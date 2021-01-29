@@ -16,6 +16,7 @@
 #include "epan/follow.h"
 #include "epan/dissectors/packet-tcp.h"
 #include "epan/dissectors/packet-udp.h"
+#include "epan/dissectors/packet-dccp.h"
 #include "epan/dissectors/packet-http2.h"
 #include "epan/dissectors/packet-quic.h"
 #include "epan/prefs.h"
@@ -92,6 +93,9 @@ FollowStreamDialog::FollowStreamDialog(QWidget &parent, CaptureFile &cf, follow_
         break;
     case FOLLOW_UDP:
         follower_ = get_follow_by_name("UDP");
+        break;
+    case FOLLOW_DCCP:
+        follower_ = get_follow_by_name("DCCP");
         break;
     case FOLLOW_HTTP:
         follower_ = get_follow_by_name("HTTP");
@@ -932,6 +936,18 @@ bool FollowStreamDialog::follow(QString previous_filter, bool use_stream_index, 
     case FOLLOW_UDP:
     {
         int stream_count = get_udp_stream_count();
+        ui->streamNumberSpinBox->blockSignals(true);
+        ui->streamNumberSpinBox->setMaximum(stream_count-1);
+        ui->streamNumberSpinBox->setValue(stream_num);
+        ui->streamNumberSpinBox->blockSignals(false);
+        ui->streamNumberSpinBox->setToolTip(tr("%Ln total stream(s).", "", stream_count));
+        ui->streamNumberLabel->setToolTip(ui->streamNumberSpinBox->toolTip());
+
+        break;
+    }
+    case FOLLOW_DCCP:
+    {
+        int stream_count = get_dccp_stream_count();
         ui->streamNumberSpinBox->blockSignals(true);
         ui->streamNumberSpinBox->setMaximum(stream_count-1);
         ui->streamNumberSpinBox->setValue(stream_num);

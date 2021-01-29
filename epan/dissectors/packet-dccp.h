@@ -20,6 +20,10 @@
 #ifndef __PACKET_DCCP_H__
 #define __PACKET_DCCP_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
 /* DCCP structs and definitions */
 typedef struct _e_dccphdr {
     guint16 sport;
@@ -103,6 +107,16 @@ struct dccp_analysis {
 	 */
 	nstime_t	ts_prev;
 };
+
+/** Get the current number of DCCP streams
+ *
+ * @return The number of DCCP streams
+ */
+WS_DLL_PUBLIC guint32 get_dccp_stream_count(void);
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
 #endif /* __PACKET_DCCP_H__ */
 

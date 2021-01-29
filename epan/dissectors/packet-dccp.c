@@ -486,6 +486,12 @@ dccpip_hostlist_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, c
     return TAP_PACKET_REDRAW;
 }
 
+/* Return the current stream count */
+guint32 get_dccp_stream_count(void)
+{
+    return dccp_stream_count;
+}
+
 static gboolean
 dccp_filter_valid(packet_info *pinfo)
 {
