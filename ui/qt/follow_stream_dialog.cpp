@@ -523,6 +523,7 @@ FollowStreamDialog::readStream()
 
     case FOLLOW_TCP :
     case FOLLOW_UDP :
+    case FOLLOW_DCCP :
     case FOLLOW_HTTP :
     case FOLLOW_HTTP2:
     case FOLLOW_QUIC:

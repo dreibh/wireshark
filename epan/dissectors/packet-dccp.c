@@ -262,6 +262,11 @@ decode_dccp_ports(tvbuff_t *tvb, int offset, packet_info *pinfo,
         }
     }
 
+    /* If the user has a "Follow DCCP Stream" window loading, pass a pointer
+       to the payload tvb through the tap system. */
+    if (have_tap_listener(dccp_follow_tap))
+        tap_queue_packet(dccp_follow_tap, pinfo, next_tvb);
+
     /*
      * Do lookups with the subdissector table.
      * We try the port number with the lower value first, followed by the
