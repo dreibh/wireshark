@@ -1718,7 +1718,7 @@
     <string>DCCP Stream</string>
    </property>
    <property name="shortcut">
-    <string notr="true">Ctrl+Alt+Shift+U</string>
+    <string notr="true">Ctrl+Alt+Shift+D</string>
    </property>
   </action>
   <action name="actionAnalyzeFollowTLSStream">
