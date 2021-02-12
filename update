@@ -5,6 +5,3 @@ git checkout debian/
 
 git pull
 ./renew-debian-changelog
-
-# The symbols are currently out of date!
-rm -f debian/*.symbols
