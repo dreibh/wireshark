@@ -1,0 +1,7 @@
+#!/bin/bash -e
+
+git fetch --all
+git merge upstream/master
+./update
+./make-ppa
+git push
