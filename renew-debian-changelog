@@ -3,9 +3,7 @@
 . ./packaging.conf
 
 # ------ Revert debian/changelog and debian/control -------------------------
-git checkout debian/changelog debian/control debian/rules debian tools/make-version.pl
-
-find debian/ -name '*.symbols' | xargs -n1 -i§ truncate --size 0 §
+git checkout debian/changelog debian/control debian/rules debian tools/make-version.pl debian/*.symbols
 
 # rm -rf debian
 # cp -a debian.td debian
