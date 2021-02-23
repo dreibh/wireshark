@@ -4,8 +4,10 @@ git fetch --all
 git merge upstream/master
 ./update
 
-find debian/ -name '*.symbols' | xargs -n1 -i§ truncate --size 0 §
+SYMBBOLS=`find debian/ -name '*.symbols'`
+git rm -f ${SYMBBOLS}
 ./make-ppa
-git checkout debian/*.symbols
+git reset
+git checkout ${SYMBBOLS}
 
 git push
