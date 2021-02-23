@@ -7,6 +7,6 @@ git pull
 
 # Rebase to upstream master
 git fetch --all
-git rebase upstream/master
+git merge upstream/master
 
 ./renew-debian-changelog
