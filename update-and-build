@@ -6,7 +6,7 @@ git checkout dreibh/hencsat
 git merge upstream/master
 ./update
 
-git branch -d dreibh/testing || true
+git branch -D dreibh/testing || true
 git branch dreibh/testing || true
 git checkout dreibh/testing
 
