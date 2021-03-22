@@ -18,6 +18,7 @@ git commit -a -m "A test."
 
 ./make-ppa
 
+git checkout debian
 git checkout dreibh/hencsat
 
 git push
