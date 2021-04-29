@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Debian Packaging Scripts
-# Copyright (C) 2002-2020 by Thomas Dreibholz
+# Debian/Ubuntu Packaging Scripts
+# Copyright (C) 2002-2021 by Thomas Dreibholz
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -85,8 +85,8 @@ if [ "${PACKAGE_DISTRIBUTION}" == "unstable" -o \
    changesFilesPattern="${PACKAGE}_${version}_*.changes"
    dscFile=`ls ${PACKAGE}_${version}.dsc | tail -n1`
 else
-   changesFilesPattern="${PACKAGE}_${PACKAGE_VERSION}~${PACKAGE_DISTRIBUTION}[0-9]~ppa[0-9]_*.changes"
-   dscFile=`ls ${PACKAGE}_${PACKAGE_VERSION}~${PACKAGE_DISTRIBUTION}[0-9]~ppa[0-9].dsc | tail -n1`
+   changesFilesPattern="${PACKAGE}_${OUTPUT_VERSION}~${PACKAGE_DISTRIBUTION}[0-9]_*.changes"
+   dscFile=`ls ${PACKAGE}_${OUTPUT_VERSION}~${PACKAGE_DISTRIBUTION}[0-9].dsc | tail -n1`
 fi
 
 
@@ -119,5 +119,5 @@ if [ "${PACKAGE_DISTRIBUTION}" == "unstable" -o \
      "${PACKAGE_DISTRIBUTION}" == "stable" ] ; then
    profile="debian"
 fi
-echo "Calling: lintian -iIEv --pedantic --profile ${profile} ${changesFile}"
-lintian -iIEv --pedantic --profile ${profile} ${changesFile} || true
+echo "Calling: lintian -iIEv --pedantic --suppress-tags file-references-package-build-path --profile ${profile} ${changesFile}"
+lintian -iIEv --pedantic --suppress-tags file-references-package-build-path --profile ${profile} ${changesFile} || true
