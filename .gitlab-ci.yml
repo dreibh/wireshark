@@ -10,6 +10,11 @@
 # https://hub.docker.com/r/wireshark/wireshark-opensuse-15.2-dev
 # https://hub.docker.com/r/wireshark/wireshark-ubuntu-dev
 
+stages:
+  - build
+  - analysis
+  - test
+
 variables:
   # Ensure that checkouts are a) fast and b) have a reachable tag. In a
   # brighter, more glorious future we might be able to use --shallow-since:
@@ -398,3 +403,78 @@ merge-req:windows:
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount Wireshark.sln
     - msbuild /verbosity:minimal test-programs.vcxproj
     - ctest -C RelWithDebInfo --parallel 3 --force-new-ctest-process --verbose
+
+# Adapted from https://www.synopsys.com/blogs/software-security/integrating-coverity-scan-with-gitlab-ci/
+# and https://gitlab.gnome.org/GNOME/glib/-/blob/8f57a5b9/.gitlab-ci.yml#L481
+coverity-gcc:
+  only:
+    refs:
+      - schedules
+    variables:
+      - $RUN_COVERITY_GCC == "True"
+  image: wireshark/wireshark-ubuntu-dev
+  stage: analysis
+  needs: []
+  variables:
+    CC: gcc
+    CXX: g++
+    # cov-build doesn’t handle GLIB_DEPRECATED_ENUMERATOR
+    CFLAGS: '-DGLIB_DISABLE_DEPRECATION_WARNINGS'
+    CXXFLAGS: '-DGLIB_DISABLE_DEPRECATION_WARNINGS'
+  script:
+    - curl --output /tmp/cov-analysis-linux64.tar.gz --form project=$COVERITY_SCAN_PROJECT_NAME --form token=$COVERITY_SCAN_TOKEN https://scan.coverity.com/download/linux64
+    - tar --directory=/tmp --extract --gzip --file /tmp/cov-analysis-linux64.tar.gz
+    - mkdir build
+    - cd build
+    - cmake -G Ninja ..
+    - /tmp/cov-analysis-linux64-*/bin/cov-build --return-emit-failures --dir cov-int ninja
+    - tar --create --gzip --file cov-int.tar.gz cov-int
+    - curl --form file=@cov-int.tar.gz --form token=$COVERITY_SCAN_TOKEN --form email=$GITLAB_USER_EMAIL --form description="Ubuntu $( git describe --tags ) $CI_COMMIT_REF_NAME:$CI_PIPELINE_ID" --form version=$( git describe --tags ) https://scan.coverity.com/builds?project=$COVERITY_SCAN_PROJECT_NAME
+
+coverity-visual-c++:
+  only:
+    refs:
+      - schedules
+    variables:
+      - $RUN_COVERITY_VISUAL_CPP == "True"
+  extends: .build-windows
+  tags:
+    - wireshark-windows-merge-req
+  stage: analysis
+  needs: []
+  script:
+    - $gitDescription = (( git describe --tags ) | Out-String).Trim()
+    - C:\Windows\System32\curl --output $env:temp\cov-analysis-win64.zip --form project=$COVERITY_SCAN_PROJECT_NAME --form token=$COVERITY_SCAN_TOKEN https://scan.coverity.com/download/win64
+    - C:\ProgramData\chocolatey\tools\7z x "$env:temp\cov-analysis-win64.zip" -y -r -o"$env:temp"
+    - cmake -DTEST_EXTRA_ARGS=--enable-release -DENABLE_LTO=off -G "Visual Studio 16 2019" -A x64 ..
+    - $covAnalysisWin64 = (Get-ChildItem -Path $env:temp -Filter "cov-analysis-win64-*" -Directory)[0].FullName
+    - Invoke-Expression "& $covAnalysisWin64\bin\cov-build.exe --return-emit-failures --dir cov-int msbuild /verbosity:minimal `"/consoleloggerparameters:PerformanceSummary;NoSummary`" /maxcpucount:1 Wireshark.sln"
+    - C:\ProgramData\chocolatey\tools\7z a -tzip cov-int.zip cov-int
+    - C:\Windows\System32\curl --form file=@cov-int.zip --form token=$COVERITY_SCAN_TOKEN--form email=$GITLAB_USER_EMAIL --form description="Windows $gitDescription $env:CI_COMMIT_REF_NAME`:$env:CI_PIPELINE_ID" --form version=$gitDescription https://scan.coverity.com/builds?project=$COVERITY_SCAN_PROJECT_NAME
+
+clang-scan-build:
+  only:
+    refs:
+      - schedules
+    variables:
+      - $RUN_DAILY == "True"
+  image: wireshark/wireshark-ubuntu-dev
+  stage: analysis
+  needs: []
+  variables:
+    CLANG_VERSION: 11
+    CC: "clang-${CLANG_VERSION}"
+    CXX: "clang++-${CLANG_VERSION}"
+  script:
+    - mkdir build
+    - cd build
+    - scan-build-${CLANG_VERSION} cmake -DCMAKE_BUILD_TYPE=Debug -DDISABLE_WERROR=ON -G Ninja ..
+    - scan-build-${CLANG_VERSION} -o ../sbout ninja
+    - cd ../sbout
+    - RAW_DIR=$( find ../sbout -type d -name "20??-??-??-*" -printf "%P\n" | head )
+    - SB_DIR="scan-build-$RAW_DIR"
+    - mv "$RAW_DIR" "$SB_DIR"
+    - if [ -d logs ] ; then mv logs $SB_DIR ; fi
+    - chmod -R u=rwX,go=rX "$SB_DIR"
+    - zip -9 -r "${SB_DIR}.zip" "$SB_DIR"
+    - if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ] && [ -n "$S3_DESTINATION_ANALYSIS" ] ; then aws s3 cp "${SB_DIR}.zip" "$S3_DESTINATION_ANALYSIS/" ; fi
