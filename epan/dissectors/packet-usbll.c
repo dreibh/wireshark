@@ -627,9 +627,9 @@ static int usbll_addr_to_str(const address* addr, gchar *buf, int buf_len)
     const usbll_address_t *addrp = (const usbll_address_t *)addr->data;
 
     if (addrp->flags & USBLL_ADDRESS_HOST) {
-        g_strlcpy(buf, "host", buf_len);
+        (void) g_strlcpy(buf, "host", buf_len);
     } else if (addrp->flags & USBLL_ADDRESS_BROADCAST) {
-        g_strlcpy(buf, "broadcast", buf_len);
+        (void) g_strlcpy(buf, "broadcast", buf_len);
     } else if (addrp->flags & USBLL_ADDRESS_HUB_PORT) {
         /*
          * In split transaction we use : to mark that the last part is port not
@@ -659,8 +659,8 @@ usbll_set_address(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
     usbll_address_t *src_addr, *dst_addr;
     guint8 *str_src_addr, *str_dst_addr;
 
-    src_addr = wmem_new0(wmem_packet_scope(), usbll_address_t);
-    dst_addr = wmem_new0(wmem_packet_scope(), usbll_address_t);
+    src_addr = wmem_new0(pinfo->pool, usbll_address_t);
+    dst_addr = wmem_new0(pinfo->pool, usbll_address_t);
 
     if (USBLL_ADDRESS_IS_HOST_TO_DEV(flags)) {
         src_addr->flags = USBLL_ADDRESS_HOST;
