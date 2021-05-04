@@ -107,6 +107,7 @@ variables:
 
 .build-rpm:
   extends: .build
+  rules: !reference [.if-merged]
   before_script:
     # It might make sense to set "GIT_STRATEGY: none" and build from
     # the tarball.
@@ -120,6 +121,14 @@ variables:
     paths:
       - build/packaging/rpm/RPMS
     expire_in: 3 days
+  needs:
+    - build:ubuntu-dist
+
+.test-rpm:
+  rules: !reference [.if-merged]
+  stage: test
+  variables:
+    GIT_STRATEGY: none
 
 .build-windows:
   stage: build
@@ -176,70 +185,51 @@ build:ubuntu-dist:
 # https://gitlab.com/wireshark/wireshark-containers/-/tree/master/dev/centos-7
 build:rpm-centos-7:
   extends: .build-rpm
-  rules: !reference [.if-merged]
   image: wireshark/wireshark-centos-7-dev
   script:
     - cmake3 -GNinja ..
     - ninja-build rpm-package
-  needs:
-    - build:ubuntu-dist
 test:rpm-centos-7:
-  rules: !reference [.if-merged]
-  stage: test
+  extends: .test-rpm
   image: wireshark/wireshark-centos-7-dev
   script:
     - yum --nogpgcheck localinstall -y build/packaging/rpm/RPMS/x86_64/*.rpm
     - tshark --version
   needs:
     - build:rpm-centos-7
-  variables:
-    GIT_STRATEGY: none
 
 build:rpm-centos-8:
   extends: .build-rpm
-  rules: !reference [.if-merged]
   image: wireshark/wireshark-centos-8-dev
   script:
     - cmake -GNinja ..
     - ninja-build rpm-package
-  needs:
-    - build:ubuntu-dist
 test:rpm-centos-8:
-  rules: !reference [.if-merged]
-  stage: test
+  extends: .test-rpm
   image: wireshark/wireshark-centos-8-dev
   script:
     - dnf --nogpgcheck localinstall -y build/packaging/rpm/RPMS/x86_64/*.rpm
     - tshark --version
   needs:
     - build:rpm-centos-8
-  variables:
-    GIT_STRATEGY: none
 
 build:rpm-opensuse-15.2:
   extends: .build-rpm
-  rules: !reference [.if-merged]
   image: wireshark/wireshark-opensuse-15.2-dev
   script:
     - cmake -GNinja ..
     - ninja rpm-package
-  needs:
-    - build:ubuntu-dist
 test:rpm-opensuse-15.2:
-  rules: !reference [.if-merged]
+  extends: .test-rpm
   image: wireshark/wireshark-opensuse-15.2-dev
-  stage: test
   script:
     - zypper --no-gpg-checks install -y build/packaging/rpm/RPMS/x86_64/*.rpm
     - tshark --version
-  variables:
-    GIT_STRATEGY: none
   needs:
     - build:rpm-opensuse-15.2
 
 build:rpm-fedora:
   extends: .build-rpm
-  rules: !reference [.if-merged]
   image: wireshark/wireshark-fedora-dev
   script:
     # Shared GitLab runners limit the log size to 4M, so reduce verbosity. See
@@ -247,17 +237,12 @@ build:rpm-fedora:
     - export FORCE_CMAKE_NINJA_NON_VERBOSE=1
     - cmake3 -GNinja ..
     - ninja rpm-package
-  needs:
-    - build:ubuntu-dist
 # test:rpm-fedora:
-#  rules: !reference [.if-merged]
+  # extends: .test-rpm
 #   image: fedora
-#   stage: test
 #   script:
 #     - dnf install -y build/packaging/rpm/RPMS/x86_64/*.rpm
 #     - tshark --version
-#   variables:
-#     GIT_STRATEGY: none
 #   needs:
 #     - build:rpm-fedora
 
@@ -322,28 +307,6 @@ docbook:
       - wsdg_html_chunked/
   needs: []
 
-
-# Build all doxygen docs
-doxygen_all:
-  image: wireshark/wireshark-ubuntu-dev
-  rules: !reference [.if-daily-schedule]
-  stage: build
-  script:
-    - mkdir build
-    - cd build
-    - cmake -GNinja ..
-    - ninja wsar_html 2>&1 > doxygen_output.txt | tee doxygen_errors.txt
-  after_script:
-    - mv build/wsar_html .
-    - mv build/doxygen_output.txt .
-    - mv build/doxygen_errors.txt .
-  artifacts:
-    when: always
-    paths:
-    - doxygen_errors.txt
-    - doxygen_output.txt
-    - wsar_html
-  needs: []
 
 # https://docs.gitlab.com/ee/user/gitlab_com/index.html#linux-shared-runners
 
@@ -459,12 +422,12 @@ coverity-gcc:
     - cd ..
     - tar --create --gzip --file cov-int.tar.gz cov-int
     # - curl --form file=@cov-int.tar.gz --form token=$COVERITY_SCAN_TOKEN --form email=$GITLAB_USER_EMAIL --form description="Ubuntu $( git describe --tags ) $CI_COMMIT_REF_NAME:$CI_PIPELINE_ID" --form version=$( git describe --tags ) https://scan.coverity.com/builds?project=$COVERITY_SCAN_PROJECT_NAME
-    - echo "export CI_JOB_URL=$CI_JOB_URL" > job_environment_variables.txt
-    - echo "export GIT_DESCRIPTION=$GIT_DESCRIPTION" >> job_environment_variables.txt
+    - echo "export ARTIFACT_JOB_URL=$CI_JOB_URL" > job_environment_variables.sh
+    - echo "export GIT_DESCRIPTION=$( git describe --tags )" >> job_environment_variables.sh
   artifacts:
     paths:
       - cov-int.tar.gz
-      - job_environment_variables.txt
+      - job_environment_variables.sh
 coverity-gcc-submit:
   image: curlimages/curl
   rules:
@@ -472,8 +435,10 @@ coverity-gcc-submit:
       when: always
   stage: .post
   script:
-    - . job_environment_variables.txt
-    - curl --fail --data "project=$COVERITY_SCAN_PROJECT_NAME&token=$COVERITY_SCAN_TOKEN&email=$GITLAB_USER_EMAIL&url=$ARTIFACT_JOB_URL/artifacts/raw/build/cov-int.tar.gz&version=$GIT_DESCRIPTION&description=Ubuntu $GIT_DESCRIPTION $CI_COMMIT_REF_NAME:$CI_PIPELINE_ID" https://scan.coverity.com/builds
+    - . job_environment_variables.sh
+    - echo $ARTIFACT_JOB_URL
+    - echo $GIT_DESCRIPTION
+    - curl --fail --data "project=$COVERITY_SCAN_PROJECT_NAME&token=$COVERITY_SCAN_TOKEN&email=$GITLAB_USER_EMAIL&url=$ARTIFACT_JOB_URL/artifacts/raw/cov-int.tar.gz&version=$GIT_DESCRIPTION&description=Ubuntu $GIT_DESCRIPTION $CI_COMMIT_REF_NAME:$CI_PIPELINE_ID" https://scan.coverity.com/builds
   needs:
     - coverity-gcc
 
@@ -496,12 +461,12 @@ coverity-visual-c++:
     - cd ..
     - C:\ProgramData\chocolatey\tools\7z a -tzip cov-int.zip cov-int
     # - C:\Windows\System32\curl --form file=@cov-int.zip --form token=$COVERITY_SCAN_TOKEN--form email=$GITLAB_USER_EMAIL --form description="Windows $gitDescription $env:CI_COMMIT_REF_NAME`:$env:CI_PIPELINE_ID" --form version=$gitDescription https://scan.coverity.com/builds?project=$COVERITY_SCAN_PROJECT_NAME
-    - ("export CI_JOB_URL=$env:CI_JOB_URL" | Out-File -Encoding ascii job_environment_variables.txt)
-    - ("export GIT_DESCRIPTION=$gitDescription" | Out-File -Encoding ascii -Append job_environment_variables.txt)
+    - '"export ARTIFACT_JOB_URL=$env:CI_JOB_URL" | Out-File -Encoding ascii job_environment_variables.sh'
+    - '"export GIT_DESCRIPTION=$gitDescription" | Out-File -Encoding ascii -Append job_environment_variables.sh'
   artifacts:
     paths:
       - cov-int.zip
-      - job_environment_variables.txt
+      - job_environment_variables.sh
 coverity-visual-c++-submit:
   image: curlimages/curl
   rules:
@@ -509,9 +474,11 @@ coverity-visual-c++-submit:
       when: always
   stage: .post
   script:
-    - sed -i -e 's/\r//' job_environment_variables.txt
-    - . job_environment_variables.txt
-    - curl --fail --data "project=$COVERITY_SCAN_PROJECT_NAME&token=$COVERITY_SCAN_TOKEN&email=$GITLAB_USER_EMAIL&url=$ARTIFACT_JOB_URL/artifacts/raw/build/cov-int.zip&version=$GIT_DESCRIPTION&description=Windows $GIT_DESCRIPTION $CI_COMMIT_REF_NAME:$CI_PIPELINE_ID" https://scan.coverity.com/builds
+    - sed -i -e 's/\r//' job_environment_variables.sh
+    - . job_environment_variables.sh
+    - echo $ARTIFACT_JOB_URL
+    - echo $GIT_DESCRIPTION
+    - curl --fail --data "project=$COVERITY_SCAN_PROJECT_NAME&token=$COVERITY_SCAN_TOKEN&email=$GITLAB_USER_EMAIL&url=$ARTIFACT_JOB_URL/artifacts/raw/cov-int.zip&version=$GIT_DESCRIPTION&description=Windows $GIT_DESCRIPTION $CI_COMMIT_REF_NAME:$CI_PIPELINE_ID" https://scan.coverity.com/builds
   needs:
     - coverity-visual-c++
 
@@ -551,6 +518,29 @@ build:windows-vs-code-analysis:
     - $env:caexcludepath = "C:\Qt;$env:INCLUDE"
     - cmake -DENABLE_CODE_ANALYSIS=ON -G "Visual Studio 16 2019" -A x64 -DENABLE_LTO=off ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount:2 Wireshark.sln
+
+# Build all doxygen docs
+doxygen_all:
+  image: wireshark/wireshark-ubuntu-dev
+  rules: !reference [.if-daily-schedule]
+  stage: build
+  script:
+    - mkdir build
+    - cd build
+    - cmake -GNinja ..
+    - ninja wsar_html_zip 2>&1 > doxygen_output.txt | tee doxygen_errors.txt
+  after_script:
+    - mv build/wsar_html_zip .
+    - mv build/doxygen_output.txt .
+    - mv build/doxygen_errors.txt .
+    - if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ] && [ -n "$S3_DESTINATION_DIST" ] ; then aws s3 cp wsar_html_zip "$S3_DESTINATION_DIST/" ; fi
+  artifacts:
+    when: always
+    paths:
+    - doxygen_errors.txt
+    - doxygen_output.txt
+    - wsar_html.zip
+  needs: []
 
 sloccount:
   extends: .build-ubuntu
