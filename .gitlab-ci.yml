@@ -14,6 +14,9 @@ stages:
   - build
   - analysis
   - test
+  - fuzz-asan
+  - fuzz-randpkt
+  - fuzz-valgrind
 
 variables:
   # Ensure that checkouts are a) fast and b) have a reachable tag. In a
@@ -58,6 +61,11 @@ variables:
 # often doesn't report errors.
 .if-daily-schedule:
   - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "daily"'
+    when: always
+# Fuzz jobs. Care should be taken when changing this since the scheduler
+# often doesn't report errors.
+.if-fuzz-schedule:
+  - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "fuzz"'
     when: always
 
 .build:
@@ -138,7 +146,7 @@ variables:
     - $env:Configuration = "RelWithDebInfo"
     - $env:Path += ";C:\Program Files\CMake\bin"
     - $env:Path += ";C:\Strawberry\c\bin;C:\Strawberry\perl\site\bin;C:\Strawberry\perl\bin"
-    - $env:Path += ";C:\qt\5.15.1\msvc2019_64\bin"
+    - $env:Path += ";C:\qt\5.15.2\msvc2019_64\bin"
     # https://help.appveyor.com/discussions/questions/18777-how-to-use-vcvars64bat-from-powershell
     - cmd.exe /c "call `"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat`" && set > %temp%\vcvars.txt"
     - Get-Content "$env:temp\vcvars.txt" | Foreach-Object { if ($_ -match "^(.*?)=(.*)$") { Set-Content "env:\$($matches[1])" $matches[2] } }
@@ -570,3 +578,75 @@ sloccount:
     - sloccount . | awk "/^Computing results/ { results=1 } { if (results) print }" > $SLOC_OUT
     - cat $SLOC_OUT
     - if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ] && [ -n "$S3_DESTINATION_ANALYSIS" ] ; then aws s3 cp "$SLOC_OUT" "$S3_DESTINATION_ANALYSIS/" ; fi
+
+# Fuzz TShark using ASAN and valgrind.
+.fuzz-ubuntu:
+  extends: .build-ubuntu
+  rules: !reference [.if-fuzz-schedule]
+  tags:
+    - wireshark-ubuntu-fuzz
+  resource_group: fuzz-master
+  variables:
+    CC: "clang-$CLANG_VERSION"
+    CXX: "clang++-$CLANG_VERSION"
+    INSTALL_PREFIX: "$CI_PROJECT_DIR/_install"
+    MIN_PLUGINS: 10
+    MAX_PASSES: 15
+  before_script:
+    # Signal after_script, which runs in its own shell.
+    - echo "export FUZZ_PASSED=true" > /tmp/fuzz_result.sh
+    - mkdir /tmp/fuzz
+  after_script:
+    - . /tmp/fuzz_result.sh
+    - if $FUZZ_PASSED ; then exit 0 ; fi
+    - echo Fuzzing failed. Generating report.
+    - FUZZ_CAPTURE=$( ls /tmp/fuzz/fuzz-*.pcap | head -n 1 )
+    - FUZZ_ERRORS="/tmp/fuzz/$( basename "$FUZZ_CAPTURE" .pcap ).err"
+    - printf "\nfuzz-test.sh stderr:\n" >> "$FUZZ_ERRORS"
+    - cat fuzz-test.err >> "$FUZZ_ERRORS"
+    - |
+      if [ -n "$AWS_ACCESS_KEY_ID" ] && [ -n "$AWS_SECRET_ACCESS_KEY" ] && [ -n "$S3_DESTINATION_FUZZ" ] ; then
+        aws s3 cp "$FUZZ_CAPTURE" "$S3_DESTINATION_FUZZ/"
+        aws s3 cp "$FUZZ_ERRORS" "$S3_DESTINATION_FUZZ/"
+      fi
+
+fuzz-asan:
+  extends: .fuzz-ubuntu
+  stage: fuzz-asan
+  script:
+    - JOB_START_SECS=$( date -d "$CI_JOB_STARTED_AT" +%s )
+    - cmake -G Ninja -DBUILD_wireshark=OFF -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX ..
+    - ninja
+    - ninja install
+    # Run for 4 hours - build time - slop
+    - MAX_SECONDS=$(( 14400 - ( $( date +%s ) - $JOB_START_SECS ) - 300 ))
+    - cd ..
+    # /var/menagerie contains captures harvested from wireshark.org's mailing list, wiki, issues, etc.
+    # We have more captures than we can fuzz in $MAX_SECONDS, so we shuffle them each run.
+    - ./tools/fuzz-test.sh -a -2 -P $MIN_PLUGINS -b $INSTALL_PREFIX/bin -d /tmp/fuzz -t $MAX_SECONDS $( shuf -e /var/menagerie/*/* ) 2> fuzz-test.err || echo "export FUZZ_PASSED=false" > /tmp/fuzz_result.sh
+
+fuzz-randpkt:
+  extends: .fuzz-ubuntu
+  stage: fuzz-randpkt
+  script:
+    # XXX Reuse fuzz-asan?
+    - cmake -G Ninja -DBUILD_wireshark=OFF -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX ..
+    - ninja
+    - ninja install
+    - cd ..
+    - ./tools/randpkt-test.sh -a -b $INSTALL_PREFIX/bin -d /tmp/fuzz -p $MAX_PASSES 2> fuzz-test.err || echo "export FUZZ_PASSED=false" > /tmp/fuzz_result.sh
+  needs: [ fuzz-asan ]
+
+fuzz-valgrind:
+  extends: .fuzz-ubuntu
+  stage: fuzz-valgrind
+  script:
+    - JOB_START_SECS=$( date -d "$CI_JOB_STARTED_AT" +%s )
+    - cmake -G Ninja -DBUILD_wireshark=OFF -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=OFF -DCMAKE_INSTALL_PREFIX=$INSTALL_PREFIX ..
+    - ninja
+    - ninja install
+    # Run for 3 hours - build time - slop
+    - MAX_SECONDS=$(( 10800 - ( $( date +%s ) - $JOB_START_SECS ) - 300 ))
+    - cd ..
+    - ./tools/fuzz-test.sh -g -P $MIN_PLUGINS -b $INSTALL_PREFIX/bin -d /tmp/fuzz -t $MAX_SECONDS $( shuf -e /var/menagerie/*/* ) 2> fuzz-test.err || echo "export FUZZ_PASSED=false" > /tmp/fuzz_result.sh
+  needs: [ fuzz-randpkt ]
