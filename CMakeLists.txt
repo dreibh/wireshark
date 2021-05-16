@@ -1151,13 +1151,6 @@ ws_find_package(Systemd BUILD_sdjournal HAVE_SYSTEMD)
 
 # Build the Qt GUI?
 if(BUILD_wireshark)
-	if(CMAKE_VERSION VERSION_GREATER "3.19.999" AND CMAKE_VERSION VERSION_LESS "3.20.2")
-		# https://gitlab.kitware.com/cmake/cmake/-/issues/22085
-		set(CMAKE_AUTOMOC ON)
-		set(CMAKE_AUTOUIC ON)
-		set(CMAKE_AUTORCC ON)
-	endif()
-
 	# Untested, may not work if CMAKE_PREFIX_PATH gets overwritten
 	# somewhere. The if WIN32 in this place is annoying as well.
 	if(WIN32)
@@ -2274,6 +2267,23 @@ add_custom_command(
 	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 )
 
+file(GLOB _protobuf_src_files RELATIVE "${CMAKE_SOURCE_DIR}" protobuf/*.proto)
+set (_protobuf_data_files)
+foreach(_data_file ${_protobuf_src_files})
+	list(APPEND _protobuf_data_files "${DATAFILE_DIR}/${_data_file}")
+endforeach()
+
+add_custom_command(
+	OUTPUT ${_protobuf_data_files}
+	COMMAND ${CMAKE_COMMAND} -E make_directory "${DATAFILE_DIR}/protobuf"
+	COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		"${_protobuf_src_files}"
+		"${DATAFILE_DIR}/protobuf"
+	VERBATIM
+	DEPENDS ${_protobuf_src_files}
+	WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
+)
+
 file(GLOB _profiles_src_files RELATIVE "${CMAKE_SOURCE_DIR}" profiles/*/*)
 set (_profiles_data_files)
 foreach(_data_file ${_profiles_src_files})
@@ -2290,6 +2300,7 @@ list(APPEND copy_data_files_depends
 	${_dtds_data_files}
 	${_diameter_data_files}
 	${_radius_data_files}
+	${_protobuf_data_files}
 	${_profiles_data_files}
 )
 
