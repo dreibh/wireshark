@@ -17,7 +17,6 @@ set(NONGENERATED_UI_SRC
 	console.c
 	decode_as_utils.c
 	dissect_opts.c
-	export_object_ui.c
 	export_pdu_ui_utils.c
 	help_url.c
 	failure_message.c
@@ -91,11 +90,6 @@ if(MSVC)
 endif()
 
 target_link_libraries(ui wsutil caputils)
-
-if (HTML_HELP_COMPILER)
-	add_definitions(-DHHC_DIR)
-	target_link_libraries(ui Htmlhelp.lib)
-endif()
 
 target_include_directories(ui SYSTEM
 	PRIVATE
