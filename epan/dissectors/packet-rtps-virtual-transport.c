@@ -943,7 +943,6 @@ static gint dissect_parameter_transport_rtps_type(
                         offset,
                         2, /* length: sizeof(guint16) */
                         param_length);
-                offset += 2;
 
                 proto_tree_add_string(
                         rtpsvt_tree_direction,
@@ -970,12 +969,10 @@ static gint dissect_rtps_virtual_transport_loss_info_type(
 {
 
     guint16 param_id;
-    guint16 param_length;
 
     param_id = tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN);
     offset += 2;
-    param_length = tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN);
-    offset += 2;
+    offset += 2; /* parameter length */
     if (param_id == PARAM_ID_LOST_MESSAGES) {
         guint64 first_lost = tvb_get_guint64(tvb, offset, ENC_BIG_ENDIAN);
         guint64 last_lost = tvb_get_guint64(tvb, offset+8, ENC_BIG_ENDIAN);
@@ -992,7 +989,6 @@ static gint dissect_rtps_virtual_transport_loss_info_type(
         }
         expert_add_info(NULL, tree_transport, &ei_missing_msg);
     }
-    offset += param_length;
 
     return tvb_captured_length(tvb);
 }
