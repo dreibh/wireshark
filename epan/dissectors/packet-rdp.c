@@ -31,6 +31,8 @@
 void proto_register_rdp(void);
 void proto_reg_handoff_rdp(void);
 
+static heur_dissector_list_t rdp_heur_subdissector_list;
+
 static int proto_rdp = -1;
 
 static int ett_rdp = -1;
@@ -340,6 +342,8 @@ static int hf_rdp_channelPacketAtFront = -1;
 static int hf_rdp_channelPacketFlushed = -1;
 static int hf_rdp_channelPacketCompressionType = -1;
 static int hf_rdp_virtualChannelData = -1;
+
+static int hf_rdp_fastpathPDULength = -1;
 
 static int hf_rdp_wYear = -1;
 static int hf_rdp_wMonth = -1;
@@ -2305,6 +2309,60 @@ dissect_rdp_cc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void*
   return offset;
 }
 
+static gboolean
+dissect_rdp_fastpath(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
+{
+  guint8 fp_hdr;
+  proto_item *item;
+  proto_tree *tree;
+  guint16 pdu_length;
+  guint8 len_size = 1;
+
+  if (tvb_captured_length(tvb) < 3)
+    return FALSE;
+
+  fp_hdr = tvb_get_guint8(tvb, 0);
+
+  if (fp_hdr & 0x3)
+    return FALSE;
+
+  pdu_length = tvb_get_guint8(tvb, 1);
+
+  if (pdu_length == 0)
+    return FALSE;
+
+  if (pdu_length & 0x80) {
+    pdu_length &= ~(0x80);
+    pdu_length = (pdu_length << 8);
+    pdu_length += tvb_get_guint8(tvb, 2);
+    len_size = 2;
+  }
+
+  if (pdu_length != tvb_captured_length(tvb))
+    return FALSE;
+
+  col_set_str(pinfo->cinfo, COL_PROTOCOL, "RDP");
+  col_clear(pinfo->cinfo, COL_INFO);
+  col_set_str(pinfo->cinfo, COL_INFO, "Fast-Path PDU");
+
+  item = proto_tree_add_item(parent_tree, proto_rdp, tvb, 0, pdu_length, ENC_NA);
+  tree = proto_item_add_subtree(item, ett_rdp);
+  proto_tree_add_uint(tree, hf_rdp_fastpathPDULength, tvb, 1, len_size, pdu_length);
+
+  return TRUE;
+}
+
+static gboolean
+dissect_rdp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_) {
+    heur_dtbl_entry_t *hdtbl_entry;
+
+    if (dissector_try_heuristic(rdp_heur_subdissector_list, tvb, pinfo, parent_tree,
+                                &hdtbl_entry, NULL)) {
+        return TRUE;
+    }
+    return dissect_rdp_fastpath(tvb, pinfo, parent_tree, NULL);
+}
+
 /*--- proto_register_rdp -------------------------------------------*/
 void
 proto_register_rdp(void) {
@@ -2887,6 +2945,10 @@ proto_register_rdp(void) {
       { "virtualChannelData", "rdp.virtualChannelData",
         FT_BYTES, BASE_NONE, NULL, 0,
         NULL, HFILL }},
+    { &hf_rdp_fastpathPDULength,
+      { "fastpathPDULength", "rdp.fastpathPDULength",
+        FT_UINT16, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
     { &hf_rdp_totalLength,
       { "totalLength", "rdp.totalLength",
         FT_UINT16, BASE_DEC, NULL, 0,
@@ -3366,6 +3428,8 @@ proto_register_rdp(void) {
   prefs_register_static_text_preference(rdp_module, "tcp_port_info",
             "The TCP ports used by the RDP protocol should be added to the TPKT preference \"TPKT TCP ports\", or by selecting \"TPKT\" as the \"Transport\" protocol in the \"Decode As\" dialog.",
             "RDP TCP Port preference moved information");
+
+  rdp_heur_subdissector_list = register_heur_dissector_list("rdp", proto_rdp);
 }
 
 void
@@ -3373,6 +3437,8 @@ proto_reg_handoff_rdp(void)
 {
   heur_dissector_add("cotp_cr", dissect_rdp_cr, "RDP", "rdp_cr", proto_rdp, HEURISTIC_ENABLE);
   heur_dissector_add("cotp_cc", dissect_rdp_cc, "RDP", "rdp_cc", proto_rdp, HEURISTIC_ENABLE);
+
+  heur_dissector_add("tpkt", dissect_rdp_heur, "RDP", "rdp_fastpath", proto_rdp, HEURISTIC_ENABLE);
 
   register_t124_ns_dissector("Duca", dissect_rdp_ClientData, proto_rdp);
   register_t124_ns_dissector("McDn", dissect_rdp_ServerData, proto_rdp);
