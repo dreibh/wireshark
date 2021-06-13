@@ -6405,7 +6405,7 @@ static int hf_ieee80211_hs20_indication_dgaf_disabled = -1;
 static int hf_ieee80211_hs20_indication_pps_mo_id_present = -1;
 static int hf_ieee80211_hs20_indication_anqp_domain_id_present = -1;
 static int hf_ieee80211_hs20_reserved = -1;
-static int hf_ieee80211_hs20_indication_release_number = -1;
+static int hf_ieee80211_hs20_indication_version_number = -1;
 static int hf_ieee80211_hs20_indication_pps_mo_id = -1;
 static int hf_ieee80211_hs20_indication_anqp_domain_id = -1;
 
@@ -16766,9 +16766,10 @@ dissect_hs20_osen(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void*
   return offset;
 }
 
-static const value_string hs20_indication_release_number_vals[] = {
-  { 0, "Release 1" },
-  { 1, "Release 2" },
+static const value_string hs20_indication_version_number_vals[] = {
+  { 0, "1.x" },
+  { 1, "2.x" },
+  { 2, "3.x" },
   { 0, NULL }
 };
 
@@ -16780,7 +16781,7 @@ dissect_hs20_indication(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     &hf_ieee80211_hs20_indication_pps_mo_id_present,
     &hf_ieee80211_hs20_indication_anqp_domain_id_present,
     &hf_ieee80211_hs20_reserved,
-    &hf_ieee80211_hs20_indication_release_number,
+    &hf_ieee80211_hs20_indication_version_number,
     NULL
   };
   int len = tvb_captured_length(tvb);
@@ -40216,11 +40217,11 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_hs20_reserved,
       { "Reserved", "wlan.hs20.indication.reserved",
-       FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x80, NULL, HFILL }},
+       FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x08, NULL, HFILL }},
 
-    {&hf_ieee80211_hs20_indication_release_number,
-     {"Release Number", "wlan.hs20.indication.release_number",
-      FT_UINT8, BASE_DEC, VALS(hs20_indication_release_number_vals), 0xF0, NULL, HFILL }},
+    {&hf_ieee80211_hs20_indication_version_number,
+     {"Version Number", "wlan.hs20.indication.version_number",
+      FT_UINT8, BASE_DEC, VALS(hs20_indication_version_number_vals), 0xF0, NULL, HFILL }},
 
     {&hf_ieee80211_hs20_indication_pps_mo_id,
      {"PPS MO ID", "wlan.hs20.indication.pps_mo_id",
@@ -41928,17 +41929,17 @@ proto_register_ieee80211(void)
       NULL, HFILL }},
 
     {&hf_ieee80211_rnr_bss_parameters_b2,
-     {"Multiple SSID", "wlan.rnr.bss_parameters.b2",
+     {"Multiple BSSID", "wlan.rnr.bss_parameters.b2",
       FT_BOOLEAN, 8, NULL, 0x04,
       NULL, HFILL }},
 
     {&hf_ieee80211_rnr_bss_parameters_b3,
-     {"Transmitted SSID", "wlan.rnr.bss_parameters.b3",
+     {"Transmitted BSSID", "wlan.rnr.bss_parameters.b3",
       FT_BOOLEAN, 8, NULL, 0x08,
       NULL, HFILL }},
 
     {&hf_ieee80211_rnr_bss_parameters_b4,
-     {"Member of ESS with 2.4/5 Ghz Co-Located AP", "wlan.rnr.bss_parameters.b4",
+     {"Member of ESS with 2.4/5 GHz Co-Located AP", "wlan.rnr.bss_parameters.b4",
       FT_BOOLEAN, 8, NULL, 0x10,
       NULL, HFILL }},
 
@@ -41948,7 +41949,7 @@ proto_register_ieee80211(void)
       NULL, HFILL }},
 
     {&hf_ieee80211_rnr_bss_parameters_b6,
-     {"Co-located AP", "wlan.rnr.bss_parameters.b6",
+     {"Co-Located AP", "wlan.rnr.bss_parameters.b6",
       FT_BOOLEAN, 8, NULL, 0x40,
       NULL, HFILL }},
 
