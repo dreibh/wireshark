@@ -977,13 +977,13 @@ static const value_string sgl_sub_type_tbl[] = {
 
 
 static const value_string cns_table[] = {
-    { 0, "Identify Namespace"},
-    { 1, "Identify Controller"},
+    { 0, "Namespace"},
+    { 1, "Controller"},
     { 2, "Active Namespace List"},
     { 3, "Namespace Identification Descriptor"},
     {4, "NVM Set List"},
     {0x10, "Allocated Namespace ID List"},
-    {0x11, "Identify Namespace Data Structure"},
+    {0x11, "Namespace Data Structure"},
     {0x12, "Controller List Attached to NSID"},
     {0x13, "Existing Controllers List"},
     {0x14, "Primary Controller Capabilities"},
@@ -1836,11 +1836,8 @@ static void dissect_nvme_identify_resp(tvbuff_t *cmd_tvb, proto_tree *cmd_tree,
     }
 }
 
-static void dissect_nvme_identify_cmd(tvbuff_t *cmd_tvb, proto_tree *cmd_tree,
-                                      struct nvme_cmd_ctx *cmd_ctx)
+static void dissect_nvme_identify_cmd(tvbuff_t *cmd_tvb, proto_tree *cmd_tree)
 {
-    cmd_ctx->cmd_ctx.cmd_identify.cns = tvb_get_guint16(cmd_tvb, 40, ENC_LITTLE_ENDIAN);
-
     add_group_mask_entry(cmd_tvb, cmd_tree, 40, 4, ASPEC(hf_nvme_identify_dword10));
     add_group_mask_entry(cmd_tvb, cmd_tree, 44, 4, ASPEC(hf_nvme_identify_dword11));
 
@@ -2028,6 +2025,7 @@ static void dissect_nvme_get_logpage_ify_resp(proto_item *ti, tvbuff_t *cmd_tvb,
     guint roff;
     guint max_bytes;
     guint64 rcrd;
+    guint64 recnum = 0;
 
     grp =  proto_item_add_subtree(ti, ett_data);
 
@@ -2036,7 +2034,7 @@ static void dissect_nvme_get_logpage_ify_resp(proto_item *ti, tvbuff_t *cmd_tvb,
 
     /* guint casts are to silence clang-11 compile errors */
     if (off <= 8 && (16 - (guint)off) <= len)
-        proto_tree_add_item(grp, hf_nvme_get_logpage_ify_numrec, cmd_tvb, (guint)(8-off), 8, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item_ret_uint64(grp, hf_nvme_get_logpage_ify_numrec, cmd_tvb, (guint)(8-off), 8, ENC_LITTLE_ENDIAN, &recnum);
 
     if (off <= 16 && (18 - (guint)off) <= len)
         proto_tree_add_item(grp, hf_nvme_get_logpage_ify_recfmt, cmd_tvb, (guint)(16-off), 2, ENC_LITTLE_ENDIAN);
@@ -2063,13 +2061,18 @@ static void dissect_nvme_get_logpage_ify_resp(proto_item *ti, tvbuff_t *cmd_tvb,
     poff += max_bytes;
     len -= max_bytes;
     rcrd++;
+    if (!recnum)
+        recnum = (len  + 1023) / 1024;
+    else
+        recnum--;
 
-    while (len) {
+    while (len && recnum) {
         max_bytes = (len >= 1024) ? 1024 : len;
         dissect_nvme_get_logpage_ify_rcrd_resp(cmd_tvb, grp, rcrd, 0, poff, len);
         poff += max_bytes;
         len -= max_bytes;
         rcrd++;
+        recnum--;
     }
 }
 
@@ -3313,9 +3316,28 @@ static void dissect_nvme_set_features_transfer(tvbuff_t *tvb, proto_tree *tree, 
     }
 }
 
+
+void nvme_update_transfer_request(packet_info *pinfo, struct nvme_cmd_ctx *cmd, struct nvme_q_ctx *q_ctx)
+{
+    if (cmd->fabric) {
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMeOF Data Request for %s",
+            val_to_str_const(cmd->cmd_ctx.fabric_cmd.fctype, fctype_tbl, "Unknown Command"));
+        return;
+    }
+    if (!q_ctx->qid) {
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMeOF Data Request for %s", val_to_str_const(cmd->opcode, aq_opc_tbl, "Unknown Command"));
+        if (cmd->opcode == NVME_AQ_OPC_IDENTIFY)
+            col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", val_to_str_const(cmd->cmd_ctx.cmd_identify.cns, cns_table, "Unknown"));
+        else if (cmd->opcode == NVME_AQ_OPC_GET_LOG_PAGE)
+            col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", get_logpage_name(cmd->cmd_ctx.get_logpage.lid));
+    } else {
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMeOF Data Request for %s", val_to_str_const(cmd->opcode, ioq_opc_tbl, "Unknown Command"));
+    }
+}
+
 void
 dissect_nvme_data_response(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tree *root_tree,
-                 struct nvme_q_ctx *q_ctx, struct nvme_cmd_ctx *cmd_ctx, guint len)
+                 struct nvme_q_ctx *q_ctx, struct nvme_cmd_ctx *cmd_ctx, guint len, gboolean is_inline)
 {
     proto_tree *cmd_tree;
     proto_item *ti;
@@ -3327,7 +3349,7 @@ dissect_nvme_data_response(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tree *r
     cmd_tree = proto_item_add_subtree(ti, ett_data);
     if (q_ctx->qid) { //IOQ
         str_opcode = val_to_str_const(cmd_ctx->opcode, ioq_opc_tbl,
-                                      "Unknown IOQ Opcode");
+                                      "Unknown Command");
         switch (cmd_ctx->opcode) {
         case NVME_IOQ_OPC_READ:
         case NVME_IOQ_OPC_WRITE:
@@ -3339,7 +3361,7 @@ dissect_nvme_data_response(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tree *r
         }
     } else { //AQ
         str_opcode = val_to_str_const(cmd_ctx->opcode, aq_opc_tbl,
-                                      "Unknown AQ Opcode");
+                                      "Unknown Command");
         switch (cmd_ctx->opcode) {
         case NVME_AQ_OPC_IDENTIFY:
             dissect_nvme_identify_resp(nvme_tvb, cmd_tree, cmd_ctx);
@@ -3359,7 +3381,15 @@ dissect_nvme_data_response(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tree *r
             break;
         }
     }
-    col_append_sep_fstr(pinfo->cinfo, COL_INFO, " | ", "NVMe %s: Data", str_opcode);
+    if (is_inline)
+        return;
+    col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMeOF Data for %s", str_opcode);
+    if (!q_ctx->qid) {
+        if (cmd_ctx->opcode == NVME_AQ_OPC_IDENTIFY)
+            col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", val_to_str_const(cmd_ctx->cmd_ctx.cmd_identify.cns, cns_table, "Unknown"));
+        else if (cmd_ctx->opcode == NVME_AQ_OPC_GET_LOG_PAGE)
+            col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", get_logpage_name(cmd_ctx->cmd_ctx.get_logpage.lid));
+    }
 }
 
 static void add_nvme_qid(gchar *result, guint32 val)
@@ -3491,7 +3521,7 @@ static void dissect_nvmeof_fabric_prop_data(proto_tree *tree, tvbuff_t *tvb, gui
         proto_tree_add_item(grp, hf_nvmeof_prop_get_set_data_4B_rsvd, tvb,
                         off+4, 4, ENC_LITTLE_ENDIAN);
 }
-static void dissect_nvmeof_fabric_prop_set_cmd(proto_tree *cmd_tree, tvbuff_t *cmd_tvb, guint off)
+static void dissect_nvmeof_fabric_prop_set_cmd(proto_tree *cmd_tree, tvbuff_t *cmd_tvb, struct nvme_cmd_ctx *cmd, guint off)
 {
     guint8 attr;
     guint32 prop_off;
@@ -3499,6 +3529,7 @@ static void dissect_nvmeof_fabric_prop_set_cmd(proto_tree *cmd_tree, tvbuff_t *c
     dissect_nvme_fabric_prop_cmd_common(cmd_tree, cmd_tvb, off);
     attr = tvb_get_guint8(cmd_tvb, 40+off) & 0x7;
     prop_off = tvb_get_guint32(cmd_tvb, 44+off, ENC_LITTLE_ENDIAN);
+    cmd->cmd_ctx.fabric_cmd.prop_get.offset = prop_off;
     dissect_nvmeof_fabric_prop_data(cmd_tree, cmd_tvb, 48+off, prop_off, attr);
     proto_tree_add_item(cmd_tree, hf_nvmeof_cmd_prop_set_rsvd, cmd_tvb,
                         56+off, 8, ENC_NA);
@@ -3518,6 +3549,7 @@ void dissect_nvmeof_fabric_cmd(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tre
     proto_tree *cmd_tree;
     proto_item *ti;
     guint8 fctype;
+    guint32 prop_off;
 
     fctype = tvb_get_guint8(nvme_tvb, 4);
     cmd->cmd_ctx.fabric_cmd.fctype = fctype;
@@ -3528,6 +3560,8 @@ void dissect_nvmeof_fabric_cmd(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tre
 
     proto_tree_add_bytes_format(cmd_tree, hf_nvmeof_cmd_opc, nvme_tvb, off, 1, NULL, "Opcode: 0x%x (Fabric Command)",
                                 NVME_FABRIC_OPC);
+    col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMeOF %s", val_to_str_const(fctype, fctype_tbl, "Unknown Command"));
+    prop_off = tvb_get_guint32(nvme_tvb, 44+off, ENC_LITTLE_ENDIAN);
 
     cmd->opcode = NVME_FABRIC_OPC;
     if (link_data_req)
@@ -3546,10 +3580,12 @@ void dissect_nvmeof_fabric_cmd(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tre
         dissect_nvmeof_fabric_connect_cmd(cmd_tree, pinfo, nvme_tvb, q_ctx, cmd, off);
         break;
     case NVME_FCTYPE_PROP_GET:
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", val_to_str_const(prop_off, prop_offset_tbl, "Unknown Property"));
         dissect_nvmeof_fabric_prop_get_cmd(cmd_tree, nvme_tvb, cmd, off);
         break;
     case NVME_FCTYPE_PROP_SET:
-        dissect_nvmeof_fabric_prop_set_cmd(cmd_tree, nvme_tvb, off);
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", val_to_str_const(prop_off, prop_offset_tbl, "Unknown Property"));
+        dissect_nvmeof_fabric_prop_set_cmd(cmd_tree, nvme_tvb, cmd, off);
         break;
     case NVME_FCTYPE_DISCONNECT:
         dissect_nvme_fabric_disconnect_cmd(cmd_tree, nvme_tvb, off);
@@ -3583,9 +3619,11 @@ dissect_nvmeof_fabric_connect_cmd_data(tvbuff_t *data_tvb, proto_tree *data_tree
 }
 
 void
-dissect_nvmeof_cmd_data(tvbuff_t *data_tvb, proto_tree *data_tree,
+dissect_nvmeof_cmd_data(tvbuff_t *data_tvb, packet_info *pinfo, proto_tree *data_tree,
                                  guint offset, struct nvme_cmd_ctx *cmd, guint len)
 {
+    if (!offset)
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMeoF Data for %s", val_to_str_const(cmd->cmd_ctx.fabric_cmd.fctype, fctype_tbl, "Unknown Command"));
     if (cmd->cmd_ctx.fabric_cmd.fctype == NVME_FCTYPE_CONNECT && len >= 768)
         dissect_nvmeof_fabric_connect_cmd_data(data_tvb, data_tree, offset);
 }
@@ -3632,17 +3670,25 @@ const gchar *get_nvmeof_cmd_string(guint8 fctype)
 static void dissect_nvme_cqe_common(tvbuff_t *nvme_tvb, proto_tree *cqe_tree, guint off, gboolean nvmeof);
 
 void
-dissect_nvmeof_fabric_cqe(tvbuff_t *nvme_tvb,
+dissect_nvmeof_fabric_cqe(tvbuff_t *nvme_tvb, packet_info *pinfo,
                         proto_tree *nvme_tree,
                         struct nvme_cmd_ctx *cmd, guint off)
 {
     proto_tree *cqe_tree;
     proto_item *ti;
+    guint8 fctype = cmd->cmd_ctx.fabric_cmd.fctype;
 
     ti = proto_tree_add_item(nvme_tree, hf_nvmeof_cqe, nvme_tvb,
                              0+off, NVME_CQE_SIZE, ENC_NA);
-    proto_item_append_text(ti, " (For Cmd: %s)", val_to_str(cmd->cmd_ctx.fabric_cmd.fctype,
-                                                fctype_tbl, "Unknown Cmd"));
+
+    if (fctype != NVME_FCTYPE_PROP_GET && fctype != NVME_FCTYPE_PROP_SET)
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMeOF CQE for %s", val_to_str_const(fctype, fctype_tbl, "Unknown Command"));
+    else
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMeOF CQE for Property %s %s",
+                            (fctype == NVME_FCTYPE_PROP_GET) ? "Get" : "Set",
+                            val_to_str_const(cmd->cmd_ctx.fabric_cmd.prop_get.offset, prop_offset_tbl, "Unknown Property"));
+
+    proto_item_append_text(ti, " (For Cmd: %s)", val_to_str(fctype, fctype_tbl, "Unknown Cmd"));
 
     cqe_tree = proto_item_add_subtree(ti, ett_data);
 
@@ -3681,12 +3727,15 @@ dissect_nvme_cmd(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tree *root_tree,
     cmd_ctx->opcode = tvb_get_guint8(nvme_tvb, 0);
     opc_item = proto_tree_add_item(cmd_tree, hf_nvme_cmd_opc, nvme_tvb,
                         0, 1, ENC_LITTLE_ENDIAN);
-    if (q_ctx->qid)
+    if (q_ctx->qid) {
         proto_item_append_text(opc_item, " %s",
-                               val_to_str_const(cmd_ctx->opcode, ioq_opc_tbl, "Reserved"));
-    else
+                               val_to_str_const(cmd_ctx->opcode, ioq_opc_tbl, "Unknown"));
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMe %s", val_to_str_const(cmd_ctx->opcode, ioq_opc_tbl, "Unknown Command"));
+    } else {
         proto_item_append_text(opc_item, " %s",
-                               val_to_str_const(cmd_ctx->opcode, aq_opc_tbl, "Reserved"));
+                               val_to_str_const(cmd_ctx->opcode, aq_opc_tbl, "Unknown"));
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMe %s", val_to_str_const(cmd_ctx->opcode, aq_opc_tbl, "Unknown Command"));
+    }
 
     nvme_publish_to_data_req_link(cmd_tree, nvme_tvb, hf_nvme_data_req, cmd_ctx);
     nvme_publish_to_cqe_link(cmd_tree, nvme_tvb, hf_nvme_cqe_pkt, cmd_ctx);
@@ -3721,9 +3770,12 @@ dissect_nvme_cmd(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tree *root_tree,
     } else { //AQ
         switch (cmd_ctx->opcode) {
         case NVME_AQ_OPC_IDENTIFY:
-            dissect_nvme_identify_cmd(nvme_tvb, cmd_tree, cmd_ctx);
+            cmd_ctx->cmd_ctx.cmd_identify.cns = tvb_get_guint16(nvme_tvb, 40, ENC_LITTLE_ENDIAN);
+            col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", val_to_str_const(cmd_ctx->cmd_ctx.cmd_identify.cns, cns_table, "Unknown"));
+            dissect_nvme_identify_cmd(nvme_tvb, cmd_tree);
             break;
         case NVME_AQ_OPC_GET_LOG_PAGE:
+            col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", get_logpage_name(tvb_get_guint8(nvme_tvb, 40)));
             dissect_nvme_get_logpage_cmd(nvme_tvb, cmd_tree, cmd_ctx);
             break;
         case NVME_AQ_OPC_SET_FEATURES:
@@ -3763,12 +3815,12 @@ nvme_is_io_queue_opcode(guint8  opcode)
 static const char *get_cqe_sc_string(guint sct, guint sc)
 {
     switch (sct) {
-        case NVME_CQE_SCT_GENERIC: return val_to_str_const(sc, nvme_cqe_sc_gen_tbl, "Uknown Status Code");
-        case NVME_CQE_SCT_COMMAND: return val_to_str_const(sc, nvme_cqe_sc_cmd_tbl, "Uknown Status Code");
-        case NVME_CQE_SCT_MEDIA: return val_to_str_const(sc, nvme_cqe_sc_media_tbl, "Uknown Status Code");
-        case NVME_CQE_SCT_PATH: return val_to_str_const(sc, nvme_cqe_sc_path_tbl, "Uknown Status Code");
+        case NVME_CQE_SCT_GENERIC: return val_to_str_const(sc, nvme_cqe_sc_gen_tbl, "Unknown Status Code");
+        case NVME_CQE_SCT_COMMAND: return val_to_str_const(sc, nvme_cqe_sc_cmd_tbl, "Unknown Status Code");
+        case NVME_CQE_SCT_MEDIA: return val_to_str_const(sc, nvme_cqe_sc_media_tbl, "Unknown Status Code");
+        case NVME_CQE_SCT_PATH: return val_to_str_const(sc, nvme_cqe_sc_path_tbl, "Unknown Status Code");
         case NVME_CQE_SCT_VENDOR: return "Vendor Error";
-        default: return "Uknown Status Code";
+        default: return "Unknown Status Code";
     }
 }
 
@@ -3838,11 +3890,22 @@ static void dissect_nvme_cqe_common(tvbuff_t *nvme_tvb, proto_tree *cqe_tree, gu
         proto_tree_add_item(grp, hf_nvme_cqe_status[i], nvme_tvb, off+14, 2, ENC_LITTLE_ENDIAN);
 }
 
-void dissect_nvme_cqe(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tree *root_tree, struct nvme_cmd_ctx *cmd_ctx)
+void dissect_nvme_cqe(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tree *root_tree, struct nvme_q_ctx *q_ctx, struct nvme_cmd_ctx *cmd_ctx)
 {
     proto_tree *cqe_tree;
     proto_item *ti;
 
+    if (q_ctx->qid)
+            col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMe CQE for %s", val_to_str_const(cmd_ctx->opcode, ioq_opc_tbl, "Unknown Command"));
+    else
+        col_append_sep_fstr(pinfo->cinfo, COL_INFO, "| ", "NVMe CQE for %s", val_to_str_const(cmd_ctx->opcode, aq_opc_tbl, "Unknown Command"));
+
+    if (!q_ctx->qid) {
+        if (cmd_ctx->opcode == NVME_AQ_OPC_IDENTIFY)
+            col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", val_to_str_const(cmd_ctx->cmd_ctx.cmd_identify.cns, cns_table, "Unknown"));
+        else if (cmd_ctx->opcode == NVME_AQ_OPC_GET_LOG_PAGE)
+            col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "%s", get_logpage_name(cmd_ctx->cmd_ctx.get_logpage.lid));
+    }
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "NVMe");
     ti = proto_tree_add_item(root_tree, proto_nvme, nvme_tvb, 0,
                              NVME_CQE_SIZE, ENC_NA);

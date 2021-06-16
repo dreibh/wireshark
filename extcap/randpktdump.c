@@ -151,6 +151,8 @@ int main(int argc, char *argv[])
 	char* help_url;
 	char* help_header = NULL;
 
+	g_set_prgname("randpktdump");
+
 	/* Initialize log handler early so we can have proper logging during startup. */
 	ws_log_init(NULL);
 
@@ -158,11 +160,8 @@ int main(int argc, char *argv[])
 
 	/* Command line options are parsed too late to configure logging, do it
 		manually. */
-	const char *opt_err_val;
-	if ((opt_err_val = ws_log_set_level_args(&argc, argv)) != NULL) {
-		cmdarg_err("Invalid log level \"%s\"", opt_err_val);
+	if (ws_log_parse_args(&argc, argv, cmdarg_err) != 0)
 		return EXIT_FAILURE;
-	}
 
 	/*
 	 * Get credential information for later use.

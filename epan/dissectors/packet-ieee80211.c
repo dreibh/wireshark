@@ -53,6 +53,7 @@
 #include <epan/exceptions.h>
 #include <wsutil/pint.h>
 #include <wsutil/str_util.h>
+#include <wsutil/ws_roundup.h>
 #include <epan/addr_resolv.h>
 #include <epan/address_types.h>
 #include <epan/strutil.h>
@@ -134,10 +135,6 @@ sta_prop_equal_fn(gconstpointer v, gconstpointer w)
 
   return memcmp(k1, k2, 6) == 0; /* Compare each address for equality */
 }
-
-#ifndef roundup2
-#define roundup2(x, y)  (((x)+((y)-1))&(~((y)-1)))  /* if y is powers of two */
-#endif
 
 /* bitmask for bits [l..h]
  * taken from kernel's include/linux/bitops.h
@@ -756,7 +753,7 @@ static const value_string tag_num_vals_eid_ext[] = {
   { ETAG_MULTIPLE_BSSID_CONFIGURATION,        "Multiple BSSID Configuration" },
   { ETAG_KNOWN_BSSID,                         "Known BSSID" },
   { ETAG_SHORT_SSID,                          "Short SSID" },
-  { ETAG_HE_6GHZ_BAND_CAPABILITIES,           "HE 6Ghz Band Capabilities" },
+  { ETAG_HE_6GHZ_BAND_CAPABILITIES,           "HE 6 GHz Band Capabilities" },
   { ETAG_UL_MU_POWER_CAPABILITIES,            "UL MU Power Capabilities" },
   { ETAG_MSCS_DESCRIPTOR_ELEMENT,             "MSCS Descriptor Element" },
   { ETAG_TCLAS_MASK,                          "TCLAS Mask" },
@@ -2698,7 +2695,7 @@ static const value_string vht_max_ampdu_flag[] = {
   {0x00, "8 191"},
   {0x01, "16 383"},
   {0x02, "32 767"},
-  {0x03, "65,535"},
+  {0x03, "65 535"},
   {0x04, "131 071"},
   {0x05, "262 143"},
   {0x06, "524 287"},
@@ -8359,7 +8356,7 @@ add_mimo_csi_matrices_report(proto_tree *tree, tvbuff_t *tvb, int offset, mimo_c
 
   ns = get_mimo_ns(mimo_cntrl.chan_width, mimo_cntrl.grouping);
   csi_matrix_size = ns*(3+(2*mimo_cntrl.nc*mimo_cntrl.nr*mimo_cntrl.coefficient_size));
-  csi_matrix_size = roundup2(csi_matrix_size, 8) / 8;
+  csi_matrix_size = WS_ROUNDUP_8(csi_matrix_size) / 8;
   proto_tree_add_item(snr_tree, hf_ieee80211_ff_mimo_csi_matrices, tvb, offset, csi_matrix_size, ENC_NA);
   offset += csi_matrix_size;
   return offset - start_offset;
@@ -8387,7 +8384,7 @@ add_mimo_beamforming_feedback_report(proto_tree *tree, tvbuff_t *tvb, int offset
 
   ns = get_mimo_ns(mimo_cntrl.chan_width, mimo_cntrl.grouping);
   csi_matrix_size = ns*(2*mimo_cntrl.nc*mimo_cntrl.nr*mimo_cntrl.coefficient_size);
-  csi_matrix_size = roundup2(csi_matrix_size, 8) / 8;
+  csi_matrix_size = WS_ROUNDUP_8(csi_matrix_size) / 8;
   proto_tree_add_item(snr_tree, hf_ieee80211_ff_mimo_csi_bf_matrices, tvb, offset, csi_matrix_size, ENC_NA);
   offset += csi_matrix_size;
   return offset - start_offset;
@@ -8430,7 +8427,7 @@ add_mimo_compressed_beamforming_feedback_report(proto_tree *tree, tvbuff_t *tvb,
   na = get_mimo_na(mimo_cntrl.nr, mimo_cntrl.nc);
   ns = get_mimo_ns(mimo_cntrl.chan_width, mimo_cntrl.grouping);
   csi_matrix_size = ns*(na*((mimo_cntrl.codebook_info+1)*2 + 2)/2);
-  csi_matrix_size = roundup2(csi_matrix_size, 8) / 8;
+  csi_matrix_size = WS_ROUNDUP_8(csi_matrix_size) / 8;
   proto_tree_add_item(snr_tree, hf_ieee80211_ff_mimo_csi_cbf_matrices, tvb, offset, csi_matrix_size, ENC_NA);
   offset += csi_matrix_size;
   return offset - start_offset;
@@ -8495,7 +8492,7 @@ capture_ieee80211_common(const guchar * pd, int offset, int len,
            * is before the mesh header, possibly because it doesn't
            * recognize the mesh header.
            */
-          hdr_length = roundup2(hdr_length, 4);
+          hdr_length = WS_ROUNDUP_4(hdr_length);
         }
 
         /*
@@ -14365,7 +14362,7 @@ add_ff_vht_compressed_beamforming_report(proto_tree *tree, tvbuff_t *tvb, packet
       carry = 1;
     else
       carry = 0;
-    len = roundup2((pos + matrix_size), 8)/8 - roundup2(pos, 8)/8;
+    len = WS_ROUNDUP_8(pos + matrix_size)/8 - WS_ROUNDUP_8(pos)/8;
     scidx = vht_compressed_skip_scidx(chan_width, grouping, scidx);
 
     /* TODO : For certain values from na_arr, there is always going be a carry over or overflow from the previous or
@@ -23358,14 +23355,14 @@ dissect_he_6ghz_band_capabilities(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 {
   if (len != 2) {
     expert_add_info_format(pinfo, tree, &ei_ieee80211_tag_length,
-                           "HE 6Ghz Band Capabilities must be at 2 octets long");
+                           "HE 6 GHz Band Capabilities must be at 2 octets long");
     return;
   }
 
-  proto_tree_add_bitmask(tree, tvb, offset, hf_ieee80211_tag_he_6ghz_cap_inf,
+  proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_tag_he_6ghz_cap_inf,
                          ett_tag_he_6ghz_cap_inf_tree,
                          ieee80211_tag_he_6ghz_cap_inf,
-                         ENC_LITTLE_ENDIAN);
+                         ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
 }
 
 static void
@@ -32555,7 +32552,7 @@ dissect_ieee80211_pv0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
      * is before the mesh header, possibly because it doesn't
      * recognize the mesh header.
      */
-    hdr_len = roundup2(hdr_len, 4);
+    hdr_len = WS_ROUNDUP_4(hdr_len);
   }
 
   if (FCF_FRAME_TYPE (fcf) == DATA_FRAME) {
@@ -33909,7 +33906,7 @@ dissect_ieee80211_pv0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
           msdu_length = tvb_get_ntohs(next_tvb, msdu_offset+12);
 
           parent_item = proto_tree_add_item(mpdu_tree, hf_ieee80211_amsdu_subframe, next_tvb,
-                            msdu_offset, roundup2(msdu_offset+14+msdu_length, 4), ENC_NA);
+                            msdu_offset, WS_ROUNDUP_4(msdu_offset+14+msdu_length), ENC_NA);
           proto_item_append_text(parent_item, " #%u", i);
           subframe_tree = proto_item_add_subtree(parent_item, ett_msdu_aggregation_subframe_tree);
           i += 1;
@@ -33929,7 +33926,7 @@ dissect_ieee80211_pv0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
           msdu_offset += 14;
           msdu_tvb = tvb_new_subset_length(next_tvb, msdu_offset, msdu_length);
           call_dissector(llc_handle, msdu_tvb, pinfo, subframe_tree);
-          msdu_offset = roundup2(msdu_offset+msdu_length, 4);
+          msdu_offset = WS_ROUNDUP_4(msdu_offset+msdu_length);
         } while (tvb_reported_length_remaining(next_tvb, msdu_offset) > 14);
       } else {
         /* I guess some bridges take Netware Ethernet_802_3 frames,
@@ -41486,18 +41483,18 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_tag_he_6ghz_cap_inf_b0_b2,
      {"Minimum MPDU Start Spacing", "wlan.tag.he_6ghz.cap_inf.b0_b2",
-      FT_UINT16, BASE_HEX, NULL, 0x0007,
+      FT_UINT16, BASE_HEX, VALS(s1g_min_mpdu_start_spacing_vals), 0x0007,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_he_6ghz_cap_inf_b3_b5,
-     {"Maximum A-MPDU Start Spacing", "wlan.tag.he_6ghz.cap_inf.b3_b5",
-      FT_UINT16, BASE_HEX, NULL, 0x0038,
-      NULL, HFILL }},
+     {"Maximum A-MPDU Length Exponent", "wlan.tag.he_6ghz.cap_inf.b3_b5",
+      FT_UINT16, BASE_HEX, VALS(vht_max_ampdu_flag), 0x0038,
+      "Octets", HFILL }},
 
     {&hf_ieee80211_tag_he_6ghz_cap_inf_b6_b7,
      {"Maximum MPDU Length", "wlan.tag.he_6ghz.cap_inf.b6_b7",
-      FT_UINT16, BASE_HEX, NULL, 0x00C0,
-      NULL, HFILL }},
+      FT_UINT16, BASE_HEX, VALS(vht_max_mpdu_length_flag), 0x00C0,
+      "Octets", HFILL }},
 
     {&hf_ieee80211_tag_he_6ghz_cap_inf_b8,
      {"Reserved", "wlan.tag.he_6ghz.cap_inf.b8",
@@ -41506,22 +41503,22 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_tag_he_6ghz_cap_inf_b9_b10,
      {"SM Power Save", "wlan.tag.he_6ghz.cap_inf.b9b_b10",
-      FT_UINT16, BASE_HEX, NULL, 0x0600,
+      FT_UINT16, BASE_HEX, VALS(ht_sm_pwsave_flag), 0x0600,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_he_6ghz_cap_inf_b11,
      {"RD Responder", "wlan.tag.he_6ghz.cap_inf.b11",
-      FT_UINT16, BASE_HEX, NULL, 0x0800,
+      FT_BOOLEAN, 16, TFS(&tfs_supported_not_supported), 0x0800,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_he_6ghz_cap_inf_b12,
      {"Rx Antenna Pattern Consistency", "wlan.tag.he_6ghz.cap_inf.b12",
-      FT_UINT16, BASE_HEX, NULL, 0x1000,
+      FT_BOOLEAN, 16, TFS(&tfs_supported_not_supported), 0x1000,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_he_6ghz_cap_inf_b13,
      {"Tx Antenna Pattern Consistency", "wlan.tag.he_6ghz.cap_inf.b13",
-      FT_UINT16, BASE_HEX, NULL, 0x2000,
+      FT_BOOLEAN, 16, TFS(&tfs_supported_not_supported), 0x2000,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_he_6ghz_cap_inf_b14_b15,
@@ -43322,7 +43319,7 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_vht_max_mpdu_length,
      {"Maximum MPDU Length", "wlan.vht.capabilities.maxmpdulength",
       FT_UINT32, BASE_HEX, VALS(vht_max_mpdu_length_flag), 0x00000003,
-      "In Octets unit", HFILL }},
+      "Octets", HFILL }},
 
     {&hf_ieee80211_vht_supported_chan_width_set,
      {"Supported Channel Width Set", "wlan.vht.capabilities.supportedchanwidthset",
@@ -43397,7 +43394,7 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_vht_max_ampdu,
      {"Max A-MPDU Length Exponent", "wlan.vht.capabilities.maxampdu",
       FT_UINT32, BASE_HEX, VALS(vht_max_ampdu_flag), 0x03800000,
-      "In Octets unit", HFILL }},
+      "Octets", HFILL }},
 
     {&hf_ieee80211_vht_link_adaptation_cap,
      {"VHT Link Adaptation", "wlan.vht.capabilities.linkadapt",

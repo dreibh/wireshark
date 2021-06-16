@@ -772,6 +772,8 @@ main(int argc, char *argv[])
   setlocale(LC_ALL, "");
 #endif
 
+  g_set_prgname("tshark");
+
   /* Initialize log handler early so we can have proper logging during startup. */
   ws_log_init(NULL);
 
@@ -779,11 +781,8 @@ main(int argc, char *argv[])
 
   /* Command line options are parsed too late to configure logging, do it
       manually. */
-  const char *opt_err_val;
-  if ((opt_err_val = ws_log_set_level_args(&argc, argv)) != NULL) {
-    cmdarg_err("Invalid log level \"%s\"", opt_err_val);
+  if (ws_log_parse_args(&argc, argv, cmdarg_err) != 0)
     return INVALID_OPTION;
-  }
 
   ws_debug("tshark started with %d args", argc);
 
