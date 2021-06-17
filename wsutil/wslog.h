@@ -9,42 +9,20 @@
 #ifndef __WSLOG_H__
 #define __WSLOG_H__
 
+#include <ws_log_defs.h>
 #include <ws_symbol_export.h>
 #include <glib.h>
 #include <stdio.h>
 #include <stdarg.h>
 
-#ifdef __cplusplus
-extern "C" {
-#endif /* __cplusplus */
-
-/*
- * Descending order by priority needs to be maintained. Higher priorities have
- * lower values.
- */
-enum ws_log_level {
-     LOG_LEVEL_NONE,       /* not user facing */
-     LOG_LEVEL_ERROR,      /* "error" is always fatal (aborts) */
-     LOG_LEVEL_CRITICAL,
-     LOG_LEVEL_WARNING,
-     LOG_LEVEL_MESSAGE,
-     LOG_LEVEL_INFO,
-     LOG_LEVEL_DEBUG,
-     _LOG_LEVEL_LAST
-};
-
-/*
- * Which log domain to use is a matter of policy. Any string is valid (names
- * using parenthesis should be avoided). There are no hard rules but using a
- * non-default pre-defined log domain is a good rule of thumb.
- */
-
-#include <ws_log_domains.h>
-
 #ifndef WS_LOG_DOMAIN
+/* Should this be an error instead? */
 #define WS_LOG_DOMAIN LOG_DOMAIN_DEFAULT
 #endif
 
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
 
 /** Callback for registering a log writer. */
 typedef void (ws_log_writer_cb)(const char *domain, enum ws_log_level level,
@@ -105,9 +83,48 @@ enum ws_log_level ws_log_set_level_str(const char *str_level);
  *
  * Domain filter is a case insensitive list separated by ',' or ';'. Only
  * the domains in the filter will generate output; the others will be muted.
+ * Filter expressions can be preceded by '!' to invert the sense of the match.
+ * In this case only non-matching domains will generate output.
  */
 WS_DLL_PUBLIC
-void ws_log_set_domain_filter_str(const char *domain_filter);
+void ws_log_set_domain_filter(const char *domain_filter);
+
+
+/** Set a debug filter from a string.
+ *
+ * A debug filter lists all domains that should have debug level output turned
+ * on, regardless of the global log level and domain filter.
+ */
+WS_DLL_PUBLIC
+void ws_log_set_debug_filter(const char *str_filter);
+
+
+/** Set a noisy filter from a string.
+ *
+ * A noisy filter lists all domains that should have noisy level output turned
+ * on, regardless of the global log level and domain filter.
+ */
+WS_DLL_PUBLIC
+void ws_log_set_noisy_filter(const char *str_filter);
+
+
+/** Set the fatal log level.
+ *
+ * Sets the log level at which calls to ws_log() will abort the program. The
+ * argument can be LOG_LEVEL_CRITICAL or LOG_LEVEL_WARNING. Level
+ * LOG_LEVEL_ERROR is always fatal.
+ */
+WS_DLL_PUBLIC
+enum ws_log_level ws_log_set_fatal(enum ws_log_level log_level);
+
+
+/** Set the fatal log level from a string.
+ *
+ * Same as ws_log_set_fatal(), but accepts the strings "critical" or "warnings"
+ * instead as arguments.
+ */
+WS_DLL_PUBLIC
+enum ws_log_level  ws_log_set_fatal_str(const char *str_level);
 
 
 /** Parses the command line arguments for log options.
@@ -214,20 +231,31 @@ void ws_logv_full(const char *domain, enum ws_log_level level,
  */
 #define ws_info(...)     _LOG_FULL(LOG_LEVEL_INFO, __VA_ARGS__)
 
+#ifndef WS_DISABLE_DEBUG
+#define _LOG_DEBUG(level, ...)   _LOG_FULL(level, __VA_ARGS__)
+#else
+/*
+ * This avoids -Wunused warnings for variables used only with
+ * !WS_DISABLE_DEBUG,typically inside a ws_debug() call. The compiler will
+ * optimize away the dead execution branch.
+ */
+#define _LOG_DEBUG(level, ...) \
+          G_STMT_START { \
+               if (0) _LOG_FULL(level, __VA_ARGS__); \
+          } G_STMT_END
+#endif
+
 /** Logs with "debug" level.
  *
  * Accepts a format string and includes the file and function name.
  */
-#ifndef WS_DISABLE_DEBUG
-#define ws_debug(...)    _LOG_FULL(LOG_LEVEL_DEBUG, __VA_ARGS__)
-#else
-/* This avoids -Wunused warnings for variables referenced by ws_debug()
- * only. The compiler will optimize it away. */
-#define ws_debug(...) \
-          G_STMT_START { \
-               if (0) _LOG_FULL(LOG_LEVEL_DEBUG, __VA_ARGS__); \
-          } G_STMT_END
-#endif
+#define ws_debug(...)    _LOG_DEBUG(LOG_LEVEL_DEBUG, __VA_ARGS__)
+
+/** Logs with "noisy" level.
+ *
+ * Accepts a format string and includes the file and function name.
+ */
+#define ws_noisy(...)    _LOG_DEBUG(LOG_LEVEL_NOISY, __VA_ARGS__)
 
 
 /** Define an auxilliary file pointer where messages should be written.
@@ -236,6 +264,10 @@ void ws_logv_full(const char *domain, enum ws_log_level level,
  */
 WS_DLL_PUBLIC
 void ws_log_add_custom_file(FILE *fp);
+
+
+WS_DLL_PUBLIC
+void ws_log_print_usage(FILE *fp);
 
 #ifdef __cplusplus
 }

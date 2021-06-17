@@ -457,6 +457,8 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		#                                   in pcap-stdinc.h when compiling C++ files, e.g. the Qt UI
 		/DPSAPI_VERSION=1
 		/D_ALLOW_KEYWORD_MACROS
+		# https://stackoverflow.com/questions/37845163/what-is-the-purpose-of-microsofts-underscore-c-functions
+		/D_CRT_NONSTDC_NO_WARNINGS
 	)
 
 	if(NOT WIRESHARK_TARGET_PLATFORM STREQUAL "win64")
@@ -3376,7 +3378,7 @@ set(SHARK_PUBLIC_HEADERS
 	ws_attributes.h
 	ws_compiler_tests.h
 	ws_diag_control.h
-	ws_log_domains.h
+	ws_log_defs.h
 	ws_symbol_export.h
 	version_info.h
 	${CMAKE_BINARY_DIR}/ws_version.h
