@@ -15,10 +15,11 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#ifndef WS_LOG_DOMAIN
-/* Should this be an error instead? */
-#define WS_LOG_DOMAIN LOG_DOMAIN_DEFAULT
-#endif
+/*
+ * Define the macro WS_LOG_DOMAIN *before* including this header,
+ * for example:
+ *   #define WS_LOG_DOMAIN LOG_DOMAIN_MAIN
+ */
 
 #ifdef __cplusplus
 extern "C" {
@@ -49,13 +50,12 @@ WS_DLL_PUBLIC
 const char *ws_log_level_to_string(enum ws_log_level level);
 
 
-/** Checks if the active log level would discard a message for the given
- * log domain.
+/** Checks if a domain and level combination generate output.
  *
- * Returns TRUE if a message will be discarded for the domain/log_level combo.
+ * Returns TRUE if a message will be printed for the domain/log_level combo.
  */
 WS_DLL_PUBLIC
-gboolean ws_log_level_is_active(enum ws_log_level level);
+gboolean ws_log_message_is_active(const char *domain, enum ws_log_level level);
 
 
 /** Return the currently active log level. */
@@ -196,8 +196,13 @@ void ws_logv_full(const char *domain, enum ws_log_level level,
                     const char *format, va_list ap);
 
 
+#ifdef WS_LOG_DOMAIN
 #define _LOG_FULL(level, ...) ws_log_full(WS_LOG_DOMAIN, level,  \
                                    __FILE__, __LINE__, G_STRFUNC, __VA_ARGS__)
+#else
+#define _LOG_FULL(level, ...) ws_log_full(NULL, level,  \
+                                   __FILE__, __LINE__, G_STRFUNC, __VA_ARGS__)
+#endif
 
 /** Logs with "error" level.
  *

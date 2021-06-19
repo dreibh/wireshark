@@ -44,8 +44,11 @@
  * domain filter. */
 #define ENV_VAR_NOISY       "WIRESHARK_LOG_NOISY"
 
-
 #define DEFAULT_LOG_LEVEL   LOG_LEVEL_MESSAGE
+
+#define DEFAULT_APPNAME     "PID"
+
+#define DOMAIN_NOTSET(domain)  ((domain) == NULL || *(domain) == '\0')
 
 
 static enum ws_log_level current_log_level = LOG_LEVEL_NONE;
@@ -63,9 +66,17 @@ static GPtrArray *debug_filter = NULL;
 /* List of domains to output noisy level unconditionally. */
 static GPtrArray *noisy_filter = NULL;
 
-/* True if active domains should match, false if actice domains should not
+/* True if active domains should match, false if active domains should not
  * match. */
 static gboolean domain_filter_positive = TRUE;
+
+/* True if debug filter enables debug log level, false if debug filter
+ * disables debug log level. */
+static gboolean debug_filter_positive = TRUE;
+
+/* True if noisy filter enables noisy log level, false if noisy filter
+ * disables noisy log level. */
+static gboolean noisy_filter_positive = TRUE;
 
 static ws_log_writer_cb *registered_log_writer = NULL;
 
@@ -85,7 +96,7 @@ const char *ws_log_level_to_string(enum ws_log_level level)
 {
     switch (level) {
         case LOG_LEVEL_NONE:
-            return "(none)";
+            return "(zero)";
         case LOG_LEVEL_ERROR:
             return "ERROR";
         case LOG_LEVEL_CRITICAL:
@@ -130,7 +141,14 @@ static enum ws_log_level string_to_log_level(const char *str_level)
 }
 
 
-gboolean ws_log_level_is_active(enum ws_log_level level)
+WS_RETNONNULL
+static inline const char *domain_to_string(const char *domain)
+{
+    return (domain == NULL) ? "(none)" : domain;
+}
+
+
+static inline gboolean log_level_is_active(enum ws_log_level level)
 {
     /*
      * Lower numerical levels have higher priority. Critical and above
@@ -145,6 +163,9 @@ gboolean ws_log_level_is_active(enum ws_log_level level)
 
 static inline gboolean filter_contains(GPtrArray *filter, const char *domain)
 {
+    if (filter == NULL || DOMAIN_NOTSET(domain))
+        return FALSE;
+
     for (guint i = 0; i < filter->len; i++) {
         if (g_ascii_strcasecmp(filter->pdata[i], domain) == 0) {
             return TRUE;
@@ -154,14 +175,16 @@ static inline gboolean filter_contains(GPtrArray *filter, const char *domain)
 }
 
 
-gboolean ws_log_domain_is_active(const char *domain)
+static inline gboolean log_domain_is_active(const char *domain)
 {
     if (domain_filter == NULL)
         return TRUE;
 
-    /* We don't filter the default domain. Default means undefined, pretty much
-     * every permanent call to ws_log should be using a chosen domain. */
-    if (strcmp(domain, LOG_DOMAIN_DEFAULT) == 0)
+    /*
+     * We don't filter the undefined domain, pretty much every permanent
+     * call to ws_log should be using a set domain.
+     */
+    if (DOMAIN_NOTSET(domain))
         return TRUE;
 
     if (filter_contains(domain_filter, domain))
@@ -170,19 +193,45 @@ gboolean ws_log_domain_is_active(const char *domain)
     return !domain_filter_positive;
 }
 
+#define ACTIVE     1
+#define SILENT     0
+#define CONTINUE  -1
 
-static gboolean log_drop_message(const char *domain, enum ws_log_level level)
+static inline int level_filter_matches(GPtrArray *ptr, const char *domain,
+                                        enum ws_log_level level,
+                                        enum ws_log_level max_level,
+                                        gboolean positive)
 {
-    if (noisy_filter != NULL && filter_contains(noisy_filter, domain)) {
-        return FALSE;
-    }
+    if (filter_contains(ptr, domain) == FALSE)
+        return CONTINUE;
 
-    if (debug_filter != NULL && level <= LOG_LEVEL_DEBUG &&
-                                filter_contains(debug_filter, domain)) {
-        return FALSE;
-    }
+    if (positive)
+        return level <= max_level ? ACTIVE : SILENT;
 
-    return !ws_log_level_is_active(level) || !ws_log_domain_is_active(domain);
+    /* negative match */
+    return level >= max_level ? SILENT : CONTINUE;
+}
+
+#define DEBUG_FILTER_MATCHES(domain, level) \
+            level_filter_matches(debug_filter, domain, level, \
+                        LOG_LEVEL_DEBUG, debug_filter_positive)
+
+#define NOISY_FILTER_MATCHES(domain, level) \
+            level_filter_matches(noisy_filter, domain, level, \
+                        LOG_LEVEL_NOISY, noisy_filter_positive)
+
+
+gboolean ws_log_message_is_active(const char *domain, enum ws_log_level level)
+{
+    int action;
+
+    if ((action = NOISY_FILTER_MATCHES(domain, level)) != CONTINUE)
+        return action;
+
+    if ((action = DEBUG_FILTER_MATCHES(domain, level)) != CONTINUE)
+        return action;
+
+    return log_level_is_active(level) && log_domain_is_active(domain);
 }
 
 
@@ -354,7 +403,7 @@ static GPtrArray *tokenize_filter_str(const char *str_filter,
     const char *sep = ",;";
     char *list, *str;
     GPtrArray *domains;
-    gboolean positive;
+    gboolean negated = FALSE;
 
     ws_assert(str_filter);
 
@@ -363,11 +412,8 @@ static GPtrArray *tokenize_filter_str(const char *str_filter,
     list = str = g_strdup(str_filter);
 
     if (str[0] == '!') {
-        positive = FALSE;
+        negated = TRUE;
         str += 1;
-    }
-    else {
-        positive = TRUE;
     }
 
     for (tok = strtok(str, sep); tok != NULL; tok = strtok(NULL, sep)) {
@@ -377,7 +423,7 @@ static GPtrArray *tokenize_filter_str(const char *str_filter,
     g_free(list);
 
     if (ret_positive)
-        *ret_positive = positive;
+        *ret_positive = !negated;
     return domains;
 }
 
@@ -396,7 +442,7 @@ void ws_log_set_debug_filter(const char *str_filter)
     if (debug_filter != NULL)
         g_ptr_array_free(debug_filter, TRUE);
 
-    debug_filter = tokenize_filter_str(str_filter, NULL);
+    debug_filter = tokenize_filter_str(str_filter, &debug_filter_positive);
 }
 
 
@@ -405,7 +451,7 @@ void ws_log_set_noisy_filter(const char *str_filter)
     if (noisy_filter != NULL)
         g_ptr_array_free(noisy_filter, TRUE);
 
-    noisy_filter = tokenize_filter_str(str_filter, NULL);
+    noisy_filter = tokenize_filter_str(str_filter, &noisy_filter_positive);
 }
 
 
@@ -434,6 +480,8 @@ void ws_log_init(ws_log_writer_cb *writer)
     const char *env;
 
     registered_appname = g_get_prgname();
+    if (registered_appname == NULL)
+        registered_appname = DEFAULT_APPNAME;
 
     if (writer)
         registered_log_writer = writer;
@@ -499,28 +547,21 @@ static void log_write_do_work(FILE *fp, gboolean use_color, const char *timestam
                                 const char *file, int line, const char *func,
                                 const char *user_format, va_list user_ap)
 {
+    const char *domain_str = domain_to_string(domain);
     const char *level_str = ws_log_level_to_string(level);
-    gboolean doextra = (level != LOG_LEVEL_MESSAGE);
+    gboolean doextra = (level != DEFAULT_LOG_LEVEL);
 
-    if (doextra) {
-        fprintf(fp, " ** (%s:%ld) ", registered_appname ?
-                        registered_appname : "PID", (long)getpid());
-    }
-    else {
+    if (doextra)
+        fprintf(fp, " ** (%s:%ld) ", registered_appname, (long)getpid());
+    else
         fputs(" ** ", fp);
-    }
 
     if (timestamp) {
         fputs(timestamp, fp);
         fputc(' ', fp);
     }
 
-    if (strcmp(domain, LOG_DOMAIN_DEFAULT) != 0) {
-        fprintf(fp, "[%s-%s] ", domain, level_str);
-    }
-    else {
-        fprintf(fp, "[%s] ", level_str);
-    }
+    fprintf(fp, "[%s-%s] ", domain_str, level_str);
 
     if (doextra) {
         if (file && line >= 0) {
@@ -581,10 +622,8 @@ static void log_write_dispatch(const char *domain, enum ws_log_level level,
 void ws_logv(const char *domain, enum ws_log_level level,
                     const char *format, va_list ap)
 {
-    if (domain == NULL || domain[0] == '\0')
-        domain = LOG_DOMAIN_DEFAULT;
 
-    if (log_drop_message(domain, level))
+    if (ws_log_message_is_active(domain, level) == FALSE)
         return;
 
     log_write_dispatch(domain, level, NULL, -1, NULL, format, ap);
@@ -595,10 +634,7 @@ void ws_logv_full(const char *domain, enum ws_log_level level,
                     const char *file, int line, const char *func,
                     const char *format, va_list ap)
 {
-    if (domain == NULL || domain[0] == '\0')
-        domain = LOG_DOMAIN_DEFAULT;
-
-    if (log_drop_message(domain, level))
+    if (ws_log_message_is_active(domain, level) == FALSE)
         return;
 
     log_write_dispatch(domain, level, file, line, func, format, ap);
@@ -610,10 +646,7 @@ void ws_log(const char *domain, enum ws_log_level level,
 {
     va_list ap;
 
-    if (domain == NULL || domain[0] == '\0')
-        domain = LOG_DOMAIN_DEFAULT;
-
-    if (log_drop_message(domain, level))
+    if (ws_log_message_is_active(domain, level) == FALSE)
         return;
 
     va_start(ap, format);
@@ -628,10 +661,7 @@ void ws_log_full(const char *domain, enum ws_log_level level,
 {
     va_list ap;
 
-    if (domain == NULL || domain[0] == '\0')
-        domain = LOG_DOMAIN_DEFAULT;
-
-    if (log_drop_message(domain, level))
+    if (ws_log_message_is_active(domain, level) == FALSE)
         return;
 
     va_start(ap, format);

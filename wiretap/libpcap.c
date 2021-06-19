@@ -603,24 +603,15 @@ done:
 	if (wth->file_encap == WTAP_ENCAP_ERF) {
 		/*Reset the ERF interface lookup table*/
 		libpcap->encap_priv = erf_priv_create();
+	} else {
+		/*
+		 * Add an IDB; we don't know how many interfaces were
+		 * involved, so we just say one interface, about which
+		 * we only know the link-layer type, snapshot length,
+		 * and time stamp resolution.
+		 */
+		wtap_add_generated_idb(wth);
 	}
-
-	/*
-	 * Add an IDB; we don't know how many interfaces were involved,
-	 * so we just say one interface, about which we only know
-	 * the link-layer type, snapshot length, and time stamp
-	 * resolution.
-	 *
-	 * XXX - this will be a bit weird if you're trying to convert
-	 * a LINKTYPE_ERF pcap file to a pcapng file; it'll have a
-	 * placeholder interface added here, *plus* interfaces
-	 * added from the ERF records.  Ideally, at some point in
-	 * the future, libpcap will have a more pcapng-friendly API
-	 * for capturing, and the DAG capture code will use it, so that
-	 * if you're capturing on more than one interface, they'll all
-	 * get regular IDBs, with no need for the placeholder.
-	 */
-	wtap_add_generated_idb(wth);
 
 	return WTAP_OPEN_MINE;
 }
@@ -919,7 +910,7 @@ libpcap_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 		int interface_id;
 		/* Set interface ID for ERF format */
 		rec->presence_flags |= WTAP_HAS_INTERFACE_ID;
-		if ((interface_id = erf_populate_interface_from_header((erf_t*) libpcap->encap_priv, wth, &rec->rec_header.packet_header.pseudo_header)) < 0)
+		if ((interface_id = erf_populate_interface_from_header((erf_t*) libpcap->encap_priv, wth, &rec->rec_header.packet_header.pseudo_header, err, err_info)) < 0)
 			return FALSE;
 
 		rec->rec_header.packet_header.interface_id = (guint) interface_id;
