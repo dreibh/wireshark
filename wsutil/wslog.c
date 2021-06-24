@@ -526,6 +526,41 @@ enum ws_log_level ws_log_set_fatal_str(const char *str_level)
 }
 
 
+static void glib_log_handler(const char *domain, GLogLevelFlags flags,
+                        const char *message, gpointer user_data _U_)
+{
+    enum ws_log_level level;
+
+    /*
+     * The highest priority bit in the mask defines the level. We
+     * ignore the GLib fatal log level mask and use our own fatal
+     * log level setting instead.
+     */
+
+    if (flags & G_LOG_LEVEL_ERROR)
+        level = LOG_LEVEL_ERROR;
+    else if (flags & G_LOG_LEVEL_CRITICAL)
+        level = LOG_LEVEL_CRITICAL;
+    else if (flags & G_LOG_LEVEL_WARNING)
+        level = LOG_LEVEL_WARNING;
+    else if (flags & G_LOG_LEVEL_MESSAGE)
+        level = LOG_LEVEL_MESSAGE;
+    else if (flags & G_LOG_LEVEL_INFO)
+        level = LOG_LEVEL_INFO;
+    else if (flags & G_LOG_LEVEL_DEBUG)
+        level = LOG_LEVEL_DEBUG;
+    else
+        level = LOG_LEVEL_NONE; /* Should not happen. */
+
+    ws_log(domain, level, "%s", message);
+}
+
+
+/*
+ * We can't write to stderr in ws_log_init() because dumpcap uses stderr
+ * to communicate with the parent and it will block. Any failures are
+ * therefore ignored.
+ */
 void ws_log_init(const char *progname, ws_log_writer_cb *writer)
 {
     const char *env;
@@ -552,16 +587,16 @@ void ws_log_init(const char *progname, ws_log_writer_cb *writer)
     current_log_level = DEFAULT_LOG_LEVEL;
 
     env = g_getenv(ENV_VAR_LEVEL);
-    if (env != NULL && ws_log_set_level_str(env) == LOG_LEVEL_NONE)
-        fprintf(stderr, "Ignoring invalid environment value %s=\"%s\".\n", ENV_VAR_LEVEL, env);
+    if (env != NULL)
+        ws_log_set_level_str(env);
+
+    env = g_getenv(ENV_VAR_FATAL);
+    if (env != NULL)
+        ws_log_set_fatal_str(env);
 
     env = g_getenv(ENV_VAR_DOMAINS);
     if (env != NULL)
         ws_log_set_domain_filter(env);
-
-    env = g_getenv(ENV_VAR_FATAL);
-    if (env != NULL && ws_log_set_fatal_str(env) == LOG_LEVEL_NONE)
-        fprintf(stderr, "Ignoring invalid environment value %s=\"%s\".\n", ENV_VAR_FATAL, env);
 
     env = g_getenv(ENV_VAR_DEBUG);
     if (env != NULL)
@@ -570,6 +605,14 @@ void ws_log_init(const char *progname, ws_log_writer_cb *writer)
     env = g_getenv(ENV_VAR_NOISY);
     if (env != NULL)
         ws_log_set_noisy_filter(env);
+
+    /* Set the GLib log handler for the default domain. */
+    g_log_set_handler(NULL, G_LOG_LEVEL_MASK | G_LOG_FLAG_FATAL,
+                        glib_log_handler, NULL);
+
+    /* Set the GLib log handler for GLib itself. */
+    g_log_set_handler("GLib", G_LOG_LEVEL_MASK | G_LOG_FLAG_FATAL,
+                        glib_log_handler, NULL);
 
     atexit(ws_log_cleanup);
 
@@ -602,16 +645,14 @@ static inline const char *msg_color_on(gboolean enable, enum ws_log_level level)
     if (!enable)
         return "";
 
-    if (level <= LOG_LEVEL_NOISY)
-        return MAGENTA;
-    else if (level <= LOG_LEVEL_DEBUG)
+    if (level <= LOG_LEVEL_DEBUG)
         return GREEN;
-    else if (level <= LOG_LEVEL_INFO)
-        return CYAN;
     else if (level <= LOG_LEVEL_MESSAGE)
-        return BLUE;
+        return CYAN;
     else if (level <= LOG_LEVEL_WARNING)
         return YELLOW;
+    else if (level <= LOG_LEVEL_CRITICAL)
+        return MAGENTA;
     else if (level <= LOG_LEVEL_ERROR)
         return RED;
     else
@@ -648,10 +689,10 @@ static void log_write_do_work(FILE *fp, gboolean use_color, const char *timestam
     }
 
     /* Message priority (domain/level) */
-    fprintf(fp, "[%s%s%s %s] ", msg_color_on(use_color, level),
+    fprintf(fp, "[%s %s%s%s] ", domain_str,
+                                msg_color_on(use_color, level),
                                 level_str,
-                                color_off(use_color),
-                                domain_str);
+                                color_off(use_color));
 
     /* File/line */
     if (doextra && file != NULL && line >= 0)
@@ -685,17 +726,23 @@ static void log_write_dispatch(const char *domain, enum ws_log_level level,
         g_date_time_unref(now);
     }
 
+    if (custom_log) {
+        va_list user_ap_copy;
+
+        G_VA_COPY(user_ap_copy, user_ap);
+        log_write_do_work(custom_log, FALSE,
+                            tstamp, domain, level,
+                            file, line, func,
+                            user_format, user_ap_copy);
+        va_end(user_ap_copy);
+    }
+
     if (registered_log_writer) {
         registered_log_writer(domain, level, tstamp, file, line, func,
                         user_format, user_ap, registered_log_writer_data);
     }
     else {
         log_write_do_work(stderr, color_enabled, tstamp, domain, level, file, line, func,
-                        user_format, user_ap);
-    }
-
-    if (custom_log) {
-        log_write_do_work(custom_log, FALSE, tstamp, domain, level, file, line, func,
                         user_format, user_ap);
     }
 
