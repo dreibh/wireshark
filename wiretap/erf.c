@@ -65,10 +65,10 @@ static gboolean erf_seek_read(wtap *wth, gint64 seek_off,
                               int *err, gchar **err_info);
 static void erf_close(wtap *wth);
 
-static int populate_summary_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, Buffer *buf, guint32 packet_size, GPtrArray *anchor_mappings_to_update);
+static int populate_summary_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, Buffer *buf, guint32 packet_size, GPtrArray *anchor_mappings_to_update, int *err, gchar **err_info);
 static int erf_update_anchors_from_header(erf_t *erf_priv, wtap_rec *rec, union wtap_pseudo_header *pseudo_header, guint64 host_id, GPtrArray *anchor_mappings_to_update);
 static int erf_get_source_from_header(union wtap_pseudo_header *pseudo_header, guint64 *host_id, guint8 *source_id);
-static int erf_populate_interface(erf_t* erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, guint64 host_id, guint8 source_id, guint8 if_num);
+static int erf_populate_interface(erf_t* erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, guint64 host_id, guint8 source_id, guint8 if_num, int *err, gchar **err_info);
 
 typedef struct {
   gboolean write_next_extra_meta;
@@ -595,7 +595,10 @@ static gboolean erf_read(wtap *wth, wtap_rec *rec, Buffer *buf,
      */
     if ((erf_header.type & 0x7F) == ERF_TYPE_META && packet_size > 0)
     {
-      populate_summary_info((erf_t*) wth->priv, wth, &rec->rec_header.packet_header.pseudo_header, buf, packet_size, anchor_mappings_to_update);
+      if (populate_summary_info((erf_t*) wth->priv, wth, &rec->rec_header.packet_header.pseudo_header, buf, packet_size, anchor_mappings_to_update, err, err_info) < 0) {
+        g_ptr_array_free(anchor_mappings_to_update, TRUE);
+        return FALSE;
+      }
     }
 
   } while ( erf_header.type == ERF_TYPE_PAD );
@@ -671,6 +674,7 @@ static gboolean erf_read_header(wtap *wth, FILE_T fh,
   int     i       = 0;
   int     max     = sizeof(pseudo_header->erf.ehdr_list)/sizeof(struct erf_ehdr);
   erf_t *priv = (erf_t*)wth->priv;
+  int    interface_id;
 
   guint64 host_id  = ERF_META_HOST_ID_IMPLICIT;
   guint8 source_id = 0;
@@ -792,8 +796,11 @@ static gboolean erf_read_header(wtap *wth, FILE_T fh,
     i++;
   }
 
-  /* XXX: erf_priv pointer needs to change if used as common function for other dissectors! */
-  rec->rec_header.packet_header.interface_id = (guint) erf_populate_interface((erf_t*) wth->priv, wth, pseudo_header, host_id, source_id, if_num);
+  interface_id = erf_populate_interface((erf_t*) wth->priv, wth, pseudo_header, host_id, source_id, if_num, err, err_info);
+  if (interface_id < 0) {
+    return FALSE;
+  }
+  rec->rec_header.packet_header.interface_id = (guint) interface_id;
 
   /* Try to find comment links using Anchor ID. Done here after we found the first Host ID and have updated the implicit Host ID. */
   erf_update_anchors_from_header(priv, rec, pseudo_header, host_id, anchor_mappings_to_update);
@@ -987,7 +994,7 @@ static void erf_dump_priv_init_gen_time(erf_dump_t *dump_priv) {
 }
 
 
-static void erf_write_wtap_option_to_capture_tag(wtap_block_t block _U_,
+static gboolean erf_write_wtap_option_to_capture_tag(wtap_block_t block _U_,
     guint option_id,
     wtap_opttype_e option_type _U_,
     wtap_optval_t *optval,
@@ -1017,9 +1024,11 @@ static void erf_write_wtap_option_to_capture_tag(wtap_block_t block _U_,
 
   if (tag_ptr)
     g_ptr_array_add(section_ptr->tags, tag_ptr);
+
+  return TRUE; /* we always succeed */
 }
 
-static void erf_write_wtap_option_to_host_tag(wtap_block_t block _U_,
+static gboolean erf_write_wtap_option_to_host_tag(wtap_block_t block _U_,
     guint option_id,
     wtap_opttype_e option_type _U_,
     wtap_optval_t *optval,
@@ -1049,9 +1058,11 @@ static void erf_write_wtap_option_to_host_tag(wtap_block_t block _U_,
 
   if (tag_ptr)
     g_ptr_array_add(section_ptr->tags, tag_ptr);
+
+  return TRUE; /* we always succeed */
 }
 
-static void erf_write_wtap_option_to_interface_tag(wtap_block_t block _U_,
+static gboolean erf_write_wtap_option_to_interface_tag(wtap_block_t block _U_,
     guint option_id,
     wtap_opttype_e option_type _U_,
     wtap_optval_t *optval,
@@ -1157,6 +1168,7 @@ static void erf_write_wtap_option_to_interface_tag(wtap_block_t block _U_,
   if (tag_ptr)
     g_ptr_array_add(section_ptr->tags, tag_ptr);
 
+  return TRUE; /* we always succeed */
 }
 
 static void erf_populate_section_length_by_tags(struct erf_meta_section *section_ptr) {
@@ -2101,7 +2113,7 @@ static int erf_get_source_from_header(union wtap_pseudo_header *pseudo_header, g
   return 0;
 }
 
-int erf_populate_interface_from_header(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header)
+int erf_populate_interface_from_header(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, int *err, gchar **err_info)
 {
   guint64 host_id;
   guint8 source_id;
@@ -2114,7 +2126,7 @@ int erf_populate_interface_from_header(erf_t *erf_priv, wtap *wth, union wtap_ps
 
   erf_get_source_from_header(pseudo_header, &host_id, &source_id);
 
-  return erf_populate_interface(erf_priv, wth, pseudo_header, host_id, source_id, if_num);
+  return erf_populate_interface(erf_priv, wth, pseudo_header, host_id, source_id, if_num, err, err_info);
 }
 
 static struct erf_if_mapping* erf_find_interface_mapping(erf_t *erf_priv, guint64 host_id, guint8 source_id)
@@ -2416,14 +2428,33 @@ static int erf_update_implicit_host_id(erf_t *erf_priv, wtap *wth, guint64 impli
   return 0;
 }
 
-static int erf_populate_interface(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, guint64 host_id, guint8 source_id, guint8 if_num)
+static int erf_populate_interface(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, guint64 host_id, guint8 source_id, guint8 if_num, int *err, gchar **err_info)
 {
   wtap_block_t int_data;
   wtapng_if_descr_mandatory_t* int_data_mand;
   struct erf_if_mapping* if_map = NULL;
 
-  if (!wth || !pseudo_header || !erf_priv || if_num > 3)
+  if (!wth) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: erf_populate_interface called with wth NULL");
     return -1;
+  }
+  if (!pseudo_header) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: erf_populate_interface called with pseudo_header NULL");
+    return -1;
+  }
+  if (!erf_priv) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: erf_populate_interface called with erf_priv NULL");
+    return -1;
+  }
+  if (if_num > 3) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: erf_populate_interface called with if_num %u > 3",
+                                if_num);
+    return -1;
+  }
 
   if (host_id == ERF_META_HOST_ID_IMPLICIT) {
     /* Defaults to ERF_META_HOST_ID_IMPLICIT so we can update mapping later */
@@ -2460,6 +2491,7 @@ static int erf_populate_interface(erf_t *erf_priv, wtap *wth, union wtap_pseudo_
   int_data_mand->wtap_encap = WTAP_ENCAP_ERF;
   /* int_data.time_units_per_second = (1LL<<32);  ERF format resolution is 2^-32, capture resolution is unknown */
   int_data_mand->time_units_per_second = 1000000000; /* XXX Since Wireshark only supports down to nanosecond resolution we have to dilute to this */
+  int_data_mand->tsprecision = WTAP_TSPREC_NSEC;
   int_data_mand->snap_len = 65535; /* ERF max length */
 
   /* XXX: if_IPv4addr opt 4  Interface network address and netmask.*/
@@ -2512,7 +2544,7 @@ static guint32 erf_meta_read_tag(struct erf_meta_tag* tag, guint8 *tag_ptr, guin
   return tagtotallength;
 }
 
-static int populate_capture_host_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header _U_, struct erf_meta_read_state *state)
+static int populate_capture_host_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header _U_, struct erf_meta_read_state *state, int *err, gchar **err_info)
 {
   struct erf_meta_tag tag = {0, 0, NULL};
 
@@ -2526,8 +2558,26 @@ static int populate_capture_host_info(erf_t *erf_priv, wtap *wth, union wtap_pse
   gchar* modelcpu    = NULL;
   guint32 tagtotallength;
 
-  if (!wth || !state || !wth->shb_hdrs || (wth->shb_hdrs->len == 0))
+  if (!wth) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_capture_host_info called with wth NULL");
     return -1;
+  }
+  if (!state) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_capture_host_info called with state NULL");
+    return -1;
+  }
+  if (!wth->shb_hdrs) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_capture_host_info called with wth->shb_hdrs NULL");
+    return -1;
+  }
+  if (wth->shb_hdrs->len == 0) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_capture_host_info called with wth->shb_hdrs->len 0");
+    return -1;
+  }
 
   /* XXX: wth->shb_hdr is already created by different layer, using directly for now. */
   /* XXX: Only one section header is supported at this time */
@@ -2668,14 +2718,22 @@ static int populate_capture_host_info(erf_t *erf_priv, wtap *wth, union wtap_pse
   return 1;
 }
 
-static int populate_module_info(erf_t *erf_priv _U_, wtap *wth, union wtap_pseudo_header *pseudo_header _U_, struct erf_meta_read_state *state)
+static int populate_module_info(erf_t *erf_priv _U_, wtap *wth, union wtap_pseudo_header *pseudo_header _U_, struct erf_meta_read_state *state, int *err, gchar **err_info)
 {
   struct erf_meta_tag tag = {0, 0, NULL};
 
   guint32 tagtotallength;
 
-  if (!wth || !state)
+  if (!wth) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_module_info called with wth NULL");
     return -1;
+  }
+  if (!state) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_module_info called with stat NULL");
+    return -1;
+  }
 
   if (state->if_map->module_gentime > state->gen_time) {
     return 0;
@@ -2709,7 +2767,7 @@ static int populate_module_info(erf_t *erf_priv _U_, wtap *wth, union wtap_pseud
   return 1;
 }
 
-static int populate_interface_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, struct erf_meta_read_state *state)
+static int populate_interface_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, struct erf_meta_read_state *state, int *err, gchar **err_info)
 {
   struct erf_meta_tag tag = {0, 0, NULL};
   guint32 tagtotallength;
@@ -2720,8 +2778,26 @@ static int populate_interface_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo
   guint32 if_num = 0;
   struct erf_if_info* if_info = NULL;
 
-  if (!wth || !state || !pseudo_header || !state->if_map)
+  if (!wth) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_interface_info called with wth NULL");
     return -1;
+  }
+  if (!state) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_interface_info called with state NULL");
+    return -1;
+  }
+  if (!pseudo_header) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_interface_info called with pseudo_header NULL");
+    return -1;
+  }
+  if (!state->if_map) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_interface_info called with state->if_map NULL");
+    return -1;
+  }
 
   /* Section ID of interface is defined to match ERF interface id. */
   if_num = state->sectionid - 1;
@@ -2765,7 +2841,10 @@ static int populate_interface_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo
 
       /* If the interface is valid but uninitialized, create it */
       if (interface_index == -1) {
-        interface_index = erf_populate_interface(erf_priv, wth, pseudo_header, state->if_map->host_id, state->if_map->source_id, (guint8) if_num);
+        interface_index = erf_populate_interface(erf_priv, wth, pseudo_header, state->if_map->host_id, state->if_map->source_id, (guint8) if_num, err, err_info);
+        if (interface_index == -1) {
+          return -1;
+        }
       }
     }
 
@@ -2777,6 +2856,8 @@ static int populate_interface_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo
       /* timing/unknown port */
       return 0;
     } else {
+      *err = WTAP_ERR_INTERNAL;
+      *err_info = g_strdup_printf("erf: populate_interface_info got interface_index %d < 0 and != -2", interface_index);
       return -1;
     }
   }
@@ -2903,7 +2984,7 @@ static int populate_interface_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo
   return 1;
 }
 
-static int populate_stream_info(erf_t *erf_priv _U_, wtap *wth, union wtap_pseudo_header *pseudo_header, struct erf_meta_read_state *state)
+static int populate_stream_info(erf_t *erf_priv _U_, wtap *wth, union wtap_pseudo_header *pseudo_header, struct erf_meta_read_state *state, int *err, gchar **err_info)
 {
   struct erf_meta_tag tag = {0, 0, NULL};
   guint32 tagtotallength;
@@ -2917,8 +2998,26 @@ static int populate_stream_info(erf_t *erf_priv _U_, wtap *wth, union wtap_pseud
   guint32 remaining_len_tmp;
   struct erf_if_info* if_info = NULL;
 
-  if (!wth || !pseudo_header || !state || !state->if_map)
+  if (!wth) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_stream_info called with wth NULL");
     return -1;
+  }
+  if (!pseudo_header) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_stream_info called with pseudo_header NULL");
+    return -1;
+  }
+  if (!state) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_stream_info called with state NULL");
+    return -1;
+  }
+  if (!state->if_map) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_stream_info called with state->if_map NULL");
+    return -1;
+  }
 
   tag_ptr_tmp = state->tag_ptr;
   remaining_len_tmp = state->remaining_len;
@@ -3041,14 +3140,27 @@ static int populate_stream_info(erf_t *erf_priv _U_, wtap *wth, union wtap_pseud
   return 1;
 }
 
-static int populate_anchor_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, struct erf_meta_read_state *state, GPtrArray *anchor_mappings_to_update) {
+static int populate_anchor_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, struct erf_meta_read_state *state, GPtrArray *anchor_mappings_to_update, int *err, gchar **err_info) {
   struct erf_meta_tag tag = {0, 0, NULL};
   guint32 tagtotallength;
   gchar *comment_ptr = NULL;
   guint i = 0;
 
-  if (!wth || !state || !pseudo_header)
+  if (!wth) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_anchor_info called with wth NULL");
     return -1;
+  }
+  if (!state) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_anchor_info called with state NULL");
+    return -1;
+  }
+  if (!pseudo_header) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_anchor_info called with pseudo_header NULL");
+    return -1;
+  }
 
   if (!anchor_mappings_to_update || anchor_mappings_to_update->len == 0)
     return 0;
@@ -3105,7 +3217,7 @@ static int populate_anchor_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_he
 }
 
 /* Populates the capture and interface information for display on the Capture File Properties */
-static int populate_summary_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, Buffer *buf, guint32 packet_size, GPtrArray *anchor_mappings_to_update)
+static int populate_summary_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_header *pseudo_header, Buffer *buf, guint32 packet_size, GPtrArray *anchor_mappings_to_update, int *err, gchar **err_info)
 {
   struct erf_meta_read_state state = {0};
   struct erf_meta_read_state *state_post = NULL;
@@ -3117,8 +3229,21 @@ static int populate_summary_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_h
   struct erf_meta_tag tag = {0, 0, NULL};
   guint32 tagtotallength;
 
-  if (!erf_priv || !wth || !pseudo_header)
+  if (!wth) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_summary_info called with wth NULL");
     return -1;
+  }
+  if (!pseudo_header) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_summary_info called with pseudo_header NULL");
+    return -1;
+  }
+  if (!erf_priv) {
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = g_strdup_printf("erf: populate_summary_info called with erf_priv NULL");
+    return -1;
+  }
 
   erf_get_source_from_header(pseudo_header, &host_id, &source_id);
 
@@ -3154,10 +3279,31 @@ static int populate_summary_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_h
          * Since wireshark doesn't have a concept of different summary metadata
          * over time, skip the record if metadata is older than what we already have.
          */
-        /* TODO: This doesn't work very well for some tags that wireshark only
-         * supports one copy of, we'll only end up with the first one.
-         * wtap_block_set_*_value() currently fails on WTAP_OPTTYPE_NOT_FOUND
-         * for everything except strings.
+        /* TODO: This doesn't work very well for some tags that map to
+         * pcapng options where the pcapng specification only allows one
+         * instance per block, which is the case for most options.  The
+         * only current exxceptions are:
+         *
+         *   comments;
+         *   IPv4 and IPv6 addresses for an interface;
+         *   hash values for a packet;
+         *   custom options.
+         *
+         * For options where only one instance is allowed per block,
+         * wtap_block_add_XXX_option() is currently used to add a new
+         * instance of an option to a block that has no instance (it
+         * fails if there's already an instance), and
+         * wtap_block_set_XXX_optin() is currently used to change the
+         * value of an option in a block that has one instance (it fails
+         * if there isn't already an instance).
+         *
+         * For options where more than one instance is allowed per block,
+         * wtap_block_add_XXX_option() is used to add a new instance to
+         * a block, no matter how many instances it currently has, and
+         * wtap_block_set_nth_XXX_option() is used to change the value
+         * of the Nth instance of an option in a block (the block must
+         * *have* an Nth instance).
+         *
          * Currently we only particularly care about updating the capture comment
          * and a few counters anyway.
          */
@@ -3229,7 +3375,10 @@ static int populate_summary_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_h
      */
     if (state.sectionid & 0x8000) {
       if(state.sectiontype & (ERF_META_SECTION_INFO)) {
-        populate_anchor_info(erf_priv, wth, pseudo_header, &state, anchor_mappings_to_update);
+        /* TODO: do we care if it returns 0 or 1? */
+        if (populate_anchor_info(erf_priv, wth, pseudo_header, &state, anchor_mappings_to_update, err, err_info) < 0) {
+          return -1;
+        }
       }
       continue;
     }
@@ -3242,14 +3391,22 @@ static int populate_summary_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_h
     switch (state.sectiontype) {
       case ERF_META_SECTION_CAPTURE:
       case ERF_META_SECTION_HOST:
-        /* TODO: use return code */
-        populate_capture_host_info(erf_priv, wth, pseudo_header, &state);
+        /* TODO: do we care if it returns 0 or 1? */
+        if (populate_capture_host_info(erf_priv, wth, pseudo_header, &state, err, err_info) < 0) {
+          return -1;
+        }
         break;
       case ERF_META_SECTION_MODULE:
-        populate_module_info(erf_priv, wth, pseudo_header, &state);
+        /* TODO: do we care if it returns 0 or 1? */
+        if (populate_module_info(erf_priv, wth, pseudo_header, &state, err, err_info) < 0) {
+          return -1;
+        }
         break;
       case ERF_META_SECTION_INTERFACE:
-        populate_interface_info(erf_priv, wth, pseudo_header, &state);
+        /* TODO: do we care if it returns 0 or 1? */
+        if (populate_interface_info(erf_priv, wth, pseudo_header, &state, err, err_info) < 0) {
+          return -1;
+        }
         break;
       case ERF_META_SECTION_STREAM:
         /*
@@ -3274,7 +3431,11 @@ static int populate_summary_info(erf_t *erf_priv, wtap *wth, union wtap_pseudo_h
       state_post = (struct erf_meta_read_state*) item->data;
       switch (state_post->sectiontype) {
         case ERF_META_SECTION_STREAM:
-          populate_stream_info(erf_priv, wth, pseudo_header, state_post);
+          if (populate_stream_info(erf_priv, wth, pseudo_header, state_post, err, err_info) < 0) {
+            g_list_foreach(post_list, erf_free_data, NULL);
+            g_list_free(post_list);
+            return -1;
+          }
           break;
       }
     } while ((item = g_list_next(item)));

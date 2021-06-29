@@ -10,9 +10,9 @@
 
 #include "config.h"
 
-#include <glib.h>
 #include "codecs.h"
 
+#include <wsutil/wslog.h>
 #ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
 #endif

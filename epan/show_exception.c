@@ -19,6 +19,7 @@
 #include <epan/prefs.h>
 #include <epan/prefs-int.h>
 #include <epan/show_exception.h>
+#include <wsutil/ws_assert.h>
 
 #include <wsutil/wslog.h>
 
@@ -139,7 +140,8 @@ show_exception(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		    pinfo->current_proto,
 		    exception_message == NULL ?
 		        dissector_error_nomsg : exception_message);
-		ws_warning("Dissector bug, protocol %s, in packet %u: %s",
+		ws_log(WS_LOG_DOMAIN, LOG_LEVEL_WARNING,
+		    "Dissector bug, protocol %s, in packet %u: %s",
 		    pinfo->current_proto, pinfo->num,
 		    exception_message == NULL ?
 		        dissector_error_nomsg : exception_message);
@@ -166,7 +168,7 @@ show_exception(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 	default:
 		/* XXX - we want to know, if an unknown exception passed until here, don't we? */
-		g_assert_not_reached();
+		ws_assert_not_reached();
 	}
 }
 

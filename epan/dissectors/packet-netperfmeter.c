@@ -499,14 +499,13 @@ dissect_npm_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *npm_t
   }
 }
 
-
 static int
 dissect_npm(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   proto_item *npm_item;
   proto_tree *npm_tree;
 
-  col_set_str(pinfo->cinfo, COL_PROTOCOL, "NetPerfMeter");
+  col_append_sep_fstr(pinfo->cinfo, COL_PROTOCOL, NULL, "NetPerfMeter");
 
   /* In the interest of speed, if "tree" is NULL, don't do any work not
      necessary to generate protocol tree items. */

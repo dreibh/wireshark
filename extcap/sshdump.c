@@ -362,6 +362,12 @@ int main(int argc, char *argv[])
 	gboolean noprom = FALSE;
 	gchar* interface_description = g_strdup("SSH remote capture");
 
+	/* Initialize log handler early so we can have proper logging during startup. */
+	ws_log_init("sshdump", NULL);
+
+	/* Early logging command-line initialization. */
+	ws_log_parse_args(&argc, argv, NULL, LOG_ARGS_NOEXIT);
+
 	sshdump_extcap_interface = g_path_get_basename(argv[0]);
 
 	/*

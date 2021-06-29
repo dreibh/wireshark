@@ -20,6 +20,7 @@
 #include <wsutil/file_util.h>
 #include <wsutil/buffer.h>
 #include <wsutil/ws_assert.h>
+#include <wsutil/wslog.h>
 #ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
 #endif
@@ -1093,7 +1094,7 @@ static struct encap_type_info encap_table_base[] = {
 	{ "vsock", "Linux vsock" },
 
 	/* WTAP_ENCAP_NORDIC_BLE */
-	{ "nordic_ble", "Nordic BLE Sniffer" },
+	{ "nordic_ble", "nRF Sniffer for Bluetooth LE" },
 
 	/* WTAP_ENCAP_NETMON_NET_NETEVENT */
 	{ "netmon_event", "Network Monitor Network Event" },
@@ -1663,12 +1664,24 @@ wtap_rec_init(wtap_rec *rec)
 void
 wtap_rec_cleanup(wtap_rec *rec)
 {
+	wtap_option_t option;
+	guint i;
+
 	g_free(rec->opt_comment);
 	rec->opt_comment = NULL;
 	ws_buffer_free(&rec->options_buf);
 	if (rec->packet_verdict != NULL) {
 		g_ptr_array_free(rec->packet_verdict, TRUE);
 		rec->packet_verdict = NULL;
+	}
+	if (rec->custom_options != NULL) {
+		for (i = 0; i < rec->custom_options->len; i++) {
+			option = g_array_index(rec->custom_options, wtap_option_t, i);
+			g_free(option.value.custom_opt.custom_data);
+			option.value.custom_opt.custom_data = NULL;
+		}
+		g_array_free(rec->custom_options, TRUE);
+		rec->custom_options = NULL;
 	}
 }
 

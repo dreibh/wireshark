@@ -344,7 +344,7 @@ qt_log_message_handler(QtMsgType type, const QMessageLogContext &, const QString
     default:
         break;
     }
-    ws_log(LOG_DOMAIN_MAIN, log_level, "%s", qUtf8Printable(msg));
+    ws_log(LOG_DOMAIN_QTUI, log_level, "%s", qUtf8Printable(msg));
 }
 
 #ifdef HAVE_LIBPCAP
@@ -529,10 +529,10 @@ int main(int argc, char *qt_argv[])
     macos_enable_layer_backing();
 #endif
 
-    g_set_prgname("wireshark");
+    cmdarg_err_init(wireshark_cmdarg_err, wireshark_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init(console_log_writer);
+    ws_log_init_with_writer("wireshark", console_log_writer, vcmdarg_err);
 
     qInstallMessageHandler(qt_log_message_handler);
 
@@ -543,7 +543,6 @@ int main(int argc, char *qt_argv[])
 #ifdef DEBUG_STARTUP_TIME
     prefs.gui_console_open = console_open_always;
 #endif /* DEBUG_STARTUP_TIME */
-    cmdarg_err_init(wireshark_cmdarg_err, wireshark_cmdarg_err_cont);
 
 #if defined(Q_OS_MAC)
     /* Disable automatic addition of tab menu entries in view menu */
@@ -582,10 +581,8 @@ int main(int argc, char *qt_argv[])
     create_app_running_mutex();
 #endif /* _WIN32 */
 
-    /* Command line options are parsed too late to configure logging, do it
-        manually. */
-    if (ws_log_parse_args(&argc, argv, cmdarg_err) != 0)
-        exit_application(INVALID_OPTION);
+    /* Early logging command-line initialization. */
+    ws_log_parse_args(&argc, argv, vcmdarg_err, INVALID_OPTION);
 
     /*
      * Get credential information for later use, and drop privileges

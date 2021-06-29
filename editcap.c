@@ -83,6 +83,8 @@
 #include <version_info.h>
 #include <wsutil/pint.h>
 #include <wsutil/strtoi.h>
+#include <wsutil/ws_assert.h>
+#include <wsutil/wslog.h>
 #include <wiretap/wtap_opttypes.h>
 
 #include "ui/failure_message.h"
@@ -1154,6 +1156,12 @@ main(int argc, char *argv[])
 
     cmdarg_err_init(editcap_cmdarg_err, editcap_cmdarg_err_cont);
 
+    /* Initialize log handler early so we can have proper logging during startup. */
+    ws_log_init("editcap", vcmdarg_err);
+
+    /* Early logging command-line initialization. */
+    ws_log_parse_args(&argc, argv, vcmdarg_err, INVALID_OPTION);
+
 #ifdef _WIN32
     create_app_running_mutex();
 #endif /* _WIN32 */
@@ -1731,7 +1739,7 @@ main(int argc, char *argv[])
             } else {
                 filename = g_strdup(argv[optind+1]);
             }
-            g_assert(filename);
+            ws_assert(filename);
 
             /* If we don't have an application name add one */
             if (wtap_block_get_string_option_value(g_array_index(params.shb_hdrs, wtap_block_t, 0), OPT_SHB_USERAPPL, &shb_user_appl) != WTAP_OPTTYPE_SUCCESS) {
@@ -1785,7 +1793,7 @@ main(int argc, char *argv[])
                     nstime_add(&block_next, &secs_per_block); /* reset for next interval */
                     g_free(filename);
                     filename = fileset_get_filename_by_pattern(block_cnt++, rec, fprefix, fsuffix);
-                    g_assert(filename);
+                    ws_assert(filename);
 
                     if (verbose)
                         fprintf(stderr, "Continuing writing in file %s\n", filename);
@@ -1817,7 +1825,7 @@ main(int argc, char *argv[])
 
                 g_free(filename);
                 filename = fileset_get_filename_by_pattern(block_cnt++, rec, fprefix, fsuffix);
-                g_assert(filename);
+                ws_assert(filename);
 
                 if (verbose)
                     fprintf(stderr, "Continuing writing in file %s\n", filename);

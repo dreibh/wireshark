@@ -22,6 +22,7 @@ DIAG_ON(frame-larger-than=)
 #include <epan/epan_dissect.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/wslog.h>
+#include <wsutil/ws_assert.h>
 #include <version_info.h>
 #include <epan/prefs.h>
 #include <epan/stats_tree_priv.h>
@@ -1380,7 +1381,7 @@ bool MainWindow::saveCaptureFile(capture_file *cf, bool dont_reopen) {
             default:
                 /* Squelch warnings that discard_comments is being used
                    uninitialized. */
-                g_assert_not_reached();
+                ws_assert_not_reached();
                 return false;
             }
 
@@ -1808,7 +1809,7 @@ bool MainWindow::testCaptureFileClose(QString before_what, FileCloseContext cont
          * callers should be modified to check this condition and act
          * accordingly (ignore action or queue it up), so print a warning.
          */
-        g_warning("Refusing to close \"%s\" which is being read.", capture_file_.capFile()->filename);
+        ws_warning("Refusing to close \"%s\" which is being read.", capture_file_.capFile()->filename);
         return false;
     }
 

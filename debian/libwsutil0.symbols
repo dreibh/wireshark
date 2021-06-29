@@ -123,6 +123,9 @@ libwsutil.so.0 libwsutil0 #MINVER#
  json_dumper_value_string@Base 2.9.0
  json_dumper_value_va_list@Base 2.9.1
  json_dumper_write_base64@Base 2.9.1
+ json_get_array@Base 3.5.0
+ json_get_array_index@Base 3.5.0
+ json_get_array_len@Base 3.5.0
  json_get_double@Base 3.1.0
  json_get_object@Base 3.1.0
  json_get_string@Base 3.1.0
@@ -200,6 +203,7 @@ libwsutil.so.0 libwsutil0 #MINVER#
  ws_add_crash_info@Base 1.10.0
  ws_ascii_strnatcasecmp@Base 1.99.1
  ws_ascii_strnatcmp@Base 1.99.1
+ ws_assert_failed@Base 3.5.0
  ws_base32_decode@Base 2.3.0
  ws_basestrtou16@Base 2.9.0
  ws_basestrtou32@Base 2.9.0
@@ -231,9 +235,10 @@ libwsutil.so.0 libwsutil0 #MINVER#
  ws_log_full@Base 3.5.0
  ws_log_get_level@Base 3.5.0
  ws_log_init@Base 3.5.0
- ws_log_init_with_data@Base 3.5.0
- ws_log_level_is_active@Base 3.5.0
+ ws_log_init_with_writer@Base 3.5.0
+ ws_log_init_with_writer_and_data@Base 3.5.0
  ws_log_level_to_string@Base 3.5.0
+ ws_log_msg_is_active@Base 3.5.0
  ws_log_parse_args@Base 3.5.0
  ws_log_print_usage@Base 3.5.0
  ws_log_set_debug_filter@Base 3.5.0
