@@ -25,9 +25,9 @@ extern "C" {
 /* Options for all blocks */
 #define OPT_EOFOPT             0     /**< Appears in pcapng files, but not in blocks. */
 #define OPT_COMMENT            1     /**< A UTF-8 string containing a human-readable comment. */
-#define OPT_CUSTOM_STR_COPY    2988  /**< A custom option containing a string, copying allowed. */
+#define OPT_CUSTOM_STR_COPY    2988  /**< A custom option containing a UTF-8 string, copying allowed. */
 #define OPT_CUSTOM_BIN_COPY    2989  /**< A custom option containing binary data, copying allowed. */
-#define OPT_CUSTOM_STR_NO_COPY 19372 /**< A custom option containing binary data, copying not allowed. */
+#define OPT_CUSTOM_STR_NO_COPY 19372 /**< A custom option containing a UTF-8 string, copying not allowed. */
 #define OPT_CUSTOM_BIN_NO_COPY 19373 /**< A custom option containing binary data, copying not allowed. */
 
 /* Section Header block (SHB) */
@@ -174,6 +174,7 @@ typedef enum {
     WTAP_BLOCK_PACKET,
     WTAP_BLOCK_FT_SPECIFIC_REPORT,
     WTAP_BLOCK_FT_SPECIFIC_EVENT,
+    WTAP_BLOCK_SYSDIG_EVENT,
     WTAP_BLOCK_SYSTEMD_JOURNAL_EXPORT,
     WTAP_BLOCK_CUSTOM,
     MAX_WTAP_BLOCK_TYPE_VALUE
