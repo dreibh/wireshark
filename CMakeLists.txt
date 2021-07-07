@@ -489,19 +489,6 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 	# /Qspectre is not available for VS2015 or older VS2017. Test for its availability.
 	set(WIRESHARK_COMMON_FLAGS /Qspectre)
 
-	if (MSVC_VERSION GREATER_EQUAL "1920")
-		# Compile with Control-flow Enforcement Technology (CET) Shadow Stack compatability
-		# See https://docs.microsoft.com/en-us/cpp/build/reference/cetcompat
-		set(WS_LINK_FLAGS "${WS_LINK_FLAGS} /CETCOMPAT")
-	endif()
-
-	if (MSVC_VERSION GREATER_EQUAL "1920" AND WIRESHARK_TARGET_PLATFORM MATCHES "win64")
-		# Enable generation of EH Continuation (EHCONT) metadata by the compiler.
-		# See https://docs.microsoft.com/en-us/cpp/build/reference/guard-enable-eh-continuation-metadata
-		list(APPEND LOCAL_CFLAGS /guard:ehcont)
-		set(WS_LINK_FLAGS "${WS_LINK_FLAGS} /guard:ehcont")
-	endif()
-
 	if(ENABLE_CODE_ANALYSIS)
 		# We should probably add a code_analysis.props file and use it to set
 		# CAExcludePath, otherwise we trigger on Qt's headers:
@@ -1820,8 +1807,8 @@ endif()
 # Should this be part of libui?
 if(WIN32)
 	set(PLATFORM_UI_SRC
-		ui/win32/console_win32.c
-		ui/win32/file_dlg_win32.c
+		ui/win32/console_win32.cpp
+		ui/win32/file_dlg_win32.cpp
 	)
 	set(PLATFORM_UI_RC_FILES
 		image/file_dlg_win32.rc
@@ -1935,13 +1922,6 @@ if(NOT WIN32)
 	# We do this for Windows further down in the copy_data_files target.
 	list(APPEND INSTALL_FILES COPYING)
 endif()
-
-set(VERSION_INFO_LIBS
-	${ZLIB_LIBRARIES}
-)
-set(VERSION_INFO_INCLUDE_DIRS
-	${ZLIB_INCLUDE_DIRS}
-)
 
 if(WIN32)
 	set(_dll_output_dir "${DATAFILE_DIR}")
@@ -2331,13 +2311,6 @@ list(APPEND copy_data_files_depends
 add_custom_target(copy_data_files ALL DEPENDS ${copy_data_files_depends} )
 set_target_properties(copy_data_files PROPERTIES FOLDER "Copy Tasks")
 
-
-# Shared code, build object files once for all users.
-add_library(version_info OBJECT version_info.c)
-target_include_directories(version_info SYSTEM PRIVATE ${VERSION_INFO_INCLUDE_DIRS})
-if(NOT VCSVERSION_OVERRIDE)
-	add_dependencies(version_info version)
-endif()
 # sources common for wireshark, tshark, rawshark and sharkd
 add_library(shark_common OBJECT
 	cfile.c
@@ -2350,7 +2323,7 @@ add_library(shark_common OBJECT
 add_library(cli_main OBJECT cli_main.c)
 add_library(capture_opts OBJECT capture_opts.c)
 target_include_directories(capture_opts SYSTEM PRIVATE ${PCAP_INCLUDE_DIRS})
-set_target_properties(version_info shark_common cli_main capture_opts
+set_target_properties(shark_common cli_main capture_opts
 	PROPERTIES
 	COMPILE_FLAGS "${WERROR_COMMON_FLAGS}"
 )
@@ -2366,7 +2339,6 @@ if(BUILD_wireshark AND QT_FOUND)
 		$<TARGET_OBJECTS:capture_opts>
 		$<TARGET_OBJECTS:qtui>
 		$<TARGET_OBJECTS:shark_common>
-		$<TARGET_OBJECTS:version_info>
 		${WIRESHARK_SRC}
 		${PLATFORM_UI_RC_FILES}
 	)
@@ -2451,8 +2423,8 @@ if(BUILD_wireshark AND QT_FOUND)
 		caputils
 		wiretap
 		epan
+		version_info
 		${QT_LIBRARIES}
-		${VERSION_INFO_LIBS}
 		${APPLE_APPLICATION_SERVICES_LIBRARY}
 		${APPLE_APPKIT_LIBRARY}
 		${APPLE_CORE_FOUNDATION_LIBRARY}
@@ -2591,7 +2563,7 @@ if(BUILD_tshark)
 		caputils
 		wiretap
 		epan
-		${VERSION_INFO_LIBS}
+		version_info
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
@@ -2601,7 +2573,6 @@ if(BUILD_tshark)
 		$<TARGET_OBJECTS:capture_opts>
 		$<TARGET_OBJECTS:cli_main>
 		$<TARGET_OBJECTS:shark_common>
-		$<TARGET_OBJECTS:version_info>
 		tshark-tap-register.c
 		tshark.c
 		${TSHARK_TAP_SRC}
@@ -2620,14 +2591,13 @@ if(BUILD_tfshark)
 		ui
 		wiretap
 		epan
-		${VERSION_INFO_LIBS}
+		version_info
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 	)
 	set(tfshark_FILES
 		$<TARGET_OBJECTS:cli_main>
 		$<TARGET_OBJECTS:shark_common>
-		$<TARGET_OBJECTS:version_info>
 		tfshark.c
 		${TSHARK_TAP_SRC}
 	)
@@ -2644,7 +2614,7 @@ if(BUILD_rawshark AND PCAP_FOUND)
 		ui
 		wiretap
 		epan
-		${VERSION_INFO_LIBS}
+		version_info
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
@@ -2652,7 +2622,6 @@ if(BUILD_rawshark AND PCAP_FOUND)
 	set(rawshark_FILES
 		$<TARGET_OBJECTS:cli_main>
 		$<TARGET_OBJECTS:shark_common>
-		$<TARGET_OBJECTS:version_info>
 		rawshark.c
 	)
 	set_executable_resources(rawshark "Rawshark")
@@ -2667,7 +2636,7 @@ if(BUILD_sharkd)
 		ui
 		wiretap
 		epan
-		${VERSION_INFO_LIBS}
+		version_info
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
@@ -2680,7 +2649,6 @@ if(BUILD_sharkd)
 		# $<TARGET_OBJECTS:cli_main> and has real_main().
 		#
 		$<TARGET_OBJECTS:shark_common>
-		$<TARGET_OBJECTS:version_info>
 		sharkd.c
 		sharkd_daemon.c
 		sharkd_session.c
@@ -2699,7 +2667,7 @@ if(BUILD_dftest)
 		ui
 		wiretap
 		epan
-		${VERSION_INFO_LIBS}
+		version_info
 	)
 	set(dftest_FILES
 		dftest.c
@@ -2721,7 +2689,6 @@ if(BUILD_randpkt)
 	)
 	set(randpkt_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:version_info>
 		randpkt.c
 	)
 	add_executable(randpkt ${randpkt_FILES})
@@ -2738,12 +2705,12 @@ if(BUILD_text2pcap)
 	set(text2pcap_LIBS
 		writecap
 		wsutil
+		version_info
 		${M_LIBRARIES}
 		${ZLIB_LIBRARIES}
 	)
 	set(text2pcap_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:version_info>
 		text2pcap.c
 	)
 	add_lex_files(text2pcap_LEX_FILES text2pcap_FILES
@@ -2761,12 +2728,12 @@ if(BUILD_mergecap)
 	set(mergecap_LIBS
 		ui
 		wiretap
+		version_info
 		${ZLIB_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
 	set(mergecap_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:version_info>
 		mergecap.c
 	)
 	set_executable_resources(mergecap "Mergecap")
@@ -2780,12 +2747,12 @@ if(BUILD_reordercap)
 	set(reordercap_LIBS
 		ui
 		wiretap
+		version_info
 		${ZLIB_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
 	set(reordercap_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:version_info>
 		reordercap.c
 	)
 	set_executable_resources(reordercap "Reordercap")
@@ -2800,13 +2767,13 @@ if(BUILD_capinfos)
 		ui
 		wiretap
 		wsutil
+		version_info
 		${ZLIB_LIBRARIES}
 		${GCRYPT_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
 	set(capinfos_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:version_info>
 		capinfos.c
 	)
 	set_executable_resources(capinfos "Capinfos")
@@ -2821,12 +2788,12 @@ if(BUILD_captype)
 		ui
 		wiretap
 		wsutil
+		version_info
 		${ZLIB_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
 	set(captype_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:version_info>
 		captype.c
 	)
 	set_executable_resources(captype "Captype")
@@ -2840,13 +2807,13 @@ if(BUILD_editcap)
 	set(editcap_LIBS
 		ui
 		wiretap
+		version_info
 		${ZLIB_LIBRARIES}
 		${GCRYPT_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
 	set(editcap_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:version_info>
 		editcap.c
 	)
 	set_executable_resources(editcap "Editcap")
@@ -2862,6 +2829,7 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 		wsutil
 		caputils
 		ui
+		version_info
 		pcap::pcap
 		${CAP_LIBRARIES}
 		${GLIB2_LIBRARIES}
@@ -2874,7 +2842,6 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 	set(dumpcap_FILES
 		$<TARGET_OBJECTS:capture_opts>
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:version_info>
 		dumpcap.c
 		ringbuffer.c
 		sync_pipe_write.c
@@ -3394,7 +3361,6 @@ set(SHARK_PUBLIC_HEADERS
 	ws_diag_control.h
 	ws_log_defs.h
 	ws_symbol_export.h
-	version_info.h
 	${CMAKE_BINARY_DIR}/ws_version.h
 )
 

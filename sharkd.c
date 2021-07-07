@@ -30,7 +30,7 @@
 #include <wsutil/privileges.h>
 #include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
-#include <version_info.h>
+#include <ui/version_info.h>
 #include <wiretap/wtap_opttypes.h>
 
 #include <epan/decode_as.h>
@@ -778,17 +778,6 @@ sharkd_set_user_comment(frame_data *fd, const gchar *new_comment)
 {
   cap_file_provider_set_user_comment(&cfile.provider, fd, new_comment);
   return 0;
-}
-
-#include "version.h"
-const char *sharkd_version(void)
-{
-  /* based on get_ws_vcs_version_info(), but shorter */
-#ifdef VCSVERSION
-  return VCSVERSION;
-#else
-  return VERSION;
-#endif
 }
 
 /*
