@@ -16,7 +16,7 @@
 
 #include "wsutil/str_util.h"
 #include "wsutil/utf8_entities.h"
-#include "version_info.h"
+#include "ui/version_info.h"
 
 #include <ui/qt/utils/qt_ui_utils.h>
 #include "wireshark_application.h"
@@ -562,17 +562,24 @@ void CaptureFilePropertiesDialog::fillDetails()
 
         for (guint32 framenum = 1; framenum <= cap_file_.capFile()->count ; framenum++) {
             frame_data *fdata = frame_data_sequence_find(cap_file_.capFile()->provider.frames, framenum);
-            char *pkt_comment = cf_get_packet_comment(cap_file_.capFile(), fdata);
+            wtap_block_t pkt_block = cf_get_packet_block(cap_file_.capFile(), fdata);
 
-            if (pkt_comment) {
-                QString frame_comment_html = tr("<p>Frame %1: ").arg(framenum);
-                QString raw_comment = gchar_free_to_qstring(pkt_comment);
+            if (pkt_block) {
+                guint n_comments = wtap_block_count_option(pkt_block, OPT_COMMENT);
+                for (guint i = 0; i < n_comments; i++) {
+                    char *comment_text;
+                    if (WTAP_OPTTYPE_SUCCESS == wtap_block_get_nth_string_option_value(pkt_block, OPT_COMMENT, i, &comment_text)) {
+                        QString frame_comment_html = tr("<p>Frame %1: ").arg(framenum);
+                        QString raw_comment = comment_text;
 
-                frame_comment_html += html_escape(raw_comment).replace('\n', "<br>");
-                frame_comment_html += "</p>\n";
-                cursor.insertBlock();
-                cursor.insertHtml(frame_comment_html);
+                        frame_comment_html += html_escape(raw_comment).replace('\n', "<br>");
+                        frame_comment_html += "</p>\n";
+                        cursor.insertBlock();
+                        cursor.insertHtml(frame_comment_html);
+                    }
+                }
             }
+            wtap_block_unref(pkt_block);
         }
     }
     ui->detailsTextEdit->verticalScrollBar()->setValue(0);

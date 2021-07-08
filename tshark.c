@@ -61,7 +61,7 @@
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
 #include <cli_main.h>
-#include <version_info.h>
+#include <ui/version_info.h>
 #include <wiretap/wtap_opttypes.h>
 
 #include "globals.h"
@@ -1772,9 +1772,10 @@ main(int argc, char *argv[])
           }
           if (!global_capture_opts.has_autostop_filesize &&
               !global_capture_opts.has_file_duration &&
-              !global_capture_opts.has_file_interval) {
+              !global_capture_opts.has_file_interval &&
+              !global_capture_opts.has_file_packets) {
             cmdarg_err("Multiple capture files requested, but "
-              "no maximum capture file size, duration or interval was specified.");
+              "no maximum capture file size, duration, interval or packets were specified.");
             exit_status = INVALID_OPTION;
             goto clean_exit;
           }
@@ -3536,7 +3537,7 @@ process_cap_file(capture_file *cf, char *save_file, int out_file_type,
 
     /* If we don't have an application name add Tshark */
     if (wtap_block_get_string_option_value(g_array_index(params.shb_hdrs, wtap_block_t, 0), OPT_SHB_USERAPPL, &shb_user_appl) != WTAP_OPTTYPE_SUCCESS) {
-      /* this is free'd by wtap_block_free() later */
+      /* this is free'd by wtap_block_unref() later */
       wtap_block_add_string_option_format(g_array_index(params.shb_hdrs, wtap_block_t, 0), OPT_SHB_USERAPPL, "%s", get_appname_and_version());
     }
 

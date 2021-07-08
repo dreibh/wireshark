@@ -1,7 +1,7 @@
 /* packet-nr-rrc-template.c
  * NR;
  * Radio Resource Control (RRC) protocol specification
- * (3GPP TS 38.331 V16.4.1 Release 16) packet dissection
+ * (3GPP TS 38.331 V16.5.0 Release 16) packet dissection
  * Copyright 2018-2021, Pascal Quantin
  *
  * Wireshark - Network traffic analyzer
@@ -518,6 +518,14 @@ nr_rrc_SRS_RSRP_r16_fmt(gchar *s, guint32 v)
   } else {
     g_snprintf(s, ITEM_LABEL_LENGTH, "Infinity (98)");
   }
+}
+
+static void
+nr_rrc_MeasTriggerQuantityOffset_fmt(gchar *s, guint32 v)
+{
+  gint32 d = (gint32)v;
+
+  g_snprintf(s, ITEM_LABEL_LENGTH, "%.1fdB (%d)", (float)d/2, d);
 }
 
 #include "packet-nr-rrc-fn.c"

@@ -29,7 +29,7 @@
 #include <wsutil/wsgetopt.h>
 #endif
 
-#include <version_info.h>
+#include <ui/version_info.h>
 
 #include <ui/clopts_common.h>
 #include <ui/cmdarg_err.h>
@@ -685,8 +685,9 @@ void commandline_other_options(int argc, char *argv[], gboolean opt_reset)
             }
             if (!global_capture_opts.has_autostop_filesize &&
                 !global_capture_opts.has_file_duration &&
-                !global_capture_opts.has_file_interval) {
-                cmdarg_err("Ring buffer requested, but no maximum capture file size, duration or interval were specified.");
+                !global_capture_opts.has_file_interval &&
+                !global_capture_opts.has_file_packets) {
+                cmdarg_err("Ring buffer requested, but no maximum capture file size, duration, interval or packets were specified.");
                 /* XXX - this must be redesigned as the conditions changed */
             }
         }

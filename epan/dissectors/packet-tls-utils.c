@@ -41,7 +41,6 @@
 #include <wsutil/wsgcrypt.h>
 #include <wsutil/rsa.h>
 #include <wsutil/ws_assert.h>
-#include <version_info.h>
 #include "packet-ber.h"
 #include "packet-x509af.h"
 #include "packet-x509if.h"
@@ -1195,7 +1194,7 @@ const value_string tls_hello_extension_types[] = {
     { SSL_HND_HELLO_EXT_CACHED_INFO, "cached_info" }, /* RFC 7924 */
     { SSL_HND_HELLO_EXT_COMPRESS_CERTIFICATE, "compress_certificate" }, /* https://tools.ietf.org/html/draft-ietf-tls-certificate-compression-03 */
     { SSL_HND_HELLO_EXT_RECORD_SIZE_LIMIT, "record_size_limit" }, /* RFC 8449 */
-    { SSL_HND_HELLO_EXT_DELEGATED_CREDENTIALS, "delegated_credentials" }, /* draft-ietf-tls-subcerts-09.txt */
+    { SSL_HND_HELLO_EXT_DELEGATED_CREDENTIALS, "delegated_credentials" }, /* draft-ietf-tls-subcerts-10.txt */
     { SSL_HND_HELLO_EXT_SESSION_TICKET_TLS, "session_ticket" }, /* RFC 5077 / RFC 8447 */
     { SSL_HND_HELLO_EXT_KEY_SHARE_OLD, "Reserved (key_share)" }, /* https://tools.ietf.org/html/draft-ietf-tls-tls13-22 (removed in -23) */
     { SSL_HND_HELLO_EXT_PRE_SHARED_KEY, "pre_shared_key" }, /* RFC 8446 */
@@ -6191,7 +6190,6 @@ ssl_set_debug(const gchar* name)
         debug_file_must_be_closed = 0;
 
     ssl_debug_printf("Wireshark SSL debug log \n\n");
-    ssl_debug_printf("Wireshark version: %s\n", get_ws_vcs_version_info());
 #ifdef HAVE_LIBGNUTLS
     ssl_debug_printf("GnuTLS version:    %s\n", gnutls_check_version(NULL));
 #endif
@@ -6671,9 +6669,64 @@ ssl_dissect_hnd_hello_ext_sig_hash_algs(ssl_common_dissect_t *hf, tvbuff_t *tvb,
 
 static gint
 ssl_dissect_hnd_ext_delegated_credentials(ssl_common_dissect_t *hf, tvbuff_t *tvb,
-                                          proto_tree *tree, packet_info* pinfo, guint32 offset, guint32 offset_end)
+                                          proto_tree *tree, packet_info* pinfo, guint32 offset, guint32 offset_end, guint8 hnd_type)
 {
-    return ssl_dissect_hash_alg_list(hf, tvb, tree, pinfo, offset, offset_end);
+    if (hnd_type == SSL_HND_CLIENT_HELLO) {
+        /*
+         *  struct {
+         *    SignatureScheme supported_signature_algorithm<2..2^16-2>;
+         *  } SignatureSchemeList;
+         */
+
+        return ssl_dissect_hash_alg_list(hf, tvb, tree, pinfo, offset, offset_end);
+    } else {
+        asn1_ctx_t asn1_ctx;
+        guint pubkey_length, sign_length;
+
+        /*
+         *  struct {
+         *    uint32 valid_time;
+         *    SignatureScheme expected_cert_verify_algorithm;
+         *    opaque ASN1_subjectPublicKeyInfo<1..2^24-1>;
+         *  } Credential;
+         *
+         *  struct {
+         *    Credential cred;
+         *    SignatureScheme algorithm;
+         *    opaque signature<0..2^16-1>;
+         *  } DelegatedCredential;
+         */
+
+        asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+
+        proto_tree_add_item(tree, hf->hf.hs_cred_valid_time, tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+
+        tls_dissect_signature_algorithm(hf, tvb, tree, offset);
+        offset += 2;
+
+        if (!ssl_add_vector(hf, tvb, pinfo, tree, offset, offset_end, &pubkey_length,
+                            hf->hf.hs_cred_pubkey_len, 1, G_MAXUINT24)) {
+            return offset_end;
+        }
+        offset += 3;
+        dissect_x509af_SubjectPublicKeyInfo(FALSE, tvb, offset, &asn1_ctx, tree, hf->hf.hs_cred_pubkey);
+        offset += pubkey_length;
+
+        tls_dissect_signature_algorithm(hf, tvb, tree, offset);
+        offset += 2;
+
+        if (!ssl_add_vector(hf, tvb, pinfo, tree, offset, offset_end, &sign_length,
+                            hf->hf.hs_cred_signature_len, 1, G_MAXUINT16)) {
+            return offset_end;
+        }
+        offset += 2;
+        proto_tree_add_item(tree, hf->hf.hs_cred_signature,
+                            tvb, offset, sign_length, ENC_ASCII|ENC_NA);
+        offset += sign_length;
+
+        return offset;
+    }
 }
 
 static gint
@@ -9512,7 +9565,7 @@ ssl_dissect_hnd_extension(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *t
             offset = ssl_dissect_hnd_hello_ext_sig_hash_algs(hf, tvb, ext_tree, pinfo, offset, next_offset);
             break;
         case SSL_HND_HELLO_EXT_DELEGATED_CREDENTIALS:
-            offset = ssl_dissect_hnd_ext_delegated_credentials(hf, tvb, ext_tree, pinfo, offset, next_offset);
+            offset = ssl_dissect_hnd_ext_delegated_credentials(hf, tvb, ext_tree, pinfo, offset, next_offset, hnd_type);
             break;
         case SSL_HND_HELLO_EXT_USE_SRTP:
             if (is_dtls) {
