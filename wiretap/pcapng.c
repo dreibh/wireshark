@@ -16,6 +16,7 @@
  */
 
 #include "config.h"
+#include "wtap_opttypes.h"
 
 #define WS_LOG_DOMAIN LOG_DOMAIN_WIRETAP
 
@@ -540,6 +541,21 @@ pcapng_process_uint8_option(wtapng_block_t *wblock,
 }
 
 static void
+pcapng_process_uint32_option(wtapng_block_t *wblock,
+                            guint16 option_code, guint16 option_length,
+                            guint32 option_content)
+{
+    if (option_length == 4) {
+        /*
+         * If this option can appear only once in a block, this call
+         * will fail on the second and later occurrences of the option;
+         * we silently ignore the failure.
+         */
+        wtap_block_add_uint32_option(wblock->block, option_code, option_content);
+    }
+}
+
+static void
 pcapng_process_timestamp_option(wtapng_block_t *wblock,
                                 const section_info_t *section_info,
                                 guint16 option_code, guint16 option_length,
@@ -749,6 +765,10 @@ pcapng_process_options(FILE_T fh, wtapng_block_t *wblock,
                 /* padding should be ok here, just get out of this */
                 opt_bytes_remaining = 0;
                 break;
+            case(OPT_COMMENT):
+                pcapng_process_string_option(wblock, option_code, option_length,
+                                             option_ptr);
+                break;
             case(OPT_CUSTOM_STR_COPY):
             case(OPT_CUSTOM_BIN_COPY):
             case(OPT_CUSTOM_STR_NO_COPY):
@@ -809,10 +829,6 @@ pcapng_process_section_header_block_option(wtapng_block_t *wblock,
      * in one of those places as standardized option types.
      */
     switch (option_code) {
-        case(OPT_COMMENT):
-            pcapng_process_string_option(wblock, option_code, option_length,
-                                         option_content);
-            break;
         case(OPT_SHB_HARDWARE):
             pcapng_process_string_option(wblock, option_code, option_length,
                                          option_content);
@@ -1018,10 +1034,6 @@ pcapng_process_if_descr_block_option(wtapng_block_t *wblock,
      * in one of those places as standardized option types.
      */
     switch (option_code) {
-        case(OPT_COMMENT):
-            pcapng_process_string_option(wblock, option_code, option_length,
-                                         option_content);
-            break;
         case(OPT_IDB_NAME): /* if_name */
             pcapng_process_string_option(wblock, option_code, option_length,
                                          option_content);
@@ -1423,9 +1435,6 @@ pcapng_process_packet_block_option(wtapng_block_t *wblock,
      * in one of those places as standardized option types.
      */
     switch (option_code) {
-        case(OPT_COMMENT):
-            pcapng_process_string_option(wblock, option_code, option_length, option_content);
-            break;
         case(OPT_EPB_FLAGS):
             if (option_length != 4) {
                 *err = WTAP_ERR_BAD_FILE;
@@ -1441,8 +1450,7 @@ pcapng_process_packet_block_option(wtapng_block_t *wblock,
             memcpy(&tmp32, option_content, sizeof(guint32));
             if (section_info->byte_swapped)
                 tmp32 = GUINT32_SWAP_LE_BE(tmp32);
-            wblock->rec->presence_flags |= WTAP_HAS_PACK_FLAGS;
-            wblock->rec->rec_header.packet_header.pack_flags = tmp32;
+            pcapng_process_uint32_option(wblock, option_code, option_length, tmp32);
             ws_debug("pack_flags 0x%08x", tmp32);
             break;
         case(OPT_EPB_HASH):
@@ -1578,6 +1586,7 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
     pcapng_packet_block_t pb;
     wtapng_packet_t packet;
     guint32 padding;
+    guint32 flags;
     interface_info_t iface_info;
     guint64 ts;
     int pseudo_header_len;
@@ -1764,7 +1773,6 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
 
     /* Option defaults */
     wblock->rec->rec_header.packet_header.drop_count  = -1;
-    wblock->rec->rec_header.packet_header.pack_flags  = 0;
     wblock->rec->rec_header.packet_header.packet_id  = 0;
     wblock->rec->rec_header.packet_header.interface_queue  = 0;
 
@@ -1784,10 +1792,10 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
     /*
      * Did we get a packet flags option?
      */
-    if (wblock->rec->presence_flags & WTAP_HAS_PACK_FLAGS) {
-        if (PACK_FLAGS_FCS_LENGTH(wblock->rec->rec_header.packet_header.pack_flags) != 0) {
+    if (WTAP_OPTTYPE_SUCCESS == wtap_block_get_uint32_option_value(wblock->block, OPT_PKT_FLAGS, &flags)) {
+        if (PACK_FLAGS_FCS_LENGTH(flags) != 0) {
             /* The FCS length is present */
-            fcslen = PACK_FLAGS_FCS_LENGTH(wblock->rec->rec_header.packet_header.pack_flags);
+            fcslen = PACK_FLAGS_FCS_LENGTH(flags);
         }
     }
 
@@ -1914,7 +1922,6 @@ pcapng_read_simple_packet_block(FILE_T fh, pcapng_block_header_t *bh,
     wblock->rec->ts.nsecs = 0;
     wblock->rec->rec_header.packet_header.interface_id = 0;
     wblock->rec->rec_header.packet_header.drop_count = 0;
-    wblock->rec->rec_header.packet_header.pack_flags = 0;
     wblock->rec->rec_header.packet_header.packet_id = 0;
     wblock->rec->rec_header.packet_header.interface_queue = 0;
 
@@ -2027,10 +2034,6 @@ pcapng_process_name_resolution_block_option(wtapng_block_t *wblock,
      * in one of those places as standardized option types.
      */
     switch (option_code) {
-        case(OPT_COMMENT):
-            pcapng_process_string_option(wblock, option_code, option_length,
-                                         option_content);
-            break;
         /* TODO:
          * ns_dnsname     2
          * ns_dnsIP4addr  3
@@ -2310,10 +2313,6 @@ pcapng_process_interface_statistics_block_option(wtapng_block_t *wblock,
      * in one of those places as standardized option types.
      */
     switch (option_code) {
-        case(OPT_COMMENT):
-            pcapng_process_string_option(wblock, option_code, option_length,
-                                         option_content);
-            break;
         case(OPT_ISB_STARTTIME): /* isb_starttime */
             pcapng_process_timestamp_option(wblock, section_info, option_code,
                                             option_length, option_content);
@@ -3709,7 +3708,7 @@ static gboolean pcapng_write_uint32_option(wtap_dumper *wdh, guint option_id, wt
         return FALSE;
     wdh->bytes_dumped += 4;
 
-    if (!wtap_dump_file_write(wdh, &optval->uint32val, 1, err))
+    if (!wtap_dump_file_write(wdh, &optval->uint32val, 4, err))
         return FALSE;
     wdh->bytes_dumped += 4;
 
@@ -4262,7 +4261,7 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
         pad_len = 0;
     }
     if (rec->block != NULL) {
-        // Current options expected to be here: comments, verdicts, custom.
+        // Current options expected to be here: comments, flags, verdicts, custom.
         // Remember to also add newly-supported option types to packet_block_options_supported
         // below.
         options_len = wtap_block_get_options_size_padded(rec->block);
@@ -4272,10 +4271,6 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
         }
     }
 
-    if (rec->presence_flags & WTAP_HAS_PACK_FLAGS) {
-        have_options = TRUE;
-        options_total_length = options_total_length + 8;
-    }
     if (rec->presence_flags & WTAP_HAS_DROP_COUNT) {
         have_options = TRUE;
         options_total_length = options_total_length + 12;
@@ -4423,18 +4418,6 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
      */
     if (!wtap_block_foreach_option(rec->block, pcapng_write_option_cb, &block_data)) {
         return FALSE;
-    }
-    if (rec->presence_flags & WTAP_HAS_PACK_FLAGS) {
-        option_hdr.type         = OPT_EPB_FLAGS;
-        option_hdr.value_length = 4;
-        if (!wtap_dump_file_write(wdh, &option_hdr, 4, err))
-            return FALSE;
-        wdh->bytes_dumped += 4;
-        if (!wtap_dump_file_write(wdh, &rec->rec_header.packet_header.pack_flags, 4, err))
-            return FALSE;
-        wdh->bytes_dumped += 4;
-        ws_debug("Wrote Options packet flags: %x",
-                 rec->rec_header.packet_header.pack_flags);
     }
     if (rec->presence_flags & WTAP_HAS_DROP_COUNT) {
         option_hdr.type         = OPT_EPB_DROPCOUNT;
@@ -5705,6 +5688,7 @@ static const struct supported_option_type decryption_secrets_block_options_suppo
 /* Options for packet blocks. */
 static const struct supported_option_type packet_block_options_supported[] = {
     { OPT_COMMENT, MULTIPLE_OPTIONS_SUPPORTED },
+    { OPT_PKT_FLAGS, ONE_OPTION_SUPPORTED },
     { OPT_EPB_VERDICT, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_STR_COPY, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_BIN_COPY, MULTIPLE_OPTIONS_SUPPORTED },

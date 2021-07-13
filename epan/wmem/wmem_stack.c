@@ -12,11 +12,10 @@
 #include <string.h>
 #include <glib.h>
 
+#include "wmem-int.h"
 #include "wmem_core.h"
 #include "wmem_stack.h"
 #include "wmem_list.h"
-
-#include <wsutil/ws_assert.h>
 
 /* Wmem stack is implemented as a simple wrapper over Wmem list */
 
@@ -27,7 +26,7 @@ wmem_stack_peek(const wmem_stack_t *stack)
 
     frame = wmem_list_head(stack);
 
-    ws_assert(frame);
+    ASSERT(frame);
 
     return wmem_list_frame_data(frame);
 }

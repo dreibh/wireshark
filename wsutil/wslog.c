@@ -1,7 +1,9 @@
 /*
+ * Copyright 2021, João Valverde <j@v6e.pt>
+ *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
- * Copyright 2021 Gerald Combs
+ * Copyright 1998 Gerald Combs
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
@@ -162,7 +164,7 @@ static enum ws_log_level string_to_log_level(const char *str_level)
 WS_RETNONNULL
 static inline const char *domain_to_string(const char *domain)
 {
-    return (domain == NULL) ? "(none)" : domain;
+    return DOMAIN_UNDEFED(domain) ? "(none)" : domain;
 }
 
 
@@ -586,8 +588,8 @@ static void glib_log_handler(const char *domain, GLogLevelFlags flags,
 
 /*
  * We can't write to stderr in ws_log_init() because dumpcap uses stderr
- * to communicate with the parent and it will block. Any failures are
- * therefore ignored.
+ * to communicate with the parent and it will block. We have to use
+ * vcmdarg_err to report errors.
  */
 void ws_log_init(const char *progname,
                             void (*vcmdarg_err)(const char *, va_list ap))
