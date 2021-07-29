@@ -336,6 +336,7 @@ dumpcap_log_writer(const char *domain, enum ws_log_level level,
 
 /* capture related options */
 static capture_options global_capture_opts;
+static GPtrArray *capture_comments = NULL;
 static gboolean quiet = FALSE;
 static gboolean use_threads = FALSE;
 static guint64 start_time;
@@ -652,7 +653,7 @@ get_capture_device_open_failure_messages(cap_device_open_status open_status,
                                          size_t secondary_errmsg_len)
 {
     g_snprintf(errmsg, (gulong) errmsg_len,
-               "The capture session could not be initiated on interface '%s' (%s).",
+               "The capture session could not be initiated on capture device \"%s\" (%s).",
                iface, open_status_str);
     g_snprintf(secondary_errmsg, (gulong) secondary_errmsg_len, "%s",
                get_pcap_failure_secondary_error_message(open_status, open_status_str));
@@ -3099,7 +3100,7 @@ capture_loop_init_pcapng_output(capture_options *capture_opts, loop_data *ld,
         get_cpu_info(cpu_info_str);
 
         successful = pcapng_write_section_header_block(ld->pdh,
-                                                       (const char *)capture_opts->capture_comment,   /* Comment */
+                                                       capture_comments,   /* Comments */
                                                        cpu_info_str->str,           /* HW */
                                                        os_info_str->str,            /* OS */
                                                        get_appname_and_version(),
@@ -4815,6 +4816,7 @@ get_dumpcap_runtime_info(GString *str)
 
 #define LONGOPT_IFNAME             LONGOPT_BASE_APPLICATION+1
 #define LONGOPT_IFDESCR            LONGOPT_BASE_APPLICATION+2
+#define LONGOPT_CAPTURE_COMMENT    LONGOPT_BASE_APPLICATION+3
 
 /* And now our feature presentation... [ fade to music ] */
 int
@@ -4828,6 +4830,7 @@ main(int argc, char *argv[])
         LONGOPT_CAPTURE_COMMON
         {"ifname", required_argument, NULL, LONGOPT_IFNAME},
         {"ifdescr", required_argument, NULL, LONGOPT_IFDESCR},
+        {"capture-comment", required_argument, NULL, LONGOPT_CAPTURE_COMMENT},
         {0, 0, 0, 0 }
     };
 
@@ -5139,7 +5142,6 @@ main(int argc, char *argv[])
         case 's':        /* Set the snapshot (capture) length */
         case 'w':        /* Write to capture file x */
         case 'y':        /* Set the pcap data link type */
-        case  LONGOPT_NUM_CAP_COMMENT: /* add a capture comment */
 #ifdef HAVE_PCAP_REMOTE
         case 'u':        /* Use UDP for data transfer */
         case 'r':        /* Capture own RPCAP traffic too */
@@ -5182,6 +5184,12 @@ main(int argc, char *argv[])
                 cmdarg_err("--ifdescr must be specified after a -i option");
                 exit_main(1);
             }
+            break;
+        case LONGOPT_CAPTURE_COMMENT:  /* capture comment */
+            if (capture_comments == NULL) {
+                capture_comments = g_ptr_array_new_with_free_func(g_free);
+            }
+            g_ptr_array_add(capture_comments, g_strdup(optarg));
             break;
         case 'Z':
             capture_child = TRUE;
@@ -5319,10 +5327,10 @@ main(int argc, char *argv[])
             global_capture_opts.use_pcapng = TRUE;
         }
 
-        if (global_capture_opts.capture_comment &&
+        if (capture_comments &&
             (!global_capture_opts.use_pcapng || global_capture_opts.multi_files_on)) {
-            /* XXX - for ringbuffer, should we apply the comment to each file? */
-            cmdarg_err("A capture comment can only be set if we capture into a single pcapng file.");
+            /* XXX - for ringbuffer, should we apply the comments to each file? */
+            cmdarg_err("Capture comments can only be set if we capture into a single pcapng file.");
             exit_main(1);
         }
 
@@ -5439,15 +5447,15 @@ main(int argc, char *argv[])
             caps = get_if_capabilities(interface_opts, &open_status, &open_status_str);
             if (caps == NULL) {
                 if (capture_child) {
-                    char *error_msg = g_strdup_printf("The capabilities of the capture device"
-                                                " \"%s\" could not be obtained (%s)",
+                    char *error_msg = g_strdup_printf("The capabilities of the capture device "
+                                                "\"%s\" could not be obtained (%s)",
                                                 interface_opts->name, open_status_str);
                     sync_pipe_errmsg_to_parent(2, error_msg,
                             get_pcap_failure_secondary_error_message(open_status, open_status_str));
                     g_free(error_msg);
                 }
                 else {
-                    cmdarg_err("The capabilities of the capture device"
+                    cmdarg_err("The capabilities of the capture device "
                                 "\"%s\" could not be obtained (%s).\n%s",
                                 interface_opts->name, open_status_str,
                                 get_pcap_failure_secondary_error_message(open_status, open_status_str));

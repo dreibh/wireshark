@@ -37,7 +37,7 @@
 #include "proto.h"
 #include "epan_dissect.h"
 #include "tvbuff.h"
-#include "wmem/wmem.h"
+#include <epan/wmem_scopes.h>
 #include "charsets.h"
 #include "column-utils.h"
 #include "to_str-int.h"
@@ -1080,21 +1080,21 @@ hfinfo_format_bytes(wmem_allocator_t *scope, const header_field_info *hfinfo,
 		 */
 		switch (FIELD_DISPLAY(hfinfo->display)) {
 		case SEP_DOT:
-			str = bytestring_to_str(scope, bytes, length, '.');
+			str = bytes_to_str_punct(scope, bytes, length, '.');
 			break;
 		case SEP_DASH:
-			str = bytestring_to_str(scope, bytes, length, '-');
+			str = bytes_to_str_punct(scope, bytes, length, '-');
 			break;
 		case SEP_COLON:
-			str = bytestring_to_str(scope, bytes, length, ':');
+			str = bytes_to_str_punct(scope, bytes, length, ':');
 			break;
 		case SEP_SPACE:
-			str = bytestring_to_str(scope, bytes, length, ' ');
+			str = bytes_to_str_punct(scope, bytes, length, ' ');
 			break;
 		case BASE_NONE:
 		default:
 			if (prefs.display_byte_fields_with_spaces) {
-				str = bytestring_to_str(scope, bytes, length, ' ');
+				str = bytes_to_str_punct(scope, bytes, length, ' ');
 			} else {
 				str = bytes_to_str(scope, bytes, length);
 			}

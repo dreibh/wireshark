@@ -56,8 +56,6 @@ endif()
 
 set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
 
-set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
-
 include( CMakeOptions.txt )
 
 # We require minimum C++11
@@ -75,10 +73,10 @@ if (ENABLE_LTO)
 	include(CheckIPOSupported)
 	check_ipo_supported(RESULT lto_supported OUTPUT lto_output)
 	if(lto_supported)
-		set(CMAKE_INTERPROCEDURAL_OPTIMIZATION TRUE)
-		message(STATUS "LTO/IPO is enabled")
+		set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+		message(STATUS "LTO/IPO is enabled for Release configuration")
 	else()
-		message(STATUS "LTO/IPO requested but it is not supported by the compiler: ${lto_output}") 
+		message(STATUS "LTO/IPO requested but it is not supported by the compiler: ${lto_output}")
 	endif()
 else()
 	message(STATUS "LTO/IPO is not enabled")
@@ -151,11 +149,6 @@ if(WIN32)
 	set(EXTRA_INSTALLER_DIR ${_ws_lib_dir})
 
 	# XXX Add a dependency on ${_ws_lib_dir}/current_tag.txt?
-
-	# Prepopulate some ConfigureChecks values. Compilation checks
-	# on Windows can be slow.
-	set(HAVE_FCNTL_H TRUE)
-	set(HAVE_FLOORL TRUE)
 endif(WIN32)
 
 include(UseCustomIncludes)
@@ -1248,6 +1241,7 @@ ws_find_package(NL ENABLE_NETLINK HAVE_LIBNL)
 
 ws_find_package(SBC ENABLE_SBC HAVE_SBC)
 
+# SpanDSP codec
 ws_find_package(SPANDSP ENABLE_SPANDSP HAVE_SPANDSP)
 
 ws_find_package(BCG729 ENABLE_BCG729 HAVE_BCG729)
@@ -1278,13 +1272,6 @@ endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	ws_find_package(CAP ENABLE_CAP HAVE_LIBCAP)
 	find_package(SETCAP)
-endif()
-
-# Include minizip include directories
-if(MINIZIP_FOUND)
-	include_directories(SYSTEM ${MINIZIP_INCLUDE_DIRS})
-else()
-	set(MINIZIP_LIBRARY "")
 endif()
 
 # Windows version updates
@@ -1402,10 +1389,11 @@ endif()
 # Platform-specific additional libraries.
 #
 if(WIN32)
+	set(WIN_COMCTL32_LIBRARY comctl32.lib)
+	set(WIN_IPHLPAPI_LIBRARY iphlpapi.lib)
 	set(WIN_PSAPI_LIBRARY    psapi.lib)
-	set(WIN_WS2_32_LIBRARY   ws2_32.lib)
-	set(WIN_COMCTL32_LIBRARY comctl32.lib )
 	set(WIN_VERSION_LIBRARY  version.lib)
+	set(WIN_WS2_32_LIBRARY   ws2_32.lib)
 endif()
 
 if(APPLE)
@@ -2780,6 +2768,7 @@ if(BUILD_capinfos)
 	add_executable(capinfos ${capinfos_FILES})
 	set_extra_executable_properties(capinfos "Executables")
 	target_link_libraries(capinfos ${capinfos_LIBS})
+	target_include_directories(capinfos SYSTEM PRIVATE ${GCRYPT_INCLUDE_DIRS})
 	install(TARGETS capinfos RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2820,6 +2809,7 @@ if(BUILD_editcap)
 	add_executable(editcap ${editcap_FILES})
 	set_extra_executable_properties(editcap "Executables")
 	target_link_libraries(editcap ${editcap_LIBS})
+	target_include_directories(editcap SYSTEM PRIVATE ${GCRYPT_INCLUDE_DIRS})
 	install(TARGETS editcap RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2832,7 +2822,6 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 		version_info
 		pcap::pcap
 		${CAP_LIBRARIES}
-		${GLIB2_LIBRARIES}
 		${GTHREAD2_LIBRARIES}
 		${ZLIB_LIBRARIES}
 		${APPLE_CORE_FOUNDATION_LIBRARY}
@@ -2850,6 +2839,7 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 	add_executable(dumpcap ${dumpcap_FILES})
 	set_extra_executable_properties(dumpcap "Executables")
 	target_link_libraries(dumpcap ${dumpcap_LIBS})
+	target_include_directories(dumpcap SYSTEM PRIVATE ${ZLIB_INCLUDE_DIRS})
 	install(TARGETS dumpcap
 			RUNTIME	DESTINATION ${CMAKE_INSTALL_BINDIR}
 			PERMISSIONS ${DUMPCAP_SETUID}
@@ -2883,7 +2873,6 @@ endif()
 # We probably shouldn't do that.
 if(BUILD_dcerpcidl2wrs)
 	set(idl2wrs_LIBS
-		${GLIB2_LIBRARIES}
 		wsutil
 	)
 	set(idl2wrs_FILES

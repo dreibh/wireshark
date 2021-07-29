@@ -144,6 +144,7 @@
 #define LONGOPT_NO_DUPLICATE_KEYS       LONGOPT_BASE_APPLICATION+3
 #define LONGOPT_ELASTIC_MAPPING_FILTER  LONGOPT_BASE_APPLICATION+4
 #define LONGOPT_EXPORT_TLS_SESSION_KEYS LONGOPT_BASE_APPLICATION+5
+#define LONGOPT_CAPTURE_COMMENT         LONGOPT_BASE_APPLICATION+6
 
 capture_file cfile;
 
@@ -198,6 +199,9 @@ static json_dumper jdumper;
 
 /* The line separator used between packets, changeable via the -S option */
 static const char *separator = "";
+
+/* Per-file comments to be added to the output file. */
+static GPtrArray *capture_comments = NULL;
 
 static gboolean prefs_loaded = FALSE;
 
@@ -425,7 +429,7 @@ print_usage(FILE *output)
   fprintf(output, "  -w <outfile|->           write packets to a pcapng-format file named \"outfile\"\n");
   fprintf(output, "                           (or '-' for stdout)\n");
   fprintf(output, "  --capture-comment <comment>\n");
-  fprintf(output, "                           set the capture file comment, if supported\n");
+  fprintf(output, "                           add a capture file comment, if supported\n");
   fprintf(output, "  -C <config profile>      start with specified configuration profile\n");
   fprintf(output, "  -F <output file type>    set the output file type, default is pcapng\n");
   fprintf(output, "                           an empty \"-F\" option will list the file types\n");
@@ -706,6 +710,7 @@ main(int argc, char *argv[])
     {"color", no_argument, NULL, LONGOPT_COLOR},
     {"no-duplicate-keys", no_argument, NULL, LONGOPT_NO_DUPLICATE_KEYS},
     {"elastic-mapping-filter", required_argument, NULL, LONGOPT_ELASTIC_MAPPING_FILTER},
+    {"capture-comment", required_argument, NULL, LONGOPT_CAPTURE_COMMENT},
     {0, 0, 0, 0 }
   };
   gboolean             arg_error = FALSE;
@@ -1099,7 +1104,6 @@ main(int argc, char *argv[])
 #endif
     case 's':        /* Set the snapshot (capture) length */
     case 'y':        /* Set the pcap data link type */
-    case  LONGOPT_NUM_CAP_COMMENT: /* add a capture comment */
 #ifdef CAN_SET_CAPTURE_BUFFER_SIZE
     case 'B':        /* Buffer size */
 #endif
@@ -1475,6 +1479,12 @@ main(int argc, char *argv[])
       no_duplicate_keys = TRUE;
       node_children_grouper = proto_node_group_children_by_json_key;
       break;
+    case LONGOPT_CAPTURE_COMMENT:  /* capture comment */
+      if (capture_comments == NULL) {
+        capture_comments = g_ptr_array_new_with_free_func(g_free);
+      }
+      g_ptr_array_add(capture_comments, g_strdup(optarg));
+      break;
     default:
     case '?':        /* Bad flag - print usage message */
       switch(optopt) {
@@ -1703,13 +1713,6 @@ main(int argc, char *argv[])
         exit_status = INVALID_OPTION;
         goto clean_exit;
       }
-      if (global_capture_opts.capture_comment) {
-        cmdarg_err("A capture comment was specified, but "
-          "a capture isn't being done.\nThere's no support for adding "
-          "a capture comment to an existing capture file.");
-        exit_status = INVALID_OPTION;
-        goto clean_exit;
-      }
 
       /* Note: TShark now allows the restriction of a _read_ file by packet count
        * and byte count as well as a write file. Other autostop options remain valid
@@ -1725,6 +1728,8 @@ main(int argc, char *argv[])
       /*
        * "-r" wasn't specified, so we're doing a live capture.
        */
+      gboolean             use_pcapng = TRUE;
+
       if (perform_two_pass_analysis) {
         /* Two-pass analysis doesn't work with live capture since it requires us
          * to buffer packets until we've read all of them, but a live capture
@@ -1736,7 +1741,6 @@ main(int argc, char *argv[])
 
       if (global_capture_opts.saving_to_file) {
         /* They specified a "-w" flag, so we'll be saving to a capture file. */
-        gboolean use_pcapng;
 
         /* When capturing, we only support writing pcap or pcapng format. */
         if (out_file_type == wtap_pcapng_file_type_subtype()) {
@@ -1748,8 +1752,8 @@ main(int argc, char *argv[])
           exit_status = INVALID_OPTION;
           goto clean_exit;
         }
-        if (global_capture_opts.capture_comment && !use_pcapng) {
-          cmdarg_err("A capture comment can only be written to a pcapng file.");
+        if (capture_comments != NULL && !use_pcapng) {
+          cmdarg_err("Capture comments can only be written to a pcapng file.");
           exit_status = INVALID_OPTION;
           goto clean_exit;
         }
@@ -1809,8 +1813,8 @@ main(int argc, char *argv[])
           exit_status = INVALID_OPTION;
           goto clean_exit;
         }
-        if (global_capture_opts.capture_comment) {
-          cmdarg_err("A capture comment was specified, but "
+        if (capture_comments != NULL) {
+          cmdarg_err("Capture comments were specified, but "
             "the capture isn't being saved to a file.");
           exit_status = INVALID_OPTION;
           goto clean_exit;
@@ -1819,6 +1823,41 @@ main(int argc, char *argv[])
     }
   }
 #endif
+
+  /*
+   * If capture comments were specified, -w also has to have been specified.
+   */
+  if (capture_comments != NULL) {
+    if (output_file_name) {
+      /* They specified a "-w" flag, so we'll be saving to a capture file.
+       * This is fine if they're writing in a format that supports
+       * section block comments.
+       */
+      if (wtap_file_type_subtype_supports_option(out_file_type,
+                                                 WTAP_BLOCK_SECTION,
+                                                 OPT_COMMENT) == OPTION_NOT_SUPPORTED) {
+        GArray *writable_type_subtypes;
+
+        cmdarg_err("Capture comments can only be written to files of the following types:");
+        writable_type_subtypes = wtap_get_writable_file_types_subtypes(FT_SORT_BY_NAME);
+        for (guint i = 0; i < writable_type_subtypes->len; i++) {
+          int ft = g_array_index(writable_type_subtypes, int, i);
+
+          if (wtap_file_type_subtype_supports_option(ft, WTAP_BLOCK_SECTION,
+                                                     OPT_COMMENT) != OPTION_NOT_SUPPORTED)
+            cmdarg_err_cont("    %s - %s", wtap_file_type_subtype_name(ft),
+                            wtap_file_type_subtype_description(ft));
+        }
+        exit_status = INVALID_OPTION;
+        goto clean_exit;
+      }
+    }
+    else {
+      cmdarg_err("Capture comments were specified, but you aren't writing a capture file.");
+      exit_status = INVALID_OPTION;
+      goto clean_exit;
+    }
+  }
 
   err_msg = ws_init_sockets();
   if (err_msg != NULL)
@@ -2523,7 +2562,8 @@ capture(void)
   fflush(stderr);
   g_string_free(str, TRUE);
 
-  ret = sync_pipe_start(&global_capture_opts, &global_capture_session, &global_info_data, NULL);
+  ret = sync_pipe_start(&global_capture_opts, capture_comments,
+                        &global_capture_session, &global_info_data, NULL);
 
   if (!ret)
     return FALSE;
@@ -3539,6 +3579,13 @@ process_cap_file(capture_file *cf, char *save_file, int out_file_type,
     if (wtap_block_get_string_option_value(g_array_index(params.shb_hdrs, wtap_block_t, 0), OPT_SHB_USERAPPL, &shb_user_appl) != WTAP_OPTTYPE_SUCCESS) {
       /* this is free'd by wtap_block_unref() later */
       wtap_block_add_string_option_format(g_array_index(params.shb_hdrs, wtap_block_t, 0), OPT_SHB_USERAPPL, "%s", get_appname_and_version());
+    }
+    if (capture_comments != NULL) {
+      for (guint i = 0; i < capture_comments->len; i++) {
+        wtap_block_add_string_option_format(g_array_index(params.shb_hdrs, wtap_block_t, 0),
+                                            OPT_COMMENT, "%s",
+                                            (char *)g_ptr_array_index(capture_comments, i));
+      }
     }
 
     ws_debug("tshark: writing format type %d, to %s", out_file_type, save_file);

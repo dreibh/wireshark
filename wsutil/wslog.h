@@ -20,6 +20,12 @@
 
 #include <ws_log_defs.h>
 
+#ifdef WS_LOG_DOMAIN
+#define _LOG_DOMAIN WS_LOG_DOMAIN
+#else
+#define _LOG_DOMAIN ""
+#endif
+
 /*
  * Define the macro WS_LOG_DOMAIN *before* including this header,
  * for example:
@@ -155,7 +161,7 @@ int ws_log_parse_args(int *argc_ptr, char *argv[],
 /** Initializes the logging code.
  *
  * Must be called at startup before using the log API. If provided
- * vcmdarg_err is used to print initialization errors. This usuallu means
+ * vcmdarg_err is used to print initialization errors. This usually means
  * a misconfigured environment variable.
  */
 WS_DLL_PUBLIC
@@ -177,7 +183,7 @@ void ws_log_init_with_writer(const char *progname,
 /** Initializes the logging code.
  *
  * Accepts a user data pointer in addition to the writer. This pointer will
- * be provided to the writer wit hevery invocation. If provided
+ * be provided to the writer with every invocation. If provided
  * free_user_data will be called during cleanup.
  */
 WS_DLL_PUBLIC
@@ -228,13 +234,8 @@ void ws_logv_full(const char *domain, enum ws_log_level level,
                     const char *format, va_list ap);
 
 
-#ifdef WS_LOG_DOMAIN
-#define _LOG_FULL(level, ...) ws_log_full(WS_LOG_DOMAIN, level,  \
+#define _LOG_FULL(level, ...) ws_log_full(_LOG_DOMAIN, level,  \
                                    __FILE__, __LINE__, G_STRFUNC, __VA_ARGS__)
-#else
-#define _LOG_FULL(level, ...) ws_log_full(NULL, level,  \
-                                   __FILE__, __LINE__, G_STRFUNC, __VA_ARGS__)
-#endif
 
 /** Logs with "error" level.
  *

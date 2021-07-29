@@ -2860,7 +2860,7 @@ dissect_radiotap(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void* u
 		return tvb_captured_length(tvb);
 	}
 
-	data = tvb_memdup(wmem_packet_scope(), tvb, 0, length);
+	data = tvb_memdup(pinfo->pool, tvb, 0, length);
 
 	if (ieee80211_radiotap_iterator_init(&iter, (struct ieee80211_radiotap_header *)data, length, NULL)) {
 		if (tree)
@@ -4337,12 +4337,12 @@ void proto_register_radiotap(void)
 
 		{&hf_radiotap_xchannel_flags_ht20,
 		 {"HT Channel (20MHz Channel Width)", "radiotap.xchannel.flags.ht20",
-		  FT_BOOLEAN, 24, NULL, 0x10000,
+		  FT_BOOLEAN, 24, NULL, 0x010000,
 		  "Channel Flags HT/20", HFILL}},
 
 		{&hf_radiotap_xchannel_flags_ht40u,
 		 {"HT Channel (40MHz Channel Width with Extension channel above)", "radiotap.xchannel.flags.ht40u",
-		  FT_BOOLEAN, 24, NULL, 0x20000,
+		  FT_BOOLEAN, 24, NULL, 0x020000,
 		  "Channel Flags HT/40+", HFILL}},
 
 		{&hf_radiotap_xchannel_flags_ht40d,
@@ -5774,7 +5774,7 @@ void proto_register_radiotap(void)
 
 		{&hf_radiotap_s1g_ndp_cts_early_sector_indic_2m,
 		 {"Early Sector Indicator", "radiotap.s1g.ndp.cts.early_sector_indic_2m",
-		  FT_BOOLEAN, 40, NULL, 0x020000000, NULL, HFILL }},
+		  FT_BOOLEAN, 40, NULL, 0x0020000000, NULL, HFILL }},
 
 		{&hf_radiotap_s1g_ndp_cts_bandwidth_indic_2m,
 		 {"Address Indicator", "radiotap.s1g.ndp.cts.address_indic",

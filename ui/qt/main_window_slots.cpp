@@ -868,7 +868,8 @@ void MainWindow::startCapture() {
 
     CaptureFile::globalCapFile()->window = this;
     info_data_.ui.ui = this;
-    if (capture_start(&global_capture_opts, &cap_session_, &info_data_, main_window_update)) {
+    if (capture_start(&global_capture_opts, NULL, &cap_session_, &info_data_,
+                      main_window_update)) {
         capture_options *capture_opts = cap_session_.capture_opts;
         GString *interface_names;
 
@@ -1114,6 +1115,21 @@ void MainWindow::recentActionTriggered() {
     }
 }
 
+QString MainWindow::commentToMenuText(QString text, int max_len)
+{
+    text = text.trimmed().replace(QRegExp("(\\r?\\n|\\r\\n?)+"), " ");
+    if (text.size() > 0) {
+        if (text.size() > max_len) {
+            text.truncate(max_len);
+            text += "…";
+        }
+    }
+    else {
+        text = tr("(empty comment)", "placeholder for empty comment");
+    }
+    return text;
+}
+
 void MainWindow::setEditCommentsMenu()
 {
     main_ui_->menuPacketComment->clear();
@@ -1127,11 +1143,8 @@ void MainWindow::setEditCommentsMenu()
             QAction *aPtr;
             main_ui_->menuPacketComment->addSeparator();
             for (guint i = 0; i < nComments; i++) {
-                QString comment = packet_list_->getPacketComment(i).trimmed();
-                if (comment.size() > 40) {
-                    comment.truncate(40);
-                    comment += "…";
-                }
+                QString comment = packet_list_->getPacketComment(i);
+                comment = this->commentToMenuText(comment);
                 aPtr = main_ui_->menuPacketComment->addAction(tr("Edit \"%1\"", "edit packet comment").arg(comment),
                         this, SLOT(actionEditPacketComment()));
                 aPtr->setData(i);
@@ -1139,11 +1152,8 @@ void MainWindow::setEditCommentsMenu()
 
             main_ui_->menuPacketComment->addSeparator();
             for (guint i = 0; i < nComments; i++) {
-                QString comment = packet_list_->getPacketComment(i).trimmed();
-                if (comment.size() > 40) {
-                    comment.truncate(40);
-                    comment += "…";
-                }
+                QString comment = packet_list_->getPacketComment(i);
+                comment = this->commentToMenuText(comment);
                 aPtr = main_ui_->menuPacketComment->addAction(tr("Delete \"%1\"", "delete packet comment").arg(comment),
                         this, SLOT(actionDeletePacketComment()));
                 aPtr->setData(i);

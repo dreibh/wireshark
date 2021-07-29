@@ -412,6 +412,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-isis.h
 	packet-isis-clv.h
 	packet-isl.h
+	packet-iso15765.h
 	packet-isup.h
 	packet-its.h
 	packet-iwarp-ddp-rdmap.h
@@ -429,6 +430,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-ldap.h
 	packet-lcsap.h
 	packet-ldp.h
+	packet-lin.h
 	packet-link16.h
 	packet-lisp.h
 	packet-llc.h
@@ -637,6 +639,7 @@ set(DISSECTOR_HEADER_FILES
 )
 
 set(DISSECTOR_SRC
+	${CMAKE_CURRENT_SOURCE_DIR}/file-blf.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-btsnoop.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-elf.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-file.c
@@ -1347,6 +1350,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lg8979.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lge_monitor.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-link16.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-lin.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-linx.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lisp-data.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lisp-tcp.c
@@ -1942,6 +1946,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wlccp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wol.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wow.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-woww.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wps.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wreth.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-wsmp.c

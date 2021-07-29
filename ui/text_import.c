@@ -615,16 +615,18 @@ write_current_packet (void)
             memset(&rec, 0, sizeof rec);
 
             rec.rec_type = REC_TYPE_PACKET;
+            rec.block = wtap_block_create(WTAP_BLOCK_PACKET);
             rec.ts.secs = ts_sec;
             rec.ts.nsecs = ts_nsec;
             if (ts_fmt == NULL) { ts_nsec++; }  /* fake packet counter */
             rec.rec_header.packet_header.caplen = rec.rec_header.packet_header.len = prefix_length + curr_offset + eth_trailer_length;
             rec.rec_header.packet_header.pkt_encap = pcap_link_type;
-            wtap_block_add_uint32_option(rec.block, OPT_PKT_FLAGS, direction);
             rec.presence_flags = WTAP_HAS_CAP_LEN|WTAP_HAS_INTERFACE_ID|WTAP_HAS_TS;
+            if (has_direction) {
+                wtap_block_add_uint32_option(rec.block, OPT_PKT_FLAGS, direction);
+            }
             if (has_seqno) {
-              rec.presence_flags |= WTAP_HAS_PACKET_ID;
-              rec.rec_header.packet_header.packet_id = seqno;
+                wtap_block_add_uint64_option(rec.block, OPT_PKT_PACKETID, seqno);
             }
 
             /* XXX - report errors! */
@@ -639,6 +641,7 @@ write_current_packet (void)
                     break;
                 }
             }
+            wtap_block_unref(rec.block);
         }
     }
 

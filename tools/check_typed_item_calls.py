@@ -56,8 +56,13 @@ class APICheck:
         self.fun_name = fun_name
         self.allowed_types = allowed_types
         self.calls = []
-        # RE captures function name + 1st 2 args (always tree + hfindex)
-        self.p = re.compile('.*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+)')
+        if fun_name.find('add_bitmask') == -1:
+            # RE captures function name + 1st 2 args (always tree + hfindex)
+            self.p = re.compile('.*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+)')
+        else:
+            # RE captures function name + 1st + 4th args (always tree + hfindex)
+            self.p = re.compile('.*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)')
+
         self.file = None
 
     def find_calls(self, file):
@@ -166,6 +171,7 @@ known_non_contiguous_fields = { 'wlan.fixed.capabilities.cfpoll.sta',
 
 field_widths = {
     'FT_BOOLEAN' : 64,   # TODO: Width depends upon 'display' field, not checked.
+    'FT_CHAR'    : 8,
     'FT_UINT8'   : 8,
     'FT_INT8'    : 8,
     'FT_UINT16'  : 16,
@@ -226,6 +232,7 @@ class Item:
                 self.check_contiguous_bits(mask)
                 self.check_mask_too_long(mask)
                 self.check_num_digits(mask)
+                self.check_digits_all_zeros(mask)
 
 
     def set_mask_value(self):
@@ -336,7 +343,12 @@ class Item:
                 print('Warning: ', self.filename, 'filter=', self.filter, ' - item has type', self.item_type, 'but mask set:', mask)
                 issues_found += 1
 
-
+    def check_digits_all_zeros(self, mask):
+        if mask.startswith('0x') and len(mask) > 3:
+            if mask[2:] == '0'*(len(mask)-2):
+                print('Warning: ', self.filename, 'filter=', self.filter, ' - item has all zeros - this is confusing! :', mask)
+                global issues_found
+                issues_found += 1
 
 
 # These are APIs in proto.c that check a set of types at runtime and can print '.. is not of type ..' to the console
@@ -387,6 +399,23 @@ apiChecks.append(APICheck('proto_tree_add_boolean_bits_format_value64', { 'FT_BO
 apiChecks.append(APICheck('proto_tree_add_ascii_7bits_item', { 'FT_STRING'}))
 apiChecks.append(APICheck('proto_tree_add_checksum', { 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32'}))
 apiChecks.append(APICheck('proto_tree_add_int64_bits_format_value', { 'FT_INT40', 'FT_INT48', 'FT_INT56', 'FT_INT64'}))
+
+
+bitmask_types = { 'FT_CHAR', 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32',
+                  'FT_INT8', 'FT_INT16', 'FT_INT24', 'FT_INT32',
+                  'FT_UINT40', 'FT_UINT48', 'FT_UINT56', 'FT_UINT64',
+                  'FT_INT40', 'FT_INT48', 'FT_INT56', 'FT_INT64',
+                   'FT_BOOLEAN'}
+apiChecks.append(APICheck('proto_tree_add_bitmask', bitmask_types))
+apiChecks.append(APICheck('proto_tree_add_bitmask_tree', bitmask_types))
+apiChecks.append(APICheck('proto_tree_add_bitmask_ret_uint64', bitmask_types))
+apiChecks.append(APICheck('proto_tree_add_bitmask_with_flags', bitmask_types))
+apiChecks.append(APICheck('proto_tree_add_bitmask_with_flags_ret_uint64', bitmask_types))
+apiChecks.append(APICheck('proto_tree_add_bitmask_value', bitmask_types))
+apiChecks.append(APICheck('proto_tree_add_bitmask_value_with_flags', bitmask_types))
+apiChecks.append(APICheck('proto_tree_add_bitmask_len', bitmask_types))
+apiChecks.append(APICheck('proto_tree_add_bitmask_text', bitmask_types))
+
 
 # Also try to check proto_tree_add_item() calls (for length)
 apiChecks.append(ProtoTreeAddItemCheck())

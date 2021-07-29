@@ -33,7 +33,7 @@
 #include <wsutil/ws_assert.h>
 #include <epan/proto_data.h>
 #include <epan/addr_resolv.h>
-#include <wmem/wmem.h>
+#include <epan/wmem_scopes.h>
 
 #include "packet-frame.h"
 #include "packet-icmp.h"
@@ -338,6 +338,9 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 	proto_item  *volatile ti = NULL;
 	guint	     cap_len = 0, frame_len = 0;
 	guint32      pack_flags = 0;
+	guint32      interface_queue = 0;
+	guint64      drop_count = 0;
+	guint64      packet_id = 0;
 	proto_tree  *volatile tree;
 	proto_tree  *comments_tree;
 	proto_tree  *volatile fh_tree = NULL;
@@ -617,10 +620,9 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 			}
 		}
 
-		if (pinfo->rec->presence_flags & WTAP_HAS_INT_QUEUE)
-			proto_tree_add_uint(fh_tree, hf_frame_interface_queue, tvb, 0, 0,
-					    pinfo->rec->rec_header.packet_header.interface_queue);
-
+		if (WTAP_OPTTYPE_SUCCESS == wtap_block_get_uint32_option_value(fr_data->pkt_block, OPT_PKT_QUEUE, &interface_queue)) {
+			proto_tree_add_uint(fh_tree, hf_frame_interface_queue, tvb, 0, 0, interface_queue);
+		}
 		if (WTAP_OPTTYPE_SUCCESS == wtap_block_get_uint32_option_value(fr_data->pkt_block, OPT_PKT_FLAGS, &pack_flags)) {
 			proto_tree *flags_tree;
 			proto_item *flags_item;
@@ -645,9 +647,9 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 			proto_tree_add_bitmask_list_value(flags_tree, tvb, 0, 0, flags, pack_flags);
 		}
 
-		if (pinfo->rec->presence_flags & WTAP_HAS_PACKET_ID)
-			proto_tree_add_uint64(fh_tree, hf_frame_packet_id, tvb, 0, 0,
-					      pinfo->rec->rec_header.packet_header.packet_id);
+		if (WTAP_OPTTYPE_SUCCESS == wtap_block_get_uint64_option_value(fr_data->pkt_block, OPT_PKT_PACKETID, &packet_id)) {
+			proto_tree_add_uint64(fh_tree, hf_frame_packet_id, tvb, 0, 0, packet_id);
+		}
 
 		if (wtap_block_count_option(fr_data->pkt_block, OPT_PKT_VERDICT) > 0) {
 			proto_tree *verdict_tree;
@@ -725,9 +727,9 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 					   0, 0, cap_len, "Capture Length: %u byte%s (%u bits)",
 					   cap_len, cap_plurality, cap_len * 8);
 
-		if (pinfo->rec->presence_flags & WTAP_HAS_DROP_COUNT)
-			proto_tree_add_uint64(fh_tree, hf_frame_drop_count, tvb, 0, 0,
-					    pinfo->rec->rec_header.packet_header.drop_count);
+		if (WTAP_OPTTYPE_SUCCESS == wtap_block_get_uint64_option_value(fr_data->pkt_block, OPT_PKT_DROPCOUNT, &drop_count)) {
+			proto_tree_add_uint64(fh_tree, hf_frame_drop_count, tvb, 0, 0, drop_count);
+		}
 
 		if (generate_md5_hash) {
 			const guint8 *cp;
@@ -737,7 +739,7 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 			cp = tvb_get_ptr(tvb, 0, cap_len);
 
 			gcry_md_hash_buffer(GCRY_MD_MD5, digest, cp, cap_len);
-			digest_string = bytestring_to_str(wmem_packet_scope(), digest, HASH_MD5_LENGTH, '\0');
+			digest_string = bytes_to_str_punct(pinfo->pool, digest, HASH_MD5_LENGTH, '\0');
 			ti = proto_tree_add_string(fh_tree, hf_frame_md5_hash, tvb, 0, 0, digest_string);
 			proto_item_set_generated(ti);
 		}
@@ -919,7 +921,7 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 	ENDTRY;
 
 	if (proto_field_is_referenced(tree, hf_frame_protocols)) {
-		wmem_strbuf_t *val = wmem_strbuf_sized_new(wmem_packet_scope(), 128, 0);
+		wmem_strbuf_t *val = wmem_strbuf_sized_new(pinfo->pool, 128, 0);
 		wmem_list_frame_t *frame;
 		/* skip the first entry, it's always the "frame" protocol */
 		frame = wmem_list_frame_next(wmem_list_head(pinfo->layers));

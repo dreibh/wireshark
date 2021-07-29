@@ -59,7 +59,7 @@
 #include <epan/expert.h>
 #include <epan/prefs.h>
 #include <epan/addr_resolv.h>
-#include <epan/wmem/wmem.h>
+#include <epan/wmem_scopes.h>
 #include <epan/conversation.h>
 #include <epan/column.h>
 #include <epan/dissectors/packet-tcp.h>
@@ -494,8 +494,8 @@ static gint dissect_parameter_transport_rtps_type(
                         tvb,
                         OFFSET_TO_VAL,
                         param_length);
-                const gchar *guid_string = bytestring_to_str(
-                        wmem_packet_scope(),
+                const gchar *guid_string = bytes_to_str_punct(
+                        pinfo->pool,
                         guid_bytes,
                         MIN(param_length, 12),
                         0);

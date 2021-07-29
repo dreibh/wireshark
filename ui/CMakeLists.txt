@@ -80,10 +80,17 @@ set_source_files_properties(
 
 add_library(ui STATIC ${UI_SRC})
 
-target_link_libraries(ui wsutil caputils)
-
-target_include_directories(ui SYSTEM
+target_link_libraries(ui
 	PRIVATE
+		caputils
+		wsutil
+		${GCRYPT_LIBRARIES}
+	)
+
+target_include_directories(ui
+	SYSTEM PRIVATE
+		${GCRYPT_INCLUDE_DIRS}
+		${GNUTLS_INCLUDE_DIRS}
 		${WINSPARKLE_INCLUDE_DIRS}
 )
 
@@ -95,7 +102,7 @@ endif()
 
 target_link_libraries(version_info PRIVATE ${ZLIB_LIBRARIES})
 
-target_include_directories(version_info PRIVATE ${ZLIB_INCLUDE_DIRS})
+target_include_directories(version_info SYSTEM PRIVATE ${ZLIB_INCLUDE_DIRS})
 
 set_target_properties(ui version_info PROPERTIES
 	LINK_FLAGS "${WS_LINK_FLAGS}"

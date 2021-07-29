@@ -814,16 +814,9 @@ static expert_field ei_1722_canfd_invalid_payload_length = EI_INIT;
 static dissector_handle_t avb1722_can_brief_handle;
 static dissector_handle_t avb1722_can_handle;
 
-/* Link to `CAN` protocol for consistent filtering */
-static dissector_handle_t dissector_can;
-static dissector_handle_t dissector_canfd;
-
 static int                      proto_can = -1;
 static int                      proto_canfd = -1;
 static gboolean                 can_heuristic_first = FALSE;
-static dissector_table_t        can_subdissector_table;
-static heur_dissector_list_t    can_heur_subdissector_table;
-static heur_dtbl_entry_t       *can_heur_dtbl_entry;
 
 /**************************************************************************************************/
 /* ACF LIN Message                                                                                */
@@ -2587,7 +2580,7 @@ static int dissect_1722_acf_can_common(tvbuff_t *tvb, packet_info *pinfo, proto_
     parsed.datalen = (guint)payload_length;
     proto_tree_add_uint(tree_acf_can, hf_1722_can_len, tvb, offset, 1, parsed.datalen);
 
-    col_append_str(pinfo->cinfo, COL_INFO, tvb_bytes_to_str_punct(wmem_packet_scope(), tvb, offset, payload_length, ' '));
+    col_append_str(pinfo->cinfo, COL_INFO, tvb_bytes_to_str_punct(pinfo->pool, tvb, offset, payload_length, ' '));
 
     if (parsed.is_fd && !is_valid_canfd_payload_length(payload_length))
     {
@@ -2617,25 +2610,8 @@ static int dissect_1722_acf_can_common(tvbuff_t *tvb, packet_info *pinfo, proto_
 
     next_tvb = tvb_new_subset_length(tvb, offset, parsed.datalen);
 
-    if(!can_heuristic_first)
-    {
-        if (!dissector_try_payload_new(can_subdissector_table, next_tvb, pinfo, tree, TRUE, &can_info))
-        {
-            if(!dissector_try_heuristic(can_heur_subdissector_table, next_tvb, pinfo, tree, &can_heur_dtbl_entry, &can_info))
-            {
-                call_data_dissector(next_tvb, pinfo, tree);
-            }
-        }
-    }
-    else
-    {
-        if (!dissector_try_heuristic(can_heur_subdissector_table, next_tvb, pinfo, tree, &can_heur_dtbl_entry, &can_info))
-        {
-            if(!dissector_try_payload_new(can_subdissector_table, next_tvb, pinfo, tree, FALSE, &can_info))
-            {
-                call_data_dissector(next_tvb, pinfo, tree);
-            }
-        }
+    if (!socketcan_call_subdissectors(next_tvb, pinfo, tree, &can_info, can_heuristic_first)) {
+        call_data_dissector(next_tvb, pinfo, tree);
     }
 
     /* Add padding bytes to ACF-CAN tree if any */
@@ -2779,11 +2755,7 @@ void proto_reg_handoff_1722_acf_can(void)
 
     register_depend_dissector("acf-can", "can");
     register_depend_dissector("acf-can", "canfd");
-    dissector_can = find_dissector("can-bigendian");
-    dissector_canfd = find_dissector("canfd");
 
-    can_subdissector_table = find_dissector_table("can.subdissector");
-    can_heur_subdissector_table = find_heur_dissector_list("can");
     proto_can = proto_get_id_by_filter_name("can");
     proto_canfd = proto_get_id_by_filter_name("canfd");
 }
@@ -2848,7 +2820,7 @@ static int dissect_1722_acf_lin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     {
         tvbuff_t*   next_tvb = tvb_new_subset_length(tvb, offset, payload_length);
 
-        col_append_str(pinfo->cinfo, COL_INFO, tvb_bytes_to_str_punct(wmem_packet_scope(), tvb, offset, payload_length, ' '));
+        col_append_str(pinfo->cinfo, COL_INFO, tvb_bytes_to_str_punct(pinfo->pool, tvb, offset, payload_length, ' '));
 
         /* at the moment, there's no global LIN sub-protocols support. Use our own. */
         if (dissector_try_payload_new(avb1722_acf_lin_dissector_table, next_tvb, pinfo, tree, TRUE, &lin_id) <= 0)
