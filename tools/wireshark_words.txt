@@ -66,9 +66,11 @@ asynchronously
 asyncmap
 atheros
 atomically
+atsss
 attendee
 attrib
 attrs
+authen
 authenticates
 authenticator
 authenticators
@@ -200,6 +202,7 @@ colorizing
 combiner
 combiners
 communication
+compilers
 computable
 concatenate
 concatenated
@@ -221,6 +224,7 @@ couchbase
 coverity
 cpdlc
 cpich
+cppcheck
 cpuregisters
 credential
 credentials
@@ -253,6 +257,7 @@ deauthentication
 deauthentications
 debian
 debug
+decapsulation
 dechunk
 decompressing
 decompressor
@@ -274,11 +279,13 @@ dehumidification
 deinterleaved
 delimited
 delimiters
+delimiting
 demodulator
 demultiplexer
 demultiplexers
 deobfuscated
 deprecated
+deprotection
 dequeue
 dequeued
 dereference
@@ -363,6 +370,7 @@ entityid
 entryid
 enumerations
 epasv
+epdcch
 ericsson
 erldp
 errinf
@@ -373,15 +381,19 @@ errorportinfo
 erspan
 España
 etheraddr
+ethers
 ethertype
 ettarr
+etwdump
 etype
 eutra
 eutran
 eventlog
+executables
 extattr
 extcap
 extensibility
+extensible
 exthdr
 extrainformation
 failover
@@ -393,6 +405,7 @@ firewall
 flag1
 flag2
 flavored
+flexray
 flowid
 flowmod
 flowspec
@@ -436,6 +449,7 @@ gnutls
 goaway
 google
 gprscdr
+greyed
 groupa
 groupb
 groupcast
@@ -447,6 +461,7 @@ hangup
 harqid
 hartip
 hashed
+hashes
 hazelcast
 heuristic
 hfarr
@@ -461,6 +476,8 @@ hsdpa
 hsdsch
 hspdsch
 hsupa
+htonl
+htons
 http2
 https
 huffman
@@ -476,6 +493,7 @@ ifconfig
 ikev2
 illuminance
 immersive
+implementations
 implementer
 implementor
 inband
@@ -569,8 +587,10 @@ macaddr
 macaddress
 mailto
 malloc
+mantissa
 manuf
 mappable
+maxlen
 maybefcs
 mbits
 mcast
@@ -608,6 +628,7 @@ modulo
 motorola
 mpeg4
 mpsse
+mptcp
 mrcpv
 msbuild
 msgid
@@ -724,6 +745,7 @@ params
 parlay
 parms
 parser
+parses
 passcode
 passkey
 passthrough
@@ -757,6 +779,7 @@ portnumber
 portstatus
 posix
 powercontrol
+pppdump
 prach
 preconfiguration
 preconfigured
@@ -774,6 +797,7 @@ privkey
 procid
 profidrive
 profinet
+promiscuously
 protected
 protoabbrev
 protobuf
@@ -795,6 +819,7 @@ qam16
 qam64
 qnet6
 qosinfo
+quadrature
 quadro
 quiescing
 quintuplet
@@ -855,6 +880,7 @@ reestablishment
 referer
 referrer
 regex
+regexp
 reimplemented
 reinitialization
 reinitialize
@@ -973,6 +999,7 @@ spare7
 spare8
 spare9
 spcell
+specifiers
 spectrograph
 speex
 spnego
@@ -981,6 +1008,7 @@ spooled
 srbid
 srcport
 srvcc
+sshdump
 sshkey
 ssupervisor
 stanag
@@ -1050,6 +1078,7 @@ tdd128
 tdd384
 tdd768
 technica
+Tektronix
 Telecomunicaciones
 Telefónica
 Teléfonos
@@ -1072,6 +1101,7 @@ toggling
 toolbar
 toolongfragment
 tooltip
+toshiba
 touchlink
 touchpad
 traceroute
@@ -1101,6 +1131,7 @@ uavcan
 uboot
 ubuntu
 udpcp
+udpdump
 uint16
 uint32
 uint8
@@ -1217,6 +1248,7 @@ v1410
 v1530
 v1610
 validator
+verifier
 verizon
 version2
 version3

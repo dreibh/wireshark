@@ -146,6 +146,7 @@ static expert_field ei_oran_invalid_bfw_iqwidth = EI_INIT;
 static expert_field ei_oran_invalid_num_bfw_weights = EI_INIT;
 static expert_field ei_oran_unsupported_bfw_compression_method = EI_INIT;
 static expert_field ei_oran_invalid_sample_bit_width = EI_INIT;
+static expert_field ei_oran_reserved_numBundPrb = EI_INIT;
 
 
 /* These are the message types handled by this dissector */
@@ -757,6 +758,8 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
         proto_tree_add_item_ret_uint(extension_tree, hf_oran_exttype, tvb, offset, 1, ENC_BIG_ENDIAN, &exttype);
         offset++;
 
+        proto_item_append_text(extension_ti, " (%s)", val_to_str_const(exttype, exttype_vals, "Unknown"));
+
         /* extLen (number of 32-bit words).
            TODO: expert_info for value 0, which is reserved!
          */
@@ -880,6 +883,10 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 /* disableBFWs */
                 proto_tree_add_item_ret_boolean(extension_tree, hf_oran_disable_bfws,
                                                 tvb, offset, 1, ENC_BIG_ENDIAN, &disableBFWs);
+                if (disableBFWs) {
+                    proto_item_append_text(extension_ti, " (disableBFWs)");
+                }
+
                 /* RAD */
                 proto_tree_add_item(extension_tree, hf_oran_rad,
                                     tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -887,9 +894,17 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 offset++;
 
                 /* numBundPrb */
-                proto_tree_add_item_ret_uint(extension_tree, hf_oran_num_bund_prbs,
-                                             tvb, offset, 1, ENC_BIG_ENDIAN, &numBundPrb);
+                proto_item *num_bund_prb_ti = proto_tree_add_item_ret_uint(extension_tree, hf_oran_num_bund_prbs,
+                                                                           tvb, offset, 1, ENC_BIG_ENDIAN, &numBundPrb);
                 offset++;
+                /* value zero is reserved.. */
+                if (numBundPrb == 0) {
+                    expert_add_info_format(pinfo, num_bund_prb_ti, &ei_oran_reserved_numBundPrb,
+                                           "Reserved value of numBundPrb seen - not valid for use");
+                }
+
+                guint32 num_bundles;
+                guint32 orphaned_prbs;
 
                 if (!disableBFWs) {
                     /********************************************/
@@ -907,8 +922,11 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     guint8 iq_width = !bfwcomphdr_iq_width ? 16 : bfwcomphdr_iq_width;
 
 
-                    /* Work out number of bundles */
-                    guint32 num_bundles = numPrbc / numBundPrb;
+                    /* Work out number of bundles, but take care not to divide by zero. */
+                    if (numBundPrb == 0) {
+                        break;
+                    }
+                    num_bundles = numPrbc / numBundPrb;
 
                     /* Add (complete) bundles */
                     for (guint b=0; b < num_bundles; b++) {
@@ -926,7 +944,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
 
 
                     /* Any remaining BFWs will be added into an 'orphan bundle'. */
-                    guint32 orphaned_prbs = numPrbc % numBundPrb;
+                    orphaned_prbs = numPrbc % numBundPrb;
                     if (orphaned_prbs) {
                         offset = dissect_bfw_bundle(tvb, extension_tree, pinfo, offset,
                                                     comp_meth_ti, bfwcomphdr_comp_meth,
@@ -941,12 +959,36 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     /* No weights in this case */
                     /********************************************/
 
-                    for (guint n=0; n < numBundPrb; n++) {
+                    /* Work out number of bundles, but take care not to divide by zero. */
+                    if (numBundPrb == 0) {
+                        break;
+                    }
+                    num_bundles = numPrbc / numBundPrb;
+
+                    for (guint n=0; n < num_bundles; n++) {
                         /* beamId */
-                        proto_tree_add_item(extension_tree, hf_oran_beam_id,
-                                            tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_item *ti = proto_tree_add_item(extension_tree, hf_oran_beam_id,
+                                                             tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_item_append_text(ti, " (Bundle %u)", n);
                         offset += 2;
                     }
+
+                    /* Any remaining BFWs would be added into an 'orphan bundle', so beamId would be here. */
+                    orphaned_prbs = numPrbc % numBundPrb;
+                    if (orphaned_prbs) {
+                        proto_item *ti = proto_tree_add_item(extension_tree, hf_oran_beam_id,
+                                                             tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_item_append_text(ti, " (Orphaned PRBs)");
+                    }
+
+                }
+
+                /* Add summary to extension root */
+                if (orphaned_prbs) {
+                    proto_item_append_text(extension_ti, " (%u bundles + orphaned)", num_bundles);
+                }
+                else {
+                    proto_item_append_text(extension_ti, " (%u bundles)", num_bundles);
                 }
             }
                 break;
@@ -961,7 +1003,6 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
 
         /* Set length of extension header. */
         proto_item_set_len(extension_ti, extlen*4);
-        proto_item_append_text(extension_ti, " (%s)", val_to_str_const(exttype, exttype_vals, "Unknown"));
     }
 
     /* Set extent of overall section */
@@ -1255,7 +1296,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
         }
         bytesLeft = tvb_captured_length(tvb) - offset;
         number_of_sections++;
-    } while (bytesLeft > 4 + nBytesPerPrb);     /* FIXME: bad heuristic */
+    } while (bytesLeft >= (4 + nBytesPerPrb));     /* FIXME: bad heuristic */
 
     proto_item *ti = proto_tree_add_uint(oran_tree, hf_oran_numberOfSections, tvb, 0, 0, number_of_sections);
     proto_item_set_generated(ti);
@@ -2209,7 +2250,8 @@ proto_register_oran(void)
         { &ei_oran_invalid_bfw_iqwidth, { "oran_fh_cus.bfw_iqwidth_invalid", PI_MALFORMED, PI_ERROR, "Invalid IQ Width", EXPFILL }},
         { &ei_oran_invalid_num_bfw_weights, { "oran_fh_cus.num_bf_weights_invalid", PI_MALFORMED, PI_ERROR, "Invalid number of BF Weights", EXPFILL }},
         { &ei_oran_unsupported_bfw_compression_method, { "oran_fh_cus.unsupported_bfw_compression_method", PI_UNDECODED, PI_WARN, "Unsupported BFW Compression Method", EXPFILL }},
-        { &ei_oran_invalid_sample_bit_width, { "oran_fh_cus.invalid_sample_bit_width", PI_UNDECODED, PI_ERROR, "Unsupported sample bit width", EXPFILL }}
+        { &ei_oran_invalid_sample_bit_width, { "oran_fh_cus.invalid_sample_bit_width", PI_UNDECODED, PI_ERROR, "Unsupported sample bit width", EXPFILL }},
+        { &ei_oran_reserved_numBundPrb, { "oran_fh_cus.reserved_numBundPrb", PI_MALFORMED, PI_ERROR, "Reserved value of numBundPrb", EXPFILL }}
     };
 
     /* Register the protocol name and description */

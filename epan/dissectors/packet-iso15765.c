@@ -8,6 +8,10 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+/*
+ * Support for FlexRay variant, see: https://www.autosar.org/fileadmin/user_upload/standards/classic/20-11/AUTOSAR_SWS_FlexRayARTransportLayer.pdf
+ */
+
 #include "config.h"
 
 #include <epan/packet.h>
@@ -20,12 +24,12 @@
 
 #include "packet-socketcan.h"
 #include "packet-lin.h"
+#include "packet-flexray.h"
 #include "packet-iso15765.h"
 
 void proto_register_iso15765(void);
 void proto_reg_handoff_iso15765(void);
 
-#define ISO15765_PCI_OFFSET 0
 #define ISO15765_PCI_LEN 1
 #define ISO15765_PCI_FD_SF_LEN 2
 #define ISO15765_PCI_FD_FF_LEN 6
@@ -35,16 +39,20 @@ void proto_reg_handoff_iso15765(void);
 #define ISO15765_MESSAGE_TYPES_FIRST_FRAME 1
 #define ISO15765_MESSAGE_TYPES_CONSECUTIVE_FRAME 2
 #define ISO15765_MESSAGE_TYPES_FLOW_CONTROL 3
+#define ISO15765_MESSAGE_TYPES_FR_SINGLE_FRAME_EXT 4
+#define ISO15765_MESSAGE_TYPES_FR_FIRST_FRAME_EXT 5
+#define ISO15765_MESSAGE_TYPES_FR_CONSECUTIVE_FRAME_2 6
+#define ISO15765_MESSAGE_TYPES_FR_ACK_FRAME 7
 
 #define ISO15765_MESSAGE_DATA_LENGTH_MASK 0x0F
 #define ISO15765_FD_MESSAGE_DATA_LENGTH_MASK 0x00FF
 #define ISO15765_MESSAGE_EXTENDED_FRAME_LENGTH_MASK 0x0F
-#define ISO15765_MESSAGE_FRAME_LENGTH_OFFSET (ISO15765_PCI_OFFSET + ISO15765_PCI_LEN)
+#define ISO15765_MESSAGE_FRAME_LENGTH_OFFSET (ISO15765_PCI_LEN)
 #define ISO15765_MESSAGE_FRAME_LENGTH_LEN 1
 #define ISO15765_MESSAGE_SEQUENCE_NUMBER_MASK 0x0F
 #define ISO15765_MESSAGE_FLOW_STATUS_MASK 0x0F
 
-#define ISO15765_FC_BS_OFFSET (ISO15765_PCI_OFFSET + ISO15765_PCI_LEN)
+#define ISO15765_FC_BS_OFFSET (ISO15765_PCI_LEN)
 #define ISO15765_FC_BS_LEN 1
 #define ISO15765_FC_STMIN_OFFSET (ISO15765_FC_BS_OFFSET + ISO15765_FC_BS_LEN)
 #define ISO15765_FC_STMIN_LEN 1
@@ -78,13 +86,22 @@ static const value_string iso15765_message_types[] = {
         {ISO15765_MESSAGE_TYPES_FIRST_FRAME, "First Frame"},
         {ISO15765_MESSAGE_TYPES_CONSECUTIVE_FRAME, "Consecutive Frame"},
         {ISO15765_MESSAGE_TYPES_FLOW_CONTROL, "Flow control"},
+        {ISO15765_MESSAGE_TYPES_FR_SINGLE_FRAME_EXT, "Single Frame Ext (FlexRay only)"},
+        {ISO15765_MESSAGE_TYPES_FR_FIRST_FRAME_EXT, "First Frame Ext (FlexRay only)"},
+        {ISO15765_MESSAGE_TYPES_FR_CONSECUTIVE_FRAME_2, "Consecutive Frame 2 (FlexRay only)"},
+        {ISO15765_MESSAGE_TYPES_FR_ACK_FRAME, "Ack Frame (FlexRay only)"},
         {0, NULL}
 };
 
 #define NORMAL_ADDRESSING 1
 #define EXTENDED_ADDRESSING 2
 
+#define FLEXRAY_ONE_BYTE_ADDRESSING 1
+#define FLEXRAY_TWO_BYTE_ADDRESSING 2
+
 static gint addressing = NORMAL_ADDRESSING;
+static gint flexray_addressing = FLEXRAY_ONE_BYTE_ADDRESSING;
+static guint flexray_segment_size_limit = 0;
 static guint window = 8;
 static range_t *configured_can_ids= NULL;
 static range_t *configured_ext_can_ids = NULL;
@@ -97,7 +114,17 @@ static const enum_val_t enum_addressing[] = {
         {NULL, NULL, 0}
 };
 
+/* Encoding */
+static const enum_val_t enum_flexray_addressing[] = {
+        {"1 Byte", "1 byte addressing", FLEXRAY_ONE_BYTE_ADDRESSING},
+        {"2 byte", "2 byte addressing", FLEXRAY_TWO_BYTE_ADDRESSING},
+        {NULL, NULL, 0}
+};
+
+
 static int hf_iso15765_address = -1;
+static int hf_iso15765_target_address = -1;
+static int hf_iso15765_source_address = -1;
 static int hf_iso15765_message_type = -1;
 static int hf_iso15765_data_length = -1;
 static int hf_iso15765_frame_length = -1;
@@ -114,6 +141,7 @@ static expert_field ei_iso15765_message_type_bad = EI_INIT;
 static int proto_iso15765 = -1;
 static dissector_handle_t iso15765_handle_can = NULL;
 static dissector_handle_t iso15765_handle_lin = NULL;
+static dissector_handle_t iso15765_handle_flexray = NULL;
 
 static dissector_table_t subdissector_table;
 
@@ -176,8 +204,6 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
     /* LIN is always extended addressing */
     guint8      ae = (addressing == NORMAL_ADDRESSING && bus_type != ISO15765_TYPE_LIN) ? 0 : 1;
     guint16     frag_id_low = 0;
-    guint8      pci_len = 0;
-    guint8      pci_offset = 0;
     guint32     offset;
     gint32      data_length;
     guint32     full_len;
@@ -198,54 +224,62 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
 
     ti = proto_tree_add_item(tree, proto_iso15765, tvb, 0, -1, ENC_NA);
     iso15765_tree = proto_item_add_subtree(ti, ett_iso15765);
-    if (ae != 0) {
-        proto_tree_add_item(iso15765_tree, hf_iso15765_address, tvb, 0, ae, ENC_NA);
-    }
-    message_type_item = proto_tree_add_item(iso15765_tree, hf_iso15765_message_type, tvb,
-                                            ae + ISO15765_PCI_OFFSET, ISO15765_PCI_LEN, ENC_BIG_ENDIAN);
 
-    pci = tvb_get_guint8(tvb, ae + ISO15765_PCI_OFFSET);
+    if (bus_type == ISO15765_TYPE_FLEXRAY) {
+        proto_tree_add_item(iso15765_tree, hf_iso15765_source_address, tvb, 0, flexray_addressing, ENC_BIG_ENDIAN);
+        proto_tree_add_item(iso15765_tree, hf_iso15765_target_address, tvb, flexray_addressing, flexray_addressing, ENC_BIG_ENDIAN);
+        ae = 2 * flexray_addressing;
+    } else {
+        if (ae != 0) {
+            proto_tree_add_item(iso15765_tree, hf_iso15765_address, tvb, 0, ae, ENC_NA);
+        }
+    }
+
+    message_type_item = proto_tree_add_item(iso15765_tree, hf_iso15765_message_type, tvb,
+                                            ae, ISO15765_PCI_LEN, ENC_BIG_ENDIAN);
+
+    pci = tvb_get_guint8(tvb, ae);
     message_type = masked_guint16_value(pci, ISO15765_MESSAGE_TYPE_MASK);
 
     col_add_fstr(pinfo->cinfo, COL_INFO, "%s", val_to_str(message_type, iso15765_message_types, "Unknown (0x%02x)"));
 
     switch(message_type) {
         case ISO15765_MESSAGE_TYPES_SINGLE_FRAME: {
-            if (bus_type == ISO15765_TYPE_CAN_FD && frame_length > 8) {
-                pci = tvb_get_guint16(tvb, ae + ISO15765_PCI_OFFSET, ENC_BIG_ENDIAN);
-                pci_len = ISO15765_PCI_FD_SF_LEN;
-                offset = ae + ISO15765_PCI_OFFSET + ISO15765_PCI_FD_SF_LEN;
-                data_length = masked_guint16_value(pci, ISO15765_FD_MESSAGE_DATA_LENGTH_MASK);
+            if (frame_length > 8 && (pci & ISO15765_MESSAGE_DATA_LENGTH_MASK) == 0) {
+                offset = ae + ISO15765_PCI_FD_SF_LEN;
+                data_length = tvb_get_guint8(tvb, ae + 1);
+                proto_tree_add_item(iso15765_tree, hf_iso15765_data_length, tvb, ae + 1, 1, ENC_BIG_ENDIAN);
             } else {
-                pci_len = ISO15765_PCI_LEN;
-                offset = ae + ISO15765_PCI_OFFSET + ISO15765_PCI_LEN;
+                offset = ae + ISO15765_PCI_LEN;
                 data_length = masked_guint16_value(pci, ISO15765_MESSAGE_DATA_LENGTH_MASK);
+                proto_tree_add_uint(iso15765_tree, hf_iso15765_data_length, tvb, ae, 1, data_length);
             }
 
             next_tvb = tvb_new_subset_length_caplen(tvb, offset, data_length, data_length);
             complete = TRUE;
 
             /* Show some info */
-            proto_tree_add_item(iso15765_tree, hf_iso15765_data_length, tvb,
-                                ae + ISO15765_PCI_OFFSET, pci_len, ENC_BIG_ENDIAN);
             col_append_fstr(pinfo->cinfo, COL_INFO, "(Len: %d)", data_length);
             break;
         }
         case ISO15765_MESSAGE_TYPES_FIRST_FRAME: {
-            pci = tvb_get_guint16(tvb, ae + ISO15765_PCI_OFFSET, ENC_BIG_ENDIAN);
-            if (bus_type == ISO15765_TYPE_CAN_FD && pci == 0x1000) {
-                pci_len = ISO15765_PCI_FD_FF_LEN - 2;
-                full_len = tvb_get_guint32(tvb, ae + ISO15765_PCI_OFFSET + 2, ENC_BIG_ENDIAN);
-                offset = ae + ISO15765_MESSAGE_FRAME_LENGTH_OFFSET + ISO15765_PCI_FD_FF_LEN - 1;
-                pci_offset = ae + ISO15765_MESSAGE_FRAME_LENGTH_OFFSET + 1;
+            pci = tvb_get_guint16(tvb, ae, ENC_BIG_ENDIAN);
+            if (pci == 0x1000) {
+                full_len = tvb_get_guint32(tvb, ae + 2, ENC_BIG_ENDIAN);
+                proto_tree_add_item(iso15765_tree, hf_iso15765_frame_length, tvb, ae + 2, 4, ENC_BIG_ENDIAN);
+                offset = ae + 2 + 4;
             } else {
-                pci_len = ISO15765_PCI_LEN;
-                full_len = tvb_get_guint16(tvb, ae + ISO15765_PCI_OFFSET, ENC_BIG_ENDIAN) & 0xFFF;
-                offset = ae + ISO15765_MESSAGE_FRAME_LENGTH_OFFSET + ISO15765_MESSAGE_FRAME_LENGTH_LEN;
-                pci_offset = ae + ISO15765_MESSAGE_FRAME_LENGTH_OFFSET;
+                full_len = tvb_get_guint16(tvb, ae, ENC_BIG_ENDIAN) & 0xFFF;
+                proto_tree_add_uint(iso15765_tree, hf_iso15765_frame_length, tvb, ae, 2, full_len);
+                offset = ae + 2;
             }
 
             data_length = tvb_reported_length(tvb) - offset;
+            if (bus_type == ISO15765_TYPE_FLEXRAY && flexray_segment_size_limit != 0
+                && (guint32)data_length > flexray_segment_size_limit - (offset - ae)) {
+                data_length = flexray_segment_size_limit - (offset - ae);
+            }
+
             fragmented = TRUE;
             frag_id_low = 0;
 
@@ -259,16 +293,19 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
             }
 
             /* Show some info */
-            proto_tree_add_item(iso15765_tree, hf_iso15765_frame_length, tvb,
-                                pci_offset, pci_len, ENC_BIG_ENDIAN);
             col_append_fstr(pinfo->cinfo, COL_INFO, "(Frame Len: %d)", full_len);
             break;
         }
         case ISO15765_MESSAGE_TYPES_CONSECUTIVE_FRAME: {
-            offset = ae + ISO15765_PCI_OFFSET + ISO15765_PCI_LEN;
+            offset = ae + ISO15765_PCI_LEN;
             data_length = tvb_reported_length(tvb) - offset;
             frag_id_low = masked_guint16_value(pci, ISO15765_MESSAGE_SEQUENCE_NUMBER_MASK);
             fragmented = TRUE;
+
+            if (bus_type == ISO15765_TYPE_FLEXRAY && flexray_segment_size_limit != 0
+                && (guint32)data_length > flexray_segment_size_limit - (offset - ae)) {
+                data_length = flexray_segment_size_limit - (offset - ae);
+            }
 
             /* Save information */
             if (!(pinfo->fd->visited)) {
@@ -277,29 +314,29 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
 
             /* Show some info */
             proto_tree_add_item(iso15765_tree, hf_iso15765_sequence_number,
-                                tvb, ae + ISO15765_PCI_OFFSET, ISO15765_PCI_LEN, ENC_BIG_ENDIAN);
+                                tvb, ae, ISO15765_PCI_LEN, ENC_BIG_ENDIAN);
             col_append_fstr(pinfo->cinfo, COL_INFO, "(Seq: %d)", (pci & ISO15765_MESSAGE_DATA_LENGTH_MASK));
             break;
         }
         case ISO15765_MESSAGE_TYPES_FLOW_CONTROL: {
-            guint16 status = masked_guint16_value(pci, ISO15765_MESSAGE_DATA_LENGTH_MASK);
-            guint8 bs = tvb_get_guint8(tvb, ae + ISO15765_FC_BS_OFFSET);
-            guint8 stmin = tvb_get_guint8(tvb, ae + ISO15765_FC_STMIN_OFFSET);
+            guint32 status = 0;
+            guint32 bs = 0;
+            guint32 stmin = 0;
             data_length = 0;
-            proto_tree_add_item(iso15765_tree, hf_iso15765_flow_status, tvb,
-                                ae + ISO15765_PCI_OFFSET, ISO15765_PCI_LEN, ENC_BIG_ENDIAN);
-            proto_tree_add_item(iso15765_tree, hf_iso15765_fc_bs, tvb,
-                                ae + ISO15765_FC_BS_OFFSET, ISO15765_FC_BS_LEN, ENC_BIG_ENDIAN);
-            proto_tree_add_item(iso15765_tree, hf_iso15765_fc_stmin, tvb,
-                                ae + ISO15765_FC_STMIN_OFFSET, ISO15765_FC_STMIN_LEN, ENC_BIG_ENDIAN);
-            col_append_fstr(pinfo->cinfo, COL_INFO, "(Status: %d, Block size:0x%x, Separation time minimum: %d ms)",
+            proto_tree_add_item_ret_uint(iso15765_tree, hf_iso15765_flow_status, tvb, ae,
+                                         ISO15765_PCI_LEN, ENC_BIG_ENDIAN, &status);
+            proto_tree_add_item_ret_uint(iso15765_tree, hf_iso15765_fc_bs, tvb, ae + ISO15765_FC_BS_OFFSET,
+                                         ISO15765_FC_BS_LEN, ENC_BIG_ENDIAN, &bs);
+            proto_tree_add_item_ret_uint(iso15765_tree, hf_iso15765_fc_stmin, tvb, ae + ISO15765_FC_STMIN_OFFSET,
+                                         ISO15765_FC_STMIN_LEN, ENC_BIG_ENDIAN, &stmin);
+            col_append_fstr(pinfo->cinfo, COL_INFO, "(Status: %d, Block size: 0x%x, Separation time minimum: %d ms)",
                             status, bs, stmin);
             break;
         }
         default:
             expert_add_info_format(pinfo, message_type_item, &ei_iso15765_message_type_bad,
                                    "Bad Message Type value %u <= 3", message_type);
-            return ae + ISO15765_PCI_OFFSET;
+            return ae;
     }
 
     /* Show data */
@@ -315,7 +352,7 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
 
         /* Get frame information */
         iso15765_frame = (iso15765_frame_t *)wmem_map_lookup(iso15765_frame_table,
-                                                                  GUINT_TO_POINTER(iso15765_info->seq));
+                                                             GUINT_TO_POINTER(iso15765_info->seq));
 
         if (iso15765_frame != NULL) {
             if (!(pinfo->fd->visited)) {
@@ -420,6 +457,18 @@ dissect_iso15765_lin(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     return dissect_iso15765(tvb, pinfo, tree, ISO15765_TYPE_LIN, lininfo->id, lininfo->len);
 }
 
+static int
+dissect_iso15765_flexray(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+{
+    DISSECTOR_ASSERT(data);
+
+    flexray_identifier *flexray_id = (flexray_identifier *)data;
+
+    guint32 id = (((guint32)flexray_id->id) << 16) | (((guint32)flexray_id->cc) << 8) | flexray_id->ch;
+
+    return dissect_iso15765(tvb, pinfo, tree, ISO15765_TYPE_FLEXRAY, id, tvb_captured_length(tvb));
+}
+
 static void
 update_config(void)
 {
@@ -457,6 +506,24 @@ proto_register_iso15765(void)
                     }
             },
             {
+                    &hf_iso15765_target_address,
+                    {
+                            "FlexRay Target Address",    "iso15765.flexray_target_address",
+                            FT_UINT16,  BASE_HEX,
+                            NULL, 0,
+                            NULL, HFILL
+                    }
+            },
+            {
+                    &hf_iso15765_source_address,
+                    {
+                            "FlexRay Source Address",    "iso15765.flexray_source_address",
+                            FT_UINT16,  BASE_HEX,
+                            NULL, 0,
+                            NULL, HFILL
+                    }
+            },
+            {
                     &hf_iso15765_message_type,
                     {
                             "Message Type",    "iso15765.message_type",
@@ -469,7 +536,7 @@ proto_register_iso15765(void)
                     &hf_iso15765_data_length,
                     {
                             "Data length",    "iso15765.data_length",
-                            FT_UINT16,  BASE_DEC,
+                            FT_UINT32,  BASE_DEC,
                             NULL, 0,
                             NULL, HFILL
                     }
@@ -660,8 +727,8 @@ proto_register_iso15765(void)
                                    "Window of ISO 15765 fragments",
                                    10, &window);
 
-    prefs_register_static_text_preference(iso15765_module, "empty2", "", NULL);
-    prefs_register_static_text_preference(iso15765_module, "map", "Protocol Handling:", NULL);
+    prefs_register_static_text_preference(iso15765_module, "empty1", "", NULL);
+    prefs_register_static_text_preference(iso15765_module, "header1", "Protocol Handling:", NULL);
 
     range_convert_str(wmem_epan_scope(), &configured_can_ids, "", 0x7ff);
     prefs_register_range_preference(iso15765_module, "can.ids",
@@ -680,6 +747,17 @@ proto_register_iso15765(void)
                                    "Handle LIN Diagnostic Frames",
                                    &register_lin_diag_frames);
 
+    prefs_register_enum_preference(iso15765_module, "flexray_addressing",
+                                   "FlexRay Addressing",
+                                   "Addressing of FlexRay TP. 1 Byte or 2 Byte",
+                                   &flexray_addressing,
+                                   enum_flexray_addressing, TRUE);
+
+    prefs_register_uint_preference(iso15765_module, "flexray_segment_size_limit",
+                                   "FlexRay Segment Cutoff",
+                                   "Segment Size Limit for first and consecutive frames of FlexRay (bytes after addresses)",
+                                   10, &flexray_segment_size_limit);
+
     iso15765_frame_table = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
 
     reassembly_table_register(&iso15765_reassembly_table, &addresses_reassembly_table_functions);
@@ -692,7 +770,9 @@ proto_reg_handoff_iso15765(void)
 {
     iso15765_handle_can = create_dissector_handle(dissect_iso15765_can, proto_iso15765);
     iso15765_handle_lin = create_dissector_handle(dissect_iso15765_lin, proto_iso15765);
+    iso15765_handle_flexray = create_dissector_handle(dissect_iso15765_flexray, proto_iso15765);
     dissector_add_for_decode_as("can.subdissector", iso15765_handle_can);
+    dissector_add_for_decode_as("flexray.subdissector", iso15765_handle_flexray);
     update_config();
 }
 
