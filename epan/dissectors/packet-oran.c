@@ -105,10 +105,10 @@ static int hf_oran_blockScaler = -1;
 static int hf_oran_compBitWidth = -1;
 static int hf_oran_compShift = -1;
 
-static  int hf_oran_repetition = -1;
+static int hf_oran_repetition = -1;
 static int hf_oran_rbgSize = -1;
 static int hf_oran_rbgMask = -1;
-static  int hf_oran_noncontig_priority = -1;
+static int hf_oran_noncontig_priority = -1;
 static int hf_oran_symbolMask = -1;
 
 static int hf_oran_rsvd4 = -1;
@@ -122,6 +122,10 @@ static int hf_oran_rad = -1;
 static int hf_oran_num_bund_prbs = -1;
 static int hf_oran_beam_id = -1;
 static int hf_oran_num_weights_per_bundle = -1;
+
+static int hf_oran_off_start_prb_num_prb_pair = -1;
+static int hf_oran_off_start_prb = -1;
+static int hf_oran_num_prb = -1;
 
 /* Computed fields */
 static int hf_oran_c_eAxC_ID = -1;
@@ -140,6 +144,7 @@ static gint ett_oran_u_prb = -1;
 static gint ett_oran_iq = -1;
 static gint ett_oran_c_section_extension = -1;
 static gint ett_oran_bfw = -1;
+static gint ett_oran_offset_start_prb_num_prb = -1;
 
 /* Expert info */
 static expert_field ei_oran_invalid_bfw_iqwidth = EI_INIT;
@@ -482,7 +487,8 @@ addSeqid(tvbuff_t *tvb, proto_tree *oran_tree, gint *offset)
     proto_item_append_text(seqIdItem, ", SeqId: %d, SubSeqId: %d, E: %d", seqId, subSeqId, e);
 }
 
-static float scale_to_float(guint32 h)
+/* Special case for uncompressed/16-bit value */
+static float uncompressed_to_float(guint32 h)
 {
     gint16 i16 = h & 0x0000ffff;
     return ((float)i16) / 0x7fff;
@@ -501,26 +507,28 @@ static int dissect_bfwCompHdr(tvbuff_t *tvb, proto_tree *tree, gint offset,
 
 /* Fields present (if any) depend upon passed-in bfwCompMeth */
 static int dissect_bfwCompParam(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, gint offset,
-                                proto_item *ti, guint32 bfwcomphdr_comp_method, gboolean *supported)
+                                proto_item *ti, guint32 bfwcomphdr_comp_method,
+                                guint32 *exponent, gboolean *supported)
 {
     *supported = FALSE;
     switch (bfwcomphdr_comp_method) {
-        case 0:  /* no compression */
+        case COMP_NONE:
             /* In this case, bfwCompParam is absent */
             *supported = TRUE;
             break;
-        case 1: /* block fl. point */
+        case COMP_BLOCK_FP:
             /* 4 reserved bits +  exponent */
-            proto_tree_add_item(tree, hf_oran_exponent,
-                                tvb, offset, 1, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(tree, hf_oran_exponent,
+                                         tvb, offset, 1, ENC_BIG_ENDIAN, exponent);
+            *supported = TRUE;
             offset++;
             break;
-        case 2: /* block scaling */
+        case COMP_BLOCK_SCALE:
             proto_tree_add_item(tree, hf_oran_blockScaler,
                                 tvb, offset, 1, ENC_BIG_ENDIAN);
             offset++;
             break;
-        case 3: /* u-law */
+        case COMP_U_LAW:
             /* compBitWidth, compShift */
             proto_tree_add_item(tree, hf_oran_compBitWidth,
                                 tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -528,7 +536,7 @@ static int dissect_bfwCompParam(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
                                 tvb, offset, 1, ENC_BIG_ENDIAN);
             offset++;
             break;
-        case 4: /* beamspace */
+        case COMP_MODULATION: /* beamspace */
             /* TODO: activeBeamspaceCoefficientMask - ceil(K/8) octets */
             /* proto_tree_add_item(extension_tree, hf_oran_blockScaler,
                                 tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -549,6 +557,38 @@ static int dissect_bfwCompParam(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
     return offset;
 }
 
+
+static gfloat decompress_value(guint32 bits, guint32 comp_method, guint8 iq_width _U_, guint32 exponent)
+{
+    switch (comp_method) {
+        case COMP_NONE: /* no compression */
+            return uncompressed_to_float(bits);
+
+        case COMP_BLOCK_FP: /* block floating point */
+        {
+            /* A.1.2 Block Floating Point Decompression Algorithm */
+            gint32 cPRB = bits;
+            guint32 scaler = 2 << (exponent-1);  /* i.e. 2^exponent */
+
+            /* Check last bit, in case we need to flip to -ve */
+            if (cPRB >= (1<<(iq_width-1))) {
+                cPRB -= (1<<iq_width);
+            }
+
+            const guint8 mantissa_bits = iq_width-1;
+            return (cPRB / (gfloat)(1 << (15+mantissa_bits))) * scaler;
+        }
+
+        case COMP_BLOCK_SCALE:
+        case COMP_U_LAW:
+        case COMP_MODULATION:
+        default:
+            /* Not supported! */
+            return 0.0;
+    }
+}
+
+
 #define ORPHAN_BUNDLE_NUMBER 999
 
 static guint32 dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, guint offset,
@@ -558,8 +598,9 @@ static guint32 dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info *
 {
     /* bfwCompParam */
     gboolean compression_method_supported = FALSE;
+    guint32  exponent = 0;
     offset = dissect_bfwCompParam(tvb, tree, pinfo, offset, comp_meth_ti,
-                                  bfwcomphdr_comp_meth, &compression_method_supported);
+                                  bfwcomphdr_comp_meth, &exponent, &compression_method_supported);
 
     /* Can't show details of unsupported compression method */
     if (!compression_method_supported) {
@@ -605,15 +646,17 @@ static guint32 dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info *
 
         /* Create subtree */
         bfw_offset = bit_offset / 8;
+        guint8 bfw_extent = ((bit_offset + (iq_width*2)) / 8) - bfw_offset;
         proto_item *bfw_ti = proto_tree_add_string_format(bundle_tree, hf_oran_bfw,
-                                                          tvb, bfw_offset, 4 /* assuming 1*16-bit samples */,
+                                                          tvb, bfw_offset, bfw_extent,
                                                           "", "TRX %u: (", m);
         proto_tree *bfw_tree = proto_item_add_subtree(bfw_ti, ett_oran_bfw);
 
         /* I */
         /* Get bits, and convert to float. */
         guint32 bits = tvb_get_bits(tvb, bit_offset, iq_width, ENC_BIG_ENDIAN);
-        gfloat value = scale_to_float(bits);
+        gfloat value = decompress_value(bits, bfwcomphdr_comp_meth, iq_width, exponent);
+
         /* Add to tree. */
         proto_tree_add_float_format_value(bfw_tree, hf_oran_bfw_i, tvb, bit_offset/8, (iq_width+7)/8, value, "#%u=%f", m, value);
         bit_offset += iq_width;
@@ -622,7 +665,7 @@ static guint32 dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info *
         /* Q */
         /* Get bits, and convert to float. */
         bits = tvb_get_bits(tvb, bit_offset, iq_width, ENC_BIG_ENDIAN);
-        value = scale_to_float(bits);
+        value = decompress_value(bits, bfwcomphdr_comp_meth, iq_width, exponent);
         /* Add to tree. */
         proto_tree_add_float_format_value(bfw_tree, hf_oran_bfw_q, tvb, bit_offset/8, (iq_width+7)/8, value, "#%u=%f", m, value);
         bit_offset += iq_width;
@@ -674,7 +717,6 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
     switch (sectionType) {
         case SEC_C_NORMAL:            /* Section Type "1" */
         case SEC_C_PRACH:             /* Section Type "3" */
-        case SEC_C_UE_SCHED:          /* Section Type "5" */
             proto_tree_add_item_ret_boolean(oran_tree, hf_oran_ef, tvb, offset, 1, ENC_BIG_ENDIAN, &extension_flag);
             break;
         default:
@@ -691,6 +733,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
     }
 
     guint32 beamId = 0;
+    guint32 ueId = 0;
 
     /* TODO: check formats for remaining sectionType values - they look different, and some fields above might not be present.. */
 
@@ -732,8 +775,10 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
         }
         case SEC_C_UE_SCHED:   /* Section Type "5" - Table 5.7 */
             /* ueId */
-            proto_tree_add_item(oran_tree, hf_oran_ueId, tvb, offset, 2, ENC_NA);
+            proto_tree_add_item_ret_uint(oran_tree, hf_oran_ueId, tvb, offset, 2, ENC_NA, &ueId);
             offset += 2;
+
+            proto_item_append_text(sectionHeading, ", UEId: %d", ueId);
             break;
 
         default:
@@ -796,9 +841,10 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 }
 
                 /* bfwCompParam */
+                guint32 exponent = 0;
                 gboolean compression_method_supported = FALSE;
                 offset = dissect_bfwCompParam(tvb, extension_tree, pinfo, offset, comp_meth_ti,
-                                              bfwcomphdr_comp_meth, &compression_method_supported);
+                                              bfwcomphdr_comp_meth, &exponent, &compression_method_supported);
 
                 /* Can't show details of unsupported compression method */
                 if (!compression_method_supported) {
@@ -836,7 +882,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     for (guint m=0; m < pref_num_bf_weights; m++) {
                         /* Get bits, and convert to float. */
                         guint32 bits = tvb_get_bits(tvb, bit_offset, iq_width, ENC_BIG_ENDIAN);
-                        gfloat value = scale_to_float(bits);
+                        gfloat value = uncompressed_to_float(bits);
                         /* Add to tree. */
                         proto_tree_add_float_format_value(bfw_tree, hf_oran_bfw_i, tvb, bit_offset/8, (iq_width+7)/8, value, "#%u=%f", m, value);
                         bit_offset += iq_width;
@@ -850,7 +896,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     for (guint m=0; m < pref_num_bf_weights; m++) {
                         /* Get bits, and convert to float. */
                         guint32 bits = tvb_get_bits(tvb, bit_offset, iq_width, ENC_BIG_ENDIAN);
-                        gfloat value = scale_to_float(bits);
+                        gfloat value = uncompressed_to_float(bits);
                         /* Add to tree. */
                         proto_tree_add_float_format_value(bfw_tree, hf_oran_bfw_q, tvb, bit_offset/8, (iq_width+7)/8, value, "#%u=%f", m, value);
                         bit_offset += iq_width;
@@ -993,6 +1039,47 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
             }
                 break;
 
+            case 12: /* Non-Contiguous PRB Allocation with Frequency Ranges */
+            {
+                /* priority */
+                proto_tree_add_item(extension_tree, hf_oran_noncontig_priority, tvb, offset, 1, ENC_BIG_ENDIAN);
+
+                /* symbolMask */
+                proto_tree_add_item(extension_tree, hf_oran_symbolMask, tvb, offset, 2, ENC_BIG_ENDIAN);
+                offset += 2;
+
+                /* There are now 'R' pairs of (offStartPrb, numPrb) values.  Not sure where R comes from,
+                   but for now assume that entire space in extLen should be filled with pairs.
+                   N.B. this suggests that 'R' would always be an even number.. */
+                guint32 extlen_remaining_byte = (extlen*4) - 4;
+                guint8 prb_index;
+
+                for (prb_index = 1; extlen_remaining_byte > 0; prb_index++)
+                {
+                    /* Create a subtree for each pair */
+                    proto_item *pair_ti = proto_tree_add_string(extension_tree, hf_oran_off_start_prb_num_prb_pair,
+                                                                tvb, offset, 2, "");
+                    proto_tree *pair_tree = proto_item_add_subtree(pair_ti, ett_oran_offset_start_prb_num_prb);
+
+                    /* offStartPrb */
+                    guint32 off_start_prb; // = tvb_get_guint8(tvb, offset);
+                    proto_tree_add_item_ret_uint(pair_tree, hf_oran_off_start_prb, tvb, offset, 1, ENC_BIG_ENDIAN, &off_start_prb);
+                    offset++;
+
+                    /* numPrb */
+                    guint32 num_prb; // = tvb_get_guint8(tvb, offset);
+                    proto_tree_add_item_ret_uint(pair_tree, hf_oran_num_prb, tvb, offset, 1, ENC_BIG_ENDIAN, &num_prb);
+                    offset++;
+
+                    /* Add summary to pair root item */
+                    proto_item_append_text(pair_ti, "(%u) offStartPrb=%3u, numPrb=%u",
+                                           prb_index, off_start_prb, num_prb);
+
+                    extlen_remaining_byte -= 2;
+                }
+                break;
+            }
+
             default:
                 /* TODO: Support remaining extension types. */
                 break;
@@ -1084,6 +1171,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     guint32 scs, slots_per_subframe;
     proto_item *ti;
 
+    /* Section-specific fields */
     switch (sectionType) {
     case SEC_C_UNUSED_RB:   /* Section Type "0" */
 
@@ -1103,6 +1191,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
         break;
 
     case SEC_C_NORMAL:      /* Section Type "1" */
+    case SEC_C_UE_SCHED:    /* Section Type "5" */
         iq_width_item = proto_tree_add_item_ret_uint(section_tree, hf_oran_udCompHdrIqWidth , tvb, offset, 1, ENC_NA, &bit_width);
         proto_item_append_text(iq_width_item, " (%d bits)", bit_width == 0 ? 16 : bit_width);
 
@@ -1753,8 +1842,8 @@ proto_register_oran(void)
         /* Section 5.4.5.10 */
         {&hf_oran_ueId,
          {"UE ID", "oran_fh_cus.ueId",
-          FT_UINT16, BASE_HEX,
-          NULL, 0x0,
+          FT_UINT16, BASE_HEX_DEC,
+          NULL, 0x7fff,
           "This parameter provides a label for the UE for which the section "
           "contents apply.  This is used to support channel information "
           "sending from the lls-CU to the RU.  This is just a label and the "
@@ -2053,6 +2142,30 @@ proto_register_oran(void)
           HFILL}
         },
 
+        /* Section 5.4.7.12 */
+        {&hf_oran_off_start_prb_num_prb_pair,
+         {"Pair", "oran_fh_cus.offStartPrb_numPrb",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          "Pair of offStartPrb and numPrb.",
+          HFILL}
+        },
+
+        {&hf_oran_off_start_prb,
+         {"offStartPrb", "oran_fh_cus.offStartPrb",
+          FT_UINT8, BASE_DEC,
+          NULL, 0x0,
+          "Offset of PRB range start.",
+          HFILL}
+        },
+        {&hf_oran_num_prb,
+         {"numPrb", "oran_fh_cus.numPrb",
+          FT_UINT8, BASE_DEC,
+          NULL, 0x0,
+          "Number of PRBs in PRB range.",
+          HFILL}
+        },
+
         /* Section 6.3.3.7 */
         {&hf_oran_symbolId,
          {"Symbol Identifier", "oran_fh_cus.symbolId",
@@ -2241,7 +2354,8 @@ proto_register_oran(void)
         &ett_oran_section,
         &ett_oran_iq,
         &ett_oran_c_section_extension,
-        &ett_oran_bfw
+        &ett_oran_bfw,
+        &ett_oran_offset_start_prb_num_prb
     };
 
     expert_module_t* expert_oran;
