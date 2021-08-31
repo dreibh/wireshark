@@ -46,7 +46,7 @@ project(${_project_name} C CXX)
 set(GIT_REVISION 0)
 set(PROJECT_MAJOR_VERSION 3)
 set(PROJECT_MINOR_VERSION 5)
-set(PROJECT_PATCH_VERSION 0)
+set(PROJECT_PATCH_VERSION 1)
 set(PROJECT_BUILD_VERSION ${GIT_REVISION})
 set(PROJECT_VERSION_EXTENSION "")
 
@@ -3655,6 +3655,15 @@ if(SHELLCHECK_EXECUTABLE)
 		WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
 	)
 endif()
+
+# uninstall target
+configure_file(
+	"${CMAKE_CURRENT_SOURCE_DIR}/cmake_uninstall.cmake.in"
+	"${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake"
+	IMMEDIATE @ONLY)
+
+add_custom_target(uninstall
+	COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
 
 #
 # Editor modelines  -  https://www.wireshark.org/tools/modelines.html

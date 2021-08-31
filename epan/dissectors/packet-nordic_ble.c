@@ -770,7 +770,13 @@ dissect_nordic_ble(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     }
 
     if ((context->mic_checked_at_capture) && (!context->mic_valid_at_capture)) {
-        col_add_str(pinfo->cinfo, COL_INFO, "Encrypted packet decrypted incorrectly (bad MIC)");
+        col_set_str(pinfo->cinfo, COL_INFO, "Encrypted packet decrypted incorrectly");
+        if (!context->crc_valid_at_capture) {
+            /* CRC is bad */
+            col_append_str(pinfo->cinfo, COL_INFO, " (bad CRC)");
+        } else {
+            col_append_str(pinfo->cinfo, COL_INFO, " (bad MIC)");
+        }
     }
 
     if (debug_handle) {
@@ -890,7 +896,7 @@ proto_register_nordic_ble(void)
                 "Reserved for Future Use", HFILL }
         },
         { &hf_nordic_ble_channel,
-            { "Channel", "nordic_ble.channel",
+            { "Channel Index", "nordic_ble.channel",
                 FT_UINT8, BASE_DEC, NULL, 0x0,
                 NULL, HFILL }
         },

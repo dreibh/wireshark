@@ -110,7 +110,6 @@ static gboolean find_packet(capture_file *cf, ws_match_function match_function,
     void *criterion, search_direction dir);
 
 static void cf_rename_failure_alert_box(const char *filename, int err);
-static void ref_time_packets(capture_file *cf);
 
 /* Seconds spent processing packets between pushing UI updates. */
 #define PROGBAR_UPDATE_INTERVAL 0.150
@@ -1554,12 +1553,6 @@ cf_filter_packets(capture_file *cf, gchar *dftext, gboolean force)
 }
 
 void
-cf_reftime_packets(capture_file *cf)
-{
-  ref_time_packets(cf);
-}
-
-void
 cf_redissect_packets(capture_file *cf)
 {
   if (cf->read_lock || cf->redissection_queued == RESCAN_SCAN) {
@@ -2022,8 +2015,8 @@ rescan_packets(capture_file *cf, const char *action, const char *action_item, gb
  * without rereading the file.
  * XXX - do we need a progres bar or is this fast enough?
  */
-static void
-ref_time_packets(capture_file *cf)
+void
+cf_reftime_packets(capture_file* cf)
 {
   guint32     framenum;
   frame_data *fdata;
@@ -4011,13 +4004,12 @@ cf_get_packet_block(capture_file *cf, const frame_data *fd)
   /* If this block has been modified, fetch the modified version */
   if (fd->has_modified_block)
     return wtap_block_ref(cap_file_provider_get_modified_block(&cf->provider, fd));
-
-  /* fetch phdr block */
-  if (fd->has_phdr_block) {
+  else {
     wtap_rec rec; /* Record metadata */
     Buffer buf;   /* Record data */
     wtap_block_t block;
 
+    /* fetch record block */
     wtap_rec_init(&rec);
     ws_buffer_init(&buf, 1514);
 
@@ -4031,7 +4023,6 @@ cf_get_packet_block(capture_file *cf, const frame_data *fd)
     ws_buffer_free(&buf);
     return block;
   }
-  return NULL;
 }
 
 /*
@@ -4774,7 +4765,6 @@ cf_save_records(capture_file *cf, const char *fname, guint save_format,
         fdata = frame_data_sequence_find(cf->provider.frames, framenum);
 
         // XXX: This also ignores non-comment options like verdict
-        fdata->has_phdr_block = FALSE;
         fdata->has_modified_block = FALSE;
       }
 

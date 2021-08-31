@@ -324,6 +324,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-disp.h
 	packet-dns.h
 	packet-docsis-tlv.h
+	packet-doip.h
 	packet-dop.h
 	packet-dsp.h
 	packet-dtls.h
@@ -734,6 +735,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-banana.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bat.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-batadv.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-bblog.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bctp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-beep.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bencode.c
@@ -1040,6 +1042,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-exablaze.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-exec.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-exported_pdu.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-extreme-exeh.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-extreme.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-f5ethtrailer.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-fc00.c
