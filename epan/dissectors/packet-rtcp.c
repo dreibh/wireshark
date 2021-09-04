@@ -1256,7 +1256,7 @@ dissect_rtcp_psfb_remb( tvbuff_t *tvb, int offset, proto_tree *rtcp_tree, proto_
 #define RTCP_HEADER_LENGTH      12
 
 static int
-dissect_rtcp_rtpfb_transport_cc( tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *rtcp_tree, int pkt_len)
+dissect_rtcp_rtpfb_transport_cc( tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *rtcp_tree, guint *padding_set, int pkt_len)
 {
     proto_tree *fci_tree, *pkt_chunk_tree, *recv_delta_tree;
     proto_item *item       = NULL;
@@ -1508,6 +1508,7 @@ dissect_rtcp_rtpfb_transport_cc( tvbuff_t *tvb, int offset, packet_info *pinfo, 
     {
         proto_tree_add_item( recv_delta_tree, hf_rtcp_rtpfb_transport_cc_fci_recv_delta_padding, tvb, offset, padding_length, ENC_BIG_ENDIAN );
         offset += padding_length;
+        *padding_set = 0;  /* consume RTCP padding here */
     }
 
     /* delta_array / pkt_seq_array will be freed out of pinfo->pool */
@@ -1559,7 +1560,7 @@ dissect_rtcp_rtpfb_nack( tvbuff_t *tvb, int offset, proto_tree *rtcp_tree, proto
 
 
 static int
-dissect_rtcp_rtpfb( tvbuff_t *tvb, int offset, proto_tree *rtcp_tree, proto_item *top_item, packet_info *pinfo )
+dissect_rtcp_rtpfb( tvbuff_t *tvb, int offset, proto_tree *rtcp_tree, proto_item *top_item, guint *padding_set, packet_info *pinfo )
 {
     unsigned int counter;
     unsigned int rtcp_rtpfb_fmt;
@@ -1611,7 +1612,7 @@ dissect_rtcp_rtpfb( tvbuff_t *tvb, int offset, proto_tree *rtcp_tree, proto_item
         offset = dissect_rtcp_rtpfb_tmmbr(tvb, offset, rtcp_tree, top_item, counter, 1);
       } else if (rtcp_rtpfb_fmt == 15) {
         /* Handle transport-cc (RTP Extensions for Transport-wide Congestion Control) - https://tools.ietf.org/html/draft-holmer-rmcat-transport-wide-cc-extensions-01 */
-        offset = dissect_rtcp_rtpfb_transport_cc( tvb, offset, pinfo, rtcp_tree, packet_length);
+        offset = dissect_rtcp_rtpfb_transport_cc( tvb, offset, pinfo, rtcp_tree, padding_set, packet_length);
       } else {
         /* Unknown FMT */
         proto_tree_add_item(rtcp_tree, hf_rtcp_fci, tvb, offset, start_offset + packet_length - offset, ENC_NA );
@@ -4521,7 +4522,7 @@ dissect_rtcp( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
                 offset = dissect_rtcp_nack( tvb, offset, rtcp_tree );
                 break;
             case RTCP_RTPFB:
-                offset = dissect_rtcp_rtpfb( tvb, offset, rtcp_tree, ti, pinfo );
+                offset = dissect_rtcp_rtpfb( tvb, offset, rtcp_tree, ti, &padding_set, pinfo );
                 break;
             case RTCP_PSFB:
                 offset = dissect_rtcp_psfb( tvb, offset, rtcp_tree, packet_length, ti, pinfo );
@@ -7306,7 +7307,7 @@ proto_register_rtcp(void)
             &hf_rtcp_psfb_ms_vsre_aspect_ratio_bitmask,
             {
                 "Aspect Ratio Bitmask",
-                "rtcp.psfb.ms.vsr.entry.apsect_ratio",
+                "rtcp.psfb.ms.vsr.entry.aspect_ratio",
                 FT_UINT8,
                 BASE_HEX,
                 NULL,
@@ -7318,7 +7319,7 @@ proto_register_rtcp(void)
             &hf_rtcp_psfb_ms_vsre_aspect_ratio_4by3,
             {
                 "Aspect Ratio 4 by 3",
-                "rtcp.psfb.ms.vsr.entry.apsect_ratio_4by3",
+                "rtcp.psfb.ms.vsr.entry.aspect_ratio_4by3",
                 FT_BOOLEAN,
                 8,
                 NULL,
@@ -7330,7 +7331,7 @@ proto_register_rtcp(void)
             &hf_rtcp_psfb_ms_vsre_aspect_ratio_16by9,
             {
                 "Aspect Ratio 16 by 9",
-                "rtcp.psfb.ms.vsr.entry.apsect_ratio_16by9",
+                "rtcp.psfb.ms.vsr.entry.aspect_ratio_16by9",
                 FT_BOOLEAN,
                 8,
                 NULL,
@@ -7342,7 +7343,7 @@ proto_register_rtcp(void)
             &hf_rtcp_psfb_ms_vsre_aspect_ratio_1by1,
             {
                 "Aspect Ratio 1 by 1",
-                "rtcp.psfb.ms.vsr.entry.apsect_ratio_1by1",
+                "rtcp.psfb.ms.vsr.entry.aspect_ratio_1by1",
                 FT_BOOLEAN,
                 8,
                 NULL,
@@ -7354,7 +7355,7 @@ proto_register_rtcp(void)
             &hf_rtcp_psfb_ms_vsre_aspect_ratio_3by4,
             {
                 "Aspect Ratio 3 by 4",
-                "rtcp.psfb.ms.vsr.entry.apsect_ratio_3by4",
+                "rtcp.psfb.ms.vsr.entry.aspect_ratio_3by4",
                 FT_BOOLEAN,
                 8,
                 NULL,
@@ -7366,7 +7367,7 @@ proto_register_rtcp(void)
             &hf_rtcp_psfb_ms_vsre_aspect_ratio_9by16,
             {
                 "Aspect Ratio 9 by 16",
-                "rtcp.psfb.ms.vsr.entry.apsect_ratio_9by16",
+                "rtcp.psfb.ms.vsr.entry.aspect_ratio_9by16",
                 FT_BOOLEAN,
                 8,
                 NULL,
@@ -7378,7 +7379,7 @@ proto_register_rtcp(void)
             &hf_rtcp_psfb_ms_vsre_aspect_ratio_20by3,
             {
                 "Aspect Ratio 20 by 3",
-                "rtcp.psfb.ms.vsr.entry.apsect_ratio_20by3",
+                "rtcp.psfb.ms.vsr.entry.aspect_ratio_20by3",
                 FT_BOOLEAN,
                 8,
                 NULL,

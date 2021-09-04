@@ -2964,6 +2964,7 @@ void
 proto_register_geonw(void)
 {
     static const value_string bh_next_header_names[] = {
+        { 0, "ANY" },
         { 1, "Common Header" },
         { 2, "Secured Packet" },
         { 0, NULL}
@@ -2978,6 +2979,7 @@ proto_register_geonw(void)
     };
 
     static const value_string ch_next_header_names[] = {
+        { 0, "ANY" },
         { CH_NH_BTP_A, "BTP-A Transport protocol" },
         { CH_NH_BTP_B, "BTP-B Transport protocol" },
         { CH_NH_IPV6, "IPv6 header" },
@@ -3650,7 +3652,10 @@ proto_reg_handoff_geonw(void)
     dissector_add_uint("ieee1609dot2.psid", psid_road_and_lane_topology_service, sgeonw_handle_);
     dissector_add_uint("ieee1609dot2.psid", psid_infrastructure_to_vehicle_information_service, sgeonw_handle_);
     dissector_add_uint("ieee1609dot2.psid", psid_traffic_light_control_requests_service, sgeonw_handle_);
+    dissector_add_uint("ieee1609dot2.psid", psid_geonetworking_management_communications, sgeonw_handle_);
     dissector_add_uint("ieee1609dot2.psid", psid_traffic_light_control_status_service, sgeonw_handle_);
+    dissector_add_uint("ieee1609dot2.psid", psid_collective_perception_service, sgeonw_handle_);
+
 }
 
 /*
