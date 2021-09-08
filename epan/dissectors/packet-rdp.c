@@ -88,6 +88,7 @@ static int ett_rdp_DaylightDate = -1;
 static int ett_rdp_clientTimeZone = -1;
 static int ett_rdp_mt_req = -1;
 static int ett_rdp_mt_rsp = -1;
+static int ett_rdp_heartbeat = -1;
 
 static expert_field ei_rdp_neg_len_invalid = EI_INIT;
 static expert_field ei_rdp_not_correlation_info = EI_INIT;
@@ -214,6 +215,22 @@ static int hf_rdp_flagsAutodetectResp = -1;
 static int hf_rdp_flagsHeartbeat = -1;
 static int hf_rdp_flagsTransportReq = -1;
 static int hf_rdp_flagsTransportResp = -1;
+static int hf_rdp_heartbeat_reserved = -1;
+static int hf_rdp_heartbeat_period = -1;
+static int hf_rdp_heartbeat_count1 = -1;
+static int hf_rdp_heartbeat_count2 = -1;
+static int hf_rdp_bandwidth_header_len = -1;
+static int hf_rdp_bandwidth_header_type = -1;
+static int hf_rdp_bandwidth_seqnumber = -1;
+static int hf_rdp_bandwidth_reqtype = -1;
+static int hf_rdp_bandwidth_resptype = -1;
+static int hf_rdp_bandwidth_measure_payload_len = -1;
+static int hf_rdp_bandwidth_measure_payload_data = -1;
+static int hf_rdp_network_characteristics_basertt = -1;
+static int hf_rdp_network_characteristics_bandwidth = -1;
+static int hf_rdp_network_characteristics_averagertt = -1;
+static int hf_rdp_rtt_measure_time_delta = -1;
+static int hf_rdp_rtt_measure_time_bytecount = -1;
 static int hf_rdp_mt_req_requestId = -1;
 static int hf_rdp_mt_req_protocol = -1;
 static int hf_rdp_mt_req_reserved = -1;
@@ -766,8 +783,44 @@ static const value_string rdp_wBlobType_vals[] = {
   { BB_SCOPE_BLOB,               "Scope" },
   { BB_CLIENT_USER_NAME_BLOB,    "Client User Name" },
   { BB_CLIENT_MACHINE_NAME_BLOB, "Client Machine Name" },
-  { 0, NULL},
+  { 0, NULL}
 };
+
+enum {
+	TYPE_ID_AUTODETECT_REQUEST = 0x00,
+	TYPE_ID_AUTODETECT_RESPONSE = 0x01
+};
+
+static const value_string bandwidth_typeid_vals[] = {
+	{ TYPE_ID_AUTODETECT_REQUEST, "AUTODETECT_REQUEST"},
+	{ TYPE_ID_AUTODETECT_RESPONSE, "AUTODETECT_RESPONSE"},
+	{ 0, NULL}
+};
+
+static const value_string bandwidth_request_vals[] = {
+	{ 0x0001, "RTT Measure Request" },
+	{ 0x1001, "RTT Measure Request (auto detection phase)" },
+	{ 0x0014, "Bandwidth Measure Start" },
+	{ 0x0114, "Bandwidth Measure Start (UDP lossy)" },
+	{ 0x1014, "Bandwidth Measure Start (connect time)" },
+	{ 0x0002, "Bandwidth Measure Payload" },
+	{ 0x002B, "Bandwidth Measure Stop (connect time)" },
+	{ 0x0429, "Bandwidth Measure Stop (UDP reliable or autodetect after connection)" },
+	{ 0x0629, "Bandwidth Measure Stop (UDP lossy)" },
+	{ 0x0840, "Network Characteristics Result (baseRTT, averageRTT)" },
+	{ 0x0880, "Network Characteristics Result (bandwidth, averageRTT)" },
+	{ 0x08C0, "Network Characteristics Result (baseRTT, bandwidth, averageRTT)" },
+	{ 0, NULL}
+};
+
+static const value_string bandwidth_response_vals[] = {
+	{ 0x0000, "RTT Measure Response" },
+	{ 0x0003, "Bandwidth Measure Results (connect time)" },
+	{ 0x000B, "Bandwidth Measure Results (auto-detect or UDP)" },
+	{ 0x0018, "Network Characteristics Sync" },
+	{ 0, NULL}
+};
+
 
 enum {
 	INITITATE_REQUEST_PROTOCOL_UDPFECR = 0x1,
@@ -950,22 +1003,6 @@ rdp_get_conversation_data(packet_info *pinfo)
   }
 
   return rdp_info;
-}
-
-gboolean rdp_isServerAddressTarget(packet_info *pinfo)
-{
-	conversation_t *conv;
-	rdp_server_address_t *server;
-	rdp_conv_info_t *rdp_info;
-
-	conv = find_conversation_pinfo(pinfo, 0);
-	if (!conv)
-		return FALSE;
-
-	rdp_info = (rdp_conv_info_t *)conversation_get_proto_data(conv, proto_rdp);
-	server = &rdp_info->serverAddr;
-
-	return addresses_equal(&server->addr, &pinfo->dst) && (pinfo->destport == server->port);
 }
 
 static int
@@ -1314,7 +1351,7 @@ dissect_rdp_channelPDU(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree
   switch (channelType) {
   case RDP_CHANNEL_DRDYNVC:
 	  subtvb = tvb_new_subset_length(tvb, offset, length);
-	  offset = call_dissector(drdynvc_handle, subtvb, pinfo, tree);
+	  offset += call_dissector(drdynvc_handle, subtvb, pinfo, tree);
 	  break;
   default:
 	  break;
@@ -1556,6 +1593,120 @@ dissect_rdp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree)
   return tree;
 }
 
+
+gint
+dissect_rdp_bandwidth_req(tvbuff_t *tvb, gint offset, packet_info *pinfo, proto_tree *tree,	gboolean from_server)
+{
+	guint16 payloadLength;
+	rdp_field_info_t bandwidth_fields[] = {
+		{&hf_rdp_bandwidth_header_len,   1, NULL  , 0, 0, NULL },
+		{&hf_rdp_bandwidth_header_type,  1, NULL  , 0, 0, NULL },
+		{&hf_rdp_bandwidth_seqnumber,  	 2, NULL  , 0, 0, NULL },
+		{&hf_rdp_bandwidth_reqtype,  	 2, NULL  , 0, 0, NULL },
+		FI_TERMINATOR
+	};
+	guint8 typeId = tvb_get_guint8(tvb, offset + 1);
+	guint16 reqRespType = tvb_get_guint8(tvb, offset + 4);
+
+	if (typeId == TYPE_ID_AUTODETECT_RESPONSE)
+		bandwidth_fields[3].pfield = &hf_rdp_bandwidth_resptype;
+
+	offset = dissect_rdp_fields(tvb, offset, pinfo, tree, bandwidth_fields, 0);
+
+	if (from_server) {
+		switch (reqRespType) {
+		case 0x0001:
+		case 0x1001:
+			/* RTT Measure Request*/
+			break;
+
+		case 0x0014:
+		case 0x0114:
+		case 0x1014:
+			/* Bandwidth Measure Start message */
+			break;
+
+		case 0x0002:
+			/* Bandwidth Measure Payload */
+			payloadLength = tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN);
+			proto_tree_add_item(tree, hf_rdp_bandwidth_measure_payload_len, tvb, offset, 2, ENC_BIG_ENDIAN);
+			offset += 2;
+
+			proto_tree_add_item(tree, hf_rdp_bandwidth_measure_payload_data, tvb, offset, payloadLength, ENC_NA);
+			offset += payloadLength;
+			break;
+
+		case 0x002B:
+		case 0x0429:
+		case 0x0629:
+			/* Bandwidth Measure Stop */
+			if (reqRespType == 0x002B) {
+				payloadLength = tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN);
+				proto_tree_add_item(tree, hf_rdp_bandwidth_measure_payload_len, tvb, offset, 2, ENC_BIG_ENDIAN);
+				offset += 2;
+
+				proto_tree_add_item(tree, hf_rdp_bandwidth_measure_payload_data, tvb, offset, payloadLength, ENC_NA);
+				offset += payloadLength;
+			}
+			break;
+
+		case 0x0840:
+		case 0x0880:
+		case 0x08C0:
+			/* Network Characteristics Result*/
+			if (reqRespType == 0x840 || reqRespType == 0x8C0) {
+				proto_tree_add_item(tree, hf_rdp_network_characteristics_basertt, tvb, offset, 4, ENC_BIG_ENDIAN);
+				offset += 4;
+			}
+			if (reqRespType == 0x880 || reqRespType == 0x8C0) {
+				proto_tree_add_item(tree, hf_rdp_network_characteristics_bandwidth, tvb, offset, 4, ENC_BIG_ENDIAN);
+				offset += 4;
+			}
+			if (reqRespType == 0x840 || reqRespType == 0x8C0) {
+				proto_tree_add_item(tree, hf_rdp_network_characteristics_averagertt, tvb, offset, 4, ENC_BIG_ENDIAN);
+				offset += 4;
+			}
+			break;
+		}
+	} else {
+		switch (reqRespType) {
+		case 0x0000:
+			/* RTT Measure Response */
+			break;
+		case 0x0003:
+		case 0x000B:
+			/* Bandwidth Measure Results */
+			proto_tree_add_item(tree, hf_rdp_rtt_measure_time_delta, tvb, offset, 4, ENC_BIG_ENDIAN);
+			offset += 4;
+
+			proto_tree_add_item(tree, hf_rdp_rtt_measure_time_bytecount, tvb, offset, 4, ENC_BIG_ENDIAN);
+			offset += 4;
+			break;
+		}
+	}
+
+	return offset;
+}
+
+static gboolean
+rdp_isServerAddressTarget(packet_info *pinfo)
+{
+	conversation_t *conv;
+	rdp_conv_info_t *rdp_info;
+
+	conv = find_conversation_pinfo(pinfo, 0);
+	if (!conv)
+		return FALSE;
+
+	rdp_info = (rdp_conv_info_t *)conversation_get_proto_data(conv, proto_rdp);
+	if (rdp_info) {
+		rdp_server_address_t *server = &rdp_info->serverAddr;
+		return addresses_equal(&server->addr, &pinfo->dst) && (pinfo->destport == server->port);
+	}
+
+	return FALSE;
+}
+
 static int
 dissect_rdp_MessageChannelData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_) {
 	proto_item *pi;
@@ -1597,7 +1748,7 @@ dissect_rdp_MessageChannelData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
 		next_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
 				ett_rdp_mt_req, NULL, "MultiTransport request");
-		offset = dissect_rdp_fields(tvb, offset, pinfo, next_tree,
+		dissect_rdp_fields(tvb, offset, pinfo, next_tree,
 				mt_req_fields, 0);
 
 	} else if (flags & SEC_TRANSPORT_RSP) {
@@ -1611,7 +1762,7 @@ dissect_rdp_MessageChannelData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
 		next_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
 				ett_rdp_mt_rsp, NULL, "MultiTransport response");
-		offset = dissect_rdp_fields(tvb, offset, pinfo, next_tree,
+		dissect_rdp_fields(tvb, offset, pinfo, next_tree,
 				mt_resp_fields, 0);
 
 	} else if (flags & SEC_AUTODETECT_REQ) {
@@ -1619,25 +1770,32 @@ dissect_rdp_MessageChannelData(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
 		next_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
 				ett_rdp_mt_req, NULL, "Autodetect request");
-		dissect_rdp_nyi(tvb, offset, pinfo, next_tree,
-				"bandwidth packets not implemented yet");
+		offset = dissect_rdp_bandwidth_req(tvb, offset, pinfo, next_tree, rdp_isServerAddressTarget(pinfo));
 	} else if (flags & SEC_AUTODETECT_RSP) {
 		col_append_sep_str(pinfo->cinfo, COL_INFO, " ", "Autodetect Resp");
 
 		next_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
 				ett_rdp_mt_req, NULL, "Autodetect response");
-		dissect_rdp_nyi(tvb, offset, pinfo, next_tree,
-				"bandwidth packets not implemented yet");
+		offset = dissect_rdp_bandwidth_req(tvb, offset, pinfo, next_tree, rdp_isServerAddressTarget(pinfo));
 	} else if (flags & SEC_HEARTBEAT) {
+		rdp_field_info_t heartbeat_fields[] = {
+			{ &hf_rdp_heartbeat_reserved, 1, NULL, 0, 0, NULL },
+			{ &hf_rdp_heartbeat_period, 1, NULL, 0, 0, NULL },
+			{ &hf_rdp_heartbeat_count1, 1, NULL, 0, 0, NULL },
+			{ &hf_rdp_heartbeat_count2, 1, NULL, 0, 0, NULL },
+			FI_TERMINATOR
+		};
+
 		col_append_sep_str(pinfo->cinfo, COL_INFO, " ", "Heartbeat");
 
 		next_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
-				ett_rdp_mt_req, NULL, "Heartbeat");
-		dissect_rdp_nyi(tvb, offset, pinfo, next_tree,
-				"bandwidth packets not implemented yet");
+				ett_rdp_heartbeat, NULL, "Heartbeat");
+
+		offset = dissect_rdp_fields(tvb, offset, pinfo, next_tree,
+				heartbeat_fields, 0);
 	}
 
-	return tvb_captured_length(tvb);
+	return offset;
 }
 
 static int
@@ -3020,10 +3178,86 @@ proto_register_rdp(void) {
       { "length", "rdp.length",
         FT_UINT32, BASE_DEC, NULL, 0,
         NULL, HFILL }},
+	{ &hf_rdp_heartbeat_reserved,
+		{ "reserved", "rdp.heartbeat.reserved",
+		  FT_UINT8, BASE_HEX, NULL, 0,
+		  NULL, HFILL}},
+	{ &hf_rdp_heartbeat_period,
+		{ "Period", "rdp.heartbeat.period",
+		  FT_UINT8, BASE_DEC, NULL, 0,
+		  NULL, HFILL}},
+	{ &hf_rdp_heartbeat_count1,
+		{ "Count1", "rdp.heartbeat.count1",
+		  FT_UINT8, BASE_DEC, NULL, 0,
+		  NULL, HFILL}},
+	{ &hf_rdp_heartbeat_count2,
+		{ "Count1", "rdp.heartbeat.count2",
+		  FT_UINT8, BASE_DEC, NULL, 0,
+		  NULL, HFILL}},
+	{ &hf_rdp_bandwidth_header_len,
+		{ "HeaderLength", "rdp.bandwidth.headerlen",
+		  FT_UINT8, BASE_HEX, NULL, 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_bandwidth_header_type,
+		{ "HeaderTypeId", "rdp.bandwidth.typeid",
+		  FT_UINT8, BASE_HEX, VALS(bandwidth_typeid_vals), 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_bandwidth_seqnumber,
+		{ "Sequence number", "rdp.bandwidth.sequencenumber",
+		  FT_UINT16, BASE_HEX, NULL, 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_bandwidth_reqtype,
+		{ "Request type", "rdp.bandwidth.reqtype",
+		  FT_UINT16, BASE_HEX, VALS(bandwidth_request_vals), 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_bandwidth_resptype,
+		{ "Response type", "rdp.bandwidth.resptype",
+		  FT_UINT16, BASE_HEX, VALS(bandwidth_response_vals), 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_bandwidth_measure_payload_len,
+		{ "Payload length", "rdp.bandwidth.measure.len",
+		  FT_UINT16, BASE_DEC, NULL, 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_bandwidth_measure_payload_data,
+		{ "Payload data", "rdp.bandwidth.measure.payload",
+		  FT_BYTES, BASE_NONE, NULL, 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_network_characteristics_basertt,
+		{ "Base RTT", "rdp.networkcharacteristics.basertt",
+		  FT_UINT32, BASE_DEC, NULL, 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_network_characteristics_bandwidth,
+		{ "Bandwidth", "rdp.networkcharacteristics.bandwidth",
+		  FT_UINT32, BASE_DEC, NULL, 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_network_characteristics_averagertt,
+		{ "Average RTT", "rdp.networkcharacteristics.averagertt",
+		  FT_UINT32, BASE_DEC, NULL, 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_rtt_measure_time_delta,
+		{ "Time delta", "rdp.rttmeasure.timedelta",
+		  FT_UINT32, BASE_DEC, NULL, 0,
+		  NULL, HFILL}
+	},
+	{ &hf_rdp_rtt_measure_time_bytecount,
+		{ "Byte count", "rdp.rttmeasure.bytecount",
+		  FT_UINT32, BASE_DEC, NULL, 0,
+		  NULL, HFILL}
+	},
 	{ &hf_rdp_mt_req_requestId,
 	  { "Request id", "rdp.mtreq.requestid",
-		FT_UINT32, BASE_HEX, NULL, 0,
-		NULL, HFILL }},
+	    FT_UINT32, BASE_HEX, NULL, 0,
+	    NULL, HFILL }},
 	{ &hf_rdp_mt_req_protocol,
 	  { "Protocol", "rdp.mtreq.protocol",
 		FT_UINT16, BASE_HEX, VALS(rdp_mt_protocol_vals), 0,
@@ -3639,6 +3873,7 @@ proto_register_rdp(void) {
     &ett_rdp_compressedType,
 	&ett_rdp_mt_req,
 	&ett_rdp_mt_rsp,
+	&ett_rdp_heartbeat,
     &ett_rdp_flags,
     &ett_rdp_mapFlags,
     &ett_rdp_options,

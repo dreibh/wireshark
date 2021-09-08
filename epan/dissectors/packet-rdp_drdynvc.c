@@ -16,6 +16,7 @@
 #include <epan/prefs.h>
 #include <epan/conversation.h>
 #include "packet-rdp.h"
+#include "packet-rdpudp.h"
 
 void proto_register_rdp_drdynvc(void);
 void proto_reg_handoff_drdynvc(void);
@@ -185,7 +186,8 @@ dissect_rdp_vlength(tvbuff_t *tvb, int hf_index, int offset, guint8 vlen, proto_
 		len = 4;
 		break;
 	default:
-		// error
+		if (ret)
+			*ret = 0;
 		return 0;
 	}
 
@@ -219,7 +221,6 @@ find_channel_name_by_id(packet_info *pinfo, drdynvc_conv_info_t *dyninfo, guint3
 	return NULL;
 }
 
-
 static int
 dissect_rdp_drdynvc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data _U_)
 {
@@ -230,7 +231,7 @@ dissect_rdp_drdynvc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, 
 	guint8 cbId, Len;
 	gboolean haveChannelId, havePri, haveLen;
 	gboolean isServerTarget = rdp_isServerAddressTarget(pinfo);
-	guint32 channelId;
+	guint32 channelId = 0;
 	drdynvc_conv_info_t *info;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "DRDYNVC");
