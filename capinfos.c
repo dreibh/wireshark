@@ -629,8 +629,14 @@ print_stats(const gchar *filename, capture_info *cf_info)
   gchar                 *size_string;
 
   /* Build printable strings for various stats */
-  file_type_string = wtap_file_type_subtype_description(cf_info->file_type);
-  file_encap_string = wtap_encap_description(cf_info->file_encap);
+  if (machine_readable) {
+    file_type_string = wtap_file_type_subtype_name(cf_info->file_type);
+    file_encap_string = wtap_encap_name(cf_info->file_encap);
+  }
+  else {
+    file_type_string = wtap_file_type_subtype_description(cf_info->file_type);
+    file_encap_string = wtap_encap_description(cf_info->file_encap);
+  }
 
   if (filename)           printf     ("File name:           %s\n", filename);
   if (cap_file_type) {
@@ -878,8 +884,8 @@ print_stats_table(const gchar *filename, capture_info *cf_info)
   const gchar           *file_type_string, *file_encap_string;
 
   /* Build printable strings for various stats */
-  file_type_string = wtap_file_type_subtype_description(cf_info->file_type);
-  file_encap_string = wtap_encap_description(cf_info->file_encap);
+  file_type_string = wtap_file_type_subtype_name(cf_info->file_type);
+  file_encap_string = wtap_encap_name(cf_info->file_encap);
 
   if (filename) {
     putquote();
@@ -1051,10 +1057,6 @@ print_stats_table(const gchar *filename, capture_info *cf_info)
        section_number++) {
     wtap_block_t shb;
 
-    // If we have more than one section, add headers for each section.
-    if (wtap_file_get_num_shbs(cf_info->wth) > 1)
-      printf("Section %u: \n", section_number);
-
     shb = wtap_file_get_shb(cf_info->wth, section_number);
     if (cap_file_more_info) {
       char *str;
@@ -1096,10 +1098,6 @@ print_stats_table(const gchar *filename, capture_info *cf_info)
       unsigned int i;
       char *opt_comment;
       gboolean have_cap = FALSE;
-
-      // If we have more than one section, add headers for each section.
-      if (wtap_file_get_num_shbs(cf_info->wth) > 1)
-        printf("Section %u: \n", section_number);
 
       for (i = 0; wtap_block_get_nth_string_option_value(shb, OPT_COMMENT, i, &opt_comment) == WTAP_OPTTYPE_SUCCESS; i++) {
         have_cap = TRUE;
