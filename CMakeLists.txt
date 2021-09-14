@@ -3529,6 +3529,7 @@ set(_test_group_list
 	suite_fileformats
 	suite_follow
 	suite_follow_dccp
+	suite_follow_multistream
 	suite_io
 	suite_mergecap
 	suite_netperfmeter
@@ -3635,7 +3636,6 @@ if(SHELLCHECK_EXECUTABLE)
 			packaging/macosx/osx-app.sh.in
 			packaging/macosx/osx-dmg.sh.in
 			packaging/source/git-export-release.sh.in
-			tools/compress-pngs.sh
 			tools/debian-setup.sh
 			tools/fuzz-test.sh
 			tools/gen-bugnote
