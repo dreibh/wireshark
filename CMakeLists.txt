@@ -1694,9 +1694,9 @@ set_package_properties(LIBSSH PROPERTIES
 	PURPOSE "extcap remote SSH interfaces (sshdump, ciscodump)"
 )
 set_package_properties(LZ4 PROPERTIES
-	DESCRIPTION "LZ4 is lossless compression algorithm used in some protocol (CQL...)"
+	DESCRIPTION "LZ4 is a fast lossless compression algorithm"
 	URL "http://www.lz4.org"
-	PURPOSE "LZ4 decompression in CQL and Kafka dissectors"
+	PURPOSE "LZ4 decompression in CQL and Kafka dissectors, read compressed capture files"
 )
 set_package_properties(SNAPPY PROPERTIES
 	DESCRIPTION "A fast compressor/decompressor from Google"
@@ -1706,7 +1706,7 @@ set_package_properties(SNAPPY PROPERTIES
 set_package_properties(ZSTD PROPERTIES
 	DESCRIPTION "A compressor/decompressor from Facebook providing better compression than Snappy at a cost of speed"
 	URL "https://facebook.github.io/zstd/"
-	PURPOSE "Zstd decompression in Kafka dissector"
+	PURPOSE "Zstd decompression in Kafka dissector, read compressed capture files"
 )
 set_package_properties(NGHTTP2 PROPERTIES
 	DESCRIPTION "HTTP/2 C library and tools"
@@ -3529,6 +3529,7 @@ set(_test_group_list
 	suite_fileformats
 	suite_follow
 	suite_follow_dccp
+	suite_follow_multistream
 	suite_io
 	suite_mergecap
 	suite_netperfmeter
@@ -3635,7 +3636,6 @@ if(SHELLCHECK_EXECUTABLE)
 			packaging/macosx/osx-app.sh.in
 			packaging/macosx/osx-dmg.sh.in
 			packaging/source/git-export-release.sh.in
-			tools/compress-pngs.sh
 			tools/debian-setup.sh
 			tools/fuzz-test.sh
 			tools/gen-bugnote

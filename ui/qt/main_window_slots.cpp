@@ -1158,15 +1158,21 @@ void MainWindow::setEditCommentsMenu()
                         this, SLOT(actionDeletePacketComment()));
                 aPtr->setData(i);
             }
+            main_ui_->menuPacketComment->addSeparator();
+            main_ui_->menuPacketComment->addAction(tr("Delete packet comments"), this, SLOT(actionDeleteCommentsFromPackets()));
         }
         wtap_block_unref(pkt_block);
+    }
+    if (selectedRows().count() > 1) {
+        main_ui_->menuPacketComment->addSeparator();
+        main_ui_->menuPacketComment->addAction(tr("Delete comments from %n packet(s)", nullptr, selectedRows().count()), this, SLOT(actionDeleteCommentsFromPackets()));
     }
 }
 
 void MainWindow::setMenusForSelectedPacket()
 {
     gboolean is_ip = FALSE, is_tcp = FALSE, is_udp = FALSE, is_dccp = FALSE, is_sctp = FALSE, is_tls = FALSE, is_rtp = FALSE, is_lte_rlc = FALSE,
-             is_http = FALSE, is_http2 = FALSE, is_quic = FALSE, is_sip = FALSE;
+             is_http = FALSE, is_http2 = FALSE, is_quic = FALSE, is_sip = FALSE, is_exported_pdu = FALSE;
 
     /* Making the menu context-sensitive allows for easier selection of the
        desired item and has the added benefit, with large captures, of
@@ -1241,6 +1247,13 @@ void MainWindow::setMenusForSelectedPacket()
             /* TODO: to follow a QUIC stream we need a *decrypted* QUIC connection, i.e. checking for "quic" in the protocol stack is not enough */
             is_quic = proto_is_frame_protocol(capture_file_.capFile()->edt->pi.layers, "quic");
             is_sip = proto_is_frame_protocol(capture_file_.capFile()->edt->pi.layers, "sip");
+            is_exported_pdu = proto_is_frame_protocol(capture_file_.capFile()->edt->pi.layers, "exported_pdu");
+            /* For Exported PDU there is a tag inserting IP addresses into the SRC and DST columns */
+            if (is_exported_pdu &&
+               (capture_file_.capFile()->edt->pi.net_src.type == AT_IPv4 || capture_file_.capFile()->edt->pi.net_src.type == AT_IPv6) &&
+               (capture_file_.capFile()->edt->pi.net_dst.type == AT_IPv4 || capture_file_.capFile()->edt->pi.net_dst.type == AT_IPv6)) {
+                is_ip = TRUE;
+            }
         }
     }
 
@@ -1262,8 +1275,8 @@ void MainWindow::setMenusForSelectedPacket()
     if (capture_file_.capFile() && capture_file_.capFile()->linktypes)
         linkTypes = capture_file_.capFile()->linktypes;
 
-    bool enableEditComments = frame_selected && linkTypes && wtap_dump_can_write(capture_file_.capFile()->linktypes, WTAP_COMMENT_PER_PACKET);
-    main_ui_->menuPacketComment->setEnabled(enableEditComments);
+    bool enableEditComments = linkTypes && wtap_dump_can_write(capture_file_.capFile()->linktypes, WTAP_COMMENT_PER_PACKET);
+    main_ui_->menuPacketComment->setEnabled(enableEditComments && selectedRows().count() > 0);
     main_ui_->actionDeleteAllPacketComments->setEnabled(enableEditComments);
 
     main_ui_->actionEditIgnorePacket->setEnabled(frame_selected || multi_selection);
@@ -2210,7 +2223,7 @@ void MainWindow::editTimeShiftFinished(int)
 void MainWindow::actionAddPacketComment()
 {
     QList<int> rows = selectedRows();
-    if (rows.count() != 1)
+    if (rows.count() == 0)
         return;
 
     frame_data * fdata = frameDataForRow(rows.at(0));
@@ -2218,7 +2231,7 @@ void MainWindow::actionAddPacketComment()
         return;
 
     PacketCommentDialog* pc_dialog;
-    pc_dialog = new PacketCommentDialog(fdata->num, this, NULL);
+    pc_dialog = new PacketCommentDialog(false, this, NULL);
     connect(pc_dialog, &QDialog::finished, std::bind(&MainWindow::addPacketCommentFinished, this, pc_dialog, std::placeholders::_1));
     pc_dialog->setWindowModality(Qt::ApplicationModal);
     pc_dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -2239,14 +2252,10 @@ void MainWindow::actionEditPacketComment()
     if (rows.count() != 1)
         return;
 
-    frame_data * fdata = frameDataForRow(rows.at(0));
-    if (! fdata)
-        return;
-
     QAction *ra = qobject_cast<QAction*>(sender());
     guint nComment = ra->data().toUInt();
     PacketCommentDialog* pc_dialog;
-    pc_dialog = new PacketCommentDialog(fdata->num, this, packet_list_->getPacketComment(nComment));
+    pc_dialog = new PacketCommentDialog(true, this, packet_list_->getPacketComment(nComment));
     connect(pc_dialog, &QDialog::finished, std::bind(&MainWindow::editPacketCommentFinished, this, pc_dialog, std::placeholders::_1, nComment));
     pc_dialog->setWindowModality(Qt::ApplicationModal);
     pc_dialog->setAttribute(Qt::WA_DeleteOnClose);
@@ -2266,6 +2275,12 @@ void MainWindow::actionDeletePacketComment()
     QAction *ra = qobject_cast<QAction*>(sender());
     guint nComment = ra->data().toUInt();
     packet_list_->setPacketComment(nComment, QString(""));
+    updateForUnsavedChanges();
+}
+
+void MainWindow::actionDeleteCommentsFromPackets()
+{
+    packet_list_->deleteCommentsFromPackets();
     updateForUnsavedChanges();
 }
 
