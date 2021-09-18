@@ -40,7 +40,6 @@
 #include <epan/wmem_scopes.h>
 #include "charsets.h"
 #include "column-utils.h"
-#include "to_str-int.h"
 #include "to_str.h"
 #include "osi-utils.h"
 #include "expert.h"
@@ -10081,7 +10080,7 @@ hfinfo_number_value_format_display(const header_field_info *hfinfo, int display,
 
 		case BASE_DEC_HEX:
 			*(--ptr) = ')';
-			ptr = hex_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			ptr = hex_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 			*(--ptr) = '(';
 			*(--ptr) = ' ';
 			ptr = isint ? int_to_str_back(ptr, (gint32) value) : uint_to_str_back(ptr, value);
@@ -10091,14 +10090,14 @@ hfinfo_number_value_format_display(const header_field_info *hfinfo, int display,
 			return oct_to_str_back(ptr, value);
 
 		case BASE_HEX:
-			return hex_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			return hex_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 
 		case BASE_HEX_DEC:
 			*(--ptr) = ')';
 			ptr = isint ? int_to_str_back(ptr, (gint32) value) : uint_to_str_back(ptr, value);
 			*(--ptr) = '(';
 			*(--ptr) = ' ';
-			ptr = hex_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			ptr = hex_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 			return ptr;
 
 		case BASE_PT_UDP:
@@ -10150,7 +10149,7 @@ hfinfo_number_value_format_display64(const header_field_info *hfinfo, int displa
 
 		case BASE_DEC_HEX:
 			*(--ptr) = ')';
-			ptr = hex64_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			ptr = hex64_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 			*(--ptr) = '(';
 			*(--ptr) = ' ';
 			ptr = isint ? int64_to_str_back(ptr, (gint64) value) : uint64_to_str_back(ptr, value);
@@ -10160,14 +10159,14 @@ hfinfo_number_value_format_display64(const header_field_info *hfinfo, int displa
 			return oct64_to_str_back(ptr, value);
 
 		case BASE_HEX:
-			return hex64_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			return hex64_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 
 		case BASE_HEX_DEC:
 			*(--ptr) = ')';
 			ptr = isint ? int64_to_str_back(ptr, (gint64) value) : uint64_to_str_back(ptr, value);
 			*(--ptr) = '(';
 			*(--ptr) = ' ';
-			ptr = hex64_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			ptr = hex64_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 			return ptr;
 
 		default:
