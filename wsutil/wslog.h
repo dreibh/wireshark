@@ -18,6 +18,8 @@
 #include <time.h>
 #include <stdarg.h>
 
+#include <wsutil/wmem/wmem.h>
+
 #include <ws_log_defs.h>
 
 #ifdef WS_LOG_DOMAIN
@@ -294,6 +296,64 @@ void ws_logv_full(const char *domain, enum ws_log_level level,
  * Accepts a format string and includes the file and function name.
  */
 #define ws_noisy(...)    _LOG_DEBUG(LOG_LEVEL_NOISY, __VA_ARGS__)
+
+
+#define ws_warn_zero_len() ws_warning("Zero length passed to %s", __func__)
+
+#define ws_warn_null_ptr() ws_warning("Null pointer passed to %s", __func__)
+
+
+#define ws_return_str_if_zero(scope, len) \
+        do { \
+            if (!(len)) { \
+                ws_warn_zero_len(); \
+                return wmem_strdup(scope, "(zero length)"); \
+            } \
+        } while (0)
+
+
+#define ws_return_str_if_null(scope, ptr) \
+        do { \
+            if (!(ptr)) { \
+                ws_warn_null_ptr(); \
+                return wmem_strdup(scope, "(null pointer)"); \
+            } \
+        } while (0)
+
+
+#define ws_return_ptr_if_null(ptr, val) \
+        do { \
+            if (!(ptr)) { \
+                ws_warn_null_ptr(); \
+                return (val); \
+            } \
+        } while (0)
+
+
+/** This function is called to log a buffer (bytes array).
+ *
+ * Accepts an optional 'msg' argument to provide a description.
+ */
+WS_DLL_PUBLIC
+void ws_log_buffer_full(const char *domain, enum ws_log_level level,
+                    const char *file, int line, const char *func,
+                    const guint8 *buffer, size_t size, size_t max_len,
+                    const char *msg);
+
+
+#define _LOG_BUFFER(buf, size) \
+    ws_log_buffer_full(_LOG_DOMAIN, LOG_LEVEL_DEBUG, \
+                        __FILE__, __LINE__, __func__, \
+                        buf, size, 72, #buf)
+
+#ifdef WS_DISABLE_DEBUG
+#define ws_log_buffer(buf, size) \
+          G_STMT_START { \
+               if (0) _LOG_BUFFER(buf, size); \
+          } G_STMT_END
+#else
+#define ws_log_buffer(buf, size) _LOG_BUFFER(buf, size)
+#endif
 
 
 /** Auxiliary function to write custom logging functions.

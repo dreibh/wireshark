@@ -40,7 +40,6 @@
 #include <epan/wmem_scopes.h>
 #include "charsets.h"
 #include "column-utils.h"
-#include "to_str-int.h"
 #include "to_str.h"
 #include "osi-utils.h"
 #include "expert.h"
@@ -62,6 +61,7 @@ typedef struct __subtree_lvl {
 } subtree_lvl;
 
 struct ptvcursor {
+	wmem_allocator_t *scope;
 	subtree_lvl *pushed_tree;
 	guint8	     pushed_tree_index;
 	guint8	     pushed_tree_max;
@@ -1119,7 +1119,7 @@ ptvcursor_new_subtree_levels(ptvcursor_t *ptvc)
 	DISSECTOR_ASSERT(ptvc->pushed_tree_max <= SUBTREE_MAX_LEVELS-SUBTREE_ONCE_ALLOCATION_NUMBER);
 	ptvc->pushed_tree_max += SUBTREE_ONCE_ALLOCATION_NUMBER;
 
-	pushed_tree = (subtree_lvl *)wmem_realloc(wmem_packet_scope(), (void *)ptvc->pushed_tree, sizeof(subtree_lvl) * ptvc->pushed_tree_max);
+	pushed_tree = (subtree_lvl *)wmem_realloc(ptvc->scope, (void *)ptvc->pushed_tree, sizeof(subtree_lvl) * ptvc->pushed_tree_max);
 	DISSECTOR_ASSERT(pushed_tree != NULL);
 	ptvc->pushed_tree = pushed_tree;
 }
@@ -1136,11 +1136,12 @@ ptvcursor_free_subtree_levels(ptvcursor_t *ptvc)
 /* Allocates an initializes a ptvcursor_t with 3 variables:
  *	proto_tree, tvbuff, and offset. */
 ptvcursor_t *
-ptvcursor_new(proto_tree *tree, tvbuff_t *tvb, gint offset)
+ptvcursor_new(wmem_allocator_t *scope, proto_tree *tree, tvbuff_t *tvb, gint offset)
 {
 	ptvcursor_t *ptvc;
 
-	ptvc                    = wmem_new(wmem_packet_scope(), ptvcursor_t);
+	ptvc                    = wmem_new(scope, ptvcursor_t);
+	ptvc->scope             = scope;
 	ptvc->tree              = tree;
 	ptvc->tvb               = tvb;
 	ptvc->offset            = offset;
@@ -10079,7 +10080,7 @@ hfinfo_number_value_format_display(const header_field_info *hfinfo, int display,
 
 		case BASE_DEC_HEX:
 			*(--ptr) = ')';
-			ptr = hex_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			ptr = hex_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 			*(--ptr) = '(';
 			*(--ptr) = ' ';
 			ptr = isint ? int_to_str_back(ptr, (gint32) value) : uint_to_str_back(ptr, value);
@@ -10089,14 +10090,14 @@ hfinfo_number_value_format_display(const header_field_info *hfinfo, int display,
 			return oct_to_str_back(ptr, value);
 
 		case BASE_HEX:
-			return hex_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			return hex_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 
 		case BASE_HEX_DEC:
 			*(--ptr) = ')';
 			ptr = isint ? int_to_str_back(ptr, (gint32) value) : uint_to_str_back(ptr, value);
 			*(--ptr) = '(';
 			*(--ptr) = ' ';
-			ptr = hex_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			ptr = hex_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 			return ptr;
 
 		case BASE_PT_UDP:
@@ -10148,7 +10149,7 @@ hfinfo_number_value_format_display64(const header_field_info *hfinfo, int displa
 
 		case BASE_DEC_HEX:
 			*(--ptr) = ')';
-			ptr = hex64_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			ptr = hex64_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 			*(--ptr) = '(';
 			*(--ptr) = ' ';
 			ptr = isint ? int64_to_str_back(ptr, (gint64) value) : uint64_to_str_back(ptr, value);
@@ -10158,14 +10159,14 @@ hfinfo_number_value_format_display64(const header_field_info *hfinfo, int displa
 			return oct64_to_str_back(ptr, value);
 
 		case BASE_HEX:
-			return hex64_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			return hex64_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 
 		case BASE_HEX_DEC:
 			*(--ptr) = ')';
 			ptr = isint ? int64_to_str_back(ptr, (gint64) value) : uint64_to_str_back(ptr, value);
 			*(--ptr) = '(';
 			*(--ptr) = ' ';
-			ptr = hex64_to_str_back(ptr, hfinfo_hex_digits(hfinfo), value);
+			ptr = hex64_to_str_back_len(ptr, value, hfinfo_hex_digits(hfinfo));
 			return ptr;
 
 		default:
