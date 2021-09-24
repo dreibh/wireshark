@@ -94,16 +94,19 @@ if(WIN32)
 	elseif(CMAKE_GENERATOR MATCHES "Visual Studio")
 		set(WIRESHARK_TARGET_PLATFORM win32)
 	elseif(DEFINED ENV{WIRESHARK_TARGET_PLATFORM})
-		set(WIRESHARK_TARGET_PLATFORM $ENV{WIRESHARK_TARGET_PLATFORM})
+		string(TOLOWER $ENV{WIRESHARK_TARGET_PLATFORM} _target_platform)
+		set(WIRESHARK_TARGET_PLATFORM ${_target_platform})
 	else()
-		message(WARNING "Assuming \"Win64\" target platform")
+		message(WARNING "Assuming \"win64\" target platform")
 		set(WIRESHARK_TARGET_PLATFORM win64)
 	endif()
 
 	if(WIRESHARK_TARGET_PLATFORM MATCHES "win64")
 		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE amd64)
-	else()
+	elseif(WIRESHARK_TARGET_PLATFORM MATCHES "win32")
 		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE x86)
+	else()
+		message(FATAL_ERROR "Invalid target platform: ${WIRESHARK_TARGET_PLATFORM}")
 	endif()
 
 	# Sanity check
@@ -122,7 +125,10 @@ if(WIN32)
 				" doesn't match the generator platform (${WIRESHARK_TARGET_PLATFORM})")
 		endif()
 	endif()
-	message(STATUS "Building for ${WIRESHARK_TARGET_PLATFORM} using ${CMAKE_GENERATOR}")
+	message(STATUS
+		"Building for ${WIRESHARK_TARGET_PLATFORM} using \"${CMAKE_GENERATOR}\" \
+and CPU target architecture \"${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}\""
+	)
 
 	# Determine where the 3rd party libraries will be
 	if( DEFINED ENV{WIRESHARK_LIB_DIR} )
@@ -436,6 +442,16 @@ if(WIN32)
 	add_definitions(
 		-DWIN32_LEAN_AND_MEAN
 		#
+		# Use Unicode in Windows runtime functions.
+		#
+		-DUNICODE
+		-D_UNICODE
+		#
+		# NOMINMAX keeps windows.h from defining "min" and "max" via windef.h.
+		# This avoids conflicts with the C++ standard library.
+		#
+		-DNOMINMAX
+		#
 		# Make sure everyone is using the same API and that it's sufficient
 		# for our needs.
 		# This should match the following:
@@ -448,6 +464,17 @@ if(WIN32)
 	)
 endif()
 
+if(MINGW)
+	add_definitions(
+		#
+		# Enable POSIX APIs. This will switch stdio to ANSI C functions and
+		# enable C99 conformant vsnprintf() among other things.
+		#
+		-D_POSIX
+	)
+	list(APPEND CMAKE_REQUIRED_DEFINITIONS -D_POSIX)
+endif()
+
 if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 	if ((MSVC_VERSION LESS "1900") OR (MSVC_VERSION GREATER_EQUAL "2000"))
 		message(FATAL_ERROR "You are using an unsupported version of MSVC")
@@ -455,9 +482,6 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 
 	add_definitions(
 		/D_CRT_SECURE_NO_DEPRECATE
-		# NOMINMAX keeps windows.h from defining "min" and "max" via windef.h.
-		# This avoids conflicts with the C++ standard library.
-		/DNOMINMAX
 		# -DPSAPI_VERSION=1                 Programs that must run on earlier versions of Windows as well as Windows 7 and later
 		#                                   versions should always call this function as GetProcessMemoryInfo. To ensure correct
 		#                                   resolution of symbols, add Psapi.lib to the TARGETLIBS macro and compile the program
@@ -469,6 +493,7 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		#                                   in pcap-stdinc.h when compiling C++ files, e.g. the Qt UI
 		/DPSAPI_VERSION=1
 		/D_ALLOW_KEYWORD_MACROS
+		# Disable deprecation of POSIX function names.
 		# https://stackoverflow.com/questions/37845163/what-is-the-purpose-of-microsofts-underscore-c-functions
 		/D_CRT_NONSTDC_NO_WARNINGS
 	)
@@ -2510,11 +2535,9 @@ if(BUILD_wireshark AND QT_FOUND)
 			POST_BUILD
 			COMMAND set "PATH=${QT_BIN_PATH};%PATH%"
 			COMMAND "${QT_WINDEPLOYQT_EXECUTABLE}"
-				$<$<CONFIG:Debug>:--debug>
-				$<$<NOT:$<CONFIG:Debug>>:--release>
 				--no-compiler-runtime
 				--verbose 10
-				--pdb
+				$<$<BOOL:${MSVC}>:--pdb>
 				"$<TARGET_FILE:wireshark>"
 		)
 		add_dependencies(copy_qt_dlls wireshark)
@@ -2563,6 +2586,13 @@ macro(set_extra_executable_properties _executable _folder)
 	endif()
 endmacro()
 
+macro(executable_link_mingw_unicode _target)
+	# target_link_options() requires CMake >= 3.13
+	if (MINGW)
+		target_link_options(${_target} PRIVATE "-municode")
+	endif()
+endmacro()
+
 register_tap_files(tshark-tap-register.c
 	${TSHARK_TAP_SRC}
 )
@@ -2593,7 +2623,7 @@ if(BUILD_tshark)
 	add_executable(tshark ${tshark_FILES})
 	set_extra_executable_properties(tshark "Executables")
 	target_link_libraries(tshark ${tshark_LIBS})
-	target_link_options(tshark PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(tshark)
 	install(TARGETS tshark RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2640,7 +2670,7 @@ if(BUILD_rawshark AND PCAP_FOUND)
 	add_executable(rawshark ${rawshark_FILES})
 	set_extra_executable_properties(rawshark "Executables")
 	target_link_libraries(rawshark ${rawshark_LIBS})
-	target_link_options(rawshark PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(rawshark)
 	install(TARGETS rawshark RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2707,7 +2737,7 @@ if(BUILD_randpkt)
 	add_executable(randpkt ${randpkt_FILES})
 	set_extra_executable_properties(randpkt "Executables")
 	target_link_libraries(randpkt ${randpkt_LIBS})
-	target_link_options(randpkt PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(randpkt)
 	install(TARGETS randpkt RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2735,7 +2765,7 @@ if(BUILD_text2pcap)
 	add_executable(text2pcap ${text2pcap_FILES})
 	set_extra_executable_properties(text2pcap "Executables")
 	target_link_libraries(text2pcap ${text2pcap_LIBS})
-	target_link_options(text2pcap PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(text2pcap)
 	install(TARGETS text2pcap RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2755,7 +2785,7 @@ if(BUILD_mergecap)
 	add_executable(mergecap ${mergecap_FILES})
 	set_extra_executable_properties(mergecap "Executables")
 	target_link_libraries(mergecap ${mergecap_LIBS})
-	target_link_options(mergecap PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(mergecap)
 	install(TARGETS mergecap RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2775,7 +2805,7 @@ if(BUILD_reordercap)
 	add_executable(reordercap ${reordercap_FILES})
 	set_extra_executable_properties(reordercap "Executables")
 	target_link_libraries(reordercap ${reordercap_LIBS})
-	target_link_options(reordercap PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(reordercap)
 	install(TARGETS reordercap RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2798,7 +2828,7 @@ if(BUILD_capinfos)
 	set_extra_executable_properties(capinfos "Executables")
 	target_link_libraries(capinfos ${capinfos_LIBS})
 	target_include_directories(capinfos SYSTEM PRIVATE ${GCRYPT_INCLUDE_DIRS})
-	target_link_options(capinfos PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(capinfos)
 	install(TARGETS capinfos RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2819,7 +2849,7 @@ if(BUILD_captype)
 	add_executable(captype ${captype_FILES})
 	set_extra_executable_properties(captype "Executables")
 	target_link_libraries(captype ${captype_LIBS})
-	target_link_options(captype PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(captype)
 	install(TARGETS captype RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2841,7 +2871,7 @@ if(BUILD_editcap)
 	set_extra_executable_properties(editcap "Executables")
 	target_link_libraries(editcap ${editcap_LIBS})
 	target_include_directories(editcap SYSTEM PRIVATE ${GCRYPT_INCLUDE_DIRS})
-	target_link_options(editcap PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(editcap)
 	install(TARGETS editcap RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
@@ -2872,7 +2902,7 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 	set_extra_executable_properties(dumpcap "Executables")
 	target_link_libraries(dumpcap ${dumpcap_LIBS})
 	target_include_directories(dumpcap SYSTEM PRIVATE ${ZLIB_INCLUDE_DIRS})
-	target_link_options(dumpcap PRIVATE $<$<BOOL:${MINGW}>:-municode>)
+	executable_link_mingw_unicode(dumpcap)
 	install(TARGETS dumpcap
 			RUNTIME	DESTINATION ${CMAKE_INSTALL_BINDIR}
 			PERMISSIONS ${DUMPCAP_SETUID}

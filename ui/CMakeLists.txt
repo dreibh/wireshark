@@ -83,6 +83,7 @@ add_library(ui STATIC ${UI_SRC})
 target_link_libraries(ui
 	PRIVATE
 		caputils
+		wiretap
 		wsutil
 		${GCRYPT_LIBRARIES}
 	)
@@ -100,7 +101,7 @@ if(NOT VCSVERSION_OVERRIDE)
 	add_dependencies(version_info vcs_version)
 endif()
 
-target_link_libraries(version_info PRIVATE ${ZLIB_LIBRARIES})
+target_link_libraries(version_info PRIVATE ${ZLIB_LIBRARIES} wsutil)
 
 target_include_directories(version_info SYSTEM PRIVATE ${ZLIB_INCLUDE_DIRS})
 
