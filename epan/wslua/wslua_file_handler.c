@@ -75,6 +75,9 @@ report_error(int *err, gchar **err_info, const char *fmt, ...)
         report_error(err, err_info, "Error in file %s: no Lua FileHandler object", #name); \
         return retval; \
     } \
+    if (fh->removed) { \
+        return retval; \
+    } \
     if (!fh->registered) { \
         report_error(err, err_info, "Error in file %s: Lua FileHandler is not registered", #name); \
         return retval; \
@@ -309,6 +312,11 @@ wslua_filehandler_seek_read(wtap *wth, gint64 seek_off,
     File *fp = NULL;
     CaptureInfo *fc = NULL;
     FrameInfo *fi = NULL;
+
+    if (fh->removed) {
+        /* Return success when removed during reloading Lua plugins */
+        return TRUE;
+    }
 
     INIT_FILEHANDLER_ROUTINE(seek_read,FALSE,err,err_info);
 
@@ -819,10 +827,14 @@ wslua_deregister_filehandler_work(FileHandler fh)
         g_free(fh->finfo.wslua_info);
         fh->finfo.wslua_info = NULL;
     }
+    g_free((char *)fh->finfo.default_file_extension);
+    fh->finfo.default_file_extension = NULL;
+    fh->finfo.additional_file_extensions = NULL;
     fh->finfo.dump_open = NULL;
 
-    if (fh->file_type != WTAP_FILE_TYPE_SUBTYPE_UNKNOWN)
+    if (fh->file_type != WTAP_FILE_TYPE_SUBTYPE_UNKNOWN) {
         wtap_deregister_file_type_subtype(fh->file_type);
+    }
 
     if (fh->is_reader && wtap_has_open_info(fh->finfo.name)) {
         wtap_deregister_open_info(fh->finfo.name);
@@ -1285,7 +1297,22 @@ int FileHandler_register(lua_State* L) {
 
 int wslua_deregister_filehandlers(lua_State* L _U_) {
     for (GSList *it = registered_file_handlers; it; it = it->next) {
-        wslua_deregister_filehandler_work((FileHandler)it->data);
+        FileHandler fh = (FileHandler)it->data;
+        wslua_deregister_filehandler_work(fh);
+
+        for (size_t i = 0; i < fh->finfo.num_supported_blocks; i++) {
+            g_free((struct supported_option_type *)fh->finfo.supported_blocks[i].supported_options);
+        }
+        g_free((struct supported_block_type  *)fh->finfo.supported_blocks);
+        g_free((char *)fh->extensions);
+        g_free((char *)fh->internal_description);
+        g_free((char *)fh->finfo.description);
+        g_free((char *)fh->finfo.name);
+        g_free(fh->type);
+
+        memset(fh, 0, sizeof(*fh));
+        fh->removed = TRUE;
+        proto_add_deregistered_data(fh);
     }
     g_slist_free(registered_file_handlers);
     registered_file_handlers = NULL;

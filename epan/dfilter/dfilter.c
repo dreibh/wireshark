@@ -7,7 +7,7 @@
  */
 
 #include "config.h"
-#define WS_LOG_DOMAIN "Dfilter"
+#define WS_LOG_DOMAIN LOG_DOMAIN_DFILTER
 
 #include <stdio.h>
 #include <string.h>
@@ -23,6 +23,7 @@
 #include "scanner_lex.h"
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
+#include "grammar.h"
 
 
 #define DFILTER_TOKEN_ID_OFFSET	1
@@ -197,6 +198,67 @@ dfwork_free(dfwork_t *dfw)
 	g_free(dfw);
 }
 
+const char *tokenstr(int token)
+{
+	switch (token) {
+		case TOKEN_TEST_AND:	return "TEST_AND";
+		case TOKEN_TEST_OR: 	return "TEST_OR";
+		case TOKEN_TEST_EQ:	return "TEST_EQ";
+		case TOKEN_TEST_NE:	return "TEST_NE";
+		case TOKEN_TEST_LT:	return "TEST_LT";
+		case TOKEN_TEST_LE:	return "TEST_LE";
+		case TOKEN_TEST_GT:	return "TEST_GT";
+		case TOKEN_TEST_GE:	return "TEST_GE";
+		case TOKEN_TEST_CONTAINS: return "TEST_CONTAINS";
+		case TOKEN_TEST_MATCHES: return "TEST_MATCHES";
+		case TOKEN_TEST_BITWISE_AND: return "TEST_BITWISE_AND";
+		case TOKEN_TEST_NOT:	return "TEST_NOT";
+		case TOKEN_FIELD:	return "FIELD";
+		case TOKEN_STRING:	return "STRING";
+		case TOKEN_CHARCONST:	return "CHARCONST";
+		case TOKEN_UNPARSED:	return "UNPARSED";
+		case TOKEN_LBRACKET:	return "LBRACKET";
+		case TOKEN_RBRACKET:	return "RBRACKET";
+		case TOKEN_COMMA:	return "COMMA";
+		case TOKEN_INTEGER:	return "INTEGER";
+		case TOKEN_COLON:	return "COLON";
+		case TOKEN_HYPHEN:	return "HYPHEN";
+		case TOKEN_TEST_IN:	return "TEST_IN";
+		case TOKEN_LBRACE:	return "LBRACE";
+		case TOKEN_RBRACE:	return "RBRACE";
+		case TOKEN_WHITESPACE:	return "WHITESPACE";
+		case TOKEN_DOTDOT:	return "DOTDOT";
+		case TOKEN_FUNCTION:	return "FUNCTION";
+		case TOKEN_LPAREN:	return "LPAREN";
+		case TOKEN_RPAREN:	return "RPAREN";
+		default:		return "<unknown>";
+	}
+	ws_assert_not_reached();
+}
+
+void
+add_deprecated_token(GPtrArray *deprecated, const char *token)
+{
+	for (guint i = 0; i < deprecated->len; i++) {
+		const char *str = (const char *)g_ptr_array_index(deprecated, i);
+		if (g_ascii_strcasecmp(token, str) == 0) {
+			/* It's already in our list */
+			return;
+		}
+	}
+	g_ptr_array_add(deprecated, g_strdup(token));
+}
+
+void
+free_deprecated(GPtrArray *deprecated)
+{
+	for (guint i = 0; i < deprecated->len; ++i) {
+		gpointer *depr = g_ptr_array_index(deprecated,i);
+		g_free(depr);
+	}
+	g_ptr_array_free(deprecated, TRUE);
+}
+
 gboolean
 dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 {
@@ -208,8 +270,6 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 	yyscan_t	scanner;
 	YY_BUFFER_STATE in_buffer;
 	gboolean failure = FALSE;
-	const char	*depr_test;
-	guint		i;
 	/* XXX, GHashTable */
 	GPtrArray	*deprecated;
 
@@ -240,14 +300,15 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 
 	dfw = dfwork_new();
 
+	deprecated = g_ptr_array_new();
+
 	state.dfw = dfw;
 	state.quoted_string = NULL;
 	state.in_set = FALSE;
 	state.raw_string = FALSE;
+	state.deprecated = deprecated;
 
 	df_set_extra(&state, scanner);
-
-	deprecated = g_ptr_array_new();
 
 	while (1) {
 		df_lval = stnode_new(STTYPE_UNINITIALIZED, NULL);
@@ -264,21 +325,7 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 			break;
 		}
 
-		/* See if the node is deprecated */
-		depr_test = stnode_deprecated(df_lval);
-
-		if (depr_test) {
-			for (i = 0; i < deprecated->len; i++) {
-				if (g_ascii_strcasecmp(depr_test, (const gchar *)g_ptr_array_index(deprecated, i)) == 0) {
-					/* It's already in our list */
-					depr_test = NULL;
-				}
-			}
-		}
-
-		if (depr_test) {
-			g_ptr_array_add(deprecated, g_strdup(depr_test));
-		}
+		ws_debug("Token: %d %s", token, tokenstr(token));
 
 		/* Give the token to the parser */
 		Dfilter(ParserObj, token, df_lval, dfw);
@@ -324,18 +371,19 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 	 * it and set *dfp to NULL */
 	if (dfw->st_root == NULL) {
 		*dfp = NULL;
-		for (i = 0; i < deprecated->len; ++i) {
-			gchar* depr = (gchar*)g_ptr_array_index(deprecated,i);
-			g_free(depr);
-		}
-		g_ptr_array_free(deprecated, TRUE);
+		free_deprecated(deprecated);
 	}
 	else {
+		log_syntax_tree(LOG_LEVEL_NOISY, dfw->st_root, "Syntax tree before semantic check");
+
+		dfw->deprecated = deprecated;
 
 		/* Check semantics and do necessary type conversion*/
-		if (!dfw_semcheck(dfw, deprecated)) {
+		if (!dfw_semcheck(dfw)) {
 			goto FAILURE;
 		}
+
+		log_syntax_tree(LOG_LEVEL_NOISY, dfw->st_root, "Syntax tree after successful semantic check");
 
 		/* Create bytecode */
 		dfw_gencode(dfw);
@@ -380,11 +428,7 @@ FAILURE:
 		global_dfw = NULL;
 		dfwork_free(dfw);
 	}
-	for (i = 0; i < deprecated->len; ++i) {
-		gchar* depr = (gchar*)g_ptr_array_index(deprecated,i);
-		g_free(depr);
-	}
-	g_ptr_array_free(deprecated, TRUE);
+	free_deprecated(deprecated);
 	if (err_msg != NULL) {
 		/*
 		 * Default error message.
