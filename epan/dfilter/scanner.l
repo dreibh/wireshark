@@ -84,10 +84,13 @@ DIAG_OFF_FLEX
 
 /*#undef YY_NO_UNPUT*/
 
-static int set_lval(int token, gpointer data);
-static int set_lval_int(dfwork_t *dfw, int token, char *s);
-static int simple(int token);
-static gboolean str_to_gint32(dfwork_t *dfw, char *s, gint32* pint);
+static int set_lval_str(int token, const char *token_value);
+static int set_lval_field(int token, header_field_info *hfinfo, const char *token_value);
+static int set_lval_func(int token, df_func_def_t *func, const char *token_value);
+static int set_lval_int(dfwork_t *dfw, int token, const char *token_value);
+static int simple(int token, const char *token_value);
+#define SIMPLE(token) simple(token, yytext)
+static gboolean str_to_gint32(dfwork_t *dfw, const char *s, gint32* pint);
 
 /*
  * Sleazy hack to suppress compiler warnings in yy_fatal_error().
@@ -115,61 +118,61 @@ static gboolean str_to_gint32(dfwork_t *dfw, char *s, gint32* pint);
 	 * should have used commas from the beginning, but now we are stuck with
 	 * whitespace as separators. */
 	if (yyextra->in_set) {
-		return simple(TOKEN_WHITESPACE);
+		return simple(TOKEN_WHITESPACE, NULL);
 	}
 }
 
 
 
-"("				return simple(TOKEN_LPAREN);
-")"				return simple(TOKEN_RPAREN);
-","				return simple(TOKEN_COMMA);
+"("		return SIMPLE(TOKEN_LPAREN);
+")"		return SIMPLE(TOKEN_RPAREN);
+","		return SIMPLE(TOKEN_COMMA);
 
 "{"[[:blank:]\n]*	{
 	yyextra->in_set = TRUE;
-	return simple(TOKEN_LBRACE);
+	return simple(TOKEN_LBRACE, "{");
 }
-[[:blank:]\n]*".."[[:blank:]\n]*	return simple(TOKEN_DOTDOT);
+[[:blank:]\n]*".."[[:blank:]\n]*	return simple(TOKEN_DOTDOT, "..");
 [[:blank:]\n]*"}"	{
 	yyextra->in_set = FALSE;
-	return simple(TOKEN_RBRACE);
+	return simple(TOKEN_RBRACE, "}");
 }
 
-"=="			return simple(TOKEN_TEST_EQ);
-"eq"			return simple(TOKEN_TEST_EQ);
+"=="		return SIMPLE(TOKEN_TEST_EQ);
+"eq"		return SIMPLE(TOKEN_TEST_EQ);
 "!="			{
 	add_deprecated_token(yyextra->deprecated, "!=");
-	return simple(TOKEN_TEST_NE);
+	return SIMPLE(TOKEN_TEST_NE);
 }
 "ne"			{
 	add_deprecated_token(yyextra->deprecated, "ne");
-	return simple(TOKEN_TEST_NE);
+	return SIMPLE(TOKEN_TEST_NE);
 }
-">"				return simple(TOKEN_TEST_GT);
-"gt"			return simple(TOKEN_TEST_GT);
-">="			return simple(TOKEN_TEST_GE);
-"ge"			return simple(TOKEN_TEST_GE);
-"<"				return simple(TOKEN_TEST_LT);
-"lt"			return simple(TOKEN_TEST_LT);
-"<="			return simple(TOKEN_TEST_LE);
-"le"			return simple(TOKEN_TEST_LE);
-"bitwise_and"	return simple(TOKEN_TEST_BITWISE_AND);
-"&"				return simple(TOKEN_TEST_BITWISE_AND);
-"contains"		return simple(TOKEN_TEST_CONTAINS);
-"~"				return simple(TOKEN_TEST_MATCHES);
-"matches"		return simple(TOKEN_TEST_MATCHES);
-"!"				return simple(TOKEN_TEST_NOT);
-"not"			return simple(TOKEN_TEST_NOT);
-"&&"			return simple(TOKEN_TEST_AND);
-"and"			return simple(TOKEN_TEST_AND);
-"||"			return simple(TOKEN_TEST_OR);
-"or"			return simple(TOKEN_TEST_OR);
-"in"			return simple(TOKEN_TEST_IN);
+">"		return SIMPLE(TOKEN_TEST_GT);
+"gt"		return SIMPLE(TOKEN_TEST_GT);
+">="		return SIMPLE(TOKEN_TEST_GE);
+"ge"		return SIMPLE(TOKEN_TEST_GE);
+"<"		return SIMPLE(TOKEN_TEST_LT);
+"lt"		return SIMPLE(TOKEN_TEST_LT);
+"<="		return SIMPLE(TOKEN_TEST_LE);
+"le"		return SIMPLE(TOKEN_TEST_LE);
+"bitwise_and"	return SIMPLE(TOKEN_TEST_BITWISE_AND);
+"&"		return SIMPLE(TOKEN_TEST_BITWISE_AND);
+"contains"	return SIMPLE(TOKEN_TEST_CONTAINS);
+"~"		return SIMPLE(TOKEN_TEST_MATCHES);
+"matches"	return SIMPLE(TOKEN_TEST_MATCHES);
+"!"		return SIMPLE(TOKEN_TEST_NOT);
+"not"		return SIMPLE(TOKEN_TEST_NOT);
+"&&"		return SIMPLE(TOKEN_TEST_AND);
+"and"		return SIMPLE(TOKEN_TEST_AND);
+"||"		return SIMPLE(TOKEN_TEST_OR);
+"or"		return SIMPLE(TOKEN_TEST_OR);
+"in"		return SIMPLE(TOKEN_TEST_IN);
 
 
 "["					{
 	BEGIN(RANGE_INT);
-	return simple(TOKEN_LBRACKET);
+	return SIMPLE(TOKEN_LBRACKET);
 }
 
 <RANGE_INT>[+-]?[[:digit:]]+		{
@@ -184,22 +187,22 @@ static gboolean str_to_gint32(dfwork_t *dfw, char *s, gint32* pint);
 
 <RANGE_INT,RANGE_PUNCT>":"		{
 	BEGIN(RANGE_INT);
-	return simple(TOKEN_COLON);
+	return SIMPLE(TOKEN_COLON);
 }
 
 <RANGE_PUNCT>"-"			{
 	BEGIN(RANGE_INT);
-	return simple(TOKEN_HYPHEN);
+	return SIMPLE(TOKEN_HYPHEN);
 }
 
 <RANGE_INT,RANGE_PUNCT>","		{
 	BEGIN(RANGE_INT);
-	return simple(TOKEN_COMMA);
+	return SIMPLE(TOKEN_COMMA);
 }
 
 <RANGE_INT,RANGE_PUNCT>"]"		{
 	BEGIN(INITIAL);
-	return simple(TOKEN_RBRACKET);
+	return SIMPLE(TOKEN_RBRACKET);
 }
 
 	/* Error if none of the above while scanning a range (slice) */
@@ -269,7 +272,7 @@ static gboolean str_to_gint32(dfwork_t *dfw, char *s, gint32* pint);
 	/* end quote */
 	int token;
 	BEGIN(INITIAL);
-	token = set_lval(TOKEN_STRING, yyextra->quoted_string->str);
+	token = set_lval_str(TOKEN_STRING, yyextra->quoted_string->str);
 	g_string_free(yyextra->quoted_string, TRUE);
 	yyextra->quoted_string = NULL;
 	return token;
@@ -371,7 +374,7 @@ static gboolean str_to_gint32(dfwork_t *dfw, char *s, gint32* pint);
 	int token;
 	BEGIN(INITIAL);
 	g_string_append_c(yyextra->quoted_string, '\'');
-	token = set_lval(TOKEN_CHARCONST, yyextra->quoted_string->str);
+	token = set_lval_str(TOKEN_CHARCONST, yyextra->quoted_string->str);
 	g_string_free(yyextra->quoted_string, TRUE);
 	yyextra->quoted_string = NULL;
 	return token;
@@ -391,7 +394,7 @@ static gboolean str_to_gint32(dfwork_t *dfw, char *s, gint32* pint);
 
 [-[:alnum:]_\.:]*\/[[:digit:]]+  {
         /* CIDR */
-        return set_lval(TOKEN_UNPARSED, yytext);
+        return set_lval_str(TOKEN_UNPARSED, yytext);
 }
 
 		([.][-+[:alnum:]_:]+)+[.]{0,2} |
@@ -409,30 +412,28 @@ static gboolean str_to_gint32(dfwork_t *dfw, char *s, gint32* pint);
 	hfinfo = proto_registrar_get_byname(yytext);
 	if (hfinfo) {
 		/* Yes, it's a field name */
-		return set_lval(TOKEN_FIELD, hfinfo);
+		return set_lval_field(TOKEN_FIELD, hfinfo, yytext);
 	}
 
 	hfinfo = proto_registrar_get_byalias(yytext);
 	if (hfinfo) {
 		/* Yes, it's an aliased field name */
-		/* XXX Do we need to make a copy of yytext? dfilter_compile
-		 * will dup this later on. */
 		add_deprecated_token(yyextra->deprecated, yytext);
-		return set_lval(TOKEN_FIELD, hfinfo);
+		return set_lval_field(TOKEN_FIELD, hfinfo, yytext);
 	}
 
 	df_func_def = df_func_lookup(yytext);
 	if (df_func_def) {
 		/* Yes, it's a dfilter function */
-		return set_lval(TOKEN_FUNCTION, df_func_def);
+		return set_lval_func(TOKEN_FUNCTION, df_func_def, yytext);
 	}
 	/* No match, so treat it as an unparsed string */
-	return set_lval(TOKEN_UNPARSED, yytext);
+	return set_lval_str(TOKEN_UNPARSED, yytext);
 }
 
 . {
 	/* Default */
-	return set_lval(TOKEN_UNPARSED, yytext);
+	return set_lval_str(TOKEN_UNPARSED, yytext);
 }
 
 
@@ -444,7 +445,7 @@ static gboolean str_to_gint32(dfwork_t *dfw, char *s, gint32* pint);
 DIAG_ON_FLEX
 
 static int
-simple(int token)
+simple(int token, const char *token_value)
 {
 	switch (token) {
 		case TOKEN_LPAREN:
@@ -475,13 +476,14 @@ simple(int token)
 		default:
 			ws_assert_not_reached();
 	}
+	stnode_init(df_lval, STTYPE_UNINITIALIZED, NULL, token_value);
 	return token;
 }
 
 static int
-set_lval(int token, gpointer data)
+set_lval_str(int token, const char *token_value)
 {
-	sttype_id_t	type_id = STTYPE_UNINITIALIZED;
+	sttype_id_t	type_id;
 
 	switch (token) {
 		case TOKEN_STRING:
@@ -490,29 +492,39 @@ set_lval(int token, gpointer data)
 		case TOKEN_CHARCONST:
 			type_id = STTYPE_CHARCONST;
 			break;
-		case TOKEN_FIELD:
-			type_id = STTYPE_FIELD;
-			break;
 		case TOKEN_UNPARSED:
 			type_id = STTYPE_UNPARSED;
-			break;
-		case TOKEN_FUNCTION:
-			type_id = STTYPE_FUNCTION;
 			break;
 		default:
 			ws_assert_not_reached();
 	}
-	stnode_init(df_lval, type_id, data);
+	stnode_init(df_lval, type_id, (gpointer)token_value, token_value);
 	return token;
 }
 
 static int
-set_lval_int(dfwork_t *dfw, int token, char *s)
+set_lval_field(int token, header_field_info *hfinfo, const char *token_value)
+{
+	ws_assert(token == TOKEN_FIELD);
+	stnode_init(df_lval, STTYPE_FIELD, hfinfo, token_value);
+	return token;
+}
+
+static int
+set_lval_func(int token, df_func_def_t *func, const char *token_value)
+{
+	ws_assert(token == TOKEN_FUNCTION);
+	stnode_init(df_lval, STTYPE_FUNCTION, func, token_value);
+	return token;
+}
+
+static int
+set_lval_int(dfwork_t *dfw, int token, const char *token_value)
 {
 	sttype_id_t	type_id = STTYPE_UNINITIALIZED;
 	gint32		val;
 
-	if (!str_to_gint32(dfw, s, &val)) {
+	if (!str_to_gint32(dfw, token_value, &val)) {
 		return SCAN_FAILED;
 	}
 
@@ -524,13 +536,13 @@ set_lval_int(dfwork_t *dfw, int token, char *s)
 			ws_assert_not_reached();
 	}
 
-	stnode_init_int(df_lval, type_id, val);
+	stnode_init_int(df_lval, type_id, val, token_value);
 	return token;
 }
 
 
 static gboolean
-str_to_gint32(dfwork_t *dfw, char *s, gint32* pint)
+str_to_gint32(dfwork_t *dfw, const char *s, gint32* pint)
 {
 	char    *endptr;
 	long	integer;
