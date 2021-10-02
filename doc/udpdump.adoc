@@ -109,21 +109,21 @@ To see interfaces:
 
     udpdump --extcap-interfaces
 
-  Example output:
+.Example output
     interface {value=udpdump}{display=UDP Listener remote capture}
 
 To see interface DLTs:
 
     udpdump --extcap-interface=udpdump --extcap-dlts
 
-  Example output:
+.Example output
     dlt {number=252}{name=udpdump}{display=Exported PDUs}
 
 To see interface configuration options:
 
     udpdump --extcap-interface=udpdump --extcap-config
 
-  Example output:
+.Example output
     arg {number=0}{call=--port}{display=Listen port}{type=unsigned}{range=1,65535}{default=5555}{tooltip=The port the receiver listens on}
 
 To capture:
@@ -141,7 +141,7 @@ xref:wireshark.html[wireshark](1), xref:tshark.html[tshark](1), xref:dumpcap.htm
 *udpdump* is part of the *Wireshark* distribution.  The latest version
 of *Wireshark* can be found at https://www.wireshark.org.
 
-HTML versions of the Wireshark project man pages are available at:
+HTML versions of the Wireshark project man pages are available at
 https://www.wireshark.org/docs/man-pages.
 
 == AUTHORS
