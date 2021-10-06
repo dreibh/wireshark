@@ -91,10 +91,16 @@ stnode_t*
 stnode_dup(const stnode_t *org);
 
 void
+stnode_clear(stnode_t *node);
+
+void
 stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data, const char *token_value);
 
 void
 stnode_init_int(stnode_t *node, sttype_id_t type_id, gint32 value, const char *token_value);
+
+void
+stnode_replace(stnode_t *node, sttype_id_t type_id, gpointer data);
 
 void
 stnode_free(stnode_t *node);
@@ -114,14 +120,14 @@ stnode_steal_data(stnode_t *node);
 gint32
 stnode_value(stnode_t *node);
 
+const char *
+stnode_token_value(stnode_t *node);
+
 char *
 stnode_tostr(stnode_t *node);
 
 gboolean
 stnode_inside_parens(stnode_t *node);
-
-const char *
-stnode_token_value(stnode_t *node);
 
 void
 stnode_set_inside_parens(stnode_t *node, gboolean inside);

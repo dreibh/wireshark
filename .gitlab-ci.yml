@@ -22,7 +22,7 @@ variables:
   GIT_FETCH_EXTRA_FLAGS: "--depth=5000"
   CCACHE_DIR: "${CI_PROJECT_DIR}/ccache"
   # Preferred version of clang available on wireshark-ubuntu-dev
-  CLANG_VERSION: 12
+  CLANG_VERSION: 13
   # Enable color output in CMake, Ninja, and other tools. https://bixense.com/clicolors/
   CLICOLOR_FORCE: 1
 
@@ -39,7 +39,7 @@ variables:
 # Commits that have been approved and merged. Run automatically in the main
 # repo and allow manual runs in the web UI and in forks.
 .if-merged:
-  - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
     when: always
   - if: '$CI_PIPELINE_SOURCE == "web"'
     when: always

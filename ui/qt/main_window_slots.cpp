@@ -1558,12 +1558,14 @@ void MainWindow::reloadLuaPlugins()
     wsApp->readConfigurationFiles(true);
     commandline_options_reapply();
 
-    prefs_apply_all();
     fieldsChanged();
+    prefs_apply_all();
 
     if (uses_lua_filehandler) {
         // Reload the file in case the FileHandler has changed
-        cf_reload(capture_file_.capFile());
+        if (cf_reload(capture_file_.capFile()) != CF_OK) {
+            cf_close(capture_file_.capFile());
+        }
         proto_free_deregistered_fields();
     } else {
         redissectPackets();
@@ -3598,6 +3600,11 @@ void MainWindow::on_actionTelephonyUCPMessages_triggered()
 void MainWindow::on_actionTelephonyF1APMessages_triggered()
 {
 	openStatisticsTreeDialog("f1ap");
+}
+
+void MainWindow::on_actionTelephonyNGAPMessages_triggered()
+{
+    openStatisticsTreeDialog("ngap");
 }
 
 void MainWindow::on_actionTelephonySipFlows_triggered()

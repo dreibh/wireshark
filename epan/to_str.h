@@ -82,17 +82,17 @@ WS_DLL_PUBLIC const gchar *port_type_to_str (port_type type);
 
 WS_DLL_PUBLIC gchar* tvb_address_with_resolution_to_str(wmem_allocator_t *scope, tvbuff_t *tvb, int type, const gint offset);
 
-#define tvb_ether_to_str(tvb, offset) tvb_address_to_str(wmem_packet_scope(), tvb, AT_ETHER, offset)
+#define tvb_ether_to_str(scope, tvb, offset) tvb_address_to_str(scope, tvb, AT_ETHER, offset)
 
 #define tvb_ip_to_str(tvb, offset) tvb_address_to_str(wmem_packet_scope(), tvb, AT_IPv4, offset)
 
 #define tvb_ip6_to_str(tvb, offset) tvb_address_to_str(wmem_packet_scope(), tvb, AT_IPv6, offset)
 
-#define tvb_fcwwn_to_str(tvb, offset) tvb_address_to_str(wmem_packet_scope(), tvb, AT_FCWWN, offset)
+#define tvb_fcwwn_to_str(scope, tvb, offset) tvb_address_to_str(scope, tvb, AT_FCWWN, offset)
 
-#define tvb_fc_to_str(tvb, offset) tvb_address_to_str(wmem_packet_scope(), tvb, AT_FC, offset)
+#define tvb_fc_to_str(scope, tvb, offset) tvb_address_to_str(scope, tvb, AT_FC, offset)
 
-#define tvb_eui64_to_str(tvb, offset) tvb_address_to_str(wmem_packet_scope(), tvb, AT_EUI64, offset)
+#define tvb_eui64_to_str(scope, tvb, offset) tvb_address_to_str(scope, tvb, AT_EUI64, offset)
 
 /** Turn an address type retrieved from a tvb into a string.
  *
@@ -149,7 +149,7 @@ WS_DLL_PUBLIC gchar *guid_to_str_buf(const e_guid_t *, gchar *, int);
 
 WS_DLL_PUBLIC gchar *guid_to_str(wmem_allocator_t *scope, const e_guid_t *);
 
-WS_DLL_PUBLIC char *decode_bits_in_field(const guint bit_offset, const gint no_of_bits, const guint64 value, const guint encoding);
+WS_DLL_PUBLIC char *decode_bits_in_field(wmem_allocator_t *scope, const guint bit_offset, const gint no_of_bits, const guint64 value, const guint encoding);
 
 #ifdef __cplusplus
 }
