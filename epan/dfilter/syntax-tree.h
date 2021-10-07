@@ -12,7 +12,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <glib.h>
-#include "cppmagic.h"
+
 #include "ws_log_defs.h"
 
 /** @file
@@ -144,35 +144,21 @@ log_stnode_full(enum ws_log_level level,
 	log_stnode_full(LOG_LEVEL_NOISY, __FILE__, __LINE__, __func__, node, #node)
 #endif
 
-void log_syntax_tree(enum ws_log_level, stnode_t *root, const char *msg);
+void
+log_syntax_tree(enum ws_log_level, stnode_t *root, const char *msg);
 
-#define assert_magic(obj, mnum) \
-	g_assert_true((obj)); \
-	if ((obj)->magic != (mnum)) { \
-		g_print("\nMagic num is 0x%08x, but should be 0x%08x", \
-			(obj)->magic, (mnum)); \
-			g_assert_true((obj)->magic == (mnum)); \
-	}
+void
+ws_assert_magic_full(const char *domain, enum ws_log_level level,
+				const char *file, int line, const char *func,
+				const void *node, uint32_t magic);
 
-#ifdef WS_DEBUG
-#define ws_assert_magic(obj, mnum) assert_magic(obj, mnum)
+#ifdef WS_DISABLE_DEBUG
+#define ws_assert_magic(obj, mnum) (void)0
 #else
-#define ws_assert_magic(obj, mnum)
+#define ws_assert_magic(obj, mnum) \
+	ws_assert_magic_full(LOG_DOMAIN_DFILTER, LOG_LEVEL_CRITICAL, \
+			__FILE__, __LINE__, __func__, \
+			obj, mnum)
 #endif
 
-#define STTYPE_ACCESSOR(ret,type,attr,magicnum) \
-	ret \
-	CONCAT(CONCAT(CONCAT(sttype_,type),_),attr) (stnode_t *node) \
-{\
-	CONCAT(type,_t)	*value; \
-	value = (CONCAT(type,_t) *)stnode_data(node);\
-	ws_assert_magic(value, magicnum); \
-	return value->attr; \
-}
-
-#define STTYPE_ACCESSOR_PROTOTYPE(ret,type,attr) \
-	ret \
-	CONCAT(CONCAT(CONCAT(sttype_,type),_),attr) (stnode_t *node);
-
-
-#endif
+#endif /* SYNTAX_TREE_H */
