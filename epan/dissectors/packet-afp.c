@@ -4984,13 +4984,13 @@ dissect_afp_server_status(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tre
 				type =  tvb_get_guint8(tvb, offset +1);
 				switch (type) {
 				case 1:	/* IP */
-					sub_tree = proto_tree_add_subtree_format(adr_tree, tvb, offset, len, ett_afp_server_addr_line, NULL, "IP: %s", tvb_ip_to_str(tvb, offset+2));
+					sub_tree = proto_tree_add_subtree_format(adr_tree, tvb, offset, len, ett_afp_server_addr_line, NULL, "IP: %s", tvb_ip_to_str(pinfo->pool, tvb, offset+2));
 					break;
 				case 2: /* IP + port */
 					port = tvb_get_ntohs(tvb, offset+6);
 					sub_tree = proto_tree_add_subtree_format(adr_tree, tvb, offset, len,
 										ett_afp_server_addr_line, NULL,
-										"IP: %s:%d", tvb_ip_to_str(tvb, offset+2), port);
+										"IP: %s:%d", tvb_ip_to_str(pinfo->pool, tvb, offset+2), port);
 					break;
 				case 3: /* DDP, atalk_addr_to_str want host order not network */
 					net  = tvb_get_ntohs(tvb, offset+2);
@@ -5039,13 +5039,13 @@ dissect_afp_server_status(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tre
 					}
 					break;
 				case 6: /* IP6 */
-					sub_tree = proto_tree_add_subtree_format(adr_tree, tvb, offset, len, ett_afp_server_addr_line, NULL, "IPv6: %s", tvb_ip6_to_str(tvb, offset+2));
+					sub_tree = proto_tree_add_subtree_format(adr_tree, tvb, offset, len, ett_afp_server_addr_line, NULL, "IPv6: %s", tvb_ip6_to_str(pinfo->pool, tvb, offset+2));
 					break;
 				case 7: /* IP6 + 2bytes port */
 					port = tvb_get_ntohs(tvb, offset+ 2+INET6_ADDRLEN);
 					sub_tree = proto_tree_add_subtree_format(adr_tree, tvb, offset, len,
 										ett_afp_server_addr_line, NULL,
-										"IPv6: %s:%d", tvb_ip6_to_str(tvb, offset+2), port);
+										"IPv6: %s:%d", tvb_ip6_to_str(pinfo->pool, tvb, offset+2), port);
 					break;
 				default:
 					sub_tree = proto_tree_add_subtree_format(adr_tree, tvb, offset, len, ett_afp_server_addr_line, NULL, "Unknown type: %u", type);

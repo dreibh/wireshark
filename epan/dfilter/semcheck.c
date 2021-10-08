@@ -38,6 +38,9 @@ check_param_entity(dfwork_t *dfw, stnode_t *st_node);
 static void
 check_function(dfwork_t *dfw, stnode_t *st_node);
 
+static fvalue_t *
+mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *s);
+
 typedef gboolean (*FtypeCanFunc)(enum ftenum);
 
 /* Compares to ftenum_t's and decides if they're
@@ -134,22 +137,59 @@ compatible_ftypes(ftenum_t a, ftenum_t b)
 }
 
 /* Gets an fvalue from a string, and sets the error message on failure. */
+WS_RETNONNULL
 static fvalue_t*
-dfilter_fvalue_from_unparsed(dfwork_t *dfw, ftenum_t ftype, const char *s, gboolean allow_partial_value)
+dfilter_fvalue_from_unparsed(dfwork_t *dfw, ftenum_t ftype, stnode_t *st,
+		gboolean allow_partial_value, header_field_info *hfinfo_value_string)
 {
-	/*
-	 * Don't set the error message if it's already set.
-	 */
-	return fvalue_from_unparsed(ftype, s, allow_partial_value,
-	    dfw->error_message == NULL ? &dfw->error_message : NULL);
+	fvalue_t *fv;
+	const char *s = stnode_data(st);
+
+	/* Don't set the error message if it's already set. */
+	fv = fvalue_from_unparsed(ftype, s, allow_partial_value,
+		dfw->error_message == NULL ? &dfw->error_message : NULL);
+	if (fv == NULL && hfinfo_value_string) {
+		/* check value_string */
+		fv = mk_fvalue_from_val_string(dfw, hfinfo_value_string, s);
+		/*
+		 * Ignore previous errors if this can be mapped
+		 * to an item from value_string.
+		 */
+		if (fv && dfw->error_message) {
+			g_free(dfw->error_message);
+			dfw->error_message = NULL;
+		}
+	}
+	if (fv == NULL)
+		THROW(TypeError);
+	return fv;
 }
 
 /* Gets an fvalue from a string, and sets the error message on failure. */
+WS_RETNONNULL
 static fvalue_t*
-dfilter_fvalue_from_string(dfwork_t *dfw, ftenum_t ftype, const char *s)
+dfilter_fvalue_from_string(dfwork_t *dfw, ftenum_t ftype, stnode_t *st,
+		header_field_info *hfinfo_value_string)
 {
-	return fvalue_from_string(ftype, s,
+	fvalue_t *fv;
+	const char *s = stnode_data(st);
+
+	fv = fvalue_from_string(ftype, s,
 	    dfw->error_message == NULL ? &dfw->error_message : NULL);
+	if (fv == NULL && hfinfo_value_string) {
+		fv = mk_fvalue_from_val_string(dfw, hfinfo_value_string, s);
+		/*
+		 * Ignore previous errors if this can be mapped
+		 * to an item from value_string.
+		 */
+		if (fv && dfw->error_message) {
+			g_free(dfw->error_message);
+			dfw->error_message = NULL;
+		}
+	}
+	if (fv == NULL)
+		THROW(TypeError);
+	return fv;
 }
 
 /* Creates a FT_UINT32 fvalue with a given value. */
@@ -180,7 +220,7 @@ mk_uint64_fvalue(guint64 val)
  * This works only for ftypes that are integers. Returns the created fvalue_t*
  * or NULL if impossible. */
 static fvalue_t*
-mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, char *s)
+mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *s)
 {
 	static const true_false_string  default_tf = { "True", "False" };
 	const true_false_string		*tf = &default_tf;
@@ -385,12 +425,14 @@ is_bytes_type(enum ftenum type)
 }
 
 /* Gets a GRegex from a string, and sets the error message on failure. */
+WS_RETNONNULL
 static GRegex*
-dfilter_g_regex_from_string(dfwork_t *dfw, const char *s)
+dfilter_g_regex_from_string(dfwork_t *dfw, stnode_t *st)
 {
 	GError *regex_error = NULL;
 	GRegexCompileFlags cflags = (GRegexCompileFlags)(G_REGEX_CASELESS | G_REGEX_OPTIMIZE);
 	GRegex *pcre;
+	const char *s = stnode_data(st);
 
 	/*
 	 * As FT_BYTES and FT_PROTOCOL contain arbitrary binary data
@@ -421,7 +463,7 @@ dfilter_g_regex_from_string(dfwork_t *dfw, const char *s)
 		if (pcre) {
 			g_regex_unref(pcre);
 		}
-		return NULL;
+		THROW(TypeError);
 	}
 	return pcre;
 }
@@ -669,21 +711,27 @@ check_function(dfwork_t *dfw, stnode_t *st_node)
 
 /* Convert a character constant to a 1-byte BYTE_STRING containing the
  * character. */
+WS_RETNONNULL
 static fvalue_t *
-dfilter_fvalue_from_charconst_string(dfwork_t *dfw, ftenum_t ftype, char *s, gboolean allow_partial_value)
+dfilter_fvalue_from_charconst_string(dfwork_t *dfw, ftenum_t ftype, stnode_t *st, gboolean allow_partial_value)
 {
 	fvalue_t *fvalue;
+	const char *s = stnode_data(st);
 
-	fvalue = dfilter_fvalue_from_unparsed(dfw, FT_CHAR, s, allow_partial_value);
-	if (fvalue) {
-		char *temp_string;
-		/* It's valid. Create a 1-byte BYTE_STRING from its value. */
-		temp_string = g_strdup_printf("%02x", fvalue->value.uinteger);
-		FVALUE_FREE(fvalue);
-		fvalue = dfilter_fvalue_from_unparsed(dfw, ftype, temp_string, allow_partial_value);
-		g_free(temp_string);
-	}
-	return (fvalue);
+	fvalue = fvalue_from_unparsed(ftype, s, allow_partial_value,
+			dfw->error_message == NULL ? &dfw->error_message : NULL);
+	if (fvalue == NULL)
+		THROW(TypeError);
+
+	char *temp_string;
+	/* It's valid. Create a 1-byte BYTE_STRING from its value. */
+	temp_string = g_strdup_printf("%02x", fvalue->value.uinteger);
+	FVALUE_FREE(fvalue);
+	fvalue = fvalue_from_unparsed(ftype, temp_string, allow_partial_value, NULL);
+	ws_assert(fvalue);
+	g_free(temp_string);
+
+	return fvalue;
 }
 
 /* If the LHS of a relation test is a FIELD, run some checks
@@ -700,7 +748,6 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 	ftenum_t		ftype1, ftype2;
 	fvalue_t		*fvalue;
 	GRegex			*pcre;
-	char			*s;
 
 	type2 = stnode_type_id(st_arg2);
 
@@ -739,13 +786,9 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 	}
 	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED ||
 	         type2 == STTYPE_CHARCONST) {
-		s = (char *)stnode_data(st_arg2);
 		if (strcmp(relation_string, "matches") == 0) {
 			/* Convert to a GRegex */
-			pcre = dfilter_g_regex_from_string(dfw, s);
-			if (!pcre) {
-				THROW(TypeError);
-			}
+			pcre = dfilter_g_regex_from_string(dfw, st_arg2);
 			stnode_replace(st_arg2, STTYPE_PCRE, pcre);
 		} else {
 			/* Skip incompatible fields */
@@ -756,37 +799,18 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 				ftype1 = hfinfo1->type;
 			}
 
-			if (type2 == STTYPE_STRING)
-				fvalue = dfilter_fvalue_from_string(dfw, ftype1, s);
+			if (type2 == STTYPE_STRING) {
+				fvalue = dfilter_fvalue_from_string(dfw, ftype1, st_arg2, NULL);
+			}
 			else if (type2 == STTYPE_CHARCONST &&
 			    strcmp(relation_string, "contains") == 0) {
 				/* The RHS should be the same type as the LHS,
 				 * but a character is just a one-byte byte
 				 * string. */
-				fvalue = dfilter_fvalue_from_charconst_string(dfw, ftype1, s, allow_partial_value);
-			} else
-				fvalue = dfilter_fvalue_from_unparsed(dfw, ftype1, s, allow_partial_value);
-
-			/*
-			 * If this is a character constant, just report the
-			 * error, don't try to treat it as a string from
-			 * a value_string table.
-			 */
-			if (!fvalue && type2 != STTYPE_CHARCONST) {
-				/* check value_string */
-				fvalue = mk_fvalue_from_val_string(dfw, hfinfo1, s);
-
-				/*
-				 * Ignore previous errors if this can be mapped
-				 * to an item from value_string.
-				 */
-				if (fvalue && dfw->error_message) {
-					g_free(dfw->error_message);
-					dfw->error_message = NULL;
-				}
+				fvalue = dfilter_fvalue_from_charconst_string(dfw, ftype1, st_arg2, allow_partial_value);
 			}
-			if (!fvalue) {
-				THROW(TypeError);
+			else {
+				fvalue = dfilter_fvalue_from_unparsed(dfw, ftype1, st_arg2, allow_partial_value, hfinfo1);
 			}
 			stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 		}
@@ -884,7 +908,6 @@ check_relation_LHS_STRING(dfwork_t *dfw, const char* relation_string,
 	df_func_def_t		*funcdef;
 	ftenum_t		ftype2;
 	fvalue_t		*fvalue;
-	char			*s;
 
 	type2 = stnode_type_id(st_arg2);
 
@@ -901,16 +924,7 @@ check_relation_LHS_STRING(dfwork_t *dfw, const char* relation_string,
 			THROW(TypeError);
 		}
 
-		s = (char*)stnode_data(st_arg1);
-		fvalue = dfilter_fvalue_from_string(dfw, ftype2, s);
-		if (!fvalue) {
-			/* check value_string */
-			fvalue = mk_fvalue_from_val_string(dfw, hfinfo2, s);
-			if (!fvalue) {
-				THROW(TypeError);
-			}
-		}
-
+		fvalue = dfilter_fvalue_from_string(dfw, ftype2, st_arg1, hfinfo2);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
 	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED ||
@@ -923,14 +937,12 @@ check_relation_LHS_STRING(dfwork_t *dfw, const char* relation_string,
 	}
 	else if (type2 == STTYPE_RANGE) {
 		check_drange_sanity(dfw, st_arg2);
-		s = (char*)stnode_data(st_arg1);
-		fvalue = dfilter_fvalue_from_string(dfw, FT_BYTES, s);
-		if (!fvalue) {
-			THROW(TypeError);
-		}
+		fvalue = dfilter_fvalue_from_string(dfw, FT_BYTES, st_arg1, NULL);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
 	else if (type2 == STTYPE_FUNCTION) {
+		check_function(dfw, st_arg2);
+
 		funcdef = sttype_function_funcdef(st_arg2);
 		ftype2  = funcdef->retval_ftype;
 
@@ -941,14 +953,7 @@ check_relation_LHS_STRING(dfwork_t *dfw, const char* relation_string,
 			THROW(TypeError);
 		}
 
-		s = (char*)stnode_data(st_arg1);
-		fvalue = dfilter_fvalue_from_string(dfw, ftype2, s);
-		if (!fvalue) {
-			THROW(TypeError);
-		}
-
-		check_function(dfw, st_arg2);
-
+		fvalue = dfilter_fvalue_from_string(dfw, ftype2, st_arg1, NULL);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
 	else if (type2 == STTYPE_SET) {
@@ -971,7 +976,6 @@ check_relation_LHS_UNPARSED(dfwork_t *dfw, const char* relation_string,
 	df_func_def_t		*funcdef;
 	ftenum_t		ftype2;
 	fvalue_t		*fvalue;
-	char			*s;
 
 	type2 = stnode_type_id(st_arg2);
 
@@ -988,16 +992,7 @@ check_relation_LHS_UNPARSED(dfwork_t *dfw, const char* relation_string,
 			THROW(TypeError);
 		}
 
-		s = (char*)stnode_data(st_arg1);
-		fvalue = dfilter_fvalue_from_unparsed(dfw, ftype2, s, allow_partial_value);
-		if (!fvalue) {
-			/* check value_string */
-			fvalue = mk_fvalue_from_val_string(dfw, hfinfo2, s);
-			if (!fvalue) {
-				THROW(TypeError);
-			}
-		}
-
+		fvalue = dfilter_fvalue_from_unparsed(dfw, ftype2, st_arg1, allow_partial_value, hfinfo2);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
 	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED ||
@@ -1010,14 +1005,12 @@ check_relation_LHS_UNPARSED(dfwork_t *dfw, const char* relation_string,
 	}
 	else if (type2 == STTYPE_RANGE) {
 		check_drange_sanity(dfw, st_arg2);
-		s = (char*)stnode_data(st_arg1);
-		fvalue = dfilter_fvalue_from_unparsed(dfw, FT_BYTES, s, allow_partial_value);
-		if (!fvalue) {
-			THROW(TypeError);
-		}
+		fvalue = dfilter_fvalue_from_unparsed(dfw, FT_BYTES, st_arg1, allow_partial_value, NULL);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
 	else if (type2 == STTYPE_FUNCTION) {
+		check_function(dfw, st_arg2);
+
 		funcdef = sttype_function_funcdef(st_arg2);
 		ftype2  = funcdef->retval_ftype;
 
@@ -1027,15 +1020,7 @@ check_relation_LHS_UNPARSED(dfwork_t *dfw, const char* relation_string,
 			THROW(TypeError);
 		}
 
-		s =  (char*)stnode_data(st_arg1);
-		fvalue = dfilter_fvalue_from_unparsed(dfw, ftype2, s, allow_partial_value);
-
-		if (!fvalue) {
-			THROW(TypeError);
-		}
-
-		check_function(dfw, st_arg2);
-
+		fvalue = dfilter_fvalue_from_unparsed(dfw, ftype2, st_arg1, allow_partial_value, NULL);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
 	else if (type2 == STTYPE_SET) {
@@ -1060,8 +1045,6 @@ check_relation_LHS_RANGE(dfwork_t *dfw, const char *relation_string,
 	ftenum_t		ftype2;
 	fvalue_t		*fvalue;
 	GRegex			*pcre;
-	char			*s;
-	int                     len_range;
 
 	ws_debug("5 check_relation_LHS_RANGE(%s)", relation_string);
 
@@ -1090,89 +1073,36 @@ check_relation_LHS_RANGE(dfwork_t *dfw, const char *relation_string,
 	}
 	else if (type2 == STTYPE_STRING) {
 		ws_debug("5 check_relation_LHS_RANGE(type2 = STTYPE_STRING)");
-		s = (char*)stnode_data(st_arg2);
 		if (strcmp(relation_string, "matches") == 0) {
 			/* Convert to a GRegex * */
-			pcre = dfilter_g_regex_from_string(dfw, s);
-			if (!pcre) {
-				THROW(TypeError);
-			}
+			pcre = dfilter_g_regex_from_string(dfw, st_arg2);
 			stnode_replace(st_arg2, STTYPE_PCRE, pcre);
 		} else {
-			fvalue = dfilter_fvalue_from_string(dfw, FT_BYTES, s);
-			if (!fvalue) {
-				THROW(TypeError);
-			}
+			fvalue = dfilter_fvalue_from_string(dfw, FT_BYTES, st_arg2, NULL);
 			stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 		}
 	}
 	else if (type2 == STTYPE_UNPARSED) {
 		ws_debug("5 check_relation_LHS_RANGE(type2 = STTYPE_UNPARSED)");
-		s = (char*)stnode_data(st_arg2);
-		len_range = drange_get_total_length(sttype_range_drange(st_arg1));
 		if (strcmp(relation_string, "matches") == 0) {
 			/* Convert to a GRegex */
-			pcre = dfilter_g_regex_from_string(dfw, s);
-			if (!pcre) {
-				THROW(TypeError);
-			}
+			pcre = dfilter_g_regex_from_string(dfw, st_arg2);
 			stnode_replace(st_arg2, STTYPE_PCRE, pcre);
 		} else {
-			/*
-			 * The RHS should be FT_BYTES. However, there is a
-			 * special case where the range slice on the LHS is
-			 * one byte long. In that case, it is natural
-			 * for the user to specify a normal hex integer
-			 * on the RHS, with the "0x" notation, as in
-			 * "slice[0] == 0x10". We can't allow this for any
-			 * slices that are longer than one byte, because
-			 * then we'd have to know which endianness the
-			 * byte string should be in.
-			 */
-			if (len_range == 1 && strlen(s) == 4 && strncmp(s, "0x", 2) == 0) {
-				/*
-				 * Even if the RHS string starts with "0x",
-				 * it still could fail to be an integer.
-				 * Try converting it here.
-				 */
-				fvalue = dfilter_fvalue_from_unparsed(dfw, FT_UINT8, s, allow_partial_value);
-				if (fvalue) {
-					FVALUE_FREE(fvalue);
-					/*
-					 * The value doees indeed fit into
-					 * 8 bits. Create a BYTE_STRING
-					 * from it. Since we know that
-					 * the last 2 characters are a valid
-					 * hex string, just use those directly.
-					 */
-					fvalue = dfilter_fvalue_from_unparsed(dfw, FT_BYTES, s+2, allow_partial_value);
-				}
-			} else {
-				fvalue = dfilter_fvalue_from_unparsed(dfw, FT_BYTES, s, allow_partial_value);
-			}
-			if (!fvalue) {
-				THROW(TypeError);
-			}
+			fvalue = dfilter_fvalue_from_unparsed(dfw, FT_BYTES, st_arg2, allow_partial_value, NULL);
 			stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 		}
 	}
 	else if (type2 == STTYPE_CHARCONST) {
 		ws_debug("5 check_relation_LHS_RANGE(type2 = STTYPE_CHARCONST)");
-		s = (char*)stnode_data(st_arg2);
 		if (strcmp(relation_string, "matches") == 0) {
 			/* Convert to a GRegex */
-			pcre = dfilter_g_regex_from_string(dfw, s);
-			if (!pcre) {
-				THROW(TypeError);
-			}
+			pcre = dfilter_g_regex_from_string(dfw, st_arg2);
 			stnode_replace(st_arg2, STTYPE_PCRE, pcre);
 		} else {
 			/* The RHS should be FT_BYTES, but a character is just a
 			 * one-byte byte string. */
-			fvalue = dfilter_fvalue_from_charconst_string(dfw, FT_BYTES, s, allow_partial_value);
-			if (!fvalue) {
-				THROW(TypeError);
-			}
+			fvalue = dfilter_fvalue_from_charconst_string(dfw, FT_BYTES, st_arg2, allow_partial_value);
 			stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 		}
 	}
@@ -1215,17 +1145,11 @@ check_param_entity(dfwork_t *dfw, stnode_t *st_node)
 	sttype_id_t		e_type;
 	stnode_t		*new_st;
 	fvalue_t		*fvalue;
-	char *s;
 
 	e_type = stnode_type_id(st_node);
 	/* If there's an unparsed string, change it to an FT_STRING */
 	if (e_type == STTYPE_UNPARSED || e_type == STTYPE_CHARCONST) {
-		s = (char*)stnode_data(st_node);
-		fvalue = dfilter_fvalue_from_unparsed(dfw, FT_STRING, s, FALSE);
-		if (!fvalue) {
-			THROW(TypeError);
-		}
-
+		fvalue = dfilter_fvalue_from_unparsed(dfw, FT_STRING, st_node, TRUE, NULL);
 		new_st = stnode_new(STTYPE_FVALUE, fvalue, st_node->token_value);
 		stnode_free(st_node);
 		return new_st;
@@ -1248,7 +1172,6 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
 	ftenum_t		ftype1, ftype2;
 	fvalue_t		*fvalue;
 	GRegex			*pcre;
-	char			*s;
 	df_func_def_t		*funcdef;
 	df_func_def_t		*funcdef2;
 	/* GSList          *params; */
@@ -1258,8 +1181,6 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
 
 	funcdef = sttype_function_funcdef(st_arg1);
 	ftype1 = funcdef->retval_ftype;
-
-	/* params = */sttype_function_params(st_arg1);  /* XXX: is this done for the side-effect ? */
 
 	ws_debug("5 check_relation_LHS_FUNCTION(%s)", relation_string);
 
@@ -1288,36 +1209,22 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
 		}
 	}
 	else if (type2 == STTYPE_STRING) {
-		s = (char*)stnode_data(st_arg2);
 		if (strcmp(relation_string, "matches") == 0) {
 			/* Convert to a GRegex */
-			pcre = dfilter_g_regex_from_string(dfw, s);
-			if (!pcre) {
-				THROW(TypeError);
-			}
+			pcre = dfilter_g_regex_from_string(dfw, st_arg2);
 			stnode_replace(st_arg2, STTYPE_PCRE, pcre);
 		} else {
-			fvalue = dfilter_fvalue_from_string(dfw, ftype1, s);
-			if (!fvalue) {
-				THROW(TypeError);
-			}
+			fvalue = dfilter_fvalue_from_string(dfw, ftype1, st_arg2, NULL);
 			stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 		}
 	}
 	else if (type2 == STTYPE_UNPARSED || type2 == STTYPE_CHARCONST) {
-		s = (char*)stnode_data(st_arg2);
 		if (strcmp(relation_string, "matches") == 0) {
 			/* Convert to a GRegex */
-			pcre = dfilter_g_regex_from_string(dfw, s);
-			if (!pcre) {
-				THROW(TypeError);
-			}
+			pcre = dfilter_g_regex_from_string(dfw, st_arg2);
 			stnode_replace(st_arg2, STTYPE_PCRE, pcre);
 		} else {
-			fvalue = dfilter_fvalue_from_unparsed(dfw, ftype1, s, allow_partial_value);
-			if (!fvalue) {
-				THROW(TypeError);
-			}
+			fvalue = dfilter_fvalue_from_unparsed(dfw, ftype1, st_arg2, allow_partial_value, NULL);
 			stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 		}
 	}

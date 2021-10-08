@@ -2276,12 +2276,12 @@ dissect_gtpv2_ip_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree
     if (length == 4)
     {
         proto_tree_add_item(tree, hf_gtpv2_ip_address_ipv4, tvb, offset, length, ENC_BIG_ENDIAN);
-        proto_item_append_text(item, "IPv4 %s", tvb_ip_to_str(tvb, offset));
+        proto_item_append_text(item, "IPv4 %s", tvb_ip_to_str(pinfo->pool, tvb, offset));
     }
     else if (length == 16)
     {
         proto_tree_add_item(tree, hf_gtpv2_ip_address_ipv6, tvb, offset, length, ENC_NA);
-        proto_item_append_text(item, "IPv6 %s", tvb_ip6_to_str(tvb, offset));
+        proto_item_append_text(item, "IPv6 %s", tvb_ip6_to_str(pinfo->pool, tvb, offset));
     }
 }
 /*
@@ -2596,7 +2596,7 @@ dissect_gtpv2_paa(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, proto
             return;
         }
         proto_tree_add_item(tree, hf_gtpv2_pdn_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-        proto_item_append_text(item, "IPv4 %s", tvb_ip_to_str(tvb, offset));
+        proto_item_append_text(item, "IPv4 %s", tvb_ip_to_str(pinfo->pool, tvb, offset));
         break;
     case 2:
         /* IPv6*/
@@ -2613,7 +2613,7 @@ dissect_gtpv2_paa(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, proto
         proto_tree_add_item(tree, hf_gtpv2_pdn_ipv6_len, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
         proto_tree_add_item(tree, hf_gtpv2_pdn_ipv6, tvb, offset, 16, ENC_NA);
-        proto_item_append_text(item, "IPv6 %s", tvb_ip6_to_str(tvb, offset));
+        proto_item_append_text(item, "IPv6 %s", tvb_ip6_to_str(pinfo->pool, tvb, offset));
         break;
     case 3:
         /* IPv4/IPv6 */
@@ -2633,10 +2633,10 @@ dissect_gtpv2_paa(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, proto
         proto_tree_add_item(tree, hf_gtpv2_pdn_ipv6_len, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
         proto_tree_add_item(tree, hf_gtpv2_pdn_ipv6, tvb, offset, 16, ENC_NA);
-        proto_item_append_text(item, "IPv6 %s, ", tvb_ip6_to_str(tvb, offset));
+        proto_item_append_text(item, "IPv6 %s, ", tvb_ip6_to_str(pinfo->pool, tvb, offset));
         offset += 16;
         proto_tree_add_item(tree, hf_gtpv2_pdn_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-        proto_item_append_text(item, "IPv4 %s", tvb_ip_to_str(tvb, offset));
+        proto_item_append_text(item, "IPv4 %s", tvb_ip_to_str(pinfo->pool, tvb, offset));
         break;
     case 4: /* Non IP */
     case 5: /* Ethernet */
@@ -3348,7 +3348,7 @@ dissect_gtpv2_f_teid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_
     {
         ipv4 = wmem_new0(pinfo->pool, address);
         proto_tree_add_item(tree, hf_gtpv2_f_teid_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-        proto_item_append_text(item, ", IPv4 %s", tvb_ip_to_str(tvb, offset));
+        proto_item_append_text(item, ", IPv4 %s", tvb_ip_to_str(pinfo->pool, tvb, offset));
         set_address_tvb(ipv4, AT_IPv4, 4, tvb, offset);
         offset += 4;
     }
@@ -3356,7 +3356,7 @@ dissect_gtpv2_f_teid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_
     {
         ipv6 = wmem_new0(pinfo->pool, address);
         proto_tree_add_item(tree, hf_gtpv2_f_teid_ipv6, tvb, offset, 16, ENC_NA);
-        proto_item_append_text(item, ", IPv6 %s", tvb_ip6_to_str(tvb, offset));
+        proto_item_append_text(item, ", IPv6 %s", tvb_ip6_to_str(pinfo->pool, tvb, offset));
         set_address_tvb(ipv6, AT_IPv6, 16, tvb, offset);
     }
 
@@ -6233,12 +6233,12 @@ dissect_gtpv2_mbms_ip_mc_dist(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree 
     if ((tvb_get_guint8(tvb, offset) & 0x3f) == 4) {
         offset += 1;
         proto_tree_add_item(tree, hf_gtpv2_mbms_ip_mc_dist_addrv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-        proto_item_append_text(item, " IPv4 Dist %s", tvb_ip_to_str(tvb, offset));
+        proto_item_append_text(item, " IPv4 Dist %s", tvb_ip_to_str(pinfo->pool, tvb, offset));
         offset += 4;
     } else if ((tvb_get_guint8(tvb, offset) & 0x3f) == 16) {
         offset += 1;
         proto_tree_add_item(tree, hf_gtpv2_mbms_ip_mc_dist_addrv6, tvb, offset, 16, ENC_NA);
-        proto_item_append_text(item, " IPv6 Dist %s", tvb_ip6_to_str(tvb, offset));
+        proto_item_append_text(item, " IPv6 Dist %s", tvb_ip6_to_str(pinfo->pool, tvb, offset));
         offset += 16;
     }
 
@@ -6248,12 +6248,12 @@ dissect_gtpv2_mbms_ip_mc_dist(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree 
     if ((tvb_get_guint8(tvb, offset) & 0x3f) == 4) {
         offset += 1;
         proto_tree_add_item(tree, hf_gtpv2_mbms_ip_mc_src_addrv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-        proto_item_append_text(item, " IPv4 Src %s", tvb_ip_to_str(tvb, offset));
+        proto_item_append_text(item, " IPv4 Src %s", tvb_ip_to_str(pinfo->pool, tvb, offset));
         offset += 4;
     } else if ((tvb_get_guint8(tvb, offset) & 0x3f) == 16) {
         offset += 1;
         proto_tree_add_item(tree, hf_gtpv2_mbms_ip_mc_src_addrv6, tvb, offset, 16, ENC_NA);
-        proto_item_append_text(item, " IPv6 Src %s", tvb_ip6_to_str(tvb, offset));
+        proto_item_append_text(item, " IPv6 Src %s", tvb_ip6_to_str(pinfo->pool, tvb, offset));
         offset += 16;
     }
 
@@ -11425,42 +11425,42 @@ void proto_register_gtpv2(void)
       },
       { &hf_gtpv2_rohc_profiles_bit0,
       { "Profile Identifier: 0x0002, UDP/IP", "gtpv2.rohc_profiles.b0",
-          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x0001,
+          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x01,
           NULL, HFILL }
       },
       { &hf_gtpv2_rohc_profiles_bit1,
       { "Profile Identifier: 0x0003, ESP/IP", "gtpv2.rohc_profiles.b1",
-          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x0002,
+          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x02,
           NULL, HFILL }
       },
       { &hf_gtpv2_rohc_profiles_bit2,
       { "Profile Identifier: 0x0004, IP", "gtpv2.rohc_profiles.b2",
-          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x0004,
+          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x04,
           NULL, HFILL }
       },
       { &hf_gtpv2_rohc_profiles_bit3,
       { "Profile Identifier: 0x0006, TCP/IP", "gtpv2.rohc_profiles.b3",
-          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x0008,
+          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x08,
           NULL, HFILL }
       },
       { &hf_gtpv2_rohc_profiles_bit4,
       { "Profile Identifier: 0x0102, UDP/IP", "gtpv2.rohc_profiles.b4",
-          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x0010,
+          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x10,
           NULL, HFILL }
       },
       { &hf_gtpv2_rohc_profiles_bit5,
       { "Profile Identifier: 0x0103, ESP/IP", "gtpv2.rohc_profiles.b5",
-          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x0020,
+          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x20,
           NULL, HFILL }
       },
       { &hf_gtpv2_rohc_profiles_bit6,
       { "Profile Identifier: 0x0104, IP", "gtpv2.rohc_profiles.b6",
-          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x0040,
+          FT_BOOLEAN, 8, TFS(&tfs_allowed_not_allowed), 0x40,
           NULL, HFILL }
       },
       { &hf_gtpv2_rohc_profiles_bit7,
       { "Spare", "gtpv2.rohc_profiles.b7",
-          FT_BOOLEAN, 8, NULL, 0x0080,
+          FT_BOOLEAN, 8, NULL, 0x80,
           NULL, HFILL }
       },
       { &hf_gtpv2_max_cid,
