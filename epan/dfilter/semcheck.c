@@ -511,7 +511,6 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 
 		case STTYPE_UNINITIALIZED:
 		case STTYPE_TEST:
-		case STTYPE_INTEGER:
 		case STTYPE_FVALUE:
 		case STTYPE_SET:
 		case STTYPE_PCRE:
@@ -800,7 +799,7 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 			}
 
 			if (type2 == STTYPE_STRING) {
-				fvalue = dfilter_fvalue_from_string(dfw, ftype1, st_arg2, NULL);
+				fvalue = dfilter_fvalue_from_string(dfw, ftype1, st_arg2, hfinfo1);
 			}
 			else if (type2 == STTYPE_CHARCONST &&
 			    strcmp(relation_string, "contains") == 0) {
@@ -1354,7 +1353,6 @@ check_relation(dfwork_t *dfw, const char *relation_string,
 
 		case STTYPE_UNINITIALIZED:
 		case STTYPE_TEST:
-		case STTYPE_INTEGER:
 		case STTYPE_FVALUE:
 		case STTYPE_SET:
 		default:
