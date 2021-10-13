@@ -6362,7 +6362,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>RawShark</source>
+        <source>Rawshark</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -7102,6 +7102,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>F1AP Messages</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NGAP</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NGAP Messages</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

@@ -6421,8 +6421,8 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>TShark</translation>
     </message>
     <message>
-        <source>RawShark</source>
-        <translation>RawShark</translation>
+        <source>Rawshark</source>
+        <translation>Rawshark</translation>
     </message>
     <message>
         <source>Dumpcap</source>
@@ -7162,6 +7162,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>F1AP Messages</source>
         <translation>Messaggi F1AP</translation>
+    </message>
+    <message>
+        <source>NGAP</source>
+        <translation>NGAP</translation>
+    </message>
+    <message>
+        <source>NGAP Messages</source>
+        <translation>Messaggi NGAP</translation>
     </message>
     <message>
         <source>Change the way packets are dissected</source>
@@ -8271,7 +8279,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source> before reloading Lua plugins</source>
-        <translation type="unfinished"></translation>
+        <translation> prima di ricaricare i plugin Lua</translation>
     </message>
     <message>
         <source>Please wait while Wireshark is initializing…</source>

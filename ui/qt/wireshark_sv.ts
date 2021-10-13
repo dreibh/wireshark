@@ -6421,8 +6421,8 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
         <translation>TShark</translation>
     </message>
     <message>
-        <source>RawShark</source>
-        <translation>RawShark</translation>
+        <source>Rawshark</source>
+        <translation>Rawshark</translation>
     </message>
     <message>
         <source>Dumpcap</source>
@@ -6438,7 +6438,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Text2pcap</source>
-        <translation>Text2pcap</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Website</source>
@@ -7161,6 +7161,14 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>F1AP Messages</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NGAP</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NGAP Messages</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
