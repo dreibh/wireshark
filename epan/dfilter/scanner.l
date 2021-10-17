@@ -85,7 +85,6 @@ DIAG_OFF_FLEX
 /*#undef YY_NO_UNPUT*/
 
 static int set_lval_str(int token, const char *token_value);
-static int set_lval_field(int token, header_field_info *hfinfo, const char *token_value);
 static int simple(int token, const char *token_value);
 #define SIMPLE(token) simple(token, yytext)
 
@@ -138,11 +137,11 @@ static int simple(int token, const char *token_value);
 "=="		return SIMPLE(TOKEN_TEST_EQ);
 "eq"		return SIMPLE(TOKEN_TEST_EQ);
 "!="			{
-	add_deprecated_token(yyextra->deprecated, "!=");
+	add_deprecated_token(yyextra->dfw, "!=");
 	return SIMPLE(TOKEN_TEST_NE);
 }
 "ne"			{
-	add_deprecated_token(yyextra->deprecated, "ne");
+	add_deprecated_token(yyextra->dfw, "ne");
 	return SIMPLE(TOKEN_TEST_NE);
 }
 ">"		return SIMPLE(TOKEN_TEST_GT);
@@ -393,25 +392,11 @@ static int simple(int token, const char *token_value);
 		([.][-+[:alnum:]_:]+)+[.]{0,2} |
 [-+[:alnum:]_:]+([.][-+[:alnum:]_:]+)*[.]{0,2} {
 	/* Is it a field name or some other value (float, integer, bytes, ...)? */
-	header_field_info *hfinfo;
 
 	/* Trailing dot is allowed for floats, but make sure that trailing ".."
 	 * is interpreted as a token on its own. */
 	if (strstr(yytext, "..")) {
 		yyless(yyleng-2);
-	}
-
-	hfinfo = proto_registrar_get_byname(yytext);
-	if (hfinfo) {
-		/* Yes, it's a field name */
-		return set_lval_field(TOKEN_FIELD, hfinfo, yytext);
-	}
-
-	hfinfo = proto_registrar_get_byalias(yytext);
-	if (hfinfo) {
-		/* Yes, it's an aliased field name */
-		add_deprecated_token(yyextra->deprecated, yytext);
-		return set_lval_field(TOKEN_FIELD, hfinfo, yytext);
 	}
 
 	/* No match, so treat it as an unparsed string */
@@ -490,13 +475,5 @@ set_lval_str(int token, const char *token_value)
 			ws_assert_not_reached();
 	}
 	stnode_init(df_lval, type_id, (gpointer)token_value, token_value);
-	return token;
-}
-
-static int
-set_lval_field(int token, header_field_info *hfinfo, const char *token_value)
-{
-	ws_assert(token == TOKEN_FIELD);
-	stnode_init(df_lval, STTYPE_FIELD, hfinfo, token_value);
 	return token;
 }

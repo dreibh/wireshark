@@ -53,7 +53,6 @@ typedef struct {
 	GString* quoted_string;
 	gboolean raw_string;
 	gboolean in_set;	/* true if parsing set elements for the membership operator */
-	GPtrArray *deprecated;
 } df_scanner_state_t;
 
 /* Constructor/Destructor prototypes for Lemon Parser */
@@ -76,7 +75,7 @@ void
 dfilter_parse_fail(dfwork_t *dfw, const char *format, ...) G_GNUC_PRINTF(2, 3);
 
 void
-add_deprecated_token(GPtrArray *deprecated, const char *token);
+add_deprecated_token(dfwork_t *dfw, const char *token);
 
 void
 free_deprecated(GPtrArray *deprecated);
@@ -89,6 +88,9 @@ dfilter_new_function(dfwork_t *dfw, const char *name);
 
 gboolean
 dfilter_str_to_gint32(dfwork_t *dfw, const char *s, gint32* pint);
+
+stnode_t *
+dfilter_resolve_unparsed(dfwork_t *dfw, stnode_t *node);
 
 const char *tokenstr(int token);
 

@@ -472,9 +472,7 @@ dfilter_g_regex_from_string(dfwork_t *dfw, stnode_t *st)
 static void
 check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 {
-#ifndef WS_DISABLE_DEBUG
 	static guint i = 0;
-#endif
 
 	ws_debug("4 check_exists() [%u]", i++);
 	log_stnode(st_arg1);
@@ -657,21 +655,19 @@ check_drange_sanity(dfwork_t *dfw, stnode_t *st)
 	}
 }
 
-static stnode_t *
+static void
 convert_to_bytes(stnode_t *arg)
 {
-	stnode_t      *new_st;
+	stnode_t      *entity1;
 	drange_node   *rn;
 
-	new_st = stnode_new(STTYPE_RANGE, NULL, arg->token_value);
-
+	entity1 = stnode_dup(arg);
 	rn = drange_node_new();
 	drange_node_set_start_offset(rn, 0);
 	drange_node_set_to_the_end(rn);
-	/* new_st is owner of arg in this step */
-	sttype_range_set1(new_st, arg, rn);
 
-	return new_st;
+	stnode_replace(arg, STTYPE_RANGE, NULL);
+	sttype_range_set1(arg, entity1, rn);
 }
 
 static void
@@ -737,7 +733,6 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 		FtypeCanFunc can_func, gboolean allow_partial_value,
 		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
 {
-	stnode_t		*new_st;
 	sttype_id_t		type2;
 	header_field_info	*hfinfo1, *hfinfo2;
 	df_func_def_t		*funcdef;
@@ -822,9 +817,7 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 			}
 
 			/* Convert entire field to bytes */
-			new_st = convert_to_bytes(st_arg1);
-
-			sttype_test_set2_args(st_node, new_st, st_arg2);
+			convert_to_bytes(st_arg1);
 		}
 	}
 	else if (type2 == STTYPE_FUNCTION) {
@@ -1032,10 +1025,9 @@ static void
 check_relation_LHS_RANGE(dfwork_t *dfw, const char *relation_string,
 		FtypeCanFunc can_func _U_,
 		gboolean allow_partial_value,
-		stnode_t *st_node,
+		stnode_t *st_node _U_,
 		stnode_t *st_arg1, stnode_t *st_arg2)
 {
-	stnode_t		*new_st;
 	sttype_id_t		type2;
 	header_field_info	*hfinfo2;
 	ftenum_t		ftype2;
@@ -1062,9 +1054,7 @@ check_relation_LHS_RANGE(dfwork_t *dfw, const char *relation_string,
 			}
 
 			/* Convert entire field to bytes */
-			new_st = convert_to_bytes(st_arg2);
-
-			sttype_test_set2_args(st_node, st_arg1, new_st);
+			convert_to_bytes(st_arg2);
 		}
 	}
 	else if (type2 == STTYPE_STRING) {
@@ -1119,9 +1109,7 @@ check_relation_LHS_RANGE(dfwork_t *dfw, const char *relation_string,
 			}
 
 			/* Convert function result to bytes */
-			new_st = convert_to_bytes(st_arg2);
-
-			sttype_test_set2_args(st_node, st_arg1, new_st);
+			convert_to_bytes(st_arg2);
 		}
 
 		check_function(dfw, st_arg2);
@@ -1160,9 +1148,8 @@ static void
 check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
 		FtypeCanFunc can_func,
 		gboolean allow_partial_value,
-		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
+		stnode_t *st_node _U_, stnode_t *st_arg1, stnode_t *st_arg2)
 {
-	stnode_t		*new_st;
 	sttype_id_t		type2;
 	header_field_info	*hfinfo2;
 	ftenum_t		ftype1, ftype2;
@@ -1235,9 +1222,7 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
 			}
 
 			/* Convert function result to bytes */
-			new_st = convert_to_bytes(st_arg1);
-
-			sttype_test_set2_args(st_node, new_st, st_arg2);
+			convert_to_bytes(st_arg1);
 		}
 	}
 	else if (type2 == STTYPE_FUNCTION) {
@@ -1277,9 +1262,7 @@ check_relation(dfwork_t *dfw, const char *relation_string,
 		FtypeCanFunc can_func, stnode_t *st_node,
 		stnode_t *st_arg1, stnode_t *st_arg2)
 {
-#ifndef WS_DISABLE_DEBUG
 	static guint i = 0;
-#endif
 	header_field_info   *hfinfo;
 	char                *s;
 
@@ -1297,16 +1280,13 @@ check_relation(dfwork_t *dfw, const char *relation_string,
 	 * protocol, or similar for a number of other possibilities
 	 * ("dc", "ff", "fefd"), and also catches the case where the user
 	 * has written a generic string on the RHS for a "contains" or
-	 * "matches" relation. (XXX: There's still a bit of a confusing mess;
-	 * byte arrays take precedent over generic strings when unquoted, so
-	 * "field contains data" matches "\x64 \x61 \x74 \x61" but
-	 * "field contains dc" matches "\xdc" and not "\x64 \x43", but that's
-	 * an underlying issue.)
+	 * "matches" relation with a string field. (The now unparsed value
+	 * will be interpreted in a way that matches the LHS; e.g.
+	 * FT_PROTOCOL and FT_BYTES fields expect byte arrays whereas
+	 * FT_STRING[Z][PAD] fields expect strings.)
 	 *
-	 * XXX: Is there a better way to do this in the lex scanner or grammar
-	 * parser step instead?  Should the determination of whether something
-	 * is a field occur later than it does currently?  This is kind of a
-	 * hack.
+	 * XXX: Is there a better way to do this in the grammar parser,
+	 * which now determines whether something is a field?
 	 */
 
 	if (stnode_type_id(st_arg2) == STTYPE_FIELD) {
@@ -1363,9 +1343,7 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 {
 	test_op_t		st_op, st_arg_op;
 	stnode_t		*st_arg1, *st_arg2;
-#ifndef WS_DISABLE_DEBUG
 	static guint i = 0;
-#endif
 
 	ws_debug("3 check_test(stnode_t *st_node = %p) [%u]\n", st_node, i++);
 	log_stnode(st_node);
@@ -1391,7 +1369,7 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 				sttype_test_get(st_arg1, &st_arg_op, NULL, NULL);
 				if (st_arg_op == TEST_OP_AND || st_arg_op == TEST_OP_OR) {
 					if (st_op != st_arg_op && !stnode_inside_parens(st_arg1))
-						g_ptr_array_add(dfw->deprecated, g_strdup("suggest parentheses around '&&' within '||'"));
+						add_deprecated_token(dfw, "suggest parentheses around '&&' within '||'");
 				}
 			}
 
@@ -1399,7 +1377,7 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 				sttype_test_get(st_arg2, &st_arg_op, NULL, NULL);
 				if (st_arg_op == TEST_OP_AND || st_arg_op == TEST_OP_OR) {
 					if (st_op != st_arg_op && !stnode_inside_parens(st_arg2))
-						g_ptr_array_add(dfw->deprecated, g_strdup("suggest parentheses around '&&' within '||'"));
+						add_deprecated_token(dfw, "suggest parentheses around '&&' within '||'");
 				}
 			}
 
@@ -1450,9 +1428,8 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 static void
 semcheck(dfwork_t *dfw, stnode_t *st_node)
 {
-#ifndef WS_DISABLE_DEBUG
 	static guint i = 0;
-#endif
+
 	ws_debug("2 semcheck(stnode_t *st_node = %p) [%u]", st_node, i++);
 
 	/* The parser assures that the top-most syntax-tree
@@ -1474,9 +1451,7 @@ gboolean
 dfw_semcheck(dfwork_t *dfw)
 {
 	volatile gboolean ok_filter = TRUE;
-#ifndef WS_DISABLE_DEBUG
 	static guint i = 0;
-#endif
 
 	ws_debug("1 dfw_semcheck(dfwork_t *dfw = %p) [%u]", dfw, i);
 

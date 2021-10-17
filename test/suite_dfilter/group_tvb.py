@@ -63,4 +63,11 @@ class case_tvb(unittest.TestCase):
         dfilter = 'http contains "HEAD"'
         checkDFilterCount(dfilter, 1)
 
+    def test_protocol_1(self, checkDFilterSucceed):
+        dfilter = 'frame contains aa.bb.ff'
+        checkDFilterSucceed(dfilter)
+
+    def test_protocol_2(self, checkDFilterFail):
+        dfilter = 'frame contains aa.bb.hh'
+        checkDFilterFail(dfilter, 'not a valid byte string.')
 
