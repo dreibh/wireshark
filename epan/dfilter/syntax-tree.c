@@ -119,6 +119,8 @@ _node_init(stnode_t *node, sttype_id_t type_id, gpointer data)
 		node->data = NULL;
 	}
 	else {
+		/* Creating an initialized node with a NULL pointer is
+		 * allowed and needs to be safe. The parser relies on that. */
 		type = sttype_lookup(type_id);
 		ws_assert(type);
 		node->type = type;
@@ -259,22 +261,26 @@ stnode_set_inside_parens(stnode_t *node, gboolean inside)
 static char *
 _node_tostr(stnode_t *node, gboolean pretty)
 {
-	const char *s;
+	char *s, *repr;
 
 	if (node->type->func_tostr == NULL)
-		s = "FIXME";
+		s = g_strdup("FIXME");
 	else
 		s = node->type->func_tostr(node->data, pretty);
 
 	if (pretty)
-		return g_strdup(s);
+		return s;
 
-	return g_strdup_printf("%s<%s>", stnode_type_name(node), s);
+	repr = g_strdup_printf("%s<%s>", stnode_type_name(node), s);
+	g_free(s);
+	return repr;
 }
 
 const char *
 stnode_tostr(stnode_t *node, gboolean pretty)
 {
+	ws_assert_magic(node, STNODE_MAGIC);
+
 	if (pretty && node->repr_display != NULL)
 		return node->repr_display;
 
