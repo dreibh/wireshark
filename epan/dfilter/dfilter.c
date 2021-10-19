@@ -78,6 +78,32 @@ dfilter_new_function(dfwork_t *dfw, const char *name)
 	return stnode_new(STTYPE_FUNCTION, def, name);
 }
 
+/* Gets a regex from a string, and sets the error message on failure. */
+stnode_t *
+dfilter_new_regex(dfwork_t *dfw, stnode_t *node)
+{
+	fvalue_regex_t *pcre;
+	char *errmsg = NULL;
+
+	if (stnode_type_id(node) != STTYPE_STRING) {
+		dfilter_parse_fail(dfw, "Expected a string not %s", stnode_todisplay(node));
+		return node;
+	}
+
+	const char *patt = stnode_data(node);
+	ws_debug("Compile regex pattern: %s", patt);
+
+	pcre = fvalue_regex_compile(patt, &errmsg);
+	if (errmsg) {
+		dfilter_parse_fail(dfw, "%s", errmsg);
+		g_free(errmsg);
+		return node;
+	}
+
+	stnode_replace(node, STTYPE_PCRE, pcre);
+	return node;
+}
+
 gboolean
 dfilter_str_to_gint32(dfwork_t *dfw, const char *s, gint32* pint)
 {
@@ -129,6 +155,38 @@ dfilter_str_to_gint32(dfwork_t *dfw, const char *s, gint32* pint)
 	return TRUE;
 }
 
+/*
+ * Tries to convert an STTYPE_UNPARSED to a STTYPE_FIELD. If it's not registered as
+ * a field pass UNPARSED to the semantic check.
+ */
+stnode_t *
+dfilter_resolve_unparsed(dfwork_t *dfw, stnode_t *node)
+{
+	const char *name;
+	header_field_info *hfinfo;
+
+	ws_assert(stnode_type_id(node) == STTYPE_UNPARSED);
+
+	name = stnode_data(node);
+
+	hfinfo = proto_registrar_get_byname(name);
+	if (hfinfo != NULL) {
+		/* It's a field name */
+		stnode_replace(node, STTYPE_FIELD, hfinfo);
+		return node;
+	}
+
+	hfinfo = proto_registrar_get_byalias(name);
+	if (hfinfo != NULL) {
+		/* It's an aliased field name */
+		add_deprecated_token(dfw, name);
+		stnode_replace(node, STTYPE_FIELD, hfinfo);
+		return node;
+	}
+
+	/* It's not a field. */
+	return node;
+}
 
 /* Initialize the dfilter module */
 void
@@ -172,13 +230,15 @@ dfilter_cleanup(void)
 }
 
 static dfilter_t*
-dfilter_new(void)
+dfilter_new(GPtrArray *deprecated)
 {
 	dfilter_t	*df;
 
 	df = g_new0(dfilter_t, 1);
 	df->insns = NULL;
-	df->deprecated = NULL;
+
+	if (deprecated)
+		df->deprecated = g_ptr_array_ref(deprecated);
 
 	return df;
 }
@@ -221,13 +281,8 @@ dfilter_free(dfilter_t *df)
 		g_list_free(df->registers[i]);
 	}
 
-	if (df->deprecated) {
-		for (i = 0; i < df->deprecated->len; ++i) {
-			gchar *depr = (gchar *)g_ptr_array_index(df->deprecated, i);
-			g_free(depr);
-		}
-		g_ptr_array_free(df->deprecated, TRUE);
-	}
+	if (df->deprecated)
+		g_ptr_array_unref(df->deprecated);
 
 	g_free(df->registers);
 	g_free(df->attempted_load);
@@ -270,6 +325,9 @@ dfwork_free(dfwork_t *dfw)
 		free_insns(dfw->consts);
 	}
 
+	if (dfw->deprecated)
+		g_ptr_array_unref(dfw->deprecated);
+
 	/*
 	 * We don't free the error message string; our caller will return
 	 * it to its caller.
@@ -292,7 +350,6 @@ const char *tokenstr(int token)
 		case TOKEN_TEST_MATCHES: return "TEST_MATCHES";
 		case TOKEN_TEST_BITWISE_AND: return "TEST_BITWISE_AND";
 		case TOKEN_TEST_NOT:	return "TEST_NOT";
-		case TOKEN_FIELD:	return "FIELD";
 		case TOKEN_STRING:	return "STRING";
 		case TOKEN_CHARCONST:	return "CHARCONST";
 		case TOKEN_UNPARSED:	return "UNPARSED";
@@ -315,26 +372,21 @@ const char *tokenstr(int token)
 }
 
 void
-add_deprecated_token(GPtrArray *deprecated, const char *token)
+add_deprecated_token(dfwork_t *dfw, const char *token)
 {
+	if (dfw->deprecated == NULL)
+		dfw->deprecated  = g_ptr_array_new_full(0, g_free);
+
+	GPtrArray *deprecated = dfw->deprecated;
+
 	for (guint i = 0; i < deprecated->len; i++) {
-		const char *str = (const char *)g_ptr_array_index(deprecated, i);
+		const char *str = g_ptr_array_index(deprecated, i);
 		if (g_ascii_strcasecmp(token, str) == 0) {
 			/* It's already in our list */
 			return;
 		}
 	}
 	g_ptr_array_add(deprecated, g_strdup(token));
-}
-
-void
-free_deprecated(GPtrArray *deprecated)
-{
-	for (guint i = 0; i < deprecated->len; ++i) {
-		gpointer *depr = g_ptr_array_index(deprecated,i);
-		g_free(depr);
-	}
-	g_ptr_array_free(deprecated, TRUE);
 }
 
 gboolean
@@ -348,8 +400,7 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 	yyscan_t	scanner;
 	YY_BUFFER_STATE in_buffer;
 	gboolean failure = FALSE;
-	/* XXX, GHashTable */
-	GPtrArray	*deprecated;
+	unsigned token_count = 0;
 
 	ws_assert(dfp);
 
@@ -378,13 +429,10 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 
 	dfw = dfwork_new();
 
-	deprecated = g_ptr_array_new();
-
 	state.dfw = dfw;
 	state.quoted_string = NULL;
 	state.in_set = FALSE;
 	state.raw_string = FALSE;
-	state.deprecated = deprecated;
 
 	df_set_extra(&state, scanner);
 
@@ -403,7 +451,9 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 			break;
 		}
 
-		ws_debug("Token: %d %s", token, tokenstr(token));
+		ws_debug("(%u) Token %d %s %s",
+				++token_count, token, tokenstr(token),
+				stnode_token_value(df_lval));
 
 		/* Give the token to the parser */
 		Dfilter(ParserObj, token, df_lval, dfw);
@@ -449,12 +499,9 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 	 * it and set *dfp to NULL */
 	if (dfw->st_root == NULL) {
 		*dfp = NULL;
-		free_deprecated(deprecated);
 	}
 	else {
 		log_syntax_tree(LOG_LEVEL_NOISY, dfw->st_root, "Syntax tree before semantic check");
-
-		dfw->deprecated = deprecated;
 
 		/* Check semantics and do necessary type conversion*/
 		if (!dfw_semcheck(dfw)) {
@@ -467,7 +514,7 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 		dfw_gencode(dfw);
 
 		/* Tuck away the bytecode in the dfilter_t */
-		dfilter = dfilter_new();
+		dfilter = dfilter_new(dfw->deprecated);
 		dfilter->insns = dfw->insns;
 		dfilter->consts = dfw->consts;
 		dfw->insns = NULL;
@@ -484,9 +531,6 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 
 		/* Initialize constants */
 		dfvm_init_const(dfilter);
-
-		/* Add any deprecated items */
-		dfilter->deprecated = deprecated;
 
 		/* And give it to the user. */
 		*dfp = dfilter;
@@ -506,7 +550,6 @@ FAILURE:
 		global_dfw = NULL;
 		dfwork_free(dfw);
 	}
-	free_deprecated(deprecated);
 	if (err_msg != NULL) {
 		/*
 		 * Default error message.

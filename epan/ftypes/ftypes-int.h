@@ -64,7 +64,7 @@ typedef double (*FvalueGetFloatingFunc)(fvalue_t*);
 typedef int (*FvalueCmp)(const fvalue_t*, const fvalue_t*);
 typedef gboolean (*FvalueBitwiseAnd)(const fvalue_t*, const fvalue_t*);
 typedef gboolean (*FvalueContains)(const fvalue_t*, const fvalue_t*);
-typedef gboolean (*FvalueMatches)(const fvalue_t*, const GRegex*);
+typedef gboolean (*FvalueMatches)(const fvalue_t*, const fvalue_regex_t*);
 
 typedef guint (*FvalueLen)(fvalue_t*);
 typedef void (*FvalueSlice)(fvalue_t*, GByteArray *, guint offset, guint length);
@@ -132,7 +132,9 @@ struct _ftype_t {
 		g_slice_free(fvalue_t, fv);			\
 	}
 
-#endif
+GByteArray *byte_array_from_unparsed(const char *s, gchar **err_msg);
+
+#endif /* FTYPES_INT_H */
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

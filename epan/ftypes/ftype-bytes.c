@@ -233,8 +233,8 @@ bytes_from_string(fvalue_t *fv, const char *s, gchar **err_msg _U_)
 	return TRUE;
 }
 
-static gboolean
-bytes_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
+GByteArray *
+byte_array_from_unparsed(const char *s, gchar **err_msg)
 {
 	GByteArray	*bytes;
 	gboolean	res;
@@ -256,8 +256,20 @@ bytes_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U
 		if (err_msg != NULL)
 			*err_msg = g_strdup_printf("\"%s\" is not a valid byte string.", s);
 		g_byte_array_free(bytes, TRUE);
-		return FALSE;
+		return NULL;
 	}
+
+	return bytes;
+}
+
+static gboolean
+bytes_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
+{
+	GByteArray	*bytes;
+
+	bytes = byte_array_from_unparsed(s, err_msg);
+	if (bytes == NULL)
+		return FALSE;
 
 	/* Free up the old value, if we have one */
 	bytes_fvalue_free(fv);
@@ -574,20 +586,11 @@ cmp_contains(const fvalue_t *fv_a, const fvalue_t *fv_b)
 }
 
 static gboolean
-cmp_matches(const fvalue_t *fv, const GRegex *regex)
+cmp_matches(const fvalue_t *fv, const fvalue_regex_t *regex)
 {
 	GByteArray *a = fv->value.bytes;
 
-	return g_regex_match_full(
-		regex,			/* Compiled PCRE */
-		(char *)a->data,	/* The data to check for the pattern... */
-		(int)a->len,		/* ... and its length */
-		0,			/* Start offset within data */
-		(GRegexMatchFlags)0,	/* GRegexMatchFlags */
-		NULL,			/* We are not interested in the match information */
-		NULL			/* We don't want error information */
-		);
-	/* NOTE - DO NOT g_free(data) */
+	return fvalue_regex_matches(regex, a->data, a->len);
 }
 
 void
