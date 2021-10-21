@@ -92,27 +92,23 @@ if(ASCIIDOCTOR_FOUND)
 	ASCIIDOCTOR2ROFFMAN(1 ${MAN1_SOURCE_FILES})
 	ASCIIDOCTOR2ROFFMAN(4 ${MAN4_SOURCE_FILES})
 	ASCIIDOCTOR2HTMLMAN(${MAN1_SOURCE_FILES} ${MAN4_SOURCE_FILES})
-endif()
 
-add_custom_target(manpages DEPENDS
-	generate_roff_man1_pages
-	generate_roff_man4_pages
-	${MAN1_INSTALL_FILES}
-	${MAN4_INSTALL_FILES}
-)
+	add_custom_target(manpages DEPENDS
+		${MAN1_INSTALL_FILES}
+		${MAN4_INSTALL_FILES}
+	)
+	set_target_properties(manpages PROPERTIES FOLDER "Documentation")
+endif()
 
 add_custom_target(
 	docs ALL
 	DEPENDS
 		${CMAKE_CURRENT_BINARY_DIR}/AUTHORS-SHORT
-		generate_roff_man1_pages
-		generate_roff_man4_pages
-		generate_html_man_pages
 		${MAN1_INSTALL_FILES}
 		${MAN4_INSTALL_FILES}
 		${HTML_INSTALL_FILES}
 )
-set_target_properties(docs PROPERTIES FOLDER "Docs")
+set_target_properties(docs PROPERTIES FOLDER "Documentation")
 
 if(ASCIIDOCTOR_FOUND)
 	install(
