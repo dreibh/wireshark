@@ -47,6 +47,7 @@
 #include <QElapsedTimer>
 #include <QKeyEvent>
 #include <QMessageBox>
+#include <QMutex>
 #include <QPrintDialog>
 #include <QPrinter>
 #include <QScrollBar>
@@ -62,6 +63,12 @@
 
 // Matches SplashOverlay.
 static int info_update_freq_ = 100;
+
+// Handle the loop breaking notification properly
+static QMutex loop_break_mutex;
+
+// Indicates that a Follow Stream is currently running
+static gboolean isReadRunning;
 
 FollowStreamDialog::FollowStreamDialog(QWidget &parent, CaptureFile &cf, follow_type_t type) :
     WiresharkDialog(parent, cf),
@@ -543,6 +550,11 @@ void FollowStreamDialog::resetStream()
 frs_return_t
 FollowStreamDialog::readStream()
 {
+
+    // interrupt any reading already running
+    loop_break_mutex.lock();
+    isReadRunning = FALSE;
+    loop_break_mutex.unlock();
 
     ui->teStreamContent->clear();
     text_pos_to_packet_.clear();
@@ -1215,8 +1227,12 @@ FollowStreamDialog::readFollowStream()
 
     elapsed_timer.start();
 
+    loop_break_mutex.lock();
+    isReadRunning = TRUE;
+    loop_break_mutex.unlock();
+
     for (cur = g_list_last(follow_info_.payload); cur; cur = g_list_previous(cur)) {
-        if (dialogClosed()) break;
+        if (dialogClosed() || !isReadRunning) break;
 
         follow_record = (follow_record_t *)cur->data;
         skip = FALSE;
@@ -1254,6 +1270,10 @@ FollowStreamDialog::readFollowStream()
             }
         }
     }
+
+    loop_break_mutex.lock();
+    isReadRunning = FALSE;
+    loop_break_mutex.unlock();
 
     return FRS_OK;
 }

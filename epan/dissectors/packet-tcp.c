@@ -2194,7 +2194,16 @@ tcp_analyze_sequence_number(packet_info *pinfo, guint32 seq, guint32 ack, guint3
         if(tcpd->mptcp_analysis && (tcpd->mptcp_analysis->mp_operations!=tcpd->fwd->mp_operations)) {
             /* just ignore this DUPLICATE ACK */
         } else {
-            tcpd->fwd->tcp_analyze_seq_info->dupacknum++;
+            switch(tcpd->fwd->tcp_analyze_seq_info->dupacknum) {
+                /* neutralize any 'TCP ACK unseen segment' */
+                case -1:
+                    tcpd->fwd->tcp_analyze_seq_info->dupacknum = 1;
+                    break;
+                /* in normal circumstances, just increment the counter */
+                default:
+                    tcpd->fwd->tcp_analyze_seq_info->dupacknum++;
+                    break;
+            }
             if(!tcpd->ta) {
                 tcp_analyze_get_acked_struct(pinfo->num, seq, ack, TRUE, tcpd);
             }
@@ -2228,11 +2237,23 @@ finished_fwd:
         if(!tcpd->ta) {
             tcp_analyze_get_acked_struct(pinfo->num, seq, ack, TRUE, tcpd);
         }
-        tcpd->ta->flags|=TCP_A_ACK_LOST_PACKET;
         /* update 'max seq to be acked' in the other direction so we don't get
          * this indication again.
          */
-        tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked=tcpd->rev->tcp_analyze_seq_info->nextseq;
+        if( tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked > tcpd->rev->tcp_analyze_seq_info->nextseq ) {
+          tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked=tcpd->rev->tcp_analyze_seq_info->nextseq;
+          tcpd->ta->flags|=TCP_A_ACK_LOST_PACKET;
+        }
+        /* sometimes the other direction is stalled with pure ACKs, but we still
+         * want to avoid multiple messages related to the very same lost packet.
+         * For this, we need to count at least one ACK seen in this direction,
+         * and decrementation is not necessary.
+         */
+        else {
+          if(tcpd->rev->tcp_analyze_seq_info->dupacknum == 0)
+            tcpd->ta->flags|=TCP_A_ACK_LOST_PACKET;
+          tcpd->rev->tcp_analyze_seq_info->dupacknum = -1;
+        }
     }
 
 
@@ -2399,7 +2420,10 @@ finished_checking_retransmission_type:
     }
 
     /* Store the highest continuous seq number seen so far for 'max seq to be acked',
-     so we can detect TCP_A_ACK_LOST_PACKET condition
+     * so we can detect TCP_A_ACK_LOST_PACKET condition.
+     * If this ever happens, this boundary value can "jump" further in order to
+     * avoid duplicating multiple messages for the very same lost packet. See later
+     * how ACKED LOST PACKET are handled.
      */
     if(EQ_SEQ(seq, tcpd->fwd->tcp_analyze_seq_info->maxseqtobeacked) || !tcpd->fwd->tcp_analyze_seq_info->maxseqtobeacked) {
         if( !tcpd->ta || !(tcpd->ta->flags&TCP_A_ZERO_WINDOW_PROBE) ) {
@@ -4025,7 +4049,16 @@ tcp_dissect_pdus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
              * Support protocols which have a variable length which cannot
              * always be determined within the given fixed_len.
              */
-            DISSECTOR_ASSERT(proto_desegment && pinfo->can_desegment);
+            /*
+             * If another segment was requested but we can't do reassembly,
+             * abort and warn about the unreassembled packet.
+             */
+            THROW_ON(!(proto_desegment && pinfo->can_desegment), FragmentBoundsError);
+            /*
+             * Tell the TCP dissector where the data for this message
+             * starts in the data it handed us, and that we need one
+             * more segment, and return.
+             */
             pinfo->desegment_offset = offset;
             pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
             return;

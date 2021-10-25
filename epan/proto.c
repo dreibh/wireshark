@@ -448,6 +448,7 @@ static const char *reserved_filter_names[] = {
 	/* Display filter keywords. */
 	"eq",
 	"ne",
+	"any_ne",
 	"gt",
 	"ge",
 	"lt",
@@ -522,7 +523,7 @@ proto_init(GSList *register_all_plugin_protocols_list,
 	proto_short_names  = g_hash_table_new(g_str_hash, g_str_equal);
 	proto_filter_names = g_hash_table_new(g_str_hash, g_str_equal);
 
-	proto_reserved_filter_names = g_hash_table_new(g_str_hash, NULL);
+	proto_reserved_filter_names = g_hash_table_new(g_str_hash, g_str_equal);
 	for (const char **ptr = reserved_filter_names; *ptr != NULL; ptr++) {
 		/* GHashTable has no key destructor. */
 		g_hash_table_add(proto_reserved_filter_names, *(char **)ptr);
