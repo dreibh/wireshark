@@ -145,6 +145,7 @@ t38.reassembly: FALSE
 tacplus.desegment: FALSE
 tali.reassemble: FALSE
 tcp.desegment_tcp_streams: FALSE
+tcpcl.desegment_transfer: FALSE
 tcpros.desegment_tcpros_messages: FALSE
 tds.desegment_buffers: FALSE
 thrift.desegment_framed: FALSE

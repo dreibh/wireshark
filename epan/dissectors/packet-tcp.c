@@ -2194,7 +2194,16 @@ tcp_analyze_sequence_number(packet_info *pinfo, guint32 seq, guint32 ack, guint3
         if(tcpd->mptcp_analysis && (tcpd->mptcp_analysis->mp_operations!=tcpd->fwd->mp_operations)) {
             /* just ignore this DUPLICATE ACK */
         } else {
-            tcpd->fwd->tcp_analyze_seq_info->dupacknum++;
+            switch(tcpd->fwd->tcp_analyze_seq_info->dupacknum) {
+                /* neutralize any 'TCP ACK unseen segment' */
+                case -1:
+                    tcpd->fwd->tcp_analyze_seq_info->dupacknum = 1;
+                    break;
+                /* in normal circumstances, just increment the counter */
+                default:
+                    tcpd->fwd->tcp_analyze_seq_info->dupacknum++;
+                    break;
+            }
             if(!tcpd->ta) {
                 tcp_analyze_get_acked_struct(pinfo->num, seq, ack, TRUE, tcpd);
             }
@@ -2228,11 +2237,23 @@ finished_fwd:
         if(!tcpd->ta) {
             tcp_analyze_get_acked_struct(pinfo->num, seq, ack, TRUE, tcpd);
         }
-        tcpd->ta->flags|=TCP_A_ACK_LOST_PACKET;
         /* update 'max seq to be acked' in the other direction so we don't get
          * this indication again.
          */
-        tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked=tcpd->rev->tcp_analyze_seq_info->nextseq;
+        if( tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked > tcpd->rev->tcp_analyze_seq_info->nextseq ) {
+          tcpd->rev->tcp_analyze_seq_info->maxseqtobeacked=tcpd->rev->tcp_analyze_seq_info->nextseq;
+          tcpd->ta->flags|=TCP_A_ACK_LOST_PACKET;
+        }
+        /* sometimes the other direction is stalled with pure ACKs, but we still
+         * want to avoid multiple messages related to the very same lost packet.
+         * For this, we need to count at least one ACK seen in this direction,
+         * and decrementation is not necessary.
+         */
+        else {
+          if(tcpd->rev->tcp_analyze_seq_info->dupacknum == 0)
+            tcpd->ta->flags|=TCP_A_ACK_LOST_PACKET;
+          tcpd->rev->tcp_analyze_seq_info->dupacknum = -1;
+        }
     }
 
 
@@ -2399,7 +2420,10 @@ finished_checking_retransmission_type:
     }
 
     /* Store the highest continuous seq number seen so far for 'max seq to be acked',
-     so we can detect TCP_A_ACK_LOST_PACKET condition
+     * so we can detect TCP_A_ACK_LOST_PACKET condition.
+     * If this ever happens, this boundary value can "jump" further in order to
+     * avoid duplicating multiple messages for the very same lost packet. See later
+     * how ACKED LOST PACKET are handled.
      */
     if(EQ_SEQ(seq, tcpd->fwd->tcp_analyze_seq_info->maxseqtobeacked) || !tcpd->fwd->tcp_analyze_seq_info->maxseqtobeacked) {
         if( !tcpd->ta || !(tcpd->ta->flags&TCP_A_ZERO_WINDOW_PROBE) ) {
@@ -4025,7 +4049,16 @@ tcp_dissect_pdus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
              * Support protocols which have a variable length which cannot
              * always be determined within the given fixed_len.
              */
-            DISSECTOR_ASSERT(proto_desegment && pinfo->can_desegment);
+            /*
+             * If another segment was requested but we can't do reassembly,
+             * abort and warn about the unreassembled packet.
+             */
+            THROW_ON(!(proto_desegment && pinfo->can_desegment), FragmentBoundsError);
+            /*
+             * Tell the TCP dissector where the data for this message
+             * starts in the data it handed us, and that we need one
+             * more segment, and return.
+             */
             pinfo->desegment_offset = offset;
             pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
             return;
@@ -6163,6 +6196,7 @@ decode_tcp_ports(tvbuff_t *tvb, int offset, packet_info *pinfo,
     tvbuff_t *next_tvb;
     int low_port, high_port;
     int save_desegment_offset;
+    gboolean try_low_port, try_high_port, try_server_port;
     guint32 save_desegment_len;
     heur_dtbl_entry_t *hdtbl_entry;
     exp_pdu_data_t *exp_pdu_data;
@@ -6206,6 +6240,60 @@ decode_tcp_ports(tvbuff_t *tvb, int offset, packet_info *pinfo,
         return TRUE;
     }
 
+    /* If the user has manually configured one of the server, low, or high
+     * ports to a dissector other than the default (via Decode As or the
+     * preferences associated with Decode As), try those first, in that order.
+     */
+    try_server_port = FALSE;
+    if (tcpd && tcpd->server_port != 0) {
+        if (dissector_is_uint_changed(subdissector_table, tcpd->server_port)) {
+            if (dissector_try_uint_new(subdissector_table, tcpd->server_port, next_tvb, pinfo, tree, TRUE, tcpinfo)) {
+                pinfo->want_pdu_tracking -= !!(pinfo->want_pdu_tracking);
+                handle_export_pdu_dissection_table(pinfo, next_tvb, tcpd->server_port, tcpinfo);
+                return TRUE;
+            }
+        } else {
+            /* The default; try it later */
+            try_server_port = TRUE;
+        }
+    }
+
+    if (src_port > dst_port) {
+        low_port = dst_port;
+        high_port = src_port;
+    } else {
+        low_port = src_port;
+        high_port = dst_port;
+    }
+
+    try_low_port = FALSE;
+    if (low_port != 0) {
+        if (dissector_is_uint_changed(subdissector_table, low_port)) {
+            if (dissector_try_uint_new(subdissector_table, low_port, next_tvb, pinfo, tree, TRUE, tcpinfo)) {
+                pinfo->want_pdu_tracking -= !!(pinfo->want_pdu_tracking);
+                handle_export_pdu_dissection_table(pinfo, next_tvb, low_port, tcpinfo);
+                return TRUE;
+            }
+        } else {
+            /* The default; try it later */
+            try_low_port = TRUE;
+        }
+    }
+
+    try_high_port = FALSE;
+    if (high_port != 0) {
+        if (dissector_is_uint_changed(subdissector_table, high_port)) {
+            if (dissector_try_uint_new(subdissector_table, high_port, next_tvb, pinfo, tree, TRUE, tcpinfo)) {
+                pinfo->want_pdu_tracking -= !!(pinfo->want_pdu_tracking);
+                handle_export_pdu_dissection_table(pinfo, next_tvb, high_port, tcpinfo);
+                return TRUE;
+            }
+        } else {
+            /* The default; try it later */
+            try_high_port = TRUE;
+        }
+    }
+
     if (try_heuristic_first) {
         /* do lookup with the heuristic subdissector table */
         if (dissector_try_heuristic(heur_subdissector_list, next_tvb, pinfo, tree, &hdtbl_entry, tcpinfo)) {
@@ -6224,7 +6312,7 @@ decode_tcp_ports(tvbuff_t *tvb, int offset, packet_info *pinfo,
        1) we pick the same dissector for traffic going in both directions;
 
        2) we prefer the port number that's more likely to be the right
-       one (as that prefers well-known ports to reserved ports);
+       one (as that prefers prefers well-known ports to reserved ports);
 
        although there is, of course, no guarantee that any such strategy
        will always pick the right port number.
@@ -6232,28 +6320,20 @@ decode_tcp_ports(tvbuff_t *tvb, int offset, packet_info *pinfo,
        XXX - we ignore port numbers of 0, as some dissectors use a port
        number of 0 to disable the port. */
 
-    if (tcpd && tcpd->server_port != 0 &&
+    if (try_server_port &&
         dissector_try_uint_new(subdissector_table, tcpd->server_port, next_tvb, pinfo, tree, TRUE, tcpinfo)) {
         pinfo->want_pdu_tracking -= !!(pinfo->want_pdu_tracking);
         handle_export_pdu_dissection_table(pinfo, next_tvb, tcpd->server_port, tcpinfo);
         return TRUE;
     }
 
-    if (src_port > dst_port) {
-        low_port = dst_port;
-        high_port = src_port;
-    } else {
-        low_port = src_port;
-        high_port = dst_port;
-    }
-
-    if (low_port != 0 &&
+    if (try_low_port &&
         dissector_try_uint_new(subdissector_table, low_port, next_tvb, pinfo, tree, TRUE, tcpinfo)) {
         pinfo->want_pdu_tracking -= !!(pinfo->want_pdu_tracking);
         handle_export_pdu_dissection_table(pinfo, next_tvb, low_port, tcpinfo);
         return TRUE;
     }
-    if (high_port != 0 &&
+    if (try_high_port &&
         dissector_try_uint_new(subdissector_table, high_port, next_tvb, pinfo, tree, TRUE, tcpinfo)) {
         pinfo->want_pdu_tracking -= !!(pinfo->want_pdu_tracking);
         handle_export_pdu_dissection_table(pinfo, next_tvb, high_port, tcpinfo);

@@ -3429,6 +3429,7 @@ set(SHARK_PUBLIC_HEADERS
 	ws_diag_control.h
 	ws_log_defs.h
 	ws_symbol_export.h
+	wireshark.h
 	${CMAKE_BINARY_DIR}/ws_version.h
 )
 
@@ -3563,7 +3564,7 @@ if (DOXYGEN_EXECUTABLE)
 		DEPENDS wsar_html_perms
 	)
 	set_target_properties(wsar_html wsar_html_zip PROPERTIES
-		FOLDER "Docs"
+		FOLDER "Documentation"
 		EXCLUDE_FROM_DEFAULT_BUILD True
 	)
 endif(DOXYGEN_EXECUTABLE)
@@ -3669,7 +3670,7 @@ if (GIT_EXECUTABLE)
 else (GIT_EXECUTABLE)
 	add_custom_target( gen-authors COMMAND ${CMAKE_COMMAND} -E echo "Git not found." )
 endif (GIT_EXECUTABLE)
-set_target_properties(gen-authors PROPERTIES FOLDER "Docs")
+set_target_properties(gen-authors PROPERTIES FOLDER "Documentation")
 
 if (WIN32)
 	file (TO_NATIVE_PATH ${CMAKE_SOURCE_DIR}/tools/Get-HardenFlags.ps1 _win_harden_flags)
