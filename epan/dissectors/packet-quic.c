@@ -12,14 +12,14 @@
 
 /*
  * See https://quicwg.org
- * https://tools.ietf.org/html/draft-ietf-quic-transport-33
- * https://tools.ietf.org/html/draft-ietf-quic-tls-33
- * https://tools.ietf.org/html/draft-ietf-quic-invariants-12
+ * RFC9000 QUIC: A UDP-Based Multiplexed and Secure Transport
+ * RFC9001 Using TLS to Secure QUIC
+ * RFC8889 Version-Independent Properties of QUIC
  * https://tools.ietf.org/html/draft-ietf-quic-version-negotiation-03
  *
  * Extension:
  * https://tools.ietf.org/html/draft-ferrieuxhamchaoui-quic-lossbits-03
- * https://tools.ietf.org/html/draft-pauly-quic-datagram-05
+ * https://datatracker.ietf.org/doc/html/draft-ietf-quic-datagram-06
  * https://tools.ietf.org/html/draft-huitema-quic-ts-02
  * https://tools.ietf.org/html/draft-iyengar-quic-delayed-ack-00
  * https://tools.ietf.org/html/draft-deconinck-quic-multipath-06
