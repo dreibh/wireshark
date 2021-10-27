@@ -34,6 +34,25 @@ typedef enum {
 	STTYPE_NUM_TYPES
 } sttype_id_t;
 
+typedef enum {
+	TEST_OP_UNINITIALIZED,
+	TEST_OP_EXISTS,
+	TEST_OP_NOT,
+	TEST_OP_AND,
+	TEST_OP_OR,
+	TEST_OP_ANY_EQ,
+	TEST_OP_ALL_NE,
+	TEST_OP_ANY_NE,
+	TEST_OP_GT,
+	TEST_OP_GE,
+	TEST_OP_LT,
+	TEST_OP_LE,
+	TEST_OP_BITWISE_AND,
+	TEST_OP_CONTAINS,
+	TEST_OP_MATCHES,
+	TEST_OP_IN
+} test_op_t;
+
 typedef gpointer        (*STTypeNewFunc)(gpointer);
 typedef gpointer        (*STTypeDupFunc)(gconstpointer);
 typedef void            (*STTypeFreeFunc)(gpointer);
@@ -58,7 +77,6 @@ typedef struct {
 	sttype_t	*type;
 	uint16_t	flags;
 	gpointer	data;
-	char		*token_value;
 	char 		*repr_display;
 	char 		*repr_debug;
 } stnode_t;
@@ -82,7 +100,10 @@ void
 sttype_register(sttype_t *type);
 
 stnode_t*
-stnode_new(sttype_id_t type_id, gpointer data, const char *token_value);
+stnode_new(sttype_id_t type_id, gpointer data);
+
+stnode_t *
+stnode_new_test(test_op_t op, stnode_t *val1, stnode_t *val2);
 
 stnode_t*
 stnode_dup(const stnode_t *org);
@@ -91,7 +112,7 @@ void
 stnode_clear(stnode_t *node);
 
 void
-stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data, const char *token_value);
+stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data);
 
 void
 stnode_replace(stnode_t *node, sttype_id_t type_id, gpointer data);
@@ -110,9 +131,6 @@ stnode_data(stnode_t *node);
 
 gpointer
 stnode_steal_data(stnode_t *node);
-
-const char *
-stnode_token_value(stnode_t *node);
 
 const char *
 stnode_tostr(stnode_t *node, gboolean pretty);

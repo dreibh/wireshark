@@ -72,8 +72,8 @@ sttype_lookup(sttype_id_t type_id)
 	return result;
 }
 
-static void
-_node_clear(stnode_t *node)
+void
+stnode_clear(stnode_t *node)
 {
 	ws_assert_magic(node, STNODE_MAGIC);
 	if (node->type) {
@@ -95,15 +95,7 @@ _node_clear(stnode_t *node)
 }
 
 void
-stnode_clear(stnode_t *node)
-{
-	_node_clear(node);
-	g_free(node->token_value);
-	node->token_value = NULL;
-}
-
-static void
-_node_init(stnode_t *node, sttype_id_t type_id, gpointer data)
+stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data)
 {
 	sttype_t	*type;
 
@@ -134,32 +126,37 @@ _node_init(stnode_t *node, sttype_id_t type_id, gpointer data)
 }
 
 void
-stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data,  const char *token_value)
-{
-	_node_init(node, type_id, data);
-	ws_assert(node->token_value == NULL);
-	node->token_value = g_strdup(token_value);
-}
-
-void
 stnode_replace(stnode_t *node, sttype_id_t type_id, gpointer data)
 {
 	uint16_t flags = node->flags; /* Save flags. */
-	_node_clear(node);
-	_node_init(node, type_id, data);
+	stnode_clear(node);
+	stnode_init(node, type_id, data);
 	node->flags = flags;
 }
 
 stnode_t*
-stnode_new(sttype_id_t type_id, gpointer data, const char *token_value)
+stnode_new(sttype_id_t type_id, gpointer data)
 {
 	stnode_t	*node;
 
 	node = g_new0(stnode_t, 1);
 	node->magic = STNODE_MAGIC;
 
-	stnode_init(node, type_id, data, token_value);
+	stnode_init(node, type_id, data);
 
+	return node;
+}
+
+stnode_t *
+stnode_new_test(test_op_t op, stnode_t *val1, stnode_t *val2)
+{
+	stnode_t *node;
+
+	node = stnode_new(STTYPE_TEST, NULL);
+	if (val2 != NULL)
+		sttype_test_set2(node, op, val1, val2);
+	else
+		sttype_test_set1(node, op, val1);
 	return node;
 }
 
@@ -172,7 +169,6 @@ stnode_dup(const stnode_t *node)
 	new = g_new(stnode_t, 1);
 	new->magic = STNODE_MAGIC;
 	new->flags = node->flags;
-	new->token_value = g_strdup(node->token_value);
 	new->repr_display = NULL;
 	new->repr_debug = NULL;
 
@@ -230,15 +226,6 @@ stnode_steal_data(stnode_t *node)
 	ws_assert(data);
 	node->data = NULL;
 	return data;
-}
-
-const char *
-stnode_token_value(stnode_t *node)
-{
-	if (node->token_value) {
-		return node->token_value;
-	}
-	return "<null token value>";
 }
 
 gboolean
@@ -309,7 +296,6 @@ sprint_node(stnode_t *node)
 	wmem_strbuf_append_printf(buf, "\t\tinside_parens = %s\n",
 					true_or_false(stnode_inside_parens(node)));
 	wmem_strbuf_append(buf, "\t}\n");
-	wmem_strbuf_append_printf(buf, "\ttoken_value = \"%s\"\n", stnode_token_value(node));
 	wmem_strbuf_append(buf, "}\n");
 	return wmem_strbuf_finalize(buf);
 }
