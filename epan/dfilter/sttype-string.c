@@ -12,13 +12,13 @@
 static gpointer
 string_new(gpointer string)
 {
-	return (gpointer) g_strdup((char*) string);
+	return g_strdup(string);
 }
 
 static gpointer
 string_dup(gconstpointer string)
 {
-	return (gpointer) g_strdup((const char*) string);
+	return g_strdup(string);
 }
 
 static void
@@ -28,8 +28,10 @@ string_free(gpointer value)
 }
 
 static char *
-string_tostr(const void *data, gboolean pretty _U_)
+string_tostr(const void *data, gboolean pretty)
 {
+	if (pretty)
+		return g_strdup_printf("\"%s\"", (const char *)data);
 	return g_strdup(data);
 }
 

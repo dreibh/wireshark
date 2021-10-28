@@ -75,19 +75,10 @@
  */
 DIAG_OFF_FLEX
 
-#define LVAL		df_lval
-#define LVAL_TYPE	stnode_t*
-#define LVAL_INIT_VAL	NULL
-#define MODNAME		df
-#define FLEX_YY_PREFIX	df_
-
-#include <lemonflex-head.inc>
-
-/*#undef YY_NO_UNPUT*/
+df_lval_t *df_lval;
 
 static int set_lval_str(int token, const char *token_value);
-static int simple(int token, const char *token_value);
-#define SIMPLE(token) simple(token, yytext)
+#define SIMPLE(token) set_lval_str(token, yytext)
 
 /*
  * Sleazy hack to suppress compiler warnings in yy_fatal_error().
@@ -103,8 +94,7 @@ static int simple(int token, const char *token_value);
 
 %}
 
-%x RANGE_INT
-%x RANGE_PUNCT
+%x RANGE
 %x DQUOTE
 %x SQUOTE
 
@@ -115,24 +105,29 @@ static int simple(int token, const char *token_value);
 	 * should have used commas from the beginning, but now we are stuck with
 	 * whitespace as separators. */
 	if (yyextra->in_set) {
-		return simple(TOKEN_WHITESPACE, NULL);
+		return set_lval_str(TOKEN_WHITESPACE, " ");
 	}
 }
 
-
-
 "("		return SIMPLE(TOKEN_LPAREN);
 ")"		return SIMPLE(TOKEN_RPAREN);
-","		return SIMPLE(TOKEN_COMMA);
+
+[[:blank:]\n]*","[[:blank:]\n]*	{
+	return set_lval_str(TOKEN_COMMA, ",");
+}
 
 "{"[[:blank:]\n]*	{
 	yyextra->in_set = TRUE;
-	return simple(TOKEN_LBRACE, "{");
+	return set_lval_str(TOKEN_LBRACE, "{");
 }
-[[:blank:]\n]*".."[[:blank:]\n]*	return simple(TOKEN_DOTDOT, "..");
+
+[[:blank:]\n]*".."[[:blank:]\n]*	{
+	return set_lval_str(TOKEN_DOTDOT, "..");
+}
+
 [[:blank:]\n]*"}"	{
 	yyextra->in_set = FALSE;
-	return simple(TOKEN_RBRACE, "}");
+	return set_lval_str(TOKEN_RBRACE, "}");
 }
 
 "=="		return SIMPLE(TOKEN_TEST_ANY_EQ);
@@ -162,52 +157,27 @@ static int simple(int token, const char *token_value);
 "or"		return SIMPLE(TOKEN_TEST_OR);
 "in"		return SIMPLE(TOKEN_TEST_IN);
 
-	/*
-	 * The syntax for ranges must handle slice[-d-d] and slice[-d--5], e.g:
-	 *   frame[-10-5] (minus ten to five)
-	 *   frame[-10--5] (minus ten to minus 5)
-	 */
-
-"["					{
-	BEGIN(RANGE_INT);
+"["				{
+	BEGIN(RANGE);
 	return SIMPLE(TOKEN_LBRACKET);
 }
 
-<RANGE_INT>[+-]?[[:alnum:]]+		{
-	BEGIN(RANGE_PUNCT);
-	return set_lval_str(TOKEN_INTEGER, yytext);
+<RANGE>[^],]+			{
+	return set_lval_str(TOKEN_RANGE, yytext);
 }
 
-<RANGE_INT,RANGE_PUNCT>":"		{
-	BEGIN(RANGE_INT);
-	return SIMPLE(TOKEN_COLON);
-}
-
-<RANGE_PUNCT>"-"			{
-	BEGIN(RANGE_INT);
-	return SIMPLE(TOKEN_HYPHEN);
-}
-
-<RANGE_INT,RANGE_PUNCT>","		{
-	BEGIN(RANGE_INT);
+<RANGE>","			{
 	return SIMPLE(TOKEN_COMMA);
 }
 
-<RANGE_INT,RANGE_PUNCT>"]"		{
+<RANGE>"]"				{
 	BEGIN(INITIAL);
 	return SIMPLE(TOKEN_RBRACKET);
 }
 
-	/* Error if none of the above while scanning a range (slice) */
-
-<RANGE_PUNCT>[^:\-,\]]+		{
-	BEGIN(RANGE_INT);
-	return set_lval_str(TOKEN_UNPARSED, yytext);
-}
-
-<RANGE_INT>[+-]?[^[:alnum:]\]]+	{
-	BEGIN(RANGE_PUNCT);
-	return set_lval_str(TOKEN_UNPARSED, yytext);
+<RANGE><<EOF>>				{
+	dfilter_fail(yyextra->dfw, "The right bracket was missing from a slice.");
+	return SCAN_FAILED;
 }
 
 [rR]{0,1}\042			{
@@ -380,15 +350,20 @@ static int simple(int token, const char *token_value);
 }
 
 
-
-[-[:alnum:]_\.:]*\/[[:digit:]]+  {
-        /* CIDR */
-        return set_lval_str(TOKEN_UNPARSED, yytext);
+	/* None of the patterns below can match ".." anywhere in the token string. */
+ 
+[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]{1,3}\.[[:digit:]]{1,3}(\/[[:digit:]]+)*  {
+	/* IPv4 CIDR */
+	return set_lval_str(TOKEN_UNPARSED, yytext);
+}
+ 
+[[:xdigit:]:]+(\/[[:digit:]]+)*  {
+	/* IPv6 CIDR or bytes-: or integer... */
+	return set_lval_str(TOKEN_UNPARSED, yytext);
 }
 
 		([.][-+[:alnum:]_:]+)+[.]{0,2} |
 [-+[:alnum:]_:]+([.][-+[:alnum:]_:]+)*[.]{0,2} {
-	/* Is it a field name or some other value (float, integer, bytes, ...)? */
 
 	/* Trailing dot is allowed for floats, but make sure that trailing ".."
 	 * is interpreted as a token on its own. */
@@ -396,13 +371,14 @@ static int simple(int token, const char *token_value);
 		yyless(yyleng-2);
 	}
 
-	/* No match, so treat it as an unparsed string */
+	/* It is a field name or some other value (float, bytes, ...). */
 	return set_lval_str(TOKEN_UNPARSED, yytext);
 }
 
 . {
-	/* Default */
-	return set_lval_str(TOKEN_UNPARSED, yytext);
+ 	/* Default */
+	dfilter_fail(yyextra->dfw, "\"%s\" was unexpected in this context.", yytext);
+	return SCAN_FAILED;
 }
 
 
@@ -414,64 +390,8 @@ static int simple(int token, const char *token_value);
 DIAG_ON_FLEX
 
 static int
-simple(int token, const char *token_value)
-{
-	switch (token) {
-		case TOKEN_LPAREN:
-		case TOKEN_RPAREN:
-		case TOKEN_LBRACKET:
-		case TOKEN_RBRACKET:
-		case TOKEN_LBRACE:
-		case TOKEN_RBRACE:
-		case TOKEN_COLON:
-		case TOKEN_COMMA:
-		case TOKEN_DOTDOT:
-		case TOKEN_HYPHEN:
-		case TOKEN_WHITESPACE:
-		case TOKEN_TEST_ANY_EQ:
-		case TOKEN_TEST_ALL_NE:
-		case TOKEN_TEST_ANY_NE:
-		case TOKEN_TEST_GT:
-		case TOKEN_TEST_GE:
-		case TOKEN_TEST_LT:
-		case TOKEN_TEST_LE:
-		case TOKEN_TEST_BITWISE_AND:
-		case TOKEN_TEST_CONTAINS:
-		case TOKEN_TEST_MATCHES:
-		case TOKEN_TEST_NOT:
-		case TOKEN_TEST_AND:
-		case TOKEN_TEST_OR:
-		case TOKEN_TEST_IN:
-			break;
-		default:
-			ws_assert_not_reached();
-	}
-	stnode_init(df_lval, STTYPE_UNINITIALIZED, NULL, token_value);
-	return token;
-}
-
-static int
 set_lval_str(int token, const char *token_value)
 {
-	sttype_id_t	type_id;
-
-	switch (token) {
-		case TOKEN_STRING:
-			type_id = STTYPE_STRING;
-			break;
-		case TOKEN_CHARCONST:
-			type_id = STTYPE_CHARCONST;
-			break;
-		case TOKEN_UNPARSED:
-			type_id = STTYPE_UNPARSED;
-			break;
-		case TOKEN_INTEGER:
-			/* Not used in AST. */
-			type_id = STTYPE_UNINITIALIZED;
-			break;
-		default:
-			ws_assert_not_reached();
-	}
-	stnode_init(df_lval, type_id, (gpointer)token_value, token_value);
+	df_lval->value = g_strdup(token_value);
 	return token;
 }

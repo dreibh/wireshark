@@ -473,98 +473,12 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 	}
 }
 
-struct check_drange_sanity_args {
-	dfwork_t		*dfw;
-	stnode_t		*st;
-	gboolean		err;
-};
-
-static void
-check_drange_node_sanity(gpointer data, gpointer user_data)
-{
-	drange_node*		drnode = (drange_node*)data;
-	struct check_drange_sanity_args *args = (struct check_drange_sanity_args*)user_data;
-	gint			start_offset, end_offset, length;
-	stnode_t                *entity;
-	header_field_info	*hfinfo;
-
-	switch (drange_node_get_ending(drnode)) {
-
-	case DRANGE_NODE_END_T_LENGTH:
-		length = drange_node_get_length(drnode);
-		if (length <= 0) {
-			if (!args->err) {
-				args->err = TRUE;
-				start_offset = drange_node_get_start_offset(drnode);
-				entity = sttype_range_entity(args->st);
-				if (entity && stnode_type_id(entity) == STTYPE_FIELD) {
-					hfinfo = (header_field_info *)stnode_data(entity);
-
-					dfilter_fail(args->dfw, "Range %d:%d specified for \"%s\" isn't valid, "
-						"as length %d isn't positive",
-						start_offset, length,
-						hfinfo->abbrev,
-						length);
-				} else
-					dfilter_fail(args->dfw, "Range %d:%d isn't valid, "
-						"as length %d isn't positive",
-						start_offset, length,
-						length);
-			}
-		}
-		break;
-
-	case DRANGE_NODE_END_T_OFFSET:
-		/*
-		 * Make sure the start offset isn't beyond the end
-		 * offset.  This applies to negative offsets too.
-		 */
-
-		/* XXX - [-ve - +ve] is probably pathological, but isn't
-		 * disallowed.
-		 * [+ve - -ve] is probably pathological too, and happens to be
-		 * disallowed.
-		 */
-		start_offset = drange_node_get_start_offset(drnode);
-		end_offset = drange_node_get_end_offset(drnode);
-		if (start_offset > end_offset) {
-			if (!args->err) {
-				args->err = TRUE;
-				entity = sttype_range_entity(args->st);
-				if (entity && stnode_type_id(entity) == STTYPE_FIELD) {
-					hfinfo = (header_field_info *)stnode_data(entity);
-
-					dfilter_fail(args->dfw, "Range %d-%d specified for \"%s\" isn't valid, "
-						"as %d is greater than %d",
-						start_offset, end_offset,
-						hfinfo->abbrev,
-						start_offset, end_offset);
-
-				} else
-					dfilter_fail(args->dfw, "Range %d-%d isn't valid, "
-						"as %d is greater than %d",
-						start_offset, end_offset,
-						start_offset, end_offset);
-			}
-		}
-		break;
-
-	case DRANGE_NODE_END_T_TO_THE_END:
-		break;
-
-	case DRANGE_NODE_END_T_UNINITIALIZED:
-	default:
-		ws_assert_not_reached();
-	}
-}
-
 static void
 check_drange_sanity(dfwork_t *dfw, stnode_t *st)
 {
 	stnode_t		*entity1;
 	header_field_info	*hfinfo1;
 	ftenum_t		ftype1;
-	struct check_drange_sanity_args	args;
 
 	entity1 = sttype_range_entity(st);
 	if (entity1 && stnode_type_id(entity1) == STTYPE_FIELD) {
@@ -596,17 +510,6 @@ check_drange_sanity(dfwork_t *dfw, stnode_t *st)
 		THROW(TypeError);
 	} else {
 		dfilter_fail(dfw, "Range is not supported, details: " G_STRLOC " entity: NULL");
-		THROW(TypeError);
-	}
-
-	args.dfw = dfw;
-	args.st = st;
-	args.err = FALSE;
-
-	drange_foreach_drange_node(sttype_range_drange(st),
-	    check_drange_node_sanity, &args);
-
-	if (args.err) {
 		THROW(TypeError);
 	}
 }
@@ -1070,7 +973,7 @@ check_param_entity(dfwork_t *dfw, stnode_t *st_node)
 	/* If there's an unparsed string, change it to an FT_STRING */
 	if (e_type == STTYPE_UNPARSED || e_type == STTYPE_CHARCONST) {
 		fvalue = dfilter_fvalue_from_unparsed(dfw, FT_STRING, st_node, TRUE, NULL);
-		new_st = stnode_new(STTYPE_FVALUE, fvalue, st_node->token_value);
+		new_st = stnode_new(STTYPE_FVALUE, fvalue);
 		stnode_free(st_node);
 		return new_st;
 	}
@@ -1263,6 +1166,25 @@ check_relation(dfwork_t *dfw, const char *relation_string,
 	}
 }
 
+static void
+check_relation_matches(dfwork_t *dfw, stnode_t *st_node,
+		stnode_t *st_arg1, stnode_t *st_arg2)
+{
+	if (stnode_type_id(st_arg1) == STTYPE_FIELD) {
+		check_relation_LHS_FIELD(dfw, "matches", ftype_can_matches, TRUE, st_node, st_arg1, st_arg2);
+	}
+	else if (stnode_type_id(st_arg1) == STTYPE_FUNCTION) {
+		check_relation_LHS_FUNCTION(dfw, "matches", ftype_can_matches, TRUE, st_node, st_arg1, st_arg2);
+	}
+	else if (stnode_type_id(st_arg1) == STTYPE_RANGE) {
+		check_relation_LHS_RANGE(dfw, "matches", ftype_can_matches, TRUE, st_node, st_arg1, st_arg2);
+	}
+	else {
+		dfilter_fail(dfw, "%s is not a valid operand for matches.", stnode_todisplay(st_arg1));
+		THROW(TypeError);
+	}
+}
+
 /* Check the semantics of any type of TEST */
 static void
 check_test(dfwork_t *dfw, stnode_t *st_node)
@@ -1339,7 +1261,7 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 			check_relation(dfw, "contains", TRUE, ftype_can_contains, st_node, st_arg1, st_arg2);
 			break;
 		case TEST_OP_MATCHES:
-			check_relation(dfw, "matches", TRUE, ftype_can_matches, st_node, st_arg1, st_arg2);
+			check_relation_matches(dfw, st_node, st_arg1, st_arg2);
 			break;
 		case TEST_OP_IN:
 			/* Use the ftype_can_eq as the items in the set are evaluated using the
