@@ -144,7 +144,8 @@ entity(E) ::= STRING(S).
 }
 entity(E) ::= CHARCONST(C).
 {
-	E = stnode_new(STTYPE_CHARCONST, df_lval_value(C));
+	/* A charconst uses "unparsed" semantic rules. */
+	E = stnode_new(STTYPE_UNPARSED, df_lval_value(C));
 	df_lval_free(C);
 }
 entity(E) ::= UNPARSED(U).
@@ -239,6 +240,13 @@ relation_test(T) ::= entity(E) TEST_IN set(S).
 	T = stnode_new_test(TEST_OP_IN, E, S);
 }
 
+relation_test(T) ::= entity(E) TEST_NOT TEST_IN set(S).
+{
+	stnode_t *R = stnode_new_test(TEST_OP_IN, E, S);
+
+	T = stnode_new_test(TEST_OP_NOT, R, NULL);
+}
+
 set(S) ::= LBRACE set_list(L) RBRACE.
 {
 	S = stnode_new(STTYPE_SET, L);
@@ -249,7 +257,7 @@ set_list(L) ::= set_element(N).
 	L = g_slist_concat(NULL, N);
 }
 
-set_list(L) ::= set_list(P) WHITESPACE set_element(N).
+set_list(L) ::= set_list(P) COMMA set_element(N).
 {
 	L = g_slist_concat(P, N);
 }

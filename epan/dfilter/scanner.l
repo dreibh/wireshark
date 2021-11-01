@@ -78,7 +78,8 @@ DIAG_OFF_FLEX
 df_lval_t *df_lval;
 
 static int set_lval_str(int token, const char *token_value);
-#define SIMPLE(token) set_lval_str(token, yytext)
+#define simple(token) set_lval_str(token, yytext)
+static GString *append_escaped_char(GString *str, char c);
 
 /*
  * Sleazy hack to suppress compiler warnings in yy_fatal_error().
@@ -100,63 +101,45 @@ static int set_lval_str(int token, const char *token_value);
 
 %%
 
-[[:blank:]\n]+		{
-	/* Ignore whitespace, unless set elements are being parsed. Perhaps it
-	 * should have used commas from the beginning, but now we are stuck with
-	 * whitespace as separators. */
-	if (yyextra->in_set) {
-		return set_lval_str(TOKEN_WHITESPACE, " ");
-	}
-}
+[[:blank:]\n]+
 
-"("		return SIMPLE(TOKEN_LPAREN);
-")"		return SIMPLE(TOKEN_RPAREN);
-","		return SIMPLE(TOKEN_COMMA);
+"("		return simple(TOKEN_LPAREN);
+")"		return simple(TOKEN_RPAREN);
+","		return simple(TOKEN_COMMA);
+"{"		return simple(TOKEN_LBRACE);
+".."		return simple(TOKEN_DOTDOT);
+"}"		return simple(TOKEN_RBRACE);
 
-"{"[[:blank:]\n]*	{
-	yyextra->in_set = TRUE;
-	return set_lval_str(TOKEN_LBRACE, "{");
-}
-
-[[:blank:]\n]*".."[[:blank:]\n]*	{
-	return set_lval_str(TOKEN_DOTDOT, "..");
-}
-
-[[:blank:]\n]*"}"	{
-	yyextra->in_set = FALSE;
-	return set_lval_str(TOKEN_RBRACE, "}");
-}
-
-"=="		return SIMPLE(TOKEN_TEST_ANY_EQ);
-"eq"		return SIMPLE(TOKEN_TEST_ANY_EQ);
-"!="		return SIMPLE(TOKEN_TEST_ALL_NE);
-"ne"		return SIMPLE(TOKEN_TEST_ALL_NE);
-"~="		return SIMPLE(TOKEN_TEST_ANY_NE);
-"any_ne"	return SIMPLE(TOKEN_TEST_ANY_NE);
-">"		return SIMPLE(TOKEN_TEST_GT);
-"gt"		return SIMPLE(TOKEN_TEST_GT);
-">="		return SIMPLE(TOKEN_TEST_GE);
-"ge"		return SIMPLE(TOKEN_TEST_GE);
-"<"		return SIMPLE(TOKEN_TEST_LT);
-"lt"		return SIMPLE(TOKEN_TEST_LT);
-"<="		return SIMPLE(TOKEN_TEST_LE);
-"le"		return SIMPLE(TOKEN_TEST_LE);
-"bitwise_and"	return SIMPLE(TOKEN_TEST_BITWISE_AND);
-"&"		return SIMPLE(TOKEN_TEST_BITWISE_AND);
-"contains"	return SIMPLE(TOKEN_TEST_CONTAINS);
-"~"		return SIMPLE(TOKEN_TEST_MATCHES);
-"matches"	return SIMPLE(TOKEN_TEST_MATCHES);
-"!"		return SIMPLE(TOKEN_TEST_NOT);
-"not"		return SIMPLE(TOKEN_TEST_NOT);
-"&&"		return SIMPLE(TOKEN_TEST_AND);
-"and"		return SIMPLE(TOKEN_TEST_AND);
-"||"		return SIMPLE(TOKEN_TEST_OR);
-"or"		return SIMPLE(TOKEN_TEST_OR);
-"in"		return SIMPLE(TOKEN_TEST_IN);
+"=="		return simple(TOKEN_TEST_ANY_EQ);
+"eq"		return simple(TOKEN_TEST_ANY_EQ);
+"!="		return simple(TOKEN_TEST_ALL_NE);
+"ne"		return simple(TOKEN_TEST_ALL_NE);
+"~="		return simple(TOKEN_TEST_ANY_NE);
+"any_ne"	return simple(TOKEN_TEST_ANY_NE);
+">"		return simple(TOKEN_TEST_GT);
+"gt"		return simple(TOKEN_TEST_GT);
+">="		return simple(TOKEN_TEST_GE);
+"ge"		return simple(TOKEN_TEST_GE);
+"<"		return simple(TOKEN_TEST_LT);
+"lt"		return simple(TOKEN_TEST_LT);
+"<="		return simple(TOKEN_TEST_LE);
+"le"		return simple(TOKEN_TEST_LE);
+"bitwise_and"	return simple(TOKEN_TEST_BITWISE_AND);
+"&"		return simple(TOKEN_TEST_BITWISE_AND);
+"contains"	return simple(TOKEN_TEST_CONTAINS);
+"~"		return simple(TOKEN_TEST_MATCHES);
+"matches"	return simple(TOKEN_TEST_MATCHES);
+"!"		return simple(TOKEN_TEST_NOT);
+"not"		return simple(TOKEN_TEST_NOT);
+"&&"		return simple(TOKEN_TEST_AND);
+"and"		return simple(TOKEN_TEST_AND);
+"||"		return simple(TOKEN_TEST_OR);
+"or"		return simple(TOKEN_TEST_OR);
+"in"		return simple(TOKEN_TEST_IN);
 
 "["				{
 	BEGIN(RANGE);
-	return SIMPLE(TOKEN_LBRACKET);
+	return simple(TOKEN_LBRACKET);
 }
 
 <RANGE>[^],]+			{
@@ -164,12 +147,12 @@ static int set_lval_str(int token, const char *token_value);
 }
 
 <RANGE>","			{
-	return SIMPLE(TOKEN_COMMA);
+	return simple(TOKEN_COMMA);
 }
 
 <RANGE>"]"				{
 	BEGIN(INITIAL);
-	return SIMPLE(TOKEN_RBRACKET);
+	return simple(TOKEN_RBRACKET);
 }
 
 <RANGE><<EOF>>				{
@@ -179,23 +162,14 @@ static int set_lval_str(int token, const char *token_value);
 
 [rR]{0,1}\042			{
 	/* start quote of a quoted string */
-	/* The example of how to scan for strings was taken from
-	the flex 2.5.4 manual, from the section "Start Conditions".
-	See:
-	http://www.gnu.org/software/flex/manual/html_node/flex_11.html */
-
+	/*
+	 * The example of how to scan for strings was taken from
+	 * the flex manual, from the section "Start Conditions".
+	 * See: https://westes.github.io/flex/manual/Start-Conditions.html
+	 */
 	BEGIN(DQUOTE);
-	/* A previous filter that failed to compile due to
-	a missing end quote will have left quoted_string set
-	to something. Clear it now that we are starting
-	a new quoted string. */
-	if (yyextra->quoted_string) {
-		g_string_free(yyextra->quoted_string, TRUE);
-		/* Don't set quoted_string to NULL, as we
-		do in other quoted_string-cleanup code, as we're
-		about to set it in the next line. */
-	}
 	yyextra->quoted_string = g_string_new("");
+
 	if (yytext[0] == 'r' || yytext[0] == 'R') {
 		/*
 		 * This is a raw string (like in Python). Rules: 1) The two
@@ -215,23 +189,18 @@ static int set_lval_str(int token, const char *token_value);
 
 <DQUOTE><<EOF>>				{
 	/* unterminated string */
-	/* The example of how to handle unclosed strings was taken from
-	the flex 2.5.4 manual, from the section "End-of-file rules".
-	See:
-	http://www.gnu.org/software/flex/manual/html_node/flex_13.html */
-
+	g_string_free(yyextra->quoted_string, TRUE);
+	yyextra->quoted_string = NULL;
 	dfilter_fail(yyextra->dfw, "The final quote was missing from a quoted string.");
 	return SCAN_FAILED;
 }
 
 <DQUOTE>\042			{
 	/* end quote */
-	int token;
 	BEGIN(INITIAL);
-	token = set_lval_str(TOKEN_STRING, yyextra->quoted_string->str);
-	g_string_free(yyextra->quoted_string, TRUE);
+	df_lval->value = g_string_free(yyextra->quoted_string, FALSE);
 	yyextra->quoted_string = NULL;
-	return token;
+	return TOKEN_STRING;
 }
 
 <DQUOTE>\\[0-7]{1,3} {
@@ -260,6 +229,10 @@ static int set_lval_str(int token, const char *token_value);
 
 <DQUOTE>\\x[[:xdigit:]]{1,2} {
 	/* hex sequence */
+	/*
+	 * C standard does not place a limit on the number of hex
+	 * digits after \x... but we do. \xNN can have 1 or two Ns, not more.
+	 */
 	if (yyextra->raw_string) {
 		g_string_append(yyextra->quoted_string, yytext);
 	}
@@ -283,7 +256,7 @@ static int set_lval_str(int token, const char *token_value);
 		g_string_append(yyextra->quoted_string, yytext);
 	}
 	else {
-		g_string_append_c(yyextra->quoted_string, yytext[1]);
+		append_escaped_char(yyextra->quoted_string, yytext[1]);
 	}
 }
 
@@ -295,45 +268,25 @@ static int set_lval_str(int token, const char *token_value);
 
 \047				{
 	/* start quote of a quoted character value */
-	/* The example of how to scan for strings was taken from
-	the Flex manual, from the section "Start Conditions".
-	See:
-	http://flex.sourceforge.net/manual/Start-Conditions.html#Start-Conditions */
-
 	BEGIN(SQUOTE);
-	/* A previous filter that failed to compile due to
-	a missing end quote will have left quoted_string set
-	to something. Clear it now that we are starting
-	a new quoted string. */
-	if (yyextra->quoted_string) {
-		g_string_free(yyextra->quoted_string, TRUE);
-		/* Don't set quoted_string to NULL, as we
-		do in other quoted_string-cleanup code, as we're
-		about to set it in the next line. */
-	}
 	yyextra->quoted_string = g_string_new("'");
 }
 
 <SQUOTE><<EOF>>				{
 	/* unterminated character value */
-	/* The example of how to handle unclosed strings was taken from
-	the Flex manual, from the section "End-of-file rules".
-	See:
-	http://flex.sourceforge.net/manual/EOF.html#EOF.html */
-
+	g_string_free(yyextra->quoted_string, TRUE);
+	yyextra->quoted_string = NULL;
 	dfilter_fail(yyextra->dfw, "The final quote was missing from a character constant.");
 	return SCAN_FAILED;
 }
 
 <SQUOTE>\047			{
 	/* end quote */
-	int token;
 	BEGIN(INITIAL);
 	g_string_append_c(yyextra->quoted_string, '\'');
-	token = set_lval_str(TOKEN_CHARCONST, yyextra->quoted_string->str);
-	g_string_free(yyextra->quoted_string, TRUE);
+	df_lval->value = g_string_free(yyextra->quoted_string, FALSE);
 	yyextra->quoted_string = NULL;
-	return token;
+	return TOKEN_CHARCONST;
 }
 
 <SQUOTE>\\.				{
@@ -347,29 +300,37 @@ static int set_lval_str(int token, const char *token_value);
 }
 
 
+	/* None of the patterns below can match ".." anywhere in the token string. */
+ 
+[-+[:alnum:]_:./]+ {
+	char *s, *value;
 
-[-[:alnum:]_\.:]*\/[[:digit:]]+  {
-        /* CIDR */
-        return set_lval_str(TOKEN_UNPARSED, yytext);
-}
+	/* Hack (but lesser) to make sure that ".." is interpreted as a token on its own. */
+	if ((s = strstr(yytext, "..")) != NULL) {
+		/* If it starts with ".." it is its own token. */
+		if (yytext[0] == '.' && yytext[1] == '.') {
+			yyless(2);
+			df_lval->value = g_strdup("..");
+			return TOKEN_DOTDOT;
+		}
 
-		([.][-+[:alnum:]_:]+)+[.]{0,2} |
-[-+[:alnum:]_:]+([.][-+[:alnum:]_:]+)*[.]{0,2} {
-	/* Is it a field name or some other value (float, integer, bytes, ...)? */
-
-	/* Trailing dot is allowed for floats, but make sure that trailing ".."
-	 * is interpreted as a token on its own. */
-	if (strstr(yytext, "..")) {
-		yyless(yyleng-2);
+		/* Match only the prefix before "..". */
+		*s = '\0';
+		value = g_strdup(yytext);
+		*s = '.'; /* Restore */
+		yyless(strlen(value));
+		df_lval->value = value;
+		return TOKEN_UNPARSED;
 	}
 
-	/* No match, so treat it as an unparsed string */
+	/* It is a variable or a literal value (CIDR, bytes, number, ...). */
 	return set_lval_str(TOKEN_UNPARSED, yytext);
 }
 
 . {
-	/* Default */
-	return set_lval_str(TOKEN_UNPARSED, yytext);
+ 	/* Default */
+	dfilter_fail(yyextra->dfw, "\"%s\" was unexpected in this context.", yytext);
+	return SCAN_FAILED;
 }
 
 
@@ -385,4 +346,41 @@ set_lval_str(int token, const char *token_value)
 {
 	df_lval->value = g_strdup(token_value);
 	return token;
+}
+
+static GString *
+append_escaped_char(GString *str, char c)
+{
+	switch (c) {
+		case 'a':
+			c = '\a';
+			break;
+		case 'b':
+			c = '\b';
+			break;
+		case 'f':
+			c = '\f';
+			break;
+		case 'n':
+			c = '\n';
+			break;
+		case 'r':
+			c = '\r';
+			break;
+		case 't':
+			c = '\t';
+			break;
+		case 'v':
+			c = '\v';
+			break;
+		default:
+			/* Unrecognized escapes are treated as a literal character.
+			 * If this is turned into an error instead (which is a backward
+			 * incompatibility but arguably the right thing to do)
+			 * we need to take care to accept all valid sequences
+			 * (like \" and \\). */
+			break;
+	}
+
+	return g_string_append_c(str, c);
 }

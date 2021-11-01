@@ -47,6 +47,10 @@ class case_syntax(unittest.TestCase):
         dfilter = r'http.host matches r"update\.microsoft\.c.."'
         checkDFilterCount(dfilter, 1)
 
+    def test_matches_5(self, checkDFilterFail):
+        dfilter = '"a" matches "b"'
+        checkDFilterFail(dfilter, "not a valid operand for matches")
+
     def test_equal_1(self, checkDFilterCount):
         dfilter = 'ip.addr == 10.0.0.5'
         checkDFilterCount(dfilter, 1)
@@ -86,3 +90,12 @@ class case_syntax(unittest.TestCase):
     def test_deprecated_2(self, checkDFilterSucceed):
         dfilter = "bootp"
         checkDFilterSucceed(dfilter, "Deprecated tokens: \"bootp\"")
+
+    def test_charconst_bytes_1(self, checkDFilterCount):
+        # Bytes as a character constant.
+        dfilter = "frame contains 'H'"
+        checkDFilterCount(dfilter, 1)
+
+    def test_charconst_bytes_2(self, checkDFilterCount):
+        dfilter = "frame[54] == 'H'"
+        checkDFilterCount(dfilter, 1)
