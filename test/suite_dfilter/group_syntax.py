@@ -91,6 +91,11 @@ class case_syntax(unittest.TestCase):
         dfilter = "bootp"
         checkDFilterSucceed(dfilter, "Deprecated tokens: \"bootp\"")
 
-    def test_deprecated_3(self, checkDFilterSucceed):
-        dfilter = "ip.version in {4 6}"
-        checkDFilterSucceed(dfilter, "Use ',' to separate set elements")
+    def test_charconst_bytes_1(self, checkDFilterCount):
+        # Bytes as a character constant.
+        dfilter = "frame contains 'H'"
+        checkDFilterCount(dfilter, 1)
+
+    def test_charconst_bytes_2(self, checkDFilterCount):
+        dfilter = "frame[54] == 'H'"
+        checkDFilterCount(dfilter, 1)
