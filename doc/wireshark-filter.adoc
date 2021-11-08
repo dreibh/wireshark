@@ -41,14 +41,22 @@ field.  If you want to see all packets which contain the IP protocol, the
 filter would be "ip" (without the quotation marks). To see all packets
 that contain a Token-Ring RIF field, use "tr.rif".
 
-Think of a protocol or field in a filter as implicitly having the "exists"
-operator.
+Whenever a protocol or field appears as the argument of a function in a filter,
+an exists operator for that protocol or field implicitly appears.
+
+=== Values and operators
+
+Each field has a value, and that value can be used in operations with
+comparable values (which may be literals, other fields, or function results).
+The value of a field is not necessarily what appears in the *Wireshark*
+display or *TShark* output.  For example, a protocol is semantically
+equivalent to the sequence of bytes that it spans, not its displayed text
+in the protocol tree.
 
 === Comparison operators
 
-Fields can also be compared against values.  The comparison operators
-can be expressed either through English-like abbreviations or through
-C-like symbols:
+The comparison operators can be expressed either through English-like
+abbreviations or through C-like symbols:
 
     eq, ==    Equal
     ne, !=    Not Equal
@@ -57,18 +65,27 @@ C-like symbols:
     ge, >=    Greater than or Equal to
     le, <=    Less than or Equal to
 
+The ordering depends on the value type in the usual way (e.g., lexicographic
+for strings and arithmetic for integers.)  A field may appear more than once
+in a given frame.  In general, if any apperance of a field has a value that
+satisfies its operator, then the expression evaluates to true.  The one
+exception is the "!=" operator, which asserts that _all_ appearances of a field
+are not equal to a value, making it the logical negation of the "==" operator.footnote:[This differs from previous, deprecated behavior.  To obtain the old behavior, which was true if any appearance was not equal, use the "any_ne", "~=" operator.]
+
 === Search and match operators
 
 Additional operators exist expressed only in English, not C-like syntax:
 
     contains     Does the protocol, field or slice contain a value
-    matches, ~   Does the protocol or text string match the given
-                 case-insensitive Perl-compatible regular expression
+    matches, ~   Does the string match the given case-insensitive
+                 Perl-compatible regular expression
 
 The "contains" operator allows a filter to search for a sequence of
-characters, expressed as a string (quoted or unquoted), or bytes,
-expressed as a byte array, or for a single character, expressed as a
-C-style character constant.  For example, to search for a given HTTP
+characters, expressed as a string, or bytes, expressed as a byte array.
+The type of the left hand side of the "contains" operator must be comparable to
+that of the right hand side after any implicit or explicit conversions.
+
+For example, to search for a given HTTP
 URL in a capture, the following filter can be used:
 
     http contains "https://www.wireshark.org"
@@ -76,11 +93,12 @@ URL in a capture, the following filter can be used:
 The "contains" operator cannot be used on atomic fields,
 such as numbers or IP addresses.
 
-The "matches"  or "~" operator allows a filter to apply to a specified
-Perl-compatible regular expression (PCRE).  The "matches" operator is only
-implemented for protocols and for protocol fields with a text string
-representation. Matches are case-insensitive by default.  For example,
-to search for a given WAP WSP User-Agent, you can write:
+The "matches" or "~" operator allows a filter to apply to a specified
+Perl-compatible regular expression (PCRE).  The regular expression must
+be a double quoted string.  The left hand side of the "matches" operator
+must be a string, which can be a non-stringlike field implicitly or
+explicitly converted to a string.  Matches are case-insensitive by default.
+For example, to search for a given WAP WSP User-Agent, you can write:
 
     wsp.header.user_agent matches "cldc"
 
@@ -283,16 +301,7 @@ or
 
     frame[-4:] == 0.1.2.3
 
-A slice is always compared against either a string or a byte sequence.
-As a special case, when the slice is only 1 byte wide, you can compare
-it against a hex integer that is 0xff or less (which means it fits inside
-one byte). This is not allowed for byte sequences greater than one byte,
-because then one would need to specify the endianness of the multi-byte
-integer. Also, this is not allowed for decimal numbers, since they
-would be confused with hex numbers that are already allowed as
-byte strings. Nevertheless, single-byte hex integers can be convenient:
-
-    frame[4] == 0xff
+A slice can always be compared against either a string or a byte sequence.
 
 Slices can be combined. You can concatenate them using the comma operator:
 
@@ -307,7 +316,7 @@ A field may be checked for matches against a set of values simply with the
 membership operator. For instance, you may find traffic on common HTTP/HTTPS
 ports with the following filter:
 
-    tcp.port in {80 443 8080}
+    tcp.port in {80,443,8080}
 
 as opposed to the more verbose:
 
@@ -315,28 +324,46 @@ as opposed to the more verbose:
 
 To find HTTP requests using the HEAD or GET methods:
 
-    http.request.method in {"HEAD" "GET"}
+    http.request.method in {"HEAD", "GET"}
 
 The set of values can also contain ranges:
 
-    tcp.port in {443 4430..4434}
-    ip.addr in {10.0.0.5 .. 10.0.0.9 192.168.1.1..192.168.1.9}
+    tcp.port in {443, 4430..4434}
+    ip.addr in {10.0.0.5 .. 10.0.0.9, 192.168.1.1..192.168.1.9}
     frame.time_delta in {10 .. 10.5}
 
-=== Type conversions
+=== Implicit type conversions
 
-If a field is a text string or a byte array, it can be expressed in whichever
-way is most convenient.
+Fields which are sequences of bytes, including protocols, are implicitly
+converted to strings for comparisons against (double quoted) literal strings
+and raw strings.
 
 So, for instance, the following filters are equivalent:
 
-    http.request.method == "GET"
-    http.request.method == 47.45.54
+    tcp.payload contains "GET"
+    tcp.payload contains 47.45.54
 
-A range can also be expressed in either way:
+As noted above, a slice can also be compared in either way:
 
     frame[60:2] gt 50.51
     frame[60:2] gt "PQ"
+
+The inverse does not occur; stringlike fields are not implicitly converted to
+byte arrays.  (Some operators allow stringlike fields to be compared with
+unquoted literals, which are then treated as strings; this is deprecated in
+general and specifically disallowed by the "matches" operator.
+Literal strings should be double quoted for clarity.)
+
+A hex integer that is 0xff or less (which means it fits inside one byte)
+can be implicitly converted to a byte string.  This is not allowed for
+hex integers greater than one byte, because then one would need to specify
+the endianness of the multi-byte integer. Also, this is not allowed for
+decimal or octal numbers, since they would be confused with the hex numbers
+that make up byte string literals. Nevertheless, single-byte hex integers
+can be convenient:
+
+    frame[4] == 0xff
+    frame[1:4] contains 0x02
 
 === Bit field operations
 
@@ -387,56 +414,34 @@ Remember that whenever a protocol or field name occurs in an expression, the
 priority. This means that the first filter expression must be read as "show me
 the packets for which tcp.port exists and equals 80, and ip.src exists and
 equals 192.168.2.1". The second filter expression means "show me the packets
-where not (llc exists)", or in other words "where llc does not exist" and hence
+where not exists llc", or in other words "where llc does not exist" and hence
 will match all packets that do not contain the llc protocol.
 The third filter expression includes the constraint that offset 199 in the
 frame exists, in other words the length of the frame is at least 200.
 
-A special caveat must be given regarding fields that occur more than
-once per packet.  "ip.addr" occurs twice per IP packet, once for the
-source address, and once for the destination address.  Likewise,
-"tr.rif.ring" fields can occur more than once per packet.  The following
-two expressions are not equivalent:
-
-        ip.addr ne 192.168.4.1
-    not ip.addr eq 192.168.4.1
-
-The first filter says "show me packets where an ip.addr exists that
-does not equal 192.168.4.1".  That is, as long as one ip.addr in the
-packet does not equal 192.168.4.1, the packet passes the display
-filter.  The other ip.addr could equal 192.168.4.1 and the packet would
-still be displayed.
-The second filter says "don't show me any packets that have an
-ip.addr field equal to 192.168.4.1".  If one ip.addr is 192.168.4.1,
-the packet does not pass.  If *neither* ip.addr field is 192.168.4.1,
-then the packet is displayed.
-
-It is easy to think of the 'ne' and 'eq' operators as having an implicit
-"exists" modifier when dealing with multiply-recurring fields.  "ip.addr
-ne 192.168.4.1" can be thought of as "there exists an ip.addr that does
-not equal 192.168.4.1".  "not ip.addr eq 192.168.4.1" can be thought of as
-"there does not exist an ip.addr equal to 192.168.4.1".
-
-Be careful with multiply-recurring fields; they can be confusing.
-
-Care must also be taken when using the display filter to remove noise
-from the packet trace. If, for example, you want to filter out all IP
+Each comparison has an implicit exists test for any field value. Care must
+be taken when using the display filter to remove noise from
+the packet trace. If, for example, you want to filter out all IP
 multicast packets to address 224.1.2.3, then using:
 
     ip.dst ne 224.1.2.3
 
-may be too restrictive. Filtering with "ip.dst" selects only those
-*IP* packets that satisfy the rule. Any other packets, including all
-non-IP packets, will not be displayed. To display the non-IP
-packets as well, you can use one of the following two expressions:
+may be too restrictive. This is the same as writing:
 
-    not ip or ip.dst ne 224.1.2.3
-    not ip.addr eq 224.1.2.3
+    ip.dst and ip.dst ne 224.1.2.3
 
-The first filter uses "not ip" to include all non-IP packets and then
+The filter selects only frames that have the "ip.dst" field. Any
+other frames, including all non-IP packets, will not be displayed. To
+display the non-IP packets as well, you can use one of the following
+two expressions:
+
+    not ip.dst or ip.dst ne 224.1.2.3
+    not ip.dst eq 224.1.2.3
+
+The first filter uses "not ip.dst" to include all non-IP packets and then
 lets "ip.dst ne 224.1.2.3" filter out the unwanted IP packets. The
-second filter has already been explained above where filtering with
-multiply occurring fields was discussed.
+second filter also negates the implicit existance test and so is
+a shorter way to write the first.
 
 == FILTER FIELD REFERENCE
 

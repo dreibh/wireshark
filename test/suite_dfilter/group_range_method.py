@@ -37,7 +37,7 @@ class case_range(unittest.TestCase):
 
     def test_slice_string_1(self, checkDFilterFail):
         dfilter = "frame == \"00\"[1]"
-        checkDFilterFail(dfilter, "Range is not supported for entity 00 of type STRING")
+        checkDFilterFail(dfilter, "Range is not supported for entity \"00\" of type STRING")
 
     def test_slice_unparsed_1(self, checkDFilterFail):
         dfilter = "a == b[1]"

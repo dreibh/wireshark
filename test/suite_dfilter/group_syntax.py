@@ -37,7 +37,7 @@ class case_syntax(unittest.TestCase):
 
     def test_matches_2(self, checkDFilterFail):
         dfilter = 'http.request.method matches HEAD'
-        checkDFilterFail(dfilter, 'Expected a string')
+        checkDFilterFail(dfilter, 'Expected a double quoted string')
 
     def test_matches_3(self, checkDFilterFail):
         dfilter = 'http.request.method matches "^HEAD" matches "^POST"'
@@ -46,6 +46,10 @@ class case_syntax(unittest.TestCase):
     def test_matches_4(self, checkDFilterCount):
         dfilter = r'http.host matches r"update\.microsoft\.c.."'
         checkDFilterCount(dfilter, 1)
+
+    def test_matches_5(self, checkDFilterFail):
+        dfilter = '"a" matches "b"'
+        checkDFilterFail(dfilter, "not a valid operand for matches")
 
     def test_equal_1(self, checkDFilterCount):
         dfilter = 'ip.addr == 10.0.0.5'
@@ -78,3 +82,20 @@ class case_syntax(unittest.TestCase):
     def test_not_equal_4(self, checkDFilterCount):
         dfilter = 'ip.addr != 10.0.0.5 or ip.addr != 207.46.134.94'
         checkDFilterCount(dfilter, 0)
+
+    def test_deprecated_1(self, checkDFilterSucceed):
+        dfilter = "http && udp || tcp"
+        checkDFilterSucceed(dfilter, "suggest parentheses around")
+
+    def test_deprecated_2(self, checkDFilterSucceed):
+        dfilter = "bootp"
+        checkDFilterSucceed(dfilter, "Deprecated tokens: \"bootp\"")
+
+    def test_charconst_bytes_1(self, checkDFilterCount):
+        # Bytes as a character constant.
+        dfilter = "frame contains 'H'"
+        checkDFilterCount(dfilter, 1)
+
+    def test_charconst_bytes_2(self, checkDFilterCount):
+        dfilter = "frame[54] == 'H'"
+        checkDFilterCount(dfilter, 1)

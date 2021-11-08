@@ -438,7 +438,6 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 			/* This is OK */
 			break;
 		case STTYPE_STRING:
-		case STTYPE_CHARCONST:
 		case STTYPE_UNPARSED:
 			dfilter_fail(dfw, "\"%s\" is neither a field nor a protocol name.",
 					(char *)stnode_data(st_arg1));
@@ -473,98 +472,12 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 	}
 }
 
-struct check_drange_sanity_args {
-	dfwork_t		*dfw;
-	stnode_t		*st;
-	gboolean		err;
-};
-
-static void
-check_drange_node_sanity(gpointer data, gpointer user_data)
-{
-	drange_node*		drnode = (drange_node*)data;
-	struct check_drange_sanity_args *args = (struct check_drange_sanity_args*)user_data;
-	gint			start_offset, end_offset, length;
-	stnode_t                *entity;
-	header_field_info	*hfinfo;
-
-	switch (drange_node_get_ending(drnode)) {
-
-	case DRANGE_NODE_END_T_LENGTH:
-		length = drange_node_get_length(drnode);
-		if (length <= 0) {
-			if (!args->err) {
-				args->err = TRUE;
-				start_offset = drange_node_get_start_offset(drnode);
-				entity = sttype_range_entity(args->st);
-				if (entity && stnode_type_id(entity) == STTYPE_FIELD) {
-					hfinfo = (header_field_info *)stnode_data(entity);
-
-					dfilter_fail(args->dfw, "Range %d:%d specified for \"%s\" isn't valid, "
-						"as length %d isn't positive",
-						start_offset, length,
-						hfinfo->abbrev,
-						length);
-				} else
-					dfilter_fail(args->dfw, "Range %d:%d isn't valid, "
-						"as length %d isn't positive",
-						start_offset, length,
-						length);
-			}
-		}
-		break;
-
-	case DRANGE_NODE_END_T_OFFSET:
-		/*
-		 * Make sure the start offset isn't beyond the end
-		 * offset.  This applies to negative offsets too.
-		 */
-
-		/* XXX - [-ve - +ve] is probably pathological, but isn't
-		 * disallowed.
-		 * [+ve - -ve] is probably pathological too, and happens to be
-		 * disallowed.
-		 */
-		start_offset = drange_node_get_start_offset(drnode);
-		end_offset = drange_node_get_end_offset(drnode);
-		if (start_offset > end_offset) {
-			if (!args->err) {
-				args->err = TRUE;
-				entity = sttype_range_entity(args->st);
-				if (entity && stnode_type_id(entity) == STTYPE_FIELD) {
-					hfinfo = (header_field_info *)stnode_data(entity);
-
-					dfilter_fail(args->dfw, "Range %d-%d specified for \"%s\" isn't valid, "
-						"as %d is greater than %d",
-						start_offset, end_offset,
-						hfinfo->abbrev,
-						start_offset, end_offset);
-
-				} else
-					dfilter_fail(args->dfw, "Range %d-%d isn't valid, "
-						"as %d is greater than %d",
-						start_offset, end_offset,
-						start_offset, end_offset);
-			}
-		}
-		break;
-
-	case DRANGE_NODE_END_T_TO_THE_END:
-		break;
-
-	case DRANGE_NODE_END_T_UNINITIALIZED:
-	default:
-		ws_assert_not_reached();
-	}
-}
-
 static void
 check_drange_sanity(dfwork_t *dfw, stnode_t *st)
 {
 	stnode_t		*entity1;
 	header_field_info	*hfinfo1;
 	ftenum_t		ftype1;
-	struct check_drange_sanity_args	args;
 
 	entity1 = sttype_range_entity(st);
 	if (entity1 && stnode_type_id(entity1) == STTYPE_FIELD) {
@@ -596,17 +509,6 @@ check_drange_sanity(dfwork_t *dfw, stnode_t *st)
 		THROW(TypeError);
 	} else {
 		dfilter_fail(dfw, "Range is not supported, details: " G_STRLOC " entity: NULL");
-		THROW(TypeError);
-	}
-
-	args.dfw = dfw;
-	args.st = st;
-	args.err = FALSE;
-
-	drange_foreach_drange_node(sttype_range_drange(st),
-	    check_drange_node_sanity, &args);
-
-	if (args.err) {
 		THROW(TypeError);
 	}
 }
@@ -657,35 +559,10 @@ check_function(dfwork_t *dfw, stnode_t *st_node)
 	}
 }
 
-/* Convert a character constant to a 1-byte BYTE_STRING containing the
- * character. */
-WS_RETNONNULL
-static fvalue_t *
-dfilter_fvalue_from_charconst_string(dfwork_t *dfw, ftenum_t ftype, stnode_t *st, gboolean allow_partial_value)
-{
-	fvalue_t *fvalue;
-	const char *s = stnode_data(st);
-
-	fvalue = fvalue_from_unparsed(ftype, s, allow_partial_value,
-			dfw->error_message == NULL ? &dfw->error_message : NULL);
-	if (fvalue == NULL)
-		THROW(TypeError);
-
-	char *temp_string;
-	/* It's valid. Create a 1-byte BYTE_STRING from its value. */
-	temp_string = g_strdup_printf("%02x", fvalue->value.uinteger);
-	FVALUE_FREE(fvalue);
-	fvalue = fvalue_from_unparsed(ftype, temp_string, allow_partial_value, NULL);
-	ws_assert(fvalue);
-	g_free(temp_string);
-
-	return fvalue;
-}
-
 /* If the LHS of a relation test is a FIELD, run some checks
  * and possibly some modifications of syntax tree nodes. */
 static void
-check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
+check_relation_LHS_FIELD(dfwork_t *dfw, test_op_t st_op,
 		FtypeCanFunc can_func, gboolean allow_partial_value,
 		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
 {
@@ -701,15 +578,15 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 	ftype1 = hfinfo1->type;
 
 	if (stnode_type_id(st_node) == STTYPE_TEST) {
-		ws_debug("5 check_relation_LHS_FIELD(%s)", relation_string);
+		ws_debug("5 check_relation_LHS_FIELD(%s)", sttype_test_todisplay(st_op));
 	} else {
-		ws_debug("6 check_relation_LHS_FIELD(%s)", relation_string);
+		ws_debug("6 check_relation_LHS_FIELD(%s)", sttype_test_todisplay(st_op));
 	}
 
 	if (!can_func(ftype1)) {
 		dfilter_fail(dfw, "%s (type=%s) cannot participate in '%s' comparison.",
 				hfinfo1->abbrev, ftype_pretty_name(ftype1),
-				relation_string);
+				sttype_test_todisplay(st_op));
 		THROW(TypeError);
 	}
 
@@ -730,8 +607,7 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 			THROW(TypeError);
 		}
 	}
-	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED ||
-	         type2 == STTYPE_CHARCONST) {
+	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED) {
 		/* Skip incompatible fields */
 		while (hfinfo1->same_name_prev_id != -1 &&
 				((type2 == STTYPE_STRING && ftype1 != FT_STRING && ftype1!= FT_STRINGZ) ||
@@ -742,13 +618,6 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 
 		if (type2 == STTYPE_STRING) {
 			fvalue = dfilter_fvalue_from_string(dfw, ftype1, st_arg2, hfinfo1);
-		}
-		else if (type2 == STTYPE_CHARCONST &&
-		    strcmp(relation_string, "contains") == 0) {
-			/* The RHS should be the same type as the LHS,
-			 * but a character is just a one-byte byte
-			 * string. */
-			fvalue = dfilter_fvalue_from_charconst_string(dfw, ftype1, st_arg2, allow_partial_value);
 		}
 		else {
 			fvalue = dfilter_fvalue_from_unparsed(dfw, ftype1, st_arg2, allow_partial_value, hfinfo1);
@@ -791,9 +660,8 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 	else if (type2 == STTYPE_SET) {
 		GSList *nodelist;
 		/* A set should only ever appear on RHS of 'in' operation */
-		if (strcmp(relation_string, "in") != 0) {
-			ws_assert_not_reached();
-		}
+		ws_assert(st_op == TEST_OP_IN);
+
 		/* Attempt to interpret one element of the set at a time. Each
 		 * element is represented by two items in the list, the element
 		 * value and NULL. Both will be replaced by a lower and upper
@@ -813,25 +681,25 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 			stnode_t *node_right = (stnode_t *)nodelist->data;
 			if (node_right) {
 				/* range type, check if comparison is possible. */
-				if (!ftype_can_ge(ftype1)) {
+				if (!ftype_can_cmp(ftype1)) {
 					dfilter_fail(dfw, "%s (type=%s) cannot participate in '%s' comparison.",
 							hfinfo1->abbrev, ftype_pretty_name(ftype1),
 							">=");
 					THROW(TypeError);
 				}
-				check_relation_LHS_FIELD(dfw, ">=", ftype_can_ge,
+				check_relation_LHS_FIELD(dfw, TEST_OP_GE, ftype_can_cmp,
 						allow_partial_value, st_arg2, st_arg1, node);
-				check_relation_LHS_FIELD(dfw, "<=", ftype_can_le,
+				check_relation_LHS_FIELD(dfw, TEST_OP_LE, ftype_can_cmp,
 						allow_partial_value, st_arg2, st_arg1, node_right);
 			} else {
-				check_relation_LHS_FIELD(dfw, "==", can_func,
+				check_relation_LHS_FIELD(dfw, TEST_OP_ANY_EQ, can_func,
 						allow_partial_value, st_arg2, st_arg1, node);
 			}
 			nodelist = g_slist_next(nodelist);
 		}
 	}
 	else if (type2 == STTYPE_PCRE) {
-		ws_assert_streq(relation_string, "matches");
+		ws_assert(st_op == TEST_OP_MATCHES);
 	}
 	else {
 		ws_assert_not_reached();
@@ -839,7 +707,7 @@ check_relation_LHS_FIELD(dfwork_t *dfw, const char *relation_string,
 }
 
 static void
-check_relation_LHS_STRING(dfwork_t *dfw, const char* relation_string,
+check_relation_LHS_STRING(dfwork_t *dfw, test_op_t st_op,
 		FtypeCanFunc can_func, gboolean allow_partial_value _U_,
 		stnode_t *st_node _U_,
 		stnode_t *st_arg1, stnode_t *st_arg2)
@@ -861,15 +729,14 @@ check_relation_LHS_STRING(dfwork_t *dfw, const char* relation_string,
 		if (!can_func(ftype2)) {
 			dfilter_fail(dfw, "%s (type=%s) cannot participate in '%s' comparison.",
 					hfinfo2->abbrev, ftype_pretty_name(ftype2),
-					relation_string);
+					sttype_test_todisplay(st_op));
 			THROW(TypeError);
 		}
 
 		fvalue = dfilter_fvalue_from_string(dfw, ftype2, st_arg1, hfinfo2);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
-	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED ||
-	         type2 == STTYPE_CHARCONST) {
+	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED) {
 		/* Well now that's silly... */
 		dfilter_fail(dfw, "Neither \"%s\" nor \"%s\" are field or protocol names.",
 				(char *)stnode_data(st_arg1),
@@ -890,7 +757,7 @@ check_relation_LHS_STRING(dfwork_t *dfw, const char* relation_string,
 		if (!can_func(ftype2)) {
 			dfilter_fail(dfw, "Return value of function %s (type=%s) cannot participate in '%s' comparison.",
 				funcdef->name, ftype_pretty_name(ftype2),
-				relation_string);
+				sttype_test_todisplay(st_op));
 			THROW(TypeError);
 		}
 
@@ -907,7 +774,7 @@ check_relation_LHS_STRING(dfwork_t *dfw, const char* relation_string,
 }
 
 static void
-check_relation_LHS_UNPARSED(dfwork_t *dfw, const char* relation_string,
+check_relation_LHS_UNPARSED(dfwork_t *dfw, test_op_t st_op,
 		FtypeCanFunc can_func, gboolean allow_partial_value,
 		stnode_t *st_node _U_,
 		stnode_t *st_arg1, stnode_t *st_arg2)
@@ -929,15 +796,14 @@ check_relation_LHS_UNPARSED(dfwork_t *dfw, const char* relation_string,
 		if (!can_func(ftype2)) {
 			dfilter_fail(dfw, "%s (type=%s) cannot participate in '%s' comparison.",
 					hfinfo2->abbrev, ftype_pretty_name(ftype2),
-					relation_string);
+					sttype_test_todisplay(st_op));
 			THROW(TypeError);
 		}
 
 		fvalue = dfilter_fvalue_from_unparsed(dfw, ftype2, st_arg1, allow_partial_value, hfinfo2);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
-	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED ||
-	         type2 == STTYPE_CHARCONST) {
+	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED) {
 		/* Well now that's silly... */
 		dfilter_fail(dfw, "Neither \"%s\" nor \"%s\" are field or protocol names.",
 				(char *)stnode_data(st_arg1),
@@ -957,7 +823,7 @@ check_relation_LHS_UNPARSED(dfwork_t *dfw, const char* relation_string,
 
 		if (!can_func(ftype2)) {
 			dfilter_fail(dfw, "return value of function %s() (type=%s) cannot participate in '%s' comparison.",
-					funcdef->name, ftype_pretty_name(ftype2), relation_string);
+					funcdef->name, ftype_pretty_name(ftype2), sttype_test_todisplay(st_op));
 			THROW(TypeError);
 		}
 
@@ -974,7 +840,7 @@ check_relation_LHS_UNPARSED(dfwork_t *dfw, const char* relation_string,
 }
 
 static void
-check_relation_LHS_RANGE(dfwork_t *dfw, const char *relation_string,
+check_relation_LHS_RANGE(dfwork_t *dfw, test_op_t st_op,
 		FtypeCanFunc can_func _U_,
 		gboolean allow_partial_value,
 		stnode_t *st_node _U_,
@@ -985,7 +851,7 @@ check_relation_LHS_RANGE(dfwork_t *dfw, const char *relation_string,
 	ftenum_t		ftype2;
 	fvalue_t		*fvalue;
 
-	ws_debug("5 check_relation_LHS_RANGE(%s)", relation_string);
+	ws_debug("5 check_relation_LHS_RANGE(%s)", sttype_test_todisplay(st_op));
 
 	check_drange_sanity(dfw, st_arg1);
 
@@ -1018,13 +884,6 @@ check_relation_LHS_RANGE(dfwork_t *dfw, const char *relation_string,
 		fvalue = dfilter_fvalue_from_unparsed(dfw, FT_BYTES, st_arg2, allow_partial_value, NULL);
 		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 	}
-	else if (type2 == STTYPE_CHARCONST) {
-		ws_debug("5 check_relation_LHS_RANGE(type2 = STTYPE_CHARCONST)");
-		/* The RHS should be FT_BYTES, but a character is just a
-		 * one-byte byte string. */
-		fvalue = dfilter_fvalue_from_charconst_string(dfw, FT_BYTES, st_arg2, allow_partial_value);
-		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
-	}
 	else if (type2 == STTYPE_RANGE) {
 		ws_debug("5 check_relation_LHS_RANGE(type2 = STTYPE_RANGE)");
 		check_drange_sanity(dfw, st_arg2);
@@ -1052,7 +911,7 @@ check_relation_LHS_RANGE(dfwork_t *dfw, const char *relation_string,
 		THROW(TypeError);
 	}
 	else if (type2 == STTYPE_PCRE) {
-		ws_assert_streq(relation_string, "matches");
+		ws_assert(st_op == TEST_OP_MATCHES);
 	}
 	else {
 		ws_assert_not_reached();
@@ -1068,9 +927,9 @@ check_param_entity(dfwork_t *dfw, stnode_t *st_node)
 
 	e_type = stnode_type_id(st_node);
 	/* If there's an unparsed string, change it to an FT_STRING */
-	if (e_type == STTYPE_UNPARSED || e_type == STTYPE_CHARCONST) {
+	if (e_type == STTYPE_UNPARSED) {
 		fvalue = dfilter_fvalue_from_unparsed(dfw, FT_STRING, st_node, TRUE, NULL);
-		new_st = stnode_new(STTYPE_FVALUE, fvalue, st_node->token_value);
+		new_st = stnode_new(STTYPE_FVALUE, fvalue);
 		stnode_free(st_node);
 		return new_st;
 	}
@@ -1081,7 +940,7 @@ check_param_entity(dfwork_t *dfw, stnode_t *st_node)
 /* If the LHS of a relation test is a FUNCTION, run some checks
  * and possibly some modifications of syntax tree nodes. */
 static void
-check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
+check_relation_LHS_FUNCTION(dfwork_t *dfw, test_op_t st_op,
 		FtypeCanFunc can_func,
 		gboolean allow_partial_value,
 		stnode_t *st_node _U_, stnode_t *st_arg1, stnode_t *st_arg2)
@@ -1100,12 +959,12 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
 	funcdef = sttype_function_funcdef(st_arg1);
 	ftype1 = funcdef->retval_ftype;
 
-	ws_debug("5 check_relation_LHS_FUNCTION(%s)", relation_string);
+	ws_debug("5 check_relation_LHS_FUNCTION(%s)", sttype_test_todisplay(st_op));
 
 	if (!can_func(ftype1)) {
 		dfilter_fail(dfw, "Function %s (type=%s) cannot participate in '%s' comparison.",
 				funcdef->name, ftype_pretty_name(ftype1),
-				relation_string);
+				sttype_test_todisplay(st_op));
 		THROW(TypeError);
 	}
 
@@ -1130,7 +989,7 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
 		fvalue = dfilter_fvalue_from_string(dfw, ftype1, st_arg2, NULL);
 		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 	}
-	else if (type2 == STTYPE_UNPARSED || type2 == STTYPE_CHARCONST) {
+	else if (type2 == STTYPE_UNPARSED) {
 		fvalue = dfilter_fvalue_from_unparsed(dfw, ftype1, st_arg2, allow_partial_value, NULL);
 		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 	}
@@ -1173,7 +1032,7 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
 		THROW(TypeError);
 	}
 	else if (type2 == STTYPE_PCRE) {
-		ws_assert_streq(relation_string, "matches");
+		ws_assert(st_op == TEST_OP_MATCHES);
 	}
 	else {
 		ws_assert_not_reached();
@@ -1183,16 +1042,15 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, const char *relation_string,
 
 /* Check the semantics of any relational test. */
 static void
-check_relation(dfwork_t *dfw, const char *relation_string,
-		gboolean allow_partial_value,
-		FtypeCanFunc can_func, stnode_t *st_node,
-		stnode_t *st_arg1, stnode_t *st_arg2)
+check_relation(dfwork_t *dfw, test_op_t st_op,
+		FtypeCanFunc can_func, gboolean allow_partial_value,
+		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
 {
 	static guint i = 0;
 	header_field_info   *hfinfo;
 	char                *s;
 
-	ws_debug("4 check_relation(\"%s\") [%u]", relation_string, i++);
+	ws_debug("4 check_relation(\"%s\") [%u]", sttype_test_todisplay(st_op), i++);
 	log_stnode(st_arg1);
 	log_stnode(st_arg2);
 
@@ -1233,24 +1091,23 @@ check_relation(dfwork_t *dfw, const char *relation_string,
 
 	switch (stnode_type_id(st_arg1)) {
 		case STTYPE_FIELD:
-			check_relation_LHS_FIELD(dfw, relation_string, can_func,
+			check_relation_LHS_FIELD(dfw, st_op, can_func,
 					allow_partial_value, st_node, st_arg1, st_arg2);
 			break;
 		case STTYPE_STRING:
-			check_relation_LHS_STRING(dfw, relation_string, can_func,
+			check_relation_LHS_STRING(dfw, st_op, can_func,
 					allow_partial_value, st_node, st_arg1, st_arg2);
 			break;
 		case STTYPE_RANGE:
-			check_relation_LHS_RANGE(dfw, relation_string, can_func,
+			check_relation_LHS_RANGE(dfw, st_op, can_func,
 					allow_partial_value, st_node, st_arg1, st_arg2);
 			break;
 		case STTYPE_UNPARSED:
-		case STTYPE_CHARCONST:
-			check_relation_LHS_UNPARSED(dfw, relation_string, can_func,
+			check_relation_LHS_UNPARSED(dfw, st_op, can_func,
 					allow_partial_value, st_node, st_arg1, st_arg2);
 			break;
 		case STTYPE_FUNCTION:
-			check_relation_LHS_FUNCTION(dfw, relation_string, can_func,
+			check_relation_LHS_FUNCTION(dfw, st_op, can_func,
 					allow_partial_value, st_node, st_arg1, st_arg2);
 			break;
 
@@ -1260,6 +1117,46 @@ check_relation(dfwork_t *dfw, const char *relation_string,
 		case STTYPE_SET:
 		default:
 			ws_assert_not_reached();
+	}
+}
+
+static void
+check_relation_matches(dfwork_t *dfw, stnode_t *st_node,
+		stnode_t *st_arg1, stnode_t *st_arg2)
+{
+	fvalue_regex_t *pcre;
+	char *errmsg = NULL;
+	const char *patt;
+
+	if (stnode_type_id(st_arg2) != STTYPE_STRING) {
+		dfilter_fail(dfw, "Expected a double quoted string not %s", stnode_todisplay(st_arg2));
+		THROW(TypeError);
+	}
+
+	patt = stnode_data(st_arg2);
+	ws_debug("Compile regex pattern: %s", patt);
+
+	pcre = fvalue_regex_compile(patt, &errmsg);
+	if (errmsg) {
+		dfilter_fail(dfw, "%s", errmsg);
+		g_free(errmsg);
+		THROW(TypeError);
+	}
+
+	stnode_replace(st_arg2, STTYPE_PCRE, pcre);
+
+	if (stnode_type_id(st_arg1) == STTYPE_FIELD) {
+		check_relation_LHS_FIELD(dfw, TEST_OP_MATCHES, ftype_can_matches, TRUE, st_node, st_arg1, st_arg2);
+	}
+	else if (stnode_type_id(st_arg1) == STTYPE_FUNCTION) {
+		check_relation_LHS_FUNCTION(dfw, TEST_OP_MATCHES, ftype_can_matches, TRUE, st_node, st_arg1, st_arg2);
+	}
+	else if (stnode_type_id(st_arg1) == STTYPE_RANGE) {
+		check_relation_LHS_RANGE(dfw, TEST_OP_MATCHES, ftype_can_matches, TRUE, st_node, st_arg1, st_arg2);
+	}
+	else {
+		dfilter_fail(dfw, "%s is not a valid operand for matches.", stnode_todisplay(st_arg1));
+		THROW(TypeError);
 	}
 }
 
@@ -1312,39 +1209,27 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 			break;
 
 		case TEST_OP_ANY_EQ:
-			check_relation(dfw, "==", FALSE, ftype_can_eq, st_node, st_arg1, st_arg2);
-			break;
 		case TEST_OP_ALL_NE:
-			check_relation(dfw, "!=", FALSE, ftype_can_ne, st_node, st_arg1, st_arg2);
-			break;
 		case TEST_OP_ANY_NE:
-			check_relation(dfw, "~=", FALSE, ftype_can_ne, st_node, st_arg1, st_arg2);
+			check_relation(dfw, st_op, ftype_can_eq, FALSE, st_node, st_arg1, st_arg2);
 			break;
 		case TEST_OP_GT:
-			check_relation(dfw, ">", FALSE, ftype_can_gt, st_node, st_arg1, st_arg2);
-			break;
 		case TEST_OP_GE:
-			check_relation(dfw, ">=", FALSE, ftype_can_ge, st_node, st_arg1, st_arg2);
-			break;
 		case TEST_OP_LT:
-			check_relation(dfw, "<", FALSE, ftype_can_lt, st_node, st_arg1, st_arg2);
-			break;
 		case TEST_OP_LE:
-			check_relation(dfw, "<=", FALSE, ftype_can_le, st_node, st_arg1, st_arg2);
+			check_relation(dfw, st_op, ftype_can_cmp, FALSE, st_node, st_arg1, st_arg2);
 			break;
 		case TEST_OP_BITWISE_AND:
-			check_relation(dfw, "&", FALSE, ftype_can_bitwise_and, st_node, st_arg1, st_arg2);
+			check_relation(dfw, st_op, ftype_can_bitwise_and, FALSE, st_node, st_arg1, st_arg2);
 			break;
 		case TEST_OP_CONTAINS:
-			check_relation(dfw, "contains", TRUE, ftype_can_contains, st_node, st_arg1, st_arg2);
+			check_relation(dfw, st_op, ftype_can_contains, TRUE, st_node, st_arg1, st_arg2);
 			break;
 		case TEST_OP_MATCHES:
-			check_relation(dfw, "matches", TRUE, ftype_can_matches, st_node, st_arg1, st_arg2);
+			check_relation_matches(dfw, st_node, st_arg1, st_arg2);
 			break;
 		case TEST_OP_IN:
-			/* Use the ftype_can_eq as the items in the set are evaluated using the
-			 * semantics of equality. */
-			check_relation(dfw, "in", FALSE, ftype_can_eq, st_node, st_arg1, st_arg2);
+			check_relation(dfw, st_op, ftype_can_cmp, FALSE, st_node, st_arg1, st_arg2);
 			break;
 
 		default:

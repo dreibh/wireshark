@@ -39,8 +39,8 @@ typedef void (*FvalueFreeFunc)(fvalue_t*);
 
 typedef gboolean (*FvalueFromUnparsed)(fvalue_t*, const char*, gboolean, gchar **);
 typedef gboolean (*FvalueFromString)(fvalue_t*, const char*, gchar **);
-typedef void (*FvalueToStringRepr)(fvalue_t*, ftrepr_t, int field_display, char*volatile, unsigned int);
-typedef int (*FvalueStringReprLen)(fvalue_t*, ftrepr_t, int field_display);
+typedef void (*FvalueToStringRepr)(const fvalue_t*, ftrepr_t, int field_display, char*volatile, unsigned int);
+typedef int (*FvalueStringReprLen)(const fvalue_t*, ftrepr_t, int field_display);
 
 typedef void (*FvalueSetByteArrayFunc)(fvalue_t*, GByteArray *);
 typedef void (*FvalueSetBytesFunc)(fvalue_t*, const guint8 *);
@@ -133,6 +133,9 @@ struct _ftype_t {
 	}
 
 GByteArray *byte_array_from_unparsed(const char *s, gchar **err_msg);
+
+gboolean
+parse_charconst(const char *s, unsigned long *valuep, gchar **err_msg);
 
 #endif /* FTYPES_INT_H */
 

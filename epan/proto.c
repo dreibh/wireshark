@@ -7361,35 +7361,17 @@ proto_tree_set_appendix(proto_tree *tree, tvbuff_t *tvb, gint start,
 }
 
 static void
-check_valid_filter_name_or_fail(const char *filter_name)
+check_protocol_filter_name_or_fail(const char *filter_name)
 {
-	gboolean found_invalid = proto_check_field_name(filter_name);
-
-	/* Additionally forbid upper case characters. */
-	if (!found_invalid) {
-		for (guint i = 0; filter_name[i]; i++) {
-			if (g_ascii_isupper(filter_name[i])) {
-				found_invalid = TRUE;
-				break;
-			}
-		}
-	}
-
-	if (found_invalid) {
+	if (proto_check_field_name(filter_name) != '\0') {
 		ws_error("Protocol filter name \"%s\" has one or more invalid characters."
-			" Allowed are lower characters, digits, '-', '_' and non-repeating '.'."
+			" Allowed are letters, digits, '-', '_' and non-repeating '.'."
 			" This might be caused by an inappropriate plugin or a development error.", filter_name);
 	}
 
 	/* Check for reserved keywords. */
 	if (g_hash_table_contains(proto_reserved_filter_names, filter_name)) {
 		ws_error("Protocol filter name \"%s\" is invalid because it is a reserved keyword."
-			" This might be caused by an inappropriate plugin or a development error.", filter_name);
-	}
-
-	/* First character cannot be '-'. */
-	if (filter_name[0] == '-') {
-		ws_error("Protocol filter name \"%s\" cannot begin with '-'."
 			" This might be caused by an inappropriate plugin or a development error.", filter_name);
 	}
 }
@@ -7420,7 +7402,7 @@ proto_register_protocol(const char *name, const char *short_name,
 			" This might be caused by an inappropriate plugin or a development error.", short_name);
 	}
 
-	check_valid_filter_name_or_fail(filter_name);
+	check_protocol_filter_name_or_fail(filter_name);
 
 	if (g_hash_table_lookup(proto_filter_names, filter_name)) {
 		ws_error("Duplicate protocol filter_name \"%s\"!"
@@ -7483,7 +7465,7 @@ proto_register_protocol_in_name_only(const char *name, const char *short_name, c
 			" This might be caused by an inappropriate plugin or a development error.", name);
 	}
 
-	check_valid_filter_name_or_fail(filter_name);
+	check_protocol_filter_name_or_fail(filter_name);
 
 	/* Add this protocol to the list of helper protocols (just so it can be properly freed) */
 	protocol = g_new(protocol_t, 1);
@@ -8216,27 +8198,6 @@ proto_free_deregistered_fields (void)
 	g_ptr_array_free(deregistered_slice, TRUE);
 	deregistered_slice = g_ptr_array_new();
 }
-
-/* chars allowed in field abbrev: alphanumerics, '-', "_", and ".". */
-static
-const guint8 fld_abbrev_chars[256] = {
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0x00-0x0F */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0x10-0x1F */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, /* 0x20-0x2F '-', '.'	   */
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, /* 0x30-0x3F '0'-'9'	   */
-	0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 0x40-0x4F 'A'-'O'	   */
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 1, /* 0x50-0x5F 'P'-'Z', '_' */
-	0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, /* 0x60-0x6F 'a'-'o'	   */
-	1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, /* 0x70-0x7F 'p'-'z'	   */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0x80-0x8F */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0x90-0x9F */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0xA0-0xAF */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0xB0-0xBF */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0xC0-0xCF */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0xD0-0xDF */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0xE0-0xEF */
-	0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, /* 0xF0-0xFF */
-};
 
 static const value_string hf_display[] = {
 	{ BASE_NONE,			  "BASE_NONE"			   },
@@ -13165,23 +13126,13 @@ proto_tree_add_checksum(proto_tree *tree, tvbuff_t *tvb, const guint offset,
 guchar
 proto_check_field_name(const gchar *field_name)
 {
-	const char *p = field_name;
-	guchar c = '.', lastc;
+	return module_check_valid_name(field_name, FALSE);
+}
 
-	do {
-		lastc = c;
-		c = *(p++);
-		/* Leading '.' or substring ".." are disallowed. */
-		if (c == '.' && lastc == '.') {
-			break;
-		}
-	} while (fld_abbrev_chars[c]);
-
-	/* Trailing '.' is disallowed. */
-	if (lastc == '.') {
-		return '.';
-	}
-	return c;
+guchar
+proto_check_field_name_lower(const gchar *field_name)
+{
+	return module_check_valid_name(field_name, TRUE);
 }
 
 gboolean

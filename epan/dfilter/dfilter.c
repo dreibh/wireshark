@@ -28,6 +28,9 @@
 
 #define DFILTER_TOKEN_ID_OFFSET	1
 
+/* Scanner's lval */
+extern df_lval_t *df_lval;
+
 /* Holds the singular instance of our Lemon parser object */
 static void*	ParserObj = NULL;
 
@@ -66,93 +69,6 @@ dfilter_parse_fail(dfwork_t *dfw, const char *format, ...)
 	dfilter_vfail(dfw, format, args);
 	va_end(args);
 	dfw->syntax_error = TRUE;
-}
-
-stnode_t *
-dfilter_new_function(dfwork_t *dfw, const char *name)
-{
-	df_func_def_t *def = df_func_lookup(name);
-	if (!def) {
-		dfilter_parse_fail(dfw, "Function '%s' does not exist", name);
-	}
-	return stnode_new(STTYPE_FUNCTION, def, name);
-}
-
-/* Gets a regex from a string, and sets the error message on failure. */
-stnode_t *
-dfilter_new_regex(dfwork_t *dfw, stnode_t *node)
-{
-	fvalue_regex_t *pcre;
-	char *errmsg = NULL;
-
-	if (stnode_type_id(node) != STTYPE_STRING) {
-		dfilter_parse_fail(dfw, "Expected a string not %s", stnode_todisplay(node));
-		return node;
-	}
-
-	const char *patt = stnode_data(node);
-	ws_debug("Compile regex pattern: %s", patt);
-
-	pcre = fvalue_regex_compile(patt, &errmsg);
-	if (errmsg) {
-		dfilter_parse_fail(dfw, "%s", errmsg);
-		g_free(errmsg);
-		return node;
-	}
-
-	stnode_replace(node, STTYPE_PCRE, pcre);
-	return node;
-}
-
-gboolean
-dfilter_str_to_gint32(dfwork_t *dfw, const char *s, gint32* pint)
-{
-	char    *endptr;
-	long	integer;
-
-	errno = 0;
-	integer = strtol(s, &endptr, 0);
-
-	if (errno == EINVAL || endptr == s || *endptr != '\0') {
-		/* This isn't a valid number. */
-		dfilter_parse_fail(dfw, "\"%s\" is not a valid number.", s);
-		return FALSE;
-	}
-	if (errno == ERANGE) {
-		if (integer == LONG_MAX) {
-			dfilter_parse_fail(dfw, "\"%s\" causes an integer overflow.", s);
-		}
-		else if (integer == LONG_MIN) {
-			dfilter_parse_fail(dfw, "\"%s\" causes an integer underflow.", s);
-		}
-		else {
-			/*
-			 * XXX - can "strtol()" set errno to ERANGE without
-			 * returning LONG_MAX or LONG_MIN?
-			 */
-			dfilter_parse_fail(dfw, "\"%s\" is not an integer.", s);
-		}
-		return FALSE;
-	}
-	if (integer > G_MAXINT32) {
-		/*
-		 * Fits in a long, but not in a gint32 (a long might be
-		 * 64 bits).
-		 */
-		dfilter_parse_fail(dfw, "\"%s\" causes an integer overflow.", s);
-		return FALSE;
-	}
-	if (integer < G_MININT32) {
-		/*
-		 * Fits in a long, but not in a gint32 (a long might be
-		 * 64 bits).
-		 */
-		dfilter_parse_fail(dfw, "\"%s\" causes an integer underflow.", s);
-		return FALSE;
-	}
-
-	*pint = (gint32)integer;
-	return TRUE;
 }
 
 /*
@@ -356,13 +272,9 @@ const char *tokenstr(int token)
 		case TOKEN_LBRACKET:	return "LBRACKET";
 		case TOKEN_RBRACKET:	return "RBRACKET";
 		case TOKEN_COMMA:	return "COMMA";
-		case TOKEN_INTEGER:	return "INTEGER";
-		case TOKEN_COLON:	return "COLON";
-		case TOKEN_HYPHEN:	return "HYPHEN";
 		case TOKEN_TEST_IN:	return "TEST_IN";
 		case TOKEN_LBRACE:	return "LBRACE";
 		case TOKEN_RBRACE:	return "RBRACE";
-		case TOKEN_WHITESPACE:	return "WHITESPACE";
 		case TOKEN_DOTDOT:	return "DOTDOT";
 		case TOKEN_LPAREN:	return "LPAREN";
 		case TOKEN_RPAREN:	return "RPAREN";
@@ -431,13 +343,12 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 
 	state.dfw = dfw;
 	state.quoted_string = NULL;
-	state.in_set = FALSE;
 	state.raw_string = FALSE;
 
 	df_set_extra(&state, scanner);
 
 	while (1) {
-		df_lval = stnode_new(STTYPE_UNINITIALIZED, NULL, NULL);
+		df_lval = df_lval_new();
 		token = df_lex(scanner);
 
 		/* Check for scanner failure */
@@ -453,11 +364,11 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 
 		ws_debug("(%u) Token %d %s %s",
 				++token_count, token, tokenstr(token),
-				stnode_token_value(df_lval));
+				df_lval_value(df_lval));
 
 		/* Give the token to the parser */
 		Dfilter(ParserObj, token, df_lval, dfw);
-		/* We've used the stnode_t, so we don't want to free it */
+		/* The parser has freed the lval for us. */
 		df_lval = NULL;
 
 		if (dfw->syntax_error) {
@@ -467,10 +378,10 @@ dfilter_compile(const gchar *text, dfilter_t **dfp, gchar **err_msg)
 
 	} /* while (1) */
 
-	/* If we created an stnode_t but didn't use it, free it; the
+	/* If we created a df_lval_t but didn't use it, free it; the
 	 * parser doesn't know about it and won't free it for us. */
 	if (df_lval) {
-		stnode_free(df_lval);
+		df_lval_free(df_lval);
 		df_lval = NULL;
 	}
 

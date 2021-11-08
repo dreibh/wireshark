@@ -12,13 +12,13 @@
 static gpointer
 string_new(gpointer string)
 {
-	return (gpointer) g_strdup((char*) string);
+	return g_strdup(string);
 }
 
 static gpointer
 string_dup(gconstpointer string)
 {
-	return (gpointer) g_strdup((const char*) string);
+	return g_strdup(string);
 }
 
 static void
@@ -28,7 +28,15 @@ string_free(gpointer value)
 }
 
 static char *
-string_tostr(const void *data, gboolean pretty _U_)
+string_tostr(const void *data, gboolean pretty)
+{
+	if (pretty)
+		return g_strdup_printf("\"%s\"", (const char *)data);
+	return g_strdup(data);
+}
+
+static char *
+unparsed_tostr(const void *data, gboolean pretty _U_)
 {
 	return g_strdup(data);
 }
@@ -46,26 +54,16 @@ sttype_register_string(void)
 		string_tostr
 	};
 
-	static sttype_t charconst_type = {
-		STTYPE_CHARCONST,
-		"CHARCONST",
-		string_new,
-		string_free,
-		string_dup,
-		string_tostr
-	};
-
 	static sttype_t unparsed_type = {
 		STTYPE_UNPARSED,
 		"UNPARSED",
 		string_new,
 		string_free,
 		string_dup,
-		string_tostr
+		unparsed_tostr
 	};
 
 	sttype_register(&string_type);
-	sttype_register(&charconst_type);
 	sttype_register(&unparsed_type);
 }
 

@@ -703,6 +703,17 @@ else() # ! MSVC
 		-Wcomma
 		-Wshorten-64-to-32
 		-Wredundant-decls
+		#
+		# -Wmaybe-uninitialized is enabled with -Wall. This is a low
+		# priority warning, sometimes with false positives, that
+		# can lay dormant and be triggered by increasing the optimization
+		# level to O3. This is a major inconvenience for developers
+		# (because the warning is typically unrelated to their code)
+		# and for end users it is a build breakage (with -Werror).
+		# For these reasons we disable the fatal error for this warning,
+		# until these procedural issues can be fixed or at least mitigated.
+		#
+		-Wno-error=maybe-uninitialized
 	)
 
 	#
@@ -2519,7 +2530,11 @@ if(BUILD_wireshark AND QT_FOUND)
 	endif()
 
 	if(ENABLE_APPLICATION_BUNDLE)
-		add_dependencies(wireshark manpages)
+		if(ASCIIDOCTOR_FOUND)
+			# Make sure to generate files referenced by
+			# BUNDLE_RESOURCE_SHARE_MAN1_FILES
+			add_dependencies(wireshark manpages)
+		endif()
 		set_target_properties(
 			wireshark PROPERTIES
 				MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/packaging/macosx/Info.plist
@@ -3597,7 +3612,6 @@ set(_test_group_list
 	suite_dfilter.group_bytes_ether
 	suite_dfilter.group_bytes_ipv6
 	suite_dfilter.group_bytes_type
-	suite_dfilter.group_deprecated
 	suite_dfilter.group_double
 	suite_dfilter.group_dfunction_string
 	suite_dfilter.group_integer

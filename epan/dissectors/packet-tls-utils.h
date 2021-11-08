@@ -123,8 +123,14 @@ typedef enum {
 #define SSL_HND_HELLO_EXT_POST_HANDSHAKE_AUTH           49
 #define SSL_HND_HELLO_EXT_SIGNATURE_ALGORITHMS_CERT     50
 #define SSL_HND_HELLO_EXT_KEY_SHARE                     51
-#define SSL_HND_HELLO_EXT_CONNECTION_ID                 53
+#define SSL_HND_HELLO_EXT_TRANSPARENCY_INFO             52 /* draft-ietf-trans-rfc6962-bis-41 */
+#define SSL_HND_HELLO_EXT_CONNECTION_ID_DEPRECATED      53 /* draft-ietf-tls-dtls-connection-id-07 */
+#define SSL_HND_HELLO_EXT_CONNECTION_ID                 54
+#define SSL_HND_HELLO_EXT_EXTERNAL_ID_HASH              55 /* RFC 8844 */
+#define SSL_HND_HELLO_EXT_EXTERNAL_SESSION_ID           56 /* RFC 8844 */
 #define SSL_HND_HELLO_EXT_QUIC_TRANSPORT_PARAMETERS_V1  57 /* draft-ietf-quic-tls-33 */
+#define SSL_HND_HELLO_EXT_TICKET_REQUEST                58 /* draft-ietf-tls-ticketrequests-07 */
+#define SSL_HND_HELLO_EXT_DNSSEC_CHAIN                  59 /* RFC 9102 */
 #define SSL_HND_HELLO_EXT_GREASE_0A0A                   2570
 #define SSL_HND_HELLO_EXT_GREASE_1A1A                   6682
 #define SSL_HND_HELLO_EXT_GREASE_2A2A                   10794
@@ -173,7 +179,7 @@ typedef enum {
 #define SSL_HND_QUIC_TP_ACTIVE_CONNECTION_ID_LIMIT          0x0e
 #define SSL_HND_QUIC_TP_INITIAL_SOURCE_CONNECTION_ID        0x0f
 #define SSL_HND_QUIC_TP_RETRY_SOURCE_CONNECTION_ID          0x10
-#define SSL_HND_QUIC_TP_MAX_DATAGRAM_FRAME_SIZE             0x20 /* https://tools.ietf.org/html/draft-pauly-quic-datagram-05 */
+#define SSL_HND_QUIC_TP_MAX_DATAGRAM_FRAME_SIZE             0x20 /* https://datatracker.ietf.org/doc/html/draft-ietf-quic-datagram-06 */
 #define SSL_HND_QUIC_TP_LOSS_BITS                           0x1057 /* https://tools.ietf.org/html/draft-ferrieuxhamchaoui-quic-lossbits-03 */
 #define SSL_HND_QUIC_TP_GREASE_QUIC_BIT                     0x2ab2 /* https://tools.ietf.org/html/draft-thomson-quic-bit-grease-00 */
 #define SSL_HND_QUIC_TP_ENABLE_TIME_STAMP                   0x7157 /* https://tools.ietf.org/html/draft-huitema-quic-ts-02 */
@@ -468,12 +474,14 @@ typedef struct _SslSession {
         opaque cid<0..2^8-1>;
     } ConnectionId;
     */
-#define DTLS_MAX_CID_LENGTH 256
 
     guint8 *client_cid;
     guint8 *server_cid;
     guint8  client_cid_len;
+    gboolean client_cid_len_present;
     guint8  server_cid_len;
+    gboolean server_cid_len_present;
+    gboolean deprecated_cid; /* Set when handshake is using the deprecated CID extention type */
 } SslSession;
 
 /* RFC 5246, section 8.1 says that the master secret is always 48 bytes */

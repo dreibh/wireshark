@@ -3002,11 +3002,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>dfilters, preferences, ethers, …</source>
-        <translation type="unfinished"></translation>
+        <translation>dfilter, inställningar, ether:ar, …</translation>
     </message>
     <message>
         <source>dfilters, preferences, manuf, …</source>
-        <translation type="unfinished"></translation>
+        <translation>dfilter, inställningar, manuf, …</translation>
     </message>
     <message>
         <source>System</source>
@@ -3152,7 +3152,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save as…</source>
-        <translation type="unfinished">Spara som …</translation>
+        <translation>Spara som …</translation>
     </message>
     <message>
         <source>Back</source>
@@ -3213,7 +3213,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>QUIC streams not found on the selected packet.</source>
-        <translation type="unfinished"></translation>
+        <translation>QUIC-strömmar fanns inte i det valda paketet.</translation>
     </message>
     <message numerus="yes">
         <source>%Ln total sub stream(s).</source>
@@ -3224,21 +3224,21 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message numerus="yes">
         <source>Total number of QUIC connections: %Ln</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Totalt antal QUIC-förbindelser: %Ln</numerusform>
+            <numerusform>Totalt antal QUIC-förbindelse: %Ln</numerusform>
         </translation>
     </message>
     <message numerus="yes">
         <source>Max QUIC Stream ID for the selected connection: %Ln</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Maximalt QUIC-ström-ID för den valda förbindelsen: %Ln</numerusform>
+            <numerusform>Maximalt QUIC-ström-ID för den valda förbindelsen: %Ln</numerusform>
         </translation>
     </message>
     <message>
         <source>No streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Inga strömmar</translation>
     </message>
     <message>
         <source>Entire conversation (%1)</source>
@@ -3254,7 +3254,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save Stream Content As…</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara ströminnehållet som …</translation>
     </message>
     <message>
         <source>[Stream output truncated]</source>
@@ -3286,7 +3286,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     <message>
         <source>Show data as</source>
         <oldsource>Show and save data as</oldsource>
-        <translation type="unfinished"></translation>
+        <translation>Visa data som</translation>
     </message>
     <message>
         <source>Stream</source>
@@ -3379,11 +3379,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     <message>
         <source>Example GIF query packets have jumbo window sizes</source>
         <extracomment>These are pangrams. Feel free to replace with nonsense text that spans your alphabet. https://en.wikipedia.org/wiki/Pangram</extracomment>
-        <translation type="unfinished"></translation>
+        <translation>Flygande bäckasiner söka hwila på mjuka tuvor</translation>
     </message>
     <message>
         <source>Lazy badgers move unique waxy jellyfish packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Yxmördaren Julia Blomqvist på fäktning i Schweiz</translation>
     </message>
     <message>
         <source>Font</source>
@@ -3668,7 +3668,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Automatic Update</source>
-        <translation type="unfinished"></translation>
+        <translation>Automatisk uppdatering</translation>
     </message>
     <message>
         <source>Reset</source>
@@ -3877,7 +3877,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save As…</source>
-        <translation type="unfinished">Spara som …</translation>
+        <translation>Spara som …</translation>
     </message>
     <message>
         <source>Copy</source>
@@ -3893,7 +3893,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>2 ms</source>
-        <translation type="unfinished">100 ms {2 ?}</translation>
+        <translation>2 ms</translation>
     </message>
     <message>
         <source>5 ms</source>
@@ -3905,11 +3905,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>20 ms</source>
-        <translation type="unfinished">100 ms {20 ?}</translation>
+        <translation>20 ms</translation>
     </message>
     <message>
         <source>50 ms</source>
-        <translation type="unfinished">100 ms {50 ?}</translation>
+        <translation>50 ms</translation>
     </message>
     <message>
         <source>100 ms</source>
@@ -3917,19 +3917,19 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>200 ms</source>
-        <translation type="unfinished">100 ms {200 ?}</translation>
+        <translation>200 ms</translation>
     </message>
     <message>
         <source>500 ms</source>
-        <translation type="unfinished">100 ms {500 ?}</translation>
+        <translation>500 ms</translation>
     </message>
     <message>
         <source>2 sec</source>
-        <translation type="unfinished">10 s {2 ?}</translation>
+        <translation>2 s</translation>
     </message>
     <message>
         <source>5 sec</source>
-        <translation type="unfinished">10 s {5 ?}</translation>
+        <translation>5 s</translation>
     </message>
     <message>
         <source>Wireshark I/O Graphs: %1</source>
@@ -4001,7 +4001,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save Graph As…</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara grafen som …</translation>
     </message>
 </context>
 <context>
@@ -4200,7 +4200,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save Graph As…</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara grafen som …</translation>
     </message>
     <message>
         <source>Can&apos;t save in a file: Wrong length of captured packets.</source>
@@ -4244,7 +4244,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Saving %1…</source>
-        <translation type="unfinished"></translation>
+        <translation>Sparar %1 …</translation>
     </message>
     <message>
         <source>Analyzing IAX2</source>
@@ -4288,11 +4288,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Hex Dump</source>
-        <translation type="unfinished">Hex-dump</translation>
+        <translation>Hex-dump</translation>
     </message>
     <message>
         <source>Import a standard hex dump as exported by Wireshark</source>
-        <translation type="unfinished"></translation>
+        <translation>Importera en standardhexdump som exporterats av Wireshark</translation>
     </message>
     <message>
         <source>Offsets in the text file are in octal notation</source>
@@ -4324,51 +4324,51 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Regular Expression</source>
-        <translation type="unfinished">Reguljärt uttryck</translation>
+        <translation>Reguljärt uttryck</translation>
     </message>
     <message>
         <source>Import a file formatted according to a custom regular expression</source>
-        <translation type="unfinished"></translation>
+        <translation>Importera en fil formaterad enligt ett anpassat reguljärt uttryck</translation>
     </message>
     <message>
         <source>Packet format regular expression</source>
-        <translation type="unfinished"></translation>
+        <translation>Paketformat reguljärt uttryck</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifieing data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;Required is only a data group, also supported are time, dir and seqno.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl-kompatibelt reguljärt uttryck för att fånga ett enskilt paket i filen med namngivna grupper som identifierar data att importera. Ankaren ^ och $ matchar även före/efter nyrader&lt;/p&gt;&lt;p&gt;Datagruppen är det enda nödvändiga, stödjer även tid, katalog och sekvensnummer.&lt;/p&gt;&lt;p&gt;Flaggor för reguljäruttryck: DUPNAMES, MULTILINE och NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>This is regexHintLabel, it will be set to default_regex_hint</source>
-        <translation type="unfinished"></translation>
+        <translation>Detta är regexHintLabel, det kommer sättas till default_regex_hint</translation>
     </message>
     <message>
         <source>Data encoding:</source>
-        <translation type="unfinished"></translation>
+        <translation>Datakodning:</translation>
     </message>
     <message>
         <source>How data is encoded</source>
-        <translation type="unfinished"></translation>
+        <translation>Hur data är kodat</translation>
     </message>
     <message>
         <source>encodingRegexExample</source>
-        <translation type="unfinished"></translation>
+        <translation>encodingRegexExample</translation>
     </message>
     <message>
         <source>List of characters indicating incoming packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Lista över tecken som indikerar inkommande paket</translation>
     </message>
     <message>
         <source>iI&lt;</source>
-        <translation type="unfinished"></translation>
+        <translation>iI&lt;</translation>
     </message>
     <message>
         <source>List of characters indicating outgoing packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Lista över tecken som indikerar utgående paket</translation>
     </message>
     <message>
         <source>oO&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>oO&gt;</translation>
     </message>
     <message>
         <source>Timestamp format:</source>
@@ -4404,7 +4404,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>&lt;small&gt;&lt;i&gt;recommended regex:&lt;/small&gt;&lt;/i&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;small&gt;&lt;i&gt;rekommenderat reguljäruttryck:&lt;/small&gt;&lt;/i&gt;</translation>
     </message>
     <message>
         <source>The format in which to parse timestamps in the text file (e.g. %H:%M:%S.). Format specifiers are based on strptime(3)</source>
@@ -4412,15 +4412,15 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The format in which to parse timestamps in the text file (e.g. %H:%M:%S.%f).&lt;/p&gt;&lt;p&gt;Format specifiers are based on strptime(3) with the addition of %f for second fractions. The percision of %f is determined from it&apos;s length.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Formatet i vilket tidsstämplar skall tolkas i textfilen (t.ex. %H.%M.%S,%f).&lt;/p&gt;&lt;p&gt;Formatspecificerare baseras på strptime(3) med tillägget %f för delar av sekunder. Upplösningen på %f avgörs från dess längd.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>%H:%M:%S.%f</source>
-        <translation type="unfinished"></translation>
+        <translation>%H.%M.%S,%f</translation>
     </message>
     <message>
         <source>timestampExampleLabel</source>
-        <translation type="unfinished"></translation>
+        <translation>timestampExampleLabel</translation>
     </message>
     <message>
         <source>Encapsulation Type:</source>
@@ -4432,7 +4432,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Dissector</source>
-        <translation type="unfinished">Dissekerare</translation>
+        <translation>Dissekerare</translation>
     </message>
     <message>
         <source>The UDP, TCP or SCTP source port for each frame</source>
@@ -4540,7 +4540,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>The dissector to use for each frame</source>
-        <translation type="unfinished"></translation>
+        <translation>Dissekeraren att använda för varje ram</translation>
     </message>
     <message>
         <source>The maximum size of the frames to write to the import capture file (max 256kiB)</source>
@@ -4548,11 +4548,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Supported fields are data, dir, time, seqno</source>
-        <translation type="unfinished"></translation>
+        <translation>Fält som stödjs är data, dir, time, seqno</translation>
     </message>
     <message>
         <source>Missing capturing group data (use (?</source>
-        <translation type="unfinished"></translation>
+        <translation>Data för fångstgrupp saknas (använd (?</translation>
     </message>
     <message>
         <source>Import From Hex Dump</source>
@@ -5602,7 +5602,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Packet Diagram</source>
-        <translation type="unfinished"></translation>
+        <translation>Paketdiagram</translation>
     </message>
     <message>
         <source>None</source>
@@ -5630,7 +5630,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Enable mouse-over colorization</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktivera färgläggning vid musen över</translation>
     </message>
     <message>
         <source>Status Bar settings:</source>
@@ -5661,7 +5661,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>MAC Statistics</source>
-        <translation type="unfinished">MAC-statistik</translation>
+        <translation>MAC-statistik</translation>
     </message>
 </context>
 <context>
@@ -5962,7 +5962,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save As…</source>
-        <translation type="unfinished">Spara som …</translation>
+        <translation>Spara som …</translation>
     </message>
     <message>
         <source>%1 %2 (%3s seq %4 len %5)</source>
@@ -6006,7 +6006,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save Graph As…</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara grafen som …</translation>
     </message>
 </context>
 <context>
@@ -6077,7 +6077,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>RLC Statistics</source>
-        <translation type="unfinished">RLC-statistik</translation>
+        <translation>RLC-statistik</translation>
     </message>
 </context>
 <context>
@@ -6100,15 +6100,15 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Manage Profiles…</source>
-        <translation type="unfinished"></translation>
+        <translation>Hantera profiler …</translation>
     </message>
     <message>
         <source>New…</source>
-        <translation type="unfinished"></translation>
+        <translation>Ny …</translation>
     </message>
     <message>
         <source>Edit…</source>
-        <translation type="unfinished"></translation>
+        <translation>Redigera …</translation>
     </message>
     <message>
         <source>Import</source>
@@ -6286,7 +6286,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Prepare as Filter</source>
-        <translation type="unfinished">Förbered som filter</translation>
+        <translation>Förbered som filter</translation>
     </message>
     <message>
         <source>SCTP</source>
@@ -6370,7 +6370,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Packet Comments</source>
-        <translation type="unfinished">Paketkommentarer</translation>
+        <translation>Paketkommentarer</translation>
     </message>
     <message>
         <source>Main Toolbar</source>
@@ -6422,7 +6422,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Rawshark</source>
-        <translation type="unfinished"></translation>
+        <translation>Rawshark</translation>
     </message>
     <message>
         <source>Dumpcap</source>
@@ -6438,7 +6438,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Text2pcap</source>
-        <translation type="unfinished"></translation>
+        <translation>Text2pcap</translation>
     </message>
     <message>
         <source>Website</source>
@@ -6658,7 +6658,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Reliable Server Pooling (RSerPool)</source>
-        <translation type="unfinished"></translation>
+        <translation>Pålitlig server-poolning (RSerPool)</translation>
     </message>
     <message>
         <source>Osmux</source>
@@ -6679,7 +6679,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>FAQs</source>
-        <translation type="unfinished"></translation>
+        <translation>Frågor och svar</translation>
     </message>
     <message>
         <source>Next Packet in Conversation</source>
@@ -6957,7 +6957,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>DCCP Stream</source>
-        <translation type="unfinished"></translation>
+        <translation>DCCP-ström</translation>
     </message>
     <message>
         <source>TLS Stream</source>
@@ -6977,7 +6977,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>SIP Call</source>
-        <translation type="unfinished"></translation>
+        <translation>SIP-anrop</translation>
     </message>
     <message>
         <source>Time Sequence (tcptrace)</source>
@@ -7157,19 +7157,19 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>F1AP</source>
-        <translation type="unfinished"></translation>
+        <translation>F1AP</translation>
     </message>
     <message>
         <source>F1AP Messages</source>
-        <translation type="unfinished"></translation>
+        <translation>F1AP-meddelanden</translation>
     </message>
     <message>
         <source>NGAP</source>
-        <translation type="unfinished"></translation>
+        <translation>NGAP</translation>
     </message>
     <message>
         <source>NGAP Messages</source>
-        <translation type="unfinished"></translation>
+        <translation>NGAP-meddelanden</translation>
     </message>
     <message>
         <source>Change the way packets are dissected</source>
@@ -7265,11 +7265,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Packet &amp;Diagram</source>
-        <translation type="unfinished"></translation>
+        <translation>Paket&amp;diagram</translation>
     </message>
     <message>
         <source>Show or hide the packet diagram</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa eller dölj paketduagrannet</translation>
     </message>
     <message>
         <source>Show each conversation hash table</source>
@@ -7329,11 +7329,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>REGISTER_STAT_GROUP_RSERPOOL</source>
-        <translation type="unfinished"></translation>
+        <translation>REGISTER_STAT_GROUP_RSERPOOL</translation>
     </message>
     <message>
         <source>Start of &quot;REGISTER_STAT_GROUP_RSERPOOL&quot;</source>
-        <translation type="unfinished"></translation>
+        <translation>Start på &quot;REGISTER_STAT_GROUP_RSERPOOL&quot;</translation>
     </message>
     <message>
         <source>No GSM statistics registered</source>
@@ -7774,15 +7774,15 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>RTP Stream Analysis for selected stream. Press CTRL key for adding reverse stream too.</source>
-        <translation type="unfinished"></translation>
+        <translation>RTP-strömanalys för den valda strömmen. Tryck CTRL-tangenten för att lägga till den omvända strömmen också.</translation>
     </message>
     <message>
         <source>RTP Player</source>
-        <translation type="unfinished">RTP-spelare</translation>
+        <translation>RTP-spelare</translation>
     </message>
     <message>
         <source>Play selected stream. Press CTRL key for playing reverse stream too.</source>
-        <translation type="unfinished"></translation>
+        <translation>Spela den valda strömmen. Tryck CTRL-tangenten för att spela den omvända strömmen också.</translation>
     </message>
     <message>
         <source>IA&amp;X2 Stream Analysis</source>
@@ -8089,7 +8089,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Check for Updates…</source>
-        <translation type="unfinished"></translation>
+        <translation>Leta efter uppdateringar …</translation>
     </message>
     <message>
         <source>Unable to drop files during capture.</source>
@@ -8097,15 +8097,15 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Unknown file type returned by merge dialog.</source>
-        <translation type="unfinished"></translation>
+        <translation>Okänd filtyp returnerad av sammanslagningsdialogen.</translation>
     </message>
     <message>
         <source>Please report this as a Wireshark issue at https://gitlab.com/wireshark/wireshark/-/issues.</source>
-        <translation type="unfinished">Rapportera gärna detta som ett problem med Wireshark på https://gitlab.com/wireshark/wireshark/-/issues.</translation>
+        <translation>Rapportera gärna detta som ett problem med Wireshark på https://gitlab.com/wireshark/wireshark/-/issues.</translation>
     </message>
     <message>
         <source>Unknown file type returned by export dialog.</source>
-        <translation type="unfinished"></translation>
+        <translation>Okänd filtyp returnerad av exportdialogen.</translation>
     </message>
     <message>
         <source>Do you want to stop the capture and save the captured packets%1?</source>
@@ -8135,15 +8135,15 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>There is no &quot;rtp.ssrc&quot; field in this version of Wireshark.</source>
-        <translation type="unfinished"></translation>
+        <translation>Det finns inget &quot;rtp.ssrc&quot;-fält i denna version av Wireshark.</translation>
     </message>
     <message>
         <source>Please select an RTPv2 packet with an SSRC value</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj ett RTPv2-paket med ett SSRC-värde</translation>
     </message>
     <message>
         <source>SSRC value not found.</source>
-        <translation type="unfinished"></translation>
+        <translation>SSRC-värdet finns inte.</translation>
     </message>
     <message>
         <source>Show or hide the toolbar</source>
@@ -8237,7 +8237,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Saving %1…</source>
-        <translation type="unfinished"></translation>
+        <translation>Sparar %1 …</translation>
     </message>
     <message>
         <source>Invalid capture filter.</source>
@@ -8246,31 +8246,31 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     <message>
         <source>(empty comment)</source>
         <comment>placeholder for empty comment</comment>
-        <translation type="unfinished"></translation>
+        <translation>(tom kommentar)</translation>
     </message>
     <message>
         <source>Add New Comment…</source>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till en ny kommentar …</translation>
     </message>
     <message>
         <source>Edit &quot;%1&quot;</source>
         <comment>edit packet comment</comment>
-        <translation type="unfinished"></translation>
+        <translation>Redigera ”%1”</translation>
     </message>
     <message>
         <source>Delete &quot;%1&quot;</source>
         <comment>delete packet comment</comment>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort ”%1”</translation>
     </message>
     <message>
         <source>Delete packet comments</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort paketkommentarer</translation>
     </message>
     <message numerus="yes">
         <source>Delete comments from %n packet(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Ta bort kommentarer från %n paket</numerusform>
+            <numerusform>Ta bort kommentarer från %n paket</numerusform>
         </translation>
     </message>
     <message>
@@ -8279,11 +8279,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source> before reloading Lua plugins</source>
-        <translation type="unfinished"></translation>
+        <translation>före Lua-insticksmodulen laddas om</translation>
     </message>
     <message>
         <source>Please wait while Wireshark is initializing…</source>
-        <translation type="unfinished"></translation>
+        <translation>Vänta medan Wireshark initieras …</translation>
     </message>
     <message>
         <source>There are no TLS Session Keys to save.</source>
@@ -8322,7 +8322,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>RTP packet search failed</source>
-        <translation type="unfinished"></translation>
+        <translation>RTP-paketsökningen misslyckades</translation>
     </message>
     <message>
         <source>No Interface Selected.</source>
@@ -8735,54 +8735,54 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     <name>PacketCommentDialog</name>
     <message>
         <source>Edit Packet Comment</source>
-        <translation type="unfinished"></translation>
+        <translation>Redigera paketkommentaren</translation>
     </message>
     <message>
         <source>Add Packet Comment</source>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till en paketkommentar</translation>
     </message>
 </context>
 <context>
     <name>PacketDiagram</name>
     <message>
         <source>Packet diagram</source>
-        <translation type="unfinished"></translation>
+        <translation>Paketdiagram</translation>
     </message>
     <message>
         <source>Show Field Values</source>
-        <translation type="unfinished"></translation>
+        <translation>Visa fältvärden</translation>
     </message>
     <message>
         <source>Save Diagram As…</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara diagrammet som …</translation>
     </message>
     <message>
         <source>Copy as Raster Image</source>
-        <translation type="unfinished"></translation>
+        <translation>Kopiera som rasterbild</translation>
     </message>
     <message>
         <source>…as SVG</source>
-        <translation type="unfinished"></translation>
+        <translation>… som SVG</translation>
     </message>
     <message>
         <source>Portable Network Graphics (*.png)</source>
-        <translation type="unfinished">Portable Network Graphics (*.png)</translation>
+        <translation>Portable Network Graphics (*.png)</translation>
     </message>
     <message>
         <source>Windows Bitmap (*.bmp)</source>
-        <translation type="unfinished">Windows Bitmap (*.bmp)</translation>
+        <translation>Windows Bitmap (*.bmp)</translation>
     </message>
     <message>
         <source>JPEG File Interchange Format (*.jpeg *.jpg)</source>
-        <translation type="unfinished">JPEG File Interchange Format (*.jpeg *.jpg)</translation>
+        <translation>JPEG File Interchange Format (*.jpeg *.jpg)</translation>
     </message>
     <message>
         <source>Scalable Vector Graphics (*.svg)</source>
-        <translation type="unfinished"></translation>
+        <translation>Scalable Vector Graphics (*.svg)</translation>
     </message>
     <message>
         <source>Save Graph As…</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara grafen som …</translation>
     </message>
 </context>
 <context>
@@ -8887,15 +8887,15 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>…as CSV</source>
-        <translation type="unfinished"></translation>
+        <translation>… som CSV</translation>
     </message>
     <message>
         <source>…as YAML</source>
-        <translation type="unfinished"></translation>
+        <translation>… som YAML</translation>
     </message>
     <message>
         <source>Decode As…</source>
-        <translation type="unfinished">Avkoda som …</translation>
+        <translation>Avkoda som …</translation>
     </message>
     <message>
         <source>Frame %1: %2
@@ -8934,11 +8934,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Column Preferences…</source>
-        <translation type="unfinished"></translation>
+        <translation>Kolumninställningar …</translation>
     </message>
     <message>
         <source>Resize Column to Width…</source>
-        <translation type="unfinished"></translation>
+        <translation>Ändra kolumnstorlek till bredden …</translation>
     </message>
     <message>
         <source>Resolve Names</source>
@@ -8961,7 +8961,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     <name>PacketListModel</name>
     <message>
         <source>Sorting &quot;%1&quot;…</source>
-        <translation type="unfinished"></translation>
+        <translation>Sorterar ”%1” …</translation>
     </message>
 </context>
 <context>
@@ -9096,7 +9096,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Open %1 preferences…</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna %1 inställningar …</translation>
     </message>
     <message>
         <source>Invalid value.</source>
@@ -9165,11 +9165,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Print capture file information on each page&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Skriv ut fångstfilsinformation på varje sida&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Capture information header</source>
-        <translation type="unfinished"></translation>
+        <translation>Fångstinformationshuvud</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Use the &amp;quot;+&amp;quot; and &amp;quot;-&amp;quot; keys to zoom the preview in and out. Use the &amp;quot;0&amp;quot; key to reset the zoom level.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -9189,11 +9189,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>&amp;Print…</source>
-        <translation type="unfinished">&amp;Skriv ut …</translation>
+        <translation>&amp;Skriv ut …</translation>
     </message>
     <message>
         <source>Page &amp;Setup…</source>
-        <translation type="unfinished"></translation>
+        <translation>Sid&amp;inställning …</translation>
     </message>
     <message>
         <source>%1 %2 total packets, %3 shown</source>
@@ -9490,7 +9490,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Loading</source>
-        <translation type="unfinished">Läser in</translation>
+        <translation>Läser in</translation>
     </message>
 </context>
 <context>
@@ -9501,11 +9501,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Not a field or protocol</source>
-        <translation type="unfinished"></translation>
+        <translation>Inte ett fält eller protokoll</translation>
     </message>
     <message>
         <source>No field reference available for text labels.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ingen fältreferens finns tillgänglig för textetiketter.</translation>
     </message>
     <message>
         <source>Expand Subtrees</source>
@@ -9561,7 +9561,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Copied </source>
-        <translation type="unfinished"></translation>
+        <translation>Kopierade </translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>
@@ -9683,7 +9683,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Open %1 preferences…</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna %1 inställningar …</translation>
     </message>
 </context>
 <context>
@@ -9766,19 +9766,19 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>…and Selected</source>
-        <translation type="unfinished">… och valda</translation>
+        <translation>… och valda</translation>
     </message>
     <message>
         <source>…or Selected</source>
-        <translation type="unfinished">… eller valda</translation>
+        <translation>… eller valda</translation>
     </message>
     <message>
         <source>…and not Selected</source>
-        <translation type="unfinished">… och inte valda</translation>
+        <translation>… och inte valda</translation>
     </message>
     <message>
         <source>…or not Selected</source>
-        <translation type="unfinished">… eller inte valda</translation>
+        <translation>… eller inte valda</translation>
     </message>
     <message>
         <source>A </source>
@@ -10106,15 +10106,15 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Gap in dissection</source>
-        <translation type="unfinished"></translation>
+        <translation>Gap i dissektionen</translation>
     </message>
     <message>
         <source>Edit…</source>
-        <translation type="unfinished"></translation>
+        <translation>Redigera …</translation>
     </message>
     <message>
         <source>Browse…</source>
-        <translation type="unfinished"></translation>
+        <translation>Bläddra…</translation>
     </message>
 </context>
 <context>
@@ -10552,63 +10552,63 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Stream %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Ström %1</translation>
     </message>
     <message>
         <source>Stream %1 Jitter</source>
-        <translation type="unfinished"></translation>
+        <translation>Ström %1 spridning</translation>
     </message>
     <message>
         <source>Stream %1 Difference</source>
-        <translation type="unfinished"></translation>
+        <translation>Ström %1 skillnad</translation>
     </message>
     <message>
         <source>Stream %1 Delta</source>
-        <translation type="unfinished"></translation>
+        <translation>Ström %1 delta</translation>
     </message>
     <message>
         <source> %1 streams, </source>
-        <translation type="unfinished"></translation>
+        <translation>%1 strömmar, </translation>
     </message>
     <message>
         <source>Save one stream CSV</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara en ström-CSV</translation>
     </message>
     <message>
         <source>Save all stream&apos;s CSV</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara alla strömmars CSV</translation>
     </message>
     <message>
         <source>&amp;Analyze</source>
-        <translation type="unfinished">A&amp;nalysera</translation>
+        <translation>A&amp;nalysera</translation>
     </message>
     <message>
         <source>Open the analysis window for the selected stream(s)</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna analysfönstret för de valda strömmarna</translation>
     </message>
     <message>
         <source>&amp;Set List</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Sätt lista</translation>
     </message>
     <message>
         <source>&amp;Add to List</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Lägg till i lista</translation>
     </message>
     <message>
         <source>&amp;Remove from List</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Ta bort från lista</translation>
     </message>
     <message>
         <source>Replace existing list in RTP Analysis Dialog with new one</source>
-        <translation type="unfinished"></translation>
+        <translation>Ersätt den befintliga listan i RTP-analysdialogen med en ny</translation>
     </message>
     <message>
         <source>Add new set to existing list in RTP Analysis Dialog</source>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till en ny mängt till en befintlig lista i RTP-analysdialogen</translation>
     </message>
     <message>
         <source>Remove selected streams from list in RTP Analysis Dialog</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort de valda strömmarna från listan i RTP-analysdialogen</translation>
     </message>
     <message>
         <source>Graph</source>
@@ -10620,11 +10620,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>&amp;Export</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Exportera</translation>
     </message>
     <message>
         <source>Open export menu</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna exportmenyn</translation>
     </message>
     <message>
         <source>CSV</source>
@@ -10632,23 +10632,23 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save tables as CSV.</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara tabeller som CSV</translation>
     </message>
     <message>
         <source>Current Tab Stream CSV</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktuell fliks ström-CSV</translation>
     </message>
     <message>
         <source>Save the table on the current tab as CSV.</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara tabellen för den aktuella fliken som CSV</translation>
     </message>
     <message>
         <source>All Tab Streams CSV</source>
-        <translation type="unfinished"></translation>
+        <translation>Alla flikars strömmars CSV</translation>
     </message>
     <message>
         <source>Save the table from all tabs as CSV.</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara tabellen från alla flikar som CSV</translation>
     </message>
     <message>
         <source>Save Graph</source>
@@ -10684,27 +10684,27 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Prepare &amp;Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>Förbered &amp;filter</translation>
     </message>
     <message>
         <source>Prepare a filter matching the selected stream(s).</source>
-        <translation type="unfinished">Förbered ett filter som matchar den valda strömmen.</translation>
+        <translation>Förbered ett filter som matchar de valda strömmarna.</translation>
     </message>
     <message>
         <source>&amp;Current Tab</source>
-        <translation type="unfinished"></translation>
+        <translation>A&amp;ktuell flik</translation>
     </message>
     <message>
         <source>Prepare a filter matching current tab.</source>
-        <translation type="unfinished"></translation>
+        <translation>Förbered ett filter som matchar den aktuella fliken</translation>
     </message>
     <message>
         <source>&amp;All Tabs</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Alla flikar</translation>
     </message>
     <message>
         <source>Prepare a filter matching all tabs.</source>
-        <translation type="unfinished"></translation>
+        <translation>Förbered ett filter som matchar alla flikar</translation>
     </message>
     <message>
         <source>RTP Stream Analysis</source>
@@ -10712,7 +10712,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save Graph As…</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara grafen som …</translation>
     </message>
     <message>
         <source> G: Go to packet, N: Next problem packet</source>
@@ -10798,27 +10798,27 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Start playback of all unmuted streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Börja återuppspelning av alla icke tystade strömmar</translation>
     </message>
     <message>
         <source>Pause/unpause playback</source>
-        <translation type="unfinished"></translation>
+        <translation>Pausa/avpausa återuppspelningen</translation>
     </message>
     <message>
         <source>Stop playback</source>
-        <translation type="unfinished"></translation>
+        <translation>Stoppa återuppspelningen</translation>
     </message>
     <message>
         <source>Enable/disable skipping of silence during playback</source>
-        <translation type="unfinished"></translation>
+        <translation>Aktivera/avaktivera att hoppa över tystnad under återuppspelning</translation>
     </message>
     <message>
         <source>Min silence:</source>
-        <translation type="unfinished"></translation>
+        <translation>Min tystnad:</translation>
     </message>
     <message>
         <source>Minimum silence duration to skip in seconds</source>
-        <translation type="unfinished"></translation>
+        <translation>Minsta varaktighet på tystnad för att hoppa över den i sekunder</translation>
     </message>
     <message>
         <source>Output Device:</source>
@@ -10826,7 +10826,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Output Audio Rate:</source>
-        <translation type="unfinished"></translation>
+        <translation>Hastighet på audioutmatning:</translation>
     </message>
     <message>
         <source>Jitter Buffer:</source>
@@ -10879,43 +10879,43 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>&amp;Export</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Exportera</translation>
     </message>
     <message>
         <source>Export audio of all unmuted selected channels or export payload of one channel.</source>
-        <translation type="unfinished"></translation>
+        <translation>Exportera audio av alla icke tystade valda kanaler eller exportera lasten i en kanal.</translation>
     </message>
     <message>
         <source>From &amp;cursor</source>
-        <translation type="unfinished"></translation>
+        <translation>Från &amp;markör</translation>
     </message>
     <message>
         <source>Save audio data started at the cursor</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara audiodata som börjar vid markören</translation>
     </message>
     <message>
         <source>&amp;Stream Synchronized Audio</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Strömma synkroniserad audio</translation>
     </message>
     <message>
         <source>Save audio data synchronized to start of the earliest stream.</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara audiodata synkroniserad till början på en tidigaste strömmen.</translation>
     </message>
     <message>
         <source>&amp;File Synchronized Audio</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Arkivera synkroniserad audio</translation>
     </message>
     <message>
         <source>Save audio data synchronized to start of the capture file.</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara audiodata synkroniserad till början av fångstfilen.</translation>
     </message>
     <message>
         <source>&amp;Payload</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Last</translation>
     </message>
     <message>
         <source>Save RTP payload of selected stream.</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara RTP-lasten för den valda strömmen.</translation>
     </message>
     <message>
         <source>Reset Graph</source>
@@ -10927,135 +10927,135 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Go To Setup Packet</source>
-        <translation type="unfinished"></translation>
+        <translation>Gå till uppsättnigspaketet</translation>
     </message>
     <message>
         <source>Go to setup packet of stream currently under the cursor</source>
-        <translation type="unfinished"></translation>
+        <translation>Gå till uppsättningspaketet för strömmen som just nu är under markören</translation>
     </message>
     <message>
         <source>Mute</source>
-        <translation type="unfinished"></translation>
+        <translation>Tysta</translation>
     </message>
     <message>
         <source>Mute selected streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Tysta de valda strömmarna</translation>
     </message>
     <message>
         <source>Unmute</source>
-        <translation type="unfinished"></translation>
+        <translation>Avtysta</translation>
     </message>
     <message>
         <source>Unmute selected streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Avtysta de valda strömmarna</translation>
     </message>
     <message>
         <source>Invert muting of selected streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Invertera tystandet av de valda strömmarna</translation>
     </message>
     <message>
         <source>Route audio to left channel of selected streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Skicka audio till vänsterkanalen av de valda strömmarna</translation>
     </message>
     <message>
         <source>Route audio to left and right channel of selected streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Skicka audio till vänster- och högerkanalen av de valda strömmarna</translation>
     </message>
     <message>
         <source>Route audio to right channel of selected streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Skicka audio till högerkanalen av de valda strömmarna</translation>
     </message>
     <message>
         <source>Remove Streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort strömmar</translation>
     </message>
     <message>
         <source>Remove selected streams from the list</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort de valda strömmarna från listan</translation>
     </message>
     <message>
         <source>All</source>
-        <translation type="unfinished"></translation>
+        <translation>Allt</translation>
     </message>
     <message>
         <source>Select all</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj allt</translation>
     </message>
     <message>
         <source>None</source>
-        <translation type="unfinished"></translation>
+        <translation>Inget</translation>
     </message>
     <message>
         <source>Clear selection</source>
-        <translation type="unfinished"></translation>
+        <translation>Nollställ valet</translation>
     </message>
     <message>
         <source>Invert</source>
-        <translation type="unfinished">Invertera</translation>
+        <translation>Invertera</translation>
     </message>
     <message>
         <source>Invert selection</source>
-        <translation type="unfinished"></translation>
+        <translation>Invertera valet</translation>
     </message>
     <message>
         <source>Play/Pause</source>
-        <translation type="unfinished"></translation>
+        <translation>Spela/pausa</translation>
     </message>
     <message>
         <source>Start playing or pause playing</source>
-        <translation type="unfinished"></translation>
+        <translation>Börja spela eller pausa uppspelning</translation>
     </message>
     <message>
         <source>Stop</source>
-        <translation type="unfinished"></translation>
+        <translation>Stopp</translation>
     </message>
     <message>
         <source>Stop playing</source>
-        <translation type="unfinished"></translation>
+        <translation>Sluta spela</translation>
     </message>
     <message>
         <source>I&amp;naudible streams</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Ohörbara strömmar</translation>
     </message>
     <message>
         <source>Select/Deselect inaudible streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj/välj bort ohörbara strömmar</translation>
     </message>
     <message>
         <source>Inaudible streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Ohörbara strömmar</translation>
     </message>
     <message>
         <source>&amp;Select</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Välj</translation>
     </message>
     <message>
         <source>Select inaudible streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj ohörbara strömmar</translation>
     </message>
     <message>
         <source>&amp;Deselect</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj &amp;bort</translation>
     </message>
     <message>
         <source>Deselect inaudible streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj bort ohörbara strömmar</translation>
     </message>
     <message>
         <source>Prepare &amp;Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>Förbered &amp;filter</translation>
     </message>
     <message>
         <source>Prepare a filter matching the selected stream(s).</source>
-        <translation type="unfinished">Förbered ett filter som matchar den valda strömmen.</translation>
+        <translation>Förbered ett filter som matchar de valda strömmarna.</translation>
     </message>
     <message>
         <source>R&amp;efresh streams</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Uppdatera strömmar</translation>
     </message>
     <message>
         <source>Read captured packets from capture in progress to player</source>
-        <translation type="unfinished"></translation>
+        <translation>Läs fångade paket från den pågående fångsten till spelaren</translation>
     </message>
     <message>
         <source>Zoom In</source>
@@ -11063,19 +11063,19 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>SR (Hz)</source>
-        <translation type="unfinished"></translation>
+        <translation>SH (Hz)</translation>
     </message>
     <message>
         <source>Sample rate of codec</source>
-        <translation type="unfinished"></translation>
+        <translation>Samplingshastighet för omkodaren</translation>
     </message>
     <message>
         <source>PR (Hz)</source>
-        <translation type="unfinished"></translation>
+        <translation>UH (Hz)</translation>
     </message>
     <message>
         <source>Play rate of decoded audio (depends e. g. on selected sound card)</source>
-        <translation type="unfinished"></translation>
+        <translation>Spelhastighet för avkodad audio (beror t.ex. på det valda ljudkortet)</translation>
     </message>
     <message>
         <source>Zoom Out</source>
@@ -11107,23 +11107,23 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Play the stream</source>
-        <translation type="unfinished"></translation>
+        <translation>Spela strömmen</translation>
     </message>
     <message>
         <source>To Left</source>
-        <translation type="unfinished"></translation>
+        <translation>Till vänster</translation>
     </message>
     <message>
         <source>Left + Right</source>
-        <translation type="unfinished"></translation>
+        <translation>Vänster + Höger</translation>
     </message>
     <message>
         <source>To Right</source>
-        <translation type="unfinished"></translation>
+        <translation>Till höger</translation>
     </message>
     <message>
         <source>Invert Muting</source>
-        <translation type="unfinished"></translation>
+        <translation>Invertera tystande</translation>
     </message>
     <message>
         <source>No devices available</source>
@@ -11131,51 +11131,51 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Select</source>
-        <translation type="unfinished"></translation>
+        <translation>Välj</translation>
     </message>
     <message>
         <source>Audio Routing</source>
-        <translation type="unfinished"></translation>
+        <translation>Audioruttläggning</translation>
     </message>
     <message>
         <source>&amp;Play Streams</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Spela strömmar</translation>
     </message>
     <message>
         <source>Open RTP player dialog</source>
-        <translation type="unfinished"></translation>
+        <translation>Öppna RTP-spelardialogen</translation>
     </message>
     <message>
         <source>&amp;Set playlist</source>
-        <translation type="unfinished"></translation>
+        <translation>S&amp;ätt spellistan</translation>
     </message>
     <message>
         <source>Replace existing playlist in RTP Player with new one</source>
-        <translation type="unfinished"></translation>
+        <translation>Ersätt den befintliga spellistan i RTP-spelaren med en ny</translation>
     </message>
     <message>
         <source>&amp;Add to playlist</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Lägg till till spellistan</translation>
     </message>
     <message>
         <source>Add new set to existing playlist in RTP Player</source>
-        <translation type="unfinished"></translation>
+        <translation>Lägg till en ny mängd till den befintliga spellistan i RTP-spelaren</translation>
     </message>
     <message>
         <source>&amp;Remove from playlist</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Ta bort från spellistan</translation>
     </message>
     <message>
         <source>Remove selected streams from playlist in RTP Player</source>
-        <translation type="unfinished"></translation>
+        <translation>Ta bort de valda strömmarna från spellistan i RTP-spelaren</translation>
     </message>
     <message>
         <source>No Audio</source>
-        <translation type="unfinished"></translation>
+        <translation>Inget ljud</translation>
     </message>
     <message>
         <source>Decoding streams...</source>
-        <translation type="unfinished"></translation>
+        <translation>Avkodar strömmar …</translation>
     </message>
     <message>
         <source>Out of Sequence</source>
@@ -11195,91 +11195,91 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Double click on cell to change audio routing</source>
-        <translation type="unfinished"></translation>
+        <translation>Dubbelklicka på en cell för att ändra audioruttläggning</translation>
     </message>
     <message>
         <source>%1 streams</source>
-        <translation type="unfinished">%1 strömmar</translation>
+        <translation>%1 strömmar</translation>
     </message>
     <message>
         <source>, %1 selected</source>
-        <translation type="unfinished"></translation>
+        <translation>, %1 valda</translation>
     </message>
     <message>
         <source>, %1 not muted</source>
-        <translation type="unfinished"></translation>
+        <translation>, %1 inte tystade</translation>
     </message>
     <message>
         <source>, start: %1. Double click on graph to set start of playback.</source>
-        <translation type="unfinished"></translation>
+        <translation>, start: %1. Dubbelklicka på grafen för att ange start av uppspelning.</translation>
     </message>
     <message>
         <source>, start: %1, cursor: %2. Press &quot;G&quot; to go to packet %3. Double click on graph to set start of playback.</source>
-        <translation type="unfinished"></translation>
+        <translation>, start: %1, markör: %2. Tryck ”G” för att gå till paket %3. Dubbelklicka på grafen för att ange start av uppspelning.</translation>
     </message>
     <message>
         <source>Playback of stream %1 failed!</source>
-        <translation type="unfinished"></translation>
+        <translation>Uppspelningen av sträm %1 misslyckades!</translation>
     </message>
     <message>
         <source>Automatic</source>
-        <translation type="unfinished"></translation>
+        <translation>Automatisk</translation>
     </message>
     <message>
         <source>WAV (*.wav)</source>
-        <translation type="unfinished"></translation>
+        <translation>WAV (*.wav)</translation>
     </message>
     <message>
         <source>Sun Audio (*.au)</source>
-        <translation type="unfinished">Sun Audio (*.au)</translation>
+        <translation>Sun Audio (*.au)</translation>
     </message>
     <message>
         <source>Save audio</source>
-        <translation type="unfinished">Spara audio</translation>
+        <translation>Spara audio</translation>
     </message>
     <message>
         <source>Raw (*.raw)</source>
-        <translation type="unfinished"></translation>
+        <translation>Rå (*.raw)</translation>
     </message>
     <message>
         <source>Save payload</source>
-        <translation type="unfinished"></translation>
+        <translation>Spara lasten</translation>
     </message>
     <message>
         <source>Warning</source>
-        <translation type="unfinished">Varning</translation>
+        <translation>Varning</translation>
     </message>
     <message>
         <source>No stream selected or none of selected streams provide audio</source>
-        <translation type="unfinished"></translation>
+        <translation>Ingen ström vald eller ingen av de valda strömmarna tillhandahåller ljud</translation>
     </message>
     <message>
         <source>Error</source>
-        <translation type="unfinished">Fel</translation>
+        <translation>Fel</translation>
     </message>
     <message>
         <source>All selected streams must use same play rate. Manual set of Output Audio Rate might help.</source>
-        <translation type="unfinished"></translation>
+        <translation>Alla valda strömmar måste använda samma spelhastighet. En manuell inställning av utmatningshastighet för ljud kan hjälpa.</translation>
     </message>
     <message>
         <source>No streams are suitable for save</source>
-        <translation type="unfinished"></translation>
+        <translation>Inga strömmar passar för att spara</translation>
     </message>
     <message>
         <source>Save failed!</source>
-        <translation type="unfinished"></translation>
+        <translation>Att spara misslyckades!</translation>
     </message>
     <message>
         <source>Can&apos;t write header of AU file</source>
-        <translation type="unfinished"></translation>
+        <translation>Det går inte att skriva huvudet till AU-filen</translation>
     </message>
     <message>
         <source>Can&apos;t write header of WAV file</source>
-        <translation type="unfinished"></translation>
+        <translation>Det går inte att skriva huvudet till WAV-filen</translation>
     </message>
     <message>
         <source>Payload save works with just one audio stream.</source>
-        <translation type="unfinished"></translation>
+        <translation>Att spara lasten fungerar med bara en ljudström.</translation>
     </message>
     <message>
         <source>Double click to change audio routing</source>
@@ -11378,11 +11378,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Prepare &amp;Filter</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Förbered &amp;filter</translation>
     </message>
     <message>
         <source>&amp;Export</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">&amp;Exportera</translation>
     </message>
     <message>
         <source>&amp;Analyze</source>
@@ -11454,11 +11454,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>All</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Allt</translation>
     </message>
     <message>
         <source>Select all</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Välj allt</translation>
     </message>
     <message>
         <source>None</source>
@@ -11466,7 +11466,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Clear selection</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Nollställ valet</translation>
     </message>
     <message>
         <source>Invert</source>
@@ -11474,7 +11474,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Invert selection</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Invertera valet</translation>
     </message>
     <message>
         <source>Go To Setup</source>
@@ -11538,7 +11538,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Select</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Välj</translation>
     </message>
     <message>
         <source>as CSV</source>
@@ -12236,7 +12236,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save Graph As…</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Spara grafen som …</translation>
     </message>
 </context>
 <context>
@@ -12432,7 +12432,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save Graph As…</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Spara grafen som …</translation>
     </message>
     <message>
         <source>Flow</source>
@@ -12564,7 +12564,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>&amp;Export</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">&amp;Exportera</translation>
     </message>
     <message>
         <source>Export diagram</source>
@@ -13593,7 +13593,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Save Graph As…</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Spara grafen som …</translation>
     </message>
 </context>
 <context>
@@ -13879,7 +13879,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Prepare &amp;Filter</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Förbered &amp;filter</translation>
     </message>
     <message>
         <source>Prepare a filter matching the selected calls(s).</source>
@@ -13895,11 +13895,11 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>All</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Allt</translation>
     </message>
     <message>
         <source>Select all</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Välj allt</translation>
     </message>
     <message>
         <source>None</source>
@@ -13911,7 +13911,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Invert selection</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Invertera valet</translation>
     </message>
     <message>
         <source>Select related RTP streams</source>
@@ -13935,7 +13935,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Clear selection</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Nollställ valet</translation>
     </message>
     <message>
         <source>Display time as time of day</source>
@@ -13975,7 +13975,7 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
     </message>
     <message>
         <source>Select</source>
-        <translation type="unfinished"></translation>
+        <translation type="unfinished">Välj</translation>
     </message>
 </context>
 <context>
