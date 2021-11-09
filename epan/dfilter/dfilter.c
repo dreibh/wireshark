@@ -71,42 +71,6 @@ dfilter_parse_fail(dfwork_t *dfw, const char *format, ...)
 	dfw->syntax_error = TRUE;
 }
 
-stnode_t *
-dfilter_new_function(dfwork_t *dfw, const char *name)
-{
-	df_func_def_t *def = df_func_lookup(name);
-	if (!def) {
-		dfilter_parse_fail(dfw, "Function '%s' does not exist", name);
-	}
-	return stnode_new(STTYPE_FUNCTION, def);
-}
-
-/* Gets a regex from a string, and sets the error message on failure. */
-stnode_t *
-dfilter_new_regex(dfwork_t *dfw, stnode_t *node)
-{
-	fvalue_regex_t *pcre;
-	char *errmsg = NULL;
-
-	if (stnode_type_id(node) != STTYPE_STRING) {
-		dfilter_parse_fail(dfw, "Expected a string not %s", stnode_todisplay(node));
-		return node;
-	}
-
-	const char *patt = stnode_data(node);
-	ws_debug("Compile regex pattern: %s", patt);
-
-	pcre = fvalue_regex_compile(patt, &errmsg);
-	if (errmsg) {
-		dfilter_parse_fail(dfw, "%s", errmsg);
-		g_free(errmsg);
-		return node;
-	}
-
-	stnode_replace(node, STTYPE_PCRE, pcre);
-	return node;
-}
-
 /*
  * Tries to convert an STTYPE_UNPARSED to a STTYPE_FIELD. If it's not registered as
  * a field pass UNPARSED to the semantic check.
