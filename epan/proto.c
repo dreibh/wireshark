@@ -25,7 +25,7 @@
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
 
-#include <ftypes/ftypes-int.h>
+#include <ftypes/ftypes.h>
 
 #include "packet.h"
 #include "exceptions.h"
@@ -794,7 +794,7 @@ proto_tree_free_node(proto_node *node, gpointer data _U_)
 
 	proto_tree_children_foreach(node, proto_tree_free_node, NULL);
 
-	FVALUE_CLEANUP(&finfo->value);
+	fvalue_cleanup(&finfo->value);
 }
 
 void
@@ -7074,7 +7074,7 @@ finfo_set_len(field_info *fi, const gint length)
 	 * larger, if there's no data to back that length;
 	 * you can only make it smaller.
 	 */
-	if (fi->value.ftype->ftype == FT_BYTES && fi->length <= (gint)fi->value.value.bytes->len)
+	if (fvalue_type_ftenum(&fi->value) == FT_BYTES && fi->length <= (gint)fi->value.value.bytes->len)
 		fi->value.value.bytes->len = fi->length;
 }
 
@@ -11352,10 +11352,9 @@ construct_match_selected_string(field_info *finfo, epan_dissect_t *edt,
 				char **filter)
 {
 	header_field_info *hfinfo;
-	int		   abbrev_len;
 	char		  *ptr;
 	int		   buf_len;
-	int		   dfilter_len, i;
+	int		   i;
 	gint		   start, length, length_remaining;
 	guint8		   c;
 	gchar		   is_signed_num = FALSE;
@@ -11365,7 +11364,6 @@ construct_match_selected_string(field_info *finfo, epan_dissect_t *edt,
 
 	hfinfo     = finfo->hfinfo;
 	DISSECTOR_ASSERT(hfinfo);
-	abbrev_len = (int) strlen(hfinfo->abbrev);
 
 	if (hfinfo->strings && FIELD_DISPLAY(hfinfo->display) == BASE_NONE) {
 		const gchar *str = NULL;
@@ -11398,8 +11396,8 @@ construct_match_selected_string(field_info *finfo, epan_dissect_t *edt,
 	}
 
 	/*
-	 * XXX - we can't use the "val_to_string_repr" and "string_repr_len"
-	 * functions for FT_UINT and FT_INT types, as we choose the base in
+	 * XXX - we can't use the "val_to_string_repr" function
+	 * for FT_UINT and FT_INT types, as we choose the base in
 	 * the string expression based on the display base of the field.
 	 *
 	 * Note that the base does matter, as this is also used for
@@ -11567,21 +11565,9 @@ construct_match_selected_string(field_info *finfo, epan_dissect_t *edt,
 
 		/* By default, use the fvalue's "to_string_repr" method. */
 		default:
-			/* Figure out the string length needed.
-			 *	The ft_repr length.
-			 *	4 bytes for " == ".
-			 *	1 byte for trailing NUL.
-			 */
 			if (filter != NULL) {
-				char* str;
-				dfilter_len = fvalue_string_repr_len(&finfo->value,
-						FTREPR_DFILTER, finfo->hfinfo->display);
-				dfilter_len += abbrev_len + 4 + 1;
-				*filter = (char *)wmem_alloc0(NULL, dfilter_len);
-
-				/* Create the string */
-				str = fvalue_to_string_repr(NULL, &finfo->value, FTREPR_DFILTER, finfo->hfinfo->display);
-				g_snprintf(*filter, dfilter_len, "%s == %s", hfinfo->abbrev, str);
+				char *str = fvalue_to_string_repr(NULL, &finfo->value, FTREPR_DFILTER, finfo->hfinfo->display);
+				*filter = wmem_strdup_printf(NULL, "%s == %s", hfinfo->abbrev, str);
 				wmem_free(NULL, str);
 			}
 			break;

@@ -418,7 +418,7 @@ int ws_log_parse_args(int *argc_ptr, char *argv[],
         else if (option == opt_domain) {
             ws_log_set_domain_filter(value);
         }
-        else if (option == opt_file) {
+        else if (value && option == opt_file) {
             FILE *fp = ws_fopen(value, "w");
             if (fp == NULL) {
                 print_err(vcmdarg_err, exit_failure,
@@ -921,13 +921,13 @@ void ws_log_write_always_full(const char *domain, enum ws_log_level level,
 
 void ws_log_buffer_full(const char *domain, enum ws_log_level level,
                     const char *file, int line, const char *func,
-                    const guint8 *ptr, size_t size,  size_t max_len,
+                    const guint8 *ptr, size_t size,  size_t max_bytes_len,
                     const char *msg)
 {
     if (!ws_log_msg_is_active(domain, level))
         return;
 
-    char *bufstr = bytes_to_str_max(NULL, ptr, size, max_len);
+    char *bufstr = bytes_to_str_maxlen(NULL, ptr, size, max_bytes_len);
 
     if (G_UNLIKELY(msg == NULL))
         ws_log_write_always_full(domain, level, file, line, func,

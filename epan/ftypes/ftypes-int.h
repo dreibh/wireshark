@@ -9,38 +9,15 @@
 #ifndef FTYPES_INT_H
 #define FTYPES_INT_H
 
-#include <epan/proto.h>
 #include "ftypes.h"
-
-
-void
-ftype_register(enum ftenum ftype, ftype_t *ft);
-
-/* These are the ftype registration functions that need to be called.
- * This list and the initialization function could be produced
- * via a script, like the dissector registration, but there's so few
- * that I don't mind doing it by hand for now. */
-void ftype_register_bytes(void);
-void ftype_register_double(void);
-void ftype_register_ieee_11073_float(void);
-void ftype_register_fc(void);
-void ftype_register_integers(void);
-void ftype_register_ipv4(void);
-void ftype_register_ipv6(void);
-void ftype_register_guid(void);
-void ftype_register_none(void);
-void ftype_register_string(void);
-void ftype_register_time(void);
-void ftype_register_tvbuff(void);
-void ftype_register_pcre(void);
+#include <epan/proto.h>
 
 typedef void (*FvalueNewFunc)(fvalue_t*);
 typedef void (*FvalueFreeFunc)(fvalue_t*);
 
 typedef gboolean (*FvalueFromUnparsed)(fvalue_t*, const char*, gboolean, gchar **);
 typedef gboolean (*FvalueFromString)(fvalue_t*, const char*, gchar **);
-typedef void (*FvalueToStringRepr)(const fvalue_t*, ftrepr_t, int field_display, char*volatile, unsigned int);
-typedef int (*FvalueStringReprLen)(const fvalue_t*, ftrepr_t, int field_display);
+typedef char *(*FvalueToStringRepr)(wmem_allocator_t *, const fvalue_t*, ftrepr_t, int field_display);
 
 typedef void (*FvalueSetByteArrayFunc)(fvalue_t*, GByteArray *);
 typedef void (*FvalueSetBytesFunc)(fvalue_t*, const guint8 *);
@@ -79,7 +56,6 @@ struct _ftype_t {
 	FvalueFromUnparsed	val_from_unparsed;
 	FvalueFromString	val_from_string;
 	FvalueToStringRepr	val_to_string_repr;
-	FvalueStringReprLen	len_string_repr;
 
 	union {
 		FvalueSetByteArrayFunc	set_value_byte_array;
@@ -113,26 +89,22 @@ struct _ftype_t {
 	FvalueSlice		slice;
 };
 
-/* Free all memory used by an fvalue_t. With MSVC and a
- * libwireshark.dll, we need a special declaration.
- */
+void ftype_register(enum ftenum ftype, ftype_t *ft);
 
-#define FVALUE_CLEANUP(fv)					\
-	{							\
-		register FvalueFreeFunc	free_value;		\
-		free_value = (fv)->ftype->free_value;	\
-		if (free_value) {				\
-			free_value((fv));			\
-		}						\
-	}
+void ftype_register_bytes(void);
+void ftype_register_double(void);
+void ftype_register_ieee_11073_float(void);
+void ftype_register_integers(void);
+void ftype_register_ipv4(void);
+void ftype_register_ipv6(void);
+void ftype_register_guid(void);
+void ftype_register_none(void);
+void ftype_register_string(void);
+void ftype_register_time(void);
+void ftype_register_tvbuff(void);
 
-#define FVALUE_FREE(fv)						\
-	{							\
-		FVALUE_CLEANUP(fv)				\
-		g_slice_free(fvalue_t, fv);			\
-	}
-
-GByteArray *byte_array_from_unparsed(const char *s, gchar **err_msg);
+GByteArray *
+byte_array_from_unparsed(const char *s, gchar **err_msg);
 
 gboolean
 parse_charconst(const char *s, unsigned long *valuep, gchar **err_msg);
