@@ -282,8 +282,14 @@ _node_tostr(stnode_t *node, gboolean pretty)
 	if (pretty)
 		return s;
 
-	repr = g_strdup_printf("%s<%s>", stnode_type_name(node), s);
-	g_free(s);
+	if (stnode_type_id(node) == STTYPE_TEST) {
+		repr = s;
+	}
+	else {
+		repr = g_strdup_printf("%s<%s>", stnode_type_name(node), s);
+		g_free(s);
+	}
+
 	return repr;
 }
 
@@ -320,7 +326,7 @@ sprint_node(stnode_t *node)
 	wmem_strbuf_append_printf(buf, "\t\tinside_parens = %s\n",
 					true_or_false(stnode_inside_parens(node)));
 	wmem_strbuf_append(buf, "\t}\n");
-	wmem_strbuf_append(buf, "}\n");
+	wmem_strbuf_append(buf, "}");
 	return wmem_strbuf_finalize(buf);
 }
 
@@ -331,6 +337,12 @@ log_stnode_full(enum ws_log_level level,
 {
 	if (!ws_log_msg_is_active(LOG_DOMAIN_DFILTER, level))
 		return;
+
+	if (node == NULL) {
+		ws_log_write_always_full(LOG_DOMAIN_DFILTER, level,
+					file, line, func, "%s: NULL", msg);
+		return;
+	}
 
 	char *str = sprint_node(node);
 	ws_log_write_always_full(LOG_DOMAIN_DFILTER, level,
@@ -352,7 +364,7 @@ visit_tree(wmem_strbuf_t *buf, stnode_t *node, int level)
 	stnode_t *left, *right;
 
 	if (stnode_type_id(node) == STTYPE_TEST) {
-		wmem_strbuf_append_printf(buf, "%s(", stnode_todisplay(node));
+		wmem_strbuf_append_printf(buf, "%s(", stnode_todebug(node));
 		sttype_test_get(node, NULL, &left, &right);
 		if (left && right) {
 			wmem_strbuf_append_c(buf, '\n');
