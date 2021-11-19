@@ -12,9 +12,10 @@
 #ifndef __FTYPES_H__
 #define __FTYPES_H__
 
-#include <glib.h>
+#include <wireshark.h>
+
+#include <wsutil/regex.h>
 #include <epan/wmem_scopes.h>
-#include "ws_symbol_export.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -131,9 +132,6 @@ typedef enum ft_framenum_type ft_framenum_type_t;
 struct _ftype_t;
 typedef struct _ftype_t ftype_t;
 
-struct _fvalue_regex_t;
-typedef struct _fvalue_regex_t fvalue_regex_t;
-
 /* String representation types. */
 enum ftrepr {
 	FTREPR_DISPLAY,
@@ -214,7 +212,6 @@ typedef struct _fvalue_t {
 		/* Put a few basic types in here */
 		guint32			uinteger;
 		gint32			sinteger;
-		guint64			integer64;
 		guint64			uinteger64;
 		gint64			sinteger64;
 		gdouble			floating;
@@ -242,22 +239,18 @@ fvalue_new(ftenum_t ftype);
 void
 fvalue_init(fvalue_t *fv, ftenum_t ftype);
 
+void
+fvalue_cleanup(fvalue_t *fv);
+
+void
+fvalue_free(fvalue_t *fv);
+
 WS_DLL_PUBLIC
 fvalue_t*
 fvalue_from_unparsed(ftenum_t ftype, const char *s, gboolean allow_partial_value, gchar **err_msg);
 
 fvalue_t*
 fvalue_from_string(ftenum_t ftype, const char *s, gchar **err_msg);
-
-/* Returns the length of the string required to hold the
- * string representation of the the field value.
- *
- * Returns -1 if the string cannot be represented in the given rtype.
- *
- * The length DOES NOT include the terminating NUL. */
-WS_DLL_PUBLIC
-int
-fvalue_string_repr_len(const fvalue_t *fv, ftrepr_t rtype, int field_display);
 
 /* Creates the string representation of the field value.
  * Memory for the buffer is allocated based on wmem allocator
@@ -355,19 +348,7 @@ gboolean
 fvalue_contains(const fvalue_t *a, const fvalue_t *b);
 
 gboolean
-fvalue_matches(const fvalue_t *a, const fvalue_regex_t *re);
-
-fvalue_regex_t *
-fvalue_regex_compile(const char *patt, char **errmsg);
-
-gboolean
-fvalue_regex_matches(const fvalue_regex_t *regex, const char *subj, gssize subj_size);
-
-void
-fvalue_regex_free(fvalue_regex_t *regex);
-
-const char *
-fvalue_regex_pattern(const fvalue_regex_t *regex);
+fvalue_matches(const fvalue_t *a, const ws_regex_t *re);
 
 guint
 fvalue_length(fvalue_t *fv);

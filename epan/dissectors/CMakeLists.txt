@@ -1200,6 +1200,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hdfsdata.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hdmi.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hencsat.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-hicp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hipercontracer.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hiqnet.c
@@ -1765,6 +1766,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ses.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sflow.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sgsap.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-shicp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-shim6.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sigcomp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-signal-pdu.c

@@ -10,24 +10,24 @@
 #include "config.h"
 
 #include "ftypes/ftypes.h"
-#include "ftypes/ftypes-int.h"
 #include "syntax-tree.h"
+#include <epan/proto.h> // For BASE_NONE
 
 static void
-fvalue_free(gpointer value)
+sttype_fvalue_free(gpointer value)
 {
 	fvalue_t *fvalue = value;
 
 	/* If the data was not claimed with stnode_steal_data(), free it. */
 	if (fvalue) {
-		FVALUE_FREE(fvalue);
+		fvalue_free(fvalue);
 	}
 }
 
 static void
 pcre_free(gpointer value)
 {
-	fvalue_regex_t *pcre = value;
+	ws_regex_t *pcre = value;
 
 	/* If the data was not claimed with stnode_steal_data(), free it. */
 	if (pcre) {
@@ -36,12 +36,12 @@ pcre_free(gpointer value)
 		 * count; it'll get freed when the reference count drops
 		 * to 0.
 		 */
-		fvalue_regex_free(pcre);
+		ws_regex_free(pcre);
 	}
 }
 
 static char *
-fvalue_tostr(const void *data, gboolean pretty)
+sttype_fvalue_tostr(const void *data, gboolean pretty)
 {
 	const fvalue_t *fvalue = data;
 
@@ -67,9 +67,7 @@ field_tostr(const void *data, gboolean pretty _U_)
 static char *
 pcre_tostr(const void *data, gboolean pretty _U_)
 {
-	const fvalue_regex_t *pcre = data;
-
-	return g_strdup(fvalue_regex_pattern(pcre));
+	return g_strdup(ws_regex_pattern(data));
 }
 
 void
@@ -87,9 +85,9 @@ sttype_register_pointer(void)
 		STTYPE_FVALUE,
 		"FVALUE",
 		NULL,
-		fvalue_free,
+		sttype_fvalue_free,
 		NULL,
-		fvalue_tostr
+		sttype_fvalue_tostr
 	};
 	static sttype_t pcre_type = {
 		STTYPE_PCRE,

@@ -12,10 +12,6 @@
 
 #include <wsutil/ws_assert.h>
 
-struct _fvalue_regex_t {
-	GRegex *code;
-};
-
 /* Keep track of ftype_t's via their ftenum number */
 static ftype_t* type_list[FT_NUM_TYPES];
 
@@ -252,6 +248,21 @@ fvalue_init(fvalue_t *fv, ftenum_t ftype)
 	}
 }
 
+void
+fvalue_cleanup(fvalue_t *fv)
+{
+	if (!fv->ftype->free_value)
+		return;
+	fv->ftype->free_value(fv);
+}
+
+void
+fvalue_free(fvalue_t *fv)
+{
+	fvalue_cleanup(fv);
+	g_slice_free(fvalue_t, fv);
+}
+
 fvalue_t*
 fvalue_from_unparsed(ftenum_t ftype, const char *s, gboolean allow_partial_value, gchar **err_msg)
 {
@@ -272,7 +283,7 @@ fvalue_from_unparsed(ftenum_t ftype, const char *s, gboolean allow_partial_value
 					s, ftype_pretty_name(ftype));
 		}
 	}
-	FVALUE_FREE(fv);
+	fvalue_free(fv);
 	return NULL;
 }
 
@@ -296,7 +307,7 @@ fvalue_from_string(ftenum_t ftype, const char *s, gchar **err_msg)
 					s, ftype_pretty_name(ftype));
 		}
 	}
-	FVALUE_FREE(fv);
+	fvalue_free(fv);
 	return NULL;
 }
 
@@ -322,32 +333,15 @@ fvalue_length(fvalue_t *fv)
 		return fv->ftype->wire_size;
 }
 
-int
-fvalue_string_repr_len(const fvalue_t *fv, ftrepr_t rtype, int field_display)
-{
-	ws_assert(fv->ftype->len_string_repr);
-	return fv->ftype->len_string_repr(fv, rtype, field_display);
-}
-
 char *
 fvalue_to_string_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int field_display)
 {
-	char *buf;
-	int len;
 	if (fv->ftype->val_to_string_repr == NULL) {
 		/* no value-to-string-representation function, so the value cannot be represented */
 		return NULL;
 	}
 
-	if ((len = fvalue_string_repr_len(fv, rtype, field_display)) >= 0) {
-		buf = (char *)wmem_alloc0(scope, len + 1);
-	} else {
-		/* the value cannot be represented in the given representation type (rtype) */
-		return NULL;
-	}
-
-	fv->ftype->val_to_string_repr(fv, rtype, field_display, buf, (unsigned int)len+1);
-	return buf;
+	return fv->ftype->val_to_string_repr(scope, fv, rtype, field_display);
 }
 
 typedef struct {
@@ -713,62 +707,10 @@ fvalue_contains(const fvalue_t *a, const fvalue_t *b)
 }
 
 gboolean
-fvalue_matches(const fvalue_t *a, const fvalue_regex_t *b)
+fvalue_matches(const fvalue_t *a, const ws_regex_t *re)
 {
-	/* XXX - check compatibility of a and b */
 	ws_assert(a->ftype->cmp_matches);
-	return a->ftype->cmp_matches(a, b);
-}
-
-fvalue_regex_t *
-fvalue_regex_compile(const char *patt, char **errmsg)
-{
-	GError *regex_error = NULL;
-	GRegex *pcre;
-
-	/*
-	 * As a string is not guaranteed to contain valid UTF-8,
-	 * we have to disable support for UTF-8 patterns and treat
-	 * every pattern and subject as raw bytes.
-	 *
-	 * Should support for UTF-8 patterns be necessary, then we
-	 * should compile a pattern without G_REGEX_RAW. Additionally,
-	 * we MUST use g_utf8_validate() before calling g_regex_match_full()
-	 * or risk crashes.
-	 */
-	GRegexCompileFlags cflags = G_REGEX_CASELESS | G_REGEX_OPTIMIZE | G_REGEX_RAW;
-
-	pcre = g_regex_new(patt, cflags, 0, &regex_error);
-
-	if (regex_error) {
-		*errmsg = g_strdup(regex_error->message);
-		g_error_free(regex_error);
-		return NULL;
-	}
-
-	struct _fvalue_regex_t *re = g_new(struct _fvalue_regex_t, 1);
-	re->code = pcre;
-
-	return re;
-}
-
-gboolean
-fvalue_regex_matches(const fvalue_regex_t *regex, const char *subj, gssize subj_size)
-{
-	return g_regex_match_full(regex->code, subj, subj_size, 0, 0, NULL, NULL);
-}
-
-void
-fvalue_regex_free(fvalue_regex_t *regex)
-{
-	g_regex_unref(regex->code);
-	g_free(regex);
-}
-
-const char *
-fvalue_regex_pattern(const fvalue_regex_t *regex)
-{
-	return g_regex_get_pattern(regex->code);
+	return a->ftype->cmp_matches(a, re);
 }
 
 /*

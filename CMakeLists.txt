@@ -65,6 +65,12 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 message(STATUS "Generating build using CMake ${CMAKE_VERSION}")
 
+# Avoid an empty build type. If this is already set it does nothing.
+set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING
+		"Choose the build configuration (one of Debug, MinSizeRel, RelWithDebInfo, Release)")
+# Build type is ignored by multi-config generators.
+message(STATUS "Using ${CMAKE_GENERATOR} generator and build type ${CMAKE_BUILD_TYPE}")
+
 #Where to find local cmake scripts
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
 
@@ -91,15 +97,15 @@ if(WIN32)
 	# libraries.
 	if(DEFINED ENV{MSYSTEM})
 		set(_msystem $ENV{MSYSTEM})
-		set(_repositoy False)
+		set(_repository False)
 		message(STATUS "Using MSYS2 with MSYSTEM=${_msystem}")
 	else()
 		set(_msystem False)
-		set(_repositoy True)
+		set(_repository True)
 		message(STATUS "Using 3rd party repository")
 	endif()
 	set(USE_MSYSTEM ${_msystem} CACHE INTERNAL "Use MSYS2 subsystem")
-	set(USE_REPOSITORY ${_repositoy} CACHE INTERNAL "Use Wireshark 3rd Party Repository")
+	set(USE_REPOSITORY ${_repository} CACHE INTERNAL "Use Wireshark 3rd Party Repository")
 
 	if(DEFINED ENV{WIRESHARK_TARGET_PLATFORM})
 		string(TOLOWER $ENV{WIRESHARK_TARGET_PLATFORM} _target_platform)
@@ -144,7 +150,7 @@ if(WIN32)
 		endif()
 	endif()
 	message(STATUS
-		"Building for ${WIRESHARK_TARGET_PLATFORM} using \"${CMAKE_GENERATOR}\" \
+		"Building for ${WIRESHARK_TARGET_PLATFORM} \
 and CPU target ${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}"
 	)
 
@@ -187,14 +193,6 @@ endif(WIN32)
 
 include(UseCustomIncludes)
 ADD_CUSTOM_CMAKE_INCLUDE()
-
-# This cannot be implemented via option(...)
-if( NOT CMAKE_BUILD_TYPE )
-	set( CMAKE_BUILD_TYPE RelWithDebInfo CACHE STRING
-		"Choose the type of build, options are: None Debug Release RelWithDebInfo MinSizeRel."
-		FORCE)
-endif()
-message(STATUS "CMake build type: ${CMAKE_BUILD_TYPE}")
 
 # Ensure that all executables and libraries end up in the same directory. Actual
 # files might end up in a configuration subdirectory, e.g. run/Debug or
@@ -393,6 +391,7 @@ endif()
 include_directories(
 	${CMAKE_BINARY_DIR}
 	${CMAKE_SOURCE_DIR}
+	${CMAKE_SOURCE_DIR}/include
 )
 
 if( DUMPCAP_INSTALL_OPTION STREQUAL "suid" )
@@ -1193,6 +1192,7 @@ reset_find_package(CARES)
 find_package(CARES "1.5.0" REQUIRED)
 find_package(LEX REQUIRED)
 find_package(Perl REQUIRED)
+find_package(PCRE2 REQUIRED)
 
 if(CMAKE_VERSION VERSION_LESS "3.12")
 	# Locate the Python interpreter. Finds the wrong (Python 2) version if:
@@ -1360,9 +1360,10 @@ find_package(DOXYGEN)
 
 # The SpeexDSP resampler is required iff building wireshark or sharkd.
 if(BUILD_wireshark OR BUILD_sharkd)
-	# On Windows we just use the bundled resampler. We don't have
-	# our own binary package for SpeexDSP and don't bother searching.
-	if (NOT WIN32)
+	# We don't provide a binary package for SpeexDSP in our repository.
+	# If using the repository don't bother searching for a system SpeexDSP
+	# installation and just use the bundled resampler code instead.
+	if (NOT USE_REPOSITORY)
 		find_package(SpeexDSP)
 	endif()
 	if(SpeexDSP_FOUND)
@@ -1801,7 +1802,7 @@ set_package_properties(NGHTTP2 PROPERTIES
 )
 set_package_properties(CARES PROPERTIES
 	DESCRIPTION "Library for asynchronous DNS requests"
-	URL "https://c-ares.haxx.se/"
+	URL "https://c-ares.org/"
 	PURPOSE "DNS name resolution for captures"
 )
 set_package_properties(Systemd PROPERTIES
@@ -1833,6 +1834,11 @@ set_package_properties(SMI PROPERTIES
 	URL "https://www.ibr.cs.tu-bs.de/projects/libsmi/"
 	DESCRIPTION "Library to access SMI management information"
 	PURPOSE "Support MIB and PIB parsing and OID resolution"
+)
+set_package_properties(PCRE2 PROPERTIES
+	URL "https://www.pcre.org"
+	DESCRIPTION "Regular expression pattern matching using the same syntax and semantics as Perl 5"
+	PURPOSE "Support for regular expressions"
 )
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" _build_type)
@@ -2066,6 +2072,10 @@ if(USE_REPOSITORY)
 		list (APPEND THIRD_PARTY_DLLS "${NGHTTP2_DLL_DIR}/${NGHTTP2_DLL}")
 		list (APPEND THIRD_PARTY_PDBS "${NGHTTP2_DLL_DIR}/${NGHTTP2_PDB}")
 	endif(NGHTTP2_FOUND)
+	if (PCRE2_FOUND)
+		list (APPEND THIRD_PARTY_DLLS "${PCRE2_DLL_DIR}/${PCRE2_DLL}")
+		list (APPEND THIRD_PARTY_PDBS "${PCRE2_DLL_DIR}/${PCRE2_PDB}")
+	endif(PCRE2_FOUND)
 	if (SBC_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${SBC_DLL_DIR}/${SBC_DLL}")
 	endif(SBC_FOUND)
@@ -2231,7 +2241,7 @@ foreach(_install_file ${INSTALL_FILES})
 	list(APPEND copy_data_files_depends "${_output_file}")
 endforeach()
 
-# Install LUA files in staging directory such that LUA can used when Wireshark
+# Install Lua files in staging directory such that Lua can used when Wireshark
 # is ran from the build directory. For install targets, see
 # epan/wslua/CMakeLists.txt
 if(LUA_FOUND AND ENABLE_LUA)
@@ -3438,13 +3448,12 @@ set(SHARK_PUBLIC_HEADERS
 	cfile.h
 	cli_main.h
 	file.h
-	globals.h
-	ws_attributes.h
-	ws_compiler_tests.h
-	ws_diag_control.h
-	ws_log_defs.h
-	ws_symbol_export.h
-	wireshark.h
+	include/ws_attributes.h
+	include/ws_compiler_tests.h
+	include/ws_diag_control.h
+	include/ws_log_defs.h
+	include/ws_symbol_export.h
+	include/wireshark.h
 	${CMAKE_BINARY_DIR}/ws_version.h
 )
 

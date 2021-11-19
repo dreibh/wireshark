@@ -418,7 +418,7 @@ int ws_log_parse_args(int *argc_ptr, char *argv[],
         else if (option == opt_domain) {
             ws_log_set_domain_filter(value);
         }
-        else if (option == opt_file) {
+        else if (value && option == opt_file) {
             FILE *fp = ws_fopen(value, "w");
             if (fp == NULL) {
                 print_err(vcmdarg_err, exit_failure,
@@ -738,8 +738,6 @@ static void log_write_do_work(FILE *fp, gboolean use_color,
                                 const char *file, int line, const char *func,
                                 const char *user_format, va_list user_ap)
 {
-    gboolean doextra = (level != DEFAULT_LOG_LEVEL);
-
 #ifndef WS_DISABLE_DEBUG
     if (!init_complete)
         fputs(" ** (noinit)", fp);
@@ -766,15 +764,15 @@ static void log_write_do_work(FILE *fp, gboolean use_color,
                                 color_off(use_color));
 
     /* File/line */
-    if (doextra && file != NULL && line >= 0)
+    if (file != NULL && line >= 0)
         fprintf(fp, "%s:%d ", file, line);
-    else if (doextra && file != NULL)
+    else if (file != NULL)
         fprintf(fp, "%s ", file);
 
     fputs("-- ", fp);
 
     /* Function name */
-    if (doextra && func != NULL)
+    if (func != NULL)
         fprintf(fp, "%s(): ", func);
 
     /* User message */
@@ -921,13 +919,13 @@ void ws_log_write_always_full(const char *domain, enum ws_log_level level,
 
 void ws_log_buffer_full(const char *domain, enum ws_log_level level,
                     const char *file, int line, const char *func,
-                    const guint8 *ptr, size_t size,  size_t max_len,
+                    const guint8 *ptr, size_t size,  size_t max_bytes_len,
                     const char *msg)
 {
     if (!ws_log_msg_is_active(domain, level))
         return;
 
-    char *bufstr = bytes_to_str_max(NULL, ptr, size, max_len);
+    char *bufstr = bytes_to_str_maxlen(NULL, ptr, size, max_bytes_len);
 
     if (G_UNLIKELY(msg == NULL))
         ws_log_write_always_full(domain, level, file, line, func,

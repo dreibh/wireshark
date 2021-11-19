@@ -115,44 +115,26 @@ val_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_,
 	return FALSE;
 }
 
-static int
-val_repr_len(const fvalue_t *fv, ftrepr_t rtype, int field_display _U_)
-{
-	volatile guint length = 0;
-
-	if (rtype != FTREPR_DFILTER) return -1;
-
-	TRY {
-		/* 3 bytes for each byte of the byte "NN:" minus 1 byte
-		 * as there's no trailing ":". */
-		length = tvb_captured_length(fv->value.protocol.tvb) * 3 - 1;
-	}
-	CATCH_ALL {
-		/* nothing */
-	}
-	ENDTRY;
-
-	return (int) length;
-}
-
-static void
-val_to_repr(const fvalue_t *fv, ftrepr_t rtype _U_, int field_display _U_, char * volatile buf, unsigned int size _U_)
+static char *
+val_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _U_, int field_display _U_)
 {
 	guint length;
+	char *volatile buf = NULL;
 
-	ws_assert(rtype == FTREPR_DFILTER);
+	if (rtype != FTREPR_DFILTER)
+		return NULL;
 
 	TRY {
 		length = tvb_captured_length(fv->value.protocol.tvb);
 
 		if (length)
-			buf = bytes_to_hexstr_punct(buf, tvb_get_ptr(fv->value.protocol.tvb, 0, length), length, ':');
-		*buf = '\0';
+			buf = bytes_to_str_punct_maxlen(scope, tvb_get_ptr(fv->value.protocol.tvb, 0, length), length, ':', 0);
 	}
 	CATCH_ALL {
 		/* nothing */
 	}
 	ENDTRY;
+	return buf;
 }
 
 static gpointer
@@ -257,7 +239,7 @@ cmp_contains(const fvalue_t *fv_a, const fvalue_t *fv_b)
 }
 
 static gboolean
-cmp_matches(const fvalue_t *fv, const fvalue_regex_t *regex)
+cmp_matches(const fvalue_t *fv, const ws_regex_t *regex)
 {
 	const protocol_value_t *a = (const protocol_value_t *)&fv->value.protocol;
 	volatile gboolean rc = FALSE;
@@ -271,9 +253,9 @@ cmp_matches(const fvalue_t *fv, const fvalue_regex_t *regex)
 		if (a->tvb != NULL) {
 			tvb_len = tvb_captured_length(a->tvb);
 			data = (const char *)tvb_get_ptr(a->tvb, 0, tvb_len);
-			rc = fvalue_regex_matches(regex, data, tvb_len);
+			rc = ws_regex_matches(regex, data, tvb_len);
 		} else {
-			rc = fvalue_regex_matches(regex, a->proto_string, -1);
+			rc = ws_regex_matches(regex, a->proto_string, -1);
 		}
 	}
 	CATCH_ALL {
@@ -297,7 +279,6 @@ ftype_register_tvbuff(void)
 		val_from_unparsed,		/* val_from_unparsed */
 		val_from_string,		/* val_from_string */
 		val_to_repr,			/* val_to_string_repr */
-		val_repr_len,			/* len_string_repr */
 
 		{ .set_value_protocol = value_set },	/* union set_value */
 		{ .get_value_ptr = value_get },		/* union get_value */

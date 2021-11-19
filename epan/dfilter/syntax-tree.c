@@ -134,6 +134,18 @@ stnode_replace(stnode_t *node, sttype_id_t type_id, gpointer data)
 	node->flags = flags;
 }
 
+void
+stnode_replace_string(stnode_t *node, const char *str)
+{
+	stnode_replace(node, STTYPE_STRING, g_strdup(str));
+}
+
+void
+stnode_replace_unparsed(stnode_t *node, const char *str)
+{
+	stnode_replace(node, STTYPE_UNPARSED, g_strdup(str));
+}
+
 stnode_t*
 stnode_new(sttype_id_t type_id, gpointer data)
 {
@@ -158,6 +170,18 @@ stnode_new_test(test_op_t op, stnode_t *val1, stnode_t *val2)
 	else
 		sttype_test_set1(node, op, val1);
 	return node;
+}
+
+stnode_t *
+stnode_new_string(const char *str)
+{
+	return stnode_new(STTYPE_STRING, g_strdup(str));
+}
+
+stnode_t *
+stnode_new_unparsed(const char *str)
+{
+	return stnode_new(STTYPE_UNPARSED, g_strdup(str));
 }
 
 stnode_t*
@@ -258,8 +282,14 @@ _node_tostr(stnode_t *node, gboolean pretty)
 	if (pretty)
 		return s;
 
-	repr = g_strdup_printf("%s<%s>", stnode_type_name(node), s);
-	g_free(s);
+	if (stnode_type_id(node) == STTYPE_TEST) {
+		repr = s;
+	}
+	else {
+		repr = g_strdup_printf("%s<%s>", stnode_type_name(node), s);
+		g_free(s);
+	}
+
 	return repr;
 }
 
@@ -288,30 +318,47 @@ sprint_node(stnode_t *node)
 {
 	wmem_strbuf_t *buf = wmem_strbuf_new(NULL, NULL);
 
-	wmem_strbuf_append_printf(buf, "stnode <%p> = {\n", (void *)node);
-	wmem_strbuf_append_printf(buf, "\tmagic = 0x%"PRIx32"\n", node->magic);
-	wmem_strbuf_append_printf(buf, "\ttype = <%p>\n", (void *)(node->type));
-	wmem_strbuf_append_printf(buf, "\tdata = %s\n", stnode_todebug(node));
-	wmem_strbuf_append_printf(buf, "\tflags (0x%04"PRIx16") = {\n", node->flags);
-	wmem_strbuf_append_printf(buf, "\t\tinside_parens = %s\n",
-					true_or_false(stnode_inside_parens(node)));
-	wmem_strbuf_append(buf, "\t}\n");
-	wmem_strbuf_append(buf, "}\n");
+	wmem_strbuf_append_printf(buf, "stnode{ ");
+	wmem_strbuf_append_printf(buf, "magic=0x%"PRIx32", ", node->magic);
+	wmem_strbuf_append_printf(buf, "type=%s, ", stnode_type_name(node));
+	wmem_strbuf_append_printf(buf, "data=<%s>, ", stnode_todisplay(node));
+	wmem_strbuf_append_printf(buf, "flags=0x%04"PRIx16" }", node->flags);
 	return wmem_strbuf_finalize(buf);
 }
 
 void
-log_stnode_full(enum ws_log_level level,
-			const char *file, int line, const char *func,
+log_test_full(enum ws_log_level level,
+			const char *file _U_, int line _U_, const char *func,
 			stnode_t *node, const char *msg)
 {
-	if (!ws_log_msg_is_active(LOG_DOMAIN_DFILTER, level))
+	if (!ws_log_msg_is_active(WS_LOG_DOMAIN, level))
 		return;
 
-	char *str = sprint_node(node);
-	ws_log_write_always_full(LOG_DOMAIN_DFILTER, level,
-					file, line, func, "%s:\n%s", msg, str);
-	g_free(str);
+	if (node == NULL) {
+		ws_log_write_always_full(WS_LOG_DOMAIN, level,
+					NULL, -1, func, "%s is NULL", msg);
+		return;
+	}
+
+	test_op_t st_op;
+	stnode_t *st_lhs = NULL, *st_rhs = NULL;
+	char *lhs = NULL, *rhs = NULL;
+
+	sttype_test_get(node, &st_op, &st_lhs, &st_rhs);
+
+	if (st_lhs)
+		lhs = sprint_node(st_lhs);
+	if (st_rhs)
+		rhs = sprint_node(st_rhs);
+
+	ws_log_write_always_full(WS_LOG_DOMAIN, level, NULL, -1, func,
+				"%s: LHS = %s; RHS = %s",
+				stnode_todebug(node),
+				lhs ? lhs : "NULL",
+				rhs ? rhs : "NULL");
+
+	g_free(lhs);
+	g_free(rhs);
 }
 
 static void
@@ -328,7 +375,7 @@ visit_tree(wmem_strbuf_t *buf, stnode_t *node, int level)
 	stnode_t *left, *right;
 
 	if (stnode_type_id(node) == STTYPE_TEST) {
-		wmem_strbuf_append_printf(buf, "%s(", stnode_todisplay(node));
+		wmem_strbuf_append_printf(buf, "%s(", stnode_todebug(node));
 		sttype_test_get(node, NULL, &left, &right);
 		if (left && right) {
 			wmem_strbuf_append_c(buf, '\n');

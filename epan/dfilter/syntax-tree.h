@@ -104,6 +104,12 @@ stnode_new(sttype_id_t type_id, gpointer data);
 stnode_t *
 stnode_new_test(test_op_t op, stnode_t *val1, stnode_t *val2);
 
+stnode_t *
+stnode_new_string(const char *str);
+
+stnode_t *
+stnode_new_unparsed(const char *str);
+
 stnode_t*
 stnode_dup(const stnode_t *org);
 
@@ -115,6 +121,12 @@ stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data);
 
 void
 stnode_replace(stnode_t *node, sttype_id_t type_id, gpointer data);
+
+void
+stnode_replace_string(stnode_t *node, const char *str);
+
+void
+stnode_replace_unparsed(stnode_t *node, const char *str);
 
 void
 stnode_free(stnode_t *node);
@@ -145,15 +157,15 @@ void
 stnode_set_inside_parens(stnode_t *node, gboolean inside);
 
 void
-log_stnode_full(enum ws_log_level level,
+log_test_full(enum ws_log_level level,
 			const char *file, int line, const char *func,
 			stnode_t *node, const char *msg);
 
 #ifdef WS_DISABLE_DEBUG
-#define log_stnode(node) (void)0;
+#define log_test(node) (void)0;
 #else
-#define log_stnode(node) \
-	log_stnode_full(LOG_LEVEL_NOISY, __FILE__, __LINE__, __func__, node, #node)
+#define log_test(node) \
+	log_test_full(LOG_LEVEL_NOISY, __FILE__, __LINE__, __func__, node, #node)
 #endif
 
 void
