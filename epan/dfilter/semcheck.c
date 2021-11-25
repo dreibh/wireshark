@@ -438,6 +438,10 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 					stnode_todisplay(st_arg1));
 			break;
 
+		case STTYPE_CHARCONST:
+			FAIL(dfw, "You cannot test whether a character constant is present.");
+			break;
+
 		case STTYPE_RANGE:
 			/*
 			 * XXX - why not?  Shouldn't "eth[3:2]" mean
@@ -539,6 +543,21 @@ check_function(dfwork_t *dfw, stnode_t *st_node)
 	}
 }
 
+WS_RETNONNULL
+static fvalue_t *
+dfilter_fvalue_from_charconst(dfwork_t *dfw, ftenum_t ftype, stnode_t *st)
+{
+	fvalue_t *fvalue;
+	unsigned long *nump = stnode_data(st);
+
+	fvalue = fvalue_from_charconst(ftype, *nump,
+			dfw->error_message == NULL ? &dfw->error_message : NULL);
+	if (fvalue == NULL)
+		THROW(TypeError);
+
+	return fvalue;
+}
+
 /* If the LHS of a relation test is a FIELD, run some checks
  * and possibly some modifications of syntax tree nodes. */
 static void
@@ -593,6 +612,10 @@ check_relation_LHS_FIELD(dfwork_t *dfw, test_op_t st_op,
 		else {
 			fvalue = dfilter_fvalue_from_unparsed(dfw, ftype1, st_arg2, allow_partial_value, hfinfo1);
 		}
+		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
+	}
+	else if (type2 == STTYPE_CHARCONST) {
+		fvalue = dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
 		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 	}
 	else if (type2 == STTYPE_RANGE) {
@@ -660,7 +683,8 @@ check_relation_LHS_STRING(dfwork_t *dfw, test_op_t st_op,
 		fvalue = dfilter_fvalue_from_string(dfw, ftype2, st_arg1, hfinfo2);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
-	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED) {
+	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED ||
+	         type2 == STTYPE_CHARCONST) {
 		/* Well now that's silly... */
 		FAIL(dfw, "Neither \"%s\" nor \"%s\" are field or protocol names.",
 				stnode_todisplay(st_arg1),
@@ -718,7 +742,8 @@ check_relation_LHS_UNPARSED(dfwork_t *dfw, test_op_t st_op,
 		fvalue = dfilter_fvalue_from_unparsed(dfw, ftype2, st_arg1, allow_partial_value, hfinfo2);
 		stnode_replace(st_arg1, STTYPE_FVALUE, fvalue);
 	}
-	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED) {
+	else if (type2 == STTYPE_STRING || type2 == STTYPE_UNPARSED ||
+	         type2 == STTYPE_CHARCONST) {
 		/* Well now that's silly... */
 		FAIL(dfw, "Neither \"%s\" nor \"%s\" are field or protocol names.",
 				stnode_todisplay(st_arg1),
@@ -785,6 +810,10 @@ check_relation_LHS_RANGE(dfwork_t *dfw, test_op_t st_op,
 	}
 	else if (type2 == STTYPE_UNPARSED) {
 		fvalue = dfilter_fvalue_from_unparsed(dfw, FT_BYTES, st_arg2, allow_partial_value, NULL);
+		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
+	}
+	else if (type2 == STTYPE_CHARCONST) {
+		fvalue = dfilter_fvalue_from_charconst(dfw, FT_BYTES, st_arg2);
 		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 	}
 	else if (type2 == STTYPE_RANGE) {
@@ -864,6 +893,10 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, test_op_t st_op,
 	}
 	else if (type2 == STTYPE_UNPARSED) {
 		fvalue = dfilter_fvalue_from_unparsed(dfw, ftype1, st_arg2, allow_partial_value, NULL);
+		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
+	}
+	else if (type2 == STTYPE_CHARCONST) {
+		fvalue = dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
 		stnode_replace(st_arg2, STTYPE_FVALUE, fvalue);
 	}
 	else if (type2 == STTYPE_RANGE) {

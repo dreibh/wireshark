@@ -13,6 +13,7 @@
 #include "syntax-tree.h"
 #include <wsutil/wmem/wmem.h>
 #include <wsutil/str_util.h>
+#include <wsutil/glib-compat.h>
 #include "sttype-test.h"
 
 /* Keep track of sttype_t's via their sttype_id_t number */
@@ -182,6 +183,12 @@ stnode_t *
 stnode_new_unparsed(const char *str)
 {
 	return stnode_new(STTYPE_UNPARSED, g_strdup(str));
+}
+
+stnode_t *
+stnode_new_charconst(unsigned long number)
+{
+	return stnode_new(STTYPE_CHARCONST, g_memdup2(&number, sizeof(number)));
 }
 
 stnode_t*

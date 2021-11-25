@@ -174,20 +174,6 @@ byte_array_from_unparsed(const char *s, gchar **err_msg)
 	GByteArray	*bytes;
 	gboolean	res;
 
-	if (s[0] == '\'') {
-		/*
-		 * byte array with length 1 represented as a C-style character constant.
-		 */
-		unsigned long value;
-		if (!parse_charconst(s, &value, err_msg))
-			return NULL;
-		ws_assert(value <= UINT8_MAX);
-		uint8_t one_byte = (uint8_t)value;
-		bytes = g_byte_array_new();
-		g_byte_array_append(bytes, &one_byte, 1);
-		return bytes;
-	}
-
 	/*
 	 * Special case where the byte string is specified using a one byte
 	 * hex literal. We can't allow this for byte strings that are longer
@@ -217,6 +203,39 @@ bytes_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U
 	GByteArray	*bytes;
 
 	bytes = byte_array_from_unparsed(s, err_msg);
+	if (bytes == NULL)
+		return FALSE;
+
+	/* Free up the old value, if we have one */
+	bytes_fvalue_free(fv);
+
+	fv->value.bytes = bytes;
+
+	return TRUE;
+}
+
+GByteArray *
+byte_array_from_charconst(unsigned long num, gchar **err_msg)
+{
+	if (num > UINT8_MAX) {
+		if (err_msg) {
+			*err_msg = g_strdup_printf("%lu is too large for a byte value", num);
+		}
+		return NULL;
+	}
+
+	GByteArray *bytes = g_byte_array_new();
+	uint8_t one_byte = (uint8_t)num;
+	g_byte_array_append(bytes, &one_byte, 1);
+	return bytes;
+}
+
+static gboolean
+bytes_from_charconst(fvalue_t *fv, unsigned long num, gchar **err_msg)
+{
+	GByteArray	*bytes;
+
+	bytes = byte_array_from_charconst(num, err_msg);
 	if (bytes == NULL)
 		return FALSE;
 
@@ -555,6 +574,7 @@ ftype_register_bytes(void)
 		bytes_fvalue_free,		/* free_value */
 		bytes_from_unparsed,		/* val_from_unparsed */
 		bytes_from_string,		/* val_from_string */
+		bytes_from_charconst,		/* val_from_charconst */
 		bytes_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_byte_array = bytes_fvalue_set },	/* union set_value */
@@ -578,6 +598,7 @@ ftype_register_bytes(void)
 		bytes_fvalue_free,		/* free_value */
 		bytes_from_unparsed,		/* val_from_unparsed */
 		NULL,				/* val_from_string */
+		NULL,				/* val_from_charconst */
 		bytes_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_byte_array = bytes_fvalue_set },	/* union set_value */
@@ -601,6 +622,7 @@ ftype_register_bytes(void)
 		bytes_fvalue_free,		/* free_value */
 		ax25_from_unparsed,		/* val_from_unparsed */
 		NULL,				/* val_from_string */
+		NULL,				/* val_from_charconst */
 		bytes_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_bytes = ax25_fvalue_set },	/* union set_value */
@@ -624,6 +646,7 @@ ftype_register_bytes(void)
 		bytes_fvalue_free,		/* free_value */
 		vines_from_unparsed,		/* val_from_unparsed */
 		NULL,				/* val_from_string */
+		NULL,				/* val_from_charconst */
 		bytes_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_bytes = vines_fvalue_set },	/* union set_value */
@@ -647,6 +670,7 @@ ftype_register_bytes(void)
 		bytes_fvalue_free,		/* free_value */
 		ether_from_unparsed,		/* val_from_unparsed */
 		NULL,				/* val_from_string */
+		NULL,				/* val_from_charconst */
 		bytes_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_bytes = ether_fvalue_set },	/* union set_value */
@@ -670,6 +694,7 @@ ftype_register_bytes(void)
 		bytes_fvalue_free,		/* free_value */
 		oid_from_unparsed,		/* val_from_unparsed */
 		NULL,				/* val_from_string */
+		NULL,				/* val_from_charconst */
 		oid_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_byte_array = oid_fvalue_set },	/* union set_value */
@@ -693,6 +718,7 @@ ftype_register_bytes(void)
 		bytes_fvalue_free,		/* free_value */
 		rel_oid_from_unparsed,		/* val_from_unparsed */
 		NULL,				/* val_from_string */
+		NULL,				/* val_from_charconst */
 		rel_oid_to_repr,		/* val_to_string_repr */
 
 		{ .set_value_byte_array = oid_fvalue_set },	/* union set_value */
@@ -716,6 +742,7 @@ ftype_register_bytes(void)
 		bytes_fvalue_free,		/* free_value */
 		system_id_from_unparsed,	/* val_from_unparsed */
 		NULL,				/* val_from_string */
+		NULL,				/* val_from_charconst */
 		system_id_to_repr,		/* val_to_string_repr */
 
 		{ .set_value_byte_array = system_id_fvalue_set }, /* union set_value */
@@ -739,6 +766,7 @@ ftype_register_bytes(void)
 		bytes_fvalue_free,		/* free_value */
 		fcwwn_from_unparsed,		/* val_from_unparsed */
 		NULL,				/* val_from_string */
+		NULL,				/* val_from_charconst */
 		bytes_to_repr,			/* val_to_string_repr */
 
 		{ .set_value_bytes = fcwwn_fvalue_set },	/* union set_value */

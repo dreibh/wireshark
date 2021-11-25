@@ -31,11 +31,6 @@ pcre_free(gpointer value)
 
 	/* If the data was not claimed with stnode_steal_data(), free it. */
 	if (pcre) {
-		/*
-		 * They're reference-counted, so just drop the reference
-		 * count; it'll get freed when the reference count drops
-		 * to 0.
-		 */
 		ws_regex_free(pcre);
 	}
 }
@@ -70,6 +65,12 @@ pcre_tostr(const void *data, gboolean pretty _U_)
 	return g_strdup(ws_regex_pattern(data));
 }
 
+static char *
+charconst_tostr(const void *data, gboolean pretty _U_)
+{
+	return g_strdup_printf("%lu", *(unsigned long *)data);
+}
+
 void
 sttype_register_pointer(void)
 {
@@ -97,10 +98,19 @@ sttype_register_pointer(void)
 		NULL,
 		pcre_tostr
 	};
+	static sttype_t charconst_type = {
+		STTYPE_CHARCONST,
+		"CHARCONST",
+		NULL,
+		g_free,
+		NULL,
+		charconst_tostr
+	};
 
 	sttype_register(&field_type);
 	sttype_register(&fvalue_type);
 	sttype_register(&pcre_type);
+	sttype_register(&charconst_type);
 }
 
 /*
