@@ -22,7 +22,7 @@ struct NECTORSliceHeader
    guint8 nsh_type;                         // Type
    guint8 nsh_flags;                        // Flags (currently unused)
    guint16 nsh_chunk_id;                    // Chunk ID to differentiate slices of different chunks
-} __attribute__((packed));
+};
 
 
 #define NSHT_UNCODED        0x01
@@ -33,7 +33,7 @@ struct NECTORUncodedSliceHeader
    struct NECTORSliceHeader nush_slice_header;     // Common header
    guint16                  nush_index;            // Index of slice in chunk
    char                     nush_payload[];        // The slice data
-} __attribute__((packed));
+};
 
 
 struct NECTORCodedSliceHeader
@@ -41,7 +41,7 @@ struct NECTORCodedSliceHeader
    struct NECTORSliceHeader ncsh_slice_header;     // Common header
    guint16                  ncsh_index;            // Index of slice in chunk (for debug)
    char                     ncsh_payload[];        // The chunk data
-} __attribute__((packed));
+};
 
 
 void proto_register_nector(void);
