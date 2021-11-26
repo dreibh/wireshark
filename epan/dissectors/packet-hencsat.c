@@ -267,13 +267,8 @@ proto_register_nector(void)
 void
 proto_reg_handoff_nector(void)
 {
-  dissector_handle_t nector_data_handle;
-  dissector_handle_t nector_control_handle;
-
-  nector_data_handle = create_dissector_handle(dissect_nector_data, proto_nector_data);
-  dissector_add_uint_range_with_preference("udp.port", "10000-65535", nector_data_handle);
-  nector_control_handle = create_dissector_handle(dissect_nector_control, proto_nector_control);
-  dissector_add_uint_range_with_preference("tcp.port", "1024-65535", nector_control_handle);
+  heur_dissector_add("udp",  dissect_nector_data,    "NECTOR Data",    "nector_data",    proto_nector_data,    HEURISTIC_ENABLE);
+  heur_dissector_add("tcp",  dissect_nector_control, "NECTOR Control", "nector_control", proto_nector_control, HEURISTIC_ENABLE);
 
   xml_handle = find_dissector_add_dependency("xml", proto_nector_control);
 }
