@@ -19,17 +19,34 @@ static void test_format_size(void)
 {
     char *str;
 
-    str = format_size(10000, format_size_unit_bytes);
+    str = format_size(10000, FORMAT_SIZE_UNIT_BYTES, FORMAT_SIZE_PREFIX_SI);
     g_assert_cmpstr(str, ==, "10 kB");
     g_free(str);
 
-    str = format_size(100000, format_size_unit_bytes|format_size_prefix_iec);
+    str = format_size(100000, FORMAT_SIZE_UNIT_BYTES, FORMAT_SIZE_PREFIX_IEC);
     g_assert_cmpstr(str, ==, "97 KiB");
     g_free(str);
 
-    str = format_size(20971520, format_size_unit_bits|format_size_prefix_iec);
+    str = format_size(20971520, FORMAT_SIZE_UNIT_BITS, FORMAT_SIZE_PREFIX_IEC);
     g_assert_cmpstr(str, ==, "20 Mib");
     g_free(str);
+}
+
+static void test_escape_string(void)
+{
+    char *buf;
+
+    buf = ws_escape_string(NULL, "quoted \"\\\" backslash", TRUE);
+    g_assert_cmpstr(buf, ==, "\"quoted \\\"\\\\\\\" backslash\"");
+    wmem_free(NULL, buf);
+
+    buf = ws_escape_string(NULL, "whitespace \t \n \r \f \v", TRUE);
+    g_assert_cmpstr(buf, ==, "\"whitespace \\t \\n \\r \\f \\v""\"");
+    wmem_free(NULL, buf);
+
+    buf = ws_escape_string(NULL, "bytes \xfe\xff", FALSE);
+    g_assert_cmpstr(buf, ==, "bytes \\xfe\\xff");
+    wmem_free(NULL, buf);
 }
 
 #include "to_str.h"
@@ -528,6 +545,7 @@ int main(int argc, char **argv)
     g_test_init(&argc, &argv, NULL);
 
     g_test_add_func("/str_util/format_size", test_format_size);
+    g_test_add_func("/str_util/escape_string", test_escape_string);
 
     g_test_add_func("/to_str/word_to_hex", test_word_to_hex);
     g_test_add_func("/to_str/bytes_to_str", test_bytes_to_str);

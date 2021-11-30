@@ -282,55 +282,8 @@ guint8 * convert_string_to_hex(const char *string, size_t *nbytes);
 WS_DLL_PUBLIC
 char * convert_string_case(const char *string, gboolean case_insensitive);
 
-/** Guarantee a non-null string.
- *
- * @param string The string to check
- * @return A pointer 'string' if it's non-null, otherwise "[NULL]".
- */
-WS_DLL_PUBLIC
-const char * string_or_null(const char *string);
-
-WS_DLL_PUBLIC
-int escape_string_len(const char *string);
-
-WS_DLL_PUBLIC
-char * escape_string(char *dst, const char *string);
-
-
 WS_DLL_PUBLIC
 void IA5_7BIT_decode(unsigned char * dest, const unsigned char* src, int len);
-
-/** Copy a string, escaping the 'chr' characters in it
- *
- * @param str The string to be copied
- * @param chr The character to be escaped
- * @return A copy of the string with every original 'chr' being
- * transformed into double 'chr'.
- */
-WS_DLL_PUBLIC
-gchar* ws_strdup_escape_char (const gchar *str, const gchar chr);
-
-/** Copy a string, unescaping the 'chr' characters in it
- *
- * @param str The string to be copied
- * @param chr The character to be escaped
- * @return A copy of the string with every occurrence of double 'chr' in
- * the original string being copied as a single 'chr'.
- */
-WS_DLL_PUBLIC
-gchar* ws_strdup_unescape_char (const gchar *str, const gchar chr);
-
-/** Replace values in a string
- *
- * @param str String containing 0 or more values to be replaced.
- * @param old_val Old value.
- * @param new_val New value. May be NULL, in which case occurences of
- *                           old_value will be removed.
- * @return A newly-allocated version of str with replacement values or
- * NULL on failure.
- */
-WS_DLL_PUBLIC
-gchar *string_replace(const gchar* str, const gchar *old_val, const gchar *new_val);
 
 /*
  * Check name is valid. This covers names for display filter fields, dissector
