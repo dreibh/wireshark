@@ -299,6 +299,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr)
     gint off_min = 0;
     guint8 ret_val = 0;
     const char *start = ptr;
+    char sign = '\0';
     gboolean has_separator = FALSE;
     gboolean have_offset = FALSE;
 
@@ -306,24 +307,48 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr)
     tm.tm_isdst = -1;
     nstime_set_unset(nstime);
 
-    /* There may be 2 or 0 dashes between the date parts */
-    has_separator = (*(ptr+4) == '-');
+    /* The ISO 8901 Basic format lacks the - and : separators, while the
+     * Extended format has them. (Both formats have the 'T' separator
+     * between date and time, which may be omitted by mutual agreement.)
+     * Verify that we start with a four digit year and then look for the
+     * separator. */
+    for (n_scanned = 0; n_scanned < 4; n_scanned++) {
+        if (!g_ascii_isdigit(*ptr)) {
+            return 0;
+        }
+        tm.tm_year *= 10;
+        tm.tm_year += *ptr++ - '0';
+    }
+    if (*ptr == '-') {
+        has_separator = TRUE;
+    } else if (g_ascii_isdigit(*ptr)) {
+        has_separator = FALSE;
+    } else {
+        return 0;
+    }
 
     /* For now we require the separator to remove ambiguity */
     if (!has_separator) return 0;
 
+    tm.tm_year -= 1900; /* struct tm expects number of years since 1900 */
+    ptr++;
+
     /* Note: sscanf is known to be inconsistent across platforms with respect
        to whether a %n is counted as a return value or not, so we use '<'/'>='
      */
-    n_scanned = sscanf(ptr, has_separator ? "%4u-%2u-%2u%n" : "%4u%2u%2u%n",
-            &tm.tm_year,
+    /* XXX: sscanf allows an optional sign indicator before each integer
+     * converted (whether with %d or %u), so this will convert some bogus
+     * strings. Either checking afterwards or doing the whole thing by hand
+     * as with the year above is the only correct way. (strptime certainly
+     * can't handle the no separator "Basic" format.)
+     */
+    n_scanned = sscanf(ptr, has_separator ? "%2u-%2u%n" : "%2u%2u%n",
             &tm.tm_mon,
             &tm.tm_mday,
             &n_chars);
-    if (n_scanned >= 3) {
+    if (n_scanned >= 2) {
         /* Got year, month, and day */
         tm.tm_mon--; /* struct tm expects 0-based month */
-        tm.tm_year -= 1900; /* struct tm expects number of years since 1900 */
         ptr += n_chars;
     }
     else {
@@ -343,10 +368,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr)
     }
 
     /* Now we're on to the time part. We'll require a minimum of hours and
-       minutes.
-       Test for a possible ':' */
-    has_separator = (*(ptr+2) == ':');
-    if (!has_separator) return 0;
+       minutes. */
 
     n_scanned = sscanf(ptr, has_separator ? "%2u:%2u%n" : "%2u%2u%n",
             &tm.tm_hour,
@@ -410,6 +432,9 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr)
 
     /* Check for a time zone offset */
     if (*ptr == '-' || *ptr == '+' || *ptr == 'Z') {
+        /* Just in case somewhere decides to observe a timezone of -00:30 or
+         * some such. */
+        sign = *ptr;
         /* We have a UTC-relative offset */
         if (*ptr == 'Z') {
             off_hr = off_min = 0;
@@ -417,8 +442,6 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr)
             ptr++;
         }
         else {
-            has_separator = (*(ptr+3) == ':');
-            if (!has_separator) return 0;
             n_scanned = sscanf(ptr, has_separator ? "%3d:%2d%n" : "%3d%2d%n",
                     &off_hr,
                     &off_min,
@@ -444,9 +467,12 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr)
         }
     }
     if (have_offset) {
-        tm.tm_hour -= off_hr;
-        tm.tm_min -= (off_hr < 0 ? -off_min : off_min);
         nstime->secs = mktime_utc(&tm);
+        if (sign == '+') {
+            nstime->secs += (off_hr * 3600) + (off_min * 60);
+        } else if (sign == '-') {
+            nstime->secs -= ((-off_hr) * 3600) + (off_min * 60);
+        }
     }
     else {
         /* No UTC offset given; ISO 8601 says this means localtime */
