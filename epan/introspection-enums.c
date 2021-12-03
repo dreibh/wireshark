@@ -88,6 +88,7 @@ static ws_enum_t all_enums[] = {
     ENUM(ENC_ISO_646_IRV),
     ENUM(ENC_ISO_8601_DATE),
     ENUM(ENC_ISO_8601_DATE_TIME),
+    ENUM(ENC_ISO_8601_DATE_TIME_BASIC),
     ENUM(ENC_ISO_8601_TIME),
     ENUM(ENC_ISO_8859_1),
     ENUM(ENC_ISO_8859_10),
@@ -422,7 +423,5 @@ static ws_enum_t all_enums[] = {
     ENUM(SEP_DASH),
     ENUM(SEP_DOT),
     ENUM(SEP_SPACE),
-    ENUM(STR_ASCII),
-    ENUM(STR_UNICODE),
     { NULL, 0 },
 };
