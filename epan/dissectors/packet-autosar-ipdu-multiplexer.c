@@ -292,12 +292,8 @@ get_message_config(guint32 id) {
         return NULL;
     }
 
-    gint64 *key = wmem_new(wmem_epan_scope(), gint64);
-    *key = id;
-    ipdum_message_list_t *tmp = (ipdum_message_list_t*)g_hash_table_lookup(data_ipdum_messages, key);
-    wmem_free(wmem_epan_scope(), key);
-
-    return tmp;
+    gint64 key = (gint64)id;
+    return (ipdum_message_list_t *)g_hash_table_lookup(data_ipdum_messages, &key);
 }
 
 
@@ -341,6 +337,8 @@ post_update_register_can(void) {
                 dissector_add_uint("can.id", *id, ipdum_handle_can);
             }
         }
+
+        g_list_free(keys);
     }
 }
 
@@ -380,17 +378,13 @@ get_can_mapping(guint32 id, guint16 bus_id) {
         return NULL;
     }
 
-    gint64 *key = wmem_new(wmem_epan_scope(), gint64);
-    *key = id & CAN_EFF_MASK;
-    *key |= ((gint64)bus_id << 32);
-    ipdum_can_mapping_t *tmp = (ipdum_can_mapping_t*)g_hash_table_lookup(data_ipdum_can_mappings, key);
+    gint64 key = ((gint64)id & CAN_EFF_MASK) | ((gint64)bus_id << 32);
+    ipdum_can_mapping_t *tmp = (ipdum_can_mapping_t *)g_hash_table_lookup(data_ipdum_can_mappings, &key);
     if (tmp == NULL) {
         /* try again without Bus ID set */
-        *key = id & CAN_EFF_MASK;
-        tmp = (ipdum_can_mapping_t*)g_hash_table_lookup(data_ipdum_can_mappings, key);
+        key = (gint64)id & CAN_EFF_MASK;
+        tmp = (ipdum_can_mapping_t *)g_hash_table_lookup(data_ipdum_can_mappings, &key);
     }
-
-    wmem_free(wmem_epan_scope(), key);
 
     return tmp;
 }
@@ -528,6 +522,8 @@ post_update_register_lin(void) {
             /* we register the combination of bus and frame id */
             dissector_add_uint("lin.frame_id", *id, ipdum_handle_lin);
         }
+
+        g_list_free(keys);
     }
 }
 
@@ -567,19 +563,15 @@ get_lin_mapping(lin_info_t *lininfo) {
         return NULL;
     }
 
-    gint32 *key = wmem_new(wmem_epan_scope(), gint32);
-    *key = (lininfo->id) & LIN_ID_MASK;
-    *key |= ((lininfo->bus_id) & 0xffff) << 16;
+    gint32 key = ((lininfo->id) & LIN_ID_MASK) | (((lininfo->bus_id) & 0xffff) << 16);
 
-    ipdum_lin_mapping_t *tmp = (ipdum_lin_mapping_t *)g_hash_table_lookup(data_ipdum_lin_mappings, key);
+    ipdum_lin_mapping_t *tmp = (ipdum_lin_mapping_t *)g_hash_table_lookup(data_ipdum_lin_mappings, &key);
 
     if (tmp == NULL) {
         /* try again without Bus ID set */
-        *key = (lininfo->id) & LIN_ID_MASK;
-        tmp = (ipdum_lin_mapping_t *)g_hash_table_lookup(data_ipdum_lin_mappings, key);
+        key = (lininfo->id) & LIN_ID_MASK;
+        tmp = (ipdum_lin_mapping_t *)g_hash_table_lookup(data_ipdum_lin_mappings, &key);
     }
-
-    wmem_free(wmem_epan_scope(), key);
 
     return tmp;
 }
@@ -629,6 +621,8 @@ post_update_register_pdu_transport(void) {
             gint64 *id = (gint64*)tmp->data;
             dissector_add_uint("pdu_transport.id", ((guint32)((guint64)(*id)) & 0xffffffff), ipdum_handle_pdu_transport);
         }
+
+        g_list_free(keys);
     }
 }
 
@@ -667,13 +661,8 @@ get_pdu_transport_mapping(guint32 pdu_transport_id) {
         return NULL;
     }
 
-    gint64 *key = wmem_new(wmem_epan_scope(), gint64);
-    *key = pdu_transport_id;
-
-    ipdum_pdu_transport_mapping_t *tmp = (ipdum_pdu_transport_mapping_t*)g_hash_table_lookup(data_ipdum_pdu_transport_mappings, key);
-    wmem_free(wmem_epan_scope(), key);
-
-    return tmp;
+    gint64 key = (gint64)pdu_transport_id;
+    return (ipdum_pdu_transport_mapping_t *)g_hash_table_lookup(data_ipdum_pdu_transport_mappings, &key);
 }
 
 /**************************************
@@ -758,7 +747,6 @@ dissect_ipdum_message_can(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 static gboolean
 dissect_ipdum_message_can_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) {
     return dissect_ipdum_message_can(tvb, pinfo, tree, data) != 0;
-    return 0;
 }
 
 static int

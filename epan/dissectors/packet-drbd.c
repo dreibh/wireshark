@@ -12,7 +12,7 @@
 
 /*
  * Wireshark dissector for DRBD - Distributed Replicated Block Device.
- * The DRBD Linux kernel module sources can be found at https://github.com/LINBIT/drbd-9.0
+ * The DRBD Linux kernel module sources can be found at https://github.com/LINBIT/drbd
  * More information about Linbit and DRBD can be found at https://www.linbit.com/
  */
 
@@ -108,6 +108,16 @@ enum drbd_packet {
 
     P_CONFIRM_STABLE      = 0x49,
 
+    P_RS_CANCEL_AHEAD     = 0x4a,
+
+    P_DISCONNECT          = 0x4b,
+
+    P_RS_DAGTAG_REQ       = 0x4c,
+    P_RS_CSUM_DAGTAG_REQ  = 0x4d,
+    P_RS_THIN_DAGTAG_REQ  = 0x4e,
+    P_OV_DAGTAG_REQ       = 0x4f,
+    P_OV_DAGTAG_REPLY     = 0x50,
+
     P_INITIAL_META        = 0xfff1,
     P_INITIAL_DATA        = 0xfff2,
 
@@ -189,6 +199,16 @@ static const value_string packet_names[] = {
     { P_TWOPC_RETRY, "P_TWOPC_RETRY" },
 
     { P_CONFIRM_STABLE, "P_CONFIRM_STABLE" },
+
+    { P_RS_CANCEL_AHEAD, "P_RS_CANCEL_AHEAD" },
+
+    { P_DISCONNECT, "P_DISCONNECT" },
+
+    { P_RS_DAGTAG_REQ, "P_RS_DAGTAG_REQ" },
+    { P_RS_CSUM_DAGTAG_REQ, "P_RS_CSUM_DAGTAG_REQ" },
+    { P_RS_THIN_DAGTAG_REQ, "P_RS_THIN_DAGTAG_REQ" },
+    { P_OV_DAGTAG_REQ, "P_OV_DAGTAG_REQ" },
+    { P_OV_DAGTAG_REPLY, "P_OV_DAGTAG_REPLY" },
 
     { P_INITIAL_META, "P_INITIAL_META" },
     { P_INITIAL_DATA, "P_INITIAL_DATA" },
@@ -343,6 +363,7 @@ static void decode_payload_data(tvbuff_t *tvb, proto_tree *tree);
 static void decode_payload_data_reply(tvbuff_t *tvb, proto_tree *tree);
 static void decode_payload_rs_data_reply(tvbuff_t *tvb, proto_tree *tree);
 static void decode_payload_barrier(tvbuff_t *tvb, proto_tree *tree);
+static void decode_payload_dagtag_data_request(tvbuff_t *tvb, proto_tree *tree);
 static void decode_payload_data_request(tvbuff_t *tvb, proto_tree *tree);
 static void decode_payload_sync_param(tvbuff_t *tvb, proto_tree *tree);
 static void decode_payload_protocol(tvbuff_t *tvb, proto_tree *tree);
@@ -411,6 +432,12 @@ static const value_payload_decoder payload_decoders[] = {
     { P_ZEROES, decode_payload_data_size },
     { P_RS_DEALLOCATED, decode_payload_rs_deallocated },
     { P_WSAME, decode_payload_data_wsame },
+    { P_DISCONNECT, NULL },
+    { P_RS_DAGTAG_REQ, decode_payload_dagtag_data_request },
+    { P_RS_CSUM_DAGTAG_REQ, decode_payload_dagtag_data_request },
+    { P_RS_THIN_DAGTAG_REQ, decode_payload_dagtag_data_request },
+    { P_OV_DAGTAG_REQ, decode_payload_dagtag_data_request },
+    { P_OV_DAGTAG_REPLY, decode_payload_dagtag_data_request },
 
     { P_PING, NULL },
     { P_PING_ACK, NULL },
@@ -428,6 +455,7 @@ static const value_payload_decoder payload_decoders[] = {
     { P_RS_IS_IN_SYNC, decode_payload_block_ack },
     { P_DELAY_PROBE, decode_payload_skip },
     { P_RS_CANCEL, decode_payload_block_ack },
+    { P_RS_CANCEL_AHEAD, decode_payload_block_ack },
     { P_CONN_ST_CHG_REPLY, decode_payload_rq_s_reply },
     { P_RETRY_WRITE, decode_payload_block_ack },
     { P_PEER_ACK, decode_payload_peer_ack },
@@ -515,7 +543,7 @@ static int hf_drbd_nodes_to_reach = -1;
 static int hf_drbd_reachable_nodes = -1;
 static int hf_drbd_offset = -1;
 static int hf_drbd_dagtag = -1;
-static int hf_drbd_node_id = -1;
+static int hf_drbd_dagtag_node_id = -1;
 
 static int hf_drbd_state_role = -1;
 static int hf_drbd_state_peer = -1;
@@ -644,7 +672,7 @@ static guint get_drbd_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset,
     return 0;
 }
 
-static int dissect_drbd_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void* data _U_)
+static int dissect_drbd_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
     dissect_drbd_message(tvb, pinfo, tree);
     return tvb_reported_length(tvb);
@@ -787,12 +815,12 @@ static void decode_payload_connection_features(tvbuff_t *tvb, proto_tree *tree)
     proto_tree_add_item(tree, hf_drbd_receiver_node_id, tvb, 16, 4, ENC_BIG_ENDIAN);
 }
 
-static void decode_payload_auth_challenge(tvbuff_t *tvb _U_, proto_tree *tree _U_)
+static void decode_payload_auth_challenge(tvbuff_t *tvb, proto_tree *tree)
 {
     proto_tree_add_bytes_format(tree, hf_drbd_auth_challenge_nonce, tvb, 0, CHALLENGE_LEN, NULL, "Nonce");
 }
 
-static void decode_payload_auth_response(tvbuff_t *tvb _U_, proto_tree *tree _U_)
+static void decode_payload_auth_response(tvbuff_t *tvb, proto_tree *tree)
 {
     proto_tree_add_bytes_format(tree, hf_drbd_auth_response_hash, tvb, 0, -1, NULL, "Hash");
 }
@@ -840,6 +868,15 @@ static void decode_payload_data_request(tvbuff_t *tvb, proto_tree *tree)
     proto_tree_add_item(tree, hf_drbd_sector, tvb, 0, 8, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_drbd_block_id, tvb, 8, 8, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_drbd_blksize, tvb, 16, 4, ENC_BIG_ENDIAN);
+}
+
+static void decode_payload_dagtag_data_request(tvbuff_t *tvb, proto_tree *tree)
+{
+    proto_tree_add_item(tree, hf_drbd_sector, tvb, 0, 8, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_drbd_block_id, tvb, 8, 8, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_drbd_blksize, tvb, 16, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_drbd_dagtag_node_id, tvb, 20, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_drbd_dagtag, tvb, 24, 8, ENC_BIG_ENDIAN);
 }
 
 static void decode_payload_sync_param(tvbuff_t *tvb, proto_tree *tree)
@@ -978,7 +1015,7 @@ static void decode_payload_uuids110(tvbuff_t *tvb, proto_tree *tree)
 static void decode_payload_peer_dagtag(tvbuff_t *tvb, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_drbd_dagtag, tvb, 0, 8, ENC_BIG_ENDIAN);
-    proto_tree_add_item(tree, hf_drbd_node_id, tvb, 8, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_drbd_dagtag_node_id, tvb, 8, 4, ENC_BIG_ENDIAN);
 }
 
 static void decode_payload_current_uuid(tvbuff_t *tvb, proto_tree *tree)
@@ -1120,8 +1157,8 @@ void proto_register_drbd(void)
         { &hf_drbd_oldest_block_id, { "oldest_block_id", "drbd.oldest_block_id", FT_UINT64, BASE_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_youngest_block_id, { "youngest_block_id", "drbd.youngest_block_id", FT_UINT64, BASE_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_resync_rate, { "resync_rate", "drbd.resync_rate", FT_UINT32, BASE_HEX_DEC, NULL, 0x0, NULL, HFILL }},
-        { &hf_drbd_verify_alg, { "verify_alg", "drbd.verify_alg", FT_STRINGZ, STR_ASCII, NULL, 0x0, NULL, HFILL }},
-        { &hf_drbd_csums_alg, { "csums_alg", "drbd.csums_alg", FT_STRINGZ, STR_ASCII, NULL, 0x0, NULL, HFILL }},
+        { &hf_drbd_verify_alg, { "verify_alg", "drbd.verify_alg", FT_STRINGZ, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+        { &hf_drbd_csums_alg, { "csums_alg", "drbd.csums_alg", FT_STRINGZ, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_c_plan_ahead, { "c_plan_ahead", "drbd.c_plan_ahead", FT_UINT32, BASE_HEX_DEC, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_c_delay_target, { "c_delay_target", "drbd.c_delay_target", FT_UINT32, BASE_HEX_DEC, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_c_fill_target, { "c_fill_target", "drbd.c_fill_target", FT_UINT32, BASE_HEX_DEC, NULL, 0x0, NULL, HFILL }},
@@ -1132,7 +1169,7 @@ void proto_register_drbd(void)
         { &hf_drbd_after_sb_2p, { "after_sb_2p", "drbd.after_sb_2p", FT_UINT32, BASE_HEX_DEC, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_conn_flags, { "conn_flags", "drbd.conn_flags", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_two_primaries, { "two_primaries", "drbd.two_primaries", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }},
-        { &hf_drbd_integrity_alg, { "integrity_alg", "drbd.integrity_alg", FT_STRINGZ, STR_ASCII, NULL, 0x0, NULL, HFILL }},
+        { &hf_drbd_integrity_alg, { "integrity_alg", "drbd.integrity_alg", FT_STRINGZ, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_current_uuid, { "Current UUID", "drbd.current_uuid", FT_UINT64, BASE_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_bitmap_uuid, { "Bitmap UUID", "drbd.bitmap_uuid", FT_UINT64, BASE_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_history_uuid_list, { "History UUIDs", "drbd.history_uuids", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL }},
@@ -1168,7 +1205,7 @@ void proto_register_drbd(void)
         { &hf_drbd_reachable_nodes, { "reachable_nodes", "drbd.reachable_nodes", FT_UINT64, BASE_CUSTOM, format_node_mask, 0x0, NULL, HFILL }},
         { &hf_drbd_offset, { "offset", "drbd.offset", FT_UINT32, BASE_HEX_DEC, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_dagtag, { "dagtag", "drbd.dagtag", FT_UINT64, BASE_HEX_DEC, NULL, 0x0, NULL, HFILL }},
-        { &hf_drbd_node_id, { "node_id", "drbd.node_id", FT_INT32, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+        { &hf_drbd_dagtag_node_id, { "dagtag_node_id", "drbd.dagtag_node_id", FT_INT32, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
         { &hf_drbd_state_role, { "role", "drbd.state.role", FT_UINT32, BASE_DEC, VALS(role_names), STATE_ROLE, NULL, HFILL }},
         { &hf_drbd_state_peer, { "peer", "drbd.state.peer", FT_UINT32, BASE_DEC, VALS(role_names), STATE_PEER, NULL, HFILL }},

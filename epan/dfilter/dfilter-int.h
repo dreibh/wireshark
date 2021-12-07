@@ -1,4 +1,5 @@
-/*
+/** @file
+ *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 2001 Gerald Combs
@@ -65,11 +66,11 @@ df_lval_new(void)
 	return g_new0(df_lval_t, 1);
 }
 
-static inline const char *
+static inline char *
 df_lval_value(df_lval_t *lval)
 {
 	if (!lval || !lval->value)
-		return "(fixme: null)";
+		return NULL;
 	return lval->value;
 }
 
@@ -80,10 +81,12 @@ df_lval_number(df_lval_t *lval)
 }
 
 static inline void
-df_lval_free(df_lval_t *lval)
+df_lval_free(df_lval_t *lval, gboolean free_value)
 {
 	if (lval) {
-		g_free(lval->value);
+		if (free_value) {
+			g_free(lval->value);
+		}
 		g_free(lval);
 	}
 }
@@ -106,9 +109,6 @@ dfilter_fail(dfwork_t *dfw, const char *format, ...) G_GNUC_PRINTF(2, 3);
 
 void
 dfilter_fail_throw(dfwork_t *dfw, long code, const char *format, ...) G_GNUC_PRINTF(3, 4);
-
-void
-dfilter_fail_parse(dfwork_t *dfw, const char *format, ...) G_GNUC_PRINTF(2, 3);
 
 void
 add_deprecated_token(dfwork_t *dfw, const char *token);

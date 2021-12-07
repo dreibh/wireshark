@@ -26,7 +26,6 @@
 #include <epan/expert.h>
 #include <epan/addr_resolv.h>
 #include <epan/pci-ids.h>
-#include <stdio.h>
 
 void proto_reg_handoff_ncsi(void);
 void proto_register_ncsi(void);
@@ -402,7 +401,7 @@ static const true_false_string tfs_complete_disable_inprog = { "Complete", "Disa
 static const value_string ncsi_partner_flow_vals[] = {
     { 0x00, "Not pause capable" },
     { 0x01, "Symmetric pause" },
-    { 0x02, "Assymmetric pause" },
+    { 0x02, "Asymmetric pause" },
     { 0x03, "Symmetric & Assymetric pause" },
     { 0, NULL },
 };

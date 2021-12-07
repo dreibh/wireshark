@@ -15,7 +15,7 @@
  * RFC9000 QUIC: A UDP-Based Multiplexed and Secure Transport
  * RFC9001 Using TLS to Secure QUIC
  * RFC8889 Version-Independent Properties of QUIC
- * https://tools.ietf.org/html/draft-ietf-quic-version-negotiation-03
+ * https://tools.ietf.org/html/draft-ietf-quic-version-negotiation-05
  * https://datatracker.ietf.org/doc/html/draft-ietf-quic-v2-00
  *
  * Extension:
@@ -526,6 +526,8 @@ const range_string quic_version_vals[] = {
     { 0xff00001e, 0xff00001e, "draft-30" },
     { 0xff00001f, 0xff00001f, "draft-31" },
     { 0xff000020, 0xff000020, "draft-32" },
+    { 0xff000021, 0xff000021, "draft-33" },
+    { 0xff000022, 0xff000022, "draft-34" },
     /* QUICv2 */
     { 0xff020000, 0xff020000, "v2-draft-00" },
     { 0, 0, NULL }
@@ -3185,6 +3187,16 @@ dissect_quic_long_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tre
             /* Create new decryption context based on the Client Connection
              * ID from the *very first* Client Initial packet. */
             quic_create_initial_decoders(&dcid, &error, conn);
+        } else if (long_packet_type == QUIC_LPT_INITIAL && from_server &&
+                   version != conn->version) {
+            /* Compatibile Version Negotiation: the server (probably) updated the connection version.
+               We need to restart the ciphers since HP depends on version.
+               If/when updating the ciphers is a bit tricky during Compatible Version Negotiation.
+               TODO: do we really need to restart all the initial ciphers?
+             */
+            conn->version = version;
+            quic_ciphers_reset(ciphers);
+            quic_create_initial_decoders(&conn->client_dcid_initial, &error, conn);
         } else if (long_packet_type == QUIC_LPT_0RTT) {
             early_data_secret_len = tls13_get_quic_secret(pinfo, FALSE, TLS_SECRET_0RTT_APP, DIGEST_MIN_SIZE, DIGEST_MAX_SIZE, early_data_secret);
             if (early_data_secret_len == 0) {
@@ -3844,7 +3856,7 @@ quic_streams_add(packet_info *pinfo, quic_info_data_t *quic_info, guint64 stream
     }
     if (!wmem_list_find(quic_info->streams_list, GUINT_TO_POINTER(stream_id))) {
         wmem_list_insert_sorted(quic_info->streams_list, GUINT_TO_POINTER(stream_id),
-                                uint_compare);
+                                wmem_compare_uint);
     }
 
     /* Map: first Stream ID for each UDP payload */

@@ -3551,7 +3551,7 @@ void dissect_nvmeof_fabric_cmd(tvbuff_t *nvme_tvb, packet_info *pinfo, proto_tre
     guint8 fctype;
     guint32 prop_off;
 
-    fctype = tvb_get_guint8(nvme_tvb, 4);
+    fctype = tvb_get_guint8(nvme_tvb, 4+off);
     cmd->cmd_ctx.fabric_cmd.fctype = fctype;
 
     ti = proto_tree_add_item(nvme_tree, hf_nvmeof_cmd, nvme_tvb, off,
@@ -5295,11 +5295,11 @@ proto_register_nvme(void)
         },
         { &hf_nvme_identify_ns_nguid,
             { "Namespace Globally Unique Identifier (NGUID)", "nvme.cmd.identify.ns.nguid",
-               FT_BYTES, STR_ASCII, NULL, 0x0, NULL, HFILL}
+               FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL}
         },
         { &hf_nvme_identify_ns_eui64,
             { "IEEE Extended Unique Identifier (EUI64)", "nvme.cmd.identify.ns.eui64",
-               FT_BYTES, STR_ASCII, NULL, 0x0, NULL, HFILL}
+               FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL}
         },
         { &hf_nvme_identify_ns_lbafs,
             { "LBA Formats", "nvme.cmd.identify.ns.lbafs",

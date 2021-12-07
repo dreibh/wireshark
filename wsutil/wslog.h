@@ -1,4 +1,5 @@
-/*
+/** @file
+ *
  * Copyright 2021, João Valverde <j@v6e.pt>
  *
  * Wireshark - Network traffic analyzer
@@ -16,8 +17,7 @@
 #include <stdarg.h>
 #include <glib.h>
 
-#include <ws_symbol_export.h>
-#include <ws_attributes.h>
+#include <wireshark.h>
 #include <ws_log_defs.h>
 
 #ifdef WS_LOG_DOMAIN
@@ -55,11 +55,27 @@ typedef void (ws_log_writer_free_data_cb)(void *user_data);
 
 
 WS_DLL_PUBLIC
-void ws_log_default_writer(const char *domain, enum ws_log_level level,
+void ws_log_file_writer(FILE *fp, const char *domain, enum ws_log_level level,
                             ws_log_time_t timestamp,
                             const char *file, int line, const char *func,
-                            const char *user_format, va_list user_ap,
-                            void *user_data);
+                            const char *user_format, va_list user_ap);
+
+
+WS_DLL_PUBLIC
+void ws_log_console_writer(const char *domain, enum ws_log_level level,
+                            ws_log_time_t timestamp,
+                            const char *file, int line, const char *func,
+                            const char *user_format, va_list user_ap);
+
+
+/** Configure all log output to use stderr.
+ *
+ * Normally log levels "info", "debug" and "noisy" are written to stdout.
+ * Calling this function with true configures these levels to be written
+ * to stderr as well.
+ */
+WS_DLL_PUBLIC
+void ws_log_console_writer_set_use_stderr(bool use_stderr);
 
 
 /** Convert a numerical level to its string representation. */
@@ -144,6 +160,26 @@ void ws_log_set_fatal(enum ws_log_level level);
  */
 WS_DLL_PUBLIC
 enum ws_log_level  ws_log_set_fatal_str(const char *str_level);
+
+
+/** Set the active log writer.
+ *
+ * The parameter 'writer' can be NULL to use the default writer.
+ */
+WS_DLL_PUBLIC
+void ws_log_set_writer(ws_log_writer_cb *writer);
+
+
+/** Set the active log writer.
+ *
+ * The parameter 'writer' can be NULL to use the default writer.
+ * Accepts an extra user_data parameter that will be passed to
+ * the log writer.
+ */
+WS_DLL_PUBLIC
+void ws_log_set_writer_with_data(ws_log_writer_cb *writer,
+                        void *user_data,
+                        ws_log_writer_free_data_cb *free_user_data);
 
 
 #define LOG_ARGS_NOEXIT -1

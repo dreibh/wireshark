@@ -1068,21 +1068,10 @@ proto_registrar_get_id_byname(const char *field_name)
 
 
 static char *
-hfinfo_format_text(wmem_allocator_t *scope, const header_field_info *hfinfo,
+hfinfo_format_text(wmem_allocator_t *scope, const header_field_info *hfinfo _U_,
     const guchar *string)
 {
-	switch (hfinfo->display) {
-		case STR_ASCII:
-			return format_text(scope, string, strlen(string));
-/*
-		case STR_ASCII_WSP
-			return format_text_wsp(string, strlen(string));
- */
-		case STR_UNICODE:
-			return format_text(scope, string, strlen(string));
-	}
-
-	return format_text(scope, string, strlen(string));
+	return format_text_string(scope, string);
 }
 
 static char *
@@ -4207,23 +4196,26 @@ proto_tree_add_time_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 
 	DISSECTOR_ASSERT_HINT(hfinfo != NULL, "Not passed hfi!");
 
-	DISSECTOR_ASSERT_FIELD_TYPE_IS_TIME(hfinfo);
-
 	/* length has to be -1 or > 0 regardless of encoding */
 	if (length < -1 || length == 0) {
 		REPORT_DISSECTOR_BUG("Invalid length %d passed to proto_tree_add_time_item",
 		    length);
 	}
 
-	time_stamp.secs  = 0;
-	time_stamp.nsecs = 0;
+	nstime_set_zero(&time_stamp);
 
 	if (encoding & ENC_STR_TIME_MASK) {
+		DISSECTOR_ASSERT_FIELD_TYPE(hfinfo, FT_ABSOLUTE_TIME);
+		/* The only string format that could be a relative time is
+		 * ENC_ISO_8601_TIME, and that is treated as an absolute time
+		 * relative to "now" currently.
+		 */
 		tvb_get_string_time(tvb, start, length, encoding, &time_stamp, endoff);
 		/* grab the errno now before it gets overwritten */
 		saved_err = errno;
 	}
 	else {
+		DISSECTOR_ASSERT_FIELD_TYPE_IS_TIME(hfinfo);
 		const gboolean is_relative = (hfinfo->type == FT_RELATIVE_TIME) ? TRUE : FALSE;
 
 		tvb_ensure_bytes_exist(tvb, start, length);
@@ -8222,8 +8214,6 @@ static const value_string hf_display[] = {
 	{ BASE_HEX_DEC|BASE_VAL64_STRING, "BASE_HEX_DEC|BASE_VAL64_STRING" },
 	{ BASE_CUSTOM|BASE_VAL64_STRING,  "BASE_CUSTOM|BASE_VAL64_STRING"  },
 	/* Alias: BASE_NONE { BASE_FLOAT,			"BASE_FLOAT" }, */
-	/* Alias: BASE_NONE { STR_ASCII,			  "STR_ASCII" }, */
-	{ STR_UNICODE,			  "STR_UNICODE" },
 	{ ABSOLUTE_TIME_LOCAL,		  "ABSOLUTE_TIME_LOCAL"		   },
 	{ ABSOLUTE_TIME_UTC,		  "ABSOLUTE_TIME_UTC"		   },
 	{ ABSOLUTE_TIME_DOY_UTC,	  "ABSOLUTE_TIME_DOY_UTC"	   },
@@ -8632,8 +8622,7 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 		case FT_STRINGZPAD:
 		case FT_STRINGZTRUNC:
 			switch (hfinfo->display) {
-				case STR_ASCII:
-				case STR_UNICODE:
+				case BASE_NONE:
 					break;
 
 				default:
@@ -8833,7 +8822,7 @@ register_string_errors(void)
 	proto_set_cant_toggle(proto_string_errors);
 }
 
-#define PROTO_PRE_ALLOC_HF_FIELDS_MEM (240000+PRE_ALLOC_EXPERT_FIELDS_MEM)
+#define PROTO_PRE_ALLOC_HF_FIELDS_MEM (260000+PRE_ALLOC_EXPERT_FIELDS_MEM)
 static int
 proto_register_field_init(header_field_info *hfinfo, const int parent)
 {
@@ -12959,10 +12948,6 @@ proto_tree_add_ts_23_038_7bits_packed_item(proto_tree *tree, const int hfindex, 
 
 	string = tvb_get_ts_23_038_7bits_string_packed(PNODE_POOL(tree), tvb, bit_offset, no_of_chars);
 
-	if (hfinfo->display == STR_UNICODE) {
-		DISSECTOR_ASSERT(g_utf8_validate(string, -1, NULL));
-	}
-
 	pi = proto_tree_add_pi(tree, hfinfo, tvb, byte_offset, &byte_length);
 	DISSECTOR_ASSERT(byte_length >= 0);
 	proto_tree_set_string(PNODE_FINFO(pi), string);
@@ -12990,10 +12975,6 @@ proto_tree_add_ascii_7bits_item(proto_tree *tree, const int hfindex, tvbuff_t *t
 	byte_offset = bit_offset >> 3;
 
 	string = tvb_get_ascii_7bits_string(PNODE_POOL(tree), tvb, bit_offset, no_of_chars);
-
-	if (hfinfo->display == STR_UNICODE) {
-		DISSECTOR_ASSERT(g_utf8_validate(string, -1, NULL));
-	}
 
 	pi = proto_tree_add_pi(tree, hfinfo, tvb, byte_offset, &byte_length);
 	DISSECTOR_ASSERT(byte_length >= 0);

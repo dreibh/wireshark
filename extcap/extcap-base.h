@@ -1,4 +1,5 @@
-/* extcap_base.h
+/** @file
+ *
  * Base function for extcaps
  *
  * Copyright 2016, Dario Lombardo
@@ -95,6 +96,7 @@ void extcap_cmdline_debug(char** ar, const unsigned n);
 void extcap_init_custom_log(const char* filename);
 void extcap_config_debug(unsigned* count);
 void extcap_base_help(void);
+void extcap_log_init(const char *progname);
 
 #endif
 
