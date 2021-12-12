@@ -46,7 +46,7 @@ endif()
 set (MMDBRESOLVE_EXE ${MAXMINDDB_FOUND})
 
 # Must match ${EXTRA_INSTALLER_DIR}/Npcap-X.Y.Z.exe
-set(NPCAP_PACKAGE_VERSION "1.55")
+set(NPCAP_PACKAGE_VERSION "1.60")
 
 set(USBPCAP_PACKAGE_VERSION "1.5.4.0")
 
@@ -170,7 +170,7 @@ set(NSIS_OPTIONS
 	/DSTAGING_DIR=${_staging_dir}
 	/DOUTFILE_DIR=${_outfile_dir}
 	/DNSIS_INCLUDE_DIR=${_nsis_include_dir}
-	/V4
+	/V2
 	PARENT_SCOPE
 )
 

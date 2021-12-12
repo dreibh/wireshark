@@ -603,8 +603,13 @@ main(int argc, char *argv[])
                         break;
 
                     case PREFS_SET_NO_SUCH_PREF:
-                    case PREFS_SET_OBSOLETE:
                         cmdarg_err("-o flag \"%s\" specifies unknown preference", ws_optarg);
+                        ret = INVALID_OPTION;
+                        goto clean_exit;
+                        break;
+
+                    case PREFS_SET_OBSOLETE:
+                        cmdarg_err("-o flag \"%s\" specifies obsolete preference", ws_optarg);
                         ret = INVALID_OPTION;
                         goto clean_exit;
                         break;
@@ -1112,7 +1117,7 @@ static gboolean print_field_value(field_info *finfo, int cmd_line_index)
 {
     header_field_info   *hfinfo;
     char                *fs_buf;
-    char                *fs_ptr;
+    char                *fs_ptr = NULL;
     static GString     *label_s = NULL;
     size_t              fs_len;
     guint              i;
