@@ -9211,7 +9211,7 @@ dissect_venue_name_info(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int
     proto_tree_add_item(tree, hf_ieee80211_ff_anqp_venue_language,
                         tvb, offset, 3, ENC_ASCII|ENC_NA);
     proto_tree_add_item(tree, hf_ieee80211_ff_anqp_venue_name,
-                        tvb, offset + 3, vlen - 3, ENC_UTF_8|ENC_NA);
+                        tvb, offset + 3, vlen - 3, ENC_UTF_8);
     offset += vlen;
   }
 }
@@ -9710,7 +9710,7 @@ dissect_hs20_anqp_operator_friendly_name(proto_tree *tree, tvbuff_t *tvb,
     proto_tree_add_item(ofn_tree, hf_array[1],
                         tvb, offset, 3, ENC_ASCII|ENC_NA);
     proto_tree_add_item(ofn_tree, hf_array[2],
-                        tvb, offset + 3, vlen - 3, ENC_UTF_8|ENC_NA);
+                        tvb, offset + 3, vlen - 3, ENC_UTF_8);
     offset += vlen;
 
     proto_item_set_len(pi, offset - start_offset);
@@ -10095,7 +10095,7 @@ dissect_hs20_anqp_osu_providers_list(proto_tree *tree, tvbuff_t *tvb,
   offset++;
 
   proto_tree_add_item(tree, hf_ieee80211_hs20_osu_providers_ssid, tvb, offset, ssid_len,
-                        ENC_UTF_8|ENC_NA);
+                        ENC_UTF_8);
   offset += ssid_len;
 
   osu_prov_count = tvb_get_guint8(tvb, offset);
@@ -10126,7 +10126,7 @@ dissect_hs20_anqp_icon_request(proto_tree *tree, tvbuff_t *tvb, int offset,
   int end)
 {
   proto_tree_add_item(tree, hf_ieee80211_hs20_icon_request_filename, tvb, offset,
-                        end - offset, ENC_UTF_8|ENC_NA);
+                        end - offset, ENC_UTF_8);
 }
 
 static const value_string hs20_icon_download_status_vals[] = {
@@ -10158,7 +10158,7 @@ dissect_hs20_anqp_icon_binary_file(proto_tree *tree, tvbuff_t *tvb, int offset,
   offset++;
 
   proto_tree_add_item(tree, hf_ieee80211_hs20_icon_type, tvb, offset, icon_type_len,
-                        ENC_UTF_8|ENC_NA);
+                        ENC_UTF_8);
   offset += icon_type_len;
 
   icon_binary_data_len = tvb_get_letohs(tvb, offset);
@@ -10294,7 +10294,7 @@ dissect_hs20_anqp_advice_of_charge(proto_tree *tree, tvbuff_t *tvb, int offset,
     offset++;
 
     proto_tree_add_item(aoc_tree, hf_ieee80211_hs20_anqp_aoc_nai_realm, tvb, offset,
-                        nai_realm_len, ENC_UTF_8|ENC_NA);
+                        nai_realm_len, ENC_UTF_8);
     offset += nai_realm_len;
 
     plan_tot_len = adv_charge_len - 3 - nai_realm_len;
@@ -10320,7 +10320,7 @@ dissect_hs20_anqp_advice_of_charge(proto_tree *tree, tvbuff_t *tvb, int offset,
         offset += 3;
 
         proto_tree_add_item(plan_info_tree, hf_ieee80211_hs20_anqp_aoc_plan_information,
-                        tvb, offset, plan_len - 6, ENC_UTF_8|ENC_NA);
+                        tvb, offset, plan_len - 6, ENC_UTF_8);
         offset += plan_len - 6;
 
         plan_index++;
@@ -47894,13 +47894,13 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_ranging_pol_rpt_starting_spatial_stream,
      {"Starting Spatial Stream",
       "wlan.trigger.he.ranging.poll_rpt.starting_spatial_stream",
-      FT_UINT40, BASE_HEX|BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
+      FT_UINT40, BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
       0x001c000000, NULL, HFILL }},
 
     {&hf_ieee80211_ranging_pol_rpt_number_spatial_streams,
      {"Number Of Spatial Streams",
       "wlan.trigger.he.ranging.poll_rpt.number_spatial_streams",
-      FT_UINT40, BASE_HEX|BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
+      FT_UINT40, BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
       0x00e0000000, NULL, HFILL }},
 
     {&hf_ieee80211_ranging_pol_rpt_ul_target_rssi,
@@ -47934,13 +47934,13 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_ranging_sounding_starting_spatial_stream,
      {"Starting Spatial Stream",
       "wlan.trigger.he.ranging.sounding.starting_spatial_stream",
-      FT_UINT40, BASE_HEX|BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
+      FT_UINT40, BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
       0x001c000000, NULL, HFILL }},
 
     {&hf_ieee80211_ranging_sounding_number_spatial_streams,
      {"Number of Spatial Streams",
       "wlan.trigger.he.ranging.sounding.number_spatial_streams",
-      FT_UINT40, BASE_HEX|BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
+      FT_UINT40, BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
       0x00e0000000, NULL, HFILL }},
 
     {&hf_ieee80211_ranging_sounding_ul_target_rssi,
@@ -47974,13 +47974,13 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_ranging_sec_sound_starting_spatial_stream,
      {"Starting Spatial Stream",
       "wlan.trigger.he.ranging.secured_sounding.starting_spatial_stream",
-      FT_UINT40, BASE_HEX|BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
+      FT_UINT40, BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
       0x001c000000, NULL, HFILL }},
 
     {&hf_ieee80211_ranging_sec_sound_number_spatial_streams,
      {"Number of Spatial Streams",
       "wlan.trigger.he.ranging.secured_sounding.number_spatial_streams",
-      FT_UINT40, BASE_HEX|BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
+      FT_UINT40, BASE_CUSTOM, CF_FUNC(he_trigger_minus_one_custom),
       0x00e0000000, NULL, HFILL }},
 
     {&hf_ieee80211_ranging_sec_sound_ul_target_rssi,
