@@ -84,8 +84,9 @@ static gboolean stdout_color_enabled = FALSE;
 
 static gboolean stderr_color_enabled = FALSE;
 
-/* Use stderr for levels "info" and below. */
-static gboolean stderr_debug_enabled = FALSE;
+/* Use stdout for levels "info" and below, for backward compatibility
+ * with GLib. */
+static gboolean stdout_logging_enabled = FALSE;
 
 static const char *registered_progname = DEFAULT_PROGNAME;
 
@@ -906,13 +907,8 @@ static void log_write_do_work(FILE *fp, gboolean use_color,
 static inline ws_log_time_t *get_timestamp(ws_log_time_t *ts)
 {
     assert(ts);
-#if defined(HAVE_CLOCK_GETTIME)
-    if (clock_gettime(CLOCK_REALTIME, (struct timespec *)ts) == 0)
-        return ts;
-#elif defined(_WIN32)
     if (timespec_get((struct timespec *)ts, TIME_UTC) == TIME_UTC)
         return ts;
-#endif
     ts->tv_sec = time(NULL);
     ts->tv_nsec = -1;
     return ts;
@@ -934,7 +930,7 @@ static inline struct tm *get_localtime(time_t unix_time, struct tm **cookie)
 
 static inline FILE *console_file(enum ws_log_level level)
 {
-    if (level <= LOG_LEVEL_INFO && !stderr_debug_enabled)
+    if (level <= LOG_LEVEL_INFO && stdout_logging_enabled)
         return stdout;
     return stderr;
 }
@@ -942,7 +938,7 @@ static inline FILE *console_file(enum ws_log_level level)
 
 static inline bool console_color_enabled(enum ws_log_level level)
 {
-    if (level <= LOG_LEVEL_INFO && !stderr_debug_enabled)
+    if (level <= LOG_LEVEL_INFO && stdout_logging_enabled)
         return stdout_color_enabled;
     return stderr_color_enabled;
 }
@@ -1103,9 +1099,9 @@ void ws_log_console_writer(const char *domain, enum ws_log_level level,
 
 
 WS_DLL_PUBLIC
-void ws_log_console_writer_set_use_stderr(bool use_stderr)
+void ws_log_console_writer_set_use_stdout(bool use_stdout)
 {
-    stderr_debug_enabled = use_stderr;
+    stdout_logging_enabled = use_stdout;
 }
 
 
