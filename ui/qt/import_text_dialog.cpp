@@ -9,12 +9,6 @@
 
 #include "config.h"
 
-#include <time.h>
-#if !defined(_WIN32) && !defined(HAVE_CLOCK_GETTIME)
-// For gettimeofday()
-#include <sys/time.h>
-#endif
-
 #include "import_text_dialog.h"
 
 #include "wiretap/wtap.h"
@@ -29,6 +23,7 @@
 
 #include "file.h"
 #include "wsutil/file_util.h"
+#include "wsutil/time_util.h"
 #include "wsutil/tempfile.h"
 #include "wsutil/filesystem.h"
 
@@ -618,7 +613,7 @@ void ImportTextDialog::on_timestampFormatLineEdit_textChanged(const QString &tim
             char time_str[100];
             QString timefmt = QString(time_format);
 
-            timespec_get(&timenow, TIME_UTC);
+            ws_clock_get_realtime(&timenow);
 
             /* On windows strftime/wcsftime does not support %s yet, this works on all OSs */
             timefmt.replace(QString("%s"), QString::number(timenow.tv_sec));

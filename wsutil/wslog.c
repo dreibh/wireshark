@@ -30,6 +30,7 @@
 #endif
 
 #include "file_util.h"
+#include "time_util.h"
 #include "to_str.h"
 #include "strtoi.h"
 
@@ -904,17 +905,6 @@ static void log_write_do_work(FILE *fp, gboolean use_color,
 }
 
 
-static inline ws_log_time_t *get_timestamp(ws_log_time_t *ts)
-{
-    assert(ts);
-    if (timespec_get((struct timespec *)ts, TIME_UTC) == TIME_UTC)
-        return ts;
-    ts->tv_sec = time(NULL);
-    ts->tv_nsec = -1;
-    return ts;
-}
-
-
 static inline struct tm *get_localtime(time_t unix_time, struct tm **cookie)
 {
     if (unix_time == (time_t)-1)
@@ -953,10 +943,10 @@ static void log_write_dispatch(const char *domain, enum ws_log_level level,
                             const char *file, int line, const char *func,
                             const char *user_format, va_list user_ap)
 {
-    ws_log_time_t tstamp;
+    struct timespec tstamp;
     struct tm *cookie = NULL;
 
-    get_timestamp(&tstamp);
+    ws_clock_get_realtime(&tstamp);
 
     if (custom_log) {
         va_list user_ap_copy;
@@ -1073,7 +1063,7 @@ void ws_log_buffer_full(const char *domain, enum ws_log_level level,
 
 
 void ws_log_file_writer(FILE *fp, const char *domain, enum ws_log_level level,
-                            ws_log_time_t timestamp,
+                            struct timespec timestamp,
                             const char *file, int line, const char *func,
                             const char *user_format, va_list user_ap)
 {
@@ -1086,7 +1076,7 @@ void ws_log_file_writer(FILE *fp, const char *domain, enum ws_log_level level,
 
 
 void ws_log_console_writer(const char *domain, enum ws_log_level level,
-                            ws_log_time_t timestamp,
+                            struct timespec timestamp,
                             const char *file, int line, const char *func,
                             const char *user_format, va_list user_ap)
 {

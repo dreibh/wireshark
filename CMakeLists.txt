@@ -58,6 +58,10 @@ set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT
 
 include( CMakeOptions.txt )
 
+# We require minimum C11
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
 # We require minimum C++11
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -567,18 +571,6 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		list(APPEND LOCAL_CFLAGS /analyze:WX-)
 	endif()
 
-	# The /std:c17 option enables ISO C17 conformance. It's available
-	# starting in Visual Studio 2019 version 16.8.
-	#
-	# XXX Do we need to split this into LOCAL_CFLAGS + LOCAL_CXXFLAGS?
-	#
-	list(APPEND LOCAL_CFLAGS /std:c17)
-
-	# MSVC 14.28 enables C5105, but the Windows SDK 10.0.18362.0 triggers it.
-	if(CMAKE_C_COMPILER_ID STREQUAL "MSVC" AND NOT CMAKE_C_COMPILER_VERSION VERSION_LESS 19.28)
-		list(APPEND LOCAL_CFLAGS -wd5105)
-	endif()
-
 	# Additional compiler warnings to be treated as "Level 3"
 	# when compiling Wireshark sources. (Selected from "level 4" warnings).
 	## 4295: array is too small to include a terminating null character
@@ -587,6 +579,17 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 	# Disable warnings about about use of flexible array members:
 	## 4200: nonstandard extension used : zero-sized array in struct/union
 	list(APPEND LOCAL_CFLAGS /w34295 /w34100 /w34189 /wd4200)
+
+	# MSVC 14.28 + C11 enables C5105, but older Windows SDKs aren't completely compatible.
+	# Windows SDK 10.0.17763.0 generates syntax errors with C11 enabled.
+	if (CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS 10.0.18362.0)
+		message(WARNING "Windows SDK ${CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION} doesn't support C11. Please make sure you're using 10.0.18362.0 or later.")
+	endif()
+	# Windows SDK 10.0.18362.0 to 10.0.19041.685 generate warning C5105 with C11 enabled.
+	if(CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_LESS 10.0.20348.0)
+		## 5105: macro expansion producing 'defined' has undefined behavior
+		list(APPEND LOCAL_CFLAGS /wd5105)
+	endif()
 
 	# We've matched these to specific compiler versions using the
 	# checks above. There's no need to pass them to check_c_compiler_flag
@@ -606,34 +609,6 @@ else() # ! MSVC
 			endif()
 			set(MIN_MACOS_VERSION ${CMAKE_OSX_DEPLOYMENT_TARGET})
 		endif()
-	endif()
-
-	#
-	# Do whatever is necessary to enable as much C17 support as
-	# possible in the C compiler.  Newer versions of compilers
-	# might default to supporting C17, but older versions may
-	# require a special flag.
-	#
-	# We do not want strict C17 support, as we may also want to
-	# use compiler extensions.
-	#
-	# We cannot use CMAKE_C_STANDARD to request C17 because
-	# it requires CMake 3.21.
-	#
-	# XXX - we add the flag for a given compiler to CMAKE_C_FLAGS,
-	# so we test whether it works and add it if we do.  We don't
-	# test whether it's necessary in order to get the C17 features
-	# that we use; if we ever have a user who tries to compile with
-	# a compiler that can't be made to support those features, we
-	# can add a test to make sure we actually *have* C99 support.
-	#
-	if(CMAKE_C_COMPILER_ID MATCHES "GNU" OR
-	   CMAKE_C_COMPILER_ID MATCHES "Clang")
-		#
-		# We use -std=gnu17 rather than -std=c17 because extension
-		# use is evaluated on a case-by-case basis.
-		#
-		set(CMAKE_C_FLAGS "-std=gnu17 ${CMAKE_C_FLAGS}")
 	endif()
 
 	if(CMAKE_C_COMPILER_ID MATCHES "Clang")
