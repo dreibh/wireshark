@@ -198,7 +198,7 @@ header_fields_update_cb(void *r, char **err)
 	 */
 	c = proto_check_field_name(rec->header_name);
 	if (c) {
-		*err = g_strdup_printf("Header name can't contain '%c'", c);
+		*err = ws_strdup_printf("Header name can't contain '%c'", c);
 		return FALSE;
 	}
 
@@ -637,7 +637,7 @@ http_stats_tree_packet(stats_tree* st, packet_info* pinfo _U_, epan_dissect_t* e
 
 		tick_stat_node(st, resp_str, st_node_responses, FALSE);
 
-		g_snprintf(str, sizeof(str), "%u %s", i,
+		snprintf(str, sizeof(str), "%u %s", i,
 			   val_to_str(i, vals_http_status_code, "Unknown (%d)"));
 		tick_stat_node(st, str, resp_grp, FALSE);
 	} else if (v->request_method) {
@@ -2891,7 +2891,7 @@ header_fields_post_update_cb(void)
 
 			dynamic_hf[i].p_id = hf_id;
 			dynamic_hf[i].hfinfo.name = header_name;
-			dynamic_hf[i].hfinfo.abbrev = g_strdup_printf("http.header.%s", header_name);
+			dynamic_hf[i].hfinfo.abbrev = ws_strdup_printf("http.header.%s", header_name);
 			dynamic_hf[i].hfinfo.type = FT_STRING;
 			dynamic_hf[i].hfinfo.display = BASE_NONE;
 			dynamic_hf[i].hfinfo.strings = NULL;

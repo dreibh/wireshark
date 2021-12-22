@@ -90,6 +90,15 @@ typedef struct
     /* Dummy header info (if encapsulation == 1) */
     enum dummy_header_type dummy_header_type;
     guint pid;
+    gboolean ipv6;
+    union {
+        ws_in4_addr ipv4;
+        ws_in6_addr ipv6;
+    } ip_src_addr;
+    union {
+        ws_in4_addr ipv4;
+        ws_in6_addr ipv6;
+    } ip_dest_addr;
     guint protocol;
     guint src_port;
     guint dst_port;

@@ -221,7 +221,7 @@ static hf_register_info hf_base[] = {
     {&hf_fiveco_i2cack, {"I2C ack state", "5co-legacy.i2cack", FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
     {&hf_fiveco_i2c2scan, {"I2C addresses to scan", "5co-legacy.i2c2scan", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
     {&hf_fiveco_i2cscaned, {"I2C addresses present", "5co-legacy.i2cscaned", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
-    {&hf_fiveco_i2cerror, {"I2C error", "5co-legacy.i2cscaned", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
+    {&hf_fiveco_i2cerror, {"I2C error", "5co-legacy.i2cerror", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
     {&hf_fiveco_regread, {"Read", "5co-legacy.regread", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
     {&hf_fiveco_regreadunknown, {"Read Register unknown", "5co-legacy.hf_fiveco_regreadunknown", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
     {&hf_fiveco_regreaduk, {"Data not decoded", "5co-legacy.regreaduk", FT_NONE, BASE_NONE, NULL, 0x0, "Data not decoded because there are unable to map to a known register", HFILL}},
@@ -762,7 +762,7 @@ static guint fiveco_hash(gconstpointer v)
     const FCOSConvRequestKey *key = (const FCOSConvRequestKey *)v;
     guint val;
 
-    val = key->conversation + (((key->usExpCmd) << 16) & 0xFFFF) +
+    val = key->conversation + (((key->usExpCmd) & 0xFFFF) << 16) +
             (key->unInternalID & 0xFFFFFFFF) + ((key->unInternalID >>32) & 0xFFFFFFFF);
 
     return val;
@@ -878,7 +878,7 @@ dispType( gchar *result, guint32 type)
 {
     int nValueH = (type>>16) & 0xFFFF;
     int nValueL = (type & 0xFFFF);
-    g_snprintf( result, 18, "%d.%d (%.4X.%.4X)", nValueH, nValueL, nValueH, nValueL);
+    snprintf( result, 18, "%d.%d (%.4X.%.4X)", nValueH, nValueL, nValueH, nValueL);
 }
 
 static void
@@ -888,7 +888,7 @@ dispVersion( gchar *result, guint32 version)
     {
         int nValueH = (version>>16) & 0xFFFF;
         int nValueL = (version & 0xFFFF);
-        g_snprintf( result, 11, "FW: %d.%d", nValueH, nValueL);
+        snprintf( result, 11, "FW: %d.%d", nValueH, nValueL);
     }
     else
     {
@@ -896,7 +896,7 @@ dispVersion( gchar *result, guint32 version)
         int nHWLow = (version>>16) & 0xFF;
         int nFWHigh = (version>>8) & 0xFF;
         int nFWLow = (version>>8) & 0xFF;
-        g_snprintf( result, 25, "HW: %d.%d / FW: %d.%d", nHWHigh, nHWLow, nFWHigh, nFWLow);
+        snprintf( result, 25, "HW: %d.%d / FW: %d.%d", nHWHigh, nHWLow, nFWHigh, nFWLow);
     }
 }
 
@@ -904,7 +904,7 @@ static void dispMAC( gchar *result, guint64 mac)
 {
     guint8 *pData = (guint8*)(&mac);
 
-    g_snprintf( result, 18, "%.2X-%.2X-%.2X-%.2X-%.2X-%.2X", pData[5], pData[4], pData[3], pData[2],
+    snprintf( result, 18, "%.2X-%.2X-%.2X-%.2X-%.2X-%.2X", pData[5], pData[4], pData[3], pData[2],
                            pData[1], pData[0]);
 }
 
@@ -912,22 +912,22 @@ static void dispIP( gchar *result, guint32 ip)
 {
     guint8 *pData = (guint8*)(&ip);
 
-    g_snprintf( result, 15, "%d.%d.%d.%d", pData[3], pData[2], pData[1], pData[0]);
+    snprintf( result, 15, "%d.%d.%d.%d", pData[3], pData[2], pData[1], pData[0]);
 }
 
 static void dispMask( gchar *result, guint32 mask)
 {
     guint8 *pData = (guint8*)(&mask);
 
-    g_snprintf( result, 15, "%d.%d.%d.%d", pData[3], pData[2], pData[1], pData[0]);
+    snprintf( result, 15, "%d.%d.%d.%d", pData[3], pData[2], pData[1], pData[0]);
 }
 
 static void dispTimeout( gchar *result, guint32 timeout)
 {
     if (timeout != 0)
-        g_snprintf( result, 12, "%d secondes", timeout);
+        snprintf( result, 12, "%d secondes", timeout);
     else
-        g_snprintf( result, 8, "Disabled");
+        snprintf( result, 8, "Disabled");
 }
 
 /*

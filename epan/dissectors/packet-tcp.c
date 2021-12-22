@@ -753,7 +753,7 @@ tcp_src_prompt(packet_info *pinfo, gchar *result)
 {
     guint32 port = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_tcp_srcport, pinfo->curr_layer_num));
 
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "source (%u%s)", port, UTF8_RIGHTWARDS_ARROW);
+    snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "source (%u%s)", port, UTF8_RIGHTWARDS_ARROW);
 }
 
 static gpointer
@@ -767,7 +767,7 @@ tcp_dst_prompt(packet_info *pinfo, gchar *result)
 {
     guint32 port = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_tcp_dstport, pinfo->curr_layer_num));
 
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "destination (%s%u)", UTF8_RIGHTWARDS_ARROW, port);
+    snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "destination (%s%u)", UTF8_RIGHTWARDS_ARROW, port);
 }
 
 static gpointer
@@ -781,7 +781,7 @@ tcp_both_prompt(packet_info *pinfo, gchar *result)
 {
     guint32 srcport = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_tcp_srcport, pinfo->curr_layer_num)),
             destport = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_tcp_dstport, pinfo->curr_layer_num));
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "both (%u%s%u)", srcport, UTF8_LEFT_RIGHT_ARROW, destport);
+    snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "both (%u%s%u)", srcport, UTF8_LEFT_RIGHT_ARROW, destport);
 }
 
 static const char* tcp_conv_get_filter_type(conv_item_t* conv, conv_filter_type_e filter)
@@ -919,7 +919,7 @@ tcp_build_filter(packet_info *pinfo)
 {
     if( pinfo->net_src.type == AT_IPv4 && pinfo->net_dst.type == AT_IPv4 ) {
         /* TCP over IPv4 */
-        return g_strdup_printf("(ip.addr eq %s and ip.addr eq %s) and (tcp.port eq %d and tcp.port eq %d)",
+        return ws_strdup_printf("(ip.addr eq %s and ip.addr eq %s) and (tcp.port eq %d and tcp.port eq %d)",
             address_to_str(pinfo->pool, &pinfo->net_src),
             address_to_str(pinfo->pool, &pinfo->net_dst),
             pinfo->srcport, pinfo->destport );
@@ -927,7 +927,7 @@ tcp_build_filter(packet_info *pinfo)
 
     if( pinfo->net_src.type == AT_IPv6 && pinfo->net_dst.type == AT_IPv6 ) {
         /* TCP over IPv6 */
-        return g_strdup_printf("(ipv6.addr eq %s and ipv6.addr eq %s) and (tcp.port eq %d and tcp.port eq %d)",
+        return ws_strdup_printf("(ipv6.addr eq %s and ipv6.addr eq %s) and (tcp.port eq %d and tcp.port eq %d)",
             address_to_str(pinfo->pool, &pinfo->net_src),
             address_to_str(pinfo->pool, &pinfo->net_dst),
             pinfo->srcport, pinfo->destport );
@@ -958,7 +958,7 @@ tcp_seq_analysis_packet( void *ptr, packet_info *pinfo, epan_dissect_t *edt _U_,
     flags = tcp_flags_to_str(NULL, tcph);
 
     if ((tcph->th_have_seglen)&&(tcph->th_seglen!=0)){
-        sai->frame_label = g_strdup_printf("%s - Len: %u",flags, tcph->th_seglen);
+        sai->frame_label = ws_strdup_printf("%s - Len: %u",flags, tcph->th_seglen);
     }
     else{
         sai->frame_label = g_strdup(flags);
@@ -967,9 +967,9 @@ tcp_seq_analysis_packet( void *ptr, packet_info *pinfo, epan_dissect_t *edt _U_,
     wmem_free(NULL, flags);
 
     if (tcph->th_flags & TH_ACK)
-        sai->comment = g_strdup_printf("Seq = %u Ack = %u",tcph->th_seq, tcph->th_ack);
+        sai->comment = ws_strdup_printf("Seq = %u Ack = %u",tcph->th_seq, tcph->th_ack);
     else
-        sai->comment = g_strdup_printf("Seq = %u",tcph->th_seq);
+        sai->comment = ws_strdup_printf("Seq = %u",tcph->th_seq);
 
     sai->line_style = 1;
     sai->conv_num = (guint16) tcph->th_stream;
@@ -996,7 +996,7 @@ gchar *tcp_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, guint
             return NULL;
 
         *stream = tcpd->stream;
-        return g_strdup_printf("tcp.stream eq %u", tcpd->stream);
+        return ws_strdup_printf("tcp.stream eq %u", tcpd->stream);
     }
 
     return NULL;
@@ -1004,7 +1004,7 @@ gchar *tcp_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, guint
 
 gchar *tcp_follow_index_filter(guint stream, guint sub_stream _U_)
 {
-    return g_strdup_printf("tcp.stream eq %u", stream);
+    return ws_strdup_printf("tcp.stream eq %u", stream);
 }
 
 gchar *tcp_follow_address_filter(address *src_addr, address *dst_addr, int src_port, int dst_port)
@@ -1016,7 +1016,7 @@ gchar *tcp_follow_address_filter(address *src_addr, address *dst_addr, int src_p
     address_to_str_buf(src_addr, src_addr_str, sizeof(src_addr_str));
     address_to_str_buf(dst_addr, dst_addr_str, sizeof(dst_addr_str));
 
-    return g_strdup_printf("((ip%s.src eq %s and tcp.srcport eq %d) and "
+    return ws_strdup_printf("((ip%s.src eq %s and tcp.srcport eq %d) and "
                      "(ip%s.dst eq %s and tcp.dstport eq %d))"
                      " or "
                      "((ip%s.src eq %s and tcp.srcport eq %d) and "
@@ -1131,7 +1131,7 @@ check_follow_fragments(follow_info_t *follow_info, gboolean is_server, guint32 a
          * by the receiving host. Add dummy stream chunk with the data
          * "[xxx bytes missing in capture file]".
          */
-        dummy_str = g_strdup_printf("[%d bytes missing in capture file]",
+        dummy_str = ws_strdup_printf("[%d bytes missing in capture file]",
                         (int)(lowest_seq - follow_info->seq[is_server]) );
         // XXX the dummy replacement could be larger than the actual missing bytes.
 
@@ -1387,22 +1387,22 @@ static void conversation_completeness_fill(gchar *buf, guint32 value)
 {
     switch(value) {
         case TCP_COMPLETENESS_SYNSENT:
-            g_snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete, SYN_SENT (%u)", value);
+            snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete, SYN_SENT (%u)", value);
             break;
         case (TCP_COMPLETENESS_SYNSENT|
               TCP_COMPLETENESS_SYNACK):
-            g_snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete, CLIENT_ESTABLISHED (%u)", value);
+            snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete, CLIENT_ESTABLISHED (%u)", value);
             break;
         case (TCP_COMPLETENESS_SYNSENT|
               TCP_COMPLETENESS_SYNACK|
               TCP_COMPLETENESS_ACK):
-            g_snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete, ESTABLISHED (%u)", value);
+            snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete, ESTABLISHED (%u)", value);
             break;
         case (TCP_COMPLETENESS_SYNSENT|
               TCP_COMPLETENESS_SYNACK|
               TCP_COMPLETENESS_ACK|
               TCP_COMPLETENESS_DATA):
-            g_snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete, DATA (%u)", value);
+            snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete, DATA (%u)", value);
             break;
         case (TCP_COMPLETENESS_SYNSENT|
               TCP_COMPLETENESS_SYNACK|
@@ -1420,7 +1420,7 @@ static void conversation_completeness_fill(gchar *buf, guint32 value)
               TCP_COMPLETENESS_DATA|
               TCP_COMPLETENESS_FIN|
               TCP_COMPLETENESS_RST):
-            g_snprintf(buf, ITEM_LABEL_LENGTH, "Complete, WITH_DATA (%u)", value);
+            snprintf(buf, ITEM_LABEL_LENGTH, "Complete, WITH_DATA (%u)", value);
             break;
         case (TCP_COMPLETENESS_SYNSENT|
               TCP_COMPLETENESS_SYNACK|
@@ -1435,10 +1435,10 @@ static void conversation_completeness_fill(gchar *buf, guint32 value)
               TCP_COMPLETENESS_ACK|
               TCP_COMPLETENESS_FIN|
               TCP_COMPLETENESS_RST):
-            g_snprintf(buf, ITEM_LABEL_LENGTH, "Complete, NO_DATA (%u)", value);
+            snprintf(buf, ITEM_LABEL_LENGTH, "Complete, NO_DATA (%u)", value);
             break;
         default:
-            g_snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete (%u)", value);
+            snprintf(buf, ITEM_LABEL_LENGTH, "Incomplete (%u)", value);
             break;
     }
 }
@@ -5039,7 +5039,7 @@ dissect_tcpopt_mptcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
                 if (mph->mh_dss_flags & MPTCP_DSS_FLAG_DATA_ACK_8BYTES) {
 
                     mph->mh_dss_rawack = tvb_get_ntoh64(tvb,offset);
-                    proto_tree_add_uint64_format_value(mptcp_tree, hf_tcp_option_mptcp_data_ack_raw, tvb, offset, 8, mph->mh_dss_rawack, "%" G_GINT64_MODIFIER "u (64bits)", mph->mh_dss_rawack);
+                    proto_tree_add_uint64_format_value(mptcp_tree, hf_tcp_option_mptcp_data_ack_raw, tvb, offset, 8, mph->mh_dss_rawack, "%" PRIu64 " (64bits)", mph->mh_dss_rawack);
                     offset += 8;
                 }
                 /* 32bits ack */
@@ -5072,7 +5072,7 @@ dissect_tcpopt_mptcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
                 if (mph->mh_dss_flags & MPTCP_DSS_FLAG_DSN_8BYTES) {
 
                     dsn = tvb_get_ntoh64(tvb,offset);
-                    proto_tree_add_uint64_format_value(mptcp_tree, hf_tcp_option_mptcp_data_seq_no_raw, tvb, offset, 8, dsn,  "%" G_GINT64_MODIFIER "u  (64bits version)", dsn);
+                    proto_tree_add_uint64_format_value(mptcp_tree, hf_tcp_option_mptcp_data_seq_no_raw, tvb, offset, 8, dsn,  "%" PRIu64 "  (64bits version)", dsn);
 
                     /* if we have the opportunity to complete the 32 Most Significant Bits of the
                      *
@@ -5084,7 +5084,7 @@ dissect_tcpopt_mptcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
                     offset += 8;
                 } else {
                     dsn = tvb_get_ntohl(tvb,offset);
-                    proto_tree_add_uint64_format_value(mptcp_tree, hf_tcp_option_mptcp_data_seq_no_raw, tvb, offset, 4, dsn,  "%" G_GINT64_MODIFIER "u  (32bits version)", dsn);
+                    proto_tree_add_uint64_format_value(mptcp_tree, hf_tcp_option_mptcp_data_seq_no_raw, tvb, offset, 4, dsn,  "%" PRIu64 "  (32bits version)", dsn);
                     offset += 4;
                 }
                 mph->mh_dss_rawdsn = dsn;

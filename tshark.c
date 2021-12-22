@@ -2057,7 +2057,7 @@ main(int argc, char *argv[])
       /* Activate the export PDU tap */
       /* Write to our output file with this comment (if the type supports it,
        * otherwise exp_pdu_open() will ignore the comment) */
-      comment = g_strdup_printf("Dump of PDUs from %s", cf_name);
+      comment = ws_strdup_printf("Dump of PDUs from %s", cf_name);
       exp_pdu_status = exp_pdu_open(&exp_pdu_tap_data, exp_pdu_filename,
                                     out_file_type, exp_fd, comment,
                                     &err, &err_info);
@@ -2194,7 +2194,7 @@ main(int argc, char *argv[])
         interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, i);
 #ifdef HAVE_PCAP_REMOTE
         if (interface_opts->auth_type == CAPTURE_AUTH_PWD) {
-          auth_str = g_strdup_printf("%s:%s", interface_opts->auth_username, interface_opts->auth_password);
+          auth_str = ws_strdup_printf("%s:%s", interface_opts->auth_username, interface_opts->auth_password);
         }
 #endif
         caps = capture_get_if_capabilities(interface_opts->name, interface_opts->monitor_mode,
@@ -3169,7 +3169,7 @@ process_cap_file_first_pass(capture_file *cf, int max_packet_count,
        * (unless we roll over max_packet_count ?)
        */
       if ( (--max_packet_count == 0) || (max_byte_count != 0 && data_offset >= max_byte_count)) {
-        ws_debug("tshark: max_packet_count (%d) or max_byte_count (%" G_GINT64_MODIFIER "d/%" G_GINT64_MODIFIER "d) reached",
+        ws_debug("tshark: max_packet_count (%d) or max_byte_count (%" PRId64 "/%" PRId64 ") reached",
                       max_packet_count, data_offset, max_byte_count);
         *err = 0; /* This is not an error */
         break;
@@ -3528,7 +3528,7 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
      * (unless we roll over max_packet_count ?)
      */
     if ( (--max_packet_count == 0) || (max_byte_count != 0 && data_offset >= max_byte_count)) {
-      ws_debug("tshark: max_packet_count (%d) or max_byte_count (%" G_GINT64_MODIFIER "d/%" G_GINT64_MODIFIER "d) reached",
+      ws_debug("tshark: max_packet_count (%d) or max_byte_count (%" PRId64 "/%" PRId64 ") reached",
                     max_packet_count, data_offset, max_byte_count);
       *err = 0; /* This is not an error */
       break;
@@ -4104,7 +4104,7 @@ print_columns(capture_file *cf, const epan_dissect_t *edt)
         case COL_DEF_DST:
         case COL_RES_DST:
         case COL_UNRES_DST:
-          g_snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_RIGHTWARDS_ARROW, delimiter_char);
+          snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_RIGHTWARDS_ARROW, delimiter_char);
           put_string(line_bufp + buf_offset, str_format, 5);
           buf_offset += 5;
           break;
@@ -4124,7 +4124,7 @@ print_columns(capture_file *cf, const epan_dissect_t *edt)
         case COL_DEF_DL_DST:
         case COL_RES_DL_DST:
         case COL_UNRES_DL_DST:
-          g_snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_RIGHTWARDS_ARROW, delimiter_char);
+          snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_RIGHTWARDS_ARROW, delimiter_char);
           put_string(line_bufp + buf_offset, str_format, 5);
           buf_offset += 5;
           break;
@@ -4144,7 +4144,7 @@ print_columns(capture_file *cf, const epan_dissect_t *edt)
         case COL_DEF_NET_DST:
         case COL_RES_NET_DST:
         case COL_UNRES_NET_DST:
-          g_snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_RIGHTWARDS_ARROW, delimiter_char);
+          snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_RIGHTWARDS_ARROW, delimiter_char);
           put_string(line_bufp + buf_offset, str_format, 5);
           buf_offset += 5;
           break;
@@ -4164,7 +4164,7 @@ print_columns(capture_file *cf, const epan_dissect_t *edt)
         case COL_DEF_SRC:
         case COL_RES_SRC:
         case COL_UNRES_SRC:
-          g_snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_LEFTWARDS_ARROW, delimiter_char);
+          snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_LEFTWARDS_ARROW, delimiter_char);
           put_string(line_bufp + buf_offset, str_format, 5);
           buf_offset += 5;
           break;
@@ -4184,7 +4184,7 @@ print_columns(capture_file *cf, const epan_dissect_t *edt)
         case COL_DEF_DL_SRC:
         case COL_RES_DL_SRC:
         case COL_UNRES_DL_SRC:
-          g_snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_LEFTWARDS_ARROW, delimiter_char);
+          snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_LEFTWARDS_ARROW, delimiter_char);
           put_string(line_bufp + buf_offset, str_format, 5);
           buf_offset += 5;
           break;
@@ -4204,7 +4204,7 @@ print_columns(capture_file *cf, const epan_dissect_t *edt)
         case COL_DEF_NET_SRC:
         case COL_RES_NET_SRC:
         case COL_UNRES_NET_SRC:
-          g_snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_LEFTWARDS_ARROW, delimiter_char);
+          snprintf(str_format, sizeof(str_format), "%s%s%s", delimiter_char, UTF8_LEFTWARDS_ARROW, delimiter_char);
           put_string(line_bufp + buf_offset, str_format, 5);
           buf_offset += 5;
           break;

@@ -137,7 +137,7 @@
 /* Debug level */
 static int debug = 0;
 
-/* time percision stored in file: 1[file] = 1^(-SUBSEC_PREC) */
+/* maximum time precision we can handle = 10^(-SUBSEC_PREC) */
 #define SUBSEC_PREC 9
 
 #define debug_printf(level,  ...) \
@@ -153,7 +153,15 @@ static guint32 hdr_ethernet_proto = 0;
 
 /* Dummy IP header */
 static gboolean hdr_ip = FALSE;
+static gboolean hdr_ipv6 = FALSE;
 static guint hdr_ip_proto = 0;
+
+/* Destination and source addresses for IP header */
+static ws_in4_addr hdr_ip_dest_addr = 0;
+static ws_in4_addr hdr_ip_src_addr = 0;
+static ws_in6_addr hdr_ipv6_dest_addr = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+static ws_in6_addr hdr_ipv6_src_addr  = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+static ws_in6_addr NO_IPv6_ADDRESS    = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
 
 /* Dummy UDP header */
 static gboolean hdr_udp = FALSE;
@@ -176,7 +184,7 @@ static guint32 hdr_sctp_tag  = 0;
 /* Dummy DATA chunk header */
 static gboolean hdr_data_chunk = FALSE;
 static guint8  hdr_data_chunk_type = 0;
-static guint8  hdr_data_chunk_bits = 3;
+static guint8  hdr_data_chunk_bits = 0;
 static guint32 hdr_data_chunk_tsn  = 0;
 static guint16 hdr_data_chunk_sid  = 0;
 static guint16 hdr_data_chunk_ssn  = 0;
@@ -197,7 +205,7 @@ static guint8 *packet_buf;
 static guint32 curr_offset = 0;
 static guint32 max_offset = WTAP_MAX_PACKET_SIZE_STANDARD;
 static guint32 packet_start = 0;
-static void start_new_packet (void);
+static void start_new_packet(gboolean);
 
 /* This buffer contains strings present before the packet offset 0 */
 #define PACKET_PREAMBLE_MAX_LEN    2048
@@ -209,6 +217,13 @@ static time_t ts_sec = 0;
 static guint32 ts_nsec = 0;
 static const char *ts_fmt = NULL;
 static struct tm timecode_default;
+/* The time delta to add to packets without a valid time code.
+ * This can be no smaller than the time resolution of the dump
+ * file, so the default is 1000 nanoseconds, or 1 microsecond.
+ * XXX: We should at least get this from the resolution of the file we're
+ * writing to, and possibly allow the user to set a different value.
+ */
+static guint32 ts_tick = 1000;
 
 static wtap_dumper* wdh;
 
@@ -287,6 +302,35 @@ static struct {         /* pseudo header for checksum calculation */
     guint16 length;
 } pseudoh;
 
+
+/* headers taken from glibc */
+
+typedef struct {
+    union  {
+        struct ip6_hdrctl {
+            guint32 ip6_un1_flow;   /* 24 bits of flow-ID */
+            guint16 ip6_un1_plen;   /* payload length */
+            guint8  ip6_un1_nxt;    /* next header */
+            guint8  ip6_un1_hlim;   /* hop limit */
+        } ip6_un1;
+        guint8 ip6_un2_vfc;       /* 4 bits version, 4 bits priority */
+    } ip6_ctlun;
+    ws_in6_addr ip6_src;      /* source address */
+    ws_in6_addr ip6_dst;      /* destination address */
+} hdr_ipv6_t;
+
+static hdr_ipv6_t HDR_IPv6;
+
+/* https://tools.ietf.org/html/rfc2460#section-8.1 */
+static struct {                 /* pseudo header ipv6 for checksum calculation */
+    struct  e_in6_addr src_addr6;
+    struct  e_in6_addr dst_addr6;
+    guint32 length;
+    guint8 zero[3];
+    guint8 next_header;
+} pseudoh6;
+
+
 typedef struct {
     guint16 source_port;
     guint16 dest_port;
@@ -340,8 +384,8 @@ static hdr_export_pdu_t HDR_EXPORT_PDU = {0, 0};
 
 #define EXPORT_PDU_END_OF_OPTIONS_SIZE 4
 
-/* Link-layer type; see net/bpf.h for details */
-static guint pcap_link_type = 1;   /* Default is DLT_EN10MB */
+/* Wiretap encapsulation type; see wiretap/wtap.h for details */
+static guint wtap_encap_type = 1;   /* Default is WTAP_ENCAP_ETHERNET */
 
 /*----------------------------------------------------------------------
  * Parse a single hex number
@@ -378,7 +422,7 @@ write_byte (const char *str)
     packet_buf[curr_offset] = (guint8) num;
     curr_offset ++;
     if (curr_offset >= max_offset) /* packet full */
-        start_new_packet();
+        start_new_packet(TRUE);
 }
 
 /*----------------------------------------------------------------------
@@ -408,9 +452,14 @@ number_of_padding_bytes (guint32 length)
 
 /*----------------------------------------------------------------------
  * Write current packet out
+ *
+ * @param cont [IN] TRUE if a packet is being written because the max frame
+ * length was reached, and the original packet from the input file is
+ * continued in a later frame. Used to set fragmentation fields in dummy
+ * headers (currently only implemented for SCTP; IPv4 could be added later.)
  */
 static void
-write_current_packet (void)
+write_current_packet(gboolean cont)
 {
     int prefix_length = 0;
     int proto_length = 0;
@@ -437,6 +486,9 @@ write_current_packet (void)
         if (hdr_tcp) { prefix_length += (int)sizeof(HDR_TCP); proto_length = prefix_length + curr_offset; }
         if (hdr_ip) {
             prefix_length += (int)sizeof(HDR_IP);
+            ip_length = prefix_length + curr_offset + ((hdr_data_chunk) ? number_of_padding_bytes(curr_offset) : 0);
+        } else if (hdr_ipv6) {
+            prefix_length += (int)sizeof(HDR_IPv6);
             ip_length = prefix_length + curr_offset + ((hdr_data_chunk) ? number_of_padding_bytes(curr_offset) : 0);
         }
         if (hdr_ethernet) { prefix_length += (int)sizeof(HDR_ETHERNET); }
@@ -471,11 +523,12 @@ write_current_packet (void)
             vec_t cksum_vector[1];
 
             if (isOutbound) {
-                HDR_IP.src_addr = IP_DST;
-                HDR_IP.dest_addr = IP_SRC;
-            } else {
-                HDR_IP.src_addr = IP_SRC;
-                HDR_IP.dest_addr = IP_DST;
+                HDR_IP.src_addr = hdr_ip_dest_addr ? hdr_ip_dest_addr : IP_DST;
+                HDR_IP.dest_addr = hdr_ip_src_addr ? hdr_ip_src_addr : IP_SRC;
+            }
+            else {
+                HDR_IP.src_addr = hdr_ip_src_addr ? hdr_ip_src_addr : IP_SRC;
+                HDR_IP.dest_addr = hdr_ip_dest_addr ? hdr_ip_dest_addr : IP_DST;
             }
             HDR_IP.packet_length = g_htons(ip_length);
             HDR_IP.protocol = (guint8) hdr_ip_proto;
@@ -485,14 +538,35 @@ write_current_packet (void)
 
             memcpy(&packet_buf[prefix_index], &HDR_IP, sizeof(HDR_IP));
             prefix_index += (int)sizeof(HDR_IP);
-        }
 
-        /* initialize pseudo header for checksum calculation */
-        pseudoh.src_addr    = HDR_IP.src_addr;
-        pseudoh.dest_addr   = HDR_IP.dest_addr;
-        pseudoh.zero        = 0;
-        pseudoh.protocol    = (guint8) hdr_ip_proto;
-        pseudoh.length      = g_htons(proto_length);
+            /* initialize pseudo header for checksum calculation */
+            pseudoh.src_addr    = HDR_IP.src_addr;
+            pseudoh.dest_addr   = HDR_IP.dest_addr;
+            pseudoh.zero        = 0;
+            pseudoh.protocol    = (guint8) hdr_ip_proto;
+            pseudoh.length      = g_htons(proto_length);
+        } else if (hdr_ipv6) {
+            if (memcmp(isOutbound ? &hdr_ipv6_dest_addr : &hdr_ipv6_src_addr, &NO_IPv6_ADDRESS, sizeof(ws_in6_addr)))
+                memcpy(&HDR_IPv6.ip6_src, isOutbound ? &hdr_ipv6_dest_addr : &hdr_ipv6_src_addr, sizeof(ws_in6_addr));
+            if (memcmp(isOutbound ? &hdr_ipv6_src_addr : &hdr_ipv6_dest_addr, &NO_IPv6_ADDRESS, sizeof(ws_in6_addr)))
+                memcpy(&HDR_IPv6.ip6_dst, isOutbound ? &hdr_ipv6_src_addr : &hdr_ipv6_dest_addr, sizeof(ws_in6_addr));
+
+            HDR_IPv6.ip6_ctlun.ip6_un2_vfc &= 0x0F;
+            HDR_IPv6.ip6_ctlun.ip6_un2_vfc |= (6<< 4);
+            HDR_IPv6.ip6_ctlun.ip6_un1.ip6_un1_plen = g_htons(ip_length);
+            HDR_IPv6.ip6_ctlun.ip6_un1.ip6_un1_nxt  = (guint8) hdr_ip_proto;
+            HDR_IPv6.ip6_ctlun.ip6_un1.ip6_un1_hlim = 32;
+
+            memcpy(&packet_buf[prefix_index], &HDR_IPv6, sizeof(HDR_IPv6));
+            prefix_index += (int)sizeof(HDR_IPv6);
+
+            /* initialize pseudo ipv6 header for checksum calculation */
+            pseudoh6.src_addr6  = HDR_IPv6.ip6_src;
+            pseudoh6.dst_addr6  = HDR_IPv6.ip6_dst;
+            memset(pseudoh6.zero, 0, sizeof(pseudoh6.zero));
+            pseudoh6.next_header   = (guint8) hdr_ip_proto;
+            pseudoh6.length      = g_htons(proto_length);
+        }
 
         /* Write UDP header */
         if (hdr_udp) {
@@ -503,7 +577,11 @@ write_current_packet (void)
             HDR_UDP.length = g_htons(proto_length);
 
             HDR_UDP.checksum = 0;
-            cksum_vector[0].ptr = (guint8 *)&pseudoh; cksum_vector[0].len = sizeof(pseudoh);
+            if (hdr_ipv6) {
+                cksum_vector[0].ptr = (guint8 *)&pseudoh6; cksum_vector[0].len = sizeof(pseudoh6);
+            } else {
+                cksum_vector[0].ptr = (guint8 *)&pseudoh; cksum_vector[0].len = sizeof(pseudoh);
+            }
             cksum_vector[1].ptr = (guint8 *)&HDR_UDP; cksum_vector[1].len = sizeof(HDR_UDP);
             cksum_vector[2].ptr = &packet_buf[prefix_length]; cksum_vector[2].len = curr_offset;
             HDR_UDP.checksum = in_cksum(cksum_vector, 3);
@@ -532,7 +610,11 @@ write_current_packet (void)
             HDR_TCP.window = g_htons(0x2000);
 
             HDR_TCP.checksum = 0;
-            cksum_vector[0].ptr = (guint8 *)&pseudoh; cksum_vector[0].len = sizeof(pseudoh);
+            if (hdr_ipv6) {
+                cksum_vector[0].ptr = (guint8 *)&pseudoh6; cksum_vector[0].len = sizeof(pseudoh6);
+            } else {
+                cksum_vector[0].ptr = (guint8 *)&pseudoh; cksum_vector[0].len = sizeof(pseudoh);
+            }
             cksum_vector[1].ptr = (guint8 *)&HDR_TCP; cksum_vector[1].len = sizeof(HDR_TCP);
             cksum_vector[2].ptr = &packet_buf[prefix_length]; cksum_vector[2].len = curr_offset;
             HDR_TCP.checksum = in_cksum(cksum_vector, 3);
@@ -551,6 +633,13 @@ write_current_packet (void)
 
         /* Compute DATA chunk header and append padding */
         if (hdr_data_chunk) {
+            hdr_data_chunk_bits = 0;
+            if (packet_start == 0) {
+                hdr_data_chunk_bits |= 0x02;
+            }
+            if (!cont) {
+                hdr_data_chunk_bits |= 0x01;
+            }
             HDR_DATA_CHUNK.type   = hdr_data_chunk_type;
             HDR_DATA_CHUNK.bits   = hdr_data_chunk_bits;
             HDR_DATA_CHUNK.length = g_htons(curr_offset + sizeof(HDR_DATA_CHUNK));
@@ -558,7 +647,10 @@ write_current_packet (void)
             HDR_DATA_CHUNK.sid    = g_htons(hdr_data_chunk_sid);
             HDR_DATA_CHUNK.ssn    = g_htons(hdr_data_chunk_ssn);
             HDR_DATA_CHUNK.ppid   = g_htonl(hdr_data_chunk_ppid);
-
+            hdr_data_chunk_tsn++;
+            if (!cont) {
+                hdr_data_chunk_ssn++;
+            }
             padding_length = number_of_padding_bytes(curr_offset);
             for (i=0; i<padding_length; i++)
                 packet_buf[prefix_length+curr_offset+i] = 0;
@@ -620,9 +712,8 @@ write_current_packet (void)
             rec.block = wtap_block_create(WTAP_BLOCK_PACKET);
             rec.ts.secs = ts_sec;
             rec.ts.nsecs = ts_nsec;
-            if (ts_fmt == NULL) { ts_nsec++; }  /* fake packet counter */
             rec.rec_header.packet_header.caplen = rec.rec_header.packet_header.len = prefix_length + curr_offset + eth_trailer_length;
-            rec.rec_header.packet_header.pkt_encap = pcap_link_type;
+            rec.rec_header.packet_header.pkt_encap = wtap_encap_type;
             rec.presence_flags = WTAP_HAS_CAP_LEN|WTAP_HAS_INTERFACE_ID|WTAP_HAS_TS;
             if (has_direction) {
                 wtap_block_add_uint32_option(rec.block, OPT_PKT_FLAGS, direction);
@@ -895,7 +986,7 @@ void parse_data(guchar* start_field, guchar* end_field, enum data_encoding encod
             parse_plain_data(&start_field, end_field, &dest, dest_end, table, NULL);
             curr_offset = (int) (dest - packet_buf);
             if (curr_offset == max_offset) {
-                write_current_packet();
+                write_current_packet(TRUE);
                 dest = &packet_buf[curr_offset];
             } else
                 break;
@@ -931,10 +1022,15 @@ void parse_dir(const guchar* start_field, const guchar* end_field, const gchar* 
 
 #define PARSE_BUF 64
 
-static void _parse_time(const guchar* start_field, const guchar* end_field, const gchar* _format, time_t* sec, gint* nsec) {
+/* Attempt to parse a time according to the given format. If the conversion
+ * succeeds, set sec and nsec appropriately and return TRUE. If it fails,
+ * leave sec and nsec unchanged and return FALSE.
+ */
+static gboolean
+_parse_time(const guchar* start_field, const guchar* end_field, const gchar* _format, time_t* sec, gint* nsec) {
     struct tm timecode;
     time_t sec_buf;
-    gint nsec_buf;
+    gint nsec_buf = 0;
 
     char field[PARSE_BUF];
     char format[PARSE_BUF];
@@ -960,28 +1056,31 @@ static void _parse_time(const guchar* start_field, const guchar* end_field, cons
      * %f is for fractions of seconds not supported by strptime
      * BTW: what is this function name? is this some russian joke?
      */
-    subsecs_fmt = g_strrstr (format, "%f");
-    if (subsecs_fmt)
+    subsecs_fmt = g_strrstr(format, "%f");
+    if (subsecs_fmt) {
         *subsecs_fmt = 0;
-    else
-      /* arbitrary counter if no fractions */
-        ++*nsec;
+    }
 
     cursor = strptime(cursor, format, &timecode);
 
-    if (cursor != NULL && subsecs_fmt != NULL) {
+    if (cursor == NULL) {
+        return FALSE;
+    }
+
+    if (subsecs_fmt != NULL) {
         /*
          * Parse subsecs and any following format
          */
         nsec_buf = (guint) strtol(cursor, &p, 10);
-        if (p > cursor) {
-            *nsec = nsec_buf;
-            subseclen = (int) (p - cursor);
-            cursor = p;
-            strptime(cursor, subsecs_fmt + 2, &timecode);
-        } else {
-            ++*nsec;
-            subseclen = -1;
+        if (p == cursor) {
+            return FALSE;
+        }
+
+        subseclen = (int) (p - cursor);
+        cursor = p;
+        cursor = strptime(cursor, subsecs_fmt + 2, &timecode);
+        if (cursor == NULL) {
+            return FALSE;
         }
     }
 
@@ -1001,23 +1100,29 @@ static void _parse_time(const guchar* start_field, const guchar* end_field, cons
              * 10^(N-9).
              */
             for (i = subseclen - SUBSEC_PREC; i != 0; i--)
-                *nsec /= 10;
+                nsec_buf /= 10;
         } else if (subseclen < SUBSEC_PREC) {
             for (i = SUBSEC_PREC - subseclen; i != 0; i--)
-                *nsec *= 10;
+                nsec_buf *= 10;
         }
     }
 
     if ( -1 == (sec_buf = mktime(&timecode)) ) {
-        ++*sec;
-    } else {
-        *sec = sec_buf;
+        return FALSE;
     }
+
+    *sec = sec_buf;
+    *nsec = nsec_buf;
+
     debug_printf(3, "parsed time %s Format(%s), time(%u), subsecs(%u)\n", field, _format, (guint32)*sec, (guint32)*nsec);
+
+    return TRUE;
 }
 
 void parse_time(const guchar* start_field, const guchar* end_field, const gchar* format) {
-    _parse_time(start_field, end_field, format, &ts_sec, &ts_nsec);
+    if (format == NULL || !_parse_time(start_field, end_field, format, &ts_sec, &ts_nsec)) {
+        ts_nsec += ts_tick;
+    }
 }
 
 void parse_seqno(const guchar* start_field, const guchar* end_field) {
@@ -1027,7 +1132,7 @@ void parse_seqno(const guchar* start_field, const guchar* end_field) {
 }
 
 void flush_packet(void) {
-    write_current_packet();
+    write_current_packet(FALSE);
 }
 
 /*----------------------------------------------------------------------
@@ -1038,6 +1143,7 @@ static void
 parse_preamble (void)
 {
     int  i;
+    gboolean got_time = FALSE;
 
     /*
      * Null-terminate the preamble.
@@ -1046,7 +1152,7 @@ parse_preamble (void)
 
     if (has_direction) {
         _parse_dir(&packet_preamble[0], &packet_preamble[1], "iI", "oO", &direction);
-        i = 0;
+        i = (direction == PACK_FLAGS_DIRECTION_UNKNOWN) ? 0 : 1;
         while (packet_preamble[i] == ' ' ||
                packet_preamble[i] == '\r' ||
                packet_preamble[i] == '\t') {
@@ -1061,19 +1167,12 @@ parse_preamble (void)
      * If no time stamp format was specified, don't attempt to parse
      * the packet preamble to extract a time stamp.
      */
-    if (ts_fmt == NULL)
-        return;
-
-    /*
-     * Initialize to today localtime, just in case not all fields
-     * of the date and time are specified.
-     */
 
     /* Ensure preamble has more than two chars before attempting to parse.
      * This should cover line breaks etc that get counted.
      */
-    if ( strlen(packet_preamble) > 2 ) {
-        _parse_time(packet_preamble, packet_preamble + strlen(packet_preamble), ts_fmt, &ts_sec, &ts_nsec);
+    if ( ts_fmt != NULL && strlen(packet_preamble) > 2 ) {
+        got_time = _parse_time(packet_preamble, packet_preamble + strlen(packet_preamble), ts_fmt, &ts_sec, &ts_nsec);
     }
     if (debug >= 2) {
         char *c;
@@ -1082,25 +1181,34 @@ parse_preamble (void)
         fprintf(stderr, "Format(%s), time(%u), subsecs(%u)\n", ts_fmt, (guint32)ts_sec, ts_nsec);
     }
 
-
     /* Clear Preamble */
     packet_preamble_len = 0;
+
+    if (!got_time) {
+        ts_nsec += ts_tick;
+    }
 }
 
 /*----------------------------------------------------------------------
  * Start a new packet
+ *
+ * @param cont [IN] TRUE if a new packet is starting because the max frame
+ * length was reached on the current packet, and the original packet from the
+ * input file is continued in a later frame. Passed to write_current_packet,
+ * where it is used to set fragmentation fields in dummy headers (currently
+ * only implemented for SCTP; IPv4 could be added later.)
  */
 static void
-start_new_packet (void)
+start_new_packet(gboolean cont)
 {
     if (debug>=1)
-        fprintf(stderr, "Start new packet\n");
+        fprintf(stderr, "Start new packet (cont = %s).\n", cont ? "TRUE" : "FALSE");
 
     /* Write out the current packet, if required */
-    write_current_packet();
+    write_current_packet(cont);
 
     /* Ensure we parse the packet preamble as it may contain the time */
-    /* THIS IMPLEIES A STATE TRANSITION OUTSIDE THE STATE MACHINE */
+    /* THIS IMPLIES A STATE TRANSITION OUTSIDE THE STATE MACHINE */
     parse_preamble();
 }
 
@@ -1150,21 +1258,21 @@ parse_token (token_t token, char *str)
             break;
         case T_OFFSET:
             num = parse_num(str, TRUE);
-            if (num==0) {
+            if (num == 0) {
                 /* New packet starts here */
-                start_new_packet();
+                start_new_packet(FALSE);
                 state = READ_OFFSET;
             }
             break;
         case T_BYTE:
             if (offset_base == 0) {
-                start_new_packet();
+                start_new_packet(FALSE);
                 write_byte(str);
                 state = READ_BYTE;
             }
             break;
         case T_EOF:
-            write_current_packet();
+            write_current_packet(FALSE);
             break;
         default:
             break;
@@ -1182,9 +1290,9 @@ parse_token (token_t token, char *str)
             break;
         case T_OFFSET:
             num = parse_num(str, TRUE);
-            if (num==0) {
+            if (num == 0) {
                 /* New packet starts here */
-                start_new_packet();
+                start_new_packet(FALSE);
                 packet_start = 0;
                 state = READ_OFFSET;
             } else if ((num - packet_start) != curr_offset) {
@@ -1205,7 +1313,7 @@ parse_token (token_t token, char *str)
                     if (debug>=1)
                         fprintf(stderr, "Inconsistent offset. Expecting %0X, got %0X. Ignoring rest of packet\n",
                                 curr_offset, num);
-                    write_current_packet();
+                    write_current_packet(FALSE);
                     state = INIT;
                 }
             } else
@@ -1218,7 +1326,7 @@ parse_token (token_t token, char *str)
             }
             break;
         case T_EOF:
-            write_current_packet();
+            write_current_packet(FALSE);
             break;
         default:
             break;
@@ -1242,7 +1350,7 @@ parse_token (token_t token, char *str)
             state = START_OF_LINE;
             break;
         case T_EOF:
-            write_current_packet();
+            write_current_packet(FALSE);
             break;
         default:
             break;
@@ -1265,7 +1373,7 @@ parse_token (token_t token, char *str)
             state = START_OF_LINE;
             break;
         case T_EOF:
-            write_current_packet();
+            write_current_packet(FALSE);
             break;
         default:
             break;
@@ -1279,7 +1387,7 @@ parse_token (token_t token, char *str)
             state = START_OF_LINE;
             break;
         case T_EOF:
-            write_current_packet();
+            write_current_packet(FALSE);
             break;
         default:
             break;
@@ -1326,8 +1434,9 @@ text_import(const text_import_info_t *info)
     if (now_tm == NULL) {
         /*
          * This shouldn't happen - on UN*X, this should Just Work, and
-         * on Windows, it won't work if ts_sec is before the Epoch,
-         * but it's long after 1970, so....
+         * on 32 bit Windows built with 32 bit time_t, it won't work if ts_sec
+         * is before the Epoch, but it's long after 1970 (and even 32 bit
+         * Windows builds with 64 bit time_t by default now), so....
          */
         fprintf(stderr, "localtime(right now) failed\n");
         exit(-1);
@@ -1373,9 +1482,15 @@ text_import(const text_import_info_t *info)
         ts_fmt = info->timestamp_format;
     }
 
-    pcap_link_type = info->encapsulation;
+    wtap_encap_type = info->encapsulation;
 
     wdh = info->wdh;
+
+    /* XXX: It would be good to know the time precision of the file,
+     * to use for the time delta for packets without timestamps. (ts_tick)
+     * That could either be added to text_import_info_t or a method
+     * added to get it from wtap_dumper (which is opaque.)
+     */
 
     switch (info->dummy_header_type)
     {
@@ -1443,6 +1558,19 @@ text_import(const text_import_info_t *info)
 
         default:
             break;
+    }
+
+    if (hdr_ip) {
+        if (info->ipv6) {
+            hdr_ipv6 = TRUE;
+            hdr_ip = FALSE;
+            hdr_ethernet_proto = 0x86DD;
+            hdr_ipv6_src_addr = info->ip_src_addr.ipv6;
+            hdr_ipv6_dest_addr = info->ip_dest_addr.ipv6;
+        } else {
+            hdr_ip_src_addr = info->ip_src_addr.ipv4;
+            hdr_ip_dest_addr = info->ip_dest_addr.ipv4;
+        }
     }
 
     max_offset = info->max_frame_length;

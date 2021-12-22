@@ -76,6 +76,9 @@ my %APIs = (
                 # See https://gitlab.com/wireshark/wireshark/-/issues/6695#note_400659130
                 'g_fprintf',
                 'g_vfprintf',
+                # use native snprintf() and vsnprintf() instead of these:
+                'g_snprintf',
+                'g_vsnprintf',
                 ### non-ANSI C
                 # use memset, memcpy, memcmp instead of these:
                 'bzero',
@@ -1172,7 +1175,7 @@ while ($_ = pop @filelist)
 
         if ($fileContents =~ m{ %ll }xo)
         {
-                # use G_GINT64_MODIFIER instead of ll
+                # use PRI[dux...]N instead of ll
                 print STDERR "Error: Found %ll in " .$filename."\n";
                 $errorCount++;
         }

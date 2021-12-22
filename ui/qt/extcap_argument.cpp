@@ -125,7 +125,7 @@ QWidget * ExtArgSelector::createEditor(QWidget * parent)
 {
     int counter = 0;
     int selected = -1;
-    const char *prefval = _argument->pref_valptr ? *_argument->pref_valptr : NULL;
+    const char *prefval = (_argument->pref_valptr && strlen(*_argument->pref_valptr)) ? *_argument->pref_valptr : NULL;
     QString stored(prefval ? prefval : "");
 
     QWidget * editor = new QWidget(parent);
@@ -134,6 +134,7 @@ QWidget * ExtArgSelector::createEditor(QWidget * parent)
     layout->setContentsMargins(0, margins.top(), 0, margins.bottom());
 
     boxSelection = new QComboBox(parent);
+    boxSelection->setToolTip(QString().fromUtf8(_argument->tooltip));
     layout->addWidget(boxSelection);
 
     if (values.length() > 0)

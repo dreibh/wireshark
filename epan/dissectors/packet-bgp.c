@@ -9445,8 +9445,8 @@ dissect_bgp_path_attr(proto_tree *subtree, tvbuff_t *tvb, guint16 path_attr_len,
                     case AIGP_TLV_TYPE :
                         proto_tree_add_item(subtree3, hf_bgp_aigp_tlv_length, tvb, q+1, 2, ENC_BIG_ENDIAN);
                         proto_tree_add_item(subtree3, hf_bgp_aigp_accu_igp_metric, tvb, q+3, 8, ENC_BIG_ENDIAN);
-                        proto_item_append_text(ti, ": %" G_GINT64_MODIFIER "u", tvb_get_ntoh64(tvb, q+3));
-                        proto_item_append_text(ti_pa, ": %" G_GINT64_MODIFIER "u", tvb_get_ntoh64(tvb, q+3));
+                        proto_item_append_text(ti, ": %" PRIu64, tvb_get_ntoh64(tvb, q+3));
+                        proto_item_append_text(ti_pa, ": %" PRIu64, tvb_get_ntoh64(tvb, q+3));
                         break;
                     default :
                         expert_add_info_format(pinfo, aigp_type_item, &ei_bgp_attr_aigp_type,
@@ -10106,7 +10106,7 @@ dissect_bgp_notification(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo)
                 (minor_cease == BGP_CEASE_MINOR_ADMIN_SHUTDOWN || minor_cease == BGP_CEASE_MINOR_ADMIN_RESET) ) {
             proto_tree_add_item(tree, hf_bgp_notify_communication_length, tvb, offset, 1, ENC_BIG_ENDIAN);
             offset += 1;
-            proto_tree_add_item(tree, hf_bgp_notify_communication, tvb, offset, clen, ENC_UTF_8|ENC_NA);
+            proto_tree_add_item(tree, hf_bgp_notify_communication, tvb, offset, clen, ENC_UTF_8);
         /* otherwise just dump the hex data */
         } else if ( major_error == BGP_MAJOR_ERROR_OPEN_MSG && minor_cease == 7 ) {
             while (offset < hlen) {

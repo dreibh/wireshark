@@ -480,7 +480,7 @@ f5_udp_conv_valid(packet_info *pinfo)
  * @return        A filter string for the F5 IP conversation or NULL if no filter can be
  *                  computed.  The caller should free this string with g_free().
  *
- * @attention This function uses g_strdup_printf() rather than the wmem equivalent because the
+ * @attention This function uses ws_strdup_printf() rather than the wmem equivalent because the
  *             caller (menu_dissector_filter_cb()) uses g_free to free the filter string.
  *             (as of WS 1.12).
  */
@@ -496,7 +496,7 @@ f5_ip_conv_filter(packet_info *pinfo)
         address_to_str_buf(&pinfo->src, src_addr, WS_INET6_ADDRSTRLEN);
         address_to_str_buf(&pinfo->dst, dst_addr, WS_INET6_ADDRSTRLEN);
         if (*src_addr != '\0' && *dst_addr != '\0') {
-            buf = g_strdup_printf(
+            buf = ws_strdup_printf(
                 "(ip.addr eq %s and ip.addr eq %s) or"
                 " (f5ethtrailer.peeraddr eq %s and f5ethtrailer.peeraddr eq %s)",
                 src_addr, dst_addr, src_addr, dst_addr);
@@ -505,7 +505,7 @@ f5_ip_conv_filter(packet_info *pinfo)
         address_to_str_buf(&pinfo->src, src_addr, WS_INET6_ADDRSTRLEN);
         address_to_str_buf(&pinfo->dst, dst_addr, WS_INET6_ADDRSTRLEN);
         if (*src_addr != '\0' && *dst_addr != '\0') {
-            buf = g_strdup_printf(
+            buf = ws_strdup_printf(
                 "(ipv6.addr eq %s and ipv6.addr eq %s) or"
                 " (f5ethtrailer.peeraddr6 eq %s and f5ethtrailer.peeraddr6 eq %s)",
                 src_addr, dst_addr, src_addr, dst_addr);
@@ -535,7 +535,7 @@ f5_ip_conv_filter(packet_info *pinfo)
  *  be filtered properly.  In the >=11.0.0 case, if you have TCP on one side and UDP on the other
  *  and it should "do the right thing".
  *
- * @attention This function uses g_strdup_printf() rather than the wmem equivalent because the
+ * @attention This function uses ws_strdup_printf() rather than the wmem equivalent because the
  *             caller (menu_dissector_filter_cb()) uses g_free to free the filter string.
  *             (as of WS 1.12).
  */
@@ -551,7 +551,7 @@ f5_tcp_conv_filter(packet_info *pinfo)
         address_to_str_buf(&pinfo->src, src_addr, WS_INET6_ADDRSTRLEN);
         address_to_str_buf(&pinfo->dst, dst_addr, WS_INET6_ADDRSTRLEN);
         if (*src_addr != '\0' && *dst_addr != '\0') {
-            buf = g_strdup_printf(
+            buf = ws_strdup_printf(
                 "(ip.addr eq %s and ip.addr eq %s and tcp.port eq %d and tcp.port eq %d) or"
                 " (f5ethtrailer.peeraddr eq %s and f5ethtrailer.peeraddr eq %s and"
                 " f5ethtrailer.peerport eq %d and f5ethtrailer.peerport eq %d and"
@@ -563,7 +563,7 @@ f5_tcp_conv_filter(packet_info *pinfo)
         address_to_str_buf(&pinfo->src, src_addr, WS_INET6_ADDRSTRLEN);
         address_to_str_buf(&pinfo->dst, dst_addr, WS_INET6_ADDRSTRLEN);
         if (*src_addr != '\0' && *dst_addr != '\0') {
-            buf = g_strdup_printf(
+            buf = ws_strdup_printf(
                 "(ipv6.addr eq %s and ipv6.addr eq %s and tcp.port eq %d and tcp.port eq %d) or"
                 " (f5ethtrailer.peeraddr6 eq %s and f5ethtrailer.peeraddr6 eq %s and"
                 " f5ethtrailer.peerport eq %d and f5ethtrailer.peerport eq %d and"
@@ -595,7 +595,7 @@ f5_tcp_conv_filter(packet_info *pinfo)
  *  be filtered properly.  In the >=11.0.0 case, if you have TCP on one side and UDP on the other
  *  and it should "do the right thing".
  *
- * @attention This function uses g_strdup_printf() rather than the wmem equivalent because the
+ * @attention This function uses ws_strdup_printf() rather than the wmem equivalent because the
  *             caller (menu_dissector_filter_cb()) uses g_free to free the filter string.
  *             (as of WS 1.12).
  */
@@ -611,7 +611,7 @@ f5_udp_conv_filter(packet_info *pinfo)
         address_to_str_buf(&pinfo->src, src_addr, WS_INET6_ADDRSTRLEN);
         address_to_str_buf(&pinfo->dst, dst_addr, WS_INET6_ADDRSTRLEN);
         if (*src_addr != '\0' && *dst_addr != '\0') {
-            buf = g_strdup_printf(
+            buf = ws_strdup_printf(
                 "(ip.addr eq %s and ip.addr eq %s and udp.port eq %d and udp.port eq %d) or"
                 " (f5ethtrailer.peeraddr eq %s and f5ethtrailer.peeraddr eq %s and"
                 " f5ethtrailer.peerport eq %d and f5ethtrailer.peerport eq %d and"
@@ -623,7 +623,7 @@ f5_udp_conv_filter(packet_info *pinfo)
         address_to_str_buf(&pinfo->src, src_addr, WS_INET6_ADDRSTRLEN);
         address_to_str_buf(&pinfo->dst, dst_addr, WS_INET6_ADDRSTRLEN);
         if (*src_addr != '\0' && *dst_addr != '\0') {
-            buf = g_strdup_printf(
+            buf = ws_strdup_printf(
                 "(ipv6.addr eq %s and ipv6.addr eq %s and udp.port eq %d and udp.port eq %d) or"
                 " (f5ethtrailer.peeraddr6 eq %s and f5ethtrailer.peeraddr6 eq %s and"
                 " f5ethtrailer.peerport eq %d and f5ethtrailer.peerport eq %d and"
@@ -714,7 +714,7 @@ f5eth_tmmdist_stats_tree_packet(
     if(check_f5eth_tap_magic(tdata) == 0) return TAP_PACKET_DONT_REDRAW;
      */
 
-    g_snprintf(tmm_stat_name_buffer, PER_TMM_STAT_NAME_BUF_LEN, "slot %3d,tmm %3d", tdata->slot,
+    snprintf(tmm_stat_name_buffer, PER_TMM_STAT_NAME_BUF_LEN, "slot %3d,tmm %3d", tdata->slot,
         tdata->tmm);
 
     pkt_len = pinfo->fd->pkt_len - tdata->trailer_len;
@@ -1915,12 +1915,12 @@ dissect_med_trailer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint o
                 rstcauseline = (rstcauseval & 0x000000000000ffffLL);
                 rstcauseval  = (rstcauseval & 0xffffffffffff0000LL) >> 16;
                 proto_tree_add_uint64_format_value(rc_tree, hf_rstcause_val, tvb, o, 6,
-                    rstcauseval, "0x%012" G_GINT64_MODIFIER "x", rstcauseval);
+                    rstcauseval, "0x%012" PRIx64, rstcauseval);
                 proto_tree_add_item(rc_tree, hf_rstcause_line, tvb, o + 6, 2, ENC_BIG_ENDIAN);
                 o += 8;
 
                 proto_item_append_text(rc_item,
-                    ": [%" G_GINT64_MODIFIER "x:%" G_GINT64_MODIFIER "u]%s %s", rstcauseval,
+                    ": [%" PRIx64 ":%" PRIu64 "]%s %s", rstcauseval,
                     rstcauseline, rstcausepeer ? " {peer}" : "",
                         tvb_get_string_enc(pinfo->pool, tvb, o,
                         rstcauselen - (o - startcause), ENC_ASCII));
@@ -2361,12 +2361,12 @@ dissect_dpt_trailer_noise_med(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
             rstcauseline = (rstcauseval & 0x000000000000ffffLL);
             rstcauseval  = (rstcauseval & 0xffffffffffff0000LL) >> 16;
             proto_tree_add_uint64_format_value(rc_tree, hf_rstcause_val, tvb, o, 6, rstcauseval,
-                "0x%012" G_GINT64_MODIFIER "x", rstcauseval);
+                "0x%012" PRIx64, rstcauseval);
             proto_tree_add_item(rc_tree, hf_rstcause_line, tvb, o + 6, 2, ENC_BIG_ENDIAN);
             o += 8;
 
             proto_item_append_text(rc_item,
-                ": [%" G_GINT64_MODIFIER "x:%" G_GINT64_MODIFIER "u]%s %s", rstcauseval,
+                ": [%" PRIx64 ":%" PRIu64 "]%s %s", rstcauseval,
                 rstcauseline, rstcausepeer ? " {peer}" : "",
                 tvb_get_string_enc(
                     pinfo->pool, tvb, o, rstcauselen - (o - startcause), ENC_ASCII));

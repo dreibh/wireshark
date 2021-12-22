@@ -60,7 +60,7 @@ ws_init_version_info(const char *appname,
 	 * version - including the VCS version, for a build from
 	 * a checkout.
 	 */
-	appname_with_version = g_strdup_printf("%s %s",
+	appname_with_version = ws_strdup_printf("%s %s",
 		appname, get_ws_vcs_version_info());
 
 	/* Get the compile-time version information string */
@@ -223,7 +223,7 @@ get_mem_info(GString *str)
 #endif
 
 	if (memsize > 0)
-		g_string_append_printf(str, ", with ""%" G_GINT64_MODIFIER "d" " MB of physical memory", memsize/(1024*1024));
+		g_string_append_printf(str, ", with %" G_GINT64_FORMAT " MB of physical memory", memsize/(1024*1024));
 }
 
 /*

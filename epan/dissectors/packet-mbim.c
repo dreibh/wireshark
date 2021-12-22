@@ -1940,15 +1940,15 @@ static void
 mbim_rssi_fmt(gchar *s, guint32 val)
 {
     if (val == 0) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-113 or less dBm (0)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-113 or less dBm (0)");
     } else if (val < 31) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "%d dBm (%u)", -113 + 2*val, val);
+        snprintf(s, ITEM_LABEL_LENGTH, "%d dBm (%u)", -113 + 2*val, val);
     } else if (val == 31) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-51 or greater dBm (31)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-51 or greater dBm (31)");
     } else if (val == 99) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (99)");
+        snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (99)");
     } else {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
+        snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
     }
 }
 
@@ -2592,7 +2592,7 @@ static const value_string mbim_sar_status_vals[] = {
 static void
 mbim_degrees_fmt(gchar *s, guint32 v)
 {
-    g_snprintf(s, ITEM_LABEL_LENGTH, "%.1f Degrees Celsius (%u)", (float)v/10.0, v);
+    snprintf(s, ITEM_LABEL_LENGTH, "%.1f Degrees Celsius (%u)", (float)v/10.0, v);
 }
 
 static const value_string mbim_adpclk_activate_state_vals[] = {
@@ -2630,15 +2630,15 @@ static void
 mbim_rscp_fmt(gchar *s, guint32 val)
 {
     if (val == 0) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-120 or less dBm (0)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-120 or less dBm (0)");
     } else if (val < 96) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "%d dBm (%u)", -120 + val, val);
+        snprintf(s, ITEM_LABEL_LENGTH, "%d dBm (%u)", -120 + val, val);
     } else if (val == 96) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-24 or greater dBm (96)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-24 or greater dBm (96)");
     } else if (val == 255) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
+        snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
     } else {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
+        snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
     }
 }
 
@@ -2646,15 +2646,15 @@ static void
 mbim_ecno_fmt(gchar *s, guint32 val)
 {
     if (val == 0) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-24 or less dBm (0)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-24 or less dBm (0)");
     } else if (val < 49) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "%.1f dBm (%u)", -24 + ((float)val/2), val);
+        snprintf(s, ITEM_LABEL_LENGTH, "%.1f dBm (%u)", -24 + ((float)val/2), val);
     } else if (val == 49) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "0.5 or greater dBm (49)");
+        snprintf(s, ITEM_LABEL_LENGTH, "0.5 or greater dBm (49)");
     } else if (val == 255) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
+        snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
     } else {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
+        snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
     }
 }
 
@@ -2662,15 +2662,15 @@ static void
 mbim_rsrq_fmt(gchar *s, guint32 val)
 {
     if (val == 0) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-19.5 or less dBm (0)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-19.5 or less dBm (0)");
     } else if (val < 34) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "%.1f dBm (%u)", -19.5 + ((float)val/2), val);
+        snprintf(s, ITEM_LABEL_LENGTH, "%.1f dBm (%u)", -19.5 + ((float)val/2), val);
     } else if (val == 34) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-2.5 or greater dBm (34)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-2.5 or greater dBm (34)");
     } else if (val == 255) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
+        snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
     } else {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
+        snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
     }
 }
 
@@ -2678,15 +2678,15 @@ static void
 mbim_rsrp_fmt(gchar *s, guint32 val)
 {
     if (val == 0) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-140 or less dBm (0)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-140 or less dBm (0)");
     } else if (val < 97) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "%d dBm (%u)", -140 + val, val);
+        snprintf(s, ITEM_LABEL_LENGTH, "%d dBm (%u)", -140 + val, val);
     } else if (val == 97) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-43 or greater dBm (97)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-43 or greater dBm (97)");
     } else if (val == 255) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
+        snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
     } else {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
+        snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
     }
 }
 
@@ -2694,15 +2694,15 @@ static void
 mbim_rssnr_fmt(gchar *s, guint32 val)
 {
     if (val == 0) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-5 or less dB (0)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-5 or less dB (0)");
     } else if (val < 35) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "%d dB (%u)", -5 + val, val);
+        snprintf(s, ITEM_LABEL_LENGTH, "%d dB (%u)", -5 + val, val);
     } else if (val == 35) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "30 or greater dB (35)");
+        snprintf(s, ITEM_LABEL_LENGTH, "30 or greater dB (35)");
     } else if (val == 255) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
+        snprintf(s, ITEM_LABEL_LENGTH, "Unknown or undetectable (255)");
     } else {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
+        snprintf(s, ITEM_LABEL_LENGTH, "Invalid value (%u)", val);
     }
 }
 
@@ -2710,13 +2710,13 @@ static void
 mbim_rsrp_signal_state_fmt(gchar *s, guint32 val)
 {
     if (val == 0) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "SS-RSRP < -156dBm (0)");
+        snprintf(s, ITEM_LABEL_LENGTH, "SS-RSRP < -156dBm (0)");
     } else if (val < 126) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "%ddBm <= SS-RSRP < %ddBm (%u)", val - 157, val - 156, val);
+        snprintf(s, ITEM_LABEL_LENGTH, "%ddBm <= SS-RSRP < %ddBm (%u)", val - 157, val - 156, val);
     } else if (val == 126) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "-31dBm <= SS-RSRP (126)");
+        snprintf(s, ITEM_LABEL_LENGTH, "-31dBm <= SS-RSRP (126)");
     } else {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "invalid (127)");
+        snprintf(s, ITEM_LABEL_LENGTH, "invalid (127)");
     }
 }
 
@@ -2724,20 +2724,20 @@ static void
 mbim_snr_signal_state_fmt(gchar *s, guint32 val)
 {
     if (val == 0) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "SS-SINR < -23dB (0)");
+        snprintf(s, ITEM_LABEL_LENGTH, "SS-SINR < -23dB (0)");
     } else if (val < 127) {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "%.1fdB <= SS-SINR < %.1fdB (%u)", (((float)val - 1) / 2) - 23, ((float)val / 2) - 23, val);
+        snprintf(s, ITEM_LABEL_LENGTH, "%.1fdB <= SS-SINR < %.1fdB (%u)", (((float)val - 1) / 2) - 23, ((float)val / 2) - 23, val);
     } else if (val == 127){
-        g_snprintf(s, ITEM_LABEL_LENGTH, "40dB <= SS-SINR (127)");
+        snprintf(s, ITEM_LABEL_LENGTH, "40dB <= SS-SINR (127)");
     } else {
-        g_snprintf(s, ITEM_LABEL_LENGTH, "invalid (128)");
+        snprintf(s, ITEM_LABEL_LENGTH, "invalid (128)");
     }
 }
 
 static void
 mbim_version_fmt(gchar* s, guint32 val)
 {
-    g_snprintf(s, ITEM_LABEL_LENGTH, "%u.%u", val / 256, val % 256);
+    snprintf(s, ITEM_LABEL_LENGTH, "%u.%u", val / 256, val % 256);
 }
 
 static const value_string mbim_atds_operator_plmn_mode_vals[] = {
@@ -2769,7 +2769,7 @@ mbim_projection_table_coeff_fmt(gchar *s, guint32 val)
 {
     gint32 coeff = (gint32)val;
 
-    g_snprintf(s, ITEM_LABEL_LENGTH, "%.3f (%d)", ((float)coeff)/1000, coeff);
+    snprintf(s, ITEM_LABEL_LENGTH, "%.3f (%d)", ((float)coeff)/1000, coeff);
 }
 
 #define MBIM_NDP_CTRL_MULTIFLOW_STATUS 0
@@ -5825,7 +5825,6 @@ static void mbim_dissect_base_station_gsm_serving_cell_info(tvbuff_t* tvb, proto
     proto_tree_add_item(tree, hf_mbim_base_station_base_station_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
     proto_tree_add_item(tree, hf_mbim_base_station_rx_level, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-    offset += 4;
     proto_tree_add_item(tree, hf_mbim_base_station_provider_id, tvb, base_offset + provider_id_offset,
         provider_id_size, ENC_LITTLE_ENDIAN | ENC_UTF_16);
 }
@@ -6363,7 +6362,6 @@ mbim_dissect_ms_open_channel(tvbuff_t* tvb, proto_tree* tree, gint offset, struc
 
     if (SHOULD_MBIM_EX4_AND_HIGHER_BE_APPLIED(mbim_conv)) {
         proto_tree_add_item(tree, hf_mbim_ms_slot_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-        offset += 4;
     }
     if (app_id_offset && app_id_size) {
         proto_tree_add_item(tree, hf_mbim_ms_open_channel_app_id, tvb, base_offset + app_id_offset, app_id_size, ENC_NA);
@@ -6383,7 +6381,6 @@ mbim_dissect_ms_open_channel_info(tvbuff_t* tvb, proto_tree* tree, gint offset)
     proto_tree_add_item_ret_uint(tree, hf_mbim_ms_uicc_response_length, tvb, offset, 4, ENC_LITTLE_ENDIAN, &response_length);
     offset += 4;
     proto_tree_add_item_ret_uint(tree, hf_mbim_ms_uicc_response_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &response_offset);
-    offset += 4;
 
     if (response_offset && response_length) {
         proto_tree_add_item(tree, hf_mbim_ms_uicc_response, tvb, base_offset + response_offset, response_length, ENC_NA);
@@ -6400,7 +6397,6 @@ mbim_dissect_ms_close_channel(tvbuff_t* tvb, proto_tree* tree, gint offset, stru
 
     if (SHOULD_MBIM_EX4_AND_HIGHER_BE_APPLIED(mbim_conv)) {
         proto_tree_add_item(tree, hf_mbim_ms_slot_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-        offset += 4;
     }
 }
 
@@ -6422,7 +6418,6 @@ mbim_dissect_ms_apdu(tvbuff_t* tvb, proto_tree* tree, gint offset, struct mbim_c
 
     if (SHOULD_MBIM_EX4_AND_HIGHER_BE_APPLIED(mbim_conv)) {
         proto_tree_add_item(tree, hf_mbim_ms_slot_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-        offset += 4;
     }
     if (command_offset && command_size) {
         proto_tree_add_item(tree, hf_mbim_ms_apdu_command, tvb, base_offset + command_offset, command_size, ENC_NA);
@@ -6440,7 +6435,6 @@ mbim_dissect_ms_apdu_info(tvbuff_t* tvb, proto_tree* tree, gint offset)
     proto_tree_add_item_ret_uint(tree, hf_mbim_ms_uicc_response_length, tvb, offset, 4, ENC_LITTLE_ENDIAN, &response_length);
     offset += 4;
     proto_tree_add_item_ret_uint(tree, hf_mbim_ms_uicc_response_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &response_offset);
-    offset += 4;
 
     if (response_offset && response_length) {
         proto_tree_add_item(tree, hf_mbim_ms_uicc_response, tvb, base_offset + response_offset, response_length, ENC_NA);
@@ -6498,7 +6492,6 @@ mbim_dissect_ms_set_reset(tvbuff_t* tvb, proto_tree* tree, gint offset, struct m
     offset += 4;
     if (SHOULD_MBIM_EX4_AND_HIGHER_BE_APPLIED(mbim_conv)) {
         proto_tree_add_item(tree, hf_mbim_ms_slot_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-        offset += 4;
     }
 }
 
@@ -6506,7 +6499,6 @@ static void
 mbim_dissect_ms_query_reset(tvbuff_t* tvb, proto_tree* tree, gint offset)
 {
     proto_tree_add_item(tree, hf_mbim_ms_slot_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-    offset += 4;
 }
 
 static void
@@ -6530,7 +6522,6 @@ mbim_dissect_ms_app_info_elements(tvbuff_t* tvb, packet_info* pinfo _U_, proto_t
     proto_tree_add_item_ret_uint(tree, hf_mbim_ms_app_info_pin_ref_offset, tvb, offset, 4, ENC_LITTLE_ENDIAN, &pin_ref_offset);
     offset += 4;
     proto_tree_add_item_ret_uint(tree, hf_mbim_ms_app_info_pin_ref_size, tvb, offset, 4, ENC_LITTLE_ENDIAN, &pin_ref_size);
-    offset += 4;
 
     if (app_id_offset && app_id_size) {
         proto_tree_add_item(tree, hf_mbim_ms_app_info_app_id, tvb, base_offset + app_id_offset, app_id_size, ENC_NA);

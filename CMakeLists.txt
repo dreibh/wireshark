@@ -661,6 +661,13 @@ else() # ! MSVC
 		# until these procedural issues can be fixed or at least mitigated.
 		#
 		-Wno-error=maybe-uninitialized
+		#
+		# Converting from g_printf() and g_snprintf() to stdio.h turns
+		# up many of these warnings. They will have to be handled later.
+		# It can be a lot of work to fix properly and none of them
+		# seem to flag very interesting issues.
+		#
+		-Wno-format-truncation
 	)
 
 	#
@@ -1178,8 +1185,7 @@ if(BUILD_wireshark)
 	else()
 		set(qtver "5")
 	endif()
-	# Untested, may not work if CMAKE_PREFIX_PATH gets overwritten
-	# somewhere. The if WIN32 in this place is annoying as well.
+	# We used to recommend setting QT5_BASE_DIR and should probably deprecate this at some point.
 	if(WIN32)
 		set(QT5_BASE_PATH "$ENV{QT5_BASE_DIR}")
 		set(CMAKE_PREFIX_PATH "${QT5_BASE_PATH}")
@@ -2769,8 +2775,9 @@ endif()
 
 if(BUILD_text2pcap)
 	set(text2pcap_LIBS
-		writecap
+		wiretap
 		wsutil
+		ui
 		version_info
 		${M_LIBRARIES}
 		${ZLIB_LIBRARIES}
@@ -3426,6 +3433,7 @@ set(SHARK_PUBLIC_HEADERS
 	include/ws_compiler_tests.h
 	include/ws_diag_control.h
 	include/ws_log_defs.h
+	include/ws_posix_compat.h
 	include/ws_symbol_export.h
 	include/wireshark.h
 	${CMAKE_BINARY_DIR}/ws_version.h

@@ -483,8 +483,8 @@ calc_progbar_val(capture_file *cf, gint64 size, gint64 file_pos, gchar *status_s
       progbar_val = 1.0f;
   }
 
-  g_snprintf(status_str, status_size,
-             "%" G_GINT64_MODIFIER "dKB of %" G_GINT64_MODIFIER "dKB",
+  snprintf(status_str, status_size,
+             "%" PRId64 "KB of %" PRId64 "KB",
              file_pos / 1024, size / 1024);
 
   return progbar_val;
@@ -1376,8 +1376,8 @@ merge_callback(merge_event event, int num _U_,
 
             if (cb_data->progbar != NULL) {
               gchar status_str[100];
-              g_snprintf(status_str, sizeof(status_str),
-                         "%" G_GINT64_MODIFIER "dKB of %" G_GINT64_MODIFIER "dKB",
+              snprintf(status_str, sizeof(status_str),
+                         "%" PRId64 "KB of %" PRId64 "KB",
                          file_pos / 1024, cb_data->f_len / 1024);
               update_progress_dlg(cb_data->progbar, progbar_val, status_str);
             }
@@ -1813,7 +1813,7 @@ rescan_packets(capture_file *cf, const char *action, const char *action_item, gb
       progbar_val = (gfloat) count / frames_count;
 
       if (progbar != NULL) {
-        g_snprintf(status_str, sizeof(status_str),
+        snprintf(status_str, sizeof(status_str),
                   "%4u of %u frames", count, frames_count);
         update_progress_dlg(progbar, progbar_val, status_str);
       }
@@ -2168,7 +2168,7 @@ process_specified_records(capture_file *cf, packet_range_t *range,
       ws_assert(cf->count > 0);
       progbar_val = (gfloat) progbar_count / cf->count;
 
-      g_snprintf(progbar_status_str, sizeof(progbar_status_str),
+      snprintf(progbar_status_str, sizeof(progbar_status_str),
                   "%4u of %u packets", progbar_count, cf->count);
       update_progress_dlg(progbar, progbar_val, progbar_status_str);
 
@@ -2380,7 +2380,7 @@ print_packet(capture_file *cf, frame_data *fdata, wtap_rec *rec, Buffer *buf,
    * We generate bookmarks, if the output format supports them.
    * The name is "__frameN__".
    */
-  g_snprintf(bookmark_name, sizeof bookmark_name, "__frame%u__", fdata->num);
+  snprintf(bookmark_name, sizeof bookmark_name, "__frame%u__", fdata->num);
 
   if (args->print_args->print_summary) {
     if (!args->print_args->print_col_headings)
@@ -2411,9 +2411,9 @@ print_packet(capture_file *cf, frame_data *fdata, wtap_rec *rec, Buffer *buf,
 
       /* Right-justify the packet number column. */
       if (col_item->col_fmt == COL_NUMBER)
-        g_snprintf(cp, column_len+1, "%*s", args->col_widths[i], col_item->col_data);
+        snprintf(cp, column_len+1, "%*s", args->col_widths[i], col_item->col_data);
       else
-        g_snprintf(cp, column_len+1, "%-*s", args->col_widths[i], col_item->col_data);
+        snprintf(cp, column_len+1, "%-*s", args->col_widths[i], col_item->col_data);
       cp += column_len;
       if (i != args->num_visible_cols - 1)
         *cp++ = ' ';
@@ -2434,7 +2434,7 @@ print_packet(capture_file *cf, frame_data *fdata, wtap_rec *rec, Buffer *buf,
      * Generate a bookmark, using "Frame N" as the title, as we're not
      * printing the summary line.
      */
-    g_snprintf(bookmark_title, sizeof bookmark_title, "Frame %u", fdata->num);
+    snprintf(bookmark_title, sizeof bookmark_title, "Frame %u", fdata->num);
     if (!print_bookmark(args->print_args->stream, bookmark_name,
                         bookmark_title))
       goto fail;
@@ -2598,9 +2598,9 @@ cf_print_packets(capture_file *cf, print_args_t *print_args,
 
       /* Right-justify the packet number column. */
 /*      if (cf->cinfo.col_fmt[i] == COL_NUMBER)
-        g_snprintf(cp, column_len+1, "%*s", callback_args.col_widths[visible_col_count], cf->cinfo.columns[i].col_title);
+        snprintf(cp, column_len+1, "%*s", callback_args.col_widths[visible_col_count], cf->cinfo.columns[i].col_title);
       else*/
-      g_snprintf(cp, column_len+1, "%-*s", callback_args.col_widths[visible_col_count], cf->cinfo.columns[i].col_title);
+      snprintf(cp, column_len+1, "%-*s", callback_args.col_widths[visible_col_count], cf->cinfo.columns[i].col_title);
       cp += column_len;
       if (i != cf->cinfo.num_cols - 1)
         *cp++ = ' ';
@@ -3662,7 +3662,7 @@ find_packet(capture_file *cf, ws_match_function match_function,
 
       progbar_val = (gfloat) count / cf->count;
 
-      g_snprintf(status_str, sizeof(status_str),
+      snprintf(status_str, sizeof(status_str),
                   "%4u of %u packets", count, cf->count);
       update_progress_dlg(progbar, progbar_val, status_str);
 
@@ -4536,7 +4536,7 @@ cf_save_records(capture_file *cf, const char *fname, guint save_format,
          to a new file and, if the write succeeds, renaming the
          new file on top of the old file. */
       if (file_exists(fname)) {
-        fname_new = g_strdup_printf("%s~", fname);
+        fname_new = ws_strdup_printf("%s~", fname);
         if (!copy_file_binary_mode(cf->filename, fname_new))
           goto fail;
       } else {
@@ -4572,7 +4572,7 @@ cf_save_records(capture_file *cf, const char *fname, guint save_format,
          file.  (If the existing file is the current capture file,
          we *HAVE* to do that, otherwise we're overwriting the file
          from which we're reading the packets that we're writing!) */
-      fname_new = g_strdup_printf("%s~", fname);
+      fname_new = ws_strdup_printf("%s~", fname);
       pdh = wtap_dump_open(fname_new, save_format, compression_type, &params,
                            &err, &err_info);
     } else {
@@ -4831,7 +4831,7 @@ cf_export_specified_packets(capture_file *cf, const char *fname,
        file.  (If the existing file is the current capture file,
        we *HAVE* to do that, otherwise we're overwriting the file
        from which we're reading the packets that we're writing!) */
-    fname_new = g_strdup_printf("%s~", fname);
+    fname_new = ws_strdup_printf("%s~", fname);
     pdh = wtap_dump_open(fname_new, save_format, compression_type, &params,
                          &err, &err_info);
   } else {

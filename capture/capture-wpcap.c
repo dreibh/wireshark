@@ -263,14 +263,14 @@ convert_errbuf_to_utf8(char *errbuf)
 	}
 	errbuf[PCAP_ERRBUF_SIZE - 1] = '\0';
 	utf8_err = local_code_page_str_to_utf8(errbuf);
-	g_snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s", utf8_err);
+	snprintf(errbuf, PCAP_ERRBUF_SIZE, "%s", utf8_err);
 	g_free(utf8_err);
 }
 
 static char *
 cant_load_winpcap_err(const char *app_name)
 {
-	return g_strdup_printf(
+	return ws_strdup_printf(
 "Unable to load Npcap or WinPcap (wpcap.dll); %s will not be able to\n"
 "capture packets.\n"
 "\n"
@@ -374,7 +374,7 @@ pcap_open_live(const char *a, int b, int c, int d, char *errbuf)
 {
 	pcap_t *p;
 	if (!has_wpcap) {
-		g_snprintf(errbuf, PCAP_ERRBUF_SIZE,
+		snprintf(errbuf, PCAP_ERRBUF_SIZE,
 			   "unable to load Npcap or WinPcap (wpcap.dll); can't open %s to capture",
 			   a);
 		return NULL;
@@ -409,7 +409,7 @@ pcap_open(const char *a, int b, int c, int d, struct pcap_rmtauth *e, char *errb
 {
 	pcap_t *ret;
 	if (!has_wpcap) {
-		g_snprintf(errbuf, PCAP_ERRBUF_SIZE,
+		snprintf(errbuf, PCAP_ERRBUF_SIZE,
 			   "unable to load Npcap or WinPcap (wpcap.dll); can't open %s to capture",
 			   a);
 		return NULL;
@@ -563,7 +563,7 @@ pcap_statustostr(int a)
     }
 
     /* XXX copy routine from pcap.c ??? */
-    (void)g_snprintf(ebuf, sizeof ebuf, "Don't have pcap_statustostr(), can't translate error: %d", a);
+    (void)snprintf(ebuf, sizeof ebuf, "Don't have pcap_statustostr(), can't translate error: %d", a);
     return(ebuf);
 
 }
@@ -771,12 +771,12 @@ cant_get_if_list_error_message(const char *err_str)
 	 */
 	if (strstr(err_str, "Not enough storage is available to process this command") != NULL ||
 	    strstr(err_str, "The operation completed successfully") != NULL) {
-		return g_strdup_printf("Can't get list of interfaces: %s\n"
+		return ws_strdup_printf("Can't get list of interfaces: %s\n"
 "This might be a problem with WinPcap 3.0. You should try updating to\n"
 "Npcap. See https://nmap.org/npcap/ for more information.",
 		    err_str);
 	}
-	return g_strdup_printf("Can't get list of interfaces: %s", err_str);
+	return ws_strdup_printf("Can't get list of interfaces: %s", err_str);
 }
 
 if_capabilities_t *

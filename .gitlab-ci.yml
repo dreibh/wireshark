@@ -161,7 +161,7 @@ variables:
     - $env:Configuration = "RelWithDebInfo"
     - $env:Path += ";C:\Program Files\CMake\bin"
     - $env:Path += ";C:\Strawberry\c\bin;C:\Strawberry\perl\site\bin;C:\Strawberry\perl\bin"
-    - $env:Path += ";C:\qt\5.15.2\msvc2019_64\bin"
+    - $env:CMAKE_PREFIX_PATH = "C:\qt\5.15.2\msvc2019_64"
     # https://help.appveyor.com/discussions/questions/18777-how-to-use-vcvars64bat-from-powershell
     - cmd.exe /c "call `"C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat`" && set > %temp%\vcvars.txt"
     - Get-Content "$env:temp\vcvars.txt" | Foreach-Object { if ($_ -match "^(.*?)=(.*)$") { Set-Content "env:\$($matches[1])" $matches[2] } }
@@ -313,10 +313,10 @@ Win64 Package:
     - $env:WIRESHARK_BASE_DIR = "C:\Development"
     - $env:Configuration = "RelWithDebInfo"
     - $env:Path += ";C:\Strawberry\c\bin;C:\Strawberry\perl\site\bin;C:\Strawberry\perl\bin"
-    - $env:Path += ";C:\qt\5.15.2\msvc2019_64\bin"
     - $env:Path += ";C:\Program Files (x86)\NSIS"
     - $env:Path += ";C:\Program Files (x86)\WiX Toolset v3.11\bin"
     - $env:Path += ";C:\Program Files\Amazon\AWSCLIV2"
+    - $env:CMAKE_PREFIX_PATH = "C:\qt\5.15.2\msvc2019_64"
     # https://help.appveyor.com/discussions/questions/18777-how-to-use-vcvars64bat-from-powershell
     - cmd.exe /c "call `"C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvars64.bat`" && set > %temp%\vcvars.txt"
     - Get-Content "$env:temp\vcvars.txt" | Foreach-Object { if ($_ -match "^(.*?)=(.*)$") { Set-Content "env:\$($matches[1])" $matches[2] } }
@@ -359,10 +359,10 @@ Win32 Package:
     - $env:WIRESHARK_BASE_DIR = "C:\Development"
     - $env:Configuration = "RelWithDebInfo"
     - $env:Path += ";C:\Strawberry\c\bin;C:\Strawberry\perl\site\bin;C:\Strawberry\perl\bin"
-    - $env:Path += ";C:\qt\5.15.2\msvc2019\bin"
     - $env:Path += ";C:\Program Files (x86)\NSIS"
     - $env:Path += ";C:\Program Files (x86)\WiX Toolset v3.11\bin"
     - $env:Path += ";C:\Program Files\Amazon\AWSCLIV2"
+    - $env:CMAKE_PREFIX_PATH = "C:\qt\5.15.2\msvc2019"
     # https://help.appveyor.com/discussions/questions/18777-how-to-use-vcvars64bat-from-powershell
     - cmd.exe /c "call `"C:\Program Files (x86)\Microsoft Visual Studio\2019\Professional\VC\Auxiliary\Build\vcvarsamd64_x86.bat`" && set > %temp%\vcvars.txt"
     - Get-Content "$env:temp\vcvars.txt" | Foreach-Object { if ($_ -match "^(.*?)=(.*)$") { Set-Content "env:\$($matches[1])" $matches[2] } }
@@ -405,17 +405,7 @@ macOS Arm Package:
   tags:
     - wireshark-macos-arm-package
   retry: 1
-  before_script:
-    - mkdir build
-    - cd build
   script:
-    - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
-    # XXX - Move this to a separate DENABLE_PCAP=OFF job?
-    - arch -arch arm64 cmake -DENABLE_CCACHE=ON -DENABLE_PCAP=OFF -DCMAKE_APPLE_SILICON_PROCESSOR=arm64 -DCMAKE_OSX_ARCHITECTURES=arm64 -G Ninja ..
-    - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
-    - arch -arch arm64 ninja
-    - cd ..
-    - git clean -d --force --force -x
     - perl tools/make-version.pl --set-release
     - mkdir build
     - cd build
@@ -447,7 +437,7 @@ macOS Intel Package:
     - wireshark-macos-intel-package
   retry: 1
   script:
-    - export CMAKE_PREFIX_PATH=/usr/local/Qt-5.15.3/lib/cmake
+    - export CMAKE_PREFIX_PATH=/usr/local/Qt-5.15.3
     - export PATH="$PATH:$HOME/bin"
     - perl tools/make-version.pl --set-release
     - mkdir build
@@ -599,6 +589,17 @@ Code Checks + Clang Warnings:
       - tfs_check.txt
       - checkhf_conflict.txt
       - html/
+
+No options:
+  extends: .build-ubuntu
+  rules: !reference [.if-merge-request]
+  script: |
+    cmake -GNinja -DENABLE_CCACHE=ON \
+      -DENABLE_BROTLI=OFF -DENABLE_CAP=OFF -DENABLE_CARES=OFF -DENABLE_CHECKHF_CONFLICT=ON -DENABLE_GNUTLS=OFF \
+      -DENABLE_KERBEROS=OFF -DENABLE_LIBXML2=OFF -DENABLE_ILBC=OFF -DENABLE_LUA=OFF -DENABLE_LZ4=OFF -DENABLE_MINIZIP=OFF \
+      -DENABLE_NETLINK=OFF -DENABLE_NGHTTP2=OFF -DENABLE_PCAP=OFF -DENABLE_PLUGIN_IFDEMO=ON -DENABLE_PLUGINS=OFF \
+      -DENABLE_SBC=OFF -DENABLE_SMI=OFF -DENABLE_SNAPPY=OFF -DENABLE_SPANDSP=OFF -DENABLE_ZLIB=OFF -DENABLE_ZSTD=OFF ..
+    ninja
 
 # Windows runners are still beta, at least technically:
 # https://docs.gitlab.com/ee/user/gitlab_com/index.html#windows-shared-runners-beta
