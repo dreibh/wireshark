@@ -4,6 +4,7 @@
 /* Include this before everything else, for various large-file definitions */
 #include "config.h"
 #include <wireshark.h>
+#include <ui/exit_codes.h>
 }
 
 /*
@@ -99,10 +100,9 @@ DIAG_OFF_FLEX
 
 %}
 
-hexdigit [0-9A-Fa-f]
 directive ^#TEXT2PCAP.*\r?\n
 comment ^[\t ]*#.*\r?\n
-byte [0-9A-Fa-f][0-9A-Fa-f][ \t]
+byte [0-9A-Fa-f][0-9A-Fa-f][ \t]?
 byte_eol [0-9A-Fa-f][0-9A-Fa-f]\r?\n
 offset [0-9A-Fa-f]+[: \t]
 offset_eol [0-9A-Fa-f]+\r?\n
@@ -138,7 +138,7 @@ text_import_scan(FILE *input_file)
     yyscan_t scanner;
 
     if (text_import_lex_init(&scanner) != 0)
-        return errno;
+        return INIT_FAILED;
 
     text_import_set_in(input_file, scanner);
 

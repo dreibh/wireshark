@@ -122,8 +122,10 @@
 #include <wsutil/crc32.h>
 #include <epan/in_cksum.h>
 
+#include <wsutil/report_message.h>
 #include <wsutil/exported_pdu_tlvs.h>
 
+#include <wsutil/nstime.h>
 #ifndef HAVE_STRPTIME
 # include "wsutil/strptime.h"
 #endif
@@ -194,6 +196,11 @@ static guint32 hdr_data_chunk_ppid = 0;
 static gboolean hdr_export_pdu = FALSE;
 static const gchar* hdr_export_pdu_payload = NULL;
 
+/* Hex+ASCII text dump identification, to handle an edge case where
+ * the ASCII representation contains patterns that look like bytes. */
+static gboolean identify_ascii = FALSE;
+static guint8* pkt_lnstart;
+
 static gboolean has_direction = FALSE;
 static guint32 direction = PACK_FLAGS_RECEPTION_TYPE_UNSPECIFIED;
 static gboolean has_seqno = FALSE;
@@ -212,10 +219,15 @@ static void start_new_packet(gboolean);
 static guint8 packet_preamble[PACKET_PREAMBLE_MAX_LEN+1];
 static int packet_preamble_len = 0;
 
+/* Number of packets read and written */
+static guint32 num_packets_read    = 0;
+static guint32 num_packets_written = 0;
+
 /* Time code of packet, derived from packet_preamble */
-static time_t ts_sec = 0;
-static guint32 ts_nsec = 0;
+static time_t   ts_sec = 0;
+static guint32  ts_nsec = 0;
 static const char *ts_fmt = NULL;
+static gboolean ts_fmt_iso = FALSE;
 static struct tm timecode_default;
 /* The time delta to add to packets without a valid time code.
  * This can be no smaller than the time resolution of the dump
@@ -225,6 +237,8 @@ static struct tm timecode_default;
  */
 static guint32 ts_tick = 1000;
 
+static const char *input_filename;
+static const char *output_filename;
 static wtap_dumper* wdh;
 
 /* HDR_ETH Offset base to parse */
@@ -488,8 +502,12 @@ write_current_packet(gboolean cont)
             prefix_length += (int)sizeof(HDR_IP);
             ip_length = prefix_length + curr_offset + ((hdr_data_chunk) ? number_of_padding_bytes(curr_offset) : 0);
         } else if (hdr_ipv6) {
-            prefix_length += (int)sizeof(HDR_IPv6);
             ip_length = prefix_length + curr_offset + ((hdr_data_chunk) ? number_of_padding_bytes(curr_offset) : 0);
+            /* IPv6 payload length field does not include the header itself.
+             * It does include extension headers, but we don't put any
+             * (if we later do fragments, that would change.)
+             */
+            prefix_length += (int)sizeof(HDR_IPv6);
         }
         if (hdr_ethernet) { prefix_length += (int)sizeof(HDR_ETHERNET); }
 
@@ -700,42 +718,35 @@ write_current_packet(gboolean cont)
         HDR_TCP.seq_num = g_ntohl(HDR_TCP.seq_num) + curr_offset;
         HDR_TCP.seq_num = g_htonl(HDR_TCP.seq_num);
 
-        {
-            /* Write the packet */
-            wtap_rec rec;
-            int err;
-            gchar *err_info;
+        /* Write the packet */
+        wtap_rec rec;
+        int err;
+        gchar *err_info;
 
-            memset(&rec, 0, sizeof rec);
+        memset(&rec, 0, sizeof rec);
 
-            rec.rec_type = REC_TYPE_PACKET;
-            rec.block = wtap_block_create(WTAP_BLOCK_PACKET);
-            rec.ts.secs = ts_sec;
-            rec.ts.nsecs = ts_nsec;
-            rec.rec_header.packet_header.caplen = rec.rec_header.packet_header.len = prefix_length + curr_offset + eth_trailer_length;
-            rec.rec_header.packet_header.pkt_encap = wtap_encap_type;
-            rec.presence_flags = WTAP_HAS_CAP_LEN|WTAP_HAS_INTERFACE_ID|WTAP_HAS_TS;
-            if (has_direction) {
-                wtap_block_add_uint32_option(rec.block, OPT_PKT_FLAGS, direction);
-            }
-            if (has_seqno) {
-                wtap_block_add_uint64_option(rec.block, OPT_PKT_PACKETID, seqno);
-            }
-
-            /* XXX - report errors! */
-            if (!wtap_dump(wdh, &rec, packet_buf, &err, &err_info)) {
-                switch (err) {
-
-                case WTAP_ERR_UNWRITABLE_REC_DATA:
-                    g_free(err_info);
-                    break;
-
-                default:
-                    break;
-                }
-            }
-            wtap_block_unref(rec.block);
+        rec.rec_type = REC_TYPE_PACKET;
+        rec.block = wtap_block_create(WTAP_BLOCK_PACKET);
+        rec.ts.secs = ts_sec;
+        rec.ts.nsecs = ts_nsec;
+        rec.rec_header.packet_header.caplen = rec.rec_header.packet_header.len = prefix_length + curr_offset + eth_trailer_length;
+        rec.rec_header.packet_header.pkt_encap = wtap_encap_type;
+        rec.presence_flags = WTAP_HAS_CAP_LEN|WTAP_HAS_INTERFACE_ID|WTAP_HAS_TS;
+        if (has_direction) {
+            wtap_block_add_uint32_option(rec.block, OPT_PKT_FLAGS, direction);
         }
+        if (has_seqno) {
+            wtap_block_add_uint64_option(rec.block, OPT_PKT_PACKETID, seqno);
+        }
+
+        if (!wtap_dump(wdh, &rec, packet_buf, &err, &err_info)) {
+            report_cfile_write_failure(input_filename, output_filename,
+                               err, err_info, num_packets_read,
+                               wtap_dump_file_type_subtype(wdh));
+            /* XXX: Return failure */
+        }
+        wtap_block_unref(rec.block);
+        num_packets_written++;
     }
 
     packet_start += curr_offset;
@@ -982,6 +993,7 @@ void parse_data(guchar* start_field, guchar* end_field, enum data_encoding encod
           default:
             return;
         }
+        num_packets_read++;
         while (1) {
             parse_plain_data(&start_field, end_field, &dest, dest_end, table, NULL);
             curr_offset = (int) (dest - packet_buf);
@@ -1043,76 +1055,85 @@ _parse_time(const guchar* start_field, const guchar* end_field, const gchar* _fo
     int  i;
 
     (void) g_strlcpy(field, start_field, MIN(end_field - start_field + 1, PARSE_BUF));
-    (void) g_strlcpy(format, _format, PARSE_BUF);
-
-    /*
-     * Initialize to today localtime, just in case not all fields
-     * of the date and time are specified.
-     */
-    timecode = timecode_default;
-    cursor = &field[0];
-
-    /*
-     * %f is for fractions of seconds not supported by strptime
-     * BTW: what is this function name? is this some russian joke?
-     */
-    subsecs_fmt = g_strrstr(format, "%f");
-    if (subsecs_fmt) {
-        *subsecs_fmt = 0;
-    }
-
-    cursor = strptime(cursor, format, &timecode);
-
-    if (cursor == NULL) {
-        return FALSE;
-    }
-
-    if (subsecs_fmt != NULL) {
-        /*
-         * Parse subsecs and any following format
-         */
-        nsec_buf = (guint) strtol(cursor, &p, 10);
-        if (p == cursor) {
+    if (ts_fmt_iso) {
+        nstime_t ts_iso;
+        if (!iso8601_to_nstime(&ts_iso, field, ISO8601_DATETIME_AUTO)) {
             return FALSE;
         }
+        *sec = ts_iso.secs;
+        *nsec = ts_iso.nsecs;
+    } else {
+        (void) g_strlcpy(format, _format, PARSE_BUF);
 
-        subseclen = (int) (p - cursor);
-        cursor = p;
-        cursor = strptime(cursor, subsecs_fmt + 2, &timecode);
+        /*
+         * Initialize to today localtime, just in case not all fields
+         * of the date and time are specified.
+         */
+        timecode = timecode_default;
+        cursor = &field[0];
+
+        /*
+         * %f is for fractions of seconds not supported by strptime
+         * BTW: what is this function name? is this some russian joke?
+         */
+        subsecs_fmt = g_strrstr(format, "%f");
+        if (subsecs_fmt) {
+            *subsecs_fmt = 0;
+        }
+
+        cursor = strptime(cursor, format, &timecode);
+
         if (cursor == NULL) {
             return FALSE;
         }
-    }
 
-    if (subseclen > 0) {
-        /*
-         * Convert that number to a number
-         * of nanoseconds; if it's N digits
-         * long, it's in units of 10^(-N) seconds,
-         * so, to convert it to units of
-         * 10^-9 seconds, we multiply by
-         * 10^(9-N).
-         */
-        if (subseclen > SUBSEC_PREC) {
+        if (subsecs_fmt != NULL) {
             /*
-             * *More* than 9 digits; 9-N is
-             * negative, so we divide by
-             * 10^(N-9).
+             * Parse subsecs and any following format
              */
-            for (i = subseclen - SUBSEC_PREC; i != 0; i--)
-                nsec_buf /= 10;
-        } else if (subseclen < SUBSEC_PREC) {
-            for (i = SUBSEC_PREC - subseclen; i != 0; i--)
-                nsec_buf *= 10;
+            nsec_buf = (guint) strtol(cursor, &p, 10);
+            if (p == cursor) {
+                return FALSE;
+            }
+
+            subseclen = (int) (p - cursor);
+            cursor = p;
+            cursor = strptime(cursor, subsecs_fmt + 2, &timecode);
+            if (cursor == NULL) {
+                return FALSE;
+            }
         }
-    }
 
-    if ( -1 == (sec_buf = mktime(&timecode)) ) {
-        return FALSE;
-    }
+        if (subseclen > 0) {
+            /*
+             * Convert that number to a number
+             * of nanoseconds; if it's N digits
+             * long, it's in units of 10^(-N) seconds,
+             * so, to convert it to units of
+             * 10^-9 seconds, we multiply by
+             * 10^(9-N).
+             */
+            if (subseclen > SUBSEC_PREC) {
+                /*
+                 * *More* than 9 digits; 9-N is
+                 * negative, so we divide by
+                 * 10^(N-9).
+                 */
+                for (i = subseclen - SUBSEC_PREC; i != 0; i--)
+                    nsec_buf /= 10;
+            } else if (subseclen < SUBSEC_PREC) {
+                for (i = SUBSEC_PREC - subseclen; i != 0; i--)
+                    nsec_buf *= 10;
+            }
+        }
 
-    *sec = sec_buf;
-    *nsec = nsec_buf;
+        if ( -1 == (sec_buf = mktime(&timecode)) ) {
+            return FALSE;
+        }
+
+        *sec = sec_buf;
+        *nsec = nsec_buf;
+    }
 
     debug_printf(3, "parsed time %s Format(%s), time(%u), subsecs(%u)\n", field, _format, (guint32)*sec, (guint32)*nsec);
 
@@ -1206,6 +1227,7 @@ start_new_packet(gboolean cont)
 
     /* Write out the current packet, if required */
     write_current_packet(cont);
+    num_packets_read++;
 
     /* Ensure we parse the packet preamble as it may contain the time */
     /* THIS IMPLIES A STATE TRANSITION OUTSIDE THE STATE MACHINE */
@@ -1229,6 +1251,13 @@ void
 parse_token (token_t token, char *str)
 {
     guint32 num;
+    /* Variables for the hex+ASCII identification / lookback */
+    int     by_eol;
+    int	    rollback = 0;
+    int     line_size;
+    int     i;
+    char   *s2;
+    char    tmp_str[3];
 
     /*
      * This is implemented as a simple state machine of five states.
@@ -1262,6 +1291,7 @@ parse_token (token_t token, char *str)
                 /* New packet starts here */
                 start_new_packet(FALSE);
                 state = READ_OFFSET;
+                pkt_lnstart = packet_buf + num;
             }
             break;
         case T_BYTE:
@@ -1269,6 +1299,7 @@ parse_token (token_t token, char *str)
                 start_new_packet(FALSE);
                 write_byte(str);
                 state = READ_BYTE;
+                pkt_lnstart = packet_buf;
             }
             break;
         case T_EOF:
@@ -1316,13 +1347,16 @@ parse_token (token_t token, char *str)
                     write_current_packet(FALSE);
                     state = INIT;
                 }
-            } else
+            } else {
                 state = READ_OFFSET;
+            }
+            pkt_lnstart = packet_buf + num;
             break;
         case T_BYTE:
             if (offset_base == 0) {
                 write_byte(str);
                 state = READ_BYTE;
+                pkt_lnstart = packet_buf;
             }
             break;
         case T_EOF:
@@ -1367,10 +1401,60 @@ parse_token (token_t token, char *str)
         case T_TEXT:
         case T_DIRECTIVE:
         case T_OFFSET:
-            state = READ_TEXT;
-            break;
         case T_EOL:
-            state = START_OF_LINE;
+            by_eol = 0;
+            state = READ_TEXT;
+            if (token == T_EOL) {
+                by_eol = 1;
+                state = START_OF_LINE;
+            }
+            if (identify_ascii) {
+                /* Here a line of pkt bytes reading is finished
+                   compare the ascii and hex to avoid such situation:
+                   "61 62 20 ab ", when ab is ascii dump then it should
+                   not be treat as byte */
+                rollback = 0;
+                /* s2 is the ASCII string, s1 is the HEX string, e.g, when
+                   s2 = "ab ", s1 = "616220"
+                   we should find out the largest tail of s1 matches the head
+                   of s2, it means the matched part in tail is the ASCII dump
+                   of the head byte. These matched should be rollback */
+                line_size = curr_offset-(int)(pkt_lnstart-packet_buf);
+                s2 = (char*)g_malloc((line_size+1)/4+1);
+                /* gather the possible pattern */
+                for (i = 0; i < (line_size+1)/4; i++) {
+                    tmp_str[0] = pkt_lnstart[i*3];
+                    tmp_str[1] = pkt_lnstart[i*3+1];
+                    tmp_str[2] = '\0';
+                    /* it is a valid convertable string */
+                    if (!g_ascii_isxdigit(tmp_str[0]) || !g_ascii_isxdigit(tmp_str[1])) {
+                        break;
+                    }
+                    s2[i] = (char)strtoul(tmp_str, (char **)NULL, 16);
+                    rollback++;
+                    /* the 3rd entry is not a delimiter, so the possible byte pattern will not shown */
+                    if (!(pkt_lnstart[i*3+2] == ' ')) {
+                        if (by_eol != 1)
+                            rollback--;
+                        break;
+                    }
+                }
+                /* If packet line start contains possible byte pattern, the line end
+                   should contain the matched pattern if the user open the -a flag.
+                   The packet will be possible invalid if the byte pattern cannot find
+                   a matched one in the line of packet buffer.*/
+                if (rollback > 0) {
+                    if (strncmp(pkt_lnstart+line_size-rollback, s2, rollback) == 0) {
+                        unwrite_bytes(rollback);
+                    }
+                    /* Not matched. This line contains invalid packet bytes, so
+                       discard the whole line */
+                    else {
+                        unwrite_bytes(line_size);
+                    }
+                }
+                g_free(s2);
+            }
             break;
         case T_EOF:
             write_current_packet(FALSE);
@@ -1480,10 +1564,15 @@ text_import(const text_import_info_t *info)
     if (info->timestamp_format)
     {
         ts_fmt = info->timestamp_format;
+        if (!strcmp(ts_fmt, "ISO")) {
+            ts_fmt_iso = TRUE;
+        }
     }
 
     wtap_encap_type = info->encapsulation;
 
+    input_filename = info->import_text_filename;
+    output_filename = info->output_filename;
     wdh = info->wdh;
 
     /* XXX: It would be good to know the time precision of the file,
@@ -1574,11 +1663,19 @@ text_import(const text_import_info_t *info)
     }
 
     max_offset = info->max_frame_length;
+    identify_ascii = info->identify_ascii;
 
     if (info->mode == TEXT_IMPORT_HEXDUMP) {
         ret = text_import_scan(info->hexdump.import_text_FILE);
+        if (ret == INIT_FAILED) {
+            report_failure("Can't initialize scanner: %s", g_strerror(errno));
+        }
     } else if (info->mode == TEXT_IMPORT_REGEX) {
         ret = text_import_regex(info);
+        if (ret > 0) {
+            num_packets_read = ret;
+            ret = 0;
+        }
     } else {
         ret = -1;
     }
