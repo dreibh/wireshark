@@ -23,6 +23,7 @@
 
 #include "file.h"
 #include "wsutil/file_util.h"
+#include "wsutil/inet_addr.h"
 #include "wsutil/time_util.h"
 #include "wsutil/tempfile.h"
 #include "wsutil/filesystem.h"
@@ -60,6 +61,8 @@ ImportTextDialog::ImportTextDialog(QWidget *parent) :
     re_has_time_(false),
     ether_type_ok_(true),
     proto_ok_(true),
+    source_addr_ok_(true),
+    dest_addr_ok_(true),
     source_port_ok_(true),
     dest_port_ok_(true),
     tag_ok_(true),
@@ -216,6 +219,7 @@ void ImportTextDialog::applyDialogSettings()
         ti_ui_->noOffsetButton->setChecked(true);
     }
     ti_ui_->directionIndicationCheckBox->setChecked(settings["hexdump.hasDirection"].toBool());
+    ti_ui_->asciiIdentificationCheckBox->setChecked(settings["hexdump.identifyAscii"].toBool());
 
     // Regular Expression
     ti_ui_->regexTextEdit->setText(settings["regex.format"].toString());
@@ -257,8 +261,11 @@ void ImportTextDialog::applyDialogSettings()
         ti_ui_->noDummyButton->setChecked(true);
     }
 
+    ti_ui_->ipv6CheckBox->setChecked(settings["ipv6"].toBool());
     ti_ui_->ethertypeLineEdit->setText(settings["ethertype"].toString());
     ti_ui_->protocolLineEdit->setText(settings["ipProtocol"].toString());
+    ti_ui_->sourceAddressLineEdit->setText(settings["sourceAddress"].toString());
+    ti_ui_->destinationAddressLineEdit->setText(settings["destinationAddress"].toString());
     ti_ui_->sourcePortLineEdit->setText(settings["sourcePort"].toString());
     ti_ui_->destinationPortLineEdit->setText(settings["destinationPort"].toString());
     ti_ui_->tagLineEdit->setText(settings["sctpTag"].toString());
@@ -300,6 +307,7 @@ void ImportTextDialog::storeDialogSettings()
         settings["hexdump.offsets"] = "none";
     }
     settings["hexdump.hasDirection"] = ti_ui_->directionIndicationCheckBox->isChecked();
+    settings["hexdump.identifyAscii"] = ti_ui_->asciiIdentificationCheckBox->isChecked();
 
     // Regular Expression
     settings["regex.format"] = ti_ui_->regexTextEdit->toPlainText();
@@ -354,8 +362,11 @@ void ImportTextDialog::storeDialogSettings()
         settings["dummyHeader"] = "none";
     }
 
+    settings["ipv6"] = ti_ui_->ipv6CheckBox->isChecked();
     settings["ethertype"] = ti_ui_->ethertypeLineEdit->text();
     settings["ipProtocol"] = ti_ui_->protocolLineEdit->text();
+    settings["sourceAddress"] = ti_ui_->sourceAddressLineEdit->text();
+    settings["destinationAddress"] = ti_ui_->destinationAddressLineEdit->text();
     settings["sourcePort"] = ti_ui_->sourcePortLineEdit->text();
     settings["destinationPort"] = ti_ui_->destinationPortLineEdit->text();
     settings["sctpTag"] = ti_ui_->tagLineEdit->text();
@@ -524,7 +535,8 @@ int ImportTextDialog::exec() {
 void ImportTextDialog::updateImportButtonState()
 {
     if (file_ok_ && timestamp_format_ok_ && ether_type_ok_ &&
-        proto_ok_ && source_port_ok_ && dest_port_ok_ &&
+        proto_ok_ && source_addr_ok_ && dest_addr_ok_ &&
+        source_port_ok_ && dest_port_ok_ &&
         tag_ok_ && ppi_ok_ && payload_ok_ && max_len_ok_ &&
         (
             (
@@ -654,6 +666,7 @@ void ImportTextDialog::on_modeTabWidget_currentChanged(int index) {
         import_info_.mode = TEXT_IMPORT_HEXDUMP;
         memset(&import_info_.hexdump, 0, sizeof(import_info_.hexdump));
         on_directionIndicationCheckBox_toggled(ti_ui_->directionIndicationCheckBox->isChecked());
+        on_asciiIdentificationCheckBox_toggled(ti_ui_->asciiIdentificationCheckBox->isChecked());
         enableFieldWidgets(false, true);
         break;
       case 1:
@@ -682,6 +695,11 @@ void ImportTextDialog::on_noOffsetButton_toggled(bool checked)
 void ImportTextDialog::on_directionIndicationCheckBox_toggled(bool checked)
 {
     import_info_.hexdump.has_direction = checked;
+}
+
+void ImportTextDialog::on_asciiIdentificationCheckBox_toggled(bool checked)
+{
+    import_info_.hexdump.identify_ascii = checked;
 }
 
 /*******************************************************************************
@@ -774,6 +792,7 @@ void ImportTextDialog::on_dirOutIndicationLineEdit_textChanged(const QString &ou
 void ImportTextDialog::enableHeaderWidgets(bool enable_ethernet_buttons, bool enable_export_pdu_buttons) {
     bool ethertype = false;
     bool ipv4_proto = false;
+    bool ip_address = false;
     bool port = false;
     bool sctp_tag = false;
     bool sctp_ppi = false;
@@ -785,12 +804,15 @@ void ImportTextDialog::enableHeaderWidgets(bool enable_ethernet_buttons, bool en
             on_ethertypeLineEdit_textChanged(ti_ui_->ethertypeLineEdit->text());
         } else if (ti_ui_->ipv4Button->isChecked()) {
             ipv4_proto = true;
+            ip_address = true;
             on_protocolLineEdit_textChanged(ti_ui_->protocolLineEdit->text());
         } else if (ti_ui_->udpButton->isChecked() || ti_ui_->tcpButton->isChecked()) {
+            ip_address = true;
             port = true;
             on_sourcePortLineEdit_textChanged(ti_ui_->sourcePortLineEdit->text());
             on_destinationPortLineEdit_textChanged(ti_ui_->destinationPortLineEdit->text());
         } else if (ti_ui_->sctpButton->isChecked()) {
+            ip_address = true;
             port = true;
             sctp_tag = true;
             on_sourcePortLineEdit_textChanged(ti_ui_->sourcePortLineEdit->text());
@@ -798,6 +820,7 @@ void ImportTextDialog::enableHeaderWidgets(bool enable_ethernet_buttons, bool en
             on_tagLineEdit_textChanged(ti_ui_->tagLineEdit->text());
         }
         if (ti_ui_->sctpDataButton->isChecked()) {
+            ip_address = true;
             port = true;
             sctp_ppi = true;
             on_sourcePortLineEdit_textChanged(ti_ui_->sourcePortLineEdit->text());
@@ -823,6 +846,11 @@ void ImportTextDialog::enableHeaderWidgets(bool enable_ethernet_buttons, bool en
     ti_ui_->ethertypeLineEdit->setEnabled(ethertype);
     ti_ui_->protocolLabel->setEnabled(ipv4_proto);
     ti_ui_->protocolLineEdit->setEnabled(ipv4_proto);
+    ti_ui_->ipv6CheckBox->setEnabled(ip_address);
+    ti_ui_->sourceAddressLabel->setEnabled(ip_address);
+    ti_ui_->sourceAddressLineEdit->setEnabled(ip_address);
+    ti_ui_->destinationAddressLabel->setEnabled(ip_address);
+    ti_ui_->destinationAddressLineEdit->setEnabled(ip_address);
     ti_ui_->sourcePortLabel->setEnabled(port);
     ti_ui_->sourcePortLineEdit->setEnabled(port);
     ti_ui_->destinationPortLabel->setEnabled(port);
@@ -870,6 +898,13 @@ void ImportTextDialog::on_ethernetButton_toggled(bool checked)
 void ImportTextDialog::on_ipv4Button_toggled(bool checked)
 {
     on_noDummyButton_toggled(checked);
+}
+
+void ImportTextDialog::on_ipv6CheckBox_toggled(bool checked)
+{
+    import_info_.ipv6 = checked;
+    on_sourceAddressLineEdit_textChanged(ti_ui_->sourceAddressLineEdit->text());
+    on_destinationAddressLineEdit_textChanged(ti_ui_->destinationAddressLineEdit->text());
 }
 
 void ImportTextDialog::on_udpButton_toggled(bool checked)
@@ -924,6 +959,52 @@ void ImportTextDialog::check_line_edit(SyntaxLineEdit *le, bool &ok_enabled, con
     updateImportButtonState();
 }
 
+void ImportTextDialog::checkAddress(SyntaxLineEdit *le, bool &ok_enabled, const QString &addr_str, ws_in4_addr *val_ptr) {
+    bool conv_ok;
+    SyntaxLineEdit::SyntaxState syntax_state = SyntaxLineEdit::Empty;
+
+    if (!le || !val_ptr)
+        return;
+
+    ok_enabled = true;
+    if (addr_str.length() < 1) {
+        *val_ptr = 0;
+    } else {
+        conv_ok = ws_inet_pton4(addr_str.toLocal8Bit().data(), (ws_in4_addr*)val_ptr);
+        if (conv_ok) {
+            syntax_state= SyntaxLineEdit::Valid;
+        } else {
+            syntax_state = SyntaxLineEdit::Invalid;
+            ok_enabled = false;
+        }
+    }
+    le->setSyntaxState(syntax_state);
+    updateImportButtonState();
+}
+
+void ImportTextDialog::checkIPv6Address(SyntaxLineEdit *le, bool &ok_enabled, const QString &addr_str, ws_in6_addr *val_ptr) {
+    bool conv_ok;
+    SyntaxLineEdit::SyntaxState syntax_state = SyntaxLineEdit::Empty;
+
+    if (!le || !val_ptr)
+        return;
+
+    ok_enabled = true;
+    if (addr_str.length() < 1) {
+        *val_ptr = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}};
+    } else {
+        conv_ok = ws_inet_pton6(addr_str.toLocal8Bit().data(), (ws_in6_addr*)val_ptr);
+        if (conv_ok) {
+            syntax_state= SyntaxLineEdit::Valid;
+        } else {
+            syntax_state = SyntaxLineEdit::Invalid;
+            ok_enabled = false;
+        }
+    }
+    le->setSyntaxState(syntax_state);
+    updateImportButtonState();
+}
+
 void ImportTextDialog::on_ethertypeLineEdit_textChanged(const QString &ethertype_str)
 {
     check_line_edit(ti_ui_->ethertypeLineEdit, ether_type_ok_, ethertype_str, 16, 0xffff, true, &import_info_.pid);
@@ -932,6 +1013,24 @@ void ImportTextDialog::on_ethertypeLineEdit_textChanged(const QString &ethertype
 void ImportTextDialog::on_protocolLineEdit_textChanged(const QString &protocol_str)
 {
     check_line_edit(ti_ui_->protocolLineEdit, proto_ok_, protocol_str, 10, 0xff, true, &import_info_.protocol);
+}
+
+void ImportTextDialog::on_sourceAddressLineEdit_textChanged(const QString &source_addr_str)
+{
+    if (ti_ui_->ipv6CheckBox->isChecked()) {
+        checkIPv6Address(ti_ui_->sourceAddressLineEdit, source_addr_ok_, source_addr_str, &import_info_.ip_src_addr.ipv6);
+    } else {
+        checkAddress(ti_ui_->sourceAddressLineEdit, source_addr_ok_, source_addr_str, &import_info_.ip_src_addr.ipv4);
+    }
+}
+
+void ImportTextDialog::on_destinationAddressLineEdit_textChanged(const QString &destination_addr_str)
+{
+    if (ti_ui_->ipv6CheckBox->isChecked()) {
+        checkIPv6Address(ti_ui_->destinationAddressLineEdit, dest_addr_ok_, destination_addr_str, &import_info_.ip_dest_addr.ipv6);
+    } else {
+        checkAddress(ti_ui_->destinationAddressLineEdit, dest_addr_ok_, destination_addr_str, &import_info_.ip_dest_addr.ipv4);
+    }
 }
 
 void ImportTextDialog::on_sourcePortLineEdit_textChanged(const QString &source_port_str)

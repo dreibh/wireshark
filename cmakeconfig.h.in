@@ -64,9 +64,6 @@
 /* Define if you have the 'dlget' function. */
 #cmakedefine HAVE_DLGET 1
 
-/* Define if you have the 'getexecname' function. */
-#cmakedefine HAVE_GETEXECNAME 1
-
 /* Define to 1 if you have the <grp.h> header file. */
 #cmakedefine HAVE_GRP_H 1
 
@@ -258,6 +255,9 @@
 
 /* Define if you have the 'strcasestr' function. */
 #cmakedefine HAVE_STRCASESTR 1
+
+/* Define if you have the 'strerrorname_np' function. */
+#cmakedefine HAVE_STRERRORNAME_NP 1
 
 /* Define if you have the 'vasprintf' function. */
 #cmakedefine HAVE_VASPRINTF 1
