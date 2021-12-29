@@ -12,8 +12,66 @@
 #include <glib.h>
 #include <wsutil/utf8_entities.h>
 
-#include "str_util.h"
+#include "inet_addr.h"
 
+static void test_inet_pton4_test1(void)
+{
+    const char *str;
+    bool ok;
+    ws_in4_addr result, expect;
+
+    str = "198.51.100.200";
+    expect = g_htonl(3325256904);
+    ok = ws_inet_pton4(str, &result);
+    g_assert_true(ok);
+    g_assert_cmpint(result, ==, expect);
+}
+
+static void test_inet_ntop4_test1(void)
+{
+    char result[WS_INET_ADDRSTRLEN];
+    const char *expect, *ptr;
+    ws_in4_addr addr;
+
+    addr = g_htonl(3325256904);
+    expect = "198.51.100.200";
+    ptr = ws_inet_ntop4(&addr, result, sizeof(result));
+    g_assert_true(ptr == result);
+    g_assert_cmpstr(result, ==, expect);
+}
+
+struct in6_test {
+    char str[WS_INET6_ADDRSTRLEN];
+    ws_in6_addr addr;
+};
+
+static struct in6_test in6_test1 = {
+    .str = "2001:db8:ffaa:ddbb:1199:2288:3377:1",
+    .addr = { { 0x20, 0x01, 0x0d, 0xb8, 0xff, 0xaa, 0xdd, 0xbb,
+                0x11, 0x99, 0x22, 0x88, 0x33, 0x77, 0x00, 0x01 } }
+};
+
+static void test_inet_pton6_test1(void)
+{
+    bool ok;
+    ws_in6_addr result;
+
+    ok = ws_inet_pton6(in6_test1.str, &result);
+    g_assert_true(ok);
+    g_assert_cmpmem(&result, sizeof(result), &in6_test1.addr, sizeof(in6_test1.addr));
+}
+
+static void test_inet_ntop6_test1(void)
+{
+    char result[WS_INET6_ADDRSTRLEN];
+    const char *ptr;
+
+    ptr = ws_inet_ntop6(&in6_test1.addr, result, sizeof(result));
+    g_assert_true(ptr == result);
+    g_assert_cmpstr(result, ==, in6_test1.str);
+}
+
+#include "str_util.h"
 
 static void test_format_size(void)
 {
@@ -438,6 +496,71 @@ static void test_int64_to_str_back(void)
     g_assert_cmpstr(str, ==, "9223372036854775807");
 }
 
+#include "nstime.h"
+#include "time_util.h"
+
+void test_nstime_from_iso8601(void)
+{
+    char *str;
+    size_t chars;
+    nstime_t result, expect;
+    struct tm tm1;
+
+    memset(&tm1, 0, sizeof(tm1));
+    tm1.tm_sec = 25;
+    tm1.tm_min = 45;
+    tm1.tm_hour = 23;
+    tm1.tm_mday = 30;
+    tm1.tm_mon = 4; /* starts at zero */
+    tm1.tm_year = 2013 - 1900;
+    tm1.tm_isdst = -1;
+
+    /* Date and time with local time. */
+    str = "2013-05-30T23:45:25.349124";
+    expect.secs = mktime(&tm1);
+    expect.nsecs = 349124 * 1000;
+    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_cmpuint(chars, ==, strlen(str));
+    g_assert_cmpint(result.secs, ==, expect.secs);
+    g_assert_cmpint(result.nsecs, ==, expect.nsecs);
+
+    /* Date and time with UTC timezone. */
+    str = "2013-05-30T23:45:25.349124Z";
+    expect.secs = mktime_utc(&tm1);
+    expect.nsecs = 349124 * 1000;
+    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_cmpuint(chars, ==, strlen(str));
+    g_assert_cmpint(result.secs, ==, expect.secs);
+    g_assert_cmpint(result.nsecs, ==, expect.nsecs);
+
+    /* Date and time with timezone offset with separator. */
+    str = "2013-05-30T23:45:25.349124+01:00";
+    expect.secs = mktime_utc(&tm1) + 1 * 60 * 60;
+    expect.nsecs = 349124 * 1000;
+    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_cmpuint(chars, ==, strlen(str));
+    g_assert_cmpint(result.secs, ==, expect.secs);
+    g_assert_cmpint(result.nsecs, ==, expect.nsecs);
+
+    /* Date and time with timezone offset without separator. */
+    str = "2013-05-30T23:45:25.349124+0100";
+    expect.secs = mktime_utc(&tm1) + 1 * 60 * 60;
+    expect.nsecs = 349124 * 1000;
+    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_cmpuint(chars, ==, strlen(str));
+    g_assert_cmpint(result.secs, ==, expect.secs);
+    g_assert_cmpint(result.nsecs, ==, expect.nsecs);
+
+    /* Date and time with timezone offset with hours only. */
+    str = "2013-05-30T23:45:25.349124+01";
+    expect.secs = mktime_utc(&tm1) + 1 * 60 * 60;
+    expect.nsecs = 349124 * 1000;
+    chars = iso8601_to_nstime(&result, str, ISO8601_DATETIME_AUTO);
+    g_assert_cmpuint(chars, ==, strlen(str));
+    g_assert_cmpint(result.secs, ==, expect.secs);
+    g_assert_cmpint(result.nsecs, ==, expect.nsecs);
+}
+
 #include "ws_getopt.h"
 
 #define ARGV_MAX 31
@@ -617,6 +740,11 @@ int main(int argc, char **argv)
 
     g_test_init(&argc, &argv, NULL);
 
+    g_test_add_func("/inet_addr/inet_pton4", test_inet_pton4_test1);
+    g_test_add_func("/inet_addr/inet_ntop4", test_inet_ntop4_test1);
+    g_test_add_func("/inet_addr/inet_pton6", test_inet_pton6_test1);
+    g_test_add_func("/inet_addr/inet_ntop6", test_inet_ntop6_test1);
+
     g_test_add_func("/str_util/format_size", test_format_size);
     g_test_add_func("/str_util/escape_string", test_escape_string);
     g_test_add_func("/str_util/strconcat", test_strconcat);
@@ -640,6 +768,8 @@ int main(int argc, char **argv)
     g_test_add_func("/to_str/uint64_to_str_back_len", test_uint64_to_str_back_len);
     g_test_add_func("/to_str/int_to_str_back", test_int_to_str_back);
     g_test_add_func("/to_str/int64_to_str_back", test_int64_to_str_back);
+
+    g_test_add_func("/nstime/from_iso8601", test_nstime_from_iso8601);
 
     g_test_add_func("/ws_getopt/basic1", test_getopt_long_basic1);
     g_test_add_func("/ws_getopt/basic2", test_getopt_long_basic2);

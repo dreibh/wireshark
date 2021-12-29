@@ -7,28 +7,14 @@
  */
 
 #include "config.h"
+#include "ftypes-int.h"
 
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-/*
- * Just make sure we include the prototype for strptime as well
- * (needed for glibc 2.2) but make sure we do this only if not
- * yet defined.
- */
-#ifndef __USE_XOPEN
-#  define __USE_XOPEN
-#endif
-
-#include <time.h>
-
-#include <ftypes-int.h>
 #include <epan/to_str.h>
-
-#ifndef HAVE_STRPTIME
-#include "wsutil/strptime.h"
-#endif
+#include <wsutil/time_util.h>
 
 
 static int
@@ -204,20 +190,20 @@ absolute_val_from_string(fvalue_t *fv, const char *s, gchar **err_msg)
 
 	/* Do not use '%b' to parse the month name, it is locale-specific. */
 	if (s[3] == ' ' && parse_month_name(s, &tm.tm_mon))
-		curptr = strptime(s + 4, "%d, %Y %H:%M:%S", &tm);
+		curptr = ws_strptime(s + 4, "%d, %Y %H:%M:%S", &tm);
 
 	if (curptr == NULL)
-		curptr = strptime(s,"%Y-%m-%dT%H:%M:%S", &tm);
+		curptr = ws_strptime(s,"%Y-%m-%dT%H:%M:%S", &tm);
 	if (curptr == NULL)
-		curptr = strptime(s,"%Y-%m-%d %H:%M:%S", &tm);
+		curptr = ws_strptime(s,"%Y-%m-%d %H:%M:%S", &tm);
 	if (curptr == NULL) {
 		has_seconds = FALSE;
-		curptr = strptime(s,"%Y-%m-%d %H:%M", &tm);
+		curptr = ws_strptime(s,"%Y-%m-%d %H:%M", &tm);
 	}
 	if (curptr == NULL)
-		curptr = strptime(s,"%Y-%m-%d %H", &tm);
+		curptr = ws_strptime(s,"%Y-%m-%d %H", &tm);
 	if (curptr == NULL)
-		curptr = strptime(s,"%Y-%m-%d", &tm);
+		curptr = ws_strptime(s,"%Y-%m-%d", &tm);
 	if (curptr == NULL)
 		goto fail;
 	tm.tm_isdst = -1;	/* let the computer figure out if it's DST */
@@ -292,20 +278,19 @@ value_get(fvalue_t *fv)
 static char *
 absolute_val_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int field_display)
 {
-	gchar *rep;
-	char *buf;
+	char *rep;
 
 	switch (rtype) {
 		case FTREPR_DISPLAY:
-			rep = abs_time_to_str(scope, &fv->value.time,
-					(absolute_time_display_e)field_display, TRUE);
+			rep = abs_time_to_str_ex(scope, &fv->value.time,
+					field_display, ABS_TIME_TO_STR_SHOW_ZONE);
 			break;
 
 		case FTREPR_DFILTER:
 			/* absolute_val_from_string only accepts local time,
 			 * with no time zone, so match that. */
-			rep = abs_time_to_str(scope, &fv->value.time,
-					ABSOLUTE_TIME_LOCAL, FALSE);
+			rep = abs_time_to_str_ex(scope, &fv->value.time,
+					ABSOLUTE_TIME_LOCAL, ABS_TIME_TO_STR_ADD_DQUOTES);
 			break;
 
 		default:
@@ -313,14 +298,7 @@ absolute_val_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype
 			break;
 	}
 
-	if (rtype == FTREPR_DFILTER) {
-		buf = wmem_strdup_printf(scope, "\"%s\"", rep);
-		wmem_free(scope, rep);
-	}
-	else {
-		buf = rep;
-	}
-	return buf;
+	return rep;
 }
 
 static char *

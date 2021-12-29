@@ -63,16 +63,20 @@ enum text_import_mode {
 
 typedef struct
 {
+    int debug;
+
     /* Input info */
     // TODO: add const, as this way string constants can't be used
     // BUT: the other way clang-check complaines when you free them
     /* const */ char *import_text_filename;
+    char *output_filename;
     enum text_import_mode mode;
 
     struct {
         FILE *import_text_FILE;
         enum offset_type offset_type;
         gboolean has_direction;
+        gboolean identify_ascii;
     } hexdump;
     struct {
         GMappedFile* import_text_GMappedFile;
@@ -84,6 +88,7 @@ typedef struct
     const char* timestamp_format;
 
     /* Import info */
+    /* Wiretap encapsulation type; see wiretap/wtap.h for details */
     guint encapsulation;
     wtap_dumper* wdh;
 
@@ -107,9 +112,13 @@ typedef struct
     /* const */ gchar* payload;
 
     guint max_frame_length;
+
+    /* Output info */
+    guint num_packets_read;
+    guint num_packets_written;
 } text_import_info_t;
 
-int text_import(const text_import_info_t *info);
+int text_import(text_import_info_t * const info);
 
 #ifdef __cplusplus
 }

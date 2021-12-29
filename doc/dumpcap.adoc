@@ -282,7 +282,7 @@ interface or pipe specified before it with *-i*.
 --ifname> <name>::
 +
 --
-Use __name__ as the name in the capture file for the the interface or
+Use __name__ as the name in the capture file for the interface or
 pipe specified before it with *-i*.
 --
 
@@ -508,6 +508,8 @@ set, no time stamp types are listed.
 --
 Change the interface's timestamp method.
 --
+
+include::diagnostic-options.adoc[]
 
 == CAPTURE FILTER SYNTAX
 

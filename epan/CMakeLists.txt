@@ -92,7 +92,6 @@ set(LIBWIRESHARK_PUBLIC_HEADERS
 	frame_data.h
 	frame_data_sequence.h
 	funnel.h
-	garrayfix.h
 	#geoip_db.h
 	golay.h
 	guid-utils.h
@@ -152,7 +151,6 @@ set(LIBWIRESHARK_PUBLIC_HEADERS
 	timestamp.h
 	timestats.h
 	tfs.h
-	time_fmt.h
 	to_str.h
 	tvbparse.h
 	tvbuff.h
