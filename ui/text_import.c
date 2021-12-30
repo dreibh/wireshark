@@ -108,11 +108,6 @@
 /* maximum time precision we can handle = 10^(-SUBSEC_PREC) */
 #define SUBSEC_PREC 9
 
-#define debug_printf(level,  ...) \
-    if (info_p->debug >= (level)) { \
-        printf(__VA_ARGS__); \
-    }
-
 static text_import_info_t *info_p;
 
 /* Dummy Ethernet header */
@@ -171,6 +166,7 @@ static guint64 seqno = 0;
 static guint8 *packet_buf;
 static guint32 curr_offset = 0;
 static guint32 packet_start = 0;
+static gboolean offset_warned = FALSE;
 static import_status_t start_new_packet(gboolean);
 
 /* This buffer contains strings present before the packet offset 0 */
@@ -219,7 +215,8 @@ static const char *token_str[] = {"",
                            "Offset",
                            "Directive",
                            "Text",
-                           "End-of-line"
+                           "End-of-line",
+                           "End-of-file"
 };
 
 /* ----- Skeleton Packet Headers --------------------------------------------------*/
@@ -246,14 +243,15 @@ typedef struct {
     guint32 dest_addr;
 } hdr_ip_t;
 
+/* Default IPv4 addresses if none supplied */
 #if G_BYTE_ORDER == G_BIG_ENDIAN
 #define IP_ID  0x1234
-#define IP_SRC 0x01010101
-#define IP_DST 0x02020202
+#define IP_SRC 0x0a010101
+#define IP_DST 0x0a020202
 #else
 #define IP_ID  0x3412
-#define IP_SRC 0x01010101
-#define IP_DST 0x02020202
+#define IP_SRC 0x0101010a
+#define IP_DST 0x0202020a
 #endif
 
 static hdr_ip_t HDR_IP =
@@ -419,14 +417,14 @@ unwrite_bytes (guint32 nbytes)
 static guint32
 number_of_padding_bytes (guint32 length)
 {
-  guint32 remainder;
+    guint32 remainder;
 
-  remainder = length % 4;
+    remainder = length % 4;
 
-  if (remainder == 0)
-    return 0;
-  else
-    return 4 - remainder;
+    if (remainder == 0)
+        return 0;
+    else
+        return 4 - remainder;
 }
 
 /*----------------------------------------------------------------------
@@ -752,12 +750,12 @@ append_to_preamble(char *str)
             /* XXX: Just keep going? This is probably not a problem, as above.*/
         (void) g_strlcpy(&packet_preamble[packet_preamble_len], str, PACKET_PREAMBLE_MAX_LEN);
         packet_preamble_len += (int) toklen;
-        if (info_p->debug >= 2) {
+        if (ws_log_get_level() >= LOG_LEVEL_NOISY) {
             char *c;
             char xs[PACKET_PREAMBLE_MAX_LEN];
             (void) g_strlcpy(xs, packet_preamble, PACKET_PREAMBLE_MAX_LEN);
             while ((c = strchr(xs, '\r')) != NULL) *c=' ';
-            fprintf (stderr, "[[append_to_preamble: \"%s\"]]", xs);
+            ws_noisy("[[append_to_preamble: \"%s\"]]", xs);
         }
     }
 
@@ -905,16 +903,19 @@ static int parse_plain_data(guchar** src, const guchar* src_end,
      */
     guint64 val;
     int j;
-    debug_printf(3, "parsing data: ");
+    if (ws_log_get_level() >= LOG_LEVEL_NOISY) {
+        char* debug_str = wmem_strndup(NULL, *src, (src_end-*src));
+        ws_noisy("parsing data: %s", debug_str);
+        wmem_free(NULL, debug_str);
+    }
     while (*src < src_end && *dest + encoding->bytes_per_unit <= dest_end) {
-        debug_printf(3, "%c", **src);
         val = encoding->table[**src];
         switch (val) {
           case INVALID_VALUE:
             status = -1;
             goto remainder;
           case WHITESPACE_VALUE:
-            fprintf(stderr, "Unexpected char %d in data\n", **src);
+            ws_warning("Unexpected char %d in data", **src);
             break;
           default:
             c_val = c_val << encoding->bits_per_char | val;
@@ -938,7 +939,6 @@ remainder:
         **dest = (gchar) (c_val >> (j - 8));
         *dest += 1;
     }
-    debug_printf(3, "\n");
     return status * units;
 }
 
@@ -981,7 +981,7 @@ void parse_data(guchar* start_field, guchar* end_field, enum data_encoding encod
         }
         break;
       default:
-          fprintf(stderr, "not implemented/invalid encoding type\n");
+          ws_critical("not implemented/invalid encoding type");
           return;
     }
 }
@@ -1111,7 +1111,7 @@ _parse_time(const guchar* start_field, const guchar* end_field, const gchar* _fo
         *nsec = nsec_buf;
     }
 
-    debug_printf(3, "parsed time %s Format(%s), time(%u), subsecs(%u)\n", field, _format, (guint32)*sec, (guint32)*nsec);
+    ws_noisy("parsed time %s Format(%s), time(%u), subsecs(%u)\n", field, _format, (guint32)*sec, (guint32)*nsec);
 
     return TRUE;
 }
@@ -1180,11 +1180,11 @@ parse_preamble (void)
             ws_warning("Time conversion (%s) failed for %s on input packet %d.", info_p->timestamp_format, packet_preamble, info_p->num_packets_read);
         }
     }
-    if (info_p->debug >= 2) {
+    if (ws_log_get_level() >= LOG_LEVEL_NOISY) {
         char *c;
         while ((c = strchr(packet_preamble, '\r')) != NULL) *c=' ';
-        fprintf(stderr, "[[parse_preamble: \"%s\"]]\n", packet_preamble);
-        fprintf(stderr, "Format(%s), time(%u), subsecs(%u)\n", info_p->timestamp_format, (guint32)ts_sec, ts_nsec);
+        ws_noisy("[[parse_preamble: \"%s\"]]", packet_preamble);
+        ws_noisy("Format(%s), time(%u), subsecs(%u)", info_p->timestamp_format, (guint32)ts_sec, ts_nsec);
     }
 
     if (!got_time) {
@@ -1207,8 +1207,7 @@ parse_preamble (void)
 static import_status_t
 start_new_packet(gboolean cont)
 {
-    if (info_p->debug>=1)
-        fprintf(stderr, "Start new packet (cont = %s).\n", cont ? "TRUE" : "FALSE");
+    ws_debug("Start new packet (cont = %s).", cont ? "TRUE" : "FALSE");
 
     /* Write out the current packet, if required */
     if (write_current_packet(cont) != IMPORT_SUCCESS)
@@ -1226,10 +1225,12 @@ start_new_packet(gboolean cont)
  * Process a directive
  */
 static void
-process_directive (char *str)
+process_directive (char *str _U_)
 {
-    fprintf(stderr, "\n--- Directive [%s] currently unsupported ---\n", str+10);
-
+    char **tokens;
+    tokens = g_strsplit_set(str+10, "\r\n", 2);
+    ws_message("--- Directive [%s] currently unsupported ---", tokens[0]);
+    g_strfreev(tokens);
 }
 
 /*----------------------------------------------------------------------
@@ -1246,6 +1247,7 @@ parse_token(token_t token, char *str)
     int     i;
     char   *s2;
     char    tmp_str[3];
+    char  **tokens;
 
     /*
      * This is implemented as a simple state machine of five states.
@@ -1253,12 +1255,12 @@ parse_token(token_t token, char *str)
      * scanner. The code should be self_documenting.
      */
 
-    if (info_p->debug>=2) {
+    if (ws_log_get_level() >= LOG_LEVEL_NOISY) {
         /* Sanitize - remove all '\r' */
         char *c;
         if (str!=NULL) { while ((c = strchr(str, '\r')) != NULL) *c=' '; }
 
-        fprintf(stderr, "(%s, %s \"%s\") -> (",
+        ws_noisy("(%s, %s \"%s\") -> (",
                 state_str[state], token_str[token], str ? str : "");
     }
 
@@ -1280,7 +1282,13 @@ parse_token(token_t token, char *str)
                  * odd like a time format with no separators. That wouldn't
                  * work in a mode with an offset, but give it a try.
                  */
-                report_warning("Running in no offset mode but read offset (%s) at start of file, treating as preamble", str);
+                tokens = g_strsplit_set(str, ": \t\r\n", 2);
+                if (!offset_warned) {
+                    report_warning("Running in no offset mode but read offset (%s) at start of file, treating as preamble", tokens[0]);
+                    offset_warned = TRUE;
+                }
+                ws_warning("Running in no offset mode but read offset (%s) at start of file, treating as preamble", tokens[0]);
+                g_strfreev(tokens);
                 break;
             }
             if (parse_num(str, TRUE, &num) != IMPORT_SUCCESS)
@@ -1327,7 +1335,13 @@ parse_token(token_t token, char *str)
                  * the preamble in this mode (we only do one packet.)
                  * Use a generic warning message to suppress the many
                  * expected duplicates. */
-                report_warning("Running in no offset mode but read offset, ignoring");
+                tokens = g_strsplit_set(str, ": \t\r\n", 2);
+                if (!offset_warned) {
+                    report_warning("Running in no offset mode but read offset (%s) at start of line, ignoring", tokens[0]);
+                    offset_warned = TRUE;
+                }
+                ws_warning("Running in no offset mode but read offset (%s) at start of line, ignoring.", tokens[0]);
+                g_strfreev(tokens);
                 break;
             }
             if (parse_num(str, TRUE, &num) != IMPORT_SUCCESS)
@@ -1353,8 +1367,7 @@ parse_token(token_t token, char *str)
                     state = READ_OFFSET;
                 } else {
                     /* Bad offset; switch to INIT state */
-                    if (info_p->debug>=1)
-                        fprintf(stderr, "Inconsistent offset. Expecting %0X, got %0X. Ignoring rest of packet\n",
+                    ws_message("Inconsistent offset. Expecting %0X, got %0X. Ignoring rest of packet",
                                 curr_offset, num);
                     if (write_current_packet(FALSE) != IMPORT_SUCCESS)
                         return IMPORT_FAILURE;
@@ -1503,8 +1516,7 @@ parse_token(token_t token, char *str)
         return IMPORT_FAILURE;
     }
 
-    if (info_p->debug>=2)
-        fprintf(stderr, ", %s)\n", state_str[state]);
+    ws_noisy(", %s)", state_str[state]);
 
     return IMPORT_SUCCESS;
 }
@@ -1590,6 +1602,7 @@ text_import(text_import_info_t * const info)
     }
 
     ts_fmt_iso = !(g_strcmp0(info->timestamp_format, "ISO"));
+    offset_warned = FALSE;
     timecode_warned = FALSE;
 
     /* XXX: It would be good to know the time precision of the file,

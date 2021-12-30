@@ -985,9 +985,13 @@ dissect_kafka_compact_array(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
     gint32 len;
 
     len = tvb_get_varint(tvb, offset, FT_VARINT_MAX_LEN, &count, ENC_VARINT_PROTOBUF);
-    if (len == 0 || count > 0x7ffffffL) {
+    if (len == 0) {
+        expert_add_info(pinfo, proto_tree_get_parent(tree), &ei_kafka_bad_varint);
+        return tvb_captured_length(tvb);
+    }
+    if(count > 0x7ffffffL) {
         expert_add_info(pinfo, proto_tree_get_parent(tree), &ei_kafka_bad_array_length);
-        return offset;
+        return offset + len;
     }
     offset += len;
 
@@ -1036,7 +1040,7 @@ dissect_kafka_varint(proto_tree *tree, int hf_item, tvbuff_t *tvb, packet_info *
 
     if (len == 0) {
         expert_add_info(pinfo, pi, &ei_kafka_bad_varint);
-        return offset;
+        return tvb_captured_length(tvb);
     }
 
     if (p_value != NULL) *p_value = value;
@@ -1057,7 +1061,7 @@ dissect_kafka_varuint(proto_tree *tree, int hf_item, tvbuff_t *tvb, packet_info 
 
     if (len == 0) {
         expert_add_info(pinfo, pi, &ei_kafka_bad_varint);
-        return offset;
+        return tvb_captured_length(tvb);
     }
 
     if (p_value != NULL) *p_value = value;
@@ -1142,7 +1146,7 @@ dissect_kafka_compact_string(proto_tree *tree, int hf_item, tvbuff_t *tvb, packe
         if (p_length) {
             *p_length = 0;
         }
-        return offset;
+        return tvb_captured_length(tvb);
     }
 
     if (length == 0) {
@@ -1239,7 +1243,7 @@ dissect_kafka_compact_bytes(proto_tree *tree, int hf_item, tvbuff_t *tvb, packet
         if (p_length) {
             *p_length = 0;
         }
-        return offset;
+        return tvb_captured_length(tvb);
     }
 
     if (length == 0) {
@@ -1293,9 +1297,8 @@ dissect_kafka_timestamp_delta(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree 
 
     pi = proto_tree_add_time(tree, hf_item, tvb, offset, len, &nstime);
     if (len == 0) {
-        //This will probably lead to a malformed packet, but it's better than not incrementing the offset
-        len = FT_VARINT_MAX_LEN;
         expert_add_info(pinfo, pi, &ei_kafka_bad_varint);
+        return tvb_captured_length(tvb);
     }
 
     return offset+len;
@@ -1313,7 +1316,7 @@ dissect_kafka_offset_delta(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
     pi = proto_tree_add_int64(tree, hf_item, tvb, offset, len, base_offset+val);
     if (len == 0) {
         expert_add_info(pinfo, pi, &ei_kafka_bad_varint);
-        return offset;
+        return tvb_captured_length(tvb);
     }
 
     return offset+len;
@@ -1362,7 +1365,7 @@ dissect_kafka_timestamp(proto_tree *tree, int hf_item, tvbuff_t *tvb, packet_inf
 /*
  * Function: dissect_kafka_string_new
  * ---------------------------------------------------
- * Decodes UTF string using the new length encoding. This format is used
+ * Decodes UTF-8 string using the new length encoding. This format is used
  * in the v2 message encoding, where the string length is encoded using
  * ProtoBuf's ZigZag integer format (inspired by Avro). The main advantage
  * of ZigZag is very compact representation for small numbers.
@@ -1372,13 +1375,12 @@ dissect_kafka_timestamp(proto_tree *tree, int hf_item, tvbuff_t *tvb, packet_inf
  * tree: protocol information tree to append the item
  * hf_item: protocol information item descriptor index
  * offset: offset in the buffer where the string length is to be found
- * p_string_offset: pointer to a variable to store the actual string begin
- * p_string_length: pointer to a variable to store the actual string length
+ * p_string_val: pointer to a variable to store a pointer o the string value
  *
- * returns: pointer to the next field in the message
+ * returns: offset of the next field in the message
  */
 static int
-dissect_kafka_string_new(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int hf_item, int offset, int *p_string_offset, int *p_string_length)
+dissect_kafka_string_new(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int hf_item, int offset, char **p_display_string)
 {
     gint64 val;
     guint len;
@@ -1389,14 +1391,20 @@ dissect_kafka_string_new(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree
     if (len == 0) {
         pi = proto_tree_add_string_format_value(tree, hf_item, tvb, offset+len, 0, NULL, "<INVALID>");
         expert_add_info(pinfo, pi, &ei_kafka_bad_varint);
-        len = 5;
-        val = 0;
+        if (p_display_string != NULL)
+            *p_display_string = "<INVALID>";
+        return tvb_captured_length(tvb);
     } else if (val > 0) {
         // there is payload available, possibly with 0 octets
-        proto_tree_add_item(tree, hf_item, tvb, offset+len, (gint)val, ENC_UTF_8);
+        if (p_display_string != NULL)
+            proto_tree_add_item_ret_display_string(tree, hf_item, tvb, offset+len, (gint)val, ENC_UTF_8, wmem_packet_scope(), p_display_string);
+        else
+            proto_tree_add_item(tree, hf_item, tvb, offset+len, (gint)val, ENC_UTF_8);
     } else if (val == 0) {
         // there is empty payload (0 octets)
         proto_tree_add_string_format_value(tree, hf_item, tvb, offset+len, 0, NULL, "<EMPTY>");
+        if (p_display_string != NULL)
+            *p_display_string = "<EMPTY>";
     } else if (val == -1) {
         // there is no payload (null)
         proto_tree_add_string_format_value(tree, hf_item, tvb, offset+len, 0, NULL, "<NULL>");
@@ -1405,13 +1413,8 @@ dissect_kafka_string_new(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree
         pi = proto_tree_add_string_format_value(tree, hf_item, tvb, offset+len, 0, NULL, "<INVALID>");
         expert_add_info(pinfo, pi, &ei_kafka_bad_string_length);
         val = 0;
-    }
-
-    if (p_string_offset != NULL) {
-        *p_string_offset = offset+len;
-    }
-    if (p_string_length != NULL) {
-        *p_string_length = (gint)val;
+        if (p_display_string != NULL)
+            *p_display_string = "<INVALID>";
     }
 
     return offset+len+(gint)val;
@@ -1450,8 +1453,7 @@ dissect_kafka_bytes_new(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     if (len == 0) {
         pi = proto_tree_add_bytes_format_value(tree, hf_item, tvb, offset+len, 0, NULL, "<INVALID>");
         expert_add_info(pinfo, pi, &ei_kafka_bad_varint);
-        len = 5;
-        val = 0;
+        return tvb_captured_length(tvb);
     } else if (val > 0) {
         // there is payload available, possibly with 0 octets
         proto_tree_add_item(tree, hf_item, tvb, offset+len, (gint)val, ENC_NA);
@@ -1496,16 +1498,15 @@ dissect_kafka_record_headers_header(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 {
     proto_item *header_ti;
     proto_tree *subtree;
-
-    int key_off, key_len;
+    char *key_display_string;
 
     subtree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_kafka_record_headers_header, &header_ti, "Header");
 
-    offset = dissect_kafka_string_new(tvb, pinfo, subtree, hf_kafka_record_header_key, offset, &key_off, &key_len);
+    offset = dissect_kafka_string_new(tvb, pinfo, subtree, hf_kafka_record_header_key, offset, &key_display_string);
     offset = dissect_kafka_bytes_new(tvb, pinfo, subtree, hf_kafka_record_header_value, offset, NULL, NULL, p_invalid);
 
-    proto_item_append_text(header_ti, " (Key: %s)",
-                           tvb_get_string_enc(pinfo->pool, tvb, key_off, key_len, ENC_UTF_8));
+    proto_item_append_text(header_ti, " (Key: %s)", key_display_string);
+
     proto_item_set_end(header_ti, tvb, offset);
 
     return offset;
@@ -1526,7 +1527,7 @@ dissect_kafka_record_headers(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
     len = tvb_get_varint(tvb, offset, 5, &count, ENC_VARINT_ZIGZAG);
     if (len == 0) {
         expert_add_info(pinfo, record_headers_ti, &ei_kafka_bad_varint);
-        len = 5;
+        return tvb_captured_length(tvb);
     } else if (count < -1) { // -1 means null array
         expert_add_info(pinfo, record_headers_ti, &ei_kafka_bad_array_length);
     }
@@ -1560,7 +1561,7 @@ dissect_kafka_record(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, in
     len = tvb_get_varint(tvb, offset, 5, &size, ENC_VARINT_ZIGZAG);
     if (len == 0) {
         expert_add_info(pinfo, record_ti, &ei_kafka_bad_varint);
-        return offset;
+        return tvb_captured_length(tvb);
     } else if (size < 6) {
         expert_add_info(pinfo, record_ti, &ei_kafka_bad_record_length);
         return offset + len;
@@ -2155,7 +2156,7 @@ dissect_kafka_tagged_field_data(proto_tree *tree, int hf_item, tvbuff_t *tvb, pa
         if (p_len) {
             *p_len = 0;
         }
-        return offset;
+        return tvb_captured_length(tvb);
     }
 
     offset = offset + len + (gint)length;
@@ -2202,8 +2203,8 @@ dissect_kafka_tagged_fields(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     len = tvb_get_varint(tvb, offset, FT_VARINT_MAX_LEN, &count, ENC_VARINT_PROTOBUF);
     if (len == 0) {
         expert_add_info(pinfo, subtree, &ei_kafka_bad_varint);
-        return offset;
-    }
+        return tvb_captured_length(tvb);
+   }
     offset += len;
 
     /*
