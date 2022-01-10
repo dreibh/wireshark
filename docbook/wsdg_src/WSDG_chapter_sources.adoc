@@ -154,12 +154,12 @@ The `--shallow-since=1year` option limits cloned commits to the last 1 year.
 The `--depth=5000` option limits cloned commits to the last 5000.
 --
 
-[[ChSrcBuildbot]]
+[[ChSrcDevelopmentSnapshots]]
 ==== Development Snapshots
 
 This method is useful for one-off builds or if Git is inaccessible (e.g. because of a restrictive firewall).
 
-The Buildbot server automatically generates development packages, including source packages.
+Our GitLab CI configuration automatically generates development packages, including source packages.
 They can be found at {wireshark-snapshots-url}.
 Packages are available for recent commits in the master branch and each release branch.
 
@@ -179,12 +179,10 @@ you might want to keep them in sync with the sources at the upstream
 Git repository.
 
 [TIP]
-.Take a look at the Buildbot first
+.Take a look at the recent commits first
 ====
-As development evolves, the Wireshark sources are compilable
-most of the time -- but not always. You should take a look at
-{wireshark-buildbot-url} before fetching or pulling to make
-sure the builds are in good shape.
+As development evolves, the Wireshark sources are compilable most of the time -- but not always.
+You should take a look at {wireshark-commits-url} before fetching or pulling to make sure the builds are in good shape.
 ====
 
 [[ChSrcAnonUpdate]]
@@ -389,6 +387,11 @@ For the steps below we’ll pretend that your username is “henry.perry”.
 . Make sure you have a clone of the main repository as described in <<ChSrcGit>>.
 
 . Create your own personal fork of the Wireshark project by https://docs.gitlab.com/ee/user/project/repository/forking_workflow.html[pressing the “Fork” button] at {wireshark-gitlab-project-url}.
++
+--
+WARNING: If you want to make merge requests you must keep your fork public.
+Making it private will disassociate it from the main Wireshark repository.
+--
 
 . Add a remote for your personal repository.
 The main repository remote is named “upstream”, so we'll name this one “downstream”.

@@ -72,7 +72,7 @@ LZIP_VERSION=1.21
 # The version of libPCRE on Catalina is insufficient to build glib due to
 # missing UTF-8 support.
 #
-PCRE_VERSION=8.44
+PCRE_VERSION=8.45
 
 #
 # CMake is required to do the build - and to build some of the
@@ -188,7 +188,7 @@ CARES_VERSION=1.15.0
 LIBSSH_VERSION=0.9.0
 # mmdbresolve
 MAXMINDDB_VERSION=1.4.3
-NGHTTP2_VERSION=1.39.2
+NGHTTP2_VERSION=1.46.0
 SPANDSP_VERSION=0.0.6
 SPEEXDSP_VERSION=1.2.0
 if [ "$SPANDSP_VERSION" ]; then
@@ -366,7 +366,7 @@ uninstall_lzip() {
 install_pcre() {
     if [ "$PCRE_VERSION" -a ! -f pcre-$PCRE_VERSION-done ] ; then
         echo "Downloading, building, and installing pcre:"
-        [ -f pcre-$PCRE_VERSION.tar.bz2 ] || curl -L -O https://ftp.pcre.org/pub/pcre/pcre-$PCRE_VERSION.tar.bz2 || exit 1
+        [ -f pcre-$PCRE_VERSION.tar.bz2 ] || curl -L -O https://sourceforge.net/projects/pcre/files/pcre/$PCRE_VERSION/pcre-$PCRE_VERSION.tar.bz2 || exit 1
         $no_build && echo "Skipping installation" && return
         bzcat pcre-$PCRE_VERSION.tar.bz2 | tar xf - || exit 1
         cd pcre-$PCRE_VERSION
@@ -2013,7 +2013,7 @@ install_nghttp2() {
         $no_build && echo "Skipping installation" && return
         xzcat nghttp2-$NGHTTP2_VERSION.tar.xz | tar xf - || exit 1
         cd nghttp2-$NGHTTP2_VERSION
-        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure || exit 1
+        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure --enable-lib-only || exit 1
         make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
         cd ..

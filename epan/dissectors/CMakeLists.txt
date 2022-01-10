@@ -329,6 +329,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-diameter_3gpp.h
 	packet-diffserv-mpls-common.h
 	packet-disp.h
+	packet-dlt.h
 	packet-dns.h
 	packet-docsis-tlv.h
 	packet-doip.h
@@ -600,6 +601,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-uavcan-dsdl.h
 	packet-ubertooth.h
 	packet-udp.h
+	packet-uds.h
 	packet-umts_fp.h
 	packet-umts_mac.h
 	packet-umts_rlc.h
@@ -1007,6 +1009,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dvb-s2-bb.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dvb-s2-table.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dvb-sdt.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-dvb-sit.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dvb-tdt.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dvb-tot.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dvbci.c

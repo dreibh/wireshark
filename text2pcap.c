@@ -90,7 +90,6 @@
 #include <wsutil/ws_getopt.h>
 
 #include <errno.h>
-#include <assert.h>
 
 #include "text2pcap.h"
 
@@ -98,9 +97,6 @@
 #include "wiretap/pcap-encap.h"
 
 /*--- Options --------------------------------------------------------------------*/
-
-/* File format */
-static gboolean use_pcapng = FALSE;
 
 /* Be quiet */
 static gboolean quiet = FALSE;
@@ -150,15 +146,12 @@ static guint32 hdr_data_chunk_ppid = 0;
 /* Export PDU */
 static gboolean hdr_export_pdu = FALSE;
 
-static gboolean has_direction = FALSE;
-
 /*--- Local data -----------------------------------------------------------------*/
 
 /* This is where we store the packet currently being built */
 static guint32 max_offset = WTAP_MAX_PACKET_SIZE_STANDARD;
 
 /* Time code of packet, derived from packet_preamble */
-static char    *ts_fmt  = NULL;
 static int      ts_fmt_iso = 0;
 
 /* Input file */
@@ -198,16 +191,29 @@ print_usage (FILE *output)
             "                         used as the default for unspecified fields.\n"
             "  -D                     the text before the packet starts with an I or an O,\n"
             "                         indicating that the packet is inbound or outbound.\n"
-            "                         This is used when generating dummy headers.\n"
-            "                         The indication is only stored if the output format is pcapng.\n"
+            "                         This is used when generating dummy headers if the\n"
+            "                         output format supports it (e.g. pcapng).\n"
             "  -a                     enable ASCII text dump identification.\n"
             "                         The start of the ASCII text dump can be identified\n"
             "                         and excluded from the packet data, even if it looks\n"
             "                         like a HEX dump.\n"
             "                         NOTE: Do not enable it if the input file does not\n"
             "                         contain the ASCII text dump.\n"
+            "  -r <regex>             enable regex mode. Scan the input using <regex>, a Perl\n"
+            "                         compatible regular expression matching a single packet.\n"
+            "                         Named capturing subgroups are used to identify fields:\n"
+            "                         <data> (mand.), and <time>, <dir>, and <seqno> (opt.)\n"
+            "                         The time field format is taken from the -t option\n"
+            "                         Example: -r '^(?<dir>[<>])\\s(?<time>\\d+:\\d\\d:\\d\\d.\\d+)\\s(?<data>[0-9a-fA-F]+)$'\n"
+            "                         could match a file with lines like\n"
+            "                         > 0:00:00.265620 a130368b000000080060\n"
+            "                         < 0:00:00.295459 a2010800000000000000000800000000\n"
+            "  -b 2|8|16|64           encoding base (radix) of the packet data in regex mode\n"
+            "                         (def: 16: hexadecimal) No effect in hexdump mode.\n"
             "\n"
             "Output:\n"
+            "  -F <capture type>      set the output file type; default is pcap.\n"
+            "                         an empty \"-F\" option will list the file types.\n"
             "  -l <typenum>           link-layer type number; default is 1 (Ethernet).  See\n"
             "                         https://www.tcpdump.org/linktypes.html for a list of\n"
             "                         numbers.  Use this option if your dump is a complete\n"
@@ -287,6 +293,20 @@ set_hdr_ip_proto(guint8 ip_proto)
     hdr_ethernet = TRUE;
 }
 
+static void
+list_capture_types(void) {
+  GArray *writable_type_subtypes;
+
+  cmdarg_err("The available capture file types for the \"-F\" flag are:\n");
+  writable_type_subtypes = wtap_get_writable_file_types_subtypes(FT_SORT_BY_NAME);
+  for (guint i = 0; i < writable_type_subtypes->len; i++) {
+    int ft = g_array_index(writable_type_subtypes, int, i);
+    fprintf(stderr, "    %s - %s\n", wtap_file_type_subtype_name(ft),
+            wtap_file_type_subtype_description(ft));
+  }
+  g_array_free(writable_type_subtypes, TRUE);
+}
+
 /*----------------------------------------------------------------------
  * Parse CLI options
  */
@@ -304,30 +324,56 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
     const char *interface_name = NULL;
     /* Link-layer type; see https://www.tcpdump.org/linktypes.html for details */
     guint32 pcap_link_type = 1;   /* Default is LINKTYPE_ETHERNET */
-    int file_type_subtype;
+    int file_type_subtype = WTAP_FILE_TYPE_SUBTYPE_UNKNOWN;
     int err;
     char* err_info;
+    GError* gerror = NULL;
+    GRegex* regex = NULL;
 
+    info->mode = TEXT_IMPORT_HEXDUMP;
     info->hexdump.offset_type = OFFSET_HEX;
+    info->regex.encoding = ENCODING_PLAIN_HEX;
     info->payload = "data";
 
     /* Initialize the version information. */
     ws_init_version_info("Text2pcap (Wireshark)", NULL, NULL, NULL);
 
     /* Scan CLI parameters */
-    while ((c = ws_getopt_long(argc, argv, "aDhqe:i:l:m:nN:o:u:P:s:S:t:T:v4:6:", long_options, NULL)) != -1) {
+    while ((c = ws_getopt_long(argc, argv, "hqab:De:F:i:l:m:nN:o:u:P:r:s:S:t:T:v4:6:", long_options, NULL)) != -1) {
         switch (c) {
         case 'h':
             show_help_header("Generate a capture file from an ASCII hexdump of packets.");
             print_usage(stdout);
             exit(0);
             break;
-        case 'D': has_direction = TRUE; break;
         case 'q': quiet = TRUE; break;
+        case 'a': info->hexdump.identify_ascii = TRUE; break;
+        case 'D': info->hexdump.has_direction = TRUE; break;
         case 'l': pcap_link_type = (guint32)strtol(ws_optarg, NULL, 0); break;
         case 'm': max_offset = (guint32)strtol(ws_optarg, NULL, 0); break;
-        case 'n': use_pcapng = TRUE; break;
+        case 'n': file_type_subtype = wtap_pcapng_file_type_subtype(); break;
         case 'N': interface_name = ws_optarg; break;
+        case 'b':
+        {
+            guint8 radix;
+            if (!ws_strtou8(ws_optarg, NULL, &radix)) {
+                cmdarg_err("Bad argument for '-b': %s", ws_optarg);
+                print_usage(stderr);
+                return INVALID_OPTION;
+            }
+            switch (radix) {
+            case  2: info->regex.encoding = ENCODING_PLAIN_BIN; break;
+            case  8: info->regex.encoding = ENCODING_PLAIN_OCT; break;
+            case 16: info->regex.encoding = ENCODING_PLAIN_HEX; break;
+            case 64: info->regex.encoding = ENCODING_BASE64; break;
+            default:
+                cmdarg_err("Bad argument for '-b': %s", ws_optarg);
+                print_usage(stderr);
+                return INVALID_OPTION;
+            }
+            break;
+        }
+
         case 'o':
             if (ws_optarg[0] != 'h' && ws_optarg[0] != 'o' && ws_optarg[0] != 'd' && ws_optarg[0] != 'n') {
                 cmdarg_err("Bad argument for '-o': %s", ws_optarg);
@@ -341,11 +387,21 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
             case 'n': info->hexdump.offset_type = OFFSET_NONE; break;
             }
             break;
+
         case 'e':
             hdr_ethernet = TRUE;
             if (sscanf(ws_optarg, "%x", &hdr_ethernet_proto) < 1) {
                 cmdarg_err("Bad argument for '-e': %s", ws_optarg);
                 print_usage(stderr);
+                return INVALID_OPTION;
+            }
+            break;
+
+        case 'F':
+            file_type_subtype = wtap_name_to_file_type_subtype(ws_optarg);
+            if  (file_type_subtype < 0) {
+                cmdarg_err("\"%s\" isn't a valid capture file type", ws_optarg);
+                list_capture_types();
                 return INVALID_OPTION;
             }
             break;
@@ -366,6 +422,28 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
             hdr_export_pdu = TRUE;
             pcap_link_type = 252;
             info->payload = ws_optarg;
+            break;
+
+        case 'r':
+            info->mode = TEXT_IMPORT_REGEX;
+            if (regex != NULL) {
+                /* XXX: Used the option twice. Should we warn? */
+                g_regex_unref(regex);
+            }
+            regex = g_regex_new(ws_optarg, G_REGEX_DUPNAMES | G_REGEX_OPTIMIZE | G_REGEX_MULTILINE, G_REGEX_MATCH_NOTEMPTY, &gerror);
+            if (gerror) {
+                cmdarg_err("%s", gerror->message);
+                g_error_free(gerror);
+                print_usage(stderr);
+                return INVALID_OPTION;
+            } else {
+                if (g_regex_get_string_number(regex, "data") == -1) {
+                    cmdarg_err("Regex missing capturing group data (use (?<data>(...)) )");
+                    g_regex_unref(regex);
+                    print_usage(stderr);
+                    return INVALID_OPTION;
+                }
+            }
             break;
 
         case 's':
@@ -408,6 +486,7 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
 
             set_hdr_ip_proto(132);
             break;
+
         case 'S':
             hdr_sctp = TRUE;
             hdr_data_chunk = TRUE;
@@ -450,7 +529,7 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
             break;
 
         case 't':
-            ts_fmt = ws_optarg;
+            info->timestamp_format = ws_optarg;
             if (!strcmp(ws_optarg, "ISO"))
               ts_fmt_iso = 1;
             break;
@@ -507,10 +586,6 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
                 return INVALID_OPTION;
             }
             set_hdr_ip_proto(6);
-            break;
-
-        case 'a':
-            info->hexdump.identify_ascii = TRUE;
             break;
 
         case 'v':
@@ -579,6 +654,14 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
 
 
         case '?':
+            switch(ws_optopt) {
+            case 'F':
+                list_capture_types();
+                return INVALID_OPTION;
+                break;
+            }
+            /* FALLTHROUGH */
+
         default:
             print_usage(stderr);
             return INVALID_OPTION;
@@ -598,6 +681,20 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
     }
 
     /* Some validation */
+
+    if (info->mode == TEXT_IMPORT_REGEX) {
+        info->regex.format = regex;
+        /* need option for data encoding */
+        if (g_regex_get_string_number(regex, "dir") > -1) {
+            /* XXX: Add parameter(s?) to specify these? */
+            info->regex.in_indication = "iI<";
+            info->regex.out_indication = "oO>";
+        }
+        if (g_regex_get_string_number(regex, "time") > -1 && info->timestamp_format == NULL) {
+            cmdarg_err("Regex with <time> capturing group requires time format (-t)");
+            return INVALID_OPTION;
+        }
+    }
     if (pcap_link_type != 1 && hdr_ethernet) {
         cmdarg_err("Dummy headers (-e, -i, -u, -s, -S -T) cannot be specified with link type override (-l)");
         return INVALID_OPTION;
@@ -640,12 +737,36 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
 
     if (strcmp(argv[ws_optind], "-") != 0) {
         input_filename = argv[ws_optind];
-        input_file = ws_fopen(input_filename, "rb");
-        if (!input_file) {
-            open_failure_message(input_filename, errno, FALSE);
-            return OPEN_ERROR;
+        if (info->mode == TEXT_IMPORT_REGEX) {
+            info->regex.import_text_GMappedFile = g_mapped_file_new(input_filename, TRUE, &gerror);
+            if (gerror) {
+                cmdarg_err("%s", gerror->message);
+                g_error_free(gerror);
+                return OPEN_ERROR;
+            }
+        } else {
+            input_file = ws_fopen(input_filename, "rb");
+            if (!input_file) {
+                open_failure_message(input_filename, errno, FALSE);
+                return OPEN_ERROR;
+            }
         }
     } else {
+        if (info->mode == TEXT_IMPORT_REGEX) {
+            /* text_import_regex requires a memory mapped file, so this likely
+             * won't work, unless the user has redirected a file (not a FIFO)
+             * to stdin, though that's pretty silly and unnecessary.
+             * XXX: We could read until EOF, write it to a temp file, and then
+             * mmap that (ugh)?
+             */
+            info->regex.import_text_GMappedFile = g_mapped_file_new_from_fd(0, TRUE, &gerror);
+            if (gerror) {
+                cmdarg_err("%s", gerror->message);
+                cmdarg_err("regex import requires memory-mapped I/O and cannot be used with terminals or pipes");
+                g_error_free(gerror);
+                return INVALID_OPTION;
+            }
+        }
         input_filename = "Standard input";
         input_file = stdin;
     }
@@ -655,13 +776,14 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
     wtap_encap_type = wtap_pcap_encap_to_wtap_encap(pcap_link_type);
     params->encap = wtap_encap_type;
     params->snaplen = max_offset;
-    if (use_pcapng) {
-        params->tsprec = WTAP_TSPREC_NSEC;
-        file_type_subtype = wtap_pcapng_file_type_subtype();
-    } else {
-        params->tsprec = WTAP_TSPREC_USEC;
+    if (file_type_subtype == WTAP_FILE_TYPE_SUBTYPE_UNKNOWN) {
         file_type_subtype = wtap_pcap_file_type_subtype();
     }
+    /* Request nanosecond precision. Most file formats only support one time
+     * precision and ignore this parameter (and the related options in the
+     * generated IDB), but it affects pcapng.
+     */
+    params->tsprec = WTAP_TSPREC_NSEC;
     if ((ret = text_import_pre_open(params, file_type_subtype, input_filename, interface_name)) != EXIT_SUCCESS) {
         g_free(params->idb_inf);
         wtap_dump_params_cleanup(params);
@@ -686,12 +808,9 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
         return OPEN_ERROR;
     }
 
-    info->mode = TEXT_IMPORT_HEXDUMP;
     info->import_text_filename = input_filename;
     info->output_filename = output_filename;
     info->hexdump.import_text_FILE = input_file;
-    info->hexdump.has_direction = has_direction;
-    info->timestamp_format = ts_fmt;
 
     info->encapsulation = wtap_encap_type;
     info->wdh = wdh;
@@ -741,8 +860,7 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
     if (!quiet) {
         fprintf(stderr, "Input from: %s\n", input_filename);
         fprintf(stderr, "Output to: %s\n",  output_filename);
-        fprintf(stderr, "Output format: %s\n", use_pcapng ? "pcapng" : "pcap");
-
+        fprintf(stderr, "Output format: %s\n", wtap_file_type_subtype_name(file_type_subtype));
         if (hdr_ethernet) fprintf(stderr, "Generate dummy Ethernet header: Protocol: 0x%0X\n",
                                   hdr_ethernet_proto);
         if (hdr_ip) fprintf(stderr, "Generate dummy IP header: Protocol: %u\n",
@@ -825,8 +943,8 @@ main(int argc, char *argv[])
         goto clean_exit;
     }
 
-    assert(input_file != NULL);
-    assert(wdh != NULL);
+    ws_assert(input_file != NULL || info.regex.import_text_GMappedFile != NULL);
+    ws_assert(wdh != NULL);
 
     ret = text_import(&info);
 
@@ -842,6 +960,12 @@ main(int argc, char *argv[])
 clean_exit:
     if (input_file) {
         fclose(input_file);
+    }
+    if (info.regex.import_text_GMappedFile) {
+        g_mapped_file_unref(info.regex.import_text_GMappedFile);
+    }
+    if (info.regex.format) {
+        g_regex_unref(info.regex.format);
     }
     if (wdh) {
         int err;

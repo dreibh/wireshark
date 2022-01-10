@@ -288,6 +288,7 @@ void ImportTextDialog::applyDialogSettings()
         ti_ui_->dissectorComboBox->setCurrentText("data");
     }
 
+    ti_ui_->interfaceLineEdit->setText(settings["interfaceName"].toString());
     ti_ui_->maxLengthLineEdit->setText(settings["maxFrameLength"].toString());
 
     // Select mode tab last to enableFieldWidgets()
@@ -383,6 +384,7 @@ void ImportTextDialog::storeDialogSettings()
     settings["sctpPPI"] = ti_ui_->ppiLineEdit->text();
     settings["pduPayload"] = ti_ui_->dissectorComboBox->currentData().toString();
 
+    settings["interfaceName"] = ti_ui_->interfaceLineEdit->text();
     settings["maxFrameLength"] = ti_ui_->maxLengthLineEdit->text();
 
     saveSettingsFile();
@@ -491,7 +493,7 @@ int ImportTextDialog::exec() {
     wtap_dump_params_init(&params, NULL);
     params.encap = import_info_.encapsulation;
     params.snaplen = import_info_.max_frame_length;
-    params.tsprec = WTAP_TSPREC_USEC; /* XXX - support other precisions? */
+    params.tsprec = WTAP_TSPREC_NSEC; /* XXX - support other precisions? */
     /* Write a pcapng temporary file */
     file_type_subtype = wtap_pcapng_file_type_subtype();
     if (ti_ui_->interfaceLineEdit->text().length()) {

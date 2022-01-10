@@ -320,7 +320,7 @@ static gboolean need_timeout_workaround;
 static void
 dumpcap_log_writer(const char *domain, enum ws_log_level level,
                                    struct timespec timestamp,
-                                   const char *file, int line, const char *func,
+                                   const char *file, long line, const char *func,
                                    const char *user_format, va_list user_ap,
                                    void *user_data);
 
@@ -576,7 +576,7 @@ get_pcap_failure_secondary_error_message(cap_device_open_status open_status,
         return
             "In order to capture packets, Npcap or WinPcap must be installed. See\n"
             "\n"
-            "        https://nmap.org/npcap/\n"
+            "        https://npcap.com/\n"
             "\n"
             "for a downloadable version of Npcap and for instructions on how to\n"
             "install it.";
@@ -5588,7 +5588,7 @@ main(int argc, char *argv[])
 static void
 dumpcap_log_writer(const char *domain, enum ws_log_level level,
                                    struct timespec timestamp,
-                                   const char *file, int line, const char *func,
+                                   const char *file, long line, const char *func,
                                    const char *user_format, va_list user_ap,
                                    void *user_data _U_)
 {

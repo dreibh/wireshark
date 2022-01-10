@@ -25,6 +25,9 @@
 #include <inttypes.h>
 #include "epan/wscbor.h"
 
+void proto_register_bpsec(void);
+void proto_reg_handoff_bpsec(void);
+
 /// Glib logging "domain" name
 //static const char *LOG_DOMAIN = "bpsec";
 
@@ -196,11 +199,6 @@ guint bpsec_id_hash(gconstpointer key) {
 
 /** Dissect an ID-value pair within a context.
  *
- * @param dissector
- * @param typeid
- * @param tvb
- * @param pinfo
- * @param tree
  */
 static gint dissect_value(dissector_handle_t dissector, gint64 *typeid, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
     gint sublen = 0;
