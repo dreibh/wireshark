@@ -396,6 +396,7 @@ static int hf_http2_settings_max_concurrent_streams = -1;
 static int hf_http2_settings_initial_window_size = -1;
 static int hf_http2_settings_max_frame_size = -1;
 static int hf_http2_settings_max_header_list_size = -1;
+static int hf_http2_settings_extended_connect = -1;
 static int hf_http2_settings_unknown = -1;
 /* Push Promise */
 static int hf_http2_push_promise_r = -1;
@@ -474,6 +475,13 @@ static int hf_http2_headers_via = -1;
 static int hf_http2_headers_www_authenticate = -1;
 #endif
 /* Blocked */
+/* Origin */
+static int hf_http2_origin = -1;
+static int hf_http2_origin_origin_len = -1;
+static int hf_http2_origin_origin = -1;
+/* Priority Update */
+static int hf_http2_priority_update_stream_id = -1;
+static int hf_http2_priority_update_field_value = -1;
 
 /*
  * These values *should* be large enough to handle most use cases while
@@ -504,6 +512,7 @@ static gint ett_http2_settings = -1;
 static gint ett_http2_encoded_entity = -1;
 static gint ett_http2_body_fragment = -1;
 static gint ett_http2_body_fragments = -1;
+static gint ett_http2_origin = -1;
 
 #ifdef HAVE_NGHTTP2
 static const fragment_items http2_body_fragment_items = {
@@ -1154,32 +1163,36 @@ static reassembly_table http2_streaming_reassembly_table;
 #define MASK_HTTP2_PRIORITY     0X7FFFFFFF
 
 /* Header Type Code */
-#define HTTP2_DATA          0
-#define HTTP2_HEADERS       1
-#define HTTP2_PRIORITY      2
-#define HTTP2_RST_STREAM    3
-#define HTTP2_SETTINGS      4
-#define HTTP2_PUSH_PROMISE  5
-#define HTTP2_PING          6
-#define HTTP2_GOAWAY        7
-#define HTTP2_WINDOW_UPDATE 8
-#define HTTP2_CONTINUATION  9
-#define HTTP2_ALTSVC        0xA
-#define HTTP2_BLOCKED       0xB
+#define HTTP2_DATA              0
+#define HTTP2_HEADERS           1
+#define HTTP2_PRIORITY          2
+#define HTTP2_RST_STREAM        3
+#define HTTP2_SETTINGS          4
+#define HTTP2_PUSH_PROMISE      5
+#define HTTP2_PING              6
+#define HTTP2_GOAWAY            7
+#define HTTP2_WINDOW_UPDATE     8
+#define HTTP2_CONTINUATION      9
+#define HTTP2_ALTSVC            0xA
+#define HTTP2_BLOCKED           0xB
+#define HTTP2_ORIGIN            0xC
+#define HTTP2_PRIORITY_UPDATE   0x10
 
 static const value_string http2_type_vals[] = {
-    { HTTP2_DATA,           "DATA" },
-    { HTTP2_HEADERS,        "HEADERS" },
-    { HTTP2_PRIORITY,       "PRIORITY" },
-    { HTTP2_RST_STREAM,     "RST_STREAM" },
-    { HTTP2_SETTINGS,       "SETTINGS" },
-    { HTTP2_PUSH_PROMISE,   "PUSH_PROMISE" },
-    { HTTP2_PING,           "PING" },
-    { HTTP2_GOAWAY,         "GOAWAY" },
-    { HTTP2_WINDOW_UPDATE,  "WINDOW_UPDATE" },
-    { HTTP2_CONTINUATION,   "CONTINUATION" },
-    { HTTP2_ALTSVC,         "ALTSVC" },
-    { HTTP2_BLOCKED,        "BLOCKED" },
+    { HTTP2_DATA,            "DATA" },
+    { HTTP2_HEADERS,         "HEADERS" },
+    { HTTP2_PRIORITY,        "PRIORITY" },
+    { HTTP2_RST_STREAM,      "RST_STREAM" },
+    { HTTP2_SETTINGS,        "SETTINGS" },
+    { HTTP2_PUSH_PROMISE,    "PUSH_PROMISE" },
+    { HTTP2_PING,            "PING" },
+    { HTTP2_GOAWAY,          "GOAWAY" },
+    { HTTP2_WINDOW_UPDATE,   "WINDOW_UPDATE" },
+    { HTTP2_CONTINUATION,    "CONTINUATION" },
+    { HTTP2_ALTSVC,          "ALTSVC" },
+    { HTTP2_BLOCKED,         "BLOCKED" },
+    { HTTP2_ORIGIN,          "ORIGIN" },
+    { HTTP2_PRIORITY_UPDATE, "PRIORITY_UPDATE" },
     { 0, NULL }
 };
 
@@ -1271,6 +1284,7 @@ static const value_string http2_error_codes_vals[] = {
 #define HTTP2_SETTINGS_INITIAL_WINDOW_SIZE      4
 #define HTTP2_SETTINGS_MAX_FRAME_SIZE           5
 #define HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE     6
+#define HTTP2_SETTINGS_EXTENDED_CONNECT         8 /* RFC 8441 */
 
 static const value_string http2_settings_vals[] = {
     { HTTP2_SETTINGS_HEADER_TABLE_SIZE,      "Header table size" },
@@ -1279,6 +1293,7 @@ static const value_string http2_settings_vals[] = {
     { HTTP2_SETTINGS_INITIAL_WINDOW_SIZE,    "Initial Windows size" },
     { HTTP2_SETTINGS_MAX_FRAME_SIZE,         "Max frame size" },
     { HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE,   "Max header list size" },
+    { HTTP2_SETTINGS_EXTENDED_CONNECT,       "Extended CONNECT" },
     { 0, NULL }
 };
 
@@ -2506,6 +2521,8 @@ dissect_http2_header_flags(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ht
         case HTTP2_WINDOW_UPDATE:
         case HTTP2_ALTSVC:
         case HTTP2_BLOCKED:
+        case HTTP2_ORIGIN:
+        case HTTP2_PRIORITY_UPDATE:
         default:
             /* Does not define any flags */
             fields = http2_unused_flags;
@@ -3386,6 +3403,9 @@ dissect_http2_settings(tvbuff_t* tvb, packet_info* pinfo _U_, http2_session_t* h
             case HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE:
                 proto_tree_add_item(settings_tree, hf_http2_settings_max_header_list_size, tvb, offset, 4, ENC_BIG_ENDIAN);
             break;
+            case HTTP2_SETTINGS_EXTENDED_CONNECT:
+                proto_tree_add_item(settings_tree, hf_http2_settings_extended_connect, tvb, offset, 4, ENC_BIG_ENDIAN);
+            break;
             default:
                 proto_tree_add_item(settings_tree, hf_http2_settings_unknown, tvb, offset, 4, ENC_BIG_ENDIAN);
             break;
@@ -3584,6 +3604,48 @@ dissect_http2_altsvc(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *http2_tr
     return offset;
 }
 
+/* Origin */
+static int
+dissect_http2_origin(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *http2_tree,
+                     guint offset, guint8 flags _U_)
+{
+    guint32 origin_len;
+
+    proto_item *ti_origin_entry;
+    proto_tree *origin_entry_tree;
+
+    while(tvb_reported_length_remaining(tvb, offset) > 0){
+
+        ti_origin_entry = proto_tree_add_item(http2_tree, hf_http2_origin, tvb, offset, 6, ENC_NA);
+        origin_entry_tree = proto_item_add_subtree(ti_origin_entry, ett_http2_origin);
+
+        proto_tree_add_item_ret_uint(origin_entry_tree, hf_http2_origin_origin_len, tvb, offset, 2, ENC_BIG_ENDIAN, &origin_len);
+        offset += 2;
+
+        proto_tree_add_item(origin_entry_tree, hf_http2_origin_origin, tvb, offset, origin_len, ENC_ASCII|ENC_NA);
+        offset += origin_len;
+    }
+
+    return offset;
+}
+
+/* Priority Update */
+static int
+dissect_http2_priority_update(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *http2_tree,
+                              guint offset, guint8 flags _U_, guint16 length)
+{
+    int remain = length;
+
+    proto_tree_add_item(http2_tree, hf_http2_priority_update_stream_id, tvb, offset, 4, ENC_BIG_ENDIAN);
+    offset += 4;
+    remain -= 4;
+
+    proto_tree_add_item(http2_tree, hf_http2_priority_update_field_value, tvb, offset, remain, ENC_ASCII|ENC_NA);
+    offset += remain;
+
+    return offset;
+}
+
 
 int
 dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_ )
@@ -3742,6 +3804,14 @@ dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 
         case HTTP2_BLOCKED: /* BLOCKED (11) */
             /* no payload! */
+        break;
+
+        case HTTP2_ORIGIN: /* ORIGIN (12) */
+            dissect_http2_origin(tvb, pinfo, http2_tree, offset, flags);
+        break;
+
+        case HTTP2_PRIORITY_UPDATE: /* Priority Update (16) */
+            dissect_http2_priority_update(tvb, pinfo, http2_tree, offset, flags, length);
         break;
 
         default:
@@ -4179,6 +4249,11 @@ proto_register_http2(void)
               FT_UINT32, BASE_DEC, NULL, 0x0,
               "This advisory setting informs a peer of the maximum size of header list that the sender is prepared to accept.", HFILL }
         },
+        { &hf_http2_settings_extended_connect,
+            { "Extended CONNECT", "http2.settings.extended_connect",
+              FT_UINT32, BASE_DEC, NULL, 0x0,
+              "Indicates support for the extended CONNECT method extension defined RFC 8441.", HFILL }
+        },
         { &hf_http2_settings_unknown,
             { "Unknown Settings", "http2.settings.unknown",
                FT_UINT32, BASE_DEC, NULL, 0x0,
@@ -4284,6 +4359,36 @@ proto_register_http2(void)
               "A sequence of octets containing a value identical to the Alt-Svc field value", HFILL }
         },
 
+        /* Origin */
+        { &hf_http2_origin,
+            { "Origin", "http2.origin",
+               FT_NONE, BASE_NONE, NULL, 0x0,
+              NULL, HFILL }
+        },
+        { &hf_http2_origin_origin_len,
+            { "Origin Length", "http2.origin.origin_len",
+               FT_UINT16, BASE_DEC, NULL, 0x0,
+              "indicating the length, in octets, of the Origin field.", HFILL }
+        },
+        { &hf_http2_origin_origin,
+            { "Origin", "http2.origin.origin",
+               FT_STRING, BASE_NONE, NULL, 0x0,
+              "A sequence of characters containing ASCII serialisation of an "
+              "origin that server is authoritative for.", HFILL }
+        },
+
+        /* Priority Update */
+        { &hf_http2_priority_update_stream_id,
+            { "Priority Update Stream ID", "http2.priority_update_stream_id",
+              FT_UINT64, BASE_DEC, NULL, 0x0,
+              NULL, HFILL }
+        },
+        { &hf_http2_priority_update_field_value,
+            { "Priority Update Field Value", "http2.priority_update_field_value",
+              FT_STRING, BASE_NONE, NULL, 0x0,
+              NULL, HFILL }
+        },
+
     };
 
     static gint *ett[] = {
@@ -4294,7 +4399,8 @@ proto_register_http2(void)
         &ett_http2_settings,
         &ett_http2_encoded_entity,
         &ett_http2_body_fragment,
-        &ett_http2_body_fragments
+        &ett_http2_body_fragments,
+        &ett_http2_origin
     };
 
     /* Setup protocol expert items */

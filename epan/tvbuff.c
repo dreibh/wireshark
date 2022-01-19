@@ -928,11 +928,11 @@ tvb_memcpy(tvbuff_t *tvb, void *target, const gint offset, size_t length)
 	DISSECTOR_ASSERT(length <= 0x7FFFFFFF);
 	check_offset_length(tvb, offset, (gint) length, &abs_offset, &abs_length);
 
-	if (tvb->real_data) {
+	if (target && tvb->real_data) {
 		return memcpy(target, tvb->real_data + abs_offset, abs_length);
 	}
 
-	if (tvb->ops->tvb_memcpy)
+	if (target && tvb->ops->tvb_memcpy)
 		return tvb->ops->tvb_memcpy(tvb, target, abs_offset, abs_length);
 
 	/*
@@ -974,6 +974,9 @@ tvb_memdup(wmem_allocator_t *scope, tvbuff_t *tvb, const gint offset, size_t len
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
 	check_offset_length(tvb, offset, (gint) length, &abs_offset, &abs_length);
+
+	if (abs_length == 0)
+		return NULL;
 
 	duped = wmem_alloc(scope, abs_length);
 	return tvb_memcpy(tvb, duped, abs_offset, abs_length);
@@ -2228,6 +2231,8 @@ tvb_find_guint8_generic(tvbuff_t *tvb, guint abs_offset, guint limit, guint8 nee
 	const guint8 *result;
 
 	ptr = ensure_contiguous(tvb, abs_offset, limit); /* tvb_get_ptr() */
+	if (!ptr)
+		return -1;
 
 	result = (const guint8 *) memchr(ptr, needle, limit);
 	if (!result)
@@ -2330,6 +2335,8 @@ tvb_ws_mempbrk_guint8_generic(tvbuff_t *tvb, guint abs_offset, guint limit, cons
 	const guint8 *result;
 
 	ptr = ensure_contiguous(tvb, abs_offset, limit); /* tvb_get_ptr */
+	if (!ptr)
+		return -1;
 
 	result = ws_mempbrk_exec(ptr, limit, pattern, found_needle);
 	if (!result)
