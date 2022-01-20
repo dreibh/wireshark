@@ -87,7 +87,7 @@ Read filters use the same syntax as display and color filters in
 *Wireshark*; a read filter is specified with the *-R* option.
 
 Read filters can be specified when capturing or when reading from a
-capture file.  Note that that capture filters are much more efficient
+capture file.  Note that capture filters are much more efficient
 than read filters, and it may be more difficult for *TShark* to keep up
 with a busy network if a read filter is specified for a live capture, so
 you might be more likely to lose packets if you're using a read filter.
@@ -204,7 +204,7 @@ fills up, *TShark* will switch writing to the next file and so on.
 
 The created filenames are based on the filename given with the *-w* option,
 the number of the file and on the creation date and time,
-e.g. outfile_00001_20210714120117.pcap, outfile_00002_20210714120523.pcap, ...
+e.g. outfile_00001_20220714120117.pcap, outfile_00002_20220714120523.pcap, ...
 
 With the __files__ option it's also possible to form a "ring buffer".
 This will fill up new files until the number of files specified,
@@ -241,7 +241,7 @@ packets.
 
 *nametimenum*:__value__ Choose between two save filename templates.  If
 __value__ is 1, make running file number part before start time part; this is
-the original and default behaviour (e.g. log_00001_20210714164426.pcap).  If
+the original and default behaviour (e.g. log_00001_20220714164426.pcap).  If
 __value__ is greater than 1, make start time part before running number part
 (e.g. log_20210828164426_00001.pcap).  The latter makes alphabetical sorting
 order equal to creation time order, and keeps related multiple file sets in
@@ -1023,6 +1023,76 @@ The argument is a string that may contain the following letter:
 --
 Cause *TShark* to print a hex and ASCII dump of the packet data
 after printing the summary and/or details, if either are also being displayed.
+--
+
+--hexdump <hexoption>::
++
+--
+Cause *TShark* to print a hex and ASCII dump of the packet data
+with the ability to select which data sources to dump and how to
+format or exclude the ASCII dump text.
+
+This option can be used multiple times where the data source *<hexoption>*
+is *all* or *frames* and the ASCII dump text *<hexoption>* is *ascii*,
+*delimit*, *noascii*.
+
+  Example:  tshark ... --hexdump frames --hexdump delimit ...
+
+*all*::
+
+Enable hexdump, generate hexdump blocks for all data sources associated
+with each frame. Used to negate earlier use of `--hexdump frames`.
+The *-x* option displays all data sources by default.
+
+*frames*::
+
+Enable hexdump, generate hexdump blocks only for the frame data. Use
+this option to exclude, from hexdump output, any hexdump blocks for
+secondary data sources such as 'Bitstring tvb', 'Reassembled TCP',
+'De-chunked entity body', etc.
+
+*ascii*::
+
+Enable hexdump, with undelimited ASCII dump text. Used to negate earlier
+use of `--hexdump delimit` or `--hexdump noascii`. The *-x* option
+displays undelimited ASCII dump text by default.
+
+*delimit*::
+
+Enable hexdump with the ASCII dump text delimited with '|' characters.
+This is useful to unambiguously determine the last of the hex byte text
+and start of the ASCII dump text.
+
+*noascii*::
+
+Enable hexdump without printing any ASCII dump text.
+
+*help*::
+
+Display --hexdump specific help then exit.
+
+The use of *--hexdump <hexoption>* is particularly useful to generate output
+that can be used to create a pcap or pcapng file from a capture file type such
+as Microsoft NetMon 2.x which *TShark* and *Wireshark* can read but can not
+directly do a "Save as" nor export packets from.
+
+Examples:
+
+Generate hexdump output, with only the frame data source, with delimited ASCII
+dump text, with each frame hex block preceeded by a human readable timestamp that
+is directly usable by the *text2pcap* utility:
+
+  tshark ... --hexdump frames --hexdump delimit \
+      -P -t ad -o gui.column.format:"Time","%t" \
+      | text2pcap -n -t '%F %T.%f' - MYNEWPCAPNG
+
+Generate hexdump output, with only the frame data source, with no ASCII dump text,
+with each frame hex block preceeded by an epoch timestamp that is directly
+usable by the *text2pcap* utility:
+
+  tshark ... --hexdump frames --hexdump noascii \
+      -P -t e -o gui.column.format:"Time","%t" \
+      | text2pcap -n -t %s.%f - MYNEWPCAPNG
 --
 
 -X <eXtension options>::
@@ -1901,6 +1971,85 @@ Calculate statistics on ISUP messages. Displayed information is message
 types and direction (originating point code and destination point code.)
 --
 
+*-z* lbmr_queue_ads_queue,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays queue
+advertisements collated by queue name and then source addresses and port.
+--
+
+*-z* lbmr_queue_ads_source,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays queue
+advertisements collated by source address and then queue and port.
+--
+
+*-z* lbmr_queue_queries_queue,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays queue
+queries collated by queue name and then receiver addresses.
+--
+
+*-z* lbmr_queue_queries_receiver,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays queue
+queries collated by receiver address and then queue.
+--
+
+*-z* lbmr_topic_ads_source,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays topic
+advertisements collated by source address and then topic name and
+source string.
+--
+
+*-z* lbmr_topic_ads_topic,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays topic
+advertisements collated by topic name and then source address and
+source string.
+--
+
+*-z* lbmr_topic_ads_transport,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays topic
+advertisements collated by source string and then topic name.
+--
+
+*-z* lbmr_topic_queries_pattern,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays topic
+queries collated by pattern and then receiver address.
+--
+
+*-z* lbmr_topic_queries_pattern_receiver,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays topic
+queries collated by receiver address and then pattern.
+--
+
+*-z* lbmr_topic_queries_receiver,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays topic
+queries collated by receiver address and then topic name.
+--
+
+*-z* lbmr_topic_queries_topic,tree[,__filter__]::
++
+--
+Calculate statistics on LBM Topic Resolution Packets. Displays topic
+queries collated by topic name and then receiver address.
+--
+
 *-z* mac-lte,stat[,__filter__]::
 +
 --
@@ -2312,6 +2461,8 @@ Enable dissection of heuristic protocol.
 --
 Disable dissection of heuristic protocol.
 --
+
+include::diagnostic-options.adoc[]
 
 == CAPTURE FILTER SYNTAX
 

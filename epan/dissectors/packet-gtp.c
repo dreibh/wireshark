@@ -272,6 +272,13 @@ static int hf_gtp_earp_pci = -1;
 static int hf_gtp_earp_pl = -1;
 static int hf_gtp_earp_pvi = -1;
 static int hf_gtp_ext_comm_flags_uasi = -1;
+static int hf_gtp_ext_comm_flags_bdwi = -1;
+static int hf_gtp_ext_comm_flags_pcri = -1;
+static int hf_gtp_ext_comm_flags_vb = -1;
+static int hf_gtp_ext_comm_flags_retloc = -1;
+static int hf_gtp_ext_comm_flags_cpsr = -1;
+static int hf_gtp_ext_comm_flags_ccrsi = -1;
+static int hf_gtp_ext_comm_flags_unauthenticated_imsi = -1;
 static int hf_gtp_ext_comm_flags_II_pnsi = -1;
 static int hf_gtp_ext_comm_flags_II_dtci = -1;
 static int hf_gtp_ext_comm_flags_II_pmtsmi = -1;
@@ -294,6 +301,7 @@ static int hf_gtp_mbms_ses_dur_days = -1;
 static int hf_gtp_mbms_ses_dur_s = -1;
 static int hf_gtp_no_of_mbms_sa_codes = -1;
 static int hf_gtp_mbms_sa_code = -1;
+static int hf_gtp_hop_count = -1;
 static int hf_gtp_mbs_2g_3g_ind = -1;
 static int hf_gtp_time_2_dta_tr = -1;
 static int hf_gtp_ext_ei = -1;
@@ -315,6 +323,7 @@ static int hf_gtp_ext_auth_apn_ambr_ul = -1;
 static int hf_gtp_ext_auth_apn_ambr_dl = -1;
 static int hf_gtp_ext_ggsn_back_off_time_units = -1;
 static int hf_gtp_ext_ggsn_back_off_timer = -1;
+static int hf_gtp_lapi = -1;
 static int hf_gtp_higher_br_16mb_flg = -1;
 static int hf_gtp_max_mbr_apn_ambr_ul = -1;
 static int hf_gtp_max_mbr_apn_ambr_dl = -1;
@@ -341,6 +350,8 @@ static int hf_gtp_ms_cm_3_len = -1;
 static int hf_gtp_sup_codec_lst_len = -1;
 static int hf_gtp_add_flg_for_srvcc_ics = -1;
 static int hf_gtp_sel_mode_val = -1;
+static int hf_gtp_uli_timestamp = -1;
+static int hf_gtp_lhn_id = -1;
 
 /* Generated from convert_proto_tree_add_text.pl */
 static int hf_gtp_rfsp_index = -1;
@@ -540,7 +551,7 @@ pdcp_uat_fld_ip_chk_cb(void* r _U_, const char* ipaddr, guint len _U_, const voi
         return TRUE;
     }
 
-    *err = g_strdup_printf("No valid IP address given");
+    *err = ws_strdup_printf("No valid IP address given");
     return FALSE;
 }
 
@@ -564,7 +575,7 @@ pdcp_uat_fld_teid_chk_cb(void* r _U_, const char* teid, guint len _U_, const voi
         }
     }
 
-    *err = g_strdup_printf("No valid TEID given");
+    *err = ws_strdup_printf("No valid TEID given");
     return FALSE;
 }
 
@@ -598,7 +609,7 @@ static gboolean pdcp_lte_update_cb(void *r, char **err)
         rec->teid_wildcard = FALSE;
     } else {
         if (err)
-            *err = g_strdup_printf("No valid TEID given");
+            *err = ws_strdup_printf("No valid TEID given");
         return FALSE;
     }
 
@@ -609,7 +620,7 @@ static gboolean pdcp_lte_update_cb(void *r, char **err)
         alloc_address_wmem(wmem_epan_scope(), &rec->ip_address, AT_IPv4, sizeof(ws_in4_addr), &ip4_addr);
     } else {
         if (err)
-            *err = g_strdup_printf("No valid IP address given");
+            *err = ws_strdup_printf("No valid IP address given");
         return FALSE;
     }
 
@@ -689,7 +700,7 @@ static gboolean pdcp_nr_update_cb(void *r, char **err) {
         rec->teid_wildcard = FALSE;
     } else {
         if (err)
-            *err = g_strdup_printf("No valid TEID given");
+            *err = ws_strdup_printf("No valid TEID given");
         return FALSE;
     }
 
@@ -700,7 +711,7 @@ static gboolean pdcp_nr_update_cb(void *r, char **err) {
         alloc_address_wmem(wmem_epan_scope(), &rec->ip_address, AT_IPv4, sizeof(ws_in4_addr), &ip4_addr);
     } else {
         if (err)
-            *err = g_strdup_printf("No valid IP address given");
+            *err = ws_strdup_printf("No valid IP address given");
         return FALSE;
     }
 
@@ -6216,7 +6227,7 @@ decode_gtp_tft(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tree *
  * UMTS:        3GPP TS 29.060 version 10.4.0 Release 10, chapter 7.7.37
  * Type = 138 (Decimal)
  *              25.413(RANAP) TargetID
- * There are several CRs to to this IE make sure to check with a recent spec if dissection is questioned.
+ * There are several CRs to this IE make sure to check with a recent spec if dissection is questioned.
  */
 static int
 decode_gtp_target_id(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tree, session_args_t * args _U_)
@@ -7181,8 +7192,7 @@ decode_gtp_hop_count(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_
     offset++;
     proto_tree_add_item(ext_tree, hf_gtp_ext_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset = offset + 2;
-    /* TODO add decoding of data */
-    proto_tree_add_expert(ext_tree, pinfo, &ei_gtp_undecoded, tvb, offset, length);
+    proto_tree_add_item(ext_tree, hf_gtp_hop_count, tvb, offset, 1, ENC_NA);
 
     return 3 + length;
 
@@ -8001,6 +8011,13 @@ decode_gtp_extended_common_flgs(tvbuff_t * tvb, int offset, packet_info * pinfo 
     offset = offset + 2;
 
     proto_tree_add_item(ext_tree, hf_gtp_ext_comm_flags_uasi, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(ext_tree, hf_gtp_ext_comm_flags_bdwi, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(ext_tree, hf_gtp_ext_comm_flags_pcri, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(ext_tree, hf_gtp_ext_comm_flags_vb, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(ext_tree, hf_gtp_ext_comm_flags_retloc, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(ext_tree, hf_gtp_ext_comm_flags_cpsr, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(ext_tree, hf_gtp_ext_comm_flags_ccrsi, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(ext_tree, hf_gtp_ext_comm_flags_unauthenticated_imsi, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset++;
 
     if(length > 1){
@@ -8263,6 +8280,10 @@ decode_gtp_ggsn_back_off_time(tvbuff_t * tvb, int offset, packet_info * pinfo _U
 /*
  * 7.7.103 Signalling Priority Indication
  */
+static const true_false_string gtp_lapi_tfs = {
+        "MS is configured for NAS signalling low priority",
+        "MS is not configured for NAS signalling low priority"
+};
 
 static int
 decode_gtp_sig_pri_ind(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tree * tree, session_args_t * args _U_)
@@ -8279,7 +8300,7 @@ decode_gtp_sig_pri_ind(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, prot
     proto_tree_add_item(ext_tree, hf_gtp_ext_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_expert(ext_tree, pinfo, &ei_gtp_undecoded, tvb, offset, length);
+    proto_tree_add_item(ext_tree, hf_gtp_lapi, tvb, offset, 1, ENC_NA);
 
     return 3 + length;
 }
@@ -8302,7 +8323,10 @@ decode_gtp_sig_pri_ind_w_nsapi(tvbuff_t * tvb, int offset, packet_info * pinfo _
     proto_tree_add_item(ext_tree, hf_gtp_ext_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_expert(ext_tree, pinfo, &ei_gtp_undecoded, tvb, offset, length);
+    proto_tree_add_item(ext_tree, hf_gtp_nsapi, tvb, offset, 1, ENC_BIG_ENDIAN);
+    offset++;
+
+    proto_tree_add_item(ext_tree, hf_gtp_lapi, tvb, offset, 1, ENC_NA);
 
     return 3 + length;
 }
@@ -8619,7 +8643,7 @@ decode_gtp_ext_uli_timestamp(tvbuff_t * tvb, int offset, packet_info * pinfo _U_
     proto_tree_add_item(ext_tree, hf_gtp_ext_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_expert(ext_tree, pinfo, &ei_gtp_undecoded, tvb, offset, length);
+    proto_tree_add_item(ext_tree, hf_gtp_uli_timestamp, tvb, offset, 4, ENC_TIME_SECS_NTP|ENC_BIG_ENDIAN);
 
     return 3 + length;
 }
@@ -8641,8 +8665,10 @@ decode_gtp_ext_lhn_id_w_sapi(tvbuff_t * tvb, int offset, packet_info * pinfo _U_
     offset++;
     proto_tree_add_item(ext_tree, hf_gtp_ext_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
+    proto_tree_add_item(ext_tree, hf_gtp_nsapi, tvb, offset, 1, ENC_BIG_ENDIAN);
+    offset += 1;
 
-    proto_tree_add_expert(ext_tree, pinfo, &ei_gtp_undecoded, tvb, offset, length);
+    proto_tree_add_item(ext_tree, hf_gtp_lhn_id, tvb, offset, length, ENC_APN_STR|ENC_NA);
 
     return 3 + length;
 }
@@ -10964,8 +10990,43 @@ proto_register_gtp(void)
            NULL, HFILL}
         },
         {&hf_gtp_ext_comm_flags_uasi,
-         { "UASI", "gtp.ext_comm_flags_uasi",
+         { "UASI", "gtp.ext_comm_flags.uasi",
            FT_BOOLEAN, 8, NULL, 0x80,
+           NULL, HFILL}
+        },
+        {&hf_gtp_ext_comm_flags_bdwi,
+         { "BDWI", "gtp.ext_comm_flags.bdwi",
+           FT_BOOLEAN, 8, NULL, 0x40,
+           NULL, HFILL}
+        },
+        {&hf_gtp_ext_comm_flags_pcri,
+         { "PCRI", "gtp.ext_comm_flags.pcri",
+           FT_BOOLEAN, 8, NULL, 0x20,
+           NULL, HFILL}
+        },
+        {&hf_gtp_ext_comm_flags_vb,
+         { "VB", "gtp.ext_comm_flags.vb",
+           FT_BOOLEAN, 8, NULL, 0x10,
+           NULL, HFILL}
+        },
+        {&hf_gtp_ext_comm_flags_retloc,
+         { "RetLoc", "gtp.ext_comm_flags.retloc",
+           FT_BOOLEAN, 8, NULL, 0x08,
+           NULL, HFILL}
+        },
+        {&hf_gtp_ext_comm_flags_cpsr,
+         { "CPSR", "gtp.ext_comm_flags.cpsr",
+           FT_BOOLEAN, 8, NULL, 0x04,
+           NULL, HFILL}
+        },
+        {&hf_gtp_ext_comm_flags_ccrsi,
+         { "CCRSI", "gtp.ext_comm_flags.ccrsi",
+           FT_BOOLEAN, 8, NULL, 0x02,
+           NULL, HFILL}
+        },
+        {&hf_gtp_ext_comm_flags_unauthenticated_imsi,
+         { "Unauthenticated IMSI", "gtp.ext_comm_flags.unauthenticated_imsi",
+           FT_BOOLEAN, 8, NULL, 0x01,
            NULL, HFILL}
         },
         {&hf_gtp_ext_comm_flags_II_pnsi,
@@ -11079,6 +11140,11 @@ proto_register_gtp(void)
            FT_UINT16, BASE_DEC, NULL, 0x0,
            NULL, HFILL}
         },
+        {&hf_gtp_hop_count,
+         { "Hop Counter", "gtp.hop_count",
+           FT_UINT8, BASE_DEC, NULL, 0x0,
+           NULL, HFILL}
+        },
         {&hf_gtp_mbs_2g_3g_ind,
          { "MBMS 2G/3G Indicator", "gtp.mbs_2g_3g_ind",
            FT_UINT8, BASE_DEC, VALS(gtp_mbs_2g_3g_ind_vals), 0x0,
@@ -11184,6 +11250,11 @@ proto_register_gtp(void)
             FT_UINT8, BASE_DEC, NULL, 0x1f,
             NULL, HFILL}
         },
+        { &hf_gtp_lapi,
+          { "LAPI", "gtp.lapi",
+            FT_BOOLEAN, 8, TFS(&gtp_lapi_tfs), 0x01,
+            "Low Access Priority Indication", HFILL}
+        },
         { &hf_gtp_higher_br_16mb_flg,
           { "Higher bitrates than 16 Mbps flag", "gtp.higher_br_16mb_flg",
             FT_UINT8, BASE_DEC, VALS(gtp_higher_br_16mb_flg_vals), 0x0,
@@ -11197,6 +11268,16 @@ proto_register_gtp(void)
         { &hf_gtp_max_mbr_apn_ambr_dl,
           { "Max MBR/APN-AMBR for downlink", "gtp.max_mbr_apn_ambr_dl",
             FT_UINT32, BASE_DEC, NULL, 0x0,
+            NULL, HFILL}
+        },
+        { &hf_gtp_uli_timestamp,
+          { "ULI Timestamp", "gtp.uli_timestamp",
+            FT_ABSOLUTE_TIME, ABSOLUTE_TIME_LOCAL, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_gtp_lhn_id,
+          { "Local Home Network ID", "gtp.lhn_id",
+            FT_STRING, BASE_NONE, NULL, 0,
             NULL, HFILL}
         },
 

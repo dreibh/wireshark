@@ -442,7 +442,7 @@ dissect_dtls(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
    * figure out what flavor of DTLS it is */
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "DTLS");
 
-  /* clear the the info column */
+  /* clear the info column */
   col_clear(pinfo->cinfo, COL_INFO);
 
   /* Create display subtree for SSL as a whole */
@@ -888,7 +888,7 @@ dissect_dtls_record(tvbuff_t *tvb, packet_info *pinfo,
   /*
    * if we don't already have a version set for this conversation,
    * but this message's version is authoritative (i.e., it's
-   * not client_hello, then save the version to to conversation
+   * not client_hello, then save the version to the conversation
    * structure and print the column version
    */
   next_byte = tvb_get_guint8(tvb, offset);
@@ -900,7 +900,7 @@ dissect_dtls_record(tvbuff_t *tvb, packet_info *pinfo,
   /*
    * now dissect the next layer
    */
-  ssl_debug_printf("dissect_dtls_record: content_type %d epoch %d seq %"G_GUINT64_FORMAT"\n", content_type, epoch, sequence_number);
+  ssl_debug_printf("dissect_dtls_record: content_type %d epoch %d seq %"PRIu64"\n", content_type, epoch, sequence_number);
 
   /* try to decrypt record on the first pass, if possible. Store decrypted
    * record for later usage (without having to decrypt again). */
@@ -1799,12 +1799,12 @@ dtlsdecrypt_uat_fld_protocol_chk_cb(void* r _U_, const char* p, guint len _U_, c
 
     if (!find_dissector(p)) {
         if (proto_get_id_by_filter_name(p) != -1) {
-            *err = g_strdup_printf("While '%s' is a valid dissector filter name, that dissector is not configured"
+            *err = ws_strdup_printf("While '%s' is a valid dissector filter name, that dissector is not configured"
                                    " to support DTLS decryption.\n\n"
                                    "If you need to decrypt '%s' over DTLS, please contact the Wireshark development team.", p, p);
         } else {
             char* ssl_str = ssl_association_info("dtls.port", "UDP");
-            *err = g_strdup_printf("Could not find dissector for: '%s'\nCommonly used DTLS dissectors include:\n%s", p, ssl_str);
+            *err = ws_strdup_printf("Could not find dissector for: '%s'\nCommonly used DTLS dissectors include:\n%s", p, ssl_str);
             g_free(ssl_str);
         }
         return FALSE;
@@ -1825,7 +1825,7 @@ dtls_src_prompt(packet_info *pinfo, gchar *result)
     if (pi != NULL)
         srcport = pi->srcport;
 
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "source (%u%s)", srcport, UTF8_RIGHTWARDS_ARROW);
+    snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "source (%u%s)", srcport, UTF8_RIGHTWARDS_ARROW);
 }
 
 static gpointer
@@ -1850,7 +1850,7 @@ dtls_dst_prompt(packet_info *pinfo, gchar *result)
     if (pi != NULL)
         destport = pi->destport;
 
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "destination (%s%u)", UTF8_RIGHTWARDS_ARROW, destport);
+    snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "destination (%s%u)", UTF8_RIGHTWARDS_ARROW, destport);
 }
 
 static gpointer
@@ -1879,7 +1879,7 @@ dtls_both_prompt(packet_info *pinfo, gchar *result)
         destport = pi->destport;
     }
 
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "both (%u%s%u)", srcport, UTF8_LEFT_RIGHT_ARROW, destport);
+    snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "both (%u%s%u)", srcport, UTF8_LEFT_RIGHT_ARROW, destport);
 }
 
 void proto_reg_handoff_dtls(void);

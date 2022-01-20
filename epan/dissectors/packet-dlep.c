@@ -398,7 +398,7 @@ decode_dataitem_status(tvbuff_t *tvb, int offset, proto_item *pi, proto_tree *pt
   proto_item_append_text(pi, ", Code: %s (%u)", val_to_str(status_code, status_code_vals, "Unknown"), status_code);
   offset+=1;
 
-  proto_tree_add_item(pt, hf_dlep_dataitem_status_text, tvb, offset, len-1, ENC_UTF_8|ENC_NA);
+  proto_tree_add_item(pt, hf_dlep_dataitem_status_text, tvb, offset, len-1, ENC_UTF_8);
   proto_item_append_text(pi, ", Text: %s", tvb_get_string_enc(pinfo->pool, tvb, offset, len-1, ENC_UTF_8));
   offset+=len-1;
 
@@ -489,7 +489,7 @@ decode_dataitem_peertype(tvbuff_t *tvb, int offset, proto_item *pi, proto_tree *
   proto_tree_add_item(flags_pt, hf_dlep_dataitem_peertype_flags_smi, tvb, offset, DLEP_DIT_PEERTYPE_FLAGS_LEN, ENC_NA);
   offset+=DLEP_DIT_PEERTYPE_FLAGS_LEN;
 
-  proto_tree_add_item(pt, hf_dlep_dataitem_peertype_description, tvb, offset, len-DLEP_DIT_PEERTYPE_FLAGS_LEN, ENC_UTF_8|ENC_NA);
+  proto_tree_add_item(pt, hf_dlep_dataitem_peertype_description, tvb, offset, len-DLEP_DIT_PEERTYPE_FLAGS_LEN, ENC_UTF_8);
   proto_item_append_text(pi, ", Description: %s", tvb_get_string_enc(pinfo->pool, tvb, offset, len-DLEP_DIT_PEERTYPE_FLAGS_LEN, ENC_UTF_8));
   offset+=len-DLEP_DIT_PEERTYPE_FLAGS_LEN;
 
@@ -676,7 +676,7 @@ decode_dataitem_mdrr(tvbuff_t *tvb, int offset, proto_item *pi, proto_tree *pt, 
   guint64 mdrr;
 
   proto_tree_add_item_ret_uint64(pt, hf_dlep_dataitem_mdrr, tvb, offset, DLEP_DIT_MDRR_LEN, ENC_BIG_ENDIAN, &mdrr);
-  proto_item_append_text(pi, ": %" G_GUINT64_FORMAT " (bps)", mdrr);
+  proto_item_append_text(pi, ": %" PRIu64 " (bps)", mdrr);
   offset+=DLEP_DIT_MDRR_LEN;
 
   if (len != DLEP_DIT_MDRR_LEN)
@@ -692,7 +692,7 @@ decode_dataitem_mdrt(tvbuff_t *tvb, int offset, proto_item *pi, proto_tree *pt, 
   guint64 mdrt;
 
   proto_tree_add_item_ret_uint64(pt, hf_dlep_dataitem_mdrt, tvb, offset, DLEP_DIT_MDRT_LEN, ENC_BIG_ENDIAN, &mdrt);
-  proto_item_append_text(pi, ": %" G_GUINT64_FORMAT " (bps)", mdrt);
+  proto_item_append_text(pi, ": %" PRIu64 " (bps)", mdrt);
   offset+=DLEP_DIT_MDRT_LEN;
 
   if (len != DLEP_DIT_MDRT_LEN)
@@ -708,7 +708,7 @@ decode_dataitem_cdrr(tvbuff_t *tvb, int offset, proto_item *pi, proto_tree *pt, 
   guint64 cdrr;
 
   proto_tree_add_item_ret_uint64(pt, hf_dlep_dataitem_cdrr, tvb, offset, DLEP_DIT_CDRR_LEN, ENC_BIG_ENDIAN, &cdrr);
-  proto_item_append_text(pi, ": %" G_GUINT64_FORMAT " (bps)", cdrr);
+  proto_item_append_text(pi, ": %" PRIu64 " (bps)", cdrr);
   offset+=DLEP_DIT_CDRR_LEN;
 
   if (len != DLEP_DIT_CDRR_LEN)
@@ -724,7 +724,7 @@ decode_dataitem_cdrt(tvbuff_t *tvb, int offset, proto_item *pi, proto_tree *pt, 
   guint64 cdrt;
 
   proto_tree_add_item_ret_uint64(pt, hf_dlep_dataitem_cdrt, tvb, offset, DLEP_DIT_CDRT_LEN, ENC_BIG_ENDIAN, &cdrt);
-  proto_item_append_text(pi, ": %" G_GUINT64_FORMAT " (bps)", cdrt);
+  proto_item_append_text(pi, ": %" PRIu64 " (bps)", cdrt);
   offset+=DLEP_DIT_CDRT_LEN;
 
   if (len != DLEP_DIT_CDRT_LEN)
@@ -740,7 +740,7 @@ decode_dataitem_latency(tvbuff_t *tvb, int offset, proto_item *pi, proto_tree *p
   guint64 latency;
 
   proto_tree_add_item_ret_uint64(pt, hf_dlep_dataitem_latency, tvb, offset, DLEP_DIT_LAT_LEN, ENC_BIG_ENDIAN, &latency);
-  proto_item_append_text(pi, ": %" G_GUINT64_FORMAT " (us)", latency);
+  proto_item_append_text(pi, ": %" PRIu64 " (us)", latency);
   offset+=DLEP_DIT_LAT_LEN;
 
   if (len != DLEP_DIT_LAT_LEN)

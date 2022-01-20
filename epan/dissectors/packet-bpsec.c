@@ -25,6 +25,9 @@
 #include <inttypes.h>
 #include "epan/wscbor.h"
 
+void proto_register_bpsec(void);
+void proto_reg_handoff_bpsec(void);
+
 /// Glib logging "domain" name
 //static const char *LOG_DOMAIN = "bpsec";
 
@@ -196,11 +199,6 @@ guint bpsec_id_hash(gconstpointer key) {
 
 /** Dissect an ID-value pair within a context.
  *
- * @param dissector
- * @param typeid
- * @param tvb
- * @param pinfo
- * @param tree
  */
 static gint dissect_value(dissector_handle_t dissector, gint64 *typeid, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree) {
     gint sublen = 0;
@@ -310,7 +308,7 @@ static int dissect_block_asb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
                     gint64 *paramid = wscbor_require_int64(wmem_packet_scope(), chunk_paramid);
                     proto_tree_add_cbor_int64(tree_param_pair, hf_asb_param_id, pinfo, tvb, chunk_paramid, paramid);
                     if (paramid) {
-                        proto_item_append_text(item_param_pair, ", ID: %" G_GINT64_FORMAT, *paramid);
+                        proto_item_append_text(item_param_pair, ", ID: %" PRId64, *paramid);
                     }
 
                     const gint offset_value = offset;
@@ -369,7 +367,7 @@ static int dissect_block_asb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
                         gint64 *resultid = wscbor_require_int64(wmem_packet_scope(), chunk_resultid);
                         proto_tree_add_cbor_int64(tree_result_pair, hf_asb_result_id, pinfo, tvb, chunk_resultid, resultid);
                         if (resultid) {
-                            proto_item_append_text(item_result_pair, ", ID: %" G_GINT64_FORMAT, *resultid);
+                            proto_item_append_text(item_result_pair, ", ID: %" PRId64, *resultid);
                         }
 
                         const gint offset_value = offset;

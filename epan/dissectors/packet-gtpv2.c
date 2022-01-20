@@ -1547,7 +1547,7 @@ gtpv2_sn_equal_unmatched(gconstpointer k1, gconstpointer k2)
 static void
 value_in_tenth_of_percent_fmt(gchar* s, guint32 v)
 {
-    g_snprintf(s, ITEM_LABEL_LENGTH, "%.1f%% (%u)", (float)v / 10, v);
+    snprintf(s, ITEM_LABEL_LENGTH, "%.1f%% (%u)", (float)v / 10, v);
 }
 
 
@@ -3217,7 +3217,7 @@ dissect_3gpp_uli(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gchar **av
             offset += 3;
             proto_tree_add_item_ret_uint64(subtree, hf_gtpv2_ncgi_nrci, tvb, offset, 5, ENC_BIG_ENDIAN, &nr_cell_id);
             *avp_str = wmem_strdup_printf(pinfo->pool,
-                                          "%s, NR Cell Id 0x%" G_GINT64_MODIFIER "x",
+                                          "%s, NR Cell Id 0x%" PRIx64,
                                           mcc_mnc_str, nr_cell_id);
         }
         return length;
@@ -3247,7 +3247,7 @@ dissect_3gpp_uli(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gchar **av
             offset += 3;
             proto_tree_add_item_ret_uint64(subtree, hf_gtpv2_ncgi_nrci, tvb, offset, 5, ENC_BIG_ENDIAN, &nr_cell_id);
             *avp_str = wmem_strdup_printf(pinfo->pool,
-                                          "%s, %s, NR Cell Id 0x%" G_GINT64_MODIFIER "x",
+                                          "%s, %s, NR Cell Id 0x%" PRIx64,
                                           *avp_str, mcc_mnc_str, nr_cell_id);
         }
         return length;
@@ -3271,11 +3271,15 @@ gchar *dissect_radius_user_loc(proto_tree * tree, tvbuff_t * tvb, packet_info* p
 }
 
 int
-dissect_diameter_3gpp_uli(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+dissect_diameter_3gpp_uli(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data)
 {
-    diam_sub_dis_t *diam_sub_dis = (diam_sub_dis_t*)data;
+    diam_sub_dis_t* diam_sub_dis = (diam_sub_dis_t*)data;
 
-    return dissect_3gpp_uli(tvb, pinfo, tree, &diam_sub_dis->avp_str);
+    if (diam_sub_dis) {
+        return dissect_3gpp_uli(tvb, pinfo, tree, &diam_sub_dis->avp_str);
+    } else {
+        return dissect_3gpp_uli(tvb, pinfo, tree, NULL);
+    }
 }
 
 /*
@@ -5878,7 +5882,7 @@ dissect_gtpv2_source_ident(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
         break;
     case 1:
         /* The Source Type is RNC ID for PS handover from GERAN Iu mode or for inter-RAT handover from UTRAN. In this
-         * case the Source ID field shall be encoded as as the Source RNC-ID part of the "Source ID" parameter in 3GPP TS
+         * case the Source ID field shall be encoded as the Source RNC-ID part of the "Source ID" parameter in 3GPP TS
          * 25.413 [33].
          */
         /* RNC-ID M INTEGER (0..4095) */
@@ -6591,7 +6595,7 @@ dissect_gtpv2_tmgi(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, prot
 
     tmgi = tvb_get_ntoh48(tvb, offset);
 
-    proto_item_append_text(item, "%012" G_GINT64_MODIFIER "x", tmgi);
+    proto_item_append_text(item, "%012" PRIx64, tmgi);
 
     proto_tree_add_item(tree, hf_gtpv2_mbms_service_id, tvb, offset, 3, ENC_NA);
     offset += 3;

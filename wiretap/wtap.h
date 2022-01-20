@@ -9,14 +9,12 @@
 #ifndef __WTAP_H__
 #define __WTAP_H__
 
-#include <glib.h>
+#include <wireshark.h>
 #include <time.h>
 #include <wsutil/buffer.h>
 #include <wsutil/nstime.h>
 #include <wsutil/inet_addr.h>
 #include "wtap_opttypes.h"
-#include "ws_symbol_export.h"
-#include "ws_attributes.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -2294,7 +2292,7 @@ void wtap_cleanup(void);
     /** The file couldn't be closed, reason unknown */
 
 #define WTAP_ERR_SHORT_READ                   -12
-    /** An attempt to read read less data than it should have */
+    /** An attempt to read less data than it should have */
 
 #define WTAP_ERR_BAD_FILE                     -13
     /** The file appears to be damaged or corrupted or otherwise bogus */

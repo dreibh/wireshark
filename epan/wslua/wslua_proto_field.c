@@ -109,7 +109,7 @@ static const struct field_display_string_t base_displays[] = {
     {"16",16},
     {"24",24},
     {"32",32},
-    /* for FT_ABSOLUTE_TIME use values in absolute_time_display_e */
+    /* FT_ABSOLUTE_TIME */
     {"base.LOCAL", ABSOLUTE_TIME_LOCAL},
     {"base.UTC", ABSOLUTE_TIME_UTC},
     {"base.DOY_UTC", ABSOLUTE_TIME_DOY_UTC},
@@ -204,9 +204,9 @@ static range_string * range_string_from_table(lua_State* L, int idx) {
                     return NULL;
                 }
                 if (key_count == 1) /* We incremented it above */
-                    r.value_min = wslua_toguint32(L, -1);
+                    r.value_min = wslua_toguint64(L, -1);
                 else
-                    r.value_max = wslua_toguint32(L, -1);
+                    r.value_max = wslua_toguint64(L, -1);
                 break;
 
             case 3:
@@ -664,7 +664,7 @@ WSLUA_CONSTRUCTOR ProtoField_new(lua_State* L) {
     case FT_ABSOLUTE_TIME:
         if (base == BASE_NONE) {
             base = ABSOLUTE_TIME_LOCAL;  /* Default base for FT_ABSOLUTE_TIME */
-        } else if (base < ABSOLUTE_TIME_LOCAL || base > ABSOLUTE_TIME_DOY_UTC) {
+        } else if (!FIELD_DISPLAY_IS_ABSOLUTE_TIME(base)) {
             WSLUA_OPTARG_ERROR(ProtoField_new,BASE,"Base must be either base.LOCAL, base.UTC, or base.DOY_UTC");
             return 0;
         }
@@ -1131,7 +1131,7 @@ static int ProtoField_time(lua_State* L,enum ftenum type) {
     }
 
     if (type == FT_ABSOLUTE_TIME) {
-        if (base < ABSOLUTE_TIME_LOCAL || base > ABSOLUTE_TIME_DOY_UTC) {
+        if (!FIELD_DISPLAY_IS_ABSOLUTE_TIME(base)) {
             luaL_argerror(L, 3, "Base must be either base.LOCAL, base.UTC, or base.DOY_UTC");
             return 0;
         }
@@ -1434,7 +1434,7 @@ PROTOFIELD_OTHER(eui64,FT_EUI64)
 WSLUA_METAMETHOD ProtoField__tostring(lua_State* L) {
     /* Returns a string with info about a protofield (for debugging purposes). */
     ProtoField f = checkProtoField(L,1);
-    gchar* s = g_strdup_printf("ProtoField(%i): %s %s %s %s %p %.8x %s",
+    gchar* s = ws_strdup_printf("ProtoField(%i): %s %s %s %s %p %.8x %s",
                                          f->hfid,f->name,f->abbrev,
                                          ftenum_to_string(f->type),
                                          base_to_string(f->base),

@@ -499,7 +499,7 @@ static void ipv6_prompt(packet_info *pinfo, gchar *result)
 {
     gpointer value = ipv6_value(pinfo);
 
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "IP protocol %u as", GPOINTER_TO_UINT(value));
+    snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "IP protocol %u as", GPOINTER_TO_UINT(value));
 }
 
 static const char* ipv6_conv_get_filter_type(conv_item_t* conv, conv_filter_type_e filter)
@@ -564,7 +564,7 @@ ipv6_filter_valid(packet_info *pinfo)
 static gchar*
 ipv6_build_filter(packet_info *pinfo)
 {
-    return g_strdup_printf("ipv6.addr eq %s and ipv6.addr eq %s",
+    return ws_strdup_printf("ipv6.addr eq %s and ipv6.addr eq %s",
                 address_to_str(pinfo->pool, &pinfo->net_src),
                 address_to_str(pinfo->pool, &pinfo->net_dst));
 }

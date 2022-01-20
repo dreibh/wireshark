@@ -23,16 +23,6 @@
 #include <stdarg.h>
 #include <math.h>
 
-/*
- * Just make sure we include the prototype for strptime as well
- * (needed for glibc 2.2) but make sure we do this only if not
- * yet defined.
- */
-
-#ifndef __USE_XOPEN
-#  define __USE_XOPEN
-#endif
-
 #include <time.h>
 #include <glib.h>
 
@@ -51,10 +41,6 @@
 #ifdef _WIN32
 #include <process.h>    /* getpid */
 #include <winsock2.h>
-#endif
-
-#ifndef HAVE_STRPTIME
-# include "wsutil/strptime.h"
 #endif
 
 #include <ui/clopts_common.h>
@@ -179,6 +165,7 @@ static const struct {
     guint32     id;
 } secrets_types[] = {
     { "tls",    SECRETS_TYPE_TLS },
+    { "ssh",    SECRETS_TYPE_SSH },
     { "wg",     SECRETS_TYPE_WIREGUARD },
 };
 
@@ -196,7 +183,7 @@ abs_time_to_str_with_sec_resolution(const nstime_t *abs_time)
     tmp = localtime(&abs_time->secs);
 
     if (tmp) {
-        g_snprintf(buf, 16, "%d%02d%02d%02d%02d%02d",
+        snprintf(buf, 16, "%d%02d%02d%02d%02d%02d",
             tmp->tm_year + 1900,
             tmp->tm_mon+1,
             tmp->tm_mday,
@@ -218,7 +205,7 @@ fileset_get_filename_by_pattern(guint idx, const wtap_rec *rec,
     gchar *timestr;
     gchar *abs_str;
 
-    g_snprintf(filenum, sizeof(filenum), "%05u", idx % RINGBUFFER_MAX_NUM_FILES);
+    snprintf(filenum, sizeof(filenum), "%05u", idx % RINGBUFFER_MAX_NUM_FILES);
     if (rec->presence_flags & WTAP_HAS_TS) {
         timestr = abs_time_to_str_with_sec_resolution(&rec->ts);
         abs_str = g_strconcat(fprefix, "_", filenum, "_", timestr, fsuffix, NULL);

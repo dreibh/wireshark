@@ -15,6 +15,7 @@
 #include <string.h>
 #include <glib.h>
 #include <float.h>
+#include <inttypes.h>
 #include <errno.h>
 
 #include <wsutil/bits_ctz.h>
@@ -169,7 +170,7 @@ struct ptvcursor {
 	}
 
 #ifdef ENABLE_CHECK_FILTER
-#define CHECK_HF_VALUE(type, modifier, start_values) \
+#define CHECK_HF_VALUE(type, spec, start_values) \
 { \
 	const type *current; \
 	int n, m; \
@@ -186,7 +187,7 @@ struct ptvcursor {
 			if ((start_values[m].value == current->value) && \
 			    (strcmp(start_values[m].strptr, current->strptr) != 0)) { \
 				ws_warning("Field '%s' (%s) has a conflicting entry in its" \
-					  " value_string: %" modifier "u is at indices %u (%s) and %u (%s)", \
+					  " value_string: %" spec " is at indices %u (%s) and %u (%s)", \
 					  hfinfo->name, hfinfo->abbrev, \
 					  current->value, m, start_values[m].strptr, n, current->strptr); \
 			} \
@@ -209,8 +210,6 @@ static void fill_label_boolean(field_info *fi, gchar *label_str);
 static void fill_label_bitfield_char(field_info *fi, gchar *label_str);
 static void fill_label_bitfield(field_info *fi, gchar *label_str, gboolean is_signed);
 static void fill_label_bitfield64(field_info *fi, gchar *label_str, gboolean is_signed);
-static void fill_label_bitfield_varint(field_info *fi, gchar *label_str, gboolean is_signed);
-static void fill_label_bitfield_varint64(field_info *fi, gchar *label_str, gboolean is_signed);
 static void fill_label_char(field_info *fi, gchar *label_str);
 static void fill_label_number(field_info *fi, gchar *label_str, gboolean is_signed);
 static void fill_label_number64(field_info *fi, gchar *label_str, gboolean is_signed);
@@ -845,7 +844,7 @@ proto_tree_free(proto_tree *tree)
 
 /* Is the parsing being done for a visible proto_tree or an invisible one?
  * By setting this correctly, the proto_tree creation is sped up by not
- * having to call g_vsnprintf and copy strings around.
+ * having to call vsnprintf and copy strings around.
  */
 gboolean
 proto_tree_set_visible(proto_tree *tree, gboolean visible)
@@ -2511,7 +2510,7 @@ test_length(header_field_info *hfinfo, tvbuff_t *tvb,
 		return;
 
 	if ((hfinfo->type == FT_STRINGZ) ||
-	    ((encoding & (ENC_VARIANT_MASK)) &&
+	    ((encoding & ENC_VARINT_MASK) &&
 	     (IS_FT_UINT(hfinfo->type) || IS_FT_INT(hfinfo->type)))) {
 		/* If we're fetching until the end of the TVB, only validate
 		 * that the offset is within range.
@@ -2607,17 +2606,12 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 		case FT_UINT16:
 		case FT_UINT24:
 		case FT_UINT32:
-			if (encoding & ENC_VARINT_PROTOBUF) {
-				new_fi->length = tvb_get_varint(tvb, start, (length == -1) ? FT_VARINT_MAX_LEN : length, &value64, encoding);
-				new_fi->flags |= FI_VARINT;
-				value = (guint32)value64;
-			} else if (encoding & ENC_VARINT_QUIC) {
+			if (encoding & ENC_VARINT_MASK) {
 				new_fi->length = tvb_get_varint(tvb, start, (length == -1) ? FT_VARINT_MAX_LEN : length, &value64, encoding);
 				value = (guint32)value64;
-			} else if (encoding & ENC_VARINT_ZIGZAG) {
-				new_fi->length = tvb_get_varint(tvb, start, (length == -1) ? FT_VARINT_MAX_LEN : length, &value64, encoding);
-				new_fi->flags |= FI_VARINT;
-				value = (guint32)value64;
+				if (!(encoding & ENC_VARINT_QUIC)) {
+					new_fi->flags |= FI_VARINT;
+				}
 			}
 			else {
 				/*
@@ -2636,15 +2630,11 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 		case FT_UINT48:
 		case FT_UINT56:
 		case FT_UINT64:
-
-			if (encoding & ENC_VARINT_PROTOBUF) {
+			if (encoding & ENC_VARINT_MASK) {
 				new_fi->length = tvb_get_varint(tvb, start, (length == -1) ? FT_VARINT_MAX_LEN : length, &value64, encoding);
-				new_fi->flags |= FI_VARINT;
-			} else if (encoding & ENC_VARINT_QUIC) {
-				new_fi->length = tvb_get_varint(tvb, start, (length == -1) ? FT_VARINT_MAX_LEN : length, &value64, encoding);
-			} else if (encoding & ENC_VARINT_ZIGZAG) {
-				new_fi->length = tvb_get_varint(tvb, start, (length == -1) ? FT_VARINT_MAX_LEN : length, &value64, encoding);
-				new_fi->flags |= FI_VARINT;
+				if (!(encoding & ENC_VARINT_QUIC)) {
+					new_fi->flags |= FI_VARINT;
+				}
 			}
 			else {
 				/*
@@ -3137,7 +3127,7 @@ proto_tree_add_item_ret_uint(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 	}
 	/* I believe it's ok if this is called with a NULL tree */
 	/* XXX - modify if we ever support EBCDIC FT_CHAR */
-	if (encoding & (ENC_VARIANT_MASK)) {
+	if (encoding & ENC_VARINT_MASK) {
 		guint64 temp64;
 		tvb_get_varint(tvb, start, length, &temp64, encoding);
 		value = (guint32)temp64;
@@ -3427,7 +3417,7 @@ proto_tree_add_item_ret_uint64(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 		REPORT_DISSECTOR_BUG("wrong encoding");
 	}
 	/* I believe it's ok if this is called with a NULL tree */
-	if (encoding & (ENC_VARIANT_MASK)) {
+	if (encoding & ENC_VARINT_MASK) {
 		tvb_get_varint(tvb, start, length, &value, encoding);
 	} else {
 		value = get_uint64_value(tree, tvb, start, length, encoding);
@@ -3490,7 +3480,7 @@ proto_tree_add_item_ret_int64(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 		REPORT_DISSECTOR_BUG("wrong encoding");
 	}
 	/* I believe it's ok if this is called with a NULL tree */
-	if (encoding & (ENC_VARIANT_MASK)) {
+	if (encoding & ENC_VARINT_MASK) {
 		tvb_get_varint(tvb, start, length, &value, encoding);
 	}
 	else {
@@ -3648,7 +3638,7 @@ proto_tree_add_item_ret_ipv4(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 		REPORT_DISSECTOR_BUG("Invalid length %d passed to proto_tree_add_item_ret_ipv4",
 			length);
 
-	if (encoding & (ENC_STRING | ENC_VARIANT_MASK | ENC_VARINT_PROTOBUF | ENC_VARINT_ZIGZAG)) {
+	if (encoding & (ENC_STRING | ENC_VARINT_MASK)) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
 	}
 
@@ -3895,7 +3885,7 @@ proto_tree_add_item_ret_time_string(proto_tree *tree, int hfindex,
 	switch (hfinfo->type) {
 	case FT_ABSOLUTE_TIME:
 		get_time_value(tree, tvb, start, length, encoding, &time_stamp, FALSE);
-		*retval = abs_time_to_str(scope, &time_stamp, (absolute_time_display_e)hfinfo->display, TRUE);
+		*retval = abs_time_to_str(scope, &time_stamp, hfinfo->display, TRUE);
 		break;
 	case FT_RELATIVE_TIME:
 		get_time_value(tree, tvb, start, length, encoding, &time_stamp, TRUE);
@@ -4334,7 +4324,7 @@ proto_tree_add_protocol_format(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 	pi = proto_tree_add_pi(tree, hfinfo, tvb, start, &length);
 
 	va_start(ap, format);
-	protocol_rep = g_strdup_vprintf(format, ap);
+	protocol_rep = ws_strdup_vprintf(format, ap);
 	proto_tree_set_protocol_tvb(PNODE_FINFO(pi), protocol_tvb, protocol_rep);
 	g_free(protocol_rep);
 	va_end(ap);
@@ -5214,11 +5204,10 @@ proto_tree_set_boolean(field_info *fi, guint64 value)
 static char *
 other_decode_bitfield_value(char *buf, const guint64 val, const guint64 mask, const int width)
 {
-	int i;
+	int i = 0;
 	guint64 bit;
 	char *p;
 
-	i = 0;
 	p = buf;
 
 	/* This is a devel error. It is safer to stop here. */
@@ -5266,6 +5255,10 @@ other_decode_bitfield_varint_value(char *buf, guint64 val, guint64 mask, const i
 	char *p;
 
 	p = buf;
+
+	/* This is a devel error. It is safer to stop here. */
+	DISSECTOR_ASSERT(width >= 1);
+
 	bit = G_GUINT64_CONSTANT(1) << (width - 1);
 	for (;;) {
 		if (((8-(i % 8)) != 8) && /* MSB is never used for value. */
@@ -6166,7 +6159,7 @@ get_full_length(header_field_info *hfinfo, tvbuff_t *tvb, const gint start,
 	case FT_INT48:
 	case FT_INT56:
 	case FT_INT64:
-		if (encoding & (ENC_VARIANT_MASK)) {
+		if (encoding & ENC_VARINT_MASK) {
 			if (length < -1) {
 				report_type_length_mismatch(NULL, "a FT_[U]INT", length, TRUE);
 			}
@@ -6313,11 +6306,11 @@ proto_tree_set_representation_value(proto_item *pi, const char *format, va_list 
 		}
 
 		/* put in the hf name */
-		ret += g_snprintf(fi->rep->representation + ret, ITEM_LABEL_LENGTH - ret, "%s: ", hf->name);
+		ret += snprintf(fi->rep->representation + ret, ITEM_LABEL_LENGTH - ret, "%s: ", hf->name);
 
 		/* If possible, Put in the value of the string */
 		if (ret < ITEM_LABEL_LENGTH) {
-			ret += g_vsnprintf(fi->rep->representation + ret,
+			ret += vsnprintf(fi->rep->representation + ret,
 					  ITEM_LABEL_LENGTH - ret, format, ap);
 		}
 		if (ret >= ITEM_LABEL_LENGTH) {
@@ -6342,7 +6335,7 @@ proto_tree_set_representation(proto_item *pi, const char *format, va_list ap)
 
 	if (!proto_item_is_hidden(pi)) {
 		ITEM_LABEL_NEW(PNODE_POOL(pi), fi->rep);
-		ret = g_vsnprintf(fi->rep->representation, ITEM_LABEL_LENGTH,
+		ret = vsnprintf(fi->rep->representation, ITEM_LABEL_LENGTH,
 				  format, ap);
 		if (ret >= ITEM_LABEL_LENGTH) {
 			/* Uh oh, we don't have enough room.  Tell the user
@@ -6434,7 +6427,7 @@ proto_item_fill_display_label(field_info *finfo, gchar *display_label_str, const
 			break;
 
 		case FT_ABSOLUTE_TIME:
-			tmp_str = abs_time_to_str(NULL, (const nstime_t *)fvalue_get(&finfo->value), (absolute_time_display_e)hfinfo->display, TRUE);
+			tmp_str = abs_time_to_str(NULL, (const nstime_t *)fvalue_get(&finfo->value), hfinfo->display, TRUE);
 			label_len = protoo_strlcpy(display_label_str, tmp_str, label_str_size);
 			wmem_free(NULL, tmp_str);
 			break;
@@ -6636,11 +6629,11 @@ proto_item_fill_display_label(field_info *finfo, gchar *display_label_str, const
 		case FT_FLOAT:
 			if (hfinfo->display & BASE_UNIT_STRING) {
 				double d_value = fvalue_get_floating(&finfo->value);
-				g_snprintf(display_label_str, label_str_size,
+				snprintf(display_label_str, label_str_size,
 						"%." G_STRINGIFY(FLT_DIG) "g%s", d_value,
 						unit_name_string_get_double(d_value, (const unit_name_string*)hfinfo->strings));
 			} else {
-				g_snprintf(display_label_str, label_str_size,
+				snprintf(display_label_str, label_str_size,
 						"%." G_STRINGIFY(FLT_DIG) "g", fvalue_get_floating(&finfo->value));
 			}
 			label_len = (int)strlen(display_label_str);
@@ -6649,11 +6642,11 @@ proto_item_fill_display_label(field_info *finfo, gchar *display_label_str, const
 		case FT_DOUBLE:
 			if (hfinfo->display & BASE_UNIT_STRING) {
 				double d_value = fvalue_get_floating(&finfo->value);
-				g_snprintf(display_label_str, label_str_size,
+				snprintf(display_label_str, label_str_size,
 						"%." G_STRINGIFY(DBL_DIG) "g%s", d_value,
 						unit_name_string_get_double(d_value, (const unit_name_string*)hfinfo->strings));
 			} else {
-				g_snprintf(display_label_str, label_str_size,
+				snprintf(display_label_str, label_str_size,
 						"%." G_STRINGIFY(DBL_DIG) "g", fvalue_get_floating(&finfo->value));
 			}
 			label_len = (int)strlen(display_label_str);
@@ -6799,7 +6792,7 @@ proto_custom_set(proto_tree* tree, GSList *field_ids, gint occurrence,
 
 						if (hfinfo->strings && FIELD_DISPLAY(hfinfo->display) == BASE_NONE) {
 							hf_str_val = hf_try_val_to_str(number, hfinfo);
-							g_snprintf(expr+offset_e, size-offset_e, "\"%s\"", hf_str_val);
+							snprintf(expr+offset_e, size-offset_e, "\"%s\"", hf_str_val);
 						} else {
 							number_out = hfinfo_char_value_format(hfinfo, number_buf, number);
 
@@ -6826,14 +6819,14 @@ proto_custom_set(proto_tree* tree, GSList *field_ids, gint occurrence,
 							(guint32) fvalue_get_sinteger(&finfo->value) :
 							fvalue_get_uinteger(&finfo->value);
 
-						if (hfinfo->strings && hfinfo->type != FT_FRAMENUM) {
+						if (hfinfo->strings && hfinfo->type != FT_FRAMENUM && FIELD_DISPLAY(hfinfo->display) != BASE_CUSTOM) {
 							hf_str_val = hf_try_val_to_str(number, hfinfo);
 						}
 
 						if (hf_str_val && FIELD_DISPLAY(hfinfo->display) == BASE_NONE) {
 
 							hf_str_val = hf_try_val_to_str(number, hfinfo);
-							g_snprintf(expr+offset_e, size-offset_e, "\"%s\"", hf_str_val);
+							snprintf(expr+offset_e, size-offset_e, "\"%s\"", hf_str_val);
 						} else {
 							number_out = hfinfo_numeric_value_format(hfinfo, number_buf, number);
 
@@ -6858,12 +6851,12 @@ proto_custom_set(proto_tree* tree, GSList *field_ids, gint occurrence,
 							(guint64) fvalue_get_sinteger64(&finfo->value) :
 							fvalue_get_uinteger64(&finfo->value);
 
-						if (hfinfo->strings && hfinfo->type != FT_FRAMENUM) {
+						if (hfinfo->strings && hfinfo->type != FT_FRAMENUM && FIELD_DISPLAY(hfinfo->display) != BASE_CUSTOM) {
 							hf_str_val = hf_try_val64_to_str(number64, hfinfo);
 						}
 
 						if (hf_str_val && FIELD_DISPLAY(hfinfo->display) == BASE_NONE) {
-							g_snprintf(expr+offset_e, size-offset_e, "\"%s\"", hf_str_val);
+							snprintf(expr+offset_e, size-offset_e, "\"%s\"", hf_str_val);
 						} else {
 							number_out = hfinfo_numeric_value_format64(hfinfo, number_buf, number64);
 
@@ -7008,7 +7001,7 @@ proto_item_append_text(proto_item *pi, const char *format, ...)
 		curlen = strlen(fi->rep->representation);
 		if (ITEM_LABEL_LENGTH > curlen) {
 			va_start(ap, format);
-			g_vsnprintf(fi->rep->representation + curlen,
+			vsnprintf(fi->rep->representation + curlen,
 				ITEM_LABEL_LENGTH - (gulong) curlen, format, ap);
 			va_end(ap);
 		}
@@ -7042,7 +7035,7 @@ proto_item_prepend_text(proto_item *pi, const char *format, ...)
 			(void) g_strlcpy(representation, fi->rep->representation, ITEM_LABEL_LENGTH);
 
 		va_start(ap, format);
-		g_vsnprintf(fi->rep->representation,
+		vsnprintf(fi->rep->representation,
 			ITEM_LABEL_LENGTH, format, ap);
 		va_end(ap);
 		(void) g_strlcat(fi->rep->representation, representation, ITEM_LABEL_LENGTH);
@@ -7356,14 +7349,14 @@ static void
 check_protocol_filter_name_or_fail(const char *filter_name)
 {
 	if (proto_check_field_name(filter_name) != '\0') {
-		ws_error("Protocol filter name \"%s\" has one or more invalid characters."
+		REPORT_DISSECTOR_BUG("Protocol filter name \"%s\" has one or more invalid characters."
 			" Allowed are letters, digits, '-', '_' and non-repeating '.'."
 			" This might be caused by an inappropriate plugin or a development error.", filter_name);
 	}
 
 	/* Check for reserved keywords. */
 	if (g_hash_table_contains(proto_reserved_filter_names, filter_name)) {
-		ws_error("Protocol filter name \"%s\" is invalid because it is a reserved keyword."
+		REPORT_DISSECTOR_BUG("Protocol filter name \"%s\" is invalid because it is a reserved keyword."
 			" This might be caused by an inappropriate plugin or a development error.", filter_name);
 	}
 }
@@ -7385,19 +7378,19 @@ proto_register_protocol(const char *name, const char *short_name,
 
 	if (g_hash_table_lookup(proto_names, name)) {
 		/* ws_error will terminate the program */
-		ws_error("Duplicate protocol name \"%s\"!"
+		REPORT_DISSECTOR_BUG("Duplicate protocol name \"%s\"!"
 			" This might be caused by an inappropriate plugin or a development error.", name);
 	}
 
 	if (g_hash_table_lookup(proto_short_names, short_name)) {
-		ws_error("Duplicate protocol short_name \"%s\"!"
+		REPORT_DISSECTOR_BUG("Duplicate protocol short_name \"%s\"!"
 			" This might be caused by an inappropriate plugin or a development error.", short_name);
 	}
 
 	check_protocol_filter_name_or_fail(filter_name);
 
 	if (g_hash_table_lookup(proto_filter_names, filter_name)) {
-		ws_error("Duplicate protocol filter_name \"%s\"!"
+		REPORT_DISSECTOR_BUG("Duplicate protocol filter_name \"%s\"!"
 			" This might be caused by an inappropriate plugin or a development error.", filter_name);
 	}
 
@@ -7449,11 +7442,11 @@ proto_register_protocol_in_name_only(const char *name, const char *short_name, c
 	 * Just register it in a list and make a hf_ field from it
 	 */
 	if ((field_type != FT_PROTOCOL) && (field_type != FT_BYTES)) {
-		ws_error("Pino \"%s\" must be of type FT_PROTOCOL or FT_BYTES.", name);
+		REPORT_DISSECTOR_BUG("Pino \"%s\" must be of type FT_PROTOCOL or FT_BYTES.", name);
 	}
 
 	if (parent_proto < 0) {
-		ws_error("Must have a valid parent protocol for helper protocol \"%s\"!"
+		REPORT_DISSECTOR_BUG("Must have a valid parent protocol for helper protocol \"%s\"!"
 			" This might be caused by an inappropriate plugin or a development error.", name);
 	}
 
@@ -7592,13 +7585,6 @@ proto_get_next_protocol(void **cookie)
 	return protocol->proto_id;
 }
 
-/* XXX: Unfortunately certain functions in proto_hier_tree_model.c
-        assume that the cookie stored by
-        proto_get_(first|next)_protocol_field() will never have a
-        value of NULL. So, to preserve this semantic, the cookie value
-        below is adjusted so that the cookie value stored is 1 + the
-        current (zero-based) array index.
-*/
 header_field_info *
 proto_get_first_protocol_field(const int proto_id, void **cookie)
 {
@@ -7607,7 +7593,7 @@ proto_get_first_protocol_field(const int proto_id, void **cookie)
 	if ((protocol == NULL) || (protocol->fields == NULL) || (protocol->fields->len == 0))
 		return NULL;
 
-	*cookie = GUINT_TO_POINTER(0 + 1);
+	*cookie = GUINT_TO_POINTER(0);
 	return (header_field_info *)g_ptr_array_index(protocol->fields, 0);
 }
 
@@ -7615,14 +7601,14 @@ header_field_info *
 proto_get_next_protocol_field(const int proto_id, void **cookie)
 {
 	protocol_t *protocol = find_protocol_by_id(proto_id);
-	guint       i        = GPOINTER_TO_UINT(*cookie) - 1;
+	guint       i        = GPOINTER_TO_UINT(*cookie);
 
 	i++;
 
 	if ((protocol->fields == NULL) || (i >= protocol->fields->len))
 		return NULL;
 
-	*cookie = GUINT_TO_POINTER(i + 1);
+	*cookie = GUINT_TO_POINTER(i);
 	return (header_field_info *)g_ptr_array_index(protocol->fields, i);
 }
 
@@ -7937,41 +7923,13 @@ proto_register_field_array(const int parent, hf_register_info *hf, const int num
 		 * from "proto_register_field_init()").
 		 */
 		if (*ptr->p_id != -1 && *ptr->p_id != 0) {
-			fprintf(stderr,
-				"Duplicate field detected in call to proto_register_field_array: %s is already registered\n",
+			REPORT_DISSECTOR_BUG(
+				"Duplicate field detected in call to proto_register_field_array: %s is already registered",
 				ptr->hfinfo.abbrev);
 			return;
 		}
 
 		*ptr->p_id = proto_register_field_common(proto, &ptr->hfinfo, parent);
-	}
-}
-
-void
-proto_register_fields_manual(const int parent, header_field_info **hfi, const int num_records)
-{
-	int		  i;
-	protocol_t	 *proto;
-
-	proto = find_protocol_by_id(parent);
-
-	if (proto->fields == NULL) {
-		proto->fields = g_ptr_array_sized_new(num_records);
-	}
-
-
-	for (i = 0; i < num_records; i++) {
-		/*
-		 * Make sure we haven't registered this yet.
-		 */
-		if (hfi[i]->id != -1) {
-			fprintf(stderr,
-				"Duplicate field detected in call to proto_register_fields: %s is already registered\n",
-				hfi[i]->abbrev);
-			return;
-		}
-
-		proto_register_field_common(proto, hfi[i], parent);
 	}
 }
 
@@ -8230,16 +8188,16 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 	if (!hfinfo->name || !hfinfo->name[0]) {
 		if (hfinfo->abbrev)
 			/* Try to identify the field */
-			ws_error("Field (abbrev='%s') does not have a name\n",
+			REPORT_DISSECTOR_BUG("Field (abbrev='%s') does not have a name",
 				hfinfo->abbrev);
 		else
 			/* Hum, no luck */
-			ws_error("Field does not have a name (nor an abbreviation)\n");
+			REPORT_DISSECTOR_BUG("Field does not have a name (nor an abbreviation)");
 	}
 
 	/* fields with an empty string for an abbreviation aren't filterable */
 	if (!hfinfo->abbrev || !hfinfo->abbrev[0])
-		ws_error("Field '%s' does not have an abbreviation\n", hfinfo->name);
+		REPORT_DISSECTOR_BUG("Field '%s' does not have an abbreviation", hfinfo->name);
 
 	/*  These types of fields are allowed to have value_strings,
 	 *  true_false_strings or a protocol_t struct
@@ -8281,8 +8239,8 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 
 			//fallthrough
 		default:
-			ws_error("Field '%s' (%s) has a 'strings' value but is of type %s"
-				" (which is not allowed to have strings)\n",
+			REPORT_DISSECTOR_BUG("Field '%s' (%s) has a 'strings' value but is of type %s"
+				" (which is not allowed to have strings)",
 				hfinfo->name, hfinfo->abbrev, ftype_name(hfinfo->type));
 		}
 	}
@@ -8312,14 +8270,14 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 		if (hfinfo->display & BASE_EXT_STRING) {
 			if (hfinfo->display & BASE_VAL64_STRING) {
 				const val64_string *start_values = VAL64_STRING_EXT_VS_P((const val64_string_ext*)hfinfo->strings);
-				CHECK_HF_VALUE(val64_string, G_GINT64_MODIFIER, start_values);
+				CHECK_HF_VALUE(val64_string, PRIu64, start_values);
 			} else {
 				const value_string *start_values = VALUE_STRING_EXT_VS_P((const value_string_ext*)hfinfo->strings);
-				CHECK_HF_VALUE(value_string, "", start_values);
+				CHECK_HF_VALUE(value_string, "u", start_values);
 			}
 		} else {
 			const value_string *start_values = (const value_string*)hfinfo->strings;
-			CHECK_HF_VALUE(value_string, "", start_values);
+			CHECK_HF_VALUE(value_string, "u", start_values);
 		}
 	}
 
@@ -8341,7 +8299,7 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 
 			do {
 				if (this_it->value_max < this_it->value_min) {
-					ws_warning("value_range_string error:  %s (%s) entry for \"%s\" - max(%u 0x%x) is less than min(%u 0x%x)",
+					ws_warning("value_range_string error:  %s (%s) entry for \"%s\" - max(%"PRIu64" 0x%"PRIx64") is less than min(%"PRIu64" 0x%"PRIx64")",
 							  hfinfo->name, hfinfo->abbrev,
 							  this_it->strptr,
 							  this_it->value_max, this_it->value_max,
@@ -8354,7 +8312,7 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 					/* Not OK if this one is completely hidden by an earlier one! */
 					if ((prev_it->value_min <= this_it->value_min) && (prev_it->value_max >= this_it->value_max)) {
 						ws_warning("value_range_string error:  %s (%s) hidden by earlier entry "
-								  "(prev=\"%s\":  %u 0x%x -> %u 0x%x)  (this=\"%s\":  %u 0x%x -> %u 0x%x)",
+								  "(prev=\"%s\":  %"PRIu64" 0x%"PRIx64" -> %"PRIu64" 0x%"PRIx64")  (this=\"%s\":  %"PRIu64" 0x%"PRIx64" -> %"PRIu64" 0x%"PRIx64")",
 								  hfinfo->name, hfinfo->abbrev,
 								  prev_it->strptr, prev_it->value_min, prev_it->value_min,
 								  prev_it->value_max, prev_it->value_max,
@@ -8387,7 +8345,7 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 					break;
 				case BASE_NONE:
 					if (hfinfo->strings == NULL)
-						ws_error("Field '%s' (%s) is an integral value (%s)"
+						REPORT_DISSECTOR_BUG("Field '%s' (%s) is an integral value (%s)"
 							" but is being displayed as BASE_NONE but"
 							" without a strings conversion",
 							hfinfo->name, hfinfo->abbrev,
@@ -8395,14 +8353,14 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 					break;
 				default:
 					tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Unknown: 0x%x)");
-					ws_error("Field '%s' (%s) is a character value (%s)"
-						" but is being displayed as %s\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is a character value (%s)"
+						" but is being displayed as %s",
 						hfinfo->name, hfinfo->abbrev,
 						ftype_name(hfinfo->type), tmp_str);
 					wmem_free(NULL, tmp_str);
 			}
 			if (hfinfo->display & BASE_UNIT_STRING) {
-				ws_error("Field '%s' (%s) is a character value (%s) but has a unit string\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is a character value (%s) but has a unit string",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			}
@@ -8426,7 +8384,7 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 				case BASE_DEC_HEX:
 				case BASE_HEX_DEC:
 					tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Bit count: %d)");
-					ws_error("Field '%s' (%s) is signed (%s) but is being displayed unsigned (%s)\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is signed (%s) but is being displayed unsigned (%s)",
 						hfinfo->name, hfinfo->abbrev,
 						ftype_name(hfinfo->type), tmp_str);
 					wmem_free(NULL, tmp_str);
@@ -8443,17 +8401,17 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 			if (IS_BASE_PORT(hfinfo->display)) {
 				tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Unknown: 0x%x)");
 				if (hfinfo->type != FT_UINT16) {
-					ws_error("Field '%s' (%s) has 'display' value %s but it can only be used with FT_UINT16, not %s\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) has 'display' value %s but it can only be used with FT_UINT16, not %s",
 						hfinfo->name, hfinfo->abbrev,
 						tmp_str, ftype_name(hfinfo->type));
 				}
 				if (hfinfo->strings != NULL) {
-					ws_error("Field '%s' (%s) is an %s (%s) but has a strings value\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s (%s) but has a strings value",
 						hfinfo->name, hfinfo->abbrev,
 						ftype_name(hfinfo->type), tmp_str);
 				}
 				if (hfinfo->bitmask != 0) {
-					ws_error("Field '%s' (%s) is an %s (%s) but has a bitmask\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s (%s) but has a bitmask",
 						hfinfo->name, hfinfo->abbrev,
 						ftype_name(hfinfo->type), tmp_str);
 				}
@@ -8464,17 +8422,17 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 			if (hfinfo->display == BASE_OUI) {
 				tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Unknown: 0x%x)");
 				if (hfinfo->type != FT_UINT24) {
-					ws_error("Field '%s' (%s) has 'display' value %s but it can only be used with FT_UINT24, not %s\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) has 'display' value %s but it can only be used with FT_UINT24, not %s",
 						hfinfo->name, hfinfo->abbrev,
 						tmp_str, ftype_name(hfinfo->type));
 				}
 				if (hfinfo->strings != NULL) {
-					ws_error("Field '%s' (%s) is an %s (%s) but has a strings value\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s (%s) but has a strings value",
 						hfinfo->name, hfinfo->abbrev,
 						ftype_name(hfinfo->type), tmp_str);
 				}
 				if (hfinfo->bitmask != 0) {
-					ws_error("Field '%s' (%s) is an %s (%s) but has a bitmask\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s (%s) but has a bitmask",
 						hfinfo->name, hfinfo->abbrev,
 						ftype_name(hfinfo->type), tmp_str);
 				}
@@ -8502,14 +8460,14 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 					break;
 				case BASE_NONE:
 					if (hfinfo->strings == NULL) {
-						ws_error("Field '%s' (%s) is an integral value (%s)"
+						REPORT_DISSECTOR_BUG("Field '%s' (%s) is an integral value (%s)"
 							" but is being displayed as BASE_NONE but"
 							" without a strings conversion",
 							hfinfo->name, hfinfo->abbrev,
 							ftype_name(hfinfo->type));
 					}
 					if (hfinfo->display & BASE_SPECIAL_VALS) {
-						ws_error("Field '%s' (%s) is an integral value (%s)"
+						REPORT_DISSECTOR_BUG("Field '%s' (%s) is an integral value (%s)"
 							" that is being displayed as BASE_NONE but"
 							" with BASE_SPECIAL_VALS",
 							hfinfo->name, hfinfo->abbrev,
@@ -8519,8 +8477,8 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 
 				default:
 					tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Unknown: 0x%x)");
-					ws_error("Field '%s' (%s) is an integral value (%s)"
-						" but is being displayed as %s\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is an integral value (%s)"
+						" but is being displayed as %s",
 						hfinfo->name, hfinfo->abbrev,
 						ftype_name(hfinfo->type), tmp_str);
 					wmem_free(NULL, tmp_str);
@@ -8540,17 +8498,17 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 					break;
 				default:
 					tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Bit count: %d)");
-					ws_error("Field '%s' (%s) is an byte array but is being displayed as %s instead of BASE_NONE, SEP_DOT, SEP_DASH, SEP_COLON, or SEP_SPACE\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is an byte array but is being displayed as %s instead of BASE_NONE, SEP_DOT, SEP_DASH, SEP_COLON, or SEP_SPACE",
 						hfinfo->name, hfinfo->abbrev, tmp_str);
 					wmem_free(NULL, tmp_str);
 			}
 			if (hfinfo->bitmask != 0)
-				ws_error("Field '%s' (%s) is an %s but has a bitmask\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a bitmask",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			//allowed to support string if its a protocol (for pinos)
 			if ((hfinfo->strings != NULL) && (!(hfinfo->display & BASE_PROTOCOL_INFO)))
-				ws_error("Field '%s' (%s) is an %s but has a strings value\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a strings value",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			break;
@@ -8559,13 +8517,13 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 		case FT_FRAMENUM:
 			if (hfinfo->display != BASE_NONE) {
 				tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Bit count: %d)");
-				ws_error("Field '%s' (%s) is an %s but is being displayed as %s instead of BASE_NONE\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but is being displayed as %s instead of BASE_NONE",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type), tmp_str);
 				wmem_free(NULL, tmp_str);
 			}
 			if (hfinfo->bitmask != 0)
-				ws_error("Field '%s' (%s) is an %s but has a bitmask\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a bitmask",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			break;
@@ -8579,12 +8537,12 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 			      hfinfo->display == ABSOLUTE_TIME_NTP_UTC   ||
 			      hfinfo->display == ABSOLUTE_TIME_DOY_UTC)) {
 				tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Bit count: %d)");
-				ws_error("Field '%s' (%s) is a %s but is being displayed as %s instead of as a time\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is a %s but is being displayed as %s instead of as a time",
 					hfinfo->name, hfinfo->abbrev, ftype_name(hfinfo->type), tmp_str);
 				wmem_free(NULL, tmp_str);
 			}
 			if (hfinfo->bitmask != 0)
-				ws_error("Field '%s' (%s) is an %s but has a bitmask\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a bitmask",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			break;
@@ -8600,19 +8558,19 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 
 				default:
 					tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Unknown: 0x%x)");
-					ws_error("Field '%s' (%s) is an string value (%s)"
-						" but is being displayed as %s\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is an string value (%s)"
+						" but is being displayed as %s",
 						hfinfo->name, hfinfo->abbrev,
 						ftype_name(hfinfo->type), tmp_str);
 					wmem_free(NULL, tmp_str);
 			}
 
 			if (hfinfo->bitmask != 0)
-				ws_error("Field '%s' (%s) is an %s but has a bitmask\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a bitmask",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			if (hfinfo->strings != NULL)
-				ws_error("Field '%s' (%s) is an %s but has a strings value\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a strings value",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			break;
@@ -8625,8 +8583,8 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 
 				default:
 					tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Unknown: 0x%x)");
-					ws_error("Field '%s' (%s) is an IPv4 value (%s)"
-						" but is being displayed as %s\n",
+					REPORT_DISSECTOR_BUG("Field '%s' (%s) is an IPv4 value (%s)"
+						" but is being displayed as %s",
 						hfinfo->name, hfinfo->abbrev,
 						ftype_name(hfinfo->type), tmp_str);
 					wmem_free(NULL, tmp_str);
@@ -8637,36 +8595,36 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 		case FT_DOUBLE:
 			if (FIELD_DISPLAY(hfinfo->display) != BASE_NONE) {
 				tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Bit count: %d)");
-				ws_error("Field '%s' (%s) is an %s but is being displayed as %s instead of BASE_NONE\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but is being displayed as %s instead of BASE_NONE",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type),
 					tmp_str);
 				wmem_free(NULL, tmp_str);
 			}
 			if (hfinfo->bitmask != 0)
-				ws_error("Field '%s' (%s) is an %s but has a bitmask\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a bitmask",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			if ((hfinfo->strings != NULL) && (!(hfinfo->display & BASE_UNIT_STRING)))
-				ws_error("Field '%s' (%s) is an %s but has a strings value\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a strings value",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			break;
 		default:
 			if (hfinfo->display != BASE_NONE) {
 				tmp_str = val_to_str_wmem(NULL, hfinfo->display, hf_display, "(Bit count: %d)");
-				ws_error("Field '%s' (%s) is an %s but is being displayed as %s instead of BASE_NONE\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but is being displayed as %s instead of BASE_NONE",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type),
 					tmp_str);
 				wmem_free(NULL, tmp_str);
 			}
 			if (hfinfo->bitmask != 0)
-				ws_error("Field '%s' (%s) is an %s but has a bitmask\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a bitmask",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			if (hfinfo->strings != NULL)
-				ws_error("Field '%s' (%s) is an %s but has a strings value\n",
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) is an %s but has a strings value",
 					hfinfo->name, hfinfo->abbrev,
 					ftype_name(hfinfo->type));
 			break;
@@ -8833,13 +8791,12 @@ proto_register_field_init(header_field_info *hfinfo, const int parent)
 		c = proto_check_field_name(hfinfo->abbrev);
 		if (c) {
 			if (c == '.') {
-				fprintf(stderr, "Invalid leading, duplicated or trailing '.' found in filter name '%s'\n", hfinfo->abbrev);
+				REPORT_DISSECTOR_BUG("Invalid leading, duplicated or trailing '.' found in filter name '%s'", hfinfo->abbrev);
 			} else if (g_ascii_isprint(c)) {
-				fprintf(stderr, "Invalid character '%c' in filter name '%s'\n", c, hfinfo->abbrev);
+				REPORT_DISSECTOR_BUG("Invalid character '%c' in filter name '%s'", c, hfinfo->abbrev);
 			} else {
-				fprintf(stderr, "Invalid byte \\%03o in filter name '%s'\n", c, hfinfo->abbrev);
+				REPORT_DISSECTOR_BUG("Invalid byte \\%03o in filter name '%s'", c, hfinfo->abbrev);
 			}
-			DISSECTOR_ASSERT_NOT_REACHED();
 		}
 
 		/* We allow multiple hfinfo's to be registered under the same
@@ -8921,8 +8878,7 @@ proto_register_subtree_array(gint * const *indices, const int num_indices)
 	 */
 	for (i = 0; i < num_indices; i++, ptr++, num_tree_types++) {
 		if (**ptr != -1) {
-			/* ws_error will terminate the program */
-			ws_error("register_subtree_array: subtree item type (ett_...) not -1 !"
+			REPORT_DISSECTOR_BUG("register_subtree_array: subtree item type (ett_...) not -1 !"
 				" This is a development error:"
 				" Either the subtree item type has already been assigned or"
 				" was not initialized to -1.");
@@ -9084,11 +9040,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		case FT_UINT24:
 		case FT_UINT32:
 			if (hfinfo->bitmask) {
-				if (fi->flags & FI_VARINT) {
-					fill_label_bitfield_varint(fi, label_str, FALSE);
-				} else {
-					fill_label_bitfield(fi, label_str, FALSE);
-				}
+				fill_label_bitfield(fi, label_str, FALSE);
 			} else {
 				fill_label_number(fi, label_str, FALSE);
 			}
@@ -9103,11 +9055,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		case FT_UINT56:
 		case FT_UINT64:
 			if (hfinfo->bitmask) {
-				if (fi->flags & FI_VARINT) {
-					fill_label_bitfield_varint64(fi, label_str, FALSE);
-				} else {
-					fill_label_bitfield64(fi, label_str, FALSE);
-				}
+				fill_label_bitfield64(fi, label_str, FALSE);
 			} else {
 				fill_label_number64(fi, label_str, FALSE);
 			}
@@ -9118,11 +9066,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		case FT_INT24:
 		case FT_INT32:
 			if (hfinfo->bitmask) {
-				if (fi->flags & FI_VARINT) {
-					fill_label_bitfield_varint(fi, label_str, TRUE);
-				} else {
-					fill_label_bitfield(fi, label_str, TRUE);
-				}
+				fill_label_bitfield(fi, label_str, TRUE);
 			} else {
 				fill_label_number(fi, label_str, TRUE);
 			}
@@ -9133,11 +9077,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		case FT_INT56:
 		case FT_INT64:
 			if (hfinfo->bitmask) {
-				if (fi->flags & FI_VARINT) {
-					fill_label_bitfield_varint64(fi, label_str, TRUE);
-				} else {
-					fill_label_bitfield64(fi, label_str, TRUE);
-				}
+				fill_label_bitfield64(fi, label_str, TRUE);
 			} else {
 				fill_label_number64(fi, label_str, TRUE);
 			}
@@ -9147,12 +9087,12 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		{
 			double d_value = fvalue_get_floating(&fi->value);
 			if (hfinfo->display & BASE_UNIT_STRING) {
-				g_snprintf(label_str, ITEM_LABEL_LENGTH,
+				snprintf(label_str, ITEM_LABEL_LENGTH,
 					   "%s: %." G_STRINGIFY(FLT_DIG) "g%s",
 					   hfinfo->name, d_value,
 					   unit_name_string_get_double(d_value, (const unit_name_string*)hfinfo->strings));
 			} else {
-				g_snprintf(label_str, ITEM_LABEL_LENGTH,
+				snprintf(label_str, ITEM_LABEL_LENGTH,
 					   "%s: %." G_STRINGIFY(FLT_DIG) "g",
 					   hfinfo->name, d_value);
 			}
@@ -9163,12 +9103,12 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		{
 			double d_value = fvalue_get_floating(&fi->value);
 			if (hfinfo->display & BASE_UNIT_STRING) {
-				g_snprintf(label_str, ITEM_LABEL_LENGTH,
+				snprintf(label_str, ITEM_LABEL_LENGTH,
 					   "%s: %." G_STRINGIFY(DBL_DIG) "g%s",
 					   hfinfo->name, d_value,
 					   unit_name_string_get_double(d_value, (const unit_name_string*)hfinfo->strings));
 			} else {
-				g_snprintf(label_str, ITEM_LABEL_LENGTH,
+				snprintf(label_str, ITEM_LABEL_LENGTH,
 					   "%s: %." G_STRINGIFY(DBL_DIG) "g",
 					   hfinfo->name, d_value);
 			}
@@ -9176,14 +9116,14 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		}
 
 		case FT_ABSOLUTE_TIME:
-			tmp = abs_time_to_str(NULL, (const nstime_t *)fvalue_get(&fi->value), (absolute_time_display_e)hfinfo->display, TRUE);
+			tmp = abs_time_to_str(NULL, (const nstime_t *)fvalue_get(&fi->value), hfinfo->display, TRUE);
 			label_fill(label_str, 0, hfinfo, tmp);
 			wmem_free(NULL, tmp);
 			break;
 
 		case FT_RELATIVE_TIME:
 			tmp = rel_time_to_secs_str(NULL, (const nstime_t *)fvalue_get(&fi->value));
-			g_snprintf(label_str, ITEM_LABEL_LENGTH,
+			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s seconds", hfinfo->name, tmp);
 			wmem_free(NULL, tmp);
 			break;
@@ -9191,7 +9131,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		case FT_IPXNET:
 			integer = fvalue_get_uinteger(&fi->value);
 			tmp = get_ipxnet_name(NULL, integer);
-			g_snprintf(label_str, ITEM_LABEL_LENGTH,
+			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s (0x%08X)", hfinfo->name,
 				   tmp, integer);
 			wmem_free(NULL, tmp);
@@ -9203,7 +9143,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 			addr.data = (guint8 *)fvalue_get(&fi->value);
 
 			addr_str = (char*)address_to_str(NULL, &addr);
-			g_snprintf(label_str, ITEM_LABEL_LENGTH,
+			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s", hfinfo->name, addr_str);
 			wmem_free(NULL, addr_str);
 			break;
@@ -9214,7 +9154,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 			addr.data = (guint8 *)fvalue_get(&fi->value);
 
 			addr_str = (char*)address_to_str(NULL, &addr);
-			g_snprintf(label_str, ITEM_LABEL_LENGTH,
+			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s", hfinfo->name, addr_str);
 			wmem_free(NULL, addr_str);
 			break;
@@ -9227,7 +9167,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 			addr.data = bytes;
 
 			addr_str = (char*)address_with_resolution_to_str(NULL, &addr);
-			g_snprintf(label_str, ITEM_LABEL_LENGTH,
+			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s", hfinfo->name, addr_str);
 			wmem_free(NULL, addr_str);
 			break;
@@ -9244,7 +9184,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 			} else {
 				addr_str = (char*)address_with_resolution_to_str(NULL, &addr);
 			}
-			g_snprintf(label_str, ITEM_LABEL_LENGTH,
+			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s", hfinfo->name, addr_str);
 			wmem_free(NULL, addr_str);
 			break;
@@ -9257,7 +9197,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 			addr.data = bytes;
 
 			addr_str = (char*)address_with_resolution_to_str(NULL, &addr);
-			g_snprintf(label_str, ITEM_LABEL_LENGTH,
+			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s", hfinfo->name, addr_str);
 			wmem_free(NULL, addr_str);
 			break;
@@ -9268,7 +9208,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 			addr.data = (guint8 *)fvalue_get(&fi->value);
 
 			addr_str = (char*)address_with_resolution_to_str(NULL, &addr);
-			g_snprintf(label_str, ITEM_LABEL_LENGTH,
+			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s", hfinfo->name, addr_str);
 			wmem_free(NULL, addr_str);
 			break;
@@ -9335,7 +9275,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		case FT_IEEE_11073_SFLOAT:
 		case FT_IEEE_11073_FLOAT:
 			tmp = fvalue_to_string_repr(NULL, &fi->value, FTREPR_DISPLAY, hfinfo->display);
-			g_snprintf(label_str, ITEM_LABEL_LENGTH,
+			snprintf(label_str, ITEM_LABEL_LENGTH,
 						"%s: %s",
 						hfinfo->name, tmp);
 			wmem_free(NULL, tmp);
@@ -9508,16 +9448,17 @@ fill_label_bitfield(field_info *fi, gchar *label_str, gboolean is_signed)
 {
 	char       *p;
 	int         bitfield_byte_length, bitwidth;
-	guint32     unshifted_value;
-	guint32     value;
-
+	guint32     value, unshifted_value;
 	char        buf[32];
 	const char *out;
 
 	header_field_info *hfinfo = fi->hfinfo;
 
 	/* Figure out the bit width */
-	bitwidth = hfinfo_container_bitwidth(hfinfo);
+	if (fi->flags & FI_VARINT)
+		bitwidth = fi->length*8;
+	else
+		bitwidth = hfinfo_container_bitwidth(hfinfo);
 
 	/* Un-shift bits */
 	if (is_signed)
@@ -9531,7 +9472,10 @@ fill_label_bitfield(field_info *fi, gchar *label_str, gboolean is_signed)
 	}
 
 	/* Create the bitfield first */
-	p = decode_bitfield_value(label_str, unshifted_value, hfinfo->bitmask, bitwidth);
+	if (fi->flags & FI_VARINT)
+		p = decode_bitfield_varint_value(label_str, unshifted_value, hfinfo->bitmask, bitwidth);
+	else
+		p = decode_bitfield_value(label_str, unshifted_value, hfinfo->bitmask, bitwidth);
 	bitfield_byte_length = (int) (p - label_str);
 
 	/* Fill in the textual info using stored (shifted) value */
@@ -9564,16 +9508,17 @@ fill_label_bitfield64(field_info *fi, gchar *label_str, gboolean is_signed)
 {
 	char       *p;
 	int         bitfield_byte_length, bitwidth;
-	guint64     unshifted_value;
-	guint64     value;
-
+	guint64     value, unshifted_value;
 	char        buf[48];
 	const char *out;
 
 	header_field_info *hfinfo = fi->hfinfo;
 
 	/* Figure out the bit width */
-	bitwidth = hfinfo_container_bitwidth(hfinfo);
+	if (fi->flags & FI_VARINT)
+		bitwidth = fi->length*8;
+	else
+		bitwidth = hfinfo_container_bitwidth(hfinfo);
 
 	/* Un-shift bits */
 	if (is_signed)
@@ -9587,111 +9532,10 @@ fill_label_bitfield64(field_info *fi, gchar *label_str, gboolean is_signed)
 	}
 
 	/* Create the bitfield first */
-	p = decode_bitfield_value(label_str, unshifted_value, hfinfo->bitmask, bitwidth);
-	bitfield_byte_length = (int) (p - label_str);
-
-	/* Fill in the textual info using stored (shifted) value */
-	if (hfinfo->display == BASE_CUSTOM) {
-		gchar tmp[ITEM_LABEL_LENGTH];
-		const custom_fmt_func_64_t fmtfunc64 = (const custom_fmt_func_64_t)hfinfo->strings;
-
-		DISSECTOR_ASSERT(fmtfunc64);
-		fmtfunc64(tmp, value);
-		label_fill(label_str, bitfield_byte_length, hfinfo, tmp);
-	}
-	else if (hfinfo->strings) {
-		const char *val_str = hf_try_val64_to_str_const(value, hfinfo, "Unknown");
-
-		out = hfinfo_number_vals_format64(hfinfo, buf, value);
-		if (out == NULL) /* BASE_NONE so don't put integer in descr */
-			label_fill(label_str, bitfield_byte_length, hfinfo, val_str);
-		else
-			label_fill_descr(label_str, bitfield_byte_length, hfinfo, val_str, out);
-	}
-	else {
-		out = hfinfo_number_value_format64(hfinfo, buf, value);
-
-		label_fill(label_str, bitfield_byte_length, hfinfo, out);
-	}
-}
-
-static void
-fill_label_bitfield_varint(field_info *fi, gchar *label_str, gboolean is_signed)
-{
-	char       *p;
-	int         bitfield_byte_length;
-	guint32     value, unshifted_value;
-	char        buf[48];
-	const char *out;
-
-	header_field_info *hfinfo = fi->hfinfo;
-
-	/* Un-shift bits */
-	if (is_signed) {
-		value = fvalue_get_sinteger(&fi->value);
-	} else {
-		value = fvalue_get_uinteger(&fi->value);
-	}
-	unshifted_value = value;
-	if (hfinfo->bitmask) {
-		unshifted_value <<= hfinfo_bitshift(hfinfo);
-	}
-
-	/* Create the bitfield first */
-	p = decode_bitfield_varint_value(label_str, unshifted_value, hfinfo->bitmask, fi->length*8);
-	bitfield_byte_length = (int) (p - label_str);
-
-	/* Fill in the textual info using stored (shifted) value */
-	if (hfinfo->display == BASE_CUSTOM) {
-		gchar tmp[ITEM_LABEL_LENGTH];
-		const custom_fmt_func_t fmtfunc = (const custom_fmt_func_t)hfinfo->strings;
-
-		DISSECTOR_ASSERT(fmtfunc);
-		fmtfunc(tmp, value);
-		label_fill(label_str, bitfield_byte_length, hfinfo, tmp);
-	}
-	else if (hfinfo->strings) {
-		const char *val_str = hf_try_val_to_str_const(value, hfinfo, "Unknown");
-
-		out = hfinfo_number_vals_format(hfinfo, buf, value);
-		if (out == NULL) /* BASE_NONE so don't put integer in descr */
-			label_fill(label_str, bitfield_byte_length, hfinfo, val_str);
-		else
-			label_fill_descr(label_str, bitfield_byte_length, hfinfo, val_str, out);
-	}
-	else {
-		out = hfinfo_number_value_format(hfinfo, buf, value);
-
-		label_fill(label_str, bitfield_byte_length, hfinfo, out);
-	}
-}
-
-static void
-fill_label_bitfield_varint64(field_info *fi, gchar *label_str, gboolean is_signed)
-{
-	char       *p;
-	int         bitfield_byte_length;
-	guint64     unshifted_value;
-	guint64     value;
-
-	char        buf[48];
-	const char *out;
-
-	header_field_info *hfinfo = fi->hfinfo;
-
-	/* Un-shift bits */
-	if (is_signed) {
-		value = fvalue_get_sinteger64(&fi->value);
-	} else {
-		value = fvalue_get_uinteger64(&fi->value);
-	}
-	unshifted_value = value;
-	if (hfinfo->bitmask) {
-		unshifted_value <<= hfinfo_bitshift(hfinfo);
-	}
-
-	/* Create the bitfield first */
-	p = decode_bitfield_varint_value(label_str, unshifted_value, hfinfo->bitmask, fi->length*8);
+	if (fi->flags & FI_VARINT)
+		p = decode_bitfield_varint_value(label_str, unshifted_value, hfinfo->bitmask, bitwidth);
+	else
+		p = decode_bitfield_value(label_str, unshifted_value, hfinfo->bitmask, bitwidth);
 	bitfield_byte_length = (int) (p - label_str);
 
 	/* Fill in the textual info using stored (shifted) value */
@@ -10124,11 +9968,11 @@ hfinfo_number_value_format_display(const header_field_info *hfinfo, int display,
 			manuf_name = uint_get_manuf_name_if_known(value);
 			if (manuf_name == NULL) {
 				/* Could not find an OUI. */
-				g_snprintf(buf, 32, "%02x:%02x:%02x", p_oui[0], p_oui[1], p_oui[2]);
+				snprintf(buf, 32, "%02x:%02x:%02x", p_oui[0], p_oui[1], p_oui[2]);
 			}
 			else {
 				/* Found an address string. */
-				g_snprintf(buf, 32, "%02x:%02x:%02x (%s)", p_oui[0], p_oui[1], p_oui[2], manuf_name);
+				snprintf(buf, 32, "%02x:%02x:%02x (%s)", p_oui[0], p_oui[1], p_oui[2], manuf_name);
 			}
 			return buf;
 			}
@@ -10854,7 +10698,7 @@ proto_registrar_dump_values(void)
 		else if (vals64) {
 			vi = 0;
 			while (vals64[vi].strptr) {
-				printf("V64\t%s\t%" G_GINT64_MODIFIER "u\t%s\n",
+				printf("V64\t%s\t%" PRIu64 "\t%s\n",
 				       hfinfo->abbrev,
 				       vals64[vi].value,
 				       vals64[vi].strptr);
@@ -10868,14 +10712,14 @@ proto_registrar_dump_values(void)
 			while (range[vi].strptr) {
 				/* Print in the proper base */
 				if (FIELD_DISPLAY(hfinfo->display) == BASE_HEX) {
-					printf("R\t%s\t0x%x\t0x%x\t%s\n",
+					printf("R\t%s\t0x%"PRIx64"\t0x%"PRIx64"\t%s\n",
 					       hfinfo->abbrev,
 					       range[vi].value_min,
 					       range[vi].value_max,
 					       range[vi].strptr);
 				}
 				else {
-					printf("R\t%s\t%u\t%u\t%s\n",
+					printf("R\t%s\t%"PRIu64"\t%"PRIu64"\t%s\n",
 					       hfinfo->abbrev,
 					       range[vi].value_min,
 					       range[vi].value_max,
@@ -11123,7 +10967,7 @@ proto_registrar_dump_elastic(const gchar* filter)
 			/* Skip the fields that would map into string. This is the default in elasticsearch. */
 			type = ws_type_to_elastic(hfinfo->type);
 			if (type) {
-				str = g_strdup_printf("%s_%s", prev_proto, hfinfo->abbrev);
+				str = ws_strdup_printf("%s_%s", prev_proto, hfinfo->abbrev);
 				json_dumper_set_member_name(&dumper, dot_to_underscore(str));
 				g_free(str);
 				json_dumper_begin_object(&dumper); // 9.hfinfo->abbrev
@@ -11169,7 +11013,7 @@ proto_registrar_dump_elastic(const gchar* filter)
  * Field 1 = 'F'
  * Field 2 = descriptive field name
  * Field 3 = field abbreviation
- * Field 4 = type ( textual representation of the the ftenum type )
+ * Field 4 = type ( textual representation of the ftenum type )
  * Field 5 = parent protocol abbreviation
  * Field 6 = base for display (for integer types); "parent bitfield width" for FT_BOOLEAN
  * Field 7 = bitmask: format: hex: 0x....
@@ -11264,7 +11108,7 @@ proto_registrar_dump_fields(void)
 				}
 			} else if (hfinfo->type == FT_BOOLEAN) {
 				/* For FT_BOOLEAN: 'display' can be "parent bitfield width" */
-				g_snprintf(width, sizeof(width), "%d", hfinfo->display);
+				snprintf(width, sizeof(width), "%d", hfinfo->display);
 				base_name = width;
 			}
 
@@ -11274,7 +11118,7 @@ proto_registrar_dump_fields(void)
 			else if (strlen(blurb) == 0)
 				blurb = "\"\"";
 
-			printf("F\t%s\t%s\t%s\t%s\t%s\t0x%" G_GINT64_MODIFIER "x\t%s\n",
+			printf("F\t%s\t%s\t%s\t%s\t%s\t0x%" PRIx64 "\t%s\n",
 				hfinfo->name, hfinfo->abbrev, enum_name,
 				parent_hfinfo->abbrev, base_name,
 				hfinfo->bitmask, blurb);
@@ -11510,16 +11354,16 @@ construct_match_selected_string(field_info *finfo, epan_dissect_t *edt,
 				*filter = (char *)wmem_alloc0(NULL, buf_len);
 				ptr = *filter;
 
-				ptr += g_snprintf(ptr, (gulong) (buf_len-(ptr-*filter)),
+				ptr += snprintf(ptr, (gulong) (buf_len-(ptr-*filter)),
 					"frame[%d:%d] == ", finfo->start, length);
 				for (i=0; i<length; i++) {
 					c = tvb_get_guint8(finfo->ds_tvb, start);
 					start++;
 					if (i == 0 ) {
-						ptr += g_snprintf(ptr, (gulong) (buf_len-(ptr-*filter)), "%02x", c);
+						ptr += snprintf(ptr, (gulong) (buf_len-(ptr-*filter)), "%02x", c);
 					}
 					else {
-						ptr += g_snprintf(ptr, (gulong) (buf_len-(ptr-*filter)), ":%02x", c);
+						ptr += snprintf(ptr, (gulong) (buf_len-(ptr-*filter)), ":%02x", c);
 					}
 				}
 			}
@@ -12452,7 +12296,7 @@ proto_tree_add_split_bits_item_ret_val(proto_tree *tree, const int hfindex, tvbu
 					    mask_greatest_bit_offset);
 	} else {
 		/* If the bitmask is too large, try to describe its contents. */
-		g_snprintf(bf_str, sizeof(bf_str), "%d bits", no_of_bits);
+		snprintf(bf_str, sizeof(bf_str), "%d bits", no_of_bits);
 	}
 
 	switch (hf_field->type) {

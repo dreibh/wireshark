@@ -226,6 +226,9 @@ typedef struct {
     /* list of pointer to wmem_array_t, which is array of http2_header_t
     * that come from all HEADERS and CONTINUATION frames. */
     wmem_list_t *stream_header_list;
+    /* fake header info */
+    http2_frame_num_t fake_headers_initiated_fn;
+    wmem_array_t* fake_headers;
 } http2_header_stream_info_t;
 
 /* struct to reference uni-directional per-stream info */
@@ -288,7 +291,7 @@ static void
 http2_streamid_prompt(packet_info* pinfo, gchar* result)
 {
 
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "stream (%u)", http2_get_stream_id(pinfo));
+    snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "stream (%u)", http2_get_stream_id(pinfo));
 }
 
 static void
@@ -393,6 +396,7 @@ static int hf_http2_settings_max_concurrent_streams = -1;
 static int hf_http2_settings_initial_window_size = -1;
 static int hf_http2_settings_max_frame_size = -1;
 static int hf_http2_settings_max_header_list_size = -1;
+static int hf_http2_settings_extended_connect = -1;
 static int hf_http2_settings_unknown = -1;
 /* Push Promise */
 static int hf_http2_push_promise_r = -1;
@@ -471,6 +475,13 @@ static int hf_http2_headers_via = -1;
 static int hf_http2_headers_www_authenticate = -1;
 #endif
 /* Blocked */
+/* Origin */
+static int hf_http2_origin = -1;
+static int hf_http2_origin_origin_len = -1;
+static int hf_http2_origin_origin = -1;
+/* Priority Update */
+static int hf_http2_priority_update_stream_id = -1;
+static int hf_http2_priority_update_field_value = -1;
 
 /*
  * These values *should* be large enough to handle most use cases while
@@ -501,6 +512,7 @@ static gint ett_http2_settings = -1;
 static gint ett_http2_encoded_entity = -1;
 static gint ett_http2_body_fragment = -1;
 static gint ett_http2_body_fragments = -1;
+static gint ett_http2_origin = -1;
 
 #ifdef HAVE_NGHTTP2
 static const fragment_items http2_body_fragment_items = {
@@ -576,7 +588,7 @@ header_fields_update_cb(void *r, char **err)
      */
     c = proto_check_field_name(rec->header_name);
     if (c) {
-        *err = g_strdup_printf("Header name can't contain '%c'", c);
+        *err = ws_strdup_printf("Header name can't contain '%c'", c);
         return FALSE;
     }
 
@@ -584,7 +596,7 @@ header_fields_update_cb(void *r, char **err)
     if (header_fields_hash != NULL) {
         const gint *entry = (const gint *) g_hash_table_lookup(header_fields_hash, rec->header_name);
         if (entry != NULL) {
-            *err = g_strdup_printf("This header field is already defined in UAT or it is a static header field");
+            *err = ws_strdup_printf("This header field is already defined in UAT or it is a static header field");
             return FALSE;
         }
     }
@@ -1101,7 +1113,7 @@ http2_init_protocol(void)
 
             hf_uat[i].p_id = hf_id;
             hf_uat[i].hfinfo.name = header_name;
-            hf_uat[i].hfinfo.abbrev = g_strdup_printf("http2.headers.%s", header_name);
+            hf_uat[i].hfinfo.abbrev = ws_strdup_printf("http2.headers.%s", header_name);
             switch(header_fields[i].header_type) {
                 case val_uint64:
                     hf_uat[i].hfinfo.type = FT_UINT64;
@@ -1151,32 +1163,36 @@ static reassembly_table http2_streaming_reassembly_table;
 #define MASK_HTTP2_PRIORITY     0X7FFFFFFF
 
 /* Header Type Code */
-#define HTTP2_DATA          0
-#define HTTP2_HEADERS       1
-#define HTTP2_PRIORITY      2
-#define HTTP2_RST_STREAM    3
-#define HTTP2_SETTINGS      4
-#define HTTP2_PUSH_PROMISE  5
-#define HTTP2_PING          6
-#define HTTP2_GOAWAY        7
-#define HTTP2_WINDOW_UPDATE 8
-#define HTTP2_CONTINUATION  9
-#define HTTP2_ALTSVC        0xA
-#define HTTP2_BLOCKED       0xB
+#define HTTP2_DATA              0
+#define HTTP2_HEADERS           1
+#define HTTP2_PRIORITY          2
+#define HTTP2_RST_STREAM        3
+#define HTTP2_SETTINGS          4
+#define HTTP2_PUSH_PROMISE      5
+#define HTTP2_PING              6
+#define HTTP2_GOAWAY            7
+#define HTTP2_WINDOW_UPDATE     8
+#define HTTP2_CONTINUATION      9
+#define HTTP2_ALTSVC            0xA
+#define HTTP2_BLOCKED           0xB
+#define HTTP2_ORIGIN            0xC
+#define HTTP2_PRIORITY_UPDATE   0x10
 
 static const value_string http2_type_vals[] = {
-    { HTTP2_DATA,           "DATA" },
-    { HTTP2_HEADERS,        "HEADERS" },
-    { HTTP2_PRIORITY,       "PRIORITY" },
-    { HTTP2_RST_STREAM,     "RST_STREAM" },
-    { HTTP2_SETTINGS,       "SETTINGS" },
-    { HTTP2_PUSH_PROMISE,   "PUSH_PROMISE" },
-    { HTTP2_PING,           "PING" },
-    { HTTP2_GOAWAY,         "GOAWAY" },
-    { HTTP2_WINDOW_UPDATE,  "WINDOW_UPDATE" },
-    { HTTP2_CONTINUATION,   "CONTINUATION" },
-    { HTTP2_ALTSVC,         "ALTSVC" },
-    { HTTP2_BLOCKED,        "BLOCKED" },
+    { HTTP2_DATA,            "DATA" },
+    { HTTP2_HEADERS,         "HEADERS" },
+    { HTTP2_PRIORITY,        "PRIORITY" },
+    { HTTP2_RST_STREAM,      "RST_STREAM" },
+    { HTTP2_SETTINGS,        "SETTINGS" },
+    { HTTP2_PUSH_PROMISE,    "PUSH_PROMISE" },
+    { HTTP2_PING,            "PING" },
+    { HTTP2_GOAWAY,          "GOAWAY" },
+    { HTTP2_WINDOW_UPDATE,   "WINDOW_UPDATE" },
+    { HTTP2_CONTINUATION,    "CONTINUATION" },
+    { HTTP2_ALTSVC,          "ALTSVC" },
+    { HTTP2_BLOCKED,         "BLOCKED" },
+    { HTTP2_ORIGIN,          "ORIGIN" },
+    { HTTP2_PRIORITY_UPDATE, "PRIORITY_UPDATE" },
     { 0, NULL }
 };
 
@@ -1268,6 +1284,7 @@ static const value_string http2_error_codes_vals[] = {
 #define HTTP2_SETTINGS_INITIAL_WINDOW_SIZE      4
 #define HTTP2_SETTINGS_MAX_FRAME_SIZE           5
 #define HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE     6
+#define HTTP2_SETTINGS_EXTENDED_CONNECT         8 /* RFC 8441 */
 
 static const value_string http2_settings_vals[] = {
     { HTTP2_SETTINGS_HEADER_TABLE_SIZE,      "Header table size" },
@@ -1276,6 +1293,7 @@ static const value_string http2_settings_vals[] = {
     { HTTP2_SETTINGS_INITIAL_WINDOW_SIZE,    "Initial Windows size" },
     { HTTP2_SETTINGS_MAX_FRAME_SIZE,         "Max frame size" },
     { HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE,   "Max header list size" },
+    { HTTP2_SETTINGS_EXTENDED_CONNECT,       "Extended CONNECT" },
     { 0, NULL }
 };
 
@@ -1380,6 +1398,9 @@ http2_get_stream_id(packet_info *pinfo _U_)
 #endif /* ! HAVE_NGHTTP2 */
 
 #ifdef HAVE_NGHTTP2
+static const gchar*
+get_real_header_value(packet_info* pinfo, const gchar* name, gboolean the_other_direction);
+
 static guint32
 select_http2_flow_index(packet_info *pinfo, http2_session_t *h2session)
 {
@@ -2205,7 +2226,10 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, guint offset, prot
 
 /* If the initial/first HEADERS frame (containing ":method" or ":status" header) of this direction is not received
  * (normally because of starting capturing after a long-lived HTTP2 stream like gRPC streaming call has been establied),
- * we initialize the information in direction of the stream with the fake headers of wireshark http2 preferences. */
+ * we initialize the information in direction of the stream with the fake headers of wireshark http2 preferences.
+ * In an other situation, some http2 headers are unable to be parse in current HEADERS frame because previous HEADERS
+ * frames were not captured that causing HPACK index table not completed. Fake headers can also be used in this situation.
+ */
 static void
 try_init_stream_with_fake_headers(tvbuff_t* tvb, packet_info* pinfo, http2_session_t* h2session, proto_tree* tree, guint offset)
 {
@@ -2221,19 +2245,22 @@ try_init_stream_with_fake_headers(tvbuff_t* tvb, packet_info* pinfo, http2_sessi
     proto_tree* header_tree;
     http2_frame_num_t http2_frame_num = get_http2_frame_num(tvb, pinfo);
 
+    http2_header_stream_info_t* header_stream_info = get_header_stream_info(pinfo, h2session, FALSE);
     http2_data_stream_reassembly_info_t* reassembly_info = get_data_reassembly_info(pinfo, h2session);
 
-    if (!PINFO_FD_VISITED(pinfo) && reassembly_info->data_initiated_in == 0) {
-        /* At this time, the data_initiated_in has not been set,
-         * indicating that the previous initial HEADERS frame has been lost.
-         * We try to use fake headers to initialize stream reassembly info. */
-        reassembly_info->data_initiated_in = http2_frame_num;
-    }
+    if (!PINFO_FD_VISITED(pinfo) && header_stream_info->fake_headers_initiated_fn == 0) {
+        header_stream_info->fake_headers_initiated_fn = http2_frame_num;
+        if (reassembly_info->data_initiated_in == 0) {
+            /* At this time, the data_initiated_in has not been set,
+             * indicating that the previous initial HEADERS frame has been lost.
+             * We try to use fake headers to initialize stream reassembly info. */
+            reassembly_info->data_initiated_in = http2_frame_num;
+        }
 
-    if (reassembly_info->data_initiated_in == http2_frame_num) {
-        /* The data_initiated_in should have been equal to the frame number of initial HEADERS
-         * frame, but now it is the frame number of current DATA frame, so the initial HEADERS
-         * frame must be lost. We try to find the matching fake headers */
+        /* Initialize with fake headers in this frame.
+         * Use only those fake headers that do not appear. */
+        header_stream_info->fake_headers = wmem_array_sized_new(wmem_file_scope(), sizeof(http2_fake_header_t*), 16);
+
         for (guint i = 0; i < num_http2_fake_headers; ++i) {
             http2_fake_header_t* fake_header = http2_fake_headers + i;
             if (fake_header->enable == FALSE ||
@@ -2255,17 +2282,20 @@ try_init_stream_with_fake_headers(tvbuff_t* tvb, packet_info* pinfo, http2_sessi
             }
 
             /* now match one */
-            if (!PINFO_FD_VISITED(pinfo)) {
-                populate_http_header_tracking(tvb, pinfo, h2session, (int)strlen(fake_header->header_value),
-                    fake_header->header_name, fake_header->header_value);
+            if (get_real_header_value(pinfo, fake_header->header_name, FALSE)) {
+                /* If this header already appears, the fake header is ignored. */
+                continue;
             }
 
-            if (indexes == NULL) {
-                indexes = wmem_array_sized_new(wmem_file_scope(), sizeof(http2_fake_header_t*), 16);
-            }
-            wmem_array_append(indexes, &fake_header, 1);
+            populate_http_header_tracking(tvb, pinfo, h2session, (int)strlen(fake_header->header_value),
+                fake_header->header_name, fake_header->header_value);
+
+            wmem_array_append(header_stream_info->fake_headers, &fake_header, 1);
         }
+    }
 
+    if (header_stream_info->fake_headers_initiated_fn == http2_frame_num) {
+        indexes = header_stream_info->fake_headers;
         /* Try to add the tree item of fake headers. */
         if (indexes) {
             guint total_matching_fake_headers = wmem_array_get_count(indexes);
@@ -2287,8 +2317,6 @@ try_init_stream_with_fake_headers(tvbuff_t* tvb, packet_info* pinfo, http2_sessi
                 ti = proto_tree_add_string(header_tree, hf_http2_header_value, tvb, offset, 0, header->header_value);
                 proto_item_set_generated(ti);
             }
-
-            wmem_destroy_array(indexes);
         }
     }
 }
@@ -2314,7 +2342,7 @@ http2_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, guint *str
 
         *stream = tcpd->stream;
         *sub_stream = h2session->current_stream_id;
-        return g_strdup_printf("tcp.stream eq %u and http2.streamid eq %u", tcpd->stream, h2session->current_stream_id);
+        return ws_strdup_printf("tcp.stream eq %u and http2.streamid eq %u", tcpd->stream, h2session->current_stream_id);
     }
 
     return NULL;
@@ -2395,7 +2423,7 @@ http2_get_stream_id_ge(guint streamid, guint sub_stream_id, guint *sub_stream_id
 static gchar*
 http2_follow_index_filter(guint stream, guint sub_stream)
 {
-    return g_strdup_printf("tcp.stream eq %u and http2.streamid eq %u", stream, sub_stream);
+    return ws_strdup_printf("tcp.stream eq %u and http2.streamid eq %u", stream, sub_stream);
 }
 
 static tap_packet_status
@@ -2493,6 +2521,8 @@ dissect_http2_header_flags(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *ht
         case HTTP2_WINDOW_UPDATE:
         case HTTP2_ALTSVC:
         case HTTP2_BLOCKED:
+        case HTTP2_ORIGIN:
+        case HTTP2_PRIORITY_UPDATE:
         default:
             /* Does not define any flags */
             fields = http2_unused_flags;
@@ -3097,9 +3127,9 @@ dissect_http2_data_body(tvbuff_t *tvb, packet_info *pinfo, http2_session_t* h2se
     }
 }
 
-/* Get header value from current or the other direction stream_header_list */
-const gchar*
-http2_get_header_value(packet_info *pinfo, const gchar* name, gboolean the_other_direction)
+/* Get real header value from current or the other direction stream_header_list */
+static const gchar*
+get_real_header_value(packet_info* pinfo, const gchar* name, gboolean the_other_direction)
 {
     http2_header_stream_info_t* header_stream_info;
     wmem_list_frame_t* frame;
@@ -3152,7 +3182,19 @@ http2_get_header_value(packet_info *pinfo, const gchar* name, gboolean the_other
         }
     }
 
-    return get_fake_header_value(pinfo, name, the_other_direction);
+    return NULL;
+}
+
+/* Get header value from current or the other direction stream_header_list */
+const gchar*
+http2_get_header_value(packet_info *pinfo, const gchar* name, gboolean the_other_direction)
+{
+    const gchar* value = get_real_header_value(pinfo, name, the_other_direction);
+    if (value) {
+        return value;
+    } else {
+        return get_fake_header_value(pinfo, name, the_other_direction);
+    }
 }
 #else
 static void
@@ -3361,6 +3403,9 @@ dissect_http2_settings(tvbuff_t* tvb, packet_info* pinfo _U_, http2_session_t* h
             case HTTP2_SETTINGS_MAX_HEADER_LIST_SIZE:
                 proto_tree_add_item(settings_tree, hf_http2_settings_max_header_list_size, tvb, offset, 4, ENC_BIG_ENDIAN);
             break;
+            case HTTP2_SETTINGS_EXTENDED_CONNECT:
+                proto_tree_add_item(settings_tree, hf_http2_settings_extended_connect, tvb, offset, 4, ENC_BIG_ENDIAN);
+            break;
             default:
                 proto_tree_add_item(settings_tree, hf_http2_settings_unknown, tvb, offset, 4, ENC_BIG_ENDIAN);
             break;
@@ -3559,6 +3604,48 @@ dissect_http2_altsvc(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *http2_tr
     return offset;
 }
 
+/* Origin */
+static int
+dissect_http2_origin(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *http2_tree,
+                     guint offset, guint8 flags _U_)
+{
+    guint32 origin_len;
+
+    proto_item *ti_origin_entry;
+    proto_tree *origin_entry_tree;
+
+    while(tvb_reported_length_remaining(tvb, offset) > 0){
+
+        ti_origin_entry = proto_tree_add_item(http2_tree, hf_http2_origin, tvb, offset, 6, ENC_NA);
+        origin_entry_tree = proto_item_add_subtree(ti_origin_entry, ett_http2_origin);
+
+        proto_tree_add_item_ret_uint(origin_entry_tree, hf_http2_origin_origin_len, tvb, offset, 2, ENC_BIG_ENDIAN, &origin_len);
+        offset += 2;
+
+        proto_tree_add_item(origin_entry_tree, hf_http2_origin_origin, tvb, offset, origin_len, ENC_ASCII|ENC_NA);
+        offset += origin_len;
+    }
+
+    return offset;
+}
+
+/* Priority Update */
+static int
+dissect_http2_priority_update(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *http2_tree,
+                              guint offset, guint8 flags _U_, guint16 length)
+{
+    int remain = length;
+
+    proto_tree_add_item(http2_tree, hf_http2_priority_update_stream_id, tvb, offset, 4, ENC_BIG_ENDIAN);
+    offset += 4;
+    remain -= 4;
+
+    proto_tree_add_item(http2_tree, hf_http2_priority_update_field_value, tvb, offset, remain, ENC_ASCII|ENC_NA);
+    offset += remain;
+
+    return offset;
+}
+
 
 int
 dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_ )
@@ -3717,6 +3804,14 @@ dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 
         case HTTP2_BLOCKED: /* BLOCKED (11) */
             /* no payload! */
+        break;
+
+        case HTTP2_ORIGIN: /* ORIGIN (12) */
+            dissect_http2_origin(tvb, pinfo, http2_tree, offset, flags);
+        break;
+
+        case HTTP2_PRIORITY_UPDATE: /* Priority Update (16) */
+            dissect_http2_priority_update(tvb, pinfo, http2_tree, offset, flags, length);
         break;
 
         default:
@@ -4154,6 +4249,11 @@ proto_register_http2(void)
               FT_UINT32, BASE_DEC, NULL, 0x0,
               "This advisory setting informs a peer of the maximum size of header list that the sender is prepared to accept.", HFILL }
         },
+        { &hf_http2_settings_extended_connect,
+            { "Extended CONNECT", "http2.settings.extended_connect",
+              FT_UINT32, BASE_DEC, NULL, 0x0,
+              "Indicates support for the extended CONNECT method extension defined RFC 8441.", HFILL }
+        },
         { &hf_http2_settings_unknown,
             { "Unknown Settings", "http2.settings.unknown",
                FT_UINT32, BASE_DEC, NULL, 0x0,
@@ -4259,6 +4359,36 @@ proto_register_http2(void)
               "A sequence of octets containing a value identical to the Alt-Svc field value", HFILL }
         },
 
+        /* Origin */
+        { &hf_http2_origin,
+            { "Origin", "http2.origin",
+               FT_NONE, BASE_NONE, NULL, 0x0,
+              NULL, HFILL }
+        },
+        { &hf_http2_origin_origin_len,
+            { "Origin Length", "http2.origin.origin_len",
+               FT_UINT16, BASE_DEC, NULL, 0x0,
+              "indicating the length, in octets, of the Origin field.", HFILL }
+        },
+        { &hf_http2_origin_origin,
+            { "Origin", "http2.origin.origin",
+               FT_STRING, BASE_NONE, NULL, 0x0,
+              "A sequence of characters containing ASCII serialisation of an "
+              "origin that server is authoritative for.", HFILL }
+        },
+
+        /* Priority Update */
+        { &hf_http2_priority_update_stream_id,
+            { "Priority Update Stream ID", "http2.priority_update_stream_id",
+              FT_UINT64, BASE_DEC, NULL, 0x0,
+              NULL, HFILL }
+        },
+        { &hf_http2_priority_update_field_value,
+            { "Priority Update Field Value", "http2.priority_update_field_value",
+              FT_STRING, BASE_NONE, NULL, 0x0,
+              NULL, HFILL }
+        },
+
     };
 
     static gint *ett[] = {
@@ -4269,7 +4399,8 @@ proto_register_http2(void)
         &ett_http2_settings,
         &ett_http2_encoded_entity,
         &ett_http2_body_fragment,
-        &ett_http2_body_fragments
+        &ett_http2_body_fragments,
+        &ett_http2_origin
     };
 
     /* Setup protocol expert items */

@@ -377,7 +377,7 @@
         <translation>行をマーク/マーク解除</translation>
     </message>
     <message>
-        <source>Ctrl-M</source>
+        <source>Ctrl+M</source>
         <translation>Ctrl+M</translation>
     </message>
     <message>
@@ -721,8 +721,8 @@
 <context>
     <name>ByteViewText</name>
     <message>
-        <source>Allow hover selection</source>
-        <translation>ホーバー選択を許可</translation>
+        <source>Allow hover highlighting</source>
+        <translation>ホーバーハイライトを許可</translation>
     </message>
     <message>
         <source>Show bytes as hexadecimal</source>
@@ -2660,8 +2660,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>開始</translation>
     </message>
     <message>
+        <source>Save</source>
+        <translation>保存</translation>
+    </message>
+    <message>
         <source>Default</source>
         <translation>デフォルト</translation>
+    </message>
+    <message>
+        <source>Restore default value of the item</source>
+        <translation>デフォルト値を復元します</translation>
     </message>
     <message>
         <source>Extcap Help cannot be found</source>
@@ -4305,6 +4313,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>10進数</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Whether to do extra processing detecting the start of the ASCII representation at the end of a hex+ASCII line even if it looks like hex bytes.&lt;/p&gt;&lt;p&gt;Do not enable if the hex dump does not contain ASCII.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;たとえ16進数バイト列のように見えても16進数+ASCII行の末尾にてASCII表現の開始を検出する追加処理をするかどうか。&lt;/p&gt;&lt;p&gt;16進数ダンプにASCIIを含まない場合には有効にしません。&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>ASCII identification:</source>
+        <translation>ASCII 識別:</translation>
+    </message>
+    <message>
         <source>Regular Expression</source>
         <translation>正規表現</translation>
     </message>
@@ -4369,6 +4385,27 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>エキスポートPDU</translation>
     </message>
     <message>
+        <source>IP version:</source>
+        <translation>IP バージョン:</translation>
+    </message>
+    <message>
+        <source>The IP Version to use for the dummy IP header</source>
+        <oldsource>The IP Version for to use for the dummy IP header</oldsource>
+        <translation type="unfinished">ダミーIPヘッダに用いるIPバージョン</translation>
+    </message>
+    <message>
+        <source>Interface name:</source>
+        <translation>インターフェース名:</translation>
+    </message>
+    <message>
+        <source>The name of the interface to write to the import capture file</source>
+        <translation>インポートしたキャプチャファイルに書き込むインターフェースの名前</translation>
+    </message>
+    <message>
+        <source>Fake IF, Import from Hex Dump</source>
+        <translation>フェイクインターフェース, 16進ダンプからインポート</translation>
+    </message>
+    <message>
         <source>Maximum frame length:</source>
         <translation>最大フレーム長:</translation>
     </message>
@@ -4393,8 +4430,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>テキストファイルのタイムスタンプを解析する形式（例 %H:%M:%S） 形式の仕様はstrptime(3)に基づきます</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The format in which to parse timestamps in the text file (e.g. %H:%M:%S.%f).&lt;/p&gt;&lt;p&gt;Format specifiers are based on strptime(3) with the addition of %f for second fractions. The percision of %f is determined from it&apos;s length.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;テキストファイルのタイムスタンプを解析する形式(例 %H:%M:%S.%f)&lt;/p&gt;&lt;p&gt; 形式の仕様はstrptime(3)に %fでコンマ秒を加えた仕様に基づきます %fの精度はその長さにより決まります。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The format in which to parse timestamps in the text file (e.g. %H:%M:%S.%f).&lt;/p&gt;&lt;p&gt;Format specifiers are based on strptime(3) with the addition of %f for second fractions. The precision of %f is determined from its length.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;テキストファイルのタイムスタンプを解析する際の形式(例 %H:%M:%S.%f)&lt;/p&gt;&lt;p&gt; 形式の仕様はstrptime(3)に %fでコンマ秒を加えた仕様に基づきます %fの精度はその長さにより決まります。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>%H:%M:%S.%f</source>
@@ -4413,8 +4450,52 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>インポートしたキャプチャファイルのフレームのカプセル化の種別</translation>
     </message>
     <message>
+        <source>Prefix each frame with an Ethernet and IP header</source>
+        <translation>EthernetとIPヘッダをもつ各々のフレームのプレフィックス</translation>
+    </message>
+    <message>
+        <source>IP</source>
+        <translation>IP</translation>
+    </message>
+    <message>
+        <source>Prefix each frame with an Ethernet, IP and UDP header</source>
+        <translation>EthernetとIPとUDPヘッダをもつ各々のフレームのプレフィックス</translation>
+    </message>
+    <message>
+        <source>Prefix each frame with an Ethernet, IP and TCP header</source>
+        <translation>EthernetとIPとTCPヘッダをもつ各々のフレームのプレフィックス</translation>
+    </message>
+    <message>
+        <source>Prefix each frame with an Ethernet, IP and SCTP header</source>
+        <translation>EthernetとIPとSCTPヘッダをもつ各々のフレームのプレフィックス</translation>
+    </message>
+    <message>
+        <source>Prefix each frame with an Ethernet, IP and SCTP (DATA) header</source>
+        <translation>EthernetとIPとSCTP (DATA)ヘッダをもつ各々のフレームのプレフィックス</translation>
+    </message>
+    <message>
+        <source>Source address:</source>
+        <translation>送信元アドレス:</translation>
+    </message>
+    <message>
+        <source>Destination address:</source>
+        <translation>宛先アドレス:</translation>
+    </message>
+    <message>
         <source>Dissector</source>
         <translation>ダイセクタ</translation>
+    </message>
+    <message>
+        <source>The IP protocol ID for each frame</source>
+        <translation>各々のフレームのIPプロトコルID</translation>
+    </message>
+    <message>
+        <source>The IP source address for each frame</source>
+        <translation>各々のフレームの送信元IPアドレス</translation>
+    </message>
+    <message>
+        <source>The IP destination address for each frame</source>
+        <translation>各々のフレームのIP宛先アドレス</translation>
     </message>
     <message>
         <source>The UDP, TCP or SCTP source port for each frame</source>
@@ -4435,10 +4516,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Ethernet</source>
         <translation>Ethernet</translation>
-    </message>
-    <message>
-        <source>Prefix each frame with an Ethernet, IPv4 and SCTP header</source>
-        <translation>各フレームの前にEthernet/IPv4/SCTPヘッダを付加します</translation>
     </message>
     <message>
         <source>SCTP</source>
@@ -4465,10 +4542,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>タグ:</translation>
     </message>
     <message>
-        <source>Prefix each frame with an Ethernet, IPv4 and UDP header</source>
-        <translation>各フレームの前にEthernet/IPv4/UDPヘッダを付加します</translation>
-    </message>
-    <message>
         <source>UDP</source>
         <translation>UDP</translation>
     </message>
@@ -4479,10 +4552,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>The Ethertype value of each frame</source>
         <translation>各フレームのイーサタイプの値</translation>
-    </message>
-    <message>
-        <source>Prefix each frame with an Ethernet, IPv4 and TCP header</source>
-        <translation>各フレームの前にEthernet/IPv4/TCPヘッダを付加します</translation>
     </message>
     <message>
         <source>TCP</source>
@@ -4501,24 +4570,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>イーサタイプ(16進数):</translation>
     </message>
     <message>
-        <source>The IPv4 protocol ID for each frame</source>
-        <translation>各フレームのIPv4プロトコル識別子</translation>
-    </message>
-    <message>
-        <source>Prefix each frame with an Ethernet, IPv4 and SCTP (DATA) header</source>
-        <translation>各フレームの前にEthernet/IPv4/SCTP(DATA）ヘッダを付加します</translation>
-    </message>
-    <message>
         <source>SCTP (Data)</source>
         <translation>SCTP(データ)</translation>
-    </message>
-    <message>
-        <source>Prefix each frame with an Ethernet and IPv4 header</source>
-        <translation>各フレームの前にEthernet/IPv4ヘッダを付加します</translation>
-    </message>
-    <message>
-        <source>IPv4</source>
-        <translation>IPv4</translation>
     </message>
     <message>
         <source>The dissector to use for each frame</source>
@@ -4608,8 +4661,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>外部のキャプチャインターフェース無効化</translation>
     </message>
     <message>
-        <source>&lt;p&gt;Local interfaces are unavailable because no packet capture driver is installed.&lt;/p&gt;&lt;p&gt;You can fix this by installing &lt;a href=&quot;https://nmap.org/npcap/&quot;&gt;Npcap&lt;/a&gt; or &lt;a href=&quot;https://www.winpcap.org/install/default.htm&quot;&gt;WinPcap&lt;/a&gt;.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;パケットキャプチャドライバがインストールされていないためローカルインタフェースは利用できません。&lt;/p&gt;&lt;p&gt;以下をインストールしてこれを修正できます。&lt;a href=&quot;https://nmap.org/npcap/&quot;&gt;Npcap&lt;/a&gt; もしくは &lt;a href=&quot;https://www.winpcap.org/install/default.htm&quot;&gt;WinPcap&lt;/a&gt;。&lt;/p&gt;</translation>
+        <source>&lt;p&gt;Local interfaces are unavailable because no packet capture driver is installed.&lt;/p&gt;&lt;p&gt;You can fix this by installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
+        <translation>&lt;p&gt;キャプチャドライバがインストールされていないのでローカルインターフェースは利用できません。&lt;p&gt;以下をインストールすることで修正できます。 &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;。&lt;/p&gt;</translation>
     </message>
     <message>
         <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed or &lt;pre&gt;net start npf&lt;/pre&gt; if you have WinPcap installed. Both commands must be run as Administrator.&lt;/p&gt;</source>
@@ -6643,6 +6696,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>信頼できるサーバープール (RSerPool)</translation>
     </message>
     <message>
+        <source>SOME/IP</source>
+        <translation>SOME/IP</translation>
+    </message>
+    <message>
         <source>Osmux</source>
         <translation>Osmux</translation>
     </message>
@@ -7104,6 +7161,22 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Sametime statistics</source>
         <translation>Sametime統計</translation>
+    </message>
+    <message>
+        <source>SOME/IP Messages</source>
+        <translation>SOME/IP メッセージ</translation>
+    </message>
+    <message>
+        <source>SOME/IP Message statistics</source>
+        <translation>SOME/IP メッセージ統計</translation>
+    </message>
+    <message>
+        <source>SOME/IP-SD Entries</source>
+        <translation>SOME/IP-SD エントリ</translation>
+    </message>
+    <message>
+        <source>SOME/IP-SD Entries statistics</source>
+        <translation>SOME/IP-SD エントリ統計</translation>
     </message>
     <message>
         <source>&amp;ISUP Messages</source>
@@ -8219,6 +8292,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Saving %1…</source>
         <translation>保存中 %1…</translation>
+    </message>
+    <message>
+        <source>Configure all extcaps before start of capture.</source>
+        <translation>キャプチャ開始前にすべてのextcapを設定します</translation>
     </message>
     <message>
         <source>Invalid capture filter.</source>
@@ -12814,6 +12891,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Raw(無加工)形式</translation>
     </message>
     <message>
+        <source>Rust Array</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>UTF-8</source>
         <translation>UTF-8形式</translation>
     </message>
@@ -13607,6 +13688,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Save the displayed data in various formats</source>
         <translation>様々な形式で表示データを保存します</translation>
+    </message>
+    <message>
+        <source>Collapse All</source>
+        <translation>すべて閉じる</translation>
+    </message>
+    <message>
+        <source>Expand All</source>
+        <translation>すべて展開</translation>
     </message>
     <message>
         <source>Save Statistics As…</source>

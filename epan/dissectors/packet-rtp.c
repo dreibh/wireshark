@@ -642,11 +642,11 @@ static void rtp_prompt(packet_info *pinfo _U_, gchar* result)
     /* Dynamic payload range, don't expose value as it may change within conversation */
     if (payload_type > 95)
     {
-        g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "RTP payload type as");
+        snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "RTP payload type as");
     }
     else
     {
-        g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "RTP payload type %d as", payload_type);
+        snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "RTP payload type %d as", payload_type);
     }
 }
 
@@ -688,7 +688,7 @@ rtp_dump_dyn_payload(rtp_dyn_payload_t *rtp_dyn_payload) {
             DENDENT();
             return;
         }
-        DPRINT2(("ref_count=%" G_GSIZE_FORMAT, rtp_dyn_payload->ref_count));
+        DPRINT2(("ref_count=%zu", rtp_dyn_payload->ref_count));
         if (!rtp_dyn_payload->table) {
             DPRINT2(("null rtp_dyn_payload table"));
             DENDENT();

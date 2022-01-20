@@ -82,7 +82,7 @@ void extcap_base_set_util_info(extcap_parameters * extcap, const char * exename,
     if (!minor)
         ws_assert(!release);
 
-    extcap->version = g_strdup_printf("%s%s%s%s%s",
+    extcap->version = ws_strdup_printf("%s%s%s%s%s",
         major,
         minor ? "." : "",
         minor ? minor : "",
@@ -96,7 +96,7 @@ void extcap_base_set_compiled_with(extcap_parameters * extcap, const char *fmt, 
     va_list ap;
 
     va_start(ap, fmt);
-    extcap->compiled_with = g_strdup_vprintf(fmt, ap);
+    extcap->compiled_with = ws_strdup_vprintf(fmt, ap);
     va_end(ap);
 }
 
@@ -105,13 +105,15 @@ void extcap_base_set_running_with(extcap_parameters * extcap, const char *fmt, .
     va_list ap;
 
     va_start(ap, fmt);
-    extcap->running_with = g_strdup_vprintf(fmt, ap);
+    extcap->running_with = ws_strdup_vprintf(fmt, ap);
     va_end(ap);
 }
 
 void extcap_log_init(const char *progname)
 {
     ws_log_init(progname, NULL);
+    /* extcaps cannot write debug information to parent on stderr. */
+    ws_log_console_writer_set_use_stdout(TRUE);
 }
 
 uint8_t extcap_base_parse_options(extcap_parameters * extcap, int result, char * optargument)
@@ -333,9 +335,9 @@ static void extcap_init_log_file(const char* filename)
 void extcap_config_debug(unsigned* count)
 {
     printf("arg {number=%u}{call=--log-level}{display=Set the log level}"
-    "{type=selector}{default=message}{tooltip=Set the log level}{required=false}"
+    "{type=selector}{tooltip=Set the log level}{required=false}"
     "{group=Debug}\n", *count);
-    printf("value {arg=%u}{value=message}{display=Message}\n", *count);
+    printf("value {arg=%u}{value=message}{display=Message}{default=true}\n", *count);
     printf("value {arg=%u}{value=info}{display=Info}\n", *count);
     printf("value {arg=%u}{value=debug}{display=Debug}\n", *count);
     printf("value {arg=%u}{value=noisy}{display=Noisy}\n", *count);

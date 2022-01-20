@@ -53,7 +53,7 @@ dfilter_vfail(dfwork_t *dfw, const char *format, va_list args)
 	if (dfw->error_message != NULL)
 		return;
 
-	dfw->error_message = g_strdup_vprintf(format, args);
+	dfw->error_message = ws_strdup_vprintf(format, args);
 }
 
 void
@@ -262,8 +262,10 @@ const char *tokenstr(int token)
 	switch (token) {
 		case TOKEN_TEST_AND:	return "TEST_AND";
 		case TOKEN_TEST_OR: 	return "TEST_OR";
-		case TOKEN_TEST_EQ:	return "TEST_EQ";
-		case TOKEN_TEST_NE:	return "TEST_NE";
+		case TOKEN_TEST_ALL_EQ:	return "TEST_ALL_EQ";
+		case TOKEN_TEST_ANY_EQ:	return "TEST_ANY_EQ";
+		case TOKEN_TEST_ALL_NE:	return "TEST_ALL_NE";
+		case TOKEN_TEST_ANY_NE:	return "TEST_ANY_NE";
 		case TOKEN_TEST_LT:	return "TEST_LT";
 		case TOKEN_TEST_LE:	return "TEST_LE";
 		case TOKEN_TEST_GT:	return "TEST_GT";
@@ -278,15 +280,15 @@ const char *tokenstr(int token)
 		case TOKEN_LBRACKET:	return "LBRACKET";
 		case TOKEN_RBRACKET:	return "RBRACKET";
 		case TOKEN_COMMA:	return "COMMA";
+		case TOKEN_RANGE:	return "RANGE";
 		case TOKEN_TEST_IN:	return "TEST_IN";
 		case TOKEN_LBRACE:	return "LBRACE";
 		case TOKEN_RBRACE:	return "RBRACE";
 		case TOKEN_DOTDOT:	return "DOTDOT";
 		case TOKEN_LPAREN:	return "LPAREN";
 		case TOKEN_RPAREN:	return "RPAREN";
-		default:		return "<unknown>";
 	}
-	ws_assert_not_reached();
+	return "<unknown>";
 }
 
 void
@@ -356,7 +358,7 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 	ws_noisy("Expanded text: %s", expanded_text);
 
 	if (df_lex_init(&scanner) != 0) {
-		dfw->error_message = g_strdup_printf("Can't initialize scanner: %s", g_strerror(errno));
+		dfw->error_message = ws_strdup_printf("Can't initialize scanner: %s", g_strerror(errno));
 		goto FAILURE;
 	}
 

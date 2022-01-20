@@ -31,7 +31,6 @@
 
 #include "ipv4.h"
 #include "wsutil/nstime.h"
-#include "time_fmt.h"
 #include "tvbuff.h"
 #include "value_string.h"
 #include "tfs.h"
@@ -213,7 +212,7 @@ void proto_report_dissector_bug(const char *format, ...)
 
 #define DISSECTOR_ASSERT_CMPINT(a, op, b)  \
   ((void) ((a op b) ? (void)0 : \
-   __DISSECTOR_ASSERT_CMPINT (a, op, b, gint64, "%" G_GINT64_MODIFIER "d"))) \
+   __DISSECTOR_ASSERT_CMPINT (a, op, b, int64_t, "%" PRId64))) \
    __DISSECTOR_ASSERT_STATIC_ANALYSIS_HINT(a op b)
 
 /** Like DISSECTOR_ASSERT_CMPINT() except the arguments are treated as
@@ -223,7 +222,7 @@ void proto_report_dissector_bug(const char *format, ...)
  */
 #define DISSECTOR_ASSERT_CMPUINT(a, op, b)  \
   ((void) ((a op b) ? (void)0 : \
-   __DISSECTOR_ASSERT_CMPINT (a, op, b, guint64, "%" G_GINT64_MODIFIER "u"))) \
+   __DISSECTOR_ASSERT_CMPINT (a, op, b, uint64_t, "%" PRIu64))) \
    __DISSECTOR_ASSERT_STATIC_ANALYSIS_HINT(a op b)
 
 /** Like DISSECTOR_ASSERT_CMPUINT() except the values are displayed in
@@ -231,7 +230,7 @@ void proto_report_dissector_bug(const char *format, ...)
  */
 #define DISSECTOR_ASSERT_CMPUINTHEX(a, op, b)  \
   ((void) ((a op b) ? (void)0 : \
-   __DISSECTOR_ASSERT_CMPINT (a, op, b, guint64, "0x%" G_GINT64_MODIFIER "X"))) \
+   __DISSECTOR_ASSERT_CMPINT (a, op, b, uint64_t, "0x%" PRIX64))) \
   __DISSECTOR_ASSERT_STATIC_ANALYSIS_HINT(a op b)
 
 /*
@@ -641,7 +640,7 @@ void proto_report_dissector_bug(const char *format, ...)
  */
 #define ENC_VARINT_ZIGZAG        0x00000008
 
-#define ENC_VARIANT_MASK         (ENC_VARINT_PROTOBUF|ENC_VARINT_QUIC|ENC_VARINT_ZIGZAG)
+#define ENC_VARINT_MASK          (ENC_VARINT_PROTOBUF|ENC_VARINT_QUIC|ENC_VARINT_ZIGZAG)
 
 /* Values for header_field_info.display */
 
@@ -654,6 +653,7 @@ void proto_report_dissector_bug(const char *format, ...)
 /*
  * Note that this enum values are parsed in make-init-lua.pl so make sure
  * any changes here still makes valid entries in init.lua.
+ * XXX The script requires the equals sign.
  */
 typedef enum {
     BASE_NONE    = 0,   /**< none */
@@ -685,11 +685,19 @@ typedef enum {
     BASE_PT_SCTP = 16,  /**< SCTP port */
 
 /* OUI types */
-    BASE_OUI     = 17   /**< OUI resolution */
+    BASE_OUI     = 17,  /**< OUI resolution */
 
+/* Time types */
+    ABSOLUTE_TIME_LOCAL   = 18,     /**< local time in our time zone, with month and day */
+    ABSOLUTE_TIME_UTC     = 19,     /**< UTC, with month and day */
+    ABSOLUTE_TIME_DOY_UTC = 20,     /**< UTC, with 1-origin day-of-year */
+    ABSOLUTE_TIME_NTP_UTC = 21,     /**< UTC, with "NULL" when timestamp is all zeros */
 } field_display_e;
 
 #define FIELD_DISPLAY(d) ((d) & FIELD_DISPLAY_E_MASK)
+
+#define FIELD_DISPLAY_IS_ABSOLUTE_TIME(d) \
+        (FIELD_DISPLAY(d) >= ABSOLUTE_TIME_LOCAL && FIELD_DISPLAY(d) <= ABSOLUTE_TIME_NTP_UTC)
 
 /* Following constants have to be ORed with a field_display_e when dissector
  * want to use specials value-string MACROs for a header_field_info */
@@ -715,9 +723,6 @@ typedef enum {
 
 /** BASE_PT_ values display decimal and transport port service name */
 #define IS_BASE_PORT(b) (((b)==BASE_PT_UDP||(b)==BASE_PT_TCP||(b)==BASE_PT_DCCP||(b)==BASE_PT_SCTP))
-
-/* For FT_ABSOLUTE_TIME, the display format is an absolute_time_display_e
- * as per time_fmt.h. */
 
 typedef enum {
     HF_REF_TYPE_NONE,       /**< Field is not referenced */
@@ -1169,7 +1174,7 @@ WS_DLL_PUBLIC void proto_tree_free(proto_tree *tree);
 /** Set the tree visible or invisible.
  Is the parsing being done for a visible proto_tree or an invisible one?
  By setting this correctly, the proto_tree creation is sped up by not
- having to call g_vsnprintf and copy strings around.
+ having to call vsnprintf and copy strings around.
  @param tree the tree to be set
  @param visible ... or not
  @return the old value */
@@ -2461,9 +2466,6 @@ proto_register_prefix(const char *prefix,  prefix_initializer_t initializer);
 
 /** Initialize every remaining uninitialized prefix. */
 WS_DLL_PUBLIC void proto_initialize_all_prefixes(void);
-
-WS_DLL_PUBLIC void proto_register_fields_manual(const int parent, header_field_info **hfi,
-    const int num_records);
 
 /** Register a header_field array.
  @param parent the protocol handle from proto_register_protocol()

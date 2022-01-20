@@ -24,7 +24,7 @@ test_new(gpointer junk)
 {
 	test_t *test;
 
-	g_assert_true(junk == NULL);
+	ws_assert(junk == NULL);
 
 	test = g_new(test_t, 1);
 
@@ -81,6 +81,9 @@ test_todisplay(test_op_t op)
 			break;
 		case TEST_OP_OR:
 			s = "||";
+			break;
+		case TEST_OP_ALL_EQ:
+			s = "===";
 			break;
 		case TEST_OP_ANY_EQ:
 			s = "==";
@@ -142,6 +145,9 @@ test_todebug(test_op_t op)
 			break;
 		case TEST_OP_OR:
 			s = "TEST_OR";
+			break;
+		case TEST_OP_ALL_EQ:
+			s = "TEST_ALL_EQ";
 			break;
 		case TEST_OP_ANY_EQ:
 			s = "TEST_ANY_EQ";
@@ -211,6 +217,7 @@ num_operands(test_op_t op)
 			return 1;
 		case TEST_OP_AND:
 		case TEST_OP_OR:
+		case TEST_OP_ALL_EQ:
 		case TEST_OP_ANY_EQ:
 		case TEST_OP_ALL_NE:
 		case TEST_OP_ANY_NE:
@@ -224,7 +231,7 @@ num_operands(test_op_t op)
 		case TEST_OP_IN:
 			return 2;
 	}
-	g_assert_not_reached();
+	ws_assert_not_reached();
 	return -1;
 }
 
@@ -235,7 +242,7 @@ sttype_test_set1(stnode_t *node, test_op_t op, stnode_t *val1)
 	test_t *test = stnode_data(node);
 	ws_assert_magic(test, TEST_MAGIC);
 
-	g_assert_true(num_operands(op) == 1);
+	ws_assert(num_operands(op) == 1);
 	test->op = op;
 	test->val1 = val1;
 }
@@ -246,7 +253,7 @@ sttype_test_set2(stnode_t *node, test_op_t op, stnode_t *val1, stnode_t *val2)
 	test_t *test = stnode_data(node);
 	ws_assert_magic(test, TEST_MAGIC);
 
-	g_assert_true(num_operands(op) == 2);
+	ws_assert(num_operands(op) == 2);
 	test->op = op;
 	test->val1 = val1;
 	test->val2 = val2;
@@ -260,7 +267,7 @@ sttype_test_set1_args(stnode_t *node, stnode_t *val1)
 	test = (test_t*)stnode_data(node);
 	ws_assert_magic(test, TEST_MAGIC);
 
-	g_assert_true(num_operands(test->op) == 1);
+	ws_assert(num_operands(test->op) == 1);
 	test->val1 = val1;
 }
 
@@ -272,7 +279,7 @@ sttype_test_set2_args(stnode_t *node, stnode_t *val1, stnode_t *val2)
 	test = (test_t*)stnode_data(node);
 	ws_assert_magic(test, TEST_MAGIC);
 
-	g_assert_true(num_operands(test->op) == 2);
+	ws_assert(num_operands(test->op) == 2);
 	test->val1 = val1;
 	test->val2 = val2;
 }

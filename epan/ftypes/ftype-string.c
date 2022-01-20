@@ -90,7 +90,7 @@ val_from_charconst(fvalue_t *fv, unsigned long num, gchar **err_msg)
 
 	if (num > UINT8_MAX) {
 		if (err_msg) {
-			*err_msg = g_strdup_printf("%lu is too large for a byte value", num);
+			*err_msg = ws_strdup_printf("%lu is too large for a byte value", num);
 		}
 		return FALSE;
 	}
@@ -152,7 +152,7 @@ cmp_matches(const fvalue_t *fv, const ws_regex_t *regex)
 	if (! regex) {
 		return FALSE;
 	}
-	return ws_regex_matches(regex, str, -1);
+	return ws_regex_matches(regex, str);
 }
 
 void

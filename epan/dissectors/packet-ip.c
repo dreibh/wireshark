@@ -476,7 +476,7 @@ const value_string ip_version_vals[] = {
 
 static void ip_prompt(packet_info *pinfo, gchar* result)
 {
-    g_snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "IP protocol %u as",
+    snprintf(result, MAX_DECODE_AS_PROMPT_LEN, "IP protocol %u as",
         GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_ip, pinfo->curr_layer_num)));
 }
 
@@ -545,7 +545,7 @@ ip_filter_valid(packet_info *pinfo)
 static gchar*
 ip_build_filter(packet_info *pinfo)
 {
-    return g_strdup_printf("ip.addr eq %s and ip.addr eq %s",
+    return ws_strdup_printf("ip.addr eq %s and ip.addr eq %s",
                 address_to_str(pinfo->pool, &pinfo->net_src),
                 address_to_str(pinfo->pool, &pinfo->net_dst));
 }
@@ -984,7 +984,7 @@ dissect_ipopt_cipso(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
           bit_spot = 0;
           while (bit_spot < 8) {
             if (val_ptr[byte_spot] & bitmask) {
-              g_snprintf(cat_str_tmp, USHRT_MAX_STRLEN, "%u",
+              snprintf(cat_str_tmp, USHRT_MAX_STRLEN, "%u",
                          byte_spot * 8 + bit_spot);
               if (cat_str_len < (strlen(cat_str) + 2 + USHRT_MAX_STRLEN)) {
                 char *cat_str_new;
@@ -1034,7 +1034,7 @@ dissect_ipopt_cipso(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
         char *cat_str_tmp = (char *)wmem_alloc(pinfo->pool, USHRT_MAX_STRLEN);
 
         while ((offset + 2) <= offset_max_cat) {
-          g_snprintf(cat_str_tmp, USHRT_MAX_STRLEN, "%u",
+          snprintf(cat_str_tmp, USHRT_MAX_STRLEN, "%u",
                      tvb_get_ntohs(tvb, offset));
           offset += 2;
           if (cat_str[0] != '\0')
@@ -1076,10 +1076,10 @@ dissect_ipopt_cipso(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
             offset += 2;
           }
           if (cat_low != cat_high)
-            g_snprintf(cat_str_tmp, USHRT_MAX_STRLEN * 2, "%u-%u",
+            snprintf(cat_str_tmp, USHRT_MAX_STRLEN * 2, "%u-%u",
                        cat_high, cat_low);
           else
-            g_snprintf(cat_str_tmp, USHRT_MAX_STRLEN * 2, "%u", cat_high);
+            snprintf(cat_str_tmp, USHRT_MAX_STRLEN * 2, "%u", cat_high);
 
           if (cat_str[0] != '\0')
             (void) g_strlcat(cat_str, ",", USHRT_MAX_STRLEN * 16);
@@ -1181,7 +1181,7 @@ dissect_ipopt_route(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int pro
       dissect_option_route(field_tree, tvb, offset + optoffset, hf_ip_rec_rt,
                            hf_ip_rec_rt_host, FALSE);
     } else if (optoffset == (len - 4)) {
-      /* This is the the destination */
+      /* This is the destination */
       proto_item *item;
       guint32 addr;
       const char *dst_host;

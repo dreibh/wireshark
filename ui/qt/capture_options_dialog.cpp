@@ -417,7 +417,7 @@ void CaptureOptionsDialog::interfaceItemChanged(QTreeWidgetItem *item, int colum
 
     #ifdef HAVE_PCAP_REMOTE
         if (device->remote_opts.remote_host_opts.auth_type == CAPTURE_AUTH_PWD) {
-            auth_str = g_strdup_printf("%s:%s", device->remote_opts.remote_host_opts.auth_username,
+            auth_str = ws_strdup_printf("%s:%s", device->remote_opts.remote_host_opts.auth_username,
                                        device->remote_opts.remote_host_opts.auth_password);
         }
     #endif
@@ -455,7 +455,7 @@ void CaptureOptionsDialog::interfaceItemChanged(QTreeWidgetItem *item, int colum
                 } else {
                     gchar *str;
                     /* XXX - should we just omit them? */
-                    str = g_strdup_printf("%s (not supported)", data_link_info->name);
+                    str = ws_strdup_printf("%s (not supported)", data_link_info->name);
                     linkr->dlt = -1;
                     linkr->name = g_strdup(str);
                     g_free(str);
@@ -499,7 +499,7 @@ void CaptureOptionsDialog::itemClicked(QTreeWidgetItem *item, int column)
             QString device_name = ti->data(col_extcap_, Qt::UserRole).value<QString>();
             if (extcap_has_configuration((const char *)(device_name.toStdString().c_str()), FALSE))
             {
-                emit showExtcapOptions(device_name);
+                emit showExtcapOptions(device_name, false);
                 return;
             }
         }
@@ -527,7 +527,7 @@ void CaptureOptionsDialog::itemDoubleClicked(QTreeWidgetItem *item)
         QString device_name = ti->data(col_extcap_, Qt::UserRole).value<QString>();
         if (extcap_has_configuration((const char *)(device_name.toStdString().c_str()), TRUE))
         {
-            emit showExtcapOptions(device_name);
+            emit showExtcapOptions(device_name, true);
             return;
         }
     }
@@ -598,7 +598,7 @@ void CaptureOptionsDialog::on_buttonBox_accepted()
                 QString device_name = ti->data(col_extcap_, Qt::UserRole).value<QString>();
                 if (extcap_has_configuration((const char *)(device_name.toStdString().c_str()), TRUE))
                 {
-                    emit showExtcapOptions(device_name);
+                    emit showExtcapOptions(device_name, true);
                     return;
                 }
             }

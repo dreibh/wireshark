@@ -928,11 +928,11 @@ tvb_memcpy(tvbuff_t *tvb, void *target, const gint offset, size_t length)
 	DISSECTOR_ASSERT(length <= 0x7FFFFFFF);
 	check_offset_length(tvb, offset, (gint) length, &abs_offset, &abs_length);
 
-	if (tvb->real_data) {
+	if (target && tvb->real_data) {
 		return memcpy(target, tvb->real_data + abs_offset, abs_length);
 	}
 
-	if (tvb->ops->tvb_memcpy)
+	if (target && tvb->ops->tvb_memcpy)
 		return tvb->ops->tvb_memcpy(tvb, target, abs_offset, abs_length);
 
 	/*
@@ -974,6 +974,9 @@ tvb_memdup(wmem_allocator_t *scope, tvbuff_t *tvb, const gint offset, size_t len
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
 	check_offset_length(tvb, offset, (gint) length, &abs_offset, &abs_length);
+
+	if (abs_length == 0)
+		return NULL;
 
 	duped = wmem_alloc(scope, abs_length);
 	return tvb_memcpy(tvb, duped, abs_offset, abs_length);
@@ -2228,6 +2231,8 @@ tvb_find_guint8_generic(tvbuff_t *tvb, guint abs_offset, guint limit, guint8 nee
 	const guint8 *result;
 
 	ptr = ensure_contiguous(tvb, abs_offset, limit); /* tvb_get_ptr() */
+	if (!ptr)
+		return -1;
 
 	result = (const guint8 *) memchr(ptr, needle, limit);
 	if (!result)
@@ -2330,6 +2335,8 @@ tvb_ws_mempbrk_guint8_generic(tvbuff_t *tvb, guint abs_offset, guint limit, cons
 	const guint8 *result;
 
 	ptr = ensure_contiguous(tvb, abs_offset, limit); /* tvb_get_ptr */
+	if (!ptr)
+		return -1;
 
 	result = ws_mempbrk_exec(ptr, limit, pattern, found_needle);
 	if (!result)
@@ -3702,7 +3709,7 @@ tvb_get_stringz_enc(wmem_allocator_t *scope, tvbuff_t *tvb, const gint offset, g
  * no more than bufsize number of bytes, including terminating NUL, to buffer.
  * Returns length of string (not including terminating NUL), or -1 if the string was
  * truncated in the buffer due to not having reached the terminating NUL.
- * In this way, it acts like g_snprintf().
+ * In this way, it acts like snprintf().
  *
  * bufsize MUST be greater than 0.
  *
@@ -3788,7 +3795,7 @@ _tvb_get_nstringz(tvbuff_t *tvb, const gint offset, const guint bufsize, guint8*
  * no more than bufsize number of bytes, including terminating NUL, to buffer.
  * Returns length of string (not including terminating NUL), or -1 if the string was
  * truncated in the buffer due to not having reached the terminating NUL.
- * In this way, it acts like g_snprintf().
+ * In this way, it acts like snprintf().
  *
  * When processing a packet where the remaining number of bytes is less
  * than bufsize, an exception is not thrown if the end of the packet
@@ -4311,6 +4318,7 @@ int tvb_get_token_len(tvbuff_t *tvb, const gint offset, int len, gint *next_offs
 gchar *
 tvb_bytes_to_str_punct(wmem_allocator_t *scope, tvbuff_t *tvb, const gint offset, const gint len, const gchar punct)
 {
+	DISSECTOR_ASSERT(len > 0);
 	return bytes_to_str_punct(scope, ensure_contiguous(tvb, offset, len), len, punct);
 }
 
@@ -4486,7 +4494,9 @@ tvb_get_varint(tvbuff_t *tvb, guint offset, guint maxlen, guint64 *value, const 
 {
 	*value = 0;
 
-	if (encoding & ENC_VARINT_PROTOBUF) {
+	switch (encoding & ENC_VARINT_MASK) {
+	case ENC_VARINT_PROTOBUF:
+	{
 		guint i;
 		guint64 b; /* current byte */
 
@@ -4499,7 +4509,11 @@ tvb_get_varint(tvbuff_t *tvb, guint offset, guint maxlen, guint64 *value, const 
 				return i + 1;
 			}
 		}
-	} else if (encoding & ENC_VARINT_ZIGZAG) {
+		break;
+	}
+
+	case ENC_VARINT_ZIGZAG:
+	{
 		guint i;
 		guint64 b; /* current byte */
 
@@ -4513,9 +4527,11 @@ tvb_get_varint(tvbuff_t *tvb, guint offset, guint maxlen, guint64 *value, const 
 				return i + 1;
 			}
 		}
+		break;
 	}
-	else if (encoding & ENC_VARINT_QUIC) {
 
+	case ENC_VARINT_QUIC:
+	{
 		/* calculate variable length */
 		*value = tvb_get_guint8(tvb, offset);
 		switch((*value) >> 6) {
@@ -4535,7 +4551,11 @@ tvb_get_varint(tvbuff_t *tvb, guint offset, guint maxlen, guint64 *value, const 
 			ws_assert_not_reached();
 			break;
 		}
+		break;
+	}
 
+	default:
+		DISSECTOR_ASSERT_NOT_REACHED();
 	}
 
 	return 0; /* 10 bytes scanned, but no bytes' msb is zero */

@@ -543,7 +543,7 @@ void WiresharkApplication::storeCustomColorsInRecent()
         recent.custom_colors = NULL;
         for (int i = 0; i < QColorDialog::customCount(); i++) {
             QRgb rgb = QColorDialog::customColor(i).rgb();
-            recent.custom_colors = g_list_append(recent.custom_colors, g_strdup_printf("%08x", rgb));
+            recent.custom_colors = g_list_append(recent.custom_colors, ws_strdup_printf("%08x", rgb));
         }
     }
 }
@@ -662,6 +662,8 @@ WiresharkApplication::WiresharkApplication(int &argc,  char **argv) :
 #if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
     styleHints()->setShowShortcutsInContextMenus(true);
 #endif
+
+    setDesktopFileName(QStringLiteral("org.wireshark.Wireshark"));
 
     //
     // XXX - this means we try to check for the existence of all files

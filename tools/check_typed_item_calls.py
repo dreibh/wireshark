@@ -18,7 +18,6 @@ import subprocess
 # is assigned to a different variable or a macro is used, it isn't tracked.
 
 # TODO:
-# Currently assuming we'll find call + first 2 args in same line...
 # Attempt to check for allowed encoding types (most likely will be literal values |'d)?
 
 
@@ -52,34 +51,66 @@ class Call:
 
 # A check for a particular API function.
 class APICheck:
-    def __init__(self, fun_name, allowed_types):
+    def __init__(self, fun_name, allowed_types, positive_length=False):
         self.fun_name = fun_name
         self.allowed_types = allowed_types
+        self.positive_length = positive_length
         self.calls = []
 
         if fun_name.startswith('ptvcursor'):
             # RE captures function name + 1st 2 args (always ptvc + hfindex)
             self.p = re.compile('.*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+)')
         elif fun_name.find('add_bitmask') == -1:
-            # RE captures function name + 1st 2 args (always tree + hfindex)
-            self.p = re.compile('.*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+)')
+            # Normal case.
+            # RE captures function name + 1st 2 args (always tree + hfindex + length)
+            self.p = re.compile('.*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)')
         else:
+            # _add_bitmask functions.
             # RE captures function name + 1st + 4th args (always tree + hfindex)
             self.p = re.compile('.*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)')
 
         self.file = None
 
+
     def find_calls(self, file):
         self.file = file
         self.calls = []
+
         with open(file, 'r') as f:
-            for line_number, line in enumerate(f, start=1):
-                m = self.p.match(line)
-                if m:
-                    self.calls.append(Call(m.group(2), line_number=line_number))
+            contents = f.read()
+            lines = contents.splitlines()
+            total_lines = len(lines)
+            line_number = 1
+            for line in lines:
+                # Want to check this, and next few lines
+                to_check = lines[line_number-1]
+                # Nothing to check if function name isn't in it
+                if to_check.find(self.fun_name) != -1:
+                    # Ok, add the next file lines before trying RE
+                    for i in range(1, 4):
+                        if line_number+i < total_lines:
+                            to_check += lines[line_number-1+i]
+                    m = self.p.match(to_check)
+                    if m:
+                        # Add call. We have length if re had 3 groups.
+                        num_groups = self.p.groups
+                        self.calls.append(Call(m.group(2),
+                                               line_number=line_number,
+                                               length=(m.group(3) if (num_groups==3) else None)))
+                line_number += 1
+
+
 
     def check_against_items(self, items):
+        global errors_found
         for call in self.calls:
+            if self.positive_length and call.length != None:
+                if call.length != -1 and call.length <= 0:
+                    print('Error: ' +  self.fun_name + '(.., ' + call.hf_name + ', ...) called at ' +
+                          self.file + ':' + str(call.line_number) +
+                          ' with length ' + str(call.length) + ' - must be > 0 or -1')
+                    # Inc global count of issues found.
+                    errors_found += 1
             if call.hf_name in items:
                 if not items[call.hf_name].item_type in self.allowed_types:
                     # Report this issue.
@@ -88,7 +119,6 @@ class APICheck:
                           ' with type ' + items[call.hf_name].item_type)
                     print('    (allowed types are', self.allowed_types, ')\n')
                     # Inc global count of issues found.
-                    global errors_found
                     errors_found += 1
 
 
@@ -129,7 +159,6 @@ class ProtoTreeAddItemCheck(APICheck):
         self.lengths['FT_INT56']  = 7
         self.lengths['FT_UINT64'] = 8
         self.lengths['FT_INT64']  = 8
-        # TODO: for FT_BOOLEAN, could take length from 2nd arg (which is in bits...)
         self.lengths['FT_ETHER']  = 6
         # TODO: other types...
 
@@ -137,12 +166,24 @@ class ProtoTreeAddItemCheck(APICheck):
         self.file = file
         self.calls = []
         with open(file, 'r') as f:
-            # TODO: would be better to just iterate over those found in whole file,
-            # but extra effort would be needed to still know line number.
-            for line_number, line in enumerate(f, start=1):
-                m = self.p.match(line)
-                if m:
-                    self.calls.append(Call(m.group(1), line_number=line_number, length=m.group(2)))
+
+            contents = f.read()
+            lines = contents.splitlines()
+            total_lines = len(lines)
+            line_number = 1
+            for line in lines:
+                # Want to check this, and next few lines
+                to_check = lines[line_number-1]
+                # Nothing to check if function name isn't in itk)
+                if to_check.find(self.fun_name) != -1:
+                    # Ok, add the next file lines before trying RE
+                    for i in range(1, 5):
+                        if line_number+i < total_lines:
+                            to_check += lines[line_number-1+i]
+                    m = self.p.match(to_check)
+                    if m:
+                        self.calls.append(Call(m.group(1), line_number=line_number, length=m.group(2)))
+                line_number += 1
 
     def check_against_items(self, items):
         # For now, only complaining if length if call is longer than the item type implies.
@@ -185,7 +226,7 @@ known_non_contiguous_fields = { 'wlan.fixed.capabilities.cfpoll.sta',
 
 
 field_widths = {
-    'FT_BOOLEAN' : 64,   # TODO: Width depends upon 'display' field, not checked.
+    'FT_BOOLEAN' : 64,   # TODO: Width depends upon 'display' field
     'FT_CHAR'    : 8,
     'FT_UINT8'   : 8,
     'FT_INT8'    : 8,
@@ -273,7 +314,7 @@ class Item:
     def check_bit(self, value, n):
         return (value & (0x1 << n)) != 0
 
-    # Output a warning if non-contigous bits are found in the the mask (guint64).
+    # Output a warning if non-contigous bits are found in the mask (guint64).
     # Note that this legimately happens in several dissectors where multiple reserved/unassigned
     # bits are conflated into one field.
     # TODO: there is probably a cool/efficient way to check this?
@@ -389,15 +430,15 @@ class Item:
 # These are APIs in proto.c that check a set of types at runtime and can print '.. is not of type ..' to the console
 # if the type is not suitable.
 apiChecks = []
-apiChecks.append(APICheck('proto_tree_add_item_ret_uint', { 'FT_CHAR', 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32'}))
+apiChecks.append(APICheck('proto_tree_add_item_ret_uint', { 'FT_CHAR', 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32'}, positive_length=True))
 apiChecks.append(APICheck('proto_tree_add_item_ret_int', { 'FT_INT8', 'FT_INT16', 'FT_INT24', 'FT_INT32'}))
-apiChecks.append(APICheck('ptvcursor_add_ret_uint', { 'FT_CHAR', 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32'}))
-apiChecks.append(APICheck('ptvcursor_add_ret_int', { 'FT_INT8', 'FT_INT16', 'FT_INT24', 'FT_INT32'}))
+apiChecks.append(APICheck('ptvcursor_add_ret_uint', { 'FT_CHAR', 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32'}, positive_length=True))
+apiChecks.append(APICheck('ptvcursor_add_ret_int', { 'FT_INT8', 'FT_INT16', 'FT_INT24', 'FT_INT32'}, positive_length=True))
 apiChecks.append(APICheck('ptvcursor_add_ret_string', { 'FT_STRING', 'FT_STRINGZ', 'FT_UINT_STRING', 'FT_STRINGZPAD', 'FT_STRINGZTRUNC'}))
-apiChecks.append(APICheck('ptvcursor_add_ret_boolean', { 'FT_BOOLEAN'}))
-apiChecks.append(APICheck('proto_tree_add_item_ret_uint64', { 'FT_UINT40', 'FT_UINT48', 'FT_UINT56', 'FT_UINT64'}))
-apiChecks.append(APICheck('proto_tree_add_item_ret_int64', { 'FT_INT40', 'FT_INT48', 'FT_INT56', 'FT_INT64'}))
-apiChecks.append(APICheck('proto_tree_add_item_ret_boolean', { 'FT_BOOLEAN'}))
+apiChecks.append(APICheck('ptvcursor_add_ret_boolean', { 'FT_BOOLEAN'}, positive_length=True))
+apiChecks.append(APICheck('proto_tree_add_item_ret_uint64', { 'FT_UINT40', 'FT_UINT48', 'FT_UINT56', 'FT_UINT64'}, positive_length=True))
+apiChecks.append(APICheck('proto_tree_add_item_ret_int64', { 'FT_INT40', 'FT_INT48', 'FT_INT56', 'FT_INT64'}, positive_length=True))
+apiChecks.append(APICheck('proto_tree_add_item_ret_boolean', { 'FT_BOOLEAN'}, positive_length=True))
 apiChecks.append(APICheck('proto_tree_add_item_ret_string_and_length', { 'FT_STRING', 'FT_STRINGZ', 'FT_UINT_STRING', 'FT_STRINGZPAD', 'FT_STRINGZTRUNC'}))
 apiChecks.append(APICheck('proto_tree_add_item_ret_display_string_and_length', { 'FT_STRING', 'FT_STRINGZ', 'FT_UINT_STRING',
                                                                                  'FT_STRINGZPAD', 'FT_STRINGZTRUNC', 'FT_BYTES', 'FT_UINT_BYTES'}))
@@ -435,6 +476,7 @@ apiChecks.append(APICheck('proto_tree_add_ascii_7bits_item', { 'FT_STRING'}))
 apiChecks.append(APICheck('proto_tree_add_checksum', { 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32'}))
 apiChecks.append(APICheck('proto_tree_add_int64_bits_format_value', { 'FT_INT40', 'FT_INT48', 'FT_INT56', 'FT_INT64'}))
 
+# TODO: add proto_tree_add_bytes_item, proto_tree_add_time_item ?
 
 bitmask_types = { 'FT_CHAR', 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32',
                   'FT_INT8', 'FT_INT16', 'FT_INT24', 'FT_INT32',
@@ -487,7 +529,6 @@ def isGeneratedFile(filename):
             line.find('This file was generated') != -1 or
             line.find('This filter was automatically generated') != -1 or
             line.find('This file is auto generated, do not edit!') != -1):
-
 
             f_read.close()
             return True

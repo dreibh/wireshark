@@ -17,10 +17,6 @@
 #include "epochs.h"
 #include "time_util.h"
 
-#ifndef HAVE_STRPTIME
-# include "wsutil/strptime.h"
-#endif
-
 /* this is #defined so that we can clearly see that we have the right number of
    zeros, rather than as a guard against the number of nanoseconds in a second
    changing ;) */
@@ -34,13 +30,9 @@ void nstime_set_zero(nstime_t *nstime)
 }
 
 /* is the given nstime_t currently zero? */
-gboolean nstime_is_zero(nstime_t *nstime)
+gboolean nstime_is_zero(const nstime_t *nstime)
 {
-    if(nstime->secs == 0 && nstime->nsecs == 0) {
-        return TRUE;
-    } else {
-        return FALSE;
-    }
+    return nstime->secs == 0 && nstime->nsecs == 0;
 }
 
 /* set the given nstime_t to (0,maxint) to mark it as "unset"
@@ -467,26 +459,20 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
             ptr++;
         }
         else {
-            n_scanned = sscanf(ptr, has_separator ? "%3d:%2d%n" : "%3d%2d%n",
-                    &off_hr,
-                    &off_min,
-                    &n_chars);
+            off_hr = off_min = 0;
+            n_scanned = sscanf(ptr, "%3d%n", &off_hr, &n_chars);
             if (n_scanned >= 1) {
                 /* Definitely got hours */
                 have_offset = TRUE;
-                if (n_scanned >= 2) {
+                ptr += n_chars;
+                n_scanned = sscanf(ptr, *ptr == ':' ? ":%2d%n" : "%2d%n", &off_min, &n_chars);
+                if (n_scanned >= 1) {
                     /* Got minutes too */
                     ptr += n_chars;
-                }
-                else {
-                    /* Only got hours, just move ptr past the +hh or whatever */
-                    off_min = 0;
-                    ptr += 3;
                 }
             }
             else {
                 /* Didn't get a valid offset, treat as if there's none at all */
-                off_hr = off_min =  0;
                 have_offset = FALSE;
             }
         }
@@ -494,7 +480,7 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
     if (have_offset) {
         nstime->secs = mktime_utc(&tm);
         if (sign == '+') {
-            nstime->secs += (off_hr * 3600) + (off_min * 60);
+            nstime->secs -= (off_hr * 3600) + (off_min * 60);
         } else if (sign == '-') {
             /* -00:00 is illegal according to ISO 8601, but RFC 3339 allows
              * it under a convention where -00:00 means "time in UTC is known,
@@ -502,11 +488,14 @@ iso8601_to_nstime(nstime_t *nstime, const char *ptr, iso8601_fmt_e format)
              * offset of Z or +00:00, but semantically implies that UTC is
              * not the preferred time zone, which is immaterial to us.
              */
-            nstime->secs -= ((-off_hr) * 3600) + (off_min * 60);
+            /* Add the time, but reverse the sign of off_hr, which includes
+             * the negative sign.
+             */
+            nstime->secs += ((-off_hr) * 3600) + (off_min * 60);
         }
     }
     else {
-        /* No UTC offset given; ISO 8601 says this means localtime */
+        /* No UTC offset given; ISO 8601 says this means local time */
         nstime->secs = mktime(&tm);
     }
     nstime->nsecs = frac;
@@ -539,11 +528,11 @@ unix_epoch_to_nstime(nstime_t *nstime, const char *ptr)
     tm.tm_isdst = -1;
     nstime_set_unset(nstime);
 
-    if (!(ptr_new=strptime(ptr, "%s", &tm))) {
+    if (!(ptr_new = ws_strptime(ptr, "%s", &tm))) {
         return 0;
     }
 
-    /* No UTC offset given; ISO 8601 says this means localtime */
+    /* No UTC offset given; ISO 8601 says this means local time */
     nstime->secs = mktime(&tm);
 
     /* Now let's test for fractional seconds */
