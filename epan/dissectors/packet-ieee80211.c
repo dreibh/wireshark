@@ -18339,7 +18339,7 @@ set_conversation_last_akm_suite(ieee80211_conversation_data_t *conv,
 
 /*
  * 7.3.2.25 RSNE information element. Common format with OSEN except the
- * verison... should refactor
+ * version... should refactor
  */
 static int
 dissect_rsn_ie(packet_info *pinfo, proto_tree *tree, tvbuff_t *tvb,
@@ -23779,6 +23779,9 @@ dissect_ista_availability_window(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
   int i = 0, j;
   int avail_bits_offset;
   gint8 bits;
+
+  memset(avail_string, 0x0, sizeof(avail_string));
+  memset(pad_string, 0x0, sizeof(pad_string));
 
   /* These are at the same level as the avail bits */
   proto_tree_add_item(tree, hf_ieee80211_ftm_ista_availability_count,

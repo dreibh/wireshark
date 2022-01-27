@@ -53,6 +53,8 @@
 #include <wsutil/rsa.h>
 #include "packet-tls-utils.h"
 #include "packet-dtls.h"
+#include "packet-rtp.h"
+#include "packet-rtcp.h"
 
 void proto_register_dtls(void);
 
@@ -74,13 +76,21 @@ static proto_tree *top_tree;
  *********************************************************************/
 
 /* https://www.iana.org/assignments/srtp-protection/srtp-protection.xhtml */
+
+#define SRTP_AES128_CM_HMAC_SHA1_80 0x0001
+#define SRTP_AES128_CM_HMAC_SHA1_32 0x0002
+#define SRTP_NULL_HMAC_SHA1_80      0x0005
+#define SRTP_NULL_HMAC_SHA1_32      0x0006
+#define SRTP_AEAD_AES_128_GCM       0x0007
+#define SRTP_AEAD_AES_256_GCM       0x0008
+
 static const value_string srtp_protection_profile_vals[] = {
-  { 0x0001, "SRTP_AES128_CM_HMAC_SHA1_80" }, /* RFC 5764 */
-  { 0x0002, "SRTP_AES128_CM_HMAC_SHA1_32" },
-  { 0x0005, "SRTP_NULL_HMAC_SHA1_80" },
-  { 0x0006, "SRTP_NULL_HMAC_SHA1_32" },
-  { 0x0007, "SRTP_AEAD_AES_128_GCM" }, /* RFC 7714 */
-  { 0x0008, "SRTP_AEAD_AES_256_GCM" },
+  { SRTP_AES128_CM_HMAC_SHA1_80, "SRTP_AES128_CM_HMAC_SHA1_80" }, /* RFC 5764 */
+  { SRTP_AES128_CM_HMAC_SHA1_32, "SRTP_AES128_CM_HMAC_SHA1_32" },
+  { SRTP_NULL_HMAC_SHA1_80, "SRTP_NULL_HMAC_SHA1_80" },
+  { SRTP_NULL_HMAC_SHA1_32, "SRTP_NULL_HMAC_SHA1_32" },
+  { SRTP_AEAD_AES_128_GCM, "SRTP_AEAD_AES_128_GCM" }, /* RFC 7714 */
+  { SRTP_AEAD_AES_256_GCM, "SRTP_AEAD_AES_256_GCM" },
   { 0x00, NULL },
 };
 
@@ -151,7 +161,9 @@ static expert_field ei_dtls_handshake_fragment_past_end_msg = EI_INIT;
 static expert_field ei_dtls_msg_len_diff_fragment = EI_INIT;
 static expert_field ei_dtls_heartbeat_payload_length = EI_INIT;
 static expert_field ei_dtls_cid_invalid_content_type = EI_INIT;
+#if 0
 static expert_field ei_dtls_cid_invalid_enc_content = EI_INIT;
+#endif
 
 #ifdef HAVE_LIBGNUTLS
 static GHashTable      *dtls_key_hash   = NULL;
@@ -1653,8 +1665,9 @@ dissect_dtls_hnd_hello_verify_request(ssl_common_dissect_t *hf, tvbuff_t *tvb,
 }
 
 gint
-dtls_dissect_hnd_hello_ext_use_srtp(tvbuff_t *tvb, proto_tree *tree,
-                                    guint32 offset, guint32 ext_len)
+dtls_dissect_hnd_hello_ext_use_srtp(packet_info *pinfo, tvbuff_t *tvb,
+                                    proto_tree *tree, guint32 offset,
+                                    guint32 ext_len, gboolean is_server)
 {
   /* From https://tools.ietf.org/html/rfc5764#section-4.1.1
    *
@@ -1668,7 +1681,7 @@ dtls_dissect_hnd_hello_ext_use_srtp(tvbuff_t *tvb, proto_tree *tree,
    * SRTPProtectionProfile SRTPProtectionProfiles<2..2^16-1>;
    */
 
-  guint32 profiles_length, profiles_end, mki_length;
+  guint32 profiles_length, profiles_end, profile, mki_length;
 
   if (ext_len < 2) {
     /* XXX expert info, record too small */
@@ -1687,8 +1700,13 @@ dtls_dissect_hnd_hello_ext_use_srtp(tvbuff_t *tvb, proto_tree *tree,
   /* SRTPProtectionProfiles list items */
   profiles_end = offset + profiles_length;
   while (offset < profiles_end) {
-    proto_tree_add_item(tree, hf_dtls_hs_ext_use_srtp_protection_profile,
-        tvb, offset, 2, ENC_BIG_ENDIAN);
+    /* The server, if sending the use_srtp extension, MUST return a
+     * single chosen profile that the client has offered. We will
+     * use that to set up the connection.
+     */
+    proto_tree_add_item_ret_uint(tree,
+        hf_dtls_hs_ext_use_srtp_protection_profile, tvb, offset, 2,
+        ENC_BIG_ENDIAN, &profile);
     offset += 2;
   }
 
@@ -1702,6 +1720,60 @@ dtls_dissect_hnd_hello_ext_use_srtp(tvbuff_t *tvb, proto_tree *tree,
     offset += mki_length;
   }
 
+  if (is_server) {
+    struct srtp_info *srtp_info = wmem_new0(wmem_file_scope(), struct srtp_info);
+    switch(profile) {
+    case SRTP_AES128_CM_HMAC_SHA1_80:
+      srtp_info->encryption_algorithm = SRTP_ENC_ALG_AES_CM;
+      srtp_info->auth_algorithm = SRTP_AUTH_ALG_HMAC_SHA1;
+      srtp_info->auth_tag_len = 10;
+      break;
+    case SRTP_AES128_CM_HMAC_SHA1_32:
+      srtp_info->encryption_algorithm = SRTP_ENC_ALG_AES_CM;
+      srtp_info->auth_algorithm = SRTP_AUTH_ALG_HMAC_SHA1;
+      srtp_info->auth_tag_len = 4;
+      break;
+    case SRTP_NULL_HMAC_SHA1_80:
+      srtp_info->encryption_algorithm = SRTP_ENC_ALG_NULL;
+      srtp_info->auth_algorithm = SRTP_AUTH_ALG_HMAC_SHA1;
+      srtp_info->auth_tag_len = 10;
+      break;
+    case SRTP_NULL_HMAC_SHA1_32:
+      srtp_info->encryption_algorithm = SRTP_ENC_ALG_NULL;
+      srtp_info->auth_algorithm = SRTP_AUTH_ALG_HMAC_SHA1;
+      srtp_info->auth_tag_len = 4;
+      break;
+    case SRTP_AEAD_AES_128_GCM:
+      srtp_info->encryption_algorithm = SRTP_ENC_ALG_AES_CM;
+      srtp_info->auth_algorithm = SRTP_AUTH_ALG_GMAC;
+      srtp_info->auth_tag_len = 16;
+      break;
+    case SRTP_AEAD_AES_256_GCM:
+      srtp_info->encryption_algorithm = SRTP_ENC_ALG_AES_CM;
+      srtp_info->auth_algorithm = SRTP_AUTH_ALG_GMAC;
+      srtp_info->auth_tag_len = 16;
+      break;
+    default:
+      srtp_info->encryption_algorithm = SRTP_ENC_ALG_AES_CM;
+      srtp_info->auth_algorithm = SRTP_AUTH_ALG_HMAC_SHA1;
+      srtp_info->auth_tag_len = 10;
+    }
+    srtp_info->mki_len = mki_length;
+    /* RFC 5764: It is RECOMMENDED that symmetric RTP be used with DTLS-SRTP.
+     * RTP and RTCP traffic MAY be multiplexed on a single UDP port. (RFC 5761)
+     *
+     * XXX: We call srtp_add_address last because both it and srtcp_add_address
+     * set the conversation dissector to themselves, but while the [S]RTP
+     * dissector forwards [S]RTCP payload types to the RTCP dissector, the RTCP
+     * dissector does not do the reverse, so it's better to have the RTP
+     * dissector take a look first. Perhaps that should be changed, along with
+     * some other things to better support multiplexed RFC 5761 connections.
+     */
+    srtcp_add_address(pinfo, &pinfo->net_src, pinfo->srcport, pinfo->destport, "DTLS-SRTP", pinfo->num, srtp_info);
+    srtcp_add_address(pinfo, &pinfo->net_dst, pinfo->destport, pinfo->srcport, "DTLS-SRTP", pinfo->num, srtp_info);
+    srtp_add_address(pinfo, PT_UDP, &pinfo->net_src, pinfo->srcport, pinfo->destport, "DTLS-SRTP", pinfo->num, RTP_MEDIA_AUDIO, NULL, srtp_info, NULL);
+    srtp_add_address(pinfo, PT_UDP, &pinfo->net_dst, pinfo->destport, pinfo->srcport, "DTLS-SRTP", pinfo->num, RTP_MEDIA_AUDIO, NULL, srtp_info, NULL);
+  }
   return offset;
 }
 
@@ -2108,7 +2180,9 @@ proto_register_dtls(void)
      { &ei_dtls_msg_len_diff_fragment, { "dtls.msg_len_diff_fragment", PI_PROTOCOL, PI_ERROR, "Message length differs from value in earlier fragment", EXPFILL }},
      { &ei_dtls_heartbeat_payload_length, { "dtls.heartbeat_message.payload_length.invalid", PI_MALFORMED, PI_ERROR, "Invalid heartbeat payload length", EXPFILL }},
      { &ei_dtls_cid_invalid_content_type, { "dtls.cid.content_type.invalid", PI_MALFORMED, PI_ERROR, "Invalid real content type", EXPFILL }},
+#if 0
      { &ei_dtls_cid_invalid_enc_content, { "dtls.cid.enc_content.invalid", PI_MALFORMED, PI_ERROR, "Invalid encrypted content", EXPFILL }},
+#endif
 
      SSL_COMMON_EI_LIST(dissect_dtls_hf, "dtls")
   };
