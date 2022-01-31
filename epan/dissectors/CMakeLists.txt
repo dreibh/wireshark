@@ -134,6 +134,7 @@ set(CLEAN_ASN1_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mpeg-audio.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mpeg-pes.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-msgpack.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-msrcp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mudurl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-nbap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ngap.c
@@ -2038,6 +2039,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-zdp-binding.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-zdp-discovery.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-zdp-management.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbncp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zebra.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zep.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ziop.c

@@ -508,8 +508,7 @@ static gboolean ssh_read_e(tvbuff_t *tvb, int offset,
         struct ssh_flow_data *global_data);
 static gboolean ssh_read_f(tvbuff_t *tvb, int offset,
         struct ssh_flow_data *global_data);
-static void ssh_keylog_hash_write_secret(tvbuff_t *tvb, int offset,
-        struct ssh_flow_data *global_data);
+static void ssh_keylog_hash_write_secret(struct ssh_flow_data *global_data);
 static ssh_bignum *ssh_kex_shared_secret(gint kex_type, ssh_bignum *pub, ssh_bignum *priv);
 static void ssh_hash_buffer_put_string(wmem_array_t *buffer, const gchar *string,
         guint len);
@@ -535,7 +534,7 @@ static gboolean ssh_decrypt_chacha20(gcry_cipher_hd_t hd, guint32 seqnr,
 static int ssh_dissect_decrypted_packet(tvbuff_t *tvb, packet_info *pinfo,
         struct ssh_peer_data *peer_data, proto_tree *tree,
         gchar *plaintext, guint plaintext_len);
-static void ssh_dissect_connection_specific(tvbuff_t *packet_tvb, packet_info *pinfo,
+static int ssh_dissect_connection_specific(tvbuff_t *packet_tvb, packet_info *pinfo,
         struct ssh_peer_data *peer_data, int offset, proto_item *msg_type_tree,
         guint msg_code);
 
@@ -1188,7 +1187,7 @@ static int ssh_dissect_kex_dh(guint8 msg_code, tvbuff_t *tvb,
             proto_tree_add_expert_format(tree, pinfo, &ei_ssh_invalid_keylen, tvb, offset, 2,
                 "Invalid key length: %u", tvb_get_ntohl(tvb, offset));
         }
-        ssh_keylog_hash_write_secret(tvb, offset, global_data);
+        ssh_keylog_hash_write_secret(global_data);
 #endif
 
         offset += ssh_tree_add_mpint(tvb, offset, tree, hf_ssh_dh_f);
@@ -1286,7 +1285,7 @@ ssh_dissect_kex_ecdh(guint8 msg_code, tvbuff_t *tvb,
                 "Invalid key length: %u", tvb_get_ntohl(tvb, offset));
         }
 
-        ssh_keylog_hash_write_secret(tvb, offset, global_data);
+        ssh_keylog_hash_write_secret(global_data);
         if(global_data->peer_data[SERVER_PEER_DATA].seq_num_ecdh_rep == 0){
             global_data->peer_data[SERVER_PEER_DATA].seq_num_ecdh_rep = global_data->peer_data[SERVER_PEER_DATA].sequence_number;
             global_data->peer_data[SERVER_PEER_DATA].sequence_number++;
@@ -1930,8 +1929,7 @@ ssh_read_f(tvbuff_t *tvb, int offset, struct ssh_flow_data *global_data)
 }
 
 static void
-ssh_keylog_hash_write_secret(tvbuff_t *tvb, int offset,
-        struct ssh_flow_data *global_data)
+ssh_keylog_hash_write_secret(struct ssh_flow_data *global_data)
 {
     /*
      * This computation is defined differently for each key exchange method:
@@ -1948,7 +1946,6 @@ ssh_keylog_hash_write_secret(tvbuff_t *tvb, int offset,
 
     ssh_keylog_read_file();
 
-    length = tvb_get_ntohl(tvb, offset);
     guint kex_type = ssh_kex_type(global_data->kex);
     guint kex_hash_type = ssh_kex_hash_type(global_data->kex);
 
@@ -2184,14 +2181,14 @@ ssh_decryption_setup_cipher(struct ssh_peer_data *peer_data,
 
         if ((err = gcry_cipher_setkey(*hd1, k1, 32))) {
             gcry_cipher_close(*hd1);
-            g_debug("ssh: can't set chacha20 cipher key");
+            g_debug("ssh: can't set chacha20 cipher key %s", gcry_strerror(err));
             return;
         }
 
         if ((err = gcry_cipher_setkey(*hd2, k2, 32))) {
             gcry_cipher_close(*hd1);
             gcry_cipher_close(*hd2);
-            g_debug("ssh: can't set chacha20 cipher key");
+            g_debug("ssh: can't set chacha20 cipher key %s", gcry_strerror(err));
             return;
         }
     }
@@ -2484,7 +2481,7 @@ ssh_dissect_decrypted_packet(tvbuff_t *tvb, packet_info *pinfo,
     return offset;
 }
 
-static void
+static int
 ssh_dissect_connection_specific(tvbuff_t *packet_tvb, packet_info *pinfo,
         struct ssh_peer_data *peer_data, int offset, proto_item *msg_type_tree,
         guint msg_code)
@@ -2570,6 +2567,7 @@ ssh_dissect_connection_specific(tvbuff_t *packet_tvb, packet_info *pinfo,
                 proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
                 offset += 4;
         }
+	return offset;
 }
 
 static dissector_handle_t
