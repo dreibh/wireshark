@@ -2045,7 +2045,10 @@ uninstall_nghttp2() {
 install_libtiff() {
     if [ "$LIBTIFF_VERSION" -a ! -f tiff-$LIBTIFF_VERSION-done ] ; then
         echo "Downloading, building, and installing libtiff:"
-        [ -f libtiff-$LIBTIFF_VERSION.tar.gz ] || curl -L -O https://download.osgeo.org/libtiff/tiff-$LIBTIFF_VERSION.tar.gz || exit 1
+        [ -f tiff-$LIBTIFF_VERSION.tar.gz ] || 
+            curl --fail -L -O https://download.osgeo.org/libtiff/tiff-$LIBTIFF_VERSION.tar.gz     || 
+            curl --fail -L -O https://download.osgeo.org/libtiff/old/tiff-$LIBTIFF_VERSION.tar.gz || 
+            exit 1
         $no_build && echo "Skipping installation" && return
         gzcat tiff-$LIBTIFF_VERSION.tar.gz | tar xf - || exit 1
         cd tiff-$LIBTIFF_VERSION
