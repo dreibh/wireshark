@@ -1082,7 +1082,18 @@ hfinfo_format_bytes(wmem_allocator_t *scope, const header_field_info *hfinfo,
 	gboolean is_printable;
 
 	if (bytes) {
-		if (hfinfo->display & BASE_SHOW_ASCII_PRINTABLE) {
+		if (hfinfo->display & BASE_SHOW_UTF_8_PRINTABLE) {
+			/*
+			 * If all bytes are valid and printable UTF-8, show the
+			 * bytes as a string - in quotes to indicate that it's
+			 * a string.
+			 */
+			if (isprint_utf8_string(bytes, length)) {
+				str = wmem_strdup_printf(scope, "\"%.*s\"",
+				    (int)length, bytes);
+				return str;
+			}
+		} else if (hfinfo->display & BASE_SHOW_ASCII_PRINTABLE) {
 			/*
 			 * Check whether all bytes are printable.
 			 */
@@ -6139,6 +6150,9 @@ get_full_length(header_field_info *hfinfo, tvbuff_t *tvb, const gint start,
 	case FT_UINT_BYTES:
 		n = get_uint_value(NULL, tvb, start, length, encoding);
 		item_length += n;
+		if ((int)item_length < length) {
+			THROW(ReportedBoundsError);
+		}
 		break;
 
 	/* XXX - make these just FT_UINT? */
@@ -6218,6 +6232,9 @@ get_full_length(header_field_info *hfinfo, tvbuff_t *tvb, const gint start,
 	case FT_UINT_STRING:
 		n = get_uint_value(NULL, tvb, start, length, encoding & ~ENC_CHARENCODING_MASK);
 		item_length += n;
+		if ((int)item_length < length) {
+			THROW(ReportedBoundsError);
+		}
 		break;
 
 	case FT_STRINGZPAD:
@@ -8204,6 +8221,12 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 	 */
 	if (hfinfo->strings != NULL) {
 		switch (hfinfo->type) {
+
+		/*
+		 * These types are allowed to support display value_strings,
+		 * value64_strings, the extended versions of the previous
+		 * two, range strings, or unit strings.
+		 */
 		case FT_CHAR:
 		case FT_UINT8:
 		case FT_UINT16:
@@ -8223,21 +8246,41 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 		case FT_INT64:
 		case FT_BOOLEAN:
 		case FT_PROTOCOL:
+			break;
+
+		/*
+		 * This is allowed to have a value of type
+		 * enum ft_framenum_type to indicate what relationship
+		 * the frame in question has to the frame in which
+		 * the field is put.
+		 */
 		case FT_FRAMENUM:
 			break;
+
+		/*
+		 * These types are allowed to support only unit strings.
+		 */
 		case FT_FLOAT:
 		case FT_DOUBLE:
-			//allowed to support string if its a unit decsription
-			if (hfinfo->display & BASE_UNIT_STRING)
-				break;
+			if (!(hfinfo->display & BASE_UNIT_STRING)) {
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) has a non-unit-strings 'strings' value but is of type %s"
+					" (which is only allowed to have unit strings)",
+					hfinfo->name, hfinfo->abbrev, ftype_name(hfinfo->type));
+			}
+			break;
 
-			//fallthrough
+		/*
+		 * This type is only allowed to support a string if it's
+		 * a protocol (for pinos).
+		 */
 		case FT_BYTES:
-			//allowed to support string if its a protocol (for pinos)
-			if (hfinfo->display & BASE_PROTOCOL_INFO)
-				break;
+			if (!(hfinfo->display & BASE_PROTOCOL_INFO)) {
+				REPORT_DISSECTOR_BUG("Field '%s' (%s) has a non-protocol-info 'strings' value but is of type %s"
+					" (which is only allowed to have protocol-info strings)",
+					hfinfo->name, hfinfo->abbrev, ftype_name(hfinfo->type));
+			}
+			break;
 
-			//fallthrough
 		default:
 			REPORT_DISSECTOR_BUG("Field '%s' (%s) has a 'strings' value but is of type %s"
 				" (which is not allowed to have strings)",
