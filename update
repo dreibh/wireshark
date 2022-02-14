@@ -1,8 +1,9 @@
 #!/bin/bash -e
 
 git checkout tools/make-version.pl
-git checkout debian/
+git checkout packaging/debian/
 
+if [ ! -e debian ] ; then ln -s packaging/debian/ . ; fi
 git pull
 
 # Rebase to upstream master
