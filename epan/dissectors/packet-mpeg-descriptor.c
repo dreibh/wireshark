@@ -122,6 +122,7 @@ static const value_string mpeg_descriptor_tag_vals[] = {
     { 0x6E, "Announcement Support Descriptor" },
     { 0x6F, "Application Signalling Descriptor" },
     { 0x70, "Adaptation Field Data Descriptor" },
+    /* SID (0x71) from ETSI TS 102 812 */
     { 0x71, "Service Identifier Descriptor" },
     { 0x72, "Service Availability Descriptor" },
     { 0x73, "Default Authority Descriptor" },
@@ -134,6 +135,7 @@ static const value_string mpeg_descriptor_tag_vals[] = {
     { 0x7A, "Enhanced AC-3 Descriptor" },
     { 0x7B, "DTS Descriptor" },
     { 0x7C, "AAC Descriptor" },
+    /* 0x7D from ETSI TS 102 727 */
     { 0x7D, "XAIT Content Location Descriptor" },
     { 0x7E, "FTA Content Management Descriptor" },
     { 0x7F, "Extension Descriptor" },
@@ -1604,6 +1606,19 @@ proto_mpeg_descriptor_dissect_extended_event(tvbuff_t *tvb, guint offset, proto_
 
 }
 
+/* 0x4F Time Shifted Event Descriptor */
+static int hf_mpeg_descr_time_shifted_event_reference_service_id = -1;
+static int hf_mpeg_descr_time_shifted_event_reference_event_id = -1;
+
+static void
+proto_mpeg_descriptor_dissect_time_shifted_event(tvbuff_t *tvb, guint offset, proto_tree *tree)
+{
+    proto_tree_add_item(tree, hf_mpeg_descr_time_shifted_event_reference_service_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
+
+    proto_tree_add_item(tree, hf_mpeg_descr_time_shifted_event_reference_event_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+}
+
 /* 0x50 Component Descriptor */
 static int hf_mpeg_descr_component_stream_content_ext = -1;
 static int hf_mpeg_descr_component_stream_content = -1;
@@ -3018,6 +3033,102 @@ proto_mpeg_descriptor_dissect_private_data_specifier(tvbuff_t *tvb, guint offset
     proto_tree_add_item(tree, hf_mpeg_descr_private_data_specifier_id, tvb, offset, 4, ENC_BIG_ENDIAN);
 }
 
+/* 0x61 Short Smoothing Buffer Descriptor */
+static int hf_mpeg_descr_short_smoothing_buffer_sb_size = -1;
+static int hf_mpeg_descr_short_smoothing_buffer_sb_leak_rate = -1;
+static int hf_mpeg_descr_short_smoothing_buffer_dvb_reserved = -1;
+
+#define MPEG_DESCR_SHORT_SMOOTHING_BUFFER_SB_SIZE_MASK      0xC0
+#define MPEG_DESCR_SHORT_SMOOTHING_BUFFER_SB_LEAK_RATE_MASK 0x3F
+
+static const value_string mpeg_descr_ssb_sb_size_vals[] = {
+    { 0, "DVB_reserved" },
+    { 1, "1 536" },
+    { 2, "DVB_reserved" },
+    { 3, "DVB_reserved" },
+    { 0, NULL }
+};
+
+static const value_string mpeg_descr_ssb_sb_leak_rate_vals[] = {
+    { 0, "DVB_reserved" },
+    { 1, "0,0009 Mbit/s" },
+    { 2, "0,0018 Mbit/s" },
+    { 3, "0,0036 Mbit/s" },
+    { 4, "0,0072 Mbit/s" },
+    { 5, "0,0108 Mbit/s" },
+    { 6, "0,0144 Mbit/s" },
+    { 7, "0,0216 Mbit/s" },
+    { 8, "0,0288 Mbit/s" },
+    { 9, "0,075 Mbit/s" },
+    { 10, "0,5 Mbit/s" },
+    { 11, "0,5625 Mbit/s" },
+    { 12, "0,8437 Mbit/s" },
+    { 13, "1,0 Mbit/s" },
+    { 14, "1,1250 Mbit/s" },
+    { 15, "1,5 Mbit/s" },
+    { 16, "1,6875 Mbit/s" },
+    { 17, "2,0 Mbit/s" },
+    { 18, "2,2500 Mbit/s" },
+    { 19, "2,5 Mbit/s" },
+    { 20, "3,0 Mbit/s" },
+    { 21, "3,3750 Mbit/s" },
+    { 22, "3,5 Mbit/s" },
+    { 23, "4,0 Mbit/s" },
+    { 24, "4,5 Mbit/s" },
+    { 25, "5,0 Mbit/s" },
+    { 26, "5,5 Mbit/s" },
+    { 27, "6,0 Mbit/s" },
+    { 28, "6,5 Mbit/s" },
+    { 29, "6,7500 Mbit/s" },
+    { 30, "7,0 Mbit/s" },
+    { 31, "7,5 Mbit/s" },
+    { 32, "8,0 Mbit/s" },
+    { 33, "9,0 Mbit/s" },
+    { 34, "10,0 Mbit/s" },
+    { 35, "11,0 Mbit/s" },
+    { 36, "12,0 Mbit/s" },
+    { 37, "13,0 Mbit/s" },
+    { 38, "13,5 Mbit/s" },
+    { 39, "14,0 Mbit/s" },
+    { 40, "15,0 Mbit/s" },
+    { 41, "16,0 Mbit/s" },
+    { 42, "17,0 Mbit/s" },
+    { 43, "18,0 Mbit/s" },
+    { 44, "20,0 Mbit/s" },
+    { 45, "22,0 Mbit/s" },
+    { 46, "24,0 Mbit/s" },
+    { 47, "26,0 Mbit/s" },
+    { 48, "27,0 Mbit/s" },
+    { 49, "28,0 Mbit/s" },
+    { 50, "30,0 Mbit/s" },
+    { 51, "32,0 Mbit/s" },
+    { 52, "34,0 Mbit/s" },
+    { 53, "36,0 Mbit/s" },
+    { 54, "38,0 Mbit/s" },
+    { 55, "40,0 Mbit/s" },
+    { 56, "44,0 Mbit/s" },
+    { 57, "48,0 Mbit/s" },
+    { 58, "54,0 Mbit/s" },
+    { 59, "72,0 Mbit/s" },
+    { 60, "108,0 Mbit/s" },
+    { 61, "DVB_reserved" },
+    { 62, "DVB_reserved" },
+    { 63, "DVB_reserved" },
+    { 0, NULL }
+};
+
+static void
+proto_mpeg_descriptor_dissect_short_smoothing_buffer(tvbuff_t *tvb, guint offset, guint len, proto_tree *tree)
+{
+    proto_tree_add_item(tree, hf_mpeg_descr_short_smoothing_buffer_sb_size, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_mpeg_descr_short_smoothing_buffer_sb_leak_rate, tvb, offset, 1, ENC_BIG_ENDIAN);
+    offset += 1;
+
+    if (len == 1) return;
+
+    proto_tree_add_item(tree, hf_mpeg_descr_short_smoothing_buffer_dvb_reserved, tvb, offset, len-1, ENC_NA);
+}
+
 /* 0x63 Partial Transport Stream Descriptor */
 static int hf_mpeg_descr_partial_transport_stream_reserved_future_use1 = -1;
 static int hf_mpeg_descr_partial_transport_stream_peak_rate = -1;
@@ -3290,6 +3401,15 @@ proto_mpeg_descriptor_dissect_app_sig(tvbuff_t *tvb, guint offset, guint len, pr
     }
 }
 
+/* 0x71 Service Identifier Descriptor */
+static int hf_mpeg_descr_service_identifier = -1;
+
+static void
+proto_mpeg_descriptor_dissect_service_identifier(tvbuff_t *tvb, guint offset, guint len, proto_tree *tree)
+{
+    proto_tree_add_item(tree, hf_mpeg_descr_service_identifier, tvb, offset, len, ENC_ASCII|ENC_NA);
+}
+
 /* 0x72 Service Availability Descriptor */
 static int hf_mpeg_descr_service_availability_flag = -1;
 static int hf_mpeg_descr_service_availability_reserved = -1;
@@ -3405,6 +3525,34 @@ proto_mpeg_descriptor_dissect_content_identifier(tvbuff_t *tvb, guint offset, gu
     }
 
 
+}
+
+/* 0x7D XAIT Content Location Descriptor */
+static int hf_mpeg_descr_xait_onid = -1;
+static int hf_mpeg_descr_xait_sid = -1;
+static int hf_mpeg_descr_xait_version_number = -1;
+static int hf_mpeg_descr_xait_update_policy = -1;
+
+#define MPEG_DESCR_XAIT_VERSION_NUM_MASK    0xF8
+#define MPEG_DESCR_XAIT_UPDATE_POLICY_MASK  0x07
+
+static const range_string mpeg_descr_xait_update_policy_vals[] = {
+    { 0, 0, "When the XAIT version changes, immediately re-load the XAIT" },
+    { 1, 1, "Ignore XAIT version changes until a reset or reinitialize" },
+    { 2, 7, "Reserved for future use" },
+    { 0, 0, NULL }
+};
+
+static void
+proto_mpeg_descriptor_dissect_xait(tvbuff_t *tvb, guint offset, proto_tree *tree) {
+    proto_tree_add_item(tree, hf_mpeg_descr_xait_onid, tvb, offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
+
+    proto_tree_add_item(tree, hf_mpeg_descr_xait_sid, tvb, offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
+
+    proto_tree_add_item(tree, hf_mpeg_descr_xait_version_number, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_mpeg_descr_xait_update_policy, tvb, offset, 1, ENC_BIG_ENDIAN);
 }
 
 /* 0x7F Extension Descriptor */
@@ -4270,6 +4418,9 @@ proto_mpeg_descriptor_dissect(tvbuff_t *tvb, guint offset, proto_tree *tree)
         case 0x4E: /* Extended Event Descriptor */
             proto_mpeg_descriptor_dissect_extended_event(tvb, offset, descriptor_tree);
             break;
+        case 0x4F: /* Time Shifted Event Descriptor */
+            proto_mpeg_descriptor_dissect_time_shifted_event(tvb, offset, descriptor_tree);
+            break;
         case 0x50: /* Component Descriptor */
             proto_mpeg_descriptor_dissect_component(tvb, offset, len, descriptor_tree);
             break;
@@ -4318,6 +4469,9 @@ proto_mpeg_descriptor_dissect(tvbuff_t *tvb, guint offset, proto_tree *tree)
         case 0x5F: /* Private Data Specifier Descriptor */
             proto_mpeg_descriptor_dissect_private_data_specifier(tvb, offset, descriptor_tree);
             break;
+        case 0x61: /* Short Smoothing Buffer Descriptor */
+            proto_mpeg_descriptor_dissect_short_smoothing_buffer(tvb, offset, len, descriptor_tree);
+            break;
         case 0x63: /* Partial Transport Stream Descriptor */
             proto_mpeg_descriptor_dissect_partial_transport_stream(tvb, offset, len, descriptor_tree);
             break;
@@ -4333,6 +4487,9 @@ proto_mpeg_descriptor_dissect(tvbuff_t *tvb, guint offset, proto_tree *tree)
         case 0x6F: /* Application Signalling Descriptor */
             proto_mpeg_descriptor_dissect_app_sig(tvb, offset, len, descriptor_tree);
             break;
+        case 0x71: /* Service Identifier Descriptor */
+            proto_mpeg_descriptor_dissect_service_identifier(tvb, offset, len, descriptor_tree);
+            break;
         case 0x72: /* Service Availability Descriptor */
             proto_mpeg_descriptor_dissect_service_availability(tvb, offset, len, descriptor_tree);
             break;
@@ -4341,6 +4498,9 @@ proto_mpeg_descriptor_dissect(tvbuff_t *tvb, guint offset, proto_tree *tree)
             break;
         case 0x76: /* Content Identifier Descriptor */
             proto_mpeg_descriptor_dissect_content_identifier(tvb, offset, len, descriptor_tree);
+            break;
+        case 0x7D: /* XAIT Content Location Descriptor */
+            proto_mpeg_descriptor_dissect_xait(tvb, offset, descriptor_tree);
             break;
         case 0x7F: /* Extension Descriptor */
             proto_mpeg_descriptor_dissect_extension(tvb, offset, len, descriptor_tree);
@@ -5201,6 +5361,17 @@ proto_register_mpeg_descriptor(void)
             FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL
         } },
 
+        /* 0x4F Time Shifted Event Descriptor */
+        { &hf_mpeg_descr_time_shifted_event_reference_service_id, {
+            "Reference Service ID", "mpeg_descr.tshift_evt.sid",
+            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_time_shifted_event_reference_event_id, {
+            "Reference Event ID", "mpeg_descr.tshift_evt.eid",
+            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL
+        } },
+
         /* 0x50 Component Descriptor */
         { &hf_mpeg_descr_component_nga_bits_b7_reserved, {
             "Reserved zero for future use", "mpeg_descr.component.nga.reserved",
@@ -5799,6 +5970,24 @@ proto_register_mpeg_descriptor(void)
             FT_UINT32, BASE_HEX, VALS(mpeg_descr_data_specifier_id_vals), 0, NULL, HFILL
         } },
 
+        /* 0x61 Short Smoothing Buffer Descriptor */
+        { &hf_mpeg_descr_short_smoothing_buffer_sb_size, {
+            "SB Size", "mpeg_descr.ssb.sb_size",
+            FT_UINT8, BASE_HEX, VALS(mpeg_descr_ssb_sb_size_vals),
+            MPEG_DESCR_SHORT_SMOOTHING_BUFFER_SB_SIZE_MASK, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_short_smoothing_buffer_sb_leak_rate, {
+            "SB Leak Rate", "mpeg_descr.ssb.sb_leak_rate",
+            FT_UINT8, BASE_HEX, VALS(mpeg_descr_ssb_sb_leak_rate_vals),
+            MPEG_DESCR_SHORT_SMOOTHING_BUFFER_SB_LEAK_RATE_MASK, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_short_smoothing_buffer_dvb_reserved, {
+            "DVB Reserved", "mpeg_descr.ssb.dvb_reserved",
+            FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL
+        } },
+
         /* 0x63 Partial Transport Stream Descriptor */
         { &hf_mpeg_descr_partial_transport_stream_reserved_future_use1, {
             "Reserved", "mpeg_descr.partial_transport_stream.reserved_future_use1",
@@ -5961,6 +6150,12 @@ proto_register_mpeg_descriptor(void)
             FT_UINT8, BASE_HEX, NULL, 0x3F, NULL, HFILL
         } },
 
+        /* 0x71 Service Identifier Descriptor */
+        { &hf_mpeg_descr_service_identifier, {
+            "Service Textual Identifier", "mpeg_descr.sid.txt_identifier",
+            FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL
+        } },
+
         /* 0x72 Service Availability Descriptor */
         { &hf_mpeg_descr_service_availability_flag, {
             "Availability Flag", "mpeg_descr.srv_avail.flag",
@@ -6010,6 +6205,28 @@ proto_register_mpeg_descriptor(void)
         { &hf_mpeg_descr_content_identifier_cird_ref, {
             "CRID Reference", "mpeg_descr.content_identifier.crid_ref",
             FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL
+        } },
+
+        /* 0x7D XAIT Content Location Descriptor */
+        { &hf_mpeg_descr_xait_onid, {
+            "Original Network ID", "mpeg_descr.xait.onid",
+            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_xait_sid, {
+            "Service ID", "mpeg_descr.xait.sid",
+            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_xait_version_number, {
+            "Version Number", "mpeg_descr.xait.version",
+            FT_UINT8, BASE_HEX, NULL, MPEG_DESCR_XAIT_VERSION_NUM_MASK, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_xait_update_policy, {
+            "Update Policy", "mpeg_descr.xait.update_policy",
+            FT_UINT8, BASE_HEX|BASE_RANGE_STRING, RVALS(mpeg_descr_xait_update_policy_vals),
+            MPEG_DESCR_XAIT_UPDATE_POLICY_MASK, NULL, HFILL
         } },
 
         /* 0x7F Extension Descriptor */
