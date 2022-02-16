@@ -69,6 +69,8 @@
 #define PROTOCOL_BINARY_RESPONSE_NOT_MY_VBUCKET     0x07
 #define PROTOCOL_BINARY_RESPONSE_NO_VBUCKET         0x08
 #define PROTOCOL_BINARY_RESPONSE_LOCKED             0x09
+#define PROTOCOL_BINARY_RESPONSE_DCP_STREAM_NOT_FOUND 0x0a
+#define PROTOCOL_BINARY_RESPONSE_OPAQUE_NO_MATCH    0x0b
 #define PROTOCOL_BINARY_RESPONSE_AUTH_STALE         0x1f
 #define PROTOCOL_BINARY_RESPONSE_AUTH_ERROR         0x20
 #define PROTOCOL_BINARY_RESPONSE_AUTH_CONTINUE      0x21
@@ -76,6 +78,11 @@
 #define PROTOCOL_BINARY_RESPONSE_ROLLBACK           0x23
 #define PROTOCOL_BINARY_RESPONSE_EACCESS            0x24
 #define PROTOCOL_BINARY_RESPONSE_NOT_INITIALIZED    0x25
+#define PROTOCOL_BINARY_RESPONSE_RATELIMITED_NETWORK_INGRESS 0x30
+#define PROTOCOL_BINARY_RESPONSE_RATELIMITED_NETWORK_EGRESS 0x31
+#define PROTOCOL_BINARY_RESPONSE_RATELIMITED_MAX_CONNECTIONS 0x32
+#define PROTOCOL_BINARY_RESPONSE_RATELIMITED_MAX_COMMANDS 0x33
+#define PROTOCOL_BINARY_RESPONSE_SCOPE_SIZE_LIMIT_EXCEEDED 0x34
 #define PROTOCOL_BINARY_RESPONSE_UNKNOWN_COMMAND    0x81
 #define PROTOCOL_BINARY_RESPONSE_ENOMEM             0x82
 #define PROTOCOL_BINARY_RESPONSE_NOT_SUPPORTED      0x83
@@ -204,6 +211,30 @@
 
 #define PROTOCOL_BINARY_CMD_GET_ALL_VB_SEQNOS       0x48
 
+/* DCP commands */
+#define PROTOCOL_BINARY_DCP_OPEN_CONNECTION         0x50
+#define PROTOCOL_BINARY_DCP_ADD_STREAM              0x51
+#define PROTOCOL_BINARY_DCP_CLOSE_STREAM            0x52
+#define PROTOCOL_BINARY_DCP_STREAM_REQUEST          0x53
+#define PROTOCOL_BINARY_DCP_FAILOVER_LOG_REQUEST    0x54
+#define PROTOCOL_BINARY_DCP_STREAM_END              0x55
+#define PROTOCOL_BINARY_DCP_SNAPSHOT_MARKER         0x56
+#define PROTOCOL_BINARY_DCP_MUTATION                0x57
+#define PROTOCOL_BINARY_DCP_DELETION                0x58
+#define PROTOCOL_BINARY_DCP_EXPIRATION              0x59
+#define PROTOCOL_BINARY_DCP_FLUSH                   0x5a
+#define PROTOCOL_BINARY_DCP_SET_VBUCKET_STATE       0x5b
+#define PROTOCOL_BINARY_DCP_NOOP                    0x5c
+#define PROTOCOL_BINARY_DCP_BUFFER_ACKNOWLEDGEMENT  0x5d
+#define PROTOCOL_BINARY_DCP_CONTROL                 0x5e
+#define PROTOCOL_BINARY_DCP_SYSTEM_EVENT            0x5f
+#define PROTOCOL_BINARY_DCP_PREPARE                 0x60
+#define PROTOCOL_BINARY_DCP_SEQNO_ACK               0x61
+#define PROTOCOL_BINARY_DCP_COMMIT                  0x62
+#define PROTOCOL_BINARY_DCP_ABORT                   0x63
+#define PROTOCOL_BINARY_DCP_SEQNO_ADVANCED          0x64
+#define PROTOCOL_BINARY_DCP_OSO_SNAPSHOT            0x65
+
  /* Commands from EP (eventually persistent) and bucket engines */
 #define PROTOCOL_BINARY_CMD_STOP_PERSISTENCE        0x80
 #define PROTOCOL_BINARY_CMD_START_PERSISTENCE       0x81
@@ -244,6 +275,7 @@
 #define PROTOCOL_BINARY_CMD_NOTIFY_VBUCKET_UPDATE   0xac
 #define PROTOCOL_BINARY_CMD_ENABLE_TRAFFIC          0xad
 #define PROTOCOL_BINARY_CMD_DISABLE_TRAFFIC         0xae
+#define PROTOCOL_BINARY_CMD_IFCONFIG                0xaf
 #define PROTOCOL_BINARY_CMD_CHANGE_VB_FILTER        0xb0
 #define PROTOCOL_BINARY_CMD_CHECKPOINT_PERSISTENCE  0xb1
 #define PROTOCOL_BINARY_CMD_RETURN_META             0xb2
@@ -252,7 +284,9 @@
 
 #define PROTOCOL_BINARY_CMD_SET_CLUSTER_CONFIG      0xb4
 #define PROTOCOL_BINARY_CMD_GET_CLUSTER_CONFIG      0xb5
-
+#define PROTOCOL_BINARY_CMD_GET_RANDOM_KEY          0xb6
+#define PROTOCOL_BINARY_CMD_SEQNO_PERSISTENCE       0xb7
+#define PROTOCOL_BINARY_CMD_GET_KEYS                0xb8
 #define PROTOCOL_BINARY_CMD_COLLECTIONS_SET_MANIFEST 0xb9
 #define PROTOCOL_BINARY_CMD_COLLECTIONS_GET_MANIFEST 0xba
 #define PROTOCOL_BINARY_CMD_COLLECTIONS_GET_ID       0xbb
@@ -278,33 +312,6 @@
 #define PROTOCOL_BINARY_CMD_SUBDOC_GET_COUNT        0xd2
 #define PROTOCOL_BINARY_CMD_SUBDOC_REPLACE_BODY_WITH_XATTR 0xd3
 
-/* DCP commands */
-#define PROTOCOL_BINARY_DCP_OPEN_CONNECTION         0x50
-#define PROTOCOL_BINARY_DCP_ADD_STREAM              0x51
-#define PROTOCOL_BINARY_DCP_CLOSE_STREAM            0x52
-#define PROTOCOL_BINARY_DCP_STREAM_REQUEST          0x53
-#define PROTOCOL_BINARY_DCP_FAILOVER_LOG_REQUEST    0x54
-#define PROTOCOL_BINARY_DCP_STREAM_END              0x55
-#define PROTOCOL_BINARY_DCP_SNAPSHOT_MARKER         0x56
-#define PROTOCOL_BINARY_DCP_MUTATION                0x57
-#define PROTOCOL_BINARY_DCP_DELETION                0x58
-#define PROTOCOL_BINARY_DCP_EXPIRATION              0x59
-#define PROTOCOL_BINARY_DCP_FLUSH                   0x5a
-#define PROTOCOL_BINARY_DCP_SET_VBUCKET_STATE       0x5b
-#define PROTOCOL_BINARY_DCP_NOOP                    0x5c
-#define PROTOCOL_BINARY_DCP_BUFFER_ACKNOWLEDGEMENT  0x5d
-#define PROTOCOL_BINARY_DCP_CONTROL                 0x5e
-#define PROTOCOL_BINARY_DCP_SYSTEM_EVENT            0x5f
-#define PROTOCOL_BINARY_DCP_PREPARE                 0x60
-#define PROTOCOL_BINARY_DCP_SEQNO_ACK               0x61
-#define PROTOCOL_BINARY_DCP_COMMIT                  0x62
-#define PROTOCOL_BINARY_DCP_ABORT                   0x63
-#define PROTOCOL_BINARY_DCP_SEQNO_ADVANCED          0x64
-#define PROTOCOL_BINARY_DCP_OSO_SNAPSHOT            0x65
-
-#define PROTOCOL_BINARY_CMD_GET_RANDOM_KEY          0xb6
-#define PROTOCOL_BINARY_CMD_SEQNO_PERSISTENCE       0xb7
-#define PROTOCOL_BINARY_CMD_GET_KEYS                0xb8
 #define PROTOCOL_BINARY_CMD_SCRUB                   0xf0
 #define PROTOCOL_BINARY_CMD_ISASL_REFRESH           0xf1
 #define PROTOCOL_BINARY_CMD_SSL_CERTS_REFRESH       0xf2
@@ -599,6 +606,8 @@ static const value_string status_vals[] = {
   { PROTOCOL_BINARY_RESPONSE_NOT_MY_VBUCKET,    "Not my vBucket"          },
   { PROTOCOL_BINARY_RESPONSE_NO_VBUCKET,        "Not connected to a bucket" },
   { PROTOCOL_BINARY_RESPONSE_LOCKED,            "The requested resource is locked" },
+  { PROTOCOL_BINARY_RESPONSE_DCP_STREAM_NOT_FOUND, "No DCP Stream for this request" },
+  { PROTOCOL_BINARY_RESPONSE_OPAQUE_NO_MATCH,   "Opaque does not match" },
   { PROTOCOL_BINARY_RESPONSE_AUTH_STALE,        "Authentication context is stale. Should reauthenticate." },
   { PROTOCOL_BINARY_RESPONSE_AUTH_ERROR,        "Authentication error"    },
   { PROTOCOL_BINARY_RESPONSE_AUTH_CONTINUE,     "Authentication continue" },
@@ -608,6 +617,11 @@ static const value_string status_vals[] = {
   { PROTOCOL_BINARY_RESPONSE_NOT_INITIALIZED,
     "The Couchbase cluster is currently initializing this node, and "
     "the Cluster manager has not yet granted all users access to the cluster."},
+  { PROTOCOL_BINARY_RESPONSE_RATELIMITED_NETWORK_INGRESS, "Rate limit: Network ingress"},
+  { PROTOCOL_BINARY_RESPONSE_RATELIMITED_NETWORK_EGRESS, "Rate limit: Network Egress"},
+  { PROTOCOL_BINARY_RESPONSE_RATELIMITED_MAX_CONNECTIONS, "Rate limit: Max Connections"},
+  { PROTOCOL_BINARY_RESPONSE_RATELIMITED_MAX_COMMANDS, "Rate limit: Max Commands"},
+  {PROTOCOL_BINARY_RESPONSE_SCOPE_SIZE_LIMIT_EXCEEDED, "To much data in Scope"},
   { PROTOCOL_BINARY_RESPONSE_UNKNOWN_COMMAND,   "Unknown command"         },
   { PROTOCOL_BINARY_RESPONSE_ENOMEM,            "Out of memory"           },
   { PROTOCOL_BINARY_RESPONSE_NOT_SUPPORTED,     "Command isn't supported" },
@@ -820,6 +834,7 @@ static const value_string opcode_vals[] = {
   { PROTOCOL_BINARY_CMD_NOTIFY_VBUCKET_UPDATE,      "Notify VBucket Update"    },
   { PROTOCOL_BINARY_CMD_ENABLE_TRAFFIC,             "Enable Traffic"           },
   { PROTOCOL_BINARY_CMD_DISABLE_TRAFFIC,            "Disable Traffic"          },
+  { PROTOCOL_BINARY_CMD_IFCONFIG,                   "Ifconfig"                 },
   { PROTOCOL_BINARY_CMD_CHANGE_VB_FILTER,           "Change VBucket Filter"    },
   { PROTOCOL_BINARY_CMD_CHECKPOINT_PERSISTENCE,     "Checkpoint Persistence"   },
   { PROTOCOL_BINARY_CMD_RETURN_META,                "Return Meta"              },
@@ -2156,7 +2171,7 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     if (opcode == PROTOCOL_BINARY_CMD_OBSERVE) {
       proto_tree *observe_tree;
       gint oo = offset, end = offset + value_len;
-      ti = proto_tree_add_item(tree, hf_observe, tvb, offset, value_len, ENC_ASCII|ENC_NA);
+      ti = proto_tree_add_item(tree, hf_observe, tvb, offset, value_len, ENC_ASCII);
       observe_tree = proto_item_add_subtree(ti, ett_observe);
       while (oo < end) {
         guint16 kl; /* keylength */
@@ -2165,7 +2180,7 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         kl = tvb_get_ntohs(tvb, oo);
         proto_tree_add_item(observe_tree, hf_observe_keylength, tvb, oo, 2, ENC_BIG_ENDIAN);
         oo += 2;
-        proto_tree_add_item(observe_tree, hf_observe_key, tvb, oo, kl, ENC_ASCII|ENC_NA);
+        proto_tree_add_item(observe_tree, hf_observe_key, tvb, oo, kl, ENC_ASCII);
         oo += kl;
         if (!request) {
           proto_tree_add_item(observe_tree, hf_observe_status, tvb, oo, 1, ENC_BIG_ENDIAN);
@@ -2234,7 +2249,7 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       } else {
         proto_tree *failover_log_tree;
         gint cur = offset, end = offset + value_len;
-        ti = proto_tree_add_item(tree, hf_failover_log, tvb, offset, value_len, ENC_ASCII|ENC_NA);
+        ti = proto_tree_add_item(tree, hf_failover_log, tvb, offset, value_len, ENC_ASCII);
         failover_log_tree = proto_item_add_subtree(ti, ett_failover_log);
         ti = proto_tree_add_uint(failover_log_tree, hf_failover_log_size, tvb, offset, 0, (end - cur) / 16);
         proto_item_set_generated(ti);
@@ -2251,7 +2266,7 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       } else {
         proto_tree *vbucket_states_tree;
         gint cur = offset, end = offset + value_len;
-        ti = proto_tree_add_item(tree, hf_vbucket_states, tvb, offset, value_len, ENC_ASCII|ENC_NA);
+        ti = proto_tree_add_item(tree, hf_vbucket_states, tvb, offset, value_len, ENC_ASCII);
         vbucket_states_tree = proto_item_add_subtree(ti, ett_vbucket_states);
         ti = proto_tree_add_uint(vbucket_states_tree, hf_vbucket_states_size, tvb, offset, 0, (end - cur) / 10);
         proto_item_set_generated(ti);
@@ -2282,7 +2297,7 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     } else if (opcode == PROTOCOL_BINARY_CMD_HELLO) {
       gint curr = offset, end = offset + value_len;
       proto_tree *hello_features_tree;
-      ti = proto_tree_add_item(tree, hf_hello_features, tvb, offset, value_len, ENC_ASCII|ENC_NA);
+      ti = proto_tree_add_item(tree, hf_hello_features, tvb, offset, value_len, ENC_ASCII);
       hello_features_tree = proto_item_add_subtree(ti, ett_hello_features);
       while (curr < end) {
         proto_tree_add_item(hello_features_tree, hf_hello_features_feature, tvb, curr, 2, ENC_BIG_ENDIAN);
@@ -2304,7 +2319,7 @@ dissect_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
       sep = tvb_find_guint8(tvb, offset, value_len, 0x00);
       if (sep == -1) {
-        ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII|ENC_NA);
+        ti = proto_tree_add_item(tree, hf_value, tvb, offset, value_len, ENC_ASCII);
         expert_add_info_format(pinfo, ti, &ef_separator_not_found, "Null byte not found");
       } else {
         proto_tree_add_item(tree, hf_bucket_type, tvb, offset, sep - offset, ENC_ASCII | ENC_NA);
@@ -2828,8 +2843,8 @@ dissect_couchbase(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
       case PROTOCOL_BINARY_CMD_COLLECTIONS_GET_ID:
           break;
       default:
-          proto_item_append_text(couchbase_item, ", VBucket: 0x%x", vbucket);
-          col_append_fstr(pinfo->cinfo, COL_INFO, ", VBucket: 0x%x", vbucket);
+          proto_item_append_text(couchbase_item, ", vb:%d", vbucket);
+          col_append_fstr(pinfo->cinfo, COL_INFO, ", vb:%d", vbucket);
     }
   }
   offset += 2;
