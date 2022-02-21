@@ -125,6 +125,7 @@ static const value_string mpeg_descriptor_tag_vals[] = {
     /* SID (0x71) from ETSI TS 102 812 */
     { 0x71, "Service Identifier Descriptor" },
     { 0x72, "Service Availability Descriptor" },
+    /* 0x73...0x76 from ETSI TS 102 323 */
     { 0x73, "Default Authority Descriptor" },
     { 0x74, "Related Content Descriptor" },
     { 0x75, "TVA ID Descriptor" },
@@ -3251,6 +3252,38 @@ proto_mpeg_descriptor_dissect_data_bcast_id(tvbuff_t *tvb, guint offset, guint l
         proto_tree_add_item(tree, hf_mpeg_descr_data_bcast_id_id_selector_bytes, tvb, offset, len - 2, ENC_NA);
 }
 
+/* 0x69 PDC Descriptor */
+static int hf_mpeg_descr_pdc_reserved = -1;
+static int hf_mpeg_descr_pdc_pil = -1;
+static int hf_mpeg_descr_pdc_day = -1;
+static int hf_mpeg_descr_pdc_month = -1;
+static int hf_mpeg_descr_pdc_hour = -1;
+static int hf_mpeg_descr_pdc_minute = -1;
+
+#define MPEG_DESCR_PDC_RESERVED_MASK    0xF00000
+#define MPEG_DESCR_PDC_PIL_MASK         0x0FFFFF
+#define MPEG_DESCR_PDC_DAY_MASK         0x0F8000
+#define MPEG_DESCR_PDC_MONTH_MASK       0x007800
+#define MPEG_DESCR_PDC_HOUR_MASK        0x0007C0
+#define MPEG_DESCR_PDC_MINUTE_MASK      0x00003F
+
+static gint ett_mpeg_descriptor_pdc_pil = -1;
+
+static void
+proto_mpeg_descriptor_dissect_pdc(tvbuff_t *tvb, guint offset, proto_tree *tree)
+{
+    proto_item * pi;
+    proto_tree * pil_tree;
+
+    proto_tree_add_item(tree, hf_mpeg_descr_pdc_reserved, tvb, offset, 3, ENC_BIG_ENDIAN);
+    pi = proto_tree_add_item(tree, hf_mpeg_descr_pdc_pil, tvb, offset, 3, ENC_BIG_ENDIAN);
+    pil_tree = proto_item_add_subtree(pi, ett_mpeg_descriptor_pdc_pil);
+    proto_tree_add_item(pil_tree, hf_mpeg_descr_pdc_day, tvb, offset, 3, ENC_BIG_ENDIAN);
+    proto_tree_add_item(pil_tree, hf_mpeg_descr_pdc_month, tvb, offset, 3, ENC_BIG_ENDIAN);
+    proto_tree_add_item(pil_tree, hf_mpeg_descr_pdc_hour, tvb, offset, 3, ENC_BIG_ENDIAN);
+    proto_tree_add_item(pil_tree, hf_mpeg_descr_pdc_minute, tvb, offset, 3, ENC_BIG_ENDIAN);
+}
+
 /* 0x6A AC-3 Descriptor */
 static int hf_mpeg_descr_ac3_component_type_flag = -1;
 static int hf_mpeg_descr_ac3_bsid_flag = -1;
@@ -3453,6 +3486,49 @@ static void
 proto_mpeg_descriptor_dissect_default_authority(tvbuff_t *tvb, guint offset, guint len, proto_tree *tree)
 {
     proto_tree_add_item(tree, hf_mpeg_descr_default_authority_name, tvb, offset, len, ENC_ASCII);
+}
+
+/* 0x75 TVA ID Descriptor */
+static int hf_mpeg_descr_tva_id = -1;
+static int hf_mpeg_descr_tva_reserved = -1;
+static int hf_mpeg_descr_tva_running_status = -1;
+
+static gint ett_mpeg_descriptor_tva = -1;
+
+#define MPEG_DESCR_TVA_RESREVED_MASK        0xF8
+#define MPEG_DESCR_TVA_RUNNING_STATUS_MASK  0x07
+
+static const value_string mpeg_descr_tva_running_status_vals[] = {
+    { 0, "Reserved" },
+    { 1, "Not yet running" },
+    { 2, "Starts (or restarts) shortly" },
+    { 3, "Paused" },
+    { 4, "Running" },
+    { 5, "Cancelled" },
+    { 6, "Completed" },
+    { 7, "Reserved" },
+    { 0, NULL }
+};
+
+static void
+proto_mpeg_descriptor_dissect_tva_id(tvbuff_t *tvb, guint offset, guint len, proto_tree *tree)
+{
+    guint end = offset + len;
+    guint tva_cnt = 0;
+
+    proto_tree * tva_tree;
+
+    while (offset < end) {
+        guint id = tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN);
+        tva_tree = proto_tree_add_subtree_format(tree, tvb, offset, 3, ett_mpeg_descriptor_tva, NULL, "TVA %u (0x%04X)", tva_cnt, id);
+        proto_tree_add_item(tva_tree, hf_mpeg_descr_tva_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+        offset += 2;
+        tva_cnt += 1;
+
+        proto_tree_add_item(tva_tree, hf_mpeg_descr_tva_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tva_tree, hf_mpeg_descr_tva_running_status, tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset += 1;
+    }
 }
 
 /* 0x76 Content Identifier Descriptor */
@@ -4481,6 +4557,9 @@ proto_mpeg_descriptor_dissect(tvbuff_t *tvb, guint offset, proto_tree *tree)
         case 0x66: /* Data Broadcast ID Descriptor */
             proto_mpeg_descriptor_dissect_data_bcast_id(tvb, offset, len, descriptor_tree);
             break;
+        case 0x69: /* PDC Descriptor */
+            proto_mpeg_descriptor_dissect_pdc(tvb, offset, descriptor_tree);
+            break;
         case 0x6A: /* AC-3 Descriptor */
             proto_mpeg_descriptor_dissect_ac3(tvb, offset, len, descriptor_tree);
             break;
@@ -4495,6 +4574,9 @@ proto_mpeg_descriptor_dissect(tvbuff_t *tvb, guint offset, proto_tree *tree)
             break;
         case 0x73: /* Default Authority Descriptor */
             proto_mpeg_descriptor_dissect_default_authority(tvb, offset, len, descriptor_tree);
+            break;
+        case 0x75: /* TVA ID Descriptor */
+            proto_mpeg_descriptor_dissect_tva_id(tvb, offset, len, descriptor_tree);
             break;
         case 0x76: /* Content Identifier Descriptor */
             proto_mpeg_descriptor_dissect_content_identifier(tvb, offset, len, descriptor_tree);
@@ -6066,6 +6148,37 @@ proto_register_mpeg_descriptor(void)
             FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL
         } },
 
+        /* 0x69 PDC Descriptor */
+        { &hf_mpeg_descr_pdc_reserved, {
+            "Reserved Future Use", "mpeg_descr.pdc.reserved",
+            FT_UINT24, BASE_HEX, NULL, MPEG_DESCR_PDC_RESERVED_MASK, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_pdc_pil, {
+            "Program Identification Label (PIL)", "mpeg_descr.pdc.pil",
+            FT_UINT24, BASE_HEX, NULL, MPEG_DESCR_PDC_PIL_MASK, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_pdc_day, {
+            "Day", "mpeg_descr.pdc.day",
+            FT_UINT24, BASE_DEC, NULL, MPEG_DESCR_PDC_DAY_MASK, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_pdc_month, {
+            "Month", "mpeg_descr.pdc.month",
+            FT_UINT24, BASE_DEC, NULL, MPEG_DESCR_PDC_MONTH_MASK, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_pdc_hour, {
+            "Hour", "mpeg_descr.pdc.hour",
+            FT_UINT24, BASE_DEC, NULL, MPEG_DESCR_PDC_HOUR_MASK, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_pdc_minute, {
+            "Minute", "mpeg_descr.pdc.minute",
+            FT_UINT24, BASE_DEC, NULL, MPEG_DESCR_PDC_MINUTE_MASK, NULL, HFILL
+        } },
+
         /* 0x6A AC-3 Descriptor */
         { &hf_mpeg_descr_ac3_component_type_flag, {
             "Component Type Flag", "mpeg_descr.ac3.component_type_flag",
@@ -6179,7 +6292,24 @@ proto_register_mpeg_descriptor(void)
             FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL
         } },
 
-        /* 0x77 Content Identifier Descriptor */
+        /* 0x75 TVA ID Descriptor */
+        { &hf_mpeg_descr_tva_id, {
+            "TVA ID", "mpeg_descr.tva.id",
+            FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_tva_reserved, {
+            "Reserved", "mpeg_descr.tva.reserved",
+            FT_UINT8, BASE_HEX, NULL, MPEG_DESCR_TVA_RESREVED_MASK, NULL, HFILL
+        } },
+
+        { &hf_mpeg_descr_tva_running_status, {
+            "Running Status", "mpeg_descr.tva.status",
+            FT_UINT8, BASE_DEC, VALS(mpeg_descr_tva_running_status_vals),
+            MPEG_DESCR_TVA_RUNNING_STATUS_MASK, NULL, HFILL
+        } },
+
+        /* 0x76 Content Identifier Descriptor */
         { &hf_mpeg_descr_content_identifier_crid_type, {
             "CRID Type", "mpeg_descr.content_identifier.crid_type",
             FT_UINT8, BASE_HEX, VALS(mpeg_descr_content_identifier_crid_type_vals),
@@ -6693,11 +6823,13 @@ proto_register_mpeg_descriptor(void)
         &ett_mpeg_descriptor_nvod_reference_triplet,
         &ett_mpeg_descriptor_vbi_data_service,
         &ett_mpeg_descriptor_srv_avail_cells,
+        &ett_mpeg_descriptor_tva,
         &ett_mpeg_descriptor_content_identifier_crid,
         &ett_mpeg_descriptor_mosaic_logical_cell,
         &ett_mpeg_descriptor_mosaic_elementary_cells,
         &ett_mpeg_descriptor_service_list,
         &ett_mpeg_descriptor_telephone_number,
+        &ett_mpeg_descriptor_pdc_pil,
         &ett_mpeg_descriptor_nordig_lcd_v1_service_list,
         &ett_mpeg_descriptor_nordig_lcd_v2_channel_list_list,
         &ett_mpeg_descriptor_nordig_lcd_v2_service_list,
