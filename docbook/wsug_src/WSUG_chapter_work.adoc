@@ -541,25 +541,27 @@ of the types with examples of how to use them in display filters.
 
 Unsigned integer::
   Can be 8, 16, 24, 32, or 64 bits. You can express integers in decimal, octal,
-  or hexadecimal. The following display filters are equivalent:
+  hexadecimal or binary. The following display filters are equivalent:
 +
 `ip.len le 1500`
 +
 `ip.len le 02734`
 +
 `ip.len le 0x5dc`
++
+`ip.len le 0b10111011100`
 
 Signed integer::
   Can be 8, 16, 24, 32, or 64 bits. As with unsigned integers you can use
-  decimal, octal, or hexadecimal.
+  decimal, octal, hexadecimal or binary.
 
 Boolean::
-  Can be 1 (for true), or 0 (for false).
+  Can be 1 or "true", 0 or "false" (without quotes).
 +
 A Boolean field is present whether its value is true or false. For example,
 `tcp.flags.syn` is present in all TCP packets containing the flag, whether
 the SYN flag is 0 or 1. To only match TCP packets with the SYN flag set, you need
-to use `tcp.flags.syn == 1`.
+to use `tcp.flags.syn == 1` or `tcp.flags.syn == true`.
 
 Ethernet address::
   6 bytes separated by a colon (:), dot (.), or dash (-) with one or two bytes between separators:

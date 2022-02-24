@@ -20,7 +20,7 @@
 static void
 int_fvalue_new(fvalue_t *fv)
 {
-	fv->value.uinteger = 0;
+	memset(&fv->value, 0, sizeof(fv->value));
 }
 
 static void
@@ -48,6 +48,22 @@ get_sinteger(fvalue_t *fv)
 	return fv->value.sinteger;
 }
 
+static unsigned long
+binary_strtoul(const char *s, char **endptr)
+{
+	const char *binstr = s;
+
+	if (*binstr == '+') {
+		binstr++;
+	}
+
+	if (binstr[0] == '0' && (binstr[1] == 'b' || binstr[1] == 'B')) {
+		return strtoul(binstr + 2, endptr, 2);
+	}
+
+	return strtoul(s, endptr, 0);
+}
+
 static gboolean
 uint_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg,
 		   guint32 max)
@@ -69,7 +85,7 @@ uint_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_
 	}
 
 	errno = 0;
-	value = strtoul(s, &endptr, 0);
+	value = binary_strtoul(s, &endptr);
 
 	if (errno == EINVAL || endptr == s || *endptr != '\0') {
 		/* This isn't a valid number. */
@@ -135,6 +151,28 @@ uint_from_charconst(fvalue_t *fv, unsigned long num, gchar **err_msg _U_)
 	return TRUE;
 }
 
+static long
+binary_strtol(const char *s, char **endptr)
+{
+	const char *binstr = s;
+	gboolean negative = FALSE;
+
+	if (*binstr == '+') {
+		binstr++;
+	}
+	else if (*binstr == '-') {
+		binstr++;
+		negative = TRUE;
+	}
+
+	if (binstr[0] == '0' && (binstr[1] == 'b' || binstr[1] == 'B')) {
+		long value = strtol(binstr + 2, endptr, 2);
+		return negative ? -value : +value;
+	}
+
+	return strtol(s, endptr, 0);
+}
+
 static gboolean
 sint_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg,
 		   gint32 max, gint32 min)
@@ -157,7 +195,7 @@ sint_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_
 	}
 
 	errno = 0;
-	value = strtol(s, &endptr, 0);
+	value = binary_strtol(s, &endptr);
 
 	if (errno == EINVAL || endptr == s || *endptr != '\0') {
 		/* This isn't a valid number. */
@@ -456,6 +494,22 @@ get_sinteger64(fvalue_t *fv)
 	return fv->value.sinteger64;
 }
 
+static unsigned long long
+binary_strtoull(const char *s, char **endptr)
+{
+	const char *binstr = s;
+
+	if (*binstr == '+') {
+		binstr++;
+	}
+
+	if (binstr[0] == '0' && (binstr[1] == 'b' || binstr[1] == 'B')) {
+		return g_ascii_strtoull(binstr + 2, endptr, 2);
+	}
+
+	return g_ascii_strtoull(s, endptr, 0);
+}
+
 static gboolean
 _uint64_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg,
 		   guint64 max)
@@ -474,7 +528,7 @@ _uint64_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value 
 	}
 
 	errno = 0;
-	value = g_ascii_strtoull(s, &endptr, 0);
+	value = binary_strtoull(s, &endptr);
 
 	if (errno == EINVAL || endptr == s || *endptr != '\0') {
 		/* This isn't a valid number. */
@@ -539,6 +593,28 @@ uint64_from_charconst(fvalue_t *fv, unsigned long num, gchar **err_msg _U_)
 	return TRUE;
 }
 
+static long long
+binary_strtoll(const char *s, char **endptr)
+{
+	const char *binstr = s;
+	gboolean negative = FALSE;
+
+	if (*binstr == '+') {
+		binstr++;
+	}
+	else if (*binstr == '-') {
+		binstr++;
+		negative = TRUE;
+	}
+
+	if (binstr[0] == '0' && (binstr[1] == 'b' || binstr[1] == 'B')) {
+		long long value = g_ascii_strtoll(binstr + 2, endptr, 2);
+		return negative ? -value : +value;
+	}
+
+	return g_ascii_strtoll(s, endptr, 0);
+}
+
 static gboolean
 _sint64_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg,
 		   gint64 max, gint64 min)
@@ -557,7 +633,7 @@ _sint64_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value 
 	}
 
 	errno = 0;
-	value = g_ascii_strtoll(s, &endptr, 0);
+	value = binary_strtoll(s, &endptr);
 
 	if (errno == EINVAL || endptr == s || *endptr != '\0') {
 		/* This isn't a valid number. */
@@ -678,10 +754,19 @@ cmp_bitwise_and64(const fvalue_t *a, const fvalue_t *b)
 
 /* BOOLEAN-specific */
 
-static void
-boolean_fvalue_new(fvalue_t *fv)
+static gboolean
+boolean_from_unparsed(fvalue_t *fv, const char *s, gboolean allow_partial_value, gchar **err_msg)
 {
-	fv->value.uinteger64 = TRUE;
+	if (g_ascii_strcasecmp(s, "true") == 0) {
+		fv->value.uinteger64 = 1;
+		return TRUE;
+	}
+	if (g_ascii_strcasecmp(s, "false") == 0) {
+		fv->value.uinteger64 = 0;
+		return TRUE;
+	}
+
+	return uint64_from_unparsed(fv, s, allow_partial_value, err_msg);
 }
 
 static char *
@@ -700,7 +785,7 @@ boolean_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _U_,
  * T  F   1
  */
 static int
-bool_cmp_order(const fvalue_t *a, const fvalue_t *b)
+boolean_cmp_order(const fvalue_t *a, const fvalue_t *b)
 {
 	if (a->value.uinteger64) {
 		if (b->value.uinteger64) {
@@ -1164,9 +1249,9 @@ ftype_register_integers(void)
 		"FT_BOOLEAN",			/* name */
 		"Boolean",			/* pretty_name */
 		0,				/* wire_size */
-		boolean_fvalue_new,		/* new_value */
+		int_fvalue_new,			/* new_value */
 		NULL,				/* free_value */
-		uint64_from_unparsed,		/* val_from_unparsed */
+		boolean_from_unparsed,		/* val_from_unparsed */
 		NULL,				/* val_from_string */
 		uint64_from_charconst,		/* val_from_charconst */
 		boolean_to_repr,		/* val_to_string_repr */
@@ -1174,7 +1259,7 @@ ftype_register_integers(void)
 		{ .set_value_uinteger64 = set_uinteger64 },	/* union set_value */
 		{ .get_value_uinteger64 = get_uinteger64 },	/* union get_value */
 
-		bool_cmp_order,			/* cmp_eq */
+		boolean_cmp_order,		/* cmp_eq */
 		NULL,				/* cmp_bitwise_and */
 		NULL,				/* cmp_contains */
 		NULL,				/* cmp_matches */
