@@ -19,9 +19,10 @@ class case_syntax(unittest.TestCase):
         dfilter = "ip.proto == 6"
         checkDFilterCount(dfilter, 1)
 
-    def test_commute_2(self, checkDFilterCount):
+    def test_commute_2(self, checkDFilterFail):
         dfilter = "6 == ip.proto"
-        checkDFilterCount(dfilter, 1)
+        error = "Left side of \"==\" expression must be a field or function"
+        checkDFilterFail(dfilter, error)
 
     def test_func_1(self, checkDFilterCount):
         dfilter = "len(frame) == 207"
@@ -46,10 +47,6 @@ class case_syntax(unittest.TestCase):
     def test_matches_4(self, checkDFilterCount):
         dfilter = r'http.host matches r"update\.microsoft\.c.."'
         checkDFilterCount(dfilter, 1)
-
-    def test_matches_5(self, checkDFilterFail):
-        dfilter = '"a" matches "b"'
-        checkDFilterFail(dfilter, "requires a field-like value")
 
     def test_equal_1(self, checkDFilterCount):
         dfilter = 'ip.addr == 10.0.0.5'
@@ -104,10 +101,6 @@ class case_syntax(unittest.TestCase):
         dfilter = r"ip.proto == '\Z'"
         checkDFilterFail(dfilter, "isn't a valid character constant")
 
-    def test_charconst_lhs(self, checkDFilterCount):
-        dfilter = "'H' == frame[54]"
-        checkDFilterCount(dfilter, 1)
-
     def test_bool_1(self, checkDFilterCount):
         dfilter = "tcp.flags.push == 1"
         checkDFilterCount(dfilter, 1)
@@ -134,4 +127,16 @@ class case_equality(unittest.TestCase):
 
     def test_all_ne_1(self, checkDFilterCount):
         dfilter = "udp.port != 5060"
+        checkDFilterCount(dfilter, 1)
+
+    def test_root_1(self, checkDFilterCount):
+        dfilter = "udp.srcport == .udp.dstport"
+        checkDFilterCount(dfilter, 2)
+
+    def test_literal_1(self, checkDFilterCount):
+        dfilter = "udp.port == :5070"
+        checkDFilterCount(dfilter, 3)
+
+    def test_literal_2(self, checkDFilterCount):
+        dfilter = "udp contains <ce:13>"
         checkDFilterCount(dfilter, 1)

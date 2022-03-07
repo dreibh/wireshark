@@ -264,13 +264,22 @@ fvalue_free(fvalue_t *fv)
 }
 
 fvalue_t*
-fvalue_from_unparsed(ftenum_t ftype, const char *s, gboolean allow_partial_value, gchar **err_msg)
+fvalue_from_literal(ftenum_t ftype, const char *s, gboolean allow_partial_value, gchar **err_msg)
 {
 	fvalue_t	*fv;
+	gboolean ok = FALSE;
 
 	fv = fvalue_new(ftype);
-	if (fv->ftype->val_from_unparsed) {
-		if (fv->ftype->val_from_unparsed(fv, s, allow_partial_value, err_msg)) {
+	if (fv->ftype->val_from_literal) {
+		if (*s == ':') {
+			ok = fv->ftype->val_from_literal(fv, s + 1, allow_partial_value, err_msg);
+			/* If not ok maybe leading colon is not special syntax but part of the value (e.g: IPv6),
+			 * try again in that case. */
+		}
+		if (!ok) {
+			ok = fv->ftype->val_from_literal(fv, s, allow_partial_value, err_msg);
+		}
+		if (ok) {
 			/* Success */
 			if (err_msg != NULL)
 				*err_msg = NULL;

@@ -15,6 +15,7 @@
 #include <wsutil/str_util.h>
 #include <wsutil/glib-compat.h>
 #include "sttype-test.h"
+#include "dfilter-int.h"
 
 /* Keep track of sttype_t's via their sttype_id_t number */
 static sttype_t* type_list[STTYPE_NUM_TYPES];
@@ -140,6 +141,13 @@ stnode_replace(stnode_t *node, sttype_id_t type_id, gpointer data)
 	node->repr_token = repr_token;
 }
 
+void
+stnode_change_type(stnode_t *node, sttype_id_t new_type)
+{
+	/* XXX Check types are "compatible" */
+	node->type = sttype_lookup(new_type);
+}
+
 stnode_t*
 stnode_new(sttype_id_t type_id, gpointer data, char *token)
 {
@@ -173,6 +181,13 @@ stnode_t *
 stnode_new_unparsed(const char *str, char *token)
 {
 	return stnode_new(STTYPE_UNPARSED, g_strdup(str), token);
+}
+
+stnode_t *
+stnode_new_literal(const char *str, char *token)
+{
+	char *value = dfilter_literal_normalized(str);
+	return stnode_new(STTYPE_LITERAL, value, token);
 }
 
 stnode_t *
