@@ -92,11 +92,11 @@ struct ptvcursor {
 
 /** See inlined comments.
  @param length the length of this item
- @param free_block a code block to call to free resources if this returns
+ @param cleanup_block a code block to call to free resources if this returns
  @return NULL if 'length' is lower -1 or equal 0 */
-#define CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_FREE(length, free_block)	\
+#define CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length, cleanup_block)	\
 	if (length < -1 || length == 0 ) {				\
-		free_block;						\
+		cleanup_block;						\
 		return NULL;						\
 	}
 
@@ -104,7 +104,7 @@ struct ptvcursor {
  @param length the length of this item
  @return NULL if 'length' is lower -1 or equal 0 */
 #define CHECK_FOR_ZERO_OR_MINUS_LENGTH(length) \
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_FREE(length, ((void)0))
+	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length, ((void)0))
 
 /** See inlined comments.
  @param tree the tree to append this item to
@@ -3085,7 +3085,13 @@ proto_tree_add_item_ret_int(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 		    hfinfo->abbrev);
 	}
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH(length);
+	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
+		{
+			if(retval)
+			{
+				*retval = 0;
+			}
+		} );
 
 	if (encoding & ENC_STRING) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
@@ -3142,7 +3148,13 @@ proto_tree_add_item_ret_uint(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 		    hfinfo->abbrev);
 	}
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH(length);
+	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
+		{
+			if(retval)
+			{
+				*retval = 0;
+			}
+		} );
 
 	if (encoding & ENC_STRING) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
@@ -3370,7 +3382,13 @@ ptvcursor_add_ret_boolean(ptvcursor_t* ptvc, int hfindex, gint length, const gui
 		    hfinfo->abbrev);
 	}
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH(length);
+	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
+		{
+			if(retval)
+			{
+				*retval = FALSE;
+			}
+		} );
 
 	if (encoding & ENC_STRING) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
@@ -3425,7 +3443,13 @@ proto_tree_add_item_ret_uint64(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 		    hfinfo->abbrev);
 	}
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH(length);
+	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
+		{
+			if(retval)
+			{
+				*retval = 0;
+			}
+		} );
 
 	if (encoding & ENC_STRING) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
@@ -3484,7 +3508,13 @@ proto_tree_add_item_ret_int64(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 			hfinfo->abbrev);
 	}
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH(length);
+	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
+		{
+			if(retval)
+			{
+				*retval = 0;
+			}
+		} );
 
 	if (encoding & ENC_STRING) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
@@ -3591,7 +3621,13 @@ proto_tree_add_item_ret_boolean(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 		    hfinfo->abbrev);
 	}
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH(length);
+	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
+		{
+			if(retval)
+			{
+				*retval = FALSE;
+			}
+		} );
 
 	if (encoding & ENC_STRING) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
@@ -4187,7 +4223,13 @@ proto_tree_add_time_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 
 	DISSECTOR_ASSERT_HINT(hfinfo != NULL, "Not passed hfi!");
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH(length);
+	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
+		{
+			if(retval)
+			{
+				nstime_set_zero(retval);
+			}
+		} );
 
 	nstime_set_zero(&time_stamp);
 
@@ -10829,9 +10871,6 @@ proto_registrar_dump_fieldcount(void)
 static void
 elastic_add_base_mapping(json_dumper *dumper)
 {
-	json_dumper_set_member_name(dumper, "index_patterns");
-	json_dumper_value_string(dumper, "packets-*");
-
 	json_dumper_set_member_name(dumper, "settings");
 	json_dumper_begin_object(dumper);
 	json_dumper_set_member_name(dumper, "index.mapping.total_fields.limit");
@@ -10907,6 +10946,7 @@ proto_registrar_dump_elastic(const gchar* filter)
 	gboolean found;
 	guint j;
 	gchar* type;
+	gchar* prev_item = NULL;
 
 	/* We have filtering protocols. Extract them. */
 	if (filter) {
@@ -10927,24 +10967,21 @@ proto_registrar_dump_elastic(const gchar* filter)
 
 	json_dumper_set_member_name(&dumper, "mappings");
 	json_dumper_begin_object(&dumper); // 2.mappings
-	json_dumper_set_member_name(&dumper, "doc");
-
-	json_dumper_begin_object(&dumper); // 3.doc
 	json_dumper_set_member_name(&dumper, "dynamic");
 	json_dumper_value_anyf(&dumper, "false");
 
 	json_dumper_set_member_name(&dumper, "properties");
-	json_dumper_begin_object(&dumper); // 4.properties
+	json_dumper_begin_object(&dumper); // 3.properties
 	json_dumper_set_member_name(&dumper, "timestamp");
-	json_dumper_begin_object(&dumper); // 5.timestamp
+	json_dumper_begin_object(&dumper); // 4.timestamp
 	json_dumper_set_member_name(&dumper, "type");
 	json_dumper_value_string(&dumper, "date");
-	json_dumper_end_object(&dumper); // 5.timestamp
+	json_dumper_end_object(&dumper); // 4.timestamp
 
 	json_dumper_set_member_name(&dumper, "layers");
-	json_dumper_begin_object(&dumper); // 5.layers
+	json_dumper_begin_object(&dumper); // 4.layers
 	json_dumper_set_member_name(&dumper, "properties");
-	json_dumper_begin_object(&dumper); // 6.properties
+	json_dumper_begin_object(&dumper); // 5.properties
 
 	for (i = 0; i < gpa_hfinfo.len; i++) {
 		if (gpa_hfinfo.hfi[i] == NULL)
@@ -10983,8 +11020,8 @@ proto_registrar_dump_elastic(const gchar* filter)
 			}
 
 			if (prev_proto && g_strcmp0(parent_hfinfo->abbrev, prev_proto)) {
-				json_dumper_end_object(&dumper); // 8.properties
-				json_dumper_end_object(&dumper); // 7.parent_hfinfo->abbrev
+				json_dumper_end_object(&dumper); // 7.properties
+				json_dumper_end_object(&dumper); // 8.parent_hfinfo->abbrev
 				open_object = TRUE;
 			}
 
@@ -10992,34 +11029,38 @@ proto_registrar_dump_elastic(const gchar* filter)
 
 			if (open_object) {
 				json_dumper_set_member_name(&dumper, parent_hfinfo->abbrev);
-				json_dumper_begin_object(&dumper); // 7.parent_hfinfo->abbrev
+				json_dumper_begin_object(&dumper); // 6.parent_hfinfo->abbrev
 				json_dumper_set_member_name(&dumper, "properties");
-				json_dumper_begin_object(&dumper); // 8.properties
+				json_dumper_begin_object(&dumper); // 7.properties
 				open_object = FALSE;
 			}
 			/* Skip the fields that would map into string. This is the default in elasticsearch. */
 			type = ws_type_to_elastic(hfinfo->type);
 			if (type) {
 				str = ws_strdup_printf("%s_%s", prev_proto, hfinfo->abbrev);
-				json_dumper_set_member_name(&dumper, dot_to_underscore(str));
-				g_free(str);
-				json_dumper_begin_object(&dumper); // 9.hfinfo->abbrev
-				json_dumper_set_member_name(&dumper, "type");
-				json_dumper_value_string(&dumper, type);
-				json_dumper_end_object(&dumper); // 9.hfinfo->abbrev
+				dot_to_underscore(str);
+				if (g_strcmp0(prev_item, str)) {
+					json_dumper_set_member_name(&dumper, str);
+					json_dumper_begin_object(&dumper); // 8.hfinfo->abbrev
+					json_dumper_set_member_name(&dumper, "type");
+					json_dumper_value_string(&dumper, type);
+					json_dumper_end_object(&dumper); // 8.hfinfo->abbrev
+				}
+				g_free(prev_item);
+				prev_item = str;
 			}
 		}
 	}
+	g_free(prev_item);
 
 	if (prev_proto) {
-		json_dumper_end_object(&dumper); // 8.properties
-		json_dumper_end_object(&dumper); // 7.parent_hfinfo->abbrev
+		json_dumper_end_object(&dumper); // 7.properties
+		json_dumper_end_object(&dumper); // 6.parent_hfinfo->abbrev
 	}
 
-	json_dumper_end_object(&dumper); // 6.properties
-	json_dumper_end_object(&dumper); // 5.layers
-	json_dumper_end_object(&dumper); // 4.properties
-	json_dumper_end_object(&dumper); // 3.doc
+	json_dumper_end_object(&dumper); // 5.properties
+	json_dumper_end_object(&dumper); // 4.layers
+	json_dumper_end_object(&dumper); // 3.properties
 	json_dumper_end_object(&dumper); // 2.mappings
 	json_dumper_end_object(&dumper); // 1.root
 	gboolean ret = json_dumper_finish(&dumper);
