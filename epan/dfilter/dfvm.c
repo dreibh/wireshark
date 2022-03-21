@@ -76,44 +76,69 @@ dfvm_value_new(dfvm_value_type_t type)
 	return v;
 }
 
+char *
+dfvm_value_tostr(dfvm_value_t *v)
+{
+	char *s, *aux;
+
+	if (!v)
+		return NULL;
+
+	switch (v->type) {
+		case HFINFO:
+			s = ws_strdup(v->value.hfinfo->abbrev);
+			break;
+		case FVALUE:
+			aux = fvalue_to_debug_repr(NULL, v->value.fvalue);
+			s = ws_strdup_printf("%s <%s>",
+				aux, fvalue_type_name(v->value.fvalue));
+			g_free(aux);
+			break;
+		case DRANGE:
+			s = drange_tostr(v->value.drange);
+			break;
+		case PCRE:
+			s = ws_strdup(ws_regex_pattern(v->value.pcre));
+			break;
+		case REGISTER:
+			s = ws_strdup_printf("reg#%u", v->value.numeric);
+			break;
+		case FUNCTION_DEF:
+			s = ws_strdup(v->value.funcdef->name);
+			break;
+		default:
+			s = ws_strdup("FIXME");
+	}
+	return s;
+}
 
 void
 dfvm_dump(FILE *f, dfilter_t *df)
 {
 	int		id, length;
 	dfvm_insn_t	*insn;
-	dfvm_value_t	*arg1;
-	dfvm_value_t	*arg2;
-	dfvm_value_t	*arg3;
-	dfvm_value_t	*arg4;
-	char		*value_str;
-	GSList		*range_list;
-	drange_node	*range_item;
+	dfvm_value_t	*arg1, *arg2, *arg3, *arg4;
+	char 		*arg1_str, *arg2_str, *arg3_str, *arg4_str;
 
 	/* First dump the constant initializations */
 	fprintf(f, "Constants:\n");
 	length = df->consts->len;
 	for (id = 0; id < length; id++) {
 
-		insn = (dfvm_insn_t	*)g_ptr_array_index(df->consts, id);
+		insn = g_ptr_array_index(df->consts, id);
 		arg1 = insn->arg1;
 		arg2 = insn->arg2;
+		arg1_str = dfvm_value_tostr(arg1);
+		arg2_str = dfvm_value_tostr(arg2);
 
 		switch (insn->op) {
 			case PUT_FVALUE:
-				value_str = fvalue_to_string_repr(NULL, arg1->value.fvalue,
-					FTREPR_DFILTER, BASE_NONE);
-				fprintf(f, "%05d PUT_FVALUE\t%s <%s> -> reg#%u\n",
-					id, value_str,
-					fvalue_type_name(arg1->value.fvalue),
-					arg2->value.numeric);
-				wmem_free(NULL, value_str);
+				fprintf(f, "%05d PUT_FVALUE\t%s -> %s\n",
+					id, arg1_str, arg2_str);
 				break;
 			case PUT_PCRE:
-				fprintf(f, "%05d PUT_PCRE  \t%s -> reg#%u\n",
-					id,
-					ws_regex_pattern(arg1->value.pcre),
-					arg2->value.numeric);
+				fprintf(f, "%05d PUT_PCRE  \t%s -> %s\n",
+					id, arg1_str, arg2_str);
 				break;
 			case CHECK_EXISTS:
 			case READ_TREE:
@@ -135,10 +160,12 @@ dfvm_dump(FILE *f, dfilter_t *df)
 			case RETURN:
 			case IF_TRUE_GOTO:
 			case IF_FALSE_GOTO:
-			default:
 				ws_assert_not_reached();
 				break;
 		}
+
+		g_free(arg1_str);
+		g_free(arg2_str);
 	}
 
 	fprintf(f, "\nInstructions:\n");
@@ -146,144 +173,103 @@ dfvm_dump(FILE *f, dfilter_t *df)
 	length = df->insns->len;
 	for (id = 0; id < length; id++) {
 
-		insn = (dfvm_insn_t	*)g_ptr_array_index(df->insns, id);
+		insn = g_ptr_array_index(df->insns, id);
 		arg1 = insn->arg1;
 		arg2 = insn->arg2;
 		arg3 = insn->arg3;
 		arg4 = insn->arg4;
+		arg1_str = dfvm_value_tostr(arg1);
+		arg2_str = dfvm_value_tostr(arg2);
+		arg3_str = dfvm_value_tostr(arg3);
+		arg4_str = dfvm_value_tostr(arg4);
 
 		switch (insn->op) {
 			case CHECK_EXISTS:
 				fprintf(f, "%05d CHECK_EXISTS\t%s\n",
-					id, arg1->value.hfinfo->abbrev);
+					id, arg1_str);
 				break;
 
 			case READ_TREE:
-				fprintf(f, "%05d READ_TREE\t\t%s -> reg#%u\n",
-					id, arg1->value.hfinfo->abbrev,
-					arg2->value.numeric);
+				fprintf(f, "%05d READ_TREE\t\t%s -> %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case CALL_FUNCTION:
-				fprintf(f, "%05d CALL_FUNCTION\t%s (",
-					id, arg1->value.funcdef->name);
-				if (arg3) {
-					fprintf(f, "reg#%u", arg3->value.numeric);
+				fprintf(f, "%05d CALL_FUNCTION\t%s(",
+					id, arg1_str);
+				if (arg3_str) {
+					fprintf(f, "%s", arg3_str);
 				}
-				if (arg4) {
-					fprintf(f, ", reg#%u", arg4->value.numeric);
+				if (arg4_str) {
+					fprintf(f, ", %s", arg4_str);
 				}
-				fprintf(f, ") --> reg#%u\n", arg2->value.numeric);
-				break;
-
-			case PUT_FVALUE:
-				/* We already dumped these */
-				ws_assert_not_reached();
-				break;
-
-			case PUT_PCRE:
-				/* We already dumped these */
-				ws_assert_not_reached();
+				fprintf(f, ") -> %s\n", arg2_str);
 				break;
 
 			case MK_RANGE:
 				arg3 = insn->arg3;
-				fprintf(f, "%05d MK_RANGE\t\treg#%u[",
-					id,
-					arg1->value.numeric);
-				for (range_list = arg3->value.drange->range_list;
-				     range_list != NULL;
-				     range_list = range_list->next) {
-					range_item = (drange_node *)range_list->data;
-					switch (range_item->ending) {
-
-					case DRANGE_NODE_END_T_UNINITIALIZED:
-						fprintf(f, "?");
-						break;
-
-					case DRANGE_NODE_END_T_LENGTH:
-						fprintf(f, "%d:%d",
-						    range_item->start_offset,
-						    range_item->length);
-						break;
-
-					case DRANGE_NODE_END_T_OFFSET:
-						fprintf(f, "%d-%d",
-						    range_item->start_offset,
-						    range_item->end_offset);
-						break;
-
-					case DRANGE_NODE_END_T_TO_THE_END:
-						fprintf(f, "%d:",
-						    range_item->start_offset);
-						break;
-					}
-					if (range_list->next != NULL)
-						fprintf(f, ",");
-				}
-				fprintf(f, "] -> reg#%u\n",
-					arg2->value.numeric);
+				fprintf(f, "%05d MK_RANGE\t\t%s[%s] -> %s\n",
+					id, arg1_str, arg2_str, arg3_str);
 				break;
 
 			case ALL_EQ:
-				fprintf(f, "%05d ALL_EQ\t\treg#%u === reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ALL_EQ\t\t%s === %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_EQ:
-				fprintf(f, "%05d ANY_EQ\t\treg#%u == reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ANY_EQ\t\t%s == %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ALL_NE:
-				fprintf(f, "%05d ALL_NE\t\treg#%u != reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ALL_NE\t\t%s != %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_NE:
-				fprintf(f, "%05d ANY_NE\t\treg#%u !== reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ANY_NE\t\t%s !== %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_GT:
-				fprintf(f, "%05d ANY_GT\t\treg#%u > reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ANY_GT\t\t%s > %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_GE:
-				fprintf(f, "%05d ANY_GE\t\treg#%u >= reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ANY_GE\t\t%s >= %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_LT:
-				fprintf(f, "%05d ANY_LT\t\treg#%u < reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ANY_LT\t\t%s < %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_LE:
-				fprintf(f, "%05d ANY_LE\t\treg#%u <= reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ANY_LE\t\t%s <= %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_BITWISE_AND:
-				fprintf(f, "%05d ANY_BITWISE_AND\treg#%u & reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ANY_BITWISE_AND\t%s & %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_CONTAINS:
-				fprintf(f, "%05d ANY_CONTAINS\treg#%u contains reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ANY_CONTAINS\t%s contains %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_MATCHES:
-				fprintf(f, "%05d ANY_MATCHES\treg#%u matches reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric);
+				fprintf(f, "%05d ANY_MATCHES\t%s matches %s\n",
+					id, arg1_str, arg2_str);
 				break;
 
 			case ANY_IN_RANGE:
-				fprintf(f, "%05d ANY_IN_RANGE\treg#%u in range reg#%u,reg#%u\n",
-					id, arg1->value.numeric, arg2->value.numeric,
-					arg3->value.numeric);
+				fprintf(f, "%05d ANY_IN_RANGE\t%s in { %s .. %s }\n",
+					id, arg1_str, arg2_str, arg3_str);
 				break;
 
 			case NOT:
@@ -295,32 +281,43 @@ dfvm_dump(FILE *f, dfilter_t *df)
 				break;
 
 			case IF_TRUE_GOTO:
-				fprintf(f, "%05d IF-TRUE-GOTO\t%u\n",
+				fprintf(f, "%05d IF_TRUE_GOTO\t%u\n",
 						id, arg1->value.numeric);
 				break;
 
 			case IF_FALSE_GOTO:
-				fprintf(f, "%05d IF-FALSE-GOTO\t%u\n",
+				fprintf(f, "%05d IF_FALSE_GOTO\t%u\n",
 						id, arg1->value.numeric);
 				break;
 
-			default:
+			case PUT_FVALUE:
+			case PUT_PCRE:
+				/* We already dumped these */
 				ws_assert_not_reached();
 				break;
 		}
+
+		g_free(arg1_str);
+		g_free(arg2_str);
+		g_free(arg3_str);
+		g_free(arg4_str);
 	}
 }
 
 /* Reads a field from the proto_tree and loads the fvalues into a register,
  * if that field has not already been read. */
 static gboolean
-read_tree(dfilter_t *df, proto_tree *tree, header_field_info *hfinfo, int reg)
+read_tree(dfilter_t *df, proto_tree *tree,
+				dfvm_value_t *arg1, dfvm_value_t *arg2)
 {
 	GPtrArray	*finfos;
 	field_info	*finfo;
 	int		i, len;
-	GList		*fvalues = NULL;
+	GSList		*fvalues = NULL;
 	gboolean	found_something = FALSE;
+
+	header_field_info *hfinfo = arg1->value.hfinfo;
+	int reg = arg2->value.numeric;
 
 	/* Already loaded in this run of the dfilter? */
 	if (df->attempted_load[reg]) {
@@ -346,8 +343,8 @@ read_tree(dfilter_t *df, proto_tree *tree, header_field_info *hfinfo, int reg)
 
 		len = finfos->len;
 		for (i = 0; i < len; i++) {
-			finfo = (field_info *)g_ptr_array_index(finfos, i);
-			fvalues = g_list_prepend(fvalues, &finfo->value);
+			finfo = g_ptr_array_index(finfos, i);
+			fvalues = g_slist_prepend(fvalues, &finfo->value);
 		}
 
 		hfinfo = hfinfo->same_name_next;
@@ -367,9 +364,12 @@ read_tree(dfilter_t *df, proto_tree *tree, header_field_info *hfinfo, int reg)
 /* Put a constant value in a register. These will not be cleared by
  * free_register_overhead. */
 static gboolean
-put_fvalue(dfilter_t *df, fvalue_t *fv, int reg)
+put_fvalue(dfilter_t *df, dfvm_value_t *arg1, dfvm_value_t *arg2)
 {
-	df->registers[reg] = g_list_append(NULL, fv);
+	fvalue_t *fv = arg1->value.fvalue;
+	int reg = arg2->value.numeric;
+
+	df->registers[reg] = g_slist_prepend(NULL, fv);
 	df->owns_memory[reg] = FALSE;
 	return TRUE;
 }
@@ -377,9 +377,12 @@ put_fvalue(dfilter_t *df, fvalue_t *fv, int reg)
 /* Put a constant PCRE in a register. These will not be cleared by
  * free_register_overhead. */
 static gboolean
-put_pcre(dfilter_t *df, ws_regex_t *pcre, int reg)
+put_pcre(dfilter_t *df, dfvm_value_t *arg1, dfvm_value_t *arg2)
 {
-	df->registers[reg] = g_list_append(NULL, pcre);
+	ws_regex_t *pcre = arg1->value.pcre;
+	int reg = arg2->value.numeric;
+
+	df->registers[reg] = g_slist_prepend(NULL, pcre);
 	df->owns_memory[reg] = FALSE;
 	return TRUE;
 }
@@ -389,20 +392,21 @@ enum match_how {
 	MATCH_ALL
 };
 
-typedef gboolean (*DFVMMatchFunc)(const fvalue_t*, const fvalue_t*);
+typedef gboolean (*DFVMCompareFunc)(const fvalue_t*, const fvalue_t*);
 
 static gboolean
-cmp_test(dfilter_t *df, enum match_how how, DFVMMatchFunc match_func, int reg1, int reg2)
+cmp_test(enum match_how how, DFVMCompareFunc match_func,
+					GSList *reg1, GSList *reg2)
 {
-	GList	*list_a, *list_b;
+	GSList *list_a, *list_b;
 	gboolean want_all = (how == MATCH_ALL);
 	gboolean want_any = (how == MATCH_ANY);
 	gboolean have_match;
 
-	list_a = df->registers[reg1];
+	list_a = reg1;
 
 	while (list_a) {
-		list_b = df->registers[reg2];
+		list_b = reg2;
 		while (list_b) {
 			have_match = match_func(list_a->data, list_b->data);
 			if (want_all && !have_match) {
@@ -411,85 +415,68 @@ cmp_test(dfilter_t *df, enum match_how how, DFVMMatchFunc match_func, int reg1, 
 			else if (want_any && have_match) {
 				return TRUE;
 			}
-			list_b = g_list_next(list_b);
+			list_b = g_slist_next(list_b);
 		}
-		list_a = g_list_next(list_a);
+		list_a = g_slist_next(list_a);
 	}
 	/* want_all || !want_any */
 	return want_all;
 }
 
+/* cmp(A) <=> cmp(a1) OR cmp(a2) OR cmp(a3) OR ... */
 static inline gboolean
-any_test(dfilter_t *df, DFVMMatchFunc cmp, int reg1, int reg2)
+any_test(dfilter_t *df, DFVMCompareFunc cmp,
+				dfvm_value_t *arg1, dfvm_value_t *arg2)
 {
-	/* cmp(A) <=> cmp(a1) OR cmp(a2) OR cmp(a3) OR ... */
-	return cmp_test(df, MATCH_ANY, cmp, reg1, reg2);
+	GSList *reg1 = df->registers[arg1->value.numeric];
+	GSList *reg2 = df->registers[arg2->value.numeric];
+
+	return cmp_test(MATCH_ANY, cmp, reg1, reg2);
 }
 
+/* cmp(A) <=> cmp(a1) AND cmp(a2) AND cmp(a3) AND ... */
 static inline gboolean
-all_test(dfilter_t *df, DFVMMatchFunc cmp, int reg1, int reg2)
+all_test(dfilter_t *df, DFVMCompareFunc cmp,
+				dfvm_value_t *arg1, dfvm_value_t *arg2)
 {
-	/* cmp(A) <=> cmp(a1) AND cmp(a2) AND cmp(a3) AND ... */
-	return cmp_test(df, MATCH_ALL, cmp, reg1, reg2);
-}
+	GSList *reg1 = df->registers[arg1->value.numeric];
+	GSList *reg2 = df->registers[arg2->value.numeric];
 
-static inline gboolean
-all_eq(dfilter_t *df, int reg1, int reg2)
-{
-	/* A all_eq B <=> a1 == b1 AND a2 == b2 AND a3 == b3 AND ... */
-	return all_test(df, fvalue_eq, reg1, reg2);
-}
-
-static inline gboolean
-any_eq(dfilter_t *df, int reg1, int reg2)
-{
-	/* A any_eq B <=> a1 == b1 OR a2 == b2 OR a3 == b3 OR ... */
-	return any_test(df, fvalue_eq, reg1, reg2);
-}
-
-static inline gboolean
-any_ne(dfilter_t *df, int reg1, int reg2)
-{
-	/* A any_ne B <=> a1 != b1 OR a2 != b2 OR a3 != b3 OR ... */
-	return any_test(df, fvalue_ne, reg1, reg2);
-}
-
-static inline gboolean
-all_ne(dfilter_t *df, int reg1, int reg2)
-{
-	/* A all_ne B <=> a1 != b1 AND a2 != b2 AND a3 != b3 AND ... */
-	return all_test(df, fvalue_ne, reg1, reg2);
+	return cmp_test(MATCH_ALL, cmp, reg1, reg2);
 }
 
 static gboolean
-any_matches(dfilter_t *df, int reg1, int reg2)
+any_matches(dfilter_t *df, dfvm_value_t *arg1, dfvm_value_t *arg2)
 {
-	GList	*list_a, *list_b;
+	GSList *reg1 = df->registers[arg1->value.numeric];
+	GSList *reg2 = df->registers[arg2->value.numeric];
+	GSList *list_a, *list_b;
 
-	list_a = df->registers[reg1];
+	list_a = reg1;
 
 	while (list_a) {
-		list_b = df->registers[reg2];
+		list_b = reg2;
 		while (list_b) {
-			if (fvalue_matches((fvalue_t *)list_a->data, list_b->data)) {
+			if (fvalue_matches(list_a->data, list_b->data)) {
 				return TRUE;
 			}
-			list_b = g_list_next(list_b);
+			list_b = g_slist_next(list_b);
 		}
-		list_a = g_list_next(list_a);
+		list_a = g_slist_next(list_a);
 	}
 	return FALSE;
 }
 
 static gboolean
-any_in_range(dfilter_t *df, int reg1, int reg2, int reg3)
+any_in_range(dfilter_t *df, dfvm_value_t *arg1,
+				dfvm_value_t *arg_low, dfvm_value_t *arg_high)
 {
-	GList	*list1, *list_low, *list_high;
-	fvalue_t *low, *high;
+	GSList *list1, *list_low, *list_high;
+	fvalue_t *low, *high, *value;
 
-	list1 = df->registers[reg1];
-	list_low = df->registers[reg2];
-	list_high = df->registers[reg3];
+	list1 = df->registers[arg1->value.numeric];
+	list_low = df->registers[arg_low->value.numeric];
+	list_high = df->registers[arg_high->value.numeric];
 
 	/* The first register contains the values associated with a field, the
 	 * second and third arguments are expected to be a single value for the
@@ -497,17 +484,17 @@ any_in_range(dfilter_t *df, int reg1, int reg2, int reg3)
 	 * the list length MUST be one. This should have been enforced by
 	 * grammar.lemon.
 	 */
-	ws_assert(list_low && !g_list_next(list_low));
-	ws_assert(list_high && !g_list_next(list_high));
-	low = (fvalue_t *)list_low->data;
-	high = (fvalue_t *)list_high->data;
+	ws_assert(list_low && !g_slist_next(list_low));
+	ws_assert(list_high && !g_slist_next(list_high));
+	low = list_low->data;
+	high = list_high->data;
 
 	while (list1) {
-		fvalue_t *value = (fvalue_t *)list1->data;
+		value = list1->data;
 		if (fvalue_ge(value, low) && fvalue_le(value, high)) {
 			return TRUE;
 		}
-		list1 = g_list_next(list1);
+		list1 = g_slist_next(list1);
 	}
 	return FALSE;
 }
@@ -531,10 +518,10 @@ free_register_overhead(dfilter_t* df)
 		df->attempted_load[i] = FALSE;
 		if (df->registers[i]) {
 			if (df->owns_memory[i]) {
-				g_list_foreach(df->registers[i], free_owned_register, NULL);
+				g_slist_foreach(df->registers[i], free_owned_register, NULL);
 				df->owns_memory[i] = FALSE;
 			}
-			g_list_free(df->registers[i]);
+			g_slist_free(df->registers[i]);
 			df->registers[i] = NULL;
 		}
 	}
@@ -544,31 +531,56 @@ free_register_overhead(dfilter_t* df)
  * to make a new list of fvalue_t's (which are ranges, or byte-slices),
  * and puts the new list into a new register. */
 static void
-mk_range(dfilter_t *df, int from_reg, int to_reg, drange_t *d_range)
+mk_range(dfilter_t *df, dfvm_value_t *from_arg, dfvm_value_t *to_arg,
+						dfvm_value_t *drange_arg)
 {
-	GList		*from_list, *to_list;
+	GSList		*from_list, *to_list;
 	fvalue_t	*old_fv, *new_fv;
 
 	to_list = NULL;
-	from_list = df->registers[from_reg];
+	from_list = df->registers[from_arg->value.numeric];
+	drange_t *drange = drange_arg->value.drange;
 
 	while (from_list) {
-		old_fv = (fvalue_t*)from_list->data;
-		new_fv = fvalue_slice(old_fv, d_range);
+		old_fv = from_list->data;
+		new_fv = fvalue_slice(old_fv, drange);
 		/* Assert here because semcheck.c should have
 		 * already caught the cases in which a slice
 		 * cannot be made. */
 		ws_assert(new_fv);
-		to_list = g_list_append(to_list, new_fv);
+		to_list = g_slist_prepend(to_list, new_fv);
 
-		from_list = g_list_next(from_list);
+		from_list = g_slist_next(from_list);
 	}
 
-	df->registers[to_reg] = to_list;
-	df->owns_memory[to_reg] = TRUE;
+	df->registers[to_arg->value.numeric] = to_list;
+	df->owns_memory[to_arg->value.numeric] = TRUE;
 }
 
+static gboolean
+call_function(dfilter_t *df, dfvm_value_t *arg1, dfvm_value_t *arg2,
+				dfvm_value_t *arg3, dfvm_value_t *arg4)
+{
+	df_func_def_t *funcdef;
+	GSList *param1 = NULL;
+	GSList *param2 = NULL;
+	GSList *retval = NULL;
+	gboolean accum;
 
+	funcdef = arg1->value.funcdef;
+	if (arg3) {
+		param1 = df->registers[arg3->value.numeric];
+	}
+	if (arg4) {
+		param2 = df->registers[arg4->value.numeric];
+	}
+	accum = funcdef->function(param1, param2, &retval);
+
+	df->registers[arg2->value.numeric] = retval;
+	// functions create a new value, so own it.
+	df->owns_memory[arg2->value.numeric] = TRUE;
+	return accum;
+}
 
 gboolean
 dfvm_apply(dfilter_t *df, proto_tree *tree)
@@ -581,8 +593,6 @@ dfvm_apply(dfilter_t *df, proto_tree *tree)
 	dfvm_value_t	*arg3 = NULL;
 	dfvm_value_t	*arg4 = NULL;
 	header_field_info	*hfinfo;
-	GList		*param1;
-	GList		*param2;
 
 	ws_assert(tree);
 
@@ -591,9 +601,11 @@ dfvm_apply(dfilter_t *df, proto_tree *tree)
 	for (id = 0; id < length; id++) {
 
 	  AGAIN:
-		insn = (dfvm_insn_t	*)g_ptr_array_index(df->insns, id);
+		insn = g_ptr_array_index(df->insns, id);
 		arg1 = insn->arg1;
 		arg2 = insn->arg2;
+		arg3 = insn->arg3;
+		arg4 = insn->arg4;
 
 		switch (insn->op) {
 			case CHECK_EXISTS:
@@ -611,90 +623,63 @@ dfvm_apply(dfilter_t *df, proto_tree *tree)
 				break;
 
 			case READ_TREE:
-				accum = read_tree(df, tree,
-						arg1->value.hfinfo, arg2->value.numeric);
+				accum = read_tree(df, tree, arg1, arg2);
 				break;
 
 			case CALL_FUNCTION:
-				arg3 = insn->arg3;
-				arg4 = insn->arg4;
-				param1 = NULL;
-				param2 = NULL;
-				if (arg3) {
-					param1 = df->registers[arg3->value.numeric];
-				}
-				if (arg4) {
-					param2 = df->registers[arg4->value.numeric];
-				}
-				accum = arg1->value.funcdef->function(param1, param2,
-						&df->registers[arg2->value.numeric]);
-				// functions create a new value, so own it.
-				df->owns_memory[arg2->value.numeric] = TRUE;
+				accum = call_function(df, arg1, arg2, arg3, arg4);
 				break;
 
 			case MK_RANGE:
-				arg3 = insn->arg3;
-				mk_range(df,
-						arg1->value.numeric, arg2->value.numeric,
-						arg3->value.drange);
+				mk_range(df, arg1, arg2, arg3);
 				break;
 
 			case ALL_EQ:
-				accum = all_eq(df, arg1->value.numeric, arg2->value.numeric);
+				accum = all_test(df, fvalue_eq, arg1, arg2);
 				break;
 
 			case ANY_EQ:
-				accum = any_eq(df, arg1->value.numeric, arg2->value.numeric);
+				accum = any_test(df, fvalue_eq, arg1, arg2);
 				break;
 
 			case ALL_NE:
-				accum = all_ne(df, arg1->value.numeric, arg2->value.numeric);
+				accum = all_test(df, fvalue_ne, arg1, arg2);
 				break;
 
 			case ANY_NE:
-				accum = any_ne(df, arg1->value.numeric, arg2->value.numeric);
+				accum = any_test(df, fvalue_ne, arg1, arg2);
 				break;
 
 			case ANY_GT:
-				accum = any_test(df, fvalue_gt,
-						arg1->value.numeric, arg2->value.numeric);
+				accum = any_test(df, fvalue_gt, arg1, arg2);
 				break;
 
 			case ANY_GE:
-				accum = any_test(df, fvalue_ge,
-						arg1->value.numeric, arg2->value.numeric);
+				accum = any_test(df, fvalue_ge, arg1, arg2);
 				break;
 
 			case ANY_LT:
-				accum = any_test(df, fvalue_lt,
-						arg1->value.numeric, arg2->value.numeric);
+				accum = any_test(df, fvalue_lt, arg1, arg2);
 				break;
 
 			case ANY_LE:
-				accum = any_test(df, fvalue_le,
-						arg1->value.numeric, arg2->value.numeric);
+				accum = any_test(df, fvalue_le, arg1, arg2);
 				break;
 
 			case ANY_BITWISE_AND:
-				accum = any_test(df, fvalue_bitwise_and,
-						arg1->value.numeric, arg2->value.numeric);
+				accum = any_test(df, fvalue_bitwise_and, arg1, arg2);
 				break;
 
 			case ANY_CONTAINS:
-				accum = any_test(df, fvalue_contains,
-						arg1->value.numeric, arg2->value.numeric);
+				accum = any_test(df, fvalue_contains, arg1, arg2);
 				break;
 
 			case ANY_MATCHES:
-				accum = any_matches(df,
-						arg1->value.numeric, arg2->value.numeric);
+				accum = any_matches(df, arg1, arg2);
 				break;
 
 			case ANY_IN_RANGE:
-				arg3 = insn->arg3;
-				accum = any_in_range(df, arg1->value.numeric,
-						arg2->value.numeric,
-						arg3->value.numeric);
+				accum = any_in_range(df, arg1, arg2, arg3);
 				break;
 
 			case NOT:
@@ -720,29 +705,14 @@ dfvm_apply(dfilter_t *df, proto_tree *tree)
 				break;
 
 			case PUT_FVALUE:
-#if 0
-				/* These were handled in the constants initialization */
-				accum = put_fvalue(df,
-						arg1->value.fvalue, arg2->value.numeric);
-				break;
-#endif
-
 			case PUT_PCRE:
-#if 0
 				/* These were handled in the constants initialization */
-				accum = put_pcre(df,
-						arg1->value.pcre, arg2->value.numeric);
-				break;
-#endif
-
-			default:
 				ws_assert_not_reached();
 				break;
 		}
 	}
 
 	ws_assert_not_reached();
-	return FALSE; /* to appease the compiler */
 }
 
 void
@@ -757,18 +727,16 @@ dfvm_init_const(dfilter_t *df)
 
 	for (id = 0; id < length; id++) {
 
-		insn = (dfvm_insn_t	*)g_ptr_array_index(df->consts, id);
+		insn = g_ptr_array_index(df->consts, id);
 		arg1 = insn->arg1;
 		arg2 = insn->arg2;
 
 		switch (insn->op) {
 			case PUT_FVALUE:
-				put_fvalue(df,
-						arg1->value.fvalue, arg2->value.numeric);
+				put_fvalue(df, arg1, arg2);
 				break;
 			case PUT_PCRE:
-				put_pcre(df,
-						arg1->value.pcre, arg2->value.numeric);
+				put_pcre(df, arg1, arg2);
 				break;
 			case CHECK_EXISTS:
 			case READ_TREE:
@@ -790,13 +758,10 @@ dfvm_init_const(dfilter_t *df)
 			case RETURN:
 			case IF_TRUE_GOTO:
 			case IF_FALSE_GOTO:
-			default:
 				ws_assert_not_reached();
 				break;
 		}
 	}
-
-	return;
 }
 
 /*
