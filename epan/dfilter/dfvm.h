@@ -41,6 +41,7 @@ typedef struct {
 		ws_regex_t		*pcre;
 	} value;
 
+	int ref_count;
 } dfvm_value_t;
 
 
@@ -52,8 +53,6 @@ typedef enum {
 	NOT,
 	RETURN,
 	READ_TREE,
-	PUT_FVALUE,
-	PUT_PCRE,
 	ALL_EQ,
 	ANY_EQ,
 	ALL_NE,
@@ -89,13 +88,34 @@ dfvm_insn_free(dfvm_insn_t *insn);
 dfvm_value_t*
 dfvm_value_new(dfvm_value_type_t type);
 
+dfvm_value_t*
+dfvm_value_ref(dfvm_value_t *v);
+
+void
+dfvm_value_unref(dfvm_value_t *v);
+
+dfvm_value_t*
+dfvm_value_new_fvalue(fvalue_t *fv);
+
+dfvm_value_t*
+dfvm_value_new_hfinfo(header_field_info *hfinfo);
+
+dfvm_value_t*
+dfvm_value_new_register(int reg);
+
+dfvm_value_t*
+dfvm_value_new_drange(drange_t *dr);
+
+dfvm_value_t*
+dfvm_value_new_funcdef(df_func_def_t *funcdef);
+
+dfvm_value_t*
+dfvm_value_new_pcre(ws_regex_t *re);
+
 void
 dfvm_dump(FILE *f, dfilter_t *df);
 
 gboolean
 dfvm_apply(dfilter_t *df, proto_tree *tree);
-
-void
-dfvm_init_const(dfilter_t *df);
 
 #endif
