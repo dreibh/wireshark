@@ -721,6 +721,19 @@ again:
 	else if (type2 == STTYPE_PCRE) {
 		ws_assert(st_op == TEST_OP_MATCHES);
 	}
+	else if (type2 == STTYPE_BITWISE) {
+		ftype2 = check_bitwise_operation(dfw, st_arg2);
+
+		if (!compatible_ftypes(ftype1, ftype2)) {
+			FAIL(dfw, "%s and %s are not of compatible types.",
+					stnode_todisplay(st_arg1), stnode_todisplay(st_arg2));
+		}
+
+		if (!can_func(ftype2)) {
+			FAIL(dfw, "%s (type=%s) cannot participate in specified comparison.",
+					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
+		}
+	}
 	else {
 		ws_assert_not_reached();
 	}
@@ -800,6 +813,19 @@ again:
 	}
 	else if (type2 == STTYPE_PCRE) {
 		ws_assert(st_op == TEST_OP_MATCHES);
+	}
+	else if (type2 == STTYPE_BITWISE) {
+		ftype2 = check_bitwise_operation(dfw, st_arg2);
+
+		if (!compatible_ftypes(FT_BYTES, ftype2)) {
+			FAIL(dfw, "%s and %s are not of compatible types.",
+					stnode_todisplay(st_arg1), stnode_todisplay(st_arg2));
+		}
+
+		if (!can_func(ftype2)) {
+			FAIL(dfw, "%s (type=%s) cannot participate in specified comparison.",
+					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
+		}
 	}
 	else {
 		ws_assert_not_reached();
@@ -903,6 +929,19 @@ again:
 	}
 	else if (type2 == STTYPE_PCRE) {
 		ws_assert(st_op == TEST_OP_MATCHES);
+	}
+	else if (type2 == STTYPE_BITWISE) {
+		ftype2 = check_bitwise_operation(dfw, st_arg2);
+
+		if (!compatible_ftypes(ftype1, ftype2)) {
+			FAIL(dfw, "%s and %s are not of compatible types.",
+					stnode_todisplay(st_arg1), stnode_todisplay(st_arg2));
+		}
+
+		if (!can_func(ftype2)) {
+			FAIL(dfw, "%s (type=%s) cannot participate in specified comparison.",
+					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
+		}
 	}
 	else {
 		ws_assert_not_reached();
@@ -1249,7 +1288,7 @@ check_bitwise_operation(dfwork_t *dfw, stnode_t *st_node)
 	ftype1 = check_bitwise_entity(dfw, st_node, st_arg1, FT_NONE);
 	ftype2 = check_bitwise_entity(dfw, st_node, st_arg2, ftype1);
 
-	if (!ftype_can_is_true(ftype1)) {
+	if (!ftype_can_is_zero(ftype1)) {
 		FAIL(dfw, "Cannot test if %s is true", stnode_todisplay(st_arg1));
 	}
 

@@ -1166,7 +1166,7 @@ void Iax2AnalysisDialog::saveCsv(Iax2AnalysisDialog::StreamDirection direction)
             foreach (QVariant v, ra_ti->rowData()) {
                 if (!v.isValid()) {
                     values << "\"\"";
-                } else if ((int) v.type() == (int) QMetaType::QString) {
+                } else if (v.userType() == QMetaType::QString) {
                     values << QString("\"%1\"").arg(v.toString());
                 } else {
                     values << v.toString();
@@ -1190,7 +1190,7 @@ void Iax2AnalysisDialog::saveCsv(Iax2AnalysisDialog::StreamDirection direction)
             foreach (QVariant v, ra_ti->rowData()) {
                 if (!v.isValid()) {
                     values << "\"\"";
-                } else if (v.type() == QVariant::String) {
+                } else if (v.userType() == QMetaType::QString) {
                     values << QString("\"%1\"").arg(v.toString());
                 } else {
                     values << v.toString();
@@ -1225,7 +1225,11 @@ void Iax2AnalysisDialog::graphClicked(QMouseEvent *event)
 {
     updateWidgets();
     if (event->button() == Qt::RightButton) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0 ,0)
+        graph_ctx_menu_.exec(event->globalPosition().toPoint());
+#else
         graph_ctx_menu_.exec(event->globalPos());
+#endif
     }
 }
 
