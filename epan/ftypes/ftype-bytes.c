@@ -605,6 +605,7 @@ ftype_register_bytes(void)
 		len,
 		slice,
 		bytes_bitwise_and,		/* bitwise_and */
+		NULL,				/* unary_minus */
 	};
 
 	static ftype_t uint_bytes_type = {
@@ -630,6 +631,7 @@ ftype_register_bytes(void)
 		len,
 		slice,
 		bytes_bitwise_and,		/* bitwise_and */
+		NULL,				/* unary_minus */
 	};
 
 	static ftype_t ax25_type = {
@@ -655,6 +657,7 @@ ftype_register_bytes(void)
 		len,
 		slice,
 		bytes_bitwise_and,		/* bitwise_and */
+		NULL,				/* unary_minus */
 	};
 
 	static ftype_t vines_type = {
@@ -680,6 +683,7 @@ ftype_register_bytes(void)
 		len,
 		slice,
 		bytes_bitwise_and,		/* bitwise_and */
+		NULL,				/* unary_minus */
 	};
 
 	static ftype_t ether_type = {
@@ -705,6 +709,7 @@ ftype_register_bytes(void)
 		len,
 		slice,
 		bytes_bitwise_and,		/* bitwise_and */
+		NULL,				/* unary_minus */
 	};
 
 	static ftype_t oid_type = {
@@ -730,6 +735,7 @@ ftype_register_bytes(void)
 		len,
 		slice,
 		bytes_bitwise_and,		/* bitwise_and */
+		NULL,				/* unary_minus */
 	};
 
 	static ftype_t rel_oid_type = {
@@ -755,6 +761,7 @@ ftype_register_bytes(void)
 		len,
 		slice,
 		bytes_bitwise_and,		/* bitwise_and */
+		NULL,				/* unary_minus */
 	};
 
 	static ftype_t system_id_type = {
@@ -780,6 +787,7 @@ ftype_register_bytes(void)
 		len,
 		slice,
 		bytes_bitwise_and,		/* bitwise_and */
+		NULL,				/* unary_minus */
 	};
 
 	static ftype_t fcwwn_type = {
@@ -805,6 +813,7 @@ ftype_register_bytes(void)
 		len,
 		slice,
 		bytes_bitwise_and,		/* bitwise_and */
+		NULL,				/* unary_minus */
 	};
 
 	ftype_register(FT_BYTES, &bytes_type);
@@ -816,6 +825,64 @@ ftype_register_bytes(void)
 	ftype_register(FT_REL_OID, &rel_oid_type);
 	ftype_register(FT_SYSTEM_ID, &system_id_type);
 	ftype_register(FT_FCWWN, &fcwwn_type);
+}
+
+void
+ftype_register_pseudofields_bytes(int proto)
+{
+	static int hf_ft_bytes;
+	static int hf_ft_uint_bytes;
+	static int hf_ft_ax25;
+	static int hf_ft_vines;
+	static int hf_ft_ether;
+	static int hf_ft_oid;
+	static int hf_ft_rel_oid;
+	static int hf_ft_system_id;
+
+	static hf_register_info hf_ftypes[] = {
+		{ &hf_ft_bytes,
+		    { "FT_BYTES", "_ws.ftypes.bytes",
+			FT_BYTES, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+		{ &hf_ft_uint_bytes,
+		    { "FT_UINT_BYTES", "_ws.ftypes.uint_bytes",
+			FT_UINT_BYTES, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+		{ &hf_ft_ax25,
+		    { "FT_AX25", "_ws.ftypes.ax25",
+			FT_AX25, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+		{ &hf_ft_vines,
+		    { "FT_VINES", "_ws.ftypes.vines",
+			FT_VINES, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+		{ &hf_ft_ether,
+		    { "FT_ETHER", "_ws.ftypes.ether",
+			FT_ETHER, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+		{ &hf_ft_oid,
+		    { "FT_OID", "_ws.ftypes.oid",
+			FT_OID, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+		{ &hf_ft_rel_oid,
+		    { "FT_REL_OID", "_ws.ftypes.rel_oid",
+			FT_REL_OID, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+		{ &hf_ft_system_id,
+		    { "FT_SYSTEM_ID", "_ws.ftypes.system_id",
+			FT_SYSTEM_ID, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+	};
+
+	proto_register_field_array(proto, hf_ftypes, array_length(hf_ftypes));
 }
 
 /*

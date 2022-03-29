@@ -1228,7 +1228,7 @@ add_packet_to_packet_list(frame_data *fdata, capture_file *cf,
              * (potentially not displayed) frames.  Find those frames and mark them
              * as depended upon.
              */
-            g_slist_foreach(edt->pi.fd->dependent_frames, find_and_mark_frame_depended_upon, cf->provider.frames);
+            g_slist_foreach(edt->pi.dependent_frames, find_and_mark_frame_depended_upon, cf->provider.frames);
         }
     } else
         fdata->passed_dfilter = 1;
@@ -1678,6 +1678,11 @@ rescan_packets(capture_file *cf, const char *action, const char *action_item, gb
      */
     compiled = dfilter_compile(cf->dfilter, &dfcode, NULL);
     ws_assert(!cf->dfilter || (compiled && dfcode));
+
+    if (dfcode != NULL) {
+        dfilter_log_full(LOG_DOMAIN_DFILTER, LOG_LEVEL_DEBUG, NULL, -1, NULL,
+                        dfcode, "Rescanning packets with display filter:");
+    }
 
     /* Get the union of the flags for all tap listeners. */
     tap_flags = union_of_tap_listener_flags();

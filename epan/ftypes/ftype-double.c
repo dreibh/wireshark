@@ -85,6 +85,13 @@ double_val_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _
 	return buf;
 }
 
+enum ft_result
+val_unary_minus(fvalue_t * dst, const fvalue_t *src, char **err_ptr _U_)
+{
+	dst->value.floating = -src->value.floating;
+	return FT_OK;
+}
+
 static int
 cmp_order(const fvalue_t *a, const fvalue_t *b)
 {
@@ -122,6 +129,7 @@ ftype_register_double(void)
 		NULL,
 		NULL,
 		NULL,				/* bitwise_and */
+		val_unary_minus,		/* unary_minus */
 	};
 
 	static ftype_t double_type = {
@@ -147,10 +155,33 @@ ftype_register_double(void)
 		NULL,
 		NULL,
 		NULL,				/* bitwise_and */
+		val_unary_minus,		/* unary_minus */
 	};
 
 	ftype_register(FT_FLOAT, &float_type);
 	ftype_register(FT_DOUBLE, &double_type);
+}
+
+void
+ftype_register_pseudofields_double(int proto)
+{
+	static int hf_ft_float;
+	static int hf_ft_double;
+
+	static hf_register_info hf_ftypes[] = {
+		{ &hf_ft_float,
+		    { "FT_FLOAT", "_ws.ftypes.float",
+			FT_FLOAT, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+		{ &hf_ft_double,
+		    { "FT_DOUBLE", "_ws.ftypes.double",
+			FT_DOUBLE, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+	};
+
+	proto_register_field_array(proto, hf_ftypes, array_length(hf_ftypes));
 }
 
 /*

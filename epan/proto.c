@@ -573,6 +573,10 @@ proto_init(GSList *register_all_plugin_protocols_list,
 	register_number_string_decodinws_error();
 	register_string_errors();
 
+#ifndef WS_DISABLE_DEBUG
+	ftypes_register_pseudofields();
+#endif
+
 	/* Have each built-in dissector register its protocols, fields,
 	   dissector tables, and dissectors to be called through a
 	   handle, and do whatever one-time initialization it needs to
@@ -1892,7 +1896,7 @@ get_stringztrunc_value(wmem_allocator_t *scope, tvbuff_t *tvb, gint start,
 #define NTP_TIMEDIFF1900TO1970SEC G_GINT64_CONSTANT(2208988800)
 
 /*
- * NTP Era 1: the epoch is January 1, 2036, 00:00:00 UTC.
+ * NTP Era 1: the epoch is February 7, 2036, 06:28:16 UTC.
  */
 #define NTP_TIMEDIFF1970TO2036SEC G_GINT64_CONSTANT(2085978496)
 

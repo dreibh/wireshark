@@ -137,16 +137,17 @@ bitwise_and(fvalue_t *dst, const fvalue_t *fv_a, const fvalue_t *fv_b, char **er
 	prefix = MIN(a->prefix, b->prefix);	/* MIN() like in IPv4 */
 	prefix = MIN(prefix, 128);		/* sanitize, max prefix is 128 */
 
-	dst->value.ipv6 = fv_a->value.ipv6;
 	while (prefix >= 8) {
-		dst->value.ipv6.addr.bytes[pos] &= b->addr.bytes[pos] & bitmasks[prefix];
+		dst->value.ipv6.addr.bytes[pos] =
+			a->addr.bytes[pos] & b->addr.bytes[pos];
 
 		prefix -= 8;
 		pos++;
 	}
 
 	if (prefix != 0) {
-		dst->value.ipv6.addr.bytes[pos] &= b->addr.bytes[pos] & bitmasks[prefix];
+		dst->value.ipv6.addr.bytes[pos] =
+			a->addr.bytes[pos] & b->addr.bytes[pos] & bitmasks[prefix];
 	}
 	return FT_OK;
 }
@@ -194,9 +195,26 @@ ftype_register_ipv6(void)
 		NULL,
 		slice,
 		bitwise_and,
+		NULL,				/* unary_minus */
 	};
 
 	ftype_register(FT_IPv6, &ipv6_type);
+}
+
+void
+ftype_register_pseudofields_ipv6(int proto)
+{
+	static int hf_ft_ipv6;
+
+	static hf_register_info hf_ftypes[] = {
+		{ &hf_ft_ipv6,
+		    { "FT_IPv6", "_ws.ftypes.ipv6",
+			FT_IPv6, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+	};
+
+	proto_register_field_array(proto, hf_ftypes, array_length(hf_ftypes));
 }
 
 /*
