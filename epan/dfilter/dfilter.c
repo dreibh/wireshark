@@ -199,20 +199,42 @@ dfilter_free(dfilter_t *df)
 
 	g_free(df->interesting_fields);
 
+	g_hash_table_destroy(df->references);
+
 	if (df->deprecated)
 		g_ptr_array_unref(df->deprecated);
 
 	g_free(df->registers);
 	g_free(df->attempted_load);
 	g_free(df->free_registers);
+	g_free(df->expanded_text);
 	g_free(df);
+}
+
+static void free_reference(gpointer data)
+{
+	/* List data is not owned by us. */
+	GSList **fvalues_ptr = data;
+	if (*fvalues_ptr)
+		g_slist_free(*fvalues_ptr);
+	g_free(fvalues_ptr);
 }
 
 
 static dfwork_t*
 dfwork_new(void)
 {
-	return g_new0(dfwork_t, 1);
+	dfwork_t *dfw = g_new0(dfwork_t, 1);
+
+	dfw->references =
+		g_hash_table_new_full(g_direct_hash, g_direct_equal,
+				NULL, free_reference);
+
+	dfw->loaded_references =
+		g_hash_table_new_full(g_direct_hash, g_direct_equal,
+				NULL, (GDestroyNotify)dfvm_value_unref);
+
+	return dfw;
 }
 
 static void
@@ -228,6 +250,14 @@ dfwork_free(dfwork_t *dfw)
 
 	if (dfw->interesting_fields) {
 		g_hash_table_destroy(dfw->interesting_fields);
+	}
+
+	if (dfw->references) {
+		g_hash_table_destroy(dfw->references);
+	}
+
+	if (dfw->loaded_references) {
+		g_hash_table_destroy(dfw->loaded_references);
 	}
 
 	if (dfw->insns) {
@@ -260,6 +290,8 @@ const char *tokenstr(int token)
 		case TOKEN_TEST_CONTAINS: return "TEST_CONTAINS";
 		case TOKEN_TEST_MATCHES: return "TEST_MATCHES";
 		case TOKEN_BITWISE_AND: return "BITWISE_AND";
+		case TOKEN_PLUS:	return "PLUS";
+		case TOKEN_MINUS:	return "MINUS";
 		case TOKEN_TEST_NOT:	return "TEST_NOT";
 		case TOKEN_STRING:	return "STRING";
 		case TOKEN_CHARCONST:	return "CHARCONST";
@@ -276,6 +308,9 @@ const char *tokenstr(int token)
 		case TOKEN_DOTDOT:	return "DOTDOT";
 		case TOKEN_LPAREN:	return "LPAREN";
 		case TOKEN_RPAREN:	return "RPAREN";
+		case TOKEN_REFERENCE:	return "REFERENCE";
+		case TOKEN_REF_OPEN:	return "REF_OPEN";
+		case TOKEN_REF_CLOSE:	return "REF_CLOSE";
 	}
 	return "<unknown>";
 }
@@ -442,6 +477,9 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 		dfw->insns = NULL;
 		dfilter->interesting_fields = dfw_interesting_fields(dfw,
 			&dfilter->num_interesting_fields);
+		dfilter->expanded_text = ws_strdup(expanded_text);
+		dfilter->references = dfw->references;
+		dfw->references = NULL;
 
 		/* Initialize run-time space */
 		dfilter->num_registers = dfw->next_register;
@@ -538,6 +576,67 @@ dfilter_dump(dfilter_t *df)
 			sep = ", ";
 		}
 		printf("\n");
+	}
+}
+
+void
+dfilter_log_full(const char *domain, enum ws_log_level level,
+			const char *file, long line, const char *func,
+			dfilter_t *df, const char *msg)
+{
+	if (!ws_log_msg_is_active(domain, level))
+		return;
+
+	if (df == NULL) {
+		ws_log_write_always_full(domain, level, file, line, func,
+				"%s: NULL display filter", msg ? msg : "?");
+		return;
+	}
+
+	char *str = dfvm_dump_str(NULL, df, TRUE);
+	if (G_UNLIKELY(msg == NULL))
+		ws_log_write_always_full(domain, level, file, line, func, "\n%s", str);
+	else
+		ws_log_write_always_full(domain, level, file, line, func, "%s\n%s", msg, str);
+	g_free(str);
+}
+
+void
+dfilter_load_field_references(const dfilter_t *df, proto_tree *tree)
+{
+	GHashTableIter iter;
+	GPtrArray *finfos;
+	field_info *finfo;
+	header_field_info *hfinfo;
+	GSList **fvalues_ptr;
+	int i, len;
+
+	if (g_hash_table_size(df->references) == 0) {
+		/* Nothing to do. */
+		return;
+	}
+
+	g_hash_table_iter_init( &iter, df->references);
+	while (g_hash_table_iter_next (&iter, (void **)&hfinfo, (void **)&fvalues_ptr)) {
+		/* If we have a previous list free it leaving the data alone */
+		g_slist_free(*fvalues_ptr);
+		*fvalues_ptr = NULL;
+
+		while (hfinfo) {
+			finfos = proto_find_finfo(tree, hfinfo->id);
+			if ((finfos == NULL) || (g_ptr_array_len(finfos) == 0)) {
+				hfinfo = hfinfo->same_name_next;
+				continue;
+			}
+
+			len = finfos->len;
+			for (i = 0; i < len; i++) {
+				finfo = g_ptr_array_index(finfos, i);
+				*fvalues_ptr = g_slist_prepend(*fvalues_ptr, &finfo->value);
+			}
+
+			hfinfo = hfinfo->same_name_next;
+		}
 	}
 }
 

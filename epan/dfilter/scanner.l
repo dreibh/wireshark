@@ -98,11 +98,12 @@ static gboolean parse_charconst(dfwork_t *dfw, const char *s, unsigned long *val
 
 %}
 
-WORD_CHAR			[][:alnum:]_:/+-]
+WORD_CHAR			[[:alnum:]_:/+-]
 
 %x RANGE
 %x DQUOTE
 %x SQUOTE
+%x REFERENCE
 
 %%
 
@@ -114,6 +115,8 @@ WORD_CHAR			[][:alnum:]_:/+-]
 "{"		return simple(TOKEN_LBRACE);
 ".."		return simple(TOKEN_DOTDOT);
 "}"		return simple(TOKEN_RBRACE);
+"+"		return simple(TOKEN_PLUS);
+"-"		return simple(TOKEN_MINUS);
 
 "=="		return simple(TOKEN_TEST_ANY_EQ);
 "eq"		return simple(TOKEN_TEST_ANY_EQ);
@@ -150,6 +153,25 @@ WORD_CHAR			[][:alnum:]_:/+-]
 
 "&"		return simple(TOKEN_BITWISE_AND);
 "bitwise_and"	return simple(TOKEN_BITWISE_AND);
+
+"${"					{
+	BEGIN(REFERENCE);
+	return simple(TOKEN_REF_OPEN);
+}
+
+<REFERENCE>[^}]+		{
+	return set_lval_str(TOKEN_REFERENCE, yytext);
+}
+
+<REFERENCE>"}"				{
+	BEGIN(INITIAL);
+	return simple(TOKEN_REF_CLOSE);
+}
+
+<REFERENCE><<EOF>>				{
+	dfilter_fail(yyextra->dfw, "Right brace missing from field reference.");
+	return SCAN_FAILED;
+}
 
 "["				{
 	BEGIN(RANGE);
@@ -337,7 +359,7 @@ WORD_CHAR			[][:alnum:]_:/+-]
 	return set_lval_str(TOKEN_IDENTIFIER, yytext);
 }
 
-{WORD_CHAR}+(\.{WORD_CHAR}+)*		{
+[[:alnum:]_]{WORD_CHAR}*(\.{WORD_CHAR}+)*		{
 	/* Unparsed word token. */
 	return set_lval_str(TOKEN_UNPARSED, yytext);
 }

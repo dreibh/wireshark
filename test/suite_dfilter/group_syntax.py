@@ -81,10 +81,6 @@ class case_syntax(unittest.TestCase):
         checkDFilterCount(dfilter, 0)
 
     def test_deprecated_1(self, checkDFilterSucceed):
-        dfilter = "http && udp || tcp"
-        checkDFilterSucceed(dfilter, "suggest parentheses around")
-
-    def test_deprecated_2(self, checkDFilterSucceed):
         dfilter = "bootp"
         checkDFilterSucceed(dfilter, "Deprecated tokens: \"bootp\"")
 
@@ -160,3 +156,32 @@ class case_bitwise(unittest.TestCase):
     def test_equal_2(self, checkDFilterCount):
         dfilter = "tcp.srcport != tcp.dstport & 0x0F"
         checkDFilterCount(dfilter, 1)
+
+@fixtures.uses_fixtures
+class case_arithmetic(unittest.TestCase):
+    trace_file = "http.pcap"
+
+    def test_minus_const_1(self, checkDFilterCount):
+        dfilter = "tcp.window_size_scalefactor == -1"
+        checkDFilterCount(dfilter, 1)
+
+    def test_minus_const_2(self, checkDFilterCount):
+        dfilter = "tcp.window_size_scalefactor == -2"
+        checkDFilterCount(dfilter, 0)
+
+    def test_plus_const_1(self, checkDFilterCount):
+        dfilter = "tcp.window_size_scalefactor == +1"
+        checkDFilterCount(dfilter, 0)
+
+    def test_unary_1(self, checkDFilterCount):
+        dfilter = "tcp.window_size_scalefactor == -tcp.dstport"
+        checkDFilterCount(dfilter, 0)
+
+    def test_unary_2(self, checkDFilterCount):
+        dfilter = "tcp.window_size_scalefactor == +tcp.dstport"
+        checkDFilterCount(dfilter, 0)
+
+    def test_unary_3(self, checkDFilterFail):
+        error = 'Left side of "==" expression must be a field or function'
+        dfilter = "-2 == tcp.dstport"
+        checkDFilterFail(dfilter, error)

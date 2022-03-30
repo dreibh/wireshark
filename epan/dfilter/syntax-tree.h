@@ -24,6 +24,7 @@ typedef enum {
 	STTYPE_TEST,
 	STTYPE_LITERAL,
 	STTYPE_UNPARSED,
+	STTYPE_REFERENCE,
 	STTYPE_STRING,
 	STTYPE_CHARCONST,
 	STTYPE_FIELD,
@@ -33,6 +34,7 @@ typedef enum {
 	STTYPE_SET,
 	STTYPE_PCRE,
 	STTYPE_BITWISE,
+	STTYPE_ARITHMETIC,
 	STTYPE_NUM_TYPES
 } sttype_id_t;
 
@@ -51,6 +53,7 @@ typedef enum {
 	TEST_OP_LT,
 	TEST_OP_LE,
 	OP_BITWISE_AND,
+	OP_UNARY_MINUS,
 	TEST_OP_NOTZERO,
 	TEST_OP_CONTAINS,
 	TEST_OP_MATCHES,
@@ -73,13 +76,10 @@ typedef struct {
 	STTypeToStrFunc		func_tostr;
 } sttype_t;
 
-#define STNODE_F_INSIDE_PARENS (1 << 0)
-
 /** Node (type instance) information */
 typedef struct {
 	uint32_t	magic;
 	sttype_t	*type;
-	uint16_t	flags;
 	gpointer	data;
 	char 		*repr_token;
 	char 		*repr_display;
@@ -155,12 +155,6 @@ stnode_tostr(stnode_t *node, gboolean pretty);
 #define stnode_todisplay(node) stnode_tostr(node, TRUE)
 
 #define stnode_todebug(node) stnode_tostr(node, FALSE)
-
-gboolean
-stnode_inside_parens(stnode_t *node);
-
-void
-stnode_set_inside_parens(stnode_t *node, gboolean inside);
 
 void
 log_node_full(enum ws_log_level level,

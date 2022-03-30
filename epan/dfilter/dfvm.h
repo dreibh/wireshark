@@ -53,6 +53,7 @@ typedef enum {
 	NOT,
 	RETURN,
 	READ_TREE,
+	READ_REFERENCE,
 	ALL_EQ,
 	ANY_EQ,
 	ALL_NE,
@@ -67,6 +68,7 @@ typedef enum {
 	ANY_MATCHES,
 	MK_RANGE,
 	MK_BITWISE_AND,
+	MK_MINUS,
 	CALL_FUNCTION,
 	ANY_IN_RANGE
 
@@ -116,6 +118,9 @@ dfvm_value_new_pcre(ws_regex_t *re);
 
 void
 dfvm_dump(FILE *f, dfilter_t *df);
+
+char *
+dfvm_dump_str(wmem_allocator_t *alloc, dfilter_t *df, gboolean print_references);
 
 gboolean
 dfvm_apply(dfilter_t *df, proto_tree *tree);

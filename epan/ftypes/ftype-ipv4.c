@@ -172,9 +172,26 @@ ftype_register_ipv4(void)
 		NULL,
 		slice,
 		bitwise_and,
+		NULL,				/* unary_minus */
 	};
 
 	ftype_register(FT_IPv4, &ipv4_type);
+}
+
+void
+ftype_register_pseudofields_ipv4(int proto)
+{
+	static int hf_ft_ipv4;
+
+	static hf_register_info hf_ftypes[] = {
+		{ &hf_ft_ipv4,
+		    { "FT_IPv4", "_ws.ftypes.ipv4",
+			FT_IPv4, BASE_NONE, NULL, 0x00,
+			NULL, HFILL }
+		},
+	};
+
+	proto_register_field_array(proto, hf_ftypes, array_length(hf_ftypes));
 }
 
 /*

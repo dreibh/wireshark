@@ -13,7 +13,7 @@
 #include <wsutil/ws_assert.h>
 
 /* Keep track of ftype_t's via their ftenum number */
-static ftype_t* type_list[FT_NUM_TYPES];
+ftype_t* type_list[FT_NUM_TYPES];
 
 /* Initialize the ftype module. */
 void
@@ -32,6 +32,30 @@ ftypes_initialize(void)
 	ftype_register_tvbuff();
 }
 
+void
+ftypes_register_pseudofields(void)
+{
+	static int proto_ftypes;
+
+	proto_ftypes = proto_register_protocol(
+				"Wireshark Field/Fundamental Types",
+				"Wireshark FTypes",
+				"_ws.ftypes");
+
+	ftype_register_pseudofields_bytes(proto_ftypes);
+	ftype_register_pseudofields_double(proto_ftypes);
+	ftype_register_pseudofields_ieee_11073_float(proto_ftypes);
+	ftype_register_pseudofields_integer(proto_ftypes);
+	ftype_register_pseudofields_ipv4(proto_ftypes);
+	ftype_register_pseudofields_ipv6(proto_ftypes);
+	ftype_register_pseudofields_guid(proto_ftypes);
+	ftype_register_pseudofields_string(proto_ftypes);
+	ftype_register_pseudofields_time(proto_ftypes);
+	ftype_register_pseudofields_tvbuff(proto_ftypes);
+
+	proto_set_cant_toggle(proto_ftypes);
+}
+
 /* Each ftype_t is registered via this function */
 void
 ftype_register(enum ftenum ftype, ftype_t *ft)
@@ -45,13 +69,6 @@ ftype_register(enum ftenum ftype, ftype_t *ft)
 
 	type_list[ftype] = ft;
 }
-
-/* Given an ftenum number, return an ftype_t* */
-#define FTYPE_LOOKUP(ftype, result)	\
-	/* Check input */		\
-	ws_assert(ftype < FT_NUM_TYPES);	\
-	result = type_list[ftype];
-
 
 
 /* from README.dissector:
@@ -190,6 +207,15 @@ ftype_can_bitwise_and(enum ftenum ftype)
 
 	FTYPE_LOOKUP(ftype, ft);
 	return ft->bitwise_and ? TRUE : FALSE;
+}
+
+gboolean
+ftype_can_unary_minus(enum ftenum ftype)
+{
+	ftype_t	*ft;
+
+	FTYPE_LOOKUP(ftype, ft);
+	return ft->unary_minus != NULL;
 }
 
 gboolean
@@ -760,7 +786,7 @@ fvalue_is_zero(const fvalue_t *a)
 }
 
 fvalue_t *
-fvalue_bitwise_and(const fvalue_t *a, const fvalue_t *b, gchar **err_msg)
+fvalue_bitwise_and(const fvalue_t *a, const fvalue_t *b, char **err_msg)
 {
 	fvalue_t *result;
 
@@ -769,6 +795,21 @@ fvalue_bitwise_and(const fvalue_t *a, const fvalue_t *b, gchar **err_msg)
 
 	result = fvalue_new(a->ftype->ftype);
 	if (a->ftype->bitwise_and(result, a, b, err_msg) != FT_OK) {
+		fvalue_free(result);
+		return NULL;
+	}
+	return result;
+}
+
+fvalue_t*
+fvalue_unary_minus(const fvalue_t *fv, char **err_msg)
+{
+	fvalue_t *result;
+
+	ws_assert(fv->ftype->unary_minus);
+
+	result = fvalue_new(fv->ftype->ftype);
+	if (fv->ftype->unary_minus(result, fv, err_msg) != FT_OK) {
 		fvalue_free(result);
 		return NULL;
 	}

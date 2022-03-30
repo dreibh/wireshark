@@ -30,7 +30,10 @@
 
 
 #define FAIL(dfw, ...) \
-	dfilter_fail_throw(dfw, TypeError, __VA_ARGS__)
+	do {								\
+		ws_noisy("Semantic check failed here.");		\
+		dfilter_fail_throw(dfw, TypeError, __VA_ARGS__);	\
+	} while (0)
 
 static void
 semcheck(dfwork_t *dfw, stnode_t *st_node);
@@ -43,6 +46,10 @@ check_bitwise_entity(dfwork_t *dfw, stnode_t *st_node, stnode_t *st_arg, ftenum_
 
 static ftenum_t
 check_bitwise_operation(dfwork_t *dfw, stnode_t *st_node);
+
+static
+ftenum_t
+check_arithmetic_operation(dfwork_t *dfw, stnode_t *st_node, ftenum_t lhs_ftype);
 
 static fvalue_t *
 mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *s);
@@ -457,10 +464,12 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 		case STTYPE_FIELD:
 			/* This is OK */
 			break;
+		case STTYPE_REFERENCE:
 		case STTYPE_STRING:
 		case STTYPE_UNPARSED:
 		case STTYPE_LITERAL:
 		case STTYPE_CHARCONST:
+		case STTYPE_ARITHMETIC:
 			FAIL(dfw, "%s is neither a field nor a protocol name.",
 					stnode_todisplay(st_arg1));
 			break;
@@ -615,7 +624,7 @@ again:
 				stnode_todisplay(st_node));
 	}
 
-	if (type2 == STTYPE_FIELD) {
+	if (type2 == STTYPE_FIELD || type2 == STTYPE_REFERENCE) {
 		hfinfo2 = stnode_data(st_arg2);
 		ftype2 = hfinfo2->type;
 
@@ -702,6 +711,19 @@ again:
 					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
 		}
 	}
+	else if (type2 == STTYPE_ARITHMETIC) {
+		ftype2 = check_arithmetic_operation(dfw, st_arg2, ftype1);
+
+		if (!compatible_ftypes(ftype1, ftype2)) {
+			FAIL(dfw, "%s and %s are not of compatible types.",
+					stnode_todisplay(st_arg1), stnode_todisplay(st_arg2));
+		}
+
+		if (!can_func(ftype2)) {
+			FAIL(dfw, "%s (type=%s) cannot participate in specified comparison.",
+					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
+		}
+	}
 	else {
 		ws_assert_not_reached();
 	}
@@ -726,7 +748,7 @@ check_relation_LHS_RANGE(dfwork_t *dfw, test_op_t st_op,
 again:
 	type2 = stnode_type_id(st_arg2);
 
-	if (type2 == STTYPE_FIELD) {
+	if (type2 == STTYPE_FIELD || type2 == STTYPE_REFERENCE) {
 		hfinfo2 = stnode_data(st_arg2);
 		ftype2 = hfinfo2->type;
 
@@ -795,6 +817,19 @@ again:
 					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
 		}
 	}
+	else if (type2 == STTYPE_ARITHMETIC) {
+		ftype2 = check_arithmetic_operation(dfw, st_arg2, FT_BYTES);
+
+		if (!compatible_ftypes(FT_BYTES, ftype2)) {
+			FAIL(dfw, "%s and %s are not of compatible types.",
+					stnode_todisplay(st_arg1), stnode_todisplay(st_arg2));
+		}
+
+		if (!can_func(ftype2)) {
+			FAIL(dfw, "%s (type=%s) cannot participate in specified comparison.",
+					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
+		}
+	}
 	else {
 		ws_assert_not_reached();
 	}
@@ -831,7 +866,7 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, test_op_t st_op,
 again:
 	type2 = stnode_type_id(st_arg2);
 
-	if (type2 == STTYPE_FIELD) {
+	if (type2 == STTYPE_FIELD || type2 == STTYPE_REFERENCE) {
 		hfinfo2 = stnode_data(st_arg2);
 		ftype2 = hfinfo2->type;
 
@@ -911,6 +946,19 @@ again:
 					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
 		}
 	}
+	else if (type2 == STTYPE_ARITHMETIC) {
+		ftype2 = check_arithmetic_operation(dfw, st_arg2, ftype1);
+
+		if (!compatible_ftypes(ftype1, ftype2)) {
+			FAIL(dfw, "%s and %s are not of compatible types.",
+					stnode_todisplay(st_arg1), stnode_todisplay(st_arg2));
+		}
+
+		if (!can_func(ftype2)) {
+			FAIL(dfw, "%s (type=%s) cannot participate in specified comparison.",
+					stnode_todisplay(st_arg2), ftype_pretty_name(ftype2));
+		}
+	}
 	else {
 		ws_assert_not_reached();
 	}
@@ -933,7 +981,8 @@ check_relation_LHS_BITWISE(dfwork_t *dfw, test_op_t st_op _U_,
 	sttype_test_get(st_arg1, NULL, &bitwise_entity, NULL);
 	bitwise_entity_type = stnode_type_id(bitwise_entity);
 
-	if (bitwise_entity_type == STTYPE_FIELD) {
+	if (bitwise_entity_type == STTYPE_FIELD ||
+				bitwise_entity_type == STTYPE_REFERENCE) {
 		check_relation_LHS_FIELD(dfw, st_op, can_func, allow_partial_value, st_node, bitwise_entity, st_arg2);
 	}
 	else if (bitwise_entity_type == STTYPE_RANGE) {
@@ -944,6 +993,36 @@ check_relation_LHS_BITWISE(dfwork_t *dfw, test_op_t st_op _U_,
 	}
 	else {
 		ws_assert_not_reached();
+	}
+}
+
+static void
+check_relation_LHS_ARITHMETIC(dfwork_t *dfw, test_op_t st_op _U_,
+		FtypeCanFunc can_func _U_, gboolean allow_partial_value,
+		stnode_t *st_node _U_,
+		stnode_t *st_arg1, stnode_t *st_arg2)
+{
+	stnode_t		*entity;
+	sttype_id_t		entity_type;
+
+	LOG_NODE(st_node);
+
+	sttype_test_get(st_arg1, NULL, &entity, NULL);
+	entity_type = stnode_type_id(entity);
+
+	if (entity_type == STTYPE_FIELD || entity_type == STTYPE_REFERENCE) {
+		check_arithmetic_operation(dfw, st_arg1, FT_NONE);
+
+		check_relation_LHS_FIELD(dfw, st_op, can_func, allow_partial_value, st_node, entity, st_arg2);
+	}
+	else if (entity_type == STTYPE_FUNCTION) {
+		check_arithmetic_operation(dfw, st_arg1, FT_NONE);
+
+		check_relation_LHS_FUNCTION(dfw, st_op, can_func, allow_partial_value, st_node, entity, st_arg2);
+	}
+	else {
+		FAIL(dfw, "Left side of %s expression must be a field or function, not %s.",
+				stnode_todisplay(st_node), stnode_todisplay(entity));
 	}
 }
 
@@ -959,6 +1038,7 @@ check_relation(dfwork_t *dfw, test_op_t st_op,
 
 	switch (stnode_type_id(st_arg1)) {
 		case STTYPE_FIELD:
+		case STTYPE_REFERENCE:
 			check_relation_LHS_FIELD(dfw, st_op, can_func,
 					allow_partial_value, st_node, st_arg1, st_arg2);
 			break;
@@ -972,6 +1052,10 @@ check_relation(dfwork_t *dfw, test_op_t st_op,
 			break;
 		case STTYPE_BITWISE:
 			check_relation_LHS_BITWISE(dfw, st_op, can_func,
+					allow_partial_value, st_node, st_arg1, st_arg2);
+			break;
+		case STTYPE_ARITHMETIC:
+			check_relation_LHS_ARITHMETIC(dfw, st_op, can_func,
 					allow_partial_value, st_node, st_arg1, st_arg2);
 			break;
 		default:
@@ -990,6 +1074,7 @@ check_relation_contains(dfwork_t *dfw, stnode_t *st_node,
 
 	switch (stnode_type_id(st_arg1)) {
 		case STTYPE_FIELD:
+		case STTYPE_REFERENCE:
 			check_relation_LHS_FIELD(dfw, TEST_OP_CONTAINS, ftype_can_contains,
 							TRUE, st_node, st_arg1, st_arg2);
 			break;
@@ -1038,6 +1123,7 @@ check_relation_matches(dfwork_t *dfw, stnode_t *st_node,
 
 	switch (stnode_type_id(st_arg1)) {
 		case STTYPE_FIELD:
+		case STTYPE_REFERENCE:
 			check_relation_LHS_FIELD(dfw, TEST_OP_MATCHES, ftype_can_matches,
 							TRUE, st_node, st_arg1, st_arg2);
 			break;
@@ -1106,7 +1192,7 @@ check_relation_in(dfwork_t *dfw, stnode_t *st_node _U_,
 static void
 check_test(dfwork_t *dfw, stnode_t *st_node)
 {
-	test_op_t		st_op, st_arg_op;
+	test_op_t		st_op;
 	stnode_t		*st_arg1, *st_arg2;
 
 	LOG_NODE(st_node);
@@ -1133,22 +1219,6 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 
 		case TEST_OP_AND:
 		case TEST_OP_OR:
-			if (stnode_type_id(st_arg1) == STTYPE_TEST) {
-				sttype_test_get(st_arg1, &st_arg_op, NULL, NULL);
-				if (st_arg_op == TEST_OP_AND || st_arg_op == TEST_OP_OR) {
-					if (st_op != st_arg_op && !stnode_inside_parens(st_arg1))
-						add_deprecated_token(dfw, "suggest parentheses around '&&' within '||'");
-				}
-			}
-
-			if (stnode_type_id(st_arg2) == STTYPE_TEST) {
-				sttype_test_get(st_arg2, &st_arg_op, NULL, NULL);
-				if (st_arg_op == TEST_OP_AND || st_arg_op == TEST_OP_OR) {
-					if (st_op != st_arg_op && !stnode_inside_parens(st_arg2))
-						add_deprecated_token(dfw, "suggest parentheses around '&&' within '||'");
-				}
-			}
-
 			semcheck(dfw, st_arg1);
 			semcheck(dfw, st_arg2);
 			break;
@@ -1194,7 +1264,7 @@ check_bitwise_entity(dfwork_t *dfw, stnode_t *st_node, stnode_t *st_arg, ftenum_
 	resolve_unparsed(dfw, st_arg);
 	type = stnode_type_id(st_arg);
 
-	if (type == STTYPE_FIELD) {
+	if (type == STTYPE_FIELD || type == STTYPE_REFERENCE) {
 		hfinfo = stnode_data(st_arg);
 		ftype = hfinfo->type;
 
@@ -1270,6 +1340,80 @@ check_bitwise_operation(dfwork_t *dfw, stnode_t *st_node)
 	return ftype1;
 }
 
+ftenum_t
+check_arithmetic_operation(dfwork_t *dfw, stnode_t *st_node, ftenum_t lhs_ftype)
+{
+	test_op_t		st_op;
+	stnode_t		*st_arg;
+	sttype_id_t		type;
+	ftenum_t		ftype;
+	FtypeCanFunc 		can_func = NULL;
+
+	sttype_test_get(st_node, &st_op, &st_arg, NULL);
+	resolve_unparsed(dfw, st_arg);
+	type = stnode_type_id(st_arg);
+
+	switch (st_op) {
+		case OP_UNARY_MINUS:
+			can_func = ftype_can_unary_minus;
+			break;
+		default:
+			ws_assert_not_reached();
+	}
+
+	if (type == STTYPE_LITERAL) {
+		/* numeric constant */
+		ws_assert(lhs_ftype != FT_NONE);
+		fvalue_t *fvalue = dfilter_fvalue_from_literal(dfw, lhs_ftype, st_arg, FALSE, NULL);
+		stnode_replace(st_arg, STTYPE_FVALUE, fvalue);
+		ftype = fvalue_type_ftenum(fvalue);
+		if (!can_func(ftype)) {
+			FAIL(dfw, "%s (%s) cannot be negative.",
+					stnode_todisplay(st_arg),
+					fvalue_type_name(fvalue));
+		}
+
+		if (st_op == OP_UNARY_MINUS) {
+			/* Pre-compute constant unary minus result */
+			char *err_msg;
+			fvalue_t *new_fv = fvalue_unary_minus(fvalue, &err_msg);
+			if (new_fv == NULL) {
+				dfilter_fail(dfw, "%s: %s", stnode_todisplay(st_arg), err_msg);
+				g_free(err_msg);
+				THROW(TypeError);
+			}
+			/* Replaces unary operator with result */
+			stnode_replace(st_node, STTYPE_FVALUE, new_fv);
+		}
+	}
+	else if (type == STTYPE_FIELD || type == STTYPE_REFERENCE) {
+		header_field_info *hfinfo = stnode_data(st_arg);
+		ftype = hfinfo->type;
+
+		if (!can_func(ftype)) {
+			FAIL(dfw, "%s (type=%s) cannot be negative.",
+					hfinfo->abbrev, ftype_pretty_name(ftype));
+		}
+	}
+	else if (type == STTYPE_FUNCTION) {
+		check_function(dfw, st_arg);
+
+		df_func_def_t *funcdef = sttype_function_funcdef(st_arg);
+		ftype = funcdef->retval_ftype;
+
+		if (!can_func(ftype)) {
+			FAIL(dfw, "Function %s (type=%s) cannot be negative.",
+					funcdef->name, ftype_pretty_name(ftype));
+		}
+	}
+	else {
+		FAIL(dfw, "%s cannot be a negative value.",
+				stnode_todisplay(st_arg));
+	}
+
+	return ftype;
+}
+
 /* Check the entire syntax tree. */
 static void
 semcheck(dfwork_t *dfw, stnode_t *st_node)
@@ -1296,7 +1440,7 @@ dfw_semcheck(dfwork_t *dfw)
 {
 	volatile gboolean ok_filter = TRUE;
 
-	ws_debug("Starting semantic check (dfw = %p)", dfw);
+	ws_noisy("Starting semantic check (dfw = %p)", dfw);
 
 	/* Instead of having to check for errors at every stage of
 	 * the semantic-checking, the semantic-checking code will
@@ -1309,7 +1453,7 @@ dfw_semcheck(dfwork_t *dfw)
 	}
 	ENDTRY;
 
-	ws_debug("Semantic check (dfw = %p) returns %s",
+	ws_noisy("Semantic check (dfw = %p) returns %s",
 			dfw, ok_filter ? "TRUE" : "FALSE");
 
 	return ok_filter;

@@ -73,6 +73,11 @@ dfilter_apply(dfilter_t *df, proto_tree *tree);
 void
 dfilter_prime_proto_tree(const dfilter_t *df, proto_tree *tree);
 
+/* Refresh references in a compiled display filter. */
+WS_DLL_PUBLIC
+void
+dfilter_load_field_references(const dfilter_t *df, proto_tree *tree);
+
 /* Check if dfilter has interesting fields */
 gboolean
 dfilter_has_interesting_fields(const dfilter_t *df);
@@ -85,6 +90,27 @@ dfilter_deprecated_tokens(dfilter_t *df);
 WS_DLL_PUBLIC
 void
 dfilter_dump(dfilter_t *df);
+
+/* Print bytecode of dfilter to log */
+WS_DLL_PUBLIC
+void
+dfilter_log_full(const char *domain, enum ws_log_level level,
+			const char *file, long line, const char *func,
+			dfilter_t *dfcode, const char *msg);
+
+#ifndef WS_DISABLE_DEBUG
+#define dfilter_log(dfcode, msg) \
+	dfilter_log_full(LOG_DOMAIN_DFILTER, LOG_LEVEL_NOISY,	\
+				__FILE__, __LINE__, __func__,	\
+				dfcode, msg)
+#else
+#define dfilter_log(dfcode, msg) (void)0
+#endif
+
+#define DFILTER_DEBUG_HERE(dfcode) \
+	dfilter_log_full(LOG_DOMAIN_DFILTER, LOG_LEVEL_ECHO,	\
+				__FILE__, __LINE__, __func__,	\
+				dfcode, #dfcode);
 
 #ifdef __cplusplus
 }

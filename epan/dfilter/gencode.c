@@ -92,6 +92,53 @@ dfw_append_read_tree(dfwork_t *dfw, header_field_info *hfinfo)
 
 /* returns register number */
 static dfvm_value_t *
+dfw_append_read_reference(dfwork_t *dfw, header_field_info *hfinfo)
+{
+	dfvm_insn_t	*insn;
+	dfvm_value_t	*reg_val, *val1;
+	GSList		**fvalues_ptr;
+	gboolean	added_new_hfinfo = FALSE;
+
+	/* Rewind to find the first field of this name. */
+	while (hfinfo->same_name_prev_id != -1) {
+		hfinfo = proto_registrar_get_nth(hfinfo->same_name_prev_id);
+	}
+
+	/* Keep track of which registers
+	 * were used for which hfinfo's so that we
+	 * can re-use registers. */
+	reg_val = g_hash_table_lookup(dfw->loaded_references, hfinfo);
+	if (!reg_val) {
+		reg_val = dfvm_value_new_register(dfw->next_register++);
+		g_hash_table_insert(dfw->loaded_references, hfinfo, dfvm_value_ref(reg_val));
+		added_new_hfinfo = TRUE;
+	}
+
+	insn = dfvm_insn_new(READ_REFERENCE);
+	val1 = dfvm_value_new_hfinfo(hfinfo);
+	insn->arg1 = dfvm_value_ref(val1);
+	insn->arg2 = dfvm_value_ref(reg_val);
+	dfw_append_insn(dfw, insn);
+
+	fvalues_ptr = g_new(GSList *, 1);
+	*fvalues_ptr = NULL;
+	g_hash_table_insert(dfw->references, hfinfo, fvalues_ptr);
+
+	if (added_new_hfinfo) {
+		while (hfinfo) {
+			/* Record the FIELD_ID in hash of interesting fields. */
+			g_hash_table_insert(dfw->interesting_fields,
+			    GINT_TO_POINTER(hfinfo->id),
+			    GUINT_TO_POINTER(TRUE));
+			hfinfo = hfinfo->same_name_next;
+		}
+	}
+
+	return reg_val;
+}
+
+/* returns register number */
+static dfvm_value_t *
 dfw_append_mk_range(dfwork_t *dfw, stnode_t *node, GSList **jumps_ptr)
 {
 	stnode_t                *entity;
@@ -305,6 +352,30 @@ gen_bitwise(dfwork_t *dfw, stnode_t *st_arg, GSList **jumps_ptr)
 	return reg_val;
 }
 
+static dfvm_value_t *
+gen_arithmetic(dfwork_t *dfw, stnode_t *st_arg, GSList **jumps_ptr)
+{
+	stnode_t	*left, *right;
+	test_op_t	st_op;
+	dfvm_value_t	*reg_val, *val1;
+	dfvm_opcode_t	op;
+
+	sttype_test_get(st_arg, &st_op, &left, &right);
+
+	if (st_op == OP_UNARY_MINUS) {
+		op = MK_MINUS;
+	}
+	else {
+		ws_assert_not_reached();
+	}
+
+	/* Generate DFVM instruction. */
+	val1 = gen_entity(dfw, left, jumps_ptr);
+	reg_val = dfvm_value_new_register(dfw->next_register++);
+	gen_relation_insn(dfw, op, val1, reg_val, NULL, NULL);
+	return reg_val;
+}
+
 /* Parse an entity, returning the reg that it gets put into.
  * p_jmp will be set if it has to be set by the calling code; it should
  * be set to the place to jump to, to return to the calling code,
@@ -328,6 +399,16 @@ gen_entity(dfwork_t *dfw, stnode_t *st_arg, GSList **jumps_ptr)
 		dfw_append_insn(dfw, insn);
 		*jumps_ptr = g_slist_prepend(*jumps_ptr, jmp);
 	}
+	else if (e_type == STTYPE_REFERENCE) {
+		hfinfo = stnode_data(st_arg);
+		val = dfw_append_read_reference(dfw, hfinfo);
+
+		insn = dfvm_insn_new(IF_FALSE_GOTO);
+		jmp = dfvm_value_new(INSN_NUMBER);
+		insn->arg1 = dfvm_value_ref(jmp);
+		dfw_append_insn(dfw, insn);
+		*jumps_ptr = g_slist_prepend(*jumps_ptr, jmp);
+	}
 	else if (e_type == STTYPE_FVALUE) {
 		val = dfvm_value_new_fvalue(stnode_steal_data(st_arg));
 	}
@@ -342,6 +423,9 @@ gen_entity(dfwork_t *dfw, stnode_t *st_arg, GSList **jumps_ptr)
 	}
 	else if (e_type == STTYPE_BITWISE) {
 		val = gen_bitwise(dfw, st_arg, jumps_ptr);
+	}
+	else if (e_type == STTYPE_ARITHMETIC) {
+		val = gen_arithmetic(dfw, st_arg, jumps_ptr);
 	}
 	else {
 		/* printf("sttype_id is %u\n", (unsigned)e_type); */
@@ -464,10 +548,6 @@ gen_test(dfwork_t *dfw, stnode_t *st_node)
 			gen_relation(dfw, ANY_LE, st_arg1, st_arg2);
 			break;
 
-		case OP_BITWISE_AND:
-			ws_assert_not_reached();
-			break;
-
 		case TEST_OP_CONTAINS:
 			gen_relation(dfw, ANY_CONTAINS, st_arg1, st_arg2);
 			break;
@@ -478,6 +558,11 @@ gen_test(dfwork_t *dfw, stnode_t *st_node)
 
 		case TEST_OP_IN:
 			gen_relation_in(dfw, st_arg1, st_arg2);
+			break;
+
+		case OP_BITWISE_AND:
+		case OP_UNARY_MINUS:
+			ws_assert_not_reached();
 			break;
 	}
 }

@@ -12,10 +12,19 @@
 
 #include "ftypes.h"
 #include <epan/proto.h>
+#include <epan/packet.h>
+
+extern ftype_t* type_list[FT_NUM_TYPES];
+
+/* Given an ftenum number, return an ftype_t* */
+#define FTYPE_LOOKUP(ftype, result)		\
+	/* Check input */			\
+	ws_assert(ftype < FT_NUM_TYPES);	\
+	result = type_list[ftype];
 
 enum ft_result {
 	FT_OK,
-	FT_ERROR,
+	FT_ERR_OVERFLOW,
 };
 
 typedef void (*FvalueNewFunc)(fvalue_t*);
@@ -53,6 +62,7 @@ typedef gboolean (*FvalueIsZero)(const fvalue_t*);
 typedef guint (*FvalueLen)(fvalue_t*);
 typedef void (*FvalueSlice)(fvalue_t*, GByteArray *, guint offset, guint length);
 typedef enum ft_result (*FvalueBitwiseAnd)(fvalue_t *, const fvalue_t*, const fvalue_t*, gchar **);
+typedef enum ft_result (*FvalueUnaryMinus)(fvalue_t *, const fvalue_t*, gchar **);
 
 struct _ftype_t {
 	ftenum_t		ftype;
@@ -97,6 +107,7 @@ struct _ftype_t {
 	FvalueLen		len;
 	FvalueSlice		slice;
 	FvalueBitwiseAnd	bitwise_and;
+	FvalueUnaryMinus	unary_minus;
 };
 
 void ftype_register(enum ftenum ftype, ftype_t *ft);
@@ -112,6 +123,17 @@ void ftype_register_none(void);
 void ftype_register_string(void);
 void ftype_register_time(void);
 void ftype_register_tvbuff(void);
+
+void ftype_register_pseudofields_bytes(int proto);
+void ftype_register_pseudofields_double(int proto);
+void ftype_register_pseudofields_ieee_11073_float(int proto);
+void ftype_register_pseudofields_integer(int proto);
+void ftype_register_pseudofields_ipv4(int proto);
+void ftype_register_pseudofields_ipv6(int proto);
+void ftype_register_pseudofields_guid(int proto);
+void ftype_register_pseudofields_string(int proto);
+void ftype_register_pseudofields_time(int proto);
+void ftype_register_pseudofields_tvbuff(int proto);
 
 GByteArray *
 byte_array_from_literal(const char *s, gchar **err_msg);
