@@ -24,10 +24,11 @@ extern ftype_t* type_list[FT_NUM_TYPES];
 
 enum ft_result {
 	FT_OK,
-	FT_ERR_OVERFLOW,
+	FT_ERROR,
 };
 
 typedef void (*FvalueNewFunc)(fvalue_t*);
+typedef void (*FvalueCopyFunc)(fvalue_t*, const fvalue_t*);
 typedef void (*FvalueFreeFunc)(fvalue_t*);
 
 typedef gboolean (*FvalueFromLiteral)(fvalue_t*, const char*, gboolean, gchar **);
@@ -63,6 +64,8 @@ typedef guint (*FvalueLen)(fvalue_t*);
 typedef void (*FvalueSlice)(fvalue_t*, GByteArray *, guint offset, guint length);
 typedef enum ft_result (*FvalueBitwiseAnd)(fvalue_t *, const fvalue_t*, const fvalue_t*, gchar **);
 typedef enum ft_result (*FvalueUnaryMinus)(fvalue_t *, const fvalue_t*, gchar **);
+typedef enum ft_result (*FvalueAdd)(fvalue_t *, const fvalue_t*, const fvalue_t*, gchar **);
+typedef enum ft_result (*FvalueSubtract)(fvalue_t *, const fvalue_t*, const fvalue_t*, gchar **);
 
 struct _ftype_t {
 	ftenum_t		ftype;
@@ -70,6 +73,7 @@ struct _ftype_t {
 	const char		*pretty_name;
 	int			wire_size;
 	FvalueNewFunc		new_value;
+	FvalueCopyFunc		copy_value;
 	FvalueFreeFunc		free_value;
 	FvalueFromLiteral	val_from_literal;
 	FvalueFromString	val_from_string;
@@ -108,6 +112,8 @@ struct _ftype_t {
 	FvalueSlice		slice;
 	FvalueBitwiseAnd	bitwise_and;
 	FvalueUnaryMinus	unary_minus;
+	FvalueAdd		add;
+	FvalueSubtract		subtract;
 };
 
 void ftype_register(enum ftenum ftype, ftype_t *ft);

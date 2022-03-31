@@ -16,6 +16,7 @@
 #include <epan/to_str.h>
 
 #include <wsutil/pint.h>
+#include <wsutil/safe-math.h>
 
 static void
 int_fvalue_new(fvalue_t *fv)
@@ -686,7 +687,7 @@ uint_unary_minus(fvalue_t *dst, const fvalue_t *src, char **err_ptr)
 		if (err_ptr)
 			*err_ptr = ws_strdup_printf("%"G_GUINT32_FORMAT" overflows gint32",
 							src->value.uinteger);
-		return FT_ERR_OVERFLOW;
+		return FT_ERROR;
 	}
 	FTYPE_LOOKUP(FT_INT32, dst->ftype);
 	dst->value.sinteger = -(gint32)src->value.uinteger;
@@ -714,7 +715,7 @@ uint64_unary_minus(fvalue_t *dst, const fvalue_t *src, char **err_ptr)
 		if (err_ptr)
 			*err_ptr = ws_strdup_printf("%"G_GUINT64_FORMAT" overflows gint64",
 							src->value.uinteger64);
-		return FT_ERR_OVERFLOW;
+		return FT_ERROR;
 	}
 	FTYPE_LOOKUP(FT_INT64, dst->ftype);
 	dst->value.sinteger64 = -(gint64)src->value.uinteger64;
@@ -758,6 +759,128 @@ enum ft_result
 sint64_unary_minus(fvalue_t * dst, const fvalue_t *src, char **err_ptr _U_)
 {
 	dst->value.sinteger64 = -src->value.sinteger64;
+	return FT_OK;
+}
+
+static enum ft_result
+sint_add(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
+{
+	if (!psnip_safe_add(&dst->value.sinteger, a->value.sinteger, b->value.sinteger)) {
+		/* Overflow */
+		*err_ptr = ws_strdup_printf("sint_add: overflow");
+		return FT_ERROR;
+	}
+	return FT_OK;
+}
+
+static enum ft_result
+_sint_subtract(gint32 *sint_dst, gint32 sint_a, gint32 sint_b, char **err_ptr)
+{
+	if (!psnip_safe_sub(sint_dst, sint_a, sint_b)) {
+		/* Overflow */
+		*err_ptr = ws_strdup_printf("sint_sub: overflow");
+		return FT_ERROR;
+	}
+	return FT_OK;
+}
+
+static enum ft_result
+sint_subtract(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
+{
+	return _sint_subtract(&dst->value.sinteger, a->value.sinteger, b->value.sinteger, err_ptr);
+}
+
+static enum ft_result
+uint_add(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
+{
+	if (!psnip_safe_add(&dst->value.uinteger, a->value.uinteger, b->value.uinteger)) {
+		/* Overflow */
+		*err_ptr = ws_strdup_printf("uint_add: overflow");
+		return FT_ERROR;
+	}
+	return FT_OK;
+}
+
+static enum ft_result
+uint_subtract(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
+{
+	if (b->value.uinteger > a->value.uinteger) {
+		/* Uses signed arithmetic. */
+		if (a->value.uinteger > G_MAXINT32 ||
+				b->value.uinteger > G_MAXINT32) {
+			*err_ptr = ws_strdup_printf("uint_subtract: signed overflow");
+			return FT_ERROR;
+		}
+		FTYPE_LOOKUP(FT_INT32, dst->ftype);
+		return _sint_subtract(&dst->value.sinteger, (gint32)a->value.uinteger, (gint32)b->value.uinteger, err_ptr);
+	}
+
+	if (!psnip_safe_sub(&dst->value.uinteger, a->value.uinteger, b->value.uinteger)) {
+		/* Overflow */
+		*err_ptr = ws_strdup_printf("uint_subtract: overflow");
+		return FT_ERROR;
+	}
+	return FT_OK;
+}
+
+static enum ft_result
+sint64_add(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
+{
+	if (!psnip_safe_add(&dst->value.sinteger64, a->value.sinteger64, b->value.sinteger64)) {
+		/* Overflow */
+		*err_ptr = ws_strdup_printf("sint64_add: overflow");
+		return FT_ERROR;
+	}
+	return FT_OK;
+}
+
+static enum ft_result
+_sint64_subtract(gint64 *sint_dst, gint64 sint_a, gint64 sint_b, char **err_ptr)
+{
+	if (!psnip_safe_sub(sint_dst, sint_a, sint_b)) {
+		/* Overflow */
+		*err_ptr = ws_strdup_printf("sint64_sub: overflow");
+		return FT_ERROR;
+	}
+	return FT_OK;
+}
+
+static enum ft_result
+sint64_subtract(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
+{
+	return _sint64_subtract(&dst->value.sinteger64, a->value.sinteger64, b->value.sinteger64, err_ptr);
+}
+
+static enum ft_result
+uint64_add(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
+{
+	if (!psnip_safe_add(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
+		/* Overflow */
+		*err_ptr = ws_strdup_printf("uint64_add: overflow");
+		return FT_ERROR;
+	}
+	return FT_OK;
+}
+
+static enum ft_result
+uint64_subtract(fvalue_t *dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
+{
+	if (b->value.uinteger64 > a->value.uinteger64) {
+		/* Uses signed arithmetic. */
+		if (a->value.uinteger64 > G_MAXINT64 ||
+				b->value.uinteger64 > G_MAXINT64) {
+			*err_ptr = ws_strdup_printf("uint64_subtract: signed overflow");
+			return FT_ERROR;
+		}
+		FTYPE_LOOKUP(FT_INT64, dst->ftype);
+		return _sint64_subtract(&dst->value.sinteger64, (gint64)a->value.uinteger64, (gint64)b->value.uinteger64, err_ptr);
+	}
+
+	if (!psnip_safe_sub(&dst->value.uinteger64, a->value.uinteger64, b->value.uinteger64)) {
+		/* Overflow */
+		*err_ptr = ws_strdup_printf("uint64_sub: overflow");
+		return FT_ERROR;
+	}
 	return FT_OK;
 }
 
@@ -868,6 +991,7 @@ ftype_register_integers(void)
 		"Character, 1 byte",		/* pretty name */
 		1,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint8_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -886,6 +1010,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint_bitwise_and,		/* bitwise_and */
 		uint_unary_minus,		/* unary_minus */
+		uint_add,			/* add */
+		uint_subtract,			/* subtract */
 	};
 	static ftype_t uint8_type = {
 		FT_UINT8,			/* ftype */
@@ -893,6 +1019,7 @@ ftype_register_integers(void)
 		"Unsigned integer, 1 byte",	/* pretty name */
 		1,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint8_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -911,6 +1038,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint_bitwise_and,		/* bitwise_and */
 		uint_unary_minus,		/* unary_minus */
+		uint_add,			/* add */
+		uint_subtract,			/* subtract */
 	};
 	static ftype_t uint16_type = {
 		FT_UINT16,			/* ftype */
@@ -918,6 +1047,7 @@ ftype_register_integers(void)
 		"Unsigned integer, 2 bytes",	/* pretty_name */
 		2,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint16_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -936,6 +1066,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint_bitwise_and,		/* bitwise_and */
 		uint_unary_minus,		/* unary_minus */
+		uint_add,			/* add */
+		uint_subtract,			/* subtract */
 	};
 	static ftype_t uint24_type = {
 		FT_UINT24,			/* ftype */
@@ -943,6 +1075,7 @@ ftype_register_integers(void)
 		"Unsigned integer, 3 bytes",	/* pretty_name */
 		3,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint24_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -961,6 +1094,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint_bitwise_and,		/* bitwise_and */
 		uint_unary_minus,		/* unary_minus */
+		uint_add,			/* add */
+		uint_subtract,			/* subtract */
 	};
 	static ftype_t uint32_type = {
 		FT_UINT32,			/* ftype */
@@ -968,6 +1103,7 @@ ftype_register_integers(void)
 		"Unsigned integer, 4 bytes",	/* pretty_name */
 		4,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint32_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -986,6 +1122,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint_bitwise_and,		/* bitwise_and */
 		uint_unary_minus,		/* unary_minus */
+		uint_add,			/* add */
+		uint_subtract,			/* subtract */
 	};
 	static ftype_t uint40_type = {
 		FT_UINT40,			/* ftype */
@@ -993,6 +1131,7 @@ ftype_register_integers(void)
 		"Unsigned integer, 5 bytes",	/* pretty_name */
 		5,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint40_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1011,6 +1150,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
 		uint64_unary_minus,		/* unary_minus */
+		uint64_add,			/* add */
+		uint64_subtract,		/* subtract */
 	};
 	static ftype_t uint48_type = {
 		FT_UINT48,			/* ftype */
@@ -1018,6 +1159,7 @@ ftype_register_integers(void)
 		"Unsigned integer, 6 bytes",	/* pretty_name */
 		6,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint48_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1036,6 +1178,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
 		uint64_unary_minus,		/* unary_minus */
+		uint64_add,			/* add */
+		uint64_subtract,		/* subtract */
 	};
 	static ftype_t uint56_type = {
 		FT_UINT56,			/* ftype */
@@ -1043,6 +1187,7 @@ ftype_register_integers(void)
 		"Unsigned integer, 7 bytes",	/* pretty_name */
 		7,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint56_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1061,6 +1206,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
 		uint64_unary_minus,		/* unary_minus */
+		uint64_add,			/* add */
+		uint64_subtract,		/* subtract */
 	};
 	static ftype_t uint64_type = {
 		FT_UINT64,			/* ftype */
@@ -1068,6 +1215,7 @@ ftype_register_integers(void)
 		"Unsigned integer, 8 bytes",	/* pretty_name */
 		8,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint64_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1086,6 +1234,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
 		uint64_unary_minus,		/* unary_minus */
+		uint64_add,			/* add */
+		uint64_subtract,		/* subtract */
 	};
 	static ftype_t int8_type = {
 		FT_INT8,			/* ftype */
@@ -1093,6 +1243,7 @@ ftype_register_integers(void)
 		"Signed integer, 1 byte",	/* pretty_name */
 		1,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		sint8_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1111,6 +1262,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		sint_bitwise_and,		/* bitwise_and */
 		sint_unary_minus,		/* unary_minus */
+		sint_add,			/* add */
+		sint_subtract,			/* subtract */
 	};
 	static ftype_t int16_type = {
 		FT_INT16,			/* ftype */
@@ -1118,6 +1271,7 @@ ftype_register_integers(void)
 		"Signed integer, 2 bytes",	/* pretty_name */
 		2,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		sint16_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1136,6 +1290,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		sint_bitwise_and,		/* bitwise_and */
 		sint_unary_minus,		/* unary_minus */
+		sint_add,			/* add */
+		sint_subtract,			/* subtract */
 	};
 	static ftype_t int24_type = {
 		FT_INT24,			/* ftype */
@@ -1143,6 +1299,7 @@ ftype_register_integers(void)
 		"Signed integer, 3 bytes",	/* pretty_name */
 		3,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		sint24_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1161,6 +1318,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		sint_bitwise_and,		/* bitwise_and */
 		sint_unary_minus,		/* unary_minus */
+		sint_add,			/* add */
+		sint_subtract,			/* subtract */
 	};
 	static ftype_t int32_type = {
 		FT_INT32,			/* ftype */
@@ -1168,6 +1327,7 @@ ftype_register_integers(void)
 		"Signed integer, 4 bytes",	/* pretty_name */
 		4,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		sint32_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1186,6 +1346,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		sint_bitwise_and,		/* bitwise_and */
 		sint_unary_minus,		/* unary_minus */
+		sint_add,			/* add */
+		sint_subtract,			/* subtract */
 	};
 	static ftype_t int40_type = {
 		FT_INT40,			/* ftype */
@@ -1193,6 +1355,7 @@ ftype_register_integers(void)
 		"Signed integer, 5 bytes",	/* pretty_name */
 		5,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		sint40_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1211,6 +1374,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
 		sint64_unary_minus,		/* unary_minus */
+		sint64_add,			/* add */
+		sint64_subtract,		/* subtract */
 	};
 	static ftype_t int48_type = {
 		FT_INT48,			/* ftype */
@@ -1218,6 +1383,7 @@ ftype_register_integers(void)
 		"Signed integer, 6 bytes",	/* pretty_name */
 		6,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		sint48_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1236,6 +1402,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
 		sint64_unary_minus,		/* unary_minus */
+		NULL,				/* add */
+		NULL,				/* subtract */
 	};
 	static ftype_t int56_type = {
 		FT_INT56,			/* ftype */
@@ -1243,6 +1411,7 @@ ftype_register_integers(void)
 		"Signed integer, 7 bytes",	/* pretty_name */
 		7,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		sint56_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1261,6 +1430,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
 		sint64_unary_minus,		/* unary_minus */
+		sint64_add,			/* add */
+		sint64_subtract,		/* subtract */
 	};
 	static ftype_t int64_type = {
 		FT_INT64,			/* ftype */
@@ -1268,6 +1439,7 @@ ftype_register_integers(void)
 		"Signed integer, 8 bytes",	/* pretty_name */
 		8,				/* wire_size */
 		int64_fvalue_new,		/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		sint64_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1286,6 +1458,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		sint64_bitwise_and,		/* bitwise_and */
 		sint64_unary_minus,		/* unary_minus */
+		sint64_add,			/* add */
+		sint64_subtract,		/* subtract */
 	};
 	static ftype_t boolean_type = {
 		FT_BOOLEAN,			/* ftype */
@@ -1293,6 +1467,7 @@ ftype_register_integers(void)
 		"Boolean",			/* pretty_name */
 		0,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		boolean_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1311,6 +1486,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		NULL,				/* bitwise_and */
 		NULL,				/* unary_minus */
+		NULL,				/* add */
+		NULL,				/* subtract */
 	};
 
 	static ftype_t ipxnet_type = {
@@ -1319,6 +1496,7 @@ ftype_register_integers(void)
 		"IPX network number",		/* pretty_name */
 		4,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		ipxnet_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1337,6 +1515,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint_bitwise_and,		/* bitwise_and */
 		uint_unary_minus,		/* unary_minus */
+		NULL,				/* add */
+		NULL,				/* subtract */
 	};
 
 	static ftype_t framenum_type = {
@@ -1345,6 +1525,7 @@ ftype_register_integers(void)
 		"Frame number",			/* pretty_name */
 		4,				/* wire_size */
 		int_fvalue_new,			/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		uint32_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1363,6 +1544,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint_bitwise_and,		/* bitwise_and */
 		uint_unary_minus,		/* unary_minus */
+		uint_add,			/* add */
+		uint_subtract,			/* subtract */
 	};
 
 	static ftype_t eui64_type = {
@@ -1371,6 +1554,7 @@ ftype_register_integers(void)
 		"EUI64 address",		/* pretty_name */
 		FT_EUI64_LEN,			/* wire_size */
 		int64_fvalue_new,		/* new_value */
+		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		eui64_from_literal,		/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -1389,6 +1573,8 @@ ftype_register_integers(void)
 		NULL,				/* slice */
 		uint64_bitwise_and,		/* bitwise_and */
 		uint64_unary_minus,		/* unary_minus */
+		uint64_add,			/* add */
+		uint64_subtract,		/* subtract */
 	};
 
 	ftype_register(FT_CHAR, &char_type);

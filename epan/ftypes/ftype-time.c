@@ -321,6 +321,12 @@ time_fvalue_new(fvalue_t *fv)
 }
 
 static void
+time_fvalue_copy(fvalue_t *dst, const fvalue_t *src)
+{
+	nstime_copy(&dst->value.time, &src->value.time);
+}
+
+static void
 time_fvalue_set(fvalue_t *fv, const nstime_t *value)
 {
 	fv->value.time = *value;
@@ -419,6 +425,20 @@ time_unary_minus(fvalue_t * dst, const fvalue_t *src, char **err_ptr _U_)
 	return FT_OK;
 }
 
+static enum ft_result
+time_add(fvalue_t * dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr _U_)
+{
+	nstime_sum(&dst->value.time, &a->value.time, &b->value.time);
+	return FT_OK;
+}
+
+static enum ft_result
+time_subtract(fvalue_t * dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr _U_)
+{
+	nstime_delta(&dst->value.time, &a->value.time, &b->value.time);
+	return FT_OK;
+}
+
 void
 ftype_register_time(void)
 {
@@ -429,6 +449,7 @@ ftype_register_time(void)
 		"Date and time",		/* pretty_name */
 		0,				/* wire_size */
 		time_fvalue_new,		/* new_value */
+		time_fvalue_copy,		/* copy_value */
 		NULL,				/* free_value */
 		absolute_val_from_literal,	/* val_from_literal */
 		absolute_val_from_string,	/* val_from_string */
@@ -447,6 +468,8 @@ ftype_register_time(void)
 		NULL,
 		NULL,				/* bitwise_and */
 		NULL,				/* unary_minus */
+		NULL,				/* add */
+		NULL,				/* subtract */
 	};
 	static ftype_t reltime_type = {
 		FT_RELATIVE_TIME,		/* ftype */
@@ -454,6 +477,7 @@ ftype_register_time(void)
 		"Time offset",			/* pretty_name */
 		0,				/* wire_size */
 		time_fvalue_new,		/* new_value */
+		time_fvalue_copy,		/* copy_value */
 		NULL,				/* free_value */
 		relative_val_from_literal,	/* val_from_literal */
 		NULL,				/* val_from_string */
@@ -472,6 +496,8 @@ ftype_register_time(void)
 		NULL,
 		NULL,				/* bitwise_and */
 		time_unary_minus,		/* unary_minus */
+		time_add,			/* add */
+		time_subtract,			/* subtract */
 	};
 
 	ftype_register(FT_ABSOLUTE_TIME, &abstime_type);

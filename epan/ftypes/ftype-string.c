@@ -22,6 +22,12 @@ string_fvalue_new(fvalue_t *fv)
 }
 
 static void
+string_fvalue_copy(fvalue_t *dst, const fvalue_t *src)
+{
+	dst->value.string = g_strdup(src->value.string);
+}
+
+static void
 string_fvalue_free(fvalue_t *fv)
 {
 	g_free(fv->value.string);
@@ -169,6 +175,7 @@ ftype_register_string(void)
 		"Character string",		/* pretty_name */
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
+		string_fvalue_copy,		/* copy_value */
 		string_fvalue_free,		/* free_value */
 		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
@@ -187,6 +194,8 @@ ftype_register_string(void)
 		slice,
 		NULL,				/* bitwise_and */
 		NULL,				/* unary_minus */
+		NULL,				/* add */
+		NULL,				/* subtract */
 	};
 	static ftype_t stringz_type = {
 		FT_STRINGZ,			/* ftype */
@@ -194,6 +203,7 @@ ftype_register_string(void)
 		"Character string",		/* pretty name */
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
+		string_fvalue_copy,		/* copy_value */
 		string_fvalue_free,		/* free_value */
 		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
@@ -212,6 +222,8 @@ ftype_register_string(void)
 		slice,
 		NULL,				/* bitwise_and */
 		NULL,				/* unary_minus */
+		NULL,				/* add */
+		NULL,				/* subtract */
 	};
 	static ftype_t uint_string_type = {
 		FT_UINT_STRING,		/* ftype */
@@ -219,6 +231,7 @@ ftype_register_string(void)
 		"Character string",		/* pretty_name */
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
+		string_fvalue_copy,		/* copy_value */
 		string_fvalue_free,		/* free_value */
 		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
@@ -237,6 +250,8 @@ ftype_register_string(void)
 		slice,
 		NULL,				/* bitwise_and */
 		NULL,				/* unary_minus */
+		NULL,				/* add */
+		NULL,				/* subtract */
 	};
 	static ftype_t stringzpad_type = {
 		FT_STRINGZPAD,			/* ftype */
@@ -244,6 +259,7 @@ ftype_register_string(void)
 		"Character string",		/* pretty name */
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
+		string_fvalue_copy,		/* copy_value */
 		string_fvalue_free,		/* free_value */
 		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
@@ -262,6 +278,8 @@ ftype_register_string(void)
 		slice,
 		NULL,				/* bitwise_and */
 		NULL,				/* unary_minus */
+		NULL,				/* add */
+		NULL,				/* subtract */
 	};
 	static ftype_t stringztrunc_type = {
 		FT_STRINGZTRUNC,		/* ftype */
@@ -269,6 +287,7 @@ ftype_register_string(void)
 		"Character string",		/* pretty name */
 		0,				/* wire_size */
 		string_fvalue_new,		/* new_value */
+		string_fvalue_copy,		/* copy_value */
 		string_fvalue_free,		/* free_value */
 		val_from_literal,		/* val_from_literal */
 		val_from_string,		/* val_from_string */
@@ -287,6 +306,8 @@ ftype_register_string(void)
 		slice,
 		NULL,				/* bitwise_and */
 		NULL,				/* unary_minus */
+		NULL,				/* add */
+		NULL,				/* subtract */
 	};
 
 	ftype_register(FT_STRING, &string_type);
