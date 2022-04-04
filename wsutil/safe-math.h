@@ -1027,8 +1027,8 @@ PSNIP_SAFE_DEFINE_UNSIGNED_MOD(psnip_uint64_t, uint64, 0xffffffffffffffffULL)
 #define psnip_safe_add(res, a, b) !__builtin_add_overflow(a, b, res)
 #define psnip_safe_sub(res, a, b) !__builtin_sub_overflow(a, b, res)
 #define psnip_safe_mul(res, a, b) !__builtin_mul_overflow(a, b, res)
-#define psnip_safe_div(res, a, b) !__builtin_div_overflow(a, b, res)
-#define psnip_safe_mod(res, a, b) !__builtin_mod_overflow(a, b, res)
+#define psnip_safe_div(res, a, b) PSNIP_SAFE_C11_GENERIC_BINARY_OP(div, res, a, b)
+#define psnip_safe_mod(res, a, b) PSNIP_SAFE_C11_GENERIC_BINARY_OP(mod, res, a, b)
 #define psnip_safe_neg(res, v)    PSNIP_SAFE_C11_GENERIC_UNARY_OP (neg, res, v)
 
 #elif defined(__STDC_VERSION__) && (__STDC_VERSION__ >= 201112L)
@@ -1043,29 +1043,6 @@ PSNIP_SAFE_DEFINE_UNSIGNED_MOD(psnip_uint64_t, uint64, 0xffffffffffffffffULL)
 #define psnip_safe_div(res, a, b) PSNIP_SAFE_C11_GENERIC_BINARY_OP(div, res, a, b)
 #define psnip_safe_mod(res, a, b) PSNIP_SAFE_C11_GENERIC_BINARY_OP(mod, res, a, b)
 #define psnip_safe_neg(res, v)    PSNIP_SAFE_C11_GENERIC_UNARY_OP (neg, res, v)
-#endif
-
-#if !defined(PSNIP_SAFE_HAVE_BUILTINS) && (defined(PSNIP_SAFE_EMULATE_NATIVE) || defined(PSNIP_BUILTIN_EMULATE_NATIVE))
-#  define __builtin_sadd_overflow(a, b, res)   (!psnip_safe_int_add(res, a, b))
-#  define __builtin_saddl_overflow(a, b, res)  (!psnip_safe_long_add(res, a, b))
-#  define __builtin_saddll_overflow(a, b, res) (!psnip_safe_llong_add(res, a, b))
-#  define __builtin_uadd_overflow(a, b, res)   (!psnip_safe_uint_add(res, a, b))
-#  define __builtin_uaddl_overflow(a, b, res)  (!psnip_safe_ulong_add(res, a, b))
-#  define __builtin_uaddll_overflow(a, b, res) (!psnip_safe_ullong_add(res, a, b))
-
-#  define __builtin_ssub_overflow(a, b, res)   (!psnip_safe_int_sub(res, a, b))
-#  define __builtin_ssubl_overflow(a, b, res)  (!psnip_safe_long_sub(res, a, b))
-#  define __builtin_ssubll_overflow(a, b, res) (!psnip_safe_llong_sub(res, a, b))
-#  define __builtin_usub_overflow(a, b, res)   (!psnip_safe_uint_sub(res, a, b))
-#  define __builtin_usubl_overflow(a, b, res)  (!psnip_safe_ulong_sub(res, a, b))
-#  define __builtin_usubll_overflow(a, b, res) (!psnip_safe_ullong_sub(res, a, b))
-
-#  define __builtin_smul_overflow(a, b, res)   (!psnip_safe_int_mul(res, a, b))
-#  define __builtin_smull_overflow(a, b, res)  (!psnip_safe_long_mul(res, a, b))
-#  define __builtin_smulll_overflow(a, b, res) (!psnip_safe_llong_mul(res, a, b))
-#  define __builtin_umul_overflow(a, b, res)   (!psnip_safe_uint_mul(res, a, b))
-#  define __builtin_umull_overflow(a, b, res)  (!psnip_safe_ulong_mul(res, a, b))
-#  define __builtin_umulll_overflow(a, b, res) (!psnip_safe_ullong_mul(res, a, b))
 #endif
 
 #endif /* !defined(PSNIP_SAFE_H) */
