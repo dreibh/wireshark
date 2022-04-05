@@ -33,14 +33,12 @@ typedef enum {
 	STTYPE_FUNCTION,
 	STTYPE_SET,
 	STTYPE_PCRE,
-	STTYPE_BITWISE,
 	STTYPE_ARITHMETIC,
 	STTYPE_NUM_TYPES
 } sttype_id_t;
 
 typedef enum {
 	TEST_OP_UNINITIALIZED,
-	TEST_OP_EXISTS,
 	TEST_OP_NOT,
 	TEST_OP_AND,
 	TEST_OP_OR,
@@ -59,7 +57,6 @@ typedef enum {
 	OP_MULTIPLY,
 	OP_DIVIDE,
 	OP_MODULO,
-	TEST_OP_NOTZERO,
 	TEST_OP_CONTAINS,
 	TEST_OP_MATCHES,
 	TEST_OP_IN
@@ -114,6 +111,9 @@ stnode_new(sttype_id_t type_id, gpointer data, char *token);
 
 stnode_t *
 stnode_new_test(test_op_t op, char *token);
+
+stnode_t *
+stnode_new_math(test_op_t op, char *token);
 
 stnode_t *
 stnode_new_string(const char *str, char *token);
@@ -189,8 +189,11 @@ log_test_full(enum ws_log_level level,
 	} while (0)
 #endif
 
+char *
+dump_syntax_tree_str(stnode_t *root);
+
 void
-log_syntax_tree(enum ws_log_level, stnode_t *root, const char *msg);
+log_syntax_tree(enum ws_log_level, stnode_t *root, const char *msg, char **cache_ptr);
 
 #ifdef WS_DISABLE_DEBUG
 #define ws_assert_magic(obj, mnum) (void)0

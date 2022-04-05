@@ -15,14 +15,14 @@
 #pragma warning(disable:4996)
 #endif
 
-#include "main_window.h"
+#include "logwolf_main_window.h"
 
 /*
- * The generated Ui_MainWindow::setupUi() can grow larger than our configured limit,
+ * The generated Ui_LogwolfMainWindow::setupUi() can grow larger than our configured limit,
  * so turn off -Wframe-larger-than= for ui_main_window.h.
  */
 DIAG_OFF(frame-larger-than=)
-#include <ui_main_window.h>
+#include <ui_logwolf_main_window.h>
 DIAG_ON(frame-larger-than=)
 
 #ifdef _WIN32
@@ -88,9 +88,6 @@ DIAG_ON(frame-larger-than=)
 #endif
 
 #include "about_dialog.h"
-#include "bluetooth_att_server_attributes_dialog.h"
-#include "bluetooth_devices_dialog.h"
-#include "bluetooth_hci_summary_dialog.h"
 #include "capture_file_dialog.h"
 #include "capture_file_properties_dialog.h"
 #ifdef HAVE_LIBPCAP
@@ -117,18 +114,13 @@ DIAG_ON(frame-larger-than=)
 #include "filter_dialog.h"
 #include "firewall_rules_dialog.h"
 #include "funnel_statistics.h"
-#include "gsm_map_summary_dialog.h"
-#include "iax2_analysis_dialog.h"
 #include "interface_toolbar.h"
 #include "io_graph_dialog.h"
 #include <ui/qt/widgets/additional_toolbar.h>
 #include "lbm_stream_dialog.h"
 #include "lbm_lbtrm_transport_dialog.h"
 #include "lbm_lbtru_transport_dialog.h"
-#include "lte_mac_statistics_dialog.h"
-#include "lte_rlc_statistics_dialog.h"
-#include "lte_rlc_graph_dialog.h"
-#include "mtp3_summary_dialog.h"
+#include "main_application.h"
 #include "multicast_statistics_dialog.h"
 #include "packet_comment_dialog.h"
 #include "packet_diagram.h"
@@ -142,25 +134,15 @@ DIAG_ON(frame-larger-than=)
 #include <ui/qt/utils/qt_ui_utils.h>
 #include "resolved_addresses_dialog.h"
 #include "rpc_service_response_time_dialog.h"
-#include "rtp_stream_dialog.h"
-#include "rtp_analysis_dialog.h"
-#include "sctp_all_assocs_dialog.h"
-#include "sctp_assoc_analyse_dialog.h"
-#include "sctp_graph_dialog.h"
-#include "sequence_dialog.h"
+//#include "sequence_dialog.h"
 #include "show_packet_bytes_dialog.h"
 #include "stats_tree_dialog.h"
-#include "strip_headers_dialog.h"
 #include <ui/qt/utils/stock_icon.h>
 #include "supported_protocols_dialog.h"
 #include "tap_parameter_dialog.h"
 #include "tcp_stream_dialog.h"
 #include "time_shift_dialog.h"
 #include "uat_dialog.h"
-#include "voip_calls_dialog.h"
-#include "wireshark_application.h"
-#include "wlan_statistics_dialog.h"
-#include <ui/qt/widgets/wireless_timeline.h>
 
 #include <functional>
 #include <QClipboard>
@@ -184,7 +166,7 @@ DIAG_ON(frame-larger-than=)
 // Public slots
 //
 
-bool MainWindow::openCaptureFile(QString cf_path, QString read_filter, unsigned int type, gboolean is_tempfile)
+bool LogwolfMainWindow::openCaptureFile(QString cf_path, QString read_filter, unsigned int type, gboolean is_tempfile)
 {
     QString file_name = "";
     dfilter_t *rfcode = NULL;
@@ -278,7 +260,7 @@ bool MainWindow::openCaptureFile(QString cf_path, QString read_filter, unsigned 
         break;
     }
 
-    wsApp->setLastOpenDirFromFilename(cf_path);
+    mainApp->setLastOpenDirFromFilename(cf_path);
 
     main_ui_->statusBar->showExpert();
 
@@ -290,7 +272,7 @@ finish:
     return ret;
 }
 
-void MainWindow::filterPackets(QString new_filter, bool force)
+void LogwolfMainWindow::filterPackets(QString new_filter, bool force)
 {
     cf_status_t cf_status;
 
@@ -319,7 +301,7 @@ void MainWindow::filterPackets(QString new_filter, bool force)
     }
 }
 
-void MainWindow::layoutToolbars()
+void LogwolfMainWindow::layoutToolbars()
 {
     Qt::ToolButtonStyle tbstyle = Qt::ToolButtonIconOnly;
     switch (prefs.gui_toolbar_main_style) {
@@ -335,9 +317,6 @@ void MainWindow::layoutToolbars()
 
     main_ui_->mainToolBar->setVisible(recent.main_toolbar_show);
     main_ui_->displayFilterToolBar->setVisible(recent.filter_toolbar_show);
-#if defined(HAVE_LIBNL) && defined(HAVE_NL80211)
-    main_ui_->wirelessToolBar->setVisible(recent.wireless_toolbar_show);
-#endif
     main_ui_->statusBar->setVisible(recent.statusbar_show);
 
     foreach(QAction *action, main_ui_->menuInterfaceToolbars->actions()) {
@@ -363,7 +342,7 @@ void MainWindow::layoutToolbars()
     }
 }
 
-void MainWindow::updatePreferenceActions()
+void LogwolfMainWindow::updatePreferenceActions()
 {
     main_ui_->actionViewPacketList->setEnabled(prefs_has_layout_pane_content(layout_pane_content_plist));
     main_ui_->actionViewPacketDetails->setEnabled(prefs_has_layout_pane_content(layout_pane_content_pdetails));
@@ -378,11 +357,10 @@ void MainWindow::updatePreferenceActions()
     main_ui_->actionGoAutoScroll->setChecked(prefs.capture_auto_scroll);
 }
 
-void MainWindow::updateRecentActions()
+void LogwolfMainWindow::updateRecentActions()
 {
     main_ui_->actionViewMainToolbar->setChecked(recent.main_toolbar_show);
     main_ui_->actionViewFilterToolbar->setChecked(recent.filter_toolbar_show);
-    main_ui_->actionViewWirelessToolbar->setChecked(recent.wireless_toolbar_show);
     main_ui_->actionViewStatusBar->setChecked(recent.statusbar_show);
     main_ui_->actionViewPacketList->setChecked(recent.packet_list_show && prefs_has_layout_pane_content(layout_pane_content_plist));
     main_ui_->actionViewPacketDetails->setChecked(recent.tree_view_show && prefs_has_layout_pane_content(layout_pane_content_pdetails));
@@ -423,7 +401,7 @@ void MainWindow::updateRecentActions()
 }
 
 // Don't connect to this directly. Connect to or emit fiterAction(...) instead.
-void MainWindow::queuedFilterAction(QString action_filter, FilterAction::Action action, FilterAction::ActionType type)
+void LogwolfMainWindow::queuedFilterAction(QString action_filter, FilterAction::Action action, FilterAction::ActionType type)
 {
     QString cur_filter, new_filter;
 
@@ -480,7 +458,7 @@ void MainWindow::queuedFilterAction(QString action_filter, FilterAction::Action 
         colorizeWithFilter(new_filter.toUtf8());
         break;
     case FilterAction::ActionCopy:
-        wsApp->clipboard()->setText(new_filter);
+        mainApp->clipboard()->setText(new_filter);
         break;
     case FilterAction::ActionFind:
         main_ui_->searchFrame->findFrameWithFilter(new_filter);
@@ -504,10 +482,10 @@ void MainWindow::queuedFilterAction(QString action_filter, FilterAction::Action 
 // Capture callbacks
 
 #ifdef HAVE_LIBPCAP
-void MainWindow::captureCapturePrepared(capture_session *session) {
+void LogwolfMainWindow::captureCapturePrepared(capture_session *session) {
     setTitlebarForCaptureInProgress();
 
-    setWindowIcon(wsApp->captureIcon());
+    setWindowIcon(mainApp->captureIcon());
 
     /* Disable menu items that make no sense if you're currently running
        a capture. */
@@ -520,7 +498,7 @@ void MainWindow::captureCapturePrepared(capture_session *session) {
     showCapture();
 }
 
-void MainWindow::captureCaptureUpdateStarted(capture_session *session) {
+void LogwolfMainWindow::captureCaptureUpdateStarted(capture_session *session) {
 
     /* We've done this in "prepared" above, but it will be cleared while
        switching to the next multiple file. */
@@ -532,7 +510,7 @@ void MainWindow::captureCaptureUpdateStarted(capture_session *session) {
     setForCapturedPackets(true);
 }
 
-void MainWindow::captureCaptureUpdateFinished(capture_session *session) {
+void LogwolfMainWindow::captureCaptureUpdateFinished(capture_session *session) {
 
     /* The capture isn't stopping any more - it's stopped. */
     capture_stopping_ = false;
@@ -546,7 +524,7 @@ void MainWindow::captureCaptureUpdateFinished(capture_session *session) {
     setForCaptureInProgress(false, handle_toolbars);
     setMenusForCaptureFile();
 
-    setWindowIcon(wsApp->normalIcon());
+    setWindowIcon(mainApp->normalIcon());
 
     if (global_commandline_info.quit_after_cap) {
         // Command line asked us to quit after capturing.
@@ -555,7 +533,7 @@ void MainWindow::captureCaptureUpdateFinished(capture_session *session) {
     }
 }
 
-void MainWindow::captureCaptureFixedFinished(capture_session *) {
+void LogwolfMainWindow::captureCaptureFixedFinished(capture_session *) {
 
     /* The capture isn't stopping any more - it's stopped. */
     capture_stopping_ = false;
@@ -568,7 +546,7 @@ void MainWindow::captureCaptureFixedFinished(capture_session *) {
        display packets */
     setMenusForCaptureFile(true);
 
-    setWindowIcon(wsApp->normalIcon());
+    setWindowIcon(mainApp->normalIcon());
 
     if (global_commandline_info.quit_after_cap) {
         // Command line asked us to quit after capturing.
@@ -577,7 +555,7 @@ void MainWindow::captureCaptureFixedFinished(capture_session *) {
     }
 }
 
-void MainWindow::captureCaptureFailed(capture_session *) {
+void LogwolfMainWindow::captureCaptureFailed(capture_session *) {
     /* Capture isn't stopping any more. */
     capture_stopping_ = false;
 
@@ -586,9 +564,9 @@ void MainWindow::captureCaptureFailed(capture_session *) {
 
     // Reset expert information indicator
     main_ui_->statusBar->captureFileClosing();
-    wsApp->popStatus(WiresharkApplication::FileStatus);
+    mainApp->popStatus(WiresharkApplication::FileStatus);
 
-    setWindowIcon(wsApp->normalIcon());
+    setWindowIcon(mainApp->normalIcon());
 
     if (global_commandline_info.quit_after_cap) {
         // Command line asked us to quit after capturing.
@@ -600,7 +578,7 @@ void MainWindow::captureCaptureFailed(capture_session *) {
 
 // Callbacks from cfile.c and file.c via CaptureFile::captureFileCallback
 
-void MainWindow::captureEventHandler(CaptureEvent ev)
+void LogwolfMainWindow::captureEventHandler(CaptureEvent ev)
 {
     switch (ev.captureContext()) {
 
@@ -672,11 +650,11 @@ void MainWindow::captureEventHandler(CaptureEvent ev)
     case CaptureEvent::Merge:
         switch (ev.eventType()) {
         case CaptureEvent::Started:
-            wsApp->popStatus(WiresharkApplication::FileStatus);
-            wsApp->pushStatus(WiresharkApplication::FileStatus, tr("Merging files."), QString());
+            mainApp->popStatus(WiresharkApplication::FileStatus);
+            mainApp->pushStatus(WiresharkApplication::FileStatus, tr("Merging files."), QString());
             break;
         case CaptureEvent::Finished:
-            wsApp->popStatus(WiresharkApplication::FileStatus);
+            mainApp->popStatus(WiresharkApplication::FileStatus);
             break;
         default:
             break;
@@ -688,8 +666,8 @@ void MainWindow::captureEventHandler(CaptureEvent ev)
         case CaptureEvent::Started:
         {
             QFileInfo file_info(ev.filePath());
-            wsApp->popStatus(WiresharkApplication::FileStatus);
-            wsApp->pushStatus(WiresharkApplication::FileStatus, tr("Saving %1…").arg(file_info.fileName()));
+            mainApp->popStatus(WiresharkApplication::FileStatus);
+            mainApp->pushStatus(WiresharkApplication::FileStatus, tr("Saving %1…").arg(file_info.fileName()));
             break;
         }
         default:
@@ -740,7 +718,7 @@ void MainWindow::captureEventHandler(CaptureEvent ev)
     }
 }
 
-void MainWindow::captureFileOpened() {
+void LogwolfMainWindow::captureFileOpened() {
     if (capture_file_.window() != this) return;
 
     file_set_dialog_->fileOpened(capture_file_.capFile());
@@ -748,35 +726,31 @@ void MainWindow::captureFileOpened() {
     emit setCaptureFile(capture_file_.capFile());
 }
 
-void MainWindow::captureFileReadStarted(const QString &action) {
+void LogwolfMainWindow::captureFileReadStarted(const QString &action) {
 //    tap_param_dlg_update();
 
     /* Set up main window for a capture file. */
 //    main_set_for_capture_file(TRUE);
 
-    wsApp->popStatus(WiresharkApplication::FileStatus);
+    mainApp->popStatus(WiresharkApplication::FileStatus);
     QString msg = QString(tr("%1: %2")).arg(action).arg(capture_file_.fileName());
     QString msgtip = QString();
-    wsApp->pushStatus(WiresharkApplication::FileStatus, msg, msgtip);
+    mainApp->pushStatus(WiresharkApplication::FileStatus, msg, msgtip);
     showCapture();
     main_ui_->actionAnalyzeReloadLuaPlugins->setEnabled(false);
-    main_ui_->wirelessTimelineWidget->captureFileReadStarted(capture_file_.capFile());
 }
 
-void MainWindow::captureFileReadFinished() {
+void LogwolfMainWindow::captureFileReadFinished() {
     if (!capture_file_.capFile()->is_tempfile && capture_file_.capFile()->filename) {
         /* Add this filename to the list of recent files in the "Recent Files" submenu */
         add_menu_recent_capture_file(capture_file_.capFile()->filename);
 
         /* Remember folder for next Open dialog and save it in recent */
-        wsApp->setLastOpenDirFromFilename(capture_file_.capFile()->filename);
+        mainApp->setLastOpenDirFromFilename(capture_file_.capFile()->filename);
     }
 
     /* Update the appropriate parts of the main window. */
     updateForUnsavedChanges();
-
-    /* enable wireless timeline if capture allows it */
-    main_ui_->wirelessTimelineWidget->captureFileReadFinished();
 
     /* Enable menu items that make sense if you have some captured packets. */
     setForCapturedPackets(true);
@@ -789,7 +763,7 @@ void MainWindow::captureFileReadFinished() {
     emit setDissectedCaptureFile(capture_file_.capFile());
 }
 
-void MainWindow::captureFileClosing() {
+void LogwolfMainWindow::captureFileClosing() {
     setMenusForCaptureFile(true);
     setForCapturedPackets(false);
     setForCaptureInProgress(false);
@@ -803,7 +777,7 @@ void MainWindow::captureFileClosing() {
     emit setDissectedCaptureFile(NULL);
 }
 
-void MainWindow::captureFileClosed() {
+void LogwolfMainWindow::captureFileClosed() {
     packets_bar_update();
 
     file_set_dialog_->fileClosed();
@@ -812,10 +786,10 @@ void MainWindow::captureFileClosed() {
 
     // Reset expert information indicator
     main_ui_->statusBar->captureFileClosing();
-    wsApp->popStatus(WiresharkApplication::FileStatus);
+    mainApp->popStatus(WiresharkApplication::FileStatus);
 
     setWSWindowTitle();
-    setWindowIcon(wsApp->normalIcon());
+    setWindowIcon(mainApp->normalIcon());
     setMenusForSelectedPacket();
     setMenusForSelectedTreeRow();
 
@@ -831,36 +805,21 @@ void MainWindow::captureFileClosed() {
 
 // ui/gtk/capture_dlg.c:start_capture_confirmed
 
-void MainWindow::startCapture() {
+void LogwolfMainWindow::startCapture() {
     startCapture(QStringList());
 }
 
-void MainWindow::startCapture(QStringList interfaces _U_) {
+void LogwolfMainWindow::startCapture(QStringList interfaces _U_) {
 #ifdef HAVE_LIBPCAP
     interface_options *interface_opts;
     guint i;
     interface_t *device;
     gboolean can_start_capture = TRUE;
 
-    if (interfaces.count() > 0) {
-        global_capture_opts.num_selected = 0;
-        for (i = 0; i < global_capture_opts.all_ifaces->len; i++) {
-            device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
-
-            if (interfaces.contains(device->name)) {
-                device->selected = TRUE;
-                global_capture_opts.num_selected++;
-            }
-            else {
-                device->selected = FALSE;
-            }
-        }
-    }
-
     /* did the user ever select a capture interface before? */
     if (global_capture_opts.num_selected == 0) {
         QString msg = QString(tr("No interface selected."));
-        wsApp->pushStatus(WiresharkApplication::TemporaryStatus, msg);
+        mainApp->pushStatus(WiresharkApplication::TemporaryStatus, msg);
         main_ui_->actionCaptureStart->setChecked(false);
         return;
     }
@@ -885,7 +844,7 @@ void MainWindow::startCapture(QStringList interfaces _U_) {
     /* If some of extcap was not configured, do not start with the capture */
     if (!can_start_capture) {
         QString msg = QString(tr("Configure all extcaps before start of capture."));
-        wsApp->pushStatus(WiresharkApplication::TemporaryStatus, msg);
+        mainApp->pushStatus(WiresharkApplication::TemporaryStatus, msg);
         main_ui_->actionCaptureStart->setChecked(false);
         return;
     }
@@ -895,7 +854,7 @@ void MainWindow::startCapture(QStringList interfaces _U_) {
     // case, e.g. with QtMacExtras.
     if (!capture_filter_valid_) {
         QString msg = QString(tr("Invalid capture filter."));
-        wsApp->pushStatus(WiresharkApplication::TemporaryStatus, msg);
+        mainApp->pushStatus(WiresharkApplication::TemporaryStatus, msg);
         main_ui_->actionCaptureStart->setChecked(false);
         return;
     }
@@ -929,12 +888,12 @@ void MainWindow::startCapture(QStringList interfaces _U_) {
         }
         g_string_append(interface_names, " ");
 
-        wsApp->popStatus(WiresharkApplication::FileStatus);
+        mainApp->popStatus(WiresharkApplication::FileStatus);
         QString msg = QString("%1<live capture in progress>").arg(interface_names->str);
         QString msgtip = QString("to file: ");
         if (capture_opts->save_file)
             msgtip += capture_opts->save_file;
-        wsApp->pushStatus(WiresharkApplication::FileStatus, msg, msgtip);
+        mainApp->pushStatus(WiresharkApplication::FileStatus, msg, msgtip);
         g_string_free(interface_names, TRUE);
 
         /* The capture succeeded, which means the capture filter syntax is
@@ -968,7 +927,7 @@ void MainWindow::startCapture(QStringList interfaces _U_) {
 }
 
 // Copied from ui/gtk/gui_utils.c
-void MainWindow::pipeTimeout() {
+void LogwolfMainWindow::pipeTimeout() {
 #ifdef _WIN32
     HANDLE handle;
     DWORD avail = 0;
@@ -1010,7 +969,7 @@ void MainWindow::pipeTimeout() {
 #endif // _WIN32
 }
 
-void MainWindow::pipeActivated(int source) {
+void LogwolfMainWindow::pipeActivated(int source) {
     Q_UNUSED(source)
 
 #ifndef _WIN32
@@ -1026,7 +985,7 @@ void MainWindow::pipeActivated(int source) {
 #endif // _WIN32
 }
 
-void MainWindow::pipeNotifierDestroyed()
+void LogwolfMainWindow::pipeNotifierDestroyed()
 {
     /* Pop the "<live capture in progress>" message off the status bar. */
     main_ui_->statusBar->setFileName(capture_file_);
@@ -1038,7 +997,7 @@ void MainWindow::pipeNotifierDestroyed()
 #endif // _WIN32
 }
 
-void MainWindow::stopCapture() {
+void LogwolfMainWindow::stopCapture() {
 //#ifdef HAVE_AIRPCAP
 //  if (airpcap_if_active)
 //    airpcap_set_toolbar_stop_capture(airpcap_if_active);
@@ -1052,7 +1011,7 @@ void MainWindow::stopCapture() {
 
 // Keep focus rects from showing through the welcome screen. Primarily for
 // macOS.
-void MainWindow::mainStackChanged(int)
+void LogwolfMainWindow::mainStackChanged(int)
 {
     for (int i = 0; i < main_ui_->mainStack->count(); i++) {
         main_ui_->mainStack->widget(i)->setEnabled(i == main_ui_->mainStack->currentIndex());
@@ -1065,7 +1024,7 @@ void MainWindow::mainStackChanged(int)
  * Add the capture filename (with an absolute path) to the "Recent Files" menu.
  */
 // XXX - We should probably create a RecentFile class.
-void MainWindow::updateRecentCaptures() {
+void LogwolfMainWindow::updateRecentCaptures() {
     QAction *ra;
     QMenu *recentMenu = main_ui_->menuOpenRecentCaptureFile;
     QString action_cf_name;
@@ -1096,7 +1055,7 @@ void MainWindow::updateRecentCaptures() {
     /* Iterate through the actions in menuOpenRecentCaptureFile,
      * removing special items, a maybe duplicate entry and every item above count_max */
     int shortcut = Qt::Key_0;
-    foreach(recent_item_status *ri, wsApp->recentItems()) {
+    foreach(recent_item_status *ri, mainApp->recentItems()) {
         // Add the new item
         ra = new QAction(recentMenu);
         ra->setData(ri->filename);
@@ -1147,7 +1106,7 @@ void MainWindow::updateRecentCaptures() {
         ra = new QAction(recentMenu);
         ra->setText(tr("Clear Menu"));
         recentMenu->insertAction(NULL, ra);
-        connect(ra, SIGNAL(triggered()), wsApp, SLOT(clearRecentCaptures()));
+        connect(ra, SIGNAL(triggered()), mainApp, SLOT(clearRecentCaptures()));
     } else {
         if (main_ui_->actionDummyNoFilesFound) {
             recentMenu->addAction(main_ui_->actionDummyNoFilesFound);
@@ -1155,7 +1114,7 @@ void MainWindow::updateRecentCaptures() {
     }
 }
 
-void MainWindow::recentActionTriggered() {
+void LogwolfMainWindow::recentActionTriggered() {
     QAction *ra = qobject_cast<QAction*>(sender());
 
     if (ra) {
@@ -1164,7 +1123,7 @@ void MainWindow::recentActionTriggered() {
     }
 }
 
-QString MainWindow::commentToMenuText(QString text, int max_len)
+QString LogwolfMainWindow::commentToMenuText(QString text, int max_len)
 {
     text = text.trimmed().replace(QRegularExpression("(\\r?\\n|\\r\\n?)+"), " ");
     if (text.size() > 0) {
@@ -1179,7 +1138,7 @@ QString MainWindow::commentToMenuText(QString text, int max_len)
     return text;
 }
 
-void MainWindow::setEditCommentsMenu()
+void LogwolfMainWindow::setEditCommentsMenu()
 {
     main_ui_->menuPacketComment->clear();
     main_ui_->menuPacketComment->addAction(tr("Add New Comment…"), this, SLOT(actionAddPacketComment()), QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_C));
@@ -1218,10 +1177,10 @@ void MainWindow::setEditCommentsMenu()
     }
 }
 
-void MainWindow::setMenusForSelectedPacket()
+void LogwolfMainWindow::setMenusForSelectedPacket()
 {
     gboolean is_ip = FALSE, is_tcp = FALSE, is_udp = FALSE, is_dccp = FALSE, is_sctp = FALSE, is_tls = FALSE, is_rtp = FALSE, is_lte_rlc = FALSE,
-             is_http = FALSE, is_http2 = FALSE, is_quic = FALSE, is_sip = FALSE, is_exported_pdu = FALSE;
+             is_http = FALSE, is_http2 = FALSE, is_quic = FALSE, is_exported_pdu = FALSE;
 
     /* Making the menu context-sensitive allows for easier selection of the
        desired item and has the added benefit, with large captures, of
@@ -1295,7 +1254,6 @@ void MainWindow::setMenusForSelectedPacket()
             is_http2 = proto_is_frame_protocol(capture_file_.capFile()->edt->pi.layers, "http2");
             /* TODO: to follow a QUIC stream we need a *decrypted* QUIC connection, i.e. checking for "quic" in the protocol stack is not enough */
             is_quic = proto_is_frame_protocol(capture_file_.capFile()->edt->pi.layers, "quic");
-            is_sip = proto_is_frame_protocol(capture_file_.capFile()->edt->pi.layers, "sip");
             is_exported_pdu = proto_is_frame_protocol(capture_file_.capFile()->edt->pi.layers, "exported_pdu");
             /* For Exported PDU there is a tag inserting IP addresses into the SRC and DST columns */
             if (is_exported_pdu &&
@@ -1350,7 +1308,6 @@ void MainWindow::setMenusForSelectedPacket()
     main_ui_->actionAnalyzeFollowHTTPStream->setEnabled(is_http);
     main_ui_->actionAnalyzeFollowHTTP2Stream->setEnabled(is_http2);
     main_ui_->actionAnalyzeFollowQUICStream->setEnabled(is_quic);
-    main_ui_->actionAnalyzeFollowSIPCall->setEnabled(is_sip);
 
     foreach(QAction *cc_action, cc_actions) {
         cc_action->setEnabled(frame_selected);
@@ -1374,17 +1331,9 @@ void MainWindow::setMenusForSelectedPacket()
     main_ui_->actionStatisticsTcpStreamStevens->setEnabled(is_tcp);
     main_ui_->actionStatisticsTcpStreamTcptrace->setEnabled(is_tcp);
     main_ui_->actionStatisticsTcpStreamThroughput->setEnabled(is_tcp);
-    main_ui_->actionStatisticsTcpStreamWindowScaling->setEnabled(is_tcp);
+    main_ui_->actionStatisticsTcpStreamWindowScaling->setEnabled(is_tcp);}
 
-    main_ui_->actionSCTPAnalyseThisAssociation->setEnabled(is_sctp);
-    main_ui_->actionSCTPShowAllAssociations->setEnabled(is_sctp);
-    main_ui_->actionSCTPFilterThisAssociation->setEnabled(is_sctp);
-    main_ui_->actionTelephonyRtpStreamAnalysis->setEnabled(is_rtp);
-    main_ui_->actionTelephonyRtpPlayer->setEnabled(is_rtp);
-    main_ui_->actionTelephonyLteRlcGraph->setEnabled(is_lte_rlc);
-}
-
-void MainWindow::setMenusForSelectedTreeRow(FieldInformation *finfo) {
+void LogwolfMainWindow::setMenusForSelectedTreeRow(FieldInformation *finfo) {
 
     bool can_match_selected = false;
     bool is_framenum = false;
@@ -1487,7 +1436,7 @@ void MainWindow::setMenusForSelectedTreeRow(FieldInformation *finfo) {
 
 }
 
-void MainWindow::interfaceSelectionChanged()
+void LogwolfMainWindow::interfaceSelectionChanged()
 {
 #ifdef HAVE_LIBPCAP
     // XXX This doesn't disable the toolbar button when using
@@ -1500,13 +1449,13 @@ void MainWindow::interfaceSelectionChanged()
 #endif // HAVE_LIBPCAP
 }
 
-void MainWindow::captureFilterSyntaxChanged(bool valid)
+void LogwolfMainWindow::captureFilterSyntaxChanged(bool valid)
 {
     capture_filter_valid_ = valid;
     interfaceSelectionChanged();
 }
 
-void MainWindow::startInterfaceCapture(bool valid, const QString capture_filter)
+void LogwolfMainWindow::startInterfaceCapture(bool valid, const QString capture_filter)
 {
     capture_filter_valid_ = valid;
     welcome_page_->setCaptureFilter(capture_filter);
@@ -1514,11 +1463,11 @@ void MainWindow::startInterfaceCapture(bool valid, const QString capture_filter)
     if (testCaptureFileClose(before_what)) {
         // The interface tree will update the selected interfaces via its timer
         // so no need to do anything here.
-        startCapture(QStringList());
+        startCapture();
     }
 }
 
-void MainWindow::applyGlobalCommandLineOptions()
+void LogwolfMainWindow::applyGlobalCommandLineOptions()
 {
     if (global_dissect_options.time_format != TS_NOT_SET) {
         foreach(QAction* tda, td_actions.keys()) {
@@ -1535,7 +1484,7 @@ void MainWindow::applyGlobalCommandLineOptions()
     }
 }
 
-void MainWindow::redissectPackets()
+void LogwolfMainWindow::redissectPackets()
 {
     if (capture_file_.capFile()) {
         cf_redissect_packets(capture_file_.capFile());
@@ -1545,7 +1494,7 @@ void MainWindow::redissectPackets()
     proto_free_deregistered_fields();
 }
 
-void MainWindow::checkDisplayFilter()
+void LogwolfMainWindow::checkDisplayFilter()
 {
     if (!df_combo_box_->checkDisplayFilter()) {
         g_free(CaptureFile::globalCapFile()->dfilter);
@@ -1553,7 +1502,7 @@ void MainWindow::checkDisplayFilter()
     }
 }
 
-void MainWindow::fieldsChanged()
+void LogwolfMainWindow::fieldsChanged()
 {
     gchar *err_msg = NULL;
     if (!color_filters_reload(&err_msg, color_filter_add_cb)) {
@@ -1572,10 +1521,10 @@ void MainWindow::fieldsChanged()
     emit reloadFields();
 }
 
-void MainWindow::reloadLuaPlugins()
+void LogwolfMainWindow::reloadLuaPlugins()
 {
 #ifdef HAVE_LUA
-    if (wsApp->isReloadingLua())
+    if (mainApp->isReloadingLua())
         return;
 
     gboolean uses_lua_filehandler = FALSE;
@@ -1594,7 +1543,7 @@ void MainWindow::reloadLuaPlugins()
         }
     }
 
-    wsApp->setReloadingLua(true);
+    mainApp->setReloadingLua(true);
 
     wslua_reload_plugins(NULL, NULL);
     funnel_statistics_reload_menus();
@@ -1604,7 +1553,7 @@ void MainWindow::reloadLuaPlugins()
     // Preferences may have been deleted so close all widgets using prefs
     main_ui_->preferenceEditorFrame->animatedHide();
 
-    wsApp->readConfigurationFiles(true);
+    mainApp->readConfigurationFiles(true);
     commandline_options_reapply();
 
     fieldsChanged();
@@ -1620,12 +1569,12 @@ void MainWindow::reloadLuaPlugins()
         redissectPackets();
     }
 
-    wsApp->setReloadingLua(false);
+    mainApp->setReloadingLua(false);
     SimpleDialog::displayQueuedMessages();
 #endif
 }
 
-void MainWindow::showAccordionFrame(AccordionFrame *show_frame, bool toggle)
+void LogwolfMainWindow::showAccordionFrame(AccordionFrame *show_frame, bool toggle)
 {
     QList<AccordionFrame *>frame_list = QList<AccordionFrame *>()
             << main_ui_->goToFrame << main_ui_->searchFrame
@@ -1644,20 +1593,20 @@ void MainWindow::showAccordionFrame(AccordionFrame *show_frame, bool toggle)
     show_frame->animatedShow();
 }
 
-void MainWindow::showColumnEditor(int column)
+void LogwolfMainWindow::showColumnEditor(int column)
 {
-    previous_focus_ = wsApp->focusWidget();
+    previous_focus_ = mainApp->focusWidget();
     connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
     main_ui_->columnEditorFrame->editColumn(column);
     showAccordionFrame(main_ui_->columnEditorFrame);
 }
 
-void MainWindow::showPreferenceEditor()
+void LogwolfMainWindow::showPreferenceEditor()
 {
     showAccordionFrame(main_ui_->preferenceEditorFrame);
 }
 
-void MainWindow::initViewColorizeMenu()
+void LogwolfMainWindow::initViewColorizeMenu()
 {
     QList<QAction *> cc_actions = QList<QAction *>()
             << main_ui_->actionViewColorizeConversation1 << main_ui_->actionViewColorizeConversation2
@@ -1687,7 +1636,7 @@ void MainWindow::initViewColorizeMenu()
 #endif
 }
 
-void MainWindow::addStatsPluginsToMenu() {
+void LogwolfMainWindow::addStatsPluginsToMenu() {
     GList          *cfg_list = stats_tree_get_cfg_list();
     GList          *iter = g_list_first(cfg_list);
     QAction        *stats_tree_action;
@@ -1727,7 +1676,7 @@ void MainWindow::addStatsPluginsToMenu() {
     g_list_free(cfg_list);
 }
 
-void MainWindow::setFeaturesEnabled(bool enabled)
+void LogwolfMainWindow::setFeaturesEnabled(bool enabled)
 {
     main_ui_->menuBar->setEnabled(enabled);
     main_ui_->mainToolBar->setEnabled(enabled);
@@ -1747,7 +1696,7 @@ void MainWindow::setFeaturesEnabled(bool enabled)
 
 // Display Filter Toolbar
 
-void MainWindow::on_actionDisplayFilterExpression_triggered()
+void LogwolfMainWindow::on_actionDisplayFilterExpression_triggered()
 {
     DisplayFilterExpressionDialog *dfe_dialog = new DisplayFilterExpressionDialog(this);
 
@@ -1757,12 +1706,12 @@ void MainWindow::on_actionDisplayFilterExpression_triggered()
     dfe_dialog->show();
 }
 
-void MainWindow::on_actionNewDisplayFilterExpression_triggered()
+void LogwolfMainWindow::on_actionNewDisplayFilterExpression_triggered()
 {
     main_ui_->filterExpressionFrame->addExpression(df_combo_box_->lineEdit()->text());
 }
 
-void MainWindow::onFilterSelected(QString filterText, bool prepare)
+void LogwolfMainWindow::onFilterSelected(QString filterText, bool prepare)
 {
     if (filterText.length() <= 0)
         return;
@@ -1773,23 +1722,23 @@ void MainWindow::onFilterSelected(QString filterText, bool prepare)
         df_combo_box_->applyDisplayFilter();
 }
 
-void MainWindow::onFilterPreferences()
+void LogwolfMainWindow::onFilterPreferences()
 {
     emit showPreferencesDialog(PrefsModel::typeToString(PrefsModel::FilterButtons));
 }
 
-void MainWindow::onFilterEdit(int uatIndex)
+void LogwolfMainWindow::onFilterEdit(int uatIndex)
 {
     main_ui_->filterExpressionFrame->editExpression(uatIndex);
 }
 
-void MainWindow::openStatCommandDialog(const QString &menu_path, const char *arg, void *userdata)
+void LogwolfMainWindow::openStatCommandDialog(const QString &menu_path, const char *arg, void *userdata)
 {
     QString slot = QString("statCommand%1").arg(menu_path);
     QMetaObject::invokeMethod(this, slot.toLatin1().constData(), Q_ARG(const char *, arg), Q_ARG(void *, userdata));
 }
 
-void MainWindow::openTapParameterDialog(const QString cfg_str, const QString arg, void *userdata)
+void LogwolfMainWindow::openTapParameterDialog(const QString cfg_str, const QString arg, void *userdata)
 {
     TapParameterDialog *tp_dialog = TapParameterDialog::showTapParameterStatistics(*this, capture_file_, cfg_str, arg, userdata);
     if (!tp_dialog) return;
@@ -1801,7 +1750,7 @@ void MainWindow::openTapParameterDialog(const QString cfg_str, const QString arg
     tp_dialog->show();
 }
 
-void MainWindow::openTapParameterDialog()
+void LogwolfMainWindow::openTapParameterDialog()
 {
     QAction *tpa = qobject_cast<QAction *>(QObject::sender());
     if (!tpa) return;
@@ -1811,54 +1760,54 @@ void MainWindow::openTapParameterDialog()
 }
 
 #if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
-void MainWindow::softwareUpdateRequested() {
+void LogwolfMainWindow::softwareUpdateRequested() {
     // We could call testCaptureFileClose here, but that would give us yet
     // another dialog. Just try again later.
     if (capture_file_.capFile() && capture_file_.capFile()->state != FILE_CLOSED) {
-        wsApp->rejectSoftwareUpdate();
+        mainApp->rejectSoftwareUpdate();
     }
 }
 #endif
 
 // File Menu
 
-void MainWindow::on_actionFileOpen_triggered()
+void LogwolfMainWindow::on_actionFileOpen_triggered()
 {
     openCaptureFile();
 }
 
-void MainWindow::on_actionFileMerge_triggered()
+void LogwolfMainWindow::on_actionFileMerge_triggered()
 {
     mergeCaptureFile();
 }
 
-void MainWindow::on_actionFileImportFromHexDump_triggered()
+void LogwolfMainWindow::on_actionFileImportFromHexDump_triggered()
 {
     importCaptureFile();
 }
 
-void MainWindow::on_actionFileClose_triggered() {
+void LogwolfMainWindow::on_actionFileClose_triggered() {
     QString before_what(tr(" before closing the file"));
     if (testCaptureFileClose(before_what))
         showWelcome();
 }
 
-void MainWindow::on_actionFileSave_triggered()
+void LogwolfMainWindow::on_actionFileSave_triggered()
 {
     saveCaptureFile(capture_file_.capFile(), false);
 }
 
-void MainWindow::on_actionFileSaveAs_triggered()
+void LogwolfMainWindow::on_actionFileSaveAs_triggered()
 {
     saveAsCaptureFile(capture_file_.capFile());
 }
 
-void MainWindow::on_actionFileSetListFiles_triggered()
+void LogwolfMainWindow::on_actionFileSetListFiles_triggered()
 {
     file_set_dialog_->show();
 }
 
-void MainWindow::on_actionFileSetNextFile_triggered()
+void LogwolfMainWindow::on_actionFileSetNextFile_triggered()
 {
     fileset_entry *entry = fileset_get_next();
 
@@ -1868,7 +1817,7 @@ void MainWindow::on_actionFileSetNextFile_triggered()
     }
 }
 
-void MainWindow::on_actionFileSetPreviousFile_triggered()
+void LogwolfMainWindow::on_actionFileSetPreviousFile_triggered()
 {
     fileset_entry *entry = fileset_get_previous();
 
@@ -1878,50 +1827,50 @@ void MainWindow::on_actionFileSetPreviousFile_triggered()
     }
 }
 
-void MainWindow::on_actionFileExportPackets_triggered()
+void LogwolfMainWindow::on_actionFileExportPackets_triggered()
 {
     exportSelectedPackets();
 }
 
-void MainWindow::on_actionFileExportAsPlainText_triggered()
+void LogwolfMainWindow::on_actionFileExportAsPlainText_triggered()
 {
     exportDissections(export_type_text);
 }
 
-void MainWindow::on_actionFileExportAsCSV_triggered()
+void LogwolfMainWindow::on_actionFileExportAsCSV_triggered()
 {
     exportDissections(export_type_csv);
 }
 
-void MainWindow::on_actionFileExportAsCArrays_triggered()
+void LogwolfMainWindow::on_actionFileExportAsCArrays_triggered()
 {
     exportDissections(export_type_carrays);
 }
 
-void MainWindow::on_actionFileExportAsPSML_triggered()
+void LogwolfMainWindow::on_actionFileExportAsPSML_triggered()
 {
     exportDissections(export_type_psml);
 }
 
-void MainWindow::on_actionFileExportAsPDML_triggered()
+void LogwolfMainWindow::on_actionFileExportAsPDML_triggered()
 {
     exportDissections(export_type_pdml);
 }
 
-void MainWindow::on_actionFileExportAsJSON_triggered()
+void LogwolfMainWindow::on_actionFileExportAsJSON_triggered()
 {
     exportDissections(export_type_json);
 }
 
-void MainWindow::on_actionFileExportPacketBytes_triggered()
+void LogwolfMainWindow::on_actionFileExportPacketBytes_triggered()
 {
     QString file_name;
 
     if (!capture_file_.capFile() || !capture_file_.capFile()->finfo_selected) return;
 
     file_name = WiresharkFileDialog::getSaveFileName(this,
-                                            wsApp->windowTitleString(tr("Export Selected Packet Bytes")),
-                                            wsApp->lastOpenDir().canonicalPath(),
+                                            mainApp->windowTitleString(tr("Export Selected Packet Bytes")),
+                                            mainApp->lastOpenDir().canonicalPath(),
                                             tr("Raw data (*.bin *.dat *.raw);;All Files (" ALL_FILES_WILDCARD ")")
                                             );
 
@@ -1933,18 +1882,18 @@ void MainWindow::on_actionFileExportPacketBytes_triggered()
         write_file_binary_mode(qUtf8Printable(file_name), data_p, capture_file_.capFile()->finfo_selected->length);
 
         /* Save the directory name for future file dialogs. */
-        wsApp->setLastOpenDirFromFilename(file_name);
+        mainApp->setLastOpenDirFromFilename(file_name);
     }
 }
 
-void MainWindow::on_actionAnalyzeShowPacketBytes_triggered()
+void LogwolfMainWindow::on_actionAnalyzeShowPacketBytes_triggered()
 {
     ShowPacketBytesDialog *spbd = new ShowPacketBytesDialog(*this, capture_file_);
     spbd->addCodecs(text_codec_map_);
     spbd->show();
 }
 
-void MainWindow::on_actionFileExportPDU_triggered()
+void LogwolfMainWindow::on_actionFileExportPDU_triggered()
 {
     ExportPDUDialog *exportpdu_dialog = new ExportPDUDialog(this);
 
@@ -1961,25 +1910,7 @@ void MainWindow::on_actionFileExportPDU_triggered()
     exportpdu_dialog->activateWindow();
 }
 
-void MainWindow::on_actionFileStripHeaders_triggered()
-{
-    StripHeadersDialog *stripheaders_dialog = new StripHeadersDialog(this);
-
-    if (stripheaders_dialog->isMinimized() == true)
-    {
-        stripheaders_dialog->showNormal();
-    }
-    else
-    {
-        stripheaders_dialog->show();
-    }
-
-    stripheaders_dialog->raise();
-    stripheaders_dialog->activateWindow();
-}
-
-
-void MainWindow::on_actionFileExportTLSSessionKeys_triggered()
+void LogwolfMainWindow::on_actionFileExportTLSSessionKeys_triggered()
 {
     QString file_name;
     QString save_title;
@@ -1998,10 +1929,10 @@ void MainWindow::on_actionFileExportTLSSessionKeys_triggered()
         return;
     }
 
-    save_title.append(wsApp->windowTitleString(tr("Export TLS Session Keys (%Ln key(s))", "", keylist_len)));
+    save_title.append(mainApp->windowTitleString(tr("Export TLS Session Keys (%Ln key(s))", "", keylist_len)));
     file_name = WiresharkFileDialog::getSaveFileName(this,
                                             save_title,
-                                            wsApp->lastOpenDir().canonicalPath(),
+                                            mainApp->lastOpenDir().canonicalPath(),
                                             tr("TLS Session Keys (*.keys *.txt);;All Files (" ALL_FILES_WILDCARD ")")
                                             );
     if (file_name.length() > 0) {
@@ -2010,17 +1941,17 @@ void MainWindow::on_actionFileExportTLSSessionKeys_triggered()
         write_file_binary_mode(qUtf8Printable(file_name), keylist, keylist_length);
 
         /* Save the directory name for future file dialogs. */
-        wsApp->setLastOpenDirFromFilename(file_name);
+        mainApp->setLastOpenDirFromFilename(file_name);
         g_free(keylist);
     }
 }
 
-void MainWindow::on_actionStatisticsHpfeeds_triggered()
+void LogwolfMainWindow::on_actionStatisticsHpfeeds_triggered()
 {
     openStatisticsTreeDialog("hpfeeds");
 }
 
-void MainWindow::on_actionFilePrint_triggered()
+void LogwolfMainWindow::on_actionFilePrint_triggered()
 {
     capture_file *cf = capture_file_.capFile();
     g_return_if_fail(cf);
@@ -2040,7 +1971,7 @@ void MainWindow::on_actionFilePrint_triggered()
 // Edit Menu
 
 // XXX This should probably be somewhere else.
-void MainWindow::actionEditCopyTriggered(MainWindow::CopySelected selection_type)
+void LogwolfMainWindow::actionEditCopyTriggered(LogwolfMainWindow::CopySelected selection_type)
 {
     char label_str[ITEM_LABEL_LENGTH];
     QString clip;
@@ -2130,64 +2061,64 @@ void MainWindow::actionEditCopyTriggered(MainWindow::CopySelected selection_type
     }
 
     if (clip.length()) {
-        wsApp->clipboard()->setText(clip);
+        mainApp->clipboard()->setText(clip);
     } else {
         QString err = tr("Couldn't copy text. Try another item.");
-        wsApp->pushStatus(WiresharkApplication::TemporaryStatus, err);
+        mainApp->pushStatus(WiresharkApplication::TemporaryStatus, err);
     }
 }
 
-void MainWindow::on_actionCopyAllVisibleItems_triggered()
+void LogwolfMainWindow::on_actionCopyAllVisibleItems_triggered()
 {
     actionEditCopyTriggered(CopyAllVisibleItems);
 }
 
-void MainWindow::on_actionCopyListAsText_triggered()
+void LogwolfMainWindow::on_actionCopyListAsText_triggered()
 {
     actionEditCopyTriggered(CopyListAsText);
 }
 
-void MainWindow::on_actionCopyListAsCSV_triggered()
+void LogwolfMainWindow::on_actionCopyListAsCSV_triggered()
 {
     actionEditCopyTriggered(CopyListAsCSV);
 }
 
-void MainWindow::on_actionCopyListAsYAML_triggered()
+void LogwolfMainWindow::on_actionCopyListAsYAML_triggered()
 {
     actionEditCopyTriggered(CopyListAsYAML);
 }
 
-void MainWindow::on_actionCopyAllVisibleSelectedTreeItems_triggered()
+void LogwolfMainWindow::on_actionCopyAllVisibleSelectedTreeItems_triggered()
 {
     actionEditCopyTriggered(CopyAllVisibleSelectedTreeItems);
 }
 
-void MainWindow::on_actionEditCopyDescription_triggered()
+void LogwolfMainWindow::on_actionEditCopyDescription_triggered()
 {
     actionEditCopyTriggered(CopySelectedDescription);
 }
 
-void MainWindow::on_actionEditCopyFieldName_triggered()
+void LogwolfMainWindow::on_actionEditCopyFieldName_triggered()
 {
     actionEditCopyTriggered(CopySelectedFieldName);
 }
 
-void MainWindow::on_actionEditCopyValue_triggered()
+void LogwolfMainWindow::on_actionEditCopyValue_triggered()
 {
     actionEditCopyTriggered(CopySelectedValue);
 }
 
-void MainWindow::on_actionEditCopyAsFilter_triggered()
+void LogwolfMainWindow::on_actionEditCopyAsFilter_triggered()
 {
     matchFieldFilter(FilterAction::ActionCopy, FilterAction::ActionTypePlain);
 }
 
-void MainWindow::on_actionEditFindPacket_triggered()
+void LogwolfMainWindow::on_actionEditFindPacket_triggered()
 {
     if (! packet_list_->model() || packet_list_->model()->rowCount() < 1) {
         return;
     }
-    previous_focus_ = wsApp->focusWidget();
+    previous_focus_ = mainApp->focusWidget();
     connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
     if (!main_ui_->searchFrame->isVisible()) {
         showAccordionFrame(main_ui_->searchFrame, true);
@@ -2197,17 +2128,17 @@ void MainWindow::on_actionEditFindPacket_triggered()
     main_ui_->searchFrame->setFocus();
 }
 
-void MainWindow::on_actionEditFindNext_triggered()
+void LogwolfMainWindow::on_actionEditFindNext_triggered()
 {
     main_ui_->searchFrame->findNext();
 }
 
-void MainWindow::on_actionEditFindPrevious_triggered()
+void LogwolfMainWindow::on_actionEditFindPrevious_triggered()
 {
     main_ui_->searchFrame->findPrevious();
 }
 
-void MainWindow::on_actionEditMarkPacket_triggered()
+void LogwolfMainWindow::on_actionEditMarkPacket_triggered()
 {
     freeze();
     packet_list_->markFrame();
@@ -2215,7 +2146,7 @@ void MainWindow::on_actionEditMarkPacket_triggered()
     setMenusForSelectedPacket();
 }
 
-void MainWindow::on_actionEditMarkAllDisplayed_triggered()
+void LogwolfMainWindow::on_actionEditMarkAllDisplayed_triggered()
 {
     freeze();
     packet_list_->markAllDisplayedFrames(true);
@@ -2223,7 +2154,7 @@ void MainWindow::on_actionEditMarkAllDisplayed_triggered()
     setMenusForSelectedPacket();
 }
 
-void MainWindow::on_actionEditUnmarkAllDisplayed_triggered()
+void LogwolfMainWindow::on_actionEditUnmarkAllDisplayed_triggered()
 {
     freeze();
     packet_list_->markAllDisplayedFrames(false);
@@ -2231,19 +2162,19 @@ void MainWindow::on_actionEditUnmarkAllDisplayed_triggered()
     setMenusForSelectedPacket();
 }
 
-void MainWindow::on_actionEditNextMark_triggered()
+void LogwolfMainWindow::on_actionEditNextMark_triggered()
 {
     if (capture_file_.capFile())
         cf_find_packet_marked(capture_file_.capFile(), SD_FORWARD);
 }
 
-void MainWindow::on_actionEditPreviousMark_triggered()
+void LogwolfMainWindow::on_actionEditPreviousMark_triggered()
 {
     if (capture_file_.capFile())
         cf_find_packet_marked(capture_file_.capFile(), SD_BACKWARD);
 }
 
-void MainWindow::on_actionEditIgnorePacket_triggered()
+void LogwolfMainWindow::on_actionEditIgnorePacket_triggered()
 {
     freeze();
     packet_list_->ignoreFrame();
@@ -2251,7 +2182,7 @@ void MainWindow::on_actionEditIgnorePacket_triggered()
     setMenusForSelectedPacket();
 }
 
-void MainWindow::on_actionEditIgnoreAllDisplayed_triggered()
+void LogwolfMainWindow::on_actionEditIgnoreAllDisplayed_triggered()
 {
     freeze();
     packet_list_->ignoreAllDisplayedFrames(true);
@@ -2259,7 +2190,7 @@ void MainWindow::on_actionEditIgnoreAllDisplayed_triggered()
     setMenusForSelectedPacket();
 }
 
-void MainWindow::on_actionEditUnignoreAllDisplayed_triggered()
+void LogwolfMainWindow::on_actionEditUnignoreAllDisplayed_triggered()
 {
     freeze();
     packet_list_->ignoreAllDisplayedFrames(false);
@@ -2267,31 +2198,31 @@ void MainWindow::on_actionEditUnignoreAllDisplayed_triggered()
     setMenusForSelectedPacket();
 }
 
-void MainWindow::on_actionEditSetTimeReference_triggered()
+void LogwolfMainWindow::on_actionEditSetTimeReference_triggered()
 {
     packet_list_->setTimeReference();
     setMenusForSelectedPacket();
 }
 
-void MainWindow::on_actionEditUnsetAllTimeReferences_triggered()
+void LogwolfMainWindow::on_actionEditUnsetAllTimeReferences_triggered()
 {
     packet_list_->unsetAllTimeReferences();
     setMenusForSelectedPacket();
 }
 
-void MainWindow::on_actionEditNextTimeReference_triggered()
+void LogwolfMainWindow::on_actionEditNextTimeReference_triggered()
 {
     if (!capture_file_.capFile()) return;
     cf_find_packet_time_reference(capture_file_.capFile(), SD_FORWARD);
 }
 
-void MainWindow::on_actionEditPreviousTimeReference_triggered()
+void LogwolfMainWindow::on_actionEditPreviousTimeReference_triggered()
 {
     if (!capture_file_.capFile()) return;
     cf_find_packet_time_reference(capture_file_.capFile(), SD_BACKWARD);
 }
 
-void MainWindow::on_actionEditTimeShift_triggered()
+void LogwolfMainWindow::on_actionEditTimeShift_triggered()
 {
     TimeShiftDialog *ts_dialog = new TimeShiftDialog(this, capture_file_.capFile());
     connect(ts_dialog, SIGNAL(finished(int)), this, SLOT(editTimeShiftFinished(int)));
@@ -2305,14 +2236,14 @@ void MainWindow::on_actionEditTimeShift_triggered()
     ts_dialog->show();
 }
 
-void MainWindow::editTimeShiftFinished(int)
+void LogwolfMainWindow::editTimeShiftFinished(int)
 {
     if (capture_file_.capFile()->unsaved_changes) {
         updateForUnsavedChanges();
     }
 }
 
-void MainWindow::actionAddPacketComment()
+void LogwolfMainWindow::actionAddPacketComment()
 {
     QList<int> rows = selectedRows();
     if (rows.count() == 0)
@@ -2324,13 +2255,13 @@ void MainWindow::actionAddPacketComment()
 
     PacketCommentDialog* pc_dialog;
     pc_dialog = new PacketCommentDialog(false, this, NULL);
-    connect(pc_dialog, &QDialog::finished, std::bind(&MainWindow::addPacketCommentFinished, this, pc_dialog, std::placeholders::_1));
+    connect(pc_dialog, &QDialog::finished, std::bind(&LogwolfMainWindow::addPacketCommentFinished, this, pc_dialog, std::placeholders::_1));
     pc_dialog->setWindowModality(Qt::ApplicationModal);
     pc_dialog->setAttribute(Qt::WA_DeleteOnClose);
     pc_dialog->show();
 }
 
-void MainWindow::addPacketCommentFinished(PacketCommentDialog* pc_dialog _U_, int result _U_)
+void LogwolfMainWindow::addPacketCommentFinished(PacketCommentDialog* pc_dialog _U_, int result _U_)
 {
     if (result == QDialog::Accepted) {
         packet_list_->addPacketComment(pc_dialog->text());
@@ -2338,7 +2269,7 @@ void MainWindow::addPacketCommentFinished(PacketCommentDialog* pc_dialog _U_, in
     }
 }
 
-void MainWindow::actionEditPacketComment()
+void LogwolfMainWindow::actionEditPacketComment()
 {
     QList<int> rows = selectedRows();
     if (rows.count() != 1)
@@ -2348,13 +2279,13 @@ void MainWindow::actionEditPacketComment()
     guint nComment = ra->data().toUInt();
     PacketCommentDialog* pc_dialog;
     pc_dialog = new PacketCommentDialog(true, this, packet_list_->getPacketComment(nComment));
-    connect(pc_dialog, &QDialog::finished, std::bind(&MainWindow::editPacketCommentFinished, this, pc_dialog, std::placeholders::_1, nComment));
+    connect(pc_dialog, &QDialog::finished, std::bind(&LogwolfMainWindow::editPacketCommentFinished, this, pc_dialog, std::placeholders::_1, nComment));
     pc_dialog->setWindowModality(Qt::ApplicationModal);
     pc_dialog->setAttribute(Qt::WA_DeleteOnClose);
     pc_dialog->show();
 }
 
-void MainWindow::editPacketCommentFinished(PacketCommentDialog* pc_dialog _U_, int result _U_, guint nComment)
+void LogwolfMainWindow::editPacketCommentFinished(PacketCommentDialog* pc_dialog _U_, int result _U_, guint nComment)
 {
     if (result == QDialog::Accepted) {
         packet_list_->setPacketComment(nComment, pc_dialog->text());
@@ -2362,7 +2293,7 @@ void MainWindow::editPacketCommentFinished(PacketCommentDialog* pc_dialog _U_, i
     }
 }
 
-void MainWindow::actionDeletePacketComment()
+void LogwolfMainWindow::actionDeletePacketComment()
 {
     QAction *ra = qobject_cast<QAction*>(sender());
     guint nComment = ra->data().toUInt();
@@ -2370,13 +2301,13 @@ void MainWindow::actionDeletePacketComment()
     updateForUnsavedChanges();
 }
 
-void MainWindow::actionDeleteCommentsFromPackets()
+void LogwolfMainWindow::actionDeleteCommentsFromPackets()
 {
     packet_list_->deleteCommentsFromPackets();
     updateForUnsavedChanges();
 }
 
-void MainWindow::on_actionDeleteAllPacketComments_triggered()
+void LogwolfMainWindow::on_actionDeleteAllPacketComments_triggered()
 {
     QMessageBox *msg_dialog = new QMessageBox();
     connect(msg_dialog, SIGNAL(finished(int)), this, SLOT(deleteAllPacketCommentsFinished(int)));
@@ -2392,7 +2323,7 @@ void MainWindow::on_actionDeleteAllPacketComments_triggered()
     msg_dialog->show();
 }
 
-void MainWindow::deleteAllPacketCommentsFinished(int result)
+void LogwolfMainWindow::deleteAllPacketCommentsFinished(int result)
 {
     if (result == QMessageBox::Ok) {
         /* XXX Do we need a wait/hourglass for large files? */
@@ -2401,7 +2332,7 @@ void MainWindow::deleteAllPacketCommentsFinished(int result)
     }
 }
 
-void MainWindow::on_actionEditConfigurationProfiles_triggered()
+void LogwolfMainWindow::on_actionEditConfigurationProfiles_triggered()
 {
     ProfileDialog *cp_dialog = new ProfileDialog();
     cp_dialog->setWindowModality(Qt::ApplicationModal);
@@ -2409,10 +2340,10 @@ void MainWindow::on_actionEditConfigurationProfiles_triggered()
     cp_dialog->show();
 }
 
-void MainWindow::showPreferencesDialog(QString module_name)
+void LogwolfMainWindow::showPreferencesDialog(QString module_name)
 {
     PreferencesDialog *pref_dialog = new PreferencesDialog(this);
-    connect(pref_dialog, SIGNAL(destroyed(QObject*)), wsApp, SLOT(flushAppSignals()));
+    connect(pref_dialog, SIGNAL(destroyed(QObject*)), mainApp, SLOT(flushAppSignals()));
     saveWindowGeometry();  // Save in case the layout panes are rearranged
 
     pref_dialog->setPane(module_name);
@@ -2421,14 +2352,14 @@ void MainWindow::showPreferencesDialog(QString module_name)
     pref_dialog->show();
 }
 
-void MainWindow::on_actionEditPreferences_triggered()
+void LogwolfMainWindow::on_actionEditPreferences_triggered()
 {
     showPreferencesDialog(PrefsModel::typeToString(PrefsModel::Appearance));
 }
 
 // View Menu
 
-void MainWindow::showHideMainWidgets(QAction *action)
+void LogwolfMainWindow::showHideMainWidgets(QAction *action)
 {
     if (!action) {
         return;
@@ -2444,11 +2375,6 @@ void MainWindow::showHideMainWidgets(QAction *action)
     } else if (widget == main_ui_->displayFilterToolBar) {
         recent.filter_toolbar_show = show;
         main_ui_->actionViewFilterToolbar->setChecked(show);
-#if defined(HAVE_LIBNL) && defined(HAVE_NL80211)
-    } else if (widget == main_ui_->wirelessToolBar) {
-        recent.wireless_toolbar_show = show;
-        main_ui_->actionViewWirelessToolbar->setChecked(show);
-#endif
     } else if (widget == main_ui_->statusBar) {
         recent.statusbar_show = show;
         main_ui_->actionViewStatusBar->setChecked(show);
@@ -2503,7 +2429,7 @@ void MainWindow::showHideMainWidgets(QAction *action)
     }
 }
 
-void MainWindow::setTimestampFormat(QAction *action)
+void LogwolfMainWindow::setTimestampFormat(QAction *action)
 {
     if (!action) {
         return;
@@ -2523,7 +2449,7 @@ void MainWindow::setTimestampFormat(QAction *action)
     }
 }
 
-void MainWindow::setTimestampPrecision(QAction *action)
+void LogwolfMainWindow::setTimestampPrecision(QAction *action)
 {
     if (!action) {
         return;
@@ -2544,7 +2470,7 @@ void MainWindow::setTimestampPrecision(QAction *action)
     }
 }
 
-void MainWindow::on_actionViewTimeDisplaySecondsWithHoursAndMinutes_triggered(bool checked)
+void LogwolfMainWindow::on_actionViewTimeDisplaySecondsWithHoursAndMinutes_triggered(bool checked)
 {
     if (checked) {
         recent.gui_seconds_format = TS_SECONDS_HOUR_MIN_SEC;
@@ -2562,7 +2488,7 @@ void MainWindow::on_actionViewTimeDisplaySecondsWithHoursAndMinutes_triggered(bo
     }
 }
 
-void MainWindow::on_actionViewEditResolvedName_triggered()
+void LogwolfMainWindow::on_actionViewEditResolvedName_triggered()
 {
     //int column = packet_list_->selectedColumn();
     int column = -1;
@@ -2575,7 +2501,7 @@ void MainWindow::on_actionViewEditResolvedName_triggered()
     showAccordionFrame(main_ui_->addressEditorFrame);
 }
 
-void MainWindow::setNameResolution()
+void LogwolfMainWindow::setNameResolution()
 {
     gbl_resolv_flags.mac_name = main_ui_->actionViewNameResolutionPhysical->isChecked() ? TRUE : FALSE;
     gbl_resolv_flags.network_name = main_ui_->actionViewNameResolutionNetwork->isChecked() ? TRUE : FALSE;
@@ -2584,54 +2510,54 @@ void MainWindow::setNameResolution()
     if (packet_list_) {
         packet_list_->resetColumns();
     }
-    wsApp->emitAppSignal(WiresharkApplication::NameResolutionChanged);
+    mainApp->emitAppSignal(WiresharkApplication::NameResolutionChanged);
 }
 
-void MainWindow::on_actionViewNameResolutionPhysical_triggered()
+void LogwolfMainWindow::on_actionViewNameResolutionPhysical_triggered()
 {
     setNameResolution();
 }
 
-void MainWindow::on_actionViewNameResolutionNetwork_triggered()
+void LogwolfMainWindow::on_actionViewNameResolutionNetwork_triggered()
 {
     setNameResolution();
 }
 
-void MainWindow::on_actionViewNameResolutionTransport_triggered()
+void LogwolfMainWindow::on_actionViewNameResolutionTransport_triggered()
 {
     setNameResolution();
 }
 
-void MainWindow::zoomText()
+void LogwolfMainWindow::zoomText()
 {
-    wsApp->zoomTextFont(recent.gui_zoom_level);
+    mainApp->zoomTextFont(recent.gui_zoom_level);
 }
 
-void MainWindow::on_actionViewZoomIn_triggered()
+void LogwolfMainWindow::on_actionViewZoomIn_triggered()
 {
     recent.gui_zoom_level++;
     zoomText();
 }
 
-void MainWindow::on_actionViewZoomOut_triggered()
+void LogwolfMainWindow::on_actionViewZoomOut_triggered()
 {
     recent.gui_zoom_level--;
     zoomText();
 }
 
-void MainWindow::on_actionViewNormalSize_triggered()
+void LogwolfMainWindow::on_actionViewNormalSize_triggered()
 {
     recent.gui_zoom_level = 0;
     zoomText();
 }
 
-void MainWindow::on_actionViewColorizePacketList_triggered(bool checked) {
+void LogwolfMainWindow::on_actionViewColorizePacketList_triggered(bool checked) {
     recent.packet_list_colorize = checked;
     packet_list_recolor_packets();
     packet_list_->resetColorized();
 }
 
-void MainWindow::on_actionViewColoringRules_triggered()
+void LogwolfMainWindow::on_actionViewColoringRules_triggered()
 {
     ColoringRulesDialog *coloring_rules_dialog = new ColoringRulesDialog(this);
     connect(coloring_rules_dialog, SIGNAL(accepted()),
@@ -2645,7 +2571,7 @@ void MainWindow::on_actionViewColoringRules_triggered()
 }
 
 // actionViewColorizeConversation1 - 10
-void MainWindow::colorizeConversation(bool create_rule)
+void LogwolfMainWindow::colorizeConversation(bool create_rule)
 {
     QAction *colorize_action = qobject_cast<QAction *>(sender());
     if (!colorize_action) return;
@@ -2655,7 +2581,7 @@ void MainWindow::colorizeConversation(bool create_rule)
         guint8 cc_num = colorize_action->data().toUInt();
         gchar *filter = conversation_filter_from_packet(pi);
         if (filter == NULL) {
-            wsApp->pushStatus(WiresharkApplication::TemporaryStatus, tr("Unable to build conversation filter."));
+            mainApp->pushStatus(WiresharkApplication::TemporaryStatus, tr("Unable to build conversation filter."));
             return;
         }
 
@@ -2678,7 +2604,7 @@ void MainWindow::colorizeConversation(bool create_rule)
     setMenusForSelectedPacket();
 }
 
-void MainWindow::colorizeActionTriggered()
+void LogwolfMainWindow::colorizeActionTriggered()
 {
     QByteArray filter;
     int color_number = -1;
@@ -2698,7 +2624,7 @@ void MainWindow::colorizeActionTriggered()
     colorizeWithFilter(filter, color_number);
 }
 
-void MainWindow::colorizeWithFilter(QByteArray filter, int color_number)
+void LogwolfMainWindow::colorizeWithFilter(QByteArray filter, int color_number)
 {
     if (filter.isEmpty()) return;
 
@@ -2722,7 +2648,7 @@ void MainWindow::colorizeWithFilter(QByteArray filter, int color_number)
     main_ui_->actionViewColorizeResetColorization->setEnabled(tmp_color_filters_used());
 }
 
-void MainWindow::on_actionViewColorizeResetColorization_triggered()
+void LogwolfMainWindow::on_actionViewColorizeResetColorization_triggered()
 {
     gchar *err_msg = NULL;
     if (!color_filters_reset_tmp(&err_msg)) {
@@ -2733,12 +2659,12 @@ void MainWindow::on_actionViewColorizeResetColorization_triggered()
     setMenusForSelectedPacket();
 }
 
-void MainWindow::on_actionViewColorizeNewColoringRule_triggered()
+void LogwolfMainWindow::on_actionViewColorizeNewColoringRule_triggered()
 {
     colorizeConversation(true);
 }
 
-void MainWindow::on_actionViewResetLayout_triggered()
+void LogwolfMainWindow::on_actionViewResetLayout_triggered()
 {
     recent.gui_geometry_main_upper_pane = 0;
     recent.gui_geometry_main_lower_pane = 0;
@@ -2746,7 +2672,7 @@ void MainWindow::on_actionViewResetLayout_triggered()
     applyRecentPaneGeometry();
 }
 
-void MainWindow::on_actionViewResizeColumns_triggered()
+void LogwolfMainWindow::on_actionViewResizeColumns_triggered()
 {
     if (! packet_list_->model())
         return;
@@ -2756,7 +2682,7 @@ void MainWindow::on_actionViewResizeColumns_triggered()
     }
 }
 
-void MainWindow::openPacketDialog(bool from_reference)
+void LogwolfMainWindow::openPacketDialog(bool from_reference)
 {
     frame_data * fdata = Q_NULLPTR;
 
@@ -2783,42 +2709,42 @@ void MainWindow::openPacketDialog(bool from_reference)
 
         connect(this, SIGNAL(closePacketDialogs()),
                 packet_dialog, SLOT(close()));
-        zoomText(); // Emits wsApp->zoomMonospaceFont(QFont)
+        zoomText(); // Emits mainApp->zoomMonospaceFont(QFont)
 
         packet_dialog->show();
     }
 }
 
-void MainWindow::on_actionViewInternalsConversationHashTables_triggered()
+void LogwolfMainWindow::on_actionViewInternalsConversationHashTables_triggered()
 {
     ConversationHashTablesDialog *conversation_hash_tables_dlg = new ConversationHashTablesDialog(this);
     conversation_hash_tables_dlg->show();
 }
 
-void MainWindow::on_actionViewInternalsDissectorTables_triggered()
+void LogwolfMainWindow::on_actionViewInternalsDissectorTables_triggered()
 {
     DissectorTablesDialog *dissector_tables_dlg = new DissectorTablesDialog(this);
     dissector_tables_dlg->show();
 }
 
-void MainWindow::on_actionViewInternalsSupportedProtocols_triggered()
+void LogwolfMainWindow::on_actionViewInternalsSupportedProtocols_triggered()
 {
     SupportedProtocolsDialog *supported_protocols_dlg = new SupportedProtocolsDialog(this);
     supported_protocols_dlg->show();
 }
 
-void MainWindow::on_actionViewShowPacketInNewWindow_triggered()
+void LogwolfMainWindow::on_actionViewShowPacketInNewWindow_triggered()
 {
     openPacketDialog();
 }
 
 // This is only used in ProtoTree. Defining it here makes more sense.
-void MainWindow::on_actionContextShowLinkedPacketInNewWindow_triggered()
+void LogwolfMainWindow::on_actionContextShowLinkedPacketInNewWindow_triggered()
 {
     openPacketDialog(true);
 }
 
-void MainWindow::on_actionViewReload_triggered()
+void LogwolfMainWindow::on_actionViewReload_triggered()
 {
     capture_file *cf = CaptureFile::globalCapFile();
 
@@ -2831,7 +2757,7 @@ void MainWindow::on_actionViewReload_triggered()
     cf_reload(cf);
 }
 
-void MainWindow::on_actionViewReload_as_File_Format_or_Capture_triggered()
+void LogwolfMainWindow::on_actionViewReload_as_File_Format_or_Capture_triggered()
 {
     capture_file *cf = CaptureFile::globalCapFile();
 
@@ -2856,7 +2782,7 @@ void MainWindow::on_actionViewReload_as_File_Format_or_Capture_triggered()
 
 // Analyze Menu
 
-void MainWindow::filterMenuAboutToShow()
+void LogwolfMainWindow::filterMenuAboutToShow()
 {
     QMenu * menu = qobject_cast<QMenu *>(sender());
     QString field_filter;
@@ -2875,7 +2801,7 @@ void MainWindow::filterMenuAboutToShow()
     menu->addActions(group->actions());
 }
 
-void MainWindow::matchFieldFilter(FilterAction::Action action, FilterAction::ActionType filter_type)
+void LogwolfMainWindow::matchFieldFilter(FilterAction::Action action, FilterAction::ActionType filter_type)
 {
     QString field_filter;
 
@@ -2890,19 +2816,14 @@ void MainWindow::matchFieldFilter(FilterAction::Action action, FilterAction::Act
 
     if (field_filter.isEmpty()) {
         QString err = tr("No filter available. Try another %1.").arg(packet_list_->contextMenuActive() ? tr("column") : tr("item"));
-        wsApp->pushStatus(WiresharkApplication::TemporaryStatus, err);
+        mainApp->pushStatus(WiresharkApplication::TemporaryStatus, err);
         return;
     }
 
     setDisplayFilter(field_filter, action, filter_type);
 }
 
-void MainWindow::setDisplayFilter(QString filter, FilterAction::Action action, FilterAction::ActionType filterType)
-{
-    emit filterAction(filter, action, filterType);
-}
-
-void MainWindow::on_actionAnalyzeDisplayFilters_triggered()
+void LogwolfMainWindow::on_actionAnalyzeDisplayFilters_triggered()
 {
     if (!display_filter_dlg_) {
         display_filter_dlg_ = new FilterDialog(this, FilterDialog::DisplayFilter);
@@ -2913,19 +2834,19 @@ void MainWindow::on_actionAnalyzeDisplayFilters_triggered()
 }
 
 struct epan_uat;
-void MainWindow::on_actionAnalyzeDisplayFilterMacros_triggered()
+void LogwolfMainWindow::on_actionAnalyzeDisplayFilterMacros_triggered()
 {
     struct epan_uat* dfm_uat;
     dfilter_macro_get_uat(&dfm_uat);
     UatDialog *uat_dlg = new UatDialog(parentWidget(), dfm_uat);
-    connect(uat_dlg, SIGNAL(destroyed(QObject*)), wsApp, SLOT(flushAppSignals()));
+    connect(uat_dlg, SIGNAL(destroyed(QObject*)), mainApp, SLOT(flushAppSignals()));
 
     uat_dlg->setWindowModality(Qt::ApplicationModal);
     uat_dlg->setAttribute(Qt::WA_DeleteOnClose);
     uat_dlg->show();
 }
 
-void MainWindow::on_actionAnalyzeCreateAColumn_triggered()
+void LogwolfMainWindow::on_actionAnalyzeCreateAColumn_triggered()
 {
     if (capture_file_.capFile() != 0 && capture_file_.capFile()->finfo_selected != 0) {
         header_field_info *hfinfo = capture_file_.capFile()->finfo_selected->hfinfo;
@@ -2939,7 +2860,7 @@ void MainWindow::on_actionAnalyzeCreateAColumn_triggered()
             } else {
                 status = tr("The \"%1\" column already exists as \"%2\".").arg(hfinfo->name).arg(get_column_title(col));
             }
-            wsApp->pushStatus(WiresharkApplication::TemporaryStatus, status);
+            mainApp->pushStatus(WiresharkApplication::TemporaryStatus, status);
 
             if (!get_column_visible(col)) {
                 packet_list_->setColumnHidden(col, false);
@@ -2950,7 +2871,7 @@ void MainWindow::on_actionAnalyzeCreateAColumn_triggered()
     }
 }
 
-void MainWindow::applyConversationFilter()
+void LogwolfMainWindow::applyConversationFilter()
 {
     ConversationAction *conv_action = qobject_cast<ConversationAction*>(sender());
     if (!conv_action) return;
@@ -2968,7 +2889,7 @@ void MainWindow::applyConversationFilter()
     }
 }
 
-void MainWindow::applyExportObject()
+void LogwolfMainWindow::applyExportObject()
 {
     ExportObjectAction *export_action = qobject_cast<ExportObjectAction*>(sender());
     if (!export_action)
@@ -2980,35 +2901,35 @@ void MainWindow::applyExportObject()
     export_dialog->show();
 }
 
-void MainWindow::on_actionAnalyzeEnabledProtocols_triggered()
+void LogwolfMainWindow::on_actionAnalyzeEnabledProtocols_triggered()
 {
     EnabledProtocolsDialog *enable_proto_dialog = new EnabledProtocolsDialog(this);
-    connect(enable_proto_dialog, SIGNAL(destroyed(QObject*)), wsApp, SLOT(flushAppSignals()));
+    connect(enable_proto_dialog, SIGNAL(destroyed(QObject*)), mainApp, SLOT(flushAppSignals()));
 
     enable_proto_dialog->setWindowModality(Qt::ApplicationModal);
     enable_proto_dialog->setAttribute(Qt::WA_DeleteOnClose);
     enable_proto_dialog->show();
 }
 
-void MainWindow::on_actionAnalyzeDecodeAs_triggered()
+void LogwolfMainWindow::on_actionAnalyzeDecodeAs_triggered()
 {
     QAction *da_action = qobject_cast<QAction*>(sender());
     bool create_new = da_action && da_action->property("create_new").toBool();
 
     DecodeAsDialog *da_dialog = new DecodeAsDialog(this, capture_file_.capFile(), create_new);
-    connect(da_dialog, SIGNAL(destroyed(QObject*)), wsApp, SLOT(flushAppSignals()));
+    connect(da_dialog, SIGNAL(destroyed(QObject*)), mainApp, SLOT(flushAppSignals()));
 
     da_dialog->setWindowModality(Qt::ApplicationModal);
     da_dialog->setAttribute(Qt::WA_DeleteOnClose);
     da_dialog->show();
 }
 
-void MainWindow::on_actionAnalyzeReloadLuaPlugins_triggered()
+void LogwolfMainWindow::on_actionAnalyzeReloadLuaPlugins_triggered()
 {
     reloadLuaPlugins();
 }
 
-void MainWindow::openFollowStreamDialog(follow_type_t type, guint stream_num, guint sub_stream_num, bool use_stream_index) {
+void LogwolfMainWindow::openFollowStreamDialog(follow_type_t type, guint stream_num, guint sub_stream_num, bool use_stream_index) {
     FollowStreamDialog *fsd = new FollowStreamDialog(*this, capture_file_, type);
     connect(fsd, SIGNAL(updateFilter(QString, bool)), this, SLOT(filterPackets(QString, bool)));
     connect(fsd, SIGNAL(goToPacket(int)), packet_list_, SLOT(goToPacket(int)));
@@ -3023,126 +2944,47 @@ void MainWindow::openFollowStreamDialog(follow_type_t type, guint stream_num, gu
     }
 }
 
-void MainWindow::openFollowStreamDialogForType(follow_type_t type) {
+void LogwolfMainWindow::openFollowStreamDialogForType(follow_type_t type) {
     openFollowStreamDialog(type, 0, 0, false);
 }
 
-void MainWindow::on_actionAnalyzeFollowTCPStream_triggered()
+void LogwolfMainWindow::on_actionAnalyzeFollowTCPStream_triggered()
 {
     openFollowStreamDialogForType(FOLLOW_TCP);
 }
 
-void MainWindow::on_actionAnalyzeFollowUDPStream_triggered()
+void LogwolfMainWindow::on_actionAnalyzeFollowUDPStream_triggered()
 {
     openFollowStreamDialogForType(FOLLOW_UDP);
 }
 
-void MainWindow::on_actionAnalyzeFollowDCCPStream_triggered()
+void LogwolfMainWindow::on_actionAnalyzeFollowDCCPStream_triggered()
 {
     openFollowStreamDialogForType(FOLLOW_DCCP);
 }
 
-void MainWindow::on_actionAnalyzeFollowTLSStream_triggered()
+void LogwolfMainWindow::on_actionAnalyzeFollowTLSStream_triggered()
 {
     openFollowStreamDialogForType(FOLLOW_TLS);
 }
 
-void MainWindow::on_actionAnalyzeFollowHTTPStream_triggered()
+void LogwolfMainWindow::on_actionAnalyzeFollowHTTPStream_triggered()
 {
     openFollowStreamDialogForType(FOLLOW_HTTP);
 }
 
-void MainWindow::on_actionAnalyzeFollowHTTP2Stream_triggered()
+void LogwolfMainWindow::on_actionAnalyzeFollowHTTP2Stream_triggered()
 {
     openFollowStreamDialogForType(FOLLOW_HTTP2);
 }
 
-void MainWindow::on_actionAnalyzeFollowQUICStream_triggered()
+void LogwolfMainWindow::on_actionAnalyzeFollowQUICStream_triggered()
 {
     openFollowStreamDialogForType(FOLLOW_QUIC);
 }
 
-void MainWindow::on_actionAnalyzeFollowSIPCall_triggered()
-{
-    openFollowStreamDialogForType(FOLLOW_SIP);
-}
-
-void MainWindow::openSCTPAllAssocsDialog()
-{
-    SCTPAllAssocsDialog *sctp_dialog = new SCTPAllAssocsDialog(this, capture_file_.capFile());
-    connect(sctp_dialog, SIGNAL(filterPackets(QString, bool)),
-            this, SLOT(filterPackets(QString, bool)));
-    connect(this, SIGNAL(setCaptureFile(capture_file*)),
-            sctp_dialog, SLOT(setCaptureFile(capture_file*)));
-    sctp_dialog->fillTable();
-
-    if (sctp_dialog->isMinimized() == true)
-    {
-        sctp_dialog->showNormal();
-    }
-    else
-    {
-        sctp_dialog->show();
-    }
-
-    sctp_dialog->raise();
-    sctp_dialog->activateWindow();
-}
-
-void MainWindow::on_actionSCTPShowAllAssociations_triggered()
-{
-    openSCTPAllAssocsDialog();
-}
-
-void MainWindow::on_actionSCTPAnalyseThisAssociation_triggered()
-{
-    const sctp_assoc_info_t* assoc = SCTPAssocAnalyseDialog::findAssocForPacket(capture_file_.capFile());
-    if (!assoc) {
-        return;
-    }
-    SCTPAssocAnalyseDialog *sctp_analyse = new SCTPAssocAnalyseDialog(this, assoc, capture_file_.capFile());
-    connect(sctp_analyse, SIGNAL(filterPackets(QString, bool)),
-            this, SLOT(filterPackets(QString, bool)));
-
-    if (sctp_analyse->isMinimized() == true)
-    {
-        sctp_analyse->showNormal();
-    }
-    else
-    {
-        sctp_analyse->show();
-    }
-
-    sctp_analyse->raise();
-    sctp_analyse->activateWindow();
-}
-
-void MainWindow::on_actionSCTPFilterThisAssociation_triggered()
-{
-    const sctp_assoc_info_t* assoc = SCTPAssocAnalyseDialog::findAssocForPacket(capture_file_.capFile());
-    if (assoc) {
-        QString newFilter = QString("sctp.assoc_index==%1").arg(assoc->assoc_id);
-        assoc = NULL;
-        emit filterPackets(newFilter, false);
-    }
-}
-
-// -z wlan,stat
-void MainWindow::statCommandWlanStatistics(const char *arg, void *)
-{
-    WlanStatisticsDialog *wlan_stats_dlg = new WlanStatisticsDialog(*this, capture_file_, arg);
-    connect(wlan_stats_dlg, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
-            this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
-    wlan_stats_dlg->show();
-}
-
-void MainWindow::on_actionWirelessWlanStatistics_triggered()
-{
-    statCommandWlanStatistics(NULL, NULL);
-}
-
 // -z expert
-void MainWindow::statCommandExpertInfo(const char *, void *)
+void LogwolfMainWindow::statCommandExpertInfo(const char *, void *)
 {
     ExpertInfoDialog *expert_dialog = new ExpertInfoDialog(*this, capture_file_);
     const DisplayFilterEdit *df_edit = dynamic_cast<DisplayFilterEdit *>(df_combo_box_->lineEdit());
@@ -3157,7 +2999,7 @@ void MainWindow::statCommandExpertInfo(const char *, void *)
     expert_dialog->show();
 }
 
-void MainWindow::on_actionAnalyzeExpertInfo_triggered()
+void LogwolfMainWindow::on_actionAnalyzeExpertInfo_triggered()
 {
     statCommandExpertInfo(NULL, NULL);
 }
@@ -3167,13 +3009,14 @@ void MainWindow::on_actionAnalyzeExpertInfo_triggered()
 
 // Statistics Menu
 
-void MainWindow::on_actionStatisticsFlowGraph_triggered()
+void LogwolfMainWindow::on_actionStatisticsFlowGraph_triggered()
 {
-    SequenceDialog *sequence_dialog = new SequenceDialog(*this, capture_file_);
-    sequence_dialog->show();
+    QMessageBox::warning(this, "Oops", "SequenceDialog depends on RTPStreamDialog");
+//    SequenceDialog *sequence_dialog = new SequenceDialog(*this, capture_file_);
+//    sequence_dialog->show();
 }
 
-void MainWindow::openTcpStreamDialog(int graph_type)
+void LogwolfMainWindow::openTcpStreamDialog(int graph_type)
 {
     TCPStreamDialog *stream_dialog = new TCPStreamDialog(this, capture_file_.capFile(), (tcp_graph_type)graph_type);
     connect(stream_dialog, SIGNAL(goToPacket(int)),
@@ -3185,33 +3028,33 @@ void MainWindow::openTcpStreamDialog(int graph_type)
     }
 }
 
-void MainWindow::on_actionStatisticsTcpStreamStevens_triggered()
+void LogwolfMainWindow::on_actionStatisticsTcpStreamStevens_triggered()
 {
     openTcpStreamDialog(GRAPH_TSEQ_STEVENS);
 }
 
-void MainWindow::on_actionStatisticsTcpStreamTcptrace_triggered()
+void LogwolfMainWindow::on_actionStatisticsTcpStreamTcptrace_triggered()
 {
     openTcpStreamDialog(GRAPH_TSEQ_TCPTRACE);
 }
 
-void MainWindow::on_actionStatisticsTcpStreamThroughput_triggered()
+void LogwolfMainWindow::on_actionStatisticsTcpStreamThroughput_triggered()
 {
     openTcpStreamDialog(GRAPH_THROUGHPUT);
 }
 
-void MainWindow::on_actionStatisticsTcpStreamRoundTripTime_triggered()
+void LogwolfMainWindow::on_actionStatisticsTcpStreamRoundTripTime_triggered()
 {
     openTcpStreamDialog(GRAPH_RTT);
 }
 
-void MainWindow::on_actionStatisticsTcpStreamWindowScaling_triggered()
+void LogwolfMainWindow::on_actionStatisticsTcpStreamWindowScaling_triggered()
 {
     openTcpStreamDialog(GRAPH_WSCALE);
 }
 
 // -z mcast,stat
-void MainWindow::statCommandMulticastStatistics(const char *arg, void *)
+void LogwolfMainWindow::statCommandMulticastStatistics(const char *arg, void *)
 {
     MulticastStatisticsDialog *mcast_stats_dlg = new MulticastStatisticsDialog(*this, capture_file_, arg);
     connect(mcast_stats_dlg, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
@@ -3219,12 +3062,12 @@ void MainWindow::statCommandMulticastStatistics(const char *arg, void *)
     mcast_stats_dlg->show();
 }
 
-void MainWindow::on_actionStatisticsUdpMulticastStreams_triggered()
+void LogwolfMainWindow::on_actionStatisticsUdpMulticastStreams_triggered()
 {
     statCommandMulticastStatistics(NULL, NULL);
 }
 
-void MainWindow::openStatisticsTreeDialog(const gchar *abbr)
+void LogwolfMainWindow::openStatisticsTreeDialog(const gchar *abbr)
 {
     StatsTreeDialog *st_dialog = new StatsTreeDialog(*this, capture_file_, abbr);
 //    connect(st_dialog, SIGNAL(goToPacket(int)),
@@ -3232,62 +3075,62 @@ void MainWindow::openStatisticsTreeDialog(const gchar *abbr)
     st_dialog->show();
 }
 
-void MainWindow::on_actionStatistics29WestTopics_Advertisements_by_Topic_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestTopics_Advertisements_by_Topic_triggered()
 {
     openStatisticsTreeDialog("lbmr_topic_ads_topic");
 }
 
-void MainWindow::on_actionStatistics29WestTopics_Advertisements_by_Source_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestTopics_Advertisements_by_Source_triggered()
 {
     openStatisticsTreeDialog("lbmr_topic_ads_source");
 }
 
-void MainWindow::on_actionStatistics29WestTopics_Advertisements_by_Transport_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestTopics_Advertisements_by_Transport_triggered()
 {
     openStatisticsTreeDialog("lbmr_topic_ads_transport");
 }
 
-void MainWindow::on_actionStatistics29WestTopics_Queries_by_Topic_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestTopics_Queries_by_Topic_triggered()
 {
     openStatisticsTreeDialog("lbmr_topic_queries_topic");
 }
 
-void MainWindow::on_actionStatistics29WestTopics_Queries_by_Receiver_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestTopics_Queries_by_Receiver_triggered()
 {
     openStatisticsTreeDialog("lbmr_topic_queries_receiver");
 }
 
-void MainWindow::on_actionStatistics29WestTopics_Wildcard_Queries_by_Pattern_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestTopics_Wildcard_Queries_by_Pattern_triggered()
 {
     openStatisticsTreeDialog("lbmr_topic_queries_pattern");
 }
 
-void MainWindow::on_actionStatistics29WestTopics_Wildcard_Queries_by_Receiver_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestTopics_Wildcard_Queries_by_Receiver_triggered()
 {
     openStatisticsTreeDialog("lbmr_topic_queries_pattern_receiver");
 }
 
-void MainWindow::on_actionStatistics29WestQueues_Advertisements_by_Queue_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestQueues_Advertisements_by_Queue_triggered()
 {
     openStatisticsTreeDialog("lbmr_queue_ads_queue");
 }
 
-void MainWindow::on_actionStatistics29WestQueues_Advertisements_by_Source_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestQueues_Advertisements_by_Source_triggered()
 {
     openStatisticsTreeDialog("lbmr_queue_ads_source");
 }
 
-void MainWindow::on_actionStatistics29WestQueues_Queries_by_Queue_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestQueues_Queries_by_Queue_triggered()
 {
     openStatisticsTreeDialog("lbmr_queue_queries_queue");
 }
 
-void MainWindow::on_actionStatistics29WestQueues_Queries_by_Receiver_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestQueues_Queries_by_Receiver_triggered()
 {
     openStatisticsTreeDialog("lbmr_queue_queries_receiver");
 }
 
-void MainWindow::on_actionStatistics29WestUIM_Streams_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestUIM_Streams_triggered()
 {
     LBMStreamDialog *stream_dialog = new LBMStreamDialog(this, capture_file_.capFile());
 //    connect(stream_dialog, SIGNAL(goToPacket(int)),
@@ -3297,7 +3140,7 @@ void MainWindow::on_actionStatistics29WestUIM_Streams_triggered()
     stream_dialog->show();
 }
 
-void MainWindow::on_actionStatistics29WestLBTRM_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestLBTRM_triggered()
 {
     LBMLBTRMTransportDialog * lbtrm_dialog = new LBMLBTRMTransportDialog(this, capture_file_.capFile());
     connect(lbtrm_dialog, SIGNAL(goToPacket(int)),
@@ -3306,7 +3149,7 @@ void MainWindow::on_actionStatistics29WestLBTRM_triggered()
             lbtrm_dialog, SLOT(setCaptureFile(capture_file*)));
     lbtrm_dialog->show();
 }
-void MainWindow::on_actionStatistics29WestLBTRU_triggered()
+void LogwolfMainWindow::on_actionStatistics29WestLBTRU_triggered()
 {
     LBMLBTRUTransportDialog * lbtru_dialog = new LBMLBTRUTransportDialog(this, capture_file_.capFile());
     connect(lbtru_dialog, SIGNAL(goToPacket(int)),
@@ -3316,39 +3159,39 @@ void MainWindow::on_actionStatistics29WestLBTRU_triggered()
     lbtru_dialog->show();
 }
 
-void MainWindow::on_actionStatisticsANCP_triggered()
+void LogwolfMainWindow::on_actionStatisticsANCP_triggered()
 {
     openStatisticsTreeDialog("ancp");
 }
 
 
-void MainWindow::on_actionStatisticsBACappInstanceId_triggered()
+void LogwolfMainWindow::on_actionStatisticsBACappInstanceId_triggered()
 {
     openStatisticsTreeDialog("bacapp_instanceid");
 }
 
-void MainWindow::on_actionStatisticsBACappIP_triggered()
+void LogwolfMainWindow::on_actionStatisticsBACappIP_triggered()
 {
     openStatisticsTreeDialog("bacapp_ip");
 }
 
-void MainWindow::on_actionStatisticsBACappObjectId_triggered()
+void LogwolfMainWindow::on_actionStatisticsBACappObjectId_triggered()
 {
     openStatisticsTreeDialog("bacapp_objectid");
 }
 
-void MainWindow::on_actionStatisticsBACappService_triggered()
+void LogwolfMainWindow::on_actionStatisticsBACappService_triggered()
 {
     openStatisticsTreeDialog("bacapp_service");
 }
 
-void MainWindow::on_actionStatisticsCollectd_triggered()
+void LogwolfMainWindow::on_actionStatisticsCollectd_triggered()
 {
     openStatisticsTreeDialog("collectd");
 }
 
 // -z conv,...
-void MainWindow::statCommandConversations(const char *arg, void *userdata)
+void LogwolfMainWindow::statCommandConversations(const char *arg, void *userdata)
 {
     ConversationDialog *conv_dialog = new ConversationDialog(*this, capture_file_, GPOINTER_TO_INT(userdata), arg);
     connect(conv_dialog, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
@@ -3360,13 +3203,13 @@ void MainWindow::statCommandConversations(const char *arg, void *userdata)
     conv_dialog->show();
 }
 
-void MainWindow::on_actionStatisticsConversations_triggered()
+void LogwolfMainWindow::on_actionStatisticsConversations_triggered()
 {
     statCommandConversations(NULL, NULL);
 }
 
 // -z endpoints,...
-void MainWindow::statCommandEndpoints(const char *arg, void *userdata)
+void LogwolfMainWindow::statCommandEndpoints(const char *arg, void *userdata)
 {
     EndpointDialog *endp_dialog = new EndpointDialog(*this, capture_file_, GPOINTER_TO_INT(userdata), arg);
     connect(endp_dialog, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
@@ -3378,43 +3221,43 @@ void MainWindow::statCommandEndpoints(const char *arg, void *userdata)
     endp_dialog->show();
 }
 
-void MainWindow::on_actionStatisticsEndpoints_triggered()
+void LogwolfMainWindow::on_actionStatisticsEndpoints_triggered()
 {
     statCommandEndpoints(NULL, NULL);
 }
 
-void MainWindow::on_actionStatisticsHART_IP_triggered()
+void LogwolfMainWindow::on_actionStatisticsHART_IP_triggered()
 {
     openStatisticsTreeDialog("hart_ip");
 }
 
-void MainWindow::on_actionStatisticsHTTPPacketCounter_triggered()
+void LogwolfMainWindow::on_actionStatisticsHTTPPacketCounter_triggered()
 {
     openStatisticsTreeDialog("http");
 }
 
-void MainWindow::on_actionStatisticsHTTPRequests_triggered()
+void LogwolfMainWindow::on_actionStatisticsHTTPRequests_triggered()
 {
     openStatisticsTreeDialog("http_req");
 }
 
-void MainWindow::on_actionStatisticsHTTPLoadDistribution_triggered()
+void LogwolfMainWindow::on_actionStatisticsHTTPLoadDistribution_triggered()
 {
     openStatisticsTreeDialog("http_srv");
 }
 
-void MainWindow::on_actionStatisticsHTTPRequestSequences_triggered()
+void LogwolfMainWindow::on_actionStatisticsHTTPRequestSequences_triggered()
 {
     openStatisticsTreeDialog("http_seq");
 }
 
-void MainWindow::on_actionStatisticsPacketLengths_triggered()
+void LogwolfMainWindow::on_actionStatisticsPacketLengths_triggered()
 {
     openStatisticsTreeDialog("plen");
 }
 
 // -z io,stat
-void MainWindow::statCommandIOGraph(const char *, void *)
+void LogwolfMainWindow::statCommandIOGraph(const char *, void *)
 {
     const DisplayFilterEdit *df_edit = qobject_cast<DisplayFilterEdit *>(df_combo_box_->lineEdit());
     QString displayFilter;
@@ -3427,22 +3270,22 @@ void MainWindow::statCommandIOGraph(const char *, void *)
     iog_dialog->show();
 }
 
-void MainWindow::on_actionStatisticsIOGraph_triggered()
+void LogwolfMainWindow::on_actionStatisticsIOGraph_triggered()
 {
     statCommandIOGraph(NULL, NULL);
 }
 
-void MainWindow::on_actionStatisticsSametime_triggered()
+void LogwolfMainWindow::on_actionStatisticsSametime_triggered()
 {
     openStatisticsTreeDialog("sametime");
 }
 
-void MainWindow::on_actionStatisticsDNS_triggered()
+void LogwolfMainWindow::on_actionStatisticsDNS_triggered()
 {
     openStatisticsTreeDialog("dns");
 }
 
-void MainWindow::actionStatisticsPlugin_triggered()
+void LogwolfMainWindow::actionStatisticsPlugin_triggered()
 {
     QAction* action = qobject_cast<QAction*>(sender());
     if (action) {
@@ -3450,378 +3293,121 @@ void MainWindow::actionStatisticsPlugin_triggered()
     }
 }
 
-void MainWindow::on_actionStatisticsHTTP2_triggered()
+void LogwolfMainWindow::on_actionStatisticsHTTP2_triggered()
 {
     openStatisticsTreeDialog("http2");
 
 }
 
-void MainWindow::on_actionStatisticsSOMEIPmessages_triggered()
+void LogwolfMainWindow::on_actionStatisticsSOMEIPmessages_triggered()
 {
     openStatisticsTreeDialog("someip_messages");
 }
 
-void MainWindow::on_actionStatisticsSOMEIPSDentries_triggered()
+void LogwolfMainWindow::on_actionStatisticsSOMEIPSDentries_triggered()
 {
     openStatisticsTreeDialog("someipsd_entries");
 }
 
-// Telephony Menu
-
-RtpPlayerDialog *MainWindow::openTelephonyRtpPlayerDialog()
-{
-    RtpPlayerDialog *dialog;
-
-#ifdef HAVE_LIBPCAP
-    dialog = RtpPlayerDialog::openRtpPlayerDialog(*this, capture_file_, packet_list_, captureSession()->state != CAPTURE_STOPPED);
-#else
-    dialog = RtpPlayerDialog::openRtpPlayerDialog(*this, capture_file_, packet_list_, false);
-#endif
-
-    dialog->show();
-
-    return dialog;
-}
-
-VoipCallsDialog *MainWindow::openTelephonyVoipCallsDialogVoip()
-{
-    VoipCallsDialog *dialog;
-
-    dialog = VoipCallsDialog::openVoipCallsDialogVoip(*this, capture_file_, packet_list_);
-    dialog->show();
-
-    return dialog;
-}
-
-VoipCallsDialog *MainWindow::openTelephonyVoipCallsDialogSip()
-{
-    VoipCallsDialog *dialog;
-
-    dialog = VoipCallsDialog::openVoipCallsDialogSip(*this, capture_file_, packet_list_);
-    dialog->show();
-
-    return dialog;
-}
-
-RtpAnalysisDialog *MainWindow::openTelephonyRtpAnalysisDialog()
-{
-    RtpAnalysisDialog *dialog;
-
-    dialog = RtpAnalysisDialog::openRtpAnalysisDialog(*this, capture_file_, packet_list_);
-    dialog->show();
-
-    return dialog;
-}
-
-void MainWindow::on_actionTelephonyVoipCalls_triggered()
-{
-    openTelephonyVoipCallsDialogVoip();
-}
-
-void MainWindow::on_actionTelephonyGsmMapSummary_triggered()
-{
-    GsmMapSummaryDialog *gms_dialog = new GsmMapSummaryDialog(*this, capture_file_);
-    gms_dialog->show();
-}
-
-void MainWindow::on_actionTelephonyIax2StreamAnalysis_triggered()
-{
-    Iax2AnalysisDialog *iax2_analysis_dialog = new  Iax2AnalysisDialog(*this, capture_file_);
-    connect(iax2_analysis_dialog, SIGNAL(goToPacket(int)),
-            packet_list_, SLOT(goToPacket(int)));
-    iax2_analysis_dialog->show();
-}
-
-void MainWindow::on_actionTelephonyISUPMessages_triggered()
-{
-    openStatisticsTreeDialog("isup_msg");
-}
-
-// -z mac-lte,stat
-void MainWindow::statCommandLteMacStatistics(const char *arg, void *)
-{
-    LteMacStatisticsDialog *lte_mac_stats_dlg = new LteMacStatisticsDialog(*this, capture_file_, arg);
-    connect(lte_mac_stats_dlg, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
-            this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
-    lte_mac_stats_dlg->show();
-}
-
-void MainWindow::on_actionTelephonyLteMacStatistics_triggered()
-{
-    statCommandLteMacStatistics(NULL, NULL);
-}
-
-void MainWindow::statCommandLteRlcStatistics(const char *arg, void *)
-{
-    LteRlcStatisticsDialog *lte_rlc_stats_dlg = new LteRlcStatisticsDialog(*this, capture_file_, arg);
-    connect(lte_rlc_stats_dlg, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
-            this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
-    // N.B. It is necessary for the RLC Statistics window to launch the RLC graph in this way, to ensure
-    // that the goToPacket() signal/slot connection gets set up...
-    connect(lte_rlc_stats_dlg, SIGNAL(launchRLCGraph(bool, guint16, guint8, guint16, guint16, guint8)),
-            this, SLOT(launchRLCGraph(bool, guint16, guint8, guint16, guint16, guint8)));
-
-    lte_rlc_stats_dlg->show();
-}
-
-void MainWindow::on_actionTelephonyLteRlcStatistics_triggered()
-{
-    statCommandLteRlcStatistics(NULL, NULL);
-}
-
-void MainWindow::launchRLCGraph(bool channelKnown,
-    guint16 ueid, guint8 rlcMode,
-    guint16 channelType, guint16 channelId, guint8 direction)
-{
-    LteRlcGraphDialog *lrg_dialog = new LteRlcGraphDialog(*this, capture_file_, channelKnown);
-    connect(lrg_dialog, SIGNAL(goToPacket(int)), packet_list_, SLOT(goToPacket(int)));
-    // This is a bit messy, but wanted to hide these parameters from users of
-    // on_actionTelephonyLteRlcGraph_triggered().
-    if (channelKnown) {
-        lrg_dialog->setChannelInfo(ueid, rlcMode, channelType, channelId, direction);
-    }
-    lrg_dialog->show();
-}
-
-void MainWindow::on_actionTelephonyLteRlcGraph_triggered()
-{
-    // We don't yet know the channel.
-    launchRLCGraph(false, 0, 0, 0, 0, 0);
-}
-
-void MainWindow::on_actionTelephonyMtp3Summary_triggered()
-{
-    Mtp3SummaryDialog *mtp3s_dialog = new Mtp3SummaryDialog(*this, capture_file_);
-    mtp3s_dialog->show();
-}
-
-void MainWindow::on_actionTelephonyOsmuxPacketCounter_triggered()
-{
-    openStatisticsTreeDialog("osmux");
-}
-
-RtpStreamDialog *MainWindow::openTelephonyRtpStreamsDialog()
-{
-    RtpStreamDialog *dialog;
-
-    dialog = RtpStreamDialog::openRtpStreamDialog(*this, capture_file_, packet_list_);
-    dialog->show();
-
-    return dialog;
-}
-
-void MainWindow::on_actionTelephonyRtpStreams_triggered()
-{
-    openTelephonyRtpStreamsDialog();
-}
-
-void MainWindow::on_actionTelephonyRtpStreamAnalysis_triggered()
-{
-    QVector<rtpstream_id_t *> stream_ids;
-    QString err;
-
-    if (QGuiApplication::keyboardModifiers().testFlag(Qt::ControlModifier)) {
-        err = findRtpStreams(&stream_ids, true);
-    } else {
-        err = findRtpStreams(&stream_ids, false);
-    }
-    if (!err.isNull()) {
-        QMessageBox::warning(this, tr("RTP packet search failed"),
-                             err,
-                             QMessageBox::Ok);
-    } else {
-        openTelephonyRtpAnalysisDialog()->addRtpStreams(stream_ids);
-    }
-    foreach(rtpstream_id_t *id, stream_ids) {
-        rtpstream_id_free(id);
-    }
-}
-
-void MainWindow::on_actionTelephonyRtpPlayer_triggered()
-{
-    QVector<rtpstream_id_t *> stream_ids;
-    QString err;
-
-    if (QGuiApplication::keyboardModifiers().testFlag(Qt::ControlModifier)) {
-        err = findRtpStreams(&stream_ids, true);
-    } else {
-        err = findRtpStreams(&stream_ids, false);
-    }
-    if (!err.isNull()) {
-        QMessageBox::warning(this, tr("RTP packet search failed"),
-                             err,
-                             QMessageBox::Ok);
-#ifdef QT_MULTIMEDIA_LIB
-    } else {
-        openTelephonyRtpPlayerDialog()->addRtpStreams(stream_ids);
-#endif // QT_MULTIMEDIA_LIB
-    }
-    foreach(rtpstream_id_t *id, stream_ids) {
-        rtpstream_id_free(id);
-    }
-}
-
-void MainWindow::on_actionTelephonyRTSPPacketCounter_triggered()
-{
-    openStatisticsTreeDialog("rtsp");
-}
-
-void MainWindow::on_actionTelephonySMPPOperations_triggered()
-{
-    openStatisticsTreeDialog("smpp_commands");
-}
-
-void MainWindow::on_actionTelephonyUCPMessages_triggered()
-{
-    openStatisticsTreeDialog("ucp_messages");
-}
-
-void MainWindow::on_actionTelephonyF1APMessages_triggered()
-{
-	openStatisticsTreeDialog("f1ap");
-}
-
-void MainWindow::on_actionTelephonyNGAPMessages_triggered()
-{
-    openStatisticsTreeDialog("ngap");
-}
-
-void MainWindow::on_actionTelephonySipFlows_triggered()
-{
-    openTelephonyVoipCallsDialogSip();
-}
-
-// Wireless Menu
-
-void MainWindow::on_actionBluetoothATT_Server_Attributes_triggered()
-{
-    BluetoothAttServerAttributesDialog *bluetooth_att_sever_attributes_dialog = new BluetoothAttServerAttributesDialog(*this, capture_file_);
-    connect(bluetooth_att_sever_attributes_dialog, SIGNAL(goToPacket(int)),
-            packet_list_, SLOT(goToPacket(int)));
-    connect(bluetooth_att_sever_attributes_dialog, SIGNAL(updateFilter(QString, bool)),
-            this, SLOT(filterPackets(QString, bool)));
-    bluetooth_att_sever_attributes_dialog->show();
-}
-
-void MainWindow::on_actionBluetoothDevices_triggered()
-{
-    BluetoothDevicesDialog *bluetooth_devices_dialog = new BluetoothDevicesDialog(*this, capture_file_, packet_list_);
-    connect(bluetooth_devices_dialog, SIGNAL(goToPacket(int)),
-            packet_list_, SLOT(goToPacket(int)));
-    connect(bluetooth_devices_dialog, SIGNAL(updateFilter(QString, bool)),
-            this, SLOT(filterPackets(QString, bool)));
-    bluetooth_devices_dialog->show();
-}
-
-void MainWindow::on_actionBluetoothHCI_Summary_triggered()
-{
-    BluetoothHciSummaryDialog *bluetooth_hci_summary_dialog = new BluetoothHciSummaryDialog(*this, capture_file_);
-    connect(bluetooth_hci_summary_dialog, SIGNAL(goToPacket(int)),
-            packet_list_, SLOT(goToPacket(int)));
-    connect(bluetooth_hci_summary_dialog, SIGNAL(updateFilter(QString, bool)),
-            this, SLOT(filterPackets(QString, bool)));
-    bluetooth_hci_summary_dialog->show();
-}
-
 // Tools Menu
 
-void MainWindow::on_actionToolsFirewallAclRules_triggered()
+void LogwolfMainWindow::on_actionToolsFirewallAclRules_triggered()
 {
     FirewallRulesDialog *firewall_rules_dialog = new FirewallRulesDialog(*this, capture_file_);
     firewall_rules_dialog->show();
 }
 
-void MainWindow::on_actionToolsCredentials_triggered()
+void LogwolfMainWindow::on_actionToolsCredentials_triggered()
 {
     CredentialsDialog *credentials_dialog = new CredentialsDialog(*this, capture_file_, packet_list_);
     credentials_dialog->show();
 }
 
 // Help Menu
-void MainWindow::on_actionHelpContents_triggered() {
+void LogwolfMainWindow::on_actionHelpContents_triggered() {
 
-    wsApp->helpTopicAction(HELP_CONTENT);
+    mainApp->helpTopicAction(HELP_CONTENT);
 }
 
-void MainWindow::on_actionHelpMPWireshark_triggered() {
+void LogwolfMainWindow::on_actionHelpMPWireshark_triggered() {
 
-    wsApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK);
+    mainApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK);
 }
 
-void MainWindow::on_actionHelpMPWireshark_Filter_triggered() {
-    wsApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK_FILTER);
+void LogwolfMainWindow::on_actionHelpMPWireshark_Filter_triggered() {
+    mainApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK_FILTER);
 }
 
-void MainWindow::on_actionHelpMPCapinfos_triggered() {
-    wsApp->helpTopicAction(LOCALPAGE_MAN_CAPINFOS);
+void LogwolfMainWindow::on_actionHelpMPCapinfos_triggered() {
+    mainApp->helpTopicAction(LOCALPAGE_MAN_CAPINFOS);
 }
 
-void MainWindow::on_actionHelpMPDumpcap_triggered() {
-    wsApp->helpTopicAction(LOCALPAGE_MAN_DUMPCAP);
+void LogwolfMainWindow::on_actionHelpMPDumpcap_triggered() {
+    mainApp->helpTopicAction(LOCALPAGE_MAN_DUMPCAP);
 }
 
-void MainWindow::on_actionHelpMPEditcap_triggered() {
-    wsApp->helpTopicAction(LOCALPAGE_MAN_EDITCAP);
+void LogwolfMainWindow::on_actionHelpMPEditcap_triggered() {
+    mainApp->helpTopicAction(LOCALPAGE_MAN_EDITCAP);
 }
 
-void MainWindow::on_actionHelpMPMergecap_triggered() {
-    wsApp->helpTopicAction(LOCALPAGE_MAN_MERGECAP);
+void LogwolfMainWindow::on_actionHelpMPMergecap_triggered() {
+    mainApp->helpTopicAction(LOCALPAGE_MAN_MERGECAP);
 }
 
-void MainWindow::on_actionHelpMPRawshark_triggered() {
-    wsApp->helpTopicAction(LOCALPAGE_MAN_RAWSHARK);
+void LogwolfMainWindow::on_actionHelpMPRawshark_triggered() {
+    mainApp->helpTopicAction(LOCALPAGE_MAN_RAWSHARK);
 }
 
-void MainWindow::on_actionHelpMPReordercap_triggered() {
-    wsApp->helpTopicAction(LOCALPAGE_MAN_REORDERCAP);
+void LogwolfMainWindow::on_actionHelpMPReordercap_triggered() {
+    mainApp->helpTopicAction(LOCALPAGE_MAN_REORDERCAP);
 }
 
-void MainWindow::on_actionHelpMPText2pcap_triggered() {
-    wsApp->helpTopicAction(LOCALPAGE_MAN_TEXT2PCAP);
+void LogwolfMainWindow::on_actionHelpMPText2pcap_triggered() {
+    mainApp->helpTopicAction(LOCALPAGE_MAN_TEXT2PCAP);
 }
 
-void MainWindow::on_actionHelpMPTShark_triggered() {
-    wsApp->helpTopicAction(LOCALPAGE_MAN_TSHARK);
+void LogwolfMainWindow::on_actionHelpMPTShark_triggered() {
+    mainApp->helpTopicAction(LOCALPAGE_MAN_TSHARK);
 }
 
-void MainWindow::on_actionHelpWebsite_triggered() {
+void LogwolfMainWindow::on_actionHelpWebsite_triggered() {
 
-    wsApp->helpTopicAction(ONLINEPAGE_HOME);
+    mainApp->helpTopicAction(ONLINEPAGE_HOME);
 }
 
-void MainWindow::on_actionHelpFAQ_triggered() {
+void LogwolfMainWindow::on_actionHelpFAQ_triggered() {
 
-    wsApp->helpTopicAction(ONLINEPAGE_FAQ);
+    mainApp->helpTopicAction(ONLINEPAGE_FAQ);
 }
 
-void MainWindow::on_actionHelpAsk_triggered() {
+void LogwolfMainWindow::on_actionHelpAsk_triggered() {
 
-    wsApp->helpTopicAction(ONLINEPAGE_ASK);
+    mainApp->helpTopicAction(ONLINEPAGE_ASK);
 }
 
-void MainWindow::on_actionHelpDownloads_triggered() {
+void LogwolfMainWindow::on_actionHelpDownloads_triggered() {
 
-    wsApp->helpTopicAction(ONLINEPAGE_DOWNLOAD);
+    mainApp->helpTopicAction(ONLINEPAGE_DOWNLOAD);
 }
 
-void MainWindow::on_actionHelpWiki_triggered() {
+void LogwolfMainWindow::on_actionHelpWiki_triggered() {
 
-    wsApp->helpTopicAction(ONLINEPAGE_WIKI);
+    mainApp->helpTopicAction(ONLINEPAGE_WIKI);
 }
 
-void MainWindow::on_actionHelpSampleCaptures_triggered() {
+void LogwolfMainWindow::on_actionHelpSampleCaptures_triggered() {
 
-    wsApp->helpTopicAction(ONLINEPAGE_SAMPLE_FILES);
+    mainApp->helpTopicAction(ONLINEPAGE_SAMPLE_FILES);
 }
 
 #ifdef HAVE_SOFTWARE_UPDATE
-void MainWindow::checkForUpdates()
+void LogwolfMainWindow::checkForUpdates()
 {
     software_update_check();
 }
 #endif
 
-void MainWindow::on_actionHelpAbout_triggered()
+void LogwolfMainWindow::on_actionHelpAbout_triggered()
 {
     AboutDialog *about_dialog = new AboutDialog(this);
 
@@ -3838,11 +3424,11 @@ void MainWindow::on_actionHelpAbout_triggered()
     about_dialog->activateWindow();
 }
 
-void MainWindow::on_actionGoGoToPacket_triggered() {
+void LogwolfMainWindow::on_actionGoGoToPacket_triggered() {
     if (! packet_list_->model() || packet_list_->model()->rowCount() < 1) {
         return;
     }
-    previous_focus_ = wsApp->focusWidget();
+    previous_focus_ = mainApp->focusWidget();
     connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
 
     showAccordionFrame(main_ui_->goToFrame, true);
@@ -3852,7 +3438,7 @@ void MainWindow::on_actionGoGoToPacket_triggered() {
     }
 }
 
-void MainWindow::on_actionGoGoToLinkedPacket_triggered()
+void LogwolfMainWindow::on_actionGoGoToLinkedPacket_triggered()
 {
     QAction *gta = qobject_cast<QAction*>(sender());
     if (!gta) return;
@@ -3865,7 +3451,7 @@ void MainWindow::on_actionGoGoToLinkedPacket_triggered()
 }
 
 // gtk/main_menubar.c:goto_conversation_frame
-void MainWindow::goToConversationFrame(bool go_next) {
+void LogwolfMainWindow::goToConversationFrame(bool go_next) {
     gchar     *filter       = NULL;
     dfilter_t *dfcode       = NULL;
     gboolean   found_packet = FALSE;
@@ -3881,14 +3467,14 @@ void MainWindow::goToConversationFrame(bool go_next) {
      * coloring */
     filter = conversation_filter_from_packet(pi);
     if (filter == NULL) {
-        wsApp->pushStatus(WiresharkApplication::TemporaryStatus, tr("Unable to build conversation filter."));
+        mainApp->pushStatus(WiresharkApplication::TemporaryStatus, tr("Unable to build conversation filter."));
         g_free(filter);
         return;
     }
 
     if (!dfilter_compile(filter, &dfcode, NULL)) {
         /* The attempt failed; report an error. */
-        wsApp->pushStatus(WiresharkApplication::TemporaryStatus, tr("Error compiling filter for this conversation."));
+        mainApp->pushStatus(WiresharkApplication::TemporaryStatus, tr("Error compiling filter for this conversation."));
         g_free(filter);
         return;
     }
@@ -3897,33 +3483,33 @@ void MainWindow::goToConversationFrame(bool go_next) {
 
     if (!found_packet) {
         /* We didn't find a packet */
-        wsApp->pushStatus(WiresharkApplication::TemporaryStatus, tr("No previous/next packet in conversation."));
+        mainApp->pushStatus(WiresharkApplication::TemporaryStatus, tr("No previous/next packet in conversation."));
     }
 
     dfilter_free(dfcode);
     g_free(filter);
 }
 
-void MainWindow::on_actionGoNextConversationPacket_triggered()
+void LogwolfMainWindow::on_actionGoNextConversationPacket_triggered()
 {
     goToConversationFrame(true);
 }
 
-void MainWindow::on_actionGoPreviousConversationPacket_triggered()
+void LogwolfMainWindow::on_actionGoPreviousConversationPacket_triggered()
 {
     goToConversationFrame(false);
 }
 
-void MainWindow::on_actionGoAutoScroll_toggled(bool checked)
+void LogwolfMainWindow::on_actionGoAutoScroll_toggled(bool checked)
 {
     packet_list_->setVerticalAutoScroll(checked);
 }
 
-void MainWindow::resetPreviousFocus() {
+void LogwolfMainWindow::resetPreviousFocus() {
     previous_focus_ = NULL;
 }
 
-void MainWindow::on_goToCancel_clicked()
+void LogwolfMainWindow::on_goToCancel_clicked()
 {
     main_ui_->goToFrame->animatedHide();
     if (previous_focus_) {
@@ -3933,19 +3519,19 @@ void MainWindow::on_goToCancel_clicked()
     }
 }
 
-void MainWindow::on_goToGo_clicked()
+void LogwolfMainWindow::on_goToGo_clicked()
 {
     gotoFrame(main_ui_->goToLineEdit->text().toInt());
 
     on_goToCancel_clicked();
 }
 
-void MainWindow::on_goToLineEdit_returnPressed()
+void LogwolfMainWindow::on_goToLineEdit_returnPressed()
 {
     on_goToGo_clicked();
 }
 
-void MainWindow::on_actionCaptureStart_triggered()
+void LogwolfMainWindow::on_actionCaptureStart_triggered()
 {
 //#ifdef HAVE_AIRPCAP
 //  airpcap_if_active = airpcap_if_selected;
@@ -3975,7 +3561,7 @@ void MainWindow::on_actionCaptureStart_triggered()
 #ifdef HAVE_LIBPCAP
     if (global_capture_opts.num_selected == 0) {
         QString err_msg = tr("No Interface Selected.");
-        wsApp->pushStatus(WiresharkApplication::TemporaryStatus, err_msg);
+        mainApp->pushStatus(WiresharkApplication::TemporaryStatus, err_msg);
         main_ui_->actionCaptureStart->setChecked(false);
         return;
     }
@@ -3983,7 +3569,7 @@ void MainWindow::on_actionCaptureStart_triggered()
     /* XXX - will closing this remove a temporary file? */
     QString before_what(tr(" before starting a new capture"));
     if (testCaptureFileClose(before_what)) {
-        startCapture(QStringList());
+        startCapture();
     } else {
         // simply clicking the button sets it to 'checked' even though we've
         // decided to do nothing, so undo that
@@ -3992,12 +3578,12 @@ void MainWindow::on_actionCaptureStart_triggered()
 #endif // HAVE_LIBPCAP
 }
 
-void MainWindow::on_actionCaptureStop_triggered()
+void LogwolfMainWindow::on_actionCaptureStop_triggered()
 {
     stopCapture();
 }
 
-void MainWindow::on_actionCaptureRestart_triggered()
+void LogwolfMainWindow::on_actionCaptureRestart_triggered()
 {
 #ifdef HAVE_LIBPCAP
     QString before_what(tr(" before restarting the capture"));
@@ -4005,11 +3591,11 @@ void MainWindow::on_actionCaptureRestart_triggered()
     if (!testCaptureFileClose(before_what, Restart))
         return;
 
-    startCapture(QStringList());
+    startCapture();
 #endif // HAVE_LIBPCAP
 }
 
-void MainWindow::on_actionCaptureCaptureFilters_triggered()
+void LogwolfMainWindow::on_actionCaptureCaptureFilters_triggered()
 {
     if (!capture_filter_dlg_) {
         capture_filter_dlg_ = new FilterDialog(this, FilterDialog::CaptureFilter);
@@ -4019,7 +3605,7 @@ void MainWindow::on_actionCaptureCaptureFilters_triggered()
     capture_filter_dlg_->activateWindow();
 }
 
-void MainWindow::on_actionStatisticsCaptureFileProperties_triggered()
+void LogwolfMainWindow::on_actionStatisticsCaptureFileProperties_triggered()
 {
     CaptureFilePropertiesDialog *capture_file_properties_dialog = new CaptureFilePropertiesDialog(*this, capture_file_);
     connect(capture_file_properties_dialog, SIGNAL(captureCommentChanged()),
@@ -4027,7 +3613,7 @@ void MainWindow::on_actionStatisticsCaptureFileProperties_triggered()
     capture_file_properties_dialog->show();
 }
 
-void MainWindow::on_actionStatisticsResolvedAddresses_triggered()
+void LogwolfMainWindow::on_actionStatisticsResolvedAddresses_triggered()
 {
     QString capFileName;
     wtap* wth = Q_NULLPTR;
@@ -4041,7 +3627,7 @@ void MainWindow::on_actionStatisticsResolvedAddresses_triggered()
     resolved_addresses_dialog->show();
 }
 
-void MainWindow::on_actionStatisticsProtocolHierarchy_triggered()
+void LogwolfMainWindow::on_actionStatisticsProtocolHierarchy_triggered()
 {
     ProtocolHierarchyDialog *phd = new ProtocolHierarchyDialog(*this, capture_file_);
     connect(phd, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
@@ -4049,7 +3635,7 @@ void MainWindow::on_actionStatisticsProtocolHierarchy_triggered()
     phd->show();
 }
 
-void MainWindow::on_actionCaptureOptions_triggered()
+void LogwolfMainWindow::on_actionCaptureOptions_triggered()
 {
 #ifdef HAVE_LIBPCAP
     if (!capture_options_dialog_) {
@@ -4093,15 +3679,15 @@ void MainWindow::on_actionCaptureOptions_triggered()
 }
 
 #ifdef HAVE_LIBPCAP
-void MainWindow::on_actionCaptureRefreshInterfaces_triggered()
+void LogwolfMainWindow::on_actionCaptureRefreshInterfaces_triggered()
 {
     main_ui_->actionCaptureRefreshInterfaces->setEnabled(false);
-    wsApp->refreshLocalInterfaces();
+    mainApp->refreshLocalInterfaces();
     main_ui_->actionCaptureRefreshInterfaces->setEnabled(true);
 }
 #endif
 
-void MainWindow::externalMenuItem_triggered()
+void LogwolfMainWindow::externalMenuItem_triggered()
 {
     QAction * triggerAction = NULL;
     QVariant v;
@@ -4123,25 +3709,18 @@ void MainWindow::externalMenuItem_triggered()
     }
 }
 
-void MainWindow::gotoFrame(int packet_num)
-{
-    if (packet_num > 0) {
-        packet_list_->goToPacket(packet_num);
-    }
-}
-
-void MainWindow::extcap_options_finished(int result)
+void LogwolfMainWindow::extcap_options_finished(int result)
 {
     if (result == QDialog::Accepted) {
         QString before_what(tr(" before starting a new capture"));
         if (testCaptureFileClose(before_what)) {
-            startCapture(QStringList());
+            startCapture();
         }
     }
     this->welcome_page_->getInterfaceFrame()->interfaceListChanged();
 }
 
-void MainWindow::showExtcapOptionsDialog(QString &device_name, bool startCaptureOnClose)
+void LogwolfMainWindow::showExtcapOptionsDialog(QString &device_name, bool startCaptureOnClose)
 {
     ExtcapOptionsDialog * extcap_options_dialog = ExtcapOptionsDialog::createForDevice(device_name, startCaptureOnClose, this);
     /* The dialog returns null, if the given device name is not a valid extcap device */
@@ -4163,19 +3742,7 @@ void MainWindow::showExtcapOptionsDialog(QString &device_name, bool startCapture
     }
 }
 
-void MainWindow::insertColumn(QString name, QString abbrev, gint pos)
-{
-    gint colnr = 0;
-    if (name.length() > 0 && abbrev.length() > 0)
-    {
-        colnr = column_prefs_add_custom(COL_CUSTOM, name.toStdString().c_str(), abbrev.toStdString().c_str(), pos);
-        packet_list_->columnsChanged();
-        packet_list_->resizeColumnToContents(colnr);
-        prefs_main_write();
-    }
-}
-
-void MainWindow::on_actionContextWikiProtocolPage_triggered()
+void LogwolfMainWindow::on_actionContextWikiProtocolPage_triggered()
 {
     QAction *wa = qobject_cast<QAction*>(sender());
     if (!wa) return;
@@ -4186,7 +3753,7 @@ void MainWindow::on_actionContextWikiProtocolPage_triggered()
 
     const QString proto_abbrev = proto_registrar_get_abbrev(field_id);
 
-    int ret = QMessageBox::question(this, wsApp->windowTitleString(tr("Wiki Page for %1").arg(proto_abbrev)),
+    int ret = QMessageBox::question(this, mainApp->windowTitleString(tr("Wiki Page for %1").arg(proto_abbrev)),
                                     tr("<p>The Wireshark Wiki is maintained by the community.</p>"
                                     "<p>The page you are about to load might be wonderful, "
                                     "incomplete, wrong, or nonexistent.</p>"
@@ -4199,7 +3766,7 @@ void MainWindow::on_actionContextWikiProtocolPage_triggered()
     QDesktopServices::openUrl(wiki_url);
 }
 
-void MainWindow::on_actionContextFilterFieldReference_triggered()
+void LogwolfMainWindow::on_actionContextFilterFieldReference_triggered()
 {
     QAction *wa = qobject_cast<QAction*>(sender());
     if (!wa) return;
@@ -4216,7 +3783,7 @@ void MainWindow::on_actionContextFilterFieldReference_triggered()
     QDesktopServices::openUrl(dfref_url);
 }
 
-void MainWindow::on_actionViewFullScreen_triggered(bool checked)
+void LogwolfMainWindow::on_actionViewFullScreen_triggered(bool checked)
 {
     if (checked) {
         // Save the state for future restore
@@ -4231,7 +3798,7 @@ void MainWindow::on_actionViewFullScreen_triggered(bool checked)
     }
 }
 
-void MainWindow::activatePluginIFToolbar(bool)
+void LogwolfMainWindow::activatePluginIFToolbar(bool)
 {
     QAction *sendingAction = dynamic_cast<QAction *>(sender());
     if (!sendingAction || !sendingAction->data().isValid())
@@ -4252,52 +3819,6 @@ void MainWindow::activatePluginIFToolbar(bool)
             }
         }
     }
-}
-
-void MainWindow::rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *> stream_ids _U_)
-{
-#ifdef QT_MULTIMEDIA_LIB
-    openTelephonyRtpPlayerDialog()->replaceRtpStreams(stream_ids);
-#endif
-}
-
-void MainWindow::rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *> stream_ids _U_)
-{
-#ifdef QT_MULTIMEDIA_LIB
-    openTelephonyRtpPlayerDialog()->addRtpStreams(stream_ids);
-#endif
-}
-
-void MainWindow::rtpPlayerDialogRemoveRtpStreams(QVector<rtpstream_id_t *> stream_ids _U_)
-{
-#ifdef QT_MULTIMEDIA_LIB
-    openTelephonyRtpPlayerDialog()->removeRtpStreams(stream_ids);
-#endif
-}
-
-void MainWindow::rtpAnalysisDialogReplaceRtpStreams(QVector<rtpstream_id_t *> stream_ids)
-{
-    openTelephonyRtpAnalysisDialog()->replaceRtpStreams(stream_ids);
-}
-
-void MainWindow::rtpAnalysisDialogAddRtpStreams(QVector<rtpstream_id_t *> stream_ids)
-{
-    openTelephonyRtpAnalysisDialog()->addRtpStreams(stream_ids);
-}
-
-void MainWindow::rtpAnalysisDialogRemoveRtpStreams(QVector<rtpstream_id_t *> stream_ids)
-{
-    openTelephonyRtpAnalysisDialog()->removeRtpStreams(stream_ids);
-}
-
-void MainWindow::rtpStreamsDialogSelectRtpStreams(QVector<rtpstream_id_t *> stream_ids)
-{
-    openTelephonyRtpStreamsDialog()->selectRtpStream(stream_ids);
-}
-
-void MainWindow::rtpStreamsDialogDeselectRtpStreams(QVector<rtpstream_id_t *> stream_ids)
-{
-    openTelephonyRtpStreamsDialog()->deselectRtpStream(stream_ids);
 }
 
 #ifdef _MSC_VER

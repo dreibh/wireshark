@@ -1178,8 +1178,8 @@ ws_find_package(PCAP ENABLE_PCAP HAVE_LIBPCAP)
 ws_find_package(AIRPCAP ENABLE_AIRPCAP HAVE_AIRPCAP)
 ws_find_package(Systemd BUILD_sdjournal HAVE_SYSTEMD)
 
-# Build the Qt GUI?
-if(BUILD_wireshark)
+# Build one of the Qt GUIs?
+if(BUILD_wireshark OR BUILD_logwolf)
 	if(USE_qt6)
 		set(qtver "6")
 		if(DEFINED ENV{WIRESHARK_QT6_PREFIX_PATH})
@@ -1303,7 +1303,7 @@ ws_find_package(ILBC ENABLE_ILBC HAVE_ILBC)
 
 ws_find_package(OPUS ENABLE_OPUS HAVE_OPUS)
 
-if (NOT WIN32)
+if (BUILD_logwolf)
 	# libsinsp+libscap, required for falco-bridge
 	ws_find_package(Sinsp ENABLE_SINSP HAVE_SINSP)
 endif()
@@ -1340,7 +1340,7 @@ find_package( Asciidoctor 1.5 )
 find_package(DOXYGEN)
 
 # The SpeexDSP resampler is required iff building wireshark or sharkd.
-if(BUILD_wireshark OR BUILD_sharkd)
+if(BUILD_wireshark OR BUILD_logwolf OR BUILD_sharkd)
 	# We don't provide a binary package for SpeexDSP in our repository.
 	# If using the repository don't bother searching for a system SpeexDSP
 	# installation and just use the bundled resampler code instead.
@@ -1583,6 +1583,10 @@ if(BUILD_wireshark AND QT_FOUND)
 	add_subdirectory( ui/qt )
 endif()
 
+if(BUILD_logwolf AND QT_FOUND)
+	add_subdirectory( ui/qt_logwolf )
+endif()
+
 # Location of our plugins. PLUGIN_DIR should allow running
 # from the build directory similar to DATAFILE_DIR above.
 if(ENABLE_PLUGINS)
@@ -1612,8 +1616,9 @@ if(ENABLE_PLUGINS)
 		plugins/codecs/l16_mono
 		${CUSTOM_PLUGIN_SRC_DIR}
 	)
+	set(LOGWOLF_PLUGIN_SRC_DIRS)
 	if(SINSP_FOUND)
-		list(APPEND PLUGIN_SRC_DIRS
+		list(APPEND LOGWOLF_PLUGIN_SRC_DIRS
 			plugins/epan/falco_bridge
 		)
 	endif()
@@ -1654,6 +1659,7 @@ if(ENABLE_PLUGINS)
 
 else()
 	set(PLUGIN_SRC_DIRS )
+	set(LOGWOLF_PLUGIN_SRC_DIRS )
 endif()
 
 if(ENABLE_APPLICATION_BUNDLE)
@@ -1663,14 +1669,23 @@ if(ENABLE_APPLICATION_BUNDLE)
 		# Xcode
 		set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Wireshark.app/Contents/PlugIns/wireshark/${PLUGIN_PATH_ID}")
 	endif()
+	if(CMAKE_CFG_INTDIR STREQUAL ".")
+		set(_logwolf_plugin_dir "${CMAKE_BINARY_DIR}/run/Logwolf.app/Contents/PlugIns/logwolf/${PLUGIN_PATH_ID}")
+	else()
+		# Xcode
+		set(_logwolf_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Logwolf.app/Contents/PlugIns/logwolf/${PLUGIN_PATH_ID}")
+	endif()
 elseif(WIN32 AND NOT CMAKE_CFG_INTDIR STREQUAL ".")
 	set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/${PLUGIN_VERSION_DIR}")
+	set(_logwolf_plugin_dir ${_plugin_dir})
 else()
 	set(_plugin_dir "${DATAFILE_DIR}/${PLUGIN_VERSION_DIR}")
+	set(_logwolf_plugin_dir ${_plugin_dir})
 endif()
 set (PLUGIN_DIR ${_plugin_dir} CACHE INTERNAL "Build time plugin location.")
+set (LOGWOLF_PLUGIN_DIR ${_logwolf_plugin_dir} CACHE INTERNAL "Build time Logwolf plugin location.")
 
-foreach(_plugin_src_dir ${PLUGIN_SRC_DIRS})
+foreach(_plugin_src_dir ${PLUGIN_SRC_DIRS} ${LOGWOLF_PLUGIN_SRC_DIRS})
 	add_subdirectory( ${_plugin_src_dir} )
 endforeach()
 
@@ -1710,11 +1725,12 @@ set(DOXYGEN_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR})
 
 set(CFG_OUT_FILES
 	doxygen.cfg
-	packaging/macosx/Info.plist
+	packaging/macosx/LogwolfInfo.plist
 	packaging/macosx/osx-app.sh
 	packaging/macosx/osx-dmg.sh
 	packaging/macosx/wireshark-app.dmgbuild
 	packaging/macosx/wireshark-dsym.dmgbuild
+	packaging/macosx/WiresharkInfo.plist
 	packaging/source/git-export-release.sh
 	resources/dumpcap.rc
 	resources/libwireshark.rc
@@ -2432,6 +2448,22 @@ if(BUILD_wireshark AND QT_FOUND)
 	set_executable_resources(wireshark "Wireshark" UNIQUE_RC)
 endif()
 
+if(BUILD_logwolf AND QT_FOUND)
+	set(LOGWOLF_SRC
+		file.c
+		fileset.c
+		${PLATFORM_UI_SRC}
+	)
+	set(logwolf_FILES
+		$<TARGET_OBJECTS:capture_opts>
+		$<TARGET_OBJECTS:ui_qt_logwolf>
+		$<TARGET_OBJECTS:shark_common>
+		${LOGWOLF_SRC}
+		${PLATFORM_UI_RC_FILES}
+	)
+	set_executable_resources(logwolf "Logwolf" UNIQUE_RC)
+endif()
+
 if(ENABLE_APPLICATION_BUNDLE)
 	#
 	# Add -Wl,-single_module to the LDFLAGS used with shared
@@ -2456,9 +2488,6 @@ if(ENABLE_APPLICATION_BUNDLE)
 	set(CMAKE_EXE_LINKER_FLAGS
 	"-Wl,-headerpad_max_install_names -Wl,-search_paths_first ${CMAKE_EXE_LINKER_FLAGS}"
 	)
-
-	# Create our Frameworks directory
-	file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/run/${CMAKE_CFG_INTDIR}/Wireshark.app/Contents/Frameworks")
 
 	# Add files to the app bundle
 	# Wireshark.app/Contents
@@ -2553,7 +2582,7 @@ if(BUILD_wireshark AND QT_FOUND)
 		endif()
 		set_target_properties(
 			wireshark PROPERTIES
-				MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/packaging/macosx/Info.plist
+				MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/packaging/macosx/WiresharkInfo.plist
 		)
 		if(CMAKE_CFG_INTDIR STREQUAL ".")
 			# Add a wrapper script which opens the bundle. This adds
@@ -2601,6 +2630,109 @@ if(BUILD_wireshark AND QT_FOUND)
 			\"${QT_WINDEPLOYQT_EXECUTABLE}\"
 			--no-compiler-runtime
 			\"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/Wireshark.exe\")"
+		)
+
+	endif(QT_WINDEPLOYQT_EXECUTABLE)
+endif()
+
+if(BUILD_logwolf AND QT_FOUND)
+	set(logwolf_LIBS
+		ui
+		capchild
+		caputils
+		wiretap
+		epan
+		version_info
+		${QT_LIBRARIES}
+		${APPLE_APPLICATION_SERVICES_LIBRARY}
+		${APPLE_APPKIT_LIBRARY}
+		${APPLE_CORE_FOUNDATION_LIBRARY}
+		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
+		${SPARKLE_LIBRARIES}
+		${WIN_WS2_32_LIBRARY}
+		${WIN_VERSION_LIBRARY}
+		${WINSPARKLE_LIBRARIES}
+		$<$<BOOL:${WIN32}>:UxTheme.lib>
+		${SPEEXDSP_LIBRARIES}
+		${MINIZIP_LIBRARIES}
+	)
+
+	add_executable(logwolf WIN32 MACOSX_BUNDLE ${logwolf_FILES} ${EXTRA_BUNDLE_FILES})
+	if(WIN32 AND NOT BUILD_wireshark)
+		set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT logwolf)
+	endif()
+	set(PROGLIST ${PROGLIST} logwolf)
+	set_target_properties(logwolf PROPERTIES
+		LINK_FLAGS "${WS_LINK_FLAGS}"
+		FOLDER "Executables"
+		INSTALL_RPATH "${EXECUTABLE_INSTALL_RPATH}"
+		AUTOMOC ON
+		AUTOUIC ON
+		AUTORCC ON
+	)
+	if(MSVC)
+		set_target_properties(logwolf PROPERTIES LINK_FLAGS_DEBUG "${WS_MSVC_DEBUG_LINK_FLAGS}")
+	endif()
+	if(ENABLE_APPLICATION_BUNDLE OR WIN32)
+		set_target_properties(logwolf PROPERTIES OUTPUT_NAME Logwolf)
+	endif()
+
+	if(ENABLE_APPLICATION_BUNDLE)
+		if(ASCIIDOCTOR_FOUND)
+			# Make sure to generate files referenced by
+			# BUNDLE_RESOURCE_SHARE_MAN1_FILES
+			add_dependencies(logwolf manpages)
+		endif()
+		set_target_properties(
+			logwolf PROPERTIES
+				MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/packaging/macosx/LogwolfInfo.plist
+		)
+		if(CMAKE_CFG_INTDIR STREQUAL ".")
+			# Add a wrapper script which opens the bundle. This adds
+			# convenience but makes debugging more difficult.
+			# It is not created if using Xcode
+			# XXX Running run/Logwolf.app/Contents/MacOS/Logwolf works
+			# fine for me (Gerald) here on Mojave. Can we just make this a
+			# symlink?
+			file(REMOVE ${CMAKE_BINARY_DIR}/run/logwolf)
+			file(WRITE ${CMAKE_BINARY_DIR}/run/logwolf "#!/bin/sh\n")
+			file(APPEND ${CMAKE_BINARY_DIR}/run/logwolf "# Generated by ${CMAKE_CURRENT_LIST_FILE}\n")
+			file(APPEND ${CMAKE_BINARY_DIR}/run/logwolf "# Wrapper script which should work around the issue described at\n")
+			file(APPEND ${CMAKE_BINARY_DIR}/run/logwolf "# https://stackoverflow.com/questions/25318524/what-exactly-should-i-pass-to-nsapp-activateignoringotherapps-to-get-my-appl\n")
+			file(APPEND ${CMAKE_BINARY_DIR}/run/logwolf "exec ${CMAKE_BINARY_DIR}/run/Logwolf.app/Contents/MacOS/Logwolf \"\$\@\"\n")
+			execute_process(COMMAND chmod a+x ${CMAKE_BINARY_DIR}/run/logwolf)
+		endif()
+	endif()
+
+	target_link_libraries(logwolf ${logwolf_LIBS})
+	target_include_directories(logwolf SYSTEM PRIVATE ${SPARKLE_INCLUDE_DIRS})
+
+	install(
+		TARGETS logwolf
+		RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+		BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR}
+	)
+
+	if(QT_WINDEPLOYQT_EXECUTABLE)
+		add_custom_target(copy_ls_qt_dlls ALL)
+		set_target_properties(copy_ls_qt_dlls PROPERTIES FOLDER "Copy Tasks")
+		# Will we ever need to use --debug? Windeployqt seems to
+		# be smart enough to copy debug DLLs when needed.
+		add_custom_command(TARGET copy_ls_qt_dlls
+			POST_BUILD
+			COMMAND set "PATH=${QT_BIN_PATH};%PATH%"
+			COMMAND "${QT_WINDEPLOYQT_EXECUTABLE}"
+				--no-compiler-runtime
+				--verbose 0
+				$<$<BOOL:${MSVC}>:--pdb>
+				"$<TARGET_FILE:logwolf>"
+		)
+		add_dependencies(copy_ls_qt_dlls logwolf)
+
+		install(CODE "execute_process(COMMAND
+			\"${QT_WINDEPLOYQT_EXECUTABLE}\"
+			--no-compiler-runtime
+			\"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/Logwolf.exe\")"
 		)
 
 	endif(QT_WINDEPLOYQT_EXECUTABLE)
@@ -3051,7 +3183,7 @@ if (MAXMINDDB_FOUND)
 	install(TARGETS mmdbresolve RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-if(ENABLE_APPLICATION_BUNDLE)
+if(ENABLE_APPLICATION_BUNDLE AND BUILD_wireshark)
 	file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/run/${CMAKE_CFG_INTDIR}/Wireshark.app/Contents/Resources/Extras")
 
 	# --preserve-xattr is undocumented but ensures that we install
@@ -3226,6 +3358,44 @@ if(ENABLE_APPLICATION_BUNDLE)
 		# We create Wireshark.app in "run". Do our work there.
 		WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/run
 	)
+
+endif()
+
+if(ENABLE_APPLICATION_BUNDLE AND BUILD_logwolf)
+	add_custom_target(logwolf_app_bundle)
+	set_target_properties(logwolf_app_bundle PROPERTIES FOLDER "Copy Tasks")
+	add_custom_command(TARGET logwolf_app_bundle
+		POST_BUILD
+		COMMAND "${CMAKE_BINARY_DIR}/packaging/macosx/osx-app.sh" --bundle Logwolf.app
+		WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/run"
+	)
+
+	# add_custom_target(dmg_package_prep DEPENDS app_bundle)
+
+	# set(_read_me_first "packaging/macosx/Read me first.html")
+	# ADD_CUSTOM_COMMAND(
+	# OUTPUT
+	# 	${_read_me_first}
+	# COMMAND ${ASCIIDOCTOR_EXECUTABLE}
+	# 	--backend html
+	# 	--out-file ${_read_me_first}
+	# 	--attribute include-dir=${CMAKE_SOURCE_DIR}/docbook
+	# 	--attribute min-macos-version=${MIN_MACOS_VERSION}
+	# 	${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Read_me_first.adoc
+	# DEPENDS
+	# 	${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Read_me_first.adoc
+	# )
+	# add_custom_target(read_me_first_html DEPENDS ${_read_me_first} )
+	# add_dependencies(dmg_package_prep read_me_first_html)
+
+	# ADD_CUSTOM_TARGET( dmg_package
+	# 	COMMAND bash -x ${CMAKE_BINARY_DIR}/packaging/macosx/osx-dmg.sh
+	# 	# Unlike nsis_package_prep + nsis_package, we can add a direct
+	# 	# dependency here.
+	# 	DEPENDS dmg_package_prep
+	# 	# We create Wireshark.app in "run". Do our work there.
+	# 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}/run
+	# )
 
 endif()
 

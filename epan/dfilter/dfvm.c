@@ -195,9 +195,7 @@ dfvm_dump_str(wmem_allocator_t *alloc, dfilter_t *df, gboolean print_references)
 
 	buf = wmem_strbuf_new(alloc, NULL);
 
-	wmem_strbuf_append_printf(buf, "Filter: %s\n", df->expanded_text);
-
-	wmem_strbuf_append(buf, "\nInstructions:\n");
+	wmem_strbuf_append(buf, "Instructions:\n");
 
 	length = df->insns->len;
 	for (id = 0; id < length; id++) {
@@ -243,7 +241,7 @@ dfvm_dump_str(wmem_allocator_t *alloc, dfilter_t *df, gboolean print_references)
 			case MK_RANGE:
 				arg3 = insn->arg3;
 				wmem_strbuf_append_printf(buf, "%05d MK_RANGE\t\t%s[%s] -> %s\n",
-					id, arg1_str, arg2_str, arg3_str);
+					id, arg1_str, arg3_str, arg2_str);
 				break;
 
 			case ALL_EQ:

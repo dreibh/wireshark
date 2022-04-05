@@ -81,7 +81,7 @@
 #include "ui/qt/utils/color_utils.h"
 #include "ui/qt/coloring_rules_dialog.h"
 #include "ui/qt/endpoint_dialog.h"
-#include "ui/qt/main_window.h"
+#include "ui/qt/wireshark_main_window.h"
 #include "ui/qt/response_time_delay_dialog.h"
 #include "ui/qt/service_response_time_dialog.h"
 #include "ui/qt/simple_dialog.h"
@@ -262,18 +262,18 @@ gather_wireshark_runtime_info(feature_list l)
     gather_airpcap_runtime_info(l);
 #endif
 
-    if (wsApp) {
+    if (mainApp) {
         // Display information
         const char *display_mode = ColorUtils::themeIsDark() ? "dark" : "light";
         with_feature(l, "%s display mode", display_mode);
 
         int hidpi_count = 0;
-        foreach (QScreen *screen, wsApp->screens()) {
+        foreach (QScreen *screen, mainApp->screens()) {
             if (screen->devicePixelRatio() > 1.0) {
                 hidpi_count++;
             }
         }
-        if (hidpi_count == wsApp->screens().count()) {
+        if (hidpi_count == mainApp->screens().count()) {
             with_feature(l, "HiDPI");
         } else if (hidpi_count) {
             with_feature(l, "mixed DPI");
@@ -418,7 +418,7 @@ macos_enable_layer_backing(void)
 /* And now our feature presentation... [ fade to music ] */
 int main(int argc, char *qt_argv[])
 {
-    MainWindow *main_w;
+    WiresharkMainWindow *main_w;
 
 #ifdef _WIN32
     LPWSTR              *wc_argv;
@@ -560,7 +560,7 @@ int main(int argc, char *qt_argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    /* init_progfile_dir_error = */ init_progfile_dir(argv[0]);
+    /* configuration_init_error = */ configuration_init(argv[0], NULL);
     /* ws_log(NULL, LOG_LEVEL_DEBUG, "progfile_dir: %s", get_progfile_dir()); */
 
 #ifdef _WIN32
@@ -697,7 +697,7 @@ int main(int argc, char *qt_argv[])
     /* ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_DEBUG, "Translator %s", language); */
 
     // Init the main window (and splash)
-    main_w = new(MainWindow);
+    main_w = new(WiresharkMainWindow);
     main_w->show();
     // We may not need a queued connection here but it would seem to make sense
     // to force the issue.

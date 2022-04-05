@@ -198,6 +198,10 @@ class case_arithmetic(unittest.TestCase):
         dfilter = "udp.dstport == 66 + 1"
         checkDFilterCount(dfilter, 2)
 
+    def test_add_3(self, checkDFilterCount):
+        dfilter = "udp.dstport == 66+1"
+        checkDFilterCount(dfilter, 2)
+
     def test_add_3(self, checkDFilterFail):
         error = 'Constant arithmetic expression on the LHS is invalid'
         dfilter = "2 + 3 == frame.number"
@@ -208,5 +212,15 @@ class case_arithmetic(unittest.TestCase):
         checkDFilterCount(dfilter, 2)
 
     def test_sub_2(self, checkDFilterCount):
+        dfilter = "udp.dstport == 68 - 1"
+        checkDFilterCount(dfilter, 2)
+
+    def test_sub_3(self, checkDFilterFail):
+        # Minus operator requires spaces around it.
+        error = '"68-1" is not a valid number.'
+        dfilter = "udp.dstport == 68-1"
+        checkDFilterFail(dfilter, error)
+
+    def test_sub_4(self, checkDFilterCount):
         dfilter = "udp.length == ip.len - 20"
         checkDFilterCount(dfilter, 4)
