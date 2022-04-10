@@ -86,9 +86,6 @@ dfilter_resolve_unparsed(dfwork_t *dfw, const char *name)
 {
 	header_field_info *hfinfo;
 
-	if (*name == '.')
-		name += 1;
-
 	hfinfo = proto_registrar_get_byname(name);
 	if (hfinfo != NULL) {
 		/* It's a field name */
@@ -104,17 +101,6 @@ dfilter_resolve_unparsed(dfwork_t *dfw, const char *name)
 
 	/* It's not a field. */
 	return NULL;
-}
-
-char *
-dfilter_literal_normalized(const char *token)
-{
-	if (*token == '<') {
-		char *end = strchr(token, '>');
-		return g_strndup(token + 1, end - (token + 1));
-	}
-
-	return g_strdup(token);
 }
 
 /* Initialize the dfilter module */
@@ -630,9 +616,9 @@ dfilter_log_full(const char *domain, enum ws_log_level level,
 
 	char *str = dfvm_dump_str(NULL, df, TRUE);
 	if (G_UNLIKELY(msg == NULL))
-		ws_log_write_always_full(domain, level, file, line, func, "Filter:%s\n%s", dfilter_text(df), str);
+		ws_log_write_always_full(domain, level, file, line, func, "\nFilter:\n%s\n%s", dfilter_text(df), str);
 	else
-		ws_log_write_always_full(domain, level, file, line, func, "%s:\nFilter: %s\nInstructions:\n%s", msg, dfilter_text(df), str);
+		ws_log_write_always_full(domain, level, file, line, func, "%s:\nFilter:\n%s\n%s", msg, dfilter_text(df), str);
 	g_free(str);
 }
 

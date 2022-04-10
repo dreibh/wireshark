@@ -1510,9 +1510,11 @@ include( UseCheckAPI )
 # If you change the nesting level be sure to check also the INSTALL_RPATH
 # target property.
 if (WIN32)
-	set(EXTCAP_INSTALL_LIBDIR "extcap" CACHE INTERNAL "The extcap dir")
+	set(EXTCAP_INSTALL_LIBDIR "extcap" CACHE INTERNAL "External capture utilities path")
+	set(EXTLOG_INSTALL_LIBDIR "extlog" CACHE INTERNAL "External log utilities path")
 else ()
-	set(EXTCAP_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/extcap" CACHE INTERNAL "The extcap dir")
+	set(EXTCAP_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/extcap" CACHE INTERNAL "External capture utilities path")
+	set(EXTLOG_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/extlog" CACHE INTERNAL "External log utilities path")
 endif()
 
 if(APPLE)
@@ -1736,6 +1738,7 @@ set(CFG_OUT_FILES
 	resources/libwireshark.rc
 	resources/libwiretap.rc
 	resources/libwsutil.rc
+	resources/logwolf.exe.manifest
 	resources/wireshark.exe.manifest
 	resources/wireshark.rc
 	wireshark.pc
@@ -3114,6 +3117,12 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 			if( _SETCAP_RESULT )
 				message( WARNING \"setcap failed (${_SETCAP_RESULT}).\")
 			endif()"
+		)
+	endif()
+	if(BUILD_logwolf AND ENABLE_APPLICATION_BUNDLE)
+		add_custom_command(TARGET dumpcap POST_BUILD
+			COMMAND ${CMAKE_COMMAND} -E copy_if_different
+				$<TARGET_FILE:dumpcap> run/Logwolf.app/Contents/MacOS/dumpcap
 		)
 	endif()
 elseif(BUILD_dumpcap AND ENABLE_PCAP)
