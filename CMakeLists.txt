@@ -19,13 +19,7 @@ if(WIN32)
 	# Needed for add_custom_command() WORKING_DIRECTORY generator expressions
 	cmake_minimum_required(VERSION 3.13)
 else()
-	cmake_minimum_required(VERSION 3.5)
-endif()
-if(POLICY CMP0069)
-	cmake_policy(SET CMP0069 NEW)
-endif()
-if(POLICY CMP0071)
-	cmake_policy(SET CMP0071 NEW)
+	cmake_minimum_required(VERSION 3.10)
 endif()
 if(POLICY CMP0074)
 	cmake_policy(SET CMP0074 NEW)
@@ -1141,7 +1135,7 @@ find_package(GMODULE2)
 reset_find_package(GTHREAD2)
 find_package(GTHREAD2 REQUIRED)
 reset_find_package(GCRYPT GCRYPT_ERROR_LIBRARY)
-find_package(GCRYPT "1.5.0" REQUIRED)
+find_package(GCRYPT "1.8.0" REQUIRED)
 # C Asynchronous resolver
 reset_find_package(CARES)
 find_package(CARES "1.5.0" REQUIRED)
@@ -1245,7 +1239,7 @@ if(BUILD_wireshark OR BUILD_logwolf)
 	endif()
 	set(QT_FOUND ON)
 	if(APPLE)
-		ws_find_package(Sparkle ENABLE_SPARKLE HAVE_SOFTWARE_UPDATE 1)
+		ws_find_package(Sparkle ENABLE_SPARKLE HAVE_SOFTWARE_UPDATE 2)
 	endif()
 	if(Qt${qtver}Multimedia_FOUND)
 		set(QT_MULTIMEDIA_LIB 1)
@@ -1415,14 +1409,13 @@ if (QT_FOUND)
 		# https://doc.qt.io/qt-5.11/supported-platforms-and-configurations.html
 		# https://doc.qt.io/qt-5.15/supported-platforms.html
 		# https://doc-snapshots.qt.io/qt6-dev/supported-platforms.html
-		# CMake < 3.7 doesn't support VERSION_GREATER_EQUAL.
-		if(Qt${qtver}Widgets_VERSION VERSION_GREATER "5.999.999")
+		if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.0.0")
 			set(MIN_MACOS_VERSION 10.14)
-		elseif(Qt5Widgets_VERSION VERSION_GREATER "5.14.999")
+		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.14.0")
 			set(MIN_MACOS_VERSION 10.13)
-		elseif(Qt5Widgets_VERSION VERSION_GREATER "5.11.999")
+		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.12.0")
 			set(MIN_MACOS_VERSION 10.12)
-		elseif(Qt5Widgets_VERSION VERSION_GREATER "5.9.999")
+		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.10.0")
 			set(MIN_MACOS_VERSION 10.11)
 		endif()
 		if(CMAKE_OSX_DEPLOYMENT_TARGET AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS MIN_MACOS_VERSION)
@@ -1851,31 +1844,6 @@ else()
 endif()
 
 feature_summary(WHAT ALL)
-
-# Newer Libgcrypt versions may be required for certain functionality:
-# 1.6
-# - IEEE 802.11 TDLS, AES-GCMP-128 and AES-GCMP-256 decryption
-# - IEEE 802.11 WPA3-Personal / SAE decryption
-# - BT Mesh decryption
-# - Distributed Object Framework (DOF) decryption
-# - IKEv2 integrity check
-# - LoRaWAN integrity check
-# - LTE PDCP EIA2 integrity check
-# - QUIC decryption support
-# - SMB3 AES-128-CCM/GCM decryption
-# - TLS 1.3 0-RTT decryption
-# - TLS GCM/CCM ciphers integrity check
-# 1.7
-# - QUIC ChaCha20-Poly1305 decryption
-# - TLS 1.3 ChaCha20-Poly1305 decryption
-# 1.8
-# - dcerpc-netlogon NETLOGON_FLAG_AES decryption
-# - WireGuard decryption
-if(GCRYPT_VERSION VERSION_LESS 1.6.0)
-	message(WARNING "Libgcrypt version 1.6.0 or newer is strongly recommended for improved decryption support, found ${GCRYPT_VERSION}")
-elseif(GCRYPT_VERSION VERSION_LESS 1.8.0)
-	message(WARNING "Libgcrypt version 1.8.0 or newer is recommended for full decryption functionality, found ${GCRYPT_VERSION}")
-endif()
 
 # Should this be part of libui?
 if(WIN32)
