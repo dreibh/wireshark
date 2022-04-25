@@ -136,6 +136,7 @@ if(WIN32)
 	if(WIRESHARK_TARGET_PLATFORM MATCHES "win64")
 		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE amd64)
 	elseif(WIRESHARK_TARGET_PLATFORM MATCHES "win32")
+		message(FATAL_ERROR "Deprecated target platform ${WIRESHARK_TARGET_PLATFORM}. See https://gitlab.com/wireshark/wireshark/-/issues/17779 for details.")
 		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE x86)
 	else()
 		message(FATAL_ERROR "Invalid target platform: ${WIRESHARK_TARGET_PLATFORM}")
@@ -1128,7 +1129,7 @@ endmacro()
 # The minimum package list
 find_package(Git)
 reset_find_package(GLIB2 GLIB2_MAIN_INCLUDE_DIR GLIB2_INTERNAL_INCLUDE_DIR)
-find_package(GLIB2 "2.38.0" REQUIRED)
+find_package(GLIB2 "2.50.0" REQUIRED)
 include_directories(SYSTEM ${GLIB2_INCLUDE_DIRS})
 reset_find_package(GMODULE2)
 find_package(GMODULE2)
@@ -1255,7 +1256,7 @@ reset_find_package(SMI SMI_SHARE_DIR)
 ws_find_package(SMI ENABLE_SMI HAVE_LIBSMI)
 
 # Support for TLS decryption using RSA private keys.
-ws_find_package(GNUTLS ENABLE_GNUTLS HAVE_LIBGNUTLS "3.3.0")
+ws_find_package(GNUTLS ENABLE_GNUTLS HAVE_LIBGNUTLS "3.5.8")
 
 # Kerberos
 ws_find_package(KERBEROS ENABLE_KERBEROS HAVE_KERBEROS)
@@ -1279,7 +1280,7 @@ ws_find_package(SNAPPY ENABLE_SNAPPY HAVE_SNAPPY)
 ws_find_package(ZSTD ENABLE_ZSTD HAVE_ZSTD "1.0.0")
 
 # Enhanced HTTP/2 dissection
-ws_find_package(NGHTTP2 ENABLE_NGHTTP2 HAVE_NGHTTP2)
+ws_find_package(NGHTTP2 ENABLE_NGHTTP2 HAVE_NGHTTP2 "1.11.0")
 
 # Embedded Lua interpreter
 ws_find_package(LUA ENABLE_LUA HAVE_LUA "5.1")
@@ -1356,7 +1357,7 @@ add_custom_target(dist
 	WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 )
 
-if(GNUTLS_FOUND AND NOT GNUTLS_VERSION VERSION_LESS "3.4.0")
+if(GNUTLS_FOUND)
 	# Calculating public keys from PKCS #11 private keys requires GnuTLS
 	# 3.4.0 or greater.
 	#
