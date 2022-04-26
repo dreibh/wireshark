@@ -3,8 +3,9 @@
 # says that recent CMake versions take care of rpathification.
 
 # To do:
-# - Add bcond_with clang
+# - Support clang with non Fedora distributions
 
+%bcond_with	toolchain_clang
 %bcond_with	ninja
 %bcond_with	ccache
 %bcond_without	qt5
@@ -22,6 +23,16 @@
 %bcond_with	ilbc
 %bcond_with	opus
 
+# Fedora options to use clang as the compiler
+# https://docs.fedoraproject.org/en-US/packaging-guidelines/#compiler
+%if %{with toolchain_clang}
+%if 0%{?fedora}
+%global toolchain clang
+%else
+%global toolchain gcc
+%endif
+%endif
+
 # Set at most one of these two:
 # Note that setcap requires rpmbuild 4.7.0 or later.
 %global setuid_dumpcap 0
@@ -35,7 +46,7 @@
 %global package_version @VERSION@
 
 
-Summary:	Wireshark is the world's foremost protocol analyzer
+Summary:	The world's foremost protocol analyzer
 Name:		wireshark
 Version:	@RPM_VERSION@
 Release:	1
@@ -47,40 +58,42 @@ Source:		https://www.wireshark.org/download/src/%{name}-%{package_version}.tar.x
 URL:		https://www.wireshark.org/
 Packager:	Gerald Combs <gerald[AT]wireshark.org>
 
-BuildRoot:	/tmp/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
-
 BuildRequires:	cmake >= 3.10
-BuildRequires:  python3
+BuildRequires:	python3
+%if %{with toolchain_clang}
+BuildRequires:	clang
+%else
 BuildRequires:	gcc
+%endif
 BuildRequires:	perl
 BuildRequires:	flex
 %if %{with ninja}
 %if 0%{?fedora} || 0%{?rhel}
-BuildRequires:  ninja-build
+BuildRequires:	ninja-build
 %else
-BuildRequires:  ninja
+BuildRequires:	ninja
 %endif
 %endif
 # XXX We always require Asciidoctor for packaging builds as of 84ab55cf75,
 # unfortunately it's not evenly distributed across distros.
 # Fedora & CentOS 7: rubygem-asciidoctor
-# CentOS 8: <no package?>
+# CentOS 8: <no package? - https://bugzilla.redhat.com/show_bug.cgi?id=1820896>
 # openSUSE 15.3: ruby2.5-rubygem-asciidoctor
 # SLES 12 SP5: ruby2.1-rubygem-asciidoctor
 # All of the packages provide this, so we can rely on it:
 %if ! 0%{?el8}
-BuildRequires:  /usr/bin/asciidoctor
+BuildRequires:	/usr/bin/asciidoctor
 %endif
 # No CentOS 8 package, so we install it from rubygems directly, but that
 # means the package manager doesn't know about it and we can't require it.
 
 # For the HTML guides, we need xsltproc, and the docbook stylesheets
 %if %{with guides}
-BuildRequires:  /usr/bin/xsltproc
+BuildRequires:	/usr/bin/xsltproc
 %if 0%{?suse_version}
-BuildRequires:  docbook-xsl-stylesheets
+BuildRequires:	docbook-xsl-stylesheets
 %else
-BuildRequires:  docbook-style-xsl
+BuildRequires:	docbook-style-xsl
 %endif
 %endif
 
@@ -204,10 +217,11 @@ Wireshark. A Qt graphical user interface is packaged separately.
 %package	qt
 Summary:	Wireshark's Qt-based GUI
 Group:		Applications/Internet
-# XXX Recent versions of rpm (Fedora 33 et al.) warn about unversioned "Obsoletes".
-Obsoletes:	wireshark-gnome wireshark-gtk
+Obsoletes:	wireshark-gnome < %{version} wireshark-gtk < %{version}
 Requires:	%{name} = %{version}-%{release}
+%if %{without toolchain_clang}
 BuildRequires:	gcc-c++
+%endif
 %if 0%{?suse_version}
 BuildRequires:	libQt5Core-devel
 BuildRequires:	libQt5Gui-devel
@@ -248,6 +262,7 @@ development of Wireshark scripts and plugins.
 %prep
 %setup -q -n %{name}-%{package_version}
 
+%build
 # The SUSE macros for cmake and ninja depend upon _bindir, which depends
 # on _prefix (and is thus wrong if _prefix is anything other than /usr).
 # Set _bindir to the correct value regardless of _prefix.
@@ -358,8 +373,6 @@ development of Wireshark scripts and plugins.
 %if %{with ninja}
 %ninja_build
 %else
-# Suggestion: put this in your ~/.rpmmacros (without the hash sign, of course):
-# %_smp_mflags -j %(grep -c processor /proc/cpuinfo)
 %if (0%{?suse_version} && 0%{?sle_version} <= 150100)
 make %{?_smp_mflags}
 %else
@@ -371,7 +384,6 @@ make %{?_smp_mflags} -C %{__cmake_builddir}
 %endif
 
 %install
-rm -rf $RPM_BUILD_ROOT
 %if (0%{?suse_version} && 0%{?sle_version} <= 150100) && %{with ninja}
 cd %{__cmake_builddir}
 %endif
@@ -417,9 +429,6 @@ install -Dm 0644 %{buildroot}%{_prefix}/share/applications/org.wireshark.Wiresha
 desktop-file-validate %{buildroot}%{_datadir}/applications/org.wireshark.Wireshark.desktop
 %endif
 %endif
-
-%clean
-rm -rf $RPM_BUILD_ROOT
 
 %if %{use_wireshark_group}
 %pre
@@ -509,7 +518,9 @@ update-mime-database %{_datadir}/mime &> /dev/null || :
 %defattr(-,root,root)
 %{_datadir}/applications/org.wireshark.Wireshark.desktop
 %if 0%{?suse_version}
+%if "%{_prefix}" != "/usr"
 /usr/share/applications/org.wireshark.Wireshark.desktop
+%endif
 %endif
 %{_datadir}/metainfo/org.wireshark.Wireshark.metainfo.xml
 %{_datadir}/icons/hicolor/*/apps/*
@@ -525,6 +536,9 @@ update-mime-database %{_datadir}/mime &> /dev/null || :
 %{_libdir}/pkgconfig/wireshark.pc
 
 %changelog
+* Mon Apr 25 2022 John Thacker
+- Cleanup specfile to remove obsolete and deprecated syntax
+
 * Wed Jan  5 2022 John Thacker
 - pcre2 is required now (most distros will get this as part of a dependency
   chain glib2-devel->libselinux-devel->pcre2-devel anyway)
@@ -624,7 +638,7 @@ update-mime-database %{_datadir}/mime &> /dev/null || :
 - Make the license tag more specific: Wireshark is GPLv2+.
 
 * Mon Jan 12 2015 Jeff Morriss
-- Modernize the (base package) %description.
+- Modernize the (base package) %%description.
 
 * Wed Dec  3 2014 Jeff Morriss
 - Don't run gtk-update-icon-cache when uninstalling the Qt package.  But do run
@@ -646,7 +660,7 @@ update-mime-database %{_datadir}/mime &> /dev/null || :
 
 * Fri Aug  1 2014 Jeff Morriss
 - Remove the old wireshark binary during RPM upgrades: this is needed because
-  we now declare wireshark to be %ghost so it doesn't get overwritten during an
+  we now declare wireshark to be %%ghost so it doesn't get overwritten during an
   upgrade (but in older RPMs it was the real program).
 
 * Tue Jul  1 2014 Jeff Morriss
