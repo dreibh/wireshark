@@ -4054,8 +4054,6 @@ void WiresharkMainWindow::on_actionCaptureOptions_triggered()
         connect(capture_options_dialog_, SIGNAL(startCapture()), this, SLOT(startCapture()));
         connect(capture_options_dialog_, SIGNAL(stopCapture()), this, SLOT(stopCapture()));
 
-        connect(capture_options_dialog_, SIGNAL(getPoints(int, PointList*)),
-                this->welcome_page_->getInterfaceFrame(), SLOT(getPoints(int, PointList*)));
         connect(capture_options_dialog_, SIGNAL(interfacesChanged()),
                 this->welcome_page_, SLOT(interfaceSelected()));
         connect(capture_options_dialog_, SIGNAL(interfacesChanged()),
@@ -4074,7 +4072,6 @@ void WiresharkMainWindow::on_actionCaptureOptions_triggered()
         connect(capture_options_dialog_, SIGNAL(showExtcapOptions(QString&, bool)),
                 this, SLOT(showExtcapOptionsDialog(QString&, bool)));
     }
-    capture_options_dialog_->setTab(0);
     capture_options_dialog_->updateInterfaces();
 
     if (capture_options_dialog_->isMinimized()) {
