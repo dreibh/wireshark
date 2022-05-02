@@ -17,6 +17,12 @@
 
 #include <glib.h>
 
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4100)
+#pragma warning(disable:4267)
+#endif
+
 // epan/address.h and driver/ppm_events_public.h both define PT_NONE, so
 // handle libsinsp calls here.
 
@@ -29,7 +35,7 @@ typedef struct ss_plugin_info ss_plugin_info;
 #include <sinsp.h>
 
 typedef struct sinsp_source_info_t {
-    sinsp_source_plugin *source;
+    sinsp_plugin *source;
     const char *name;
     const char *description;
     char *last_error;
@@ -59,11 +65,11 @@ create_sinsp_source(sinsp_span_t *sinsp_span, const char* libname, sinsp_source_
     sinsp_source_info_t *ssi = new sinsp_source_info_t();
 
     try {
-        sinsp_plugin *sp = sinsp_source_plugin::register_plugin(&sinsp_span->inspector, libname, "{}").get();
-        if (sp->type() == TYPE_SOURCE_PLUGIN) {
-            ssi->source = dynamic_cast<sinsp_source_plugin *>(sp);
+        sinsp_plugin *sp = sinsp_span->inspector.register_plugin(libname, "{}").get();
+        if (sp->caps() & CAP_EXTRACTION) {
+            ssi->source = dynamic_cast<sinsp_plugin *>(sp);
         } else {
-            err_str = g_strdup_printf("%s has unsupported plugin type %d", libname, sp->type());
+            err_str = g_strdup_printf("%s has unsupported plugin capabilities 0x%02x", libname, sp->caps());
         }
     } catch (const sinsp_exception& e) {
         err_str = g_strdup_printf("Caught sinsp exception %s", e.what());
@@ -88,11 +94,6 @@ uint32_t get_sinsp_source_id(sinsp_source_info_t *ssi)
 bool init_sinsp_source(sinsp_source_info_t *ssi, const char *config)
 {
     return ssi->source->init(config);
-}
-
-uint32_t get_sinsp_source_type(sinsp_source_info_t *ssi)
-{
-    return ssi->source->type();
 }
 
 const char *get_sinsp_source_last_error(sinsp_source_info_t *ssi)
@@ -202,3 +203,7 @@ bool extract_sisnp_source_fields(sinsp_source_info_t *ssi, uint32_t evt_num, uin
     }
     return status;
 }
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
