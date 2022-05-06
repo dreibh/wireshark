@@ -70,6 +70,8 @@ They previously shipped with Npcap 1.55.
 ** Adds new display filter functions max(), min() and abs().
 ** Functions can accept expressions as arguments, including other functions. Previously only protocol
    fields and slices were syntactically valid function arguments.
+** New syntax to match a specific layer in the protocol stack. For example ip.addr#2 == 1.1.1.1
+   matches only the inner layer in an IP-over-IP packet.
 
 * text2pcap and "Import from Hex Dump":
 ** text2pcap supports writing the output file in all the capture file formats
@@ -112,6 +114,7 @@ They previously shipped with Npcap 1.55.
 * The interface list on the welcome page sorts active interfaces first and only displays the sparkline for active interfaces. 
   Additionally, the interfaces can now be hidden/unhidden via the context menu in the interface list
 
+* ETW reader now supports to display IP packets from an event trace logfile or an event trace live session
 === Removed Features and Support
 
 * CMake: The options starting with DISABLE_something were renamed ENABLE_something for consistency.

@@ -1620,6 +1620,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pdcp-lte.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pdcp-nr.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pdu-transport.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-peap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-peekremote.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-per.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pfcp.c

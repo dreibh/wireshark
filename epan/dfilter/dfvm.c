@@ -24,9 +24,11 @@ dfvm_opcode_tostr(dfvm_opcode_t code)
 		case IF_TRUE_GOTO:	return "IF_TRUE_GOTO";
 		case IF_FALSE_GOTO:	return "IF_FALSE_GOTO";
 		case CHECK_EXISTS:	return "CHECK_EXISTS";
+		case CHECK_EXISTS_R:	return "CHECK_EXISTS_R";
 		case NOT:		return "NOT";
 		case RETURN:		return "RETURN";
 		case READ_TREE:		return "READ_TREE";
+		case READ_TREE_R:	return "READ_TREE_R";
 		case READ_REFERENCE:	return "READ_REFERENCE";
 		case PUT_FVALUE:	return "PUT_FVALUE";
 		case ALL_EQ:		return "ALL_EQ";
@@ -41,7 +43,7 @@ dfvm_opcode_tostr(dfvm_opcode_t code)
 		case ALL_ZERO:		return "ALL_ZERO";
 		case ANY_CONTAINS:	return "ANY_CONTAINS";
 		case ANY_MATCHES:	return "ANY_MATCHES";
-		case MK_RANGE:		return "MK_RANGE";
+		case MK_SLICE:		return "MK_SLICE";
 		case MK_BITWISE_AND:	return "MK_BITWISE_AND";
 		case MK_MINUS:		return "MK_MINUS";
 		case DFVM_ADD:		return "DFVM_ADD";
@@ -293,9 +295,19 @@ dfvm_dump_str(wmem_allocator_t *alloc, dfilter_t *df, gboolean print_references)
 					id, arg1_str);
 				break;
 
+			case CHECK_EXISTS_R:
+				wmem_strbuf_append_printf(buf, "%05d CHECK_EXISTS\t%s#[%s]\n",
+					id, arg1_str, arg2_str);
+				break;
+
 			case READ_TREE:
 				wmem_strbuf_append_printf(buf, "%05d READ_TREE\t\t%s -> %s\n",
 					id, arg1_str, arg2_str);
+				break;
+
+			case READ_TREE_R:
+				wmem_strbuf_append_printf(buf, "%05d READ_TREE\t\t%s#[%s] -> %s\n",
+					id, arg1_str, arg3_str, arg2_str);
 				break;
 
 			case READ_REFERENCE:
@@ -332,8 +344,9 @@ dfvm_dump_str(wmem_allocator_t *alloc, dfilter_t *df, gboolean print_references)
 				}
 				break;
 
-			case MK_RANGE:
-				wmem_strbuf_append_printf(buf, "%05d MK_RANGE\t\t%s[%s] -> %s\n",
+			case MK_SLICE:
+				arg3 = insn->arg3;
+				wmem_strbuf_append_printf(buf, "%05d MK_SLICE\t\t%s[%s] -> %s\n",
 					id, arg1_str, arg3_str, arg2_str);
 				break;
 
@@ -497,20 +510,97 @@ dfvm_dump(FILE *f, dfilter_t *df)
 	wmem_free(NULL, str);
 }
 
+static int
+compare_finfo_layer(gconstpointer _a, gconstpointer _b)
+{
+	const field_info *a = *(const field_info **)_a;
+	const field_info *b = *(const field_info **)_b;
+	return a->proto_layer_num - b->proto_layer_num;
+}
+
+static gboolean
+drange_contains_layer(drange_t *dr, int num, int length)
+{
+	drange_node *rn;
+	GSList *list = dr->range_list;
+	int lower, upper;
+
+	while (list) {
+		rn = list->data;
+		lower = rn->start_offset;
+		if (lower < 0) {
+			lower += length + 1;
+		}
+		if (rn->ending == DRANGE_NODE_END_T_LENGTH) {
+			upper = lower + rn->length - 1;
+		}
+		else if (rn->ending == DRANGE_NODE_END_T_OFFSET) {
+			upper = rn->end_offset;
+		}
+		else if (rn->ending == DRANGE_NODE_END_T_TO_THE_END) {
+			upper = INT_MAX;
+		}
+
+		if (num >= lower && num <= upper) {  /* inclusive */
+			return TRUE;
+		}
+
+		list = g_slist_next(list);
+	}
+	return FALSE;
+}
+
+GSList *
+filter_finfo_fvalues(GSList *fvalues, GPtrArray *finfos, drange_t *range)
+{
+	int length; /* maximum proto layer number. The numbers are sequential. */
+	field_info *last_finfo, *finfo;
+	int cookie = -1;
+	gboolean cookie_matches = false;
+	int layer;
+
+	g_ptr_array_sort(finfos, compare_finfo_layer);
+	last_finfo = finfos->pdata[finfos->len - 1];
+	length = last_finfo->proto_layer_num;
+
+	for (guint i = 0; i < finfos->len; i++) {
+		finfo = finfos->pdata[i];
+		layer = finfo->proto_layer_num;
+		if (cookie == layer) {
+			if (cookie_matches) {
+				fvalues = g_slist_prepend(fvalues, &finfo->value);
+			}
+		}
+		else {
+			cookie = layer;
+			cookie_matches = drange_contains_layer(range, layer, length);
+			if (cookie_matches) {
+				fvalues = g_slist_prepend(fvalues, &finfo->value);
+			}
+		}
+	}
+	return fvalues;
+}
+
 /* Reads a field from the proto_tree and loads the fvalues into a register,
  * if that field has not already been read. */
 static gboolean
 read_tree(dfilter_t *df, proto_tree *tree,
-				dfvm_value_t *arg1, dfvm_value_t *arg2)
+				dfvm_value_t *arg1, dfvm_value_t *arg2,
+				dfvm_value_t *arg3)
 {
 	GPtrArray	*finfos;
 	field_info	*finfo;
 	int		i, len;
 	GSList		*fvalues = NULL;
-	gboolean	found_something = FALSE;
+	drange_t	*range = NULL;
 
 	header_field_info *hfinfo = arg1->value.hfinfo;
 	int reg = arg2->value.numeric;
+
+	if (arg3) {
+		range = arg3->value.drange;
+	}
 
 	/* Already loaded in this run of the dfilter? */
 	if (df->attempted_load[reg]) {
@@ -530,20 +620,22 @@ read_tree(dfilter_t *df, proto_tree *tree,
 			hfinfo = hfinfo->same_name_next;
 			continue;
 		}
-		else {
-			found_something = TRUE;
-		}
 
-		len = finfos->len;
-		for (i = 0; i < len; i++) {
-			finfo = g_ptr_array_index(finfos, i);
-			fvalues = g_slist_prepend(fvalues, &finfo->value);
+		if (range) {
+			fvalues = filter_finfo_fvalues(fvalues, finfos, range);
+		}
+		else {
+			len = finfos->len;
+			for (i = 0; i < len; i++) {
+				finfo = g_ptr_array_index(finfos, i);
+				fvalues = g_slist_prepend(fvalues, &finfo->value);
+			}
 		}
 
 		hfinfo = hfinfo->same_name_next;
 	}
 
-	if (!found_something) {
+	if (fvalues == NULL) {
 		return FALSE;
 	}
 
@@ -789,10 +881,10 @@ free_register_overhead(dfilter_t* df)
 }
 
 /* Takes the list of fvalue_t's in a register, uses fvalue_slice()
- * to make a new list of fvalue_t's (which are ranges, or byte-slices),
+ * to make a new list of fvalue_t's (which are byte-slices),
  * and puts the new list into a new register. */
 static void
-mk_range(dfilter_t *df, dfvm_value_t *from_arg, dfvm_value_t *to_arg,
+mk_slice(dfilter_t *df, dfvm_value_t *from_arg, dfvm_value_t *to_arg,
 						dfvm_value_t *drange_arg)
 {
 	GSList		*from_list, *to_list;
@@ -1037,6 +1129,42 @@ stack_pop(dfilter_t *df, dfvm_value_t *arg1)
 	}
 }
 
+static gboolean
+check_exists(proto_tree *tree, dfvm_value_t *arg1, dfvm_value_t *arg2)
+{
+	GPtrArray		*finfos;
+	header_field_info	*hfinfo;
+	drange_t		*range = NULL;
+	gboolean		exists;
+	GSList			*fvalues;
+
+	hfinfo = arg1->value.hfinfo;
+	if (arg2)
+		range = arg2->value.drange;
+
+	while (hfinfo) {
+		finfos = proto_get_finfo_ptr_array(tree, hfinfo->id);
+		if ((finfos == NULL) || (g_ptr_array_len(finfos) == 0)) {
+			hfinfo = hfinfo->same_name_next;
+			continue;
+		}
+		if (range == NULL) {
+			return TRUE;
+		}
+
+		fvalues = filter_finfo_fvalues(NULL, finfos, range);
+		exists = (fvalues != NULL);
+		g_slist_free(fvalues);
+		if (exists) {
+			return TRUE;
+		}
+
+		hfinfo = hfinfo->same_name_next;
+	}
+
+	return FALSE;
+}
+
 gboolean
 dfvm_apply(dfilter_t *df, proto_tree *tree)
 {
@@ -1046,7 +1174,6 @@ dfvm_apply(dfilter_t *df, proto_tree *tree)
 	dfvm_value_t	*arg1;
 	dfvm_value_t	*arg2;
 	dfvm_value_t	*arg3 = NULL;
-	header_field_info	*hfinfo;
 
 	ws_assert(tree);
 
@@ -1064,21 +1191,19 @@ dfvm_apply(dfilter_t *df, proto_tree *tree)
 
 		switch (insn->op) {
 			case CHECK_EXISTS:
-				hfinfo = arg1->value.hfinfo;
-				while(hfinfo) {
-					accum = proto_check_for_protocol_or_field(tree,
-							hfinfo->id);
-					if (accum) {
-						break;
-					}
-					else {
-						hfinfo = hfinfo->same_name_next;
-					}
-				}
+				accum = check_exists(tree, arg1, NULL);
+				break;
+
+			case CHECK_EXISTS_R:
+				accum = check_exists(tree, arg1, arg2);
 				break;
 
 			case READ_TREE:
-				accum = read_tree(df, tree, arg1, arg2);
+				accum = read_tree(df, tree, arg1, arg2, NULL);
+				break;
+
+			case READ_TREE_R:
+				accum = read_tree(df, tree, arg1, arg2, arg3);
 				break;
 
 			case READ_REFERENCE:
@@ -1101,8 +1226,8 @@ dfvm_apply(dfilter_t *df, proto_tree *tree)
 				stack_pop(df, arg1);
 				break;
 
-			case MK_RANGE:
-				mk_range(df, arg1, arg2, arg3);
+			case MK_SLICE:
+				mk_slice(df, arg1, arg2, arg3);
 				break;
 
 			case ALL_EQ:
