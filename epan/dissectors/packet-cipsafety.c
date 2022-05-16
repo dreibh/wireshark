@@ -302,6 +302,7 @@ static expert_field ei_mal_ssupervisor_cp_owners = EI_INIT;
 static expert_field ei_mal_ssupervisor_cp_owners_entry = EI_INIT;
 static expert_field ei_mal_ssupervisor_cp_owners_app_path_size = EI_INIT;
 static expert_field ei_mal_ssupervisor_proposed_tunid = EI_INIT;
+static expert_field ei_info_ssupervisor_tunid_cancel = EI_INIT;
 
 static expert_field ei_mal_svalidator_type = EI_INIT;
 static expert_field ei_mal_svalidator_time_coord_msg_min_mult = EI_INIT;
@@ -528,6 +529,17 @@ static void dissect_safety_supervisor_safety_reset(proto_tree* cmd_data_tree, tv
    }
 }
 
+static void detect_cancel_propose_apply_operation(tvbuff_t* tvb, int offset, packet_info* pinfo, proto_item* item)
+{
+   // Check for all FFs.
+   guint64 part1 = tvb_get_guint64(tvb, offset, ENC_LITTLE_ENDIAN);
+   guint16 part2 = tvb_get_guint16(tvb, offset + 8, ENC_LITTLE_ENDIAN);
+   if (part1 == 0xFFFFFFFFFFFFFFFF && part2 == 0xFFFF)
+   {
+      expert_add_info(pinfo, item, &ei_info_ssupervisor_tunid_cancel);
+   }
+}
+
 /************************************************
  *
  * Dissector for CIP Safety Supervisor Object
@@ -710,6 +722,8 @@ dissect_cip_s_supervisor_data( proto_tree *item_tree,
                          hf_cip_ssupervisor_propose_tunid_tunid_nodeid,
                          ett_ssupervisor_propose_tunid,
                          ett_ssupervisor_propose_tunid_snn);
+
+            detect_cancel_propose_apply_operation(tvb, offset + 2 + req_path_size, pinfo, pi);
             break;
          case SC_SSUPER_APPLY_TUNID:
             pi = proto_tree_add_item(cmd_data_tree, hf_cip_ssupervisor_apply_tunid_tunid,
@@ -721,6 +735,8 @@ dissect_cip_s_supervisor_data( proto_tree *item_tree,
                          hf_cip_ssupervisor_apply_tunid_tunid_nodeid,
                          ett_ssupervisor_apply_tunid,
                          ett_ssupervisor_apply_tunid_snn);
+
+            detect_cancel_propose_apply_operation(tvb, offset + 2 + req_path_size, pinfo, pi);
             break;
          default:
             proto_tree_add_item(cmd_data_tree, hf_cip_data,
@@ -2136,18 +2152,18 @@ attribute_info_t cip_safety_attribute_vals[] = {
    {0x3A, FALSE, 11, 10, "CCO Binding", cip_uint, &hf_cip_svalidator_cco_binding, NULL},
    {0x3A, FALSE, 12, 11, "Max Data Age", cip_uint, &hf_cip_svalidator_max_data_age, NULL},
    {0x3A, FALSE, 13, 12, "Application Data Path", cip_dissector_func, NULL, dissect_s_validator_app_data_path},
-   /* TODO: GAA code can't get to "Error Code", because dissect_s_validator_app_data_path() will use
-      all remaining bytes. Waiting on clarification in a future spec update. */
+   /* Note: Get Attributes All can't get to "Error Code", because dissect_s_validator_app_data_path() will use
+      all remaining bytes. */
    {0x3A, FALSE, 14, 13, "Error Code", cip_uint, &hf_cip_svalidator_error_code, NULL},
    {0x3A, FALSE, 15, -1, "Producer/Consumer Fault Counters", cip_dissector_func, NULL, dissect_s_validator_prod_cons_fault_count},
 
-   /* Sercos III Link */
+   /* SERCOS III Link */
    {0x4C, FALSE, 1, -1, "Safety Network Number", cip_dissector_func, NULL, dissect_sercosiii_safety_network_number},
-   {0x4C, FALSE, 2, -1, "Communication Cycle Time", cip_dint, &hf_cip_sercosiii_link_communication_cycle_time, NULL},
+   {0x4C, FALSE, 2, -1, "Communication Cycle Time", cip_udint, &hf_cip_sercosiii_link_communication_cycle_time, NULL},
    {0x4C, FALSE, 3, -1, "Interface Status", cip_word, &hf_cip_sercosiii_link_interface_status, NULL},
-   {0x4C, FALSE, 4, -1, "Error counter MST-P/S", cip_int, &hf_cip_sercosiii_link_error_count_mstps, NULL},
+   {0x4C, FALSE, 4, -1, "Error counter MST-P/S", cip_uint, &hf_cip_sercosiii_link_error_count_mstps, NULL},
    {0x4C, FALSE, 5, -1, "Error counter Port1 and Port2", cip_dissector_func, NULL, dissect_sercosiii_link_error_count_p1p2},
-   {0x4C, FALSE, 6, -1, "SERCOS address", cip_int, &hf_cip_sercosiii_link_sercos_address, NULL},
+   {0x4C, FALSE, 6, -1, "SERCOS address", cip_uint, &hf_cip_sercosiii_link_sercos_address, NULL},
 };
 
 /*
@@ -2342,27 +2358,27 @@ proto_register_cipsafety(void)
       },
       { &hf_cip_sercosiii_link_communication_cycle_time,
         { "Communication Cycle Time", "cipsafety.sercosiii_link.communication_cycle_time",
-          FT_INT32, BASE_DEC, NULL, 0, NULL, HFILL }
+          FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL }
       },
       { &hf_cip_sercosiii_link_interface_status,
-        { "Communication Cycle Time", "cipsafety.sercosiii_link.interface_status",
+        { "Interface Status", "cipsafety.sercosiii_link.interface_status",
           FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL }
       },
       { &hf_cip_sercosiii_link_error_count_mstps,
         { "Error Counter MST-P/S", "cipsafety.sercosiii_link.error_count_mstps",
-          FT_INT16, BASE_DEC, NULL, 0, NULL, HFILL }
+          FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }
       },
       { &hf_cip_sercosiii_link_error_count_p1,
         { "Error Count Port 1", "cipsafety.sercosiii_link.error_count_p1",
-          FT_INT16, BASE_DEC, NULL, 0, NULL, HFILL }
+          FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }
       },
       { &hf_cip_sercosiii_link_error_count_p2,
         { "Error Count Port 2", "cipsafety.sercosiii_link.error_count_p2",
-          FT_INT16, BASE_DEC, NULL, 0, NULL, HFILL }
+          FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }
       },
       { &hf_cip_sercosiii_link_sercos_address,
         { "SERCOS Address", "cipsafety.sercosiii_link.sercos_address",
-          FT_INT16, BASE_DEC, NULL, 0, NULL, HFILL }
+          FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }
       },
    };
 
@@ -2944,17 +2960,17 @@ proto_register_cipsafety(void)
    };
 
    static ei_register_info ei[] = {
-      { &ei_cipsafety_tbd_not_complemented, { "cipsafety.tbd_not_complemented", PI_PROTOCOL, PI_WARN, "TBD bit not complemented", EXPFILL }},
-      { &ei_cipsafety_tbd2_not_copied, { "cipsafety.tbd2_not_copied", PI_PROTOCOL, PI_WARN, "TBD2 bit not copied", EXPFILL }},
-      { &ei_cipsafety_run_idle_not_complemented, { "cipsafety.run_idle_not_complemented", PI_PROTOCOL, PI_WARN, "Run/Idle bit not complemented", EXPFILL }},
+      { &ei_cipsafety_tbd_not_complemented, { "cipsafety.tbd_not_complemented", PI_PROTOCOL, PI_ERROR, "TBD bit not complemented", EXPFILL }},
+      { &ei_cipsafety_tbd2_not_copied, { "cipsafety.tbd2_not_copied", PI_PROTOCOL, PI_ERROR, "TBD2 bit not copied", EXPFILL }},
+      { &ei_cipsafety_run_idle_not_complemented, { "cipsafety.run_idle_not_complemented", PI_PROTOCOL, PI_ERROR, "Run/Idle bit not complemented", EXPFILL }},
       { &ei_mal_io, { "cipsafety.malformed.io", PI_MALFORMED, PI_ERROR, "Malformed CIP Safety I/O packet", EXPFILL }},
       { &ei_mal_sercosiii_link_error_count_p1p2, { "cipsafety.malformed.sercosiii_link.error_count_p1p2", PI_MALFORMED, PI_ERROR, "Malformed SERCOS III Attribute 5", EXPFILL }},
-      { &ei_cipsafety_not_complement_data, { "cipsafety.not_complement_data", PI_PROTOCOL, PI_WARN, "Data not complemented", EXPFILL }},
-      { &ei_cipsafety_crc_s1, { "cipsafety.crc_s1.incorrect", PI_PROTOCOL, PI_WARN, "CRC-S1 incorrect", EXPFILL }},
-      { &ei_cipsafety_crc_s2, { "cipsafety.crc_s2.incorrect", PI_PROTOCOL, PI_WARN, "CRC-S2 incorrect", EXPFILL }},
-      { &ei_cipsafety_crc_s3, { "cipsafety.crc_s3.incorrect", PI_PROTOCOL, PI_WARN, "CRC-S3 incorrect", EXPFILL }},
-      { &ei_cipsafety_complement_crc_s3, { "cipsafety.complement_crc_s3.incorrect", PI_PROTOCOL, PI_WARN, "Complement CRC-S3 incorrect", EXPFILL }},
-      { &ei_cipsafety_crc_s5, { "cipsafety.crc_s5.incorrect", PI_PROTOCOL, PI_WARN, "CRC-S5 incorrect", EXPFILL }},
+      { &ei_cipsafety_not_complement_data, { "cipsafety.not_complement_data", PI_PROTOCOL, PI_ERROR, "Data not complemented", EXPFILL }},
+      { &ei_cipsafety_crc_s1, { "cipsafety.crc_s1.incorrect", PI_PROTOCOL, PI_ERROR, "CRC-S1 incorrect", EXPFILL }},
+      { &ei_cipsafety_crc_s2, { "cipsafety.crc_s2.incorrect", PI_PROTOCOL, PI_ERROR, "CRC-S2 incorrect", EXPFILL }},
+      { &ei_cipsafety_crc_s3, { "cipsafety.crc_s3.incorrect", PI_PROTOCOL, PI_ERROR, "CRC-S3 incorrect", EXPFILL }},
+      { &ei_cipsafety_complement_crc_s3, { "cipsafety.complement_crc_s3.incorrect", PI_PROTOCOL, PI_ERROR, "Complement CRC-S3 incorrect", EXPFILL }},
+      { &ei_cipsafety_crc_s5, { "cipsafety.crc_s5.incorrect", PI_PROTOCOL, PI_ERROR, "CRC-S5 incorrect", EXPFILL }},
       };
 
    static ei_register_info ei_ssupervisor[] = {
@@ -2978,6 +2994,8 @@ proto_register_cipsafety(void)
                         "Malformed Safety Supervisor Output Connection Point Owners (EPATH)", EXPFILL }},
       { &ei_mal_ssupervisor_proposed_tunid, { "cipsafety.ssupervisor.malformed.proposed_tunid", PI_MALFORMED, PI_ERROR,
                         "Malformed Safety Supervisor Proposed TUNID", EXPFILL }},
+      { &ei_info_ssupervisor_tunid_cancel, { "cipsafety.ssupervisor.info.cancel_propose_apply", PI_PROTOCOL, PI_WARN,
+                        "Cancel Proposed/Apply Operation", EXPFILL } },
    };
 
    static ei_register_info ei_svalidator[] = {
