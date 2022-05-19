@@ -15,7 +15,6 @@
 
 #include "ui/recent.h"
 #include "ui/tap-tcp-stream.h"
-#include "ui/traffic_table_ui.h"
 
 #include "wsutil/str_util.h"
 
@@ -51,6 +50,25 @@
 // - Show Absolute time in conversation tables https://gitlab.com/wireshark/wireshark/-/issues/11618
 // - The value of 'Rel start' and 'Duration' in "Conversations" no need too precise https://gitlab.com/wireshark/wireshark/-/issues/12803
 
+
+typedef enum {
+    CONV_COLUMN_SRC_ADDR,
+    CONV_COLUMN_SRC_PORT,
+    CONV_COLUMN_DST_ADDR,
+    CONV_COLUMN_DST_PORT,
+    CONV_COLUMN_PACKETS,
+    CONV_COLUMN_BYTES,
+    CONV_COLUMN_PKT_AB,
+    CONV_COLUMN_BYTES_AB,
+    CONV_COLUMN_PKT_BA,
+    CONV_COLUMN_BYTES_BA,
+    CONV_COLUMN_START,
+    CONV_COLUMN_DURATION,
+    CONV_COLUMN_BPS_AB,
+    CONV_COLUMN_BPS_BA,
+    CONV_NUM_COLUMNS,
+    CONV_INDEX_COLUMN = CONV_NUM_COLUMNS
+} conversation_column_type_e;
 
 static const QString table_name_ = QObject::tr("Conversation");
 ConversationDialog::ConversationDialog(QWidget &parent, CaptureFile &cf, int cli_proto_id, const char *filter) :
@@ -621,15 +639,15 @@ ConversationTreeWidget::ConversationTreeWidget(QWidget *parent, register_ct_t* t
     setUniformRowHeights(true);
 
     for (int i = 0; i < CONV_NUM_COLUMNS; i++) {
-        headerItem()->setText(i, conv_column_titles[i]);
+        headerItem()->setText(i, columnTitle(i));
     }
 
     if (get_conversation_hide_ports(table_)) {
         hideColumn(CONV_COLUMN_SRC_PORT);
         hideColumn(CONV_COLUMN_DST_PORT);
     } else if (!strcmp(proto_get_protocol_filter_name(get_conversation_proto_id(table_)), "ncp")) {
-        headerItem()->setText(CONV_COLUMN_SRC_PORT, conv_conn_a_title);
-        headerItem()->setText(CONV_COLUMN_DST_PORT, conv_conn_b_title);
+        headerItem()->setText(CONV_COLUMN_SRC_PORT, tr("Connection A"));
+        headerItem()->setText(CONV_COLUMN_DST_PORT, tr("Connection B"));
     }
 
     int one_en = fontMetrics().height() / 2;
@@ -717,6 +735,42 @@ ConversationTreeWidget::~ConversationTreeWidget() {
     reset_conversation_table_data(&hash_);
 }
 
+QString ConversationTreeWidget::columnTitle(int col)
+{
+    switch (col) {
+        case 0:
+            return tr("Address A"); break;
+        case 1:
+            return tr("Port A"); break;
+        case 2:
+            return tr("Address B"); break;
+        case 3:
+            return tr("Port B"); break;
+        case 4:
+            return tr("Packets"); break;
+        case 5:
+            return tr("Bytes"); break;
+        case 6:
+            return tr("Packets A " UTF8_RIGHTWARDS_ARROW " B"); break;
+        case 7:
+            return tr("Bytes A " UTF8_RIGHTWARDS_ARROW " B"); break;
+        case 8:
+            return tr("Packets B " UTF8_RIGHTWARDS_ARROW " A"); break;
+        case 9:
+            return tr("Packets B " UTF8_RIGHTWARDS_ARROW " A"); break;
+        case 10:
+            return tr("Rel Start"); break;
+        case 11:
+            return tr("Duration"); break;
+        case 12:
+            return tr("Bits/s A " UTF8_RIGHTWARDS_ARROW " B"); break;
+        case 13:
+            return tr("Bits/s B " UTF8_RIGHTWARDS_ARROW " A"); break;
+    }
+
+    return QString();
+}
+
 // Callbacks for register_tap_listener
 void ConversationTreeWidget::tapReset(void *conv_hash_ptr)
 {
@@ -742,8 +796,8 @@ void ConversationTreeWidget::tapDraw(void *conv_hash_ptr)
 void ConversationTreeWidget::updateStartTime(bool absolute)
 {
     headerItem()->setText(CONV_COLUMN_START, absolute
-                          ? conv_abs_start_title
-                          : conv_column_titles[CONV_COLUMN_START]);
+                          ? tr("Abs Start")
+                          : columnTitle(CONV_COLUMN_START));
 
     dataChanged(QModelIndex(), QModelIndex());
 
