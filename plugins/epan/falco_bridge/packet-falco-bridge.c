@@ -156,11 +156,11 @@ configure_plugin(bridge_info* bi, char* config _U_)
      */
     bi->source_id = get_sinsp_source_id(bi->ssi);
 
-    uint32_t tot_fields = get_sinsp_source_nfields(bi->ssi);
+    size_t tot_fields = get_sinsp_source_nfields(bi->ssi);
     bi->visible_fields = 0;
     uint32_t addr_fields = 0;
     sinsp_field_info_t sfi;
-    for (uint32_t j = 0; j < tot_fields; j++) {
+    for (size_t j = 0; j < tot_fields; j++) {
         get_sinsp_source_field_info(bi->ssi, j, &sfi);
         if (sfi.is_hidden) {
             /*
@@ -194,10 +194,10 @@ configure_plugin(bridge_info* bi, char* config _U_)
         size_t conv_fld_cnt = 0;
         uint32_t addr_fld_cnt = 0;
 
-        for (uint32_t j = 0; j < tot_fields; j++)
+        for (size_t j = 0; j < tot_fields; j++)
         {
             bi->hf_ids[fld_cnt] = -1;
-            bi->field_ids[fld_cnt] = j;
+            bi->field_ids[fld_cnt] = (int) j;
             bi->field_flags[fld_cnt] = BFF_NONE;
             hf_register_info* ri = bi->hf + fld_cnt;
 
@@ -267,8 +267,8 @@ configure_plugin(bridge_info* bi, char* config _U_)
 
             if (sfi.type == SFT_STRINGZ && is_addr_field(sfi.abbrev)) {
                 bi->hf_id_to_addr_id[fld_cnt] = addr_fld_cnt;
-                bi->hf_ids[addr_fld_cnt] = -1;
 
+                bi->hf_v4_ids[addr_fld_cnt] = -1;
                 hf_register_info* ri_v4 = bi->hf_v4 + addr_fld_cnt;
                 hf_register_info finfo_v4 = {
                     bi->hf_v4_ids + addr_fld_cnt,
@@ -282,6 +282,7 @@ configure_plugin(bridge_info* bi, char* config _U_)
                 };
                 *ri_v4 = finfo_v4;
 
+                bi->hf_v6_ids[addr_fld_cnt] = -1;
                 hf_register_info* ri_v6 = bi->hf_v6 + addr_fld_cnt;
                 hf_register_info finfo_v6 = {
                     bi->hf_v6_ids + addr_fld_cnt,
@@ -342,7 +343,8 @@ import_plugin(char* fname)
 static void
 on_wireshark_exit(void)
 {
-    destroy_sinsp_span(sinsp_span);
+    // XXX This currently crashes in a sinsp thread.
+    // destroy_sinsp_span(sinsp_span);
     sinsp_span = NULL;
 }
 
