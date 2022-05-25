@@ -10,6 +10,8 @@
 #ifndef ENDPOINT_DIALOG_H
 #define ENDPOINT_DIALOG_H
 
+#include <QFile>
+
 #include "traffic_table_dialog.h"
 
 class EndpointTreeWidget : public TrafficTableTreeWidget
@@ -33,6 +35,8 @@ signals:
 
 private:
     void updateItems();
+
+    QString columnTitle(int nr);
 
 #ifdef HAVE_MAXMINDDB
     bool has_geoip_data_;
@@ -68,6 +72,7 @@ private:
     QPushButton *map_bt_;
 
     QUrl createMap(bool json_only);
+    bool writeEndpointGeoipMap(QFile * fp, bool json_only, hostlist_talker_t *const *hosts);
 #endif
     bool addTrafficTable(register_ct_t* table);
 
