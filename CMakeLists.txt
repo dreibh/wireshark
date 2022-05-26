@@ -656,6 +656,9 @@ else() # ! MSVC
 		# until these procedural issues can be fixed or at least mitigated.
 		#
 		-Wno-error=maybe-uninitialized
+		# Disable errors for another warning that is prone to guesswork
+		# and false positives.
+		-Wno-error=alloc-size-larger-than=
 		#
 		# Converting from g_printf() and g_snprintf() to stdio.h turns
 		# up many of these warnings. They will have to be handled later.
@@ -1394,7 +1397,12 @@ if (QT_FOUND)
 	# Use qmake to find windeployqt and macdeployqt. Ideally one of
 	# the modules in ${QTDIR}/lib/cmake would do this for us.
 	if(WIN32)
-		find_program(QT_WINDEPLOYQT_EXECUTABLE windeployqt
+		if (USE_qt6 AND USE_MSYSTEM)
+			set(_windeployqt_name "windeployqt-qt6")
+		else()
+			set(_windeployqt_name "windeployqt")
+		endif()
+		find_program(QT_WINDEPLOYQT_EXECUTABLE ${_windeployqt_name}
 			HINTS "${QT_BIN_PATH}"
 			DOC "Path to the windeployqt utility."
 		)
