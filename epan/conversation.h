@@ -233,11 +233,11 @@ WS_DLL_PUBLIC conversation_t *find_conversation_full(const guint32 frame_num, co
  *	otherwise, we found no matching conversation, and return NULL.
  *
  * @param frame_num Frame number. Must be greater than or equal to the conversation's initial frame number.
- * @param addr1 The first address in the identifying tuple.
- * @param addr2 The second address in the identifying tuple.
+ * @param addr_a The first address in the identifying tuple.
+ * @param addr_b The second address in the identifying tuple.
  * @param etype The endpoint type.
- * @param port1 The first port in the identifying tuple.
- * @param port2 The second port in the identifying tuple.
+ * @param port_a The first port in the identifying tuple.
+ * @param port_b The second port in the identifying tuple.
  * @param options Wildcard options as described above.
  * @return The matching conversation if found, otherwise NULL.
  */
@@ -297,7 +297,7 @@ WS_DLL_PUBLIC void conversation_set_dissector_from_frame_number(conversation_t *
 WS_DLL_PUBLIC dissector_handle_t conversation_get_dissector(conversation_t *conversation, const guint32 frame_num);
 
 WS_DLL_PUBLIC void conversation_create_endpoint(struct _packet_info *pinfo, address* addr1, address* addr2,
-    endpoint_type etype, guint32 port1, guint32	port2, const guint options);
+    endpoint_type etype, guint32 port1, guint32	port2);
 
 WS_DLL_PUBLIC void conversation_create_endpoint_by_id(struct _packet_info *pinfo,
     endpoint_type etype, guint32 id);
@@ -335,6 +335,14 @@ WS_DLL_PUBLIC wmem_map_t *get_conversation_hashtable_no_addr2(void);
 WS_DLL_PUBLIC wmem_map_t * get_conversation_hashtable_no_port2(void);
 
 WS_DLL_PUBLIC wmem_map_t *get_conversation_hashtable_no_addr2_or_port2(void);
+
+/**
+ * @brief Get a hash table of conversation hash table.
+ *
+ * @return A wmem_map_t * of (const char *: wmem_map_t *).
+ * Each value is a wmem_map_t * of (const conversation_element_t *: void *).
+ */
+WS_DLL_PUBLIC wmem_map_t *get_conversation_hashtables(void);
 
 /* Temporary function to handle port_type to endpoint_type conversion
    For now it's a 1-1 mapping, but the intention is to remove
