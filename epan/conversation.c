@@ -85,11 +85,41 @@ static guint32 new_index;
  */
 static address null_address_ = ADDRESS_INIT_NONE;
 
-
-static char* conversation_element_list_name(conversation_element_t *elements);
-
 static conversation_t *conversation_lookup_hashtable(wmem_map_t *conversation_hashtable, const guint32 frame_num, conversation_key_t conv_key);
 
+/* Element count including the terminating CE_ENDPOINT */
+#define MAX_CONVERSATION_ELEMENTS 10 // Arbitrary.
+static size_t conversation_element_count(conversation_element_t *elements) {
+    size_t count = 0;
+    while (elements[count].type != CE_ENDPOINT) {
+        count++;
+        DISSECTOR_ASSERT(count < MAX_CONVERSATION_ELEMENTS);
+    }
+    count++;
+    // Keying on the endpoint type alone isn't very useful.
+    DISSECTOR_ASSERT(count > 1);
+    return count;
+}
+
+/* Create a string based on element types. */
+static char* conversation_element_list_name(wmem_allocator_t *allocator, conversation_element_t *elements) {
+    const char *type_names[] = {
+        "endpoint",
+        "address",
+        "string",
+        "uint",
+        "uint64",
+    };
+    char *sep = "";
+    wmem_strbuf_t *conv_hash_group = wmem_strbuf_new(allocator, "");
+    size_t element_count = conversation_element_count(elements);
+    for (size_t i = 0; i < element_count; i++) {
+        conversation_element_t *cur_el = &elements[i];
+        wmem_strbuf_append_printf(conv_hash_group, "%s%s", sep, type_names[cur_el->type]);
+        sep = ",";
+    }
+    return wmem_strbuf_finalize(conv_hash_group);
+}
 
 /*
  * Creates a new conversation with known endpoints based on a conversation
@@ -602,13 +632,12 @@ conversation_init(void)
         { CE_UINT, .uint_val = 0 },
         { CE_ENDPOINT, .endpoint_type_val = ENDPOINT_NONE }
     };
-    char *id_map_key = conversation_element_list_name(id_elements);
+    char *id_map_key = conversation_element_list_name(wmem_epan_scope(), id_elements);
     conversation_hashtable_id = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(),
                                                        conversation_hash_element_list,
                                                        conversation_match_element_list);
     wmem_map_insert(conversation_hashtable_element_list, wmem_strdup(wmem_epan_scope(), id_map_key),
                     conversation_hashtable_id);
-    g_free(id_map_key);
 }
 
 /**
@@ -742,40 +771,6 @@ conversation_remove_from_hashtable(wmem_map_t *hashtable, conversation_t *conv)
     }
 }
 
-/* Element count including the terminating CE_ENDPOINT */
-#define MAX_CONVERSATION_ELEMENTS 10 // Arbitrary.
-static size_t conversation_element_count(conversation_element_t *elements) {
-    size_t count = 0;
-    while (elements[count].type != CE_ENDPOINT) {
-        count++;
-        DISSECTOR_ASSERT(count < MAX_CONVERSATION_ELEMENTS);
-    }
-    count++;
-    // Keying on the endpoint type alone isn't very useful.
-    DISSECTOR_ASSERT(count > 1);
-    return count;
-}
-
-/* Create a string based on element types. Must be g_freed. */
-static char* conversation_element_list_name(conversation_element_t *elements) {
-    const char *type_names[] = {
-        "endpoint",
-        "address",
-        "string",
-        "uint",
-        "uint64",
-    };
-    char *sep = "";
-    GString *conv_hash_group = g_string_new("");
-    size_t element_count = conversation_element_count(elements);
-    for (size_t i = 0; i < element_count; i++) {
-        conversation_element_t *cur_el = &elements[i];
-        g_string_append_printf(conv_hash_group, "%s%s", sep, type_names[cur_el->type]);
-        sep = ",";
-    }
-    return g_string_free(conv_hash_group, FALSE);
-}
-
 #if 0 // debugging
 static char* conversation_element_list_values(conversation_element_t *elements) {
     const char *type_names[] = {
@@ -822,14 +817,13 @@ conversation_t *conversation_new_full(const guint32 setup_frame, conversation_el
 {
     DISSECTOR_ASSERT(elements);
 
-    char *el_list_map_key = conversation_element_list_name(elements);
+    char *el_list_map_key = conversation_element_list_name(wmem_epan_scope(), elements);
     wmem_map_t *el_list_map = (wmem_map_t *) wmem_map_lookup(conversation_hashtable_element_list, el_list_map_key);
     if (!el_list_map) {
         el_list_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), conversation_hash_element_list,
                 conversation_match_element_list);
         wmem_map_insert(conversation_hashtable_element_list, wmem_strdup(wmem_file_scope(), el_list_map_key), el_list_map);
     }
-    g_free(el_list_map_key);
 
     size_t element_count = conversation_element_count(elements);
     conversation_element_t *conv_key = wmem_memdup(wmem_file_scope(), elements, sizeof(conversation_element_t) * element_count);
@@ -995,9 +989,6 @@ conversation_new(const guint32 setup_frame, const address *addr1, const address 
 
     conversation->conv_index = new_index;
     conversation->setup_frame = conversation->last_frame = setup_frame;
-    conversation->data_list = NULL;
-
-    conversation->dissector_tree = wmem_tree_new(wmem_file_scope());
 
     /* set the options and key pointer */
     conversation->options = options;
@@ -1015,18 +1006,18 @@ conversation_new(const guint32 setup_frame, const address *addr1, const address 
 conversation_t *
 conversation_new_by_id(const guint32 setup_frame, const endpoint_type etype, const guint32 id)
 {
-    conversation_element_t elements[2] = {
-        { CE_UINT, .uint_val = id },
-        { CE_ENDPOINT, .endpoint_type_val = etype }
-    };
-
     conversation_t *conversation = wmem_new0(wmem_file_scope(), conversation_t);
     conversation->conv_index = new_index;
     conversation->setup_frame = conversation->last_frame = setup_frame;
 
     new_index++;
 
-    // XXX Overloading conversation_key_t this way is terrible and we shouldn't do it.
+    conversation_element_t *elements = wmem_alloc(wmem_file_scope(), sizeof(conversation_element_t) * 2);
+    elements[0].type = CE_UINT;
+    elements[0].uint_val = id;
+    elements[1].type = CE_ENDPOINT;
+    elements[1].endpoint_type_val = etype;
+   // XXX Overloading conversation_key_t this way is terrible and we shouldn't do it.
     conversation->key_ptr = (conversation_key_t) elements;
     conversation_insert_into_hashtable(conversation_hashtable_id, conversation);
 
@@ -1136,7 +1127,7 @@ static conversation_t *conversation_lookup_hashtable(wmem_map_t *conversation_ha
 
 conversation_t *find_conversation_full(const guint32 frame_num, conversation_element_t *elements)
 {
-    char *el_list_map_key = conversation_element_list_name(elements);
+    char *el_list_map_key = conversation_element_list_name(NULL, elements);
     wmem_map_t *el_list_map = (wmem_map_t *) wmem_map_lookup(conversation_hashtable_element_list, el_list_map_key);
     g_free(el_list_map_key);
     if (!el_list_map) {
@@ -1624,6 +1615,9 @@ void
 conversation_set_dissector_from_frame_number(conversation_t *conversation,
         const guint32 starting_frame_num, const dissector_handle_t handle)
 {
+    if (!conversation->dissector_tree) {
+        conversation->dissector_tree = wmem_tree_new(wmem_file_scope());
+    }
     wmem_tree_insert32(conversation->dissector_tree, starting_frame_num, (void *)handle);
 }
 
@@ -1636,6 +1630,9 @@ conversation_set_dissector(conversation_t *conversation, const dissector_handle_
 dissector_handle_t
 conversation_get_dissector(conversation_t *conversation, const guint32 frame_num)
 {
+    if (!conversation->dissector_tree) {
+        return NULL;
+    }
     return (dissector_handle_t)wmem_tree_lookup32_le(conversation->dissector_tree, frame_num);
 }
 
@@ -1643,11 +1640,16 @@ static gboolean
 try_conversation_call_dissector_helper(conversation_t *conversation, gboolean* dissector_success,
         tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 {
+    if (!conversation->dissector_tree) {
+        return FALSE;
+    }
+
     int ret;
     dissector_handle_t handle = (dissector_handle_t)wmem_tree_lookup32_le(
             conversation->dissector_tree, pinfo->num);
-    if (handle == NULL)
+    if (handle == NULL) {
         return FALSE;
+    }
 
     ret = call_dissector_only(handle, tvb, pinfo, tree, data);
 
@@ -1719,11 +1721,17 @@ try_conversation_dissector_by_id(const endpoint_type etype, const guint32 id, tv
     conversation = find_conversation_by_id(pinfo->num, etype, id);
 
     if (conversation != NULL) {
-        int ret;
-
-        dissector_handle_t handle = (dissector_handle_t)wmem_tree_lookup32_le(conversation->dissector_tree, pinfo->num);
-        if (handle == NULL)
+        if (!conversation->dissector_tree) {
             return FALSE;
+        }
+
+        int ret;
+        dissector_handle_t handle = (dissector_handle_t)wmem_tree_lookup32_le(conversation->dissector_tree, pinfo->num);
+
+        if (handle == NULL) {
+            return FALSE;
+        }
+
         ret = call_dissector_only(handle, tvb, pinfo, tree, data);
         if (!ret) {
             /* this packet was rejected by the dissector
@@ -1837,7 +1845,7 @@ find_or_create_conversation_by_id(packet_info *pinfo, const endpoint_type etype,
 
 void
 conversation_create_endpoint(struct _packet_info *pinfo, address* addr1, address* addr2,
-        endpoint_type etype, guint32 port1, guint32	port2, const guint options)
+        endpoint_type etype, guint32 port1, guint32	port2)
 {
     pinfo->conv_endpoint = wmem_new0(pinfo->pool, struct endpoint);
     pinfo->use_endpoint = TRUE;
@@ -1851,7 +1859,6 @@ conversation_create_endpoint(struct _packet_info *pinfo, address* addr1, address
     pinfo->conv_endpoint->etype = etype;
     pinfo->conv_endpoint->port1 = port1;
     pinfo->conv_endpoint->port2 = port2;
-    pinfo->conv_endpoint->options = options;
 }
 
 void
@@ -1859,7 +1866,7 @@ conversation_create_endpoint_by_id(struct _packet_info *pinfo,
         endpoint_type etype, guint32 id)
 {
     /* Force the lack of a address or port B */
-    conversation_create_endpoint(pinfo, &null_address_, &null_address_, etype, id, 0, 0);
+    conversation_create_endpoint(pinfo, &null_address_, &null_address_, etype, id, 0);
 }
 
 guint32
@@ -1897,6 +1904,12 @@ wmem_map_t *
 get_conversation_hashtable_no_addr2_or_port2(void)
 {
     return conversation_hashtable_no_addr2_or_port2;
+}
+
+wmem_map_t *
+get_conversation_hashtables(void)
+{
+    return conversation_hashtable_element_list;
 }
 
 address*
