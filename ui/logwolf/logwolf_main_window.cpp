@@ -1224,13 +1224,13 @@ void LogwolfMainWindow::mergeCaptureFile()
     }
 
     for (;;) {
-        CaptureFileDialog merge_dlg(this, capture_file_.capFile(), read_filter);
+        CaptureFileDialog merge_dlg(this, capture_file_.capFile());
         int file_type;
         cf_status_t  merge_status;
         char        *in_filenames[2];
         char        *tmpname;
 
-        if (merge_dlg.merge(file_name)) {
+        if (merge_dlg.merge(file_name, read_filter)) {
             gchar *err_msg;
 
             if (!dfilter_compile(qUtf8Printable(read_filter), &rfcode, &err_msg)) {
@@ -2036,6 +2036,13 @@ void LogwolfMainWindow::findTextCodecs() {
     QRegularExpressionMatch match;
     for (int mib : mibs) {
         QTextCodec *codec = QTextCodec::codecForMib(mib);
+        // QTextCodec::availableMibs() returns a list of hard-coded MIB
+        // numbers, it doesn't check if they are really available. ICU data may
+        // not have been compiled with support for all encodings.
+        if (!codec) {
+            continue;
+        }
+
         QString key = codec->name().toUpper();
         char rank;
 

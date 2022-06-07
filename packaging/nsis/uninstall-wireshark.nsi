@@ -1,18 +1,18 @@
 ;
-; uninstall.nsi
+; uninstall-wireshark.nsi
 ;
 
 ; Create an installer that only writes an uninstaller.
 ; https://nsis.sourceforge.io/Signing_an_Uninstaller
 
-!include "common.nsh"
+!include "wireshark-common.nsh"
 !include 'LogicLib.nsh'
 !include x64.nsh
 !include "StrFunc.nsh"
 ${UnStrRep}
 
 SetCompress off
-OutFile "${STAGING_DIR}\uninstall_installer.exe"
+OutFile "${STAGING_DIR}\uninstall_wireshark_installer.exe"
 
 InstType "un.Default (keep Personal Settings and Npcap)"
 InstType "un.All (remove all)"
@@ -64,23 +64,23 @@ FunctionEnd
 
 Var EXTENSION
 Function un.Disassociate
-    Push $R0
+  Push $R0
 !insertmacro PushFileExtensions
 
-    Pop $EXTENSION
-    ${DoUntil} $EXTENSION == ${FILE_EXTENSION_MARKER}
-        ReadRegStr $R0 HKCR $EXTENSION ""
-        StrCmp $R0 ${WIRESHARK_ASSOC} un.Disassociate.doDeregister
-        Goto un.Disassociate.end
+  Pop $EXTENSION
+  ${DoUntil} $EXTENSION == ${FILE_EXTENSION_MARKER}
+    ReadRegStr $R0 HKCR $EXTENSION ""
+    StrCmp $R0 ${WIRESHARK_ASSOC} un.Disassociate.doDeregister
+    Goto un.Disassociate.end
 un.Disassociate.doDeregister:
-        ; The extension is associated with Wireshark so, we must destroy this!
-        DeleteRegKey HKCR $EXTENSION
-        DetailPrint "Deregistered file type: $EXTENSION"
+    ; The extension is associated with Wireshark so, we must destroy this!
+    DeleteRegKey HKCR $EXTENSION
+    DetailPrint "Deregistered file type: $EXTENSION"
 un.Disassociate.end:
-        Pop $EXTENSION
-    ${Loop}
+    Pop $EXTENSION
+  ${Loop}
 
-    Pop $R0
+  Pop $R0
 FunctionEnd
 
 Section "-Required"
@@ -152,15 +152,15 @@ Push "mmdbresolve"
 Pop $EXECUTABLE
 ${DoUntil} $EXECUTABLE == ${EXECUTABLE_MARKER}
 
-    ; IsWiresharkRunning should make sure everything is closed down so we *shouldn't* run
-    ; into any problems here.
-    Delete "$INSTDIR\$EXECUTABLE.exe"
-    IfErrors 0 deletionSuccess
-        MessageBox MB_OK "$EXECUTABLE.exe could not be removed. Is it in use?" /SD IDOK IDOK 0
-        Abort "$EXECUTABLE.exe could not be removed. Aborting the uninstall process."
+  ; IsWiresharkRunning should make sure everything is closed down so we *shouldn't* run
+  ; into any problems here.
+  Delete "$INSTDIR\$EXECUTABLE.exe"
+  IfErrors 0 deletionSuccess
+    MessageBox MB_OK "$EXECUTABLE.exe could not be removed. Is it in use?" /SD IDOK IDOK 0
+    Abort "$EXECUTABLE.exe could not be removed. Aborting the uninstall process."
 
 deletionSuccess:
-    Pop $EXECUTABLE
+  Pop $EXECUTABLE
 
 ${Loop}
 
@@ -185,9 +185,6 @@ Delete "$INSTDIR\COPYING*"
 Delete "$INSTDIR\audio\*.*"
 Delete "$INSTDIR\bearer\*.*"
 Delete "$INSTDIR\diameter\*.*"
-Delete "$INSTDIR\etc\gtk-2.0\*.*"
-Delete "$INSTDIR\etc\gtk-3.0\*.*"
-Delete "$INSTDIR\etc\pango\*.*"
 Delete "$INSTDIR\extcap\androiddump.*"
 Delete "$INSTDIR\extcap\randpktdump.*"
 Delete "$INSTDIR\extcap\sshdump.*"
@@ -197,25 +194,11 @@ Delete "$INSTDIR\extcap\wifidump.*"
 Delete "$INSTDIR\help\*.*"
 Delete "$INSTDIR\iconengines\*.*"
 Delete "$INSTDIR\imageformats\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\2.10.0\engines\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\2.10.0\immodules\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\2.10.0\loaders\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\2.2.0\engines\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\2.2.0\immodules\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\2.2.0\loaders\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\2.4.0\engines\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\2.4.0\immodules\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\2.4.0\loaders\*.*"
-Delete "$INSTDIR\lib\gtk-2.0\modules\*.*"
-Delete "$INSTDIR\lib\pango\1.2.0\modules\*.*"
-Delete "$INSTDIR\lib\pango\1.4.0\modules\*.*"
-Delete "$INSTDIR\lib\pango\1.5.0\modules\*.*"
 Delete "$INSTDIR\mediaservice\*.*"
 Delete "$INSTDIR\platforms\*.*"
 Delete "$INSTDIR\playlistformats\*.*"
 Delete "$INSTDIR\printsupport\*.*"
 Delete "$INSTDIR\share\glib-2.0\schemas\*.*"
-Delete "$INSTDIR\share\themes\Default\gtk-2.0\*.*"
 Delete "$INSTDIR\snmp\*.*"
 Delete "$INSTDIR\snmp\mibs\*.*"
 Delete "$INSTDIR\styles\translations\*.*"
@@ -243,55 +226,16 @@ Delete "$INSTDIR\ipmap.html"
 Delete "$INSTDIR\radius\*.*"
 Delete "$INSTDIR\dtds\*.*"
 
-!define PROGRAM_NAME_GTK "${PROGRAM_NAME} Legacy"
-Delete "$SMPROGRAMS\${PROGRAM_NAME}\*.*"
-Delete "$SMPROGRAMS\${PROGRAM_NAME}.lnk"
-Delete "$SMPROGRAMS\${PROGRAM_NAME_GTK}.lnk"
-Delete "$SMPROGRAMS\Qtshark.lnk"
-Delete "$DESKTOP\${PROGRAM_NAME}.lnk"
-Delete "$DESKTOP\${PROGRAM_NAME_GTK}.lnk"
-Delete "$QUICKLAUNCH\${PROGRAM_NAME}.lnk"
-Delete "$QUICKLAUNCH\${PROGRAM_NAME_GTK}.lnk"
-
 RMDir "$INSTDIR\accessible"
 RMDir "$INSTDIR\audio"
 RMDir "$INSTDIR\bearer"
-RMDir "$INSTDIR\etc\gtk-2.0"
-RMDir "$INSTDIR\etc\pango"
-RMDir "$INSTDIR\etc"
 RMDir "$INSTDIR\extcap"
 RMDir "$INSTDIR\iconengines"
 RMDir "$INSTDIR\imageformats"
-RMDir "$INSTDIR\lib\gtk-2.0\2.2.0\engines"
-RMDir "$INSTDIR\lib\gtk-2.0\2.2.0\loaders"
-RMDir "$INSTDIR\lib\gtk-2.0\2.2.0\immodules"
-RMDir "$INSTDIR\lib\gtk-2.0\2.2.0"
-RMDir "$INSTDIR\lib\gtk-2.0\2.4.0\engines"
-RMDir "$INSTDIR\lib\gtk-2.0\2.4.0\loaders"
-RMDir "$INSTDIR\lib\gtk-2.0\2.4.0\immodules"
-RMDir "$INSTDIR\lib\gtk-2.0\2.4.0"
-RMDir "$INSTDIR\lib\gtk-2.0\2.10.0\engines"
-RMDir "$INSTDIR\lib\gtk-2.0\2.10.0\loaders"
-RMDir "$INSTDIR\lib\gtk-2.0\2.10.0\immodules"
-RMDir "$INSTDIR\lib\gtk-2.0\2.10.0"
-RMDir "$INSTDIR\lib\gtk-2.0\modules"
-RMDir "$INSTDIR\lib\gtk-2.0"
-RMDir "$INSTDIR\lib\pango\1.2.0\modules"
-RMDir "$INSTDIR\lib\pango\1.2.0"
-RMDir "$INSTDIR\lib\pango\1.4.0\modules"
-RMDir "$INSTDIR\lib\pango\1.4.0"
-RMDir "$INSTDIR\lib\pango\1.5.0\modules"
-RMDir "$INSTDIR\lib\pango\1.5.0"
-RMDir "$INSTDIR\lib\pango"
-RMDir "$INSTDIR\lib"
 RMDir "$INSTDIR\mediaservice"
 RMDir "$INSTDIR\platforms"
 RMDir "$INSTDIR\playlistformats"
 RMDir "$INSTDIR\printsupport"
-RMDir "$INSTDIR\share\themes\Default\gtk-2.0"
-RMDir "$INSTDIR\share\themes\Default"
-RMDir "$INSTDIR\share\themes"
-RMDir "$INSTDIR\share"
 RMDir "$INSTDIR\styles\translations"
 RMDir "$INSTDIR\styles"
 RMDir "$SMPROGRAMS\${PROGRAM_NAME}"
@@ -358,10 +302,10 @@ SectionIn 2
 ReadRegStr $1 HKEY_LOCAL_MACHINE "SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\NpcapInst" "UninstallString"
 ;IfErrors un.lbl_npcap_notinstalled ;if RegKey is unavailable, Npcap is not installed
 ${If} $1 != ""
-    ;MessageBox MB_OK "Npcap $1" /SD IDOK
-    ExecWait '$1' $0
-    DetailPrint "Npcap uninstaller returned $0"
-    ;SetRebootFlag true
+  ;MessageBox MB_OK "Npcap $1" /SD IDOK
+  ExecWait '$1' $0
+  DetailPrint "Npcap uninstaller returned $0"
+  ;SetRebootFlag true
 ${EndIf}
 ;un.lbl_npcap_notinstalled:
 SectionEnd
@@ -379,24 +323,11 @@ NoFinalErrorMsg:
 SectionEnd
 
 !insertmacro MUI_UNFUNCTION_DESCRIPTION_BEGIN
-    !insertmacro MUI_DESCRIPTION_TEXT ${un.SecUinstall} "Uninstall all ${PROGRAM_NAME} components."
-    !insertmacro MUI_DESCRIPTION_TEXT ${un.SecPlugins} "Uninstall all Plugins (even from previous ${PROGRAM_NAME} versions)."
-    !insertmacro MUI_DESCRIPTION_TEXT ${un.SecProfiles} "Uninstall all global configuration profiles."
-    !insertmacro MUI_DESCRIPTION_TEXT ${un.SecGlobalSettings} "Uninstall global settings like: $INSTDIR\cfilters"
-    !insertmacro MUI_DESCRIPTION_TEXT ${un.SecPersonalSettings} "Uninstall personal settings like your preferences file from your profile: $PROFILE."
-    !insertmacro MUI_DESCRIPTION_TEXT ${un.SecNpcap} "Call Npcap's uninstall program."
-    !insertmacro MUI_DESCRIPTION_TEXT ${un.SecUSBPcap} "Call USBPcap's uninstall program."
+  !insertmacro MUI_DESCRIPTION_TEXT ${un.SecUinstall} "Uninstall all ${PROGRAM_NAME} components."
+  !insertmacro MUI_DESCRIPTION_TEXT ${un.SecPlugins} "Uninstall all Plugins (even from previous ${PROGRAM_NAME} versions)."
+  !insertmacro MUI_DESCRIPTION_TEXT ${un.SecProfiles} "Uninstall all global configuration profiles."
+  !insertmacro MUI_DESCRIPTION_TEXT ${un.SecGlobalSettings} "Uninstall global settings like: $INSTDIR\cfilters"
+  !insertmacro MUI_DESCRIPTION_TEXT ${un.SecPersonalSettings} "Uninstall personal settings like your preferences file from your profile: $PROFILE."
+  !insertmacro MUI_DESCRIPTION_TEXT ${un.SecNpcap} "Call Npcap's uninstall program."
+  !insertmacro MUI_DESCRIPTION_TEXT ${un.SecUSBPcap} "Call USBPcap's uninstall program."
 !insertmacro MUI_UNFUNCTION_DESCRIPTION_END
-
-;
-; Editor modelines  -  https://www.wireshark.org/tools/modelines.html
-;
-; Local variables:
-; c-basic-offset: 4
-; tab-width: 8
-; indent-tabs-mode: nil
-; End:
-;
-; vi: set shiftwidth=4 tabstop=8 expandtab:
-; :indentSize=4:tabSize=8:noTabs=true:
-;

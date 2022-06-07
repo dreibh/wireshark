@@ -30,8 +30,10 @@ endif()
 
 if(WIN32)
 	set(_project_name Wireshark)
+	set(_log_project_name Logwolf)
 else()
 	set(_project_name wireshark)
+	set(_log_project_name logwolf)
 endif()
 
 project(${_project_name} C CXX)
@@ -49,6 +51,11 @@ if(DEFINED ENV{WIRESHARK_VERSION_EXTRA})
 endif()
 
 set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
+
+set(LOG_PROJECT_NAME ${_log_project_name})
+set(LOG_PROJECT_MAJOR_VERSION 0)
+set(LOG_PROJECT_MINOR_VERSION 8)
+set(LOG_PROJECT_VERSION "${LOG_PROJECT_MAJOR_VERSION}.${LOG_PROJECT_MINOR_VERSION}.${PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
 
 include( CMakeOptions.txt )
 
@@ -3131,8 +3138,8 @@ if (WIN32)
 
 	if(MAKENSIS_EXECUTABLE)
 		add_subdirectory( packaging/nsis EXCLUDE_FROM_ALL )
-		ADD_NSIS_UNINSTALLER_TARGET()
-		ADD_NSIS_PACKAGE_TARGET()
+		ADD_NSIS_UNINSTALLER_TARGETS()
+		ADD_NSIS_PACKAGE_TARGETS()
 	endif()
 
 	find_package( WiX )
@@ -3339,7 +3346,7 @@ if(ENABLE_APPLICATION_BUNDLE AND BUILD_wireshark)
 
 	ADD_CUSTOM_TARGET( wireshark_dmg
 		COMMAND bash -x ${CMAKE_BINARY_DIR}/packaging/macosx/osx-dmg.sh
-		# Unlike nsis_package_prep + nsis_package, we can add a direct
+		# Unlike wireshark_nsis_prep + wireshark_nsis, we can add a direct
 		# dependency here.
 		DEPENDS wireshark_dmg_prep
 		# We create Wireshark.app in "run". Do our work there.
@@ -3393,7 +3400,7 @@ if(ENABLE_APPLICATION_BUNDLE AND BUILD_logwolf)
 
 	# ADD_CUSTOM_TARGET( logwolf_dmg
 	# 	COMMAND bash -x ${CMAKE_BINARY_DIR}/packaging/macosx/osx-dmg.sh
-	# 	# Unlike nsis_package_prep + nsis_package, we can add a direct
+	# 	# Unlike wireshark_nsis_prep + wireshark_nsis, we can add a direct
 	# 	# dependency here.
 	# 	DEPENDS wireshark_dmg_prep
 	# 	# We create Wireshark.app in "run". Do our work there.
