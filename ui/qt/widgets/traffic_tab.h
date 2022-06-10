@@ -23,6 +23,7 @@
 #include <QFile>
 #include <QUrl>
 #include <QAbstractItemDelegate>
+#include <QSortFilterProxyModel>
 
 /**
  * @brief Callback for creating an ATapDataModel
@@ -62,6 +63,17 @@ private:
 
 Q_DECLARE_METATYPE(TabData)
 
+class TrafficDataFilterProxy : public QSortFilterProxyModel
+{
+    Q_OBJECT
+public:
+    TrafficDataFilterProxy(QObject *parent = nullptr);
+
+protected:
+    virtual bool filterAcceptsRow(int source_row, const QModelIndex &source_parent) const;
+
+};
+
 /**
  * @brief A QTabWidget class, providing tap information
  *
@@ -86,13 +98,12 @@ public:
      * without having to removing the predefined object during setup of the UI.
      *
      * @param tableName The name for the table. Used for the protocol selection button
-     * @param cliId a protocol id for the first tab
      * @param recentList The list to store the selected protocols in
      * @param createModel A callback, which will create the correct model for the trees
      *
      * @see ATapModelCallback
      */
-    void setProtocolInfo(QString tableName, int cliId, GList ** recentList, ATapModelCallback createModel);
+    void setProtocolInfo(QString tableName, GList ** recentList, ATapModelCallback createModel);
 
     /**
      * @brief Set the Delegate object for a specific column
@@ -212,7 +223,6 @@ protected slots:
     virtual void attachTab(QWidget * content, QString name) override;
 
 private:
-    int _cliId;
     QVector<int> _protocols;
     QMap<int, QString> _allTaps;
     QMap<int, QAction *> _protocolButtons;
