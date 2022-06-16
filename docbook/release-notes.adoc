@@ -37,6 +37,9 @@ wsbuglink:17779[]
    - Conversations will be sorted via second address and first port number
    - Endpoints will be sorted via port numbers
    - IPv6 addresses are sorted correctly after IPv4 addresses
+ - The dialog elements have been moved to make it easier to handle for new users.
+   - Selection of tap elements is done via list
+   - All configurations and options are done via a left side button row
 
 * The PCRE2 library (https://www.pcre.org/) is now a required dependency to build Wireshark.
 
@@ -45,6 +48,12 @@ wsbuglink:17779[]
   In most cases the API should be compatible and the conversion just requires a module name change.
 
 * You must now have a compiler with C11 support in order to build Wireshark.
+
+* The ip.flags field is now only the three high bits, not the full byte. Display filters or
+  Coloring rules using the field will need to be adjusted.
+
+* The 'v' (lower case) and 'V' (upper case) switches have been swapped for editcap and mergecap to
+  match the other command line utilities.
 
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
@@ -192,10 +201,13 @@ Generic Data Transfer Protocol (GDT)
 Host IP Configuration Protocol (HICP)
 Mesh Connex (MCX)
 Microsoft Cluster Remote Control Protocol (RCP)
+Protected Extensible Authentication Protocol (PEAP)
 Realtek
 REdis Serialization Protocol v2 (RESP)
+Roon Discovery (RoonDisco)
 Secure File Transfer Protocol (sftp)
 Secure Host IP Configuration Protocol (SHICP)
+SSH File Transfer Protocol (SFTP)
 USB Attached SCSI (UASP)
 ZBOSS NCP
 gRPC Web (gRPC-Web)
