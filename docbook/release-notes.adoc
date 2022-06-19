@@ -55,6 +55,9 @@ wsbuglink:17779[]
 * The 'v' (lower case) and 'V' (upper case) switches have been swapped for editcap and mergecap to
   match the other command line utilities.
 
+* New address type AT_NUMERIC allows simple numeric addresses for protocols which do not have
+  a more common-style address approach, analog to AT_STRINGZ.
+
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
 
@@ -138,6 +141,8 @@ They previously shipped with Qt 5.12.2.
 ** `text2pcap` and “Import from Hex Dump” support writing fake IP, TCP, UDP, and SCTP headers to files with Raw IP, Raw IPv4, and Raw IPv6 encapsulations, in addition to Ethernet encapsulation available in previous versions.
 ** `text2pcap` supports scanning the input file using a custom regular expression, as supported in “Import from Hex Dump” in Wireshark 3.6.x.
 ** In general, `text2pcap` and wireshark's “Import from Hex Dump” have feature parity.
+
+* The default main window layout has been changed so that the packet detail and bytes are side by side.
 
 * The HTTP2 dissector now supports using fake headers to parse the DATAs of streams captured without first HEADERS frames of a long-lived stream (such as a gRPC streaming call which allows sending many request or response messages in one HTTP2 stream).
  Users can specify fake headers using an existing stream’s server port, stream id and direction.
