@@ -166,6 +166,14 @@ public:
     bool portsAreHidden() const;
 
     /**
+     * @brief A total column is filled
+     *
+     * @return true if the column is filled
+     * @return false the column is empty
+     */
+    bool showTotalColumn() const;
+
+    /**
      * @brief Enable tapping in this model.
      *
      * This will register the tap listener with the corresponding packet function.
@@ -227,8 +235,6 @@ protected:
 
     register_ct_t* registerTable() const;
 
-    bool showTotalColumn() const;
-
 private:
     int _protoId;
 
@@ -246,6 +252,8 @@ public:
         ENDP_COLUMN_PORT,
         ENDP_COLUMN_PACKETS,
         ENDP_COLUMN_BYTES,
+        ENDP_COLUMN_PACKETS_TOTAL,
+        ENDP_COLUMN_BYTES_TOTAL,
         ENDP_COLUMN_PKT_AB,
         ENDP_COLUMN_BYTES_AB,
         ENDP_COLUMN_PKT_BA,
@@ -278,6 +286,9 @@ public:
         CONV_COLUMN_DST_PORT,
         CONV_COLUMN_PACKETS,
         CONV_COLUMN_BYTES,
+        CONV_COLUMN_CONV_ID,
+        CONV_COLUMN_PACKETS_TOTAL,
+        CONV_COLUMN_BYTES_TOTAL,
         CONV_COLUMN_PKT_AB,
         CONV_COLUMN_BYTES_AB,
         CONV_COLUMN_PKT_BA,
@@ -299,6 +310,14 @@ public:
     void doDataUpdate();
 
     conv_item_t * itemForRow(int row);
+
+    /**
+     * @brief Show the conversation id if available
+     *
+     * @return true a conversation id exists
+     * @return false none available
+     */
+    bool showConversationId(int row) const;
 
 };
 
