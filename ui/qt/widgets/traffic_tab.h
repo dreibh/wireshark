@@ -12,11 +12,12 @@
 
 #include "config.h"
 
-#include <ui/recent.h>
+#include <glib.h>
 
 #include <ui/qt/models/atap_data_model.h>
 #include <ui/qt/filter_action.h>
 #include <ui/qt/widgets/detachable_tabwidget.h>
+#include <ui/qt/widgets/traffic_types_list.h>
 
 #include <QTabWidget>
 #include <QTreeView>
@@ -69,9 +70,16 @@ class TrafficDataFilterProxy : public QSortFilterProxyModel
 public:
     TrafficDataFilterProxy(QObject *parent = nullptr);
 
+    void setColumnVisibility(int column, bool visible);
+    bool columnVisible(int column) const;
+
 protected:
     virtual bool filterAcceptsRow(int source_row, const QModelIndex &source_parent) const;
+    virtual bool filterAcceptsColumn(int source_column, const QModelIndex &source_parent) const;
     virtual bool lessThan(const QModelIndex &source_left, const QModelIndex &source_right) const;
+
+private:
+    QList<int> hideColumns_;
 
 };
 
@@ -99,12 +107,13 @@ public:
      * without having to removing the predefined object during setup of the UI.
      *
      * @param tableName The name for the table. Used for the protocol selection button
-     * @param recentList The list to store the selected protocols in
+     * @param trafficList an element of traffictypeslist, which handles all profile selections
+     * @param recentColumnList a list of columns to be displayed for this traffic type
      * @param createModel A callback, which will create the correct model for the trees
      *
      * @see ATapModelCallback
      */
-    void setProtocolInfo(QString tableName, GList ** recentList, ATapModelCallback createModel);
+    void setProtocolInfo(QString tableName, TrafficTypesList * trafficList, GList ** recentColumnList, ATapModelCallback createModel);
 
     /**
      * @brief Set the Delegate object for a specific column
@@ -212,11 +221,15 @@ public slots:
      */
     void useAbsoluteTime(bool absolute);
 
+    void setOpenTabs(QList<int> protocols);
+
 signals:
     void filterAction(QString filter, FilterAction::Action action, FilterAction::ActionType type);
     void tabDataChanged(int idx);
     void retapRequired();
     void disablingTaps();
+    void tabsChanged(QList<int> protocols);
+    void columnsHaveChanged(QList<int> columns);
 
 protected slots:
 
@@ -224,29 +237,27 @@ protected slots:
     virtual void attachTab(QWidget * content, QString name) override;
 
 private:
-    QVector<int> _protocols;
-    QMap<int, QString> _allTaps;
-    QMap<int, QAction *> _protocolButtons;
+    QList<int> _allProtocols;
     QMap<int, int> _tabs;
-    GList ** _recentList;
     ATapModelCallback _createModel;
     QMap<int, ATapCreateDelegate> _createDelegates;
+    GList ** _recentColumnList;
 
     bool _disableTaps;
     bool _nameResolution;
 
-    void updateTabs();
     QTreeView * createTree(int protoId);
     ATapDataModel * modelForTabIndex(int tabIdx = -1);
     ATapDataModel * modelForWidget(QWidget * widget);
+
+    void insertProtoTab(int protoId, bool emitSignals = true);
+    void removeProtoTab(int protoId, bool emitSignals = true);
 
 #ifdef HAVE_MAXMINDDB
     bool writeGeoIPMapFile(QFile * fp, bool json_only, ATapDataModel * dataModel);
 #endif
 
 private slots:
-    void toggleTab(bool checked = false);
-
     void modelReset();
 
     void doCurrentIndexChange(const QModelIndex & cur, const QModelIndex & prev);

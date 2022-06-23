@@ -16,17 +16,15 @@
 #include <wsutil/utf8_entities.h>
 #include <wsutil/filesystem.h>
 
-#include "ui/recent.h"
-
 #include <ui/qt/main_application.h>
 #include <ui/qt/filter_action.h>
 #include <ui/qt/models/atap_data_model.h>
 #include <ui/qt/utils/variant_pointer.h>
 #include <ui/qt/widgets/traffic_tab.h>
 #include <ui/qt/widgets/traffic_tree.h>
+#include <ui/qt/widgets/traffic_types_list.h>
 #include <ui/qt/widgets/detachable_tabwidget.h>
 
-#include <QVector>
 #include <QStringList>
 #include <QTreeView>
 #include <QList>
@@ -122,6 +120,11 @@ bool TrafficDataFilterProxy::lessThan(const QModelIndex &source_left, const QMod
 
                 result = valA < valB;
                 identical = valA == valB;
+            } else if (addressTypeA == AT_NUMERIC) {
+                quint32 valA = datA.toInt();
+                quint32 valB = datB.toInt();
+                result = valA < valB;
+                identical = valA == valB;
             } else {
                 result = QString::compare(datA.toString(), datB.toString(), Qt::CaseInsensitive) < 0;
                 identical = QString::compare(datA.toString(), datB.toString(), Qt::CaseInsensitive) == 0;
@@ -133,15 +136,11 @@ bool TrafficDataFilterProxy::lessThan(const QModelIndex &source_left, const QMod
                 if (source_left.column() == ConversationDataModel::CONV_COLUMN_SRC_ADDR) {
                     portColumn = ConversationDataModel::CONV_COLUMN_SRC_PORT;
                     int col = ConversationDataModel::CONV_COLUMN_DST_ADDR;
-                    if (model->portsAreHidden())
-                        col -= 1;
                     tstA = model->index(source_left.row(), col);
                     tstB = model->index(source_right.row(), col);
                 } else if (source_left.column() == ConversationDataModel::CONV_COLUMN_DST_ADDR) {
                     portColumn = ConversationDataModel::CONV_COLUMN_DST_PORT;
                     int col = ConversationDataModel::CONV_COLUMN_SRC_ADDR;
-                    if (model->portsAreHidden())
-                        col -= 1;
                     tstA = model->index(source_left.row(), col);
                     tstB = model->index(source_right.row(), col);
                 }
@@ -174,17 +173,51 @@ bool TrafficDataFilterProxy::lessThan(const QModelIndex &source_left, const QMod
     return QSortFilterProxyModel::lessThan(source_left, source_right);
 }
 
-
-static gboolean iterateProtocols(const void *key, void *value, void *userdata)
+bool TrafficDataFilterProxy::filterAcceptsColumn(int source_column, const QModelIndex &) const
 {
-    QMap<int, QString> *protocols = (QMap<int, QString> *)userdata;
-    register_ct_t* ct = (register_ct_t*)value;
-    const QString title = (const gchar*)key;
-    int proto_id = get_conversation_proto_id(ct);
-    protocols->insert(proto_id, title);
+    if (hideColumns_.contains(source_column))
+        return false;
 
-    return FALSE;
+    ATapDataModel * model = qobject_cast<ATapDataModel *>(sourceModel());
+    if (model) {
+        if (model->portsAreHidden()) {
+            if (qobject_cast<EndpointDataModel *>(model) && source_column == EndpointDataModel::ENDP_COLUMN_PORT)
+                return false;
+            if (qobject_cast<ConversationDataModel *>(model) &&
+                (source_column == ConversationDataModel::CONV_COLUMN_SRC_PORT || source_column == ConversationDataModel::CONV_COLUMN_DST_PORT))
+                return false;
+        }
+        if (! model->showTotalColumn()) {
+            if (qobject_cast<EndpointDataModel *>(model) &&
+                (source_column == EndpointDataModel::ENDP_COLUMN_PACKETS_TOTAL || source_column == EndpointDataModel::ENDP_COLUMN_BYTES_TOTAL))
+                return false;
+            if (qobject_cast<ConversationDataModel *>(model) &&
+                (source_column == ConversationDataModel::CONV_COLUMN_PACKETS_TOTAL || source_column == ConversationDataModel::CONV_COLUMN_BYTES_TOTAL))
+                return false;
+        }
+        if (qobject_cast<ConversationDataModel *>(model)) {
+            ConversationDataModel * convModel = qobject_cast<ConversationDataModel *>(model);
+            if (source_column == ConversationDataModel::CONV_COLUMN_CONV_ID && ! convModel->showConversationId(source_column))
+                return false;
+        }
+    }
+
+    return true;
 }
+
+void TrafficDataFilterProxy::setColumnVisibility(int column, bool visible)
+{
+    hideColumns_.removeAll(column);
+    if (!visible)
+        hideColumns_.append(column);
+    invalidateFilter();
+}
+
+bool TrafficDataFilterProxy::columnVisible(int column) const
+{
+    return ! hideColumns_.contains(column);
+}
+
 
 TrafficTab::TrafficTab(QWidget * parent) :
     DetachableTabWidget(parent)
@@ -192,86 +225,23 @@ TrafficTab::TrafficTab(QWidget * parent) :
     _createModel = nullptr;
     _disableTaps = false;
     _nameResolution = false;
-    _recentList = nullptr;
     setTabBasename(QString());
-
 }
 
 TrafficTab::~TrafficTab()
-{
-    prefs_clear_string_list(*_recentList);
-    *_recentList = NULL;
-    _protocolButtons.clear();
+{}
 
-    foreach (int protoId, _tabs.keys())
-    {
-        char *title = g_strdup(proto_get_protocol_short_name(find_protocol_by_id(protoId)));
-        *_recentList = g_list_append(*_recentList, title);
-    }
-}
-
-void TrafficTab::setProtocolInfo(QString tableName, GList ** recentList, ATapModelCallback createModel)
+void TrafficTab::setProtocolInfo(QString tableName, TrafficTypesList * trafficList, GList ** recentColumnList, ATapModelCallback createModel)
 {
     setTabBasename(tableName);
-    _recentList = recentList;
+
+    _allProtocols = trafficList->protocols();
     if (createModel)
         _createModel = createModel;
 
-    for (GList * endTab = *_recentList; endTab; endTab = endTab->next) {
-        int protoId = proto_get_id_by_short_name((const char *)endTab->data);
-        if (protoId > -1 && ! _protocols.contains(protoId))
-            _protocols.append(protoId);
-    }
+    _recentColumnList = recentColumnList;
 
-    if (_protocols.isEmpty()) {
-        QStringList protoNames = QStringList() << "eth" << "ip" << "ipv6" << "tcp" << "udp";
-        foreach(QString name, protoNames)
-            _protocols << proto_get_id_by_filter_name(name.toStdString().c_str());
-    }
-
-    QWidget * container = new QWidget(this);
-    container->setFixedHeight(tabBar()->height());
-    container->setSizePolicy(QSizePolicy(QSizePolicy::Preferred, QSizePolicy::Fixed));
-
-    QHBoxLayout * layout = new QHBoxLayout(container);
-    layout->setContentsMargins(1, 0, 1, 0);
-
-    QPushButton * cornerButton = new QPushButton(tr("%1 Types").arg(tableName));
-    cornerButton->setFixedHeight(tabBar()->height());
-    cornerButton->setSizePolicy(QSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed));
-    QMenu * cornerMenu = new QMenu();
-    conversation_table_iterate_tables(iterateProtocols, &_allTaps);
-    foreach (int protoId, _allTaps.keys())
-    {
-        QAction * endPoint = new QAction(_allTaps[protoId], this);
-        endPoint->setProperty("protocol", QVariant::fromValue(protoId));
-        endPoint->setCheckable(true);
-        endPoint->setChecked(_protocols.contains(protoId));
-        connect(endPoint, &QAction::triggered, this, &TrafficTab::toggleTab);
-        _protocolButtons.insert(protoId, endPoint);
-        cornerMenu->addAction(endPoint);
-    }
-    cornerButton->setMenu(cornerMenu);
-
-    layout->addWidget(cornerButton);
-    setCornerWidget(container, Qt::TopRightCorner);
-
-    updateTabs();
-}
-
-void TrafficTab::toggleTab(bool checked)
-{
-    QAction * orig = qobject_cast<QAction *>(sender());
-    if (!orig || ! orig->property("protocol").isValid())
-        return;
-
-    int protocol = orig->property("protocol").toInt();
-    if (!checked && _protocols.contains(protocol))
-        _protocols.removeAll(protocol);
-    else if (checked && ! _protocols.contains(protocol))
-        _protocols.append(protocol);
-
-    updateTabs();
+    setOpenTabs(trafficList->selectedProtocols());
 }
 
 void TrafficTab::setDelegate(int column, ATapCreateDelegate createDelegate)
@@ -303,7 +273,7 @@ void TrafficTab::setDelegate(int column, ATapCreateDelegate createDelegate)
 
 QTreeView * TrafficTab::createTree(int protoId)
 {
-    TrafficTree * tree = new TrafficTree(tabBasename(), this);
+    TrafficTree * tree = new TrafficTree(tabBasename(), _recentColumnList, this);
 
     if (_createModel) {
         ATapDataModel * model = _createModel(protoId, "");
@@ -328,6 +298,8 @@ QTreeView * TrafficTab::createTree(int protoId)
         tree->setSelectionModel(ism);
         connect(ism, &QItemSelectionModel::currentChanged, this, &TrafficTab::doCurrentIndexChange);
 
+        tree->applyRecentColumns();
+
         tree->sortByColumn(0, Qt::AscendingOrder);
 
         connect(proxyModel, &TrafficDataFilterProxy::modelReset, this, [tree]() {
@@ -337,6 +309,13 @@ QTreeView * TrafficTab::createTree(int protoId)
             }
         });
         connect(proxyModel, &TrafficDataFilterProxy::modelReset, this, &TrafficTab::modelReset);
+
+        /* If the columns for the tree have changed, contact the tab. By also having the tab
+         * columns changed signal connecting back to the tree, it will propagate to all trees
+         * registered with this tab. Attention, this heavily relies on the fact, that all
+         * tree data models are identical */
+        connect(tree, &TrafficTree::columnsHaveChanged, this, &TrafficTab::columnsHaveChanged);
+        connect(this, &TrafficTab::columnsHaveChanged, tree, &TrafficTree::columnsChanged);
     }
 
     return tree;
@@ -376,60 +355,78 @@ void TrafficTab::disableTap()
     emit disablingTaps();
 }
 
-void TrafficTab::updateTabs()
+void TrafficTab::setOpenTabs(QList<int> protocols)
 {
-    QList<int> keys = _tabs.keys();
-    QList<int> allProtocols = _allTaps.keys();
+    QList<int> tabs = _tabs.keys();
+    QList<int> remove;
+    blockSignals(true);
 
-    /* Adding new Tabs, and keeping the same order they are in the drop-down menu */
-    foreach (int proto, _protocols) {
-        if (!keys.contains(proto)) {
-
-            int insertIndex = -1;
-            auto bIdx = allProtocols.indexOf(proto);
-            int idx = 0;
-            while (insertIndex < 0 && idx < keys.count())
-            {
-                auto aIdx = allProtocols.indexOf(keys[idx]);
-                if (aIdx < 0) /* Key not in all protocols. This would be a fluke */
-                    break;
-                if (aIdx > bIdx) /* Should never be equal, as proto is not yet in keys */
-                    insertIndex = _tabs[keys[idx]];
-                idx++;
-            }
-
-            QTreeView * tree = createTree(proto);
-            QString tableName = proto_get_protocol_short_name(find_protocol_by_id(proto));
-            TabData tabData(tableName, proto);
-            QVariant storage;
-            storage.setValue(tabData);
-            if (tree->model()->rowCount() > 0)
-                tableName += QString(" %1 %2").arg(UTF8_MIDDLE_DOT).arg(tree->model()->rowCount());
-
-            int tabId = insertTab(insertIndex, tree, tableName);
-            _protocolButtons[proto]->setChecked(true);
-            tabBar()->setTabData(tabId, storage);
-        }
-    }
-
-    /* Removing tabs no longer required. First filter the key array, for all tabs which
-     * are still being displayed */
-    foreach(int key, keys)
+    foreach(int protocol, protocols)
     {
-        if ( _protocols.contains(key)) {
-            _protocolButtons[key]->setChecked(true);
-            keys.removeAll(key);
+        if (! tabs.contains(protocol)) {
+            insertProtoTab(protocol, false);
+        }
+        tabs.removeAll(protocol);
+    }
+
+    foreach(int protocol, tabs)
+        removeProtoTab(protocol, false);
+
+    blockSignals(false);
+
+    emit tabsChanged(_tabs.keys());
+    emit retapRequired();
+}
+
+void TrafficTab::insertProtoTab(int protoId, bool emitSignals)
+{
+    QList<int> lUsed = _tabs.keys();
+
+    if (lUsed.contains(protoId) && lUsed.count() != count())
+    {
+        _tabs.clear();
+        for (int idx = 0; idx < count(); idx++) {
+            TabData tabData = qvariant_cast<TabData>(tabBar()->tabData(idx));
+            _tabs.insert(tabData.protoId(), idx);
+        }
+        lUsed = _tabs.keys();
+    }
+
+    if (protoId <= 0 || lUsed.contains(protoId))
+        return;
+
+    QList<int> lFull = _allProtocols;
+    int idx = (int) lFull.indexOf(protoId);
+    if (idx < 0)
+        return;
+
+    QList<int> part = lFull.mid(0, idx);
+    int insertAt = 0;
+    if (part.count() > 0) {
+        for (int cnt = idx - 1; cnt >= 0; cnt--) {
+            if (lUsed.contains(part[cnt]) && part[cnt] != protoId) {
+                insertAt = (int) lUsed.indexOf(part[cnt]) + 1;
+                break;
+            }
         }
     }
-    /* Removal step 2, now actually remove all elements. Counting down, otherwise removing
-     * a tab will shift the indeces */
-    for(int idx = count(); idx > 0; idx--) {
-        TabData tabData = qvariant_cast<TabData>(tabBar()->tabData(idx - 1));
-        if (keys.contains(tabData.protoId())) {
-            removeTab(idx - 1);
-            _protocolButtons[tabData.protoId()]->setChecked(false);
-        }
-    }
+
+    QTreeView * tree = createTree(protoId);
+    QString tableName = proto_get_protocol_short_name(find_protocol_by_id(protoId));
+    TabData tabData(tableName, protoId);
+    QVariant storage;
+    storage.setValue(tabData);
+    if (tree->model()->rowCount() > 0)
+        tableName += QString(" %1 %2").arg(UTF8_MIDDLE_DOT).arg(tree->model()->rowCount());
+
+    int tabId = -1;
+    if (insertAt > -1)
+        tabId = insertTab(insertAt, tree, tableName);
+    else
+        tabId = addTab(tree, tableName);
+    if (tabId >= 0)
+        tabBar()->setTabData(tabId, storage);
+
 
     /* We reset the correct tab idxs. That operations is costly, but it is only
      * called during this operation and ensures, that other operations do not
@@ -440,7 +437,37 @@ void TrafficTab::updateTabs()
         _tabs.insert(tabData.protoId(), idx);
     }
 
-    emit retapRequired();
+    if (emitSignals) {
+        emit tabsChanged(_tabs.keys());
+        emit retapRequired();
+    }
+}
+
+void TrafficTab::removeProtoTab(int protoId, bool emitSignals)
+{
+    if (_tabs.keys().contains(protoId)) {
+        for(int idx = 0; idx < count(); idx++) {
+            TabData tabData = qvariant_cast<TabData>(tabBar()->tabData(idx));
+            if (protoId == tabData.protoId()) {
+                removeTab(idx);
+                break;
+            }
+        }
+    }
+
+    /* We reset the correct tab idxs. That operations is costly, but it is only
+    * called during this operation and ensures, that other operations do not
+    * need to iterate, but rather can lookup the indeces. */
+    _tabs.clear();
+    for (int idx = 0; idx < count(); idx++) {
+        TabData tabData = qvariant_cast<TabData>(tabBar()->tabData(idx));
+        _tabs.insert(tabData.protoId(), idx);
+    }
+
+    if (emitSignals) {
+        emit tabsChanged(_tabs.keys());
+        emit retapRequired();
+    }
 }
 
 void TrafficTab::doCurrentIndexChange(const QModelIndex & cur, const QModelIndex &)
@@ -484,7 +511,7 @@ void TrafficTab::modelReset()
         return;
 
     TrafficDataFilterProxy * qsfpm = qobject_cast<TrafficDataFilterProxy *>(sender());
-    if (! qobject_cast<ATapDataModel *>(qsfpm->sourceModel()))
+    if (!qsfpm || ! qobject_cast<ATapDataModel *>(qsfpm->sourceModel()))
         return;
 
     ATapDataModel * atdm = qobject_cast<ATapDataModel *>(qsfpm->sourceModel());
@@ -519,7 +546,7 @@ ATapDataModel * TrafficTab::modelForWidget(QWidget * searchWidget)
         QTreeView * tree = qobject_cast<QTreeView *>(searchWidget);
         if (qobject_cast<TrafficDataFilterProxy *>(tree->model())) {
             TrafficDataFilterProxy * qsfpm = qobject_cast<TrafficDataFilterProxy *>(tree->model());
-            if (qobject_cast<ATapDataModel *>(qsfpm->sourceModel())) {
+            if (qsfpm && qobject_cast<ATapDataModel *>(qsfpm->sourceModel())) {
                 return qobject_cast<ATapDataModel *>(qsfpm->sourceModel());
             }
         }
@@ -736,9 +763,6 @@ void TrafficTab::detachTab(int tabIdx, QPoint pos) {
     if (!model)
         return;
 
-    int protocol = model->protoId();
-    _protocols.removeAll(protocol);
-
     TrafficTree * tree = qobject_cast<TrafficTree *>(widget(tabIdx));
     if (!tree)
         return;
@@ -746,7 +770,7 @@ void TrafficTab::detachTab(int tabIdx, QPoint pos) {
     connect(this, &TrafficTab::disablingTaps ,tree , &TrafficTree::disableTap);
     DetachableTabWidget::detachTab(tabIdx, pos);
 
-    updateTabs();
+    removeProtoTab(model->protoId());
 }
 
 void TrafficTab::attachTab(QWidget * content, QString name)
@@ -757,8 +781,5 @@ void TrafficTab::attachTab(QWidget * content, QString name)
         return;
     }
 
-    int protocol = model->protoId();
-    _protocols.append(protocol);
-
-    updateTabs();
+    insertProtoTab(model->protoId());
 }

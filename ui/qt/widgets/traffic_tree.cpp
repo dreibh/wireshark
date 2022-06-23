@@ -25,9 +25,9 @@
 #include <ui/qt/filter_action.h>
 #include <ui/qt/models/atap_data_model.h>
 #include <ui/qt/utils/variant_pointer.h>
+#include <ui/qt/widgets/traffic_tab.h>
 #include <ui/qt/widgets/traffic_tree.h>
 
-#include <QVector>
 #include <QStringList>
 #include <QTreeView>
 #include <QList>
@@ -40,20 +40,120 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonDocument>
+#include <QHeaderView>
 
-TrafficTree::TrafficTree(QString baseName, QWidget *parent) :
+TrafficTreeHeaderView::TrafficTreeHeaderView(GList ** recentColumnList, QWidget * parent):
+    QHeaderView(Qt::Horizontal, parent)
+{
+    _recentColumnList = recentColumnList;
+
+    setContextMenuPolicy(Qt::CustomContextMenu);
+
+    connect(this, &QHeaderView::customContextMenuRequested, this, &TrafficTreeHeaderView::headerContextMenu);
+}
+
+TrafficTreeHeaderView::~TrafficTreeHeaderView()
+{}
+
+void TrafficTreeHeaderView::headerContextMenu(const QPoint &pos)
+{
+    TrafficTree * tree = qobject_cast<TrafficTree *>(parent());
+    if (!tree)
+        return;
+
+    TrafficDataFilterProxy * proxy = qobject_cast<TrafficDataFilterProxy *>(tree->model());
+    if (sender() != this || ! proxy)
+        return;
+
+    QMenu ctxMenu;
+
+    for (int col = 0; col < tree->dataModel()->columnCount(); col++)
+    {
+        QString name = tree->dataModel()->headerData(col).toString();
+        QAction * action = new QAction(name);
+        action->setCheckable(true);
+        action->setChecked(proxy->columnVisible(col));
+        action->setProperty("col_nr", col);
+        ctxMenu.addAction(action);
+
+        connect(action, &QAction::triggered, this, &TrafficTreeHeaderView::columnTriggered);
+    }
+
+    ctxMenu.exec(mapToGlobal(pos));
+}
+
+void TrafficTreeHeaderView::applyRecent()
+{
+    TrafficTree * tree = qobject_cast<TrafficTree *>(parent());
+    if (!tree)
+        return;
+
+    QList<int> columns;
+    for (GList * endTab = *_recentColumnList; endTab; endTab = endTab->next) {
+        QString colStr = QString((const char *)endTab->data);
+        bool ok = false;
+        int col = colStr.toInt(&ok);
+        if (ok)
+            columns << col;
+    }
+
+    if (columns.count() > 0) {
+        TrafficDataFilterProxy * proxy = qobject_cast<TrafficDataFilterProxy *>(tree->model());
+        for (int col = 0; col < tree->dataModel()->columnCount(); col++) {
+            proxy->setColumnVisibility(col, columns.contains(col));
+        }
+    }
+}
+
+void TrafficTreeHeaderView::columnTriggered(bool checked)
+{
+    TrafficTree * tree = qobject_cast<TrafficTree *>(parent());
+    if (!tree)
+        return;
+
+    TrafficDataFilterProxy * proxy = qobject_cast<TrafficDataFilterProxy *>(tree->model());
+    QAction * entry = qobject_cast<QAction *>(sender());
+    if (! proxy || ! entry || ! entry->property("col_nr").isValid())
+        return;
+
+    int col = entry->property("col_nr").toInt();
+    proxy->setColumnVisibility(col, checked);
+
+    prefs_clear_string_list(*_recentColumnList);
+    *_recentColumnList = NULL;
+
+    QList<int> visible;
+
+    for (int col = 0; col < tree->dataModel()->columnCount(); col++) {
+        if (proxy->columnVisible(col)) {
+            visible << col;
+            gchar *nr = qstring_strdup(QString::number(col));
+            *_recentColumnList = g_list_append(*_recentColumnList, nr);
+        }
+    }
+
+    emit columnsHaveChanged(visible);
+}
+
+
+TrafficTree::TrafficTree(QString baseName, GList ** recentColumnList, QWidget *parent) :
     QTreeView(parent)
 {
     _tapEnabled = true;
     _saveRaw = true;
     _baseName = baseName;
     _exportRole = ATapDataModel::UNFORMATTED_DISPLAYDATA;
+    _header = nullptr;
 
     setAlternatingRowColors(true);
     setRootIsDecorated(false);
     setSortingEnabled(true);
     setContextMenuPolicy(Qt::CustomContextMenu);
-    
+
+    _header = new TrafficTreeHeaderView(recentColumnList);
+    setHeader(_header);
+
+    connect(_header, &TrafficTreeHeaderView::columnsHaveChanged, this, &TrafficTree::columnsHaveChanged);
     connect(this, &QTreeView::customContextMenuRequested, this, &TrafficTree::customContextMenu);
 }
 
@@ -119,11 +219,14 @@ QMenu * TrafficTree::createActionSubMenu(FilterAction::Action cur_action, QModel
     initDirection();
 
     conv_item_t * conv_item = nullptr;
+    bool hasConvId = false;
     if (isConversation)
     {
         ConversationDataModel * model = qobject_cast<ConversationDataModel *>(dataModel());
-        if (model)
+        if (model) {
             conv_item = model->itemForRow(idx.row());
+            hasConvId = model->showConversationId(idx.row());
+        }
     }
 
     QMenu * subMenu = new QMenu(FilterAction::actionName(cur_action));
@@ -131,6 +234,13 @@ QMenu * TrafficTree::createActionSubMenu(FilterAction::Action cur_action, QModel
     foreach (FilterAction::ActionType at, FilterAction::actionTypes()) {
         if (isConversation && conv_item) {
             QMenu *subsubmenu = subMenu->addMenu(FilterAction::actionTypeName(at));
+            if (hasConvId && (cur_action == FilterAction::ActionApply || cur_action == FilterAction::ActionPrepare)) {
+                QString filter = QString("%1.stream eq %2").arg(conv_item->etype == ENDPOINT_TCP ? "tcp" : "udp").arg(conv_item->conv_id);
+                FilterAction * act = new FilterAction(subsubmenu, cur_action, at, tr("Filter on stream id"));
+                act->setProperty("filter", filter);
+                subsubmenu->addAction(act);
+                connect(act, &QAction::triggered, this, &TrafficTree::useFilterAction);
+            }
             foreach (FilterAction::ActionDirection ad, FilterAction::actionDirections()) {
                 FilterAction *fa = new FilterAction(subsubmenu, cur_action, at, ad);
                 QString filter = get_conversation_filter(conv_item, (conv_direction_e) fad_to_cd_[fa->actionDirection()]);
@@ -162,8 +272,8 @@ QMenu * TrafficTree::createCopyMenu(QWidget *parent)
     ca->setToolTip(tr("Copy all values of this page to the clipboard in the YAML data serialization format."));
     ca->setProperty("copy_as", TrafficTree::CLIPBOARD_YAML);
     connect(ca, &QAction::triggered, this, &TrafficTree::clipboardAction);
-    ca = copy_menu->addAction(tr("as Json"));
-    ca->setToolTip(tr("Copy all values of this page to the clipboard in the Json data serialization format."));
+    ca = copy_menu->addAction(tr("as JSON"));
+    ca->setToolTip(tr("Copy all values of this page to the clipboard in the JSON data serialization format."));
     ca->setProperty("copy_as", TrafficTree::CLIPBOARD_JSON);
     connect(ca, &QAction::triggered, this, &TrafficTree::clipboardAction);
 
@@ -277,4 +387,23 @@ void TrafficTree::disableTap()
     if (!model)
         return;
     model->disableTap();
+}
+
+void TrafficTree::applyRecentColumns()
+{
+    if (_header)
+        _header->applyRecent();
+}
+
+void TrafficTree::columnsChanged(QList<int> columns)
+{
+    TrafficDataFilterProxy * proxy = qobject_cast<TrafficDataFilterProxy *>(model());
+    if (!proxy)
+        return;
+
+    for (int col = 0; col < dataModel()->columnCount(); col++) {
+        proxy->setColumnVisibility(col, columns.contains(col));
+    }
+
+    resizeAction();
 }
