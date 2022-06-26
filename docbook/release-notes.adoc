@@ -96,7 +96,8 @@ They previously shipped with Qt 5.12.2.
    For example the expression "all tcp.port > 1024" is true if and only if all tcp.port fields match the condition.
    Previously only the default behaviour to return true if any one field matches was supported.
 ** Field references, of the form ${some.field}, are now part of the syntax of display filters. Previously they were implemented as macros.
-   The new implementation is more efficient and allows matching multiple values, like any other protocol field.
+   The new implementation is more efficient and has the same properties as protocol fields, like matching on multiple values
+   using quantifiers and support for layer filtering.
 ** Arithmetic is supported for numeric fields with the usual operators “+”, “-”, “*”, “/”, and “%”.
    Arithmetic expressions must be grouped using curly brackets (not parenthesis).
 ** New display filter functions max(), min() and abs() have been added.
@@ -139,6 +140,7 @@ They previously shipped with Qt 5.12.2.
 ** Literal strings can handle embedded null bytes (the value '\0') correctly. This includes regular expression patterns.
    For example the double-quoted string "\0 is a null byte" is a legal literal value.
    This may be useful to match byte patterns but note that in general protocol fields with a string type still cannot contain embedded null bytes.
+** Booleans can be written as True/TRUE or False/FALSE. Previously they could only be written as 1 or 0.
 
 * The `text2pcap` command and the “Import from Hex Dump” feature have been updated and enhanced:
 ** `text2pcap` supports writing the output file in all the capture file formats that wiretap library supports, using the same `-F` option as `editcap`, `mergecap`, and `tshark`.
