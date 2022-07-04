@@ -55,6 +55,8 @@
 #include <wsutil/report_message.h>
 #include "packet-tcp.h"
 #include "packet-diameter.h"
+#include "packet-tls.h"
+#include "packet-dtls.h"
 #include "packet-e212.h"
 #include "packet-e164.h"
 
@@ -320,8 +322,10 @@ static dissector_handle_t diameter_udp_handle;
 static dissector_handle_t diameter_tcp_handle;
 static dissector_handle_t diameter_sctp_handle;
 static range_t *global_diameter_sctp_port_range;
-/* This is used for TCP and SCTP */
+/* This is IANA registered for TCP and SCTP (and reserved for UDP) */
 #define DEFAULT_DIAMETER_PORT_RANGE "3868"
+/* This is IANA registered for TLS/TCP and DTLS/SCTP (and reserved for UDP) */
+#define DEFAULT_DIAMETER_TLS_PORT 5868
 
 /* desegmentation of Diameter over TCP */
 static gboolean gbl_diameter_desegment = TRUE;
@@ -1630,6 +1634,7 @@ static gint
 check_diameter(tvbuff_t *tvb)
 {
 	guint8 flags;
+	guint32 msg_len;
 
 	/* Ensure we don't throw an exception trying to do these heuristics */
 	if (tvb_captured_length(tvb) < 5)
@@ -1653,7 +1658,12 @@ check_diameter(tvbuff_t *tvb)
 	 *
 	 * --> 36 bytes
 	 */
-	if (tvb_get_ntoh24(tvb, 1) < 36)
+        msg_len = tvb_get_ntoh24(tvb, 1);
+	/* Diameter message length field must be a multiple of 4.
+         * This is implicit in RFC 3588 (based on the header and that each
+         * AVP must align on a 32-bit boundary) and explicit in RFC 6733.
+         */
+	if ((msg_len < 36) || (msg_len & 0x3))
 		return NOT_DIAMETER;
 
 	flags = tvb_get_guint8(tvb, 4);
@@ -1706,6 +1716,21 @@ dissect_diameter_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
 	}
 
 	return tvb_reported_length(tvb);
+}
+
+static gboolean
+dissect_diameter_tcp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+{
+	if (check_diameter(tvb) != IS_DIAMETER) {
+		return FALSE;
+	}
+
+	conversation_set_dissector(find_or_create_conversation(pinfo), diameter_tcp_handle);
+
+	tcp_dissect_pdus(tvb, pinfo, tree, gbl_diameter_desegment, 4,
+			 get_diameter_pdu_len, dissect_diameter_common, data);
+
+	return TRUE;
 }
 
 static int
@@ -2576,6 +2601,7 @@ proto_register_diameter(void)
 
 	/* Allow dissector to find be found by name. */
 	diameter_sctp_handle = register_dissector("diameter", dissect_diameter, proto_diameter);
+	diameter_tcp_handle = register_dissector("diameter.tcp", dissect_diameter_tcp, proto_diameter);
 	/* Diameter AVPs without Diameter header, for EAP-TTLS (RFC 5281, Section 10) */
 	register_dissector("diameter_avps", dissect_diameter_avps, proto_diameter);
 
@@ -2636,13 +2662,16 @@ proto_reg_handoff_diameter(void)
 	static range_t *diameter_sctp_port_range;
 
 	if (!Initialized) {
-		diameter_tcp_handle = create_dissector_handle(dissect_diameter_tcp,
-							      proto_diameter);
 		diameter_udp_handle = create_dissector_handle(dissect_diameter, proto_diameter);
 		data_handle = find_dissector("data");
 		eap_handle = find_dissector_add_dependency("eap", proto_diameter);
 
 		dissector_add_uint("sctp.ppi", DIAMETER_PROTOCOL_ID, diameter_sctp_handle);
+
+		heur_dissector_add("tcp", dissect_diameter_tcp_heur, "Diameter over TCP", "diameter_tcp", proto_diameter, HEURISTIC_DISABLE);
+
+		ssl_dissector_add(DEFAULT_DIAMETER_TLS_PORT, diameter_tcp_handle);
+		dtls_dissector_add(DEFAULT_DIAMETER_TLS_PORT, diameter_sctp_handle);
 
 		/* Register special decoding for some AVPs */
 
