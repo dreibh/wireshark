@@ -6397,10 +6397,14 @@ proto_tree_set_representation(proto_item *pi, const char *format, va_list ap)
 static int
 protoo_strlcpy(gchar *dest, const gchar *src, gsize dest_size)
 {
+	if (dest_size == 0) return 0;
+
 	gsize res = g_strlcpy(dest, src, dest_size);
 
-	if (res > dest_size)
-		res = dest_size;
+	/* At most dest_size - 1 characters will be copied
+         * (unless dest_size is 0). */
+	if (res >= dest_size)
+		res = dest_size - 1;
 	return (int) res;
 }
 
@@ -6735,7 +6739,7 @@ proto_custom_set(proto_tree* tree, GSList *field_ids, gint occurrence,
 	guint64             number64;
 	const guint8       *bytes;
 
-	int                 len, prev_len, last, i, offset_r = 0, offset_e = 0, label_len;
+	int                 len, prev_len, last, i, offset_r = 0, offset_e = 0, prev_offset_r = 0, label_len;
 	GPtrArray          *finfos;
 	field_info         *finfo         = NULL;
 	header_field_info*  hfinfo;
@@ -6803,6 +6807,14 @@ proto_custom_set(proto_tree* tree, GSList *field_ids, gint occurrence,
 			}
 
 			prev_len += len; /* Count handled occurrences */
+
+			/* Store the offset where all the occurrences of this
+			 * field begin in the result.
+			 */
+			prev_offset_r = offset_r;
+			if (offset_r && (offset_r < (size - 2))) {
+				prev_offset_r++; /* skip the comma added below */
+			}
 
 			while (i <= last) {
 				finfo = (field_info *)g_ptr_array_index(finfos, i);
@@ -6975,11 +6987,13 @@ proto_custom_set(proto_tree* tree, GSList *field_ids, gint occurrence,
 					break;
 
 				default:
-					/* for all others, just copy "result" to "expr" */
-					(void) g_strlcpy(expr, result, size);
+					/* for all others, just copy the latest "result" to "expr" */
+					offset_e += protoo_strlcpy(expr+offset_e, result+prev_offset_r, size-offset_e);
 					break;
 			}
 
+			/* XXX: Why is only the first abbreviation returned for a multifield
+			 * custom column? */
 			if (!abbrev) {
 				/* Store abbrev for return value */
 				abbrev = hfinfo->abbrev;
@@ -8113,14 +8127,28 @@ void proto_free_field_strings (ftenum_t field_type, unsigned int field_display, 
 		case FT_INT56:
 		case FT_UINT64:
 		case FT_INT64: {
-			/*
-			 * XXX - if it's BASE_RANGE_STRING, or
-			 * BASE_EXT_STRING, should we free it?
-			 */
 			if (field_display & BASE_UNIT_STRING) {
 				unit_name_string *unit = (unit_name_string *)field_strings;
 				g_free((gchar *)unit->singular);
 				g_free((gchar *)unit->plural);
+			} else if (field_display & BASE_RANGE_STRING) {
+				range_string *rs = (range_string *)field_strings;
+				while (rs->strptr) {
+					g_free((gchar *)rs->strptr);
+					rs++;
+				}
+			} else if (field_display & BASE_EXT_STRING) {
+				val64_string_ext *vse = (val64_string_ext *)field_strings;
+				val64_string *vs = (val64_string *)vse->_vs_p;
+				while (vs->strptr) {
+					g_free((gchar *)vs->strptr);
+					vs++;
+				}
+				val64_string_ext_free(vse);
+				field_strings = NULL;
+			} else if (field_display == BASE_CUSTOM) {
+				/* this will be a pointer to a function, don't free that */
+				field_strings = NULL;
 			} else {
 				val64_string *vs64 = (val64_string *)field_strings;
 				while (vs64->strptr) {
@@ -8141,10 +8169,6 @@ void proto_free_field_strings (ftenum_t field_type, unsigned int field_display, 
 		case FT_INT32:
 		case FT_FLOAT:
 		case FT_DOUBLE: {
-			/*
-			 * XXX - if it's BASE_RANGE_STRING, or
-			 * BASE_EXT_STRING, should we free it?
-			 */
 			if (field_display & BASE_UNIT_STRING) {
 				unit_name_string *unit = (unit_name_string *)field_strings;
 				g_free((gchar *)unit->singular);
@@ -8155,6 +8179,18 @@ void proto_free_field_strings (ftenum_t field_type, unsigned int field_display, 
 					g_free((gchar *)rs->strptr);
 					rs++;
 				}
+			} else if (field_display & BASE_EXT_STRING) {
+				value_string_ext *vse = (value_string_ext *)field_strings;
+				value_string *vs = (value_string *)vse->_vs_p;
+				while (vs->strptr) {
+					g_free((gchar *)vs->strptr);
+					vs++;
+				}
+				value_string_ext_free(vse);
+				field_strings = NULL;
+			} else if (field_display == BASE_CUSTOM) {
+				/* this will be a pointer to a function, don't free that */
+				field_strings = NULL;
 			} else {
 				value_string *vs = (value_string *)field_strings;
 				while (vs->strptr) {

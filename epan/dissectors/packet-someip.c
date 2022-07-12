@@ -818,22 +818,29 @@ someip_lookup_client_name(guint16 serviceid, guint16 clientid) {
     return (char *)g_hash_table_lookup(data_someip_clients, &tmp);
 }
 
+
 /*** SOME/IP Services ***/
 UAT_HEX_CB_DEF        (someip_service_ident, id,    generic_one_id_string_t)
 UAT_CSTRING_CB_DEF    (someip_service_ident, name,  generic_one_id_string_t)
 
 static void
-post_update_someip_service_cb(void) {
+reset_someip_service_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_someip_services) {
         g_hash_table_destroy(data_someip_services);
         data_someip_services = NULL;
     }
+}
+
+static void
+post_update_someip_service_cb(void) {
+    reset_someip_service_cb();
 
     /* create new hash table */
     data_someip_services = g_hash_table_new_full(g_int_hash, g_int_equal, &someip_free_key, &simple_free);
     post_update_one_id_string_template_cb(someip_service_ident, someip_service_ident_num, data_someip_services);
 }
+
 
 /*** SOME/IP Methods/Events/Fields ***/
 UAT_HEX_CB_DEF      (someip_method_ident, id,   generic_two_id_string_t)
@@ -841,17 +848,23 @@ UAT_HEX_CB_DEF      (someip_method_ident, id2,  generic_two_id_string_t)
 UAT_CSTRING_CB_DEF  (someip_method_ident, name, generic_two_id_string_t)
 
 static void
-post_update_someip_method_cb(void) {
+reset_someip_method_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_someip_methods) {
         g_hash_table_destroy(data_someip_methods);
         data_someip_methods = NULL;
     }
+}
+
+static void
+post_update_someip_method_cb(void) {
+    reset_someip_method_cb();
 
     /* create new hash table */
     data_someip_methods = g_hash_table_new_full(g_int_hash, g_int_equal, &someip_free_key, &simple_free);
     post_update_generic_two_id_string_template_cb(someip_method_ident, someip_method_ident_num, data_someip_methods);
 }
+
 
 /*** SOME/IP Eventgroups ***/
 UAT_HEX_CB_DEF      (someip_eventgroup_ident, id,   generic_two_id_string_t)
@@ -859,17 +872,23 @@ UAT_HEX_CB_DEF      (someip_eventgroup_ident, id2,  generic_two_id_string_t)
 UAT_CSTRING_CB_DEF  (someip_eventgroup_ident, name, generic_two_id_string_t)
 
 static void
-post_update_someip_eventgroup_cb(void) {
+reset_someip_eventgroup_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_someip_eventgroups) {
         g_hash_table_destroy(data_someip_eventgroups);
         data_someip_eventgroups = NULL;
     }
+}
+
+static void
+post_update_someip_eventgroup_cb(void) {
+    reset_someip_eventgroup_cb();
 
     /* create new hash table */
     data_someip_eventgroups = g_hash_table_new_full(g_int_hash, g_int_equal, &someip_free_key, &simple_free);
     post_update_generic_two_id_string_template_cb(someip_eventgroup_ident, someip_eventgroup_ident_num, data_someip_eventgroups);
 }
+
 
 /*** SOME/IP Clients ***/
 UAT_HEX_CB_DEF(someip_client_ident, id, generic_two_id_string_t)
@@ -877,12 +896,17 @@ UAT_HEX_CB_DEF(someip_client_ident, id2, generic_two_id_string_t)
 UAT_CSTRING_CB_DEF(someip_client_ident, name, generic_two_id_string_t)
 
 static void
-post_update_someip_client_cb(void) {
+reset_someip_client_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_someip_clients) {
         g_hash_table_destroy(data_someip_clients);
         data_someip_clients = NULL;
     }
+}
+
+static void
+post_update_someip_client_cb(void) {
+    reset_someip_client_cb();
 
     /* create new hash table */
     data_someip_clients = g_hash_table_new_full(g_int_hash, g_int_equal, &someip_free_key, &simple_free);
@@ -1154,12 +1178,17 @@ post_update_someip_parameter_list_read_in_data(someip_parameter_list_uat_t *data
 }
 
 static void
-post_update_someip_parameter_list_cb(void) {
+reset_someip_parameter_list_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_someip_parameter_list) {
         g_hash_table_destroy(data_someip_parameter_list);
         data_someip_parameter_list = NULL;
     }
+}
+
+static void
+post_update_someip_parameter_list_cb(void) {
+    reset_someip_parameter_list_cb();
 
     data_someip_parameter_list = g_hash_table_new_full(g_int64_hash, g_int64_equal, &someip_payload_free_key, &free_someip_parameter_list);
     post_update_someip_parameter_list_read_in_data(someip_parameter_list, someip_parameter_list_num, data_someip_parameter_list);
@@ -1207,17 +1236,22 @@ update_someip_parameter_enum(void *r, char **err) {
     /* enum name is not used in a filter yet. */
 
     if (rec->name == NULL || rec->name[0] == 0) {
-        *err = ws_strdup_printf("Name cannot be empty");
+        *err = ws_strdup_printf("Name cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
     if (rec->value_name == NULL || rec->value_name[0] == 0) {
-        *err = ws_strdup_printf("Value Name cannot be empty");
+        *err = ws_strdup_printf("Value Name cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
     if (rec->num_of_items == 0) {
-        *err = ws_strdup_printf("Number_of_Items = 0");
+        *err = ws_strdup_printf("Number_of_Items = 0 (ID: 0x%x)!", rec->id);
+        return FALSE;
+    }
+
+    if (rec->data_type == SOMEIP_PAYLOAD_PARAMETER_DATA_TYPE_ENUM) {
+        *err = ws_strdup_printf("An enum cannot reference an enum (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
@@ -1306,12 +1340,17 @@ post_update_someip_parameter_enum_read_in_data(someip_parameter_enum_uat_t *data
 }
 
 static void
-post_update_someip_parameter_enum_cb(void) {
+reset_someip_parameter_enum_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_someip_parameter_enums) {
         g_hash_table_destroy(data_someip_parameter_enums);
         data_someip_parameter_enums = NULL;
     }
+}
+
+static void
+post_update_someip_parameter_enum_cb(void) {
+    reset_someip_parameter_enum_cb();
 
     data_someip_parameter_enums = g_hash_table_new_full(g_int64_hash, g_int64_equal, &someip_payload_free_key, &free_someip_parameter_enum);
     post_update_someip_parameter_enum_read_in_data(someip_parameter_enums, someip_parameter_enums_num, data_someip_parameter_enums);
@@ -1365,23 +1404,28 @@ update_someip_parameter_array(void *r, char **err) {
     char                         *tmp;
 
     if (rec->name == NULL || rec->name[0] == 0) {
-        *err = ws_strdup_printf("Name cannot be empty");
+        *err = ws_strdup_printf("Name cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
     if (rec->num >= rec->num_of_dims) {
-        *err = ws_strdup_printf("Dimension >= Number of Dimensions");
+        *err = ws_strdup_printf("Dimension >= Number of Dimensions (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
     if (rec->filter_string == NULL || rec->filter_string[0] == 0) {
-        *err = ws_strdup_printf("Filter String cannot be empty");
+        *err = ws_strdup_printf("Filter String cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
     tmp = check_filter_string(rec->filter_string, rec->id);
     if (tmp != NULL) {
         *err = tmp;
+        return FALSE;
+    }
+
+    if (rec->data_type == SOMEIP_PAYLOAD_PARAMETER_DATA_TYPE_ARRAY && rec->id == rec->id_ref) {
+        *err = ws_strdup_printf("An array cannot include itself (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
@@ -1473,6 +1517,15 @@ post_update_someip_parameter_array_cb(void) {
     update_dynamic_hf_entries_someip_parameter_arrays();
 }
 
+static void
+reset_someip_parameter_array_cb(void) {
+    /* destroy old hash table, if it exists */
+    if (data_someip_parameter_arrays) {
+        g_hash_table_destroy(data_someip_parameter_arrays);
+        data_someip_parameter_arrays = NULL;
+    }
+}
+
 UAT_HEX_CB_DEF(someip_parameter_structs, id, someip_parameter_struct_uat_t)
 UAT_CSTRING_CB_DEF(someip_parameter_structs, struct_name, someip_parameter_struct_uat_t)
 UAT_DEC_CB_DEF(someip_parameter_structs, length_of_length, someip_parameter_struct_uat_t)
@@ -1530,12 +1583,12 @@ update_someip_parameter_struct(void *r, char **err) {
     char                          *tmp = NULL;
 
     if (rec->struct_name == NULL || rec->struct_name[0] == 0) {
-        *err = ws_strdup_printf("Struct name cannot be empty");
+        *err = ws_strdup_printf("Struct name cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
     if (rec->filter_string == NULL || rec->filter_string[0] == 0) {
-        *err = ws_strdup_printf("Struct name cannot be empty");
+        *err = ws_strdup_printf("Struct name cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
@@ -1546,12 +1599,17 @@ update_someip_parameter_struct(void *r, char **err) {
     }
 
     if (rec->name == NULL || rec->name[0] == 0) {
-        *err = ws_strdup_printf("Name cannot be empty");
+        *err = ws_strdup_printf("Name cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
     if (rec->pos >= rec->num_of_items) {
-        *err = ws_strdup_printf("Position >= Number of Parameters");
+        *err = ws_strdup_printf("Position >= Number of Parameters (ID: 0x%x)!", rec->id);
+        return FALSE;
+    }
+
+    if (rec->data_type == SOMEIP_PAYLOAD_PARAMETER_DATA_TYPE_STRUCT && rec->id == rec->id_ref) {
+        *err = ws_strdup_printf("A struct cannot include itself (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
@@ -1647,6 +1705,15 @@ post_update_someip_parameter_struct_cb(void) {
     update_dynamic_hf_entries_someip_parameter_structs();
 }
 
+static void
+reset_someip_parameter_struct_cb(void) {
+    /* destroy old hash table, if it exists */
+    if (data_someip_parameter_structs) {
+        g_hash_table_destroy(data_someip_parameter_structs);
+        data_someip_parameter_structs = NULL;
+    }
+}
+
 UAT_HEX_CB_DEF(someip_parameter_unions, id, someip_parameter_union_uat_t)
 UAT_CSTRING_CB_DEF(someip_parameter_unions, name, someip_parameter_union_uat_t)
 UAT_DEC_CB_DEF(someip_parameter_unions, length_of_length, someip_parameter_union_uat_t)
@@ -1704,7 +1771,7 @@ update_someip_parameter_union(void *r, char **err) {
     gchar                        *tmp;
 
     if (rec->name == NULL || rec->name[0] == 0) {
-        *err = ws_strdup_printf("Union name cannot be empty");
+        *err = ws_strdup_printf("Union name cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
@@ -1715,7 +1782,12 @@ update_someip_parameter_union(void *r, char **err) {
     }
 
     if (rec->type_name == NULL || rec->type_name[0] == 0) {
-        *err = ws_strdup_printf("Type Name cannot be empty");
+        *err = ws_strdup_printf("Type Name cannot be empty (ID: 0x%x)!", rec->id);
+        return FALSE;
+    }
+
+    if (rec->data_type == SOMEIP_PAYLOAD_PARAMETER_DATA_TYPE_UNION && rec->id == rec->id_ref) {
+        *err = ws_strdup_printf("A union cannot include itself (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
@@ -1812,12 +1884,17 @@ post_update_someip_parameter_union_read_in_data(someip_parameter_union_uat_t *da
 }
 
 static void
-post_update_someip_parameter_union_cb(void) {
+reset_someip_parameter_union_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_someip_parameter_unions) {
         g_hash_table_destroy(data_someip_parameter_unions);
         data_someip_parameter_unions = NULL;
     }
+}
+
+static void
+post_update_someip_parameter_union_cb(void) {
+    reset_someip_parameter_union_cb();
 
     data_someip_parameter_unions = g_hash_table_new_full(g_int64_hash, g_int64_equal, &someip_payload_free_key, &free_someip_parameter_union);
     post_update_someip_parameter_union_read_in_data(someip_parameter_unions, someip_parameter_unions_num, data_someip_parameter_unions);
@@ -1861,7 +1938,7 @@ update_someip_parameter_base_type_list(void *r, char **err) {
     someip_parameter_base_type_list_uat_t *rec = (someip_parameter_base_type_list_uat_t *)r;
 
     if (rec->name == NULL || rec->name[0] == 0) {
-        *err = ws_strdup_printf("Name cannot be empty");
+        *err = ws_strdup_printf("Name cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
@@ -1889,15 +1966,20 @@ free_someip_parameter_base_type_list_cb(void*r) {
 }
 
 static void
-post_update_someip_parameter_base_type_list_cb(void) {
-    guint   i;
-    gint64 *key = NULL;
-
+reset_someip_parameter_base_type_list_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_someip_parameter_base_type_list) {
         g_hash_table_destroy(data_someip_parameter_base_type_list);
         data_someip_parameter_base_type_list = NULL;
     }
+}
+
+static void
+post_update_someip_parameter_base_type_list_cb(void) {
+    guint   i;
+    gint64 *key = NULL;
+
+    reset_someip_parameter_base_type_list_cb();
 
     /* we don't need to free the data as long as we don't alloc it first */
     data_someip_parameter_base_type_list = g_hash_table_new_full(g_int64_hash, g_int64_equal, &someip_payload_free_key, NULL);
@@ -1957,7 +2039,7 @@ update_someip_parameter_string_list(void *r, char **err) {
     someip_parameter_string_uat_t *rec = (someip_parameter_string_uat_t *)r;
 
     if (rec->name == NULL || rec->name[0] == 0) {
-        *err = ws_strdup_printf("Name cannot be empty");
+        *err = ws_strdup_printf("Name cannot be empty (ID: 0x%x)!", rec->id);
         return FALSE;
     }
 
@@ -1991,6 +2073,15 @@ free_someip_parameter_string_list_cb(void*r) {
     if (rec->encoding) {
         g_free(rec->encoding);
         rec->encoding = NULL;
+    }
+}
+
+static void
+reset_someip_parameter_string_list_cb(void) {
+    /* destroy old hash table, if it exists */
+    if (data_someip_parameter_strings) {
+        g_hash_table_destroy(data_someip_parameter_strings);
+        data_someip_parameter_strings = NULL;
     }
 }
 
@@ -2054,6 +2145,11 @@ update_someip_parameter_typedef_list(void *r, char **err) {
         return FALSE;
     }
 
+    if (rec->data_type == SOMEIP_PAYLOAD_PARAMETER_DATA_TYPE_TYPEDEF && rec->id == rec->id_ref) {
+        *err = ws_strdup_printf("A typedef cannot reference itself (ID: 0x%x)!", rec->id);
+        return FALSE;
+    }
+
     return TRUE;
 }
 
@@ -2068,15 +2164,20 @@ free_someip_parameter_typedef_list_cb(void*r) {
 }
 
 static void
-post_update_someip_parameter_typedef_list_cb(void) {
-    guint   i;
-    gint64 *key = NULL;
-
+reset_someip_parameter_typedef_list_cb(void) {
     /* destroy old hash table, if it exists */
     if (data_someip_parameter_typedefs) {
         g_hash_table_destroy(data_someip_parameter_typedefs);
         data_someip_parameter_typedefs = NULL;
     }
+}
+
+static void
+post_update_someip_parameter_typedef_list_cb(void) {
+    guint   i;
+    gint64 *key = NULL;
+
+    reset_someip_parameter_typedef_list_cb();
 
     /* we don't need to free the data as long as we don't alloc it first */
     data_someip_parameter_typedefs = g_hash_table_new_full(g_int64_hash, g_int64_equal, &someip_payload_free_key, NULL);
@@ -2246,7 +2347,7 @@ update_dynamic_hf_entry(hf_register_info *hf_array, int pos, guint32 data_type, 
         hf_array[pos].hfinfo.name = ws_strdup_printf("%s [%s]", param_name, attribs.base_type_name);
     }
 
-    hf_array[pos].hfinfo.abbrev = ws_strdup_printf("%s.%s", SOMEIP_NAME_PREFIX, filter_string);;
+    hf_array[pos].hfinfo.abbrev = ws_strdup_printf("%s.%s", SOMEIP_NAME_PREFIX, filter_string);
     hf_array[pos].hfinfo.type = attribs.type;
     hf_array[pos].hfinfo.display = attribs.display_base;
 
@@ -4142,93 +4243,95 @@ proto_register_someip(void) {
 
     /* UATs */
     someip_service_uat = uat_new("SOME/IP Services",
-        sizeof(generic_one_id_string_t),            /* record size           */
-        DATAFILE_SOMEIP_SERVICES,                   /* filename              */
-        TRUE,                                       /* from profile          */
-        (void **) &someip_service_ident,            /* data_ptr              */
-        &someip_service_ident_num,                  /* numitems_ptr          */
-        UAT_AFFECTS_DISSECTION,                     /* but not fields        */
-        NULL,                                       /* help                  */
-        copy_generic_one_id_string_cb,              /* copy callback         */
-        update_generic_one_identifier_16bit,        /* update callback       */
-        free_generic_one_id_string_cb,              /* free callback         */
-        post_update_someip_service_cb,              /* post update callback  */
-        NULL,                                       /* reset callback        */
-        someip_service_uat_fields                   /* UAT field definitions */
+        sizeof(generic_one_id_string_t),                   /* record size           */
+        DATAFILE_SOMEIP_SERVICES,                          /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **) &someip_service_ident,                   /* data_ptr              */
+        &someip_service_ident_num,                         /* numitems_ptr          */
+        UAT_AFFECTS_DISSECTION,                            /* but not fields        */
+        NULL,                                              /* help                  */
+        copy_generic_one_id_string_cb,                     /* copy callback         */
+        update_generic_one_identifier_16bit,               /* update callback       */
+        free_generic_one_id_string_cb,                     /* free callback         */
+        post_update_someip_service_cb,                     /* post update callback  */
+        reset_someip_service_cb,                           /* reset callback        */
+        someip_service_uat_fields                          /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "services", "SOME/IP Services",
         "A table to define names of SOME/IP services", someip_service_uat);
 
     someip_method_uat = uat_new("SOME/IP Methods/Events/Fields",
-        sizeof(generic_two_id_string_t),            /* record size           */
-        DATAFILE_SOMEIP_METHODS,                    /* filename              */
-        TRUE,                                       /* from profile          */
-        (void **) &someip_method_ident,             /* data_ptr              */
-        &someip_method_ident_num,                   /* numitems_ptr          */
-        UAT_AFFECTS_DISSECTION,                     /* but not fields        */
-        NULL,                                       /* help                  */
-        copy_generic_two_id_string_cb,              /* copy callback         */
-        update_generic_two_identifier_16bit,        /* update callback       */
-        free_generic_two_id_string_cb,              /* free callback         */
-        post_update_someip_method_cb,               /* post update callback  */
-        NULL,                                       /* reset callback        */
-        someip_method_uat_fields                    /* UAT field definitions */
+        sizeof(generic_two_id_string_t),                    /* record size           */
+        DATAFILE_SOMEIP_METHODS,                            /* filename              */
+        TRUE,                                               /* from profile          */
+        (void **) &someip_method_ident,                     /* data_ptr              */
+        &someip_method_ident_num,                           /* numitems_ptr          */
+        UAT_AFFECTS_DISSECTION,                             /* but not fields        */
+        NULL,                                               /* help                  */
+        copy_generic_two_id_string_cb,                      /* copy callback         */
+        update_generic_two_identifier_16bit,                /* update callback       */
+        free_generic_two_id_string_cb,                      /* free callback         */
+        post_update_someip_method_cb,                       /* post update callback  */
+        reset_someip_method_cb,                             /* reset callback        */
+        someip_method_uat_fields                            /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "methods", "SOME/IP Methods",
         "A table to define names of SOME/IP methods", someip_method_uat);
 
     someip_eventgroup_uat = uat_new("SOME/IP Eventgroups",
-        sizeof(generic_two_id_string_t),            /* record size           */
-        DATAFILE_SOMEIP_EVENTGROUPS,                /* filename              */
-        TRUE,                                       /* from profile          */
-        (void **) &someip_eventgroup_ident,         /* data_ptr              */
-        &someip_eventgroup_ident_num,               /* numitems_ptr          */
-        UAT_AFFECTS_DISSECTION,                     /* but not fields        */
-        NULL,                                       /* help                  */
-        copy_generic_two_id_string_cb,              /* copy callback         */
-        update_generic_two_identifier_16bit,        /* update callback       */
-        free_generic_two_id_string_cb,              /* free callback         */
-        post_update_someip_eventgroup_cb,           /* post update callback  */
-        NULL,                                       /* reset callback        */
-        someip_eventgroup_uat_fields                /* UAT field definitions */
+        sizeof(generic_two_id_string_t),                   /* record size           */
+        DATAFILE_SOMEIP_EVENTGROUPS,                       /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **) &someip_eventgroup_ident,                /* data_ptr              */
+        &someip_eventgroup_ident_num,                      /* numitems_ptr          */
+        UAT_AFFECTS_DISSECTION,                            /* but not fields        */
+        NULL,                                              /* help                  */
+        copy_generic_two_id_string_cb,                     /* copy callback         */
+        update_generic_two_identifier_16bit,               /* update callback       */
+        free_generic_two_id_string_cb,                     /* free callback         */
+        post_update_someip_eventgroup_cb,                  /* post update callback  */
+        reset_someip_eventgroup_cb,                        /* reset callback        */
+        someip_eventgroup_uat_fields                       /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "eventgroups", "SOME/IP Eventgroups",
         "A table to define names of SOME/IP eventgroups", someip_eventgroup_uat);
 
     someip_client_uat = uat_new("SOME/IP Clients",
-        sizeof(generic_two_id_string_t),            /* record size           */
-        DATAFILE_SOMEIP_CLIENTS,                    /* filename              */
-        TRUE,                                       /* from profile          */
-        (void **)&someip_client_ident,              /* data_ptr              */
-        &someip_client_ident_num,                   /* numitems_ptr          */
-        UAT_AFFECTS_DISSECTION,                     /* but not fields        */
-        NULL,                                       /* help                  */
-        copy_generic_two_id_string_cb,              /* copy callback         */
-        update_generic_two_identifier_16bit,        /* update callback       */
-        free_generic_two_id_string_cb,              /* free callback         */
-        post_update_someip_client_cb,               /* post update callback  */
-        NULL,                                       /* reset callback        */
-        someip_client_uat_fields                    /* UAT field definitions */
+        sizeof(generic_two_id_string_t),                   /* record size           */
+        DATAFILE_SOMEIP_CLIENTS,                           /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **)&someip_client_ident,                     /* data_ptr              */
+        &someip_client_ident_num,                          /* numitems_ptr          */
+        UAT_AFFECTS_DISSECTION,                            /* but not fields        */
+        NULL,                                              /* help                  */
+        copy_generic_two_id_string_cb,                     /* copy callback         */
+        update_generic_two_identifier_16bit,               /* update callback       */
+        free_generic_two_id_string_cb,                     /* free callback         */
+        post_update_someip_client_cb,                      /* post update callback  */
+        reset_someip_client_cb,                            /* reset callback        */
+        someip_client_uat_fields                           /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "clients", "SOME/IP Clients",
         "A table to define names of SOME/IP clients", someip_client_uat);
 
     someip_parameter_list_uat = uat_new("SOME/IP Parameter List",
-        sizeof(someip_parameter_list_uat_t), DATAFILE_SOMEIP_PARAMETERS, TRUE,
-        (void **)&someip_parameter_list,
-        &someip_parameter_list_num,
+        sizeof(someip_parameter_list_uat_t),               /* record size           */
+        DATAFILE_SOMEIP_PARAMETERS,                        /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **)&someip_parameter_list,                   /* data_ptr              */
+        &someip_parameter_list_num,                        /* numitems_ptr          */
         UAT_AFFECTS_DISSECTION | UAT_AFFECTS_FIELDS,
-        NULL, /* help */
-        copy_someip_parameter_list_cb,
-        update_someip_parameter_list,
-        free_someip_parameter_list_cb,
-        post_update_someip_parameter_list_cb,
-        NULL, /* reset */
-        someip_parameter_list_uat_fields
+        NULL,                                              /* help                  */
+        copy_someip_parameter_list_cb,                     /* copy callback         */
+        update_someip_parameter_list,                      /* update callback       */
+        free_someip_parameter_list_cb,                     /* free callback         */
+        post_update_someip_parameter_list_cb,              /* post update callback  */
+        reset_someip_parameter_list_cb,                    /* reset callback        */
+        someip_parameter_list_uat_fields                   /* UAT field definitions */
     );
 
     prefs_register_bool_preference(someip_module, "reassemble_tp", "Reassemble SOME/IP-TP",
@@ -4248,119 +4351,133 @@ proto_register_someip(void) {
         "A table to define names of SOME/IP parameters", someip_parameter_list_uat);
 
     someip_parameter_arrays_uat = uat_new("SOME/IP Parameter Arrays",
-        sizeof(someip_parameter_array_uat_t), DATAFILE_SOMEIP_ARRAYS, TRUE,
-        (void **)&someip_parameter_arrays,
-        &someip_parameter_arrays_num,
+        sizeof(someip_parameter_array_uat_t),              /* record size           */
+        DATAFILE_SOMEIP_ARRAYS,                            /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **)&someip_parameter_arrays,                 /* data_ptr              */
+        &someip_parameter_arrays_num,                      /* numitems_ptr          */
         UAT_AFFECTS_DISSECTION | UAT_AFFECTS_FIELDS,
-        NULL, /* help */
-        copy_someip_parameter_array_cb,
-        update_someip_parameter_array,
-        free_someip_parameter_array_cb,
-        post_update_someip_parameter_array_cb,
-        NULL, /* reset */
-        someip_parameter_array_uat_fields
+        NULL,                                              /* help                  */
+        copy_someip_parameter_array_cb,                    /* copy callback         */
+        update_someip_parameter_array,                     /* update callback       */
+        free_someip_parameter_array_cb,                    /* free callback         */
+        post_update_someip_parameter_array_cb,             /* post update callback  */
+        reset_someip_parameter_array_cb,                   /* reset callback        */
+        someip_parameter_array_uat_fields                  /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "_someip_parameter_arrays", "SOME/IP Parameter Arrays",
         "A table to define arrays used by SOME/IP", someip_parameter_arrays_uat);
 
     someip_parameter_structs_uat = uat_new("SOME/IP Parameter Structs",
-        sizeof(someip_parameter_struct_uat_t), DATAFILE_SOMEIP_STRUCTS, TRUE,
-        (void **)&someip_parameter_structs,
-        &someip_parameter_structs_num,
+        sizeof(someip_parameter_struct_uat_t),             /* record size           */
+        DATAFILE_SOMEIP_STRUCTS,                           /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **)&someip_parameter_structs,                /* data_ptr              */
+        &someip_parameter_structs_num,                     /* numitems_ptr          */
         UAT_AFFECTS_DISSECTION | UAT_AFFECTS_FIELDS,
-        NULL, /* help */
-        copy_someip_parameter_struct_cb,
-        update_someip_parameter_struct,
-        free_someip_parameter_struct_cb,
-        post_update_someip_parameter_struct_cb,
-        NULL, /* reset */
-        someip_parameter_struct_uat_fields
+        NULL,                                              /* help                  */
+        copy_someip_parameter_struct_cb,                   /* copy callback         */
+        update_someip_parameter_struct,                    /* update callback       */
+        free_someip_parameter_struct_cb,                   /* free callback         */
+        post_update_someip_parameter_struct_cb,            /* post update callback  */
+        reset_someip_parameter_struct_cb,                  /* reset callback        */
+        someip_parameter_struct_uat_fields                 /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "_someip_parameter_structs", "SOME/IP Parameter Structs",
         "A table to define structs used by SOME/IP", someip_parameter_structs_uat);
 
     someip_parameter_unions_uat = uat_new("SOME/IP Parameter Unions",
-        sizeof(someip_parameter_union_uat_t), DATAFILE_SOMEIP_UNIONS, TRUE,
-        (void **)&someip_parameter_unions,
-        &someip_parameter_unions_num,
+        sizeof(someip_parameter_union_uat_t),              /* record size           */
+        DATAFILE_SOMEIP_UNIONS,                            /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **)&someip_parameter_unions,                 /* data_ptr              */
+        &someip_parameter_unions_num,                      /* numitems_ptr          */
         UAT_AFFECTS_DISSECTION | UAT_AFFECTS_FIELDS,
-        NULL, /* help */
-        copy_someip_parameter_union_cb,
-        update_someip_parameter_union,
-        free_someip_parameter_union_cb,
-        post_update_someip_parameter_union_cb,
-        NULL, /* reset */
-        someip_parameter_union_uat_fields
+        NULL,                                              /* help                  */
+        copy_someip_parameter_union_cb,                    /* copy callback         */
+        update_someip_parameter_union,                     /* update callback       */
+        free_someip_parameter_union_cb,                    /* free callback         */
+        post_update_someip_parameter_union_cb,             /* post update callback  */
+        reset_someip_parameter_union_cb,                   /* reset callback        */
+        someip_parameter_union_uat_fields                  /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "_someip_parameter_unions", "SOME/IP Parameter Unions",
         "A table to define unions used by SOME/IP", someip_parameter_unions_uat);
 
     someip_parameter_enums_uat = uat_new("SOME/IP Parameter Enums",
-        sizeof(someip_parameter_enum_uat_t), DATAFILE_SOMEIP_ENUMS, TRUE,
-        (void **)&someip_parameter_enums,
-        &someip_parameter_enums_num,
-        UAT_AFFECTS_DISSECTION,
-        NULL, /* help */
-        copy_someip_parameter_enum_cb,
-        update_someip_parameter_enum,
-        free_someip_parameter_enum_cb,
-        post_update_someip_parameter_enum_cb,
-        NULL, /* reset */
-        someip_parameter_enum_uat_fields
+        sizeof(someip_parameter_enum_uat_t),               /* record size           */
+        DATAFILE_SOMEIP_ENUMS,                             /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **)&someip_parameter_enums,                  /* data_ptr              */
+        &someip_parameter_enums_num,                       /* numitems_ptr          */
+        UAT_AFFECTS_DISSECTION,                            /* but not fields        */
+        NULL,                                              /* help                  */
+        copy_someip_parameter_enum_cb,                     /* copy callback         */
+        update_someip_parameter_enum,                      /* update callback       */
+        free_someip_parameter_enum_cb,                     /* free callback         */
+        post_update_someip_parameter_enum_cb,              /* post update callback  */
+        reset_someip_parameter_enum_cb,                    /* reset callback        */
+        someip_parameter_enum_uat_fields                   /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "_someip_parameter_enums", "SOME/IP Parameter Enums",
         "A table to define enumerations used by SOME/IP", someip_parameter_enums_uat);
 
     someip_parameter_base_type_list_uat = uat_new("SOME/IP Parameter Base Type List",
-        sizeof(someip_parameter_base_type_list_uat_t), DATAFILE_SOMEIP_BASE_TYPES, TRUE,
-        (void **)&someip_parameter_base_type_list,
-        &someip_parameter_base_type_list_num,
-        UAT_AFFECTS_DISSECTION,
-        NULL, /* help */
-        copy_someip_parameter_base_type_list_cb,
-        update_someip_parameter_base_type_list,
-        free_someip_parameter_base_type_list_cb,
-        post_update_someip_parameter_base_type_list_cb,
-        NULL, /* reset */
-        someip_parameter_base_type_list_uat_fields
+        sizeof(someip_parameter_base_type_list_uat_t),     /* record size           */
+        DATAFILE_SOMEIP_BASE_TYPES,                        /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **)&someip_parameter_base_type_list,         /* data_ptr              */
+        &someip_parameter_base_type_list_num,              /* numitems_ptr          */
+        UAT_AFFECTS_DISSECTION,                            /* but not fields        */
+        NULL,                                              /* help                  */
+        copy_someip_parameter_base_type_list_cb,           /* copy callback         */
+        update_someip_parameter_base_type_list,            /* update callback       */
+        free_someip_parameter_base_type_list_cb,           /* free callback         */
+        post_update_someip_parameter_base_type_list_cb,    /* post update callback  */
+        reset_someip_parameter_base_type_list_cb,          /* reset callback        */
+        someip_parameter_base_type_list_uat_fields         /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "_someip_parameter_base_type_list", "SOME/IP Parameter Base Type List",
         "A table to define base types of SOME/IP parameters", someip_parameter_base_type_list_uat);
 
     someip_parameter_strings_uat = uat_new("SOME/IP Parameter String List",
-        sizeof(someip_parameter_string_uat_t), DATAFILE_SOMEIP_STRINGS, TRUE,
-        (void **)&someip_parameter_strings,
-        &someip_parameter_strings_num,
-        UAT_AFFECTS_DISSECTION,
-        NULL, /* help */
-        copy_someip_parameter_string_list_cb,
-        update_someip_parameter_string_list,
-        free_someip_parameter_string_list_cb,
-        post_update_someip_parameter_string_list_cb,
-        NULL, /* reset */
-        someip_parameter_string_list_uat_fields
+        sizeof(someip_parameter_string_uat_t),             /* record size           */
+        DATAFILE_SOMEIP_STRINGS,                           /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **)&someip_parameter_strings,                /* data_ptr              */
+        &someip_parameter_strings_num,                     /* numitems_ptr          */
+        UAT_AFFECTS_DISSECTION,                            /* but not fields        */
+        NULL,                                              /* help                  */
+        copy_someip_parameter_string_list_cb,              /* copy callback         */
+        update_someip_parameter_string_list,               /* update callback       */
+        free_someip_parameter_string_list_cb,              /* free callback         */
+        post_update_someip_parameter_string_list_cb,       /* post update callback  */
+        reset_someip_parameter_string_list_cb,             /* reset callback        */
+        someip_parameter_string_list_uat_fields            /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "_someip_parameter_string_list", "SOME/IP Parameter String List",
         "A table to define strings parameters", someip_parameter_strings_uat);
 
     someip_parameter_typedefs_uat = uat_new("SOME/IP Parameter Typedef List",
-        sizeof(someip_parameter_typedef_uat_t), DATAFILE_SOMEIP_TYPEDEFS, TRUE,
-        (void **)&someip_parameter_typedefs,
-        &someip_parameter_typedefs_num,
-        UAT_AFFECTS_DISSECTION,
-        NULL, /* help */
-        copy_someip_parameter_typedef_list_cb,
-        update_someip_parameter_typedef_list,
-        free_someip_parameter_typedef_list_cb,
-        post_update_someip_parameter_typedef_list_cb,
-        NULL, /* reset */
-        someip_parameter_typedef_list_uat_fields
+        sizeof(someip_parameter_typedef_uat_t),            /* record size           */
+        DATAFILE_SOMEIP_TYPEDEFS,                          /* filename              */
+        TRUE,                                              /* from profile          */
+        (void **)&someip_parameter_typedefs,               /* data_ptr              */
+        &someip_parameter_typedefs_num,                    /* numitems_ptr          */
+        UAT_AFFECTS_DISSECTION,                            /* but not fields        */
+        NULL,                                              /* help                  */
+        copy_someip_parameter_typedef_list_cb,             /* copy callback         */
+        update_someip_parameter_typedef_list,              /* update callback       */
+        free_someip_parameter_typedef_list_cb,             /* free callback         */
+        post_update_someip_parameter_typedef_list_cb,      /* post update callback  */
+        reset_someip_parameter_typedef_list_cb,            /* reset callback        */
+        someip_parameter_typedef_list_uat_fields           /* UAT field definitions */
     );
 
     prefs_register_uat_preference(someip_module, "_someip_parameter_typedef_list", "SOME/IP Parameter Typedef List",
