@@ -356,14 +356,22 @@ dfvm_dump_str(wmem_allocator_t *alloc, dfilter_t *df, gboolean print_references)
 				break;
 
 			case DFVM_ALL_EQ:
-			case DFVM_ANY_EQ:
 				wmem_strbuf_append_printf(buf, "%05d %s\t\t%s === %s\n",
 					id, opcode_str, arg1_str, arg2_str);
 				break;
 
+			case DFVM_ANY_EQ:
+				wmem_strbuf_append_printf(buf, "%05d %s\t\t%s == %s\n",
+					id, opcode_str, arg1_str, arg2_str);
+				break;
+
 			case DFVM_ALL_NE:
-			case DFVM_ANY_NE:
 				wmem_strbuf_append_printf(buf, "%05d %s\t\t%s != %s\n",
+					id, opcode_str, arg1_str, arg2_str);
+				break;
+
+			case DFVM_ANY_NE:
+				wmem_strbuf_append_printf(buf, "%05d %s\t\t%s !== %s\n",
 					id, opcode_str, arg1_str, arg2_str);
 				break;
 
@@ -727,8 +735,8 @@ enum match_how {
 	MATCH_ALL
 };
 
-typedef gboolean (*DFVMCompareFunc)(const fvalue_t*, const fvalue_t*);
-typedef gboolean (*DFVMTestFunc)(const fvalue_t*);
+typedef ft_bool_t (*DFVMCompareFunc)(const fvalue_t*, const fvalue_t*);
+typedef ft_bool_t (*DFVMTestFunc)(const fvalue_t*);
 
 static gboolean
 cmp_test(enum match_how how, DFVMCompareFunc match_func,
@@ -737,7 +745,7 @@ cmp_test(enum match_how how, DFVMCompareFunc match_func,
 	GSList *list1, *list2;
 	gboolean want_all = (how == MATCH_ALL);
 	gboolean want_any = (how == MATCH_ANY);
-	gboolean have_match;
+	ft_bool_t have_match;
 
 	list1 = arg1;
 
@@ -745,10 +753,10 @@ cmp_test(enum match_how how, DFVMCompareFunc match_func,
 		list2 = arg2;
 		while (list2) {
 			have_match = match_func(list1->data, list2->data);
-			if (want_all && !have_match) {
+			if (want_all && have_match == FT_FALSE) {
 				return FALSE;
 			}
-			else if (want_any && have_match) {
+			else if (want_any && have_match == FT_TRUE) {
 				return TRUE;
 			}
 			list2 = g_slist_next(list2);
@@ -765,16 +773,16 @@ cmp_test_unary(enum match_how how, DFVMTestFunc test_func, GSList *arg1)
 	GSList *list1;
 	gboolean want_all = (how == MATCH_ALL);
 	gboolean want_any = (how == MATCH_ANY);
-	gboolean have_match;
+	ft_bool_t have_match;
 
 	list1 = arg1;
 
 	while (list1) {
 		have_match = test_func(list1->data);
-		if (want_all && !have_match) {
+		if (want_all && have_match == FT_FALSE) {
 			return FALSE;
 		}
-		else if (want_any && have_match) {
+		else if (want_any && have_match == FT_TRUE) {
 			return TRUE;
 		}
 		list1 = g_slist_next(list1);
@@ -840,7 +848,7 @@ any_matches(dfilter_t *df, dfvm_value_t *arg1, dfvm_value_t *arg2)
 	ws_regex_t *re = arg2->value.pcre;
 
 	while (list1) {
-		if (fvalue_matches(list1->data, re)) {
+		if (fvalue_matches(list1->data, re) == FT_TRUE) {
 			return TRUE;
 		}
 		list1 = g_slist_next(list1);
@@ -855,7 +863,7 @@ all_matches(dfilter_t *df, dfvm_value_t *arg1, dfvm_value_t *arg2)
 	ws_regex_t *re = arg2->value.pcre;
 
 	while (list1) {
-		if (!fvalue_matches(list1->data, re)) {
+		if (fvalue_matches(list1->data, re) == FT_FALSE) {
 			return FALSE;
 		}
 		list1 = g_slist_next(list1);
@@ -867,8 +875,8 @@ static gboolean
 any_in_range_internal(GSList *list1, fvalue_t *low, fvalue_t *high)
 {
 	while (list1) {
-		if (fvalue_ge(list1->data, low) &&
-					fvalue_le(list1->data, high)) {
+		if (fvalue_ge(list1->data, low) == FT_TRUE &&
+				fvalue_le(list1->data, high) == FT_TRUE) {
 			return TRUE;
 		}
 		list1 = g_slist_next(list1);
@@ -880,8 +888,8 @@ static gboolean
 all_in_range_internal(GSList *list1, fvalue_t *low, fvalue_t *high)
 {
 	while (list1) {
-		if (!fvalue_ge(list1->data, low) ||
-					!fvalue_le(list1->data, high)) {
+		if (fvalue_ge(list1->data, low) == FT_FALSE ||
+				fvalue_le(list1->data, high) == FT_FALSE) {
 			return FALSE;
 		}
 		list1 = g_slist_next(list1);
@@ -1288,8 +1296,6 @@ dfvm_apply(dfilter_t *df, proto_tree *tree)
 		arg1 = insn->arg1;
 		arg2 = insn->arg2;
 		arg3 = insn->arg3;
-
-		ws_noisy("ID: %d; OP: %s", id, dfvm_opcode_tostr(insn->op));
 
 		switch (insn->op) {
 			case DFVM_CHECK_EXISTS:
