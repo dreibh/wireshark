@@ -1146,9 +1146,9 @@ reset_find_package(GCRYPT GCRYPT_ERROR_LIBRARY)
 find_package(GCRYPT "1.8.0" REQUIRED)
 # C Asynchronous resolver
 reset_find_package(CARES)
-find_package(CARES "1.5.0" REQUIRED)
+find_package(CARES "1.14.0" REQUIRED)
 find_package(LEX REQUIRED)
-find_package(Perl REQUIRED)
+find_package(Perl)
 find_package(PCRE2 REQUIRED)
 
 if(CMAKE_VERSION VERSION_LESS "3.12")
@@ -1210,11 +1210,12 @@ if(BUILD_wireshark OR BUILD_logray)
 		Qt${qtver}Core
 		Qt${qtver}Gui
 		Qt${qtver}LinguistTools
-		# Our code currently does not compile with Qt6Multimedia
-		# Qt${qtver}Multimedia
 		Qt${qtver}PrintSupport
 		Qt${qtver}Widgets
 		Qt${qtver}Concurrent
+	)
+	set(QT_OPTIONAL_PACKAGELIST
+		Qt${qtver}Multimedia
 	)
 	if(USE_qt6)
 		set(CMAKE_CXX_STANDARD 17)
@@ -1226,13 +1227,18 @@ if(BUILD_wireshark OR BUILD_logray)
 		endif()
 		list(APPEND QT_PACKAGELIST Qt6Core5Compat)
 	else()
-		list(APPEND QT_PACKAGELIST Qt5Multimedia)
 		if(WIN32)
 			list(APPEND QT_PACKAGELIST Qt5WinExtras)
 		endif()
 	endif()
 	foreach(_qt_package IN LISTS QT_PACKAGELIST)
 		find_package(${_qt_package} REQUIRED ${QT_FIND_PACKAGE_OPTIONS})
+		list(APPEND QT_LIBRARIES ${${_qt_package}_LIBRARIES})
+		list(APPEND QT_INCLUDE_DIRS ${${_qt_package}_INCLUDE_DIRS})
+		list(APPEND QT_COMPILE_DEFINITIONS ${${_qt_package}_COMPILE_DEFINITIONS})
+	endforeach()
+	foreach(_qt_package IN LISTS QT_OPTIONAL_PACKAGELIST)
+		find_package(${_qt_package} ${QT_FIND_PACKAGE_OPTIONS})
 		list(APPEND QT_LIBRARIES ${${_qt_package}_LIBRARIES})
 		list(APPEND QT_INCLUDE_DIRS ${${_qt_package}_INCLUDE_DIRS})
 		list(APPEND QT_COMPILE_DEFINITIONS ${${_qt_package}_COMPILE_DEFINITIONS})
@@ -1960,6 +1966,7 @@ set(INSTALL_DIRS
 set(INSTALL_FILES
 	docbook/ws.css
 	enterprises.tsv
+	gpl-2.0-standalone.html
 	manuf
 	resources/share/wireshark/cfilters
 	resources/share/wireshark/colorfilters
@@ -2420,7 +2427,8 @@ add_custom_command(
 	WORKING_DIRECTORY ${_protocol_data_dir}
 )
 
-file(GLOB _profiles_src_files RELATIVE "${CMAKE_SOURCE_DIR}" resources/share/wireshark/profiles/*/*)
+set(_profiles_src_dir ${CMAKE_SOURCE_DIR}/resources/share/wireshark)
+file(GLOB _profiles_src_files RELATIVE ${_profiles_src_dir} ${_profiles_src_dir}/profiles/*/*)
 set (_profiles_data_files)
 foreach(_data_file ${_profiles_src_files})
 	list(APPEND _profiles_data_files "${DATAFILE_DIR}/${_data_file}")
