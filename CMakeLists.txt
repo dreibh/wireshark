@@ -41,7 +41,7 @@ project(${_project_name} C CXX)
 # Updated by tools/make-version.py
 set(PROJECT_MAJOR_VERSION 3)
 set(PROJECT_MINOR_VERSION 7)
-set(PROJECT_PATCH_VERSION 2)
+set(PROJECT_PATCH_VERSION 3)
 set(PROJECT_BUILD_VERSION 0)
 set(PROJECT_VERSION_EXTENSION "")
 
@@ -1492,11 +1492,12 @@ if(ENABLE_CCACHE)
 		message(WARNING "Ccache is enabled, but your compiler is ${CMAKE_C_COMPILER_ID}."
 		" We wish you the best of luck.")
 	endif()
-	# https://stackoverflow.com/questions/1815688/how-to-use-ccache-with-cmake/24305849#24305849
 	find_program(CCACHE_EXECUTABLE ccache)
 	if(CCACHE_EXECUTABLE)
-		set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_EXECUTABLE}")
-		set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK "${CCACHE_EXECUTABLE}")
+		set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_EXECUTABLE}")
+		set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_EXECUTABLE}")
+		set(CMAKE_C_LINKER_LAUNCHER "${CCACHE_EXECUTABLE}")
+		set(CMAKE_CXX_LINKER_LAUNCHER "${CCACHE_EXECUTABLE}")
 	endif()
 endif()
 
