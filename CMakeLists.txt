@@ -39,9 +39,9 @@ endif()
 project(${_project_name} C CXX)
 
 # Updated by tools/make-version.py
-set(PROJECT_MAJOR_VERSION 3)
-set(PROJECT_MINOR_VERSION 7)
-set(PROJECT_PATCH_VERSION 2)
+set(PROJECT_MAJOR_VERSION 4)
+set(PROJECT_MINOR_VERSION 1)
+set(PROJECT_PATCH_VERSION 0)
 set(PROJECT_BUILD_VERSION 0)
 set(PROJECT_VERSION_EXTENSION "")
 
@@ -1146,9 +1146,9 @@ reset_find_package(GCRYPT GCRYPT_ERROR_LIBRARY)
 find_package(GCRYPT "1.8.0" REQUIRED)
 # C Asynchronous resolver
 reset_find_package(CARES)
-find_package(CARES "1.5.0" REQUIRED)
+find_package(CARES "1.14.0" REQUIRED)
 find_package(LEX REQUIRED)
-find_package(Perl REQUIRED)
+find_package(Perl)
 find_package(PCRE2 REQUIRED)
 
 if(CMAKE_VERSION VERSION_LESS "3.12")
@@ -1210,11 +1210,12 @@ if(BUILD_wireshark OR BUILD_logray)
 		Qt${qtver}Core
 		Qt${qtver}Gui
 		Qt${qtver}LinguistTools
-		# Our code currently does not compile with Qt6Multimedia
-		# Qt${qtver}Multimedia
 		Qt${qtver}PrintSupport
 		Qt${qtver}Widgets
 		Qt${qtver}Concurrent
+	)
+	set(QT_OPTIONAL_PACKAGELIST
+		Qt${qtver}Multimedia
 	)
 	if(USE_qt6)
 		set(CMAKE_CXX_STANDARD 17)
@@ -1226,13 +1227,18 @@ if(BUILD_wireshark OR BUILD_logray)
 		endif()
 		list(APPEND QT_PACKAGELIST Qt6Core5Compat)
 	else()
-		list(APPEND QT_PACKAGELIST Qt5Multimedia)
 		if(WIN32)
 			list(APPEND QT_PACKAGELIST Qt5WinExtras)
 		endif()
 	endif()
 	foreach(_qt_package IN LISTS QT_PACKAGELIST)
 		find_package(${_qt_package} REQUIRED ${QT_FIND_PACKAGE_OPTIONS})
+		list(APPEND QT_LIBRARIES ${${_qt_package}_LIBRARIES})
+		list(APPEND QT_INCLUDE_DIRS ${${_qt_package}_INCLUDE_DIRS})
+		list(APPEND QT_COMPILE_DEFINITIONS ${${_qt_package}_COMPILE_DEFINITIONS})
+	endforeach()
+	foreach(_qt_package IN LISTS QT_OPTIONAL_PACKAGELIST)
+		find_package(${_qt_package} ${QT_FIND_PACKAGE_OPTIONS})
 		list(APPEND QT_LIBRARIES ${${_qt_package}_LIBRARIES})
 		list(APPEND QT_INCLUDE_DIRS ${${_qt_package}_INCLUDE_DIRS})
 		list(APPEND QT_COMPILE_DEFINITIONS ${${_qt_package}_COMPILE_DEFINITIONS})
@@ -1486,11 +1492,12 @@ if(ENABLE_CCACHE)
 		message(WARNING "Ccache is enabled, but your compiler is ${CMAKE_C_COMPILER_ID}."
 		" We wish you the best of luck.")
 	endif()
-	# https://stackoverflow.com/questions/1815688/how-to-use-ccache-with-cmake/24305849#24305849
 	find_program(CCACHE_EXECUTABLE ccache)
 	if(CCACHE_EXECUTABLE)
-		set_property(GLOBAL PROPERTY RULE_LAUNCH_COMPILE "${CCACHE_EXECUTABLE}")
-		set_property(GLOBAL PROPERTY RULE_LAUNCH_LINK "${CCACHE_EXECUTABLE}")
+		set(CMAKE_C_COMPILER_LAUNCHER "${CCACHE_EXECUTABLE}")
+		set(CMAKE_CXX_COMPILER_LAUNCHER "${CCACHE_EXECUTABLE}")
+		set(CMAKE_C_LINKER_LAUNCHER "${CCACHE_EXECUTABLE}")
+		set(CMAKE_CXX_LINKER_LAUNCHER "${CCACHE_EXECUTABLE}")
 	endif()
 endif()
 
@@ -1672,8 +1679,7 @@ if(ENABLE_PLUGINS)
 
 	# Build demo plugin, only if asked explicitly
 	if(ENABLE_PLUGIN_IFDEMO)
-		set(PLUGIN_SRC_DIRS
-			${PLUGIN_SRC_DIRS}
+		list(APPEND PLUGIN_SRC_DIRS
 			plugins/epan/pluginifdemo
 		)
 	endif()
@@ -1958,8 +1964,10 @@ set(INSTALL_DIRS
 
 # Installed into ${DATAFILE_DIR}
 set(INSTALL_FILES
+	Acknowledgements.md
 	docbook/ws.css
 	enterprises.tsv
+	gpl-2.0-standalone.html
 	manuf
 	resources/share/wireshark/cfilters
 	resources/share/wireshark/colorfilters
@@ -2420,7 +2428,8 @@ add_custom_command(
 	WORKING_DIRECTORY ${_protocol_data_dir}
 )
 
-file(GLOB _profiles_src_files RELATIVE "${CMAKE_SOURCE_DIR}" resources/share/wireshark/profiles/*/*)
+set(_profiles_src_dir ${CMAKE_SOURCE_DIR}/resources/share/wireshark)
+file(GLOB _profiles_src_files RELATIVE ${_profiles_src_dir} ${_profiles_src_dir}/profiles/*/*)
 set (_profiles_data_files)
 foreach(_data_file ${_profiles_src_files})
 	list(APPEND _profiles_data_files "${DATAFILE_DIR}/${_data_file}")
@@ -2447,7 +2456,6 @@ set_target_properties(copy_data_files PROPERTIES FOLDER "Copy Tasks")
 # sources common for wireshark, tshark, rawshark and sharkd
 add_library(shark_common OBJECT
 	cfile.c
-	extcap.c
 	extcap_parser.c
 	file_packet_provider.c
 	frame_tvbuff.c
@@ -2466,6 +2474,7 @@ if(BUILD_wireshark AND QT_FOUND)
 	set(WIRESHARK_SRC
 		file.c
 		fileset.c
+		extcap.c
 		${PLATFORM_UI_SRC}
 	)
 	set(wireshark_FILES
@@ -2482,6 +2491,7 @@ if(BUILD_logray AND QT_FOUND)
 	set(LOGRAY_SRC
 		file.c
 		fileset.c
+		extcap.c
 		${PLATFORM_UI_SRC}
 	)
 	set(logray_FILES
@@ -2842,6 +2852,7 @@ if(BUILD_tshark)
 		$<TARGET_OBJECTS:shark_common>
 		tshark-tap-register.c
 		tshark.c
+		extcap.c
 		${TSHARK_TAP_SRC}
 	)
 

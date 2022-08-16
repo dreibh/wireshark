@@ -245,6 +245,7 @@ source_group(dissectors-ncp2222 FILES ${NCP2222_DISSECTOR_SRC})
 
 set(DISSECTOR_PUBLIC_HEADERS
 	cond_ace_token_enum.h
+	file-pcapng.h
 	file-rbm.h
 	packet-6lowpan.h
 	packet-a21.h
@@ -590,6 +591,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-tcap.h
 	packet-tcp.h
 	packet-tcpcl.h
+	packet-tecmp.h
 	packet-tetra.h
 	packet-thrift.h
 	packet-tls-utils.h
@@ -1398,6 +1400,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lmi.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lmp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lnet.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-locamation-im.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-logcat.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-logcat-text.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lon.c

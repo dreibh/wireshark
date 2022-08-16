@@ -168,7 +168,7 @@ static int hf_tcp_flags = -1;
 static int hf_tcp_flags_res = -1;
 static int hf_tcp_flags_ns = -1;
 static int hf_tcp_flags_cwr = -1;
-static int hf_tcp_flags_ecn = -1;
+static int hf_tcp_flags_ece = -1;
 static int hf_tcp_flags_urg = -1;
 static int hf_tcp_flags_ack = -1;
 static int hf_tcp_flags_push = -1;
@@ -714,7 +714,7 @@ static const unit_name_string units_64bit_version = { " (64bits version)", NULL 
 static char *
 tcp_flags_to_str(wmem_allocator_t *scope, const struct tcpheader *tcph)
 {
-    static const char flags[][4] = { "FIN", "SYN", "RST", "PSH", "ACK", "URG", "ECN", "CWR", "NS" };
+    static const char flags[][4] = { "FIN", "SYN", "RST", "PSH", "ACK", "URG", "ECE", "CWR", "NS" };
     const int maxlength = 64; /* upper bounds, max 53B: 8 * 3 + 2 + strlen("Reserved") + 9 * 2 + 1 */
 
     char *pbuf;
@@ -1008,9 +1008,16 @@ gchar *tcp_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, guint
     conversation_t *conv;
     struct tcp_analysis *tcpd;
 
+    /* XXX: Since TCP doesn't use the endpoint API, we can only look
+     * up using the current pinfo addresses and ports. We don't want
+     * to create a new conversation or new TCP stream.
+     * Eventually the endpoint API should support storing multiple
+     * endpoints and TCP should be changed to use the endpoint API.
+     */
     if (((pinfo->net_src.type == AT_IPv4 && pinfo->net_dst.type == AT_IPv4) ||
         (pinfo->net_src.type == AT_IPv6 && pinfo->net_dst.type == AT_IPv6))
-        && (conv=find_conversation_pinfo(pinfo, 0)) != NULL )
+        && (pinfo->ptype == PT_TCP) &&
+        (conv=find_conversation(pinfo->num, &pinfo->net_src, &pinfo->net_dst, ENDPOINT_TCP, pinfo->srcport, pinfo->destport, 0)) != NULL)
     {
         /* TCP over IPv4/6 */
         tcpd=get_tcp_conversation_data(conv, pinfo);
@@ -7074,8 +7081,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     struct tcpinfo tcpinfo;
     struct tcpheader *tcph;
     proto_item *tf_syn = NULL, *tf_fin = NULL, *tf_rst = NULL, *scaled_pi;
-    conversation_t *conv=NULL, *other_conv;
-    guint32 save_last_frame = 0;
+    conversation_t *conv=NULL;
     struct tcp_analysis *tcpd=NULL;
     struct tcp_per_packet_data_t *tcppd=NULL;
     proto_item *item;
@@ -7154,18 +7160,12 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
     /* find(or create if needed) the conversation for this tcp session
      * This is a slight deviation from find_or_create_conversation so it's
-     * done manually.  This is done to save the last frame of the conversation
-     * in case a new conversation is found and the previous conversation needs
-     * to be adjusted,
+     * done manually. This is done to avoid conversation overlapping when
+     * reusing ports (see issue 15097), as find_or_create_conversation automatically
+     * extends the conversation found. This extension is done later.
      */
-    if((conv = find_conversation_pinfo(pinfo, 0)) != NULL) {
-        /* Update how far the conversation reaches */
-        if (pinfo->num > conv->last_frame) {
-            save_last_frame = conv->last_frame;
-            conv->last_frame = pinfo->num;
-        }
-    }
-    else {
+    conv = find_conversation(pinfo->num, &pinfo->src, &pinfo->dst, ENDPOINT_TCP, pinfo->srcport, pinfo->destport, 0);
+    if(!conv) {
         conv = conversation_new(pinfo->num, &pinfo->src,
                      &pinfo->dst, ENDPOINT_TCP,
                      pinfo->srcport, pinfo->destport, 0);
@@ -7187,9 +7187,6 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
        (tcpd->fwd->static_flags & TCP_S_BASE_SEQ_SET)) {
         if(tcph->th_seq!=tcpd->fwd->base_seq) {
             if (!(pinfo->fd->visited)) {
-                /* Reset the last frame seen in the conversation */
-                if (save_last_frame > 0)
-                    conv->last_frame = save_last_frame;
 
                 conv=conversation_new(pinfo->num, &pinfo->src, &pinfo->dst, ENDPOINT_TCP, pinfo->srcport, pinfo->destport, 0);
                 tcpd=get_tcp_conversation_data(conv,pinfo);
@@ -7230,21 +7227,9 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     if(tcpd && ((tcph->th_flags&(TH_SYN|TH_ACK))==(TH_SYN|TH_ACK)) &&
         (tcpd->fwd->static_flags & TCP_S_BASE_SEQ_SET) &&
         (tcph->th_seq!=tcpd->fwd->base_seq) ) {
-        if (!(pinfo->fd->visited)) {
-            /* Reset the last frame seen in the conversation */
-            if (save_last_frame > 0)
-                conv->last_frame = save_last_frame;
-        }
 
-        other_conv = find_conversation(pinfo->num, &pinfo->dst, &pinfo->src, ENDPOINT_TCP, pinfo->destport, pinfo->srcport, 0);
-        if (other_conv != NULL)
-        {
-            conv = other_conv;
-            tcpd=get_tcp_conversation_data(conv,pinfo);
-
-            /* the retrieved conversation might have a different base_seq (issue 16944) */
-            tcpd->fwd->base_seq = tcph->th_seq;
-        }
+        /* the retrieved conversation might have a different base_seq (issue 16944) */
+        tcpd->fwd->base_seq = tcph->th_seq;
 
         if(!tcpd->ta)
             tcp_analyze_get_acked_struct(pinfo->num, tcph->th_seq, tcph->th_ack, TRUE, tcpd);
@@ -7410,6 +7395,16 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         }
       }
       else {
+          /* Explicitly and immediately move forward the conversation last_frame,
+           * although it would one way or another be changed later
+           * in the conversation helper functions.
+           */
+          if (!(pinfo->fd->visited)) {
+            if (pinfo->num > conv->last_frame) {
+              conv->last_frame = pinfo->num;
+            }
+          }
+
           conversation_completeness  = tcpd->conversation_completeness ;
 
           /* SYN-ACK */
@@ -7498,7 +7493,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         proto_tree_add_boolean(field_tree, hf_tcp_flags_res, tvb, offset + 12, 1, tcph->th_flags);
         proto_tree_add_boolean(field_tree, hf_tcp_flags_ns, tvb, offset + 12, 1, tcph->th_flags);
         proto_tree_add_boolean(field_tree, hf_tcp_flags_cwr, tvb, offset + 13, 1, tcph->th_flags);
-        proto_tree_add_boolean(field_tree, hf_tcp_flags_ecn, tvb, offset + 13, 1, tcph->th_flags);
+        proto_tree_add_boolean(field_tree, hf_tcp_flags_ece, tvb, offset + 13, 1, tcph->th_flags);
         proto_tree_add_boolean(field_tree, hf_tcp_flags_urg, tvb, offset + 13, 1, tcph->th_flags);
         proto_tree_add_boolean(field_tree, hf_tcp_flags_ack, tvb, offset + 13, 1, tcph->th_flags);
         proto_tree_add_boolean(field_tree, hf_tcp_flags_push, tvb, offset + 13, 1, tcph->th_flags);
@@ -8067,11 +8062,11 @@ proto_register_tcp(void)
             "ECN concealment protection (RFC 3540)", HFILL }},
 
         { &hf_tcp_flags_cwr,
-        { "Congestion Window Reduced (CWR)",            "tcp.flags.cwr", FT_BOOLEAN, 12, TFS(&tfs_set_notset), TH_CWR,
+        { "Congestion Window Reduced",            "tcp.flags.cwr", FT_BOOLEAN, 12, TFS(&tfs_set_notset), TH_CWR,
             NULL, HFILL }},
 
-        { &hf_tcp_flags_ecn,
-        { "ECN-Echo",           "tcp.flags.ecn", FT_BOOLEAN, 12, TFS(&tfs_set_notset), TH_ECN,
+        { &hf_tcp_flags_ece,
+        { "ECN-Echo",           "tcp.flags.ece", FT_BOOLEAN, 12, TFS(&tfs_set_notset), TH_ECE,
             NULL, HFILL }},
 
         { &hf_tcp_flags_urg,

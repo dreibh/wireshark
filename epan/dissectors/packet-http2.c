@@ -385,6 +385,7 @@ static int hf_http2_header_table_size_update = -1;
 static int hf_http2_header_table_size = -1;
 static int hf_http2_fake_header_count = -1;
 static int hf_http2_fake_header = -1;
+static int hf_http2_header_request_full_uri = -1;
 /* RST Stream */
 static int hf_http2_rst_stream_error = -1;
 /* Settings */
@@ -1229,6 +1230,8 @@ static const value_string http2_type_vals[] = {
 #define HTTP2_HEADER_METHOD_CONNECT "CONNECT"
 #define HTTP2_HEADER_TRANSFER_ENCODING "transfer-encoding"
 #define HTTP2_HEADER_PATH ":path"
+#define HTTP2_HEADER_AUTHORITY ":authority"
+#define HTTP2_HEADER_SCHEME ":scheme"
 #define HTTP2_HEADER_CONTENT_TYPE "content-type"
 #define HTTP2_HEADER_UNKNOWN "<unknown>"
 
@@ -1932,6 +1935,8 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, guint offset, prot
     guint i;
     const gchar *method_header_value = NULL;
     const gchar *path_header_value = NULL;
+    const gchar *scheme_header_value = NULL;
+    const gchar *authority_header_value = NULL;
     http2_header_stream_info_t* header_stream_info;
     gchar *header_unescaped = NULL;
 
@@ -2101,6 +2106,15 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, guint offset, prot
     ti = proto_tree_add_uint(tree, hf_http2_header_length, header_tvb, hoffset, 1, header_len);
     proto_item_set_generated(ti);
 
+    if (have_tap_listener(http2_follow_tap)) {
+        http2_follow_tap_data_t *follow_data = wmem_new0(wmem_packet_scope(), http2_follow_tap_data_t);
+
+        follow_data->tvb = header_tvb;
+        follow_data->stream_id = h2session->current_stream_id;
+
+        tap_queue_packet(http2_follow_tap, pinfo, follow_data);
+    }
+
     if (header_data->header_size_attempted > 0) {
         expert_add_info_format(pinfo, ti, &ei_http2_header_size,
                                "Decompression stopped after %u bytes (%u attempted).",
@@ -2207,8 +2221,35 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, guint offset, prot
             proto_item_append_text(header_tree, " %s", reason_phase);
             proto_item_append_text(tree, ", %s %s", header_value, reason_phase);
         }
+        else if (strcmp(header_name, HTTP2_HEADER_AUTHORITY) == 0) {
+            authority_header_value = header_value;
+	}
+        else if (strcmp(header_name, HTTP2_HEADER_SCHEME) == 0) {
+            scheme_header_value = header_value;
+	}
 
         offset += in->length;
+    }
+
+    /* Use the Authority Header as an indication that this packet is a request */
+    if (authority_header_value) {
+        proto_item *e_ti;
+        gchar *uri;
+
+        /* RFC9113 8.3.1:
+           "All HTTP/2 requests MUST include exactly one valid value for the
+           ":method", ":scheme", and ":path" pseudo-header fields, unless they
+           are CONNECT requests"
+        */
+        if (method_header_value &&
+            strcmp(method_header_value, HTTP2_HEADER_METHOD_CONNECT) == 0) {
+            uri = wmem_strdup(wmem_packet_scope(), authority_header_value);
+        } else {
+            uri = wmem_strdup_printf(wmem_packet_scope(), "%s://%s%s", scheme_header_value, authority_header_value, path_header_value);
+        }
+        e_ti = proto_tree_add_string(tree, hf_http2_header_request_full_uri, tvb, 0, 0, uri);
+        proto_item_set_url(e_ti);
+        proto_item_set_generated(e_ti);
     }
 }
 
@@ -2315,10 +2356,18 @@ http2_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, guint *str
 {
     http2_session_t *h2session;
     struct tcp_analysis *tcpd;
-    conversation_t* conversation = find_or_create_conversation(pinfo);
+    conversation_t* conversation;
 
-    if( ((pinfo->net_src.type == AT_IPv4 && pinfo->net_dst.type == AT_IPv4) ||
-         (pinfo->net_src.type == AT_IPv6 && pinfo->net_dst.type == AT_IPv6)))
+    /* XXX: Since TCP doesn't use the endpoint API (and HTTP2 is
+     * over TCP), we can only look up using the current pinfo addresses
+     * and ports. We don't want to create a new conversion or stream.
+     * Eventually the endpoint API should support storing multiple
+     * endpoints and TCP should be changed to use the endpoint API.
+     */
+    if (((pinfo->net_src.type == AT_IPv4 && pinfo->net_dst.type == AT_IPv4) ||
+        (pinfo->net_src.type == AT_IPv6 && pinfo->net_dst.type == AT_IPv6))
+        && (pinfo->ptype == PT_TCP) &&
+        (conversation=find_conversation(pinfo->num, &pinfo->net_src, &pinfo->net_dst, ENDPOINT_TCP, pinfo->srcport, pinfo->destport, 0)) != NULL)
     {
         h2session = get_http2_session(pinfo, conversation);
         tcpd = get_tcp_conversation_data(conversation, pinfo);
@@ -3648,6 +3697,7 @@ dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
     GHashTable* entry;
     struct tcp_analysis* tcpd;
     conversation_t* conversation = find_or_create_conversation(pinfo);
+    gboolean use_follow_tap = TRUE;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "HTTP2");
 
@@ -3758,6 +3808,9 @@ dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 
         case HTTP2_HEADERS: /* Headers (1) */
             dissect_http2_headers(tvb, pinfo, http2_session, http2_tree, offset, flags);
+#ifdef HAVE_NGHTTP2
+            use_follow_tap = FALSE;
+#endif
         break;
 
         case HTTP2_PRIORITY: /* Priority (2) */
@@ -3774,6 +3827,9 @@ dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 
         case HTTP2_PUSH_PROMISE: /* PUSH Promise (5) */
             dissect_http2_push_promise(tvb, pinfo, http2_session, http2_tree, offset, flags);
+#ifdef HAVE_NGHTTP2
+            use_follow_tap = FALSE;
+#endif
         break;
 
         case HTTP2_PING: /* Ping (6) */
@@ -3790,6 +3846,9 @@ dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 
         case HTTP2_CONTINUATION: /* Continuation (9) */
             dissect_http2_continuation(tvb, pinfo, http2_session, http2_tree, offset, flags);
+#ifdef HAVE_NGHTTP2
+            use_follow_tap = FALSE;
+#endif
         break;
 
         case HTTP2_ALTSVC: /* ALTSVC (10) */
@@ -3814,7 +3873,10 @@ dissect_http2_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
     }
     tap_queue_packet(http2_tap, pinfo, http2_stats);
 
-    if (have_tap_listener(http2_follow_tap)) {
+    /* HEADERS, CONTINUATION, and PUSH_PROMISE frames are compressed,
+     * and sent to the follow tap inside inflate_http2_header_block.
+     */
+    if (have_tap_listener(http2_follow_tap) && use_follow_tap) {
         http2_follow_tap_data_t *follow_data = wmem_new0(wmem_packet_scope(), http2_follow_tap_data_t);
 
         follow_data->tvb = tvb;
@@ -4188,6 +4250,11 @@ proto_register_http2(void)
             { "Fake Header", "http2.fake.header",
                FT_NONE, BASE_NONE, NULL, 0x0,
                NULL, HFILL }
+        },
+        { &hf_http2_header_request_full_uri,
+            { "Full request URI", "http2.request.full_uri",
+              FT_STRING, BASE_NONE, NULL, 0x0,
+              "The full requested URI (including host name)", HFILL }
         },
 
         /* RST Stream */

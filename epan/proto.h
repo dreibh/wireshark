@@ -81,6 +81,8 @@ typedef void (*custom_fmt_func_t)(gchar *, guint32);
 
 typedef void (*custom_fmt_func_64_t)(gchar *, guint64);
 
+typedef void (*custom_fmt_func_double_t)(gchar *, double);
+
 /** Make a custom format function pointer look like a void pointer. Used to set header_field_info.strings.
  *
  * We cast to gsize first, which 1) is guaranteed to be wide enough to
@@ -662,16 +664,14 @@ void proto_report_dissector_bug(const char *format, ...)
 typedef enum {
     BASE_NONE    = 0,   /**< none */
 
-/* Integral types */
-    BASE_DEC     = 1,   /**< decimal */
-    BASE_HEX     = 2,   /**< hexadecimal */
-    BASE_OCT     = 3,   /**< octal */
-    BASE_DEC_HEX = 4,   /**< decimal (hexadecimal) */
-    BASE_HEX_DEC = 5,   /**< hexadecimal (decimal) */
-    BASE_CUSTOM  = 6,   /**< call custom routine (in ->strings) to format */
-
-/* Float types */
-    BASE_FLOAT   = BASE_NONE, /**< decimal-format float */
+/* Integral and float types */
+    BASE_DEC     = 1,   /**< decimal [integer, float] */
+    BASE_HEX     = 2,   /**< hexadecimal [integer, float] */
+    BASE_OCT     = 3,   /**< octal [integer] */
+    BASE_DEC_HEX = 4,   /**< decimal (hexadecimal) [integer] */
+    BASE_HEX_DEC = 5,   /**< hexadecimal (decimal) [integer] */
+    BASE_CUSTOM  = 6,   /**< call custom routine to format [integer, float] */
+    BASE_EXP     = 7,   /**< exponential [float] */
 
 /* Byte separators */
     SEP_DOT      = 8,   /**< hexadecimal bytes with a period (.) between each byte */
@@ -3001,7 +3001,7 @@ proto_tree_add_bitmask_list(proto_tree *tree, tvbuff_t *tvb, const guint offset,
         FT_integer fields that have a value_string attached will have the
         matched string displayed on the expansion line.
  @param encoding big or little endian byte representation (ENC_BIG_ENDIAN/ENC_LITTLE_ENDIAN/ENC_HOST_ENDIAN)
- @param return_value if a pointer is passed here the value is returned. */
+ @param retval if a pointer is passed here the value is returned. */
 WS_DLL_PUBLIC  void
 proto_tree_add_bitmask_list_ret_uint64(proto_tree *tree, tvbuff_t *tvb, const guint offset,
 					const int len, int * const *fields, const guint encoding, guint64 *retval);
