@@ -54,7 +54,8 @@ set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT
 set(LOG_PROJECT_NAME ${_log_project_name})
 set(LOG_PROJECT_MAJOR_VERSION 0)
 set(LOG_PROJECT_MINOR_VERSION 8)
-set(LOG_PROJECT_VERSION "${LOG_PROJECT_MAJOR_VERSION}.${LOG_PROJECT_MINOR_VERSION}.${PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
+set(LOG_PROJECT_PATCH_VERSION 3)
+set(LOG_PROJECT_VERSION "${LOG_PROJECT_MAJOR_VERSION}.${LOG_PROJECT_MINOR_VERSION}.${LOG_PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
 
 include( CMakeOptions.txt )
 
@@ -4042,6 +4043,14 @@ configure_file(
 
 add_custom_target(uninstall
 	COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+
+# Break on programmer errors when debugging in Visual Studio
+if(MSVC)
+	get_property(_targets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
+	foreach(_target ${_targets})
+		set_target_properties(${_target} PROPERTIES VS_DEBUGGER_ENVIRONMENT "G_DEBUG=fatal-criticals")
+	endforeach()
+endif()
 
 #
 # Editor modelines  -  https://www.wireshark.org/tools/modelines.html

@@ -3177,6 +3177,7 @@ static const SslCipherSuite cipher_suites[]={
     {0x1303,KEX_TLS13,          ENC_CHACHA20,   DIG_SHA256, MODE_POLY1305 }, /* TLS_CHACHA20_POLY1305_SHA256 */
     {0x1304,KEX_TLS13,          ENC_AES,        DIG_SHA256, MODE_CCM   },   /* TLS_AES_128_CCM_SHA256 */
     {0x1305,KEX_TLS13,          ENC_AES,        DIG_SHA256, MODE_CCM_8 },   /* TLS_AES_128_CCM_8_SHA256 */
+    {0x00C6,KEX_TLS13,          ENC_SM4,        DIG_SM3,    MODE_GCM   },   /* TLS_SM4_GCM_SM3 */
 
     {0xC001,KEX_ECDH_ECDSA,     ENC_NULL,       DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_ECDSA_WITH_NULL_SHA */
     {0xC002,KEX_ECDH_ECDSA,     ENC_RC4,        DIG_SHA,    MODE_STREAM},   /* TLS_ECDH_ECDSA_WITH_RC4_128_SHA */
@@ -3646,11 +3647,17 @@ prf(SslDecryptSession *ssl, StringInfo *secret, const gchar *usage,
     case TLSV1DOT1_VERSION:
     case DTLSV1DOT0_VERSION:
     case DTLSV1DOT0_OPENSSL_VERSION:
-    case GMTLSV1_VERSION:
         return tls_prf(secret, usage, rnd1, rnd2, out, out_len);
 
     default: /* TLSv1.2 */
         switch (ssl->cipher_suite->dig) {
+        case DIG_SM3:
+#if GCRYPT_VERSION_NUMBER >= 0x010900
+            return tls12_prf(GCRY_MD_SM3, secret, usage, rnd1, rnd2,
+                             out, out_len);
+#else
+            return FALSE;
+#endif
         case DIG_SHA384:
             return tls12_prf(GCRY_MD_SHA384, secret, usage, rnd1, rnd2,
                              out, out_len);
@@ -4874,7 +4881,7 @@ tls_decrypt_aead_record(SslDecryptSession *ssl, SslDecoder *decoder,
      * ciphertext and authentication tag.
      */
     const guint16   version = ssl->session.version;
-    const gboolean  is_v12 = version == TLSV1DOT2_VERSION || version == DTLSV1DOT2_VERSION;
+    const gboolean  is_v12 = version == TLSV1DOT2_VERSION || version == DTLSV1DOT2_VERSION || version == GMTLSV1_VERSION;
     gcry_error_t    err;
     const guchar   *explicit_nonce = NULL, *ciphertext;
     guint           ciphertext_len, auth_tag_len;
@@ -5048,11 +5055,11 @@ tls_decrypt_aead_record(SslDecryptSession *ssl, SslDecoder *decoder,
     }
 
     /*
-     * Increment the (implicit) sequence number for TLS 1.2/1.3. This is done
+     * Increment the (implicit) sequence number for TLS 1.2/1.3 and GMTLSv1. This is done
      * after successful authentication to ensure that early data is skipped when
      * CLIENT_EARLY_TRAFFIC_SECRET keys are unavailable.
      */
-    if (version == TLSV1DOT2_VERSION || version == TLSV1DOT3_VERSION) {
+    if (version == TLSV1DOT2_VERSION || version == TLSV1DOT3_VERSION || version == GMTLSV1_VERSION) {
         decoder->seq++;
     }
 
@@ -5127,6 +5134,7 @@ ssl_decrypt_record(SslDecryptSession *ssl, SslDecoder *decoder, guint8 ct, guint
         case DTLSV1DOT0_VERSION:
         case DTLSV1DOT2_VERSION:
         case DTLSV1DOT0_OPENSSL_VERSION:
+        case GMTLSV1_VERSION:
             blocksize = ssl_get_cipher_blocksize(decoder->cipher_suite);
             if (inl < blocksize) {
                 ssl_debug_printf("ssl_decrypt_record failed: input %d has no space for IV %d\n",
@@ -7857,6 +7865,7 @@ ssl_dissect_hnd_hello_ext_quic_transport_parameters(ssl_common_dissect_t *hf, tv
             case SSL_HND_QUIC_TP_STATELESS_RESET_TOKEN:
                 proto_tree_add_item(parameter_tree, hf->hf.hs_ext_quictp_parameter_stateless_reset_token,
                                     tvb, offset, 16, ENC_BIG_ENDIAN);
+                quic_add_stateless_reset_token(pinfo, tvb, offset, NULL);
                 offset += 16;
             break;
             case SSL_HND_QUIC_TP_MAX_UDP_PAYLOAD_SIZE:
@@ -7951,6 +7960,9 @@ ssl_dissect_hnd_hello_ext_quic_transport_parameters(ssl_common_dissect_t *hf, tv
 
                 proto_tree_add_item(parameter_tree, hf->hf.hs_ext_quictp_parameter_pa_statelessresettoken,
                                     tvb, offset, 16, ENC_NA);
+                if (connectionid_length >= 1 && connectionid_length <= QUIC_MAX_CID_LENGTH) {
+                    quic_add_stateless_reset_token(pinfo, tvb, offset, &cid);
+                }
                 offset += 16;
             }
             break;
