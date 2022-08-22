@@ -805,6 +805,7 @@ const value_string wfa_subtype_vals[] = {
   { WFA_SUBTYPE_WIFI_60G, "60GHz Information Element" },
   { WFA_WNM_SUBTYPE_NON_PREF_CHAN_REPORT, "Non-preferred Channel Report" },
   { WFA_WNM_SUBTYPE_CELL_DATA_CAPABILITIES, "Cellular Data Capabilities" },
+  { WFA_SUBTYPE_TRANSITION_DISABLE_KDE, "Transition Disable KDE" },
   { WFA_SUBTYPE_QOS_MGMT, "QoS Management" },
   { 0, NULL }
 };
@@ -4517,6 +4518,7 @@ static int hf_ieee80211_ff_cf_reserved6 = -1;
 /* ************************************************************************* */
 static int hf_ieee80211_amsdu_subframe = -1;
 static int hf_ieee80211_amsdu_length = -1;
+static int hf_ieee80211_amsdu_padding = -1;
 
 /* ************************************************************************* */
 /*                       Tagged value format fields                          */
@@ -6009,6 +6011,13 @@ static int hf_ieee80211_wfa_ie_oce_probe_suppr_ssid = -1;
 static int hf_ieee80211_wfa_anqp_mbo_subtype = -1;
 static int hf_ieee80211_wfa_anqp_mbo_query = -1;
 static int hf_ieee80211_wfa_anqp_mbo_cellular_pref = -1;
+static int hf_ieee80211_wfa_ie_transition_disable_bitmap = -1;
+static int hf_ieee80211_wfa_ie_transition_disable_wpa3_personal = -1;
+static int hf_ieee80211_wfa_ie_transition_disable_sae_pk = -1;
+static int hf_ieee80211_wfa_ie_transition_disable_wpa3_enterprise = -1;
+static int hf_ieee80211_wfa_ie_transition_disable_enhanced_open = -1;
+static int hf_ieee80211_wfa_ie_transition_disable_reserved_b4thru7 = -1;
+static int hf_ieee80211_wfa_ie_transition_disable_reserved= -1;
 
 static int hf_ieee80211_aironet_ie_type = -1;
 static int hf_ieee80211_aironet_ie_dtpc = -1;
@@ -7724,6 +7733,7 @@ static gint ett_sta_info = -1;
 static gint ett_ieee80211_esp = -1;
 
 static gint ett_ieee80211_wfa_60g_attr = -1;
+static gint ett_ieee80211_wfa_transition_disable_tree = -1;
 
 /* 802.11ah trees */
 static gint ett_s1g_sync_control_tree = -1;
@@ -16988,6 +16998,38 @@ dissect_owe_transition_mode(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_tree_add_item(tree, hf_ieee80211_wfa_ie_owe_channel_info, tvb, offset, 1, ENC_NA);
     offset  += 1;
   }
+
+  return offset;
+}
+
+static int
+dissect_transition_disable_kde(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+{
+  int tag_len = tvb_captured_length(tvb);
+  int offset = 0;
+  static int * const ieee80211_wfa_transition_disable_flags[] = {
+    &hf_ieee80211_wfa_ie_transition_disable_wpa3_personal,
+    &hf_ieee80211_wfa_ie_transition_disable_sae_pk,
+    &hf_ieee80211_wfa_ie_transition_disable_wpa3_enterprise,
+    &hf_ieee80211_wfa_ie_transition_disable_enhanced_open,
+    &hf_ieee80211_wfa_ie_transition_disable_reserved_b4thru7,
+    NULL
+  };
+
+  if (tag_len < 1) {
+    expert_add_info(pinfo, tree, &ei_ieee80211_bad_length);
+    return 0;
+  }
+
+  proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_wfa_ie_transition_disable_bitmap,
+                                    ett_ieee80211_wfa_transition_disable_tree,
+                                    ieee80211_wfa_transition_disable_flags,
+                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+  offset++;
+
+  if (offset < tag_len)
+    proto_tree_add_item(tree, hf_ieee80211_wfa_ie_transition_disable_reserved, tvb, offset, tag_len-offset, ENC_NA);
+  offset = tag_len;
 
   return offset;
 }
@@ -34738,6 +34780,8 @@ dissect_ieee80211_pv0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
           tvbuff_t           *msdu_tvb;
           guint16             msdu_length;
           proto_tree         *subframe_tree;
+          gboolean            last_subframe = FALSE;
+          guint16             subframe_length;
           const gchar *resolve_name;
 
           /*
@@ -34752,8 +34796,17 @@ dissect_ieee80211_pv0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
            */
           msdu_length = tvb_get_ntohs(next_tvb, msdu_offset+12);
 
+          if (tvb_reported_length_remaining(next_tvb, msdu_offset+14+msdu_length) <= 14)
+            last_subframe = TRUE;
+
+          /* The last A-MSDU subframe has no padding. */
+          if (last_subframe)
+            subframe_length = 14+msdu_length;
+          else
+            subframe_length = WS_ROUNDUP_4(14+msdu_length);
+
           parent_item = proto_tree_add_item(mpdu_tree, hf_ieee80211_amsdu_subframe, next_tvb,
-                            msdu_offset, WS_ROUNDUP_4(msdu_offset+14+msdu_length), ENC_NA);
+                            msdu_offset, subframe_length, ENC_NA);
           proto_item_append_text(parent_item, " #%u", i);
           subframe_tree = proto_item_add_subtree(parent_item, ett_msdu_aggregation_subframe_tree);
           i += 1;
@@ -34773,6 +34826,12 @@ dissect_ieee80211_pv0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
           msdu_offset += 14;
           msdu_tvb = tvb_new_subset_length(next_tvb, msdu_offset, msdu_length);
           call_dissector(llc_handle, msdu_tvb, pinfo, subframe_tree);
+          if (!last_subframe) {
+            guint8 padding = (4-((msdu_offset+msdu_length)&3))&3;
+            if (padding > 0)
+              proto_tree_add_item(subframe_tree, hf_ieee80211_amsdu_padding, next_tvb, msdu_offset+msdu_length, padding, ENC_NA);
+          }
+
           msdu_offset = WS_ROUNDUP_4(msdu_offset+msdu_length);
         } while (tvb_reported_length_remaining(next_tvb, msdu_offset) > 14);
       } else {
@@ -51268,6 +51327,34 @@ proto_register_ieee80211(void)
       {"RSNX", "wlan.rsnx",
        FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }},
 
+    {&hf_ieee80211_wfa_ie_transition_disable_bitmap,
+      {"Transition Disable Bitmap", "wlan.transition_disable_bitmap",
+       FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }},
+
+    {&hf_ieee80211_wfa_ie_transition_disable_wpa3_personal,
+      {"WPA3-Personal", "wlan.transition_disable.wpa3_personal",
+       FT_BOOLEAN, 8, NULL, GENMASK(0, 0), NULL, HFILL }},
+
+    {&hf_ieee80211_wfa_ie_transition_disable_sae_pk,
+      {"SAE-PK", "wlan.transition_disable.sae_pk",
+       FT_BOOLEAN, 8, NULL, GENMASK(1, 1), NULL, HFILL }},
+
+    {&hf_ieee80211_wfa_ie_transition_disable_wpa3_enterprise,
+      {"WPA3-Enterprise", "wlan.transition_disable.wpa3_enterprise",
+       FT_BOOLEAN, 8, NULL, GENMASK(2, 2), NULL, HFILL }},
+
+    {&hf_ieee80211_wfa_ie_transition_disable_enhanced_open,
+      {"Wi-Fi Enhanced Open", "wlan.transition_disable.enhanced_open",
+       FT_BOOLEAN, 8, NULL, GENMASK(3, 3), NULL, HFILL }},
+
+    {&hf_ieee80211_wfa_ie_transition_disable_reserved_b4thru7,
+      {"Reserved", "wlan.transition_disable.reserved.b4thru7",
+       FT_UINT8, BASE_HEX, NULL, GENMASK(7, 4), NULL, HFILL }},
+
+    {&hf_ieee80211_wfa_ie_transition_disable_reserved,
+      {"Reserved", "wlan.transition_disable.reserved",
+       FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
     {&hf_ieee80211_tag_rsnx_length,
       {"RSNX Length", "wlan.rsnx.length",
        FT_UINT8, BASE_DEC, NULL, 0x0F, NULL, HFILL }},
@@ -51371,14 +51458,19 @@ proto_register_ieee80211(void)
 
   static hf_register_info aggregate_fields[] = {
     {&hf_ieee80211_amsdu_subframe,
-     {"A-MSDU Subframe", "wlan_aggregate.a_mdsu.subframe",
+     {"A-MSDU Subframe", "wlan_aggregate.a_msdu.subframe",
       FT_NONE, BASE_NONE, NULL, 0x0,
       "Aggregate MAC Service Data Unit (MSDU) Subframe", HFILL }},
 
     {&hf_ieee80211_amsdu_length,
-     {"A-MSDU Length", "wlan_aggregate.a_mdsu.length",
+     {"A-MSDU Length", "wlan_aggregate.a_msdu.length",
       FT_UINT16, BASE_DEC, NULL, 0x0,
-      NULL, HFILL }}
+      NULL, HFILL }},
+
+    {&hf_ieee80211_amsdu_padding,
+     {"A-MSDU Padding", "wlan_aggregate.a_msdu.padding",
+      FT_BYTES, BASE_NONE, NULL, 0x0,
+      NULL, HFILL }},
   };
 
   static uat_field_t wep_uat_flds[] = {
@@ -51754,6 +51846,7 @@ proto_register_ieee80211(void)
 
     &ett_ieee80211_esp,
     &ett_ieee80211_wfa_60g_attr,
+    &ett_ieee80211_wfa_transition_disable_tree,
     &ett_gas_resp_fragment,
     &ett_gas_resp_fragments,
 
@@ -52592,6 +52685,7 @@ proto_reg_handoff_ieee80211(void)
   dissector_add_uint("wlan.ie.wifi_alliance.subtype", WFA_SUBTYPE_HS20_INDICATION, create_dissector_handle(dissect_hs20_indication, -1));
   dissector_add_uint("wlan.ie.wifi_alliance.subtype", WFA_SUBTYPE_OSEN, create_dissector_handle(dissect_hs20_osen, -1));
   dissector_add_uint("wlan.ie.wifi_alliance.subtype", WFA_SUBTYPE_OWE_TRANSITION_MODE, create_dissector_handle(dissect_owe_transition_mode, -1));
+  dissector_add_uint("wlan.ie.wifi_alliance.subtype", WFA_SUBTYPE_TRANSITION_DISABLE_KDE, create_dissector_handle(dissect_transition_disable_kde, -1));
   dissector_add_uint("wlan.ie.wifi_alliance.subtype", WFA_SUBTYPE_WIFI_60G, create_dissector_handle(dissect_wfa_60g_ie, -1));
   dissector_add_uint("wlan.ie.wifi_alliance.subtype", WFA_SUBTYPE_MBO_OCE, create_dissector_handle(dissect_mbo_oce, -1));
   dissector_add_uint("wlan.ie.wifi_alliance.subtype", WFA_WNM_SUBTYPE_NON_PREF_CHAN_REPORT, create_dissector_handle(dissect_wfa_wnm_non_pref_chan, -1));
