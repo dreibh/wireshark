@@ -1185,10 +1185,15 @@ ws_find_package(Systemd BUILD_sdjournal HAVE_SYSTEMD)
 if(BUILD_wireshark OR BUILD_logray)
 	if(USE_qt6)
 		set(qtver "6")
+		if(DEFINED ENV{WIRESHARK_QT6_PREFIX_PATH})
+			list(APPEND CMAKE_PREFIX_PATH $ENV{WIRESHARK_QT6_PREFIX_PATH})
+		endif()
 	else()
 		set(qtver "5")
+		if(DEFINED ENV{WIRESHARK_QT5_PREFIX_PATH})
+			list(APPEND CMAKE_PREFIX_PATH $ENV{WIRESHARK_QT5_PREFIX_PATH})
 		# XXX We used to recommend setting QT5_BASE_DIR. Remove after the 4.0 branch is created.
-		if(WIN32 AND DEFINED ENV{QT5_BASE_DIR})
+		elseif(WIN32 AND DEFINED ENV{QT5_BASE_DIR})
 			message(WARNING "Support for QT5_BASE_DIR will be removed in a future release.")
 			set(QT5_BASE_PATH "$ENV{QT5_BASE_DIR}")
 			set(CMAKE_PREFIX_PATH "${QT5_BASE_PATH}")
@@ -3937,6 +3942,14 @@ set(_test_group_list
 set(TEST_EXTRA_ARGS "" CACHE STRING "Extra arguments to pass to test/test.py")
 separate_arguments(TEST_EXTRA_ARGS)
 
+add_test(build_unittests
+	"${CMAKE_COMMAND}"
+	--build "${CMAKE_BINARY_DIR}"
+	--config "${CONFIG}"
+	--target test-programs
+)
+set_tests_properties(build_unittests PROPERTIES FIXTURES_SETUP unittests)
+
 foreach(_group_name ${_test_group_list})
 	add_test(
 		NAME ${_group_name}
@@ -3949,6 +3962,8 @@ foreach(_group_name ${_test_group_list})
 		)
 	set_tests_properties(${_group_name} PROPERTIES TIMEOUT 600)
 endforeach()
+
+set_tests_properties(suite_unittests PROPERTIES FIXTURES_REQUIRED unittests)
 
 # Make it possible to run pytest without passing the full path as argument.
 if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)

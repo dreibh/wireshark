@@ -86,7 +86,7 @@ $Win64Archives = @{
     "lua/lua-5.2.4-unicode-win64-vc14.zip" = "e8968d2c7871ce1ea82cbd29ac1b3a2c59d3dec25e483c5e12de85df66f5d928";
     "lz4/lz4-1.9.3-1-win64ws.zip" = "7129515893ffdc439f4ffe9673c4bc43f9042e910bb2607e68dde6b99a1ab058";
     "minizip/minizip-1.2.11-4-win64ws.zip" = "dd6bf24e2d946465ad19aa4f8c38e0db91da6585887935de68011982cd6fb2cb";
-    "nghttp2/nghttp2-1.46.0-1-win64ws.zip" = "5769f1efc218faec3b59eba4f83b44f86bf6fa381d80ceb0d8882e796fa54b23";
+    "nghttp2/nghttp2-1.49.0-1-win64ws.zip" = "215919ec20be62101d4704ec2464bfb72c5677126c5245b92ba495a3d30642ca";
     "opus/opus-1.3.1-3-win64ws.zip" = "1f7a55a6d2d7215dffa4a43bca8ca05024bd4ba1ac3d0d0c405fd38b09cc2205";
     "pcre2/pcre2-10.40-1-win64ws.zip" = "17eee615990b23bc859a862c19f5ac10c61776587603bc452285abe073a0fad9";
     "sbc/sbc-1.3-1-win64ws.zip" = "08cef6898c421277a6582ef3225d8820f74a037cbd5b6e673a4d8f4593ce80a1";
@@ -105,7 +105,7 @@ $ArchivesSubDirectory = @{
 # Plain file downloads
 
 $Win64Files = @{
-    "Npcap/npcap-1.70.exe" = "53913ee65ac54927c793254d7404d40c57432de18b60feb3bd9cfd554d38dde9";
+    "Npcap/npcap-1.71.exe" = "5ccb61296c48e3f8cd20db738784bd7bf0daf8fce630f89892678b6dda4e533c";
     "USBPcap/USBPcapSetup-1.5.4.0.exe" = "87a7edf9bbbcf07b5f4373d9a192a6770d2ff3add7aa1e276e82e38582ccb622";
 }
 
