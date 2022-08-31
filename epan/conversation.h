@@ -148,8 +148,25 @@ typedef enum {
 } conversation_element_type;
 
 /**
- * Elements used to identify conversations for *_full routines and pinfo->conv_elements.
+ * Elements used to identify conversations for *_full routines and
+ * pinfo->conv_elements.
  * Arrays must be terminated with an element .type set to CE_CONVERSATION_TYPE.
+ *
+ * This is currently set only by conversation_set_elements_by_id(); it
+ * is not set for conversations identified by address/port endpoints.
+ *
+ * In find_conversation_pinfo() and find_or_create_conversation(), if
+ * any dissector has set this, then, unless some dissector has set the
+ * pair of address/port endpoints (see below), the array of elements
+ * is used to look up or create the conversation.  Otherwise, the
+ * current addresses and ports in the packet_info structure are used.
+ *
+ * XXX - is there any reason why we shouldn't use an array of conversation
+ * elements, with the appropriate addresses and ports, and set it for
+ * all protocols that use conversations specified by a pair of address/port
+ * endpoints?  That might simplify find_conversation_pinfo() by having
+ * them always use the array of elements if it's present, and just fail if
+ * it's not.
  */
 typedef struct conversation_element {
     conversation_element_type type;
@@ -180,8 +197,42 @@ typedef struct conversation {
     conversation_element_t *key_ptr;	/** Keys are conversation element arrays terminated with a CE_CONVERSATION_TYPE */
 } conversation_t;
 
-struct conversation_key;
-typedef struct conversation_key* conversation_key_t;
+/*
+ * For some protocols, we store, in the packet_info structure, a pair
+ * of address/port endpoints, for use by code that might want to
+ * construct a conversation for that protocol.
+ *
+ * This appears to have been done in order to allow protocols to save
+ * that information *without* overwriting the addresses or ports in the
+ * packet_info structure, so that the other code that uses those values,
+ * such as the code that fills in the address and port columns in the
+ * packet summary, will pick up the values put there by protocols such
+ * as IP and UDP, rather than the values put there by protocols such as
+ * TDMoP, FCIP, TIPC, and DVB Dynamic Mode Adaptation. See commit
+ * 66b441f3d63e21949530d672bf1406dea94ed254 and issue #11340.
+ *
+ * That is set by conversation_set_conv_addr_port_endpoints().
+ *
+ * In find_conversation_pinfo() and find_or_create_conversation(), if
+ * any dissector has set this, that address/port endpoint pair is used
+ * to look up or create the conversation.
+ *
+ * Prior to 4.0, conversations identified by a single integer value
+ * (such as a circuit ID) were handled by creating a pair of address/port
+ * endpoints with null addresses, the first port equal to the integer
+ * value, the second port missing, and a port type being an ENDPOINT_
+ * type specifying the protocol for the conversation.  Now we use an
+ * array of elements, with a CE_UINT value for the integer followed
+ * by a CE_CONVERSATION_TYPE value specifying the protocol for the
+ * converation.
+ *
+ * XXX - is there any reason why we shouldn't use an array of conversation
+ * elements, with the appropriate addresses and ports, instead of this
+ * structure?  It would at least simplify find_conversation_pinfo() and
+ * find_or_create_conversation().
+ */
+struct conversation_addr_port_endpoints;
+typedef struct conversation_addr_port_endpoints* conversation_addr_port_endpoints_t;
 
 WS_DLL_PUBLIC const address* conversation_key_addr1(const conversation_element_t *key);
 WS_DLL_PUBLIC guint32 conversation_key_port1(const conversation_element_t *key);
@@ -341,8 +392,8 @@ WS_DLL_PUBLIC void conversation_set_dissector_from_frame_number(conversation_t *
 WS_DLL_PUBLIC dissector_handle_t conversation_get_dissector(conversation_t *conversation, const guint32 frame_num);
 
 /**
- * Save conversation elements including address+port information in the
- * current packet info which can be matched by find_conversation_pinfo.
+ * Save address+port information in the current packet info; it can be matched
+ * by find_conversation_pinfo or find_conversation.
  * Supports wildcarding.
  * @param pinfo Packet info.
  * @param addr1 The first address in the identifying tuple.
@@ -351,7 +402,7 @@ WS_DLL_PUBLIC dissector_handle_t conversation_get_dissector(conversation_t *conv
  * @param port1 The first port in the identifying tuple.
  * @param port2 The second port in the identifying tuple.
  */
-WS_DLL_PUBLIC void conversation_set_elements_by_address_port_pairs(struct _packet_info *pinfo, address* addr1, address* addr2,
+WS_DLL_PUBLIC void conversation_set_conv_addr_port_endpoints(struct _packet_info *pinfo, address* addr1, address* addr2,
     conversation_type ctype, guint32 port1, guint32 port2);
 
 /**

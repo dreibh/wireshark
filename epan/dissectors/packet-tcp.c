@@ -452,6 +452,7 @@ static expert_field ei_tcp_checksum_bad = EI_INIT;
 static expert_field ei_tcp_urgent_pointer_non_zero = EI_INIT;
 static expert_field ei_tcp_suboption_malformed = EI_INIT;
 static expert_field ei_tcp_nop = EI_INIT;
+static expert_field ei_tcp_non_zero_bytes_after_eol = EI_INIT;
 static expert_field ei_tcp_bogus_header_length = EI_INIT;
 
 /* static expert_field ei_mptcp_analysis_unexpected_idsn = EI_INIT; */
@@ -1590,6 +1591,15 @@ static gboolean mptcp_intersubflows_retransmission  = FALSE;
 #define TCP_A_WINDOW_FULL             0x1000
 #define TCP_A_REUSED_PORTS            0x2000
 #define TCP_A_SPURIOUS_RETRANSMISSION 0x4000
+
+/* This flag for desegment_tcp to exclude segments with previously
+ * seen sequence numbers.
+ * It is from the perspective of Wireshark's reassembler, whereas
+ * the other flags above are from the perspective of the sender.
+ * (E.g., TCP_A_RETRANSMISSION or TCP_A_SPURIOUS_RETRANSMISSION
+ * can be set even when first appearance in the capture file.)
+ */
+#define TCP_A_OLD_DATA                0x8000
 
 /* Static TCP flags. Set in tcp_flow_t:static_flags */
 #define TCP_S_BASE_SEQ_SET 0x01
@@ -3673,7 +3683,7 @@ split_msp(packet_info *pinfo, struct tcp_multisegment_pdu *msp, struct tcp_analy
         guint32 frag_offset = fd_i->offset;
         guint32 frag_len = fd_i->len;
         /* Check for some unusual out of order overlapping segment situations. */
-        if (split_offset <= frag_offset + frag_len) {
+        if (split_offset < frag_offset + frag_len) {
             if (fd_i->offset < split_offset) {
                 frag_offset = split_offset;
                 frag_len -= (split_offset - fd_i->offset);
@@ -3879,6 +3889,11 @@ again:
      * "retransmitted due to bad checksum" (especially if checksum verification
      * is enabled.)
      *
+     * "Reassemble out-of-order segments" uses its own method of detecting
+     * retranmission, but uses more memory and CPU, and when used, a TCP stream
+     * that has missing segments that are never retransmitted stop processing
+     * after the missing segment.
+     *
      * If multiple TCP/IP packets are encapsulated in the same frame (such
      * as with GSE, which has very long Baseband Frames) this causes issues:
      *
@@ -3894,122 +3909,177 @@ again:
      */
 
     if (tcpd) {
-        /* Have we seen this PDU before (and is it the start of a multi-
-         * segment PDU)?
-         *
-         * If the sequence number was seen before, it is part of a
-         * retransmission if the whole segment fits within the MSP.
-         * (But if this is this frame was already visited and the first frame of
-         * the MSP matches the current frame, then it is not a retransmission,
-         * but the start of a new MSP.)
-         *
-         * If only part of the segment fits in the MSP, then either:
-         * - The previous segment included with the MSP was a Zero Window Probe
-         *   with one byte of data and the subdissector just asked for one more
-         *   byte. Do not mark it as retransmission (Bug 15427).
-         * - Data was actually being retransmitted, but with additional data
-         *   (Bug 13523). Do not mark it as retransmission to handle the extra
-         *   bytes. (NOTE Due to the TCP_A_RETRANSMISSION check below, such
-         *   extra data will still be ignored.)
-         * - The MSP contains multiple segments, but the subdissector finished
-         *   reassembly using a subset of the final segment (thus "msp->nxtpdu"
-         *   is smaller than the nxtseq of the previous segment). If that final
-         *   segment was retransmitted, then "nxtseq > msp->nxtpdu".
-         *   Unfortunately that will *not* be marked as retransmission here.
-         *   The next TCP_A_RETRANSMISSION hopefully takes care of it though.
-         *
-         * Only shortcircuit here when the first segment of the MSP is known,
-         * and when this first segment is not one to complete the MSP.
-         */
-        if ((msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32(tcpd->fwd->multisegment_pdus, seq)) &&
-                nxtseq <= msp->nxtpdu &&
-                !(msp->flags & MSP_FLAGS_MISSING_FIRST_SEGMENT) && msp->last_frame != pinfo->num) {
-            const char* str;
-            gboolean is_retransmission = FALSE;
 
-            /* Yes.  This could be because we've dissected this frame before
-             * or because this is a retransmission of a previously-seen
-             * segment.  Either way, we don't need to hand it off to the
-             * subdissector and we certainly don't want to re-add it to the
-             * multisegment_pdus list: if we did, subsequent lookups would
-             * find this retransmission instead of the original transmission
-             * (breaking desegmentation if we'd already linked other segments
-             * to the original transmission's entry).
+        if (reassemble_ooo) {
+            /* If we are reassembling out of order, we can do this retransmission
+             * check. Anything before the latest consecutive sequence number we've
+             * already processed is a retransmission (from the perspective of has
+             * been passed to subdissectors; the judgment of TCP Sequence Analysis
+             * may be different, because it considers RTO and ACKs and so forth).
              *
-             * Cases to handle here:
-             * - In-order stream, pinfo->num matches begin of MSP.
-             * - In-order stream, but pinfo->num does not match the begin of the
-             *   MSP. Must be a retransmission.
-             * - OoO stream where this segment fills the gap in the begin of the
-             *   MSP. msp->first_frame is the start where the gap was detected
-             *   (and does NOT match pinfo->num).
+             * XXX: If these segments are part of incomplete MSPs, we pass them
+             * to the reassembly code which tests for overlap conflicts.
+             * For those which are part of completed reassemblies or not part
+             * of MSPs, we just don't process them. The former would throw a
+             * ReassemblyError, which is likely acceptable in the case of
+             * retransmission of the same segment but not if retransmitted with
+             * additional data, where we'd need to catch the exception to
+             * process the extra data. For ones that were not added to MSPs at
+             * all, we can't do much. (Bug #13061)
+             *
+             * Retransmissions of out of order segments after our latest
+             * consecutive sequence number will all be stored and then eventually
+             * put on multisegment PDUs and go to the reassembler, which should
+             * be able to handle retransmission, as those are still incomplete.
              */
 
-            if (msp->first_frame == pinfo->num || msp->first_frame_with_seq == pinfo->num) {
-                str = "";
-                if (first_pdu) {
-                    col_append_sep_str(pinfo->cinfo, COL_INFO, " ", "[TCP segment of a reassembled PDU]");
-                }
-            } else {
-                str = "Retransmitted ";
-                is_retransmission = TRUE;
-                /* TCP analysis already flags this (in COL_INFO) as a retransmission--if it's enabled */
+            msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32_le(tcpd->fwd->multisegment_pdus, seq);
+
+            gboolean has_unfinished_msp = FALSE;
+            if (msp && LE_SEQ(msp->seq, seq) && GT_SEQ(msp->nxtpdu, seq) && !(msp->flags & MSP_FLAGS_GOT_ALL_SEGMENTS)) {
+                has_unfinished_msp = TRUE;
             }
 
-            /* Fix for bug 3264: look up ipfd for this (first) segment,
-               so can add tcp.reassembled_in generated field on this code path. */
-            if (!is_retransmission) {
-                ipfd_head = fragment_get(&tcp_reassembly_table, pinfo, msp->first_frame, msp);
-                if (ipfd_head) {
-                    if (ipfd_head->reassembled_in != 0) {
-                        item = proto_tree_add_uint(tcp_tree, hf_tcp_reassembled_in, tvb, 0,
-                                           0, ipfd_head->reassembled_in);
-                        proto_item_set_generated(item);
+            if (!PINFO_FD_VISITED(pinfo) && first_pdu) {
+                if (tcpd->fwd->maxnextseq && LT_SEQ(seq, tcpd->fwd->maxnextseq) && !has_unfinished_msp) {
+                    if(!tcpd->ta) {
+                        tcp_analyze_get_acked_struct(pinfo->num, seq, tcpinfo->lastackseq, TRUE, tcpd);
+                    }
+                    tcpd->ta->flags |= TCP_A_OLD_DATA;
+                    if (GT_SEQ(nxtseq, tcpd->fwd->maxnextseq)) {
+                        tcpd->ta->new_data_seq = tcpd->fwd->maxnextseq;
+                    } else {
+                        tcpd->ta->new_data_seq = nxtseq;
                     }
                 }
             }
 
-            nbytes = tvb_reported_length_remaining(tvb, offset);
+            if(tcpd->ta && first_pdu) {
+                if((tcpd->ta->flags&TCP_A_OLD_DATA) == TCP_A_OLD_DATA) {
+                    nbytes = tcpd->ta->new_data_seq - seq;
 
-            proto_tree_add_bytes_format(tcp_tree, hf_tcp_segment_data, tvb, offset,
-                nbytes, NULL, "%sTCP segment data (%u byte%s)", str, nbytes,
-                plurality(nbytes, "", "s"));
-            goto clean_exit;
-        }
+                    proto_tree_add_bytes_format(tcp_tree, hf_tcp_segment_data, tvb,
+                        offset, nbytes, NULL,
+                        "Retransmitted TCP segment data (%u byte%s)",
+                        nbytes, plurality(nbytes, "", "s"));
 
-        /* The above code only finds retransmission if the PDU boundaries and the seq coincide I think
-         * If we have sequence analysis active use the TCP_A_RETRANSMISSION flag.
-         * XXXX Could the above code be improved?
-         * XXX the following check works great for filtering duplicate
-         * retransmissions, but could there be a case where it prevents
-         * "tcp_reassemble_out_of_order" from functioning due to skipping
-         * retransmission of a lost segment?
-         * If the latter is enabled, it could use "maxnextseq" for ignoring
-         * retransmitted single-segment PDUs (that would require storing
-         * per-packet state (tcp_per_packet_data_t) to make it work for two-pass
-         * and random access dissection). Retransmitted segments that are part
-         * of a MSP should already be passed only once to subdissectors due to
-         * the "reassembled_in" check below.
-         */
-        if(tcpd->ta) {
-            /* Spurious Retransmission is the most obvious case to handle, just ignore it.
-             * See issue 10289
-             */
-            if((tcpd->ta->flags&TCP_A_SPURIOUS_RETRANSMISSION) == TCP_A_SPURIOUS_RETRANSMISSION) {
-                goto clean_exit;
+                    offset += nbytes;
+                    seq = tcpd->ta->new_data_seq;
+                    first_pdu = FALSE;
+                    if (tvb_captured_length_remaining(tvb, offset) > 0)
+                        goto again;
+                    goto clean_exit;
+                }
             }
-            if((tcpd->ta->flags&TCP_A_RETRANSMISSION) == TCP_A_RETRANSMISSION) {
-                const char* str = "Retransmitted ";
+        } else {
+
+            /* Have we seen this PDU before (and is it the start of a multi-
+             * segment PDU)?
+             *
+             * If the sequence number was seen before, it is part of a
+             * retransmission if the whole segment fits within the MSP.
+             * (But if this is this frame was already visited and the first frame of
+             * the MSP matches the current frame, then it is not a retransmission,
+             * but the start of a new MSP.)
+             *
+             * If only part of the segment fits in the MSP, then either:
+             * - The previous segment included with the MSP was a Zero Window Probe
+             *   with one byte of data and the subdissector just asked for one more
+             *   byte. Do not mark it as retransmission (Bug 15427).
+             * - Data was actually being retransmitted, but with additional data
+             *   (Bug 13523). Do not mark it as retransmission to handle the extra
+             *   bytes. (NOTE Due to the TCP_A_RETRANSMISSION check below, such
+             *   extra data will still be ignored.)
+             * - The MSP contains multiple segments, but the subdissector finished
+             *   reassembly using a subset of the final segment (thus "msp->nxtpdu"
+             *   is smaller than the nxtseq of the previous segment). If that final
+             *   segment was retransmitted, then "nxtseq > msp->nxtpdu".
+             *   Unfortunately that will *not* be marked as retransmission here.
+             *   The next TCP_A_RETRANSMISSION hopefully takes care of it though.
+             *
+             * Only shortcircuit here when the first segment of the MSP is known,
+             * and when this first segment is not one to complete the MSP.
+             */
+            if ((msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32(tcpd->fwd->multisegment_pdus, seq)) &&
+                    nxtseq <= msp->nxtpdu &&
+                    !(msp->flags & MSP_FLAGS_MISSING_FIRST_SEGMENT) && msp->last_frame != pinfo->num) {
+                const char* str;
+                gboolean is_retransmission = FALSE;
+
+                /* Yes.  This could be because we've dissected this frame before
+                 * or because this is a retransmission of a previously-seen
+                 * segment.  Either way, we don't need to hand it off to the
+                 * subdissector and we certainly don't want to re-add it to the
+                 * multisegment_pdus list: if we did, subsequent lookups would
+                 * find this retransmission instead of the original transmission
+                 * (breaking desegmentation if we'd already linked other segments
+                 * to the original transmission's entry).
+                 *
+                 * Cases to handle here:
+                 * - In-order stream, pinfo->num matches begin of MSP.
+                 * - In-order stream, but pinfo->num does not match the begin of the
+                 *   MSP. Must be a retransmission.
+                 * - OoO stream where this segment fills the gap in the begin of the
+                 *   MSP. msp->first_frame is the start where the gap was detected
+                 *   (and does NOT match pinfo->num).
+                 */
+
+                if (msp->first_frame == pinfo->num || msp->first_frame_with_seq == pinfo->num) {
+                    str = "";
+                    if (first_pdu) {
+                        col_append_sep_str(pinfo->cinfo, COL_INFO, " ", "[TCP segment of a reassembled PDU]");
+                    }
+                } else {
+                    str = "Retransmitted ";
+                    is_retransmission = TRUE;
+                    /* TCP analysis already flags this (in COL_INFO) as a retransmission--if it's enabled */
+                }
+
+                /* Fix for bug 3264: look up ipfd for this (first) segment,
+                   so can add tcp.reassembled_in generated field on this code path. */
+                if (!is_retransmission) {
+                    ipfd_head = fragment_get(&tcp_reassembly_table, pinfo, msp->first_frame, msp);
+                    if (ipfd_head) {
+                        if (ipfd_head->reassembled_in != 0) {
+                            item = proto_tree_add_uint(tcp_tree, hf_tcp_reassembled_in, tvb, 0,
+                                               0, ipfd_head->reassembled_in);
+                            proto_item_set_generated(item);
+                        }
+                    }
+                }
+
                 nbytes = tvb_reported_length_remaining(tvb, offset);
+
                 proto_tree_add_bytes_format(tcp_tree, hf_tcp_segment_data, tvb, offset,
                     nbytes, NULL, "%sTCP segment data (%u byte%s)", str, nbytes,
                     plurality(nbytes, "", "s"));
                 goto clean_exit;
             }
-        }
-        /* Else, find the most previous PDU starting before this sequence number */
-        if (!msp) {
-            msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32_le(tcpd->fwd->multisegment_pdus, seq-1);
+
+            /* The above code only finds retransmission if the PDU boundaries and the seq coincide I think
+             * If we have sequence analysis active use the TCP_A_RETRANSMISSION flag.
+             * XXXX Could the above code be improved?
+             */
+            if(tcpd->ta) {
+                /* Spurious Retransmission is the most obvious case to handle, just ignore it.
+                 * See issue 10289
+                 */
+                if((tcpd->ta->flags&TCP_A_SPURIOUS_RETRANSMISSION) == TCP_A_SPURIOUS_RETRANSMISSION) {
+                    goto clean_exit;
+                }
+                if((tcpd->ta->flags&TCP_A_RETRANSMISSION) == TCP_A_RETRANSMISSION) {
+                    const char* str = "Retransmitted ";
+                    nbytes = tvb_reported_length_remaining(tvb, offset);
+                    proto_tree_add_bytes_format(tcp_tree, hf_tcp_segment_data, tvb, offset,
+                        nbytes, NULL, "%sTCP segment data (%u byte%s)", str, nbytes,
+                        plurality(nbytes, "", "s"));
+                    goto clean_exit;
+                }
+            }
+            /* Else, find the most previous PDU starting before this sequence number */
+            if (!msp) {
+                msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32_le(tcpd->fwd->multisegment_pdus, seq-1);
+            }
         }
     }
 
@@ -4034,11 +4104,13 @@ again:
                  *
                  * XXX: It would be nice to handle captures that have both
                  * out-of-order packets and some lost packets that are
-                 * never retransmitted.
-                 * follow_tcp_tap_listener uses the reverse flow's ACK to
-                 * decide that missing packets will not be appearing later.
-                 * Could we use that idea here too, getting the ack from
-                 * tcpinfo, and using that to advance maxnextseq?
+                 * never retransmitted. But using the reverse flow ACK
+                 * (like follow_tcp_tap_listener) or using a known end of
+                 * a MSP (that we haven't fully received yet) to process a
+                 * segment that starts right afterwards would both break the
+                 * promise of in-order delivery, if a missing packet did arrive
+                 * later, which is a problem for any state-based dissector
+                 * (including TLS.)
                  */
 
                 /* Whether the new segment has a gap from our latest contiguous
@@ -4285,10 +4357,6 @@ again:
              * desegmented, or does it think we need even more
              * data?
              */
-            if (reassemble_ooo && !PINFO_FD_VISITED(pinfo) && pinfo->desegment_len) {
-                /* "desegment_len" isn't 0, so it needs more data to extend the MSP. */
-                msp->flags &= ~MSP_FLAGS_GOT_ALL_SEGMENTS;
-            }
             if (pinfo->desegment_len) {
                 /*
                  * "desegment_len" isn't 0, so it needs more data
@@ -4315,6 +4383,9 @@ again:
                  * subdissector here on subsequent passes.
                  */
                 if (pinfo->desegment_offset == 0) {
+                    if (reassemble_ooo && !PINFO_FD_VISITED(pinfo)) {
+                        msp->flags &= ~MSP_FLAGS_GOT_ALL_SEGMENTS;
+                    }
                     remove_last_data_source(pinfo);
                     fragment_set_partial_reassembly(&tcp_reassembly_table,
                                                     pinfo, msp->first_frame,
@@ -4336,6 +4407,9 @@ again:
                          * fewer bytes than it did before.
                          * XXX: Report this as a dissector bug?
                          */
+                        if (reassemble_ooo && !PINFO_FD_VISITED(pinfo)) {
+                            msp->flags &= ~MSP_FLAGS_GOT_ALL_SEGMENTS;
+                        }
                         fragment_set_partial_reassembly(&tcp_reassembly_table,
                                                         pinfo, msp->first_frame,
                                                         msp);
@@ -4351,6 +4425,9 @@ again:
                          */
                         /* nxtpdu adjustment for the new msp is the same. */
                         if (!PINFO_FD_VISITED(pinfo)) {
+                            /* We don't need to clear MSP_FLAGS_GOT_ALL_SEGMENTS
+                             * since we are spliting the MSP.
+                             */
                             msp = split_msp(pinfo, msp, tcpd);
                         }
                         print_tcp_fragment_tree(ipfd_head, tree, tcp_tree, pinfo, next_tvb);
@@ -4966,7 +5043,7 @@ dissect_tcpopt_acc_ecn_data(tvbuff_t *tvb, int data_offset, guint data_len,
     gboolean is_order_0, packet_info *pinfo, proto_tree *tree, proto_item *item, void *data _U_)
 {
     struct tcp_analysis *tcpd;
-    gint32 ee0b, eceb, ee1b;
+    guint32 ee0b, eceb, ee1b;
 
     switch (data_len) {
     case 0:
@@ -4974,12 +5051,12 @@ dissect_tcpopt_acc_ecn_data(tvbuff_t *tvb, int data_offset, guint data_len,
         break;
     case 3:
         if (is_order_0) {
-            ee0b = tvb_get_gint24(tvb, data_offset, ENC_BIG_ENDIAN);
+            ee0b = tvb_get_guint24(tvb, data_offset, ENC_BIG_ENDIAN);
             proto_tree_add_item(tree, hf_tcp_option_acc_ecn_ee0b, tvb, data_offset, 3, ENC_BIG_ENDIAN);
             proto_item_append_text(item, " (Order 0): EE0B %u", ee0b);
             tcp_info_append_uint(pinfo, "EE0B", ee0b);
         } else {
-            ee1b = tvb_get_gint24(tvb, data_offset, ENC_BIG_ENDIAN);
+            ee1b = tvb_get_guint24(tvb, data_offset, ENC_BIG_ENDIAN);
             proto_tree_add_item(tree, hf_tcp_option_acc_ecn_ee1b, tvb, data_offset, 3, ENC_BIG_ENDIAN);
             proto_item_append_text(item, " (Order 1): EE1B %u", ee1b);
             tcp_info_append_uint(pinfo, "EE1B", ee1b);
@@ -4987,15 +5064,15 @@ dissect_tcpopt_acc_ecn_data(tvbuff_t *tvb, int data_offset, guint data_len,
         break;
     case 6:
         if (is_order_0) {
-            ee0b = tvb_get_gint24(tvb, data_offset, ENC_BIG_ENDIAN);
+            ee0b = tvb_get_guint24(tvb, data_offset, ENC_BIG_ENDIAN);
             proto_tree_add_item(tree, hf_tcp_option_acc_ecn_ee0b, tvb, data_offset, 3, ENC_BIG_ENDIAN);
             tcp_info_append_uint(pinfo, "EE0B", ee0b);
         } else {
-            ee1b = tvb_get_gint24(tvb, data_offset, ENC_BIG_ENDIAN);
+            ee1b = tvb_get_guint24(tvb, data_offset, ENC_BIG_ENDIAN);
             proto_tree_add_item(tree, hf_tcp_option_acc_ecn_ee1b, tvb, data_offset, 3, ENC_BIG_ENDIAN);
             tcp_info_append_uint(pinfo, "EE1B", ee1b);
         }
-        eceb = tvb_get_gint24(tvb, data_offset + 3, ENC_BIG_ENDIAN);
+        eceb = tvb_get_guint24(tvb, data_offset + 3, ENC_BIG_ENDIAN);
         proto_tree_add_item(tree, hf_tcp_option_acc_ecn_eceb, tvb, data_offset + 3, 3, ENC_BIG_ENDIAN);
         tcp_info_append_uint(pinfo, "ECEB", eceb);
         if (is_order_0) {
@@ -5006,24 +5083,24 @@ dissect_tcpopt_acc_ecn_data(tvbuff_t *tvb, int data_offset, guint data_len,
         break;
     case 9:
         if (is_order_0) {
-            ee0b = tvb_get_gint24(tvb, data_offset, ENC_BIG_ENDIAN);
+            ee0b = tvb_get_guint24(tvb, data_offset, ENC_BIG_ENDIAN);
             proto_tree_add_item(tree, hf_tcp_option_acc_ecn_ee0b, tvb, data_offset, 3, ENC_BIG_ENDIAN);
             tcp_info_append_uint(pinfo, "EE0B", ee0b);
         } else {
-            ee1b = tvb_get_gint24(tvb, data_offset, ENC_BIG_ENDIAN);
+            ee1b = tvb_get_guint24(tvb, data_offset, ENC_BIG_ENDIAN);
             proto_tree_add_item(tree, hf_tcp_option_acc_ecn_ee1b, tvb, data_offset, 3, ENC_BIG_ENDIAN);
             tcp_info_append_uint(pinfo, "EE1B", ee1b);
         }
-        eceb = tvb_get_gint24(tvb, data_offset + 3, ENC_BIG_ENDIAN);
+        eceb = tvb_get_guint24(tvb, data_offset + 3, ENC_BIG_ENDIAN);
         proto_tree_add_item(tree, hf_tcp_option_acc_ecn_eceb, tvb, data_offset + 3, 3, ENC_BIG_ENDIAN);
         tcp_info_append_uint(pinfo, "ECEB", eceb);
         if (is_order_0) {
-            ee1b = tvb_get_gint24(tvb, data_offset + 6, ENC_BIG_ENDIAN);
+            ee1b = tvb_get_guint24(tvb, data_offset + 6, ENC_BIG_ENDIAN);
             proto_tree_add_item(tree, hf_tcp_option_acc_ecn_ee1b, tvb, data_offset + 6, 3, ENC_BIG_ENDIAN);
             tcp_info_append_uint(pinfo, "EE1B", ee1b);
             proto_item_append_text(item, " (Order 0): EE0B %u, ECEB %u, EE1B %u", ee0b, eceb, ee1b);
         } else {
-            ee0b = tvb_get_gint24(tvb, data_offset + 6, ENC_BIG_ENDIAN);
+            ee0b = tvb_get_guint24(tvb, data_offset + 6, ENC_BIG_ENDIAN);
             proto_tree_add_item(tree, hf_tcp_option_acc_ecn_ee0b, tvb, data_offset + 6, 3, ENC_BIG_ENDIAN);
             tcp_info_append_uint(pinfo, "EE0B", ee0b);
             proto_item_append_text(item, " (Order 1): EE1B %u, ECEB %u, EE0B %u", ee1b, eceb, ee0b);
@@ -6870,7 +6947,7 @@ dissect_tcpopt_rvbd_trpy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
  /* Started as a copy of dissect_ip_tcp_options(), but was changed to support
     options as a dissector table */
 static void
-tcp_dissect_options(tvbuff_t *tvb, int offset, guint length, int eol,
+tcp_dissect_options(tvbuff_t *tvb, int offset, guint length,
                        packet_info *pinfo, proto_tree *opt_tree,
                        proto_item *opt_item, void * data)
 {
@@ -6882,9 +6959,15 @@ tcp_dissect_options(tvbuff_t *tvb, int offset, guint length, int eol,
     tvbuff_t         *next_tvb;
     struct tcpheader *tcph = (struct tcpheader *)data;
     gboolean          mss_seen = FALSE;
+    gboolean          eol_seen = FALSE;
 
     while (length > 0) {
         opt = tvb_get_guint8(tvb, offset);
+        if (eol_seen && opt != TCPOPT_EOL) {
+            proto_tree_add_expert_format(opt_tree, pinfo, &ei_tcp_non_zero_bytes_after_eol, tvb, offset, length,
+                                         "Non-zero header padding");
+            return;
+        }
         --length;      /* account for type byte */
         if ((opt == TCPOPT_EOL) || (opt == TCPOPT_NOP)) {
             int local_proto;
@@ -6967,8 +7050,8 @@ tcp_dissect_options(tvbuff_t *tvb, int offset, guint length, int eol,
             length -= (optlen-2); //already accounted for type and len bytes
         }
 
-        if (opt == eol)
-            break;
+        if (opt == TCPOPT_EOL)
+            eol_seen = true;
     }
 
     if ((tcph->th_flags & TH_SYN) && (mss_seen != TRUE))
@@ -8066,8 +8149,8 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         rvbd_option_data* option_data;
 
         tcp_dissect_options(tvb, offset + 20, optlen,
-                               TCPOPT_EOL, pinfo, options_tree,
-                               options_item, tcph);
+                            pinfo, options_tree,
+                            options_item, tcph);
 
         /* Do some post evaluation of some Riverbed probe options in the list */
         option_data = (rvbd_option_data*)p_get_proto_data(pinfo->pool, pinfo, proto_tcp_option_rvbd_probe, pinfo->curr_layer_num);
@@ -9226,6 +9309,7 @@ proto_register_tcp(void)
         { &ei_tcp_urgent_pointer_non_zero, { "tcp.urgent_pointer.non_zero", PI_PROTOCOL, PI_NOTE, "The urgent pointer field is nonzero while the URG flag is not set", EXPFILL }},
         { &ei_tcp_suboption_malformed, { "tcp.suboption_malformed", PI_MALFORMED, PI_ERROR, "suboption would go past end of option", EXPFILL }},
         { &ei_tcp_nop, { "tcp.nop", PI_PROTOCOL, PI_WARN, "4 NOP in a row - a router may have removed some options", EXPFILL }},
+        { &ei_tcp_non_zero_bytes_after_eol, { "tcp.non_zero_bytes_after_eol", PI_PROTOCOL, PI_ERROR, "Non zero bytes in option space after EOL option", EXPFILL }},
         { &ei_tcp_bogus_header_length, { "tcp.bogus_header_length", PI_PROTOCOL, PI_ERROR, "Bogus TCP Header length", EXPFILL }},
     };
 
