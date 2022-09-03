@@ -171,6 +171,8 @@ static int hf_quic_af_reserved = -1;
 static int hf_quic_af_ignore_order = -1;
 static int hf_quic_af_ignore_ce = -1;
 static int hf_quic_ts = -1;
+static int hf_quic_unpredictable_bits = -1;
+static int hf_quic_stateless_reset_token = -1;
 static int hf_quic_reassembled_in = -1;
 static int hf_quic_reassembled_length = -1;
 static int hf_quic_reassembled_data = -1;
@@ -393,6 +395,7 @@ typedef struct _quic_follow_stream {
 typedef struct quic_follow_tap_data {
     tvbuff_t *tvb;
     guint64  stream_id;
+    gboolean from_server;
 } quic_follow_tap_data_t;
 
 /**
@@ -460,6 +463,7 @@ typedef struct quic_datagram {
     quic_info_data_t       *conn;
     quic_packet_info_t      first_packet;
     bool                    from_server : 1;
+    bool                    stateless_reset : 1;
 } quic_datagram;
 
 /**
@@ -980,9 +984,10 @@ quic_connection_hash(gconstpointer key)
 {
     const quic_cid_t *cid = (const quic_cid_t *)key;
 
-    return wmem_strong_hash((const guint8 *)cid, sizeof(quic_cid_t) - sizeof(cid->cid) + cid->len);
+    return wmem_strong_hash((const guint8 *)cid->cid, cid->len);
 }
 
+/* Note this function intentionally does not consider the reset token. */
 static gboolean
 quic_connection_equal(gconstpointer a, gconstpointer b)
 {
@@ -1126,7 +1131,7 @@ quic_connection_find(packet_info *pinfo, guint8 long_packet_type,
             }
         }
         if (long_packet_type == QUIC_LPT_INITIAL && conn && !*from_server && dcid->len > 0 &&
-            memcmp(dcid, &conn->client_dcid_initial, sizeof(quic_cid_t)) &&
+            !quic_connection_equal(dcid, &conn->client_dcid_initial) &&
             !quic_cids_has_match(&conn->server_cids, dcid)) {
             // If the Initial Packet is from the client, it must either match
             // the DCID from the first Client Initial, or the DCID that was
@@ -2344,6 +2349,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
 
                 follow_data->tvb = tvb_new_subset_remaining(tvb, offset);
                 follow_data->stream_id = stream_id;
+                follow_data->from_server = from_server;
 
                 tap_queue_packet(quic_follow_tap, pinfo, follow_data);
             }
@@ -2463,8 +2469,8 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
             }
 
             proto_tree_add_item(ft_tree, hf_quic_nci_connection_id, tvb, offset, nci_length, ENC_NA);
+            quic_cid_t cid = {.len=0};
             if (valid_cid && quic_info) {
-                quic_cid_t cid = {.len=0};
                 tvb_memcpy(tvb, cid.cid, offset, nci_length);
                 cid.len = nci_length;
                 quic_connection_add_cid(quic_info, &cid, from_server);
@@ -2472,6 +2478,9 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
             offset += nci_length;
 
             proto_tree_add_item(ft_tree, hf_quic_nci_stateless_reset_token, tvb, offset, 16, ENC_NA);
+            if (valid_cid && quic_info) {
+                quic_add_stateless_reset_token(pinfo, tvb, offset, &cid);
+            }
             offset += 16;
         }
         break;
@@ -3482,6 +3491,77 @@ quic_add_loss_bits(packet_info *pinfo, guint64 value)
     }
 }
 
+static quic_info_data_t *
+quic_find_stateless_reset_token(packet_info *pinfo, tvbuff_t *tvb, gboolean *from_server)
+{
+    /* This is used when we have not found a connection, so use
+     * the 5-tuple. (XXX: When we do handle multiple connections
+     * on the same 5-tuple properly (#17099), this needs to search
+     * all of them.)
+     */
+    quic_info_data_t* conn = quic_connection_from_conv(pinfo);
+    const quic_cid_item_t *cids;
+
+    if (conn) {
+        gboolean conn_from_server;
+        conn_from_server = conn->server_port == pinfo->srcport &&
+                addresses_equal(&conn->server_address, &pinfo->src);
+        cids = conn_from_server ? &conn->server_cids : &conn->client_cids;
+        while (cids) {
+            const quic_cid_t *cid = &cids->data;
+            if (cid->reset_token_set &&
+                    !tvb_memeql(tvb, -16, cid->reset_token, 16) ) {
+                *from_server = conn_from_server;
+                return conn;
+            }
+            cids = cids->next;
+        }
+    }
+    return NULL;
+}
+
+void
+quic_add_stateless_reset_token(packet_info *pinfo, tvbuff_t *tvb, gint offset, const quic_cid_t *cid)
+{
+    quic_datagram *dgram_info;
+    quic_info_data_t *conn;
+    quic_cid_item_t *cids;
+
+    dgram_info = (quic_datagram *)p_get_proto_data(wmem_file_scope(), pinfo, proto_quic, 0);
+    if (dgram_info && dgram_info->conn) {
+        conn = dgram_info->conn;
+        if (dgram_info->from_server) {
+            cids = &conn->server_cids;
+        } else {
+            cids = &conn->client_cids;
+        }
+
+        if (cid) {
+            while (cids) {
+                quic_cid_t *old_cid = &cids->data;
+                if (quic_connection_equal(old_cid, cid) ) {
+                    tvb_memcpy(tvb, old_cid->reset_token, offset, 16);
+                    old_cid->reset_token_set = TRUE;
+                    return;
+                }
+                cids = cids->next;
+            }
+        } else {
+            /* If cid is NULL (this is a Handshake message),
+             * add it to the most recent cid. (There could
+             * have been a Retry.)
+             */
+            while (cids->next != NULL) cids = cids->next;
+            quic_cid_t *old_cid = &cids->data;
+            tvb_memcpy(tvb, old_cid->reset_token, offset, 16);
+            old_cid->reset_token_set = TRUE;
+            return;
+        }
+    }
+    /* Failed to find cid. */
+    return;
+}
+
 static void
 quic_add_connection_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, quic_info_data_t *conn)
 {
@@ -3657,7 +3737,7 @@ dissect_quic_long_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tre
         gchar early_data_secret[DIGEST_MAX_SIZE];
         guint early_data_secret_len = 0;
         if (long_packet_type == QUIC_LPT_INITIAL && !from_server &&
-            !memcmp(&dcid, &conn->client_dcid_initial, sizeof(quic_cid_t))) {
+            quic_connection_equal(&dcid, &conn->client_dcid_initial)) {
             /* Create new decryption context based on the Client Connection
              * ID from the *very first* Client Initial packet. */
             quic_create_initial_decoders(&dcid, &error, conn);
@@ -3964,6 +4044,31 @@ quic_get_message_tvb(tvbuff_t *tvb, const guint offset)
     return tvb_new_subset_remaining(tvb, offset);
 }
 
+static int
+dissect_quic_stateless_reset(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *quic_tree, const quic_datagram *dgram_info _U_)
+{
+    proto_item *ti;
+
+    col_set_str(pinfo->cinfo, COL_INFO, "Stateless Reset");
+
+    ti = proto_tree_add_uint(quic_tree, hf_quic_packet_length, tvb, 0, 0, tvb_reported_length(tvb));
+    proto_item_set_generated(ti);
+    ti = proto_tree_add_item(quic_tree, hf_quic_header_form, tvb, 0, 1, ENC_NA);
+    if (tvb_get_guint8(tvb, 0) & 0x80) {
+        /* RFC 9000 says that endpoints MUST treat any packets ending in a valid
+         * stateless reset token as a Stateless Reset, even though they MUST
+         * send them formatted as packets with short headers.
+         */
+        expert_add_info_format(pinfo, ti, &ei_quic_protocol_violation,
+                "Stateless Reset packets must be formatted as with short header");
+    }
+    proto_tree_add_item(quic_tree, hf_quic_fixed_bit, tvb, 0, 1, ENC_NA);
+    proto_tree_add_bits_item(quic_tree, hf_quic_unpredictable_bits, tvb, 2, (tvb_reported_length(tvb) - 16)*8 - 2, ENC_NA);
+    proto_tree_add_item(quic_tree, hf_quic_stateless_reset_token, tvb, tvb_reported_length(tvb)-16, 16, ENC_NA);
+
+    return tvb_reported_length(tvb);
+}
+
 /**
  * Extracts necessary information from header to find any existing connection.
  * There are two special values for "long_packet_type":
@@ -4117,7 +4222,11 @@ dissect_quic(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             real_retry_odcid = conn->client_dcid_initial;
             retry_odcid = &real_retry_odcid;
         }
-        quic_connection_create_or_update(&conn, pinfo, long_packet_type, version, &scid, &dcid, from_server);
+        if (!conn && tvb_bytes_exist(tvb, -16, 16) && (conn = quic_find_stateless_reset_token(pinfo, tvb, &from_server))) {
+            dgram_info->stateless_reset = TRUE;
+        } else {
+            quic_connection_create_or_update(&conn, pinfo, long_packet_type, version, &scid, &dcid, from_server);
+        }
         dgram_info->conn = conn;
         dgram_info->from_server = from_server;
 #if 0
@@ -4128,6 +4237,10 @@ dissect_quic(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     }
 
     quic_add_connection_info(tvb, pinfo, quic_tree, dgram_info->conn);
+
+    if (dgram_info->stateless_reset) {
+        return dissect_quic_stateless_reset(tvb, pinfo, quic_tree, dgram_info);
+    }
 
     do {
         if (!quic_packet) {
@@ -4447,8 +4560,9 @@ quic_follow_address_filter(address *src_addr _U_, address *dst_addr _U_, int src
 }
 
 static tap_packet_status
-follow_quic_tap_listener(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, const void *data, tap_flags_t flags)
+follow_quic_tap_listener(void *tapdata, packet_info *pinfo, epan_dissect_t *edt _U_, const void *data, tap_flags_t flags _U_)
 {
+    follow_record_t *follow_record;
     follow_info_t *follow_info = (follow_info_t *)tapdata;
     const quic_follow_tap_data_t *follow_data = (const quic_follow_tap_data_t *)data;
 
@@ -4457,12 +4571,44 @@ follow_quic_tap_listener(void *tapdata, packet_info *pinfo, epan_dissect_t *edt 
         return TAP_PACKET_DONT_REDRAW;
     }
 
-    // XXX: follow_tvb_tap_listener sets follow_info->is_server based on
-    // the initial client_port and client_ip, and is not correct after
-    // connection migration. QUIC should implement its own function
-    // here. Ideally, such function should also deal with stream
-    // fragmentation in a similar manner to the TCP dissector.
-    return follow_tvb_tap_listener(tapdata, pinfo, NULL, follow_data->tvb, flags);
+    follow_record = g_new(follow_record_t, 1);
+
+    // XXX: Ideally, we should also deal with stream retransmission
+    // and out of order packets in a similar manner to the TCP dissector,
+    // using the offset, plus ACKs and other information.
+    follow_record->data = g_byte_array_sized_new(tvb_captured_length(follow_data->tvb));
+    follow_record->data = g_byte_array_append(follow_record->data, tvb_get_ptr(follow_data->tvb, 0, -1), tvb_captured_length(follow_data->tvb));
+    follow_record->packet_num = pinfo->fd->num;
+    follow_record->abs_ts = pinfo->fd->abs_ts;
+
+    /* This sets the address and port information the first time this
+     * stream is tapped. It will no longer be true after migration, but
+     * as it seems it's only used for display, using the initial values
+     * is the best we can do.
+     */
+
+    if (follow_data->from_server) {
+        follow_record->is_server = TRUE;
+        if (follow_info->client_port == 0) {
+            follow_info->server_port = pinfo->srcport;
+            copy_address(&follow_info->server_ip, &pinfo->src);
+            follow_info->client_port = pinfo->destport;
+            copy_address(&follow_info->client_ip, &pinfo->dst);
+        }
+    } else {
+        follow_record->is_server = FALSE;
+        if (follow_info->client_port == 0) {
+            follow_info->client_port = pinfo->srcport;
+            copy_address(&follow_info->client_ip, &pinfo->src);
+            follow_info->server_port = pinfo->destport;
+            copy_address(&follow_info->server_ip, &pinfo->dst);
+        }
+    }
+
+    follow_info->bytes_written[follow_record->is_server] += follow_record->data->len;
+
+    follow_info->payload = g_list_prepend(follow_info->payload, follow_record);
+    return TAP_PACKET_DONT_REDRAW;
 }
 
 guint32 get_quic_connections_count(void)
@@ -4962,7 +5108,7 @@ proto_register_quic(void)
               NULL, HFILL }
         },
         { &hf_quic_nci_stateless_reset_token,
-            { "Stateless Reset Token", "quic.stateless_reset_token",
+            { "Stateless Reset Token", "quic.nci.stateless_reset_token",
               FT_BYTES, BASE_NONE, NULL, 0x0,
               NULL, HFILL }
         },
@@ -5067,6 +5213,19 @@ proto_register_quic(void)
         { &hf_quic_ts,
             { "Time Stamp", "quic.ts",
               FT_UINT64, BASE_DEC, NULL, 0x0,
+              NULL, HFILL }
+        },
+
+        /* STATELESS RESET */
+        { &hf_quic_unpredictable_bits,
+            { "Unpredictable Bits", "quic.unpredictable_bits",
+              FT_BYTES, BASE_NONE, NULL, 0x0,
+              "Bytes indistinguishable from random",
+              HFILL }
+        },
+        { &hf_quic_stateless_reset_token,
+            { "Stateless Reset Token", "quic.stateless_reset_token",
+              FT_BYTES, BASE_NONE, NULL, 0x0,
               NULL, HFILL }
         },
 

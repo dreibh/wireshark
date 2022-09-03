@@ -1891,23 +1891,6 @@ void prefs_register_decode_as_range_preference(module_t *module, const char *nam
 }
 
 /*
- * Register a (internal) "Decode As" preference with an unsigned integral value
- * for a dissector table.
- */
-void prefs_register_decode_as_preference(module_t *module, const char *name,
-    const char *title, const char *description, guint *var)
-{
-    pref_t *preference;
-
-    preference = register_preference(module, name, title, description,
-                                     PREF_DECODE_AS_UINT);
-    preference->varp.uint = var;
-    preference->default_val.uint = *var;
-    /* XXX - Presume base 10 for now */
-    preference->info.base = 10;
-}
-
-/*
  * Register a preference with password value.
  */
 void
@@ -5200,8 +5183,8 @@ deprecated_port_pref(gchar *pref_name, const gchar *value)
         const char* pref_name;
     };
 
-    /* For now this is only supporting TCP/UDP port dissector preferences
-       which are assumed to be decimal */
+    /* For now this is only supporting TCP/UDP port and RTP payload
+     * types dissector preferences, which are assumed to be decimal */
     /* module_name is the filter name of the destination port preference,
      * which is usually the same as the original module but not
      * necessarily (e.g., if the preference is for what is now a PINO.)
@@ -5246,6 +5229,7 @@ deprecated_port_pref(gchar *pref_name, const gchar *value)
         {"ltp.port", "ltp", "udp.port", 10},
         {"lwres.udp.lwres_port", "lwres", "udp.port", 10},
         {"megaco.udp.txt_port", "megaco", "udp.port", 10},
+        {"pfcp.port_pfcp", "pfcp", "udp.port", 10},
         {"pgm.udp.encap_ucast_port", "pgm", "udp.port", 10},
         {"pgm.udp.encap_mcast_port", "pgm", "udp.port", 10},
         {"quic.udp.quic.port", "quic", "udp.port", 10},
@@ -5263,6 +5247,15 @@ deprecated_port_pref(gchar *pref_name, const gchar *value)
         {"uhd.dissector_port", "uhd", "udp.port", 10},
         {"vrt.dissector_port", "vrt", "udp.port", 10},
         {"tpncp.udp.trunkpack_port", "tpncp", "udp.port", 10},
+        /* SCTP */
+        {"hnbap.port", "hnbap", "sctp.port", 10},
+        {"m2pa.port", "m2pa", "sctp.port", 10},
+        {"megaco.sctp.txt_port", "megaco", "sctp.port", 10},
+        {"rua.port", "rua", "sctp.port", 10},
+        /* SCTP PPI */
+        {"lapd.sctp_payload_protocol_identifier", "lapd", "sctp.ppi", 10},
+        /* SCCP SSN */
+        {"ranap.sccp_ssn", "ranap", "sccp.ssn", 10},
     };
 
     struct port_pref_name port_range_prefs[] = {
@@ -5273,9 +5266,12 @@ deprecated_port_pref(gchar *pref_name, const gchar *value)
         {"kt.tcp.ports", "kt", "tcp.port", 10},
         {"memcache.tcp.ports", "memcache", "tcp.port", 10},
         {"mrcpv2.tcp.port_range", "mrcpv2", "tcp.port", 10},
+        {"pdu_transport.ports.tcp", "pdu_transport", "tcp.port", 10},
         {"rtsp.tcp.port_range", "rtsp", "tcp.port", 10},
         {"sip.tcp.ports", "sip", "tcp.port", 10},
+        {"someip.ports.tcp", "someip", "tcp.port", 10},
         {"tds.tcp_ports", "tds", "tcp.port", 10},
+        {"tpkt.tcp.ports", "tpkt", "tcp.port", 10},
         {"uma.tcp.ports", "uma", "tcp.port", 10},
         /* UDP */
         {"aruba_erm.udp.ports", "arubs_erm", "udp.port", 10},
@@ -5288,11 +5284,37 @@ deprecated_port_pref(gchar *pref_name, const gchar *value)
         {"nb_rtpmux.udp_ports", "nb_rtpmux", "udp.port", 10},
         {"gprs-ns.udp.ports", "gprs-ns", "udp.port", 10},
         {"p_mul.udp_ports", "p_mul", "udp.port", 10},
+        {"pdu_transport.ports.udp", "pdu_transport", "udp.port", 10},
         {"radius.ports", "radius", "udp.port", 10},
         {"sflow.ports", "sflow", "udp.port", 10},
+        {"someip.ports.udp", "someip", "udp.port", 10},
         {"sscop.udp.ports", "sscop", "udp.port", 10},
         {"tftp.udp_ports", "tftp", "udp.port", 10},
         {"tipc.udp.ports", "tipc", "udp.port", 10},
+        /* RTP */
+        {"amr.dynamic.payload.type", "amr", "rtp.pt", 10},
+        {"amr.wb.dynamic.payload.type", "amr_wb", "rtp.pt", 10},
+        {"dvb-s2_modeadapt.dynamic.payload.type", "dvb-s2_modeadapt", "rtp.pt", 10},
+        {"evs.dynamic.payload.type", "evs", "rtp.pt", 10},
+        {"h263p.dynamic.payload.type", "h263p", "rtp.pt", 10},
+        {"h264.dynamic.payload.type", "h264", "rtp.pt", 10},
+        {"h265.dynamic.payload.type", "h265", "rtp.pt", 10},
+        {"ismacryp.dynamic.payload.type", "ismacryp", "rtp.pt", 10},
+        {"iuup.dynamic.payload.type", "iuup", "rtp.pt", 10},
+        {"lapd.rtp_payload_type", "lapd", "rtp.pt", 10},
+        {"mp4ves.dynamic.payload.type", "mp4ves", "rtp.pt", 10},
+        {"mtp2.rtp_payload_type", "mtp2", "rtp.pt", 10},
+        {"opus.dynamic.payload.type", "opus", "rtp.pt", 10},
+        {"rtp.rfc2198_payload_type", "rtp_rfc2198", "rtp.pt", 10},
+        {"rtpevent.event_payload_type_value", "rtpevent", "rtp.pt", 10},
+        {"rtpevent.cisco_nse_payload_type_value", "rtpevent", "rtp.pt", 10},
+        {"rtpmidi.midi_payload_type_value", "rtpmidi", "rtp.pt", 10},
+        {"vp8.dynamic.payload.type", "vp8", "rtp.pt", 10},
+        /* SCTP */
+        {"diameter.sctp.ports", "diameter", "sctp.port", 10},
+        {"sgsap.sctp_ports", "sgsap", "sctp.port", 10},
+        /* SCCP SSN */
+        {"pcap.ssn", "pcap", "sccp.ssn", 10},
     };
 
     /* These are subdissectors of TPKT/OSITP that used to have a
@@ -5786,6 +5808,8 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
                     pref = prefs_find_preference(module, "analyze_sequence_numbers");
                 else if (strcmp(dotp, "tcp_relative_sequence_numbers") == 0)
                     pref = prefs_find_preference(module, "relative_sequence_numbers");
+                else if (strcmp(dotp, "dissect_experimental_options_with_magic") == 0)
+                    pref = prefs_find_preference(module, "dissect_experimental_options_rfc6994");
             } else if (strcmp(module->name, "udp") == 0) {
                 /* Handle old names for UDP preferences. */
                 if (strcmp(dotp, "udp_summary_in_tree") == 0)

@@ -39,9 +39,9 @@ endif()
 project(${_project_name} C CXX)
 
 # Updated by tools/make-version.py
-set(PROJECT_MAJOR_VERSION 3)
-set(PROJECT_MINOR_VERSION 7)
-set(PROJECT_PATCH_VERSION 3)
+set(PROJECT_MAJOR_VERSION 4)
+set(PROJECT_MINOR_VERSION 1)
+set(PROJECT_PATCH_VERSION 0)
 set(PROJECT_BUILD_VERSION 0)
 set(PROJECT_VERSION_EXTENSION "")
 
@@ -54,7 +54,8 @@ set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT
 set(LOG_PROJECT_NAME ${_log_project_name})
 set(LOG_PROJECT_MAJOR_VERSION 0)
 set(LOG_PROJECT_MINOR_VERSION 8)
-set(LOG_PROJECT_VERSION "${LOG_PROJECT_MAJOR_VERSION}.${LOG_PROJECT_MINOR_VERSION}.${PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
+set(LOG_PROJECT_PATCH_VERSION 3)
+set(LOG_PROJECT_VERSION "${LOG_PROJECT_MAJOR_VERSION}.${LOG_PROJECT_MINOR_VERSION}.${LOG_PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
 
 include( CMakeOptions.txt )
 
@@ -1185,12 +1186,14 @@ if(BUILD_wireshark OR BUILD_logray)
 	if(USE_qt6)
 		set(qtver "6")
 		if(DEFINED ENV{WIRESHARK_QT6_PREFIX_PATH})
-			set(CMAKE_PREFIX_PATH $ENV{WIRESHARK_QT6_PREFIX_PATH})
+			list(APPEND CMAKE_PREFIX_PATH $ENV{WIRESHARK_QT6_PREFIX_PATH})
 		endif()
 	else()
 		set(qtver "5")
+		if(DEFINED ENV{WIRESHARK_QT5_PREFIX_PATH})
+			list(APPEND CMAKE_PREFIX_PATH $ENV{WIRESHARK_QT5_PREFIX_PATH})
 		# XXX We used to recommend setting QT5_BASE_DIR. Remove after the 4.0 branch is created.
-		if(WIN32 AND DEFINED ENV{QT5_BASE_DIR})
+		elseif(WIN32 AND DEFINED ENV{QT5_BASE_DIR})
 			message(WARNING "Support for QT5_BASE_DIR will be removed in a future release.")
 			set(QT5_BASE_PATH "$ENV{QT5_BASE_DIR}")
 			set(CMAKE_PREFIX_PATH "${QT5_BASE_PATH}")
@@ -1609,6 +1612,8 @@ add_subdirectory( wsutil )
 
 if(BUILD_wireshark AND QT_FOUND)
 	add_subdirectory( ui/qt )
+elseif(BUILD_wireshark AND USE_qt6)
+	message(VERBOSE "To use Qt5 instead of Qt6 use CMake option USE_qt6=OFF.")
 endif()
 
 if(BUILD_logray AND QT_FOUND)
@@ -1679,8 +1684,7 @@ if(ENABLE_PLUGINS)
 
 	# Build demo plugin, only if asked explicitly
 	if(ENABLE_PLUGIN_IFDEMO)
-		set(PLUGIN_SRC_DIRS
-			${PLUGIN_SRC_DIRS}
+		list(APPEND PLUGIN_SRC_DIRS
 			plugins/epan/pluginifdemo
 		)
 	endif()
@@ -1965,6 +1969,7 @@ set(INSTALL_DIRS
 
 # Installed into ${DATAFILE_DIR}
 set(INSTALL_FILES
+	Acknowledgements.md
 	docbook/ws.css
 	enterprises.tsv
 	gpl-2.0-standalone.html
@@ -1999,6 +2004,7 @@ if (ASCIIDOCTOR_FOUND)
 		${CMAKE_BINARY_DIR}/doc/dumpcap.html
 		${CMAKE_BINARY_DIR}/doc/editcap.html
 		${CMAKE_BINARY_DIR}/doc/extcap.html
+		${CMAKE_BINARY_DIR}/doc/falcodump.html
 		${CMAKE_BINARY_DIR}/doc/mergecap.html
 		${CMAKE_BINARY_DIR}/doc/randpkt.html
 		${CMAKE_BINARY_DIR}/doc/randpktdump.html
@@ -2456,7 +2462,6 @@ set_target_properties(copy_data_files PROPERTIES FOLDER "Copy Tasks")
 # sources common for wireshark, tshark, rawshark and sharkd
 add_library(shark_common OBJECT
 	cfile.c
-	extcap.c
 	extcap_parser.c
 	file_packet_provider.c
 	frame_tvbuff.c
@@ -2475,6 +2480,7 @@ if(BUILD_wireshark AND QT_FOUND)
 	set(WIRESHARK_SRC
 		file.c
 		fileset.c
+		extcap.c
 		${PLATFORM_UI_SRC}
 	)
 	set(wireshark_FILES
@@ -2491,6 +2497,7 @@ if(BUILD_logray AND QT_FOUND)
 	set(LOGRAY_SRC
 		file.c
 		fileset.c
+		extcap.c
 		${PLATFORM_UI_SRC}
 	)
 	set(logray_FILES
@@ -2528,47 +2535,89 @@ if(ENABLE_APPLICATION_BUNDLE)
 	"-Wl,-headerpad_max_install_names -Wl,-search_paths_first ${CMAKE_EXE_LINKER_FLAGS}"
 	)
 
-	# Add files to the app bundle
+	# Add files to the Wireshark application bundle
 	# Wireshark.app/Contents
-	file(WRITE ${CMAKE_BINARY_DIR}/packaging/macosx/PkgInfo "APPLWshk\n")
-	set(BUNDLE_CONTENTS_FILES
-		${CMAKE_BINARY_DIR}/packaging/macosx/PkgInfo
+	file(WRITE ${CMAKE_BINARY_DIR}/packaging/macosx/wireshark/PkgInfo "APPLWshk\n")
+	set(WIRESHARK_BUNDLE_CONTENTS_FILES
+		${CMAKE_BINARY_DIR}/packaging/macosx/wireshark/PkgInfo
 	)
-	set_source_files_properties(${BUNDLE_CONTENTS_FILES} PROPERTIES
+	set_source_files_properties(${WIRESHARK_BUNDLE_CONTENTS_FILES} PROPERTIES
 		MACOSX_PACKAGE_LOCATION .
 	)
 
 	# Wireshark.app/Contents/Resources
-	set(BUNDLE_RESOURCE_FILES
+	set(WIRESHARK_BUNDLE_RESOURCE_FILES
 		${CMAKE_SOURCE_DIR}/packaging/macosx/Wireshark.icns
 		${CMAKE_SOURCE_DIR}/packaging/macosx/Wiresharkdoc.icns
 	)
-	set_source_files_properties(${BUNDLE_RESOURCE_FILES} PROPERTIES
+	set_source_files_properties(${WIRESHARK_BUNDLE_RESOURCE_FILES} PROPERTIES
 		MACOSX_PACKAGE_LOCATION Resources
 	)
 
 	# Wireshark.app/Contents/Resources/share/man/man1
-	set_source_files_properties(${BUNDLE_RESOURCE_SHARE_MAN1_FILES} PROPERTIES
+	set_source_files_properties(${WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN1_FILES} PROPERTIES
 		MACOSX_PACKAGE_LOCATION Resources/share/man/man1
 		GENERATED 1
 	)
 
 	# Wireshark.app/Contents/Resources/share/man/man4
-	set_source_files_properties(${BUNDLE_RESOURCE_SHARE_MAN4_FILES} PROPERTIES
+	set_source_files_properties(${WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN4_FILES} PROPERTIES
 		MACOSX_PACKAGE_LOCATION Resources/share/man/man4
 		GENERATED 1
 	)
 
 	# INSTALL_FILES and INSTALL_DIRS are handled by copy_data_files
 
-	set(EXTRA_BUNDLE_FILES
-		${BUNDLE_CONTENTS_FILES}
-		${BUNDLE_RESOURCE_FILES}
-		${BUNDLE_RESOURCE_SHARE_MAN1_FILES}
-		${BUNDLE_RESOURCE_SHARE_MAN4_FILES}
+	set(EXTRA_WIRESHARK_BUNDLE_FILES
+		${WIRESHARK_BUNDLE_CONTENTS_FILES}
+		${WIRESHARK_BUNDLE_RESOURCE_FILES}
+		${WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN1_FILES}
+		${WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN4_FILES}
 	)
+
+	# Add files to the Logray application bundle
+	# Logray.app/Contents
+	file(WRITE ${CMAKE_BINARY_DIR}/packaging/macosx/logray/PkgInfo "APPLLgry\n")
+	set(LOGRAY_BUNDLE_CONTENTS_FILES
+		${CMAKE_BINARY_DIR}/packaging/macosx/logray/PkgInfo
+	)
+	set_source_files_properties(${LOGRAY_BUNDLE_CONTENTS_FILES} PROPERTIES
+		MACOSX_PACKAGE_LOCATION .
+	)
+
+	# Logray.app/Contents/Resources
+	set(LOGRAY_BUNDLE_RESOURCE_FILES
+		${CMAKE_SOURCE_DIR}/packaging/macosx/Wireshark.icns
+		${CMAKE_SOURCE_DIR}/packaging/macosx/Wiresharkdoc.icns
+	)
+	set_source_files_properties(${LOGRAY_BUNDLE_RESOURCE_FILES} PROPERTIES
+		MACOSX_PACKAGE_LOCATION Resources
+	)
+
+	# Logray.app/Contents/Resources/share/man/man1
+	set_source_files_properties(${LOGRAY_BUNDLE_RESOURCE_SHARE_MAN1_FILES} PROPERTIES
+		MACOSX_PACKAGE_LOCATION Resources/share/man/man1
+		GENERATED 1
+	)
+
+	# Logray.app/Contents/Resources/share/man/man4
+	set_source_files_properties(${LOGRAY_BUNDLE_RESOURCE_SHARE_MAN4_FILES} PROPERTIES
+		MACOSX_PACKAGE_LOCATION Resources/share/man/man4
+		GENERATED 1
+	)
+
+	# INSTALL_FILES and INSTALL_DIRS are handled by copy_data_files
+
+	set(EXTRA_LOGRAY_BUNDLE_FILES
+		${LOGRAY_BUNDLE_CONTENTS_FILES}
+		${LOGRAY_BUNDLE_RESOURCE_FILES}
+		${LOGRAY_BUNDLE_RESOURCE_SHARE_MAN1_FILES}
+		${LOGRAY_BUNDLE_RESOURCE_SHARE_MAN4_FILES}
+	)
+
 else()
-	set(EXTRA_BUNDLE_FILES)
+	set(EXTRA_WIRESHARK_BUNDLE_FILES)
+	set(EXTRA_LOGRAY_BUNDLE_FILES)
 endif()
 
 if(BUILD_wireshark AND QT_FOUND)
@@ -2593,7 +2642,7 @@ if(BUILD_wireshark AND QT_FOUND)
 		${MINIZIP_LIBRARIES}
 	)
 
-	add_executable(wireshark WIN32 MACOSX_BUNDLE ${wireshark_FILES} ${EXTRA_BUNDLE_FILES})
+	add_executable(wireshark WIN32 MACOSX_BUNDLE ${wireshark_FILES} ${EXTRA_WIRESHARK_BUNDLE_FILES})
 	if(WIN32)
 		set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT wireshark)
 	endif()
@@ -2616,7 +2665,7 @@ if(BUILD_wireshark AND QT_FOUND)
 	if(ENABLE_APPLICATION_BUNDLE)
 		if(ASCIIDOCTOR_FOUND)
 			# Make sure to generate files referenced by
-			# BUNDLE_RESOURCE_SHARE_MAN1_FILES
+			# WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN1_FILES
 			add_dependencies(wireshark manpages)
 		endif()
 		set_target_properties(
@@ -2696,7 +2745,7 @@ if(BUILD_logray AND QT_FOUND)
 		${MINIZIP_LIBRARIES}
 	)
 
-	add_executable(logray WIN32 MACOSX_BUNDLE ${logray_FILES} ${EXTRA_BUNDLE_FILES})
+	add_executable(logray WIN32 MACOSX_BUNDLE ${logray_FILES} ${EXTRA_LOGRAY_BUNDLE_FILES})
 	if(WIN32 AND NOT BUILD_wireshark)
 		set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT logray)
 	endif()
@@ -2719,7 +2768,7 @@ if(BUILD_logray AND QT_FOUND)
 	if(ENABLE_APPLICATION_BUNDLE)
 		if(ASCIIDOCTOR_FOUND)
 			# Make sure to generate files referenced by
-			# BUNDLE_RESOURCE_SHARE_MAN1_FILES
+			# LOGRAY_BUNDLE_RESOURCE_SHARE_MAN1_FILES
 			add_dependencies(logray manpages)
 		endif()
 		set_target_properties(
@@ -2851,6 +2900,7 @@ if(BUILD_tshark)
 		$<TARGET_OBJECTS:shark_common>
 		tshark-tap-register.c
 		tshark.c
+		extcap.c
 		${TSHARK_TAP_SRC}
 	)
 
@@ -3558,7 +3608,11 @@ if(RPMBUILD_EXECUTABLE)
 		list(APPEND _rpmbuild_with_args --with ccache)
 	endif()
 	if(NOT BUILD_wireshark)
-		list(APPEND _rpmbuild_with_args --without qt5)
+		list(APPEND _rpmbuild_with_args --without qt5 --without qt6)
+	elseif(USE_qt6)
+		list(APPEND _rpmbuild_with_args --without qt5 --with qt6)
+	else()
+		list(APPEND _rpmbuild_with_args --with qt5 --without qt6)
 	endif()
 	if (MAXMINDDB_FOUND)
 		list(APPEND _rpmbuild_with_args --with mmdbresolve)
@@ -3673,6 +3727,7 @@ set(CLEAN_C_FILES
 	${randpkt_FILES}
 	${randpktdump_FILES}
 	${etwdump_FILES}
+	${falcodump_FILES}
 	${udpdump_FILES}
 	${text2pcap_FILES}
 	${mergecap_FILES}
@@ -3931,6 +3986,14 @@ set(_test_group_list
 set(TEST_EXTRA_ARGS "" CACHE STRING "Extra arguments to pass to test/test.py")
 separate_arguments(TEST_EXTRA_ARGS)
 
+add_test(build_unittests
+	"${CMAKE_COMMAND}"
+	--build "${CMAKE_BINARY_DIR}"
+	--config "${CONFIG}"
+	--target test-programs
+)
+set_tests_properties(build_unittests PROPERTIES FIXTURES_SETUP unittests)
+
 foreach(_group_name ${_test_group_list})
 	add_test(
 		NAME ${_group_name}
@@ -3943,6 +4006,8 @@ foreach(_group_name ${_test_group_list})
 		)
 	set_tests_properties(${_group_name} PROPERTIES TIMEOUT 600)
 endforeach()
+
+set_tests_properties(suite_unittests PROPERTIES FIXTURES_REQUIRED unittests)
 
 # Make it possible to run pytest without passing the full path as argument.
 if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
@@ -4040,6 +4105,14 @@ configure_file(
 
 add_custom_target(uninstall
 	COMMAND ${CMAKE_COMMAND} -P ${CMAKE_CURRENT_BINARY_DIR}/cmake_uninstall.cmake)
+
+# Break on programmer errors when debugging in Visual Studio
+if(MSVC)
+	get_property(_targets DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY BUILDSYSTEM_TARGETS)
+	foreach(_target ${_targets})
+		set_target_properties(${_target} PROPERTIES VS_DEBUGGER_ENVIRONMENT "G_DEBUG=fatal-criticals")
+	endforeach()
+endif()
 
 #
 # Editor modelines  -  https://www.wireshark.org/tools/modelines.html

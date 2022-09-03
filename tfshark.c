@@ -62,7 +62,6 @@
 #include <epan/tap.h>
 #include <epan/stat_tap_ui.h>
 #include <epan/ex-opt.h>
-#include "extcap.h"
 
 #include <wiretap/wtap-int.h>
 #include <wiretap/file_wrappers.h>
@@ -573,7 +572,7 @@ main(int argc, char *argv[])
     /* Now get our args */
     while ((opt = ws_getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
         switch (opt) {
-            case '2':        /* Perform two pass analysis */
+            case '2':        /* Perform two-pass analysis */
                 perform_two_pass_analysis = TRUE;
                 break;
             case 'C':
@@ -966,7 +965,6 @@ clean_exit:
     destroy_print_stream(print_stream);
     epan_free(cfile.epan);
     epan_cleanup();
-    extcap_cleanup();
 
     output_fields_free(output_fields);
     output_fields = NULL;

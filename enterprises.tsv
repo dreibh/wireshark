@@ -5,7 +5,7 @@
 # The format used here is: <NUMERICAL_ID><SPACE><NAME>
 # Where SPACE can be any sequence of spaces and tabs.
 #
-# (last updated 2022-07-23)
+# (last updated 2022-08-27)
 
 0	Reserved
 1	NxNetworks
@@ -372,7 +372,7 @@
 362	L & N Technologies, Ltd.
 363	Cincinnati Bell Information Systems, Inc.
 364	RAMA Technologies
-365	MICROGNOSIS
+365	GM Labs, LLC.
 366	Datapoint Corporation
 367	RICOH Co. Ltd.
 368	Axis Communications AB
@@ -33544,7 +33544,7 @@
 33710	Tawasul Telecom
 33711	Campanja AB
 33712	CSC PYXUS-2006
-33713	WB Electronics sp. z o.o.
+33713	WB Electronics S.A.
 33714	Neuralitic Systems Inc.
 33715	Axcient, Incorporated
 33716	Jiangsu Hengtong Photoelectric Stock Co., Ltd
@@ -44091,7 +44091,7 @@
 44269	Beamly
 44270	Barnardsoft Co., Ltd.
 44271	Nuage Networks
-44272	PRO-PflegeBeratung
+44272	Peter Andree
 44273	Gernert-Net
 44274	Trit Networks LLC
 44275	Illumio, Inc.
@@ -47105,7 +47105,7 @@
 47286	UANATACA S.A.
 47287	Brabbler Secure Message and Data Exchange Aktiengesellschaft
 47288	COMMUNITHINGS S.A.
-47289	Tango Wave
+47289	SpacePath Communications
 47290	Johnson Computers
 47291	Deep Groups
 47292	Luxar Tech Inc
@@ -48384,7 +48384,7 @@
 48565	NEUBERT-IT Inh. Mario Neubert
 48566	Guangzhou Shirui Electronics Co., Ltd.
 48567	LINET Group SE
-48568	First Orion LLC
+48568	First Orion Corp.
 48569	Midland States Bancorp, Inc
 48570	sn3rd llc
 48571	Istanbul Teknik Universitesi (ITU)
@@ -49151,7 +49151,7 @@
 49333	Brighthouse Financial Inc.
 49334	Axon-Ar
 49335	ROTOK
-49336	Schreiber Systems
+49336	DHWS
 49337	KommunalBIT AöR
 49338	ASTEN
 49339	GAYA
@@ -52563,7 +52563,7 @@
 52756	XVTEC
 52757	Beacon Cancer Care, PLL
 52758	Kistler Instrumente AG
-52759	Rayhaan Systems
+52759	Rayhaan Networks
 52760	SBTAP-AS59715
 52761	Baldwin Risk Partners
 52762	Instituto Federal Catarinense - Araquari
@@ -54409,7 +54409,7 @@
 54606	Scalstrm AB
 54607	Epsom & St Helier University Hospitals NHS Trust
 54608	Definium Technologies
-54609	Centurion Consulting et. Cie. GbR
+54609	Centurion Intelligence Consulting Agency
 54610	OOO "NTC Rotek"
 54611	Stichting Casade
 54612	Chicago Digital Power
@@ -58258,7 +58258,7 @@
 58465	Leibniz-Institut für Deutsche Sprache
 58466	Nestor Nestor Diculescu Kingston Petersen
 58467	Aitken Industries
-58468	Helmholtz-Zentrum für Infektionsforschung GmbH
+58468	Helmholtz-Zentrum fuer Infektionsforschung GmbH
 58469	Atom Computing, Inc.
 58470	Elekto Produtos Financeiros
 58471	The Poor Man's Datacenter
@@ -58956,3 +58956,144 @@
 59164	Oregon Health & Science University
 59165	Energy Research Aps
 59166	Olivance PTY LTD
+59167	innogy Česká republika
+59168	Basellandschaftliche Gebäudeversicherung
+59169	GRID NOORD
+59170	GRID BEHEER
+59171	Endpoint Clinical
+59172	Enclave Networks Limited
+59173	CSL Dualcom Ltd
+59174	Primoris Services Corporation
+59175	Azdio
+59176	PowerLerder Computer Systems Co., LTD
+59177	Asio
+59178	Indiana Foot & Ankle Specialists LLC
+59179	USSOCOM
+59180	Interface Corporation
+59181	Creative Frequency Entertainment
+59182	Fohhn Audio AG
+59183	Powow VPP Pty Ltd
+59184	Global Sailfish Network
+59185	Discar Metering
+59186	Intuitiv Ltd
+59187	Cambridge Valley Machining, Inc.
+59188	Skogslogistik AB
+59189	Emil Frey IT Solutions AG
+59190	AzTrust Certificate Authority
+59191	LI AO Integrated Systems
+59192	Datasoft Systems Bangladesh Limited
+59193	UMH Systems GmbH
+59194	RaycoWylie Systems
+59195	Asociacion de Bancos Multiples de la República Dominicana
+59196	Lead Control Inc.
+59197	Castagnet Duméou
+59198	ARGOSDATA CERTIFICACION DE INFORMACION Y SERVICIOS RELACIONADOS S.A.S.
+59199	NIO Inc.
+59200	atriga GmbH
+59201	zetasys.net
+59202	Expressway Authority of Thailand
+59203	ASP Microcomputers
+59204	EV Converged Networks
+59205	The University of Electro-Communications
+59206	The University of Electro-Communications
+59207	Humanising Autonomy Ltd
+59208	Quant Decisions, S.L.
+59209	TimberLand
+59210	DURAG GmbH
+59211	scorpiones.ch
+59212	Almawave SpA
+59213	Barrington Consulting GmbH
+59214	everti GmbH
+59215	Danger-Management.com
+59216	Radiomar Eletronica Naval Ltda.
+59217	MSTronic Co., LTD.
+59218	Guangzhou Sanjing Electric Co., Ltd
+59219	RADKit
+59220	IFD NETWORK
+59221	CtiPath LLC
+59222	Tide_Korea
+59223	The Open Group SOSA™ Consortium
+59224	Aydahwa Enterprise
+59225	Cetitec GmbH
+59226	Nightingale Nurses, LLC
+59227	terranets bw GmbH
+59228	REHAU Industries SE & Co. KG
+59229	Fiscalia General de la Republica de El salvador
+59230	Quick Iterate Co., Ltd.
+59231	Total Foot Care, PA
+59232	KS Technologies
+59233	Frey+Cie Techinvest22 Holding AG
+59234	Domestic & General
+59235	DHL Parcel
+59236	Peterie
+59237	INYOURSKY Organization
+59238	Stacuity Limited
+59239	Port of Rotterdam
+59240	Axians BE
+59241	yeekatee AG
+59242	3AE1.net
+59243	EUC365
+59244	GLtecnologia
+59245	RedT Telecom
+59246	RedT Telecom
+59247	SYNCOMP Data Systems Handels GmbH
+59248	Apex Microtechnology, Inc.
+59249	iTik
+59250	Ankh-Morp.ORG
+59251	LeiSec GmbH
+59252	Rapidmax Technology Corporation
+59253	Shenzhen FinDreams Battery Co., Ltd.
+59254	bibliotheca AG
+59255	SPECIAL AGENT SERVICES DBA JET AFFILIATIONS
+59256	Alphaledger
+59257	RackN Inc.
+59258	RHS Research LLC
+59259	Progeek Consulting, LLC
+59260	Nanbu works Inc.
+59261	pme Familienservice GmbH
+59262	Retail Navigator LLC
+59263	Siemens DigitSphere
+59264	Bustec s.r.o.
+59265	Bayerische Staatsbrauerei Weihenstephan
+59266	TriNetX LLC
+59267	Window Nation LLC
+59268	Sol-Ark
+59269	iPoxo IT GmbH
+59270	Novella Satcoms ltd
+59271	Clearpoint Business Group, LLC.
+59272	Golden Rings Technologies Co., LTD
+59273	Shenzhen 3SNIC information technology company Limited
+59274	ReadyOp Communications, Inc.
+59275	MadfooatCom For Electronic Payments
+59276	EXATERRA LTD
+59277	SWN Stadtwerke Northeim GmbH
+59278	D1GITAL GROUP Dawid Banaszewski
+59279	SinoVision Technology (Beijing) Co., Ltd
+59280	Nexus (Tyne & Wear Passenger Transport Executive)
+59281	N3com
+59282	Systao
+59283	DSV Air & Sea
+59284	Seaboard Corporation
+59285	DTM Worx
+59286	Uni-Cast LLC
+59287	Institute of Electrical Power Engineering of Warsaw University of Technology
+59288	Entek
+59289	Burke County Public Schools
+59290	Cunningham Swan
+59291	CloudForce
+59292	RPV Transport AB
+59293	Maverick Technical Service
+59294	Mindhash B.V.
+59295	SRC UK Ltd
+59296	POSTALIA BELGIUM
+59297	Philipp Butterhof
+59298	Galbusera S.p.A.
+59299	HTP Microsystems GmbH
+59300	Cross Design Group, Ltd.
+59301	LEGEND
+59302	GPEC SYSTEM SP. Z O.O.
+59303	INBRES, LLC
+59304	Lion Elastomers Geismar
+59305	Versowood Oy
+59306	METRO METALIKS LIMITED
+59307	CareConnections
