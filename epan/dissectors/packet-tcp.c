@@ -7037,7 +7037,7 @@ tcp_dissect_options(tvbuff_t *tvb, int offset, guint length,
                 name = wmem_strdup_printf(pinfo->pool, "Unknown (0x%02x)", opt);
                 option_dissector = tcp_opt_unknown_handle;
             } else {
-                name = dissector_handle_get_short_name(option_dissector);
+                name = dissector_handle_get_protocol_short_name(option_dissector);
             }
 
             /* Option has a length. Is it in the packet? */
@@ -7551,15 +7551,31 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     /* If this is a SYN packet, then check if its seq-nr is different
      * from the base_seq of the retrieved conversation. If this is the
      * case, create a new conversation with the same addresses and ports
-     * and set the TA_PORTS_REUSED flag. If the seq-nr is the same as
-     * the base_seq, then restore some flow values to avoid buggy
-     * analysis. In the latter case, it will also be marked as a
-     * retransmission later.
+     * and set the TA_PORTS_REUSED flag. (XXX: There is a small chance
+     * that this is an old duplicate SYN received after the connection
+     * is ESTABLISHED on both sides, the other side will respond with
+     * an appropriate ACK, and this SYN ought to be ignored rather than
+     * create a new conversation.)
+     *
+     * If the seq-nr is the same as the base_seq, it might be a simple
+     * retransmission, reattempting a handshake that was reset (due
+     * to a half-open connection) with the same sequence number, or
+     * (unlikely) a new connection that happens to use the same sequence
+     * number as the previous one.
+     *
+     * If we have received a RST or FIN on the retrieved conversation,
+     * create a new conversation in order to clear out the follow info,
+     * sequence analysis, desegmentation, etc.
+     * If not, it's probably a retransmission, and will be marked
+     * as one later, but restore some flow values to reduce the
+     * sequence analysis warnings if our capture file is missing a RST
+     * or FIN segment that was present on the network.
+     *
      * XXX - Is this affected by MPTCP which can use multiple SYNs?
      */
     if (tcpd != NULL  && (tcph->th_flags & (TH_SYN|TH_ACK)) == TH_SYN) {
         if (tcpd->fwd->static_flags & TCP_S_BASE_SEQ_SET) {
-            if(tcph->th_seq!=tcpd->fwd->base_seq) {
+            if(tcph->th_seq!=tcpd->fwd->base_seq || (tcpd->conversation_completeness & TCP_COMPLETENESS_RST) || (tcpd->conversation_completeness & TCP_COMPLETENESS_FIN)) {
                 if (!(pinfo->fd->visited)) {
 
                     conv=conversation_new(pinfo->num, &pinfo->src, &pinfo->dst, CONVERSATION_TCP, pinfo->srcport, pinfo->destport, 0);
@@ -7593,10 +7609,12 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
     /* If this is a SYN/ACK packet, then check if its seq-nr is different
      * from the base_seq of the retrieved conversation. If this is the
-     * case, try to find a conversation with the same addresses and ports
-     * and set the TA_PORTS_REUSED flag. If the seq-nr is the same as
-     * the base_seq, then do nothing so it will be marked as a retrans-
-     * mission later.
+     * case, set the TA_PORTS_REUSED flag and override the base seq.
+     * (XXX: Should this create a new conversation, as above with a
+     * SYN packet? We might have received the new connection's SYN/ACK before
+     * the SYN packet, or the SYN might be missing from the capture file.)
+     * If the seq-nr is the same as the base_seq, then do nothing so it
+     * will be marked as a retransmission later.
      * XXX - Is this affected by MPTCP which can use multiple SYNs?
      */
     if (tcpd != NULL && (tcph->th_flags & (TH_SYN|TH_ACK)) == (TH_SYN|TH_ACK)) {
@@ -7604,6 +7622,10 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             (tcph->th_seq != tcpd->fwd->base_seq)) {
 
             /* the retrieved conversation might have a different base_seq (issue 16944) */
+            /* XXX: Shouldn't this create a new conversation? Changing the
+             * base_seq will change how the previous packets in the conversation
+             * are processed in the second pass.
+             */
             tcpd->fwd->base_seq = tcph->th_seq;
 
             if(!tcpd->ta)
@@ -7816,6 +7838,9 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
           }
 
           /* RST */
+          /* XXX: A RST segment should be validated (RFC 9293 3.5.3),
+           * and if not valid should not change the conversation state.
+           */
           if(tcph->th_flags&(TH_RST)) {
               conversation_completeness |= TCP_COMPLETENESS_RST;
           }
@@ -8271,6 +8296,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
      * need to explicitly check for that here.
      */
     if(tcph->th_have_seglen && tcpd && (tcph->th_flags & TH_FIN)
+       && pinfo->can_desegment
        && (tcpd->fwd->flags&TCP_FLOW_REASSEMBLE_UNTIL_FIN) ) {
         struct tcp_multisegment_pdu *msp;
 
@@ -9607,7 +9633,7 @@ proto_register_tcp(void)
 
     register_conversation_table(proto_mptcp, FALSE, mptcpip_conversation_packet, tcpip_endpoint_packet);
     register_follow_stream(proto_tcp, "tcp_follow", tcp_follow_conv_filter, tcp_follow_index_filter, tcp_follow_address_filter,
-                            tcp_port_to_display, follow_tcp_tap_listener);
+                            tcp_port_to_display, follow_tcp_tap_listener, get_tcp_stream_count);
 }
 
 void
