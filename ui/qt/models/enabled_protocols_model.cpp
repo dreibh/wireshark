@@ -265,7 +265,7 @@ bool EnabledProtocolsModel::setData(const QModelIndex &index, const QVariant &va
     if (item == NULL)
         return false;
 
-    item->setEnabled(value == Qt::Checked ? true : false);
+    item->setEnabled(value.toInt() == Qt::Checked ? true : false);
 
     QVector<int> roles;
     roles << role;
@@ -484,7 +484,8 @@ void EnabledProtocolsProxyModel::setItemsEnable(EnabledProtocolsProxyModel::Enab
     if (! parent.isValid())
         beginResetModel();
 
-    for (int row = 0; row < rowCount(parent); row++)
+    int rowcount = rowCount(parent);
+    for (int row = 0; row < rowcount; row++)
     {
         QModelIndex idx = index(row, EnabledProtocolsModel::colProtocol, parent);
 

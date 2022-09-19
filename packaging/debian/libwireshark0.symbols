@@ -220,6 +220,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  create_capture_dissector_handle@Base 2.3.0
  create_dissector_handle@Base 2.1.0
  create_dissector_handle_with_name@Base 2.1.0
+ create_dissector_handle_with_name_and_description@Base 4.0.0-rc2
  dcerpc_get_proto_hf_opnum@Base 2.1.0
  dcerpc_get_proto_name@Base 1.9.1
  dcerpc_get_proto_sub_dissector@Base 1.9.1
@@ -516,8 +517,11 @@ libwireshark.so.0 libwireshark0 #MINVER#
  dissector_get_payload_handle@Base 3.1.0
  dissector_get_string_handle@Base 1.9.1
  dissector_get_uint_handle@Base 1.9.1
+ dissector_handle_get_description@Base 4.0.0-rc2
  dissector_handle_get_dissector_name@Base 1.12.0~rc1
  dissector_handle_get_protocol_index@Base 1.9.1
+ dissector_handle_get_protocol_long_name@Base 4.0.0-rc2
+ dissector_handle_get_protocol_short_name@Base 4.0.0-rc2
  dissector_handle_get_short_name@Base 1.9.1
  dissector_hostlist_init@Base 1.99.0
  dissector_is_string_changed@Base 3.5.1
@@ -852,6 +856,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  get_follow_index_func@Base 2.1.0
  get_follow_port_to_display@Base 2.1.0
  get_follow_proto_id@Base 2.1.0
+ get_follow_stream_count_func@Base 4.1.0
  get_follow_tap_handler@Base 2.1.0
  get_follow_tap_string@Base 2.1.0
  get_export_pdu_tap_list@Base 1.99.0
@@ -1435,6 +1440,7 @@ libwireshark.so.0 libwireshark0 #MINVER#
  register_dissector_table@Base 1.9.1
  register_dissector_table_alias@Base 2.9.0
  register_dissector_with_data@Base 2.5.0
+ register_dissector_with_description@Base 4.0.0-rc2
  register_export_object@Base 2.3.0
  register_export_pdu_tap@Base 1.99.0
  register_export_pdu_tap_with_encap@Base 3.7.0

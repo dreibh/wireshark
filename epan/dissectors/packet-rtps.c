@@ -3629,6 +3629,7 @@ static gint rtps_util_add_locator_t(proto_tree *tree, packet_info *pinfo, tvbuff
       proto_item_append_text(tree, " (%s, %s:%u)",
                  val_to_str(kind, rtps_locator_kind_vals, "%02x"),
                  tvb_ip_to_str(pinfo->pool, tvb, offset + 20), port);
+      proto_tree_add_item(locator_tree, hf_rtps_locator_ipv4, tvb, offset + 20, 4, ENC_BIG_ENDIAN);
       break;
     }
     case LOCATOR_KIND_TCPV4_LAN:
@@ -15455,7 +15456,7 @@ void proto_register_rtps(void) {
         "Enum representing the Key Establishment algorithm the participant will use if it is the authentication initiator",  HFILL }
     },
     { &hf_rtps_param_participant_security_digital_signature_algorithms_auth_used_bit, {
-        "Authentication Used Bit", "rtps.articipant_security_digital_signature_algorithms.auth_used_bit",
+        "Authentication Used Bit", "rtps.participant_security_digital_signature_algorithms.auth_used_bit",
         FT_UINT32, BASE_HEX, VALS(security_digital_signature_bit_vals), 0,
         "Enum representing the Digital Signature algorithm the participant will use during Authentication",  HFILL }
     },
@@ -15985,11 +15986,11 @@ void proto_register_rtps(void) {
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), VENDOR_BUILTIN_ENDPOINT_SET_FLAG_PARTICIPANT_CONFIG_WRITER, NULL, HFILL }
     },
     { &hf_rtps_flag_participant_config_reader,{
-        "Participant Config Reader", "rtps.flag.articipant_config_reader",
+        "Participant Config Reader", "rtps.flag.participant_config_reader",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), VENDOR_BUILTIN_ENDPOINT_SET_FLAG_PARTICIPANT_CONFIG_READER, NULL, HFILL }
     },
     { &hf_rtps_flag_participant_config_secure_writer,{
-        "Participant Config Secure Writer", "rtps.flag.articipant_config_secure_writer",
+        "Participant Config Secure Writer", "rtps.flag.participant_config_secure_writer",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), VENDOR_BUILTIN_ENDPOINT_SET_FLAG_PARTICIPANT_CONFIG_SECURE_WRITER, NULL, HFILL }
     },
     { &hf_rtps_flag_participant_config_secure_reader,{

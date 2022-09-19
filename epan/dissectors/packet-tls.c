@@ -1304,7 +1304,8 @@ again:
                                  seq - msp->seq,
                                  len, (LT_SEQ (nxtseq,msp->nxtpdu)));
 
-        if (msp->flags & MSP_FLAGS_REASSEMBLE_ENTIRE_SEGMENT) {
+        if (!PINFO_FD_VISITED(pinfo)
+        && msp->flags & MSP_FLAGS_REASSEMBLE_ENTIRE_SEGMENT) {
             msp->flags &= (~MSP_FLAGS_REASSEMBLE_ENTIRE_SEGMENT);
 
             /* If we consumed the entire segment there is no
@@ -2058,14 +2059,14 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
            "%s Record Layer: %s Protocol: %s",
             val_to_str_const(version, ssl_version_short_names, "SSL"),
             val_to_str_const(content_type, ssl_31_content_type, "unknown"),
-            app_handle ? dissector_handle_get_long_name(app_handle)
+            app_handle ? dissector_handle_get_protocol_long_name(app_handle)
             : "Application Data");
 
         proto_tree_add_item(ssl_record_tree, hf_tls_record_appdata, tvb,
                        offset, record_length, ENC_NA);
 
         if (app_handle) {
-            ti = proto_tree_add_string(ssl_record_tree, hf_tls_record_appdata_proto, tvb, 0, 0, dissector_handle_get_long_name(app_handle));
+            ti = proto_tree_add_string(ssl_record_tree, hf_tls_record_appdata_proto, tvb, 0, 0, dissector_handle_get_protocol_long_name(app_handle));
             proto_item_set_generated(ti);
         }
 
@@ -2079,7 +2080,7 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
                "%s Record Layer: %s Protocol: %s",
                 val_to_str_const(version, ssl_version_short_names, "SSL"),
                 val_to_str_const(content_type, ssl_31_content_type, "unknown"),
-                dissector_handle_get_long_name(session->app_handle));
+                dissector_handle_get_protocol_long_name(session->app_handle));
 
         break;
     }
@@ -4597,7 +4598,7 @@ proto_register_tls(void)
         "tls", tls_tap);
 
     register_follow_stream(proto_tls, "tls", tcp_follow_conv_filter, tcp_follow_index_filter, tcp_follow_address_filter,
-                            tcp_port_to_display, ssl_follow_tap_listener);
+                            tcp_port_to_display, ssl_follow_tap_listener, get_tcp_stream_count);
     secrets_register_type(SECRETS_TYPE_TLS, tls_secrets_block_callback);
 }
 
