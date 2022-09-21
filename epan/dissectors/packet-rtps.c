@@ -2799,12 +2799,24 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
             member_kind = type_id;
         }
     }
-    if (info && (flags & MEMBER_OPTIONAL) == MEMBER_OPTIONAL) {
-        gint offset_before = offset;
-        rtps_util_dissect_parameter_header(tvb, &offset, encoding, &member_id, &member_length);
-        offset = offset_before;
-        if (element_member_id != 0 && member_id != element_member_id)
+    if ((flags & MEMBER_OPTIONAL) != 0) {
+		gint offset_before = offset;
+		/* Parameter header is at minimun 4 bytes */
+		ALIGN_ZERO(
+            offset,
+            get_native_type_cdr_alignment(RTI_CDR_TYPE_OBJECT_TYPE_KIND_UINT_32_TYPE, encoding_version),
+            offset_zero);
+		rtps_util_dissect_parameter_header(tvb, &offset, encoding, &member_id, &member_length);
+        if (info
+                && (flags & MEMBER_OPTIONAL) == MEMBER_OPTIONAL
+                && element_member_id != 0
+                && member_id != element_member_id) {
+			offset = offset_before;
             return offset;
+        }
+        if (member_length == 0) {
+            return offset;
+        }
     }
     if (extensibility == EXTENSIBILITY_MUTABLE) {
       rtps_util_dissect_parameter_header(tvb, &offset, encoding, &member_id, &member_length);
@@ -3629,6 +3641,7 @@ static gint rtps_util_add_locator_t(proto_tree *tree, packet_info *pinfo, tvbuff
       proto_item_append_text(tree, " (%s, %s:%u)",
                  val_to_str(kind, rtps_locator_kind_vals, "%02x"),
                  tvb_ip_to_str(pinfo->pool, tvb, offset + 20), port);
+      proto_tree_add_item(locator_tree, hf_rtps_locator_ipv4, tvb, offset + 20, 4, ENC_BIG_ENDIAN);
       break;
     }
     case LOCATOR_KIND_TCPV4_LAN:
@@ -6736,6 +6749,7 @@ static gboolean dissect_parameter_sequence_rti_dds(proto_tree *rtps_parameter_tr
       proto_tree_add_bitmask_value(rtps_parameter_tree, tvb, offset,
               hf_rtps_param_participant_security_attributes_mask, ett_rtps_flags,
               PARTICIPANT_SECURITY_INFO_FLAGS, flags);
+      offset += 4;
       flags = tvb_get_guint32(tvb, offset, encoding);
       proto_tree_add_bitmask_value(rtps_parameter_tree, tvb, offset,
               hf_rtps_param_plugin_participant_security_attributes_mask, ett_rtps_flags,
@@ -15455,7 +15469,7 @@ void proto_register_rtps(void) {
         "Enum representing the Key Establishment algorithm the participant will use if it is the authentication initiator",  HFILL }
     },
     { &hf_rtps_param_participant_security_digital_signature_algorithms_auth_used_bit, {
-        "Authentication Used Bit", "rtps.articipant_security_digital_signature_algorithms.auth_used_bit",
+        "Authentication Used Bit", "rtps.participant_security_digital_signature_algorithms.auth_used_bit",
         FT_UINT32, BASE_HEX, VALS(security_digital_signature_bit_vals), 0,
         "Enum representing the Digital Signature algorithm the participant will use during Authentication",  HFILL }
     },
@@ -15985,11 +15999,11 @@ void proto_register_rtps(void) {
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), VENDOR_BUILTIN_ENDPOINT_SET_FLAG_PARTICIPANT_CONFIG_WRITER, NULL, HFILL }
     },
     { &hf_rtps_flag_participant_config_reader,{
-        "Participant Config Reader", "rtps.flag.articipant_config_reader",
+        "Participant Config Reader", "rtps.flag.participant_config_reader",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), VENDOR_BUILTIN_ENDPOINT_SET_FLAG_PARTICIPANT_CONFIG_READER, NULL, HFILL }
     },
     { &hf_rtps_flag_participant_config_secure_writer,{
-        "Participant Config Secure Writer", "rtps.flag.articipant_config_secure_writer",
+        "Participant Config Secure Writer", "rtps.flag.participant_config_secure_writer",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), VENDOR_BUILTIN_ENDPOINT_SET_FLAG_PARTICIPANT_CONFIG_SECURE_WRITER, NULL, HFILL }
     },
     { &hf_rtps_flag_participant_config_secure_reader,{
