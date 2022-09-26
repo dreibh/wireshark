@@ -152,17 +152,6 @@ private:
         MatchSelectedOrNot
     };
 
-    enum CopySelected {
-        CopyAllVisibleItems,
-        CopyAllVisibleSelectedTreeItems,
-        CopySelectedDescription,
-        CopySelectedFieldName,
-        CopySelectedValue,
-        CopyListAsText,
-        CopyListAsCSV,
-        CopyListAsYAML
-    };
-
     enum FileCloseContext {
         Default,
         Quit,
@@ -314,8 +303,6 @@ public slots:
     void launchRLCGraph(bool channelKnown, guint16 ueid, guint8 rlcMode,
                         guint16 channelType, guint16 channelId, guint8 direction);
 
-    void on_actionViewFullScreen_triggered(bool checked);
-
     void rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *> stream_ids);
     void rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *> stream_ids);
     void rtpPlayerDialogRemoveRtpStreams(QVector<rtpstream_id_t *> stream_ids);
@@ -352,10 +339,10 @@ private slots:
     void mainStackChanged(int);
     void updateRecentCaptures();
     void recentActionTriggered();
-    void actionAddPacketComment();
-    void actionEditPacketComment();
-    void actionDeletePacketComment();
-    void actionDeleteCommentsFromPackets();
+    void addPacketComment();
+    void editPacketComment();
+    void deletePacketComment();
+    void deleteCommentsFromPackets();
     QString commentToMenuText(QString text, int max_len = 40);
     void setEditCommentsMenu();
     void setMenusForSelectedPacket();
@@ -422,94 +409,47 @@ private slots:
     // We might want move these to main_window_actions.cpp similar to
     // gtk/main_menubar.c
 
-    void on_actionFileOpen_triggered();
-    void on_actionFileMerge_triggered();
-    void on_actionFileImportFromHexDump_triggered();
-    void on_actionFileClose_triggered();
-    void on_actionFileSave_triggered();
-    void on_actionFileSaveAs_triggered();
-    void on_actionFileSetListFiles_triggered();
-    void on_actionFileSetNextFile_triggered();
-    void on_actionFileSetPreviousFile_triggered();
-    void on_actionFileExportPackets_triggered();
-    void on_actionFileExportAsPlainText_triggered();
-    // We're dropping PostScript exports
-    void on_actionFileExportAsCSV_triggered();
-    void on_actionFileExportAsCArrays_triggered();
-    void on_actionFileExportAsPSML_triggered();
-    void on_actionFileExportAsPDML_triggered();
-    void on_actionFileExportAsJSON_triggered();
-    void on_actionFileExportPacketBytes_triggered();
-    void on_actionFilePrint_triggered();
-
-    void on_actionFileExportPDU_triggered();
-    void on_actionFileStripHeaders_triggered();
-    void on_actionFileExportTLSSessionKeys_triggered();
-
-    void actionEditCopyTriggered(WiresharkMainWindow::CopySelected selection_type);
-    void on_actionCopyAllVisibleItems_triggered();
-    void on_actionCopyAllVisibleSelectedTreeItems_triggered();
-    void on_actionCopyListAsText_triggered();
-    void on_actionCopyListAsCSV_triggered();
-    void on_actionCopyListAsYAML_triggered();
+    void connectFileMenuActions();
+    void exportPacketBytes();
+    void exportPDU();
+    void stripPacketHeaders();
+    void exportTLSSessionKeys();
+    void printFile();
 
     void connectEditMenuActions();
+    void copySelectedItems(WiresharkMainWindow::CopySelected selection_type);
     void findPacket();
     void editTimeShift();
     void editConfigurationProfiles();
-
     void editTimeShiftFinished(int);
     void addPacketCommentFinished(PacketCommentDialog* pc_dialog, int result);
     void editPacketCommentFinished(PacketCommentDialog* pc_dialog, int result, guint nComment);
-    void on_actionDeleteAllPacketComments_triggered();
+    void deleteAllPacketComments();
     void deleteAllPacketCommentsFinished(int result);
     void showPreferencesDialog(QString module_name);
 
+    void connectViewMenuActions();
     void showHideMainWidgets(QAction *action);
     void setTimestampFormat(QAction *action);
     void setTimestampPrecision(QAction *action);
-    void on_actionViewTimeDisplaySecondsWithHoursAndMinutes_triggered(bool checked);
-    void on_actionViewEditResolvedName_triggered();
+    void setTimeDisplaySecondsWithHoursAndMinutes(bool checked);
+    void editResolvedName();
     void setNameResolution();
-    void on_actionViewNameResolutionPhysical_triggered();
-    void on_actionViewNameResolutionNetwork_triggered();
-    void on_actionViewNameResolutionTransport_triggered();
-    // XXX We're not porting the concurrency action from GTK+ on purpose.
     void zoomText();
-    void on_actionViewZoomIn_triggered();
-    void on_actionViewZoomOut_triggered();
-    void on_actionViewNormalSize_triggered();
-    void on_actionViewColorizePacketList_triggered(bool checked);
-    void on_actionViewColoringRules_triggered();
+    void showColoringRulesDialog();
     void colorizeConversation(bool create_rule = false);
     void colorizeActionTriggered();
-    void on_actionViewColorizeResetColorization_triggered();
-    void on_actionViewColorizeNewColoringRule_triggered();
-    void on_actionViewResetLayout_triggered();
-    void on_actionViewResizeColumns_triggered();
-
-    void on_actionViewInternalsConversationHashTables_triggered();
-    void on_actionViewInternalsDissectorTables_triggered();
-    void on_actionViewInternalsSupportedProtocols_triggered();
-
     void openPacketDialog(bool from_reference = false);
-    void on_actionViewShowPacketInNewWindow_triggered();
-    void on_actionContextShowLinkedPacketInNewWindow_triggered();
-    void on_actionViewReload_triggered();
-    void on_actionViewReload_as_File_Format_or_Capture_triggered();
+    void reloadCaptureFileAsFormatOrCapture();
+    void reloadCaptureFile();
 
-    void on_actionGoGoToPacket_triggered();
-    void on_actionGoGoToLinkedPacket_triggered();
-    void on_actionGoNextConversationPacket_triggered();
-    void on_actionGoPreviousConversationPacket_triggered();
-    void on_actionGoAutoScroll_toggled(bool checked);
+    void connectGoMenuActions();
+
     void resetPreviousFocus();
 
-    void on_actionCaptureOptions_triggered();
-#ifdef HAVE_LIBPCAP
-    void on_actionCaptureRefreshInterfaces_triggered();
-#endif
-    void on_actionCaptureCaptureFilters_triggered();
+    void connectCaptureMenuActions();
+    void showCaptureOptionsDialog();
+    void startCaptureTriggered();
 
     void on_actionAnalyzeDisplayFilters_triggered();
     void on_actionAnalyzeDisplayFilterMacros_triggered();
@@ -557,9 +497,6 @@ private slots:
     void on_goToCancel_clicked();
     void on_goToGo_clicked();
     void on_goToLineEdit_returnPressed();
-    void on_actionCaptureStart_triggered();
-    void on_actionCaptureStop_triggered();
-    void on_actionCaptureRestart_triggered();
 
     void on_actionStatisticsCaptureFileProperties_triggered();
     void on_actionStatisticsResolvedAddresses_triggered();
@@ -613,7 +550,6 @@ private slots:
     void on_actionStatisticsIOGraph_triggered();
     void on_actionStatisticsSametime_triggered();
     void on_actionStatisticsDNS_triggered();
-    void actionStatisticsPlugin_triggered();
     void on_actionStatisticsHpfeeds_triggered();
     void on_actionStatisticsHTTP2_triggered();
     void on_actionStatisticsSOMEIPmessages_triggered();

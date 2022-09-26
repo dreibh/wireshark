@@ -27,6 +27,7 @@
 #include <epan/follow.h>
 #include <epan/addr_resolv.h>
 #include <epan/uat.h>
+#include <epan/charsets.h>
 #include <epan/strutil.h>
 #include <epan/stats_tree.h>
 #include <epan/to_str.h>
@@ -3108,7 +3109,8 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 	gint hf_index;
 	guchar c;
 	int value_offset;
-	int value_len;
+	int value_len, value_bytes_len;
+	guint8 *value_bytes;
 	char *value;
 	char *header_name;
 	char *p;
@@ -3158,21 +3160,43 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 	/*
 	 * Fetch the value.
 	 *
-	 * XXX - the line may well have a NUL in it.  Wireshark should
-	 * really treat strings extracted from packets as counted
-	 * strings, so that NUL isn't any different from any other
-	 * character.  For now, we just allocate a buffer that's
-	 * value_len+1 bytes long, copy value_len bytes, and stick
-	 * in a NUL terminator, so that the buffer for value actually
-	 * has value_len bytes in it.
+	 * XXX - RFC 9110 5.5 "Specification for newly defined fields
+	 * SHOULD limit their values to visible US-ASCII octets (VCHAR),
+	 * SP, and HTAB. A recipient SHOULD treat other allowed octets in
+	 * field content (i.e., obs-text [%x80-FF]) as opaque data...
+	 * Field values containing CR, LF, or NUL characters are invalid
+	 * and dangerous." (Up to RFC 7230, an obsolete "line-folding"
+	 * mechanism that included CRLF was allowed.)
+	 *
+	 * So NUL is not allowed, and we should have one or more
+	 * expert infos if the field value has anything other than
+	 * ASCII printable + TAB. (Possibly different severities
+	 * depending on whether it contains obsolete characters
+	 * like \x80-\xFF vs characters never allowed like NUL.)
+	 * All known field types respect this (using Base64, etc.)
+	 * Unknown field types (possibly including those registered
+	 * through the UAT) should be treated like FT_BYTES with
+	 * BASE_SHOW_ASCII_PRINTABLE instead of FT_STRING, but it's
+	 * more difficult to do that with the custom formatting
+	 * that uses the header name.
+	 *
+	 * Instead, for now for display purposes we will treat strings
+	 * as ASCII and pass the raw value to subdissectors via the
+	 * header_value_map. For the latter, we allocate a buffer that's
+	 * value_bytes_len+1 bytes long, copy value_bytes_len bytes, and
+	 * stick in a NUL terminator, so that the buffer for value actually
+	 * has value_bytes_len bytes in it.
 	 */
-	value_len = line_end_offset - value_offset;
-	value = (char *)wmem_alloc(wmem_packet_scope(), value_len+1);
-	memcpy(value, &line[value_offset - offset], value_len);
-	value[value_len] = '\0';
+	value_bytes_len = line_end_offset - value_offset;
+	value_bytes = (char *)wmem_alloc(wmem_packet_scope(), value_bytes_len+1);
+	memcpy(value_bytes, &line[value_offset - offset], value_bytes_len);
+	value_bytes[value_bytes_len] = '\0';
+	value = tvb_get_string_enc(pinfo->pool, tvb, value_offset, value_bytes_len, ENC_ASCII);
+	/* The length of the value might change after UTF-8 sanitization */
+	value_len = (int)strlen(value);
 
 	if (header_value_map) {
-		wmem_map_insert(header_value_map, header_name, value);
+		wmem_map_insert(header_value_map, header_name, value_bytes);
 	}
 
 	if (hf_index == -1) {
@@ -3202,8 +3226,8 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 
 			} else {
 				proto_tree_add_string_format(tree,
-					*hf_id, tvb, offset, len,
-					value, "%s", format_text(wmem_packet_scope(), line, len));
+					*hf_id, tvb, offset, len, value,
+					"%s", format_text(pinfo->pool, line, len));
 				if (http_type == HTTP_REQUEST ||
 					http_type == HTTP_RESPONSE) {
 					it = proto_tree_add_item(tree,
@@ -3254,7 +3278,8 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 			default:
 				hdr_item = proto_tree_add_string_format(tree,
 				    *headers[hf_index].hf, tvb, offset, len,
-				    value, "%s", format_text(wmem_packet_scope(), line, len));
+				    value,
+				    "%s", format_text(pinfo->pool, line, len));
 				if (http_type == HTTP_REQUEST ||
 					http_type == HTTP_RESPONSE) {
 					it = proto_tree_add_item(tree,
@@ -3303,7 +3328,7 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 			break;
 
 		case HDR_CONTENT_TYPE:
-			eh_ptr->content_type = (gchar*) wmem_memdup(wmem_packet_scope(), (guint8*)value,value_len + 1);
+			eh_ptr->content_type = wmem_strdup(pinfo->pool, value);
 
 			for (i = 0; i < value_len; i++) {
 				c = value[i];
@@ -3446,14 +3471,14 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 
 		case HDR_LOCATION:
 			if (conv_data->request_uri){
-				stat_info->location_target = wmem_strndup(wmem_packet_scope(), value, value_offset);
+				stat_info->location_target = wmem_strndup(wmem_packet_scope(), value, value_len);
 				stat_info->location_base_uri = wmem_strdup(wmem_packet_scope(), conv_data->full_uri);
 			}
 			break;
 		case HDR_HTTP2_SETTINGS:
 		{
 			proto_tree* settings_tree = proto_item_add_subtree(hdr_item, ett_http_http2_settings_item);
-			tvbuff_t* new_tvb = base64uri_tvb_to_new_tvb(tvb, value_offset, value_len);
+			tvbuff_t* new_tvb = base64uri_tvb_to_new_tvb(tvb, value_offset, value_bytes_len);
 			add_new_data_source(pinfo, new_tvb, "Base64uri decoded");
 			TRY{
 				dissect_http2_settings_ext(new_tvb, pinfo, settings_tree, 0);

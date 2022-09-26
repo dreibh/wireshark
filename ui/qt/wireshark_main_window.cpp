@@ -626,7 +626,11 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     connect(mainApp, SIGNAL(zoomMonospaceFont(QFont)),
             proto_tree_, SLOT(setMonospaceFont(QFont)));
 
+    connectFileMenuActions();
     connectEditMenuActions();
+    connectViewMenuActions();
+    connectGoMenuActions();
+    connectCaptureMenuActions();
 
     connect(main_ui_->actionAnalyzeFollowTCPStream, &QAction::triggered, this,
             [this]() { this->openFollowStreamDialogForType(FOLLOW_TCP); },
@@ -652,28 +656,6 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     connect(main_ui_->actionAnalyzeFollowSIPCall, &QAction::triggered, this,
             [this]() { this->openFollowStreamDialogForType(FOLLOW_SIP); },
             Qt::QueuedConnection);
-
-    connect(main_ui_->actionGoNextPacket, SIGNAL(triggered()),
-            packet_list_, SLOT(goNextPacket()));
-    connect(main_ui_->actionGoPreviousPacket, SIGNAL(triggered()),
-            packet_list_, SLOT(goPreviousPacket()));
-    connect(main_ui_->actionGoFirstPacket, SIGNAL(triggered()),
-            packet_list_, SLOT(goFirstPacket()));
-    connect(main_ui_->actionGoLastPacket, SIGNAL(triggered()),
-            packet_list_, SLOT(goLastPacket()));
-    connect(main_ui_->actionGoNextHistoryPacket, SIGNAL(triggered()),
-            packet_list_, SLOT(goNextHistoryPacket()));
-    connect(main_ui_->actionGoPreviousHistoryPacket, SIGNAL(triggered()),
-            packet_list_, SLOT(goPreviousHistoryPacket()));
-
-    connect(main_ui_->actionViewExpandSubtrees, SIGNAL(triggered()),
-            proto_tree_, SLOT(expandSubtrees()));
-    connect(main_ui_->actionViewCollapseSubtrees, SIGNAL(triggered()),
-            proto_tree_, SLOT(collapseSubtrees()));
-    connect(main_ui_->actionViewExpandAll, SIGNAL(triggered()),
-            proto_tree_, SLOT(expandAll()));
-    connect(main_ui_->actionViewCollapseAll, SIGNAL(triggered()),
-            proto_tree_, SLOT(collapseAll()));
 
     connect(packet_list_, SIGNAL(packetDissectionChanged()),
             this, SLOT(redissectPackets()));
