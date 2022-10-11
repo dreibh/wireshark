@@ -652,19 +652,16 @@ else() # ! MSVC
 		-Wshorten-64-to-32
 		-Wredundant-decls
 		#
-		# -Wmaybe-uninitialized is enabled with -Wall. This is a low
-		# priority warning, sometimes with false positives, that
-		# can lay dormant and be triggered by increasing the optimization
-		# level to O3. This is a major inconvenience for developers
-		# (because the warning is typically unrelated to their code)
-		# and for end users it is a build breakage (with -Werror).
-		# For these reasons we disable the fatal error for this warning,
-		# until these procedural issues can be fixed or at least mitigated.
+		# Disable errors unconditionally for some static analysis warnings
+		# that are dormant at lower optimizations levels and also
+		# prone to false positives and compiler bugs. This is
+		# a big nuisance because the warning is dormant and a low
+		# priority target for action. That is very disruptive
+		# with -Werror enabled (the default on the master branch).
 		#
 		-Wno-error=maybe-uninitialized
-		# Disable errors for another warning that is prone to guesswork
-		# and false positives.
 		-Wno-error=alloc-size-larger-than=
+		-Wno-error=stringop-overflow=
 		#
 		# Converting from g_printf() and g_snprintf() to stdio.h turns
 		# up many of these warnings. They will have to be handled later.
@@ -672,6 +669,13 @@ else() # ! MSVC
 		# seem to flag very interesting issues.
 		#
 		-Wno-format-truncation
+		#
+		# Updating external dependencies can introduce new deprecations.
+		# Also fixing new internal deprecations takes time.
+		# We want to be able to build with -Werror in that case. New
+		# code should not introduce new deprecations in any case.
+		#
+		-Wno-error=deprecated-declarations
 	)
 
 	#
@@ -1148,7 +1152,7 @@ reset_find_package(GCRYPT GCRYPT_ERROR_LIBRARY)
 find_package(GCRYPT "1.8.0" REQUIRED)
 # C Asynchronous resolver
 reset_find_package(CARES)
-find_package(CARES "1.14.0" REQUIRED)
+find_package(CARES "1.13.0" REQUIRED)
 find_package(LEX REQUIRED)
 find_package(Perl)
 find_package(PCRE2 REQUIRED)
@@ -1906,7 +1910,6 @@ feature_summary(WHAT ALL)
 # Should this be part of libui?
 if(WIN32)
 	set(PLATFORM_UI_SRC
-		ui/win32/console_win32.cpp
 		ui/win32/file_dlg_win32.cpp
 	)
 	set(PLATFORM_UI_RC_FILES
@@ -1988,6 +1991,7 @@ set(INSTALL_FILES
 
 if (BUILD_logray)
 	set(LOG_INSTALL_FILES
+		docbook/ws.css
 		resources/share/logray/colorfilters
 		resources/share/logray/dfilter_buttons
 	)
@@ -2005,7 +2009,6 @@ if (ASCIIDOCTOR_FOUND)
 		${CMAKE_BINARY_DIR}/doc/dumpcap.html
 		${CMAKE_BINARY_DIR}/doc/editcap.html
 		${CMAKE_BINARY_DIR}/doc/extcap.html
-		${CMAKE_BINARY_DIR}/doc/falcodump.html
 		${CMAKE_BINARY_DIR}/doc/mergecap.html
 		${CMAKE_BINARY_DIR}/doc/randpkt.html
 		${CMAKE_BINARY_DIR}/doc/randpktdump.html
@@ -2030,6 +2033,11 @@ if (ASCIIDOCTOR_FOUND)
 		list(APPEND INSTALL_FILES
 			${CMAKE_BINARY_DIR}/doc/asn2deb.html
 			${CMAKE_BINARY_DIR}/doc/idl2deb.html
+		)
+	endif()
+	if (BUILD_logray)
+		list(APPEND LOG_INSTALL_FILES
+			${CMAKE_BINARY_DIR}/doc/falcodump.html
 		)
 	endif()
 endif()
@@ -2302,7 +2310,7 @@ endif()
 # epan/wslua/CMakeLists.txt
 if(LUA_FOUND AND ENABLE_LUA)
 	set(_lua_files
-		"${CMAKE_BINARY_DIR}/epan/wslua/init.lua"
+		"${CMAKE_SOURCE_DIR}/epan/wslua/init.lua"
 		"${CMAKE_SOURCE_DIR}/epan/wslua/console.lua"
 		"${CMAKE_SOURCE_DIR}/epan/wslua/dtd_gen.lua"
 	)
@@ -2315,7 +2323,6 @@ if(LUA_FOUND AND ENABLE_LUA)
 				"${_lua_file}"
 				"${DATAFILE_DIR}/${_lua_filename}"
 			DEPENDS
-				wsluaauxiliary
 				"${_lua_file}"
 		)
 	endforeach()
