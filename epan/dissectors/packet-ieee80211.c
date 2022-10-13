@@ -6085,6 +6085,9 @@ static int hf_ieee80211_vs_mist_data = -1;
 static int hf_ieee80211_vs_ruckus_ap_name = -1;
 static int hf_ieee80211_vs_ruckus_data = -1;
 
+static int hf_ieee80211_vs_alcatel_ap_name = -1;
+static int hf_ieee80211_vs_alcatel_data = -1;
+
 static int hf_ieee80211_vs_fortinet_subtype = -1;
 static int hf_ieee80211_vs_fortinet_system_type = -1;
 static int hf_ieee80211_vs_fortinet_system_length = -1;
@@ -9395,7 +9398,7 @@ static const value_string nai_realm_encoding_vals[] = {
   { 0, NULL }
 };
 
-static const range_string hs20_oper_class_rvals[] = {
+static const range_string oper_class_rvals[] = {
   {   0,   0, "Unknown" }, /* 0 should not be used */
   {   1,  80, "Reserved" },
   {  81,  81, "2.407 GHz, Channels 1-13, 25 MHz Spacing" },
@@ -15256,9 +15259,9 @@ dissect_compressed_beamforming_and_cqi(proto_tree *tree, tvbuff_t *tvb, packet_i
                 "Average Signal to Noise Ratio");
 
   for (i = 0; i < nc; i++) {
-    gint8 snr = tvb_get_guint8(tvb, offset);
+    gint8 snr = tvb_get_gint8(tvb, offset);
 
-    proto_tree_add_uint_format(snr_tree,
+    proto_tree_add_int_format(snr_tree,
         hf_ieee80211_he_compressed_beamforming_report_snr, tvb, offset, 1,
         snr, "Stream %d: %s%0.2fdB (0x%02x)", i, (snr == 127 ? ">=" :
                                                   (snr == -128 ? "<=" : "")),
@@ -18024,13 +18027,12 @@ dissect_vendor_ie_aerohive(proto_item *item _U_, proto_tree *ietree,
   tag_len -= 1;
 
   proto_tree_add_item(ietree, hf_ieee80211_vs_aerohive_version, tvb, offset, 1, ENC_NA);
+  proto_item_append_text(item, ": %s", val_to_str_const(type, ieee80211_vs_aerohive_type_vals, "Unknown"));
   offset += 1;
   tag_len -= 1;
 
   switch(type){
     case AEROHIVE_HOSTNAME: /* Subtype (1 byte) + Host Name Length (1 byte) + Host Name */
-
-      proto_item_append_text(item, ": %s", val_to_str_const(type, ieee80211_vs_aerohive_type_vals, "Unknown"));
 
       proto_tree_add_item(ietree, hf_ieee80211_vs_aerohive_subtype, tvb, offset, 1, ENC_NA);
       offset += 1;
@@ -18070,18 +18072,15 @@ dissect_vendor_ie_mist(proto_item *item _U_, proto_tree *ietree,
 
     /* VS OUI Type */
     type = tvb_get_guint8(tvb, offset);
+    proto_item_append_text(item, ": %s", val_to_str_const(type, ieee80211_vs_mist_type_vals, "Unknown"));
     offset += 1;
     tag_len -= 1;
 
     switch(type){
         case MIST_APNAME:
-
-            proto_item_append_text(item, ": %s", val_to_str_const(type, ieee80211_vs_mist_type_vals, "Unknown"));
-
             length = tag_len;
             proto_tree_add_item_ret_string(ietree, hf_ieee80211_vs_mist_ap_name, tvb, offset, length, ENC_ASCII|ENC_NA, wmem_packet_scope(), &apname);
             proto_item_append_text(item, " (%s)", apname);
-
             break;
 
         default:
@@ -18104,22 +18103,50 @@ dissect_vendor_ie_ruckus(proto_item *item _U_, proto_tree *ietree,
 
     /* VS OUI Type */
     type = tvb_get_guint8(tvb, offset);
+    proto_item_append_text(item, ": %s", val_to_str_const(type, ieee80211_vs_ruckus_type_vals, "Unknown"));
     offset += 1;
     tag_len -= 1;
 
     switch(type){
         case RUCKUS_APNAME:
-
-            proto_item_append_text(item, ": %s", val_to_str_const(type, ieee80211_vs_ruckus_type_vals, "Unknown"));
-
-            length = tag_len;
+          length = tag_len;
             proto_tree_add_item_ret_string(ietree, hf_ieee80211_vs_ruckus_ap_name, tvb, offset, length, ENC_ASCII|ENC_NA, wmem_packet_scope(), &apname);
             proto_item_append_text(item, " (%s)", apname);
-
             break;
 
         default:
             proto_tree_add_item(ietree, hf_ieee80211_vs_ruckus_data, tvb, offset, tag_len, ENC_NA);
+            break;
+    }
+}
+
+#define ALCATEL_APNAME 1
+static const value_string ieee80211_vs_alcatel_type_vals[] = {
+    { ALCATEL_APNAME, "AP Name"},
+    { 0, NULL }
+};
+static void
+dissect_vendor_ie_alcatel(proto_item *item _U_, proto_tree *ietree,
+                       tvbuff_t *tvb, int offset, guint32 tag_len)
+{
+    guint32 type, length;
+    const guint8* apname;
+
+    /* VS OUI Type */
+    type = tvb_get_guint8(tvb, offset);
+    proto_item_append_text(item, ": %s", val_to_str_const(type, ieee80211_vs_alcatel_type_vals, "Unknown"));
+    offset += 1;
+    tag_len -= 1;
+
+    switch(type){
+        case ALCATEL_APNAME:
+            length = tag_len;
+            proto_tree_add_item_ret_string(ietree, hf_ieee80211_vs_alcatel_ap_name, tvb, offset, length, ENC_ASCII|ENC_NA, wmem_packet_scope(), &apname);
+            proto_item_append_text(item, " (%s)", apname);
+            break;
+
+        default:
+            proto_tree_add_item(ietree, hf_ieee80211_vs_alcatel_data, tvb, offset, tag_len, ENC_NA);
             break;
     }
 }
@@ -19525,6 +19552,15 @@ static conversation_t *find_wlan_conversation_pinfo(packet_info *pinfo)
     p_get_proto_data(wmem_file_scope(), pinfo, proto_wlan, ASSOC_COUNTER_KEY));
   pinfo->destport = pinfo->srcport;
   return find_conversation_pinfo(pinfo, 0);
+}
+
+static gboolean determine_nonce_is_set(tvbuff_t *tvb) {
+  int offset;
+
+  for (offset = 12; offset < 12 + 32; offset++)
+    if (tvb_get_guint8(tvb, offset))
+      return TRUE;
+  return FALSE;
 }
 
 static guint16 determine_mic_len(packet_info *pinfo, gboolean assoc_frame,
@@ -27779,6 +27815,9 @@ ieee80211_tag_vendor_specific_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     case OUI_RUCKUS:
       dissect_vendor_ie_ruckus(field_data->item_tag, tree, tvb, offset, tag_vs_len);
       break;
+    case OUI_ALCATEL_LUCENT:
+      dissect_vendor_ie_alcatel(field_data->item_tag, tree, tvb, offset, tag_vs_len);
+      break;
     case OUI_SGDSN:
       dissect_vendor_ie_sgdsn(field_data->item_tag, tree, tvb, offset, tag_vs_len, pinfo);
       break;
@@ -32217,13 +32256,13 @@ dissect_ieee80211_s1g_tack(tvbuff_t *tvb, packet_info *pinfo _U_,
   proto_tree_add_item(tree, hf_ieee80211_addr_ta, tvb, offset, 6, ENC_NA);
   hidden_item = proto_tree_add_string(tree, hf_ieee80211_addr_ta_resolved,
                         tvb, offset, 6, ether_name);
-  PROTO_ITEM_SET_HIDDEN(hidden_item);
+  proto_item_set_hidden(hidden_item);
   hidden_item = proto_tree_add_item(tree, hf_ieee80211_addr, tvb, offset, 6,
                         ENC_NA);
-  PROTO_ITEM_SET_HIDDEN(hidden_item);
+  proto_item_set_hidden(hidden_item);
   hidden_item = proto_tree_add_string(tree, hf_ieee80211_addr_resolved, tvb,
                         offset, 6, ether_name);
-  PROTO_ITEM_SET_HIDDEN(hidden_item);
+  proto_item_set_hidden(hidden_item);
 
   offset += 6;
   length += 6;
@@ -33013,10 +33052,10 @@ dissect_ieee80211_pv1(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     set_dst_addr_cols(pinfo, tvb, offset, "RA");
     proto_tree_add_item(hdr_tree, hf_ieee80211_addr_ra, tvb, offset, 6, ENC_NA);
     hidden = proto_tree_add_item(hdr_tree, hf_ieee80211_addr, tvb, offset, 6, ENC_NA);
-    PROTO_ITEM_SET_HIDDEN(hidden);
+    proto_item_set_hidden(hidden);
     hidden = proto_tree_add_string(hdr_tree, hf_ieee80211_addr_ra_resolved, tvb,
                                    offset, 6, ether_name);
-    PROTO_ITEM_SET_HIDDEN(hidden);
+    proto_item_set_hidden(hidden);
     offset += 6;
   }
 
@@ -33039,10 +33078,10 @@ dissect_ieee80211_pv1(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     /* TODO: why adding as visible *and* hidden? */
     proto_tree_add_item(hdr_tree, hf_ieee80211_addr_ta, tvb, offset, 6, ENC_NA);
     hidden = proto_tree_add_item(hdr_tree, hf_ieee80211_addr_ta, tvb, offset, 6, ENC_NA);
-    PROTO_ITEM_SET_HIDDEN(hidden);
+    proto_item_set_hidden(hidden);
     hidden = proto_tree_add_string(hdr_tree, hf_ieee80211_addr_ta_resolved, tvb,
                                    offset, 6, ether_name);
-    PROTO_ITEM_SET_HIDDEN(hidden);
+    proto_item_set_hidden(hidden);
     offset += 6;
   }
 
@@ -33068,10 +33107,10 @@ dissect_ieee80211_pv1(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     set_dst_addr_cols(pinfo, tvb, offset, "DA");
     proto_tree_add_item(hdr_tree, hf_ieee80211_addr_da, tvb, offset, 6, ENC_NA);
     hidden = proto_tree_add_item(hdr_tree, hf_ieee80211_addr, tvb, offset, 6, ENC_NA);
-    PROTO_ITEM_SET_HIDDEN(hidden);
+    proto_item_set_hidden(hidden);
     hidden = proto_tree_add_string(hdr_tree, hf_ieee80211_addr_da_resolved, tvb,
                                    offset, 6, ether_name);
-    PROTO_ITEM_SET_HIDDEN(hidden);
+    proto_item_set_hidden(hidden);
     offset += 6;
   }
 
@@ -33084,10 +33123,10 @@ dissect_ieee80211_pv1(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     copy_address_shallow(&pinfo->src, &pinfo->dl_src);
     proto_tree_add_item(hdr_tree, hf_ieee80211_addr_sa, tvb, offset, 6, ENC_NA);
     hidden = proto_tree_add_item(hdr_tree, hf_ieee80211_addr, tvb, offset, 6, ENC_NA);
-    PROTO_ITEM_SET_HIDDEN(hidden);
+    proto_item_set_hidden(hidden);
     hidden = proto_tree_add_string(hdr_tree, hf_ieee80211_addr_sa_resolved, tvb,
                                    offset, 6, ether_name);
-    PROTO_ITEM_SET_HIDDEN(hidden);
+    proto_item_set_hidden(hidden);
     offset += 6;
   }
 
@@ -35685,6 +35724,7 @@ dissect_wlan_rsna_eapol_wpa_or_rsn_key(tvbuff_t *tvb, packet_info *pinfo, proto_
     NULL
   };
   guint16 eapol_data_offset = 76;  /* 92 - 16 */
+  gboolean has_nonce = determine_nonce_is_set(tvb);
   gboolean defaulted_mic_len = FALSE;
   guint16 eapol_key_mic_len = determine_mic_len(pinfo, FALSE, &defaulted_mic_len);
   save_proto_data_value(pinfo, eapol_key_mic_len, MIC_LEN_KEY);
@@ -35745,11 +35785,14 @@ dissect_wlan_rsna_eapol_wpa_or_rsn_key(tvbuff_t *tvb, packet_info *pinfo, proto_
       use the Secure Bit and/or the Nonce, but there are implementations ignoring the spec.
       The Secure Bit is incorrectly set on rekeys for Windows clients for Message 2 and the Nonce is non-zero
       in Message 4 in Bug 11994 (Apple?) */
+      /* In Wi-SUN protocol, message 2 does not contains any data. However, all the implementations
+       * respect 802.11X, so Secure Bit is set only on message 2 and Nonce is set only on message 4
+       * (see section 6.5.2.3 of Wi-SUN specification) */
       /* When using AES-SIV without plaintext (i.e. only for integrity), the ciphertext has length 16 */
       /* With MLO message 4 will have 12 bytes of data */
       if (((eapol_key_mic_len == 0) && (eapol_data_len > 16)) ||
-          ((eapol_key_mic_len > 0) && (eapol_data_len != 0) &&
-           (eapol_data_len != 12))) {
+          ((eapol_key_mic_len > 0) && (eapol_data_len == 0) && !(keyinfo & KEY_INFO_SECURE_MASK) && has_nonce) ||
+          ((eapol_key_mic_len > 0) && (eapol_data_len != 0) && (eapol_data_len != 12))) {
         ti = proto_tree_add_uint(tree, hf_wlan_rsna_eapol_wpa_keydes_msgnr, tvb, offset, 0, 2);
 
         col_set_str(pinfo->cinfo, COL_INFO, "Key (Message 2 of 4)");
@@ -38794,7 +38837,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_he_compressed_beamforming_report_snr,
      {"AgvSNR", "wlan.he.mimo.beamforming_report.avgsnr",
-      FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+      FT_INT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
     {&hf_ieee80211_he_compressed_beamform_scidx,
      {"SCIDX", "wlan.he.action.he_mimo_control.scidx",
@@ -41253,7 +41296,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_hs20_anqp_oper_class_indic,
      {"Operating Class", "wlan.hs20.anqp.oper_class_indic.oper_class",
-      FT_UINT8, BASE_DEC | BASE_RANGE_STRING, RVALS(hs20_oper_class_rvals),
+      FT_UINT8, BASE_DEC | BASE_RANGE_STRING, RVALS(oper_class_rvals),
       0, NULL, HFILL }},
 
     {&hf_ieee80211_hs20_osu_friendly_names_len,
@@ -46570,7 +46613,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_tag_supported_ope_classes_current,
      {"Current Operating Class", "wlan.supopeclass.current",
-      FT_UINT8, BASE_DEC, NULL, 0,
+      FT_UINT8, BASE_DEC | BASE_RANGE_STRING, RVALS(oper_class_rvals), 0,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_supported_ope_classes_alternate,
@@ -47764,6 +47807,17 @@ proto_register_ieee80211(void)
      {"Data", "wlan.vs.ruckus.data",
        FT_BYTES, BASE_NONE, NULL, 0,
        NULL, HFILL }},
+
+     /* Vendor Specific : Alcatel-Lucent */
+     {&hf_ieee80211_vs_alcatel_ap_name,
+      {"AP Name", "wlan.vs.alcatel.apname",
+        FT_STRING, BASE_NONE, NULL, 0,
+        NULL, HFILL }},
+
+     {&hf_ieee80211_vs_alcatel_data,
+      {"Data", "wlan.vs.alcatel.data",
+        FT_BYTES, BASE_NONE, NULL, 0,
+        NULL, HFILL }},
 
     /* Vendor Specific : Fortinet */
     {&hf_ieee80211_vs_fortinet_subtype,

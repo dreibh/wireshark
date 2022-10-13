@@ -329,14 +329,14 @@ static gboolean pref_walk_trailer = FALSE;
  * fields.*/
 static gboolean pref_pop_other_fields = FALSE;
 /** Wireshark preference to perform analysis */
-static gboolean pref_perform_analysis = TRUE;
+static gboolean pref_perform_analysis = FALSE;
 /** Wireshark preference to generate keylog entries from f5ethtrailer TLS data */
 static gboolean pref_generate_keylog = TRUE;
 /** Identifiers for taps (when enabled), only the address is important, the
  * values are unused. */
-static gint tap_ip_enabled;
-static gint tap_ipv6_enabled;
-static gint tap_tcp_enabled;
+static gboolean tap_ip_enabled;
+static gboolean tap_ipv6_enabled;
+static gboolean tap_tcp_enabled;
 
 /** Used "in" and "out" map for the true and false for ingress. (Not actually
  * used in field definition, but rather used to display via a format call
@@ -2449,7 +2449,7 @@ dissect_dpt_trailer_noise_low(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
          * for backward compatability for users that are accustomed to using
          * "f5ethtrailer.ingress" but mark it as generated to indicate that that
          * field no longer really exists. */
-        PROTO_ITEM_SET_GENERATED(pi);
+        proto_item_set_generated(pi);
         proto_tree_add_bitmask(
             tree, tvb, offset, hf_flags, ett_f5ethtrailer_low_flags, hf_flags__fields,
             ENC_BIG_ENDIAN);
@@ -3574,18 +3574,24 @@ proto_init_f5ethtrailer(void)
         if (error_string) {
             ws_warning("Unable to register tap \"ip\" for f5ethtrailer: %s", error_string->str);
             g_string_free(error_string, TRUE);
+        } else {
+            tap_ip_enabled = TRUE;
         }
         error_string = register_tap_listener(
             "ipv6", &tap_ipv6_enabled, NULL, TL_REQUIRES_NOTHING, NULL, ipv6_tap_pkt, NULL, NULL);
         if (error_string) {
             ws_warning("Unable to register tap \"ipv6\" for f5ethtrailer: %s", error_string->str);
             g_string_free(error_string, TRUE);
+        } else {
+            tap_ipv6_enabled = TRUE;
         }
         error_string = register_tap_listener(
             "tcp", &tap_tcp_enabled, NULL, TL_REQUIRES_NOTHING, NULL, tcp_tap_pkt, NULL, NULL);
         if (error_string) {
             ws_warning("Unable to register tap \"tcp\" for f5ethtrailer: %s", error_string->str);
             g_string_free(error_string, TRUE);
+        } else {
+            tap_tcp_enabled = TRUE;
         }
     }
 }
@@ -3597,9 +3603,18 @@ proto_init_f5ethtrailer(void)
 static void
 f5ethtrailer_cleanup(void)
 {
-    remove_tap_listener(&tap_tcp_enabled);
-    remove_tap_listener(&tap_ipv6_enabled);
-    remove_tap_listener(&tap_ip_enabled);
+    if (tap_tcp_enabled) {
+        remove_tap_listener(&tap_tcp_enabled);
+        tap_tcp_enabled = FALSE;
+    }
+    if (tap_ipv6_enabled) {
+        remove_tap_listener(&tap_ipv6_enabled);
+        tap_ipv6_enabled = FALSE;
+    }
+    if (tap_ip_enabled) {
+        remove_tap_listener(&tap_ip_enabled);
+        tap_ip_enabled = FALSE;
+    }
 }
 
 /**
@@ -4272,6 +4287,7 @@ dissect_f5fileinfo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     guint offset = 0;
     const guint8 *object;
     const gchar *platform = NULL;
+    const gchar *platform_name = NULL;
     gint objlen;
     struct f5fileinfo_tap_data *tap_data;
 
@@ -4294,20 +4310,19 @@ dissect_f5fileinfo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     tap_data->magic = F5FILEINFO_TAP_MAGIC;
 
     while (tvb_captured_length_remaining(tvb, offset)) {
-        object = tvb_get_const_stringz(tvb, offset, &objlen);
+        object = tvb_get_stringz_enc(wmem_packet_scope(), tvb, offset, &objlen, ENC_ASCII);
 
         if (objlen <= 0 || object == NULL)
             break;
 
         if (strncmp(object, "CMD: ", 5) == 0) {
-            proto_tree_add_item(tree, hf_fi_command, tvb, offset + 5, objlen - 5, ENC_ASCII);
+            proto_tree_add_string(tree, hf_fi_command, tvb, offset + 5, objlen - 5, &object[5]);
             col_add_str(pinfo->cinfo, COL_INFO, &object[5]);
         } else if (strncmp(object, "VER: ", 5) == 0) {
             guint i;
             const guint8 *c;
 
-            proto_tree_add_item(
-                tree, hf_fi_version, tvb, offset + 5, objlen - 5, ENC_ASCII | ENC_NA);
+            proto_tree_add_string(tree, hf_fi_version, tvb, offset + 5, objlen - 5, &object[5]);
             for (c = object; *c && (*c < '0' || *c > '9'); c++);
             for (i = 0; i < 6 && *c; c++) {
                 if (*c < '0' || *c > '9') {
@@ -4317,19 +4332,15 @@ dissect_f5fileinfo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
                 tap_data->ver[i] = (tap_data->ver[i] * 10) + (*c - '0');
             }
         } else if (strncmp(object, "HOST: ", 6) == 0)
-            proto_tree_add_item(
-                tree, hf_fi_hostname, tvb, offset + 6, objlen - 6, ENC_ASCII | ENC_NA);
+            proto_tree_add_string(tree, hf_fi_hostname, tvb, offset + 6, objlen - 6, &object[6]);
         else if (strncmp(object, "PLAT: ", 6) == 0) {
-            proto_tree_add_item(
-                tree, hf_fi_platform, tvb, offset + 6, objlen - 6, ENC_ASCII | ENC_NA);
-            platform =
-                tvb_get_string_enc(pinfo->pool, tvb, offset + 6, objlen - 6, ENC_ASCII);
-            proto_tree_add_string_format(tree, hf_fi_platformname, tvb, offset + 6, objlen - 6, "",
-                "%s: %s", platform,
-                str_to_str(platform, f5info_platform_strings, "Unknown, please report"));
+            proto_tree_add_string(tree, hf_fi_platform, tvb, offset + 6, objlen - 6, &object[6]);
+            platform = &object[6];
+            platform_name = str_to_str(platform, f5info_platform_strings, "Unknown, please report");
+            proto_tree_add_string_format(tree, hf_fi_platformname, tvb, offset + 6, objlen - 6, platform_name,
+                "%s: %s", platform, platform_name);
         } else if (strncmp(object, "PROD: ", 6) == 0)
-            proto_tree_add_item(
-                tree, hf_fi_product, tvb, offset + 6, objlen - 6, ENC_ASCII | ENC_NA);
+            proto_tree_add_string(tree, hf_fi_product, tvb, offset + 6, objlen - 6, &object[6]);
 
         offset += objlen;
     }

@@ -5993,13 +5993,10 @@ dissect_radius_qos_umts(proto_tree * tree, tvbuff_t * tvb, packet_info* pinfo)
     return tvb_get_string_enc(wmem_packet_scope(), tvb, 0, tvb_reported_length(tvb), ENC_UTF_8|ENC_NA);
 }
 
-#define MAX_APN_LENGTH          100
-
 static void
 decode_apn(tvbuff_t * tvb, int offset, guint16 length, proto_tree * tree, proto_item *item)
 {
-    guint8   str[MAX_APN_LENGTH+1];
-    guint    curr_len;
+    const guint8 *apn = NULL;
 
     /*
      * This is "a domain name represented as a sequence of labels, where
@@ -6009,22 +6006,10 @@ decode_apn(tvbuff_t * tvb, int offset, guint16 length, proto_tree * tree, proto_
      * XXX - does it involve compression?
      */
 
-    /* init buffer and copy it */
-    memset(str, 0, MAX_APN_LENGTH+1);
-    tvb_memcpy(tvb, str, offset, length<MAX_APN_LENGTH?length:MAX_APN_LENGTH);
-
-    curr_len = 0;
-    while ((curr_len < length) && (curr_len < MAX_APN_LENGTH))
-    {
-        guint step    = str[curr_len];
-        str[curr_len] = '.';
-        curr_len     += step+1;
-    }
-
     /* Highlight bytes including the first length byte */
-    proto_tree_add_string(tree, hf_gtp_apn, tvb, offset, length, str+1);
+    proto_tree_add_item_ret_string(tree, hf_gtp_apn, tvb, offset, length, ENC_APN_STR, wmem_packet_scope(), &apn);
     if(item){
-        proto_item_append_text(item, ": %s", str+1);
+        proto_item_append_text(item, ": %s", apn);
     }
 
 }
@@ -8709,8 +8694,8 @@ decode_gtp_ue_ambr(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tr
     proto_tree *ext_tree;
 
     length = tvb_get_ntohs(tvb, offset + 1);
-    ext_tree = proto_tree_add_subtree(tree, tvb, offset, 3 + length, ett_gtp_ies[GTP_EXT_APN_AMBR_WITH_NSAPI], NULL,
-                                        val_to_str_ext_const(GTP_EXT_APN_AMBR_WITH_NSAPI, &gtpv1_val_ext, "Unknown"));
+    ext_tree = proto_tree_add_subtree(tree, tvb, offset, 3 + length, ett_gtp_ies[GTP_EXT_UE_AMBR], NULL,
+                                        val_to_str_ext_const(GTP_EXT_UE_AMBR, &gtpv1_val_ext, "Unknown"));
     proto_tree_add_item(ext_tree, hf_gtp_ie_id, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
@@ -8727,17 +8712,19 @@ decode_gtp_ue_ambr(tvbuff_t * tvb, int offset, packet_info * pinfo _U_, proto_tr
     /* Authorized UE-AMBR for Uplink and Downlink fields are present in the IE only if the sender has their valid values
      * available. Otherwise, the fields from m to (n+3) shall not be present.
      */
-    if(offset >= length)
-        return 3 + length;
+    if (length > 8) {
+        /* m to (m+3) Authorized UE-AMBR for Uplink */
+        proto_tree_add_item(ext_tree, hf_gtp_ext_auth_ue_ambr_ul, tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
 
-    /* m to (m+3) Authorized UE-AMBR for Uplink */
-    proto_tree_add_item(ext_tree, hf_gtp_ext_auth_ue_ambr_ul, tvb, offset, 4, ENC_BIG_ENDIAN);
-    offset+=4;
+        /* (m+4) to (n+3) Authorized UE-AMBR for Downlink */
+        proto_tree_add_item(ext_tree, hf_gtp_ext_auth_ue_ambr_dl, tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+    }
 
-    /* (m+4) to (n+3) Authorized UE-AMBR for Downlink */
-    proto_tree_add_item(ext_tree, hf_gtp_ext_auth_ue_ambr_dl, tvb, offset, 4, ENC_BIG_ENDIAN);
-
-    proto_tree_add_expert(ext_tree, pinfo, &ei_gtp_undecoded, tvb, offset, length);
+    if (length > 16) {
+        proto_tree_add_expert(ext_tree, pinfo, &ei_gtp_undecoded, tvb, offset, length - 16);
+    }
 
     return 3 + length;
 }
@@ -8752,8 +8739,8 @@ decode_gtp_apn_ambr_with_nsapi(tvbuff_t * tvb, int offset, packet_info * pinfo _
     proto_tree *ext_tree;
 
     length = tvb_get_ntohs(tvb, offset + 1);
-    ext_tree = proto_tree_add_subtree(tree, tvb, offset, 3 + length, ett_gtp_ies[GTP_EXT_UE_AMBR], NULL,
-                                        val_to_str_ext_const(GTP_EXT_UE_AMBR, &gtpv1_val_ext, "Unknown"));
+    ext_tree = proto_tree_add_subtree(tree, tvb, offset, 3 + length, ett_gtp_ies[GTP_EXT_APN_AMBR_WITH_NSAPI], NULL,
+                                        val_to_str_ext_const(GTP_EXT_APN_AMBR_WITH_NSAPI, &gtpv1_val_ext, "Unknown"));
     proto_tree_add_item(ext_tree, hf_gtp_ie_id, tvb, offset, 1, ENC_BIG_ENDIAN);
 
     offset++;
