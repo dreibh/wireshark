@@ -102,9 +102,17 @@ WS_DLL_PUBLIC
 void
 wmem_strbuf_append_unichar(wmem_strbuf_t *strbuf, const gunichar c);
 
+#define wmem_strbuf_append_unichar_repl(buf) \
+            wmem_strbuf_append_unichar(buf, 0xfffd)
+
 WS_DLL_PUBLIC
 void
 wmem_strbuf_append_hex(wmem_strbuf_t *strbuf, uint8_t);
+
+/* Returns the number of characters written (4, 6 or 10). */
+WS_DLL_PUBLIC
+size_t
+wmem_strbuf_append_hex_unichar(wmem_strbuf_t *strbuf, gunichar);
 
 WS_DLL_PUBLIC
 void
