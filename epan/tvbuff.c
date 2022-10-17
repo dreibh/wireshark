@@ -2654,9 +2654,6 @@ tvb_format_stringzpad_wsp(wmem_allocator_t* allocator, tvbuff_t *tvb, const gint
 	return format_text_wsp(allocator, ptr, stringlen);
 }
 
-/* Unicode REPLACEMENT CHARACTER */
-#define UNREPL 0x00FFFD
-
 /*
  * All string functions below take a scope as an argument.
  *
@@ -3062,7 +3059,7 @@ tvb_get_apn_string(wmem_allocator_t *scope, tvbuff_t *tvb, const gint offset,
 				if (ch < 0x80)
 					wmem_strbuf_append_c(str, ch);
 				else
-					wmem_strbuf_append_unichar(str, UNREPL);
+					wmem_strbuf_append_unichar_repl(str);
 				ptr++;
 				label_len--;
 				length--;
@@ -3925,6 +3922,22 @@ gboolean tvb_utf_8_isprint(tvbuff_t *tvb, const gint offset, const gint length)
 	}
 
 	return isprint_utf8_string(buf, abs_length);
+}
+
+gboolean tvb_ascii_isdigit(tvbuff_t *tvb, const gint offset, const gint length)
+{
+	const guint8* buf = tvb_get_ptr(tvb, offset, length);
+	guint abs_offset, abs_length = length;
+
+	if (length == -1) {
+		/* tvb_get_ptr has already checked for exceptions. */
+		compute_offset_and_remaining(tvb, offset, &abs_offset, &abs_length);
+	}
+	for (guint i = 0; i < abs_length; i++, buf++)
+		if (!g_ascii_isdigit(*buf))
+			return FALSE;
+
+	return TRUE;
 }
 
 static ws_mempbrk_pattern pbrk_crlf;
