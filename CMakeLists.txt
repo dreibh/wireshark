@@ -3547,7 +3547,7 @@ if(RPMBUILD_EXECUTABLE)
 		file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/packaging/rpm/${_rpm_dir}")
 	endforeach()
 
-	set(_rpmbuild_with_args)
+	set(_rpmbuild_with_args ${RPMBUILD_EXTRA_ARGS})
 	#
 	# This is ugly.
 	#
@@ -3934,6 +3934,7 @@ add_custom_target(test-programs
 		tvbtest
 		wmem_test
 		wscbor_test
+		test_epan
 		test_wsutil
 	COMMENT "Building unit test programs and wrapper"
 )

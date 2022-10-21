@@ -34,11 +34,12 @@
  * Reference :
  * The 802.11 standard is "free", 6 month after the publication.
  *
- * IEEE Std 802.11-2016: Revision of IEEE Std 802.11-2012
+ * IEEE Std 802.11-2020: Revision of IEEE Std 802.11-2016
+ * include 5 amendments (802.11ai,ah,aj,ak,aq) 802.11-2016
  * include 5 amendments (802.11ae,aa,ad,ac,af) 802.11-2012
  * include 10 amendments (802.11k,r,y,w,n,p,z,v,u,s) 802.11-2007
  * include 8 amendments (802.11a,b,d,e,g,h,i,j) 802.11-1999
- * https://ieeexplore.ieee.org/document/7786995
+ * https://ieeexplore.ieee.org/document/9502043
  *
  * WAPI (IE 68)
  * http://isotc.iso.org/livelink/livelink/fetch/-8913189/8913214/8913250/8913253/JTC001-N-9880.pdf?nodeid=8500308&vernum=-2
@@ -15195,13 +15196,13 @@ dissect_he_feedback_matrix(proto_tree *tree, tvbuff_t *tvb, int offset,
     for (ri = ci; ri < nr; ri++) {
       int angle = he_get_bits(tvb, bit_offset, phi_bits);
       str_offset += snprintf(angles + str_offset, sizeof(angles) - str_offset,
-                             ", h%d%d:%d", ri, ci, angle);
+                             ", φ%d%d:%d", ri, ci, angle);
       bit_offset += phi_bits;
     }
     for (ri = ci + 1; ri <= nr; ri++) {
       int angle = he_get_bits(tvb, bit_offset, psi_bits);
       str_offset += snprintf(angles + str_offset, sizeof(angles) - str_offset,
-                             ", s%d%d:%d", ri, ci, angle);
+                             ", ψ%d%d:%d", ri, ci, angle);
       bit_offset += psi_bits;
     }
   }
