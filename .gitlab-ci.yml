@@ -18,13 +18,14 @@ variables:
   # brighter, more glorious future we might be able to use --shallow-since:
   # https://gitlab.com/gitlab-org/gitlab-runner/-/issues/3460
   # In the mean time, fetching the last 5000 commits does the job.
+  # Ensure that all variables are string
   GIT_DEPTH: "1"
   GIT_FETCH_EXTRA_FLAGS: "--depth=5000"
   CCACHE_DIR: "${CI_PROJECT_DIR}/ccache"
   # Preferred version of clang available on wireshark-ubuntu-dev
-  CLANG_VERSION: 14
+  CLANG_VERSION: "14"
   # Enable color output in CMake, Ninja, and other tools. https://bixense.com/clicolors/
-  CLICOLOR_FORCE: 1
+  CLICOLOR_FORCE: "1"
   # Skip irrelevant SAST scanners:
   SAST_EXCLUDED_ANALYZERS: "brakeman,eslint,security-code-scan,semgrep,spotbugs"
 
@@ -69,6 +70,9 @@ variables:
 .if-daily-schedule:
   - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "daily"'
     when: always
+.if-2x-daily-schedule:
+  - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "2x-daily"'
+    when: always
 # Fuzz jobs. Care should be taken when changing this since the scheduler
 # often doesn't report errors.
 .if-fuzz-schedule:
@@ -80,7 +84,7 @@ variables:
   tags:
     - docker
   after_script:
-    - for builddir in build/packaging/rpm/BUILD/wireshark-*/build build/packaging/rpm/BUILD/wireshark* build obj-*; do [ ! -d "$builddir/run" ] || break; done
+    - for builddir in build/packaging/rpm/BUILD/wireshark-*/build build/packaging/rpm/BUILD/wireshark-* build obj-*; do [ ! -d "$builddir/run" ] || break; done
     - if [[ "$CI_JOB_NAME" == "build:rpm-opensuse-"* ]]; then export LD_LIBRARY_PATH=$builddir/run; fi
     - if [ -f $builddir/run/tshark ]; then $builddir/run/tshark --version; fi
   needs: []
@@ -122,12 +126,6 @@ variables:
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
     - ninja install
-    - ninja shellcheck
-    - ninja test-programs
-    - chown -R user .
-    - if [ -f run/dumpcap ]; then setcap cap_net_raw,cap_net_admin+eip run/dumpcap; fi
-    - if [ -f run/dumpcap ]; then su user -c "run/dumpcap -D" ; fi
-    - su user -c pytest-3
   after_script:
     # The cache should be large enough to be useful but it shouldn't take
     # too long to restore+save each run.
@@ -135,24 +133,14 @@ variables:
 
 .build-rpm:
   extends: .build-linux
-  rules: !reference [.if-merged]
-  cache:
-    key: ${CI_JOB_NAME}-master
-    paths:
-      - ccache/
+  rules: !reference [.if-2x-daily-schedule]
   before_script:
-    - mkdir -p ccache
-    - ccache --show-stats
     - git config --global user.email "you@example.com"
     - git config --global user.name "Your Name"
     - mkdir build
     - cd build
     - ../tools/make-version.py --set-release ..
     - mv -v ../wireshark-*.tar.* .
-  after_script:
-    # The cache should be large enough to be useful but it shouldn't take
-    # too long to restore+save each run.
-    - ccache --max-size $( du --summarize --block-size=1M $CI_PROJECT_DIR/build/packaging/rpm/BUILD/wireshark | awk '{printf ("%dM", $1 * 1.5)}' )
   artifacts:
     paths:
       - build/packaging/rpm/RPMS
@@ -162,7 +150,7 @@ variables:
 
 .test-rpm:
   extends: .test-linux
-  rules: !reference [.if-merged]
+  rules: !reference [.if-2x-daily-schedule]
 
 .build-windows:
   stage: build
@@ -191,15 +179,18 @@ variables:
 Source Package:
   extends: .build-ubuntu
   stage: .pre
-  rules: !reference [.if-merged]
+  rules:
+    - !reference [.if-merged]
+    - !reference [.if-2x-daily-schedule]
   script:
     - ../tools/make-version.py --set-release ..
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
-    - cmake -G Ninja $CMAKE_ARGS -DENABLE_CCACHE=ON ..
+    - cmake -G Ninja $CMAKE_ARGS ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - cd $CI_PROJECT_DIR
     - build/packaging/source/git-export-release.sh -d .
   after_script:
+    - if [ -n "$SCHEDULE_TYPE" ] ; then exit 0 ; fi
     # - ccache --max-size $( du --summarize --block-size=1M "$CI_PROJECT_DIR/build" | awk '{printf ("%dM", $1 * 1.5)}' )
     - stat --format="%n %s bytes" wireshark-*.tar.*
     - for digest in sha512 sha256 sha1 ; do openssl $digest wireshark-*.tar.* ; done
@@ -212,7 +203,7 @@ Source Package:
 # Job to generate packages for Debian stable
 Debian Stable APT Package:
   extends: .build-linux
-  rules: !reference [.if-merged]
+  rules: !reference [.if-2x-daily-schedule]
   image: registry.gitlab.com/wireshark/wireshark-containers/debian-stable-dev
   script:
     - ln --symbolic --no-dereference --force packaging/debian
@@ -235,7 +226,7 @@ Debian Stable APT Package:
 
 Debian Stable APT Test:
   extends: .test-linux
-  rules: !reference [.if-merged]
+  rules: !reference [.if-2x-daily-schedule]
   image: registry.gitlab.com/wireshark/wireshark-containers/debian-stable-dev
   stage: test
   script:
@@ -253,7 +244,7 @@ Fedora RPM Package:
     # https://gitlab.com/gitlab-com/support-forum/issues/2790
     - export FORCE_CMAKE_NINJA_NON_VERBOSE=1
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
-    - cmake3 -G Ninja -DENABLE_CCACHE=ON -DRPMBUILD_EXTRA_ARGS="--define;__cmake_builddir $CI_PROJECT_DIR/build/packaging/rpm/BUILD/wireshark" ..
+    - cmake3 -G Ninja ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja wireshark_rpm
 
@@ -270,7 +261,7 @@ openSUSE 15.3 RPM Package:
   image: registry.gitlab.com/wireshark/wireshark-containers/opensuse-15.3-dev
   script:
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
-    - cmake -G Ninja -DENABLE_CCACHE=ON -DRPMBUILD_EXTRA_ARGS="--define;__cmake_builddir $CI_PROJECT_DIR/build/packaging/rpm/BUILD/wireshark" -DUSE_qt6=OFF ..
+    - cmake -G Ninja -DUSE_qt6=OFF ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja wireshark_rpm
 
@@ -287,7 +278,7 @@ Rocky Linux 9 RPM Package:
   image: registry.gitlab.com/wireshark/wireshark-containers/rockylinux-9-dev
   script:
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
-    - cmake -G Ninja -DENABLE_CCACHE=ON -DRPMBUILD_EXTRA_ARGS="--define;__cmake_builddir $CI_PROJECT_DIR/build/packaging/rpm/BUILD/wireshark" -DUSE_qt6=OFF ..
+    - cmake -G Ninja -DUSE_qt6=OFF ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja wireshark_rpm
 
@@ -301,7 +292,7 @@ Rocky Linux 9 RPM Test:
 
 Ubuntu APT Package:
   extends: .build-ubuntu
-  rules: !reference [.if-merged]
+  rules: !reference [.if-2x-daily-schedule]
   script:
     # build-ubuntu puts us in `build`.
     - cd ..
@@ -322,7 +313,7 @@ Ubuntu APT Package:
 
 Ubuntu APT Test:
   extends: .test-linux
-  rules: !reference [.if-merged]
+  rules: !reference [.if-2x-daily-schedule]
   image: registry.gitlab.com/wireshark/wireshark-containers/ubuntu-dev
   stage: test
   script:
@@ -503,15 +494,6 @@ Commit Check:
     - bash ./tools/pre-commit "HEAD~$NUM_COMMITS"
     - tools/validate-commit.py
 
-# Rely on fedora:latest and debian-stable jobs for testing a recent GCC version.
-Latest Clang:
-  extends: .build-ubuntu
-  rules: !reference [.if-merge-request]
-  variables:
-    CC: "clang-$CLANG_VERSION"
-    CXX: "clang++-$CLANG_VERSION"
-  needs: [ 'Commit Check' ]
-
 GCC Warnings:
   extends: .build-ubuntu
   rules: !reference [.if-merge-request]
@@ -526,6 +508,8 @@ GCC Warnings:
     - ansi2html < ../gcc_report.txt > ../gcc_report.html
     - ninja test-programs
     - chown -R user .
+    - if [ -f run/dumpcap ]; then setcap cap_net_raw,cap_net_admin+eip run/dumpcap; fi
+    - if [ -f run/dumpcap ]; then su user -c "run/dumpcap -D" ; fi
     - su user -c "ctest --parallel $(getconf _NPROCESSORS_ONLN) --force-new-ctest-process --output-on-failure"
   artifacts:
     paths:
@@ -562,6 +546,7 @@ Code Checks + Clang Warnings:
     - ansi2txt < ../tmp_clang_analyzer_check.txt > ../clang_analyzer_check.txt
     - ansi2html < ../tmp_clang_analyzer_check.txt > ../html/clang_analyzer_check.html
     - ninja checkAPI
+    - ninja shellcheck
   artifacts:
     paths:
       - clang_report.txt
