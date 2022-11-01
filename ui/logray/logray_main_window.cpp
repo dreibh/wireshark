@@ -327,8 +327,6 @@ LograyMainWindow::LograyMainWindow(QWidget *parent) :
     , capture_options_dialog_(NULL)
     , info_data_()
 #endif
-    , display_filter_dlg_(NULL)
-    , capture_filter_dlg_(NULL)
 #if defined(Q_OS_MAC)
     , dock_menu_(NULL)
 #endif
@@ -706,8 +704,6 @@ LograyMainWindow::~LograyMainWindow()
     // freed by its parent. Free then here explicitly to avoid leak and numerous
     // Valgrind complaints.
     delete file_set_dialog_;
-    delete capture_filter_dlg_;
-    delete display_filter_dlg_;
 #ifdef HAVE_LIBPCAP
     delete capture_options_dialog_;
 #endif
@@ -2859,12 +2855,4 @@ void LograyMainWindow::setMwFileName(QString fileName)
 {
     mwFileName_ = fileName;
     return;
-}
-
-frame_data * LograyMainWindow::frameDataForRow(int row) const
-{
-    if (packet_list_)
-        return packet_list_->getFDataForRow(row);
-
-    return Q_NULLPTR;
 }

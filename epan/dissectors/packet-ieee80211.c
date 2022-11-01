@@ -33078,10 +33078,7 @@ dissect_ieee80211_pv1(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     const gchar *ether_name = tvb_get_ether_name(tvb, offset);
 
     set_src_addr_cols(pinfo, tvb, offset, "TA");
-    /* TODO: why adding as visible *and* hidden? */
     proto_tree_add_item(hdr_tree, hf_ieee80211_addr_ta, tvb, offset, 6, ENC_NA);
-    hidden = proto_tree_add_item(hdr_tree, hf_ieee80211_addr_ta, tvb, offset, 6, ENC_NA);
-    proto_item_set_hidden(hidden);
     hidden = proto_tree_add_string(hdr_tree, hf_ieee80211_addr_ta_resolved, tvb,
                                    offset, 6, ether_name);
     proto_item_set_hidden(hidden);
@@ -36504,7 +36501,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_pv1_cnt_bat_bitmap,
      {"BAT Bitmap", "wlan.pv1.control.bat.bat_bitmap",
-      FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL }},
+      FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL }},
 
     {&hf_ieee80211_pv1_mgmt_reserved,
      {"PV1 Reserved Management frame", "wlan.pv1.management.reserved",
@@ -37138,7 +37135,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_ff_key_data_length,
      {"Key Data Length", "wlan.fixed.key_data_length",
-      FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }},
+      FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }},
 
     {&hf_ieee80211_ff_wnm_notification_type,
      {"WNM-Notification type", "wlan.fixed.wnm_notification_type",
@@ -40033,13 +40030,14 @@ proto_register_ieee80211(void)
      {"Compressed Beamforming Feedback Matrices", "wlan.mimo.csimatrices.cbf",
       FT_NONE, BASE_NONE, NULL, 0,
       NULL, HFILL }},
+
     {&hf_ieee80211_ff_public_action,
      {"Public Action", "wlan.fixed.publicact",
       FT_UINT8, BASE_HEX|BASE_EXT_STRING, &ff_pa_action_codes_ext, 0,
       "Public Action Code", HFILL }},
 
     {&hf_ieee80211_ff_protected_public_action,
-     {"Protected Public Action", "wlan.fixed.publicact",
+     {"Protected Public Action", "wlan.fixed.protectedpublicact",
       FT_UINT8, BASE_HEX|BASE_EXT_STRING, &ff_ppa_action_codes_ext, 0,
       "Protected Public Action Code", HFILL }},
 
@@ -41336,7 +41334,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_hs20_icons_avail_len,
      {"Icons Available Length", "wlan.hs20.osu_icons_avail_len",
-      FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }},
+      FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }},
 
     {&hf_ieee80211_hs20_osu_providers_list_ssid_len,
      {"SSID Length", "wlan.hs20.anqp_osu_prov_list.ssid_len",
@@ -42957,7 +42955,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_pentapartial_timestamp,
      {"Pentapartial Timestamp", "wlan.s1g.pentapartial_timestamp",
-      FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+      FT_UINT40, BASE_HEX, NULL, 0x0, NULL, HFILL }},
 
     {&hf_ieee80211_tack_next_twt_info,
      {"Next TWT Info/Suspend Duration", "wlan.s1g.next_twt_info",
@@ -43609,7 +43607,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_s1g_short_beacon_interval,
      {"Short Beacon Interval", "wlan.sig.short_beacon_interval",
-      FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+      FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
     {&hf_ieee80211_s1g_change_sequence,
      {"Change Sequence", "wlan.s1g.change_sequence",
@@ -48774,12 +48772,12 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_he_ndp_annc_ru_start,
      {"RU Start Index", "wlan.he_ndp.sta_info.ru_start",
-      FT_UINT32, BASE_HEX, NULL, 0x3F800,
+      FT_UINT32, BASE_HEX, NULL, 0x0003F800,
       "26-tone RU start index of the target STA", HFILL }},
 
     {&hf_ieee80211_he_ndp_annc_ru_end,
      {"RU End Index", "wlan.he_ndp.sta_info.ru_end",
-      FT_UINT32, BASE_HEX, NULL, 0x1FC0000,
+      FT_UINT32, BASE_HEX, NULL, 0x01FC0000,
       "26-tone RU end index  of the target STA", HFILL }},
 
     {&hf_ieee80211_he_ndp_annc_feedback_type_and_ng,

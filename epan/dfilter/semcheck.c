@@ -599,7 +599,7 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 	ws_assert(stnode_type_id(st_arg1) == STTYPE_FIELD ||
 			stnode_type_id(st_arg1) == STTYPE_REFERENCE);
 	hfinfo1 = sttype_field_hfinfo(st_arg1);
-	ftype1 = hfinfo1->type;
+	ftype1 = sttype_field_ftenum(st_arg1);
 
 	if (!can_func(ftype1)) {
 		FAIL(dfw, st_arg1, "%s (type=%s) cannot participate in %s comparison.",
@@ -612,7 +612,7 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 
 		if (!compatible_ftypes(ftype1, ftype2)) {
 			FAIL(dfw, st_arg2, "%s and %s are not of compatible types.",
-					hfinfo1->abbrev, stnode_todisplay(st_arg2));
+					stnode_todisplay(st_arg1), stnode_todisplay(st_arg2));
 		}
 		/* Do this check even though you'd think that if
 		 * they're compatible, then can_func() would pass. */

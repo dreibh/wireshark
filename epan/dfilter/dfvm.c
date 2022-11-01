@@ -155,9 +155,14 @@ dfvm_value_new_fvalue(fvalue_t *fv)
 }
 
 dfvm_value_t*
-dfvm_value_new_hfinfo(header_field_info *hfinfo)
+dfvm_value_new_hfinfo(header_field_info *hfinfo, gboolean raw)
 {
-	dfvm_value_t *v = dfvm_value_new(HFINFO);
+	dfvm_value_t *v;
+
+	if (raw)
+		v = dfvm_value_new(RAW_HFINFO);
+	else
+		v = dfvm_value_new(HFINFO);
 	v->value.hfinfo = hfinfo;
 	return v;
 }
@@ -215,6 +220,10 @@ dfvm_value_tostr(dfvm_value_t *v)
 			s = ws_strdup_printf("%s <%s>",
 					v->value.hfinfo->abbrev,
 					ftype_name(v->value.hfinfo->type));
+			break;
+		case RAW_HFINFO:
+			s = ws_strdup_printf("@%s <FT_BYTES>",
+					v->value.hfinfo->abbrev);
 			break;
 		case FVALUE:
 			aux = fvalue_to_debug_repr(NULL, v->value.fvalue);
@@ -500,6 +509,28 @@ dfvm_dump_str(wmem_allocator_t *alloc, dfilter_t *df, gboolean print_references)
 		}
 	}
 
+	if (print_references && g_hash_table_size(df->raw_references) > 0) {
+		wmem_strbuf_append(buf, "\nRaw references:\n");
+		g_hash_table_iter_init(&ref_iter, df->raw_references);
+		while (g_hash_table_iter_next(&ref_iter, &key, &value)) {
+			const char *abbrev = ((header_field_info *)key)->abbrev;
+			GPtrArray *refs_array = value;
+			df_reference_t *ref;
+
+			wmem_strbuf_append_printf(buf, "${@%s} = {", abbrev);
+			for (i = 0; i < refs_array->len; i++) {
+				if (i != 0) {
+					wmem_strbuf_append(buf, ", ");
+				}
+				ref = refs_array->pdata[i];
+				str = fvalue_to_debug_repr(NULL, ref->value);
+				wmem_strbuf_append_printf(buf, "%s <%s>", str, fvalue_type_name(ref->value));
+				g_free(str);
+			}
+			wmem_strbuf_append(buf, "}\n");
+		}
+	}
+
 	return wmem_strbuf_finalize(buf);
 }
 
@@ -554,11 +585,43 @@ drange_contains_layer(drange_t *dr, int num, int length)
 	return FALSE;
 }
 
+fvalue_t *
+dfvm_get_raw_fvalue(const field_info *fi)
+{
+	GByteArray *bytes;
+	fvalue_t *fv;
+	int length, tvb_length;
+
+	/*
+	 * XXX - a field can have a length that runs past
+	 * the end of the tvbuff.  Ideally, that should
+	 * be fixed when adding an item to the protocol
+	 * tree, but checking the length when doing
+	 * that could be expensive.  Until we fix that,
+	 * we'll do the check here.
+	 */
+	tvb_length = tvb_captured_length_remaining(fi->ds_tvb, fi->start);
+	if (tvb_length < 0) {
+		return NULL;
+	}
+	length = fi->length;
+	if (length > tvb_length)
+		length = tvb_length;
+
+	bytes = g_byte_array_new();
+	g_byte_array_append(bytes, tvb_get_ptr(fi->ds_tvb, fi->start, length), length);
+
+	fv = fvalue_new(FT_BYTES);
+	fvalue_set_byte_array(fv, bytes);
+	return fv;
+}
+
 static GSList *
-filter_finfo_fvalues(GSList *fvalues, GPtrArray *finfos, drange_t *range)
+filter_finfo_fvalues(GSList *fvalues, GPtrArray *finfos, drange_t *range, gboolean raw)
 {
 	int length; /* maximum proto layer number. The numbers are sequential. */
 	field_info *last_finfo, *finfo;
+	fvalue_t *fv;
 	int cookie = -1;
 	gboolean cookie_matches = false;
 	int layer;
@@ -572,14 +635,22 @@ filter_finfo_fvalues(GSList *fvalues, GPtrArray *finfos, drange_t *range)
 		layer = finfo->proto_layer_num;
 		if (cookie == layer) {
 			if (cookie_matches) {
-				fvalues = g_slist_prepend(fvalues, &finfo->value);
+				if (raw)
+					fv = dfvm_get_raw_fvalue(finfo);
+				else
+					fv = &finfo->value;
+				fvalues = g_slist_prepend(fvalues, fv);
 			}
 		}
 		else {
 			cookie = layer;
 			cookie_matches = drange_contains_layer(range, layer, length);
 			if (cookie_matches) {
-				fvalues = g_slist_prepend(fvalues, &finfo->value);
+				if (raw)
+					fv = dfvm_get_raw_fvalue(finfo);
+				else
+					fv = &finfo->value;
+				fvalues = g_slist_prepend(fvalues, fv);
 			}
 		}
 	}
@@ -597,9 +668,13 @@ read_tree(dfilter_t *df, proto_tree *tree,
 	field_info	*finfo;
 	int		i, len;
 	GSList		*fvalues = NULL;
+	fvalue_t	*fv;
 	drange_t	*range = NULL;
+	gboolean	raw;
 
 	header_field_info *hfinfo = arg1->value.hfinfo;
+	raw = arg1->type == RAW_HFINFO;
+
 	int reg = arg2->value.numeric;
 
 	if (arg3) {
@@ -626,13 +701,17 @@ read_tree(dfilter_t *df, proto_tree *tree,
 		}
 
 		if (range) {
-			fvalues = filter_finfo_fvalues(fvalues, finfos, range);
+			fvalues = filter_finfo_fvalues(fvalues, finfos, range, raw);
 		}
 		else {
 			len = finfos->len;
 			for (i = 0; i < len; i++) {
 				finfo = g_ptr_array_index(finfos, i);
-				fvalues = g_slist_prepend(fvalues, &finfo->value);
+				if (raw)
+					fv = dfvm_get_raw_fvalue(finfo);
+				else
+					fv = &finfo->value;
+				fvalues = g_slist_prepend(fvalues, fv);
 			}
 		}
 
@@ -644,8 +723,13 @@ read_tree(dfilter_t *df, proto_tree *tree,
 	}
 
 	df->registers[reg] = fvalues;
-	// These values are referenced only, do not try to free it later.
-	df->free_registers[reg] = NULL;
+	if (raw) {
+		df->free_registers[reg] = (GDestroyNotify)fvalue_free;
+	}
+	else {
+		// These values are referenced only, do not try to free it later.
+		df->free_registers[reg] = NULL;
+	}
 	return TRUE;
 }
 
@@ -671,20 +755,20 @@ filter_refs_fvalues(GPtrArray *refs_array, drange_t *range)
 		int layer = ref->proto_layer_num;
 
 		if (range == NULL) {
-			fvalues = g_slist_prepend(fvalues, fvalue_dup(ref->value));
+			fvalues = g_slist_prepend(fvalues, ref->value);
 			continue;
 		}
 
 		if (cookie == layer) {
 			if (cookie_matches) {
-				fvalues = g_slist_prepend(fvalues, fvalue_dup(ref->value));
+				fvalues = g_slist_prepend(fvalues, ref->value);
 			}
 		}
 		else {
 			cookie = layer;
 			cookie_matches = drange_contains_layer(range, layer, length);
 			if (cookie_matches) {
-				fvalues = g_slist_prepend(fvalues, fvalue_dup(ref->value));
+				fvalues = g_slist_prepend(fvalues, ref->value);
 			}
 		}
 	}
@@ -697,8 +781,11 @@ read_reference(dfilter_t *df, dfvm_value_t *arg1, dfvm_value_t *arg2,
 {
 	GPtrArray	*refs;
 	drange_t	*range = NULL;
+	gboolean	raw;
 
 	header_field_info *hfinfo = arg1->value.hfinfo;
+	raw = arg1->type == RAW_HFINFO;
+
 	int reg = arg2->value.numeric;
 
 	if (arg3) {
@@ -717,16 +804,18 @@ read_reference(dfilter_t *df, dfvm_value_t *arg1, dfvm_value_t *arg2,
 
 	df->attempted_load[reg] = TRUE;
 
-	refs = g_hash_table_lookup(df->references, hfinfo);
+	if (raw)
+		refs = g_hash_table_lookup(df->raw_references, hfinfo);
+	else
+		refs = g_hash_table_lookup(df->references, hfinfo);
 	if (refs == NULL || refs->len == 0) {
 		df->registers[reg] = NULL;
 		return FALSE;
 	}
 
-	/* Shallow copy */
 	df->registers[reg] = filter_refs_fvalues(refs, range);
-	/* Creates new value so own it. */
-	df->free_registers[reg] = (GDestroyNotify)fvalue_free;
+	// These values are referenced only, do not try to free it later.
+	df->free_registers[reg] = NULL;
 	return TRUE;
 }
 
@@ -1262,7 +1351,7 @@ check_exists(proto_tree *tree, dfvm_value_t *arg1, dfvm_value_t *arg2)
 			return TRUE;
 		}
 
-		fvalues = filter_finfo_fvalues(NULL, finfos, range);
+		fvalues = filter_finfo_fvalues(NULL, finfos, range, FALSE);
 		exists = (fvalues != NULL);
 		g_slist_free(fvalues);
 		if (exists) {

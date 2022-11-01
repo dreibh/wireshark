@@ -329,8 +329,6 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     , capture_options_dialog_(NULL)
     , info_data_()
 #endif
-    , display_filter_dlg_(NULL)
-    , capture_filter_dlg_(NULL)
 #if defined(Q_OS_MAC)
     , dock_menu_(NULL)
 #endif
@@ -759,8 +757,6 @@ WiresharkMainWindow::~WiresharkMainWindow()
     // freed by its parent. Free then here explicitly to avoid leak and numerous
     // Valgrind complaints.
     delete file_set_dialog_;
-    delete capture_filter_dlg_;
-    delete display_filter_dlg_;
 #ifdef HAVE_LIBPCAP
     delete capture_options_dialog_;
 #endif
@@ -936,6 +932,13 @@ void WiresharkMainWindow::keyPressEvent(QKeyEvent *event) {
 }
 
 void WiresharkMainWindow::closeEvent(QCloseEvent *event) {
+    if (main_ui_->actionCaptureStop->isEnabled()) {
+        // Capture is running, we should stop it before close and ignore the event
+        stopCapture();
+        event->ignore();
+        return;
+    }
+
     saveWindowGeometry();
 
     /* If we're in the middle of stopping a capture, don't do anything;
@@ -2992,14 +2995,6 @@ void WiresharkMainWindow::setMwFileName(QString fileName)
 {
     mwFileName_ = fileName;
     return;
-}
-
-frame_data * WiresharkMainWindow::frameDataForRow(int row) const
-{
-    if (packet_list_)
-        return packet_list_->getFDataForRow(row);
-
-    return Q_NULLPTR;
 }
 
 // Finds rtp id for selected stream and adds it to stream_ids
