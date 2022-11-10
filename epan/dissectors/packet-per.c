@@ -908,10 +908,43 @@ dissect_per_BMPString(tvbuff_t *tvb, guint32 offset, asn1_ctx_t *actx, proto_tre
 	return offset;
 }
 guint32
-dissect_per_UTF8String(tvbuff_t *tvb, guint32 offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index, int min_len, int max_len, gboolean has_extension _U_)
+dissect_per_UTF8String(tvbuff_t *tvb, guint32 offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index, int min_len _U_, int max_len _U_, gboolean has_extension _U_)
 {
-	offset=dissect_per_restricted_character_string_sorted(tvb, offset, actx, tree,
-		hf_index, min_len, max_len, has_extension, 0, 255, NULL, 256, NULL);
+	tvbuff_t *val_tvb;
+	guint32   length;
+
+	/* UTF8String is not a known-multiplier character string (UTF8
+	 * characters are variable width.) Hence subclause 27.6 applies,
+	 * and "constraints are never PER-visible, and the type can never
+	 * be extensible for PER encoding."
+	 */
+
+	/* 27.6.3 unconstrained length determinant with "n" in octets */
+	offset = dissect_per_length_determinant(tvb, offset, actx, tree, hf_per_octet_string_length, &length, NULL);
+
+	if(length){
+
+		/* Unnecessary because the length determinant is aligned. */
+		if(actx->aligned) {
+			BYTE_ALIGN_OFFSET(offset);
+		}
+
+		val_tvb = tvb_new_octet_aligned(tvb, offset, length * 8);
+		/* Add new data source if the offset was unaligned */
+		if ((offset & 7) != 0) {
+			add_new_data_source(actx->pinfo, val_tvb, "Unaligned UTF8String");
+		}
+
+		proto_tree_add_item(tree, hf_index, val_tvb, 0, length, ENC_UTF_8);
+	} else {
+		/* tvb_new_octet_aligned doesn't like zero length.
+		 * length zero indicates a present but empty string, so add it
+		 */
+		proto_tree_add_item(tree, hf_index, tvb, (offset-1)>>3, length, ENC_UTF_8);
+	}
+
+	offset+=(length<<3);
+
 	return offset;
 }
 
@@ -1733,7 +1766,6 @@ dissect_per_choice(tvbuff_t *tvb, guint32 offset, asn1_ctx_t *actx, proto_tree *
 {
 	gboolean /*extension_present,*/ extension_flag;
 	int extension_root_entries;
-	int extension_addition_entries;
 	guint32 choice_index;
 	int i, idx, cidx;
 	guint32 ext_length = 0;
@@ -1757,7 +1789,6 @@ DEBUG_ENTRY("dissect_per_choice");
 
 	/* count the number of entries in the extension root and extension addition */
 	extension_root_entries = 0;
-	extension_addition_entries = 0;
 	for (i=0; choice[i].p_id; i++) {
 		switch(choice[i].extension){
 			case ASN1_NO_EXTENSIONS:
@@ -1765,7 +1796,6 @@ DEBUG_ENTRY("dissect_per_choice");
 				extension_root_entries++;
 				break;
 			case ASN1_NOT_EXTENSION_ROOT:
-				extension_addition_entries++;
 				break;
 		}
 	}
