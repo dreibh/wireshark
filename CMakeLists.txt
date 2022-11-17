@@ -616,41 +616,25 @@ else() # ! MSVC
 		endif()
 	endif()
 
-	if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-		set(WIRESHARK_COMMON_FLAGS ${WIRESHARK_COMMON_FLAGS}
-			# avoid "argument unused during compilation" warnings
-			# (for example, when getting the -gsplit-dwarf option or
-			# when combining -fwrapv with -fno-strict-overflow)
-			-Qunused-arguments
-		)
-	else()
-		set(WIRESHARK_COMMON_FLAGS ${WIRESHARK_COMMON_FLAGS}
-			-fexcess-precision=fast
-		)
-	endif()
-
 	list(APPEND WIRESHARK_COMMON_FLAGS
 		# The following are for C and C++
 		# -O<X> and -g get set by the CMAKE_BUILD_TYPE
 		-Wall
 		-Wextra
-		-Wendif-labels
 		-Wpointer-arith
 		-Wformat-security
-		-fwrapv
 		-fno-strict-overflow
+		-fexcess-precision=fast	# GCC-only
 		-Wvla
-		-Waddress
 		-Wattributes
-		-Wdiv-by-zero
-		-Wignored-qualifiers
-		-Wpragmas
-		-Wno-overlength-strings
-		-Wno-long-long
-		-Wheader-guard
-		-Wcomma
-		-Wshorten-64-to-32
+		-Wpragmas		# Clang-only
+		-Wheader-guard		# Clang-only
+		-Wcomma			# Clang-only
+		-Wshorten-64-to-32	# Clang-only
 		-Wredundant-decls
+		-Wunreachable-code	# Clang-only
+		-Wdocumentation		# Clang-only
+		-Wlogical-op		# GCC-only
 		#
 		# Disable errors unconditionally for some static analysis warnings
 		# that are dormant at lower optimizations levels and also
@@ -658,10 +642,13 @@ else() # ! MSVC
 		# a big nuisance because the warning is dormant and a low
 		# priority target for action. That is very disruptive
 		# with -Werror enabled (the default on the master branch).
+		# XXX Now that we have a CI job with Release build type (using
+		# -O3 optimization level) the dormancy issue should be ameliorated
+		# so comment out these exceptions to re-evaluate the impact.
 		#
-		-Wno-error=maybe-uninitialized
-		-Wno-error=alloc-size-larger-than=
-		-Wno-error=stringop-overflow=
+		#-Wno-error=maybe-uninitialized
+		#-Wno-error=alloc-size-larger-than=
+		#-Wno-error=stringop-overflow=
 		#
 		# Converting from g_printf() and g_snprintf() to stdio.h turns
 		# up many of these warnings. They will have to be handled later.
@@ -706,20 +693,7 @@ else() # ! MSVC
 		-Wshadow
 		-Wold-style-definition
 		-Wstrict-prototypes
-		#
-		# Some versions of GCC, such as 4.3.2 and 4.4.5,
-		# generate logical-op warnings when strchr() is given a
-		# constant string.  The autoconf script checked for that;
-		# we don't.
-		#
-		-Wlogical-op
 		-Wjump-misses-init
-		#
-		# Implicit function declarations are an error in C++ and most
-		# likely a programming error in C. Turn -Wimplicit-int and
-		# -Wimplicit-function-declaration into an error by default.
-		#
-		-Werror=implicit
 	)
 
 	#
@@ -740,17 +714,19 @@ else() # ! MSVC
 
 
 	list(APPEND WIRESHARK_CXX_ONLY_FLAGS
-		-Wextra-semi
+		-Wextra-semi	# Clang-only
 	)
 
 	#
 	# These are not enabled by default, because the warnings they
 	# produce are very hard or impossible to eliminate.
 	#
-	if(ENABLE_EXTRA_COMPILER_WARNINGS)   # This overrides -Werror
+	if(ENABLE_EXTRA_COMPILER_WARNINGS)
 		list(APPEND WIRESHARK_COMMON_FLAGS
 			# The following are for C and C++
 			-Wpedantic
+			-Wno-overlength-strings
+			-Wno-long-long
 			#
 			# As we use variadic macros, we don't want warnings
 			# about them, even with -Wpedantic.
@@ -781,18 +757,13 @@ else() # ! MSVC
 			#
 			-Wcast-align
 			#
-			# Works only with Clang
+			# Doesn't warn of interesting issues. Usually the
+			# duplicated branches are protocol constants that
+			# happen to be equal and are relevant for documentation
+			# and readability and are trivially optimized by the
+			# compiler.
 			#
-			-Wunreachable-code
-			#
-			# Works only with Clang but generates a lot of warnings
-			# (about glib library not using Doxygen)
-			#
-			-Wdocumentation
-			#
-			# Works only with GCC 7
-			#
-			-Wduplicated-branches
+			-Wduplicated-branches		# GCC-only
 			#
 			# No longer supported by El Capitan clang on C++
 			# XXX - is this one of those where CMake's check
@@ -995,7 +966,7 @@ if(MSVC)
 endif()
 
 set(WERROR_COMMON_FLAGS "")
-if(ENABLE_WERROR AND NOT ENABLE_EXTRA_COMPILER_WARNINGS)
+if(ENABLE_WERROR)
 	if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		set(WERROR_COMMON_FLAGS "/WX")
 	else()
@@ -3730,6 +3701,7 @@ set(CLEAN_C_FILES
 	${dumpcap_FILES}
 	${wireshark_FILES}
 	${tshark_FILES}
+	${tfshark_FILES}
 	${rawshark_FILES}
 	${dftest_FILES}
 	${randpkt_FILES}
