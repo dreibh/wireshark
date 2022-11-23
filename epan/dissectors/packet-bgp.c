@@ -4788,7 +4788,7 @@ static int decode_bgp_link_node_nlri_common_fields(tvbuff_t *tvb,
     length -= dissected_length;
 
     /* dissect Local Node Descriptors TLV */
-    if (length > 0 && length < 4) {
+    if (length < 4) {
         expert_add_info_format(pinfo, tree, &ei_bgp_ls_error,
                 "Unknown data in Link-State Link NLRI! length = %d bytes", length);
         return dissected_length;
@@ -6621,11 +6621,11 @@ static int decode_evpn_nlri(proto_tree *tree, tvbuff_t *tvb, gint offset, packet
             case 128:
                  proto_tree_add_item(prefix_tree, hf_bgp_evpn_nlri_igmp_mc_or_addr_ipv6, tvb,
                                      reader_offset, 16, ENC_NA);
-                 offset += 16;
+                 reader_offset += 16;
                  break;
         }
         if (reader_offset - start_offset < nlri_len) {
-            proto_tree_add_bitmask(prefix_tree, tvb, offset, hf_bgp_evpn_nlri_igmp_mc_flags,
+            proto_tree_add_bitmask(prefix_tree, tvb, reader_offset, hf_bgp_evpn_nlri_igmp_mc_flags,
                                    ett_bgp_evpn_nlri_mc, evpn_nlri_igmp_mc_flags, ENC_BIG_ENDIAN);
             reader_offset += 1;
         }

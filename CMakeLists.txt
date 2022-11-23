@@ -15,15 +15,8 @@ if(DEFINED ENV{FORCE_CMAKE_NINJA_NON_VERBOSE})
 	unset(CMAKE_VERBOSE_MAKEFILE CACHE)
 endif()
 
-if(WIN32)
-	# Needed for add_custom_command() WORKING_DIRECTORY generator expressions
-	cmake_minimum_required(VERSION 3.13)
-else()
-	cmake_minimum_required(VERSION 3.10)
-endif()
-if(POLICY CMP0074)
-	cmake_policy(SET CMP0074 NEW)
-endif()
+# Needed for add_custom_command() WORKING_DIRECTORY generator expressions
+cmake_minimum_required(VERSION 3.13)
 if(POLICY CMP0083)
 	cmake_policy(SET CMP0083 NEW)
 endif()
@@ -616,41 +609,35 @@ else() # ! MSVC
 		endif()
 	endif()
 
-	if(CMAKE_C_COMPILER_ID MATCHES "Clang")
-		set(WIRESHARK_COMMON_FLAGS ${WIRESHARK_COMMON_FLAGS}
-			# avoid "argument unused during compilation" warnings
-			# (for example, when getting the -gsplit-dwarf option or
-			# when combining -fwrapv with -fno-strict-overflow)
-			-Qunused-arguments
-		)
-	else()
-		set(WIRESHARK_COMMON_FLAGS ${WIRESHARK_COMMON_FLAGS}
-			-fexcess-precision=fast
-		)
-	endif()
-
+	#
+	# NOTE: Adding new warnings is a policy decision that can have far-reaching
+	# implications for the project and each developers workflow. Modern
+	# C compilers are on a race to add new warnings, not always sensibly.
+	# They are opt-in so take a moment to fully consider the implications
+	# of enabling the latest shiny new warning.
+	# If in doubt ask on the Wireshark developer list (recommended).
+	#
 	list(APPEND WIRESHARK_COMMON_FLAGS
-		# The following are for C and C++
+		#
+		### Flags common to C and C++ ###
+		#
 		# -O<X> and -g get set by the CMAKE_BUILD_TYPE
 		-Wall
 		-Wextra
-		-Wendif-labels
 		-Wpointer-arith
 		-Wformat-security
-		-fwrapv
 		-fno-strict-overflow
+		-fexcess-precision=fast	# GCC-only
 		-Wvla
-		-Waddress
 		-Wattributes
-		-Wdiv-by-zero
-		-Wignored-qualifiers
-		-Wpragmas
-		-Wno-overlength-strings
-		-Wno-long-long
-		-Wheader-guard
-		-Wcomma
-		-Wshorten-64-to-32
+		-Wpragmas		# Clang-only
+		-Wheader-guard		# Clang-only
+		-Wcomma			# Clang-only
+		-Wshorten-64-to-32	# Clang-only
 		-Wredundant-decls
+		-Wunreachable-code	# Clang-only
+		-Wdocumentation		# Clang-only
+		-Wlogical-op		# GCC-only
 		#
 		# Disable errors unconditionally for some static analysis warnings
 		# that are dormant at lower optimizations levels and also
@@ -658,17 +645,13 @@ else() # ! MSVC
 		# a big nuisance because the warning is dormant and a low
 		# priority target for action. That is very disruptive
 		# with -Werror enabled (the default on the master branch).
+		# XXX Now that we have a CI job with Release build type (using
+		# -O3 optimization level) the dormancy issue should be ameliorated
+		# so comment out these exceptions to re-evaluate the impact.
 		#
-		-Wno-error=maybe-uninitialized
-		-Wno-error=alloc-size-larger-than=
-		-Wno-error=stringop-overflow=
-		#
-		# Converting from g_printf() and g_snprintf() to stdio.h turns
-		# up many of these warnings. They will have to be handled later.
-		# It can be a lot of work to fix properly and none of them
-		# seem to flag very interesting issues.
-		#
-		-Wno-format-truncation
+		#-Wno-error=maybe-uninitialized
+		#-Wno-error=alloc-size-larger-than=
+		#-Wno-error=stringop-overflow=
 		#
 		# Updating external dependencies can introduce new deprecations.
 		# Also fixing new internal deprecations takes time.
@@ -678,9 +661,6 @@ else() # ! MSVC
 		-Wno-error=deprecated-declarations
 	)
 
-	#
-	# Code that may be worth looking into (coding practices)
-	#
 	if((NOT ENABLE_ASAN) AND (NOT ENABLE_TSAN) AND (NOT ENABLE_UBSAN) AND (NOT DISABLE_FRAME_LARGER_THAN_WARNING))
 		#
 		# Only do this if none of ASan, TSan, and UBSan are
@@ -688,12 +668,15 @@ else() # ! MSVC
 		# the stack usage - we only care about stack
 		# usage in normal operation.
 		#
-		set(WIRESHARK_COMMON_FLAGS ${WIRESHARK_COMMON_FLAGS}
+		list(APPEND WIRESHARK_COMMON_FLAGS
 			-Wframe-larger-than=32768
 		)
 	endif()
 
 	list(APPEND WIRESHARK_C_ONLY_FLAGS
+		#
+		### Flags for C only ###
+		#
 		# The following are C only, not C++
 		-Wunused-const-variable
 		#
@@ -706,20 +689,7 @@ else() # ! MSVC
 		-Wshadow
 		-Wold-style-definition
 		-Wstrict-prototypes
-		#
-		# Some versions of GCC, such as 4.3.2 and 4.4.5,
-		# generate logical-op warnings when strchr() is given a
-		# constant string.  The autoconf script checked for that;
-		# we don't.
-		#
-		-Wlogical-op
 		-Wjump-misses-init
-		#
-		# Implicit function declarations are an error in C++ and most
-		# likely a programming error in C. Turn -Wimplicit-int and
-		# -Wimplicit-function-declaration into an error by default.
-		#
-		-Werror=implicit
 	)
 
 	#
@@ -738,19 +708,59 @@ else() # ! MSVC
 		list(APPEND WIRESHARK_C_ONLY_FLAGS -Wno-missing-braces)
 	endif()
 
-
 	list(APPEND WIRESHARK_CXX_ONLY_FLAGS
-		-Wextra-semi
+		#
+		### Flags for C++ only ###
+		#
+		-Wextra-semi	# Clang-only
 	)
+
+	#
+	# Not all warnings are the same. They fall on a spectrum from "critical"
+	# to "pedantic nonsense". These are warnings that realistically are worth
+	# fixing eventually.
+	#
+	if(ENABLE_TODO_WARNINGS)
+		list(APPEND WIRESHARK_COMMON_FLAGS
+			#
+			# All the registration functions block these for now.
+			#
+			-Wmissing-prototypes
+			-Wmissing-declarations
+			#
+			# A bunch of "that might not work on SPARC" code blocks
+			# this one for now; some of it is code that *will* work
+			# on SPARC, such as casts of "struct sockaddr *" to
+			# "struct sockaddr_in *", which are required by some
+			# APIs such as getifaddrs().
+			#
+			-Wcast-align
+		)
+	else()
+		list(APPEND WIRESHARK_COMMON_FLAGS
+			#
+			# Converting from g_printf() and g_snprintf() to stdio.h turns
+			# up many of these warnings. They will have to be handled later.
+			# It can be a lot of work to fix properly and none of them
+			# seem to flag very interesting issues.
+			#
+			-Wno-format-truncation # Enabled with -Wall
+		)
+		list(APPEND WIRESHARK_C_ONLY_FLAGS
+			-Wno-pointer-sign # Enabled with -Wall
+		)
+	endif()
 
 	#
 	# These are not enabled by default, because the warnings they
 	# produce are very hard or impossible to eliminate.
 	#
-	if(ENABLE_EXTRA_COMPILER_WARNINGS)   # This overrides -Werror
+	if(ENABLE_PEDANTIC_COMPILER_WARNINGS)
 		list(APPEND WIRESHARK_COMMON_FLAGS
 			# The following are for C and C++
 			-Wpedantic
+			-Wno-overlength-strings
+			-Wno-long-long
 			#
 			# As we use variadic macros, we don't want warnings
 			# about them, even with -Wpedantic.
@@ -768,31 +778,13 @@ else() # ! MSVC
 			#
 			-Wcast-qual
 			#
-			# All the registration functions block these for now.
+			# Doesn't warn of interesting issues. Usually the
+			# duplicated branches are protocol constants that
+			# happen to be equal and are relevant for documentation
+			# and readability and are trivially optimized by the
+			# compiler.
 			#
-			-Wmissing-prototypes
-			-Wmissing-declarations
-			#
-			# A bunch of "that might not work on SPARC" code blocks
-			# this one for now; some of it is code that *will* work
-			# on SPARC, such as casts of "struct sockaddr *" to
-			# "struct sockaddr_in *", which are required by some
-			# APIs such as getifaddrs().
-			#
-			-Wcast-align
-			#
-			# Works only with Clang
-			#
-			-Wunreachable-code
-			#
-			# Works only with Clang but generates a lot of warnings
-			# (about glib library not using Doxygen)
-			#
-			-Wdocumentation
-			#
-			# Works only with GCC 7
-			#
-			-Wduplicated-branches
+			-Wduplicated-branches		# GCC-only
 			#
 			# No longer supported by El Capitan clang on C++
 			# XXX - is this one of those where CMake's check
@@ -822,20 +814,6 @@ else() # ! MSVC
 		)
 
 		list(APPEND WIRESHARK_CXX_ONLY_FLAGS
-		)
-	else()
-		#
-		# -Wpointer-sign is a default test we get with -Wall and
-		# -W, but for some reason we were suppressing it -
-		# unconditionally.  Suppress it only without the extra
-		# warnings, so we can at least see how much we get.
-		# (This would have caught at least one error - the one
-		# in change https://code.wireshark.org/review/33234,
-		# which would have suggested that the wrong
-		# proto_tree_add_ret_ call was being used.)
-		#
-		list(APPEND WIRESHARK_C_ONLY_FLAGS
-			-Wno-pointer-sign
 		)
 	endif()
 
@@ -995,7 +973,7 @@ if(MSVC)
 endif()
 
 set(WERROR_COMMON_FLAGS "")
-if(ENABLE_WERROR AND NOT ENABLE_EXTRA_COMPILER_WARNINGS)
+if(ENABLE_WERROR)
 	if(CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		set(WERROR_COMMON_FLAGS "/WX")
 	else()
@@ -1157,18 +1135,10 @@ find_package(LEX REQUIRED)
 find_package(Perl)
 find_package(PCRE2 REQUIRED)
 
-if(CMAKE_VERSION VERSION_LESS "3.12")
-	# Locate the Python interpreter. Finds the wrong (Python 2) version if:
-	# - PATH contains python3.6, but not python3 (3.4). Affects RHEL7+EPEL.
-	# - Path contains C:\Python27 but not C:\Python37 (which is installed,
-	#   but not present in PATH).
-	find_package(PythonInterp 3.6 REQUIRED)
-else()
-	find_package(Python3 3.6 REQUIRED)
-	# Several files (including LocatePythonModule) still use the old name
-	# from FindPythonInterp, let's stick to it for now.
-	set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
-endif()
+find_package(Python3 3.6 REQUIRED)
+# Several files (including LocatePythonModule) still use the old name
+# from FindPythonInterp, let's stick to it for now.
+set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
 
 if (NOT WIN32)
 	find_package(Gettext)
@@ -3730,6 +3700,7 @@ set(CLEAN_C_FILES
 	${dumpcap_FILES}
 	${wireshark_FILES}
 	${tshark_FILES}
+	${tfshark_FILES}
 	${rawshark_FILES}
 	${dftest_FILES}
 	${randpkt_FILES}
@@ -3744,6 +3715,7 @@ set(CLEAN_C_FILES
 	${editcap_FILES}
 	${idl2wrs_FILES}
 	${mmdbresolve_FILES}
+	${sharkd_FILES}
 )
 
 if(CLEAN_C_FILES)

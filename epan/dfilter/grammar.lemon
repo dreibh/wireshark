@@ -24,7 +24,11 @@ new_function(dfwork_t *dfw, stnode_t *node);
 
 #define FAIL(dfw, node, ...) dfilter_fail(dfw, stnode_location(node), __VA_ARGS__)
 
-/* End of C code */
+DIAG_OFF_LEMON()
+} /* end of %include */
+
+%code {
+DIAG_ON_LEMON()
 }
 
 /* Parser Information */
