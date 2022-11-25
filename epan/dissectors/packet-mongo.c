@@ -23,6 +23,8 @@
 #include <epan/exceptions.h>
 #include <epan/expert.h>
 #include <epan/proto_data.h>
+#include <wsutil/crc32.h> // CRC32C_PRELOAD
+#include <epan/crc32-tvb.h> // crc32c_tvb_offset_calculate
 #include "packet-tcp.h"
 #include "packet-tls.h"
 #ifdef HAVE_SNAPPY
@@ -260,6 +262,8 @@ static int hf_mongo_msg_sections_section_body = -1;
 static int hf_mongo_msg_sections_section_doc_sequence = -1;
 static int hf_mongo_msg_sections_section_size = -1;
 static int hf_mongo_msg_sections_section_doc_sequence_id = -1;
+static int hf_mongo_msg_checksum = -1;
+static int hf_mongo_msg_checksum_status = -1;
 
 static gint ett_mongo = -1;
 static gint ett_mongo_doc = -1;
@@ -281,6 +285,7 @@ static expert_field ei_mongo_document_length_bad = EI_INIT;
 static expert_field ei_mongo_unknown = EI_INIT;
 static expert_field ei_mongo_unsupported_compression = EI_INIT;
 static expert_field ei_mongo_too_large_compressed = EI_INIT;
+static expert_field ei_mongo_msg_checksum = EI_INIT;
 
 static int
 dissect_fullcollectionname(tvbuff_t *tvb, guint offset, proto_tree *tree)
@@ -840,12 +845,24 @@ dissect_mongo_op_msg(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree
     &hf_mongo_msg_flags_exhaustallowed,
     NULL
   };
+  gint64 op_msg_flags;
+  bool checksum_present = false;
 
-  proto_tree_add_bitmask(tree, tvb, offset, hf_mongo_msg_flags, ett_mongo_msg_flags, mongo_msg_flags, ENC_LITTLE_ENDIAN);
+  proto_tree_add_bitmask_ret_uint64 (tree, tvb, offset, hf_mongo_msg_flags, ett_mongo_msg_flags, mongo_msg_flags, ENC_LITTLE_ENDIAN, &op_msg_flags);
+  if (op_msg_flags & 0x00000001) {
+    checksum_present = true;
+  }
+
   offset += 4;
 
-  while (tvb_reported_length_remaining(tvb, offset) > 0){
+  while (tvb_reported_length_remaining(tvb, offset) > (checksum_present ? 4 : 0)){
     offset += dissect_op_msg_section(tvb, pinfo, offset, tree);
+  }
+
+  if (checksum_present) {
+    guint32 calculated_checksum = ~crc32c_tvb_offset_calculate (tvb, 0, tvb_reported_length (tvb) - 4, CRC32C_PRELOAD);
+    proto_tree_add_checksum(tree, tvb, offset, hf_mongo_msg_checksum, hf_mongo_msg_checksum_status, &ei_mongo_msg_checksum, pinfo, calculated_checksum, ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
+    offset += 4;
   }
 
   return offset;
@@ -1272,6 +1289,16 @@ proto_register_mongo(void)
       FT_STRING, BASE_NONE, NULL, 0x0,
       "Document sequence identifier", HFILL }
     },
+    { &hf_mongo_msg_checksum,
+      { "Checksum", "mongo.msg.checksum",
+      FT_UINT32, BASE_HEX, NULL, 0x0,
+      "CRC32C checksum.", HFILL }
+    },
+    { &hf_mongo_msg_checksum_status,
+      { "Checksum Status", "mongo.msg.checksum.status",
+      FT_UINT8, BASE_NONE, VALS(proto_checksum_vals), 0x0,
+      NULL, HFILL }
+    },
     { &hf_mongo_number_of_cursor_ids,
       { "Number of Cursor IDS", "mongo.number_to_cursor_ids",
       FT_INT32, BASE_DEC, NULL, 0x0,
@@ -1452,6 +1479,7 @@ proto_register_mongo(void)
      { &ei_mongo_unknown, { "mongo.unknown.expert", PI_UNDECODED, PI_WARN, "Unknown Data (not interpreted)", EXPFILL }},
      { &ei_mongo_unsupported_compression, { "mongo.unsupported_compression.expert", PI_UNDECODED, PI_WARN, "This packet was compressed with an unsupported compressor", EXPFILL }},
      { &ei_mongo_too_large_compressed, { "mongo.too_large_compressed.expert", PI_UNDECODED, PI_WARN, "The size of the uncompressed packet exceeded the maximum allowed value", EXPFILL }},
+     { &ei_mongo_msg_checksum, { "mongo.bad_checksum.expert", PI_UNDECODED, PI_ERROR, "Bad checksum", EXPFILL }},
   };
 
   proto_mongo = proto_register_protocol("Mongo Wire Protocol", "MONGO", "mongo");
