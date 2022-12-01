@@ -1,11 +1,8 @@
 /* Do not modify this file. Changes will be overwritten.                      */
 /* Generated automatically by the ASN.1 to Wireshark dissector compiler       */
 /* packet-e2ap.c                                                              */
-/* asn2wrs.py -p e2ap -c ./e2ap.cnf -s ./packet-e2ap-template -D . -O ../.. E2AP-CommonDataTypes.asn E2AP-Constants.asn E2AP-Containers.asn E2AP-IEs.asn E2AP-PDU-Contents.asn E2AP-PDU-Descriptions.asn e2sm-v2.01.asn e2sm-ric-v1.02.asn e2sm-kpm-v2.02.asn */
+/* asn2wrs.py -L -p e2ap -c ./e2ap.cnf -s ./packet-e2ap-template -D . -O ../.. E2AP-CommonDataTypes.asn E2AP-Constants.asn E2AP-Containers.asn E2AP-IEs.asn E2AP-PDU-Contents.asn E2AP-PDU-Descriptions.asn e2sm-v2.01.asn e2sm-ric-v1.02.asn e2sm-kpm-v2.02.asn */
 
-/* Input file: packet-e2ap-template.c */
-
-#line 1 "./asn1/e2ap/packet-e2ap-template.c"
 /* packet-e2ap.c
  * Routines for E2APApplication Protocol (e2ap) packet dissection
  * Copyright 2021, Martin Mathieson
@@ -47,9 +44,6 @@ void proto_reg_handoff_e2ap(void);
 
 static dissector_handle_t e2ap_handle;
 
-
-/*--- Included file: packet-e2ap-val.h ---*/
-#line 1 "./asn1/e2ap/packet-e2ap-val.h"
 #define maxProtocolIEs                 65535
 #define maxnoofErrors                  256
 #define maxofE2nodeComponents          1024
@@ -175,14 +169,8 @@ typedef enum _ProtocolIE_ID_enum {
   id_RICsubscription_withCause_Item =  61
 } ProtocolIE_ID_enum;
 
-/*--- End of included file: packet-e2ap-val.h ---*/
-#line 43 "./asn1/e2ap/packet-e2ap-template.c"
-
 /* Initialize the protocol and registered fields */
 static int proto_e2ap = -1;
-
-/*--- Included file: packet-e2ap-hf.c ---*/
-#line 1 "./asn1/e2ap/packet-e2ap-hf.c"
 static int hf_e2ap_Cause_PDU = -1;                /* Cause */
 static int hf_e2ap_CriticalityDiagnostics_PDU = -1;  /* CriticalityDiagnostics */
 static int hf_e2ap_GlobalE2node_ID_PDU = -1;      /* GlobalE2node_ID */
@@ -863,9 +851,6 @@ static int hf_e2ap_ric_ReportStyle_List_item_01 = -1;  /* RIC_ReportStyle_Item *
 static int hf_e2ap_ric_ActionFormat_Type = -1;    /* RIC_Format_Type */
 static int hf_e2ap_measInfo_Action_List = -1;     /* MeasurementInfo_Action_List */
 
-/*--- End of included file: packet-e2ap-hf.c ---*/
-#line 47 "./asn1/e2ap/packet-e2ap-template.c"
-
 static int hf_e2ap_unmapped_ran_function_id = -1;
 static int hf_e2ap_ran_function_name_not_recognised = -1;
 static int hf_e2ap_ran_function_setup_frame = -1;
@@ -878,9 +863,6 @@ static gint ett_e2ap = -1;
 static expert_field ei_e2ap_ran_function_names_no_match = EI_INIT;
 static expert_field ei_e2ap_ran_function_id_not_mapped = EI_INIT;
 
-
-/*--- Included file: packet-e2ap-ett.c ---*/
-#line 1 "./asn1/e2ap/packet-e2ap-ett.c"
 static gint ett_e2ap_ProtocolIE_Container = -1;
 static gint ett_e2ap_ProtocolIE_Field = -1;
 static gint ett_e2ap_Cause = -1;
@@ -1284,9 +1266,6 @@ static gint ett_e2ap_SEQUENCE_SIZE_1_maxnoofRICStyles_OF_RIC_ReportStyle_Item = 
 static gint ett_e2ap_RIC_EventTriggerStyle_Item = -1;
 static gint ett_e2ap_RIC_ReportStyle_Item = -1;
 
-/*--- End of included file: packet-e2ap-ett.c ---*/
-#line 61 "./asn1/e2ap/packet-e2ap-template.c"
-
 
 /* Forward declarations */
 static int dissect_E2SM_KPM_EventTriggerDefinition_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_);
@@ -1561,9 +1540,6 @@ static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, pro
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *);
 
 
-
-/*--- Included file: packet-e2ap-fn.c ---*/
-#line 1 "./asn1/e2ap/packet-e2ap-fn.c"
 /*--- Cyclic dependencies ---*/
 
 /* RANParameter-Testing-Item -> RANParameter-Testing-Item/ranParameter-Type -> RANParameter-Testing-Item-Choice-List -> RANParameter-Testing-LIST -> RANParameter-Testing-Item */
@@ -1618,13 +1594,11 @@ static value_string_ext e2ap_ProcedureCode_vals_ext = VALUE_STRING_EXT_INIT(e2ap
 
 static int
 dissect_e2ap_ProcedureCode(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 119 "./asn1/e2ap/e2ap.cnf"
   struct e2ap_private_data *e2ap_data = e2ap_get_private_data(actx->pinfo);
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             0U, 255U, &e2ap_data->procedure_code, FALSE);
 
   //col_append_fstr(actx->pinfo->cinfo, COL_INFO, "%s", val_to_str(e2ap_data->procedure_code, e2ap_ProcedureCode_vals, "Unknown"));
-
 
   return offset;
 }
@@ -1698,20 +1672,16 @@ static value_string_ext e2ap_ProtocolIE_ID_vals_ext = VALUE_STRING_EXT_INIT(e2ap
 
 static int
 dissect_e2ap_ProtocolIE_ID(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 93 "./asn1/e2ap/e2ap.cnf"
   struct e2ap_private_data *e2ap_data = e2ap_get_private_data(actx->pinfo);
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             0U, 65535U, &e2ap_data->protocol_ie_id, FALSE);
 
 
 
-
-#line 97 "./asn1/e2ap/e2ap.cnf"
   if (tree) {
     proto_item_append_text(proto_item_get_parent_nth(actx->created_item, 2), ": %s",
                            val_to_str_ext(e2ap_data->protocol_ie_id, &e2ap_ProtocolIE_ID_vals_ext, "unknown (%d)"));
   }
-
   return offset;
 }
 
@@ -2612,7 +2582,6 @@ dissect_e2ap_GlobalRIC_ID(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U
 
 static int
 dissect_e2ap_RANfunctionDefinition(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 239 "./asn1/e2ap/e2ap.cnf"
   tvbuff_t *parameter_tvb;
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, FALSE, &parameter_tvb);
@@ -2640,7 +2609,6 @@ dissect_e2ap_RANfunctionDefinition(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t
 
 
 
-
   return offset;
 }
 
@@ -2648,7 +2616,6 @@ dissect_e2ap_RANfunctionDefinition(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t
 
 static int
 dissect_e2ap_RANfunctionID(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 539 "./asn1/e2ap/e2ap.cnf"
   guint32 value;
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
                                                             0U, 4095U, &value, FALSE);
@@ -2656,7 +2623,6 @@ dissect_e2ap_RANfunctionID(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
   /* Store value in packet-private data */
   struct e2ap_private_data *e2ap_data = e2ap_get_private_data(actx->pinfo);
   e2ap_data->ran_function_id = value;
-
 
 
 
@@ -2687,7 +2653,6 @@ dissect_e2ap_RANfunctionRevision(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
 
 static int
 dissect_e2ap_RICactionDefinition(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 297 "./asn1/e2ap/e2ap.cnf"
   tvbuff_t *parameter_tvb;
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, FALSE, &parameter_tvb);
@@ -2696,7 +2661,6 @@ dissect_e2ap_RICactionDefinition(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
   if (functions && functions->ran_action_definition_dissector) {
     functions->ran_action_definition_dissector(parameter_tvb, actx->pinfo, tree, NULL);
   }
-
 
 
   return offset;
@@ -2733,7 +2697,6 @@ dissect_e2ap_RICactionType(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
 
 static int
 dissect_e2ap_RICcallProcessID(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 321 "./asn1/e2ap/e2ap.cnf"
   tvbuff_t *parameter_tvb;
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, FALSE, &parameter_tvb);
@@ -2742,7 +2705,6 @@ dissect_e2ap_RICcallProcessID(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *act
   if (functions && functions->ran_callprocessid_dissector) {
     functions->ran_callprocessid_dissector(parameter_tvb, actx->pinfo, tree, NULL);
   }
-
 
 
 
@@ -2770,7 +2732,6 @@ dissect_e2ap_RICcontrolAckRequest(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 
 static int
 dissect_e2ap_RICcontrolHeader(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 264 "./asn1/e2ap/e2ap.cnf"
   tvbuff_t *parameter_tvb;
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, FALSE, &parameter_tvb);
@@ -2781,7 +2742,6 @@ dissect_e2ap_RICcontrolHeader(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *act
   }
 
 
-
   return offset;
 }
 
@@ -2789,7 +2749,6 @@ dissect_e2ap_RICcontrolHeader(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *act
 
 static int
 dissect_e2ap_RICcontrolMessage(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 272 "./asn1/e2ap/e2ap.cnf"
   tvbuff_t *parameter_tvb;
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, FALSE, &parameter_tvb);
@@ -2800,7 +2759,6 @@ dissect_e2ap_RICcontrolMessage(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
   }
 
 
-
   return offset;
 }
 
@@ -2808,7 +2766,6 @@ dissect_e2ap_RICcontrolMessage(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
 
 static int
 dissect_e2ap_RICcontrolOutcome(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 280 "./asn1/e2ap/e2ap.cnf"
   tvbuff_t *parameter_tvb;
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, FALSE, &parameter_tvb);
@@ -2820,7 +2777,6 @@ dissect_e2ap_RICcontrolOutcome(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
 
 
 
-
   return offset;
 }
 
@@ -2828,7 +2784,6 @@ dissect_e2ap_RICcontrolOutcome(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
 
 static int
 dissect_e2ap_RICeventTriggerDefinition(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 289 "./asn1/e2ap/e2ap.cnf"
   tvbuff_t *parameter_tvb;
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, FALSE, &parameter_tvb);
@@ -2839,7 +2794,6 @@ dissect_e2ap_RICeventTriggerDefinition(tvbuff_t *tvb _U_, int offset _U_, asn1_c
   }
 
 
-
   return offset;
 }
 
@@ -2847,7 +2801,6 @@ dissect_e2ap_RICeventTriggerDefinition(tvbuff_t *tvb _U_, int offset _U_, asn1_c
 
 static int
 dissect_e2ap_RICindicationHeader(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 305 "./asn1/e2ap/e2ap.cnf"
   tvbuff_t *parameter_tvb;
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, FALSE, &parameter_tvb);
@@ -2858,7 +2811,6 @@ dissect_e2ap_RICindicationHeader(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
   }
 
 
-
   return offset;
 }
 
@@ -2866,7 +2818,6 @@ dissect_e2ap_RICindicationHeader(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
 
 static int
 dissect_e2ap_RICindicationMessage(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 313 "./asn1/e2ap/e2ap.cnf"
   tvbuff_t *parameter_tvb;
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
                                        NO_BOUND, NO_BOUND, FALSE, &parameter_tvb);
@@ -2875,7 +2826,6 @@ dissect_e2ap_RICindicationMessage(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
   if (functions && functions->ran_indication_message_dissector) {
     functions->ran_indication_message_dissector(parameter_tvb, actx->pinfo, tree, NULL);
   }
-
 
 
   return offset;
@@ -3059,9 +3009,7 @@ static const per_sequence_t RICsubscriptionRequest_sequence[] = {
 
 static int
 dissect_e2ap_RICsubscriptionRequest(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 631 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICsubscriptionRequest");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RICsubscriptionRequest, RICsubscriptionRequest_sequence);
@@ -3123,9 +3071,7 @@ static const per_sequence_t RICsubscriptionResponse_sequence[] = {
 
 static int
 dissect_e2ap_RICsubscriptionResponse(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 634 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICsubscriptionResponse");
-
 
 
 
@@ -3200,9 +3146,7 @@ static const per_sequence_t RICsubscriptionFailure_sequence[] = {
 
 static int
 dissect_e2ap_RICsubscriptionFailure(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 628 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICsubscriptionFailure");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RICsubscriptionFailure, RICsubscriptionFailure_sequence);
@@ -3218,9 +3162,7 @@ static const per_sequence_t RICsubscriptionDeleteRequest_sequence[] = {
 
 static int
 dissect_e2ap_RICsubscriptionDeleteRequest(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 642 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICsubscriptionDeleteRequest");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RICsubscriptionDeleteRequest, RICsubscriptionDeleteRequest_sequence);
@@ -3236,9 +3178,7 @@ static const per_sequence_t RICsubscriptionDeleteResponse_sequence[] = {
 
 static int
 dissect_e2ap_RICsubscriptionDeleteResponse(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 645 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICsubscriptionDeleteResponse");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RICsubscriptionDeleteResponse, RICsubscriptionDeleteResponse_sequence);
@@ -3254,9 +3194,7 @@ static const per_sequence_t RICsubscriptionDeleteFailure_sequence[] = {
 
 static int
 dissect_e2ap_RICsubscriptionDeleteFailure(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 639 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICsubscriptionDeleteFailure");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RICsubscriptionDeleteFailure, RICsubscriptionDeleteFailure_sequence);
@@ -3272,9 +3210,7 @@ static const per_sequence_t RICsubscriptionDeleteRequired_sequence[] = {
 
 static int
 dissect_e2ap_RICsubscriptionDeleteRequired(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 648 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICsubscriptionDeleteRequired");
-
 
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
@@ -3321,9 +3257,7 @@ static const per_sequence_t RICindication_sequence[] = {
 
 static int
 dissect_e2ap_RICindication(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 609 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICindication");
-
 
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
@@ -3340,9 +3274,7 @@ static const per_sequence_t RICcontrolRequest_sequence[] = {
 
 static int
 dissect_e2ap_RICcontrolRequest(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 605 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICcontrolRequest");
-
 
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
@@ -3359,9 +3291,7 @@ static const per_sequence_t RICcontrolAcknowledge_sequence[] = {
 
 static int
 dissect_e2ap_RICcontrolAcknowledge(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 599 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICcontrolAcknowledge");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RICcontrolAcknowledge, RICcontrolAcknowledge_sequence);
@@ -3377,9 +3307,7 @@ static const per_sequence_t RICcontrolFailure_sequence[] = {
 
 static int
 dissect_e2ap_RICcontrolFailure(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 602 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICcontrolFailure");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RICcontrolFailure, RICcontrolFailure_sequence);
@@ -3395,9 +3323,7 @@ static const per_sequence_t ErrorIndication_sequence[] = {
 
 static int
 dissect_e2ap_ErrorIndication(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 588 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ErrorIndication");
-
 
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
@@ -3414,9 +3340,7 @@ static const per_sequence_t E2setupRequest_sequence[] = {
 
 static int
 dissect_e2ap_E2setupRequest(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 581 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E2setupRequest");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_E2setupRequest, E2setupRequest_sequence);
@@ -3432,9 +3356,7 @@ static const per_sequence_t E2setupResponse_sequence[] = {
 
 static int
 dissect_e2ap_E2setupResponse(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 584 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E2setupResponse");
-
 
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
@@ -3451,9 +3373,7 @@ static const per_sequence_t E2setupFailure_sequence[] = {
 
 static int
 dissect_e2ap_E2setupFailure(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 578 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E2setupFailure");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_E2setupFailure, E2setupFailure_sequence);
@@ -3469,9 +3389,7 @@ static const per_sequence_t E2connectionUpdate_sequence[] = {
 
 static int
 dissect_e2ap_E2connectionUpdate(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 558 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E2connectionUpdate");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_E2connectionUpdate, E2connectionUpdate_sequence);
@@ -3544,9 +3462,7 @@ static const per_sequence_t E2connectionUpdateAcknowledge_sequence[] = {
 
 static int
 dissect_e2ap_E2connectionUpdateAcknowledge(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 561 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E2connectionUpdateAcknowledge");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_E2connectionUpdateAcknowledge, E2connectionUpdateAcknowledge_sequence);
@@ -3591,9 +3507,7 @@ static const per_sequence_t E2connectionUpdateFailure_sequence[] = {
 
 static int
 dissect_e2ap_E2connectionUpdateFailure(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 564 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E2connectionUpdateFailure");
-
 
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
@@ -3610,9 +3524,7 @@ static const per_sequence_t E2nodeConfigurationUpdate_sequence[] = {
 
 static int
 dissect_e2ap_E2nodeConfigurationUpdate(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 568 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E2nodeConfigurationUpdate");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_E2nodeConfigurationUpdate, E2nodeConfigurationUpdate_sequence);
@@ -3746,9 +3658,7 @@ static const per_sequence_t E2nodeConfigurationUpdateAcknowledge_sequence[] = {
 
 static int
 dissect_e2ap_E2nodeConfigurationUpdateAcknowledge(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 571 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E2nodeConfigurationUpdateAcknowledge");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_E2nodeConfigurationUpdateAcknowledge, E2nodeConfigurationUpdateAcknowledge_sequence);
@@ -3854,9 +3764,7 @@ static const per_sequence_t E2nodeConfigurationUpdateFailure_sequence[] = {
 
 static int
 dissect_e2ap_E2nodeConfigurationUpdateFailure(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 574 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "E2nodeConfigurationUpdateFailure");
-
 
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
@@ -3873,9 +3781,7 @@ static const per_sequence_t ResetRequest_sequence[] = {
 
 static int
 dissect_e2ap_ResetRequest(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 592 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ResetRequest");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_ResetRequest, ResetRequest_sequence);
@@ -3891,9 +3797,7 @@ static const per_sequence_t ResetResponse_sequence[] = {
 
 static int
 dissect_e2ap_ResetResponse(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 595 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "ResetResponse");
-
 
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
@@ -3910,9 +3814,7 @@ static const per_sequence_t RICserviceUpdate_sequence[] = {
 
 static int
 dissect_e2ap_RICserviceUpdate(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 617 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICserviceUpdate");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RICserviceUpdate, RICserviceUpdate_sequence);
@@ -3988,9 +3890,7 @@ static const per_sequence_t RICserviceUpdateAcknowledge_sequence[] = {
 
 static int
 dissect_e2ap_RICserviceUpdateAcknowledge(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 620 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICserviceUpdateAcknowledge");
-
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RICserviceUpdateAcknowledge, RICserviceUpdateAcknowledge_sequence);
@@ -4035,9 +3935,7 @@ static const per_sequence_t RICserviceUpdateFailure_sequence[] = {
 
 static int
 dissect_e2ap_RICserviceUpdateFailure(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 623 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICserviceUpdateFailure");
-
 
 
 
@@ -4055,9 +3953,7 @@ static const per_sequence_t RICserviceQuery_sequence[] = {
 
 static int
 dissect_e2ap_RICserviceQuery(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 613 "./asn1/e2ap/e2ap.cnf"
   col_append_sep_str(actx->pinfo->cinfo, COL_INFO, NULL, "RICserviceQuery");
-
 
 
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
@@ -4112,10 +4008,8 @@ dissect_e2ap_E2RemovalFailure(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *act
 
 static int
 dissect_e2ap_InitiatingMessage_value(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 128 "./asn1/e2ap/e2ap.cnf"
   struct e2ap_private_data *e2ap_data = e2ap_get_private_data(actx->pinfo);
   e2ap_data->message_type = INITIATING_MESSAGE;
-
   offset = dissect_per_open_type_pdu_new(tvb, offset, actx, tree, hf_index, dissect_InitiatingMessageValue);
 
   return offset;
@@ -4141,10 +4035,8 @@ dissect_e2ap_InitiatingMessage(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
 
 static int
 dissect_e2ap_SuccessfulOutcome_value(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 132 "./asn1/e2ap/e2ap.cnf"
   struct e2ap_private_data *e2ap_data = e2ap_get_private_data(actx->pinfo);
   e2ap_data->message_type = SUCCESSFUL_OUTCOME;
-
   offset = dissect_per_open_type_pdu_new(tvb, offset, actx, tree, hf_index, dissect_SuccessfulOutcomeValue);
 
   return offset;
@@ -4170,10 +4062,8 @@ dissect_e2ap_SuccessfulOutcome(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
 
 static int
 dissect_e2ap_UnsuccessfulOutcome_value(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 136 "./asn1/e2ap/e2ap.cnf"
   struct e2ap_private_data *e2ap_data = e2ap_get_private_data(actx->pinfo);
   e2ap_data->message_type = UNSUCCESSFUL_OUTCOME;
-
 
 
 
@@ -4721,7 +4611,6 @@ dissect_e2ap_InterfaceType(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
 
 static int
 dissect_e2ap_T_ranFunction_ShortName(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-#line 547 "./asn1/e2ap/e2ap.cnf"
   gint start_offset = offset;
   offset = dissect_per_PrintableString(tvb, offset, actx, tree, hf_index,
                                           1, 150, TRUE);
@@ -4731,7 +4620,6 @@ dissect_e2ap_T_ranFunction_ShortName(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx
   ran_functionid_table_t *table = get_ran_functionid_table(actx->pinfo);
   store_ran_function_mapping(actx->pinfo, table, e2ap_data->ran_function_id,
                              tvb_get_stringz_enc(wmem_packet_scope(), tvb, (start_offset+15)/8, NULL, ENC_ASCII));
-
 
 
 
@@ -11191,9 +11079,6 @@ static int dissect_E2SM_KPM_RANfunction_Description_PDU(tvbuff_t *tvb _U_, packe
 }
 
 
-/*--- End of included file: packet-e2ap-fn.c ---*/
-#line 337 "./asn1/e2ap/packet-e2ap-template.c"
-
 static int dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   e2ap_ctx_t e2ap_ctx;
@@ -11272,9 +11157,6 @@ proto_reg_handoff_e2ap(void)
 {
   dissector_add_uint_with_preference("sctp.port", SCTP_PORT_E2AP, e2ap_handle);
 
-
-/*--- Included file: packet-e2ap-dis-tab.c ---*/
-#line 1 "./asn1/e2ap/packet-e2ap-dis-tab.c"
   dissector_add_uint("e2ap.ies", id_Cause, create_dissector_handle(dissect_Cause_PDU, proto_e2ap));
   dissector_add_uint("e2ap.ies", id_CriticalityDiagnostics, create_dissector_handle(dissect_CriticalityDiagnostics_PDU, proto_e2ap));
   dissector_add_uint("e2ap.ies", id_GlobalE2node_ID, create_dissector_handle(dissect_GlobalE2node_ID_PDU, proto_e2ap));
@@ -11363,9 +11245,6 @@ proto_reg_handoff_e2ap(void)
   dissector_add_uint("e2ap.proc.imsg", id_E2removal, create_dissector_handle(dissect_E2RemovalRequest_PDU, proto_e2ap));
   dissector_add_uint("e2ap.proc.sout", id_E2removal, create_dissector_handle(dissect_E2RemovalResponse_PDU, proto_e2ap));
 
-
-/*--- End of included file: packet-e2ap-dis-tab.c ---*/
-#line 417 "./asn1/e2ap/packet-e2ap-template.c"
 }
 
 
@@ -11376,9 +11255,6 @@ void proto_register_e2ap(void) {
   /* List of fields */
 
   static hf_register_info hf[] = {
-
-/*--- Included file: packet-e2ap-hfarr.c ---*/
-#line 1 "./asn1/e2ap/packet-e2ap-hfarr.c"
     { &hf_e2ap_Cause_PDU,
       { "Cause", "e2ap.Cause",
         FT_UINT32, BASE_DEC, VALS(e2ap_Cause_vals), 0,
@@ -14095,9 +13971,6 @@ void proto_register_e2ap(void) {
       { "measInfo-Action-List", "e2ap.measInfo_Action_List",
         FT_UINT32, BASE_DEC, NULL, 0,
         "MeasurementInfo_Action_List", HFILL }},
-
-/*--- End of included file: packet-e2ap-hfarr.c ---*/
-#line 428 "./asn1/e2ap/packet-e2ap-template.c"
       { &hf_e2ap_unmapped_ran_function_id,
           { "Unmapped RANfunctionID", "e2ap.unmapped-ran-function-id",
             FT_NONE, BASE_NONE, NULL, 0x0,
@@ -14115,9 +13988,6 @@ void proto_register_e2ap(void) {
   /* List of subtrees */
   static gint *ett[] = {
     &ett_e2ap,
-
-/*--- Included file: packet-e2ap-ettarr.c ---*/
-#line 1 "./asn1/e2ap/packet-e2ap-ettarr.c"
     &ett_e2ap_ProtocolIE_Container,
     &ett_e2ap_ProtocolIE_Field,
     &ett_e2ap_Cause,
@@ -14520,9 +14390,6 @@ void proto_register_e2ap(void) {
     &ett_e2ap_SEQUENCE_SIZE_1_maxnoofRICStyles_OF_RIC_ReportStyle_Item,
     &ett_e2ap_RIC_EventTriggerStyle_Item,
     &ett_e2ap_RIC_ReportStyle_Item,
-
-/*--- End of included file: packet-e2ap-ettarr.c ---*/
-#line 446 "./asn1/e2ap/packet-e2ap-template.c"
   };
 
   static ei_register_info ei[] = {

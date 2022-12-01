@@ -52,23 +52,40 @@ dfilter_expand(const char *expr, char **err_ret);
  * Returns TRUE on success, FALSE on failure.
  */
 
+#define DF_ERROR_GENERIC		-1
+
 typedef struct _dfilter_loc {
 	long col_start;
 	size_t col_len;
 } dfilter_loc_t;
 
+typedef struct {
+	int code;
+	char *msg;
+	dfilter_loc_t loc;
+} df_error_t;
+
+WS_DLL_PUBLIC
+void
+dfilter_error_free(df_error_t *);
+
+/* Save textual representation of syntax tree (for debugging purposes). */
+#define DF_SAVE_TREE		(1U << 0)
+/* Perform macro substitution on filter text. */
+#define DF_EXPAND_MACROS	(1U << 1)
+/* Do an optimization pass on the compiled filter. */
+#define DF_OPTIMIZE		(1U << 2)
+
 WS_DLL_PUBLIC
 gboolean
 dfilter_compile_real(const gchar *text, dfilter_t **dfp,
-			gchar **err_msg, dfilter_loc_t *loc_ptr,
-			const char *caller, gboolean save_tree,
-			gboolean apply_macros);
+			df_error_t **errpp, unsigned flags,
+			const char *caller);
 
-#define dfilter_compile(text, dfp, err_msg) \
-	dfilter_compile_real(text, dfp, err_msg, NULL, __func__, FALSE, TRUE)
-
-#define dfilter_compile2(text, dfp, err_msg, loc_ptr) \
-	dfilter_compile_real(text, dfp, err_msg, loc_ptr, __func__, FALSE, TRUE)
+#define dfilter_compile(text, dfp, errp) \
+	dfilter_compile_real(text, dfp, errp, \
+				DF_EXPAND_MACROS|DF_OPTIMIZE, \
+				__func__)
 
 /* Frees all memory used by dfilter, and frees
  * the dfilter itself. */

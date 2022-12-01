@@ -2257,7 +2257,7 @@ NRrestrictionin5GS                      N s1ap.extension id-NRrestrictionin5GS
 PLMNidentity                            N s1ap.extension id-LastNG-RANPLMNIdentity
 PSCellInformation                       N s1ap.extension id-PSCellInformation
 IMSvoiceEPSfallbackfrom5G               N s1ap.extension id-IMSvoiceEPSfallbackfrom5G
-RequestTypeAdditionalInfo               N s1ap.extension id-TimeSinceSecondaryNodeRelease
+RequestTypeAdditionalInfo               N s1ap.extension id-RequestTypeAdditionalInfo
 ContextatSource                         N s1ap.extension id-ContextatSource
 Ethernet-Type                           N s1ap.extension id-Ethernet-Type
 IntersystemMeasurementConfiguration     N s1ap.extension id-IntersystemMeasurementConfiguration
@@ -2687,7 +2687,6 @@ MMEEarlyStatusTransfer                  N s1ap.proc.imsg id-MMEEarlyStatusTransf
 
 #.FIELD_ATTR
 EUTRAN-CGI/cell-ID ABBREV=CellIdentity TYPE=FT_UINT32 DISPLAY=BASE_HEX BITMASK=0xFFFFFFF0
-
 #.FN_BODY CellIdentity VAL_PTR = &cell_id_tvb HF_INDEX=-1
   tvbuff_t *cell_id_tvb = NULL;
 %(DEFAULT_BODY)s
