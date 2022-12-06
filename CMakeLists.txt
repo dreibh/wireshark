@@ -677,8 +677,6 @@ else() # ! MSVC
 		#
 		### Flags for C only ###
 		#
-		# The following are C only, not C++
-		-Wunused-const-variable
 		#
 		# XXX - some versions of GCC, including the one in at
 		# least some Xcode versions that come with Mac OS X
@@ -689,7 +687,6 @@ else() # ! MSVC
 		-Wshadow
 		-Wold-style-definition
 		-Wstrict-prototypes
-		-Wjump-misses-init
 	)
 
 	#

@@ -687,6 +687,75 @@ fragment_add_seq_offset(reassembly_table *table, const packet_info *pinfo, const
 	fd_head->fragment_nr_offset = fragment_offset;
 }
 
+static void
+update_first_gap(fragment_head *fd_head, fragment_item *inserted, gboolean multi_insert)
+{
+	guint32 frag_end = inserted->offset + inserted->len;
+	fragment_item *iter;
+	guint32 contiguous;
+
+	if (inserted->offset > fd_head->contiguous_len) {
+		/* first inserted node is after first gap */
+		return;
+	} else if (fd_head->first_gap == NULL) {
+		/* we haven't seen first fragment yet */
+		if (inserted->offset != 0) {
+			/* inserted node is not first fragment */
+			return;
+		}
+		contiguous = inserted->len;
+		iter = inserted;
+	} else {
+		contiguous = MAX(fd_head->contiguous_len, frag_end);
+		iter = multi_insert ? inserted : fd_head->first_gap;
+	}
+
+	while (iter->next) {
+		if (iter->next->offset > contiguous) {
+			break;
+		}
+		iter = iter->next;
+		contiguous = MAX(contiguous, iter->offset + iter->len);
+	}
+
+	/* iter is either pointing to last fragment before gap or tail */
+	fd_head->first_gap = iter;
+	fd_head->contiguous_len = contiguous;
+}
+
+/*
+ * Keeping first gap and contiguous length in sync significantly speeds up
+ * LINK_FRAG() when fragments in capture file are mostly ordered. However, when
+ * fragments are removed from the list, the first gap can point to fragments
+ * that were either moved to another list or freed. Therefore when any fragment
+ * before first gap is removed, the first gap (and contiguous length) must be
+ * invalidated.
+ */
+static void fragment_reset_first_gap(fragment_head *fd_head)
+{
+	fd_head->first_gap = NULL;
+	fd_head->contiguous_len = 0;
+	if (fd_head->next) {
+		gboolean multi_insert = (fd_head->next->next != NULL);
+		update_first_gap(fd_head, fd_head->next, multi_insert);
+	}
+}
+
+/*
+ * Determines whether list modification requires first gap reset. On entry
+ * modified is NULL if all elements were removed, otherwise it points to
+ * element (reachable from fd_head) whose next pointer was changed.
+ */
+static void fragment_items_removed(fragment_head *fd_head, fragment_item *modified)
+{
+	if ((fd_head->first_gap == modified) ||
+	    ((modified != NULL) && (modified->offset > fd_head->contiguous_len))) {
+		/* Removed elements were after first gap */
+		return;
+	}
+	fragment_reset_first_gap(fd_head);
+}
+
 /*
  * For use with fragment_add (and not the fragment_add_seq functions).
  * When the reassembled result is wrong (perhaps it needs to be extended), this
@@ -874,6 +943,8 @@ fragment_truncate(reassembly_table *table, const packet_info *pinfo,
 	} else {
 		fd_head->next = NULL;
 	}
+	fd_head->contiguous_len = MIN(fd_head->contiguous_len, tot_len);
+	fragment_items_removed(fd_head, prev_fd);
 	fragment_item *tmp_fd;
 	for (; fd_i; fd_i = tmp_fd) {
 		tmp_fd=fd_i->next;
@@ -1035,41 +1106,73 @@ LINK_FRAG(fragment_head *fd_head,fragment_item *fd)
 		fd->next = fd_head->next;
 		fd_head->next = fd;
 	} else {
-		for(fd_i = fd_head->next; fd_i->next; fd_i=fd_i->next) {
+		fd_i = fd_head->next;
+		if (fd_head->first_gap != NULL) {
+			if (fd->offset >= fd_head->first_gap->offset) {
+				/* fragment is after first gap */
+				fd_i = fd_head->first_gap;
+			}
+		}
+		for(; fd_i->next; fd_i=fd_i->next) {
 			if (fd->offset < fd_i->next->offset )
 				break;
 		}
 		fd->next = fd_i->next;
 		fd_i->next = fd;
 	}
+
+	update_first_gap(fd_head, fd, FALSE);
 }
 
 static void
 MERGE_FRAG(fragment_head *fd_head, fragment_item *fd)
 {
-	fragment_item *fd_i, *tmp;
+	fragment_item *fd_i, *tmp, *inserted = fd;
+	gboolean multi_insert;
 
 	if (fd == NULL) return;
 
+	multi_insert = (fd->next != NULL);
+
 	if (fd_head->next == NULL) {
 		fd_head->next = fd;
+		update_first_gap(fd_head, fd, multi_insert);
 		return;
 	}
 
-	if (fd->offset < fd_head->next->offset) {
-		tmp = fd_head->next;
-		fd_head->next = fd;
-		fd = tmp;
+	if ((fd_head->first_gap != NULL) &&
+	    (fd->offset >= fd_head->first_gap->offset)) {
+		/* all new fragments go after first gap */
+		fd_i = fd_head->first_gap;
+	} else {
+		/* at least one new fragment goes before first gap */
+		if (fd->offset < fd_head->next->offset) {
+			/* inserted fragment is new head, "swap" the lists */
+			tmp = fd_head->next;
+			fd_head->next = fd;
+			fd = tmp;
+		}
+		fd_i = fd_head->next;
 	}
 
-	for(fd_i = fd_head->next; fd_i->next; fd_i=fd_i->next) {
+	/* Traverse the list linked to fragment head ("main" list), checking if
+	 * fd pointer ("merge" list) should go before or after fd_i->next. Swap
+	 * fd_i->next ("main") and fd pointers ("merge") if "merge" list should
+	 * go before iterated element (fd_i). After the swap what formerly was
+	 * "merge" list essentially becomes part of "main" list (just detached
+	 * element, i.e. fd, is now head of new "merge list").
+	 */
+	for(; fd_i->next; fd_i=fd_i->next) {
 		if (fd->offset < fd_i->next->offset) {
 			tmp = fd_i->next;
 			fd_i->next = fd;
 			fd = tmp;
 		}
 	}
+	/* Reached "main" list end, attach remaining elements */
 	fd_i->next = fd;
+
+	update_first_gap(fd_head, inserted, multi_insert);
 }
 
 /*
@@ -1097,11 +1200,11 @@ static gboolean
 fragment_add_work(fragment_head *fd_head, tvbuff_t *tvb, const int offset,
 		 const packet_info *pinfo, const guint32 frag_offset,
 		 const guint32 frag_data_len, const gboolean more_frags,
-		 const guint32 frag_frame)
+		 const guint32 frag_frame, const gboolean allow_overlaps)
 {
 	fragment_item *fd;
 	fragment_item *fd_i;
-	guint32 max, dfpos, fraglen, overlap;
+	guint32 dfpos, fraglen, overlap;
 	tvbuff_t *old_tvb_data;
 	guint8 *data;
 
@@ -1117,7 +1220,7 @@ fragment_add_work(fragment_head *fd_head, tvbuff_t *tvb, const int offset,
 	/*
 	 * Are we adding to an already-completed reassembly?
 	 */
-	if (fd_head->flags & FD_DEFRAGMENTED) {
+	if ((fd_head->flags & FD_DEFRAGMENTED) && !allow_overlaps) {
 		/*
 		 * Yes.  Does this fragment go past the end of the results
 		 * of that reassembly?
@@ -1260,26 +1363,8 @@ fragment_add_work(fragment_head *fd_head, tvbuff_t *tvb, const int offset,
 		return FALSE;
 	}
 
-
-	/*
-	 * Check if we have received the entire fragment.
-	 * This is easy since the list is sorted and the head is faked.
-	 *
-	 * First, we compute the amount of contiguous data that's
-	 * available.  (The check for fd_i->offset <= max rules out
-	 * fragments that don't start before or at the end of the
-	 * previous fragment, i.e. fragments that have a gap between
-	 * them and the previous fragment.)
-	 */
-	max = 0;
-	for (fd_i=fd_head->next;fd_i;fd_i=fd_i->next) {
-		if ( ((fd_i->offset)<=max) &&
-			((fd_i->offset+fd_i->len)>max) ){
-			max = fd_i->offset+fd_i->len;
-		}
-	}
-
-	if (max < (fd_head->datalen)) {
+	/* Check if we have received the entire fragment. */
+	if (fd_head->contiguous_len < fd_head->datalen) {
 		/*
 		 * The amount of contiguous data we have is less than the
 		 * amount of data we're trying to reassemble, so we haven't
@@ -1301,7 +1386,7 @@ fragment_add_work(fragment_head *fd_head, tvbuff_t *tvb, const int offset,
 	for (dfpos=0,fd_i=fd_head->next;fd_i;fd_i=fd_i->next) {
 		if (fd_i->len) {
 			/*
-			 * The loop above that calculates max also
+			 * The contiguous length check above also
 			 * ensures that the only gaps that exist here
 			 * are ones where a fragment starts past the
 			 * end of the reassembled datagram, and there's
@@ -1613,7 +1698,7 @@ fragment_add_common(reassembly_table *table, tvbuff_t *tvb, const int offset,
 	}
 
 	if (fragment_add_work(fd_head, tvb, offset, pinfo, frag_offset,
-		frag_data_len, more_frags, frag_frame)) {
+		frag_data_len, more_frags, frag_frame, FALSE)) {
 		/*
 		 * Reassembly is complete.
 		 */
@@ -1674,14 +1759,16 @@ fragment_add_out_of_order(reassembly_table *table, tvbuff_t *tvb,
 }
 
 fragment_head *
-fragment_add_check(reassembly_table *table, tvbuff_t *tvb, const int offset,
+fragment_add_check_with_fallback(reassembly_table *table, tvbuff_t *tvb, const int offset,
 		   const packet_info *pinfo, const guint32 id,
 		   const void *data, const guint32 frag_offset,
-		   const guint32 frag_data_len, const gboolean more_frags)
+		   const guint32 frag_data_len, const gboolean more_frags,
+		   const guint32 fallback_frame)
 {
 	reassembled_key reass_key;
 	fragment_head *fd_head;
 	gpointer orig_key;
+	gboolean late_retransmission = FALSE;
 
 	/*
 	 * If this isn't the first pass, look for this frame in the table
@@ -1698,6 +1785,20 @@ fragment_add_check(reassembly_table *table, tvbuff_t *tvb, const int offset,
 	 * the memory allocated for the original key, for example before calling g_hash_table_remove()
 	 */
 	fd_head = lookup_fd_head(table, pinfo, id, data, &orig_key);
+	if ((fd_head == NULL) && (fallback_frame != pinfo->num)) {
+		/* Check if there is completed reassembly reachable from fallback frame */
+		reass_key.frame = fallback_frame;
+		reass_key.id = id;
+		fd_head = (fragment_head *)g_hash_table_lookup(table->reassembled_table, &reass_key);
+		if (fd_head != NULL) {
+			/* Found completely reassembled packet, hash it with current frame number */
+			reassembled_key *new_key = g_slice_new(reassembled_key);
+			new_key->frame = pinfo->num;
+			new_key->id = id;
+			g_hash_table_insert(table->reassembled_table, new_key, fd_head);
+			late_retransmission = TRUE;
+		}
+	}
 	if (fd_head == NULL) {
 		/* not found, this must be the first snooped fragment for this
 		 * packet. Create list-head.
@@ -1719,7 +1820,11 @@ fragment_add_check(reassembly_table *table, tvbuff_t *tvb, const int offset,
 	}
 
 	if (fragment_add_work(fd_head, tvb, offset, pinfo, frag_offset,
-		frag_data_len, more_frags, pinfo->num)) {
+		frag_data_len, more_frags, pinfo->num, late_retransmission)) {
+		/* Nothing left to do if it was a late retransmission */
+		if (late_retransmission) {
+			return fd_head;
+		}
 		/*
 		 * Reassembly is complete.
 		 * Remove this from the table of in-progress
@@ -1744,6 +1849,16 @@ fragment_add_check(reassembly_table *table, tvbuff_t *tvb, const int offset,
 		 */
 		return NULL;
 	}
+}
+
+fragment_head *
+fragment_add_check(reassembly_table *table, tvbuff_t *tvb, const int offset,
+		   const packet_info *pinfo, const guint32 id,
+		   const void *data, const guint32 frag_offset,
+		   const guint32 frag_data_len, const gboolean more_frags)
+{
+	return fragment_add_check_with_fallback(table, tvb, offset, pinfo, id, data,
+		frag_offset, frag_data_len, more_frags, pinfo->num);
 }
 
 static void
@@ -2333,6 +2448,8 @@ fragment_add_seq_single_move(reassembly_table *table, const packet_info *pinfo,
 		/* Don't take a reassembly starting with a First fragment. */
 		fd = new_fh->next;
 		if (fd && fd->offset != 0) {
+			fragment_item *inserted = fd;
+			gboolean multi_insert = (inserted->next != NULL);
 			if (prev_fd) {
 				prev_fd->next = fd;
 			} else {
@@ -2344,6 +2461,7 @@ fragment_add_seq_single_move(reassembly_table *table, const packet_info *pinfo,
 					fh->frame = fd->frame;
 				}
 			}
+			update_first_gap(fh, inserted, multi_insert);
 			/* If previously found a Last fragment,
 			 * transfer that info to the new one. */
 			if (new_fh->flags & FD_DATALEN_SET) {
@@ -2420,6 +2538,7 @@ fragment_add_seq_single_work(reassembly_table *table, tvbuff_t *tvb,
 				} else {
 					new_fh->next = NULL;
 				}
+				fragment_items_removed(new_fh, prev_fd);
 				break;
 			}
 		}
@@ -2506,6 +2625,7 @@ fragment_add_seq_single_work(reassembly_table *table, tvbuff_t *tvb,
 			} else {
 			    fh->next = NULL;
 			}
+			fragment_items_removed(fh, prev_fd);
 			fh->frame = 0;
 			for (prev_fd=fh->next; prev_fd; prev_fd=prev_fd->next) {
 				if (fh->frame < prev_fd->frame) {
@@ -2639,6 +2759,8 @@ fragment_start_seq_check(reassembly_table *table, const packet_info *pinfo,
 		/* Create list-head. */
 		fd_head = g_slice_new(fragment_head);
 		fd_head->next = NULL;
+		fd_head->first_gap = NULL;
+		fd_head->contiguous_len = 0;
 		fd_head->frame = 0;
 		fd_head->len = 0;
 		fd_head->fragment_nr_offset = 0;

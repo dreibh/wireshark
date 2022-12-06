@@ -23,6 +23,8 @@ Wireshark is now better about generating valid UTF-8 output.
 
 A new display filter feature for filtering raw bytes has been added.
 
+Display filter autocomplete is smarter about not suggesting invalid syntax.
+
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
 
@@ -92,7 +94,10 @@ DECT proprietary Mitel OMM/RFP Protocol (also named AaMiDe)
 * The JSON dissector now has a preference to enable/disable "unescaping"
   of string values. By default it is off. Previously it was always on.
 
-Too many protocols have been updated to list here.
+* The IPv6 dissector has a new preference to show some semantic details
+  about addresses (default off).
+
+Too many other protocols have been updated to list them all here.
 
 === New and Updated Capture File Support
 
