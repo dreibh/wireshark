@@ -56,6 +56,7 @@
 #include <ui/qt/widgets/drag_label.h>
 #include <ui/qt/filter_action.h>
 #include <ui/qt/decode_as_dialog.h>
+#include <ui/qt/wireshark_main_window.h>
 
 #include <QAction>
 #include <QActionGroup>
@@ -206,7 +207,8 @@ PacketList::PacketList(QWidget *parent) :
     set_column_visibility_(false),
     frozen_rows_(QModelIndexList()),
     cur_history_(-1),
-    in_history_(false)
+    in_history_(false),
+    finfo_array(NULL)
 {
     setItemsExpandable(false);
     setRootIsDecorated(false);
@@ -261,6 +263,14 @@ PacketList::PacketList(QWidget *parent) :
             this, SLOT(sectionMoved(int,int,int)));
 
     connect(verticalScrollBar(), SIGNAL(actionTriggered(int)), this, SLOT(vScrollBarActionTriggered(int)));
+}
+
+PacketList::~PacketList()
+{
+    if (finfo_array)
+    {
+        g_ptr_array_free(finfo_array, TRUE);
+    }
 }
 
 void PacketList::colorsChanged()
@@ -569,8 +579,13 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
 
     proto_prefs_menus_.clear();
 
+    if (finfo_array)
+    {
+        g_ptr_array_free(finfo_array, TRUE);
+        finfo_array = NULL;
+    }
     if (cap_file_ && cap_file_->edt && cap_file_->edt->tree) {
-        GPtrArray *finfo_array = proto_all_finfos(cap_file_->edt->tree);
+        finfo_array = proto_all_finfos(cap_file_->edt->tree);
         QList<QString> added_proto_prefs;
 
         for (guint i = 0; i < finfo_array->len; i++) {
@@ -599,7 +614,6 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
                 added_proto_prefs << module_name;
             }
         }
-        g_ptr_array_free(finfo_array, TRUE);
     }
 
     QModelIndex ctxIndex = indexAt(event->pos());
@@ -622,6 +636,15 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
     ctx_menu->addMenu(window()->findChild<QMenu *>("menuPacketComment"));
 
     ctx_menu->addSeparator();
+
+    // Code for custom context menus from Lua's register_packet_menu()
+    MainWindow * mainWindow = qobject_cast<MainWindow *>(mainApp->mainWindow());
+    if (cap_file_ && cap_file_->edt && cap_file_->edt->tree && mainWindow) {
+        bool insertedPacketMenu = mainWindow->addPacketMenus(ctx_menu, finfo_array);
+        if (insertedPacketMenu) {
+            ctx_menu->addSeparator();
+        }
+    }
 
     ctx_menu->addAction(window()->findChild<QAction *>("actionViewEditResolvedName"));
     ctx_menu->addSeparator();
@@ -1392,7 +1415,7 @@ void PacketList::addPacketComment(QString new_comment)
     if (!cap_file_ || !packet_list_model_) return;
     if (new_comment.isEmpty()) return;
 
-    QByteArray ba = new_comment.toLocal8Bit();
+    QByteArray ba = new_comment.toUtf8();
 
     for (int i = 0; i < selectedRows().size(); i++) {
         int row = selectedRows().at(i);
@@ -1440,7 +1463,7 @@ void PacketList::setPacketComment(guint c_number, QString new_comment)
     if (new_comment.isEmpty()) {
         wtap_block_remove_nth_option_instance(pkt_block, OPT_COMMENT, c_number);
     } else {
-        QByteArray ba = new_comment.toLocal8Bit();
+        QByteArray ba = new_comment.toUtf8();
         /*
          * Make sure this would fit in a pcapng option.
          *
