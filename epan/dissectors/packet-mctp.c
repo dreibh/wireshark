@@ -22,6 +22,7 @@
 #include <epan/packet.h>
 #include <epan/reassemble.h>
 #include <epan/to_str.h>
+#include <epan/dissectors/packet-mctp.h>
 #include <epan/dissectors/packet-sll.h>
 
 #define MCTP_MIN_LENGTH 5       /* 4-byte header, plus message type */
@@ -41,11 +42,14 @@ static int hf_mctp_seq = -1;
 static int hf_mctp_tag = -1;
 static int hf_mctp_tag_to = -1;
 static int hf_mctp_tag_value = -1;
+static int hf_mctp_msg_ic = -1;
+static int hf_mctp_msg_type = -1;
 
 static gint ett_mctp = -1;
 static gint ett_mctp_fst = -1;
 static gint ett_mctp_flags = -1;
 static gint ett_mctp_tag = -1;
+static gint ett_mctp_type = -1;
 
 static const true_false_string tfs_tag_to = { "Sender", "Receiver" };
 
@@ -94,7 +98,17 @@ static const value_string flag_vals[] = {
     { 0x00, NULL },
 };
 
+static const value_string type_vals[] = {
+    { MCTP_TYPE_CONTROL, "MCTP Control Protocol" },
+    { MCTP_TYPE_PLDM, "PLDM" },
+    { MCTP_TYPE_NCSI, "NC-SI" },
+    { MCTP_TYPE_ETHERNET, "Ethernet" },
+    { MCTP_TYPE_NVME, "NVMe-MI" },
+    { 0, NULL },
+};
+
 static dissector_table_t mctp_dissector_table;
+static dissector_table_t mctp_encap_dissector_table;
 static reassembly_table mctp_reassembly_table;
 
 static int
@@ -208,9 +222,32 @@ dissect_mctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     }
 
     if (next_tvb) {
+        proto_tree *type_tree;
+        int rc;
+
         type = tvb_get_guint8(next_tvb, 0);
-        dissector_try_uint_new(mctp_dissector_table, type & 0x7f, next_tvb,
-                               pinfo, tree, true, NULL);
+        type_tree = proto_tree_add_subtree_format(mctp_tree, next_tvb, 0, 1,
+                                                  ett_mctp_type,
+                                                  &tti, "Type: %s (0x%x)%s",
+                                                  val_to_str_const(type & 0x7f,
+                                                                   type_vals,
+                                                                   "unknown"),
+                                                  type & 0x7f,
+                                                  type & 0x80 ? " + IC" : "");
+
+        proto_tree_add_item(type_tree, hf_mctp_msg_type, next_tvb, 0, 1,
+                            ENC_NA);
+        proto_tree_add_item(type_tree, hf_mctp_msg_ic, next_tvb, 0, 1,
+                            ENC_NA);
+
+        rc = dissector_try_uint_new(mctp_dissector_table, type & 0x7f,
+                                    next_tvb, pinfo, tree, true, NULL);
+
+        if (!rc && !(type & 0x80)) {
+            tvbuff_t *encap_tvb = tvb_new_subset_remaining(next_tvb, 1);
+            dissector_try_uint_new(mctp_encap_dissector_table, type,
+                                   encap_tvb, pinfo, tree, true, NULL);
+        }
     }
 
     pinfo->fragmented = save_fragmented;
@@ -275,6 +312,18 @@ proto_register_mctp(void)
             NULL, HFILL },
         },
 
+        /* message header */
+        { &hf_mctp_msg_ic,
+          { "Integrity check", "mctp.msg.ic",
+            FT_BOOLEAN, 8, TFS(&tfs_present_absent), 0x80,
+            NULL, HFILL },
+        },
+        { &hf_mctp_msg_type,
+          { "Message type", "mctp.msg.type",
+            FT_UINT8, BASE_HEX, VALS(type_vals), 0x7f,
+            NULL, HFILL },
+        },
+
         /* generic fragmentation */
         {&hf_mctp_fragments,
             {"Message fragments", "mctp.fragments",
@@ -319,6 +368,7 @@ proto_register_mctp(void)
         &ett_mctp_flags,
         &ett_mctp_fst,
         &ett_mctp_tag,
+        &ett_mctp_type,
         &ett_mctp_fragment,
         &ett_mctp_fragments,
     };
@@ -330,9 +380,31 @@ proto_register_mctp(void)
     proto_register_field_array(proto_mctp, hf, array_length(hf));
     proto_register_subtree_array(ett, array_length(ett));
 
+    /* We have two dissector tables here, both keyed off the type byte, but
+     * with different decode semantics:
+     *
+     * mctp.type: for protocols that are "MCTP-aware" - they perform their
+     *    own decoding of the type byte, including the IC bit, and possibly the
+     *    message integrity check (which is type-specific!). For example,
+     *    NVMe-MI, which includes the type byte in packet specifications
+     *
+     * mctp.encap-type: for procotols that are trivially encapsulated in a
+     *    MCTP message, and do not handle the type byte themselves. For
+     *    example, NC-SI over MCTP, which just wraps a NC-SI packet within
+     *    a MCTP message.
+     *
+     * it doesn't make sense to allow encap-type decoders to also have the IC
+     * bit set, as there is no specification for what format the message
+     * integrity check is in. So, we disallow the IC bit in the type field
+     * for those dissectors.
+     */
     mctp_dissector_table = register_dissector_table("mctp.type", "MCTP type",
                                                     proto_mctp, FT_UINT8,
                                                     BASE_HEX);
+    mctp_encap_dissector_table = register_dissector_table("mctp.encap-type",
+                                                          "MCTP encapsulated type",
+                                                          proto_mctp, FT_UINT8,
+                                                          BASE_HEX);
 
     reassembly_table_register(&mctp_reassembly_table,
                               &addresses_reassembly_table_functions);

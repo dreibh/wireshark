@@ -459,7 +459,7 @@ set_property(DIRECTORY
 		"G_DISABLE_SINGLE_INCLUDES"
 		$<$<OR:$<NOT:$<BOOL:${ENABLE_ASSERT}>>,$<CONFIG:Release>>:WS_DISABLE_ASSERT>
 		$<$<OR:$<NOT:$<BOOL:${ENABLE_DEBUG}>>,$<CONFIG:Release>>:WS_DISABLE_DEBUG>
-		$<$<BOOL:${ENABLE_DEBUG_MBS}>:WS_DEBUG_UTF_8>
+		$<$<OR:$<BOOL:${ENABLE_DEBUG_MBS}>,$<CONFIG:Debug>>:WS_DEBUG_UTF_8>
 )
 
 if(WIN32)
@@ -640,18 +640,20 @@ else() # ! MSVC
 		-Wlogical-op		# GCC-only
 		#
 		# Disable errors unconditionally for some static analysis warnings
-		# that are dormant at lower optimizations levels and also
+		# that are dormant at lower optimizations levels or active only in
+		# bleeding edge versions of a compiler and possibly also
 		# prone to false positives and compiler bugs. This is
 		# a big nuisance because the warning is dormant and a low
 		# priority target for action. That is very disruptive
 		# with -Werror enabled (the default on the master branch).
+		#
+		-Wno-error=stringop-overflow=
+		#
 		# XXX Now that we have a CI job with Release build type (using
 		# -O3 optimization level) the dormancy issue should be ameliorated
 		# so comment out these exceptions to re-evaluate the impact.
-		#
 		#-Wno-error=maybe-uninitialized
 		#-Wno-error=alloc-size-larger-than=
-		#-Wno-error=stringop-overflow=
 		#
 		# Updating external dependencies can introduce new deprecations.
 		# Also fixing new internal deprecations takes time.
@@ -1325,19 +1327,7 @@ find_package(DOXYGEN)
 
 # The SpeexDSP resampler is required iff building wireshark or sharkd.
 if(BUILD_wireshark OR BUILD_logray OR BUILD_sharkd)
-	# We don't provide a binary package for SpeexDSP in our repository.
-	# If using the repository don't bother searching for a system SpeexDSP
-	# installation and just use the bundled resampler code instead.
-	if (NOT USE_REPOSITORY)
-		find_package(SpeexDSP)
-	endif()
-	if(SpeexDSP_FOUND)
-		set(HAVE_SPEEXDSP 1)
-	else()
-		add_subdirectory(speexdsp)
-		set(SPEEXDSP_INCLUDE_DIRS "")
-		set(SPEEXDSP_LIBRARIES "speexresampler")
-	endif()
+	find_package(SpeexDSP REQUIRED)
 endif()
 
 # Generate the distribution tarball.
@@ -2169,6 +2159,9 @@ if(USE_REPOSITORY)
 			list (APPEND THIRD_PARTY_DLLS "${BROTLI_DLL_DIR}/${_dll}")
 		endforeach(_dll)
 	endif(BROTLI_FOUND)
+	if (SPEEXDSP_FOUND)
+		list (APPEND THIRD_PARTY_DLLS "${SPEEXDSP_DLL_DIR}/${SPEEXDSP_DLL}")
+	endif()
 
 	# With libs downloaded to c:/wireshark-win64-libs this currently
 	# (early 2018) expands to about 1900 characters.

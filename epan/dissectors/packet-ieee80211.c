@@ -1659,7 +1659,14 @@ static const value_string ieee80211_tag_measure_request_type_flags[] = {
   {0x07, "STA Statistics Request"},
   {0x08, "Location Configuration Indication (LCI) Request"},
   {0x09, "Transmit Stream Measurement Request"},
-  {0x0A, "Measurement Pause Request"},
+  {0x0a, "Multicast Diagnostics Request"},
+  {0x0b, "Location Civic Request"},
+  {0x0c, "Location Identifier Request"},
+  {0x0d, "Directional Channel Quality Request"},
+  {0x0e, "Directional Measurement Request"},
+  {0x0f, "Directional Statistics Request"},
+  {0x10, "Fine Timing Measurement Range Request"},
+  {0xFF, "Measurement Pause Request"},
   {0x00, NULL}
 };
 static value_string_ext ieee80211_tag_measure_request_type_flags_ext =
@@ -1676,6 +1683,13 @@ static const value_string ieee80211_tag_measure_report_type_flags[] = {
   { 0x07, "STA Statistics Report" },
   { 0x08, "Location Configuration Information (LCI) Report" },
   { 0x09, "Transmit Stream Measurement Report" },
+  { 0x0a, "Multicast Diagnostics Report"},
+  { 0x0b, "Location Civic Report"},
+  { 0x0c, "Location Identifier Report"},
+  { 0x0d, "Directional Channel Quality Report"},
+  { 0x0e, "Directional Measurement Report"},
+  { 0x0f, "Directional Statistics Report"},
+  { 0x10, "Fine Timing Measurement Range Report"},
   { 0x00, NULL }
 };
 static value_string_ext ieee80211_tag_measure_report_type_flags_ext =
@@ -1766,6 +1780,19 @@ static const value_string ieee80211_tag_measure_request_group_id_flags[] = {
 static value_string_ext ieee80211_tag_measure_request_group_id_flags_ext =
   VALUE_STRING_EXT_INIT(ieee80211_tag_measure_request_group_id_flags);
 
+static const value_string ieee80211_tag_measure_request_location_subject[] = {
+  { 0, "Local" },
+  { 1, "Remote" },
+  { 2, "Third party" },
+  { 0x00, NULL }
+};
+
+static const value_string ieee80211_tag_measure_request_civic_location_type[] = {
+  { 0, "IETF RFC 4776" },
+  { 1, "Vendor Specific" },
+  { 0x00, NULL }
+};
+
 static const value_string ieee80211_tclas_process_flag[] = {
   {0x00, "Incoming MSDU's higher layer parameters have to match to the parameters in all associated TCLAS elements."},
   {0x01, "Incoming MSDU's higher layer parameters have to match to at least one of the associated TCLAS elements."},
@@ -1814,6 +1841,50 @@ static const value_string ieee80211_tag_measure_report_beacon_sub_id_vals[] = {
   { MEASURE_REP_BEACON_SUB_REPORTED_FRAME_BODY_FRAG_ID, "Reported Frame Body Fragment ID" },
   { MEASURE_REP_BEACON_SUB_WIDE_BW_CHANNEL_SWITCH, "Wide Bandwidth Channel Switch"},
   { MEASURE_REP_BEACON_SUB_LAST_REPORT_INDICATION, "Last Beacon Report Indication"},
+  { 221, "Vendor Specific" },
+  { 0x00, NULL}
+};
+
+#define MEASURE_REP_LCI_SUB_REPORTED_LCI 0
+#define MEASURE_REP_LCI_SUB_REPORTED_AZIMUTH_REPORT 1
+#define MEASURE_REP_LCI_SUB_REPORTED_OR_STA 2
+#define MEASURE_REP_LCI_SUB_REPORTED_T_MAC 3
+#define MEASURE_REP_LCI_SUB_REPORTED_Z 4
+#define MEASURE_REP_LCI_SUB_REPORTED_RLE 5
+#define MEASURE_REP_LCI_SUB_REPORTED_URP 6
+#define MEASURE_REP_LCI_SUB_REPORTED_CO_BSSID 7
+
+static const value_string ieee80211_tag_measure_report_lci_sub_id_vals[] = {
+  { MEASURE_REP_LCI_SUB_REPORTED_LCI, "LCI" },
+  { MEASURE_REP_LCI_SUB_REPORTED_AZIMUTH_REPORT, "Azimuth Report" },
+  { MEASURE_REP_LCI_SUB_REPORTED_OR_STA, "Originator Requesting STA MAC Address" },
+  { MEASURE_REP_LCI_SUB_REPORTED_T_MAC, "Target MAC Address" },
+  { MEASURE_REP_LCI_SUB_REPORTED_Z, "Z" },
+  { MEASURE_REP_LCI_SUB_REPORTED_RLE, "Relative Location Error" },
+  { MEASURE_REP_LCI_SUB_REPORTED_URP, "Usage Rules/Policy" },
+  { MEASURE_REP_LCI_SUB_REPORTED_CO_BSSID, "Co-Located BSSID List" },
+  { 221, "Vendor Specific" },
+  { 0x00, NULL}
+};
+
+#define MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_CIVIC 0
+#define MEASURE_REP_CIVIC_SUB_REPORTED_OR_STA 1
+#define MEASURE_REP_CIVIC_SUB_REPORTED_T_MAC 2
+#define MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_REFERENCE 4
+#define MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_SHAPE 4
+#define MEASURE_REP_CIVIC_SUB_REPORTED_MAP_IMAGE 5
+#define MEASURE_REP_CIVIC_SUB_REPORTED_RESERVED 6
+#define MEASURE_REP_CIVIC_SUB_REPORTED_CO_BSSID 7
+
+static const value_string ieee80211_tag_measure_report_civic_sub_id_vals[] = {
+  { MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_CIVIC, "Location Civic" },
+  { MEASURE_REP_CIVIC_SUB_REPORTED_OR_STA, "Originator Requesting STA MAC Address" },
+  { MEASURE_REP_CIVIC_SUB_REPORTED_T_MAC, "Target MAC Address" },
+  { MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_REFERENCE, "Location Reference" },
+  { MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_SHAPE, "Location Shape" },
+  { MEASURE_REP_CIVIC_SUB_REPORTED_MAP_IMAGE, "Map Image" },
+  { MEASURE_REP_CIVIC_SUB_REPORTED_RESERVED, "Reserved" },
+  { MEASURE_REP_CIVIC_SUB_REPORTED_CO_BSSID, "Co-Locatel BSSID List" },
   { 221, "Vendor Specific" },
   { 0x00, NULL}
 };
@@ -4678,6 +4749,11 @@ static int hf_ieee80211_tag_measure_request_mac_address  = -1;
 static int hf_ieee80211_tag_measure_request_peer_mac_address = -1;
 static int hf_ieee80211_tag_measure_request_group_id = -1;
 
+static int hf_ieee80211_tag_measure_request_location_subject = -1;
+static int hf_ieee80211_tag_measure_request_civic_location_type = -1;
+static int hf_ieee80211_tag_measure_request_location_service_interval_units = -1;
+static int hf_ieee80211_tag_measure_request_location_service_interval = -1;
+
 static int hf_ieee80211_tag_measure_request_unknown = -1;
 
 static int hf_ieee80211_ht_pren_type = -1;
@@ -5307,6 +5383,28 @@ static int hf_ieee80211_tag_measure_reported_frame_frag_id = -1;
 static int hf_ieee80211_tag_measure_reported_frame_frag_rep_id = -1;
 static int hf_ieee80211_tag_measure_reported_frame_frag_number = -1;
 static int hf_ieee80211_tag_measure_reported_frame_frag_more =-1;
+
+static int hf_ieee80211_tag_measure_report_lci_sub_id = -1;
+static int hf_ieee80211_tag_measure_report_lci_lci = -1;
+static int hf_ieee80211_tag_measure_report_lci_z_sta_floor_info = -1;
+static int hf_ieee80211_tag_measure_report_lci_z_sta_floor_info_expected_to_move = -1;
+static int hf_ieee80211_tag_measure_report_lci_z_sta_floor_info_sta_floor_number = -1;
+static int hf_ieee80211_tag_measure_report_lci_z_sta_height_above_floor = -1;
+static int hf_ieee80211_tag_measure_report_lci_z_sta_height_above_floor_uncertainty = -1;
+static int hf_ieee80211_tag_measure_report_lci_urp = -1;
+static int hf_ieee80211_tag_measure_report_lci_urp_retransmission_allowed = -1;
+static int hf_ieee80211_tag_measure_report_lci_urp_retention_expires_relative_present = -1;
+static int hf_ieee80211_tag_measure_report_lci_urp_sta_location_policy = -1;
+static int hf_ieee80211_tag_measure_report_lci_urp_reserved = -1;
+static int hf_ieee80211_tag_measure_report_lci_urp_retention_expires_relative = -1;
+static int hf_ieee80211_tag_measure_report_lci_unknown = -1;
+
+static int hf_ieee80211_tag_measure_report_civic_location_type = -1;
+static int hf_ieee80211_tag_measure_report_civic_sub_id = -1;
+static int hf_ieee80211_tag_measure_report_location_civic_country = -1;
+static int hf_ieee80211_tag_measure_report_location_civic_type = -1;
+static int hf_ieee80211_tag_measure_report_location_civic_length = -1;
+static int hf_ieee80211_tag_measure_report_location_civic = -1;
 
 static int hf_ieee80211_tag_measure_report_unknown = -1;
 
@@ -7536,6 +7634,8 @@ static gint ett_tag_measure_report_frame_tree = -1;
 static gint ett_tag_measure_report_sub_element_tree = -1;
 static gint ett_tag_measure_reported_frame_tree = -1;
 static gint ett_tag_measure_reported_frame_frag_id_tree = -1;
+static gint ett_tag_measure_reported_lci_z_tree = -1;
+static gint ett_tag_measure_reported_lci_urp_tree = -1;
 static gint ett_tag_bss_bitmask_tree = -1;
 static gint ett_tag_dfs_map_tree = -1;
 static gint ett_tag_dfs_map_flags_tree = -1;
@@ -7697,6 +7797,7 @@ static expert_field ei_ieee80211_tag_measure_request_unknown = EI_INIT;
 static expert_field ei_ieee80211_tag_measure_request_beacon_unknown = EI_INIT;
 static expert_field ei_ieee80211_tag_measure_report_unknown = EI_INIT;
 static expert_field ei_ieee80211_tag_measure_report_beacon_unknown = EI_INIT;
+static expert_field ei_ieee80211_tag_measure_report_lci_unknown = EI_INIT;
 static expert_field ei_ieee80211_tag_number = EI_INIT;
 static expert_field ei_ieee80211_ff_anqp_info_length = EI_INIT;
 static expert_field ei_hs20_anqp_ofn_length = EI_INIT;
@@ -27172,22 +27273,40 @@ ieee80211_tag_measure_req(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
      break;
    }
    case 8: /* Location Configuration Indication (LCI) Request */
-    /* TODO */
+     proto_tree_add_item(sub_tree, hf_ieee80211_tag_measure_request_location_subject, tvb, offset, 1, ENC_NA);
+     offset += 1;
+
+     /* TODO Add Optional Subelements */
+     break;
    case 9: /* Transmit Stream Measurement Request */
     /* TODO */
-   case 10: /* Multicast diagnostics request */
+   case 10: /* Multicast Diagnostics Request */
     /* TODO */
-   case 11: /* Location Civic request */
+   case 11: /* Location Civic Request */
+      proto_tree_add_item(sub_tree, hf_ieee80211_tag_measure_request_location_subject, tvb, offset, 1, ENC_NA);
+      offset += 1;
+
+      proto_tree_add_item(sub_tree, hf_ieee80211_tag_measure_request_civic_location_type, tvb, offset, 1, ENC_NA);
+      offset += 1;
+
+      proto_tree_add_item(sub_tree, hf_ieee80211_tag_measure_request_location_service_interval_units, tvb, offset, 1, ENC_NA);
+      offset += 1;
+
+      proto_tree_add_item(sub_tree, hf_ieee80211_tag_measure_request_location_service_interval, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+     /* TODO Add Optional Subelements */
+      break;
+   case 12: /* Location Identifier Request */
     /* TODO */
-   case 12: /* Location Identifier request */
+   case 13: /* Directional Channel Quality Request */
     /* TODO */
-   case 13: /* Directional channel quality request */
+   case 14: /* Directional Measurement Request */
     /* TODO */
-   case 14: /* Directional measurement request */
+   case 15: /* Directional Statistics Request */
     /* TODO */
-   case 15: /* Directional statistics request */
+   case 16: /* Fine Timing Measurement Range Request */
     /* TODO */
-   case 255: /* Measurement Pause Request*/
+   case 255: /* Measurement Pause Request */
     /* TODO */
    default: /* unknown */
     break;
@@ -27546,20 +27665,182 @@ ieee80211_tag_measure_rep(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
   case 7: /* BSTA Statistics Report */
     /* TODO */
   case 8: /* Location Configuration Information Report element */
-    /* TODO */
+    //proto_tree_add_item(sub_tree, hf_ieee80211_tag_measure_report_parent_tsf, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+    //offset += 4;
+
+    while (offset < tag_len)
+    {
+      guint8 sub_id, sub_length, sub_tag_end;;
+      proto_item *sub_elem_item, *sub_elem_len_item;
+      proto_tree *sub_elem_tree;
+
+      sub_elem_item = proto_tree_add_item(sub_tree, hf_ieee80211_tag_measure_report_lci_sub_id,
+                                          tvb, offset, 1, ENC_NA);
+      sub_id = tvb_get_guint8(tvb, offset);
+      offset += 1;
+
+      sub_elem_tree = proto_item_add_subtree(sub_elem_item, ett_tag_measure_report_sub_element_tree);
+
+      sub_elem_len_item = proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_subelement_length,
+                                              tvb, offset, 1, ENC_NA);
+      sub_length = tvb_get_guint8(tvb, offset);
+      offset += 1;
+      sub_tag_end = offset + sub_length;
+
+      if (sub_tag_end > tag_len)
+      {
+        expert_add_info_format(pinfo, sub_elem_len_item, &ei_ieee80211_tag_length, "Sub Element length exceed Tag length");
+        return tvb_captured_length(tvb);
+      }
+
+      switch (sub_id) {
+        case MEASURE_REP_LCI_SUB_REPORTED_LCI: /* Location Configuration Information (0) */
+        {
+          proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_lci_lci,
+                              tvb, offset, 16, ENC_NA);
+          offset += 16;
+          break;
+        }
+        case MEASURE_REP_LCI_SUB_REPORTED_Z: /* Z (4) */
+        {
+          static int * const ieee80211_tag_measure_reported_lci_z_sta_floor_info[] = {
+            &hf_ieee80211_tag_measure_report_lci_z_sta_floor_info_expected_to_move,
+            &hf_ieee80211_tag_measure_report_lci_z_sta_floor_info_sta_floor_number,
+            NULL
+          };
+          proto_tree_add_bitmask_with_flags(sub_elem_tree, tvb, offset,
+                                            hf_ieee80211_tag_measure_report_lci_z_sta_floor_info,
+                                            ett_tag_measure_reported_lci_z_tree,
+                                            ieee80211_tag_measure_reported_lci_z_sta_floor_info,
+                                            ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+          offset += 2;
+
+          proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_lci_z_sta_height_above_floor,
+                              tvb, offset, 3, ENC_LITTLE_ENDIAN);
+          offset += 3;
+
+          proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_lci_z_sta_height_above_floor_uncertainty,
+                              tvb, offset, 1, ENC_LITTLE_ENDIAN);
+          offset += 1;
+          break;
+        }
+        case MEASURE_REP_LCI_SUB_REPORTED_URP: /* Usage Rules/Policy (6) */
+        {
+          static int * const ieee80211_tag_measure_reported_lci_urp[] = {
+            &hf_ieee80211_tag_measure_report_lci_urp_retransmission_allowed,
+            &hf_ieee80211_tag_measure_report_lci_urp_retention_expires_relative_present,
+            &hf_ieee80211_tag_measure_report_lci_urp_sta_location_policy,
+            &hf_ieee80211_tag_measure_report_lci_urp_reserved,
+            NULL
+          };
+          proto_tree_add_bitmask_with_flags(sub_elem_tree, tvb, offset,
+                                            hf_ieee80211_tag_measure_report_lci_urp,
+                                            ett_tag_measure_reported_lci_urp_tree,
+                                            ieee80211_tag_measure_reported_lci_urp,
+                                            ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+          offset += 1;
+
+          /* Retention Expires Relative (optional) */
+          if ((sub_tag_end - 1) == 2 ) {
+            proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_lci_urp_retention_expires_relative,
+                                  tvb, offset, 2, ENC_NA);
+            offset += 1;
+          }
+          break;
+        }
+        default:
+          /* no default action */
+          break;
+      }
+
+      if (offset < sub_tag_end)
+      {
+        proto_item *tix;
+        tix = proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_lci_unknown,
+                                  tvb, offset, sub_tag_end - offset, ENC_NA);
+        expert_add_info(pinfo, tix, &ei_ieee80211_tag_measure_report_lci_unknown);
+        offset = sub_tag_end;
+      }
+    }
+    break;
   case 9: /* Transmit Stream Measurement Report */
     /* TODO */
-  case 10: /* Multicast diagnostics Report */
+  case 10: /* Multicast Diagnostics Report */
     /* TODO */
   case 11: /* Location Civic Report */
-    /* TODO */
+      proto_tree_add_item(sub_tree, hf_ieee80211_tag_measure_report_civic_location_type, tvb, offset, 1, ENC_NA);
+      offset += 1;
+
+    while (offset < tag_len)
+    {
+      guint8 sub_id, sub_length, sub_tag_end;;
+      proto_item *sub_elem_item, *sub_elem_len_item;
+      proto_tree *sub_elem_tree;
+
+      sub_elem_item = proto_tree_add_item(sub_tree, hf_ieee80211_tag_measure_report_civic_sub_id,
+                                          tvb, offset, 1, ENC_NA);
+      sub_id = tvb_get_guint8(tvb, offset);
+      offset += 1;
+
+      sub_elem_tree = proto_item_add_subtree(sub_elem_item, ett_tag_measure_report_sub_element_tree);
+
+      sub_elem_len_item = proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_subelement_length,
+                                              tvb, offset, 1, ENC_NA);
+      sub_length = tvb_get_guint8(tvb, offset);
+      offset += 1;
+      sub_tag_end = offset + sub_length;
+
+      if (sub_tag_end > tag_len)
+      {
+        expert_add_info_format(pinfo, sub_elem_len_item, &ei_ieee80211_tag_length, "Sub Element length exceed Tag length");
+        return tvb_captured_length(tvb);
+      }
+
+      switch (sub_id) {
+        case MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_CIVIC: /* Location Civic (0) */
+        {
+          guint32 length;
+          proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_location_civic_country,
+                              tvb, offset, 2, ENC_ASCII);
+          offset += 2;
+
+          proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_location_civic_type,
+                              tvb, offset, 1, ENC_ASCII);
+          offset += 1;
+
+          proto_tree_add_item_ret_uint(sub_elem_tree, hf_ieee80211_tag_measure_report_location_civic_length,
+                              tvb, offset, 1, ENC_LITTLE_ENDIAN, &length);
+          offset += 1;
+
+          proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_location_civic,
+                              tvb, offset, length, ENC_ASCII);
+          offset += length;
+          break;
+        }
+        default:
+          /* no default action */
+          break;
+      }
+
+      if (offset < sub_tag_end)
+      {
+        proto_item *tix;
+        tix = proto_tree_add_item(sub_elem_tree, hf_ieee80211_tag_measure_report_lci_unknown,
+                                  tvb, offset, sub_tag_end - offset, ENC_NA);
+        expert_add_info(pinfo, tix, &ei_ieee80211_tag_measure_report_lci_unknown);
+        offset = sub_tag_end;
+      }
+    }
+    break;
   case 12: /* Location Identifier Report */
     /* TODO */
-  case 13: /* Directional channel quality Report */
+  case 13: /* Directional Channel Quality Report */
     /* TODO */
-  case 14: /* Directional measurement Report */
+  case 14: /* Directional Measurement Report */
     /* TODO */
-  case 15: /* Directional statistics Report */
+  case 15: /* Directional Statistics Report */
+    /* TODO */
+  case 16: /* Fine Timing Measurement range Report */
     /* TODO */
   default: /* unknown */
     break;
@@ -42225,7 +42506,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_tclas_class_mask7_reserved,
      {"Reserved", "wlan.tclas.class7.reserved",
-      FT_UINT24, BASE_HEX, NULL, 0xFFC0000, NULL, HFILL }},
+      FT_UINT24, BASE_HEX, NULL, 0xFFC000, NULL, HFILL }},
 
     {&hf_ieee80211_tclas7_frame_control_spec,
      {"Frame Control Spec", "wlan.tclas.class7.frame_control_spec",
@@ -42356,24 +42637,24 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_tclas_class_mask9_frame_control_match_spec,
      {"Frame Control Spec", "wlan.tclas.class9.frame_control_spec",
-      FT_UINT16, BASE_HEX, VALS(frame_control_mask_vals), 0x0003, NULL, HFILL }},
+      FT_UINT24, BASE_HEX, VALS(frame_control_mask_vals), 0x000003, NULL, HFILL }},
 
     {&hf_ieee80211_tclas_class_mask9_address_1_match_spec,
      {"Address 1 Spec", "wlan.tclas.class9.mask.address_1_spec",
-      FT_UINT16, BASE_HEX, VALS(address_1_mask_vals), 0x0003, NULL, HFILL }},
+      FT_UINT24, BASE_HEX, VALS(address_1_mask_vals), 0x000003, NULL, HFILL }},
 
     {&hf_ieee80211_tclas_class_mask9_address_2_match_spec,
      {"Address 2 Spec", "wlan.tclas.class9.mask.address_2_spec",
-      FT_UINT16, BASE_HEX, VALS(address_2_mask_vals), 0x00000C, NULL, HFILL }},
+      FT_UINT24, BASE_HEX, VALS(address_2_mask_vals), 0x00000C, NULL, HFILL }},
 
     {&hf_ieee80211_tclas_class_mask9_sequence_control_spec,
      {"Sequence Control Spec", "wlan.tclas.class9.mask.sequence_control_spec",
-      FT_UINT16, BASE_HEX, VALS(sequence_control_mask_vals),
-      0x0030, NULL, HFILL }},
+      FT_UINT24, BASE_HEX, VALS(sequence_control_mask_vals),
+      0x000030, NULL, HFILL }},
 
     {&hf_ieee80211_tclas_class_mask9_reserved,
      {"Reserved", "wlan.tclas.class9.mask.reserved",
-      FT_UINT16, BASE_HEX, NULL, 0xFFFFC0, NULL, HFILL }},
+      FT_UINT24, BASE_HEX, NULL, 0xFFFFC0, NULL, HFILL }},
 
     {&hf_ieee80211_tclas9_frame_control_spec,
      {"Frame Control Spec", "wlan.tclas.class9.frame_control_spec",
@@ -43404,22 +43685,22 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_s1g_slot_def_slot_duration_count8,
      {"Slot Duration Count",
       "wlan.s1g.rps.raw_slot_definition.slot_duration_count",
-      FT_UINT16, BASE_DEC, NULL, 0x03FC0, NULL, HFILL }},
+      FT_UINT16, BASE_DEC, NULL, 0x03FC, NULL, HFILL }},
 
     {&hf_ieee80211_s1g_slot_def_num_slots6,
      {"Number of Slots",
       "wlan.s1g.rps.raw_slot_definition.number_of_slots",
-      FT_UINT16, BASE_DEC, NULL, 0xFC0000, NULL, HFILL }},
+      FT_UINT16, BASE_DEC, NULL, 0xFC00, NULL, HFILL }},
 
     {&hf_ieee80211_s1g_slot_def_slot_duration_count11,
      {"Slot Duration Count",
       "wlan.s1g.rps.raw_slot_definition.slot_duration_count",
-      FT_UINT16, BASE_DEC, NULL, 0x1FFC0, NULL, HFILL }},
+      FT_UINT16, BASE_DEC, NULL, 0x1FC0, NULL, HFILL }},
 
     {&hf_ieee80211_s1g_slot_def_num_slots3,
      {"Number of Slots",
       "wlan.s1g.rps.raw_slot_definition.number_of_slots",
-      FT_UINT16, BASE_DEC, NULL, 0xE00000, NULL, HFILL }},
+      FT_UINT16, BASE_DEC, NULL, 0xE000, NULL, HFILL }},
 
     {&hf_ieee80211_s1g_raw_start_time,
      {"RAW Start Time", "wlan.s1g.raw_slot_definition.raw_start_time",
@@ -45581,6 +45862,26 @@ proto_register_ieee80211(void)
       FT_UINT8, BASE_HEX|BASE_EXT_STRING, &ieee80211_tag_measure_request_group_id_flags_ext, 0,
       NULL, HFILL }},
 
+    {&hf_ieee80211_tag_measure_request_location_subject,
+     {"Location Subject", "wlan.measure.req.location_subject",
+      FT_UINT8, BASE_DEC, VALS(ieee80211_tag_measure_request_location_subject), 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_request_civic_location_type,
+     {"Civic Location Type", "wlan.measure.req.location_subject",
+      FT_UINT8, BASE_DEC, VALS(ieee80211_tag_measure_request_civic_location_type), 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_request_location_service_interval_units,
+     {"Location Service Interval Units", "wlan.measure.req.location_service_interval_units",
+      FT_UINT8, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_request_location_service_interval,
+     {"Location Service Interval", "wlan.measure.req.location_service_interval",
+      FT_UINT16, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
     {&hf_ieee80211_tag_measure_request_unknown,
      {"Unknown Data", "wlan.measure.req.unknown",
       FT_BYTES, BASE_NONE, NULL, 0,
@@ -45874,6 +46175,106 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_tag_measure_report_beacon_sub_last_report_indication,
      {"Last Report", "wlan.measure.req.beacon.sub.last_report",
       FT_BOOLEAN, BASE_DEC, TFS(&tfs_yes_no), 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_sub_id,
+     {"SubElement ID", "wlan.measure.req.lci.sub.id",
+      FT_UINT8, BASE_DEC, VALS(ieee80211_tag_measure_report_lci_sub_id_vals), 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_lci,
+     {"LCI", "wlan.measure.req.lci.lci",
+      FT_BYTES, BASE_NONE, NULL, 0,
+      "Location Configuration Information", HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_z_sta_floor_info,
+     {"STA Floor Info", "wlan.measure.req.lci.z.sta_floor_info",
+      FT_UINT16, BASE_HEX, NULL, 0x0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_z_sta_floor_info_expected_to_move,
+     {"Expected To Move", "wlan.measure.req.lci.z.sta_floor_info.expected_to_move",
+      FT_UINT16, BASE_DEC, NULL, 0x0003,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_z_sta_floor_info_sta_floor_number,
+     {"STA Floor Number", "wlan.measure.req.lci.z.sta_floor_info.sta_floor_number",
+      FT_UINT16, BASE_DEC, NULL, 0xFFFC,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_z_sta_height_above_floor,
+     {"STA Height Above Floor", "wlan.measure.req.lci.z.sta_height_above_floor",
+      FT_UINT24, BASE_DEC, NULL, 0x0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_z_sta_height_above_floor_uncertainty,
+     {"STA Height Above Floor Uncertainty", "wlan.measure.req.lci.z.sta_height_above_floor_uncertainty",
+      FT_UINT8, BASE_DEC, NULL, 0x0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_urp,
+     {"Usage Rules/Policy Parameters", "wlan.measure.req.lci.urp",
+      FT_UINT8, BASE_HEX, NULL, 0x0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_urp_retransmission_allowed,
+     {"Retransmission Allowed", "wlan.measure.req.lci.urp.retransmission_allowed",
+      FT_BOOLEAN, 8, NULL, 0x01,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_urp_retention_expires_relative_present,
+     {"Retention Expires Relative Present", "wlan.measure.req.lci.urp.retention_expires_relative_present",
+      FT_BOOLEAN, 8, NULL, 0x02,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_urp_sta_location_policy,
+     {"STA Location Policy", "wlan.measure.req.lci.urp.sta_location_policy",
+      FT_BOOLEAN, 8, NULL, 0x04,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_urp_reserved,
+     {"Reserved", "wlan.measure.req.lci.urp.reserved",
+      FT_UINT8, BASE_HEX, NULL, 0xF8,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_urp_retention_expires_relative,
+     {"Retention Expires Relative", "wlan.measure.req.lci.urp.retention_expires_relative",
+      FT_UINT16, BASE_DEC, NULL, 0x0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_lci_unknown,
+     {"Unknown Data", "wlan.measure.rep.lci.unknown",
+      FT_BYTES, BASE_NONE, NULL, 0,
+      "(not interpreted)", HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_civic_location_type,
+     {"Civic Location Type", "wlan.measure.rep.location_subject",
+      FT_UINT8, BASE_DEC, VALS(ieee80211_tag_measure_request_civic_location_type), 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_civic_sub_id,
+     {"SubElement ID", "wlan.measure.rep.civic.sub.id",
+      FT_UINT8, BASE_DEC, VALS(ieee80211_tag_measure_report_civic_sub_id_vals), 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_location_civic_country,
+     {"Country", "wlan.measure.rep.civic.sub.country",
+      FT_STRING, BASE_NONE, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_location_civic_type,
+     {"Type", "wlan.measure.rep.civic.sub.type",
+      FT_UINT8, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_location_civic_length,
+     {"Length", "wlan.measure.rep.civic.sub.length",
+      FT_UINT8, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_tag_measure_report_location_civic,
+     {"Location Civic", "wlan.measure.rep.civic.sub.location_civic",
+      FT_STRING, BASE_NONE, NULL, 0,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_quiet_count,
@@ -51818,6 +52219,8 @@ proto_register_ieee80211(void)
     &ett_tag_measure_report_sub_element_tree,
     &ett_tag_measure_reported_frame_tree,
     &ett_tag_measure_reported_frame_frag_id_tree,
+    &ett_tag_measure_reported_lci_z_tree,
+    &ett_tag_measure_reported_lci_urp_tree,
     &ett_tag_bss_bitmask_tree,
     &ett_tag_dfs_map_tree,
     &ett_tag_dfs_map_flags_tree,
@@ -52195,6 +52598,10 @@ proto_register_ieee80211(void)
 
     { &ei_ieee80211_tag_measure_report_beacon_unknown,
       { "wlan.measure.rep.beacon.unknown.expert", PI_UNDECODED, PI_WARN,
+        "Unknown Data (not interpreted)", EXPFILL }},
+
+    { &ei_ieee80211_tag_measure_report_lci_unknown,
+      { "wlan.measure.rep.lci.unknown.expert", PI_UNDECODED, PI_WARN,
         "Unknown Data (not interpreted)", EXPFILL }},
 
     { &ei_ieee80211_tag_data,
