@@ -1870,7 +1870,7 @@ static const value_string ieee80211_tag_measure_report_lci_sub_id_vals[] = {
 #define MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_CIVIC 0
 #define MEASURE_REP_CIVIC_SUB_REPORTED_OR_STA 1
 #define MEASURE_REP_CIVIC_SUB_REPORTED_T_MAC 2
-#define MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_REFERENCE 4
+#define MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_REFERENCE 3
 #define MEASURE_REP_CIVIC_SUB_REPORTED_LOCATION_SHAPE 4
 #define MEASURE_REP_CIVIC_SUB_REPORTED_MAP_IMAGE 5
 #define MEASURE_REP_CIVIC_SUB_REPORTED_RESERVED 6
@@ -45868,7 +45868,7 @@ proto_register_ieee80211(void)
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_request_civic_location_type,
-     {"Civic Location Type", "wlan.measure.req.location_subject",
+     {"Civic Location Type", "wlan.measure.req.location_type",
       FT_UINT8, BASE_DEC, VALS(ieee80211_tag_measure_request_civic_location_type), 0,
       NULL, HFILL }},
 
@@ -51662,7 +51662,7 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_s1g_sector_id_snr,
      {"SNR", "wlan.s1g.sector_id_index.snr",
       FT_UINT16, BASE_CUSTOM, CF_FUNC(s1g_sector_id_index_snr_custom),
-      0x00F1, NULL, HFILL }},
+      0x00F8, NULL, HFILL }},
 
     {&hf_ieee80211_s1g_sector_id_receive_sector_bitmap,
      {"Receive Sector Bitmap", "wlan.s1g.sector_id_index.receive_sector_bitmap",
