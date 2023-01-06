@@ -13,6 +13,8 @@
 #include <glib.h>
 #include "ws_symbol_export.h"
 
+#include "dfilter-loc.h"
+
 /* Passed back to user */
 typedef struct epan_dfilter dfilter_t;
 
@@ -55,15 +57,10 @@ dfilter_expand(const char *expr, char **err_ret);
 #define DF_ERROR_GENERIC		-1
 #define DF_ERROR_UNEXPECTED_END		-2
 
-typedef struct _dfilter_loc {
-	long col_start;
-	size_t col_len;
-} dfilter_loc_t;
-
 typedef struct {
 	int code;
 	char *msg;
-	dfilter_loc_t loc;
+	df_loc_t loc;
 } df_error_t;
 
 WS_DLL_PUBLIC
@@ -76,6 +73,10 @@ dfilter_error_free(df_error_t *);
 #define DF_EXPAND_MACROS	(1U << 1)
 /* Do an optimization pass on the compiled filter. */
 #define DF_OPTIMIZE		(1U << 2)
+/* Enable debug trace for flex. */
+#define DF_DEBUG_FLEX		(1U << 3)
+/* Enable debug trace for lemon. */
+#define DF_DEBUG_LEMON		(1U << 4)
 
 WS_DLL_PUBLIC
 gboolean
@@ -120,10 +121,14 @@ WS_DLL_PUBLIC
 GPtrArray *
 dfilter_deprecated_tokens(dfilter_t *df);
 
-/* Print bytecode of dfilter to stdout */
+WS_DLL_PUBLIC
+GSList *
+dfilter_get_warnings(dfilter_t *df);
+
+/* Print bytecode of dfilter to fp */
 WS_DLL_PUBLIC
 void
-dfilter_dump(dfilter_t *df);
+dfilter_dump(FILE *fp, dfilter_t *df);
 
 /* Text after macro expansion. */
 WS_DLL_PUBLIC

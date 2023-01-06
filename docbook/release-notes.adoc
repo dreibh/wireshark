@@ -60,6 +60,8 @@ The following features are new (or have been significantly updated) since versio
   This can be useful to filter on malformed UTF-8 strings, among other use cases where it is necessary to
   look at the field's raw data.
 
+* Negation (unary minus) now works with any display filter arithmetic expression.
+
 * ciscodump support Cisco IOS XE 17.x
 
 // === Removed Features and Support
@@ -93,12 +95,15 @@ Management Component Transport Protocol - Control Protocol (MCTP CP)
 Non-volatile Memory Express - Management Interface (NVMe-MI) over MCTP
 DECT proprietary Mitel OMM/RFP Protocol (also named AaMiDe)
 DECT DLC protocol layer (DECT-DLC)
+DECT NWK protocol layer (DECT-NWK)
 --
 
 === Updated Protocol Support
 
 * The JSON dissector now has a preference to enable/disable "unescaping"
   of string values. By default it is off. Previously it was always on.
+
+* The JSON dissector now supports "Display JSON in raw form".
 
 * The IPv6 dissector has a new preference to show some semantic details
   about addresses (default off).

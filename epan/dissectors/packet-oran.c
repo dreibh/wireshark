@@ -21,6 +21,13 @@
 #include <epan/prefs.h>
 #include <epan/proto.h>
 
+/* TODO:
+ * - sequence analysis based on sequence Id.  N.B. separate counts per antenna for spatial stream (eAxC Id), plane, direction
+ * - tap stats by flow?
+ * - for U-Plane, track back to last C-Plane frame for that eAxC
+ *     - use upCompHdr values from C-Plane if not overridden by U-Plane?
+ */
+
 /* Prototypes */
 void proto_reg_handoff_oran(void);
 void proto_register_oran(void);
@@ -374,6 +381,10 @@ static const value_string exttype_vals[] = {
     {16,    "Section description for antenna mapping in UE channel information based UL beamforming"},
     {17,    "Section description for indication of user port group"},
     {18,    "Section description for Uplink Transmission Management"},
+    {19,    "Compact beamforming information for multiple port"},
+    {20,    "Puncturing extension"},
+    {21,    "Variable PRB group size for channel information"},
+    {22,    "ACK/NACK request"},
     {0, NULL}
 };
 
@@ -505,13 +516,16 @@ addPcOrRtcid(tvbuff_t *tvb, proto_tree *tree, gint *offset, const char *name)
     guint64 duPortId, bandSectorId, ccId, ruPortId = 0;
     gint id_offset = *offset;
 
-    if (!((pref_du_port_id_bits > 0) && (pref_bandsector_id_bits > 0) && (pref_cc_id_bits > 0) && (pref_ru_port_id_bits > 0) && ((pref_du_port_id_bits + pref_bandsector_id_bits + pref_cc_id_bits + pref_ru_port_id_bits) == 16))) {
+    if (!((pref_du_port_id_bits > 0) && (pref_bandsector_id_bits > 0) && (pref_cc_id_bits > 0) && (pref_ru_port_id_bits > 0) && /* all parts above 0 */
+         ((pref_du_port_id_bits + pref_bandsector_id_bits + pref_cc_id_bits + pref_ru_port_id_bits) == 16))) {                  /* and adding up to 16 bits */
         expert_add_info(NULL, tree, &ei_oran_invalid_eaxc_bit_width);
         *offset += 2;
         return;
     }
 
     guint bit_offset = *offset * 8;
+
+    /* N.B. For sequence analysis / tapping, just interpret these 2 bytes as eAxC ID... */
 
     /* DU Port ID */
     proto_tree_add_bits_ret_val(oran_pcid_tree, hf_oran_du_port_id, tvb, bit_offset, pref_du_port_id_bits, &duPortId, ENC_BIG_ENDIAN);
@@ -1111,7 +1125,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     proto_tree_add_bits_item(extension_tree, hf_oran_csf, tvb, bit_offset, 1, ENC_BIG_ENDIAN);
                     bit_offset += 1;
                     /* mcScaleOffset (15 bits) */
-                    proto_tree_add_item(extension_tree, hf_oran_mc_scale_offset, tvb, bit_offset, 15, ENC_BIG_ENDIAN);
+                    proto_tree_add_bits_item(extension_tree, hf_oran_mc_scale_offset, tvb, bit_offset, 15, ENC_BIG_ENDIAN);
                     bit_offset += 15;
                 }
 
@@ -1392,6 +1406,8 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
     return offset;
 }
 
+/* Dissect udCompHdr (user data compression header, 7.5.2.10) */
+/* bit_width and comp_meth are out params */
 static int dissect_udcomphdr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guint offset,
                              guint *bit_width, guint *comp_meth)
 {
@@ -1401,12 +1417,12 @@ static int dissect_udcomphdr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
                                                          "udCompHdr");
     proto_tree *udcomphdr_tree = proto_item_add_subtree(udcomphdr_ti, ett_oran_udcomphdr);
 
-
     /* udIqWidth */
     guint32 hdr_iq_width;
     proto_item *iq_width_item = proto_tree_add_item_ret_uint(udcomphdr_tree, hf_oran_udCompHdrIqWidth , tvb, offset, 1, ENC_NA, &hdr_iq_width);
     *bit_width = (hdr_iq_width) ? hdr_iq_width : 16;
-    proto_item_append_text(iq_width_item, " (%d bits)", *bit_width);
+    proto_item_append_text(iq_width_item, " (%u bits)", *bit_width);
+
     /* udCompMeth */
     guint32 ud_comp_meth;
     proto_tree_add_item_ret_uint(udcomphdr_tree, hf_oran_udCompHdrMeth, tvb, offset, 1, ENC_NA, &ud_comp_meth);
@@ -1422,7 +1438,7 @@ static int dissect_udcomphdr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *
 }
 
 
-/* Control plane dissector. */
+/* Control plane dissector (section 7). */
 static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     /* Set up structures needed to add the protocol subtree and manage it */
@@ -1577,7 +1593,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     return tvb_captured_length(tvb);
 }
 
-/* User plane dissector (6.3.2) */
+/* User plane dissector (section 8) */
 static int
 dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
@@ -1683,8 +1699,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 
         if (includeUdCompHeader) {
             /* 5.4.4.10.  Described in 6.3.3.13 */
-            /* Extract these values to inform how wide IQ samples in each PRB will be? */
-            /* TODO: should be setting compression here as well? */
+            /* Extract these values to inform how wide IQ samples in each PRB will be. */
             offset = dissect_udcomphdr(tvb, pinfo, section_tree, offset, &sample_bit_width, &compression);
 
             /* Not part of udCompHdr */
@@ -1718,10 +1733,9 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
                 proto_tree_add_item_ret_uint(rb_tree, hf_oran_exponent, tvb, offset, 1, ENC_BIG_ENDIAN, &exponent);
                 offset += 1;
             }
+            /* Show PRB number in root */
+            proto_item_append_text(prbHeading, " %u", startPrbu + i);
 
-            /* FIXME - add udCompParam for COMP_NONE or COMP_MODULATION, figure out correct length
-               Maybe even decode the samples themselves.
-             */
 
             proto_tree_add_item(rb_tree, hf_oran_iq_user_data, tvb, offset, nBytesForSamples, ENC_NA);
 
@@ -1749,12 +1763,12 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 
                     sample_number++;
                 }
+                proto_item_append_text(prbHeading, " (%u samples)", sample_number);
             }
 
             offset += nBytesForSamples;
 
             proto_item_set_len(sectionHeading, nBytesPerPrb * numPrbu + 4);  /* 4 bytes for section header */
-            proto_item_append_text(prbHeading, " %d", startPrbu + i);
         }
         bytesLeft = tvb_captured_length(tvb) - offset;
         number_of_sections++;
@@ -1770,6 +1784,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 
 /*****************************/
 /* Main dissection function. */
+/* N.B. ecpri message type passed in as 'data' arg by eCPRI dissector */
 static int
 dissect_oran(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
@@ -2638,21 +2653,21 @@ proto_register_oran(void)
 
         { &hf_oran_rsvd4,
           { "Reserved", "oran_fh_cus.reserved4",
-            FT_UINT8, BASE_DEC,
+            FT_UINT8, BASE_HEX,
             NULL, 0xf0,
             "Reserved for future use", HFILL }
         },
 
         { &hf_oran_rsvd8,
           { "Reserved", "oran_fh_cus.reserved8",
-            FT_UINT8, BASE_DEC,
+            FT_UINT8, BASE_HEX,
             NULL, 0x00,
             "Reserved for future use", HFILL }
         },
 
         { &hf_oran_rsvd16,
           { "Reserved", "oran_fh_cus.reserved16",
-            FT_UINT16, BASE_DEC,
+            FT_UINT16, BASE_HEX,
             NULL, 0x00,
             "Reserved for future use", HFILL }
         },
@@ -2778,7 +2793,7 @@ proto_register_oran(void)
             HFILL }
         },
 
-        /* 5.4.7.4.1 */
+        /* 5.4.7.4.1 (1 bit) */
         { &hf_oran_csf,
           { "csf", "oran_fh_cus.csf",
             FT_BOOLEAN, 1,
@@ -2795,18 +2810,19 @@ proto_register_oran(void)
             HFILL }
         },
 
-        /* 5.4.7.5.1 */
+        /* 5.4.7.5.1 (12 bits) */
         { &hf_oran_mc_scale_re_mask,
           { "mcScaleReMask", "oran_fh_cus.mcscaleremask",
             FT_UINT16, BASE_DEC,
-            NULL, 0xfff0,
+            NULL, 0x0,
             "modulation compression power scale RE mask",
             HFILL }
         },
+        /* (15 bits) */
         { &hf_oran_mc_scale_offset,
           { "mcScaleOffset", "oran_fh_cus.mcscaleoffset",
             FT_UINT24, BASE_DEC,
-            NULL, 0x03fff0,
+            NULL, 0x0,
             "scaling value for modulation compression",
             HFILL }
         },
@@ -2871,7 +2887,7 @@ proto_register_oran(void)
         "The bit width of RU Port ID, sum of a,b,c&d must be 16", 10, &pref_ru_port_id_bits);
 
     prefs_register_uint_preference(oran_module, "oran.iq_bitwidth_up", "IQ Bitwidth Uplink",
-        "The bit width of a sample in the Uplink", 10, &pref_sample_bit_width_uplink);
+        "The bit width of a sample in the Uplink (if no udcompHdr)", 10, &pref_sample_bit_width_uplink);
     prefs_register_enum_preference(oran_module, "oran.ud_comp_up", "Uplink User Data Compression",
         "Uplink User Data Compression", &pref_iqCompressionUplink, compression_options, TRUE);
     prefs_register_bool_preference(oran_module, "oran.ud_comp_hdr_up", "udCompHdr field is present for uplink",
@@ -2880,7 +2896,7 @@ proto_register_oran(void)
         "this field to be present in uplink messages.", &pref_includeUdCompHeaderUplink);
 
     prefs_register_uint_preference(oran_module, "oran.iq_bitwidth_down", "IQ Bitwidth Downlink",
-        "The bit width of a sample in the Downlink", 10, &pref_sample_bit_width_downlink);
+        "The bit width of a sample in the Downlink (if no udcompHdr)", 10, &pref_sample_bit_width_downlink);
     prefs_register_enum_preference(oran_module, "oran.ud_comp_down", "Downlink User Data Compression",
         "Downlink User Data Compression", &pref_iqCompressionDownlink, compression_options, TRUE);
     prefs_register_bool_preference(oran_module, "oran.ud_comp_hdr_down", "udCompHdr field is present for downlink",

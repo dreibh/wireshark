@@ -16,6 +16,7 @@
 #include <wsutil/ws_assert.h>
 #include <wsutil/wslog.h>
 #include <epan/ftypes/ftypes.h>
+#include "dfilter-loc.h"
 
 /** @file
  */
@@ -53,11 +54,6 @@ typedef struct {
 	STTypeToStrFunc		func_tostr;
 } sttype_t;
 
-typedef struct {
-	long col_start;
-	size_t col_len;
-} stloc_t;
-
 /** Node (type instance) information */
 typedef struct {
 	uint32_t	magic;
@@ -66,7 +62,7 @@ typedef struct {
 	char 		*repr_token;
 	char 		*repr_display;
 	char 		*repr_debug;
-	stloc_t		location;
+	df_loc_t	location;
 } stnode_t;
 
 typedef enum {
@@ -119,7 +115,10 @@ void
 sttype_register(sttype_t *type);
 
 stnode_t*
-stnode_new(sttype_id_t type_id, gpointer data, char *token, const stloc_t *loc);
+stnode_new(sttype_id_t type_id, gpointer data, char *token, df_loc_t loc);
+
+stnode_t*
+stnode_new_empty(sttype_id_t type_id);
 
 stnode_t*
 stnode_dup(const stnode_t *org);
@@ -128,7 +127,7 @@ void
 stnode_clear(stnode_t *node);
 
 void
-stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data, char *token, const stloc_t *loc);
+stnode_init(stnode_t *node, sttype_id_t type_id, gpointer data, char *token, df_loc_t loc);
 
 void
 stnode_replace(stnode_t *node, sttype_id_t type_id, gpointer data);
@@ -154,8 +153,14 @@ stnode_steal_data(stnode_t *node);
 const char *
 stnode_token(stnode_t *node);
 
-stloc_t *
+df_loc_t
 stnode_location(stnode_t *node);
+
+void
+stnode_set_location(stnode_t *node, df_loc_t loc);
+
+void
+stnode_merge_location(stnode_t *dst, stnode_t *n1, stnode_t *n2);
 
 const char *
 stnode_tostr(stnode_t *node, gboolean pretty);
@@ -205,7 +210,7 @@ log_syntax_tree(enum ws_log_level, stnode_t *root, const char *msg, char **cache
 	do { \
 		ws_assert(obj); \
 		if ((obj)->magic != (mnum)) { \
-			ws_log_full(LOG_DOMAIN_DFILTER, LOG_LEVEL_CRITICAL, \
+			ws_log_full(LOG_DOMAIN_DFILTER, LOG_LEVEL_ERROR, \
 				__FILE__, __LINE__, __func__, \
 				"Magic num is 0x%08"PRIx32", " \
 				"but should be 0x%08"PRIx32, \
