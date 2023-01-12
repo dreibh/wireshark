@@ -193,10 +193,25 @@ class case_equality(unittest.TestCase):
         dfilter = 'frame[37] == fc:'
         checkDFilterCount(dfilter, 1)
 
-    def test_rhs_literal_bias_4(self, checkDFilterCount):
+    def test_rhs_bias_4(self, checkDFilterCount):
         # Protocol "Fibre Channel" on the RHS
         dfilter = 'frame[37] == .fc'
         checkDFilterCount(dfilter, 0)
+
+    def test_rhs_bias_5(self, checkDFilterSucceed):
+        # Protocol "Fibre Channel" on the RHS (with warning)
+        dfilter = 'frame contains fc'
+        checkDFilterSucceed(dfilter, 'Interpreting "fc" as Fibre Channel')
+
+    def test_rhs_bias_6(self, checkDFilterSucceed):
+        # Protocol "Fibre Channel" on the RHS (without warning)
+        dfilter = 'frame contains .fc'
+        checkDFilterSucceed(dfilter)
+
+    def test_rhs_bias_7(self, checkDFilterSucceed):
+        # Byte 0xFC on the RHS
+        dfilter = 'frame contains fc:'
+        checkDFilterSucceed(dfilter)
 
 @fixtures.uses_fixtures
 class case_bitwise(unittest.TestCase):
@@ -250,6 +265,11 @@ class case_unary_minus(unittest.TestCase):
     def test_unary_4(self, checkDFilterCount):
         dfilter = "tcp.window_size_scalefactor == -{tcp.dstport * 20}"
         checkDFilterCount(dfilter, 0)
+
+    def test_unary_invalid_1(self, checkDFilterFail):
+        error = 'FT_PROTOCOL cannot be negated'
+        dfilter = "-tcp"
+        checkDFilterFail(dfilter, error)
 
 @fixtures.uses_fixtures
 class case_arithmetic(unittest.TestCase):

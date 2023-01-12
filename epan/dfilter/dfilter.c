@@ -425,16 +425,16 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 
 	df_yyset_extra(&state, scanner);
 
+#ifdef NDEBUG
+	if (flags & DF_DEBUG_FLEX || flags & DF_DEBUG_LEMON) {
+		ws_message("Compile Wireshark without NDEBUG to enable Flex and/or Lemon debug traces");
+	}
+#else
 	/* Enable/disable debugging for Flex. */
 	df_yyset_debug(flags & DF_DEBUG_FLEX, scanner);
 
-#ifndef NDEBUG
 	/* Enable/disable debugging for Lemon. */
 	DfilterTrace(flags & DF_DEBUG_LEMON ? stderr : NULL, "lemon> ");
-#else
-	if (flags & DF_DEBUG_LEMON) {
-		ws_message("Compile Wireshark without NDEBUG to enable Lemon debug traces");
-	}
 #endif
 
 	while (1) {
@@ -628,9 +628,9 @@ dfilter_get_warnings(dfilter_t *df)
 }
 
 void
-dfilter_dump(FILE *fp, dfilter_t *df)
+dfilter_dump(FILE *fp, dfilter_t *df, uint16_t flags)
 {
-	dfvm_dump(fp, df);
+	dfvm_dump(fp, df, flags);
 }
 
 const char *
@@ -661,9 +661,9 @@ dfilter_log_full(const char *domain, enum ws_log_level level,
 
 	char *str = dfvm_dump_str(NULL, df, TRUE);
 	if (G_UNLIKELY(msg == NULL))
-		ws_log_write_always_full(domain, level, file, line, func, "\nFilter:\n%s\n%s", dfilter_text(df), str);
+		ws_log_write_always_full(domain, level, file, line, func, "\nFilter:\n %s\n\n%s", dfilter_text(df), str);
 	else
-		ws_log_write_always_full(domain, level, file, line, func, "%s:\nFilter:\n%s\n%s", msg, dfilter_text(df), str);
+		ws_log_write_always_full(domain, level, file, line, func, "%s:\nFilter:\n %s\n\n%s", msg, dfilter_text(df), str);
 	g_free(str);
 }
 

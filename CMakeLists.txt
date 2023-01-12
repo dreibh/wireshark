@@ -457,9 +457,8 @@ set_property(DIRECTORY
 	PROPERTY COMPILE_DEFINITIONS
 		"G_DISABLE_DEPRECATED"
 		"G_DISABLE_SINGLE_INCLUDES"
-		$<$<OR:$<NOT:$<BOOL:${ENABLE_ASSERT}>>,$<CONFIG:Release>>:WS_DISABLE_ASSERT>
-		$<$<OR:$<NOT:$<BOOL:${ENABLE_DEBUG}>>,$<CONFIG:Release>>:WS_DISABLE_DEBUG>
-		$<$<OR:$<BOOL:${ENABLE_DEBUG_MBS}>,$<CONFIG:Debug>>:WS_DEBUG_UTF_8>
+		$<$<OR:$<BOOL:${ENABLE_DEBUG}>,$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:WS_DEBUG>
+		$<$<OR:$<BOOL:${ENABLE_DEBUG_UTF_8}>,$<CONFIG:Debug>,$<CONFIG:RelWithDebInfo>>:WS_DEBUG_UTF_8>
 )
 
 if(WIN32)
@@ -2794,11 +2793,12 @@ if(BUILD_logray AND QT_FOUND)
 	endif(QT_WINDEPLOYQT_EXECUTABLE)
 endif()
 
-if (BUILD_logray AND SINSP_FOUND)
+if (BUILD_logray AND FALCO_PLUGINS)
 	add_custom_target(copy_falco_plugins)
 	add_custom_command(TARGET copy_falco_plugins
 		COMMAND ${CMAKE_COMMAND} -E make_directory ${LOGRAY_PLUGIN_DIR}/falco
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${SINSP_PLUGINS} ${LOGRAY_PLUGIN_DIR}/falco
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FALCO_PLUGINS} ${LOGRAY_PLUGIN_DIR}/falco
+		VERBATIM
 	)
 	add_dependencies(logray copy_falco_plugins)
 endif()
@@ -3408,6 +3408,20 @@ if(ENABLE_APPLICATION_BUNDLE AND BUILD_wireshark)
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Wireshark_read_me_first.adoc
 	)
 
+	set(_wireshark_donate "packaging/macosx/wireshark/Donate to the Wireshark Foundation.html")
+	ADD_CUSTOM_COMMAND(
+	OUTPUT
+		${_wireshark_donate}
+	COMMAND ${ASCIIDOCTOR_EXECUTABLE}
+		--backend html
+		--out-file ${_wireshark_donate}
+		--attribute include-dir=${CMAKE_SOURCE_DIR}/docbook
+		--attribute min-macos-version=${MIN_MACOS_VERSION}
+		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Donate_to_the_Wireshark_Foundation.adoc
+	DEPENDS
+		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Donate_to_the_Wireshark_Foundation.adoc
+	)
+
 	set(_wireshark_dsym_installation "packaging/macosx/wireshark/Debugging symbols installation.html")
 	ADD_CUSTOM_COMMAND(
 	OUTPUT
@@ -3421,7 +3435,7 @@ if(ENABLE_APPLICATION_BUNDLE AND BUILD_wireshark)
 		${CMAKE_CURRENT_SOURCE_DIR}/packaging/macosx/Wireshark_dsym_installation.adoc
 	)
 
-	add_custom_target(wireshark_dmg_readmes DEPENDS ${_wireshark_read_me_first} ${_wireshark_dsym_installation} )
+	add_custom_target(wireshark_dmg_readmes DEPENDS ${_wireshark_read_me_first} ${_wireshark_donate} ${_wireshark_dsym_installation} )
 	add_dependencies(wireshark_dmg_prep wireshark_dmg_readmes)
 
 	ADD_CUSTOM_TARGET( wireshark_dmg
@@ -3915,24 +3929,20 @@ set(_test_group_list
 	suite_capture
 	suite_clopts
 	suite_decryption
-	suite_dfilter.group_bytes_ether
-	suite_dfilter.group_bytes_ipv6
-	suite_dfilter.group_bytes_type
+	suite_dfilter.group_bytes
 	suite_dfilter.group_double
+	suite_dfilter.group_ether
 	suite_dfilter.group_function
 	suite_dfilter.group_integer
-	suite_dfilter.group_integer_1byte
 	suite_dfilter.group_ipv4
+	suite_dfilter.group_ipv6
 	suite_dfilter.group_membership
-	suite_dfilter.group_slice
 	suite_dfilter.group_scanner
-	suite_dfilter.group_string_type
-	suite_dfilter.group_stringz
+	suite_dfilter.group_slice
+	suite_dfilter.group_string
 	suite_dfilter.group_syntax
-	suite_dfilter.group_time_relative
-	suite_dfilter.group_time_type
+	suite_dfilter.group_time
 	suite_dfilter.group_tvb
-	suite_dfilter.group_uint64
 	suite_dissection
 	suite_dissectors.group_asterix
 	suite_extcaps
@@ -3942,12 +3952,12 @@ set(_test_group_list
 	suite_follow_multistream
 	suite_io
 	suite_mergecap
-	suite_netperfmeter
 	suite_nameres
+	suite_netperfmeter
 	suite_outputformats
 	suite_release
-	suite_text2pcap
 	suite_sharkd
+	suite_text2pcap
 	suite_unittests
 	suite_wslua
 )

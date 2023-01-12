@@ -965,11 +965,19 @@ int main(int argc, char **argv)
         while (!extcap_end_application) {
             try {
                 int32_t res = inspector.next(&evt);
-                if (res != SCAP_SUCCESS) {
+                switch (res) {
+                case SCAP_TIMEOUT:
+                case SCAP_FILTERED_EVENT:
+                    break;
+                case SCAP_SUCCESS:
+                    dumper.dump(evt);
+                    dumper.flush();
+                    break;
+                default:
+                    ws_noisy("Inspector exited with %d", res);
+                    extcap_end_application = true;
                     break;
                 }
-                dumper.dump(evt);
-                dumper.flush();
             } catch (sinsp_exception &e) {
                 ws_warning("%s", e.what());
                 goto end;

@@ -54,6 +54,10 @@ typedef struct {
 	STTypeToStrFunc		func_tostr;
 } sttype_t;
 
+
+/* Lexical value is ambiguous (can be a protocol field or a literal). */
+#define STFLAG_UNPARSED		(1 << 0)
+
 /** Node (type instance) information */
 typedef struct {
 	uint32_t	magic;
@@ -63,6 +67,7 @@ typedef struct {
 	char 		*repr_display;
 	char 		*repr_debug;
 	df_loc_t	location;
+	uint16_t	flags;
 } stnode_t;
 
 typedef enum {
@@ -159,6 +164,12 @@ stnode_location(stnode_t *node);
 void
 stnode_set_location(stnode_t *node, df_loc_t loc);
 
+gboolean
+stnode_get_flags(stnode_t *node, uint16_t flags);
+
+void
+stnode_set_flags(stnode_t *node, uint16_t flags);
+
 void
 stnode_merge_location(stnode_t *dst, stnode_t *n1, stnode_t *n2);
 
@@ -179,11 +190,7 @@ log_test_full(enum ws_log_level level,
 			const char *file, int line, const char *func,
 			stnode_t *node, const char *msg);
 
-#ifdef WS_DISABLE_DEBUG
-#define log_node(node) (void)0;
-#define log_test(node) (void)0;
-#define LOG_NODE(node) (void)0;
-#else
+#ifdef WS_DEBUG
 #define log_node(node) \
 	log_node_full(LOG_LEVEL_NOISY, __FILE__, __LINE__, __func__, node, #node)
 #define log_test(node) \
@@ -195,6 +202,10 @@ log_test_full(enum ws_log_level level,
 		else					\
 			log_node(node);			\
 	} while (0)
+#else
+#define log_node(node) (void)0
+#define log_test(node) (void)0
+#define LOG_NODE(node) (void)0
 #endif
 
 char *
@@ -203,9 +214,7 @@ dump_syntax_tree_str(stnode_t *root);
 void
 log_syntax_tree(enum ws_log_level, stnode_t *root, const char *msg, char **cache_ptr);
 
-#ifdef WS_DISABLE_DEBUG
-#define ws_assert_magic(obj, mnum) (void)0
-#else
+#ifdef WS_DEBUG
 #define ws_assert_magic(obj, mnum) \
 	do { \
 		ws_assert(obj); \
@@ -217,6 +226,8 @@ log_syntax_tree(enum ws_log_level, stnode_t *root, const char *msg, char **cache
 				(obj)->magic, (mnum)); \
 		} \
 	} while(0)
+#else
+#define ws_assert_magic(obj, mnum) (void)0
 #endif
 
 #endif /* SYNTAX_TREE_H */
