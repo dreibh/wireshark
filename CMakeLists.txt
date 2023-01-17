@@ -118,10 +118,22 @@ if(WIN32)
 	if(DEFINED ENV{WIRESHARK_TARGET_PLATFORM})
 		string(TOLOWER $ENV{WIRESHARK_TARGET_PLATFORM} _target_platform)
 		set(WIRESHARK_TARGET_PLATFORM ${_target_platform})
-	elseif(USE_MSYSTEM MATCHES "MINGW64")
+	elseif(USE_MSYSTEM MATCHES "MINGW64|CLANG64|UCRT64")
+		# https://www.msys2.org/docs/environments
+		#    MSYS2 comes with different environments/subsystems and
+		#    the first thing you have to decide is which one to use.
+		#    The differences among the environments are mainly environment
+		#    variables, default compilers/linkers, architecture,
+		#    system libraries used etc. If you are unsure, go with UCRT64.
 		set(WIRESHARK_TARGET_PLATFORM win64)
 	elseif(USE_MSYSTEM)
-		message(WARNING "Building for MSYSTEM=${USE_MSYSTEM} is not officially supported")
+		if($ENV{MSYSTEM_CARCH} MATCHES "x86_64")
+			set(WIRESHARK_TARGET_PLATFORM win64)
+		elseif($ENV{MSYSTEM_CARCH} MATCHES "i686")
+			set(WIRESHARK_TARGET_PLATFORM win32)
+		else()
+			set(WIRESHARK_TARGET_PLATFORM "$ENV{MSYSTEM_CARCH}")
+		endif()
 	elseif(CMAKE_CL_64 OR CMAKE_GENERATOR MATCHES "Win64")
 		set(WIRESHARK_TARGET_PLATFORM win64)
 	elseif(CMAKE_GENERATOR MATCHES "Visual Studio")
@@ -477,16 +489,6 @@ if(WIN32)
 		# This avoids conflicts with the C++ standard library.
 		#
 		-DNOMINMAX
-		#
-		# Make sure everyone is using the same API and that it's sufficient
-		# for our needs.
-		# This should match the following:
-		# - The <compatibility><application> section in resources\wireshark.exe.manifest.in
-		# - The GetWindowsVersion parts of packaging\nsis\wireshark.nsi
-		# - The VersionNT parts of packaging\wix\Prerequisites.wxi
-		#
-		-DNTDDI_VERSION=NTDDI_WIN7
-		-D_WIN32_WINNT=_WIN32_WINNT_WIN7
 	)
 endif()
 
@@ -695,7 +697,7 @@ else() # ! MSVC
 	#
 	if((CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_LESS "5.1") OR
 	   (CMAKE_C_COMPILER_ID STREQUAL "Clang" AND CMAKE_C_COMPILER_VERSION VERSION_LESS "6.0") OR
-	   (CMAKE_C_COMPILER_ID STREQUAL "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_LESS "10.0"))
+	   (CMAKE_C_COMPILER_ID STREQUAL "AppleClang" AND CMAKE_C_COMPILER_VERSION VERSION_LESS "12.0"))
 		if(NOT CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_VERSION VERSION_LESS "4.7")
 			list(APPEND WIRESHARK_C_ONLY_FLAGS -Wno-missing-field-initializers)
 		endif()
@@ -3724,7 +3726,7 @@ if(CLEAN_C_FILES)
 	# the INCLUDE environment variable).
 	# This should apparently be handled for us via CMAKE_RC_FLAG_REGEX
 	# in CMakeRCInformation.cmake but that doesn't appear to work.
-	if(MSVC)
+	if(WIN32)
 		list(FILTER CLEAN_C_FILES EXCLUDE REGEX ".*\\.rc")
 	endif()
 

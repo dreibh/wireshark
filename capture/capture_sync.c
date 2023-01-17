@@ -94,7 +94,7 @@
 #include <wsutil/ws_pipe.h>
 
 #ifdef _WIN32
-static void create_dummy_signal_pipe();
+static void create_dummy_signal_pipe(void);
 static HANDLE dummy_signal_pipe; /* Dummy named pipe which lets the child check for a dropped connection */
 static gchar *dummy_control_id;
 #else
@@ -419,7 +419,7 @@ sync_pipe_start(capture_options *capture_opts, GPtrArray *capture_comments,
         if (interface_opts->extcap_fifo != NULL)
         {
 #ifdef _WIN32
-            char *pipe = ws_strdup_printf("%s%" PRIuPTR, EXTCAP_PIPE_PREFIX, interface_opts->extcap_pipe_h);
+            char *pipe = ws_strdup_printf("%s%" PRIuMAX, EXTCAP_PIPE_PREFIX, (uintmax_t)interface_opts->extcap_pipe_h);
             argv = sync_pipe_add_arg(argv, &argc, pipe);
             g_free(pipe);
             i_handles++;
@@ -519,7 +519,7 @@ sync_pipe_start(capture_options *capture_opts, GPtrArray *capture_comments,
 #ifndef DEBUG_CHILD
     argv = sync_pipe_add_arg(argv, &argc, "-Z");
 #ifdef _WIN32
-    snprintf(control_id, ARGV_NUMBER_LEN, "%d", GetCurrentProcessId());
+    snprintf(control_id, ARGV_NUMBER_LEN, "%ld", GetCurrentProcessId());
     argv = sync_pipe_add_arg(argv, &argc, control_id);
 #else
     argv = sync_pipe_add_arg(argv, &argc, SIGNAL_PIPE_CTRL_ID_NONE);
@@ -2094,13 +2094,13 @@ sync_pipe_signame(int sig)
 
 #ifdef _WIN32
 
-static void create_dummy_signal_pipe() {
+static void create_dummy_signal_pipe(void) {
     gchar *dummy_signal_pipe_name;
 
     if (dummy_signal_pipe != NULL) return;
 
     if (!dummy_control_id) {
-        dummy_control_id = ws_strdup_printf("%d.dummy", GetCurrentProcessId());
+        dummy_control_id = ws_strdup_printf("%ld.dummy", GetCurrentProcessId());
     }
 
     /* Create the signal pipe */

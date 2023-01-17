@@ -163,6 +163,9 @@
 /* Define to use Lua */
 #cmakedefine HAVE_LUA 1
 
+/* Define to 1 if we have Lua with Unicode for Windows patches. */
+#cmakedefine HAVE_LUA_UNICODE 1
+
 /* Define to use MIT kerberos */
 #cmakedefine HAVE_MIT_KERBEROS 1
 
@@ -320,6 +323,22 @@
 
 #  ifndef __STDC__
 #    define __STDC__ 0
+#  endif
+
+/*
+ * Make sure everyone is using the same API and that it's sufficient
+ * for our needs.
+ * This should match the following:
+ * - The <compatibility><application> section in resources\wireshark.exe.manifest.in
+ * - The GetWindowsVersion parts of packaging\nsis\wireshark.nsi
+ * - The VersionNT parts of packaging\wix\Prerequisites.wxi
+ */
+#  ifndef NTDDI_VERSION
+#  define NTDDI_VERSION   NTDDI_WIN7
+#  endif
+
+#  ifndef _WIN32_WINNT
+#  define _WIN32_WINNT    _WIN32_WINNT_WIN7
 #  endif
 #endif
 
