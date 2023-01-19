@@ -16,14 +16,18 @@ if(UNIX OR USE_MSYSTEM)
 		string(REPLACE "\\" "\\\\" _extcap_dir "${_dir}")
 		file(TO_NATIVE_PATH "${CMAKE_INSTALL_DATADIR}" _dir)
 		string(REPLACE "\\" "\\\\" _data_dir "${_dir}")
+		file(TO_NATIVE_PATH "${CMAKE_INSTALL_DOCDIR}" _dir)
+		string(REPLACE "\\" "\\\\" _doc_dir "${_dir}")
 	elseif(UNIX)
 		set(_plugin_dir "${PLUGIN_INSTALL_FULL_LIBDIR}")
 		set(_extcap_dir "${EXTCAP_INSTALL_FULL_LIBDIR}")
 		set(_data_dir "${CMAKE_INSTALL_FULL_DATADIR}")
+		set(_doc_dir "${CMAKE_INSTALL_FULL_DOCDIR}")
 	endif()
 	add_definitions(-DPLUGIN_DIR=\"${_plugin_dir}\")
 	add_definitions(-DEXTCAP_DIR=\"${_extcap_dir}\")
 	add_definitions(-DDATA_DIR=\"${_data_dir}\")
+	add_definitions(-DDOC_DIR=\"${_doc_dir}\")
 endif()
 
 add_subdirectory(wmem)
@@ -342,6 +346,8 @@ set_target_properties(test_wsutil PROPERTIES
 
 install(FILES ${WSUTIL_PUBLIC_HEADERS}
 	DESTINATION "${PROJECT_INSTALL_INCLUDEDIR}/wsutil"
+	COMPONENT "Development"
+	EXCLUDE_FROM_ALL
 )
 
 CHECKAPI(

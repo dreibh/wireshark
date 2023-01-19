@@ -47,7 +47,6 @@ ADD_MAN_PAGE(androiddump 1)
 ADD_MAN_PAGE(capinfos    1)
 ADD_MAN_PAGE(captype     1)
 ADD_MAN_PAGE(ciscodump   1)
-ADD_MAN_PAGE(dftest      1)
 ADD_MAN_PAGE(dumpcap     1)
 ADD_MAN_PAGE(editcap     1)
 ADD_MAN_PAGE(mergecap    1)
@@ -134,10 +133,16 @@ if(ASCIIDOCTOR_FOUND)
 	)
 endif()
 
-#
-# Installation of HTML manuals is done
-# elsewhere to CMAKE_INSTALL_DATADIR.
-#
+list(APPEND HTML_INSTALL_FILES
+	${CMAKE_SOURCE_DIR}/resources/share/doc/wireshark/ipmap.html
+)
+
+install(
+	FILES
+		${HTML_INSTALL_FILES}
+	DESTINATION
+		${CMAKE_INSTALL_DOCDIR}
+)
 
 #
 # Editor modelines  -  https://www.wireshark.org/tools/modelines.html
