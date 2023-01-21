@@ -49,6 +49,7 @@
 
 #define PROFILES_DIR    "profiles"
 #define PLUGINS_DIR_NAME    "plugins"
+#define EXTCAP_DIR_NAME     "extcap"
 #define PROFILES_INFO_NAME  "profile_files.txt"
 
 #define _S G_DIR_SEPARATOR_S
@@ -1124,6 +1125,7 @@ static char *plugin_dir = NULL;
 static char *plugin_dir_with_version = NULL;
 static char *plugin_pers_dir = NULL;
 static char *plugin_pers_dir_with_version = NULL;
+static char *extcap_pers_dir = NULL;
 
 static void
 init_plugin_dir(void)
@@ -1351,6 +1353,17 @@ init_extcap_dir(void)
 #endif
 }
 
+static void
+init_extcap_pers_dir(void)
+{
+#ifdef _WIN32
+    extcap_pers_dir = get_persconffile_path(EXTCAP_DIR_NAME, FALSE);
+#else
+    extcap_pers_dir = g_build_filename(g_get_home_dir(), ".local/lib",
+                                       CONFIGURATION_NAMESPACE_LOWER, EXTCAP_DIR_NAME, (gchar *)NULL);
+#endif
+}
+
 /*
  * Get the directory in which the extcap hooks are stored.
  *
@@ -1361,6 +1374,15 @@ get_extcap_dir(void)
     if (!extcap_dir)
         init_extcap_dir();
     return extcap_dir;
+}
+
+/* Get the personal plugin dir */
+const char *
+get_extcap_pers_dir(void)
+{
+    if (!extcap_pers_dir)
+        init_extcap_pers_dir();
+    return extcap_pers_dir;
 }
 
 /*
@@ -2115,9 +2137,7 @@ get_persconffile_path(const char *filename, gboolean from_profile)
 char *
 get_datafile_path(const char *filename)
 {
-    if (running_in_build_directory_flag &&
-        (!strcmp(filename, "AUTHORS-SHORT") ||
-         !strcmp(filename, "hosts"))) {
+    if (running_in_build_directory_flag && !strcmp(filename, "hosts")) {
         /* We're running in the build directory and the requested file is a
          * generated (or a test) file.  Return the file name in the build
          * directory (not in the source/data directory).
@@ -2126,6 +2146,28 @@ get_datafile_path(const char *filename)
         return g_build_filename(get_progfile_dir(), filename, (char *)NULL);
     } else {
         return g_build_filename(get_datafile_dir(), filename, (char *)NULL);
+    }
+}
+
+/*
+ * Construct the path name of a global documentation file, given the
+ * file name.
+ *
+ * The returned file name was g_malloc()'d so it must be g_free()d when the
+ * caller is done with it.
+ */
+char *
+get_docfile_path(const char *filename)
+{
+    if (running_in_build_directory_flag) {
+        /* We're running in the build directory and the requested file is a
+         * generated (or a test) file.  Return the file name in the build
+         * directory (not in the source/data directory).
+         * (Oh the things we do to keep the source directory pristine...)
+         */
+        return g_build_filename(get_progfile_dir(), filename, (char *)NULL);
+    } else {
+        return g_build_filename(get_doc_dir(), filename, (char *)NULL);
     }
 }
 
@@ -2636,6 +2678,8 @@ free_progdirs(void)
 #endif
     g_free(extcap_dir);
     extcap_dir = NULL;
+    g_free(extcap_pers_dir);
+    extcap_pers_dir = NULL;
 }
 
 /*

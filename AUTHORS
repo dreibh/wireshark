@@ -2621,7 +2621,7 @@ Kees Cook		<kees[AT]outflux.net> {
 	TiVoConnect Discovery Protocol
 }
 
-Thomas Dreibholz	<dreibh[AT]iem.uni-due.de>/<dreibh[AT]simula.no> {
+Thomas Dreibholz	<dreibh[AT]simula.no> {
 	Calculation Application Protocol support
 	Component Status Protocol support
 	Fractal Generator Protocol support
@@ -4514,6 +4514,7 @@ Jim Walker		<jim[AT]couchbase.com>
 Jim Young		<jim.young.ws[AT]gmail.com>
 Jim Young		<jyoung[AT]gsu.edu>
 Jiri Pirko		<jiri[AT]resnulli.us>
+Jiří Engelthaler	<Jiri.Engelthaler[AT]zat.cz>
 Jo Rueschel		<wireshark[AT]rueschel.de>
 Jo-Philipp Wich		<jo[AT]mein.io>
 Joakim Andersson	<joakim.andersson[AT]nordicsemi.no>

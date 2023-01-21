@@ -1952,9 +1952,6 @@ if (BUILD_logray)
 endif()
 
 if (ASCIIDOCTOR_FOUND)
-	list(APPEND INSTALL_FILES
-		${CMAKE_BINARY_DIR}/doc/AUTHORS-SHORT
-	)
 	list(APPEND DOC_FILES
 		${CMAKE_BINARY_DIR}/doc/androiddump.html
 		${CMAKE_BINARY_DIR}/doc/udpdump.html
@@ -4087,7 +4084,7 @@ if (GIT_EXECUTABLE)
 	# Update AUTHORS file with entries from git shortlog
 	add_custom_target(
 		gen-authors
-		COMMAND ${PYTHON_EXECUTABLE} tools/generate_authors.py AUTHORS.src > AUTHORS
+		COMMAND ${PYTHON_EXECUTABLE} tools/generate_authors.py AUTHORS
 		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 	)
 else (GIT_EXECUTABLE)
