@@ -30,11 +30,14 @@ The speex code that was previously bundled has been removed.
 
 The personal extcap plugin folder location on Unix has been changed to
 follow existing conventions for architecture-dependent files.
-The extcap personal folder is now ``$HOME/.local/lib/extcap``.
+The extcap personal folder is now ``$HOME/.local/lib/wireshark/extcap``.
 Previously it was ``$XDG_CONFIG_HOME/wireshark/extcap``.
 
 The installation target no longer installs development headers by default.
 That must be done explicitly using ``cmake --install <builddir> --component Development``.
+
+The Wireshark installation is relocatable on Linux (and other ELF platforms
+with support for relative RPATHs).
 
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
@@ -89,6 +92,7 @@ The following features are new (or have been significantly updated) since versio
 // git log --oneline --diff-filter=A --stat v3.7.0rc0.. epan/dissectors plugins
 [commaize]
 --
+SAP GUI (SAPDiag)
 SAP Enqueue Server (SAPEnqueue)
 SAP HANA SQL Command Network Protocol (SAPHDB)
 SAP Internet Graphic Server (SAP IGS)

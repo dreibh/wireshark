@@ -74,16 +74,16 @@ class APICheck:
 
         if fun_name.startswith('ptvcursor'):
             # RE captures function name + 1st 2 args (always ptvc + hfindex)
-            self.p = re.compile('[^\n]*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+)')
+            self.p = re.compile('[^\n]*' +  self.fun_name + '\s*\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+)')
         elif fun_name.find('add_bitmask') == -1:
             # Normal case.
             # RE captures function name + 1st 2 args (always tree + hfindex + length)
-            self.p = re.compile('[^\n]*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)')
+            self.p = re.compile('[^\n]*' +  self.fun_name + '\s*\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)')
         else:
             # _add_bitmask functions.
             # RE captures function name + 1st + 4th args (always tree + hfindex)
             # 6th arg is 'fields'
-            self.p = re.compile('[^\n]*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)\s*,\s*[a-zA-Z0-9_]+\s*,\s*([a-zA-Z0-9_]+)\s*,')
+            self.p = re.compile('[^\n]*' +  self.fun_name + '\s*\(([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)\s*,\s*[a-zA-Z0-9_]+\s*,\s*([a-zA-Z0-9_]+)\s*,')
 
         self.file = None
         self.mask_allowed = True
@@ -179,13 +179,13 @@ class ProtoTreeAddItemCheck(APICheck):
             # proto_tree_add_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
             #                     const gint start, gint length, const guint encoding)
             self.fun_name = 'proto_tree_add_item'
-            self.p = re.compile('[^\n]*' + self.fun_name + '\(\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([0-9]+),\s*([a-zA-Z0-9_]+)')
+            self.p = re.compile('[^\n]*' + self.fun_name + '\s*\(\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([0-9]+),\s*([a-zA-Z0-9_]+)')
         else:
             # proto_item *
             # ptvcursor_add(ptvcursor_t *ptvc, int hfindex, gint length,
             #               const guint encoding)
             self.fun_name = 'ptvcursor_add'
-            self.p = re.compile('[^\n]*' + self.fun_name + '\([a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+),\s*([a-zA-Z_0-9]+),\s*([a-zA-Z0-9_\-\>]+)')
+            self.p = re.compile('[^\n]*' + self.fun_name + '\s*\([a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+),\s*([a-zA-Z_0-9]+),\s*([a-zA-Z0-9_\-\>]+)')
 
 
         self.lengths = {}
@@ -313,6 +313,51 @@ field_widths = {
     'FT_INT64'   : 64
 }
 
+def is_ignored_consecutive_filter(filter):
+    ignore_patterns = [
+        re.compile(r'^elf.sh_type'),
+        re.compile(r'^elf.p_type'),
+        re.compile(r'^btavrcp.pdu_id'),
+        re.compile(r'^nstrace.trcdbg.val(\d+)'),
+        re.compile(r'^netlogon.dummy_string'),
+        re.compile(r'^opa.reserved'),
+        re.compile(r'^mpls_pm.timestamp\d\..*'),
+        re.compile(r'^wassp.data.mu_mac'),
+        re.compile(r'^thrift.type'),
+        re.compile(r'^quake2.game.client.command.move.angles'),
+        re.compile(r'^ipp.enum_value'),
+        re.compile(r'^idrp.error.subcode'),
+        re.compile(r'^ftdi-ft.lValue'),
+        re.compile(r'^6lowpan.src'),
+        re.compile(r'^couchbase.flex_frame.frame.id'),
+        re.compile(r'^rtps.param.id'),
+        re.compile(r'^rtps.locator.port'),
+        re.compile(r'^sigcomp.udvm.value'),
+        re.compile(r'^opa.mad.attributemodifier.n'),
+        re.compile(r'^smb.cmd'),
+        re.compile(r'^sctp.checksum'),
+        re.compile(r'^dhcp.option.end'),
+        re.compile(r'^nfapi.num.bf.vector.bf.value'),
+        re.compile(r'^dnp3.al.range.abs'),
+        re.compile(r'^dnp3.al.range.quantity'),
+        re.compile(r'^dnp3.al.index'),
+        re.compile(r'^dnp3.al.size'),
+        re.compile(r'^ftdi-ft.hValue'),
+        re.compile(r'^homeplug_av.op_attr_cnf.data.sw_sub'),
+        re.compile(r'^radiotap.he_mu.preamble_puncturing'),
+        re.compile(r'^ndmp.file'),
+        re.compile(r'^ocfs2.dlm.lvb'),
+        re.compile(r'^oran_fh_cus.reserved'),
+        re.compile(r'^qnet6.kif.msgsend.msg.read.xtypes0-7'),
+        re.compile(r'^mih.sig_strength')
+    ]
+
+    for patt in ignore_patterns:
+        if patt.match(filter):
+            return True
+    return False
+
+
 
 # The relevant parts of an hf item.  Used as value in dict where hf variable name is key.
 class Item:
@@ -336,9 +381,10 @@ class Item:
         if check_consecutive:
             if Item.previousItem and Item.previousItem.filter == filter:
                 if label != Item.previousItem.label:
-                    print('Warning:', filename, hf, ': - filter "' + filter +
-                          '" appears consecutively - labels are "' + Item.previousItem.label + '" and "' + label + '"')
-                    warnings_found += 1
+                    if not is_ignored_consecutive_filter(self.filter):
+                        print('Warning:', filename, hf, ': - filter "' + filter +
+                            '" appears consecutively - labels are "' + Item.previousItem.label + '" and "' + label + '"')
+                        warnings_found += 1
 
             Item.previousItem = self
 

@@ -168,6 +168,8 @@ void proto_reg_handoff_mysql(void);
 #define MYSQL_DAEMON              29
 #define MYSQL_BINLOG_DUMP_GTID    30 /* replication */
 #define MYSQL_RESET_CONNECTION    31
+#define MYSQL_CLONE               32
+#define MYSQL_SUBSCRIBE_GROUP_REPLICATION_STREAM  33
 
 /* MariaDB specific commands */
 #define MARIADB_STMT_BULK_EXECUTE 250
@@ -251,6 +253,8 @@ static const value_string mysql_command_vals[] = {
 	{MYSQL_DAEMON, "Daemon"},
 	{MYSQL_BINLOG_DUMP_GTID, "Send Binlog GTID"},
 	{MYSQL_RESET_CONNECTION, "Reset Connection"},
+	{MYSQL_CLONE, "Native cloning"},
+	{MYSQL_SUBSCRIBE_GROUP_REPLICATION_STREAM, "Subscribe Group Replication Stream"},
 	{MARIADB_STMT_BULK_EXECUTE, "Execute Bulk Statement"},
 	{0, NULL}
 };
@@ -1139,11 +1143,12 @@ static int hf_mysql_auth_switch_request_status = -1;
 static int hf_mysql_auth_switch_request_name = -1;
 static int hf_mysql_auth_switch_request_data = -1;
 static int hf_mysql_auth_switch_response_data = -1;
+static int hf_mysql_sha2_auth = -1;
+static int hf_mysql_sha2_response = -1;
+static int hf_mysql_pubkey = -1;
 static int hf_mysql_compressed_packet_length = -1;
 static int hf_mysql_compressed_packet_length_uncompressed = -1;
 static int hf_mysql_compressed_packet_number = -1;
-static int hf_mysql_prefix = -1;
-static int hf_mysql_length = -1;
 //static int hf_mariadb_fld_charsetnr = -1;
 static int hf_mariadb_server_language = -1;
 static int hf_mariadb_charset = -1;
@@ -1230,6 +1235,9 @@ typedef enum mysql_state {
 	PREPARED_FIELDS,
 	AUTH_SWITCH_REQUEST,
 	AUTH_SWITCH_RESPONSE,
+	AUTH_SHA2,
+	AUTH_PUBKEY,
+	AUTH_SHA2_RESPONSE,
 	BINLOG_DUMP
 } mysql_state_t;
 
@@ -1252,6 +1260,9 @@ static const value_string state_vals[] = {
 	{PREPARED_FIELDS,      "fields in response to PREPARE"},
 	{AUTH_SWITCH_REQUEST,  "authentication switch request"},
 	{AUTH_SWITCH_RESPONSE, "authentication switch response"},
+	{AUTH_SHA2,            "caching_sha2_password"},
+	{AUTH_PUBKEY,          "public key request"},
+	{AUTH_SHA2_RESPONSE,   "caching_sha2_password response"},
 	{BINLOG_DUMP,          "binlog event"},
 	{0, NULL}
 };
@@ -1319,6 +1330,7 @@ static int mysql_dissect_response_prepare(tvbuff_t *tvb, packet_info *pinfo, int
 static int mysql_dissect_auth_switch_request(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree, mysql_conn_data_t *conn_data);
 static int mysql_dissect_eof(tvbuff_t *tvb, packet_info *pinfo, proto_item *pi, int offset, proto_tree *tree, mysql_conn_data_t *conn_data);
 static int mysql_dissect_auth_switch_response(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree, mysql_conn_data_t *conn_data);
+static int mysql_dissect_auth_sha2(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree, mysql_conn_data_t *conn_data);
 static void mysql_dissect_exec_string(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
 static void mysql_dissect_exec_datetime(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
 static void mysql_dissect_exec_tiny(tvbuff_t *tvb, int *param_offset, proto_item *field_tree);
@@ -1999,6 +2011,9 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 	if(current_state == AUTH_SWITCH_RESPONSE){
 		return mysql_dissect_auth_switch_response(tvb, pinfo, offset, tree, conn_data);
 	}
+	if(current_state == AUTH_SHA2){
+		return mysql_dissect_auth_sha2(tvb, pinfo, offset, tree, conn_data);
+	}
 
 	request_item = proto_tree_add_item(tree, hf_mysql_request, tvb, offset, -1, ENC_NA);
 	req_tree = proto_item_add_subtree(request_item, ett_request);
@@ -2066,6 +2081,12 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 					offset = mysql_field_add_lestring(tvb, offset, query_attrs_tree, hf_mysql_query_attribute_value);
 				}
 			}
+		} else if ((conn_data->clnt_caps_ext == 0) && (conn_data->srv_caps_ext == 0)){
+			// No server/client capabilities, probably in the middle of a conversation
+			// As the query isn't likely to start with 0x00 this probably means these are
+			// query attributes we need to skip
+			if (tvb_get_guint8(tvb, offset) == 0)
+				offset += 2;
 		}
 		lenstr = my_tvb_strsize(tvb, offset);
 		proto_tree_add_item(req_tree, hf_mysql_query, tvb, offset, lenstr, ENC_ASCII);
@@ -2522,7 +2543,6 @@ mysql_dissect_response(tvbuff_t *tvb, packet_info *pinfo, int offset,
 				proto_item_append_text(pi, " - %s", val_to_str(RESPONSE_EOF, state_vals, "Unknown (%u)"));
 				mysql_set_conn_state(pinfo, conn_data, REQUEST);
 			}
-
 		} else if (tvb_reported_length_remaining(tvb, offset) < 0xffffff) {
 			// not an EOF
 			if (current_state == AUTH_SWITCH_REQUEST) {
@@ -2623,8 +2643,13 @@ mysql_dissect_response(tvbuff_t *tvb, packet_info *pinfo, int offset,
 			break;
 
 		case AUTH_SWITCH_REQUEST:
-			proto_item_append_text(pi, " - %s", val_to_str(AUTH_SWITCH_REQUEST, state_vals, "Unknown (%u)"));
-			offset = mysql_dissect_auth_switch_request(tvb, pinfo, offset, tree, conn_data);
+			if (tvb_reported_length_remaining(tvb,offset) == 2) {
+				proto_item_append_text(pi, " - %s", val_to_str(AUTH_SHA2, state_vals, "Unknown (%u)"));
+				offset = mysql_dissect_auth_sha2(tvb, pinfo, offset, tree, conn_data);
+			} else {
+				proto_item_append_text(pi, " - %s", val_to_str(AUTH_SWITCH_REQUEST, state_vals, "Unknown (%u)"));
+				offset = mysql_dissect_auth_switch_request(tvb, pinfo, offset, tree, conn_data);
+			}
 			break;
 
 		default:
@@ -2822,7 +2847,8 @@ mysql_dissect_ok_packet(tvbuff_t *tvb, packet_info *pinfo, int offset,
 		offset = mysql_dissect_server_status(tvb, offset, tree, &server_status);
 
 		/* 4.1+ protocol only: 2 bytes number of warnings */
-		if (conn_data->clnt_caps & conn_data->srv_caps & MYSQL_CAPS_CU) {
+		if ((conn_data->clnt_caps & conn_data->srv_caps & MYSQL_CAPS_CU)
+			|| ((conn_data->clnt_caps == 0) && (conn_data->srv_caps == 0))) {
 			proto_tree_add_item(tree, hf_mysql_num_warn, tvb, offset, 2, ENC_LITTLE_ENDIAN);
 			lenstr = tvb_get_ntohs(tvb, offset);
 			offset += 2;
@@ -2859,6 +2885,12 @@ mysql_dissect_ok_packet(tvbuff_t *tvb, packet_info *pinfo, int offset,
 			}
 		}
 	} else {
+		if ((tvb_reported_length_remaining(tvb, offset) > 0)
+			&& ((conn_data->clnt_caps == 0) && (conn_data->srv_caps == 0))) {
+			// No client or server capabilities to work with, Let's try to skip over session state
+			offset += tvb_get_fle(tvb, tree, offset, &lenstr, NULL);
+		}
+
 		/* optional: message string */
 		if (tvb_reported_length_remaining(tvb, offset) > 0) {
 			if(lenstr > (guint64)tvb_reported_length_remaining(tvb, offset))
@@ -3124,7 +3156,7 @@ mysql_dissect_field_packet(tvbuff_t *tvb, proto_item *pi _U_, int offset, proto_
 	}
 
 	/* default (Only use for show fields) */
-	if (tree && tvb_reported_length_remaining(tvb, offset) > 0) {
+	if (tvb_reported_length_remaining(tvb, offset) > 0) {
 		offset = mysql_field_add_lestring(tvb, offset, tree, hf_mysql_fld_default);
 	}
 	return offset;
@@ -3562,6 +3594,81 @@ mysql_dissect_auth_switch_response(tvbuff_t *tvb, packet_info *pinfo, int offset
 	return offset + tvb_reported_length_remaining(tvb, offset);
 
 }
+
+/*
+ caching_sha2_password authentication state
+
+ Doc: https://dev.mysql.com/doc/dev/mysql-server/latest/page_caching_sha2_authentication_exchanges.html
+*/
+static int
+mysql_dissect_auth_sha2(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree, mysql_conn_data_t *conn_data _U_)
+{
+	col_set_str(pinfo->cinfo, COL_INFO, "Caching_sha2_password " );
+	col_set_fence(pinfo->cinfo, COL_INFO);
+
+	if (tvb_reported_length_remaining(tvb,offset) == 2)
+		offset++;
+	char *auth2_state;
+	guint8 c = tvb_get_guint8(tvb, offset);
+	switch (c) {
+		case 2:
+			auth2_state = "request_public_key";
+			mysql_set_conn_state(pinfo, conn_data, AUTH_PUBKEY);
+			break;
+		case 3:
+			auth2_state = "fast_auth_success";
+			break;
+		case 4:
+			auth2_state = "perform_full_authentication";
+			mysql_set_conn_state(pinfo, conn_data, AUTH_SHA2);
+			break;
+		default:
+			auth2_state = "unknown";
+	}
+	col_append_str(pinfo->cinfo, COL_INFO, auth2_state);
+	proto_tree_add_string(tree, hf_mysql_sha2_auth, tvb, offset, 1, auth2_state);
+	offset++;
+
+	return offset + tvb_reported_length_remaining(tvb, offset);
+}
+
+/*
+ Public key as requested during caching_sha2_password authentication
+*/
+static int
+mysql_dissect_pubkey(tvbuff_t *tvb, packet_info *pinfo, int offset,
+		       proto_tree *tree, mysql_conn_data_t *conn_data _U_, proto_item *pi _U_, mysql_state_t current_state _U_)
+{
+	tvbuff_t *next_tvb;
+	col_set_str(pinfo->cinfo, COL_INFO, "Public key " );
+	col_set_fence(pinfo->cinfo, COL_INFO);
+	mysql_set_conn_state(pinfo, conn_data, AUTH_SHA2_RESPONSE);
+
+	offset++;
+	gint len = tvb_reported_length_remaining(tvb, offset) - 1;
+	next_tvb = tvb_new_subset_length(tvb, offset, len);
+	add_new_data_source(pinfo, next_tvb, "public key");
+	proto_tree_add_item(tree, hf_mysql_pubkey, tvb, offset, len, ENC_ASCII);
+	offset += len;
+
+	return offset + tvb_reported_length_remaining(tvb,offset);
+}
+
+/*
+ If caching_sha2_password authentication is used over a non-secure channel
+ then the authentication response (password) is encrypted with a RSA public key.
+
+ This means that we can't dissect this response without access to the RSA private key.
+*/
+static int
+mysql_dissect_sha2_response(tvbuff_t *tvb, packet_info *pinfo _U_, int offset,
+		       proto_tree *tree _U_, mysql_conn_data_t *conn_data _U_, proto_item *pi _U_, mysql_state_t current_state _U_)
+{
+	gint len = tvb_reported_length_remaining(tvb, offset);
+	proto_tree_add_item(tree, hf_mysql_sha2_response, tvb, offset, len, ENC_NA);
+	return offset + tvb_reported_length_remaining(tvb, offset);
+}
+
 /*
  get length of string in packet buffer
 
@@ -3604,18 +3711,19 @@ my_tvb_strsize(tvbuff_t *tvb, int offset)
    read FLE from packet buffer and store its value and ISNULL flag
    in caller provided variables
 
+   Docs: https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_basic_dt_integers.html
+
  RETURN VALUE
    length of FLE
 */
 static int
-tvb_get_fle(tvbuff_t *tvb, proto_tree *tree, int offset, guint64 *res, guint8 *is_null)
+tvb_get_fle(tvbuff_t *tvb, proto_tree *tree _U_, int offset, guint64 *res, guint8 *is_null)
 {
-	guint32 prefix;
-	proto_item* ti;
-	int num_bytes, len_len;
+	guint8 prefix;
+	int num_bytes;
 	guint64 length;
 
-	ti = proto_tree_add_item_ret_uint(tree, hf_mysql_prefix, tvb, offset, 1, ENC_BIG_ENDIAN, &prefix);
+	prefix = tvb_get_guint8(tvb, offset);
 
 	if (is_null) {
 		*is_null = 0;
@@ -3627,32 +3735,27 @@ tvb_get_fle(tvbuff_t *tvb, proto_tree *tree, int offset, guint64 *res, guint8 *i
 			*res = 0;
 		if (is_null)
 			*is_null = 1;
-		proto_item_append_text(ti, "(NULL)");
 		return 1;
-	case 252:
-		proto_item_append_text(ti, " Length in following 2 bytes");
+	case 252: // 0xFC
 		num_bytes = 3;
-		len_len = 2;
 		offset++;
+		length = (guint64)tvb_get_guint16(tvb, offset, ENC_LITTLE_ENDIAN);
 		break;
-	case 253:
-		proto_item_append_text(ti, " Length in following 3 bytes");
+	case 253: // 0xFD
 		num_bytes = 4;
-		len_len = 3;
 		offset++;
+		length = (guint64)tvb_get_guint24(tvb, offset, ENC_LITTLE_ENDIAN);
 		break;
-	case 254:
-		proto_item_append_text(ti, " Length in following 8 bytes");
+	case 254: // 0xFE
 		num_bytes = 9;
-		len_len = 8;
 		offset++;
+		length = tvb_get_guint64(tvb, offset, ENC_LITTLE_ENDIAN);
 		break;
 	default:
-		len_len = 1;
 		num_bytes = 1;
+		length = tvb_get_guint8(tvb, offset);
 	}
 
-	proto_tree_add_item_ret_uint64(tree, hf_mysql_length, tvb, offset, len_len, ENC_LITTLE_ENDIAN, &length);
 	if (res) {
 		*res = length;
 	}
@@ -3773,6 +3876,9 @@ dissect_mysql_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 		if (packet_number == 0 && mysql_frame_data_p->state == UNDEFINED) {
 			col_set_str(pinfo->cinfo, COL_INFO, "Server Greeting ");
 			offset = mysql_dissect_greeting(tvb, pinfo, offset, mysql_tree, conn_data);
+		} else if (mysql_frame_data_p->state == AUTH_PUBKEY) {
+			col_set_str(pinfo->cinfo, COL_INFO, "Public key ");
+			offset = mysql_dissect_pubkey(tvb, pinfo, offset, mysql_tree, conn_data, ti, mysql_frame_data_p->state);
 		} else {
 			col_set_str(pinfo->cinfo, COL_INFO, "Response ");
 			offset = mysql_dissect_response(tvb, pinfo, offset, mysql_tree, conn_data, ti, mysql_frame_data_p->state);
@@ -3787,6 +3893,9 @@ dissect_mysql_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 					conn_data->compressed_state = MYSQL_COMPRESS_INIT;
 				}
 			}
+		} else if (mysql_frame_data_p->state == AUTH_SHA2_RESPONSE) {
+			col_set_str(pinfo->cinfo, COL_INFO, "Caching_sha2_password response");
+			offset = mysql_dissect_sha2_response(tvb, pinfo, offset, mysql_tree, conn_data, ti, mysql_frame_data_p->state);
 		} else {
 			col_set_str(pinfo->cinfo, COL_INFO, "Request");
 			offset = mysql_dissect_request(tvb, pinfo, offset, mysql_tree, conn_data, mysql_frame_data_p->state);
@@ -4957,6 +5066,21 @@ void proto_register_mysql(void)
 		FT_BYTES, BASE_NONE, NULL, 0x0,
 		NULL, HFILL }},
 
+		{ &hf_mysql_sha2_auth,
+		{ "SHA2 Auth State", "mysql.hf_mysql_sha2_auth.name",
+		FT_STRING, BASE_NONE, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_pubkey,
+		{ "Public Key", "mysql.hf_mysql_pubkey",
+		FT_STRINGZ, BASE_NONE, NULL, 0x0,
+		NULL, HFILL }},
+
+		{ &hf_mysql_sha2_response,
+		{ "SHA2 Auth Response", "mysql.hf_mysql_sha2_response",
+		FT_BYTES, BASE_NONE, NULL, 0x0,
+		NULL, HFILL }},
+
 		{ &hf_mysql_compressed_packet_length,
 		{ "Compressed Packet Length", "mysql.compressed_packet_length",
 		FT_UINT24, BASE_DEC, NULL,  0x0,
@@ -5036,16 +5160,6 @@ void proto_register_mysql(void)
 		{ "Row nr", "mariadb.bulk.row_nr",
 		FT_UINT32, BASE_DEC, NULL, 0x00,
 		NULL, HFILL }},
-
-		{ &hf_mysql_prefix,
-		{ "Prefix", "mariadb.prefix",
-		FT_UINT8, BASE_DEC, NULL, 0x00,
-		NULL, HFILL }},
-
-		{ &hf_mysql_length,
-		{ "Length", "mariadb.length",
-		FT_UINT64, BASE_DEC, NULL, 0x00,
-		NULL, HFILL }}
 	};
 
 	static gint *ett[]=
