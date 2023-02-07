@@ -8,10 +8,11 @@
  */
 
 #include "config.h"
+#include "epan.h"
 
 #include <stdarg.h>
 
-#include <wsutil/wsgcrypt.h>
+#include <gcrypt.h>
 
 #ifdef HAVE_LIBGNUTLS
 #include <gnutls/gnutls.h>
@@ -23,7 +24,6 @@
 
 #include <epan/exceptions.h>
 
-#include "epan.h"
 #include "epan/frame_data.h"
 
 #include "dfilter/dfilter.h"
@@ -220,7 +220,7 @@ void epan_register_plugin(const epan_plugin *plug _U_)
 int epan_plugins_supported(void)
 {
 #ifdef HAVE_PLUGINS
-	return g_module_supported() ? 0 : 1;
+	return plugins_supported() ? 0 : 1;
 #else
 	return -1;
 #endif

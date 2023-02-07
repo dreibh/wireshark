@@ -32,6 +32,7 @@ if(WIN32)
 		message(STATUS "Using 3rd party repository")
 	endif()
 	set(USE_MSYSTEM ${_msystem} CACHE INTERNAL "Use MSYS2 subsystem")
+	set(HAVE_MSYSTEM ${USE_MSYSTEM}) # For config.h
 	set(USE_REPOSITORY ${_repository} CACHE INTERNAL "Use Wireshark 3rd Party Repository")
 endif()
 
@@ -2588,9 +2589,11 @@ if(BUILD_wireshark AND QT_FOUND)
 		ui
 		capchild
 		caputils
+		iface_monitor
 		wiretap
 		epan
 		version_info
+		summary
 		${QT_LIBRARIES}
 		${APPLE_APPLICATION_SERVICES_LIBRARY}
 		${APPLE_APPKIT_LIBRARY}
@@ -2693,9 +2696,11 @@ if(BUILD_logray AND QT_FOUND)
 		ui
 		capchild
 		caputils
+		iface_monitor
 		wiretap
 		epan
 		version_info
+		summary
 		${QT_LIBRARIES}
 		${APPLE_APPLICATION_SERVICES_LIBRARY}
 		${APPLE_APPKIT_LIBRARY}
@@ -2854,6 +2859,7 @@ if(BUILD_tshark)
 		caputils
 		wiretap
 		epan
+		wsutil
 		version_info
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
@@ -2935,7 +2941,6 @@ if(BUILD_sharkd)
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
 		${SPEEXDSP_LIBRARIES}
-		${M_LIBRARIES}
 	)
 	set(sharkd_FILES
 		#
@@ -2978,9 +2983,6 @@ if(BUILD_randpkt)
 		ui
 		wiretap
 		wsutil
-		${M_LIBRARIES}
-		${CARES_LIBRARIES}
-		${ZLIB_LIBRARIES}
 	)
 	set(randpkt_FILES
 		$<TARGET_OBJECTS:cli_main>
@@ -3006,7 +3008,6 @@ if(BUILD_text2pcap)
 		ui
 		epan
 		version_info
-		${M_LIBRARIES}
 		${ZLIB_LIBRARIES}
 	)
 	set(text2pcap_FILES
@@ -3133,11 +3134,11 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 		writecap
 		wsutil
 		caputils
+		iface_monitor
 		ui
 		version_info
 		pcap::pcap
 		${CAP_LIBRARIES}
-		${GTHREAD2_LIBRARIES}
 		${ZLIB_LIBRARIES}
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
@@ -3811,6 +3812,7 @@ set(SHARK_PUBLIC_HEADERS
 	include/ws_codepoints.h
 	include/ws_compiler_tests.h
 	include/ws_diag_control.h
+	include/ws_exit_codes.h
 	include/ws_log_defs.h
 	include/ws_posix_compat.h
 	include/ws_symbol_export.h
