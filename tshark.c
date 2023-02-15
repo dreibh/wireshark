@@ -38,8 +38,8 @@
 #include <epan/epan.h>
 
 #include <ws_exit_codes.h>
-#include <ui/clopts_common.h>
-#include <ui/cmdarg_err.h>
+#include <wsutil/clopts_common.h>
+#include <wsutil/cmdarg_err.h>
 #include <ui/urls.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/file_util.h>
@@ -74,7 +74,7 @@
 #include "ui/util.h"
 #include "ui/ws_ui_util.h"
 #include "ui/decode_as_utils.h"
-#include "ui/filter_files.h"
+#include "wsutil/filter_files.h"
 #include "ui/cli/tshark-tap.h"
 #include "ui/cli/tap-exportobject.h"
 #include "ui/tap_export_pdu.h"

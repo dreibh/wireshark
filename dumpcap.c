@@ -31,7 +31,7 @@
 #include <signal.h>
 #include <errno.h>
 
-#include <ui/cmdarg_err.h>
+#include <wsutil/cmdarg_err.h>
 #include <wsutil/strtoi.h>
 #include <cli_main.h>
 #include <wsutil/version_info.h>
@@ -60,7 +60,7 @@
 #include <sys/un.h>
 #endif
 
-#include <ui/clopts_common.h>
+#include <wsutil/clopts_common.h>
 #include <wsutil/privileges.h>
 
 #include "sync_pipe.h"
