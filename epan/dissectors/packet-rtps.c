@@ -194,7 +194,6 @@ typedef enum {
 
 typedef struct _rtps_dissector_data {
   guint16 encapsulation_id;
-  gboolean info_displayed;
   /* Represents the position of a sample within a batch. Since the
      position can be 0, we use -1 as not valid (not a batch) */
   gint position_in_batch;
@@ -511,7 +510,6 @@ static dissector_table_t rtps_type_name_table;
 #define ENTITYID_RESERVED_META_GROUP_WRITER        (0xcc)
 #define ENTITYID_RESERVED_META_GROUP_READER        (0xcd)
 #define ENTITYID_RESERVED_META_CST_GROUP_READER    (0xce)
-#define ENTITYID_OBJECT_NORMAL_META_CST_READER     (0x87)
 #define ENTITYID_OBJECT_NORMAL_META_WRITER_GROUP   (0x88)
 #define ENTITYID_OBJECT_NORMAL_META_READER_GROUP   (0x89)
 #define ENTITYID_OBJECT_NORMAL_META_TOPIC          (0x8a)
@@ -1533,7 +1531,6 @@ static const value_string entity_kind_vals [] = {
   { ENTITYKIND_RTI_BUILTIN_WRITER_NO_KEY,       "RTI Built-in writer (no key)" },
   { ENTITYKIND_RTI_BUILTIN_READER_WITH_KEY,     "RTI Built-in reader (with key)" },
   { ENTITYKIND_RTI_BUILTIN_READER_NO_KEY,       "RTI Built-in reader (no key)" },
-  { ENTITYID_OBJECT_NORMAL_META_CST_READER,     "Object normal meta CST reader" },
   { ENTITYID_OBJECT_NORMAL_META_WRITER_GROUP,   "Object normal meta writer group" },
   { ENTITYID_OBJECT_NORMAL_META_READER_GROUP,   "Object normal meta reader group" },
   { ENTITYID_OBJECT_NORMAL_META_TOPIC,          "Object normal meta topic" },
@@ -2653,6 +2650,9 @@ static int* const HEADER_EXTENSION_MASK_FLAGS[] = {
 #define RTPS_TCPMAP_DOMAIN_ID_KEY_STR "ParticipantGuid"
 #define RTPS_TCPMAP_DOMAIN_ID_PROTODATA_KEY 0
 
+/* Key for mapping the topic name in pinfo */
+#define RTPS_TOPIC_NAME_PROTODATA_KEY       1
+
 /* End of TCP get DomainId feature constants */
 
 typedef struct _participant_info {
@@ -2933,7 +2933,7 @@ static gint get_encapsulation_version(gint encapsulation_id)
 }
 
 
-dissection_info* lookup_dissection_info_in_custom_and_builtin_types(guint64 type_id) {
+static dissection_info* lookup_dissection_info_in_custom_and_builtin_types(guint64 type_id) {
   dissection_info* info = NULL;
   if (dissection_infos != NULL) {
     info = (dissection_info*)wmem_map_lookup(dissection_infos, &(type_id));
@@ -3602,7 +3602,15 @@ static void append_status_info(packet_info *pinfo,
     }
     wmem_strbuf_append(buffer, ")");
     col_append_str(pinfo->cinfo, COL_INFO, wmem_strbuf_get_str(buffer));
-   }
+    /* DATA(w|r) have the topic information (PID_TOPIC_NAME) and it has been stored when parsed it */
+    if (enable_topic_info &&
+          (writer_id == ENTITYID_BUILTIN_SUBSCRIPTIONS_WRITER || writer_id == ENTITYID_BUILTIN_PUBLICATIONS_WRITER)) {
+      const gchar* topic_name = (const gchar*)p_get_proto_data(pinfo->pool, pinfo, proto_rtps, RTPS_TOPIC_NAME_PROTODATA_KEY);
+      if (topic_name != NULL) {
+        col_append_sep_str(pinfo->cinfo, COL_INFO, " -> ", topic_name);
+      }
+    }
+  }
 }
 
 /* *********************************************************************** */
@@ -5895,17 +5903,6 @@ static void rtps_util_add_type_element_struct(proto_tree *tree,
         offset_tmp = rtps_util_add_type_member(member, tvb, offset_tmp, encoding, NULL, NULL);
       proto_item_set_len(member, offset_tmp - member_size);
   }
-  if (i < long_number) {
-      proto_tree_add_subtree_format(
-          tree,
-          tvb,
-          0,
-          0,
-          ett_rtps_info_remaining_items,
-          NULL,
-          DISSECTION_INFO_REMAINING_ELEMENTS_STR_d,
-          long_number - i);
-  }
   if (info)
     info->num_elements = long_number;
 }
@@ -6489,8 +6486,9 @@ static void rtps_util_format_typename(gchar * type_name, gchar ** output) {
 
 }
 
-static void rtps_util_topic_info_add_tree(proto_tree *tree, tvbuff_t *tvb,
+static const char* rtps_util_topic_info_add_tree(proto_tree *tree, tvbuff_t *tvb,
   gint offset, endpoint_guid * guid) {
+  const char* topic_name = NULL;
   if (enable_topic_info) {
     proto_tree * topic_info_tree;
     proto_item * ti;
@@ -6502,6 +6500,7 @@ static void rtps_util_topic_info_add_tree(proto_tree *tree, tvbuff_t *tvb,
       const gchar* topic_information_text = (!is_builtin_type) ?
         "[Topic Information (from Discovery)]":
         "[Topic Information (BuiltIn type)]";
+      topic_name = type_mapping_object->topic_name;
       topic_info_tree = proto_tree_add_subtree(tree, tvb, offset, 0,
                 ett_rtps_topic_info, NULL, topic_information_text);
       ti = proto_tree_add_string(topic_info_tree, hf_rtps_param_type_name, tvb, offset, 0,
@@ -6509,13 +6508,26 @@ static void rtps_util_topic_info_add_tree(proto_tree *tree, tvbuff_t *tvb,
       proto_item_set_generated(ti);
       if (!is_builtin_type) {
         ti = proto_tree_add_string(topic_info_tree, hf_rtps_param_topic_name, tvb, offset, 0,
-          type_mapping_object->topic_name);
+          topic_name);
         proto_item_set_generated(ti);
         ti = proto_tree_add_uint(topic_info_tree, hf_rtps_dcps_publication_data_frame_number,
           tvb, 0, 0, type_mapping_object->dcps_publication_frame_number);
       }
       proto_item_set_generated(ti);
     }
+  }
+  return topic_name;
+}
+
+/* Adds the topic topic information to the tree and the topic name to the info column.
+ * Topic name will be added to the info column only if the topic information is stored
+ * in the "registry map".
+ * This is used when the packet doesn't contain the topic information (PID_TOPIC_INFORMATION)
+ */
+static void rtps_util_add_topic_info(proto_tree* tree, packet_info *pinfo,tvbuff_t* tvb, gint offset, endpoint_guid* guid) {
+  const char* topic_name = rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  if (enable_topic_info && topic_name != NULL) {
+    col_append_sep_str(pinfo->cinfo, COL_INFO, " -> ", topic_name);
   }
 }
 
@@ -6652,25 +6664,7 @@ gint rtps_util_dissect_encapsulation_options(
     return offset;
 }
 
-static gboolean rtps_util_topic_info_add_column_info(
-    packet_info *pinfo, endpoint_guid * guid,
-    rtps_dissector_data * data) {
-    gboolean added = FALSE;
-    if (enable_topic_info) {
-        type_mapping * type_mapping_object = rtps_util_get_topic_info(guid);
-
-        /* This part shows information available for the sample */
-        if (data && !(data->info_displayed) && (type_mapping_object != NULL)) {
-            col_append_sep_str(pinfo->cinfo, COL_INFO, " -> ", type_mapping_object->topic_name);
-            data->info_displayed = TRUE;
-            added = TRUE;
-        }
-    }
-    /* Return false so the content is dissected by the codepath following this one */
-    return added;
-}
-
-static gboolean rtps_util_topic_info_add_column_info_and_try_dissector(proto_tree *tree,
+static gboolean rtps_util_try_dissector(proto_tree *tree,
         packet_info *pinfo, tvbuff_t *tvb, gint offset, endpoint_guid * guid,
         rtps_dissector_data * data, guint encoding, guint encoding_version, gboolean try_dissection_from_type_object) {
 
@@ -6681,14 +6675,6 @@ static gboolean rtps_util_topic_info_add_column_info_and_try_dissector(proto_tre
       gchar * dissector_name = NULL;
       tvbuff_t *next_tvb;
       dissection_info* info = NULL;
-
-      rtps_util_topic_info_add_column_info(pinfo, guid, data);
-      /* This part shows information available for the sample
-      if (data && !(data->info_displayed)) {
-        col_append_sep_str(pinfo->cinfo, COL_INFO, " -> ", type_mapping_object->topic_name);
-        data->info_displayed = TRUE;
-      }
-      */
 
       if (try_dissection_from_type_object && enable_user_data_dissection) {
           info = lookup_dissection_info_in_custom_and_builtin_types(type_mapping_object->type_id);
@@ -7827,11 +7813,15 @@ static gboolean dissect_parameter_sequence_v1(proto_tree *rtps_parameter_tree, p
       guint32 str_size = tvb_get_guint32(tvb, offset, encoding);
 
       retVal = (gchar*)tvb_get_string_enc(wmem_packet_scope(), tvb, offset+4, str_size, ENC_ASCII);
-
-      rtps_util_store_type_mapping(pinfo, tvb, offset, type_mapping_object,
-          retVal, TOPIC_INFO_ADD_TOPIC_NAME);
-
       rtps_util_add_string(rtps_parameter_tree, tvb, offset, hf_rtps_param_topic_name, encoding);
+      /* If topic information is enabled we have to store the topic name for showing after the DATA(r|w)
+       * in the infor column. This information is used in append_status_info function.
+       */
+      if (retVal != NULL && enable_topic_info) {
+        rtps_util_store_type_mapping(pinfo, tvb, offset, type_mapping_object, retVal, TOPIC_INFO_ADD_TOPIC_NAME);
+        /* retVal has packet scope lifetime, enough for adding to the DATA(r|w) column information */
+        p_add_proto_data(pinfo->pool, pinfo, proto_rtps, RTPS_TOPIC_NAME_PROTODATA_KEY, (gpointer)retVal);
+      }
       break;
     }
 
@@ -9444,8 +9434,7 @@ static void dissect_APP_ACK_CONF(tvbuff_t *tvb,
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
-
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* virtualWriterCount */
   proto_tree_add_item_ret_uint(tree, hf_rtps_param_app_ack_conf_virtual_writer_count, tvb, offset, 4,
@@ -9821,6 +9810,7 @@ gint rtps_prepare_encapsulated_data(
  *  could be used to define a custom compressor plugin for matching purposes.
  *
  */
+
 static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, gint offset,
                         int  size, const char *label, guint16 vendor_id, gboolean is_discovery_data,
                         endpoint_guid * guid, gint32 frag_number /* -1 if no fragmentation */) {
@@ -9837,7 +9827,6 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
   gboolean uncompressed_ok = FALSE;
   proto_tree *compressed_subtree = NULL;
 
-  data->info_displayed = FALSE;
   data->encapsulation_id = 0;
   data->position_in_batch = -1;
   /* Creates the sub-tree */
@@ -9902,7 +9891,7 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
      *       tvb if it is not decompressed.
      * Only try to dissect the user data if it is not compressed or it is compressed and correctly uncompressed */
     if (is_compressed == uncompressed_ok) {
-        if (rtps_util_topic_info_add_column_info_and_try_dissector(dissected_data_holdeer_tree,
+        if (rtps_util_try_dissector(dissected_data_holdeer_tree,
                 pinfo, data_holder_tvb, offset, guid, data, encapsulation_encoding,
                 get_encapsulation_version(encapsulation_id), try_dissection_from_type_object)) {
             return;
@@ -9926,7 +9915,7 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
             }
             else if (frag_number != NOT_A_FRAGMENT) {
                 /* fragments should be dissected as raw bytes (not parametrized) */
-                proto_tree_add_item(dissected_data_holdeer_tree, hf_rtps_issue_data, tvb,
+                proto_tree_add_item(dissected_data_holdeer_tree, hf_rtps_issue_data, data_holder_tvb,
                     offset, size, ENC_NA);
                 break;
             }
@@ -9934,7 +9923,7 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
                 /* Instead of showing a warning like before, we now dissect the data as
                  * (id - length - value) members */
                 dissect_parametrized_serialized_data(dissected_data_holdeer_tree,
-                    tvb, offset, size, encapsulation_encoding);
+                    data_holder_tvb, offset, size, encapsulation_encoding);
             }
             break;
 
@@ -9942,9 +9931,6 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
             proto_tree_add_item(dissected_data_holdeer_tree, hf_rtps_data_serialize_data, tvb,
                 offset, size, ENC_NA);
         }
-    } else {
-        /* If uncompression fails we still need toadd the topic name to the column */
-        rtps_util_topic_info_add_column_info(pinfo, guid, data);
     }
   }
 }
@@ -10014,7 +10000,7 @@ static void dissect_APP_ACK(tvbuff_t *tvb,
     &wid);
   offset += 4;
   guid->entity_id = wid;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* writerEntityId */
   rtps_util_add_entity_id(tree,
@@ -10433,7 +10419,7 @@ static void dissect_DATA_v2(tvbuff_t *tvb, packet_info *pinfo, gint offset, guin
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* Sequence number */
   rtps_util_add_seq_number(tree, tvb, offset, encoding, "writerSeqNumber");
@@ -10657,7 +10643,7 @@ static void dissect_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, gint offset, gu
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* Sequence number */
   rtps_util_add_seq_number(tree, tvb, offset, encoding, "writerSeqNumber");
@@ -11012,10 +10998,9 @@ static void dissect_ACKNACK(tvbuff_t *tvb, packet_info *pinfo, gint offset, guin
   gint original_offset; /* Offset to the readerEntityId */
   proto_item *octet_item;
   guint32 wid;
+
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, ACKNACK_FLAGS, flags);
-
   octet_item = proto_tree_add_item(tree, hf_rtps_sm_octets_to_next_header, tvb, offset + 2, 2, encoding);
-
   if (octets_to_next_header < 20) {
     expert_add_info_format(pinfo, octet_item, &ei_rtps_sm_octets_to_next_header_error, "(Error: should be >= 20)");
     return;
@@ -11035,7 +11020,7 @@ static void dissect_ACKNACK(tvbuff_t *tvb, packet_info *pinfo, gint offset, guin
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* Bitmap */
   offset = rtps_util_add_bitmap(tree, tvb, offset, encoding, "readerSNState", TRUE);
@@ -11208,7 +11193,7 @@ static void dissect_HEARTBEAT(tvbuff_t *tvb, packet_info *pinfo, gint offset, gu
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* First available Sequence Number */
   rtps_util_add_seq_number(tree, tvb, offset, encoding, "firstAvailableSeqNumber");
@@ -11288,7 +11273,7 @@ static void dissect_HEARTBEAT_BATCH(tvbuff_t *tvb, packet_info *pinfo, gint offs
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* First available Batch Sequence Number */
   rtps_util_add_seq_number(tree, tvb, offset, encoding, "firstBatchSN");
@@ -11430,7 +11415,7 @@ static void dissect_HEARTBEAT_VIRTUAL(tvbuff_t *tvb, packet_info *pinfo _U_, gin
     offset += 4;
     guid->entity_id = wid;
     guid->fields_present |= GUID_HAS_ENTITY_ID;
-    rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+    rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
     /* virtualGUID */
     if (!(flags & FLAG_VIRTUAL_HEARTBEAT_V) && !(flags & FLAG_VIRTUAL_HEARTBEAT_N)) {
@@ -11632,7 +11617,7 @@ static void dissect_HEARTBEAT_FRAG(tvbuff_t *tvb, packet_info *pinfo, gint offse
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* First available Sequence Number */
   rtps_util_add_seq_number(tree, tvb, offset, encoding, "writerSeqNumber");
@@ -11755,7 +11740,7 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, gint offset, gu
   offset += 4;
   guid->entity_id = writer_wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* Sequence number */
   if (is_session) {
@@ -12132,7 +12117,7 @@ static void dissect_RTPS_DATA_FRAG_kind(tvbuff_t *tvb, packet_info *pinfo, gint 
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
 
   /* Sequence number */
@@ -12344,7 +12329,6 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, gint offs
 
 
   data = wmem_new(wmem_packet_scope(), rtps_dissector_data);
-  data->info_displayed = FALSE;
   data->encapsulation_id = 0;
 
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, RTPS_DATA_BATCH_FLAGS, flags);
@@ -12383,7 +12367,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, gint offs
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
 
   /* Batch sequence number */
@@ -12574,7 +12558,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, gint offs
                   proto_tree_add_bytes_format(sil_tree, hf_rtps_serialized_key,
                       data_holder_tvb, offset, sample_info_length[count], NULL, "serializedKey[%d]", count);
               } else {
-                  if (!rtps_util_topic_info_add_column_info_and_try_dissector(
+                  if (!rtps_util_try_dissector(
                       sil_tree, pinfo, data_holder_tvb, offset, guid, data, get_encapsulation_endianness(encapsulation_id), get_encapsulation_version(encapsulation_id), try_dissection_from_type_object)) {
                       proto_tree_add_bytes_format(sil_tree, hf_rtps_serialized_data,
                           data_holder_tvb, offset, sample_info_length[count], NULL, "serializedData[%d]", count);
@@ -12583,9 +12567,6 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, gint offs
               offset += sample_info_length[count];
           }
       }
-  } else {
-      /* If uncompression went wrong still need to add the topic column info */
-      rtps_util_topic_info_add_column_info(pinfo, guid, data);
   }
   append_status_info(pinfo, wid, status_info);
 }
@@ -12659,7 +12640,7 @@ static void dissect_GAP(tvbuff_t *tvb, packet_info *pinfo, gint offset,
   offset += 4;
   guid->entity_id = wid;
   guid->fields_present |= GUID_HAS_ENTITY_ID;
-  rtps_util_topic_info_add_tree(tree, tvb, offset, guid);
+  rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
 
  /* First Sequence Number */
@@ -15879,7 +15860,7 @@ void proto_register_rtps(void) {
         FT_BOOLEAN, 8, TFS(&tfs_set_notset), RTPS_HE_TIMESTAMP_FLAG, NULL, HFILL }
     },
     { &hf_rtps_flag_header_extension_message_length, {
-        "Header Extension Message Length", "rtps.flag.header_extension.message_legth",
+        "Header Extension Message Length", "rtps.flag.header_extension.message_length",
         FT_BOOLEAN, 8, TFS(&tfs_set_notset), RTPS_HE_MESSAGE_LENGTH_FLAG, NULL, HFILL }
     },
     { &hf_rtps_header_extension_checksum, {

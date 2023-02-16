@@ -42,7 +42,7 @@
 #include <glib.h>
 #include <epan/epan.h>
 
-#include <ui/cmdarg_err.h>
+#include <wsutil/cmdarg_err.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/file_util.h>
 #include <wsutil/socket.h>
@@ -51,7 +51,7 @@
 #include <wsutil/report_message.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/wslog.h>
-#include <ui/clopts_common.h>
+#include <wsutil/clopts_common.h>
 
 #ifdef _WIN32
 #include <wsutil/unicode-utils.h>
