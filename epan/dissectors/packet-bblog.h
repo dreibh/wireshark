@@ -37,7 +37,8 @@ static const value_string tcp_state_values[] = {
 
 #define BBLOG_TCP_LOG_IN               1
 #define BBLOG_TCP_LOG_OUT              2
-#define BBLOG_TCP_LOG_RTO              3
+/* Use a better name for the event used for various timer events */
+#define BBLOG_TCP_LOG_TIMER            3
 #define BBLOG_TCP_LOG_SB_WAKE          4
 #define BBLOG_TCP_LOG_BAD_RETRAN       5
 #define BBLOG_TCP_LOG_PRR              6
@@ -102,12 +103,15 @@ static const value_string tcp_state_values[] = {
 #define BBLOG_TCP_HYSTART             65
 #define BBLOG_TCP_CHG_QUERY           66
 #define BBLOG_TCP_RACK_LOG_COLLAPSE   67
-#define BBLOG_TCP_LOG_END             68
+#define TCP_RACK_TP_TRIGGERED         68
+#define TCP_HYBRID_PACING_LOG         69
+#define TCP_LOG_PRU                   70
+#define BBLOG_TCP_LOG_END             71
 
 static const value_string event_identifier_values[] = {
   { BBLOG_TCP_LOG_IN,              "Incoming packet" },
   { BBLOG_TCP_LOG_OUT,             "Transmit (without other event)" },
-  { BBLOG_TCP_LOG_RTO,             "Retransmit timeout" },
+  { BBLOG_TCP_LOG_TIMER,           "Timer" },
   { BBLOG_TCP_LOG_SB_WAKE,         "Awaken socket buffer" },
   { BBLOG_TCP_LOG_BAD_RETRAN,      "Detected bad retransmission" },
   { BBLOG_TCP_LOG_PRR,             "Doing PRR" },
@@ -172,7 +176,10 @@ static const value_string event_identifier_values[] = {
   { BBLOG_TCP_HYSTART,             "TCP Hystart logging" },
   { BBLOG_TCP_CHG_QUERY,           "Change query during fnc_init()" },
   { BBLOG_TCP_RACK_LOG_COLLAPSE,   "Window collapse by peer" },
-  { 0,                       NULL } };
+  { TCP_RACK_TP_TRIGGERED,         "A RACK tracepoint is triggered" },
+  { TCP_HYBRID_PACING_LOG,         "Hybrid pacing log" },
+  { TCP_LOG_PRU,                   "TCP protocol user request" },
+  { 0,                             NULL } };
 
 /*
  * The event flag values used here are defined in
