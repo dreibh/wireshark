@@ -388,8 +388,8 @@ json_prep(char* buf, const jsmntok_t* tokens, int count)
         {"follow",     "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   MANDATORY},
         {"frame",      "frame",      2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, MANDATORY},
         {"frame",      "proto",      2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
-        {"frame",      "ref_frame",  2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
-        {"frame",      "prev_frame", 2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
+        {"frame",      "ref_frame",  2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, OPTIONAL},
+        {"frame",      "prev_frame", 2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, OPTIONAL},
         {"frame",      "columns",    2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
         {"frame",      "color",      2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
         {"frame",      "bytes",      2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
@@ -1087,7 +1087,17 @@ sharkd_session_process_load(const char *buf, const jsmntok_t *tokens, int count)
     ENDTRY;
 
     if (err == 0)
+    {
         sharkd_json_simple_ok(rpcid);
+    }
+    else
+    {
+        sharkd_json_result_prologue(rpcid);
+        sharkd_json_value_string("status", wtap_strerror(err));
+        sharkd_json_value_anyf("err", "%d", err);
+        sharkd_json_result_epilogue();
+    }
+
 }
 
 /**
