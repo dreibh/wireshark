@@ -13,6 +13,7 @@
 #include <epan/proto_data.h>
 #include <wsutil/pint.h>
 #include <epan/reassemble.h>
+#include <epan/oids.h>
 
 #include "packet-ieee802154.h"
 
@@ -75,6 +76,8 @@ static reassembly_table netricity_reassembly_table;
 #define WISUN_PIE_SUBID_LCP      0x04
 #define WISUN_PIE_SUBID_LFNVER   0x40
 #define WISUN_PIE_SUBID_LGTKHASH 0x41
+#define WISUN_PIE_SUBID_LBATS    0x09
+#define WISUN_PIE_SUBID_JM       0x0a
 
 #define WISUN_LGTKHASH_LGTK0_INCLUDED_MASK   0x01
 #define WISUN_LGTKHASH_LGTK1_INCLUDED_MASK   0x02
@@ -109,6 +112,10 @@ static reassembly_table netricity_reassembly_table;
 #define WISUN_PIE_PHY_OPERATING_MODES_MASK   0x0F
 #define WISUN_PIE_PHY_TYPE                   0xF0
 
+#define WISUN_PIE_JM_ID_PLF      1
+#define WISUN_PIE_JM_ID_MASK  0xfc
+#define WISUN_PIE_JM_LEN_MASK 0x03
+
 static int proto_wisun = -1;
 static int hf_wisun_subid = -1;
 static int hf_wisun_unknown_ie = -1;
@@ -139,7 +146,6 @@ static int hf_wisun_lbtie_slot = -1;
 static int hf_wisun_lbtie_bio = -1;
 static int hf_wisun_nrie = -1;
 static int hf_wisun_nrie_nr_id = -1;
-static int hf_wisun_nrie_listening_type = -1;
 static int hf_wisun_nrie_timing_accuracy = -1;
 static int hf_wisun_nrie_listening_interval_min = -1;
 static int hf_wisun_nrie_listening_interval_max = -1;
@@ -244,6 +250,17 @@ static int hf_wisun_lgtkhashie_flag_active_lgtk_index = -1;
 static int hf_wisun_lgtkhashie_gtk0 = -1;
 static int hf_wisun_lgtkhashie_gtk1 = -1;
 static int hf_wisun_lgtkhashie_gtk2 = -1;
+static int hf_wisun_lbatsie = -1;
+static int hf_wisun_lbatsie_additional_tx = -1;
+static int hf_wisun_lbatsie_next_tx_delay = -1;
+static int hf_wisun_jmie = -1;
+static int hf_wisun_jmie_version = -1;
+static int hf_wisun_jmie_metric_hdr = -1;
+static int hf_wisun_jmie_metric_id = -1;
+static int hf_wisun_jmie_metric_len = -1;
+static int hf_wisun_jmie_metric_plf = -1;
+static int hf_wisun_jmie_metric_plf_data = -1;
+static int hf_wisun_jmie_metric_unknown = -1;
 
 static int proto_wisun_sec = -1;
 static int hf_wisun_sec_function = -1;
@@ -319,6 +336,11 @@ static gint ett_wisun_pomie_phy_mode_id = -1;
 static gint ett_wisun_lfnverie = -1;
 static gint ett_wisun_lgtkhashie = -1;
 static gint ett_wisun_lgtkhashie_flags = -1;
+static gint ett_wisun_lbatsie = -1;
+static gint ett_wisun_jmie = -1;
+static gint ett_wisun_jmie_metric_hdr = -1;
+static gint ett_wisun_jmie_metric_plf = -1;
+static gint ett_wisun_jmie_metric_unknown = -1;
 static gint ett_wisun_sec = -1;
 static gint ett_wisun_eapol_relay = -1;
 // Netricity
@@ -402,6 +424,8 @@ static const value_string wisun_wsie_names_short[] = {
     { WISUN_PIE_SUBID_POM,       "PHY Operating Modes IE" },
     { WISUN_PIE_SUBID_LFNVER,    "LFN Version IE" },
     { WISUN_PIE_SUBID_LGTKHASH,  "LFN GTK Hash IE" },
+    { WISUN_PIE_SUBID_LBATS,     "LFN Broadcast Additional Transmit Schedule IE" },
+    { WISUN_PIE_SUBID_JM,        "Join Metrics IE" },
     { 0, NULL }
 };
 
@@ -520,6 +544,19 @@ static const value_string wisun_window_style[] = {
     { 0, NULL }
 };
 
+static const value_string wisun_metric_id[] = {
+    { WISUN_PIE_JM_ID_PLF, "PAN Load Factor" },
+    { 0, NULL }
+};
+
+static const value_string wisun_metric_len[] = {
+    { 0, "0" },
+    { 1, "1" },
+    { 2, "2" },
+    { 3, "4" },
+    { 0, NULL }
+};
+
 static const value_string wisun_sec_functions[] = {
     { 0x01, "SM Error" },
     { 0, NULL }
@@ -582,11 +619,6 @@ static const range_string wisun_phy_mode_ofdm_vals[] = {
     { 0,  0, NULL }
 };
 
-static const true_false_string wisun_wsie_listening_type_tfs = {
-    "Semi-synchronized Listening Type",
-    "Coordinated Sample Listening"
-};
-
 static const true_false_string wisun_netricity_sc_contention_control_tfs = {
     "Contention-free access",
     "Contention allowed in next contention state"
@@ -611,6 +643,7 @@ static expert_field ei_wisun_wsie_unsupported = EI_INIT;
 static expert_field ei_wisun_usie_channel_plan_invalid = EI_INIT;
 static expert_field ei_wisun_edfe_start_not_found = EI_INIT;
 static expert_field ei_wisun_usie_explicit_reserved_bits_not_zero = EI_INIT;
+static expert_field ei_wisun_jmie_metric_unsupported = EI_INIT;
 
 static guint
 wisun_add_wbxml_uint(tvbuff_t *tvb, proto_tree *tree, int hf, guint offset)
@@ -776,10 +809,6 @@ dissect_wisun_nrie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, guin
     guint8 node_role = tvb_get_guint8(tvb, offset) & WISUN_WSIE_NODE_ROLE_MASK;
 
     proto_tree_add_item(tree, hf_wisun_nrie_nr_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-
-    if (node_role == WISUN_WSIE_NODE_ROLE_ID_LFN) {
-        proto_tree_add_item(tree, hf_wisun_nrie_listening_type, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-    }
     offset++;
 
     proto_tree_add_item(tree, hf_wisun_usie_clock_drift, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -1420,6 +1449,74 @@ dissect_wisun_lgtkhashie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree
 }
 
 static int
+dissect_wisun_lbatsie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    guint8 offset = 0;
+    proto_item *item;
+    proto_tree *subtree;
+
+    item = proto_tree_add_item(tree, hf_wisun_lbatsie, tvb, 0, tvb_reported_length(tvb), ENC_NA);
+    subtree = proto_item_add_subtree(item, ett_wisun_lbatsie);
+
+    proto_tree_add_bitmask(subtree, tvb, offset, hf_wisun_wsie, ett_wisun_wsie_bitmap, wisun_format_nested_ie_short, ENC_LITTLE_ENDIAN);
+    offset += 2;
+    proto_tree_add_item(subtree, hf_wisun_lbatsie_additional_tx, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+    offset += 1;
+    proto_tree_add_item(subtree, hf_wisun_lbatsie_next_tx_delay, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+    offset += 2;
+    return offset;
+}
+
+static int
+dissect_wisun_jmie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    static int * const fields_jmie_metric_hdr[] = {
+        &hf_wisun_jmie_metric_id,
+        &hf_wisun_jmie_metric_len,
+        NULL
+    };
+    guint8 offset = 0;
+    proto_item *item;
+    proto_tree *subtree;
+
+    item = proto_tree_add_item(tree, hf_wisun_jmie, tvb, 0, tvb_reported_length(tvb), ENC_NA);
+    subtree = proto_item_add_subtree(item, ett_wisun_jmie);
+
+    proto_tree_add_bitmask(subtree, tvb, offset, hf_wisun_wsie, ett_wisun_wsie_bitmap, wisun_format_nested_ie_short, ENC_LITTLE_ENDIAN);
+    offset += 2;
+    proto_tree_add_item(subtree, hf_wisun_jmie_version, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+    offset += 1;
+    while (tvb_reported_length_remaining(tvb, offset) > 0) {
+        guint8 metric_hdr = tvb_get_guint8(tvb, offset);
+        guint8 metric_len = metric_hdr & WISUN_PIE_JM_LEN_MASK;
+        proto_tree *metric_subtree;
+
+        if (metric_len == 3)
+            metric_len = 4;
+
+        switch ((metric_hdr & WISUN_PIE_JM_ID_MASK) >> 2) {
+        case WISUN_PIE_JM_ID_PLF:
+            item = proto_tree_add_item(subtree, hf_wisun_jmie_metric_plf, tvb, offset, 1 + metric_len, ENC_NA);
+            metric_subtree = proto_item_add_subtree(item, ett_wisun_jmie_metric_plf);
+            proto_tree_add_bitmask(metric_subtree, tvb, offset, hf_wisun_jmie_metric_hdr, ett_wisun_jmie_metric_hdr, fields_jmie_metric_hdr, ENC_NA);
+            offset += 1;
+            proto_tree_add_item(metric_subtree, hf_wisun_jmie_metric_plf_data, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+            break;
+        default:
+            item = proto_tree_add_item(subtree, hf_wisun_jmie_metric_unknown, tvb, offset, 1 + metric_len, ENC_NA);
+            metric_subtree = proto_item_add_subtree(item, ett_wisun_jmie_metric_unknown);
+            proto_tree_add_bitmask(metric_subtree, tvb, offset, hf_wisun_jmie_metric_hdr, ett_wisun_jmie_metric_hdr, fields_jmie_metric_hdr, ENC_NA);
+            offset += 1;
+            expert_add_info(pinfo, metric_subtree, &ei_wisun_jmie_metric_unsupported);
+            call_data_dissector(tvb_new_subset_length(tvb, offset, metric_len), pinfo, metric_subtree);
+            break;
+        }
+        offset += metric_len;
+    }
+    return offset;
+}
+
+static int
 dissect_wisun_pie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ies_tree, void *data)
 {
     proto_tree *tree = ieee802154_create_pie_tree(tvb, ies_tree, hf_wisun_pie, ett_wisun_pie);
@@ -1481,6 +1578,12 @@ dissect_wisun_pie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ies_tree, void 
                     break;
                 case WISUN_PIE_SUBID_LGTKHASH:
                     dissect_wisun_lgtkhashie(wsie_tvb, pinfo, tree, data);
+                    break;
+                case WISUN_PIE_SUBID_LBATS:
+                    dissect_wisun_lbatsie(wsie_tvb, pinfo, tree, data);
+                    break;
+                case WISUN_PIE_SUBID_JM:
+                    dissect_wisun_jmie(wsie_tvb, pinfo, tree, data);
                     break;
                 default:{
                     proto_item *item = proto_tree_add_item(tree, hf_wisun_unknown_ie, wsie_tvb, 0, tvb_reported_length(wsie_tvb), ENC_NA);
@@ -1789,10 +1892,6 @@ void proto_register_wisun(void)
           { "Node Role ID", "wisun.nrie.nr_id", FT_UINT8, BASE_DEC|BASE_SPECIAL_VALS, VALS(wisun_wsie_node_role_vals), 0x0,
             NULL, HFILL }
         },
-
-        { &hf_wisun_nrie_listening_type,
-          { "Listening Type", "wisun.nrie.listening_type", FT_BOOLEAN, BASE_NONE, TFS(&wisun_wsie_listening_type_tfs), 1>>7,
-          NULL, HFILL }},
 
         { &hf_wisun_nrie_timing_accuracy,
           { "Timing Accuracy", "wisun.nrie.timing_accuracy", FT_UINT8, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
@@ -2310,6 +2409,61 @@ void proto_register_wisun(void)
             NULL, HFILL }
         },
 
+        { &hf_wisun_lbatsie,
+          { "LBATS-IE", "wisun.lbatsie", FT_NONE, BASE_NONE, NULL, 0x0,
+            "LFN Broadcast Additional Transmit Schedule IE", HFILL }
+        },
+
+        { &hf_wisun_lbatsie_additional_tx,
+          { "Additional Transmissions", "wisun.lbatsie.additional_tx", FT_UINT8, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+
+        { &hf_wisun_lbatsie_next_tx_delay,
+          { "Next Transmit Delay", "wisun.lbatsie.next_tx_delay", FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+            NULL, HFILL }
+        },
+
+        { &hf_wisun_jmie,
+          { "JM-IE", "wisun.jmie", FT_NONE, BASE_NONE, NULL, 0x0,
+            "Join Metrics IE", HFILL }
+        },
+
+        { &hf_wisun_jmie_version,
+          { "Content Version", "wisun.jmie.version", FT_UINT8, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+
+        { &hf_wisun_jmie_metric_hdr,
+          { "Metric Header", "wisun.jmie.metric.hdr", FT_UINT8, BASE_HEX, NULL, 0x0,
+            NULL, HFILL }
+        },
+
+        { &hf_wisun_jmie_metric_id,
+          { "Metric ID", "wisun.jmie.metric.id", FT_UINT8, BASE_DEC, VALS(wisun_metric_id), WISUN_PIE_JM_ID_MASK,
+            NULL, HFILL }
+        },
+
+        { &hf_wisun_jmie_metric_len,
+          { "Metric Length", "wisun.jmie.metric.len", FT_UINT8, BASE_DEC, VALS(wisun_metric_len), WISUN_PIE_JM_LEN_MASK,
+            NULL, HFILL }
+        },
+
+        { &hf_wisun_jmie_metric_plf,
+          { "JM-PLF", "wisun.jmie.metric.plf", FT_NONE, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }
+        },
+
+        { &hf_wisun_jmie_metric_plf_data,
+          { "PAN Load Factor", "wisun.jmie.metric.plf.data", FT_UINT8, BASE_DEC|BASE_UNIT_STRING, &units_percent, 0x0,
+            NULL, HFILL }
+        },
+
+        { &hf_wisun_jmie_metric_unknown,
+          { "Unknown Metric", "wisun.jmie.metric.unknown", FT_NONE, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }
+        },
+
         /* Wi-SUN FAN Security Extension */
         { &hf_wisun_sec_function,
           { "Function Code", "wisun.sec.function", FT_UINT8, BASE_HEX, VALS(wisun_sec_functions), 0x0,
@@ -2464,6 +2618,11 @@ void proto_register_wisun(void)
         &ett_wisun_lfnverie,
         &ett_wisun_lgtkhashie,
         &ett_wisun_lgtkhashie_flags,
+        &ett_wisun_lbatsie,
+        &ett_wisun_jmie,
+        &ett_wisun_jmie_metric_hdr,
+        &ett_wisun_jmie_metric_plf,
+        &ett_wisun_jmie_metric_unknown,
         &ett_wisun_sec,
         &ett_wisun_eapol_relay,
         &ett_wisun_netricity_nftie,
@@ -2495,6 +2654,8 @@ void proto_register_wisun(void)
                 "EDFE Transfer: start frame not found", EXPFILL }},
         { &ei_wisun_usie_explicit_reserved_bits_not_zero, { "wisun.usie.explicit.reserved.invalid", PI_MALFORMED, PI_ERROR,
                 "Reserved bits not zero", EXPFILL }},
+        { &ei_wisun_jmie_metric_unsupported, { "wisun.jmie.metric.unsupported", PI_PROTOCOL, PI_WARN,
+                "Unsupported Metric ID", EXPFILL }},
     };
 
     expert_module_t* expert_wisun;
@@ -2524,6 +2685,8 @@ void proto_reg_handoff_wisun(void)
 {
     dissector_add_uint(IEEE802154_HEADER_IE_DTABLE, IEEE802154_HEADER_IE_WISUN, create_dissector_handle(dissect_wisun_hie, proto_wisun));
     dissector_add_uint(IEEE802154_PAYLOAD_IE_DTABLE, IEEE802154_PAYLOAD_IE_WISUN, create_dissector_handle(dissect_wisun_pie, proto_wisun));
+
+    oid_add_from_string("id-kp-wisun-fan-device", "1.3.6.1.4.1.45605.1");
 
     // For EAPOL relay
     dissector_add_uint("udp.port", WISUN_EAPOL_RELAY_UDP_PORT, wisun_eapol_relay_handle);

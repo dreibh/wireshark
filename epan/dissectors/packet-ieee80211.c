@@ -3616,6 +3616,7 @@ static int hf_ieee80211_fc_frame_extension = -1;
 static int hf_ieee80211_fc_frame_type_subtype = -1;
 
 static int hf_ieee80211_fc_flags = -1;
+static int hf_ieee80211_fc_flags_str = -1;
 static int hf_ieee80211_fc_to_ds = -1;
 static int hf_ieee80211_fc_from_ds = -1;
 static int hf_ieee80211_fc_data_ds = -1;
@@ -6204,6 +6205,22 @@ static int hf_ieee80211_vs_arista_subtype = -1;
 static int hf_ieee80211_vs_arista_apname = -1;
 static int hf_ieee80211_vs_arista_data = -1;
 
+static int hf_ieee80211_vs_wisun_type = -1;
+static int hf_ieee80211_vs_wisun_ptkid = -1;
+static int hf_ieee80211_vs_wisun_gtkl = -1;
+static int hf_ieee80211_vs_wisun_gtkl_gtk0 = -1;
+static int hf_ieee80211_vs_wisun_gtkl_gtk1 = -1;
+static int hf_ieee80211_vs_wisun_gtkl_gtk2 = -1;
+static int hf_ieee80211_vs_wisun_gtkl_gtk3 = -1;
+static int hf_ieee80211_vs_wisun_nr = -1;
+static int hf_ieee80211_vs_wisun_lgtkl = -1;
+static int hf_ieee80211_vs_wisun_lgtkl_lgtk0 = -1;
+static int hf_ieee80211_vs_wisun_lgtkl_lgtk1 = -1;
+static int hf_ieee80211_vs_wisun_lgtkl_lgtk2 = -1;
+static int hf_ieee80211_vs_wisun_lgtk_key_id = -1;
+static int hf_ieee80211_vs_wisun_lgtk_lgtk = -1;
+static int hf_ieee80211_vs_wisun_data = -1;
+
 static int hf_ieee80211_rsn_ie_ptk_keyid = -1;
 
 static int hf_ieee80211_rsn_ie_gtk_kde_data_type = -1;
@@ -7753,6 +7770,9 @@ static gint ett_nintendo = -1;
 static gint ett_routerboard = -1;
 
 static gint ett_meru = -1;
+
+static gint ett_wisun_gtkl = -1;
+static gint ett_wisun_lgtkl = -1;
 
 static gint ett_qos_map_set_exception = -1;
 static gint ett_qos_map_set_range = -1;
@@ -16625,6 +16645,7 @@ dissect_vendor_ie_wpawme(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, in
         {
           proto_tree_add_item(wpa_sub_akms_tree, hf_ieee80211_wfa_ie_wpa_akms_wfa_type, tvb, offset+3, 1, ENC_LITTLE_ENDIAN);
           proto_item_append_text(wpa_akms_item, " %s", wpa_akms_return(tvb_get_ntohl(tvb, offset)));
+          save_proto_data_value(pinfo, tvb_get_guint8(tvb, offset + 3), AKM_KEY);
         } else {
           proto_tree_add_item(wpa_sub_akms_tree, hf_ieee80211_wfa_ie_wpa_akms_type, tvb, offset+3, 1, ENC_LITTLE_ENDIAN);
         }
@@ -18744,6 +18765,101 @@ dissect_vendor_ie_arista(proto_item *item, proto_tree *ietree,
   default:
     proto_tree_add_item(ietree, hf_ieee80211_vs_arista_data, tvb, offset,
       tag_len, ENC_NA);
+    if (tag_len > 0)
+      proto_item_append_text(item, " (Data: %s)", tvb_bytes_to_str(wmem_packet_scope(), tvb, offset, tag_len));
+    break;
+  }
+}
+
+#define WISUN_PTKID 1
+#define WISUN_GTKL  2
+#define WISUN_NR    3
+#define WISUN_LGTKL 4
+#define WISUN_LGTK  5
+
+static const value_string ieee80211_vs_wisun_type_vals[] = {
+  { WISUN_PTKID, "PTKID" },
+  { WISUN_GTKL,  "GTKL"  },
+  { WISUN_NR,    "NR"    },
+  { WISUN_LGTKL, "LGTKL" },
+  { WISUN_LGTK,  "LGTK"  },
+  { 0,           NULL    }
+};
+
+#define WISUN_GTKL_GTK0 0x01
+#define WISUN_GTKL_GTK1 0x02
+#define WISUN_GTKL_GTK2 0x04
+#define WISUN_GTKL_GTK3 0x08
+
+#define WISUN_NR_BR     0
+#define WISUN_NR_ROUTER 1
+#define WISUN_NR_LFN    2
+
+static const value_string ieee80211_vs_wisun_nr_vals[] = {
+  { WISUN_NR_BR,     "Border Router" },
+  { WISUN_NR_ROUTER, "Router"        },
+  { WISUN_NR_LFN,    "LFN"           },
+  { 0,               NULL            }
+};
+
+#define WISUN_LGTKL_LGTK0 0x01
+#define WISUN_LGTKL_LGTK1 0x02
+#define WISUN_LGTKL_LGTK2 0x04
+
+static void
+dissect_vendor_ie_wisun(proto_item *item, proto_tree *ietree,
+                        tvbuff_t *tvb, int offset, guint32 tag_len)
+{
+  guint32 type;
+
+  proto_tree_add_item_ret_uint(ietree, hf_ieee80211_vs_wisun_type, tvb, offset, 1, ENC_LITTLE_ENDIAN, &type);
+  proto_item_append_text(item, ": %s", val_to_str_const(type, ieee80211_vs_wisun_type_vals, "Unknown"));
+  offset += 1;
+  tag_len -= 1;
+
+  switch(type) {
+  case WISUN_PTKID:
+    proto_tree_add_item(ietree, hf_ieee80211_vs_wisun_ptkid, tvb, offset, 16, ENC_NA);
+    break;
+  case WISUN_GTKL: {
+    static int * const wisun_gtkl[] = {
+        &hf_ieee80211_vs_wisun_gtkl_gtk0,
+        &hf_ieee80211_vs_wisun_gtkl_gtk1,
+        &hf_ieee80211_vs_wisun_gtkl_gtk2,
+        &hf_ieee80211_vs_wisun_gtkl_gtk3,
+        NULL,
+    };
+
+    proto_tree_add_bitmask(ietree, tvb, offset, hf_ieee80211_vs_wisun_gtkl,
+                           ett_wisun_gtkl, wisun_gtkl, ENC_LITTLE_ENDIAN);
+    break;
+  }
+  case WISUN_NR:
+    proto_tree_add_item(ietree, hf_ieee80211_vs_wisun_nr, tvb,
+                        offset, 1, ENC_LITTLE_ENDIAN);
+    break;
+  case WISUN_LGTKL: {
+    static int * const wisun_lgtkl[] = {
+        &hf_ieee80211_vs_wisun_lgtkl_lgtk0,
+        &hf_ieee80211_vs_wisun_lgtkl_lgtk1,
+        &hf_ieee80211_vs_wisun_lgtkl_lgtk2,
+        NULL,
+    };
+
+    proto_tree_add_bitmask(ietree, tvb, offset, hf_ieee80211_vs_wisun_lgtkl,
+                           ett_wisun_lgtkl, wisun_lgtkl, ENC_LITTLE_ENDIAN);
+    break;
+  }
+  case WISUN_LGTK:
+    proto_tree_add_item(ietree, hf_ieee80211_vs_wisun_lgtk_key_id, tvb,
+                        offset, 1, ENC_LITTLE_ENDIAN);
+    offset += 2;
+    tag_len -= 2;
+    proto_tree_add_item(ietree, hf_ieee80211_vs_wisun_lgtk_lgtk, tvb,
+                        offset, tag_len, ENC_NA);
+    break;
+  default:
+    proto_tree_add_item(ietree, hf_ieee80211_vs_wisun_data, tvb, offset, tag_len, ENC_NA);
     if (tag_len > 0)
       proto_item_append_text(item, " (Data: %s)", tvb_bytes_to_str(wmem_packet_scope(), tvb, offset, tag_len));
     break;
@@ -28162,7 +28278,9 @@ ieee80211_tag_vendor_specific_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     case OUI_MOJO_ARISTA:
       dissect_vendor_ie_arista(field_data->item_tag, tree, tvb, offset, tag_vs_len);
       break;
-
+    case OUI_WISUN:
+      dissect_vendor_ie_wisun(field_data->item_tag, tree, tvb, offset, tag_vs_len);
+      break;
     default:
       proto_tree_add_item(tree, hf_ieee80211_tag_vendor_data, tvb, offset, tag_vs_len, ENC_NA);
       break;
@@ -33505,6 +33623,7 @@ dissect_ieee80211_pv0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   gboolean         more_frags;
   proto_item      *ti          = NULL;
   proto_item      *cw_item     = NULL;
+  proto_tree      *flags_item;
   proto_item      *hidden_item;
   proto_tree      *cw_tree     = NULL;
   guint16          hdr_len, ohdr_len;
@@ -34538,6 +34657,8 @@ dissect_ieee80211_pv0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   proto_item_append_text(ti, ", Flags: %s", flag_str);
   col_append_fstr(pinfo->cinfo, COL_INFO, ", Flags=%s", flag_str);
 
+  flags_item = proto_tree_add_string(hdr_tree, hf_ieee80211_fc_flags_str, tvb, 0, 0, flag_str);
+  proto_item_set_generated(flags_item);
 
   /*
    * Only management and data frames have a body, so we don't have
@@ -36167,6 +36288,7 @@ dissect_wlan_rsna_eapol_wpa_or_rsn_key(tvbuff_t *tvb, packet_info *pinfo, proto_
                                     ENC_BIG_ENDIAN, BMT_NO_APPEND);
   offset += 2;
 
+  guint16 key_len = tvb_get_ntohs(tvb, offset);
   proto_tree_add_item(tree, hf_wlan_rsna_eapol_keydes_key_len, tvb, offset,
                       2, ENC_BIG_ENDIAN);
   save_proto_data_value(pinfo, tvb_get_ntohs(tvb, offset), KEY_LEN_KEY);
@@ -36205,10 +36327,16 @@ dissect_wlan_rsna_eapol_wpa_or_rsn_key(tvbuff_t *tvb, packet_info *pinfo, proto_
     ti = proto_tree_add_item(tree, hf_wlan_rsna_eapol_wpa_keydes_data,
                              tvb, offset, eapol_data_len, ENC_NA);
     if ((keyinfo & KEY_INFO_ENCRYPTED_KEY_DATA_MASK) ||
-        !(keyinfo & KEY_INFO_KEY_TYPE_MASK)) {
+        (!(keyinfo & KEY_INFO_KEY_TYPE_MASK) && key_len)) {
       /* RSN: EAPOL-Key Key Data is encrypted.
        * WPA: Group Keys use encrypted Key Data.
        * IEEE 802.11i-2004 8.5.2.
+       * Having an encrypted data field without the Encrypted Key Data set
+       * is not standard, but there are WPA implementation which assume
+       * encryption when Key Type = 0. In Wi-SUN, the EAPOL-Key frame has
+       * Key Type = 0 and Encrypted Key Data = 0, but the Key Data is not
+       * encrypted. To differentiate this case from non standard WPA, we
+       * check the Key Length, which is 0 for Wi-SUN.
        * Let decryption engine try to decrypt this and if successful it's
        * stored in EAPOL_KEY proto data.
        */
@@ -36596,6 +36724,11 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_fc_flags,
      {"Flags", "wlan.flags",
       FT_UINT8, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_fc_flags_str,
+     {"WLAN Flags", "wlan.flags.str",
+      FT_STRING, BASE_NONE, NULL, 0,
       NULL, HFILL }},
 
     {&hf_ieee80211_fc_data_ds,
@@ -48319,6 +48452,55 @@ proto_register_ieee80211(void)
       FT_BYTES, BASE_NONE, NULL, 0,
       NULL, HFILL }},
 
+    /* Vendor Specific : Wi-SUN */
+    {&hf_ieee80211_vs_wisun_type,
+     {"Data Type", "wlan.vs.wisun.type",
+      FT_UINT8, BASE_DEC, VALS(ieee80211_vs_wisun_type_vals), 0,
+      NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_ptkid,
+     {"PTK ID", "wlan.vs.wisun.ptkid",
+      FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_gtkl,
+     {"GTK Liveness", "wlan.vs.wisun.gtkl",
+      FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_gtkl_gtk0,
+     {"GTK[0]", "wlan.vs.wisun.gtkl.gtk0",
+      FT_UINT8, BASE_HEX, NULL, WISUN_GTKL_GTK0, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_gtkl_gtk1,
+     {"GTK[1]", "wlan.vs.wisun.gtkl.gtk1",
+      FT_UINT8, BASE_HEX, NULL, WISUN_GTKL_GTK1, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_gtkl_gtk2,
+     {"GTK[2]", "wlan.vs.wisun.gtkl.gtk2",
+      FT_UINT8, BASE_HEX, NULL, WISUN_GTKL_GTK2, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_gtkl_gtk3,
+     {"GTK[3]", "wlan.vs.wisun.gtkl.gtk3",
+      FT_UINT8, BASE_HEX, NULL, WISUN_GTKL_GTK3, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_nr,
+     {"Node Role", "wlan.vs.wisun.nr",
+      FT_UINT8, BASE_DEC, VALS(ieee80211_vs_wisun_nr_vals), 0,
+      NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_lgtkl,
+     {"LGTK Liveness", "wlan.vs.wisun.lgtkl",
+      FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_lgtkl_lgtk0,
+     {"LGTK[0]", "wlan.vs.wisun.lgtkl.lgtk0",
+      FT_UINT8, BASE_HEX, NULL, WISUN_LGTKL_LGTK0, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_lgtkl_lgtk1,
+     {"LGTK[1]", "wlan.vs.wisun.lgtkl.lgtk1",
+      FT_UINT8, BASE_HEX, NULL, WISUN_LGTKL_LGTK1, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_lgtkl_lgtk2,
+     {"LGTK[2]", "wlan.vs.wisun.lgtkl.lgtk2",
+      FT_UINT8, BASE_HEX, NULL, WISUN_LGTKL_LGTK2, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_lgtk_key_id,
+     {"Key ID", "wlan.vs.wisun.lgtk.key_id",
+      FT_UINT8, BASE_HEX, NULL, 0x03, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_lgtk_lgtk,
+     {"LGTK", "wlan.vs.wisun.lgtk.lgtk",
+      FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+    {&hf_ieee80211_vs_wisun_data,
+     {"Data", "wlan.vs.wisun.data",
+      FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }},
+
     {&hf_ieee80211_tsinfo,
      {"Traffic Stream (TS) Info", "wlan.ts_info",
       FT_UINT24, BASE_HEX, NULL, 0,
@@ -52339,6 +52521,9 @@ proto_register_ieee80211(void)
     &ett_routerboard,
 
     &ett_meru,
+
+    &ett_wisun_gtkl,
+    &ett_wisun_lgtkl,
 
     &ett_qos_map_set_exception,
     &ett_qos_map_set_range,
