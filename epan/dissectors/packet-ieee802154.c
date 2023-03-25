@@ -5176,8 +5176,8 @@ dissect_ieee802154_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     case IEEE802154_CMD_VENDOR_SPECIFIC:
     {
         guint32 oui = tvb_get_ntoh24(tvb, 0);
-        if (!dissector_try_uint_new(cmd_vendor_dissector_table, oui, tvb, pinfo, tree, FALSE, packet)) {
-            proto_tree_add_item(tree, hf_ieee802154_cmd_vendor_oui, tvb, 0, 3, ENC_BIG_ENDIAN);
+        proto_tree_add_item(tree, hf_ieee802154_cmd_vendor_oui, tvb, 0, 3, ENC_BIG_ENDIAN);
+        if (!dissector_try_uint_new(cmd_vendor_dissector_table, oui, tvb_new_subset_remaining(tvb, 3), pinfo, tree, FALSE, packet)) {
             call_data_dissector(tvb_new_subset_remaining(tvb, 3), pinfo, tree);
         }
         break;
@@ -7086,11 +7086,11 @@ void proto_register_ieee802154(void)
             "New Mode Modulation Scheme", HFILL }},
 
         { &hf_ieee802154_tap_phr_fsk_ms_mode_mode,
-        { "Mode",  "wpan-tap.phr.fsk_ms.page", FT_UINT16, BASE_HEX, VALS(ieee802154_phr_fsk_ms_mode), IEEE802154_TAP_PHR_FSK_MS_MODE_MODE,
+        { "Mode",  "wpan-tap.phr.fsk_ms.mode", FT_UINT16, BASE_HEX, VALS(ieee802154_phr_fsk_ms_mode), IEEE802154_TAP_PHR_FSK_MS_MODE_MODE,
             "New Mode Mode", HFILL }},
 
         { &hf_ieee802154_tap_phr_fsk_ms_mode_addl_mode,
-        { "Additional Mode",  "wpan-tap.phr.fsk_ms.page", FT_UINT16, BASE_HEX, VALS(ieee802154_phr_fsk_ms_additional_modes), IEEE802154_TAP_PHR_FSK_MS_MODE_MODE,
+        { "Additional Mode",  "wpan-tap.phr.fsk_ms.mode", FT_UINT16, BASE_HEX, VALS(ieee802154_phr_fsk_ms_additional_modes), IEEE802154_TAP_PHR_FSK_MS_MODE_MODE,
             "New Mode Additional Mode", HFILL }},
 
         { &hf_ieee802154_tap_phr_wisun_fsk_ms_reserved,

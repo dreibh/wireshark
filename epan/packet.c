@@ -452,13 +452,10 @@ mark_frame_as_depended_upon(frame_data *fd, guint32 frame_num)
 		/* ws_assert(frame_num < fd->num) - we assume in several other
 		 * places in the code that frames don't depend on future
 		 * frames. */
-		/* XXX: Looking to see if the frame is already there is slow
-		 * if there's a lot of dependent frames, so this should
-		 * be a hash table or something.
-		 */
-		if (g_slist_find(fd->dependent_frames, GUINT_TO_POINTER(frame_num)) == NULL) {
-			fd->dependent_frames = g_slist_prepend(fd->dependent_frames, GUINT_TO_POINTER(frame_num));
+		if (fd->dependent_frames == NULL) {
+			fd->dependent_frames = g_hash_table_new(g_direct_hash, g_direct_equal);
 		}
+		g_hash_table_insert(fd->dependent_frames, GUINT_TO_POINTER(frame_num), NULL);
 	}
 }
 
@@ -870,9 +867,6 @@ call_dissector_work(dissector_handle_t handle, tvbuff_t *tvb, packet_info *pinfo
 	int          len;
 	guint        saved_layers_len = 0;
 	guint        saved_tree_count = tree ? tree->tree_data->count : 0;
-	gboolean     saved_use_conv_addr_port_endpoints;
-	struct conversation_addr_port_endpoints *saved_conv_addr_port_endpoints;
-	struct conversation_element *saved_conv_elements;
 
 	if (handle->protocol != NULL &&
 	    !proto_is_protocol_enabled(handle->protocol)) {
@@ -886,10 +880,6 @@ call_dissector_work(dissector_handle_t handle, tvbuff_t *tvb, packet_info *pinfo
 	saved_can_desegment = pinfo->can_desegment;
 	saved_layers_len = wmem_list_count(pinfo->layers);
 	DISSECTOR_ASSERT(saved_layers_len < PINFO_LAYER_MAX_RECURSION_DEPTH);
-
-	saved_use_conv_addr_port_endpoints = pinfo->use_conv_addr_port_endpoints;
-	saved_conv_addr_port_endpoints = pinfo->conv_addr_port_endpoints;
-	saved_conv_elements = pinfo->conv_elements;
 
 	/*
 	 * can_desegment is set to 2 by anyone which offers the
@@ -947,9 +937,6 @@ call_dissector_work(dissector_handle_t handle, tvbuff_t *tvb, packet_info *pinfo
 	}
 	pinfo->current_proto = saved_proto;
 	pinfo->can_desegment = saved_can_desegment;
-	pinfo->use_conv_addr_port_endpoints = saved_use_conv_addr_port_endpoints;
-	pinfo->conv_addr_port_endpoints = saved_conv_addr_port_endpoints;
-	pinfo->conv_elements = saved_conv_elements;
 	return len;
 }
 

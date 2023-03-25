@@ -1569,6 +1569,18 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
         <translation>Mettre la liste de paquet à jour en temps réel</translation>
     </message>
     <message>
+        <source>Interval between updates (ms)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How often the capture notifies the GUI of new packets. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The interval between new packet updates. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Keep the packet list scrolled to the bottom while capturing.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Gardez la liste des paquets défilés vers le bas tout en capturant.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1684,11 +1696,11 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
     </message>
     <message>
         <source>Your coloring rules file contains unknown rules</source>
-        <translation>Votre fichier de règles de coloriage contient des règles inconnues.</translation>
+        <translation type="vanished">Votre fichier de règles de coloriage contient des règles inconnues.</translation>
     </message>
     <message>
         <source>Wireshark doesn&apos;t recognize one or more of your coloring rules. They have been disabled.</source>
-        <translation>Wireshark ne reconnaît pas une ou plusieurs de vos règles de coloration. Elles ont été désactivées.</translation>
+        <translation type="vanished">Wireshark ne reconnaît pas une ou plusieurs de vos règles de coloration. Elles ont été désactivées.</translation>
     </message>
 </context>
 <context>
@@ -3237,17 +3249,12 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
         <translation>Plugins Lua personnels</translation>
     </message>
     <message>
-        <source>Lua scripts</source>
-        <oldsource>lua scripts</oldsource>
-        <translation type="unfinished">scripts lua</translation>
-    </message>
-    <message>
         <source>Global Lua Plugins</source>
         <translation>Plugins Lua globaux</translation>
     </message>
     <message>
-        <source>Extcap Plugins search path</source>
-        <translation type="vanished">Chemin de recherche des plugins Extcap</translation>
+        <source>Lua scripts</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Personal Extcap path</source>
@@ -3296,6 +3303,13 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
     <message>
         <source>Typical Files</source>
         <translation>Fichiers typiques</translation>
+    </message>
+</context>
+<context>
+    <name>FollowStreamAction</name>
+    <message>
+        <source>%1 Stream</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -3417,10 +3431,6 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>QUIC streams not found on the selected packet.</source>
-        <translation type="vanished">Flux QUIC introuvables sur le paquet sélectionné.</translation>
-    </message>
-    <message>
         <source>Entire conversation (%1)</source>
         <translation>Conversation entière (%1)</translation>
     </message>
@@ -3439,10 +3449,6 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
     <message>
         <source>[Stream output truncated]</source>
         <translation>[Sortie du flux tronquée]</translation>
-    </message>
-    <message>
-        <source>A transport or network layer header is needed.</source>
-        <translation type="vanished">Une en-tête de transport ou de la couche de réseau est nécessaire.</translation>
     </message>
     <message numerus="yes">
         <source>%Ln total stream(s).</source>
@@ -6586,6 +6592,14 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
         <translation>Utiliser les paramètres système</translation>
     </message>
     <message>
+        <source>Debounce Timer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How long to wait (in milliseconds) before processing user input&lt;br/&gt;If you type quickly, consider lowering the value for a &apos;snappier&apos; experience.&lt;br/&gt; If you type slowly, consider increasing the value to avoid performance issues.&lt;br/&gt;This is currently used to delay searches in View -&gt; Internals -&gt; Supported Protocols and Preferences -&gt; Advanced menu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Open Files In</source>
         <translation>Ouvrir les fichiers dans</translation>
     </message>
@@ -7123,6 +7137,10 @@ Pas exemple, inquiquez 1 heure pour avoir un nouveau fichier créé toutes les h
     <message>
         <source>Sorting &quot;%1&quot;…</source>
         <translation>Tri de &quot;%1&quot;…</translation>
+    </message>
+    <message>
+        <source>Sorting …</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -13294,15 +13312,15 @@ a:hover {
     </message>
     <message>
         <source>DCCP Stream</source>
-        <translation>Flux DCCP</translation>
+        <translation type="vanished">Flux DCCP</translation>
     </message>
     <message>
         <source>TLS Stream</source>
-        <translation>Flux TLS</translation>
+        <translation type="vanished">Flux TLS</translation>
     </message>
     <message>
         <source>HTTP Stream</source>
-        <translation>Flux HTTP</translation>
+        <translation type="vanished">Flux HTTP</translation>
     </message>
     <message>
         <source>HTTP/2 Stream</source>
@@ -13310,11 +13328,7 @@ a:hover {
     </message>
     <message>
         <source>QUIC Stream</source>
-        <translation>Flux RAPIDE</translation>
-    </message>
-    <message>
-        <source>Websocket Stream</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Flux RAPIDE</translation>
     </message>
     <message>
         <source>SIP Call</source>
@@ -13641,6 +13655,10 @@ a:hover {
         <translation>Secondes depuis le premier paquet capturé</translation>
     </message>
     <message>
+        <source>Show packet times as the seconds since the first captured packet.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Packet &amp;Diagram</source>
         <translation>Paquet du &amp;diagramme</translation>
     </message>
@@ -13854,11 +13872,11 @@ a:hover {
     </message>
     <message>
         <source>TCP Stream</source>
-        <translation>Flux TCP</translation>
+        <translation type="vanished">Flux TCP</translation>
     </message>
     <message>
         <source>UDP Stream</source>
-        <translation>Flux UDP</translation>
+        <translation type="vanished">Flux UDP</translation>
     </message>
     <message>
         <source>Request Sequences</source>

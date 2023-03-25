@@ -24,7 +24,7 @@
 #include <shlobj.h>
 #include <wsutil/unicode-utils.h>
 #else /* _WIN32 */
-#ifdef __APPLE__
+#ifdef ENABLE_APPLICATION_BUNDLE
 #include <mach-o/dyld.h>
 #endif
 #ifdef __linux__
@@ -46,6 +46,8 @@
 #include <wsutil/utf8_entities.h>
 
 #include <wiretap/wtap.h>   /* for WTAP_ERR_SHORT_WRITE */
+
+#include "path_config.h"
 
 #define PROFILES_DIR    "profiles"
 #define PLUGINS_DIR_NAME    "plugins"
@@ -79,9 +81,7 @@ char *doc_dir = NULL;
 
 /* Directory from which the executable came. */
 static char *progfile_dir = NULL;
-#ifdef __MINGW64__
 static char *install_prefix = NULL;
-#endif
 
 static gboolean do_store_persconffiles = FALSE;
 static GHashTable *profile_files = NULL;
@@ -219,7 +219,7 @@ test_for_fifo(const char *path)
         return 0;
 }
 
-#ifdef __APPLE__
+#ifdef ENABLE_APPLICATION_BUNDLE
 /*
  * Directory of the application bundle in which we're contained,
  * if we're contained in an application bundle.  Otherwise, NULL.
@@ -378,7 +378,7 @@ bool is_packet_configuration_namespace(void)
 static const char *
 get_current_executable_path(void)
 {
-#if defined(__APPLE__)
+#if defined(ENABLE_APPLICATION_BUNDLE)
     static char *executable_path;
     uint32_t path_buf_size;
 
@@ -536,7 +536,6 @@ static void trim_progfile_dir(void)
     g_free(extcap_progfile_dir);
 }
 
-#ifdef __MINGW64__
 static char *
 trim_last_dir_from_path(const char *_path)
 {
@@ -547,7 +546,6 @@ trim_last_dir_from_path(const char *_path)
     }
     return path;
 }
-#endif
 
 /*
  * Construct the path name of a non-extcap Wireshark executable file,
@@ -644,7 +642,7 @@ configuration_init_w32(const char* arg0 _U_)
             msg, error);
     }
 
-#ifdef __MINGW64__
+#ifdef HAVE_MSYSTEM
     /*
      * We already have the program_dir. Find the installation prefix.
      * This is one level up from the bin_dir. If the program_dir does
@@ -659,7 +657,7 @@ configuration_init_w32(const char* arg0 _U_)
         install_prefix = g_strdup(progfile_dir);
         running_in_build_directory_flag = TRUE;
     }
-#endif /* __MINGW64__ */
+#endif /* HAVE_MSYSTEM */
 
     return NULL;
 }
@@ -679,6 +677,9 @@ configuration_init_posix(const char* arg0)
     char *retstr;
     char *path;
     char *dir_end;
+
+    /* Hard-coded value used if we cannot obtain the path of the running executable. */
+    install_prefix = g_strdup(INSTALL_PREFIX);
 
     /*
      * Check whether XXX_RUN_FROM_BUILD_DIRECTORY is set in the
@@ -836,7 +837,7 @@ configuration_init_posix(const char* arg0)
                         running_in_build_directory_flag = TRUE;
                     g_free(cmake_file);
                 }
-#ifdef __APPLE__
+#ifdef ENABLE_APPLICATION_BUNDLE
                 {
                     /*
                      * Scan up the path looking for a component
@@ -888,7 +889,6 @@ configuration_init_posix(const char* arg0)
          */
         progfile_dir = prog_pathname;
         trim_progfile_dir();
-        return NULL;
     } else {
         /*
          * This "shouldn't happen"; we apparently
@@ -899,6 +899,24 @@ configuration_init_posix(const char* arg0)
         g_free(prog_pathname);
         return retstr;
     }
+
+    /*
+     * We already have the program_dir. Find the installation prefix.
+     * This is one level up from the bin_dir. If the program_dir does
+     * not end with "bin" then assume we are running in the build directory
+     * and the "installation prefix" (staging directory) is the same as
+     * the program_dir.
+     */
+    g_free(install_prefix);
+    if (g_str_has_suffix(progfile_dir, _S"bin")) {
+        install_prefix = trim_last_dir_from_path(progfile_dir);
+    }
+    else {
+        install_prefix = g_strdup(progfile_dir);
+        running_in_build_directory_flag = TRUE;
+    }
+
+    return NULL;
 }
 #endif /* ?_WIN32 */
 
@@ -964,7 +982,19 @@ get_datafile_dir(void)
     if (datafile_dir != NULL)
         return datafile_dir;
 
-#if defined(__MINGW64__)
+    const char *data_dir_envar = CONFIGURATION_ENVIRONMENT_VARIABLE("DATA_DIR");
+    if (g_getenv(data_dir_envar) && !started_with_special_privs()) {
+        /*
+         * The user specified a different directory for data files
+         * and we aren't running with special privileges.
+         * Let {WIRESHARK,LOGRAY}_DATA_DIR take precedence.
+         * XXX - We might be able to dispense with the priv check
+         */
+        datafile_dir = g_strdup(g_getenv(data_dir_envar));
+        return datafile_dir;
+    }
+
+#if defined(HAVE_MSYSTEM)
     if (running_in_build_directory_flag) {
         datafile_dir = g_strdup(install_prefix);
     } else {
@@ -995,17 +1025,7 @@ get_datafile_dir(void)
         datafile_dir = g_strdup("C:\\Program Files\\Wireshark\\");
     }
 #else
-
-    const char *data_dir_envar = CONFIGURATION_ENVIRONMENT_VARIABLE("DATA_DIR");
-    if (g_getenv(data_dir_envar) && !started_with_special_privs()) {
-        /*
-         * The user specified a different directory for data files
-         * and we aren't running with special privileges.
-         * XXX - We might be able to dispense with the priv check
-         */
-        datafile_dir = g_strdup(g_getenv(data_dir_envar));
-    }
-#ifdef __APPLE__
+#ifdef ENABLE_APPLICATION_BUNDLE
     /*
      * If we're running from an app bundle and weren't started
      * with special privileges, use the Contents/Resources/share/wireshark
@@ -1035,12 +1055,7 @@ get_datafile_dir(void)
          */
         datafile_dir = g_strdup(progfile_dir);
     } else {
-        /*
-         * XXX We might want want to make this relative to progfile_dir, which would
-         * allow installation into arbitrary directories and provide better AppImage
-         * support.
-         */
-        datafile_dir = g_strdup(DATA_DIR);
+        datafile_dir = g_build_filename(install_prefix, DATA_DIR, (char *)NULL);
     }
 #endif
     return datafile_dir;
@@ -1052,7 +1067,12 @@ get_doc_dir(void)
     if (doc_dir != NULL)
         return doc_dir;
 
-#if defined(__MINGW64__)
+    /* No environment variable for this. */
+    if (false) {
+        ;
+    }
+
+#if defined(HAVE_MSYSTEM)
     if (running_in_build_directory_flag) {
         doc_dir = g_strdup(install_prefix);
     } else {
@@ -1066,12 +1086,7 @@ get_doc_dir(void)
         doc_dir = g_strdup("C:\\Program Files\\Wireshark\\");
     }
 #else
-
-    /* No environment variable for this. */
-    if (false) {
-        ;
-    }
-#ifdef __APPLE__
+#ifdef ENABLE_APPLICATION_BUNDLE
     /*
      * If we're running from an app bundle and weren't started
      * with special privileges, use the Contents/Resources/share/wireshark
@@ -1093,7 +1108,7 @@ get_doc_dir(void)
          */
         doc_dir = g_strdup(progfile_dir);
     } else {
-        doc_dir = g_strdup(DOC_DIR);
+        doc_dir = g_build_filename(install_prefix, DOC_DIR, (char *)NULL);
     }
 #endif
     return doc_dir;
@@ -1130,8 +1145,19 @@ static char *extcap_pers_dir = NULL;
 static void
 init_plugin_dir(void)
 {
+    const char *plugin_dir_envar = CONFIGURATION_ENVIRONMENT_VARIABLE("PLUGIN_DIR");
+    if (g_getenv(plugin_dir_envar) && !started_with_special_privs()) {
+        /*
+         * The user specified a different directory for plugins
+         * and we aren't running with special privileges.
+         * Let {WIRESHARK,LOGRAY}_PLUGIN_DIR take precedence.
+         */
+        plugin_dir = g_strdup(g_getenv(plugin_dir_envar));
+        return;
+    }
+
 #if defined(HAVE_PLUGINS) || defined(HAVE_LUA)
-#if defined(__MINGW64__)
+#if defined(HAVE_MSYSTEM)
     if (running_in_build_directory_flag) {
         plugin_dir = g_build_filename(install_prefix, "plugins", (gchar *)NULL);
     } else {
@@ -1170,7 +1196,22 @@ init_plugin_dir(void)
         running_in_build_directory_flag = TRUE;
     }
 #else
-    if (running_in_build_directory_flag) {
+#ifdef ENABLE_APPLICATION_BUNDLE
+    /*
+     * If we're running from an app bundle and weren't started
+     * with special privileges, use the Contents/PlugIns/wireshark
+     * subdirectory of the app bundle.
+     *
+     * (appbundle_dir is not set to a non-null value if we're
+     * started with special privileges, so we need only check
+     * it; we don't need to call started_with_special_privs().)
+     */
+    else if (appbundle_dir != NULL) {
+        plugin_dir = g_build_filename(appbundle_dir, "Contents/PlugIns",
+                                        CONFIGURATION_NAMESPACE_LOWER, (gchar *)NULL);
+    }
+#endif
+    else if (running_in_build_directory_flag) {
         /*
          * We're (probably) being run from the build directory and
          * weren't started with special privileges, so we'll use
@@ -1179,37 +1220,7 @@ init_plugin_dir(void)
          */
         plugin_dir = g_build_filename(get_progfile_dir(), "plugins", (gchar *)NULL);
     } else {
-        const char *plugin_dir_envar = CONFIGURATION_ENVIRONMENT_VARIABLE("PLUGIN_DIR");
-        if (g_getenv(plugin_dir_envar) && !started_with_special_privs()) {
-            /*
-             * The user specified a different directory for plugins
-             * and we aren't running with special privileges.
-             */
-            plugin_dir = g_strdup(g_getenv(plugin_dir_envar));
-        }
-#ifdef __APPLE__
-        /*
-         * If we're running from an app bundle and weren't started
-         * with special privileges, use the Contents/PlugIns/wireshark
-         * subdirectory of the app bundle.
-         *
-         * (appbundle_dir is not set to a non-null value if we're
-         * started with special privileges, so we need only check
-         * it; we don't need to call started_with_special_privs().)
-         */
-        else if (appbundle_dir != NULL) {
-            plugin_dir = g_build_filename(appbundle_dir, "Contents/PlugIns",
-                                          CONFIGURATION_NAMESPACE_LOWER, (gchar *)NULL);
-        }
-#endif
-        else {
-            /*
-             * XXX We might want want to make this relative to progfile_dir, which would
-             * allow installation into arbitrary directories and provide better AppImage
-             * support.
-             */
-            plugin_dir = g_strdup(PLUGIN_DIR);
-        }
+        plugin_dir = g_build_filename(install_prefix, PLUGIN_DIR, (char *)NULL);
     }
 #endif
 #endif /* defined(HAVE_PLUGINS) || defined(HAVE_LUA) */
@@ -1300,7 +1311,7 @@ init_extcap_dir(void)
         extcap_dir = g_strdup(g_getenv(extcap_dir_envar));
     }
 
-#if defined(__MINGW64__)
+#if defined(HAVE_MSYSTEM)
     else if (running_in_build_directory_flag) {
         extcap_dir = g_build_filename(install_prefix, "extcap", (gchar *)NULL);
     } else {
@@ -1328,7 +1339,7 @@ init_extcap_dir(void)
          */
         extcap_dir = g_build_filename(get_progfile_dir(), "extcap", (gchar *)NULL);
     }
-#ifdef __APPLE__
+#ifdef ENABLE_APPLICATION_BUNDLE
     else if (appbundle_dir != NULL) {
         /*
          * If we're running from an app bundle and weren't started
@@ -1343,12 +1354,7 @@ init_extcap_dir(void)
     }
 #endif
     else {
-        /*
-         * XXX We might want want to make this relative to progfile_dir, which would
-         * allow installation into arbitrary directories and provide better AppImage
-         * support.
-         */
-        extcap_dir = g_strdup(EXTCAP_DIR);
+        extcap_dir = g_build_filename(install_prefix, EXTCAP_DIR, (char *)NULL);
     }
 #endif
 }
@@ -2243,7 +2249,7 @@ file_open_error_message(int err, gboolean for_writing)
          * You need to make the pagefile bigger.
          */
 #define ENOMEM_REASON "the pagefile is too small"
-#elif defined(__APPLE__)
+#elif defined(ENABLE_APPLICATION_BUNDLE)
         /*
          * dynamic_pager couldn't, or wouldn't, create more swap files.
          */
@@ -2662,10 +2668,8 @@ free_progdirs(void)
     progfile_dir = NULL;
     g_free(doc_dir);
     doc_dir = NULL;
-#ifdef __MINGW64__
     g_free(install_prefix);
     install_prefix = NULL;
-#endif
 #if defined(HAVE_PLUGINS) || defined(HAVE_LUA)
     g_free(plugin_dir);
     plugin_dir = NULL;

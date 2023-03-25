@@ -1,54 +1,47 @@
-This document contains instructions to build and install Wireshark on Windows
+This document contains instructions on how to build and install Wireshark on Windows
 using GCC and MinGW-w64 with the MSYS2 distribution.
 
-How to setup MSYS2:
+The MSYS2 installer can be downloaded from https://www.msys2.org.
 
-1. Download and install MSYS2 from https://www.msys2.org.
+Wireshark is available as an MSYS2 binary package[1]. It can be installed using pacman,
+for example using the UCRT64 shell:
 
-2. Open the MSYS shell.
+    $ pacman -S mingw-w64-ucrt-x86_64-wireshark
 
-3. Update with "pacman -Syu" as many times as necessary. You also need to
-   have base-devel installed:
-   
-    $ pacman -S base-devel.
+If you wish to build wireshark from source code keep reading.
 
-How to build the Wireshark MSYS2 package:
+How to build Wireshark from source:
 
-1. Open the UCRT64 shell.
+1. Open the shell for the selected 64-bit environment.
 
-2. (Optional) Build and install some missing dependencies in the MSYS2 repository.
+2. Build using CMake + Ninja:
 
-    $ cd $srcdir/packaging/msys2/mingw-w64-bcg729
-    $ makepkg-mingw -si
+    $ cd $srcdir
+    $ mkdir build && cd build
+    $ cmake ..
+    $ ninja
+    $ ninja test        # optional
+    $ ninja install     # optional
 
-    $ cd $srcdir/packaging/msys2/mingw-w64-libsmi
-    $ makepkg-mingw -si
-
-    $ cd $srcdir/packaging/msys2/mingw-w64-sbc
-    $ makepkg-mingw -si
-
-3. Build and install Wireshark
-
-    $ cd $srcdir/packaging/msys2/mingw-w64-wireshark-git
-    $ makepkg-mingw -si
-
-The application should be launched using the same shell (UCRT64 in this case).
+The application should be launched using the same shell. Alternatively you
+can also use the PKGBUILD included in the Wireshark distribution.
 
 Currently the MSYS2 build has the following limitations compared to
 the build using Visual Studio (MSVC):
 
 * The Event Tracing for Windows (ETW) extcap cannot be compiled using MinGW-w64.
 
-* Lua version is 5.1 (MSVC uses Lua 5.2) and does not have UTF-8 patches[1]. 
+* Lua version is 5.1 (MSVC uses Lua 5.2) and does not have UTF-8 patches[2].
 
-* Kerberos dependency for enhanced Kerberos dissection is not available
-  in the repositories.
+* Enhanced Kerberos dissection with decryption is not available.
 
-* AirPcap is not available and there is no plan to support it.
+* AirPcap SDK is not available. AirPcap is EOL and currently there is no plan to
+  add support for it with MSYS2 builds.
 
-* There is currently no way to build a stand-alone distributable binary
-  installer, similar to the Wireshark NSIS installer using MSVC.
+* TODO: Add a stand-alone distributable binary installer that can be
+  deployed outside the MSYS2 environment.
 
 References:
 
-[1]https://github.com/Lekensteyn/lua-unicode
+[1]https://packages.msys2.org/base/mingw-w64-wireshark
+[2]https://github.com/Lekensteyn/lua-unicode

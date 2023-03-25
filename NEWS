@@ -23,12 +23,15 @@ Wireshark 4.1.0 Release Notes
 
   The personal extcap plugin folder location on Unix has been changed to
   follow existing conventions for architecture-dependent files. The
-  extcap personal folder is now `$HOME/.local/lib/extcap`. Previously it
-  was `$XDG_CONFIG_HOME/wireshark/extcap`.
+  extcap personal folder is now `$HOME/.local/lib/wireshark/extcap`.
+  Previously it was `$XDG_CONFIG_HOME/wireshark/extcap`.
 
   The installation target no longer installs development headers by
   default. That must be done explicitly using `cmake --install
   <builddir> --component Development`.
+
+  The Wireshark installation is relocatable on Linux (and other ELF
+  platforms with support for relative RPATHs).
 
   Many other improvements have been made. See the “New and Updated
   Features” section below for more details.
@@ -64,6 +67,9 @@ Wireshark 4.1.0 Release Notes
 
      • ciscodump support Cisco IOS XE 17.x
 
+     • The default interval between GUI updates when capturing has been
+       decreased from 500ms to 100ms, and is now configurable.
+
   New Protocol Support
 
    DECT DLC protocol layer (DECT-DLC), DECT NWK protocol layer
@@ -72,12 +78,13 @@ Wireshark 4.1.0 Release Notes
    Transport Protocol (MCTP), Management Component Transport Protocol -
    Control Protocol (MCTP CP), Non-volatile Memory Express - Management
    Interface (NVMe-MI) over MCTP, SAP Enqueue Server (SAPEnqueue), SAP
-   HANA SQL Command Network Protocol (SAPHDB), SAP Internet Graphic
-   Server (SAP IGS), SAP Message Server (SAPMS), SAP Network Interface
-   (SAPNI), SAP Router (SAPROUTER), SAP Secure Network Connection (SNC),
-   Support for almost all WoW 1.12 messages has been added., and World
-   of Warcraft World (WOWW) display filters have been changed to be more
-   internally consistent.
+   GUI (SAPDiag), SAP HANA SQL Command Network Protocol (SAPHDB), SAP
+   Internet Graphic Server (SAP IGS), SAP Message Server (SAPMS), SAP
+   Network Interface (SAPNI), SAP Router (SAPROUTER), SAP Secure Network
+   Connection (SNC), Support for almost all WoW 1.12 messages has been
+   added., Train Real-Time Data Protocol (TRDP), and World of Warcraft
+   World (WOWW) display filters have been changed to be more internally
+   consistent.
 
   Updated Protocol Support
 

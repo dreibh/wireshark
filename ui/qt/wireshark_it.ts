@@ -1569,6 +1569,18 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Aggiorna l&apos;elenco dei pacchetti in tempo reale</translation>
     </message>
     <message>
+        <source>Interval between updates (ms)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How often the capture notifies the GUI of new packets. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The interval between new packet updates. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Keep the packet list scrolled to the bottom while capturing.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Mantieni l&apos;elenco dei pacchetti al fondo durante la cattura.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1684,11 +1696,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Your coloring rules file contains unknown rules</source>
-        <translation>Il file delle tue regole di colorazione contiene regole sconosciute</translation>
+        <translation type="vanished">Il file delle tue regole di colorazione contiene regole sconosciute</translation>
     </message>
     <message>
         <source>Wireshark doesn&apos;t recognize one or more of your coloring rules. They have been disabled.</source>
-        <translation>Wireshark non riconosce una o più delle tue regole di colorazione. Sono state disabilitate.</translation>
+        <translation type="vanished">Wireshark non riconosce una o più delle tue regole di colorazione. Sono state disabilitate.</translation>
     </message>
 </context>
 <context>
@@ -3239,17 +3251,12 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Plugin Lua personali</translation>
     </message>
     <message>
-        <source>Lua scripts</source>
-        <oldsource>lua scripts</oldsource>
-        <translation type="unfinished">script lua</translation>
-    </message>
-    <message>
         <source>Global Lua Plugins</source>
         <translation>Plugin Lua globali</translation>
     </message>
     <message>
-        <source>Extcap Plugins search path</source>
-        <translation type="vanished">Percorso di ricerca plugin Extcap</translation>
+        <source>Lua scripts</source>
+        <translation>Script Lua</translation>
     </message>
     <message>
         <source>Personal Extcap path</source>
@@ -3257,7 +3264,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>external capture (extcap) plugins</source>
-        <translation type="unfinished"></translation>
+        <translation>estensioni di cattura esterna (extcap)</translation>
     </message>
     <message>
         <source>Global Extcap path</source>
@@ -3298,6 +3305,13 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Typical Files</source>
         <translation>File tipici</translation>
+    </message>
+</context>
+<context>
+    <name>FollowStreamAction</name>
+    <message>
+        <source>%1 Stream</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -3416,11 +3430,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>%1 stream not found on the selected packet.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>QUIC streams not found on the selected packet.</source>
-        <translation type="vanished">Flussi QUIC non trovati nel pacchetto selezionato.</translation>
+        <translation>Flussi %1 non trovati nel pacchetto selezionato.</translation>
     </message>
     <message>
         <source>Entire conversation (%1)</source>
@@ -3442,10 +3452,6 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <source>[Stream output truncated]</source>
         <translation>[Flusso di output troncato]</translation>
     </message>
-    <message>
-        <source>A transport or network layer header is needed.</source>
-        <translation type="vanished">È necessaria un&apos;intestazione di livello trasporto o rete.</translation>
-    </message>
     <message numerus="yes">
         <source>%Ln total stream(s).</source>
         <translation>
@@ -3455,9 +3461,9 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message numerus="yes">
         <source>Max sub stream ID for the selected stream: %Ln</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>ID massimo del flusso secondario per il flusso selezionato: %Ln</numerusform>
+            <numerusform>ID massimo del flusso secondario per il flusso selezionato: %Ln</numerusform>
         </translation>
     </message>
     <message>
@@ -3825,11 +3831,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Move this graph upwards.</source>
-        <translation type="unfinished"></translation>
+        <translation>Sposta questo grafico verso l&apos;alto.</translation>
     </message>
     <message>
         <source>Move this graph downwards.</source>
-        <translation type="unfinished"></translation>
+        <translation>Sposta questo grafico verso il basso.</translation>
     </message>
     <message>
         <source>Mouse</source>
@@ -5879,11 +5885,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Maximum number of cached rows (affects sorting)</source>
-        <translation type="unfinished"></translation>
+        <translation>Numero massimo di righe memorizzate nella cache (influisce sull&apos;ordinamento)</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;If more than this many rows are displayed, then sorting by columns that require packet dissection will be disabled. Increasing this number increases memory consumption by caching column values.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Se vengono visualizzate più righe, l&apos;ordinamento per colonne che richiedono la dissezione dei pacchetti sarà disabilitato. L&apos;aumento di questo numero aumenta il consumo di memoria archiviando nella cache i valori delle colonne.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Enable mouse-over colorization</source>
@@ -6587,6 +6593,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Usa le impostazioni di sistema</translation>
     </message>
     <message>
+        <source>Debounce Timer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How long to wait (in milliseconds) before processing user input&lt;br/&gt;If you type quickly, consider lowering the value for a &apos;snappier&apos; experience.&lt;br/&gt; If you type slowly, consider increasing the value to avoid performance issues.&lt;br/&gt;This is currently used to delay searches in View -&gt; Internals -&gt; Supported Protocols and Preferences -&gt; Advanced menu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Open Files In</source>
         <translation>Apri file in</translation>
     </message>
@@ -7115,15 +7129,19 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <name>PacketListModel</name>
     <message>
         <source>Column</source>
-        <translation type="unfinished"></translation>
+        <translation>Colonna</translation>
     </message>
     <message>
         <source>%1 can only be sorted with %2 or fewer visible rows; increase cache size in Layout preferences</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 può essere ordinato solo con %2 o meno righe visibili; aumenta la dimensione della cache nelle preferenze di disposizione</translation>
     </message>
     <message>
         <source>Sorting &quot;%1&quot;…</source>
         <translation>Ordinamento di &quot;%1&quot;...</translation>
+    </message>
+    <message>
+        <source>Sorting …</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -12425,7 +12443,49 @@ a:hover {
 
 &lt;/tr&gt;&lt;/table&gt;
 &lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head&gt;
+&lt;style&gt;
+a:link {
+  color: palette(text);
+  text-decoration: none;
+}
+a:hover {
+  color: palette(text);
+  text-decoration: underline;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;table&gt;&lt;tr&gt;
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/docs/wsug_html_chunked/&quot;&gt;Manuale utente&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://gitlab.com/wireshark/wireshark/-/wikis/&quot;&gt;Wiki&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://ask.wireshark.org/&quot;&gt;Domande e risposte&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/lists/&quot;&gt;Mailing list&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://sharkfest.wireshark.org/&quot;&gt;SharkFest&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://wiresharkfoundation.org/donate/&quot;&gt;Donazione&lt;/a&gt;&lt;/th&gt;
+
+&lt;/tr&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Show in Finder</source>
@@ -13291,15 +13351,15 @@ a:hover {
     </message>
     <message>
         <source>DCCP Stream</source>
-        <translation>Flusso DCCP</translation>
+        <translation type="vanished">Flusso DCCP</translation>
     </message>
     <message>
         <source>TLS Stream</source>
-        <translation>Flusso TLS</translation>
+        <translation type="vanished">Flusso TLS</translation>
     </message>
     <message>
         <source>HTTP Stream</source>
-        <translation>Flusso HTTP</translation>
+        <translation type="vanished">Flusso HTTP</translation>
     </message>
     <message>
         <source>HTTP/2 Stream</source>
@@ -13307,11 +13367,11 @@ a:hover {
     </message>
     <message>
         <source>QUIC Stream</source>
-        <translation>Flusso QUIC</translation>
+        <translation type="vanished">Flusso QUIC</translation>
     </message>
     <message>
         <source>Websocket Stream</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Flusso Websocket</translation>
     </message>
     <message>
         <source>SIP Call</source>
@@ -13638,6 +13698,10 @@ a:hover {
         <translation>Secondi dal primo pacchetto catturato</translation>
     </message>
     <message>
+        <source>Show packet times as the seconds since the first captured packet.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Packet &amp;Diagram</source>
         <translation>&amp;Diagramma del pacchetto</translation>
     </message>
@@ -13851,11 +13915,11 @@ a:hover {
     </message>
     <message>
         <source>TCP Stream</source>
-        <translation>Flusso TCP</translation>
+        <translation type="vanished">Flusso TCP</translation>
     </message>
     <message>
         <source>UDP Stream</source>
-        <translation>Flusso UDP</translation>
+        <translation type="vanished">Flusso UDP</translation>
     </message>
     <message>
         <source>Request Sequences</source>

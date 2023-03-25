@@ -244,6 +244,16 @@ set(NCP2222_DISSECTOR_SRC
 
 source_group(dissectors-ncp2222 FILES ${NCP2222_DISSECTOR_SRC})
 
+#
+# Note: In principle dissector headers are internal to libwireshark and not part
+# of any public API. The only possible reason I can see to expose these symbols is to allow
+# dissector plugins to share code with static dissectors (arguably there should be better mechanisms
+# for that too, that are more dynamic at runtime and more friendly to language bindings but I digress).
+# So at most only a small part of dissector header content belongs in any
+# sort of public API but historically there has been no separation and everything is balled
+# up as a DISSECTOR_PUBLIC_HEADER more or less automatically and indiscriminately (because of a lack
+# of clear guidelines). In the future this unsatistactory situation should be fixed somehow.
+#
 set(DISSECTOR_PUBLIC_HEADERS
 	cond_ace_token_enum.h
 	file-pcapng.h
@@ -672,6 +682,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/file-mp4.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-pcap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-pcapng.c
+	${CMAKE_CURRENT_SOURCE_DIR}/file-pcapng-darwin.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-png.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-rbm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-rfc7468.c
@@ -1180,9 +1191,11 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_cbsp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_gsup.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_ipa.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_l2rcop.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_osmux.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_r_uus1.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_rlcmac.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_rlp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_sim.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_sms.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gsm_sms_ud.c
@@ -1501,6 +1514,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mrp-mmrp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mrp-msrp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mrp-mvrp.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-ms-do.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ms-mms.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ms-nns.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-msdp.c
@@ -1776,6 +1790,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sadmind.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sametime.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sap.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapdiag.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapenqueue.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-saphdb.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapigs.c
@@ -1920,6 +1935,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tpm20.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tpncp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tr.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-trdp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-trill.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-trmac.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tsp.c

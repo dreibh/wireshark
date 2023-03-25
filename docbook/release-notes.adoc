@@ -36,6 +36,9 @@ Previously it was ``$XDG_CONFIG_HOME/wireshark/extcap``.
 The installation target no longer installs development headers by default.
 That must be done explicitly using ``cmake --install <builddir> --component Development``.
 
+The Wireshark installation is relocatable on Linux (and other ELF platforms
+with support for relative RPATHs).
+
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
 
@@ -72,6 +75,9 @@ The following features are new (or have been significantly updated) since versio
 
 * ciscodump support Cisco IOS XE 17.x
 
+* The default interval between GUI updates when capturing has been decreased
+from 500ms to 100ms, and is now configurable.
+
 // === Removed Features and Support
 
 // === Removed Dissectors
@@ -89,6 +95,7 @@ The following features are new (or have been significantly updated) since versio
 // git log --oneline --diff-filter=A --stat v3.7.0rc0.. epan/dissectors plugins
 [commaize]
 --
+SAP GUI (SAPDiag)
 SAP Enqueue Server (SAPEnqueue)
 SAP HANA SQL Command Network Protocol (SAPHDB)
 SAP Internet Graphic Server (SAP IGS)
@@ -105,6 +112,8 @@ DECT proprietary Mitel OMM/RFP Protocol (also named AaMiDe)
 DECT DLC protocol layer (DECT-DLC)
 DECT NWK protocol layer (DECT-NWK)
 Low Level Signalling (ATSC3 LLS)
+Train Real-Time Data Protocol (TRDP)
+Windows Delivery Optimization (MS-DO)
 --
 
 === Updated Protocol Support
@@ -116,6 +125,10 @@ Low Level Signalling (ATSC3 LLS)
 
 * The IPv6 dissector has a new preference to show some semantic details
   about addresses (default off).
+
+* The XML dissector now supports display character according to the "encoding"
+  attribute of the XML declaration, and has a new preference to set default
+  character encoding for some XML document without "encoding" attribute.
 
 Too many other protocols have been updated to list them all here.
 

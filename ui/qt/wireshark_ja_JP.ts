@@ -1561,6 +1561,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>実時間でパケット一覧を更新</translation>
     </message>
     <message>
+        <source>Interval between updates (ms)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How often the capture notifies the GUI of new packets. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The interval between new packet updates. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Keep the packet list scrolled to the bottom while capturing.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;キャプチャ中にパケット一覧を一番下にスクロールし続けます&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1676,11 +1688,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Your coloring rules file contains unknown rules</source>
-        <translation>あなたの色付けルールのファイルは未知のルールを含んでいます。</translation>
+        <translation type="vanished">あなたの色付けルールのファイルは未知のルールを含んでいます。</translation>
     </message>
     <message>
         <source>Wireshark doesn&apos;t recognize one or more of your coloring rules. They have been disabled.</source>
-        <translation>Wiresharkは１つかそれ以上の色分けルールを認識しません。それらは無効とされました。</translation>
+        <translation type="vanished">Wiresharkは１つかそれ以上の色分けルールを認識しません。それらは無効とされました。</translation>
     </message>
 </context>
 <context>
@@ -3230,17 +3242,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>個人Luaプラグイン</translation>
     </message>
     <message>
-        <source>Lua scripts</source>
-        <oldsource>lua scripts</oldsource>
-        <translation type="unfinished">luaスクリプト</translation>
-    </message>
-    <message>
         <source>Global Lua Plugins</source>
         <translation>グローバルLuaプラグイン</translation>
     </message>
     <message>
-        <source>Extcap Plugins search path</source>
-        <translation type="vanished">Extcapプラグイン検索パス</translation>
+        <source>Lua scripts</source>
+        <translation>Luaスクリプト</translation>
     </message>
     <message>
         <source>Personal Extcap path</source>
@@ -3248,7 +3255,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>external capture (extcap) plugins</source>
-        <translation type="unfinished"></translation>
+        <translation>外部キャプチャ(extcap)プラグイン</translation>
     </message>
     <message>
         <source>Global Extcap path</source>
@@ -3289,6 +3296,13 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Typical Files</source>
         <translation>典型的なファイル</translation>
+    </message>
+</context>
+<context>
+    <name>FollowStreamAction</name>
+    <message>
+        <source>%1 Stream</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -3402,11 +3416,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>%1 stream not found on the selected packet.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>QUIC streams not found on the selected packet.</source>
-        <translation type="vanished">選択したパケットにQUICストリームは見つかりませんでした</translation>
+        <translation>選択したパケットに %1 ストリームは見つかりませんでした</translation>
     </message>
     <message>
         <source>Entire conversation (%1)</source>
@@ -3428,10 +3438,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>[Stream output truncated]</source>
         <translation>[ストリーム出力が切り詰められました]</translation>
     </message>
-    <message>
-        <source>A transport or network layer header is needed.</source>
-        <translation type="vanished">トランスポート層かネットワーク層のヘッダーが必要です。</translation>
-    </message>
     <message numerus="yes">
         <source>%Ln total stream(s).</source>
         <translation>
@@ -3440,8 +3446,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message numerus="yes">
         <source>Max sub stream ID for the selected stream: %Ln</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>選択したストリーム: %Ln の最大のサブストリームID</numerusform>
         </translation>
     </message>
     <message>
@@ -3809,11 +3815,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Move this graph upwards.</source>
-        <translation type="unfinished"></translation>
+        <translation>このグラフを上に移動します</translation>
     </message>
     <message>
         <source>Move this graph downwards.</source>
-        <translation type="unfinished"></translation>
+        <translation>このグラフを下に移動します</translation>
     </message>
     <message>
         <source>Mouse</source>
@@ -5861,11 +5867,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Maximum number of cached rows (affects sorting)</source>
-        <translation type="unfinished"></translation>
+        <translation>キャッシュされた行の最大数(ソートに影響します)</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;If more than this many rows are displayed, then sorting by columns that require packet dissection will be disabled. Increasing this number increases memory consumption by caching column values.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;もしこれ以上の行が表示されたらパケット解析に必要な列でソートは不可能になります。この数値を増やすことで、列の値をキャッシュするためのメモリ消費量が増加します。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Enable mouse-over colorization</source>
@@ -6571,6 +6577,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>システム設定を利用</translation>
     </message>
     <message>
+        <source>Debounce Timer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How long to wait (in milliseconds) before processing user input&lt;br/&gt;If you type quickly, consider lowering the value for a &apos;snappier&apos; experience.&lt;br/&gt; If you type slowly, consider increasing the value to avoid performance issues.&lt;br/&gt;This is currently used to delay searches in View -&gt; Internals -&gt; Supported Protocols and Preferences -&gt; Advanced menu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Open Files In</source>
         <translation>ファイルを開く</translation>
     </message>
@@ -7099,15 +7113,19 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>PacketListModel</name>
     <message>
         <source>Column</source>
-        <translation type="unfinished"></translation>
+        <translation>列</translation>
     </message>
     <message>
         <source>%1 can only be sorted with %2 or fewer visible rows; increase cache size in Layout preferences</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 は %2 か、より少ない表示行数でのみソートできます。設定のレイアウトでキャッシュサイズを増やしてください。</translation>
     </message>
     <message>
         <source>Sorting &quot;%1&quot;…</source>
         <translation>&quot;%1&quot; ソート中…</translation>
+    </message>
+    <message>
+        <source>Sorting …</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -12403,7 +12421,49 @@ a:hover {
 
 &lt;/tr&gt;&lt;/table&gt;
 &lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head&gt;
+&lt;style&gt;
+a:link {
+  color: palette(text);
+  text-decoration: none;
+}
+a:hover {
+  color: palette(text);
+  text-decoration: underline;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;table&gt;&lt;tr&gt;
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/docs/wsug_html_chunked/&quot;&gt;ユーザーズガイド&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://gitlab.com/wireshark/wireshark/-/wikis/&quot;&gt;Wiki&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://ask.wireshark.org/&quot;&gt;質問と回答&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/lists/&quot;&gt;メーリングリスト&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://sharkfest.wireshark.org/&quot;&gt;SharkFest Wireshark開発者会議&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://wiresharkfoundation.org/donate/&quot;&gt;寄付&lt;/a&gt;&lt;/th&gt;
+
+&lt;/tr&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Show in Finder</source>
@@ -13268,15 +13328,15 @@ a:hover {
     </message>
     <message>
         <source>DCCP Stream</source>
-        <translation>DCCPストリーム</translation>
+        <translation type="vanished">DCCPストリーム</translation>
     </message>
     <message>
         <source>TLS Stream</source>
-        <translation>TLS ストリーム</translation>
+        <translation type="vanished">TLS ストリーム</translation>
     </message>
     <message>
         <source>HTTP Stream</source>
-        <translation>HTTPストリーム</translation>
+        <translation type="vanished">HTTPストリーム</translation>
     </message>
     <message>
         <source>HTTP/2 Stream</source>
@@ -13284,11 +13344,11 @@ a:hover {
     </message>
     <message>
         <source>QUIC Stream</source>
-        <translation>QUIC ストリーム</translation>
+        <translation type="vanished">QUIC ストリーム</translation>
     </message>
     <message>
         <source>Websocket Stream</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Webソケットストリーム</translation>
     </message>
     <message>
         <source>SIP Call</source>
@@ -13615,6 +13675,10 @@ a:hover {
         <translation>最初にキャプチャしたパケットからの経過時間</translation>
     </message>
     <message>
+        <source>Show packet times as the seconds since the first captured packet.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Packet &amp;Diagram</source>
         <translation>パケット &amp;ダイアグラム</translation>
     </message>
@@ -13828,11 +13892,11 @@ a:hover {
     </message>
     <message>
         <source>TCP Stream</source>
-        <translation>TCPストリーム</translation>
+        <translation type="vanished">TCPストリーム</translation>
     </message>
     <message>
         <source>UDP Stream</source>
-        <translation>UDPストリーム</translation>
+        <translation type="vanished">UDPストリーム</translation>
     </message>
     <message>
         <source>Request Sequences</source>

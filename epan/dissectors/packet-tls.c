@@ -1166,7 +1166,7 @@ decrypt_ssl3_record(tvbuff_t *tvb, packet_info *pinfo, guint32 offset, SslDecryp
     gboolean    success;
     gint        direction;
     StringInfo *data_for_iv;
-    gint        data_for_iv_len;
+    gint        data_for_iv_len, data_for_iv_offset;
     SslDecoder *decoder;
 
     /* if we can decrypt and decryption was a success
@@ -1188,7 +1188,12 @@ decrypt_ssl3_record(tvbuff_t *tvb, packet_info *pinfo, guint32 offset, SslDecryp
     /* save data to update IV if decoder is available or updated later */
     data_for_iv = (direction != 0) ? &ssl->server_data_for_iv : &ssl->client_data_for_iv;
     data_for_iv_len = (record_length < 24) ? record_length : 24;
-    ssl_data_set(data_for_iv, (const guchar*)tvb_get_ptr(tvb, offset + record_length - data_for_iv_len, data_for_iv_len), data_for_iv_len);
+    data_for_iv_offset = offset + record_length - data_for_iv_len;
+    if (!tvb_bytes_exist(tvb, data_for_iv_offset, data_for_iv_len)) {
+        ssl_debug_printf("decrypt_ssl3_record: record truncated\n");
+        return FALSE;
+    }
+    ssl_data_set(data_for_iv, (const guchar*)tvb_get_ptr(tvb, data_for_iv_offset, data_for_iv_len), data_for_iv_len);
 
     if (!decoder) {
         ssl_debug_printf("decrypt_ssl3_record: no decoder available\n");
@@ -3874,6 +3879,7 @@ ssl_looks_like_sslv3(tvbuff_t *tvb, const guint32 offset)
     case TLSV1_VERSION:
     case TLSV1DOT1_VERSION:
     case TLSV1DOT2_VERSION:
+    case TLSV1DOT3_VERSION:
     case TLCPV1_VERSION:
         return 1;
     }
@@ -4815,6 +4821,7 @@ proto_reg_handoff_ssl(void)
     register_ber_oid_dissector("1.3.6.1.4.1.11129.2.4.5", dissect_tls_sct_ber, proto_tls, "SignedCertificateTimestampList");
 
     heur_dissector_add("tcp", dissect_ssl_heur, "SSL/TLS over TCP", "tls_tcp", proto_tls, HEURISTIC_ENABLE);
+    dissector_add_string("http.upgrade", "tls", tls_handle);
 }
 
 void

@@ -24,14 +24,14 @@
 #include <epan/exceptions.h>
 #include <epan/epan.h>
 
-#include <ui/clopts_common.h>
-#include <ui/cmdarg_err.h>
+#include <wsutil/clopts_common.h>
+#include <wsutil/cmdarg_err.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/file_util.h>
 #include <wsutil/privileges.h>
 #include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
-#include <ui/version_info.h>
+#include <wsutil/version_info.h>
 #include <wiretap/wtap_opttypes.h>
 
 #include <epan/decode_as.h>
@@ -46,7 +46,7 @@
 #include "ui/util.h"
 #include "ui/ws_ui_util.h"
 #include "ui/decode_as_utils.h"
-#include "ui/filter_files.h"
+#include "wsutil/filter_files.h"
 #include "ui/tap_export_pdu.h"
 #include "ui/failure_message.h"
 #include "wtap.h"
@@ -66,8 +66,8 @@
 
 #include "sharkd.h"
 
-#define INIT_FAILED 1
-#define EPAN_INIT_FAIL 2
+#define SHARKD_INIT_FAILED 1
+#define SHARKD_EPAN_INIT_FAIL 2
 
 capture_file cfile;
 
@@ -123,7 +123,7 @@ main(int argc, char *argv[])
     ws_log_init("sharkd", vcmdarg_err);
 
     /* Early logging command-line initialization. */
-    ws_log_parse_args(&argc, argv, vcmdarg_err, INIT_FAILED);
+    ws_log_parse_args(&argc, argv, vcmdarg_err, SHARKD_INIT_FAILED);
 
     ws_noisy("Finished log init and parsing command line log arguments");
 
@@ -153,7 +153,7 @@ main(int argc, char *argv[])
     if (sharkd_init(argc, argv) < 0)
     {
         printf("cannot initialize sharkd\n");
-        ret = INIT_FAILED;
+        ret = SHARKD_INIT_FAILED;
         goto clean_exit;
     }
 
@@ -175,7 +175,7 @@ main(int argc, char *argv[])
        dissectors, and we must do it before we read the preferences, in
        case any dissectors register preferences. */
     if (!epan_init(NULL, NULL, TRUE)) {
-        ret = EPAN_INIT_FAIL;
+        ret = SHARKD_EPAN_INIT_FAIL;
         goto clean_exit;
     }
 
@@ -315,8 +315,8 @@ process_packet(capture_file *cf, epan_dissect_t *edt,
          * if a display filter was given and it matches this packet.
          */
         if (edt && cf->dfcode) {
-            if (dfilter_apply_edt(cf->dfcode, edt)) {
-                g_slist_foreach(edt->pi.fd->dependent_frames, find_and_mark_frame_depended_upon, cf->provider.frames);
+            if (dfilter_apply_edt(cf->dfcode, edt) && edt->pi.fd->dependent_frames) {
+                g_hash_table_foreach(edt->pi.fd->dependent_frames, find_and_mark_frame_depended_upon, cf->provider.frames);
             }
         }
 

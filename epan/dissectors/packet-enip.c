@@ -1264,13 +1264,19 @@ enip_close_cip_connection(packet_info *pinfo, const cip_connection_triad_t* tria
    conn_key.T2OConnID          = 0;
 
    cip_conn_info_t* conn_val = (cip_conn_info_t*)wmem_map_lookup( enip_conn_hashtable, &conn_key );
-   if ( conn_val )
+   if (!conn_val)
+   {
+      return;
+   }
+
+   // Only mark the first Forward Close Request for a given connection.
+   if (conn_val->close_frame == 0)
    {
       conn_val->close_frame = pinfo->num;
-
-      /* Save the connection info for the conversation filter */
-      p_add_proto_data(wmem_file_scope(), pinfo, proto_enip, ENIP_CONNECTION_INFO, conn_val);
    }
+
+   /* Save the connection info for the conversation filter */
+   p_add_proto_data(wmem_file_scope(), pinfo, proto_enip, ENIP_CONNECTION_INFO, conn_val);
 }
 
 /* Save the connection info for the conversation filter */
@@ -4214,22 +4220,22 @@ proto_register_enip(void)
 
       { &hf_elink_icapability_capability_bits_manual,
         { "Manual Setting Requires Reset", "cip.elink.icapability.capability_bits.manual",
-          FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x0001,
+          FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00000001,
           NULL, HFILL }},
 
       { &hf_elink_icapability_capability_bits_auto_neg,
         { "Auto-negotiate", "cip.elink.icapability.capability_bits.auto_neg",
-          FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x0002,
+          FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00000002,
           NULL, HFILL }},
 
       { &hf_elink_icapability_capability_bits_auto_mdix,
         { "Auto-MDIX", "cip.elink.icapability.capability_bits.auto_mdix",
-          FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x0004,
+          FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00000004,
           NULL, HFILL } },
 
       { &hf_elink_icapability_capability_bits_manual_speed,
         { "Manual Speed/Duplex", "cip.elink.icapability.capability_bits.manual_speed",
-          FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x0008,
+          FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00000008,
           NULL, HFILL } },
 
       { &hf_elink_icapability_capability_speed_duplex_array_count,

@@ -74,16 +74,16 @@ class APICheck:
 
         if fun_name.startswith('ptvcursor'):
             # RE captures function name + 1st 2 args (always ptvc + hfindex)
-            self.p = re.compile('[^\n]*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+)')
+            self.p = re.compile('[^\n]*' +  self.fun_name + '\s*\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+)')
         elif fun_name.find('add_bitmask') == -1:
             # Normal case.
             # RE captures function name + 1st 2 args (always tree + hfindex + length)
-            self.p = re.compile('[^\n]*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)')
+            self.p = re.compile('[^\n]*' +  self.fun_name + '\s*\(([a-zA-Z0-9_]+),\s*([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)')
         else:
             # _add_bitmask functions.
             # RE captures function name + 1st + 4th args (always tree + hfindex)
             # 6th arg is 'fields'
-            self.p = re.compile('[^\n]*' +  self.fun_name + '\(([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)\s*,\s*[a-zA-Z0-9_]+\s*,\s*([a-zA-Z0-9_]+)\s*,')
+            self.p = re.compile('[^\n]*' +  self.fun_name + '\s*\(([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+)\s*,\s*[a-zA-Z0-9_]+\s*,\s*([a-zA-Z0-9_]+)\s*,')
 
         self.file = None
         self.mask_allowed = True
@@ -172,20 +172,20 @@ class APICheck:
 class ProtoTreeAddItemCheck(APICheck):
     def __init__(self, ptv=None):
 
-        # RE will capture whole call.  N.B. only looking at calls with literal numerical length field.
+        # RE will capture whole call.
 
         if not ptv:
             # proto_item *
             # proto_tree_add_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
             #                     const gint start, gint length, const guint encoding)
             self.fun_name = 'proto_tree_add_item'
-            self.p = re.compile('[^\n]*' + self.fun_name + '\(\s*[a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+),\s*[a-zA-Z0-9_]+,\s*[a-zA-Z0-9_]+,\s*([0-9]+),\s*([a-zA-Z0-9_]+)')
+            self.p = re.compile('[^\n]*' + self.fun_name + '\s*\(\s*[a-zA-Z0-9_]+?,\s*([a-zA-Z0-9_]+?),\s*[a-zA-Z0-9_\+\s]+?,\s*[^,.]+?,\s*(.+),\s*([^,.]+?)\);')
         else:
             # proto_item *
             # ptvcursor_add(ptvcursor_t *ptvc, int hfindex, gint length,
             #               const guint encoding)
             self.fun_name = 'ptvcursor_add'
-            self.p = re.compile('[^\n]*' + self.fun_name + '\([a-zA-Z0-9_]+,\s*([a-zA-Z0-9_]+),\s*([a-zA-Z_0-9]+),\s*([a-zA-Z0-9_\-\>]+)')
+            self.p = re.compile('[^\n]*' + self.fun_name + '\s*\([^,.]+?,\s*([^,.]+?),\s*([^,.]+?),\s*([a-zA-Z0-9_\-\>]+)')
 
 
         self.lengths = {}
@@ -221,22 +221,43 @@ class ProtoTreeAddItemCheck(APICheck):
                 # Want to check this, and next few lines
                 to_check = lines[line_number-1] + '\n'
                 # Nothing to check if function name isn't in it
-                if to_check.find(self.fun_name) != -1:
+                fun_idx = to_check.find(self.fun_name)
+                if fun_idx != -1:
                     # Ok, add the next file lines before trying RE
                     for i in range(1, 5):
                         if to_check.find(';') != -1:
                             break
                         elif line_number+i < total_lines:
                             to_check += (lines[line_number-1+i] + '\n')
+                    # Lose anything before function call itself.
+                    to_check = to_check[fun_idx:]
                     m = self.p.search(to_check)
                     if m:
+                        # Throw out if parens not matched
+                        if m.group(0).count('(') != m.group(0).count(')'):
+                            continue
+
                         enc = m.group(3)
                         hf_name = m.group(1)
                         if not enc.startswith('ENC_'):
                             if not enc in { 'encoding', 'enc', 'client_is_le', 'cigi_byte_order', 'endian', 'endianess', 'machine_encoding', 'byte_order', 'bLittleEndian',
-                                            'p_mq_parm', 'iEnc', 'strid_enc', 'iCod', 'nl_data', 'argp', 'gquic_info', 'writer_encoding',
-                                            'tds_get_int2_encoding', 'tds_get_int4_encoding',
-                                            'DREP_ENC_INTEGER' }:
+                                            'p_mq_parm->mq_str_enc', 'p_mq_parm->mq_int_enc',
+                                            'iEnc', 'strid_enc', 'iCod', 'nl_data->encoding',
+                                            'argp->info->encoding', 'gquic_info->encoding', 'writer_encoding',
+                                            'tds_get_int2_encoding(tds_info)',
+                                            'tds_get_int4_encoding(tds_info)',
+                                            'tds_get_char_encoding(tds_info)',
+                                            'info->encoding',
+                                            'item->encoding',
+                                            'DREP_ENC_INTEGER(drep)', 'string_encoding', 'item',
+                                            'dvb_enc_to_item_enc(encoding)',
+                                            'packet->enc',
+                                            'IS_EBCDIC(uCCS) ? ENC_EBCDIC : ENC_ASCII',
+                                            'DREP_ENC_INTEGER(hdr->drep)',
+                                            'dhcp_uuid_endian',
+                                            'payload_le',
+                                            'local_encoding',
+                                            'big_endian'  }:
                                 global warnings_found
 
                                 print('Warning:', self.file + ':' + str(line_number),
@@ -287,7 +308,11 @@ known_non_contiguous_fields = { 'wlan.fixed.capabilities.cfpoll.sta',
                                 'bssgp.csg_id', 'tiff.t6.unused', 'artnet.ip_prog_reply.unused',
                                 'telnet.auth.mod.enc', 'osc.message.midi.bender', 'btle.data_header.rfu',
                                 'stun.type.method', # figure 3 in rfc 5389
-                                'tds.done.status' # covers all bits in bitset
+                                'tds.done.status', # covers all bits in bitset
+                                'hf_iax2_video_csub',  # RFC 5456, table 8.7
+                                'iax2.video.subclass',
+                                'dnp3.al.ana.int',
+                                'pwcesopsn.cw.lm'
                               }
 ##################################################################################################
 
@@ -313,6 +338,108 @@ field_widths = {
     'FT_INT64'   : 64
 }
 
+def is_ignored_consecutive_filter(filter):
+    ignore_patterns = [
+        re.compile(r'^elf.sh_type'),
+        re.compile(r'^elf.p_type'),
+        re.compile(r'^btavrcp.pdu_id'),
+        re.compile(r'^nstrace.trcdbg.val(\d+)'),
+        re.compile(r'^netlogon.dummy_string'),
+        re.compile(r'^opa.reserved'),
+        re.compile(r'^mpls_pm.timestamp\d\..*'),
+        re.compile(r'^wassp.data.mu_mac'),
+        re.compile(r'^thrift.type'),
+        re.compile(r'^quake2.game.client.command.move.angles'),
+        re.compile(r'^ipp.enum_value'),
+        re.compile(r'^idrp.error.subcode'),
+        re.compile(r'^ftdi-ft.lValue'),
+        re.compile(r'^6lowpan.src'),
+        re.compile(r'^couchbase.flex_frame.frame.id'),
+        re.compile(r'^rtps.param.id'),
+        re.compile(r'^rtps.locator.port'),
+        re.compile(r'^sigcomp.udvm.value'),
+        re.compile(r'^opa.mad.attributemodifier.n'),
+        re.compile(r'^smb.cmd'),
+        re.compile(r'^sctp.checksum'),
+        re.compile(r'^dhcp.option.end'),
+        re.compile(r'^nfapi.num.bf.vector.bf.value'),
+        re.compile(r'^dnp3.al.range.abs'),
+        re.compile(r'^dnp3.al.range.quantity'),
+        re.compile(r'^dnp3.al.index'),
+        re.compile(r'^dnp3.al.size'),
+        re.compile(r'^ftdi-ft.hValue'),
+        re.compile(r'^homeplug_av.op_attr_cnf.data.sw_sub'),
+        re.compile(r'^radiotap.he_mu.preamble_puncturing'),
+        re.compile(r'^ndmp.file'),
+        re.compile(r'^ocfs2.dlm.lvb'),
+        re.compile(r'^oran_fh_cus.reserved'),
+        re.compile(r'^qnet6.kif.msgsend.msg.read.xtypes0-7'),
+        re.compile(r'^qnet6.kif.msgsend.msg.write.xtypes0-7'),
+        re.compile(r'^mih.sig_strength'),
+        re.compile(r'^couchbase.flex_frame.frame.len'),
+        re.compile(r'^nvme-rdma.read_to_host_req'),
+        re.compile(r'^rpcap.dummy'),
+        re.compile(r'^sflow.flow_sample.output_interface'),
+        re.compile(r'^socks.results'),
+        re.compile(r'^opa.mad.attributemodifier.p'),
+        re.compile(r'^v5ua.efa'),
+        re.compile(r'^zbncp.data.tx_power'),
+        re.compile(r'^zbncp.data.nwk_addr'),
+        re.compile(r'^zbee_zcl_hvac.pump_config_control.attr.ctrl_mode'),
+        re.compile(r'^nat-pmp.external_port'),
+        re.compile(r'^zbee_zcl.attr.float'),
+        re.compile(r'^wpan-tap.phr.fsk_ms.mode'),
+        re.compile(r'^mysql.exec_flags'),
+        re.compile(r'^pim.metric_pref'),
+        re.compile(r'^modbus.regval_float'),
+        re.compile(r'^alcap.cau.value'),
+        re.compile(r'^bpv7.crc_field'),
+        re.compile(r'^at.chld.mode'),
+        re.compile(r'^btl2cap.psm'),
+        re.compile(r'^srvloc.srvtypereq.nameauthlistlen'),
+        re.compile(r'^a11.ext.code'),
+        re.compile(r'^adwin_config.port'),
+        re.compile(r'^afp.unknown'),
+        re.compile(r'^ansi_a_bsmap.mid.digit_1'),
+        re.compile(r'^ber.unknown.OCTETSTRING'),
+        re.compile(r'^btatt.handle'),
+        re.compile(r'^btl2cap.option_flushto'),
+        re.compile(r'^cip.network_segment.prod_inhibit'),
+        re.compile(r'^cql.result.rows.table_name'),
+        re.compile(r'^dcom.sa.vartype'),
+        re.compile(r'^f5ethtrailer.slot'),
+        re.compile(r'^ipdr.cm_ipv6_addr'),
+        re.compile(r'^mojito.kuid'),
+        re.compile(r'^mtp3.priority'),
+        re.compile(r'^pw.cw.length'),
+        re.compile(r'^rlc.ciphered_data'),
+        re.compile(r'^vp8.pld.pictureid'),
+        re.compile(r'^gryphon.sched.channel'),
+        re.compile(r'^pn_io.ioxs'),
+        re.compile(r'^pn_dcp.block_qualifier_reset'),
+        re.compile(r'^pn_dcp.suboption_device_instance'),
+        re.compile(r'^nfs.attr'),
+        re.compile(r'^nfs.create_session_flags'),
+        re.compile(r'^rmt-lct.toi64'),
+        re.compile(r'^gryphon.data.header_length'),
+        re.compile(r'^quake2.game.client.command.move.movement'),
+        re.compile(r'^isup.parameter_type'),
+        re.compile(r'^cip.port'),
+        re.compile(r'^adwin.fifo_no'),
+        re.compile(r'^bthci_evt.hci_vers_nr'),
+        re.compile(r'^gryphon.usdt.stmin_active'),
+        re.compile(r'^dnp3.al.anaout.int'),
+        re.compile(r'^dnp3.al.ana.int'),
+        re.compile(r'^dnp3.al.cnt'),
+        re.compile(r'^bthfp.chld.mode')
+    ]
+
+    for patt in ignore_patterns:
+        if patt.match(filter):
+            return True
+    return False
+
+
 
 # The relevant parts of an hf item.  Used as value in dict where hf variable name is key.
 class Item:
@@ -336,9 +463,10 @@ class Item:
         if check_consecutive:
             if Item.previousItem and Item.previousItem.filter == filter:
                 if label != Item.previousItem.label:
-                    print('Warning:', filename, hf, ': - filter "' + filter +
-                          '" appears consecutively - labels are "' + Item.previousItem.label + '" and "' + label + '"')
-                    warnings_found += 1
+                    if not is_ignored_consecutive_filter(self.filter):
+                        print('Warning:', filename, hf, ': - filter "' + filter +
+                            '" appears consecutively - labels are "' + Item.previousItem.label + '" and "' + label + '"')
+                        warnings_found += 1
 
             Item.previousItem = self
 
@@ -352,8 +480,10 @@ class Item:
             if (label.count('(') != label.count(')') or
                 label.count('[') != label.count(']') or
                 label.count('{') != label.count('}')):
-                print('Warning: ' + filename, hf, 'filter "' + filter + '" label', '"' + label + '"', 'has unbalanced parens/braces/brackets')
-                warnings_found += 1
+                # Ignore if includes quotes, as may be unbalanced.
+                if label.find("'") == -1:
+                    print('Warning: ' + filename, hf, 'filter "' + filter + '" label', '"' + label + '"', 'has unbalanced parens/braces/brackets')
+                    warnings_found += 1
             if item_type != 'FT_NONE' and label.endswith(':'):
                 print('Warning: ' + filename, hf, 'filter "' + filter + '" label', '"' + label + '"', 'ends with an unnecessary colon')
                 warnings_found += 1
@@ -409,9 +539,9 @@ class Item:
             return
 
         # Do see non-contiguous bits often for these..
-        if name_has_one_of(self.hf, ['reserved', 'unknown']):
+        if name_has_one_of(self.hf, ['reserved', 'unknown', 'unused', 'spare']):
             return
-        if name_has_one_of(self.label, ['reserved', 'unknown']):
+        if name_has_one_of(self.label, ['reserved', 'unknown', 'unused', 'spare']):
             return
 
 
@@ -466,14 +596,20 @@ class Item:
                 return 8  # i.e. 1 byte
             elif self.type_modifier == 'BASE_NONE':
                 return 8
-            elif self.type_modifier == 'SEP_DOT':   # from proto.h
+            elif self.type_modifier == 'SEP_DOT':   # from proto.h, only meant for FT_BYTES
                 return 64
             else:
-                # For FT_BOOLEAN, modifier is just numerical number of bits. Round up to next nibble.
-                return int(self.type_modifier)+3
+                try:
+                    # For FT_BOOLEAN, modifier is just numerical number of bits. Round up to next nibble.
+                    return int((int(self.type_modifier) + 3)/4)*4
+                except:
+                    return None
         else:
-            # Lookup fixed width for this type
-            return field_widths[self.item_type]
+            if self.item_type in field_widths:
+                # Lookup fixed width for this type
+                return field_widths[self.item_type]
+            else:
+                return None
 
     # N.B. Not currently used.
     def check_mask_too_long(self, mask):
@@ -669,6 +805,8 @@ apiChecks.append(ProtoTreeAddItemCheck(True)) # for ptvcursor_add()
 def removeComments(code_string):
     code_string = re.sub(re.compile(r"/\*.*?\*/",re.DOTALL ) ,"" , code_string) # C-style comment
     code_string = re.sub(re.compile(r"//.*?\n" ) ,"" , code_string)             # C++-style comment
+    code_string = re.sub(re.compile(r"#if 0.*?#endif",re.DOTALL ) ,"" , code_string) # Ignored region
+
     return code_string
 
 # Test for whether the given file was automatically generated.
@@ -710,7 +848,7 @@ def find_items(filename, check_mask=False, mask_exact_width=False, check_label=F
         contents = removeComments(contents)
 
         # N.B. re extends all the way to HFILL to avoid greedy matching
-        matches = re.finditer( r'.*\{\s*\&(hf_[a-z_A-Z0-9]*)\s*,\s*{\s*\"(.*?)\"\s*,\s*\"(.*?)\"\s*,\s*(.*?)\s*,\s*(.*?)\s*,\s*(.*?)\s*,\s*(.*?)\s*,\s*([a-zA-Z0-9\W\s_]*?)\s*,\s*HFILL', contents)
+        matches = re.finditer( r'.*\{\s*\&(hf_[a-z_A-Z0-9]*)\s*,\s*{\s*\"(.*?)\"\s*,\s*\"(.*?)\"\s*,\s*(.*?)\s*,\s*([0-9A-Z_\|\s]*?)\s*,\s*(.*?)\s*,\s*(.*?)\s*,\s*([a-zA-Z0-9\W\s_\u00f6\u00e4]*?)\s*,\s*HFILL', contents)
         for m in matches:
             # Store this item.
             hf = m.group(1)
@@ -734,6 +872,7 @@ def find_field_arrays(filename, all_fields, all_hf):
         # Remove comments so as not to trip up RE.
         contents = removeComments(contents)
 
+        # Find definition of hf array
         matches = re.finditer(r'static\s*g?int\s*\*\s*const\s+([a-zA-Z0-9_]*)\s*\[\]\s*\=\s*\{([a-zA-Z0-9,_\&\s]*)\}', contents)
         for m in matches:
             name = m.group(1)
@@ -743,6 +882,8 @@ def find_field_arrays(filename, all_fields, all_hf):
             all_fields = m.group(2)
             all_fields = all_fields.replace('&', '')
             all_fields = all_fields.replace(',', '')
+
+            # Get list of each hf field in the array
             fields = all_fields.split()
 
             if fields[0].startswith('ett_'):
@@ -768,6 +909,17 @@ def find_field_arrays(filename, all_fields, all_hf):
                         print('Warning:', filename, name, 'has overlapping mask - {', ', '.join(fields), '} combined currently', hex(combined_mask), f, 'adds', hex(new_mask))
                         warnings_found += 1
                     combined_mask |= new_mask
+
+            # Make sure all entries have the same width
+            set_field_width = None
+            for f in fields[0:-1]:
+                if f in all_hf:
+                    new_field_width = all_hf[f].get_field_width_in_bits()
+                    if set_field_width is not None and new_field_width != set_field_width:
+                        print('Warning:', filename, name, 'set items not all same width - {', ', '.join(fields), '} seen', set_field_width, 'now', new_field_width)
+                        warnings_found += 1
+                    set_field_width = new_field_width
+
     return []
 
 def find_item_declarations(filename):
@@ -879,10 +1031,18 @@ parser.add_argument('--missing-items', action='store_true',
                     help='when set, look for used items that were never registered')
 parser.add_argument('--check-bitmask-fields', action='store_true',
                     help='when set, attempt to check arrays of hf items passed to add_bitmask() calls')
-
+parser.add_argument('--all-checks', action='store_true',
+                    help='when set, apply all checks to selected files')
 
 
 args = parser.parse_args()
+
+# Turn all checks on.
+if args.all_checks:
+    args.mask = True
+    args.mask_exact_width = True
+    args.consecutive = True
+    args.check_bitmask_fields = True
 
 
 # Get files from wherever command-line args indicate.

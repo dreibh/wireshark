@@ -75,6 +75,7 @@ asn1
 asn1cnf
 asn2deb
 asn2wrs
+assignee
 assignor
 assoc
 assymetric
@@ -88,6 +89,7 @@ attendee
 attrib
 attrs
 audigy
+authcitrix
 authen
 authenticates
 authenticator
@@ -219,6 +221,7 @@ choplen
 chromaticities
 chromaticity
 chunked
+cicam
 cinfo
 ciphered
 ciphering
@@ -394,6 +397,7 @@ dfilter
 dfilters
 dfsauth
 dftest
+dgotyp
 dgram
 dhcpv
 dialed
@@ -443,6 +447,7 @@ earfcn
 ebcdic
 ecdhe
 ecdsa
+ecpri
 editcap
 eeprom
 egprs
@@ -476,6 +481,7 @@ enttec
 enumerates
 enumerations
 enumerator
+envchange
 epasv
 epdcch
 epsem
@@ -492,6 +498,7 @@ erspan
 España
 esperanto
 etheraddr
+ethercat
 ethers
 ethertype
 etlfile
@@ -510,6 +517,7 @@ extensibility
 extensible
 extern
 exthdr
+extlen
 extrainformation
 eyesdn
 facch
@@ -616,6 +624,8 @@ homeplug
 hopcount
 hostname
 howto
+hpfeeds
+hresult
 hsdpa
 hsdsch
 hspdsch
@@ -683,6 +693,7 @@ instdir
 instrumented
 interferer
 interleaving
+interop
 interruptible
 interworking
 inuse
@@ -726,10 +737,12 @@ ixveriwave
 jacobson
 jetds
 jsonraw
+k12xx
 kademlia
 kasme
 kasumi
 kbytes
+kchip
 keepalive
 kerberos
 keydes
@@ -795,6 +808,7 @@ mappable
 mariadb
 marvell
 mathieson
+matrixes
 maxlen
 maybefcs
 mbits
@@ -820,6 +834,7 @@ meteorological
 metermod
 México
 mgmtmsg
+microapp
 microbit
 midamble
 millimeters
@@ -835,6 +850,7 @@ mitel
 mitsubishi
 mkdir
 mmdbresolve
+modbus
 mode01
 mode7
 modepage
@@ -956,6 +972,7 @@ ntohs
 nullptr
 nvmeof
 nvram
+oampdu
 obfuscated
 objectid
 objkey
@@ -996,6 +1013,7 @@ oscillatory
 oscore
 osdmap
 osmocom
+osmux
 ospf6
 outhdr
 pacch
@@ -1126,6 +1144,7 @@ queryset
 quiescing
 quintuplet
 quintuplets
+r3info
 radcom
 radeon
 radiotap
@@ -1285,6 +1304,7 @@ sabme
 sacch
 sanicap
 sanitize
+sapgui
 satisfiable
 scalability
 scaleout
@@ -1331,6 +1351,7 @@ sharkd
 shomiti
 siapp
 sidelink
+signaal
 signaling
 signon
 simulcast
@@ -1437,6 +1458,7 @@ symantec
 synchronizer
 synchronizing
 synchronously
+syncman
 synphasor
 syntaxes
 sysdig
@@ -1530,6 +1552,7 @@ ucast
 udpcp
 udpdump
 udphdr
+uievent
 uint16
 uint32
 uint8
@@ -1552,6 +1575,7 @@ uncalibrated
 uncategorized
 unchannelized
 unciphered
+uncoloured
 uncompensated
 uncompress
 uncompressed
@@ -1560,6 +1584,7 @@ uncompression
 unconfigurable
 unconfigured
 unconfirm
+uncontended
 uncorrectable
 undecidable
 undecipherable
@@ -1611,6 +1636,7 @@ unmerged
 unmodulated
 unmute
 unmuted
+unnumb
 unoptimized
 unordered
 unparsable
@@ -1660,6 +1686,7 @@ usability
 usbmon
 usbms
 usbpcap
+userauth
 userdata
 userinfo
 userlist
@@ -1716,6 +1743,7 @@ wikipedia
 wikis
 wimax
 wimaxasncp
+winflexbison
 winget
 winpcap
 winspool

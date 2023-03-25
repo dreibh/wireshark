@@ -761,6 +761,7 @@ static int hf_nas_5gs_mm_relay_key_resp_params_key_knr_prose = -1;
 static int hf_nas_5gs_mm_relay_key_resp_params_nonce_2 = -1;
 static int hf_nas_5gs_mm_relay_key_resp_params_cp_pruk_id = -1;
 static int hf_nas_5gs_mm_prio_ind_mpsi = -1;
+static int hf_nas_5gs_ue_os_id = -1;
 
 static expert_field ei_nas_5gs_extraneous_data = EI_INIT;
 static expert_field ei_nas_5gs_unknown_pd = EI_INIT;
@@ -1833,8 +1834,8 @@ de_nas_5gs_mm_conf_upd_ind(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
  * 9.11.3.18A   CAG information list
  */
 static true_false_string tfs_5gs_mm_cag_info_entry_cag_only = {
-    "the UE is allowed to access 5GS via non-CAG cells",
-    "the UE is not allowed to access 5GS via non-CAG cells"
+    "the UE is not allowed to access 5GS via non-CAG cells",
+    "the UE is allowed to access 5GS via non-CAG cells"
 };
 
 static guint16
@@ -8056,7 +8057,7 @@ nas_5gs_sm_pdu_ses_est_acc(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
     /* 25    DNN    DNN 9.11.2.1B    O    TLV    3-102 */
     ELEM_OPT_TLV(0x25, NAS_5GS_PDU_TYPE_COMMON, DE_NAS_5GS_CMN_DNN, NULL);
     /* 17    5GSM network feature support    5GSM network feature support 9.11.4.18    O    TLV    3-15  */
-    ELEM_OPT_TLV(0x25, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_NW_FEATURE_SUP, NULL);
+    ELEM_OPT_TLV(0x17, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_NW_FEATURE_SUP, NULL);
     /* 18    Serving PLMN rate control    Serving PLMN rate control 9.11.4.20    O    TLV    4  */
     ELEM_OPT_TLV(0x18, NAS_PDU_TYPE_ESM, DE_ESM_SERV_PLMN_RATE_CTRL, NULL);
     /* 77    ATSSS container    ATSSS container 9.11.4.22    O    TLV-E    3-65538  */
@@ -9281,18 +9282,16 @@ de_nas_5gs_updp_ue_policy_cm(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo
 
 /* D.6.6 UE OS Id */
 static guint16
-de_nas_5gs_updp_ue_os_id(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo,
+de_nas_5gs_updp_ue_os_id(tvbuff_t* tvb, proto_tree* tree, packet_info* pinfo _U_,
     guint32 offset, guint len,
     gchar* add_string _U_, int string_len _U_)
 {
-    gint32 length;
     guint32 curr_offset = offset;
-
-
-    proto_tree_add_item_ret_uint(tree, hf_nas_5gs_os_id_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &length);
-    curr_offset++;
-
-    proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, curr_offset, length);
+    /* OS Id:
+    * The OS Id is coded as a sequence of a sixteen octet OS Id value field.
+    *  The OS Id value field is defined as Universally Unique IDentifier (UUID) as specified in IETF RFC 4122 [35A].
+    */
+    proto_tree_add_item(tree, hf_nas_5gs_ue_os_id, tvb, curr_offset, len, ENC_BIG_ENDIAN);
 
     return len;
 }
@@ -9447,7 +9446,7 @@ nas_5gs_updp_manage_ue_policy_cmd(tvbuff_t* tvb, proto_tree* tree, packet_info* 
     ELEM_MAND_LV_E(NAS_5GS_PDU_TYPE_UPDP, DE_NAS_5GS_UPDP_UE_POLICY_SECTION_MGM_LST, NULL, ei_nas_5gs_missing_mandatory_element);
 
     /* 42    UE policy network classmark    UE policy network classmark D.6.7    O    TLV    3-5 */
-    ELEM_OPT_TLV(0x42, NAS_5GS_PDU_TYPE_UPDP, DE_NAS_5GS_UPDP_UE_OS_ID, NULL);
+    ELEM_OPT_TLV(0x42, NAS_5GS_PDU_TYPE_UPDP, DE_NAS_5GS_UPDP_UE_POLICY_NW_CLASSMARK, NULL);
 
 }
 
@@ -13447,7 +13446,7 @@ proto_register_nas_5gs(void)
         },
         { &hf_nas_5gs_mm_relay_key_req_params_relay_service_code,
         { "Relay service code", "nas_5gs.mm.relay_key_req_params.relay_service_code",
-            FT_UINT8, BASE_DEC, NULL, 0,
+            FT_UINT24, BASE_DEC, NULL, 0,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_relay_key_req_params_nonce_1,
@@ -13483,6 +13482,11 @@ proto_register_nas_5gs(void)
         { &hf_nas_5gs_mm_prio_ind_mpsi,
         { "MPS indicator (MPSI)", "nas_5gs.mm.priority_indicator.mpsi",
             FT_BOOLEAN, 8, TFS(&tfs_nas_5gs_mm_prio_ind_mpsi), 0x01,
+            NULL, HFILL }
+        },
+        { &hf_nas_5gs_ue_os_id,
+        { "UE OS ID UUID", "nas_5gs.ue_os_id",
+            FT_GUID, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
     };

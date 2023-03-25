@@ -1562,6 +1562,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Paket listesini gerçek zamanlı olarak güncelleyin</translation>
     </message>
     <message>
+        <source>Interval between updates (ms)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How often the capture notifies the GUI of new packets. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;The interval between new packet updates. Affects how often the GUI updates and the granularity of timers.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Keep the packet list scrolled to the bottom while capturing.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Yakalarken paket listesini aşağıya kaydırılmış halde tutun.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1677,11 +1689,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Your coloring rules file contains unknown rules</source>
-        <translation>Boyama kuralları dosyanız bilinmeyen kurallar içeriyor</translation>
+        <translation type="vanished">Boyama kuralları dosyanız bilinmeyen kurallar içeriyor</translation>
     </message>
     <message>
         <source>Wireshark doesn&apos;t recognize one or more of your coloring rules. They have been disabled.</source>
-        <translation>Wireshark, renklendirme kurallarınızdan birini veya daha fazlasını tanımıyor. Devre dışı bırakıldılar.</translation>
+        <translation type="vanished">Wireshark, renklendirme kurallarınızdan birini veya daha fazlasını tanımıyor. Devre dışı bırakıldılar.</translation>
     </message>
 </context>
 <context>
@@ -3231,17 +3243,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Kişisel Lua Eklentileri</translation>
     </message>
     <message>
-        <source>Lua scripts</source>
-        <oldsource>lua scripts</oldsource>
-        <translation type="unfinished">lua betikleri</translation>
-    </message>
-    <message>
         <source>Global Lua Plugins</source>
         <translation>Genel Lua Eklentileri</translation>
     </message>
     <message>
-        <source>Extcap Plugins search path</source>
-        <translation type="vanished">Extcap Eklentileri arama yolu</translation>
+        <source>Lua scripts</source>
+        <translation>Lua betikleri</translation>
     </message>
     <message>
         <source>Personal Extcap path</source>
@@ -3249,7 +3256,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>external capture (extcap) plugins</source>
-        <translation type="unfinished"></translation>
+        <translation>harici yakalama (extcap) eklentileri</translation>
     </message>
     <message>
         <source>Global Extcap path</source>
@@ -3290,6 +3297,13 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Typical Files</source>
         <translation>Tipik Dosyalar</translation>
+    </message>
+</context>
+<context>
+    <name>FollowStreamAction</name>
+    <message>
+        <source>%1 Stream</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -3403,11 +3417,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>%1 stream not found on the selected packet.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>QUIC streams not found on the selected packet.</source>
-        <translation type="vanished">QUIC akışları seçilen pakette bulunamadı.</translation>
+        <translation>Seçili pakette %1 akışı bulunamadı.</translation>
     </message>
     <message>
         <source>Entire conversation (%1)</source>
@@ -3428,10 +3438,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>[Stream output truncated]</source>
         <translation>[Akış çıkışı kesildi]</translation>
-    </message>
-    <message>
-        <source>A transport or network layer header is needed.</source>
-        <translation type="vanished">Bir aktarım veya ağ katmanı başlığı gereklidir.</translation>
     </message>
     <message numerus="yes">
         <source>%Ln total stream(s).</source>
@@ -6568,6 +6574,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Sistem ayarını kullan</translation>
     </message>
     <message>
+        <source>Debounce Timer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;How long to wait (in milliseconds) before processing user input&lt;br/&gt;If you type quickly, consider lowering the value for a &apos;snappier&apos; experience.&lt;br/&gt; If you type slowly, consider increasing the value to avoid performance issues.&lt;br/&gt;This is currently used to delay searches in View -&gt; Internals -&gt; Supported Protocols and Preferences -&gt; Advanced menu.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Open Files In</source>
         <translation>Dosyaları Aç</translation>
     </message>
@@ -7105,6 +7119,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Sorting &quot;%1&quot;…</source>
         <translation>&quot;%1&quot; sıralanıyor…</translation>
+    </message>
+    <message>
+        <source>Sorting …</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -13307,15 +13325,15 @@ a:üzerine gelin{
     </message>
     <message>
         <source>DCCP Stream</source>
-        <translation>DCCP Akışı</translation>
+        <translation type="vanished">DCCP Akışı</translation>
     </message>
     <message>
         <source>TLS Stream</source>
-        <translation>TLS Akışı</translation>
+        <translation type="vanished">TLS Akışı</translation>
     </message>
     <message>
         <source>HTTP Stream</source>
-        <translation>HTTP Akışı</translation>
+        <translation type="vanished">HTTP Akışı</translation>
     </message>
     <message>
         <source>HTTP/2 Stream</source>
@@ -13323,11 +13341,11 @@ a:üzerine gelin{
     </message>
     <message>
         <source>QUIC Stream</source>
-        <translation>QUIC Akışı</translation>
+        <translation type="vanished">QUIC Akışı</translation>
     </message>
     <message>
         <source>Websocket Stream</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Websocket Akışı</translation>
     </message>
     <message>
         <source>SIP Call</source>
@@ -13654,6 +13672,10 @@ a:üzerine gelin{
         <translation>İlk Yakalanan Paketten Beri Saniye</translation>
     </message>
     <message>
+        <source>Show packet times as the seconds since the first captured packet.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Packet &amp;Diagram</source>
         <translation>Paket &amp;Şeması</translation>
     </message>
@@ -13867,11 +13889,11 @@ a:üzerine gelin{
     </message>
     <message>
         <source>TCP Stream</source>
-        <translation>TCP Akışı</translation>
+        <translation type="vanished">TCP Akışı</translation>
     </message>
     <message>
         <source>UDP Stream</source>
-        <translation>UDP Akışı</translation>
+        <translation type="vanished">UDP Akışı</translation>
     </message>
     <message>
         <source>Request Sequences</source>
