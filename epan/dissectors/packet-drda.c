@@ -22,15 +22,35 @@
 *   of the DDM commands and reply messages are in EBCDIC.
 *
 *   Documentation:
-*   DRDA Version 3 Vol. 3: Distributed Relational Database Architecture,
-*   Open Group.
-*   Version 3 is no longer available; for the latest version, see
 *
-*       http://www.opengroup.org/dbiop/
+*   DRDA Version 2, Volume 3: Distributed Data Management (DDM)
+*     Architecture, Open Group.
+*
+*       https://pubs.opengroup.org/onlinepubs/009608699/toc.pdf
+*
+*   DRDA Version 3, Volume 3: Distributed Data Management (DDM)
+*     Architecture Open Group.
+*   Version 3 is no longer available.
+*
+*   DRDA Version 4, Volume 3: Distributed Data Management (DDM)
+*     Architecture, Open Group.
+*
+*       https://pubs.opengroup.org/onlinepubs/9699939199/toc.pdf
+*
+*   DRDA Version 5, Volume 3: Distributed Data Management (DDM)
+*     Architecture, Open Group.
+*
+*       https://publications.opengroup.org/c114
 *
 *   Reference for Remote DRDA Requesters and Servers, IBM.
 *
 *       https://www-304.ibm.com/support/docview.wss?uid=pub1sc18985301
+*         (now dead)
+*       https://publibfp.boulder.ibm.com/epubs/pdf/dsnudh10.pdf
+*
+*   Microsoft has some references that can be useful as well:
+*
+*       https://learn.microsoft.com/en-us/dotnet/api/microsoft.hostintegration.drda.common?view=his-dotnet
 */
 
 #include "config.h"
@@ -62,6 +82,13 @@ static int hf_drda_param_data_ebcdic = -1;
 static int hf_drda_sqlstatement_length = -1;
 static int hf_drda_sqlstatement = -1;
 static int hf_drda_sqlstatement_ebcdic = -1;
+static int hf_drda_secmec = -1;
+static int hf_drda_svrcod = -1;
+static int hf_drda_secchkcd = -1;
+static int hf_drda_ccsid = -1;
+static int hf_drda_mgrlvln = -1;
+static int hf_drda_respktsz = -1;
+static int hf_drda_pktobj = -1;
 
 static gint ett_drda = -1;
 static gint ett_drda_ddm = -1;
@@ -71,6 +98,8 @@ static gint ett_drda_param = -1;
 static expert_field ei_drda_opcode_invalid_length = EI_INIT;
 
 static dissector_handle_t drda_tcp_handle;
+
+static dissector_table_t drda_opcode_table;
 
 static gboolean drda_desegment = TRUE;
 
@@ -144,9 +173,14 @@ static gboolean drda_desegment = TRUE;
 #define DRDA_CP_SYNCPTMGR     0x14C0
 #define DRDA_CP_RSYNCMGR      0x14C1
 #define DRDA_CP_CCSIDMGR      0x14CC
+#define DRDA_CP_SNDPKT        0x1805
 #define DRDA_CP_MONITOR       0x1900
+#define DRDA_CP_RESPKTSZ      0x1908
+#define DRDA_CP_CCSIDXML      0x1913
 #define DRDA_CP_MONITORRD     0x1C00
 #define DRDA_CP_XAMGR         0x1C01
+#define DRDA_CP_PKTOBJ        0x1C04
+#define DRDA_CP_UNICODEMGR    0x1C08
 #define DRDA_CP_ACCRDB        0x2001
 #define DRDA_CP_BGNBND        0x2002
 #define DRDA_CP_BNDSQLSTT     0x2004
@@ -341,9 +375,14 @@ static const value_string drda_opcode_vals[] = {
     { DRDA_CP_SYNCPTMGR,    "Sync Point Manager" },
     { DRDA_CP_RSYNCMGR,     "ResynchronizationManager" },
     { DRDA_CP_CCSIDMGR,     "CCSID Manager" },
+    { DRDA_CP_SNDPKT,       "Send Packet" },
     { DRDA_CP_MONITOR,      "Monitor Events" },
+    { DRDA_CP_RESPKTSZ,     "Response Packet Size" },
+    { DRDA_CP_CCSIDXML,     "CCSID for External Encoded XML Strings" },
     { DRDA_CP_MONITORRD,    "Monitor Reply Data" },
     { DRDA_CP_XAMGR,        "XAManager" },
+    { DRDA_CP_PKTOBJ,       "Packet Object" },
+    { DRDA_CP_UNICODEMGR,   "Unicode Manager" },
     { DRDA_CP_ACCRDB,       "Access RDB" },
     { DRDA_CP_BGNBND,       "Begin Binding a Package to an RDB" },
     { DRDA_CP_BNDSQLSTT,    "Bind SQL Statement to an RDB Package" },
@@ -525,9 +564,14 @@ static const value_string drda_opcode_abbr[] = {
     { DRDA_CP_SYNCPTMGR,    "SYNCPTMGR" },
     { DRDA_CP_RSYNCMGR,     "RSYNCMGR" },
     { DRDA_CP_CCSIDMGR,     "CCSIDMGR" },
+    { DRDA_CP_SNDPKT,       "SNDPKT" },
     { DRDA_CP_MONITOR,      "MONITOR" },
+    { DRDA_CP_RESPKTSZ,     "RESPKTSZ" },
+    { DRDA_CP_CCSIDXML,     "CCSIDXML" },
     { DRDA_CP_MONITORRD,    "MONITORRD" },
     { DRDA_CP_XAMGR,        "XAMGR" },
+    { DRDA_CP_PKTOBJ,       "PKTOBJ" },
+    { DRDA_CP_UNICODEMGR,   "UNICODEMGR" },
     { DRDA_CP_ACCRDB,       "ACCRDB" },
     { DRDA_CP_BGNBND,       "BGNBND" },
     { DRDA_CP_BNDSQLSTT,    "BNDSQLSTT" },
@@ -648,6 +692,186 @@ static const value_string drda_dsstyp_abbr[] = {
     { 0,          NULL }
 };
 
+static const value_string drda_secmec_vals[] = {
+    { 1, "DCESEC - Distributed Computing Environment" },
+    { 3, "USRIDPWD - User ID and Password" },
+    { 4, "UDRIDONL - User ID Only" },
+    { 5, "USRIDNWPWD - User ID, Password, and New Password" },
+    { 6, "USRSBSPWD - User ID with Substitute Password" },
+    { 7, "USRENCPWD - User ID with Encrypted Password" },
+    { 8, "USRSSBPWD - User ID with Strong Password Substitute" },
+    { 9, "EUSRIDPWD - Encrypted User ID and Password" },
+    {10, "EUSRIDNWPWD - Encrypted User ID, Password, New Password" },
+    {11, "KERSEC - Kerberos Security" },
+    {12, "EUSRIDDTA - Encrypted User ID and Security-Sensitive Data" },
+    {13, "EUSRPWDDTA - Encrypted User ID, Password, and Security-Sensitive Data" },
+    {14, "EUSRNPWDDTA - Encrypted User ID, Password, New Password, and Security-Sensitive Data" },
+    {15, "PLGIN - Plug-in Security" },
+    {16, "EUSRIDONL - Encrypted User ID Only" },
+    { 0, NULL }
+};
+
+static int
+dissect_drda_secmec(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    proto_tree_add_item(tree, hf_drda_secmec, tvb, 0, 2, ENC_BIG_ENDIAN);
+    return 2;
+}
+
+static const value_string drda_svrcod_vals[] = {
+    {  0, "INFO - Information Only" },
+    {  4, "WARNING - Warning" },
+    {  8, "ERROR - Error" },
+    { 16, "SEVERE - Severe Error" },
+    { 32, "ACCDMG - Access Damage" },
+    { 64, "PRMDMG - Permanent Damage" },
+    {128, "SESDMG - Session Damage" },
+    { 0, NULL }
+};
+
+static int
+dissect_drda_svrcod(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    proto_tree_add_item(tree, hf_drda_svrcod, tvb, 0, 2, ENC_BIG_ENDIAN);
+    return 2;
+}
+
+static const value_string drda_secchkcd_vals[] = {
+    {0x00, "The security information is correct and acceptable." },
+    {0x01, "SECMEC value not supported." },
+    {0x02, "DCE information status issued." },
+    {0x03, "DCE retryable error." },
+    {0x04, "DCE non-retryable error." },
+    {0x05, "GSSAPI informational status issued." },
+    {0x06, "GSSAPI retryable error." },
+    {0x07, "GSSAPI non-retryable error." },
+    {0x08, "Local Security Service informational status issued." },
+    {0x09, "Local Security Service retryable error." },
+    {0x0A, "Local Security Service non-retryable error." },
+    {0x0B, "SECTKN missing when it is required or it is invalid." },
+    {0x0E, "Password expired." },
+    {0x0F, "Password invalid." },
+    {0x10, "Password missing." },
+    {0x12, "User ID missing." },
+    {0x13, "User ID invalid." },
+    {0x14, "User ID revoked." },
+    {0x15, "New Password invalid." },
+    {0x16, "Authentication failed because of connectivity restrictions enforced by the security plug-in." },
+    {0x17, "Invalid GSS-API server credential." },
+    {0x18, "GSS-API server credential expired on the database server." },
+    {0x19, "Continue - require more security context information for authentication." },
+    { 0, NULL }
+};
+
+static int
+dissect_drda_secchkcd(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    proto_tree_add_item(tree, hf_drda_secchkcd, tvb, 0, 1, ENC_BIG_ENDIAN);
+    return 1;
+}
+
+/* A few common CCSIDs, many more are at:
+ * https://www.ibm.com/docs/en/i/7.3?topic=information-ccsid-values-defined-i
+ * https://web.archive.org/web/20160304082631/http://www-01.ibm.com/software/globalization/g11n-res.html
+ */
+static const value_string drda_ccsid_vals[] = {
+    {   37, "IBM037" },
+    {  367, "US-ASCII" },
+    { 1200, "UTF-16" },
+    { 1208, "UTF-8" },
+    { 0, NULL }
+};
+
+static int
+dissect_drda_ccsid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    proto_tree_add_item(tree, hf_drda_ccsid, tvb, 0, 2, ENC_BIG_ENDIAN);
+    return 2;
+}
+
+static int
+dissect_drda_respktsz(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    proto_tree_add_item(tree, hf_drda_respktsz, tvb, 0, 4, ENC_BIG_ENDIAN);
+    return 4;
+}
+
+static int
+dissect_drda_pktobj(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    proto_tree_add_item(tree, hf_drda_pktobj, tvb, 0, tvb_reported_length(tvb), ENC_NA);
+    return tvb_reported_length(tvb);
+}
+
+static int
+dissect_drda_mgrlvlls(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    proto_tree *drda_tree_sub;
+    proto_item *ti;
+
+    gint offset = 0;
+    guint16 iParameterCP;
+    gint iLengthParam = 4;
+
+    while (tvb_reported_length_remaining(tvb, offset) >= 2)
+    {
+        iParameterCP = tvb_get_ntohs(tvb, offset);
+        drda_tree_sub = proto_tree_add_subtree(tree, tvb, offset, iLengthParam,
+                        ett_drda_param, &ti, DRDA_TEXT_PARAM);
+        proto_item_append_text(ti, " (%s)", val_to_str_ext(iParameterCP, &drda_opcode_vals_ext, "Unknown (0x%02x)"));
+        proto_tree_add_item(drda_tree_sub, hf_drda_param_codepoint, tvb, offset, 2, ENC_BIG_ENDIAN);
+        proto_tree_add_item(drda_tree_sub, hf_drda_mgrlvln, tvb, offset + 2, 2, ENC_BIG_ENDIAN);
+        offset += iLengthParam;
+    }
+
+    return tvb_captured_length(tvb);
+}
+
+static int
+dissect_drda_collection(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+    proto_tree *drda_tree_sub;
+    proto_item *ti;
+    gint offset = 0;
+
+    guint16 iParameterCP;
+    gint iLengthParam;
+
+    /* All objects in DDM are modeled as either scalars or collections.
+     * A collection has the length before each element.
+     * There are also lists of repeatable scalars, which don't have
+     * the length.
+     */
+
+    while (tvb_reported_length_remaining(tvb, offset) >= 2)
+    {
+        iLengthParam = tvb_get_ntohs(tvb, offset + 0);
+        if (tvb_reported_length_remaining(tvb, offset) >= iLengthParam)
+        {
+            iParameterCP = tvb_get_ntohs(tvb, offset + 2);
+            drda_tree_sub = proto_tree_add_subtree(tree, tvb, offset, iLengthParam,
+                            ett_drda_param, &ti, DRDA_TEXT_PARAM);
+            proto_item_append_text(ti, " (%s)", val_to_str_ext(iParameterCP, &drda_opcode_vals_ext, "Unknown (0x%02x)"));
+            proto_tree_add_item(drda_tree_sub, hf_drda_param_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+            proto_tree_add_item(drda_tree_sub, hf_drda_param_codepoint, tvb, offset + 2, 2, ENC_BIG_ENDIAN);
+            if (!dissector_try_uint(drda_opcode_table, iParameterCP, tvb_new_subset_length(tvb, offset + 4, iLengthParam - 4), pinfo, drda_tree_sub)) {
+                proto_tree_add_item(drda_tree_sub, hf_drda_param_data, tvb, offset + 4, iLengthParam - 4, ENC_UTF_8);
+                proto_tree_add_item(drda_tree_sub, hf_drda_param_data_ebcdic, tvb, offset + 4, iLengthParam - 4, ENC_EBCDIC);
+            }
+        }
+        offset += iLengthParam;
+    }
+
+    return tvb_captured_length(tvb);
+}
+
+static int
+dissect_drda_codpntdr(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
+{
+    proto_tree_add_item(tree, hf_drda_param_codepoint, tvb, 0, 2, ENC_BIG_ENDIAN);
+    return 2;
+}
+
 static int
 dissect_drda_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
@@ -694,35 +918,40 @@ dissect_drda_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
     col_append_sep_str(pinfo->cinfo, COL_INFO, " | ", val_to_str_ext(iCommand, &drda_opcode_abbr_ext, "Unknown (0x%02x)"));
     col_set_fence(pinfo->cinfo, COL_INFO);
 
-    /* The number of attributes is variable */
-    offset = 10;
-    while (tvb_reported_length_remaining(tvb, offset) >= 2)
-    {
-        iLengthParam = tvb_get_ntohs(tvb, offset + 0);
-        if (iLengthParam == 0 || iLengthParam == 1)
-            iLengthParam = iLength - 10;
-        if (tvb_reported_length_remaining(tvb, offset) >= iLengthParam)
+    /* There are a few command objects treated differently, like SNDPKT */
+    if (!dissector_try_uint(drda_opcode_table, iCommand, tvb_new_subset_length(tvb, 10, iLength - 10), pinfo, drda_tree)) {
+        /* The number of attributes is variable */
+        offset = 10;
+        while (tvb_reported_length_remaining(tvb, offset) >= 2)
         {
-            iParameterCP = tvb_get_ntohs(tvb, offset + 2);
-            drda_tree_sub = proto_tree_add_subtree(drdaroot_tree, tvb, offset, iLengthParam,
-                            ett_drda_param, &ti, DRDA_TEXT_PARAM);
-            proto_item_append_text(ti, " (%s)", val_to_str_ext(iParameterCP, &drda_opcode_vals_ext, "Unknown (0x%02x)"));
-            proto_tree_add_item(drda_tree_sub, hf_drda_param_length, tvb, offset, 2, ENC_BIG_ENDIAN);
-            proto_tree_add_item(drda_tree_sub, hf_drda_param_codepoint, tvb, offset + 2, 2, ENC_BIG_ENDIAN);
-            proto_tree_add_item(drda_tree_sub, hf_drda_param_data, tvb, offset + 4, iLengthParam - 4, ENC_UTF_8);
-            proto_tree_add_item(drda_tree_sub, hf_drda_param_data_ebcdic, tvb, offset + 4, iLengthParam - 4, ENC_EBCDIC);
-            if (iCommand == DRDA_CP_SQLSTT)
+            iLengthParam = tvb_get_ntohs(tvb, offset + 0);
+            if (iLengthParam == 0 || iLengthParam == 1)
+                iLengthParam = iLength - 10;
+            if (tvb_reported_length_remaining(tvb, offset) >= iLengthParam)
             {
-                /* Extract SQL statement from packet */
-                tvbuff_t* next_tvb = NULL;
-                next_tvb = tvb_new_subset_length(tvb, offset + 4, iLengthParam - 4);
-                add_new_data_source(pinfo, next_tvb, "SQL statement");
-                proto_tree_add_item(drdaroot_tree, hf_drda_sqlstatement_length, next_tvb, 0, 1, ENC_NA);
-                proto_tree_add_item(drdaroot_tree, hf_drda_sqlstatement, next_tvb, 1, iLengthParam - 6, ENC_UTF_8);
-                proto_tree_add_item(drdaroot_tree, hf_drda_sqlstatement_ebcdic, next_tvb, 0, iLengthParam - 4, ENC_EBCDIC);
+                iParameterCP = tvb_get_ntohs(tvb, offset + 2);
+                drda_tree_sub = proto_tree_add_subtree(drdaroot_tree, tvb, offset, iLengthParam,
+                                ett_drda_param, &ti, DRDA_TEXT_PARAM);
+                proto_item_append_text(ti, " (%s)", val_to_str_ext(iParameterCP, &drda_opcode_vals_ext, "Unknown (0x%02x)"));
+                proto_tree_add_item(drda_tree_sub, hf_drda_param_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+                proto_tree_add_item(drda_tree_sub, hf_drda_param_codepoint, tvb, offset + 2, 2, ENC_BIG_ENDIAN);
+                if (!dissector_try_uint(drda_opcode_table, iParameterCP, tvb_new_subset_length(tvb, offset + 4, iLengthParam - 4), pinfo, drda_tree_sub)) {
+                    proto_tree_add_item(drda_tree_sub, hf_drda_param_data, tvb, offset + 4, iLengthParam - 4, ENC_UTF_8);
+                    proto_tree_add_item(drda_tree_sub, hf_drda_param_data_ebcdic, tvb, offset + 4, iLengthParam - 4, ENC_EBCDIC);
+                    if (iCommand == DRDA_CP_SQLSTT)
+                    {
+                        /* Extract SQL statement from packet */
+                        tvbuff_t* next_tvb = NULL;
+                        next_tvb = tvb_new_subset_length(tvb, offset + 4, iLengthParam - 4);
+                        add_new_data_source(pinfo, next_tvb, "SQL statement");
+                        proto_tree_add_item(drdaroot_tree, hf_drda_sqlstatement_length, next_tvb, 0, 1, ENC_NA);
+                        proto_tree_add_item(drdaroot_tree, hf_drda_sqlstatement, next_tvb, 1, iLengthParam - 6, ENC_UTF_8);
+                        proto_tree_add_item(drdaroot_tree, hf_drda_sqlstatement_ebcdic, next_tvb, 0, iLengthParam - 4, ENC_EBCDIC);
+                    }
+                }
             }
+            offset += iLengthParam;
         }
-        offset += iLengthParam;
     }
 
     return tvb_captured_length(tvb);
@@ -862,9 +1091,44 @@ proto_register_drda(void)
         { &hf_drda_sqlstatement_ebcdic,
           { "SQL statement (EBCDIC)", "drda.sqlstatement.ebcdic",
             FT_STRING, BASE_NONE, NULL, 0x0,
-            "SQL statement converted from EBCDIC to ASCII for display", HFILL }}
+            "SQL statement converted from EBCDIC to ASCII for display", HFILL }},
 
+        { &hf_drda_secmec,
+          { "Security Mechanism", "drda.secmec", FT_UINT16, BASE_DEC,
+            VALS(drda_secmec_vals), 0x0,
+            NULL, HFILL }},
+
+        { &hf_drda_svrcod,
+          { "Severity Code", "drda.svrcod", FT_UINT16, BASE_DEC,
+            VALS(drda_svrcod_vals), 0x0,
+            NULL, HFILL }},
+
+        { &hf_drda_secchkcd,
+          { "Security Check Code", "drda.secchkcd", FT_UINT8, BASE_HEX,
+            VALS(drda_secchkcd_vals), 0x0,
+            NULL, HFILL }},
+
+        { &hf_drda_ccsid,
+          { "CCSID", "drda.ccsid", FT_UINT16, BASE_DEC,
+            VALS(drda_ccsid_vals), 0x0,
+            "Coded Character Set Identifier", HFILL }},
+
+        { &hf_drda_mgrlvln,
+          { "Manager-level Number", "drda.mgrlvln", FT_UINT16, BASE_DEC,
+            NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_drda_respktsz,
+          { "Response Packet Size", "drda.respktsz", FT_UINT32, BASE_DEC,
+            NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_drda_pktobj,
+          { "Packet Object", "drda.pktobj", FT_BYTES, BASE_NONE,
+            NULL, 0x0,
+            NULL, HFILL }},
     };
+
     static gint *ett[] = {
         &ett_drda,
         &ett_drda_ddm,
@@ -885,6 +1149,9 @@ proto_register_drda(void)
     expert_drda = expert_register_protocol(proto_drda);
     expert_register_field_array(expert_drda, ei, array_length(ei));
 
+    drda_opcode_table = register_dissector_table("drda.opcode", "DRDA opcode",
+        proto_drda, FT_UINT16, BASE_HEX);
+
     drda_module = prefs_register_protocol(proto_drda, NULL);
     prefs_register_bool_preference(drda_module, "desegment",
                        "Reassemble DRDA messages spanning multiple TCP segments",
@@ -901,6 +1168,25 @@ proto_reg_handoff_drda(void)
 {
     heur_dissector_add("tcp", dissect_drda_heur, "DRDA over TCP", "drda_tcp", proto_drda, HEURISTIC_ENABLE);
     drda_tcp_handle = create_dissector_handle(dissect_drda_tcp, proto_drda);
+
+    dissector_handle_t ccsid_handle;
+    dissector_handle_t codpntdr_handle;
+
+    ccsid_handle = create_dissector_handle(dissect_drda_ccsid, proto_drda);
+    codpntdr_handle = create_dissector_handle(dissect_drda_codpntdr, proto_drda);
+
+    dissector_add_uint("drda.opcode", DRDA_CP_MGRLVLLS, create_dissector_handle(dissect_drda_mgrlvlls, proto_drda));
+    dissector_add_uint("drda.opcode", DRDA_CP_TYPDEFOVR, create_dissector_handle(dissect_drda_collection, proto_drda));
+    dissector_add_uint("drda.opcode", DRDA_CP_SECMEC, create_dissector_handle(dissect_drda_secmec, proto_drda));
+    dissector_add_uint("drda.opcode", DRDA_CP_SVRCOD, create_dissector_handle(dissect_drda_svrcod, proto_drda));
+    dissector_add_uint("drda.opcode", DRDA_CP_SECCHKCD, create_dissector_handle(dissect_drda_secchkcd, proto_drda));
+    dissector_add_uint("drda.opcode", DRDA_CP_CCSIDSBC, ccsid_handle);
+    dissector_add_uint("drda.opcode", DRDA_CP_CCSIDDBC, ccsid_handle);
+    dissector_add_uint("drda.opcode", DRDA_CP_CCSIDMBC, ccsid_handle);
+    dissector_add_uint("drda.opcode", DRDA_CP_CCSIDXML, ccsid_handle);
+    dissector_add_uint("drda.opcode", DRDA_CP_RDBACCCL, codpntdr_handle);
+    dissector_add_uint("drda.opcode", DRDA_CP_RESPKTSZ, create_dissector_handle(dissect_drda_respktsz, proto_drda));
+    dissector_add_uint("drda.opcode", DRDA_CP_PKTOBJ, create_dissector_handle(dissect_drda_pktobj, proto_drda));
 }
 
 /*

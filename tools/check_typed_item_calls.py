@@ -249,7 +249,7 @@ class ProtoTreeAddItemCheck(APICheck):
                                             'tds_get_char_encoding(tds_info)',
                                             'info->encoding',
                                             'item->encoding',
-                                            'DREP_ENC_INTEGER(drep)', 'string_encoding', 'item',
+                                            'DREP_ENC_INTEGER(drep)', 'string_encoding', 'item', 'type',
                                             'dvb_enc_to_item_enc(encoding)',
                                             'packet->enc',
                                             'IS_EBCDIC(uCCS) ? ENC_EBCDIC : ENC_ASCII',
@@ -257,7 +257,11 @@ class ProtoTreeAddItemCheck(APICheck):
                                             'dhcp_uuid_endian',
                                             'payload_le',
                                             'local_encoding',
-                                            'big_endian'  }:
+                                            'big_endian',
+                                            'hf_data_encoding',
+                                            'IS_EBCDIC(eStr) ? ENC_EBCDIC : ENC_ASCII',
+                                            'big_endian ? ENC_BIG_ENDIAN : ENC_LITTLE_ENDIAN',
+                                            '(skip == 1) ? ENC_BIG_ENDIAN : ENC_LITTLE_ENDIAN'  }:
                                 global warnings_found
 
                                 print('Warning:', self.file + ':' + str(line_number),
@@ -312,7 +316,8 @@ known_non_contiguous_fields = { 'wlan.fixed.capabilities.cfpoll.sta',
                                 'hf_iax2_video_csub',  # RFC 5456, table 8.7
                                 'iax2.video.subclass',
                                 'dnp3.al.ana.int',
-                                'pwcesopsn.cw.lm'
+                                'pwcesopsn.cw.lm',
+                                'gsm_a.rr.format_id' # EN 301 503
                               }
 ##################################################################################################
 
@@ -431,7 +436,9 @@ def is_ignored_consecutive_filter(filter):
         re.compile(r'^dnp3.al.anaout.int'),
         re.compile(r'^dnp3.al.ana.int'),
         re.compile(r'^dnp3.al.cnt'),
-        re.compile(r'^bthfp.chld.mode')
+        re.compile(r'^bthfp.chld.mode'),
+        re.compile(r'^nat-pmp.pml'),
+        re.compile(r'^systemactivator.actproperties.ts.hdr')
     ]
 
     for patt in ignore_patterns:
