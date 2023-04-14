@@ -3057,6 +3057,19 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 	switch (new_fi->hfinfo->type) {
 
 	case FT_STRING:
+		/* XXX: trailing stray character detection should be done
+	         * _before_ conversion to UTF-8, because conversion can change
+	         * the length, or else get_string_length should return a value
+	         * for the "length in bytes of the string after conversion
+	         * including internal nulls." (Noting that we do, for other
+	         * reasons, still need the "length in bytes in the field",
+	         * especially for FT_STRINGZ.)
+	         *
+	         * This is true even for ASCII and UTF-8, because
+	         * substituting REPLACEMENT CHARACTERS for illegal characters
+	         * can also do so (and for UTF-8 possibly even make the
+	         * string _shorter_).
+	         */
 		detect_trailing_stray_characters(encoding, stringval, length, pi);
 		break;
 
@@ -9551,6 +9564,20 @@ hf_try_val64_to_str(guint64 value, const header_field_info *hfinfo)
 }
 
 static const char *
+hf_try_double_val_to_str(gdouble value, const header_field_info *hfinfo)
+{
+	if (hfinfo->display & BASE_UNIT_STRING)
+		return unit_name_string_get_double(value, (const struct unit_name_string*)hfinfo->strings);
+
+	REPORT_DISSECTOR_BUG("field %s (FT_DOUBLE) has no base_unit_string", hfinfo->abbrev);
+
+	/* This is necessary to squelch MSVC errors; is there
+	   any way to tell it that DISSECTOR_ASSERT_NOT_REACHED()
+	   never returns? */
+	return NULL;
+}
+
+static const char *
 hf_try_val_to_str_const(guint32 value, const header_field_info *hfinfo, const char *unknown_str)
 {
 	const char *str = hf_try_val_to_str(value, hfinfo);
@@ -9965,6 +9992,11 @@ fill_display_label_float(field_info *fi, gchar *label_str)
 	}
 	if (n < 0) {
 		return 0; /* error */
+	}
+	if ((fi->hfinfo->strings) && (fi->hfinfo->display & BASE_UNIT_STRING)) {
+		const char *hf_str_val;
+		hf_str_val = hf_try_double_val_to_str(value, fi->hfinfo);
+		n += protoo_strlcpy(label_str + n, hf_str_val, ITEM_LABEL_LENGTH - n);
 	}
 	if (n > ITEM_LABEL_LENGTH) {
 		ws_warning("label length too small");

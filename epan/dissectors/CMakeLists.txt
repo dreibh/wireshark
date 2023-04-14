@@ -659,6 +659,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-zbee.h
 	packet-zbee-aps.h
 	packet-zbee-nwk.h
+	packet-zbee-tlv.h
 	packet-zbee-security.h
 	packet-zbee-zcl.h
 	packet-zbee-zdp.h
@@ -686,6 +687,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/file-png.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-rbm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-rfc7468.c
+	${CMAKE_CURRENT_SOURCE_DIR}/file-rtpdump.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-tiff.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-2dparityfec.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-3com-njack.c
@@ -1718,6 +1720,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_multitransport.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_drdynvc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_egfx.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_rail.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdpudp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdt.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-realtek.c
@@ -1956,6 +1959,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-uavcan-dsdl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ubdp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ubertooth.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-uci.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ucp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-udld.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-udp.c
@@ -2088,6 +2092,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-zdp-binding.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-zdp-discovery.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-zdp-management.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-tlv.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbncp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zebra.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zep.c
