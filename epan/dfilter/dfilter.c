@@ -35,12 +35,6 @@ extern stnode_t *df_lval;
 /* Holds the singular instance of our Lemon parser object */
 static void*	ParserObj = NULL;
 
-/*
- * XXX - if we're using a version of Flex that supports reentrant lexical
- * analyzers, we should put this into the lexical analyzer's state.
- */
-dfwork_t *global_dfw;
-
 df_loc_t loc_empty = {-1, 0};
 
 void
@@ -371,7 +365,6 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 	df_scanner_state_t state;
 	yyscan_t	scanner;
 	YY_BUFFER_STATE in_buffer;
-	gboolean failure = FALSE;
 	unsigned token_count = 0;
 	char		*tree_str;
 
@@ -440,7 +433,7 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 		/* Check for scanner failure */
 		if (token == SCAN_FAILED) {
 			ws_noisy("Scanning failed");
-			failure = TRUE;
+			dfw->parse_failure = TRUE;
 			break;
 		}
 
@@ -460,7 +453,6 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 		state.df_lval = NULL;
 
 		if (dfw->parse_failure) {
-			failure = TRUE;
 			break;
 		}
 
@@ -481,17 +473,13 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 	 * the parse finishes.) */
 	Dfilter(ParserObj, 0, NULL, dfw);
 
-	/* One last check for syntax error (after EOF) */
-	if (dfw->parse_failure)
-		failure = TRUE;
-
 	/* Free scanner state */
 	if (state.quoted_string != NULL)
 		g_string_free(state.quoted_string, TRUE);
 	df_yy_delete_buffer(in_buffer, scanner);
 	df_yylex_destroy(scanner);
 
-	if (failure)
+	if (dfw->parse_failure)
 		goto FAILURE;
 
 	/* Success, but was it an empty filter? If so, discard
@@ -554,7 +542,6 @@ dfilter_compile_real(const gchar *text, dfilter_t **dfp,
 		*dfp = dfilter;
 	}
 	/* SUCCESS */
-	global_dfw = NULL;
 	dfwork_free(dfw);
 	if (*dfp != NULL)
 		ws_log(WS_LOG_DOMAIN, LOG_LEVEL_INFO, "Compiled display filter: %s", text);
@@ -574,7 +561,6 @@ FAILURE:
 		dfw_error_take(errpp, &dfw->error);
 	}
 
-	global_dfw = NULL;
 	dfwork_free(dfw);
 	*dfp = NULL;
 	return FALSE;
