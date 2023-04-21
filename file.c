@@ -1501,7 +1501,7 @@ cf_filter_packets(capture_file *cf, gchar *dftext, gboolean force)
                     "See the help for a description of the display filter syntax.",
                     "\"%s\" isn't a valid display filter: %s",
                     dftext, df_err->msg);
-            dfilter_error_free(df_err);
+            df_error_free(&df_err);
             g_free(dftext);
             return CF_ERROR;
         }
@@ -4104,7 +4104,7 @@ cf_goto_framenum(capture_file *cf)
         hfinfo = cf->finfo_selected->hfinfo;
         ws_assert(hfinfo);
         if (hfinfo->type == FT_FRAMENUM) {
-            framenum = fvalue_get_uinteger(&cf->finfo_selected->value);
+            framenum = fvalue_get_uinteger(cf->finfo_selected->value);
             if (framenum != 0)
                 return cf_goto_frame(cf, framenum);
         }
