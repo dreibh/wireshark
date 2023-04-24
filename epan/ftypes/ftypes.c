@@ -691,6 +691,14 @@ fvalue_set_byte_array(fvalue_t *fv, GByteArray *value)
 }
 
 void
+fvalue_set_bytes_data(fvalue_t *fv, const void *data, size_t size)
+{
+	GBytes *bytes = g_bytes_new(data, size);
+	fvalue_set_bytes(fv, bytes);
+	g_bytes_unref(bytes);
+}
+
+void
 fvalue_set_fcwwn(fvalue_t *fv, const guint8 *value)
 {
 	GBytes *bytes = g_bytes_new(value, FT_FCWWN_LEN);
@@ -854,15 +862,19 @@ fvalue_get_bytes(fvalue_t *fv)
 gsize
 fvalue_get_bytes_size(fvalue_t *fv)
 {
-	gsize size = g_bytes_get_size(fvalue_get_bytes(fv));
-	//ws_assert(size == fvalue_length(fv));
+	GBytes *bytes = fvalue_get_bytes(fv);
+	gsize size = g_bytes_get_size(bytes);
+	g_bytes_unref(bytes);
 	return size;
 }
 
 const void *
 fvalue_get_bytes_data(fvalue_t *fv)
 {
-	return g_bytes_get_data(fvalue_get_bytes(fv), NULL);
+	GBytes *bytes = fvalue_get_bytes(fv);
+	const void *data = g_bytes_get_data(bytes, NULL);
+	g_bytes_unref(bytes);
+	return data;
 }
 
 const e_guid_t *

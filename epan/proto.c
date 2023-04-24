@@ -4501,15 +4501,9 @@ proto_tree_add_bytes_format(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 static void
 proto_tree_set_bytes(field_info *fi, const guint8* start_ptr, gint length)
 {
-	GByteArray *bytes;
-
 	DISSECTOR_ASSERT(start_ptr != NULL || length == 0);
 
-	bytes = g_byte_array_new();
-	if (length > 0) {
-		g_byte_array_append(bytes, start_ptr, length);
-	}
-	fvalue_set_byte_array(fi->value, bytes);
+	fvalue_set_bytes_data(fi->value, start_ptr, length);
 }
 
 
@@ -6675,14 +6669,14 @@ proto_item_fill_display_label(field_info *finfo, gchar *display_label_str, const
 			break;
 
 		case FT_FCWWN:
-			set_address (&addr, AT_FCWWN, FCWWN_ADDR_LEN, fvalue_get_bytes(finfo->value));
+			set_address (&addr, AT_FCWWN, FCWWN_ADDR_LEN, fvalue_get_bytes_data(finfo->value));
 			tmp_str = address_to_display(NULL, &addr);
 			label_len = protoo_strlcpy(display_label_str, tmp_str, label_str_size);
 			wmem_free(NULL, tmp_str);
 			break;
 
 		case FT_ETHER:
-			set_address (&addr, AT_ETHER, FT_ETHER_LEN, fvalue_get_bytes(finfo->value));
+			set_address (&addr, AT_ETHER, FT_ETHER_LEN, fvalue_get_bytes_data(finfo->value));
 			tmp_str = address_to_display(NULL, &addr);
 			label_len = protoo_strlcpy(display_label_str, tmp_str, label_str_size);
 			wmem_free(NULL, tmp_str);
@@ -7149,11 +7143,12 @@ finfo_set_len(field_info *fi, const gint length)
 	 */
 	if (fvalue_type_ftenum(fi->value) == FT_BYTES && fi->length > 0) {
 		GBytes *bytes = fvalue_get_bytes(fi->value);
-		if ((gsize)fi->length <= g_bytes_get_size(bytes)) {
-			GByteArray *byte_array = g_bytes_unref_to_array(bytes);
-			g_byte_array_set_size(byte_array, fi->length);
-			fvalue_set_byte_array(fi->value, byte_array);
+		gsize size;
+		const void *data = g_bytes_get_data(bytes, &size);
+		if ((gsize)fi->length <= size) {
+			fvalue_set_bytes_data(fi->value, data, fi->length);
 		}
+		g_bytes_unref(bytes);
 	}
 }
 
@@ -9342,7 +9337,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		case FT_AX25:
 			addr.type = AT_AX25;
 			addr.len  = AX25_ADDR_LEN;
-			addr.data = fvalue_get_bytes(fi->value);
+			addr.data = fvalue_get_bytes_data(fi->value);
 
 			addr_str = (char*)address_to_str(NULL, &addr);
 			snprintf(label_str, ITEM_LABEL_LENGTH,
@@ -9353,7 +9348,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		case FT_VINES:
 			addr.type = AT_VINES;
 			addr.len  = VINES_ADDR_LEN;
-			addr.data = fvalue_get_bytes(fi->value);
+			addr.data = fvalue_get_bytes_data(fi->value);
 
 			addr_str = (char*)address_to_str(NULL, &addr);
 			snprintf(label_str, ITEM_LABEL_LENGTH,
