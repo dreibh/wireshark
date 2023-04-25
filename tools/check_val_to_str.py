@@ -72,17 +72,24 @@ def is_dissector_file(filename):
     p = re.compile(r'.*packet-.*\.c')
     return p.match(filename)
 
-def findDissectorFilesInFolder(folder):
-    # Look at files in sorted order, to give some idea of how far through is.
-    files = []
-
-    for f in sorted(os.listdir(folder)):
-        if should_exit:
-            return
-        if is_dissector_file(f):
+def findDissectorFilesInFolder(folder, dissector_files=None, recursive=False):
+    if dissector_files is None:
+        dissector_files = []
+    if recursive:
+        for root, subfolders, files in os.walk(folder):
+            for f in files:
+                if should_exit:
+                    return
+                f = os.path.join(root, f)
+                dissector_files.append(f)
+    else:
+        for f in sorted(os.listdir(folder)):
+            if should_exit:
+                return
             filename = os.path.join(folder, f)
-            files.append(filename)
-    return files
+            dissector_files.append(filename)
+
+    return [x for x in filter(is_dissector_file, dissector_files)]
 
 
 
@@ -105,7 +112,7 @@ def checkFile(filename):
         # Remove comments so as not to trip up RE.
         contents = removeComments(contents)
 
-        matches =   re.finditer(r'(?<!try_)(?<!char_)(r?val_to_str(?:_ext|)(?:_const|))\(.*?,.*?,\s*(".*?\")\s*\)', contents)
+        matches =   re.finditer(r'(?<!try_)(?<!char_)(?<!bytes)(r?val_to_str(?:_ext|)(?:_const|))\(.*?,.*?,\s*(".*?\")\s*\)', contents)
         for m in matches:
             function = m.group(1)
             format_string = m.group(2)
@@ -186,6 +193,7 @@ elif args.open:
 else:
     # Find all dissector files from folder.
     files = findDissectorFilesInFolder(os.path.join('epan', 'dissectors'))
+    files = findDissectorFilesInFolder(os.path.join('plugins', 'epan'), recursive=True, dissector_files=files)
 
 
 # If scanning a subset of files, list them here.
