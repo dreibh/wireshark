@@ -1556,7 +1556,9 @@ add_subdirectory( epan )
 add_subdirectory( extcap )
 add_subdirectory( randpkt_core )
 add_subdirectory( tools/lemon )
-add_subdirectory( tools/radiotap-gen )
+if(PCAP_FOUND)
+	add_subdirectory( tools/radiotap-gen )
+endif()
 add_subdirectory( ui )
 add_subdirectory( wiretap )
 add_subdirectory( writecap )
@@ -4054,54 +4056,16 @@ set_target_properties(test-programs PROPERTIES
 	EXCLUDE_FROM_DEFAULT_BUILD True
 )
 
+# Add target to enable capturing from the build directory. Requires Linux capabilities
+# and running with sudo.
+if(TARGET dumpcap AND SETCAP_EXECUTABLE)
+	add_custom_target(test-capture
+		COMMAND ${SETCAP_EXECUTABLE} cap_net_raw,cap_net_admin+ep $<TARGET_FILE:dumpcap>
+	)
+endif()
+
 # Test suites
 enable_testing()
-# We could try to build this list dynamically, but given that we tend to
-# go years between adding suites just run
-#     test/test.py --list-groups | sort
-# and paste the output here.
-set(_test_group_list
-	suite_capture
-	suite_clopts
-	suite_decryption
-	suite_dfilter.group_bytes
-	suite_dfilter.group_double
-	suite_dfilter.group_ether
-	suite_dfilter.group_function
-	suite_dfilter.group_integer
-	suite_dfilter.group_ipv4
-	suite_dfilter.group_ipv6
-	suite_dfilter.group_membership
-	suite_dfilter.group_scanner
-	suite_dfilter.group_slice
-	suite_dfilter.group_string
-	suite_dfilter.group_syntax
-	suite_dfilter.group_time
-	suite_dfilter.group_tvb
-	suite_dissection
-	suite_dissectors.group_asterix
-	suite_extcaps
-	suite_fileformats
-	suite_follow
-	suite_follow_dccp
-	suite_follow_multistream
-	suite_io
-	suite_mergecap
-	suite_nameres
-	suite_netperfmeter
-	suite_outputformats
-	suite_release
-	suite_sharkd
-	suite_text2pcap
-	suite_unittests
-	suite_wslua
-)
-
-# We don't currently handle spaces in arguments. On Windows this
-# means that you will probably have to pass in an interface index
-# instead of a name.
-set(TEST_EXTRA_ARGS "" CACHE STRING "Extra arguments to pass to test/test.py")
-separate_arguments(TEST_EXTRA_ARGS)
 
 add_test(build_unittests
 	"${CMAKE_COMMAND}"
@@ -4111,20 +4075,12 @@ add_test(build_unittests
 )
 set_tests_properties(build_unittests PROPERTIES FIXTURES_SETUP unittests)
 
-foreach(_group_name ${_test_group_list})
-	add_test(
-		NAME ${_group_name}
-		COMMAND ${CMAKE_COMMAND} -E env PYTHONIOENCODING=UTF-8
-			${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/test.py
-			--verbose
-			--program-path $<TARGET_FILE_DIR:wmem_test>
-			${TEST_EXTRA_ARGS}
-			${_group_name}
-		)
-	set_tests_properties(${_group_name} PROPERTIES TIMEOUT 600)
-endforeach()
-
-set_tests_properties(suite_unittests PROPERTIES FIXTURES_REQUIRED unittests)
+add_test(
+	NAME all
+	COMMAND ${CMAKE_COMMAND} -E env PYTHONIOENCODING=UTF-8
+		${PYTHON_EXECUTABLE} -m pytest
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+)
 
 # Make it possible to run pytest without passing the full path as argument.
 if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)
