@@ -1343,6 +1343,7 @@ endif()
 ws_find_package(WinSparkle ENABLE_WINSPARKLE HAVE_SOFTWARE_UPDATE)
 
 find_package( Asciidoctor 1.5 )
+find_package( XSLTPROC )
 
 find_package(DOXYGEN)
 
@@ -3862,6 +3863,21 @@ install(
 		${CMAKE_INSTALL_DOCDIR}
 )
 
+if(ASCIIDOCTOR_FOUND AND XSLTPROC_EXECUTABLE)
+	install(
+		DIRECTORY "${CMAKE_BINARY_DIR}/docbook/wsug_html_chunked"
+		DESTINATION "${CMAKE_INSTALL_DOCDIR}"
+		COMPONENT "UserGuide"
+		EXCLUDE_FROM_ALL
+	)
+	install(
+		DIRECTORY "${CMAKE_BINARY_DIR}/docbook/wsdg_html_chunked"
+		DESTINATION "${CMAKE_INSTALL_DOCDIR}"
+		COMPONENT "DeveloperGuide"
+		EXCLUDE_FROM_ALL
+	)
+endif()
+
 set(SHARK_PUBLIC_HEADERS
 	cfile.h
 	cli_main.h
@@ -4064,22 +4080,12 @@ if(TARGET dumpcap AND SETCAP_EXECUTABLE)
 	)
 endif()
 
-# Test suites
-enable_testing()
-
-add_test(build_unittests
-	"${CMAKE_COMMAND}"
-	--build "${CMAKE_BINARY_DIR}"
-	--config "${CONFIG}"
-	--target test-programs
-)
-set_tests_properties(build_unittests PROPERTIES FIXTURES_SETUP unittests)
-
-add_test(
-	NAME all
+add_custom_target(test
 	COMMAND ${CMAKE_COMMAND} -E env PYTHONIOENCODING=UTF-8
 		${PYTHON_EXECUTABLE} -m pytest
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+	DEPENDS test-programs
+	USES_TERMINAL
 )
 
 # Make it possible to run pytest without passing the full path as argument.
