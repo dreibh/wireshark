@@ -19,7 +19,6 @@
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
 #include <epan/addr_resolv.h>
-#include <epan/wmem_scopes.h>
 #include <wiretap/secrets-types.h>
 
 #include <epan/dissectors/file-pcapng.h>
@@ -537,6 +536,7 @@ static const guint8 pcapng_little_endian_magic[BYTE_ORDER_MAGIC_SIZE] = {
     0x4D, 0x3C, 0x2B, 0x1A
 };
 
+static
 void dissect_custom_options(proto_tree *tree, packet_info *pinfo _U_, tvbuff_t *tvb, int offset,
                             guint32 option_code, guint32 option_length, guint encoding)
 {
@@ -2567,12 +2567,12 @@ proto_register_pcapng(void)
         },
         { &hf_pcapng_captured_length,
             { "Captured Length",                           "pcapng.packet.captured_length",
-            FT_UINT16, BASE_DEC, NULL, 0x00,
+            FT_UINT32, BASE_DEC, NULL, 0x00,
             NULL, HFILL }
         },
         { &hf_pcapng_packet_length,
             { "Packet Length",                             "pcapng.packet.packet_length",
-            FT_UINT16, BASE_DEC, NULL, 0x00,
+            FT_UINT32, BASE_DEC, NULL, 0x00,
             NULL, HFILL }
         },
         { &hf_pcapng_packet_data,

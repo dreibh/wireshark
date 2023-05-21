@@ -21,13 +21,33 @@
 #include "cfile.h"
 
 #include <epan/packet.h>
+#include <epan/decode_as.h>
 #include <epan/dissectors/packet-dcerpc.h>
 
 class DecodeAsItem
 {
 public:
-    DecodeAsItem();
+    DecodeAsItem(const char *table_name = NULL, gconstpointer selector = NULL);
+    DecodeAsItem(const decode_as_t *entry, gconstpointer selector = NULL);
     virtual ~DecodeAsItem();
+
+    const gchar* tableName() const { return tableName_; }
+    const gchar* tableUIName() const { return tableUIName_; }
+    uint selectorUint() const { return selectorUint_; }
+    QString selectorString() const { return selectorString_; }
+    decode_dcerpc_bind_values_t* selectorDCERPC() const { return selectorDCERPC_; }
+    QString defaultDissector() const { return default_dissector_; }
+    void setTable(const decode_as_t *entry);
+    void setSelector(const QString &value);
+
+    void updateHandles();
+
+
+    QString current_dissector_;
+    dissector_handle_t  dissector_handle_;
+
+private:
+    void init(const char *table_name, gconstpointer selector = NULL);
 
     const gchar* tableName_;
     const gchar* tableUIName_;
@@ -39,8 +59,6 @@ public:
     decode_dcerpc_bind_values_t* selectorDCERPC_; //for special handling of DCE/RPC
 
     QString default_dissector_;
-    QString current_dissector_;
-    dissector_handle_t  dissector_handle_;
 };
 
 class DecodeAsModel : public QAbstractTableModel
