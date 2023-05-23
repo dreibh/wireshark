@@ -695,6 +695,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-3com-xns.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-3g-a11.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-5co-legacy.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-5co-rap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-6lowpan.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-9p.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-a21.c
@@ -807,6 +808,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bssap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bssgp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bt-dht.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-bt-tracker.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bt-utp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bt3ds.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-btamp.c
@@ -1807,6 +1809,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-saprouter.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapsnc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sasp.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-sbas_l1.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sbus.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sbc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sccp.c

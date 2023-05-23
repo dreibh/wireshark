@@ -39,6 +39,9 @@ That must be done explicitly using ``cmake --install <builddir> --component Deve
 The Wireshark installation is relocatable on Linux (and other ELF platforms
 with support for relative RPATHs).
 
+Support for building an NSIS Windows installer using the MinGW-w64 toolchain
+and https://www.msys2.org/[MSYS2]. Read README.msys2 in the distribution for more information.
+
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
 
@@ -92,6 +95,10 @@ Recognizes PCAP traces with the link type LINKTYPE_FIRA_UCI=299.
 * The display filter drop-down list is now sorted by "most recently used" instead
   of "most recently created".
 
+* Running the test suite requires the https://pypi.org/project/pytest/[pytest]
+  Python module. The emulation layer that allowed running tests without pytest
+  installed has been removed.
+
 // === Removed Features and Support
 
 // === Removed Dissectors
@@ -131,6 +138,9 @@ Windows Delivery Optimization (MS-DO)
 FiRa UWB Controller Interface (UCI)
 Matter home automation protocol
 UBX protocol of u-blox GNSS receivers (UBX)
+SBAS L1 Navigation Messages (SBAS L1)
+FiveCo's Register Access Protocol (5CoRAP)
+UDP Tracker Protocol for BitTorrent (BT-Tracker)
 --
 
 === Updated Protocol Support
@@ -156,6 +166,10 @@ UBX protocol of u-blox GNSS receivers (UBX)
   chunked encoding. This feature ensures the server stream messages of GRPC-Web
   over HTTP/1.1 can be dissected even if the last chunk is absent.
 
+* The media type dissector table now properly treats media types and subtypes
+as case-insensitive automatically, per RFC 6838. Media types no longer need
+to be lower cased before registering or looking up in the table.
+
 Too many other protocols have been updated to list them all here.
 
 === New and Updated Capture File Support
@@ -167,6 +181,9 @@ Too many other protocols have been updated to list them all here.
 --
 
 // === New and Updated Capture Interfaces support
+
+=== New and Updated Codec support
+Adaptive Multi-Rate (AMR), if compiled with https://sourceforge.net/projects/opencore-amr/[opencore-amr]
 
 //_Non-empty section placeholder._
 

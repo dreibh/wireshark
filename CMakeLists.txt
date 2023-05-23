@@ -178,10 +178,10 @@ if(WIN32)
 and CPU target ${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}"
 	)
 
+	find_package(PowerShell REQUIRED)
+
 	# Determine where the 3rd party libraries will be
 	if(USE_REPOSITORY)
-		find_package(PowerShell REQUIRED)
-
 		if( DEFINED ENV{WIRESHARK_LIB_DIR} )
 			# The buildbots set WIRESHARK_LIB_DIR but not WIRESHARK_BASE_DIR.
 			file( TO_CMAKE_PATH "$ENV{WIRESHARK_LIB_DIR}" _PROJECT_LIB_DIR )
@@ -213,6 +213,8 @@ and CPU target ${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}"
 		set(EXTRA_INSTALLER_DIR ${_ws_lib_dir})
 
 		# XXX Add a dependency on ${_ws_lib_dir}/current_tag.txt?
+	else()
+		set(EXTRA_INSTALLER_DIR ${CMAKE_BINARY_DIR}/packaging/nsis)
 	endif()
 endif(WIN32)
 
@@ -1343,6 +1345,7 @@ endif()
 ws_find_package(WinSparkle ENABLE_WINSPARKLE HAVE_SOFTWARE_UPDATE)
 
 find_package( Asciidoctor 1.5 )
+find_package( XSLTPROC )
 
 find_package(DOXYGEN)
 
@@ -1396,8 +1399,13 @@ if (QT_FOUND)
 	)
 	# Use qmake to find windeployqt and macdeployqt. Ideally one of
 	# the modules in ${QTDIR}/lib/cmake would do this for us.
-	if(WIN32 AND NOT USE_MSYSTEM)
-		find_program(QT_WINDEPLOYQT_EXECUTABLE windeployqt
+	if(WIN32)
+		if (USE_qt6 AND USE_MSYSTEM)
+			set(_windeployqt_name "windeployqt-qt6")
+		else()
+			set(_windeployqt_name "windeployqt")
+		endif()
+		find_program(QT_WINDEPLOYQT_EXECUTABLE ${_windeployqt_name}
 			HINTS "${QT_BIN_PATH}"
 			DOC "Path to the windeployqt utility."
 		)
@@ -1556,7 +1564,9 @@ add_subdirectory( epan )
 add_subdirectory( extcap )
 add_subdirectory( randpkt_core )
 add_subdirectory( tools/lemon )
-add_subdirectory( tools/radiotap-gen )
+if(PCAP_FOUND)
+	add_subdirectory( tools/radiotap-gen )
+endif()
 add_subdirectory( ui )
 add_subdirectory( wiretap )
 add_subdirectory( writecap )
@@ -2260,7 +2270,7 @@ endif()
 # List of extra dependencies for the "copy_data_files" target
 set(copy_data_files_depends)
 
-if(WIN32 AND NOT USE_MSYSTEM)
+if(WIN32)
 	foreach(_install_as_txt_file COPYING NEWS README.md README.windows)
 		# On Windows, install some files with a .txt extension so that they're
 		# double-clickable.
@@ -2717,6 +2727,13 @@ if(BUILD_wireshark AND QT_FOUND)
 		set_target_properties(copy_qt_dlls PROPERTIES FOLDER "Copy Tasks")
 		# Will we ever need to use --debug? Windeployqt seems to
 		# be smart enough to copy debug DLLs when needed.
+		if (USE_MSYSTEM AND Qt${qtver}Widgets_VERSION VERSION_EQUAL 6.5.0)
+			# windeployqt released with Qt 6.5.0 is broken.
+			# https://bugreports.qt.io/browse/QTBUG-112204
+			message(WARNING "Qt Deploy Tool 6.5.0 is broken, skipping translations.")
+			list(APPEND QT_WINDEPLOYQT_EXTRA_ARGS --no-translations)
+			set(SKIP_QT_TRANSLATIONS True)
+		endif()
 		add_custom_command(TARGET copy_qt_dlls
 			POST_BUILD
 			COMMAND set "PATH=${QT_BIN_PATH};%PATH%"
@@ -3260,7 +3277,7 @@ if(BUILD_dcerpcidl2wrs)
 	install(TARGETS idl2wrs RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-if(MSVC)
+if(WIN32)
 	find_package( MSVC_REDIST )
 
 	# Must come after executable targets are defined.
@@ -3860,6 +3877,21 @@ install(
 		${CMAKE_INSTALL_DOCDIR}
 )
 
+if(ASCIIDOCTOR_FOUND AND XSLTPROC_EXECUTABLE)
+	install(
+		DIRECTORY "${CMAKE_BINARY_DIR}/docbook/wsug_html_chunked"
+		DESTINATION "${CMAKE_INSTALL_DOCDIR}"
+		COMPONENT "UserGuide"
+		EXCLUDE_FROM_ALL
+	)
+	install(
+		DIRECTORY "${CMAKE_BINARY_DIR}/docbook/wsdg_html_chunked"
+		DESTINATION "${CMAKE_INSTALL_DOCDIR}"
+		COMPONENT "DeveloperGuide"
+		EXCLUDE_FROM_ALL
+	)
+endif()
+
 set(SHARK_PUBLIC_HEADERS
 	cfile.h
 	cli_main.h
@@ -4054,77 +4086,21 @@ set_target_properties(test-programs PROPERTIES
 	EXCLUDE_FROM_DEFAULT_BUILD True
 )
 
-# Test suites
-enable_testing()
-# We could try to build this list dynamically, but given that we tend to
-# go years between adding suites just run
-#     test/test.py --list-groups | sort
-# and paste the output here.
-set(_test_group_list
-	suite_capture
-	suite_clopts
-	suite_decryption
-	suite_dfilter.group_bytes
-	suite_dfilter.group_double
-	suite_dfilter.group_ether
-	suite_dfilter.group_function
-	suite_dfilter.group_integer
-	suite_dfilter.group_ipv4
-	suite_dfilter.group_ipv6
-	suite_dfilter.group_membership
-	suite_dfilter.group_scanner
-	suite_dfilter.group_slice
-	suite_dfilter.group_string
-	suite_dfilter.group_syntax
-	suite_dfilter.group_time
-	suite_dfilter.group_tvb
-	suite_dissection
-	suite_dissectors.group_asterix
-	suite_extcaps
-	suite_fileformats
-	suite_follow
-	suite_follow_dccp
-	suite_follow_multistream
-	suite_io
-	suite_mergecap
-	suite_nameres
-	suite_netperfmeter
-	suite_outputformats
-	suite_release
-	suite_sharkd
-	suite_text2pcap
-	suite_unittests
-	suite_wslua
+# Add target to enable capturing from the build directory. Requires Linux capabilities
+# and running with sudo.
+if(TARGET dumpcap AND SETCAP_EXECUTABLE)
+	add_custom_target(test-capture
+		COMMAND ${SETCAP_EXECUTABLE} cap_net_raw,cap_net_admin+ep $<TARGET_FILE:dumpcap>
+	)
+endif()
+
+add_custom_target(test
+	COMMAND ${CMAKE_COMMAND} -E env PYTHONIOENCODING=UTF-8
+		${PYTHON_EXECUTABLE} -m pytest
+	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+	DEPENDS test-programs
+	USES_TERMINAL
 )
-
-# We don't currently handle spaces in arguments. On Windows this
-# means that you will probably have to pass in an interface index
-# instead of a name.
-set(TEST_EXTRA_ARGS "" CACHE STRING "Extra arguments to pass to test/test.py")
-separate_arguments(TEST_EXTRA_ARGS)
-
-add_test(build_unittests
-	"${CMAKE_COMMAND}"
-	--build "${CMAKE_BINARY_DIR}"
-	--config "${CONFIG}"
-	--target test-programs
-)
-set_tests_properties(build_unittests PROPERTIES FIXTURES_SETUP unittests)
-
-foreach(_group_name ${_test_group_list})
-	add_test(
-		NAME ${_group_name}
-		COMMAND ${CMAKE_COMMAND} -E env PYTHONIOENCODING=UTF-8
-			${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/test/test.py
-			--verbose
-			--program-path $<TARGET_FILE_DIR:wmem_test>
-			${TEST_EXTRA_ARGS}
-			${_group_name}
-		)
-	set_tests_properties(${_group_name} PROPERTIES TIMEOUT 600)
-endforeach()
-
-set_tests_properties(suite_unittests PROPERTIES FIXTURES_REQUIRED unittests)
 
 # Make it possible to run pytest without passing the full path as argument.
 if(NOT CMAKE_SOURCE_DIR STREQUAL CMAKE_BINARY_DIR)

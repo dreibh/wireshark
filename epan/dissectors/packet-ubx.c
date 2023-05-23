@@ -17,6 +17,7 @@
 #include <epan/packet.h>
 #include <epan/unit_strings.h>
 #include <wsutil/utf8_entities.h>
+#include <wsutil/pint.h>
 
 #include "packet-ubx.h"
 
@@ -817,9 +818,14 @@ static int dissect_ubx_nav_timegps(tvbuff_t *tvb, packet_info *pinfo, proto_tree
     // dissect the registered fields
     itow = tvb_get_guint32(tvb, 0, ENC_LITTLE_ENDIAN);
     ftow = tvb_get_gint32(tvb, 4, ENC_LITTLE_ENDIAN);
+    ftow = (itow % 1000) * 1000000 + ftow;
+    itow = itow / 1000;
+    if (ftow < 0) {
+        itow = itow - 1;
+        ftow = 1000000000 + ftow;
+    }
     proto_tree *tow_tree = proto_tree_add_subtree_format(ubx_nav_timegps_tree,
-            tvb, 0, 8, ett_ubx_nav_timegps_tow, NULL,
-            "TOW: %d.%09ds", itow / 1000, (itow % 1000) * 1000000 + ftow);
+            tvb, 0, 8, ett_ubx_nav_timegps_tow, NULL, "TOW: %d.%09ds", itow, ftow);
     proto_tree_add_item(tow_tree, hf_ubx_nav_timegps_itow,
             tvb, 0, 4, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(tow_tree, hf_ubx_nav_timegps_ftow,
@@ -868,7 +874,7 @@ static int dissect_ubx_nav_velecef(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 /* Dissect UBX-RXM-SFRBX message */
 static int dissect_ubx_rxm_sfrbx(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
     tvbuff_t *next_tvb;
-    guint32 *buf;
+    guint8 *buf;
     guint8 i;
     guint32 gnssid, numwords, version;
 
@@ -927,13 +933,9 @@ static int dissect_ubx_rxm_sfrbx(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     else {
         // UBX-RXM-SFRBX has the nav msg encoded in little endian. As this is not
         // convenient for dissection, map to big endian and add as new data source.
-        buf = (guint32 *)wmem_alloc(pinfo->pool, numwords * 4);
+        buf = wmem_alloc(pinfo->pool, numwords * 4);
         for (i = 0; i < numwords; i++) {
-            guint32 temp = tvb_get_guint32(tvb, 8 + i * 4, ENC_LITTLE_ENDIAN);
-            buf[i] = ((temp & 0x000000ff) << 24) ||
-                ((temp & 0x0000ff00) << 8) ||
-                ((temp & 0x00ff0000) >> 8) ||
-                ((temp & 0xff000000) >> 24);
+            phton32(buf + 4 * i, tvb_get_guint32(tvb, 8 + i * 4, ENC_LITTLE_ENDIAN));
         }
         next_tvb = tvb_new_child_real_data(tvb, (guint8 *)buf, numwords * 4, numwords * 4);
         add_new_data_source(pinfo, next_tvb, "GNSS navigation message");

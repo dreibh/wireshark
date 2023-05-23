@@ -45,9 +45,7 @@ variables:
 # repo and allow manual runs in the web UI and in forks.
 .if-merged:
   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
-    when: always
   - if: '$CI_PIPELINE_SOURCE == "web"'
-    when: always
   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_URL !~ /.*gitlab.com\/wireshark\/wireshark/'
     when: manual
 # Merged commits for runners which are only available in
@@ -55,34 +53,26 @@ variables:
 # the main repo and allow manual runs in the web UI.
 .if-w-w-only-merged:
   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
-    when: always
   - if: '$CI_PIPELINE_SOURCE == "web"'
-    when: always
 # Incoming merge requests.
 .if-merge-request:
   - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-    when: always
 # Incoming non-detached merge requests. Must be used for runners which are only
 # available in wireshark/wireshark, e.g. wireshark-windows-*
 .if-w-w-only-merge-request:
   - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
-    when: always
 # Scheduled jobs. Care should be taken when changing this since the scheduler
 # often doesn't report errors.
 .if-weekly-schedule:
   - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "weekly"'
-    when: always
 .if-daily-schedule:
   - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "daily"'
-    when: always
 .if-2x-daily-schedule:
   - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "2x-daily"'
-    when: always
 # Fuzz jobs. Care should be taken when changing this since the scheduler
 # often doesn't report errors.
 .if-fuzz-schedule:
   - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "fuzz"'
-    when: always
 
 .build-linux:
   stage: build
@@ -228,7 +218,7 @@ variables:
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
     - ninja test-programs
-    - ctest --parallel 4 --output-on-failure
+    - pytest
   after_script:
     # The cache should be large enough to be useful but it shouldn't take
     # too long to restore+save each run.
@@ -423,7 +413,7 @@ Win64 Package:
           aws s3 cp "$package" "$env:S3_DESTINATION_WIN64/"
         }
       }
-    - ctest -C RelWithDebInfo --parallel 3 --force-new-ctest-process --output-on-failure
+    - C:\Windows\py.exe -m pytest
 
 macOS Arm Package:
   stage: build
@@ -455,7 +445,7 @@ macOS Arm Package:
       fi
     - cd ..
     - ninja test-programs
-    - ctest --parallel 4 --output-on-failure
+    - python3 -m pytest
   needs: []
 
 macOS Intel Package:
@@ -489,7 +479,7 @@ macOS Intel Package:
       fi
     - cd ..
     - ninja test-programs
-    - ctest --parallel 4 --output-on-failure
+    - python3 -m pytest
   needs: []
 
 # Build the User's Guide and Developer's Guide
@@ -501,12 +491,9 @@ Documentation:
       changes:
         - "docbook/**/*"
         - "epan/wslua/**/*"
-      when: always
     - if: '$CI_PIPELINE_SOURCE == "push"'
-      changes:
-        - "docbook/**/*"
-        - "epan/wslua/**/*"
       when: manual
+      allow_failure: true
   script:
     # XXX We might want to move this to wireshark-ubuntu-dev or debian-setup.sh.
     - DEBIAN_FRONTEND=noninteractive apt-get update
@@ -550,7 +537,8 @@ Commit Check:
   script:
     # build-ubuntu puts us in `build`.
     - cd ..
-    - bash ./tools/pre-commit "HEAD~$NUM_COMMITS"
+    - git status
+    - bash ./tools/pre-commit "${CI_COMMIT_SHA}~$NUM_COMMITS"
     - tools/validate-commit.py
 
 GCC Release Build:
@@ -569,7 +557,7 @@ GCC Release Build:
     - chown -R user .
     - if [ -f run/dumpcap ]; then setcap cap_net_raw,cap_net_admin+eip run/dumpcap; fi
     - if [ -f run/dumpcap ]; then su user -c "run/dumpcap -D" ; fi
-    - su user -c "ctest --parallel $(getconf _NPROCESSORS_ONLN) --force-new-ctest-process --output-on-failure"
+    - su user -c pytest-3
   artifacts:
     paths:
       - gcc_report.html
@@ -643,7 +631,7 @@ Windows Build:
     - cmake -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off ..
     - msbuild /verbosity:minimal /maxcpucount Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount test-programs.vcxproj
-    - ctest -C RelWithDebInfo --parallel 3 --force-new-ctest-process --output-on-failure
+    - C:\Windows\py.exe -m pytest
 
 Windows Qt5 Build:
   extends: .build-windows
@@ -667,7 +655,6 @@ Coverity GCC Scan:
   image: registry.gitlab.com/wireshark/wireshark-containers/ubuntu-dev
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "coverity-gcc"'
-      when: always
   stage: analysis
   needs: []
   variables:
@@ -696,7 +683,6 @@ Coverity GCC Submit:
   image: curlimages/curl
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "coverity-gcc"'
-      when: always
   stage: .post
   script:
     - . job_environment_variables.sh
@@ -709,7 +695,6 @@ Coverity Visual C++ Scan:
   extends: .build-windows
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "coverity-visual-c++"'
-      when: always
   tags:
     - wireshark-windows-merge-req
   stage: analysis
@@ -734,7 +719,6 @@ Coverity Visual C++ Submit:
   image: curlimages/curl
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "coverity-visual-c++"'
-      when: always
   stage: .post
   script:
     - sed -i -e 's/\r//' job_environment_variables.sh
@@ -773,7 +757,6 @@ Visual Studio Code Analysis:
   rules:
     # The wireshark-windows-* tags are only available in wireshark/wireshark.
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "daily" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
-      when: always
   script:
     - $env:caexcludepath = "C:\Qt;$env:INCLUDE"
     - cmake -DENABLE_CODE_ANALYSIS=ON -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off ..
@@ -797,7 +780,6 @@ API Reference:
         aws s3 cp wsar_html.zip "$S3_DESTINATION_DOCS/"
       fi
   artifacts:
-    when: always
     paths:
     - doxygen_errors.txt
     - doxygen_output.txt
