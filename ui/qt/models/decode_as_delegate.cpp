@@ -271,7 +271,12 @@ QWidget* DecodeAsDelegate::createEditor(QWidget *parentWidget, const QStyleOptio
 
         for (dissector_info_t* protocol : protocols)
         {
-            cb_editor->addItem(protocol->proto_name, VariantPointer<dissector_info_t>::asQVariant(protocol));
+            // Make it easy to reset to the default dissector
+            if (protocol->proto_name == item->defaultDissector()) {
+                cb_editor->insertItem(0, protocol->proto_name, VariantPointer<dissector_info_t>::asQVariant(protocol));
+            } else {
+                cb_editor->addItem(protocol->proto_name, VariantPointer<dissector_info_t>::asQVariant(protocol));
+            }
         }
 
         //Make sure the combo box is at least as wide as the column
@@ -358,16 +363,14 @@ void DecodeAsDelegate::setModelData(QWidget *editor, QAbstractItemModel *model,
     case DecodeAsModel::colProtocol:
         {
         QComboBox *combobox = static_cast<QComboBox *>(editor);
-        const QString &data = combobox->currentText();
-        model->setData(index, data, Qt::EditRole);
 
         //set the dissector handle
         QVariant var = combobox->itemData(combobox->currentIndex());
         dissector_info_t* dissector_info = VariantPointer<dissector_info_t>::asPtr(var);
         if (dissector_info != NULL) {
-            ((DecodeAsModel*)model)->setDissectorHandle(index, dissector_info->dissector_handle);
+            model->setData(index, VariantPointer<dissector_handle>::asQVariant(dissector_info->dissector_handle), Qt::EditRole);
         } else {
-            ((DecodeAsModel*)model)->setDissectorHandle(index, NULL);
+            model->setData(index, QVariant(), Qt::EditRole);
         }
         break;
         }

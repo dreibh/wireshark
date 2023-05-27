@@ -20,6 +20,9 @@ cmake_minimum_required(VERSION 3.13)
 if(POLICY CMP0083)
 	cmake_policy(SET CMP0083 NEW)
 endif()
+if(POLICY CMP0135)
+	cmake_policy(SET CMP0135 NEW)
+endif()
 
 if(WIN32)
 	if(DEFINED ENV{MSYSTEM})
@@ -78,6 +81,15 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 
 message(STATUS "Generating build using CMake ${CMAKE_VERSION}")
 
+if(USE_MSYSTEM)
+	# Use the deprecated FindPythonInterp.cmake module to Work around bugs and odd behavior in MSYS2 CMake
+	# searching in the wrong paths for python3.exe using FindPython3.cmake
+	find_package(PythonInterp REQUIRED)
+	set(Python3_Executable ${PYTHON_EXECUTABLE})
+else()
+	find_package(Python3 3.6 REQUIRED)
+endif()
+
 # Set a default build type if none was specified
 set(_default_build_type "RelWithDebInfo")
 if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
@@ -115,6 +127,10 @@ endif()
 # WIRESHARK_TARGET_PLATFORM accordingly. Otherwise use
 # %WIRESHARK_TARGET_PLATFORM%.
 
+# XXX We should probably consolidate WIRESHARK_TARGET_PLATFORM and
+# WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE and just use "x64" and "arm64"
+# instead of "win64" and "win64arm"
+
 if(WIN32)
 	if(DEFINED ENV{WIRESHARK_TARGET_PLATFORM})
 		string(TOLOWER $ENV{WIRESHARK_TARGET_PLATFORM} _target_platform)
@@ -147,12 +163,12 @@ if(WIN32)
 	endif()
 
 	if(WIRESHARK_TARGET_PLATFORM MATCHES "win64")
-		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE amd64)
+		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE x64)
+	elseif(WIRESHARK_TARGET_PLATFORM MATCHES "win64arm")
+		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE arm64)
 	elseif(WIRESHARK_TARGET_PLATFORM MATCHES "win32")
 		message(FATAL_ERROR "Deprecated target platform ${WIRESHARK_TARGET_PLATFORM}. See https://gitlab.com/wireshark/wireshark/-/issues/17779 for details.")
 		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE x86)
-	elseif(WIRESHARK_TARGET_PLATFORM MATCHES "win64arm")
-		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE arm64)
 	else()
 		message(FATAL_ERROR "Invalid target platform: ${WIRESHARK_TARGET_PLATFORM}")
 	endif()
@@ -178,10 +194,10 @@ if(WIN32)
 and CPU target ${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}"
 	)
 
+	find_package(PowerShell REQUIRED)
+
 	# Determine where the 3rd party libraries will be
 	if(USE_REPOSITORY)
-		find_package(PowerShell REQUIRED)
-
 		if( DEFINED ENV{WIRESHARK_LIB_DIR} )
 			# The buildbots set WIRESHARK_LIB_DIR but not WIRESHARK_BASE_DIR.
 			file( TO_CMAKE_PATH "$ENV{WIRESHARK_LIB_DIR}" _PROJECT_LIB_DIR )
@@ -213,7 +229,37 @@ and CPU target ${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}"
 		set(EXTRA_INSTALLER_DIR ${_ws_lib_dir})
 
 		# XXX Add a dependency on ${_ws_lib_dir}/current_tag.txt?
+	else()
+		set(EXTRA_INSTALLER_DIR ${CMAKE_BINARY_DIR}/packaging/nsis)
 	endif()
+
+	include(FetchContent)
+	set(LIBS_URL "https://dev-libs.wireshark.org/windows/packages")
+	file(TO_CMAKE_PATH ${EXTRA_INSTALLER_DIR} _file_download_dir)
+
+	# Download Npcap required by the Windows installer
+	set(NPCAP_VERSION "1.75")
+	set(NPCAP_SHA256 "9ac38dff01b48e18033e8a9015b27042ef847c8c84a9065961a30f8ae22d5245")
+	set(NPCAP_FILENAME "npcap-${NPCAP_VERSION}.exe")
+	set(NPCAP_URL "${LIBS_URL}/Npcap/${NPCAP_FILENAME}")
+	FetchContent_Declare(Npcap
+		URL ${NPCAP_URL}
+		DOWNLOAD_DIR ${_file_download_dir}
+		URL_HASH SHA256=${NPCAP_SHA256}
+		DOWNLOAD_NO_EXTRACT True
+	)
+
+	# Download USBPcap required by the Windows installer
+	set(USBPCAP_VERSION "1.5.4.0")
+	set(USBPCAP_SHA256 "87a7edf9bbbcf07b5f4373d9a192a6770d2ff3add7aa1e276e82e38582ccb622")
+	set(USBPCAP_FILENAME "USBPcapSetup-${USBPCAP_VERSION}.exe")
+	set(USBPCAP_URL "${LIBS_URL}/USBPcap/${USBPCAP_FILENAME}")
+	FetchContent_Declare(USBPcap
+		URL ${USBPCAP_URL}
+		DOWNLOAD_DIR ${_file_download_dir}
+		URL_HASH SHA256=${USBPCAP_SHA256}
+		DOWNLOAD_NO_EXTRACT True
+	)
 endif(WIN32)
 
 include(UseCustomIncludes)
@@ -360,6 +406,10 @@ else()
 endif()
 
 # Used in .rc files and manifests
+set(MANIFEST_PROCESSOR_ARCHITECTURE ${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE})
+if (MANIFEST_PROCESSOR_ARCHITECTURE MATCHES "x64")
+	set(MANIFEST_PROCESSOR_ARCHITECTURE "amd64")
+endif()
 set(RC_VERSION ${PROJECT_MAJOR_VERSION},${PROJECT_MINOR_VERSION},${PROJECT_PATCH_VERSION},${PROJECT_BUILD_VERSION})
 set(LOG_RC_VERSION ${LOG_PROJECT_MAJOR_VERSION},${LOG_PROJECT_MINOR_VERSION},${PROJECT_PATCH_VERSION},${PROJECT_BUILD_VERSION})
 
@@ -1153,11 +1203,6 @@ find_package(LEX REQUIRED)
 find_package(Perl)
 find_package(PCRE2 REQUIRED)
 
-find_package(Python3 3.6 REQUIRED)
-# Several files (including LocatePythonModule) still use the old name
-# from FindPythonInterp, let's stick to it for now.
-set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
-
 if (NOT WIN32)
 	find_package(Gettext)
 	find_package(M REQUIRED)
@@ -1397,8 +1442,13 @@ if (QT_FOUND)
 	)
 	# Use qmake to find windeployqt and macdeployqt. Ideally one of
 	# the modules in ${QTDIR}/lib/cmake would do this for us.
-	if(WIN32 AND NOT USE_MSYSTEM)
-		find_program(QT_WINDEPLOYQT_EXECUTABLE windeployqt
+	if(WIN32)
+		if (USE_qt6 AND USE_MSYSTEM)
+			set(_windeployqt_name "windeployqt-qt6")
+		else()
+			set(_windeployqt_name "windeployqt")
+		endif()
+		find_program(QT_WINDEPLOYQT_EXECUTABLE ${_windeployqt_name}
 			HINTS "${QT_BIN_PATH}"
 			DOC "Path to the windeployqt utility."
 		)
@@ -1556,7 +1606,9 @@ add_subdirectory( docbook EXCLUDE_FROM_ALL )
 add_subdirectory( epan )
 add_subdirectory( extcap )
 add_subdirectory( randpkt_core )
-add_subdirectory( tools/lemon )
+if(NOT LEMON_EXECUTABLE)
+	add_subdirectory( tools/lemon )
+endif()
 if(PCAP_FOUND)
 	add_subdirectory( tools/radiotap-gen )
 endif()
@@ -1732,7 +1784,7 @@ if(VCSVERSION_OVERRIDE)
 else()
 	add_custom_target(vcs_version
 		BYPRODUCTS vcs_version.h
-		COMMAND ${PYTHON_EXECUTABLE}
+		COMMAND ${Python3_EXECUTABLE}
 			${CMAKE_SOURCE_DIR}/tools/make-version.py
 			${CMAKE_SOURCE_DIR}
 	)
@@ -2248,7 +2300,7 @@ if(USE_REPOSITORY)
 	if(ZIP_EXECUTABLE)
 		add_custom_target(pdb_zip_package COMMENT "This packages .PDBs but will not create them.")
 		set_target_properties(pdb_zip_package PROPERTIES FOLDER "Packaging")
-		set(_pdb_zip "${CMAKE_BINARY_DIR}/Wireshark-pdb-${WIRESHARK_TARGET_PLATFORM}-${PROJECT_VERSION}.zip")
+		set(_pdb_zip "${CMAKE_BINARY_DIR}/Wireshark-pdb-${PROJECT_VERSION}-${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}.zip")
 		file(TO_NATIVE_PATH "${_pdb_zip}" _pdb_zip_win)
 		add_custom_command(TARGET pdb_zip_package POST_BUILD
 			COMMAND ${CMAKE_COMMAND} -E remove -f "${_pdb_zip}"
@@ -2263,7 +2315,7 @@ endif()
 # List of extra dependencies for the "copy_data_files" target
 set(copy_data_files_depends)
 
-if(WIN32 AND NOT USE_MSYSTEM)
+if(WIN32)
 	foreach(_install_as_txt_file COPYING NEWS README.md README.windows)
 		# On Windows, install some files with a .txt extension so that they're
 		# double-clickable.
@@ -2653,7 +2705,7 @@ if(BUILD_wireshark AND QT_FOUND)
 		${WIN_WS2_32_LIBRARY}
 		${WIN_VERSION_LIBRARY}
 		${WINSPARKLE_LIBRARIES}
-		$<$<BOOL:${WIN32}>:UxTheme.lib>
+		$<$<BOOL:${WIN32}>:uxtheme.lib>
 		${SPEEXDSP_LIBRARIES}
 		${ZLIB_LIBRARIES}
 		${MINIZIP_LIBRARIES}
@@ -2720,6 +2772,13 @@ if(BUILD_wireshark AND QT_FOUND)
 		set_target_properties(copy_qt_dlls PROPERTIES FOLDER "Copy Tasks")
 		# Will we ever need to use --debug? Windeployqt seems to
 		# be smart enough to copy debug DLLs when needed.
+		if (USE_MSYSTEM AND Qt${qtver}Widgets_VERSION VERSION_EQUAL 6.5.0)
+			# windeployqt released with Qt 6.5.0 is broken.
+			# https://bugreports.qt.io/browse/QTBUG-112204
+			message(WARNING "Qt Deploy Tool 6.5.0 is broken, skipping translations.")
+			list(APPEND QT_WINDEPLOYQT_EXTRA_ARGS --no-translations)
+			set(SKIP_QT_TRANSLATIONS True)
+		endif()
 		add_custom_command(TARGET copy_qt_dlls
 			POST_BUILD
 			COMMAND set "PATH=${QT_BIN_PATH};%PATH%"
@@ -2759,7 +2818,7 @@ if(BUILD_logray AND QT_FOUND)
 		${WIN_WS2_32_LIBRARY}
 		${WIN_VERSION_LIBRARY}
 		${WINSPARKLE_LIBRARIES}
-		$<$<BOOL:${WIN32}>:UxTheme.lib>
+		$<$<BOOL:${WIN32}>:uxtheme.lib>
 		${SPEEXDSP_LIBRARIES}
 		${ZLIB_LIBRARIES}
 		${MINIZIP_LIBRARIES}
@@ -3263,7 +3322,7 @@ if(BUILD_dcerpcidl2wrs)
 	install(TARGETS idl2wrs RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
-if(MSVC)
+if(WIN32)
 	find_package( MSVC_REDIST )
 
 	# Must come after executable targets are defined.
@@ -3691,7 +3750,7 @@ if(RPMBUILD_EXECUTABLE)
 	endif()
 
 	execute_process(
-		COMMAND ${PYTHON_EXECUTABLE}
+		COMMAND ${Python3_EXECUTABLE}
 			${CMAKE_SOURCE_DIR}/tools/make-version.py
 			${CMAKE_SOURCE_DIR}
 	)
@@ -4082,7 +4141,7 @@ endif()
 
 add_custom_target(test
 	COMMAND ${CMAKE_COMMAND} -E env PYTHONIOENCODING=UTF-8
-		${PYTHON_EXECUTABLE} -m pytest
+		${Python3_EXECUTABLE} -m pytest
 	WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
 	DEPENDS test-programs
 	USES_TERMINAL
@@ -4101,7 +4160,7 @@ if (GIT_EXECUTABLE)
 	# Update AUTHORS file with entries from git shortlog
 	add_custom_target(
 		gen-authors
-		COMMAND ${PYTHON_EXECUTABLE} tools/generate_authors.py AUTHORS
+		COMMAND ${Python3_EXECUTABLE} tools/generate_authors.py AUTHORS
 		WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
 	)
 else (GIT_EXECUTABLE)

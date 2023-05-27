@@ -15,7 +15,7 @@ add_subdirectory(pidl EXCLUDE_FROM_ALL)
 
 add_custom_command(
 	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/packet-ncp2222.c
-	COMMAND ${PYTHON_EXECUTABLE}
+	COMMAND ${Python3_EXECUTABLE}
 		${CMAKE_SOURCE_DIR}/tools/ncp2222.py
 		-o ${CMAKE_CURRENT_BINARY_DIR}/packet-ncp2222.c
 	DEPENDS
@@ -808,6 +808,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bssap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bssgp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bt-dht.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-bt-tracker.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bt-utp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bt3ds.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-btamp.c
@@ -1840,6 +1841,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-signal-pdu.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-simple.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-simulcrypt.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-sinecap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sipfrag.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sita.c
@@ -2143,7 +2145,7 @@ file(GENERATE
 )
 add_custom_command(
 	OUTPUT dissectors.c
-	COMMAND ${PYTHON_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/make-regs.py dissectors dissectors.c @dissectors.in.txt
+	COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/make-regs.py dissectors dissectors.c @dissectors.in.txt
 	DEPENDS ${CMAKE_SOURCE_DIR}/tools/make-regs.py ${ALL_DISSECTOR_SRC}
 		"${CMAKE_CURRENT_BINARY_DIR}/dissectors.in.txt"
 	COMMENT "Making dissectors.c"

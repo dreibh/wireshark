@@ -19,6 +19,8 @@ It is used for troubleshooting, analysis, development and education.
 // Add a summary of major changes here.
 // Add other changes to "New and Updated Features" below.
 
+Windows installer file names now have the format Wireshark-<version>-<architecture>.exe.
+
 Wireshark is now better about generating valid UTF-8 output.
 
 A new display filter feature for filtering raw bytes has been added.
@@ -38,6 +40,16 @@ That must be done explicitly using ``cmake --install <builddir> --component Deve
 
 The Wireshark installation is relocatable on Linux (and other ELF platforms
 with support for relative RPATHs).
+
+Support for building an NSIS Windows installer using the MinGW-w64 toolchain
+and https://www.msys2.org/[MSYS2]. Read README.msys2 in the distribution for more information.
+
+When changing the dissector via the Decode As table for values that
+have default dissectors registered, selecting "(none)" will select
+no dissection (while still allowing heuristic dissectors to attempt to
+dissect.) The previous behavior was to reset the dissector to the default.
+To facilitate resetting the dissector, the default dissector is now sorted
+at the top of the list of possible dissector options.
 
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
@@ -137,6 +149,8 @@ Matter home automation protocol
 UBX protocol of u-blox GNSS receivers (UBX)
 SBAS L1 Navigation Messages (SBAS L1)
 FiveCo's Register Access Protocol (5CoRAP)
+UDP Tracker Protocol for BitTorrent (BT-Tracker)
+SINEC AP1 Protocol (SINEC AP)
 --
 
 === Updated Protocol Support

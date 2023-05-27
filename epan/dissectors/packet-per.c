@@ -166,7 +166,7 @@ static guint32
 dissect_per_open_type_internal(tvbuff_t *tvb, guint32 offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index, void* type_cb, asn1_cb_variant variant)
 {
 	int type_length, start_offset, end_offset, fragmented_length = 0, pdu_length, pdu_offset;
-	tvbuff_t *val_tvb = NULL, *pdu_tvb = NULL;
+	tvbuff_t *val_tvb = NULL, *pdu_tvb = NULL, *fragment_tvb = NULL;
 	header_field_info *hfi;
 	proto_tree *subtree = tree;
 	gboolean is_fragmented;
@@ -179,10 +179,11 @@ dissect_per_open_type_internal(tvbuff_t *tvb, guint32 offset, asn1_ctx_t *actx, 
 		offset = dissect_per_length_determinant(tvb, offset, actx, tree, hf_per_open_type_length, &type_length, &is_fragmented);
 		if (actx->aligned) BYTE_ALIGN_OFFSET(offset);
 		if (is_fragmented) {
+			fragment_tvb = tvb_new_octet_aligned(tvb, offset, 8*type_length);
 			if (fragmented_length == 0) {
 				pdu_tvb = tvb_new_composite();
 			}
-			tvb_composite_append(pdu_tvb, tvb_new_octet_aligned(tvb, offset, 8*type_length));
+			tvb_composite_append(pdu_tvb, fragment_tvb);
 			offset += 8*type_length;
 			fragmented_length += type_length;
 		}
@@ -2259,7 +2260,7 @@ dissect_per_bit_string(tvbuff_t *tvb, guint32 offset, asn1_ctx_t *actx, proto_tr
 	guint32 length, fragmented_length = 0;
 	header_field_info *hfi;
 	gboolean is_fragmented = FALSE;
-	tvbuff_t *fragmented_tvb = NULL, *out_tvb = NULL;
+	tvbuff_t *fragmented_tvb = NULL, *out_tvb = NULL, *fragment_tvb = NULL;
 
 	hfi = (hf_index==-1) ? NULL : proto_registrar_get_nth(hf_index);
 
@@ -2294,9 +2295,10 @@ DEBUG_ENTRY("dissect_per_bit_string");
 					BYTE_ALIGN_OFFSET(offset);
 				}
 				if(is_fragmented){
+					fragment_tvb = tvb_new_octet_aligned(tvb, offset, length);
 					if(fragmented_length==0)
 						fragmented_tvb = tvb_new_composite();
-					tvb_composite_append(fragmented_tvb, tvb_new_octet_aligned(tvb, offset, length));
+					tvb_composite_append(fragmented_tvb, fragment_tvb);
 					offset += length;
 					fragmented_length += length;
 					goto next_fragment1;
@@ -2373,9 +2375,10 @@ DEBUG_ENTRY("dissect_per_bit_string");
 			BYTE_ALIGN_OFFSET(offset);
 		}
 		if(is_fragmented){
+			fragment_tvb = tvb_new_octet_aligned(tvb, offset, length);
 			if(fragmented_length==0)
 				fragmented_tvb = tvb_new_composite();
-			tvb_composite_append(fragmented_tvb, tvb_new_octet_aligned(tvb, offset, length));
+			tvb_composite_append(fragmented_tvb, fragment_tvb);
 			offset += length;
 			fragmented_length += length;
 			goto next_fragment2;
@@ -2442,7 +2445,7 @@ dissect_per_octet_string(tvbuff_t *tvb, guint32 offset, asn1_ctx_t *actx, proto_
 	guint32 length = 0, fragmented_length = 0;;
 	header_field_info *hfi;
 	gboolean is_fragmented = FALSE;
-	tvbuff_t *out_tvb = NULL;
+	tvbuff_t *out_tvb = NULL, *fragment_tvb = NULL;
 
 	hfi = (hf_index==-1) ? NULL : proto_registrar_get_nth(hf_index);
 
@@ -2507,9 +2510,10 @@ DEBUG_ENTRY("dissect_per_octet_string");
 				BYTE_ALIGN_OFFSET(offset);
 			}
 			if (is_fragmented) {
+				fragment_tvb = tvb_new_octet_aligned(tvb, offset, length * 8);
 				if (fragmented_length == 0)
 					out_tvb = tvb_new_composite();
-				tvb_composite_append(out_tvb, tvb_new_octet_aligned(tvb, offset, length * 8));
+				tvb_composite_append(out_tvb, fragment_tvb);
 				offset += length * 8;
 				fragmented_length += length;
 				goto next_fragment;
