@@ -85,7 +85,7 @@ if(USE_MSYSTEM)
 	# Use the deprecated FindPythonInterp.cmake module to Work around bugs and odd behavior in MSYS2 CMake
 	# searching in the wrong paths for python3.exe using FindPython3.cmake
 	find_package(PythonInterp REQUIRED)
-	set(Python3_Executable ${PYTHON_EXECUTABLE})
+	set(Python3_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "")
 else()
 	find_package(Python3 3.6 REQUIRED)
 endif()
@@ -128,8 +128,8 @@ endif()
 # %WIRESHARK_TARGET_PLATFORM%.
 
 # XXX We should probably consolidate WIRESHARK_TARGET_PLATFORM and
-# WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE and just use "x64" and "arm64"
-# instead of "win64" and "win64arm"
+# WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE and just use "x64"
+# instead of "win64"
 
 if(WIN32)
 	if(DEFINED ENV{WIRESHARK_TARGET_PLATFORM})
@@ -149,12 +149,12 @@ if(WIN32)
 		elseif($ENV{MSYSTEM_CARCH} MATCHES "i686")
 			set(WIRESHARK_TARGET_PLATFORM win32)
 		elseif($ENV{MSYSTEM_CARCH} MATCHES "aarch64")
-			set(WIRESHARK_TARGET_PLATFORM "win64arm")
+			set(WIRESHARK_TARGET_PLATFORM "arm64")
 		else()
 			set(WIRESHARK_TARGET_PLATFORM "$ENV{MSYSTEM_CARCH}")
 		endif()
 	elseif($ENV{Platform} MATCHES arm64 OR CMAKE_GENERATOR_PLATFORM MATCHES arm64)
-		set(WIRESHARK_TARGET_PLATFORM win64arm)
+		set(WIRESHARK_TARGET_PLATFORM arm64)
 	elseif(CMAKE_CL_64 OR CMAKE_GENERATOR MATCHES Win64)
 		set(WIRESHARK_TARGET_PLATFORM win64)
 	else()
@@ -162,13 +162,11 @@ if(WIN32)
 		set(WIRESHARK_TARGET_PLATFORM win64)
 	endif()
 
+	set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE ${WIRESHARK_TARGET_PLATFORM})
 	if(WIRESHARK_TARGET_PLATFORM MATCHES "win64")
 		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE x64)
-	elseif(WIRESHARK_TARGET_PLATFORM MATCHES "win64arm")
-		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE arm64)
 	elseif(WIRESHARK_TARGET_PLATFORM MATCHES "win32")
 		message(FATAL_ERROR "Deprecated target platform ${WIRESHARK_TARGET_PLATFORM}. See https://gitlab.com/wireshark/wireshark/-/issues/17779 for details.")
-		set(WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE x86)
 	else()
 		message(FATAL_ERROR "Invalid target platform: ${WIRESHARK_TARGET_PLATFORM}")
 	endif()
@@ -194,7 +192,9 @@ if(WIN32)
 and CPU target ${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}"
 	)
 
-	find_package(PowerShell REQUIRED)
+	if(NOT CMAKE_CROSSCOMPILING)
+		find_package(PowerShell REQUIRED)
+	endif()
 
 	# Determine where the 3rd party libraries will be
 	if(USE_REPOSITORY)
@@ -2775,9 +2775,8 @@ if(BUILD_wireshark AND QT_FOUND)
 		if (USE_MSYSTEM AND Qt${qtver}Widgets_VERSION VERSION_EQUAL 6.5.0)
 			# windeployqt released with Qt 6.5.0 is broken.
 			# https://bugreports.qt.io/browse/QTBUG-112204
-			message(WARNING "Qt Deploy Tool 6.5.0 is broken, skipping translations.")
-			list(APPEND QT_WINDEPLOYQT_EXTRA_ARGS --no-translations)
-			set(SKIP_QT_TRANSLATIONS True)
+			message(WARNING "Qt Deploy Tool 6.5.0 is broken, please upgrade to a later version.")
+			# lconvert will fail
 		endif()
 		add_custom_command(TARGET copy_qt_dlls
 			POST_BUILD

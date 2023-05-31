@@ -58,7 +58,6 @@
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/expert.h>
-#include <epan/conversation.h>
 #include <epan/iana_charsets.h>
 #include <epan/proto_data.h>
 #include "packet-tcp.h"
@@ -3157,7 +3156,7 @@ proto_register_drda(void)
             NULL, HFILL }},
 
         { &hf_drda_outexp,
-          { "Output Expected", "drda.rdbcmtok", FT_UINT8, BASE_NONE,
+          { "Output Expected", "drda.outexp", FT_UINT8, BASE_NONE,
             VALS(drda_boolean_vals), 0x0,
             NULL, HFILL }},
 
