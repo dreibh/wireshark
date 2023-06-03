@@ -79,6 +79,7 @@ struct _output_fields {
     GHashTable   *field_indicies;
     GPtrArray   **field_values;
     gchar         quote;
+    gboolean      escape;
     gboolean      includes_col_fields;
 };
 
@@ -1903,6 +1904,9 @@ print_escaped_csv(FILE *fh, const char *unescaped_string)
         case '\t':
             fputs("\\t", fh);
             break;
+        case '\v':
+            fputs("\\v", fh);
+            break;
         default:
             fputc(*p, fh);
         }
@@ -2247,6 +2251,19 @@ gboolean output_fields_set_option(output_fields_t *info, gchar *option)
         }
         return TRUE;
     }
+    else if (0 == strcmp(option_name, "escape")) {
+        switch (*option_value) {
+        case 'n':
+            info->escape = FALSE;
+            break;
+        case 'y':
+            info->escape = TRUE;
+            break;
+        default:
+            return FALSE;
+        }
+        return TRUE;
+    }
 
     return FALSE;
 }
@@ -2342,14 +2359,6 @@ static void format_field_values(output_fields_t* fields, gpointer field_index, g
         break;
     case 'a':
         /* print the value of all accurrences of the field */
-        if (g_ptr_array_len(fv_p) != 0) {
-            /*
-             * This isn't the first occurrence. so add the "aggregator"
-             * character as a separator between the previous element
-             * and this element.
-             */
-            g_ptr_array_add(fv_p, (gpointer)ws_strdup_printf("%c", fields->aggregator));
-        }
         break;
     default:
         ws_assert_not_reached();
@@ -2467,8 +2476,15 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
 
                 /* Output the array of (partial) field values */
                 for (j = 0; j < g_ptr_array_len(fv_p); j++ ) {
+                    if (j != 0) {
+                        fputc(fields->aggregator, fh);
+                    }
                     str = (gchar *)g_ptr_array_index(fv_p, j);
-                    print_escaped_csv(fh, str);
+                    if (fields->escape) {
+                        print_escaped_csv(fh, str);
+                    } else {
+                        fputs(str, fh);
+                    }
                 }
                 if (fields->quote != '\0') {
                     fputc(fields->quote, fh);
@@ -2489,7 +2505,7 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
                 fv_p = fields->field_values[i];
 
                 /* Output the array of (partial) field values */
-                for (j = 0; j < (g_ptr_array_len(fv_p)); j+=2 ) {
+                for (j = 0; j < (g_ptr_array_len(fv_p)); j++ ) {
                     str = (gchar *)g_ptr_array_index(fv_p, j);
 
                     fprintf(fh, "  <field name=\"%s\" value=", field);
@@ -2517,7 +2533,7 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
                 json_dumper_begin_array(dumper);
 
                 /* Output the array of (partial) field values */
-                for (j = 0; j < (g_ptr_array_len(fv_p)); j += 2) {
+                for (j = 0; j < (g_ptr_array_len(fv_p)); j++ ) {
                     str = (gchar *) g_ptr_array_index(fv_p, j);
                     json_dumper_value_string(dumper, str);
                 }
@@ -2544,7 +2560,7 @@ static void write_specified_fields(fields_format format, output_fields_t *fields
                 json_dumper_begin_array(dumper);
 
                 /* Output the array of (partial) field values */
-                for (j = 0; j < (g_ptr_array_len(fv_p)); j += 2) {
+                for (j = 0; j < (g_ptr_array_len(fv_p)); j++ ) {
                     str = (gchar *)g_ptr_array_index(fv_p, j);
                     json_dumper_value_string(dumper, str);
                 }
@@ -2705,6 +2721,7 @@ output_fields_t* output_fields_new(void)
     fields->field_indicies      = NULL;
     fields->field_values        = NULL;
     fields->quote               ='\0';
+    fields->escape              = TRUE;
     fields->includes_col_fields = FALSE;
     return fields;
 }
