@@ -2,11 +2,11 @@
 
 [#ChapterSetup]
 
-== Toolchain Installation and Build Instructions
+== Setup and Build Instructions
 
 [#ChSetupUNIX]
 
-=== UNIX and UNIX-like Systems
+=== UN*X: Step-by-step guide
 
 [#ChSetupUNIXBuildEnvironmentSetup]
 
@@ -215,7 +215,7 @@ _wireshark-dev_ mailing list explaining your problem. Include the output from
 
 // Retain ChSetupWin32 for backward compatibility
 [#ChSetupWindows]
-=== Windows: Microsoft Visual Studio[[ChSetupWin32]]
+=== Windows: Using Microsoft Visual Studio[[ChSetupWin32]]
 
 A quick setup guide for Windows development with recommended configurations.
 
@@ -702,6 +702,8 @@ msbuild /m /p:Configuration=RelWithDebInfo wireshark_nsis.vcxproj
 
 to build a Wireshark installer.
 If you sign your executables you should do so between the “wireshark_nsis_prep” and “wireshark_nsis” steps.
+To sign your installer you should place the signing batch script on the path. It must be named "sign-wireshark.bat".
+It should be autodetected by CMake, to always require signing set the -DENABLE_SIGNED_NSIS=On CMake option.
 
 Run
 
@@ -714,7 +716,7 @@ It’s a good idea to test on a different machine than the developer machine.
 
 [#ChSetupMSYS2]
 
-=== Windows: Mingw-w64 with MSYS2
+=== Windows: Using MinGW-w64 with MSYS2
 
 MSYS2 comes with different environments/subsystems and the first thing you
 have to decide is which one to use. The differences among the environments
@@ -730,34 +732,28 @@ system libraries used etc. If you are unsure, go with UCRT64.
 
 . Install needed dependencies:
 
-    $ tools/msys2-setup.sh --install-all
+    tools/msys2-setup.sh --install-all
 
 . Build using CMake + Ninja:
 
-    $ mkdir build && cd build
-    $ cmake -DENABLE_WERROR=Off ..
-    $ ninja
-    $ ninja test        # optional, to run the test suite
-    $ ninja install     # optional, install to the MSYS2 shell path
+    mkdir build && cd build
+    cmake -DENABLE_WERROR=Off ..
+    ninja
+    ninja test        # optional, to run the test suite
+    ninja install     # optional, install to the MSYS2 shell path
 
 The application should be launched using the same shell.
 
-==== Build an installer
+==== Building an .exe installer
 
 . Follow the instructions above to compile Wireshark from source.
 
-. Build the Wireshark User Guide.
+. Build the NSIS installer target.
 
-    $ ninja user_guide_html
+    ninja wireshark_nsis_prep
+    ninja wireshark_nsis
 
-. Download Npcap and USBpcap and copy them to ${CMAKE_BINARY_DIR}/packaging/nsis.
-
-. Build the installer
-
-    $ ninja wireshark_nsis_prep
-    $ ninja wireshark_nsis
-
-If successful the installer can be found in ${CMAKE_BINARY_DIR}/packaging/nsis.
+If successful the installer can be found in `$CMAKE_BINARY_DIR/packaging/nsis`.
 
 Alternatively you can also use the PKGBUILD included in the Wireshark
 source distribution to compile Wireshark into a binary package that can be
@@ -775,5 +771,59 @@ the build using MSVC:
   https://github.com/Lekensteyn/lua-unicode[custom UTF-8 patches].
 
 * Enhanced Kerberos dissection with decryption is not available.
+
+* AirPcap is not supported.
+
+[#ChSetupCross]
+
+=== Windows: Cross-compilation using Linux
+
+It is possible to compile Wireshark for Microsoft Windows using Linux and MinGW.
+This way developers can deploy Wireshark on Windows systems without requiring
+a Windows host machine. Building for Windows using a Linux host is also
+easier for devs already familiar with Linux, the build itself is faster and it
+uses a very mature C/C++ compiler (GCC) and debugger (GDB).
+
+https://fedoraproject.org/[Fedora Linux] provides the best out-of-the-box
+support for MinGW cross-compilation. Fedora is what the project uses to test
+the build and it's what we recommend. While any other reasonably modern Linux
+distribution can be used, that will make the process more time consuming and
+involve some trial and error to setup.
+
+The build instructions on Fedora follow the familiar recipe for building Wireshark
+using Linux.
+
+==== Building from source
+
+. Install needed dependencies:
+
+    tools/mingw-rpm-setup.sh --install-all
+
+. Build using CMake + Ninja:
+
+    mkdir build && cd build
+    mingw64-cmake -G Ninja -DENABLE_CCACHE=Yes ..
+    ninja
+
+  Note that currently it is not possible to run the test-suite when cross-compiling.
+
+. Build the NSIS installer
+
+    ninja wireshark_nsis_prep
+    ninja wireshark_nsis
+
+If successful the installer can be found in `$CMAKE_BINARY_DIR/packaging/nsis`.
+
+==== Notes and comparison with MSVC builds
+
+* Only the MSVCRT C library for Microsoft Windows can be used. Support for the
+  UCRT (Universal C Runtime) library on Fedora Linux is in the initial stages of
+  deployment and not ready for prime-time (at the time of this writing).
+
+* Some optional dependencies are missing from Fedora repositories and must be
+  compiled from source if desired. An up-to-date complete list can be found in
+  the bug tracker (https://gitlab.com/wireshark/wireshark/-/issues/19108[issue 19108]).
+
+* The Event Tracing for Windows (ETW) extcap cannot be compiled using MinGW-w64.
 
 * AirPcap is not supported.

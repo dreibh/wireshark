@@ -35,3 +35,6 @@
 #cmakedefine SMI_DIR "@SMI_DIR@"
 
 #cmakedefine QT_DIR "@QT_DIR@"
+
+#cmakedefine ENABLE_SIGNED_NSIS
+#cmakedefine SKIP_NSIS_QT_DLLS

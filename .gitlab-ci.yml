@@ -421,18 +421,18 @@ Windows x64 Package:
     - cd build
   script:
     - C:\Windows\py.exe ..\tools\make-version.py --set-release ..
-    - cmake -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off ..
+    - cmake -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off -DENABLE_SIGNED_NSIS=On ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount test-programs.vcxproj
     - msbuild /verbosity:minimal /maxcpucount wireshark_nsis_prep.vcxproj
     - msbuild /verbosity:minimal /maxcpucount wireshark_wix_prep.vcxproj
     - C:\gitlab-builds\bin\sign-files.ps1 -Recurse -Path run\RelWithDebInfo
     - msbuild /verbosity:minimal wireshark_nsis.vcxproj
-    - C:\gitlab-builds\bin\sign-files.ps1 -Path packaging\nsis
+    # No need for explicit signing of NSIS installer here. The signing is done by makensis.
     - msbuild /verbosity:minimal wireshark_wix.vcxproj
-    - C:\gitlab-builds\bin\sign-files.ps1 -Path packaging\wix
+    - C:\gitlab-builds\bin\sign-files.ps1 -Path packaging\wix\Wireshark-*.msi
     - msbuild /verbosity:minimal wireshark_portableapps.vcxproj
-    - C:\gitlab-builds\bin\sign-files.ps1 -Path packaging\portableapps
+    - C:\gitlab-builds\bin\sign-files.ps1 -Path packaging\portableapps\WiresharkPortable*.exe
     - $plugins = Get-ChildItem run\RelWithDebInfo\plugins\*\*.dll ; signtool verify /q /pa /all run\RelWithDebInfo\*.exe run\RelWithDebInfo\extcap\*.exe $plugins run\RelWithDebInfo\libwireshark.dll run\RelWithDebInfo\libwiretap.dll run\RelWithDebInfo\libwsutil.dll packaging\nsis\Wireshark-*-x64.exe packaging\wix\Wireshark-*-x64.msi packaging\portableapps\WiresharkPortable??_*.paf.exe
     - msbuild /verbosity:minimal pdb_zip_package.vcxproj
     - C:\gitlab-builds\bin\mse-scan.ps1
@@ -794,9 +794,19 @@ Visual Studio Code Analysis:
     # The wireshark-windows-* tags are only available in wireshark/wireshark.
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "daily" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
   script:
+    - py -m venv sarif-tools.venv
+    - sarif-tools.venv\Scripts\pip.exe install sarif-tools
+    - msiexec.exe /i https://awscli.amazonaws.com/AWSCLIV2.msi
+    - $env:Path += ";C:\Program Files\Amazon\AWSCLIV2"
     - $env:caexcludepath = "C:\Qt;$env:INCLUDE"
     - cmake -DENABLE_CODE_ANALYSIS=ON -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount:2 Wireshark.sln
+    - $report = "visual-c++-analyze-" + (Get-Date -format "yyyy-MM-dd") + ".html"
+    - sarif-tools.venv\Scripts\sarif html --output $report
+    - |
+      if (Test-Path env:S3_DESTINATION_ANALYSIS) {
+        aws s3 cp "$report" "$env:S3_DESTINATION_ANALYSIS/"
+      }
 
 # Build all doxygen docs
 API Reference:
