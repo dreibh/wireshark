@@ -17,7 +17,7 @@ PACKAGE=`echo $CHANGELOG_HEADER | sed -e "s/(.*//" -e "s/ //g"`
 # The package distribution, e.g. precise, raring, ...
 PACKAGE_DISTRIBUTION=`echo $CHANGELOG_HEADER | sed -e "s/[^)]*)//" -e "s/;.*//g" -e "s/ //g"`
 # The package's version, e.g. 1.2.3-1ubuntu1
-PACKAGE_VERSION=`echo $CHANGELOG_HEADER | sed -e "s/.*(//" -e "s/).*//" -e "s/ //g" -e "s/ //g" -e "s/^[0-9]://g"`
+PACKAGE_VERSION=`echo $CHANGELOG_HEADER | sed -e "s/.*(//" -e "s/).*//" -e "s/ //g" -e "s/ //g" -e "s/^[0-9]://g" -e "s/+git[0-9a-f~]*//g"`
 # The package's output version, e.g. 1.2.3-1ubuntu
 OUTPUT_VERSION=`echo $PACKAGE_VERSION   | sed -e "s/\(ubuntu\|ppa\)[0-9]*$/\1/"`
 # The package's Debian version, e.g. 1.2.3-1
@@ -56,7 +56,7 @@ sed -e "s/Wireshark Self-made package <wireshark@example.com>/$MAINTAINER/g" \
     -e "s/libgnutls-dev/libgnutls28-dev | libgnutls-dev | libgnutls26-dev/g" \
     -e "s/[ ]*libnghttp2-dev,//g" \
     -e "s/[ ]*libssh-gcrypt-dev,//g" \
-    -e "s/Recommends: libqt/Recommends: rsplib-tools,subnetcalc,traceroute,whois,libcap2-bin,libqt/g" \
+    -e "s/Recommends: libqt/Recommends: rsplib-tools,subnetcalc,traceroute,hipercontracer,whois,libcap2-bin,libqt/g" \
     >debian/control.new
 
 # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
