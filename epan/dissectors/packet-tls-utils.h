@@ -197,7 +197,8 @@ typedef enum {
 #define SSL_HND_QUIC_TP_GOOGLE_CONNECTION_OPTIONS           0x3128
 /* https://github.com/facebookincubator/mvfst/blob/master/quic/QuicConstants.h */
 #define SSL_HND_QUIC_TP_FACEBOOK_PARTIAL_RELIABILITY        0xFF00
-#define SSL_HND_QUIC_TP_MIN_ACK_DELAY                       0xFF03DE1A /* https://tools.ietf.org/html/draft-ietf-quic-ack-frequency-01 */
+#define SSL_HND_QUIC_TP_MIN_ACK_DELAY_DRAFT_V1              0xFF03DE1A /* https://tools.ietf.org/html/draft-ietf-quic-ack-frequency-01 */
+#define SSL_HND_QUIC_TP_MIN_ACK_DELAY                       0xFF04DE1A /* https://tools.ietf.org/html/draft-ietf-quic-ack-frequency-04 */
 /*
  * Lookup tables
  */
@@ -560,6 +561,14 @@ typedef struct {
     GHashTable *tls13_server_appdata;
     GHashTable *tls13_early_exporter;
     GHashTable *tls13_exporter;
+
+    /* The hash tables above store the static keylog file contents and secrets
+     * from any DSB, not all of which may be used, in addition to any master
+     * secrets derived at runtime ([D]TLS < 1.3). These store the used
+     * Client Random for exporting master secrets and derived secrets in
+     * TLS Export Sessions or adding a DSB.
+     */
+    GHashTable *used_crandom;
 } ssl_master_key_map_t;
 
 gint ssl_get_keyex_alg(gint cipher);
@@ -762,7 +771,7 @@ ssl_common_cleanup(ssl_master_key_map_t *master_key_map, FILE **ssl_keylog_file,
  * (This is a transition function, it would be nice if the static keylog file
  * contents was separated from keys derived at runtime.)
  */
-extern ssl_master_key_map_t *
+WS_DLL_PUBLIC ssl_master_key_map_t *
 tls_get_master_key_map(gboolean load_secrets);
 
 /* Process lines from the TLS key log and populate the secrets map. */
@@ -780,12 +789,15 @@ extern void
 ssl_parse_key_list(const ssldecrypt_assoc_t * uats, GHashTable *key_hash, const char* dissector_table_name, dissector_handle_t main_handle, gboolean tcp);
 #endif
 
-/* store master secret into session data cache */
-extern void
-ssl_save_session(SslDecryptSession* ssl, GHashTable *session_hash);
-
 extern void
 ssl_finalize_decryption(SslDecryptSession *ssl, ssl_master_key_map_t *mk_map);
+
+/**
+ * Mark a Client Random as used (not just present in the keylog file),
+ * to enable "Export TLS Sessions Keys" or "Inject Secrets"
+ */
+extern void
+tls_save_crandom(SslDecryptSession *ssl, ssl_master_key_map_t *mk_map);
 
 extern gboolean
 tls13_generate_keys(SslDecryptSession *ssl_session, const StringInfo *secret, gboolean is_from_server);

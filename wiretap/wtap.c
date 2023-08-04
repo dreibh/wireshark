@@ -9,7 +9,6 @@
 #include <config.h>
 
 #include <string.h>
-#include <errno.h>
 
 #include <sys/types.h>
 
@@ -202,6 +201,26 @@ wtap_get_next_interface_description(wtap *wth)
 }
 
 void
+wtap_file_add_decryption_secrets(wtap *wth, const wtap_block_t dsb)
+{
+	if (!wth->dsbs) {
+		wth->dsbs = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
+	}
+	g_array_append_val(wth->dsbs, dsb);
+}
+
+gboolean
+wtap_file_discard_decryption_secrets(wtap *wth)
+{
+	if (!wth->dsbs || wth->dsbs->len == 0)
+		return FALSE;
+
+	wtap_block_array_free(wth->dsbs);
+	wth->dsbs = NULL;
+	return TRUE;
+}
+
+void
 wtap_add_idb(wtap *wth, wtap_block_t idb)
 {
 	g_array_append_val(wth->interface_data, idb);
@@ -216,8 +235,6 @@ wtap_generate_idb(int encap, int tsprec, int snaplen)
 	ws_assert(encap != WTAP_ENCAP_UNKNOWN &&
 	    encap != WTAP_ENCAP_PER_PACKET &&
 	    encap != WTAP_ENCAP_NONE);
-	ws_assert(tsprec != WTAP_TSPREC_UNKNOWN &&
-	    tsprec != WTAP_TSPREC_PER_PACKET);
 
 	idb = wtap_block_create(WTAP_BLOCK_IF_ID_AND_INFO);
 
@@ -260,9 +277,9 @@ wtap_generate_idb(int encap, int tsprec, int snaplen)
 	case WTAP_TSPREC_UNKNOWN:
 	default:
 		/*
-		 * Don't do this.
+		 * No timestamp precision.
 		 */
-		ws_assert_not_reached();
+		if_descr_mand->time_units_per_second = 1000000; /* default microsecond resolution */
 		break;
 	}
 	if (snaplen == 0) {

@@ -2031,12 +2031,24 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Copia i byte del pacchetto come un dump esadecimale.</translation>
     </message>
     <message>
+        <source>…as MIME Data</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>…as C String</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy packet bytes as printable ASCII characters and escape sequences.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>…as Printable Text</source>
-        <translation>...come testo stampabile</translation>
+        <translation type="vanished">...come testo stampabile</translation>
     </message>
     <message>
         <source>Copy only the printable text in the packet.</source>
-        <translation>Copia solo il testo stampabile nel pacchetto.</translation>
+        <translation type="vanished">Copia solo il testo stampabile nel pacchetto.</translation>
     </message>
     <message>
         <source>…as a Hex Stream</source>
@@ -2056,7 +2068,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>…as Raw Binary</source>
-        <translation>...come binario grezzo</translation>
+        <translation type="vanished">...come binario grezzo</translation>
     </message>
     <message>
         <source>Copy packet bytes as application/octet-stream MIME data.</source>
@@ -2064,11 +2076,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>…as Escaped String</source>
-        <translation>...come stringa letterale</translation>
+        <translation type="vanished">...come stringa letterale</translation>
     </message>
     <message>
         <source>Copy packet bytes as an escaped string.</source>
-        <translation>Copia i byte del pacchetto come stringa letterale</translation>
+        <translation type="vanished">Copia i byte del pacchetto come stringa letterale</translation>
     </message>
 </context>
 <context>
@@ -4170,12 +4182,24 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Pacchetti filtrati</translation>
     </message>
     <message>
+        <source>Filtered events</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>All Packets</source>
         <translation>Tutti i pacchetti</translation>
     </message>
     <message>
         <source>TCP Errors</source>
         <translation>Errori TCP</translation>
+    </message>
+    <message>
+        <source>All Events</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Access Denied</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Hover over the graph for details.</source>
@@ -4186,12 +4210,24 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Nessun pacchetto nell&apos;intervallo</translation>
     </message>
     <message>
+        <source>No events in interval</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Click to select packet</source>
         <translation>Fai clic per selezionare il pacchetto</translation>
     </message>
     <message>
         <source>Packet</source>
         <translation>Pacchetto</translation>
+    </message>
+    <message>
+        <source>Click to select event</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Event</source>
+        <translation type="unfinished">Evento</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -6990,6 +7026,13 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <source>Bytes %1-%2</source>
         <translation>Byte %1-%2</translation>
     </message>
+    <message numerus="yes">
+        <source>%Ln byte(s)</source>
+        <translation type="unfinished">
+            <numerusform>%Ln byte</numerusform>
+            <numerusform>%Ln byte</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>PacketFormatGroupBox</name>
@@ -7192,6 +7235,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Remove &amp;ignored packets</source>
         <translation>Rimuovi i pacchetti &amp;ignorati</translation>
+    </message>
+    <message>
+        <source>Include &amp;depended upon packets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Also include packets depended upon, such as those used to reassemble displayed packets</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>First &amp;to last marked</source>
@@ -7856,6 +7907,30 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Copia l&apos;elenco dei flussi come YAML.</translation>
     </message>
     <message>
+        <source>Copy short names</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy short protocol names in use.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disable unused protocols</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disable all protocols but those listed.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Re-enable unused protocols</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Re-enable protocols that were disabled in this dialog.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Protocol Hierarchy Statistics</source>
         <translation>Statistiche gerarchia di protocolli</translation>
     </message>
@@ -7872,12 +7947,36 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>come YAML</translation>
     </message>
     <message>
+        <source>protocol short names</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protocols</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Disable unused</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Revert changes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>No display filter.</source>
         <translation>Nessun filtro di visualizzazione.</translation>
     </message>
     <message>
         <source>Display filter: %1</source>
         <translation>Filtro di visualizzazione: %1</translation>
+    </message>
+    <message>
+        <source>Unused protocols have been disabled.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protocol changes have been reverted.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -11951,8 +12050,12 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Numero di frame non valido.</translation>
     </message>
     <message>
+        <source>Time shifting is not available while capturing packets.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Time shifting is not available capturing packets.</source>
-        <translation>Lo spostamento temporale non è disponibile durante la cattura.</translation>
+        <translation type="vanished">Lo spostamento temporale non è disponibile durante la cattura.</translation>
     </message>
 </context>
 <context>
@@ -13299,6 +13402,22 @@ a:hover {
     <message>
         <source>Remove all packet comments in the capture file</source>
         <translation>Rimuovi tutti i commenti dei pacchetti nel file di cattura</translation>
+    </message>
+    <message>
+        <source>Inject TLS Secrets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Embed used TLS secrets in the capture file</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Discard All Secrets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Discard all decryption secrets in the capture file</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&amp;Configuration Profiles…</source>
@@ -14756,6 +14875,18 @@ a:hover {
     <message>
         <source>TLS Session Keys (*.keys *.txt);;All Files (</source>
         <translation>Chiavi di sessione SSL (*.keys *.txt);;Tutti i file (</translation>
+    </message>
+    <message>
+        <source>No TLS Secrets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>There are no available secrets used to decrypt TLS traffic in the capture file.  Would you like to view information about how to decrypt TLS traffic on the wiki?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Are you sure you want to discard all decryption secrets?</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>No filter available. Try another %1.</source>

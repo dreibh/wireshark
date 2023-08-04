@@ -232,7 +232,7 @@ bool LograyMainWindow::openCaptureFile(QString cf_path, QString read_filter, uns
             continue;
         }
 
-        switch (cf_read(CaptureFile::globalCapFile(), FALSE)) {
+        switch (cf_read(CaptureFile::globalCapFile(), /*reloading=*/FALSE)) {
         case CF_READ_OK:
         case CF_READ_ERROR:
             /* Just because we got an error, that doesn't mean we were unable
@@ -3012,11 +3012,36 @@ void LograyMainWindow::statCommandExpertInfo(const char *, void *)
 
 // Statistics Menu
 
-void LograyMainWindow::on_actionStatisticsFlowGraph_triggered()
+void LograyMainWindow::connectStatisticsMenuActions()
 {
-    QMessageBox::warning(this, "Oops", "SequenceDialog depends on RTPStreamDialog");
-//    SequenceDialog *sequence_dialog = new SequenceDialog(*this, capture_file_);
-//    sequence_dialog->show();
+    connect(main_ui_->actionStatisticsCaptureFileProperties, &QAction::triggered, this, [=]() {
+        CaptureFilePropertiesDialog *capture_file_properties_dialog = new CaptureFilePropertiesDialog(*this, capture_file_);
+        connect(capture_file_properties_dialog, SIGNAL(captureCommentChanged()),
+                this, SLOT(updateForUnsavedChanges()));
+        capture_file_properties_dialog->show();
+    });
+
+    connect(main_ui_->actionStatisticsResolvedAddresses, &QAction::triggered, this, &LograyMainWindow::showResolvedAddressesDialog);
+
+    connect(main_ui_->actionStatisticsProtocolHierarchy, &QAction::triggered, this, [=]() {
+        ProtocolHierarchyDialog *phd = new ProtocolHierarchyDialog(*this, capture_file_);
+        connect(phd, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
+                this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
+        phd->show();
+    });
+
+    connect(main_ui_->actionStatisticsConversations, &QAction::triggered, this, &LograyMainWindow::showConversationsDialog);
+    connect(main_ui_->actionStatisticsEndpoints, &QAction::triggered, this, &LograyMainWindow::showEndpointsDialog);
+
+    connect(main_ui_->actionStatisticsPacketLengths, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("plen"); });
+
+    connect(main_ui_->actionStatisticsIOGraph, &QAction::triggered, this, [=]() { statCommandIOGraph(NULL, NULL); });
+
+    connect(main_ui_->actionStatisticsFlowGraph, &QAction::triggered, this, [=]() {
+        QMessageBox::warning(this, "Oops", "SequenceDialog depends on RTPStreamDialog");
+        //    SequenceDialog *sequence_dialog = new SequenceDialog(*this, capture_file_);
+        //    sequence_dialog->show();
+    });
 }
 
 void LograyMainWindow::openStatisticsTreeDialog(const gchar *abbr)
@@ -3025,31 +3050,6 @@ void LograyMainWindow::openStatisticsTreeDialog(const gchar *abbr)
 //    connect(st_dialog, SIGNAL(goToPacket(int)),
 //            packet_list_, SLOT(goToPacket(int)));
     st_dialog->show();
-}
-
-void LograyMainWindow::on_actionStatisticsConversations_triggered()
-{
-    ConversationDialog *conv_dialog = new ConversationDialog(*this, capture_file_);
-    connect(conv_dialog, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
-        this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
-    connect(conv_dialog, SIGNAL(openFollowStreamDialog(int, guint, guint)),
-        this, SLOT(openFollowStreamDialog(int, guint, guint)));
-    conv_dialog->show();
-}
-
-void LograyMainWindow::on_actionStatisticsEndpoints_triggered()
-{
-    EndpointDialog *endp_dialog = new EndpointDialog(*this, capture_file_);
-    connect(endp_dialog, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
-            this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
-    connect(endp_dialog, SIGNAL(openFollowStreamDialog(int)),
-            this, SLOT(openFollowStreamDialog(int)));
-    endp_dialog->show();
-}
-
-void LograyMainWindow::on_actionStatisticsPacketLengths_triggered()
-{
-    openStatisticsTreeDialog("plen");
 }
 
 // -z io,stat
@@ -3066,90 +3066,46 @@ void LograyMainWindow::statCommandIOGraph(const char *, void *)
     iog_dialog->show();
 }
 
-void LograyMainWindow::on_actionStatisticsIOGraph_triggered()
-{
-    statCommandIOGraph(NULL, NULL);
-}
-
 // Tools Menu
 
 // XXX No log tools yet
 
 // Help Menu
-void LograyMainWindow::on_actionHelpContents_triggered() {
+void LograyMainWindow::connectHelpMenuActions()
+{
+    connect(main_ui_->actionHelpAbout, &QAction::triggered, this, [=]() {
+        AboutDialog *about_dialog = new AboutDialog(this);
 
-    mainApp->helpTopicAction(HELP_CONTENT);
-}
+        if (about_dialog->isMinimized() == true)
+        {
+            about_dialog->showNormal();
+        }
+        else
+        {
+            about_dialog->show();
+        }
 
-void LograyMainWindow::on_actionHelpMPWireshark_triggered() {
+        about_dialog->raise();
+        about_dialog->activateWindow();
+    });
 
-    mainApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK);
-}
-
-void LograyMainWindow::on_actionHelpMPWireshark_Filter_triggered() {
-    mainApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK_FILTER);
-}
-
-void LograyMainWindow::on_actionHelpMPCapinfos_triggered() {
-    mainApp->helpTopicAction(LOCALPAGE_MAN_CAPINFOS);
-}
-
-void LograyMainWindow::on_actionHelpMPDumpcap_triggered() {
-    mainApp->helpTopicAction(LOCALPAGE_MAN_DUMPCAP);
-}
-
-void LograyMainWindow::on_actionHelpMPEditcap_triggered() {
-    mainApp->helpTopicAction(LOCALPAGE_MAN_EDITCAP);
-}
-
-void LograyMainWindow::on_actionHelpMPMergecap_triggered() {
-    mainApp->helpTopicAction(LOCALPAGE_MAN_MERGECAP);
-}
-
-void LograyMainWindow::on_actionHelpMPRawshark_triggered() {
-    mainApp->helpTopicAction(LOCALPAGE_MAN_RAWSHARK);
-}
-
-void LograyMainWindow::on_actionHelpMPReordercap_triggered() {
-    mainApp->helpTopicAction(LOCALPAGE_MAN_REORDERCAP);
-}
-
-void LograyMainWindow::on_actionHelpMPText2pcap_triggered() {
-    mainApp->helpTopicAction(LOCALPAGE_MAN_TEXT2PCAP);
-}
-
-void LograyMainWindow::on_actionHelpMPTShark_triggered() {
-    mainApp->helpTopicAction(LOCALPAGE_MAN_TSHARK);
-}
-
-void LograyMainWindow::on_actionHelpWebsite_triggered() {
-
-    mainApp->helpTopicAction(ONLINEPAGE_HOME);
-}
-
-void LograyMainWindow::on_actionHelpFAQ_triggered() {
-
-    mainApp->helpTopicAction(ONLINEPAGE_FAQ);
-}
-
-void LograyMainWindow::on_actionHelpAsk_triggered() {
-
-    mainApp->helpTopicAction(ONLINEPAGE_ASK);
-}
-
-void LograyMainWindow::on_actionHelpDownloads_triggered() {
-
-    mainApp->helpTopicAction(ONLINEPAGE_DOWNLOAD);
-}
-
-void LograyMainWindow::on_actionHelpWiki_triggered() {
-
-    mainApp->helpTopicAction(ONLINEPAGE_WIKI);
-}
-
-void LograyMainWindow::on_actionHelpSampleCaptures_triggered() {
-
-    mainApp->helpTopicAction(ONLINEPAGE_SAMPLE_FILES);
+    connect(main_ui_->actionHelpContents, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(HELP_CONTENT); });
+    connect(main_ui_->actionHelpMPWireshark, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK); });
+    connect(main_ui_->actionHelpMPWireshark_Filter, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK_FILTER); });
+    connect(main_ui_->actionHelpMPCapinfos, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_CAPINFOS); });
+    connect(main_ui_->actionHelpMPDumpcap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_DUMPCAP); });
+    connect(main_ui_->actionHelpMPEditcap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_EDITCAP); });
+    connect(main_ui_->actionHelpMPMergecap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_MERGECAP); });
+    connect(main_ui_->actionHelpMPRawshark, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_RAWSHARK); });
+    connect(main_ui_->actionHelpMPReordercap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_REORDERCAP); });
+    connect(main_ui_->actionHelpMPText2pcap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_TEXT2PCAP); });
+    connect(main_ui_->actionHelpMPTShark, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_TSHARK); });
+    connect(main_ui_->actionHelpWebsite, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_HOME); });
+    connect(main_ui_->actionHelpFAQ, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_FAQ); });
+    connect(main_ui_->actionHelpAsk, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_ASK); });
+    connect(main_ui_->actionHelpDownloads, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_DOWNLOAD); });
+    connect(main_ui_->actionHelpWiki, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_WIKI); });
+    connect(main_ui_->actionHelpSampleCaptures, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_SAMPLE_FILES); });
 }
 
 #ifdef HAVE_SOFTWARE_UPDATE
@@ -3159,28 +3115,11 @@ void LograyMainWindow::checkForUpdates()
 }
 #endif
 
-void LograyMainWindow::on_actionHelpAbout_triggered()
-{
-    AboutDialog *about_dialog = new AboutDialog(this);
-
-    if (about_dialog->isMinimized() == true)
-    {
-        about_dialog->showNormal();
-    }
-    else
-    {
-        about_dialog->show();
-    }
-
-    about_dialog->raise();
-    about_dialog->activateWindow();
-}
-
 void LograyMainWindow::resetPreviousFocus() {
     previous_focus_ = NULL;
 }
 
-void LograyMainWindow::on_goToCancel_clicked()
+void LograyMainWindow::goToCancelClicked()
 {
     main_ui_->goToFrame->animatedHide();
     if (previous_focus_) {
@@ -3190,27 +3129,19 @@ void LograyMainWindow::on_goToCancel_clicked()
     }
 }
 
-void LograyMainWindow::on_goToGo_clicked()
+void LograyMainWindow::goToGoClicked()
 {
     gotoFrame(main_ui_->goToLineEdit->text().toInt());
 
-    on_goToCancel_clicked();
+    goToCancelClicked();
 }
 
-void LograyMainWindow::on_goToLineEdit_returnPressed()
+void LograyMainWindow::goToLineEditReturnPressed()
 {
-    on_goToGo_clicked();
+    goToGoClicked();
 }
 
-void LograyMainWindow::on_actionStatisticsCaptureFileProperties_triggered()
-{
-    CaptureFilePropertiesDialog *capture_file_properties_dialog = new CaptureFilePropertiesDialog(*this, capture_file_);
-    connect(capture_file_properties_dialog, SIGNAL(captureCommentChanged()),
-            this, SLOT(updateForUnsavedChanges()));
-    capture_file_properties_dialog->show();
-}
-
-void LograyMainWindow::on_actionStatisticsResolvedAddresses_triggered()
+void LograyMainWindow::showResolvedAddressesDialog()
 {
     QString capFileName;
     wtap* wth = Q_NULLPTR;
@@ -3224,15 +3155,27 @@ void LograyMainWindow::on_actionStatisticsResolvedAddresses_triggered()
     resolved_addresses_dialog->show();
 }
 
-void LograyMainWindow::on_actionStatisticsProtocolHierarchy_triggered()
+void LograyMainWindow::showConversationsDialog()
 {
-    ProtocolHierarchyDialog *phd = new ProtocolHierarchyDialog(*this, capture_file_);
-    connect(phd, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
-            this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
-    phd->show();
+    ConversationDialog *conv_dialog = new ConversationDialog(*this, capture_file_);
+    connect(conv_dialog, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
+        this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
+    connect(conv_dialog, SIGNAL(openFollowStreamDialog(int, guint, guint)),
+        this, SLOT(openFollowStreamDialog(int, guint, guint)));
+    conv_dialog->show();
 }
 
-void LograyMainWindow::externalMenuItem_triggered()
+void LograyMainWindow::showEndpointsDialog()
+{
+    EndpointDialog *endp_dialog = new EndpointDialog(*this, capture_file_);
+    connect(endp_dialog, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
+            this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
+    connect(endp_dialog, SIGNAL(openFollowStreamDialog(int)),
+            this, SLOT(openFollowStreamDialog(int)));
+    endp_dialog->show();
+}
+
+void LograyMainWindow::externalMenuItemTriggered()
 {
     QAction * triggerAction = NULL;
     QVariant v;

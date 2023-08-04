@@ -133,6 +133,7 @@ class TestDissectGprpc:
         stdout = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('grpc_person_search_json_with_image.pcapng.gz'),
                 '-d', 'tcp.port==50052,http2',
+                '-2',
                 '-Y', 'grpc.message_length == 208 && json.value.string == "87561234"',
             ), encoding='utf-8', env=test_env)
         assert grep_output(stdout, 'GRPC/JSON')
@@ -148,6 +149,7 @@ class TestDissectGprpc:
                 '-o', 'uat:protobuf_search_paths: "{}","{}"'.format(well_know_types_dir, 'FALSE'),
                 '-o', 'uat:protobuf_search_paths: "{}","{}"'.format(user_defined_types_dir, 'TRUE'),
                 '-d', 'tcp.port==50051,http2',
+                '-2',
                 '-Y', 'protobuf.message.name == "tutorial.PersonSearchRequest"'
                       ' || (grpc.message_length == 66 && protobuf.field.value.string == "Jason"'
                       '     && protobuf.field.value.int64 == 1602601886)',
@@ -202,6 +204,7 @@ class TestDissectGprpc:
                 '-o', 'uat:http2_fake_headers: "{}","{}","{}","{}","{}","{}"'.format(
                             '50051','0','OUT','content-type','application/grpc','TRUE'),
                 '-d', 'tcp.port==50051,http2',
+                '-2',
                 '-Y', 'protobuf.field.value.string == "Jason" || protobuf.field.value.string == "Lily"',
             ), encoding='utf-8', env=test_env)
         assert count_output(stdout, 'DATA') == 2
@@ -219,6 +222,7 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.preload_protos: TRUE',
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57226,http',
+                '-2',
                 '-Y', '(tcp.stream eq 0) && (pbf.greet.HelloRequest.name == "88888888"'
                         '|| pbf.greet.HelloRequest.name == "99999999"'
                         '|| pbf.greet.HelloReply.message == "Hello 99999999")',
@@ -239,6 +243,7 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.preload_protos: TRUE',
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57228,http2',
+                '-2',
                 '-Y', '(tcp.stream eq 1) && (pbf.greet.HelloRequest.name == "88888888"'
                         '|| pbf.greet.HelloRequest.name == "99999999"'
                         '|| pbf.greet.HelloReply.message == "Hello 99999999")',
@@ -259,6 +264,7 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.preload_protos: TRUE',
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57228,http2',
+                '-2',
                 '-Y', '(tcp.stream eq 2) && ((pbf.greet.HelloRequest.name && grpc.message_length == 80004)'
                        '|| (pbf.greet.HelloReply.message && (grpc.message_length == 23 || grpc.message_length == 80012)))',
             ), encoding='utf-8', env=test_env)
@@ -276,6 +282,7 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.preload_protos: TRUE',
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57226,http',
+                '-2',
                 '-Y', '(tcp.stream eq 5) && (pbf.greet.HelloRequest.name == "88888888"'
                         '|| pbf.greet.HelloRequest.name == "99999999"'
                         '|| pbf.greet.HelloReply.message == "Hello 99999999")',
@@ -297,6 +304,7 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.preload_protos: TRUE',
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57228,http2',
+                '-2',
                 '-Y', '(tcp.stream eq 6) && (pbf.greet.HelloRequest.name == "88888888"'
                         '|| pbf.greet.HelloRequest.name == "99999999"'
                         '|| pbf.greet.HelloReply.message == "Hello 99999999")',
@@ -318,6 +326,7 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.preload_protos: TRUE',
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57228,http2',
+                '-2',
                 '-Y', '(tcp.stream eq 8) && ((pbf.greet.HelloRequest.name && grpc.message_length == 80004)'
                        '|| (pbf.greet.HelloReply.message && (grpc.message_length == 23 || grpc.message_length == 80012)))',
             ), encoding='utf-8', env=test_env)
@@ -336,6 +345,7 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.preload_protos: TRUE',
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57226,http',
+                '-2',
                 '-Y', '(tcp.stream eq 7) && (grpc.message_length == 80004 || grpc.message_length == 80010)',
             ), encoding='utf-8', env=test_env)
         assert grep_output(stdout, 'GRPC-Web-Text')
@@ -353,6 +363,7 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.preload_protos: TRUE',
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57226,http',
+                '-2',
                 '-Y', '(tcp.stream eq 9) && ((pbf.greet.HelloRequest.name && grpc.message_length == 10)'
                        '|| (pbf.greet.HelloReply.message && grpc.message_length == 18))',
             ), encoding='utf-8', env=test_env)
@@ -371,6 +382,7 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.preload_protos: TRUE',
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57226,http',
+                '-2',
                 '-Y', '(tcp.stream eq 10) && ((pbf.greet.HelloRequest.name && grpc.message_length == 80004)'
                        '|| (pbf.greet.HelloReply.message && (grpc.message_length == 23 || grpc.message_length == 80012)))',
             ), encoding='utf-8', env=test_env)
@@ -432,8 +444,8 @@ class TestDissectHttp2:
         assert grep_output(stdout, '00000000  00 00 12 04 00 00 00 00')
         # Stream ID 1 bytes, decrypted but compressed by HPACK
         assert not grep_output(stdout, '00000000  00 00 2c 01 05 00 00 00')
-        # Stream ID 1 bytes, decrypted and uncompressed
-        assert not grep_output(stdout, '00000000  00 00 00 07 3a 6d 65 74')
+        # Stream ID 1 bytes, decrypted and uncompressed, human readable
+        assert not grep_output(stdout, '00000000  3a 6d 65 74 68 6f 64 3a')
 
     def test_http2_follow_1(self, cmd_tshark, features, dirs, capture_file, test_env):
         '''Follow HTTP/2 Stream ID 1 test'''
@@ -449,8 +461,8 @@ class TestDissectHttp2:
         assert not grep_output(stdout, '00000000  00 00 12 04 00 00 00 00')
         # Stream ID 1 bytes, decrypted but compressed by HPACK
         assert not grep_output(stdout, '00000000  00 00 2c 01 05 00 00 00')
-        # Stream ID 1 bytes, decrypted and uncompressed
-        assert grep_output(stdout, '00000000  00 00 00 07 3a 6d 65 74')
+        # Stream ID 1 bytes, decrypted and uncompressed, human readable
+        assert grep_output(stdout, '00000000  3a 6d 65 74 68 6f 64 3a')
 
 class TestDissectProtobuf:
     def test_protobuf_udp_message_mapping(self, cmd_tshark, features, dirs, capture_file, test_env):
@@ -628,7 +640,7 @@ class TestDissectTcp:
             '-r', capture_file('http-ooo2.pcap'),
             '-otcp.reassemble_out_of_order:TRUE',
             '-Tfields',
-            '-eframe.number', '-etcp.reassembled_in', '-e_ws.col.Info',
+            '-eframe.number', '-etcp.reassembled_in', '-e_ws.col.info',
             '-2',
             ), encoding='utf-8', env=test_env)
         lines = stdout.split('\n')
@@ -718,6 +730,18 @@ class TestDissectTls:
         expected = ''.join('%04x\n' % i for i in range(1, 1001))
         assert stdout == expected
 
+    @staticmethod
+    def check_tls_reassembly_over_tcp_reassembly(cmd_tshark, capture_file, test_env,
+                                                 extraArgs=[]):
+        stdout = subprocess.check_output([cmd_tshark,
+                               '-r', capture_file('tls-fragmented-over-tcp-segmented.pcapng.gz'),
+                               '-zexpert,note',
+                               '-Yhttp.host',
+                               '-Tfields', '-ehttp.host'] + extraArgs,
+                               encoding='utf-8', env=test_env)
+        stdout = stdout.replace(',', '\n')
+        assert stdout == 'reports.crashlytics.com\n'
+
     def test_tls_handshake_reassembly(self, cmd_tshark, capture_file, test_env):
         '''Verify that TCP and TLS handshake reassembly works.'''
         self.check_tls_handshake_reassembly(cmd_tshark, capture_file, test_env)
@@ -726,6 +750,45 @@ class TestDissectTls:
         '''Verify that TCP and TLS handshake reassembly works (second pass).'''
         self.check_tls_handshake_reassembly(
             cmd_tshark, capture_file, test_env, extraArgs=['-2'])
+
+    def test_tls_reassembly_over_tcp_reassembly(self, cmd_tshark, capture_file, features, test_env):
+        '''Verify that TLS reassembly over TCP reassembly works.'''
+        if not features.have_gnutls:
+            pytest.skip('Requires GnuTLS.')
+        self.check_tls_reassembly_over_tcp_reassembly(cmd_tshark, capture_file, test_env)
+
+    def test_tls_reassembly_over_tcp_reassembly_2(self, cmd_tshark, capture_file, features, test_env):
+        '''Verify that TLS reassembly over TCP reassembly works (second pass).'''
+        # pinfo->curr_layer_num can be different on the second pass than the
+        # first pass, because the HTTP dissector isn't called for the first
+        # TLS record on the second pass.
+        if not features.have_gnutls:
+            pytest.skip('Requires GnuTLS.')
+        self.check_tls_reassembly_over_tcp_reassembly(cmd_tshark, capture_file,
+            test_env, extraArgs=['-2'])
+
+    @staticmethod
+    def check_tls_out_of_order(cmd_tshark, capture_file, test_env, extraArgs=[]):
+        stdout = subprocess.check_output([cmd_tshark,
+                '-r', capture_file('challenge01_ooo_stream.pcapng.gz'),
+                '-otcp.reassemble_out_of_order:TRUE',
+                '-q',
+                '-zhttp,stat,png or image-jfif',
+            ] + extraArgs, encoding='utf-8', env=test_env)
+        assert grep_output(stdout, r'200 OK\s*11')
+
+    def test_tls_out_of_order(self, cmd_tshark, capture_file, features, test_env):
+        '''Verify that TLS reassembly over TCP reassembly works.'''
+        if not features.have_gnutls:
+            pytest.skip('Requires GnuTLS.')
+        self.check_tls_out_of_order(cmd_tshark, capture_file, test_env)
+
+    def test_tls_out_of_order_second_pass(self, cmd_tshark, capture_file, features, test_env):
+        '''Verify that TLS reassembly over TCP reassembly works (second pass).'''
+        if not features.have_gnutls:
+            pytest.skip('Requires GnuTLS.')
+        self.check_tls_out_of_order(cmd_tshark, capture_file,
+            test_env, extraArgs=['-2'])
 
 class TestDissectQuic:
     @staticmethod

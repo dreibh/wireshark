@@ -281,6 +281,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-bacnet.h
 	packet-bblog.h
 	packet-ber.h
+	packet-bfcp.h
 	packet-bfd.h
 	packet-bgp.h
 	packet-bicc_mst.h
@@ -1276,6 +1277,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-icmpv6.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-icp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-icq.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-id3v2.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-idp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-idrp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-iec104.c
@@ -1425,6 +1427,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-llc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lldp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-llrp.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-lls-slt.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lls.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-llt.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lltd.c
@@ -2085,6 +2088,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ypserv.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ypxfr.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-z3950.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-zabbix.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-aps.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-nwk.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-nwk-gp.c

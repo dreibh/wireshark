@@ -253,21 +253,19 @@ void proto_report_dissector_bug(const char *format, ...)
    __DISSECTOR_ASSERT_STATIC_ANALYSIS_HINT((hfinfo)->type == t)
 
 #define DISSECTOR_ASSERT_FIELD_TYPE_IS_INTEGRAL(hfinfo)  \
-  ((void) ((IS_FT_INT((hfinfo)->type) || \
-            IS_FT_UINT((hfinfo)->type)) ? (void)0 : \
+  ((void) ((FT_IS_INTEGER((hfinfo)->type)) ? (void)0 : \
    REPORT_DISSECTOR_BUG("%s:%u: field %s is not of type FT_CHAR or an FT_{U}INTn type", \
          __FILE__, __LINE__, (hfinfo)->abbrev))) \
-   __DISSECTOR_ASSERT_STATIC_ANALYSIS_HINT(IS_FT_INT((hfinfo)->type) || \
-                                           IS_FT_UINT((hfinfo)->type))
+   __DISSECTOR_ASSERT_STATIC_ANALYSIS_HINT(FT_IS_INTEGER((hfinfo)->type))
 
 #define __DISSECTOR_ASSERT_FIELD_TYPE_IS_STRING(hfinfo) \
   (REPORT_DISSECTOR_BUG("%s:%u: field %s is not of type FT_STRING, FT_STRINGZ, FT_STRINGZPAD, FT_STRINGZTRUNC, or FT_UINT_STRING", \
         __FILE__, __LINE__, (hfinfo)->abbrev))
 
 #define DISSECTOR_ASSERT_FIELD_TYPE_IS_STRING(hfinfo)  \
-  ((void) (IS_FT_STRING((hfinfo)->type) ? (void)0 : \
+  ((void) (FT_IS_STRING((hfinfo)->type) ? (void)0 : \
    __DISSECTOR_ASSERT_FIELD_TYPE_IS_STRING ((hfinfo)))) \
-   __DISSECTOR_ASSERT_STATIC_ANALYSIS_HINT(IS_FT_STRING((hfinfo)->type))
+   __DISSECTOR_ASSERT_STATIC_ANALYSIS_HINT(FT_IS_STRING((hfinfo)->type))
 
 #define __DISSECTOR_ASSERT_FIELD_TYPE_IS_TIME(hfinfo) \
   (REPORT_DISSECTOR_BUG("%s:%u: field %s is not of type FT_ABSOLUTE_TIME or FT_RELATIVE_TIME", \
@@ -459,6 +457,16 @@ void proto_report_dissector_bug(const char *format, ...)
  * and the number of octets in the value is 0.
  */
 #define ENC_ZIGBEE               0x40000000
+
+/*
+ * This is a modifier for ENC_UTF_16, ENC_UCS_2, and ENC_UCS_4
+ * indicating that if the first two (or four, for UCS-4) octets
+ * are a big-endian or little-endian BOM, use that to determine
+ * the serialization order and ignore the ENC_LITTLE_ENDIAN or
+ * ENC_BIG_ENDIAN flag. This can't collide with ENC_ZIGBEE because
+ * it could be used simultaneously.
+ */
+#define ENC_BOM                  0x20000000
 
 /*
  * For cases where either native type or string encodings could both be
@@ -691,6 +699,7 @@ typedef enum {
     ABSOLUTE_TIME_UTC,          /**< UTC, with month and day */
     ABSOLUTE_TIME_DOY_UTC,      /**< UTC, with 1-origin day-of-year */
     ABSOLUTE_TIME_NTP_UTC,      /**< UTC, with "NULL" when timestamp is all zeros */
+    ABSOLUTE_TIME_UNIX,         /**< Unix time */
 
 /* String types */
     BASE_STR_WSP,       /**< Replace all whitespace characters (newline, formfeed, etc) with "space". */
@@ -699,7 +708,7 @@ typedef enum {
 #define FIELD_DISPLAY(d) ((d) & FIELD_DISPLAY_E_MASK)
 
 #define FIELD_DISPLAY_IS_ABSOLUTE_TIME(d) \
-        (FIELD_DISPLAY(d) >= ABSOLUTE_TIME_LOCAL && FIELD_DISPLAY(d) <= ABSOLUTE_TIME_NTP_UTC)
+        (FIELD_DISPLAY(d) >= ABSOLUTE_TIME_LOCAL && FIELD_DISPLAY(d) <= ABSOLUTE_TIME_UNIX)
 
 /* Following constants have to be ORed with a field_display_e when dissector
  * want to use specials value-string MACROs for a header_field_info */
@@ -2695,6 +2704,9 @@ WS_DLL_PUBLIC void proto_disable_by_default(const int proto_id);
  @param enabled enable / disable the protocol */
 WS_DLL_PUBLIC void proto_set_decoding(const int proto_id, const gboolean enabled);
 
+/** Disable all protocols. */
+WS_DLL_PUBLIC void proto_disable_all(void);
+
 /** Re-enable all protocols that are not marked as disabled by default. */
 WS_DLL_PUBLIC void proto_reenable_all(void);
 
@@ -2759,6 +2771,9 @@ WS_DLL_PUBLIC gboolean proto_registrar_dump_fieldcount(void);
 
 /** Dumps a glossary of the protocol and field registrations to STDOUT. */
 WS_DLL_PUBLIC void proto_registrar_dump_fields(void);
+
+/** Dumps protocol and field abbreviations to STDOUT which start with prefix. */
+WS_DLL_PUBLIC gboolean proto_registrar_dump_field_completions(char *prefix);
 
 /** Dumps a glossary field types and descriptive names to STDOUT */
 WS_DLL_PUBLIC void proto_registrar_dump_ftypes(void);
@@ -3318,6 +3333,28 @@ WS_DLL_PUBLIC proto_item *
 proto_tree_add_checksum(proto_tree *tree, tvbuff_t *tvb, const guint offset,
         const int hf_checksum, const int hf_checksum_status, struct expert_field* bad_checksum_expert,
         packet_info *pinfo, guint32 computed_checksum, const guint encoding, const guint flags);
+
+/** Add a checksum bytes arry filed to a proto_tree.
+ This standardizes the display of a checksum field as well as any
+ status and expert info supporting it.
+ @param tree the tree to append this item to
+ @param tvb the tv buffer of the current data
+ @param offset start of data in tvb
+ @param hf_checksum checksum field index
+ @param hf_checksum_status optional checksum status field index.  If none
+ exists, just pass -1
+ @param bad_checksum_expert optional expert info for a bad checksum.  If
+ none exists, just pass NULL
+ @param pinfo Packet info used for optional expert info.  If unused, NULL can
+ be passed
+ @param computed_checksum Checksum as bytes array to verify against
+ @param checksum_len Checksum size in bytes
+ @param flags bitmask field of PROTO_CHECKSUM_ options. PROTO_CHECKSUM_IN_CKSUM is ignored
+ @return the newly created item */
+WS_DLL_PUBLIC proto_item*
+proto_tree_add_checksum_bytes(proto_tree *tree, tvbuff_t *tvb, const guint offset,
+		const int hf_checksum, const int hf_checksum_status, struct expert_field* bad_checksum_expert,
+		packet_info *pinfo, const uint8_t *computed_checksum, size_t checksum_len, const guint flags);
 
 typedef enum
 {

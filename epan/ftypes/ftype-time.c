@@ -15,6 +15,7 @@
 
 #include <epan/to_str.h>
 #include <wsutil/time_util.h>
+#include <wsutil/safe-math.h>
 
 
 static enum ft_result
@@ -92,7 +93,7 @@ get_nsecs(const char *startp, int *nsecs, const char **endptr)
 }
 
 static gboolean
-relative_val_from_literal(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
+val_from_unix_time(fvalue_t *fv, const char *s)
 {
 	const char    *curptr;
 	char *endptr;
@@ -115,7 +116,7 @@ relative_val_from_literal(fvalue_t *fv, const char *s, gboolean allow_partial_va
 		 */
 		fv->value.time.secs = strtoul(curptr, &endptr, 10);
 		if (endptr == curptr || (*endptr != '\0' && *endptr != '.'))
-			goto fail;
+			return FALSE;
 		curptr = endptr;
 		if (*curptr == '.')
 			curptr++;	/* skip the decimal point */
@@ -136,7 +137,7 @@ relative_val_from_literal(fvalue_t *fv, const char *s, gboolean allow_partial_va
 		 * Get the nanoseconds value.
 		 */
 		if (!get_nsecs(curptr, &fv->value.time.nsecs, NULL))
-			goto fail;
+			return FALSE;
 	} else {
 		/*
 		 * No nanoseconds value - it's 0.
@@ -149,13 +150,18 @@ relative_val_from_literal(fvalue_t *fv, const char *s, gboolean allow_partial_va
 		fv->value.time.nsecs = -fv->value.time.nsecs;
 	}
 	return TRUE;
+}
 
-fail:
+static gboolean
+relative_val_from_literal(fvalue_t *fv, const char *s, gboolean allow_partial_value _U_, gchar **err_msg)
+{
+	if (val_from_unix_time(fv, s))
+		return TRUE;
+
 	if (err_msg != NULL)
 		*err_msg = ws_strdup_printf("\"%s\" is not a valid time.", s);
 	return FALSE;
 }
-
 
 /* Returns TRUE if 's' starts with an abbreviated month name. */
 static gboolean
@@ -195,7 +201,11 @@ absolute_val_from_string(fvalue_t *fv, const char *s, size_t len _U_, char **err
 	gboolean has_seconds = TRUE;
 	char *err_msg = NULL;
 
-	/* Try ISO 8601 format first. */
+	/* Try Unix time first. */
+	if (val_from_unix_time(fv, s))
+		return TRUE;
+
+	/* Try ISO 8601 format. */
 	if (iso8601_to_nstime(&fv->value.time, s, ISO8601_DATETIME) == strlen(s))
 		return TRUE;
 
@@ -391,11 +401,16 @@ absolute_val_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype
 			break;
 
 		case FTREPR_DFILTER:
-			/* Only ABSOLUTE_TIME_LOCAL and ABSOLUTE_TIME_UTC
-			 * are supported. Normalize the field_display value. */
-			if (field_display != ABSOLUTE_TIME_LOCAL)
-				field_display = ABSOLUTE_TIME_UTC;
-			rep = abs_time_to_ftrepr_dfilter(scope, &fv->value.time, field_display != ABSOLUTE_TIME_LOCAL);
+			if (field_display == ABSOLUTE_TIME_UNIX) {
+				rep = abs_time_to_unix_str(scope, &fv->value.time);
+			}
+			else {
+				/* Only ABSOLUTE_TIME_LOCAL and ABSOLUTE_TIME_UTC
+				 * are supported. Normalize the field_display value. */
+				if (field_display != ABSOLUTE_TIME_LOCAL)
+					field_display = ABSOLUTE_TIME_UTC;
+				rep = abs_time_to_ftrepr_dfilter(scope, &fv->value.time, field_display != ABSOLUTE_TIME_LOCAL);
+			}
 			break;
 
 		default:
@@ -438,17 +453,58 @@ time_unary_minus(fvalue_t * dst, const fvalue_t *src, char **err_ptr _U_)
 	return FT_OK;
 }
 
-static enum ft_result
-time_add(fvalue_t * dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr _U_)
+#define NS_PER_S 1000000000
+
+static void
+check_ns_wraparound(nstime_t *ns, jmp_buf env)
 {
-	nstime_sum(&dst->value.time, &a->value.time, &b->value.time);
+	if (ns->nsecs >= NS_PER_S || (ns->nsecs > 0 && ns->secs < 0)) {
+		ws_safe_sub_jmp(&ns->nsecs, ns->nsecs, NS_PER_S, env);
+		ws_safe_add_jmp(&ns->secs, ns->secs, 1, env);
+	}
+	else if(ns->nsecs <= -NS_PER_S || (ns->nsecs < 0 && ns->secs > 0)) {
+		ws_safe_add_jmp(&ns->nsecs, ns->nsecs, NS_PER_S, env);
+		ws_safe_sub_jmp(&ns->secs, ns->secs, 1, env);
+	}
+}
+
+static void
+_nstime_add(nstime_t *res, nstime_t a, const nstime_t b, jmp_buf env)
+{
+	ws_safe_add_jmp(&res->secs, a.secs, b.secs, env);
+	ws_safe_add_jmp(&res->nsecs, a.nsecs, b.nsecs, env);
+	check_ns_wraparound(res, env);
+}
+
+static void
+_nstime_sub(nstime_t *res, nstime_t a, const nstime_t b, jmp_buf env)
+{
+	ws_safe_sub_jmp(&res->secs, a.secs, b.secs, env);
+	ws_safe_sub_jmp(&res->nsecs, a.nsecs, b.nsecs, env);
+	check_ns_wraparound(res, env);
+}
+
+static enum ft_result
+time_add(fvalue_t * dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
+{
+	jmp_buf env;
+	if (setjmp(env) != 0) {
+		*err_ptr = ws_strdup_printf("time_add: overflow");
+		return FT_ERROR;
+	}
+	_nstime_add(&dst->value.time, a->value.time, b->value.time, env);
 	return FT_OK;
 }
 
 static enum ft_result
-time_subtract(fvalue_t * dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr _U_)
+time_subtract(fvalue_t * dst, const fvalue_t *a, const fvalue_t *b, char **err_ptr)
 {
-	nstime_delta(&dst->value.time, &a->value.time, &b->value.time);
+	jmp_buf env;
+	if (setjmp(env) != 0) {
+		*err_ptr = ws_strdup_printf("time_subtract: overflow");
+		return FT_ERROR;
+	}
+	_nstime_sub(&dst->value.time, a->value.time, b->value.time, env);
 	return FT_OK;
 }
 
@@ -481,13 +537,13 @@ ftype_register_time(void)
 
 		time_hash,			/* hash */
 		time_is_zero,			/* is_zero */
-		NULL,				/* is_negative */
+		time_is_negative,		/* is_negative */
 		NULL,
 		NULL,
 		NULL,				/* bitwise_and */
-		NULL,				/* unary_minus */
-		NULL,				/* add */
-		NULL,				/* subtract */
+		time_unary_minus,		/* unary_minus */
+		time_add,			/* add */
+		time_subtract,			/* subtract */
 		NULL,				/* multiply */
 		NULL,				/* divide */
 		NULL,				/* modulo */

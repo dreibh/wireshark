@@ -27,10 +27,10 @@
 #include <epan/proto_data.h>
 #include <wsutil/utf8_entities.h>
 
-#include <packet-tecmp.h>
-#include <packet-socketcan.h>
-#include <packet-flexray.h>
-#include <packet-lin.h>
+#include "packet-tecmp.h"
+#include "packet-socketcan.h"
+#include "packet-flexray.h"
+#include "packet-lin.h"
 
 void proto_register_tecmp(void);
 void proto_reg_handoff_tecmp(void);
@@ -47,8 +47,6 @@ static gboolean heuristic_first = FALSE;
 static gboolean analog_samples_are_signed_int = TRUE;
 static gboolean show_ethernet_in_tecmp_tree = FALSE;
 
-static dissector_table_t fr_subdissector_table;
-static heur_dissector_list_t fr_heur_subdissector_list;
 static dissector_table_t lin_subdissector_table;
 static dissector_table_t data_subdissector_table;
 static dissector_handle_t text_lines_handle;
@@ -1364,18 +1362,15 @@ dissect_tecmp_status_device_vendor_data(tvbuff_t *tvb, packet_info *pinfo _U_, p
         offset += 1;
         tmp = tvb_get_guint24(tvb, offset, ENC_BIG_ENDIAN);
         proto_tree_add_string_format(tree, hf_tecmp_payload_status_dev_vendor_technica_sw, tvb, offset, 3, NULL,
-                                     "Software Version: v.%d.%d.%d",
-                                     (tmp&0x00ff0000)>>16, (tmp&0x0000ff00)>>8, tmp&0x000000ff);
+                                     "Software Version: v%d.%d.%d", (tmp&0x00ff0000)>>16, (tmp&0x0000ff00)>>8, tmp&0x000000ff);
         offset += 3;
 
         tmp = tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN);
         proto_tree_add_string_format(tree, hf_tecmp_payload_status_dev_vendor_technica_hw, tvb, offset, 2, NULL,
-                                     "Hardware Version: v.%d.%x",
-                                     (tmp & 0x0000ff00) >> 8, tmp & 0x000000ff);
+                                     "Hardware Version: v%d.%x", (tmp & 0x0000ff00) >> 8, tmp & 0x000000ff);
         offset += 2;
 
-        ti = proto_tree_add_item(tree, hf_tecmp_payload_status_dev_vendor_technica_buffer_fill_level, tvb, offset, 1,
-                                 ENC_NA);
+        ti = proto_tree_add_item(tree, hf_tecmp_payload_status_dev_vendor_technica_buffer_fill_level, tvb, offset, 1, ENC_NA);
         proto_item_append_text(ti, "%s", "%");
         offset += 1;
 
@@ -1387,8 +1382,7 @@ dissect_tecmp_status_device_vendor_data(tvbuff_t *tvb, packet_info *pinfo _U_, p
                                          4, tmp * 128, "%d MB", tmp * 128);
         offset += 4;
 
-        ti = proto_tree_add_item_ret_uint64(tree, hf_tecmp_payload_status_dev_vendor_technica_lifecycle, tvb, offset, 8,
-                                 ENC_BIG_ENDIAN, &tmp64);
+        ti = proto_tree_add_item_ret_uint64(tree, hf_tecmp_payload_status_dev_vendor_technica_lifecycle, tvb, offset, 8, ENC_BIG_ENDIAN, &tmp64);
 
         guint64 nanos = tmp64 % 1000000000;
         guint64 secs = tmp64 / 1000000000;
@@ -1410,8 +1404,7 @@ dissect_tecmp_status_device_vendor_data(tvbuff_t *tvb, packet_info *pinfo _U_, p
         tmp = tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN);
 
         double voltage_value = (double)((tmp & 0x0000ff00) >> 8) + (tmp & 0x000000ff) / 100.0;
-        /* we are adding the base unit manually since currently proto.c does not do this for doubles */
-        proto_tree_add_double_format_value(tree, hf_tecmp_payload_status_dev_vendor_technica_voltage, tvb, offset, 2, voltage_value, "%g %s", voltage_value, unit_name_string_get_double(voltage_value, &units_volt));
+        proto_tree_add_double(tree, hf_tecmp_payload_status_dev_vendor_technica_voltage, tvb, offset, 2, voltage_value);
         offset += 2;
 
         if (tvb_captured_length_remaining(tvb, offset) == 1) {
@@ -2395,7 +2388,7 @@ proto_register_tecmp_payload(void) {
             FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0, NULL, HFILL } },
         { &hf_tecmp_payload_status_dev_vendor_technica_voltage,
             { "Voltage", "tecmp.payload.status_dev.vendor_technica.voltage",
-            FT_DOUBLE, BASE_NONE, NULL, 0x0, NULL, HFILL } },
+            FT_DOUBLE, BASE_NONE | BASE_UNIT_STRING, &units_volt, 0x0, NULL, HFILL } },
         { &hf_tecmp_payload_status_dev_vendor_technica_temperature,
             { "Temperature", "tecmp.payload.status_dev.vendor_technica.temperature",
             FT_UINT8, BASE_DEC | BASE_UNIT_STRING, &units_degree_celsius, 0x0, NULL, HFILL }},
@@ -2882,9 +2875,6 @@ proto_reg_handoff_tecmp(void) {
 
     tecmp_handle = create_dissector_handle(dissect_tecmp, proto_tecmp);
     dissector_add_uint("ethertype", ETHERTYPE_TECMP, tecmp_handle);
-
-    fr_subdissector_table  = find_dissector_table("flexray.subdissector");
-    fr_heur_subdissector_list = find_heur_dissector_list("flexray");
 
     lin_subdissector_table = find_dissector_table("lin.frame_id");
 

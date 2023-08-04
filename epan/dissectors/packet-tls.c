@@ -240,9 +240,6 @@ ssl_proto_tree_add_segment_data(
 
 
 static ssl_master_key_map_t       ssl_master_key_map;
-/* used by "Export TLS Session Keys" */
-GHashTable *ssl_session_hash;
-GHashTable *ssl_crandom_hash;
 
 #ifdef HAVE_LIBGNUTLS
 static GHashTable         *ssl_key_hash             = NULL;
@@ -286,10 +283,6 @@ ssl_init(void)
                     &ssl_decrypted_data, &ssl_compressed_data);
     ssl_debug_flush();
 
-    /* for "Export TLS Session Keys" */
-    ssl_session_hash = ssl_master_key_map.session;
-    ssl_crandom_hash = ssl_master_key_map.crandom;
-
     /* We should have loaded "keys_list" by now. Mark it obsolete */
     if (ssl_module) {
         keys_list_pref = prefs_find_preference(ssl_module, "keys_list");
@@ -313,11 +306,6 @@ ssl_cleanup(void)
 #endif
     ssl_common_cleanup(&ssl_master_key_map, &ssl_keylog_file,
                        &ssl_decrypted_data, &ssl_compressed_data);
-
-    /* should not be needed since the UI code prevents this from being accessed
-     * when no file is open. Clear it anyway just to be sure. */
-    ssl_session_hash = NULL;
-    ssl_crandom_hash = NULL;
 }
 
 ssl_master_key_map_t *
@@ -613,16 +601,9 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
      * - TLS within a different encrypted TLS tunnel.
      *
      * To support the second case, 'curr_layer_num_ssl' is used as identifier
-     * for the current TLS layer. It is however not a stable identifier for the
-     * second pass (Bug 16109). If the first decrypted record requests
-     * reassembly for HTTP, then the second pass will skip calling the dissector
-     * for the first record. That means that 'pinfo->curr_layer_num' will
-     * actually be lower the second time.
-     *
-     * Since this cannot be easily fixed, we will just break the (hopefully less
-     * common) case of TLS tunneled within TLS.
+     * for the current TLS layer.
      */
-    guint8             curr_layer_num_ssl = 0; // pinfo->curr_layer_num;
+    guint8             curr_layer_num_ssl = pinfo->curr_proto_layer_num;
 
     ti = NULL;
     ssl_tree   = NULL;
@@ -2870,10 +2851,13 @@ dissect_tls_handshake_full(tvbuff_t *tvb, packet_info *pinfo,
                  * since the server may not agree on using TLS 1.3. If
                  * early_data is advertised, it must be TLS 1.3 though.
                  */
-                if (ssl && ssl->has_early_data) {
-                    session->version = TLSV1DOT3_VERSION;
-                    ssl->state |= SSL_VERSION;
-                    ssl_debug_printf("%s forcing version 0x%04X -> state 0x%02X\n", G_STRFUNC, version, ssl->state);
+                if (ssl) {
+                    tls_save_crandom(ssl, &ssl_master_key_map);
+                    if  (ssl->has_early_data) {
+                        session->version = TLSV1DOT3_VERSION;
+                        ssl->state |= SSL_VERSION;
+                        ssl_debug_printf("%s forcing version 0x%04X -> state 0x%02X\n", G_STRFUNC, version, ssl->state);
+                    }
                 }
                 break;
 

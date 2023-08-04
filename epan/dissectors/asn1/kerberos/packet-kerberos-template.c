@@ -492,7 +492,7 @@ wmem_map_t *kerberos_longterm_keys = NULL;
 static wmem_map_t *kerberos_all_keys = NULL;
 static wmem_map_t *kerberos_app_session_keys = NULL;
 
-static gboolean
+static bool
 enc_key_list_cb(wmem_allocator_t* allocator _U_, wmem_cb_event_t event _U_, void *user_data _U_)
 {
 	enc_key_list = NULL;
@@ -1198,10 +1198,10 @@ read_keytab_file(const char *filename)
 					 snprintf(pos, KRB_MAX_ORIG_LEN, "keytab principal "));
 			for(i=0;i<key.principal->length;i++){
 				pos+=MIN(KRB_MAX_ORIG_LEN-(pos-new_key->key_origin),
-						 snprintf(pos, (gulong)(KRB_MAX_ORIG_LEN-(pos-new_key->key_origin)), "%s%s",(i?"/":""),(key.principal->data[i]).data));
+						 snprintf(pos, KRB_MAX_ORIG_LEN-(pos-new_key->key_origin), "%s%s",(i?"/":""),(key.principal->data[i]).data));
 			}
 			pos+=MIN(KRB_MAX_ORIG_LEN-(pos-new_key->key_origin),
-					 snprintf(pos, (gulong)(KRB_MAX_ORIG_LEN-(pos-new_key->key_origin)), "@%s",key.principal->realm.data));
+					 snprintf(pos, KRB_MAX_ORIG_LEN-(pos-new_key->key_origin), "@%s",key.principal->realm.data));
 			*pos=0;
 			new_key->keytype=key.key.enctype;
 			new_key->keylength=key.key.length;

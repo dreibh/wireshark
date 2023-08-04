@@ -10,7 +10,7 @@
 #include <config.h>
 #include <epan/packet.h>
 #include <epan/expert.h>
-#include <epan/dissectors/packet-ieee80211.h>
+#include "packet-ieee80211.h"
 
 #include <wsutil/str_util.h>
 
@@ -1556,12 +1556,12 @@ dissect_attr_availability(proto_tree* attr_tree, tvbuff_t* tvb, gint offset, gui
 
         guint64 entries_type, non_contiguous_bw, num_entries;
         proto_tree_add_bits_ret_val(entries_tree, hf_nan_attr_availability_entry_entries_type, tvb,
-            offset * 8 + 7, 1, &entries_type, ENC_LITTLE_ENDIAN);
+            offset * 8, 1, &entries_type, ENC_LITTLE_ENDIAN);
         proto_tree_add_bits_ret_val(entries_tree,
-            hf_nan_attr_availability_entry_entries_non_contiguous_bw, tvb, offset * 8 + 6, 1,
+            hf_nan_attr_availability_entry_entries_non_contiguous_bw, tvb, offset * 8 + 1, 1,
             &non_contiguous_bw, ENC_LITTLE_ENDIAN);
         proto_tree_add_bits_ret_val(entries_tree, hf_nan_attr_availability_entry_entries_num_entries,
-            tvb, offset * 8, 4, &num_entries, ENC_LITTLE_ENDIAN);
+            tvb, offset * 8 + 4, 4, &num_entries, ENC_LITTLE_ENDIAN);
 
         offset += 1;
         for (guint8 i = 0; i < num_entries; i++)
@@ -3852,7 +3852,7 @@ proto_register_nan(void)
              {
              "Map ID",
              "nan.unaligned_schedule.ulw_overwrite.map_id",
-             FT_UINT16, BASE_HEX_DEC, NULL, 0x1E, NULL, HFILL
+             FT_UINT8, BASE_HEX_DEC, NULL, 0x1E, NULL, HFILL
              }
         },
         { &hf_nan_attr_unaligned_sch_ulw_ctrl,

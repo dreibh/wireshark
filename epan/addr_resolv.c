@@ -23,6 +23,9 @@
 #include <wsutil/strtoi.h>
 #include <wsutil/ws_assert.h>
 
+#include "enterprises.h"
+#include "manuf.h"
+
 /*
  * Win32 doesn't have SIGALRM (and it's the OS where name lookup calls
  * are most likely to take a long time, given the way address-to-name
@@ -94,6 +97,7 @@
 #include <epan/maxmind_db.h>
 #include <epan/prefs.h>
 #include <epan/uat.h>
+#include "services.h"
 
 #define ENAME_HOSTS     "hosts"
 #define ENAME_SUBNETS   "subnets"
@@ -104,7 +108,7 @@
 #define ENAME_SERVICES  "services"
 #define ENAME_VLANS     "vlans"
 #define ENAME_SS7PCS    "ss7pcs"
-#define ENAME_ENTERPRISES "enterprises.tsv"
+#define ENAME_ENTERPRISES "enterprises"
 
 #define HASHETHSIZE      2048
 #define HASHHOSTSIZE     2048
@@ -223,6 +227,8 @@ static wmem_map_t *wka_hashtable = NULL;
 static wmem_map_t *eth_hashtable = NULL;
 // Maps guint -> serv_port_t*
 static wmem_map_t *serv_port_hashtable = NULL;
+
+// Maps enterprise-id -> enterprise-desc (only used for user additions)
 static GHashTable *enterprises_hashtable = NULL;
 
 static subnet_length_entry_t subnet_length_entries[SUBNETLENGTHSIZE]; /* Ordered array of entries */
@@ -831,10 +837,30 @@ serv_name_lookup(port_type proto, guint port)
 {
     serv_port_t *serv_port_table = NULL;
     const char *name;
+    ws_services_proto_t p;
+    ws_services_entry_t *serv;
 
+    /* first look in the personal services file + cache */
     name = _serv_name_lookup(proto, port, &serv_port_table);
     if (name != NULL)
         return name;
+
+    /* now look in the global tables */
+    switch(proto) {
+        case PT_TCP: p = ws_tcp; break;
+        case PT_UDP: p = ws_udp; break;
+        case PT_SCTP: p = ws_sctp; break;
+        case PT_DCCP: p = ws_dccp; break;
+        default: ws_assert_not_reached();
+    }
+    serv = global_services_lookup(port, p);
+    if (serv) {
+        /* Cache result */
+        /* XXX would be nice to avoid the strdup for this name static string but user/custom entries
+         * are dynamic and they share the same table. */
+        add_service_name(proto, port, serv->name);
+        return serv->name;
+    }
 
     if (serv_port_table == NULL) {
         serv_port_table = wmem_new0(wmem_epan_scope(), serv_port_t);
@@ -850,11 +876,10 @@ serv_name_lookup(port_type proto, guint port)
 static void
 initialize_services(void)
 {
-    gboolean parse_file = TRUE;
     ws_assert(serv_port_hashtable == NULL);
     serv_port_hashtable = wmem_map_new(wmem_epan_scope(), g_direct_hash, g_direct_equal);
 
-    /* Compute the pathname of the services file. */
+    /* Compute the pathname of the global services file. */
     if (g_services_path == NULL) {
         g_services_path = get_datafile_path(ENAME_SERVICES);
     }
@@ -867,12 +892,8 @@ initialize_services(void)
         if (!parse_services_file(g_pservices_path)) {
             g_free(g_pservices_path);
             g_pservices_path = get_persconffile_path(ENAME_SERVICES, FALSE);
-        } else {
-            parse_file = FALSE;
+            parse_services_file(g_pservices_path);
         }
-    }
-    if (parse_file) {
-        parse_services_file(g_pservices_path);
     }
 }
 
@@ -947,6 +968,7 @@ initialize_enterprises(void)
     }
     parse_enterprises_file(g_enterprises_path);
 
+    /* Populate entries from profile or personal */
     if (g_penterprises_path == NULL) {
         /* Check profile directory before personal configuration */
         g_penterprises_path = get_persconffile_path(ENAME_ENTERPRISES, TRUE);
@@ -955,13 +977,21 @@ initialize_enterprises(void)
             g_penterprises_path = get_persconffile_path(ENAME_ENTERPRISES, FALSE);
         }
     }
+    /* Parse personal file (if present) */
     parse_enterprises_file(g_penterprises_path);
 }
 
 const gchar *
 try_enterprises_lookup(guint32 value)
 {
-    return (const gchar *)g_hash_table_lookup(enterprises_hashtable, GUINT_TO_POINTER(value));
+    /* Trying extra entries first. N.B. This does allow entries to be overwritten and found.. */
+    const char *name = (const gchar *)g_hash_table_lookup(enterprises_hashtable, GUINT_TO_POINTER(value));
+    if (name) {
+        return name;
+    }
+    else {
+        return global_enterprises_lookup(value);
+    }
 }
 
 const gchar *
@@ -993,13 +1023,10 @@ enterprises_cleanup(void)
     ws_assert(enterprises_hashtable);
     g_hash_table_destroy(enterprises_hashtable);
     enterprises_hashtable = NULL;
-    ws_assert(g_enterprises_path);
     g_free(g_enterprises_path);
     g_enterprises_path = NULL;
     g_free(g_penterprises_path);
     g_penterprises_path = NULL;
-    g_free(g_pservices_path);
-    g_pservices_path = NULL;
 }
 
 /* Fill in an IP4 structure with info from subnets file or just with the
@@ -1571,7 +1598,7 @@ get_ethbyaddr(const guint8 *addr)
 } /* get_ethbyaddr */
 
 static hashmanuf_t *
-manuf_hash_new_entry(const guint8 *addr, char* name, char* longname)
+manuf_hash_new_entry(const guint8 *addr, const char* name, const char* longname)
 {
     guint manuf_key;
     hashmanuf_t *manuf_value;
@@ -1672,6 +1699,13 @@ manuf_name_lookup(const guint8 *addr)
         if (manuf_value != NULL) {
             return manuf_value;
         }
+    }
+
+    /* Try the global manuf tables. */
+    struct ws_manuf manuf;
+    if (ws_manuf_lookup(addr, &manuf) != NULL) {
+        /* Found it */
+        return manuf_hash_new_entry(addr, manuf.short_name, manuf.long_name);
     }
 
     /* Add the address as a hex string */

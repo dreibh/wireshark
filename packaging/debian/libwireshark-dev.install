@@ -1,3 +1,5 @@
 usr/include/wireshark/epan/*
 usr/lib/*/libwireshark.so
 usr/lib/*/pkgconfig/wireshark.pc
+usr/lib/*/cmake/wireshark/*.cmake
+usr/include/wireshark/epan/*

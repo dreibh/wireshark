@@ -59,7 +59,10 @@ BASIC_LIST="mingw64-gcc \
 	asciidoctor \
 	libxslt \
 	docbook-style-xsl \
-	ccache"
+	ccache \
+	git \
+	patch \
+	cmake"
 
 ACTUAL_LIST=$BASIC_LIST
 

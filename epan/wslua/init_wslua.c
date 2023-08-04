@@ -16,7 +16,9 @@
 
 #include "wslua.h"
 #include "init_wslua.h"
+
 #include <epan/dissectors/packet-frame.h>
+#include <errno.h>
 #include <math.h>
 #include <stdio.h>
 #include <epan/expert.h>
@@ -141,7 +143,7 @@ static expert_field ei_lua_proto_deprecated_error   = EI_INIT;
 
 static gint ett_wslua_traceback = -1;
 
-static gboolean
+static bool
 lua_pinfo_end(wmem_allocator_t *allocator _U_, wmem_cb_event_t event _U_,
         void *user_data _U_)
 {

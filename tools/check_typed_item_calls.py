@@ -124,7 +124,7 @@ class APICheck:
         self.file = file
         self.calls = []
 
-        with open(file, 'r') as f:
+        with open(file, 'r', encoding="utf8") as f:
             contents = f.read()
             lines = contents.splitlines()
             total_lines = len(lines)
@@ -160,7 +160,8 @@ class APICheck:
 
 
 
-    def check_against_items(self, items_defined, items_declared, items_declared_extern, check_missing_items=False):
+    def check_against_items(self, items_defined, items_declared, items_declared_extern, check_missing_items=False,
+                            field_arrays=None):
         global errors_found
         global warnings_found
 
@@ -175,33 +176,40 @@ class APICheck:
                               'item type is', items_defined[call.hf_name].item_type, 'but call has len', call.length)
                         warnings_found += 1
 
-
+            # Needs a +ve length
             if self.positive_length and call.length != None:
                 if call.length != -1 and call.length <= 0:
                     print('Error: ' +  self.fun_name + '(.., ' + call.hf_name + ', ...) called at ' +
                           self.file + ':' + str(call.line_number) +
                           ' with length ' + str(call.length) + ' - must be > 0 or -1')
-                    # Inc global count of issues found.
                     errors_found += 1
+
             if call.hf_name in items_defined:
+                # Is type allowed?
                 if not items_defined[call.hf_name].item_type in self.allowed_types:
-                    # Report this issue.
                     print('Error: ' +  self.fun_name + '(.., ' + call.hf_name + ', ...) called at ' +
                           self.file + ':' + str(call.line_number) +
                           ' with type ' + items_defined[call.hf_name].item_type)
                     print('    (allowed types are', self.allowed_types, ')\n')
-                    # Inc global count of issues found.
                     errors_found += 1
+                # No mask allowed
                 if not self.mask_allowed and items_defined[call.hf_name].mask_value != 0:
-                    # Report this issue.
                     print('Error: ' +  self.fun_name + '(.., ' + call.hf_name + ', ...) called at ' +
                           self.file + ':' + str(call.line_number) +
                           ' with mask ' + items_defined[call.hf_name].mask + '    (must be zero!)\n')
-                    # Inc global count of issues found.
                     errors_found += 1
 
+            if self.fun_name.find('add_bitmask') != -1 and call.hf_name in items_defined and field_arrays:
+                if call.fields in field_arrays:
+                    if (items_defined[call.hf_name].mask_value and
+                        field_arrays[call.fields][1] != 0 and items_defined[call.hf_name].mask_value != field_arrays[call.fields][1]):
+                        # TODO: only really a problem if bit is set in array but not in top-level item?
+                        print('Warning:', self.file, call.hf_name, call.fields, "masks don't match. root=",
+                              items_defined[call.hf_name].mask,
+                              "array has", hex(field_arrays[call.fields][1]))
+                        warnings_found += 1
 
-            elif check_missing_items:
+            if check_missing_items:
                 if call.hf_name in items_declared and not call.hf_name in items_declared_extern:
                 #not in common_hf_var_names:
                     print('Warning:', self.file + ':' + str(call.line_number),
@@ -232,7 +240,7 @@ class ProtoTreeAddItemCheck(APICheck):
     def find_calls(self, file, macros):
         self.file = file
         self.calls = []
-        with open(file, 'r') as f:
+        with open(file, 'r', encoding="utf8") as f:
 
             contents = f.read()
             lines = contents.splitlines()
@@ -293,7 +301,8 @@ class ProtoTreeAddItemCheck(APICheck):
                                 warnings_found += 1
                         self.calls.append(Call(hf_name, macros, line_number=line_number, length=m.group(2)))
 
-    def check_against_items(self, items_defined, items_declared, items_declared_extern, check_missing_items=False):
+    def check_against_items(self, items_defined, items_declared, items_declared_extern,
+                            check_missing_items=False, field_arrays=None):
         # For now, only complaining if length if call is longer than the item type implies.
         #
         # Could also be bugs where the length is always less than the type allows.
@@ -534,6 +543,7 @@ class Item:
                 self.check_contiguous_bits(mask)
                 self.check_num_digits(self.mask)
                 self.check_digits_all_zeros(self.mask)
+                self.check_full_mask(self.mask)
 
 
     def __str__(self):
@@ -618,7 +628,6 @@ class Item:
                   'but mask is', mask, 'which is', mask_width, 'bits wide!')
             global warnings_found
             warnings_found += 1
-
         # Now, any more zero set bits are an error!
         if self.filter in known_non_contiguous_fields or self.filter.startswith('rtpmidi'):
             # Don't report if we know this one is Ok.
@@ -702,8 +711,31 @@ class Item:
                 global warnings_found
                 warnings_found += 1
 
+    # A mask where all bits are set should instead be 0.
+    # Exceptions might be where:
+    # - in add_bitmask() set and only one there!
+    # - represents flags, but dissector is not yet decoding them
+    def check_full_mask(self, mask):
+        if self.item_type == "FT_BOOLEAN":
+            return
+        if self.label.lower().find('mask') != -1 or self.label.lower().find('flag') != -1 or self.label.lower().find('bitmap') != -1:
+            return
+        if mask.startswith('0x') and len(mask) > 3:
+            width_in_bits = self.get_field_width_in_bits()
+            if not width_in_bits:
+                return
+            num_digits = int(width_in_bits / 4)
+            if num_digits is None:
+                return
+            if mask[2:] == 'f'*num_digits   or   mask[2:] == 'F'*num_digits:
+                print('Warning:', self.filename, self.hf, 'filter=', self.filter, ' - mask is all set - this is confusing - set 0 instead! :', '"' + mask + '"')
+                global warnings_found
+                warnings_found += 1
+
+
+
     # Return True if appears to be a match
-    def check_label_vs_filter(self, reportError=True):
+    def check_label_vs_filter(self, reportError=True, reportNumericalMismatch=True):
         global warnings_found
 
         last_filter = self.filter.split('.')[-1]
@@ -735,7 +767,7 @@ class Item:
         label_numbers =  re.findall(r'\d+', label_orig)
         filter_numbers = re.findall(r'\d+', last_filter_orig)
         if len(label_numbers) == len(filter_numbers) and label_numbers != filter_numbers:
-            if reportError:
+            if reportNumericalMismatch:
                 print('Warning:', self.filename, self.hf, 'label="' + self.label + '" has different **numbers** from  filter="' + self.filter + '"')
                 print(label_numbers, filter_numbers)
                 warnings_found += 1
@@ -771,7 +803,7 @@ class CombinedCallsCheck:
         self.all_calls.sort(key=lambda x:x.line_number)
 
     def check_consecutive_item_calls(self):
-        lines = open(self.file, 'r').read().splitlines()
+        lines = open(self.file, 'r', encoding="utf8").read().splitlines()
 
         prev = None
         for call in self.all_calls:
@@ -864,6 +896,7 @@ apiChecks.append(APICheck('proto_tree_add_bitmask_with_flags_ret_uint64', bitmas
 apiChecks.append(APICheck('proto_tree_add_bitmask_value', bitmask_types))
 apiChecks.append(APICheck('proto_tree_add_bitmask_value_with_flags', bitmask_types))
 apiChecks.append(APICheck('proto_tree_add_bitmask_len', bitmask_types))
+# N.B., proto_tree_add_bitmask_list does not have a root item, just a subtree...
 
 add_bits_types = { 'FT_CHAR', 'FT_BOOLEAN',
                    'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32', 'FT_UINT40', 'FT_UINT48', 'FT_UINT56', 'FT_UINT64',
@@ -897,7 +930,7 @@ def removeComments(code_string):
 # Test for whether the given file was automatically generated.
 def isGeneratedFile(filename):
     # Open file
-    f_read = open(os.path.join(filename), 'r')
+    f_read = open(os.path.join(filename), 'r', encoding="utf8")
     lines_tested = 0
     for line in f_read:
         # The comment to say that its generated is near the top, so give up once
@@ -926,7 +959,7 @@ def isGeneratedFile(filename):
 
 def find_macros(filename):
     macros = {}
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding="utf8") as f:
         contents = f.read()
         # Remove comments so as not to trip up RE.
         contents = removeComments(contents)
@@ -942,7 +975,7 @@ def find_macros(filename):
 def find_items(filename, macros, check_mask=False, mask_exact_width=False, check_label=False, check_consecutive=False):
     is_generated = isGeneratedFile(filename)
     items = {}
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding="utf8") as f:
         contents = f.read()
         # Remove comments so as not to trip up RE.
         contents = removeComments(contents)
@@ -968,8 +1001,9 @@ def find_items(filename, macros, check_mask=False, mask_exact_width=False, check
 # the 6th arg of ..add_bitmask_..() calls...
 # TODO: return items (rather than local checks) from here so can be checked against list of calls for given filename
 def find_field_arrays(filename, all_fields, all_hf):
+    field_entries = {}
     global warnings_found
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding="utf8") as f:
         contents = f.read()
         # Remove comments so as not to trip up RE.
         contents = removeComments(contents)
@@ -979,20 +1013,22 @@ def find_field_arrays(filename, all_fields, all_hf):
         for m in matches:
             name = m.group(1)
             # Ignore if not used in a call to an _add_bitmask_ API
-            if name not in all_fields:
+            if not name in all_fields:
                 continue
-            all_fields = m.group(2)
-            all_fields = all_fields.replace('&', '')
-            all_fields = all_fields.replace(',', '')
+
+            fields_text = m.group(2)
+            fields_text = fields_text.replace('&', '')
+            fields_text = fields_text.replace(',', '')
 
             # Get list of each hf field in the array
-            fields = all_fields.split()
+            fields = fields_text.split()
 
             if fields[0].startswith('ett_'):
                 continue
             if fields[-1].find('NULL') == -1 and fields[-1] != '0':
                 print('Warning:', filename, name, 'is not NULL-terminated - {', ', '.join(fields), '}')
                 warnings_found += 1
+                continue
 
             # Do any hf items reappear?
             seen_fields = set()
@@ -1022,12 +1058,15 @@ def find_field_arrays(filename, all_fields, all_hf):
                         warnings_found += 1
                     set_field_width = new_field_width
 
-    return []
+            # Add entry to table
+            field_entries[name] = (fields[0:-1], combined_mask)
+
+    return field_entries
 
 def find_item_declarations(filename):
     items = set()
 
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding="utf8") as f:
         lines = f.read().splitlines()
         p = re.compile(r'^static int (hf_[a-zA-Z0-9_]*)\s*\=\s*-1;')
         for line in lines:
@@ -1038,7 +1077,7 @@ def find_item_declarations(filename):
 
 def find_item_extern_declarations(filename):
     items = set()
-    with open(filename, 'r') as f:
+    with open(filename, 'r', encoding="utf8") as f:
         lines = f.read().splitlines()
         p = re.compile(r'^\s*(hf_[a-zA-Z0-9_]*)\s*\=\s*proto_registrar_get_id_byname\s*\(')
         for line in lines:
@@ -1096,23 +1135,28 @@ def checkFile(filename, check_mask=False, mask_exact_width=False, check_label=Fa
 
     fields = set()
 
-    # Check each API
+    # Get 'fields' out of calls
     for c in apiChecks:
         c.find_calls(filename, macros)
         for call in c.calls:
+            # From _add_bitmask() calls
             if call.fields:
                 fields.add(call.fields)
 
-        c.check_against_items(items_defined, items_declared, items_extern_declared, check_missing_items)
-
     # Checking for lists of fields for add_bitmask calls
+    field_arrays = {}
     if check_bitmask_fields:
         field_arrays = find_field_arrays(filename, fields, items_defined)
+
+    # Now actually check the calls
+    for c in apiChecks:
+        c.check_against_items(items_defined, items_declared, items_extern_declared, check_missing_items, field_arrays)
+
 
     if label_vs_filter:
         matches = 0
         for hf in items_defined:
-            if items_defined[hf].check_label_vs_filter(reportError=False):
+            if items_defined[hf].check_label_vs_filter(reportError=False, reportNumericalMismatch=True):
                 matches += 1
 
         # Only checking if almost every field does match.
@@ -1120,7 +1164,7 @@ def checkFile(filename, check_mask=False, mask_exact_width=False, check_label=Fa
         if checking:
             print(filename, ':', matches, 'label-vs-filter matches of out of', len(items_defined), 'so reporting mismatches')
             for hf in items_defined:
-                items_defined[hf].check_label_vs_filter(reportError=True)
+                items_defined[hf].check_label_vs_filter(reportError=True, reportNumericalMismatch=False)
 
 
 

@@ -39,7 +39,7 @@ ${UnStrRep}
 ; ============================================================================
 
 ; The file to write
-OutFile "${OUTFILE_DIR}\${PROGRAM_NAME}-${VERSION}-${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}.exe"
+OutFile "${OUTFILE_DIR}\${PROGRAM_NAME}-${VERSION}-${WIRESHARK_TARGET_PLATFORM}.exe"
 ; Installer icon
 Icon "${TOP_SRC_DIR}\resources\icons\wiresharkinst.ico"
 ; Uninstaller icon
@@ -296,13 +296,13 @@ Function .onInit
     Abort
   ${EndIf}
 
-  !if ${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE} == "x64"
+  !if ${WIRESHARK_TARGET_PLATFORM} == "x64"
     ${If} ${IsNativeARM64}
       MessageBox MB_OK "You're installing the x64 version of Wireshark on an Arm64 system.$\nThe native Arm64 installer might work better." /SD IDOK
     ${EndIf}
   !endif
 
-  !if ${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE} == "arm64"
+  !if ${WIRESHARK_TARGET_PLATFORM} == "arm64"
     ${IfNot} ${IsNativeARM64}
       MessageBox MB_OK "You're trying to install the Arm64 version of Wireshark on an x64 system.$\nTry the native x64 installer instead." /SD IDOK
       Abort
@@ -541,9 +541,7 @@ File "${STAGING_DIR}\COPYING.txt"
 File "${STAGING_DIR}\NEWS.txt"
 File "${STAGING_DIR}\README.txt"
 File "${STAGING_DIR}\README.windows.txt"
-File "${STAGING_DIR}\manuf"
 File "${STAGING_DIR}\wka"
-File "${STAGING_DIR}\services"
 File "${STAGING_DIR}\pdml2html.xsl"
 File "${STAGING_DIR}\ws.css"
 File "${STAGING_DIR}\wireshark.html"
@@ -598,9 +596,6 @@ File "${STAGING_DIR}\colorfilters"
 ;dont_overwrite_colorfilters:
 ;IfFileExists dfilters dont_overwrite_dfilters
 File "${STAGING_DIR}\dfilters"
-;dont_overwrite_dfilters:
-;IfFileExists enterprises.tsv dont_overwrite_enterprises_tsv
-File "${STAGING_DIR}\enterprises.tsv"
 ;dont_overwrite_dfilters:
 ;IfFileExists smi_modules dont_overwrite_smi_modules
 File "${STAGING_DIR}\smi_modules"

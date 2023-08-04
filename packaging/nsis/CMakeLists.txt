@@ -119,8 +119,8 @@ endif()
 
 find_program(_vcredist
 	NAMES
-		"vc_redist.${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}.exe" # Visual Studio 2022 and later
-		"vcredist_${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}.exe" # Visual Studio 2019 and earlier
+		"vc_redist.${WIRESHARK_TARGET_PLATFORM}.exe" # Visual Studio 2022 and later
+		"vcredist_${WIRESHARK_TARGET_PLATFORM}.exe" # Visual Studio 2019 and earlier
 	PATHS "${_PROJECT_LIB_DIR}" $ENV{VCToolsRedistDir} "${VCINSTALLDIR}"
 	PATH_SUFFIXES ${_ws_vcredist_subdir} ${_ms_vcredist_subdir}
 	NO_DEFAULT_PATH
@@ -180,7 +180,7 @@ if (BUILD_wireshark)
 		endforeach()
 	endif()
 	if(LUA_FOUND)
-		foreach(_script "init.lua" "console.lua" "dtd_gen.lua")
+		foreach(_script "init.lua" "console.lua" "browser_sslkeylog.lua" "dtd_gen.lua")
 			set(_all_manifest_contents "${_all_manifest_contents}File \"\${STAGING_DIR}\\${_script}\"\n")
 		endforeach()
 	endif()
@@ -302,6 +302,7 @@ macro( ADD_NSIS_PACKAGE_TARGETS )
 			elseif(MINGW AND CMAKE_CROSSCOMPILING)
 				add_custom_command(OUTPUT ${_nsis_binary_dir}/wireshark-qt-manifest.nsh
 					COMMAND ${Python3_EXECUTABLE} "${_nsis_source_dir}/windeployqt-to-nsis.py"
+						--sysroot "${MINGW_SYSROOT}"
 						--mapping "${_nsis_source_dir}/mingw64-qt-mapping.txt"
 						${_nsis_binary_dir}/wireshark-qt-manifest.nsh
 						#$<$<CONFIG:Debug>:-DebugConfig>
@@ -395,12 +396,12 @@ set(CLEAN_FILES
 	#NEWS.txt
 	#user-guide.chm
 	${DATAFILE_DIR}/uninstall-wireshark.exe
-	wireshark-${VERSION}-${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}.exe
+	wireshark-${VERSION}-${WIRESHARK_TARGET_PLATFORM}.exe
 	wireshark-config.nsh
 	wireshark-manifest.nsh
 	wireshark-qt-manifest.nsh
 	${DATAFILE_DIR}/uninstall-logray.exe
-	logray-${VERSION}-${WIRESHARK_TARGET_PROCESSOR_ARCHITECTURE}.exe
+	logray-${VERSION}-${WIRESHARK_TARGET_PLATFORM}.exe
 	logray-config.nsh
 	logray-manifest.nsh
 	logray-qt-manifest.nsh

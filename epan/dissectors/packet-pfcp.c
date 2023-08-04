@@ -633,6 +633,7 @@ static int hf_pfcp_packet_replication_and_detection_carry_on_information_flags_b
 static int hf_pfcp_packet_replication_and_detection_carry_on_information_flags_b0_priueai = -1;
 
 static int hf_pfcp_validity_time_value = -1;
+static int hf_pfcp_validity_time_str = -1;
 
 static int hf_pfcp_number_of_reports = -1;
 
@@ -981,7 +982,6 @@ static int hf_pfcp_bbf_multicast_group_limit_max_joins = -1;
 
 static int hf_pfcp_bbf_apply_action_flags_b0_nat = -1;
 
-static int hf_pfcp_bbf_nat_external_port_range = -1;
 static int hf_pfcp_bbf_nat_external_port_range_start = -1;
 static int hf_pfcp_bbf_nat_external_port_range_end = -1;
 
@@ -6836,12 +6836,19 @@ dissect_pfcp_quota_validity_time(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 {
     int offset = 0;
     guint value;
+    nstime_t quvti;
+    proto_item *pi;
 
     /* The Quota Validity Time value shall be encoded as an Unsigned32 binary integer value. */
     proto_tree_add_item_ret_uint(tree, hf_pfcp_validity_time_value, tvb, offset, 4, ENC_BIG_ENDIAN, &value);
     offset += 4;
 
     proto_item_append_text(item, "%u", value);
+
+    nstime_copy(&quvti, &(pinfo->abs_ts));
+    quvti.secs += value;
+    pi = proto_tree_add_time(tree, hf_pfcp_validity_time_str, tvb, 0, 0, &quvti);
+    proto_item_set_generated(pi);
 
     if (offset < length) {
         proto_tree_add_expert(tree, pinfo, &ei_pfcp_ie_data_not_decoded, tvb, offset, -1);
@@ -8174,7 +8181,7 @@ dissect_pfcp_offending_ie_information(tvbuff_t *tvb, packet_info *pinfo _U_, pro
     offset += 2;
 
     /* Octets 7 to (n+4) shall contain the value of the offending IE that caused the failure */
-    proto_tree_add_item(tree, hf_pfcp_offending_ie_value, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_pfcp_offending_ie_value, tvb, offset, length - offset, ENC_NA);
 }
 
 /*
@@ -12718,8 +12725,8 @@ proto_register_pfcp(void)
             NULL, HFILL }
         },
         { &hf_pfcp_offending_ie_value,
-        { "Type of the offending IE", "pfcp.offending_ie",
-            FT_UINT32, BASE_DEC, NULL, 0x0,
+        { "Value of the offending IE", "pfcp.offending_ie_value",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
 
@@ -14183,6 +14190,11 @@ proto_register_pfcp(void)
             FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0x0,
             NULL, HFILL }
         },
+        { &hf_pfcp_validity_time_str,
+        { "Validity Time", "pfcp.validity_time",
+            FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0,
+            NULL, HFILL }
+        },
 
         { &hf_pfcp_number_of_reports,
         { "Number of Reports", "pfcp.number_of_reports",
@@ -15534,11 +15546,6 @@ proto_register_pfcp(void)
             NULL, HFILL }
         },
 
-        { &hf_pfcp_bbf_nat_external_port_range,
-        { "Port Range", "pfcp.bbf.nat_external_port_range",
-            FT_NONE, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
         { &hf_pfcp_bbf_nat_external_port_range_start,
         { "Start", "pfcp.bbf.nat_external_port_range.start",
             FT_UINT16, BASE_DEC, NULL, 0x0,
@@ -16332,6 +16339,7 @@ void
 proto_reg_handoff_pfcp(void)
 {
     dissector_add_uint_with_preference("udp.port", UDP_PORT_PFCP, pfcp_handle);
+    dissector_add_string("media_type", "application/vnd.3gpp.pfcp", pfcp_handle);
 }
 
 /*

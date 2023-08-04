@@ -304,11 +304,9 @@ class TestDfilterArithmetic:
         dfilter = "udp.dstport == 68 - 1"
         checkDFilterCount(dfilter, 2)
 
-    def test_sub_3(self, checkDFilterFail):
-        # Minus operator requires spaces around it.
-        error = '"68-1" is not a valid number.'
+    def test_sub_3(self, checkDFilterCount):
         dfilter = "udp.dstport == 68-1"
-        checkDFilterFail(dfilter, error)
+        checkDFilterCount(dfilter, 2)
 
     def test_sub_4(self, checkDFilterCount):
         dfilter = "udp.length == ip.len - 20"
@@ -396,3 +394,41 @@ class TestDfilterRawModifier:
         dfilter = '@s7comm.blockinfo.blocktype == ${@s7comm.blockinfo.blocktype}'
         # select frame 3, expect 2 frames out of 3.
         checkDFilterCountWithSelectedFrame(dfilter, 2, 3)
+
+class TestDfilterRawSlice:
+    trace_file = "http.pcap"
+
+    def test_raw_slice1(self, checkDFilterFail):
+        dfilter = 'tcp.port[1] == 0xc3'
+        checkDFilterFail(dfilter, "cannot be sliced")
+
+    def test_raw_slice2(self, checkDFilterCount):
+        dfilter = '@tcp.port[1] == 0xc3'
+        checkDFilterCount(dfilter, 1)
+
+    def test_raw_slice3(self, checkDFilterFail):
+        dfilter = 'tcp.port[0:] == 0c:c3'
+        checkDFilterFail(dfilter, "cannot be sliced")
+
+    def test_raw_slice4(self, checkDFilterCount):
+        dfilter = '@tcp.port[0:] == 0c:c3'
+        checkDFilterCount(dfilter, 1)
+
+class TestDfilterXor:
+    trace_file = "ipoipoip.pcap"
+
+    def test_xor_1(self, checkDFilterCount):
+        dfilter = 'ip.src == 7.7.7.7 xor ip.dst == 7.7.7.7'
+        checkDFilterCount(dfilter, 1)
+
+    def test_xor_2(self, checkDFilterCount):
+        dfilter = 'ip.src == 7.7.7.7 ^^ ip.dst == 7.7.7.7'
+        checkDFilterCount(dfilter, 1)
+
+    def test_xor_3(self, checkDFilterCount):
+        dfilter = 'ip.src == 9.9.9.9 xor ip.dst == 9.9.9.9'
+        checkDFilterCount(dfilter, 0)
+
+    def test_xor_4(self, checkDFilterCount):
+        dfilter = 'ip.src == 9.9.9.9 ^^ ip.dst == 9.9.9.9'
+        checkDFilterCount(dfilter, 0)

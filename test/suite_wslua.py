@@ -14,6 +14,7 @@ import os.path
 import shutil
 import subprocess
 import pytest
+import logging
 
 dhcp_pcap = 'dhcp.pcap'
 dns_port_pcap = 'dns_port.pcap'
@@ -37,7 +38,10 @@ def check_lua_script(cmd_tshark, features, dirs, capture_file, test_env):
         tshark_proc = subprocess.run(tshark_cmd, check=True, capture_output=True, encoding='utf-8', env=test_env)
 
         if check_passed:
-            assert 'All tests passed!' in tshark_proc.stdout
+            logging.info(tshark_proc.stdout)
+            logging.info(tshark_proc.stderr)
+            if not 'All tests passed!' in tshark_proc.stdout:
+                pytest.fail("Some test failed, check the logs (eg: pytest --lf --log-cli-level=info)")
 
         return tshark_proc
     return check_lua_script_real
@@ -48,11 +52,11 @@ def check_lua_script_verify(check_lua_script, result_file):
     def check_lua_script_verify_real(lua_script, cap_file, check_stage_1=False, heur_regmode=None):
         # First run tshark with the dissector script.
         if heur_regmode is None:
-            tshark_proc = check_lua_script(lua_script, dns_port_pcap, check_stage_1,
+            tshark_proc = check_lua_script(lua_script, cap_file, check_stage_1,
                 '-V'
             )
         else:
-            tshark_proc = check_lua_script(lua_script, dns_port_pcap, check_stage_1,
+            tshark_proc = check_lua_script(lua_script, cap_file, check_stage_1,
                 '-V',
                 '-X', 'lua_script1:heur_regmode={}'.format(heur_regmode)
             )
@@ -124,7 +128,7 @@ class TestWslua:
 
     def test_wslua_field(self, check_lua_script):
         '''wslua fields'''
-        check_lua_script('field.lua', dhcp_pcap, True)
+        check_lua_script('field.lua', dhcp_pcap, True, '-q', '-c1')
 
     # reader, writer, and acme_reader were all under wslua_step_file_test
     # in the Bash version.
@@ -185,7 +189,7 @@ class TestWslua:
 
     def test_wslua_nstime(self, check_lua_script):
         '''wslua nstime'''
-        check_lua_script('nstime.lua', dhcp_pcap, True)
+        check_lua_script('nstime.lua', dhcp_pcap, True, '-q')
 
     def test_wslua_pinfo(self, check_lua_script):
         '''wslua pinfo'''
@@ -261,11 +265,11 @@ class TestWslua:
 
     def test_wslua_tvb_tree(self, check_lua_script):
         '''wslua tvb with a tree'''
-        check_lua_script('tvb.lua', dns_port_pcap, True, '-V')
+        check_lua_script('tvb.lua', dns_port_pcap, True, '-c1', '-V')
 
     def test_wslua_tvb_no_tree(self, check_lua_script):
         '''wslua tvb without a tree'''
-        check_lua_script('tvb.lua', dns_port_pcap, True)
+        check_lua_script('tvb.lua', dns_port_pcap, True, '-c1')
 
     def test_wslua_try_heuristics(self, check_lua_script):
         '''wslua try_heuristics'''

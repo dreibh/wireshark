@@ -132,6 +132,7 @@ packet_list_select_row_from_data(frame_data *fdata_needle)
          */
         gbl_cur_packet_list->selectionModel()->clearSelection();
         gbl_cur_packet_list->selectionModel()->setCurrentIndex(model->index(row, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        gbl_cur_packet_list->scrollTo(gbl_cur_packet_list->currentIndex(), PacketList::PositionAtCenter);
         return TRUE;
     }
 
@@ -1105,6 +1106,8 @@ frame_data *PacketList::getFDataForRow(int row) const
 void PacketList::columnsChanged()
 {
     columns_changed_ = true;
+    column_register_fields();
+    mainApp->emitAppSignal(MainApplication::FieldsChanged);
     if (!cap_file_) {
         // Keep columns_changed_ = true until we load a capture file.
         return;
@@ -1198,6 +1201,12 @@ void PacketList::preferencesChanged()
     setTextElideMode(elide_mode);
 }
 
+void PacketList::freezePacketList(bool changing_profile)
+{
+    changing_profile_ = changing_profile;
+    freeze(true);
+}
+
 void PacketList::recolorPackets()
 {
     packet_list_model_->resetColorized();
@@ -1233,34 +1242,58 @@ void PacketList::captureFileReadFinished()
     }
 }
 
-void PacketList::freeze()
+bool PacketList::freeze(bool keep_current_frame)
 {
+    if (!cap_file_ || model() == Q_NULLPTR) {
+        // No capture file or already frozen
+        return false;
+    }
+
+    frame_data *current_frame = cap_file_->current_frame;
     column_state_ = header()->saveState();
     setHeaderHidden(true);
     frozen_current_row_ = currentIndex();
-    frozen_selected_rows_ = selectedIndexes();
+    frozen_selected_rows_ = selectionModel()->selectedRows();
     selectionModel()->clear();
     setModel(Q_NULLPTR);
     // It looks like GTK+ sends a cursor-changed signal at this point but Qt doesn't
     // call selectionChanged.
     related_packet_delegate_.clear();
 
+    if (keep_current_frame) {
+        cap_file_->current_frame = current_frame;
+    }
+
     /* Clears packet list as well as byteview */
     emit framesSelected(QList<int>());
+
+    return true;
 }
 
-void PacketList::thaw(bool restore_selection)
+bool PacketList::thaw(bool restore_selection)
 {
+    if (!cap_file_ || model() != Q_NULLPTR) {
+        // No capture file or not frozen
+        return false;
+    }
+
     setHeaderHidden(false);
     // Note that if we have a current sort status set in the header,
     // this will automatically try to sort the model (we don't want
     // that to happen if we're in the middle of reading the file).
     setModel(packet_list_model_);
 
-    // Resetting the model resets our column widths so we restore them here.
-    // We don't reapply the recent settings because the user could have
-    // resized the columns manually since they were initially loaded.
-    header()->restoreState(column_state_);
+    if (changing_profile_) {
+        // When changing profile the new recent settings must be applied to the columns.
+        applyRecentColumnWidths();
+        setColumnVisibility();
+        changing_profile_ = false;
+    } else {
+        // Resetting the model resets our column widths so we restore them here.
+        // We don't reapply the recent settings because the user could have
+        // resized the columns manually since they were initially loaded.
+        header()->restoreState(column_state_);
+    }
 
     if (restore_selection && frozen_selected_rows_.length() > 0 && selectionModel()) {
         /* This updates our selection, which redissects the current packet,
@@ -1271,9 +1304,12 @@ void PacketList::thaw(bool restore_selection)
         foreach (QModelIndex idx, frozen_selected_rows_) {
             selectionModel()->select(idx, QItemSelectionModel::Select | QItemSelectionModel::Rows);
         }
+        scrollTo(currentIndex(), PositionAtCenter);
     }
     frozen_current_row_ = QModelIndex();
     frozen_selected_rows_ = QModelIndexList();
+
+    return true;
 }
 
 void PacketList::clear() {
@@ -1541,6 +1577,7 @@ void PacketList::setCaptureFile(capture_file *cf)
         }
     }
     create_near_overlay_ = true;
+    changing_profile_ = false;
     sortByColumn(-1, Qt::AscendingOrder);
 }
 
@@ -1618,6 +1655,7 @@ void PacketList::goToPacket(int packet, int hf_id)
     int row = packet_list_model_->packetNumberToRow(packet);
     if (row >= 0) {
         selectionModel()->setCurrentIndex(packet_list_model_->index(row, 0), QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+        scrollTo(currentIndex(), PositionAtCenter);
         proto_tree_->goToHfid(hf_id);
     }
 
@@ -2116,7 +2154,7 @@ void PacketList::rowsInserted(const QModelIndex &parent, int start, int end)
 
 void PacketList::resizeAllColumns(bool onlyTimeFormatted)
 {
-    if (!cap_file_ || cap_file_->state == FILE_CLOSED)
+    if (!cap_file_ || cap_file_->state == FILE_CLOSED || cap_file_->state == FILE_READ_PENDING)
         return;
 
     for (int col = 0; col < cap_file_->cinfo.num_cols; col++) {

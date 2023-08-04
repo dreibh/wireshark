@@ -84,7 +84,7 @@ static int hf_bssgp_rim_app_id = -1;
 static int hf_bssgp_rim_seq_no = -1;
 static int hf_bssgp_rat_discriminator = -1;
 static int hf_bssgp_nacc_cause = -1;
-static int hf_bssgp_s13_cause = -1;
+static int hf_bssgp_si3_cause = -1;
 static int hf_bssgp_mbms_data_ch_cause = -1;
 static int hf_bssgp_utra_si_cause = -1;
 static int hf_bssgp_num_si_psi = -1;
@@ -170,8 +170,8 @@ static int hf_bssgp_rel_int_rat_ho_inf_ind = -1;
 static int hf_bssgp_csg_id = -1;
 static int hf_bssgp_cell_acc_mode = -1;
 static int hf_bssgp_redir_complete_outcome = -1;
-static int hf_bssgp_redir_indiction_reroute_reject_cause = -1;
-static int hf_bssgp_unconfim_send_state_var = -1;
+static int hf_bssgp_redir_indication_reroute_reject_cause = -1;
+static int hf_bssgp_unconfirm_send_state_var = -1;
 static int hf_bssgp_Global_ENB_ID_PDU = -1;
 static int hf_bssgp_SONtransferRequestContainer_PDU = -1;
 static int hf_bssgp_plmn_id = -1;
@@ -2012,7 +2012,7 @@ static const value_string bssgp_nacc_cause_vals[] = {
     { 0,    NULL },
 };
 
-static const value_string bssgp_s13_cause_vals[] = {
+static const value_string bssgp_si3_cause_vals[] = {
     { 0, "Other unspecified error" },
     { 1, "Syntax error in the Application Container" },
     { 2, "Reporting Cell Identifier does not match with the Destination Cell Identifier or with the Source Cell Identifier" },
@@ -2061,7 +2061,7 @@ de_bssgp_ran_app_error_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
              * 11.3.64.2    Application Error Container for the SI3 application
              */
             /* Octet 3 SI3 Cause */
-            proto_tree_add_item(tree, hf_bssgp_s13_cause, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+            proto_tree_add_item(tree, hf_bssgp_si3_cause, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
             curr_offset++;
             /* Erroneous Application Container including IEI and LI */
             proto_tree_add_expert(tree, pinfo, &ei_bssgp_erroneous_app_container, tvb, curr_offset, len-(curr_offset-offset));
@@ -3313,7 +3313,7 @@ de_bssgp_redir_attempt_flg(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
 /*
  * 11.3.112     Redirection Indication
 */
-static const value_string bssgp_redir_indiction_reroute_reject_cause_vals[] = {
+static const value_string bssgp_redir_indication_reroute_reject_cause_vals[] = {
     {0x00, "Reserved"},
     {0x01, "Reserved"},
     {0x02, "Reserved"},
@@ -3344,7 +3344,7 @@ de_bssgp_redir_indication(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U
 
     curr_offset = offset;
 
-    proto_tree_add_item(tree, hf_bssgp_redir_indiction_reroute_reject_cause, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_bssgp_redir_indication_reroute_reject_cause, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
     curr_offset += 1;
 
     return(curr_offset-offset);
@@ -3379,9 +3379,9 @@ de_bssgp_redir_complete(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
  * 11.3.114     Unconfirmed send state variable
  */
 static guint16
-de_bssgp_unconfim_send_state_var(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, guint32 offset, guint len _U_, gchar *add_string _U_, int string_len _U_)
+de_bssgp_unconfirm_send_state_var(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, guint32 offset, guint len _U_, gchar *add_string _U_, int string_len _U_)
 {
-    proto_tree_add_item(tree, hf_bssgp_unconfim_send_state_var, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_bssgp_unconfirm_send_state_var, tvb, offset, 2, ENC_BIG_ENDIAN);
     return 2;
 }
 
@@ -4006,7 +4006,7 @@ guint16 (*bssgp_elem_fcn[])(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     de_bssgp_redir_attempt_flg,                                 /* 11.3.111 Redirect Attempt Flag */
     de_bssgp_redir_indication,                                  /* 11.3.112 Redirection Indication */
     de_bssgp_redir_complete,                                    /* 11.3.113 Redirection Completed */
-    de_bssgp_unconfim_send_state_var,                           /* 11.3.114 Unconfirmed send state variable */
+    de_bssgp_unconfirm_send_state_var,                          /* 11.3.114 Unconfirmed send state variable */
     de_bssgp_sci,                                               /* 11.3.116 SCI */
     de_bssgp_ggsn_pgw_location,                                 /* 11.3.117 GGSN/P-GW location */
     de_bssgp_pri_class_ind,                                     /* 11.3.119 Priority Class Indicator */
@@ -7021,9 +7021,9 @@ proto_register_bssgp(void)
             FT_UINT8, BASE_DEC, VALS(bssgp_nacc_cause_vals), 0x0,
             NULL, HFILL }
         },
-        { &hf_bssgp_s13_cause,
-          { "SI3 Cause", "bssgp.s13_cause",
-            FT_UINT8, BASE_DEC, VALS(bssgp_s13_cause_vals), 0x0,
+        { &hf_bssgp_si3_cause,
+          { "SI3 Cause", "bssgp.si3_cause",
+            FT_UINT8, BASE_DEC, VALS(bssgp_si3_cause_vals), 0x0,
             NULL, HFILL }
         },
         { &hf_bssgp_mbms_data_ch_cause,
@@ -7391,13 +7391,13 @@ proto_register_bssgp(void)
             FT_UINT8, BASE_HEX, VALS(bssgp_redir_complete_outcome_vals), 0x0,
             NULL, HFILL }
         },
-        { &hf_bssgp_redir_indiction_reroute_reject_cause,
-          { "Reroute Reject Cause Value", "bssgp.redir_indiction_reroute_reject_cause",
-            FT_UINT8, BASE_HEX, VALS(bssgp_redir_indiction_reroute_reject_cause_vals), 0x0,
+        { &hf_bssgp_redir_indication_reroute_reject_cause,
+          { "Reroute Reject Cause Value", "bssgp.redir_indication_reroute_reject_cause",
+            FT_UINT8, BASE_HEX, VALS(bssgp_redir_indication_reroute_reject_cause_vals), 0x0,
             NULL, HFILL }
         },
-        { &hf_bssgp_unconfim_send_state_var,
-          { "Unconfirmed Send State Variable V(U)", "bssgp.unconfim_send_state_var",
+        { &hf_bssgp_unconfirm_send_state_var,
+          { "Unconfirmed Send State Variable V(U)", "bssgp.unconfirm_send_state_var",
             FT_UINT16, BASE_DEC, NULL, 0x01ff,
             NULL, HFILL }
         },

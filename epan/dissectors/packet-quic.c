@@ -15,21 +15,21 @@
  * RFC9000 QUIC: A UDP-Based Multiplexed and Secure Transport
  * RFC9001 Using TLS to Secure QUIC
  * RFC8889 Version-Independent Properties of QUIC
- * https://tools.ietf.org/html/draft-ietf-quic-version-negotiation-14
- * https://datatracker.ietf.org/doc/html/draft-ietf-quic-v2-10
+ * RFC9369 QUIC Version 2
+ * RFC9368 Compatible Version Negotiation for QUIC
  *
  * Extension:
  * https://tools.ietf.org/html/draft-ferrieuxhamchaoui-quic-lossbits-03
  * https://datatracker.ietf.org/doc/html/draft-ietf-quic-datagram-06
  * https://tools.ietf.org/html/draft-huitema-quic-ts-02
- * https://tools.ietf.org/html/draft-ietf-quic-ack-frequency-01
+ * https://tools.ietf.org/html/draft-ietf-quic-ack-frequency-04
  * https://tools.ietf.org/html/draft-deconinck-quic-multipath-06
  * https://tools.ietf.org/html/draft-banks-quic-cibir-01
 
  *
  * Currently supported QUIC version(s): draft-21, draft-22, draft-23, draft-24,
  * draft-25, draft-26, draft-27, draft-28, draft-29, draft-30, draft-31, draft-32,
- * draft-33, draft-34, v1, v2-draft-10
+ * draft-33, draft-34, v1, v2
  * For a table of supported QUIC versions per Wireshark version, see
  * https://github.com/quicwg/base-drafts/wiki/Tools#wireshark
  *
@@ -47,8 +47,6 @@
  */
 
 #include <config.h>
-
-#include <stdbool.h>
 
 #include <epan/packet.h>
 #include <epan/expert.h>
@@ -166,8 +164,7 @@ static int hf_quic_dg = -1;
 static int hf_quic_af_sequence_number = -1;
 static int hf_quic_af_ack_eliciting_threshold = -1;
 static int hf_quic_af_request_max_ack_delay = -1;
-static int hf_quic_af_last_byte = -1;
-static int hf_quic_af_reserved = -1;
+static int hf_quic_af_reordering_threshold = -1;
 static int hf_quic_af_ignore_order = -1;
 static int hf_quic_af_ignore_ce = -1;
 static int hf_quic_ts = -1;
@@ -2617,17 +2614,8 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_af_request_max_ack_delay, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
             offset += (guint32)length;
 
-
-            static int * const af_fields[] = {
-                &hf_quic_af_reserved,
-                &hf_quic_af_ignore_ce,
-                &hf_quic_af_ignore_order,
-                NULL
-            };
-
-            proto_tree_add_bitmask(ft_tree, tvb, offset, hf_quic_af_last_byte, ett_quic_af, af_fields, ENC_BIG_ENDIAN);
-            offset += 1;
-
+            proto_tree_add_item_ret_varint(ft_tree, hf_quic_af_reordering_threshold, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
+            offset += (guint32)length;
         }
         break;
         case FT_TIME_STAMP:{
@@ -3840,8 +3828,10 @@ dissect_quic_long_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tre
         proto_tree_add_item(quic_tree, hf_quic_long_packet_type, tvb, offset, 1, ENC_NA);
     }
     if (quic_packet->pkn_len) {
-        proto_tree_add_uint(quic_tree, hf_quic_long_reserved, tvb, offset, 1, first_byte);
-        proto_tree_add_uint(quic_tree, hf_quic_packet_number_length, tvb, offset, 1, first_byte);
+        ti = proto_tree_add_uint(quic_tree, hf_quic_long_reserved, tvb, offset, 1, first_byte);
+        proto_item_set_generated(ti);
+        ti = proto_tree_add_uint(quic_tree, hf_quic_packet_number_length, tvb, offset, 1, first_byte);
+        proto_item_set_generated(ti);
     }
     offset += 1;
     /* Trick: internal values in `long_packet_type` are always correctly mapped by V1 enum */
@@ -3873,7 +3863,9 @@ dissect_quic_long_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tre
         return offset;
     }
 
-    proto_tree_add_uint64(quic_tree, hf_quic_packet_number, tvb, offset, quic_packet->pkn_len, quic_packet->packet_number);
+    ti = proto_tree_add_uint64(quic_tree, hf_quic_packet_number, tvb, offset, quic_packet->pkn_len, quic_packet->packet_number);
+    proto_item_set_generated(ti);
+
     offset += quic_packet->pkn_len;
     col_append_fstr(pinfo->cinfo, COL_INFO, ", PKN: %" PRIu64, quic_packet->packet_number);
 
@@ -3954,10 +3946,13 @@ dissect_quic_short_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tr
         key_phase = (first_byte & SH_KP) != 0;
         /* No room for reserved bits with "loss bits" feature is enable */
         if (!loss_bits_negotiated) {
-            proto_tree_add_uint(hdr_tree, hf_quic_short_reserved, tvb, offset, 1, first_byte);
+            ti = proto_tree_add_uint(hdr_tree, hf_quic_short_reserved, tvb, offset, 1, first_byte);
+            proto_item_set_generated(ti);
         }
-        proto_tree_add_boolean(hdr_tree, hf_quic_key_phase, tvb, offset, 1, key_phase<<2);
-        proto_tree_add_uint(hdr_tree, hf_quic_packet_number_length, tvb, offset, 1, first_byte);
+        ti = proto_tree_add_boolean(hdr_tree, hf_quic_key_phase, tvb, offset, 1, key_phase<<2);
+        proto_item_set_generated(ti);
+        ti = proto_tree_add_uint(hdr_tree, hf_quic_packet_number_length, tvb, offset, 1, first_byte);
+        proto_item_set_generated(ti);
     }
     offset += 1;
 
@@ -3988,7 +3983,8 @@ dissect_quic_short_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tr
     }
 
     /* Packet Number */
-    proto_tree_add_uint64(hdr_tree, hf_quic_packet_number, tvb, offset, quic_packet->pkn_len, quic_packet->packet_number);
+    ti = proto_tree_add_uint64(hdr_tree, hf_quic_packet_number, tvb, offset, quic_packet->pkn_len, quic_packet->packet_number);
+    proto_item_set_generated(ti);
     offset += quic_packet->pkn_len;
     col_append_fstr(pinfo->cinfo, COL_INFO, ", PKN: %" PRIu64, quic_packet->packet_number);
     proto_item_append_text(pi, " PKN=%" PRIu64, quic_packet->packet_number);
@@ -5257,15 +5253,10 @@ proto_register_quic(void)
               FT_UINT64, BASE_DEC, NULL, 0x0,
               "The value to which the endpoint requests the peer update its max_ack_delay", HFILL }
         },
-        { &hf_quic_af_last_byte,
-            { "Last Byte", "quic.af.last_byte",
-              FT_UINT8, BASE_HEX, NULL, 0x0,
-              NULL, HFILL }
-        },
-        { &hf_quic_af_reserved,
-            { "Reserved", "quic.af.reserved",
-              FT_UINT8, BASE_DEC, NULL, 0xFC,
-              "This field has no meaning in this version of ACK_FREQUENCY", HFILL }
+        { &hf_quic_af_reordering_threshold,
+            { "Reordering Threshold", "quic.af.reordering_threshold",
+              FT_UINT64, BASE_DEC, NULL, 0x0,
+              "The value that indicates the maximum packet reordering before eliciting an immediate ACK", HFILL }
         },
         { &hf_quic_af_ignore_order,
             { "Ignore Order", "quic.af.ignore_order",

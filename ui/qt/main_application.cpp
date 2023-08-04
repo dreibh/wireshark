@@ -487,6 +487,10 @@ void MainApplication::setConfigurationProfile(const gchar *profile_name, bool wr
 
     setMonospaceFont(prefs.gui_font_name);
 
+    // Freeze the packet list early to avoid updating column data before doing a
+    // full redissection. The packet list will be thawed when redissection is done.
+    emit freezePacketList(true);
+
     emit columnsChanged();
     emit preferencesChanged();
     emit recentPreferencesRead();
@@ -696,6 +700,11 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     setAttribute(Qt::AA_DisableWindowContextHelpButton);
 #endif
 
+    // Throw various settings at the wall with the hope that one of them will
+    // enable context menu shortcuts QTBUG-69452, QTBUG-109590
+#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+    setAttribute(Qt::AA_DontShowShortcutsInContextMenus, false);
+#endif
 #if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
     styleHints()->setShowShortcutsInContextMenus(true);
 #endif
@@ -864,6 +873,9 @@ void MainApplication::emitAppSignal(AppSignal signal)
         break;
     case FieldsChanged:
         emit fieldsChanged();
+        break;
+    case FreezePacketList:
+        emit freezePacketList(false);
         break;
     default:
         break;

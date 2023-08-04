@@ -775,7 +775,10 @@ typedef enum _KERBEROS_PADATA_TYPE_enum {
   KERBEROS_PA_PKINIT_KX = 147,
   KERBEROS_PA_PKU2U_NAME = 148,
   KERBEROS_PA_REQ_ENC_PA_REP = 149,
+  KERBEROS_PA_AS_FRESHNESS = 150,
   KERBEROS_PA_SPAKE = 151,
+  KERBEROS_PA_REDHAT_IDP_OAUTH2 = 152,
+  KERBEROS_PA_REDHAT_PASSKEY = 153,
   KERBEROS_PA_KERB_KEY_LIST_REQ = 161,
   KERBEROS_PA_KERB_KEY_LIST_REP = 162,
   KERBEROS_PA_SUPPORTED_ETYPES = 165,
@@ -923,7 +926,7 @@ wmem_map_t *kerberos_longterm_keys = NULL;
 static wmem_map_t *kerberos_all_keys = NULL;
 static wmem_map_t *kerberos_app_session_keys = NULL;
 
-static gboolean
+static bool
 enc_key_list_cb(wmem_allocator_t* allocator _U_, wmem_cb_event_t event _U_, void *user_data _U_)
 {
 	enc_key_list = NULL;
@@ -1629,10 +1632,10 @@ read_keytab_file(const char *filename)
 					 snprintf(pos, KRB_MAX_ORIG_LEN, "keytab principal "));
 			for(i=0;i<key.principal->length;i++){
 				pos+=MIN(KRB_MAX_ORIG_LEN-(pos-new_key->key_origin),
-						 snprintf(pos, (gulong)(KRB_MAX_ORIG_LEN-(pos-new_key->key_origin)), "%s%s",(i?"/":""),(key.principal->data[i]).data));
+						 snprintf(pos, KRB_MAX_ORIG_LEN-(pos-new_key->key_origin), "%s%s",(i?"/":""),(key.principal->data[i]).data));
 			}
 			pos+=MIN(KRB_MAX_ORIG_LEN-(pos-new_key->key_origin),
-					 snprintf(pos, (gulong)(KRB_MAX_ORIG_LEN-(pos-new_key->key_origin)), "@%s",key.principal->realm.data));
+					 snprintf(pos, KRB_MAX_ORIG_LEN-(pos-new_key->key_origin), "@%s",key.principal->realm.data));
 			*pos=0;
 			new_key->keytype=key.key.enctype;
 			new_key->keylength=key.key.length;
@@ -5679,7 +5682,10 @@ static const value_string kerberos_PADATA_TYPE_vals[] = {
   { KERBEROS_PA_PKINIT_KX, "pA-PKINIT-KX" },
   { KERBEROS_PA_PKU2U_NAME, "pA-PKU2U-NAME" },
   { KERBEROS_PA_REQ_ENC_PA_REP, "pA-REQ-ENC-PA-REP" },
+  { KERBEROS_PA_AS_FRESHNESS, "pA-AS-FRESHNESS" },
   { KERBEROS_PA_SPAKE, "pA-SPAKE" },
+  { KERBEROS_PA_REDHAT_IDP_OAUTH2, "pA-REDHAT-IDP-OAUTH2" },
+  { KERBEROS_PA_REDHAT_PASSKEY, "pA-REDHAT-PASSKEY" },
   { KERBEROS_PA_KERB_KEY_LIST_REQ, "pA-KERB-KEY-LIST-REQ" },
   { KERBEROS_PA_KERB_KEY_LIST_REP, "pA-KERB-KEY-LIST-REP" },
   { KERBEROS_PA_SUPPORTED_ETYPES, "pA-SUPPORTED-ETYPES" },
@@ -7455,7 +7461,6 @@ dissect_kerberos_T_encryptedKrbFastReq_cipher(gboolean implicit_tag _U_, tvbuff_
                                        NULL);
 
 #endif
-  return offset;
 
 
   return offset;
@@ -7519,7 +7524,6 @@ dissect_kerberos_T_encryptedKrbFastResponse_cipher(gboolean implicit_tag _U_, tv
                                        NULL);
 
 #endif
-  return offset;
 
 
   return offset;
@@ -7581,7 +7585,6 @@ dissect_kerberos_T_encryptedChallenge_cipher(gboolean implicit_tag _U_, tvbuff_t
                                        NULL);
 
 #endif
-  return offset;
 
 
   return offset;

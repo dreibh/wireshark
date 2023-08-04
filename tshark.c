@@ -67,6 +67,9 @@
 #include <epan/decode_as.h>
 #include <epan/print.h>
 #include <epan/addr_resolv.h>
+#include <epan/enterprises.h>
+#include <epan/manuf.h>
+#include <epan/services.h>
 #ifdef HAVE_LIBPCAP
 #include "ui/capture_ui_utils.h"
 #endif
@@ -186,7 +189,6 @@ static print_stream_t *print_stream = NULL;
 static char *output_file_name;
 
 static output_fields_t* output_fields  = NULL;
-static wmem_map_t *protocolfilter = NULL;
 
 static gboolean no_duplicate_keys = FALSE;
 static proto_node_children_grouper_func node_children_grouper = proto_node_group_children_by_unique;
@@ -217,7 +219,7 @@ static gboolean infoprint;      /* if TRUE, print capture info after clearing in
 #endif /* SIGINFO */
 
 static gboolean capture(void);
-static gboolean capture_input_new_file(capture_session *cap_session,
+static bool capture_input_new_file(capture_session *cap_session,
         gchar *new_file);
 static void capture_input_new_packets(capture_session *cap_session,
         int to_read);
@@ -454,7 +456,7 @@ print_usage(FILE *output)
     fprintf(output, "  -J <protocolfilter>      top level protocol filter if -T ek|pdml|json selected\n");
     fprintf(output, "                           (e.g. \"http tcp\", filter which expands all child nodes)\n");
     fprintf(output, "  -e <field>               field to print if -Tfields selected (e.g. tcp.port,\n");
-    fprintf(output, "                           _ws.col.Info)\n");
+    fprintf(output, "                           _ws.col.info)\n");
     fprintf(output, "                           this option can be repeated to print multiple fields\n");
     fprintf(output, "  -E<fieldsoption>=<value> set options for output when -Tfields selected:\n");
     fprintf(output, "     bom=y|n               print a UTF-8 BOM\n");
@@ -531,13 +533,17 @@ glossary_option_help(void)
     fprintf(output, "  -G column-formats        dump column format codes and exit\n");
     fprintf(output, "  -G decodes               dump \"layer type\"/\"decode as\" associations and exit\n");
     fprintf(output, "  -G dissector-tables      dump dissector table names, types, and properties\n");
+    fprintf(output, "  -G dissectors            dump registered dissector names\n");
     fprintf(output, "  -G elastic-mapping       dump ElasticSearch mapping file\n");
+    fprintf(output, "  -G enterprises           dump IANA Private Enterprise Number (PEN) table\n");
     fprintf(output, "  -G fieldcount            dump count of header fields and exit\n");
-    fprintf(output, "  -G fields                dump fields glossary and exit\n");
+    fprintf(output, "  -G fields [prefix]       dump fields glossary and exit\n");
     fprintf(output, "  -G ftypes                dump field type basic and descriptive names\n");
     fprintf(output, "  -G heuristic-decodes     dump heuristic dissector tables\n");
+    fprintf(output, "  -G manuf                 dump ethernet manufacturer tables\n");
     fprintf(output, "  -G plugins               dump installed plugins and exit\n");
     fprintf(output, "  -G protocols             dump protocols in registration database and exit\n");
+    fprintf(output, "  -G services              dump transport service (port) names\n");
     fprintf(output, "  -G values                dump value, range, true/false strings and exit\n");
     fprintf(output, "\n");
     fprintf(output, "Preference reports:\n");
@@ -647,7 +653,6 @@ _compile_dfilter(const char *text, dfilter_t **dfp, const char *caller)
 static gboolean
 protocolfilter_add_opt(const char* arg, pf_flags filter_flags)
 {
-    void* value;
     gchar **newfilter = NULL;
     for (newfilter = wmem_strsplit(wmem_epan_scope(), arg, " ", -1); *newfilter; newfilter++) {
         if (strcmp(*newfilter, "") == 0) {
@@ -657,20 +662,9 @@ protocolfilter_add_opt(const char* arg, pf_flags filter_flags)
              */
             continue;
         }
-        if (!protocolfilter) {
-            protocolfilter = wmem_map_new(wmem_epan_scope(), wmem_str_hash, g_str_equal);
+        if (!output_fields_add_protocolfilter(output_fields, *newfilter, filter_flags)) {
+            cmdarg_err("%s was already specified with different filter flags. Overwriting previous protocol filter.", *newfilter);
         }
-        if (wmem_map_lookup_extended(protocolfilter, *newfilter, NULL, &value)) {
-            if (GPOINTER_TO_UINT(value) != (guint)filter_flags) {
-
-                cmdarg_err("%s was already specified with different filter flags. Overwriting previous protocol filter.", *newfilter);
-            }
-        }
-        if (!proto_registrar_get_byname(*newfilter)) {
-            cmdarg_err("%s is not a valid protocol or field name.", *newfilter);
-            return FALSE;
-        }
-        wmem_map_insert(protocolfilter, *newfilter, GINT_TO_POINTER(filter_flags));
     }
     return TRUE;
 }
@@ -1161,14 +1155,28 @@ main(int argc, char *argv[])
                 write_prefs(NULL);
             else if (strcmp(argv[2], "dissector-tables") == 0)
                 dissector_dump_dissector_tables();
+            else if (strcmp(argv[2], "dissectors") == 0)
+                dissector_dump_dissectors();
             else if (strcmp(argv[2], "elastic-mapping") == 0)
                 proto_registrar_dump_elastic(elastic_mapping_filter);
             else if (strcmp(argv[2], "fieldcount") == 0) {
                 /* return value for the test suite */
                 exit_status = proto_registrar_dump_fieldcount();
                 goto clean_exit;
-            } else if (strcmp(argv[2], "fields") == 0)
-                proto_registrar_dump_fields();
+            }
+            else if (strcmp(argv[2], "fields") == 0) {
+                if (argc >= 4) {
+                    gboolean matched = proto_registrar_dump_field_completions(argv[3]);
+                    if (!matched) {
+                        cmdarg_err("No field or protocol begins with \"%s\"", argv[3]);
+                        exit_status = EXIT_FAILURE;
+                        goto clean_exit;
+                    }
+                }
+                else {
+                    proto_registrar_dump_fields();
+                }
+            }
             else if (strcmp(argv[2], "folders") == 0) {
                 epan_load_settings();
                 about_folders();
@@ -1176,6 +1184,12 @@ main(int argc, char *argv[])
                 proto_registrar_dump_ftypes();
             else if (strcmp(argv[2], "heuristic-decodes") == 0)
                 dissector_dump_heur_decodes();
+            else if (strcmp(argv[2], "manuf") == 0)
+                ws_manuf_dump(stdout);
+            else if (strcmp(argv[2], "enterprises") == 0)
+                global_enterprises_dump(stdout);
+            else if (strcmp(argv[2], "services") == 0)
+                global_services_dump(stdout);
             else if (strcmp(argv[2], "plugins") == 0) {
 #ifdef HAVE_PLUGINS
                 codecs_init();
@@ -1332,7 +1346,13 @@ main(int argc, char *argv[])
                 break;
             case 'e':
                 /* Field entry */
-                output_fields_add(output_fields, ws_optarg);
+                {
+                    header_field_info *hfi = proto_registrar_get_byalias(ws_optarg);
+                    if (hfi)
+                        output_fields_add(output_fields, hfi->abbrev);
+                    else
+                        output_fields_add(output_fields, ws_optarg);
+                }
                 break;
             case 'E':
                 /* Field option */
@@ -2103,23 +2123,6 @@ main(int argc, char *argv[])
             goto clean_exit;
         }
     }
-#ifdef HAVE_LIBPCAP
-    /* We currently don't support taps, or printing dissected packets,
-       if we're writing to a pipe. */
-    if (global_capture_opts.saving_to_file &&
-            global_capture_opts.output_to_pipe) {
-        if (tap_listeners_require_dissection()) {
-            cmdarg_err("Taps aren't supported when saving to a pipe.");
-            exit_status = WS_EXIT_INVALID_OPTION;
-            goto clean_exit;
-        }
-        if (print_packet_info) {
-            cmdarg_err("Printing dissected packets isn't supported when saving to a pipe.");
-            exit_status = WS_EXIT_INVALID_OPTION;
-            goto clean_exit;
-        }
-    }
-#endif
 
     if (ex_opt_count("read_format") > 0) {
         const gchar* name = ex_opt_get_next("read_format");
@@ -2268,8 +2271,6 @@ main(int argc, char *argv[])
         }
     }
 
-    ws_debug("tshark: do_dissection = %s", do_dissection ? "TRUE" : "FALSE");
-
     if (cf_name) {
         ws_debug("tshark: Opening capture file: %s", cf_name);
         /*
@@ -2294,6 +2295,7 @@ main(int argc, char *argv[])
            other things, what taps are listening, so determine that after
            starting the statistics taps. */
         do_dissection = must_do_dissection(rfcode, dfcode, pdu_export_arg);
+        ws_debug("tshark: do_dissection = %s", do_dissection ? "TRUE" : "FALSE");
 
         /* Process the packets in the file */
         ws_debug("tshark: invoking process_cap_file() to process the packets");
@@ -2449,14 +2451,6 @@ main(int argc, char *argv[])
         else
             print_packet_counts = TRUE;
 
-        if (print_packet_info) {
-            if (!write_preamble(&cfile)) {
-                show_print_file_io_error();
-                exit_status = WS_EXIT_INVALID_FILE;
-                goto clean_exit;
-            }
-        }
-
         ws_debug("tshark: performing live capture");
 
         /* Start statistics taps; we should only do so after the capture
@@ -2473,6 +2467,54 @@ main(int argc, char *argv[])
            other things, what taps are listening, so determine that after
            starting the statistics taps. */
         do_dissection = must_do_dissection(rfcode, dfcode, pdu_export_arg);
+        ws_debug("tshark: do_dissection = %s", do_dissection ? "TRUE" : "FALSE");
+
+        /* We're doing live capture; if the capture child is writing to a pipe,
+           we can't do dissection, because that would mean two readers for
+           the pipe, tshark and whatever else. */
+        if (do_dissection && global_capture_opts.output_to_pipe) {
+            if (tap_listeners_require_dissection()) {
+                cmdarg_err("Taps aren't supported when capturing and saving to a pipe.");
+                exit_status = WS_EXIT_INVALID_OPTION;
+                goto clean_exit;
+            }
+            if (print_packet_info) {
+                cmdarg_err("Printing dissected packets isn't supported when capturing and saving to a pipe.");
+                exit_status = WS_EXIT_INVALID_OPTION;
+                goto clean_exit;
+            }
+            /* We already checked the next three reasons for supersets of
+               capturing and saving to a pipe, but this doesn't hurt. */
+            if (pdu_export_arg) {
+                cmdarg_err("PDUs export isn't supported when capturing and saving to a pipe.");
+                exit_status = WS_EXIT_INVALID_OPTION;
+                goto clean_exit;
+            }
+            if (rfcode != NULL) {
+                cmdarg_err("Read filters aren't supported when capturing and saving to a pipe.");
+                exit_status = WS_EXIT_INVALID_OPTION;
+                goto clean_exit;
+            }
+            if (dfcode != NULL) {
+                cmdarg_err("Display filters aren't supported when capturing and saving to a pipe.");
+                exit_status = WS_EXIT_INVALID_OPTION;
+                goto clean_exit;
+            }
+            /* There's some other reason we're dissecting. */
+            cmdarg_err("Dissection isn't supported when capturing and saving to a pipe.");
+            exit_status = WS_EXIT_INVALID_OPTION;
+            goto clean_exit;
+        }
+
+        /* Write a preamble if we're printing one. Do this after all checking
+         * for invalid options, so we don't print just a preamble and quit. */
+        if (print_packet_info) {
+            if (!write_preamble(&cfile)) {
+                show_print_file_io_error();
+                exit_status = WS_EXIT_INVALID_FILE;
+                goto clean_exit;
+            }
+        }
 
         /*
          * XXX - this returns FALSE if an error occurred, but it also
@@ -2737,7 +2779,7 @@ capture_input_cfilter_error(capture_session *cap_session, guint i, const char *e
 
 
 /* capture child tells us we have a new (or the first) capture file */
-static gboolean
+static bool
 capture_input_new_file(capture_session *cap_session, gchar *new_file)
 {
     capture_options *capture_opts = cap_session->capture_opts;
@@ -3066,6 +3108,8 @@ process_packet_first_pass(capture_file *cf, epan_dissect_t *edt,
        from the dissection or running taps on the packet; if we're doing
        any of that, we'll do it in the second pass.) */
     if (edt) {
+        column_info *cinfo = NULL;
+
         /* If we're running a read filter, prime the epan_dissect_t with that
            filter. */
         if (cf->rfcode)
@@ -3085,9 +3129,14 @@ process_packet_first_pass(capture_file *cf, epan_dissect_t *edt,
             cf->provider.ref = &ref_frame;
         }
 
+        /* If we're applying a filter that needs the columns, construct them. */
+        if (dfilter_requires_columns(cf->rfcode) || dfilter_requires_columns(cf->dfcode)) {
+            cinfo = &cf->cinfo;
+        }
+
         epan_dissect_run(edt, cf->cd_t, rec,
                 frame_tvbuff_new_buffer(&cf->provider, &fdlocal, buf),
-                &fdlocal, NULL);
+                &fdlocal, cinfo);
 
         /* Run the read filter if we have one. */
         if (cf->rfcode)
@@ -3273,7 +3322,7 @@ process_cap_file_first_pass(capture_file *cf, int max_packet_count,
 static gboolean
 process_packet_second_pass(capture_file *cf, epan_dissect_t *edt,
         frame_data *fdata, wtap_rec *rec,
-        Buffer *buf, guint tap_flags)
+        Buffer *buf, guint tap_flags _U_)
 {
     column_info    *cinfo;
     gboolean        passed;
@@ -3298,12 +3347,14 @@ process_packet_second_pass(capture_file *cf, epan_dissect_t *edt,
         col_custom_prime_edt(edt, &cf->cinfo);
 
         /* We only need the columns if either
-           1) some tap needs the columns
+           1) some tap or filter needs the columns
            or
            2) we're printing packet info but we're *not* verbose; in verbose
            mode, we print the protocol tree, not the protocol summary.
+           or
+           3) there is a column mapped to an individual field
            */
-        if ((tap_flags & TL_REQUIRES_COLUMNS) || (print_packet_info && print_summary) || output_fields_has_cols(output_fields))
+        if ((tap_listeners_require_columns()) || (print_packet_info && print_summary) || output_fields_has_cols(output_fields) || dfilter_requires_columns(cf->dfcode))
             cinfo = &cf->cinfo;
         else
             cinfo = NULL;
@@ -3929,7 +3980,7 @@ out:
 
 static gboolean
 process_packet_single_pass(capture_file *cf, epan_dissect_t *edt, gint64 offset,
-        wtap_rec *rec, Buffer *buf, guint tap_flags)
+        wtap_rec *rec, Buffer *buf, guint tap_flags _U_)
 {
     frame_data      fdata;
     column_info    *cinfo;
@@ -3964,13 +4015,13 @@ process_packet_single_pass(capture_file *cf, epan_dissect_t *edt, gint64 offset,
         col_custom_prime_edt(edt, &cf->cinfo);
 
         /* We only need the columns if either
-           1) some tap needs the columns
+           1) some tap or filter needs the columns
            or
            2) we're printing packet info but we're *not* verbose; in verbose
            mode, we print the protocol tree, not the protocol summary.
            or
            3) there is a column mapped as an individual field */
-        if ((tap_flags & TL_REQUIRES_COLUMNS) || (print_packet_info && print_summary) || output_fields_has_cols(output_fields))
+        if ((tap_listeners_require_columns()) || (print_packet_info && print_summary) || output_fields_has_cols(output_fields) || dfilter_requires_columns(cf->dfcode))
             cinfo = &cf->cinfo;
         else
             cinfo = NULL;
@@ -4392,7 +4443,7 @@ print_packet(capture_file *cf, epan_dissect_t *edt)
                 return !ferror(stdout);
             }
             if (print_details) {
-                write_pdml_proto_tree(output_fields, protocolfilter, edt, &cf->cinfo, stdout, dissect_color);
+                write_pdml_proto_tree(output_fields, edt, &cf->cinfo, stdout, dissect_color);
                 printf("\n");
                 return !ferror(stdout);
             }
@@ -4415,8 +4466,7 @@ print_packet(capture_file *cf, epan_dissect_t *edt)
                 ws_assert_not_reached();
             if (print_details) {
                 write_json_proto_tree(output_fields, print_dissections_expanded,
-                        print_hex, protocolfilter,
-                        edt, &cf->cinfo, node_children_grouper, &jdumper);
+                        print_hex, edt, &cf->cinfo, node_children_grouper, &jdumper);
                 return !ferror(stdout);
             }
             break;
@@ -4426,15 +4476,14 @@ print_packet(capture_file *cf, epan_dissect_t *edt)
                 ws_assert_not_reached();
             if (print_details) {
                 write_json_proto_tree(output_fields, print_dissections_none,
-                        TRUE, protocolfilter,
-                        edt, &cf->cinfo, node_children_grouper, &jdumper);
+                        TRUE, edt, &cf->cinfo, node_children_grouper, &jdumper);
                 return !ferror(stdout);
             }
             break;
 
         case WRITE_EK:
             write_ek_proto_tree(output_fields, print_summary, print_hex,
-                    protocolfilter, edt, &cf->cinfo, stdout);
+                    edt, &cf->cinfo, stdout);
             return !ferror(stdout);
 
         default:
