@@ -3,7 +3,7 @@
 . ./packaging.conf
 
 # ------ Revert debian/changelog and debian/control -------------------------
-git checkout debian/changelog debian/control debian/rules debian tools/make-version.pl debian/*.symbols
+git checkout debian/changelog debian/control debian/rules debian tools/make-version.py debian/*.symbols
 
 # rm -rf debian
 # cp -a debian.td debian
@@ -31,10 +31,10 @@ GIT_VERSION="git`env LANG=en date -u +"%Y%m%d%H%M%S"`"
 GIT_ID="$GIT_VERSION~`cat .git/ORIG_HEAD | cut -b 1-8`"   # Name may not be too long! Just take 8 digits ...
 
 
-# ------ Change make-version.pl ---------------------------------------------
-sed -e "s/^my %version_pref = (.*$/my %version_pref = (  \"git_description\" => \"v${UPSTREAM_VERSION}+${GIT_ID}\",/g" \
-   <tools/make-version.pl >tools/make-version.pl.new
-chmod +x tools/make-version.pl.new
+# ------ Change make-version.py ---------------------------------------------
+sed -e "s/git_description = git_last_annotated.*$/git_description = \"v${UPSTREAM_VERSION}+${GIT_ID}\"/g" \
+   <tools/make-version.py >tools/make-version.py.new
+chmod +x tools/make-version.py.new
 
 
 # ------ Create debian/changelog --------------------------------------------
@@ -72,7 +72,7 @@ sed -e "2i DEB_BUILD_OPTIONS=nocheck   # <<-- NOTE: (currently) necessary for pa
 
 
 # ------ Apply changes ------------------------------------------------------
-mv tools/make-version.pl.new tools/make-version.pl
+mv tools/make-version.py.new tools/make-version.py
 mv debian/changelog.new debian/changelog
 mv debian/control.new debian/control
 mv debian/rules.new debian/rules
