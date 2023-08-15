@@ -2385,7 +2385,6 @@ if(LUA_FOUND AND ENABLE_LUA)
 		"${CMAKE_SOURCE_DIR}/epan/wslua/init.lua"
 		"${CMAKE_SOURCE_DIR}/epan/wslua/console.lua"
 		"${CMAKE_SOURCE_DIR}/epan/wslua/browser_sslkeylog.lua"
-		"${CMAKE_SOURCE_DIR}/epan/wslua/dtd_gen.lua"
 	)
 	foreach(_lua_file ${_lua_files})
 		get_filename_component(_lua_filename "${_lua_file}" NAME)
@@ -3057,6 +3056,7 @@ if(BUILD_sharkd)
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
 		${SPEEXDSP_LIBRARIES}
+		${M_LIBRARIES}
 	)
 	set(sharkd_FILES
 		#
@@ -3067,6 +3067,7 @@ if(BUILD_sharkd)
 		sharkd.c
 		sharkd_daemon.c
 		sharkd_session.c
+		${TSHARK_TAP_SRC}
 	)
 	set_executable_resources(sharkd "SharkD")
 	add_executable(sharkd ${sharkd_FILES})
