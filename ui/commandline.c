@@ -417,7 +417,6 @@ void commandline_other_options(int argc, char *argv[], gboolean opt_reset)
     }
 
     /* Initialize with default values */
-    dissect_opts_init();
     global_commandline_info.jump_backwards = SD_FORWARD;
     global_commandline_info.go_to_packet = 0;
     global_commandline_info.jfilter = NULL;
@@ -494,7 +493,7 @@ void commandline_other_options(int argc, char *argv[], gboolean opt_reset)
                 break;
             case 'l':        /* Automatic scrolling in live capture mode */
 #ifdef HAVE_LIBPCAP
-                auto_scroll_live = TRUE;
+                recent.capture_auto_scroll = TRUE;
 #else
                 capture_option_specified = TRUE;
                 arg_error = TRUE;

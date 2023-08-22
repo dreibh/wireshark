@@ -24,6 +24,7 @@
 #include <wsutil/wsjson.h>
 #include <wsutil/json_dumper.h>
 #include <wsutil/ws_assert.h>
+#include <wsutil/wsgcrypt.h>
 
 #include <file.h>
 #include <epan/epan_dissect.h>
@@ -58,6 +59,7 @@
 #include <ui/tap-rtp-common.h>
 #include <ui/tap-rtp-analysis.h>
 #include <ui/cli/tap-protohierstat.h>
+#include <ui/cli/tap-voip.h>
 #include <wsutil/version_info.h>
 #include <epan/to_str.h>
 
@@ -346,8 +348,8 @@ json_prep(char* buf, const jsmntok_t* tokens, int count)
         gboolean is_mandatory;
     };
 
-#define MANDATORY TRUE
-#define OPTIONAL FALSE
+#define SHARKD_MANDATORY TRUE
+#define SHARKD_OPTIONAL FALSE
 
     /*
      * The member attribute structure is key to the syntax checking.  The
@@ -362,101 +364,102 @@ json_prep(char* buf, const jsmntok_t* tokens, int count)
 
     struct member_attribute name_array[] = {
         // Root members
-        {NULL,         "jsonrpc",    1, JSMN_STRING,       SHARKD_JSON_STRING,   MANDATORY},
-        {NULL,         "userid",     1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {NULL,         "id",         1, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, MANDATORY},
-        {NULL,         "method",     1, JSMN_STRING,       SHARKD_JSON_STRING,   MANDATORY},
-        {NULL,         "params",     1, JSMN_OBJECT,       SHARKD_JSON_OBJECT,   OPTIONAL},
+        {NULL,         "jsonrpc",    1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
+        {NULL,         "userid",     1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {NULL,         "id",         1, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_MANDATORY},
+        {NULL,         "method",     1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
+        {NULL,         "params",     1, JSMN_OBJECT,       SHARKD_JSON_OBJECT,   SHARKD_OPTIONAL},
 
         // Valid methods
-        {"method",     "analyse",    1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "bye",        1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "check",      1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "complete",   1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "download",   1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "dumpconf",   1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "follow",     1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "frame",      1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "frames",     1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "info",       1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "intervals",  1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "iograph",    1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "load",       1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "setcomment", 1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "setconf",    1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "status",     1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"method",     "tap",        1, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
+        {"method",     "analyse",    1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "bye",        1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "check",      1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "complete",   1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "download",   1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "dumpconf",   1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "follow",     1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "frame",      1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "frames",     1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "info",       1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "intervals",  1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "iograph",    1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "load",       1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "setcomment", 1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "setconf",    1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "status",     1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"method",     "tap",        1, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
 
         // Parameters and their method context
-        {"check",      "field",      2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"check",      "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"complete",   "field",      2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"complete",   "pref",       2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"download",   "token",      2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"dumpconf",   "pref",       2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"follow",     "follow",     2, JSMN_STRING,       SHARKD_JSON_STRING,   MANDATORY},
-        {"follow",     "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   MANDATORY},
-        {"frame",      "frame",      2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, MANDATORY},
-        {"frame",      "proto",      2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
-        {"frame",      "ref_frame",  2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, OPTIONAL},
-        {"frame",      "prev_frame", 2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, OPTIONAL},
-        {"frame",      "columns",    2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
-        {"frame",      "color",      2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
-        {"frame",      "bytes",      2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
-        {"frame",      "hidden",     2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  OPTIONAL},
-        {"frames",     "column*",    2, JSMN_UNDEFINED,    SHARKD_JSON_ANY,      OPTIONAL},
-        {"frames",     "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"frames",     "skip",       2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, OPTIONAL},
-        {"frames",     "limit",      2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, OPTIONAL},
-        {"frames",     "refs",       2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"intervals",  "interval",   2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, OPTIONAL},
-        {"intervals",  "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "interval",   2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, OPTIONAL},
-        {"iograph",    "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "graph0",     2, JSMN_STRING,       SHARKD_JSON_STRING,   MANDATORY},
-        {"iograph",    "graph1",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "graph2",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "graph3",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "graph4",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "graph5",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "graph6",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "graph7",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "graph8",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "graph9",     2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter0",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter1",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter2",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter3",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter4",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter5",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter6",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter7",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter8",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"iograph",    "filter9",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"load",       "file",       2, JSMN_STRING,       SHARKD_JSON_STRING,   MANDATORY},
-        {"setcomment", "frame",      2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, MANDATORY},
-        {"setcomment", "comment",    2, JSMN_STRING,       SHARKD_JSON_STRING,   OPTIONAL},
-        {"setconf",    "name",       2, JSMN_STRING,       SHARKD_JSON_STRING,   MANDATORY},
-        {"setconf",    "value",      2, JSMN_UNDEFINED,    SHARKD_JSON_ANY,      MANDATORY},
-        {"tap",        "tap0",       2, JSMN_STRING,       SHARKD_JSON_STRING, MANDATORY},
-        {"tap",        "tap1",       2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap2",       2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap3",       2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap4",       2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap5",       2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap6",       2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap7",       2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap8",       2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap9",       2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap10",      2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap11",      2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap12",      2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap13",      2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap14",      2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
-        {"tap",        "tap15",      2, JSMN_STRING,       SHARKD_JSON_STRING, OPTIONAL},
+        {"check",      "field",      2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"check",      "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"complete",   "field",      2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"complete",   "pref",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"download",   "token",      2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"dumpconf",   "pref",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"follow",     "follow",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
+        {"follow",     "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
+        {"frame",      "frame",      2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_MANDATORY},
+        {"frame",      "proto",      2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
+        {"frame",      "ref_frame",  2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
+        {"frame",      "prev_frame", 2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
+        {"frame",      "columns",    2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
+        {"frame",      "color",      2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
+        {"frame",      "bytes",      2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
+        {"frame",      "hidden",     2, JSMN_PRIMITIVE,    SHARKD_JSON_BOOLEAN,  SHARKD_OPTIONAL},
+        {"frames",     "column*",    2, JSMN_UNDEFINED,    SHARKD_JSON_ANY,      SHARKD_OPTIONAL},
+        {"frames",     "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"frames",     "skip",       2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
+        {"frames",     "limit",      2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
+        {"frames",     "refs",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"intervals",  "interval",   2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
+        {"intervals",  "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "interval",   2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_OPTIONAL},
+        {"iograph",    "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "graph0",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
+        {"iograph",    "graph1",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "graph2",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "graph3",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "graph4",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "graph5",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "graph6",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "graph7",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "graph8",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "graph9",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter0",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter1",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter2",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter3",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter4",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter5",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter6",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter7",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter8",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"iograph",    "filter9",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"load",       "file",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
+        {"setcomment", "frame",      2, JSMN_PRIMITIVE,    SHARKD_JSON_UINTEGER, SHARKD_MANDATORY},
+        {"setcomment", "comment",    2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"setconf",    "name",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
+        {"setconf",    "value",      2, JSMN_UNDEFINED,    SHARKD_JSON_ANY,      SHARKD_MANDATORY},
+        {"tap",        "tap0",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_MANDATORY},
+        {"tap",        "tap1",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap2",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap3",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap4",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap5",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap6",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap7",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap8",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap9",       2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap10",      2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap11",      2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap12",      2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap13",      2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap14",      2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "tap15",      2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
+        {"tap",        "filter",     2, JSMN_STRING,       SHARKD_JSON_STRING,   SHARKD_OPTIONAL},
 
         // End of the name_array
-        {NULL,         NULL,         0, JSMN_STRING,       SHARKD_ARRAY_END,   OPTIONAL},
+        {NULL,         NULL,         0, JSMN_STRING,       SHARKD_ARRAY_END,   SHARKD_OPTIONAL},
     };
 
     rpcid = 0;
@@ -1036,6 +1039,16 @@ sharkd_session_process_info(void)
         json_dumper_begin_object(&dumper);
         sharkd_json_value_string("name", "Protocol Hierarchy Statistics");
         sharkd_json_value_string("tap", "phs");
+        json_dumper_end_object(&dumper);
+
+        json_dumper_begin_object(&dumper);
+        sharkd_json_value_string("name", "VoIP Calls");
+        sharkd_json_value_string("tap", "voip-calls");
+        json_dumper_end_object(&dumper);
+
+        json_dumper_begin_object(&dumper);
+        sharkd_json_value_string("name", "VoIP Conversations");
+        sharkd_json_value_string("tap", "voip-convs");
         json_dumper_end_object(&dumper);
 
         json_dumper_begin_object(&dumper);
@@ -2716,6 +2729,7 @@ static struct sharkd_export_object_list *sharkd_eo_list;
  *                  (o) type - content type
  *                  (o) filename - filename
  *                  (m) len - object length
+ *                  (m) sha1 - object's sha1 sum
  */
 static void
 sharkd_session_process_tap_eo_cb(void *tapdata)
@@ -2724,6 +2738,7 @@ sharkd_session_process_tap_eo_cb(void *tapdata)
     struct sharkd_export_object_list *object_list = (struct sharkd_export_object_list *) tap_object->gui_data;
     GSList *slist;
     int i = 0;
+    char sha1sum_bytes[HASH_SHA1_LENGTH], *sha1sum_str;
 
     json_dumper_begin_object(&dumper);
     sharkd_json_value_string("tap", object_list->type);
@@ -2753,6 +2768,11 @@ sharkd_session_process_tap_eo_cb(void *tapdata)
 
         sharkd_json_value_anyf("len", "%zu", eo_entry->payload_len);
 
+        gcry_md_hash_buffer(GCRY_MD_SHA1, sha1sum_bytes, eo_entry->payload_data, eo_entry->payload_len);
+        sha1sum_str = bytes_to_str(NULL, sha1sum_bytes, HASH_SHA1_LENGTH);
+        sharkd_json_value_string("sha1", sha1sum_str);
+        g_free(sha1sum_str);
+
         json_dumper_end_object(&dumper);
 
         i++;
@@ -2777,6 +2797,19 @@ sharkd_eo_object_list_get_entry(void *gui_data, int row)
 
     return (export_object_entry_t *) g_slist_nth_data(object_list->entries, row);
 }
+
+static struct sharkd_export_object_list *
+sharkd_eo_object_list_get_entry_by_type(void *gui_data, const char *tap_type)
+{
+    struct sharkd_export_object_list *object_list = (struct sharkd_export_object_list *) gui_data;
+    for (; object_list; object_list = object_list->next)
+    {
+        if (!strcmp(object_list->type, tap_type))
+            return object_list;
+    }
+    return NULL;
+}
+
 
 /**
  * sharkd_session_process_tap_rtp_cb()
@@ -2892,6 +2925,7 @@ sharkd_session_process_tap_multicast_cb(void *arg)
 {
     mcaststream_tapinfo_t *tapinfo = (mcaststream_tapinfo_t *)arg;
     GList *list_item;
+    char *addr_str;
 
     json_dumper_begin_object(&dumper);
 
@@ -2907,9 +2941,13 @@ sharkd_session_process_tap_multicast_cb(void *arg)
         mcast_stream_info_t *stream_info = (mcast_stream_info_t *) list_item->data;
         sharkd_json_object_open(NULL);
         {
-            sharkd_json_value_string("saddr", address_to_display(NULL, &stream_info->src_addr));
+            addr_str = address_to_display(NULL, &stream_info->src_addr);
+            sharkd_json_value_string("saddr", addr_str);
+            wmem_free(NULL, addr_str);
             sharkd_json_value_anyf("sport", "%u", stream_info->src_port);
-            sharkd_json_value_string("daddr", address_to_display(NULL, &stream_info->dest_addr));
+            addr_str = address_to_display(NULL, &stream_info->dest_addr);
+            sharkd_json_value_string("daddr", addr_str);
+            wmem_free(NULL, addr_str);
             sharkd_json_value_anyf("dport", "%u", stream_info->dest_port);
             sharkd_json_object_open("packets");
             {
@@ -2954,6 +2992,179 @@ sharkd_session_process_free_tap_multicast_cb(void *tapdata)
 }
 
 /**
+ * sharkd_session_process_tap_voip_calls_cb()
+ *
+ * Output VoIP Calls tap:
+ *   (m) tap                    - tap name
+ *   (m) type                   - tap output type
+ *   (m) calls                  - array of objects with attributes:
+ *                              (m) call            - call number
+ *                              (m) start_time      - start timestamp
+ *                              (m) stop_time       - stop timestamp
+ *                              (m) initial_speaker - address of initial speaker
+ *                              (m) from            - from address
+ *                              (m) to              - to address
+ *                              (m) protocol        - protocol name
+ *                              (m) packets         - packet count
+ *                              (m) state           - state string
+ *                              (m) comment         - comment string
+ */
+static void
+sharkd_session_process_tap_voip_calls_cb(void *arg)
+{
+    voip_calls_tapinfo_t *tapinfo = (voip_calls_tapinfo_t *)arg;
+    char *addr_str;
+    GList *cur_call = g_queue_peek_nth_link(tapinfo->callsinfos, 0);
+    sharkd_json_object_open(NULL);
+    sharkd_json_value_string("tap", "voip-calls");
+    sharkd_json_value_string("type", "voip-calls");
+    sharkd_json_array_open("calls");
+    while (cur_call && cur_call->data) {
+        voip_calls_info_t *call_info_ = (voip_calls_info_t*) cur_call->data;
+        sharkd_json_object_open(NULL);
+        sharkd_json_value_anyf("call", "%hu", call_info_->call_num);
+        sharkd_json_value_anyf("start_time", "%.6f", nstime_to_sec(&(call_info_->start_rel_ts)));
+        sharkd_json_value_anyf("stop_time", "%.6f", nstime_to_sec(&(call_info_->start_rel_ts)));
+        addr_str = address_to_display(NULL, &(call_info_->initial_speaker));
+        sharkd_json_value_string("initial_speaker", addr_str);
+        wmem_free(NULL, addr_str);
+        sharkd_json_value_string("from", call_info_->from_identity);
+        sharkd_json_value_string("to", call_info_->to_identity);
+        sharkd_json_value_string("protocol", ((call_info_->protocol == VOIP_COMMON) && call_info_->protocol_name) ?
+            call_info_->protocol_name : voip_protocol_name[call_info_->protocol]);
+        sharkd_json_value_anyf("packets", "%u", call_info_->npackets);
+        sharkd_json_value_string("state", voip_call_state_name[call_info_->call_state]);
+        sharkd_json_value_string("comment", call_info_->call_comment);
+        sharkd_json_object_close();
+        cur_call = g_list_next(cur_call);
+    }
+    sharkd_json_array_close();
+    sharkd_json_object_close();
+}
+
+static void
+sharkd_session_free_tap_voip_calls_cb(void *tapdata)
+{
+    voip_calls_tapinfo_t *tapinfo = (voip_calls_tapinfo_t *)tapdata;
+    voip_calls_remove_all_tap_listeners(tapinfo);
+    if (tapinfo->callsinfos != NULL) {
+        g_queue_free(tapinfo->callsinfos);
+    }
+    if (tapinfo->graph_analysis != NULL) {
+        sequence_analysis_info_free(tapinfo->graph_analysis);
+    }
+    memset(tapinfo, 0, sizeof(*tapinfo));
+}
+
+
+struct sharkd_voip_convs_req {
+    voip_calls_tapinfo_t *tapinfo;
+    const char *tap_name;
+};
+
+/**
+ * sharkd_session_process_tap_voip_convs_cb()
+ *
+ * Output VoIP Conversations tap:
+ *   (m) tap                    - tap name
+ *   (m) type                   - tap output type
+ *   (m) convs                  - array of objects with attributes:
+ *                              (m) frame    - frame number
+ *                              (m) call     - call number
+ *                              (m) time     - timestamp
+ *                              (m) dst_addr - destination address
+ *                              (m) dst_port - destination port
+ *                              (m) src_addr - source address
+ *                              (m) src_port - source port
+ *                              (m) label    - label string
+ *                              (m) comment  - comment string
+ */
+static void
+sharkd_session_process_tap_voip_convs_cb(void *arg)
+{
+    struct sharkd_voip_convs_req *voip_convs_req = (struct sharkd_voip_convs_req *)arg;
+    voip_calls_tapinfo_t *tapinfo = voip_convs_req->tapinfo;
+    seq_analysis_info_t *sainfo = tapinfo->graph_analysis;
+    char *addr_str;
+    sequence_analysis_list_sort(sainfo);
+    sharkd_json_object_open(NULL);
+    sharkd_json_value_string("tap", voip_convs_req->tap_name);
+    sharkd_json_value_string("type", "voip-convs");
+    sharkd_json_array_open("convs");
+    for (GList *cur = g_queue_peek_nth_link(sainfo->items, 0); cur; cur = g_list_next(cur)) {
+        seq_analysis_item_t *sai = (seq_analysis_item_t *) cur->data;
+        if ((voip_conv_sel[sai->conv_num / VOIP_CONV_BITS] & (1 << (sai->conv_num % VOIP_CONV_BITS))) == 0)
+            continue;
+        sharkd_json_object_open(NULL);
+        sharkd_json_value_anyf("frame", "%d", sai->frame_number);
+        sharkd_json_value_anyf("call", "%d", sai->conv_num);
+        sharkd_json_value_string("time", sai->time_str);
+        addr_str = address_to_display(NULL, &(sai->dst_addr));
+        sharkd_json_value_string("dst_addr", addr_str);
+        wmem_free(NULL, addr_str);
+        sharkd_json_value_anyf("dst_port", "%d", sai->port_dst);
+        addr_str = address_to_display(NULL, &(sai->src_addr));
+        sharkd_json_value_string("src_addr", addr_str);
+        wmem_free(NULL, addr_str);
+        sharkd_json_value_anyf("src_port", "%d", sai->port_src);
+        sharkd_json_value_string("label", sai->frame_label);
+        sharkd_json_value_string("comment", sai->comment);
+        sharkd_json_object_close();
+    }
+    sharkd_json_array_close();
+    sharkd_json_object_close();
+}
+
+static void
+sharkd_session_free_tap_voip_convs_cb(void *tapdata)
+{
+    struct sharkd_voip_convs_req *voip_convs_req = (struct sharkd_voip_convs_req *)tapdata;
+    voip_calls_tapinfo_t *tapinfo = voip_convs_req->tapinfo;
+    voip_calls_remove_all_tap_listeners(tapinfo);
+    if (tapinfo->callsinfos != NULL) {
+        g_queue_free(tapinfo->callsinfos);
+    }
+    if (tapinfo->graph_analysis != NULL) {
+        sequence_analysis_info_free(tapinfo->graph_analysis);
+    }
+    memset(tapinfo, 0, sizeof(*tapinfo));
+    g_free(voip_convs_req);
+}
+
+static GString*
+sharkd_session_eo_register_tap_listener(register_eo_t *eo, const char *tap_type, const char *tap_filter, tap_draw_cb tap_draw, void **ptap_data, GFreeFunc* ptap_free)
+{
+    export_object_list_t *eo_object;
+    struct sharkd_export_object_list *object_list;
+
+    object_list = sharkd_eo_object_list_get_entry_by_type(sharkd_eo_list, tap_type);
+    if (object_list)
+    {
+        g_slist_free_full(object_list->entries, (GDestroyNotify) eo_free_entry);
+        object_list->entries = NULL;
+    }
+    else
+    {
+        object_list = g_new(struct sharkd_export_object_list, 1);
+        object_list->type = g_strdup(tap_type);
+        object_list->proto = proto_get_protocol_short_name(find_protocol_by_id(get_eo_proto_id(eo)));
+        object_list->entries = NULL;
+        object_list->next = sharkd_eo_list;
+        sharkd_eo_list = object_list;
+    }
+
+    eo_object  = g_new0(export_object_list_t, 1);
+    eo_object->add_entry = sharkd_eo_object_list_add_entry;
+    eo_object->get_entry = sharkd_eo_object_list_get_entry;
+    eo_object->gui_data = (void *) object_list;
+
+    *ptap_data = eo_object;
+    *ptap_free = g_free; /* need to free only eo_object, object_list need to be kept for potential download */
+
+    return register_tap_listener(get_eo_tap_listener_name(eo), eo_object, tap_filter, 0, NULL, get_eo_packet_func(eo), tap_draw, NULL);
+}
+
+/**
  * sharkd_session_process_tap()
  *
  * Process tap request
@@ -2988,6 +3199,7 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
     GFreeFunc taps_free[16];
     int taps_count = 0;
     int i;
+    const char *tap_filter = json_find_attr(buf, tokens, count, "filter");
 
     rtpstream_tapinfo_t rtp_tapinfo =
     { NULL, NULL, NULL, NULL, 0, NULL, NULL, 0, TAP_ANALYSE, NULL, NULL, NULL, FALSE, FALSE};
@@ -2999,7 +3211,6 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
 
         void *tap_data = NULL;
         GFreeFunc tap_free = NULL;
-        const char *tap_filter = "";
         GString *tap_error = NULL;
 
         snprintf(tapbuf, sizeof(tapbuf), "tap%d", i);
@@ -3038,7 +3249,7 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
             expert_tap = g_new0(struct sharkd_expert_tap, 1);
             expert_tap->text = g_string_chunk_new(100);
 
-            tap_error = register_tap_listener("expert", expert_tap, NULL, 0, NULL, sharkd_session_packet_tap_expert_cb, sharkd_session_process_tap_expert_cb, NULL);
+            tap_error = register_tap_listener("expert", expert_tap, tap_filter, 0, NULL, sharkd_session_packet_tap_expert_cb, sharkd_session_process_tap_expert_cb, NULL);
 
             tap_data = expert_tap;
             tap_free = sharkd_session_free_tap_expert_cb;
@@ -3070,7 +3281,7 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
             tap_flags = sequence_analysis_get_tap_flags(analysis);
             tap_func  = sequence_analysis_get_packet_func(analysis);
 
-            tap_error = register_tap_listener(tap_name, graph_analysis, NULL, tap_flags, NULL, tap_func, sharkd_session_process_tap_flow_cb, NULL);
+            tap_error = register_tap_listener(tap_name, graph_analysis, tap_filter, tap_flags, NULL, tap_func, sharkd_session_process_tap_flow_cb, NULL);
 
             tap_data = graph_analysis;
             tap_free = sharkd_session_free_tap_flow_cb;
@@ -3231,8 +3442,6 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
         else if (!strncmp(tok_tap, "eo:", 3))
         {
             register_eo_t *eo = get_eo_by_name(tok_tap + 3);
-            export_object_list_t *eo_object;
-            struct sharkd_export_object_list *object_list;
 
             if (!eo)
             {
@@ -3243,35 +3452,9 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
                 return;
             }
 
-            for (object_list = sharkd_eo_list; object_list; object_list = object_list->next)
-            {
-                if (!strcmp(object_list->type, tok_tap))
-                {
-                    g_slist_free_full(object_list->entries, (GDestroyNotify) eo_free_entry);
-                    object_list->entries = NULL;
-                    break;
-                }
-            }
+            tap_error = sharkd_session_eo_register_tap_listener(eo, tok_tap, tap_filter, sharkd_session_process_tap_eo_cb, &tap_data, &tap_free);
 
-            if (!object_list)
-            {
-                object_list = g_new(struct sharkd_export_object_list, 1);
-                object_list->type = g_strdup(tok_tap);
-                object_list->proto = proto_get_protocol_short_name(find_protocol_by_id(get_eo_proto_id(eo)));
-                object_list->entries = NULL;
-                object_list->next = sharkd_eo_list;
-                sharkd_eo_list = object_list;
-            }
-
-            eo_object  = g_new0(export_object_list_t, 1);
-            eo_object->add_entry = sharkd_eo_object_list_add_entry;
-            eo_object->get_entry = sharkd_eo_object_list_get_entry;
-            eo_object->gui_data = (void *) object_list;
-
-            tap_error = register_tap_listener(get_eo_tap_listener_name(eo), eo_object, NULL, 0, NULL, get_eo_packet_func(eo), sharkd_session_process_tap_eo_cb, NULL);
-
-            tap_data = eo_object;
-            tap_free = g_free; /* need to free only eo_object, object_list need to be kept for potential download */
+            /* tap_data & tap_free assigned by sharkd_session_eo_register_tap_listener */
         }
         else if (!strcmp(tok_tap, "rtp-streams"))
         {
@@ -3324,6 +3507,75 @@ sharkd_session_process_tap(char *buf, const jsmntok_t *tokens, int count)
 
             tap_data = rs;
             tap_free = sharkd_session_free_tap_phs_cb;
+        }
+        else if (!strcmp(tok_tap, "voip-calls"))
+        {
+            voip_stat_init_tapinfo();
+
+            tap_error = register_tap_listener("frame", &tapinfo_, tap_filter, 0, NULL, NULL, sharkd_session_process_tap_voip_calls_cb, NULL);
+
+            tapinfo_.session = cfile.epan;
+            voip_calls_init_all_taps(&tapinfo_);
+
+            tap_data = &tapinfo_;
+            tap_free = sharkd_session_free_tap_voip_calls_cb;
+        }
+        else if (!strncmp(tok_tap, "voip-convs:", 11))
+        {
+            int len;
+            unsigned int min, max;
+            struct sharkd_voip_convs_req *voip_convs_req;
+            const char *conv_arg = tok_tap + 11;
+
+            // parse tok_tap to get which call we are asking for
+            if (*conv_arg == 0) {
+                // set all bits of voip_conv_sel (-1 in binary is all 1's)
+                memset(voip_conv_sel, -1, sizeof(voip_conv_sel));
+            } else {
+                memset(voip_conv_sel, 0, sizeof(voip_conv_sel));
+
+                while (*conv_arg != 0) {
+                    if (*conv_arg == ',') {
+                        conv_arg++;
+                    }
+                    if (sscanf(conv_arg, "%u-%u%n", &min, &max, &len) == 2) {
+                        conv_arg += len;
+                    } else if (sscanf(conv_arg, "%u%n", &min, &len) == 1) {
+                        max = min;
+                        conv_arg += len;
+                    } else {
+                        sharkd_json_error(
+                                rpcid, -11014, NULL,
+                                "sharkd_session_process_tap() voip-convs=%s invalid 'convs' parameter", tok_tap
+                        );
+                        return;
+                    }
+                    if (min > max || min >= VOIP_CONV_MAX || max >= VOIP_CONV_MAX) {
+                        sharkd_json_error(
+                                rpcid, -11012, NULL,
+                                "sharkd_session_process_tap() voip-convs=%s invalid 'convs' number range", tok_tap
+                        );
+                        return;
+                    }
+                    for(; min <= max; min++) {
+                        voip_conv_sel[min / VOIP_CONV_BITS] |= 1 << (min % VOIP_CONV_BITS);
+                    }
+                }
+            }
+
+            voip_stat_init_tapinfo();
+
+            voip_convs_req = (struct sharkd_voip_convs_req *) g_malloc0(sizeof(*voip_convs_req));
+            voip_convs_req->tapinfo = &tapinfo_;
+            voip_convs_req->tap_name = tok_tap;
+
+            tap_error = register_tap_listener("frame", voip_convs_req, tap_filter, 0, NULL, NULL, sharkd_session_process_tap_voip_convs_cb, NULL);
+
+            tapinfo_.session = cfile.epan;
+            voip_calls_init_all_taps(&tapinfo_);
+
+            tap_data = voip_convs_req;
+            tap_free = sharkd_session_free_tap_voip_convs_cb;
         }
         else
         {
@@ -3572,6 +3824,9 @@ sharkd_session_process_frame_cb_tree(const char *key, epan_dissect_t *edt, proto
                 sharkd_json_value_string("f", filter);
                 wmem_free(NULL, filter);
             }
+
+            if (finfo->hfinfo->abbrev)
+                    sharkd_json_value_string("fn", finfo->hfinfo->abbrev);
         }
 
         if (FI_GET_FLAG(finfo, FI_GENERATED))
@@ -4152,6 +4407,7 @@ sharkd_session_process_intervals(char *buf, const jsmntok_t *tokens, int count)
  *                  l - label
  *                  t: 'proto', 'framenum', 'url' - type of node
  *                  f - filter string
+ *                  fn - field name
  *                  s - severity
  *                  e - subtree ett index
  *                  n - array of subtree nodes
@@ -5045,6 +5301,51 @@ sharkd_session_packet_download_tap_rtp_cb(void *tapdata, packet_info *pinfo, epa
     return TAP_PACKET_DONT_REDRAW;
 }
 
+static gboolean
+sharkd_session_eo_retap_listener(const char *tap_type) {
+    gboolean ok = TRUE;
+    register_eo_t *eo = NULL;
+    GString *tap_error = NULL;
+    void *tap_data = NULL;
+    GFreeFunc tap_free = NULL;
+
+    // get <name> from eo:<name>, get_eo_by_name only needs the name (http etc.)
+    eo = get_eo_by_name(tap_type + 3);
+    if (!eo)
+    {
+        ok = FALSE;
+        sharkd_json_error(
+                rpcid, -11011, NULL,
+                "sharkd_session_eo_retap_listener() eo=%s not found", tap_type + 3
+        );
+    }
+
+    if (ok)
+    {
+        tap_error = sharkd_session_eo_register_tap_listener(eo, tap_type, NULL, NULL, &tap_data, &tap_free);
+        if (tap_error)
+        {
+            ok = FALSE;
+            sharkd_json_error(
+                    rpcid, -10002, NULL,
+                    "sharkd_session_eo_retap_listener() sharkd_session_eo_register_tap_listener error %s",
+                    tap_error->str);
+            g_string_free(tap_error, TRUE);
+        }
+    }
+
+    if (ok)
+        sharkd_retap();
+
+    if (!tap_error)
+        remove_tap_listener(tap_data);
+
+    if (tap_free)
+        tap_free(tap_data);
+
+    return ok;
+}
+
 /**
  * sharkd_session_process_download()
  *
@@ -5074,6 +5375,23 @@ sharkd_session_process_download(char *buf, const jsmntok_t *tokens, int count)
 
     if (!strncmp(tok_token, "eo:", 3))
     {
+        // get eo:<name> from eo:<name>_<row>
+        char *tap_type = g_strdup(tok_token);
+        char *tmp = strrchr(tap_type, '_');
+        if (tmp)
+            *tmp = '\0';
+
+        // if eo:<name> not in sharkd_eo_list, retap
+        if (!sharkd_eo_object_list_get_entry_by_type(sharkd_eo_list, tap_type) &&
+            !sharkd_session_eo_retap_listener(tap_type))
+        {
+            g_free(tap_type);
+            // sharkd_json_error called in sharkd_session_eo_retap_listener
+            return;
+        }
+
+        g_free(tap_type);
+
         struct sharkd_export_object_list *object_list;
         const export_object_entry_t *eo_entry = NULL;
 

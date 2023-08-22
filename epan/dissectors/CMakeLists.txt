@@ -1136,6 +1136,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-fmtp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-force10-oui.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-forces.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-fortinet-fgcp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-fortinet-sso.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-foundry.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-fp_hint.c
@@ -1475,6 +1476,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mcpe.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mctp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mctp-control.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-mdb.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mdp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mdshdr.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-media.c

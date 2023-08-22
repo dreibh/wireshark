@@ -373,9 +373,6 @@ void WiresharkMainWindow::updatePreferenceActions()
     main_ui_->actionViewNameResolutionPhysical->setChecked(gbl_resolv_flags.mac_name);
     main_ui_->actionViewNameResolutionNetwork->setChecked(gbl_resolv_flags.network_name);
     main_ui_->actionViewNameResolutionTransport->setChecked(gbl_resolv_flags.transport_name);
-
-    // Should this be a "recent" setting?
-    main_ui_->actionGoAutoScroll->setChecked(prefs.capture_auto_scroll);
 }
 
 void WiresharkMainWindow::updateRecentActions()
@@ -420,6 +417,8 @@ void WiresharkMainWindow::updateRecentActions()
     main_ui_->actionViewTimeDisplaySecondsWithHoursAndMinutes->setChecked(recent.gui_seconds_format == TS_SECONDS_HOUR_MIN_SEC);
 
     main_ui_->actionViewColorizePacketList->setChecked(recent.packet_list_colorize);
+
+    main_ui_->actionGoAutoScroll->setChecked(recent.capture_auto_scroll);
 }
 
 // Don't connect to this directly. Connect to or emit fiterAction(...) instead.
@@ -907,6 +906,7 @@ void WiresharkMainWindow::startCapture(QStringList interfaces _U_) {
     showCapture();
 
     /* XXX - we might need to init other pref data as well... */
+    main_ui_->actionGoAutoScroll->setChecked(recent.capture_auto_scroll);
 
     /* XXX - can this ever happen? */
     if (cap_session_.state != CAPTURE_STOPPED)
@@ -1469,6 +1469,10 @@ void WiresharkMainWindow::applyGlobalCommandLineOptions()
         foreach(QAction* tda, td_actions.keys()) {
             if (global_dissect_options.time_format == td_actions[tda]) {
                 tda->setChecked(true);
+                // XXX - this means that if the user sets the
+                // time stamp format with the -t flag, that
+                // setting will persist and will be used as
+                // the default the next time Wireshark is run.
                 recent.gui_time_format = global_dissect_options.time_format;
                 timestamp_set_type(global_dissect_options.time_format);
                 break;
@@ -1479,6 +1483,10 @@ void WiresharkMainWindow::applyGlobalCommandLineOptions()
         foreach(QAction* tpa, tp_actions.keys()) {
             if (global_dissect_options.time_precision == tp_actions[tpa]) {
                 tpa->setChecked(true);
+                // XXX - this means that if the user sets the
+                // time stamp precision with the -t flag, that
+                // setting will persist and will be used as
+                // the default the next time Wireshark is run.
                 recent.gui_time_precision = global_dissect_options.time_precision;
                 timestamp_set_precision(global_dissect_options.time_precision);
                 break;
@@ -1698,7 +1706,7 @@ void WiresharkMainWindow::setFeaturesEnabled(bool enabled)
     {
         main_ui_->statusBar->clearMessage();
 #ifdef HAVE_LIBPCAP
-        main_ui_->actionGoAutoScroll->setChecked(auto_scroll_live);
+        main_ui_->actionGoAutoScroll->setChecked(recent.capture_auto_scroll);
 #endif
     }
     else
@@ -2903,6 +2911,15 @@ void WiresharkMainWindow::connectGoMenuActions()
     connect(main_ui_->actionGoPreviousHistoryPacket, &QAction::triggered,
             packet_list_, &PacketList::goPreviousHistoryPacket);
 
+    // triggered is whenever the user clicks the button; save that as
+    // the new recent value
+    connect(main_ui_->actionGoAutoScroll, &QAction::triggered, this,
+            [](bool checked) { recent.capture_auto_scroll = checked; });
+
+    // toggled is whenever the value changes; if it changes programmatically
+    // (e.g., the user scrolls upwards so we stop auto scrolling) change
+    // whether the button is checked but don't save value to recent (it's
+    // a temporary change)
     connect(main_ui_->actionGoAutoScroll, &QAction::toggled, this,
             [this](bool checked) { packet_list_->setVerticalAutoScroll(checked); });
 }

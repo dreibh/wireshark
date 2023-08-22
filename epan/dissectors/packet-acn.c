@@ -992,7 +992,7 @@ static const value_string acn_blob_dimmer_properties2_field_name[] = {
   { 47, "DMX B Patch DD" },
   { 48, "sACN Patch DD" },
   { 49, "DMX A 16-bit Enable" },
-  { 40, "DMX B 16-bit Enable" },
+  { 50, "DMX B 16-bit Enable" },
   { 51, "sACN 16-bit Enable" },
   { 52, "Dimmer Zone" },
   { 0, NULL }
@@ -1029,7 +1029,7 @@ static const value_string acn_blob_dimmer_rack_properties2_field_name[] = {
   { 27, "Data Loss Preset DMX A" },
   { 28, "Data Loss Preset DMX B" },
   { 29, "Data Loss Preset sACN" },
-  { 20, "Data Port Priority DMX A" },
+  { 30, "Data Port Priority DMX A" },
   { 31, "Data Port Priority DMX B" },
   { 32, "Data Port Enabled DMX A" },
   { 33, "Data Port Enabled DMX B" },
@@ -1039,7 +1039,7 @@ static const value_string acn_blob_dimmer_rack_properties2_field_name[] = {
   { 37, "16 Bit Enabled sACN" },
   { 38, "Patch From Home Screen" },
   { 39, "SCR Off Time" },
-  { 30, "Time Mode" },
+  { 40, "Time Mode" },
   { 41, "Offset from UTC" },
   { 42, "Universal Hold Last Look Time" },
   { 43, "Reactivate Presets On Boot" },
@@ -2478,7 +2478,7 @@ static const value_string acn_blob_sequence_operation_field_name[] = {
   { 1, "Operation Type" },
   { 2, "Space" },
   { 3, "Sequence Number" },
-  { 3, "Step Number" },
+  { 4, "Step Number" },
   { 0, NULL }
 };
 

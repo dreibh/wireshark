@@ -1364,7 +1364,8 @@ if(FETCH_lua)
 	# Download and build lua
 	include(${CMAKE_SOURCE_DIR}/cmake/external/lua52/Lua52.cmake)
 else()
-	ws_find_package(LUA ENABLE_LUA HAVE_LUA "5.1")
+	set(LUA_FIND_VERSIONS "5.2;5.1" CACHE STRING "Lua versions valid for the build (as a list)")
+	ws_find_package(Lua ENABLE_LUA HAVE_LUA)
 endif()
 
 ws_find_package(NL ENABLE_NETLINK HAVE_LIBNL)
@@ -1965,6 +1966,11 @@ set_package_properties(Sinsp PROPERTIES
 	URL "https://github.com/falcosecurity/libs/"
 	PURPOSE "Support for Falco plugins"
 )
+set_package_properties(Lua PROPERTIES
+	DESCRIPTION "Lua is a powerful, efficient, lightweight, embeddable scripting language"
+	URL "https://www.lua.org/"
+	PURPOSE "Lua allows writing dissectors and other extensions without a C/C++ compiler"
+)
 
 string(TOUPPER "${CMAKE_BUILD_TYPE}" _build_type)
 message(STATUS "C-Flags: ${CMAKE_C_FLAGS} ${CMAKE_C_FLAGS_${_build_type}}")
@@ -2026,6 +2032,7 @@ set(TSHARK_TAP_SRC
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-srt.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-stats_tree.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-sv.c
+	${CMAKE_SOURCE_DIR}/ui/cli/tap-voip.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-wspstat.c
 	${CUSTOM_TSHARK_TAP_SRC}
 
@@ -2383,7 +2390,6 @@ endif()
 if(LUA_FOUND AND ENABLE_LUA)
 	set(_lua_files
 		"${CMAKE_SOURCE_DIR}/epan/wslua/init.lua"
-		"${CMAKE_SOURCE_DIR}/epan/wslua/console.lua"
 		"${CMAKE_SOURCE_DIR}/epan/wslua/browser_sslkeylog.lua"
 	)
 	foreach(_lua_file ${_lua_files})
@@ -3057,6 +3063,7 @@ if(BUILD_sharkd)
 		${WIN_WS2_32_LIBRARY}
 		${SPEEXDSP_LIBRARIES}
 		${M_LIBRARIES}
+		${GCRYPT_LIBRARIES}
 	)
 	set(sharkd_FILES
 		#
@@ -3064,6 +3071,7 @@ if(BUILD_sharkd)
 		# $<TARGET_OBJECTS:cli_main> and has real_main().
 		#
 		$<TARGET_OBJECTS:shark_common>
+		ui/cli/simple_dialog.c
 		sharkd.c
 		sharkd_daemon.c
 		sharkd_session.c
