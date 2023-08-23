@@ -25,24 +25,6 @@ end
 -- Note: Not checked on Windows. running_superuser is always false.
 run_user_scripts_when_superuser = true
 
-
-function typeof(obj)
-    local mt = getmetatable(obj)
-
-    if type(obj) == "table" then
-        return mt and mt.__typeof or obj.__typeof or type(obj)
-    else
-        return mt and mt.__typeof or type(obj)
-    end
-end
-
--- the following function checks if a file exists
--- since 1.11.3
-function file_exists(name)
-   local f = io.open(name,"r")
-   if f ~= nil then io.close(f) return true else return false end
-end
-
 -- the following function prepends the given directory name to
 -- the package.path, so that a 'require "foo"' will work if 'foo'
 -- is in the directory name given to this function. For example,
@@ -81,46 +63,6 @@ function package.prepend_path(name)
     -- also prepend just the name as a directory
     package.path = name .. sep .. "?.lua;" .. package.path
 end
-
--- for backward compatibility
-wtap = wtap_encaps
-
---
--- Generate the wtap_filetypes items for file types, for backwards
--- compatibility.
--- We no longer have WTAP_FILE_TYPE_SUBTYPE_ #defines;
--- built-in file types are registered the same way that
--- plugin file types are registered.
---
--- New code should use wtap_name_to_file_type_subtype to
--- look up file types by name.
---
-wtap_filetypes = get_wtap_filetypes()
-
--- Old / deprecated menu groups. These shoudn't be used in new code.
-MENU_ANALYZE_UNSORTED = MENU_PACKET_ANALYZE_UNSORTED
-MENU_ANALYZE_CONVERSATION = MENU_ANALYZE_CONVERSATION_FILTER
-MENU_STAT_CONVERSATION = MENU_STAT_CONVERSATION_LIST
-MENU_STAT_ENDPOINT = MENU_STAT_ENDPOINT_LIST
-MENU_STAT_RESPONSE = MENU_STAT_RESPONSE_TIME
-MENU_STAT_UNSORTED = MENU_PACKET_STAT_UNSORTED
-
--- the possible values for Pinfo's p2p_dir attribute
-P2P_DIR_UNKNOWN = -1
-P2P_DIR_SENT    =  0
-P2P_DIR_RECV    =  1
-
-
--- other useful constants
--- DATA_DIR and USER_DIR have a trailing directory separator.
-GUI_ENABLED = gui_enabled()
-DATA_DIR = Dir.global_config_path()..package.config:sub(1,1)
-USER_DIR = Dir.personal_config_path()..package.config:sub(1,1)
-
--- deprecated function names
-datafile_path = Dir.global_config_path
-persconffile_path = Dir.personal_config_path
-
 
 if not running_superuser or run_user_scripts_when_superuser then
     dofile(DATA_DIR.."browser_sslkeylog.lua")
