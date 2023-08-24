@@ -109,14 +109,6 @@ add_custom_target(
 
 set_target_properties(register_wslua PROPERTIES FOLDER "Libs/epan/wslua")
 
-install(
-	FILES
-		browser_sslkeylog.lua
-		init.lua
-	DESTINATION
-		${CMAKE_INSTALL_DATADIR}
-)
-
 add_library(wslua OBJECT
 	${WSLUA_FILES}
 )
