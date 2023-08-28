@@ -824,6 +824,17 @@ warn_about_capture_filter(const char *rfilter)
 }
 #endif
 
+#ifdef HAVE_LIBPCAP
+static GList *
+capture_opts_get_interface_list(int *err, char **err_str)
+{
+    /*
+     * This isn't a GUI tool, so no need for a callback.
+     */
+    return capture_interface_list(err, err_str, NULL);
+}
+#endif
+
 int
 main(int argc, char *argv[])
 {
@@ -1095,7 +1106,7 @@ main(int argc, char *argv[])
     init_report_message("TShark", &tshark_report_routines);
 
 #ifdef HAVE_LIBPCAP
-    capture_opts_init(&global_capture_opts);
+    capture_opts_init(&global_capture_opts, capture_opts_get_interface_list);
     capture_session_init(&global_capture_session, &cfile,
             capture_input_new_file, capture_input_new_packets,
             capture_input_drops, capture_input_error,
@@ -1333,20 +1344,31 @@ main(int argc, char *argv[])
                 break;
             case 'D':        /* Print a list of capture devices and exit */
 #ifdef HAVE_LIBPCAP
+                exit_status = EXIT_SUCCESS;
                 if_list = capture_interface_list(&err, &err_str,NULL);
+                if (err != 0) {
+                    /*
+                     * An error occurred when fetching the local
+                     * interfaces.  Report it.
+                     */
+                    cmdarg_err("%s", err_str);
+                    g_free(err_str);
+                    exit_status = WS_EXIT_PCAP_ERROR;
+                }
                 if (if_list == NULL) {
-                    if (err == 0)
+                    /*
+                     * No interfaces were found.  If that's not the
+                     * result of an error when fetching the local
+                     * interfaces, let the user know.
+                     */
+                    if (err == 0) {
                         cmdarg_err("There are no interfaces on which a capture can be done");
-                    else {
-                        cmdarg_err("%s", err_str);
-                        g_free(err_str);
+                        exit_status = WS_EXIT_NO_INTERFACES;
                     }
-                    exit_status = WS_EXIT_INVALID_INTERFACE;
                     goto clean_exit;
                 }
                 capture_opts_print_interfaces(if_list);
                 free_interface_list(if_list);
-                exit_status = EXIT_SUCCESS;
                 goto clean_exit;
 #else
                 capture_option_specified = TRUE;

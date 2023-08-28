@@ -56,9 +56,9 @@ See the “New and Updated Features” section below for more details.
 
 The following bugs have been fixed:
 
-* wsbuglink:18413[No Audio in RTP player with Wireshark 4.0.0] - RTP player do not play audio frequently on Win32 builds with Qt6
+* wsbuglink:18413[No Audio in RTP player with Wireshark 4.0.0] - RTP player do not play audio frequently on Windows builds with Qt6.
 
-* wsbuglink:18510[Paused playback cannot continue to play] - Playback marker do not move after unpause with Qt6
+* wsbuglink:18510[Paused playback cannot continue to play] - Playback marker does not move after resume with Qt6.
 
 
 //* wsbuglink:5000[]
@@ -135,7 +135,7 @@ The following features are new (or have been significantly updated) since versio
   rules, Wireshark read filters, and the -Y, -R, and -e options to tshark,
   the "Apply as Filter" GUI option, etc.
 
-  ** The filter field names are prefixed by "_ws.col", followed by a lowercase
+  ** The filter field names are prefixed by "\_ws.col", followed by a lowercase
      version of the COL_ name found in epan/column-utils.h, e.g. "_ws.col.info"
      or "_ws.col.protocol"
 
@@ -202,7 +202,7 @@ The following features are new (or have been significantly updated) since versio
   cannot be used elsewhere (as they may not be legal filter names) and create
   confusion if more than one column has the same title or if a column is renamed.
   Prefer the column format instead, e.g. "_ws.col.info" for "_ws.col.Info".
-  However, for backwards compatibilty with existing tools and scripts, the
+  However, for backwards compatibility with existing tools and scripts, the
   titles of the default columns can continue to be used with "tshark -e"
   (but not elsewhere.)
 
@@ -257,6 +257,7 @@ UDP Tracker Protocol for BitTorrent (BT-Tracker)
 Video Protocol 9 (VP9)
 Windows Delivery Optimization (MS-DO)
 Zabbix Protocol (Zabbix)
+Aruba UBT Protocol
 --
 
 === Updated Protocol Support

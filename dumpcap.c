@@ -562,7 +562,7 @@ dumpcap_cmdarg_err(const char *fmt, va_list ap)
         gchar *msg;
         /* Generate a 'special format' message back to parent */
         msg = ws_strdup_vprintf(fmt, ap);
-        sync_pipe_errmsg_to_parent(2, msg, "");
+        sync_pipe_write_errmsgs_to_parent(2, msg, "");
         g_free(msg);
     } else {
         fprintf(stderr, "dumpcap: ");
@@ -582,7 +582,7 @@ dumpcap_cmdarg_err_cont(const char *fmt, va_list ap)
     if (capture_child) {
         gchar *msg;
         msg = ws_strdup_vprintf(fmt, ap);
-        sync_pipe_errmsg_to_parent(2, msg, "");
+        sync_pipe_write_errmsgs_to_parent(2, msg, "");
         g_free(msg);
     } else {
         vfprintf(stderr, fmt, ap);
@@ -957,28 +957,9 @@ show_filter_code(capture_options *capture_opts)
 #endif
     if (capture_child) {
         /* Let our parent know we succeeded. */
-        pipe_write_block(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
     }
     return TRUE;
-}
-
-/*
- * capture_interface_list() is expected to do the right thing to get
- * a list of interfaces.
- *
- * In most of the programs in the Wireshark suite, "the right thing"
- * is to run dumpcap and ask it for the list, because dumpcap may
- * be the only program in the suite with enough privileges to get
- * the list.
- *
- * In dumpcap itself, however, we obviously can't run dumpcap to
- * ask for the list.  Therefore, our capture_interface_list() should
- * just call get_interface_list().
- */
-GList *
-capture_interface_list(int *err, char **err_str, void(*update_cb)(void) _U_)
-{
-    return get_interface_list(err, err_str);
 }
 
 /*
@@ -998,7 +979,7 @@ print_machine_readable_interfaces(GList *if_list)
 
     if (capture_child) {
         /* Let our parent know we succeeded. */
-        pipe_write_block(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
     }
 
     i = 1;  /* Interface id number */
@@ -1065,7 +1046,7 @@ print_machine_readable_if_capabilities(if_capabilities_t *caps, int queries)
 
     if (capture_child) {
         /* Let our parent know we succeeded. */
-        pipe_write_block(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
     }
 
     if (queries & CAPS_QUERY_LINK_TYPES) {
@@ -1161,7 +1142,7 @@ print_statistics_loop(gboolean machine_readable)
 
     if (capture_child) {
         /* Let our parent know we succeeded. */
-        pipe_write_block(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
     }
 
     if (!machine_readable) {
@@ -4945,7 +4926,7 @@ capture_loop_write_pcapng_cb(capture_src *pcap_src, const pcapng_block_header_t 
             ws_info("Sending SP_FILE on first SHB");
 #endif
             /* SHB is now ready for capture parent to read on SP_FILE message */
-            pipe_write_block(2, SP_FILE, report_capture_filename);
+            sync_pipe_write_string_msg(2, SP_FILE, report_capture_filename);
             report_capture_filename = NULL;
         }
     }
@@ -5174,7 +5155,7 @@ set_80211_channel(const char *iface, const char *opt)
     }
 
     if (capture_child)
-        pipe_write_block(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
 
 out:
     g_strfreev(options);
@@ -5500,7 +5481,7 @@ main(int argc, char *argv[])
 
     /* Set the initial values in the capture options. This might be overwritten
        by the command line parameters. */
-    capture_opts_init(&global_capture_opts);
+    capture_opts_init(&global_capture_opts, get_interface_list);
     /* We always save to a file - if no file was specified, we save to a
        temporary file. */
     global_capture_opts.saving_to_file      = TRUE;
@@ -5767,7 +5748,7 @@ main(int argc, char *argv[])
         int    err;
         gchar *err_str;
 
-        if_list = capture_interface_list(&err, &err_str, NULL);
+        if_list = get_interface_list(&err, &err_str);
         if (if_list == NULL) {
             if (err == 0) {
                 /*
@@ -5845,7 +5826,7 @@ main(int argc, char *argv[])
                     char *error_msg = ws_strdup_printf("The capabilities of the capture device "
                                                 "\"%s\" could not be obtained (%s)",
                                                 interface_opts->name, open_status_str);
-                    sync_pipe_errmsg_to_parent(2, error_msg,
+                    sync_pipe_write_errmsgs_to_parent(2, error_msg,
                             get_pcap_failure_secondary_error_message(open_status, open_status_str));
                     g_free(error_msg);
                 }
@@ -5992,7 +5973,7 @@ dumpcap_log_writer(const char *domain, enum ws_log_level level,
 #endif
         if (capture_child) {
             gchar *msg = ws_strdup_vprintf(user_format, user_ap);
-            sync_pipe_errmsg_to_parent(2, msg, "");
+            sync_pipe_write_errmsgs_to_parent(2, msg, "");
             g_free(msg);
         } else {
             ws_log_console_writer(domain, level, timestamp, file, line, func, user_format, user_ap);
@@ -6012,7 +5993,7 @@ dumpcap_log_writer(const char *domain, enum ws_log_level level,
     /*  to parent especially formatted if dumpcap running as child. */
     if (capture_child) {
         gchar *msg = ws_strdup_vprintf(user_format, user_ap);
-        sync_pipe_errmsg_to_parent(2, msg, "");
+        sync_pipe_write_errmsgs_to_parent(2, msg, "");
         g_free(msg);
     } else if(ws_log_msg_is_active(domain, level)) {
         ws_log_console_writer(domain, level, timestamp, getpid(), file, line, func, user_format, user_ap);
@@ -6027,13 +6008,11 @@ dumpcap_log_writer(const char *domain, enum ws_log_level level,
 static void
 report_packet_count(unsigned int packet_count)
 {
-    char count_str[SP_DECISIZE+1+1];
     static unsigned int count = 0;
 
     if (capture_child) {
-        snprintf(count_str, sizeof(count_str), "%u", packet_count);
-        ws_debug("Packets: %s", count_str);
-        pipe_write_block(2, SP_PACKET_COUNT, count_str);
+        ws_debug("Packets: %u", packet_count);
+        sync_pipe_write_uint_msg(2, SP_PACKET_COUNT, packet_count);
     } else {
         count += packet_count;
         fprintf(stderr, "\rPackets: %u ", count);
@@ -6054,7 +6033,7 @@ report_new_capture_file(const char *filename)
 #endif
             report_capture_filename = filename;
         } else {
-            pipe_write_block(2, SP_FILE, filename);
+            sync_pipe_write_string_msg(2, SP_FILE, filename);
         }
     } else {
 #ifdef SIGINFO
@@ -6094,7 +6073,7 @@ report_cfilter_error(capture_options *capture_opts, guint i, const char *errmsg)
         if (capture_child) {
             snprintf(tmp, sizeof(tmp), "%u:%s", i, errmsg);
             ws_debug("Capture filter error: %s", errmsg);
-            pipe_write_block(2, SP_BAD_FILTER, tmp);
+            sync_pipe_write_string_msg(2, SP_BAD_FILTER, tmp);
         } else {
             /*
              * clopts_step_invalid_capfilter in test/suite-clopts.sh MUST match
@@ -6117,7 +6096,7 @@ report_capture_error(const char *error_msg, const char *secondary_error_msg)
     if (capture_child) {
         ws_debug("Primary Error: %s", error_msg);
         ws_debug("Secondary Error: %s", secondary_error_msg);
-        sync_pipe_errmsg_to_parent(2, error_msg, secondary_error_msg);
+        sync_pipe_write_errmsgs_to_parent(2, error_msg, secondary_error_msg);
     } else {
         cmdarg_err("%s", error_msg);
         if (secondary_error_msg[0] != '\0')
@@ -6135,7 +6114,7 @@ report_packet_drops(guint32 received, guint32 pcap_drops, guint32 drops, guint32
 
         ws_debug("Packets received/dropped on interface '%s': %u/%u (pcap:%u/dumpcap:%u/flushed:%u/ps_ifdrop:%u)",
             name, received, total_drops, pcap_drops, drops, flushed, ps_ifdrop);
-        pipe_write_block(2, SP_DROPS, tmp);
+        sync_pipe_write_string_msg(2, SP_DROPS, tmp);
         g_free(tmp);
     } else {
         fprintf(stderr,

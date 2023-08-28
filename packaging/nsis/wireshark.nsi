@@ -498,7 +498,7 @@ FunctionEnd
 !endif
 
 Function DisplayDonatePage
-  !insertmacro MUI_HEADER_TEXT "Donate Today" "We could use your help."
+  !insertmacro MUI_HEADER_TEXT "Your donations keep these releases coming" "Donate today"
   !insertmacro INSTALLOPTIONS_DISPLAY "DonatePage.ini"
 FunctionEnd
 
@@ -1502,9 +1502,6 @@ Delete "$INSTDIR\cfilters"
 Delete "$INSTDIR\colorfilters"
 Delete "$INSTDIR\dfilters"
 Delete "$INSTDIR\enterprises.tsv"
-Delete "$INSTDIR\init.lua"
-Delete "$INSTDIR\console.lua"
-Delete "$INSTDIR\dtd_gen.lua"
 Delete "$INSTDIR\smi_modules"
 RMDir "$INSTDIR"
 SectionEnd
