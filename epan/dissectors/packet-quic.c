@@ -166,8 +166,8 @@ static int hf_quic_af_sequence_number = -1;
 static int hf_quic_af_ack_eliciting_threshold = -1;
 static int hf_quic_af_request_max_ack_delay = -1;
 static int hf_quic_af_reordering_threshold = -1;
-static int hf_quic_af_ignore_order = -1;
-static int hf_quic_af_ignore_ce = -1;
+//static int hf_quic_af_ignore_order = -1;
+//static int hf_quic_af_ignore_ce = -1;
 static int hf_quic_ts = -1;
 static int hf_quic_unpredictable_bits = -1;
 static int hf_quic_stateless_reset_token = -1;
@@ -5355,16 +5355,16 @@ proto_register_quic(void)
               FT_UINT64, BASE_DEC, NULL, 0x0,
               "The value that indicates the maximum packet reordering before eliciting an immediate ACK", HFILL }
         },
-        { &hf_quic_af_ignore_order,
-            { "Ignore Order", "quic.af.ignore_order",
-              FT_BOOLEAN, 8, NULL, 0x02,
-              "This field is set to true by an endpoint that does not wish to receive an immediate acknowledgement when the peer receives a packet out of order", HFILL }
-        },
-        { &hf_quic_af_ignore_ce,
-            { "Ignore CE", "quic.af.ignore_ce",
-              FT_BOOLEAN, 8, NULL, 0x01,
-              "This field is set to true by an endpoint that does not wish to receive an immediate acknowledgement when the peer receives CE-marked packets", HFILL }
-        },
+        //{ &hf_quic_af_ignore_order,
+        //    { "Ignore Order", "quic.af.ignore_order",
+        //      FT_BOOLEAN, 8, NULL, 0x02,
+        //      "This field is set to true by an endpoint that does not wish to receive an immediate acknowledgement when the peer receives a packet out of order", HFILL }
+        //},
+        //{ &hf_quic_af_ignore_ce,
+        //    { "Ignore CE", "quic.af.ignore_ce",
+        //      FT_BOOLEAN, 8, NULL, 0x01,
+        //      "This field is set to true by an endpoint that does not wish to receive an immediate acknowledgement when the peer receives CE-marked packets", HFILL }
+        //},
 
         /* TIME STAMP */
         { &hf_quic_ts,
@@ -5565,6 +5565,25 @@ proto_reg_handoff_quic(void)
     dissector_add_uint_with_preference("udp.port", 0, quic_handle);
     heur_dissector_add("udp", dissect_quic_heur, "QUIC", "quic", proto_quic, HEURISTIC_ENABLE);
     quic_follow_tap = register_tap("quic_follow");
+}
+
+gboolean
+quic_conn_data_get_conn_client_dcid_initial(struct _packet_info *pinfo, quic_cid_t *dcid)
+{
+    if (pinfo == NULL || dcid == NULL) {
+        return false;
+    }
+
+    quic_info_data_t * conn = quic_connection_from_conv(pinfo);
+    if (conn == NULL) {
+        return false;
+    }
+
+    dcid->len = conn->client_dcid_initial.len;
+    memset(dcid->cid, 0, QUIC_MAX_CID_LENGTH);
+    memcpy(dcid->cid, conn->client_dcid_initial.cid, dcid->len);
+
+    return true;
 }
 
 /*

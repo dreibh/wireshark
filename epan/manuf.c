@@ -10,8 +10,11 @@
 #include "manuf.h"
 #include <stdlib.h>
 
+// MA-L / OUI - MAC Address Block Large (24-bit prefix)
 #define MA_L 0
+// MA-M - MAC Address Block Medium (28-bit prefix)
 #define MA_M 1
+// MA-S / OUI-36 - MAC Address Block Small (36-bit prefix)
 #define MA_S 2
 
 typedef struct {
@@ -41,39 +44,47 @@ typedef struct {
 #include "manuf-data.c"
 
 static int
-compare_oui24_registry(const void *a, const void *b)
+compare_oui24_registry(const void *key, const void *element)
 {
-    return memcmp(a, ((const manuf_registry_t *)b)->oui24, 3);
+    const uint8_t *addr = (const uint8_t *)key;
+    const manuf_registry_t *entry = (const manuf_registry_t *)element;
+
+    return memcmp(addr, entry->oui24, 3);
 }
 
 static int
-compare_oui24_entry(const void *a, const void *b)
+compare_oui24_entry(const void *key, const void *element)
 {
-    return memcmp(a, ((const manuf_oui24_t *)b)->oui24, 3);
+    const uint8_t *addr = (const uint8_t *)key;
+    const manuf_oui24_t *oui = (const manuf_oui24_t *)element;
+
+    return memcmp(addr, oui->oui24, 3);
 }
 
 static int
-compare_oui28_entry(const void *a, const void *b)
+compare_oui28_entry(const void *key, const void *element)
 {
-    uint8_t addr[4];
-    memcpy(addr, a, 4);
-    addr[3] &= 0xF0;
-    return memcmp(addr, ((const manuf_oui28_t *)b)->oui28, 4);
+    const uint8_t *addr = (const uint8_t *)key;
+    const manuf_oui28_t *oui = (const manuf_oui28_t *)element;
+
+    // The caller is expected to have masked out (addr[3] & 0xF0).
+    return memcmp(addr, oui->oui28, 4);
 }
 
 static int
-compare_oui36_entry(const void *a, const void *b)
+compare_oui36_entry(const void *key, const void *element)
 {
-    uint8_t addr[5];
-    memcpy(addr, a, 5);
-    addr[4] &= 0xF0;
-    return memcmp(addr, ((const manuf_oui36_t *)b)->oui36, 5);
+    const uint8_t *addr = (const uint8_t *)key;
+    const manuf_oui36_t *oui = (const manuf_oui36_t *)element;
+
+    // The caller is expected to have masked out (addr[4] & 0xF0).
+    return memcmp(addr, oui->oui36, 5);
 }
 
 static int
 select_registry(const uint8_t addr[6])
 {
-    manuf_registry_t *entry;
+    const manuf_registry_t *entry;
 
     entry = bsearch(addr, ieee_registry_table, G_N_ELEMENTS(ieee_registry_table), sizeof(manuf_registry_t), compare_oui24_registry);
     if (entry)
@@ -81,49 +92,51 @@ select_registry(const uint8_t addr[6])
     return MA_L;
 }
 
-static struct ws_manuf *
+static bool
 manuf_oui24_lookup(const uint8_t addr[6], struct ws_manuf *result)
 {
-    manuf_oui24_t *oui24 = bsearch(addr, global_manuf_oui24_table, G_N_ELEMENTS(global_manuf_oui24_table), sizeof(manuf_oui24_t), compare_oui24_entry);
+    const manuf_oui24_t *oui24 = bsearch(addr, global_manuf_oui24_table, G_N_ELEMENTS(global_manuf_oui24_table), sizeof(manuf_oui24_t), compare_oui24_entry);
     if (!oui24)
-        return NULL;
+        return false;
 
     memcpy(result->addr, oui24->oui24, sizeof(oui24->oui24));
     result->mask = 24;
     result->short_name = oui24->short_name;
     result->long_name = oui24->long_name;
-    return result;
+    return true;
 }
 
-static struct ws_manuf *
+static bool
 manuf_oui28_lookup(const uint8_t addr[6], struct ws_manuf *result)
 {
-    manuf_oui28_t *oui28 = bsearch(addr, global_manuf_oui28_table, G_N_ELEMENTS(global_manuf_oui28_table), sizeof(manuf_oui28_t), compare_oui28_entry);
+    const uint8_t addr28[6] = { addr[0], addr[1], addr[2], addr[3] & 0xF0, };
+    const manuf_oui28_t *oui28 = bsearch(addr28, global_manuf_oui28_table, G_N_ELEMENTS(global_manuf_oui28_table), sizeof(manuf_oui28_t), compare_oui28_entry);
     if (!oui28)
-        return NULL;
+        return false;
 
     memcpy(result->addr, oui28->oui28, sizeof(oui28->oui28));
     result->mask = 28;
     result->short_name = oui28->short_name;
     result->long_name = oui28->long_name;
-    return result;
+    return true;
 }
 
-static struct ws_manuf *
+static bool
 manuf_oui36_lookup(const uint8_t addr[6], struct ws_manuf *result)
 {
-    manuf_oui36_t *oui36 = bsearch(addr, global_manuf_oui36_table, G_N_ELEMENTS(global_manuf_oui36_table), sizeof(manuf_oui36_t), compare_oui36_entry);
+    const uint8_t addr36[6] = { addr[0], addr[1], addr[2], addr[3], addr[4] & 0xF0, };
+    const manuf_oui36_t *oui36 = bsearch(addr36, global_manuf_oui36_table, G_N_ELEMENTS(global_manuf_oui36_table), sizeof(manuf_oui36_t), compare_oui36_entry);
     if (!oui36)
-        return NULL;
+        return false;
 
     memcpy(result->addr, oui36->oui36, sizeof(oui36->oui36));
     result->mask = 36;
     result->short_name = oui36->short_name;
     result->long_name = oui36->long_name;
-    return result;
+    return true;
 }
 
-struct ws_manuf *
+bool
 ws_manuf_lookup(const uint8_t addr[6], struct ws_manuf *result)
 {
     memset(result, 0, sizeof(*result));
@@ -136,15 +149,10 @@ ws_manuf_lookup(const uint8_t addr[6], struct ws_manuf *result)
     switch (select_registry(addr_copy)) {
         case MA_L:
             return manuf_oui24_lookup(addr_copy, result);
-            break;
         case MA_M:
             return manuf_oui28_lookup(addr_copy, result);
-            break;
         case MA_S:
             return manuf_oui36_lookup(addr_copy, result);
-            break;
-        default:
-            break;
     }
     ws_assert_not_reached();
 }
@@ -155,23 +163,25 @@ ws_manuf_iter_init(ws_manuf_iter_t *iter)
     memset(iter, 0, sizeof(*iter));
 }
 
-#define NUM_REGISTRIES  3
-
-/* Iterate between 3 registries in ascending order. */
-struct ws_manuf *
-ws_manuf_iter_next(ws_manuf_iter_t *iter, struct ws_manuf manuf[NUM_REGISTRIES])
+/**
+ * Iterate between 3 registries in ascending order. This is not the same as
+ * fully iterating through one registry followed by another. For example, after
+ * visiting "00:55:B1", it could go to  "00:55:DA:00/28", and eventually end up
+ * at "00:56:2B" again.
+ *
+ * The "iter" structure must be zero initialized before the first iteration.
+ */
+bool
+ws_manuf_iter_next(ws_manuf_iter_t *iter, struct ws_manuf *result)
 {
-    manuf_oui24_t *ptr24 = NULL;
-    manuf_oui28_t *ptr28 = NULL;
-    manuf_oui36_t *ptr36 = NULL;
+    struct ws_manuf manuf[3] = { 0 };
     struct ws_manuf *ptr;
 
-    memset(manuf, 0, NUM_REGISTRIES * sizeof(struct ws_manuf));
     ptr = manuf;
 
     /* Read current positions. */
     if (iter->idx24 < G_N_ELEMENTS(global_manuf_oui24_table)) {
-        ptr24 = &global_manuf_oui24_table[iter->idx24];
+        const manuf_oui24_t *ptr24 = &global_manuf_oui24_table[iter->idx24];
         memcpy(ptr->addr, ptr24->oui24, sizeof(ptr24->oui24));
         ptr->mask = 24;
         ptr->short_name = ptr24->short_name;
@@ -179,7 +189,7 @@ ws_manuf_iter_next(ws_manuf_iter_t *iter, struct ws_manuf manuf[NUM_REGISTRIES])
         ptr++;
     }
     if (iter->idx28 < G_N_ELEMENTS(global_manuf_oui28_table)) {
-        ptr28 = &global_manuf_oui28_table[iter->idx28];
+        const manuf_oui28_t *ptr28 = &global_manuf_oui28_table[iter->idx28];
         memcpy(ptr->addr, ptr28->oui28, sizeof(ptr28->oui28));
         ptr->mask = 28;
         ptr->short_name = ptr28->short_name;
@@ -187,7 +197,7 @@ ws_manuf_iter_next(ws_manuf_iter_t *iter, struct ws_manuf manuf[NUM_REGISTRIES])
         ptr++;
     }
     if (iter->idx36 < G_N_ELEMENTS(global_manuf_oui36_table)) {
-        ptr36 = &global_manuf_oui36_table[iter->idx36];
+        const manuf_oui36_t *ptr36 = &global_manuf_oui36_table[iter->idx36];
         memcpy(ptr->addr, ptr36->oui36, sizeof(ptr36->oui36));
         ptr->mask = 36;
         ptr->short_name = ptr36->short_name;
@@ -195,29 +205,30 @@ ws_manuf_iter_next(ws_manuf_iter_t *iter, struct ws_manuf manuf[NUM_REGISTRIES])
     }
 
     /* None read. */
-    if (manuf->long_name == NULL)
-        return NULL;
+    if (manuf->mask == 0)
+        return false;
 
     /* Select smallest current prefix out of the 3 registries.
      * There is at least one entry and index 0 is non-empty. */
     ptr = &manuf[0];
-    for (size_t i = 1; i < NUM_REGISTRIES; i++) {
-        if (manuf[i].long_name && memcmp(manuf[i].addr, ptr->addr, 6) < 0) {
+    for (size_t i = 1; i < G_N_ELEMENTS(manuf); i++) {
+        if (manuf[i].mask && memcmp(manuf[i].addr, ptr->addr, 6) < 0) {
             ptr = &manuf[i];
         }
     }
 
     /* Advance iterator. */
-    if (ptr24 && ptr->long_name == ptr24->long_name)
+    if (ptr->mask == 24)
         iter->idx24++;
-    else if (ptr28 && ptr->long_name == ptr28->long_name)
+    else if (ptr->mask == 28)
         iter->idx28++;
-    else if (ptr36 && ptr->long_name == ptr36->long_name)
+    else if (ptr->mask == 36)
         iter->idx36++;
     else
         ws_assert_not_reached();
 
-    return ptr;
+    *result = *ptr;
+    return true;
 }
 
 const char *
@@ -246,17 +257,16 @@ void
 ws_manuf_dump(FILE *fp)
 {
     ws_manuf_iter_t iter;
-    struct ws_manuf manuf[3];
-    struct ws_manuf *ptr;
+    struct ws_manuf item;
     char strbuf[64];
 
     ws_manuf_iter_init(&iter);
 
-    while ((ptr = ws_manuf_iter_next(&iter, manuf))) {
+    while (ws_manuf_iter_next(&iter, &item)) {
         fprintf(fp, "%-17s\t%-12s\t%s\n",
-            ws_manuf_block_str(strbuf, sizeof(strbuf), ptr),
-            ptr->short_name,
-            ptr->long_name);
+            ws_manuf_block_str(strbuf, sizeof(strbuf), &item),
+            item.short_name,
+            item.long_name);
     }
 }
 
