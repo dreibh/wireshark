@@ -59,7 +59,6 @@ static int hf_papi_debug_bytes = -1;
 static int hf_papi_debug_bytes_length = -1;
 
 static int hf_papi_licmgr = -1;
-static int hf_papi_licmgr_unknown = -1;
 static int hf_papi_licmgr_payload_len = -1;
 static int hf_papi_licmgr_tlv = -1;
 static int hf_papi_licmgr_type = -1;
@@ -421,17 +420,14 @@ static const value_string licmgr_type_vals[] = {
     { 0,     NULL     }
 };
 static int
-dissect_papi_license_manager(tvbuff_t *tvb, packet_info *pinfo, guint offset, proto_tree *tree)
+dissect_papi_license_manager(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
     proto_item *ti;
     proto_tree *licmgr_tree, *licmgr_subtree;
-    guint offset_end, payload_len;
+    guint offset_end, payload_len, offset = 0;
 
     ti = proto_tree_add_item(tree, hf_papi_licmgr, tvb, offset, -1, ENC_NA);
     licmgr_tree = proto_item_add_subtree(ti, ett_papi_licmgr);
-
-    proto_tree_add_item(licmgr_tree, hf_papi_licmgr_unknown, tvb, offset, 32, ENC_NA);
-    offset += 32;
 
     proto_tree_add_item_ret_uint(licmgr_tree, hf_papi_licmgr_payload_len, tvb, offset, 2, ENC_BIG_ENDIAN, &payload_len);
     offset += 2;
@@ -657,10 +653,6 @@ dissect_papi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
 
     }
 
-    if(dest_port == LICENSE_MANAGER && src_port == LICENSE_MANAGER){
-        offset = dissect_papi_license_manager(tvb, pinfo, offset, papi_tree);
-    }
-
     if(g_papi_debug)
     {
         offset = dissect_papi_debug(tvb, pinfo, offset, papi_tree);
@@ -818,11 +810,6 @@ proto_register_papi(void)
             FT_NONE, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
-        { &hf_papi_licmgr_unknown,
-            { "Unknown", "papi.licmgr.unknown",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
-        },
         { &hf_papi_licmgr_payload_len,
             { "Payload Length", "papi.licmgr.payload_len",
             FT_UINT32, BASE_DEC, NULL, 0x0,
@@ -962,6 +949,7 @@ proto_register_papi(void)
 void
 proto_reg_handoff_papi(void)
 {
+    dissector_add_uint("papi.port", LICENSE_MANAGER, create_dissector_handle(dissect_papi_license_manager, -1));
     dissector_add_uint_with_preference("udp.port", UDP_PORT_PAPI, papi_handle);
 }
 /*

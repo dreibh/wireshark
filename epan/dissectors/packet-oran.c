@@ -65,7 +65,9 @@ static int hf_oran_sectionType = -1;
 
 static int hf_oran_udCompHdr = -1;
 static int hf_oran_udCompHdrIqWidth = -1;
+static int hf_oran_udCompHdrIqWidth_pref = -1;
 static int hf_oran_udCompHdrMeth = -1;
+static int hf_oran_udCompHdrMeth_pref = -1;
 static int hf_oran_numberOfUEs = -1;
 static int hf_oran_timeOffset = -1;
 static int hf_oran_frameStructure_fft = -1;
@@ -829,7 +831,8 @@ static void write_pdu_label_and_info(proto_item *ti1, proto_item *ti2,
 
 /* Add section (type + PRB range) for C-Plane, U-Plane */
 static void
-write_section_info(proto_item *section_heading, packet_info *pinfo, proto_item *protocol_item, guint32 section_id, guint32 start_prbx, guint32 num_prbx)
+write_section_info(proto_item *section_heading, packet_info *pinfo, proto_item *protocol_item,
+                   guint32 section_id, guint32 start_prbx, guint32 num_prbx, guint32 rb)
 {
     switch (num_prbx) {
     case 0:
@@ -839,7 +842,8 @@ write_section_info(proto_item *section_heading, packet_info *pinfo, proto_item *
         write_pdu_label_and_info(section_heading, protocol_item, pinfo, ", Id: %d (PRB: %3u)", section_id, start_prbx);
         break;
     default:
-        write_pdu_label_and_info(section_heading, protocol_item, pinfo, ", Id: %d (PRB: %3u-%3u)", section_id, start_prbx, start_prbx + num_prbx - 1);
+        write_pdu_label_and_info(section_heading, protocol_item, pinfo, ", Id: %d (PRB: %3u-%3u%s)", section_id, start_prbx,
+                                 start_prbx + (num_prbx-1)*(1+rb), rb ? " (every-other)" : "");
     }
 }
 
@@ -1170,7 +1174,8 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
         offset++;
 
         /* rb */
-        proto_tree_add_item(oran_tree, hf_oran_rb, tvb, offset, 1, ENC_NA);
+        guint32 rb;
+        proto_tree_add_item_ret_uint(oran_tree, hf_oran_rb, tvb, offset, 1, ENC_NA, &rb);
         /* symInc */
         proto_tree_add_item(oran_tree, hf_oran_symInc, tvb, offset, 1, ENC_NA);
         /* startPrbc */
@@ -1201,7 +1206,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 break;
         }
 
-        write_section_info(sectionHeading, pinfo, protocol_item, sectionId, startPrbc, numPrbc);
+        write_section_info(sectionHeading, pinfo, protocol_item, sectionId, startPrbc, numPrbc, rb);
         proto_item_append_text(sectionHeading, ", Symbols: %d", numSymbol);
 
         if (numPrbc == 0) {
@@ -2693,7 +2698,8 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
         }
         offset++;
         /* rb */
-        proto_tree_add_item(section_tree, hf_oran_rb, tvb, offset, 1, ENC_NA);
+        guint32 rb;
+        proto_tree_add_item_ret_uint(section_tree, hf_oran_rb, tvb, offset, 1, ENC_NA, &rb);
         /* symInc */
         proto_tree_add_item(section_tree, hf_oran_symInc, tvb, offset, 1, ENC_NA);
         /* startPrbu */
@@ -2715,6 +2721,18 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
             proto_tree_add_item(section_tree, hf_oran_rsvd8, tvb, offset, 1, ENC_NA);
             offset += 1;
         }
+        else {
+            /* Showing comp values from prefs */
+            /* iqWidth */
+            proto_item *iq_width_item = proto_tree_add_uint(section_tree, hf_oran_udCompHdrIqWidth_pref, tvb, 0, 0, sample_bit_width);
+            proto_item_append_text(iq_width_item, " (from preferences)");
+            proto_item_set_generated(iq_width_item);
+
+            /* udCompMethod */
+            proto_item *ud_comp_meth_item = proto_tree_add_uint(section_tree, hf_oran_udCompHdrMeth_pref, tvb, 0, 0, compression);
+            proto_item_append_text(ud_comp_meth_item, " (from preferences)");
+            proto_item_set_generated(ud_comp_meth_item);
+        }
 
         /* Work this out each time, as udCompHdr may have changed things */
         guint nBytesForSamples = (sample_bit_width * 12 * 2) / 8;
@@ -2724,7 +2742,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
         }
 
 
-        write_section_info(sectionHeading, pinfo, protocol_item, sectionId, startPrbu, numPrbu);
+        write_section_info(sectionHeading, pinfo, protocol_item, sectionId, startPrbu, numPrbu, rb);
 
         /* TODO: should this use the same pref as c-plane? */
         if (numPrbu == 0) {
@@ -2733,7 +2751,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
             startPrbu = 0;  /* may already be 0... */
         }
 
-        for (guint i = 0; i < numPrbu; ++i) {
+        for (guint i = 0; i < numPrbu; i++) {
             /* Create subtree */
             proto_item *prbHeading = proto_tree_add_string_format(section_tree, hf_oran_samples_prb,
                                                                   tvb, offset, nBytesPerPrb,
@@ -2746,7 +2764,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
                 offset += 1;
             }
             /* Show PRB number in root */
-            proto_item_append_text(prbHeading, " %u", startPrbu + i);
+            proto_item_append_text(prbHeading, " %u", startPrbu + i*(1+rb));
 
 
             proto_tree_add_item(rb_tree, hf_oran_iq_user_data, tvb, offset, nBytesForSamples, ENC_NA);
@@ -3655,7 +3673,6 @@ proto_register_oran(void)
           HFILL}
         },
 
-
         /* 6.3.3.13 */
         { &hf_oran_udCompHdrMeth,
          {"User Data Compression Method", "oran_fh_cus.udCompHdrMeth",
@@ -3665,12 +3682,28 @@ proto_register_oran(void)
           "the user data in every section in the C-Plane message",
           HFILL}
          },
+        { &hf_oran_udCompHdrMeth_pref,
+         {"User Data Compression Method", "oran_fh_cus.udCompHdrMeth",
+          FT_UINT8, BASE_DEC | BASE_RANGE_STRING,
+          RVALS(ud_comp_header_meth), 0x0,
+          "Defines the compression method for "
+          "the user data in every section in the C-Plane message",
+          HFILL}
+         },
 
         /* 6.3.3.13 */
-        {&hf_oran_udCompHdrIqWidth,
+        { &hf_oran_udCompHdrIqWidth,
          {"User Data IQ width", "oran_fh_cus.udCompHdrWidth",
           FT_UINT8, BASE_DEC | BASE_RANGE_STRING,
           RVALS(ud_comp_header_width), 0xf0,
+          "Defines the IQ bit width "
+          "for the user data in every section in the C-Plane message",
+          HFILL}
+        },
+        { &hf_oran_udCompHdrIqWidth_pref,
+         {"User Data IQ width", "oran_fh_cus.udCompHdrWidth",
+          FT_UINT8, BASE_DEC,
+          NULL, 0x0,
           "Defines the IQ bit width "
           "for the user data in every section in the C-Plane message",
           HFILL}

@@ -28,10 +28,11 @@ ManufTableItem::ManufTableItem(struct ws_manuf *ptr) :
         default:
             ws_assert_not_reached();
     }
+    // Note: since 'ptr' is not stable, a deep copy is needed.
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
-    block_bytes_ = QByteArray(reinterpret_cast<const char *>(ptr->addr), size);
+    block_bytes_ = QByteArray(reinterpret_cast<const char *>(ptr->block), size);
 #else
-    block_bytes_ = QByteArray(reinterpret_cast<const char *>(ptr->addr), static_cast<int>(size));
+    block_bytes_ = QByteArray(reinterpret_cast<const char *>(ptr->block), static_cast<int>(size));
 #endif
 
     char buf[64];
@@ -45,11 +46,11 @@ ManufTableItem::~ManufTableItem()
 ManufTableModel::ManufTableModel(QObject *parent) : QAbstractTableModel(parent)
 {
     ws_manuf_iter_t iter;
-    struct ws_manuf buf[3], *ptr;
+    struct ws_manuf item;
 
     ws_manuf_iter_init(&iter);
-    while ((ptr = ws_manuf_iter_next(&iter, buf))) {
-        rows_.append(new ManufTableItem(ptr));
+    while (ws_manuf_iter_next(&iter, &item)) {
+        rows_.append(new ManufTableItem(&item));
     }
 }
 

@@ -15,30 +15,37 @@
 extern "C" {
 #endif /* __cplusplus */
 
+#define MANUF_BLOCK_SIZE 5
+
 struct ws_manuf {
-    uint8_t addr[6];
+    uint8_t block[MANUF_BLOCK_SIZE];
     uint8_t mask;
     const char *short_name;
     const char *long_name;
 };
 
+/* Internal structure, not supposed to be accessed by users. */
 struct ws_manuf_iter {
     size_t idx24, idx28, idx36;
+    struct ws_manuf buf24;
+    struct ws_manuf buf28;
+    struct ws_manuf buf36;
 };
 
 typedef struct ws_manuf_iter ws_manuf_iter_t;
 
+/* Returns the short name. Takes an optional pointer to return the long name. */
 WS_DLL_PUBLIC
-struct ws_manuf *
-ws_manuf_lookup(const uint8_t addr[6], struct ws_manuf *result);
+const char *
+ws_manuf_lookup_str(const uint8_t addr[6], const char **long_name_ptr);
 
 WS_DLL_PUBLIC
 void
 ws_manuf_iter_init(ws_manuf_iter_t *iter);
 
 WS_DLL_PUBLIC
-struct ws_manuf *
-ws_manuf_iter_next(ws_manuf_iter_t *iter, struct ws_manuf manuf_ptr[3]);
+bool
+ws_manuf_iter_next(ws_manuf_iter_t *iter, struct ws_manuf *result);
 
 WS_DLL_PUBLIC
 const char *
