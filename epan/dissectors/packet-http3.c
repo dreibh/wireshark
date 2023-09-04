@@ -1101,13 +1101,14 @@ http3_session_lookup_or_create(packet_info *pinfo)
     http3_session_info_t *http3_session;
 
     /* First, try to look up the session by initial QUIC DCID */
-    quic_cid_t initial_dcid;
+    quic_cid_t initial_dcid = {0};
     if (quic_conn_data_get_conn_client_dcid_initial(pinfo, &initial_dcid)) {
         /* Look up the session data in the conn map */
         http3_session = (http3_session_info_t *)wmem_map_lookup(HTTP3_CONN_INFO_MAP, &initial_dcid);
         if (http3_session == NULL) {
+            quic_cid_t *dcid_p = wmem_memdup(wmem_file_scope(), &initial_dcid, sizeof(initial_dcid));
             http3_session = http3_session_new();
-            wmem_map_insert(HTTP3_CONN_INFO_MAP, &initial_dcid, http3_session);
+            wmem_map_insert(HTTP3_CONN_INFO_MAP, dcid_p, http3_session);
         }
     } else {
         /* Initial DCID can not be found, use the 5-tuple for lookup */
@@ -1623,7 +1624,7 @@ dissect_http3_qpack_encoder_stream(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
             opcode_ti   = proto_tree_add_item(tree, hf_http3_qpack_encoder_opcode_dtable_cap, tvb, opcode_offset,
                                             opcode_len, ENC_NA);
             opcode_tree = proto_item_add_subtree(opcode_ti, ett_http3_qpack_opcode);
-            proto_tree_add_uint64(tree, hf_http3_qpack_encoder_opcode_dtable_cap_val, tvb, opcode_offset, opcode_len,
+            proto_tree_add_uint64(opcode_tree, hf_http3_qpack_encoder_opcode_dtable_cap_val, tvb, opcode_offset, opcode_len,
                                   dynamic_capacity);
             proto_item_set_text(opcode_ti, "QPACK encoder opcode: Set DTable Cap=%" PRIu64 "", dynamic_capacity);
         } else if (opcode == QPACK_OPCODE_DUPLICATE) {
@@ -1644,8 +1645,8 @@ dissect_http3_qpack_encoder_stream(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
             decoded += inc;
 
             opcode_len = offset + decoded - opcode_offset;
-            opcode_ti  = proto_tree_add_item(tree, hf_http3_qpack_encoder_opcode_duplicate, tvb, opcode_offset,
-                                            opcode_len, ENC_NA);
+            proto_tree_add_item(tree, hf_http3_qpack_encoder_opcode_duplicate, tvb, opcode_offset,
+                                opcode_len, ENC_NA);
         } else {
             HTTP3_DISSECTOR_DPRINTF("Opcode=%" PRIu8 ": UNKNOWN", opcode);
             can_continue = 0;
@@ -1868,7 +1869,7 @@ dissect_http3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     switch (QUIC_STREAM_TYPE(stream_info->stream_id)) {
     case QUIC_STREAM_CLIENT_BIDI:
         /* Used for HTTP requests and responses. */
-        offset = dissect_http3_client_bidi_stream(tvb, pinfo, http3_tree, offset, stream_info, http3_stream);
+        dissect_http3_client_bidi_stream(tvb, pinfo, http3_tree, offset, stream_info, http3_stream);
         break;
 
     case QUIC_STREAM_SERVER_BIDI:
@@ -1879,7 +1880,7 @@ dissect_http3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     case QUIC_STREAM_CLIENT_UNI:
     case QUIC_STREAM_SERVER_UNI:
-        offset = dissect_http3_uni_stream(tvb, pinfo, http3_tree, offset, stream_info, http3_stream);
+        dissect_http3_uni_stream(tvb, pinfo, http3_tree, offset, stream_info, http3_stream);
         break;
     }
 
@@ -2369,7 +2370,7 @@ proto_register_http3(void)
               NULL, HFILL }
         },
         { &hf_http3_qpack_encoder_opcode_dtable_cap_val,
-            { "Capacity", "http3.qpack.encoder.opcode.dtable_cap",
+            { "Capacity", "http3.qpack.encoder.opcode.dtable_cap.val",
               FT_UINT64, BASE_DEC, NULL, 0x0,
               NULL, HFILL }
         },

@@ -37,6 +37,12 @@
 		dfilter_fail_throw(dfw, DF_ERROR_GENERIC, stnode_location(node), __VA_ARGS__); \
 	} while (0)
 
+#define FAIL_HERE(dfw) \
+	do {								\
+		ws_noisy("Semantic check failed here.");		\
+		THROW(TypeError); \
+	} while (0)
+
 typedef gboolean (*FtypeCanFunc)(enum ftenum);
 
 static ftenum_t
@@ -185,7 +191,7 @@ dfilter_fvalue_from_literal(dfwork_t *dfw, ftenum_t ftype, stnode_t *st,
 	}
 	if (fv == NULL) {
 		dfw_set_error_location(dfw, stnode_location(st));
-		THROW(TypeError);
+		FAIL_HERE(dfw);
 	}
 
 	return fv;
@@ -216,7 +222,7 @@ dfilter_fvalue_from_string(dfwork_t *dfw, ftenum_t ftype, stnode_t *st,
 	}
 	if (fv == NULL) {
 		dfw_set_error_location(dfw, stnode_location(st));
-		THROW(TypeError);
+		FAIL_HERE(dfw);
 	}
 
 	return fv;
@@ -253,9 +259,6 @@ static fvalue_t*
 mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *s,
 				df_loc_t loc)
 {
-	static const true_false_string  default_tf = { "True", "False" };
-	const true_false_string		*tf = &default_tf;
-
 	/* Early return? */
 	switch(hfinfo->type) {
 		case FT_NONE:
@@ -286,9 +289,9 @@ mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *
 		case FT_REL_OID:
 		case FT_SYSTEM_ID:
 		case FT_FRAMENUM: /* hfinfo->strings contains ft_framenum_type_t, not strings */
+		case FT_BOOLEAN:
 			return NULL;
 
-		case FT_BOOLEAN:
 		case FT_CHAR:
 		case FT_UINT8:
 		case FT_UINT16:
@@ -310,30 +313,6 @@ mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *
 
 		case FT_NUM_TYPES:
 			ws_assert_not_reached();
-	}
-
-	/* TRUE/FALSE *always* exist for FT_BOOLEAN. */
-	if (hfinfo->type == FT_BOOLEAN) {
-		if (hfinfo->strings) {
-			tf = (const true_false_string *)hfinfo->strings;
-		}
-
-		if (g_ascii_strcasecmp(s, tf->true_string) == 0) {
-			return mk_uint64_fvalue(TRUE);
-		}
-		else if (g_ascii_strcasecmp(s, tf->false_string) == 0) {
-			return mk_uint64_fvalue(FALSE);
-		}
-		else {
-			/*
-			 * Prefer this error message to whatever error message
-			 * has already been set.
-			 */
-			df_error_free(&dfw->error);
-			dfilter_fail(dfw, DF_ERROR_GENERIC, loc, "\"%s\" cannot be found among the possible values for %s.",
-				s, hfinfo->abbrev);
-			return NULL;
-		}
 	}
 
 	/* Do val_strings exist? */
@@ -585,7 +564,7 @@ dfilter_fvalue_from_charconst(dfwork_t *dfw, ftenum_t ftype, stnode_t *st)
 
 	if (fvalue == NULL) {
 		dfw_set_error_location(dfw, stnode_location(st));
-		THROW(TypeError);
+		FAIL_HERE(dfw);
 	}
 
 	return fvalue;
@@ -1215,6 +1194,7 @@ check_relation_matches(dfwork_t *dfw, stnode_t *st_node,
 	if (errmsg) {
 		dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st_arg2), "Regex compilation error: %s.", errmsg);
 		g_free(errmsg);
+		ws_noisy("Semantic check failed here with a regex syntax error");
 		THROW(TypeError);
 	}
 
@@ -1413,7 +1393,7 @@ check_arithmetic_LHS(dfwork_t *dfw, stnode_op_t st_op,
 				dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st_arg1),
 							"%s: %s", stnode_todisplay(st_arg1), err_msg);
 				g_free(err_msg);
-				THROW(TypeError);
+				FAIL_HERE(dfw);
 			}
 			/* Replaces unary operator with result */
 			stnode_replace(st_node, STTYPE_FVALUE, new_fv);

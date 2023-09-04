@@ -98,6 +98,7 @@
 
 #include <wsutil/nstime.h>
 #include <wsutil/time_util.h>
+#include <wsutil/ws_strptime.h>
 
 #include <wsutil/version_info.h>
 #include <wsutil/cpu_info.h>
@@ -1079,7 +1080,7 @@ _parse_time(const guchar* start_field, const guchar* end_field, const gchar* _fo
             *subsecs_fmt = 0;
         }
 
-        cursor = ws_strptime(cursor, format, &timecode);
+        cursor = ws_strptime_p(cursor, format, &timecode);
 
         if (cursor == NULL) {
             return FALSE;
@@ -1096,7 +1097,7 @@ _parse_time(const guchar* start_field, const guchar* end_field, const gchar* _fo
 
             subseclen = (int) (p - cursor);
             cursor = p;
-            cursor = ws_strptime(cursor, subsecs_fmt + 2, &timecode);
+            cursor = ws_strptime_p(cursor, subsecs_fmt + 2, &timecode);
             if (cursor == NULL) {
                 return FALSE;
             }

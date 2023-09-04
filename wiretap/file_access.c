@@ -281,58 +281,6 @@ wtap_get_file_extension_type_extensions(guint extension_type)
 	return extensions;
 }
 
-/* Return a list of all extensions that are used by all capture file
- * types, including compressed extensions, e.g. not just "pcap" but
- * also "pcap.gz" if we can read gzipped files.
- *
- * "Capture files" means "include file types that correspond to
- * collections of network packets, but not file types that
- * store data that just happens to be transported over protocols
- * such as HTTP but that aren't collections of network packets",
- * so that it could be used for "All Capture Files" without picking
- * up JPEG files or files such as that - those aren't capture files,
- * and we *do* have them listed in the long list of individual file
- * types, so omitting them from "All Capture Files" is the right
- * thing to do.
- *
- * All strings in the list are allocated with g_malloc() and must be freed
- * with g_free().
- */
-GSList *
-wtap_get_all_capture_file_extensions_list(void)
-{
-	GSList *extensions, *compression_type_extensions;
-	unsigned int i;
-
-	init_file_type_extensions();
-
-	extensions = NULL;	/* empty list, to start with */
-
-	/*
-	 * Get compression-type extensions, if any.
-	 */
-	compression_type_extensions = wtap_get_all_compression_type_extensions_list();
-
-	for (i = 0; i < file_type_extensions_arr->len; i++) {
-		/*
-		 * Is this a capture file, rather than one of the
-		 * other random file types we can read?
-		 */
-		if (file_type_extensions[i].is_capture_file) {
-			/*
-			 * Yes.  Add all this file extension type's
-			 * extensions, with compressed variants.
-			 */
-			extensions = add_extensions_for_file_extensions_type(i,
-			    extensions, compression_type_extensions);
-		}
-	}
-
-	g_slist_free(compression_type_extensions);
-
-	return extensions;
-}
-
 /*
  * The open_file_* routines must return:
  *
@@ -374,8 +322,9 @@ wtap_get_all_capture_file_extensions_list(void)
  * should probably also add it to file_type_extensions_base[] (in this file).
  */
 static const struct open_info open_info_base[] = {
-	{ "Wireshark/tcpdump/... - pcap",           OPEN_INFO_MAGIC,     libpcap_open,             "pcap",     NULL, NULL },
-	{ "Wireshark/... - pcapng",                 OPEN_INFO_MAGIC,     pcapng_open,              "pcapng;scap", NULL, NULL },
+	/* Open routines that look for magic numbers */
+	{ "Wireshark/tcpdump/... - pcap",           OPEN_INFO_MAGIC,     libpcap_open,             NULL,   NULL, NULL },
+	{ "Wireshark/... - pcapng",                 OPEN_INFO_MAGIC,     pcapng_open,              NULL, NULL, NULL },
 	{ "Sniffer (DOS)",                          OPEN_INFO_MAGIC,     ngsniffer_open,           NULL,       NULL, NULL },
 	{ "Snoop, Shomiti/Finisar Surveyor",        OPEN_INFO_MAGIC,     snoop_open,               NULL,       NULL, NULL },
 	{ "AIX iptrace",                            OPEN_INFO_MAGIC,     iptrace_open,             NULL,       NULL, NULL },
@@ -399,13 +348,15 @@ static const struct open_info open_info_base[] = {
 	{ "3GPP TS 32.423 Trace format",            OPEN_INFO_MAGIC,     nettrace_3gpp_32_423_file_open, NULL, NULL, NULL },
 	/* Gammu DCT3 trace must come before MIME files as it's XML based*/
 	{ "Gammu DCT3 trace",                       OPEN_INFO_MAGIC,     dct3trace_open,           NULL,       NULL, NULL },
-	{ "BLF Logfile",                            OPEN_INFO_MAGIC,     blf_open,                 "blf",      NULL, NULL },
-	{ "AUTOSAR DLT Logfile",                    OPEN_INFO_MAGIC,     autosar_dlt_open,         "dlt",      NULL, NULL },
-	{ "RTPDump files",                          OPEN_INFO_MAGIC,     rtpdump_open,             "rtp;rtpdump", NULL, NULL },
+	{ "BLF Logfile",                            OPEN_INFO_MAGIC,     blf_open,                 NULL,     NULL, NULL },
+	{ "AUTOSAR DLT Logfile",                    OPEN_INFO_MAGIC,     autosar_dlt_open,         NULL,     NULL, NULL },
+	{ "RTPDump files",                          OPEN_INFO_MAGIC,     rtpdump_open,             NULL, NULL, NULL },
 	{ "MIME Files Format",                      OPEN_INFO_MAGIC,     mime_file_open,           NULL,       NULL, NULL },
-	{ "Micropross mplog",                       OPEN_INFO_MAGIC,     mplog_open,               "mplog",    NULL, NULL },
-	{ "Unigraf DPA-400 capture",                OPEN_INFO_MAGIC,     dpa400_open,              "bin",      NULL, NULL },
-	{ "RFC 7468 files",                         OPEN_INFO_MAGIC,     rfc7468_open,             "pem;crt",  NULL, NULL },
+	{ "Micropross mplog",                       OPEN_INFO_MAGIC,     mplog_open,               NULL,   NULL, NULL },
+	{ "Unigraf DPA-400 capture",                OPEN_INFO_MAGIC,     dpa400_open,              NULL,       NULL, NULL },
+	{ "RFC 7468 files",                         OPEN_INFO_MAGIC,     rfc7468_open,             NULL,  NULL, NULL },
+
+	/* Open routines that have no magic numbers and require heuristics. */
 	{ "Novell LANalyzer",                       OPEN_INFO_HEURISTIC, lanalyzer_open,           "tr1",      NULL, NULL },
 	/*
 	 * PacketLogger must come before MPEG, because its files
@@ -523,10 +474,25 @@ init_open_routines(void)
 }
 
 /*
- * Registers a new file reader - currently only called by wslua code for Lua readers.
- * If first_routine is true, it's added before other readers of its type (magic or heuristic).
- * Also, it checks for an existing reader of the same name and errors if it finds one; if
- * you want to handle that condition more gracefully, call wtap_has_open_info() first.
+ * Registers a new file reader - currently only called by wslua code for
+ * Lua readers and by compiled file reader plugins.
+ *
+ * If first_routine is true, the reader added before other readers of its
+ * type (magic or heuristic).  This should be done only in cases where
+ * this reader's open test must be performed early, to avoid false
+ * positives for other readers' tests treating files for this reader
+ * as being for another reader.
+ *
+ * XXX - given that there is no guarantee that registration routines will
+ * be called in a given order, all this really does is divide readers for
+ * a given type (magic or heuristic) into two categories, with open routines
+ * for readers in the first category (first_routine true) all being called
+ * before readers in the second category; it does not guarantee a particular
+ * total order for open routines.
+ *
+ * Checks for an existing reader of the same name and errors if it finds one;
+ * if you want to handle that condition more gracefully, call
+ * wtap_has_open_info() first.
  */
 void
 wtap_register_open_info(struct open_info *oi, const gboolean first_routine)
@@ -2078,7 +2044,8 @@ add_extensions_for_file_type_subtype(int file_type_subtype, GSList *extensions,
 	return extensions;
 }
 
-/* Return a list of file extensions that are used by the specified file type.
+/* Return a list of file extensions that are used by the specified file
+ * type/subtype.
  *
  * If include_compressed is TRUE, the list will include compressed
  * extensions, e.g. not just "pcap" but also "pcap.gz" if we can read
@@ -2124,6 +2091,61 @@ wtap_get_file_extensions_list(int file_type_subtype, gboolean include_compressed
 	return extensions;
 }
 
+/* Return a list of all extensions that are used by all capture file
+ * types, including compressed extensions, e.g. not just "pcap" but
+ * also "pcap.gz" if we can read gzipped files.
+ *
+ * "Capture files" means "include file types that correspond to
+ * collections of network packets, but not file types that
+ * store data that just happens to be transported over protocols
+ * such as HTTP but that aren't collections of network packets",
+ * so that it could be used for "All Capture Files" without picking
+ * up JPEG files or files such as that - those aren't capture files,
+ * and we *do* have them listed in the long list of individual file
+ * types, so omitting them from "All Capture Files" is the right
+ * thing to do.
+ *
+ * All strings in the list are allocated with g_malloc() and must be freed
+ * with g_free().
+ *
+ * This is used to generate a list of extensions to look for if the user
+ * chooses "All Capture Files" in a file open dialog.
+ */
+GSList *
+wtap_get_all_capture_file_extensions_list(void)
+{
+	GSList *extensions, *compression_type_extensions;
+	unsigned int i;
+
+	init_file_type_extensions();
+
+	extensions = NULL;	/* empty list, to start with */
+
+	/*
+	 * Get compression-type extensions, if any.
+	 */
+	compression_type_extensions = wtap_get_all_compression_type_extensions_list();
+
+	for (i = 0; i < file_type_extensions_arr->len; i++) {
+		/*
+		 * Is this a capture file, rather than one of the
+		 * other random file types we can read?
+		 */
+		if (file_type_extensions[i].is_capture_file) {
+			/*
+			 * Yes.  Add all this file extension type's
+			 * extensions, with compressed variants.
+			 */
+			extensions = add_extensions_for_file_extensions_type(i,
+			    extensions, compression_type_extensions);
+		}
+	}
+
+	g_slist_free(compression_type_extensions);
+
+	return extensions;
+}
+
 /* Return a list of all extensions that are used by all file types that
  * we can read, including compressed extensions, e.g. not just "pcap" but
  * also "pcap.gz" if we can read gzipped files.
@@ -2135,6 +2157,10 @@ wtap_get_file_extensions_list(int file_type_subtype, gboolean include_compressed
  *
  * All strings in the list are allocated with g_malloc() and must be freed
  * with g_free().
+ *
+ * This is used to get the "base name" for a file, by stripping off
+ * compressed-file extensions and extensions that correspond to file
+ * types that we know about.
  */
 GSList *
 wtap_get_all_file_extensions_list(void)
@@ -2176,8 +2202,8 @@ wtap_free_extensions_list(GSList *extensions)
 }
 
 /*
- * Return the default file extension to use with the specified file type;
- * that's just the extension, without any ".".
+ * Return the default file extension to use with the specified file type
+ * and subtype; that's just the extension, without any ".".
  */
 const char *
 wtap_default_file_extension(int file_type_subtype)

@@ -154,7 +154,7 @@ static const string_string id3v2_tag_names[] = {
 	{ "TXXX", "User defined" },
 	{ "UFID", "Unique file identifier" },
 	{ "USER", "Terms of use" },
-	{ "USLT", "Unsychronized lyric/text transcription" },
+	{ "USLT", "Unsynchronized lyric/text transcription" },
 	{ "WCOM", "Commercial information" },
 	{ "WCOP", "Copyright/Legal information" },
 	{ "WOAF", "Official audio file webpage" },
@@ -173,7 +173,7 @@ static const value_string id3v2_apic_types[] = {
 	{ 0x03,   "Cover (front)" },
 	{ 0x04,   "Cover (back)" },
 	{ 0x05,   "Leaflet page" },
-	{ 0x06,   "Media (e.g. lable side of CD)" },
+	{ 0x06,   "Media (e.g. label side of CD)" },
 	{ 0x07,   "Lead artist/lead performer/soloist" },
 	{ 0x08,   "Artist/performer" },
 	{ 0x09,   "Conductor" },
@@ -290,7 +290,7 @@ dissect_id3v2_apic_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
 
 	id3v2_dissect_textz_item(tvb, tree, &offset, id3_encoding, hf_id3v2_frame_apic_description);
 
-	image_tvb = tvb_new_subset_length_caplen(tvb, offset, -1, (end - offset));
+	image_tvb = tvb_new_subset_length(tvb, offset, (end - offset));
 	dissector_try_string(media_type_dissector_table, mime_type, image_tvb, pinfo, tree, NULL);
 }
 
