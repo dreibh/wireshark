@@ -195,8 +195,8 @@ static void lua_custom_packet_menu_callback(gpointer data, GPtrArray *finfo_arra
  */
 WSLUA_FUNCTION wslua_register_packet_menu(lua_State* L) { /*  Register a menu item in the packet list. */
 #define WSLUA_ARG_register_packet_menu_NAME 1 /* The name of the menu item. Use slashes to separate submenus. (e.g. level1/level2/name). (string) */
-#define WSLUA_ARG_register_packet_menu_ACTION 2 /* The function to be called when the menu item is invoked. The function must take one argument and return nothing. */
-#define WSLUA_OPTARG_register_packet_menu_REQUIRED_FIELDS 3 /* A comma-separated list of packet fields (e.g., http.host,dns.qry.name) which all must be present for the menu to be displayed (default: always display)*/
+#define WSLUA_ARG_register_packet_menu_ACTION 2 /* The function to be called when the menu item is invoked. The function must take a variable number of arguments and return nothing. The arguments will be FieldInfo objects, one for each field present in the selected packet. */
+#define WSLUA_OPTARG_register_packet_menu_REQUIRED_FIELDS 3 /* A comma-separated list of packet fields (e.g., http.host,dns.qry.name) which all must be present for the menu to be displayed. If omitted, the packet menu will be displayed for all packets. */
 
     const gchar* name = luaL_checkstring(L,WSLUA_ARG_register_packet_menu_NAME);
     const gchar* required_fields = luaL_optstring(L,WSLUA_OPTARG_register_packet_menu_REQUIRED_FIELDS,"");
@@ -351,8 +351,8 @@ WSLUA_FUNCTION wslua_new_dialog(lua_State* L) { /*
     */
 #define WSLUA_ARG_new_dialog_TITLE 1 /* The title of the dialog. */
 #define WSLUA_ARG_new_dialog_ACTION 2 /* Action to be performed when the user presses btn:[OK]. */
-/* WSLUA_MOREARGS new_dialog Strings to be used a labels of the dialog's fields. Each string creates a new labeled field. The first field is required.
-Instead of a strings it is possible to provide tables with fields 'name' and 'value' of type string. Then the created dialog's field will labeld with the content of name and prefilled with the content of value.*/
+/* WSLUA_MOREARGS new_dialog Strings to be used as labels of the dialog's fields. Each string creates a new labeled field. The first field is required.
+Instead of a string it is possible to provide tables with fields 'name' and 'value' of type string. Then the created dialog's field will be labeled with the content of name and prefilled with the content of value.*/
 
     const gchar* title;
     int top = lua_gettop(L);
