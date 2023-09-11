@@ -641,56 +641,9 @@ eui64_to_str(wmem_allocator_t *scope, const guint64 ad) {
 }
 
 void
-display_epoch_time(gchar *buf, size_t buflen, const time_t sec, gint32 frac,
-					const ws_tsprec_e units)
+display_epoch_time(gchar *buf, size_t buflen, const nstime_t *ns, int precision)
 {
-	double elapsed_secs;
-
-	elapsed_secs = difftime(sec,(time_t)0);
-
-	/* This code copied from display_signed_time; keep it in case anyone
-	   is looking at captures from before 1970 (???).
-	   If the fractional part of the time stamp is negative,
-	   print its absolute value and, if the seconds part isn't
-	   (the seconds part should be zero in that case), stick
-	   a "-" in front of the entire time stamp. */
-	if (frac < 0) {
-		frac = -frac;
-		if (elapsed_secs >= 0) {
-			if (buflen < 1) {
-				return;
-			}
-			buf[0] = '-';
-			buf++;
-			buflen--;
-		}
-	}
-	switch (units) {
-
-		case WS_TSPREC_SEC:
-			snprintf(buf, buflen, "%0.0f", elapsed_secs);
-			break;
-
-		case WS_TSPREC_100_MSEC:
-			snprintf(buf, buflen, "%0.0f.%01d", elapsed_secs, frac);
-			break;
-
-		case WS_TSPREC_10_MSEC:
-			snprintf(buf, buflen, "%0.0f.%02d", elapsed_secs, frac);
-			break;
-
-		case WS_TSPREC_MSEC:
-			snprintf(buf, buflen, "%0.0f.%03d", elapsed_secs, frac);
-			break;
-
-		case WS_TSPREC_USEC:
-			snprintf(buf, buflen, "%0.0f.%06d", elapsed_secs, frac);
-			break;
-
-		case WS_TSPREC_NSEC:
-			snprintf(buf, buflen, "%0.0f.%09d", elapsed_secs, frac);
-			break;
-	}
+	display_signed_time(buf, buflen, ns, precision);
 }
 
 /*
@@ -703,9 +656,9 @@ display_epoch_time(gchar *buf, size_t buflen, const time_t sec, gint32 frac,
 #define CHARS_NANOSECONDS	10	/* .000000001 */
 
 void
-display_signed_time(gchar *buf, size_t buflen, const gint64 sec, gint32 frac,
-					const ws_tsprec_e units)
+display_signed_time(gchar *buf, size_t buflen, const nstime_t *ns, int precision)
 {
+	int nsecs;
 	/* this buffer is not NUL terminated */
 	gint8 num_buf[CHARS_64_BIT_SIGNED];
 	gint8 *num_end = &num_buf[CHARS_64_BIT_SIGNED];
@@ -719,48 +672,108 @@ display_signed_time(gchar *buf, size_t buflen, const gint64 sec, gint32 frac,
 	   print its absolute value and, if the seconds part isn't
 	   (the seconds part should be zero in that case), stick
 	   a "-" in front of the entire time stamp. */
-	if (frac < 0) {
-		frac = -frac;
-		if (sec >= 0) {
+	nsecs = ns->nsecs;
+	if (nsecs < 0) {
+		nsecs = -nsecs;
+		if (ns->secs >= 0) {
 			buf[0] = '-';
 			buf++;
 			buflen--;
 		}
 	}
 
-	num_ptr = int64_to_str_back(num_end, sec);
+	num_ptr = int64_to_str_back(num_end, ns->secs);
 
 	num_len = MIN((size_t)(num_end - num_ptr), buflen);
 	memcpy(buf, num_ptr, num_len);
 	buf += num_len;
 	buflen -= num_len;
 
-	switch (units) {
-		case WS_TSPREC_SEC:
-		default:
-			/* no fraction */
-			num_ptr = NULL;
-			break;
+	switch (precision) {
 
-		case WS_TSPREC_100_MSEC:
-			num_ptr = uint_to_str_back_len(num_end, frac, 1);
-			break;
+	case 0:
+		/*
+		 * Seconds precision, so no nanosecond.
+		 */
+		num_ptr = NULL;
+		break;
 
-		case WS_TSPREC_10_MSEC:
-			num_ptr = uint_to_str_back_len(num_end, frac, 2);
-			break;
+	case 1:
+		/*
+		 * Scale down to units of 1/10 second.
+		 * We do this in a case statement so as
+		 * to do divisions by a constant.
+		 */
+		num_ptr = uint_to_str_back_len(num_end,
+		    ((guint32)nsecs) / 100000000, 1);
+		break;
 
-		case WS_TSPREC_MSEC:
-			num_ptr = uint_to_str_back_len(num_end, frac, 3);
-			break;
+	case 2:
+		/*
+		 * Scale down to units of 1/100 second.
+		 */
+		num_ptr = uint_to_str_back_len(num_end,
+		    ((guint32)nsecs) / 10000000, 2);
+		break;
 
-		case WS_TSPREC_USEC:
-			num_ptr = uint_to_str_back_len(num_end, frac, 6);
-			break;
+	case 3:
+		/*
+		 * Scale down to units of 1/1000 second.
+		 */
+		num_ptr = uint_to_str_back_len(num_end,
+		    ((guint32)nsecs) / 1000000, 3);
+		break;
 
-		case WS_TSPREC_NSEC:
-			num_ptr = uint_to_str_back_len(num_end, frac, 9);
-			break;
+	case 4:
+		/*
+		 * Scale down to units of 1/10000 second.
+		 */
+		num_ptr = uint_to_str_back_len(num_end,
+		    ((guint32)nsecs) / 100000, 4);
+		break;
+
+	case 5:
+		/*
+		 * Scale down to units of 1/100000 second.
+		 */
+		num_ptr = uint_to_str_back_len(num_end,
+		    ((guint32)nsecs) / 10000, 5);
+		break;
+
+	case 6:
+		/*
+		 * Scale down to units of 1/1000000 second.
+		 */
+		num_ptr = uint_to_str_back_len(num_end,
+		    ((guint32)nsecs) / 1000, 6);
+		break;
+
+	case 7:
+		/*
+		 * Scale down to units of 1/10000000 second.
+		 */
+		num_ptr = uint_to_str_back_len(num_end,
+		    ((guint32)nsecs) / 100, 7);
+		break;
+
+	case 8:
+		/*
+		 * Scale down to units of 1/100000000 second.
+		 */
+		num_ptr = uint_to_str_back_len(num_end,
+		    ((guint32)nsecs) / 10, 8);
+		break;
+
+	case 9:
+		/*
+		 * We're already in units of 1/1000000000 second.
+		 */
+		num_ptr = uint_to_str_back_len(num_end, (guint32)nsecs, 9);
+		break;
+
+	default:
+		ws_assert_not_reached();
+		break;
 	}
 
 	if (num_ptr != NULL)

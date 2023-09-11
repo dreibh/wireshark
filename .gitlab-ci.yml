@@ -157,7 +157,7 @@ variables:
     - $env:WIRESHARK_BASE_DIR = "C:\Development"
     - $env:Configuration = "RelWithDebInfo"
     - $env:Path += ";C:\Program Files\CMake\bin"
-    - $env:CMAKE_PREFIX_PATH = "C:\qt\6.2.4\msvc2019_64"
+    - $env:CMAKE_PREFIX_PATH = "C:\qt\6.5.2\msvc2019_64"
     # https://help.appveyor.com/discussions/questions/18777-how-to-use-vcvars64bat-from-powershell
     - cmd.exe /c "call `"C:\Program Files\Microsoft Visual Studio\2022\Community\VC\Auxiliary\Build\vcvars64.bat`" && set > %temp%\vcvars.txt"
     - Get-Content "$env:temp\vcvars.txt" | Foreach-Object { if ($_ -match "^(.*?)=(.*)$") { Set-Content "env:\$($matches[1])" $matches[2] } }
@@ -532,7 +532,7 @@ macOS Intel Package:
     - mkdir build
     - cd build
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
-    - cmake -DENABLE_CCACHE=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DCMAKE_OSX_SYSROOT=macosx10.15 -DTEST_EXTRA_ARGS=--enable-release -G Ninja ..
+    - cmake -DENABLE_CCACHE=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=10.14 -DTEST_EXTRA_ARGS=--enable-release -G Ninja ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
     - package-prep
@@ -713,7 +713,7 @@ Windows Build:
     - cmake -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off ..
     - msbuild /verbosity:minimal /maxcpucount Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount test-programs.vcxproj
-    - C:\Windows\py.exe -m pytest
+    - C:\Windows\py.exe -m pytest --disable-gui
 
 Windows Qt5 Build:
   extends: .build-windows
@@ -972,7 +972,7 @@ Code Lines and Data:
     - . /tmp/fuzz_result.sh
     - if $FUZZ_PASSED ; then exit 0 ; fi
     - echo Fuzzing failed. Generating report.
-    - FUZZ_CAPTURE=$( ls /tmp/fuzz/fuzz-*.pcap | head -n 1 )
+    - FUZZ_CAPTURE=$( find /tmp/fuzz -name "fuzz-*.pcap" -o -name "randpkt-*.pcap" | head -n 1 )
     - FUZZ_ERRORS="/tmp/fuzz/$( basename "$FUZZ_CAPTURE" .pcap ).err"
     - printf "\nfuzz-test.sh stderr:\n" >> "$FUZZ_ERRORS"
     - cat fuzz-test.err >> "$FUZZ_ERRORS"
