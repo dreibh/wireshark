@@ -121,6 +121,7 @@ set(CLEAN_ASN1_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-isdn-sup.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-its.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-kerberos.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-kpm-v2.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lcsap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ldap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lnpdqp.c
@@ -1874,6 +1875,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sml.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-smp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-smpp.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-smpte-2110-20.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-smtp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sna.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-snaeth.c

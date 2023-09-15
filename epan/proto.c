@@ -2599,6 +2599,13 @@ detect_trailing_stray_characters(guint encoding, const char *string, gint length
 	}
 }
 
+static void
+free_fvalue_cb(void *data)
+{
+	fvalue_t *fv = (fvalue_t*)data;
+	fvalue_free(fv);
+}
+
 /* Add an item to a proto_tree, using the text label registered to that item;
    the item is extracted from the tvbuff handed to it. */
 static proto_item *
@@ -2615,6 +2622,13 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 	const char *stringval = NULL;
 	nstime_t    time_stamp;
 	gboolean    length_error;
+
+	/* Ensure that the newly created fvalue_t is freed if we throw an
+	 * exception before adding it to the tree. (gcc creates clobbering
+	 * when it optimizes the equivalent TRY..EXCEPT implementation.)
+	 * XXX: Move the new_field_info() call inside here?
+	 */
+	CLEANUP_PUSH(free_fvalue_cb, new_fi->value);
 
 	switch (new_fi->hfinfo->type) {
 		case FT_NONE:
@@ -3062,8 +3076,12 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 
 	/* Don't add new node to proto_tree until now so that any exceptions
 	 * raised by a tvbuff access method doesn't leave junk in the proto_tree. */
-	/* XXX. wouldn't be better to add this item to tree, with some special flag (FI_EXCEPTION?)
-	 *      to know which item caused exception? */
+	/* XXX. wouldn't be better to add this item to tree, with some special
+	 * flag (FI_EXCEPTION?) to know which item caused exception? For
+	 * strings and bytes, we would have to set new_fi->value to something
+	 * non-NULL, or otherwise ensure that proto_item_fill_display_label
+	 * could handle NULL values. */
+	CLEANUP_POP
 	pi = proto_tree_add_node(tree, new_fi);
 
 	switch (new_fi->hfinfo->type) {
@@ -4340,20 +4358,24 @@ proto_tree_add_bytes_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 	else if (generate) {
 		tvb_ensure_bytes_exist(tvb, start, length);
 
-		if (!bytes) {
-			/* caller doesn't care about return value, but we need it to
-			   call tvb_get_string_bytes() and set the tree later */
-			bytes = created_bytes = g_byte_array_new();
-		}
-
 		if (hfinfo->type == FT_UINT_BYTES) {
 			n = length; /* n is now the "header" length */
 			length = get_uint_value(tree, tvb, start, n, encoding);
 			/* length is now the value's length; only store the value in the array */
 			tvb_ensure_bytes_exist(tvb, start + n, length);
+			if (!bytes) {
+				/* caller doesn't care about return value, but
+				 * we may need it to set the tree later */
+				bytes = created_bytes = g_byte_array_new();
+			}
 			g_byte_array_append(bytes, tvb_get_ptr(tvb, start + n, length), length);
 		}
 		else if (length > 0) {
+			if (!bytes) {
+				/* caller doesn't care about return value, but
+				 * we may need it to set the tree later */
+				bytes = created_bytes = g_byte_array_new();
+			}
 			g_byte_array_append(bytes, tvb_get_ptr(tvb, start, length), length);
 		}
 
@@ -4398,6 +4420,12 @@ proto_tree_add_bytes_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 	else {
 		/* n will be zero except when it's a FT_UINT_BYTES */
 		proto_tree_set_bytes_tvb(new_fi, tvb, start + n, length);
+
+		/* XXX: If we have a non-NULL tree but NULL retval, we don't
+		 * use the byte array created above in this case.
+		 */
+		if (created_bytes)
+		    g_byte_array_free(created_bytes, TRUE);
 
 		FI_SET_FLAG(new_fi,
 			(encoding & ENC_LITTLE_ENDIAN) ? FI_LITTLE_ENDIAN : FI_BIG_ENDIAN);
@@ -6124,6 +6152,8 @@ proto_tree_add_node(proto_tree *tree, field_info *fi)
 		for (tnode = tree; tnode != NULL; tnode = tnode->parent) {
 			depth++;
 			if (G_UNLIKELY(depth > prefs.gui_max_tree_depth)) {
+				fvalue_free(fi->value);
+				fi->value = NULL;
 				THROW_MESSAGE(DissectorError, wmem_strdup_printf(PNODE_POOL(tree),
 						     "Maximum tree depth %d exceeded for \"%s\" - \"%s\" (%s:%u) (Maximum depth can be increased in advanced preferences)",
 						     prefs.gui_max_tree_depth,
@@ -6144,6 +6174,11 @@ proto_tree_add_node(proto_tree *tree, field_info *fi)
 	tnode = tree;
 	tfi = PNODE_FINFO(tnode);
 	if (tfi != NULL && (tfi->tree_type < 0 || tfi->tree_type >= num_tree_types)) {
+		/* Since we are not adding fi to a node, its fvalue won't get
+		 * freed by proto_tree_free_node(), so free it now.
+		 */
+		fvalue_free(fi->value);
+		fi->value = NULL;
 		REPORT_DISSECTOR_BUG("\"%s\" - \"%s\" tfi->tree_type: %d invalid (%s:%u)",
 				     fi->hfinfo->name, fi->hfinfo->abbrev, tfi->tree_type, __FILE__, __LINE__);
 		/* XXX - is it safe to continue here? */

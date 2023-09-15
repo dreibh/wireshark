@@ -1429,7 +1429,7 @@ install_p11_kit() {
         # but it's not clear that this matters to us, so we just
         # configure p11-kit not to use libffi.
         #
-        CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure --without-libffi --without-trust-paths || exit 1
+        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS -L/usr/local/lib" LIBS=-lintl ./configure --without-libffi --without-trust-paths || exit 1
         make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
         cd ..
@@ -1470,11 +1470,7 @@ install_nettle() {
         $no_build && echo "Skipping installation" && return
         gzcat nettle-$NETTLE_VERSION.tar.gz | tar xf - || exit 1
         cd nettle-$NETTLE_VERSION
-        if [ "$DARWIN_PROCESSOR_ARCH" = "arm" ] ; then
-            CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure --disable-assembler || exit 1
-        else
-            CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure || exit 1
-        fi
+        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS -I/usr/local/include" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS -L/usr/local/lib" ./configure || exit 1
         make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
         cd ..
@@ -1535,7 +1531,7 @@ install_gnutls() {
             bzcat gnutls-$GNUTLS_VERSION.tar.bz2 | tar xf - || exit 1
         fi
         cd gnutls-$GNUTLS_VERSION
-        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure --with-included-unistring --disable-guile || exit 1
+        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS -I /usr/local/include" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS -I/usr/local/include/" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS -L/usr/local/lib" ./configure --with-included-unistring --disable-guile || exit 1
         make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
         cd ..
@@ -1614,6 +1610,10 @@ install_snappy() {
         $no_build && echo "Skipping installation" && return
         gzcat snappy-$SNAPPY_VERSION.tar.gz | tar xf - || exit 1
         cd snappy-$SNAPPY_VERSION
+	if [ "$SNAPPY_VERSION" = "1.1.10" ] ; then
+	    # This patch corresponds to https://github.com/google/snappy/commit/27f34a580be4a3becf5f8c0cba13433f53c21337
+	    patch -p0 <${topdir}/macosx-support-lib-patches/snappy-signed.patch || exit 1
+	fi
         mkdir build_dir
         cd build_dir
         #
@@ -1623,7 +1623,7 @@ install_snappy() {
         # will carry that dependency with it, so linking with it should
         # Just Work.
         #
-        MACOSX_DEPLOYMENT_TARGET=$min_osx_target SDKROOT="$SDKPATH" cmake -DBUILD_SHARED_LIBS=YES ../ || exit 1
+        MACOSX_DEPLOYMENT_TARGET=$min_osx_target SDKROOT="$SDKPATH" cmake -DBUILD_SHARED_LIBS=YES -DSNAPPY_BUILD_BENCHMARKS=NO -DSNAPPY_BUILD_TESTS=NO ../ || exit 1
         make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
         cd ../..
@@ -1719,9 +1719,12 @@ uninstall_zstd() {
 install_libxml2() {
     if [ "$LIBXML2_VERSION" -a ! -f libxml2-$LIBXML2_VERSION-done ] ; then
         echo "Downloading, building, and installing libxml2:"
-        [ -f libxml2-$LIBXML2_VERSION.tar.gz ] || curl -L -O ftp://xmlsoft.org/libxml2/libxml2-$LIBXML2_VERSION.tar.gz || exit 1
+        LIBXML2_MAJOR_VERSION="`expr $LIBXML2_VERSION : '\([0-9][0-9]*\).*'`"
+        LIBXML2_MINOR_VERSION="`expr $LIBXML2_VERSION : '[0-9][0-9]*\.\([0-9][0-9]*\).*'`"
+        LIBXML2_MAJOR_MINOR_VERSION=$LIBXML2_MAJOR_VERSION.$LIBXML2_MINOR_VERSION
+        [ -f libxml2-$LIBXML2_VERSION.tar.gz ] || curl -L -O https://download.gnome.org/sources/libxml2/$LIBXML2_MAJOR_MINOR_VERSION/libxml2-$LIBXML2_VERSION.tar.xz || exit 1
         $no_build && echo "Skipping installation" && return
-        gzcat libxml2-$LIBXML2_VERSION.tar.gz | tar xf - || exit 1
+        xzcat libxml2-$LIBXML2_VERSION.tar.xz | tar xf - || exit 1
         cd libxml2-$LIBXML2_VERSION
         #
         # At least on macOS 12.0.1 with Xcode 13.1, when we build
@@ -1751,7 +1754,7 @@ uninstall_libxml2() {
             # Get rid of the previously downloaded and unpacked version.
             #
             rm -rf libxml2-$installed_libxml2_version
-            rm -rf libxml2-$installed_libxml2_version.tar.gz
+            rm -rf libxml2-$installed_libxml2_version.tar.xz
         fi
 
         installed_libxml2_version=""
@@ -1959,7 +1962,6 @@ install_libssh() {
         $no_build && echo "Skipping installation" && return
         xzcat libssh-$LIBSSH_VERSION.tar.xz | tar xf - || exit 1
         cd libssh-$LIBSSH_VERSION
-        patch -p0 <${topdir}/macosx-support-lib-patches/libssh-void-arglists.patch || exit 1
         mkdir build
         cd build
         MACOSX_DEPLOYMENT_TARGET=$min_osx_target SDKROOT="$SDKPATH" cmake -DWITH_GCRYPT=1 ../ || exit 1
@@ -2196,14 +2198,16 @@ uninstall_speexdsp() {
 install_bcg729() {
     if [ "$BCG729_VERSION" -a ! -f bcg729-$BCG729_VERSION-done ] ; then
         echo "Downloading, building, and installing bcg729:"
-        [ -f bcg729-$BCG729_VERSION.tar.gz ] || curl -L -O https://download.savannah.gnu.org/releases/linphone/plugins/sources/bcg729-$BCG729_VERSION.tar.gz || exit 1
+        [ -f bcg729-$BCG729_VERSION.tar.gz ] || curl -L -O https://gitlab.linphone.org/BC/public/bcg729/-/archive/$BCG729_VERSION/bcg729-$BCG729_VERSION.tar.gz || exit 1
         $no_build && echo "Skipping installation" && return
         gzcat bcg729-$BCG729_VERSION.tar.gz | tar xf - || exit 1
         cd bcg729-$BCG729_VERSION
-        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure || exit 1
+        mkdir build_dir
+        cd build_dir
+        MACOSX_DEPLOYMENT_TARGET=$min_osx_target SDKROOT="$SDKPATH" cmake  ../ || exit 1
         make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
-        cd ..
+        cd ../..
         touch bcg729-$BCG729_VERSION-done
     fi
 }
@@ -2212,8 +2216,21 @@ uninstall_bcg729() {
     if [ ! -z "$installed_bcg729_version" ] ; then
         echo "Uninstalling bcg729:"
         cd bcg729-$installed_bcg729_version
-        $DO_MAKE_UNINSTALL || exit 1
-        make distclean || exit 1
+        #
+        # bcg729 uses cmake on macOS and doesn't support "make uninstall";
+        # just remove what we know it installs.
+        #
+        # $DO_MAKE_UNINSTALL || exit 1
+        $DO_RM -rf /usr/local/share/Bcg729 \
+                   /usr/local/lib/libbcg729* \
+                   /usr/local/include/bcg729 \
+                   /usr/local/lib/pkgconfig/libbcg729* || exit 1
+        #
+        # bcg729 uses cmake on macOS and doesn't support "make distclean";
+        # just remove the enire build directory.
+        #
+        # make distclean || exit 1
+        rm -rf build_dir || exit 1
         cd ..
         rm bcg729-$installed_bcg729_version-done
 
@@ -2268,7 +2285,7 @@ uninstall_ilbc() {
 install_opus() {
     if [ "$OPUS_VERSION" -a ! -f opus-$OPUS_VERSION-done ] ; then
         echo "Downloading, building, and installing opus:"
-        [ -f opus-$OPUS_VERSION.tar.gz ] || curl -L -O https://archive.mozilla.org/pub/opus/opus-$OPUS_VERSION.tar.gz || exit 1
+        [ -f opus-$OPUS_VERSION.tar.gz ] || curl -L -O https://downloads.xiph.org/releases/opus/opus-$OPUS_VERSION.tar.gz || exit 1
         $no_build && echo "Skipping installation" && return
         gzcat opus-$OPUS_VERSION.tar.gz | tar xf - || exit 1
         cd opus-$OPUS_VERSION
