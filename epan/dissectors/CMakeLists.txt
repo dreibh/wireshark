@@ -53,6 +53,8 @@ set(PIDL_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-frstrans.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-fsrvp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-initshutdown.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-iwbemlevel1login.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-iwbemloginclientid.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-lsa.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-mapi.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-mdssvc.c
@@ -660,6 +662,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-yppasswd.h
 	packet-ypserv.h
 	packet-ypxfr.h
+	packet-zbee-direct.h
 	packet-zbee.h
 	packet-zbee-aps.h
 	packet-zbee-nwk.h
@@ -1320,6 +1323,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipdc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipdr.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-iperf.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-iperf3.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipfc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipmi.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipmi-app.c
@@ -1785,6 +1789,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rsvp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rsync.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rtacser.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-rtag.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rtcdc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rtcp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rtitcp.c
@@ -2027,6 +2032,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vj-comp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vlan.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vmlab.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-vmware-hb.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vnc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vntag.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vp8.c
@@ -2072,6 +2078,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-x11.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-x25.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-x29.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-x75.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xcsl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xdmcp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xip.c
@@ -2097,8 +2104,10 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-yppasswd.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ypserv.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ypxfr.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-z21.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-z3950.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zabbix.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-direct.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-aps.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-nwk.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-zbee-nwk-gp.c

@@ -236,7 +236,7 @@ static inline bool level_filter_matches(log_filter_t *filter,
 }
 
 
-static void
+static inline void
 get_timestamp(struct timespec *ts)
 {
     bool ok = false;
@@ -786,7 +786,7 @@ void ws_log_set_writer_with_data(ws_log_writer_cb *writer,
 
 
 static void glib_log_handler(const char *domain, GLogLevelFlags flags,
-                        const char *message, gpointer user_data _U_)
+                        const char *message, void * user_data _U_)
 {
     enum ws_log_level level;
 
@@ -854,6 +854,8 @@ void ws_log_init(const char *progname,
         registered_progname = progname;
         g_set_prgname(progname);
     }
+
+    ws_tzset();
 
     current_log_level = DEFAULT_LOG_LEVEL;
 
@@ -1097,8 +1099,7 @@ static void log_write_dispatch(const char *domain, enum ws_log_level level,
     }
 
 #ifdef _WIN32
-    if (fatal_event || ws_log_console_open != LOG_CONSOLE_OPEN_NEVER) {
-        /* the user wants a console or the application will terminate immediately */
+    if (ws_log_console_open != LOG_CONSOLE_OPEN_NEVER) {
         create_console();
     }
 #endif /* _WIN32 */
@@ -1130,7 +1131,7 @@ static void log_write_dispatch(const char *domain, enum ws_log_level level,
     }
 
 #ifdef _WIN32
-    if (fatal_event) {
+    if (fatal_event && ws_log_console_open != LOG_CONSOLE_OPEN_NEVER) {
         /* wait for a key press before the following error handler will terminate the program
             this way the user at least can read the error message */
         printf("\n\nPress any key to exit\n");
