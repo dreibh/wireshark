@@ -42,6 +42,7 @@ static int proto_mdb = -1;
 static int ett_mdb = -1;
 static int ett_mdb_hdr = -1;
 static int ett_mdb_cl = -1;
+static int ett_mdb_cgw = -1;
 
 static int hf_mdb_hdr_ver = -1;
 static int hf_mdb_event = -1;
@@ -55,16 +56,20 @@ static int hf_mdb_cl_disp_info = -1;
 static int hf_mdb_cl_max_price = -1;
 static int hf_mdb_cl_min_price = -1;
 static int hf_mdb_cl_vend_sub = -1;
+static int hf_mdb_cl_item_price = -1;
+static int hf_mdb_cl_item_num = -1;
 static int hf_mdb_cl_reader_sub = -1;
 static int hf_mdb_cl_resp = -1;
 static int hf_mdb_cl_scale = -1;
 static int hf_mdb_cl_dec_pl = -1;
 static int hf_mdb_cl_max_rsp_time = -1;
+static int hf_mdb_cl_vend_amt = -1;
 static int hf_mdb_cl_expns_sub = -1;
 static int hf_mdb_cl_manuf_code = -1;
 static int hf_mdb_cl_ser_num = -1;
 static int hf_mdb_cl_mod_num = -1;
 static int hf_mdb_cl_opt_feat = -1;
+static int hf_mdb_cgw_resp = -1;
 static int hf_mdb_ack = -1;
 static int hf_mdb_data = -1;
 static int hf_mdb_chk = -1;
@@ -85,11 +90,12 @@ static const value_string mdb_event[] = {
 #define ADDR_VMC "VMC"
 
 #define ADDR_CASHLESS1 0x10
+#define ADDR_COMMS_GW  0x18
 
 static const value_string mdb_addr[] = {
     { 0x08, "Changer" },
     { ADDR_CASHLESS1, "Cashless #1" },
-    { 0x18, "Communication Gateway" },
+    { ADDR_COMMS_GW, "Communications Gateway" },
     { 0x30, "Bill Validator" },
     { 0x60, "Cashless #2" },
     { 0x68, "Age Verification Device" },
@@ -103,6 +109,11 @@ static const value_string mdb_ack[] = {
     { 0, NULL }
 };
 
+/*
+ * These are just the command bits in the address + command byte. MDB supports
+ * two Cashless peripherals (Cashless #1 and #2) with different addresses,
+ * both use the same commands.
+ */
 #define MDB_CL_CMD_SETUP  0x01
 #define MDB_CL_CMD_VEND   0x03
 #define MDB_CL_CMD_READER 0x04
@@ -127,9 +138,12 @@ static const value_string mdb_cl_setup_sub_cmd[] = {
     { 0, NULL }
 };
 
+#define MDB_CL_VEND_REQ 0x00
+#define MDB_CL_VEND_SUC 0x02
+
 static const value_string mdb_cl_vend_sub_cmd[] = {
-    { 0x00, "Vend Request" },
-    { 0x02, "Vend Success" },
+    { MDB_CL_VEND_REQ, "Vend Request" },
+    { MDB_CL_VEND_SUC, "Vend Success" },
     { 0x04, "Session Complete" },
     { 0, NULL }
 };
@@ -150,17 +164,35 @@ static const value_string mdb_cl_expns_sub_cmd[] = {
 };
 
 #define MDB_CL_RESP_RD_CFG_DATA 0x01
+#define MDB_CL_RESP_VEND_APRV   0x05
 #define MDB_CL_RESP_PER_ID      0x09
 
 static const value_string mdb_cl_resp[] = {
     { 0x00, "Just Reset" },
     { MDB_CL_RESP_RD_CFG_DATA, "Reader Config Data" },
     { 0x03, "Begin Session" },
-    { 0x05, "Vend Approved" },
+    { MDB_CL_RESP_VEND_APRV, "Vend Approved" },
     { 0x06, "Vend Denied" },
     { 0x07, "End Session" },
     { MDB_CL_RESP_PER_ID, "Peripheral ID" },
     { 0x0b, "Cmd Out Of Sequence" },
+    { 0, NULL }
+};
+
+/*
+ * For the Communications Gateway, we use the complete address + command byte
+ * as value for the value string. The values here match those in the MDB
+ * specification.
+ *
+ * There's only one Communications Gateway, the address bits are always the
+ * same. (This is different from the Cashless peripherals, see above.)
+ */
+static const value_string mdb_cgw_addr_cmd[] = {
+    { 0x18, "Reset" },
+    { 0x19, "Setup" },
+    { 0x1A, "Poll" },
+    { 0x1B, "Report" },
+    { 0x1F, "Expansion" },
     { 0, NULL }
 };
 
@@ -257,6 +289,40 @@ static void dissect_mdb_cl_setup(tvbuff_t *tvb, gint offset,
     }
 }
 
+static void dissect_mdb_cl_vend(tvbuff_t *tvb, gint offset,
+        packet_info *pinfo, proto_tree *tree)
+{
+    guint32 sub_cmd, price, item;
+    const gchar *s;
+
+    proto_tree_add_item_ret_uint(tree, hf_mdb_cl_vend_sub, tvb, offset, 1,
+            ENC_BIG_ENDIAN, &sub_cmd);
+    s = try_val_to_str(sub_cmd, mdb_cl_vend_sub_cmd);
+    if (s) {
+        col_set_str(pinfo->cinfo, COL_INFO, s);
+    }
+    offset++;
+
+    switch (sub_cmd) {
+        case MDB_CL_VEND_REQ:
+            if (tvb_reported_length_remaining(tvb, offset) == 5) {
+                proto_tree_add_item_ret_uint(tree, hf_mdb_cl_item_price, tvb,
+                        offset, 2, ENC_BIG_ENDIAN, &price);
+                offset += 2;
+                proto_tree_add_item_ret_uint(tree, hf_mdb_cl_item_num, tvb,
+                        offset, 2, ENC_BIG_ENDIAN, &item);
+                col_append_fstr(pinfo->cinfo, COL_INFO, " (item %d, price %d)",
+                        item, price);
+            }
+            /* XXX - dissect the longer request in Expanded Currency Mode */
+            break;
+        case MDB_CL_VEND_SUC:
+                proto_tree_add_item(tree, hf_mdb_cl_item_num, tvb, offset, 2,
+                        ENC_BIG_ENDIAN);
+            break;
+    }
+}
+
 static gint
 dissect_mdb_cl_id_fields(tvbuff_t *tvb, gint offset, proto_tree *tree)
 {
@@ -336,9 +402,7 @@ static void dissect_mdb_mst_per_cl( tvbuff_t *tvb, gint offset, gint len _U_,
             dissect_mdb_cl_setup(tvb, offset, pinfo, cl_tree);
             break;
         case MDB_CL_CMD_VEND:
-            proto_tree_add_item_ret_uint(cl_tree, hf_mdb_cl_vend_sub,
-                    tvb, offset, 1, ENC_BIG_ENDIAN, &sub_cmd);
-            s = try_val_to_str(sub_cmd, mdb_cl_vend_sub_cmd);
+            dissect_mdb_cl_vend(tvb, offset, pinfo, cl_tree);
             break;
         case MDB_CL_CMD_READER:
             proto_tree_add_item_ret_uint(cl_tree, hf_mdb_cl_reader_sub,
@@ -372,11 +436,40 @@ static void dissect_mdb_per_mst_cl( tvbuff_t *tvb, gint offset,
         case MDB_CL_RESP_RD_CFG_DATA:
             dissect_mdb_cl_rd_cfg_data(tvb, offset, pinfo, cl_tree);
             break;
+        case MDB_CL_RESP_VEND_APRV:
+            if (tvb_reported_length_remaining(tvb, offset) == 3) {
+                proto_tree_add_item(cl_tree, hf_mdb_cl_vend_amt, tvb, offset,
+                        2, ENC_BIG_ENDIAN);
+            }
+            /* XXX - dissect the longer response in Expanded Currency Mode */
+            break;
         case MDB_CL_RESP_PER_ID:
             dissect_mdb_cl_id_fields(tvb, offset, tree);
             /* XXX - check if we have Optional Feature Bits */
             break;
     }
+}
+
+static void dissect_mdb_mst_per_cgw( tvbuff_t *tvb _U_, gint offset _U_, gint len _U_,
+        packet_info *pinfo, proto_tree *tree _U_, proto_item *cmd_it,
+        guint8 addr_cmd_byte)
+{
+    const gchar *s;
+
+    s = val_to_str_const(addr_cmd_byte, mdb_cgw_addr_cmd, "Unknown");
+    proto_item_append_text(cmd_it, " (%s)", s);
+    col_set_str(pinfo->cinfo, COL_INFO, s);
+}
+
+static void dissect_mdb_per_mst_cgw( tvbuff_t *tvb, gint offset,
+        gint len, packet_info *pinfo _U_, proto_tree *tree)
+{
+    proto_tree *cgw_tree;
+
+    cgw_tree = proto_tree_add_subtree(tree, tvb, offset, len, ett_mdb_cgw,
+            NULL, "Communications Gateway");
+
+    proto_tree_add_item(cgw_tree, hf_mdb_cgw_resp, tvb, offset, 1, ENC_BIG_ENDIAN);
 }
 
 static void dissect_mdb_mst_per(tvbuff_t *tvb, gint offset, packet_info *pinfo,
@@ -434,7 +527,10 @@ static void dissect_mdb_mst_per(tvbuff_t *tvb, gint offset, packet_info *pinfo,
             dissect_mdb_mst_per_cl(tvb, offset, data_len, pinfo, tree,
                     cmd_it, addr_byte);
             break;
-
+        case ADDR_COMMS_GW:
+            dissect_mdb_mst_per_cgw(tvb, offset, data_len, pinfo, tree,
+                    cmd_it, addr_byte);
+            break;
         default:
             if (data_len > 0) {
                 proto_tree_add_item(tree, hf_mdb_data,
@@ -475,7 +571,9 @@ static void dissect_mdb_per_mst(tvbuff_t *tvb, gint offset, packet_info *pinfo,
         case ADDR_CASHLESS1:
             dissect_mdb_per_mst_cl(tvb, offset, data_len, pinfo, tree);
             break;
-
+        case ADDR_COMMS_GW:
+            dissect_mdb_per_mst_cgw(tvb, offset, data_len, pinfo, tree);
+            break;
         default:
             proto_tree_add_item(tree, hf_mdb_data, tvb, offset, data_len, ENC_NA);
             break;
@@ -555,7 +653,8 @@ void proto_register_mdb(void)
     static gint *ett[] = {
         &ett_mdb,
         &ett_mdb_hdr,
-        &ett_mdb_cl
+        &ett_mdb_cl,
+        &ett_mdb_cgw
     };
 
     static hf_register_info hf[] = {
@@ -607,6 +706,14 @@ void proto_register_mdb(void)
             { "Sub-command", "mdb.cashless.vend_sub_cmd",
                 FT_UINT8, BASE_HEX, VALS(mdb_cl_vend_sub_cmd), 0, NULL, HFILL }
         },
+        { &hf_mdb_cl_item_price,
+            { "Item Price", "mdb.cashless.item_price",
+                FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cl_item_num,
+            { "Item Number", "mdb.cashless.item_number",
+                FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL }
+        },
         { &hf_mdb_cl_reader_sub,
             { "Sub-command", "mdb.cashless.reader_sub_cmd",
                 FT_UINT8, BASE_HEX, VALS(mdb_cl_reader_sub_cmd), 0, NULL, HFILL }
@@ -627,6 +734,10 @@ void proto_register_mdb(void)
             { "Application maximum response time", "mdb.cashless.max_rsp_time",
                 FT_RELATIVE_TIME, BASE_NONE, NULL, 0, NULL, HFILL }
         },
+        { &hf_mdb_cl_vend_amt,
+            { "Vend Amount", "mdb.cashless.vend_amount",
+                FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL }
+        },
         { &hf_mdb_cl_expns_sub,
             { "Sub-command", "mdb.cashless.expansion_sub_cmd",
                 FT_UINT8, BASE_HEX, VALS(mdb_cl_expns_sub_cmd), 0, NULL, HFILL }
@@ -646,6 +757,10 @@ void proto_register_mdb(void)
         { &hf_mdb_cl_opt_feat,
             { "Optional Feature Bits", "mdb.cashless.opt_feature_bits",
                 FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL }
+        },
+        { &hf_mdb_cgw_resp,
+            { "Response", "mdb.comms_gw.resp",
+                FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL }
         },
         { &hf_mdb_ack,
             { "Ack byte", "mdb.ack",
