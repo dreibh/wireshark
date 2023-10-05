@@ -2254,7 +2254,7 @@ install_spandsp() {
         # support.
         #
         patch -p0 <${topdir}/macosx-support-lib-patches/spandsp-configure-patch || exit 1
-        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure || exit 1
+        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS -I/usr/local/include" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS -L/usr/local/lib" ./configure || exit 1
         make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
         cd ..
@@ -2577,7 +2577,7 @@ uninstall_brotli() {
 install_minizip() {
     if [ "$ZLIB_VERSION" ] && [ ! -f minizip-$ZLIB_VERSION-done ] ; then
         echo "Downloading, building, and installing zlib for minizip:"
-        [ -f zlib-$ZLIB_VERSION.tar.gz ] || curl -L -o zlib-$ZLIB_VERSION.tar.gz https://zlib.net/zlib-$ZLIB_VERSION.tar.gz || exit 1
+        [ -f zlib-$ZLIB_VERSION.tar.gz ] || curl -L -o zlib-$ZLIB_VERSION.tar.gz https://zlib.net/fossils/zlib-$ZLIB_VERSION.tar.gz || exit 1
         $no_build && echo "Skipping installation" && return
         gzcat zlib-$ZLIB_VERSION.tar.gz | tar xf - || exit 1
         #
@@ -2641,6 +2641,9 @@ uninstall_sparkle() {
     if [ -n "$installed_sparkle_version" ]; then
         echo "Uninstalling Sparkle:"
         sudo rm -rf "/usr/local/Sparkle-$installed_sparkle_version"
+
+        rm sparkle-$installed_sparkle_version-done
+
         if [ "$#" -eq 1 ] && [ "$1" = "-r" ] ; then
             rm -f "Sparkle-$installed_sparkle_version.tar.xz"
         fi

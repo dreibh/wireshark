@@ -89,13 +89,12 @@ typedef match_result (*ws_match_function)(capture_file *, frame_data *,
 static match_result match_protocol_tree(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
 static void match_subtree_text(proto_node *node, gpointer data);
+static void match_subtree_text_reverse(proto_node *node, gpointer data);
 static match_result match_summary_line(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
 static match_result match_narrow_and_wide(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
 static match_result match_narrow_and_wide_case(capture_file *cf, frame_data *fdata,
-        wtap_rec *, Buffer *, void *criterion);
-static match_result match_narrow(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
 static match_result match_narrow_case(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
@@ -3149,12 +3148,27 @@ cf_write_json_packets(capture_file *cf, print_args_t *print_args)
 
 gboolean
 cf_find_packet_protocol_tree(capture_file *cf, const char *string,
-        search_direction dir)
+        search_direction dir, bool multiple)
 {
     match_data mdata;
 
+    mdata.frame_matched = FALSE;
+    mdata.halt = FALSE;
     mdata.string = string;
     mdata.string_len = strlen(string);
+    mdata.cf = cf;
+    mdata.prev_finfo = cf->finfo_selected;
+    if (multiple && cf->finfo_selected && cf->edt) {
+        if (dir == SD_FORWARD) {
+            proto_tree_children_foreach(cf->edt->tree, match_subtree_text, &mdata);
+        } else {
+            proto_tree_children_foreach(cf->edt->tree, match_subtree_text_reverse, &mdata);
+        }
+        if (mdata.frame_matched) {
+            packet_list_select_finfo(mdata.finfo);
+            return TRUE;
+        }
+    }
     return find_packet(cf, match_protocol_tree, &mdata, dir);
 }
 
@@ -3163,11 +3177,17 @@ cf_find_string_protocol_tree(capture_file *cf, proto_tree *tree)
 {
     match_data mdata;
     mdata.frame_matched = FALSE;
+    mdata.halt = FALSE;
     mdata.string = convert_string_case(cf->sfilter, cf->case_type);
     mdata.string_len = strlen(mdata.string);
     mdata.cf = cf;
+    mdata.prev_finfo = NULL;
     /* Iterate through all the nodes looking for matching text */
-    proto_tree_children_foreach(tree, match_subtree_text, &mdata);
+    if (cf->dir == SD_FORWARD) {
+        proto_tree_children_foreach(tree, match_subtree_text, &mdata);
+    } else {
+        proto_tree_children_foreach(tree, match_subtree_text_reverse, &mdata);
+    }
     g_free((char *)mdata.string);
     return mdata.frame_matched ? mdata.finfo : NULL;
 }
@@ -3195,6 +3215,12 @@ match_protocol_tree(capture_file *cf, frame_data *fdata,
     /* Iterate through all the nodes, seeing if they have text that matches. */
     mdata->cf = cf;
     mdata->frame_matched = FALSE;
+    mdata->halt = FALSE;
+    mdata->prev_finfo = NULL;
+    /* We don't care about the direction here, because we're just looking
+     * for one match and we'll destroy this tree anyway. (We find the actual
+     * field later in PacketList::selectionChanged().) Forwards is faster.
+     */
     proto_tree_children_foreach(edt.tree, match_subtree_text, mdata);
     epan_dissect_cleanup(&edt);
     return mdata->frame_matched ? MR_MATCHED : MR_NOTMATCHED;
@@ -3227,6 +3253,107 @@ match_subtree_text(proto_node *node, gpointer data)
     if (proto_item_is_hidden(node))
         return;
 
+    if (mdata->prev_finfo) {
+        /* Haven't found the old match, so don't match this node. */
+        if (fi == mdata->prev_finfo) {
+            /* Found the old match, look for the next one after this. */
+            mdata->prev_finfo = NULL;
+        }
+    } else {
+        /* was a free format label produced? */
+        if (fi->rep) {
+            label_ptr = fi->rep->representation;
+        } else {
+            /* no, make a generic label */
+            label_ptr = label_str;
+            proto_item_fill_label(fi, label_str);
+        }
+
+        if (cf->regex) {
+            if (ws_regex_matches(cf->regex, label_ptr)) {
+                mdata->frame_matched = TRUE;
+                mdata->finfo = fi;
+                return;
+            }
+        } else if (cf->case_type) {
+            /* Case insensitive match */
+            label_len = strlen(label_ptr);
+            i_restart = 0;
+            for (i = 0; i < label_len; i++) {
+                if (i_restart == 0 && c_match == 0 && (label_len - i < string_len))
+                    break;
+                c_char = label_ptr[i];
+                c_char = g_ascii_toupper(c_char);
+                /* If c_match is non-zero, save candidate for retrying full match. */
+                if (c_match > 0 && i_restart == 0 && c_char == string[0])
+                    i_restart = i;
+                if (c_char == string[c_match]) {
+                    c_match++;
+                    if (c_match == string_len) {
+                        mdata->frame_matched = TRUE;
+                        mdata->finfo = fi;
+                        /* No need to look further; we have a match */
+                        return;
+                    }
+                } else if (i_restart) {
+                    i = i_restart;
+                    c_match = 1;
+                    i_restart = 0;
+                } else
+                    c_match = 0;
+            }
+        } else if (strstr(label_ptr, string) != NULL) {
+            /* Case sensitive match */
+            mdata->frame_matched = TRUE;
+            mdata->finfo = fi;
+            return;
+        }
+    }
+
+    /* Recurse into the subtree, if it exists */
+    if (node->first_child != NULL)
+        proto_tree_children_foreach(node, match_subtree_text, mdata);
+}
+
+static void
+match_subtree_text_reverse(proto_node *node, gpointer data)
+{
+    match_data   *mdata      = (match_data *) data;
+    const gchar  *string     = mdata->string;
+    size_t        string_len = mdata->string_len;
+    capture_file *cf         = mdata->cf;
+    field_info   *fi         = PNODE_FINFO(node);
+    gchar         label_str[ITEM_LABEL_LENGTH];
+    gchar        *label_ptr;
+    size_t        label_len;
+    guint32       i, i_restart;
+    guint8        c_char;
+    size_t        c_match    = 0;
+
+    /* dissection with an invisible proto tree? */
+    ws_assert(fi);
+
+    /* We don't have an easy way to search backwards in the tree
+     * (see also, proto_find_field_from_offset()) because we don't
+     * have a previous node pointer, so we search backwards by
+     * searching forwards, only stopping if we see the old match
+     * (if we have one).
+     */
+
+    if (mdata->halt) {
+        return;
+    }
+
+    /* Don't match invisible entries. */
+    if (proto_item_is_hidden(node))
+        return;
+
+    if (mdata->prev_finfo && fi == mdata->prev_finfo) {
+        /* Found the old match, use the previous match. */
+        mdata->halt = TRUE;
+        return;
+    }
+
     /* was a free format label produced? */
     if (fi->rep) {
         label_ptr = fi->rep->representation;
@@ -3240,7 +3367,6 @@ match_subtree_text(proto_node *node, gpointer data)
         if (ws_regex_matches(cf->regex, label_ptr)) {
             mdata->frame_matched = TRUE;
             mdata->finfo = fi;
-            return;
         }
     } else if (cf->case_type) {
         /* Case insensitive match */
@@ -3257,10 +3383,9 @@ match_subtree_text(proto_node *node, gpointer data)
             if (c_char == string[c_match]) {
                 c_match++;
                 if (c_match == string_len) {
-                    /* No need to look further; we have a match */
                     mdata->frame_matched = TRUE;
                     mdata->finfo = fi;
-                    return;
+                    break;
                 }
             } else if (i_restart) {
                 i = i_restart;
@@ -3273,12 +3398,11 @@ match_subtree_text(proto_node *node, gpointer data)
         /* Case sensitive match */
         mdata->frame_matched = TRUE;
         mdata->finfo = fi;
-        return;
     }
 
     /* Recurse into the subtree, if it exists */
     if (node->first_child != NULL)
-        proto_tree_children_foreach(node, match_subtree_text, mdata);
+        proto_tree_children_foreach(node, match_subtree_text_reverse, mdata);
 }
 
 gboolean
@@ -3435,7 +3559,9 @@ cf_find_packet_data(capture_file *cf, const guint8 *string, size_t string_size,
                     return find_packet(cf, match_narrow_and_wide, &info, dir);
 
                 case SCS_NARROW:
-                    return find_packet(cf, match_narrow, &info, dir);
+                    /* Narrow, case-sensitive match is the same as looking
+                     * for a converted hexstring. */
+                    return find_packet(cf, match_binary, &info, dir);
 
                 case SCS_WIDE:
                     return find_packet(cf, match_wide, &info, dir);
@@ -3484,10 +3610,9 @@ match_narrow_and_wide(capture_file *cf, frame_data *fdata,
                 c_match++;
                 if (c_match == textlen) {
                     result = MR_MATCHED;
-                    cf->search_pos = i + (guint32)(pd - buf_start);
-                    /* Save the position of the last character
-                       for highlighting the field. */
-                    cf->search_len = i + 1;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (guint32)(pd - buf_start);
+                    cf->search_len = (guint32)(textlen);
                     goto done;
                 }
             } else {
@@ -3503,10 +3628,9 @@ match_narrow_and_wide(capture_file *cf, frame_data *fdata,
                 c_match++;
                 if (c_match == textlen) {
                     result = MR_MATCHED;
-                    cf->search_pos = i + (guint32)(pd - buf_start);
-                    /* Save the position of the last character
-                       for highlighting the field. */
-                    cf->search_len = i + 1;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (guint32)(pd - buf_start);
+                    cf->search_len = (guint32)(textlen);
                     goto done;
                 }
                 i++;
@@ -3560,10 +3684,9 @@ match_narrow_and_wide_case(capture_file *cf, frame_data *fdata,
                 c_match++;
                 if (c_match == textlen) {
                     result = MR_MATCHED;
-                    cf->search_pos = i + (guint32)(pd - buf_start);
-                    /* Save the position of the last character
-                       for highlighting the field. */
-                    cf->search_len = i + 1;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (guint32)(pd - buf_start);
+                    cf->search_len = (guint32)(textlen);
                     goto done;
                 }
             } else {
@@ -3579,64 +3702,13 @@ match_narrow_and_wide_case(capture_file *cf, frame_data *fdata,
                 c_match++;
                 if (c_match == textlen) {
                     result = MR_MATCHED;
-                    cf->search_pos = i + (guint32)(pd - buf_start);
-                    /* Save the position of the last character
-                       for highlighting the field. */
-                    cf->search_len = i + 1;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (guint32)(pd - buf_start);
+                    cf->search_len = (guint32)(textlen);
                     goto done;
                 }
                 i++;
                 if (pd + i >= buf_end || pd[i] != '\0') break;
-            } else {
-                break;
-            }
-        }
-    }
-
-done:
-    return result;
-}
-
-static match_result
-match_narrow(capture_file *cf, frame_data *fdata,
-        wtap_rec *rec, Buffer *buf, void *criterion)
-{
-    cbs_t        *info       = (cbs_t *)criterion;
-    const guint8 *ascii_text = info->data;
-    size_t        textlen    = info->data_len;
-    match_result  result;
-    guint32       buf_len;
-    guint8       *pd, *buf_start, *buf_end;
-    guint32       i;
-    guint8        c_char;
-    size_t        c_match    = 0;
-
-    /* Load the frame's data. */
-    if (!cf_read_record(cf, fdata, rec, buf)) {
-        /* Attempt to get the packet failed. */
-        return MR_ERROR;
-    }
-
-    result = MR_NOTMATCHED;
-    buf_len = fdata->cap_len;
-    buf_start = ws_buffer_start_ptr(buf);
-    buf_end = buf_start + buf_len;
-    for (pd = buf_start; pd < buf_end; pd++) {
-        pd = (guint8 *)memchr(pd, ascii_text[0], buf_end - pd);
-        if (pd == NULL) break;
-        c_match = 0;
-        for (i = 0; pd + i < buf_end; i++) {
-            c_char = pd[i];
-            if (c_char == ascii_text[c_match]) {
-                c_match++;
-                if (c_match == textlen) {
-                    result = MR_MATCHED;
-                    cf->search_pos = i + (guint32)(pd - buf_start);
-                    /* Save the position of the last character
-                       for highlighting the field. */
-                    cf->search_len = i + 1;
-                    goto done;
-                }
             } else {
                 break;
             }
@@ -3684,11 +3756,10 @@ match_narrow_case(capture_file *cf, frame_data *fdata,
             if (c_char == ascii_text[c_match]) {
                 c_match++;
                 if (c_match == textlen) {
+                    /* Save position and length for highlighting the field. */
                     result = MR_MATCHED;
-                    cf->search_pos = i + (guint32)(pd - buf_start);
-                    /* Save the position of the last character
-                       for highlighting the field. */
-                    cf->search_len = i + 1;
+                    cf->search_pos = (guint32)(pd - buf_start);
+                    cf->search_len = (guint32)(textlen);
                     goto done;
                 }
             } else {
@@ -3735,10 +3806,9 @@ match_wide(capture_file *cf, frame_data *fdata,
                 c_match++;
                 if (c_match == textlen) {
                     result = MR_MATCHED;
-                    cf->search_pos = i + (guint32)(pd - buf_start);
-                    /* Save the position of the last character
-                       for highlighting the field. */
-                    cf->search_len = i + 1;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (guint32)(pd - buf_start);
+                    cf->search_len = (guint32)(textlen);
                     goto done;
                 }
                 i++;
@@ -3791,10 +3861,9 @@ match_wide_case(capture_file *cf, frame_data *fdata,
                 c_match++;
                 if (c_match == textlen) {
                     result = MR_MATCHED;
-                    cf->search_pos = i + (guint32)(pd - buf_start);
-                    /* Save the position of the last character
-                       for highlighting the field. */
-                    cf->search_len = i + 1;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (guint32)(pd - buf_start);
+                    cf->search_len = (guint32)(textlen);
                     goto done;
                 }
                 i++;
@@ -3814,13 +3883,9 @@ match_binary(capture_file *cf, frame_data *fdata,
         wtap_rec *rec, Buffer *buf, void *criterion)
 {
     cbs_t        *info        = (cbs_t *)criterion;
-    const guint8 *binary_data = info->data;
     size_t        datalen     = info->data_len;
     match_result  result;
-    guint32       buf_len;
-    guint8       *pd, *buf_start, *buf_end;
-    guint32       i;
-    size_t        c_match     = 0;
+    const uint8_t *pd, *buf_start;
 
     /* Load the frame's data. */
     if (!cf_read_record(cf, fdata, rec, buf)) {
@@ -3829,34 +3894,15 @@ match_binary(capture_file *cf, frame_data *fdata,
     }
 
     result = MR_NOTMATCHED;
-    buf_len = fdata->cap_len;
     buf_start = ws_buffer_start_ptr(buf);
-    buf_end = buf_start + buf_len;
-    /* Not clear if using memcmp() is faster. memmem() on systems that
-     * have it should be faster, though.
-     */
-    for (pd = buf_start; pd < buf_end; pd++) {
-        pd = (guint8 *)memchr(pd, binary_data[0], buf_end - pd);
-        if (pd == NULL) break;
-        c_match = 0;
-        for (i = 0; pd + i < buf_end; i++) {
-            if (pd[i] == binary_data[c_match]) {
-                c_match++;
-                if (c_match == datalen) {
-                    result = MR_MATCHED;
-                    cf->search_pos = i + (guint32)(pd - buf_start);
-                    /* Save the position of the last character
-                       for highlighting the field. */
-                    cf->search_len = i + 1;
-                    goto done;
-                }
-            } else {
-                break;
-            }
-        }
+    pd = ws_memmem(buf_start, fdata->cap_len, info->data, datalen);
+    if (pd != NULL) {
+        result = MR_MATCHED;
+        /* Save position and length for highlighting the field. */
+        cf->search_pos = (uint32_t)(pd - buf_start);
+        cf->search_len = (uint32_t)datalen;
     }
 
-done:
     return result;
 }
 
@@ -3875,10 +3921,14 @@ match_regex(capture_file *cf, frame_data *fdata,
 
     if (ws_regex_matches_pos(cf->regex,
                                 (const gchar *)ws_buffer_start_ptr(buf),
-                                fdata->cap_len,
+                                fdata->cap_len, 0,
                                 result_pos)) {
+        //TODO: A chosen regex can match the empty string (zero length)
+        // which doesn't make a lot of sense for searching the packet bytes.
+        // Should we search with the PCRE2_NOTEMPTY option?
         //TODO: Fix cast.
-        cf->search_pos = (guint32)(result_pos[1] - 1); /* last byte = end position - 1 */
+        /* Save position and length for highlighting the field. */
+        cf->search_pos = (guint32)(result_pos[0]);
         cf->search_len = (guint32)(result_pos[1] - result_pos[0]);
         result = MR_MATCHED;
     }
