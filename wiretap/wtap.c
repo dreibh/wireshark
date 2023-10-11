@@ -8,6 +8,8 @@
 
 #include <config.h>
 
+#define WS_LOG_DOMAIN LOG_DOMAIN_WIRETAP
+
 #include <string.h>
 
 #include <sys/types.h>
@@ -19,7 +21,6 @@
 #include <wsutil/file_util.h>
 #include <wsutil/buffer.h>
 #include <wsutil/ws_assert.h>
-#include <wsutil/wslog.h>
 #include <wsutil/exported_pdu_tlvs.h>
 #ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
