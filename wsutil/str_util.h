@@ -152,7 +152,14 @@ WS_DLL_PUBLIC
 bool isdigit_string(const unsigned char *str);
 
 /** Finds the first occurrence of string 'needle' in string 'haystack'.
- *  The matching is done in a case insensitive manner.
+ *  The matching is done ignoring the case of ASCII characters in a
+ *  non-locale-dependent way.
+ *
+ *  The string is assumed to be in a character encoding, such as
+ *  an ISO 8859 or other EUC encoding, or UTF-8, in which all
+ *  bytes in the range 0x00 through 0x7F are ASCII characters and
+ *  non-ASCII characters are constructed from one or more bytes in
+ *  the range 0x80 through 0xFF.
  *
  * @param haystack The string possibly containing the substring
  * @param needle The substring to be searched
@@ -160,7 +167,7 @@ bool isdigit_string(const unsigned char *str);
  *   Otherwise it returns NULL.
  */
 WS_DLL_PUBLIC
-const char *ws_strcasestr(const char *haystack, const char *needle);
+const char *ws_ascii_strcasestr(const char *haystack, const char *needle);
 
 WS_DLL_PUBLIC
 char *ws_escape_string(wmem_allocator_t *alloc, const char *string, bool add_quotes);
