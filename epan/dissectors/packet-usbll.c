@@ -1526,7 +1526,8 @@ usbll_get_endpoint_info(packet_info *pinfo, guint8 addr, guint8 ep, gboolean fro
         usb_conv_info_t *usb_conv_info;
         usbll_ep_type_t  type = USBLL_EP_UNKNOWN;
         guint16          max_packet_size = 0;
-        usb_conv_info = get_existing_usb_ep_conv_info(pinfo, 0, addr, ep);
+        guint8           endpoint = ep | (from_host ? 0 : 0x80);
+        usb_conv_info = get_existing_usb_ep_conv_info(pinfo, 0, addr, endpoint);
         if (usb_conv_info && usb_conv_info->max_packet_size)
         {
             type = usbll_ep_type_from_urb_type(usb_conv_info->descriptor_transfer_type);
@@ -1769,7 +1770,7 @@ usbll_construct_urb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                     DISSECTOR_ASSERT_NOT_REACHED();
             }
             pseudo_urb.device_address = data->transaction->address;
-            pseudo_urb.endpoint = data->transaction->endpoint;
+            pseudo_urb.endpoint = data->transaction->endpoint | (transfer->from_host ? 0 : 0x80);
             pseudo_urb.bus_id = 0;
             pseudo_urb.speed = usbll_get_data_transaction_speed(data);
             dissect_usb_common(transfer_tvb, pinfo, proto_tree_get_parent_tree(tree),
@@ -1780,7 +1781,7 @@ usbll_construct_urb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 static gint
 dissect_usbll_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset,
-                   guint8 pid, usbll_data_t *data)
+                   guint8 pid, usbll_data_t *data, gint *payload_size)
 {
     /* TODO: How to determine the expected DATA size? */
     guint16                computed_crc, actual_crc;
@@ -2060,7 +2061,7 @@ dissect_usbll_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offs
         }
     }
 
-    usbll_construct_urb(tvb, pinfo, tree, data_offset, data_size, data);
+    *payload_size = data_size;
 
     return offset;
 }
@@ -2293,8 +2294,6 @@ dissect_usbll_handshake(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *t
         }
     }
 
-    usbll_construct_urb(tvb, pinfo, tree, offset, 0, data);
-
     return offset;
 }
 
@@ -2381,6 +2380,8 @@ dissect_usbll_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
     proto_item       *item;
     proto_tree       *tree;
     gint              offset = 0;
+    gint              data_offset;
+    gint              data_size;
     guint8            pid;
     gboolean          is_subpid;
     const gchar      *str;
@@ -2419,6 +2420,12 @@ dissect_usbll_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
         expert_add_info(pinfo, item, &ei_invalid_pid);
     }
 
+    /* If handler updates data size, then it means we should process with data
+     * reassembly at data offset with the provided data size.
+     */
+    data_offset = offset;
+    data_size = -1;
+
     if (is_subpid) {
         switch (pid)
         {
@@ -2444,7 +2451,7 @@ dissect_usbll_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
             case USB_PID_DATA_DATA1:
             case USB_PID_DATA_DATA2:
             case USB_PID_DATA_MDATA:
-                offset = dissect_usbll_data(tvb, pinfo, tree, offset, pid, data);
+                offset = dissect_usbll_data(tvb, pinfo, tree, offset, pid, data, &data_size);
                 break;
 
             case USB_PID_HANDSHAKE_ACK:
@@ -2452,6 +2459,7 @@ dissect_usbll_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
             case USB_PID_HANDSHAKE_NYET:
             case USB_PID_HANDSHAKE_STALL:
                 offset = dissect_usbll_handshake(tvb, pinfo, tree, offset, pid, data);
+                data_size = 0;
                 break;
 
             case USB_PID_TOKEN_SOF:
@@ -2478,6 +2486,10 @@ dissect_usbll_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
     if (tvb_reported_length_remaining(tvb, offset) > 0) {
         proto_tree_add_expert(tree, pinfo, &ei_undecoded, tvb, offset, -1);
         offset += tvb_captured_length_remaining(tvb, offset);
+    }
+
+    if (data_size >= 0) {
+        usbll_construct_urb(tvb, pinfo, tree, data_offset, data_size, data);
     }
 
     return offset;

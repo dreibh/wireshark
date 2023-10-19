@@ -19,11 +19,11 @@ shopt -s extglob
 DARWIN_MAJOR_VERSION=`uname -r | sed 's/\([0-9]*\).*/\1/'`
 
 #
-# The minimum supported version of Qt is 5.9, so the minimum supported version
-# of macOS is OS X 10.10 (Yosemite), aka Darwin 14.0.
+# The minimum supported version of Qt is 5.10, so the minimum supported version
+# of macOS is OS X 10.11 (El Capitan), aka Darwin 15.0.
 #
-if [[ $DARWIN_MAJOR_VERSION -lt 14 ]]; then
-    echo "This script does not support any versions of macOS before Yosemite" 1>&2
+if [[ $DARWIN_MAJOR_VERSION -lt 15 ]]; then
+    echo "This script does not support any versions of macOS before El Capitan" 1>&2
     exit 1
 fi
 
@@ -273,7 +273,7 @@ install_xz() {
         cd xz-$XZ_VERSION
         #
         # This builds and installs liblzma, which libxml2 uses, and
-        # Wireshark uses liblzma, so we need to build this with
+        # Wireshark uses libxml2, so we need to build this with
         # all the minimum-deployment-version and SDK stuff.
         #
         CFLAGS="$CFLAGS -D_FORTIFY_SOURCE=0 $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure || exit 1
@@ -348,7 +348,7 @@ install_pcre() {
         $no_build && echo "Skipping installation" && return
         bzcat pcre-$PCRE_VERSION.tar.bz2 | tar xf - || exit 1
         cd pcre-$PCRE_VERSION
-        ./configure --enable-unicode-properties || exit 1
+        CFLAGS="$CFLAGS -D_FORTIFY_SOURCE=0 $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure --enable-unicode-properties || exit 1
         make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
         cd ..
@@ -646,7 +646,7 @@ install_cmake() {
             # 3.19.3 and later have a macos-universal DMG for 10.13 and later,
             # and a macos10.10-universal DMG for 10.10 and later.
             #
-            if [ "$CMAKE_MINOR_VERSION" -lt 5 ]; then
+            if [ "$CMAKE_MINOR_VERSION" -lt 10 ]; then
                 echo "CMake $CMAKE_VERSION" is too old 1>&2
             elif [ "$CMAKE_MINOR_VERSION" -lt 19 -o \
                  "$CMAKE_VERSION" = 3.19.0 -o \
@@ -1079,11 +1079,11 @@ EOF
         *)
             case $GLIB_MINOR_VERSION in
 
-            [0-9]|1[0-9]|2[0-9]|3[0-7])
+            [0-9]|1[0-9]|2[0-9]|3[0-9]|4[0-9])
                 echo "GLib $GLIB_VERSION" is too old 1>&2
                 ;;
 
-            3[8-9]|4[0-9]|5[0-8])
+            5[0-8])
                 if [ ! -f ./configure ]; then
                     LIBTOOLIZE=glibtoolize ./autogen.sh
                 fi
@@ -1238,11 +1238,11 @@ install_qt() {
         5)
             case $QT_MINOR_VERSION in
 
-            0|1|2|3|4|5|6|7|8)
+            0|1|2|3|4|5|6|7|8|9)
                 echo "Qt $QT_VERSION" is too old 1>&2
                 ;;
 
-            9|10|11|12|13|14)
+            10|11|12|13|14)
                 QT_VOLUME=qt-opensource-mac-x64-$QT_VERSION
                 ;;
             *)
@@ -1807,7 +1807,7 @@ install_zstd() {
         $no_build && echo "Skipping installation" && return
         gzcat zstd-$ZSTD_VERSION.tar.gz | tar xf - || exit 1
         cd zstd-$ZSTD_VERSION
-        make $MAKE_BUILD_OPTS || exit 1
+        CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
         cd ..
         touch zstd-$ZSTD_VERSION-done
