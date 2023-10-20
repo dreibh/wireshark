@@ -89,12 +89,11 @@ $X64Archives = @{
     "nghttp2/nghttp2-1.57.0-1-x64-windows-ws.zip" = "94afb12d63d0830dc25e5605c30a6a91fe1f7284c1e6ddfff177d961d5b52bbd";
     "nghttp3/nghttp3-1.0.0-1-x64-windows-ws.zip" = "219a0024b79627c00fa1c134085678edbfac72b7b5eaf45db84f36e2553e1638";
     "opus/opus-1.3.1-3-win64ws.zip" = "1f7a55a6d2d7215dffa4a43bca8ca05024bd4ba1ac3d0d0c405fd38b09cc2205";
-    "pcre2/pcre2-10.40-1-win64ws.zip" = "17eee615990b23bc859a862c19f5ac10c61776587603bc452285abe073a0fad9";
     "sbc/sbc-2.0-1-x64-windows-ws.zip" = "d1a58f977dcffa168b11b280bd10228191582d263b7c901e50cde7c1c43d9c04";
     "snappy/snappy-1.1.9-1-win64ws.zip" = "fa907724be019bcc55d27ebe88257ba8898b5c38b719099b8164ac78600d81cc";
     "spandsp/spandsp-0.0.6-5-x64-windows-ws.zip" = "cbb18310876ec6f081662253a2d37f5174ac60c58b0b7cd6759852fbcfaa7d7f";
     "speexdsp/speexdsp-1.21.1-1-win64ws.zip" = "d36db62e64ffaee38d9f607bef07d3778d8957ad29757f3eba169eb135f1a4e5";
-    "vcpkg-export/vcpkg-export-20220726-1-win64ws.zip" = "b1eaa8124802532fa8d30789219906f90fb80908844e4458327b3f73995a44b0";
+    "vcpkg-export/vcpkg-export-20231017-1-x64-windows-ws.zip" = "fc5ea8110ce5e905e3342197481a805b6c2c87e273b0370bcc6a5964316c20ee";
     "WinSparkle/WinSparkle-0.8.0-4-gb320893.zip" = "3ae42326bcd34594bc21b1e7948863a839ee76e87d9f4cf6b59b9d9f9a083881";
     "zstd/zstd-1.5.2-1-win64ws.zip" = "d920afe636951cfcf144824d9c075d1f2c13387f4739152fe185fd9c09fc58f2";
 }
@@ -117,12 +116,11 @@ $Arm64Archives = @{
     "nghttp2/nghttp2-1.57.0-1-arm64-windows-ws.zip" = "3f264dc0ccb48850e07ec136dede5b0ad0e39e31ff2d2e6ab215348ce2d9e570";
     "nghttp3/nghttp3-1.0.0-1-arm64-windows-ws.zip" = "cf53090b514d3193d75b81562235ae1e7a8a9d462e37f515f9a9a29c6b469236";
     "opus/opus-1.4-1-win64armws.zip" = "51d10381360d5691b2022dde5b284266d9b0ce9a3c9bd7e86f9a4ff1a4f7d904";
-    "pcre2/pcre2-10.40-1-win64armws.zip" = "e8fc7542845900e7dbecfa4a10d7ec17edf72bc0e8d433268bee111f1d4947d3";
     "sbc/sbc-2.0-1-arm64-windows-ws.zip" = "83cfe4a8b6fa5bae253ecacc1c02e6e4c61b4ad9ad0e5e63f0f30422fb6eac96";
     "snappy/snappy-1.1.9-1-win64armws.zip" = "f3f6ec841024d18df06934ff70f44068a4e8f1008eca1f363257645647f74d4a";
     "spandsp/spandsp-0.0.6-5-arm64-windows-ws.zip" = "fdf01e3c33e739ff9399b7d42cd8230c97cb27ce51865a0f06285a8f68206b6c";
     "speexdsp/speexdsp-1.2.1-1-win64armws.zip" = "1759a9193065f27e50dd79dbb1786d24031ac43ccc48c40dca46d8a48552e3bb";
-    "vcpkg-export/vcpkg-export-20230502-1-win64armws.zip" = "94bc2d98bcb86e79569c7bf638cde8d63175cd65cf07cc219890cdc713707ce9";
+    "vcpkg-export/vcpkg-export-20231017-1-arm64-windows-ws.zip" = "2752e2e059ea13e8b4e1ef5f8892b81b745da6838e513bd6e4e548d290d9f472";
     "WinSparkle/WinSparkle-0.8.0-4-gb320893.zip" = "3ae42326bcd34594bc21b1e7948863a839ee76e87d9f4cf6b59b9d9f9a083881";
     "zstd/zstd-1.5.5-1-win64armws.zip" = "0e448875380cc5d5f5539d994062201bfa564e4a27466bc3fdfec84d9008e51d";
 }

@@ -759,6 +759,7 @@ Windows Build:
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug test-programs.vcxproj
     - C:\Windows\py.exe -m pytest --disable-gui --build-type=Debug
 
+
 Windows Qt5 Build:
   extends: .build-windows
   rules:
