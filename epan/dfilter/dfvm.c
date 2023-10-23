@@ -21,6 +21,7 @@ const char *
 dfvm_opcode_tostr(dfvm_opcode_t code)
 {
 	switch (code) {
+		case DFVM_NULL:			return "(DFVM_NULL)";
 		case DFVM_IF_TRUE_GOTO:		return "IF_TRUE_GOTO";
 		case DFVM_IF_FALSE_GOTO:	return "IF_FALSE_GOTO";
 		case DFVM_CHECK_EXISTS:		return "CHECK_EXISTS";
@@ -582,7 +583,8 @@ append_op_args(wmem_strbuf_t *buf, dfvm_insn_t *insn, GSList **stack_print,
 		case DFVM_NOT:
 		case DFVM_RETURN:
 		case DFVM_SET_CLEAR:
-			ws_assert_not_reached();
+		case DFVM_NULL:
+			ASSERT_DFVM_OP_NOT_REACHED(insn->op);
 	}
 
 	g_free(arg1_str);
@@ -1807,6 +1809,9 @@ dfvm_apply(dfilter_t *df, proto_tree *tree)
 					goto AGAIN;
 				}
 				break;
+
+			case DFVM_NULL:
+				ASSERT_DFVM_OP_NOT_REACHED(insn->op);
 		}
 	}
 

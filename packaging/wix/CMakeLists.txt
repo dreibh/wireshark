@@ -61,6 +61,7 @@ file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}" TOP_SRC_DIR)
 # STAGING_DIR depends on the build configuration so we pass it
 # on the command line below.
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/docbook" DOCBOOK_DIR)
+file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/doc" DOC_DIR)
 
 # To do:
 # - Sync the various version names between CMake and Wix.
@@ -126,7 +127,7 @@ foreach(_dll ${GLIB2_DLLS_RELEASE})
 endforeach()
 file(APPEND "${_all_manifest_wix}" "      <?endif?>\n")
 SET(unique_component "")
-foreach(_dll ${CARES_DLL} ${PCRE2_DLL} ${GCRYPT_DLLS}
+foreach(_dll ${CARES_DLL} ${PCRE2_RELEASE_DLL} ${GCRYPT_DLLS}
 		${GNUTLS_DLLS} ${KERBEROS_DLLS} ${LIBSSH_DLLS} ${LUA_DLL}
 		${LZ4_DLL} ${NGHTTP2_DLL} ${NGHTTP3_DLL} ${SBC_DLL} ${SMI_DLL} ${SNAPPY_DLL}
 		${SPANDSP_DLL} ${BCG729_DLL} ${LIBXML2_DLLS} ${WINSPARKLE_DLL}
@@ -160,7 +161,7 @@ foreach(_dll ${GLIB2_DLLS_RELEASE})
 endforeach()
 file(APPEND "${_all_manifest_wix}" "      <?endif?>\n")
 SET(unique_file "")
-foreach(_dll ${CARES_DLL} ${PCRE2_DLL} ${GCRYPT_DLLS}
+foreach(_dll ${CARES_DLL} ${PCRE2_RELEASE_DLL} ${GCRYPT_DLLS}
 		${GNUTLS_DLLS} ${KERBEROS_DLLS} ${LIBSSH_DLLS} ${LUA_DLL}
 		${LZ4_DLL} ${NGHTTP2_DLL} ${NGHTTP3_DLL} ${SBC_DLL} ${SMI_DLL} ${SNAPPY_DLL}
 		${SPANDSP_DLL} ${BCG729_DLL} ${LIBXML2_DLLS} ${WINSPARKLE_DLL}

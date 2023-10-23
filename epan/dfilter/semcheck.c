@@ -21,6 +21,7 @@
 #include "sttype-set.h"
 #include "sttype-function.h"
 #include "sttype-pointer.h"
+#include "sttype-number.h"
 
 #include <epan/exceptions.h>
 #include <epan/packet.h>
@@ -51,11 +52,6 @@ typedef bool (*FtypeCanFunc)(enum ftenum);
 
 static ftenum_t
 find_logical_ftype(dfwork_t *dfw, stnode_t *st_node);
-
-static ftenum_t
-check_arithmetic_LHS(dfwork_t *dfw, stnode_op_t st_op,
-			stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2,
-			ftenum_t logical_ftype);
 
 static void
 check_relation(dfwork_t *dfw, stnode_op_t st_op,
@@ -176,7 +172,8 @@ compatible_ftypes(ftenum_t a, ftenum_t b)
 			}
 
 		case FT_NUM_TYPES:
-			ws_assert_not_reached();
+		case FT_SCALAR:
+			ASSERT_FTYPE_NOT_REACHED(a);
 	}
 
 	ws_assert_not_reached();
@@ -292,6 +289,63 @@ dfilter_fvalue_from_charconst(dfwork_t *dfw, ftenum_t ftype, stnode_t *st)
 	ws_assert_not_reached();
 }
 
+void
+dfilter_fvalue_from_number(dfwork_t *dfw, ftenum_t ftype, stnode_t *st)
+{
+	fvalue_t *fv = NULL;
+	const char *s = stnode_token(st);
+	char *error_message = NULL;
+	stnumber_t num_type;
+
+	num_type = sttype_number_get_type(st);
+
+	if (ftype == FT_SCALAR) {
+		/* If a scalar was requested then transform the number
+		 * syntax node to an fvalue according to its lexical
+		 * type (integer or float). */
+		switch (num_type) {
+			case STNUM_INTEGER:
+			case STNUM_UNSIGNED:
+				ftype = FT_INT64;
+				break;
+			case STNUM_FLOAT:
+				ftype = FT_DOUBLE;
+				break;
+			case STNUM_NONE:
+				ws_assert_not_reached();
+		}
+	}
+
+	switch (num_type) {
+		case STNUM_INTEGER:
+			fv = fvalue_from_sinteger64(ftype, s, sttype_number_get_integer(st), &error_message);
+			break;
+
+		case STNUM_UNSIGNED:
+			fv = fvalue_from_uinteger64(ftype, s, sttype_number_get_unsigned(st), &error_message);
+			break;
+
+		case STNUM_FLOAT:
+			fv = fvalue_from_floating(ftype, s, sttype_number_get_float(st), &error_message);
+			break;
+
+		case STNUM_NONE:
+			ws_assert_not_reached();
+	}
+
+	if (fv != NULL) {
+		g_free(error_message); // error_message is expected to be null
+		stnode_replace(st, STTYPE_FVALUE, fv);
+		return;
+	}
+	SET_ERROR(dfw, error_message);
+
+	// Failure
+	dfw_set_error_location(dfw, stnode_location(st));
+	FAIL_HERE(dfw);
+	ws_assert_not_reached();
+}
+
 /* Creates a FT_BOOLEAN fvalue with a given value. */
 static fvalue_t*
 mk_boolean_fvalue(bool val)
@@ -385,7 +439,8 @@ mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *
 			break;
 
 		case FT_NUM_TYPES:
-			ws_assert_not_reached();
+		case FT_SCALAR:
+			ASSERT_FTYPE_NOT_REACHED(hfinfo->type);
 	}
 
 	/* Do val_strings exist? */
@@ -580,7 +635,8 @@ is_bytes_type(enum ftenum type)
 			return false;
 
 		case FT_NUM_TYPES:
-			ws_assert_not_reached();
+		case FT_SCALAR:
+			ASSERT_FTYPE_NOT_REACHED(type);
 	}
 
 	ws_assert_not_reached();
@@ -626,6 +682,7 @@ get_logical_ftype(stnode_t *st_node)
 		case STTYPE_STRING:
 		case STTYPE_LITERAL:
 		case STTYPE_CHARCONST:
+		case STTYPE_NUMBER:
 			return FT_NONE;
 
 		case STTYPE_FUNCTION:
@@ -648,7 +705,7 @@ get_logical_ftype(stnode_t *st_node)
 		case STTYPE_NUM_TYPES:
 		case STTYPE_FVALUE:
 		case STTYPE_PCRE:
-			ws_error("invalid syntax type %s", stnode_type_name(st_node));
+			ASSERT_STTYPE_NOT_REACHED(stnode_type_id(st_node));
 	}
 
 	ws_assert_not_reached();
@@ -679,6 +736,7 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 		case STTYPE_STRING:
 		case STTYPE_LITERAL:
 		case STTYPE_CHARCONST:
+		case STTYPE_NUMBER:
 			FAIL(dfw, st_arg1, "%s is neither a field nor a protocol name.",
 					stnode_todisplay(st_arg1));
 			break;
@@ -697,7 +755,7 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 		case STTYPE_PCRE:
 		case STTYPE_ARITHMETIC:
 		case STTYPE_SLICE:
-			ws_assert_not_reached();
+			ASSERT_STTYPE_NOT_REACHED(stnode_type_id(st_arg1));
 	}
 }
 
@@ -860,6 +918,9 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 	else if (type2 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
 	}
+	else if (type2 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype1, st_arg2);
+	}
 	else if (type2 == STTYPE_SLICE) {
 		ftype2 = check_slice(dfw, st_arg2, ftype1);
 
@@ -914,7 +975,7 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 }
 
@@ -949,6 +1010,7 @@ check_relation_LHS_FVALUE(dfwork_t *dfw, stnode_op_t st_op,
 	else if (type2 == STTYPE_STRING ||
 				type2 == STTYPE_LITERAL ||
 				type2 == STTYPE_CHARCONST ||
+				type2 == STTYPE_NUMBER ||
 				type2 == STTYPE_PCRE) {
 		FAIL(dfw, st_node, "Constant expression is invalid.");
 	}
@@ -977,7 +1039,7 @@ check_relation_LHS_FVALUE(dfwork_t *dfw, stnode_op_t st_op,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 
 	type1 = stnode_type_id(st_arg1);
@@ -990,8 +1052,11 @@ check_relation_LHS_FVALUE(dfwork_t *dfw, stnode_op_t st_op,
 	else if (type1 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype2, st_arg1);
 	}
+	else if (type1 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype2, st_arg1);
+	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type1);
 	}
 	if (mk_val_string) {
 		sttype_field_set_value_string(st_arg2, true);
@@ -1053,6 +1118,9 @@ check_relation_LHS_SLICE(dfwork_t *dfw, stnode_op_t st_op _U_,
 	else if (type2 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
 	}
+	else if (type2 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype1, st_arg2);
+	}
 	else if (type2 == STTYPE_SLICE) {
 		ftype2 = check_slice(dfw, st_arg2, ftype1);
 
@@ -1096,7 +1164,7 @@ check_relation_LHS_SLICE(dfwork_t *dfw, stnode_op_t st_op _U_,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 }
 
@@ -1147,6 +1215,9 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, stnode_op_t st_op _U_,
 	}
 	else if (type2 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
+	}
+	else if (type2 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype1, st_arg2);
 	}
 	else if (type2 == STTYPE_SLICE) {
 		ftype2 = check_slice(dfw, st_arg2, ftype1);
@@ -1203,7 +1274,7 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, stnode_op_t st_op _U_,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 }
 
@@ -1250,6 +1321,9 @@ check_relation_LHS_ARITHMETIC(dfwork_t *dfw, stnode_op_t st_op _U_,
 	}
 	else if (type2 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
+	}
+	else if (type2 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype1, st_arg2);
 	}
 	else if (type2 == STTYPE_SLICE) {
 		ftype2 = check_slice(dfw, st_arg2, ftype1);
@@ -1302,7 +1376,7 @@ check_relation_LHS_ARITHMETIC(dfwork_t *dfw, stnode_op_t st_op _U_,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 }
 
@@ -1335,13 +1409,17 @@ check_relation(dfwork_t *dfw, stnode_op_t st_op,
 		case STTYPE_LITERAL:
 		case STTYPE_STRING:
 		case STTYPE_CHARCONST:
+		case STTYPE_NUMBER:
 			check_relation_LHS_FVALUE(dfw, st_op, can_func,
 					allow_partial_value, st_node, st_arg1, st_arg2, find_logical_ftype(dfw, st_node));
 			break;
-		default:
-			/* Should not happen. */
-			FAIL(dfw, st_arg1, "(FIXME) Syntax node type \"%s\" is invalid for relation \"%s\".",
-					stnode_type_name(st_arg1), stnode_todisplay(st_node));
+		case STTYPE_UNINITIALIZED:
+		case STTYPE_PCRE:
+		case STTYPE_FVALUE:
+		case STTYPE_TEST:
+		case STTYPE_SET:
+		case STTYPE_NUM_TYPES:
+			ASSERT_STTYPE_NOT_REACHED(stnode_type_id(st_arg1));
 	}
 }
 
@@ -1536,7 +1614,7 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 		case STNODE_OP_MULTIPLY:
 		case STNODE_OP_DIVIDE:
 		case STNODE_OP_MODULO:
-			ws_assert_not_reached();
+			ASSERT_STNODE_OP_NOT_REACHED(st_op);
 	}
 }
 
@@ -1553,8 +1631,7 @@ check_nonzero(dfwork_t *dfw, stnode_t *st_node)
 			check_slice(dfw, st_node, find_logical_ftype(dfw, st_node));
 			break;
 		default:
-			ws_assert_not_reached();
-			break;
+			ASSERT_STTYPE_NOT_REACHED(stnode_type_id(st_node));
 	}
 }
 
@@ -1582,7 +1659,7 @@ op_to_error_msg(stnode_op_t st_op)
 }
 
 static ftenum_t
-check_arithmetic_LHS(dfwork_t *dfw, stnode_op_t st_op,
+check_arithmetic_LHS_NUMBER(dfwork_t *dfw, stnode_op_t st_op,
 			stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2,
 			ftenum_t logical_ftype)
 {
@@ -1633,7 +1710,7 @@ check_arithmetic_LHS(dfwork_t *dfw, stnode_op_t st_op,
 			can_func = ftype_can_bitwise_and;
 			break;
 		default:
-			ws_assert_not_reached();
+			ASSERT_STNODE_OP_NOT_REACHED(st_op);
 	}
 
 	ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
@@ -1656,6 +1733,53 @@ check_arithmetic_LHS(dfwork_t *dfw, stnode_op_t st_op,
 	return ftype1;
 }
 
+/*
+ * Time arithmetic with scalar multiplication/division only.
+ * An extra limitation is that multiplicative scalars must appear on the
+ * RHS currently.
+ */
+static ftenum_t
+check_arithmetic_LHS_TIME(dfwork_t *dfw, stnode_op_t st_op, stnode_t *st_node,
+			stnode_t *st_arg1, stnode_t *st_arg2,
+			ftenum_t logical_ftype)
+{
+	ftenum_t		ftype1, ftype2;
+
+	sttype_oper_get(st_node, &st_op, &st_arg1, &st_arg2);
+
+	LOG_NODE(st_node);
+
+	switch (st_op) {
+		case STNODE_OP_UNARY_MINUS:
+			ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
+			return ftype1;
+		case STNODE_OP_ADD:
+		case STNODE_OP_SUBTRACT:
+			ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
+			if (!FT_IS_TIME(ftype1)) {
+				FAIL(dfw, st_node, "Left hand side must be a time type, not %s.", ftype_pretty_name(ftype1));
+			}
+			ftype2 = check_arithmetic(dfw, st_arg2, logical_ftype);
+			if (!FT_IS_TIME(ftype2)) {
+				FAIL(dfw, st_node, "Right hand side must be a time type, not %s.", ftype_pretty_name(ftype2));
+			}
+			return ftype1;
+		case STNODE_OP_MULTIPLY:
+		case STNODE_OP_DIVIDE:
+			ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
+			if (!FT_IS_TIME(ftype1)) {
+				FAIL(dfw, st_node, "Left hand side must be a time type, not %s.", ftype_pretty_name(ftype1));
+			}
+			ftype2 = check_arithmetic(dfw, st_arg2, FT_SCALAR);
+			if (!FT_IS_SCALAR(ftype2)) {
+				FAIL(dfw, st_node, "Right hand side must be an integer ou float type, not %s.", ftype_pretty_name(ftype2));
+			}
+			return ftype1;
+		default:
+			ws_error("invalid stnode op %s", stnode_todebug(st_node));
+	}
+}
+
 ftenum_t
 check_arithmetic(dfwork_t *dfw, stnode_t *st_node, ftenum_t logical_ftype)
 {
@@ -1671,6 +1795,11 @@ check_arithmetic(dfwork_t *dfw, stnode_t *st_node, ftenum_t logical_ftype)
 	switch (type) {
 		case STTYPE_LITERAL:
 			dfilter_fvalue_from_literal(dfw, logical_ftype, st_node, false, NULL);
+			ftype = sttype_pointer_ftenum(st_node);
+			break;
+
+		case STTYPE_NUMBER:
+			dfilter_fvalue_from_number(dfw, logical_ftype, st_node);
 			ftype = sttype_pointer_ftenum(st_node);
 			break;
 
@@ -1690,12 +1819,15 @@ check_arithmetic(dfwork_t *dfw, stnode_t *st_node, ftenum_t logical_ftype)
 			break;
 
 		case STTYPE_FVALUE:
-			ftype = fvalue_type_ftenum(stnode_data(st_node));
+			ftype = sttype_pointer_ftenum(st_node);
 			break;
 
 		case STTYPE_ARITHMETIC:
 			sttype_oper_get(st_node, &st_op, &st_arg1, &st_arg2);
-			ftype = check_arithmetic_LHS(dfw, st_op, st_node, st_arg1, st_arg2, logical_ftype);
+			if (FT_IS_TIME(logical_ftype))
+				ftype = check_arithmetic_LHS_TIME(dfw, st_op, st_node, st_arg1, st_arg2, logical_ftype);
+			else
+				ftype = check_arithmetic_LHS_NUMBER(dfw, st_op, st_node, st_arg1, st_arg2, logical_ftype);
 			break;
 
 		default:

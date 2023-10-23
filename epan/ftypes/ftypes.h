@@ -21,6 +21,9 @@
 extern "C" {
 #endif /* __cplusplus */
 
+#define ASSERT_FTYPE_NOT_REACHED(ft) \
+	ws_error("Invalid field type '%s'.", ftype_name(ft))
+
 /* field types */
 enum ftenum {
 	FT_NONE,	/* used for text labels with no value */
@@ -69,7 +72,9 @@ enum ftenum {
 	FT_STRINGZPAD,	/* null-padded string */
 	FT_FCWWN,
 	FT_STRINGZTRUNC,	/* null-truncated string */
-	FT_NUM_TYPES /* last item number plus one */
+	FT_NUM_TYPES, /* last item number plus one */
+	FT_SCALAR,		/* Pseudo-type used only internally for certain
+				 * arithmetic operations. */
 };
 
 #define FT_IS_INT32(ft) \
@@ -112,6 +117,8 @@ enum ftenum {
 #define FT_IS_STRING(ft) \
 	((ft) == FT_STRING || (ft) == FT_STRINGZ || (ft) == FT_STRINGZPAD || \
 	 (ft) == FT_STRINGZTRUNC || (ft) == FT_UINT_STRING)
+
+#define FT_IS_SCALAR(ft) ((ft) == FT_INT64 || (ft) == FT_DOUBLE)
 
 /* field types lengths */
 #define FT_ETHER_LEN		6
@@ -315,6 +322,15 @@ fvalue_from_string(ftenum_t ftype, const char *s, size_t len, char **err_msg);
 fvalue_t*
 fvalue_from_charconst(ftenum_t ftype, unsigned long number, char **err_msg);
 
+fvalue_t*
+fvalue_from_sinteger64(ftenum_t ftype, const char *s, int64_t number, char **err_msg);
+
+fvalue_t*
+fvalue_from_uinteger64(ftenum_t ftype, const char *s, uint64_t number, char **err_msg);
+
+fvalue_t*
+fvalue_from_floating(ftenum_t ftype, const char *s, double number, char **err_msg);
+
 /* Creates the string representation of the field value.
  * Memory for the buffer is allocated based on wmem allocator
  * provided.
@@ -341,8 +357,11 @@ fvalue_to_uinteger64(const fvalue_t *fv, uint64_t *repr);
 WS_DLL_PUBLIC enum ft_result
 fvalue_to_sinteger64(const fvalue_t *fv, int64_t *repr);
 
+WS_DLL_PUBLIC enum ft_result
+fvalue_to_double(const fvalue_t *fv, double *repr);
+
 WS_DLL_PUBLIC ftenum_t
-fvalue_type_ftenum(fvalue_t *fv);
+fvalue_type_ftenum(const fvalue_t *fv);
 
 const char*
 fvalue_type_name(const fvalue_t *fv);

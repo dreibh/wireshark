@@ -2442,6 +2442,13 @@ const value_string aead_id_type_vals[] = {
     { 0,      NULL }
 };
 
+const value_string token_binding_key_parameter_vals[] = {
+    { 0, "rsa2048_pkcs1.5" },
+    { 1, "rsa2048_pss" },
+    { 2, "ecdsap256" },
+    { 0, NULL }
+};
+
 /* Lookup tables }}} */
 
 void
@@ -7308,8 +7315,15 @@ ssl_dissect_hnd_hello_ext_alpn(ssl_common_dissect_t *hf, tvbuff_t *tvb,
         proto_tree_add_item(alpn_tree, hf->hf.hs_ext_alpn_str,
                             tvb, offset, name_length, ENC_ASCII|ENC_NA);
         if (ja4_data && wmem_strbuf_get_len(ja4_data->alpn) == 0) {
-            wmem_strbuf_append_c(ja4_data->alpn, (char)tvb_get_guint8(tvb,offset));
-            wmem_strbuf_append_c(ja4_data->alpn, (char)tvb_get_guint8(tvb,offset + name_length - 1));
+            const char alpn_first_char = (char)tvb_get_guint8(tvb,offset);
+            const char alpn_last_char = (char)tvb_get_guint8(tvb,offset + name_length - 1);
+            if ((g_ascii_isprint(alpn_first_char)) && g_ascii_isprint(alpn_last_char)) {
+                wmem_strbuf_append_printf(ja4_data->alpn, "%c%c", alpn_first_char, alpn_last_char);
+            }
+            else {
+                wmem_strbuf_append_printf(ja4_data->alpn, "%x%x",(alpn_first_char >> 4) & 0x0F,
+                    alpn_last_char & 0x0F);
+            }
         }
         /* Remember first ALPN ProtocolName entry for server. */
         if (hnd_type == SSL_HND_SERVER_HELLO || hnd_type == SSL_HND_ENCRYPTED_EXTENSIONS) {
@@ -7977,6 +7991,73 @@ ssl_dissect_hnd_hello_ext_compress_certificate(ssl_common_dissect_t *hf, tvbuff_
                                 tvb, offset, 2, ENC_BIG_ENDIAN);
             offset += 2;
         }
+        break;
+    default:
+        break;
+    }
+
+    return offset;
+}
+
+static guint32
+ssl_dissect_hnd_hello_ext_token_binding(ssl_common_dissect_t *hf, tvbuff_t *tvb, packet_info *pinfo,
+                                        proto_tree *tree, guint32 offset, guint32 offset_end,
+                                        guint8 hnd_type, SslDecryptSession *ssl _U_)
+{
+   guint32 key_parameters_length, next_offset;
+   proto_item *p_ti;
+   proto_tree *p_tree;
+
+   /* RFC 8472
+    *
+    * struct {
+    *     uint8 major;
+    *     uint8 minor;
+    * } TB_ProtocolVersion;
+    *
+    * enum {
+    *     rsa2048_pkcs1.5(0), rsa2048_pss(1), ecdsap256(2), (255)
+    * } TokenBindingKeyParameters;
+    *
+    * struct {
+    *     TB_ProtocolVersion token_binding_version;
+    *     TokenBindingKeyParameters key_parameters_list<1..2^8-1>
+    * } TokenBindingParameters;
+    */
+
+    switch (hnd_type) {
+    case SSL_HND_CLIENT_HELLO:
+    case SSL_HND_SERVER_HELLO:
+        proto_tree_add_item(tree, hf->hf.hs_ext_token_binding_version_major, tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset += 1;
+        proto_tree_add_item(tree, hf->hf.hs_ext_token_binding_version_minor, tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset += 1;
+
+        if (!ssl_add_vector(hf, tvb, pinfo, tree, offset, offset_end, &key_parameters_length,
+                            hf->hf.hs_ext_token_binding_key_parameters_length, 1, G_MAXUINT8)) {
+            return offset_end;
+        }
+        offset += 1;
+        next_offset = offset + key_parameters_length;
+
+        p_ti = proto_tree_add_none_format(tree,
+                                          hf->hf.hs_ext_token_binding_key_parameters,
+                                          tvb, offset, key_parameters_length,
+                                          "Key parameters identifiers (%d identifier%s)",
+                                          key_parameters_length,
+                                          plurality(key_parameters_length, "", "s"));
+        p_tree = proto_item_add_subtree(p_ti, hf->ett.hs_ext_token_binding_key_parameters);
+
+        while (offset < next_offset) {
+            proto_tree_add_item(p_tree, hf->hf.hs_ext_token_binding_key_parameter,
+                                tvb, offset, 1, ENC_BIG_ENDIAN);
+            offset += 1;
+        }
+
+        if (!ssl_end_vector(hf, tvb, pinfo, p_tree, offset, next_offset)) {
+            offset = next_offset;
+        }
+
         break;
     default:
         break;
@@ -10576,6 +10657,9 @@ ssl_dissect_hnd_extension(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *t
             break;
         case SSL_HND_HELLO_EXT_COMPRESS_CERTIFICATE:
             offset = ssl_dissect_hnd_hello_ext_compress_certificate(hf, tvb, pinfo, ext_tree, offset, next_offset, hnd_type, ssl);
+            break;
+        case SSL_HND_HELLO_EXT_TOKEN_BINDING:
+            offset = ssl_dissect_hnd_hello_ext_token_binding(hf, tvb, pinfo, ext_tree, offset, next_offset, hnd_type, ssl);
             break;
         case SSL_HND_HELLO_EXT_RECORD_SIZE_LIMIT:
             proto_tree_add_item(ext_tree, hf->hf.hs_ext_record_size_limit,

@@ -232,8 +232,8 @@ if(WIN32)
 	file(TO_CMAKE_PATH ${EXTRA_INSTALLER_DIR} _file_download_dir)
 
 	# Download Npcap required by the Windows installer
-	set(NPCAP_VERSION "1.77")
-	set(NPCAP_SHA256 "4b8896513505dde38b8250bfbb1c413deecde78aabda11f6a65c2ee250ddd79f")
+	set(NPCAP_VERSION "1.78")
+	set(NPCAP_SHA256 "deeb39ae22a44ea2698c4a58732e621bc45b84686a444c405491fef946898d90")
 	set(NPCAP_FILENAME "npcap-${NPCAP_VERSION}.exe")
 	set(NPCAP_URL "${LIBS_URL}/Npcap/${NPCAP_FILENAME}")
 	FetchContent_Declare(Npcap
@@ -2075,6 +2075,10 @@ set(DOC_FILES
 )
 
 if (BUILD_logray)
+	set(LOG_INSTALL_DIRS
+		resources/share/logray/profiles
+	)
+
 	set(LOG_INSTALL_FILES
 		docbook/ws.css
 		resources/share/logray/colorfilters
@@ -2530,12 +2534,28 @@ add_custom_command(
 		"${CMAKE_SOURCE_DIR}/resources/share/wireshark/profiles" "${DATAFILE_DIR}/profiles"
 )
 
+set (_log_profiles_data_files)
+if (BUILD_logray AND ENABLE_APPLICATION_BUNDLE)
+	set(_profiles_src_dir ${CMAKE_SOURCE_DIR}/resources/share/logray)
+	file(GLOB _profiles_src_files RELATIVE ${_profiles_src_dir} ${_profiles_src_dir}/profiles/*/*)
+	foreach(_data_file ${_profiles_src_files})
+		list(APPEND _log_profiles_data_files "${LOG_DATAFILE_DIR}/${_data_file}")
+	endforeach()
+
+	add_custom_command(
+		OUTPUT ${_log_profiles_data_files}
+		COMMAND ${CMAKE_COMMAND} -E copy_directory
+			"${CMAKE_SOURCE_DIR}/resources/share/logray/profiles" "${LOG_DATAFILE_DIR}/profiles"
+	)
+endif()
+
 list(APPEND copy_data_files_depends
 	${_dtds_data_files}
 	${_diameter_data_files}
 	${_radius_data_files}
 	${_protobuf_data_files}
 	${_profiles_data_files}
+	${_log_profiles_data_files}
 )
 
 # Copy files including ${INSTALL_FILES} and ${INSTALL_DIRS} to ${DATAFILE_DIR}
