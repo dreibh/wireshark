@@ -92,7 +92,7 @@ NINJA_VERSION=${NINJA_VERSION-1.10.2}
 # The following libraries and tools are required even to build only TShark.
 #
 GETTEXT_VERSION=0.21
-GLIB_VERSION=2.68.4
+GLIB_VERSION=2.76.6
 if [ "$GLIB_VERSION" ]; then
     GLIB_MAJOR_VERSION="`expr $GLIB_VERSION : '\([0-9][0-9]*\).*'`"
     GLIB_MINOR_VERSION="`expr $GLIB_VERSION : '[0-9][0-9]*\.\([0-9][0-9]*\).*'`"
@@ -1419,7 +1419,12 @@ install_libgcrypt() {
         #
         #    https://lists.freebsd.org/pipermail/freebsd-ports-bugs/2010-October/198809.html
         #
-        CFLAGS="$CFLAGS -std=gnu89 $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure --disable-asm || exit 1
+        # We specify "unix" as the random number generator so that we
+        # don't try to use getentropy, because random/rndgetentropy.c
+        # *REQUIRES* Linux getrandom(), which we don't have.  (This should
+        # not matter, as we only use this for decryption, as far as I know.)
+        #
+        CFLAGS="$CFLAGS -std=gnu89 $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" ./configure --disable-asm --enable-random=unix || exit 1
         make $MAKE_BUILD_OPTS || exit 1
         $DO_MAKE_INSTALL || exit 1
         cd ..

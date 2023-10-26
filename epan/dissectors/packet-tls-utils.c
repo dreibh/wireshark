@@ -510,6 +510,16 @@ const value_string ssl_extension_curves[] = {
     { 28, "brainpoolP512r1" }, /* RFC 7027 */
     { 29, "x25519" }, /* RFC 8446 / RFC 8422 */
     { 30, "x448" }, /* RFC 8446 / RFC 8422 */
+    { 31, "brainpoolP256r1tls13" }, /* RFC8734 */
+    { 32, "brainpoolP384r1tls13" }, /* RFC8734 */
+    { 33, "brainpoolP512r1tls13" }, /* RFC8734 */
+    { 34, "GC256A" }, /* RFC9189 */
+    { 35, "GC256B" }, /* RFC9189 */
+    { 36, "GC256C" }, /* RFC9189 */
+    { 37, "GC256D" }, /* RFC9189 */
+    { 38, "GC512A" }, /* RFC9189 */
+    { 39, "GC512B" }, /* RFC9189 */
+    { 40, "GC512C" }, /* RFC9189 */
     { 41, "curveSM2" }, /* RFC 8998 */
     { 256, "ffdhe2048" }, /* RFC 7919 */
     { 257, "ffdhe3072" }, /* RFC 7919 */
@@ -1429,11 +1439,21 @@ const value_string tls13_signature_algorithm[] = {
     { 0x0203, "ecdsa_sha1" },
     { 0x0401, "rsa_pkcs1_sha256" },
     { 0x0403, "ecdsa_secp256r1_sha256" },
+    { 0x0420, "rsa_pkcs1_sha256_legacy" }, /* draft-davidben-tls13-pkcs1-01 */
     { 0x0501, "rsa_pkcs1_sha384" },
     { 0x0503, "ecdsa_secp384r1_sha384" },
+    { 0x0520, "rsa_pkcs1_sha384_legacy" }, /* draft-davidben-tls13-pkcs1-01 */
     { 0x0601, "rsa_pkcs1_sha512" },
     { 0x0603, "ecdsa_secp521r1_sha512" },
+    { 0x0620, "rsa_pkcs1_sha512_legacy" }, /* draft-davidben-tls13-pkcs1-01 */
     { 0x0708, "sm2sig_sm3" },
+    { 0x0709, "gostr34102012_256a" }, /* RFC9367 */
+    { 0x070a, "gostr34102012_256b" }, /* RFC9367 */
+    { 0x070b, "gostr34102012_256c" }, /* RFC9367 */
+    { 0x070c, "gostr34102012_256d" }, /* RFC9367 */
+    { 0x070d, "gostr34102012_512a" }, /* RFC9367 */
+    { 0x070e, "gostr34102012_512b" }, /* RFC9367 */
+    { 0x070f, "gostr34102012_512c" }, /* RFC9367 */
     { 0x0804, "rsa_pss_rsae_sha256" },
     { 0x0805, "rsa_pss_rsae_sha384" },
     { 0x0806, "rsa_pss_rsae_sha512" },
@@ -1442,6 +1462,9 @@ const value_string tls13_signature_algorithm[] = {
     { 0x0809, "rsa_pss_pss_sha256" },
     { 0x080a, "rsa_pss_pss_sha384" },
     { 0x080b, "rsa_pss_pss_sha512" },
+    { 0x081a, "ecdsa_brainpoolP256r1tls13_sha256" }, /* RFC8734 */
+    { 0x081b, "ecdsa_brainpoolP384r1tls13_sha384" }, /* RFC8734 */
+    { 0x081c, "ecdsa_brainpoolP512r1tls13_sha512" }, /* RFC8734 */
     /* PQC digital signature algorithms from OQS-OpenSSL,
         see https://github.com/open-quantum-safe/openssl/blob/OQS-OpenSSL_1_1_1-stable/oqs-template/oqs-sig-info.md */
     { 0xfea0, "dilithium2" },
@@ -4184,64 +4207,6 @@ ssl_decoder_destroy_cb(wmem_allocator_t *allocator _U_, wmem_cb_event_t event _U
 #endif
 
     return FALSE;
-}
-
-static bool
-tls13_cipher_destroy_cb(wmem_allocator_t *allocator _U_, wmem_cb_event_t event _U_, void *user_data)
-{
-    tls13_cipher *cipher = (tls13_cipher *) user_data;
-
-    gcry_cipher_close(cipher->hd);
-
-    return FALSE;
-}
-
-tls13_cipher *
-tls13_cipher_create(const char *label_prefix, int cipher_algo, int cipher_mode, int hash_algo, const StringInfo *secret, const gchar **error)
-{
-    tls13_cipher       *cipher = NULL;
-    guchar             *write_key = NULL, *write_iv = NULL;
-    guint               key_length, iv_length;
-    gcry_cipher_hd_t    hd = NULL;
-    gcry_error_t        err;
-
-    /*
-     * Calculate traffic keys based on RFC 8446 Section 7.
-     */
-    key_length = (guint) gcry_cipher_get_algo_keylen(cipher_algo);
-    iv_length = TLS13_AEAD_NONCE_LENGTH;
-
-    if (!tls13_hkdf_expand_label(hash_algo, secret, label_prefix, "key", key_length, &write_key)) {
-        *error = "Key expansion (key) failed";
-        return NULL;
-    }
-    if (!tls13_hkdf_expand_label(hash_algo, secret, label_prefix, "iv", iv_length, &write_iv)) {
-        *error = "Key expansion (IV) failed";
-        goto end;
-    }
-
-    err = gcry_cipher_open(&hd, cipher_algo, cipher_mode, 0);
-    if (err) {
-        *error = wmem_strdup_printf(wmem_packet_scope(), "Decryption (initialization) failed: %s", gcry_strerror(err));
-        goto end;
-    }
-    err = gcry_cipher_setkey(hd, write_key, key_length);
-    if (err) {
-        *error = wmem_strdup_printf(wmem_packet_scope(), "Decryption (setkey) failed: %s", gcry_strerror(err));
-        gcry_cipher_close(hd);
-        goto end;
-    }
-
-    cipher = wmem_new(wmem_file_scope(), tls13_cipher);
-    wmem_register_callback(wmem_file_scope(), tls13_cipher_destroy_cb, cipher);
-    cipher->hd = hd;
-    memcpy(cipher->iv, write_iv, iv_length);
-    *error = NULL;
-
-end:
-    wmem_free(NULL, write_key);
-    wmem_free(NULL, write_iv);
-    return cipher;
 }
 /* }}} */
 

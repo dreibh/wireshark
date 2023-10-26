@@ -127,6 +127,9 @@ static int hf_diameter_3gpp_feature_list2_s6a_flags_bit24 = -1;
 static int hf_diameter_3gpp_feature_list2_s6a_flags_bit25 = -1;
 static int hf_diameter_3gpp_feature_list2_s6a_flags_bit26 = -1;
 static int hf_diameter_3gpp_feature_list2_s6a_flags_bit27 = -1;
+static int hf_diameter_3gpp_feature_list2_s6a_flags_bit28 = -1;
+static int hf_diameter_3gpp_feature_list2_s6a_flags_bit29 = -1;
+static int hf_diameter_3gpp_feature_list2_s6a_flags_bit30 = -1;
 static int hf_diameter_3gpp_feature_list_gx_flags = -1;
 static int hf_diameter_3gpp_feature_list1_gx_flags_bit0 = -1;
 static int hf_diameter_3gpp_feature_list1_gx_flags_bit1 = -1;
@@ -486,7 +489,9 @@ static int hf_diameter_3gpp_feature_list_s6t_flags_bit4 = -1;
 static int hf_diameter_3gpp_feature_list_s6t_flags_bit5 = -1;
 static int hf_diameter_3gpp_feature_list_s6t_flags_bit6 = -1;
 static int hf_diameter_3gpp_feature_list_s6t_flags_bit7 = -1;
-static int hf_diameter_3gpp_feature_list_s6t_spare_b31_b8 = -1;
+static int hf_diameter_3gpp_feature_list_s6t_flags_bit8 = -1;
+static int hf_diameter_3gpp_feature_list_s6t_flags_bit9 = -1;
+static int hf_diameter_3gpp_feature_list_s6t_spare_b31_b10 = -1;
 static int hf_diameter_3gpp_supported_monitoring_events = -1;
 static int hf_diameter_3gpp_supported_monitoring_events_b0 = -1;
 static int hf_diameter_3gpp_supported_monitoring_events_b1 = -1;
@@ -1057,6 +1062,9 @@ dissect_diameter_3gpp_feature_list(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
             /* 3GPP TS 29.272 Table 7.3.10/2: Features of Feature-List-ID 2 used in S6a/S6d */
             static int * const flags[] = {
                 &hf_diameter_3gpp_feature_list2_s6a_flags_spare_bits,
+                &hf_diameter_3gpp_feature_list2_s6a_flags_bit30,
+                &hf_diameter_3gpp_feature_list2_s6a_flags_bit29,
+                &hf_diameter_3gpp_feature_list2_s6a_flags_bit28,
                 &hf_diameter_3gpp_feature_list2_s6a_flags_bit27,
                 &hf_diameter_3gpp_feature_list2_s6a_flags_bit26,
                 &hf_diameter_3gpp_feature_list2_s6a_flags_bit25,
@@ -1158,7 +1166,9 @@ dissect_diameter_3gpp_feature_list(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
     case DIAM_APPID_3GPP_S6T:
     {
         int* const flags[] = {
-            &hf_diameter_3gpp_feature_list_s6t_spare_b31_b8,
+            &hf_diameter_3gpp_feature_list_s6t_spare_b31_b10,
+            &hf_diameter_3gpp_feature_list_s6t_flags_bit9,
+            &hf_diameter_3gpp_feature_list_s6t_flags_bit8,
             &hf_diameter_3gpp_feature_list_s6t_flags_bit7,
             &hf_diameter_3gpp_feature_list_s6t_flags_bit6,
             &hf_diameter_3gpp_feature_list_s6t_flags_bit5,
@@ -3815,9 +3825,24 @@ proto_register_diameter_3gpp(void)
             FT_BOOLEAN, 32, TFS(&tfs_supported_not_supported), 0x08000000,
             NULL, HFILL }
         },
+        { &hf_diameter_3gpp_feature_list2_s6a_flags_bit28,
+            { "Unlicensed Spectrum as Secondary RAT", "diameter.3gpp.feature_list2_s6a_flags_bit28",
+            FT_BOOLEAN, 32, TFS(&tfs_supported_not_supported), 0x10000000,
+            NULL, HFILL }
+        },
+        { &hf_diameter_3gpp_feature_list2_s6a_flags_bit29,
+            { "Ethernet PDN Type APNs", "diameter.3gpp.feature_list2_s6a_flags_bit29",
+            FT_BOOLEAN, 32, TFS(&tfs_supported_not_supported), 0x20000000,
+            NULL, HFILL }
+        },
+        { &hf_diameter_3gpp_feature_list2_s6a_flags_bit30,
+            { "Extended Reference IDs", "diameter.3gpp.feature_list2_s6a_flags_bit30",
+            FT_BOOLEAN, 32, TFS(&tfs_supported_not_supported), 0x40000000,
+            NULL, HFILL }
+        },
         { &hf_diameter_3gpp_feature_list2_s6a_flags_spare_bits,
         { "Spare", "diameter.3gpp.feature_list2_s6a_flags_spare",
-            FT_UINT32, BASE_HEX, NULL, 0xF0000000,
+            FT_UINT32, BASE_HEX, NULL, 0x80000000,
             NULL, HFILL }
         },
         { &hf_diameter_3gpp_feature_list_gx_flags,
@@ -5813,9 +5838,19 @@ proto_register_diameter_3gpp(void)
           FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000080,
           NULL, HFILL }
         },
-        { &hf_diameter_3gpp_feature_list_s6t_spare_b31_b8,
+        { &hf_diameter_3gpp_feature_list_s6t_flags_bit8,
+        { "Config-Eff-NP", "diameter.3gpp.s6t.b8",
+          FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000100,
+          NULL, HFILL }
+        },
+        { &hf_diameter_3gpp_feature_list_s6t_flags_bit9,
+        { "Extended Reference IDs", "diameter.3gpp.s6t.b9",
+          FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000200,
+          NULL, HFILL }
+        },
+        { &hf_diameter_3gpp_feature_list_s6t_spare_b31_b10,
         { "Spare", "diameter.3gpp.s6t.spare",
-          FT_UINT32, BASE_HEX, NULL, 0xffffff00,
+          FT_UINT32, BASE_HEX, NULL, 0xfffffc00,
           NULL, HFILL }
         },
          { &hf_diameter_3gpp_supported_monitoring_events,
