@@ -52,8 +52,6 @@
 // - Instead of calling QMessageBox, display the error message in the text
 //   box and disable the appropriate controls.
 // - Add a progress bar and connect captureCaptureUpdateContinue to it
-// - User's Guide documents the "Raw" type as "same as ASCII, but saving binary
-//   data". However it currently displays hex-encoded data.
 
 // Matches SplashOverlay.
 static int info_update_freq_ = 100;
@@ -87,6 +85,8 @@ FollowStreamDialog::FollowStreamDialog(QWidget &parent, CaptureFile &cf, int pro
 
     ui->streamNumberSpinBox->setStyleSheet("QSpinBox { min-width: 2em; }");
     ui->subStreamNumberSpinBox->setStyleSheet("QSpinBox { min-width: 2em; }");
+    ui->streamNumberSpinBox->setKeyboardTracking(false);
+    ui->subStreamNumberSpinBox->setKeyboardTracking(false);
 
     follower_ = get_follow_by_proto_id(proto_id);
     if (follower_ == NULL) {
@@ -203,6 +203,8 @@ void FollowStreamDialog::goToPacketForTextPos(int pkt)
 
 void FollowStreamDialog::updateWidgets(bool follow_in_progress)
 {
+    // XXX: If follow_in_progress set cursor to Qt::BusyCursor or WaitCursor,
+    // otherwise unset cursor?
     bool enable = !follow_in_progress;
     if (file_closed_) {
         ui->teStreamContent->setEnabled(true);
@@ -211,9 +213,9 @@ void FollowStreamDialog::updateWidgets(bool follow_in_progress)
 
     ui->cbDirections->setEnabled(enable);
     ui->cbCharset->setEnabled(enable);
-    ui->streamNumberSpinBox->setEnabled(enable);
+    ui->streamNumberSpinBox->setReadOnly(!enable);
     if (get_follow_sub_stream_id_func(follower_) != NULL) {
-        ui->subStreamNumberSpinBox->setEnabled(enable);
+        ui->subStreamNumberSpinBox->setReadOnly(!enable);
     }
     ui->leFind->setEnabled(enable);
     ui->bFind->setEnabled(enable);
@@ -470,9 +472,17 @@ void FollowStreamDialog::removeStreamControls()
     ui->subStreamNumberSpinBox->setVisible(false);
 }
 
+void FollowStreamDialog::resetStream(void *tap_data)
+{
+    follow_info_t *follow_info = static_cast<follow_info_t*>(tap_data);
+    follow_reset_stream(follow_info);
+    // If we ever draw the text while tapping (instead of only after
+    // the tap finishes), reset the GUI here too.
+}
+
 void FollowStreamDialog::resetStream()
 {
-    follow_reset_stream(&follow_info_);
+    FollowStreamDialog::resetStream(&follow_info_);
 }
 
 frs_return_t
@@ -531,7 +541,7 @@ FollowStreamDialog::followStream()
 
 void FollowStreamDialog::addText(QString text, gboolean is_from_server, guint32 packet_num, gboolean colorize)
 {
-    ui->teStreamContent->addText(text, is_from_server, packet_num, colorize);
+    ui->teStreamContent->addText(std::move(text), is_from_server, packet_num, colorize);
 }
 
 // The following keyboard shortcuts should work (although
@@ -586,15 +596,15 @@ void FollowStreamDialog::keyPressEvent(QKeyEvent *event)
 // Causes buffer to detach/deep copy *only* if a character has to be
 // replaced.
 static inline void sanitize_buffer(QByteArray &buffer, size_t nchars) {
-    for (size_t i = 0; i < nchars; i++) {
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    for (int i = 0; i < (int)nchars; i++) {
+#else
+    for (qsizetype i = 0; i < (qsizetype)nchars; i++) {
+#endif
         if (buffer.at(i) == '\n' || buffer.at(i) == '\r' || buffer.at(i) == '\t')
             continue;
         if (! g_ascii_isprint((guchar)buffer.at(i))) {
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-            buffer[static_cast<unsigned>(i)] = '.';
-#else
             buffer[i] = '.';
-#endif
         }
     }
 }
@@ -848,8 +858,6 @@ bool FollowStreamDialog::follow(QString previous_filter, bool use_stream_index, 
     int                 stream_count;
     follow_stream_count_func stream_count_func = NULL;
 
-    resetStream();
-
     if (file_closed_)
     {
         QMessageBox::warning(this, tr("No capture file."), tr("Please make sure you have a capture file opened."));
@@ -904,7 +912,8 @@ bool FollowStreamDialog::follow(QString previous_filter, bool use_stream_index, 
     /* data will be passed via tap callback*/
     if (!registerTapListener(get_follow_tap_string(follower_), &follow_info_,
                                 follow_filter.toUtf8().constData(),
-                                0, NULL, get_follow_tap_handler(follower_), NULL)) {
+                                0, FollowStreamDialog::resetStream,
+                                get_follow_tap_handler(follower_), NULL)) {
         return false;
     }
 
@@ -953,6 +962,24 @@ bool FollowStreamDialog::follow(QString previous_filter, bool use_stream_index, 
 
     /* Run the display filter so it goes in effect - even if it's the
        same as the previous display filter. */
+    /* XXX: This forces a cf_filter_packets() - but if a rescan (or something else
+     * that sets cf->read_lock) is in progress, this will queue the filter
+     * and return immediately. It will also cause a rescan in progress to
+     * stop and restart with the new filter. That also applies to this rescan;
+     * changing the main display filter (from the main window, or from, e.g.
+     * another FollowStreamDialog) will cause this to restart and reset the
+     * tap.
+     *
+     * Other tapping dialogs call cf_retap_packets (which retaps but doesn't
+     * set the main display filter, freeze the packet list, etc.), which
+     * has somewhat different behavior when another dialog tries to retap,
+     * but also results in the taps being reset mid tap.
+     *
+     * Either way, we should be event driven and listening for CaptureEvents
+     * instead of drawing after this returns. (Or like other taps, draw
+     * periodically in a callback, provided that can be done without causing
+     * issues with changing the Decode As type.)
+     */
     emit updateFilter(follow_filter, TRUE);
 
     removeTapListeners();
