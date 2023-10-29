@@ -4225,7 +4225,7 @@ ssl_restore_master_key(SslDecryptSession *ssl, const char *label,
 gboolean
 ssl_generate_pre_master_secret(SslDecryptSession *ssl_session,
                                guint32 length, tvbuff_t *tvb, guint32 offset,
-                               const gchar *ssl_psk,
+                               const gchar *ssl_psk, packet_info *pinfo,
 #ifdef HAVE_LIBGNUTLS
                                GHashTable *key_hash,
 #endif
@@ -4340,7 +4340,7 @@ ssl_generate_pre_master_secret(SslDecryptSession *ssl_session,
         }
 
         StringInfo encrypted_pre_master = {
-            .data = (guchar *)tvb_memdup(wmem_packet_scope(), tvb, offset + skip, encrlen),
+            .data = (guchar *)tvb_memdup(pinfo->pool, tvb, offset + skip, encrlen),
             .data_len = encrlen,
         };
 
@@ -7294,7 +7294,7 @@ ssl_dissect_hnd_hello_ext_alpn(ssl_common_dissect_t *hf, tvbuff_t *tvb,
         if (hnd_type == SSL_HND_SERVER_HELLO || hnd_type == SSL_HND_ENCRYPTED_EXTENSIONS) {
             /* '\0'-terminated string for dissector table match and prefix
              * comparison purposes. */
-            proto_name = tvb_get_string_enc(wmem_packet_scope(), tvb, offset,
+            proto_name = tvb_get_string_enc(pinfo->pool, tvb, offset,
                                             name_length, ENC_ASCII);
         }
         offset += name_length;
@@ -7414,7 +7414,8 @@ ssl_dissect_hnd_hello_ext_reneg_info(ssl_common_dissect_t *hf, tvbuff_t *tvb,
 
 static gint
 ssl_dissect_hnd_hello_ext_key_share_entry(ssl_common_dissect_t *hf, tvbuff_t *tvb, packet_info *pinfo,
-                                          proto_tree *tree, guint32 offset, guint32 offset_end)
+                                          proto_tree *tree, guint32 offset, guint32 offset_end,
+                                          const gchar **group_name_out)
 {
    /* RFC 8446 Section 4.2.8
     *   struct {
@@ -7429,7 +7430,11 @@ ssl_dissect_hnd_hello_ext_key_share_entry(ssl_common_dissect_t *hf, tvbuff_t *tv
 
     proto_tree_add_item_ret_uint(ks_tree, hf->hf.hs_ext_key_share_group, tvb, offset, 2, ENC_BIG_ENDIAN, &group);
     offset += 2;
-    proto_item_append_text(ks_tree, ": Group: %s", val_to_str(group, ssl_extension_curves, "Unknown (%u)"));
+    const gchar *group_name = val_to_str(group, ssl_extension_curves, "Unknown (%u)");
+    proto_item_append_text(ks_tree, ": Group: %s", group_name);
+    if (group_name_out) {
+        *group_name_out = !IS_GREASE_TLS(group) ? group_name : NULL;
+    }
 
     /* opaque key_exchange<1..2^16-1> */
     if (!ssl_add_vector(hf, tvb, pinfo, ks_tree, offset, offset_end, &key_exchange_length,
@@ -7454,6 +7459,8 @@ ssl_dissect_hnd_hello_ext_key_share(ssl_common_dissect_t *hf, tvbuff_t *tvb, pac
     proto_tree *key_share_tree;
     guint32 next_offset;
     guint32 client_shares_length;
+    guint32 group;
+    const gchar *group_name = NULL;
 
     if (offset_end <= offset) {  /* Check if ext_len == 0 and "overflow" (offset + ext_len) > guint32) */
         return offset;
@@ -7470,19 +7477,29 @@ ssl_dissect_hnd_hello_ext_key_share(ssl_common_dissect_t *hf, tvbuff_t *tvb, pac
             }
             offset += 2;
             next_offset = offset + client_shares_length;
+            const char *sep = " ";
             while (offset + 4 <= next_offset) { /* (NamedGroup (2 bytes), key_exchange (1 byte for length, 1 byte minimum data) */
-                offset = ssl_dissect_hnd_hello_ext_key_share_entry(hf, tvb, pinfo, key_share_tree, offset, next_offset);
+                offset = ssl_dissect_hnd_hello_ext_key_share_entry(hf, tvb, pinfo, key_share_tree, offset, next_offset, &group_name);
+                if (group_name) {
+                    proto_item_append_text(tree, "%s%s", sep, group_name);
+                    sep = ", ";
+                }
             }
             if (!ssl_end_vector(hf, tvb, pinfo, key_share_tree, offset, next_offset)) {
                 return next_offset;
             }
         break;
         case SSL_HND_SERVER_HELLO:
-            offset = ssl_dissect_hnd_hello_ext_key_share_entry(hf, tvb, pinfo, key_share_tree, offset, offset_end);
+            offset = ssl_dissect_hnd_hello_ext_key_share_entry(hf, tvb, pinfo, key_share_tree, offset, offset_end, &group_name);
+            if (group_name) {
+                proto_item_append_text(tree, " %s", group_name);
+            }
         break;
         case SSL_HND_HELLO_RETRY_REQUEST:
-            proto_tree_add_item(key_share_tree, hf->hf.hs_ext_key_share_selected_group, tvb, offset, 2, ENC_BIG_ENDIAN );
+            proto_tree_add_item_ret_uint(key_share_tree, hf->hf.hs_ext_key_share_selected_group, tvb, offset, 2, ENC_BIG_ENDIAN, &group);
             offset += 2;
+            group_name = val_to_str(group, ssl_extension_curves, "Unknown (%u)");
+            proto_item_append_text(tree, " %s", group_name);
         break;
         default: /* no default */
         break;
@@ -7634,9 +7651,15 @@ ssl_dissect_hnd_hello_ext_supported_versions(ssl_common_dissect_t *hf, tvbuff_t 
 
     guint version;
     guint8 draft_version, max_draft_version = 0;
+    const char *sep = " ";
     while (offset + 2 <= next_offset) {
         proto_tree_add_item_ret_uint(tree, hf->hf.hs_ext_supported_version, tvb, offset, 2, ENC_BIG_ENDIAN, &version);
         offset += 2;
+
+        if (!IS_GREASE_TLS(version)) {
+            proto_item_append_text(tree, "%s%s", sep, val_to_str(version, ssl_versions, "Unknown (0x%04x)"));
+            sep = ", ";
+        }
 
         draft_version = extract_tls13_draft_version(version);
         max_draft_version = MAX(draft_version, max_draft_version);
@@ -7766,7 +7789,7 @@ ssl_dissect_hnd_hello_ext_oid_filters(ssl_common_dissect_t *hf, tvbuff_t *tvb, p
         offset += oid_length;
 
         /* Append OID to tree label */
-        name = oid_resolved_from_string(wmem_packet_scope(), oid);
+        name = oid_resolved_from_string(pinfo->pool, oid);
         proto_item_append_text(subtree, " (%s)", name ? name : oid);
 
         /* opaque certificate_extension_values<0..2^16-1> */
@@ -7831,8 +7854,10 @@ ssl_dissect_hnd_hello_ext_server_name(ssl_common_dissect_t *hf, tvbuff_t *tvb,
     next_offset = offset + list_length;
 
     while (offset < next_offset) {
-        proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name_type,
-                            tvb, offset, 1, ENC_NA);
+        guint32 name_type;
+        const guint8 *server_name = NULL;
+        proto_tree_add_item_ret_uint(server_name_tree, hf->hf.hs_ext_server_name_type,
+                                     tvb, offset, 1, ENC_NA, &name_type);
         offset++;
 
         /* opaque HostName<1..2^16-1> */
@@ -7842,9 +7867,15 @@ ssl_dissect_hnd_hello_ext_server_name(ssl_common_dissect_t *hf, tvbuff_t *tvb,
         }
         offset += 2;
 
-        proto_tree_add_item(server_name_tree, hf->hf.hs_ext_server_name,
-                            tvb, offset, server_name_length, ENC_ASCII|ENC_NA);
+        proto_tree_add_item_ret_string(server_name_tree, hf->hf.hs_ext_server_name,
+                                       tvb, offset, server_name_length, ENC_ASCII|ENC_NA,
+                                       pinfo->pool, &server_name);
         offset += server_name_length;
+        // Each type must only occur once, so we don't check for duplicates.
+        if (name_type == 0) {
+            proto_item_append_text(tree, " name=%s", server_name);
+            col_append_fstr(pinfo->cinfo, COL_INFO, " (SNI=%s)", server_name);
+        }
     }
     return offset;
 }
@@ -9170,7 +9201,7 @@ ssl_dissect_hnd_hello_ext_esni(ssl_common_dissect_t *hf, tvbuff_t *tvb, packet_i
          */
         proto_tree_add_item(tree, hf->hf.esni_suite, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
-        offset = ssl_dissect_hnd_hello_ext_key_share_entry(hf, tvb, pinfo, tree, offset, offset_end);
+        offset = ssl_dissect_hnd_hello_ext_key_share_entry(hf, tvb, pinfo, tree, offset, offset_end, NULL);
 
         /* opaque record_digest<0..2^16-1> */
         if (!ssl_add_vector(hf, tvb, pinfo, tree, offset, offset_end, &record_digest_length,
@@ -9522,7 +9553,7 @@ ssl_dissect_hnd_cli_hello(ssl_common_dissect_t *hf, tvbuff_t *tvb,
     guint32     compression_methods_length;
     guint8      compression_method;
     guint32     next_offset;
-    wmem_strbuf_t *ja3 = wmem_strbuf_new(wmem_packet_scope(), "");
+    wmem_strbuf_t *ja3 = wmem_strbuf_new(pinfo->pool, "");
     gchar      *ja3_hash;
     gchar      *ja3_dash = "";
     gchar      *ja4, *ja4_r, *ja4_hash, *ja4_b, *ja4_c;
@@ -9757,7 +9788,7 @@ ssl_dissect_hnd_srv_hello(ssl_common_dissect_t *hf, tvbuff_t *tvb,
     proto_item *ti;
     guint32     server_version;
     guint32     cipher_suite;
-    wmem_strbuf_t *ja3 = wmem_strbuf_new(wmem_packet_scope(), "");
+    wmem_strbuf_t *ja3 = wmem_strbuf_new(pinfo->pool, "");
     gchar      *ja3_hash;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL,
@@ -9857,7 +9888,7 @@ ssl_dissect_hnd_new_ses_ticket(ssl_common_dissect_t *hf, tvbuff_t *tvb, packet_i
     offset += 4;
 
     if (lifetime_hint >= 60) {
-        gchar *time_str = unsigned_time_secs_to_str(wmem_packet_scope(), lifetime_hint);
+        gchar *time_str = unsigned_time_secs_to_str(pinfo->pool, lifetime_hint);
         proto_item_append_text(subitem, " (%s)", time_str);
     }
 
@@ -10456,9 +10487,10 @@ ssl_dissect_hnd_extension(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *t
     guint32     next_offset;
     proto_tree *ext_tree;
     gboolean    is_tls13 = session->version == TLSV1DOT3_VERSION;
-    wmem_strbuf_t *ja3_sg = wmem_strbuf_new(wmem_packet_scope(), "");
-    wmem_strbuf_t *ja3_ecpf = wmem_strbuf_new(wmem_packet_scope(), "");
+    wmem_strbuf_t *ja3_sg = wmem_strbuf_new(pinfo->pool, "");
+    wmem_strbuf_t *ja3_ecpf = wmem_strbuf_new(pinfo->pool, "");
     gchar      *ja3_dash = "";
+    guint       supported_version;
 
     /* Extension extensions<0..2^16-2> (for TLS 1.3 HRR/CR min-length is 2) */
     if (!ssl_add_vector(hf, tvb, pinfo, tree, offset, offset_end, &exts_len,
@@ -10507,9 +10539,11 @@ ssl_dissect_hnd_extension(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *t
 
         switch (ext_type) {
         case SSL_HND_HELLO_EXT_SERVER_NAME:
-            offset = ssl_dissect_hnd_hello_ext_server_name(hf, tvb, pinfo, ext_tree, offset, next_offset);
-            if (ja4_data) {
-                ja4_data->server_name_present = TRUE;
+            if (hnd_type == SSL_HND_CLIENT_HELLO) {
+                offset = ssl_dissect_hnd_hello_ext_server_name(hf, tvb, pinfo, ext_tree, offset, next_offset);
+                if (ja4_data) {
+                    ja4_data->server_name_present = TRUE;
+                }
             }
             break;
         case SSL_HND_HELLO_EXT_MAX_FRAGMENT_LENGTH:
@@ -10656,8 +10690,9 @@ ssl_dissect_hnd_extension(ssl_common_dissect_t *hf, tvbuff_t *tvb, proto_tree *t
                 break;
             case SSL_HND_SERVER_HELLO:
             case SSL_HND_HELLO_RETRY_REQUEST:
-                proto_tree_add_item(ext_tree, hf->hf.hs_ext_supported_version, tvb, offset, 2, ENC_BIG_ENDIAN);
+                proto_tree_add_item_ret_uint(ext_tree, hf->hf.hs_ext_supported_version, tvb, offset, 2, ENC_BIG_ENDIAN, &supported_version);
                 offset += 2;
+                proto_item_append_text(ext_tree, " %s", val_to_str(supported_version, ssl_versions, "Unknown (0x%04x)"));
                 break;
             }
             break;

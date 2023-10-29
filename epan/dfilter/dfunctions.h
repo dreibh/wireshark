@@ -15,6 +15,10 @@
 #include <epan/dfilter/syntax-tree.h>
 #include <epan/dfilter/dfilter-int.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif /* __cplusplus */
+
 /* Functions take any number of arguments and return 1. */
 
 #define dfunc_fail(dfw, node, ...) \
@@ -60,6 +64,14 @@ bool df_func_deregister(df_func_def_t *func);
 WS_DLL_PUBLIC
 df_func_def_t* df_func_lookup(const char *name);
 
+/* You must call g_ptr_array_unref() when you are done. */
+WS_DLL_PUBLIC
+GPtrArray *df_func_name_list(void);
+
 void df_func_cleanup(void);
+
+#ifdef __cplusplus
+}
+#endif /* __cplusplus */
 
 #endif
