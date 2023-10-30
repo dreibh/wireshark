@@ -111,7 +111,7 @@ blf_free_channel_to_iface_entry(gpointer data) {
 
 static gint64
 blf_calc_key_value(int pkt_encap, guint16 channel, guint16 hwchannel) {
-    return ((gint64)pkt_encap << 32) | ((gint64)hwchannel << 16) | channel;
+    return (gint64)(((guint64)pkt_encap << 32) | ((guint64)hwchannel << 16) | (guint64)channel);
 }
 
 static void add_interface_name(wtap_block_t *int_data, int pkt_encap, guint16 channel, guint16 hwchannel, gchar *name) {
@@ -996,16 +996,25 @@ blf_init_rec(blf_params_t *params, guint32 flags, guint64 object_timestamp, int 
         break;
 
     default:
-        /*
-         * XXX - report this as an error?
-         *
-         * Or provide a mechanism to allow file readers to report
-         * a warning (an error that the reader tries to work
-         * around and that the caller should report)?
-         */
-        ws_debug("I don't understand the flags 0x%x", flags);
-        params->rec->tsprec = WTAP_TSPREC_NSEC;
-        object_timestamp = 0;
+        if (flags == 0 && object_timestamp == 0) {
+            /* This is not an error, but is used for metadata at the beginning of the file. */
+            params->rec->tsprec = WTAP_TSPREC_NSEC;
+            object_timestamp = params->blf_data->start_offset_ns;
+        }
+        else {
+            /*
+             * XXX - report this as an error?
+             *
+             * Or provide a mechanism to allow file readers to report
+             * a warning (an error that the reader tries to work
+             * around and that the caller should report)?
+             *
+             * Set the timestamp to params->blf_data->start_offset_ns also here?
+             */
+            ws_debug("Unknown combination of flags and timestamp (0x%x, %" PRIu64 ")", flags, object_timestamp);
+            params->rec->tsprec = WTAP_TSPREC_NSEC;
+            object_timestamp = 0;
+        }
         break;
     }
     params->rec->ts.secs = object_timestamp / (1000 * 1000 * 1000);
