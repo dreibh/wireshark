@@ -3100,7 +3100,7 @@ dissect_enip_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 {
    enum enip_packet_type packet_type;
    guint16             encap_cmd, encap_data_length;
-   const char         *pkt_type_str = "";
+   const char         *pkt_type_str;
    guint32             ifacehndl;
    conversation_t     *conversation;
 
@@ -3297,7 +3297,7 @@ dissect_cipio(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U
    col_set_str(pinfo->cinfo, COL_PROTOCOL, "CIP I/O");
 
    /* create display subtree for the protocol */
-   ti = proto_tree_add_item(tree, proto_enip, tvb, 0, -1, ENC_NA );
+   ti = proto_tree_add_item(tree, proto_cipio, tvb, 0, -1, ENC_NA );
 
    enip_tree = proto_item_add_subtree(ti, ett_enip);
 

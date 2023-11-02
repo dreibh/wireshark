@@ -39,7 +39,6 @@ add_custom_command(
 )
 
 set(LIBWIRESHARK_PUBLIC_HEADERS
-	addr_and_mask.h
 	addr_resolv.h
 	address.h
 	address_types.h
@@ -103,8 +102,6 @@ set(LIBWIRESHARK_PUBLIC_HEADERS
 	iana-ip.h
 	ip_opts.h
 	ipproto.h
-	ipv4.h
-	ipv6.h
 	lapd_sapi.h
 	llcsaps.h
 	maxmind_db.h
@@ -172,7 +169,6 @@ set(LIBWIRESHARK_HEADER_FILES
 )
 
 set(LIBWIRESHARK_NONGENERATED_FILES
-	addr_and_mask.c
 	addr_resolv.c
 	address_types.c
 	afn.c
@@ -216,8 +212,6 @@ set(LIBWIRESHARK_NONGENERATED_FILES
 	in_cksum.c
 	introspection.c
 	ipproto.c
-	ipv4.c
-	ipv6.c
 	manuf.c
 	maxmind_db.c
 	media_params.c

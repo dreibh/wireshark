@@ -169,7 +169,7 @@ fi
 # features present in all three versions)
 LUA_VERSION=5.2.4
 SNAPPY_VERSION=1.1.10
-ZSTD_VERSION=1.4.5
+ZSTD_VERSION=1.5.5
 LIBXML2_VERSION=2.11.5
 LZ4_VERSION=1.9.4
 SBC_VERSION=2.0
@@ -1120,7 +1120,11 @@ EOF
                 # supports it, and I'm too lazy to add a dot-dot
                 # version check.
                 #
-                CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" $MESON _build || exit 1
+                # Disable tests to work around
+                #
+                #    https://gitlab.gnome.org/GNOME/glib/-/issues/2902
+                #
+                CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" $MESON -Dtests=false _build || exit 1
                 ninja $MAKE_BUILD_OPTS -C _build || exit 1
                 $DO_NINJA_INSTALL || exit 1
                 ;;

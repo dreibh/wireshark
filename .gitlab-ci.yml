@@ -48,17 +48,23 @@ variables:
 
 # Commits that have been approved and merged. Run automatically in the main
 # repo and allow manual runs in the web UI and in forks.
+# Release builds: CI_PIPELINE_SOURCE=api
 .if-merged:
+  # Regular commits: CI_PIPELINE_SOURCE=push, CI_COMMIT_BRANCH=master
   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  # "Run pipeline" button commits, cherry picks
   - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  # Tagged release builds: CI_PIPELINE_SOURCE=api (should be "web"?)
+  - if: '$CI_PIPELINE_SOURCE == "api"'
   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_URL !~ /.*gitlab.com\/wireshark\/wireshark/'
     when: manual
 # Merged commits for runners which are only available in
 # wireshark/wireshark, e.g. wireshark-windows-*. Run automatically in
 # the main repo and allow manual runs in the web UI.
 .if-w-w-only-merged:
-  - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
-  - if: '$CI_PIPELINE_SOURCE == "web" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  - if: '$CI_PIPELINE_SOURCE == "api"'
 # Incoming merge requests.
 .if-merge-request:
   - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -83,6 +89,10 @@ variables:
   stage: build
   tags:
     - docker
+  before_script:
+    - printf "\e[0Ksection_start:%s:ci_env_section[collapsed=true]\r\e[0KCI environment variables" "$(date +%s)"
+    - env | grep ^CI | sort
+    - printf "\e[0Ksection_end:%s:ci_env_section\r\e[0K" "$(date +%s)"
   after_script:
     - for builddir in build/packaging/rpm/BUILD/wireshark-*/build build/packaging/rpm/BUILD/wireshark-* build obj-*; do [ ! -d "$builddir/run" ] || break; done
     - if [[ "$CI_JOB_NAME" == "build:rpm-opensuse-"* ]]; then export LD_LIBRARY_PATH=$builddir/run; fi
@@ -601,7 +611,7 @@ Documentation:
   extends: .build-linux
   image: registry.gitlab.com/wireshark/wireshark-containers/ubuntu-dev
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
       changes:
         - "docbook/**/*"
         - "epan/wslua/**/*"
@@ -649,12 +659,51 @@ Commit Check:
   extends: .build-ubuntu
   rules: !reference [.if-merge-request]
   script:
+    - (cd /tmp ; curl -JLO https://gitlab.com/gitlab-org/cli/-/releases/v1.34.0/downloads/glab_1.34.0_Linux_x86_64.deb)
+    - dpkg --install /tmp/glab_1.34.0_Linux_x86_64.deb
+    - glab auth status
+    - >
+      if [[ $NUM_COMMITS > 1 ]] ; then
+        glab mr note $CI_MERGE_REQUEST_IID --unique --message "ℹ️ This merge request has more than one commit. Please squash any trivial ones:
+        ~~~
+        $(git log --oneline --no-decorate "${CI_COMMIT_SHA}~$NUM_COMMITS..${CI_COMMIT_SHA}")
+        ~~~
+        "
+      fi
     # build-ubuntu puts us in `build`.
     - cd ..
     - git status
-    - bash ./tools/pre-commit "${CI_COMMIT_SHA}~$NUM_COMMITS"
-    - tools/validate-commit.py
-    - python3 tools/checklicenses.py
+    - PC_EXIT_CODE=0
+    - ANALYSIS_MESSAGE=$( ./tools/pre-commit "${CI_COMMIT_SHA}~$NUM_COMMITS" || PC_EXIT_CODE=1 )
+    - >
+      if [ -n "$ANALYSIS_MESSAGE" ] ; then
+        glab mr note $CI_MERGE_REQUEST_IID --unique --message "Pre-commit check results:
+        ~~~
+        $ANALYSIS_MESSAGE
+        ~~~
+        "
+      fi
+    - VC_EXIT_CODE=0
+    - ANALYSIS_MESSAGE=$( tools/validate-commit.py || VC_EXIT_CODE=1 )
+    - >
+      if [[ $VC_EXIT_CODE != 0 ]] ; then
+        glab mr note $CI_MERGE_REQUEST_IID --unique --message "Commit validation failure:
+        ~~~
+        $ANALYSIS_MESSAGE
+        ~~~
+        "
+      fi
+    - LC_EXIT_CODE=0
+    - ANALYSIS_MESSAGE=$( python3 tools/checklicenses.py || LC_EXIT_CODE=1 )
+    - >
+      if [[ $LC_EXIT_CODE != 0 ]] ; then
+        glab mr note $CI_MERGE_REQUEST_IID --unique --message "License check failure:
+        ~~~
+        $ANALYSIS_MESSAGE
+        ~~~
+        "
+      fi
+    - exit $(( PC_EXIT_CODE || VC_EXIT_CODE || LC_EXIT_CODE ))
 
 Ubuntu GCC Build:
   extends: .build-ubuntu

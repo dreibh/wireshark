@@ -17,7 +17,7 @@
 #include "tvbuff.h"
 #include <epan/wmem_scopes.h>
 #include <wsutil/ws_assert.h>
-#include <epan/ipv4.h>
+#include <wsutil/inet_cidr.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -106,6 +106,11 @@ set_address_ipv4(address *addr, const ipv4_addr_and_mask *ipv4) {
     uint32_t val = g_htonl(ipv4->addr);
     addr->priv = g_memdup2(&val, sizeof(val));
     addr->data = addr->priv;
+}
+
+static inline void
+set_address_ipv6(address *addr, const ipv6_addr_and_prefix *ipv6) {
+    set_address(addr, AT_IPv6, sizeof(ws_in6_addr), &ipv6->addr);
 }
 
 /** Initialize an address from TVB data.
