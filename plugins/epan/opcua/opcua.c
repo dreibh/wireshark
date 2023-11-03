@@ -235,11 +235,11 @@ static void opcua_keylog_process_line(struct opcua_keylog_parser_ctx *ctx, const
         debugprintf("Adding new keyset for id %lu...\n", id);
         /* create new keyset for new id */
         ctx->keyset = ua_keysets_add();
-        ctx->keyset->id = id;
         ctx->last_id = id;
     }
     keyset = ctx->keyset;
     if (keyset) {
+        keyset->id = id;
         /* store key material */
         if (strcmp(parts[0], "client") == 0) {
             if (strcmp(parts[1], "iv") == 0) {
@@ -454,12 +454,17 @@ static int decrypt_opcua(
     res = gcry_cipher_decrypt(handle, plaintext, plaintext_len, cipher, cipher_len);
     if (res == 0) {
         /* col_append_fstr(pinfo->cinfo, COL_INFO, " (decrypted)"); */
+        debugprintf("decryption succeeded.\n");
     } else {
         /* col_append_fstr(pinfo->cinfo, COL_INFO, " (encrypted)"); */
         debugprintf("decryption failed.\n");
         ret = -1;
     }
     gcry_cipher_close(handle);
+    /* it makes no sense to continue and verify the padding if decryption failed */
+    if (ret != 0) {
+        return ret;
+    }
 
     ret = verify_padding(&plaintext[plaintext_len - *sig_len - 1]);
     if (ret < 0) {
