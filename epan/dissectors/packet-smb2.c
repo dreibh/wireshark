@@ -201,6 +201,7 @@ static int hf_smb2_file_internal_info = -1;
 static int hf_smb2_file_ea_info = -1;
 static int hf_smb2_file_access_info = -1;
 static int hf_smb2_file_rename_info = -1;
+static int hf_smb2_file_link_info = -1;
 static int hf_smb2_file_disposition_info = -1;
 static int hf_smb2_file_position_info = -1;
 static int hf_smb2_file_full_ea_info = -1;
@@ -287,6 +288,7 @@ static int hf_smb2_rdma_transform_reserved1 = -1;
 static int hf_smb2_rdma_transform_reserved2 = -1;
 static int hf_smb2_rdma_transform_id = -1;
 static int hf_smb2_posix_reserved = -1;
+static int hf_smb2_dev = -1;
 static int hf_smb2_inode = -1;
 static int hf_smb2_ea_size = -1;
 static int hf_smb2_ea_flags = -1;
@@ -686,6 +688,7 @@ static gint ett_smb2_file_compression_info = -1;
 static gint ett_smb2_file_network_open_info = -1;
 static gint ett_smb2_file_attribute_tag_info = -1;
 static gint ett_smb2_file_rename_info = -1;
+static gint ett_smb2_file_link_info = -1;
 static gint ett_smb2_file_disposition_info = -1;
 static gint ett_smb2_file_full_ea_info = -1;
 static gint ett_smb2_file_normalized_name_info = -1;
@@ -858,6 +861,7 @@ static const value_string smb2_share_type_vals[] = {
 #define SMB2_FILE_EA_INFO             0x07
 #define SMB2_FILE_ACCESS_INFO         0x08
 #define SMB2_FILE_RENAME_INFO         0x0a
+#define SMB2_FILE_LINK_INFO           0x0b
 #define SMB2_FILE_DISPOSITION_INFO    0x0d
 #define SMB2_FILE_POSITION_INFO       0x0e
 #define SMB2_FILE_FULL_EA_INFO        0x0f
@@ -882,6 +886,7 @@ static const value_string smb2_file_info_levels[] = {
 	{SMB2_FILE_EA_INFO,		"SMB2_FILE_EA_INFO" },
 	{SMB2_FILE_ACCESS_INFO,		"SMB2_FILE_ACCESS_INFO" },
 	{SMB2_FILE_RENAME_INFO,		"SMB2_FILE_RENAME_INFO" },
+	{SMB2_FILE_LINK_INFO,		"SMB2_FILE_LINK_INFO" },
 	{SMB2_FILE_DISPOSITION_INFO,	"SMB2_FILE_DISPOSITION_INFO" },
 	{SMB2_FILE_POSITION_INFO,	"SMB2_FILE_POSITION_INFO" },
 	{SMB2_FILE_FULL_EA_INFO,	"SMB2_FILE_FULL_EA_INFO" },
@@ -3181,6 +3186,52 @@ dissect_smb2_file_rename_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *par
 }
 
 static int
+dissect_smb2_file_link_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, int offset, smb2_info_t *si _U_)
+{
+	proto_item *item = NULL;
+	proto_tree *tree = NULL;
+	int         length;
+	char       *display_string = NULL;
+
+
+	if (parent_tree) {
+		item = proto_tree_add_item(parent_tree, hf_smb2_file_link_info, tvb, offset, -1, ENC_NA);
+		tree = proto_item_add_subtree(item, ett_smb2_file_link_info);
+	}
+
+	/* ReplaceIfExists */
+	proto_tree_add_item(tree, hf_smb2_replace_if, tvb, offset, 1, ENC_NA);
+	offset += 1;
+
+	/* reserved */
+	proto_tree_add_item(tree, hf_smb2_reserved_random, tvb, offset, 7, ENC_NA);
+	offset += 7;
+
+	/* Root Directory Handle, MBZ */
+	proto_tree_add_item(tree, hf_smb2_root_directory_mbz, tvb, offset, 8, ENC_NA);
+	offset += 8;
+
+	/* file name length */
+	length = tvb_get_letohs(tvb, offset);
+	proto_tree_add_item(tree, hf_smb2_filename_len, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+
+	/* file name */
+	if (length < 1) {
+		return offset;
+	}
+
+	proto_tree_add_item_ret_display_string(tree, hf_smb2_filename,
+					       tvb, offset, length, ENC_UTF_16|ENC_LITTLE_ENDIAN,
+					       pinfo->pool, &display_string);
+	col_append_fstr(pinfo->cinfo, COL_INFO, " NewLink:%s",
+			display_string);
+	offset += length;
+
+	return offset;
+}
+
+static int
 dissect_smb2_sec_info_00(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *parent_tree, int offset, smb2_info_t *si _U_)
 {
 	proto_item *item = NULL;
@@ -4990,12 +5041,12 @@ static int dissect_smb2_posix_info(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
 	/* last change */
 	offset = dissect_nt_64bit_time(tvb, tree, offset, hf_smb2_last_change_timestamp);
 
-	/* allocation size */
-	proto_tree_add_item(tree, hf_smb2_allocation_size, tvb, offset, 8, ENC_LITTLE_ENDIAN);
-	offset += 8;
-
 	/* end of file */
 	proto_tree_add_item(tree, hf_smb2_end_of_file, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+	offset += 8;
+
+	/* allocation size */
+	proto_tree_add_item(tree, hf_smb2_allocation_size, tvb, offset, 8, ENC_LITTLE_ENDIAN);
 	offset += 8;
 
 	/* File Attributes */
@@ -5006,7 +5057,7 @@ static int dissect_smb2_posix_info(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
 	offset += 8;
 
 	/* dev id */
-	proto_tree_add_item(tree, hf_smb2_file_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item(tree, hf_smb2_dev, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	offset += 4;
 
 	/* zero */
@@ -5885,6 +5936,9 @@ dissect_smb2_infolevel(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, 
 			break;
 		case SMB2_FILE_RENAME_INFO:
 			offset = dissect_smb2_file_rename_info(tvb, pinfo, tree, offset, si);
+			break;
+		case SMB2_FILE_LINK_INFO:
+			offset = dissect_smb2_file_link_info(tvb, pinfo, tree, offset, si);
 			break;
 		case SMB2_FILE_DISPOSITION_INFO:
 			offset = dissect_smb2_file_disposition_info(tvb, pinfo, tree, offset, si);
@@ -10434,7 +10488,9 @@ decrypt_smb_payload(packet_info *pinfo,
 static void
 append_uncompress_data(wmem_array_t *out, tvbuff_t *tvb, int offset, guint length)
 {
-	wmem_array_append(out, tvb_get_ptr(tvb, offset, length), length);
+	const guint8 *ptr = tvb_get_ptr(tvb, offset, length);
+	if (ptr)
+		wmem_array_append(out, tvb_get_ptr(tvb, offset, length), length);
 }
 
 static int
@@ -11992,6 +12048,11 @@ proto_register_smb2(void)
 			NULL, 0, NULL, HFILL }
 		},
 
+		{ &hf_smb2_file_link_info,
+			{ "SMB2_FILE_LINK_INFO", "smb2.file_link_info", FT_NONE, BASE_NONE,
+			NULL, 0, NULL, HFILL }
+		},
+
 		{ &hf_smb2_fs_info_01,
 			{ "FileFsVolumeInformation", "smb2.fs_volume_info", FT_NONE, BASE_NONE,
 			NULL, 0, NULL, HFILL }
@@ -12252,6 +12313,11 @@ proto_register_smb2(void)
 
 		{ &hf_smb2_posix_reserved,
 			{ "POSIX Reserved", "smb2.negotiate_context.posix_reserved", FT_BYTES, BASE_NONE,
+			NULL, 0, NULL, HFILL }
+		},
+
+		{ &hf_smb2_dev,
+			{ "Device", "smb2.dev", FT_UINT32, BASE_HEX,
 			NULL, 0, NULL, HFILL }
 		},
 
@@ -14063,6 +14129,7 @@ proto_register_smb2(void)
 		&ett_smb2_file_ea_info,
 		&ett_smb2_file_access_info,
 		&ett_smb2_file_rename_info,
+		&ett_smb2_file_link_info,
 		&ett_smb2_file_disposition_info,
 		&ett_smb2_file_position_info,
 		&ett_smb2_file_full_ea_info,
