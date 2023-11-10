@@ -28,6 +28,7 @@ FilterExpressionFrame::FilterExpressionFrame(QWidget *parent) :
     ui(new Ui::FilterExpressionFrame)
 {
     ui->setupUi(this);
+    updateStyleSheet();
 
 #ifdef Q_OS_MAC
     foreach (QWidget *w, findChildren<QWidget *>()) {
@@ -82,6 +83,13 @@ void FilterExpressionFrame::editExpression(int exprIdx)
 
     if (! isVisible())
         animatedShow();
+}
+
+void FilterExpressionFrame::updateStyleSheet()
+{
+    ui->labelLineEdit->setStyleSheet(lineEditStyleSheet());
+    ui->displayFilterLineEdit->setStyleSheet(lineEditStyleSheet());
+    ui->commentLineEdit->setStyleSheet(lineEditStyleSheet());
 }
 
 void FilterExpressionFrame::showEvent(QShowEvent *event)
