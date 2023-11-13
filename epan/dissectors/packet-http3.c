@@ -650,11 +650,29 @@ cid_to_string(const quic_cid_t *cid)
 }
 
 static http3_header_data_t *
-http3_get_header_data(packet_info *pinfo, guint offset)
+http3_get_header_data(packet_info *pinfo, tvbuff_t *tvb, guint offset)
 {
     http3_header_data_t *data, *prev = NULL;
 
-    data = (http3_header_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_http3, 0);
+    unsigned raw_offset = tvb_raw_offset(tvb) + offset;
+    /* The raw offset is relative to the original data source, which is
+     * the decrypted QUIC packet. There can be multiple decrypted QUIC
+     * packets in a single QUIC layer, so this guarantees the same raw
+     * offset from different decrypted data gives different keys.
+     */
+    tvbuff_t *ds_tvb = tvb_get_ds_tvb(tvb);
+    GSList *src_le;
+    struct data_source *src;
+    uint32_t key = 0;
+    for (src_le = pinfo->data_src; src_le != NULL; src_le = src_le->next) {
+        src = (struct data_source *)src_le->data;
+        if (ds_tvb == get_data_source_tvb(src)) {
+            break;
+        }
+        key++;
+    }
+
+    data = (http3_header_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_http3, key);
 
     /*
      * Attempt to find existing header data block.
@@ -662,7 +680,7 @@ http3_get_header_data(packet_info *pinfo, guint offset)
      * and this loop won't be visited.
      */
     while (data != NULL) {
-        if (data->offset == offset) {
+        if (data->offset == raw_offset) {
             /*
              * We found the matching data. Return it.
              */
@@ -678,7 +696,7 @@ http3_get_header_data(packet_info *pinfo, guint offset)
      * the offset marker.
      */
     data         = wmem_new0(wmem_file_scope(), http3_header_data_t);
-    data->offset = offset;
+    data->offset = raw_offset;
 
     /*
      * Check whether the newly allocated data should be linked
@@ -688,7 +706,7 @@ http3_get_header_data(packet_info *pinfo, guint offset)
     if (prev != NULL) {
         prev->next = data;
     } else {
-        p_add_proto_data(wmem_file_scope(), pinfo, proto_http3, 0, data);
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_http3, key, data);
     }
 
     return data;
@@ -780,7 +798,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint
     tvbuff_t                      *header_tvb;
 
     http3_session = http3_session_lookup_or_create(pinfo);
-    header_data   = http3_get_header_data(pinfo, offset);
+    header_data   = http3_get_header_data(pinfo, tvb, offset);
 
     HTTP3_DISSECTOR_DPRINTF("pdinfo visited=%d", PINFO_FD_VISITED(pinfo));
 
@@ -1433,14 +1451,14 @@ read_qpack_prefixed_integer(guint8 *buf, guint8 *end, gint prefix,
     guint64       shift = 0;
     const guint8 *p     = buf;
 
+    if (out_flag) {
+        *out_flag = *p & (1 << prefix);
+    }
+
     if (((*p) & k) != k) {
         *out_result = (*p) & k;
         *out_fin    = true;
         return 1;
-    }
-
-    if (out_flag) {
-        *out_flag = *p & (1 << prefix);
     }
 
     n = k;
@@ -1541,12 +1559,12 @@ dissect_http3_qpack_encoder_stream(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
             decoded += read_qpack_prefixed_integer(qpack_buf + decoded, end, 6, &table_entry, &fin, NULL);
             table_entry_len = offset + decoded - opcode_offset;
 
-            value_offset = offset + decoded - opcode_offset;
+            value_offset = offset + decoded;
             decoded += read_qpack_prefixed_integer(qpack_buf + decoded, end, 7, &val_bytes_len, &fin, &value_huffman);
-            val_bytes_offset = offset + decoded - opcode_offset;
+            val_bytes_offset = offset + decoded;
 
             decoded += (guint32)val_bytes_len;
-            value_len = opcode + decoded - value_offset;
+            value_len = offset + decoded - value_offset;
 
             opcode_len = offset + decoded - opcode_offset;
 
@@ -1600,15 +1618,15 @@ dissect_http3_qpack_encoder_stream(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
             decoded += read_qpack_prefixed_integer(qpack_buf + decoded, end, 5, &name_bytes_len, &fin, &name_huffman);
             name_len_len      = offset + decoded - name_len_offset;
             name_len          = name_len_len + (guint32)name_bytes_len;
-            name_bytes_offset = offset + decoded - opcode_offset;
+            name_bytes_offset = offset + decoded;
             decoded += (guint32)name_bytes_len;
 
             /* Read the 7-encoded value length */
-            val_len_offset = offset + decoded - opcode_offset;
+            val_len_offset = offset + decoded;
             decoded += read_qpack_prefixed_integer(qpack_buf + decoded, end, 7, &val_bytes_len, &fin, &value_huffman);
             val_len_len      = offset + decoded - val_len_offset;
             val_len          = val_len_len + (guint32)val_bytes_len;
-            val_bytes_offset = offset + decoded - opcode_offset;
+            val_bytes_offset = offset + decoded;
 
             decoded += (guint32)val_bytes_len;
 
