@@ -219,8 +219,9 @@ uat_wep_key_record_update_cb(void* r, char** err)
     return FALSE;
   }
 
+  *err = NULL;
   g_strstrip(rec->string);
-  dk = parse_key_string(rec->string, rec->key);
+  dk = parse_key_string(rec->string, rec->key, err);
 
   if (dk != NULL) {
     dk_type = dk->type;
@@ -264,7 +265,9 @@ uat_wep_key_record_update_cb(void* r, char** err)
         break;
     }
   } else {
-    *err = g_strdup("Invalid key format");
+    if (*err == NULL) {
+        *err = g_strdup("Invalid key format");
+    }
     return FALSE;
   }
   return TRUE;
@@ -41336,46 +41339,43 @@ set_dot11decrypt_keys(void)
 {
   guint                     i;
   DOT11DECRYPT_KEYS_COLLECTION  *keys = g_new(DOT11DECRYPT_KEYS_COLLECTION, 1);
-  GByteArray                *bytes = NULL;
 
   keys->nKeys = 0;
 
   for (i = 0; (uat_wep_key_records != NULL) && (i < num_wepkeys_uat) && (i < MAX_ENCRYPTION_KEYS); i++)
   {
     decryption_key_t *dk;
-    dk = parse_key_string(uat_wep_key_records[i].string, uat_wep_key_records[i].key);
+    dk = parse_key_string(uat_wep_key_records[i].string, uat_wep_key_records[i].key, NULL);
 
     if (dk != NULL)
     {
+      /* parse_key_string() does vaildation, so if it doesn't
+       * return NULL, we can just copy the results.
+       */
       DOT11DECRYPT_KEY_ITEM key = { 0 };
       if (dk->type == DOT11DECRYPT_KEY_TYPE_WEP)
       {
-        gboolean res;
         key.KeyType = DOT11DECRYPT_KEY_TYPE_WEP;
 
-        bytes = g_byte_array_new();
-        res = hex_str_to_bytes(dk->key->str, bytes, FALSE);
-
-        if (dk->key->str && res && (bytes->len > 0) && (bytes->len <= DOT11DECRYPT_WEP_KEY_MAXLEN))
-        {
-          /*
-           * WEP key is correct (well, the can be even or odd, so it is not
-           * a real check, I think... is a check performed somewhere in the
-           * Dot11Decrypt function???)
-           */
-          memcpy(key.KeyData.Wep.WepKey, bytes->data, bytes->len);
-          key.KeyData.Wep.WepKeyLen = bytes->len;
-          keys->Keys[keys->nKeys] = key;
-          keys->nKeys += 1;
-        }
+        /*
+         * WEP key is correct (well, at least no longer than
+         * DOT11DECRYPT_WEP_KEY_MAXLEN)
+         */
+        memcpy(key.KeyData.Wep.WepKey, dk->key->data, dk->key->len);
+        key.KeyData.Wep.WepKeyLen = dk->key->len;
+        keys->Keys[keys->nKeys] = key;
+        keys->nKeys += 1;
       }
       else if (dk->type == DOT11DECRYPT_KEY_TYPE_WPA_PWD)
       {
         key.KeyType = DOT11DECRYPT_KEY_TYPE_WPA_PWD;
 
-        /* XXX - This just lops the end if the key off if it's too long.
-         *       Should we handle this more gracefully? */
-        (void) g_strlcpy(key.UserPwd.Passphrase, dk->key->str, DOT11DECRYPT_WPA_PASSPHRASE_MAX_LEN+1);
+        /*
+         * dk->key has a valid length, because otherwise
+         * parse_key_string() would have returned NULL.
+         */
+        memcpy(key.UserPwd.Passphrase, dk->key->data, dk->key->len);
+        key.UserPwd.PassphraseLen = dk->key->len;
 
         key.UserPwd.SsidLen = 0;
         if ((dk->ssid != NULL) && (dk->ssid->len <= DOT11DECRYPT_WPA_SSID_MAX_LEN))
@@ -41391,27 +41391,17 @@ set_dot11decrypt_keys(void)
       {
         key.KeyType = DOT11DECRYPT_KEY_TYPE_WPA_PSK;
 
-        bytes = g_byte_array_new();
-        hex_str_to_bytes(dk->key->str, bytes, FALSE);
-
-        /* XXX - Pass the correct array of bytes... */
-        if (bytes->len <= DOT11DECRYPT_WPA_PWD_PSK_LEN ||
-            bytes->len == DOT11DECRYPT_WPA_PMK_MAX_LEN) {
-          memcpy(key.KeyData.Wpa.Psk, bytes->data, bytes->len);
-          key.KeyData.Wpa.PskLen = bytes->len;
-          keys->Keys[keys->nKeys] = key;
-          keys->nKeys += 1;
-        }
+        memcpy(key.KeyData.Wpa.Psk, dk->key->data, dk->key->len);
+        key.KeyData.Wpa.PskLen = dk->key->len;
+        keys->Keys[keys->nKeys] = key;
+        keys->nKeys += 1;
       }
       else if (dk->type == DOT11DECRYPT_KEY_TYPE_TK)
       {
         key.KeyType = DOT11DECRYPT_KEY_TYPE_TK;
 
-        bytes = g_byte_array_new();
-        hex_str_to_bytes(dk->key->str, bytes, FALSE);
-
-        memcpy(key.Tk.Tk, bytes->data, bytes->len);
-        key.Tk.Len = bytes->len;
+        memcpy(key.Tk.Tk, dk->key->data, dk->key->len);
+        key.Tk.Len = dk->key->len;
         keys->Keys[keys->nKeys] = key;
         keys->nKeys += 1;
       }
@@ -41419,19 +41409,12 @@ set_dot11decrypt_keys(void)
       {
         key.KeyType = DOT11DECRYPT_KEY_TYPE_MSK;
 
-        bytes = g_byte_array_new();
-        hex_str_to_bytes(dk->key->str, bytes, FALSE);
-
-        memcpy(key.Msk.Msk, bytes->data, bytes->len);
-        key.Msk.Len = bytes->len;
+        memcpy(key.Msk.Msk, dk->key->data, dk->key->len);
+        key.Msk.Len = dk->key->len;
         keys->Keys[keys->nKeys] = key;
         keys->nKeys += 1;
       }
       free_key_string(dk);
-      if (bytes) {
-        g_byte_array_free(bytes, TRUE);
-        bytes = NULL;
-      }
     }
   }
 
@@ -56788,7 +56771,7 @@ proto_register_ieee80211(void)
       FT_UINT16, BASE_HEX, VALS(he_phy_dcm_max_constellation_vals), 0x0018, NULL, HFILL }},
 
     {&hf_ieee80211_he_phy_cap_dcm_max_nss_rx,
-     {"DCM Max NSS Rx", "wlan.ext_tag.he_phy_cap.dcm_max_nss_tx",
+     {"DCM Max NSS Rx", "wlan.ext_tag.he_phy_cap.dcm_max_nss_rx",
       FT_UINT16, BASE_HEX, VALS(he_phy_dcm_max_nss_vals), 0x0020, NULL, HFILL }},
 
     {&hf_ieee80211_he_phy_cap_rx_partial_bw_su_20mhz_he_mu_ppdu,
