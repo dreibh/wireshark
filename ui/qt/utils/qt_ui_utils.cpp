@@ -17,15 +17,12 @@
 #include <epan/range.h>
 #include <epan/to_str.h>
 #include <epan/value_string.h>
-#include <epan/prefs.h>
 
 #include <ui/recent.h>
 #include <ui/util.h>
 #include "ui/ws_ui_util.h"
 
 #include <wsutil/str_util.h>
-
-#include <ui/qt/main_application.h>
 
 #include <QAction>
 #include <QApplication>
@@ -46,7 +43,7 @@
  */
 
 gchar *qstring_strdup(QString q_string) {
-    return g_strdup(q_string.toUtf8().constData());
+    return g_strdup(qUtf8Printable(q_string));
 }
 
 QString gchar_free_to_qstring(gchar *glib_string) {
@@ -310,27 +307,7 @@ QString openDialogInitialDir()
 {
     QString result;
 
-    switch (prefs.gui_fileopen_style) {
-
-    case FO_STYLE_LAST_OPENED:
-        /* The user has specified that we should start out in the last directory
-           we looked in.  If we've already opened a file, use its containing
-           directory, if we could determine it, as the directory, otherwise
-           use the "last opened" directory saved in the preferences file if
-           there was one. */
-        /* This is now the default behaviour in file_selection_new() */
-        result = QString(get_open_dialog_initial_dir());
-        break;
-
-    case FO_STYLE_SPECIFIED:
-        /* The user has specified that we should always start out in a
-           specified directory; if they've specified that directory,
-           start out by showing the files in that dir. */
-        if (prefs.gui_fileopen_dir[0] != '\0')
-            result = QString(prefs.gui_fileopen_dir);
-        break;
-    }
-
+    result = QString(get_open_dialog_initial_dir());
     QDir ld(result);
     if (ld.exists())
         return result;
