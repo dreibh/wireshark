@@ -94,17 +94,31 @@ static match_result match_summary_line(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
 static match_result match_narrow_and_wide(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
+static match_result match_narrow_and_wide_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *, Buffer *, void *criterion);
 static match_result match_narrow_and_wide_case(capture_file *cf, frame_data *fdata,
+        wtap_rec *, Buffer *, void *criterion);
+static match_result match_narrow_and_wide_case_reverse(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
 static match_result match_narrow_case(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
+static match_result match_narrow_case_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *, Buffer *, void *criterion);
 static match_result match_wide(capture_file *cf, frame_data *fdata,
+        wtap_rec *, Buffer *, void *criterion);
+static match_result match_wide_reverse(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
 static match_result match_wide_case(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
+static match_result match_wide_case_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *, Buffer *, void *criterion);
 static match_result match_binary(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
+static match_result match_binary_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *, Buffer *, void *criterion);
 static match_result match_regex(capture_file *cf, frame_data *fdata,
+        wtap_rec *, Buffer *, void *criterion);
+static match_result match_regex_reverse(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
 static match_result match_dfilter(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
@@ -216,19 +230,16 @@ compute_elapsed(capture_file *cf, gint64 start_time)
 static const nstime_t *
 ws_get_frame_ts(struct packet_provider_data *prov, guint32 frame_num)
 {
-    if (prov->prev_dis && prov->prev_dis->num == frame_num)
-        return &prov->prev_dis->abs_ts;
-
-    if (prov->prev_cap && prov->prev_cap->num == frame_num)
-        return &prov->prev_cap->abs_ts;
-
-    if (prov->frames) {
-        frame_data *fd = frame_data_sequence_find(prov->frames, frame_num);
-
-        return (fd) ? &fd->abs_ts : NULL;
+    const frame_data *fd = NULL;
+    if (prov->prev_dis && prov->prev_dis->num == frame_num) {
+        fd = prov->prev_dis;
+    } else if (prov->prev_cap && prov->prev_cap->num == frame_num) {
+        fd = prov->prev_cap;
+    } else if (prov->frames) {
+        fd = frame_data_sequence_find(prov->frames, frame_num);
     }
 
-    return NULL;
+    return (fd && fd->has_ts) ? &fd->abs_ts : NULL;
 }
 
 static epan_t *
@@ -1252,7 +1263,16 @@ add_packet_to_packet_list(frame_data *fdata, capture_file *cf,
     if (fdata->passed_dfilter || fdata->ref_time)
     {
         frame_data_set_after_dissect(fdata, &cf->cum_bytes);
-        cf->provider.prev_dis = fdata;
+        /* The only way we use prev_dis is to get the time stamp of
+         * the previous displayed frame, so ignore it if it doesn't
+         * have a time stamp, because we're presumably interested in
+         * the timestamp of the previously displayed frame with a
+         * time. XXX: What if in the future we want to use the previously
+         * displayed frame for something else, too?
+         */
+        if (fdata->has_ts) {
+            cf->provider.prev_dis = fdata;
+        }
 
         /* If we haven't yet seen the first frame, this is it. */
         if (cf->first_displayed == 0)
@@ -2110,44 +2130,59 @@ cf_reftime_packets(capture_file* cf)
         fdata->cum_bytes = cf->cum_bytes + fdata->pkt_len;
 
         /*
-         *Timestamps
+         * Timestamps
          */
 
-        /* If we don't have the time stamp of the first packet in the
-           capture, it's because this is the first packet.  Save the time
-           stamp of this packet as the time stamp of the first packet. */
-        if (cf->provider.ref == NULL)
-            cf->provider.ref = fdata;
-        /* if this frames is marked as a reference time frame, reset
-           firstsec and firstusec to this frame */
-        if (fdata->ref_time)
-            cf->provider.ref = fdata;
+        if (fdata->has_ts) {
+            /* If we don't have the time stamp of the first packet in the
+               capture, it's because this is the first packet.  Save the time
+               stamp of this packet as the time stamp of the first packet. */
+            if (cf->provider.ref == NULL)
+                cf->provider.ref = fdata;
+            /* if this frames is marked as a reference time frame, reset
+               firstsec and firstusec to this frame */
+            if (fdata->ref_time)
+                cf->provider.ref = fdata;
 
-        /* Get the time elapsed between the first packet and this packet. */
-        fdata->frame_ref_num = (fdata != cf->provider.ref) ? cf->provider.ref->num : 0;
-        nstime_delta(&rel_ts, &fdata->abs_ts, &cf->provider.ref->abs_ts);
+            /* Get the time elapsed between the first packet and this one. */
+            fdata->frame_ref_num = (fdata != cf->provider.ref) ? cf->provider.ref->num : 0;
+            nstime_delta(&rel_ts, &fdata->abs_ts, &cf->provider.ref->abs_ts);
 
-        /* If it's greater than the current elapsed time, set the elapsed time
-           to it (we check for "greater than" so as not to be confused by
-           time moving backwards). */
-        if ((gint32)cf->elapsed_time.secs < rel_ts.secs
-                || ((gint32)cf->elapsed_time.secs == rel_ts.secs && (gint32)cf->elapsed_time.nsecs < rel_ts.nsecs)) {
-            cf->elapsed_time = rel_ts;
-        }
-
-        /* If this frame is displayed, get the time elapsed between the
-           previous displayed packet and this packet. */
-        if ( fdata->passed_dfilter ) {
-            /* If we don't have the time stamp of the previous displayed packet,
-               it's because this is the first displayed packet.  Save the time
-               stamp of this packet as the time stamp of the previous displayed
-               packet. */
-            if (cf->provider.prev_dis == NULL) {
-                cf->provider.prev_dis = fdata;
+            /* If it's greater than the current elapsed time, set the elapsed
+               time to it (we check for "greater than" so as not to be
+               confused by time moving backwards). */
+            if ((gint32)cf->elapsed_time.secs < rel_ts.secs
+                    || ((gint32)cf->elapsed_time.secs == rel_ts.secs && (gint32)cf->elapsed_time.nsecs < rel_ts.nsecs)) {
+                cf->elapsed_time = rel_ts;
             }
 
-            fdata->prev_dis_num = cf->provider.prev_dis->num;
-            cf->provider.prev_dis = fdata;
+            /* If this frame is displayed, get the time elapsed between the
+               previous displayed packet and this packet. */
+            /* XXX: What if in the future we want to use the previously
+             * displayed frame for something else, too? Then we'd want
+             * to store this frame as prev_dis even if it doesn't have a
+             * timestamp. */
+            if ( fdata->passed_dfilter ) {
+                /* If we don't have the time stamp of the previous displayed
+                   packet, it's because this is the first displayed packet.
+                   Save the time stamp of this packet as the time stamp of
+                   the previous displayed packet. */
+                if (cf->provider.prev_dis == NULL) {
+                    cf->provider.prev_dis = fdata;
+                }
+
+                fdata->prev_dis_num = cf->provider.prev_dis->num;
+                cf->provider.prev_dis = fdata;
+            }
+        } else {
+            /* If this frame doesn't have a timestamp, don't calculate
+               anything with relative times. */
+            /* However, if this frame is marked as a reference time frame,
+               clear the reference frame so that the next frame with a
+               timestamp becomes the reference frame. */
+            if (fdata->ref_time) {
+                cf->provider.ref = NULL;
+            }
         }
 
         /*
@@ -3515,11 +3550,12 @@ typedef struct {
 
 gboolean
 cf_find_packet_data(capture_file *cf, const guint8 *string, size_t string_size,
-        search_direction dir)
+        search_direction dir, bool multiple)
 {
     cbs_t  info;
     guint8 needles[3];
-    ws_mempbrk_pattern pattern;
+    ws_mempbrk_pattern pattern = {0};
+    ws_match_function match_function;
 
     info.data = string;
     info.data_len = string_size;
@@ -3527,7 +3563,7 @@ cf_find_packet_data(capture_file *cf, const guint8 *string, size_t string_size,
     /* Regex, String or hex search? */
     if (cf->regex) {
         /* Regular Expression search */
-        return find_packet(cf, match_regex, NULL, dir);
+        match_function = (cf->dir == SD_FORWARD) ? match_regex : match_regex_reverse;
     } else if (cf->string) {
         /* String search - what type of string? */
         if (cf->case_type) {
@@ -3539,13 +3575,16 @@ cf_find_packet_data(capture_file *cf, const guint8 *string, size_t string_size,
             switch (cf->scs_type) {
 
                 case SCS_NARROW_AND_WIDE:
-                    return find_packet(cf, match_narrow_and_wide_case, &info, dir);
+                    match_function = (cf->dir == SD_FORWARD) ? match_narrow_and_wide_case : match_narrow_and_wide_case_reverse;
+                    break;
 
                 case SCS_NARROW:
-                    return find_packet(cf, match_narrow_case, &info, dir);
+                    match_function = (cf->dir == SD_FORWARD) ? match_narrow_case : match_narrow_case_reverse;
+                    break;
 
                 case SCS_WIDE:
-                    return find_packet(cf, match_wide_case, &info, dir);
+                    match_function = (cf->dir == SD_FORWARD) ? match_wide_case : match_wide_case_reverse;
+                    break;
 
                 default:
                     ws_assert_not_reached();
@@ -3556,23 +3595,51 @@ cf_find_packet_data(capture_file *cf, const guint8 *string, size_t string_size,
             switch (cf->scs_type) {
 
                 case SCS_NARROW_AND_WIDE:
-                    return find_packet(cf, match_narrow_and_wide, &info, dir);
+                    match_function = (cf->dir == SD_FORWARD) ? match_narrow_and_wide : match_narrow_and_wide_reverse;
+                    break;
 
                 case SCS_NARROW:
                     /* Narrow, case-sensitive match is the same as looking
                      * for a converted hexstring. */
-                    return find_packet(cf, match_binary, &info, dir);
+                    match_function = (cf->dir == SD_FORWARD) ? match_binary : match_binary_reverse;
+                    break;
 
                 case SCS_WIDE:
-                    return find_packet(cf, match_wide, &info, dir);
+                    match_function = (cf->dir == SD_FORWARD) ? match_wide : match_wide_reverse;
+                    break;
 
                 default:
                     ws_assert_not_reached();
                     return FALSE;
             }
         }
-    } else
-        return find_packet(cf, match_binary, &info, dir);
+    } else {
+        match_function = (cf->dir == SD_FORWARD) ? match_binary : match_binary_reverse;
+    }
+
+    if (multiple && cf->current_frame && (cf->search_pos || cf->search_len)) {
+        /* Use the current frame (this will perform the equivalent of
+         * cf_read_current_record() in match_function).
+         */
+        if (match_function(cf, cf->current_frame, &cf->rec, &cf->buf, &info)) {
+            cf->search_in_progress = TRUE;
+            if (cf->edt) {
+                field_info *fi = NULL;
+                /* The regex match can match an empty string. */
+                if (cf->search_len) {
+                    fi = proto_find_field_from_offset(cf->edt->tree, cf->search_pos + cf->search_len - 1, cf->edt->tvb);
+                }
+                packet_list_select_finfo(fi);
+            } else {
+                packet_list_select_row_from_data(cf->current_frame);
+            }
+            cf->search_in_progress = FALSE;
+            return TRUE;
+        }
+    }
+    cf->search_pos = 0; /* Reset the position */
+    cf->search_len = 0; /* Reset length */
+    return find_packet(cf, match_function, &info, dir);
 }
 
 static match_result
@@ -3599,7 +3666,12 @@ match_narrow_and_wide(capture_file *cf, frame_data *fdata,
     buf_len = fdata->cap_len;
     buf_start = ws_buffer_start_ptr(buf);
     buf_end = buf_start + buf_len;
-    for (pd = buf_start; pd < buf_end; pd++) {
+    pd = buf_start;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte past the previous match start */
+        pd += cf->search_pos + 1;
+    }
+    for (; pd < buf_end; pd++) {
         pd = (guint8 *)memchr(pd, ascii_text[0], buf_end - pd);
         if (pd == NULL) break;
         /* Try narrow match at this start location */
@@ -3611,8 +3683,8 @@ match_narrow_and_wide(capture_file *cf, frame_data *fdata,
                 if (c_match == textlen) {
                     result = MR_MATCHED;
                     /* Save position and length for highlighting the field. */
-                    cf->search_pos = (guint32)(pd - buf_start);
-                    cf->search_len = (guint32)(textlen);
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
                     goto done;
                 }
             } else {
@@ -3629,8 +3701,87 @@ match_narrow_and_wide(capture_file *cf, frame_data *fdata,
                 if (c_match == textlen) {
                     result = MR_MATCHED;
                     /* Save position and length for highlighting the field. */
-                    cf->search_pos = (guint32)(pd - buf_start);
-                    cf->search_len = (guint32)(textlen);
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
+                    goto done;
+                }
+                i++;
+                if (pd + i >= buf_end || pd[i] != '\0') break;
+            } else {
+                break;
+            }
+        }
+    }
+
+done:
+    return result;
+}
+
+static match_result
+match_narrow_and_wide_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *rec, Buffer *buf, void *criterion)
+{
+    cbs_t        *info       = (cbs_t *)criterion;
+    const guint8 *ascii_text = info->data;
+    size_t        textlen    = info->data_len;
+    match_result  result;
+    guint32       buf_len;
+    guint8       *pd, *buf_start, *buf_end;
+    guint32       i;
+    guint8        c_char;
+    size_t        c_match    = 0;
+
+    /* Load the frame's data. */
+    if (!cf_read_record(cf, fdata, rec, buf)) {
+        /* Attempt to get the packet failed. */
+        return MR_ERROR;
+    }
+
+    result = MR_NOTMATCHED;
+    /* Has to be room to hold the sought data. */
+    if (textlen > fdata->cap_len) {
+        return result;
+    }
+    buf_len = fdata->cap_len;
+    buf_start = ws_buffer_start_ptr(buf);
+    buf_end = buf_start + buf_len;
+    pd = buf_end - textlen;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte before the previous match start */
+        pd = buf_start + cf->search_pos - 1;
+    }
+    for (; pd < buf_end; pd++) {
+        pd = (uint8_t *)ws_memrchr(buf_start, ascii_text[0], pd - buf_start + 1);
+        if (pd == NULL) break;
+        /* Try narrow match at this start location */
+        c_match = 0;
+        for (i = 0; pd + i < buf_end; i++) {
+            c_char = pd[i];
+            if (c_char == ascii_text[c_match]) {
+                c_match++;
+                if (c_match == textlen) {
+                    result = MR_MATCHED;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
+                    goto done;
+                }
+            } else {
+                break;
+            }
+        }
+
+        /* Now try wide match at the same start location. */
+        c_match = 0;
+        for (i = 0; pd + i < buf_end; i++) {
+            c_char = pd[i];
+            if (c_char == ascii_text[c_match]) {
+                c_match++;
+                if (c_match == textlen) {
+                    result = MR_MATCHED;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
                     goto done;
                 }
                 i++;
@@ -3673,7 +3824,12 @@ match_narrow_and_wide_case(capture_file *cf, frame_data *fdata,
     buf_len = fdata->cap_len;
     buf_start = ws_buffer_start_ptr(buf);
     buf_end = buf_start + buf_len;
-    for (pd = buf_start; pd < buf_end; pd++) {
+    pd = buf_start;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte past the previous match start */
+        pd += cf->search_pos + 1;
+    }
+    for (; pd < buf_end; pd++) {
         pd = (guint8 *)ws_mempbrk_exec(pd, buf_end - pd, pattern, &c_char);
         if (pd == NULL) break;
         /* Try narrow match at this start location */
@@ -3685,8 +3841,8 @@ match_narrow_and_wide_case(capture_file *cf, frame_data *fdata,
                 if (c_match == textlen) {
                     result = MR_MATCHED;
                     /* Save position and length for highlighting the field. */
-                    cf->search_pos = (guint32)(pd - buf_start);
-                    cf->search_len = (guint32)(textlen);
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
                     goto done;
                 }
             } else {
@@ -3703,8 +3859,90 @@ match_narrow_and_wide_case(capture_file *cf, frame_data *fdata,
                 if (c_match == textlen) {
                     result = MR_MATCHED;
                     /* Save position and length for highlighting the field. */
-                    cf->search_pos = (guint32)(pd - buf_start);
-                    cf->search_len = (guint32)(textlen);
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
+                    goto done;
+                }
+                i++;
+                if (pd + i >= buf_end || pd[i] != '\0') break;
+            } else {
+                break;
+            }
+        }
+    }
+
+done:
+    return result;
+}
+
+static match_result
+match_narrow_and_wide_case_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *rec, Buffer *buf, void *criterion)
+{
+    cbs_t        *info       = (cbs_t *)criterion;
+    const guint8 *ascii_text = info->data;
+    size_t        textlen    = info->data_len;
+    ws_mempbrk_pattern *pattern = info->pattern;
+    match_result  result;
+    guint32       buf_len;
+    guint8       *pd, *buf_start, *buf_end;
+    guint32       i;
+    guint8        c_char;
+    size_t        c_match    = 0;
+
+    /* Load the frame's data. */
+    if (!cf_read_record(cf, fdata, rec, buf)) {
+        /* Attempt to get the packet failed. */
+        return MR_ERROR;
+    }
+
+    ws_assert(pattern != NULL);
+
+    result = MR_NOTMATCHED;
+    /* Has to be room to hold the sought data. */
+    if (textlen > fdata->cap_len) {
+        return result;
+    }
+    buf_len = fdata->cap_len;
+    buf_start = ws_buffer_start_ptr(buf);
+    buf_end = buf_start + buf_len;
+    pd = buf_end - textlen;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte before the previous match start */
+        pd = buf_start + cf->search_pos - 1;
+    }
+    for (; pd >= buf_start; pd--) {
+        pd = (guint8 *)ws_memrpbrk_exec(buf_start, pd - buf_start + 1, pattern, &c_char);
+        if (pd == NULL) break;
+        /* Try narrow match at this start location */
+        c_match = 0;
+        for (i = 0; pd + i < buf_end; i++) {
+            c_char = g_ascii_toupper(pd[i]);
+            if (c_char == ascii_text[c_match]) {
+                c_match++;
+                if (c_match == textlen) {
+                    result = MR_MATCHED;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
+                    goto done;
+                }
+            } else {
+                break;
+            }
+        }
+
+        /* Now try wide match at the same start location. */
+        c_match = 0;
+        for (i = 0; pd + i < buf_end; i++) {
+            c_char = g_ascii_toupper(pd[i]);
+            if (c_char == ascii_text[c_match]) {
+                c_match++;
+                if (c_match == textlen) {
+                    result = MR_MATCHED;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
                     goto done;
                 }
                 i++;
@@ -3747,7 +3985,12 @@ match_narrow_case(capture_file *cf, frame_data *fdata,
     buf_len = fdata->cap_len;
     buf_start = ws_buffer_start_ptr(buf);
     buf_end = buf_start + buf_len;
-    for (pd = buf_start; pd < buf_end; pd++) {
+    pd = buf_start;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte past the previous match start */
+        pd += cf->search_pos + 1;
+    }
+    for (; pd < buf_end; pd++) {
         pd = (guint8 *)ws_mempbrk_exec(pd, buf_end - pd, pattern, &c_char);
         if (pd == NULL) break;
         c_match = 0;
@@ -3758,8 +4001,69 @@ match_narrow_case(capture_file *cf, frame_data *fdata,
                 if (c_match == textlen) {
                     /* Save position and length for highlighting the field. */
                     result = MR_MATCHED;
-                    cf->search_pos = (guint32)(pd - buf_start);
-                    cf->search_len = (guint32)(textlen);
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
+                    goto done;
+                }
+            } else {
+                break;
+            }
+        }
+    }
+
+done:
+    return result;
+}
+
+static match_result
+match_narrow_case_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *rec, Buffer *buf, void *criterion)
+{
+    cbs_t        *info       = (cbs_t *)criterion;
+    const guint8 *ascii_text = info->data;
+    size_t        textlen    = info->data_len;
+    ws_mempbrk_pattern *pattern = info->pattern;
+    match_result  result;
+    guint32       buf_len;
+    guint8       *pd, *buf_start, *buf_end;
+    guint32       i;
+    guint8        c_char;
+    size_t        c_match    = 0;
+
+    /* Load the frame's data. */
+    if (!cf_read_record(cf, fdata, rec, buf)) {
+        /* Attempt to get the packet failed. */
+        return MR_ERROR;
+    }
+
+    ws_assert(pattern != NULL);
+
+    result = MR_NOTMATCHED;
+    /* Has to be room to hold the sought data. */
+    if (textlen > fdata->cap_len) {
+        return result;
+    }
+    buf_len = fdata->cap_len;
+    buf_start = ws_buffer_start_ptr(buf);
+    buf_end = buf_start + buf_len;
+    pd = buf_end - textlen;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte before the previous match start */
+        pd = buf_start + cf->search_pos - 1;
+    }
+    for (; pd >= buf_start; pd--) {
+        pd = (guint8 *)ws_memrpbrk_exec(buf_start, pd - buf_start + 1, pattern, &c_char);
+        if (pd == NULL) break;
+        c_match = 0;
+        for (i = 0; pd + i < buf_end; i++) {
+            c_char = g_ascii_toupper(pd[i]);
+            if (c_char == ascii_text[c_match]) {
+                c_match++;
+                if (c_match == textlen) {
+                    /* Save position and length for highlighting the field. */
+                    result = MR_MATCHED;
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
                     goto done;
                 }
             } else {
@@ -3796,7 +4100,12 @@ match_wide(capture_file *cf, frame_data *fdata,
     buf_len = fdata->cap_len;
     buf_start = ws_buffer_start_ptr(buf);
     buf_end = buf_start + buf_len;
-    for (pd = buf_start; pd < buf_end; pd++) {
+    pd = buf_start;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte past the previous match start */
+        pd += cf->search_pos + 1;
+    }
+    for (; pd < buf_end; pd++) {
         pd = (guint8 *)memchr(pd, ascii_text[0], buf_end - pd);
         if (pd == NULL) break;
         c_match = 0;
@@ -3807,8 +4116,68 @@ match_wide(capture_file *cf, frame_data *fdata,
                 if (c_match == textlen) {
                     result = MR_MATCHED;
                     /* Save position and length for highlighting the field. */
-                    cf->search_pos = (guint32)(pd - buf_start);
-                    cf->search_len = (guint32)(textlen);
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
+                    goto done;
+                }
+                i++;
+                if (pd + i >= buf_end || pd[i] != '\0') break;
+            } else {
+                break;
+            }
+        }
+    }
+
+done:
+    return result;
+}
+
+static match_result
+match_wide_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *rec, Buffer *buf, void *criterion)
+{
+    cbs_t        *info       = (cbs_t *)criterion;
+    const guint8 *ascii_text = info->data;
+    size_t        textlen    = info->data_len;
+    match_result  result;
+    guint32       buf_len;
+    guint8       *pd, *buf_start, *buf_end;
+    guint32       i;
+    guint8        c_char;
+    size_t        c_match    = 0;
+
+    /* Load the frame's data. */
+    if (!cf_read_record(cf, fdata, rec, buf)) {
+        /* Attempt to get the packet failed. */
+        return MR_ERROR;
+    }
+
+    result = MR_NOTMATCHED;
+    /* Has to be room to hold the sought data. */
+    if (textlen > fdata->cap_len) {
+        return result;
+    }
+    buf_len = fdata->cap_len;
+    buf_start = ws_buffer_start_ptr(buf);
+    buf_end = buf_start + buf_len;
+    pd = buf_end - textlen;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte before the previous match start */
+        pd = buf_start + cf->search_pos - 1;
+    }
+    for (; pd < buf_end; pd++) {
+        pd = (uint8_t *)ws_memrchr(buf_start, ascii_text[0], pd - buf_start + 1);
+        if (pd == NULL) break;
+        c_match = 0;
+        for (i = 0; pd + i < buf_end; i++) {
+            c_char = pd[i];
+            if (c_char == ascii_text[c_match]) {
+                c_match++;
+                if (c_match == textlen) {
+                    result = MR_MATCHED;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
                     goto done;
                 }
                 i++;
@@ -3851,7 +4220,12 @@ match_wide_case(capture_file *cf, frame_data *fdata,
     buf_len = fdata->cap_len;
     buf_start = ws_buffer_start_ptr(buf);
     buf_end = buf_start + buf_len;
-    for (pd = buf_start; pd < buf_end; pd++) {
+    pd = buf_start;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte past the previous match start */
+        pd += cf->search_pos + 1;
+    }
+    for (; pd < buf_end; pd++) {
         pd = (guint8 *)ws_mempbrk_exec(pd, buf_end - pd, pattern, &c_char);
         if (pd == NULL) break;
         c_match = 0;
@@ -3862,8 +4236,72 @@ match_wide_case(capture_file *cf, frame_data *fdata,
                 if (c_match == textlen) {
                     result = MR_MATCHED;
                     /* Save position and length for highlighting the field. */
-                    cf->search_pos = (guint32)(pd - buf_start);
-                    cf->search_len = (guint32)(textlen);
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
+                    goto done;
+                }
+                i++;
+                if (pd + i >= buf_end || pd[i] != '\0') break;
+            } else {
+                break;
+            }
+        }
+    }
+
+done:
+    return result;
+}
+
+/* Case insensitive match */
+static match_result
+match_wide_case_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *rec, Buffer *buf, void *criterion)
+{
+    cbs_t        *info       = (cbs_t *)criterion;
+    const guint8 *ascii_text = info->data;
+    size_t        textlen    = info->data_len;
+    ws_mempbrk_pattern *pattern = info->pattern;
+    match_result  result;
+    guint32       buf_len;
+    guint8       *pd, *buf_start, *buf_end;
+    guint32       i;
+    guint8        c_char;
+    size_t        c_match    = 0;
+
+    /* Load the frame's data. */
+    if (!cf_read_record(cf, fdata, rec, buf)) {
+        /* Attempt to get the packet failed. */
+        return MR_ERROR;
+    }
+
+    ws_assert(pattern != NULL);
+
+    result = MR_NOTMATCHED;
+    /* Has to be room to hold the sought data. */
+    if (textlen > fdata->cap_len) {
+        return result;
+    }
+    buf_len = fdata->cap_len;
+    buf_start = ws_buffer_start_ptr(buf);
+    buf_end = buf_start + buf_len;
+    pd = buf_end - textlen;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte before the previous match start */
+        pd = buf_start + cf->search_pos - 1;
+    }
+    for (; pd >= buf_start; pd--) {
+        pd = (guint8 *)ws_memrpbrk_exec(buf_start, pd - buf_start + 1, pattern, &c_char);
+        if (pd == NULL) break;
+        c_match = 0;
+        for (i = 0; pd + i < buf_end; i++) {
+            c_char = g_ascii_toupper(pd[i]);
+            if (c_char == ascii_text[c_match]) {
+                c_match++;
+                if (c_match == textlen) {
+                    result = MR_MATCHED;
+                    /* Save position and length for highlighting the field. */
+                    cf->search_pos = (uint32_t)(pd - buf_start);
+                    cf->search_len = (uint32_t)(i + 1);
                     goto done;
                 }
                 i++;
@@ -3885,7 +4323,7 @@ match_binary(capture_file *cf, frame_data *fdata,
     cbs_t        *info        = (cbs_t *)criterion;
     size_t        datalen     = info->data_len;
     match_result  result;
-    const uint8_t *pd, *buf_start;
+    const uint8_t *pd = NULL, *buf_start;
 
     /* Load the frame's data. */
     if (!cf_read_record(cf, fdata, rec, buf)) {
@@ -3895,12 +4333,60 @@ match_binary(capture_file *cf, frame_data *fdata,
 
     result = MR_NOTMATCHED;
     buf_start = ws_buffer_start_ptr(buf);
-    pd = ws_memmem(buf_start, fdata->cap_len, info->data, datalen);
+    size_t offset = 0;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte past the previous match start */
+        offset = cf->search_pos + 1;
+    }
+    if (offset < fdata->cap_len) {
+        pd = ws_memmem(buf_start + offset, fdata->cap_len - offset, info->data, datalen);
+    }
     if (pd != NULL) {
         result = MR_MATCHED;
         /* Save position and length for highlighting the field. */
         cf->search_pos = (uint32_t)(pd - buf_start);
         cf->search_len = (uint32_t)datalen;
+    }
+
+    return result;
+}
+
+static match_result
+match_binary_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *rec, Buffer *buf, void *criterion)
+{
+    cbs_t        *info        = (cbs_t *)criterion;
+    size_t        datalen     = info->data_len;
+    match_result  result;
+    const uint8_t *pd = NULL, *buf_start;
+
+    /* Load the frame's data. */
+    if (!cf_read_record(cf, fdata, rec, buf)) {
+        /* Attempt to get the packet failed. */
+        return MR_ERROR;
+    }
+
+    result = MR_NOTMATCHED;
+    buf_start = ws_buffer_start_ptr(buf);
+    /* Has to be room to hold the sought data. */
+    if (datalen > fdata->cap_len) {
+        return result;
+    }
+    pd = buf_start + fdata->cap_len - datalen;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte before the previous match start */
+        pd = buf_start + cf->search_pos - 1;
+    }
+    for (; pd >= buf_start; pd--) {
+        pd = (uint8_t *)ws_memrchr(buf_start, info->data[0], pd - buf_start + 1);
+        if (pd == NULL) break;
+        if (memcmp(pd, info->data, datalen) == 0) {
+            result = MR_MATCHED;
+            /* Save position and length for highlighting the field. */
+            cf->search_pos = (uint32_t)(pd - buf_start);
+            cf->search_len = (uint32_t)datalen;
+            break;
+        }
     }
 
     return result;
@@ -3919,18 +4405,62 @@ match_regex(capture_file *cf, frame_data *fdata,
         return MR_ERROR;
     }
 
-    if (ws_regex_matches_pos(cf->regex,
-                                (const gchar *)ws_buffer_start_ptr(buf),
-                                fdata->cap_len, 0,
-                                result_pos)) {
-        //TODO: A chosen regex can match the empty string (zero length)
-        // which doesn't make a lot of sense for searching the packet bytes.
-        // Should we search with the PCRE2_NOTEMPTY option?
-        //TODO: Fix cast.
-        /* Save position and length for highlighting the field. */
-        cf->search_pos = (guint32)(result_pos[0]);
-        cf->search_len = (guint32)(result_pos[1] - result_pos[0]);
-        result = MR_MATCHED;
+    size_t offset = 0;
+    if (cf->search_len || cf->search_pos) {
+        /* we want to start searching one byte past the previous match start */
+        offset = cf->search_pos + 1;
+    }
+    if (offset < fdata->cap_len) {
+        if (ws_regex_matches_pos(cf->regex,
+                                    (const gchar *)ws_buffer_start_ptr(buf),
+                                    fdata->cap_len, offset,
+                                    result_pos)) {
+            //TODO: A chosen regex can match the empty string (zero length)
+            // which doesn't make a lot of sense for searching the packet bytes.
+            // Should we search with the PCRE2_NOTEMPTY option?
+            //TODO: Fix cast.
+            /* Save position and length for highlighting the field. */
+            cf->search_pos = (guint32)(result_pos[0]);
+            cf->search_len = (guint32)(result_pos[1] - result_pos[0]);
+            result = MR_MATCHED;
+        }
+    }
+    return result;
+}
+
+static match_result
+match_regex_reverse(capture_file *cf, frame_data *fdata,
+        wtap_rec *rec, Buffer *buf, void *criterion _U_)
+{
+    match_result  result = MR_NOTMATCHED;
+    size_t result_pos[2] = {0, 0};
+
+    /* Load the frame's data. */
+    if (!cf_read_record(cf, fdata, rec, buf)) {
+        /* Attempt to get the packet failed. */
+        return MR_ERROR;
+    }
+
+    size_t offset = fdata->cap_len - 1;
+    if (cf->search_pos) {
+        /* we want to start searching one byte before the previous match */
+        offset = cf->search_pos - 1;
+    }
+    for (; offset > 0; offset--) {
+        if (ws_regex_matches_pos(cf->regex,
+                                    (const gchar *)ws_buffer_start_ptr(buf),
+                                    fdata->cap_len, offset,
+                                    result_pos)) {
+            //TODO: A chosen regex can match the empty string (zero length)
+            // which doesn't make a lot of sense for searching the packet bytes.
+            // Should we search with the PCRE2_NOTEMPTY option?
+            //TODO: Fix cast.
+            /* Save position and length for highlighting the field. */
+            cf->search_pos = (guint32)(result_pos[0]);
+            cf->search_len = (guint32)(result_pos[1] - result_pos[0]);
+            result = MR_MATCHED;
+            break;
+        }
     }
     return result;
 }
@@ -4173,12 +4703,12 @@ find_packet(capture_file *cf, ws_match_function match_function,
         cf->search_in_progress = TRUE;
         found_row = packet_list_select_row_from_data(new_fd);
         cf->search_in_progress = FALSE;
-        cf->search_pos = 0; /* Reset the position */
-        cf->search_len = 0; /* Reset length */
         if (!found_row) {
             /* We didn't find a row corresponding to this frame.
                This means that the frame isn't being displayed currently,
                so we can't select it. */
+            cf->search_pos = 0; /* Reset the position */
+            cf->search_len = 0; /* Reset length */
             simple_message_box(ESD_TYPE_INFO, NULL,
                     "The capture file is probably not fully dissected.",
                     "End of capture exceeded.");
@@ -4405,6 +4935,52 @@ cf_update_section_comment(capture_file *cf, gchar *comment)
     }
     /* Mark the file as having unsaved changes */
     cf->unsaved_changes = TRUE;
+}
+
+/*
+ * Modify the section comments for a given section.
+ */
+void
+cf_update_section_comments(capture_file *cf, unsigned shb_idx, char **comments)
+{
+    wtap_block_t shb_inf;
+    gchar *shb_comment;
+
+    shb_inf = wtap_file_get_shb(cf->provider.wth, shb_idx);
+    if (shb_inf == NULL) {
+        /* Shouldn't happen. XXX: Report it if it does? */
+        return;
+    }
+
+    unsigned n_comments = g_strv_length(comments);
+    unsigned i;
+    char* comment;
+
+    for (i = 0; i < n_comments; i++) {
+        comment = comments[i];
+        if (wtap_block_get_nth_string_option_value(shb_inf, OPT_COMMENT, i, &shb_comment) != WTAP_OPTTYPE_SUCCESS) {
+            /* There's no comment - add one. */
+            wtap_block_add_string_option_owned(shb_inf, OPT_COMMENT, comment);
+            cf->unsaved_changes = TRUE;
+        } else {
+            /* See if the comment has changed or not */
+            if (strcmp(shb_comment, comment) != 0) {
+                /* The comment has changed, let's update it */
+                wtap_block_set_nth_string_option_value(shb_inf, OPT_COMMENT, 0, comment, strlen(comment));
+                cf->unsaved_changes = TRUE;
+            }
+            g_free(comment);
+        }
+    }
+    /* We either transferred ownership of the comments or freed them
+     * above, so free the array of strings but not the strings themselves. */
+    g_free(comments);
+
+    /* If there are extra old comments, remove them. Start at the end. */
+    for (i = wtap_block_count_option(shb_inf, OPT_COMMENT); i > n_comments; i--) {
+        wtap_block_remove_nth_option_instance(shb_inf, OPT_COMMENT, i - 1);
+        cf->unsaved_changes = TRUE;
+    }
 }
 
 /*

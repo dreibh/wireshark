@@ -84,12 +84,12 @@ static int dissect_ProtectedAircraftPDUs_PDU(
 #include "packet-atn-cpdlc-hf.c"
 
 #include "packet-atn-cpdlc-ett.c"
-static gint ett_atn_cpdlc = -1;
+static gint ett_atn_cpdlc;
 
 #include "packet-atn-cpdlc-fn.c"
 
 /* Wireshark ID of CPDLC protocol */
-static int proto_atn_cpdlc = -1;
+static int proto_atn_cpdlc;
 
 
 static int
@@ -310,10 +310,7 @@ void proto_register_atn_cpdlc (void)
     };
 
     /* register CPDLC */
-    proto_atn_cpdlc = proto_register_protocol(
-        ATN_CPDLC_PROTO ,
-        "ATN-CPDLC",
-        "atn-cpdlc");
+    proto_atn_cpdlc = proto_register_protocol(ATN_CPDLC_PROTO, "ATN-CPDLC", "atn-cpdlc");
 
     proto_register_field_array(
         proto_atn_cpdlc,

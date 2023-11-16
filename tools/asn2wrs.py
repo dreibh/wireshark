@@ -304,6 +304,7 @@ reserved_words = {
     'SET'         : 'SET',
     'SIZE'        : 'SIZE',
     'STRING'      : 'STRING',
+    'SUCCESSORS'  : 'SUCCESSORS',
     'SYNTAX'      : 'SYNTAX',
     'TAGS'        : 'TAGS',
     'TRUE'        : 'TRUE',
@@ -1595,13 +1596,13 @@ class EthCtx:
         if not len(self.eth_hf_ord) and not len(self.eth_hfpdu_ord) and not len(self.named_bit): return
         fx = self.output.file_open('hf')
         for f in (self.eth_hfpdu_ord + self.eth_hf_ord):
-            fx.write("%-50s/* %s */\n" % ("static int %s = -1;  " % (self.eth_hf[f]['fullname']), self.eth_hf[f]['ethtype']))
+            fx.write("%-50s/* %s */\n" % ("static int %s;  " % (self.eth_hf[f]['fullname']), self.eth_hf[f]['ethtype']))
         if (self.named_bit):
             fx.write('/* named bits */\n')
         for nb in self.named_bit:
-            fx.write("static int %s = -1;\n" % (nb['ethname']))
+            fx.write("static int %s;\n" % (nb['ethname']))
         if (self.dummy_eag_field):
-            fx.write("static int %s = -1; /* never registered */\n" % (self.dummy_eag_field))
+            fx.write("static int %s; /* never registered */\n" % (self.dummy_eag_field))
         self.output.file_close(fx)
 
     #--- eth_output_hf_arr ------------------------------------------------------
@@ -1654,10 +1655,10 @@ class EthCtx:
     def eth_output_ett (self):
         fx = self.output.file_open('ett')
         fempty = True
-        #fx.write("static gint ett_%s = -1;\n" % (self.eproto))
+        #fx.write("static gint ett_%s;\n" % (self.eproto))
         for t in self.eth_type_ord:
             if self.eth_type[t]['tree']:
-                fx.write("static gint %s = -1;\n" % (self.eth_type[t]['tree']))
+                fx.write("static gint %s;\n" % (self.eth_type[t]['tree']))
                 fempty = False
         self.output.file_close(fx, discard=fempty)
 
@@ -5880,7 +5881,8 @@ def p_SymbolsFromModuleList_2 (t):
     t[0] = [t[1]]
 
 def p_SymbolsFromModule (t):
-    'SymbolsFromModule : SymbolList FROM GlobalModuleReference'
+    '''SymbolsFromModule : SymbolList FROM GlobalModuleReference
+                        | SymbolList FROM GlobalModuleReference WITH SUCCESSORS'''
     t[0] = Node ('SymbolList', symbol_list = t[1], module = t[3])
     for s in (t[0].symbol_list):
         if (isinstance(s, Value_Ref)): lcase_ident_assigned[s.val] = t[3]
@@ -7984,6 +7986,51 @@ def eth_usage():
                     o - list of output files
   """)
 
+
+## Used to preparse C style comments
+## https://github.com/eerimoq/asn1tools/blob/master/asn1tools/parser.py#L231
+##
+def ignore_comments(string):
+    """Ignore comments in given string by replacing them with spaces. This
+    reduces the parsing time by roughly a factor of two.
+
+    """
+
+    comments = [
+        (mo.start(), mo.group(0))
+        for mo in re.finditer(r'(/\*|\*/|\n)', string)
+    ]
+
+    comments.sort()
+
+    multi_line_comment_depth = 0
+    start_offset = 0
+    non_comment_offset = 0
+    chunks = []
+
+    for offset, kind in comments:
+        if multi_line_comment_depth > 0:
+            if kind == '/*':
+                multi_line_comment_depth += 1
+            elif kind == '*/':
+                multi_line_comment_depth -= 1
+
+                if multi_line_comment_depth == 0:
+                    offset += 2
+                    chunks.append(' ' * (offset - start_offset))
+                    non_comment_offset = offset
+            elif kind == '\n':
+                chunks.append('\n')
+                non_comment_offset = offset
+        elif kind == '/*':
+            multi_line_comment_depth = 1
+            start_offset = offset
+            chunks.append(string[non_comment_offset:start_offset])
+
+    chunks.append(string[non_comment_offset:])
+
+    return ''.join(chunks)
+
 def eth_main():
     global input_file
     global g_conform
@@ -8073,6 +8120,7 @@ def eth_main():
         # Py2 compat, name.translate in eth_output_hf_arr fails with unicode
         if not isinstance(data, str):
             data = data.encode('utf-8')
+        data = ignore_comments(data)
         ast.extend(yacc.parse(data, lexer=lexer, debug=pd))
     ectx.eth_clean()
     if (ectx.merge_modules):  # common output for all module

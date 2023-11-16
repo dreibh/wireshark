@@ -55,6 +55,7 @@
 #include "zlib.h"
 #include <epan/crc32-tvb.h>
 #include <wsutil/crc32.h>
+#include <wsutil/str_util.h>
 #include <gcrypt.h>
 
 void proto_register_rtps(void);
@@ -915,6 +916,7 @@ static int hf_rtps_parameter_id_toc             = -1;
 static int hf_rtps_parameter_id_rti             = -1;
 static int hf_rtps_parameter_id_adl             = -1;
 static int hf_rtps_parameter_length             = -1;
+static int hf_rtps_string_length                = -1;
 static int hf_rtps_coherent_set_start           = -1;
 static int hf_rtps_coherent_set_end             = -1;
 static int hf_rtps_param_topic_name             = -1;
@@ -1045,7 +1047,8 @@ static int hf_rtps_param_builtin_endpoint_qos               = -1;
 static int hf_rtps_secure_dataheader_transformation_kind    = -1;
 static int hf_rtps_secure_dataheader_transformation_key_revision_id    = -1;
 static int hf_rtps_secure_dataheader_transformation_key_id  = -1;
-static int hf_rtps_secure_dataheader_plugin_sec_header      = -1;
+static int hf_rtps_secure_dataheader_init_vector_suffix     = -1;
+static int hf_rtps_secure_dataheader_session_id             = -1;
 static int hf_rtps_secure_datatag_plugin_sec_tag            = -1;
 static int hf_rtps_pgm                                      = -1;
 static int hf_rtps_pgm_dst_participant_guid                 = -1;
@@ -2802,6 +2805,13 @@ static const fragment_items rtps_frag_items = {
 
 static const true_false_string tfs_little_big_endianness = { "Little-Endian", "Big-Endian" };
 
+/* #19359 - ensure strings we copy aren't truncated halfway through a Unicode codepoint */
+static void rtps_strlcpy(char *dest, const char *src, size_t dest_size)
+{
+  (void) g_strlcpy(dest, src, dest_size);
+  ws_utf8_truncate(dest, dest_size);
+}
+
 static gint check_offset_addition(gint offset, guint32 value, proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb)
 {
     gint new_offset = offset + (gint)value;
@@ -4476,15 +4486,15 @@ static void rtps_util_add_generic_guid_v1(proto_tree *tree, tvbuff_t *tvb, gint 
 /* ------------------------------------------------------------------------- */
 /* Insert in the protocol tree the next data interpreted as a String
  * Returns the new offset (after reading the string)
+ * XXX - should check that string length field makes sense, possibly by
+ *       comparing to a passed-in container length (cf. #19359)
  */
 static gint rtps_util_add_string(proto_tree *tree, tvbuff_t *tvb, gint offset,
                           int hf_item, const guint encoding) {
-  guint8 *retVal = NULL;
-  guint32 size = tvb_get_guint32(tvb, offset, encoding);
+  guint32 size;
 
-  retVal = tvb_get_string_enc(wmem_packet_scope(), tvb, offset+4, size, ENC_ASCII);
-
-  proto_tree_add_string(tree, hf_item, tvb, offset, size+4, retVal);
+  proto_tree_add_item_ret_uint(tree, hf_rtps_string_length, tvb, offset, 4, encoding, &size);
+  proto_tree_add_item(tree, hf_item, tvb, offset+4, size, ENC_ASCII);
 
   /* NDDS align strings at 4-bytes word. So:
    *  string_length: 4 -> buffer_length = 4;
@@ -5008,7 +5018,7 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
     case RTI_CDR_TK_UNION: {
         guint32     struct_name_len;
         guint8      *struct_name;
-        const char *discriminator_name      = "<unknown>"; /* for unions */
+        const char *discriminator_name;                    /* for unions */
         char       *discriminator_enum_name = NULL;        /* for unions with enum discriminator */
         /*guint32 defaultIdx;*/ /* Currently is ignored */
         guint32     disc_id;                               /* Used temporarily to populate 'discriminator_name' */
@@ -6463,13 +6473,13 @@ static void rtps_util_store_type_mapping(packet_info *pinfo _U_, tvbuff_t *tvb, 
           break;
         }
         case TOPIC_INFO_ADD_TOPIC_NAME: {
-          (void) g_strlcpy(type_mapping_object->topic_name, value, MAX_TOPIC_AND_TYPE_LENGTH);
+          rtps_strlcpy(type_mapping_object->topic_name, value, MAX_TOPIC_AND_TYPE_LENGTH);
           type_mapping_object->fields_visited =
                   type_mapping_object->fields_visited | TOPIC_INFO_ADD_TOPIC_NAME;
           break;
         }
         case TOPIC_INFO_ADD_TYPE_NAME: {
-          (void) g_strlcpy(type_mapping_object->type_name, value, MAX_TOPIC_AND_TYPE_LENGTH);
+          rtps_strlcpy(type_mapping_object->type_name, value, MAX_TOPIC_AND_TYPE_LENGTH);
           type_mapping_object->fields_visited =
                   type_mapping_object->fields_visited | TOPIC_INFO_ADD_TYPE_NAME;
           break;
@@ -13265,15 +13275,15 @@ static void dissect_SECURE_PREFIX(tvbuff_t *tvb, packet_info *pinfo _U_, gint of
      * SecureDataHeader: TransformationIdentifier (kind + key) + plugin_sec_header
      *  0...2...........8...............16.............24...............32
      * +---------------+---------------+---------------+---------------+
-     * |                 octet transformation_kind[4]                  |
+     * | Revision_id                                   |tran...on_kind |
      * +---------------+---------------+---------------+---------------+
      * |                                                               |
      * +                 octet transformation_key_id[4]                +
      * |                                                               |
      * +---------------+---------------+---------------+---------------+
-     * |                                                               |
-     * ~                 octet plugin_sec_header[]                     ~
-     * |                                                               |
+     * |                          sesion_id                            |
+     * +---------------+---------------+---------------+---------------+
+     * |               init_vector_suffix[8]                           |
      * +---------------+---------------+---------------+---------------+
      */
   proto_tree * sec_data_header_tree;
@@ -13302,11 +13312,15 @@ static void dissect_SECURE_PREFIX(tvbuff_t *tvb, packet_info *pinfo _U_, gint of
   offset += 1;
 
   proto_tree_add_item(sec_data_header_tree, hf_rtps_secure_dataheader_transformation_key_id, tvb,
-          offset, 4, encoding);
+          offset, 4, ENC_NA);
   offset += 4;
 
-  proto_tree_add_item(sec_data_header_tree, hf_rtps_secure_dataheader_plugin_sec_header, tvb,
-          offset, octets_to_next_header-8, encoding);
+  proto_tree_add_item(sec_data_header_tree, hf_rtps_secure_dataheader_session_id, tvb,
+          offset, 4, ENC_BIG_ENDIAN);
+  offset += 4;
+
+  proto_tree_add_item(sec_data_header_tree, hf_rtps_secure_dataheader_init_vector_suffix, tvb,
+          offset, octets_to_next_header-12, ENC_NA);
 }
 
 static void dissect_SECURE_POSTFIX(tvbuff_t *tvb, packet_info *pinfo _U_, gint offset,
@@ -14768,6 +14782,18 @@ void proto_register_rtps(void) {
         NULL,
         0,
         "Parameter Length",
+        HFILL }
+    },
+
+    /* String Length ---------------------------------------------------- */
+    { &hf_rtps_string_length, {
+        "String length",
+        "rtps.param.string.length",
+        FT_UINT32,
+        BASE_DEC,
+        NULL,
+        0,
+        NULL,
         HFILL }
     },
 
@@ -16641,9 +16667,14 @@ void proto_register_rtps(void) {
         FT_BYTES, BASE_NONE, NULL, 0,
         NULL, HFILL }
     },
-    { &hf_rtps_secure_dataheader_plugin_sec_header, {
-        "Plugin Secure Header", "rtps.secure.data_header.plugin_sec_header",
+    { &hf_rtps_secure_dataheader_init_vector_suffix, {
+        "Plugin Secure Header", "rtps.secure.data_header.init_vector_suffix",
         FT_BYTES, BASE_NONE, NULL, 0,
+        NULL, HFILL }
+    },
+    { &hf_rtps_secure_dataheader_session_id, {
+        "Session Id", "rtps.secure.data_header.session_id",
+        FT_UINT32, BASE_HEX, NULL, 0,
         NULL, HFILL }
     },
     { &hf_rtps_secure_datatag_plugin_sec_tag, {
@@ -17169,10 +17200,7 @@ void proto_register_rtps(void) {
   module_t *rtps_module;
   expert_module_t *expert_rtps;
 
-  proto_rtps = proto_register_protocol(
-                        "Real-Time Publish-Subscribe Wire Protocol",
-                        "RTPS",
-                        "rtps");
+  proto_rtps = proto_register_protocol("Real-Time Publish-Subscribe Wire Protocol", "RTPS", "rtps");
   proto_register_field_array(proto_rtps, hf, array_length(hf));
   proto_register_subtree_array(ett, array_length(ett));
   expert_rtps = expert_register_protocol(proto_rtps);

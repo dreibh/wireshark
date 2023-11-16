@@ -343,24 +343,24 @@ static void
 proto_tree_set_eui64_tvb(field_info *fi, tvbuff_t *tvb, gint start, const guint encoding);
 
 /* Handle type length mismatch (now filterable) expert info */
-static int proto_type_length_mismatch = -1;
-static expert_field ei_type_length_mismatch_error = EI_INIT;
-static expert_field ei_type_length_mismatch_warn = EI_INIT;
+static int proto_type_length_mismatch;
+static expert_field ei_type_length_mismatch_error;
+static expert_field ei_type_length_mismatch_warn;
 static void register_type_length_mismatch(void);
 
 /* Handle byte array string decoding errors with expert info */
-static int proto_byte_array_string_decoding_error = -1;
-static expert_field ei_byte_array_string_decoding_failed_error = EI_INIT;
+static int proto_byte_array_string_decoding_error;
+static expert_field ei_byte_array_string_decoding_failed_error;
 static void register_byte_array_string_decodinws_error(void);
 
 /* Handle date and time string decoding errors with expert info */
-static int proto_date_time_string_decoding_error = -1;
-static expert_field ei_date_time_string_decoding_failed_error = EI_INIT;
+static int proto_date_time_string_decoding_error;
+static expert_field ei_date_time_string_decoding_failed_error;
 static void register_date_time_string_decodinws_error(void);
 
 /* Handle string errors expert info */
-static int proto_string_errors = -1;
-static expert_field ei_string_trailing_characters = EI_INIT;
+static int proto_string_errors;
+static expert_field ei_string_trailing_characters;
 static void register_string_errors(void);
 
 static int proto_register_field_init(header_field_info *hfinfo, const int parent);
@@ -425,9 +425,9 @@ static GHashTable* prefixes = NULL;
 	wmem_free(pool, il);
 
 #define PROTO_REGISTRAR_GET_NTH(hfindex, hfinfo)						\
-	if((guint)hfindex >= gpa_hfinfo.len && wireshark_abort_on_dissector_bug)	\
+	if((hfindex == 0 || (guint)hfindex > gpa_hfinfo.len) && wireshark_abort_on_dissector_bug)	\
 		ws_error("Unregistered hf! index=%d", hfindex);					\
-	DISSECTOR_ASSERT_HINT((guint)hfindex < gpa_hfinfo.len, "Unregistered hf!");	\
+	DISSECTOR_ASSERT_HINT(hfindex > 0 && (guint)hfindex < gpa_hfinfo.len, "Unregistered hf!");	\
 	DISSECTOR_ASSERT_HINT(gpa_hfinfo.hfi[hfindex] != NULL, "Unregistered hf!");	\
 	hfinfo = gpa_hfinfo.hfi[hfindex];
 
@@ -464,8 +464,8 @@ static void save_same_name_hfinfo(gpointer data)
    an item of that type are to be expanded. */
 static guint32 *tree_is_expanded;
 
-/* Number of elements in that array. */
-int		num_tree_types;
+/* Number of elements in that array. The entry with index 0 is not used. */
+int		num_tree_types = 1;
 
 /* Name hashtables for fast detection of duplicate names */
 static GHashTable* proto_names        = NULL;
@@ -484,6 +484,7 @@ static const char *reserved_filter_names[] = {
 	"ge",
 	"lt",
 	"le",
+	"bitand",
 	"bitwise_and",
 	"contains",
 	"matches",
@@ -1092,8 +1093,8 @@ label_strcat_flags(const header_field_info *hfinfo)
 }
 
 static char *
-format_bytes_hfinfo(wmem_allocator_t *scope, const header_field_info *hfinfo,
-    const guint8 *bytes, guint length)
+format_bytes_hfinfo_maxlen(wmem_allocator_t *scope, const header_field_info *hfinfo,
+    const guint8 *bytes, guint length, size_t max_str_len)
 {
 	char *str = NULL;
 	const guint8 *p;
@@ -1142,23 +1143,23 @@ format_bytes_hfinfo(wmem_allocator_t *scope, const header_field_info *hfinfo,
 		 */
 		switch (FIELD_DISPLAY(hfinfo->display)) {
 		case SEP_DOT:
-			str = bytes_to_str_punct(scope, bytes, length, '.');
+			str = bytes_to_str_punct_maxlen(scope, bytes, length, '.', max_str_len/3);
 			break;
 		case SEP_DASH:
-			str = bytes_to_str_punct(scope, bytes, length, '-');
+			str = bytes_to_str_punct_maxlen(scope, bytes, length, '-', max_str_len/3);
 			break;
 		case SEP_COLON:
-			str = bytes_to_str_punct(scope, bytes, length, ':');
+			str = bytes_to_str_punct_maxlen(scope, bytes, length, ':', max_str_len/3);
 			break;
 		case SEP_SPACE:
-			str = bytes_to_str_punct(scope, bytes, length, ' ');
+			str = bytes_to_str_punct_maxlen(scope, bytes, length, ' ', max_str_len/3);
 			break;
 		case BASE_NONE:
 		default:
 			if (prefs.display_byte_fields_with_spaces) {
-				str = bytes_to_str_punct(scope, bytes, length, ' ');
+				str = bytes_to_str_punct_maxlen(scope, bytes, length, ' ', max_str_len/3);
 			} else {
-				str = bytes_to_str(scope, bytes, length);
+				str = bytes_to_str_maxlen(scope, bytes, length, max_str_len/2);
 			}
 			break;
 		}
@@ -1171,6 +1172,13 @@ format_bytes_hfinfo(wmem_allocator_t *scope, const header_field_info *hfinfo,
 		}
 	}
 	return str;
+}
+
+static char *
+format_bytes_hfinfo(wmem_allocator_t *scope, const header_field_info *hfinfo,
+    const guint8 *bytes, guint length)
+{
+	return format_bytes_hfinfo_maxlen(scope, hfinfo, bytes, length, ITEM_LABEL_LENGTH);
 }
 
 static void
@@ -2016,13 +2024,17 @@ get_time_value(proto_tree *tree, tvbuff_t *tvb, const gint start,
 				time_stamp->secs = (time_t)((gint64)tmpsecs + NTP_TIMEDIFF1970TO2036SEC);
 
 			if (length == 8) {
-				/*
-				 * Convert 1/2^32s of a second to nanoseconds.
-				 */
-				time_stamp->nsecs = (int)(1000000000*(tvb_get_ntohl(tvb, start+4)/4294967296.0));
-				if ((time_stamp->nsecs == 0) && (tmpsecs == 0)) {
+				tmp64secs = tvb_get_ntoh64(tvb, start);
+				if (tmp64secs == 0) {
 					//This is "NULL" time
 					time_stamp->secs = 0;
+					time_stamp->nsecs = 0;
+				} else {
+					/*
+					 * Convert 1/2^32s of a second to
+					 * nanoseconds.
+					 */
+					time_stamp->nsecs = (int)(1000000000*(tvb_get_ntohl(tvb, start+4)/4294967296.0));
 				}
 			} else if (length == 4) {
 				/*
@@ -2063,13 +2075,17 @@ get_time_value(proto_tree *tree, tvbuff_t *tvb, const gint start,
 				time_stamp->secs = (time_t)((gint64)tmpsecs + NTP_TIMEDIFF1970TO2036SEC);
 
 			if (length == 8) {
-				/*
-				 * Convert 1/2^32s of a second to nanoseconds.
-				 */
-				time_stamp->nsecs = (int)(1000000000*(tvb_get_letohl(tvb, start+4)/4294967296.0));
-				if ((time_stamp->nsecs == 0) && (tmpsecs == 0)) {
+				tmp64secs = tvb_get_letoh64(tvb, start);
+				if (tmp64secs == 0) {
 					//This is "NULL" time
 					time_stamp->secs = 0;
+					time_stamp->nsecs = 0;
+				} else {
+					/*
+					 * Convert 1/2^32s of a second to
+					 * nanoseconds.
+					 */
+					time_stamp->nsecs = (int)(1000000000*(tvb_get_letohl(tvb, start+4)/4294967296.0));
 				}
 			} else if (length == 4) {
 				/*
@@ -2460,31 +2476,55 @@ get_time_value(proto_tree *tree, tvbuff_t *tvb, const gint start,
 			break;
 		case ENC_TIME_MSEC_NTP | ENC_BIG_ENDIAN:
 			/*
-			* Milliseconds, 1 to 8 bytes.
+			* Milliseconds, 6 to 8 bytes.
 			* For absolute times, it's milliseconds since the
 			* NTP epoch.
+			*
+			* ETSI TS 129.274 8.119 defines this as:
+			* "a 48 bit unsigned integer in network order format
+			* ...encoded as the number of milliseconds since
+			* 00:00:00 January 1, 1900 00:00 UTC, i.e. as the
+			* rounded value of 1000 x the value of the 64-bit
+			* timestamp (Seconds + (Fraction / (1<<32))) defined
+			* in clause 6 of IETF RFC 5905."
+			*
+			* Taken literally, the part after "i.e." would
+			* mean that the value rolls over before reaching
+			* 2^32 * 1000 = 4294967296000 = 0x3e800000000
+			* when the 64 bit timestamp rolls over, and we have
+			* to pick an NTP Era equivalence class to support
+			* (such as 1968-01-20 to 2104-02-06).
+			*
+			* OTOH, the extra room might be used to store Era
+			* information instead, in which case times until
+			* 10819-08-03 can be represented with 6 bytes without
+			* ambiguity. We handle both implementations, and assume
+			* that times before 1968-01-20 are not represented.
+			*
+			* Only 6 bytes or more makes sense as an absolute
+			* time. 5 bytes or fewer could express a span of
+			* less than 35 years, either 1900-1934 or 2036-2070.
 			*/
-			if (length >= 1 && length <= 8) {
+			if (length >= 6 && length <= 8) {
 				guint64 msecs;
 
 				msecs = get_uint64_value(tree, tvb, start, length, encoding);
-				tmpsecs = (guint32)(msecs / 1000);
+				tmp64secs = (msecs / 1000);
 				/*
-				* If bit 0 is set, the UTC time is in the range 1968-2036 and
-				* UTC time is reckoned from 0h 0m 0s UTC on 1 January 1900.
-				* If bit 0 is not set, the time is in the range 2036-2104 and
-				* UTC time is reckoned from 6h 28m 16s UTC on 7 February 2036.
-				*/
-				if ((tmpsecs & 0x80000000) != 0)
-					time_stamp->secs = (time_t)((gint64)tmpsecs - NTP_TIMEDIFF1900TO1970SEC);
+				 * Assume that times in the first half of NTP
+				 * Era 0 really represent times in the NTP
+				 * Era 1.
+				 */
+				if (tmp64secs >= 0x80000000)
+					time_stamp->secs = (time_t)((gint64)tmp64secs - NTP_TIMEDIFF1900TO1970SEC);
 				else
-					time_stamp->secs = (time_t)((gint64)tmpsecs + NTP_TIMEDIFF1970TO2036SEC);
+					time_stamp->secs = (time_t)((gint64)tmp64secs + NTP_TIMEDIFF1970TO2036SEC);
 				time_stamp->nsecs = (int)(msecs % 1000)*1000000;
 			}
 			else {
 				time_stamp->secs  = 0;
 				time_stamp->nsecs = 0;
-				report_type_length_mismatch(tree, "a time-in-milliseconds NTP time stamp", length, (length < 4));
+				report_type_length_mismatch(tree, "a time-in-milliseconds NTP time stamp", length, (length < 6));
 			}
 			break;
 
@@ -4918,7 +4958,9 @@ proto_tree_add_ipv4_format(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 static void
 proto_tree_set_ipv4(field_info *fi, ws_in4_addr value)
 {
-	fvalue_set_uinteger(fi->value, value);
+	ipv4_addr_and_mask ipv4;
+	ws_ipv4_addr_and_mask_init(&ipv4, value, 32);
+	fvalue_set_ipv4(fi->value, &ipv4);
 }
 
 /* Add a FT_IPv6 to a proto_tree */
@@ -4986,7 +5028,10 @@ static void
 proto_tree_set_ipv6(field_info *fi, const ws_in6_addr *value)
 {
 	DISSECTOR_ASSERT(value != NULL);
-	fvalue_set_ipv6(fi->value, value);
+	ipv6_addr_and_prefix ipv6;
+	ipv6.addr = *value;
+	ipv6.prefix = 128;
+	fvalue_set_ipv6(fi->value, &ipv6);
 }
 
 static void
@@ -6790,8 +6835,8 @@ proto_item_fill_display_label(field_info *finfo, gchar *display_label_str, const
 	char number_buf[48];
 	const char *number_out;
 	address addr;
-	ws_in4_addr ipv4;
-	const ws_in6_addr *ipv6;
+	const ipv4_addr_and_mask *ipv4;
+	const ipv6_addr_and_prefix *ipv6;
 
 	switch (hfinfo->type) {
 
@@ -6801,10 +6846,11 @@ proto_item_fill_display_label(field_info *finfo, gchar *display_label_str, const
 
 		case FT_UINT_BYTES:
 		case FT_BYTES:
-			tmp_str = format_bytes_hfinfo(NULL,
+			tmp_str = format_bytes_hfinfo_maxlen(NULL,
 				hfinfo,
 				fvalue_get_bytes_data(finfo->value),
-				(guint)fvalue_length2(finfo->value));
+				(guint)fvalue_length2(finfo->value),
+				label_str_size);
 			label_len = protoo_strlcpy(display_label_str, tmp_str, label_str_size);
 			wmem_free(NULL, tmp_str);
 			break;
@@ -6953,19 +6999,22 @@ proto_item_fill_display_label(field_info *finfo, gchar *display_label_str, const
 			break;
 
 		case FT_IPv4:
-			ipv4 = fvalue_get_uinteger(finfo->value);
-			set_address (&addr, AT_IPv4, 4, &ipv4);
+			ipv4 = fvalue_get_ipv4(finfo->value);
+			//XXX: Should we ignore the mask?
+			set_address_ipv4(&addr, ipv4);
 			tmp_str = address_to_display(NULL, &addr);
 			label_len = protoo_strlcpy(display_label_str, tmp_str, label_str_size);
 			wmem_free(NULL, tmp_str);
+			free_address(&addr);
 			break;
 
 		case FT_IPv6:
 			ipv6 = fvalue_get_ipv6(finfo->value);
-			set_address (&addr, AT_IPv6, sizeof(ws_in6_addr), ipv6);
+			set_address_ipv6(&addr, ipv6);
 			tmp_str = address_to_display(NULL, &addr);
 			label_len = protoo_strlcpy(display_label_str, tmp_str, label_str_size);
 			wmem_free(NULL, tmp_str);
+			free_address(&addr);
 			break;
 
 		case FT_FCWWN:
@@ -7891,7 +7940,7 @@ proto_register_protocol_in_name_only(const char *name, const char *short_name, c
 		REPORT_DISSECTOR_BUG("Pino \"%s\" must be of type FT_PROTOCOL or FT_BYTES.", name);
 	}
 
-	if (parent_proto < 0) {
+	if (parent_proto <= 0) {
 		REPORT_DISSECTOR_BUG("Must have a valid parent protocol for helper protocol \"%s\"!"
 			" This might be caused by an inappropriate plugin or a development error.", name);
 	}
@@ -8063,7 +8112,7 @@ find_protocol_by_id(const int proto_id)
 {
 	header_field_info *hfinfo;
 
-	if (proto_id < 0)
+	if (proto_id <= 0)
 		return NULL;
 
 	PROTO_REGISTRAR_GET_NTH(proto_id, hfinfo);
@@ -9087,7 +9136,7 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 		case FT_UINT_STRING:
 		case FT_STRINGZPAD:
 		case FT_STRINGZTRUNC:
-			switch (hfinfo->display) {
+			switch (FIELD_DISPLAY(hfinfo->display)) {
 				case BASE_NONE:
 				case BASE_STR_WSP:
 					break;
@@ -9334,6 +9383,9 @@ proto_register_field_init(header_field_info *hfinfo, const int parent)
 		if (!gpa_hfinfo.hfi) {
 			gpa_hfinfo.allocated_len = PROTO_PRE_ALLOC_HF_FIELDS_MEM;
 			gpa_hfinfo.hfi = (header_field_info **)g_malloc(sizeof(header_field_info *)*PROTO_PRE_ALLOC_HF_FIELDS_MEM);
+			/* The entry with index 0 is not used. */
+			gpa_hfinfo.hfi[0] = NULL;
+			gpa_hfinfo.len = 1;
 		} else {
 			gpa_hfinfo.allocated_len += 1000;
 			gpa_hfinfo.hfi = (header_field_info **)g_realloc(gpa_hfinfo.hfi,
@@ -9442,11 +9494,11 @@ proto_register_subtree_array(gint * const *indices, const int num_indices)
 	 * "num_tree_types" appropriately.
 	 */
 	for (i = 0; i < num_indices; i++, ptr++, num_tree_types++) {
-		if (**ptr != -1) {
-			REPORT_DISSECTOR_BUG("register_subtree_array: subtree item type (ett_...) not -1 !"
+		if (**ptr != -1 && **ptr != 0) {
+			REPORT_DISSECTOR_BUG("register_subtree_array: subtree item type (ett_...) not -1 or 0 !"
 				" This is a development error:"
 				" Either the subtree item type has already been assigned or"
-				" was not initialized to -1.");
+				" was not initialized to -1 or 0.");
 		}
 		**ptr = num_tree_types;
 	}
@@ -9553,8 +9605,8 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 	const guint8	   *bytes;
 	guint32		    integer;
 	guint64		    integer64;
-	ws_in4_addr         ipv4;
-	const ws_in6_addr  *ipv6;
+	const ipv4_addr_and_mask *ipv4;
+	const ipv6_addr_and_prefix *ipv6;
 	const e_guid_t	   *guid;
 	gchar		   *name;
 	address		    addr;
@@ -9718,11 +9770,8 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 			break;
 
 		case FT_IPv4:
-			ipv4 = fvalue_get_uinteger(fi->value);
-
-			addr.type = AT_IPv4;
-			addr.len  = 4;
-			addr.data = &ipv4;
+			ipv4 = fvalue_get_ipv4(fi->value);
+			set_address_ipv4(&addr, ipv4);
 
 			if (hfinfo->display == BASE_NETMASK) {
 				addr_str = (char*)address_to_str(NULL, &addr);
@@ -9732,19 +9781,18 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s", hfinfo->name, addr_str);
 			wmem_free(NULL, addr_str);
+			free_address(&addr);
 			break;
 
 		case FT_IPv6:
 			ipv6 = fvalue_get_ipv6(fi->value);
-
-			addr.type = AT_IPv6;
-			addr.len  = 16;
-			addr.data = ipv6;
+			set_address_ipv6(&addr, ipv6);
 
 			addr_str = (char*)address_with_resolution_to_str(NULL, &addr);
 			snprintf(label_str, ITEM_LABEL_LENGTH,
 				   "%s: %s", hfinfo->name, addr_str);
 			wmem_free(NULL, addr_str);
+			free_address(&addr);
 			break;
 
 		case FT_FCWWN:
@@ -13706,7 +13754,7 @@ proto_check_field_name_lower(const gchar *field_name)
 gboolean
 tree_expanded(int tree_type)
 {
-	if (tree_type == -1) {
+	if (tree_type <= 0) {
 		return FALSE;
 	}
 	ws_assert(tree_type >= 0 && tree_type < num_tree_types);

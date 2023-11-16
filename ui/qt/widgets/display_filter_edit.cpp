@@ -12,6 +12,7 @@
 #include <glib.h>
 
 #include <epan/dfilter/dfilter.h>
+#include <epan/dfilter/dfunctions.h>
 
 #include <ui/recent.h>
 
@@ -150,20 +151,21 @@ void DisplayFilterEdit::contextMenuEvent(QContextMenuEvent *event) {
         return;
     }
 
-    QAction * first = menu->actions().at(0);
+    QAction *first = menu->actions().at(0);
 
-    QAction * na = new QAction(tr("Left align buttons"), this);
-    na->setCheckable(true);
-    na->setChecked(leftAlignActions_);
-    connect(na, &QAction::triggered, this, &DisplayFilterEdit::triggerAlignementAction);
-    menu->addSeparator();
-    menu->addAction(na);
-
-    na = new QAction(tr("Display Filter Expression…"), this);
+    QAction *na = new QAction(tr("Display Filter Expression…"), this);
     connect(na, &QAction::triggered, this, &DisplayFilterEdit::displayFilterExpression);
     menu->insertAction(first, na);
-
     menu->insertSeparator(first);
+
+    if (type_ == DisplayFilterToApply) {
+        na = new QAction(tr("Left align buttons"), this);
+        na->setCheckable(true);
+        na->setChecked(leftAlignActions_);
+        connect(na, &QAction::triggered, this, &DisplayFilterEdit::triggerAlignementAction);
+        menu->addSeparator();
+        menu->addAction(na);
+    }
 
     menu->popup(event->globalPos());
 }
@@ -212,8 +214,8 @@ void DisplayFilterEdit::alignActionButtons()
         rightMargin = 0;
     }
 
-    setStyleSheet(QString(
-            "DisplayFilterEdit {"
+    SyntaxLineEdit::setStyleSheet(style_sheet_ + QString(
+            "SyntaxLineEdit {"
             "  padding-left: %1px;"
             "  margin-left: %2px;"
             "  margin-right: %3px;"
@@ -587,11 +589,25 @@ void DisplayFilterEdit::buildCompletionList(const QString &field_word, const QSt
                 }
             }
         }
+
+        // Add display filter functions to the completion list
+        GPtrArray *func_list = df_func_name_list();
+        for (guint i = 0; i < func_list->len; i++) {
+            field_list << QString::fromUtf8(static_cast<const char *>(func_list->pdata[i])).append("(");
+        }
+        g_ptr_array_unref(func_list);
+
         field_list.sort();
     }
 
     completion_model_->setStringList(complex_list + field_list);
     completer()->setCompletionPrefix(field_word);
+}
+
+void DisplayFilterEdit::setStyleSheet(const QString &style_sheet)
+{
+    style_sheet_ = style_sheet;
+    SyntaxLineEdit::setStyleSheet(style_sheet_);
 }
 
 void DisplayFilterEdit::clearFilter()

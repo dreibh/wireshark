@@ -30,7 +30,7 @@
 #endif
 
 #include "ui/alert_box.h"
-#include "ui/last_open_dir.h"
+#include "ui/util.h"
 #include "ui/help_url.h"
 #include <wsutil/utf8_entities.h>
 
@@ -100,7 +100,33 @@ QStringList AuthorListModel::headerColumns() const
     return QStringList() << tr("Name") << tr("Email");
 }
 
+#ifdef HAVE_PLUGINS
 static void plugins_add_description(const char *name, const char *version,
+                                    uint32_t flags, const char *filename,
+                                    void *user_data)
+{
+    QList<QStringList> *plugin_data = (QList<QStringList> *)user_data;
+    QStringList plugin_types;
+    if (flags & WS_PLUGIN_DESC_DISSECTOR)
+        plugin_types << "dissector";
+    if (flags & WS_PLUGIN_DESC_FILE_TYPE)
+        plugin_types << "file type";
+    if (flags & WS_PLUGIN_DESC_CODEC)
+        plugin_types << "codec";
+    if (flags & WS_PLUGIN_DESC_EPAN)
+        plugin_types << "epan";
+    if (flags & WS_PLUGIN_DESC_TAP_LISTENER)
+        plugin_types << "tap listener";
+    if (flags & WS_PLUGIN_DESC_DFILTER)
+        plugin_types << "dfilter";
+    if (plugin_types.empty())
+        plugin_types << "unknown";
+    QStringList plugin_row = QStringList() << name << version << plugin_types.join(", ") << filename;
+    *plugin_data << plugin_row;
+}
+#endif
+
+static void other_plugins_add_description(const char *name, const char *version,
                                     const char *types, const char *filename,
                                     void *user_data)
 {
@@ -109,7 +135,7 @@ static void plugins_add_description(const char *name, const char *version,
     *plugin_data << plugin_row;
 }
 
-PluginListModel::PluginListModel(QObject * parent) : AStringListListModel(parent)
+PluginListModel::PluginListModel(QObject *parent) : AStringListListModel(parent)
 {
     QList<QStringList> plugin_data;
 #ifdef HAVE_PLUGINS
@@ -117,10 +143,10 @@ PluginListModel::PluginListModel(QObject * parent) : AStringListListModel(parent
 #endif
 
 #ifdef HAVE_LUA
-    wslua_plugins_get_descriptions(plugins_add_description, &plugin_data);
+    wslua_plugins_get_descriptions(other_plugins_add_description, &plugin_data);
 #endif
 
-    extcap_get_descriptions(plugins_add_description, &plugin_data);
+    extcap_get_descriptions(other_plugins_add_description, &plugin_data);
 
     typeNames_ << QString("");
     foreach(QStringList row, plugin_data)
@@ -179,7 +205,7 @@ FolderListModel::FolderListModel(QObject * parent):
         AStringListListModel(parent)
 {
     /* "file open" */
-    appendRow(QStringList() << tr("\"File\" dialogs") << get_last_open_dir() << tr("capture files"));
+    appendRow(QStringList() << tr("\"File\" dialogs") << get_open_dialog_initial_dir() << tr("capture files"));
 
     /* temp */
     appendRow(QStringList() << tr("Temp") << (global_capture_opts.temp_dir && global_capture_opts.temp_dir[0] ? global_capture_opts.temp_dir : g_get_tmp_dir()) << tr("untitled capture files"));

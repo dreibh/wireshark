@@ -23,6 +23,7 @@ set(PIDL_DISSECTOR_NAMES
 	initshutdown
 	iwbemlevel1login
 	iwbemloginclientid
+	iwbemloginclientidex
 	lsa
 	mapi
 	mdssvc
@@ -72,6 +73,9 @@ set(PIDL_DISSECTOR_iwbemlevel1login_EXTRA_DEPS
 set(PIDL_DISSECTOR_iwbemloginclientid_EXTRA_DEPS
 	idl_types.h
 )
+set(PIDL_DISSECTOR_iwbemloginclientidex_EXTRA_DEPS
+	idl_types.h
+)
 set(PIDL_DISSECTOR_lsa_EXTRA_DEPS
 	idl_types.h
 )
@@ -97,6 +101,7 @@ set(PIDL_DISSECTOR_rfr_EXTRA_DEPS
 )
 set(PIDL_DISSECTOR_samr_EXTRA_DEPS
 	idl_types.h
+	lsa/lsa.idl
 )
 set(PIDL_DISSECTOR_srvsvc_EXTRA_DEPS
 	idl_types.h

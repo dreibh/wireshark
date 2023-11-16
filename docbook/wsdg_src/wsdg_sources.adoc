@@ -874,7 +874,6 @@ If that is not possible, it *must* use a compatible license.
 The following licenses are currently allowed:
 
 * BSD {spdx-license-url}BSD-1-Clause.html[1], {spdx-license-url}BSD-2-Clause.html[2], {spdx-license-url}BSD-3-Clause.html[3] clause
-* {spdx-license-url}GPL-3.0-or-later.html[GPL version 3 or later] *with* the https://www.gnu.org/software/bison/manual/html_node/Conditions.html[Bison parser exception]
 * {spdx-license-url}ISC.html[ISC]
 * {spdx-license-url}LGPL-2.0-or-later.html[LGPL v2 or later], including {spdx-license-url}LGPL-2.1-or-later.html[v2.1]
 * {spdx-license-url}MIT.html[MIT] / {spdx-license-url}X11.html[X11]
@@ -1083,6 +1082,12 @@ https://1.na.dl.wireshark.org/download/src/all-versions/wireshark-{wireshark-ver
 instead of
 
 https://1.na.dl.wireshark.org/download/src/wireshark-{wireshark-version}.tar.xz
+
+[discrete]
+===== Staying Current
+
+Wireshark releases are announced on the link:{wireshark-mailing-lists-url}[wireshark-announce] mailing list.
+A https://appvisor.com/pad/[PAD] file is also published at https://www.wireshark.org/wireshark-pad.xml which contains the current stable version and release date.
 
 [discrete]
 ===== Artwork

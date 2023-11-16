@@ -8409,11 +8409,11 @@ proto_register_zbee_zcl_msg(void)
             0x0, NULL, HFILL } },
 
         { &hf_zbee_zcl_msg_confirm_ctrl,
-            { "Confirmation Control", "zbee_zcl_se.msg.message.confirm.ctrl", FT_BOOLEAN, 8, TFS(&tfs_no_yes),
+            { "Confirmation Control", "zbee_zcl_se.msg.message.confirm_ctrl", FT_BOOLEAN, 8, TFS(&tfs_no_yes),
             ZBEE_ZCL_MSG_CONFIRM_CTRL_MASK, NULL, HFILL } },
 
         { &hf_zbee_zcl_msg_confirm_response,
-            { "Response", "zbee_zcl_se.msg.message", FT_UINT_STRING, BASE_NONE, NULL,
+            { "Response", "zbee_zcl_se.msg.message.confirm_response", FT_UINT_STRING, BASE_NONE, NULL,
             0x00, NULL, HFILL } },
 
         { &hf_zbee_zcl_msg_implementation_time,
@@ -14496,7 +14496,7 @@ proto_register_zbee_zcl_events(void)
             0x00, NULL, HFILL } },
 
         { &hf_zbee_zcl_events_publish_event_log_total_number_of_matching_events,
-            { "Total Number of Matching Events", "zbee_zcl_se.events.publish_event_log.event_id", FT_UINT16, BASE_DEC, NULL,
+            { "Total Number of Matching Events", "zbee_zcl_se.events.publish_event_log.matching_events", FT_UINT16, BASE_DEC, NULL,
             0x00, NULL, HFILL } },
 
         { &hf_zbee_zcl_events_publish_event_log_command_index,

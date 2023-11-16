@@ -493,12 +493,12 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     main_ui_->goToGo->setAttribute(Qt::WA_MacSmallSize, true);
     main_ui_->goToCancel->setAttribute(Qt::WA_MacSmallSize, true);
 
-    connect(main_ui_->goToGo, &QPushButton::pressed, this, &WiresharkMainWindow::goToGoClicked);
-    connect(main_ui_->goToCancel, &QPushButton::pressed, this, &WiresharkMainWindow::goToCancelClicked);
-
     main_ui_->actionEditPreferences->setMenuRole(QAction::PreferencesRole);
 
 #endif // Q_OS_MAC
+
+    connect(main_ui_->goToGo, &QPushButton::pressed, this, &WiresharkMainWindow::goToGoClicked);
+    connect(main_ui_->goToCancel, &QPushButton::pressed, this, &WiresharkMainWindow::goToCancelClicked);
 
 // A billion-1 is equivalent to the inputMask 900000000 previously used
 // Avoid QValidator::Intermediate values by using a top value of all 9's
@@ -863,6 +863,23 @@ void WiresharkMainWindow::removeInterfaceToolbar(const gchar *menu_title)
     menu->menuAction()->setVisible(!menu->actions().isEmpty());
 }
 
+void WiresharkMainWindow::updateStyleSheet()
+{
+#ifdef Q_OS_MAC
+    // TODO: The event type QEvent::ApplicationPaletteChange is not sent to all child widgets.
+    // Workaround this by doing it manually for all AccordionFrame.
+    main_ui_->addressEditorFrame->updateStyleSheet();
+    main_ui_->columnEditorFrame->updateStyleSheet();
+    main_ui_->filterExpressionFrame->updateStyleSheet();
+    main_ui_->goToFrame->updateStyleSheet();
+    main_ui_->preferenceEditorFrame->updateStyleSheet();
+    main_ui_->searchFrame->updateStyleSheet();
+
+    df_combo_box_->updateStyleSheet();
+    welcome_page_->updateStyleSheets();
+#endif
+}
+
 bool WiresharkMainWindow::eventFilter(QObject *obj, QEvent *event) {
 
     // The user typed some text. Start filling in a filter.
@@ -886,6 +903,7 @@ bool WiresharkMainWindow::event(QEvent *event)
     switch (event->type()) {
     case QEvent::ApplicationPaletteChange:
         initMainToolbarIcons();
+        updateStyleSheet();
         break;
     default:
         break;
@@ -2397,6 +2415,8 @@ bool WiresharkMainWindow::addFollowStreamMenuItem(const void *key, void *value, 
         follow_action->setText(tr("HTTP/2 Stream"));
     } else if (g_strcmp0(short_name, "SIP") == 0) {
         follow_action->setText(tr("SIP Call"));
+    } else if (g_strcmp0(short_name, "USBCOM") == 0) {
+        follow_action->setText(tr("USB CDC Data"));
     }
 
     connect(follow_action, &QAction::triggered, window,
@@ -3215,20 +3235,20 @@ QString WiresharkMainWindow::findRtpStreams(QVector<rtpstream_id_t *> *stream_id
     return NULL;
 }
 
-void WiresharkMainWindow::openBrowserKeylogDialog()
+void WiresharkMainWindow::openTLSKeylogDialog()
 {
     // Have a single instance of the dialog at any one time.
-    if (!sslkeylog_dialog_) {
-        sslkeylog_dialog_ = new SSLKeylogDialog(*this);
-        sslkeylog_dialog_->setAttribute(Qt::WA_DeleteOnClose);
+    if (!tlskeylog_dialog_) {
+        tlskeylog_dialog_ = new TLSKeylogDialog(*this);
+        tlskeylog_dialog_->setAttribute(Qt::WA_DeleteOnClose);
     }
 
-    if (sslkeylog_dialog_->isMinimized()) {
-        sslkeylog_dialog_->showNormal();
+    if (tlskeylog_dialog_->isMinimized()) {
+        tlskeylog_dialog_->showNormal();
     }
     else {
-        sslkeylog_dialog_->show();
+        tlskeylog_dialog_->show();
     }
-    sslkeylog_dialog_->raise();
-    sslkeylog_dialog_->activateWindow();
+    tlskeylog_dialog_->raise();
+    tlskeylog_dialog_->activateWindow();
 }

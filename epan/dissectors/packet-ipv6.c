@@ -39,6 +39,7 @@
 #include <epan/to_str.h>
 #include <epan/exported_pdu.h>
 #include <epan/exceptions.h>
+#include <epan/iana-ip.h>
 
 #include <wiretap/erf_record.h>
 #include <wsutil/str_util.h>
@@ -170,6 +171,11 @@ static int hf_ipv6_src_multicast_flags_transient = -1;
 static int hf_ipv6_src_multicast_flags_network_prefix = -1;
 static int hf_ipv6_src_multicast_flags_embed_rp = -1;
 static int hf_ipv6_src_special_purpose          = -1;
+static int hf_ipv6_src_special_purpose_source   = -1;
+static int hf_ipv6_src_special_purpose_destination = -1;
+static int hf_ipv6_src_special_purpose_forwardable = -1;
+static int hf_ipv6_src_special_purpose_global   = -1;
+static int hf_ipv6_src_special_purpose_reserved = -1;
 static int hf_ipv6_src_multicast_scope          = -1;
 static int hf_ipv6_src_host                     = -1;
 static int hf_ipv6_src_slaac_mac                = -1;
@@ -189,6 +195,11 @@ static int hf_ipv6_dst_multicast_flags_network_prefix = -1;
 static int hf_ipv6_dst_multicast_flags_embed_rp = -1;
 static int hf_ipv6_dst_multicast_scope          = -1;
 static int hf_ipv6_dst_special_purpose          = -1;
+static int hf_ipv6_dst_special_purpose_source   = -1;
+static int hf_ipv6_dst_special_purpose_destination = -1;
+static int hf_ipv6_dst_special_purpose_forwardable = -1;
+static int hf_ipv6_dst_special_purpose_global   = -1;
+static int hf_ipv6_dst_special_purpose_reserved = -1;
 static int hf_ipv6_dst_host                     = -1;
 static int hf_ipv6_dst_slaac_mac                = -1;
 static int hf_ipv6_dst_isatap_ipv4              = -1;
@@ -207,6 +218,11 @@ static int hf_ipv6_multicast_flags_network_prefix = -1;
 static int hf_ipv6_multicast_flags_embed_rp     = -1;
 static int hf_ipv6_multicast_scope              = -1;
 static int hf_ipv6_addr_special_purpose         = -1;
+static int hf_ipv6_addr_special_purpose_source  = -1;
+static int hf_ipv6_addr_special_purpose_destination = -1;
+static int hf_ipv6_addr_special_purpose_forwardable = -1;
+static int hf_ipv6_addr_special_purpose_global  = -1;
+static int hf_ipv6_addr_special_purpose_reserved = -1;
 static int hf_ipv6_host                         = -1;
 static int hf_ipv6_slaac_mac                    = -1;
 static int hf_ipv6_isatap_ipv4                  = -1;
@@ -400,6 +416,11 @@ struct ipv6_addr_info_s {
     int *const *hf_multicast_flags_bits;
     int *hf_multicast_scope;
     int *hf_special_purpose;
+    int *hf_special_purpose_source;
+    int *hf_special_purpose_destination;
+    int *hf_special_purpose_forwardable;
+    int *hf_special_purpose_global;
+    int *hf_special_purpose_reserved;
     int *hf_host;
 };
 
@@ -418,6 +439,11 @@ static struct ipv6_addr_info_s ipv6_src_info = {
     ipv6_src_multicast_flags_bits,
     &hf_ipv6_src_multicast_scope,
     &hf_ipv6_src_special_purpose,
+    &hf_ipv6_src_special_purpose_source,
+    &hf_ipv6_src_special_purpose_destination,
+    &hf_ipv6_src_special_purpose_forwardable,
+    &hf_ipv6_src_special_purpose_global,
+    &hf_ipv6_src_special_purpose_reserved,
     &hf_ipv6_src_host,
 };
 
@@ -436,6 +462,11 @@ static struct ipv6_addr_info_s ipv6_dst_info = {
     ipv6_dst_multicast_flags_bits,
     &hf_ipv6_dst_multicast_scope,
     &hf_ipv6_dst_special_purpose,
+    &hf_ipv6_dst_special_purpose_source,
+    &hf_ipv6_dst_special_purpose_destination,
+    &hf_ipv6_dst_special_purpose_forwardable,
+    &hf_ipv6_dst_special_purpose_global,
+    &hf_ipv6_dst_special_purpose_reserved,
     &hf_ipv6_dst_host,
 };
 
@@ -465,6 +496,7 @@ static int hf_geoip_dst_longitude       = -1;
 
 static gint ett_ipv6_proto              = -1;
 static gint ett_ipv6_detail             = -1;
+static gint ett_ipv6_detail_special_purpose = -1;
 static gint ett_ipv6_multicast_flags    = -1;
 static gint ett_ipv6_traffic_class      = -1;
 static gint ett_ipv6_opt                = -1;
@@ -787,7 +819,7 @@ static gboolean ipv6_reassemble = TRUE;
 static gboolean ipv6_summary_in_tree = TRUE;
 
 /* Show expanded information about IPv6 address */
-static gboolean ipv6_address_detail = FALSE;
+static gboolean ipv6_address_detail = TRUE;
 
 /* Perform strict RFC adherence checking */
 static gboolean g_ipv6_rpl_srh_strict_rfc_checking = FALSE;
@@ -2985,180 +3017,6 @@ ipv6_get_jumbo_plen(tvbuff_t *tvb, gint offset)
     return 0;
 }
 
-struct ipv6_addr_and_mask {
-    uint8_t addr[16];
-    uint8_t mask[16];
-};
-
-typedef struct ipv6_addr_and_mask ipv6_range_t;
-
-/* https://www.iana.org/assignments/iana-ipv6-special-registry/iana-ipv6-special-registry.xhtml */
-static struct ipv6_special_range_s {
-    ipv6_range_t range;
-    const char *name;
-} ipv6_special_purpose_registry[] = {
-    {
-        {
-            { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
-        },
-        "Loopback Address"
-    },
-    {
-        {
-            { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
-        },
-        "Unspecified Address"
-    },
-    {
-        {
-            { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "IPv4-mapped Address"
-    },
-    {
-        {
-            { 0x00, 0x64, 0xff, 0x9b, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "IPv4-IPv6 Translat."
-    },
-    {
-        {
-            { 0x00, 0x64, 0xff, 0x9b, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "IPv4-IPv6 Translat."
-    },
-    {
-        {
-            { 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "Discard-Only Address Block"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "IETF Protocol Assignments"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "TEREDO"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
-        },
-        "Port Control Protocol Anycast"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff },
-        },
-        "Traversal Using Relays around NAT Anycast"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "Benchmarking"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x00, 0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "AMT"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x00, 0x04, 0x01, 0x12, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "AS112-v6"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x00, 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "ORCHIDv2"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x00, 0x30, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xf0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "Drone Remote ID Protocol Entity Tags (DETs)"
-    },
-    {
-        {
-            { 0x20, 0x01, 0x0d, 0xb8, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "Documentation"
-    },
-    {
-        {
-            { 0x20, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "6to4"
-    },
-    {
-        {
-            { 0x26, 0x20, 0x00, 0x4f, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "Direct Delegation AS112 Service"
-    },
-    {
-        {
-            { 0xfc, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xfe, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "Unique-Local"
-    },
-    {
-        {
-            { 0xfe, 0x80, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0xff, 0xc0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        "Link-Local Unicast"
-    },
-    {
-        {
-            { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-            { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 },
-        },
-        NULL
-    },
-};
-
-static bool
-match_ipv6_range(const ipv6_range_t *range, const ws_in6_addr *addr)
-{
-    int i;
-
-    for (i = 0; i < 16; i++) {
-        if (range->addr[i] != (addr->bytes[i] & range->mask[i])) {
-            return false;
-        }
-    }
-    return true;
-}
-
 static void
 add_ipv6_address_detail(packet_info *pinfo, proto_item *vis, proto_item *invis,
                         tvbuff_t *tvb, int offset, struct ipv6_addr_info_s *addr_info)
@@ -3174,8 +3032,6 @@ add_ipv6_address_detail(packet_info *pinfo, proto_item *vis, proto_item *invis,
      * Internet Protocol Version 6 Address Space
      * https://www.iana.org/assignments/ipv6-address-space/ipv6-address-space.xhtml
      */
-
-
     if (tvb_get_guint8(tvb, offset) == 0xFF) {
         /* RFC 4291 section 2.4: multicast prefix */
         ti = proto_tree_add_string(vtree, *addr_info->hf_addr_space, tvb, offset, 1, "Multicast");
@@ -3250,15 +3106,48 @@ add_ipv6_address_detail(packet_info *pinfo, proto_item *vis, proto_item *invis,
 
     /* Check for IPv6 address special-purpose ranges. */
     const ws_in6_addr *addr = tvb_get_ptr_ipv6(tvb, offset);
-    const struct ipv6_special_range_s *rp;
+    const struct ws_iana_ip_special_block *block;
+    proto_tree *vtree2;
+    proto_tree *itree2;
 
-    for (rp = ipv6_special_purpose_registry; rp->name != NULL; rp++) {
-        if (match_ipv6_range(&rp->range, addr)) {
-            ti = proto_tree_add_string(vtree, *addr_info->hf_special_purpose, tvb, offset, IPv6_ADDR_SIZE, rp->name);
+    if ((block = ws_iana_ipv6_special_block_lookup(addr)) != NULL) {
+        ti = proto_tree_add_string(vtree, *addr_info->hf_special_purpose, tvb, offset, IPv6_ADDR_SIZE, block->name);
+        proto_item_set_generated(ti);
+        vtree2 = proto_item_add_subtree(ti, ett_ipv6_detail_special_purpose);
+
+        ti = proto_tree_add_string(itree, hf_ipv6_addr_special_purpose, tvb, offset, IPv6_ADDR_SIZE, block->name);
+        proto_item_set_generated(ti);
+        itree2 = proto_item_add_subtree(ti, ett_ipv6_detail_special_purpose);
+
+        if (block->source >= 0) {
+            ti = proto_tree_add_boolean(vtree2, *addr_info->hf_special_purpose_source, tvb, offset, IPv6_ADDR_SIZE, block->source);
             proto_item_set_generated(ti);
-            ti = proto_tree_add_string(itree, hf_ipv6_addr_special_purpose, tvb, offset, IPv6_ADDR_SIZE, rp->name);
+            ti = proto_tree_add_boolean(itree2, hf_ipv6_addr_special_purpose_source, tvb, offset, IPv6_ADDR_SIZE, block->source);
             proto_item_set_generated(ti);
-            break;
+        }
+        if (block->destination >= 0) {
+            ti = proto_tree_add_boolean(vtree2, *addr_info->hf_special_purpose_destination, tvb, offset, IPv6_ADDR_SIZE, block->destination);
+            proto_item_set_generated(ti);
+            ti = proto_tree_add_boolean(itree2, hf_ipv6_addr_special_purpose_destination, tvb, offset, IPv6_ADDR_SIZE, block->destination);
+            proto_item_set_generated(ti);
+        }
+        if (block->forwardable >= 0) {
+            ti = proto_tree_add_boolean(vtree2, *addr_info->hf_special_purpose_forwardable, tvb, offset, IPv6_ADDR_SIZE, block->forwardable);
+            proto_item_set_generated(ti);
+            ti = proto_tree_add_boolean(itree2, hf_ipv6_addr_special_purpose_forwardable, tvb, offset, IPv6_ADDR_SIZE, block->forwardable);
+            proto_item_set_generated(ti);
+        }
+        if (block->global >= 0) {
+            ti = proto_tree_add_boolean(vtree2, *addr_info->hf_special_purpose_global, tvb, offset, IPv6_ADDR_SIZE, block->global);
+            proto_item_set_generated(ti);
+            ti = proto_tree_add_boolean(itree2, hf_ipv6_addr_special_purpose_global, tvb, offset, IPv6_ADDR_SIZE, block->global);
+            proto_item_set_generated(ti);
+        }
+        if (block->reserved >= 0) {
+            ti = proto_tree_add_boolean(vtree2, *addr_info->hf_special_purpose_reserved, tvb, offset, IPv6_ADDR_SIZE, block->reserved);
+            proto_item_set_generated(ti);
+            ti = proto_tree_add_boolean(itree2, hf_ipv6_addr_special_purpose_reserved, tvb, offset, IPv6_ADDR_SIZE, block->reserved);
+            proto_item_set_generated(ti);
         }
     }
 }
@@ -3855,44 +3744,74 @@ proto_register_ipv6(void)
                 "Source IPv6 Address", HFILL }
         },
         { &hf_ipv6_src_addr_space,
-            { "Source Address Space", "ipv6.src_addr_space",
+            { "Address Space", "ipv6.src_addr_space",
                 FT_STRING, BASE_NONE, NULL, 0x0,
                 "Source IPv6 Address Space", HFILL }
         },
         { &hf_ipv6_src_multicast_flags,
-            { "Source Address Multicast Flags", "ipv6.src_multicast_flags",
+            { "Multicast Flags", "ipv6.src_multicast_flags",
                 FT_UINT16, BASE_HEX, NULL, 0x00F0,
-                NULL, HFILL }
+                "Source Address Multicast Flags", HFILL }
         },
         { &hf_ipv6_src_multicast_flags_transient,
-            { "Source Address Transient Multicast Flag", "ipv6.src_multicast_flags.transient",
+            { "Transient", "ipv6.src_multicast_flags.transient",
                 FT_BOOLEAN, 16, NULL, 0x0010,
-                NULL, HFILL }
+                "Source Address Transient Multicast Flag", HFILL }
         },
         { &hf_ipv6_src_multicast_flags_network_prefix,
-            { "Source Address Network Prefix Multicast Flag", "ipv6.src_multicast_flags.network_prefix",
+            { "Network Prefix", "ipv6.src_multicast_flags.network_prefix",
                 FT_BOOLEAN, 16, NULL, 0x0020,
-                NULL, HFILL }
+                "Source Address Network Prefix Multicast Flag", HFILL }
         },
         { &hf_ipv6_src_multicast_flags_embed_rp,
-            { "Source Address RP Multicast Flag", "ipv6.src_multicast_flags.embed_rp",
+            { "Rendezvous Point (RP)", "ipv6.src_multicast_flags.embed_rp",
                 FT_BOOLEAN, 16, NULL, 0x0040,
-                NULL, HFILL }
+                "Source Address Rendezvous Point (RP) Multicast Flag", HFILL }
         },
         { &hf_ipv6_src_multicast_flags_reserved,
-            { "Source Address Reserved Multicast Flag", "ipv6.src_multicast_flags.reserved",
+            { "Reserved", "ipv6.src_multicast_flags.reserved",
                 FT_UINT16, BASE_DEC, NULL, 0x0080,
-                NULL, HFILL }
+                "Source Address Reserved Multicast Flag", HFILL }
         },
         { &hf_ipv6_src_multicast_scope,
-            { "Source Address Multicast Scope", "ipv6.src_multicast_scope",
+            { "Multicast Scope", "ipv6.src_multicast_scope",
                 FT_UINT16, BASE_HEX, VALS(ipv6_multicast_scope_vals), 0x000F,
-                NULL, HFILL }
+                "Source Address Multicast Scope", HFILL }
         },
         { &hf_ipv6_src_special_purpose,
-            { "Source Address Special-Purpose Allocation", "ipv6.src_special_purpose",
+            { "Special-Purpose Allocation", "ipv6.src_special_purpose",
                 FT_STRING, BASE_NONE, NULL, 0x0,
-                NULL, HFILL }
+                "Source Address Special-Purpose Allocation", HFILL }
+        },
+        { &hf_ipv6_src_special_purpose_source,
+            { "Source", "ipv6.src_special_purpose_source",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether an address from the allocated special-purpose address "
+                "block is valid when used as the source address of an IP datagram", HFILL }
+        },
+        { &hf_ipv6_src_special_purpose_destination,
+            { "Destination", "ipv6.src_special_purpose_destination",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether an address from the allocated special-purpose address "
+                "block is valid when used as the destination address of an IP datagram", HFILL }
+        },
+        { &hf_ipv6_src_special_purpose_forwardable,
+            { "Forwardable", "ipv6.src_special_purpose_forwardable",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether a router may forward an IP datagram whose destination "
+                "address is drawn from the allocated special-purpose address block", HFILL }
+        },
+        { &hf_ipv6_src_special_purpose_global,
+            { "Globally Reachable", "ipv6.src_special_purpose_global",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether an IP datagram whose destination address is drawn "
+                "from the allocated special-purpose address block is "
+                "forwardable beyond a specified administrative domain", HFILL }
+        },
+        { &hf_ipv6_src_special_purpose_reserved,
+            { "Reserved-by-Protocol", "ipv6.src_special_purpose_reserved",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether the special-purpose address block is reserved by IP itself", HFILL }
         },
         { &hf_ipv6_src_host,
             { "Source Host", "ipv6.src_host",
@@ -3945,44 +3864,74 @@ proto_register_ipv6(void)
                 "Destination IPv6 Address", HFILL }
         },
         { &hf_ipv6_dst_addr_space,
-            { "Destination Address Space", "ipv6.dst_addr_space",
+            { "Address Space", "ipv6.dst_addr_space",
                 FT_STRING, BASE_NONE, NULL, 0x0,
                 "Destination IPv6 Address Space", HFILL }
         },
         { &hf_ipv6_dst_multicast_flags,
-            { "Destination Address Multicast Flags", "ipv6.dst_multicast_flags",
+            { "Multicast Flags", "ipv6.dst_multicast_flags",
                 FT_UINT16, BASE_HEX, NULL, 0x00F0,
-                NULL, HFILL }
+                "Destination Address Multicast Flags", HFILL }
         },
         { &hf_ipv6_dst_multicast_flags_transient,
-            { "Destination Address Transient Multicast Flag", "ipv6.dst_multicast_flags.transient",
+            { "Transient", "ipv6.dst_multicast_flags.transient",
                 FT_BOOLEAN, 16, NULL, 0x0010,
-                NULL, HFILL }
+                "Destination Address Transient Multicast Flag", HFILL }
         },
         { &hf_ipv6_dst_multicast_flags_network_prefix,
-            { "Destination Address Network Prefix Multicast Flag", "ipv6.dst_multicast_flags.network_prefix",
+            { "Network Prefix", "ipv6.dst_multicast_flags.network_prefix",
                 FT_BOOLEAN, 16, NULL, 0x0020,
-                NULL, HFILL }
+                "Destination Address Network Prefix Multicast Flag", HFILL }
         },
         { &hf_ipv6_dst_multicast_flags_embed_rp,
-            { "Destination Address RP Multicast Flag", "ipv6.dst_multicast_flags.embed_rp",
+            { "Rendezvous Point (RP)", "ipv6.dst_multicast_flags.embed_rp",
                 FT_BOOLEAN, 16, NULL, 0x0040,
-                NULL, HFILL }
+                "Destination Address Rendezvous Point (RP) Multicast Flag", HFILL }
         },
         { &hf_ipv6_dst_multicast_flags_reserved,
-            { "Destination Address Reserved Multicast Flag", "ipv6.dst_multicast_flags.reserved",
+            { "Reserved", "ipv6.dst_multicast_flags.reserved",
                 FT_UINT16, BASE_DEC, NULL, 0x0080,
-                NULL, HFILL }
+                "Destination Address Reserved Multicast Flag", HFILL }
         },
         { &hf_ipv6_dst_multicast_scope,
-            { "Destination Address Multicast Scope", "ipv6.dst_multicast_scope",
+            { "Multicast Scope", "ipv6.dst_multicast_scope",
                 FT_UINT16, BASE_HEX, VALS(ipv6_multicast_scope_vals), 0x000F,
-                NULL, HFILL }
+                "Destination Address Multicast Scope", HFILL }
         },
         { &hf_ipv6_dst_special_purpose,
-            { "Destination Address Special-Purpose Allocation", "ipv6.dst_special_purpose",
+            { "Special-Purpose Allocation", "ipv6.dst_special_purpose",
                 FT_STRING, BASE_NONE, NULL, 0x0,
-                NULL, HFILL }
+                "Destination Address Special-Purpose Allocation", HFILL }
+        },
+        { &hf_ipv6_dst_special_purpose_source,
+            { "Source", "ipv6.dst_special_purpose_source",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether an address from the allocated special-purpose address "
+                "block is valid when used as the source address of an IP datagram", HFILL }
+        },
+        { &hf_ipv6_dst_special_purpose_destination,
+            { "Destination", "ipv6.dst_special_purpose_destination",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether an address from the allocated special-purpose address "
+                "block is valid when used as the destination address of an IP datagram", HFILL }
+        },
+        { &hf_ipv6_dst_special_purpose_forwardable,
+            { "Forwardable", "ipv6.dst_special_purpose_forwardable",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether a router may forward an IP datagram whose destination "
+                "address is drawn from the allocated special-purpose address block", HFILL }
+        },
+        { &hf_ipv6_dst_special_purpose_global,
+            { "Globally Reachable", "ipv6.dst_special_purpose_global",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether an IP datagram whose destination address is drawn "
+                "from the allocated special-purpose address block is "
+                "forwardable beyond a specified administrative domain", HFILL }
+        },
+        { &hf_ipv6_dst_special_purpose_reserved,
+            { "Reserved-by-Protocol", "ipv6.dst_special_purpose_reserved",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether the special-purpose address block is reserved by IP itself", HFILL }
         },
         { &hf_ipv6_dst_host,
             { "Destination Host", "ipv6.dst_host",
@@ -4035,44 +3984,74 @@ proto_register_ipv6(void)
                 NULL, HFILL }
         },
         { &hf_ipv6_addr_space,
-            { "Source or Destination Address Space", "ipv6.addr_space",
+            { "Address Space", "ipv6.addr_space",
                 FT_STRING, BASE_NONE, NULL, 0x0,
-                NULL, HFILL }
+                "Source or Destination Address Space", HFILL }
         },
         { &hf_ipv6_multicast_flags,
-            { "Source or Destination Address Multicast Flags", "ipv6.multicast_flags",
+            { "Multicast Flags", "ipv6.multicast_flags",
                 FT_UINT16, BASE_HEX, NULL, 0x00F0,
-                NULL, HFILL }
+                "Source or Destination Address Multicast Flags", HFILL }
         },
         { &hf_ipv6_multicast_flags_transient,
-            { "Source or Destination Address Transient Multicast Flag", "ipv6.multicast_flags.transient",
+            { "Transient", "ipv6.multicast_flags.transient",
                 FT_BOOLEAN, 16, NULL, 0x0010,
-                NULL, HFILL }
+                "Source or Destination Address Transient Multicast Flag", HFILL }
         },
         { &hf_ipv6_multicast_flags_network_prefix,
-            { "Source or Destination Address Network Prefix Multicast Flag", "ipv6.multicast_flags.network_prefix",
+            { "Network Prefix", "ipv6.multicast_flags.network_prefix",
                 FT_BOOLEAN, 16, NULL, 0x0020,
-                NULL, HFILL }
+                "Source or Destination Address Network Prefix Multicast Flag", HFILL }
         },
         { &hf_ipv6_multicast_flags_embed_rp,
-            { "Source or Destination Address RP Multicast Flag", "ipv6.multicast_flags.embed_rp",
+            { "Rendezvous Point (RP)", "ipv6.multicast_flags.embed_rp",
                 FT_BOOLEAN, 16, NULL, 0x0040,
-                NULL, HFILL }
+                "Source or Destination Address Rendezvous Point (RP) Multicast Flag", HFILL }
         },
         { &hf_ipv6_multicast_flags_reserved,
-            { "Source or Destination Address Reserved Multicast Flag", "ipv6.multicast_flags.reserved",
+            { "Reserved", "ipv6.multicast_flags.reserved",
                 FT_UINT16, BASE_DEC, NULL, 0x0080,
-                NULL, HFILL }
+                "Source or Destination Address Reserved Multicast Flag", HFILL }
         },
         { &hf_ipv6_multicast_scope,
-            { "Source or Destination Address Multicast Scope", "ipv6.multicast_scope",
+            { "Multicast Scope", "ipv6.multicast_scope",
                 FT_UINT16, BASE_HEX, VALS(ipv6_multicast_scope_vals), 0x000F,
-                NULL, HFILL }
+                "Source or Destination Address Multicast Scope", HFILL }
         },
         { &hf_ipv6_addr_special_purpose,
-            { "Source or Destination Address Special-Purpose Allocation", "ipv6.addr_special_purpose",
+            { "Special-Purpose Allocation", "ipv6.addr_special_purpose",
                 FT_STRING, BASE_NONE, NULL, 0x0,
-                NULL, HFILL }
+                "Source or Destination Address Special-Purpose Allocation", HFILL }
+        },
+        { &hf_ipv6_addr_special_purpose_source,
+            { "Source", "ipv6.addr_special_purpose_source",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether an address from the allocated special-purpose address "
+                "block is valid when used as the source address of an IP datagram", HFILL }
+        },
+        { &hf_ipv6_addr_special_purpose_destination,
+            { "Destination", "ipv6.addr_special_purpose_destination",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether an address from the allocated special-purpose address "
+                "block is valid when used as the destination address of an IP datagram", HFILL }
+        },
+        { &hf_ipv6_addr_special_purpose_forwardable,
+            { "Forwardable", "ipv6.addr_special_purpose_forwardable",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether a router may forward an IP datagram whose destination "
+                "address is drawn from the allocated special-purpose address block", HFILL }
+        },
+        { &hf_ipv6_addr_special_purpose_global,
+            { "Globally Reachable", "ipv6.addr_special_purpose_global",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether an IP datagram whose destination address is drawn "
+                "from the allocated special-purpose address block is "
+                "forwardable beyond a specified administrative domain", HFILL }
+        },
+        { &hf_ipv6_addr_special_purpose_reserved,
+            { "Reserved-by-Protocol", "ipv6.addr_special_purpose_reserved",
+                FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+                "Whether the special-purpose address block is reserved by IP itself", HFILL }
         },
         { &hf_ipv6_host,
             { "Source or Destination Host", "ipv6.host",
@@ -5119,6 +5098,7 @@ proto_register_ipv6(void)
     static gint *ett_ipv6[] = {
         &ett_ipv6_proto,
         &ett_ipv6_detail,
+        &ett_ipv6_detail_special_purpose,
         &ett_ipv6_multicast_flags,
         &ett_ipv6_traffic_class,
         &ett_geoip_info,

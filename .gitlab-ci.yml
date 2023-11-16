@@ -48,17 +48,23 @@ variables:
 
 # Commits that have been approved and merged. Run automatically in the main
 # repo and allow manual runs in the web UI and in forks.
+# Release builds: CI_PIPELINE_SOURCE=api
 .if-merged:
+  # Regular commits: CI_PIPELINE_SOURCE=push, CI_COMMIT_BRANCH=master
   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  # "Run pipeline" button commits, cherry picks
   - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  # Tagged release builds: CI_PIPELINE_SOURCE=api (should be "web"?)
+  - if: '$CI_PIPELINE_SOURCE == "api"'
   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_URL !~ /.*gitlab.com\/wireshark\/wireshark/'
     when: manual
 # Merged commits for runners which are only available in
 # wireshark/wireshark, e.g. wireshark-windows-*. Run automatically in
 # the main repo and allow manual runs in the web UI.
 .if-w-w-only-merged:
-  - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
-  - if: '$CI_PIPELINE_SOURCE == "web" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+  - if: '$CI_PIPELINE_SOURCE == "api"'
 # Incoming merge requests.
 .if-merge-request:
   - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
@@ -83,6 +89,10 @@ variables:
   stage: build
   tags:
     - docker
+  before_script:
+    - printf "\e[0Ksection_start:%s:ci_env_section[collapsed=true]\r\e[0KCI environment variables" "$(date +%s)"
+    - env | grep ^CI | sort
+    - printf "\e[0Ksection_end:%s:ci_env_section\r\e[0K" "$(date +%s)"
   after_script:
     - for builddir in build/packaging/rpm/BUILD/wireshark-*/build build/packaging/rpm/BUILD/wireshark-* build obj-*; do [ ! -d "$builddir/run" ] || break; done
     - if [[ "$CI_JOB_NAME" == "build:rpm-opensuse-"* ]]; then export LD_LIBRARY_PATH=$builddir/run; fi
@@ -107,6 +117,9 @@ variables:
     paths:
       - ccache/
   before_script:
+    - printf "\e[0Ksection_start:%s:ci_env_section[collapsed=true]\r\e[0KCI environment variables" "$(date +%s)"
+    - env | grep ^CI | sort
+    - printf "\e[0Ksection_end:%s:ci_env_section\r\e[0K" "$(date +%s)"
     - useradd user
     - export LANG=en_US.UTF-8
     - export PYTEST_ADDOPTS=--skip-missing-programs=dumpcap,rawshark
@@ -195,11 +208,14 @@ variables:
       - ccache/
   variables:
     HOMEBREW_DISPLAY_INSTALL_TIMES: "1"
-    HOMEBREW_NO_AUTO_UPDATE: "1"
     HOMEBREW_NO_INSTALL_CLEANUP: "1"
     HOMEBREW_NO_INSTALL_UPGRADE: "1"
     HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: "1"
+    HOMEBREW_NO_UPDATE_REPORT_NEW: "1"
   before_script:
+    - printf "\e[0Ksection_start:%s:ci_env_section[collapsed=true]\r\e[0KCI environment variables" "$(date +%s)"
+    - env | grep ^CI | sort
+    - printf "\e[0Ksection_end:%s:ci_env_section\r\e[0K" "$(date +%s)"
     # At the time of this writing (January 2023), the macOS SaaS builder has the following PATH:
     # /Users/gitlab/.asdf/shims:/Users/gitlab/.asdf/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Library/Apple/usr/bin
     # The suite_clopts.case_tshark_extcap.test_tshark_extcap_interfaces test will fail because
@@ -207,8 +223,9 @@ variables:
     #   unknown command: python3. Perhaps you have to reshim?
     # Make sure /usr/local/bin is first in order to work around asdf.
     - export PATH=/usr/local/bin:$PATH
+    - brew --version
     - printf "\e[0Ksection_start:%s:brew_section[collapsed=true]\r\e[0KInstalling prerequisites" "$( date +%s)"
-    - ./tools/macos-setup-brew.sh --install-optional
+    - ./tools/macos-setup-brew.sh --install-optional --install-test-deps
     - printf "\e[0Ksection_end:%s:brew_section\r\e[0K" "$( date +%s)"
     - export PYTEST_ADDOPTS=--skip-missing-programs=dumpcap,rawshark
     - mkdir -p ccache
@@ -241,6 +258,9 @@ variables:
     paths:
       - ccache/
   before_script:
+    - printf "\e[0Ksection_start:%s:ci_env_section[collapsed=true]\r\e[0KCI environment variables" "$(date +%s)"
+    - env | grep ^CI | sort
+    - printf "\e[0Ksection_end:%s:ci_env_section\r\e[0K" "$(date +%s)"
     - mkdir -p ccache
     - ccache --show-stats
     - mkdir build
@@ -262,6 +282,7 @@ Source Package:
     - !reference [.if-2x-daily-schedule]
   script:
     - ../tools/make-version.py --set-release ..
+    - ../tools/update-appdata.py
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
     - cmake -G Ninja $CMAKE_ARGS ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
@@ -294,13 +315,17 @@ Debian Stable APT Package:
     # Ignore changed symbols (on development branch).
     - export DPKG_GENSYMBOLS_CHECK_LEVEL=0
     - CC=/usr/lib/ccache/gcc CXX=/usr/lib/ccache/g++ dpkg-buildpackage -b --no-sign -jauto -zfast
-    - lintian --suppress-tags library-not-linked-against-libc --display-experimental --display-info --pedantic --profile debian
     - mkdir debian-packages
-    - mv ../*.deb debian-packages/
+    - mv -v ../*.deb debian-packages/
+    - mkdir debian-symbols
+    - for wslib in wireshark wiretap wsutil ; do cp -v packaging/debian/lib${wslib}0/DEBIAN/symbols debian-symbols/lib${wslib}0.symbols ; done
+    - lintian --suppress-tags library-not-linked-against-libc --display-experimental --display-info --pedantic --profile debian
   artifacts:
     paths:
       - debian-packages/*.deb
+      - debian-symbols/*.symbols
     expire_in: 3 days
+    when: always
 
 Debian Stable APT Test:
   extends: .test-linux
@@ -334,22 +359,22 @@ Fedora RPM Package:
 #     - tshark --version
 #  needs: [ 'Fedora RPM Package' ]
 
-openSUSE 15.4 RPM Package:
+openSUSE 15.5 RPM Package:
   extends: .build-rpm
-  image: registry.gitlab.com/wireshark/wireshark-containers/opensuse-15.4-dev
+  image: registry.gitlab.com/wireshark/wireshark-containers/opensuse-15.5-dev
   script:
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
     - cmake -G Ninja -DUSE_qt6=OFF ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja wireshark_rpm
 
-openSUSE 15.4 RPM Test:
+openSUSE 15.5 RPM Test:
   extends: .test-rpm
-  image: registry.gitlab.com/wireshark/wireshark-containers/opensuse-15.4-dev
+  image: registry.gitlab.com/wireshark/wireshark-containers/opensuse-15.5-dev
   script:
     - zypper --no-gpg-checks --no-remote install -y build/packaging/rpm/RPMS/x86_64/*.rpm
     - tshark --version
-  needs: [ 'openSUSE 15.4 RPM Package' ]
+  needs: [ 'openSUSE 15.5 RPM Package' ]
 
 Rocky Linux 9 RPM Package:
   extends: .build-rpm
@@ -416,7 +441,7 @@ Windows x64 Package:
     - mkdir build
     - cd build
   script:
-    - C:\Windows\py.exe ..\tools\make-version.py --set-release ..
+    - C:\Windows\py.exe ..\tools\make-version.py --set-release --version-file=wireshark_version.txt ..
     - cmake -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off -DENABLE_SIGNED_NSIS=on ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount test-programs.vcxproj
@@ -432,11 +457,18 @@ Windows x64 Package:
     - $plugins = Get-ChildItem run\RelWithDebInfo\plugins\*\*.dll ; signtool verify /q /pa /all run\RelWithDebInfo\*.exe run\RelWithDebInfo\extcap\*.exe $plugins run\RelWithDebInfo\libwireshark.dll run\RelWithDebInfo\libwiretap.dll run\RelWithDebInfo\libwsutil.dll packaging\nsis\Wireshark-*-x64.exe packaging\wix\Wireshark-*-x64.msi packaging\portableapps\WiresharkPortable??_*.paf.exe
     - msbuild /verbosity:minimal pdb_zip_package.vcxproj
     - C:\gitlab-builds\bin\mse-scan.ps1
+    - run\RelWithDebInfo\tshark --version
     - $packages = Get-ChildItem "packaging\nsis\Wireshark-*-x64.exe", "packaging\wix\Wireshark-*-x64.msi", "packaging\portableapps\WiresharkPortable??_*.paf.exe", "Wireshark-pdb-*x64.zip"
-    - foreach ($package in $packages) { Write-Host $package.name $package.length "bytes" }
-    - foreach ($package in $packages) { certutil -hashfile $package SHA256 }
+    - foreach ($package in $packages) { Write-Host $package.name $(Get-Filehash -Algorithm SHA256 $package).Hash $package.length "bytes" }
     - if (Test-Path env:MC_DESTINATION_WINDOWS_X64) { C:\gitlab-builds\bin\mc --quiet cp $packages "$env:MC_DESTINATION_WINDOWS_X64/" }
+    - $nsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Wireshark-*-x64.exe).Hash
+    - $wiresharkVersion = Get-Content .\wireshark_version.txt
+    - Set-Content -Path release-info-$($wiresharkVersion)-windows-x64.ini -Value ("[DEFAULT]`nnsis_sha256 = $nsisSha256")
+    - if (Test-Path env:MC_DESTINATION_RELEASE) { C:\gitlab-builds\bin\mc --quiet cp release-info-$($wiresharkVersion)-windows-x64.ini "$env:MC_DESTINATION_RELEASE/" }
     - C:\Windows\py.exe -m pytest
+  artifacts:
+    paths:
+      - build/release-info-*.ini
 
 Windows Arm64 Package:
   extends: .build-windows
@@ -453,7 +485,7 @@ Windows Arm64 Package:
     - mkdir build
     - cd build
   script:
-    - C:\Windows\py.exe ..\tools\make-version.py --set-release ..
+    - C:\Windows\py.exe ..\tools\make-version.py --set-release --version-file=wireshark_version.txt ..
     - cmake -G "Visual Studio 17 2022" -A arm64 -DENABLE_LTO=off -DENABLE_SIGNED_NSIS=on ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount test-programs.vcxproj
@@ -463,11 +495,18 @@ Windows Arm64 Package:
     - $plugins = Get-ChildItem run\RelWithDebInfo\plugins\*\*.dll ; signtool verify /q /pa /all run\RelWithDebInfo\*.exe run\RelWithDebInfo\extcap\*.exe $plugins run\RelWithDebInfo\libwireshark.dll run\RelWithDebInfo\libwiretap.dll run\RelWithDebInfo\libwsutil.dll packaging\nsis\Wireshark-*-arm64.exe
     - msbuild /verbosity:minimal pdb_zip_package.vcxproj
     - C:\gitlab-builds\bin\mse-scan.ps1
+    - run\RelWithDebInfo\tshark --version
     - $packages = Get-ChildItem "packaging\nsis\Wireshark-*-arm64.exe", "Wireshark-pdb-*arm64.zip"
-    - foreach ($package in $packages) { Write-Host $package.name $package.length "bytes" }
-    - foreach ($package in $packages) { certutil -hashfile $package SHA256 }
+    - foreach ($package in $packages) { Write-Host $package.name $(Get-Filehash -Algorithm SHA256 $package).Hash $package.length "bytes" }
     - if (Test-Path env:MC_DESTINATION_WINDOWS_ARM64) { C:\gitlab-builds\bin\mc --quiet cp $packages "$env:MC_DESTINATION_WINDOWS_ARM64/" }
+    - $nsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Wireshark-*-arm64.exe).Hash
+    - $wiresharkVersion = Get-Content .\wireshark_version.txt
+    - Set-Content -Path release-info-$($wiresharkVersion)-windows-arm64.ini -Value ("[DEFAULT]`nnsis_sha256 = $nsisSha256")
+    - if (Test-Path env:MC_DESTINATION_RELEASE) { C:\gitlab-builds\bin\mc --quiet cp release-info-$($wiresharkVersion)-windows-arm64.ini "$env:MC_DESTINATION_RELEASE/" }
     - C:\Windows\py.exe -m pytest
+  artifacts:
+    paths:
+      - build/release-info-*.ini
 
 Windows MinGW-w64 Package:
   extends: .build-mingw
@@ -494,9 +533,9 @@ macOS Arm Package:
   script:
     - export CMAKE_PREFIX_PATH=/usr/local/Qt-6.5.3
     - export PATH="$PATH:$HOME/bin"
-    - tools/make-version.py --set-release .
     - mkdir build
     - cd build
+    - ../tools/make-version.py --set-release --version-file=wireshark_version.txt ..
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
     - cmake -DENABLE_CCACHE=ON -DCMAKE_APPLE_SILICON_PROCESSOR=arm64 -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DCMAKE_OSX_ARCHITECTURES=arm64 -DTEST_EXTRA_ARGS=--enable-release -G Ninja ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
@@ -516,10 +555,11 @@ macOS Arm Package:
         aws s3 cp Wireshark?dSYM*Arm*.dmg "$S3_DESTINATION_MACOS_ARM64/"
       fi
     - SPARKLE_SIGNATURE=$( age --decrypt --identity="$MACOS_AGE_IDENTITY" "$MACOS_SPARKLE_BLOB" | /usr/local/Sparkle-2.2.2/bin/sign_update --ed-key-file - Wireshark?[1-9]*.dmg )
+    - $CI_PROJECT_DIR/build/run/tshark --version
     - DMG_SHA256=$( shasum --algorithm 256 Wireshark?[1-9]*.dmg | awk '{print $1}' )
-    - TSHARK_VERSION=$( ./tshark --version | head -n 1 | sed -e 's/.*(v//' -e 's/)\.*$//' -e 's/-0-g.*//' )
-    - printf '[DEFAULT]\nsparkle_signature = %s\ndmg_sha256 = %s\n' "$SPARKLE_SIGNATURE" "$DMG_SHA256" > release-info-${TSHARK_VERSION}-macos-arm64.ini
-    - if [[ -n "$S3_DESTINATION_RELEASE" ]] ; then aws s3 cp release-info-${TSHARK_VERSION}-macos-arm64.ini "$S3_DESTINATION_RELEASE/" ; fi
+    - WIRESHARK_VERSION=$(< ../wireshark_version.txt)
+    - printf '[DEFAULT]\nsparkle_signature = %s\ndmg_sha256 = %s\n' "$SPARKLE_SIGNATURE" "$DMG_SHA256" > release-info-${WIRESHARK_VERSION}-macos-arm64.ini
+    - if [[ -n "$S3_DESTINATION_RELEASE" ]] ; then aws s3 cp release-info-${WIRESHARK_VERSION}-macos-arm64.ini "$S3_DESTINATION_RELEASE/" ; fi
     - cd ..
     - ninja test-programs
     - python3 -m pytest
@@ -539,9 +579,9 @@ macOS Intel Package:
   script:
     - export CMAKE_PREFIX_PATH=/usr/local/Qt-6.5.3
     - export PATH="$PATH:$HOME/bin"
-    - tools/make-version.py --set-release .
     - mkdir build
     - cd build
+    - ../tools/make-version.py --set-release --version-file=wireshark_version.txt ..
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
     - cmake -DENABLE_CCACHE=ON -DCMAKE_OSX_DEPLOYMENT_TARGET=11.0 -DTEST_EXTRA_ARGS=--enable-release -G Ninja ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
@@ -561,10 +601,11 @@ macOS Intel Package:
         aws s3 cp Wireshark?dSYM*Intel*.dmg "$S3_DESTINATION_MACOS_INTEL64/"
       fi
     - SPARKLE_SIGNATURE=$( age --decrypt --identity="$MACOS_AGE_IDENTITY" "$MACOS_SPARKLE_BLOB" | /usr/local/Sparkle-2.2.2/bin/sign_update --ed-key-file - Wireshark?[1-9]*.dmg )
+    - $CI_PROJECT_DIR/build/run/tshark --version
     - DMG_SHA256=$( shasum --algorithm 256 Wireshark?[1-9]*.dmg | awk '{print $1}' )
-    - TSHARK_VERSION=$( ./tshark --version | head -n 1 | sed -e 's/.*(v//' -e 's/)\.*$//' -e 's/-0-g.*//' )
-    - printf '[DEFAULT]\nsparkle_signature = %s\ndmg_sha256 = %s\n' "$SPARKLE_SIGNATURE" "$DMG_SHA256" > release-info-${TSHARK_VERSION}-macos-intel64.ini
-    - if [[ -n "$S3_DESTINATION_RELEASE" ]] ; then aws s3 cp release-info-${TSHARK_VERSION}-macos-intel64.ini "$S3_DESTINATION_RELEASE/" ; fi
+    - WIRESHARK_VERSION=$(< ../wireshark_version.txt)
+    - printf '[DEFAULT]\nsparkle_signature = %s\ndmg_sha256 = %s\n' "$SPARKLE_SIGNATURE" "$DMG_SHA256" > release-info-${WIRESHARK_VERSION}-macos-intel64.ini
+    - if [[ -n "$S3_DESTINATION_RELEASE" ]] ; then aws s3 cp release-info-${WIRESHARK_VERSION}-macos-intel64.ini "$S3_DESTINATION_RELEASE/" ; fi
     - cd ..
     - ninja test-programs
     - python3 -m pytest
@@ -578,7 +619,7 @@ Documentation:
   extends: .build-linux
   image: registry.gitlab.com/wireshark/wireshark-containers/ubuntu-dev
   rules:
-    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
       changes:
         - "docbook/**/*"
         - "epan/wslua/**/*"
@@ -625,13 +666,58 @@ Documentation:
 Commit Check:
   extends: .build-ubuntu
   rules: !reference [.if-merge-request]
+  variables:
+    GITLAB_REPO: "$CI_MERGE_REQUEST_PROJECT_URL"
   script:
+    # glab depends on a valid GITALB_TOKEN variable. It will fail when run under outside projects.
+    - if ! command -V glab 2> /dev/null ; then (cd /tmp ; curl -JLO https://gitlab.com/gitlab-org/cli/-/releases/v1.34.0/downloads/glab_1.34.0_Linux_x86_64.deb ; dpkg --install /tmp/glab_1.34.0_Linux_x86_64.deb ) ; fi
+    - glab auth status
+    - >
+      if [[ $NUM_COMMITS > 1 ]] ; then
+        MESSAGE="ℹ️ This merge request has more than one commit. Please squash any trivial ones:
+        ~~~
+        $(git log --oneline --no-decorate "${CI_COMMIT_SHA}~$NUM_COMMITS..${CI_COMMIT_SHA}")
+        ~~~
+        "
+        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
+      fi
     # build-ubuntu puts us in `build`.
     - cd ..
     - git status
-    - bash ./tools/pre-commit "${CI_COMMIT_SHA}~$NUM_COMMITS"
-    - tools/validate-commit.py
-    - python3 tools/checklicenses.py
+    - PC_EXIT_CODE=0
+    - ANALYSIS_MESSAGE=$( ./tools/pre-commit "${CI_COMMIT_SHA}~$NUM_COMMITS" ) || PC_EXIT_CODE=1
+    - >
+      if [ -n "$ANALYSIS_MESSAGE" ] ; then
+        MESSAGE="Pre-commit check results:
+        ~~~
+        $ANALYSIS_MESSAGE
+        ~~~
+        "
+        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
+      fi
+    - VC_EXIT_CODE=0
+    - ANALYSIS_MESSAGE=$( tools/validate-commit.py ) || VC_EXIT_CODE=1
+    - >
+      if [[ $VC_EXIT_CODE != 0 ]] ; then
+        MESSAGE="Commit validation failure:
+        ~~~
+        $ANALYSIS_MESSAGE
+        ~~~
+        "
+        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
+      fi
+    - LC_EXIT_CODE=0
+    - ANALYSIS_MESSAGE=$( python3 tools/checklicenses.py ) || LC_EXIT_CODE=1
+    - >
+      if [[ $LC_EXIT_CODE != 0 ]] ; then
+        MESSAGE="License check failure:
+        ~~~
+        $ANALYSIS_MESSAGE
+        ~~~
+        "
+        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
+      fi
+    - exit $(( PC_EXIT_CODE || VC_EXIT_CODE || LC_EXIT_CODE ))
 
 Ubuntu GCC Build:
   extends: .build-ubuntu
@@ -747,6 +833,7 @@ Windows Build:
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug test-programs.vcxproj
     - C:\Windows\py.exe -m pytest --disable-gui --build-type=Debug
+
 
 Windows Qt5 Build:
   extends: .build-windows

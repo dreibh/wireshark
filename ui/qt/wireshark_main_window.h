@@ -73,7 +73,7 @@
 #include "main_window.h"
 #include "rtp_stream_dialog.h"
 #include "rtp_analysis_dialog.h"
-#include "browser_sslkeylog_dialog.h"
+#include "tlskeylog_launcher_dialog.h"
 
 class AccordionFrame;
 class ByteViewTab;
@@ -198,7 +198,7 @@ private:
 
     QPoint dragStartPosition;
 
-    QPointer<SSLKeylogDialog> sslkeylog_dialog_;
+    QPointer<TLSKeylogDialog> tlskeylog_dialog_;
 
     void freeze();
     void thaw();
@@ -232,6 +232,7 @@ private:
     void setMenusForFileSet(bool enable_list_files);
     void setWindowIcon(const QIcon &icon);
     QString replaceWindowTitleVariables(QString title);
+    void updateStyleSheet();
 
     void externalMenuHelper(ext_menu_t * menu, QMenu  * subMenu, gint depth);
 
@@ -449,6 +450,7 @@ private slots:
 
     void connectGoMenuActions();
 
+    void setPreviousFocus();
     void resetPreviousFocus();
 
     void connectCaptureMenuActions();
@@ -521,7 +523,7 @@ private slots:
 
     QString findRtpStreams(QVector<rtpstream_id_t *> *stream_ids, bool reverse);
 
-    void openBrowserKeylogDialog();
+    void openTLSKeylogDialog();
 
     friend class MainApplication;
 };

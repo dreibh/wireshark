@@ -2325,7 +2325,7 @@ dissecting_body:
 			server_acked = TRUE;
 		}
 
-		if (server_acked) {
+		if (server_acked && !PINFO_FD_VISITED(pinfo)) {
 			conv_data->startframe = pinfo->num;
 			conv_data->startoffset = offset;
 			conv_data->next_handle = next_handle;
@@ -4730,11 +4730,7 @@ proto_register_message_http(void)
 		&ett_message_http,
 	};
 
-	proto_message_http = proto_register_protocol(
-			"Media Type: message/http",
-			"message/http",
-			"message-http"
-	);
+	proto_message_http = proto_register_protocol("Media Type: message/http", "message/http", "message-http");
 	proto_register_subtree_array(ett, array_length(ett));
 }
 

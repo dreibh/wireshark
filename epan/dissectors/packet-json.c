@@ -443,7 +443,7 @@ json_key_lookup(proto_tree* tree, tvbparse_elem_t* tok, const char* key_str, pac
 	}
 
 	hf_id = *json_data_decoder_rec->hf_id;
-	DISSECTOR_ASSERT(hf_id >= 0);
+	DISSECTOR_ASSERT(hf_id > 0);
 
 	if (use_compact) {
 		int str_len = (int)strlen(key_str);
@@ -510,10 +510,10 @@ dissect_json(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
 
 		if (strcmp(name, "frame")) {
 			col_append_sep_str(pinfo->cinfo, COL_PROTOCOL, "/", "JSON");
-			col_append_sep_str(pinfo->cinfo, COL_INFO, NULL, "JavaScript Object Notation");
+			col_append_sep_str(pinfo->cinfo, COL_INFO, NULL, "JSON");
 		} else {
 			col_set_str(pinfo->cinfo, COL_PROTOCOL, "JSON");
-			col_set_str(pinfo->cinfo, COL_INFO, "JavaScript Object Notation");
+			col_set_str(pinfo->cinfo, COL_INFO, "JSON");
 		}
 	}
 
@@ -641,7 +641,7 @@ before_object(void *tvbparse_data, const void *wanted_data _U_, tvbparse_elem_t 
 	proto_tree *subtree;
 	proto_item *ti;
 
-	ti = proto_tree_add_item(tree, hf_json_object, tok->tvb, tok->offset, tok->len, ENC_NA);
+	ti = proto_tree_add_item(tree, hf_json_object, tok->tvb, tok->offset, tok->len, ENC_UTF_8);
 	if (json_hide_original_tree() && wmem_stack_count(data->stack) == 1) {
 		proto_item_set_hidden(ti);
 	}
@@ -1267,7 +1267,7 @@ proto_register_json(void)
 		},
 		{ &hf_json_object,
 			{ "Object", "json.object",
-			  FT_NONE, BASE_NONE, NULL, 0x00,
+			  FT_STRING, BASE_NONE|BASE_NO_DISPLAY_VALUE, NULL, 0x00,
 			  "JSON object", HFILL }
 		},
 		{ &hf_json_member,

@@ -21,6 +21,7 @@
 #include "sttype-set.h"
 #include "sttype-function.h"
 #include "sttype-pointer.h"
+#include "sttype-number.h"
 
 #include <epan/exceptions.h>
 #include <epan/packet.h>
@@ -40,15 +41,28 @@
 #define FAIL_HERE(dfw) \
 	do {								\
 		ws_noisy("Semantic check failed here.");		\
-		THROW(TypeError); \
+		THROW(TypeError);					\
 	} while (0)
+
+#define FAIL_MSG(dfw, node, msg) \
+	do {								\
+		ws_noisy("Semantic check failed here.");		\
+		dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(node), \
+					"%s", msg);			\
+		g_free(msg);						\
+		THROW(TypeError);					\
+	} while (0)
+
+#define IS_FIELD_ENTITY(ft) \
+	((ft) == STTYPE_FIELD || \
+		(ft) == STTYPE_REFERENCE)
 
 typedef bool (*FtypeCanFunc)(enum ftenum);
 
+typedef void (*ArithmeticDoFunc)(dfwork_t *dfw, stnode_t *node, stnode_t *arg1, stnode_t *arg2);
+
 static ftenum_t
-check_arithmetic_LHS(dfwork_t *dfw, stnode_op_t st_op,
-			stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2,
-			ftenum_t lhs_ftype);
+find_logical_ftype(dfwork_t *dfw, stnode_t *st_node);
 
 static void
 check_relation(dfwork_t *dfw, stnode_op_t st_op,
@@ -169,11 +183,27 @@ compatible_ftypes(ftenum_t a, ftenum_t b)
 			}
 
 		case FT_NUM_TYPES:
-			ws_assert_not_reached();
+		case FT_SCALAR:
+			ASSERT_FTYPE_NOT_REACHED(a);
 	}
 
 	ws_assert_not_reached();
 	return false;
+}
+
+void
+resolve_unparsed(dfwork_t *dfw, stnode_t *st, bool strict)
+{
+	if (stnode_type_id(st) != STTYPE_UNPARSED)
+		return;
+
+	header_field_info *hfinfo = dfilter_resolve_unparsed(stnode_data(st), dfw->deprecated);
+	if (hfinfo != NULL)
+		stnode_replace(st, STTYPE_FIELD, hfinfo);
+	else if (strict)
+		FAIL(dfw, st, "\"%s\" is not a valid protocol or protocol field.", stnode_todisplay(st));
+	else
+		stnode_mutate(st, STTYPE_LITERAL);
 }
 
 /* Don't set the error message if it's already set. */
@@ -285,6 +315,63 @@ dfilter_fvalue_from_charconst(dfwork_t *dfw, ftenum_t ftype, stnode_t *st)
 	ws_assert_not_reached();
 }
 
+void
+dfilter_fvalue_from_number(dfwork_t *dfw, ftenum_t ftype, stnode_t *st)
+{
+	fvalue_t *fv = NULL;
+	const char *s = stnode_token(st);
+	char *error_message = NULL;
+	stnumber_t num_type;
+
+	num_type = sttype_number_get_type(st);
+
+	if (ftype == FT_SCALAR) {
+		/* If a scalar was requested then transform the number
+		 * syntax node to an fvalue according to its lexical
+		 * type (integer or float). */
+		switch (num_type) {
+			case STNUM_INTEGER:
+			case STNUM_UNSIGNED:
+				ftype = FT_INT64;
+				break;
+			case STNUM_FLOAT:
+				ftype = FT_DOUBLE;
+				break;
+			case STNUM_NONE:
+				ws_assert_not_reached();
+		}
+	}
+
+	switch (num_type) {
+		case STNUM_INTEGER:
+			fv = fvalue_from_sinteger64(ftype, s, sttype_number_get_integer(st), &error_message);
+			break;
+
+		case STNUM_UNSIGNED:
+			fv = fvalue_from_uinteger64(ftype, s, sttype_number_get_unsigned(st), &error_message);
+			break;
+
+		case STNUM_FLOAT:
+			fv = fvalue_from_floating(ftype, s, sttype_number_get_float(st), &error_message);
+			break;
+
+		case STNUM_NONE:
+			ws_assert_not_reached();
+	}
+
+	if (fv != NULL) {
+		g_free(error_message); // error_message is expected to be null
+		stnode_replace(st, STTYPE_FVALUE, fv);
+		return;
+	}
+	SET_ERROR(dfw, error_message);
+
+	// Failure
+	dfw_set_error_location(dfw, stnode_location(st));
+	FAIL_HERE(dfw);
+	ws_assert_not_reached();
+}
+
 /* Creates a FT_BOOLEAN fvalue with a given value. */
 static fvalue_t*
 mk_boolean_fvalue(bool val)
@@ -378,7 +465,8 @@ mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *
 			break;
 
 		case FT_NUM_TYPES:
-			ws_assert_not_reached();
+		case FT_SCALAR:
+			ASSERT_FTYPE_NOT_REACHED(hfinfo->type);
 	}
 
 	/* Do val_strings exist? */
@@ -573,38 +661,133 @@ is_bytes_type(enum ftenum type)
 			return false;
 
 		case FT_NUM_TYPES:
-			ws_assert_not_reached();
+		case FT_SCALAR:
+			ASSERT_FTYPE_NOT_REACHED(type);
 	}
 
 	ws_assert_not_reached();
 	return false;
 }
 
+static ftenum_t
+get_slice_ftype(dfwork_t *dfw, stnode_t *st_node)
+{
+	stnode_t *entity1 = sttype_slice_entity(st_node);
+	ws_assert(entity1);
+	resolve_unparsed(dfw, entity1, true);
+	ftenum_t ftype = get_logical_ftype(dfw, entity1);
+	return FT_IS_STRING(ftype) ? FT_STRING : FT_BYTES;
+}
+
+static ftenum_t
+get_function_ftype(dfwork_t *dfw, stnode_t *st_node)
+{
+	df_func_def_t *funcdef;
+	GSList        *params;
+	unsigned       nparams;
+
+	funcdef  = sttype_function_funcdef(st_node);
+	params   = sttype_function_params(st_node);
+	nparams  = g_slist_length(params);
+
+	if (funcdef->return_ftype != FT_NONE)
+		return funcdef->return_ftype;
+	if (nparams < 1)
+		return FT_NONE;
+
+	for (GSList *l = params; l != NULL; l = l->next) {
+		resolve_unparsed(dfw, l->data, false);
+		ftenum_t ftype = get_logical_ftype(dfw, l->data);
+		if (ftype != FT_NONE) {
+			return ftype;
+		}
+	}
+	return FT_NONE;
+}
+
+ftenum_t
+get_logical_ftype(dfwork_t *dfw, stnode_t *st_node)
+{
+	stnode_t *st_arg1, *st_arg2;
+	ftenum_t ft;
+
+	switch(stnode_type_id(st_node)) {
+		case STTYPE_FIELD:
+		case STTYPE_REFERENCE:
+			return sttype_field_ftenum(st_node);
+
+		case STTYPE_UNPARSED:
+			resolve_unparsed(dfw, st_node, true);
+			return sttype_field_ftenum(st_node);
+
+		case STTYPE_STRING:
+		case STTYPE_LITERAL:
+		case STTYPE_CHARCONST:
+		case STTYPE_NUMBER:
+			return FT_NONE;
+
+		case STTYPE_FUNCTION:
+			return get_function_ftype(dfw, st_node);
+
+		case STTYPE_ARITHMETIC:
+		case STTYPE_TEST:
+			sttype_oper_get(st_node, NULL, &st_arg1, &st_arg2);
+			if (st_arg1 && (ft = get_logical_ftype(dfw, st_arg1)) != FT_NONE)
+				return ft;
+			if (st_arg2 && (ft = get_logical_ftype(dfw, st_arg2)) != FT_NONE)
+				return ft;
+			return FT_NONE;
+
+		case STTYPE_SLICE:
+			return get_slice_ftype(dfw, st_node);
+
+		case STTYPE_SET:
+		case STTYPE_UNINITIALIZED:
+		case STTYPE_NUM_TYPES:
+		case STTYPE_FVALUE:
+		case STTYPE_PCRE:
+			ASSERT_STTYPE_NOT_REACHED(stnode_type_id(st_node));
+	}
+
+	ws_assert_not_reached();
+}
+
+static ftenum_t
+find_logical_ftype(dfwork_t *dfw, stnode_t *st_node)
+{
+	ftenum_t ftype = get_logical_ftype(dfw, st_node);
+	if (ftype == FT_NONE) {
+		FAIL(dfw, st_node, "Constant expression is invalid");
+	}
+	return ftype;
+}
+
 /* Check the semantics of an existence test. */
 static void
 check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 {
+
+	resolve_unparsed(dfw, st_arg1, true);
+
 	LOG_NODE(st_arg1);
 
 	switch (stnode_type_id(st_arg1)) {
 		case STTYPE_FIELD:
-			/* This is OK */
 			dfw->field_count++;
-			break;
+			/* fall-through */
 		case STTYPE_REFERENCE:
+			/* This is OK */
+			break;
 		case STTYPE_STRING:
 		case STTYPE_LITERAL:
 		case STTYPE_CHARCONST:
+		case STTYPE_NUMBER:
 			FAIL(dfw, st_arg1, "%s is neither a field nor a protocol name.",
 					stnode_todisplay(st_arg1));
 			break;
 
+		case STTYPE_UNPARSED:
 		case STTYPE_FUNCTION:
-			/* XXX - Maybe we should change functions so they can return fields,
-			 * in which case the 'exist' should be fine. */
-			FAIL(dfw, st_arg1, "You cannot test whether a function is present.");
-			break;
-
 		case STTYPE_SET:
 		case STTYPE_UNINITIALIZED:
 		case STTYPE_NUM_TYPES:
@@ -613,51 +796,73 @@ check_exists(dfwork_t *dfw, stnode_t *st_arg1)
 		case STTYPE_PCRE:
 		case STTYPE_ARITHMETIC:
 		case STTYPE_SLICE:
-			ws_assert_not_reached();
+			ASSERT_STTYPE_NOT_REACHED(stnode_type_id(st_arg1));
 	}
 }
 
 ftenum_t
-check_slice(dfwork_t *dfw, stnode_t *st, ftenum_t lhs_ftype)
+check_slice(dfwork_t *dfw, stnode_t *st, ftenum_t logical_ftype)
 {
 	stnode_t		*entity1;
 	header_field_info	*hfinfo1;
-	ftenum_t		ftype1;
+	sttype_id_t		sttype1;
+	ftenum_t		ftype1 = FT_NONE;
 
 	LOG_NODE(st);
 
 	entity1 = sttype_slice_entity(st);
 	ws_assert(entity1);
+	resolve_unparsed(dfw, entity1, true);
+	sttype1 = stnode_type_id(entity1);
 
-	if (stnode_type_id(entity1) == STTYPE_FIELD) {
-		dfw->field_count++;
-		hfinfo1 = sttype_field_hfinfo(entity1);
-		ftype1 = sttype_field_ftenum(entity1);
+	switch (sttype1) {
+		case STTYPE_FIELD:
+			dfw->field_count++;
+			/* fall-through */
+		case STTYPE_REFERENCE:
+			hfinfo1 = sttype_field_hfinfo(entity1);
+			ftype1 = sttype_field_ftenum(entity1);
 
-		if (!ftype_can_slice(ftype1)) {
-			FAIL(dfw, entity1, "\"%s\" is a %s and cannot be sliced into a sequence of bytes.",
-					hfinfo1->abbrev, ftype_pretty_name(ftype1));
-		}
-	} else if (stnode_type_id(entity1) == STTYPE_FUNCTION) {
-		ftype1 = check_function(dfw, entity1, lhs_ftype);
+			if (!ftype_can_slice(ftype1)) {
+				FAIL(dfw, entity1, "\"%s\" is a %s and cannot be sliced into a sequence of bytes.",
+						hfinfo1->abbrev, ftype_pretty_name(ftype1));
+			}
+			break;
 
-		if (!ftype_can_slice(ftype1)) {
-			FAIL(dfw, entity1, "Return value of function \"%s\" is a %s and cannot be converted into a sequence of bytes.",
-					sttype_function_name(entity1), ftype_pretty_name(ftype1));
-		}
-	} else if (stnode_type_id(entity1) == STTYPE_SLICE) {
-		ftype1 = check_slice(dfw, entity1, lhs_ftype);
-	} else {
-		FAIL(dfw, entity1, "Range is not supported for entity %s",
-					stnode_todisplay(entity1));
+		case STTYPE_FUNCTION:
+			ftype1 = check_function(dfw, entity1, logical_ftype);
+
+			if (!ftype_can_slice(ftype1)) {
+				FAIL(dfw, entity1, "Return value of function \"%s\" is a %s and cannot be converted into a sequence of bytes.",
+						sttype_function_name(entity1), ftype_pretty_name(ftype1));
+			}
+			break;
+
+		case STTYPE_SLICE:
+			ftype1 = check_slice(dfw, entity1, logical_ftype);
+			break;
+
+		case STTYPE_LITERAL:
+		case STTYPE_STRING:
+		case STTYPE_CHARCONST:
+		case STTYPE_NUMBER:
+			FAIL(dfw, entity1, "Range is not supported for entity %s",
+						stnode_todisplay(entity1));
+
+		case STTYPE_UNPARSED:
+		case STTYPE_UNINITIALIZED:
+		case STTYPE_NUM_TYPES:
+		case STTYPE_PCRE:
+		case STTYPE_FVALUE:
+		case STTYPE_TEST:
+		case STTYPE_ARITHMETIC:
+		case STTYPE_SET:
+			ASSERT_STTYPE_NOT_REACHED(sttype1);
+
 	}
 
 	return FT_IS_STRING(ftype1) ? FT_STRING : FT_BYTES;
 }
-
-#define IS_FIELD_ENTITY(ft) \
-	((ft) == STTYPE_FIELD || \
-		(ft) == STTYPE_REFERENCE)
 
 static void
 convert_to_bytes(stnode_t *arg)
@@ -675,7 +880,7 @@ convert_to_bytes(stnode_t *arg)
 }
 
 ftenum_t
-check_function(dfwork_t *dfw, stnode_t *st_node, ftenum_t lhs_ftype)
+check_function(dfwork_t *dfw, stnode_t *st_node, ftenum_t logical_ftype)
 {
 	df_func_def_t *funcdef;
 	GSList        *params;
@@ -695,7 +900,7 @@ check_function(dfwork_t *dfw, stnode_t *st_node, ftenum_t lhs_ftype)
 			funcdef->name, funcdef->max_nargs);
 	}
 
-	return funcdef->semcheck_param_function(dfw, funcdef->name, lhs_ftype, params,
+	return funcdef->semcheck_param_function(dfw, funcdef->name, logical_ftype, params,
 					stnode_location(st_node));
 }
 
@@ -751,6 +956,7 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 		}
 	}
 	else if (type2 == STTYPE_STRING || type2 == STTYPE_LITERAL) {
+
 		/* Skip incompatible fields */
 		while (hfinfo1->same_name_prev_id != -1 &&
 				((type2 == STTYPE_STRING && ftype1 != FT_STRING && ftype1!= FT_STRINGZ) ||
@@ -779,6 +985,9 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 	}
 	else if (type2 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
+	}
+	else if (type2 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype1, st_arg2);
 	}
 	else if (type2 == STTYPE_SLICE) {
 		ftype2 = check_slice(dfw, st_arg2, ftype1);
@@ -834,7 +1043,7 @@ check_relation_LHS_FIELD(dfwork_t *dfw, stnode_op_t st_op,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 }
 
@@ -842,7 +1051,8 @@ static void
 check_relation_LHS_FVALUE(dfwork_t *dfw, stnode_op_t st_op,
 		FtypeCanFunc can_func, bool allow_partial_value,
 		stnode_t *st_node,
-		stnode_t *st_arg1, stnode_t *st_arg2)
+		stnode_t *st_arg1, stnode_t *st_arg2,
+		ftenum_t logical_ftype)
 {
 	sttype_id_t		type1, type2;
 	header_field_info	*hfinfo2 = NULL;
@@ -868,11 +1078,12 @@ check_relation_LHS_FVALUE(dfwork_t *dfw, stnode_op_t st_op,
 	else if (type2 == STTYPE_STRING ||
 				type2 == STTYPE_LITERAL ||
 				type2 == STTYPE_CHARCONST ||
+				type2 == STTYPE_NUMBER ||
 				type2 == STTYPE_PCRE) {
 		FAIL(dfw, st_node, "Constant expression is invalid.");
 	}
 	else if (type2 == STTYPE_SLICE) {
-		ftype2 = check_slice(dfw, st_arg2, FT_NONE);
+		ftype2 = check_slice(dfw, st_arg2, logical_ftype);
 
 		if (!can_func(ftype2)) {
 			FAIL(dfw, st_arg2, "%s (type=%s) cannot participate in specified comparison.",
@@ -880,7 +1091,7 @@ check_relation_LHS_FVALUE(dfwork_t *dfw, stnode_op_t st_op,
 		}
 	}
 	else if (type2 == STTYPE_FUNCTION) {
-		ftype2 = check_function(dfw, st_arg2, FT_NONE);
+		ftype2 = check_function(dfw, st_arg2, logical_ftype);
 
 		if (!can_func(ftype2)) {
 			FAIL(dfw, st_arg2, "return value of %s() (type=%s) cannot participate in specified comparison.",
@@ -888,7 +1099,7 @@ check_relation_LHS_FVALUE(dfwork_t *dfw, stnode_op_t st_op,
 		}
 	}
 	else if (type2 == STTYPE_ARITHMETIC) {
-		ftype2 = check_arithmetic(dfw, st_arg2, FT_NONE);
+		ftype2 = check_arithmetic(dfw, st_arg2, logical_ftype);
 
 		if (!can_func(ftype2)) {
 			FAIL(dfw, st_arg2, "%s (type=%s) cannot participate in specified comparison.",
@@ -896,7 +1107,7 @@ check_relation_LHS_FVALUE(dfwork_t *dfw, stnode_op_t st_op,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 
 	type1 = stnode_type_id(st_arg1);
@@ -909,8 +1120,11 @@ check_relation_LHS_FVALUE(dfwork_t *dfw, stnode_op_t st_op,
 	else if (type1 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype2, st_arg1);
 	}
+	else if (type1 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype2, st_arg1);
+	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type1);
 	}
 	if (mk_val_string) {
 		sttype_field_set_value_string(st_arg2, true);
@@ -930,14 +1144,15 @@ check_relation_LHS_SLICE(dfwork_t *dfw, stnode_op_t st_op _U_,
 		FtypeCanFunc can_func _U_,
 		bool allow_partial_value,
 		stnode_t *st_node _U_,
-		stnode_t *st_arg1, stnode_t *st_arg2)
+		stnode_t *st_arg1, stnode_t *st_arg2,
+		ftenum_t logical_ftype)
 {
 	sttype_id_t		type2;
 	ftenum_t		ftype1, ftype2;
 
 	LOG_NODE(st_node);
 
-	ftype1 = check_slice(dfw, st_arg1, FT_NONE);
+	ftype1 = check_slice(dfw, st_arg1, logical_ftype);
 	if (!can_func(ftype1)) {
 		FAIL(dfw, st_arg1, "%s cannot participate in %s comparison.",
 				stnode_todisplay(st_arg1), stnode_todisplay(st_node));
@@ -970,6 +1185,9 @@ check_relation_LHS_SLICE(dfwork_t *dfw, stnode_op_t st_op _U_,
 	}
 	else if (type2 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
+	}
+	else if (type2 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype1, st_arg2);
 	}
 	else if (type2 == STTYPE_SLICE) {
 		ftype2 = check_slice(dfw, st_arg2, ftype1);
@@ -1014,7 +1232,7 @@ check_relation_LHS_SLICE(dfwork_t *dfw, stnode_op_t st_op _U_,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 }
 
@@ -1023,17 +1241,15 @@ check_relation_LHS_SLICE(dfwork_t *dfw, stnode_op_t st_op _U_,
 static void
 check_relation_LHS_FUNCTION(dfwork_t *dfw, stnode_op_t st_op _U_,
 		FtypeCanFunc can_func, bool allow_partial_value,
-		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
+		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2,
+		ftenum_t logical_ftype)
 {
 	sttype_id_t		type2;
 	ftenum_t		ftype1, ftype2;
 
 	LOG_NODE(st_node);
 
-	ftype1 = check_function(dfw, st_arg1, FT_NONE);
-	if (ftype1 == FT_NONE) {
-		FAIL(dfw, st_arg1, "Constant expression is invalid on the LHS.");
-	}
+	ftype1 = check_function(dfw, st_arg1, logical_ftype);
 	if (!can_func(ftype1)) {
 		FAIL(dfw, st_arg1, "Function %s (type=%s) cannot participate in %s comparison.",
 				sttype_function_name(st_arg1), ftype_pretty_name(ftype1),
@@ -1067,6 +1283,9 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, stnode_op_t st_op _U_,
 	}
 	else if (type2 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
+	}
+	else if (type2 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype1, st_arg2);
 	}
 	else if (type2 == STTYPE_SLICE) {
 		ftype2 = check_slice(dfw, st_arg2, ftype1);
@@ -1123,24 +1342,22 @@ check_relation_LHS_FUNCTION(dfwork_t *dfw, stnode_op_t st_op _U_,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 }
 
 static void
 check_relation_LHS_ARITHMETIC(dfwork_t *dfw, stnode_op_t st_op _U_,
 		FtypeCanFunc can_func, bool allow_partial_value,
-		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
+		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2,
+		ftenum_t logical_ftype)
 {
 	sttype_id_t		type2;
 	ftenum_t		ftype1, ftype2;
 
 	LOG_NODE(st_node);
 
-	ftype1 = check_arithmetic(dfw, st_arg1, FT_NONE);
-	if (ftype1 == FT_NONE) {
-		FAIL(dfw, st_arg1, "Constant expression is invalid on the LHS.");
-	}
+	ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
 	if (!can_func(ftype1)) {
 		FAIL(dfw, st_arg1, "Result with type %s cannot participate in %s comparison.",
 				ftype_pretty_name(ftype1),
@@ -1172,6 +1389,9 @@ check_relation_LHS_ARITHMETIC(dfwork_t *dfw, stnode_op_t st_op _U_,
 	}
 	else if (type2 == STTYPE_CHARCONST) {
 		dfilter_fvalue_from_charconst(dfw, ftype1, st_arg2);
+	}
+	else if (type2 == STTYPE_NUMBER) {
+		dfilter_fvalue_from_number(dfw, ftype1, st_arg2);
 	}
 	else if (type2 == STTYPE_SLICE) {
 		ftype2 = check_slice(dfw, st_arg2, ftype1);
@@ -1224,7 +1444,7 @@ check_relation_LHS_ARITHMETIC(dfwork_t *dfw, stnode_op_t st_op _U_,
 		}
 	}
 	else {
-		ws_assert_not_reached();
+		ASSERT_STTYPE_NOT_REACHED(type2);
 	}
 }
 
@@ -1234,36 +1454,44 @@ check_relation(dfwork_t *dfw, stnode_op_t st_op,
 		FtypeCanFunc can_func, bool allow_partial_value,
 		stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
 {
+	resolve_unparsed(dfw, st_arg1, true);
+	resolve_unparsed(dfw, st_arg2, false);
+
 	LOG_NODE(st_node);
 
 	switch (stnode_type_id(st_arg1)) {
 		case STTYPE_FIELD:
 		case STTYPE_REFERENCE:
+		case STTYPE_UNPARSED:
 			check_relation_LHS_FIELD(dfw, st_op, can_func,
 					allow_partial_value, st_node, st_arg1, st_arg2);
 			break;
 		case STTYPE_SLICE:
 			check_relation_LHS_SLICE(dfw, st_op, can_func,
-					allow_partial_value, st_node, st_arg1, st_arg2);
+					allow_partial_value, st_node, st_arg1, st_arg2, find_logical_ftype(dfw, st_node));
 			break;
 		case STTYPE_FUNCTION:
 			check_relation_LHS_FUNCTION(dfw, st_op, can_func,
-					allow_partial_value, st_node, st_arg1, st_arg2);
+					allow_partial_value, st_node, st_arg1, st_arg2, find_logical_ftype(dfw, st_node));
 			break;
 		case STTYPE_ARITHMETIC:
 			check_relation_LHS_ARITHMETIC(dfw, st_op, can_func,
-					allow_partial_value, st_node, st_arg1, st_arg2);
+					allow_partial_value, st_node, st_arg1, st_arg2, find_logical_ftype(dfw, st_node));
 			break;
 		case STTYPE_LITERAL:
 		case STTYPE_STRING:
 		case STTYPE_CHARCONST:
+		case STTYPE_NUMBER:
 			check_relation_LHS_FVALUE(dfw, st_op, can_func,
-					allow_partial_value, st_node, st_arg1, st_arg2);
+					allow_partial_value, st_node, st_arg1, st_arg2, find_logical_ftype(dfw, st_node));
 			break;
-		default:
-			/* Should not happen. */
-			FAIL(dfw, st_arg1, "(FIXME) Syntax node type \"%s\" is invalid for relation \"%s\".",
-					stnode_type_name(st_arg1), stnode_todisplay(st_node));
+		case STTYPE_UNINITIALIZED:
+		case STTYPE_PCRE:
+		case STTYPE_FVALUE:
+		case STTYPE_TEST:
+		case STTYPE_SET:
+		case STTYPE_NUM_TYPES:
+			ASSERT_STTYPE_NOT_REACHED(stnode_type_id(st_arg1));
 	}
 }
 
@@ -1288,6 +1516,9 @@ static void
 check_relation_contains(dfwork_t *dfw, stnode_t *st_node,
 		stnode_t *st_arg1, stnode_t *st_arg2)
 {
+	resolve_unparsed(dfw, st_arg1, true);
+	resolve_unparsed(dfw, st_arg2, false);
+
 	LOG_NODE(st_node);
 
 	if (stnode_type_id(st_arg2) == STTYPE_FIELD && stnode_get_flags(st_arg2, STFLAG_UNPARSED)) {
@@ -1297,16 +1528,17 @@ check_relation_contains(dfwork_t *dfw, stnode_t *st_node,
 	switch (stnode_type_id(st_arg1)) {
 		case STTYPE_FIELD:
 		case STTYPE_REFERENCE:
+		case STTYPE_UNPARSED:
 			check_relation_LHS_FIELD(dfw, STNODE_OP_CONTAINS, ftype_can_contains,
 							true, st_node, st_arg1, st_arg2);
 			break;
 		case STTYPE_FUNCTION:
 			check_relation_LHS_FUNCTION(dfw, STNODE_OP_CONTAINS, ftype_can_contains,
-							true, st_node, st_arg1, st_arg2);
+							true, st_node, st_arg1, st_arg2, find_logical_ftype(dfw, st_node));
 			break;
 		case STTYPE_SLICE:
 			check_relation_LHS_SLICE(dfw, STNODE_OP_CONTAINS, ftype_can_contains,
-							true, st_node, st_arg1, st_arg2);
+							true, st_node, st_arg1, st_arg2, find_logical_ftype(dfw, st_node));
 			break;
 		default:
 			FAIL(dfw, st_arg1, "Left side of %s expression must be a field or function, not %s.",
@@ -1322,6 +1554,8 @@ check_relation_matches(dfwork_t *dfw, stnode_t *st_node,
 	ws_regex_t *pcre;
 	char *errmsg = NULL;
 	GString *patt;
+
+	resolve_unparsed(dfw, st_arg1, true);
 
 	LOG_NODE(st_node);
 
@@ -1350,11 +1584,11 @@ check_relation_matches(dfwork_t *dfw, stnode_t *st_node,
 			break;
 		case STTYPE_FUNCTION:
 			check_relation_LHS_FUNCTION(dfw, STNODE_OP_MATCHES, ftype_can_matches,
-							true, st_node, st_arg1, st_arg2);
+							true, st_node, st_arg1, st_arg2, find_logical_ftype(dfw, st_arg1));
 			break;
 		case STTYPE_SLICE:
 			check_relation_LHS_SLICE(dfw, STNODE_OP_MATCHES, ftype_can_matches,
-							true, st_node, st_arg1, st_arg2);
+							true, st_node, st_arg1, st_arg2, find_logical_ftype(dfw, st_arg1));
 			break;
 		default:
 			FAIL(dfw, st_arg1, "Left side of %s expression must be a field or function, not %s.",
@@ -1368,6 +1602,9 @@ check_relation_in(dfwork_t *dfw, stnode_t *st_node _U_,
 {
 	GSList *nodelist;
 	stnode_t *node_left, *node_right;
+
+	resolve_unparsed(dfw, st_arg1, true);
+	resolve_unparsed(dfw, st_arg2, false);
 
 	LOG_NODE(st_node);
 
@@ -1458,31 +1695,34 @@ check_test(dfwork_t *dfw, stnode_t *st_node)
 		case STNODE_OP_MULTIPLY:
 		case STNODE_OP_DIVIDE:
 		case STNODE_OP_MODULO:
-			ws_assert_not_reached();
+			ASSERT_STNODE_OP_NOT_REACHED(st_op);
 	}
 }
 
 static void
 check_nonzero(dfwork_t *dfw, stnode_t *st_node)
 {
-	ftenum_t		ftype = FT_NONE;
+	ftenum_t ftype;
 
 	LOG_NODE(st_node);
 
 	switch (stnode_type_id(st_node)) {
 		case STTYPE_ARITHMETIC:
-			ftype = check_arithmetic(dfw, st_node, FT_NONE);
+			ftype = check_arithmetic(dfw, st_node, find_logical_ftype(dfw, st_node));
 			break;
 		case STTYPE_SLICE:
-			ftype = check_slice(dfw, st_node, FT_NONE);
+			ftype = check_slice(dfw, st_node, find_logical_ftype(dfw, st_node));
+			break;
+		case STTYPE_FUNCTION:
+			ftype = check_function(dfw, st_node, find_logical_ftype(dfw, st_node));
 			break;
 		default:
-			ws_assert_not_reached();
-			break;
+			ASSERT_STTYPE_NOT_REACHED(stnode_type_id(st_node));
 	}
 
-	if (ftype == FT_NONE) {
-		FAIL(dfw, st_node, "Constant expression is invalid.");
+	if (!ftype_can_is_zero(ftype)) {
+		FAIL(dfw, st_node, "Type %s cannot be assigned a truth value.",
+					ftype_pretty_name(ftype));
 	}
 }
 
@@ -1509,36 +1749,102 @@ op_to_error_msg(stnode_op_t st_op)
 	}
 }
 
+static void
+do_unary_minus(dfwork_t *dfw, stnode_t *st_node, stnode_t *st_arg1)
+{
+	char *err_msg;
+	fvalue_t *new_fv = fvalue_unary_minus(stnode_data(st_arg1), &err_msg);
+	if (new_fv == NULL)
+		FAIL_MSG(dfw, st_node, err_msg);
+	stnode_replace(st_node, STTYPE_FVALUE, new_fv);
+}
+
+static void
+do_addition(dfwork_t *dfw, stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
+{
+	char *err_msg;
+	fvalue_t *new_fv = fvalue_add(stnode_data(st_arg1), stnode_data(st_arg2), &err_msg);
+	if (new_fv == NULL)
+		FAIL_MSG(dfw, st_node, err_msg);
+	stnode_replace(st_node, STTYPE_FVALUE, new_fv);
+}
+
+static void
+do_subtraction(dfwork_t *dfw, stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
+{
+	char *err_msg;
+	fvalue_t *new_fv = fvalue_subtract(stnode_data(st_arg1), stnode_data(st_arg2), &err_msg);
+	if (new_fv == NULL)
+		FAIL_MSG(dfw, st_node, err_msg);
+	stnode_replace(st_node, STTYPE_FVALUE, new_fv);
+}
+
+static void
+do_multiplication(dfwork_t *dfw, stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
+{
+	char *err_msg;
+	fvalue_t *new_fv = fvalue_multiply(stnode_data(st_arg1), stnode_data(st_arg2), &err_msg);
+	if (new_fv == NULL)
+		FAIL_MSG(dfw, st_node, err_msg);
+	stnode_replace(st_node, STTYPE_FVALUE, new_fv);
+}
+
+static void
+do_division(dfwork_t *dfw, stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
+{
+	if (fvalue_is_zero(stnode_data(st_arg2)))
+		FAIL(dfw, st_node, "Division by zero");
+
+	char *err_msg;
+	fvalue_t *new_fv = fvalue_divide(stnode_data(st_arg1), stnode_data(st_arg2), &err_msg);
+	if (new_fv == NULL)
+		FAIL_MSG(dfw, st_node, err_msg);
+	stnode_replace(st_node, STTYPE_FVALUE, new_fv);
+}
+
+static void
+do_modulo(dfwork_t *dfw, stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
+{
+	if (fvalue_is_zero(stnode_data(st_arg2)))
+		FAIL(dfw, st_node, "Division by zero");
+
+	char *err_msg;
+	fvalue_t *new_fv = fvalue_modulo(stnode_data(st_arg1), stnode_data(st_arg2), &err_msg);
+	if (new_fv == NULL)
+		FAIL_MSG(dfw, st_node, err_msg);
+	stnode_replace(st_node, STTYPE_FVALUE, new_fv);
+}
+
+static void
+do_bitwise_and(dfwork_t *dfw, stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2)
+{
+	char *err_msg;
+	fvalue_t *new_fv = fvalue_bitwise_and(stnode_data(st_arg1), stnode_data(st_arg2), &err_msg);
+	if (new_fv == NULL)
+		FAIL_MSG(dfw, st_node, err_msg);
+	stnode_replace(st_node, STTYPE_FVALUE, new_fv);
+}
+
 static ftenum_t
-check_arithmetic_LHS(dfwork_t *dfw, stnode_op_t st_op,
+check_arithmetic_LHS_NUMBER(dfwork_t *dfw, stnode_op_t st_op,
 			stnode_t *st_node, stnode_t *st_arg1, stnode_t *st_arg2,
-			ftenum_t lhs_ftype)
+			ftenum_t logical_ftype)
 {
 	ftenum_t		ftype1, ftype2;
 	FtypeCanFunc 		can_func = NULL;
+	ArithmeticDoFunc	do_func = NULL;
 
 	LOG_NODE(st_node);
 
 	if (st_op == STNODE_OP_UNARY_MINUS) {
-		ftype1 = check_arithmetic(dfw, st_arg1, lhs_ftype);
-		if (ftype1 == FT_NONE)
-			return FT_NONE;
+		ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
 		if (!ftype_can_unary_minus(ftype1)) {
 			FAIL(dfw, st_arg1, "%s %s.",
 				ftype_name(ftype1), op_to_error_msg(st_op));
 		}
-		if (stnode_type_id(st_arg1) == STTYPE_FVALUE) {
-			/* Pre-compute constant unary minus result */
-			char *err_msg;
-			fvalue_t *new_fv = fvalue_unary_minus(stnode_data(st_arg1), &err_msg);
-			if (new_fv == NULL) {
-				dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st_arg1),
-							"%s: %s", stnode_todisplay(st_arg1), err_msg);
-				g_free(err_msg);
-				FAIL_HERE(dfw);
-			}
-			/* Replaces unary operator with result */
-			stnode_replace(st_node, STTYPE_FVALUE, new_fv);
+		if (dfw->flags & DF_OPTIMIZE && stnode_type_id(st_arg1) == STTYPE_FVALUE) {
+			/* Pre-compute constant result */
+			do_unary_minus(dfw, st_node, st_arg1);
 		}
 		return ftype1;
 	}
@@ -1546,30 +1852,33 @@ check_arithmetic_LHS(dfwork_t *dfw, stnode_op_t st_op,
 	switch (st_op) {
 		case STNODE_OP_ADD:
 			can_func = ftype_can_add;
+			do_func = do_addition;
 			break;
 		case STNODE_OP_SUBTRACT:
 			can_func = ftype_can_subtract;
+			do_func = do_subtraction;
 			break;
 		case STNODE_OP_MULTIPLY:
 			can_func = ftype_can_multiply;
+			do_func = do_multiplication;
 			break;
 		case STNODE_OP_DIVIDE:
 			can_func = ftype_can_divide;
+			do_func = do_division;
 			break;
 		case STNODE_OP_MODULO:
 			can_func = ftype_can_modulo;
+			do_func = do_modulo;
 			break;
 		case STNODE_OP_BITWISE_AND:
 			can_func = ftype_can_bitwise_and;
+			do_func = do_bitwise_and;
 			break;
 		default:
-			ws_assert_not_reached();
+			ASSERT_STNODE_OP_NOT_REACHED(st_op);
 	}
 
-	ftype1 = check_arithmetic(dfw, st_arg1, lhs_ftype);
-	if (ftype1 == FT_NONE) {
-		FAIL(dfw, st_arg1, "Unknown type for left side of %s", stnode_todisplay(st_node));
-	}
+	ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
 	if (!can_func(ftype1)) {
 		FAIL(dfw, st_arg1, "%s %s.",
 			ftype_name(ftype1), op_to_error_msg(st_op));
@@ -1586,30 +1895,118 @@ check_arithmetic_LHS(dfwork_t *dfw, stnode_op_t st_op,
 			ftype_name(ftype1), ftype_name(ftype2));
 	}
 
+	if (dfw->flags & DF_OPTIMIZE &&
+				stnode_type_id(st_arg1) == STTYPE_FVALUE &&
+				stnode_type_id(st_arg2) == STTYPE_FVALUE) {
+		/* Pre-compute constant result */
+		do_func(dfw, st_node, st_arg1, st_arg2);
+	}
+
+	return ftype1;
+}
+
+/*
+ * Time arithmetic with scalar multiplication/division only.
+ * An extra limitation is that multiplicative scalars must appear on the
+ * RHS currently.
+ */
+static ftenum_t
+check_arithmetic_LHS_TIME(dfwork_t *dfw, stnode_op_t st_op, stnode_t *st_node,
+			stnode_t *st_arg1, stnode_t *st_arg2,
+			ftenum_t logical_ftype)
+{
+	ftenum_t		ftype1, ftype2;
+	ArithmeticDoFunc	do_func = NULL;
+
+	sttype_oper_get(st_node, &st_op, &st_arg1, &st_arg2);
+
+	LOG_NODE(st_node);
+
+	if (st_op == STNODE_OP_UNARY_MINUS) {
+		ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
+		if (dfw->flags & DF_OPTIMIZE && stnode_type_id(st_arg1) == STTYPE_FVALUE) {
+			do_unary_minus(dfw, st_node, st_arg1);
+		}
+		return ftype1;
+	}
+
+	switch (st_op) {
+		case STNODE_OP_ADD:
+		case STNODE_OP_SUBTRACT:
+			ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
+			if (!FT_IS_TIME(ftype1)) {
+				FAIL(dfw, st_node, "Left hand side must be a time type, not %s.", ftype_pretty_name(ftype1));
+			}
+			ftype2 = check_arithmetic(dfw, st_arg2, logical_ftype);
+			if (!FT_IS_TIME(ftype2)) {
+				FAIL(dfw, st_node, "Right hand side must be a time type, not %s.", ftype_pretty_name(ftype2));
+			}
+			break;
+		case STNODE_OP_MULTIPLY:
+		case STNODE_OP_DIVIDE:
+			ftype1 = check_arithmetic(dfw, st_arg1, logical_ftype);
+			if (!FT_IS_TIME(ftype1)) {
+				FAIL(dfw, st_node, "Left hand side must be a time type, not %s.", ftype_pretty_name(ftype1));
+			}
+			ftype2 = check_arithmetic(dfw, st_arg2, FT_SCALAR);
+			if (!FT_IS_SCALAR(ftype2)) {
+				FAIL(dfw, st_node, "Right hand side must be an integer ou float type, not %s.", ftype_pretty_name(ftype2));
+			}
+			break;
+		default:
+			FAIL(dfw, st_node, "\"%s\" is not a valid arithmetic operator for %s",
+					stnode_todisplay(st_node), ftype_pretty_name(logical_ftype));
+	}
+
+	if (dfw->flags & DF_OPTIMIZE &&
+				stnode_type_id(st_arg1) == STTYPE_FVALUE &&
+				stnode_type_id(st_arg2) == STTYPE_FVALUE) {
+		/* Pre-compute constant result */
+		switch (st_op) {
+			case STNODE_OP_ADD:
+				do_func = do_addition;
+				break;
+			case STNODE_OP_SUBTRACT:
+				do_func = do_subtraction;
+				break;
+			case STNODE_OP_MULTIPLY:
+				do_func = do_multiplication;
+				break;
+			case STNODE_OP_DIVIDE:
+				do_func = do_division;
+				break;
+			default:
+				ASSERT_STNODE_OP_NOT_REACHED(st_op);
+		}
+		do_func(dfw, st_node, st_arg1, st_arg2);
+	}
+
 	return ftype1;
 }
 
 ftenum_t
-check_arithmetic(dfwork_t *dfw, stnode_t *st_node, ftenum_t lhs_ftype)
+check_arithmetic(dfwork_t *dfw, stnode_t *st_node, ftenum_t logical_ftype)
 {
 	sttype_id_t		type;
 	stnode_op_t		st_op;
 	stnode_t		*st_arg1, *st_arg2;
-	ftenum_t		ftype;
+	ftenum_t		ftype = FT_NONE;
 
 	LOG_NODE(st_node);
+
+	resolve_unparsed(dfw, st_node, true);
 
 	type = stnode_type_id(st_node);
 
 	switch (type) {
 		case STTYPE_LITERAL:
-			if (lhs_ftype != FT_NONE) {
-				dfilter_fvalue_from_literal(dfw, lhs_ftype, st_node, false, NULL);
-				ftype = sttype_pointer_ftenum(st_node);
-			}
-			else {
-				ftype = FT_NONE;
-			}
+			dfilter_fvalue_from_literal(dfw, logical_ftype, st_node, false, NULL);
+			ftype = sttype_pointer_ftenum(st_node);
+			break;
+
+		case STTYPE_NUMBER:
+			dfilter_fvalue_from_number(dfw, logical_ftype, st_node);
+			ftype = sttype_pointer_ftenum(st_node);
 			break;
 
 		case STTYPE_FIELD:
@@ -1620,25 +2017,34 @@ check_arithmetic(dfwork_t *dfw, stnode_t *st_node, ftenum_t lhs_ftype)
 			break;
 
 		case STTYPE_FUNCTION:
-			ftype = check_function(dfw, st_node, lhs_ftype);
+			ftype = check_function(dfw, st_node, logical_ftype);
 			break;
 
 		case STTYPE_SLICE:
-			ftype = check_slice(dfw, st_node, lhs_ftype);
+			ftype = check_slice(dfw, st_node, logical_ftype);
 			break;
 
 		case STTYPE_FVALUE:
-			ftype = fvalue_type_ftenum(stnode_data(st_node));
+			ftype = sttype_pointer_ftenum(st_node);
 			break;
 
 		case STTYPE_ARITHMETIC:
 			sttype_oper_get(st_node, &st_op, &st_arg1, &st_arg2);
-			ftype = check_arithmetic_LHS(dfw, st_op, st_node, st_arg1, st_arg2, lhs_ftype);
+			if (FT_IS_TIME(logical_ftype))
+				ftype = check_arithmetic_LHS_TIME(dfw, st_op, st_node, st_arg1, st_arg2, logical_ftype);
+			else
+				ftype = check_arithmetic_LHS_NUMBER(dfw, st_op, st_node, st_arg1, st_arg2, logical_ftype);
 			break;
 
-		default:
-			FAIL(dfw, st_node, "%s is not a valid arithmetic operation.",
-				stnode_todisplay(st_node));
+		case STTYPE_STRING:
+		case STTYPE_CHARCONST:
+		case STTYPE_SET:
+		case STTYPE_PCRE:
+		case STTYPE_UNPARSED:
+		case STTYPE_UNINITIALIZED:
+		case STTYPE_NUM_TYPES:
+		case STTYPE_TEST:
+			ASSERT_STTYPE_NOT_REACHED(type);
 	}
 
 	return ftype;
@@ -1659,6 +2065,7 @@ semcheck(dfwork_t *dfw, stnode_t *st_node)
 			break;
 		case STTYPE_ARITHMETIC:
 		case STTYPE_SLICE:
+		case STTYPE_FUNCTION:
 			check_nonzero(dfw, st_node);
 			break;
 		default:

@@ -472,6 +472,7 @@ static expert_field ei_tcp_connection_rst = EI_INIT;
 static expert_field ei_tcp_connection_fin_active = EI_INIT;
 static expert_field ei_tcp_connection_fin_passive = EI_INIT;
 static expert_field ei_tcp_checksum_ffff = EI_INIT;
+static expert_field ei_tcp_checksum_partial = EI_INIT;
 static expert_field ei_tcp_checksum_bad = EI_INIT;
 static expert_field ei_tcp_urgent_pointer_non_zero = EI_INIT;
 static expert_field ei_tcp_suboption_malformed = EI_INIT;
@@ -1456,10 +1457,34 @@ static int exp_pdu_tcp_dissector_data_populate_data(packet_info *pinfo _U_, void
     return exp_pdu_tcp_dissector_data_size(pinfo, data);
 }
 
+static tvbuff_t*
+handle_export_pdu_check_desegmentation(packet_info *pinfo, tvbuff_t *tvb)
+{
+    /* Check to see if the tvb we're planning on exporting PDUs from was
+     * dissected fully, or whether it requested further desegmentation.
+     * This should only matter on the first pass (so in one-pass tshark.)
+     */
+    if (pinfo->can_desegment > 0 && pinfo->desegment_len != 0) {
+        /* Desegmentation was requested. How much did we desegment here?
+         * The rest, presumably, will be handled in another frame.
+         */
+        if (pinfo->desegment_offset == 0) {
+            /* We couldn't, in fact, dissect any of it. */
+            return NULL;
+        }
+        tvb = tvb_new_subset_length(tvb, 0, pinfo->desegment_offset);
+    }
+    return tvb;
+}
+
 static void
 handle_export_pdu_dissection_table(packet_info *pinfo, tvbuff_t *tvb, guint32 port, struct tcpinfo *tcpinfo)
 {
     if (have_tap_listener(exported_pdu_tap)) {
+        tvb = handle_export_pdu_check_desegmentation(pinfo, tvb);
+        if (tvb == NULL) {
+            return;
+        }
         exp_pdu_data_item_t exp_pdu_data_table_value = {exp_pdu_data_dissector_table_num_value_size, exp_pdu_data_dissector_table_num_value_populate_data, NULL};
         exp_pdu_data_item_t exp_pdu_data_dissector_data = {exp_pdu_tcp_dissector_data_size, exp_pdu_tcp_dissector_data_populate_data, NULL};
         const exp_pdu_data_item_t *tcp_exp_pdu_items[] = {
@@ -1494,6 +1519,10 @@ handle_export_pdu_heuristic(packet_info *pinfo, tvbuff_t *tvb, heur_dtbl_entry_t
     exp_pdu_data_t *exp_pdu_data = NULL;
 
     if (have_tap_listener(exported_pdu_tap)) {
+        tvb = handle_export_pdu_check_desegmentation(pinfo, tvb);
+        if (tvb == NULL) {
+            return;
+        }
         if ((!hdtbl_entry->enabled) ||
             (hdtbl_entry->protocol != NULL && !proto_is_protocol_enabled(hdtbl_entry->protocol))) {
             exp_pdu_data = export_pdu_create_common_tags(pinfo, "data", EXP_PDU_TAG_DISSECTOR_NAME);
@@ -1529,6 +1558,10 @@ static void
 handle_export_pdu_conversation(packet_info *pinfo, tvbuff_t *tvb, int src_port, int dst_port, struct tcpinfo *tcpinfo)
 {
     if (have_tap_listener(exported_pdu_tap)) {
+        tvb = handle_export_pdu_check_desegmentation(pinfo, tvb);
+        if (tvb == NULL) {
+            return;
+        }
         conversation_t *conversation = find_conversation(pinfo->num, &pinfo->src, &pinfo->dst, CONVERSATION_TCP, src_port, dst_port, 0);
         if (conversation != NULL)
         {
@@ -7922,7 +7955,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             tcph->th_seglen = reported_len - tcph->th_hlen;
             tcph->th_have_seglen = TRUE;
 
-            pi = proto_tree_add_uint(ti, hf_tcp_len, tvb, offset+12, 1, tcph->th_seglen);
+            pi = proto_tree_add_uint(ti, hf_tcp_len, tvb, 0, 0, tcph->th_seglen);
             proto_item_set_generated(pi);
 
             /* initialize base_seq numbers */
@@ -8360,8 +8393,12 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                 DISSECTOR_ASSERT_NOT_REACHED();
                 break;
             }
+            /* See discussion in packet-udp.c of partial checksums used in
+             * checksum offloading in Linux and Windows (and possibly others.)
+             */
+            uint16_t partial_cksum;
             SET_CKSUM_VEC_TVB(cksum_vec[3], tvb, offset, reported_len);
-            computed_cksum = in_cksum(cksum_vec, 4);
+            computed_cksum = in_cksum_ret_partial(cksum_vec, 4, &partial_cksum);
             if (computed_cksum == 0 && th_sum == 0xffff) {
                 item = proto_tree_add_uint_format_value(tcp_tree, hf_tcp_checksum, tvb,
                                                   offset + 16, 2, th_sum,
@@ -8383,11 +8420,23 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                 desegment_ok = TRUE;
             } else {
                 proto_item* calc_item;
-                item = proto_tree_add_checksum(tcp_tree, tvb, offset+16, hf_tcp_checksum, hf_tcp_checksum_status, &ei_tcp_checksum_bad, pinfo, computed_cksum,
-                                               ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY|PROTO_CHECKSUM_IN_CKSUM);
-
-                calc_item = proto_tree_add_uint(tcp_tree, hf_tcp_checksum_calculated, tvb,
-                                              offset + 16, 2, in_cksum_shouldbe(th_sum, computed_cksum));
+                uint16_t shouldbe_cksum = in_cksum_shouldbe(th_sum, computed_cksum);
+                if (th_sum == g_htons(partial_cksum)) {
+                    /* Don't use PROTO_CHECKSUM_IN_CKSUM because we expect the value
+                     * to match what we pass in. */
+                    item = proto_tree_add_checksum(tcp_tree, tvb, offset+16, hf_tcp_checksum, hf_tcp_checksum_status, &ei_tcp_checksum_bad, pinfo, g_htons(partial_cksum),
+                                                   ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
+                    proto_item_append_text(item, " (matches partial checksum, not 0x%4x, likely caused by \"TCP checksum offload\")", shouldbe_cksum);
+                    expert_add_info(pinfo, item, &ei_tcp_checksum_partial);
+                    computed_cksum = 0;
+                    /* XXX Add a new status, e.g. PROTO_CHECKSUM_E_PARTIAL? */
+                } else {
+                    item = proto_tree_add_checksum(tcp_tree, tvb, offset+16, hf_tcp_checksum, hf_tcp_checksum_status, &ei_tcp_checksum_bad, pinfo, computed_cksum,
+                                                   ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY|PROTO_CHECKSUM_IN_CKSUM);
+                }
+                checksum_tree = proto_item_add_subtree(item, ett_tcp_checksum);
+                calc_item = proto_tree_add_uint(checksum_tree, hf_tcp_checksum_calculated, tvb,
+                                              offset + 16, 2, shouldbe_cksum);
                 proto_item_set_generated(calc_item);
 
                 /* Checksum is valid, so we're willing to desegment it. */
@@ -9686,6 +9735,7 @@ proto_register_tcp(void)
          */
         { &ei_tcp_connection_rst, { "tcp.connection.rst", PI_SEQUENCE, PI_WARN, "Connection reset (RST)", EXPFILL }},
         { &ei_tcp_checksum_ffff, { "tcp.checksum.ffff", PI_CHECKSUM, PI_WARN, "TCP Checksum 0xffff instead of 0x0000 (see RFC 1624)", EXPFILL }},
+        { &ei_tcp_checksum_partial, { "tcp.checksum.partial", PI_CHECKSUM, PI_NOTE, "Partial (pseudo header) checksum (likely caused by \"TCP checksum offload\")", EXPFILL }},
         { &ei_tcp_checksum_bad, { "tcp.checksum_bad.expert", PI_CHECKSUM, PI_ERROR, "Bad checksum", EXPFILL }},
         { &ei_tcp_urgent_pointer_non_zero, { "tcp.urgent_pointer.non_zero", PI_PROTOCOL, PI_NOTE, "The urgent pointer field is nonzero while the URG flag is not set", EXPFILL }},
         { &ei_tcp_suboption_malformed, { "tcp.suboption_malformed", PI_MALFORMED, PI_ERROR, "suboption would go past end of option", EXPFILL }},

@@ -97,7 +97,6 @@ DIAG_ON(frame-larger-than=)
 #include "capture_options_dialog.h"
 #endif
 #include <ui/qt/utils/color_utils.h>
-#include "browser_sslkeylog_dialog.h"
 #include "coloring_rules_dialog.h"
 #include "conversation_dialog.h"
 #include "conversation_colorize_action.h"
@@ -154,6 +153,7 @@ DIAG_ON(frame-larger-than=)
 #include "sctp_graph_dialog.h"
 #include "sequence_dialog.h"
 #include "show_packet_bytes_dialog.h"
+#include "tlskeylog_launcher_dialog.h"
 #include "stats_tree_dialog.h"
 #include "strip_headers_dialog.h"
 #include <ui/qt/utils/stock_icon.h>
@@ -1295,6 +1295,9 @@ void WiresharkMainWindow::setMenusForSelectedPacket()
     /* Allow un-ignore of all frames even with no frames currently displayed */
     main_ui_->actionEditUnignoreAllDisplayed->setEnabled(have_ignored);
 
+    // XXX: Should we allow frames that don't have a time stamp to be
+    // set as time references? "Time" references are also used to reset
+    // the "Cumulative Bytes", so it's not entirely useless.
     main_ui_->actionEditSetTimeReference->setEnabled(frame_selected);
     main_ui_->actionEditUnsetAllTimeReferences->setEnabled(have_time_ref);
     main_ui_->actionEditNextTimeReference->setEnabled(another_is_time_ref);
@@ -1360,6 +1363,22 @@ void WiresharkMainWindow::setMenusForSelectedTreeRow(FieldInformation *finfo) {
 
         if (fi && fi->ds_tvb && (fi->length > 0)) {
             have_packet_bytes = true;
+        }
+
+        if (!(capture_file_.capFile()->search_in_progress && (capture_file_.capFile()->hex || (capture_file_.capFile()->string && capture_file_.capFile()->packet_data)))) {
+            // If we're not in the middle of a packet bytes search, then set
+            // search_pos and search_len so that we can start a new search
+            // from this point. (If we are, then we already set it.)
+            if (fi && capture_file_.capFile()->edt && (fi->ds_tvb == capture_file_.capFile()->edt->tvb)) {
+                // We can only do a Packet Bytes search in the main bytes from
+                // the frame, not from any secondary data sources. (XXX: This
+                // might be surprising to users, though.)
+                capture_file_.capFile()->search_pos = (uint32_t)(finfo->position().start + finfo->position().length - 1);
+                capture_file_.capFile()->search_len = (uint32_t)finfo->position().length;
+            } else {
+                capture_file_.capFile()->search_pos = 0;
+                capture_file_.capFile()->search_len = 0;
+            }
         }
     }
 
@@ -1614,8 +1633,7 @@ void WiresharkMainWindow::showAccordionFrame(AccordionFrame *show_frame, bool to
 
 void WiresharkMainWindow::showColumnEditor(int column)
 {
-    previous_focus_ = mainApp->focusWidget();
-    connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
+    setPreviousFocus();
     main_ui_->columnEditorFrame->editColumn(column);
     showAccordionFrame(main_ui_->columnEditorFrame);
 }
@@ -1877,7 +1895,7 @@ void WiresharkMainWindow::exportPacketBytes()
 
     file_name = WiresharkFileDialog::getSaveFileName(this,
                                             mainApp->windowTitleString(tr("Export Selected Packet Bytes")),
-                                            mainApp->lastOpenDir().canonicalPath(),
+                                            mainApp->openDialogInitialDir().canonicalPath(),
                                             tr("Raw data (*.bin *.dat *.raw);;All Files (" ALL_FILES_WILDCARD ")")
                                             );
 
@@ -1950,7 +1968,7 @@ void WiresharkMainWindow::exportTLSSessionKeys()
     save_title.append(mainApp->windowTitleString(tr("Export TLS Session Keys (%Ln key(s))", "", keylist_len)));
     file_name = WiresharkFileDialog::getSaveFileName(this,
                                             save_title,
-                                            mainApp->lastOpenDir().canonicalPath(),
+                                            mainApp->openDialogInitialDir().canonicalPath(),
                                             tr("TLS Session Keys (*.keys *.txt);;All Files (" ALL_FILES_WILDCARD ")")
                                             );
     if (file_name.length() > 0) {
@@ -2220,8 +2238,7 @@ void WiresharkMainWindow::findPacket()
     if (! packet_list_->model() || packet_list_->model()->rowCount() < 1) {
         return;
     }
-    previous_focus_ = mainApp->focusWidget();
-    connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
+    setPreviousFocus();
     if (!main_ui_->searchFrame->isVisible()) {
         showAccordionFrame(main_ui_->searchFrame, true);
     } else {
@@ -2873,8 +2890,7 @@ void WiresharkMainWindow::connectGoMenuActions()
         if (! packet_list_->model() || packet_list_->model()->rowCount() < 1) {
             return;
         }
-        previous_focus_ = mainApp->focusWidget();
-        connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
+        setPreviousFocus();
 
         showAccordionFrame(main_ui_->goToFrame, true);
         if (main_ui_->goToFrame->isVisible()) {
@@ -3113,14 +3129,10 @@ void WiresharkMainWindow::connectAnalyzeMenuActions()
     });
 
     connect(main_ui_->actionAnalyzeDisplayFilterMacros, &QAction::triggered, this, [=]() {
-        struct epan_uat* dfm_uat;
-        dfilter_macro_get_uat(&dfm_uat);
-        UatDialog *uat_dlg = new UatDialog(parentWidget(), dfm_uat);
-        connect(uat_dlg, SIGNAL(destroyed(QObject*)), mainApp, SLOT(flushAppSignals()));
-
-        uat_dlg->setWindowModality(Qt::ApplicationModal);
-        uat_dlg->setAttribute(Qt::WA_DeleteOnClose);
-        uat_dlg->show();
+        FilterDialog *display_filter_dlg = new FilterDialog(window(), FilterDialog::DisplayMacro);
+        display_filter_dlg->setWindowModality(Qt::ApplicationModal);
+        display_filter_dlg->setAttribute(Qt::WA_DeleteOnClose);
+        display_filter_dlg->show();
     });
 
     connect(main_ui_->actionDisplayFilterExpression, &QAction::triggered, this, [=]() {
@@ -3774,7 +3786,7 @@ void WiresharkMainWindow::connectToolsMenuActions()
         manuf_dialog->show();
     });
 
-    connect(main_ui_->actionToolsSSLKeylog, &QAction::triggered, this, &WiresharkMainWindow::openBrowserKeylogDialog);
+    connect(main_ui_->actionToolsTLSKeylog, &QAction::triggered, this, &WiresharkMainWindow::openTLSKeylogDialog);
 }
 
 // Help Menu
@@ -3824,8 +3836,15 @@ void WiresharkMainWindow::checkForUpdates()
 }
 #endif
 
+void WiresharkMainWindow::setPreviousFocus() {
+    previous_focus_ = mainApp->focusWidget();
+    if (previous_focus_ != nullptr) {
+        connect(previous_focus_, SIGNAL(destroyed()), this, SLOT(resetPreviousFocus()));
+    }
+}
+
 void WiresharkMainWindow::resetPreviousFocus() {
-    previous_focus_ = NULL;
+    previous_focus_ = nullptr;
 }
 
 void WiresharkMainWindow::goToCancelClicked()

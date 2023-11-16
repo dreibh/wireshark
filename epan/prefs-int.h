@@ -138,6 +138,7 @@ WS_DLL_PUBLIC guint32 prefs_get_max_value(pref_t *pref);
 #define PREF_EFFECT_CAPTURE           (1u << 1)
 #define PREF_EFFECT_GUI_LAYOUT        (1u << 2)
 #define PREF_EFFECT_FIELDS            (1u << 3)
+#define PREF_EFFECT_GUI               (1u << 4)
 
 /** Fetch flags that show the effect of the preference
  *
@@ -248,6 +249,9 @@ WS_DLL_PUBLIC gboolean prefs_remove_decode_as_value(pref_t *pref, guint value, g
 
 WS_DLL_PUBLIC unsigned int prefs_set_password_value(pref_t *pref, const char* value, pref_source_t source);
 WS_DLL_PUBLIC char* prefs_get_password_value(pref_t *pref, pref_source_t source);
+
+WS_DLL_PUBLIC gboolean prefs_add_list_value(pref_t *pref, void *value, pref_source_t source);
+WS_DLL_PUBLIC GList* prefs_get_list_value(pref_t *pref, pref_source_t source);
 
 WS_DLL_PUBLIC void reset_pref(pref_t *pref);
 

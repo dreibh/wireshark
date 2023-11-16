@@ -42,10 +42,10 @@ void proto_reg_handoff_atn_cm(void);
 #include "packet-atn-cm-hf.c"
 
 #include "packet-atn-cm-ett.c"
-static gint ett_atn_cm = -1;
+static gint ett_atn_cm;
 
 #include "packet-atn-cm-fn.c"
-static int proto_atn_cm = -1;
+static int proto_atn_cm;
 
 static int
 dissect_atn_cm(
@@ -187,10 +187,7 @@ void proto_register_atn_cm (void)
     };
 
     /* register CM application */
-    proto_atn_cm = proto_register_protocol(
-        ATN_CM_PROTO ,
-        "ATN-CM",
-        "atn-cm");
+    proto_atn_cm = proto_register_protocol(ATN_CM_PROTO, "ATN-CM", "atn-cm");
 
     proto_register_field_array(
         proto_atn_cm,

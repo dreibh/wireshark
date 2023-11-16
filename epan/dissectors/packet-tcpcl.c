@@ -2168,11 +2168,7 @@ proto_register_tcpclv3(void)
 {
     expert_module_t *expert_tcpcl;
 
-    proto_tcpcl = proto_register_protocol(
-        "DTN TCP Convergence Layer Protocol",
-        "TCPCL",
-        "tcpcl"
-    );
+    proto_tcpcl = proto_register_protocol("DTN TCP Convergence Layer Protocol", "TCPCL", "tcpcl");
 
     proto_tcpcl_exts = proto_register_protocol_in_name_only(
         "TCPCL Extension Subdissectors",
@@ -2205,7 +2201,7 @@ proto_register_tcpclv3(void)
         "desegment_transfer",
         "Reassemble the segments of each transfer",
         "Whether the TCPCLv4 dissector should combine the sequential segments "
-        "of a transfer into the full bundle being transfered."
+        "of a transfer into the full bundle being transferred."
         "To use this option, you must also enable "
         "\"Allow subdissectors to reassemble TCP streams\" "
         "in the TCP protocol settings.",

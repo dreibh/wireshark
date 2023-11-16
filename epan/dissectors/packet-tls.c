@@ -920,6 +920,17 @@ dissect_ssl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
     return ret;
 }
 
+
+/*
+ * Dissect ECHConfigList structure, for use by the DNS dissector.
+ */
+static int
+dissect_tls_echconfig(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+{
+    return ssl_dissect_ext_ech_echconfiglist(&dissect_ssl3_hf, tvb, pinfo,
+                                             tree, 0, tvb_reported_length(tvb));
+}
+
 /*
  * Dissect TLS 1.3 handshake messages (without the record layer).
  * For use by QUIC (draft -13).
@@ -2962,7 +2973,7 @@ dissect_tls_handshake_full(tvbuff_t *tvb, packet_info *pinfo,
                         &ssl_master_key_map);
                 /* try to find master key from pre-master key */
                 if (!ssl_generate_pre_master_secret(ssl, length, tvb, offset,
-                            ssl_options.psk,
+                            ssl_options.psk, pinfo,
 #ifdef HAVE_LIBGNUTLS
                             ssl_key_hash,
 #endif
@@ -4809,6 +4820,7 @@ proto_register_tls(void)
 
     tls_handle = register_dissector("tls", dissect_ssl, proto_tls);
     register_dissector("tls13-handshake", dissect_tls13_handshake, proto_tls);
+    register_dissector("tls-echconfig", dissect_tls_echconfig, proto_tls);
 
     register_init_routine(ssl_init);
     register_cleanup_routine(ssl_cleanup);

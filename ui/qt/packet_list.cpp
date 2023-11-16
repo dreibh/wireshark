@@ -248,9 +248,7 @@ PacketList::PacketList(QWidget *parent) :
     connect(packet_list_header_, &PacketListHeader::columnsChanged, this, &PacketList::columnsChanged);
     setHeader(packet_list_header_);
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 11, 0)
     header()->setFirstSectionMovable(true);
-#endif
 
     setSelectionMode(QAbstractItemView::ExtendedSelection);
 
@@ -677,7 +675,9 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
 
     // Code for custom context menus from Lua's register_packet_menu()
     MainWindow * mainWindow = qobject_cast<MainWindow *>(mainApp->mainWindow());
-    if (cap_file_ && cap_file_->edt && cap_file_->edt->tree && mainWindow) {
+    // N.B., Only want to call for a single frame selection.
+    // Testing finfo_array as a proxy, because mainWindow->hasUniqueSelection() doesn't detect multiple selections...
+    if (cap_file_ && cap_file_->edt && cap_file_->edt->tree && mainWindow && finfo_array) {
         bool insertedPacketMenu = mainWindow->addPacketMenus(ctx_menu, finfo_array);
         if (insertedPacketMenu) {
             ctx_menu->addSeparator();
@@ -1019,19 +1019,11 @@ void PacketList::setRecentColumnWidth(int col)
         const char *long_str = get_column_width_string(fmt, col);
 
         QFontMetrics fm = QFontMetrics(mainApp->monospaceFont());
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
         if (long_str) {
             col_width = fm.horizontalAdvance(long_str);
         } else {
             col_width = fm.horizontalAdvance(MIN_COL_WIDTH_STR);
         }
-#else
-        if (long_str) {
-            col_width = fm.width(long_str);
-        } else {
-            col_width = fm.width(MIN_COL_WIDTH_STR);
-        }
-#endif
         // Custom delegate padding
         if (itemDelegateForColumn(col)) {
             QStyleOptionViewItem option;

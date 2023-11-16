@@ -937,6 +937,7 @@ main(int argc, char *argv[])
         {"version", ws_no_argument, NULL, 'v'},
         LONGOPT_CAPTURE_COMMON
         LONGOPT_DISSECT_COMMON
+        LONGOPT_READ_CAPTURE_COMMON
         {"print", ws_no_argument, NULL, 'P'},
         {"export-objects", ws_required_argument, NULL, LONGOPT_EXPORT_OBJECTS},
         {"export-tls-session-keys", ws_required_argument, NULL, LONGOPT_EXPORT_TLS_SESSION_KEYS},
@@ -1002,7 +1003,7 @@ main(int argc, char *argv[])
      * We do *not* use a leading - because the behavior of a leading - is
      * platform-dependent.
      */
-#define OPTSTRING "+2" OPTSTRING_CAPTURE_COMMON OPTSTRING_DISSECT_COMMON "M:C:e:E:F:gG:hH:j:J:lo:O:PqQr:R:S:T:U:vVw:W:xX:Y:z:"
+#define OPTSTRING "+2" OPTSTRING_CAPTURE_COMMON OPTSTRING_DISSECT_COMMON OPTSTRING_READ_CAPTURE_COMMON "M:C:e:E:F:gG:hH:j:J:lo:O:PqQS:T:U:vVw:W:xX:z:"
 
     static const char    optstring[] = OPTSTRING;
 
@@ -1331,8 +1332,6 @@ main(int argc, char *argv[])
     /* Load libwireshark settings from the current profile. */
     prefs_p = epan_load_settings();
     prefs_loaded = TRUE;
-
-    read_filter_list(CFILTER_LIST);
 
     cap_file_init(&cfile);
 
@@ -2719,7 +2718,6 @@ clean_exit:
     capture_opts_cleanup(&global_capture_opts);
 #endif
     col_cleanup(&cfile.cinfo);
-    free_filter_lists();
     wtap_cleanup();
     free_progdirs();
     dfilter_free(dfcode);
@@ -2733,22 +2731,18 @@ guint32 packet_count = 0;
 static const nstime_t *
 tshark_get_frame_ts(struct packet_provider_data *prov, guint32 frame_num)
 {
-    if (prov->ref && prov->ref->num == frame_num)
-        return &prov->ref->abs_ts;
-
-    if (prov->prev_dis && prov->prev_dis->num == frame_num)
-        return &prov->prev_dis->abs_ts;
-
-    if (prov->prev_cap && prov->prev_cap->num == frame_num)
-        return &prov->prev_cap->abs_ts;
-
-    if (prov->frames) {
-        frame_data *fd = frame_data_sequence_find(prov->frames, frame_num);
-
-        return (fd) ? &fd->abs_ts : NULL;
+    const frame_data *fd = NULL;
+    if (prov->ref && prov->ref->num == frame_num) {
+        fd = prov->ref;
+    } else if (prov->prev_dis && prov->prev_dis->num == frame_num) {
+        fd = prov->prev_dis;
+    } else if (prov->prev_cap && prov->prev_cap->num == frame_num) {
+        fd = prov->prev_cap;
+    } else if (prov->frames) {
+        fd = frame_data_sequence_find(prov->frames, frame_num);
     }
 
-    return NULL;
+    return (fd && fd->has_ts) ? &fd->abs_ts : NULL;
 }
 
 static epan_t *

@@ -490,7 +490,6 @@ create_shb_header(const merge_in_file_t *in_files, const guint in_file_count,
     GString *comment_gstr;
     GString *os_info_str;
     guint i;
-    char* shb_comment = NULL;
     wtapng_section_mandatory_t* shb_data;
     gsize opt_len;
     gchar *opt_str;
@@ -505,14 +504,7 @@ create_shb_header(const merge_in_file_t *in_files, const guint in_file_count,
      *
      * XXX - do we want some way to record which comments, hardware/OS/app
      * descriptions, IDBs, etc.? came from which files?
-     *
-     * XXX - fix this to handle multiple comments from a single file.
      */
-    if (wtap_block_get_nth_string_option_value(shb_hdr, OPT_COMMENT, 0, &shb_comment) == WTAP_OPTTYPE_SUCCESS &&
-        strlen(shb_comment) > 0) {
-        /* very lame way to save comments - does not save them from the other files */
-        g_string_append_printf(comment_gstr, "%s \n",shb_comment);
-    }
 
     g_string_append_printf(comment_gstr, "File created by merging: \n");
 
@@ -527,9 +519,14 @@ create_shb_header(const merge_in_file_t *in_files, const guint in_file_count,
     shb_data->section_length = -1;
     /* TODO: handle comments from each file being merged */
     opt_len = comment_gstr->len;
+    /* XXX: 65535 is the maximum size for an option (hence comment) in pcapng.
+     * Truncate it? Let wiretap/pcapng.c decide what to do? (Currently it
+     * writes nothing without reporting an error.) What if we support other
+     * output file formats later?
+     */
     opt_str = g_string_free(comment_gstr, FALSE);
-    wtap_block_set_nth_string_option_value(shb_hdr, OPT_COMMENT, 0, opt_str, opt_len); /* section comment */
-    g_free(opt_str);
+    /* XXX: We probably want to prepend (insert at index 0) instead? */
+    wtap_block_add_string_option_owned(shb_hdr, OPT_COMMENT, opt_str);
     /*
      * XXX - and how do we preserve all the OPT_SHB_HARDWARE, OPT_SHB_OS,
      * and OPT_SHB_USERAPPL values from all the previous files?
@@ -1420,6 +1417,22 @@ merge_files(const gchar* out_filename, const int file_type,
             guint32 *err_framenum)
 {
     ws_assert(out_filename != NULL);
+    ws_assert(in_file_count > 0);
+    ws_assert(in_filenames != NULL);
+    ws_assert(err_info != NULL);
+
+    /* #19402: ensure we aren't appending to one of our inputs */
+    if (do_append) {
+        unsigned int i;
+        for (i = 0; i < in_file_count; i++) {
+            if (files_identical(out_filename, in_filenames[i])) {
+                *err_info = ws_strdup_printf("Output file %s is same as input file %s; "
+                                             "appending would create infinite loop",
+                                             out_filename, in_filenames[i]);
+                return MERGE_ERR_INVALID_OPTION;
+            }
+        }
+    }
 
     return merge_files_common(out_filename, NULL, NULL,
                               file_type, in_filenames, in_file_count,

@@ -82,15 +82,13 @@
 #include <glib.h>
 
 #include "packet.h"
-#include "addr_and_mask.h"
-#include "ipv6.h"
 #include "addr_resolv.h"
 #include "wsutil/filesystem.h"
 
 #include <wsutil/report_message.h>
 #include <wsutil/file_util.h>
 #include <wsutil/pint.h>
-#include <wsutil/inet_addr.h>
+#include <wsutil/inet_cidr.h>
 
 #include <epan/strutil.h>
 #include <epan/to_str.h>
@@ -287,7 +285,6 @@ e_addr_resolve gbl_resolv_flags = {
     FALSE,  /* transport_name */
     TRUE,   /* dns_pkt_addr_resolution */
     TRUE,   /* use_external_net_name_resolver */
-    FALSE,  /* load_hosts_file_from_profile_only */
     FALSE,  /* vlan_name */
     FALSE,  /* ss7 point code names */
     TRUE,   /* maxmind_geoip */
@@ -1052,7 +1049,7 @@ fill_dummy_ip4(const guint addr, hashipv4_t* volatile tp)
         gsize i;
 
         host_addr = addr & (~subnet_entry.mask);
-        ip_to_str_buf((guint8 *)&host_addr, buffer, WS_INET_ADDRSTRLEN);
+        ip_addr_to_str_buf(&host_addr, buffer, WS_INET_ADDRSTRLEN);
         paddr = buffer;
 
         /* Skip to first octet that is not totally masked
@@ -1073,7 +1070,7 @@ fill_dummy_ip4(const guint addr, hashipv4_t* volatile tp)
         snprintf(tp->name, MAXNAMELEN, "%s%s", subnet_entry.name, paddr);
     } else {
         /* XXX: This means we end up printing "1.2.3.4 (1.2.3.4)" in many cases */
-        ip_to_str_buf((const guint8 *)&addr, tp->name, MAXNAMELEN);
+        ip_addr_to_str_buf(&addr, tp->name, MAXNAMELEN);
     }
 }
 
@@ -1122,7 +1119,7 @@ new_ipv4(const guint addr)
     tp->addr = addr;
     tp->flags = 0;
     tp->name[0] = '\0';
-    ip_to_str_buf((const guint8 *)&addr, tp->ip, sizeof(tp->ip));
+    ip_addr_to_str_buf(&addr, tp->ip, sizeof(tp->ip));
     return tp;
 }
 
@@ -2727,7 +2724,7 @@ subnet_name_lookup_init(void)
 
         subnet_length_entries[i].subnet_addresses  = NULL;
         subnet_length_entries[i].mask_length  = length;
-        subnet_length_entries[i].mask = g_htonl(ip_get_subnet_mask(length));
+        subnet_length_entries[i].mask = g_htonl(ws_ipv4_get_subnet_mask(length));
     }
 
     /* Check profile directory before personal configuration */
@@ -2981,11 +2978,7 @@ addr_resolve_pref_init(module_t *nameres)
             10,
             &name_resolve_concurrency);
 
-    prefs_register_bool_preference(nameres, "hosts_file_handling",
-            "Only use the profile \"hosts\" file",
-            "By default \"hosts\" files will be loaded from multiple sources."
-            " Checking this box only loads the \"hosts\" in the current profile.",
-            &gbl_resolv_flags.load_hosts_file_from_profile_only);
+    prefs_register_obsolete_preference(nameres, "hosts_file_handling");
 
     prefs_register_bool_preference(nameres, "vlan_name",
             "Resolve VLAN IDs",
@@ -3240,13 +3233,11 @@ host_name_lookup_init(void)
     /*
      * Load the global hosts file, if we have one.
      */
-    if (!gbl_resolv_flags.load_hosts_file_from_profile_only) {
-        hostspath = get_datafile_path(ENAME_HOSTS);
-        if (!read_hosts_file(hostspath, TRUE) && errno != ENOENT) {
-            report_open_failure(hostspath, errno, FALSE);
-        }
-        g_free(hostspath);
+    hostspath = get_datafile_path(ENAME_HOSTS);
+    if (!read_hosts_file(hostspath, TRUE) && errno != ENOENT) {
+        report_open_failure(hostspath, errno, FALSE);
     }
+    g_free(hostspath);
     /*
      * Load the user's hosts file no matter what, if they have one.
      */
@@ -3266,7 +3257,7 @@ host_name_lookup_init(void)
     }
 #endif
 
-    if (extra_hosts_files && !gbl_resolv_flags.load_hosts_file_from_profile_only) {
+    if (extra_hosts_files) {
         for (i = 0; i < extra_hosts_files->len; i++) {
             read_hosts_file((const char *) g_ptr_array_index(extra_hosts_files, i), TRUE);
         }

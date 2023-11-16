@@ -64,6 +64,7 @@ anacap
 analyzers
 analyzes
 annexc
+annotation
 annunc
 annunciation
 anonsvn
@@ -106,6 +107,7 @@ audigy
 authcitrix
 authen
 authenticates
+authentications
 authenticator
 authenticators
 authgss
@@ -128,6 +130,7 @@ backend
 backhaul
 backoff
 bacnet
+barbados
 batched
 baudrate
 bayer
@@ -178,6 +181,7 @@ butype
 byte
 byteorder
 cablelabs
+caching
 cadenced
 callback
 callid
@@ -222,11 +226,14 @@ centiseconds
 centrino
 cfilters
 cframe
+chacha
 chan1
 chan2
 changelog
 channelisation
 channelized
+channelmap
+chars
 charset
 charsets
 chauvet
@@ -238,6 +245,7 @@ chmod
 choco
 chocolatey
 choplen
+chroma
 chromaticities
 chromaticity
 chunked
@@ -312,12 +320,14 @@ contactless
 contextp
 contiguity
 contiguously
+convolutional
 coord
 Coord3D
 coords
 copycss
 copyfile
 corba
+corosync
 corrigendum
 couchbase
 coverity
@@ -396,6 +406,7 @@ defragmented
 defragmenting
 dehumidification
 deinterleaved
+delimit
 delimited
 delimiters
 delimiting
@@ -432,6 +443,7 @@ deselect
 designator
 destip
 destport
+determinant
 deutschland
 devcap
 deviceid
@@ -462,6 +474,7 @@ dissector
 dissectors
 distinguisher
 distributions
+diversifications
 diversifier
 divisor
 djiuav
@@ -507,6 +520,7 @@ elink
 ellipsoid
 encap
 encaps
+encapsulating
 encapsulation
 encapsulations
 encapsulator
@@ -537,6 +551,7 @@ envchange
 epasv
 epdcch
 eperm
+epoll
 epsem
 equinf
 equiv
@@ -551,6 +566,7 @@ errorportinfo
 erspan
 España
 esperanto
+essar
 etheraddr
 ethercat
 ethers
@@ -562,9 +578,12 @@ etype
 eutra
 eutran
 eventlog
+evolutions
+exclusions
 executables
 exflags
 exocet
+expansions
 extattr
 extcap
 extensibility
@@ -572,6 +591,7 @@ extensible
 extern
 exthdr
 extlen
+extpfx
 extrainformation
 eyesdn
 facch
@@ -636,6 +656,7 @@ geran
 getattr
 getentrybyname
 getgroupinfo
+getimageinfo
 getnext
 getter
 gidaddr
@@ -663,7 +684,9 @@ groupadd
 groupb
 groupcast
 groupmod
+gryphon
 gssapi
+gtalk
 guint
 gzipped
 handoff
@@ -706,6 +729,7 @@ hytec
 icmpv
 ident
 identifier
+ideographic
 idiographic
 idl2deb
 idl2wrs
@@ -728,6 +752,7 @@ implementor
 inactivated
 inband
 incits
+inconsistently
 incremented
 incrementing
 indenting
@@ -752,24 +777,29 @@ initializer
 initializers
 initializes
 initializing
+inkey
 inline
 inode
 inodes
 inspiron
 installers
 instantiate
+instantiated
 instdir
 instrumented
 interferer
 interleaving
 interop
+interpolated
 interruptible
 interworking
 intra
 intval
 inuse
 invalidation
+invalidity
 invalidly
+invariant
 ioctl
 ioerr
 ioflag
@@ -840,6 +870,7 @@ lcgid
 lcids
 lcsap
 leasequery
+legitimisation
 libgcrypt
 libpcap
 libsmi
@@ -876,6 +907,7 @@ macaddress
 macosx
 macros
 macsec
+magnitudes
 mailto
 maintainers
 malloc
@@ -892,6 +924,7 @@ maybefcs
 mbits
 mbsfn
 mbytes
+mcaal
 mcast
 mcmemberrecord
 mcptt
@@ -918,6 +951,7 @@ mgmtmsg
 microapp
 microbit
 midamble
+migratable
 millimeters
 milliwatt
 mingw
@@ -940,6 +974,7 @@ modepage
 modespecificinfo
 modifier
 modulo
+modulus
 motorola
 mozilla
 mpeg4
@@ -986,12 +1021,14 @@ multirate
 multislot
 multistate
 mumbai
+myanmar
 mycapture
 mycaptures
 mydns
 myhost
 mysql
 nacks
+nagle
 namelen
 namespace
 naptr
@@ -1019,6 +1056,7 @@ newpw
 nexthop
 nextseq
 nfs2err
+nfs3err
 nfs4err
 nghttp
 ngran
@@ -1033,6 +1071,7 @@ nodeid
 nofcs
 nokia
 nominals
+non3gpp
 nonblock
 noncriticalextension
 noncriticalextensions
@@ -1106,6 +1145,7 @@ opflags
 oplock
 opnum
 optimisation
+optimised
 optimizations
 optimizer
 optiplex
@@ -1124,6 +1164,7 @@ packetcable
 packetization
 packetized
 pagings
+panasonic
 parallelization
 param
 parameterization
@@ -1156,6 +1197,7 @@ peeraddr
 peerkey
 periodicities
 periodicity
+peripherals
 peristency
 persistency
 pfname
@@ -1170,6 +1212,7 @@ picmg
 pinfo
 pixmap
 plaintext
+planar
 plano
 plixer
 plugin
@@ -1179,6 +1222,7 @@ pluginsdir
 pmconfig
 pname
 polestar
+polygon
 popup
 portcounters
 portid
@@ -1194,6 +1238,7 @@ powercontrol
 pppdump
 pppoe
 prach
+preambles
 preauth
 preconfiguration
 preconfigured
@@ -1207,6 +1252,8 @@ prepay
 prepend
 preshared
 printf
+prioritised
+prioritising
 prioritization
 prioritized
 privkey
@@ -1245,14 +1292,18 @@ qam64
 qmgmt
 qnet6
 qosinfo
+qpack
 qsearch
 quadlet
 quadrature
 quadro
+quadruplets
 quantifiers
 quantization
+quantized
 queryhit
 queryset
+quiesce
 quiescing
 quintuplet
 quintuplets
@@ -1271,6 +1322,7 @@ raster
 rdpudp
 rdtci
 reachability
+readdir
 readme
 realloc
 realtek
@@ -1316,6 +1368,7 @@ redir
 redirection
 redirector
 redirects
+redist
 redistributable
 redistributables
 reencyption
@@ -1340,6 +1393,7 @@ rekey
 rekeying
 relocatable
 remapping
+renegotiation
 renumbering
 reoptimization
 reoptimized
@@ -1394,6 +1448,7 @@ revalidate
 revalidation
 revertive
 revocations
+rf4ce
 rfcomm
 rfmon
 rgoose
@@ -1403,6 +1458,7 @@ rmcap
 rngrsp
 rnsap
 roamer
+romania
 routable
 rowfmt
 rpcap
@@ -1416,6 +1472,7 @@ rtpmidi
 rtpmux
 rtpstream
 ruleset
+rwanda
 rxchannel
 rxlen
 rxlev
@@ -1427,6 +1484,7 @@ sanicap
 sanitize
 sapgui
 satisfiable
+savvius
 scalability
 scalable
 scaleout
@@ -1434,6 +1492,7 @@ scaler
 scannable
 scdma
 scell
+sched
 schema
 scoped
 scrollbar
@@ -1444,6 +1503,7 @@ sectorization
 sectorized
 segmenting
 segno
+selectivity
 semaphores
 semiautomatic
 sendto
@@ -1452,6 +1512,7 @@ separators
 seqno
 seqnr
 seqnum
+seqpkt
 sequenceno
 sercos
 serialised
@@ -1484,11 +1545,13 @@ signaling
 signon
 simulcast
 sistemas
+sizeof
 skippable
 skype
 slaac
 slimp
 slsch
+smpdirected
 smpte
 smrse
 sname
@@ -1519,6 +1582,7 @@ spline
 spnego
 spoofing
 spooled
+sqlwarn
 srbid
 srcport
 srtcp
@@ -1577,6 +1641,7 @@ subpdu
 subpm
 subprocesstest
 subquery
+subrect
 subrects
 subselect
 subselection
@@ -1590,6 +1655,7 @@ sverige
 svhdx
 switchinfo
 symantec
+symlink
 synchronizer
 synchronizing
 synchronously
@@ -1605,6 +1671,7 @@ sysmac
 systemd
 tablemod
 tabular
+tanzania
 tclas
 tcpdump
 tcpflags
@@ -1616,6 +1683,7 @@ tdd384
 tdd768
 technica
 Tektronix
+telco
 Telecomunicaciones
 telefonica
 Telefónica
@@ -1626,6 +1694,7 @@ teletex
 telfonica
 telia
 telnet
+telstra
 teredo
 terminations
 tesla
@@ -1641,6 +1710,7 @@ timestamp
 timestamps
 timezone
 tipcv
+tobago
 toggled
 toggling
 toolbar
@@ -1698,12 +1768,14 @@ udpcp
 udpdump
 udphdr
 udrei
+uganda
 uievent
 uint16
 uint32
 uint8
 ulmap
 ulsch
+umask
 unack
 unacked
 unadmitted
@@ -1732,6 +1804,7 @@ uncompression
 unconfigurable
 unconfigured
 unconfirm
+unconstrained
 uncontended
 uncorrectable
 undecidable
@@ -1809,6 +1882,7 @@ unreportable
 unresolvable
 unresponded
 unroutable
+unsaved
 unsecure
 unsegmented
 unsequenced
@@ -1882,11 +1956,13 @@ virtex
 virtio
 virtualization
 vlans
+vmware
 vnode
 vocoder
 vodafone
 voipmetrics
 volerr
+vserver
 vxlan
 wakeup
 wapforum

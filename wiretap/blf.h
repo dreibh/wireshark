@@ -276,6 +276,10 @@ typedef struct blf_canerrorext {
 
 /* see https://bitbucket.org/tobylorenz/vector_blf/src/master/src/Vector/BLF/CanFdErrorFrame64.h */
 
+#define BLF_CANERROR64_FLAG_FDF 0x01
+#define BLF_CANERROR65_FLAG_BRS 0x02
+#define BLF_CANERROR65_FLAG_ESI 0x04
+
 typedef struct blf_canfderror64 {
     guint8  channel;
     guint8  dlc;
@@ -443,9 +447,7 @@ typedef struct blf_linmessage {
     guint16 channel;
     guint8  id;
     guint8  dlc;
-} blf_linmessage_t;
-
-typedef struct blf_linmessage_trailer {
+    guint8  data[8];
     guint8  fsmId;
     guint8  fsmState;
     guint8  headerTime;
@@ -456,7 +458,97 @@ typedef struct blf_linmessage_trailer {
 /*  This field is optional and skipping does not hurt us.
     guint32 res2;
 */
-} blf_linmessage_trailer_t;
+} blf_linmessage_t;
+
+typedef struct blf_linsenderror {
+    guint16 channel;
+    guint8  id;
+    guint8  dlc;
+    guint8  fsmId;
+    guint8  fsmState;
+    guint8  headerTime;
+    guint8  fullTime;
+} blf_linsenderror_t;
+
+typedef struct blf_linbusevent {
+    guint64 sof;
+    guint32 eventBaudrate;
+    guint16 channel;
+    guint8  res1[2];
+} blf_linbusevent_t;
+
+typedef struct blf_linsynchfieldevent {
+    blf_linbusevent_t   linBusEvent;
+    guint64             synchBreakLength;
+    guint64             synchDelLength;
+} blf_linsynchfieldevent_t;
+
+typedef struct blf_linmessagedescriptor {
+    blf_linsynchfieldevent_t    linSynchFieldEvent;
+    guint16                     supplierId;             /* LIN 2.0 or higher */
+    guint16                     messageId;              /* LIN 2.0: message identifier, LIN 2.1: position index as specified in LDF */
+    guint8                      configuredNodeAddress;  /* LIN 2.0 or higher */
+    guint8                      id;
+    guint8                      dlc;
+    guint8                      checksumModel;
+} blf_linmessagedescriptor_t;
+
+typedef struct blf_lindatabytetimestampevent {
+    blf_linmessagedescriptor_t  linMessageDescriptor;
+    guint64                     databyteTimestamps[9];  /* Byte 0: Timestamp of last header byte, Bytes 1-9: Timestamps of data bytes 1-8 */
+} blf_lindatabytetimestampevent_t;
+
+typedef struct blf_linmessage2 {
+    blf_lindatabytetimestampevent_t linDataByteTimestampEvent;
+    guint8                          data[8];
+    guint16                         crc;
+    guint8                          dir;        /* 0 RX, 1 TX Receipt, 2 TX Req */
+    guint8                          simulated;  /* 0 Real frame, 1 Simulated frame */
+    guint8                          isEtf;      /* 0 Not event triggered frame, 1 Event triggered frame */
+    guint8                          eftAssocIndex;
+    guint8                          eftAssocEftId;
+    guint8                          fsmId;      /* Obsolete */
+    guint8                          fsmState;   /* Obsolete */
+    guint8                          res1[3];
+/*  These fields are optional and skipping does not hurt us.
+    guint32                         respBaudrate;
+    double                          exactHeaderBaudrate;
+    guint32                         earlyStopBitOffset;
+    guint32                         earlyStopBitOffsetResponse;
+*/
+} blf_linmessage2_t;
+
+typedef struct blf_lincrcerror2 {
+    blf_lindatabytetimestampevent_t linDataByteTimestampEvent;
+    guint8                          data[8];
+    guint16                         crc;
+    guint8                          dir;        /* 0 RX, 1 TX Receipt, 2 TX Req */
+    guint8                          fsmId;      /* Obsolete */
+    guint8                          fsmState;   /* Obsolete */
+    guint8                          simulated;  /* 0 Real frame, 1 Simulated frame */
+    guint8                          res1[2];
+/*  These fields are optional and skipping does not hurt us.
+    guint32                         respBaudrate;
+    guint8                          res2[4];
+    double                          exactHeaderBaudrate;
+    guint32                         earlyStopBitOffset;
+    guint32                         earlyStopBitOffsetResponse;
+*/
+} blf_lincrcerror2_t;
+
+typedef struct blf_linsenderror2 {
+    blf_linmessagedescriptor_t  linMessageDescriptor;
+    guint64                     eoh;
+    guint8                      isEtf;
+    guint8                      fsmId;      /* Obsolete */
+    guint8                      fsmState;   /* Obsolete */
+    guint8                      res1;
+/*  These fields are optional and skipping does not hurt us.
+    guint8                      res2[4];
+    double                      exactHeaderBaudrate;
+    guint32                     earlyStopBitOffset;
+*/
+} blf_linsenderror2_t;
 
 
 /* see https://bitbucket.org/tobylorenz/vector_blf/src/master/src/Vector/BLF/AppText.h */
@@ -468,11 +560,17 @@ typedef struct blf_apptext {
     guint32 reservedAppText2;
 } blf_apptext_t;
 
-#define BLF_APPTEXT_COMMENT  0x00000000
-#define BLF_APPTEXT_CHANNEL  0x00000001
-#define BLF_APPTEXT_METADATA 0x00000002
-#define BLF_APPTEXT_FAILED   0x000000FF
+#define BLF_APPTEXT_COMMENT     0x00000000
+#define BLF_APPTEXT_CHANNEL     0x00000001
+#define BLF_APPTEXT_METADATA    0x00000002
+#define BLF_APPTEXT_ATTACHMENT  0x00000003
+#define BLF_APPTEXT_TRACELINE   0x00000004
+#define BLF_APPTEXT_CONT        0x000000FE
+#define BLF_APPTEXT_FAILED      0x000000FF
 
+#define BLF_APPTEXT_XML_GENERAL     0x01
+#define BLF_APPTEXT_XML_CHANNELS    0x02
+#define BLF_APPTEXT_XML_IDENTITY    0x03
 
 #define BLF_BUSTYPE_CAN 1
 #define BLF_BUSTYPE_LIN 5
@@ -496,7 +594,19 @@ typedef struct blf_ethernet_status {
     uint8_t pairs;
     uint8_t hardwareChannel;
     uint32_t bitrate;
+/* Starting from version 1
+    uint64_t linkUpDuration;    // In nanoseconds
+*/
 } blf_ethernet_status_t;
+
+typedef struct blf_ethernet_phystate {
+    uint16_t    channel;
+    uint16_t    flags;
+    uint8_t     phyState;
+    uint8_t     phyEvent;
+    uint8_t     hardwareChannel;
+    uint8_t     res1;
+} blf_ethernet_phystate_t;
 
 
 /* see https://bitbucket.org/tobylorenz/vector_blf/src/master/src/Vector/BLF/ObjectHeaderBase.h */
@@ -609,6 +719,9 @@ typedef struct blf_ethernet_status {
 #define BLF_OBJTYPE_A429_BUS_STATISTIC          112
 #define BLF_OBJTYPE_A429_MESSAGE                113
 #define BLF_OBJTYPE_ETHERNET_STATISTIC          114
+#define BLF_OBJTYPE_RESERVED5                   115
+#define BLF_OBJTYPE_RESERVED6                   116
+#define BLF_OBJTYPE_RESERVED7                   117
 #define BLF_OBJTYPE_TEST_STRUCTURE              118
 #define BLF_OBJTYPE_DIAG_REQUEST_INTERPRETATION 119
 #define BLF_OBJTYPE_ETHERNET_FRAME_EX           120
@@ -623,6 +736,8 @@ typedef struct blf_ethernet_status {
 #define BLF_OBJTYPE_CAN_SETTING_CHANGED         129
 #define BLF_OBJTYPE_DISTRIBUTED_OBJECT_MEMBER   130
 #define BLF_OBJTYPE_ATTRIBUTE_EVENT             131
+#define BLF_OBJTYPE_DISTRIBUTED_OBJECT_CHANGE   132
+#define BLF_OBJTYPE_ETHERNET_PHY_STATE          133
 
 #define BLF_ETH_STATUS_LINKSTATUS 0x0001
 #define BLF_ETH_STATUS_BITRATE 0x0002
@@ -633,6 +748,11 @@ typedef struct blf_ethernet_status {
 #define BLF_ETH_STATUS_CLOCKMODE  0x0040
 #define BLF_ETH_STATUS_BRPAIR 0x0080
 #define BLF_ETH_STATUS_HARDWARECHANNEL 0x0100
+#define BLF_ETH_STATUS_LINKUPDURATION 0x0200
+
+#define BLF_PHY_STATE_PHYSTATE          0x0001
+#define BLF_PHY_STATE_PHYEVENT          0x0002
+#define BLF_PHY_STATE_HARDWARECHANNEL   0x0004
 
 #endif
 

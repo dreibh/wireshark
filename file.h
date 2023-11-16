@@ -550,10 +550,13 @@ gboolean cf_find_packet_summary_line(capture_file *cf, const char *string,
  * @param string the string to find
  * @param string_size the size of the string to find
  * @param dir direction in which to search
+ * @param multiple whether to look for the next occurrence of the same string
+ * in the current packet, or to only match once per frame
  * @return TRUE if a packet was found, FALSE otherwise
  */
 gboolean cf_find_packet_data(capture_file *cf, const guint8 *string,
-                             size_t string_size, search_direction dir);
+                             size_t string_size, search_direction dir,
+                             bool multiple);
 
 /**
  * Find packet that matches a compiled display filter.
@@ -688,6 +691,16 @@ cf_merge_files_to_tempfile(gpointer pd_window, const char *temp_dir, char **out_
  * @param comment the string replacing the old comment
  */
 void cf_update_section_comment(capture_file *cf, gchar *comment);
+
+/**
+ * Update(replace) the comments on a capture from the SHB data block
+ *
+ * @param cf the capture file
+ * @param shb_idx the index of the SHB (0-indexed)
+ * @param comments a NULL-terminated string array of comments. The function
+ * takes ownership of the string array and frees it and the contents.
+ */
+void cf_update_section_comments(capture_file *cf, unsigned shb_idx, char **comments);
 
 /*
  * Get the packet block for a packet (record).

@@ -26,15 +26,15 @@ void proto_reg_handoff_mpeg_audio(void);
 
 dissector_handle_t mpeg_audio_handle;
 
-static int proto_mpeg_audio = -1;
+static int proto_mpeg_audio;
 static dissector_handle_t id3v2_handle;
 
-static int hf_mpeg_audio_header = -1;
-static int hf_mpeg_audio_data = -1;
-static int hf_mpeg_audio_padbytes = -1;
-static int hf_id3v1 = -1;
+static int hf_mpeg_audio_header;
+static int hf_mpeg_audio_data;
+static int hf_mpeg_audio_padbytes;
+static int hf_id3v1;
 
-static int ett_mpeg_audio = -1;
+static int ett_mpeg_audio;
 
 static gboolean
 test_mpeg_audio(tvbuff_t *tvb, int offset)
@@ -205,8 +205,7 @@ proto_register_mpeg_audio(void)
 #include "packet-mpeg-audio-ettarr.c"
 	};
 
-	proto_mpeg_audio = proto_register_protocol(
-			"Moving Picture Experts Group Audio", "MPEG Audio", "mpeg-audio");
+	proto_mpeg_audio = proto_register_protocol("Moving Picture Experts Group Audio", "MPEG Audio", "mpeg-audio");
 	proto_register_field_array(proto_mpeg_audio, hf, array_length(hf));
 	proto_register_subtree_array(ett, array_length(ett));
 

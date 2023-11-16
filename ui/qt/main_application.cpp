@@ -55,7 +55,7 @@
 #include "wsutil/filter_files.h"
 #include "ui/capture_globals.h"
 #include "ui/software_update.h"
-#include "ui/last_open_dir.h"
+#include "ui/file_dialog.h"
 #include "ui/recent_utils.h"
 
 #ifdef HAVE_LIBPCAP
@@ -114,8 +114,6 @@ MainApplication *mainApp = NULL;
 
 // XXX - Copied from ui/gtk/file_dlg.c
 
-// MUST be UTF-8
-static char *last_open_dir = NULL;
 static QList<recent_item_status *> recent_captures_;
 static QHash<int, QList<QAction *> > dynamic_menu_groups_;
 static QHash<int, QList<QAction *> > added_menu_groups_;
@@ -152,18 +150,6 @@ void
 topic_action(topic_action_e action)
 {
     if (mainApp) mainApp->helpTopicAction(action);
-}
-
-extern "C" char *
-get_last_open_dir(void)
-{
-    return last_open_dir;
-}
-
-void
-set_last_open_dir(const char *dirname)
-{
-    if (mainApp) mainApp->setLastOpenDir(dirname);
 }
 
 /*
@@ -296,14 +282,15 @@ void MainApplication::updateTaps()
     draw_tap_listeners(FALSE);
 }
 
-QDir MainApplication::lastOpenDir() {
-    return QDir(last_open_dir);
+QDir MainApplication::openDialogInitialDir() {
+    return QDir(get_open_dialog_initial_dir());
 }
 
 void MainApplication::setLastOpenDirFromFilename(const QString file_name)
 {
     QString directory = QFileInfo(file_name).absolutePath();
-    setLastOpenDir(qUtf8Printable(directory));
+    /* XXX - printable? */
+    set_last_open_dir(qUtf8Printable(directory));
 }
 
 void MainApplication::helpTopicAction(topic_action_e action)
@@ -409,11 +396,7 @@ void MainApplication::setMonospaceFont(const char *font_string) {
 
 int MainApplication::monospaceTextSize(const char *str)
 {
-#if (QT_VERSION >= QT_VERSION_CHECK(5, 11, 0))
     return QFontMetrics(mono_font_).horizontalAdvance(str);
-#else
-    return QFontMetrics(mono_font_).width(str);
-#endif
 }
 
 void MainApplication::setConfigurationProfile(const gchar *profile_name, bool write_recent_file)
@@ -601,28 +584,6 @@ void MainApplication::storeCustomColorsInRecent()
     }
 }
 
-void MainApplication::setLastOpenDir(const char *dir_name)
-{
-    qint64 len;
-    gchar *new_last_open_dir;
-
-    if (dir_name && dir_name[0]) {
-        len = strlen(dir_name);
-        if (dir_name[len-1] == G_DIR_SEPARATOR) {
-            new_last_open_dir = g_strconcat(dir_name, (char *)NULL);
-        }
-        else {
-            new_last_open_dir = g_strconcat(dir_name,
-                                            G_DIR_SEPARATOR_S, (char *)NULL);
-        }
-    } else {
-        new_last_open_dir = NULL;
-    }
-
-    g_free(last_open_dir);
-    last_open_dir = new_last_open_dir;
-}
-
 bool MainApplication::event(QEvent *event)
 {
     QString display_filter = NULL;
@@ -710,15 +671,13 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 #endif
 
-#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0) && QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     setAttribute(Qt::AA_DisableWindowContextHelpButton);
 #endif
 
     // Throw various settings at the wall with the hope that one of them will
     // enable context menu shortcuts QTBUG-69452, QTBUG-109590
-#if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
     setAttribute(Qt::AA_DontShowShortcutsInContextMenus, false);
-#endif
 #if QT_VERSION >= QT_VERSION_CHECK(5, 13, 0)
     styleHints()->setShowShortcutsInContextMenus(true);
 #endif
@@ -845,7 +804,6 @@ MainApplication::~MainApplication()
 {
     mainApp = NULL;
     clearDynamicMenuGroupItems();
-    free_filter_lists();
 }
 
 void MainApplication::registerUpdate(register_action_e action, const char *message)
@@ -1133,9 +1091,6 @@ _e_prefs *MainApplication::readConfigurationFiles(bool reset)
 
     /* Load libwireshark settings from the current profile. */
     prefs_p = epan_load_settings();
-
-    /* Read the capture filter file. */
-    read_filter_list(CFILTER_LIST);
 
     return prefs_p;
 }

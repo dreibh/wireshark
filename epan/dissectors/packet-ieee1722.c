@@ -1431,10 +1431,7 @@ void proto_register_1722_61883(void)
     expert_module_t* expert_1722_61883;
 
     /* Register the protocol name and description */
-    proto_1722_61883 = proto_register_protocol(
-                "IEC 61883 Protocol",   /* name */
-                "IEC 61883",            /* short name */
-                "iec61883");            /* abbrev */
+    proto_1722_61883 = proto_register_protocol("IEC 61883 Protocol", "IEC 61883", "iec61883");
 
     /* Required function calls to register the header fields and subtrees used */
     proto_register_field_array(proto_1722_61883, hf, array_length(hf));
@@ -2653,6 +2650,12 @@ static int dissect_1722_acf_can_common(tvbuff_t *tvb, packet_info *pinfo, proto_
     {
         can_info.id |= CAN_RTR_FLAG;
     }
+
+    can_info.len = (guint32)parsed.datalen;
+    can_info.fd = parsed.is_fd;
+
+    /* for practical reasons a remapping might be needed in the future */
+    can_info.bus_id = (guint16)parsed.bus_id;
 
     next_tvb = tvb_new_subset_length(tvb, offset, parsed.datalen);
 

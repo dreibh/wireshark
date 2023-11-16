@@ -795,7 +795,9 @@ dissect_openflow_flow_mod(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, i
 
     /* uint16_t flags; One of OFPFF_*. */
     proto_tree_add_item(tree, hf_openflow_flags, tvb, offset, 2, ENC_BIG_ENDIAN);
-    /*offset+=2;*/
+    offset+=2;
+
+    dissect_openflow_action_header(tvb, pinfo, tree, offset);
 }
 
 
@@ -1558,8 +1560,7 @@ proto_register_openflow_v1(void)
     expert_module_t* expert_openflow_v1;
 
     /* Register the protocol name and description */
-    proto_openflow_v1 = proto_register_protocol("OpenFlow 1.0",
-            "openflow_v1", "openflow_v1");
+    proto_openflow_v1 = proto_register_protocol("OpenFlow 1.0", "openflow_v1", "openflow_v1");
 
     register_dissector("openflow_v1", dissect_openflow_v1, proto_openflow_v1);
 

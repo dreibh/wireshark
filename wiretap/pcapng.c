@@ -1838,23 +1838,23 @@ pcapng_read_decryption_secrets_block(FILE_T fh, pcapng_block_header_t *bh,
 }
 
 static bool
-pcapng_read_sysdig_meta_event_block(FILE_T fh, pcapng_block_header_t *bh,
+pcapng_read_meta_event_block(FILE_T fh, pcapng_block_header_t *bh,
                                      wtapng_block_t *wblock,
                                      int *err, gchar **err_info)
 {
     guint to_read;
-    wtapng_sysdig_mev_mandatory_t *mev_mand;
+    wtapng_meta_event_mandatory_t *mev_mand;
 
     /*
      * Set wblock->block to a newly-allocated Sysdig meta event block.
      */
-    wblock->block = wtap_block_create(WTAP_BLOCK_SYSDIG_META_EVENT);
+    wblock->block = wtap_block_create(WTAP_BLOCK_META_EVENT);
 
     /*
      * Set the mandatory values for the block.
      */
-    mev_mand = (wtapng_sysdig_mev_mandatory_t *)wtap_block_get_mandatory_data(wblock->block);
-    mev_mand->mev_type = bh->block_type;
+    mev_mand = (wtapng_meta_event_mandatory_t *)wtap_block_get_mandatory_data(wblock->block);
+    mev_mand->mev_block_type = bh->block_type;
     mev_mand->mev_data_len = bh->block_total_length -
         (int)sizeof(pcapng_block_header_t) -
         (int)sizeof(bh->block_total_length);
@@ -2278,8 +2278,11 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
      */
     if (WTAP_OPTTYPE_SUCCESS == wtap_block_get_uint32_option_value(wblock->block, OPT_PKT_FLAGS, &flags)) {
         if (PACK_FLAGS_FCS_LENGTH(flags) != 0) {
-            /* The FCS length is present */
-            fcslen = PACK_FLAGS_FCS_LENGTH(flags);
+            /*
+             * The FCS length is present, but in units of octets, not
+             * bits; convert it to bits.
+             */
+            fcslen = PACK_FLAGS_FCS_LENGTH(flags)*8;
         }
     }
     /*
@@ -3090,7 +3093,7 @@ pcapng_read_custom_block(FILE_T fh, pcapng_block_header_t *bh,
 }
 
 static gboolean
-pcapng_read_sysdig_event_block(FILE_T fh, pcapng_block_header_t *bh,
+pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
                                const section_info_t *section_info,
                                wtapng_block_t *wblock,
                                int *err, gchar **err_info)
@@ -3154,6 +3157,7 @@ pcapng_read_sysdig_event_block(FILE_T fh, pcapng_block_header_t *bh,
         }
     }
 
+    wblock->rec->rec_header.syscall_header.pathname = wth->pathname;
     wblock->rec->rec_header.syscall_header.byte_order = G_BYTE_ORDER;
 
     /* XXX Use Gxxx_FROM_LE macros instead? */
@@ -3549,7 +3553,7 @@ pcapng_read_block(wtap *wth, FILE_T fh, pcapng_t *pn,
             case BLOCK_TYPE_SYSDIG_FDL_V2:
             case BLOCK_TYPE_SYSDIG_IL_V2:
             case BLOCK_TYPE_SYSDIG_UL_V2:
-                if (!pcapng_read_sysdig_meta_event_block(fh, &bh, wblock, err, err_info))
+                if (!pcapng_read_meta_event_block(fh, &bh, wblock, err, err_info))
                     return FALSE;
                 break;
             case(BLOCK_TYPE_CB_COPY):
@@ -3561,7 +3565,7 @@ pcapng_read_block(wtap *wth, FILE_T fh, pcapng_t *pn,
             case(BLOCK_TYPE_SYSDIG_EVENT_V2):
             case(BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE):
             /* case(BLOCK_TYPE_SYSDIG_EVF): */
-                if (!pcapng_read_sysdig_event_block(fh, &bh, section_info, wblock, err, err_info))
+                if (!pcapng_read_sysdig_event_block(wth, fh, &bh, section_info, wblock, err, err_info))
                     return FALSE;
                 break;
             case(BLOCK_TYPE_SYSTEMD_JOURNAL_EXPORT):
@@ -3646,12 +3650,12 @@ pcapng_process_dsb(wtap *wth, wtapng_block_t *wblock)
 
 /* Process a Sysdig meta event block that we have just read. */
 static void
-pcapng_process_sysdig_mev(wtap *wth, wtapng_block_t *wblock)
+pcapng_process_meta_event(wtap *wth, wtapng_block_t *wblock)
 {
-    // XXX add wtapng_process_sysdig_meb(wth, wblock->block);
+    // XXX add wtapng_process_meta_event(wth, wblock->block);
 
     /* Store meta event such that it can be saved by the dumper. */
-    g_array_append_val(wth->sysdig_meta_events, wblock->block);
+    g_array_append_val(wth->meta_events, wblock->block);
 }
 
 static void
@@ -3769,9 +3773,9 @@ pcapng_process_internal_block(wtap *wth, pcapng_t *pcapng, section_info_t *curre
         case BLOCK_TYPE_SYSDIG_FDL_V2:
         case BLOCK_TYPE_SYSDIG_IL_V2:
         case BLOCK_TYPE_SYSDIG_UL_V2:
-            /* Decryption secrets. */
+            /* Meta events */
             ws_debug("block type Sysdig meta event");
-            pcapng_process_sysdig_mev(wth, wblock);
+            pcapng_process_meta_event(wth, wblock);
             /* Do not free wblock->block, it is consumed by pcapng_process_sysdig_meb */
             break;
 
@@ -3935,7 +3939,7 @@ pcapng_open(wtap *wth, int *err, gchar **err_info)
      * file. */
     wth->dsbs = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
     wth->nrbs = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
-    wth->sysdig_meta_events = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
+    wth->meta_events = g_array_new(FALSE, FALSE, sizeof(wtap_block_t));
 
     /* Most other capture types (such as pcap) support a single link-layer
      * type, indicated in the header, and don't support WTAP_ENCAP_PER_PACKET.
@@ -5602,14 +5606,14 @@ pcapng_write_decryption_secrets_block(wtap_dumper *wdh, wtap_block_t sdata, int 
 }
 
 static bool
-pcapng_write_sysdig_meta_event_block(wtap_dumper *wdh, wtap_block_t mev_data, int *err)
+pcapng_write_meta_event_block(wtap_dumper *wdh, wtap_block_t mev_data, int *err)
 {
     pcapng_block_header_t bh;
-    wtapng_sysdig_mev_mandatory_t *mand_data = (wtapng_sysdig_mev_mandatory_t *)wtap_block_get_mandatory_data(mev_data);
+    wtapng_meta_event_mandatory_t *mand_data = (wtapng_meta_event_mandatory_t *)wtap_block_get_mandatory_data(mev_data);
     unsigned pad_len = (4 - (mand_data->mev_data_len & 3)) & 3;
 
     /* write block header */
-    bh.block_type = mand_data->mev_type;
+    bh.block_type = mand_data->mev_block_type;
     bh.block_total_length = MIN_BLOCK_SIZE + mand_data->mev_data_len + pad_len;
     ws_debug("Sysdig mev total len %u", bh.block_total_length);
 
@@ -6276,14 +6280,14 @@ static gboolean pcapng_write_internal_blocks(wtap_dumper *wdh, int *err)
 
     /* Write (optional) Sysdig Meta Event Blocks that were collected while
      * reading packet blocks. */
-    if (wdh->sysdig_mev_growing) {
-        for (unsigned i = wdh->sysdig_mev_growing_written; i < wdh->sysdig_mev_growing->len; i++) {
+    if (wdh->mevs_growing) {
+        for (unsigned i = wdh->mevs_growing_written; i < wdh->mevs_growing->len; i++) {
             ws_debug("writing Sysdig mev %u", i);
-            wtap_block_t mev = g_array_index(wdh->sysdig_mev_growing, wtap_block_t, i);
-            if (!pcapng_write_sysdig_meta_event_block(wdh, mev, err)) {
+            wtap_block_t mev = g_array_index(wdh->mevs_growing, wtap_block_t, i);
+            if (!pcapng_write_meta_event_block(wdh, mev, err)) {
                 return false;
             }
-            ++wdh->sysdig_mev_growing_written;
+            ++wdh->mevs_growing_written;
         }
     }
 
@@ -6644,8 +6648,8 @@ static const struct supported_option_type decryption_secrets_block_options_suppo
     { OPT_CUSTOM_BIN_NO_COPY, MULTIPLE_OPTIONS_SUPPORTED }
 };
 
-/* Options for Sysdig meta event blocks. */
-static const struct supported_option_type sysdig_meta_events_block_options_supported[] = {
+/* Options for meta event blocks. */
+static const struct supported_option_type meta_events_block_options_supported[] = {
     { OPT_COMMENT, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_STR_COPY, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_BIN_COPY, MULTIPLE_OPTIONS_SUPPORTED },
@@ -6712,7 +6716,7 @@ static const struct supported_block_type pcapng_blocks_supported[] = {
     { WTAP_BLOCK_DECRYPTION_SECRETS, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(decryption_secrets_block_options_supported) },
 
     /* Multiple blocks of decryption secrets. */
-    { WTAP_BLOCK_SYSDIG_META_EVENT, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(sysdig_meta_events_block_options_supported) },
+    { WTAP_BLOCK_META_EVENT, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(meta_events_block_options_supported) },
 
     /* And, obviously, multiple packets. */
     { WTAP_BLOCK_PACKET, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(packet_block_options_supported) },

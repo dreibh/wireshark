@@ -1726,7 +1726,7 @@ validate_single_byte_ascii_encoding(const guint encoding)
 	    case ENC_KEYPAD_BC_TBCD:
 	    case ENC_ETSI_TS_102_221_ANNEX_A:
 	    case ENC_APN_STR:
-		case ENC_DECT_STANDARD_4BITS_TBCD:
+	    case ENC_DECT_STANDARD_4BITS_TBCD:
 	    REPORT_DISSECTOR_BUG("Invalid string encoding type passed to tvb_get_string_XXX");
 	    break;
 	    default:
@@ -2060,6 +2060,51 @@ tvb_get_ipv6(tvbuff_t *tvb, const gint offset, ws_in6_addr *addr)
 
 	ptr = ensure_contiguous(tvb, offset, sizeof(*addr));
 	memcpy(addr, ptr, sizeof *addr);
+}
+
+/*
+ * These routines return the length of the address in bytes on success
+ * and -1 if the prefix length is too long.
+ */
+int
+tvb_get_ipv4_addr_with_prefix_len(tvbuff_t *tvb, int offset, ws_in4_addr *addr,
+    guint32 prefix_len)
+{
+	guint8 addr_len;
+
+	if (prefix_len > 32)
+		return -1;
+
+	addr_len = (prefix_len + 7) / 8;
+	*addr = 0;
+	tvb_memcpy(tvb, addr, offset, addr_len);
+	if (prefix_len % 8)
+		((guint8*)addr)[addr_len - 1] &= ((0xff00 >> (prefix_len % 8)) & 0xff);
+	return addr_len;
+}
+
+/*
+ * These routines return the length of the address in bytes on success
+ * and -1 if the prefix length is too long.
+ */
+int
+tvb_get_ipv6_addr_with_prefix_len(tvbuff_t *tvb, int offset, ws_in6_addr *addr,
+    guint32 prefix_len)
+{
+	guint32 addr_len;
+
+	if (prefix_len > 128)
+		return -1;
+
+	addr_len = (prefix_len + 7) / 8;
+	memset(addr->bytes, 0, 16);
+	tvb_memcpy(tvb, addr->bytes, offset, addr_len);
+	if (prefix_len % 8) {
+		addr->bytes[addr_len - 1] &=
+		    ((0xff00 >> (prefix_len % 8)) & 0xff);
+	}
+
+	return addr_len;
 }
 
 /* Fetch a GUID. */

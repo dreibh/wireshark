@@ -13,6 +13,12 @@ Wireshark 4.3.0 Release Notes
   Improved display filter support for value strings (optional string
   representations for numeric fields).
 
+  Display filter functions can be implemented as runtime-loadable C
+  plugins.
+
+  Many other improvements have been made. See the “New and Updated
+  Features” section below for more details.
+
   New and Updated Features
 
    The following features are new (or have been significantly updated)
@@ -28,11 +34,71 @@ Wireshark 4.3.0 Release Notes
         • Fields with value strings now support regular expression
        matching.
 
+        • Date and time values now support arithmetic, with some
+       restrictions: the multiplier/divisor must be an integer or float
+       and appear on the right-hand side of the operator.
+
+        • The keyword "bitand" can be used as an alternative syntax for
+       the bitwise-and operator.
+
+        • Functions alone can now be used as an entire logical
+       expression. The result of the expression is the truthiness of the
+       function return value (or of all values if more than one). This
+       is useful for example to write "len(something)" instead of
+       "len(something) != 0". Even more so if a function returns itself
+       a boolean value, it is now possible to write
+       "bool_test(some.field)" instead of having to write
+       "bool_test(some.field) == True" (both forms are now valid).
+
+        • Display filter references can be written without curly braces.
+       It is now possible to write `$frame.number` instead of
+       `${frame.number}` for example.
+
+        • Added new display filter functions to test various IP address
+       properties. Check the wireshark-filter(5) manpage for more
+       information.
+
+        • Display filter macros can be written using a function-like
+       notation. The macro `${mymacro:arg1; …​; argN}` can be written
+       $mymacro(arg1, …​, argN)`.
+
+     • Display filter functions can be implemented as libwireshark
+       plugins. Plugins are loaded during startup from the usual binary
+       plugin configuration directories. See the `ipaddr.c` source file
+       in the distribution for an example of a display filter C plugin
+       and the doc/plugins.example folder for generic instructions how
+       to build a plugin.
+
+     • Display filter autocompletions now also include display filter
+       functions.
+
+     • The display filter macro configuration file has changed format.
+       It now uses the same format as the "dfilters" file and has been
+       renamed accordingly to "dmacros". Internally it no longer uses
+       the UAT API and the display filter macro GUI dialog has been
+       updated. There is some basic migration logic implemented but it
+       is advisable to check that the "dfilter_macros" (old) and
+       "dmacros" (new) files in the profile directory are consistent.
+
   New Protocol Support
+
+   MAC NR Framed (mac-nr-framed), RF4CE Network Layer (RF4CE), and RF4CE
+   Profile (RF4CE Profile)
 
   Updated Protocol Support
 
-   Too many protocol updates have been made to list them all here.
+     • IPv6: The "show address detail" preference is now enabled by
+       default. The address details provided have been extended to
+       include more special purpose address block properties
+       (forwardable, globally-routable, etc).
+
+   Too many other protocol updates have been made to list them all here.
+
+  Major API Changes
+
+     • Plugins should provide a `plugin_describe()` function that
+       returns an ORed list of flags consisting of the plugin types used
+       (declared in wsutil/plugins.h).
 
  Getting Wireshark
 

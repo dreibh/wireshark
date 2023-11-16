@@ -44,6 +44,11 @@ static const value_string inv_types[] =
   { 0, "ERROR" },
   { 1, "MSG_TX" },
   { 2, "MSG_BLOCK" },
+  { 3, "MSG_FILTERED_BLOCK" },
+  { 4, "MSG_CMPCT_BLOCK" },
+  { 5, "MSG_WTX" },
+  { 0x40000001, "MSG_WITNESS_TX" },
+  { 0x40000002, "MSG_WITNESS_BLOCK" },
   { 0, NULL }
 };
 
@@ -95,6 +100,7 @@ static int hf_bitcoin_length = -1;
 static int hf_bitcoin_magic = -1;
 static int hf_bitcoin_msg_addr = -1;
 static int hf_bitcoin_msg_block = -1;
+static int hf_bitcoin_msg_feefilter = -1;
 static int hf_bitcoin_msg_filteradd = -1;
 static int hf_bitcoin_msg_filterload = -1;
 static int hf_bitcoin_msg_getblocks = -1;
@@ -107,6 +113,7 @@ static int hf_bitcoin_msg_notfound = -1;
 static int hf_bitcoin_msg_ping = -1;
 static int hf_bitcoin_msg_pong = -1;
 static int hf_bitcoin_msg_reject = -1;
+static int hf_bitcoin_msg_sendcmpct = -1;
 static int hf_bitcoin_msg_tx = -1;
 static int hf_bitcoin_msg_version = -1;
 static int hf_data_value = -1;
@@ -130,6 +137,7 @@ static int hf_msg_block_transactions32 = -1;
 static int hf_msg_block_transactions64 = -1;
 static int hf_msg_block_transactions8 = -1;
 static int hf_msg_block_version = -1;
+static int hf_msg_feefilter_value = -1;
 static int hf_msg_filteradd_data = -1;
 static int hf_msg_filterload_filter = -1;
 static int hf_msg_filterload_nflags = -1;
@@ -199,6 +207,8 @@ static int hf_msg_reject_ccode = -1;
 static int hf_msg_reject_data = -1;
 static int hf_msg_reject_message = -1;
 static int hf_msg_reject_reason = -1;
+static int hf_msg_sendcmpct_announce = -1;
+static int hf_msg_sendcmpct_version = -1;
 static int hf_msg_tx_in = -1;
 static int hf_msg_tx_in_count16 = -1;
 static int hf_msg_tx_in_count32 = -1;
@@ -236,11 +246,30 @@ static int hf_msg_version_timestamp = -1;
 static int hf_msg_version_user_agent = -1;
 static int hf_msg_version_version = -1;
 static int hf_services_network = -1;
+static int hf_services_getutxo = -1;
+static int hf_services_bloom = -1;
+static int hf_services_witness = -1;
+static int hf_services_xthin = -1;
+static int hf_services_compactfilters = -1;
+static int hf_services_networklimited = -1;
+static int hf_services_p2pv2 = -1;
 static int hf_string_value = -1;
 static int hf_string_varint_count16 = -1;
 static int hf_string_varint_count32 = -1;
 static int hf_string_varint_count64 = -1;
 static int hf_string_varint_count8 = -1;
+
+static int * const services_hf_flags[] = {
+  &hf_services_network,
+  &hf_services_getutxo,
+  &hf_services_bloom,
+  &hf_services_witness,
+  &hf_services_xthin,
+  &hf_services_compactfilters,
+  &hf_services_networklimited,
+  &hf_services_p2pv2,
+  NULL
+};
 
 static gint ett_bitcoin = -1;
 static gint ett_bitcoin_msg = -1;
@@ -276,31 +305,9 @@ get_bitcoin_pdu_length(packet_info *pinfo _U_, tvbuff_t *tvb,
   return length;
 }
 
-/**
- * Create a services sub-tree for bit-by-bit display
- */
-static proto_tree *
-create_services_tree(tvbuff_t *tvb, proto_item *ti, guint32 offset)
-{
-  proto_tree *tree;
-  guint64 services;
-
-  tree = proto_item_add_subtree(ti, ett_services);
-
-  /* start of services */
-  /* NOTE:
-   *  - 2011-06-05
-   *    Currently the boolean tree only supports a maximum of
-   *    32 bits - so we split services in two
-   */
-  services = tvb_get_letoh64(tvb, offset);
-
-  /* service = NODE_NETWORK */
-  proto_tree_add_boolean(tree, hf_services_network, tvb, offset, 4, (guint32)services);
-
-  /* end of services */
-
-  return tree;
+static void
+format_feefilter_value(gchar *buf, gint64 value) {
+  snprintf(buf, ITEM_LABEL_LENGTH, "%.3f sat/B", ((gdouble) value) / 1000);
 }
 
 /**
@@ -314,8 +321,8 @@ create_address_tree(tvbuff_t *tvb, proto_item *ti, guint32 offset)
   tree = proto_item_add_subtree(ti, ett_address);
 
   /* services */
-  ti = proto_tree_add_item(tree, hf_address_services, tvb, offset, 8, ENC_LITTLE_ENDIAN);
-  create_services_tree(tvb, ti, offset);
+  proto_tree_add_bitmask(tree, tvb, offset, hf_address_services,
+                         ett_services, services_hf_flags, ENC_LITTLE_ENDIAN);
   offset += 8;
 
   /* IPv6 address */
@@ -489,8 +496,8 @@ dissect_bitcoin_msg_version(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
   proto_tree_add_item(tree, hf_msg_version_version, tvb, offset, 4, ENC_LITTLE_ENDIAN);
   offset += 4;
 
-  ti = proto_tree_add_item(tree, hf_msg_version_services, tvb, offset, 8, ENC_LITTLE_ENDIAN);
-  create_services_tree(tvb, ti, offset);
+  proto_tree_add_bitmask(tree, tvb, offset, hf_msg_version_services,
+                         ett_services, services_hf_flags, ENC_LITTLE_ENDIAN);
   offset += 8;
 
   proto_tree_add_item(tree, hf_msg_version_timestamp, tvb, offset, 8, ENC_TIME_SECS_NSECS|ENC_LITTLE_ENDIAN);
@@ -1072,6 +1079,24 @@ dissect_bitcoin_msg_reject(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
 }
 
 /**
+ * Handler for feefilter messages
+ */
+static int
+dissect_bitcoin_msg_feefilter(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+  proto_item *ti;
+  guint32     offset = 0;
+
+  ti   = proto_tree_add_item(tree, hf_bitcoin_msg_feefilter, tvb, offset, -1, ENC_NA);
+  tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
+
+  proto_tree_add_item(tree, hf_msg_feefilter_value, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+  offset += 8;
+
+  return offset;
+}
+
+/**
  * Handler for filterload messages
  */
 static int
@@ -1176,6 +1201,28 @@ dissect_bitcoin_msg_merkleblock(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tre
   /* The cast to guint is save because bitcoin messages are always smaller than 0x02000000 bytes. */
   proto_tree_add_item(subtree, hf_msg_merkleblock_flags_data, tvb, offset, (guint)count, BASE_SHOW_UTF_8_PRINTABLE);
   offset += (guint32)count;
+
+  return offset;
+}
+
+/**
+ * Handler for sendcmpct messages
+ */
+
+static int
+dissect_bitcoin_msg_sendcmpct(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
+{
+  proto_item *ti;
+  guint32     offset = 0;
+
+  ti   = proto_tree_add_item(tree, hf_bitcoin_msg_sendcmpct, tvb, offset, -1, ENC_NA);
+  tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
+
+  proto_tree_add_item(tree, hf_msg_sendcmpct_announce, tvb, offset, 1, ENC_NA);
+  offset += 1;
+
+  proto_tree_add_item(tree, hf_msg_sendcmpct_version, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+  offset += 8;
 
   return offset;
 }
@@ -1847,6 +1894,31 @@ proto_register_bitcoin(void)
         FT_BYTES, BASE_NONE, NULL, 0x0,
         NULL, HFILL }
     },
+    { &hf_bitcoin_msg_sendcmpct,
+      { "Sendcmpct message", "bitcoin.sendcmpct",
+        FT_NONE, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_sendcmpct_announce,
+      { "Announce", "bitcoin.sendcmpct.announce",
+        FT_BOOLEAN, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_sendcmpct_version,
+      { "Version", "bitcoin.sendcmpct.version",
+        FT_UINT64, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_bitcoin_msg_feefilter,
+      { "Feefilter message", "bitcoin.feefilter",
+        FT_NONE, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_feefilter_value,
+      { "Minimal fee", "bitcoin.feefilter.value",
+        FT_UINT64, BASE_CUSTOM, CF_FUNC(format_feefilter_value), 0x0,
+        NULL, HFILL }
+    },
     { &hf_bitcoin_msg_filterload,
       { "Filterload message", "bitcoin.filterload",
         FT_NONE, BASE_NONE, NULL, 0x0,
@@ -1975,6 +2047,41 @@ proto_register_bitcoin(void)
     { &hf_services_network,
       { "Network node", "bitcoin.services.network",
         FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x1,
+        NULL, HFILL }
+    },
+    { &hf_services_getutxo,
+      { "Getutxo node", "bitcoin.services.getutxo",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x2,
+        NULL, HFILL }
+    },
+    { &hf_services_bloom,
+      { "Bloom filter node", "bitcoin.services.bloom",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x4,
+        NULL, HFILL }
+    },
+    { &hf_services_witness,
+      { "Witness node", "bitcoin.services.witness",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x8,
+        NULL, HFILL }
+    },
+    { &hf_services_xthin,
+      { "Xtreme Thinblocks node", "bitcoin.services.xthin",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x10,
+        NULL, HFILL }
+    },
+    { &hf_services_compactfilters,
+      { "Compact filters node", "bitcoin.services.compactfilters",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x40,
+        NULL, HFILL }
+    },
+    { &hf_services_networklimited,
+      { "Limited network node", "bitcoin.services.networklimited",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x400,
+        NULL, HFILL }
+    },
+    { &hf_services_p2pv2,
+      { "Version 2 P2P node", "bitcoin.services.p2pv2",
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x800,
         NULL, HFILL }
     },
     { &hf_address_services,
@@ -2126,12 +2233,16 @@ proto_reg_handoff_bitcoin(void)
   dissector_add_string("bitcoin.command", "reject", command_handle);
   command_handle = create_dissector_handle( dissect_bitcoin_msg_headers, proto_bitcoin );
   dissector_add_string("bitcoin.command", "headers", command_handle);
+  command_handle = create_dissector_handle( dissect_bitcoin_msg_feefilter, proto_bitcoin );
+  dissector_add_string("bitcoin.command", "feefilter", command_handle);
   command_handle = create_dissector_handle( dissect_bitcoin_msg_filterload, proto_bitcoin );
   dissector_add_string("bitcoin.command", "filterload", command_handle);
   command_handle = create_dissector_handle( dissect_bitcoin_msg_filteradd, proto_bitcoin );
   dissector_add_string("bitcoin.command", "filteradd", command_handle);
   command_handle = create_dissector_handle( dissect_bitcoin_msg_merkleblock, proto_bitcoin );
   dissector_add_string("bitcoin.command", "merkleblock", command_handle);
+  command_handle = create_dissector_handle( dissect_bitcoin_msg_sendcmpct, proto_bitcoin );
+  dissector_add_string("bitcoin.command", "sendcmpct", command_handle);
 
   /* messages with no payload */
   command_handle = create_dissector_handle( dissect_bitcoin_msg_empty, proto_bitcoin );
@@ -2139,6 +2250,9 @@ proto_reg_handoff_bitcoin(void)
   dissector_add_string("bitcoin.command", "getaddr", command_handle);
   dissector_add_string("bitcoin.command", "mempool", command_handle);
   dissector_add_string("bitcoin.command", "filterclear", command_handle);
+  dissector_add_string("bitcoin.command", "sendaddrv2", command_handle);
+  dissector_add_string("bitcoin.command", "sendheaders", command_handle);
+  dissector_add_string("bitcoin.command", "wtxidrelay", command_handle);
 
   /* messages not implemented */
   /* command_handle = create_dissector_handle( dissect_bitcoin_msg_empty, proto_bitcoin ); */

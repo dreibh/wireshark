@@ -1030,7 +1030,7 @@ VALUE_STRING_ARRAY(lustre_layout_intent_opc_vals);
     XXX(OS_STATE_DEGRADED,       0x00000001, "Degraded")        \
     XXX(OS_STATE_READONLY,       0x00000002, "ReadOnly")        \
     XXX(OS_STATE_ENOSPC,         0x00000020, "No Space")        \
-    XXX(OS_STATE_ENOINO,         0x00000040, "No Indoes")
+    XXX(OS_STATE_ENOINO,         0x00000040, "No Inodes")
 //VALUE_STRING_ENUM(obd_statfs_state);
 VALUE_STRING_ARRAY(obd_statfs_state);
 /********************************************************************
@@ -7652,7 +7652,7 @@ proto_register_lustre(void)
         { &hf_lustre_changelog_rec_padding,
           { "padding", "lustre.changelog_rec.padding", FT_NONE, BASE_NONE, NULL, 0, NULL, HFILL } },
         { &hf_lustre_changelog_rec_pfid,
-          { "Cr PFid", "lustre.changelog_rec.tfid", FT_NONE, BASE_NONE, NULL, 0, "Parent FID", HFILL } },
+          { "Cr PFid", "lustre.changelog_rec.pfid", FT_NONE, BASE_NONE, NULL, 0, "Parent FID", HFILL } },
 
         { &hf_lustre_changelog_ext_rename_sfid,
           { "Cr sFid", "lustre.changelog_ext_rename.sfid", FT_NONE, BASE_NONE, NULL, 0, NULL, HFILL } },
@@ -7809,7 +7809,7 @@ proto_register_lustre(void)
         { &hf_lustre_lmv_mds_md_pool_name,
           { "Lmv Pool Name", "lustre.lmv_mds_md.pool_name", FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }},
         { &hf_lustre_lmv_mds_md_stripe_fid,
-          { "Lmv Stripe FID", "lustre.lmv_mds_md.padding", FT_NONE, BASE_NONE, NULL, 0, NULL, HFILL }},
+          { "Lmv Stripe FID", "lustre.lmv_mds_md.stripe_fid", FT_NONE, BASE_NONE, NULL, 0, NULL, HFILL }},
 
         /* LOV MDS MD */
         { &hf_lustre_lov_mds_md,
