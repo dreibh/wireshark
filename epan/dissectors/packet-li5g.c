@@ -16,25 +16,25 @@
 void proto_reg_handoff_li5g(void);
 void proto_register_li5g(void);
 
-static int proto_li5g = -1;
-static int hf_li5g_version = -1;
-static int hf_li5g_pduType = -1;
-static int hf_li5g_headerLen = -1;
-static int hf_li5g_payloadLen = -1;
-static int hf_li5g_payloadFormat = -1;
-static int hf_li5g_payloadDirection = -1;
-static int hf_li5g_xid = -1;
-static int hf_li5g_cid = -1;
-static int hf_li5g_attrType = -1;
-static int hf_li5g_attrLen = -1;
-static int hf_li5g_pld = -1;
+static int proto_li5g;
+static int hf_li5g_version;
+static int hf_li5g_pduType;
+static int hf_li5g_headerLen;
+static int hf_li5g_payloadLen;
+static int hf_li5g_payloadFormat;
+static int hf_li5g_payloadDirection;
+static int hf_li5g_xid;
+static int hf_li5g_cid;
+static int hf_li5g_attrType;
+static int hf_li5g_attrLen;
+static int hf_li5g_pld;
 
 /* the min Attribute Type is 1 */
 #define LI_5G_ATTR_TYPE_MAX 23
 /* the min header length */
 #define LI_5G_HEADER_LEN_MIN 40
 
-static gint ett_li5g = -1;
+static gint ett_li5g;
 static gint ett_attrContents[LI_5G_ATTR_TYPE_MAX];
 static int hf_li5g_attrContents[LI_5G_ATTR_TYPE_MAX];
 static dissector_handle_t li5g_handle;
@@ -225,9 +225,6 @@ dissect_li5g_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 void
 proto_register_li5g(void)
 {
-    memset(ett_attrContents, -1, sizeof(ett_attrContents));
-    memset(hf_li5g_attrContents, -1, sizeof(hf_li5g_attrContents));
-
     static hf_register_info hf[] = {
         { &hf_li5g_version, { "Version", "li5g.ver", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
         { &hf_li5g_pduType, { "PDU Type", "li5g.type", FT_UINT16, BASE_DEC, VALS(pdu_type_vals), 0x0, NULL, HFILL }},
