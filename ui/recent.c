@@ -60,6 +60,9 @@
 #define RECENT_GUI_GEOMETRY_LEFTALIGN_ACTIONS   "gui.geometry_leftalign_actions"
 #define RECENT_GUI_GEOMETRY_MAIN_UPPER_PANE     "gui.geometry_main_upper_pane"
 #define RECENT_GUI_GEOMETRY_MAIN_LOWER_PANE     "gui.geometry_main_lower_pane"
+#define RECENT_GUI_GEOMETRY_MAIN                "gui.geometry_main"
+#define RECENT_GUI_GEOMETRY_MAIN_MASTER_SPLIT   "gui.geometry_main_master_split"
+#define RECENT_GUI_GEOMETRY_MAIN_EXTRA_SPLIT    "gui.geometry_main_extra_split"
 #define RECENT_LAST_USED_PROFILE                "gui.last_used_profile"
 #define RECENT_GUI_FILEOPEN_REMEMBERED_DIR      "gui.fileopen_remembered_dir"
 #define RECENT_GUI_CONVERSATION_TABS            "gui.conversation_tabs"
@@ -1066,6 +1069,27 @@ write_profile_recent(void)
                 recent.gui_geometry_main_lower_pane);
     }
 
+    if (recent.gui_geometry_main != NULL) {
+        fprintf(rf, "\n# Main window geometry state.\n");
+        fprintf(rf, "# Hex byte string.\n");
+        fprintf(rf, RECENT_GUI_GEOMETRY_MAIN ": %s\n",
+                recent.gui_geometry_main);
+    }
+
+    if (recent.gui_geometry_main_master_split != NULL) {
+        fprintf(rf, "\n# Main window master splitter state.\n");
+        fprintf(rf, "# Hex byte string.\n");
+        fprintf(rf, RECENT_GUI_GEOMETRY_MAIN_MASTER_SPLIT ": %s\n",
+                recent.gui_geometry_main_master_split);
+    }
+
+    if (recent.gui_geometry_main_extra_split != NULL) {
+        fprintf(rf, "\n# Main window extra splitter state.\n");
+        fprintf(rf, "# Hex byte string.\n");
+        fprintf(rf, RECENT_GUI_GEOMETRY_MAIN_EXTRA_SPLIT ": %s\n",
+                recent.gui_geometry_main_extra_split);
+    }
+
     fprintf(rf, "\n# Packet list column pixel widths.\n");
     fprintf(rf, "# Each pair of strings consists of a column format and its pixel width.\n");
     packet_list_recent_write_all(rf);
@@ -1298,6 +1322,15 @@ read_set_recent_pair_static(gchar *key, const gchar *value,
         if (num <= 0)
             return PREFS_SET_SYNTAX_ERR;      /* number must be positive */
         recent.gui_geometry_main_lower_pane = (gint)num;
+    } else if (strcmp(key, RECENT_GUI_GEOMETRY_MAIN) == 0) {
+        g_free(recent.gui_geometry_main);
+        recent.gui_geometry_main = g_strdup(value);
+    } else if (strcmp(key, RECENT_GUI_GEOMETRY_MAIN_MASTER_SPLIT) == 0) {
+        g_free(recent.gui_geometry_main_master_split);
+        recent.gui_geometry_main_master_split = g_strdup(value);
+    } else if (strcmp(key, RECENT_GUI_GEOMETRY_MAIN_EXTRA_SPLIT) == 0) {
+        g_free(recent.gui_geometry_main_extra_split);
+        recent.gui_geometry_main_extra_split = g_strdup(value);
     } else if (strcmp(key, RECENT_GUI_CONVERSATION_TABS) == 0) {
         recent.conversation_tabs = prefs_get_string_list(value);
     } else if (strcmp(key, RECENT_GUI_CONVERSATION_TABS_COLUMNS) == 0) {
@@ -1491,6 +1524,9 @@ recent_read_static(char **rf_path_return, int *rf_errno_return)
     recent.sys_warn_if_no_capture = TRUE;
 
     recent.col_width_list = NULL;
+    recent.gui_geometry_main = NULL;
+    recent.gui_geometry_main_master_split = NULL;
+    recent.gui_geometry_main_extra_split = NULL;
     recent.gui_fileopen_remembered_dir = NULL;
 
     /* Construct the pathname of the user's recent common file. */
@@ -1551,6 +1587,20 @@ recent_read_profile_static(char **rf_path_return, int *rf_errno_return)
     /* pane size of zero will autodetect */
     recent.gui_geometry_main_upper_pane   = 0;
     recent.gui_geometry_main_lower_pane   = 0;
+
+    if (recent.gui_geometry_main) {
+        g_free(recent.gui_geometry_main);
+        recent.gui_geometry_main = NULL;
+    }
+
+    if (recent.gui_geometry_main_master_split) {
+        g_free(recent.gui_geometry_main_master_split);
+        recent.gui_geometry_main_master_split = NULL;
+    }
+    if (recent.gui_geometry_main_extra_split) {
+        g_free(recent.gui_geometry_main_extra_split);
+        recent.gui_geometry_main_extra_split = NULL;
+    }
 
     if (recent.col_width_list) {
         free_col_width_info(&recent);
@@ -1800,6 +1850,9 @@ void
 recent_cleanup(void)
 {
     free_col_width_info(&recent);
+    g_free(recent.gui_geometry_main);
+    g_free(recent.gui_geometry_main_master_split);
+    g_free(recent.gui_geometry_main_extra_split);
     g_free(recent.gui_fileopen_remembered_dir);
     g_list_free_full(recent.gui_additional_toolbars, g_free);
     g_list_free_full(recent.interface_toolbars, g_free);
