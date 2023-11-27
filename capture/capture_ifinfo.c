@@ -189,83 +189,25 @@ capture_interface_list(int *err, char **err_str, void (*update_cb)(void))
     return if_list;
 }
 
-/* XXX - We parse simple text output to get our interface list.  Should
- * we use "real" data serialization instead, e.g. via XML? */
-if_capabilities_t *
-capture_get_if_capabilities(const char *ifname, bool monitor_mode,
-                            const char *auth_string,
-                            char **err_primary_msg, char **err_secondary_msg,
-                            void (*update_cb)(void))
+static if_capabilities_t *
+deserialize_if_capability(char* data, jsmntok_t *inf_tok,
+                          char **err_primary_msg, char **err_secondary_msg)
 {
     if_capabilities_t *caps;
-    GList              *linktype_list = NULL, *timestamp_list = NULL;
-    int                 err, i;
-    char               *data, *primary_msg, *secondary_msg, *val_s;
-    jsmntok_t          *tokens, *inf_tok, *array_tok, *cur_tok;
+    GList             *linktype_list = NULL, *timestamp_list = NULL;
+    int                err, i;
+    char              *primary_msg, *secondary_msg, *val_s;
+    double             val_d;
+    jsmntok_t         *array_tok, *cur_tok;
 
-    /* see if the interface is from extcap */
-    caps = extcap_get_if_dlts(ifname, err_primary_msg);
-    if (caps != NULL)
-        return caps;
-
-    /* return if the extcap interface generated an error */
-    if (err_primary_msg != NULL && *err_primary_msg != NULL)
-        return NULL;
-
-    /* Try to get our interface list */
-    err = sync_if_capabilities_open(ifname, monitor_mode, auth_string, &data,
-                                    &primary_msg, &secondary_msg, update_cb);
-    if (err != 0) {
-        ws_info("Capture Interface Capabilities failed. Error %d, %s",
-              err, primary_msg ? primary_msg : "no message");
-        if (err_primary_msg)
-            *err_primary_msg = primary_msg;
-        else
-            g_free(primary_msg);
-        if (err_secondary_msg)
-            *err_secondary_msg = secondary_msg;
-        else
-            g_free(secondary_msg);
-        return NULL;
-    }
-
-    int num_tokens = json_parse(data, NULL, 0);
-    if (num_tokens <= 0) {
+    if (inf_tok == NULL || !json_get_double(data, inf_tok, "status", &val_d)) {
         ws_info("Capture Interface Capabilities failed with invalid JSON.");
-        g_free(data);
-        return NULL;
-    }
-
-    tokens = wmem_alloc_array(NULL, jsmntok_t, num_tokens);
-    if (json_parse(data, tokens, num_tokens) <= 0) {
-        ws_info("Capture Interface Capabilities returned no information.");
         if (err_primary_msg) {
-            *err_primary_msg = g_strdup("Dumpcap returned no interface capability information");
+            *err_primary_msg = g_strdup("Dumpcap returned bad JSON.");
         }
-        wmem_free(NULL, tokens);
-        g_free(data);
         return NULL;
     }
 
-    inf_tok = json_get_array_index(tokens, 0);
-    if (inf_tok) {
-        inf_tok = json_get_object(data, inf_tok, ifname);
-    }
-
-    if (inf_tok == NULL) {
-        ws_info("Capture Interface Capabilities failed with invalid JSON.");
-        wmem_free(NULL, tokens);
-        g_free(data);
-        return NULL;
-    }
-
-    double val_d;
-    if (!json_get_double(data, inf_tok, "status", &val_d)) {
-        ws_info("Capture Interface Capabilities failed with invalid JSON.");
-        wmem_free(NULL, tokens);
-        g_free(data);
-        return NULL;
-    }
     err = (int)val_d;
     if (err != 0) {
         primary_msg = json_get_string(data, inf_tok, "primary_msg");
@@ -286,8 +228,6 @@ capture_get_if_capabilities(const char *ifname, bool monitor_mode,
             *err_secondary_msg = secondary_msg;
         else
             g_free(secondary_msg);
-        wmem_free(NULL, tokens);
-        g_free(data);
         return NULL;
     }
 
@@ -298,8 +238,6 @@ capture_get_if_capabilities(const char *ifname, bool monitor_mode,
         if (err_primary_msg) {
             *err_primary_msg = ws_strdup_printf("Dumpcap didn't return monitor-mode capability");
         }
-        wmem_free(NULL, tokens);
-        g_free(data);
         return NULL;
     }
 
@@ -318,8 +256,6 @@ capture_get_if_capabilities(const char *ifname, bool monitor_mode,
         if (err_primary_msg) {
             *err_primary_msg = ws_strdup_printf("Dumpcap didn't return data link types capability");
         }
-        wmem_free(NULL, tokens);
-        g_free(data);
         g_free(caps);
         return NULL;
     }
@@ -365,10 +301,170 @@ capture_get_if_capabilities(const char *ifname, bool monitor_mode,
     /* Might be NULL. Not all systems report timestamp types */
     caps->timestamp_types = timestamp_list;
 
+    return caps;
+}
+
+if_capabilities_t *
+capture_get_if_capabilities(const char *ifname, bool monitor_mode,
+                            const char *auth_string,
+                            char **err_primary_msg, char **err_secondary_msg,
+                            void (*update_cb)(void))
+{
+    if_capabilities_t *caps;
+    int                 err;
+    char               *data, *primary_msg, *secondary_msg;
+    jsmntok_t          *tokens, *inf_tok;
+
+    /* see if the interface is from extcap */
+    caps = extcap_get_if_dlts(ifname, err_primary_msg);
+    if (caps != NULL)
+        return caps;
+
+    /* return if the extcap interface generated an error */
+    if (err_primary_msg != NULL && *err_primary_msg != NULL)
+        return NULL;
+
+    /* Try to get our interface list */
+    err = sync_if_capabilities_open(ifname, monitor_mode, auth_string, &data,
+                                    &primary_msg, &secondary_msg, update_cb);
+    if (err != 0) {
+        ws_info("Capture Interface Capabilities failed. Error %d, %s",
+              err, primary_msg ? primary_msg : "no message");
+        if (err_primary_msg)
+            *err_primary_msg = primary_msg;
+        else
+            g_free(primary_msg);
+        if (err_secondary_msg)
+            *err_secondary_msg = secondary_msg;
+        else
+            g_free(secondary_msg);
+        return NULL;
+    }
+
+    int num_tokens = json_parse(data, NULL, 0);
+    if (num_tokens <= 0) {
+        ws_info("Capture Interface Capabilities failed with invalid JSON.");
+        if (err_primary_msg) {
+            *err_primary_msg = g_strdup("Dumpcap returned bad JSON.");
+        }
+        g_free(data);
+        return NULL;
+    }
+
+    tokens = wmem_alloc_array(NULL, jsmntok_t, num_tokens);
+    if (json_parse(data, tokens, num_tokens) <= 0) {
+        ws_info("Capture Interface Capabilities returned no information.");
+        if (err_primary_msg) {
+            *err_primary_msg = g_strdup("Dumpcap returned no interface capability information");
+        }
+        wmem_free(NULL, tokens);
+        g_free(data);
+        return NULL;
+    }
+
+    inf_tok = json_get_array_index(tokens, 0);
+    if (inf_tok && inf_tok->type == JSMN_OBJECT) {
+        inf_tok++; // Key
+        char *ifname2 = g_strndup(&data[inf_tok->start], inf_tok->end - inf_tok->start);
+        if (json_decode_string_inplace(ifname2) && g_strcmp0(ifname2, ifname) == 0) {
+            inf_tok++;
+            caps = deserialize_if_capability(data, inf_tok, err_primary_msg, err_secondary_msg);
+        } else if (err_primary_msg) {
+            *err_primary_msg = g_strdup("Dumpcap returned bad JSON.");
+        }
+        g_free(ifname2);
+    } else if (err_primary_msg) {
+        *err_primary_msg = g_strdup("Dumpcap returned bad JSON.");
+    }
+
     wmem_free(NULL, tokens);
     g_free(data);
 
     return caps;
+}
+
+GHashTable*
+capture_get_if_list_capabilities(GList *if_cap_queries,
+                            char **err_primary_msg, char **err_secondary_msg,
+                            void (*update_cb)(void))
+{
+    if_cap_query_t    *query;
+    if_capabilities_t *caps;
+    GHashTable        *caps_hash;
+    GList             *local_queries = NULL;
+    int                err, i;
+    char              *data, *primary_msg, *secondary_msg;
+    jsmntok_t         *tokens, *inf_tok;
+
+    caps_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
+    for (GList *li = if_cap_queries; li != NULL; li = g_list_next(li)) {
+
+        query = (if_cap_query_t *)li->data;
+        /* see if the interface is from extcap */
+        caps = extcap_get_if_dlts(query->name, err_primary_msg);
+        /* if the extcap interface generated an error, it was from extcap */
+        if (caps != NULL || (err_primary_msg != NULL && *err_primary_msg != NULL)) {
+            g_hash_table_replace(caps_hash, g_strdup(query->name), caps);
+        } else {
+            local_queries = g_list_prepend(local_queries, query);
+        }
+    }
+
+    local_queries = g_list_reverse(local_queries);
+
+    /* Try to get our interface list */
+    err = sync_if_list_capabilities_open(local_queries, &data,
+                                    &primary_msg, &secondary_msg, update_cb);
+    g_list_free(local_queries);
+    if (err != 0) {
+        ws_info("Capture Interface Capabilities failed. Error %d, %s",
+              err, primary_msg ? primary_msg : "no message");
+        if (err_primary_msg)
+            *err_primary_msg = primary_msg;
+        else
+            g_free(primary_msg);
+        if (err_secondary_msg)
+            *err_secondary_msg = secondary_msg;
+        else
+            g_free(secondary_msg);
+        return NULL;
+    }
+
+    int num_tokens = json_parse(data, NULL, 0);
+    if (num_tokens <= 0) {
+        ws_info("Capture Interface Capabilities failed with invalid JSON.");
+        g_free(data);
+        return NULL;
+    }
+
+    tokens = wmem_alloc_array(NULL, jsmntok_t, num_tokens);
+    if (json_parse(data, tokens, num_tokens) <= 0) {
+        ws_info("Capture Interface Capabilities returned no information.");
+        if (err_primary_msg) {
+            *err_primary_msg = g_strdup("Dumpcap returned no interface capability information");
+        }
+        wmem_free(NULL, tokens);
+        g_free(data);
+        return NULL;
+    }
+
+    char *ifname;
+    for (i = 0; i < json_get_array_len(tokens); i++) {
+        inf_tok = json_get_array_index(tokens, i);
+        if (inf_tok && inf_tok->type == JSMN_OBJECT) {
+            inf_tok++; // Key
+            ifname = g_strndup(&data[inf_tok->start], inf_tok->end - inf_tok->start);
+            if (!json_decode_string_inplace(ifname)) continue;
+            inf_tok++;
+            caps = deserialize_if_capability(data, inf_tok, err_primary_msg, err_secondary_msg);
+            g_hash_table_replace(caps_hash, ifname, caps);
+        }
+    }
+
+    wmem_free(NULL, tokens);
+    g_free(data);
+
+    return caps_hash;
 }
 
 #ifdef HAVE_PCAP_REMOTE

@@ -45,6 +45,7 @@ static int hf_scsi_sbc_rdwr10_lba;
 static int hf_scsi_sbc_rdwr10_xferlen;
 static int hf_scsi_sbc_rdwr12_xferlen;
 static int hf_scsi_sbc_rdwr16_lba;
+static int hf_scsi_sbc_read_capacity;
 static int hf_scsi_sbc_ssu_immed_flags;
 static int hf_scsi_sbc_ssu_immed;
 static int hf_scsi_sbc_ssu_pwr_flags;
@@ -996,8 +997,11 @@ dissect_sbc_readcapacity10 (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
                            guint offset, gboolean isreq, gboolean iscdb,
                            guint payload_len _U_, scsi_task_data_t *cdata _U_)
 {
-    guint32     len, block_len, tot_len;
-    const char *un;
+    guint32     lba, block_len;
+    guint64     totalSizeBytes64;
+    double      totalSizeBytes, totalSizeAbbrev;
+    const char* binaryPrefixes[] = { "B", "KiB", "MiB", "GiB", "TiB", "PiB" };
+    gint        index = 0;
 
     if (!tree)
         return;
@@ -1007,16 +1011,24 @@ dissect_sbc_readcapacity10 (tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
                 ett_scsi_control, cdb_control_fields, ENC_BIG_ENDIAN);
     }
     else if (!iscdb) {
-        len = tvb_get_ntohl (tvb, offset);
-        block_len = tvb_get_ntohl (tvb, offset+4);
-        tot_len=((len/1024)*block_len)/1024; /*MB*/
-        un="MB";
-        if(tot_len>20000){
-            tot_len/=1024;
-            un="GB";
+        lba       = tvb_get_ntohl(tvb, offset) + 1;   /* LBAs are zero-based so we add 1 */
+        proto_tree_add_uint_format(tree, hf_scsi_sbc_returned_lba, tvb, offset, 4, lba, "LBA: %u", lba);
+        proto_tree_add_item(tree, hf_scsi_sbc_blocksize, tvb, offset+4, 4, ENC_BIG_ENDIAN);
+
+        block_len = tvb_get_ntohl(tvb, offset+4);
+        totalSizeBytes64 = (guint64)lba * (guint64)block_len;  /* prevent overflow */
+        totalSizeBytes = (double)totalSizeBytes64;
+        totalSizeAbbrev = totalSizeBytes;
+
+        while (totalSizeAbbrev >= 1024 && index < 5) {
+            totalSizeAbbrev /= 1024.0;
+            index++;
         }
-        proto_tree_add_uint_format (tree, hf_scsi_sbc_returned_lba, tvb, offset, 4, len, "LBA: %u (%u %s)", len, tot_len, un);
-        proto_tree_add_item (tree, hf_scsi_sbc_blocksize, tvb, offset+4, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_double_format(tree, hf_scsi_sbc_read_capacity, tvb, 0, 0,
+            totalSizeBytes, "Read capacity: %.0f bytes (%.2f %s)",
+            totalSizeBytes, totalSizeAbbrev, binaryPrefixes[index]);
+        col_prepend_fstr(pinfo->cinfo, COL_INFO, "%.2f %s ",
+            totalSizeAbbrev, binaryPrefixes[index]);
     }
 }
 
@@ -2079,10 +2091,13 @@ proto_register_scsi_sbc(void)
            TFS(&fua_nv_tfs), 0x02, "ForceUnitAccess_NonVolatile: Whether to allow reading from non-volatile cache or not", HFILL}},
         { &hf_scsi_sbc_blocksize,
           {"Block size in bytes", "scsi_sbc.blocksize", FT_UINT32, BASE_DEC,
-           NULL, 0, NULL, HFILL}},
+          NULL, 0, NULL, HFILL}},
         { &hf_scsi_sbc_returned_lba,
           {"Returned LBA", "scsi_sbc.returned_lba", FT_UINT32, BASE_DEC,
            NULL, 0, NULL, HFILL}},
+        { &hf_scsi_sbc_read_capacity,
+          {"Read capacity", "scsi_sbc.read_capacity", FT_DOUBLE, BASE_DEC,
+          NULL,0,NULL, HFILL}},
         { &hf_scsi_sbc_req_plist,
           {"REQ_PLIST", "scsi_sbc.req_plist", FT_BOOLEAN, 8,
            NULL, 0x10, NULL, HFILL}},
