@@ -57,10 +57,10 @@
 #define RECENT_GUI_GEOMETRY_MAIN_WIDTH          "gui.geometry_main_width"
 #define RECENT_GUI_GEOMETRY_MAIN_HEIGHT         "gui.geometry_main_height"
 #define RECENT_GUI_GEOMETRY_MAIN_MAXIMIZED      "gui.geometry_main_maximized"
+#define RECENT_GUI_GEOMETRY_MAIN                "gui.geometry_main"
 #define RECENT_GUI_GEOMETRY_LEFTALIGN_ACTIONS   "gui.geometry_leftalign_actions"
 #define RECENT_GUI_GEOMETRY_MAIN_UPPER_PANE     "gui.geometry_main_upper_pane"
 #define RECENT_GUI_GEOMETRY_MAIN_LOWER_PANE     "gui.geometry_main_lower_pane"
-#define RECENT_GUI_GEOMETRY_MAIN                "gui.geometry_main"
 #define RECENT_GUI_GEOMETRY_MAIN_MASTER_SPLIT   "gui.geometry_main_master_split"
 #define RECENT_GUI_GEOMETRY_MAIN_EXTRA_SPLIT    "gui.geometry_main_extra_split"
 #define RECENT_LAST_USED_PROFILE                "gui.last_used_profile"
@@ -240,11 +240,25 @@ write_recent_geom(gpointer key _U_, gpointer value, gpointer rfh)
     fprintf(rf, RECENT_GUI_GEOMETRY "%s.maximized: %s\n", geom->key,
             geom->maximized == TRUE ? "TRUE" : "FALSE");
 
+    fprintf(rf, "# Qt Geometry State (hex byte string).\n");
+    fprintf(rf, RECENT_GUI_GEOMETRY "%s.qt_geometry: %s\n", geom->key,
+            geom->qt_geom);
 }
 
 /* the geometry hashtable for all known window classes,
  * the window name is the key, and the geometry struct is the value */
 static GHashTable *window_geom_hash = NULL;
+
+static GHashTable *window_splitter_hash = NULL;
+
+void
+window_geom_free(void *data)
+{
+    window_geometry_t *geom = (window_geometry_t*)data;
+    g_free(geom->key);
+    g_free(geom->qt_geom);
+    g_free(geom);
+}
 
 /* save the window and its current geometry into the geometry hashtable */
 void
@@ -255,14 +269,7 @@ window_geom_save(const gchar *name, window_geometry_t *geom)
 
     /* init hashtable, if not already done */
     if (!window_geom_hash) {
-        window_geom_hash = g_hash_table_new(g_str_hash, g_str_equal);
-    }
-    /* if we have an old one, remove and free it first */
-    work = (window_geometry_t *)g_hash_table_lookup(window_geom_hash, name);
-    if (work) {
-        g_hash_table_remove(window_geom_hash, name);
-        g_free(work->key);
-        g_free(work);
+        window_geom_hash = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, window_geom_free);
     }
 
     /* g_malloc and insert the new one */
@@ -270,7 +277,7 @@ window_geom_save(const gchar *name, window_geometry_t *geom)
     *work = *geom;
     key = g_strdup(name);
     work->key = key;
-    g_hash_table_insert(window_geom_hash, key, work);
+    g_hash_table_replace(window_geom_hash, key, work);
 }
 
 /* load the desired geometry for this window from the geometry hashtable */
@@ -282,7 +289,7 @@ window_geom_load(const gchar       *name,
 
     /* init hashtable, if not already done */
     if (!window_geom_hash) {
-        window_geom_hash = g_hash_table_new(g_str_hash, g_str_equal);
+        window_geom_hash = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, window_geom_free);
     }
 
     p = (window_geometry_t *)g_hash_table_lookup(window_geom_hash, name);
@@ -293,6 +300,31 @@ window_geom_load(const gchar       *name,
         return FALSE;
     }
 }
+
+/* save the window and its splitter state into the splitter hashtable */
+void
+window_splitter_save(const char *name, const char *splitter_state)
+{
+    /* init hashtable, if not already done */
+    if (!window_splitter_hash) {
+        window_splitter_hash = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
+    }
+
+    g_hash_table_replace(window_splitter_hash, g_strdup(name), g_strdup(splitter_state));
+}
+
+/* save the window and its splitter state into the geometry hashtable */
+const char*
+window_splitter_load(const gchar *name)
+{
+    /* init hashtable, if not already done */
+    if (!window_splitter_hash) {
+        return NULL;
+    }
+
+    return g_hash_table_lookup(window_splitter_hash, name);
+}
+
 
 /* parse values of particular types */
 static void
@@ -319,6 +351,11 @@ window_geom_recent_read_pair(const char *name,
 {
     window_geometry_t geom;
 
+    if (strcmp(key, "splitter") == 0) {
+        window_splitter_save(name, value);
+        return;
+    }
+
     /* find window geometry maybe already in hashtable */
     if (!window_geom_load(name, &geom)) {
         /* not in table, init geom with "basic" values */
@@ -329,6 +366,7 @@ window_geom_recent_read_pair(const char *name,
         geom.set_size   = FALSE;
         geom.width      = -1;
         geom.height     = -1;
+        geom.qt_geom    = NULL;
     }
 
     if (strcmp(key, "x") == 0) {
@@ -346,6 +384,8 @@ window_geom_recent_read_pair(const char *name,
     } else if (strcmp(key, "maximized") == 0) {
         parse_recent_boolean(value, &geom.maximized);
         geom.set_maximized = TRUE;
+    } else if (strcmp(key, "qt_geometry") == 0) {
+        geom.qt_geom = g_strdup(value);
     } else {
         /*
          * Silently ignore the bogus key.  We shouldn't abort here,
@@ -370,10 +410,33 @@ window_geom_recent_write_all(FILE *rf)
 {
     /* init hashtable, if not already done */
     if (!window_geom_hash) {
-        window_geom_hash = g_hash_table_new(g_str_hash, g_str_equal);
+        window_geom_hash = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, window_geom_free);
     }
 
     g_hash_table_foreach(window_geom_hash, write_recent_geom, rf);
+}
+
+/** Write all known window splitter states to the recent file.
+ *
+ * @param rf recent file handle from caller
+ */
+static void
+window_splitter_recent_write_all(FILE *rf)
+{
+    /* init hashtable, if not already done */
+    if (!window_splitter_hash) {
+        return;
+    }
+
+    GHashTableIter iter;
+    gpointer key, value;
+    g_hash_table_iter_init(&iter, window_splitter_hash);
+    while (g_hash_table_iter_next(&iter, &key, &value)) {
+        fprintf(rf, "\n# Splitter state of %s window.\n", (char*)key);
+        fprintf(rf, "# Qt Splitter state (hex byte string).\n");
+        fprintf(rf, RECENT_GUI_GEOMETRY "%s.splitter: %s\n", (char*)key,
+                (char*)value);
+    }
 }
 
 /* Global list of recent capture filters. */
@@ -837,6 +900,13 @@ write_recent(void)
             RECENT_GUI_GEOMETRY_MAIN_MAXIMIZED,
             recent.gui_geometry_main_maximized);
 
+    if (recent.gui_geometry_main != NULL) {
+        fprintf(rf, "\n# Main window geometry state.\n");
+        fprintf(rf, "# Hex byte string.\n");
+        fprintf(rf, RECENT_GUI_GEOMETRY_MAIN ": %s\n",
+                recent.gui_geometry_main);
+    }
+
     write_recent_boolean(rf, "Leftalign Action Buttons",
             RECENT_GUI_GEOMETRY_LEFTALIGN_ACTIONS,
             recent.gui_geometry_leftalign_actions);
@@ -1069,13 +1139,6 @@ write_profile_recent(void)
                 recent.gui_geometry_main_lower_pane);
     }
 
-    if (recent.gui_geometry_main != NULL) {
-        fprintf(rf, "\n# Main window geometry state.\n");
-        fprintf(rf, "# Hex byte string.\n");
-        fprintf(rf, RECENT_GUI_GEOMETRY_MAIN ": %s\n",
-                recent.gui_geometry_main);
-    }
-
     if (recent.gui_geometry_main_master_split != NULL) {
         fprintf(rf, "\n# Main window master splitter state.\n");
         fprintf(rf, "# Hex byte string.\n");
@@ -1089,6 +1152,8 @@ write_profile_recent(void)
         fprintf(rf, RECENT_GUI_GEOMETRY_MAIN_EXTRA_SPLIT ": %s\n",
                 recent.gui_geometry_main_extra_split);
     }
+
+    window_splitter_recent_write_all(rf);
 
     fprintf(rf, "\n# Packet list column pixel widths.\n");
     fprintf(rf, "# Each pair of strings consists of a column format and its pixel width.\n");
@@ -1185,6 +1250,9 @@ read_set_recent_common_pair_static(gchar *key, const gchar *value,
         if (num <= 0)
             return PREFS_SET_SYNTAX_ERR;      /* number must be positive */
         recent.gui_geometry_main_height = (gint)num;
+    } else if (strcmp(key, RECENT_GUI_GEOMETRY_MAIN) == 0) {
+        g_free(recent.gui_geometry_main);
+        recent.gui_geometry_main = g_strdup(value);
     } else if (strcmp(key, RECENT_LAST_USED_PROFILE) == 0) {
         if ((strcmp(value, DEFAULT_PROFILE) != 0) && profile_exists (value, FALSE)) {
             set_profile_name (value);
@@ -1306,8 +1374,6 @@ read_set_recent_pair_static(gchar *key, const gchar *value,
         recent.gui_show_bytes_decode = (bytes_decode_type)str_to_val(value, show_bytes_decode_values, DecodeAsNone);
     } else if (strcmp(key, RECENT_GUI_SHOW_BYTES_SHOW) == 0) {
         recent.gui_show_bytes_show = (bytes_show_type)str_to_val(value, bytes_show_values, SHOW_ASCII);
-    } else if (strcmp(key, RECENT_GUI_GEOMETRY_MAIN_MAXIMIZED) == 0) {
-        parse_recent_boolean(value, &recent.gui_geometry_main_maximized);
     } else if (strcmp(key, RECENT_GUI_GEOMETRY_MAIN_UPPER_PANE) == 0) {
         num = strtol(value, &p, 0);
         if (p == value || *p != '\0')
@@ -1322,15 +1388,21 @@ read_set_recent_pair_static(gchar *key, const gchar *value,
         if (num <= 0)
             return PREFS_SET_SYNTAX_ERR;      /* number must be positive */
         recent.gui_geometry_main_lower_pane = (gint)num;
-    } else if (strcmp(key, RECENT_GUI_GEOMETRY_MAIN) == 0) {
-        g_free(recent.gui_geometry_main);
-        recent.gui_geometry_main = g_strdup(value);
     } else if (strcmp(key, RECENT_GUI_GEOMETRY_MAIN_MASTER_SPLIT) == 0) {
         g_free(recent.gui_geometry_main_master_split);
         recent.gui_geometry_main_master_split = g_strdup(value);
     } else if (strcmp(key, RECENT_GUI_GEOMETRY_MAIN_EXTRA_SPLIT) == 0) {
         g_free(recent.gui_geometry_main_extra_split);
         recent.gui_geometry_main_extra_split = g_strdup(value);
+    } else if (strncmp(key, RECENT_GUI_GEOMETRY, sizeof(RECENT_GUI_GEOMETRY)-1) == 0) {
+        /* now have something like "gui.geom.win.sub_key", split it into win and sub_key */
+        char *win = &key[sizeof(RECENT_GUI_GEOMETRY)-1];
+        char *sub_key = strchr(win, '.');
+        if (sub_key) {
+            *sub_key = '\0';
+            sub_key++;
+            window_geom_recent_read_pair(win, sub_key, value);
+        }
     } else if (strcmp(key, RECENT_GUI_CONVERSATION_TABS) == 0) {
         recent.conversation_tabs = prefs_get_string_list(value);
     } else if (strcmp(key, RECENT_GUI_CONVERSATION_TABS_COLUMNS) == 0) {

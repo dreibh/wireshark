@@ -56,13 +56,12 @@ static void blf_close(wtap *wth);
  * The "real" positions, length, etc. reference this layout and not the file.
  * When no compression is used the file is accessed directly.
  */
-
 typedef struct blf_log_container {
     gint64   infile_start_pos;        /* start position of log container in file */
     guint64  infile_length;           /* length of log container in file */
     guint64  infile_data_start;       /* start position of data in log container in file */
 
-    gint64   real_start_pos;          /* decompressed (virtual) start position including header */
+    guint64  real_start_pos;          /* decompressed (virtual) start position including header */
     guint64  real_length;             /* decompressed length */
     gint64   real_first_object_pos;   /* where does the first obj start? */
     guint64  real_leftover_bytes;     /* how many bytes are left over for the next container? */
@@ -77,7 +76,6 @@ typedef struct blf_data {
     gint64      current_real_seek_pos;
     guint64     start_offset_ns;
 
-    guint       current_log_container;
     GArray     *log_containers;
 
     GHashTable *channel_to_iface_ht;
@@ -90,6 +88,8 @@ typedef struct blf_params {
     wtap_rec *rec;
     Buffer   *buf;
     FILE_T    fh;
+    gboolean  random;
+    gboolean  pipe;
 
     blf_t    *blf_data;
 } blf_params_t;
@@ -606,121 +606,139 @@ blf_init_logcontainer(blf_log_container_t *tmp) {
     tmp->compression_method = 0;
 }
 
-static void
-blf_add_logcontainer(blf_t *blf_data, blf_log_container_t log_container) {
-    if (blf_data->log_containers == NULL) {
-        blf_data->log_containers = g_array_sized_new(FALSE, FALSE, sizeof(blf_log_container_t), 1);
-        blf_data->current_log_container = 0;
-    } else {
-        blf_data->current_log_container++;
-    }
+gint
+blf_logcontainers_cmp(gconstpointer a, gconstpointer b) {
+    blf_log_container_t* container_a = (blf_log_container_t*)a;
+    blf_log_container_t* container_b = (blf_log_container_t*)b;
 
-    g_array_append_val(blf_data->log_containers, log_container);
+    if (container_a->real_start_pos < container_b->real_start_pos) {
+        return -1;
+    }
+    else if (container_a->real_start_pos > container_b->real_start_pos) {
+        return 1;
+    }
+    else {
+        return 0;
+    }
 }
 
+gint
+blf_logcontainers_search(gconstpointer a, gconstpointer b) {
+    blf_log_container_t* container_a = (blf_log_container_t*)a;
+    guint64 pos = *(guint64*)b;
+
+    if (container_a->real_start_pos > pos) {
+        return 1;
+    }
+    else if (pos >= container_a->real_start_pos + container_a->real_length) {
+        return -1;
+    }
+    else {
+        return 0;
+    }
+}
+
+/** Ensures the given log container is in memory
+ *
+ * If the log container already is not already in memory,
+ * it reads it from the current seek position, allocating a
+ * properly sized buffer.
+ * The file offset must be set to the start of the container
+ * data (container->infile_data_start) before calling this function.
+ */
 static gboolean
-blf_get_logcontainer_by_index(blf_t *blf_data, guint container_index, blf_log_container_t **ret) {
-    if (blf_data == NULL || blf_data->log_containers == NULL || container_index >= blf_data->log_containers->len) {
+blf_pull_logcontainer_into_memory(blf_params_t *params, blf_log_container_t *container, int *err, gchar **err_info) {
+
+    if (container == NULL) {
+        *err = WTAP_ERR_INTERNAL;
+        *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory called with NULL container");
         return FALSE;
     }
 
-    *ret = &g_array_index(blf_data->log_containers, blf_log_container_t, container_index);
-    return TRUE;
-}
-
-static gboolean
-blf_find_logcontainer_for_address(blf_t *blf_data, gint64 pos, blf_log_container_t **container, gint *container_index) {
-    blf_log_container_t *tmp;
-
-    if (blf_data == NULL || blf_data->log_containers == NULL) {
-        return FALSE;
+    if (container->real_data != NULL) {
+        return TRUE;
     }
 
-    for (guint i = 0; i < blf_data->log_containers->len; i++) {
-        tmp = &g_array_index(blf_data->log_containers, blf_log_container_t, i);
-        if (tmp->real_start_pos <= pos && pos < tmp->real_start_pos + (gint64)tmp->real_length) {
-            *container = tmp;
-            *container_index = i;
-            return TRUE;
-        }
-    }
-
-    return FALSE;
-}
-
-static gboolean
-blf_pull_logcontainer_into_memory(blf_params_t *params, guint index_log_container, int *err, gchar **err_info) {
-    blf_t *blf_data = params->blf_data;
-    blf_log_container_t tmp;
-
-    if (index_log_container >= blf_data->log_containers->len) {
+    /* pull compressed data into buffer */
+    if (container->infile_start_pos < 0) {
         /*
          * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
          * malformed file (WTAP_ERR_BAD_FILE)?
          */
         *err = WTAP_ERR_INTERNAL;
-        *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: index_log_container (%u) >= blf_data->log_containers->len (%u)",
-                                     index_log_container, blf_data->log_containers->len);
+        *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: container.infile_start_pos (%" G_GINT64_FORMAT ") < 0",
+            container->infile_start_pos);
+        return FALSE;
+    }
+    if (container->infile_data_start < (guint64)container->infile_start_pos) {
+        /*
+         * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
+         * malformed file (WTAP_ERR_BAD_FILE)?
+         */
+        *err = WTAP_ERR_INTERNAL;
+        *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: container.infile_data_start (%" G_GUINT64_FORMAT ") < container.infile_start_pos (%" G_GINT64_FORMAT ")",
+            container->infile_data_start, container->infile_start_pos);
+        return FALSE;
+    }
+    if (container->infile_length < container->infile_data_start - (guint64)container->infile_start_pos) {
+        /*
+         * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
+         * malformed file (WTAP_ERR_BAD_FILE)?
+         */
+        *err = WTAP_ERR_INTERNAL;
+        *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: container.infile_length (%" G_GUINT64_FORMAT ") < (container.infile_data_start (%" G_GUINT64_FORMAT ") - container.infile_start_pos (%" G_GINT64_FORMAT ")) = %" G_GUINT64_FORMAT,
+            container->infile_length,
+            container->infile_data_start, container->infile_start_pos,
+            container->infile_data_start - (guint64)container->infile_start_pos);
+        return FALSE;
+    }
+    guint64 data_length = container->infile_length - (container->infile_data_start - (guint64)container->infile_start_pos);
+    if (data_length > UINT_MAX) {
+        /*
+         * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
+         * malformed file (WTAP_ERR_BAD_FILE)?
+         */
+        *err = WTAP_ERR_INTERNAL;
+        *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: data_length (%" G_GUINT64_FORMAT ") > UINT_MAX",
+            data_length);
         return FALSE;
     }
 
-    tmp = g_array_index(blf_data->log_containers, blf_log_container_t, index_log_container);
-
-    if (tmp.real_data != NULL) {
+    if (container->compression_method == BLF_COMPRESSION_NONE) {
+        unsigned char* buf = g_try_malloc0((gsize)container->real_length);
+        if (buf == NULL) {
+            /*
+             * XXX - our caller will turn this into an EOF.
+             * How *should* it be treated?
+             * For now, we turn it into Yet Another Internal Error,
+             * pending having better documentation of the file
+             * format.
+             */
+            *err = WTAP_ERR_INTERNAL;
+            *err_info = ws_strdup("blf_pull_logcontainer_into_memory: cannot allocate memory");
+        }
+        if (!wtap_read_bytes_or_eof(params->fh, buf, (unsigned int)data_length, err, err_info)) {
+            g_free(buf);
+            if (*err == WTAP_ERR_SHORT_READ) {
+                /*
+                 * XXX - our caller will turn this into an EOF.
+                 * How *should* it be treated?
+                 * For now, we turn it into Yet Another Internal Error,
+                 * pending having better documentation of the file
+                 * format.
+                 */
+                *err = WTAP_ERR_INTERNAL;
+                *err_info = ws_strdup("blf_pull_logcontainer_into_memory: short read on uncompressed data");
+            }
+            return FALSE;
+        }
+        container->real_data = buf;
         return TRUE;
+
     }
-
-    if (tmp.compression_method == BLF_COMPRESSION_ZLIB) {
+    else if (container->compression_method == BLF_COMPRESSION_ZLIB) {
 #ifdef HAVE_ZLIB
-        if (file_seek(params->fh, tmp.infile_data_start, SEEK_SET, err) == -1) {
-            return FALSE;
-        }
-
-        /* pull compressed data into buffer */
-        if (tmp.infile_start_pos < 0) {
-            /*
-             * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
-             * malformed file (WTAP_ERR_BAD_FILE)?
-             */
-            *err = WTAP_ERR_INTERNAL;
-            *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: tmp.infile_start_pos (%" G_GINT64_FORMAT ") < 0",
-                                         tmp.infile_start_pos);
-            return FALSE;
-        }
-        if (tmp.infile_data_start < (guint64)tmp.infile_start_pos) {
-            /*
-             * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
-             * malformed file (WTAP_ERR_BAD_FILE)?
-             */
-            *err = WTAP_ERR_INTERNAL;
-            *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: tmp.infile_data_start (%" G_GUINT64_FORMAT ") < tmp.infile_start_pos (%" G_GINT64_FORMAT ")",
-                                         tmp.infile_data_start, tmp.infile_start_pos);
-            return FALSE;
-        }
-        if (tmp.infile_length < tmp.infile_data_start - (guint64)tmp.infile_start_pos) {
-            /*
-             * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
-             * malformed file (WTAP_ERR_BAD_FILE)?
-             */
-            *err = WTAP_ERR_INTERNAL;
-            *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: tmp.infile_length (%" G_GUINT64_FORMAT ") < (tmp.infile_data_start (%" G_GUINT64_FORMAT ") - tmp.infile_start_pos (%" G_GINT64_FORMAT ")) = %" G_GUINT64_FORMAT,
-                                         tmp.infile_length,
-                                         tmp.infile_data_start, tmp.infile_start_pos,
-                                         tmp.infile_data_start - (guint64)tmp.infile_start_pos);
-            return FALSE;
-        }
-        guint64 data_length = tmp.infile_length - (tmp.infile_data_start - (guint64)tmp.infile_start_pos);
-        if (data_length > UINT_MAX) {
-            /*
-             * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
-             * malformed file (WTAP_ERR_BAD_FILE)?
-             */
-            *err = WTAP_ERR_INTERNAL;
-            *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: data_length (%" G_GUINT64_FORMAT ") > UINT_MAX",
-                                         data_length);
-            return FALSE;
-        }
-        unsigned char *compressed_data = g_try_malloc0((gsize)tmp.infile_length);
+        unsigned char *compressed_data = g_try_malloc0((gsize)data_length);
         if (!wtap_read_bytes_or_eof(params->fh, compressed_data, (unsigned int)data_length, err, err_info)) {
             g_free(compressed_data);
             if (*err == WTAP_ERR_SHORT_READ) {
@@ -737,12 +755,23 @@ blf_pull_logcontainer_into_memory(blf_params_t *params, guint index_log_containe
             return FALSE;
         }
 
-        unsigned char *buf = g_try_malloc0((gsize)tmp.real_length);
+        unsigned char *buf = g_try_malloc0((gsize)container->real_length);
+        if (buf == NULL) {
+            /*
+             * XXX - our caller will turn this into an EOF.
+             * How *should* it be treated?
+             * For now, we turn it into Yet Another Internal Error,
+             * pending having better documentation of the file
+             * format.
+             */
+            *err = WTAP_ERR_INTERNAL;
+            *err_info = ws_strdup("blf_pull_logcontainer_into_memory: cannot allocate memory");
+        }
         z_stream infstream = {0};
 
         infstream.avail_in  = (unsigned int)data_length;
         infstream.next_in   = compressed_data;
-        infstream.avail_out = (unsigned int)tmp.real_length;
+        infstream.avail_out = (unsigned int)container->real_length;
         infstream.next_out  = buf;
 
         /* the actual DE-compression work. */
@@ -754,14 +783,12 @@ blf_pull_logcontainer_into_memory(blf_params_t *params, guint index_log_containe
             g_free(compressed_data);
             *err = WTAP_ERR_INTERNAL;
             if (infstream.msg != NULL) {
-                *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: inflateInit failed for LogContainer %u, message\"%s\"",
-                                              index_log_container,
+                *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: inflateInit failed for LogContainer, message\"%s\"",
                                               infstream.msg);
             } else {
-                *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: inflateInit failed for LogContainer %u",
-                                              index_log_container);
+                *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: inflateInit failed for LogContainer");
             }
-            ws_debug("inflateInit failed for LogContainer %u", index_log_container);
+            ws_debug("inflateInit failed for LogContainer");
             if (infstream.msg != NULL) {
                 ws_debug("inflateInit returned: \"%s\"", infstream.msg);
             }
@@ -817,7 +844,7 @@ blf_pull_logcontainer_into_memory(blf_params_t *params, guint index_log_containe
             }
             g_free(buf);
             g_free(compressed_data);
-            ws_debug("inflate failed (return code %d) for LogContainer %u", ret, index_log_container);
+            ws_debug("inflate failed (return code %d) for LogContainer", ret);
             if (infstream.msg != NULL) {
                 ws_debug("inflate returned: \"%s\"", infstream.msg);
             }
@@ -840,10 +867,10 @@ blf_pull_logcontainer_into_memory(blf_params_t *params, guint index_log_containe
              * fails.
              */
             *err = WTAP_ERR_INTERNAL;
-            *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: inflateEnd failed for LogContainer %u", index_log_container);
+            *err_info = ws_strdup_printf("blf_pull_logcontainer_into_memory: inflateEnd failed for LogContainer");
             g_free(buf);
             g_free(compressed_data);
-            ws_debug("inflateEnd failed for LogContainer %u", index_log_container);
+            ws_debug("inflateEnd failed for LogContainer");
             if (infstream.msg != NULL) {
                 ws_debug("inflateEnd returned: \"%s\"", infstream.msg);
             }
@@ -851,10 +878,10 @@ blf_pull_logcontainer_into_memory(blf_params_t *params, guint index_log_containe
         }
 
         g_free(compressed_data);
-        tmp.real_data = buf;
-        g_array_index(blf_data->log_containers, blf_log_container_t, index_log_container) = tmp;
+        container->real_data = buf;
         return TRUE;
 #else
+        (void) params;
         *err = WTAP_ERR_DECOMPRESSION_NOT_SUPPORTED;
         *err_info = ws_strdup("blf_pull_logcontainer_into_memory: reading gzip-compressed containers isn't supported");
         return FALSE;
@@ -864,274 +891,267 @@ blf_pull_logcontainer_into_memory(blf_params_t *params, guint index_log_containe
     return FALSE;
 }
 
+/** Finds the next log container starting at the current file offset
+ *
+ * Adds the container to the containers array for later access
+ */
 static gboolean
-blf_read_bytes_or_eof(blf_params_t *params, guint64 real_pos, void *target_buffer, unsigned int count, int *err, gchar **err_info) {
-    blf_log_container_t *start_container;
-    blf_log_container_t *end_container;
-    blf_log_container_t *current_container;
+blf_find_next_logcontainer(blf_params_t* params, int* err, gchar** err_info) {
+    blf_blockheader_t           header;
+    blf_logcontainerheader_t    logcontainer_header;
+    blf_log_container_t         tmp;
 
-    gint start_container_index = -1;
-    gint end_container_index   = -1;
-    gint current_container_index = -1;
+    guint64 current_real_start;
+    if (params->blf_data->log_containers->len == 0) {
+        current_real_start = 0;
+    }
+    else {
+        blf_log_container_t* container = &g_array_index(params->blf_data->log_containers, blf_log_container_t, params->blf_data->log_containers->len - 1);
+        current_real_start = container->real_start_pos + container->real_length;
+    }
 
-    unsigned int copied = 0;
-    unsigned int data_left;
-    unsigned int start_in_buf;
+    unsigned int i = 0;
+
+    unsigned char* header_ptr = (unsigned char*)&header;
+
+    /** Find Object
+     *
+     * We read one byte at a time so that we don't have to seek backward (allows us to do a linear read)
+     */
+    while (i < sizeof(blf_obj_magic)) {
+        if (!wtap_read_bytes_or_eof(params->fh, &header_ptr[i], 1, err, err_info)) {
+            ws_debug("we found end of file");
+            return FALSE;
+        }
+        if (header_ptr[i] != blf_obj_magic[i]) {
+            if (params->pipe) {
+                ws_debug("container object magic is not LOBJ");
+            }
+            else {
+                ws_debug("container object magic is not LOBJ (pos: 0x%" PRIx64 ")", file_tell(params->fh));
+            }
+            if (i > 0) {
+                int j = i;
+
+                while (memcmp(&header_ptr[i - j + 1], blf_obj_magic, j)) {
+                    /* Check if the last j bytes match the first j bytes of the magic */
+                    j--;
+                }
+
+                /* The last j bytes match, and the first j bytes are already in the buffer, since j<=i */
+                i = j;
+            }
+        }
+        else {
+            /* Character matches */
+            i++;
+        }
+    }
+
+    if (!wtap_read_bytes_or_eof(params->fh, &header.header_length, sizeof(blf_blockheader_t) - sizeof(blf_obj_magic), err, err_info)) {
+        ws_debug("we found end of file");
+        return FALSE;
+    }
+
+    fix_endianness_blf_blockheader(&header);
+
+    if (header.header_length < sizeof(blf_blockheader_t)) {
+        *err = WTAP_ERR_BAD_FILE;
+        *err_info = ws_strdup("blf: log container header length too short");
+        return FALSE;
+    }
+
+    if (header.header_type != BLF_HEADER_TYPE_DEFAULT) {
+        *err = WTAP_ERR_UNSUPPORTED;
+        *err_info = ws_strdup_printf("blf: unknown header type (%u), I know only BLF_HEADER_TYPE_DEFAULT (1)", header.header_type);
+        return FALSE;
+    }
+
+    if (header.object_length < header.header_length) {
+        *err = WTAP_ERR_BAD_FILE;
+        *err_info = ws_strdup("blf: log container header object length less than log container header length");
+        return FALSE;
+    }
+
+    switch (header.object_type) {
+    case BLF_OBJTYPE_LOG_CONTAINER:
+        /* skip unknown header part if needed */
+        if (header.header_length > sizeof(blf_blockheader_t)) {
+            /* seek over unknown header part */
+            if (!wtap_read_bytes(params->fh, NULL, header.header_length - sizeof(blf_blockheader_t), err, err_info)) {
+                ws_debug("cannot seek file for skipping unknown header bytes in log container");
+                return FALSE;
+            }
+        }
+
+        /* Read the log container header */
+        if (!wtap_read_bytes_or_eof(params->fh, &logcontainer_header, sizeof(blf_logcontainerheader_t), err, err_info)) {
+            ws_debug("not enough bytes for log container header");
+            return FALSE;
+        }
+
+        fix_endianness_blf_logcontainerheader(&logcontainer_header);
+
+        blf_init_logcontainer(&tmp);
+
+        if (params->pipe) {
+            tmp.infile_start_pos = 0;
+            tmp.infile_data_start = sizeof(blf_logcontainerheader_t) + header.header_length;
+        }
+        else {
+            tmp.infile_data_start = file_tell(params->fh);
+            tmp.infile_start_pos = tmp.infile_data_start - sizeof(blf_logcontainerheader_t) - header.header_length;
+        }
+        tmp.infile_length = header.object_length;
+
+        tmp.real_start_pos = current_real_start;
+        tmp.real_length = logcontainer_header.uncompressed_size;
+        tmp.compression_method = logcontainer_header.compression_method;
+
+        ws_debug("found log container with real_pos=0x%" PRIx64 ", real_length=0x%" PRIx64, tmp.real_start_pos, tmp.real_length);
+
+        g_array_append_val(params->blf_data->log_containers, tmp);
+
+        break;
+    default:
+        ws_debug("we found a non BLF log container on top level. this is unexpected.");
+
+        /* TODO: maybe create "fake Log Container" for this */
+        if (!wtap_read_bytes(params->fh, NULL, MAX(MAX(sizeof(blf_blockheader_t), header.object_length), header.header_length) - sizeof(blf_blockheader_t), err, err_info)) {
+            return FALSE;
+        }
+    }
+
+    return TRUE;
+}
+
+static gboolean
+blf_pull_next_logcontainer(blf_params_t* params, int* err, gchar** err_info) {
+    blf_log_container_t* container;
+    if (!blf_find_next_logcontainer(params, err, err_info)) {
+        return FALSE;
+    }
+    container = &g_array_index(params->blf_data->log_containers, blf_log_container_t, params->blf_data->log_containers->len - 1);
+    if (!blf_pull_logcontainer_into_memory(params, container, err, err_info)) {
+        return FALSE;
+    }
+    return TRUE;
+}
+
+static gboolean
+blf_read_bytes_or_eof(blf_params_t *params, guint64 real_pos, void *target_buffer, guint64 count, int *err, gchar **err_info) {
+    blf_log_container_t*    container;
+    guint   container_index;
+
+    guint64 end_pos = real_pos + count;
+
+    guint64 copied = 0;
+    guint64 data_left;
+    guint64 start_in_buf;
 
     unsigned char *buf = (unsigned char *)target_buffer;
 
-    if (!blf_find_logcontainer_for_address(params->blf_data, real_pos, &start_container, &start_container_index)) {
-        /*
-         * XXX - why is this treated as an EOF rather than an error?
-         * *err appears to be 0, which means our caller treats it as an
-         * EOF, at least when reading the log object header.
-         */
-        ws_debug("cannot read data because start position cannot be mapped");
-        return FALSE;
-    }
-    if (!blf_find_logcontainer_for_address(params->blf_data, real_pos + count - 1, &end_container, &end_container_index)) {
-        /*
-         * XXX - why is this treated as an EOF rather than an error?
-         * *err appears to be 0, which means our caller treats it as an
-         * EOF, at least when reading the log object header.
-         */
-        ws_debug("cannot read data because end position cannot be mapped");
+    if (count == 0) {
+        ws_debug("called blf_read_bytes_or_eof with 0 count");
         return FALSE;
     }
 
-    current_container_index = start_container_index;
-    current_container = start_container;
-    start_in_buf = (unsigned int)real_pos - (unsigned int)start_container->real_start_pos;
+    if (count > UINT32_MAX) {
+        ws_debug("trying to read too many bytes");
+        return FALSE;
+    }
 
-    switch (start_container->compression_method) {
-    case BLF_COMPRESSION_NONE:
-        while (current_container_index <= end_container_index) {
-            if (!blf_get_logcontainer_by_index(params->blf_data, current_container_index, &current_container)) {
-                /*
-                 * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
-                 * malformed file (WTAP_ERR_BAD_FILE)?
-                 */
-                *err = WTAP_ERR_INTERNAL;
-                *err_info = ws_strdup_printf("blf_read_bytes_or_eof: cannot refresh container");
-                ws_debug("cannot refresh container");
+    if (params->random) {
+        if (!g_array_binary_search(params->blf_data->log_containers, &real_pos, blf_logcontainers_search, &container_index)) {
+            /*
+             * XXX - why is this treated as an EOF rather than an error?
+             * *err appears to be 0, which means our caller treats it as an
+             * EOF, at least when reading the log object header.
+             */
+            ws_debug("cannot read data because start position cannot be mapped");
+            return FALSE;
+        }
+        container = &g_array_index(params->blf_data->log_containers, blf_log_container_t, container_index);
+    }
+    else {
+        if (params->blf_data->log_containers->len == 0) {  /* First (linear) pass */
+            if (!blf_pull_next_logcontainer(params, err, err_info)) {
                 return FALSE;
-            }
-
-            data_left = (unsigned int)(current_container->real_length - start_in_buf);
-
-            if (file_seek(params->fh, current_container->infile_data_start + start_in_buf, SEEK_SET, err) < 0) {
-                ws_debug("cannot seek data");
-                return FALSE;
-            }
-
-            if (data_left < (count - copied)) {
-                if (!wtap_read_bytes_or_eof(params->fh, buf + copied, data_left, err, err_info)) {
-                    ws_debug("cannot read data");
-                    return FALSE;
-                }
-                copied += data_left;
-                current_container_index++;
-                start_in_buf = 0;
-            } else {
-                if (!wtap_read_bytes_or_eof(params->fh, buf + copied, count - copied, err, err_info)) {
-                    ws_debug("cannot read data");
-                    return FALSE;
-                }
-                return TRUE;
             }
         }
-        break;
-
-    case BLF_COMPRESSION_ZLIB:
-        while (current_container_index <= end_container_index) {
-            if (!blf_pull_logcontainer_into_memory(params, current_container_index, err, err_info)) {
-                return FALSE;
-            }
-
-            if (!blf_get_logcontainer_by_index(params->blf_data, current_container_index, &current_container)) {
-                /*
-                 * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
-                 * malformed file (WTAP_ERR_BAD_FILE)?
-                 */
-                *err = WTAP_ERR_INTERNAL;
-                *err_info = ws_strdup_printf("blf_read_bytes_or_eof: cannot refresh container");
-                ws_debug("cannot refresh container");
-                return FALSE;
-            }
-
-            if (current_container->real_data == NULL) {
-                /*
-                 * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
-                 * malformed file (WTAP_ERR_BAD_FILE)?
-                 */
-                *err = WTAP_ERR_INTERNAL;
-                *err_info = ws_strdup_printf("blf_read_bytes_or_eof: pulling in container failed hard");
-                ws_debug("pulling in container failed hard");
-                return FALSE;
-            }
-
-            data_left = (unsigned int)(current_container->real_length - start_in_buf);
-
-            if (data_left < (count - copied)) {
-                memcpy(buf + copied, current_container->real_data + start_in_buf, (unsigned int)data_left);
-                copied += data_left;
-                current_container_index++;
-                start_in_buf = 0;
-            } else {
-                memcpy(buf + copied, current_container->real_data + start_in_buf, count - copied);
-                return TRUE;
-            }
-        }
-        /*
-         * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
-         * malformed file (WTAP_ERR_BAD_FILE)?
-         */
-        *err = WTAP_ERR_INTERNAL;
-        *err_info = ws_strdup_printf("blf_read_bytes_or_eof: ran out of items in container");
-        return FALSE;
-        break;
-
-    default:
-        *err = WTAP_ERR_UNSUPPORTED;
-        *err_info = ws_strdup_printf("blf: unknown compression method %u",
-                                    start_container->compression_method);
-        ws_debug("unknown compression method");
-        return FALSE;
+        container_index = params->blf_data->log_containers->len;
+        do {
+            container = &g_array_index(params->blf_data->log_containers, blf_log_container_t, --container_index);
+        } while (real_pos < container->real_start_pos && container_index > 0);  /* For some reason we skipped past the correct container */
     }
 
+    while (real_pos < end_pos) {
+
+        while (real_pos >= container->real_start_pos + container->real_length) {
+            container_index++;
+            if (!params->random) {  /* First (linear) pass */
+                if (!blf_pull_next_logcontainer(params, err, err_info)) {
+                    return FALSE;
+                }
+            }
+            if (container_index >= params->blf_data->log_containers->len) {
+                ws_debug("cannot find real_pos in container");
+                return FALSE;
+            }
+            container = &g_array_index(params->blf_data->log_containers, blf_log_container_t, container_index);
+            if (real_pos < container->real_start_pos) {
+                ws_debug("cannot find real_pos in container");
+                return FALSE;
+            }
+        }
+
+        if (real_pos < container->real_start_pos) {
+            ws_debug("cannot find real_pos in container");
+            return FALSE;
+        }
+
+        start_in_buf = real_pos - container->real_start_pos;
+
+        if (params->random) {
+            if (file_seek(params->fh, container->infile_data_start, SEEK_SET, err) == -1) {
+                return FALSE;
+            }
+            if (!blf_pull_logcontainer_into_memory(params, container, err, err_info)) {
+                return FALSE;
+            }
+        }
+
+        data_left = container->real_length - start_in_buf;
+
+        if (data_left < (count - copied)) {
+            memcpy(buf + copied, container->real_data + start_in_buf, data_left);
+            copied += data_left;
+            real_pos += data_left;
+        }
+        else {
+            memcpy(buf + copied, container->real_data + start_in_buf, count - copied);
+            return TRUE;
+        }
+
+    }
+
+    /*
+     * XXX - does this represent a bug (WTAP_ERR_INTERNAL) or a
+     * malformed file (WTAP_ERR_BAD_FILE)?
+     */
+    *err = WTAP_ERR_INTERNAL;
+    *err_info = ws_strdup_printf("blf_read_bytes_or_eof: ran out of containers");
     return FALSE;
 }
 
 static gboolean
-blf_read_bytes(blf_params_t *params, guint64 real_pos, void *target_buffer, unsigned int count, int *err, gchar **err_info) {
+blf_read_bytes(blf_params_t *params, guint64 real_pos, void *target_buffer, guint64 count, int *err, gchar **err_info) {
     if (!blf_read_bytes_or_eof(params, real_pos, target_buffer, count, err, err_info)) {
         if (*err == 0) {
             *err = WTAP_ERR_SHORT_READ;
         }
         return FALSE;
     }
-    return TRUE;
-}
-
-/* this is only called once on open to figure out the layout of the file */
-static gboolean
-blf_scan_file_for_logcontainers(blf_params_t *params, int *err, gchar **err_info) {
-    blf_blockheader_t        header;
-    blf_logcontainerheader_t logcontainer_header;
-    blf_log_container_t      tmp;
-
-    guint64  current_start_pos;
-    guint64  current_real_start  = 0;
-
-    while (1) {
-        current_start_pos = file_tell(params->fh);
-
-        /* Find Object */
-        while (1) {
-            if (!wtap_read_bytes_or_eof(params->fh, &header, sizeof header, err, err_info)) {
-                ws_debug("we found end of file");
-
-                /* lets ignore some bytes at the end since some implementations think it is ok to add a few zero bytes */
-                if (*err == WTAP_ERR_SHORT_READ) {
-                    *err = 0;
-                }
-
-                /* Either succeed on an EOF or fail. */
-                return *err == 0;
-            }
-
-            fix_endianness_blf_blockheader(&header);
-
-            if (memcmp(header.magic, blf_obj_magic, sizeof(blf_obj_magic))) {
-                ws_debug("object magic is not LOBJ (pos: 0x%" PRIx64 ")", current_start_pos);
-            } else {
-                break;
-            }
-
-            /*
-             * we are moving back and try again but 1 byte later
-             * TODO: better understand how this paddings works...
-             * Note that, in at least one capture - the Example.blf
-             * file attached to
-             * https://gitlab.com/wireshark/wireshark/-/issues/19269 -
-             * one of the log container objects is aligned on a 2-byte
-             * bundary but *not* on a 4-byte boundary, with 3 bytes
-             * of padding.
-             */
-            current_start_pos++;
-            if (file_seek(params->fh, current_start_pos, SEEK_SET, err) < 0) {
-                return FALSE;
-            }
-        }
-
-        if (header.header_length < sizeof(blf_blockheader_t)) {
-            *err = WTAP_ERR_BAD_FILE;
-            *err_info = ws_strdup("blf: log container header length too short");
-            return FALSE;
-        }
-
-        if (header.header_type != BLF_HEADER_TYPE_DEFAULT) {
-            *err = WTAP_ERR_UNSUPPORTED;
-            *err_info = ws_strdup_printf("blf: unknown header type (%u), I know only BLF_HEADER_TYPE_DEFAULT (1)", header.header_type);
-            return FALSE;
-        }
-
-        if (header.object_length < header.header_length) {
-            *err = WTAP_ERR_BAD_FILE;
-            *err_info = ws_strdup("blf: log container header object length less than log container header length");
-            return FALSE;
-        }
-
-        switch (header.object_type) {
-        case BLF_OBJTYPE_LOG_CONTAINER:
-            /* skip unknown header part if needed */
-            if (header.header_length - sizeof(blf_blockheader_t) > 0) {
-                /* seek over unknown header part */
-                if (file_seek(params->fh, current_start_pos + header.header_length, SEEK_SET, err) < 0) {
-                    ws_debug("cannot seek file for skipping unknown header bytes in log container");
-                    return FALSE;
-                }
-            }
-
-            /* Read the log container header */
-            if (!wtap_read_bytes_or_eof(params->fh, &logcontainer_header, sizeof(blf_logcontainerheader_t), err, err_info)) {
-                ws_debug("not enough bytes for log container header");
-                return FALSE;
-            }
-
-            fix_endianness_blf_logcontainerheader(&logcontainer_header);
-
-            blf_init_logcontainer(&tmp);
-
-            tmp.infile_start_pos = current_start_pos;
-            tmp.infile_data_start = file_tell(params->fh);
-            tmp.infile_length = header.object_length;
-
-            tmp.real_start_pos = current_real_start;
-            tmp.real_length = logcontainer_header.uncompressed_size;
-            tmp.compression_method = logcontainer_header.compression_method;
-
-            /* set up next start position */
-            current_real_start += logcontainer_header.uncompressed_size;
-
-            if (file_seek(params->fh, current_start_pos + MAX(MAX(16, header.object_length), header.header_length), SEEK_SET, err) < 0) {
-                ws_debug("cannot seek file for skipping log container bytes");
-                return FALSE;
-            }
-
-            blf_add_logcontainer(params->blf_data, tmp);
-
-            break;
-        default:
-            ws_debug("we found a non BLF log container on top level. this is unexpected.");
-
-            /* TODO: maybe create "fake Log Container" for this */
-            if (file_seek(params->fh, current_start_pos + MAX(MAX(16, header.object_length), header.header_length), SEEK_SET, err) < 0) {
-                return FALSE;
-            }
-        }
-    }
-
     return TRUE;
 }
 
@@ -3087,7 +3107,8 @@ blf_read_block(blf_params_t *params, gint64 start_pos, int *err, gchar **err_inf
 
             if (memcmp(header.magic, blf_obj_magic, sizeof(blf_obj_magic))) {
                 ws_debug("object magic is not LOBJ (pos: 0x%" PRIx64 ")", start_pos);
-            } else {
+            }
+            else {
                 break;
             }
 
@@ -3303,6 +3324,8 @@ static gboolean blf_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err, gchar 
 
     blf_tmp.wth = wth;
     blf_tmp.fh  = wth->fh;
+    blf_tmp.random = FALSE;
+    blf_tmp.pipe = wth->ispipe;
     blf_tmp.rec = rec;
     blf_tmp.buf = buf;
     blf_tmp.blf_data = (blf_t *)wth->priv;
@@ -3320,6 +3343,8 @@ static gboolean blf_seek_read(wtap *wth, gint64 seek_off, wtap_rec *rec, Buffer 
 
     blf_tmp.wth = wth;
     blf_tmp.fh  = wth->random_fh;
+    blf_tmp.random = TRUE;
+    blf_tmp.pipe = wth->ispipe;
     blf_tmp.rec = rec;
     blf_tmp.buf = buf;
     blf_tmp.blf_data = (blf_t *)wth->priv;
@@ -3333,18 +3358,17 @@ static gboolean blf_seek_read(wtap *wth, gint64 seek_off, wtap_rec *rec, Buffer 
 }
 
 static void blf_free(blf_t *blf) {
-    if (blf != NULL && blf->log_containers != NULL) {
-        for (guint i = 0; i < blf->log_containers->len; i++) {
-            blf_log_container_t *log_container = &g_array_index(blf->log_containers, blf_log_container_t, i);
-            if (log_container->real_data != NULL) {
-                g_free(log_container->real_data);
-            }
-        }
-        g_array_free(blf->log_containers, TRUE);
-        blf->log_containers = NULL;
-    }
-
     if (blf != NULL) {
+        if (blf->log_containers != NULL) {
+            for (guint i = 0; i < blf->log_containers->len; i++) {
+                blf_log_container_t* log_container = &g_array_index(blf->log_containers, blf_log_container_t, i);
+                if (log_container->real_data != NULL) {
+                    g_free(log_container->real_data);
+                }
+            }
+            g_array_free(blf->log_containers, TRUE);
+            blf->log_containers = NULL;
+        }
         if (blf->channel_to_iface_ht != NULL) {
             g_hash_table_destroy(blf->channel_to_iface_ht);
             blf->channel_to_iface_ht = NULL;
@@ -3370,7 +3394,7 @@ blf_open(wtap *wth, int *err, gchar **err_info) {
 
     ws_debug("opening file");
 
-    if (!wtap_read_bytes_or_eof(wth->fh, &header, sizeof header, err, err_info)) {
+    if (!wtap_read_bytes_or_eof(wth->fh, &header, sizeof(blf_fileheader_t), err, err_info)) {
 
         ws_debug("wtap_read_bytes_or_eof() failed, err = %d.", *err);
         if (*err == 0 || *err == WTAP_ERR_SHORT_READ) {
@@ -3396,14 +3420,14 @@ blf_open(wtap *wth, int *err, gchar **err_info) {
 
     /* This seems to be an BLF! */
     /* Check for a valid header length */
-    if (header.header_length < sizeof(blf_blockheader_t)) {
+    if (header.header_length < sizeof(blf_fileheader_t)) {
         *err = WTAP_ERR_BAD_FILE;
         *err_info = ws_strdup("blf: file header length too short");
         return WTAP_OPEN_ERROR;
     }
 
     /* skip past the header, which may include padding/reserved space */
-    if (file_seek(wth->fh, header.header_length, SEEK_SET, err) < 0) {
+    if (!wtap_read_bytes(wth->fh, NULL, header.header_length - sizeof(blf_fileheader_t), err, err_info)) {
         return WTAP_OPEN_ERROR;
     }
 
@@ -3418,8 +3442,7 @@ blf_open(wtap *wth, int *err, gchar **err_info) {
 
     /* Prepare our private context. */
     blf = g_new(blf_t, 1);
-    blf->log_containers = NULL;
-    blf->current_log_container = 0;
+    blf->log_containers = g_array_new(FALSE, FALSE, sizeof(blf_log_container_t));
     blf->current_real_seek_pos = 0;
     blf->start_offset_ns = 1000 * 1000 * 1000 * (guint64)mktime(&timestamp);
     blf->start_offset_ns += 1000 * 1000 * header.start_date.ms;
@@ -3432,16 +3455,11 @@ blf_open(wtap *wth, int *err, gchar **err_info) {
     params.blf_data = blf;
     params.buf = NULL;
     params.fh = wth->fh;
+    params.random = FALSE;
+    params.pipe = wth->ispipe;
     params.rec = NULL;
     params.wth = wth;
     params.blf_data->current_real_seek_pos = 0;
-
-    /* lets check out the layout of all log containers */
-    if (!blf_scan_file_for_logcontainers(&params, err, err_info)) {
-        /* That didn't work. */
-        blf_free(blf);
-        return WTAP_OPEN_ERROR;
-    }
 
     wth->priv = (void *)blf;
     wth->file_encap = WTAP_ENCAP_NONE;
