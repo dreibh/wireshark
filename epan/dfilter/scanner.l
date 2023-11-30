@@ -519,12 +519,10 @@ HexExponent		([pP][+-]?[[:digit:]]+)
 	return set_lval_literal(yyextra, yytext, yytext);
 }
 
-:?{HyphenBytes}	{
+:{HyphenBytes}	{
 	/* Bytes. */
 	update_location(yyextra, yytext);
-	if (yytext[0] == ':')
-		return set_lval_literal(yyextra, yytext + 1, yytext);
-	return set_lval_literal(yyextra, yytext, yytext);
+	return set_lval_literal(yyextra, yytext + 1, yytext);
 }
 
 :{DotBytes}	{

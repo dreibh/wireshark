@@ -47,43 +47,43 @@ static int udp_tap = -1;
 static int udp_follow_tap = -1;
 static int exported_pdu_tap = -1;
 
-static int proto_udp = -1;
-static int proto_udplite = -1;
+static int proto_udp;
+static int proto_udplite;
 
-static int hf_udp_checksum = -1;
-static int hf_udp_checksum_calculated = -1;
-static int hf_udp_checksum_status = -1;
-static int hf_udp_dstport = -1;
-static int hf_udp_length = -1;
-static int hf_udp_payload = -1;
-static int hf_udp_pdu_size = -1;
-static int hf_udp_port = -1;
-static int hf_udp_proc_dst_cmd = -1;
-static int hf_udp_proc_dst_pid = -1;
-static int hf_udp_proc_dst_uid = -1;
-static int hf_udp_proc_dst_uname = -1;
-static int hf_udp_proc_src_cmd = -1;
-static int hf_udp_proc_src_pid = -1;
-static int hf_udp_proc_src_uid = -1;
-static int hf_udp_proc_src_uname = -1;
-static int hf_udp_srcport = -1;
-static int hf_udp_stream = -1;
-static int hf_udp_ts_delta = -1;
-static int hf_udp_ts_relative = -1;
-static int hf_udplite_checksum_coverage = -1;
+static int hf_udp_checksum;
+static int hf_udp_checksum_calculated;
+static int hf_udp_checksum_status;
+static int hf_udp_dstport;
+static int hf_udp_length;
+static int hf_udp_payload;
+static int hf_udp_pdu_size;
+static int hf_udp_port;
+static int hf_udp_proc_dst_cmd;
+static int hf_udp_proc_dst_pid;
+static int hf_udp_proc_dst_uid;
+static int hf_udp_proc_dst_uname;
+static int hf_udp_proc_src_cmd;
+static int hf_udp_proc_src_pid;
+static int hf_udp_proc_src_uid;
+static int hf_udp_proc_src_uname;
+static int hf_udp_srcport;
+static int hf_udp_stream;
+static int hf_udp_ts_delta;
+static int hf_udp_ts_relative;
+static int hf_udplite_checksum_coverage;
 
-static gint ett_udp = -1;
-static gint ett_udp_checksum = -1;
-static gint ett_udp_process_info = -1;
-static gint ett_udp_timestamps = -1;
+static gint ett_udp;
+static gint ett_udp_checksum;
+static gint ett_udp_process_info;
+static gint ett_udp_timestamps;
 
-static expert_field ei_udp_possible_traceroute = EI_INIT;
-static expert_field ei_udp_length_bad = EI_INIT;
-static expert_field ei_udplite_checksum_coverage_bad = EI_INIT;
-static expert_field ei_udp_checksum_zero = EI_INIT;
-static expert_field ei_udp_checksum_partial = EI_INIT;
-static expert_field ei_udp_checksum_bad = EI_INIT;
-static expert_field ei_udp_length_bad_zero = EI_INIT;
+static expert_field ei_udp_possible_traceroute;
+static expert_field ei_udp_length_bad;
+static expert_field ei_udplite_checksum_coverage_bad;
+static expert_field ei_udp_checksum_zero;
+static expert_field ei_udp_checksum_partial;
+static expert_field ei_udp_checksum_bad;
+static expert_field ei_udp_length_bad_zero;
 
 /* Preferences */
 
@@ -1175,7 +1175,7 @@ dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 ip_proto)
                  * to match what we pass in. */
                 item = proto_tree_add_checksum(udp_tree, tvb, offset + 6, hf_udp_checksum, hf_udp_checksum_status, &ei_udp_checksum_bad,
                                                                                     pinfo, g_htons(partial_cksum), ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
-                proto_item_append_text(item, " (matches partial checksum, not 0x%4x, likely caused by \"UDP checksum offload\")", shouldbe_cksum);
+                proto_item_append_text(item, " (matches partial checksum, not 0x%04x, likely caused by \"UDP checksum offload\")", shouldbe_cksum);
                 expert_add_info(pinfo, item, &ei_udp_checksum_partial);
                 computed_cksum = 0;
                 /* XXX: Find some way hint to QUIC (or other dissectors) that

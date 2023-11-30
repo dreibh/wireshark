@@ -89,175 +89,187 @@ static dissector_handle_t bitcoin_handle;
 
 static dissector_table_t bitcoin_command_table;
 
-static int proto_bitcoin = -1;
+static int proto_bitcoin;
 
-static int hf_address_address = -1;
-static int hf_address_port = -1;
-static int hf_address_services = -1;
-static int hf_bitcoin_checksum = -1;
-static int hf_bitcoin_command = -1;
-static int hf_bitcoin_length = -1;
-static int hf_bitcoin_magic = -1;
-static int hf_bitcoin_msg_addr = -1;
-static int hf_bitcoin_msg_block = -1;
-static int hf_bitcoin_msg_feefilter = -1;
-static int hf_bitcoin_msg_filteradd = -1;
-static int hf_bitcoin_msg_filterload = -1;
-static int hf_bitcoin_msg_getblocks = -1;
-static int hf_bitcoin_msg_getdata = -1;
-static int hf_bitcoin_msg_getheaders = -1;
-static int hf_bitcoin_msg_headers = -1;
-static int hf_bitcoin_msg_inv = -1;
-static int hf_bitcoin_msg_merkleblock = -1;
-static int hf_bitcoin_msg_notfound = -1;
-static int hf_bitcoin_msg_ping = -1;
-static int hf_bitcoin_msg_pong = -1;
-static int hf_bitcoin_msg_reject = -1;
-static int hf_bitcoin_msg_sendcmpct = -1;
-static int hf_bitcoin_msg_tx = -1;
-static int hf_bitcoin_msg_version = -1;
-static int hf_data_value = -1;
-static int hf_data_varint_count16 = -1;
-static int hf_data_varint_count32 = -1;
-static int hf_data_varint_count64 = -1;
-static int hf_data_varint_count8 = -1;
-static int hf_msg_addr_address = -1;
-static int hf_msg_addr_count16 = -1;
-static int hf_msg_addr_count32 = -1;
-static int hf_msg_addr_count64 = -1;
-static int hf_msg_addr_count8 = -1;
-static int hf_msg_addr_timestamp = -1;
-static int hf_msg_block_bits = -1;
-static int hf_msg_block_merkle_root = -1;
-static int hf_msg_block_nonce = -1;
-static int hf_msg_block_prev_block = -1;
-static int hf_msg_block_time = -1;
-static int hf_msg_block_transactions16 = -1;
-static int hf_msg_block_transactions32 = -1;
-static int hf_msg_block_transactions64 = -1;
-static int hf_msg_block_transactions8 = -1;
-static int hf_msg_block_version = -1;
-static int hf_msg_feefilter_value = -1;
-static int hf_msg_filteradd_data = -1;
-static int hf_msg_filterload_filter = -1;
-static int hf_msg_filterload_nflags = -1;
-static int hf_msg_filterload_nhashfunc = -1;
-static int hf_msg_filterload_ntweak = -1;
-static int hf_msg_getblocks_count16 = -1;
-static int hf_msg_getblocks_count32 = -1;
-static int hf_msg_getblocks_count64 = -1;
-static int hf_msg_getblocks_count8 = -1;
-static int hf_msg_getblocks_start = -1;
-static int hf_msg_getblocks_stop = -1;
-static int hf_msg_getdata_count16 = -1;
-static int hf_msg_getdata_count32 = -1;
-static int hf_msg_getdata_count64 = -1;
-static int hf_msg_getdata_count8 = -1;
-static int hf_msg_getdata_hash = -1;
-static int hf_msg_getdata_type = -1;
-static int hf_msg_getheaders_count16 = -1;
-static int hf_msg_getheaders_count32 = -1;
-static int hf_msg_getheaders_count64 = -1;
-static int hf_msg_getheaders_count8 = -1;
-static int hf_msg_getheaders_start = -1;
-static int hf_msg_getheaders_stop = -1;
-static int hf_msg_getheaders_version = -1;
-static int hf_msg_headers_bits = -1;
-static int hf_msg_headers_count16 = -1;
-static int hf_msg_headers_count32 = -1;
-static int hf_msg_headers_count64 = -1;
-static int hf_msg_headers_count8 = -1;
-static int hf_msg_headers_merkle_root = -1;
-static int hf_msg_headers_nonce = -1;
-static int hf_msg_headers_prev_block = -1;
-static int hf_msg_headers_time = -1;
-static int hf_msg_headers_version = -1;
-static int hf_msg_inv_count16 = -1;
-static int hf_msg_inv_count32 = -1;
-static int hf_msg_inv_count64 = -1;
-static int hf_msg_inv_count8 = -1;
-static int hf_msg_inv_hash = -1;
-static int hf_msg_inv_type = -1;
-static int hf_msg_merkleblock_bits = -1;
-static int hf_msg_merkleblock_flags_data = -1;
-static int hf_msg_merkleblock_flags_size16 = -1;
-static int hf_msg_merkleblock_flags_size32 = -1;
-static int hf_msg_merkleblock_flags_size64 = -1;
-static int hf_msg_merkleblock_flags_size8 = -1;
-static int hf_msg_merkleblock_hashes_count16 = -1;
-static int hf_msg_merkleblock_hashes_count32 = -1;
-static int hf_msg_merkleblock_hashes_count64 = -1;
-static int hf_msg_merkleblock_hashes_count8 = -1;
-static int hf_msg_merkleblock_hashes_hash = -1;
-static int hf_msg_merkleblock_merkle_root = -1;
-static int hf_msg_merkleblock_nonce = -1;
-static int hf_msg_merkleblock_prev_block = -1;
-static int hf_msg_merkleblock_time = -1;
-static int hf_msg_merkleblock_transactions = -1;
-static int hf_msg_merkleblock_version = -1;
-static int hf_msg_notfound_count16 = -1;
-static int hf_msg_notfound_count32 = -1;
-static int hf_msg_notfound_count64 = -1;
-static int hf_msg_notfound_count8 = -1;
-static int hf_msg_notfound_hash = -1;
-static int hf_msg_notfound_type = -1;
-static int hf_msg_ping_nonce = -1;
-static int hf_msg_pong_nonce = -1;
-static int hf_msg_reject_ccode = -1;
-static int hf_msg_reject_data = -1;
-static int hf_msg_reject_message = -1;
-static int hf_msg_reject_reason = -1;
-static int hf_msg_sendcmpct_announce = -1;
-static int hf_msg_sendcmpct_version = -1;
-static int hf_msg_tx_in = -1;
-static int hf_msg_tx_in_count16 = -1;
-static int hf_msg_tx_in_count32 = -1;
-static int hf_msg_tx_in_count64 = -1;
-static int hf_msg_tx_in_count8 = -1;
-static int hf_msg_tx_in_prev_outp_hash = -1;
-static int hf_msg_tx_in_prev_outp_index = -1;
-static int hf_msg_tx_in_prev_output = -1;
-static int hf_msg_tx_in_script16 = -1;
-static int hf_msg_tx_in_script32 = -1;
-static int hf_msg_tx_in_script64 = -1;
-static int hf_msg_tx_in_script8 = -1;
-static int hf_msg_tx_in_seq = -1;
-static int hf_msg_tx_in_sig_script = -1;
-static int hf_msg_tx_lock_time = -1;
-static int hf_msg_tx_out = -1;
-static int hf_msg_tx_out_count16 = -1;
-static int hf_msg_tx_out_count32 = -1;
-static int hf_msg_tx_out_count64 = -1;
-static int hf_msg_tx_out_count8 = -1;
-static int hf_msg_tx_out_script = -1;
-static int hf_msg_tx_out_script16 = -1;
-static int hf_msg_tx_out_script32 = -1;
-static int hf_msg_tx_out_script64 = -1;
-static int hf_msg_tx_out_script8 = -1;
-static int hf_msg_tx_out_value = -1;
-static int hf_msg_tx_version = -1;
-static int hf_msg_version_addr_me = -1;
-static int hf_msg_version_addr_you = -1;
-static int hf_msg_version_nonce = -1;
-static int hf_msg_version_relay = -1;
-static int hf_msg_version_services = -1;
-static int hf_msg_version_start_height = -1;
-static int hf_msg_version_timestamp = -1;
-static int hf_msg_version_user_agent = -1;
-static int hf_msg_version_version = -1;
-static int hf_services_network = -1;
-static int hf_services_getutxo = -1;
-static int hf_services_bloom = -1;
-static int hf_services_witness = -1;
-static int hf_services_xthin = -1;
-static int hf_services_compactfilters = -1;
-static int hf_services_networklimited = -1;
-static int hf_services_p2pv2 = -1;
-static int hf_string_value = -1;
-static int hf_string_varint_count16 = -1;
-static int hf_string_varint_count32 = -1;
-static int hf_string_varint_count64 = -1;
-static int hf_string_varint_count8 = -1;
+static int hf_address_address;
+static int hf_address_port;
+static int hf_address_services;
+static int hf_bitcoin_checksum;
+static int hf_bitcoin_command;
+static int hf_bitcoin_length;
+static int hf_bitcoin_magic;
+static int hf_bitcoin_msg_addr;
+static int hf_bitcoin_msg_block;
+static int hf_bitcoin_msg_feefilter;
+static int hf_bitcoin_msg_filteradd;
+static int hf_bitcoin_msg_filterload;
+static int hf_bitcoin_msg_getblocks;
+static int hf_bitcoin_msg_getdata;
+static int hf_bitcoin_msg_getheaders;
+static int hf_bitcoin_msg_headers;
+static int hf_bitcoin_msg_inv;
+static int hf_bitcoin_msg_merkleblock;
+static int hf_bitcoin_msg_notfound;
+static int hf_bitcoin_msg_ping;
+static int hf_bitcoin_msg_pong;
+static int hf_bitcoin_msg_reject;
+static int hf_bitcoin_msg_sendcmpct;
+static int hf_bitcoin_msg_tx;
+static int hf_bitcoin_msg_version;
+static int hf_data_value;
+static int hf_data_varint_count16;
+static int hf_data_varint_count32;
+static int hf_data_varint_count64;
+static int hf_data_varint_count8;
+static int hf_msg_addr_address;
+static int hf_msg_addr_count16;
+static int hf_msg_addr_count32;
+static int hf_msg_addr_count64;
+static int hf_msg_addr_count8;
+static int hf_msg_addr_timestamp;
+static int hf_msg_block_bits;
+static int hf_msg_block_merkle_root;
+static int hf_msg_block_nonce;
+static int hf_msg_block_prev_block;
+static int hf_msg_block_time;
+static int hf_msg_block_transactions16;
+static int hf_msg_block_transactions32;
+static int hf_msg_block_transactions64;
+static int hf_msg_block_transactions8;
+static int hf_msg_block_version;
+static int hf_msg_feefilter_value;
+static int hf_msg_filteradd_data;
+static int hf_msg_filterload_filter;
+static int hf_msg_filterload_nflags;
+static int hf_msg_filterload_nhashfunc;
+static int hf_msg_filterload_ntweak;
+static int hf_msg_getblocks_count16;
+static int hf_msg_getblocks_count32;
+static int hf_msg_getblocks_count64;
+static int hf_msg_getblocks_count8;
+static int hf_msg_getblocks_start;
+static int hf_msg_getblocks_stop;
+static int hf_msg_getdata_count16;
+static int hf_msg_getdata_count32;
+static int hf_msg_getdata_count64;
+static int hf_msg_getdata_count8;
+static int hf_msg_getdata_hash;
+static int hf_msg_getdata_type;
+static int hf_msg_getheaders_count16;
+static int hf_msg_getheaders_count32;
+static int hf_msg_getheaders_count64;
+static int hf_msg_getheaders_count8;
+static int hf_msg_getheaders_start;
+static int hf_msg_getheaders_stop;
+static int hf_msg_getheaders_version;
+static int hf_msg_headers_bits;
+static int hf_msg_headers_count16;
+static int hf_msg_headers_count32;
+static int hf_msg_headers_count64;
+static int hf_msg_headers_count8;
+static int hf_msg_headers_merkle_root;
+static int hf_msg_headers_nonce;
+static int hf_msg_headers_prev_block;
+static int hf_msg_headers_time;
+static int hf_msg_headers_version;
+static int hf_msg_inv_count16;
+static int hf_msg_inv_count32;
+static int hf_msg_inv_count64;
+static int hf_msg_inv_count8;
+static int hf_msg_inv_hash;
+static int hf_msg_inv_type;
+static int hf_msg_merkleblock_bits;
+static int hf_msg_merkleblock_flags_data;
+static int hf_msg_merkleblock_flags_size16;
+static int hf_msg_merkleblock_flags_size32;
+static int hf_msg_merkleblock_flags_size64;
+static int hf_msg_merkleblock_flags_size8;
+static int hf_msg_merkleblock_hashes_count16;
+static int hf_msg_merkleblock_hashes_count32;
+static int hf_msg_merkleblock_hashes_count64;
+static int hf_msg_merkleblock_hashes_count8;
+static int hf_msg_merkleblock_hashes_hash;
+static int hf_msg_merkleblock_merkle_root;
+static int hf_msg_merkleblock_nonce;
+static int hf_msg_merkleblock_prev_block;
+static int hf_msg_merkleblock_time;
+static int hf_msg_merkleblock_transactions;
+static int hf_msg_merkleblock_version;
+static int hf_msg_notfound_count16;
+static int hf_msg_notfound_count32;
+static int hf_msg_notfound_count64;
+static int hf_msg_notfound_count8;
+static int hf_msg_notfound_hash;
+static int hf_msg_notfound_type;
+static int hf_msg_ping_nonce;
+static int hf_msg_pong_nonce;
+static int hf_msg_reject_ccode;
+static int hf_msg_reject_data;
+static int hf_msg_reject_message;
+static int hf_msg_reject_reason;
+static int hf_msg_sendcmpct_announce;
+static int hf_msg_sendcmpct_version;
+static int hf_msg_tx_in;
+static int hf_msg_tx_in_count16;
+static int hf_msg_tx_in_count32;
+static int hf_msg_tx_in_count64;
+static int hf_msg_tx_in_count8;
+static int hf_msg_tx_in_prev_outp_hash;
+static int hf_msg_tx_in_prev_outp_index;
+static int hf_msg_tx_in_prev_output;
+static int hf_msg_tx_in_script16;
+static int hf_msg_tx_in_script32;
+static int hf_msg_tx_in_script64;
+static int hf_msg_tx_in_script8;
+static int hf_msg_tx_in_seq;
+static int hf_msg_tx_in_sig_script;
+static int hf_msg_tx_lock_time;
+static int hf_msg_tx_out;
+static int hf_msg_tx_out_count16;
+static int hf_msg_tx_out_count32;
+static int hf_msg_tx_out_count64;
+static int hf_msg_tx_out_count8;
+static int hf_msg_tx_out_script;
+static int hf_msg_tx_out_script16;
+static int hf_msg_tx_out_script32;
+static int hf_msg_tx_out_script64;
+static int hf_msg_tx_out_script8;
+static int hf_msg_tx_out_value;
+static int hf_msg_tx_witness;
+static int hf_msg_tx_witness_components16;
+static int hf_msg_tx_witness_components32;
+static int hf_msg_tx_witness_components64;
+static int hf_msg_tx_witness_components8;
+static int hf_msg_tx_witness_component;
+static int hf_msg_tx_witness_component_length16;
+static int hf_msg_tx_witness_component_length32;
+static int hf_msg_tx_witness_component_length64;
+static int hf_msg_tx_witness_component_length8;
+static int hf_msg_tx_witness_component_data;
+static int hf_msg_tx_version;
+static int hf_msg_tx_flag;
+static int hf_msg_version_addr_me;
+static int hf_msg_version_addr_you;
+static int hf_msg_version_nonce;
+static int hf_msg_version_relay;
+static int hf_msg_version_services;
+static int hf_msg_version_start_height;
+static int hf_msg_version_timestamp;
+static int hf_msg_version_user_agent;
+static int hf_msg_version_version;
+static int hf_services_network;
+static int hf_services_getutxo;
+static int hf_services_bloom;
+static int hf_services_witness;
+static int hf_services_xthin;
+static int hf_services_compactfilters;
+static int hf_services_networklimited;
+static int hf_services_p2pv2;
+static int hf_string_value;
+static int hf_string_varint_count16;
+static int hf_string_varint_count32;
+static int hf_string_varint_count64;
+static int hf_string_varint_count8;
 
 static int * const services_hf_flags[] = {
   &hf_services_network,
@@ -271,23 +283,25 @@ static int * const services_hf_flags[] = {
   NULL
 };
 
-static gint ett_bitcoin = -1;
-static gint ett_bitcoin_msg = -1;
-static gint ett_services = -1;
-static gint ett_address = -1;
-static gint ett_string = -1;
-static gint ett_addr_list = -1;
-static gint ett_inv_list = -1;
-static gint ett_getdata_list = -1;
-static gint ett_notfound_list = -1;
-static gint ett_getblocks_list = -1;
-static gint ett_getheaders_list = -1;
-static gint ett_tx_in_list = -1;
-static gint ett_tx_in_outp = -1;
-static gint ett_tx_out_list = -1;
+static gint ett_bitcoin;
+static gint ett_bitcoin_msg;
+static gint ett_services;
+static gint ett_address;
+static gint ett_string;
+static gint ett_addr_list;
+static gint ett_inv_list;
+static gint ett_getdata_list;
+static gint ett_notfound_list;
+static gint ett_getblocks_list;
+static gint ett_getheaders_list;
+static gint ett_tx_in_list;
+static gint ett_tx_in_outp;
+static gint ett_tx_out_list;
+static gint ett_tx_witness_list;
+static gint ett_tx_witness_component_list;
 
-static expert_field ei_bitcoin_command_unknown = EI_INIT;
-static expert_field ei_bitcoin_script_len = EI_INIT;
+static expert_field ei_bitcoin_command_unknown;
+static expert_field ei_bitcoin_script_len;
 
 
 static gboolean bitcoin_desegment  = TRUE;
@@ -769,6 +783,14 @@ dissect_bitcoin_msg_tx_common(tvbuff_t *tvb, guint32 offset, packet_info *pinfo,
   proto_tree_add_item(tree, hf_msg_tx_version, tvb, offset, 4, ENC_LITTLE_ENDIAN);
   offset += 4;
 
+  /* If present, "flag" always starts with 0x00. */
+  /* Otherwise we proceed straight to "in_count". */
+  guint8 flag = tvb_get_guint8(tvb, offset);
+  if (flag == 0) {
+    proto_tree_add_item(tree, hf_msg_tx_flag, tvb, offset, 2, ENC_NA);
+    offset += 2;
+  }
+
   /* TxIn[] */
   get_varint(tvb, offset, &count_length, &in_count);
   add_varint_item(tree, tvb, offset, count_length, hf_msg_tx_in_count8, hf_msg_tx_in_count16,
@@ -787,7 +809,7 @@ dissect_bitcoin_msg_tx_common(tvbuff_t *tvb, guint32 offset, packet_info *pinfo,
    *   [ 4]  index              uint32_t
    *
    */
-  for (; in_count > 0; in_count--)
+  for (guint64 index = 0; index < in_count; index++)
   {
     proto_tree *subtree;
     proto_tree *prevtree;
@@ -876,6 +898,55 @@ dissect_bitcoin_msg_tx_common(tvbuff_t *tvb, guint32 offset, packet_info *pinfo,
 
     proto_tree_add_item(subtree, hf_msg_tx_out_script, tvb, offset, (guint)script_length, ENC_NA);
     offset += (guint)script_length;
+  }
+
+  if (flag == 0) {
+    /*  TxWitness
+    */
+    for (; in_count > 0; in_count--)
+    {
+      guint32 witness_start_offset = offset;
+      proto_item *ti;
+      proto_tree *subtree;
+
+      ti = proto_tree_add_item(tree, hf_msg_tx_witness, tvb, offset, -1, ENC_NA);
+      subtree = proto_item_add_subtree(ti, ett_tx_witness_list);
+
+      // count of witness data components
+      gint        component_count_length;
+      guint64     component_count;
+
+      get_varint(tvb, offset, &component_count_length, &component_count);
+      add_varint_item(subtree, tvb, offset, component_count_length, hf_msg_tx_witness_components8,
+                      hf_msg_tx_witness_components16, hf_msg_tx_witness_components32,
+                      hf_msg_tx_witness_components64);
+      offset += component_count_length;
+
+      for (; component_count > 0; component_count--)
+      {
+        proto_item *subti;
+        proto_tree *subsubtree;
+
+        gint        component_size_length;
+        guint64     component_size;
+
+        get_varint(tvb, offset, &component_size_length, &component_size);
+
+        subti = proto_tree_add_item(subtree, hf_msg_tx_witness_component, tvb, offset,
+                                    component_size_length + (gint) component_size, ENC_NA);
+        subsubtree = proto_item_add_subtree(subti, ett_tx_witness_component_list);
+
+        add_varint_item(subsubtree, tvb, offset, component_size_length, hf_msg_tx_witness_component_length8,
+                        hf_msg_tx_witness_component_length16, hf_msg_tx_witness_component_length32,
+                        hf_msg_tx_witness_component_length64);
+        offset += component_size_length;
+
+        proto_tree_add_item(subsubtree, hf_msg_tx_witness_component_data, tvb, offset, (gint) component_size, ENC_NA);
+        offset += component_size;
+      }
+
+      proto_item_set_len(ti, offset - witness_start_offset);
+    }
   }
 
   proto_tree_add_item(tree, hf_msg_tx_lock_time, tvb, offset, 4, ENC_LITTLE_ENDIAN);
@@ -1629,6 +1700,11 @@ proto_register_bitcoin(void)
         FT_UINT32, BASE_DEC, NULL, 0x0,
         NULL, HFILL }
     },
+    { &hf_msg_tx_flag,
+      { "Flag", "bitcoin.tx.flag",
+        FT_BYTES, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }
+    },
     { &hf_msg_tx_in_script8,
       { "Script Length", "bitcoin.tx.in.script_length",
         FT_UINT8, BASE_DEC, NULL, 0x0,
@@ -1731,6 +1807,61 @@ proto_register_bitcoin(void)
     },
     { &hf_msg_tx_out_script,
       { "Script", "bitcoin.tx.out.script",
+        FT_BYTES, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness,
+      { "Transaction witness", "bitcoin.tx.witness",
+        FT_NONE, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_components8,
+      { "Number of components", "bitcoin.tx.witness.component_count",
+        FT_UINT8, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_components16,
+      { "Number of components", "bitcoin.tx.witness.component_count",
+        FT_UINT16, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_components32,
+      { "Number of components", "bitcoin.tx.witness.component_count",
+        FT_UINT32, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_components64,
+      { "Number of components", "bitcoin.tx.witness.component_count64",
+        FT_UINT64, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_component,
+      { "Witness component", "bitcoin.tx.witness.component",
+        FT_NONE, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_component_length8,
+      { "Length", "bitcoin.tx.witness.component.length",
+        FT_UINT8, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_component_length16,
+      { "Length", "bitcoin.tx.witness.component.length",
+        FT_UINT16, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_component_length32,
+      { "Length", "bitcoin.tx.witness.component.length",
+        FT_UINT32, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_component_length64,
+      { "Length", "bitcoin.tx.witness.component.length64",
+        FT_UINT64, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_msg_tx_witness_component_data,
+      { "Data", "bitcoin.tx.witness.component.data",
         FT_BYTES, BASE_NONE, NULL, 0x0,
         NULL, HFILL }
     },
@@ -2046,42 +2177,42 @@ proto_register_bitcoin(void)
     },
     { &hf_services_network,
       { "Network node", "bitcoin.services.network",
-        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x1,
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000001,
         NULL, HFILL }
     },
     { &hf_services_getutxo,
       { "Getutxo node", "bitcoin.services.getutxo",
-        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x2,
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000002,
         NULL, HFILL }
     },
     { &hf_services_bloom,
       { "Bloom filter node", "bitcoin.services.bloom",
-        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x4,
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000004,
         NULL, HFILL }
     },
     { &hf_services_witness,
       { "Witness node", "bitcoin.services.witness",
-        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x8,
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000008,
         NULL, HFILL }
     },
     { &hf_services_xthin,
       { "Xtreme Thinblocks node", "bitcoin.services.xthin",
-        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x10,
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000010,
         NULL, HFILL }
     },
     { &hf_services_compactfilters,
       { "Compact filters node", "bitcoin.services.compactfilters",
-        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x40,
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000040,
         NULL, HFILL }
     },
     { &hf_services_networklimited,
       { "Limited network node", "bitcoin.services.networklimited",
-        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x400,
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000400,
         NULL, HFILL }
     },
     { &hf_services_p2pv2,
       { "Version 2 P2P node", "bitcoin.services.p2pv2",
-        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x800,
+        FT_BOOLEAN, 32, TFS(&tfs_set_notset), 0x00000800,
         NULL, HFILL }
     },
     { &hf_address_services,
@@ -2166,6 +2297,8 @@ proto_register_bitcoin(void)
     &ett_tx_in_list,
     &ett_tx_in_outp,
     &ett_tx_out_list,
+    &ett_tx_witness_list,
+    &ett_tx_witness_component_list,
   };
 
   static ei_register_info ei[] = {

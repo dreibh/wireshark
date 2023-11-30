@@ -88,6 +88,11 @@ The following features are new (or have been significantly updated) since versio
   but it is advisable to check that the "dfilter_macros" (old) and
   "dmacros" (new) files in the profile directory are consistent.
 
+* When selecting "Manage Interfaces" from "Capture Options", Wireshark only
+  attempts to reconnect to rpcap (remote) hosts that were connected to in the
+  last session, instead of every remote host that the current profile has ever
+  connected to. wsbuglink:17484[]
+
 //=== Removed Features and Support
 
 // === Removed Dissectors
@@ -109,6 +114,7 @@ The following features are new (or have been significantly updated) since versio
 MAC NR Framed (mac-nr-framed)
 RF4CE Network Layer (RF4CE)
 RF4CE Profile (RF4CE Profile)
+EGNOS Message Server (EMS) file format
 --
 
 === Updated Protocol Support
@@ -123,9 +129,10 @@ Too many other protocol updates have been made to list them all here.
 
 // There is no new or updated capture file support in this release.
 // Add one file type per line between the -- delimiters.
-//[commaize]
-//--
-//--
+[commaize]
+--
+EGNOS Messager Server (EMS) files
+--
 
 // === New and Updated Capture Interfaces support
 

@@ -419,6 +419,7 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(updateTitlebar()));
 
     connect(mainApp, SIGNAL(updateRecentCaptureStatus(const QString &, qint64, bool)), this, SLOT(updateRecentCaptures()));
+    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(updateRecentCaptures()));
     updateRecentCaptures();
 
 #if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
@@ -1089,7 +1090,23 @@ void WiresharkMainWindow::loadWindowGeometry()
 
 #ifndef Q_OS_MAC
     if (recent.gui_geometry_main_maximized) {
-        setWindowState(Qt::WindowMaximized);
+        // [save|restore]Geometry does a better job (on Linux and Windows)
+        // of restoring to the original monitor because it saves
+        // QGuiApplication::screens().indexOf(screen())
+        // (it also saves Qt::WindowFullScreen, restores the non-maximized
+        // size even when starting out maximized, etc.)
+        // Monitors of different DPI might still be tricky:
+        // https://bugreports.qt.io/browse/QTBUG-70721
+        // https://bugreports.qt.io/browse/QTBUG-77385
+        //
+        // We might eventually want to always use restoreGeometry, but
+        // for now at least use it just for maximized because it's better
+        // then what we've been doing.
+        if (recent.gui_geometry_main == nullptr ||
+            !restoreGeometry(QByteArray::fromHex(recent.gui_geometry_main))) {
+
+            setWindowState(Qt::WindowMaximized);
+        }
     } else
 #endif
     {
@@ -1120,6 +1137,13 @@ void WiresharkMainWindow::loadWindowGeometry()
 
 void WiresharkMainWindow::saveWindowGeometry()
 {
+    if (prefs.gui_geometry_save_position ||
+        prefs.gui_geometry_save_size ||
+        prefs.gui_geometry_save_maximized) {
+        g_free(recent.gui_geometry_main);
+        recent.gui_geometry_main = g_strdup(saveGeometry().toHex().constData());
+    }
+
     if (prefs.gui_geometry_save_position) {
         recent.gui_geometry_main_x = pos().x();
         recent.gui_geometry_main_y = pos().y();
@@ -1132,6 +1156,9 @@ void WiresharkMainWindow::saveWindowGeometry()
 
     if (prefs.gui_geometry_save_maximized) {
         // On macOS this is false when it shouldn't be
+        // XXX: Does save/restoreGeometry work any better on macOS
+        // for maximized windows? Apparently not:
+        // https://bugreports.qt.io/browse/QTBUG-100272
         recent.gui_geometry_main_maximized = isMaximized();
     }
 
@@ -1139,6 +1166,14 @@ void WiresharkMainWindow::saveWindowGeometry()
         recent.gui_geometry_main_upper_pane = master_split_.sizes()[0];
     }
 
+    g_free(recent.gui_geometry_main_master_split);
+    g_free(recent.gui_geometry_main_extra_split);
+    recent.gui_geometry_main_master_split = g_strdup(master_split_.saveState().toHex().constData());
+    recent.gui_geometry_main_extra_split = g_strdup(extra_split_.saveState().toHex().constData());
+
+    // Saving the QSplitter state is more accurate (#19361), but save
+    // the old GTK-style pane information for backwards compatibility
+    // for switching back and forth with older versions.
     if (master_split_.sizes().length() > 2) {
         recent.gui_geometry_main_lower_pane = master_split_.sizes()[1];
     } else if (extra_split_.sizes().length() > 0) {
@@ -1562,7 +1597,7 @@ bool WiresharkMainWindow::saveAsCaptureFile(capture_file *cf, bool must_support_
             cf->unsaved_changes = false; //we just saved so we signal that we have no unsaved changes
             updateForUnsavedChanges(); // we update the title bar to remove the *
             /* Add this filename to the list of recent files in the "Recent Files" submenu */
-            add_menu_recent_capture_file(qUtf8Printable(file_name));
+            add_menu_recent_capture_file(qUtf8Printable(file_name), false);
             return true;
 
         case CF_WRITE_ERROR:
@@ -1704,7 +1739,7 @@ void WiresharkMainWindow::exportSelectedPackets() {
             if (discard_comments)
                 packet_list_->redrawVisiblePackets();
             /* Add this filename to the list of recent files in the "Recent Files" submenu */
-            add_menu_recent_capture_file(qUtf8Printable(file_name));
+            add_menu_recent_capture_file(qUtf8Printable(file_name), false);
             goto cleanup;
 
         case CF_WRITE_ERROR:

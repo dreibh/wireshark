@@ -72,168 +72,168 @@ void proto_register_quic(void);
 static int quic_follow_tap = -1;
 
 /* Initialize the protocol and registered fields */
-static int proto_quic = -1;
-static int hf_quic_connection_number = -1;
-static int hf_quic_packet_length = -1;
-static int hf_quic_header_form = -1;
-static int hf_quic_long_packet_type = -1;
-static int hf_quic_long_packet_type_v2 = -1;
-static int hf_quic_long_reserved = -1;
-static int hf_quic_packet_number_length = -1;
-static int hf_quic_dcid = -1;
-static int hf_quic_scid = -1;
-static int hf_quic_dcil = -1;
-static int hf_quic_scil = -1;
-static int hf_quic_token_length = -1;
-static int hf_quic_token = -1;
-static int hf_quic_length = -1;
-static int hf_quic_packet_number = -1;
-static int hf_quic_version = -1;
-static int hf_quic_supported_version = -1;
-static int hf_quic_vn_unused = -1;
-static int hf_quic_short = -1;
-static int hf_quic_fixed_bit = -1;
-static int hf_quic_spin_bit = -1;
-static int hf_quic_short_reserved = -1;
-static int hf_quic_q_bit = -1;
-static int hf_quic_l_bit = -1;
-static int hf_quic_key_phase = -1;
-static int hf_quic_payload = -1;
-static int hf_quic_protected_payload = -1;
-static int hf_quic_remaining_payload = -1;
-static int hf_quic_odcil = -1;
-static int hf_quic_odcid = -1;
-static int hf_quic_retry_token = -1;
-static int hf_quic_retry_integrity_tag = -1;
+static int proto_quic;
+static int hf_quic_connection_number;
+static int hf_quic_packet_length;
+static int hf_quic_header_form;
+static int hf_quic_long_packet_type;
+static int hf_quic_long_packet_type_v2;
+static int hf_quic_long_reserved;
+static int hf_quic_packet_number_length;
+static int hf_quic_dcid;
+static int hf_quic_scid;
+static int hf_quic_dcil;
+static int hf_quic_scil;
+static int hf_quic_token_length;
+static int hf_quic_token;
+static int hf_quic_length;
+static int hf_quic_packet_number;
+static int hf_quic_version;
+static int hf_quic_supported_version;
+static int hf_quic_vn_unused;
+static int hf_quic_short;
+static int hf_quic_fixed_bit;
+static int hf_quic_spin_bit;
+static int hf_quic_short_reserved;
+static int hf_quic_q_bit;
+static int hf_quic_l_bit;
+static int hf_quic_key_phase;
+static int hf_quic_payload;
+static int hf_quic_protected_payload;
+static int hf_quic_remaining_payload;
+static int hf_quic_odcil;
+static int hf_quic_odcid;
+static int hf_quic_retry_token;
+static int hf_quic_retry_integrity_tag;
 
-static int hf_quic_frame = -1;
-static int hf_quic_frame_type = -1;
+static int hf_quic_frame;
+static int hf_quic_frame_type;
 
-static int hf_quic_padding_length = -1;
-static int hf_quic_ack_largest_acknowledged = -1;
-static int hf_quic_ack_ack_delay = -1;
-static int hf_quic_ack_ack_range_count = -1;
-static int hf_quic_ack_first_ack_range = -1;
-static int hf_quic_ack_gap = -1;
-static int hf_quic_ack_ack_range = -1;
-static int hf_quic_ack_ect0_count = -1;
-static int hf_quic_ack_ect1_count = -1;
-static int hf_quic_ack_ecn_ce_count = -1;
-static int hf_quic_rsts_stream_id = -1;
-static int hf_quic_rsts_application_error_code = -1;
-static int hf_quic_rsts_final_size = -1;
-static int hf_quic_ss_stream_id = -1;
-static int hf_quic_ss_application_error_code = -1;
-static int hf_quic_crypto_offset = -1;
-static int hf_quic_crypto_length = -1;
-static int hf_quic_crypto_crypto_data = -1;
-static int hf_quic_nt_length = -1;
-static int hf_quic_nt_token = -1;
-static int hf_quic_stream_fin = -1;
-static int hf_quic_stream_len = -1;
-static int hf_quic_stream_off = -1;
-static int hf_quic_stream_stream_id = -1;
-static int hf_quic_stream_initiator = -1;
-static int hf_quic_stream_direction = -1;
-static int hf_quic_stream_offset = -1;
-static int hf_quic_stream_length = -1;
-static int hf_quic_stream_data = -1;
-static int hf_quic_md_maximum_data = -1;
-static int hf_quic_msd_stream_id = -1;
-static int hf_quic_msd_maximum_stream_data = -1;
-static int hf_quic_ms_max_streams = -1;
-static int hf_quic_db_stream_data_limit = -1;
-static int hf_quic_sdb_stream_id = -1;
-static int hf_quic_sdb_stream_data_limit = -1;
-static int hf_quic_sb_stream_limit = -1;
-static int hf_quic_nci_retire_prior_to = -1;
-static int hf_quic_nci_sequence = -1;
-static int hf_quic_nci_connection_id_length = -1;
-static int hf_quic_nci_connection_id = -1;
-static int hf_quic_nci_stateless_reset_token = -1;
-static int hf_quic_rci_sequence = -1;
-static int hf_quic_path_challenge_data = -1;
-static int hf_quic_path_response_data = -1;
-static int hf_quic_cc_error_code = -1;
-static int hf_quic_cc_error_code_app = -1;
-static int hf_quic_cc_error_code_tls_alert = -1;
-static int hf_quic_cc_frame_type = -1;
-static int hf_quic_cc_reason_phrase_length = -1;
-static int hf_quic_cc_reason_phrase = -1;
-static int hf_quic_dg_length = -1;
-static int hf_quic_dg = -1;
-static int hf_quic_af_sequence_number = -1;
-static int hf_quic_af_ack_eliciting_threshold = -1;
-static int hf_quic_af_request_max_ack_delay = -1;
-static int hf_quic_af_reordering_threshold = -1;
-//static int hf_quic_af_ignore_order = -1;
-//static int hf_quic_af_ignore_ce = -1;
-static int hf_quic_ts = -1;
-static int hf_quic_unpredictable_bits = -1;
-static int hf_quic_stateless_reset_token = -1;
-static int hf_quic_reassembled_in = -1;
-static int hf_quic_reassembled_length = -1;
-static int hf_quic_reassembled_data = -1;
-static int hf_quic_fragments = -1;
-static int hf_quic_fragment = -1;
-static int hf_quic_fragment_overlap = -1;
-static int hf_quic_fragment_overlap_conflict = -1;
-static int hf_quic_fragment_multiple_tails = -1;
-static int hf_quic_fragment_too_long_fragment = -1;
-static int hf_quic_fragment_error = -1;
-static int hf_quic_fragment_count = -1;
+static int hf_quic_padding_length;
+static int hf_quic_ack_largest_acknowledged;
+static int hf_quic_ack_ack_delay;
+static int hf_quic_ack_ack_range_count;
+static int hf_quic_ack_first_ack_range;
+static int hf_quic_ack_gap;
+static int hf_quic_ack_ack_range;
+static int hf_quic_ack_ect0_count;
+static int hf_quic_ack_ect1_count;
+static int hf_quic_ack_ecn_ce_count;
+static int hf_quic_rsts_stream_id;
+static int hf_quic_rsts_application_error_code;
+static int hf_quic_rsts_final_size;
+static int hf_quic_ss_stream_id;
+static int hf_quic_ss_application_error_code;
+static int hf_quic_crypto_offset;
+static int hf_quic_crypto_length;
+static int hf_quic_crypto_crypto_data;
+static int hf_quic_nt_length;
+static int hf_quic_nt_token;
+static int hf_quic_stream_fin;
+static int hf_quic_stream_len;
+static int hf_quic_stream_off;
+static int hf_quic_stream_stream_id;
+static int hf_quic_stream_initiator;
+static int hf_quic_stream_direction;
+static int hf_quic_stream_offset;
+static int hf_quic_stream_length;
+static int hf_quic_stream_data;
+static int hf_quic_md_maximum_data;
+static int hf_quic_msd_stream_id;
+static int hf_quic_msd_maximum_stream_data;
+static int hf_quic_ms_max_streams;
+static int hf_quic_db_stream_data_limit;
+static int hf_quic_sdb_stream_id;
+static int hf_quic_sdb_stream_data_limit;
+static int hf_quic_sb_stream_limit;
+static int hf_quic_nci_retire_prior_to;
+static int hf_quic_nci_sequence;
+static int hf_quic_nci_connection_id_length;
+static int hf_quic_nci_connection_id;
+static int hf_quic_nci_stateless_reset_token;
+static int hf_quic_rci_sequence;
+static int hf_quic_path_challenge_data;
+static int hf_quic_path_response_data;
+static int hf_quic_cc_error_code;
+static int hf_quic_cc_error_code_app;
+static int hf_quic_cc_error_code_tls_alert;
+static int hf_quic_cc_frame_type;
+static int hf_quic_cc_reason_phrase_length;
+static int hf_quic_cc_reason_phrase;
+static int hf_quic_dg_length;
+static int hf_quic_dg;
+static int hf_quic_af_sequence_number;
+static int hf_quic_af_ack_eliciting_threshold;
+static int hf_quic_af_request_max_ack_delay;
+static int hf_quic_af_reordering_threshold;
+//static int hf_quic_af_ignore_order;
+//static int hf_quic_af_ignore_ce;
+static int hf_quic_ts;
+static int hf_quic_unpredictable_bits;
+static int hf_quic_stateless_reset_token;
+static int hf_quic_reassembled_in;
+static int hf_quic_reassembled_length;
+static int hf_quic_reassembled_data;
+static int hf_quic_fragments;
+static int hf_quic_fragment;
+static int hf_quic_fragment_overlap;
+static int hf_quic_fragment_overlap_conflict;
+static int hf_quic_fragment_multiple_tails;
+static int hf_quic_fragment_too_long_fragment;
+static int hf_quic_fragment_error;
+static int hf_quic_fragment_count;
 
-static int hf_quic_crypto_reassembled_in = -1;
-static int hf_quic_crypto_fragments = -1;
-static int hf_quic_crypto_fragment = -1;
-static int hf_quic_crypto_fragment_count = -1;
+static int hf_quic_crypto_reassembled_in;
+static int hf_quic_crypto_fragments;
+static int hf_quic_crypto_fragment;
+static int hf_quic_crypto_fragment_count;
 
-static int hf_quic_mp_add_address_first_byte	= -1;
-static int hf_quic_mp_add_address_reserved = -1;
-static int hf_quic_mp_add_address_port_present = -1;
-static int hf_quic_mp_add_address_ip_version = -1;
-static int hf_quic_mp_add_address_id = -1;
-static int hf_quic_mp_add_address_sq_number = -1;
-static int hf_quic_mp_add_address_interface_type = -1;
-static int hf_quic_mp_add_address_ip_address = -1;
-static int hf_quic_mp_add_address_ip_address_v6 = -1;
-static int hf_quic_mp_add_address_port = -1;
-static int hf_quic_mp_uniflow_id = -1;
-static int hf_quic_mp_receiving_uniflows = -1;
-static int hf_quic_mp_active_sending_uniflows = -1;
-static int hf_quic_mp_add_local_address_id = -1;
-static int hf_quic_mp_uniflow_info_section = -1;
-static int hf_quic_mp_receiving_uniflow_info_section = -1;
-static int hf_quic_mp_active_sending_uniflows_info_section = -1;
+static int hf_quic_mp_add_address_first_byte;
+static int hf_quic_mp_add_address_reserved;
+static int hf_quic_mp_add_address_port_present;
+static int hf_quic_mp_add_address_ip_version;
+static int hf_quic_mp_add_address_id;
+static int hf_quic_mp_add_address_sq_number;
+static int hf_quic_mp_add_address_interface_type;
+static int hf_quic_mp_add_address_ip_address;
+static int hf_quic_mp_add_address_ip_address_v6;
+static int hf_quic_mp_add_address_port;
+static int hf_quic_mp_uniflow_id;
+static int hf_quic_mp_receiving_uniflows;
+static int hf_quic_mp_active_sending_uniflows;
+static int hf_quic_mp_add_local_address_id;
+static int hf_quic_mp_uniflow_info_section;
+static int hf_quic_mp_receiving_uniflow_info_section;
+static int hf_quic_mp_active_sending_uniflows_info_section;
 
 /* multipath*/
-static int hf_quic_mp_ack_dcid_sequence_number = -1;
-static int hf_quic_mp_pa_dcid_sequence_number = -1;
-static int hf_quic_mp_ps_dcid_sequence_number = -1;
-static int hf_quic_mp_ps_path_status_sequence_number = -1;
-static int hf_quic_mp_ps_path_status = -1;
+static int hf_quic_mp_ack_dcid_sequence_number;
+static int hf_quic_mp_pa_dcid_sequence_number;
+static int hf_quic_mp_ps_dcid_sequence_number;
+static int hf_quic_mp_ps_path_status_sequence_number;
+static int hf_quic_mp_ps_path_status;
 
-static expert_field ei_quic_connection_unknown = EI_INIT;
-static expert_field ei_quic_ft_unknown = EI_INIT;
-static expert_field ei_quic_decryption_failed = EI_INIT;
-static expert_field ei_quic_protocol_violation = EI_INIT;
-static expert_field ei_quic_bad_retry = EI_INIT;
-static expert_field ei_quic_coalesced_padding_data = EI_INIT;
-static expert_field ei_quic_retransmission = EI_INIT;
-static expert_field ei_quic_overlap = EI_INIT;
-static expert_field ei_quic_data_after_forcing_vn = EI_INIT;
+static expert_field ei_quic_connection_unknown;
+static expert_field ei_quic_ft_unknown;
+static expert_field ei_quic_decryption_failed;
+static expert_field ei_quic_protocol_violation;
+static expert_field ei_quic_bad_retry;
+static expert_field ei_quic_coalesced_padding_data;
+static expert_field ei_quic_retransmission;
+static expert_field ei_quic_overlap;
+static expert_field ei_quic_data_after_forcing_vn;
 
-static gint ett_quic = -1;
-static gint ett_quic_af = -1;
-static gint ett_quic_short_header = -1;
-static gint ett_quic_connection_info = -1;
-static gint ett_quic_ft = -1;
-static gint ett_quic_ftflags = -1;
-static gint ett_quic_ftid = -1;
-static gint ett_quic_fragments = -1;
-static gint ett_quic_fragment = -1;
-static gint ett_quic_crypto_fragments = -1;
-static gint ett_quic_crypto_fragment = -1;
+static gint ett_quic;
+static gint ett_quic_af;
+static gint ett_quic_short_header;
+static gint ett_quic_connection_info;
+static gint ett_quic_ft;
+static gint ett_quic_ftflags;
+static gint ett_quic_ftid;
+static gint ett_quic_fragments;
+static gint ett_quic_fragment;
+static gint ett_quic_crypto_fragments;
+static gint ett_quic_crypto_fragment;
 
 static dissector_handle_t quic_handle;
 static dissector_handle_t tls13_handshake_handle;
@@ -4260,8 +4260,10 @@ dissect_quic_forcing_version_negotiation(tvbuff_t *tvb, packet_info *pinfo, prot
     return offset;
 }
 
+static unsigned quic_gso_heur_dcid_len = 8;
+
 static tvbuff_t *
-quic_get_message_tvb(tvbuff_t *tvb, const guint offset)
+quic_get_message_tvb(tvbuff_t *tvb, const guint offset, const quic_cid_t *dcid)
 {
     guint64 token_length;
     guint64 payload_length;
@@ -4287,6 +4289,15 @@ quic_get_message_tvb(tvbuff_t *tvb, const guint offset)
                 if (payload_length <= G_MAXINT32 && length < (guint)tvb_reported_length_remaining(tvb, offset)) {
                     return tvb_new_subset_length(tvb, offset, length);
                 }
+            }
+        }
+    } else {
+        if (quic_gso_heur_dcid_len && (dcid->len >= quic_gso_heur_dcid_len)) {
+            unsigned dcid_offset = offset + 1;
+            tvbuff_t *needle_tvb = tvb_new_subset_length(tvb, dcid_offset, dcid->len);
+            int needle_pos = tvb_find_tvb(tvb, needle_tvb, dcid_offset + dcid->len);
+            if (needle_pos != -1) {
+                return(tvb_new_subset_length(tvb, offset, needle_pos - offset - 1));
             }
         }
     }
@@ -4397,9 +4408,9 @@ quic_extract_header(tvbuff_t *tvb, guint8 *long_packet_type, guint32 *version,
  */
 static gboolean
 check_dcid_on_coalesced_packet(tvbuff_t *tvb, const quic_datagram *dgram_info,
-                               gboolean is_first_packet, quic_cid_t *first_packet_dcid)
+                               guint offset, quic_cid_t *first_packet_dcid)
 {
-    guint offset = 0;
+    gboolean is_first_packet = (offset == 0);
     guint8 first_byte, dcid_len;
     quic_cid_t dcid = {.len=0};
     quic_info_data_t *conn = dgram_info->conn;
@@ -4528,15 +4539,15 @@ dissect_quic(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             quic_tree = proto_item_add_subtree(quic_ti, ett_quic);
         }
 
-        tvbuff_t *next_tvb = quic_get_message_tvb(tvb, offset);
-
-        if (!check_dcid_on_coalesced_packet(next_tvb, dgram_info, offset == 0, &first_packet_dcid)) {
+        if (!check_dcid_on_coalesced_packet(tvb, dgram_info, offset, &first_packet_dcid)) {
             /* Coalesced packet with unexpected CID; it probably is some kind
                of unencrypted padding data added after the valid QUIC payload */
             expert_add_info_format(pinfo, quic_tree, &ei_quic_coalesced_padding_data,
                                    "(Random) padding data appended to the datagram");
             break;
         }
+
+        tvbuff_t *next_tvb = quic_get_message_tvb(tvb, offset, &first_packet_dcid);
 
         proto_item_set_len(quic_ti, tvb_reported_length(next_tvb));
         ti = proto_tree_add_uint(quic_tree, hf_quic_packet_length, next_tvb, 0, 0, tvb_reported_length(next_tvb));
@@ -5686,6 +5697,13 @@ proto_register_quic(void)
         "Whether out-of-order CRYPTO frames should be buffered and reordered before "
         "passing them to the TLS handshake dissector.",
         &quic_crypto_out_of_order);
+
+    prefs_register_uint_preference(quic_module, "gso_heur_min_dcid_len",
+        "Search for coalesced short header packets at DCID length",
+        "Heuristically search for coalesced QUIC packets with a short header "
+        "(e.g., when Generic Segmentation Offload (GSO) or similar is used), "
+        "if the DCID is at least this many bytes long (0 to disable). ",
+        10, &quic_gso_heur_dcid_len);
 
     quic_handle = register_dissector("quic", dissect_quic, proto_quic);
 
