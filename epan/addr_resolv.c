@@ -159,19 +159,20 @@ typedef struct ss7pc {
 } hashss7pc_t;
 
 /* hash tables used for ethernet and manufacturer lookup */
-#define HASHETHER_STATUS_UNRESOLVED     1
-#define HASHETHER_STATUS_RESOLVED_DUMMY 2
-#define HASHETHER_STATUS_RESOLVED_NAME  3
-
 struct hashether {
-    guint             status;  /* (See above) */
+    uint8_t           flags;  /* (See above) */
     guint8            addr[6];
     char              hexaddr[6*3];
     char              resolved_name[MAXNAMELEN];
 };
 
+struct hashwka {
+    uint8_t           flags;  /* (See above) */
+    char*             name;
+};
+
 struct hashmanuf {
-    guint             status;  /* (See above) */
+    uint8_t           flags;  /* (See above) */
     guint8            addr[3];
     char              hexaddr[3*3];
     char              resolved_name[MAXNAMELEN];
@@ -200,6 +201,12 @@ typedef struct _vlan
     char              name[MAXVLANNAMELEN];
 } vlan_t;
 
+/* internal services custom type */
+typedef struct _serv_port_custom_key {
+    uint16_t          port;
+    port_type         type;
+} serv_port_custom_key_t;
+
 static wmem_allocator_t *addr_resolv_scope = NULL;
 
 // Maps guint -> hashipxnet_t*
@@ -226,12 +233,13 @@ struct cb_serv_data {
 // We might want to store vendor names from MA-M and MA-S to
 // present in the Resolved Addresses dialog.
 static wmem_map_t *manuf_hashtable = NULL;
-
-// Maps address -> hashether_t*
+// Maps address -> hashwka_t*
 static wmem_map_t *wka_hashtable = NULL;
+// Maps address -> hashether_t*
 static wmem_map_t *eth_hashtable = NULL;
 // Maps guint -> serv_port_t*
 static wmem_map_t *serv_port_hashtable = NULL;
+static wmem_map_t *serv_port_custom_hashtable = NULL;
 
 // Maps enterprise-id -> enterprise-desc (only used for user additions)
 static GHashTable *enterprises_hashtable = NULL;
@@ -665,43 +673,78 @@ fgetline(char *buf, int size, FILE *fp)
 static subnet_entry_t subnet_lookup(const guint32 addr);
 static void subnet_entry_set(guint32 subnet_addr, const guint8 mask_length, const gchar* name);
 
+static unsigned serv_port_custom_hash(gconstpointer k)
+{
+    const serv_port_custom_key_t *key = (const serv_port_custom_key_t*)k;
+    return key->port + (key->type << 16);
+}
+
+static gboolean serv_port_custom_equal(gconstpointer k1, gconstpointer k2)
+{
+    const serv_port_custom_key_t *key1 = (const serv_port_custom_key_t*)k1;
+    const serv_port_custom_key_t *key2 = (const serv_port_custom_key_t*)k2;
+
+    return (key1->port == key2->port) && (key1->type == key2->type);
+}
 
 static void
-add_service_name(port_type proto, const guint port, const char *service_name)
+add_custom_service_name(port_type proto, const guint port, const char *service_name)
 {
-    serv_port_t *serv_port_table;
+    char *name;
+    serv_port_custom_key_t *key, *orig_key;
 
-    serv_port_table = (serv_port_t *)wmem_map_lookup(serv_port_hashtable, GUINT_TO_POINTER(port));
-    if (serv_port_table == NULL) {
-        serv_port_table = wmem_new0(addr_resolv_scope, serv_port_t);
-        wmem_map_insert(serv_port_hashtable, GUINT_TO_POINTER(port), serv_port_table);
+    key = wmem_new(addr_resolv_scope, serv_port_custom_key_t);
+    key->port = (uint16_t)port;
+    key->type = proto;
+
+    if (wmem_map_lookup_extended(serv_port_custom_hashtable, key, (const void**)&orig_key, (void**)&name)) {
+        wmem_free(addr_resolv_scope, orig_key);
+        wmem_free(addr_resolv_scope, name);
     }
 
+    name = wmem_strdup(addr_resolv_scope, service_name);
+    wmem_map_insert(serv_port_custom_hashtable, key, name);
+
+    // A new custom entry is not a new resolved object.
+    // new_resolved_objects = TRUE;
+}
+
+static serv_port_t*
+add_service_name(port_type proto, const guint port, const char *service_name)
+{
+    serv_port_t *serv_port_names;
+
+    serv_port_names = (serv_port_t *)wmem_map_lookup(serv_port_hashtable, GUINT_TO_POINTER(port));
+    if (serv_port_names == NULL) {
+        serv_port_names = wmem_new0(addr_resolv_scope, serv_port_t);
+        wmem_map_insert(serv_port_hashtable, GUINT_TO_POINTER(port), serv_port_names);
+    }
+
+    /* We don't need to strdup because service_name is owned by either
+     * the global arrays or the custom table, which manage the memory
+     * and have lifespans at least as long as the addr_resolv_scope.
+     */
     switch(proto) {
         case PT_TCP:
-            wmem_free(addr_resolv_scope, serv_port_table->tcp_name);
-            serv_port_table->tcp_name = wmem_strdup(addr_resolv_scope, service_name);
+            serv_port_names->tcp_name = service_name;
             break;
         case PT_UDP:
-            wmem_free(addr_resolv_scope, serv_port_table->udp_name);
-            serv_port_table->udp_name = wmem_strdup(addr_resolv_scope, service_name);
+            serv_port_names->udp_name = service_name;
             break;
         case PT_SCTP:
-            wmem_free(addr_resolv_scope, serv_port_table->sctp_name);
-            serv_port_table->sctp_name = wmem_strdup(addr_resolv_scope, service_name);
+            serv_port_names->sctp_name = service_name;
             break;
         case PT_DCCP:
-            wmem_free(addr_resolv_scope, serv_port_table->dccp_name);
-            serv_port_table->dccp_name = wmem_strdup(addr_resolv_scope, service_name);
+            serv_port_names->dccp_name = service_name;
             break;
         default:
-            return;
+            return serv_port_names;
             /* Should not happen */
     }
 
     new_resolved_objects = TRUE;
+    return serv_port_names;
 }
-
 
 static void
 parse_service_line (char *line)
@@ -765,7 +808,7 @@ add_serv_port_cb(const guint32 port, gpointer ptr)
     struct cb_serv_data *cb_data = (struct cb_serv_data *)ptr;
 
     if ( port ) {
-        add_service_name(cb_data->proto, port, cb_data->service);
+        add_custom_service_name(cb_data->proto, port, cb_data->service);
     }
 }
 
@@ -806,25 +849,55 @@ wmem_utoa(wmem_allocator_t *allocator, guint port)
 static const gchar *
 _serv_name_lookup(port_type proto, guint port, serv_port_t **value_ret)
 {
-    serv_port_t *serv_port_table;
+    serv_port_t *serv_port_names;
+    const char* name = NULL;
+    ws_services_proto_t p;
+    ws_services_entry_t *serv;
 
-    serv_port_table = (serv_port_t *)wmem_map_lookup(serv_port_hashtable, GUINT_TO_POINTER(port));
+    /* Look in the cache */
+    serv_port_names = (serv_port_t *)wmem_map_lookup(serv_port_hashtable, GUINT_TO_POINTER(port));
+
+    if (serv_port_names == NULL) {
+        /* Try the user custom table */
+        serv_port_custom_key_t custom_key = { (uint16_t)port, proto };
+        name = wmem_map_lookup(serv_port_custom_hashtable, &custom_key);
+    }
+
+    if (name == NULL) {
+        /* now look in the global tables */
+        switch(proto) {
+            case PT_TCP: p = ws_tcp; break;
+            case PT_UDP: p = ws_udp; break;
+            case PT_SCTP: p = ws_sctp; break;
+            case PT_DCCP: p = ws_dccp; break;
+            default: ws_assert_not_reached();
+        }
+        serv = global_services_lookup(port, p);
+        if (serv) {
+            name = serv->name;
+        }
+    }
+
+    if (name) {
+        /* Cache result */
+        serv_port_names = add_service_name(proto, port, name);
+    }
 
     if (value_ret != NULL)
-        *value_ret = serv_port_table;
+        *value_ret = serv_port_names;
 
-    if (serv_port_table == NULL)
+    if (serv_port_names == NULL)
         return NULL;
 
     switch (proto) {
         case PT_UDP:
-            return serv_port_table->udp_name;
+            return serv_port_names->udp_name;
         case PT_TCP:
-            return serv_port_table->tcp_name;
+            return serv_port_names->tcp_name;
         case PT_SCTP:
-            return serv_port_table->sctp_name;
+            return serv_port_names->sctp_name;
         case PT_DCCP:
-            return serv_port_table->dccp_name;
+            return serv_port_names->dccp_name;
         default:
             break;
     }
@@ -840,42 +913,25 @@ try_serv_name_lookup(port_type proto, guint port)
 const gchar *
 serv_name_lookup(port_type proto, guint port)
 {
-    serv_port_t *serv_port_table = NULL;
+    serv_port_t *serv_port_names = NULL;
     const char *name;
-    ws_services_proto_t p;
-    ws_services_entry_t *serv;
 
-    /* first look in the personal services file + cache */
-    name = _serv_name_lookup(proto, port, &serv_port_table);
+    /* first look for the name */
+    name = _serv_name_lookup(proto, port, &serv_port_names);
     if (name != NULL)
         return name;
 
-    /* now look in the global tables */
-    switch(proto) {
-        case PT_TCP: p = ws_tcp; break;
-        case PT_UDP: p = ws_udp; break;
-        case PT_SCTP: p = ws_sctp; break;
-        case PT_DCCP: p = ws_dccp; break;
-        default: ws_assert_not_reached();
-    }
-    serv = global_services_lookup(port, p);
-    if (serv) {
-        /* Cache result */
-        /* XXX would be nice to avoid the strdup for this name static string but user/custom entries
-         * are dynamic and they share the same table. */
-        add_service_name(proto, port, serv->name);
-        return serv->name;
+    if (serv_port_names == NULL) {
+        serv_port_names = wmem_new0(addr_resolv_scope, serv_port_t);
+        wmem_map_insert(serv_port_hashtable, GUINT_TO_POINTER(port), serv_port_names);
     }
 
-    if (serv_port_table == NULL) {
-        serv_port_table = wmem_new0(addr_resolv_scope, serv_port_t);
-        wmem_map_insert(serv_port_hashtable, GUINT_TO_POINTER(port), serv_port_table);
-    }
-    if (serv_port_table->numeric == NULL) {
-        serv_port_table->numeric = wmem_strdup_printf(addr_resolv_scope, "%u", port);
+    /* No name; create the numeric string. */
+    if (serv_port_names->numeric == NULL) {
+        serv_port_names->numeric = wmem_strdup_printf(addr_resolv_scope, "%u", port);
     }
 
-    return serv_port_table->numeric;
+    return serv_port_names->numeric;
 }
 
 static void
@@ -883,6 +939,8 @@ initialize_services(void)
 {
     ws_assert(serv_port_hashtable == NULL);
     serv_port_hashtable = wmem_map_new(addr_resolv_scope, g_direct_hash, g_direct_equal);
+    ws_assert(serv_port_custom_hashtable == NULL);
+    serv_port_custom_hashtable = wmem_map_new(addr_resolv_scope, serv_port_custom_hash, serv_port_custom_equal);
 
     /* Compute the pathname of the global services file. */
     if (g_services_path == NULL) {
@@ -906,6 +964,7 @@ static void
 service_name_lookup_cleanup(void)
 {
     serv_port_hashtable = NULL;
+    serv_port_custom_hashtable = NULL;
     g_free(g_services_path);
     g_services_path = NULL;
     g_free(g_pservices_path);
@@ -1616,7 +1675,7 @@ manuf_hash_new_entry(const guint8 *addr, const char* name, const char* longname)
     memcpy(manuf_value->addr, addr, 3);
     if (name != NULL) {
         (void) g_strlcpy(manuf_value->resolved_name, name, MAXNAMELEN);
-        manuf_value->status = HASHETHER_STATUS_RESOLVED_NAME;
+        manuf_value->flags = NAME_RESOLVED;
         if (longname != NULL) {
             (void) g_strlcpy(manuf_value->resolved_longname, longname, MAXNAMELEN);
         }
@@ -1625,7 +1684,7 @@ manuf_hash_new_entry(const guint8 *addr, const char* name, const char* longname)
         }
     }
     else {
-        manuf_value->status = HASHETHER_STATUS_UNRESOLVED;
+        manuf_value->flags = 0;
         manuf_value->resolved_name[0] = '\0';
         manuf_value->resolved_longname[0] = '\0';
     }
@@ -1637,15 +1696,21 @@ manuf_hash_new_entry(const guint8 *addr, const char* name, const char* longname)
     return manuf_value;
 }
 
-static void
+static hashwka_t*
 wka_hash_new_entry(const guint8 *addr, char* name)
 {
     guint8 *wka_key;
+    hashwka_t *wka_value;
 
     wka_key = (guint8 *)wmem_alloc(addr_resolv_scope, 6);
     memcpy(wka_key, addr, 6);
 
-    wmem_map_insert(wka_hashtable, wka_key, wmem_strdup(addr_resolv_scope, name));
+    wka_value = (hashwka_t*)wmem_new(addr_resolv_scope, hashwka_t);
+    wka_value->flags = NAME_RESOLVED;
+    wka_value->name = wmem_strdup(addr_resolv_scope, name);
+
+    wmem_map_insert(wka_hashtable, wka_key, wka_value);
+    return wka_value;
 }
 
 static void
@@ -1654,19 +1719,26 @@ add_manuf_name(const guint8 *addr, unsigned int mask, gchar *name, gchar *longna
     switch (mask)
     {
     case 0:
+        {
         /* This is a manufacturer ID; add it to the manufacturer ID hash table */
-        manuf_hash_new_entry(addr, name, longname);
+        hashmanuf_t *entry = manuf_hash_new_entry(addr, name, longname);
+        entry->flags |= STATIC_HOSTNAME;
         break;
-
+        }
     case 48:
+        {
         /* This is a well-known MAC address; add it to the Ethernet hash table */
-        add_eth_name(addr, name);
+        hashether_t *entry = add_eth_name(addr, name);
+        entry->flags |= STATIC_HOSTNAME;
         break;
-
+        }
     default:
+        {
         /* This is a range of well-known addresses; add it to the well-known-address table */
-        wka_hash_new_entry(addr, name);
+        hashwka_t *entry = wka_hash_new_entry(addr, name);
+        entry->flags |= STATIC_HOSTNAME;
         break;
+        }
     }
 } /* add_manuf_name */
 
@@ -1697,6 +1769,7 @@ manuf_name_lookup(const guint8 *addr, size_t size)
     /* first try to find a "perfect match" */
     manuf_value = (hashmanuf_t*)wmem_map_lookup(manuf_hashtable, GUINT_TO_POINTER(manuf_key));
     if (manuf_value != NULL) {
+        manuf_value->flags |= TRIED_RESOLVE_ADDRESS;
         return manuf_value;
     }
 
@@ -1709,6 +1782,7 @@ manuf_name_lookup(const guint8 *addr, size_t size)
         manuf_key &= 0x00FEFFFF;
         manuf_value = (hashmanuf_t*)wmem_map_lookup(manuf_hashtable, GUINT_TO_POINTER(manuf_key));
         if (manuf_value != NULL) {
+            manuf_value->flags |= TRIED_RESOLVE_ADDRESS;
             return manuf_value;
         }
     }
@@ -1719,11 +1793,14 @@ manuf_name_lookup(const guint8 *addr, size_t size)
     short_name = ws_manuf_lookup_oui24(addr, &long_name);
     if (short_name != NULL) {
         /* Found it */
-        return manuf_hash_new_entry(addr, short_name, long_name);
+        manuf_value = manuf_hash_new_entry(addr, short_name, long_name);
+    } else {
+        /* Add the address as a hex string */
+        manuf_value = manuf_hash_new_entry(addr, NULL, NULL);
     }
 
-    /* Add the address as a hex string */
-    return manuf_hash_new_entry(addr, NULL, NULL);
+    manuf_value->flags |= TRIED_RESOLVE_ADDRESS;
+    return manuf_value;
 
 } /* manuf_name_lookup */
 
@@ -1733,7 +1810,7 @@ wka_name_lookup(const guint8 *addr, const unsigned int mask)
     guint8     masked_addr[6];
     guint      num;
     gint       i;
-    gchar     *name;
+    hashwka_t *value;
 
     if (wka_hashtable == NULL) {
         return NULL;
@@ -1748,16 +1825,25 @@ wka_name_lookup(const guint8 *addr, const unsigned int mask)
     for (; i < 6; i++)
         masked_addr[i] = 0;
 
-    name = (gchar *)wmem_map_lookup(wka_hashtable, masked_addr);
+    value = (hashwka_t*)wmem_map_lookup(wka_hashtable, masked_addr);
 
-    return name;
+    if (value) {
+        value->flags |= TRIED_RESOLVE_ADDRESS;
+        return value->name;
+    }
+
+    return NULL;
 
 } /* wka_name_lookup */
 
-
 guint get_hash_ether_status(hashether_t* ether)
 {
-    return ether->status;
+    return ether->flags;
+}
+
+bool get_hash_ether_used(hashether_t* ether)
+{
+    return ((ether->flags & TRIED_OR_RESOLVED_MASK) == TRIED_OR_RESOLVED_MASK);
 }
 
 char* get_hash_ether_hexaddr(hashether_t* ether)
@@ -1768,6 +1854,16 @@ char* get_hash_ether_hexaddr(hashether_t* ether)
 char* get_hash_ether_resolved_name(hashether_t* ether)
 {
     return ether->resolved_name;
+}
+
+bool get_hash_wka_used(hashwka_t* wka)
+{
+    return ((wka->flags & TRIED_OR_RESOLVED_MASK) == TRIED_OR_RESOLVED_MASK);
+}
+
+char* get_hash_wka_resolved_name(hashwka_t* wka)
+{
+    return wka->name;
 }
 
 static guint
@@ -1926,7 +2022,7 @@ eth_addr_resolve(hashether_t *tp) {
 
     if ( (eth = get_ethbyaddr(addr)) != NULL) {
         (void) g_strlcpy(tp->resolved_name, eth->name, MAXNAMELEN);
-        tp->status = HASHETHER_STATUS_RESOLVED_NAME;
+        tp->flags |= NAME_RESOLVED | STATIC_HOSTNAME;
         return tp;
     } else {
         guint         mask;
@@ -1941,7 +2037,7 @@ eth_addr_resolve(hashether_t *tp) {
             if ((name = wka_name_lookup(addr, mask+40)) != NULL) {
                 snprintf(tp->resolved_name, MAXNAMELEN, "%s_%02x",
                         name, addr[5] & (0xFF >> mask));
-                tp->status = HASHETHER_STATUS_RESOLVED_DUMMY;
+                tp->flags |= NAME_RESOLVED | NAME_RESOLVED_PREFIX;
                 return tp;
             }
         } while (mask--);
@@ -1952,7 +2048,7 @@ eth_addr_resolve(hashether_t *tp) {
             if ((name = wka_name_lookup(addr, mask+32)) != NULL) {
                 snprintf(tp->resolved_name, MAXNAMELEN, "%s_%02x:%02x",
                         name, addr[4] & (0xFF >> mask), addr[5]);
-                tp->status = HASHETHER_STATUS_RESOLVED_DUMMY;
+                tp->flags |= NAME_RESOLVED | NAME_RESOLVED_PREFIX;
                 return tp;
             }
         } while (mask--);
@@ -1963,17 +2059,17 @@ eth_addr_resolve(hashether_t *tp) {
             if ((name = wka_name_lookup(addr, mask+24)) != NULL) {
                 snprintf(tp->resolved_name, MAXNAMELEN, "%s_%02x:%02x:%02x",
                         name, addr[3] & (0xFF >> mask), addr[4], addr[5]);
-                tp->status = HASHETHER_STATUS_RESOLVED_DUMMY;
+                tp->flags |= NAME_RESOLVED | NAME_RESOLVED_PREFIX;
                 return tp;
             }
         } while (mask--);
 
         /* Now try looking in the manufacturer table. */
         manuf_value = manuf_name_lookup(addr, addr_size);
-        if ((manuf_value != NULL) && (manuf_value->status != HASHETHER_STATUS_UNRESOLVED)) {
+        if ((manuf_value != NULL) && ((manuf_value->flags & NAME_RESOLVED) == NAME_RESOLVED)) {
             snprintf(tp->resolved_name, MAXNAMELEN, "%s_%02x:%02x:%02x",
                     manuf_value->resolved_name, addr[3], addr[4], addr[5]);
-            tp->status = HASHETHER_STATUS_RESOLVED_DUMMY;
+            tp->flags |= NAME_RESOLVED | NAME_RESOLVED_PREFIX;
             return tp;
         }
 
@@ -1986,7 +2082,7 @@ eth_addr_resolve(hashether_t *tp) {
                 snprintf(tp->resolved_name, MAXNAMELEN, "%s_%02x:%02x:%02x:%02x",
                         name, addr[2] & (0xFF >> mask), addr[3], addr[4],
                         addr[5]);
-                tp->status = HASHETHER_STATUS_RESOLVED_DUMMY;
+                tp->flags |= NAME_RESOLVED | NAME_RESOLVED_PREFIX;
                 return tp;
             }
         } while (mask--);
@@ -1998,7 +2094,7 @@ eth_addr_resolve(hashether_t *tp) {
                 snprintf(tp->resolved_name, MAXNAMELEN, "%s_%02x:%02x:%02x:%02x:%02x",
                         name, addr[1] & (0xFF >> mask), addr[2], addr[3],
                         addr[4], addr[5]);
-                tp->status = HASHETHER_STATUS_RESOLVED_DUMMY;
+                tp->flags |= NAME_RESOLVED | NAME_RESOLVED_PREFIX;
                 return tp;
             }
         } while (mask--);
@@ -2010,7 +2106,7 @@ eth_addr_resolve(hashether_t *tp) {
                 snprintf(tp->resolved_name, MAXNAMELEN, "%s_%02x:%02x:%02x:%02x:%02x:%02x",
                         name, addr[0] & (0xFF >> mask), addr[1], addr[2],
                         addr[3], addr[4], addr[5]);
-                tp->status = HASHETHER_STATUS_RESOLVED_DUMMY;
+                tp->flags |= NAME_RESOLVED | NAME_RESOLVED_PREFIX;
                 return tp;
             }
         } while (--mask); /* Work down to the last bit */
@@ -2029,13 +2125,12 @@ eth_addr_resolve(hashether_t *tp) {
                 manuf_hash_new_entry(addr, short_name, long_name);
             }
             eth_resolved_name_fill(tp, short_name, mask, addr);
-            tp->status = HASHETHER_STATUS_RESOLVED_DUMMY;
+            tp->flags |= NAME_RESOLVED | NAME_RESOLVED_PREFIX;
             return tp;
         }
         /* No match whatsoever. */
         set_address(&ether_addr, AT_ETHER, 6, addr);
         address_to_str_buf(&ether_addr, tp->resolved_name, MAXNAMELEN);
-        tp->status = HASHETHER_STATUS_RESOLVED_DUMMY;
         return tp;
     }
     ws_assert_not_reached();
@@ -2049,7 +2144,7 @@ eth_hash_new_entry(const guint8 *addr, const gboolean resolve)
 
     tp = wmem_new(addr_resolv_scope, hashether_t);
     memcpy(tp->addr, addr, sizeof(tp->addr));
-    tp->status = HASHETHER_STATUS_UNRESOLVED;
+    tp->flags = 0;
     /* Values returned by bytes_to_hexstr_punct() are *not* null-terminated */
     endp = bytes_to_hexstr_punct(tp->hexaddr, addr, sizeof(tp->addr), ':');
     *endp = '\0';
@@ -2076,7 +2171,7 @@ add_eth_name(const guint8 *addr, const gchar *name)
 
     if (strcmp(tp->resolved_name, name) != 0) {
         (void) g_strlcpy(tp->resolved_name, name, MAXNAMELEN);
-        tp->status = HASHETHER_STATUS_RESOLVED_NAME;
+        tp->flags |= NAME_RESOLVED;
         new_resolved_objects = TRUE;
     }
 
@@ -2093,10 +2188,11 @@ eth_name_lookup(const guint8 *addr, const gboolean resolve)
     if (tp == NULL) {
         tp = eth_hash_new_entry(addr, resolve);
     } else {
-        if (resolve && (tp->status == HASHETHER_STATUS_UNRESOLVED)) {
+        if (resolve && !(tp->flags & NAME_RESOLVED)) {
             eth_addr_resolve(tp); /* Found but needs to be resolved */
         }
     }
+    tp->flags |= TRIED_RESOLVE_ADDRESS;
 
     return tp;
 
@@ -3489,8 +3585,8 @@ get_ether_name_if_known(const guint8 *addr)
      * if it doesn't exist, so it never returns NULL */
     tp = eth_name_lookup(addr, TRUE);
 
-    if (tp->status == HASHETHER_STATUS_RESOLVED_NAME) {
-        /* Name is from an ethers file */
+    if ((tp->flags & (NAME_RESOLVED | NAME_RESOLVED_PREFIX)) == NAME_RESOLVED) {
+        /* Name is from an exact match, not a prefix/OUI */
         return tp->resolved_name;
     }
     else {
@@ -3552,8 +3648,10 @@ get_manuf_name(const guint8 *addr, size_t size)
 {
     hashmanuf_t *manuf_value;
 
+    ws_return_val_if(size < 3, NULL);
+
     manuf_value = manuf_name_lookup(addr, size);
-    if (gbl_resolv_flags.mac_name && manuf_value->status != HASHETHER_STATUS_UNRESOLVED)
+    if (gbl_resolv_flags.mac_name && ((manuf_value->flags & NAME_RESOLVED) == NAME_RESOLVED))
         return manuf_value->resolved_name;
 
     return manuf_value->hexaddr;
@@ -3576,7 +3674,7 @@ get_manuf_name_if_known(const guint8 *addr, size_t size)
     ws_return_val_if(size < 3, NULL);
 
     manuf_value = manuf_name_lookup(addr, size);
-    if (manuf_value != NULL && manuf_value->status != HASHETHER_STATUS_UNRESOLVED) {
+    if (manuf_value != NULL && ((manuf_value->flags & NAME_RESOLVED) == NAME_RESOLVED)) {
         return manuf_value->resolved_longname;
     }
 
@@ -3613,6 +3711,11 @@ tvb_get_manuf_name_if_known(tvbuff_t *tvb, gint offset)
     return get_manuf_name_if_known(buf, sizeof(buf));
 }
 
+bool get_hash_manuf_used(hashmanuf_t* manuf)
+{
+    return ((manuf->flags & TRIED_OR_RESOLVED_MASK) == TRIED_OR_RESOLVED_MASK);
+}
+
 char* get_hash_manuf_resolved_name(hashmanuf_t* manuf)
 {
     return manuf->resolved_longname;
@@ -3633,7 +3736,7 @@ eui64_to_display(wmem_allocator_t *allocator, const guint64 addr_eui64)
      * it first so it also covers the user-defined tables.
      */
     manuf_value = manuf_name_lookup(addr, 8);
-    if (!gbl_resolv_flags.mac_name || (manuf_value->status == HASHETHER_STATUS_UNRESOLVED)) {
+    if (!gbl_resolv_flags.mac_name || !manuf_value || ((manuf_value->flags & NAME_RESOLVED) == 0)) {
         /* Now try looking in the global manuf data for a MA-M or MA-S match.
          */
         const char *short_name, *long_name;

@@ -65,15 +65,18 @@ typedef struct _e_addr_resolve {
 struct hashether;
 typedef struct hashether hashether_t;
 
+struct hashwka;
+typedef struct hashwka hashwka_t;
+
 struct hashmanuf;
 typedef struct hashmanuf hashmanuf_t;
 
 typedef struct serv_port {
-  gchar            *udp_name;
-  gchar            *tcp_name;
-  gchar            *sctp_name;
-  gchar            *dccp_name;
-  gchar            *numeric;
+  const char       *udp_name;
+  const char       *tcp_name;
+  const char       *sctp_name;
+  const char       *dccp_name;
+  const char       *numeric;
 } serv_port_t;
 
 typedef struct _resolved_name {
@@ -81,12 +84,13 @@ typedef struct _resolved_name {
 } resolved_name_t;
 
 /*
- * Flags for various IPv4/IPv6 hash table entries.
+ * Flags for various resolved name hash table entries.
  */
 #define TRIED_RESOLVE_ADDRESS    (1U<<0)  /* XXX - what does this bit *really* mean? */
 #define NAME_RESOLVED            (1U<<1)  /* the name field contains a host name, not a printable address */
 #define RESOLVED_ADDRESS_USED    (1U<<2)  /* a get_hostname* call returned the host name */
 #define STATIC_HOSTNAME          (1U<<3)  /* do not update entries from hosts file with DNS responses */
+#define NAME_RESOLVED_PREFIX     (1U<<4)  /* name was generated from a prefix (e.g., OUI) instead of the entire address */
 
 #define TRIED_OR_RESOLVED_MASK   (TRIED_RESOLVE_ADDRESS | NAME_RESOLVED)
 #define USED_AND_RESOLVED_MASK   (NAME_RESOLVED | RESOLVED_ADDRESS_USED)
@@ -217,7 +221,11 @@ void fill_unresolved_ss7pc(const gchar * pc_addr, const guint8 ni, const guint32
 /* Same as get_ether_name with tvb support */
 WS_DLL_PUBLIC const gchar *tvb_get_ether_name(tvbuff_t *tvb, gint offset);
 
-/* get_ether_name_if_known returns the logical name if found in ethers files else NULL */
+/* get_ether_name_if_known returns the logical name if an exact match is
+ * found (in ethers files or from ARP) else NULL.
+ * @note: It returns NULL for addresses if only a prefix can be resolved
+ * into a manufacturer name.
+ */
 const gchar *get_ether_name_if_known(const guint8 *addr);
 
 /*
@@ -287,11 +295,15 @@ extern gchar *get_ipxnet_name(wmem_allocator_t *allocator, const guint32 addr);
 extern gchar *get_vlan_name(wmem_allocator_t *allocator, const guint16 id);
 
 WS_DLL_PUBLIC guint get_hash_ether_status(hashether_t* ether);
+WS_DLL_PUBLIC bool get_hash_ether_used(hashether_t* ether);
 WS_DLL_PUBLIC char* get_hash_ether_hexaddr(hashether_t* ether);
 WS_DLL_PUBLIC char* get_hash_ether_resolved_name(hashether_t* ether);
 
+WS_DLL_PUBLIC bool get_hash_manuf_used(hashmanuf_t* manuf);
 WS_DLL_PUBLIC char* get_hash_manuf_resolved_name(hashmanuf_t* manuf);
 
+WS_DLL_PUBLIC bool get_hash_wka_used(hashwka_t* wka);
+WS_DLL_PUBLIC char* get_hash_wka_resolved_name(hashwka_t* wka);
 
 /* adds a hostname/IPv4 in the hash table */
 WS_DLL_PUBLIC void add_ipv4_name(const guint addr, const gchar *name, const gboolean static_entry);
