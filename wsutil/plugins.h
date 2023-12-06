@@ -23,16 +23,6 @@ typedef enum {
     WS_PLUGIN_CODEC
 } plugin_type_e;
 
-typedef enum {
-    /* Plug-in license is GPLv2-or-later */
-    WS_PLUGIN_IS_GPLv2_OR_LATER     = 0x2222,     /* Ok */
-    /* Plug-in license is compatible with the GPL version 2, according to the FSF. */
-    /* https://www.gnu.org/licenses/gpl-faq.html#WhatDoesCompatMean */
-    WS_PLUGIN_IS_GPLv2_COMPATIBLE   = 0x2002,     /* Ok */
-    /* Plug-in license is none of the above */
-    WS_PLUGIN_IS_GPLv2_INCOMPATIBLE = 0,          /* Not allowed, will refuse to load.*/
-} plugin_license_e;
-
 #define WS_PLUGIN_SPDX_GPLv2    "GPL-2.0-or-later"
 #define WS_PLUGIN_GITLAB_URL    "https://gitlab.com/wireshark/wireshark"
 
@@ -48,8 +38,6 @@ typedef void plugins_t;
 typedef void (*module_register_func)(void);
 
 struct ws_module {
-    plugin_license_e license;
-    int min_api_level; /* unused */
     uint32_t flags;
     const char *version;
     const char *spdx_id;
@@ -63,7 +51,9 @@ typedef plugin_type_e (*ws_load_module_func)(int *, int *, struct ws_module **);
 WS_DLL_PUBLIC plugins_t *plugins_init(plugin_type_e type);
 
 typedef void (*plugin_description_callback)(const char *name, const char *version,
-                                            uint32_t flags, const char *filename,
+                                            uint32_t flags, const char *spdx_id,
+                                            const char *blurb, const char *home_url,
+                                            const char *filename,
                                             void *user_data);
 
 WS_DLL_PUBLIC void plugins_get_descriptions(plugin_description_callback callback, void *user_data);
@@ -81,12 +71,15 @@ int plugins_abi_version(plugin_type_e type);
 
 #define WIRESHARK_PLUGIN_REGISTER(type, ptr_, api_level_) \
     WS_DLL_PUBLIC plugin_type_e \
-    wireshark_load_module(int *abi_version, int *min_api_level, \
-                            struct ws_module **plug_ptr) \
+    wireshark_load_module(int *abi_version_ptr, int *min_api_level_ptr, \
+                            struct ws_module **module_ptr) \
     { \
-        *abi_version = WIRESHARK_ABI_VERSION_ ## type; \
-        *min_api_level = api_level_; \
-        *plug_ptr = ptr_; \
+        if (abi_version_ptr) \
+            *abi_version_ptr = WIRESHARK_ABI_VERSION_ ## type; \
+        if (min_api_level_ptr) \
+            *min_api_level_ptr = api_level_; \
+        ws_assert(module_ptr); \
+        *module_ptr = ptr_; \
         return WS_PLUGIN_ ## type; \
     }
 
