@@ -105,6 +105,9 @@ The following features are new (or have been significantly updated) since versio
   selected rows or the entire table can be saved or copied to the clipboard
   in several formats.
 
+* New menu:Tools[Install Plugin] option provides a convenient method to install
+  a binary plugin to the personal folder.
+
 //=== Removed Features and Support
 
 // === Removed Dissectors
@@ -155,7 +158,7 @@ EGNOS Messager Server (EMS) files
 === Major API Changes
 
 * Plugin registration API was refactored. Plugin authors must do the following:
-  1 - Remove the existing bloilerplate (version, want_major` and `want_minor` and
+  1 - Remove the existing boilerplate (version, want_major` and `want_minor` and
   plugin API declarations. 2 - Add a struct ws_module to the plugin.
   3 - Call one of the WIRESHARK_PLUGIN_REGISTER_* macros. See README.plugins
   sections 5 and doc/plugins.example/hello.c for details and examples.
