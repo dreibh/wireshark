@@ -402,18 +402,22 @@ macos_enable_layer_backing(void)
 
 #ifdef HAVE_LIBPCAP
 static GList *
-capture_opts_get_interface_list(int *err, char **err_str)
+capture_opts_get_interface_list(int *err _U_, char **err_str _U_)
 {
-    /*
-     * XXX - should this pass an update callback?
-     * We already have a window up by the time we start parsing
-     * the majority of the command-line arguments, because
-     * we need to do a bunch of initialization work before
-     * parsing those arguments, and we want to let the user
-     * know that we're doing that initialization, given that
-     * it can take a while.
-     */
-    return capture_interface_list(err, err_str, NULL);
+    // logray only wants the IF_EXTCAP interfaces, so there's no point
+    // in spawning dumpcap to retrieve the other types of interfaces.
+#if 0
+    if (mainApp) {
+        GList *if_list = mainApp->getInterfaceList();
+        if (if_list == NULL) {
+            if_list = capture_interface_list(err, err_str, main_window_update);
+            mainApp->setInterfaceList(if_list);
+        }
+        return if_list;
+    }
+    return capture_interface_list(err, err_str, main_window_update);
+#endif
+    return append_extcap_interface_list(NULL);
 }
 #endif
 
@@ -839,19 +843,6 @@ int main(int argc, char *qt_argv[])
     timestamp_set_seconds_type (recent.gui_seconds_format);
 
 #ifdef HAVE_LIBPCAP
-#ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
-#endif
-    splash_update(RA_INTERFACES, NULL, NULL);
-
-    if (!global_commandline_info.cf_name && !prefs.capture_no_interface_load) {
-        /* Allow only extcap interfaces to be found */
-        GList * filter_list = NULL;
-        filter_list = g_list_append(filter_list, GUINT_TO_POINTER((guint) IF_EXTCAP));
-        fill_in_local_interfaces_filtered(filter_list, main_window_update);
-        g_list_free(filter_list);
-    }
-
     if  (global_commandline_info.list_link_layer_types)
         caps_queries |= CAPS_QUERY_LINK_TYPES;
      if (global_commandline_info.list_timestamp_types)
@@ -912,6 +903,19 @@ int main(int argc, char *qt_argv[])
         destroy_console();
 #endif /* _WIN32 */
         goto clean_exit;
+    }
+
+#ifdef DEBUG_STARTUP_TIME
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" G_GUINT64_FORMAT " us \n", g_get_monotonic_time() - start_time);
+#endif
+    splash_update(RA_INTERFACES, NULL, NULL);
+
+    if (!global_commandline_info.cf_name && !prefs.capture_no_interface_load) {
+        /* Allow only extcap interfaces to be found */
+        GList * filter_list = NULL;
+        filter_list = g_list_append(filter_list, GUINT_TO_POINTER((guint) IF_EXTCAP));
+        fill_in_local_interfaces_filtered(filter_list, main_window_update);
+        g_list_free(filter_list);
     }
 
     capture_opts_trim_snaplen(&global_capture_opts, MIN_PACKET_SIZE);

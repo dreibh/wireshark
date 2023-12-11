@@ -28,6 +28,7 @@ typedef enum {
     WS_PLUGIN_SCOPE_NONE,
     WS_PLUGIN_SCOPE_USER,
     WS_PLUGIN_SCOPE_GLOBAL,
+    WS_PLUGIN_SCOPE_CLI,
 } plugin_scope_e;
 
 #define WS_PLUGIN_SPDX_GPLv2    "GPL-2.0-or-later"
@@ -96,8 +97,8 @@ int plugins_abi_version(plugin_type_e type);
             *abi_version_ptr = WIRESHARK_ABI_VERSION_ ## type; \
         if (min_api_level_ptr) \
             *min_api_level_ptr = api_level_; \
-        ws_assert(module_ptr); \
-        *module_ptr = ptr_; \
+        if (module_ptr) \
+            *module_ptr = ptr_; \
         return WS_PLUGIN_ ## type; \
     }
 
