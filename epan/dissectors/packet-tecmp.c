@@ -50,6 +50,7 @@ static gboolean heuristic_first = FALSE;
 static gboolean analog_samples_are_signed_int = TRUE;
 static gboolean show_ethernet_in_tecmp_tree = FALSE;
 static gboolean detect_asam_cmp = TRUE;
+static gboolean detect_asam_cmp_ignore_user_defined = TRUE;
 
 static dissector_table_t lin_subdissector_table;
 static dissector_table_t data_subdissector_table;
@@ -193,7 +194,14 @@ static int hf_tecmp_payload_data_analog_value_watt;
 static int hf_tecmp_payload_data_analog_value_amp_hour;
 static int hf_tecmp_payload_data_analog_value_celsius;
 
-/* TECMP Status Messsages */
+/* ILaS */
+static int hf_tecmp_payload_data_ilas_decoded_command;
+static int hf_tecmp_payload_data_ilas_decoded_address;
+static int hf_tecmp_payload_data_ilas_decoded_data;
+static int hf_tecmp_payload_data_ilas_raw_sdu;
+static int hf_tecmp_payload_data_ilas_raw_crc;
+
+/* TECMP Status Messages */
 /* Status Device */
 static int hf_tecmp_payload_status_vendor_id;
 static int hf_tecmp_payload_status_dev_version;
@@ -562,6 +570,60 @@ static const value_string tecmp_payload_analog_unit_types[] = {
     {0x5, "undefined value"},
     {0x6, "undefined value"},
     {0x7, "undefined value"},
+    {0, NULL}
+};
+
+static const value_string tecmp_ilas_command_types[] = {
+    {0, "Unknown Command"},
+    {1, "ILas_Reset"},
+    {2, "ILaS_Set_Config"},
+    {3, "ILaS_Set_PWM_Max_High_Ch2"},
+    {4, "ILaS_Set_PWM_Max_High_Ch1"},
+    {5, "ILaS_Set_PWM_Max_High_Ch0"},
+    {6, "ILaS_Set_Cur_Ch1"},
+    {7, "ILaS_Set_Cur_Ch0"},
+    {8, "ILaS_Set_Temp_Offset"},
+    {9, "ILaS_Trig_ADC_Cal"},
+    {11, "ILaS_Set_Bias"},
+    {12, "ILaS_Set_TC_Base"},
+    {13, "ILaS_Set_TC_Offset"},
+    {14, "ILaS_Set_Sig_High"},
+    {15, "ILaS_Set_ADC_DAC"},
+    {16, "ILaS_Burn_Item (part 1)"},
+    {17, "ILaS_Burn_Sig"},
+    {18, "ILaS_Burn_Item (part 2)"},
+    {19, "ILaS_Set_TC_LUT"},
+    {20, "ILaS_Define_Mcast"},
+    {21, "ILaS_Set_PWM_Max_Low_Ch2"},
+    {22, "ILaS_Set_PWM_Max_Low_Ch1"},
+    {23, "ILaS_Set_PWM_Max_Low_Ch0"},
+    {24, "ILaS_Set_Cur_Ch3"},
+    {25, "ILaS_Burn_Item (part 3)"},
+    {26, "ILaS_Set_Port"},
+    {27, "ILaS_Branch_Read_Temp"},
+    {28, "ILaS_Branch_Read_Status"},
+    {29, "ILaS_Branch_Read_ADC"},
+    {30, "ILaS_Branch_Read_Item (part 1)"},
+    {31, "ILaS_Branch_Read_PWM"},
+    {32, "ILaS_Branch_Read_Item (part 2)"},
+    {33, "ILaS_Network_Init"},
+    {34, "ILaS_Branch_Init"},
+    {35, "ILaS_Network_Ping"},
+    {36, "ILaS_Branch_Ping"},
+    {37, "ILaS_Read_Register"},
+    {38, "ILaS_BranchDevices_Read"},
+    {39, "ILaS_Read_Event"},
+    {40, "ILaS_Set_Fw_Mode"},
+    {41, "ILaS_Set_Ps_Mode"},
+    {42, "ILaS_Burn_Sniff_Mode"},
+    {43, "ILaS_NOP"},
+    {44, "ILaS_Trg_ADC_Meas"},
+    {45, "ILaS_Set_3PWM_Low"},
+    {46, "ILaS_Set_3PWM_High"},
+    {47, "ILaS_Set_DIM"},
+    {48, "ILaS_Set_PWM_Ch3"},
+    {49, "ILaS_Write_Register"},
+    {50, "ILaS_Burn_Register"},
     {0, NULL}
 };
 
@@ -1895,8 +1957,15 @@ dissect_tecmp_log_or_replay_stream(tvbuff_t *tvb, packet_info *pinfo, proto_tree
                 break;
 
             case TECMP_DATA_TYPE_ILAS:
-                /* No parameters for this format yet. */
-                proto_tree_add_item(tecmp_tree, hf_tecmp_payload_data, sub_tvb, 0, length, ENC_NA);
+                proto_tree_add_item(tecmp_tree, hf_tecmp_payload_data_ilas_decoded_command, sub_tvb, offset2, 1, ENC_NA);
+                offset2 += 1;
+                proto_tree_add_item(tecmp_tree, hf_tecmp_payload_data_ilas_decoded_address, sub_tvb, offset2, 2, ENC_BIG_ENDIAN);
+                offset2 += 2;
+                proto_tree_add_item(tecmp_tree, hf_tecmp_payload_data_ilas_decoded_data, sub_tvb, offset2, 3, ENC_NA);
+                offset2 += 3;
+                proto_tree_add_item(tecmp_tree, hf_tecmp_payload_data_ilas_raw_sdu, sub_tvb, offset2, 7, ENC_NA);
+                offset2 += 7;
+                proto_tree_add_item(tecmp_tree, hf_tecmp_payload_data_ilas_raw_crc, sub_tvb, offset2, 2, ENC_BIG_ENDIAN);
                 break;
 
             case TECMP_DATA_TYPE_RS232_ASCII:
@@ -2096,10 +2165,14 @@ dissect_tecmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     /* ASAM CMP is the successor of TECMP and uses the same EtherType.
      *
      * How to detect what the message is:
-     * The first byte in TECMP is always 0.
+     * The first byte in TECMP 1.7 and later is always 0.
+     * The first byte in TECMP 1.6 and older allowed 0xff for user-defined IDs.
      * The first byte in ASAM CMP is defined as version and is required to be > 0.
-     * If the first byte is not 0, we pass it be ASAM CMP */
-    if (detect_asam_cmp && asam_cmp_handle != 0 && tvb_get_guint8(tvb, offset) != 0) {
+     * If the first byte is not 0, we pass it be ASAM CMP.
+     * For backward compatibility: If 0xff allow as TECMP.
+     */
+    if ( (detect_asam_cmp && asam_cmp_handle != 0 && tvb_get_guint8(tvb, offset) != 0) &&
+         (!detect_asam_cmp_ignore_user_defined || tvb_get_guint8(tvb, offset) != 0xff) ) {
         return call_dissector_with_data(asam_cmp_handle, tvb, pinfo, tree, data);
     }
 
@@ -2644,6 +2717,23 @@ proto_register_tecmp_payload(void) {
             { "Analog Value", "tecmp.payload.data.analog_value_celsius",
             FT_DOUBLE, BASE_NONE | BASE_UNIT_STRING, &units_degree_celsius, 0x0, NULL, HFILL }},
 
+        /* ILaS */
+        { &hf_tecmp_payload_data_ilas_decoded_command,
+            { "Decoded API Command", "tecmp.payload.ilas_decoded_command",
+            FT_UINT8, BASE_DEC, VALS(tecmp_ilas_command_types), 0x0, NULL, HFILL } },
+        { &hf_tecmp_payload_data_ilas_decoded_address,
+            { "Decoded Address", "tecmp.payload.ilas_decoded_address",
+            FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
+        { &hf_tecmp_payload_data_ilas_decoded_data,
+            { "Decoded Data", "tecmp.payload.ilas_decoded_data",
+            FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL } },
+        { &hf_tecmp_payload_data_ilas_raw_sdu,
+            { "Raw SDU", "tecmp.payload.ilas_raw_sdu",
+            FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL } },
+        { &hf_tecmp_payload_data_ilas_raw_crc,
+            { "Raw CRC", "tecmp.payload.ilas_raw_crc",
+            FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
+
         /* TX Data Flags */
         { &hf_tecmp_payload_data_flags_use_crc_value,
             { "Use CRC Value", "tecmp.payload.data_flags.use_crc_value",
@@ -2894,6 +2984,11 @@ proto_register_tecmp(void) {
         "Detect ASAM CMP",
         "Detect ASAM CMP messages and the ASAM CMP dissector handle them.",
         &detect_asam_cmp);
+
+    prefs_register_bool_preference(tecmp_module, "detect_asam_cmp_ignore_user_defined",
+        "Ignore Device IDs 0xff00-0xffff for ASAM CMP Detection",
+        "Ignore Device IDs 0xff00-0xffff (user-defined range) for ASAM CMP Detection",
+        &detect_asam_cmp_ignore_user_defined);
 }
 
 void

@@ -8781,7 +8781,7 @@ static dissector_table_t wifi_alliance_anqp_info_table;
 static dissector_table_t wifi_alliance_ie_table;
 static dissector_table_t wifi_alliance_public_action_table;
 
-static int wlan_tap = -1;
+static int wlan_tap;
 
 static const value_string access_network_type_vals[] = {
   {  0, "Private network" },
@@ -13637,14 +13637,19 @@ find_fixed_field_len(tvbuff_t *tvb, guint offset)
        * Check if we have a len followed by either ETAG_REJECTED_GROUPS
        * or ETAG_PASSWORD_IDENTIFIER or ETAG_ANTI_CLOGGING_TOKEN
        */
-      if (offset < len - 3) {
+      /* The length of SAE Confirm or Scalar Fixed parameter >= 32 */
+      if ((offset < len - 3) && (offset - start_offset >= 32)) {
+        guint8 etag_len = tvb_get_guint8(tvb, offset + 1);
         guint8 check_byte = tvb_get_guint8(tvb, offset + 2);
         if (check_byte == ETAG_REJECTED_GROUPS ||
             check_byte == ETAG_PASSWORD_IDENTIFIER ||
             check_byte == ETAG_ANTI_CLOGGING_TOKEN ||
             check_byte == ETAG_MULTI_LINK ||
             check_byte == ETAG_AKM_SUITE_SELECTOR) {
-              break;
+          /* Add length check to avoid false detection */
+          if (offset + etag_len + 2 <= len) {
+            break;
+          }
         }
       }
     }
@@ -13774,7 +13779,9 @@ add_ff_auth_sae(proto_tree *tree, tvbuff_t *tvb,
     proto_tree_add_item(tree, hf_ieee80211_ff_send_confirm, tvb, 6, 2,
                         ENC_LITTLE_ENDIAN);
     offset += 2;
-    len = tvb_captured_length_remaining(tvb, offset);
+
+    /* Check if there are additional elements */
+    len = find_fixed_field_len(tvb, offset);
     proto_tree_add_item(tree, hf_ieee80211_ff_confirm, tvb, offset, len,
                         ENC_NA);
     offset += len;
@@ -22396,18 +22403,17 @@ static guint16 get_mic_len(guint32 akm_suite) {
   switch(akm_suite) {
     case AKMS_WPA_SHA384_SUITEB:
     case AKMS_FT_IEEE802_1X_SHA384:
+    case AKMS_FT_FILS_SHA384:
       // HMAC-SHA-384
       return 24;
 
     case AKMS_FILS_SHA256:
     case AKMS_FILS_SHA384:
-    case AKMS_FT_FILS_SHA256:
-    case AKMS_FT_FILS_SHA384:
       // AES-SIV-256 and AES-SIV-512
       return 0;
 
     default:
-      // HMAC-SHA-1-128, AES-128-CMAC, HMAC-SHA-256
+      // HMAC-SHA-1-128, AES-128-CMAC, HMAC-SHA-256, AKMS_FT_FILS_SHA256
       return 16;
   }
 }
@@ -46106,7 +46112,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_gann_flags_reserved,
      {"Reserved", "wlan.gann.flags.reserved",
-       FT_UINT8, BASE_HEX, NULL, 0,
+       FT_UINT8, BASE_HEX, NULL, 0xff,
       NULL, HFILL }},
 
     {&hf_ieee80211_gann_hop_count,
@@ -54282,7 +54288,7 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_he_trigger_bar_info_blk_ack_seq_ctrl,
      {"Block Ack Starting Sequence Control",
       "wlan.trigger.he.common_info.bar_info.blk_ack_starting_seq_ctrl",
-      FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL }},
+      FT_UINT16, BASE_HEX, NULL, 0xffff, NULL, HFILL }},
 
     {&hf_ieee80211_he_trigger_user_info,
      {"User Info", "wlan.trigger.he.user_info",

@@ -300,7 +300,7 @@ public slots:
     void captureFileClosing();
     void captureFileClosed();
 
-    void launchRLCGraph(bool channelKnown, guint16 ueid, guint8 rlcMode,
+    void launchRLCGraph(bool channelKnown, uint8_t RAT, guint16 ueid, guint8 rlcMode,
                         guint16 channelType, guint16 channelId, guint8 direction);
 
     void rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *> stream_ids);
@@ -524,6 +524,9 @@ private slots:
     QString findRtpStreams(QVector<rtpstream_id_t *> *stream_ids, bool reverse);
 
     void openTLSKeylogDialog();
+#ifdef HAVE_PLUGINS
+    void installPersonalBinaryPlugin();
+#endif
 
     friend class MainApplication;
 };

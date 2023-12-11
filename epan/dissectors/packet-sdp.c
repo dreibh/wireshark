@@ -60,7 +60,7 @@ static dissector_handle_t h264_handle;
 static dissector_handle_t h265_handle;
 static dissector_handle_t mp4ves_config_handle;
 
-static int sdp_tap = -1;
+static int sdp_tap;
 
 static int proto_sdp;
 static int proto_sprt;
@@ -1235,7 +1235,7 @@ decode_sdp_fmtp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset
        parameter name to the value, as well as dissect some of them here,
        depending on the media type.
      */
-    next_offset = tvb_find_guint8(tvb, offset, -1, '=');
+    next_offset = tvb_find_guint8(tvb, offset, tokenlen, '=');
     if (next_offset == -1)
     {
         /* Some media types, like telephone-event and RED, don't have the

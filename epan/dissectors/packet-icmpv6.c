@@ -554,7 +554,7 @@ static int hf_icmpv6_da_eui64;
 static int hf_icmpv6_da_raddr;
 
 static heur_dissector_list_t icmpv6_heur_subdissector_list;
-static int icmpv6_tap = -1;
+static int icmpv6_tap;
 
 /* RFC 7731 MPL (159) */
 static int hf_icmpv6_mpl_seed_info_min_sequence;
@@ -1027,7 +1027,7 @@ static const value_string option_vals[] = {
 #define ND_RA_FLAG_H    0x20
 #define ND_RA_FLAG_PRF  0x18
 #define ND_RA_FLAG_P    0x04
-#define ND_RA_FLAG_RSV  0x02
+#define ND_RA_FLAG_RSV  0x03
 
 #define ND_NA_FLAG_R    0x80000000
 #define ND_NA_FLAG_S    0x40000000

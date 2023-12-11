@@ -25,6 +25,9 @@ DIAG_ON(frame-larger-than=)
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
 #include <wsutil/version_info.h>
+#ifdef HAVE_PLUGINS
+#include <wsutil/plugins.h>
+#endif
 #include <epan/prefs.h>
 #include <epan/stats_tree_priv.h>
 #include <epan/plugin_if.h>
@@ -374,7 +377,7 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
             << REGISTER_STAT_GROUP_TELEPHONY
             << REGISTER_STAT_GROUP_TELEPHONY_ANSI
             << REGISTER_STAT_GROUP_TELEPHONY_GSM
-            << REGISTER_STAT_GROUP_TELEPHONY_LTE
+            << REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU
             << REGISTER_STAT_GROUP_TELEPHONY_MTP3
             << REGISTER_STAT_GROUP_TELEPHONY_SCTP
             << REGISTER_TOOLS_GROUP_UNSORTED;
@@ -478,6 +481,11 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
 
 #ifndef HAVE_LIBPCAP
     main_ui_->menuCapture->setEnabled(false);
+    main_ui_->actionCaptureStart->setEnabled(false);
+    main_ui_->actionCaptureStop->setEnabled(false);
+    main_ui_->actionCaptureRestart->setEnabled(false);
+    main_ui_->actionCaptureOptions->setEnabled(false);
+    main_ui_->actionCaptureRefreshInterfaces->setEnabled(false);
 #endif
 
     // Set OS specific shortcuts for fullscreen mode
@@ -2831,7 +2839,7 @@ void WiresharkMainWindow::addMenuActions(QList<QAction *> &actions, int menu_gro
         case REGISTER_STAT_GROUP_TELEPHONY_GSM:
             main_ui_->menuGSM->addAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_LTE:
+        case REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU:
             main_ui_->menuLTE->addAction(action);
             break;
         case REGISTER_STAT_GROUP_TELEPHONY_MTP3:
@@ -2897,7 +2905,7 @@ void WiresharkMainWindow::removeMenuActions(QList<QAction *> &actions, int menu_
         case REGISTER_STAT_GROUP_TELEPHONY_GSM:
             main_ui_->menuGSM->removeAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_LTE:
+        case REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU:
             main_ui_->menuLTE->removeAction(action);
             break;
         case REGISTER_STAT_GROUP_TELEPHONY_MTP3:
@@ -2934,9 +2942,9 @@ void WiresharkMainWindow::addDynamicMenus()
 {
     // Manual additions
     mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_GSM, main_ui_->actionTelephonyGsmMapSummary);
-    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_LTE, main_ui_->actionTelephonyLteMacStatistics);
-    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_LTE, main_ui_->actionTelephonyLteRlcStatistics);
-    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_LTE, main_ui_->actionTelephonyLteRlcGraph);
+    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU, main_ui_->actionTelephonyLteMacStatistics);
+    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU, main_ui_->actionTelephonyLteRlcStatistics);
+    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU, main_ui_->actionTelephonyLteRlcGraph);
     mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_MTP3, main_ui_->actionTelephonyMtp3Summary);
     mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY, main_ui_->actionTelephonySipFlows);
 
@@ -2955,7 +2963,7 @@ void WiresharkMainWindow::addDynamicMenus()
     if (mainApp->dynamicMenuGroupItems(REGISTER_STAT_GROUP_TELEPHONY_GSM).length() > 0) {
         main_ui_->actionTelephonyGSMPlaceholder->setVisible(false);
     }
-    if (mainApp->dynamicMenuGroupItems(REGISTER_STAT_GROUP_TELEPHONY_LTE).length() > 0) {
+    if (mainApp->dynamicMenuGroupItems(REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU).length() > 0) {
         main_ui_->actionTelephonyLTEPlaceholder->setVisible(false);
     }
     if (mainApp->dynamicMenuGroupItems(REGISTER_STAT_GROUP_TELEPHONY_MTP3).length() > 0) {
@@ -3287,3 +3295,89 @@ void WiresharkMainWindow::openTLSKeylogDialog()
     tlskeylog_dialog_->raise();
     tlskeylog_dialog_->activateWindow();
 }
+
+#ifdef HAVE_PLUGINS
+void WiresharkMainWindow::installPersonalBinaryPlugin()
+{
+    QMessageBox::StandardButton reply;
+
+    QString caption = mainApp->windowTitleString(tr("Install plugin"));
+
+    // Get the plugin file path to install
+    QString plugin_filter = tr("Binary plugin (*%1)").arg(WS_PLUGIN_MODULE_SUFFIX);
+    QString src_path = WiresharkFileDialog::getOpenFileName(this, caption, "", plugin_filter);
+    if (src_path.isEmpty()) {
+        return;
+    }
+
+    // Plugins from untrusted sources can be dangerous.
+    // Inform the user and ask for confirmation.
+    // We need to do this before checking the plugin compatibility.
+    reply = QMessageBox::question(this, caption,
+                        tr("Plugins can execute arbitrary code as the current user. "
+                           "Make sure you trust it before installing.\n\n"
+                           "Continue installing the file \"%1\" to the personal plugin folder?")
+                                .arg(src_path));
+    if (reply != QMessageBox::Yes) {
+        return;
+    }
+
+    // Check if this is a valid plugin file and get the plugin binary type.
+    // The function will report any errors.
+    plugin_type_e have_type = plugins_check_file(qUtf8Printable(src_path));
+    if (have_type == WS_PLUGIN_NONE)
+        return;
+
+    // Create the destination folder if necessary
+    QString type_path = gchar_free_to_qstring(plugins_pers_type_folder(have_type));
+    QDir type_dir(type_path);
+    if (!type_dir.exists(type_path)) {
+        if (!type_dir.mkpath(type_path)) {
+            QMessageBox::warning(this, caption,
+                        tr("Failed to create the directory: %1").arg(type_path));
+            return;
+        }
+    }
+
+    // Check if the file exists in the destination folder, in case we need to overwrite it
+    // XXX Overwriting will probably fail on Windows because the plugin is loaded. We need
+    // a way to load and unload plugins without having to restart the program.
+    QFileInfo file_info(src_path);
+    QString file_name = file_info.fileName();
+    if (type_dir.exists(file_name)) {
+#ifdef Q_OS_WIN
+        QMessageBox::warning(this, tr("Install Plugin"),
+                        tr("The plugin already exists in the personal plugin folder."));
+        return;
+#else
+        reply = QMessageBox::question(this, caption,
+                        tr("The file already exists. Do you want to overwrite it?"));
+        if (reply == QMessageBox::Yes) {
+            if (!type_dir.remove(file_name)) {
+                QMessageBox::warning(this, caption,
+                        tr("Error removing the old plugin file from the personal plugin folder."));
+                return;
+            }
+        }
+        else {
+            // Overwrite refused, we are done
+            return;
+        }
+#endif // Q_OS_WIN
+    }
+
+    // File does not exist in the destination or the user chose to overwrite it
+    // Do the copy to install it.
+    QString dst_path = type_dir.filePath(file_name);
+    if (!QFile::copy(src_path, dst_path)) {
+        QMessageBox::warning(this, caption,
+                        tr("Failed to copy the file to the destination: %1").arg(dst_path));
+        return;
+    }
+
+    // Success
+    QMessageBox::information(this, caption,
+                    tr("Plugin '%1' installed successfully. "
+                       "You must restart the program to be able to use it.").arg(file_name));
+}
+#endif
