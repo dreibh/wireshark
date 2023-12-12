@@ -31,9 +31,7 @@
 #include <wsutil/privileges.h>
 #include <wsutil/socket.h>
 #include <wsutil/wslog.h>
-#ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
-#endif
 #include <wsutil/report_message.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/unicode-utils.h>
@@ -447,16 +445,15 @@ macos_enable_layer_backing(void)
 static GList *
 capture_opts_get_interface_list(int *err, char **err_str)
 {
-    /*
-     * XXX - should this pass an update callback?
-     * We already have a window up by the time we start parsing
-     * the majority of the command-line arguments, because
-     * we need to do a bunch of initialization work before
-     * parsing those arguments, and we want to let the user
-     * know that we're doing that initialization, given that
-     * it can take a while.
-     */
-    return capture_interface_list(err, err_str, NULL);
+    if (mainApp) {
+        GList *if_list = mainApp->getInterfaceList();
+        if (if_list == NULL) {
+            if_list = capture_interface_list(err, err_str, main_window_update);
+            mainApp->setInterfaceList(if_list);
+        }
+        return if_list;
+    }
+    return capture_interface_list(err, err_str, main_window_update);
 }
 #endif
 
@@ -890,17 +887,9 @@ int main(int argc, char *qt_argv[])
     timestamp_set_seconds_type (recent.gui_seconds_format);
 
 #ifdef HAVE_LIBPCAP
-#ifdef DEBUG_STARTUP_TIME
-    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
-#endif
-    splash_update(RA_INTERFACES, NULL, NULL);
-
-    if (!global_commandline_info.cf_name && !prefs.capture_no_interface_load)
-        fill_in_local_interfaces(main_window_update);
-
-    if  (global_commandline_info.list_link_layer_types)
+    if (global_commandline_info.list_link_layer_types)
         caps_queries |= CAPS_QUERY_LINK_TYPES;
-     if (global_commandline_info.list_timestamp_types)
+    if (global_commandline_info.list_timestamp_types)
         caps_queries |= CAPS_QUERY_TIMESTAMP_TYPES;
 
     if (global_commandline_info.start_capture || caps_queries) {
@@ -959,6 +948,14 @@ int main(int argc, char *qt_argv[])
 #endif /* _WIN32 */
         goto clean_exit;
     }
+
+#ifdef DEBUG_STARTUP_TIME
+    ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling fill_in_local_interfaces, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
+#endif
+    splash_update(RA_INTERFACES, NULL, NULL);
+
+    if (!global_commandline_info.cf_name && !prefs.capture_no_interface_load)
+        fill_in_local_interfaces(main_window_update);
 
     capture_opts_trim_snaplen(&global_capture_opts, MIN_PACKET_SIZE);
     capture_opts_trim_ring_num_files(&global_capture_opts);

@@ -25,9 +25,7 @@ DIAG_ON(frame-larger-than=)
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
 #include <wsutil/version_info.h>
-#ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
-#endif
 #include <epan/prefs.h>
 #include <epan/stats_tree_priv.h>
 #include <epan/plugin_if.h>
@@ -3296,7 +3294,6 @@ void WiresharkMainWindow::openTLSKeylogDialog()
     tlskeylog_dialog_->activateWindow();
 }
 
-#ifdef HAVE_PLUGINS
 void WiresharkMainWindow::installPersonalBinaryPlugin()
 {
     QMessageBox::StandardButton reply;
@@ -3345,17 +3342,13 @@ void WiresharkMainWindow::installPersonalBinaryPlugin()
     QFileInfo file_info(src_path);
     QString file_name = file_info.fileName();
     if (type_dir.exists(file_name)) {
-#ifdef Q_OS_WIN
-        QMessageBox::warning(this, tr("Install Plugin"),
-                        tr("The plugin already exists in the personal plugin folder."));
-        return;
-#else
         reply = QMessageBox::question(this, caption,
                         tr("The file already exists. Do you want to overwrite it?"));
         if (reply == QMessageBox::Yes) {
             if (!type_dir.remove(file_name)) {
                 QMessageBox::warning(this, caption,
-                        tr("Error removing the old plugin file from the personal plugin folder."));
+                        tr("Error removing the old plugin from the personal plugin folder. "
+                           "You may need to close Wireshark first and then manually remove the file \"%1\".").arg(type_dir.filePath(file_name)));
                 return;
             }
         }
@@ -3363,7 +3356,6 @@ void WiresharkMainWindow::installPersonalBinaryPlugin()
             // Overwrite refused, we are done
             return;
         }
-#endif // Q_OS_WIN
     }
 
     // File does not exist in the destination or the user chose to overwrite it
@@ -3380,4 +3372,3 @@ void WiresharkMainWindow::installPersonalBinaryPlugin()
                     tr("Plugin '%1' installed successfully. "
                        "You must restart the program to be able to use it.").arg(file_name));
 }
-#endif

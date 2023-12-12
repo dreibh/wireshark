@@ -22,6 +22,8 @@
 
 #include <config.h>
 
+#define WS_LOG_DOMAIN "HTTP3"
+
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/exceptions.h>
@@ -46,22 +48,13 @@
 #include <nghttp3/nghttp3.h>
 #endif
 
-/* Comment out to disable dissector debug */
-// #define HTTP3_DISSECTOR_DEBUG
-
-#if defined(HTTP3_DISSECTOR_DEBUG)
-#define HTTP3_DISSECTOR_DPRINTF(fmt, ...)                                                                              \
-    printf("HTTP3 DEBUG: %s:%d (%s) " fmt "\n", __FILE__, __LINE__, __func__, __VA_ARGS__)
-#else
-#define HTTP3_DISSECTOR_DPRINTF(fmt, ...)                                                                              \
-    do {                                                                                                               \
-    } while (0)
-#endif
-
 void proto_reg_handoff_http3(void);
 void proto_register_http3(void);
 
 static dissector_handle_t http3_handle;
+
+#define PROTO_DATA_KEY_HEADER 0
+#define PROTO_DATA_KEY_QPACK 1
 
 static int proto_http3;
 static int hf_http3_stream_uni;
@@ -441,10 +434,33 @@ typedef struct _header_block_encoded_iter {
 typedef struct _http3_header_data {
     guint                       len;           /**< Length of the encoded headers block. */
     guint                       offset;        /**< Offset of the headers block in the pinfo TVB. */
+    unsigned                    ds_idx;        /**< Index of the data source tvb in the pinfo. */
     wmem_array_t *              header_fields; /**< List of header fields contained in the header block. */
     header_block_encoded_iter_t encoded;       /**< Used for dissection, not allocated. */
     struct _http3_header_data * next;          /**< Next pointer in the chain. */
 } http3_header_data_t;
+
+/* HTTP3 QPACK encoder state
+ *
+ * Store information about how many entries a QPACK encoder stream
+ * has inserted into the decoder at a particular point in the capture
+ * file (both the number newly inserted in the portion of the stream
+ * contained in the current QUIC packet and the total up to that point.)
+ * If a capture frame contains multiple encoder stream segments, the
+ * corresponding blocks will be chained using the 'next' pointer. In this
+ * case, individual blocks will be identified by the data source index
+ * of the tvb within the capture frame and the offset in the ds_tvb.
+ * (Both are necessary for multiple QUIC packets coalesced in a single
+ * UDP datagram with multiple stream segments within a QUIC packet.)
+ */
+typedef struct _http3_qpack_encoder_state {
+    guint                       offset;        /**< Offset of the headers block in the pinfo TVB. */
+    unsigned                    ds_idx;        /**< Index of the data source tvb in the pinfo. */
+    uint32_t                    icnt_inc;      /**< Number of insertions in this header segment. */
+    uint64_t                    icnt;          /**< Total number of insertions up to this point. */
+    ptrdiff_t                   nread;         /**< Number of bytes read; if negative, an error code. */
+    struct _http3_qpack_encoder_state * next;  /**< Next pointer in the chain. */
+} http3_qpack_encoder_state_t;
 
 /**
  * File-scoped context.
@@ -650,6 +666,33 @@ cid_to_string(const quic_cid_t *cid, wmem_allocator_t *scope)
     return str;
 }
 
+/* Given a packet_info and a tvbuff_t, returns the index of the
+ * data source tvb among the data sources in the packet.
+ */
+static uint32_t
+get_tvb_ds_idx(packet_info *pinfo, tvbuff_t *tvb)
+{
+    bool found = false;
+    tvbuff_t *ds_tvb = tvb_get_ds_tvb(tvb);
+    GSList *src_le;
+    struct data_source *src;
+    uint32_t ds_idx = 0;
+    for (src_le = pinfo->data_src; src_le != NULL; src_le = src_le->next) {
+        src = (struct data_source *)src_le->data;
+        if (ds_tvb == get_data_source_tvb(src)) {
+            found = true;
+            break;
+        }
+        ds_idx++;
+    }
+
+    /* If this gets made to a more general function, return a
+     * failure condition (-1?) that must be checked instead of asserting.
+     */
+    DISSECTOR_ASSERT(found == true);
+    return ds_idx;
+}
+
 static http3_header_data_t *
 http3_get_header_data(packet_info *pinfo, tvbuff_t *tvb, guint offset)
 {
@@ -661,19 +704,9 @@ http3_get_header_data(packet_info *pinfo, tvbuff_t *tvb, guint offset)
      * packets in a single QUIC layer, so this guarantees the same raw
      * offset from different decrypted data gives different keys.
      */
-    tvbuff_t *ds_tvb = tvb_get_ds_tvb(tvb);
-    GSList *src_le;
-    struct data_source *src;
-    uint32_t key = 0;
-    for (src_le = pinfo->data_src; src_le != NULL; src_le = src_le->next) {
-        src = (struct data_source *)src_le->data;
-        if (ds_tvb == get_data_source_tvb(src)) {
-            break;
-        }
-        key++;
-    }
+    uint32_t ds_idx = get_tvb_ds_idx(pinfo, tvb);
 
-    data = (http3_header_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_http3, key);
+    data = (http3_header_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_http3, PROTO_DATA_KEY_HEADER);
 
     /*
      * Attempt to find existing header data block.
@@ -681,7 +714,7 @@ http3_get_header_data(packet_info *pinfo, tvbuff_t *tvb, guint offset)
      * and this loop won't be visited.
      */
     while (data != NULL) {
-        if (data->offset == raw_offset) {
+        if (data->offset == raw_offset && data->ds_idx == ds_idx) {
             /*
              * We found the matching data. Return it.
              */
@@ -698,6 +731,7 @@ http3_get_header_data(packet_info *pinfo, tvbuff_t *tvb, guint offset)
      */
     data         = wmem_new0(wmem_file_scope(), http3_header_data_t);
     data->offset = raw_offset;
+    data->ds_idx = ds_idx;
 
     /*
      * Check whether the newly allocated data should be linked
@@ -707,7 +741,61 @@ http3_get_header_data(packet_info *pinfo, tvbuff_t *tvb, guint offset)
     if (prev != NULL) {
         prev->next = data;
     } else {
-        p_add_proto_data(wmem_file_scope(), pinfo, proto_http3, key, data);
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_http3, PROTO_DATA_KEY_HEADER, data);
+    }
+
+    return data;
+}
+
+static http3_qpack_encoder_state_t *
+http3_get_qpack_encoder_state(packet_info *pinfo, tvbuff_t *tvb, guint offset)
+{
+    http3_qpack_encoder_state_t *data, *prev = NULL;
+
+    unsigned raw_offset = tvb_raw_offset(tvb) + offset;
+    /* The raw offset is relative to the original data source, which is
+     * the decrypted QUIC packet. There can be multiple decrypted QUIC
+     * packets in a single QUIC layer, so this guarantees the same raw
+     * offset from different decrypted data gives different keys.
+     */
+    uint32_t ds_idx = get_tvb_ds_idx(pinfo, tvb);
+
+    data = (http3_qpack_encoder_state_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_http3, PROTO_DATA_KEY_QPACK);
+
+    /*
+     * Attempt to find existing header data block.
+     * In most cases, data will be `NULL'
+     * and this loop won't be visited.
+     */
+    while (data != NULL) {
+        if (data->offset == raw_offset && data->ds_idx == ds_idx) {
+            /*
+             * We found the matching data. Return it.
+             */
+            return data;
+        }
+        prev = data;
+        data = data->next;
+    }
+
+    /*
+     * We did not find header data matching the offset.
+     * Allocate a new header data block, and initialize
+     * the offset marker.
+     */
+    data         = wmem_new0(wmem_file_scope(), http3_qpack_encoder_state_t);
+    data->offset = raw_offset;
+    data->ds_idx = ds_idx;
+
+    /*
+     * Check whether the newly allocated data should be linked
+     * to the tail of existing header block chain, or whether
+     * it is the head of a new header block chain.
+     */
+    if (prev != NULL) {
+        prev->next = data;
+    } else {
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_http3, PROTO_DATA_KEY_QPACK, data);
     }
 
     return data;
@@ -801,7 +889,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint
     http3_session = http3_session_lookup_or_create(pinfo);
     header_data   = http3_get_header_data(pinfo, tvb, offset);
 
-    HTTP3_DISSECTOR_DPRINTF("pdinfo visited=%d", PINFO_FD_VISITED(pinfo));
+    ws_noisy("pdinfo visited=%d", PINFO_FD_VISITED(pinfo));
 
     if (!PINFO_FD_VISITED(pinfo)) {
         /*
@@ -830,7 +918,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint
         nghttp3_qpack_stream_context *sctx = NULL;
         nghttp3_qpack_stream_context_new(&sctx, http3_stream->id, nghttp3_mem_default());
 
-        HTTP3_DISSECTOR_DPRINTF("Header data: %p %d %d\n", header_data->encoded.bytes, header_data->encoded.pos,
+        ws_debug("Header data: %p %d %d", header_data->encoded.bytes, header_data->encoded.pos,
                                 header_data->encoded.len);
 
         proto_tree_add_expert_format(tree, pinfo, &ei_http3_header_encoded_state, tvb, tvb_offset, 0,
@@ -846,7 +934,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint
             nghttp3_qpack_nv nv;
             guint8           flags;
 
-            HTTP3_DISSECTOR_DPRINTF("%p %p:%d decode decoder=%p sctx=%p", header_data->encoded.bytes,
+            ws_noisy("%p %p:%d decode decoder=%p sctx=%p", header_data->encoded.bytes,
                                     HEADER_BLOCK_ENC_ITER_PTR(header_data),
                                     HEADER_BLOCK_ENC_ITER_REMAINING(header_data), decoder, sctx);
 
@@ -858,7 +946,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint
                 /*
                  * This should be signaled up.
                  */
-                HTTP3_DISSECTOR_DPRINTF("Early return nread=%d err=%s", nread, nghttp3_strerror(nread));
+                ws_debug("Early return nread=%d err=%s", nread, nghttp3_strerror(nread));
                 proto_tree_add_expert_format(tree, pinfo, &ei_http3_header_decoding_failed, tvb, tvb_offset, 0,
                                              "QPACK error decoder %p ctx %p flags %" PRIu8 " error %d (%s)", decoder,
                                              sctx, flags, nread, nghttp3_strerror((int)nread));
@@ -885,7 +973,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint
                                              "QPACK - blocked decoder %p ctx %p flags=%" PRIu8 " ricnt=%" PRIu64
                                              " wicnt=%" PRIu64 " error %d (%s)",
                                              decoder, sctx, flags, ricnt, wicnt, nread, nghttp3_strerror((int)nread));
-                HTTP3_DISSECTOR_DPRINTF("Early return nread=%d blocked=%" PRIu8 " ricnt=%" PRIu64 " wicnt=%" PRIu64 "",
+                ws_debug("Early return nread=%d blocked=%" PRIu8 " ricnt=%" PRIu64 " wicnt=%" PRIu64 "",
                                         nread, flags, ricnt, wicnt);
                 break;
             }
@@ -905,7 +993,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint
                 guint8                      *value;
                 guint32                     pstr_len;
 
-                HTTP3_DISSECTOR_DPRINTF("Emit nread=%d flags=%" PRIu8 "", nread, flags);
+                ws_noisy("Emit nread=%d flags=%" PRIu8 "", nread, flags);
 
                 if (header_data->header_fields == NULL) {
                     header_data->header_fields = wmem_array_new(wmem_file_scope(), sizeof(http3_header_field_t));
@@ -918,7 +1006,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint
                 value_len = (guint32)value_vec.len;
                 value     = value_vec.base;
 
-                HTTP3_DISSECTOR_DPRINTF("HTTP header: %.*s: %.*s", name_len, name, value_len, value);
+                ws_debug("HTTP header: %.*s: %.*s", name_len, name, value_len, value);
 
                 pstr_len          = (name_len + value_len + 4 + 4);
                 http3_header_pstr = (char *)wmem_realloc(wmem_file_scope(), http3_header_pstr, pstr_len);
@@ -1533,7 +1621,7 @@ dissect_http3_qpack_encoder_stream(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
         TRY {
             opcode = tvb_get_guint8(tvb, opcode_offset) & QPACK_OPCODE_MASK;
 
-            HTTP3_DISSECTOR_DPRINTF("Decoding opcode=%" PRIu8 " decoded=%d remaining=%d", opcode, decoded, remaining);
+            ws_noisy("Decoding opcode=%" PRIu8 " decoded=%d remaining=%d", opcode, decoded, remaining);
 
             if (opcode & QPACK_OPCODE_INSERT_INDEXED) {
                 gint     table_entry_len  = 0;
@@ -1687,7 +1775,7 @@ dissect_http3_qpack_encoder_stream(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
                 proto_tree_add_item(tree, hf_http3_qpack_encoder_opcode_duplicate, tvb, opcode_offset,
                                     opcode_len, ENC_NA);
             } else {
-                HTTP3_DISSECTOR_DPRINTF("Opcode=%" PRIu8 ": UNKNOWN", opcode);
+                ws_debug("Opcode=%" PRIu8 ": UNKNOWN", opcode);
                 can_continue = false;
             }
         }
@@ -1698,18 +1786,17 @@ dissect_http3_qpack_encoder_stream(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
         ENDTRY;
     }
 
-    return offset + decoded;
+    return decoded;
 }
 
 static gint
 dissect_http3_qpack_enc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset,
                         quic_stream_info *stream_info, http3_stream_info_t *http3_stream)
 {
-    gint                  remaining, remaining_captured, retval; //, decoded = 0;
+    gint                  remaining, remaining_captured, retval, decoded = 0;
     proto_item *          qpack_update;
     proto_tree *          qpack_update_tree;
     http3_session_info_t *http3_session;
-    uint8_t *             qpack_buf = NULL;
 
     remaining_captured = tvb_captured_length_remaining(tvb, offset);
     remaining          = tvb_reported_length_remaining(tvb, offset);
@@ -1719,66 +1806,79 @@ dissect_http3_qpack_enc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int
     http3_session = http3_session_lookup_or_create(pinfo);
     DISSECTOR_ASSERT(http3_session);
 
-    if (remaining > 0) {
-        qpack_buf = (uint8_t *)tvb_memdup(pinfo->pool, tvb, offset, remaining);
-    }
-
     /*
      * Add a QPACK encoder tree item.
      */
     qpack_update      = proto_tree_add_item(tree, hf_http3_qpack_encoder, tvb, offset, remaining, ENC_NA);
     qpack_update_tree = proto_item_add_subtree(qpack_update, ett_http3_qpack_update);
-    /* decoded = */     dissect_http3_qpack_encoder_stream(tvb, pinfo, qpack_update_tree, offset,
+    decoded =     dissect_http3_qpack_encoder_stream(tvb, pinfo, qpack_update_tree, offset,
                                                            http3_stream);
 
+    if (!PINFO_FD_VISITED(pinfo)) {
+        ws_debug("decode encoder stream: Wireshark decoded=%u of %u", decoded, remaining);
+    }
+    if (decoded < remaining) {
+        pinfo->desegment_offset = offset + decoded;
+        pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
+    }
+
 #ifdef HAVE_NGHTTP3
-    if (qpack_buf && 0 < remaining) {
-        /*
-         * Pass the entire stream buffer to the decoder; we stop adding
-         * instructions that are split across packet boundaries,
-         * but the nghttp3_qpack_decoder saves states.
-         */
-        gint                   qpack_buf_len = remaining, nread;
+    if (remaining > 0) {
         proto_item *           ti;
         http3_stream_dir       packet_direction = http3_packet_get_direction(stream_info);
         nghttp3_qpack_decoder *decoder          = http3_session->qpack_decoder[packet_direction];
-        guint32                icnt_before, icnt_after;
 
-        /*
-         * Get the instr count prior to processing the data.
+        http3_qpack_encoder_state_t *encoder_state = http3_get_qpack_encoder_state(pinfo, tvb, offset);
+
+        if (!PINFO_FD_VISITED(pinfo)) {
+
+            /*
+             * Since we are now defragmenting, pass only the number of bytes
+             * decoded to the nghttp3_qpack_decoder. Otherwise, we'll end up
+             * sending the same bytes to the decoder again when the packet
+             * is defragmented.
+             */
+            uint8_t *qpack_buf = (uint8_t *)tvb_memdup(pinfo->pool, tvb, offset, decoded);
+            gint                   qpack_buf_len = decoded;
+
+            /*
+             * Get the instr count prior to processing the data.
+             */
+            uint64_t icnt_before = nghttp3_qpack_decoder_get_icnt(decoder);
+
+            encoder_state->nread = nghttp3_qpack_decoder_read_encoder(decoder, qpack_buf, qpack_buf_len);
+            encoder_state->icnt = nghttp3_qpack_decoder_get_icnt(decoder);
+            encoder_state->icnt_inc = (uint32_t)(encoder_state->icnt - icnt_before);
+
+            ws_debug("decode encoder stream: decoder=%p nread=%td new insertions=%u total insertions=%" PRIu64, decoder, encoder_state->nread, encoder_state->icnt_inc, encoder_state->icnt);
+        }
+
+        /* nghttp3_qpack_decoder_read_encoder() returns a nghttp3_ssize
+         * (ptrdiff_t), negative in the case of errors, but nghttp3_strerror()
+         * accepts int instead.
          */
-        icnt_after = icnt_before = (guint32)nghttp3_qpack_decoder_get_icnt(decoder);
-
-        HTTP3_DISSECTOR_DPRINTF("decode encoder stream: decoder=%p remaining=%u", decoder, remaining);
-
-        /*
-         * XXX: This should not be called every time the packet is dissected.
-         */
-        nread = (gint)nghttp3_qpack_decoder_read_encoder(decoder, qpack_buf, qpack_buf_len);
-        if (nread < 0) {
+        if (encoder_state->nread < 0) {
             quic_cid_t quic_cid          = {.len = 0};
             gboolean   initial_cid_found = quic_conn_data_get_conn_client_dcid_initial(pinfo, &quic_cid);
             proto_tree_add_expert_format(
-                tree, pinfo, &ei_http3_qpack_failed, tvb, offset, 0, "QPAC decoder %p DCID %s [found=%d] error %d (%s)",
-                decoder, cid_to_string(&quic_cid, pinfo->pool), initial_cid_found, nread, nghttp3_strerror((int)nread));
+                tree, pinfo, &ei_http3_qpack_failed, tvb, offset, 0, "QPACK decoder %p DCID %s [found=%d] error %d (%s)",
+                decoder, cid_to_string(&quic_cid, pinfo->pool), initial_cid_found, (int)encoder_state->nread, nghttp3_strerror((int)encoder_state->nread));
         }
 
-        icnt_after = (guint32)nghttp3_qpack_decoder_get_icnt(decoder);
-        proto_item_set_text(qpack_update, "QPACK encoder stream; %d opcodes (%d total)", icnt_after - icnt_before,
-                            icnt_after);
-
-        ti = proto_tree_add_uint(qpack_update_tree, hf_http3_qpack_encoder_icnt, tvb, offset, 0, icnt_after);
-        proto_item_set_generated(ti);
+        proto_item_set_text(qpack_update, "QPACK encoder stream; %d opcodes (%" PRIu64 " total)", encoder_state->icnt_inc,
+                            encoder_state->icnt);
 
         ti = proto_tree_add_uint(qpack_update_tree, hf_http3_qpack_encoder_icnt_inc, tvb, offset, 0,
-                                 icnt_after - icnt_before);
+                                 encoder_state->icnt_inc);
+        proto_item_set_generated(ti);
+        ti = proto_tree_add_uint64(qpack_update_tree, hf_http3_qpack_encoder_icnt, tvb, offset, 0,
+                                   encoder_state->icnt);
         proto_item_set_generated(ti);
     }
 #else
     (void)stream_info;
-    (void)qpack_buf;
     (void)qpack_update;
-    /*(void)decoded;*/
+    (void)decoded;
 #endif /* HAVE_NGHTTP3 */
 
     return retval;
@@ -2359,7 +2459,7 @@ proto_register_http3(void)
         //},
         { &hf_http3_qpack_encoder_icnt,
             { "QPACK encoder instruction count", "http3.qpack.encoder.icnt",
-                FT_UINT32, BASE_DEC, NULL, 0x0,
+                FT_UINT64, BASE_DEC, NULL, 0x0,
                 NULL, HFILL }
         },
         { &hf_http3_qpack_encoder_icnt_inc,
@@ -2384,7 +2484,7 @@ proto_register_http3(void)
         },
         { &hf_http3_qpack_encoder_opcode_insert_indexed_val,
             { "Value", "http3.qpack.encoder.opcode.insert_indexed.val",
-              FT_BYTES, BASE_NONE, NULL, 0x0,
+              FT_BYTES, BASE_SHOW_ASCII_PRINTABLE, NULL, 0x0,
               NULL, HFILL }
         },
         { &hf_http3_qpack_encoder_opcode_insert_indexed_hval,
@@ -2399,7 +2499,7 @@ proto_register_http3(void)
         },
         { &hf_http3_qpack_encoder_opcode_insert_name,
             { "Literal Name", "http3.qpack.encoder.opcode.insert.name",
-              FT_BYTES, BASE_NONE, NULL, 0x0,
+              FT_BYTES, BASE_SHOW_ASCII_PRINTABLE, NULL, 0x0,
               NULL, HFILL }
         },
         { &hf_http3_qpack_encoder_opcode_insert_hname,
@@ -2409,7 +2509,7 @@ proto_register_http3(void)
         },
         { &hf_http3_qpack_encoder_opcode_insert_val,
             { "Value", "http3.qpack.encoder.opcode.insert.val",
-              FT_BYTES, BASE_NONE, NULL, 0x0,
+              FT_BYTES, BASE_SHOW_ASCII_PRINTABLE, NULL, 0x0,
               NULL, HFILL }
         },
         { &hf_http3_qpack_encoder_opcode_insert_hval,
