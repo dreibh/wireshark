@@ -623,239 +623,6 @@ relinquish_all_capabilities(void)
 }
 #endif
 
-/*
- * Platform-dependent suggestions for fixing permissions.
- */
-
-#ifdef HAVE_LIBCAP
-  #define LIBCAP_PERMISSIONS_SUGGESTION \
-    "\n\n" \
-    "If you did not install Wireshark from a package, ensure that Dumpcap " \
-    "has the needed CAP_NET_RAW and CAP_NET_ADMIN capabilities by running " \
-    "\n\n" \
-    "    sudo setcap cap_net_raw,cap_net_admin=ep {path/to/}dumpcap" \
-    "\n\n" \
-    "and then restarting Wireshark."
-#else
-  #define LIBCAP_PERMISSIONS_SUGGESTION
-#endif
-
-#if defined(__linux__)
-  #define PLATFORM_PERMISSIONS_SUGGESTION \
-    "\n\n" \
-    "On Debian and Debian derivatives such as Ubuntu, if you have " \
-    "installed Wireshark from a package, try running" \
-    "\n\n" \
-    "    sudo dpkg-reconfigure wireshark-common" \
-    "\n\n" \
-    "selecting \"<Yes>\" in response to the question" \
-    "\n\n" \
-    "    Should non-superusers be able to capture packets?" \
-    "\n\n" \
-    "adding yourself to the \"wireshark\" group by running" \
-    "\n\n" \
-    "    sudo usermod -a -G wireshark {your username}" \
-    "\n\n" \
-    "and then logging out and logging back in again." \
-    LIBCAP_PERMISSIONS_SUGGESTION
-#elif defined(__APPLE__)
-  #define PLATFORM_PERMISSIONS_SUGGESTION \
-    "\n\n" \
-    "If you installed Wireshark using the package from wireshark.org, " \
-    "close this dialog and click on the \"installing ChmodBPF\" link in " \
-    "\"You can fix this by installing ChmodBPF.\" on the main screen, " \
-    "and then complete the installation procedure."
-#else
-  #define PLATFORM_PERMISSIONS_SUGGESTION
-#endif
-
-#if defined(_WIN32)
-static const char *
-get_platform_pcap_failure_secondary_error_message(const char *open_status_str)
-{
-    /*
-     * The error string begins with the error produced by WinPcap
-     * and Npcap if attempting to set promiscuous mode fails.
-     * (Note that this string could have a specific error message
-     * from an NDIS error after the initial part, so we do a prefix
-     * check rather than an exact match check.)
-     *
-     * If this is with Npcap 1.71 through 1.73, which have bugs that
-     * cause this error on Windows 11 with some drivers, suggest that
-     * the user upgrade to the current version of Npcap;
-     * otherwise, suggest that they turn off promiscuous mode
-     * on that device.
-     */
-    static const char promisc_failed[] =
-        "failed to set hardware filter to promiscuous mode";
-
-    if (strncmp(open_status_str, promisc_failed, sizeof promisc_failed - 1) == 0) {
-        unsigned int npcap_major, npcap_minor;
-
-        if (caplibs_get_npcap_version(&npcap_major, &npcap_minor)) {
-            if (npcap_major == 1 &&
-                (npcap_minor >= 71 && npcap_minor <= 73)) {
-                return
-"This is a bug in your version of Npcap.\n"
-"\n"
-"If you need to use promiscuous mode, you must upgrade to the current "
-"version of Npcap, which is available from https://npcap.com/\n"
-"\n"
-"Otherwise, turn off promiscuous mode for this device.";
-            }
-        }
-        return
-              "Please turn off promiscuous mode for this device.";
-    }
-    return NULL;
-}
-#elif defined(__linux__)
-static const char *
-get_platform_pcap_failure_secondary_error_message(const char *open_status_str)
-{
-    /*
-     * The error string is the message provided by libpcap on
-     * Linux if an attempt to open a PF_PACKET socket failed
-     * with EAFNOSUPPORT.  This probably means that either 1)
-     * the kernel doesn't have PF_PACKET support configured in
-     * or 2) this is a Flatpak version of Wireshark that's been
-     * sandboxed in a way that disallows opening PF_PACKET
-     * sockets.
-     *
-     * Suggest that the user find some other package of
-     * Wireshark if they want to capture traffic and are
-     * running a Flatpak of Wireshark or that they configure
-     * PF_PACKET support back in if it's configured out.
-     */
-    static const char af_notsup[] =
-        "socket: Address family not supported by protocol";
-
-    if (strcmp(open_status_str, af_notsup) == 0) {
-        return
-                   "If you are running Wireshark from a Flatpak package, "
-                   "it does not support packet capture; you will need "
-                   "to run a different version of Wireshark in order "
-                   "to capture traffic.\n"
-                   "\n"
-                   "Otherwise, if your machine is running a kernel that "
-                   "was not configured with CONFIG_PACKET, that kernel "
-                   "does not support packet capture; you will need to "
-                   "use a kernel configured with CONFIG_PACKET.";
-    }
-    return NULL;
-}
-#else
-static const char *
-get_platform_pcap_failure_secondary_error_message(const char *open_status_str _U_)
-{
-    /* No such message for platforms not handled above. */
-    return NULL;
-}
-#endif
-
-static const char *
-get_pcap_failure_secondary_error_message(cap_device_open_status open_status,
-                                         const char *open_status_str)
-{
-    const char *platform_secondary_error_message;
-
-#ifdef _WIN32
-    /*
-     * On Windows, first make sure they *have* Npcap installed.
-     */
-    if (!has_wpcap) {
-        return
-            "In order to capture packets, Npcap or WinPcap must be installed. See\n"
-            "\n"
-            "        https://npcap.com/\n"
-            "\n"
-            "for a downloadable version of Npcap and for instructions on how to\n"
-            "install it.";
-    }
-#endif
-
-    /*
-     * OK, now just return a largely platform-independent error that might
-     * have platform-specific suggestions at the end (for example, suggestions
-     * for how to get permission to capture).
-     */
-    switch (open_status) {
-
-    case CAP_DEVICE_OPEN_NO_ERR:
-    case CAP_DEVICE_OPEN_WARNING_PROMISC_NOTSUP:
-    case CAP_DEVICE_OPEN_WARNING_TSTAMP_TYPE_NOTSUP:
-    case CAP_DEVICE_OPEN_WARNING_OTHER:
-        /* This should not happen, as those aren't errors. */
-        return "";
-
-    case CAP_DEVICE_OPEN_ERROR_NO_SUCH_DEVICE:
-    case CAP_DEVICE_OPEN_ERROR_RFMON_NOTSUP:
-    case CAP_DEVICE_OPEN_ERROR_IFACE_NOT_UP:
-        /*
-         * Not clear what suggestions to make for these cases.
-         */
-        return "";
-
-    case CAP_DEVICE_OPEN_ERROR_PERM_DENIED:
-    case CAP_DEVICE_OPEN_ERROR_PROMISC_PERM_DENIED:
-        /*
-         * This is a permissions error, so no need to specify any other
-         * warnings.
-         */
-        return
-               "Please check to make sure you have sufficient permissions."
-               PLATFORM_PERMISSIONS_SUGGESTION;
-        break;
-
-    case CAP_DEVICE_OPEN_ERROR_OTHER:
-    case CAP_DEVICE_OPEN_ERROR_GENERIC:
-        /*
-         * We don't know what kind of error it is.  See if there's a hint
-         * in the error string; if not, throw all generic suggestions at
-         * the user.
-         *
-         * First, check for some text that pops up in some errors.
-         * Do platform-specific checks first.
-         */
-        platform_secondary_error_message =
-            get_platform_pcap_failure_secondary_error_message(open_status_str);
-        if (platform_secondary_error_message != NULL) {
-            /* We got one, so return it. */
-            return platform_secondary_error_message;
-        }
-
-        /*
-         * Not one of those particular problems.  Was this a "generic"
-         * error from pcap_open_live() or pcap_open(), in which case
-         * it might be a permissions error?
-         */
-        if (open_status == CAP_DEVICE_OPEN_ERROR_GENERIC) {
-            /* Yes. */
-            return
-                   "Please check to make sure you have sufficient permissions, and that you have "
-                   "the proper interface or pipe specified."
-                   PLATFORM_PERMISSIONS_SUGGESTION;
-        } else {
-            /*
-             * This is not a permissions error, so no need to suggest
-             * checking permissions.
-             */
-            return
-                "Please check that you have the proper interface or pipe specified.";
-        }
-        break;
-
-    default:
-        /*
-         * This is not a permissions error, so no need to suggest
-         * checking permissions.
-         */
-        return
-            "Please check that you have the proper interface or pipe specified.";
-        break;
-    }
-}
-
 static void
 get_capture_device_open_failure_messages(cap_device_open_status open_status,
                                          const char *open_status_str,
@@ -1013,13 +780,16 @@ show_filter_code(capture_options *capture_opts)
     return TRUE;
 }
 
+static void
+print_machine_readable_if_capabilities(json_dumper *dumper, if_capabilities_t *caps, int queries);
+
 /*
  * Output a machine readable list of the interfaces
  * This list is retrieved by the sync_interface_list_open() function
  * The actual output of this function can be viewed with the command "dumpcap -D -Z none"
  */
 static int
-print_machine_readable_interfaces(GList *if_list)
+print_machine_readable_interfaces(GList *if_list, int caps_queries, bool print_statistics)
 {
     GList       *if_entry;
     if_info_t   *if_info;
@@ -1029,7 +799,7 @@ print_machine_readable_interfaces(GList *if_list)
     int         status;
 
     json_dumper dumper = {
-        .output_file = stdout,
+        .output_string = g_string_new(NULL),
         .flags = JSON_DUMPER_FLAGS_NO_DEBUG,
         // Don't abort on failure
     };
@@ -1082,6 +852,12 @@ print_machine_readable_interfaces(GList *if_list)
         json_dumper_set_member_name(&dumper, "extcap");
         json_dumper_value_string(&dumper, if_info->extcap);
 
+        if (if_info->caps && caps_queries) {
+            json_dumper_set_member_name(&dumper, "caps");
+            json_dumper_begin_object(&dumper);
+            print_machine_readable_if_capabilities(&dumper, if_info->caps, caps_queries);
+            json_dumper_end_object(&dumper);
+        }
         json_dumper_end_object(&dumper);
         json_dumper_end_object(&dumper);
     }
@@ -1089,8 +865,13 @@ print_machine_readable_interfaces(GList *if_list)
     if (json_dumper_finish(&dumper)) {
         status = 0;
         if (capture_child) {
-            /* Let our parent know we succeeded. */
-            sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+            if (print_statistics) {
+                sync_pipe_write_string_msg(2, SP_IFACE_LIST, dumper.output_string->str);
+            } else {
+                /* Let our parent know we succeeded. */
+                sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+                printf("%s", dumper.output_string->str);
+            }
         }
     } else {
         status = 2;
@@ -1098,6 +879,7 @@ print_machine_readable_interfaces(GList *if_list)
             sync_pipe_write_errmsgs_to_parent(2, "Unexpected JSON error", "");
         }
     }
+    g_string_free(dumper.output_string, TRUE);
     return status;
 }
 
@@ -1111,12 +893,39 @@ print_machine_readable_if_capabilities(json_dumper *dumper, if_capabilities_t *c
     GList *lt_entry, *ts_entry;
     const gchar *desc_str;
 
+    json_dumper_set_member_name(dumper, "status");
+    json_dumper_value_anyf(dumper, "%i", caps->status);
+    if (caps->primary_msg) {
+        json_dumper_set_member_name(dumper, "primary_msg");
+        json_dumper_value_string(dumper, caps->primary_msg);
+    }
+
     if (queries & CAPS_QUERY_LINK_TYPES) {
         json_dumper_set_member_name(dumper, "rfmon");
         json_dumper_value_anyf(dumper, "%s", caps->can_set_rfmon ? "true" : "false");
         json_dumper_set_member_name(dumper, "data_link_types");
         json_dumper_begin_array(dumper);
         for (lt_entry = caps->data_link_types; lt_entry != NULL;
+             lt_entry = g_list_next(lt_entry)) {
+          data_link_info_t *data_link_info = (data_link_info_t *)lt_entry->data;
+          if (data_link_info->description != NULL)
+            desc_str = data_link_info->description;
+          else
+            desc_str = "(not supported)";
+          json_dumper_begin_object(dumper);
+          json_dumper_set_member_name(dumper, "dlt");
+          json_dumper_value_anyf(dumper, "%d", data_link_info->dlt);
+          json_dumper_set_member_name(dumper, "name");
+          json_dumper_value_string(dumper, data_link_info->name);
+          json_dumper_set_member_name(dumper, "description");
+          json_dumper_value_string(dumper, desc_str);
+          json_dumper_end_object(dumper);
+        }
+        json_dumper_end_array(dumper);
+
+        json_dumper_set_member_name(dumper, "data_link_types_rfmon");
+        json_dumper_begin_array(dumper);
+        for (lt_entry = caps->data_link_types_rfmon; lt_entry != NULL;
              lt_entry = g_list_next(lt_entry)) {
           data_link_info_t *data_link_info = (data_link_info_t *)lt_entry->data;
           if (data_link_info->description != NULL)
@@ -5665,20 +5474,23 @@ main(int argc, char *argv[])
             break;
             /*** all non capture option specific ***/
         case 'D':        /* Print a list of capture devices and exit */
-            if (!list_interfaces) {
-                list_interfaces = TRUE;
+            if (!list_interfaces && !caps_queries & !print_statistics) {
                 run_once_args++;
             }
+            list_interfaces = TRUE;
             break;
         case 'L':        /* Print list of link-layer types and exit */
-            if (!(caps_queries & CAPS_QUERY_LINK_TYPES)) {
-                caps_queries |= CAPS_QUERY_LINK_TYPES;
+            if (!list_interfaces && !caps_queries & !print_statistics) {
                 run_once_args++;
             }
+            caps_queries |= CAPS_QUERY_LINK_TYPES;
             break;
         case LONGOPT_LIST_TSTAMP_TYPES:
-                caps_queries |= CAPS_QUERY_TIMESTAMP_TYPES;
-        break;
+            if (!list_interfaces && !caps_queries & !print_statistics) {
+                run_once_args++;
+            }
+            caps_queries |= CAPS_QUERY_TIMESTAMP_TYPES;
+            break;
         case 'd':        /* Print BPF code for capture filter and exit */
             if (!print_bpf_code) {
                 print_bpf_code = TRUE;
@@ -5686,10 +5498,10 @@ main(int argc, char *argv[])
             }
             break;
         case 'S':        /* Print interface statistics once a second */
-            if (!print_statistics) {
-                print_statistics = TRUE;
+            if (!list_interfaces && !caps_queries & !print_statistics) {
                 run_once_args++;
             }
+            print_statistics = TRUE;
             break;
         case 'k':        /* Set wireless channel */
             if (!set_chan) {
@@ -5835,14 +5647,68 @@ main(int argc, char *argv[])
             }
         }
 
-        if (machine_readable) {
-            status = print_machine_readable_interfaces(if_list);
-        } else {
+        if (!machine_readable) {
             status = 0;
             capture_opts_print_interfaces(if_list);
         }
+
+        if (caps_queries) {
+            if_info_t *if_info;
+            interface_options *interface_opts;
+            cap_device_open_status open_status;
+            gchar *open_status_str;
+            for (GList *if_entry = if_list; if_entry != NULL; if_entry = g_list_next(if_entry)) {
+                if_info = (if_info_t *)if_entry->data;
+
+                interface_opts = interface_opts_from_if_info(&global_capture_opts, if_info);
+
+                if_info->caps = get_if_capabilities(interface_opts, &open_status, &open_status_str);
+
+                if (!machine_readable) {
+                    if (if_info->caps == NULL) {
+                        cmdarg_err("The capabilities of the capture device "
+                                    "\"%s\" could not be obtained (%s).\n%s",
+                                    interface_opts->name, open_status_str,
+                                    get_pcap_failure_secondary_error_message(open_status, open_status_str));
+                        g_free(open_status_str);
+                        /* Break after one error, as when printing selected
+                         * interface capabilities. (XXX: We could print all
+                         * the primary status strings, and only the unique
+                         * set of secondary messages / suggestions; printing
+                         * the same long secondary error is a lot.)
+                         */
+                        interface_opts_free(interface_opts);
+                        g_free(interface_opts);
+                        break;
+                    } else {
+                        status = capture_opts_print_if_capabilities(if_info->caps, interface_opts, caps_queries);
+                        if (status != 0) {
+                            interface_opts_free(interface_opts);
+                            g_free(interface_opts);
+                            break;
+                        }
+                    }
+                } else {
+                    if (if_info->caps == NULL) {
+                        if_info->caps = g_new0(if_capabilities_t, 1);
+                        if_info->caps->primary_msg = open_status_str;
+                        if_info->caps->secondary_msg = g_strdup(get_pcap_failure_secondary_error_message(open_status, open_status_str));
+                    }
+                    if_info->caps->status = open_status;
+                }
+
+                interface_opts_free(interface_opts);
+                g_free(interface_opts);
+            }
+        }
+
+        if (machine_readable) {
+            status = print_machine_readable_interfaces(if_list, caps_queries, print_statistics);
+        }
         free_interface_list(if_list);
-        exit_main(status);
+        if (!print_statistics) {
+            exit_main(status);
+        }
     }
 
     /*
@@ -5904,15 +5770,14 @@ main(int argc, char *argv[])
 
                 open_status = CAP_DEVICE_OPEN_NO_ERR;
                 caps = get_if_capabilities(interface_opts, &open_status, &open_status_str);
-                json_dumper_set_member_name(&dumper, "status");
-                json_dumper_value_anyf(&dumper, "%i", open_status);
                 if (caps == NULL) {
+                    json_dumper_set_member_name(&dumper, "status");
+                    json_dumper_value_anyf(&dumper, "%i", open_status);
                     json_dumper_set_member_name(&dumper, "primary_msg");
                     json_dumper_value_string(&dumper, open_status_str);
-                    json_dumper_set_member_name(&dumper, "secondary_msg");
-                    json_dumper_value_string(&dumper, get_pcap_failure_secondary_error_message(open_status, open_status_str));
                     g_free(open_status_str);
                 } else {
+                    caps->status = open_status;
                     print_machine_readable_if_capabilities(&dumper, caps, caps_queries);
                     free_if_capabilities(caps);
                 }

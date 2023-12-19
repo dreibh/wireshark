@@ -8159,6 +8159,8 @@ static gint ett_s1g_mcs_and_mcs_set;
 static gint ett_s1g_operation_info;
 static gint ett_s1g_channel_width;
 static gint ett_s1g_subchannel_selective_transmission;
+static gint ett_s1g_raw_assignment;
+static gint ett_s1g_raw_assn_tree;
 static gint ett_s1g_raw_control;
 static gint ett_s1g_raw_slot_def;
 static gint ett_s1g_raw_group_subfield;
@@ -23910,6 +23912,11 @@ s1g_raw_type_options_custom(gchar *result, guint8 raw_type)
   }
 }
 
+static void s1g_raw_slot_duration_custom(gchar *result, guint16 slot_def)
+{
+  snprintf(result, ITEM_LABEL_LENGTH, "%u (%u uS)", slot_def, (500 + slot_def * 120));
+}
+
 static int * const s1g_raw_control_headers[] = {
   &hf_ieee80211_s1g_raw_type,
   &hf_ieee80211_s1g_raw_type_options,
@@ -23955,81 +23962,99 @@ static int * const s1g_raw_channel_indication_fields[] = {
 static int
 dissect_rps(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* data _U_)
 {
+  proto_tree *raw_assignment_tree;
+  proto_tree *assn_tree;
+  proto_item *rati;
   int offset = 0;
-  guint8 raw_control = tvb_get_guint8(tvb, offset);
-  guint8 raw_slot_def = tvb_get_guint8(tvb, offset + 1);
+  int idx = 0;
+  guint8 rps_len = tvb_reported_length_remaining(tvb, offset);
 
-  global_s1g_raw_type = raw_control & 0x03;
+  raw_assignment_tree = proto_tree_add_subtree(tree, tvb, offset, rps_len,
+                                    ett_s1g_raw_assignment, NULL,
+                                    "RAW assignments");
 
-  proto_tree_add_bitmask_with_flags(tree, tvb, offset,
-                                    hf_ieee80211_s1g_raw_control,
-                                    ett_s1g_raw_control,
-                                    s1g_raw_control_headers,
-                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
-  offset += 1;
+  while (tvb_reported_length_remaining(tvb, offset) > 0) {
 
-  if ((raw_slot_def & 0x01) || (global_s1g_raw_type == 0x01)) {
-    proto_tree_add_bitmask_with_flags(tree, tvb, offset,
-                                    hf_ieee80211_s1g_raw_slot_def,
-                                    ett_s1g_raw_slot_def,
-                                    s1g_slot_def_8_bit,
-                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
-  } else {
-    proto_tree_add_bitmask_with_flags(tree, tvb, offset,
-                                    hf_ieee80211_s1g_raw_slot_def,
-                                    ett_s1g_raw_slot_def,
-                                    s1g_slot_def_11_bit,
-                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
-  }
+    assn_tree = proto_tree_add_subtree_format(raw_assignment_tree, tvb, offset, -1,
+                                          ett_s1g_raw_assn_tree, &rati,
+                                          "Assignment %d", idx);
 
-  offset += 2;
+    guint8 raw_control = tvb_get_guint8(tvb, offset);
+    guint8 raw_slot_def = tvb_get_guint8(tvb, offset + 1);
 
-  if (raw_control & RAW_START_TIME_INDICATION) {
-    proto_tree_add_item(tree, hf_ieee80211_s1g_raw_start_time, tvb, offset, 1,
-                        ENC_NA);
+    global_s1g_raw_type = raw_control & 0x03;
+
+    proto_tree_add_bitmask_with_flags(assn_tree, tvb, offset,
+                                      hf_ieee80211_s1g_raw_control,
+                                      ett_s1g_raw_control,
+                                      s1g_raw_control_headers,
+                                      ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
     offset += 1;
-  }
 
-  if (raw_control & RAW_GROUP_INDICATION) {
-    guint32 raw_group = tvb_get_letoh24(tvb, offset);
-
-    if (raw_group == 0) {
-      proto_item *it = NULL;
-
-      it = proto_tree_add_item(tree, hf_ieee80211_s1g_raw_group_subfield, tvb,
-                               offset, 3, ENC_LITTLE_ENDIAN);
-      proto_item_append_text(it, ": All STAs allowed access within the RAW");
+    if (((raw_slot_def & 0x01) == 0x00) || (global_s1g_raw_type == 0x01)) {
+      proto_tree_add_bitmask_with_flags(assn_tree, tvb, offset,
+                                      hf_ieee80211_s1g_raw_slot_def,
+                                      ett_s1g_raw_slot_def,
+                                      s1g_slot_def_8_bit,
+                                      ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
     } else {
-      proto_tree_add_bitmask_with_flags(tree, tvb, offset,
-                                    hf_ieee80211_s1g_raw_group_subfield,
-                                    ett_s1g_raw_group_subfield,
-                                    s1g_raw_group_fields,
-                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+      proto_tree_add_bitmask_with_flags(assn_tree, tvb, offset,
+                                      hf_ieee80211_s1g_raw_slot_def,
+                                      ett_s1g_raw_slot_def,
+                                      s1g_slot_def_11_bit,
+                                      ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
     }
-    offset += 3;
-  }
 
-  if (raw_control & RAW_CHANNEL_INDICATION_PRESENCE) {
-    proto_tree_add_bitmask_with_flags(tree, tvb, offset,
-                                    hf_ieee80211_s1g_raw_channel_indication,
-                                    ett_s1g_raw_channel_indication,
-                                    s1g_raw_channel_indication_fields,
-                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
     offset += 2;
-  }
 
-  if (raw_control & RAW_PERIODIC_RAW_INDICATION) {
-    proto_tree_add_item(tree, hf_ieee80211_s1g_raw_praw_periodicity, tvb,
-                        offset, 1, ENC_NA);
-    offset += 1;
-    proto_tree_add_item(tree, hf_ieee80211_s1g_raw_praw_validity, tvb,
-                        offset, 1, ENC_NA);
-    offset += 1;
-    proto_tree_add_item(tree, hf_ieee80211_s1g_raw_praw_start_offset, tvb,
-                        offset, 1, ENC_NA);
-    offset += 1;
-  }
+    if (raw_control & RAW_START_TIME_INDICATION) {
+      proto_tree_add_item(assn_tree, hf_ieee80211_s1g_raw_start_time, tvb, offset, 1,
+                          ENC_NA);
+      offset += 1;
+    }
 
+    if (raw_control & RAW_GROUP_INDICATION) {
+      guint32 raw_group = tvb_get_letoh24(tvb, offset);
+
+      if (raw_group == 0) {
+        proto_item *it = NULL;
+
+        it = proto_tree_add_item(assn_tree, hf_ieee80211_s1g_raw_group_subfield, tvb,
+                                offset, 3, ENC_LITTLE_ENDIAN);
+        proto_item_append_text(it, ": All STAs allowed access within the RAW");
+      } else {
+        proto_tree_add_bitmask_with_flags(assn_tree, tvb, offset,
+                                      hf_ieee80211_s1g_raw_group_subfield,
+                                      ett_s1g_raw_group_subfield,
+                                      s1g_raw_group_fields,
+                                      ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+      }
+      offset += 3;
+    }
+
+    if (raw_control & RAW_CHANNEL_INDICATION_PRESENCE) {
+      proto_tree_add_bitmask_with_flags(assn_tree, tvb, offset,
+                                      hf_ieee80211_s1g_raw_channel_indication,
+                                      ett_s1g_raw_channel_indication,
+                                      s1g_raw_channel_indication_fields,
+                                      ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+      offset += 2;
+    }
+
+    if (raw_control & RAW_PERIODIC_RAW_INDICATION) {
+      proto_tree_add_item(assn_tree, hf_ieee80211_s1g_raw_praw_periodicity, tvb,
+                          offset, 1, ENC_NA);
+      offset += 1;
+      proto_tree_add_item(assn_tree, hf_ieee80211_s1g_raw_praw_validity, tvb,
+                          offset, 1, ENC_NA);
+      offset += 1;
+      proto_tree_add_item(assn_tree, hf_ieee80211_s1g_raw_praw_start_offset, tvb,
+                          offset, 1, ENC_NA);
+      offset += 1;
+    }
+
+    idx += 1;
+  }
   return offset;
 }
 
@@ -48937,7 +48962,7 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_s1g_slot_def_slot_duration_count8,
      {"Slot Duration Count",
       "wlan.s1g.rps.raw_slot_definition.slot_duration_count",
-      FT_UINT16, BASE_DEC, NULL, 0x03FC, NULL, HFILL }},
+      FT_UINT16, BASE_CUSTOM, CF_FUNC(s1g_raw_slot_duration_custom), 0x03FC, NULL, HFILL }},
 
     {&hf_ieee80211_s1g_slot_def_num_slots6,
      {"Number of Slots",
@@ -48947,7 +48972,7 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_s1g_slot_def_slot_duration_count11,
      {"Slot Duration Count",
       "wlan.s1g.rps.raw_slot_definition.slot_duration_count",
-      FT_UINT16, BASE_DEC, NULL, 0x1FC0, NULL, HFILL }},
+      FT_UINT16, BASE_CUSTOM, CF_FUNC(s1g_raw_slot_duration_custom), 0x1FFC, NULL, HFILL }},
 
     {&hf_ieee80211_s1g_slot_def_num_slots3,
      {"Number of Slots",
@@ -59511,6 +59536,8 @@ proto_register_ieee80211(void)
     &ett_s1g_operation_info,
     &ett_s1g_channel_width,
     &ett_s1g_subchannel_selective_transmission,
+    &ett_s1g_raw_assignment,
+    &ett_s1g_raw_assn_tree,
     &ett_s1g_raw_control,
     &ett_s1g_raw_slot_def,
     &ett_s1g_raw_group_subfield,
