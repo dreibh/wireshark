@@ -1075,6 +1075,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-edonkey.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-egd.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-eero.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-egnos-ems.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ehdlc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ehs.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-eigrp.c
@@ -1514,6 +1515,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mojito.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-moldudp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-moldudp64.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-monero.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mongo.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mount.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mp2t.c
@@ -1697,6 +1699,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pktap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pktc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pktgen.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-pldm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pmproxy.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pnrp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pop.c
@@ -1750,6 +1753,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_egfx.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_rail.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_snd.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_ear.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdpudp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdt.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-realtek.c

@@ -138,7 +138,7 @@ static int hf_gsm_map_ericsson_locationInformation_sac;
 static int hf_gsm_map_ussd_string;
 static int hf_gsm_map_spare_bits;
 static int hf_gsm_map_qos_signalling_ind;
-static int hf_gsm_map_qos_source_stat_desc = - 1;
+static int hf_gsm_map_qos_source_stat_desc;
 static int hf_gsm_map_qos_max_bitrate_upl_ext;
 static int hf_gsm_map_qos_max_bitrate_downl_ext;
 static int hf_gsm_map_qos_guar_bitrate_upl_ext;
@@ -2814,7 +2814,7 @@ static guint32 errorCode;
 static int application_context_version;
 static guint ProtocolId;
 static guint AccessNetworkProtocolId;
-static int gsm_map_tap = -1;
+static int gsm_map_tap;
 static guint8 gsmmap_pdu_type = 0;
 static guint8 gsm_map_pdu_size = 0;
 
@@ -22351,14 +22351,6 @@ static const true_false_string gsm_map_Ss_Status_q_bit_values = {
   "Quiescent",
   "Operative"
 };
-static const true_false_string gsm_map_Ss_Status_p_values = {
-  "Provisioned",
-  "Not Provisioned"
-};
-static const true_false_string gsm_map_Ss_Status_r_values = {
-  "Registered",
-  "Not Registered"
-};
 static const true_false_string gsm_map_Ss_Status_a_values = {
   "Active",
   "not Active"
@@ -24297,11 +24289,11 @@ void proto_register_gsm_map(void) {
           NULL, HFILL }},
       { &hf_gsm_map_Ss_Status_p_bit,
         { "P bit", "gsm_map.ss_status_p_bit",
-          FT_BOOLEAN, 8, TFS(&gsm_map_Ss_Status_p_values), 0x04,
+          FT_BOOLEAN, 8, TFS(&tfs_provisioned_not_provisioned), 0x04,
           NULL, HFILL }},
       { &hf_gsm_map_Ss_Status_r_bit,
         { "R bit", "gsm_map.ss_status_r_bit",
-          FT_BOOLEAN, 8, TFS(&gsm_map_Ss_Status_r_values), 0x02,
+          FT_BOOLEAN, 8, TFS(&tfs_registered_not_registered), 0x02,
           NULL, HFILL }},
       { &hf_gsm_map_Ss_Status_a_bit,
         { "A bit", "gsm_map.ss_status_a_bit",

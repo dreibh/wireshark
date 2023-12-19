@@ -59,6 +59,22 @@ set(PROJECT_MAJOR_VERSION 4)
 set(PROJECT_MINOR_VERSION 3)
 set(PROJECT_PATCH_VERSION 0)
 set(PROJECT_BUILD_VERSION 0)
+# ABI version for plugins. It must be incremented by one for
+# every odd minor release number.
+# start at 1 (arbitrary).
+# release 4.3.X (unstable) = ABI version 1 (start)
+# release 4.4.X (stable)   = ABI version 1 (stable release, freeze ABI 1)
+# release 4.5.X (unstable) = ABI version 2 (increment for new unstable release, ABI break)
+# release 4.6.X (stable)   = ABI version 2 (stable release, freeze ABI 2)
+# release 4.7.X (unstable) = ABI version 3 (increment for new unstable release, ABI break)
+# release 5.0.X (stable)   = ABI version 3 (stable release, freeze ABI 3)
+# etc.
+set(PROJECT_ABI_VERSION_EPAN    1)
+set(PROJECT_ABI_VERSION_WIRETAP 1)
+# Codecs API/ABI is much more narrow and stable than the other two so this
+# may not need to be incremented every X.Y release.
+set(PROJECT_ABI_VERSION_CODEC   1)
+
 set(PROJECT_VERSION_EXTENSION "")
 
 if(DEFINED ENV{WIRESHARK_VERSION_EXTRA})
@@ -1818,12 +1834,6 @@ configure_file(${CMAKE_SOURCE_DIR}/cmakeconfig.h.in ${CMAKE_BINARY_DIR}/config.h
 
 configure_file(${CMAKE_SOURCE_DIR}/ws_version.h.in ${CMAKE_BINARY_DIR}/ws_version.h)
 
-set( prefix "${CMAKE_INSTALL_PREFIX}" )
-set( exec_prefix "\${prefix}" )
-set( libdir "\${exec_prefix}/${CMAKE_INSTALL_LIBDIR}" )
-set( includedir  "\${prefix}/include" )
-set( plugindir "\${libdir}/wireshark/${PLUGIN_VERSION_DIR}" )
-
 # Doxygen variables
 file(GLOB TOP_LEVEL_SOURCE_LIST *.c *.cpp *.h)
 string (REPLACE ";" " " DOXYGEN_TOP_LEVEL_SOURCES "${TOP_LEVEL_SOURCE_LIST}")
@@ -1843,8 +1853,8 @@ set(CFG_OUT_FILES
 	resources/libwiretap.rc
 	resources/libwsutil.rc
 	resources/wireshark.exe.manifest
+	resources/wireshark.pc
 	resources/wireshark.rc
-	wireshark.pc
 )
 
 if(BUILD_logray)
@@ -3281,6 +3291,7 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
+		${M_LIBRARIES}
 	)
 	if(UNIX)
 		list(APPEND CAPUTILS_SRC
@@ -4052,13 +4063,9 @@ if(BUILD_logray AND QT_FOUND AND NOT APPLE AND (NOT WIN32 OR USE_MSYSTEM))
 		RENAME org.wireshark.Logray.svg)
 endif()
 
-install(
-	FILES
-		"${CMAKE_BINARY_DIR}/wireshark.pc"
-	DESTINATION
-		${CMAKE_INSTALL_LIBDIR}/pkgconfig
-	COMPONENT
-		"Development"
+install(FILES "${CMAKE_BINARY_DIR}/resources/wireshark.pc"
+	DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig
+	COMPONENT "Development"
 	EXCLUDE_FROM_ALL
 )
 

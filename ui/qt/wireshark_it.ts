@@ -1099,15 +1099,15 @@
     </message>
     <message>
         <source>Decryption Secrets</source>
-        <translation type="unfinished"></translation>
+        <translation>Segreti di decifratura</translation>
     </message>
     <message>
         <source>Type</source>
-        <translation type="unfinished">Tipo</translation>
+        <translation>Tipo</translation>
     </message>
     <message>
         <source>Size</source>
-        <translation type="unfinished">Dimensione</translation>
+        <translation>Dimensione</translation>
     </message>
     <message>
         <source>Statistics</source>
@@ -1400,6 +1400,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Usually a wireless network card will only capture the traffic sent to and from its own network address, and only captures &lt;em&gt;user data&lt;/em&gt; traffic with &amp;quot;fake&amp;quot; Ethernet headers. If you want to capture all traffic that wireless network cards can &amp;quot;see&amp;quot;, or are interested in 802.11 management or control packets, or radio-layer information, mark this option. Monitor mode availability depends on the wireless card and driver. See the Wiki for some more details of capturing packets on WLAN networks.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Di solito una scheda di rete wireless catturerà solo il traffico inviato e ricevuto dal suo indirizzo di rete e catturerà solo il traffico &lt;em&gt;dati dell&apos;utente&lt;/em&gt; con intestazioni Ethernet &amp;quot;fittizie&amp;quot;. Se desideri catturare tutto il traffico che transita sulle schede di rete wireless o sei interessato ai pacchetti di gestione o di controllo 802.11, o alle informazioni del livello radio, seleziona questa opzione. La disponibilità della modalità di monitoraggio dipende dalla scheda di rete wireless e dal driver. Consulta il Wiki per ulteriori dettagli sulla cattura dei pacchetti nelle reti WLAN.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Enable monitor mode on all 802.11 interfaces</source>
+        <translation>Abilita la modalità monitor su tutte le interfacce 802.11</translation>
+    </message>
+    <message>
         <source>compression</source>
         <translation>compressione</translation>
     </message>
@@ -1589,6 +1597,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Capture packets in promiscuous mode</source>
         <translation>Cattura i pacchetti in modalità promiscua</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Usually a wireless network card will only capture the traffic sent to and from its own network address, and only captures &lt;em&gt;user data&lt;/em&gt; traffic with &amp;quot;fake&amp;quot; Ethernet headers. If you want to capture all traffic that wireless network cards can &amp;quot;see&amp;quot;, or are interested in 802.11 management or control packets, or radio-layer information, mark this option. Monitor mode availability depends on the wireless card and driver. See the Wiki for more details of capturing packets on WLAN networks.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Di solito una scheda di rete wireless catturerà solo il traffico inviato e ricevuto dal suo indirizzo di rete e catturerà solo il traffico &lt;em&gt;dati dell&apos;utente&lt;/em&gt; con intestazioni Ethernet &amp;quot;fittizie&amp;quot;. Se desideri catturare tutto il traffico che transita sulle schede di rete wireless o sei interessato ai pacchetti di gestione o di controllo 802.11, o alle informazioni del livello radio, seleziona questa opzione. La disponibilità della modalità di monitoraggio dipende dalla scheda di rete wireless e dal driver. Consulta il Wiki per ulteriori dettagli sulla cattura dei pacchetti nelle reti WLAN.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Capture packets in monitor mode on 802.11 devices</source>
+        <translation>Cattura i pacchetti in modalità monitor sui dispositivi 802.11</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture packets in the next-generation capture file format.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -3049,11 +3065,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Display Filter Macros</source>
-        <translation type="unfinished"></translation>
+        <translation>Visualizza macro dei filtri</translation>
     </message>
     <message>
         <source>New macro</source>
-        <translation type="unfinished"></translation>
+        <translation>Nuova macro</translation>
     </message>
     <message>
         <source>Open </source>
@@ -3140,7 +3156,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <name>FilterListModel</name>
     <message>
         <source>Macro Name</source>
-        <translation type="unfinished"></translation>
+        <translation>Nome macro</translation>
     </message>
     <message>
         <source>Filter Name</source>
@@ -3148,7 +3164,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Macro Expression</source>
-        <translation type="unfinished"></translation>
+        <translation>Espressione macro</translation>
     </message>
     <message>
         <source>Filter Expression</source>
@@ -6015,7 +6031,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <name>LteMacStatisticsDialog</name>
     <message>
         <source>LTE Mac Statistics</source>
-        <translation>Statistiche Mac LTE</translation>
+        <translation type="vanished">Statistiche Mac LTE</translation>
+    </message>
+    <message>
+        <source>LTE/NR Mac Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Include SR frames in filter</source>
@@ -6320,7 +6340,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>LTE RLC Graph (UE=%1 chan=%2%3 %4 - %5)</source>
-        <translation>Grafico RLC LTE (UE=%1 can=%2%3 %4 - %5)</translation>
+        <translation type="vanished">Grafico RLC LTE (UE=%1 can=%2%3 %4 - %5)</translation>
+    </message>
+    <message>
+        <source>%1 RLC Graph (UE=%2 chan=%3%4 %5 - %6)</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>LTE RLC Graph - no channel selected</source>
@@ -6379,7 +6403,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <name>LteRlcStatisticsDialog</name>
     <message>
         <source>LTE RLC Statistics</source>
-        <translation>Statistiche RLC LTE</translation>
+        <translation type="vanished">Statistiche RLC LTE</translation>
+    </message>
+    <message>
+        <source>LTE/NR RLC Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Include SR frames in filter</source>
@@ -7113,6 +7141,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Mostra byte del pacchetto</translation>
     </message>
     <message>
+        <source>Layout:</source>
+        <translation>Disposizione:</translation>
+    </message>
+    <message>
         <source>Packet %1</source>
         <translation>Pacchetto %1</translation>
     </message>
@@ -7399,6 +7431,18 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <source>Path</source>
         <translation>Percorso</translation>
     </message>
+    <message>
+        <source>Scope</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Description</source>
+        <translation type="unfinished">Descrizione</translation>
+    </message>
+    <message>
+        <source>Homepage</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>PortsModel</name>
@@ -7467,6 +7511,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Search:</source>
         <translation>Cerca:</translation>
+    </message>
+    <message>
+        <source>Checking this will show only changed preferences.</source>
+        <translation>Selezionandola saranno mostrate solo le preferenze modificate.</translation>
+    </message>
+    <message>
+        <source>Show changed values</source>
+        <translation>Mostra i valori modificati</translation>
     </message>
     <message>
         <source>Preferences</source>
@@ -8291,6 +8343,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Marcatore mancante?</translation>
     </message>
     <message>
+        <source>LTE</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>C-RNTI</source>
         <translation>C-RNTI</translation>
     </message>
@@ -8309,6 +8369,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>UEId</source>
         <translation>UEId</translation>
+    </message>
+    <message>
+        <source>RAT</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>UL Frames</source>
@@ -8539,7 +8603,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <name>QObject::QObject</name>
     <message>
         <source>CCCH</source>
-        <translation>CCCH</translation>
+        <translation type="vanished">CCCH</translation>
+    </message>
+</context>
+<context>
+    <name>QObject::QObject::QObject</name>
+    <message>
+        <source>CCCH</source>
+        <translation type="unfinished">CCCH</translation>
     </message>
 </context>
 <context>
@@ -8752,6 +8823,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Indirizzi risolti</translation>
     </message>
     <message>
+        <source>Copy</source>
+        <translation>Copia</translation>
+    </message>
+    <message>
+        <source>Save as…</source>
+        <translation>Salva come...</translation>
+    </message>
+    <message>
         <source># Resolved addresses found in %1</source>
         <translation># Trovati indirizzi risolti in %1</translation>
     </message>
@@ -8762,6 +8841,61 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation># Commenti
 #
 # </translation>
+    </message>
+</context>
+<context>
+    <name>ResolvedAddressesView</name>
+    <message>
+        <source>as Plain Text</source>
+        <translation>come testo semplice</translation>
+    </message>
+    <message>
+        <source>Copy selected rows</source>
+        <translation>Copia le righe selezionate</translation>
+    </message>
+    <message>
+        <source>Copy table</source>
+        <translation>Copia la tabella</translation>
+    </message>
+    <message>
+        <source>as CSV</source>
+        <translation>come CSV</translation>
+    </message>
+    <message>
+        <source>as JSON</source>
+        <translation>come JSON</translation>
+    </message>
+    <message>
+        <source>Save selected rows as…</source>
+        <translation>Salva le righe selezionate come...</translation>
+    </message>
+    <message>
+        <source>Save table as…</source>
+        <translation>Salva la tabella come...</translation>
+    </message>
+    <message>
+        <source>Save Resolved Addresses As…</source>
+        <translation>Salva gli indirizzi risolti come...</translation>
+    </message>
+    <message>
+        <source>Plain text (*.txt)</source>
+        <translation>Testo semplice (*.txt)</translation>
+    </message>
+    <message>
+        <source>CSV Document (*.csv)</source>
+        <translation>Documento CSV (*.csv)</translation>
+    </message>
+    <message>
+        <source>JSON Document (*.json)</source>
+        <translation>Documento JSON (*.json)</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation>Avviso</translation>
+    </message>
+    <message>
+        <source>Unable to save %1: %2</source>
+        <translation>Impossibile salvare %1: %2</translation>
     </message>
 </context>
 <context>
@@ -10402,53 +10536,6 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
 </context>
 <context>
-    <name>SSLKeylogDialog</name>
-    <message>
-        <source>Dialog</source>
-        <translation type="vanished">Finestra</translation>
-    </message>
-    <message>
-        <source>Browse...</source>
-        <translation type="vanished">Sfoglia...</translation>
-    </message>
-    <message>
-        <source>Application path</source>
-        <translation type="vanished">Percorso dell&apos;applicazione</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Run an application with the SSLKEYLOG environment variable set to the file specified by the key log filename preference.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Esegui un&apos;applicazione con la variabile di ambiente SSLKEYLOG impostata sul file specificato dalla preferenza del nome file del registro delle chiavi.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;Firefox and Chrome are known to work. If your desired browser is currently running, close it first before launching it below.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;È risaputo che Firefox e Chrome funzionino. Se il browser desiderato è attualmente in esecuzione, chiudilo prima di avviarlo di seguito.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;(Pre)-Master-Secret log file path&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Percorso file di log (Pre)-Master-Secret&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;TLS keys will be logged to this file.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;Le chiavi TLS saranno registrate in questo file.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Launch</source>
-        <translation type="vanished">Avvia</translation>
-    </message>
-    <message>
-        <source>Save</source>
-        <translation type="vanished">Salva</translation>
-    </message>
-    <message>
-        <source>TLS Keylog</source>
-        <translation type="vanished">Keylog TLS</translation>
-    </message>
-    <message>
-        <source>Web Browser</source>
-        <translation type="vanished">Browser web</translation>
-    </message>
-</context>
-<context>
     <name>ScsiServiceResponseTimeDialog</name>
     <message>
         <source>&lt;small&gt;&lt;i&gt;Select a command and enter a filter if desired, then press Apply.&lt;/i&gt;&lt;/small&gt;</source>
@@ -11851,51 +11938,51 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <name>TLSKeylogDialog</name>
     <message>
         <source>Dialog</source>
-        <translation type="unfinished">Finestra</translation>
+        <translation>Finestra</translation>
     </message>
     <message>
         <source>Browse…</source>
-        <translation type="unfinished">Sfoglia...</translation>
+        <translation>Sfoglia...</translation>
     </message>
     <message>
         <source>Command line</source>
-        <translation type="unfinished"></translation>
+        <translation>Riga di commando</translation>
     </message>
     <message>
         <source>Run an application with the SSLKEYLOGFILE environment variable set to the file specified by the TLS key log filename preference. This enables TLS decryption in Wireshark. Set the key log file and start the capture before launching the application to ensure that the initial TLS handshakes are captured.</source>
-        <translation type="unfinished"></translation>
+        <translation>Esegui un&apos;applicazione con la variabile d&apos;ambiente SSLKEYLOGFILE impostata sul file specificato dalla preferenza del nome file di log della chiave TLS. Ciò consente la decifratura TLS in Wireshark. Imposta il file di registro della chiave e avvia la cattura prima di avviare l&apos;applicazione per garantire che le negoziazioni TLS iniziali vengano catturate.</translation>
     </message>
     <message>
         <source>&lt;span style=&quot; font-size:small;&quot;&gt;Firefox and Chrome are known to work. If your desired browser is currently running, close it first before launching it below. Command line options are supported.&lt;/span&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;span style=&quot; font-size:small;&quot;&gt;È risaputo che Firefox e Chrome funzionino. Se il browser desiderato è attualmente in esecuzione, chiudilo prima di avviarlo di seguito. Sono supportate le opzioni della riga di comando.&lt;/span&gt;</translation>
     </message>
     <message>
         <source>TLS (Pre)-Master-Secret log file path (tls.keylog_file)</source>
-        <translation type="unfinished"></translation>
+        <translation>Percorso del file di log TLS (Pre)-Master-Secret (tls.keylog_file)</translation>
     </message>
     <message>
         <source>&lt;span style=&quot; font-size:small;&quot;&gt;TLS session secrets will be logged to this file. If you change this field, hit the Save button to update the TLS protocol preferences.&lt;/span&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;span style=&quot; font-size:small;&quot;&gt;I segreti della sessione TLS saranno registrati in questo file. Se modifichi questo campo, premi il pulsante Salva per aggiornare le preferenze del protocollo TLS.&lt;/span&gt;</translation>
     </message>
     <message>
         <source>Launch application with SSLKEYLOGFILE</source>
-        <translation type="unfinished"></translation>
+        <translation>Avvia applicazione con SSLKEYLOGFILE</translation>
     </message>
     <message>
         <source>Launch</source>
-        <translation type="unfinished">Avvia</translation>
+        <translation>Avvia</translation>
     </message>
     <message>
         <source>Save</source>
-        <translation type="unfinished">Salva</translation>
+        <translation>Salva</translation>
     </message>
     <message>
         <source>TLS Keylog file</source>
-        <translation type="unfinished"></translation>
+        <translation>File Keylog TLS</translation>
     </message>
     <message>
         <source>Program to start with SSLKEYLOGFILE</source>
-        <translation type="unfinished"></translation>
+        <translation>Programma da avviare con SSLKEYLOGFILE</translation>
     </message>
 </context>
 <context>
@@ -13920,6 +14007,10 @@ a:hover {
         <translation>&amp;Opzioni...</translation>
     </message>
     <message>
+        <source>&amp;3GPP Uu</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&amp;Wireless</source>
         <translation>&amp;Wireless</translation>
     </message>
@@ -14339,8 +14430,7 @@ a:hover {
     </message>
     <message>
         <source>TLS Keylog Launcher</source>
-        <oldsource>SSL Keylog Launcher</oldsource>
-        <translation type="unfinished">Esecutore Keylog SSL</translation>
+        <translation>Esecutore Keylog TLS</translation>
     </message>
     <message>
         <source>Release Notes</source>
@@ -14380,7 +14470,7 @@ a:hover {
     </message>
     <message>
         <source>&amp;LTE</source>
-        <translation>&amp;LTE</translation>
+        <translation type="vanished">&amp;LTE</translation>
     </message>
     <message>
         <source>&amp;MTP3</source>
@@ -14683,6 +14773,44 @@ a:hover {
         <translation>Valore SSRC non trovato.</translation>
     </message>
     <message>
+        <source>Install plugin</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Binary plugin (*%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Plugins can execute arbitrary code as the current user. Make sure you trust it before installing.
+
+Continue installing the file &quot;%1&quot; to the personal plugin folder?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Failed to create the directory: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The plugin already exists in the personal plugin folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The file already exists. Do you want to overwrite it?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Error removing the old plugin file from the personal plugin folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Failed to copy the file to the destination: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Plugin &apos;%1&apos; installed successfully. You must restart the program to be able to use it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Show or hide the toolbar</source>
         <translation>Mostra o nascondi la barra degli strumenti</translation>
     </message>
@@ -14888,6 +15016,10 @@ a:hover {
     <message>
         <source> before restarting the capture</source>
         <translation> prima di riavviare la cattura</translation>
+    </message>
+    <message>
+        <source>Install Plugin</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>

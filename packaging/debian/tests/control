@@ -2,7 +2,4 @@ Tests: tshark
 Depends: tshark
 
 Tests: gui
-Depends: at-spi2-core,
-         wireshark-qt,
-         xauth,
-         xvfb
+Depends: wireshark, xvfb, xauth, at-spi2-core

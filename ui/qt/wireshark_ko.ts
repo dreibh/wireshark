@@ -1092,15 +1092,15 @@
     </message>
     <message>
         <source>Decryption Secrets</source>
-        <translation type="unfinished"></translation>
+        <translation>복호화 비밀 정보</translation>
     </message>
     <message>
         <source>Type</source>
-        <translation type="unfinished">유형</translation>
+        <translation>유형</translation>
     </message>
     <message>
         <source>Size</source>
-        <translation type="unfinished">크기</translation>
+        <translation>크기</translation>
     </message>
     <message>
         <source>Statistics</source>
@@ -1393,6 +1393,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 예를 들어 1시간으로 설정하면 매시간마다 새로운 파일을 만듭니다.</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Usually a wireless network card will only capture the traffic sent to and from its own network address, and only captures &lt;em&gt;user data&lt;/em&gt; traffic with &amp;quot;fake&amp;quot; Ethernet headers. If you want to capture all traffic that wireless network cards can &amp;quot;see&amp;quot;, or are interested in 802.11 management or control packets, or radio-layer information, mark this option. Monitor mode availability depends on the wireless card and driver. See the Wiki for some more details of capturing packets on WLAN networks.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enable monitor mode on all 802.11 interfaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>compression</source>
         <translation>압축</translation>
     </message>
@@ -1582,6 +1590,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Capture packets in promiscuous mode</source>
         <translation>무작위 모드로 패킷 캡처</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Usually a wireless network card will only capture the traffic sent to and from its own network address, and only captures &lt;em&gt;user data&lt;/em&gt; traffic with &amp;quot;fake&amp;quot; Ethernet headers. If you want to capture all traffic that wireless network cards can &amp;quot;see&amp;quot;, or are interested in 802.11 management or control packets, or radio-layer information, mark this option. Monitor mode availability depends on the wireless card and driver. See the Wiki for more details of capturing packets on WLAN networks.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Capture packets in monitor mode on 802.11 devices</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture packets in the next-generation capture file format.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -3041,11 +3057,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Display Filter Macros</source>
-        <translation type="unfinished"></translation>
+        <translation>표시 필터 매크로</translation>
     </message>
     <message>
         <source>New macro</source>
-        <translation type="unfinished"></translation>
+        <translation>새 매크로</translation>
     </message>
     <message>
         <source>Open </source>
@@ -3132,7 +3148,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>FilterListModel</name>
     <message>
         <source>Macro Name</source>
-        <translation type="unfinished"></translation>
+        <translation>매크로 이름</translation>
     </message>
     <message>
         <source>Filter Name</source>
@@ -3140,7 +3156,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Macro Expression</source>
-        <translation type="unfinished"></translation>
+        <translation>매크로 표현식</translation>
     </message>
     <message>
         <source>Filter Expression</source>
@@ -5998,7 +6014,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>LteMacStatisticsDialog</name>
     <message>
         <source>LTE Mac Statistics</source>
-        <translation>LTE MAC 통계</translation>
+        <translation type="vanished">LTE MAC 통계</translation>
+    </message>
+    <message>
+        <source>LTE/NR Mac Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Include SR frames in filter</source>
@@ -6303,7 +6323,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>LTE RLC Graph (UE=%1 chan=%2%3 %4 - %5)</source>
-        <translation>LTE RLC 그래프(UE=%1 chan=%2%3 %4 - %5)</translation>
+        <translation type="vanished">LTE RLC 그래프(UE=%1 chan=%2%3 %4 - %5)</translation>
+    </message>
+    <message>
+        <source>%1 RLC Graph (UE=%2 chan=%3%4 %5 - %6)</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>LTE RLC Graph - no channel selected</source>
@@ -6362,7 +6386,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>LteRlcStatisticsDialog</name>
     <message>
         <source>LTE RLC Statistics</source>
-        <translation>LTE RLC 통계</translation>
+        <translation type="vanished">LTE RLC 통계</translation>
+    </message>
+    <message>
+        <source>LTE/NR RLC Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Include SR frames in filter</source>
@@ -7094,6 +7122,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>패킷 바이트 표시</translation>
     </message>
     <message>
+        <source>Layout:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Packet %1</source>
         <translation>패킷 %1</translation>
     </message>
@@ -7379,6 +7411,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Path</source>
         <translation>경로</translation>
     </message>
+    <message>
+        <source>Scope</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Description</source>
+        <translation type="unfinished">설명</translation>
+    </message>
+    <message>
+        <source>Homepage</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>PortsModel</name>
@@ -7447,6 +7491,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Search:</source>
         <translation>검색:</translation>
+    </message>
+    <message>
+        <source>Checking this will show only changed preferences.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Show changed values</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Preferences</source>
@@ -8264,6 +8316,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>마커 없음?</translation>
     </message>
     <message>
+        <source>LTE</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>C-RNTI</source>
         <translation>C-RNTI</translation>
     </message>
@@ -8282,6 +8342,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>UEId</source>
         <translation>UEId</translation>
+    </message>
+    <message>
+        <source>RAT</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>UL Frames</source>
@@ -8512,7 +8576,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>QObject::QObject</name>
     <message>
         <source>CCCH</source>
-        <translation>CCCH</translation>
+        <translation type="vanished">CCCH</translation>
+    </message>
+</context>
+<context>
+    <name>QObject::QObject::QObject</name>
+    <message>
+        <source>CCCH</source>
+        <translation type="unfinished">CCCH</translation>
     </message>
 </context>
 <context>
@@ -8725,6 +8796,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>해석된 주소</translation>
     </message>
     <message>
+        <source>Copy</source>
+        <translation type="unfinished">복사</translation>
+    </message>
+    <message>
+        <source>Save as…</source>
+        <translation type="unfinished">다른 이름으로 저장…</translation>
+    </message>
+    <message>
         <source># Resolved addresses found in %1</source>
         <translation># %1에서 발견된 해석된 주소</translation>
     </message>
@@ -8735,6 +8814,61 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation># 주석 
 #
 # </translation>
+    </message>
+</context>
+<context>
+    <name>ResolvedAddressesView</name>
+    <message>
+        <source>as Plain Text</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy selected rows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy table</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>as CSV</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>as JSON</source>
+        <translation type="unfinished">JSON</translation>
+    </message>
+    <message>
+        <source>Save selected rows as…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Save table as…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Save Resolved Addresses As…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Plain text (*.txt)</source>
+        <translation type="unfinished">일반 텍스트 (*.txt)</translation>
+    </message>
+    <message>
+        <source>CSV Document (*.csv)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>JSON Document (*.json)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation type="unfinished">경고</translation>
+    </message>
+    <message>
+        <source>Unable to save %1: %2</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -10375,53 +10509,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
 </context>
 <context>
-    <name>SSLKeylogDialog</name>
-    <message>
-        <source>Dialog</source>
-        <translation type="vanished">대화 상자</translation>
-    </message>
-    <message>
-        <source>Browse...</source>
-        <translation type="vanished">찾아보기...</translation>
-    </message>
-    <message>
-        <source>Application path</source>
-        <translation type="vanished">프로그램 경로</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Run an application with the SSLKEYLOG environment variable set to the file specified by the key log filename preference.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;프로그램을 실행할 때 SSLKEYLOG 환경 변수를 키 로그 파일 이름 설정에서 지정한 것과 동일하게 설정하십시오.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;Firefox and Chrome are known to work. If your desired browser is currently running, close it first before launching it below.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;Firefox와 Chrome 브라우저에서는 이 설정이 작동합니다. 사용하고자 하는 브라우저가 현재 실행 중이라면 아래에서 실행하기 전에 먼저 종료하십시오.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;(Pre)-Master-Secret log file path&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;(Pre)-Master-Secret 로그 파일 경로&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;TLS keys will be logged to this file.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;이 파일에 TLS 키가 기록됩니다.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Launch</source>
-        <translation type="vanished">실행</translation>
-    </message>
-    <message>
-        <source>Save</source>
-        <translation type="vanished">저장</translation>
-    </message>
-    <message>
-        <source>TLS Keylog</source>
-        <translation type="vanished">TLS 키 로그</translation>
-    </message>
-    <message>
-        <source>Web Browser</source>
-        <translation type="vanished">웹 브라우저</translation>
-    </message>
-</context>
-<context>
     <name>ScsiServiceResponseTimeDialog</name>
     <message>
         <source>&lt;small&gt;&lt;i&gt;Select a command and enter a filter if desired, then press Apply.&lt;/i&gt;&lt;/small&gt;</source>
@@ -11825,51 +11912,51 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>TLSKeylogDialog</name>
     <message>
         <source>Dialog</source>
-        <translation type="unfinished">대화 상자</translation>
+        <translation>대화 상자</translation>
     </message>
     <message>
         <source>Browse…</source>
-        <translation type="unfinished"></translation>
+        <translation>찾아보기...</translation>
     </message>
     <message>
         <source>Command line</source>
-        <translation type="unfinished"></translation>
+        <translation>명령행</translation>
     </message>
     <message>
         <source>Run an application with the SSLKEYLOGFILE environment variable set to the file specified by the TLS key log filename preference. This enables TLS decryption in Wireshark. Set the key log file and start the capture before launching the application to ensure that the initial TLS handshakes are captured.</source>
-        <translation type="unfinished"></translation>
+        <translation>SSLKEYLOG 환경 변수를 키 로그 파일 이름 설정에서 지정한 것과 동일하게 설정한 후 프로그램을 실행하십시오. 이렇게 하면 Wireshark에서 TLS 복호화를 활성화합니다. 초기 TLS 핸드셰이크를 캡처할 수 있도록 프로그램을 실행하기 전에 키 로그 파일을 설정하고 캡처를 시작하십시오.</translation>
     </message>
     <message>
         <source>&lt;span style=&quot; font-size:small;&quot;&gt;Firefox and Chrome are known to work. If your desired browser is currently running, close it first before launching it below. Command line options are supported.&lt;/span&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;span style=&quot; font-size:small;&quot;&gt;Firefox와 Chrome 브라우저에서는 이 설정이 작동합니다. 사용하고자 하는 브라우저가 현재 실행 중이라면 아래에서 실행하기 전에 먼저 종료하십시오. 명령행 옵션도 지원합니다.&lt;/span&gt;</translation>
     </message>
     <message>
         <source>TLS (Pre)-Master-Secret log file path (tls.keylog_file)</source>
-        <translation type="unfinished"></translation>
+        <translation>TLS (Pre)-Master-Secret 로그 파일 경로(tls.keylog_file)</translation>
     </message>
     <message>
         <source>&lt;span style=&quot; font-size:small;&quot;&gt;TLS session secrets will be logged to this file. If you change this field, hit the Save button to update the TLS protocol preferences.&lt;/span&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;span style=&quot; font-size:small;&quot;&gt;이 파일에 TLS 세션 비밀 키가 기록됩니다. 이 필드를 변경하면 아래의 저장 단추를 클릭하여 TLS 프로토콜 설정을 업데이트하십시오.&lt;/span&gt;</translation>
     </message>
     <message>
         <source>Launch application with SSLKEYLOGFILE</source>
-        <translation type="unfinished"></translation>
+        <translation>SSLKEYLOGFILE을 지정하여 프로그램 실행</translation>
     </message>
     <message>
         <source>Launch</source>
-        <translation type="unfinished">실행</translation>
+        <translation>실행</translation>
     </message>
     <message>
         <source>Save</source>
-        <translation type="unfinished">저장</translation>
+        <translation>저장</translation>
     </message>
     <message>
         <source>TLS Keylog file</source>
-        <translation type="unfinished"></translation>
+        <translation>TLS 키로그 파일</translation>
     </message>
     <message>
         <source>Program to start with SSLKEYLOGFILE</source>
-        <translation type="unfinished"></translation>
+        <translation>SSLKEYLOGFILE을 지정하여 시작할 프로그램</translation>
     </message>
 </context>
 <context>
@@ -13893,6 +13980,10 @@ a:hover {
         <translation>옵션(&amp;O)…</translation>
     </message>
     <message>
+        <source>&amp;3GPP Uu</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&amp;Wireless</source>
         <translation>무선(&amp;W)</translation>
     </message>
@@ -14312,8 +14403,7 @@ a:hover {
     </message>
     <message>
         <source>TLS Keylog Launcher</source>
-        <oldsource>SSL Keylog Launcher</oldsource>
-        <translation type="unfinished">SSL 키 로그 실행기</translation>
+        <translation>TLS 키로그 실행기</translation>
     </message>
     <message>
         <source>Release Notes</source>
@@ -14353,7 +14443,7 @@ a:hover {
     </message>
     <message>
         <source>&amp;LTE</source>
-        <translation>LTE(&amp;L)</translation>
+        <translation type="vanished">LTE(&amp;L)</translation>
     </message>
     <message>
         <source>&amp;MTP3</source>
@@ -14656,6 +14746,44 @@ a:hover {
         <translation>SSRC 값을 찾을 수 없습니다.</translation>
     </message>
     <message>
+        <source>Install plugin</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Binary plugin (*%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Plugins can execute arbitrary code as the current user. Make sure you trust it before installing.
+
+Continue installing the file &quot;%1&quot; to the personal plugin folder?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Failed to create the directory: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The plugin already exists in the personal plugin folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The file already exists. Do you want to overwrite it?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Error removing the old plugin file from the personal plugin folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Failed to copy the file to the destination: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Plugin &apos;%1&apos; installed successfully. You must restart the program to be able to use it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Show or hide the toolbar</source>
         <translation>도구 모음 표시 또는 숨기기</translation>
     </message>
@@ -14858,6 +14986,10 @@ a:hover {
     <message>
         <source> before restarting the capture</source>
         <translation> 캡처를 다시 시작하기 전</translation>
+    </message>
+    <message>
+        <source>Install Plugin</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>

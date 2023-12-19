@@ -3219,9 +3219,8 @@ Juha Siltanen		<juha.siltanen[AT]nsn.com> {
 	FLIP dissector
 }
 
-Cal Turney		<cturney[AT]charter.net> {
-	NFS access tracking
-	tshark version of the SCSI tap
+Cal Turney		<cturney111[AT]gmail.com> {
+	Updates to iSCSI, HTTP, TCP, NFS, SMB, BER
 }
 
 Lukasz Kotasa		<lukasz.kotasa[AT]tieto.com> {
@@ -4266,6 +4265,7 @@ Daniel Hirschberger	<daniel.hirschberger+wireshark[AT]rub.de>
 Daniel Kamil Kozar	<dkk089[AT]gmail.com>
 Daniel Lenski		<dlenski[AT]gmail.com>
 Daniel Mack		<daniel[AT]zonque.org>
+Daniel McCarney		<daniel[AT]binaryparadox.net>
 Daniel McLean		<maczor[AT]gmail.com>
 Daniel Mouscher		<dmouscher[AT]gmail.com>
 Daniel Stenberg		<daniel[AT]haxx.se>
@@ -4879,7 +4879,7 @@ Nils Björklund		<nils.bjorklund[AT]effnet.com>
 Nils Hanke		<nils.hanke[AT]outlook.de>
 Nils Ohlmeier		<github[AT]ohlmeier.org>
 Nitzan Carmi		<nitzanc[AT]mellanox.com>
-Noan Perrot		<noan.perrot[AT]gmail.com>
+Noan			<noan.perrot[AT]gmail.com>
 Noel Power		<noel.power[AT]suse.com>
 Nora Sandler		<nsandler[AT]securityinnovation.com>
 Odysseus Yang		<wiresharkyyh[AT]outlook.com>
@@ -5003,6 +5003,7 @@ Richard Smith		<pcy190[AT]126.com>
 Rickard Holmberg	<rickard.holmberg[AT]raysearchlabs.com>
 Rickard Holmberg	<rickard[AT]avkrok.net>
 Rishi Dev Singh		<rishi.dev[AT]samsung.com>
+Riya Dixit		<riyadixitagra[AT]gmail.com>
 Robert Beardsworth	<rob_beardsworth[AT]hotmail.com>
 Robert Cragie		<robert.cragie[AT]gmail.com>
 Robert Crowston		<crowston[AT]protonmail.com>
@@ -5319,6 +5320,8 @@ reno			<renovetrov[AT]gmail.com>
 sherber1		<sebastian.herber[AT]hbkworld.com>
 shqking			<shqking[AT]gmail.com>
 snicket2100		<15079832-snicket2100[AT]users.noreply.gitlab.com>
+snicket2100		<snicket2100[AT]protonmail.com>
+sofiane degoui		<degoui.sofiane[AT]gmail.com>
 steve71			<steve[AT]clarke.org.uk>
 subhav8			<subhadevi88[AT]gmail.com>
 wi24rd			<wi24rd+gitlab[AT]fedoraproject.org>

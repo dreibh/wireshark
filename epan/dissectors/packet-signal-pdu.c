@@ -70,7 +70,7 @@
 #define DATAFILE_SPDU_ISOBUS_MAPPING                        "Signal_PDU_Binding_ISOBUS"
 
 /* ID wireshark identifies the dissector by */
-static int proto_signal_pdu                                 = -1;
+static int proto_signal_pdu;
 
 static dissector_handle_t signal_pdu_handle_someip          = NULL;
 static dissector_handle_t signal_pdu_handle_can             = NULL;
@@ -80,19 +80,19 @@ static dissector_handle_t signal_pdu_handle_pdu_transport   = NULL;
 static dissector_handle_t signal_pdu_handle_ipdum           = NULL;
 static dissector_handle_t signal_pdu_handle_isobus          = NULL;
 
-static int hf_pdu_name                                      = -1;
-static int hf_payload_unparsed                              = -1;
+static int hf_pdu_name;
+static int hf_payload_unparsed;
 
-static gint ett_spdu_payload                                = -1;
-static gint ett_spdu_signal                                 = -1;
+static gint ett_spdu_payload;
+static gint ett_spdu_signal;
 static gboolean spdu_deserializer_activated                 = TRUE;
 static gboolean spdu_deserializer_show_hidden               = FALSE;
 static gboolean spdu_deserializer_hide_raw_values           = TRUE;
 
 /*** expert info items ***/
-static expert_field ef_spdu_payload_truncated               = EI_INIT;
-static expert_field ef_spdu_config_error                    = EI_INIT;
-static expert_field ef_spdu_unaligned_data                  = EI_INIT;
+static expert_field ei_spdu_payload_truncated;
+static expert_field ei_spdu_config_error;
+static expert_field ei_spdu_unaligned_data;
 
 /*** Data Structure for UAT based config ***/
 static GHashTable *data_spdu_messages                       = NULL;
@@ -2053,19 +2053,19 @@ get_isobus_mapping(guint32 pgn, guint16 bus_id) {
 
 static void
 expert_spdu_payload_truncated(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, gint offset, gint length) {
-    proto_tree_add_expert(tree, pinfo, &ef_spdu_payload_truncated, tvb, offset, length);
+    proto_tree_add_expert(tree, pinfo, &ei_spdu_payload_truncated, tvb, offset, length);
     col_append_str(pinfo->cinfo, COL_INFO, " [Signal PDU: Truncated payload!]");
 }
 
 static void
 expert_spdu_config_error(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, gint offset, gint length) {
-    proto_tree_add_expert(tree, pinfo, &ef_spdu_config_error, tvb, offset, length);
+    proto_tree_add_expert(tree, pinfo, &ei_spdu_config_error, tvb, offset, length);
     col_append_str(pinfo->cinfo, COL_INFO, " [Signal PDU: Config Error!]");
 }
 
 static void
 expert_spdu_unaligned_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, gint offset, gint length) {
-    proto_tree_add_expert(tree, pinfo, &ef_spdu_unaligned_data, tvb, offset, length);
+    proto_tree_add_expert(tree, pinfo, &ei_spdu_unaligned_data, tvb, offset, length);
     col_append_str(pinfo->cinfo, COL_INFO, " [Signal PDU: Unaligned Data!]");
 }
 
@@ -2807,11 +2807,11 @@ proto_register_signal_pdu(void) {
     };
 
     static ei_register_info ei[] = {
-        { &ef_spdu_payload_truncated, {"signal_pdu.payload.expert_truncated",
+        { &ei_spdu_payload_truncated, {"signal_pdu.payload.expert_truncated",
           PI_MALFORMED, PI_ERROR, "Signal PDU: Truncated payload!", EXPFILL} },
-        { &ef_spdu_config_error, {"signal_pdu.payload.config_error",
+        { &ei_spdu_config_error, {"signal_pdu.payload.config_error",
           PI_MALFORMED, PI_ERROR, "Signal PDU: Config Error (missing filter, filter duplicate, ...)!", EXPFILL} },
-        { &ef_spdu_unaligned_data, {"signal_pdu.payload.unaligned_data",
+        { &ei_spdu_unaligned_data, {"signal_pdu.payload.unaligned_data",
           PI_MALFORMED, PI_ERROR, "Signal PDU: Unaligned data! Strings etc. need to be aligned to bytes!", EXPFILL} },
     };
 

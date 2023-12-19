@@ -36,7 +36,7 @@ def name_has_one_of(name, substring_list):
             return True
     return False
 
-# A call is an individual call to an API we are interested in.
+# An individual call to an API we are interested in.
 # Used by APICheck below.
 class Call:
     def __init__(self, hf_name, macros, line_number=None, length=None, fields=None):
@@ -369,7 +369,8 @@ known_non_contiguous_fields = { 'wlan.fixed.capabilities.cfpoll.sta',
                                 'xmcp.type.method',
                                 'hf_hiqnet_flags',
                                 'hf_hiqnet_flagmask',
-                                'hf_h223_mux_mpl'
+                                'hf_h223_mux_mpl',
+                                'rdp.flags.pkt'
                               }
 ##################################################################################################
 
@@ -720,8 +721,11 @@ class RangeString:
 
             if min < self.min_value:
                 self.min_value = min
-            if max > self.max_value:
-                self.max_value = max
+            # For overall max value, still use min of each entry.
+            # It is common for entries to extend to e.g. 0xff, but at least we can check for items
+            # that can never match if we only chec the min.
+            if min > self.max_value:
+                self.max_value = min
 
             # This value should not be entirely hidden by earlier entries
             for prev in self.parsed_vals:
@@ -742,6 +746,8 @@ class RangeString:
             # OK, add this entry
             self.parsed_vals.append(RangeStringEntry(min, max, label))
 
+    def extraChecks(self):
+        pass
         # TODO: some checks over all entries.  e.g.,
         # - can multiple values be coalesced into 1?
         # - if in all cases min==max, suggest value_string instead?
@@ -975,7 +981,7 @@ class Item:
         if rs_max > item_max:
             global warnings_found
             print('Warning:', self.filename, self.hf, 'filter=', self.filter,
-                  self.strings, "has max value", rs_max, '(' + hex(rs_max) + ')', "which doesn't fit into", mask_width, 'bits',
+                  self.strings, "has values", rs_min, rs_max, '(' + hex(rs_max) + ')', "which doesn't fit into", mask_width, 'bits',
                   '( mask is', hex(self.mask_value), ')')
             warnings_found += 1
 
@@ -989,7 +995,7 @@ class Item:
     # Output a warning if non-contigous bits are found in the mask (guint64).
     # Note that this legimately happens in several dissectors where multiple reserved/unassigned
     # bits are conflated into one field.
-    # TODO: there is probably a cool/efficient way to check this (+1 => 1-bit set?)
+    # - there is probably a cool/efficient way to check this (+1 => 1-bit set?)
     def check_contiguous_bits(self, mask):
         if not self.mask_value:
             return
@@ -1121,7 +1127,7 @@ class Item:
 
     # A mask where all bits are set should instead be 0.
     # Exceptions might be where:
-    # - in add_bitmask() set and only one there!
+    # - in add_bitmask()
     # - represents flags, but dissector is not yet decoding them
     def check_full_mask(self, mask, field_arrays):
         if self.item_type == "FT_BOOLEAN":
@@ -1136,16 +1142,34 @@ class Item:
             if num_digits is None:
                 return
             if mask[2:] == 'f'*num_digits   or   mask[2:] == 'F'*num_digits:
-                # Don't report though if the only item in a field_array
+                # Don't report if appears in a 'fields' array
                 for arr in field_arrays:
                     list = field_arrays[arr][0]
-                    if len(list) == 1 and list[0] == self.hf:
-                        # Was first and only!
+                    if self.hf in list:
+                        # These need to have a mask - don't judge for being 0
                         return
 
-                print('Warning:', self.filename, self.hf, 'filter=', self.filter, ' - mask is all set - this is confusing - set 0 instead! :', '"' + mask + '"')
-                global warnings_found
-                warnings_found += 1
+                print('Note:', self.filename, self.hf, 'filter=', self.filter, " - mask is all set - if only want value (rather than bits), set 0 instead? :", '"' + mask + '"')
+
+    # An item that appears in a bitmask set, needs to have a non-zero mask.
+    def check_mask_if_in_field_array(self, mask, field_arrays):
+        # Work out if this item appears in a field array
+        found = False
+        array_name = None
+        for arr in field_arrays:
+            list = field_arrays[arr][0]
+            if self.hf in list:
+                # These need to have a mask - don't judge for being 0
+                found = True
+                array_name = arr
+                break
+
+        if found:
+            # It needs to have a non-zero mask.
+            if self.mask_read and self.mask_value == 0:
+                print('Error:', self.filename, self.hf, 'is in fields array', arr, 'but has a zero mask - this is not allowed')
+                global errors_found
+                errors_found += 1
 
 
 
@@ -1403,7 +1427,6 @@ def find_items(filename, macros, value_strings, range_strings,
         # N.B. re extends all the way to HFILL to avoid greedy matching
         # TODO: fix a problem where re can't cope with mask that involve a macro with commas in it...
         matches = re.finditer( r'.*\{\s*\&(hf_[a-z_A-Z0-9]*)\s*,\s*{\s*\"(.*?)\"\s*,\s*\"(.*?)\"\s*,\s*(.*?)\s*,\s*([0-9A-Z_\|\s]*?)\s*,\s*(.*?)\s*,\s*(.*?)\s*,\s*([a-zA-Z0-9\W\s_\u00f6\u00e4]*?)\s*,\s*HFILL', contents)
-        #matches = re.finditer( r'.*\{\s*\&(hf_[a-z_A-Z0-9]*)\s*,\s*{\s*\"(.*?)\"\s*,\s*\"(.*?)\"\s*,\s*(.*?)\s*,\s*([0-9A-Z_\|\s]*?)\s*,\s*(.*?)\s*,\s*(.*?)\s*,\s*(NULL|"[a-zA-Z0-9\W\s_/\u00f6\u00e4]*?")\s*,\s*HFILL', contents)
         for m in matches:
             # Store this item.
             hf = m.group(1)
@@ -1598,6 +1621,7 @@ def checkFile(filename, check_mask=False, mask_exact_width=False, check_label=Fa
         for i in items_defined:
             item = items_defined[i]
             item.check_full_mask(item.mask, field_arrays)
+            item.check_mask_if_in_field_array(item.mask, field_arrays)
 
     # Now actually check the calls
     for c in apiChecks:

@@ -1092,15 +1092,15 @@
     </message>
     <message>
         <source>Decryption Secrets</source>
-        <translation type="unfinished"></translation>
+        <translation>復号化シークレット</translation>
     </message>
     <message>
         <source>Type</source>
-        <translation type="unfinished">種別</translation>
+        <translation>種別</translation>
     </message>
     <message>
         <source>Size</source>
-        <translation type="unfinished">サイズ</translation>
+        <translation>サイズ</translation>
     </message>
     <message>
         <source>Statistics</source>
@@ -1392,6 +1392,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>(時計の)時刻が特定の間隔になったら次のファイルに切り替えます。例えば、1時間に設定すると毎時１時間ごとに新しいファイルが作成されます</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Usually a wireless network card will only capture the traffic sent to and from its own network address, and only captures &lt;em&gt;user data&lt;/em&gt; traffic with &amp;quot;fake&amp;quot; Ethernet headers. If you want to capture all traffic that wireless network cards can &amp;quot;see&amp;quot;, or are interested in 802.11 management or control packets, or radio-layer information, mark this option. Monitor mode availability depends on the wireless card and driver. See the Wiki for some more details of capturing packets on WLAN networks.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;通常、無線 ネットワークカードは自身のネットワークアドレスに送受信されるトラフィックのみキャプチャして、&amp;quot;偽の&amp;quot; Ethernetヘッダで &lt;em&gt;ユーザデータ&lt;/em&gt; トラフィックのみ取得します。もし無線ネットワークカードが&amp;quot;見える&amp;quot;すべてのトラフィックをキャプチャしたい、802.11管理や制御パケットや無線の物理層のヘッダ情報に興味がある場合にはこのオプションをマークしてください。モニターモードが利用できるかは無線カードとドライバに依存します。無線ネットワークに関してのパケットキャプチャのさらなる詳細についてはWikiを参照ください。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Enable monitor mode on all 802.11 interfaces</source>
+        <translation>すべての802.11インターフェースにおいてモニターモードを有効化します</translation>
+    </message>
+    <message>
         <source>compression</source>
         <translation>圧縮</translation>
     </message>
@@ -1581,6 +1589,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Capture packets in promiscuous mode</source>
         <translation>プロミスキャスモードでパケットをキャプチャ</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Usually a wireless network card will only capture the traffic sent to and from its own network address, and only captures &lt;em&gt;user data&lt;/em&gt; traffic with &amp;quot;fake&amp;quot; Ethernet headers. If you want to capture all traffic that wireless network cards can &amp;quot;see&amp;quot;, or are interested in 802.11 management or control packets, or radio-layer information, mark this option. Monitor mode availability depends on the wireless card and driver. See the Wiki for more details of capturing packets on WLAN networks.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;通常、無線 ネットワークカードは自身のネットワークアドレスに送受信されるトラフィックのみキャプチャして、&amp;quot;偽の&amp;quot; Ethernetヘッダで &lt;em&gt;ユーザデータ&lt;/em&gt; トラフィックのみ取得します。もし無線ネットワークカードが&amp;quot;見える&amp;quot;すべてのトラフィックをキャプチャしたい、802.11管理や制御パケットや無線の物理層のヘッダ情報に興味がある場合にはこのオプションをマークしてください。モニターモードが利用できるかは無線カードとドライバに依存します。無線ネットワークに関してのパケットキャプチャのさらなる詳細についてはWikiを参照ください。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Capture packets in monitor mode on 802.11 devices</source>
+        <translation>802.11デバイスにおいてモニターモードでパケットをキャプチャします</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture packets in the next-generation capture file format.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -3040,11 +3056,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Display Filter Macros</source>
-        <translation type="unfinished"></translation>
+        <translation>表示フィルタマクロ</translation>
     </message>
     <message>
         <source>New macro</source>
-        <translation type="unfinished"></translation>
+        <translation>新規マクロ</translation>
     </message>
     <message>
         <source>Open </source>
@@ -3131,7 +3147,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>FilterListModel</name>
     <message>
         <source>Macro Name</source>
-        <translation type="unfinished"></translation>
+        <translation>マクロ名</translation>
     </message>
     <message>
         <source>Filter Name</source>
@@ -3139,7 +3155,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Macro Expression</source>
-        <translation type="unfinished"></translation>
+        <translation>マクロ式</translation>
     </message>
     <message>
         <source>Filter Expression</source>
@@ -5997,7 +6013,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>LteMacStatisticsDialog</name>
     <message>
         <source>LTE Mac Statistics</source>
-        <translation>LTE MAC統計</translation>
+        <translation type="vanished">LTE MAC統計</translation>
+    </message>
+    <message>
+        <source>LTE/NR Mac Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Include SR frames in filter</source>
@@ -6306,7 +6326,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>LTE RLC Graph (UE=%1 chan=%2%3 %4 - %5)</source>
-        <translation>LTE RLCグラフ (UE=%1 chan=%2%3 %4 - %5)</translation>
+        <translation type="vanished">LTE RLCグラフ (UE=%1 chan=%2%3 %4 - %5)</translation>
+    </message>
+    <message>
+        <source>%1 RLC Graph (UE=%2 chan=%3%4 %5 - %6)</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>LTE RLC Graph - no channel selected</source>
@@ -6365,7 +6389,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>LteRlcStatisticsDialog</name>
     <message>
         <source>LTE RLC Statistics</source>
-        <translation>LTE RLC統計</translation>
+        <translation type="vanished">LTE RLC統計</translation>
+    </message>
+    <message>
+        <source>LTE/NR RLC Statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Include SR frames in filter</source>
@@ -7097,6 +7125,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>パケットバイト列を表示</translation>
     </message>
     <message>
+        <source>Layout:</source>
+        <translation>レイアウト:</translation>
+    </message>
+    <message>
         <source>Packet %1</source>
         <translation>パケット %1</translation>
     </message>
@@ -7382,6 +7414,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Path</source>
         <translation>パス</translation>
     </message>
+    <message>
+        <source>Scope</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Description</source>
+        <translation type="unfinished">記述</translation>
+    </message>
+    <message>
+        <source>Homepage</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>PortsModel</name>
@@ -7450,6 +7494,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Search:</source>
         <translation>検索:</translation>
+    </message>
+    <message>
+        <source>Checking this will show only changed preferences.</source>
+        <translation>これをチェックすることで変更された設定のみ表示します</translation>
+    </message>
+    <message>
+        <source>Show changed values</source>
+        <translation>変更した値を表示</translation>
     </message>
     <message>
         <source>Preferences</source>
@@ -8267,6 +8319,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>マーカー欠如？</translation>
     </message>
     <message>
+        <source>LTE</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>NR</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>C-RNTI</source>
         <translation>C-RNTI</translation>
     </message>
@@ -8285,6 +8345,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>UEId</source>
         <translation>UEId</translation>
+    </message>
+    <message>
+        <source>RAT</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>UL Frames</source>
@@ -8515,7 +8579,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>QObject::QObject</name>
     <message>
         <source>CCCH</source>
-        <translation>CCCH</translation>
+        <translation type="vanished">CCCH</translation>
+    </message>
+</context>
+<context>
+    <name>QObject::QObject::QObject</name>
+    <message>
+        <source>CCCH</source>
+        <translation type="unfinished">CCCH</translation>
     </message>
 </context>
 <context>
@@ -8728,6 +8799,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>解決したアドレス</translation>
     </message>
     <message>
+        <source>Copy</source>
+        <translation>コピー</translation>
+    </message>
+    <message>
+        <source>Save as…</source>
+        <translation>…として保存</translation>
+    </message>
+    <message>
         <source># Resolved addresses found in %1</source>
         <translation># %1 に解決したアドレスが見つかりました</translation>
     </message>
@@ -8738,6 +8817,61 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation># コメント
 #
 # </translation>
+    </message>
+</context>
+<context>
+    <name>ResolvedAddressesView</name>
+    <message>
+        <source>as Plain Text</source>
+        <translation>プレインテキストとして</translation>
+    </message>
+    <message>
+        <source>Copy selected rows</source>
+        <translation>選択した行をコピー</translation>
+    </message>
+    <message>
+        <source>Copy table</source>
+        <translation>表をコピー</translation>
+    </message>
+    <message>
+        <source>as CSV</source>
+        <translation>CSVとして</translation>
+    </message>
+    <message>
+        <source>as JSON</source>
+        <translation>JSONとして</translation>
+    </message>
+    <message>
+        <source>Save selected rows as…</source>
+        <translation>選択した行を…として保存</translation>
+    </message>
+    <message>
+        <source>Save table as…</source>
+        <translation>…として表を保存</translation>
+    </message>
+    <message>
+        <source>Save Resolved Addresses As…</source>
+        <translation>…として解決したアドレスを保存</translation>
+    </message>
+    <message>
+        <source>Plain text (*.txt)</source>
+        <translation>プレインテキスト (*.txt)</translation>
+    </message>
+    <message>
+        <source>CSV Document (*.csv)</source>
+        <translation>CSV書類 (*.csv)</translation>
+    </message>
+    <message>
+        <source>JSON Document (*.json)</source>
+        <translation>JSON書類 (*.json)</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation>警告</translation>
+    </message>
+    <message>
+        <source>Unable to save %1: %2</source>
+        <translation>%1を保存できません: %2</translation>
     </message>
 </context>
 <context>
@@ -10378,53 +10512,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
 </context>
 <context>
-    <name>SSLKeylogDialog</name>
-    <message>
-        <source>Dialog</source>
-        <translation type="vanished">ダイアログ</translation>
-    </message>
-    <message>
-        <source>Browse...</source>
-        <translation type="vanished">参照...</translation>
-    </message>
-    <message>
-        <source>Application path</source>
-        <translation type="vanished">アプリケーションパス</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Run an application with the SSLKEYLOG environment variable set to the file specified by the key log filename preference.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;キーログファイル名設定で指定したファイルに設定したSSLKEYLOG環境変数でアプリケーションを実行します。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;Firefox and Chrome are known to work. If your desired browser is currently running, close it first before launching it below.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;FirefoxとChromeは動作することが知られています。望んだブラウザを現在実行している場合は、ブラウザを起動する前にまず閉じてください&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;(Pre)-Master-Secret log file path&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;(Pre)-Master-Secret ログファイルパス&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;TLS keys will be logged to this file.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:small;&quot;&gt;TLS鍵がこのファイルに記録されます。&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
-        <source>Launch</source>
-        <translation type="vanished">起動</translation>
-    </message>
-    <message>
-        <source>Save</source>
-        <translation type="vanished">保存</translation>
-    </message>
-    <message>
-        <source>TLS Keylog</source>
-        <translation type="vanished">TLS キーログ</translation>
-    </message>
-    <message>
-        <source>Web Browser</source>
-        <translation type="vanished">Webブラウザ</translation>
-    </message>
-</context>
-<context>
     <name>ScsiServiceResponseTimeDialog</name>
     <message>
         <source>&lt;small&gt;&lt;i&gt;Select a command and enter a filter if desired, then press Apply.&lt;/i&gt;&lt;/small&gt;</source>
@@ -11828,51 +11915,51 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>TLSKeylogDialog</name>
     <message>
         <source>Dialog</source>
-        <translation type="unfinished">ダイアログ</translation>
+        <translation>ダイアログ</translation>
     </message>
     <message>
         <source>Browse…</source>
-        <translation type="unfinished"></translation>
+        <translation>参照…</translation>
     </message>
     <message>
         <source>Command line</source>
-        <translation type="unfinished"></translation>
+        <translation>コマンドライン</translation>
     </message>
     <message>
         <source>Run an application with the SSLKEYLOGFILE environment variable set to the file specified by the TLS key log filename preference. This enables TLS decryption in Wireshark. Set the key log file and start the capture before launching the application to ensure that the initial TLS handshakes are captured.</source>
-        <translation type="unfinished"></translation>
+        <translation>TLSキーログファイル名設定で指定したファイルにSSLKEYLOGFILE環境変数を設定してアプリケーションを起動します。これによってWiresharkでTLSの復号化が行えます。初回のTLSハンドシェイクがキャプチャされたことを確認するためにアプリケーションを起動する前にキーログファイルを設定してキャプチャを開始してください。</translation>
     </message>
     <message>
         <source>&lt;span style=&quot; font-size:small;&quot;&gt;Firefox and Chrome are known to work. If your desired browser is currently running, close it first before launching it below. Command line options are supported.&lt;/span&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;span style=&quot; font-size:small;&quot;&gt;FirefoxとChromeが動作することで知られています。望むブラウザが現在起動している場合は以下を起動する前に一度閉じてください。コマンドラインオプションもサポートされます。</translation>
     </message>
     <message>
         <source>TLS (Pre)-Master-Secret log file path (tls.keylog_file)</source>
-        <translation type="unfinished"></translation>
+        <translation>TLS (プリ)マスターシークレット ログファイルパス (tls.keylog_file)</translation>
     </message>
     <message>
         <source>&lt;span style=&quot; font-size:small;&quot;&gt;TLS session secrets will be logged to this file. If you change this field, hit the Save button to update the TLS protocol preferences.&lt;/span&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;span style=&quot; font-size:small;&quot;&gt;TLS セッションシークレットはこのファイルに記録されます。このフィールドを変更したら保存ボタンを押してTLSプロトコル設定を更新してください。&lt;/span&gt;</translation>
     </message>
     <message>
         <source>Launch application with SSLKEYLOGFILE</source>
-        <translation type="unfinished"></translation>
+        <translation>SSLKEYLOGFILEとともにアプリケーションを起動します</translation>
     </message>
     <message>
         <source>Launch</source>
-        <translation type="unfinished">起動</translation>
+        <translation>起動</translation>
     </message>
     <message>
         <source>Save</source>
-        <translation type="unfinished">保存</translation>
+        <translation>保存</translation>
     </message>
     <message>
         <source>TLS Keylog file</source>
-        <translation type="unfinished"></translation>
+        <translation>TLSキーログファイル</translation>
     </message>
     <message>
         <source>Program to start with SSLKEYLOGFILE</source>
-        <translation type="unfinished"></translation>
+        <translation>SSLKEYLOGFILEとともに開始するプログラム</translation>
     </message>
 </context>
 <context>
@@ -13896,6 +13983,10 @@ a:hover {
         <translation>オプション…(&amp;O)</translation>
     </message>
     <message>
+        <source>&amp;3GPP Uu</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&amp;Wireless</source>
         <translation>無線(&amp;W)</translation>
     </message>
@@ -14315,8 +14406,7 @@ a:hover {
     </message>
     <message>
         <source>TLS Keylog Launcher</source>
-        <oldsource>SSL Keylog Launcher</oldsource>
-        <translation type="unfinished">SSLキーログランチャー</translation>
+        <translation>TLSキーログランチャー</translation>
     </message>
     <message>
         <source>Release Notes</source>
@@ -14356,7 +14446,7 @@ a:hover {
     </message>
     <message>
         <source>&amp;LTE</source>
-        <translation>&amp;LTE</translation>
+        <translation type="vanished">&amp;LTE</translation>
     </message>
     <message>
         <source>&amp;MTP3</source>
@@ -14659,6 +14749,44 @@ a:hover {
         <translation>SSRC値が見つかりませんでした</translation>
     </message>
     <message>
+        <source>Install plugin</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Binary plugin (*%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Plugins can execute arbitrary code as the current user. Make sure you trust it before installing.
+
+Continue installing the file &quot;%1&quot; to the personal plugin folder?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Failed to create the directory: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The plugin already exists in the personal plugin folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The file already exists. Do you want to overwrite it?</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Error removing the old plugin file from the personal plugin folder.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Failed to copy the file to the destination: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Plugin &apos;%1&apos; installed successfully. You must restart the program to be able to use it.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Show or hide the toolbar</source>
         <translation>ツールバーを表示/非表示</translation>
     </message>
@@ -14861,6 +14989,10 @@ a:hover {
     <message>
         <source> before restarting the capture</source>
         <translation>キャプチャを再スタートする前に</translation>
+    </message>
+    <message>
+        <source>Install Plugin</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>

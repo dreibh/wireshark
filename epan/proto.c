@@ -213,6 +213,11 @@ struct ptvcursor {
 }
 #endif
 
+/* The longest NUMBER-like field label we have is for BASE_OUI, which
+ * can have up to 64 bytes for the manufacturer name if resolved plus
+ * 11 bytes for the "XX:XX:XX ()" part = 75 octets.
+ */
+#define NUMBER_LABEL_LENGTH 80
 
 static const char *hf_try_val_to_str(guint32 value, const header_field_info *hfinfo);
 static const char *hf_try_val64_to_str(guint64 value, const header_field_info *hfinfo);
@@ -240,16 +245,16 @@ static void fill_label_number64(field_info *fi, gchar *label_str, gboolean is_si
 static size_t fill_display_label_float(field_info *fi, gchar *label_str);
 static void fill_label_float(field_info *fi, gchar *label_str);
 
-static const char *hfinfo_number_value_format_display(const header_field_info *hfinfo, int display, char buf[32], guint32 value);
-static const char *hfinfo_number_value_format_display64(const header_field_info *hfinfo, int display, char buf[48], guint64 value);
+static const char *hfinfo_number_value_format_display(const header_field_info *hfinfo, int display, char buf[NUMBER_LABEL_LENGTH], guint32 value);
+static const char *hfinfo_number_value_format_display64(const header_field_info *hfinfo, int display, char buf[NUMBER_LABEL_LENGTH], guint64 value);
 static const char *hfinfo_char_vals_format(const header_field_info *hfinfo, char buf[32], guint32 value);
-static const char *hfinfo_number_vals_format(const header_field_info *hfinfo, char buf[32], guint32 value);
-static const char *hfinfo_number_vals_format64(const header_field_info *hfinfo, char buf[48], guint64 value);
-static const char *hfinfo_number_value_format(const header_field_info *hfinfo, char buf[32], guint32 value);
-static const char *hfinfo_number_value_format64(const header_field_info *hfinfo, char buf[48], guint64 value);
+static const char *hfinfo_number_vals_format(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint32 value);
+static const char *hfinfo_number_vals_format64(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint64 value);
+static const char *hfinfo_number_value_format(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint32 value);
+static const char *hfinfo_number_value_format64(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint64 value);
 static const char *hfinfo_char_value_format(const header_field_info *hfinfo, char buf[32], guint32 value);
-static const char *hfinfo_numeric_value_format(const header_field_info *hfinfo, char buf[32], guint32 value);
-static const char *hfinfo_numeric_value_format64(const header_field_info *hfinfo, char buf[48], guint64 value);
+static const char *hfinfo_numeric_value_format(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint32 value);
+static const char *hfinfo_numeric_value_format64(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint64 value);
 
 static void proto_cleanup_base(void);
 
@@ -368,7 +373,7 @@ static int proto_register_field_init(header_field_info *hfinfo, const int parent
 /* special-case header field used within proto.c */
 static header_field_info hfi_text_only =
 	{ "Text item",	"text", FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL };
-int hf_text_only = -1;
+int hf_text_only;
 
 /* Structure for information about a protocol */
 struct _protocol {
@@ -2233,12 +2238,28 @@ get_time_value(proto_tree *tree, tvbuff_t *tvb, const gint start,
 
 		case ENC_TIME_SECS_USECS|ENC_BIG_ENDIAN:
 			/*
-			 * 4-byte seconds, followed by 4-byte fractional
-			 * time in microseconds, both big-endian.
+			 * If the length is 16, 8-byte seconds, followed
+			 * by 8-byte fractional time in microseconds,
+			 * both big-endian.
+			 *
+			 * If the length is 12, 8-byte seconds, followed
+			 * by 4-byte fractional time in microseconds,
+			 * both big-endian.
+			 *
+			 * If the length is 8, 4-byte seconds, followed
+			 * by 4-byte fractional time in microseconds,
+			 * both big-endian.
+			 *
 			 * For absolute times, the seconds are seconds
 			 * since the UN*X epoch.
 			 */
-			if (length == 8) {
+			if (length == 16) {
+				time_stamp->secs  = (time_t)tvb_get_ntoh64(tvb, start);
+				time_stamp->nsecs = (guint32)tvb_get_ntoh64(tvb, start+8)*1000;
+			} else if (length == 12) {
+				time_stamp->secs  = (time_t)tvb_get_ntoh64(tvb, start);
+				time_stamp->nsecs = tvb_get_ntohl(tvb, start+8)*1000;
+			} else if (length == 8) {
 				time_stamp->secs  = (time_t)tvb_get_ntohl(tvb, start);
 				time_stamp->nsecs = tvb_get_ntohl(tvb, start+4)*1000;
 			} else {
@@ -2250,12 +2271,28 @@ get_time_value(proto_tree *tree, tvbuff_t *tvb, const gint start,
 
 		case ENC_TIME_SECS_USECS|ENC_LITTLE_ENDIAN:
 			/*
-			 * 4-byte seconds, followed by 4-byte fractional
-			 * time in microseconds, both little-endian.
+			 * If the length is 16, 8-byte seconds, followed
+			 * by 8-byte fractional time in microseconds,
+			 * both little-endian.
+			 *
+			 * If the length is 12, 8-byte seconds, followed
+			 * by 4-byte fractional time in microseconds,
+			 * both little-endian.
+			 *
+			 * If the length is 8, 4-byte seconds, followed
+			 * by 4-byte fractional time in microseconds,
+			 * both little-endian.
+			 *
 			 * For absolute times, the seconds are seconds
 			 * since the UN*X epoch.
 			 */
-			if (length == 8) {
+			if (length == 16) {
+				time_stamp->secs  = (time_t)tvb_get_letoh64(tvb, start);
+				time_stamp->nsecs = (guint32)tvb_get_letoh64(tvb, start+8)*1000;
+			} else if (length == 12) {
+				time_stamp->secs  = (time_t)tvb_get_letoh64(tvb, start);
+				time_stamp->nsecs = tvb_get_letohl(tvb, start+8)*1000;
+			} else if (length == 8) {
 				time_stamp->secs  = (time_t)tvb_get_letohl(tvb, start);
 				time_stamp->nsecs = tvb_get_letohl(tvb, start+4)*1000;
 			} else {
@@ -6832,7 +6869,7 @@ proto_item_fill_display_label(field_info *finfo, gchar *display_label_str, const
 	guint32 number;
 	guint64 number64;
 	const char *hf_str_val;
-	char number_buf[48];
+	char number_buf[NUMBER_LABEL_LENGTH];
 	const char *number_out;
 	address addr;
 	const ipv4_addr_and_mask *ipv4;
@@ -8259,7 +8296,7 @@ proto_get_frame_protocols(const wmem_list_t *layers, gboolean *is_ip,
 			*is_tls = TRUE;
 		} else if (is_rtp && !strcmp(proto_name, "rtp")) {
 			*is_rtp = TRUE;
-		} else if (is_lte_rlc && !strcmp(proto_name, "rlc-lte")) {
+		} else if (is_lte_rlc && (!strcmp(proto_name, "rlc-lte") || !strcmp(proto_name, "rlc-nr"))) {
 			*is_lte_rlc = TRUE;
 		}
 
@@ -8402,6 +8439,14 @@ proto_disable_all(void)
 	}
 }
 
+static void
+heur_reenable_cb(void *data, void *user_data _U_)
+{
+	heur_dtbl_entry_t *heur = (heur_dtbl_entry_t*)data;
+
+	heur->enabled = heur->enabled_by_default;
+}
+
 void
 proto_reenable_all(void)
 {
@@ -8415,6 +8460,7 @@ proto_reenable_all(void)
 		protocol = (protocol_t *)list_item->data;
 		if (protocol->can_toggle)
 			protocol->is_enabled = protocol->enabled_by_default;
+		proto_heuristic_dissector_foreach(protocol, heur_reenable_cb, NULL);
 		list_item = g_list_next(list_item);
 	}
 }
@@ -10050,7 +10096,7 @@ fill_label_bitfield(field_info *fi, gchar *label_str, gboolean is_signed)
 	char       *p;
 	int         bitfield_byte_length, bitwidth;
 	guint32     value, unshifted_value;
-	char        buf[32];
+	char        buf[NUMBER_LABEL_LENGTH];
 	const char *out;
 
 	header_field_info *hfinfo = fi->hfinfo;
@@ -10125,7 +10171,7 @@ fill_label_bitfield64(field_info *fi, gchar *label_str, gboolean is_signed)
 	char       *p;
 	int         bitfield_byte_length, bitwidth;
 	guint64     value, unshifted_value;
-	char        buf[48];
+	char        buf[NUMBER_LABEL_LENGTH];
 	const char *out;
 
 	header_field_info *hfinfo = fi->hfinfo;
@@ -10233,7 +10279,7 @@ fill_label_number(field_info *fi, gchar *label_str, gboolean is_signed)
 	header_field_info *hfinfo = fi->hfinfo;
 	guint32            value;
 
-	char               buf[32];
+	char               buf[NUMBER_LABEL_LENGTH];
 	const char        *out;
 
 	if (is_signed)
@@ -10299,7 +10345,7 @@ fill_label_number64(field_info *fi, gchar *label_str, gboolean is_signed)
 	header_field_info *hfinfo = fi->hfinfo;
 	guint64            value;
 
-	char               buf[48];
+	char               buf[NUMBER_LABEL_LENGTH];
 	const char        *out;
 
 	if (is_signed)
@@ -10610,9 +10656,9 @@ hfinfo_char_value_format_display(int display, char buf[7], guint32 value)
 }
 
 static const char *
-hfinfo_number_value_format_display(const header_field_info *hfinfo, int display, char buf[32], guint32 value)
+hfinfo_number_value_format_display(const header_field_info *hfinfo, int display, char buf[NUMBER_LABEL_LENGTH], guint32 value)
 {
-	char *ptr = &buf[31];
+	char *ptr = &buf[NUMBER_LABEL_LENGTH-1];
 	gboolean isint = FT_IS_INT(hfinfo->type);
 
 	*ptr = '\0';
@@ -10647,7 +10693,7 @@ hfinfo_number_value_format_display(const header_field_info *hfinfo, int display,
 		case BASE_PT_TCP:
 		case BASE_PT_DCCP:
 		case BASE_PT_SCTP:
-			port_with_resolution_to_str_buf(buf, 32,
+			port_with_resolution_to_str_buf(buf, NUMBER_LABEL_LENGTH,
 					display_to_port_type((field_display_e)display), value);
 			return buf;
 		case BASE_OUI:
@@ -10663,11 +10709,11 @@ hfinfo_number_value_format_display(const header_field_info *hfinfo, int display,
 			manuf_name = uint_get_manuf_name_if_known(value);
 			if (manuf_name == NULL) {
 				/* Could not find an OUI. */
-				snprintf(buf, 32, "%02x:%02x:%02x", p_oui[0], p_oui[1], p_oui[2]);
+				snprintf(buf, NUMBER_LABEL_LENGTH, "%02x:%02x:%02x", p_oui[0], p_oui[1], p_oui[2]);
 			}
 			else {
 				/* Found an address string. */
-				snprintf(buf, 32, "%02x:%02x:%02x (%s)", p_oui[0], p_oui[1], p_oui[2], manuf_name);
+				snprintf(buf, NUMBER_LABEL_LENGTH, "%02x:%02x:%02x (%s)", p_oui[0], p_oui[1], p_oui[2], manuf_name);
 			}
 			return buf;
 			}
@@ -10679,9 +10725,9 @@ hfinfo_number_value_format_display(const header_field_info *hfinfo, int display,
 }
 
 static const char *
-hfinfo_number_value_format_display64(const header_field_info *hfinfo, int display, char buf[48], guint64 value)
+hfinfo_number_value_format_display64(const header_field_info *hfinfo, int display, char buf[NUMBER_LABEL_LENGTH], guint64 value)
 {
-	char *ptr = &buf[47];
+	char *ptr = &buf[NUMBER_LABEL_LENGTH-1];
 	gboolean isint = FT_IS_INT(hfinfo->type);
 
 	*ptr = '\0';
@@ -10720,7 +10766,7 @@ hfinfo_number_value_format_display64(const header_field_info *hfinfo, int displa
 }
 
 static const char *
-hfinfo_number_value_format(const header_field_info *hfinfo, char buf[32], guint32 value)
+hfinfo_number_value_format(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint32 value)
 {
 	int display = hfinfo->display;
 
@@ -10735,7 +10781,7 @@ hfinfo_number_value_format(const header_field_info *hfinfo, char buf[32], guint3
 }
 
 static const char *
-hfinfo_number_value_format64(const header_field_info *hfinfo, char buf[48], guint64 value)
+hfinfo_number_value_format64(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint64 value)
 {
 	int display = hfinfo->display;
 
@@ -10759,7 +10805,7 @@ hfinfo_char_value_format(const header_field_info *hfinfo, char buf[32], guint32 
 }
 
 static const char *
-hfinfo_numeric_value_format(const header_field_info *hfinfo, char buf[32], guint32 value)
+hfinfo_numeric_value_format(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint32 value)
 {
 	/* Get the underlying BASE_ value */
 	int display = FIELD_DISPLAY(hfinfo->display);
@@ -10796,7 +10842,7 @@ hfinfo_numeric_value_format(const header_field_info *hfinfo, char buf[32], guint
 }
 
 static const char *
-hfinfo_numeric_value_format64(const header_field_info *hfinfo, char buf[48], guint64 value)
+hfinfo_numeric_value_format64(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint64 value)
 {
 	/* Get the underlying BASE_ value */
 	int display = FIELD_DISPLAY(hfinfo->display);
@@ -10836,7 +10882,7 @@ hfinfo_char_vals_format(const header_field_info *hfinfo, char buf[32], guint32 v
 }
 
 static const char *
-hfinfo_number_vals_format(const header_field_info *hfinfo, char buf[32], guint32 value)
+hfinfo_number_vals_format(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint32 value)
 {
 	/* Get the underlying BASE_ value */
 	int display = FIELD_DISPLAY(hfinfo->display);
@@ -10853,7 +10899,7 @@ hfinfo_number_vals_format(const header_field_info *hfinfo, char buf[32], guint32
 }
 
 static const char *
-hfinfo_number_vals_format64(const header_field_info *hfinfo, char buf[48], guint64 value)
+hfinfo_number_vals_format64(const header_field_info *hfinfo, char buf[NUMBER_LABEL_LENGTH], guint64 value)
 {
 	/* Get the underlying BASE_ value */
 	int display = FIELD_DISPLAY(hfinfo->display);
@@ -12258,7 +12304,7 @@ proto_item_add_bitmask_tree(proto_item *item, tvbuff_t *tvb, const int offset,
 				first = FALSE;
 			}
 			else if (!(flags & BMT_NO_INT)) {
-				char buf[32];
+				char buf[NUMBER_LABEL_LENGTH];
 				const char *out = NULL;
 
 				if (!first) {
@@ -12305,7 +12351,7 @@ proto_item_add_bitmask_tree(proto_item *item, tvbuff_t *tvb, const int offset,
 				first = FALSE;
 			}
 			else if (!(flags & BMT_NO_INT)) {
-				char buf[32];
+				char buf[NUMBER_LABEL_LENGTH];
 				const char *out = NULL;
 
 				if (!first) {
@@ -12347,7 +12393,7 @@ proto_item_add_bitmask_tree(proto_item *item, tvbuff_t *tvb, const int offset,
 				first = FALSE;
 			}
 			else if (!(flags & BMT_NO_INT)) {
-				char buf[48];
+				char buf[NUMBER_LABEL_LENGTH];
 				const char *out = NULL;
 
 				if (!first) {
@@ -12393,7 +12439,7 @@ proto_item_add_bitmask_tree(proto_item *item, tvbuff_t *tvb, const int offset,
 				first = FALSE;
 			}
 			else if (!(flags & BMT_NO_INT)) {
-				char buf[48];
+				char buf[NUMBER_LABEL_LENGTH];
 				const char *out = NULL;
 
 				if (!first) {

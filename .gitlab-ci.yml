@@ -23,7 +23,7 @@ variables:
   GIT_FETCH_EXTRA_FLAGS: "--depth=5000"
   CCACHE_DIR: "${CI_PROJECT_DIR}/ccache"
   # Preferred version of clang available on wireshark-ubuntu-dev
-  CLANG_VERSION: "16"
+  CLANG_VERSION: "17"
   # Enable color output in various tools.
   # CMake, Ninja, and others: https://bixense.com/clicolors/
   CLICOLOR_FORCE: "1"
@@ -198,8 +198,7 @@ variables:
 # https://gitlab.com/gitlab-org/ci-cd/shared-runners/images/macstadium/orka/-/blob/main/toolchain/monterey.yml
 .build-macos:
   stage: build
-  tags: [ saas-macos-medium-m1 ]
-  image: macos-12-xcode-14 # https://docs.gitlab.com/ee/ci/runners/saas/macos/environment.html
+  tags: [ saas-macos-medium-m1 ] # https://docs.gitlab.com/ee/ci/runners/saas/macos/environment.html
   retry: 1
   # https://gould.cx/ted/blog/2017/06/10/ccache-for-Gitlab-CI/
   cache:
@@ -216,13 +215,6 @@ variables:
     - printf "\e[0Ksection_start:%s:ci_env_section[collapsed=true]\r\e[0KCI environment variables" "$(date +%s)"
     - env | grep ^CI | sort
     - printf "\e[0Ksection_end:%s:ci_env_section\r\e[0K" "$(date +%s)"
-    # At the time of this writing (January 2023), the macOS SaaS builder has the following PATH:
-    # /Users/gitlab/.asdf/shims:/Users/gitlab/.asdf/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Library/Apple/usr/bin
-    # The suite_clopts.case_tshark_extcap.test_tshark_extcap_interfaces test will fail because
-    # it sets an alternate HOME, which results in asdf returning
-    #   unknown command: python3. Perhaps you have to reshim?
-    # Make sure /usr/local/bin is first in order to work around asdf.
-    - export PATH=/usr/local/bin:$PATH
     - brew --version
     - printf "\e[0Ksection_start:%s:brew_section[collapsed=true]\r\e[0KInstalling prerequisites" "$( date +%s)"
     - ./tools/macos-setup-brew.sh --install-optional --install-test-deps
@@ -312,20 +304,15 @@ Debian Stable APT Package:
     - export DEB_BUILD_OPTIONS="nocheck parallel=$(( $(getconf _NPROCESSORS_ONLN) + 2 ))"
     - export DH_QUIET=1
     - export MAKEFLAGS=--silent
-    # Ignore changed symbols (on development branch).
-    - export DPKG_GENSYMBOLS_CHECK_LEVEL=0
     - CC=/usr/lib/ccache/gcc CXX=/usr/lib/ccache/g++ dpkg-buildpackage -b --no-sign -jauto -zfast
+    # Please don't add a Lintian step unless you can guarantee that someone
+    # will fix any breakages that invariably pop up.
     - mkdir debian-packages
-    - cp -v ../*.deb debian-packages/
-    - mkdir debian-symbols
-    - for wslib in wireshark wiretap wsutil ; do cp -v packaging/debian/lib${wslib}0/DEBIAN/symbols debian-symbols/lib${wslib}0.symbols ; done
-    - lintian --suppress-tags library-not-linked-against-libc --display-experimental --display-info --pedantic --profile debian
+    - mv -v ../*.deb debian-packages/
   artifacts:
     paths:
       - debian-packages/*.deb
-      - debian-symbols/*.symbols
     expire_in: 3 days
-    when: always
 
 Debian Stable APT Test:
   extends: .test-linux
@@ -400,9 +387,9 @@ Ubuntu APT Package:
     # build-ubuntu puts us in `build`.
     - cd ..
     - ln --symbolic --no-dereference --force packaging/debian
-      # Ignore changed symbols (on development branch).
-    - export DPKG_GENSYMBOLS_CHECK_LEVEL=0
     - CC=/usr/lib/ccache/gcc CXX=/usr/lib/ccache/g++ MAKE=ninja dpkg-buildpackage -us -uc -rfakeroot -jauto -zfast
+    # Please don't add a Lintian step unless you can guarantee that someone
+    # will fix any breakages that invariably pop up.
     - mkdir ubuntu-packages
     - mv ../*.deb ubuntu-packages/
   after_script:
@@ -717,7 +704,18 @@ Commit Check:
         "
         glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
       fi
-    - exit $(( PC_EXIT_CODE || VC_EXIT_CODE || LC_EXIT_CODE ))
+    - HC_EXIT_CODE=0
+    - ANALYSIS_MESSAGE=$( python3 tools/check_help_urls.py ) || HC_EXIT_CODE=1
+    - >
+      if [[ $HC_EXIT_CODE != 0 ]] ; then
+        MESSAGE="Help URL check failure:
+        ~~~
+        $ANALYSIS_MESSAGE
+        ~~~
+        "
+        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
+      fi
+    - exit $(( PC_EXIT_CODE || VC_EXIT_CODE || LC_EXIT_CODE || HC_EXIT_CODE ))
 
 Ubuntu GCC Build:
   extends: .build-ubuntu
@@ -815,9 +813,11 @@ No options:
   script: |
     cmake -GNinja -DENABLE_CCACHE=ON \
       -DENABLE_BROTLI=OFF -DENABLE_CAP=OFF -DENABLE_CHECKHF_CONFLICT=ON -DENABLE_GNUTLS=OFF \
-      -DENABLE_KERBEROS=OFF -DENABLE_LIBXML2=OFF -DENABLE_ILBC=OFF -DENABLE_LUA=OFF -DENABLE_LZ4=OFF -DENABLE_MINIZIP=OFF \
-      -DENABLE_NETLINK=OFF -DENABLE_NGHTTP2=OFF -DENABLE_PCAP=OFF -DENABLE_PLUGIN_IFDEMO=ON -DENABLE_PLUGINS=OFF \
-      -DENABLE_SBC=OFF -DENABLE_SMI=OFF -DENABLE_SNAPPY=OFF -DENABLE_SPANDSP=OFF -DENABLE_ZLIB=OFF -DENABLE_ZSTD=OFF ..
+      -DENABLE_KERBEROS=OFF -DENABLE_LIBXML2=OFF -DENABLE_ILBC=OFF -DENABLE_LUA=OFF -DENABLE_LZ4=OFF \
+      -DENABLE_MINIZIP=OFF -DENABLE_NETLINK=OFF -DENABLE_NGHTTP2=OFF -DENABLE_NGHTTP3=OFF \
+      -DENABLE_BCG729=OFF -DENABLE_OPUS=OFF -DENABLE_PCAP=OFF -DENABLE_PLUGIN_IFDEMO=ON \
+      -DENABLE_PLUGINS=OFF -DENABLE_SBC=OFF -DENABLE_SMI=OFF -DENABLE_SNAPPY=OFF -DENABLE_SPANDSP=OFF \
+      -DENABLE_ZLIB=OFF -DENABLE_ZSTD=OFF -DBUILD_mmdbresolve=OFF ..
     ninja
 
 # Windows runners are still beta, at least technically:
@@ -1102,6 +1102,9 @@ Code Lines and Data:
     - mkdir build
     - cd build
   after_script:
+    # The cache should be large enough to be useful but it shouldn't take
+    # too long to restore+save each run.
+    - ccache --max-size $( du --summarize --block-size=1M "$CI_PROJECT_DIR/build" | awk '{printf ("%dM", $1 * 1.5)}' )
     - . /tmp/fuzz_result.sh
     - if $FUZZ_PASSED ; then exit 0 ; fi
     - echo Fuzzing failed. Generating report.
@@ -1114,9 +1117,6 @@ Code Lines and Data:
         aws s3 cp "$FUZZ_CAPTURE" "$S3_DESTINATION_FUZZ/"
         aws s3 cp "$FUZZ_ERRORS" "$S3_DESTINATION_FUZZ/"
       fi
-    # The cache should be large enough to be useful but it shouldn't take
-    # too long to restore+save each run.
-    - ccache --max-size $( du --summarize --block-size=1M "$CI_PROJECT_DIR/build" | awk '{printf ("%dM", $1 * 1.5)}' )
 
 ASan Menagerie Fuzz:
   extends: .fuzz-ubuntu
