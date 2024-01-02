@@ -452,6 +452,7 @@ copy_linktype_cb(const void *data, void *user_data _U_)
 	data_link_info_t *linktype_info = (data_link_info_t *)data;
 
 	data_link_info_t *ret = g_new(data_link_info_t, 1);
+	ret->dlt = linktype_info->dlt;
 	ret->name = g_strdup(linktype_info->name);
 	ret->description = g_strdup(linktype_info->description);
 	return ret;
@@ -479,7 +480,7 @@ if_capabilities_copy(const if_capabilities_t *caps)
 	ret->timestamp_types = g_list_copy_deep(caps->timestamp_types, copy_timestamp_cb, NULL);
 	ret->data_link_types_rfmon = g_list_copy_deep(caps->data_link_types_rfmon, copy_linktype_cb, NULL);
 	ret->primary_msg = g_strdup(caps->primary_msg);
-	ret->secondary_msg = g_strdup(caps->secondary_msg);
+	ret->secondary_msg = caps->secondary_msg;
 
 	return ret;
 }

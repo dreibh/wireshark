@@ -95,12 +95,14 @@
 #include "wiretap/pcapng.h"
 
 /*
- * Define these for extra logging messages at INFO and below. Note
- * that when dumpcap is spawned as a child process, logs are sent
- * to the parent via the sync pipe.
+ * Define these for extra logging. Note that when dumpcap is spawned as
+ * a child process, logs are sent to the parent via the sync pipe.
+ * The parent will pass along the Capchild domain log level settings,
+ * so "--log-debug Capchild" or "--log-level debug" can be used to get
+ * debugging from dumpcap sent to the parent.
  */
-/**#define DEBUG_DUMPCAP**/       /* Logs INFO and below messages normally */
-/**#define DEBUG_CHILD_DUMPCAP**/ /* Writes INFO and below logs to file */
+//#define DEBUG_DUMPCAP       /* Waits for keypress on quitting on Windows */
+//#define DEBUG_CHILD_DUMPCAP /* Writes logs to file */
 
 #ifdef _WIN32
 #include "wsutil/win32-utils.h"
@@ -113,9 +115,7 @@
 FILE *debug_log;   /* for logging debug messages to  */
                    /*  a file if DEBUG_CHILD_DUMPCAP */
                    /*  is defined                    */
-#ifdef DEBUG_DUMPCAP
 #include <stdarg.h> /* va_copy */
-#endif
 #endif
 
 static GAsyncQueue *pcap_queue;
@@ -131,6 +131,7 @@ static gchar *sig_pipe_name = NULL;
 static HANDLE sig_pipe_handle = NULL;
 static gboolean signal_pipe_check_running(void);
 #endif
+static int sync_pipe_fd = 2;
 
 #ifdef ENABLE_ASAN
 /* This has public visibility so that if compiled with shared libasan (the
@@ -563,7 +564,7 @@ dumpcap_cmdarg_err(const char *fmt, va_list ap)
         gchar *msg;
         /* Generate a 'special format' message back to parent */
         msg = ws_strdup_vprintf(fmt, ap);
-        sync_pipe_write_errmsgs_to_parent(2, msg, "");
+        sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, msg, "");
         g_free(msg);
     } else {
         fprintf(stderr, "dumpcap: ");
@@ -583,7 +584,7 @@ dumpcap_cmdarg_err_cont(const char *fmt, va_list ap)
     if (capture_child) {
         gchar *msg;
         msg = ws_strdup_vprintf(fmt, ap);
-        sync_pipe_write_errmsgs_to_parent(2, msg, "");
+        sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, msg, "");
         g_free(msg);
     } else {
         vfprintf(stderr, fmt, ap);
@@ -775,7 +776,7 @@ show_filter_code(capture_options *capture_opts)
 #endif
     if (capture_child) {
         /* Let our parent know we succeeded. */
-        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
     }
     return TRUE;
 }
@@ -866,17 +867,17 @@ print_machine_readable_interfaces(GList *if_list, int caps_queries, bool print_s
         status = 0;
         if (capture_child) {
             if (print_statistics) {
-                sync_pipe_write_string_msg(2, SP_IFACE_LIST, dumper.output_string->str);
+                sync_pipe_write_string_msg(sync_pipe_fd, SP_IFACE_LIST, dumper.output_string->str);
             } else {
                 /* Let our parent know we succeeded. */
-                sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+                sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
                 printf("%s", dumper.output_string->str);
             }
         }
     } else {
         status = 2;
         if (capture_child) {
-            sync_pipe_write_errmsgs_to_parent(2, "Unexpected JSON error", "");
+            sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, "Unexpected JSON error", "");
         }
     }
     g_string_free(dumper.output_string, TRUE);
@@ -1032,7 +1033,7 @@ print_statistics_loop(gboolean machine_readable)
 
     if (capture_child) {
         /* Let our parent know we succeeded. */
-        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
     }
 
     if (!machine_readable) {
@@ -4503,7 +4504,11 @@ capture_loop_start(capture_options *capture_opts, gboolean *stats_known, struct 
                                               interface_opts->display_name);
                 secondary_msg = handle_npcap_bug(interface_opts->display_name,
                                                  "The interface disappeared (error code ERROR_DEVICE_REMOVED/STATUS_DEVICE_REMOVED)");
-            } else if (strcmp(cap_err_str, "The other host terminated the connection.") == 0) {
+            } else if (strcmp(cap_err_str, "The other host terminated the connection.") == 0 ||
+                       g_str_has_prefix(cap_err_str, "Is the server properly installed?")) {
+                /*
+                 * Networking error for a remote capture.
+                 */
                 primary_msg = g_strdup(cap_err_str);
                 secondary_msg = g_strdup("This may be a problem with the "
                                          "remote host on which you are "
@@ -4792,17 +4797,13 @@ capture_loop_write_pcapng_cb(capture_src *pcap_src, const pcapng_block_header_t 
             pcap_src->dropped++;
         } else if (bh->block_type == BLOCK_TYPE_EPB || bh->block_type == BLOCK_TYPE_SPB || bh->block_type == BLOCK_TYPE_SYSTEMD_JOURNAL_EXPORT || bh->block_type == BLOCK_TYPE_SYSDIG_EVENT || bh->block_type == BLOCK_TYPE_SYSDIG_EVENT_V2 || bh->block_type == BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE) {
             /* Count packets for block types that should be dissected, i.e. ones that show up in the packet list. */
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-            ws_info("Wrote a pcapng block type %u of length %d captured on interface %u.",
+            ws_debug("Wrote a pcapng block type %u of length %d captured on interface %u.",
                    bh->block_type, bh->block_total_length, pcap_src->interface_id);
-#endif
             capture_loop_wrote_one_packet(pcap_src);
         } else if (bh->block_type == BLOCK_TYPE_SHB && report_capture_filename) {
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-            ws_info("Sending SP_FILE on first SHB");
-#endif
+            ws_debug("Sending SP_FILE on first SHB");
             /* SHB is now ready for capture parent to read on SP_FILE message */
-            sync_pipe_write_string_msg(2, SP_FILE, report_capture_filename);
+            sync_pipe_write_string_msg(sync_pipe_fd, SP_FILE, report_capture_filename);
             report_capture_filename = NULL;
         }
     }
@@ -4854,10 +4855,8 @@ capture_loop_write_packet_cb(u_char *pcap_src_p, const struct pcap_pkthdr *phdr,
             global_ld.err = err;
             pcap_src->dropped++;
         } else {
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-            ws_info("Wrote a pcap packet of length %d captured on interface %u.",
+            ws_debug("Wrote a pcap packet of length %d captured on interface %u.",
                    phdr->caplen, pcap_src->interface_id);
-#endif
             capture_loop_wrote_one_packet(pcap_src);
         }
     }
@@ -5031,7 +5030,7 @@ set_80211_channel(const char *iface, const char *opt)
     }
 
     if (capture_child)
-        sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+        sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
 
 out:
     g_strfreev(options);
@@ -5055,6 +5054,9 @@ gather_dumpcap_runtime_info(feature_list l)
 #define LONGOPT_IFNAME             LONGOPT_BASE_APPLICATION+1
 #define LONGOPT_IFDESCR            LONGOPT_BASE_APPLICATION+2
 #define LONGOPT_CAPTURE_COMMENT    LONGOPT_BASE_APPLICATION+3
+#ifdef _WIN32
+#define LONGOPT_SIGNAL_PIPE        LONGOPT_BASE_APPLICATION+4
+#endif
 
 /* And now our feature presentation... [ fade to music ] */
 int
@@ -5069,6 +5071,9 @@ main(int argc, char *argv[])
         {"ifname", ws_required_argument, NULL, LONGOPT_IFNAME},
         {"ifdescr", ws_required_argument, NULL, LONGOPT_IFDESCR},
         {"capture-comment", ws_required_argument, NULL, LONGOPT_CAPTURE_COMMENT},
+#ifdef _WIN32
+        {"signal-pipe", ws_required_argument, NULL, LONGOPT_SIGNAL_PIPE},
+#endif
         {0, 0, 0, 0 }
     };
 
@@ -5125,10 +5130,31 @@ main(int argc, char *argv[])
         if (strcmp("-Z", argv[i]) == 0) {
             capture_child    = TRUE;
             machine_readable = TRUE;  /* request machine-readable output */
+            i++;
+            if (i >= argc) {
+                exit_main(1);
+            }
+
+            if (strcmp(argv[i], SIGNAL_PIPE_CTRL_ID_NONE) != 0) {
+                // get_positive_int calls cmdarg_err
+                if (!ws_strtoi(argv[i], NULL, &sync_pipe_fd) || sync_pipe_fd <= 0) {
+                    exit_main(1);
+                }
 #ifdef _WIN32
-            /* set output pipe to binary mode, to avoid ugly text conversions */
-            _setmode(2, O_BINARY);
+                /* On UN*X the fd is the same when we fork + exec.
+                 * On Windows the HANDLE value is the same for inherited
+                 * handles in the child process and the parent, although
+                 * not necessarily the fd value from _open_osfhandle.
+                 * https://learn.microsoft.com/en-us/windows/win32/procthread/inheritance
+                 * Also, "64-bit versions of Windows use 32-bit handles for
+                 * interoperability... only the lower 32 bits are significant,
+                 * so it is safe to truncate... or sign-extend the handle."
+                 * https://learn.microsoft.com/en-us/windows/win32/winprog64/interprocess-communication
+                 */
+                /* set output pipe to binary mode, avoid ugly text conversions */
+                sync_pipe_fd = _open_osfhandle( (intptr_t) sync_pipe_fd, _O_BINARY);
 #endif
+            }
         }
     }
 
@@ -5140,17 +5166,14 @@ main(int argc, char *argv[])
     /* Early logging command-line initialization. */
     ws_log_parse_args(&argc, argv, vcmdarg_err, 1);
 
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-    /* sync_pipe_start does not pass along log level information from
-     * the parent (XXX: it probably should.) Assume that if we're
-     * specially compiled with dumpcap debugging then we want it on.
+#if DEBUG_CHILD_DUMPCAP
+    /* Assume that if we're specially compiled with dumpcap debugging
+     * then we want maximum debugging.
      */
     if (capture_child) {
-        ws_log_set_level(LOG_LEVEL_DEBUG);
+        ws_log_set_level(LOG_LEVEL_NOISY);
     }
-#endif
 
-#ifdef DEBUG_CHILD_DUMPCAP
     if ((debug_log = ws_fopen("dumpcap_debug_log.tmp","w")) == NULL) {
         fprintf (stderr, "Unable to open debug log file .\n");
         exit (1);
@@ -5445,9 +5468,17 @@ main(int argc, char *argv[])
             break;
         case 'Z':
             capture_child = TRUE;
+            /*
+             * Handled above
+             */
+            break;
 #ifdef _WIN32
-            /* set output pipe to binary mode, to avoid ugly text conversions */
-            _setmode(2, O_BINARY);
+        case LONGOPT_SIGNAL_PIPE:
+            if (!capture_child) {
+                /* We have already checked for -Z at the very beginning. */
+                cmdarg_err("--signal-pipe may only be specified with -Z");
+                exit_main(1);
+            }
             /*
              * ws_optarg = the control ID, aka the PPID, currently used for the
              * signal pipe name.
@@ -5463,9 +5494,8 @@ main(int argc, char *argv[])
                     exit_main(1);
                 }
             }
-#endif
             break;
-
+#endif
         case 'q':        /* Quiet */
             quiet = TRUE;
             break;
@@ -5751,7 +5781,6 @@ main(int argc, char *argv[])
         guint  ii;
 
         if (machine_readable) {
-            status = 0;
             json_dumper dumper = {
                 .output_file = stdout,
                 .flags = JSON_DUMPER_FLAGS_NO_DEBUG,
@@ -5789,12 +5818,12 @@ main(int argc, char *argv[])
                 status = 0;
                 if (capture_child) {
                     /* Let our parent know we succeeded. */
-                    sync_pipe_write_string_msg(2, SP_SUCCESS, NULL);
+                    sync_pipe_write_string_msg(sync_pipe_fd, SP_SUCCESS, NULL);
                 }
             } else {
                 status = 2;
                 if (capture_child) {
-                    sync_pipe_write_errmsgs_to_parent(2, "Unexpected JSON error", "");
+                    sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, "Unexpected JSON error", "");
                 }
             }
         } else {
@@ -5809,7 +5838,7 @@ main(int argc, char *argv[])
                         char *error_msg = ws_strdup_printf("The capabilities of the capture device "
                                                     "\"%s\" could not be obtained (%s)",
                                                     interface_opts->name, open_status_str);
-                        sync_pipe_write_errmsgs_to_parent(2, error_msg,
+                        sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, error_msg,
                                 get_pcap_failure_secondary_error_message(open_status, open_status_str));
                         g_free(error_msg);
                     }
@@ -5942,18 +5971,36 @@ dumpcap_log_writer(const char *domain, enum ws_log_level level,
                                     const char *user_format, va_list user_ap,
                                     void *user_data _U_)
 {
-    /* DEBUG & INFO msgs (if we're debugging today)                 */
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-    if (level <= LOG_LEVEL_INFO && ws_log_msg_is_active(domain, level)) {
-#ifdef DEBUG_DUMPCAP
+    if (ws_log_msg_is_active(domain, level)) {
+        /* log messages go to stderr or    */
+        /* to parent especially formatted if dumpcap running as child. */
 #ifdef DEBUG_CHILD_DUMPCAP
         va_list user_ap_copy;
         va_copy(user_ap_copy, user_ap);
 #endif
         if (capture_child) {
-            gchar *msg = ws_strdup_vprintf(user_format, user_ap);
-            sync_pipe_write_errmsgs_to_parent(2, msg, "");
-            g_free(msg);
+            /* Format the log mesage as the numeric level, followed
+             * by a colon and then a string matching the standard log
+             * string. In the future perhaps we serialize file, line,
+             * and func (which can be NULL) instead.
+             */
+            GString *msg = g_string_new(NULL);
+            g_string_append_printf(msg, "%u:", level);
+            if (file != NULL) {
+                g_string_append_printf(msg, "%s", file);
+                if (line >= 0) {
+                    g_string_append_printf(msg, ":%ld", line);
+                }
+            }
+            g_string_append(msg, " --");
+            if (func != NULL) {
+                g_string_append_printf(msg, " %s():", func);
+            }
+            g_string_append_c(msg, ' ');
+            g_string_append_vprintf(msg, user_format, user_ap);
+
+            sync_pipe_write_string_msg(sync_pipe_fd, SP_LOG_MSG, msg->str);
+            g_string_free(msg, TRUE);
         } else {
             ws_log_console_writer(domain, level, file, line, func, mft, user_format, user_ap);
         }
@@ -5961,21 +6008,6 @@ dumpcap_log_writer(const char *domain, enum ws_log_level level,
         ws_log_file_writer(debug_log, domain, level, file, line, func, mft, user_format, user_ap_copy);
         va_end(user_ap_copy);
 #endif
-#elif defined(DEBUG_CHILD_DUMPCAP)
-        ws_log_file_writer(debug_log, domain, level, file, line, func, mft, user_format, user_ap);
-#endif
-        return;
-    }
-#endif
-
-    /* ERROR, CRITICAL, WARNING, MESSAGE messages goto stderr or    */
-    /*  to parent especially formatted if dumpcap running as child. */
-    if (capture_child) {
-        gchar *msg = ws_strdup_vprintf(user_format, user_ap);
-        sync_pipe_write_errmsgs_to_parent(2, msg, "");
-        g_free(msg);
-    } else if(ws_log_msg_is_active(domain, level)) {
-        ws_log_console_writer(domain, level, file, line, func, mft, user_format, user_ap);
     }
 }
 
@@ -5991,7 +6023,7 @@ report_packet_count(unsigned int packet_count)
 
     if (capture_child) {
         ws_debug("Packets: %u", packet_count);
-        sync_pipe_write_uint_msg(2, SP_PACKET_COUNT, packet_count);
+        sync_pipe_write_uint_msg(sync_pipe_fd, SP_PACKET_COUNT, packet_count);
     } else {
         count += packet_count;
         fprintf(stderr, "\rPackets: %u ", count);
@@ -6007,12 +6039,10 @@ report_new_capture_file(const char *filename)
         ws_debug("File: %s", filename);
         if (global_ld.pcapng_passthrough) {
             /* Save filename for sending SP_FILE to capture parent after SHB is passed-through */
-#if defined(DEBUG_DUMPCAP) || defined(DEBUG_CHILD_DUMPCAP)
-            ws_info("Delaying SP_FILE until first SHB");
-#endif
+            ws_debug("Delaying SP_FILE until first SHB");
             report_capture_filename = filename;
         } else {
-            sync_pipe_write_string_msg(2, SP_FILE, filename);
+            sync_pipe_write_string_msg(sync_pipe_fd, SP_FILE, filename);
         }
     } else {
 #ifdef SIGINFO
@@ -6052,7 +6082,7 @@ report_cfilter_error(capture_options *capture_opts, guint i, const char *errmsg)
         if (capture_child) {
             snprintf(tmp, sizeof(tmp), "%u:%s", i, errmsg);
             ws_debug("Capture filter error: %s", errmsg);
-            sync_pipe_write_string_msg(2, SP_BAD_FILTER, tmp);
+            sync_pipe_write_string_msg(sync_pipe_fd, SP_BAD_FILTER, tmp);
         } else {
             /*
              * clopts_step_invalid_capfilter in test/suite-clopts.sh MUST match
@@ -6075,7 +6105,7 @@ report_capture_error(const char *error_msg, const char *secondary_error_msg)
     if (capture_child) {
         ws_debug("Primary Error: %s", error_msg);
         ws_debug("Secondary Error: %s", secondary_error_msg);
-        sync_pipe_write_errmsgs_to_parent(2, error_msg, secondary_error_msg);
+        sync_pipe_write_errmsgs_to_parent(sync_pipe_fd, error_msg, secondary_error_msg);
     } else {
         cmdarg_err("%s", error_msg);
         if (secondary_error_msg[0] != '\0')
@@ -6093,7 +6123,7 @@ report_packet_drops(guint32 received, guint32 pcap_drops, guint32 drops, guint32
 
         ws_debug("Packets received/dropped on interface '%s': %u/%u (pcap:%u/dumpcap:%u/flushed:%u/ps_ifdrop:%u)",
             name, received, total_drops, pcap_drops, drops, flushed, ps_ifdrop);
-        sync_pipe_write_string_msg(2, SP_DROPS, tmp);
+        sync_pipe_write_string_msg(sync_pipe_fd, SP_DROPS, tmp);
         g_free(tmp);
     } else {
         fprintf(stderr,

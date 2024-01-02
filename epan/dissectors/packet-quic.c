@@ -1257,6 +1257,14 @@ quic_connection_find(packet_info *pinfo, guint8 long_packet_type,
             // No match found, truncate DCID (not really needed, but this
             // ensures that debug prints clearly show that DCID is invalid).
             dcid->len = 0;
+        } else if (quic_connection_from_conv(pinfo) == NULL) {
+            // Connection information might not be attached to the conversation,
+            // because of connection migration.
+            conversation_t *conv = find_conversation_pinfo(pinfo, 0);
+            if (conv) {
+                // attach the connection information to the conversation.
+                conversation_add_proto_data(conv, proto_quic, conn);
+            }
         }
     }
     return conn;
@@ -1784,7 +1792,7 @@ again:
              * the MSP should already be created. Retrieve it to see if we
              * know what later frame the PDU is reassembled in.
              */
-            if ((msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32(stream->multisegment_pdus, deseg_seq))) {
+            if (((struct tcp_multisegment_pdu *)wmem_tree_lookup32(stream->multisegment_pdus, deseg_seq))) {
                 fh = fragment_get(&quic_reassembly_table, pinfo, reassembly_id, NULL);
             }
         }
