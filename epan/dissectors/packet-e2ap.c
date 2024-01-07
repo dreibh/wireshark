@@ -1856,9 +1856,11 @@ void e2ap_store_ran_function_mapping(packet_info *pinfo, proto_tree *tree, tvbuf
     struct e2ap_private_data *e2ap_data = e2ap_get_private_data(pinfo);
     ran_functionid_table_t *table = get_ran_functionid_table(pinfo);
 
-    if (!name) {
+    /* Need these pointers not to be NULL */
+    if (!name || !table) {
       return;
     }
+
     /* Stop if already reached table limit */
     if (table->num_entries == MAX_RANFUNCTION_ENTRIES) {
         proto_tree_add_expert_format(tree, pinfo, &ei_e2ap_ran_function_max_dissectors_registered,
@@ -2041,6 +2043,10 @@ static void update_dissector_using_oid(packet_info *pinfo, ran_function_t ran_fu
     guint ran_function_id = e2ap_data->ran_function_id;
     ran_function_id_mapping_t *mapping = NULL;
     ran_functionid_table_t *table = get_ran_functionid_table(pinfo);
+    if (!table) {
+        return;
+    }
+
     /* Find the entry in this table corresponding to ran_function_id */
     for (guint n=0; n < table->num_entries; n++) {
         if (ran_function_id == table->entries[n].ran_function_id) {
@@ -2190,6 +2196,7 @@ static int dissect_e2ap_RANParameter_Definition(tvbuff_t *tvb _U_, int offset _U
 static int dissect_e2ap_RANParameter_ValueType(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 
+#define MAX_RECURSION_DEPTH 100 // Arbitrarily chosen.
 
 static const value_string e2ap_Criticality_vals[] = {
   {   0, "reject" },
@@ -7418,9 +7425,15 @@ static const per_sequence_t RANParameter_Testing_Item_sequence[] = {
 
 static int
 dissect_e2ap_RANParameter_Testing_Item(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
+  const unsigned cycle_size = 5;
+  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
+  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
+  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RANParameter_Testing_Item, RANParameter_Testing_Item_sequence);
 
+  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth - cycle_size);
   return offset;
 }
 
@@ -7805,9 +7818,15 @@ static const per_sequence_t RANParameter_Definition_sequence[] = {
 
 static int
 dissect_e2ap_RANParameter_Definition(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
+  const unsigned cycle_size = 6;
+  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
+  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
+  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_e2ap_RANParameter_Definition, RANParameter_Definition_sequence);
 
+  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth - cycle_size);
   return offset;
 }
 
@@ -7957,10 +7976,16 @@ static const per_choice_t RANParameter_ValueType_choice[] = {
 
 static int
 dissect_e2ap_RANParameter_ValueType(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
+  const unsigned cycle_size = 6;
+  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
+  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
+  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
   offset = dissect_per_choice(tvb, offset, actx, tree, hf_index,
                                  ett_e2ap_RANParameter_ValueType, RANParameter_ValueType_choice,
                                  NULL);
 
+  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth - cycle_size);
   return offset;
 }
 

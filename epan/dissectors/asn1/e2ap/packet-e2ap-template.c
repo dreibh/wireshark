@@ -333,9 +333,11 @@ void e2ap_store_ran_function_mapping(packet_info *pinfo, proto_tree *tree, tvbuf
     struct e2ap_private_data *e2ap_data = e2ap_get_private_data(pinfo);
     ran_functionid_table_t *table = get_ran_functionid_table(pinfo);
 
-    if (!name) {
+    /* Need these pointers not to be NULL */
+    if (!name || !table) {
       return;
     }
+
     /* Stop if already reached table limit */
     if (table->num_entries == MAX_RANFUNCTION_ENTRIES) {
         proto_tree_add_expert_format(tree, pinfo, &ei_e2ap_ran_function_max_dissectors_registered,
@@ -518,6 +520,10 @@ static void update_dissector_using_oid(packet_info *pinfo, ran_function_t ran_fu
     guint ran_function_id = e2ap_data->ran_function_id;
     ran_function_id_mapping_t *mapping = NULL;
     ran_functionid_table_t *table = get_ran_functionid_table(pinfo);
+    if (!table) {
+        return;
+    }
+
     /* Find the entry in this table corresponding to ran_function_id */
     for (guint n=0; n < table->num_entries; n++) {
         if (ran_function_id == table->entries[n].ran_function_id) {
