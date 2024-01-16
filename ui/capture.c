@@ -902,7 +902,7 @@ capture_stat_start(capture_options *capture_opts)
         /* Initialize the cache */
         for (i = 0; i < capture_opts->all_ifaces->len; i++) {
             device = &g_array_index(capture_opts->all_ifaces, interface_t, i);
-            if (device->type != IF_PIPE && device->type != IF_EXTCAP) {
+            if (device->if_info.type != IF_PIPE && device->if_info.type != IF_EXTCAP) {
                 sc_item = g_new0(if_stat_cache_item_t, 1);
                 ws_assert(device->if_info.name);
                 sc_item->name = g_strdup(device->if_info.name);
@@ -958,7 +958,7 @@ capture_interface_stat_start(capture_options *capture_opts _U_, GList **if_list)
      * of them have permission to do a capture.
      */
     int err = 0;
-    char *err_msg;
+    char *err_msg = NULL;
     *if_list = deserialize_interface_list(data, &err, &err_msg);
     if (err != 0) {
         ws_info("%s", err_msg);
