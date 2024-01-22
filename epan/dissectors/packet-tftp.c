@@ -779,7 +779,7 @@ is_valid_request_body(tvbuff_t *tvb, packet_info *pinfo)
   guint len = tvb_strsize(tvb, offset);
   const gchar* mode = tvb_format_stringzpad(pinfo->pool, tvb, offset, len);
 
-  const gchar* modes[] = {"netscii", "octet", "mail"};
+  const gchar* modes[] = {"netascii", "octet", "mail"};
   for(guint i = 0; i < array_length(modes); ++i) {
     if (g_ascii_strcasecmp(mode, modes[i]) == 0) return TRUE;
   }
@@ -1114,7 +1114,7 @@ proto_register_tftp(void)
   expert_tftp = expert_register_protocol(proto_tftp);
   expert_register_field_array(expert_tftp, ei, array_length(ei));
 
-  heur_subdissector_list = register_heur_dissector_list("tftp", proto_tftp);
+  heur_subdissector_list = register_heur_dissector_list_with_description("tftp", "TFTP payload", proto_tftp);
   reassembly_table_register(&tftp_reassembly_table, &addresses_ports_reassembly_table_functions);
 
   tftp_handle = register_dissector("tftp", dissect_tftp, proto_tftp);

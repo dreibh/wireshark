@@ -111,8 +111,11 @@ static int hf_rtmpt_audio_type;
 static int hf_rtmpt_audio_data;
 
 static int hf_rtmpt_video_control;
+static int hf_rtmpt_video_is_ex_header;
 static int hf_rtmpt_video_type;
 static int hf_rtmpt_video_format;
+static int hf_rtmpt_video_packet_type;
+static int hf_rtmpt_video_fourcc;
 static int hf_rtmpt_video_data;
 
 static int hf_rtmpt_tag_type;
@@ -162,7 +165,9 @@ static gboolean rtmpt_desegment = TRUE;
 #define RTMPT_HANDSHAKE_LENGTH_1      1537
 #define RTMPT_HANDSHAKE_LENGTH_2      3073
 #define RTMPT_HANDSHAKE_LENGTH_3      1536
-#define RTMPT_DEFAULT_CHUNK_SIZE       128
+#define RTMPT_INITIAL_CHUNK_SIZE       128
+
+static guint rtmpt_default_chunk_size = 128;
 
 #define RTMPT_ID_MAX                     65599
 #define RTMPT_TYPE_HANDSHAKE_1        0x100001
@@ -192,6 +197,8 @@ static gboolean rtmpt_desegment = TRUE;
 #define RTMPT_UCM_STREAM_ISRECORDED   0x04
 #define RTMPT_UCM_PING_REQUEST        0x06
 #define RTMPT_UCM_PING_RESPONSE       0x07
+
+#define RTMPT_IS_EX_HEADER            0x80
 
 #define RTMPT_TEXT_RTMP_HEADER        "RTMP Header"
 #define RTMPT_TEXT_RTMP_BODY          "RTMP Body"
@@ -307,6 +314,19 @@ static const value_string rtmpt_video_codecs[] = {
         {  6,                               "Screen video version 2" },
         {  7,                               "H.264" },
         { 12,                               "H.265" },
+        { 0, NULL }
+};
+
+/*
+ * https://raw.githubusercontent.com/veovera/enhanced-rtmp/main/enhanced-rtmp.pdf
+ */
+static const value_string rtmpt_video_packet_types[] = {
+        { 0,                                "PacketTypeSequenceStart" },
+        { 1,                                "PacketTypeCodedFrames" },
+        { 2,                                "PacketTypeSequenceEnd" },
+        { 3,                                "PacketTypeCodedFramesX" },
+        { 4,                                "PacketTypeMetadata" },
+        { 5,                                "PacketTypeMPEG2TSSequenceStart" },
         { 0, NULL }
 };
 
@@ -466,6 +486,8 @@ typedef struct rtmpt_packet {
                 guint32  offset;
         } data;
 
+        wmem_list_t *frames;
+
         /* used during unchunking */
         int              alloc;
         int              want;
@@ -531,6 +553,14 @@ typedef struct rtmpt_conv {
         wmem_tree_t *chunksize[2];
         wmem_tree_t *txids[2];
 } rtmpt_conv_t;
+
+static void
+rtmpt_packet_mark_depended(gpointer data, gpointer user_data)
+{
+    frame_data *fd = (frame_data *)user_data;
+    uint32_t frame_num = GPOINTER_TO_UINT(data);
+    mark_frame_as_depended_upon(fd, frame_num);
+}
 
 #ifdef DEBUG_RTMPT
 static void rtmpt_debug(const char *fmt, ...)
@@ -1635,15 +1665,35 @@ dissect_rtmpt_body_video(tvbuff_t *tvb, gint offset, proto_tree *rtmpt_tree)
         proto_tree *vt;
 
         iCtl = tvb_get_guint8(tvb, offset);
-        vi = proto_tree_add_uint_format(rtmpt_tree, hf_rtmpt_video_control, tvb, offset, 1, iCtl,
-                                        "Control: 0x%02x (%s %s)", iCtl,
-                                        val_to_str_const((iCtl & 0xf0)>>4, rtmpt_video_types, "Unknown frame type"),
-                                        val_to_str_const(iCtl & 0x0f, rtmpt_video_codecs, "Unknown codec"));
 
-        vt = proto_item_add_subtree(vi, ett_rtmpt_video_control);
-        proto_tree_add_uint(vt, hf_rtmpt_video_type, tvb, offset, 1, iCtl);
-        proto_tree_add_uint(vt, hf_rtmpt_video_format, tvb, offset, 1, iCtl);
-        proto_tree_add_item(rtmpt_tree, hf_rtmpt_video_data, tvb, offset+1, -1, ENC_NA);
+        /*
+         * https://raw.githubusercontent.com/veovera/enhanced-rtmp/main/enhanced-rtmp.pdf
+         */
+        if (iCtl & RTMPT_IS_EX_HEADER) {
+            vi = proto_tree_add_uint_format(rtmpt_tree, hf_rtmpt_video_control, tvb, offset, 1, iCtl,
+                                            "Control: 0x%02x (%s %s)", iCtl,
+                                            val_to_str_const((iCtl & 0x70)>>4, rtmpt_video_types, "Reserved frame type"),
+                                            val_to_str_const(iCtl & 0x0f, rtmpt_video_packet_types, "Reserved packet type"));
+
+            vt = proto_item_add_subtree(vi, ett_rtmpt_video_control);
+            proto_tree_add_uint(vt, hf_rtmpt_video_is_ex_header, tvb, offset, 1, iCtl);
+            proto_tree_add_uint(vt, hf_rtmpt_video_type, tvb, offset, 1, iCtl);
+            proto_tree_add_uint(vt, hf_rtmpt_video_packet_type, tvb, offset, 1, iCtl);
+
+            proto_tree_add_item(rtmpt_tree, hf_rtmpt_video_fourcc, tvb, offset+1, 4, ENC_ASCII);
+            proto_tree_add_item(rtmpt_tree, hf_rtmpt_video_data, tvb, offset+5, -1, ENC_NA);
+        } else {
+            vi = proto_tree_add_uint_format(rtmpt_tree, hf_rtmpt_video_control, tvb, offset, 1, iCtl,
+                                            "Control: 0x%02x (%s %s)", iCtl,
+                                            val_to_str_const((iCtl & 0xf0)>>4, rtmpt_video_types, "Reserved frame type"),
+                                            val_to_str_const(iCtl & 0x0f, rtmpt_video_codecs, "Unknown codec"));
+
+            vt = proto_item_add_subtree(vi, ett_rtmpt_video_control);
+            proto_tree_add_uint(vt, hf_rtmpt_video_type, tvb, offset, 1, iCtl);
+            proto_tree_add_uint(vt, hf_rtmpt_video_format, tvb, offset, 1, iCtl);
+
+            proto_tree_add_item(rtmpt_tree, hf_rtmpt_video_data, tvb, offset+1, -1, ENC_NA);
+        }
 }
 
 static void
@@ -1740,6 +1790,9 @@ dissect_rtmpt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, rtmpt_conv_t 
                                 wmem_tree_insert32(rconv->txids[cdir], tp->txid, GINT_TO_POINTER(pinfo->num));
                         }
                 }
+        } else if (tp->id == RTMPT_TYPE_HANDSHAKE_2 || tp->id == RTMPT_TYPE_HANDSHAKE_3) {
+                guint32 newchunksize = RTMPT_INITIAL_CHUNK_SIZE;
+                wmem_tree_insert32(rconv->chunksize[cdir], tp->lastseq, GINT_TO_POINTER(newchunksize));
         }
 
         if (tp->id <= RTMPT_ID_MAX)
@@ -2113,8 +2166,9 @@ dissect_rtmpt_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, rtmpt_
                                 chunk_size = body_len = 1536;
                 } else {
                         chunk_size = GPOINTER_TO_INT(wmem_tree_lookup32_le(rconv->chunksize[cdir], seq+offset-1));
-                        if (!chunk_size)
-                                chunk_size = RTMPT_DEFAULT_CHUNK_SIZE;
+                        if (!chunk_size) {
+                                chunk_size = rtmpt_default_chunk_size;
+                        }
 
                         if (header_type < 2)
                                 body_len = tf ? pntoh24(tf->saved.d+basic_hlen+3) : tvb_get_ntoh24(tvb, offset+basic_hlen+3);
@@ -2183,6 +2237,9 @@ dissect_rtmpt_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, rtmpt_
                         tp->txid       = 0;
                         tp->isresponse = FALSE;
                         tp->otherframe = 0;
+
+                        tp->frames     = wmem_list_new(wmem_file_scope());
+                        wmem_list_prepend(tp->frames, GUINT_TO_POINTER(pinfo->num));
 
                         /* Save the header information for future defaulting needs */
                         ti->ts  = ts;
@@ -2283,6 +2340,10 @@ dissect_rtmpt_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, rtmpt_
                         tp->data.p = wmem_realloc(wmem_file_scope(), tp->data.p, tp->alloc);
                 }
                 tvb_memcpy(tvb, tp->data.p+tp->have, offset, want);
+                wmem_list_frame_t *frame_head = wmem_list_head(tp->frames);
+                if (wmem_list_frame_data(frame_head) != GUINT_TO_POINTER(pinfo->num)) {
+                        wmem_list_prepend(tp->frames, GUINT_TO_POINTER(pinfo->num));
+                }
 
                 if (tf) {
                         tf->have += want;
@@ -2304,6 +2365,7 @@ dissect_rtmpt_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, rtmpt_
                 if (tp->have == tp->want) {
                         /* Whole packet is complete */
                         wmem_tree_insert32(rconv->packets[cdir], tp->lastseq, tp);
+                        wmem_list_foreach(tp->frames, rtmpt_packet_mark_depended, pinfo->fd);
 
                         pktbuf = tvb_new_child_real_data(tvb, tp->data.p, tp->have, tp->have);
                         add_new_data_source(pinfo, pktbuf, "Unchunked RTMP");
@@ -2714,13 +2776,25 @@ proto_register_rtmpt(void)
                   { "Video control", "rtmpt.video.control", FT_UINT8, BASE_HEX,
                     NULL, 0x0, "RTMPT Video control", HFILL }},
 
+                { &hf_rtmpt_video_is_ex_header,
+                  { "IsExHeader", "rtmpt.video.is_ex_header", FT_UINT8, BASE_DEC,
+                    NULL, 0x80, "RTMPT IsExHeader flag introduced in enhanced RTMP", HFILL }},
+
                 { &hf_rtmpt_video_type,
                   { "Type", "rtmpt.video.type", FT_UINT8, BASE_DEC,
-                    VALS(rtmpt_video_types), 0xf0, "RTMPT Video type", HFILL }},
+                    VALS(rtmpt_video_types), 0x70, "RTMPT Video type", HFILL }},
 
                 { &hf_rtmpt_video_format,
                   { "Format", "rtmpt.video.format", FT_UINT8, BASE_DEC,
                     VALS(rtmpt_video_codecs), 0x0f, "RTMPT Video format", HFILL }},
+
+                { &hf_rtmpt_video_packet_type,
+                  { "Packet Type", "rtmpt.video.packet_type", FT_UINT8, BASE_DEC,
+                    VALS(rtmpt_video_packet_types), 0x0f, "RTMPT Video packet type", HFILL }},
+
+                { &hf_rtmpt_video_fourcc,
+                  { "FourCC", "rtmpt.video.fourcc", FT_STRING, BASE_NONE,
+                    NULL, 0x0, "RTMPT Video fourCC", HFILL }},
 
                 { &hf_rtmpt_video_data,
                   { "Video data", "rtmpt.video.data", FT_BYTES, BASE_NONE,
@@ -2782,6 +2856,12 @@ proto_register_rtmpt(void)
                                        &rtmpt_desegment);
 
         prefs_register_obsolete_preference(rtmpt_module, "max_packet_size");
+
+        prefs_register_uint_preference(rtmpt_module, "default_chunk_size",
+                                       "Default chunk size",
+                                       "Chunk size to use for connections where the initial handshake is missing,"
+                                       " i.e. are already in progress at the beginning of the capture file.",
+                                       10, &rtmpt_default_chunk_size);
 }
 
 void

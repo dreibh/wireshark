@@ -1231,7 +1231,7 @@ if(BUILD_sshdump OR BUILD_ciscodump OR BUILD_wifidump)
 else()
 	set(ENABLE_LIBSSH OFF)
 endif()
-ws_find_package(LIBSSH ENABLE_LIBSSH HAVE_LIBSSH "0.6")
+ws_find_package(LIBSSH ENABLE_LIBSSH HAVE_LIBSSH "0.8.5")
 
 ws_find_package(PCAP ENABLE_PCAP HAVE_LIBPCAP)
 ws_find_package(AIRPCAP ENABLE_AIRPCAP HAVE_AIRPCAP)
@@ -2936,9 +2936,8 @@ endif()
 if (BUILD_logray AND FALCO_PLUGINS)
 	add_custom_target(copy_falco_plugins)
 	add_custom_command(TARGET copy_falco_plugins
-		# LOGRAY_PLUGIN_DIR is versioned. Place our Falco plugins alongsided it.
-		COMMAND ${CMAKE_COMMAND} -E make_directory ${LOGRAY_PLUGIN_DIR}/../falco
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FALCO_PLUGINS} ${LOGRAY_PLUGIN_DIR}/../falco
+		COMMAND ${CMAKE_COMMAND} -E make_directory ${LOGRAY_PLUGIN_DIR}/falco
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FALCO_PLUGINS} ${LOGRAY_PLUGIN_DIR}/falco
 		VERBATIM
 	)
 	add_dependencies(logray copy_falco_plugins)

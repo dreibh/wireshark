@@ -214,7 +214,6 @@ set(ASN1_DISSECTOR_SRC
 set(DIRTY_CORBA_IDL_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cosnaming.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gias.c
-	${CMAKE_CURRENT_SOURCE_DIR}/packet-parlay.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tango.c
 )
 
@@ -1827,6 +1826,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-s7comm_szl_ids.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sadmind.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sametime.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-sane.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapdiag.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapenqueue.c
