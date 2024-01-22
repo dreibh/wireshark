@@ -80,6 +80,7 @@
 #include <epan/strutil.h>
 #include <epan/show_exception.h>
 #include <epan/asn1.h>
+#include <epan/proto_data.h>
 #include <epan/expert.h>
 #include <epan/uat.h>
 #include <epan/charsets.h>
@@ -1716,7 +1717,8 @@ ldap_specific_rights(tvbuff_t *tvb, gint offset, proto_tree *tree, guint32 acces
 
   proto_tree_add_bitmask_list_value(tree, tvb, offset, 4, access_flags, access);
 }
-struct access_mask_info ldap_access_mask_info = {
+
+static struct access_mask_info ldap_access_mask_info = {
   "LDAP",                 /* Name of specific rights */
   ldap_specific_rights,   /* Dissection function */
   NULL,                   /* Generic mapping table */

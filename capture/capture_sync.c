@@ -101,6 +101,11 @@ static char *dummy_control_id;
 static const char *sync_pipe_signame(int);
 #endif
 
+/* We use this pipe buffer size for both the sync message pipe and the
+ * data pipe. Ensure that it's large enough for the indicator and header
+ * plus maximum message size.
+ */
+#define PIPE_BUF_SIZE (SP_MAX_MSG_LEN+4)
 
 static gboolean sync_pipe_input_cb(GIOChannel *pipe_io, capture_session *cap_session);
 static int sync_pipe_wait_for_child(ws_process_id fork_child, char **msgp);
@@ -109,14 +114,6 @@ static ssize_t pipe_read_block(GIOChannel *pipe_io, char *indicator, int len, ch
                            char **err_msg);
 
 static void (*fetch_dumpcap_pid)(ws_process_id) = NULL;
-
-static void free_argv(char** argv, int argc)
-{
-    int i;
-    for (i = 0; i < argc; i++)
-        g_free(argv[i]);
-    g_free(argv);
-}
 
 void
 capture_session_init(capture_session *cap_session, capture_file *cf,
@@ -197,6 +194,8 @@ void capture_process_finished(capture_session *cap_session)
 
 /* Append an arg (realloc) to an argc/argv array */
 /* (add a string pointer to a NULL-terminated array of string pointers) */
+/* XXX: For glib >= 2.68 we could use a GStrvBuilder.
+ */
 static char **
 sync_pipe_add_arg(char **args, int *argc, const char *arg)
 {
@@ -219,6 +218,23 @@ sync_pipe_add_arg(char **args, int *argc, const char *arg)
     return args;
 }
 
+/* Take a buffer from an SP_LOG_MSG from dumpcap and send it to our
+ * current logger. Keep this in sync with the format used in
+ * dumpcap_log_writer. (We might want to do more proper serialization
+ * of more than just the log level.)
+ */
+static void
+sync_pipe_handle_log_msg(const char *buffer) {
+    const char *log_msg = NULL;
+    const char* end;
+    uint32_t level = 0;
+
+    if (ws_strtou32(buffer, &end, &level) && end[0] == ':') {
+        log_msg = end + 1;
+    }
+    ws_log(LOG_DOMAIN_CAPCHILD, level, "%s", log_msg);
+}
+
 /* Initialize an argument list and add dumpcap to it. */
 static char **
 init_pipe_args(int *argc) {
@@ -239,6 +255,18 @@ init_pipe_args(int *argc) {
 
     /* Make that the first argument in the argument list (argv[0]). */
     argv = sync_pipe_add_arg(argv, argc, exename);
+
+    /* Tell dumpcap to log at the lowest level its domain (Capchild) is
+     * set to log in the main program. (It might be in the special noisy
+     * or debug filter, so we can't just check the overall level.)
+     */
+    for (enum ws_log_level level = LOG_LEVEL_NOISY; level != _LOG_LEVEL_LAST; level++) {
+        if (ws_log_msg_is_active(LOG_DOMAIN_CAPCHILD, level)) {
+            argv = sync_pipe_add_arg(argv, argc, "--log-level");
+            argv = sync_pipe_add_arg(argv, argc, ws_log_level_to_string(level));
+            break;
+        }
+    }
 
     /* sync_pipe_add_arg strdupes exename, so we should free our copy */
     g_free(exename);
@@ -269,17 +297,15 @@ pipe_io_cb(GIOChannel *pipe_io, GIOCondition condition _U_, void * user_data)
  * On failure, *msg points to an error message for the failure, and -1 is
  * returned, in which case *msg must be freed with g_free().
  */
-/* XXX - assumes PIPE_BUF_SIZE > SP_MAX_MSG_LEN */
 #define ARGV_NUMBER_LEN 24
-#define PIPE_BUF_SIZE 5120
 static int
 #ifdef _WIN32
-sync_pipe_open_command(char* const argv[], int *data_read_fd,
+sync_pipe_open_command(char **argv, int *data_read_fd,
                        GIOChannel **message_read_io, int *signal_write_fd,
                        ws_process_id *fork_child, GArray *ifaces,
                        char **msg, void(*update_cb)(void))
 #else
-sync_pipe_open_command(char* const argv[], int *data_read_fd,
+sync_pipe_open_command(char **argv, int *data_read_fd,
                        GIOChannel **message_read_io, int *signal_write_fd _U_,
                        ws_process_id *fork_child, GArray *ifaces _U_,
                        char **msg, void(*update_cb)(void))
@@ -287,6 +313,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
 {
     enum PIPES { PIPE_READ, PIPE_WRITE };   /* Constants 0 and 1 for PIPE_READ and PIPE_WRITE */
     int message_read_fd = -1;
+    char sync_id[ARGV_NUMBER_LEN];
 #ifdef _WIN32
     HANDLE sync_pipe[2];                    /* pipe used to send messages from child to parent */
     HANDLE data_pipe[2];                    /* pipe used to send data from child to parent */
@@ -317,6 +344,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
 
     if (!msg) {
         /* We can't return anything */
+        g_strfreev(argv);
 #ifdef _WIN32
         g_string_free(args, true);
 #endif
@@ -335,6 +363,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
         /* Couldn't create the message pipe between parent and child. */
         *msg = ws_strdup_printf("Couldn't create sync pipe: %s",
                                win32strerror(GetLastError()));
+        g_strfreev(argv);
         return -1;
     }
 
@@ -348,6 +377,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
     message_read_fd = _open_osfhandle( (intptr_t) sync_pipe[PIPE_READ], _O_BINARY);
     if (message_read_fd == -1) {
         *msg = ws_strdup_printf("Couldn't get C file handle for message read pipe: %s", g_strerror(errno));
+        g_strfreev(argv);
         CloseHandle(sync_pipe[PIPE_READ]);
         CloseHandle(sync_pipe[PIPE_WRITE]);
         return -1;
@@ -360,6 +390,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
             /* Couldn't create the message pipe between parent and child. */
             *msg = ws_strdup_printf("Couldn't create data pipe: %s",
                                    win32strerror(GetLastError()));
+            g_strfreev(argv);
             ws_close(message_read_fd);    /* Should close sync_pipe[PIPE_READ] */
             CloseHandle(sync_pipe[PIPE_WRITE]);
             return -1;
@@ -375,6 +406,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
         *data_read_fd = _open_osfhandle( (intptr_t) data_pipe[PIPE_READ], _O_BINARY);
         if (*data_read_fd == -1) {
             *msg = ws_strdup_printf("Couldn't get C file handle for data read pipe: %s", g_strerror(errno));
+            g_strfreev(argv);
             CloseHandle(data_pipe[PIPE_READ]);
             CloseHandle(data_pipe[PIPE_WRITE]);
             ws_close(message_read_fd);    /* Should close sync_pipe[PIPE_READ] */
@@ -395,6 +427,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
             /* Couldn't create the signal pipe between parent and child. */
             *msg = ws_strdup_printf("Couldn't create signal pipe: %s",
                            win32strerror(GetLastError()));
+            g_strfreev(argv);
             ws_close(message_read_fd);    /* Should close sync_pipe[PIPE_READ] */
             CloseHandle(sync_pipe[PIPE_WRITE]);
             return -1;
@@ -411,6 +444,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
         if (signal_pipe_write_fd == -1) {
             /* Couldn't create the pipe between parent and child. */
             *msg = ws_strdup_printf("Couldn't get C file handle for sync pipe: %s", g_strerror(errno));
+            g_strfreev(argv);
             ws_close(message_read_fd);    /* Should close sync_pipe[PIPE_READ] */
             CloseHandle(sync_pipe[PIPE_WRITE]);
             CloseHandle(signal_pipe);
@@ -436,7 +470,25 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
         si.hStdInput = NULL; /* handle for named pipe*/
         si.hStdOutput = data_pipe[PIPE_WRITE];
     }
-    si.hStdError = sync_pipe[PIPE_WRITE];
+    si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+
+    /* On Windows, "[a]n inherited handle refers to the same object in the child
+     * process as it does in the parent process. It also has the same value."
+     * https://learn.microsoft.com/en-us/windows/win32/procthread/inheritance
+     * When converted to a file descriptor (via _open_osfhandle), the fd
+     * value is not necessarily the same in the two processes, but the handle
+     * value can be shared.
+     * A HANDLE is a void* though "64-bit versions of Windows use 32-bit handles
+     * for interoperability... only the lower 32 bits are significant, so it is
+     * safe to truncate the handle... or sign-extend the handle"
+     * https://learn.microsoft.com/en-us/windows/win32/winprog64/interprocess-communication
+     * So it should be fine to call PtrToLong instead of casting to intptr_t.
+     * https://learn.microsoft.com/en-us/windows/win32/WinProg64/rules-for-using-pointers
+     */
+    int argc = g_strv_length(argv);
+    argv = sync_pipe_add_arg(argv, &argc, "-Z");
+    snprintf(sync_id, ARGV_NUMBER_LEN, "%ld", PtrToLong(sync_pipe[PIPE_WRITE]));
+    argv = sync_pipe_add_arg(argv, &argc, sync_id);
 #endif
 
     if (ifaces) {
@@ -455,7 +507,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
     if (si.hStdOutput && (si.hStdOutput != si.hStdInput)) {
         handles[i_handles++] = si.hStdOutput;
     }
-    handles[i_handles++] = si.hStdError;
+    handles[i_handles++] = sync_pipe[PIPE_WRITE];
     if (ifaces) {
         for (j = 0; j < ifaces->len; j++) {
             interface_opts = &g_array_index(ifaces, interface_options, j);
@@ -488,6 +540,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
         }
         ws_close(message_read_fd);    /* Should close sync_pipe[PIPE_READ] */
         CloseHandle(sync_pipe[PIPE_WRITE]);
+        g_strfreev(argv);
         g_string_free(args, true);
         g_free(handles);
         return -1;
@@ -495,6 +548,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
     *fork_child = pi.hProcess;
     /* We may need to store this and close it later */
     CloseHandle(pi.hThread);
+    g_strfreev(argv);
     g_string_free(args, true);
     g_free(handles);
 
@@ -506,6 +560,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
     if (pipe(sync_pipe) < 0) {
         /* Couldn't create the message pipe between parent and child. */
         *msg = ws_strdup_printf("Couldn't create sync pipe: %s", g_strerror(errno));
+        g_strfreev(argv);
         return -1;
     }
 
@@ -514,6 +569,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
         if (pipe(data_pipe) < 0) {
             /* Couldn't create the data pipe between parent and child. */
             *msg = ws_strdup_printf("Couldn't create data pipe: %s", g_strerror(errno));
+            g_strfreev(argv);
             ws_close(sync_pipe[PIPE_READ]);
             ws_close(sync_pipe[PIPE_WRITE]);
             return -1;
@@ -530,11 +586,16 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
             ws_close(data_pipe[PIPE_READ]);
             ws_close(data_pipe[PIPE_WRITE]);
         }
-        dup2(sync_pipe[PIPE_WRITE], 2);
         ws_close(sync_pipe[PIPE_READ]);
-        ws_close(sync_pipe[PIPE_WRITE]);
+        /* dumpcap should be running in capture child mode (hidden feature) */
+#ifndef DEBUG_CHILD
+        int argc = g_strv_length(argv);
+        argv = sync_pipe_add_arg(argv, &argc, "-Z");
+        snprintf(sync_id, ARGV_NUMBER_LEN, "%d", sync_pipe[PIPE_WRITE]);
+        argv = sync_pipe_add_arg(argv, &argc, sync_id);
+#endif
         execv(argv[0], argv);
-        sync_pipe_write_int_msg(2, SP_EXEC_FAILED, errno);
+        sync_pipe_write_int_msg(sync_pipe[PIPE_WRITE], SP_EXEC_FAILED, errno);
 
         /* Exit with "_exit()", so that we don't close the connection
            to the X server (and cause stuff buffered up by our parent but
@@ -546,6 +607,8 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
         _exit(1);
     }
 
+    g_strfreev(argv);
+
     if (fetch_dumpcap_pid && *fork_child > 0)
         fetch_dumpcap_pid(*fork_child);
 
@@ -553,6 +616,7 @@ sync_pipe_open_command(char* const argv[], int *data_read_fd,
         *data_read_fd = data_pipe[PIPE_READ];
     }
     message_read_fd = sync_pipe[PIPE_READ];
+
 #endif
 
     /* Parent process - read messages from the child process over the
@@ -860,14 +924,12 @@ sync_pipe_start(capture_options *capture_opts, GPtrArray *capture_comments,
         }
     }
 
-    /* dumpcap should be running in capture child mode (hidden feature) */
 #ifndef DEBUG_CHILD
-    argv = sync_pipe_add_arg(argv, &argc, "-Z");
 #ifdef _WIN32
+    /* pass process id to dumpcap for named signal pipe */
+    argv = sync_pipe_add_arg(argv, &argc, "--signal-pipe");
     snprintf(control_id, ARGV_NUMBER_LEN, "%ld", GetCurrentProcessId());
     argv = sync_pipe_add_arg(argv, &argc, control_id);
-#else
-    argv = sync_pipe_add_arg(argv, &argc, SIGNAL_PIPE_CTRL_ID_NONE);
 #endif
 #endif
 
@@ -896,13 +958,11 @@ sync_pipe_start(capture_options *capture_opts, GPtrArray *capture_comments,
     if (ret == -1) {
         report_failure("%s", msg);
         g_free(msg);
-        free_argv(argv, argc);
         return false;
     }
 
     /* Parent process - read messages from the child process over the
        sync pipe. */
-    free_argv(argv, argc);
 
     cap_session->fork_child_status = 0;
     cap_session->cap_data_info = cap_data;
@@ -960,10 +1020,8 @@ sync_pipe_close_command(int *data_read_fd, GIOChannel *message_read_io,
  * NULL, and -1 is returned; *primary_msg, and *secondary_msg if not NULL,
  * must be freed with g_free().
  */
-/* XXX - assumes PIPE_BUF_SIZE > SP_MAX_MSG_LEN */
-#define PIPE_BUF_SIZE 5120
 static int
-sync_pipe_run_command_actual(char* const argv[], char **data, char **primary_msg,
+sync_pipe_run_command_actual(char **argv, char **data, char **primary_msg,
                       char **secondary_msg,  void(*update_cb)(void))
 {
     char *msg;
@@ -1111,6 +1169,13 @@ sync_pipe_run_command_actual(char* const argv[], char **data, char **primary_msg
         *data = NULL;
         break;
 
+    case SP_LOG_MSG:
+        /*
+         * Log from dumpcap; pass to our log
+         */
+        sync_pipe_handle_log_msg(buffer);
+        break;
+
     case SP_SUCCESS:
         /* read the output from the command */
         data_buf = g_string_new("");
@@ -1175,7 +1240,7 @@ sync_pipe_run_command_actual(char* const argv[], char **data, char **primary_msg
 * redirects to sync_pipe_run_command_actual()
 */
 static int
-sync_pipe_run_command(char* const argv[], char **data, char **primary_msg,
+sync_pipe_run_command(char **argv, char **data, char **primary_msg,
                       char **secondary_msg, void (*update_cb)(void))
 {
     int ret, i;
@@ -1240,22 +1305,14 @@ sync_interface_set_80211_chan(const char *iface, const char *freq, const char *t
         *primary_msg = g_strdup("Out of mem.");
         *secondary_msg = NULL;
         *data = NULL;
-        free_argv(argv, argc);
         return -1;
     }
 
     argv = sync_pipe_add_arg(argv, &argc, "-k");
     argv = sync_pipe_add_arg(argv, &argc, opt);
 
-#ifndef DEBUG_CHILD
-    /* Run dumpcap in capture child mode */
-    argv = sync_pipe_add_arg(argv, &argc, "-Z");
-    argv = sync_pipe_add_arg(argv, &argc, SIGNAL_PIPE_CTRL_ID_NONE);
-#endif
-
     ret = sync_pipe_run_command(argv, data, primary_msg, secondary_msg, update_cb);
     g_free(opt);
-    free_argv(argv, argc);
     return ret;
 }
 
@@ -1293,13 +1350,7 @@ sync_interface_list_open(char **data, char **primary_msg,
     /* Ask for the interface list */
     argv = sync_pipe_add_arg(argv, &argc, "-D");
 
-#ifndef DEBUG_CHILD
-    /* Run dumpcap in capture child mode */
-    argv = sync_pipe_add_arg(argv, &argc, "-Z");
-    argv = sync_pipe_add_arg(argv, &argc, SIGNAL_PIPE_CTRL_ID_NONE);
-#endif
     ret = sync_pipe_run_command(argv, data, primary_msg, secondary_msg, update_cb);
-    free_argv(argv, argc);
     return ret;
 }
 
@@ -1347,13 +1398,7 @@ sync_if_capabilities_open(const char *ifname, bool monitor_mode, const char* aut
         argv = sync_pipe_add_arg(argv, &argc, auth);
     }
 
-#ifndef DEBUG_CHILD
-    /* Run dumpcap in capture child mode */
-    argv = sync_pipe_add_arg(argv, &argc, "-Z");
-    argv = sync_pipe_add_arg(argv, &argc, SIGNAL_PIPE_CTRL_ID_NONE);
-#endif
     ret = sync_pipe_run_command(argv, data, primary_msg, secondary_msg, update_cb);
-    free_argv(argv, argc);
     return ret;
 }
 
@@ -1393,15 +1438,10 @@ sync_if_list_capabilities_open(GList *if_queries,
     argv = sync_pipe_add_arg(argv, &argc, "-L");
     argv = sync_pipe_add_arg(argv, &argc, "--list-time-stamp-types");
 
-#ifndef DEBUG_CHILD
-    /* Run dumpcap in capture child mode */
-    argv = sync_pipe_add_arg(argv, &argc, "-Z");
-    argv = sync_pipe_add_arg(argv, &argc, SIGNAL_PIPE_CTRL_ID_NONE);
-#endif
     ret = sync_pipe_run_command(argv, data, primary_msg, secondary_msg, update_cb);
-    free_argv(argv, argc);
     return ret;
 }
+
 /*
  * Start getting interface statistics using dumpcap.  On success, read_fd
  * contains the file descriptor for the pipe's stdout, *msg is unchanged,
@@ -1447,20 +1487,17 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
     }
 
 #ifndef DEBUG_CHILD
-    argv = sync_pipe_add_arg(argv, &argc, "-Z");
 #ifdef _WIN32
+    argv = sync_pipe_add_arg(argv, &argc, "--signal-pipe");
     ret = create_dummy_signal_pipe(msg);
     if (ret == -1) {
         return -1;
     }
     argv = sync_pipe_add_arg(argv, &argc, dummy_control_id);
-#else
-    argv = sync_pipe_add_arg(argv, &argc, SIGNAL_PIPE_CTRL_ID_NONE);
 #endif
 #endif
     ret = sync_pipe_open_command(argv, data_read_fd, &message_read_io, NULL,
                                  fork_child, NULL, msg, update_cb);
-    free_argv(argv, argc);
     if (ret == -1) {
         return -1;
     }
@@ -1563,6 +1600,13 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
                 *msg = g_strdup(primary_msg_text);
                 ret = -1;
             }
+            return ret;
+
+        case SP_LOG_MSG:
+            /*
+             * Log from dumpcap; pass to our log
+             */
+            sync_pipe_handle_log_msg(buffer);
             break;
 
         case SP_IFACE_LIST:
@@ -1600,7 +1644,7 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
             }
             break;
         }
-    } while (indicator == SP_IFACE_LIST);
+    } while (indicator != SP_SUCCESS && ret != -1);
 
     return ret;
 }
@@ -1908,6 +1952,12 @@ sync_pipe_input_cb(GIOChannel *pipe_io, capture_session *cap_session)
         cap_session->error(cap_session, primary_msg, secondary_msg);
         /* the capture child will close the sync_pipe, nothing to do for now */
         /* (an error message doesn't mean we have to stop capturing) */
+        break;
+    case SP_LOG_MSG:
+        /*
+         * Log from dumpcap; pass to our log
+         */
+        sync_pipe_handle_log_msg(buffer);
         break;
     case SP_BAD_FILTER: {
         const char *message=NULL;

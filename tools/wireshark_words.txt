@@ -69,6 +69,7 @@ annunc
 annunciation
 anonsvn
 anonymization
+antsel
 aperiodic
 appdata
 append
@@ -147,6 +148,7 @@ beamforming
 bgpspec
 bibliographic
 bibliography
+bidirection
 bidirectional
 bidirectionally
 bigint
@@ -293,6 +295,7 @@ codute
 collectd
 collimation
 colocated
+colons
 coloring
 colorise
 colorization
@@ -331,6 +334,7 @@ contextp
 contiguity
 contiguously
 convolutional
+convs
 coord
 Coord3D
 coords
@@ -371,6 +375,7 @@ datagrams
 dataitem
 datalen
 datarate
+dataset
 datastate
 datetime
 dccreq
@@ -391,6 +396,7 @@ deauthentications
 debian
 debug
 debugger
+debuggers
 decapsulation
 decca
 decentralization
@@ -549,6 +555,7 @@ endian
 endianness
 endif
 endpoint
+endpt
 engineid
 enodeb
 enqueue
@@ -622,6 +629,7 @@ featureful
 fhandle
 fiber
 fileset
+firefox
 firewall
 fixme
 flag1
@@ -655,6 +663,7 @@ functionalities
 funkt
 fuzzed
 fuzzer
+fuzzing
 fvalue
 g711a
 g711u
@@ -690,6 +699,7 @@ gnutls
 goaway
 golomb
 google
+gopname
 gpointer
 gprscdr
 gprsmeasurementparams3g
@@ -798,6 +808,7 @@ initializer
 initializers
 initializes
 initializing
+initiators
 inkey
 inline
 inode
@@ -896,6 +907,7 @@ lcsap
 leasequery
 legitimisation
 libgcrypt
+libiconv
 libpcap
 libsmi
 licmgr
@@ -1093,6 +1105,7 @@ ngsniffer
 niagra
 nikon
 nitnxlate
+nmtcommand
 nnsvc
 noascii
 noauth
@@ -1101,6 +1114,7 @@ nofcs
 nokia
 nominals
 non3gpp
+nonask
 nonblock
 noncriticalextension
 noncriticalextensions
@@ -1125,6 +1139,7 @@ nrtcws
 nsapi
 nssai
 nssvc
+nstat
 nstime
 nstrace
 ntlmssp
@@ -1132,6 +1147,7 @@ ntohl
 ntohs
 ntwkconn
 nullptr
+nvgre
 nvmeof
 nvram
 oampdu
@@ -1194,6 +1210,7 @@ packetization
 packetized
 pagings
 panasonic
+parallelism
 parallelization
 param
 parameterization
@@ -1270,6 +1287,7 @@ pppoe
 prach
 preambles
 preauth
+precisions
 preconfiguration
 preconfigured
 predef
@@ -1379,6 +1397,7 @@ recalculating
 recalculation
 recalibrate
 recognizer
+recompile
 recompiled
 recompiling
 recomputed
@@ -1507,7 +1526,9 @@ rtpmux
 rtpstream
 ruleset
 rwanda
+rxbitmask
 rxchannel
+rxflags
 rxlen
 rxlev
 rxmcsmap
@@ -1636,13 +1657,16 @@ statusbar
 stderr
 stdin
 stdout
+strawberryperl
 strbuf
+strcmp
 strdup
 streamid
 stringz
 stringzpad
 struct
 structs
+stype
 subaddress
 subband
 subcarrier
@@ -1759,6 +1783,7 @@ toolbar
 toolongfragment
 toolset
 tooltip
+topologies
 toprowflag
 topup
 toshiba
@@ -2057,6 +2082,7 @@ xattr
 xauth
 xchannel
 xcode
+xdist
 xetra
 xferext
 xmlns

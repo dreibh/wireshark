@@ -75,6 +75,7 @@ const value_string ssl_version_short_names[] = {
     { TLSV1DOT3_VERSION,    "TLSv1.3" },
     { DTLSV1DOT0_VERSION,   "DTLSv1.0" },
     { DTLSV1DOT2_VERSION,   "DTLSv1.2" },
+    { DTLSV1DOT3_VERSION,   "DTLSv1.3" },
     { DTLSV1DOT0_OPENSSL_VERSION, "DTLS 1.0 (OpenSSL pre 0.9.8f)" },
     { 0x00, NULL }
 };
@@ -7268,7 +7269,7 @@ ssl_dissect_hnd_hello_ext_alpn(ssl_common_dissect_t *hf, tvbuff_t *tvb,
     proto_tree *alpn_tree;
     proto_item *ti;
     guint32     next_offset, alpn_length, name_length;
-    guint8     *proto_name = NULL;
+    guint8     *proto_name = NULL, *client_proto_name = NULL;
 
     /* ProtocolName protocol_name_list<2..2^16-1> */
     if (!ssl_add_vector(hf, tvb, pinfo, tree, offset, offset_end, &alpn_length,
@@ -7311,6 +7312,9 @@ ssl_dissect_hnd_hello_ext_alpn(ssl_common_dissect_t *hf, tvbuff_t *tvb,
              * comparison purposes. */
             proto_name = tvb_get_string_enc(pinfo->pool, tvb, offset,
                                             name_length, ENC_ASCII);
+        } else if (hnd_type == SSL_HND_CLIENT_HELLO) {
+            client_proto_name = tvb_get_string_enc(pinfo->pool, tvb, offset,
+                                                   name_length, ENC_ASCII);
         }
         offset += name_length;
     }
@@ -7352,6 +7356,10 @@ ssl_dissect_hnd_hello_ext_alpn(ssl_common_dissect_t *hf, tvbuff_t *tvb,
                              dissector_handle_get_dissector_name(handle));
             session->app_handle = handle;
         }
+    } else if (client_proto_name) {
+        // No current use for looking up the handle as the only consumer of this API is currently the QUIC dissector
+        // and it just needs the string since there are/were various HTTP/3 ALPNs to check for.
+        session->client_alpn_name = wmem_strdup(wmem_file_scope(), client_proto_name);
     }
 
     return offset;
@@ -9432,7 +9440,7 @@ ssl_try_set_version(SslSession *session, SslDecryptSession *ssl,
                 is_dtls))
         return;
 
-    if (handshake_type == SSL_HND_SERVER_HELLO) {
+    if (handshake_type == SSL_HND_SERVER_HELLO && !is_dtls) {
         tls13_draft = extract_tls13_draft_version(version);
         if (tls13_draft != 0) {
             /* This is TLS 1.3 (a draft version). */
@@ -9459,6 +9467,7 @@ ssl_try_set_version(SslSession *session, SslDecryptSession *ssl,
     case DTLSV1DOT0_VERSION:
     case DTLSV1DOT0_OPENSSL_VERSION:
     case DTLSV1DOT2_VERSION:
+    case DTLSV1DOT3_VERSION:
         if (!is_dtls)
             return;
         break;

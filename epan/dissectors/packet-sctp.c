@@ -39,6 +39,8 @@
 
 #include "config.h"
 
+#define WS_LOG_DOMAIN "sctp"
+
 #include "ws_symbol_export.h"
 
 #include <epan/packet.h>
@@ -86,6 +88,7 @@ static int hf_checksum_adler;
 static int hf_checksum_crc32c;
 static int hf_checksum_status;
 
+static int hf_chunk;
 static int hf_chunk_type;
 static int hf_chunk_flags;
 static int hf_chunk_bit_1;
@@ -416,12 +419,12 @@ static guint num_type_fields = 0;
 typedef struct _assoc_info_t {
   guint16 assoc_index;
   guint16 direction;
-  gboolean vtag_reflected;
+  address saddr;
+  address daddr;
   guint16 sport;
   guint16 dport;
   guint32 verification_tag1;
   guint32 verification_tag2;
-  guint32 initiate_tag;
 } assoc_info_t;
 
 typedef struct _infodata_t {
@@ -429,7 +432,8 @@ typedef struct _infodata_t {
   guint16 direction;
 } infodata_t;
 
-static wmem_list_t *assoc_info_list = NULL;
+static wmem_map_t *assoc_info_half_map = NULL;
+static wmem_map_t *assoc_info_map = NULL;
 static guint num_assocs = 0;
 
 UAT_CSTRING_CB_DEF(type_fields, type_name, type_field_t)
@@ -485,183 +489,235 @@ static dissector_handle_t sctp_handle;
 
 static struct _sctp_info sctp_info;
 
-#define RETURN_DIRECTION(direction) \
-  do { \
-    /*ws_warning("Returning %d at %d: a-itag=0x%x, a-vtag1=0x%x, a-vtag2=0x%x, b-itag=0x%x, b-vtag1=0x%x, b-vtag2=0x%x", \
-              direction, __LINE__, a->initiate_tag, a->verification_tag1, a->verification_tag2, b->initiate_tag, b->verification_tag1, b->verification_tag2);*/ \
-    return direction; \
-  } while (0)
-static gint sctp_assoc_vtag_cmp(const assoc_info_t *a, const assoc_info_t *b)
+static bool
+sctp_vtag_match(uint32_t vtag1, uint32_t vtag2)
 {
-  if (a == NULL || b == NULL)
-    RETURN_DIRECTION(ASSOC_NOT_FOUND);
-
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (b->verification_tag2 != 0) &&
-      (a->initiate_tag == b->verification_tag2) &&
-      (a->initiate_tag == b->initiate_tag))
-    RETURN_DIRECTION(FORWARD_STREAM);
-
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag1 == b->verification_tag1) &&
-      (a->initiate_tag ==  b->initiate_tag))
-    RETURN_DIRECTION(FORWARD_STREAM);
-
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag1 == b->verification_tag1) &&
-      (a->verification_tag1 == 0 && a->initiate_tag != 0) &&
-      (a->initiate_tag != b->initiate_tag ))
-    RETURN_DIRECTION(ASSOC_NOT_FOUND);   /* two INITs that belong to different assocs */
-
-  /* assoc known*/
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag1 == b->verification_tag1) &&
-      ((a->verification_tag1 != 0 ||
-       (b->verification_tag2 != 0))))
-    RETURN_DIRECTION(FORWARD_STREAM);
-
-  /* ABORT, vtag reflected */
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag2 == b->verification_tag2) &&
-      (a->verification_tag1 == 0 && b->verification_tag1 != 0))
-    RETURN_DIRECTION(FORWARD_STREAM);
-
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag1 == b->verification_tag2) &&
-      (a->verification_tag1 != 0))
-    RETURN_DIRECTION(BACKWARD_STREAM);
-
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag2 == b->verification_tag1) &&
-      (a->verification_tag2 != 0))
-    RETURN_DIRECTION(BACKWARD_STREAM);
-
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag1 == b->initiate_tag) &&
-      (a->verification_tag2 == 0))
-    RETURN_DIRECTION(BACKWARD_ADD_BACKWARD_VTAG);
-
-  /* ABORT, vtag reflected */
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag2 == b->verification_tag1) &&
-      (a->verification_tag1 == 0 && b->verification_tag2 != 0))
-    RETURN_DIRECTION(BACKWARD_STREAM);
-
-  /*forward stream verification tag can be added*/
-  if ((a->sport == b->sport) &&
-      (a->dport == b->dport) &&
-      (a->verification_tag1 != 0) &&
-      (b->verification_tag1 == 0) &&
-      (b->verification_tag2 !=0))
-    RETURN_DIRECTION(FORWARD_ADD_FORWARD_VTAG);
-
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag1 == b->verification_tag2) &&
-      (b->verification_tag1 == 0))
-    RETURN_DIRECTION(BACKWARD_ADD_FORWARD_VTAG);
-
-  /*backward stream verification tag can be added */
-  if ((a->sport == b->dport) &&
-      (a->dport == b->sport) &&
-      (a->verification_tag1 != 0) &&
-      (b->verification_tag1 != 0) &&
-      (b->verification_tag2 == 0))
-    RETURN_DIRECTION(BACKWARD_ADD_BACKWARD_VTAG);
-
-  RETURN_DIRECTION(ASSOC_NOT_FOUND);
+  /* If zero (unknown) tags match anything. Nonzero tags must be the same. */
+  if (vtag1 != 0) {
+    return (vtag1 == vtag2 || vtag2 == 0);
+  }
+  return true;
 }
-#undef RETURN_DIRECTION
+
+static assoc_info_t*
+sctp_assoc_reverse(wmem_allocator_t *scope, const assoc_info_t *assoc)
+{
+  assoc_info_t *new_assoc;
+
+  new_assoc = wmem_new(scope, assoc_info_t);
+  new_assoc->assoc_index = assoc->assoc_index;
+  new_assoc->direction = (assoc->direction == 1) ? 2 : 1;
+  copy_address_shallow(&new_assoc->saddr, &assoc->daddr);
+  copy_address_shallow(&new_assoc->daddr, &assoc->saddr);
+  new_assoc->sport = assoc->dport;
+  new_assoc->dport = assoc->sport;
+  new_assoc->verification_tag1 = assoc->verification_tag2;
+  new_assoc->verification_tag2 = assoc->verification_tag1;
+
+  return new_assoc;
+}
+
+static guint
+sctp_assoc_half_hash(gconstpointer key)
+{
+  const assoc_info_t *k = (const assoc_info_t *)key;
+
+  /* Add the ports so that the hash is the same regardless of direction */
+  return g_direct_hash(GUINT_TO_POINTER(k->sport + k->dport));
+}
+
+static guint
+sctp_assoc_hash(gconstpointer key)
+{
+  const assoc_info_t *k = (const assoc_info_t *)key;
+
+  // When inserting in this map, we know we have both vtags.
+  // Hash via the first one (we expect vtag collisions will be low.)
+  // When looking up with a entry from a packet that only has one vtag,
+  // we'll reverse the temporary key as necessary.
+  return g_int_hash(&k->verification_tag1);
+}
+
+/* Association comparison strategy:
+ * 1. Ports MUST match.
+ * 2. Assume vtag collisions are rare compared to multihoming. Thus:
+ * 3. If we have already discovered the vtags on both sides (e.g., with an
+ *    INIT ACK, which contains both sides) and the ports match, don't require
+ *    address matches.
+ * 4. If we have two keys each with 1 matching vtag in the same direction (and
+ *    the other vtag 0), don't require address matches; if there are new addresses
+ *    assume it's multihoming.
+ * 5. However, if we have two keys each with 1 vtag (and the other tag 0)
+ *    that are different but could be the two vtags of one association
+ *    (e.g., two unmatched DATA chunks in the opposite direction, or an INIT
+ *    and a DATA in the same direction) require address matching. Otherwise
+ *    we'll make likely spurious matches.
+ * 6. Don't worry about odd possibilities like both sides of an association
+ *    chosing the same vtag.
+ * 7. We ought to track additional addresses given in INIT, INIT ACK, ASCONF.
+ *    If we do, we could have an option of more strict association matching
+ *    that uses the addresses in all cases and is more similar to what SCTP
+ *    stacks actually do. We'd have to store a list/map/set of known source
+ *    and destinatiion addresses instead of just one each. This would fail in
+ *    the case of multihoming and where we missed the configuration messages
+ *    setting up multihoming.
+ */
+
+static gboolean
+sctp_assoc_half_equal(gconstpointer key1, gconstpointer key2)
+{
+  const assoc_info_t *a = (const assoc_info_t *)key1;
+  const assoc_info_t *b = (const assoc_info_t *)key2;
+
+  /* Matching for associations where for the entries already in the table
+   * only have one vtag, and have zero for the other direction. (For an
+   * new INIT ACK, we know both directions.)
+   */
+
+  if (a->sport == b->sport && a->dport == b->dport) {
+    // Forward match
+    if ((a->verification_tag1 == 0 || b->verification_tag1 == 0) &&
+        (a->verification_tag2 == 0 || b->verification_tag2 == 0)) {
+      // Possible INIT and DATA in the same direction, where we didn't get
+      // the INIT ACK. Call it a match if the addresses match.
+      if (addresses_equal(&a->saddr, &b->saddr) && addresses_equal(&a->daddr, &b->daddr)) {
+          return TRUE;
+      }
+    } else if (sctp_vtag_match(a->verification_tag1, b->verification_tag1) &&
+        sctp_vtag_match(a->verification_tag2, b->verification_tag2)) {
+      return TRUE;
+    }
+  }
+  if (a->sport == b->dport && a->dport == b->sport) {
+    // Reverse direction (not an else so we can handle identical ports)
+    if ((a->verification_tag1 == 0 || b->verification_tag2 == 0) &&
+        (a->verification_tag2 == 0 || b->verification_tag1 == 0)) {
+      // Possible two DATAs chunks in the opposite direction, where we
+      // didn't get the INIT ACK. Call it a match if the addresses match.
+      if (addresses_equal(&a->saddr, &b->daddr) && addresses_equal(&a->daddr, &b->saddr)) {
+          return TRUE;
+      }
+    } else if (sctp_vtag_match(a->verification_tag1, b->verification_tag2) &&
+        sctp_vtag_match(a->verification_tag2, b->verification_tag1)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
+
+static gboolean
+sctp_assoc_equal(gconstpointer key1, gconstpointer key2)
+{
+  const assoc_info_t *a = (const assoc_info_t *)key1;
+  const assoc_info_t *b = (const assoc_info_t *)key2;
+
+  /*
+   * Matching for associations where for the entries already in the map
+   * we know the vtags in each direction.
+   * We will not check addresses.
+   */
+
+  if (a->sport == b->sport && a->dport == b->dport) {
+    // Forward match
+    // ASSERTION: at least one of the verification tags must be nonzero.
+    if (sctp_vtag_match(a->verification_tag1, b->verification_tag1) &&
+        sctp_vtag_match(a->verification_tag2, b->verification_tag2)) {
+      return TRUE;
+    }
+  }
+  if (a->sport == b->dport && a->dport == b->sport) {
+    // Reverse direction (not an else so we can handle identical ports)
+    if (sctp_vtag_match(a->verification_tag1, b->verification_tag2) &&
+        sctp_vtag_match(a->verification_tag2, b->verification_tag1)) {
+      return TRUE;
+    }
+  }
+
+  return FALSE;
+}
 
 static infodata_t
-find_assoc_index(assoc_info_t* tmpinfo, gboolean visited)
+find_assoc_index(assoc_info_t* tmpinfo, packet_info *pinfo)
 {
   assoc_info_t *info = NULL;
-  wmem_list_frame_t *elem;
-  gboolean cmp = FALSE;
   infodata_t inf;
   inf.assoc_index = -1;
   inf.direction = 1;
 
-  if (assoc_info_list == NULL) {
-    assoc_info_list = wmem_list_new(wmem_file_scope());
-  }
-
-  for (elem = wmem_list_head(assoc_info_list); elem; elem = wmem_list_frame_next(elem))
-  {
-    info = (assoc_info_t*) wmem_list_frame_data(elem);
-
-    if (!visited) {
-      cmp = sctp_assoc_vtag_cmp(tmpinfo, info);
-      if (cmp < ASSOC_NOT_FOUND) {
-        switch (cmp)
-        {
-          case FORWARD_ADD_FORWARD_VTAG:
-          case BACKWARD_ADD_FORWARD_VTAG:
-            info->verification_tag1 = tmpinfo->verification_tag1;
-            break;
-          case BACKWARD_ADD_BACKWARD_VTAG:
-            info->verification_tag2 = tmpinfo->verification_tag1;
-            info->direction = 1;
-            inf.assoc_index = info->assoc_index;
-            inf.direction = 2;
-            return inf;
-          case BACKWARD_STREAM:
-            inf.assoc_index = info->assoc_index;
-            inf.direction = 2;
-            return inf;
-        }
-        if (cmp == FORWARD_STREAM || cmp == FORWARD_ADD_FORWARD_VTAG) {
-          info->direction = 1;
-        } else {
-          info->direction = 2;
-        }
-        inf.assoc_index = info->assoc_index;
-        inf.direction = info->direction;
-        return inf;
-      }
-    } else {
-      if ((tmpinfo->initiate_tag != 0 && tmpinfo->initiate_tag == info->initiate_tag) ||
-          (tmpinfo->verification_tag1 != 0 && tmpinfo->verification_tag1 == info->verification_tag1) ||
-          (tmpinfo->verification_tag2 != 0 && tmpinfo->verification_tag2 == info->verification_tag2)) {
-        inf.assoc_index = info->assoc_index;
-        inf.direction = info->direction;
-        return inf;
-      } else if ((tmpinfo->verification_tag1 != 0 && tmpinfo->verification_tag1 == info->verification_tag2) ||
-                 (tmpinfo->verification_tag2 != 0 && tmpinfo->verification_tag2 == info->verification_tag1) ||
-                 (tmpinfo->verification_tag1 == 0 && tmpinfo->initiate_tag != 0 &&
-                 tmpinfo->initiate_tag == info->verification_tag1)) {
-        inf.assoc_index = info->assoc_index;
-        if (info->direction == 1)
-          inf.direction = 2;
-        else
-          inf.direction = 1;
-        return inf;
-      }
+  /* At least one of tmpinfo's vtag1 must be nonzero (both might be, if
+   * it's an INIT ACK.) Lookup in the proper direction(s).
+   */
+  if (tmpinfo->verification_tag1 != 0) {
+    info = (assoc_info_t*)wmem_map_lookup(assoc_info_map, tmpinfo);
+    if (info) {
+      inf.assoc_index = info->assoc_index;
+      inf.direction = info->direction;
+      return inf;
     }
   }
 
-  if (!elem && !visited) {
-    info = wmem_new0(wmem_file_scope(), assoc_info_t);
-    info->assoc_index = num_assocs;
-    info->sport = tmpinfo->sport;
-    info->dport = tmpinfo->dport;
-    info->verification_tag1 = tmpinfo->verification_tag1;
-    info->verification_tag2 = tmpinfo->verification_tag2;
-    info->initiate_tag = tmpinfo->initiate_tag;
-    num_assocs++;
-    wmem_list_prepend(assoc_info_list, info);
+  if (tmpinfo->verification_tag2 != 0) {
+    info = sctp_assoc_reverse(pinfo->pool, tmpinfo);
+    info = (assoc_info_t*)wmem_map_lookup(assoc_info_map, info);
+    if (info) {
+      inf.assoc_index = info->assoc_index;
+      inf.direction = info->direction == 1 ? 2 : 1;
+      return inf;
+    }
+  }
+
+  info = (assoc_info_t*)wmem_map_lookup(assoc_info_half_map, tmpinfo);
+  if (info == NULL) {
+    if (!PINFO_FD_VISITED(pinfo)) {
+      info = wmem_new(wmem_file_scope(), assoc_info_t);
+      *info = *tmpinfo;
+      copy_address_wmem(wmem_file_scope(), &info->saddr, &tmpinfo->saddr);
+      copy_address_wmem(wmem_file_scope(), &info->daddr, &tmpinfo->daddr);
+      info->assoc_index = num_assocs++;
+      info->direction = 1;
+      inf.assoc_index = info->assoc_index;
+      if (info->verification_tag1 == 0 || info->verification_tag2 == 0) {
+        wmem_map_insert(assoc_info_half_map, info, info);
+      } else {
+        info->direction = 1;
+        wmem_map_insert(assoc_info_map, info, info);
+        info = sctp_assoc_reverse(wmem_file_scope(), info);
+        wmem_map_insert(assoc_info_map, info, info);
+      }
+    } else {
+      ws_info("association not found on second pass");
+    }
+  } else {
     inf.assoc_index = info->assoc_index;
-    inf.direction = 1;
+    /* Now figure out why we matched and fill in new information. */
+    if (info->sport == tmpinfo->dport &&
+        sctp_vtag_match(info->verification_tag1, tmpinfo->verification_tag1) &&
+        sctp_vtag_match(info->verification_tag2, tmpinfo->verification_tag2)) {
+      /* We already checked the addresses if needed when looking up in the map. */
+      if (info->verification_tag1 == 0) {
+        info->verification_tag1 = tmpinfo->verification_tag1;
+      }
+      if (info->verification_tag2 == 0) {
+        info->verification_tag2 = tmpinfo->verification_tag2;
+      }
+    } else if (sctp_vtag_match(info->verification_tag1, tmpinfo->verification_tag2) &&
+        sctp_vtag_match(info->verification_tag2, tmpinfo->verification_tag1)) {
+      /* We already checked the addresses if needed when looking up in the map. */
+      inf.direction = 2;
+      if (info->verification_tag1 == 0) {
+        info->verification_tag1 = tmpinfo->verification_tag2;
+      }
+      if (info->verification_tag2 == 0) {
+        info->verification_tag2 = tmpinfo->verification_tag1;
+      }
+    }
+    if (info->verification_tag1 != 0 && info->verification_tag2 != 0) {
+      DISSECTOR_ASSERT(wmem_map_remove(assoc_info_half_map, info) != NULL);
+      wmem_map_insert(assoc_info_map, info, info);
+      info = sctp_assoc_reverse(wmem_file_scope(), info);
+      wmem_map_insert(assoc_info_map, info, info);
+    }
   }
 
   return inf;
@@ -2673,7 +2729,6 @@ sctp_init(void)
   frag_table = g_hash_table_new_full(frag_hash, frag_equal,
       (GDestroyNotify)g_free, (GDestroyNotify)frag_free_msgs);
   num_assocs = 0;
-  assoc_info_list = NULL;
 }
 
 static void
@@ -4452,9 +4507,9 @@ dissect_sctp_chunk(tvbuff_t *chunk_tvb,
     col_append_fstr(pinfo->cinfo, COL_INFO, "%s ", val_to_str_const(type, chunk_type_values, "RESERVED"));
 
   /* create proto_tree stuff */
-  chunk_tree   = proto_tree_add_subtree_format(sctp_tree, chunk_tvb, CHUNK_HEADER_OFFSET, reported_length,
-                    ett_sctp_chunk, &chunk_item, "%s chunk",
-                    val_to_str_const(type, chunk_type_values, "RESERVED"));
+  chunk_item = proto_tree_add_none_format(sctp_tree, hf_chunk, chunk_tvb, CHUNK_HEADER_OFFSET, reported_length,
+                    "%s chunk", val_to_str_const(type, chunk_type_values, "RESERVED"));
+  chunk_tree = proto_item_add_subtree(chunk_item, ett_sctp_chunk);
 
   if (tree) {
     /* then insert the chunk header components into the protocol tree */
@@ -4585,14 +4640,16 @@ dissect_sctp_chunk(tvbuff_t *chunk_tvb,
 }
 
 static void
-dissect_sctp_chunks(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *sctp_item, proto_tree *sctp_tree, sctp_half_assoc_t *ha, gboolean encapsulated)
+dissect_sctp_chunks(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_item *sctp_item, proto_tree *sctp_tree, sctp_half_assoc_t *ha, gboolean encapsulated, proto_item *vt)
 {
+  proto_item *pi;
   tvbuff_t *chunk_tvb;
   guint16 length, total_length, remaining_length;
   gint last_offset, offset;
   gboolean sctp_item_length_set;
   assoc_info_t tmpinfo;
   infodata_t id_dir;
+  bool first_chunk = true;
 
   /* the common header of the datagram is already handled */
   last_offset = 0;
@@ -4619,42 +4676,62 @@ dissect_sctp_chunks(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_i
       else
         sctp_info.incomplete = TRUE;
     }
-    if (enable_association_indexing) {
-      tmpinfo.assoc_index = -1;
-      tmpinfo.sport = sctp_info.sport;
-      tmpinfo.dport = sctp_info.dport;
-      tmpinfo.vtag_reflected = FALSE;
-      if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_ABORT_CHUNK_ID) {
-        if ((tvb_get_guint8(chunk_tvb, CHUNK_FLAGS_OFFSET) & SCTP_ABORT_CHUNK_T_BIT) != 0) {
-          tmpinfo.vtag_reflected = TRUE;
+    if (first_chunk) {
+      first_chunk = false;
+      if (enable_association_indexing) {
+        tmpinfo.assoc_index = -1;
+        tmpinfo.direction = 1;
+        copy_address_shallow(&tmpinfo.saddr, &pinfo->src);
+        copy_address_shallow(&tmpinfo.daddr, &pinfo->dst);
+        tmpinfo.sport = sctp_info.sport;
+        tmpinfo.dport = sctp_info.dport;
+        bool vtag_reflected = false;
+        /* Certain chunk types have exceptional Verification Tag handling
+         * ( see https://datatracker.ietf.org/doc/html/rfc9260#section-8.5.1 )
+         * XXX: Those chunk types shouldn't be bundled with other chunk types
+         * (ABORT can be bundled after other control types, but ABORT with the
+         * T bit set should not be) and there should be an expert info if so.
+         * Should we use the association from the first chunk or the last
+         * chunk in such a case?
+         */
+        if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_ABORT_CHUNK_ID) {
+          if ((tvb_get_guint8(chunk_tvb, CHUNK_FLAGS_OFFSET) & SCTP_ABORT_CHUNK_T_BIT) != 0) {
+            vtag_reflected = true;
+          }
         }
-      }
-      if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_SHUTDOWN_COMPLETE_CHUNK_ID) {
-        if ((tvb_get_guint8(chunk_tvb, CHUNK_FLAGS_OFFSET) & SCTP_SHUTDOWN_COMPLETE_CHUNK_T_BIT) != 0) {
-          tmpinfo.vtag_reflected = TRUE;
+        if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_SHUTDOWN_COMPLETE_CHUNK_ID) {
+          if ((tvb_get_guint8(chunk_tvb, CHUNK_FLAGS_OFFSET) & SCTP_SHUTDOWN_COMPLETE_CHUNK_T_BIT) != 0) {
+            vtag_reflected = true;
+          }
         }
-      }
-      if (tmpinfo.vtag_reflected) {
-        tmpinfo.verification_tag2 = sctp_info.verification_tag;
-        tmpinfo.verification_tag1 = 0;
-      }
-      else {
-        tmpinfo.verification_tag1 = sctp_info.verification_tag;
-        tmpinfo.verification_tag2 = 0;
-      }
-      if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_INIT_CHUNK_ID) {
-        tmpinfo.initiate_tag = tvb_get_ntohl(sctp_info.tvb[0], 4);
-      }
-      else {
-        tmpinfo.initiate_tag = 0;
+        if (vtag_reflected) {
+          tmpinfo.verification_tag1 = 0;
+          tmpinfo.verification_tag2 = sctp_info.verification_tag;
+        }
+        else {
+          tmpinfo.verification_tag1 = sctp_info.verification_tag;
+          tmpinfo.verification_tag2 = 0;
+        }
+        if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_INIT_CHUNK_ID) {
+          tmpinfo.verification_tag1 = 0;
+          tmpinfo.verification_tag2 = tvb_get_ntohl(sctp_info.tvb[0], 4);
+        }
+        if (tvb_get_guint8(chunk_tvb, CHUNK_TYPE_OFFSET) == SCTP_INIT_ACK_CHUNK_ID) {
+          tmpinfo.verification_tag2 = tvb_get_ntohl(sctp_info.tvb[0], 4);
+        }
+
+        id_dir = find_assoc_index(&tmpinfo, pinfo);
+        pi = proto_tree_add_uint(sctp_tree, hf_sctp_assoc_index, tvb, 0 , 0, id_dir.assoc_index);
+        /* XXX: Should we set these if encapsulated is true or not? */
+        sctp_info.assoc_index = id_dir.assoc_index;
+        sctp_info.direction = id_dir.direction;
+
+      } else {
+          pi = proto_tree_add_uint_format_value(sctp_tree, hf_sctp_assoc_index, tvb, 0 , 0, sctp_info.assoc_index, "disabled (enable in preferences)");
       }
 
-      id_dir = find_assoc_index(&tmpinfo, PINFO_FD_VISITED(pinfo));
-      sctp_info.assoc_index = id_dir.assoc_index;
-      sctp_info.direction = id_dir.direction;
-    } else {
-      sctp_info.assoc_index = -1;
-      sctp_info.direction = ASSOC_NOT_FOUND;
+      proto_item_set_generated(pi);
+      proto_tree_move_item(sctp_tree, vt, pi);
     }
 
     /* call dissect_sctp_chunk for the actual work */
@@ -4689,7 +4766,7 @@ dissect_sctp_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gboolea
   proto_tree *sctp_tree;
   guint32 vtag;
   sctp_half_assoc_t *ha = NULL;
-  proto_item *pi, *vt = NULL;
+  proto_item *vt = NULL;
 
   captured_length = tvb_captured_length(tvb);
   reported_length = tvb_reported_length(tvb);
@@ -4800,17 +4877,8 @@ dissect_sctp_packet(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gboolea
   }
 
   /* add all chunks of the sctp datagram to the protocol tree */
-  dissect_sctp_chunks(tvb, pinfo, tree, sctp_item, sctp_tree, ha, encapsulated);
+  dissect_sctp_chunks(tvb, pinfo, tree, sctp_item, sctp_tree, ha, encapsulated, vt);
 
-  /* add assoc_index and move it behind the verification tag */
-  if (enable_association_indexing) {
-     pi = proto_tree_add_uint(sctp_tree, hf_sctp_assoc_index, tvb, 0 , 0, sctp_info.assoc_index);
-  }
-  else {
-     pi = proto_tree_add_uint_format_value(sctp_tree, hf_sctp_assoc_index, tvb, 0 , 0, sctp_info.assoc_index, "disabled (enable in preferences)");
-  }
-  proto_item_set_generated(pi);
-  proto_tree_move_item(sctp_tree, vt, pi);
 }
 
 static gboolean
@@ -4860,6 +4928,9 @@ dissect_sctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   sctp_info.vtag_reflected = 0;
   sctp_info.number_of_tvbs = 0;
   sctp_info.verification_tag = tvb_get_ntohl(tvb, VERIFICATION_TAG_OFFSET);
+  /* Initialize these to unknown */
+  sctp_info.assoc_index = -1;
+  sctp_info.direction = ASSOC_NOT_FOUND;
 
   sctp_info.sport = pinfo->srcport;
   sctp_info.dport = pinfo->destport;
@@ -4869,9 +4940,22 @@ dissect_sctp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
   p_add_proto_data(pinfo->pool, pinfo, hf_source_port, pinfo->curr_layer_num, GUINT_TO_POINTER(pinfo->srcport));
   p_add_proto_data(pinfo->pool, pinfo, hf_destination_port, pinfo->curr_layer_num, GUINT_TO_POINTER(pinfo->destport));
 
-  dissect_sctp_packet(tvb, pinfo, tree, FALSE);
-  if (!pinfo->flags.in_error_pkt && sctp_info.number_of_tvbs > 0)
-    tap_queue_packet(sctp_tap, pinfo, &sctp_info);
+  TRY {
+    dissect_sctp_packet(tvb, pinfo, tree, FALSE);
+  }
+
+  FINALLY {
+    if (!pinfo->flags.in_error_pkt && sctp_info.number_of_tvbs > 0)
+      /* XXX: If a (only present in an expired Internet-Draft)
+       * PKTDROP chunk is present, that shouldn't stop us from
+       * tapping the information from the outer encapsulation,
+       * but we'd have to be careful about not updating sctp_info
+       * with information from the encapsulated packet.
+       */
+      tap_queue_packet(sctp_tap, pinfo, &sctp_info);
+  }
+
+  ENDTRY;
 
   return tvb_captured_length(tvb);
 }
@@ -4891,6 +4975,7 @@ proto_register_sctp(void)
     { &hf_checksum_adler,                           { "Checksum (Adler)",                               "sctp.checksum",                                        FT_UINT32,  BASE_HEX,  NULL,                                           0x0,                                NULL, HFILL } },
     { &hf_checksum_crc32c,                          { "Checksum (CRC32C)",                              "sctp.checksum",                                        FT_UINT32,  BASE_HEX,  NULL,                                           0x0,                                NULL, HFILL } },
     { &hf_checksum_status,                          { "Checksum Status",                                "sctp.checksum.status",                                 FT_UINT8,   BASE_NONE, VALS(proto_checksum_vals),                      0x0,                                NULL, HFILL } },
+    { &hf_chunk,                                    { "Chunk",                                          "sctp.chunk",                                           FT_NONE,    BASE_NONE, NULL,                                           0x0,                                NULL, HFILL } },
     { &hf_chunk_type,                               { "Chunk type",                                     "sctp.chunk_type",                                      FT_UINT8,   BASE_DEC,  VALS(chunk_type_values),                        0x0,                                NULL, HFILL } },
     { &hf_chunk_flags,                              { "Chunk flags",                                    "sctp.chunk_flags",                                     FT_UINT8,   BASE_HEX,  NULL,                                           0x0,                                NULL, HFILL } },
     { &hf_chunk_bit_1,                              { "Bit",                                            "sctp.chunk_bit_1",                                     FT_BOOLEAN, 8,         TFS(&sctp_chunk_bit_1_value),                   SCTP_CHUNK_BIT_1,                   NULL, HFILL } },
@@ -5208,6 +5293,11 @@ proto_register_sctp(void)
   register_decode_as(&sctp_da_ppi);
 
   register_conversation_table(proto_sctp, FALSE, sctp_conversation_packet, sctp_endpoint_packet);
+
+  assoc_info_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(),
+        sctp_assoc_hash, sctp_assoc_equal);
+  assoc_info_half_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(),
+        sctp_assoc_half_hash, sctp_assoc_half_equal);
 }
 
 void

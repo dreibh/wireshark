@@ -188,6 +188,7 @@ protected:
 signals:
     void appInitialized();
     void localInterfaceEvent(const char *ifname, int added, int up);
+    void scanLocalInterfaces(GList *filter_list = nullptr);
     void localInterfaceListChanged();
     void openCaptureFile(QString cf_path, QString display_filter, unsigned int type);
     void openCaptureOptions();
@@ -212,7 +213,6 @@ signals:
 #if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
     // Each of these are called from a separate thread.
     void softwareUpdateRequested();
-    void softwareUpdateClose();
     void softwareUpdateQuit();
 #endif
 

@@ -23,6 +23,7 @@
 #include <epan/exceptions.h>
 #include <epan/tap.h>
 #include <epan/asn1.h>
+#include <epan/proto_data.h>
 #include <epan/prefs.h>
 #include <epan/exported_pdu.h>
 #include <epan/address_types.h>
@@ -1948,7 +1949,7 @@ static const h248_pkg_sig_t no_signal = { 0, &hf_h248_no_sig, &ett_h248_no_sig, 
 static const h248_pkg_param_t no_param = { 0, &hf_h248_param, h248_param_uint_item,  NULL };
 static const h248_pkg_evt_t no_event = { 0, &hf_h248_no_evt, &ett_h248_no_evt, NULL, NULL };
 
-const h248_package_t *find_package_id(guint16 pkgid);
+static const h248_package_t *find_package_id(guint16 pkgid);
 static wmem_tree_t* packages = NULL;
 
 extern void h248_param_PkgdName(proto_tree* tree, tvbuff_t* tvb, packet_info* pinfo , int hfid _U_, h248_curr_info_t* u1 _U_, void* u2 _U_) {
@@ -2087,7 +2088,7 @@ static s_h248_package_t *s_find_package_id(guint16 pkgid) {
     return s_pkg;
 }
 
-const h248_package_t *find_package_id(guint16 pkgid) {
+static const h248_package_t *find_package_id(guint16 pkgid) {
     s_h248_package_t *s_pkg = NULL;
     s_pkg = s_find_package_id(pkgid); /*(packages, GUINT_TO_POINTER((guint32)(pkgid))); */
     if (! s_pkg ) return &no_package;
@@ -2618,6 +2619,7 @@ static int dissect_h248_MtpAddress(bool implicit_tag, tvbuff_t *tvb, int offset,
 static int dissect_h248_SecondEventsDescriptor(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 
+#define MAX_RECURSION_DEPTH 100 // Arbitrarily chosen.
 
 
 static int
@@ -4246,9 +4248,15 @@ static const ber_sequence_t SecondEventsDescriptor_sequence[] = {
 
 static int
 dissect_h248_SecondEventsDescriptor(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  const int proto_id = GPOINTER_TO_INT(wmem_list_frame_data(wmem_list_tail(actx->pinfo->layers)));
+  const unsigned cycle_size = 7;
+  unsigned recursion_depth = p_get_proto_depth(actx->pinfo, proto_id);
+  DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
+  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth + cycle_size);
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    SecondEventsDescriptor_sequence, hf_index, ett_h248_SecondEventsDescriptor);
 
+  p_set_proto_depth(actx->pinfo, proto_id, recursion_depth - cycle_size);
   return offset;
 }
 
