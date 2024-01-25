@@ -32261,7 +32261,7 @@ ieee80211_tag_measure_rep(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
     while (offset < tag_len)
     {
-      guint8 sub_id, sub_length, sub_tag_end;;
+      guint8 sub_id, sub_length, sub_tag_end;
       proto_item *sub_elem_item, *sub_elem_len_item;
       proto_tree *sub_elem_tree;
 
@@ -32380,7 +32380,7 @@ ieee80211_tag_measure_rep(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
     while (offset < tag_len)
     {
-      guint8 sub_id, sub_length, sub_tag_end;;
+      guint8 sub_id, sub_length, sub_tag_end;
       proto_item *sub_elem_item, *sub_elem_len_item;
       proto_tree *sub_elem_tree;
 
@@ -32483,7 +32483,7 @@ ieee80211_tag_measure_rep(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 
     while (offset < tag_len)
     {
-      guint8 sub_id, sub_length, sub_tag_end;;
+      guint8 sub_id, sub_length, sub_tag_end;
       proto_item *sub_elem_item, *sub_elem_len_item;
       proto_tree *sub_elem_tree;
 
@@ -60187,7 +60187,7 @@ proto_register_ieee80211(void)
 
   proto_wlan = proto_register_protocol("IEEE 802.11 wireless LAN", "IEEE 802.11", "wlan");
 
-  heur_subdissector_list = register_heur_dissector_list("wlan_data", proto_wlan);
+  heur_subdissector_list = register_heur_dissector_list_with_description("wlan_data", "IEEE 802.11 WLAN v0 data", proto_wlan);
 
   /* Created to remove Decode As confusion */
   proto_centrino = proto_register_protocol("IEEE 802.11 wireless LAN (Centrino)", "IEEE 802.11 (Centrino)", "wlan_centrino");

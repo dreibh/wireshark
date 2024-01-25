@@ -4237,10 +4237,10 @@ dissect_h225_Setup_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_,
     h225_pi->cs_type = H225_SETUP;
     if (contains_faststart) {
       char temp[50];
-      snprintf(temp, 50, "%s OLC (%s)", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
+      snprintf(temp, 50, "%s OLC (%s)", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
       (void) g_strlcpy(h225_pi->frame_label, temp, 50);
     } else
-      snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+      snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4291,10 +4291,10 @@ dissect_h225_CallProceeding_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
     h225_pi->cs_type = H225_CALL_PROCEDING;
     if (contains_faststart) {
       char temp[50];
-      snprintf(temp, 50, "%s OLC (%s)", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
+      snprintf(temp, 50, "%s OLC (%s)", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
       (void) g_strlcpy(h225_pi->frame_label, temp, 50);
     } else
-      snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+      snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4336,10 +4336,10 @@ dissect_h225_Connect_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U
     h225_pi->cs_type = H225_CONNECT;
     if (contains_faststart) {
       char temp[50];
-      snprintf(temp, 50, "%s OLC (%s)", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
+      snprintf(temp, 50, "%s OLC (%s)", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
       (void) g_strlcpy(h225_pi->frame_label, temp, 50);
     } else
-      snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+      snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4379,10 +4379,10 @@ dissect_h225_Alerting_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
     h225_pi->cs_type = H225_ALERTING;
     if (contains_faststart) {
       char temp[50];
-      snprintf(temp, 50, "%s OLC (%s)", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
+      snprintf(temp, 50, "%s OLC (%s)", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
       (void) g_strlcpy(h225_pi->frame_label, temp, 50);
     } else
-      snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+      snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4409,7 +4409,7 @@ dissect_h225_Information_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *act
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
   if (h225_pi != NULL) {
     h225_pi->cs_type = H225_INFORMATION;
-    snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+    snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4568,7 +4568,7 @@ dissect_h225_ReleaseComplete_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
   if (h225_pi != NULL) {
     h225_pi->cs_type = H225_RELEASE_COMPLET;
-    snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+    snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4686,7 +4686,7 @@ dissect_h225_Facility_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
   if (h225_pi != NULL) {
     h225_pi->cs_type = H225_FACILITY;
-    snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+    snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4719,10 +4719,10 @@ dissect_h225_Progress_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
     h225_pi->cs_type = H225_PROGRESS;
     if (contains_faststart) {
       char temp[50];
-      snprintf(temp, 50, "%s OLC (%s)", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
+      snprintf(temp, 50, "%s OLC (%s)", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"), h225_pi->frame_label);
       (void) g_strlcpy(h225_pi->frame_label, temp, 50);
     } else
-      snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+      snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4760,7 +4760,7 @@ dissect_h225_Status_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
   if (h225_pi != NULL) {
     h225_pi->cs_type = H225_STATUS;
-    snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+    snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4801,7 +4801,7 @@ dissect_h225_SetupAcknowledge_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
   if (h225_pi != NULL) {
     h225_pi->cs_type = H225_SETUP_ACK;
-    snprintf(h225_pi->frame_label, 50, "%s", val_to_str(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
+    snprintf(h225_pi->frame_label, 50, "%s", val_to_str_const(h225_pi->cs_type, T_h323_message_body_vals, "<unknown>"));
   }
   return offset;
 }
@@ -4875,7 +4875,7 @@ dissect_h225_T_h323_message_body(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
                                  &message_body_val);
 
   col_append_fstr(actx->pinfo->cinfo, COL_INFO, "CS: %s ",
-    val_to_str(message_body_val, T_h323_message_body_vals, "<unknown>"));
+    val_to_str_const(message_body_val, T_h323_message_body_vals, "<unknown>"));
 
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
   if (h225_pi != NULL) {
@@ -7634,7 +7634,7 @@ dissect_h225_RasMessage(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_,
                                  &rasmessage_value);
 
   col_add_fstr(actx->pinfo->cinfo, COL_INFO, "RAS: %s ",
-    val_to_str(rasmessage_value, h225_RasMessage_vals, "<unknown>"));
+    val_to_str_const(rasmessage_value, h225_RasMessage_vals, "<unknown>"));
 
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
   if (h225_pi != NULL) {
@@ -8206,12 +8206,12 @@ h225_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *edt _U_,
 
   if (tag_idx >= 0) {
     stat_tap_table*table = g_array_index(stat_data->stat_tap_data->tables, stat_tap_table*, 0);
-    stat_tap_table_item_type* msg_data = stat_tap_get_field_data(table, tag_idx, COUNT_COLUMN);;
+    stat_tap_table_item_type* msg_data = stat_tap_get_field_data(table, tag_idx, COUNT_COLUMN);
     msg_data->value.uint_value++;
     stat_tap_set_field_data(table, tag_idx, COUNT_COLUMN, msg_data);
 
     if (reason_idx >= 0) {
-      msg_data = stat_tap_get_field_data(table, reason_idx, COUNT_COLUMN);;
+      msg_data = stat_tap_get_field_data(table, reason_idx, COUNT_COLUMN);
       msg_data->value.uint_value++;
       stat_tap_set_field_data(table, reason_idx, COUNT_COLUMN, msg_data);
     }
