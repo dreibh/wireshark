@@ -46,7 +46,7 @@ typedef struct sinsp_source_info_t {
     std::vector<const filter_check_info *> syscall_filter_checks;
     std::vector<const filtercheck_field_info *> syscall_filter_fields;
     std::vector<gen_event_filter_check *> syscall_event_filter_checks;  // Same size as syscall_filter_fields
-    std::vector<const sinsp_syscall_category_e> field_to_category;      // Same size as syscall_filter_fields
+    std::vector<sinsp_syscall_category_e> field_to_category;            // Same size as syscall_filter_fields
     sinsp_evt *evt;
     uint8_t *evt_storage;
     size_t evt_storage_size;
@@ -871,8 +871,11 @@ bool extract_syscall_source_fields(sinsp_span_t *sinsp_span, sinsp_source_info_t
             case SCAP_FILTERED_EVENT:
                 break;
             case SCAP_EOF:
-                ws_warning("Unexpected EOF");
-                return false;
+                ws_debug("Filling syscall EOF gap from %d to %u", (int) sinsp_span->sfe_ptrs.size(), frame_num);
+                sinsp_span->sfe_ptrs.resize(frame_num);
+                sinsp_span->sfe_lengths.resize(frame_num);
+                sinsp_span->sfe_infos.resize(frame_num);
+                break;
             case SCAP_SUCCESS:
                 add_syscall_event_to_cache(sinsp_span, ssi, evt);
                 break;

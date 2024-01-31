@@ -2060,7 +2060,7 @@ pfcp_stat_init(struct register_srt* srt _U_, GArray*srt_array)
     }
     pfcp_stat_msg_idx_hash = g_hash_table_new(g_direct_hash, g_direct_equal);
 
-    init_srt_table("PFPC Requests", NULL, srt_array, 0, NULL, NULL, NULL);
+    init_srt_table("PFCP Requests", NULL, srt_array, 0, NULL, NULL, NULL);
 }
 
 static tap_packet_status
@@ -2094,7 +2094,7 @@ pfcp_stat_packet(void *pss, packet_info *pinfo, epan_dissect_t *edt _U_, const v
     if (idx == 0) {
         idx = g_hash_table_size(pfcp_stat_msg_idx_hash);
         g_hash_table_insert(pfcp_stat_msg_idx_hash, GUINT_TO_POINTER(pcrp->msgtype), GUINT_TO_POINTER(idx + 1));
-        init_srt_table_row(pfcp_srt_table, idx, val_to_str_ext(pcrp->msgtype, &pfcp_message_type_ext, "Unknown (%d)"));
+        init_srt_table_row(pfcp_srt_table, idx, val_to_str_ext_const(pcrp->msgtype, &pfcp_message_type_ext, "Unknown"));
     } else {
         idx -= 1;
     }
@@ -10434,7 +10434,7 @@ typedef struct pfcp_generic_ie {
 } pfcp_generic_ie_t;
 
 static int
-dissect_pfpc_unknown_enterprise_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+dissect_pfcp_unknown_enterprise_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     proto_tree_add_item(tree, hf_pfcp_enterprise_data, tvb, 0, -1, ENC_NA);
     proto_tree_add_expert(tree, pinfo, &ei_pfcp_ie_not_decoded_null, tvb, 0, -1);
@@ -10518,14 +10518,14 @@ dissect_pfcp_generic_enterprise_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree
         if (ie_table == NULL)
         {
             // No IE-table is given so no specific decoding can be performed
-            offset = dissect_pfpc_unknown_enterprise_ie(data_tvb, pinfo, tree, data);
+            offset = dissect_pfcp_unknown_enterprise_ie(data_tvb, pinfo, tree, data);
         } else {
             // A dissector-table is provided from which an IE-specific dissector can be looked up
             offset = dissector_try_uint_new(ie_table, ie_type, data_tvb, pinfo, tree, FALSE, data);
 
             // Fallback to unknown-ie dissector
             if (offset == 0) {
-                offset = dissect_pfpc_unknown_enterprise_ie(data_tvb, pinfo, tree, data);
+                offset = dissect_pfcp_unknown_enterprise_ie(data_tvb, pinfo, tree, data);
             }
         }
 

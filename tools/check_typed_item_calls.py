@@ -824,7 +824,12 @@ class Item:
         self.strings = strings
         self.mask_exact_width = mask_exact_width
 
-        global warnings_found
+        global warnings_found, errors_found
+
+        if blurb == '0':
+            print('Error:', filename, hf, ': - filter "' + filter +
+                '" has blurb of 0 - if no string, please set NULL instead')
+            errors_found += 1
 
         self.set_mask_value(macros)
 
@@ -1258,12 +1263,27 @@ class Item:
 
     def check_boolean_length(self):
         global errors_found
-        # If mask is 0, display must be BASE_NONE.  TODO: modify test to use self.display != 'BASE_NONE' !
-        if self.item_type == 'FT_BOOLEAN' and self.mask_read and self.mask_value == 0 and self.display_value != 0:
+        # If mask is 0, display must be BASE_NONE.
+        if self.item_type == 'FT_BOOLEAN' and self.mask_read and self.mask_value == 0 and self.display != 'BASE_NONE':
             print('Error:', self.filename, self.hf, 'type is FT_BOOLEAN, no mask set (', self.mask, ') - display should be BASE_NONE, is instead', self.display)
             errors_found += 1
         # TODO: check for length > 64?
 
+    def check_string_display(self):
+        global warnings_found
+        if self.item_type in { 'FT_STRING', 'FT_STRINGZ', 'FT_UINT_STRING'}:
+            if self.display != 'BASE_NONE':
+                print('Warning:', self.filename, self.hf, 'type is', self.item_type, 'display must be BASE_NONE, is instead', self.display)
+                warnings_found += 1
+
+
+
+
+    def check_ipv4_display(self):
+        global errors_found
+        if self.item_type == 'FT_IPv4' and self.display not in { 'BASE_NETMASK', 'BASE_NONE' }:
+            print('Error:', self.filename, self.hf, 'type is FT_IPv4, should be BASE_NETMASK or BASE_NONE, is instead', self.display)
+            errors_found += 1
 
 
 class CombinedCallsCheck:
@@ -1442,7 +1462,7 @@ def isGeneratedFile(filename):
 
 def find_macros(filename):
     # Pre-populate with some useful values..
-    macros = { 'BASE_NONE' : 0 }
+    macros = { 'BASE_NONE' : 0,  'BASE_DEC' : 1 }
 
     with open(filename, 'r', encoding="utf8") as f:
         contents = f.read()
@@ -1679,12 +1699,14 @@ def checkFile(filename, check_mask=False, mask_exact_width=False, check_label=Fa
         # Only checking if almost every field does match.
         checking = len(items_defined) and matches<len(items_defined) and ((matches / len(items_defined)) > 0.93)
         if checking:
-            print(filename, ':', matches, 'label-vs-filter matches of out of', len(items_defined), 'so reporting mismatches')
+            print(filename, ':', matches, 'label-vs-filter matches out of', len(items_defined), 'so reporting mismatches')
             for hf in items_defined:
                 items_defined[hf].check_label_vs_filter(reportError=True, reportNumericalMismatch=False)
 
     for hf in items_defined:
         items_defined[hf].check_boolean_length()
+        items_defined[hf].check_string_display()
+        items_defined[hf].check_ipv4_display()
 
 
 
