@@ -3929,7 +3929,7 @@ static void
   if (detected_sasl_security) {
       ldap_info->auth_type=LDAP_AUTH_SASL;
       ldap_info->first_auth_frame=pinfo->num;
-      ldap_info->auth_mech=wmem_strdup(wmem_file_scope(), "UNKNOWN");
+      ldap_info->auth_mech=wmem_strdup(wmem_file_scope(), "GSS-SPNEGO");
       doing_sasl_security=TRUE;
   }
 
@@ -5680,7 +5680,7 @@ void proto_register_ldap(void) {
 
   ldap_tap=register_tap("ldap");
 
-  ldap_name_dissector_table = register_dissector_table("ldap.name", "LDAP Attribute Type Dissectors", proto_cldap, FT_STRING, STRING_CASE_SENSITIVE);
+  ldap_name_dissector_table = register_dissector_table("ldap.name", "LDAP Attribute Type Dissectors", proto_cldap, FT_STRING, STRING_CASE_INSENSITIVE);
 
   register_srt_table(proto_ldap, NULL, 1, ldapstat_packet, ldapstat_init, NULL);
 }
