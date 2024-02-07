@@ -20,6 +20,7 @@
 #include <wsutil/pint.h>
 
 #include "packet-ubx.h"
+#include "packet-sbas_l1.h"
 
 /*
  * Dissects the UBX protocol of u-blox GNSS receivers as defined by the
@@ -304,11 +305,43 @@ static const value_string UBX_CFG_GNSS_GLO_SIGCFGMASK[] = {
     {0, NULL}
 };
 
+/* SBAS mode */
+static const value_string UBX_SBAS_MODE[] = {
+    {0, "Disabled"},
+    {1, "Enabled integrity"},
+    {3, "Enabled test mode"},
+    {0, NULL}
+};
+
+/* SBAS system */
+static const value_string UBX_SBAS_SYSTEM[] = {
+    {-1, "Unknown"},
+    {0, "WAAS"},
+    {1, "EGNOS"},
+    {2, "MSAS"},
+    {3, "GAGAN"},
+    {16, "GPS"},
+    {0, NULL}
+};
 
 /* SBAS testbed description */
 static const value_string UBX_SBAS_TESTBED[] = {
     {0, "Ignore data when in test mode (SBAS msg 0)"},
     {1, "Use data anyhow"},
+    {0, NULL}
+};
+
+/* UTC standard identifier */
+static const value_string UBX_UTC_STD_ID[] = {
+    {0, "Information not available"},
+    {1, "Communications Research Labratory (CRL), Tokyo, Japan"},
+    {2, "National Institute of Standards and Technology (NIST)"},
+    {3, "U.S. Naval Observatory (USNO)"},
+    {4, "International Bureau of Weights and Measures (BIPM)"},
+    {5, "European laboratories"},
+    {6, "Former Soviet Union (SU)"},
+    {7, "National Time Service Center (NTSC), China"},
+    {15, "Unknown"},
     {0, NULL}
 };
 
@@ -346,6 +379,7 @@ static int hf_ubx_cfg_gnss_blk_qzss_sigcfgmask;
 static int hf_ubx_cfg_gnss_blk_glo_sigcfgmask;
 
 static int hf_ubx_cfg_sbas;
+static int hf_ubx_cfg_sbas_mode;
 static int hf_ubx_cfg_sbas_mode_enabled;
 static int hf_ubx_cfg_sbas_mode_test;
 static int hf_ubx_cfg_sbas_usage_range;
@@ -392,6 +426,12 @@ static int hf_ubx_cfg_sbas_scanmode_prn122;
 static int hf_ubx_cfg_sbas_scanmode_prn121;
 static int hf_ubx_cfg_sbas_scanmode_prn120;
 
+static int * const ubx_cfg_sbas_mode_fields[] = {
+    &hf_ubx_cfg_sbas_mode_enabled,
+    &hf_ubx_cfg_sbas_mode_test,
+    NULL
+};
+
 static int hf_ubx_nav_dop;
 static int hf_ubx_nav_dop_itow;
 static int hf_ubx_nav_dop_gdop;
@@ -428,6 +468,7 @@ static int hf_ubx_nav_pvt_day;
 static int hf_ubx_nav_pvt_hour;
 static int hf_ubx_nav_pvt_min;
 static int hf_ubx_nav_pvt_sec;
+static int hf_ubx_nav_pvt_valid;
 static int hf_ubx_nav_pvt_validmag;
 static int hf_ubx_nav_pvt_fullyresolved;
 static int hf_ubx_nav_pvt_validtime;
@@ -435,10 +476,12 @@ static int hf_ubx_nav_pvt_validdate;
 static int hf_ubx_nav_pvt_tacc;
 static int hf_ubx_nav_pvt_nano;
 static int hf_ubx_nav_pvt_fixtype;
+static int hf_ubx_nav_pvt_flags;
 static int hf_ubx_nav_pvt_headvehvalid;
 static int hf_ubx_nav_pvt_psmstate;
 static int hf_ubx_nav_pvt_diffsoln;
 static int hf_ubx_nav_pvt_gnssfixok;
+static int hf_ubx_nav_pvt_flags2;
 static int hf_ubx_nav_pvt_confirmedtime;
 static int hf_ubx_nav_pvt_confirmeddate;
 static int hf_ubx_nav_pvt_confirmedavai;
@@ -464,6 +507,29 @@ static int hf_ubx_nav_pvt_headveh;
 static int hf_ubx_nav_pvt_magdec;
 static int hf_ubx_nav_pvt_magacc;
 
+static int * const ubx_nav_pvt_valid_fields[] = {
+    &hf_ubx_nav_pvt_validdate,
+    &hf_ubx_nav_pvt_validtime,
+    &hf_ubx_nav_pvt_fullyresolved,
+    &hf_ubx_nav_pvt_validmag,
+    NULL
+};
+
+static int * const ubx_nav_pvt_flags_fields[] = {
+    &hf_ubx_nav_pvt_gnssfixok,
+    &hf_ubx_nav_pvt_diffsoln,
+    &hf_ubx_nav_pvt_psmstate,
+    &hf_ubx_nav_pvt_headvehvalid,
+    NULL
+};
+
+static int * const ubx_nav_pvt_flags2_fields[] = {
+    &hf_ubx_nav_pvt_confirmedavai,
+    &hf_ubx_nav_pvt_confirmeddate,
+    &hf_ubx_nav_pvt_confirmedtime,
+    NULL
+};
+
 static int hf_ubx_nav_sat;
 static int hf_ubx_nav_sat_itow;
 static int hf_ubx_nav_sat_version;
@@ -475,6 +541,7 @@ static int hf_ubx_nav_sat_cn0;
 static int hf_ubx_nav_sat_elev;
 static int hf_ubx_nav_sat_azim;
 static int hf_ubx_nav_sat_pr_res;
+static int hf_ubx_nav_sat_flags;
 static int hf_ubx_nav_sat_quality_ind;
 static int hf_ubx_nav_sat_sv_used;
 static int hf_ubx_nav_sat_health;
@@ -492,17 +559,101 @@ static int hf_ubx_nav_sat_spartn_corr_used;
 static int hf_ubx_nav_sat_pr_corr_used;
 static int hf_ubx_nav_sat_cr_corr_used;
 static int hf_ubx_nav_sat_do_corr_used;
-static int hf_ubx_nav_sat_clas_corr_used;
+
+static int * const ubx_nav_sat_flags_fields[] = {
+    &hf_ubx_nav_sat_quality_ind,
+    &hf_ubx_nav_sat_sv_used,
+    &hf_ubx_nav_sat_health,
+    &hf_ubx_nav_sat_diff_corr,
+    &hf_ubx_nav_sat_smoothed,
+    &hf_ubx_nav_sat_orbit_src,
+    &hf_ubx_nav_sat_eph_avail,
+    &hf_ubx_nav_sat_alm_avail,
+    &hf_ubx_nav_sat_ano_avail,
+    &hf_ubx_nav_sat_aop_avail,
+    &hf_ubx_nav_sat_sbas_corr_used,
+    &hf_ubx_nav_sat_rtcm_corr_used,
+    &hf_ubx_nav_sat_slas_corr_used,
+    &hf_ubx_nav_sat_spartn_corr_used,
+    &hf_ubx_nav_sat_pr_corr_used,
+    &hf_ubx_nav_sat_cr_corr_used,
+    &hf_ubx_nav_sat_do_corr_used,
+    NULL
+};
+
+static int hf_ubx_nav_sbas;
+static int hf_ubx_nav_sbas_itow;
+static int hf_ubx_nav_sbas_geo;
+static int hf_ubx_nav_sbas_mode;
+static int hf_ubx_nav_sbas_sys;
+static int hf_ubx_nav_sbas_service;
+static int hf_ubx_nav_sbas_service_ranging;
+static int hf_ubx_nav_sbas_service_corrections;
+static int hf_ubx_nav_sbas_service_integrity;
+static int hf_ubx_nav_sbas_service_testmode;
+static int hf_ubx_nav_sbas_service_bad;
+static int hf_ubx_nav_sbas_cnt;
+static int hf_ubx_nav_sbas_reserved1;
+static int hf_ubx_nav_sbas_sv_id;
+static int hf_ubx_nav_sbas_flags;
+static int hf_ubx_nav_sbas_udre;
+static int hf_ubx_nav_sbas_sv_sys;
+static int hf_ubx_nav_sbas_sv_service;
+static int hf_ubx_nav_sbas_reserved2;
+static int hf_ubx_nav_sbas_prc;
+static int hf_ubx_nav_sbas_reserved3;
+static int hf_ubx_nav_sbas_ic;
+
+static int * const ubx_nav_sbas_service_fields[] = {
+    &hf_ubx_nav_sbas_service_ranging,
+    &hf_ubx_nav_sbas_service_corrections,
+    &hf_ubx_nav_sbas_service_integrity,
+    &hf_ubx_nav_sbas_service_testmode,
+    &hf_ubx_nav_sbas_service_bad,
+    NULL
+};
 
 static int hf_ubx_nav_timegps;
 static int hf_ubx_nav_timegps_itow;
 static int hf_ubx_nav_timegps_ftow;
 static int hf_ubx_nav_timegps_week;
 static int hf_ubx_nav_timegps_leaps;
+static int hf_ubx_nav_timegps_valid;
 static int hf_ubx_nav_timegps_leapsvalid;
 static int hf_ubx_nav_timegps_weekvalid;
 static int hf_ubx_nav_timegps_towvalid;
 static int hf_ubx_nav_timegps_tacc;
+
+static int * const ubx_nav_timegps_valid_fields[] = {
+    &hf_ubx_nav_timegps_towvalid,
+    &hf_ubx_nav_timegps_weekvalid,
+    &hf_ubx_nav_timegps_leapsvalid,
+    NULL
+};
+
+static int hf_ubx_nav_timeutc;
+static int hf_ubx_nav_timeutc_itow;
+static int hf_ubx_nav_timeutc_tacc;
+static int hf_ubx_nav_timeutc_nano;
+static int hf_ubx_nav_timeutc_year;
+static int hf_ubx_nav_timeutc_month;
+static int hf_ubx_nav_timeutc_day;
+static int hf_ubx_nav_timeutc_hour;
+static int hf_ubx_nav_timeutc_min;
+static int hf_ubx_nav_timeutc_sec;
+static int hf_ubx_nav_timeutc_valid;
+static int hf_ubx_nav_timeutc_validtow;
+static int hf_ubx_nav_timeutc_validwkn;
+static int hf_ubx_nav_timeutc_validutc;
+static int hf_ubx_nav_timeutc_utcstandard;
+
+static int * const ubx_nav_timeutc_valid_fields[] = {
+    &hf_ubx_nav_timeutc_validtow,
+    &hf_ubx_nav_timeutc_validwkn,
+    &hf_ubx_nav_timeutc_validutc,
+    &hf_ubx_nav_timeutc_utcstandard,
+    NULL
+};
 
 static int hf_ubx_nav_velecef;
 static int hf_ubx_nav_velecef_itow;
@@ -510,6 +661,49 @@ static int hf_ubx_nav_velecef_ecefvx;
 static int hf_ubx_nav_velecef_ecefvy;
 static int hf_ubx_nav_velecef_ecefvz;
 static int hf_ubx_nav_velecef_sacc;
+
+static int hf_ubx_rxm_rawx;
+static int hf_ubx_rxm_rawx_rcvtow;
+static int hf_ubx_rxm_rawx_week;
+static int hf_ubx_rxm_rawx_leaps;
+static int hf_ubx_rxm_rawx_nummeas;
+static int hf_ubx_rxm_rawx_recstat;
+static int hf_ubx_rxm_rawx_recstat_leapsec;
+static int hf_ubx_rxm_rawx_recstat_clkreset;
+static int hf_ubx_rxm_rawx_version;
+static int hf_ubx_rxm_rawx_reserved1;
+static int hf_ubx_rxm_rawx_prmes;
+static int hf_ubx_rxm_rawx_cpmes;
+static int hf_ubx_rxm_rawx_domes;
+static int hf_ubx_rxm_rawx_gnssid;
+static int hf_ubx_rxm_rawx_svid;
+static int hf_ubx_rxm_rawx_sigid;
+static int hf_ubx_rxm_rawx_freqid;
+static int hf_ubx_rxm_rawx_locktime;
+static int hf_ubx_rxm_rawx_cn0;
+static int hf_ubx_rxm_rawx_prstdev;
+static int hf_ubx_rxm_rawx_cpstdev;
+static int hf_ubx_rxm_rawx_dostdev;
+static int hf_ubx_rxm_rawx_trkstat;
+static int hf_ubx_rxm_rawx_trkstat_prvalid;
+static int hf_ubx_rxm_rawx_trkstat_cpvalid;
+static int hf_ubx_rxm_rawx_trkstat_halfcyc;
+static int hf_ubx_rxm_rawx_trkstat_subhalfcyc;
+static int hf_ubx_rxm_rawx_reserved2;
+
+static int * const ubx_rxm_rawx_recstat_fields[] = {
+    &hf_ubx_rxm_rawx_recstat_leapsec,
+    &hf_ubx_rxm_rawx_recstat_clkreset,
+    NULL
+};
+
+static int * const ubx_rxm_rawx_trkstat_fields[] = {
+    &hf_ubx_rxm_rawx_trkstat_prvalid,
+    &hf_ubx_rxm_rawx_trkstat_cpvalid,
+    &hf_ubx_rxm_rawx_trkstat_halfcyc,
+    &hf_ubx_rxm_rawx_trkstat_subhalfcyc,
+    NULL
+};
 
 static int hf_ubx_rxm_sfrbx;
 static int hf_ubx_rxm_sfrbx_gnssid;
@@ -535,6 +729,7 @@ static int ett_ubx_ack_nak;
 static int ett_ubx_cfg_gnss;
 static int ett_ubx_cfg_gnss_block[255];
 static int ett_ubx_cfg_sbas;
+static int ett_ubx_cfg_sbas_mode;
 static int ett_ubx_cfg_sbas_scanmode;
 static int ett_ubx_nav_dop;
 static int ett_ubx_nav_eoe;
@@ -542,11 +737,25 @@ static int ett_ubx_nav_odo;
 static int ett_ubx_nav_posecef;
 static int ett_ubx_nav_pvt;
 static int ett_ubx_nav_pvt_datetime;
+static int ett_ubx_nav_pvt_valid;
+static int ett_ubx_nav_pvt_flags;
+static int ett_ubx_nav_pvt_flags2;
 static int ett_ubx_nav_sat;
-static int ett_ubx_nav_sat_sv_info[309];
+static int ett_ubx_nav_sat_sv_info[255];
+static int ett_ubx_nav_sat_flags;
+static int ett_ubx_nav_sbas;
+static int ett_ubx_nav_sbas_service;
+static int ett_ubx_nav_sbas_sv_info[255];
 static int ett_ubx_nav_timegps;
 static int ett_ubx_nav_timegps_tow;
+static int ett_ubx_nav_timegps_valid;
+static int ett_ubx_nav_timeutc;
+static int ett_ubx_nav_timeutc_valid;
 static int ett_ubx_nav_velecef;
+static int ett_ubx_rxm_rawx;
+static int ett_ubx_rxm_rawx_recstat;
+static int ett_ubx_rxm_rawx_trkstat;
+static int ett_ubx_rxm_rawx_meas[255];
 static int ett_ubx_rxm_sfrbx;
 
 static dissector_handle_t ubx_handle;
@@ -562,6 +771,11 @@ static guint16 chksum_fletcher_8(const guint8 *data, const gint len) {
     }
 
     return (ck_b << 8) | ck_a;
+}
+
+/* Format carrier phase standard deviation */
+static void fmt_cpstdev(gchar *label, guint32 p) {
+    snprintf(label, ITEM_LABEL_LENGTH, "%d.%03d cycles", (p * 4) / 1000, (p * 4) % 1000);
 }
 
 /* Format magnetic declination */
@@ -585,6 +799,11 @@ static void fmt_decl_acc(gchar *label, guint32 a) {
 /* Format Dillution of Precision */
 static void fmt_dop(gchar *label, guint32 dop) {
     snprintf(label, ITEM_LABEL_LENGTH, "%i.%02i", dop / 100, dop % 100);
+}
+
+/* Format Doppler standard deviation */
+static void fmt_dostdev(gchar *label, guint32 p) {
+    snprintf(label, ITEM_LABEL_LENGTH, "%d.%03d Hz", (1 << p) * 2 / 1000, ((1 << p) * 2) % 1000);
 }
 
 /* Format heading */
@@ -625,6 +844,11 @@ static void fmt_pr_res(gchar *label, gint32 p) {
     else {
         snprintf(label, ITEM_LABEL_LENGTH, "-%d.%01dm", -p / 10, -p % 10);
     }
+}
+
+/* Format pseudo-range standard deviation */
+static void fmt_prstdev(gchar *label, guint32 p) {
+    snprintf(label, ITEM_LABEL_LENGTH, "%d.%02dm", (1 << p) / 100, (1 << p) % 100);
 }
 
 /* Dissect UBX message */
@@ -785,10 +1009,8 @@ static int dissect_ubx_cfg_sbas(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     proto_tree *ubx_cfg_sbas_tree = proto_item_add_subtree(ti, ett_ubx_cfg_sbas);
 
     // dissect the registered fields
-    proto_tree_add_item(ubx_cfg_sbas_tree, hf_ubx_cfg_sbas_mode_enabled,
-            tvb, 0, 1, ENC_NA);
-    proto_tree_add_item(ubx_cfg_sbas_tree, hf_ubx_cfg_sbas_mode_test,
-            tvb, 0, 1, ENC_NA);
+    proto_tree_add_bitmask(ubx_cfg_sbas_tree, tvb, 0, hf_ubx_cfg_sbas_mode,
+            ett_ubx_cfg_sbas_mode, ubx_cfg_sbas_mode_fields, ENC_NA);
     proto_tree_add_item(ubx_cfg_sbas_tree, hf_ubx_cfg_sbas_usage_range,
             tvb, 1, 1, ENC_NA);
     proto_tree_add_item(ubx_cfg_sbas_tree, hf_ubx_cfg_sbas_usage_diffcorr,
@@ -1009,34 +1231,18 @@ static int dissect_ubx_nav_pvt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
     proto_tree_add_item(datetime_tree, hf_ubx_nav_pvt_sec,
             tvb, 10, 1, ENC_NA);
 
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_validdate,
-            tvb, 11, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_validtime,
-            tvb, 11, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_fullyresolved,
-            tvb, 11, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_validmag,
-            tvb, 11, 1, ENC_NA);
+    proto_tree_add_bitmask(ubx_nav_pvt_tree, tvb, 11, hf_ubx_nav_pvt_valid,
+            ett_ubx_nav_pvt_valid, ubx_nav_pvt_valid_fields, ENC_NA);
     proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_tacc,
             tvb, 12, 4, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_nano,
             tvb, 16, 4, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_fixtype,
             tvb, 20, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_gnssfixok,
-            tvb, 21, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_diffsoln,
-            tvb, 21, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_psmstate,
-            tvb, 21, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_headvehvalid,
-            tvb, 21, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_confirmedavai,
-            tvb, 22, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_confirmeddate,
-            tvb, 22, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_confirmedtime,
-            tvb, 22, 1, ENC_NA);
+    proto_tree_add_bitmask(ubx_nav_pvt_tree, tvb, 21, hf_ubx_nav_pvt_flags,
+            ett_ubx_nav_pvt_flags, ubx_nav_pvt_flags_fields, ENC_NA);
+    proto_tree_add_bitmask(ubx_nav_pvt_tree, tvb, 22, hf_ubx_nav_pvt_flags2,
+            ett_ubx_nav_pvt_flags2, ubx_nav_pvt_flags2_fields, ENC_NA);
     proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_numsv,
             tvb, 23, 1, ENC_NA);
     proto_tree_add_item(ubx_nav_pvt_tree, hf_ubx_nav_pvt_lon,
@@ -1113,8 +1319,10 @@ static int dissect_ubx_nav_sat(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
         const guint32 used = (tvb_get_guint32(tvb, 16 + 12 * i, ENC_LITTLE_ENDIAN) & 0x0008) >> 3;
 
         proto_tree *sv_info_tree = proto_tree_add_subtree_format(ubx_nav_sat_tree,
-                tvb, 8 + 12 * i, 9, ett_ubx_nav_sat_sv_info[i], NULL,
-                "GNSS ID %d, SV ID %3d, used %d", gnss_id, sv_id, used);
+                tvb, 8 + 12 * i, 12, ett_ubx_nav_sat_sv_info[i], NULL,
+                "%-7s / SV ID %3d, used %d",
+                val_to_str_const(gnss_id, UBX_GNSS_ID, "Unknown GNSS ID"),
+                sv_id, used);
 
         proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_gnss_id,
             tvb,  8 + 12 * i, 1, ENC_NA);
@@ -1128,42 +1336,68 @@ static int dissect_ubx_nav_sat(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
             tvb, 12 + 12 * i, 2, ENC_LITTLE_ENDIAN);
         proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_pr_res,
             tvb, 14 + 12 * i, 2, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_quality_ind,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_sv_used,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_health,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_diff_corr,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_smoothed,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_orbit_src,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_eph_avail,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_alm_avail,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_ano_avail,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_aop_avail,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_sbas_corr_used,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_rtcm_corr_used,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_slas_corr_used,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_spartn_corr_used,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_pr_corr_used,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_cr_corr_used,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_do_corr_used,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
-        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sat_clas_corr_used,
-            tvb, 16 + 12 * i, 4, ENC_LITTLE_ENDIAN);
+        proto_tree_add_bitmask(sv_info_tree, tvb, 16 + 12 * i,
+                hf_ubx_nav_sat_flags, ett_ubx_nav_sat_flags,
+                ubx_nav_sat_flags_fields, ENC_LITTLE_ENDIAN);
+    }
+
+    return tvb_captured_length(tvb);
+}
+
+/* Dissect UBX-NAV-SBAS message */
+static int dissect_ubx_nav_sbas(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
+    guint16 i;
+    guint32 num_svs;
+
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, "UBX-NAV-SBAS");
+    col_clear(pinfo->cinfo, COL_INFO);
+
+    num_svs = tvb_get_guint8(tvb, 8);
+
+    proto_item *ti = proto_tree_add_item(tree, hf_ubx_nav_sbas,
+            tvb, 0, 12 + 12 * num_svs, ENC_NA);
+    proto_tree *ubx_nav_sbas_tree = proto_item_add_subtree(ti, ett_ubx_nav_sbas);
+
+    proto_tree_add_item(ubx_nav_sbas_tree, hf_ubx_nav_sbas_itow,
+            tvb, 0, 4, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(ubx_nav_sbas_tree, hf_ubx_nav_sbas_geo,
+            tvb, 4, 1, ENC_NA);
+    proto_tree_add_item(ubx_nav_sbas_tree, hf_ubx_nav_sbas_mode,
+            tvb, 5, 1, ENC_NA);
+    proto_tree_add_item(ubx_nav_sbas_tree, hf_ubx_nav_sbas_sys,
+            tvb, 6, 1, ENC_NA);
+    proto_tree_add_bitmask(ubx_nav_sbas_tree, tvb, 7, hf_ubx_nav_sbas_service,
+            ett_ubx_nav_sbas_service, ubx_nav_sbas_service_fields, ENC_NA);
+    proto_tree_add_item(ubx_nav_sbas_tree, hf_ubx_nav_sbas_cnt,
+            tvb, 8, 1, ENC_NA);
+    proto_tree_add_item(ubx_nav_sbas_tree, hf_ubx_nav_sbas_reserved1,
+            tvb, 9, 3, ENC_LITTLE_ENDIAN);
+
+    for (i = 0; i < num_svs; i++) {
+        const guint8 sv_id = tvb_get_guint8(tvb, 12 + 12 * i);
+
+        proto_tree *sv_info_tree = proto_tree_add_subtree_format(ubx_nav_sbas_tree,
+                tvb, 12 + 12 * i, 12, ett_ubx_nav_sbas_sv_info[i], NULL,
+                "SV ID %3d", sv_id);
+
+        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sbas_sv_id,
+            tvb,  12 + 12 * i, 1, ENC_NA);
+        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sbas_flags,
+            tvb,  13 + 12 * i, 1, ENC_NA);
+        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sbas_udre,
+            tvb,  14 + 12 * i, 1, ENC_NA);
+        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sbas_sv_sys,
+            tvb,  15 + 12 * i, 1, ENC_NA);
+        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sbas_sv_service,
+            tvb,  16 + 12 * i, 1, ENC_NA);
+        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sbas_reserved2,
+            tvb,  17 + 12 * i, 1, ENC_NA);
+        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sbas_prc,
+            tvb,  18 + 12 * i, 2, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sbas_reserved3,
+            tvb,  20 + 12 * i, 2, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(sv_info_tree, hf_ubx_nav_sbas_ic,
+            tvb,  22 + 12 * i, 2, ENC_LITTLE_ENDIAN);
     }
 
     return tvb_captured_length(tvb);
@@ -1201,14 +1435,45 @@ static int dissect_ubx_nav_timegps(tvbuff_t *tvb, packet_info *pinfo, proto_tree
             tvb, 8, 2, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(ubx_nav_timegps_tree, hf_ubx_nav_timegps_leaps,
             tvb, 10, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_timegps_tree, hf_ubx_nav_timegps_towvalid,
-            tvb, 11, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_timegps_tree, hf_ubx_nav_timegps_weekvalid,
-            tvb, 11, 1, ENC_NA);
-    proto_tree_add_item(ubx_nav_timegps_tree, hf_ubx_nav_timegps_leapsvalid,
-            tvb, 11, 1, ENC_NA);
+    proto_tree_add_bitmask(ubx_nav_timegps_tree, tvb, 11,
+            hf_ubx_nav_timegps_valid, ett_ubx_nav_timegps_valid,
+            ubx_nav_timegps_valid_fields, ENC_NA);
     proto_tree_add_item(ubx_nav_timegps_tree, hf_ubx_nav_timegps_tacc,
             tvb, 12, 4, ENC_LITTLE_ENDIAN);
+
+    return tvb_captured_length(tvb);
+}
+
+/* Dissect UBX-NAV-TIMEUTC message */
+static int dissect_ubx_nav_timeutc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, "UBX-NAV-TIMEUTC");
+    col_clear(pinfo->cinfo, COL_INFO);
+
+    proto_item *ti = proto_tree_add_item(tree, hf_ubx_nav_timeutc,
+            tvb, 0, 20, ENC_NA);
+    proto_tree *ubx_nav_timeutc_tree = proto_item_add_subtree(ti, ett_ubx_nav_timeutc);
+
+    proto_tree_add_item(ubx_nav_timeutc_tree, hf_ubx_nav_timeutc_itow,
+            tvb, 0, 4, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(ubx_nav_timeutc_tree, hf_ubx_nav_timeutc_tacc,
+            tvb, 4, 4, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(ubx_nav_timeutc_tree, hf_ubx_nav_timeutc_nano,
+            tvb, 8, 4, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(ubx_nav_timeutc_tree, hf_ubx_nav_timeutc_year,
+            tvb, 12, 2, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(ubx_nav_timeutc_tree, hf_ubx_nav_timeutc_month,
+            tvb, 14, 1, ENC_NA);
+    proto_tree_add_item(ubx_nav_timeutc_tree, hf_ubx_nav_timeutc_day,
+            tvb, 15, 1, ENC_NA);
+    proto_tree_add_item(ubx_nav_timeutc_tree, hf_ubx_nav_timeutc_hour,
+            tvb, 16, 1, ENC_NA);
+    proto_tree_add_item(ubx_nav_timeutc_tree, hf_ubx_nav_timeutc_min,
+            tvb, 17, 1, ENC_NA);
+    proto_tree_add_item(ubx_nav_timeutc_tree, hf_ubx_nav_timeutc_sec,
+            tvb, 18, 1, ENC_NA);
+    proto_tree_add_bitmask(ubx_nav_timeutc_tree, tvb, 19,
+            hf_ubx_nav_timeutc_valid, ett_ubx_nav_timeutc_valid,
+            ubx_nav_timeutc_valid_fields, ENC_NA);
 
     return tvb_captured_length(tvb);
 }
@@ -1233,6 +1498,80 @@ static int dissect_ubx_nav_velecef(tvbuff_t *tvb, packet_info *pinfo, proto_tree
             tvb, 12, 4, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(ubx_nav_velecef_tree, hf_ubx_nav_velecef_sacc,
             tvb, 16, 4, ENC_LITTLE_ENDIAN);
+
+    return tvb_captured_length(tvb);
+}
+
+/* Dissect UBX-RXM-RAWX message */
+static int dissect_ubx_rxm_rawx(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
+    guint32 i, nummeas;
+
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, "UBX-RXM-RAWX");
+    col_clear(pinfo->cinfo, COL_INFO);
+
+    nummeas = tvb_get_guint8(tvb, 11);
+
+    proto_item *ti = proto_tree_add_item(tree, hf_ubx_rxm_rawx,
+            tvb, 0, 16 + nummeas * 32, ENC_NA);
+    proto_tree *ubx_rxm_rawx_tree = proto_item_add_subtree(ti, ett_ubx_rxm_rawx);
+
+    proto_tree_add_item(ubx_rxm_rawx_tree, hf_ubx_rxm_rawx_rcvtow,
+            tvb, 0, 8, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(ubx_rxm_rawx_tree, hf_ubx_rxm_rawx_week,
+            tvb, 8, 2, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(ubx_rxm_rawx_tree, hf_ubx_rxm_rawx_leaps,
+            tvb, 10, 1, ENC_NA);
+    proto_tree_add_item(ubx_rxm_rawx_tree, hf_ubx_rxm_rawx_nummeas,
+            tvb, 11, 1, ENC_NA);
+    proto_tree_add_bitmask(ubx_rxm_rawx_tree, tvb, 12,
+            hf_ubx_rxm_rawx_recstat, ett_ubx_rxm_rawx_recstat,
+            ubx_rxm_rawx_recstat_fields, ENC_NA);
+    proto_tree_add_item(ubx_rxm_rawx_tree, hf_ubx_rxm_rawx_version,
+            tvb, 13, 1, ENC_NA);
+    proto_tree_add_item(ubx_rxm_rawx_tree, hf_ubx_rxm_rawx_reserved1,
+            tvb, 14, 2, ENC_LITTLE_ENDIAN);
+
+    for (i = 0; i < nummeas; i++) {
+        const guint8 gnss_id = tvb_get_guint8(tvb, 36 + 32 * i);
+        const guint8 sv_id = tvb_get_guint8(tvb, 37 + 32 * i);
+        const guint8 cn0 = tvb_get_guint8(tvb, 42 + 32 * i);
+
+        proto_tree *meas_tree = proto_tree_add_subtree_format(ubx_rxm_rawx_tree,
+                tvb, 16 + 32 * i, 32, ett_ubx_rxm_rawx_meas[i], NULL,
+                "%-7s / SV ID %3d / C/N0 %d dB-Hz",
+                val_to_str_const(gnss_id, UBX_GNSS_ID, "Unknown GNSS ID"),
+                sv_id, cn0);
+
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_prmes,
+                tvb, 16 + 32 * i, 8, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_cpmes,
+                tvb, 24 + 32 * i, 8, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_domes,
+                tvb, 32 + 32 * i, 4, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_gnssid,
+                tvb, 36 + 32 * i, 1, ENC_NA);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_svid,
+                tvb, 37 + 32 * i, 1, ENC_NA);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_sigid,
+                tvb, 38 + 32 * i, 1, ENC_NA);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_freqid,
+                tvb, 39 + 32 * i, 1, ENC_NA);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_locktime,
+                tvb, 40 + 32 * i, 2, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_cn0,
+                tvb, 42 + 32 * i, 1, ENC_NA);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_prstdev,
+                tvb, 43 + 32 * i, 1, ENC_NA);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_cpstdev,
+                tvb, 44 + 32 * i, 1, ENC_NA);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_dostdev,
+                tvb, 45 + 32 * i, 1, ENC_NA);
+        proto_tree_add_bitmask(meas_tree, tvb, 46,
+                hf_ubx_rxm_rawx_trkstat, ett_ubx_rxm_rawx_trkstat,
+                ubx_rxm_rawx_trkstat_fields, ENC_NA);
+        proto_tree_add_item(meas_tree, hf_ubx_rxm_rawx_reserved2,
+                tvb, 47 + 32 * i, 1, ENC_NA);
+    }
 
     return tvb_captured_length(tvb);
 }
@@ -1406,9 +1745,12 @@ void proto_register_ubx(void) {
         {&hf_ubx_cfg_sbas,
             {"UBX-CFG-SBAS", "ubx.cfg.sbas",
                 FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_cfg_sbas_mode,
+            {"SBAS mode", "ubx.cfg.sbas.mode",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
         {&hf_ubx_cfg_sbas_mode_enabled,
             {"SBAS enabled", "ubx.cfg.sbas.mode.enabled",
-                FT_UINT8, BASE_HEX, NULL, 0x01, NULL, HFILL}},
+                FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL}},
         {&hf_ubx_cfg_sbas_mode_test,
             {"SBAS testbed", "ubx.cfg.sbas.mode.test",
                 FT_UINT8, BASE_HEX, VALS(UBX_SBAS_TESTBED), 0x02, NULL, HFILL}},
@@ -1647,17 +1989,20 @@ void proto_register_ubx(void) {
         {&hf_ubx_nav_pvt_sec,
             {"Seconds", "ubx.nav.pvt.sec",
                 FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_pvt_valid,
+            {"Validity flags", "ubx.nav.pvt.valid",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
         {&hf_ubx_nav_pvt_validmag,
-            {"Valid magnetic declination", "ubx.nav.pvt.validmag",
+            {"Valid magnetic declination", "ubx.nav.pvt.valid.validmag",
                 FT_BOOLEAN, 8, NULL, 0x08, NULL, HFILL}},
         {&hf_ubx_nav_pvt_fullyresolved,
-            {"UTC time of day fully resolved", "ubx.nav.pvt.fullyresolved",
+            {"UTC time of day fully resolved", "ubx.nav.pvt.valid.fullyresolved",
                 FT_BOOLEAN, 8, NULL, 0x04, NULL, HFILL}},
         {&hf_ubx_nav_pvt_validtime,
-            {"valid UTC time of day", "ubx.nav.pvt.validtime",
+            {"valid UTC time of day", "ubx.nav.pvt.valid.validtime",
                 FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL}},
         {&hf_ubx_nav_pvt_validdate,
-            {"valid UTC date", "ubx.nav.pvt.validdate",
+            {"valid UTC date", "ubx.nav.pvt.valid.validdate",
                 FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL}},
         {&hf_ubx_nav_pvt_tacc,
             {"Time accuracy estimate", "ubx.nav.pvt.tacc",
@@ -1668,26 +2013,32 @@ void proto_register_ubx(void) {
         {&hf_ubx_nav_pvt_fixtype,
             {"GNSS fix type", "ubx.nav.pvt.fixtype",
                 FT_UINT8, BASE_DEC, VALS(UBX_GNSS_FIX_TYPE), 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_pvt_flags,
+            {"Fix status flags", "ubx.nav.pvt.flags",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
         {&hf_ubx_nav_pvt_headvehvalid,
-            {"heading of vehicle is valid", "ubx.nav.pvt.headvehvalid",
+            {"heading of vehicle is valid", "ubx.nav.pvt.flags.headvehvalid",
                 FT_BOOLEAN, 8, NULL, 0x20, NULL, HFILL}},
         {&hf_ubx_nav_pvt_psmstate,
-            {"PSM state", "ubx.nav.pvt.psmstate",
+            {"PSM state", "ubx.nav.pvt.flags.psmstate",
                 FT_UINT8, BASE_DEC, NULL, 0x1c, NULL, HFILL}},
         {&hf_ubx_nav_pvt_diffsoln,
-            {"differential corrections were applied", "ubx.nav.pvt.diffsoln",
+            {"differential corrections were applied", "ubx.nav.pvt.flags.diffsoln",
                 FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL}},
         {&hf_ubx_nav_pvt_gnssfixok,
-            {"valid fix", "ubx.nav.pvt.gnssfixok",
+            {"valid fix", "ubx.nav.pvt.flags.gnssfixok",
                 FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL}},
+        {&hf_ubx_nav_pvt_flags2,
+            {"Additional flags", "ubx.nav.pvt.flags2",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
         {&hf_ubx_nav_pvt_confirmedtime,
-            {"UTC time of day could be confirmed", "ubx.nav.pvt.confirmedtime",
+            {"UTC time of day could be confirmed", "ubx.nav.pvt.flags2.confirmedtime",
                 FT_BOOLEAN, 8, NULL, 0x80, NULL, HFILL}},
         {&hf_ubx_nav_pvt_confirmeddate,
-            {"UTC date could be validated", "ubx.nav.pvt.confirmeddate",
+            {"UTC date could be validated", "ubx.nav.pvt.flags2.confirmeddate",
                 FT_BOOLEAN, 8, NULL, 0x40, NULL, HFILL}},
         {&hf_ubx_nav_pvt_confirmedavai,
-            {"information about UTC date and time of day validity confirmation is available", "ubx.nav.pvt.confirmedavai",
+            {"information about UTC date and time of day validity confirmation is available", "ubx.nav.pvt.flags2.confirmedavai",
                 FT_BOOLEAN, 8, NULL, 0x20, NULL, HFILL}},
         {&hf_ubx_nav_pvt_numsv,
             {"Number of satellite vehicles used in Nav solution", "ubx.nav.pvt.numsv",
@@ -1787,60 +2138,128 @@ void proto_register_ubx(void) {
         {&hf_ubx_nav_sat_pr_res,
             {"Pseudorange residual", "ubx.nav.sat.pr_res",
                 FT_INT16, BASE_CUSTOM, CF_FUNC(&fmt_pr_res), 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sat_flags,
+            {"Bitmask", "ubx.nav.sat.flags",
+                FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL}},
         {&hf_ubx_nav_sat_quality_ind,
-            {"Signal quality indicator", "ubx.nav.sat.quality_ind",
+            {"Signal quality indicator", "ubx.nav.sat.flags.quality_ind",
                 FT_UINT32, BASE_HEX, VALS(UBX_SIGNAL_QUALITY_INDICATOR), 0x00000007, NULL, HFILL}},
         {&hf_ubx_nav_sat_sv_used,
-            {"Signal used for navigation", "ubx.nav.sat.sv_used",
+            {"Signal used for navigation", "ubx.nav.sat.flags.sv_used",
                 FT_UINT32, BASE_HEX, NULL, 0x00000008, NULL, HFILL}},
         {&hf_ubx_nav_sat_health,
-            {"Signal health", "ubx.nav.sat.health",
+            {"Signal health", "ubx.nav.sat.flags.health",
                 FT_UINT32, BASE_HEX, VALS(UBX_SIGNAL_HEALTH), 0x00000030, NULL, HFILL}},
         {&hf_ubx_nav_sat_diff_corr,
-            {"Differential correction available", "ubx.nav.sat.diff_corr",
+            {"Differential correction available", "ubx.nav.sat.flags.diff_corr",
                 FT_UINT32, BASE_HEX, NULL, 0x00000040, NULL, HFILL}},
         {&hf_ubx_nav_sat_smoothed,
-            {"Carrier smoothed pseudorange used", "ubx.nav.sat.smoothed",
+            {"Carrier smoothed pseudorange used", "ubx.nav.sat.flags.smoothed",
                 FT_UINT32, BASE_HEX, NULL, 0x00000080, NULL, HFILL}},
         {&hf_ubx_nav_sat_orbit_src,
-            {"Orbit source", "ubx.nav.sat.orbit_src",
+            {"Orbit source", "ubx.nav.sat.flags.orbit_src",
                 FT_UINT32, BASE_HEX, VALS(UBX_ORBIT_SOURCE), 0x00000700, NULL, HFILL}},
         {&hf_ubx_nav_sat_eph_avail,
-            {"Ephemeris available", "ubx.nav.sat.eph_avail",
+            {"Ephemeris available", "ubx.nav.sat.flags.eph_avail",
                 FT_UINT32, BASE_HEX, NULL, 0x00000800, NULL, HFILL}},
         {&hf_ubx_nav_sat_alm_avail,
-            {"Almanac available", "ubx.nav.sat.alm_avail",
+            {"Almanac available", "ubx.nav.sat.flags.alm_avail",
                 FT_UINT32, BASE_HEX, NULL, 0x00001000, NULL, HFILL}},
         {&hf_ubx_nav_sat_ano_avail,
-            {"AssistNow Offline data available", "ubx.nav.sat.ano_avail",
+            {"AssistNow Offline data available", "ubx.nav.sat.flags.ano_avail",
                 FT_UINT32, BASE_HEX, NULL, 0x00002000, NULL, HFILL}},
         {&hf_ubx_nav_sat_aop_avail,
-            {"AssistNow Autonomous data available", "ubx.nav.sat.aop_avail",
+            {"AssistNow Autonomous data available", "ubx.nav.sat.flags.aop_avail",
                 FT_UINT32, BASE_HEX, NULL, 0x00004000, NULL, HFILL}},
         {&hf_ubx_nav_sat_sbas_corr_used,
-            {"SBAS corrections used", "ubx.nav.sat.sbas_corr_used",
+            {"SBAS corrections used", "ubx.nav.sat.flags.sbas_corr_used",
                 FT_UINT32, BASE_HEX, NULL, 0x00010000, NULL, HFILL}},
         {&hf_ubx_nav_sat_rtcm_corr_used,
-            {"RTCM corrections used", "ubx.nav.sat.rtcm_corr_used",
+            {"RTCM corrections used", "ubx.nav.sat.flags.rtcm_corr_used",
                 FT_UINT32, BASE_HEX, NULL, 0x00020000, NULL, HFILL}},
         {&hf_ubx_nav_sat_slas_corr_used,
-            {"QZSS SLAS corrections used", "ubx.nav.sat.slas_corr_used",
+            {"QZSS SLAS corrections used", "ubx.nav.sat.flags.slas_corr_used",
                 FT_UINT32, BASE_HEX, NULL, 0x00040000, NULL, HFILL}},
         {&hf_ubx_nav_sat_spartn_corr_used,
-            {"SPARTN corrections used", "ubx.nav.sat.spartn_corr_used",
+            {"SPARTN corrections used", "ubx.nav.sat.flags.spartn_corr_used",
                 FT_UINT32, BASE_HEX, NULL, 0x00080000, NULL, HFILL}},
         {&hf_ubx_nav_sat_pr_corr_used,
-            {"Pseudorange corrections used", "ubx.nav.sat.pr_corr_used",
+            {"Pseudorange corrections used", "ubx.nav.sat.flags.pr_corr_used",
                 FT_UINT32, BASE_HEX, NULL, 0x00100000, NULL, HFILL}},
         {&hf_ubx_nav_sat_cr_corr_used,
-            {"Carrier range corrections used", "ubx.nav.sat.cr_corr_used",
+            {"Carrier range corrections used", "ubx.nav.sat.flags.cr_corr_used",
                 FT_UINT32, BASE_HEX, NULL, 0x00200000, NULL, HFILL}},
         {&hf_ubx_nav_sat_do_corr_used,
-            {"Range rate (Doppler) corrections used", "ubx.nav.sat.do_corr_used",
+            {"Range rate (Doppler) corrections used", "ubx.nav.sat.flags.do_corr_used",
                 FT_UINT32, BASE_HEX, NULL, 0x00400000, NULL, HFILL}},
-        {&hf_ubx_nav_sat_clas_corr_used,
-            {"CLAS corrections used", "ubx.nav.sat.clas_corr_used",
-                FT_UINT32, BASE_HEX, NULL, 0x00800000, NULL, HFILL}},
+
+        // NAV-SBAS
+        {&hf_ubx_nav_sbas,
+            {"UBX-NAV-SBAS", "ubx.nav.sbas",
+                FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_itow,
+            {"iTOW", "ubx.nav.sbas.itow",
+                FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_geo,
+            {"GEO PRN", "ubx.nav.sbas.geo",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_mode,
+            {"SBAS Mode", "ubx.nav.sbas.mode",
+                FT_UINT8, BASE_DEC, VALS(UBX_SBAS_MODE), 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_sys,
+            {"SBAS System", "ubx.nav.sbas.sys",
+                FT_INT8, BASE_DEC, VALS(UBX_SBAS_SYSTEM), 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_service,
+            {"SBAS Services available", "ubx.nav.sbas.service",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_service_ranging,
+            {"GEO may be used as ranging source", "ubx.nav.sbas.service.ranging",
+                FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_service_corrections,
+            {"GEO is providing correction data", "ubx.nav.sbas.service.corrections",
+                FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_service_integrity,
+            {"GEO is providing integrity", "ubx.nav.sbas.service.integrity",
+                FT_BOOLEAN, 8, NULL, 0x04, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_service_testmode,
+            {"GEO is in test mode", "ubx.nav.sbas.service.testmode",
+                FT_BOOLEAN, 8, NULL, 0x08, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_service_bad,
+            {"Problem with signal or broadcast data indicated", "ubx.nav.sbas.service.bad",
+                FT_BOOLEAN, 8, NULL, 0x10, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_cnt,
+            {"Number of SV data following", "ubx.nav.sbas.cnt",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_reserved1,
+            {"Reserved", "ubx.nav.sbas.reserved1",
+                FT_UINT24, BASE_HEX, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_sv_id,
+            {"SV ID", "ubx.nav.sbas.sv_id",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_flags,
+            {"Flags", "ubx.nav.sbas.flags",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_udre,
+            {"Monitoring status", "ubx.nav.sbas.udre",
+                FT_UINT8, BASE_DEC, VALS(UDREI_EVALUATION), 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_sv_sys,
+            {"System", "ubx.nav.sbas.sv_sys",
+                FT_INT8, BASE_DEC, VALS(UBX_SBAS_SYSTEM), 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_sv_service,
+            {"Service", "ubx.nav.sbas.sv_service",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_reserved2,
+            {"Reserved", "ubx.nav.sbas.reserved2",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_prc,
+            {"Pseudo Range correction", "ubx.nav.sbas.prc",
+                FT_INT16, BASE_DEC|BASE_UNIT_STRING, &units_centimeter_centimeters, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_reserved3,
+            {"Reserved", "ubx.nav.sbas.reserved3",
+                FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_sbas_ic,
+            {"Ionosphere correction", "ubx.nav.sbas.ic",
+                FT_INT16, BASE_DEC|BASE_UNIT_STRING, &units_centimeter_centimeters, 0x0, NULL, HFILL}},
 
         // NAV-TIMEGPS
         {&hf_ubx_nav_timegps,
@@ -1858,18 +2277,68 @@ void proto_register_ubx(void) {
         {&hf_ubx_nav_timegps_leaps,
             {"GPS leap seconds", "ubx.nav.timegps.leaps",
                 FT_INT8, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timegps_valid,
+            {"Validity flags", "ubx.nav.timegps.valid",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
         {&hf_ubx_nav_timegps_towvalid,
-            {"Valid GPS time of week", "ubx.nav.timegps.towvalid",
+            {"Valid GPS time of week", "ubx.nav.timegps.valid.towvalid",
                 FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL}},
         {&hf_ubx_nav_timegps_weekvalid,
-            {"Valid GPS week number", "ubx.nav.timegps.weekvalid",
+            {"Valid GPS week number", "ubx.nav.timegps.valid.weekvalid",
                 FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL}},
         {&hf_ubx_nav_timegps_leapsvalid,
-            {"Valid GPS leap seconds", "ubx.nav.timegps.leapsvalid",
+            {"Valid GPS leap seconds", "ubx.nav.timegps.valid.leapsvalid",
                 FT_BOOLEAN, 8, NULL, 0x04, NULL, HFILL}},
         {&hf_ubx_nav_timegps_tacc,
             {"Time accuracy estimate", "ubx.nav.timegps.tacc",
                 FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0x0, NULL, HFILL}},
+
+        // NAV-TIMEUTC
+        {&hf_ubx_nav_timeutc,
+            {"UBX-NAV-TIMEUTC", "ubx.nav.timeutc",
+                FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_itow,
+            {"iTOW", "ubx.nav.timeutc.itow",
+                FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_tacc,
+            {"Time accuracy estimate (UTC)", "ubx.nav.timeutc.tacc",
+                FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_nanoseconds, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_nano,
+            {"Fraction of second (UTC)", "ubx.nav.timeutc.nano",
+                FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_nanoseconds, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_year,
+            {"Year", "ubx.nav.timeutc.year",
+                FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_month,
+            {"Month", "ubx.nav.timeutc.month",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_day,
+            {"Day", "ubx.nav.timeutc.day",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_hour,
+            {"Hour of day", "ubx.nav.timeutc.hour",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_min,
+            {"Minute of hour", "ubx.nav.timeutc.min",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_sec,
+            {"Seconds of minute", "ubx.nav.timeutc.sec",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_valid,
+            {"Validity flags", "ubx.nav.timeutc.valid",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_validtow,
+            {"Valid Time of Week", "ubx.nav.timeutc.valid.validtow",
+                FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_validwkn,
+            {"Valid Week Number", "ubx.nav.timeutc.valid.validwkn",
+                FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_validutc,
+            {"Valid UTC Time", "ubx.nav.timeutc.valid.validutc",
+                FT_BOOLEAN, 8, NULL, 0x04, NULL, HFILL}},
+        {&hf_ubx_nav_timeutc_utcstandard,
+            {"utcStandard", "ubx.nav.timeutc.valid.utcstandard",
+                FT_UINT8, BASE_DEC, VALS(UBX_UTC_STD_ID), 0xf0, NULL, HFILL}},
 
         // NAV-VELECEF
         {&hf_ubx_nav_velecef,
@@ -1890,6 +2359,92 @@ void proto_register_ubx(void) {
         {&hf_ubx_nav_velecef_sacc,
             {"Speed accuracy estimate", "ubx.nav.velecef.sacc",
                 FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_cm_s, 0x0, NULL, HFILL}},
+
+        // RXM-RAWX
+        {&hf_ubx_rxm_rawx,
+            {"UBX-RXM-RAWX", "ubx.rxm.rawx",
+                FT_NONE, BASE_NONE, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_rcvtow,
+            {"Measurement time of week in receiver local time", "ubx.rxm.rawx.rcvtow",
+                FT_DOUBLE, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_week,
+            {"GPS week number in receiver local time", "ubx.rxm.rawx.week",
+                FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_leaps,
+            {"GPS leap seconds", "ubx.rxm.rawx.leaps",
+                FT_INT8, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_nummeas,
+            {"Number of measurements to follow", "ubx.rxm.rawx.nummeas",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_recstat,
+            {"Receiver tracking status bitfield", "ubx.rxm.rawx.recstat",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_recstat_leapsec,
+            {"Leap seconds have been determined", "ubx.rxm.rawx.recstat.leapsec",
+                FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_recstat_clkreset,
+            {"Clock reset applied", "ubx.rxm.rawx.recstat.clkreset",
+                FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_version,
+            {"Message version", "ubx.rxm.rawx.version",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_reserved1,
+            {"Reserved", "ubx.rxm.rawx.reserved1",
+                FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_prmes,
+            {"Pseudorange measurement", "ubx.rxm.rawx.prmes",
+                FT_DOUBLE, BASE_DEC|BASE_UNIT_STRING, &units_meter_meters, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_cpmes,
+            {"Carrier phase measurement", "ubx.rxm.rawx.cpmes",
+                FT_DOUBLE, BASE_DEC|BASE_UNIT_STRING, &units_cycle_cycles, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_domes,
+            {"Doppler measurement", "ubx.rxm.rawx.domes",
+                FT_FLOAT, BASE_DEC|BASE_UNIT_STRING, &units_hz, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_gnssid,
+            {"GNSS ID", "ubx.rxm.rawx.gnssid",
+                FT_UINT8, BASE_DEC, VALS(UBX_GNSS_ID), 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_svid,
+            {"Satellite ID", "ubx.rxm.rawx.svid",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_sigid,
+            {"Signal ID", "ubx.rxm.rawx.sigid",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_freqid,
+            {"Frequency ID", "ubx.rxm.rawx.freqid",
+                FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_locktime,
+            {"Carrier phase locktime counter", "ubx.rxm.rawx.locktime",
+                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_cn0,
+            {"C/N0", "ubx.rxm.rawx.cn0",
+                FT_UINT8, BASE_DEC|BASE_UNIT_STRING, &units_dbhz, 0x0, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_prstdev,
+            {"Estimated pseudorange measurement standard deviation", "ubx.rxm.rawx.prstdev",
+                FT_UINT8, BASE_CUSTOM, CF_FUNC(&fmt_prstdev), 0x0f, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_cpstdev,
+            {"Estimated carrier phase measurement standard deviation", "ubx.rxm.rawx.cpstdev",
+                FT_UINT8, BASE_CUSTOM, CF_FUNC(&fmt_cpstdev), 0x0f, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_dostdev,
+            {"Estimated Doppler measurement standard deviation", "ubx.rxm.rawx.dostdev",
+                FT_UINT8, BASE_CUSTOM, CF_FUNC(&fmt_dostdev), 0x0f, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_trkstat,
+            {"Tracking status bitfield", "ubx.rxm.rawx.trkstat",
+                FT_UINT8, BASE_HEX, NULL, 0x0f, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_trkstat_prvalid,
+            {"Pseudorange valid", "ubx.rxm.rawx.trkstat.prvalid",
+                FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_trkstat_cpvalid,
+            {"Carrier phase valid", "ubx.rxm.rawx.trkstat.cpvalid",
+                FT_BOOLEAN, 8, NULL, 0x02, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_trkstat_halfcyc,
+            {"Half cycle valid", "ubx.rxm.rawx.trkstat.halfcyc",
+                FT_BOOLEAN, 8, NULL, 0x04, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_trkstat_subhalfcyc,
+            {"Half cycle subtracted from phase", "ubx.rxm.rawx.trkstat.subhalfcyc",
+                FT_BOOLEAN, 8, NULL, 0x08, NULL, HFILL}},
+        {&hf_ubx_rxm_rawx_reserved2,
+            {"Reserved", "ubx.rxm.rawx.reserved2",
+                FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL}},
 
         // RXM-SFRBX
         {&hf_ubx_rxm_sfrbx,
@@ -1942,6 +2497,7 @@ void proto_register_ubx(void) {
         &ett_ubx_ack_nak,
         &ett_ubx_cfg_gnss,
         &ett_ubx_cfg_sbas,
+        &ett_ubx_cfg_sbas_mode,
         &ett_ubx_cfg_sbas_scanmode,
         &ett_ubx_nav_dop,
         &ett_ubx_nav_eoe,
@@ -1949,16 +2505,30 @@ void proto_register_ubx(void) {
         &ett_ubx_nav_posecef,
         &ett_ubx_nav_pvt,
         &ett_ubx_nav_pvt_datetime,
+        &ett_ubx_nav_pvt_valid,
+        &ett_ubx_nav_pvt_flags,
+        &ett_ubx_nav_pvt_flags2,
         &ett_ubx_nav_sat,
+        &ett_ubx_nav_sat_flags,
+        &ett_ubx_nav_sbas,
+        &ett_ubx_nav_sbas_service,
         &ett_ubx_nav_timegps,
         &ett_ubx_nav_timegps_tow,
+        &ett_ubx_nav_timegps_valid,
+        &ett_ubx_nav_timeutc,
+        &ett_ubx_nav_timeutc_valid,
         &ett_ubx_nav_velecef,
+        &ett_ubx_rxm_rawx,
+        &ett_ubx_rxm_rawx_recstat,
+        &ett_ubx_rxm_rawx_trkstat,
         &ett_ubx_rxm_sfrbx,
     };
 
     static gint *ett[array_length(ett_part)
         + array_length(ett_ubx_nav_sat_sv_info)
-        + array_length(ett_ubx_cfg_gnss_block)];
+        + array_length(ett_ubx_cfg_gnss_block)
+        + array_length(ett_ubx_nav_sbas_sv_info)
+        + array_length(ett_ubx_rxm_rawx_meas)];
 
     // fill ett with elements from ett_part,
     // pointers to ett_ubx_nav_sat_sv_info elements, and
@@ -1973,6 +2543,17 @@ void proto_register_ubx(void) {
     for (i = 0; i < array_length(ett_ubx_cfg_gnss_block); i++) {
         ett[i + array_length(ett_part) + array_length(ett_ubx_nav_sat_sv_info)]
             = &ett_ubx_cfg_gnss_block[i];
+    }
+    for (i = 0; i < array_length(ett_ubx_nav_sbas_sv_info); i++) {
+        ett[i + array_length(ett_part) + array_length(ett_ubx_nav_sat_sv_info)
+            + array_length(ett_ubx_cfg_gnss_block)]
+            = &ett_ubx_nav_sbas_sv_info[i];
+    }
+    for (i = 0; i < array_length(ett_ubx_rxm_rawx_meas); i++) {
+        ett[i + array_length(ett_part) + array_length(ett_ubx_nav_sat_sv_info)
+            + array_length(ett_ubx_cfg_gnss_block)
+            + array_length(ett_ubx_nav_sbas_sv_info)]
+            = &ett_ubx_rxm_rawx_meas[i];
     }
 
     proto_ubx = proto_register_protocol("UBX Protocol", "UBX", "ubx");
@@ -2003,7 +2584,10 @@ void proto_reg_handoff_ubx(void) {
     UBX_REGISTER_DISSECTOR(dissect_ubx_nav_posecef, UBX_NAV_POSECEF);
     UBX_REGISTER_DISSECTOR(dissect_ubx_nav_pvt,     UBX_NAV_PVT);
     UBX_REGISTER_DISSECTOR(dissect_ubx_nav_sat,     UBX_NAV_SAT);
+    UBX_REGISTER_DISSECTOR(dissect_ubx_nav_sbas,    UBX_NAV_SBAS);
     UBX_REGISTER_DISSECTOR(dissect_ubx_nav_timegps, UBX_NAV_TIMEGPS);
+    UBX_REGISTER_DISSECTOR(dissect_ubx_nav_timeutc, UBX_NAV_TIMEUTC);
     UBX_REGISTER_DISSECTOR(dissect_ubx_nav_velecef, UBX_NAV_VELECEF);
+    UBX_REGISTER_DISSECTOR(dissect_ubx_rxm_rawx,    UBX_RXM_RAWX);
     UBX_REGISTER_DISSECTOR(dissect_ubx_rxm_sfrbx,   UBX_RXM_SFRBX);
 }
