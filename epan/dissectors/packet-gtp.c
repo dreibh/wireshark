@@ -3035,7 +3035,7 @@ typedef struct {
 /* ---------------------
  * GPRS messages
  * ---------------------*/
-static _gtp_mess_items gprs_mess_items[] = {
+static const _gtp_mess_items gprs_mess_items[] = {
 
     {
         GTP_MSG_ECHO_REQ, {
@@ -3367,7 +3367,7 @@ static _gtp_mess_items gprs_mess_items[] = {
 /* -----------------------------
  * UMTS messages
  * -----------------------------*/
-static _gtp_mess_items umts_mess_items[] = {
+static const _gtp_mess_items umts_mess_items[] = {
     /* 7.2 Path Management Messages */
     {
         GTP_MSG_ECHO_REQ, {
@@ -4439,7 +4439,7 @@ check_field_presence_and_decoder(guint8 message, guint8 field, int *position, ie
 {
 
     guint i = 0;
-    _gtp_mess_items *mess_items;
+    const _gtp_mess_items *mess_items;
 
     switch (gtp_version) {
     case 0:
@@ -7539,10 +7539,6 @@ decode_gtp_src_rnc_pdp_ctx_inf(tvbuff_t * tvb, int offset, packet_info * pinfo _
  * UMTS:        29.060 v6.11.0, chapter 7.7.62
  * Additional Trace Info
  */
-static const true_false_string gtp_trace_tfs = {
-  "Should be traced",
-  "Should not be traced",
-};
 
 static const value_string gtp_trace_depth_vals[] = {
   { 0, "minimum" },
@@ -12249,12 +12245,12 @@ proto_register_gtp(void)
         },
         {&hf_gtp_trace_triggers_ggsn_mbms,
          { "MBMS Context", "gtp.trace_triggers.ggsn.mbms",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x2,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x2,
            NULL, HFILL}
         },
         {&hf_gtp_trace_triggers_ggsn_pdp,
          { "PDP Context", "gtp.trace_triggers.ggsn.pdp",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x1,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x1,
            NULL, HFILL}
         },
         {&hf_gtp_trace_triggers_ggsn,
@@ -12269,17 +12265,17 @@ proto_register_gtp(void)
         },
         {&hf_gtp_trace_loi_ggsn_gmb,
          { "Gmb", "gtp.trace_loi.ggsn.gmb",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x4,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x4,
            NULL, HFILL}
         },
         {&hf_gtp_trace_loi_ggsn_gi,
          { "Gi", "gtp.trace_loi.ggsn.gi",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x2,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x2,
            NULL, HFILL}
         },
         {&hf_gtp_trace_loi_ggsn_gn,
          { "Gn", "gtp.trace_loi.ggsn.gn",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x1,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x1,
            NULL, HFILL}
         },
         {&hf_gtp_trace_loi_ggsn,
@@ -12304,7 +12300,7 @@ proto_register_gtp(void)
         },
         {&hf_gtp_trace_triggers_bm_sc_mbms,
          { "MBMS Multicast service activation", "gtp.trace_triggers.bm_sc.mbms",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x1,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x1,
            NULL, HFILL}
         },
         {&hf_gtp_trace_triggers_bm_sc,
@@ -12314,7 +12310,7 @@ proto_register_gtp(void)
         },
         {&hf_gtp_trace_loi_bm_sc_gmb,
          { "Gmb", "gtp.trace_loi.bm_sc.gmb",
-           FT_BOOLEAN, 8, TFS(&gtp_trace_tfs), 0x1,
+           FT_BOOLEAN, 8, TFS(&tfs_should_be_traced_should_not_be_traced), 0x1,
            NULL, HFILL}
         },
         {&hf_gtp_trace_loi_bm_sc,
