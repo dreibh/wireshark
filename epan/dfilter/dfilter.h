@@ -73,6 +73,9 @@ dfilter_expand(const char *expr, df_error_t **err_ret);
 #define DF_DEBUG_FLEX		(1U << 3)
 /* Enable debug trace for lemon. */
 #define DF_DEBUG_LEMON		(1U << 4)
+/* If the root of the syntax tree is a field, load and return the field values.
+ * By default the field is only checked for existence. */
+#define DF_RETURN_VALUES        (1U << 5)
 
 /* Compiles a string to a dfilter_t.
  * On success, sets the dfilter* pointed to by dfp
@@ -113,6 +116,11 @@ dfilter_apply_edt(dfilter_t *df, struct epan_dissect *edt);
 /* Apply compiled dfilter */
 bool
 dfilter_apply(dfilter_t *df, proto_tree *tree);
+
+/* Apply compiled dfilter and return final set of fvalues (if they
+ * exist) in addition to true/false determination. */
+bool
+dfilter_apply_full(dfilter_t *df, proto_tree *tree, GPtrArray **fvals);
 
 /* Prime a proto_tree using the fields/protocols used in a dfilter. */
 void

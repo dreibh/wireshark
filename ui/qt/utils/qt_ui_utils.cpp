@@ -23,6 +23,7 @@
 #include "ui/ws_ui_util.h"
 
 #include <wsutil/str_util.h>
+#include <wsutil/file_util.h>
 
 #include <QAction>
 #include <QApplication>
@@ -33,8 +34,15 @@
 #include <QFontDatabase>
 #include <QProcess>
 #include <QUrl>
-#include <QUuid>
 #include <QScreen>
+
+#if defined(Q_OS_MAC)
+#include <ui/macosx/cocoa_bridge.h>
+#elif !defined(Q_OS_WIN) && defined(QT_DBUS_LIB)
+#include <QtDBus/QDBusConnection>
+#include <QtDBus/QDBusMessage>
+#include <QtDBus/QDBusUnixFileDescriptor>
+#endif
 
 /*
  * We might want to create our own "wsstring" class with convenience
@@ -220,34 +228,41 @@ void desktop_show_in_folder(const QString file_path)
     arguments << "/select," << path + "";
     success = QProcess::startDetached(command, arguments);
 #elif defined(Q_OS_MAC)
-    //
-    // See
-    //
-    //    https://stackoverflow.com/questions/10722740/implementing-show-in-finder-button-in-objective-c
-    //
-    // and
-    //
-    //    https://stackoverflow.com/questions/7652928/launch-finder-window-with-specific-files-selected
-    //
-    // for a way to do this using Cocoa APIs, rather than running the
-    // osascript program to get it to do this with AppleScript.
-    //
-    QStringList script_args;
-    QString escaped_path = file_path;
+    CocoaBridge::showInFinder(file_path.toUtf8());
+    success = true;
+#elif defined(QT_DBUS_LIB)
+    // First, try the FileManager1 DBus interface's "ShowItems" method.
+    // https://www.freedesktop.org/wiki/Specifications/file-manager-interface/
+    QDBusMessage message = QDBusMessage::createMethodCall(QLatin1String("org.freedesktop.FileManager1"),
+                                                          QLatin1String("/org/freedesktop/FileManager1"),
+                                                          QLatin1String("org.freedesktop.FileManager1"),
+                                                          QLatin1String("ShowItems"));
+    QStringList uris(QUrl::fromLocalFile(file_path).toString());
+    message << uris << QString();
 
-    escaped_path.replace('"', "\\\"");
-    script_args << "-e"
-               << QString("tell application \"Finder\" to reveal POSIX file \"%1\"")
-                                     .arg(escaped_path);
-    if (QProcess::execute("/usr/bin/osascript", script_args) == 0) {
-        success = true;
-        script_args.clear();
-        script_args << "-e"
-                   << "tell application \"Finder\" to activate";
-        QProcess::execute("/usr/bin/osascript", script_args);
+    message = QDBusConnection::sessionBus().call(message);
+    success = message.type() == QDBusMessage::ReplyMessage;
+
+    // If that failed, perhaps we are sandboxed.  Try using Portal Services.
+    // https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.OpenURI.html
+    if (!success) {
+        const int fd = ws_open(QFile::encodeName(file_path), O_CLOEXEC | O_PATH, 0000);
+        if (fd != -1) {
+            QDBusUnixFileDescriptor descriptor;
+            descriptor.giveFileDescriptor(fd);
+            QDBusMessage message = QDBusMessage::createMethodCall(QLatin1String("org.freedesktop.portal.Desktop"),
+                                                                  QLatin1String("/org/freedesktop/portal/desktop"),
+                                                                  QLatin1String("org.freedesktop.portal.OpenURI"),
+                                                                  QLatin1String("OpenDirectory"));
+            message << QString() << QVariant::fromValue(descriptor) << QVariantMap();
+
+            message = QDBusConnection::sessionBus().call(message);
+            success = message.type() == QDBusMessage::ReplyMessage;
+            ws_close(fd);
+        }
     }
 #else
-    // Is there a way to highlight the file using xdg-open?
+    // Any other possibilities to highlight the file before falling back to showing the folder?
 #endif
     if (!success) {
         QFileInfo file_info(file_path);

@@ -69,7 +69,8 @@ static module_t *prefs_find_module_alias(const char *name);
 static prefs_set_pref_e set_pref(gchar*, const gchar*, void *, gboolean);
 static void free_col_info(GList *);
 static void pre_init_prefs(void);
-static gboolean prefs_is_column_visible(const gchar *cols_hidden, fmt_data *cfmt);
+static gboolean prefs_is_column_visible(const gchar *cols_hidden, int col);
+static gboolean prefs_is_column_fmt_visible(const gchar *cols_hidden, fmt_data *cfmt);
 static guint prefs_module_list_foreach(wmem_tree_t *module_list, module_cb callback,
                           gpointer user_data, gboolean skip_obsolete);
 static gint find_val_for_string(const char *needle, const enum_val_t *haystack, gint default_value);
@@ -84,6 +85,7 @@ static gint find_val_for_string(const char *needle, const enum_val_t *haystack, 
 static gboolean prefs_initialized = FALSE;
 static gchar *gpf_path = NULL;
 static gchar *cols_hidden_list = NULL;
+static gchar *cols_hidden_fmt_list = NULL;
 static gboolean gui_theme_is_dark = FALSE;
 
 /*
@@ -2541,7 +2543,8 @@ static void custom_pref_no_cb(pref_t* pref _U_) {}
 /*
  * Column preference functions
  */
-#define PRS_COL_HIDDEN                   "column.hidden"
+#define PRS_COL_HIDDEN_OBS               "column.hidden"
+#define PRS_COL_HIDDEN                   "column.hide"
 #define PRS_COL_FMT                      "column.format"
 #define PRS_COL_NUM                      "column.number"
 static module_t *gui_column_module = NULL;
@@ -2562,9 +2565,11 @@ column_hidden_set_cb(pref_t* pref, const gchar* value, unsigned int* changed_fla
      * set PRS_COL_HIDDEN on the command line).
      */
     format_pref = prefs_find_preference(gui_column_module, PRS_COL_FMT);
+    int cidx = 1;
     for (clp = *format_pref->varp.list; clp != NULL; clp = clp->next) {
       cfmt = (fmt_data *)clp->data;
-      cfmt->visible = prefs_is_column_visible(*pref->varp.string, cfmt);
+      cfmt->visible = prefs_is_column_visible(*pref->varp.string, cidx);
+      cidx++;
     }
 
     return PREFS_SET_OK;
@@ -2579,7 +2584,7 @@ column_hidden_type_name_cb(void)
 static char *
 column_hidden_type_description_cb(void)
 {
-    return g_strdup("List all columns to hide in the packet list.");
+    return g_strdup("List all column indices (1-indexed) to hide in the packet list.");
 }
 
 static char *
@@ -2589,6 +2594,7 @@ column_hidden_to_str_cb(pref_t* pref, gboolean default_val)
     GList       *clp;
     fmt_data    *cfmt;
     pref_t  *format_pref;
+    int          cidx = 1;
 
     if (default_val)
         return g_strdup(pref->default_val.string);
@@ -2597,24 +2603,14 @@ column_hidden_to_str_cb(pref_t* pref, gboolean default_val)
     format_pref = prefs_find_preference(gui_column_module, PRS_COL_FMT);
     clp = (format_pref) ? *format_pref->varp.list : NULL;
     while (clp) {
-        gchar *prefs_fmt;
         cfmt = (fmt_data *) clp->data;
-        if ((cfmt->fmt == COL_CUSTOM) && (cfmt->custom_fields)) {
-            prefs_fmt = ws_strdup_printf("%s:%s:%d:%c",
-                    col_format_to_string(cfmt->fmt),
-                    cfmt->custom_fields,
-                    cfmt->custom_occurrence,
-                    cfmt->resolved ? 'R' : 'U');
-        } else {
-            prefs_fmt = g_strdup(col_format_to_string(cfmt->fmt));
-        }
         if (!cfmt->visible) {
             if (cols_hidden->len)
                 g_string_append (cols_hidden, ",");
-            g_string_append (cols_hidden, prefs_fmt);
+            g_string_append_printf (cols_hidden, "%i", cidx);
         }
-        g_free(prefs_fmt);
         clp = clp->next;
+        cidx++;
     }
 
     return g_string_free (cols_hidden, FALSE);
@@ -2795,14 +2791,19 @@ column_format_set_cb(pref_t* pref, const gchar* value, unsigned int* changed_fla
     llen             = g_list_length(col_l);
     *col_num_pref->varp.uint = llen / 2;
     col_l_elt = g_list_first(col_l);
+    int cidx = 1;
     while (col_l_elt) {
       cfmt           = g_new(fmt_data,1);
       cfmt->title    = g_strdup((gchar *)col_l_elt->data);
       col_l_elt      = col_l_elt->next;
       parse_column_format(cfmt, (char *)col_l_elt->data);
-      cfmt->visible   = prefs_is_column_visible(*hidden_pref->varp.string, cfmt);
+      cfmt->visible   = prefs_is_column_visible(*hidden_pref->varp.string, cidx);
+      if (!prefs_is_column_fmt_visible(cols_hidden_fmt_list, cfmt)) {
+          cfmt->visible = FALSE;
+      }
       col_l_elt      = col_l_elt->next;
       *pref->varp.list = g_list_append(*pref->varp.list, cfmt);
+      cidx++;
     }
 
     prefs_clear_string_list(col_l);
@@ -3200,6 +3201,8 @@ prefs_register_modules(void)
     /* For reading older preference files with "column." preferences */
     prefs_register_module_alias("column", gui_column_module);
 
+    prefs_register_obsolete_preference(gui_column_module, PRS_COL_HIDDEN_OBS);
+
     custom_cbs.free_cb = free_string_like_preference;
     custom_cbs.reset_cb = reset_string_like_preference;
     custom_cbs.set_cb = column_hidden_set_cb;
@@ -3208,7 +3211,7 @@ prefs_register_modules(void)
     custom_cbs.is_default_cb = column_hidden_is_default_cb;
     custom_cbs.to_str_cb = column_hidden_to_str_cb;
     register_string_like_preference(gui_column_module, PRS_COL_HIDDEN, "Packet list hidden columns",
-        "List all columns to hide in the packet list",
+        "List all column indices (1-indexed) to hide in the packet list",
         &cols_hidden_list, PREF_CUSTOM, &custom_cbs, FALSE);
 
     custom_cbs.free_cb = column_format_free_cb;
@@ -5034,9 +5037,54 @@ prefs_is_capture_device_hidden(const char *name)
  * Returns TRUE if the given column is visible (not hidden)
  */
 static gboolean
-prefs_is_column_visible(const gchar *cols_hidden, fmt_data *cfmt)
+prefs_is_column_visible(const gchar *cols_hidden, int col)
 {
-    gchar *tok, *cols;
+    char *tok, *cols, *p;
+    int cidx;
+
+    /*
+     * Do we have a list of hidden columns?
+     */
+    if (cols_hidden) {
+        /*
+         * Yes - check the column against each of the ones in the
+         * list.
+         */
+        cols = g_strdup(cols_hidden);
+        for (tok = strtok(cols, ","); tok; tok = strtok(NULL, ",")) {
+            tok = g_strstrip(tok);
+
+            cidx = (int)strtol(tok, &p, 10);
+            if (p == tok || *p != '\0') {
+                continue;
+            }
+            if (cidx != col) {
+                continue;
+            }
+            /*
+             * OK, they match, so it's one of the hidden fields,
+             * hence not visible.
+             */
+            g_free(cols);
+            return FALSE;
+        }
+        g_free(cols);
+    }
+
+    /*
+     * No - either there are no hidden columns or this isn't one
+     * of them - so it is visible.
+     */
+    return TRUE;
+}
+
+/*
+ * Returns TRUE if the given column is visible (not hidden)
+ */
+static gboolean
+prefs_is_column_fmt_visible(const gchar *cols_hidden, fmt_data *cfmt)
+{
+    char *tok, *cols;
     fmt_data cfmt_hidden;
 
     /*
@@ -5674,6 +5722,10 @@ set_pref(gchar *pref_name, const gchar *value, void *private_data _U_,
         filter_label = NULL;
         /* Remember to save the new UAT to file. */
         prefs.filter_expressions_old = TRUE;
+    } else if (strcmp(pref_name, "gui.column.hidden") == 0) {
+        /* Use the old column hidden list (which is by format) */
+        g_free(cols_hidden_fmt_list);
+        cols_hidden_fmt_list = g_strdup(value);
     } else if (strcmp(pref_name, "gui.version_in_start_page") == 0) {
         /* Convert deprecated value to closest current equivalent */
         if (g_ascii_strcasecmp(value, "true") == 0) {

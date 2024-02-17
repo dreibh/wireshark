@@ -19,6 +19,7 @@
 #include <config.h>
 
 #include <epan/packet.h>
+#include <epan/exceptions.h>
 #include <epan/prefs.h>
 #include "packet-tcp.h"
 
@@ -112,6 +113,11 @@ enum drbd_packet {
     P_RS_THIN_DAGTAG_REQ  = 0x4e,
     P_OV_DAGTAG_REQ       = 0x4f,
     P_OV_DAGTAG_REPLY     = 0x50,
+
+    P_WRITE_ACK_IN_SYNC   = 0x51,
+    P_RS_NEG_ACK          = 0x52,
+    P_OV_RESULT_ID        = 0x53,
+    P_RS_DEALLOCATED_ID   = 0x54,
 
     P_INITIAL_META        = 0xfff1,
     P_INITIAL_DATA        = 0xfff2,
@@ -239,6 +245,11 @@ static const value_string packet_names[] = {
     { P_RS_THIN_DAGTAG_REQ, "P_RS_THIN_DAGTAG_REQ" },
     { P_OV_DAGTAG_REQ, "P_OV_DAGTAG_REQ" },
     { P_OV_DAGTAG_REPLY, "P_OV_DAGTAG_REPLY" },
+
+    { P_WRITE_ACK_IN_SYNC, "P_WRITE_ACK_IN_SYNC" },
+    { P_RS_NEG_ACK, "P_RS_NEG_ACK" },
+    { P_OV_RESULT_ID, "P_OV_RESULT_ID" },
+    { P_RS_DEALLOCATED_ID, "P_RS_DEALLOCATED_ID" },
 
     { P_INITIAL_META, "P_INITIAL_META" },
     { P_INITIAL_DATA, "P_INITIAL_DATA" },
@@ -387,6 +398,17 @@ static const value_string disk_state_names[] = {
 #define DP_WSAME            512
 #define DP_ZEROES          1024
 
+#define OV_RESULT_SKIP         4710
+#define OV_RESULT_IN_SYNC      4711
+#define OV_RESULT_OUT_OF_SYNC  4712
+
+static const val64_string ov_result_codes[] = {
+    { OV_RESULT_SKIP, "SKIP" },
+    { OV_RESULT_IN_SYNC, "IN_SYNC" },
+    { OV_RESULT_OUT_OF_SYNC, "OUT_OF_SYNC" },
+    { 0, NULL }
+};
+
 #define DRBD_STREAM_DATA 0
 #define DRBD_STREAM_CONTROL 1
 
@@ -429,6 +451,7 @@ static void decode_payload_data_wsame(tvbuff_t *tvb, proto_tree *tree, drbd_conv
 static void decode_payload_rs_deallocated(tvbuff_t *tvb, proto_tree *tree, drbd_conv *conv_data);
 
 static void decode_payload_block_ack(tvbuff_t *tvb, proto_tree *tree, drbd_conv *conv_data);
+static void decode_payload_ov_result(tvbuff_t *tvb, proto_tree *tree, drbd_conv *conv_data);
 static void decode_payload_barrier_ack(tvbuff_t *tvb, proto_tree *tree, drbd_conv *conv_data);
 static void decode_payload_confirm_stable(tvbuff_t *tvb, proto_tree *tree, drbd_conv *conv_data);
 static void decode_payload_rq_s_reply(tvbuff_t *tvb, proto_tree *tree, drbd_conv *conv_data);
@@ -476,6 +499,7 @@ static const value_payload_decoder payload_decoders[] = {
     { P_TRIM, NULL, decode_payload_data_size },
     { P_ZEROES, NULL, decode_payload_data_size },
     { P_RS_DEALLOCATED, NULL, decode_payload_rs_deallocated },
+    { P_RS_DEALLOCATED_ID, NULL, decode_payload_block_ack },
     { P_WSAME, NULL, decode_payload_data_wsame },
     { P_DISCONNECT, NULL, NULL },
     { P_RS_DAGTAG_REQ, NULL, decode_payload_dagtag_data_request },
@@ -488,12 +512,15 @@ static const value_payload_decoder payload_decoders[] = {
     { P_PING_ACK, NULL, NULL },
     { P_RECV_ACK, NULL, decode_payload_block_ack },
     { P_WRITE_ACK, NULL, decode_payload_block_ack },
-    { P_RS_WRITE_ACK, NULL, decode_payload_block_ack },
+    { P_WRITE_ACK_IN_SYNC, NULL, decode_payload_block_ack },
     { P_SUPERSEDED, NULL, decode_payload_block_ack },
     { P_NEG_ACK, NULL, decode_payload_block_ack },
     { P_NEG_DREPLY, NULL, decode_payload_block_ack },
     { P_NEG_RS_DREPLY, NULL, decode_payload_block_ack },
+    { P_RS_WRITE_ACK, NULL, decode_payload_block_ack },
+    { P_RS_NEG_ACK, NULL, decode_payload_block_ack },
     { P_OV_RESULT, NULL, decode_payload_block_ack },
+    { P_OV_RESULT_ID, NULL, decode_payload_ov_result },
     { P_BARRIER_ACK, NULL, decode_payload_barrier_ack },
     { P_CONFIRM_STABLE, NULL, decode_payload_confirm_stable },
     { P_STATE_CHG_REPLY, NULL, decode_payload_rq_s_reply },
@@ -515,8 +542,10 @@ void proto_register_drbd(void);
 void proto_reg_handoff_drbd(void);
 
 static dissector_handle_t drbd_handle;
+static dissector_handle_t drbd_lb_tcp_handle;
 
 static int proto_drbd;
+static int proto_drbd_lb_tcp;
 
 static int hf_drbd_command;
 static int hf_drbd_length;
@@ -526,6 +555,7 @@ static int hf_drbd_auth_response_hash;
 static int hf_drbd_sector;
 static int hf_drbd_block_id;
 static int hf_drbd_seq_num;
+static int hf_drbd_ov_result;
 static int hf_drbd_dp_flags;
 static int hf_drbd_data;
 static int hf_drbd_size;
@@ -636,7 +666,11 @@ static int hf_drbd_dp_send_write_ack;
 static int hf_drbd_dp_wsame;
 static int hf_drbd_dp_zeroes;
 
+static int hf_drbd_lb_tcp_seq;
+static int hf_drbd_lb_tcp_length;
+
 static gint ett_drbd;
+static gint ett_drbd_lb_tcp;
 static gint ett_drbd_state;
 static gint ett_drbd_twopc_flags;
 static gint ett_drbd_uuid_flags;
@@ -713,7 +747,7 @@ static gboolean is_bit_set_64(guint64 value, int bit) {
 #define DRBD_MAGIC_100 0x8620ec20
 #define DRBD_TRANSPORT_RDMA_MAGIC 0x5257494E
 
-static guint get_drbd_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
+static guint read_drbd_packet_len(tvbuff_t *tvb, int offset)
 {
     guint32 magic32;
     guint16 magic16;
@@ -734,6 +768,27 @@ static guint get_drbd_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset,
     return 0;
 }
 
+static guint get_drbd_pdu_len(packet_info *pinfo, tvbuff_t *tvb, int offset, void *data _U_)
+{
+    guint drbd_len = read_drbd_packet_len(tvb, offset);
+
+    if (tvb_reported_length_remaining(tvb, offset) >= DRBD_FRAME_HEADER_100_LEN && !drbd_len) {
+        /* We have enough data to recognize any header, but none matched.
+         * Either there is data corruption or this is actually an lb-tcp
+         * stream. It is possible that the capture is missing the first lb-tcp
+         * header. In that case, the stream will be misidentified as normal
+         * DRBD on TCP.
+         *
+         * Reset the dissector and throw some exception so that a new dissector
+         * is chosen by the heuristic. */
+        conversation_t *conversation = find_or_create_conversation(pinfo);
+        conversation_set_dissector(conversation, NULL);
+        THROW(ReportedBoundsError);
+    }
+
+    return drbd_len;
+}
+
 static int dissect_drbd_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
     dissect_drbd_message(tvb, pinfo, tree);
@@ -748,27 +803,77 @@ static int dissect_drbd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
     return tvb_reported_length(tvb);
 }
 
-static gboolean test_drbd_header(tvbuff_t *tvb)
+static guint get_drbd_lb_tcp_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
-    guint reported_length = tvb_reported_length(tvb);
-    if (reported_length < DRBD_FRAME_HEADER_80_LEN || tvb_captured_length(tvb) < 4) {
-        return FALSE;
+    return 8 + tvb_get_ntohl(tvb, offset + 4);
+}
+
+static int dissect_drbd_lb_tcp_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
+{
+    proto_tree      *lb_tcp_tree;
+    proto_item      *lb_tcp_ti;
+
+    lb_tcp_ti = proto_tree_add_item(tree, proto_drbd_lb_tcp, tvb, 0, -1, ENC_NA);
+    proto_item_set_text(lb_tcp_ti, "DRBD [lb-tcp]");
+    lb_tcp_tree = proto_item_add_subtree(lb_tcp_ti, ett_drbd_lb_tcp);
+
+    proto_tree_add_item(lb_tcp_tree, hf_drbd_lb_tcp_seq, tvb, 0, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(lb_tcp_tree, hf_drbd_lb_tcp_length, tvb, 4, 4, ENC_BIG_ENDIAN);
+
+    guint offset = 8;
+    while (tvb_captured_length(tvb) >= offset + DRBD_FRAME_HEADER_80_LEN) {
+        guint length = read_drbd_packet_len(tvb, offset);
+
+        /* Was a header recognized? */
+        if (length == 0) {
+            const gchar *info_text = col_get_text(pinfo->cinfo, COL_INFO);
+
+            col_clear(pinfo->cinfo, COL_INFO);
+            if (!info_text || !info_text[0])
+                col_append_ports(pinfo->cinfo, COL_INFO, PT_TCP, pinfo->srcport, pinfo->destport);
+            col_append_str(pinfo->cinfo, COL_INFO, " [lb-tcp Payload]");
+            col_set_fence(pinfo->cinfo, COL_INFO);
+
+            break;
+        }
+
+        dissect_drbd_message(tvb_new_subset_length(tvb, offset, length), pinfo, tree);
+
+        offset += length;
     }
 
-    gboolean match = FALSE;
-    guint32 magic32 = tvb_get_ntohl(tvb, 0);
+    return tvb_reported_length(tvb);
+}
+
+static int dissect_drbd_lb_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+{
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, "DRBD lb-tcp");
+    tcp_dissect_pdus(tvb, pinfo, tree, TRUE, 8,
+            get_drbd_lb_tcp_pdu_len, dissect_drbd_lb_tcp_pdu, data);
+    return tvb_reported_length(tvb);
+}
+
+static gboolean test_drbd_header(tvbuff_t *tvb, int offset)
+{
+    int reported_length = tvb_reported_length(tvb);
+    int captured_length = tvb_captured_length(tvb);
+
+    if (reported_length < offset + DRBD_FRAME_HEADER_80_LEN || captured_length < offset + 4)
+        return FALSE;
+
+    guint32 magic32 = tvb_get_ntohl(tvb, offset);
 
     if (magic32 == DRBD_MAGIC)
-        match = TRUE;
-    else if (reported_length >= DRBD_FRAME_HEADER_100_LEN && magic32 == DRBD_MAGIC_100)
-        match = TRUE;
+        return TRUE;
+    else if (reported_length >= offset + DRBD_FRAME_HEADER_100_LEN && magic32 == DRBD_MAGIC_100)
+        return TRUE;
     else {
-        guint16 magic16 = tvb_get_ntohs(tvb, 0);
+        guint16 magic16 = tvb_get_ntohs(tvb, offset);
         if (magic16 == DRBD_MAGIC_BIG)
-            match = TRUE;
+            return TRUE;
     }
 
-    return match;
+    return FALSE;
 }
 
 static gboolean test_drbd_rdma_control_header(tvbuff_t *tvb)
@@ -785,12 +890,29 @@ static gboolean test_drbd_rdma_control_header(tvbuff_t *tvb)
 static gboolean test_drbd_protocol(tvbuff_t *tvb, packet_info *pinfo,
         proto_tree *tree, void *data _U_)
 {
-    if (!test_drbd_header(tvb))
+    if (!test_drbd_header(tvb, 0))
         return FALSE;
 
     conversation_t *conversation = find_or_create_conversation(pinfo);
     conversation_set_dissector(conversation, drbd_handle);
     dissect_drbd(tvb, pinfo, tree, data);
+
+    return TRUE;
+}
+
+static gboolean test_drbd_lb_tcp_protocol(tvbuff_t *tvb, packet_info *pinfo,
+        proto_tree *tree, void *data _U_)
+{
+    /* DRBD packets may be split between lb-tcp wrapper packets. As a result,
+     * there may be lb-tcp packets that do not contain any DRBD header.
+     * However, we have no other way to identify lb-tcp packets, so look for a
+     * DRBD header anyway. This is a best-effort solution. */
+    if (!test_drbd_header(tvb, 8))
+        return FALSE;
+
+    conversation_t *conversation = find_or_create_conversation(pinfo);
+    conversation_set_dissector(conversation, drbd_lb_tcp_handle);
+    dissect_drbd_lb_tcp(tvb, pinfo, tree, data);
 
     return TRUE;
 }
@@ -911,12 +1033,9 @@ static void dissect_drbd_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     /* Indicate what kind of message this is. */
     const gchar *packet_name = val_to_str(command, packet_names, "Unknown (0x%02x)");
     const gchar *info_text = col_get_text(pinfo->cinfo, COL_INFO);
-    if (!info_text || !info_text[0]) {
+    if (!info_text || !info_text[0])
         col_append_ports(pinfo->cinfo, COL_INFO, PT_TCP, pinfo->srcport, pinfo->destport);
-        col_append_fstr(pinfo->cinfo, COL_INFO, " [%s]", packet_name);
-    } else {
-        col_append_fstr(pinfo->cinfo, COL_INFO, " [%s]", packet_name);
-    }
+    col_append_fstr(pinfo->cinfo, COL_INFO, " [%s]", packet_name);
     col_set_fence(pinfo->cinfo, COL_INFO);
 
     conversation_t *conv = find_drbd_conversation(pinfo);
@@ -1002,9 +1121,9 @@ static void dissect_drbd_ib_control_message(tvbuff_t *tvb, packet_info *pinfo, p
     proto_tree_add_item(drbd_tree, hf_drbd_rx_desc_stolen_from, tvb, 12, 4, ENC_BIG_ENDIAN);
 }
 
-static gboolean dissect_drbd_ib(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+static gboolean dissect_drbd_ib(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-    if (!test_drbd_header(tvb) && !test_drbd_rdma_control_header(tvb))
+    if (!test_drbd_header(tvb, 0) && !test_drbd_rdma_control_header(tvb))
         return FALSE;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "DRBD RDMA");
@@ -1015,7 +1134,7 @@ static gboolean dissect_drbd_ib(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
         if (is_control_packet)
             length = DRBD_TRANSPORT_RDMA_PACKET_LEN;
         else
-            length = get_drbd_pdu_len(pinfo, tvb, 0, data);
+            length = read_drbd_packet_len(tvb, 0);
 
         /* Was a header recognized? */
         if (length == 0)
@@ -1396,6 +1515,15 @@ static void decode_payload_block_ack(tvbuff_t *tvb, proto_tree *tree, drbd_conv 
     proto_tree_add_item(tree, hf_drbd_seq_num, tvb, 20, 4, ENC_BIG_ENDIAN);
 }
 
+static void decode_payload_ov_result(tvbuff_t *tvb, proto_tree *tree, drbd_conv *conv_data _U_)
+{
+    proto_tree_add_item(tree, hf_drbd_sector, tvb, 0, 8, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_drbd_block_id, tvb, 8, 8, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(tree, hf_drbd_size, tvb, 16, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_drbd_seq_num, tvb, 20, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(tree, hf_drbd_ov_result, tvb, 24, 8, ENC_BIG_ENDIAN);
+}
+
 static void decode_payload_barrier_ack(tvbuff_t *tvb, proto_tree *tree, drbd_conv *conv_data _U_)
 {
     proto_tree_add_item(tree, hf_drbd_barrier, tvb, 0, 4, ENC_LITTLE_ENDIAN);
@@ -1510,6 +1638,7 @@ void proto_register_drbd(void)
         { &hf_drbd_sector, { "Sector", "drbd.sector", FT_UINT64, BASE_DEC_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_block_id, { "Block ID", "drbd.block_id", FT_UINT64, BASE_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_seq_num, { "Sequence number", "drbd.seq_num", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+        { &hf_drbd_ov_result, { "Online verify result", "drbd.ov_result", FT_UINT64, BASE_DEC|BASE_VAL64_STRING, VALS64(ov_result_codes), 0x0, NULL, HFILL }},
         { &hf_drbd_dp_flags, { "Data flags", "drbd.dp_flags", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_data, { "Data", "drbd.data", FT_BYTES, BASE_NO_DISPLAY_VALUE, NULL, 0x0, NULL, HFILL }},
         { &hf_drbd_size, { "Size", "drbd.size", FT_UINT32, BASE_DEC_HEX, NULL, 0x0, NULL, HFILL }},
@@ -1621,8 +1750,14 @@ void proto_register_drbd(void)
         { &hf_drbd_dp_zeroes, { "zeroes", "drbd.dp_flag.zeroes", FT_BOOLEAN, 32, NULL, DP_ZEROES, NULL, HFILL }},
     };
 
+    static hf_register_info hf_lb_tcp[] = {
+        { &hf_drbd_lb_tcp_seq, { "lb-tcp sequence number", "drbd_lb_tcp.seq", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+        { &hf_drbd_lb_tcp_length, { "lb-tcp length", "drbd_lb_tcp.length", FT_UINT32, BASE_HEX_DEC, NULL, 0x0, NULL, HFILL }},
+    };
+
     static gint *ett[] = {
         &ett_drbd,
+        &ett_drbd_lb_tcp,
         &ett_drbd_state,
         &ett_drbd_twopc_flags,
         &ett_drbd_uuid_flags,
@@ -1632,15 +1767,21 @@ void proto_register_drbd(void)
 
     proto_drbd = proto_register_protocol("DRBD Protocol", "DRBD", "drbd");
     proto_register_field_array(proto_drbd, hf, array_length(hf));
+
+    proto_drbd_lb_tcp = proto_register_protocol("DRBD Load-Balanced Protocol", "DRBD lb-tcp", "drbd_lb_tcp");
+    proto_register_field_array(proto_drbd_lb_tcp, hf_lb_tcp, array_length(hf_lb_tcp));
+
     proto_register_subtree_array(ett, array_length(ett));
 
     drbd_handle = register_dissector("drbd", dissect_drbd, proto_drbd);
+    drbd_lb_tcp_handle = register_dissector("drbd_lb_tcp", dissect_drbd_lb_tcp, proto_drbd_lb_tcp);
 }
 
 void proto_reg_handoff_drbd(void)
 {
     heur_dissector_add("tcp", test_drbd_protocol, "DRBD over TCP", "drbd_tcp", proto_drbd, HEURISTIC_DISABLE);
     heur_dissector_add("infiniband.payload", dissect_drbd_ib, "DRBD over RDMA", "drbd_rdma", proto_drbd, HEURISTIC_DISABLE);
+    heur_dissector_add("tcp", test_drbd_lb_tcp_protocol, "DRBD Load-Balanced over TCP", "drbd_lb_tcp", proto_drbd_lb_tcp, HEURISTIC_DISABLE);
 }
 
 /*

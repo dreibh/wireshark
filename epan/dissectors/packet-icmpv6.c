@@ -235,6 +235,7 @@ static int hf_icmpv6_opt_dnssl;
 static int hf_icmpv6_opt_aro_status;
 static int hf_icmpv6_opt_earo_opaque;
 static int hf_icmpv6_opt_earo_flag;
+static int hf_icmpv6_opt_earo_flag_p;
 static int hf_icmpv6_opt_earo_flag_i;
 static int hf_icmpv6_opt_earo_flag_t;
 static int hf_icmpv6_opt_earo_flag_r;
@@ -1094,14 +1095,24 @@ static const value_string nd_opt_earo_status_val[] = {
     { 8,  "Registered Address Topologically Incorrect" },
     { 9,  "6LBR Registry Saturated" },
     { 10, "Validation Failed" },
+    { 11, "Registration Refresh Request" },
+    { 12, "Invalid Registration" },
     { 0,  NULL }
 };
 
+#define ND_OPT_EARO_FLAG_P 0x30
 #define ND_OPT_EARO_FLAG_I 0x0C
 #define ND_OPT_EARO_FLAG_R 0x02
 #define ND_OPT_EARO_FLAG_T 0x01
 
-static const value_string nd_opt_earo_flag_val[] = {
+static const value_string nd_opt_earo_p_val[] = {
+    { 0, "Unicast" },
+    { 1, "Multicast" },
+    { 2, "Anycast" },
+    { 0, NULL }
+};
+
+static const value_string nd_opt_earo_i_val[] = {
     { 0, "Default" },
     { 0, NULL }
 };
@@ -2533,6 +2544,7 @@ dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree 
                 /* 6lowpan-ND */
                 guint8 status;
                 static int * const earo_flags[] = {
+                    &hf_icmpv6_opt_earo_flag_p,
                     &hf_icmpv6_opt_earo_flag_i,
                     &hf_icmpv6_opt_earo_flag_r,
                     &hf_icmpv6_opt_earo_flag_t,
@@ -4149,7 +4161,7 @@ dissect_mpl_control(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *t
     }
 
     if (remaining != 0) {
-        /* Invalid length; there is remaining data after dissectin MPL Control Message */
+        /* Invalid length; there is remaining data after dissecting MPL Control Message */
         ti = proto_tree_add_item(tree, hf_icmpv6_unknown_data, tvb, body_offset, body_offset - offset, ENC_NA);
         expert_add_info_format(pinfo, ti, &ei_icmpv6_unknown_data,
                                "%u bytes data is left after dissecting MPL Control Message", remaining);
@@ -5385,8 +5397,11 @@ proto_register_icmpv6(void)
         { &hf_icmpv6_opt_earo_flag,
           { "Flags", "icmpv6.opt.earo.flag", FT_UINT8, BASE_HEX, NULL, 0x0,
             NULL, HFILL }},
+        { &hf_icmpv6_opt_earo_flag_p,
+          { "P", "icmpv6.opt.earo.flag.p", FT_UINT8, BASE_DEC, VALS(nd_opt_earo_p_val), ND_OPT_EARO_FLAG_P,
+            "Registered address type", HFILL }},
         { &hf_icmpv6_opt_earo_flag_i,
-          { "I", "icmpv6.opt.earo.flag.i", FT_UINT8, BASE_DEC, VALS(nd_opt_earo_flag_val), ND_OPT_EARO_FLAG_I,
+          { "I", "icmpv6.opt.earo.flag.i", FT_UINT8, BASE_DEC, VALS(nd_opt_earo_i_val), ND_OPT_EARO_FLAG_I,
             "Indicates the contents of the Opaque field", HFILL }},
         { &hf_icmpv6_opt_earo_flag_r,
           { "R", "icmpv6.opt.earo.flag.r", FT_BOOLEAN, 8, TFS(&tfs_set_notset), ND_OPT_EARO_FLAG_R,

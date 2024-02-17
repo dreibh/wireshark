@@ -41,7 +41,6 @@
 #include <epan/conversation.h>
 #include <epan/conversation_filter.h>
 #include <epan/stats_tree.h>
-#include <epan/stats_tree_priv.h>
 #include <epan/stat_tap_ui.h>
 #include <epan/tap.h>
 
@@ -122,8 +121,6 @@ static int ett_sinsp_span;
 static int ett_address;
 
 static int container_io_tap;
-static const gchar* st_str_container_io = "Container, process, and FD IO";
-static int st_node_container_io = -1;
 
 static gboolean pref_show_internal = false;
 
@@ -782,7 +779,7 @@ dissect_sinsp_enriched(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void
     const char* io_buffer = NULL;
     uint32_t io_buffer_len = 0;
 
-    const char *container_id = "<host>";
+    const char *container_id = "host";
     const char *proc_name = NULL;
     const char *fd_name = NULL;
 
@@ -1139,17 +1136,21 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
     return payload_len;
 }
 
-static void container_io_stats_tree_init(stats_tree* st)
+const char *st_str_container_total_io = "Total";
+
+static void container_io_stats_tree_init(stats_tree* st _U_)
 {
-    st_node_container_io = stats_tree_create_node(st, st_str_container_io, 0, STAT_DT_INT, TRUE);
+    stats_tree_create_node(st, st_str_container_total_io, 0, STAT_DT_INT, TRUE);
+    stat_node_set_flags(st, st_str_container_total_io, 0, FALSE, ST_FLG_SORT_TOP);
+
 }
 
 static tap_packet_status container_io_stats_tree_event(stats_tree* st, packet_info* pinfo _U_, epan_dissect_t* edt _U_, const void* tap_info_p, tap_flags_t flags _U_)
 {
     const container_io_tap_info* tap_info = (const container_io_tap_info*) tap_info_p;
 
-    increase_stat_node(st, st_str_container_io, 0, FALSE, tap_info->io_bytes);
-    int container_id_node = increase_stat_node(st, tap_info->container_id, st_node_container_io, TRUE, tap_info->io_bytes);
+    increase_stat_node(st, st_str_container_total_io, 0, FALSE, tap_info->io_bytes);
+    int container_id_node = increase_stat_node(st, tap_info->container_id, 0, TRUE, tap_info->io_bytes);
     int proc_name_node = increase_stat_node(st, tap_info->proc_name, container_id_node, TRUE, tap_info->io_bytes);
     int fd_name_node = increase_stat_node(st, tap_info->fd_name, proc_name_node, TRUE, tap_info->io_bytes);
     if (tap_info->is_write) {
@@ -1165,9 +1166,10 @@ void
 proto_reg_handoff_falcoplugin(void)
 {
     // Register statistics trees
-    stats_tree_register_with_group("container_io", "container_io", "Container IO", 0, container_io_stats_tree_event, container_io_stats_tree_init, NULL, REGISTER_LOG_STAT_GROUP_UNSORTED);
-    stats_tree_cfg *cfg = stats_tree_get_cfg_by_abbr("container_io");
-    cfg->plugin = TRUE;
+    stats_tree_cfg *st_config = stats_tree_register_plugin("container_io", "container_io", "Container I/O", 0, container_io_stats_tree_event, container_io_stats_tree_init, NULL);
+    stats_tree_set_group(st_config, REGISTER_LOG_STAT_GROUP_UNSORTED);
+    stats_tree_set_first_column_name(st_config, "Container, process, and FD I/O");
+
 }
 
 void

@@ -1036,6 +1036,11 @@ blf_pull_next_logcontainer(blf_params_t* params, int* err, gchar** err_info) {
     if (!blf_find_next_logcontainer(params, err, err_info)) {
         return FALSE;
     }
+    /* Is there a next log container to pull? */
+    if (params->blf_data->log_containers->len == 0) {
+        /* No. */
+        return FALSE;
+    }
     container = &g_array_index(params->blf_data->log_containers, blf_log_container_t, params->blf_data->log_containers->len - 1);
     if (!blf_pull_logcontainer_into_memory(params, container, err, err_info)) {
         return FALSE;
@@ -2404,7 +2409,7 @@ guint16 blf_get_xml_channel_number(const char* start, const char* end) {
     }
 
     len = (gsize)(end - start);
-    text = g_try_malloc(len + 1);  /* Accomodate '\0' */
+    text = g_try_malloc(len + 1);  /* Accommodate '\0' */
     if (text == NULL) {
         ws_debug("cannot allocate memory");
         return UINT16_MAX;
@@ -2429,7 +2434,7 @@ char* blf_get_xml_channel_name(const char* start, const char* end) {
     }
 
     len = (gsize)(end - start);
-    text = g_try_malloc(len + 1);  /* Accomodate '\0' */
+    text = g_try_malloc(len + 1);  /* Accommodate '\0' */
     if (text == NULL) {
         ws_debug("cannot allocate memory");
         return NULL;
@@ -2455,7 +2460,7 @@ gboolean blf_parse_xml_port(const char* start, const char* end, char** name, gui
     }
 
     len = (gsize)(end - start);
-    text = g_try_malloc(len + 1);  /* Accomodate '\0' */
+    text = g_try_malloc(len + 1);  /* Accommodate '\0' */
     if (text == NULL) {
         ws_debug("cannot allocate memory");
         return FALSE;

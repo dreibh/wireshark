@@ -118,6 +118,7 @@ static heur_dtbl_entry_t *heur_dtbl_entry;
 static dissector_table_t can_id_dissector_table = NULL;
 static dissector_table_t can_extended_id_dissector_table = NULL;
 static dissector_table_t subdissector_table = NULL;
+static dissector_table_t canxl_sdu_type_dissector_table = NULL;
 static dissector_handle_t socketcan_classic_handle;
 static dissector_handle_t socketcan_fd_handle;
 static dissector_handle_t socketcan_xl_handle;
@@ -169,13 +170,13 @@ static const value_string can_err_trx_canl_vals[] = {
 
 static const value_string canxl_sdu_type_vals[] = {
     { 0x00, "Reserved" },
-    { 0x01, "Contend-based Adressing" },
+    { CANXL_SDU_TYPE_CONTENT_BASED_ADDRESSING, "Content-based Addressing" },
     { 0x02, "Reserved for future use" },
-    { 0x03, "Classical CAN/CAN FD mapped tunneling" },
-    { 0x04, "IEEE 802.3 (MAC frame) tunneling" },
-    { 0x05, "IEEE 802.3 (MAC frame) mapped tunneling" },
-    { 0x06, "Classical CAN mapped tunneling" },
-    { 0x07, "CAN FD mapped tunneling" },
+    { CANXL_SDU_TYPE_CLASSICAL_CAN_AND_CAN_FD_MAPPED_TUNNELING, "Classical CAN/CAN FD mapped tunneling" },
+    { CANXL_SDU_TYPE_IEEE_802_3_MAC_FRAME_TUNNELLING, "IEEE 802.3 (MAC frame) tunneling" },
+    { CANXL_SDU_TYPE_IEEE_802_3_MAC_FRAME_MAPPED_TUNNELING, "IEEE 802.3 (MAC frame) mapped tunneling" },
+    { CANXL_SDU_TYPE_CLASSICAL_CAN_MAPPED_TUNNELING, "Classical CAN mapped tunneling" },
+    { CANXL_SDU_TYPE_CAN_FD_MAPPED_TUNNELING, "CAN FD mapped tunneling" },
     { 0xFF, "Reserved" },
     { 0, NULL }
 };
@@ -535,28 +536,28 @@ dissect_socketcan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
     proto_item     *ti;
     guint8          frame_type;
     can_info_t      can_info;
-    int * const    *can_flags;
+    int * const    *can_flags_id;
 
-    static int * const can_std_flags[] = {
+    static int * const can_std_flags_id[] = {
         &hf_can_infoent_std,
         &hf_can_extflag,
         &hf_can_rtrflag,
         &hf_can_errflag,
         NULL,
     };
-    static int * const can_ext_flags[] = {
+    static int * const can_ext_flags_id[] = {
         &hf_can_infoent_ext,
         &hf_can_extflag,
         &hf_can_rtrflag,
         &hf_can_errflag,
         NULL,
     };
-    static int * const can_std_flags_fd[] = {
+    static int * const canfd_std_flags_id[] = {
         &hf_can_infoent_std,
         &hf_can_extflag,
         NULL,
     };
-    static int * const can_ext_flags_fd[] = {
+    static int * const canfd_ext_flags_id[] = {
         &hf_can_infoent_ext,
         &hf_can_extflag,
         NULL,
@@ -660,32 +661,44 @@ dissect_socketcan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
         col_clear(pinfo->cinfo, COL_INFO);
 
         can_info.id = 0; /* XXX - is there an "ID" for XL frames? */
-        can_info.len = tvb_get_guint16(tvb, CANXL_LEN_OFFSET, xl_encoding);
-
-        guint32 effective_can_id = 0; /* Again, XXX */
-
-        col_add_fstr(pinfo->cinfo, COL_INFO, "%s: %d (0x%" PRIx32 "), Length: %d", "ID", effective_can_id, effective_can_id, can_info.len);
-
-        socketcan_set_source_and_destination_columns(pinfo, &can_info);
 
         ti = proto_tree_add_item(tree, proto_can, tvb, 0, -1, ENC_NA);
         proto_item_set_hidden(ti);
         ti = proto_tree_add_item(tree, proto_canxl, tvb, 0, -1, ENC_NA);
         can_tree = proto_item_add_subtree(ti, ett_can_xl);
 
-        proto_item_append_text(can_tree, ", %s: %d (0x%" PRIx32 "), Length: %d", "ID", effective_can_id, effective_can_id, can_info.len);
+        guint32 proto_vcid;
 
-        proto_tree_add_bitmask_list(can_tree, tvb, 0, 4, canxl_prio_vcid_fields, xl_encoding);
+	/*
+	 * The priority/VCID field is big-endian in LINKTYPE_CAN_SOCKETCAN
+	 * captures, for historical reasons.  It's host-endian in
+	 * Linux cooked captures.  This means we use the non-XL encoding.
+	 */
+        proto_tree_add_bitmask_list(can_tree, tvb, 0, 4, canxl_prio_vcid_fields, encoding);
+        proto_vcid = tvb_get_guint32(tvb, 0, encoding);
+        col_add_fstr(pinfo->cinfo, COL_INFO, "Priority: %u (0x%03x), VCID: %u (0x%02X)", proto_vcid & 0x7FF, proto_vcid & 0x7FF, (proto_vcid >> 16) & 0xFF, (proto_vcid >> 16) & 0xFF);
+        proto_item_append_text(can_tree, ", Priority: %u (0x%03x), VCID: %u (0x%02X)", proto_vcid & 0x7FF, proto_vcid & 0x7FF, (proto_vcid >> 16) & 0xFF, (proto_vcid >> 16) & 0xFF);
         proto_tree_add_bitmask_list(can_tree, tvb, 4, 1, canxl_flag_fields, xl_encoding);
-        proto_tree_add_item(can_tree, hf_canxl_sdu_type, tvb, 5, 1, ENC_NA);
-        proto_tree_add_item(can_tree, hf_can_len, tvb, CANXL_LEN_OFFSET, 2, xl_encoding);
+
+        socketcan_set_source_and_destination_columns(pinfo, &can_info);
+
+        guint32 sdu_type;
+
+	/*
+	 * These fields are, if multi-byte, little-endian in
+	 * LINKTYPE_CAN_SOCKETCAN captures, so use xl_encoding.
+	 */
+        proto_tree_add_item_ret_uint(can_tree, hf_canxl_sdu_type, tvb, 5, 1, ENC_NA, &sdu_type);
+        proto_tree_add_item_ret_uint(can_tree, hf_canxl_len, tvb, CANXL_LEN_OFFSET, 2, xl_encoding, &can_info.len);
+        col_append_fstr(pinfo->cinfo, COL_INFO, ", Length: %u", can_info.len);
+        proto_item_append_text(can_tree, ", Length: %u", can_info.len);
         proto_tree_add_item(can_tree, hf_canxl_acceptance_field, tvb, CANXL_LEN_OFFSET+2, 4, xl_encoding);
 
         tvbuff_t   *next_tvb;
 
         next_tvb = tvb_new_subset_length(tvb, CANXL_DATA_OFFSET, can_info.len);
 
-        if (!socketcan_call_subdissectors(next_tvb, pinfo, tree, &can_info, heuristic_first)) {
+        if (!dissector_try_uint_new(canxl_sdu_type_dissector_table, sdu_type, next_tvb, pinfo, tree, TRUE, &can_info)) {
             call_data_dissector(next_tvb, pinfo, tree);
         }
 
@@ -693,9 +706,6 @@ dissect_socketcan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
             proto_tree_add_item(can_tree, hf_can_padding, tvb, CANXL_DATA_OFFSET+can_info.len, -1, ENC_NA);
         }
     } else {
-        can_info.id = tvb_get_guint32(tvb, 0, encoding);
-        can_info.len = tvb_get_guint8(tvb, CAN_LEN_OFFSET);
-
         if (can_packet_type == PACKET_TYPE_CAN_FD) {
             can_info.fd = CAN_TYPE_CAN_FD;
             col_set_str(pinfo->cinfo, COL_PROTOCOL, "CANFD");
@@ -705,26 +715,6 @@ dissect_socketcan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
         }
         col_clear(pinfo->cinfo, COL_INFO);
 
-        guint32 effective_can_id = (can_info.id & CAN_EFF_FLAG) ? can_info.id & CAN_EFF_MASK : can_info.id & CAN_SFF_MASK;
-        char *id_name = (can_info.id & CAN_EFF_FLAG) ? "Ext. ID" : "ID";
-
-        /* Error Message Frames are only encapsulated in Classic CAN frames */
-        if (can_packet_type == PACKET_TYPE_CAN && (can_info.id & CAN_ERR_FLAG)) {
-            frame_type = LINUX_CAN_ERR;
-            can_flags  = can_err_flags;
-        } else if (can_info.id & CAN_EFF_FLAG) {
-            frame_type = LINUX_CAN_EXT;
-            can_info.id &= (CAN_EFF_MASK | CAN_FLAG_MASK);
-            can_flags  = (can_packet_type == PACKET_TYPE_CAN_FD) ? can_ext_flags_fd : can_ext_flags;
-        } else {
-            frame_type = LINUX_CAN_STD;
-            can_info.id &= (CAN_SFF_MASK | CAN_FLAG_MASK);
-            can_flags  = (can_packet_type == PACKET_TYPE_CAN_FD) ? can_std_flags_fd : can_std_flags;
-        }
-        col_add_fstr(pinfo->cinfo, COL_INFO, "%s: %d (0x%" PRIx32 "), Length: %d", id_name, effective_can_id, effective_can_id, can_info.len);
-
-        socketcan_set_source_and_destination_columns(pinfo, &can_info);
-
         ti = proto_tree_add_item(tree, proto_can, tvb, 0, -1, ENC_NA);
         if (can_packet_type == PACKET_TYPE_CAN_FD) {
             proto_item_set_hidden(ti);
@@ -732,10 +722,36 @@ dissect_socketcan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
         }
         can_tree = proto_item_add_subtree(ti, (can_packet_type == PACKET_TYPE_CAN_FD) ? ett_can_fd : ett_can);
 
-        proto_item_append_text(can_tree, ", %s: %d (0x%" PRIx32 "), Length: %d", id_name, effective_can_id, effective_can_id, can_info.len);
+        /* Get the ID and flags field */
+        can_info.id = tvb_get_guint32(tvb, 0, encoding);
 
-        proto_tree_add_bitmask_list(can_tree, tvb, 0, 4, can_flags, encoding);
-        proto_tree_add_item(can_tree, hf_can_len, tvb, CAN_LEN_OFFSET, 1, ENC_NA);
+        /* Error Message Frames are only encapsulated in Classic CAN frames */
+        if (can_packet_type == PACKET_TYPE_CAN && (can_info.id & CAN_ERR_FLAG)) {
+            frame_type = LINUX_CAN_ERR;
+            can_flags_id  = can_err_flags;
+        } else if (can_info.id & CAN_EFF_FLAG) {
+            frame_type = LINUX_CAN_EXT;
+            can_info.id &= (CAN_EFF_MASK | CAN_FLAG_MASK);
+            can_flags_id  = (can_packet_type == PACKET_TYPE_CAN_FD) ? canfd_ext_flags_id : can_ext_flags_id;
+        } else {
+            frame_type = LINUX_CAN_STD;
+            can_info.id &= (CAN_SFF_MASK | CAN_FLAG_MASK);
+            can_flags_id  = (can_packet_type == PACKET_TYPE_CAN_FD) ? canfd_std_flags_id : can_std_flags_id;
+        }
+
+        socketcan_set_source_and_destination_columns(pinfo, &can_info);
+
+        proto_tree_add_bitmask_list(can_tree, tvb, 0, 4, can_flags_id, encoding);
+        if (can_info.id & CAN_EFF_FLAG) {
+            col_add_fstr(pinfo->cinfo, COL_INFO, "Ext. ID: %u (0x%08x)", can_info.id & CAN_EFF_MASK, can_info.id & CAN_EFF_MASK);
+            proto_item_append_text(can_tree, ", Ext. ID: %u (0x%08x)", can_info.id & CAN_EFF_MASK, can_info.id & CAN_EFF_MASK);
+        } else {
+            col_add_fstr(pinfo->cinfo, COL_INFO, "ID: %u (0x%03x)", can_info.id & CAN_SFF_MASK, can_info.id & CAN_SFF_MASK);
+            proto_item_append_text(can_tree, ", ID: %u (0x%03x)", can_info.id & CAN_SFF_MASK, can_info.id & CAN_SFF_MASK);
+        }
+        proto_tree_add_item_ret_uint(can_tree, hf_can_len, tvb, CAN_LEN_OFFSET, 1, ENC_NA, &can_info.len);
+        col_append_fstr(pinfo->cinfo, COL_INFO, ", Length: %u", can_info.len);
+        proto_item_append_text(can_tree, ", Length: %u", can_info.len);
 
         if (frame_type == LINUX_CAN_ERR && can_info.len != CAN_ERR_DLC) {
             proto_tree_add_expert(tree, pinfo, &ei_can_err_dlc_mismatch, tvb, CAN_LEN_OFFSET, 1);
@@ -835,7 +851,7 @@ static int
 dissect_socketcan_bigendian(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
     return dissect_socketcan_common(tvb, pinfo, tree,
                                     byte_swap ? ENC_LITTLE_ENDIAN : ENC_BIG_ENDIAN,
-                                    byte_swap ? ENC_BIG_ENDIAN : ENC_LITTLE_ENDIAN,
+                                    ENC_LITTLE_ENDIAN,
                                     PACKET_TYPE_UNKNOWN);
 }
 
@@ -843,7 +859,7 @@ static int
 dissect_socketcan_classic(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
     return dissect_socketcan_common(tvb, pinfo, tree,
                                     byte_swap ? ENC_ANTI_HOST_ENDIAN : ENC_HOST_ENDIAN,
-                                    byte_swap ? ENC_ANTI_HOST_ENDIAN : ENC_HOST_ENDIAN,
+                                    ENC_HOST_ENDIAN, /* Not used, as this is CAN classic, not CAN XL */
                                     PACKET_TYPE_CAN);
 }
 
@@ -851,7 +867,7 @@ static int
 dissect_socketcan_fd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
     return dissect_socketcan_common(tvb, pinfo, tree,
                                     byte_swap ? ENC_ANTI_HOST_ENDIAN : ENC_HOST_ENDIAN,
-                                    byte_swap ? ENC_ANTI_HOST_ENDIAN : ENC_HOST_ENDIAN,
+                                    ENC_HOST_ENDIAN, /* Not used, as this is CAN FD, not CAN XL */
                                     PACKET_TYPE_CAN_FD);
 }
 
@@ -859,7 +875,7 @@ static int
 dissect_socketcan_xl(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
     return dissect_socketcan_common(tvb, pinfo, tree,
                                     byte_swap ? ENC_ANTI_HOST_ENDIAN : ENC_HOST_ENDIAN,
-                                    byte_swap ? ENC_ANTI_HOST_ENDIAN : ENC_HOST_ENDIAN,
+                                    ENC_HOST_ENDIAN,
                                     PACKET_TYPE_CAN_XL);
 }
 
@@ -1011,7 +1027,7 @@ proto_register_socketcan(void) {
     prefs_register_obsolete_preference(can_module, "protocol");
 
     prefs_register_bool_preference(can_module, "byte_swap", "Byte-swap the CAN ID/flags field",
-        "Whether the CAN ID/flags field should be byte-swapped",
+        "Whether the CAN ID/flags field should be byte-swapped in CAN classic and CAN FD packets",
         &byte_swap);
 
     prefs_register_bool_preference(can_module, "try_heuristic_first", "Try heuristic sub-dissectors first",
@@ -1023,6 +1039,8 @@ proto_register_socketcan(void) {
     can_extended_id_dissector_table = register_dissector_table("can.extended_id", "CAN Extended ID", proto_can, FT_UINT32, BASE_DEC);
 
     subdissector_table = register_decode_as_next_proto(proto_can, "can.subdissector", "CAN next level dissector", NULL);
+
+    canxl_sdu_type_dissector_table = register_dissector_table("canxl.sdu_type", "CAN XL SDU type",  proto_canxl, FT_UINT8, BASE_HEX);
 
     heur_subdissector_list = register_heur_dissector_list_with_description("can", "CAN heuristic", proto_can);
 
