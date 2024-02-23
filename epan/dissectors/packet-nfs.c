@@ -1295,6 +1295,7 @@ nfs_name_snoop_add_fh(int xid, tvbuff_t *tvb, int fh_offset, int fh_length)
 #define NFS_MAX_FS_DEPTH 100
 
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 nfs_full_name_snoop(packet_info *pinfo, nfs_name_snoop_t *nns, int *len, char **name, char **pos)
 {
 	nfs_name_snoop_t     *parent_nns = NULL;
@@ -10697,7 +10698,7 @@ dissect_nfs4_request_op(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tre
 			}
 
 			if (first_operation == 0)
-				/* Seperator between operation text */
+				/* Separator between operation text */
 				col_append_str(pinfo->cinfo, COL_INFO, " |");
 
 			if (wmem_strbuf_get_len(op_summary[summary_counter].optext) > 0)
@@ -11244,7 +11245,7 @@ dissect_nfs4_response_op(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tr
 			}
 
 			if (first_operation == 0)
-				/* Seperator between operation text */
+				/* Separator between operation text */
 				col_append_str(pinfo->cinfo, COL_INFO, " |");
 
 			if (wmem_strbuf_get_len(op_summary[summary_counter].optext) > 0)

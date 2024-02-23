@@ -21,8 +21,10 @@
 
 #include "config.h"
 
-#include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/packet.h>
+#include <epan/proto_data.h>
+
 #include "packet-osi.h"
 #include "packet-isis.h"
 #include "packet-isis-clv.h"
@@ -3427,7 +3429,10 @@ dissect_srv6_sid_struct_subsubclv(tvbuff_t *tvb, packet_info* pinfo,
  *   void
  */
 
+#define MAX_RECURSION_DEPTH 10 // Arbitrarily chosen.
+
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_sub_clv_tlv_22_22_23_141_222_223(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree,
     int offset, int subclvs_len)
 {
@@ -3444,6 +3449,10 @@ dissect_sub_clv_tlv_22_22_23_141_222_223(tvbuff_t *tvb, packet_info* pinfo, prot
     gint ssclv_code, ssclv_len;
     proto_tree *subsubtree = NULL;
     proto_item *ti_subsubtree = NULL;
+
+    unsigned recursion_depth = p_get_proto_depth(pinfo, proto_isis_lsp);
+    DISSECTOR_ASSERT(recursion_depth <= MAX_RECURSION_DEPTH);
+    p_set_proto_depth(pinfo, proto_isis_lsp, recursion_depth + 1);
 
     while (i < subclvs_len) {
         /* offset for each sub-TLV */
@@ -3704,8 +3713,9 @@ dissect_sub_clv_tlv_22_22_23_141_222_223(tvbuff_t *tvb, packet_info* pinfo, prot
                 proto_tree_add_item(subtree, hf_isis_lsp_ext_is_reachability_value, tvb, sub_tlv_offset, clv_len, ENC_NA);
             break;
         }
-    i += clv_len + 2;
-  }
+        i += clv_len + 2;
+    }
+    p_set_proto_depth(pinfo, proto_isis_lsp, recursion_depth);
 }
 
 
@@ -4171,7 +4181,7 @@ dissect_lsp_srv6_locator_entry(tvbuff_t *tvb, packet_info* pinfo,
         return (-1);
     }
 
-    /* (1) Detrmine the length of each SRv6 locator entry, first */
+    /* (1) Determine the length of each SRv6 locator entry, first */
     /* Loc Size */
     bit_length = tvb_get_guint8(tvb, offset+6);
     if (bit_length <= 0 || bit_length > 128) {
@@ -6250,22 +6260,22 @@ proto_register_isis_lsp(void)
         },
         { &hf_isis_lsp_error_metric,
             { "Error metric", "isis.lsp.error_metric",
-              FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x08,
+              FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x40,
               NULL, HFILL }
         },
         { &hf_isis_lsp_expense_metric,
             { "Expense metric", "isis.lsp.expense_metric",
-              FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x04,
+              FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x20,
               NULL, HFILL }
         },
         { &hf_isis_lsp_delay_metric,
             { "Delay metric", "isis.lsp.delay_metric",
-              FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x02,
+              FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x10,
               NULL, HFILL }
         },
         { &hf_isis_lsp_default_metric,
             { "Default metric", "isis.lsp.default_metric",
-              FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x01,
+              FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x80,
               NULL, HFILL }
         },
         { &hf_isis_lsp_ip_reachability_default_metric_ie,
