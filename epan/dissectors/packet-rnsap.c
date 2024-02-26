@@ -28,6 +28,7 @@
 #include "packet-isup.h"
 #include "packet-per.h"
 #include "packet-ber.h"
+#include "packet-e212.h"
 
 #ifdef _MSC_VER
 /* disable: "warning C4146: unary minus operator applied to unsigned type, result still unsigned" */
@@ -4388,6 +4389,7 @@ static int hf_rnsap_value_05;                     /* Outcome_value */
 static int ett_rnsap;
 static int ett_rnsap_transportLayerAddress;
 static int ett_rnsap_transportLayerAddress_nsap;
+static int ett_rnsap_IMSI;
 
 static gint ett_rnsap_PrivateIE_ID;
 static gint ett_rnsap_ProcedureID;
@@ -8830,7 +8832,7 @@ dissect_rnsap_L3_Information(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx
 	switch (pdata->ProcedureCode) {
 
 	case RNSAP_ID_DOWNLINKSIGNALLINGTRANSFER:
-		/* TODO: seperate into Iur and Iur-g cases: */
+		/* TODO: separate into Iur and Iur-g cases: */
 		/* For the Iur-g interface, L3 message is a GERAN-RRC message for which a dissector does not currently exist */
 		/* For the Iur interface, L3 message is a UMTS RRC DL-CCCH message */
 		parameter_handle = rrc_dl_ccch_handle;
@@ -25047,8 +25049,15 @@ dissect_rnsap_IMEISV(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, pr
 
 static int
 dissect_rnsap_IMSI(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  tvbuff_t *parameter_tvb;
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       3, 8, FALSE, NULL);
+                                       3, 8, FALSE, &parameter_tvb);
+
+  if (parameter_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_rnsap_IMSI);
+    dissect_e212_imsi(parameter_tvb, actx->pinfo, subtree, 0, tvb_reported_length(parameter_tvb), FALSE);
+  }
+
 
   return offset;
 }
@@ -61673,6 +61682,7 @@ void proto_register_rnsap(void) {
     &ett_rnsap,
     &ett_rnsap_transportLayerAddress,
     &ett_rnsap_transportLayerAddress_nsap,
+    &ett_rnsap_IMSI,
     &ett_rnsap_PrivateIE_ID,
     &ett_rnsap_ProcedureID,
     &ett_rnsap_TransactionID,

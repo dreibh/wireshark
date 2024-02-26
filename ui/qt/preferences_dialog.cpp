@@ -313,6 +313,10 @@ void PreferencesDialog::on_buttonBox_accepted()
 
     mainApp->setMonospaceFont(prefs.gui_font_name);
 
+    if (redissect_flags & (PREF_EFFECT_GUI_COLOR)) {
+        mainApp->queueAppSignal(MainApplication::ColorsChanged);
+    }
+
     if (redissect_flags & PREF_EFFECT_FIELDS) {
         mainApp->queueAppSignal(MainApplication::FieldsChanged);
     }
@@ -325,7 +329,10 @@ void PreferencesDialog::on_buttonBox_accepted()
         /* Redissect all the packets, and re-evaluate the display filter. */
         mainApp->queueAppSignal(MainApplication::PacketDissectionChanged);
     }
-    mainApp->queueAppSignal(MainApplication::PreferencesChanged);
+
+    if (redissect_flags) {
+        mainApp->queueAppSignal(MainApplication::PreferencesChanged);
+    }
 
     if (redissect_flags & PREF_EFFECT_GUI_LAYOUT) {
         mainApp->queueAppSignal(MainApplication::RecentPreferencesRead);

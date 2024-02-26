@@ -118,7 +118,7 @@ ProtocolIE-ContainerPairList
 	switch (pdata->ProcedureCode) {
 
 	case RNSAP_ID_DOWNLINKSIGNALLINGTRANSFER:
-		/* TODO: seperate into Iur and Iur-g cases: */
+		/* TODO: separate into Iur and Iur-g cases: */
 		/* For the Iur-g interface, L3 message is a GERAN-RRC message for which a dissector does not currently exist */
 		/* For the Iur interface, L3 message is a UMTS RRC DL-CCCH message */
 		parameter_handle = rrc_dl_ccch_handle;
@@ -245,6 +245,14 @@ TAC TYPE = FT_UINT16 DISPLAY = BASE_DEC_HEX
 %(DEFAULT_BODY)s
   if (parameter_tvb) {
     actx->created_item = proto_tree_add_item(tree, hf_index, parameter_tvb, 0, 2, ENC_BIG_ENDIAN);
+  }
+
+#.FN_BODY IMSI VAL_PTR = &parameter_tvb
+  tvbuff_t *parameter_tvb;
+%(DEFAULT_BODY)s
+  if (parameter_tvb) {
+    proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_rnsap_IMSI);
+    dissect_e212_imsi(parameter_tvb, actx->pinfo, subtree, 0, tvb_reported_length(parameter_tvb), FALSE);
   }
 
 #.REGISTER

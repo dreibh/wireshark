@@ -141,6 +141,7 @@ private:
     bool tail_at_end_;
     bool columns_changed_;
     bool set_column_visibility_;
+    bool set_style_sheet_;
     QModelIndex frozen_current_row_;
     QModelIndexList frozen_selected_rows_;
     QVector<int> selection_history_;
@@ -155,7 +156,6 @@ private:
     void drawCurrentPacket();
     void applyRecentColumnWidths();
     void scrollViewChanged(bool at_end);
-    void colorsChanged();
     QString joinSummaryRow(QStringList col_parts, int row, SummaryCopyType type);
 
 signals:
@@ -189,6 +189,7 @@ public slots:
     void recolorPackets();
     void redrawVisiblePackets();
     void redrawVisiblePacketsDontSelectCurrent();
+    void colorsChanged();
     void columnsChanged();
     void fieldsChanged(capture_file *cf);
     void preferencesChanged();
