@@ -26,6 +26,26 @@ function print_usage() {
 	printf "\\t[other]: other options are passed as-is to apt\\n"
 }
 
+# Adds package $2 to list variable $1 if the package is found.
+# If $3 is given, then this version requirement must be satisfied.
+function add_package() {
+	local list="$1" pkgname="$2" versionreq="${3:-}" version
+
+	version=$(apt-cache show "$pkgname" 2>/dev/null |
+		awk '/^Version:/{ print $2; exit}')
+	# fail if the package is not known
+	if [ -z "$version" ]; then
+		return 1
+	elif [ -n "$versionreq" ]; then
+		# Require minimum version or fail.
+		# shellcheck disable=SC2086
+		dpkg --compare-versions $version $versionreq || return 1
+	fi
+
+	# package is found, append it to list
+	eval "${list}=\"\${${list}} \${pkgname}\""
+}
+
 ADDITIONAL=0
 DEBDEPS=0
 TESTDEPS=0
@@ -102,7 +122,7 @@ QT5_LIST="
 
 QT6_LIST="
 	freeglut3-dev
-	libqt6core5compat6-dev
+	libqt6svg6-dev
 	libvulkan-dev
 	libxkbcommon-dev
 	qt6-base-dev
@@ -111,6 +131,11 @@ QT6_LIST="
 	qt6-tools-dev
 	qt6-tools-dev-tools
 	"
+
+# qt6-5compat-dev: Debian >= bookworm, Ubuntu >= 23.04
+# libqt6core5compat6-dev: Ubuntu 22.04
+add_package QT6_LIST qt6-5compat-dev ||
+QT6_LIST="$QT6_LIST libqt6core5compat6-dev"
 
 if [ $ADD_QT5 -ne 0 ]
 then
@@ -131,9 +156,12 @@ then
 	# shellcheck disable=SC1090
 	. "${os_release}"
 
-	# Ubuntu 22.04 (jammy) or later
+	# Ubuntu 22.04 (jammy) / Debian 12 (bookworm) or later
 	MAJOR=$(echo "$VERSION_ID" | cut -f1 -d.)
 	if [ "${ID:-linux}" = "ubuntu" ] && [ "${MAJOR:-0}" -ge "22" ]; then
+		echo "Installing Qt6."
+		BASIC_LIST="$BASIC_LIST $QT6_LIST"
+	elif [ "${ID:-linux}" = "debian" ] && [ "${MAJOR:-0}" -ge "12" ]; then
 		echo "Installing Qt6."
 		BASIC_LIST="$BASIC_LIST $QT6_LIST"
 	else
@@ -191,26 +219,6 @@ TESTDEPS_LIST="
 	python3-pytest
 	python3-pytest-xdist
 	"
-
-# Adds package $2 to list variable $1 if the package is found.
-# If $3 is given, then this version requirement must be satisfied.
-add_package() {
-	local list="$1" pkgname="$2" versionreq="${3:-}" version
-
-	version=$(apt-cache show "$pkgname" 2>/dev/null |
-		awk '/^Version:/{ print $2; exit}')
-	# fail if the package is not known
-	if [ -z "$version" ]; then
-		return 1
-	elif [ -n "$versionreq" ]; then
-		# Require minimum version or fail.
-		# shellcheck disable=SC2086
-		dpkg --compare-versions $version $versionreq || return 1
-	fi
-
-	# package is found, append it to list
-	eval "${list}=\"\${${list}} \${pkgname}\""
-}
 
 # apt-get update must be called before calling add_package
 # otherwise available packages appear as unavailable

@@ -173,7 +173,7 @@ static gint exported_pdu_tap = -1;
 static ws_mempbrk_pattern pbrk_whitespace;
 static ws_mempbrk_pattern pbrk_braces;
 
-/* Used when command type is needed to diferentiate parsing, extend as needed */
+/* Used when command type is needed to differentiate parsing, extend as needed */
 typedef enum
 {
     MEGACO_CMD_NOT_SET = 0,
@@ -184,7 +184,8 @@ typedef enum
 * Here are the global variables associated with
 * the various user definable characteristics of the dissection
 *
-* MEGACO has two kinds of message formats: text and binary
+* H.248/MEGACO has two kinds of message formats: text and binary (ASN.1).
+* The binary message format is dissected in packet-h248.c
 *
 * global_megaco_raw_text determines whether we are going to display
 * the raw text of the megaco message, much like the HTTP dissector does.
@@ -193,11 +194,6 @@ typedef enum
 * a detailed tree that expresses a somewhat more semantically meaningful
 * decode.
 */
-#if 0
-static guint global_megaco_bin_sctp_port = PORT_MEGACO_BIN;
-static guint global_megaco_bin_tcp_port = PORT_MEGACO_BIN;
-static guint global_megaco_bin_udp_port = PORT_MEGACO_BIN;
-#endif
 static gboolean global_megaco_raw_text = TRUE;
 static gboolean global_megaco_dissect_tree = TRUE;
 
@@ -450,6 +446,8 @@ dissect_megaco_topologydescriptor(tvbuff_t *tvb, proto_tree *tree, gint tvb_RBRK
 static void
 dissect_megaco_errordescriptor(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, gint tvb_RBRKT, gint tvb_previous_offset);
 static void
+dissect_megaco_statisticsdescriptor(tvbuff_t *tvb, proto_tree *megaco_tree_command_line,  gint tvb_RBRKT, gint tvb_previous_offset);
+static void
 dissect_megaco_TerminationStatedescriptor(tvbuff_t *tvb, proto_tree *tree, gint tvb_next_offset, gint tvb_current_offset);
 static void
 dissect_megaco_LocalRemotedescriptor(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, gint tvb_next_offset, gint tvb_current_offset, guint32 context, gboolean is_local);
@@ -635,11 +633,6 @@ dissect_megaco_text(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
      */
     tvb_offset = megaco_tvb_skip_wsp(tvb, tvb_offset);
 
-    /* Quick fix for MEGACO not following the RFC, hopefully not breaking any thing
-     * Turned out to be TPKT in case of TCP, added some code to handle that.
-     *
-     * tvb_offset = tvb_find_guint8(tvb, tvb_offset, 5, 'M');
-     */
     if(!tvb_get_raw_bytes_as_stringz(tvb,tvb_offset,sizeof(word),word)) return tvb_captured_length(tvb);
 
     /* Quick fix for MEGACO packet with Authentication Header,
@@ -1716,6 +1709,7 @@ dissect_megaco_multiplexdescriptor(tvbuff_t *tvb, proto_tree *megaco_tree_comman
 #define MEGACO_LOCAL_CONTROL_TOKEN      3
 #define MEGACO_STREAM_TOKEN             4
 #define MEGACO_TERMINATION_STATE_DESC   5
+// MEGACO_STATS_TOKEN is already defined as 6 above
 
 static const megaco_tokens_t megaco_mediaParm_names[] = {
     { "Unknown-token",              NULL }, /* 0 Pad so that the real headers start at index 1 */
@@ -1724,6 +1718,7 @@ static const megaco_tokens_t megaco_mediaParm_names[] = {
     { "LocalControl",               "O" },  /* 3 */
     { "Stream",                     "ST" }, /* 4 */
     { "TerminationState",           "TS" }, /* 5 */
+    { "Statistics",                 "SA" }, /* 6 */
 };
 
 /* Returns index of megaco_tokens_t */
@@ -1807,12 +1802,20 @@ dissect_megaco_mediadescriptor(tvbuff_t *tvb, proto_tree *megaco_tree_command_li
             streamId = (guint)strtoul(tvb_format_text(pinfo->pool, tvb, tvb_current_offset,tokenlen),NULL,10);
             ti = proto_tree_add_uint(megaco_mediadescriptor_tree, hf_megaco_streamid, tvb,
                 save_offset, 1, streamId);
-            proto_item_set_len(ti, tvb_offset-save_offset+tokenlen);
+            proto_item_set_len(ti, tvb_offset-save_offset);
             tvb_previous_offset = tvb_LBRKT+1;
             continue;
         case MEGACO_TERMINATION_STATE_DESC:
             tvb_current_offset = megaco_tvb_skip_wsp(tvb, tvb_LBRKT+1);
             dissect_megaco_TerminationStatedescriptor(tvb, megaco_mediadescriptor_tree,
+                tvb_RBRKT, tvb_current_offset);
+            tvb_current_offset = tvb_RBRKT;
+            break;
+        case MEGACO_STATS_TOKEN:
+            // dissect_megaco_statisticsdescriptor wants the previous
+            // offset, don't skip forward.
+            //tvb_current_offset = megaco_tvb_skip_wsp(tvb, tvb_LBRKT+1);
+            dissect_megaco_statisticsdescriptor(tvb, megaco_mediadescriptor_tree,
                 tvb_RBRKT, tvb_current_offset);
             tvb_current_offset = tvb_RBRKT;
             break;
@@ -2278,15 +2281,31 @@ dissect_megaco_signaldescriptor(tvbuff_t *tvb, packet_info *pinfo, proto_tree *m
 /*
    auditDescriptor      = AuditToken LBRKT [ auditItem *(COMMA auditItem) ] RBRKT
 
+   V1:
    auditItem            = ( MuxToken / ModemToken / MediaToken /
                            SignalsToken / EventBufferToken /
                            DigitMapToken / StatsToken / EventsToken /
-                           ObservedEventsToken / PackagesToken )                     */
+                           ObservedEventsToken / PackagesToken )
+
+   V3:
+   auditItem            = ( auditReturnItem / SignalsToken / EventBufferToken /
+                           EventsToken / indAudterminationAudit )
+
+   auditReturnItem      = ( MuxToken / ModemToken / MediaToken / DigitMapToken /
+                           StatsToken / ObservedEventsToken / PackagesToken )
+
+   indAudauditReturnParameter
+                        = ( indAudmediaDescriptor / indAudeventsDescriptor /
+                          indAudsignalsDescriptor / indAuddigitMapDescriptor /
+                          indAudeventBufferDescriptor /
+                          indAudstatisticsDescriptor / indAudpackagesDescriptor )
+                                                                           */
 static void
-dissect_megaco_auditdescriptor(tvbuff_t *tvb, proto_tree *megaco_tree, packet_info *pinfo _U_,  gint tvb_stop, gint tvb_offset)
+dissect_megaco_auditdescriptor(tvbuff_t *tvb, proto_tree *megaco_tree, packet_info *pinfo _U_, gint tvb_stop, gint tvb_offset, proto_tree *top_tree, guint32 context)
 {
-    gint        tokenlen, tvb_end, tvb_next, token_index;
+    gint        tokenlen, tvb_end, tvb_next, tvb_LBRKT, tvb_token_end, token_index;
     proto_tree  *megaco_auditdescriptor_tree, *megaco_auditdescriptor_ti;
+    bool        descriptor;
 
     tvb_next  = tvb_find_guint8(tvb, tvb_offset, tvb_stop, '{');           /* find opening LBRKT - is this already checked by caller?*/
     if( tvb_next == -1 )                                                   /* complain and give up if not there */
@@ -2309,15 +2328,68 @@ dissect_megaco_auditdescriptor(tvbuff_t *tvb, proto_tree *megaco_tree, packet_in
             tvb_next = tvb_find_guint8(tvb, tvb_offset, tvb_stop, ',');                           /* end of an auditItem */
             if (tvb_next == -1)                                                                   /* last item doesn't have a comma */
                 tvb_next = tvb_stop;
+
+            tvb_LBRKT = tvb_find_guint8(tvb, tvb_offset, tvb_stop, '{');
+
             tvb_end = megaco_tvb_skip_wsp_return(tvb, tvb_next-1);                                /* trim any trailing whitespace */
-            tokenlen =  tvb_end - tvb_offset;                                                     /* get length of token */
+
+            if ( tvb_LBRKT > tvb_next || tvb_LBRKT == -1 ){
+                /* auditItem has no parameters (i.e., is a Token) */
+                descriptor = false;
+                tvb_token_end = tvb_end;
+            } else {
+                /* auditItem includes Parameters (i.e., is a Descriptor) */
+                descriptor = true;
+                for (tvb_token_end=tvb_offset; tvb_token_end < tvb_end ; tvb_token_end++){
+                    if (!g_ascii_isalpha(tvb_get_guint8(tvb, tvb_token_end ))){
+                        break;
+                    }
+                }
+            }
+
+            tokenlen = tvb_token_end - tvb_offset;                                                /* get length of token */
 
             token_index = find_megaco_descriptors_names(tvb, tvb_offset, tokenlen);               /* lookup the token */
             if( token_index == -1 )                                                               /* if not found then 0 => Unknown */
                 token_index = 0;
 
-            proto_tree_add_string(megaco_auditdescriptor_tree, hf_megaco_audititem, tvb,
-                    tvb_offset, tokenlen, megaco_descriptors_names[token_index].name);    /* and display the long form */
+            if (descriptor) {
+
+                switch ( token_index ){
+                case MEGACO_MEDIA_TOKEN:
+                {
+                    int temp_offset = tvb_find_guint8(tvb, tvb_offset, tvb_stop, '{');
+                    int save_offset = tvb_offset;
+
+                    tvb_offset = megaco_tvb_skip_wsp(tvb, temp_offset +1);
+                    dissect_megaco_mediadescriptor(tvb, megaco_auditdescriptor_tree, pinfo, tvb_end, tvb_offset, save_offset, top_tree, context);
+                    break;
+                }
+                case MEGACO_SIGNALS_TOKEN:
+                    dissect_megaco_signaldescriptor(tvb, pinfo, megaco_auditdescriptor_tree, tvb_end, tvb_offset, top_tree);
+                    break;
+                case MEGACO_STATS_TOKEN:
+                    dissect_megaco_statisticsdescriptor(tvb, megaco_auditdescriptor_tree, tvb_end, tvb_offset);
+                    break;
+                case MEGACO_EVENTS_TOKEN:
+                    dissect_megaco_eventsdescriptor(tvb, pinfo, megaco_auditdescriptor_tree, tvb_end, tvb_offset, top_tree);
+                    break;
+                case MEGACO_DIGITMAP_TOKEN:
+                    dissect_megaco_digitmapdescriptor(tvb, megaco_auditdescriptor_tree, tvb_end, tvb_offset);
+                    break;
+                case MEGACO_PACKAGES_TOKEN:
+                    dissect_megaco_Packagesdescriptor(tvb, megaco_auditdescriptor_tree, tvb_end, tvb_offset);
+                    break;
+                default:
+                    tokenlen = tvb_end - tvb_offset;
+                    proto_tree_add_string(megaco_auditdescriptor_tree, hf_megaco_audititem, tvb,
+                            tvb_offset, tokenlen, megaco_descriptors_names[token_index].name);    /* and display the long form */
+                    break;
+                }
+            } else {
+                proto_tree_add_string(megaco_auditdescriptor_tree, hf_megaco_audititem, tvb,
+                        tvb_offset, tokenlen, megaco_descriptors_names[token_index].name);    /* and display the long form */
+            }
 
             tvb_offset = tvb_next;                                                                /* advance pointer */
         }
@@ -3472,7 +3544,7 @@ dissect_megaco_descriptors(tvbuff_t *tvb, proto_tree *megaco_command_tree, packe
             dissect_megaco_eventsdescriptor(tvb, pinfo, descriptor_tree, tvb_RBRKT, tvb_previous_offset, top_tree);
             break;
         case MEGACO_AUDIT_TOKEN:
-            dissect_megaco_auditdescriptor(tvb, descriptor_tree, pinfo, tvb_RBRKT, tvb_previous_offset);
+            dissect_megaco_auditdescriptor(tvb, descriptor_tree, pinfo, tvb_RBRKT, tvb_previous_offset, top_tree, context);
             break;
         case MEGACO_DIGITMAP_TOKEN:
             dissect_megaco_digitmapdescriptor(tvb, descriptor_tree, tvb_RBRKT, tvb_previous_offset);
@@ -3843,23 +3915,6 @@ proto_register_megaco(void)
 
     megaco_module = prefs_register_protocol(proto_megaco, NULL);
 
-#if 0
-    prefs_register_uint_preference(megaco_module, "sctp.bin_port",
-                                   "MEGACO Binary SCTP Port",
-                                   "Set the SCTP port for MEGACO binary messages",
-                                   10, &global_megaco_bin_sctp_port);
-
-    prefs_register_uint_preference(megaco_module, "tcp.bin_port",
-                                   "MEGACO Binary TCP Port",
-                                   "Set the TCP port for MEGACO binary messages",
-                                   10, &global_megaco_bin_tcp_port);
-
-    prefs_register_uint_preference(megaco_module, "udp.bin_port",
-                                   "MEGACO Binary UDP Port",
-                                   "Set the UDP port for MEGACO binary messages",
-                                   10, &global_megaco_bin_udp_port);
-#endif
-
     prefs_register_bool_preference(megaco_module, "display_raw_text",
                                    "Display raw text for MEGACO message",
                                    "Specifies that the raw text of the "
@@ -3896,16 +3951,6 @@ void
 proto_reg_handoff_megaco(void)
 {
     dissector_handle_t megaco_text_tcp_handle;
-
-        /*
-    * Variables to allow for proper deletion of dissector registration when
-    * the user changes port from the gui.
-    */
-#if 0
-    static guint bin_sctp_port;
-    static guint bin_tcp_port;
-    static guint bin_udp_port;
-#endif
 
     sdp_handle = find_dissector_add_dependency("sdp", proto_megaco);
     h245_handle = find_dissector_add_dependency("h245dg", proto_megaco);

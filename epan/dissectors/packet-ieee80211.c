@@ -14401,6 +14401,18 @@ add_ff_action_wnm(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offse
   code    = tvb_get_guint8(tvb, offset);
   offset += add_ff_wnm_action_code(tree, tvb, pinfo, offset);
   switch (code) {
+  case WNM_EVENT_REQ:
+  case WNM_EVENT_REPORT:
+  case WNM_DIAGNOSTIC_REQ:
+  case WNM_DIAGNOSTIC_REPORT:
+  case WNM_LOCATION_CFG_REQ:
+  case WNM_LOCATION_CFG_RESP:
+  case WNM_FMS_REQ:
+  case WNM_FMS_RESP:
+  case WNM_DMS_REQ:
+  case WNM_DMS_RESP:
+    offset += add_ff_dialog_token(tree, tvb, pinfo, offset);
+    break;
   case WNM_BSS_TRANS_MGMT_QUERY:
     offset += wnm_bss_trans_mgmt_query(tree, tvb, pinfo, offset);
     break;
@@ -38122,10 +38134,10 @@ set_sid_addr_cols(packet_info *pinfo, guint16 sid, gboolean dst)
 {
   if (dst) {
     col_add_fstr(pinfo->cinfo, COL_RES_DL_DST, "AID 0x%04x",
-                 sid % SID_AID_MASK);
+                 sid & SID_AID_MASK);
   } else {
     col_add_fstr(pinfo->cinfo, COL_RES_DL_SRC, "AID 0x%04x",
-                 sid % SID_AID_MASK);
+                 sid & SID_AID_MASK);
   }
 }
 
@@ -38142,7 +38154,7 @@ dissect_pv1_sid(proto_tree *tree, packet_info *pinfo _U_, tvbuff_t *tvb,
                 guint offset)
 {
   proto_tree_add_bitmask(tree, tvb, offset, hf_ieee80211_pv1_sid,
-                         ett_pv1_sid_field, sid_headers, ENC_BIG_ENDIAN);
+                         ett_pv1_sid_field, sid_headers, ENC_LITTLE_ENDIAN);
 
 }
 
@@ -38507,6 +38519,13 @@ dissect_ieee80211_pv1(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
    *
    * Also, add the SID (with MAC address if we know it), or the MAC
    * addr depending on type.
+   *
+   * XXX - For PV1_CONTROL frames (IEEE 802.11-2020 9.8.4), the A3 Present,
+   * A4 Present, and A-MSDU subfields of the SID are reserved. Should
+   * they be dissected differently, and ignored / expert info if set?
+   *
+   * For PV1_MANAGMENT frames (9.8.5), A4 and A-MSDU cannot be present.
+   * Ignore / expert info if set?
    */
   if (a1_is_sid) {
     guint16 a1 = tvb_get_letohs(tvb, offset);
@@ -38564,7 +38583,7 @@ dissect_ieee80211_pv1(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
   }
 
   if (a4_present) {
-    set_dst_addr_cols(pinfo, tvb, offset, "SA");
+    set_src_addr_cols(pinfo, tvb, offset, "SA");
     set_address_tvb(&pinfo->dl_src, wlan_address_type, 6, tvb, offset);
     copy_address_shallow(&pinfo->src, &pinfo->dl_src);
     proto_tree_add_mac48_detail(&mac_sa, &mac_addr, ett_addr, tvb, hdr_tree, offset);
