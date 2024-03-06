@@ -1705,9 +1705,9 @@ static icmp_transaction_t *transaction_end(packet_info *pinfo, proto_tree *tree,
 
 } /* transaction_end() */
 
-static int
+// This is recursive, but we'll run out of PDU before we'll run out of stack.
 // NOLINTNEXTLINE(misc-no-recursion)
-dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
+static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
     proto_tree *icmp6opt_tree;
     proto_item *ti, *ti_opt, *ti_opt_len;
@@ -1716,8 +1716,6 @@ dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree 
     int         opt_offset;
     tvbuff_t   *opt_tvb;
     guint       used_bytes;
-
-    increment_dissection_depth(pinfo);
 
     while ((int)tvb_reported_length(tvb) > offset) {
         /* there are more options */
@@ -1745,7 +1743,6 @@ dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree 
 
         if(opt_len == 0){
             expert_add_info_format(pinfo, ti_opt_len, &ei_icmpv6_invalid_option_length, "Invalid option length (Zero)");
-            decrement_dissection_depth(pinfo);
             return opt_offset;
         }
 
@@ -2756,7 +2753,6 @@ dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree 
         /* Close the ) to option root label */
         proto_item_append_text(ti, ")");
     }
-    decrement_dissection_depth(pinfo);
     return offset;
 }
 
