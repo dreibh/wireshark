@@ -62,7 +62,6 @@ static guint16 de_nas_5gs_mm_req_type(tvbuff_t *tvb, proto_tree *tree, packet_in
 static dissector_handle_t nas_5gs_handle;
 static dissector_handle_t eap_handle;
 static dissector_handle_t nas_eps_handle;
-static dissector_handle_t nas_eps_plain_handle;
 static dissector_handle_t lpp_handle;
 static dissector_handle_t gsm_a_dtap_handle;
 static dissector_handle_t ipv4_handle;
@@ -2603,7 +2602,7 @@ de_nas_5gs_mm_nas_msg_cont(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     gchar *add_string _U_, int string_len _U_)
 {
     /* The purpose of the NAS message container IE is to encapsulate a plain 5GS NAS message. */
-    /* a NAS message without NAS security heade */
+    /* a NAS message without NAS security header */
 
     dissect_nas_5gs(tvb_new_subset_length(tvb, offset, len), pinfo, tree, NULL);
 
@@ -6901,7 +6900,7 @@ nas_5gs_mm_registration_req(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
     /* Direction: UE to network */
     pinfo->link_dir = P2P_DIR_UL;
 
-    /* Initalize the private struct */
+    /* Initialize the private struct */
     nas5gs_get_private_data(pinfo);
 
     /*    ngKSI    NAS key set identifier 9.11.3.32    M    V    1/2 H1*/
@@ -7221,7 +7220,7 @@ nas_5gs_mm_ul_nas_transp(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, gu
     curr_offset = offset;
     curr_len = len;
 
-    /* Initalize the private struct */
+    /* Initialize the private struct */
     nas5gs_get_private_data(pinfo);
 
     /*Payload container type    Payload container type     9.11.3.31    M    V    1/2 */
@@ -7267,7 +7266,7 @@ nas_5gs_mm_dl_nas_transp(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, gu
     curr_offset = offset;
     curr_len = len;
 
-    /* Initalize the private struct */
+    /* Initialize the private struct */
     nas5gs_get_private_data(pinfo);
 
     /*Payload container type    Payload container type     9.11.3.40    M    V    1/2 H0*/
@@ -8041,7 +8040,7 @@ nas_5gs_sm_pdu_ses_est_req(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
     /*28    5GSM capability    5GSM capability     9.11.4.10    O    TLV    3-15 */
     ELEM_OPT_TLV(0x28, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAP, NULL);
 
-    /*55    Maximum number of supported packet filter    Maximum number of suuported packet filter   9.11.4.9    O    TV    3*/
+    /*55    Maximum number of supported packet filter    Maximum number of supported packet filter   9.11.4.9    O    TV    3*/
     ELEM_OPT_TV(0x55, NAS_5GS_PDU_TYPE_SM,  DE_NAS_5GS_SM_MAX_NUM_SUP_PKT_FLT, NULL);
 
     /* B-    Always-on PDU session requested    Always-on PDU session requested 9.11.4.4    O    TV    1 */
@@ -8288,7 +8287,7 @@ nas_5gs_sm_pdu_ses_mod_req(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
     /* 59    5GSM cause    5GSM cause 9.11.4.2    O    TV    2 */
     ELEM_OPT_TV(0x59, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_5GSM_CAUSE, NULL);
 
-    /*55    Maximum number of suuported packet filter    Maximum number of suuported packet filter   9.11.4.6    O    TV    3*/
+    /*55    Maximum number of supported packet filter    Maximum number of supported packet filter   9.11.4.6    O    TV    3*/
     ELEM_OPT_TV(0x55, NAS_5GS_PDU_TYPE_SM,  DE_NAS_5GS_SM_MAX_NUM_SUP_PKT_FLT, NULL);
 
     /* B-    Always-on PDU session requested    Always-on PDU session requested 9.11.4.4    O    TV    1 */
@@ -8405,7 +8404,7 @@ nas_5gs_sm_pdu_ses_mod_cmd(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
 
     /* 1E    Serving PLMN rate control    Serving PLMN rate control 9.11.4.20    O    TLV    4 */
     ELEM_OPT_TLV(0x1E, NAS_PDU_TYPE_ESM, DE_ESM_SERV_PLMN_RATE_CTRL, NULL);
-    /* 1F    Ethernet header compression configuration    Ethernet heaer compression configuration 9.11.4.28    O    TLV    3 */
+    /* 1F    Ethernet header compression configuration    Ethernet header compression configuration 9.11.4.28    O    TLV    3 */
     ELEM_OPT_TLV(0x1F, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_ETH_HDR_COMP_CONF, NULL);
     /* 71    Received MBS container    Received MBS container 9.11.4.31    O    TLV-E    8-65538 */
     ELEM_OPT_TLV_E(0x71, NAS_5GS_PDU_TYPE_SM, DE_NAS_5GS_SM_REC_MBS_CONT, NULL);
@@ -10245,7 +10244,7 @@ const value_string nas_5gs_pdu_session_id_vals[] = {
 };
 
 static int
-dissect_nas_5gs_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, void* data _U_)
+dissect_nas_5gs_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, void* data)
 {
     proto_tree *sub_tree;
     guint32 epd;
@@ -10282,6 +10281,10 @@ dissect_nas_5gs_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int 
         proto_tree_add_item(sub_tree, hf_nas_5gs_proc_trans_id, tvb, offset, 1, ENC_BIG_ENDIAN);
         break;
     default:
+        if ((epd & 0xf) == 15 && gsm_a_dtap_handle) {
+            /* dissect Test Procedure messages */
+            return call_dissector_with_data(gsm_a_dtap_handle, tvb_new_subset_remaining(tvb, offset - 1), pinfo, sub_tree, data);
+        }
         proto_tree_add_expert_format(sub_tree, pinfo, &ei_nas_5gs_unknown_pd, tvb, offset, -1, "Not a NAS 5GS PD %u (%s)",
             epd, val_to_str_const(epd, nas_5gs_epd_vals, "Unknown"));
         return 0;
@@ -13998,7 +14001,6 @@ proto_reg_handoff_nas_5gs(void)
         heur_dissector_add("udp", dissect_nas_5gs_heur, "NAS-5GS over UDP", "nas_5gs_udp", proto_nas_5gs, HEURISTIC_DISABLE);
         eap_handle = find_dissector("eap");
         nas_eps_handle = find_dissector("nas-eps");
-        nas_eps_plain_handle = find_dissector("nas-eps_plain");
         lpp_handle = find_dissector("lpp");
         gsm_a_dtap_handle = find_dissector("gsm_a_dtap");
         ipv4_handle = find_dissector("ip");

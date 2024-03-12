@@ -59,6 +59,7 @@
 #include <epan/exported_pdu.h>
 #include <epan/proto_data.h>
 #include <epan/decode_as.h>
+#include <epan/prefs-int.h>
 #include <epan/secrets.h>
 #include <wiretap/secrets-types.h>
 
@@ -67,6 +68,8 @@
 #include <wsutil/strtoi.h>
 #include <wsutil/rsa.h>
 #include <wsutil/ws_assert.h>
+#include <wsutil/filesystem.h>
+#include <wsutil/report_message.h>
 #include "packet-tcp.h"
 #include "packet-x509af.h"
 #include "packet-tls.h"
@@ -4881,6 +4884,23 @@ static int dissect_tls_sct_ber(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 void
 proto_reg_handoff_ssl(void)
 {
+    if (files_identical(ssl_debug_file_name, ssl_options.keylog_filename)) {
+        report_failure("The TLS debug file (\"%s\") cannot point to the same "
+        "file as the TLS key log file (\"%s\").", ssl_debug_file_name,
+        ssl_options.keylog_filename);
+
+        /* ssl_parse_uat() sets (and thus overwrites) the debug file, so to
+         * be safe, set it the empty string before calling that so we don't
+         * overwrite their key log file.
+         */
+        module_t *tls_module = prefs_find_module("tls");
+        if (tls_module) {
+            pref_t *pref_tls_debug = prefs_find_preference(tls_module, "debug_file");
+            if (pref_tls_debug) {
+                prefs_set_string_value(pref_tls_debug, "", pref_current);
+            }
+        }
+    }
 
 #ifdef HAVE_LIBGNUTLS
     /* parse key list */

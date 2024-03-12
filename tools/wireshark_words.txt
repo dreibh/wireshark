@@ -292,6 +292,7 @@ clearallportcounters
 clientkey
 clientout
 clksrc
+cllog
 clopts
 clsfr
 clustermap
@@ -324,6 +325,7 @@ combiner
 combiners
 communication
 compat
+compatibles
 compilable
 compilers
 compr
@@ -382,6 +384,7 @@ csapi
 ctime
 ctrlstat
 ctxinfo
+ctxinst
 ctype
 cumulated
 cumulatively
@@ -481,6 +484,7 @@ desegmentation
 desegmented
 desegmenting
 deselect
+deserialize
 designator
 destip
 destport
@@ -570,6 +574,7 @@ elink
 ellipsoid
 emlsr
 emulates
+emule
 encap
 encaps
 encapsulating
@@ -827,7 +832,7 @@ implementor
 inactivated
 inband
 incits
-incompatabilities
+incompatibilities
 inconsistently
 incremented
 incrementing
@@ -1445,6 +1450,7 @@ randomize
 randomizer
 randpkt
 raster
+rctxinfo
 rdpudp
 rdtci
 reachability
@@ -1489,6 +1495,7 @@ reconfirm
 reconfrqst
 reconnection
 recurse
+recurses
 recursively
 redelivered
 redelivery
@@ -1673,6 +1680,7 @@ serialised
 serialization
 serialize
 serialized
+serializes
 servlet
 sessionid
 sessionkey
@@ -1880,6 +1888,8 @@ timestamp
 timestamps
 timezone
 tipcv
+tlvlen
+tlvtype
 tobago
 toggled
 toggles
@@ -1957,6 +1967,7 @@ unadvise
 unaligned
 unallocated
 unallowed
+unary
 unassign
 unassoc
 unassociated

@@ -81,7 +81,9 @@ The following features are new (or have been significantly updated) since versio
      Check the wireshark-filter(5) manpage for more information.
 
   ** Added new display filter functions to convert unsigned integer types to
-     decimal or hexadecimal. Check the wireshark-filter(5) manpage for more information.
+     decimal or hexadecimal, and convert fields with value strings into the
+     associated string for their value (used to produce results similar to
+     custom columns). Check the wireshark-filter(5) manpage for more information.
 
   ** Display filter macros can be written with a semicolon after the macro
      name before the argument list, e.g. `${mymacro;arg1;...;argN}`, instead
@@ -184,6 +186,9 @@ The following features are new (or have been significantly updated) since versio
   version 3.6.0
 
 * The "Follow Stream" dialog can now show delta times between turns and all packets and events.
+
+* The "Find Packet" dialog can search backwards, and find additional occurrences
+  of a string, hex value, or regular expression in a single frame.
 
 // Lua 5.3 is supported. Different versions of Lua are not guaranteed to be
 // compatible. If your Lua dissector does not work, check the Lua manual for

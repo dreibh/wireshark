@@ -503,6 +503,7 @@ static int * const bscvlc_header_flags[] = {
 };
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ipv4_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
 
@@ -664,7 +665,9 @@ dissect_ipv4_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 			call_data_dissector(tvb, pinfo, tree);
 			return tvb_captured_length(tvb);
 		}
+		increment_dissection_depth(pinfo);
 		dissect_ipv4_bvlc(tvb, pinfo, tree, data);
+		decrement_dissection_depth(pinfo);
 		break;
 		/* We check this if we get a FDT-packet somewhere */
 	case 0x04:	/* Forwarded-NPDU
@@ -697,13 +700,14 @@ dissect_ipv4_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 	/* Code from Guy Harris */
 	if (!dissector_try_uint(bvlc_dissector_table,
 		bvlc_function, next_tvb, pinfo, tree)) {
-		/* Unknown function - dissect the paylod as data */
+		/* Unknown function - dissect the payload as data */
 		call_data_dissector(next_tvb, pinfo, tree);
 	}
 	return tvb_reported_length(tvb);
 }
 
 static int
+// NOLINTNEXTLINE(misc-no-recursion)
 dissect_ipv6_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
 	proto_item *ti;
@@ -851,7 +855,9 @@ dissect_ipv6_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 			call_data_dissector(tvb, pinfo, tree);
 			return tvb_captured_length(tvb);
 		}
+		increment_dissection_depth(pinfo);
 		dissect_ipv6_bvlc(tvb, pinfo, tree, data);
+		decrement_dissection_depth(pinfo);
 		break;
 	case 0x02: /* Original-Broadcast-NPDU */
 	case 0x0c: /* Distribute-Broadcast-To-Network */
@@ -870,7 +876,7 @@ dissect_ipv6_bvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 	/* Code from Guy Harris */
 	if ( ! dissector_try_uint(bvlc_ipv6_dissector_table,
 		bvlc_function, next_tvb, pinfo, tree)) {
-		/* Unknown function - dissect the paylod as data */
+		/* Unknown function - dissect the payload as data */
 		call_data_dissector(next_tvb, pinfo, tree);
 	}
 
@@ -1256,7 +1262,7 @@ dissect_bscvlc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 	/* Code from Guy Harris */
 	if (!dissector_try_uint(bscvlc_dissector_table,
 		bvlc_function, next_tvb, pinfo, tree)) {
-		/* Unknown function - dissect the paylod as data */
+		/* Unknown function - dissect the payload as data */
 		call_data_dissector(next_tvb, pinfo, tree);
 	}
 

@@ -2728,7 +2728,7 @@ typedef struct _coherent_set_info {
   gboolean is_set;
 } coherent_set_info;
 
-/* Links a writer_seq_number with a coherent set. Useful when cohrent set ends with paramter empty packet*/
+/* Links a writer_seq_number with a coherent set. Useful when coherent set ends with parameter empty packet*/
 typedef struct _coherent_set_end {
   guint64 writer_seq_number;
   coherent_set_key coherent_set_id;
@@ -2766,7 +2766,7 @@ typedef struct  {
 } builtin_types_dissection_infos;
 
 
-/* Dissection info of types that are sent as user data but doesn't pubish discovery data */
+/* Dissection info of types that are sent as user data but doesn't publish discovery data */
 typedef struct {
   builtin_types_type_mappings type_mappings;
   builtin_types_dissection_infos dissection_infos;
@@ -2808,7 +2808,7 @@ static const true_false_string tfs_little_big_endianness = { "Little-Endian", "B
 /* #19359 - ensure strings we copy aren't truncated halfway through a Unicode codepoint */
 static void rtps_strlcpy(char *dest, const char *src, size_t dest_size)
 {
-  /* Reserving the last character in case ws_utf8_truncate overwites it */
+  /* Reserving the last character in case ws_utf8_truncate overwrites it */
   (void) g_strlcpy(dest, src, dest_size);
   ws_utf8_truncate(dest, strlen(dest));
 }
@@ -2860,7 +2860,7 @@ static gint dissect_crypto_algorithm_requirements(proto_tree *tree , tvbuff_t* t
   return offset;
 }
 
-static gint dissect_mutable_member(proto_tree *tree , tvbuff_t * tvb, gint offset, guint encoding, guint encoding_version,
+static gint dissect_mutable_member(proto_tree *tree , tvbuff_t * tvb, packet_info *pinfo, gint offset, guint encoding, guint encoding_version,
         dissection_info * info, gboolean * is_end, gboolean show);
 
 static gint get_native_type_cdr_length(guint64 member_kind) {
@@ -3009,7 +3009,8 @@ static dissection_info* lookup_dissection_info_in_custom_and_builtin_types(guint
 }
 
 /* this is a recursive function. _info may or may not be NULL depending on the use iteration */
-static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, guint encoding, guint encoding_version,
+// NOLINTNEXTLINE(misc-no-recursion)
+static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, packet_info *pinfo, gint offset, guint encoding, guint encoding_version,
         dissection_info * _info, guint64 type_id, gchar * name,
         RTICdrTypeObjectExtensibility extensibility, gint offset_zero,
         guint16 flags, guint32 element_member_id, gboolean show) {
@@ -3032,8 +3033,8 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
     }
     if ((flags & MEMBER_OPTIONAL) != 0) {
 		gint offset_before = offset;
-		/* Parameter header is at minimun 4 bytes */
-		ALIGN_ZERO(
+        /* Parameter header is at minimum 4 bytes */
+        ALIGN_ZERO(
             offset,
             get_native_type_cdr_alignment(RTI_CDR_TYPE_OBJECT_TYPE_KIND_UINT_32_TYPE, encoding_version),
             offset_zero);
@@ -3065,6 +3066,7 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
     }
     //proto_item_append_text(tree, "(Before Switch 0x%016" PRIx64 ")", type_id);
 
+    increment_dissection_depth(pinfo);
     switch (member_kind) {
         case RTI_CDR_TYPE_OBJECT_TYPE_KIND_BOOLEAN_TYPE: {
             gint length = get_native_type_cdr_length(member_kind);
@@ -3209,12 +3211,12 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
                 aux_tree = proto_tree_add_subtree(tree, tvb, offset, -1, ett_rtps_dissection_tree,
                     NULL, name);
             } else if (array_kind_length != -1) {
-                /* Total length of the array. Nothing elese to do here. */
+                /* Total length of the array. Nothing else to do here. */
                 offset += bound * array_kind_length;
                 break;
             }
 
-            /* Get the maximun number of elements to be shown */
+            /* Get the maximum number of elements to be shown */
             num_elements = (enable_max_array_data_type_elements)
                 ? MIN(bound, rtps_max_array_data_type_elements)
                 : bound;
@@ -3238,7 +3240,7 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
                         break;
                     }
                 }
-                offset = dissect_user_defined(aux_tree, tvb, offset, encoding, encoding_version, NULL,
+                offset = dissect_user_defined(aux_tree, tvb, pinfo, offset, encoding, encoding_version, NULL,
                         info->base_type_id, temp_buff, EXTENSIBILITY_INVALID, offset_zero, 0, 0, show_current_element);
             }
 
@@ -3311,7 +3313,7 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
                     }
                 }
                 if (info != NULL && info->base_type_id > 0)
-                    offset = dissect_user_defined(aux_tree, tvb, offset, encoding, encoding_version, NULL,
+                    offset = dissect_user_defined(aux_tree, tvb, pinfo, offset, encoding, encoding_version, NULL,
                          info->base_type_id, temp_buff, EXTENSIBILITY_INVALID, offset_zero, 0, 0, show_current_element);
             }
             /* If reached the limit and there are remaining elements we need to show the message and
@@ -3352,7 +3354,7 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
             if (info != NULL) {
                 base_type_id = info->base_type_id;
             }
-            offset = dissect_user_defined(tree, tvb, offset, encoding, encoding_version, NULL,
+            offset = dissect_user_defined(tree, tvb, pinfo, offset, encoding, encoding_version, NULL,
                          base_type_id, name, EXTENSIBILITY_INVALID, offset_zero, 0, 0, show);
             break;
         }
@@ -3370,7 +3372,7 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
                         proto_item_append_text(tree, " (discriminator = %d, type_id = 0x%016" PRIx64 ")",
                             value, result->member_type_id);
                     }
-                  offset = dissect_user_defined(tree, tvb, offset, encoding, encoding_version, NULL,
+                  offset = dissect_user_defined(tree, tvb, pinfo, offset, encoding, encoding_version, NULL,
                       result->member_type_id, result->member_name, EXTENSIBILITY_INVALID, offset, 0, 0, show);
                 } else {
                     /* the hashmap uses the type_id to index the objects. subtracting -2 here to lookup the discriminator
@@ -3382,7 +3384,7 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
                             proto_item_append_text(tree, " (discriminator = %d, type_id = 0x%016" PRIx64 ")",
                                 value, result->member_type_id);
                         }
-                    offset = dissect_user_defined(tree, tvb, offset, encoding, encoding_version, NULL,
+                    offset = dissect_user_defined(tree, tvb, pinfo, offset, encoding, encoding_version, NULL,
                         result->member_type_id, result->member_name, EXTENSIBILITY_INVALID, offset, 0, 0, show);
                     }
                 }
@@ -3415,7 +3417,7 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
                     /* Updated only once */
                     first_skipped_element_offset = offset;
                   }
-                  offset = dissect_mutable_member(aux_tree, tvb, offset, encoding, encoding_version, info, &is_end, show_current_element);
+                  offset = dissect_mutable_member(aux_tree, tvb, pinfo, offset, encoding, encoding_version, info, &is_end, show_current_element);
                   ++num_elements;
                   if (show_current_element) {
                     ++shown_elements;
@@ -3427,26 +3429,26 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
                   if (show) {
                     proto_item_append_text(tree, "(BaseId: 0x%016" PRIx64 ")", info->base_type_id);
                   }
-                  offset = dissect_user_defined(aux_tree, tvb, offset, encoding, encoding_version, NULL,
+                  offset = dissect_user_defined(aux_tree, tvb, pinfo, offset, encoding, encoding_version, NULL,
                     info->base_type_id, info->member_name, EXTENSIBILITY_INVALID,
                     offset, 0, 0, show);
                 }
 
-                /* Get the maximun number of elements to be shown depending if enable_max_data_type_elements is enabled */
+                /* Get the maximum number of elements to be shown depending if enable_max_data_type_elements is enabled */
                 shown_elements = (enable_max_data_type_elements)
                   ? MIN(info->num_elements, rtps_max_data_type_elements)
                   : info->num_elements;
                 for (i = 0; i < info->num_elements; i++) {
                   if (info->elements[i].type_id > 0) {
                     /* A member is shown if the parent cluster is shown and the position is in the
-                    * range of maximun number of elements shown */
+                    * range of maximum number of elements shown */
                     if (!(show && i < shown_elements) && show_current_element) {
                       show_current_element = FALSE;
                       /* Updated only once */
                       first_skipped_element_offset = offset;
                     }
                     /* If a member is not shown all it children will inherit the "show_current_element" value */
-                    offset = dissect_user_defined(aux_tree, tvb, offset, encoding, encoding_version, NULL,
+                    offset = dissect_user_defined(aux_tree, tvb, pinfo, offset, encoding, encoding_version, NULL,
                       info->elements[i].type_id, info->elements[i].member_name, info->extensibility,
                       offset_zero, info->elements[i].flags, info->elements[i].member_id, show_current_element);
                   }
@@ -3477,6 +3479,7 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
             break;
         }
     }
+    decrement_dissection_depth(pinfo);
 
     if (extensibility == EXTENSIBILITY_MUTABLE) {
         offset_zero += member_length;
@@ -3486,7 +3489,8 @@ static gint dissect_user_defined(proto_tree *tree, tvbuff_t * tvb, gint offset, 
     }
 }
 
-static gint dissect_mutable_member(proto_tree *tree , tvbuff_t * tvb, gint offset, guint encoding, guint encoding_version,
+// NOLINTNEXTLINE(misc-no-recursion)
+static gint dissect_mutable_member(proto_tree *tree , tvbuff_t * tvb, packet_info *pinfo, gint offset, guint encoding, guint encoding_version,
         dissection_info * info, gboolean * is_end, gboolean show) {
 
     proto_tree * member;
@@ -3515,7 +3519,7 @@ static gint dissect_mutable_member(proto_tree *tree , tvbuff_t * tvb, gint offse
             mapping = (mutable_member_mapping *) wmem_map_lookup(mutable_member_mappings, &(key));
             if (mapping) { /* the library knows how to dissect this */
                 proto_item_append_text(member, "(base found 0x%016" PRIx64 ")", key);
-                dissect_user_defined(tree, tvb, offset, encoding, encoding_version, NULL, mapping->member_type_id,
+                dissect_user_defined(tree, tvb, pinfo, offset, encoding, encoding_version, NULL, mapping->member_type_id,
                     mapping->member_name, EXTENSIBILITY_INVALID, offset, 0, mapping->member_id, show);
                 proto_item_set_hidden(member);
                 return check_offset_addition(offset, member_length, tree, NULL, tvb);
@@ -3529,7 +3533,7 @@ static gint dissect_mutable_member(proto_tree *tree , tvbuff_t * tvb, gint offse
     mapping = (mutable_member_mapping *) wmem_map_lookup(mutable_member_mappings, &(key));
     if (mapping) { /* the library knows how to dissect this */
         proto_item_append_text(member, "(found 0x%016" PRIx64 ")", key);
-        dissect_user_defined(tree, tvb, offset, encoding, encoding_version, NULL, mapping->member_type_id,
+        dissect_user_defined(tree, tvb, pinfo, offset, encoding, encoding_version, NULL, mapping->member_type_id,
             mapping->member_name, EXTENSIBILITY_INVALID, offset, 0, mapping->member_id, show);
 
     } else
@@ -4921,7 +4925,8 @@ static const char *rtps_util_typecode_id_to_string(guint32 typecode_id) {
 /* Insert in the protocol tree the next bytes interpreted as typecode info
  * Returns the number of bytes parsed
  */
-static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset, const guint encoding,
+// NOLINTNEXTLINE(misc-no-recursion)
+static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, gint offset, const guint encoding,
                         int      indent_level, int is_pointer, guint16 bitfield, int is_key, const gint offset_begin,
                         char    *name,
                         int      seq_max_len,   /* -1 = not a sequence field */
@@ -5065,9 +5070,11 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
         offset = disc_offset_begin + disc_size;
 #if 0
         field_offset_begin = offset;
+        increment_dissection_depth(pinfo);
         offset += rtps_util_add_typecode(
                           tree,
                           tvb,
+                          pinfo,
                           offset,
                           encoding,
                           indent_level+1,
@@ -5079,6 +5086,7 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
                           -1,
                           NULL,
                           ndds_40_hack);
+        decrement_dissection_depth(pinfo);
 #endif
 
         /* Add the entry of the union in the tree */
@@ -5144,9 +5152,11 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
             proto_item_set_len(case_item, retVal);
           }
 
-          offset += rtps_util_add_typecode(tree, tvb, offset, encoding,
+          increment_dissection_depth(pinfo);
+          offset += rtps_util_add_typecode(tree, tvb, pinfo, offset, encoding,
                     indent_level+2, member_is_pointer, 0, 0, field_offset_begin,
                     member_name, -1, NULL, ndds_40_hack);
+          decrement_dissection_depth(pinfo);
         }
         /* Finally prints the name of the struct (if provided) */
         (void) g_strlcpy(type_name, "}", sizeof(type_name));
@@ -5314,9 +5324,11 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
             member_is_key = tvb_get_guint8(tvb, offset);
             offset++;
 
-            offset += rtps_util_add_typecode(tree, tvb, offset, encoding,
+            increment_dissection_depth(pinfo);
+            offset += rtps_util_add_typecode(tree, tvb, pinfo, offset, encoding,
                           indent_level+1, member_is_pointer, member_bitfield, member_is_key,
                           field_offset_begin, member_name, -1, NULL, ndds_40_hack);
+            decrement_dissection_depth(pinfo);
           }
         }
         /* Finally prints the name of the struct (if provided) */
@@ -5355,7 +5367,7 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
         offset += 4;
 
         /* Recursive decode seq typecode */
-        /*offset += */rtps_util_add_typecode(tree, tvb, offset, encoding, indent_level,
+        /*offset += */rtps_util_add_typecode(tree, tvb, pinfo, offset, encoding, indent_level,
                           is_pointer, bitfield, is_key, offset_begin, name,
                           seq_max_len2, NULL, ndds_40_hack);
         /* Differently from the other typecodes, the line has been already printed */
@@ -5390,9 +5402,11 @@ static gint rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, gint offset,
         }
 
         /* Recursive decode seq typecode */
-        /*offset += */rtps_util_add_typecode(tree, tvb, offset, encoding,
+        increment_dissection_depth(pinfo);
+        /*offset += */rtps_util_add_typecode(tree, tvb, pinfo, offset, encoding,
                           indent_level, is_pointer, bitfield, is_key, offset_begin,
                           name, -1, size, ndds_40_hack);
+        decrement_dissection_depth(pinfo);
         /* Differently from the other typecodes, the line has been already printed */
         return retVal;
     }
@@ -5982,6 +5996,7 @@ static void rtps_util_add_type_element_struct(proto_tree *tree,
 static void rtps_util_add_type_library(proto_tree *tree, packet_info * pinfo,
         tvbuff_t * tvb, gint offset, const guint encoding, guint32 size);
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static void rtps_util_add_type_element_module(proto_tree *tree, packet_info * pinfo,
         tvbuff_t * tvb, gint offset, const guint encoding) {
   guint32 long_number;
@@ -5993,6 +6008,7 @@ static void rtps_util_add_type_element_module(proto_tree *tree, packet_info * pi
   rtps_util_add_type_library(tree, pinfo, tvb, offset, encoding, -1);
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static gint rtps_util_add_type_library_element(proto_tree *tree, packet_info * pinfo,
         tvbuff_t * tvb, gint offset, const guint encoding) {
   proto_tree * element_tree;
@@ -6066,6 +6082,7 @@ static gint rtps_util_add_type_library_element(proto_tree *tree, packet_info * p
   return offset;
 }
 
+// NOLINTNEXTLINE(misc-no-recursion)
 static void rtps_util_add_type_library(proto_tree *tree, packet_info * pinfo,
         tvbuff_t * tvb, gint offset, const guint encoding, guint32 size) {
   proto_tree * library_tree;
@@ -6074,10 +6091,12 @@ static void rtps_util_add_type_library(proto_tree *tree, packet_info * pinfo,
   library_tree = proto_tree_add_subtree_format(tree, tvb, offset, size,
                     ett_rtps_type_library, NULL, "Type Library (%d elements)", long_number);
   offset += 4;
+  increment_dissection_depth(pinfo);
   for (i = 0; i < long_number; i++) {
       offset = rtps_util_add_type_library_element(library_tree, pinfo, tvb,
               offset, encoding);
   }
+  decrement_dissection_depth(pinfo);
 }
 
 static void rtps_util_add_typeobject(proto_tree *tree, packet_info * pinfo,
@@ -6754,7 +6773,7 @@ static gboolean rtps_util_try_dissector(proto_tree *tree,
           info = lookup_dissection_info_in_custom_and_builtin_types(type_mapping_object->type_id);
         if (info != NULL) {
           proto_item_append_text(tree, " (TypeId: 0x%016" PRIx64 ")", info->type_id);
-          return dissect_user_defined(tree, tvb, offset, encoding, encoding_version, info,
+          return dissect_user_defined(tree, tvb, pinfo, offset, encoding, encoding_version, info,
               info->type_id, info->member_name, EXTENSIBILITY_INVALID, offset,
               0 /* flags */, 0 /* member_id */, TRUE);
         }
@@ -7499,6 +7518,7 @@ static gboolean dissect_parameter_sequence_rti_dds(proto_tree *rtps_parameter_tr
     case PID_TYPECODE_RTPS2: {
       rtps_util_add_typecode(rtps_parameter_tree,
         tvb,
+        pinfo,
         offset,
         encoding,
         0,      /* indent level */
@@ -7715,6 +7735,7 @@ static gboolean dissect_parameter_sequence_toc(proto_tree *rtps_parameter_tree, 
     case PID_TYPECODE_RTPS2: {
       rtps_util_add_typecode(rtps_parameter_tree,
         tvb,
+        pinfo,
         offset,
         encoding,
         0,      /* indent level */
@@ -8609,7 +8630,7 @@ static gboolean dissect_parameter_sequence_v1(proto_tree *rtps_parameter_tree, p
      * +---------------+---------------+---------------+---------------+
      */
     case PID_TYPECODE:
-      rtps_util_add_typecode(rtps_parameter_tree, tvb, offset, encoding,
+      rtps_util_add_typecode(rtps_parameter_tree, tvb, pinfo, offset, encoding,
                     0,      /* indent level */
                     0,      /* isPointer */
                     -1,     /* bitfield */
@@ -9572,7 +9593,7 @@ static void dissect_APP_ACK_CONF(tvbuff_t *tvb,
   }
 }
 
-static void dissect_parametrized_serialized_data(proto_tree *tree, tvbuff_t *tvb,
+static void dissect_parameterized_serialized_data(proto_tree *tree, tvbuff_t *tvb,
                        gint offset_input, int size, const guint encoding)
 {
   guint32 member_id, member_length;
@@ -9897,7 +9918,7 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
   rtps_dissector_data * data = wmem_new(wmem_packet_scope(), rtps_dissector_data);
   tvbuff_t *data_holder_tvb = tvb;
   tvbuff_t *compressed_tvb = NULL;
-  proto_tree *dissected_data_holdeer_tree = NULL;
+  proto_tree *dissected_data_holder_tree = NULL;
   gboolean is_compressed = FALSE;
   gboolean uncompressed_ok = FALSE;
   proto_tree *compressed_subtree = NULL;
@@ -9909,7 +9930,7 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
           ett_rtps_serialized_data, &ti, label);
 
   /* We store thisa value for using later */
-  dissected_data_holdeer_tree = rtps_parameter_sequence_tree;
+  dissected_data_holder_tree = rtps_parameter_sequence_tree;
 
   if (frag_number > 1) {
     /* if the data is a fragment and not the first fragment, simply dissect the
@@ -9939,7 +9960,7 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
     if (is_compressed && uncompressed_ok) {
         data_holder_tvb = compressed_tvb;
         offset = 0;
-        dissected_data_holdeer_tree = compressed_subtree;
+        dissected_data_holder_tree = compressed_subtree;
     }
 
     /* Sets the correct values for encapsulation_encoding */
@@ -9954,7 +9975,7 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
       try_dissection_from_type_object = TRUE;
     }
 
-    /* In case it is compressed only try to dissect the type oject if it is correctly uncompressed */
+    /* In case it is compressed only try to dissect the type object if it is correctly uncompressed */
     try_dissection_from_type_object = try_dissection_from_type_object
         && ((is_compressed == uncompressed_ok));
 
@@ -9966,7 +9987,7 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
      *       tvb if it is not decompressed.
      * Only try to dissect the user data if it is not compressed or it is compressed and correctly uncompressed */
     if (is_compressed == uncompressed_ok) {
-        if (rtps_util_try_dissector(dissected_data_holdeer_tree,
+        if (rtps_util_try_dissector(dissected_data_holder_tree,
                 pinfo, data_holder_tvb, offset, guid, data, encapsulation_encoding,
                 get_encapsulation_version(encapsulation_id), try_dissection_from_type_object)) {
             return;
@@ -9978,32 +9999,32 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
                if it is not */
         case ENCAPSULATION_CDR_LE:
         case ENCAPSULATION_CDR_BE:
-            proto_tree_add_item(dissected_data_holdeer_tree, hf_rtps_issue_data, data_holder_tvb,
+            proto_tree_add_item(dissected_data_holder_tree, hf_rtps_issue_data, data_holder_tvb,
                 offset, size, ENC_NA);
             break;
 
         case ENCAPSULATION_PL_CDR_LE:
         case ENCAPSULATION_PL_CDR_BE:
             if (is_discovery_data) {
-                dissect_parameter_sequence(dissected_data_holdeer_tree, pinfo, data_holder_tvb, offset,
+                dissect_parameter_sequence(dissected_data_holder_tree, pinfo, data_holder_tvb, offset,
                     encapsulation_encoding, size, "serializedData", 0x0200, NULL, vendor_id, FALSE, NULL);
             }
             else if (frag_number != NOT_A_FRAGMENT) {
-                /* fragments should be dissected as raw bytes (not parametrized) */
-                proto_tree_add_item(dissected_data_holdeer_tree, hf_rtps_issue_data, data_holder_tvb,
+                /* fragments should be dissected as raw bytes (not parameterized) */
+                proto_tree_add_item(dissected_data_holder_tree, hf_rtps_issue_data, data_holder_tvb,
                     offset, size, ENC_NA);
                 break;
             }
             else {
                 /* Instead of showing a warning like before, we now dissect the data as
                  * (id - length - value) members */
-                dissect_parametrized_serialized_data(dissected_data_holdeer_tree,
+                dissect_parameterized_serialized_data(dissected_data_holder_tree,
                     data_holder_tvb, offset, size, encapsulation_encoding);
             }
             break;
 
         default:
-            proto_tree_add_item(dissected_data_holdeer_tree, hf_rtps_data_serialize_data, tvb,
+            proto_tree_add_item(dissected_data_holder_tree, hf_rtps_data_serialize_data, tvb,
                 offset, size, ENC_NA);
         }
     }
@@ -12526,7 +12547,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, gint offs
   proto_tree *compressed_subtree = NULL;
   tvbuff_t *data_holder_tvb = tvb;
   tvbuff_t *compressed_tvb = NULL;
-  proto_tree *dissected_data_holdeer_tree = tree;
+  proto_tree *dissected_data_holder_tree = tree;
 
 
   data = wmem_new(wmem_packet_scope(), rtps_dissector_data);
@@ -12575,7 +12596,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, gint offs
   rtps_util_add_seq_number(tree, tvb, offset, encoding, "batchSeqNumber");
   offset += 8;
 
-  /* First stample sequence number */
+  /* First sample sequence number */
   rtps_util_add_seq_number(tree, tvb, offset, encoding, "firstSampleSeqNumber");
   offset += 8;
 
@@ -12705,7 +12726,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, gint offs
   if (is_compressed && uncompressed_ok) {
       data_holder_tvb = compressed_tvb;
       offset = 0;
-      dissected_data_holdeer_tree = compressed_subtree;
+      dissected_data_holder_tree = compressed_subtree;
       octets_to_next_header = tvb_reported_length(data_holder_tvb);
       old_offset = 0;
   }
@@ -12730,7 +12751,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, gint offs
           gint count = 0;
 
           sil_tree = proto_tree_add_subtree(
-              dissected_data_holdeer_tree,
+              dissected_data_holder_tree,
               data_holder_tvb,
               offset,
               -1,
@@ -13814,7 +13835,7 @@ static
 void append_submessage_col_info(packet_info* pinfo, submessage_col_info* current_submessage_col_info) {
   gboolean* is_data_session_intermediate = NULL;
 
-  /* Status info clumn: (r),(p[U])...*/
+  /* Status info column: (r),(p[U])...*/
   if (current_submessage_col_info->status_info != NULL) {
     col_append_str(pinfo->cinfo, COL_INFO, current_submessage_col_info->status_info);
   }
