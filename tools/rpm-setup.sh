@@ -168,13 +168,10 @@ add_packages() {
 add_package BASIC_LIST glib2 || add_package BASIC_LIST libglib-2_0-0 ||
 echo "Required package glib2|libglib-2_0-0 is unavailable" >&2
 
-# lua51, lua51-devel: OpenSUSE Leap 42.3 (lua would be fine too, as it installs lua52), OpenSUSE Leap 15.0 (lua installs lua53, so it wouldn't work)
-# compat-lua, compat-lua-devel: Fedora 28, Fedora 29, CentOS 8
-# lua, lua-devel: CentOS 7
 add_package BASIC_LIST lua53-devel || add_package BASIC_LIST lua-devel ||
 echo "Required package lua53-devel|lua-devel is unavailable" >&2
 
-add_package BASIC_LIST lua53 || add_package BASIC_LIST compat-lua || add_package BASIC_LIST lua ||
+add_package BASIC_LIST lua53 || add_package BASIC_LIST lua ||
 echo "Required package lua53|lua is unavailable" >&2
 
 add_package BASIC_LIST libpcap || add_package BASIC_LIST libpcap1 ||
@@ -221,13 +218,17 @@ then
 	add_packages BASIC_LIST libqt5-qtmultimedia-devel libQt5PrintSupport-devel ||
 	echo "Required Qt5 Mutlimedia and/or Qt5 Print Support is unavailable" >&2
 
-	# This in only required on OpenSUSE
+	# This is only required on OpenSUSE
 	add_package BASIC_LIST libqt5-qtsvg-devel ||
 	echo "Required OpenSUSE package libqt5-qtsvg-devel is unavailable. Not required for other distributions." >&2
 
-	# This in only required on OpenSUSE
+	# This is only required on OpenSUSE
 	add_package BASIC_LIST libQt5Concurrent-devel ||
 	echo "Required OpenSUSE package libQt5Concurrent-devel is unavailable. Not required for other distributions." >&2
+
+	# This is only required on OpenSUSE
+	add_package ADDITIONAL_LIST libQt5DBus-devel ||
+	echo "Optional OpenSUSE package libQt5DBus-devel is unavailable. Not required for other distributions." >&2
 
 	add_package ADDITIONAL_LIST qt5-qtimageformats ||
 	add_package ADDITIONAL_LIST libqt5-qtimageformats ||
