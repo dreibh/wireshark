@@ -536,7 +536,9 @@ static socket_handle_t adb_connect(const char *server_ip, unsigned short *server
     struct sockaddr_in server;
     struct sockaddr_in client;
     int                status;
+#ifndef _WIN32
     int                result;
+#endif
     int                tries = 0;
 
     memset(&server, 0x0, sizeof(server));
@@ -2644,13 +2646,13 @@ int main(int argc, char *argv[]) {
             if (ws_optarg && !*ws_optarg)
                 logcat_text = true;
             else
-                logcat_text = (g_ascii_strncasecmp(ws_optarg, "TRUE", 4) == 0);
+                logcat_text = (g_ascii_strncasecmp(ws_optarg, "true", 4) == 0);
             break;
         case OPT_CONFIG_LOGCAT_IGNORE_LOG_BUFFER:
             if (ws_optarg == NULL || (ws_optarg && !*ws_optarg))
                 logcat_ignore_log_buffer = true;
             else
-                logcat_ignore_log_buffer = (g_ascii_strncasecmp(ws_optarg, "TRUE", 4) == 0);
+                logcat_ignore_log_buffer = (g_ascii_strncasecmp(ws_optarg, "true", 4) == 0);
             break;
         case OPT_CONFIG_LOGCAT_CUSTOM_OPTIONS:
             if (ws_optarg == NULL || (ws_optarg && *ws_optarg == '\0')) {
@@ -2678,7 +2680,7 @@ int main(int argc, char *argv[]) {
             }
             break;
         case OPT_CONFIG_BT_FORWARD_SOCKET:
-            bt_forward_socket = (g_ascii_strncasecmp(ws_optarg, "TRUE", 4) == 0);
+            bt_forward_socket = (g_ascii_strncasecmp(ws_optarg, "true", 4) == 0);
             break;
         case OPT_CONFIG_BT_LOCAL_IP:
             bt_local_ip = ws_optarg;
