@@ -8374,6 +8374,10 @@ ssl_dissect_hnd_hello_ext_quic_transport_parameters(ssl_common_dissect_t *hf, tv
                     // parameter is sent, the sequence number of the supplied
                     // connection ID is 1."
                     cid.seq_num = 1;
+                    // Multipath draft-07 "Also, the Path Identifier for the
+                    // connection ID specified in the "preferred address"
+                    // transport parameter is 0."
+                    cid.path_id = 0;
                     tvb_memcpy(tvb, cid.cid, offset, connectionid_length);
                     quic_add_connection(pinfo, &cid);
                 }
@@ -8522,21 +8526,23 @@ ssl_dissect_hnd_hello_ext_quic_transport_parameters(ssl_common_dissect_t *hf, tv
                 proto_tree_add_item_ret_varint(parameter_tree, hf->hf.hs_ext_quictp_parameter_enable_multipath,
                                                tvb, offset, -1, ENC_VARINT_QUIC, &value, &len);
                 if (value == 1) {
-                    quic_add_multipath(pinfo);
+                    quic_add_multipath(pinfo, QUIC_MP_NO_PATH_ID);
                 }
                 offset += parameter_length;
             break;
             case SSL_HND_QUIC_TP_ENABLE_MULTIPATH_DRAFT05:
             case SSL_HND_QUIC_TP_ENABLE_MULTIPATH:
                 /* No Payload */
-                quic_add_multipath(pinfo);
+                quic_add_multipath(pinfo, QUIC_MP_NO_PATH_ID);
             break;
             case SSL_HND_QUIC_TP_INITIAL_MAX_PATHS:
                 proto_tree_add_item_ret_varint(parameter_tree, hf->hf.hs_ext_quictp_parameter_initial_max_paths,
                                                tvb, offset, -1, ENC_VARINT_QUIC, &value, &len);
-                if (value == 1) {
-                    quic_add_multipath(pinfo);
+                if (value > 1) {
+                    quic_add_multipath(pinfo, QUIC_MP_PATH_ID);
                 }
+                /* multipath draft-07: "The value of the initial_max_paths
+                 * parameter MUST be at least 2." TODO: Expert Info? */
                 offset += parameter_length;
             break;
             default:
