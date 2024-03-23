@@ -35,6 +35,7 @@ static int hf_can_extflag;
 static int hf_can_rtrflag;
 static int hf_can_errflag;
 static int hf_can_reserved;
+static int hf_can_len8dlc;
 static int hf_can_padding;
 
 static int hf_can_err_tx_timeout;
@@ -77,6 +78,7 @@ static int hf_can_err_ctrl_specific;
 static int hf_canxl_priority;
 static int hf_canxl_vcid;
 static int hf_canxl_secflag;
+static int hf_canxl_xlflag;
 static int hf_canxl_sdu_type;
 static int hf_canxl_len;
 static int hf_canxl_acceptance_field;
@@ -85,6 +87,7 @@ static expert_field ei_can_err_dlc_mismatch;
 
 static int hf_canfd_brsflag;
 static int hf_canfd_esiflag;
+static int hf_canfd_fdflag;
 
 static gint ett_can;
 static gint ett_can_fd;
@@ -109,9 +112,7 @@ static heur_dtbl_entry_t *heur_dtbl_entry;
 
 #define CANFD_FLAG_OFFSET  5
 
-#define CANFD_BRS 0x01 /* bit rate switch (second bitrate for payload data) */
-#define CANFD_ESI 0x02 /* error state indicator of the transmitting node */
-
+#define CANXL_FLAGS_OFFSET CAN_LEN_OFFSET
 #define CANXL_LEN_OFFSET   6
 #define CANXL_DATA_OFFSET  12
 
@@ -172,11 +173,14 @@ static const value_string canxl_sdu_type_vals[] = {
     { 0x00, "Reserved" },
     { CANXL_SDU_TYPE_CONTENT_BASED_ADDRESSING, "Content-based Addressing" },
     { 0x02, "Reserved for future use" },
-    { CANXL_SDU_TYPE_CLASSICAL_CAN_AND_CAN_FD_MAPPED_TUNNELING, "Classical CAN/CAN FD mapped tunneling" },
-    { CANXL_SDU_TYPE_IEEE_802_3_MAC_FRAME_TUNNELLING, "IEEE 802.3 (MAC frame) tunneling" },
-    { CANXL_SDU_TYPE_IEEE_802_3_MAC_FRAME_MAPPED_TUNNELING, "IEEE 802.3 (MAC frame) mapped tunneling" },
-    { CANXL_SDU_TYPE_CLASSICAL_CAN_MAPPED_TUNNELING, "Classical CAN mapped tunneling" },
-    { CANXL_SDU_TYPE_CAN_FD_MAPPED_TUNNELING, "CAN FD mapped tunneling" },
+    { CANXL_SDU_TYPE_CAN_CC_CAN_FD, "CAN CC/CAN FD" },
+    { CANXL_SDU_TYPE_IEEE_802_3, "IEEE 802.3 (MAC frame)" },
+    { CANXL_SDU_TYPE_IEEE_802_3_EXTENDED, "IEEE 802.3 (MAC frame) extended" },
+    { CANXL_SDU_TYPE_CAN_CC, "CAN CC" },
+    { CANXL_SDU_TYPE_CAN_FD, "CAN FD" },
+    { CANXL_SDU_TYPE_CIA_611_2, "CiA 611-2 (Multi-PDU)" },
+    { CANXL_SDU_TYPE_AUTOSAR_MPDU, "AUTOSAR Multi-PDU" },
+    { CANXL_SDU_TYPE_CIA_613_2, "CiA 613-2 (CANsec key agreement protocol" },
     { 0xFF, "Reserved" },
     { 0, NULL }
 };
@@ -565,6 +569,7 @@ dissect_socketcan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
     static int * const canfd_flag_fields[] = {
         &hf_canfd_brsflag,
         &hf_canfd_esiflag,
+        &hf_canfd_fdflag,
         NULL,
     };
     static int * const can_err_flags[] = {
@@ -588,32 +593,13 @@ dissect_socketcan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
     };
     static int * const canxl_flag_fields[] = {
         &hf_canxl_secflag,
+        &hf_canxl_xlflag,
         NULL,
     };
 
-    /*
-     * If we weren't told the type of this frame, check
-     * whether the CANFD_FDF flag is set in the FD flags
-     * field of the header; if so, it's a CAN FD frame.
-     * otherwise, it's a CAN frame.
-     *
-     * However, trust the CANFD_FDF flag only if the only
-     * bits set in the FD flags field are the known bits,
-     * and the two bytes following that field are both
-     * zero.  This is because some older LINKTYPE_CAN_SOCKETCAN
-     * frames had uninitialized junk in the FD flags field,
-     * so we treat a frame with what appears to be uninitialized
-     * junk as being CAN rather than CAN FD, under the assumption
-     * that the CANFD_FDF bit is set because the field is
-     * uninitialized, not because it was explicitly set because
-     * it's a CAN FD frame.  At least some newer code that sets
-     * that flag also makes sure that the fields in question are
-     * initialized, so we assume that if they're not initialized
-     * the code is older code that didn't support CAN FD.
-     */
+    /* determine CAN packet type */
     if (can_packet_type == PACKET_TYPE_UNKNOWN) {
-        guint8 frame_length;
-        guint8 fd_flags;
+        guint8 canxl_flags;
 
         /*
          * Check whether the frame has the CANXL_XLF flag set in what
@@ -621,35 +607,14 @@ dissect_socketcan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
          * or CAN FD frame; if so, then it's a CAN XL frame (and that
          * field is the flags field of that frame).
          */
-        frame_length = tvb_get_guint8(tvb, CAN_LEN_OFFSET);
-        if (frame_length & CANXL_XLF) {
+        canxl_flags = tvb_get_guint8(tvb, CANXL_FLAGS_OFFSET);
+        if ((tvb_reported_length(tvb) > 12) && (canxl_flags & CANXL_XLF)) {
             can_packet_type = PACKET_TYPE_CAN_XL;
         } else {
-            /*
-             * This is a CAN classic or CAN FD frame.
-             * Check whether the flags field has the CANFD_FDF
-             * flag set, has no unknown flag bits set, and has
-             * no bits set in the two reserved fields.  If so,
-             * it's a CAN FD frame; otherwise, it's either a
-             * CAN classic frame, or a frame where the CANFD_FDF
-             * flag is set but where that might just be because
-             * that field contains uninitialized junk rather
-             * than because it's a CAN FD frame, so we treat it
-             * as a CAN classic frame.
-             */
-            fd_flags = tvb_get_guint8(tvb, CANFD_FLAG_OFFSET);
-
-            if ((fd_flags & CANFD_FDF) &&
-                    ((fd_flags & ~(CANFD_BRS | CANFD_ESI | CANFD_FDF)) == 0) &&
-                    tvb_get_guint8(tvb, CANFD_FLAG_OFFSET + 1) == 0 &&
-                    tvb_get_guint8(tvb, CANFD_FLAG_OFFSET + 2) == 0) {
+            if (tvb_reported_length(tvb) == 72)
                 can_packet_type = PACKET_TYPE_CAN_FD;
-            } else {
-                if (tvb_reported_length(tvb) == 72)
-                    can_packet_type = PACKET_TYPE_CAN_FD;
-                else
-                    can_packet_type = PACKET_TYPE_CAN;
-            }
+            else if  (tvb_reported_length(tvb) == 16)
+                can_packet_type = PACKET_TYPE_CAN;
         }
     }
 
@@ -761,7 +726,8 @@ dissect_socketcan_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, gu
             proto_tree_add_bitmask_list(can_tree, tvb, CANFD_FLAG_OFFSET, 1, canfd_flag_fields, ENC_NA);
             proto_tree_add_item(can_tree, hf_can_reserved, tvb, CANFD_FLAG_OFFSET+1, 2, ENC_NA);
         } else {
-            proto_tree_add_item(can_tree, hf_can_reserved, tvb, CANFD_FLAG_OFFSET, 3, ENC_NA);
+            proto_tree_add_item(can_tree, hf_can_reserved, tvb, CANFD_FLAG_OFFSET, 2, ENC_NA);
+            proto_tree_add_item(can_tree, hf_can_len8dlc, tvb, CANFD_FLAG_OFFSET+2, 1, ENC_NA);
         }
 
         if (frame_type == LINUX_CAN_ERR) {
@@ -894,6 +860,8 @@ proto_register_socketcan(void) {
             "Error Message Flag", "can.flags.err", FT_BOOLEAN, 32, NULL, CAN_ERR_FLAG, NULL, HFILL } },
         { &hf_can_len, {
             "Frame-Length", "can.len", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_can_len8dlc, {
+            "Len 8 DLC", "can.len8dlc", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
         { &hf_can_reserved, {
             "Reserved", "can.reserved", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL } },
         { &hf_can_padding, {
@@ -902,6 +870,8 @@ proto_register_socketcan(void) {
             "Bit Rate Setting", "canfd.flags.brs", FT_BOOLEAN, 8, NULL, CANFD_BRS, NULL, HFILL } },
         { &hf_canfd_esiflag, {
             "Error State Indicator", "canfd.flags.esi", FT_BOOLEAN, 8, NULL, CANFD_ESI, NULL, HFILL } },
+        { &hf_canfd_fdflag, {
+            "FD Frame", "canfd.flags.fdf", FT_BOOLEAN, 8, NULL, CANFD_FDF, NULL, HFILL } },
         { &hf_can_err_tx_timeout, {
             "Transmit timeout", "can.err.tx_timeout", FT_BOOLEAN, 32, NULL, CAN_ERR_TX_TIMEOUT, NULL, HFILL } },
         { &hf_can_err_lostarb, {
@@ -968,6 +938,8 @@ proto_register_socketcan(void) {
             "VCID", "canxl.vcid", FT_UINT32, BASE_DEC, NULL, 0x00FF0000, NULL, HFILL } },
         { &hf_canxl_secflag, {
             "Simple Extended Context", "canxl.flags.sec", FT_BOOLEAN, 8, NULL, CANXL_SEC, NULL, HFILL } },
+        { &hf_canxl_xlflag, {
+            "XL Frame", "canxl.flags.xl", FT_BOOLEAN, 8, NULL, CANXL_XLF, NULL, HFILL } },
         { &hf_canxl_sdu_type, {
             "SDU type", "canxl.sdu_type", FT_UINT8, BASE_HEX, VALS(canxl_sdu_type_vals), 0, NULL, HFILL } },
         { &hf_canxl_len, {
