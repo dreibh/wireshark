@@ -26,6 +26,7 @@
 
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/widgets/qcustomplot.h>
+#include <ui/qt/widgets/qcp_string_legend_item.h>
 #include "progress_frame.h"
 #include "main_application.h"
 
@@ -981,20 +982,20 @@ void IOGraphDialog::updateLegend()
 
     // Nothing.
     if (vu_label_set.size() < 1) {
+        iop->legend->layer()->replot();
         return;
     }
 
     // All the same. Use the Y Axis label.
     if (vu_label_set.size() == 1) {
         iop->yAxis->setLabel(vu_label_set.values()[0] + "/" + intervalText);
-        return;
     }
 
-    // Differing labels. Create a legend with a Title label at top.
+    // Create a legend with a Title label at top.
     // Legend Title thanks to: https://www.qcustomplot.com/index.php/support/forum/443
-    QCPTextElement* legendTitle = qobject_cast<QCPTextElement*>(iop->legend->elementAt(0));
+    QCPStringLegendItem* legendTitle = qobject_cast<QCPStringLegendItem*>(iop->legend->elementAt(0));
     if (legendTitle == NULL) {
-        legendTitle = new QCPTextElement(iop, QString(""));
+        legendTitle = new QCPStringLegendItem(iop->legend, QString(""));
         iop->legend->insertRow(0);
         iop->legend->addElement(0, 0, legendTitle);
     }
@@ -1020,6 +1021,7 @@ void IOGraphDialog::updateLegend()
     else {
         iop->legend->setVisible(false);
     }
+    iop->legend->layer()->replot();
 }
 
 QRectF IOGraphDialog::getZoomRanges(QRect zoom_rect)
@@ -1297,6 +1299,17 @@ void IOGraphDialog::on_intervalComboBox_currentIndexChanged(int)
         precision_ = 0;
     }
 
+    // XXX - This is the default QCP date time format, but adding fractional
+    // seconds when our interval is small. Should we make it something else,
+    // like ISO 8601 (but still with a line break between time and date)?
+    // Note this is local time, with no time zone offset displayed. Should
+    // it be in UTC? (call setDateTimeSpec())
+    if (precision_) {
+        datetime_ticker_->setDateTimeFormat("hh:mm:ss.z\ndd.MM.yy");
+    } else {
+        datetime_ticker_->setDateTimeFormat("hh:mm:ss\ndd.MM.yy");
+    }
+
     if (uat_model_ != NULL) {
         for (int row = 0; row < uat_model_->rowCount(); row++) {
             IOGraph *iog = ioGraphs_.value(row, NULL);
@@ -1437,6 +1450,23 @@ void IOGraphDialog::on_moveUpwardsToolButton_clicked()
             ioGraphs_[current_row] = temp;
 
             uat_model_->moveRow(current_row, current_row - 1);
+
+            // setting a QCPLayerable to its current layer moves it to the
+            // end as though it were the last added. Do that for all the
+            // elements starting with the first one that changed.
+            // (moveToLayer() is the same thing but with a parameter to prepend
+            // instead, which would be faster if we're in the top half of the
+            // list, except that's a protected function. There's no function
+            // to swap layerables in a layer.)
+            for (int row = current_row - 1; row < uat_model_->rowCount(); row++) {
+                temp = ioGraphs_[row];
+                if (temp->graph()) {
+                    temp->graph()->setLayer(temp->graph()->layer());
+                } else if (temp->bars()) {
+                    temp->bars()->setLayer(temp->bars()->layer());
+                }
+            }
+            ui->ioPlot->replot();
         }
     }
 }
@@ -1454,6 +1484,16 @@ void IOGraphDialog::on_moveDownwardsToolButton_clicked()
             ioGraphs_[current_row] = temp;
 
             uat_model_->moveRow(current_row, current_row + 1);
+
+            for (int row = current_row; row < uat_model_->rowCount(); row++) {
+                temp = ioGraphs_[row];
+                if (temp->graph()) {
+                    temp->graph()->setLayer(temp->graph()->layer());
+                } else if (temp->bars()) {
+                    temp->bars()->setLayer(temp->bars()->layer());
+                }
+            }
+            ui->ioPlot->replot();
         }
     }
 }
@@ -1477,7 +1517,13 @@ void IOGraphDialog::on_logCheckBox_toggled(bool checked)
 {
     QCustomPlot *iop = ui->ioPlot;
 
-    iop->yAxis->setScaleType(checked ? QCPAxis::stLogarithmic : QCPAxis::stLinear);
+    if (checked) {
+        iop->yAxis->setScaleType(QCPAxis::stLogarithmic);
+        iop->yAxis->setTicker(QSharedPointer<QCPAxisTickerLog>(new QCPAxisTickerLog));
+    } else {
+        iop->yAxis->setScaleType(QCPAxis::stLinear);
+        iop->yAxis->setTicker(QSharedPointer<QCPAxisTicker>(new QCPAxisTicker));
+    }
     iop->replot();
 }
 
@@ -1679,7 +1725,19 @@ void IOGraphDialog::makeCsv(QTextStream &stream) const
 
     for (int interval = 0; interval <= max_interval; interval++) {
         double interval_start = (double)interval * ((double)ui_interval / SCALE_F);
-        stream << interval_start;
+        if (qSharedPointerDynamicCast<QCPAxisTickerDateTime>(ui->ioPlot->xAxis->ticker()) != nullptr) {
+            interval_start += start_time_;
+            // XXX - If we support precision smaller than ms, we can't use
+            // QDateTime, and would use nstime_to_iso8601 or similar. (In such
+            // case we'd want to store the nstime_t version of start_time_ rather
+            // than immediately converting it to a double in tapPacket().)
+            // Should we convert to UTC for output, even if the graph axis has
+            // local time?
+            QDateTime interval_dt = QDateTime::fromMSecsSinceEpoch(int64_t(interval_start * 1000.0));
+            stream << interval_dt.toString(Qt::ISODateWithMs);
+        } else {
+            stream << interval_start;
+        }
         foreach (IOGraph *iog, activeGraphs) {
             double value = 0.0;
             if (interval <= iog->maxInterval()) {
@@ -1800,10 +1858,23 @@ void IOGraph::setFilter(const QString &filter)
         g_string_free(error_string, TRUE);
         return;
     } else {
-        if (filter_.compare(filter) && visible_) {
+        /* If we changed the tap filter, we need to retap. */
+        /* XXX - When changing from an advanced graph to one that doesn't
+         * use the field, we don't actually need to retap if filter and
+         * full_filter produce the same results. (We do have to retap
+         * regardless if changing _to_ an advanced graph, because the
+         * extra fields in the io_graph_item_t aren't filled in from the
+         * edt for the basic graph.)
+         * Checking that in full generality would require more optimization
+         * in the dfilter engine plus functions to compare filters, but
+         * we could test the simple case where filter and vu_field are
+         * the same string.
+         */
+        if (full_filter_.compare(full_filter) && visible_) {
             emit requestRetap();
         }
         filter_ = filter;
+        full_filter_ = full_filter;
     }
 }
 
@@ -1843,7 +1914,7 @@ void IOGraph::setName(const QString &name)
     }
 }
 
-QRgb IOGraph::color()
+QRgb IOGraph::color() const
 {
     return color_.color().rgb();
 }
@@ -1956,7 +2027,7 @@ void IOGraph::setPlotStyle(int style)
     applyCurrentColor();
 }
 
-const QString IOGraph::valueUnitLabel()
+QString IOGraph::valueUnitLabel() const
 {
     return val_to_str_const(val_units_, y_axis_vs, "Unknown");
 }
@@ -1968,8 +2039,18 @@ void IOGraph::setValueUnits(int val_units)
         val_units_ = (io_graph_item_unit_t)val_units;
 
         if (old_val_units != val_units) {
+            // If val_units changed, switching between a type that doesn't
+            // use the vu_field/hfi/edt to one of the advanced graphs that
+            // does requires a retap. setFilter will handle that.
+            // XXX - If we are switching between LOAD and one of the
+            // other advanced graphs, we also need to retap because
+            // LOAD doesn't fill in the io_graph_item_t the same way.
+            // We don't do that currently.
             setFilter(filter_); // Check config & prime vu field
             if (val_units < IOG_ITEM_UNIT_CALC_SUM) {
+                // XXX - Is this necessary? Won't modelDataChanged()
+                // always be called for colYAxis and that schedule
+                // a recalculation?
                 emit requestRecalc();
             }
         }
@@ -1989,6 +2070,8 @@ void IOGraph::setValueUnitField(const QString &vu_field)
     }
 
     if (old_hf_index != hf_index_) {
+        // If the field changed, and val_units is a type that uses it,
+        // we need to retap. setFilter will handle that.
         setFilter(filter_); // Check config & prime vu field
     }
 }
@@ -2015,7 +2098,7 @@ bool IOGraph::removeFromLegend()
     return false;
 }
 
-double IOGraph::startOffset()
+double IOGraph::startOffset() const
 {
     if (graph_ && qSharedPointerDynamicCast<QCPAxisTickerDateTime>(graph_->keyAxis()->ticker()) && graph_->data()->size() > 0) {
         return graph_->data()->at(0)->key;
@@ -2026,14 +2109,15 @@ double IOGraph::startOffset()
     return 0.0;
 }
 
-int IOGraph::packetFromTime(double ts)
+int IOGraph::packetFromTime(double ts) const
 {
     int idx = ts * SCALE_F / interval_;
-    if (idx >= 0 && idx < (int) cur_idx_) {
+    if (idx >= 0 && idx <= cur_idx_) {
         switch (val_units_) {
         case IOG_ITEM_UNIT_CALC_MAX:
+            return items_[idx].max_frame_in_invl;
         case IOG_ITEM_UNIT_CALC_MIN:
-            return items_[idx].extreme_frame_in_invl;
+            return items_[idx].min_frame_in_invl;
         default:
             return items_[idx].last_frame_in_invl;
         }
@@ -2044,7 +2128,9 @@ int IOGraph::packetFromTime(double ts)
 void IOGraph::clearAllData()
 {
     cur_idx_ = -1;
-    reset_io_graph_items(&items_[0], items_.size());
+    if (items_.size()) {
+        reset_io_graph_items(&items_[0], items_.size(), hf_index_);
+    }
     if (graph_) {
         graph_->data()->clear();
     }
@@ -2259,7 +2345,7 @@ bool IOGraph::hasItemToShow(int idx, double value) const
     case IOG_ITEM_UNIT_BITS:
     case IOG_ITEM_UNIT_CALC_FRAMES:
     case IOG_ITEM_UNIT_CALC_FIELDS:
-        if(value == 0.0 && (graph_ && graph_->scatterStyle().shape() != QCPScatterStyle::ssNone)) {
+        if (value == 0.0 && (graph_ && graph_->lineStyle() == QCPGraph::lsNone)) {
             result = false;
         }
         else {
