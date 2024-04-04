@@ -12,8 +12,6 @@
 
 #include <config.h>
 
-#include <glib.h>
-
 #include "epan/epan_dissect.h"
 #include "epan/prefs.h"
 #include "ui/preference_utils.h"
@@ -24,6 +22,8 @@
 
 #include <ui/qt/models/uat_model.h>
 #include <ui/qt/models/uat_delegate.h>
+
+#include <wsutil/str_util.h>
 
 #include <QIcon>
 #include <QMenu>
@@ -67,14 +67,17 @@ public:
     QString name() const { return name_; }
     void setName(const QString &name);
     QString filter() const { return filter_; }
-    void setFilter(const QString &filter);
+    bool setFilter(const QString &filter);
     void applyCurrentColor();
     bool visible() const { return visible_; }
     void setVisible(bool visible);
+    bool needRetap() const { return need_retap_; }
+    void setNeedRetap(bool retap);
     QRgb color() const;
     void setColor(const QRgb color);
     void setPlotStyle(int style);
     QString valueUnitLabel() const;
+    format_size_units_e formatUnits() const;
     void setValueUnits(int val_units);
     QString valueUnitField() const { return vu_field_; }
     void setValueUnitField(const QString &vu_field);
@@ -89,7 +92,6 @@ public:
     bool hasItemToShow(int idx, double value) const;
     double getItemValue(int idx, const capture_file *cap_file) const;
     int maxInterval () const { return cur_idx_; }
-    QString scaledValueUnit() const { return scaled_value_unit_; }
 
     void clearAllData();
 
@@ -97,7 +99,7 @@ public:
     unsigned int y_axis_factor_;
 
 public slots:
-    void recalcGraphData(capture_file *cap_file, bool enable_scaling);
+    void recalcGraphData(capture_file *cap_file);
     void captureEvent(CaptureEvent e);
     void reloadValueUnitField();
 
@@ -112,7 +114,6 @@ private:
     static tap_packet_status tapPacket(void *iog_ptr, packet_info *pinfo, epan_dissect_t *edt, const void *data, tap_flags_t flags);
     static void tapDraw(void *iog_ptr);
 
-    void calculateScaledValueUnit();
     template<class DataMap> double maxValueFromGraphData(const DataMap &map);
     template<class DataMap> void scaleGraphData(DataMap &map, int scalar);
 
@@ -120,6 +121,7 @@ private:
     QString config_err_;
     QString name_;
     bool visible_;
+    bool need_retap_;
     QCPGraph *graph_;
     QCPBars *bars_;
     QString filter_;
@@ -130,7 +132,6 @@ private:
     int hf_index_;
     int interval_;
     double start_time_;
-    QString scaled_value_unit_;
 
     // Cached data. We should be able to change the Y axis without retapping as
     // much as is feasible.
@@ -171,7 +172,7 @@ protected:
 
 signals:
     void goToPacket(int packet_num);
-    void recalcGraphData(capture_file *cap_file, bool enable_scaling);
+    void recalcGraphData(capture_file *cap_file);
     void intervalChanged(int interval);
     void reloadValueUnitFields();
 
@@ -189,7 +190,7 @@ private:
     QString hint_err_;
     QCPGraph *base_graph_;
     QCPItemTracer *tracer_;
-    guint32 packet_num_;
+    uint32_t packet_num_;
     double start_time_;
     bool mouse_drags_;
     QRubberBand *rubber_band_;

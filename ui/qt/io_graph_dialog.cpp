@@ -27,6 +27,7 @@
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/widgets/qcustomplot.h>
 #include <ui/qt/widgets/qcp_string_legend_item.h>
+#include <ui/qt/widgets/qcp_axis_ticker_si.h>
 #include "progress_frame.h"
 #include "main_application.h"
 
@@ -61,12 +62,18 @@
 
 // To do:
 // - Use scroll bars?
+//   https://www.qcustomplot.com/index.php/tutorials/specialcases/scrollbar
 // - Scroll during live captures
 // - Set ticks per pixel (e.g. pressing "2" sets 2 tpp).
 // - Explicitly handle missing values, e.g. via NAN.
 // - Add a "show missing" or "show zero" option to the UAT?
 //   It would add yet another graph configuration column.
 // - Increase max number of items (or make configurable)
+// - Dark Mode support, e.g.
+//   https://www.qcustomplot.com/index.php/demos/barchartdemo
+// - Multiple y-axes?
+//   https://www.qcustomplot.com/index.php/demos/multiaxisdemo
+//   https://www.qcustomplot.com/index.php/tutorials/specialcases/axistags
 
 // Scale factor to convert the units the interval is stored in to seconds.
 // Must match what get_io_graph_index() in io_graph_item expects.
@@ -87,15 +94,15 @@ const int stat_update_interval_ = 200; // ms
 
 // Saved graph settings
 typedef struct _io_graph_settings_t {
-    gboolean enabled;
+    bool enabled;
     char* name;
     char* dfilter;
-    guint color;
-    guint32 style;
-    guint32 yaxis;
+    unsigned color;
+    uint32_t style;
+    uint32_t yaxis;
     char* yfield;
-    guint32 sma_period;
-    guint32 y_axis_factor;
+    uint32_t sma_period;
+    uint32_t y_axis_factor;
 } io_graph_settings_t;
 
 static const value_string graph_style_vs[] = {
@@ -142,7 +149,7 @@ static const value_string moving_avg_vs[] = {
 };
 
 static io_graph_settings_t *iog_settings_ = NULL;
-static guint num_io_graphs_ = 0;
+static unsigned num_io_graphs_ = 0;
 static uat_t *iog_uat_ = NULL;
 
 // y_axis_factor was added in 3.6. Provide backward compatibility.
@@ -152,13 +159,14 @@ static const char *iog_uat_defaults_[] = {
 
 extern "C" {
 
-//Allow the enable/disable field to be a checkbox, but for backwards compatibility,
-//the strings have to be "Enabled"/"Disabled", not "TRUE"/"FALSE"
+//Allow the enable/disable field to be a checkbox, but for backwards
+//compatibility with pre-2.6 versions, the strings are "Enabled"/"Disabled",
+//not "true"/"false". (Pre-4.4 versions require "true" to be all-caps.)
 #define UAT_BOOL_ENABLE_CB_DEF(basename,field_name,rec_t) \
-static void basename ## _ ## field_name ## _set_cb(void* rec, const char* buf, guint len, const void* UNUSED_PARAMETER(u1), const void* UNUSED_PARAMETER(u2)) {\
+static void basename ## _ ## field_name ## _set_cb(void* rec, const char* buf, unsigned len, const void* UNUSED_PARAMETER(u1), const void* UNUSED_PARAMETER(u2)) {\
     char* tmp_str = g_strndup(buf,len); \
-    if ((g_strcmp0(tmp_str, "Enabled") == 0) || \
-        (g_strcmp0(tmp_str, "TRUE") == 0)) \
+    if (tmp_str && ((g_strcmp0(tmp_str, "Enabled") == 0) || \
+        (g_ascii_strcasecmp(tmp_str, "true") == 0))) \
         ((rec_t*)rec)->field_name = 1; \
     else \
         ((rec_t*)rec)->field_name = 0; \
@@ -167,32 +175,33 @@ static void basename ## _ ## field_name ## _tostr_cb(void* rec, char** out_ptr, 
     *out_ptr = ws_strdup_printf("%s",((rec_t*)rec)->field_name ? "Enabled" : "Disabled"); \
     *out_len = (unsigned)strlen(*out_ptr); }
 
-static bool uat_fld_chk_enable(void* u1 _U_, const char* strptr, guint len, const void* u2 _U_, const void* u3 _U_, char** err)
+static bool uat_fld_chk_enable(void* u1 _U_, const char* strptr, unsigned len, const void* u2 _U_, const void* u3 _U_, char** err)
 {
     char* str = g_strndup(strptr,len);
 
-    if ((g_strcmp0(str, "Enabled") == 0) ||
+    if (str &&
+       ((g_strcmp0(str, "Enabled") == 0) ||
         (g_strcmp0(str, "Disabled") == 0) ||
-        (g_strcmp0(str, "TRUE") == 0) ||    //just for UAT functionality
-        (g_strcmp0(str, "FALSE") == 0)) {
+        (g_ascii_strcasecmp(str, "true") == 0) ||  //just for UAT functionality
+        (g_ascii_strcasecmp(str, "false") == 0))) {
         *err = NULL;
         g_free(str);
-        return TRUE;
+        return true;
     }
 
     //User should never see this unless they are manually modifying UAT
     *err = ws_strdup_printf("invalid value: %s (must be Enabled or Disabled)", str);
     g_free(str);
-    return FALSE;
+    return false;
 }
 
 #define UAT_FLD_BOOL_ENABLE(basename,field_name,title,desc) \
 {#field_name, title, PT_TXTMOD_BOOL,{uat_fld_chk_enable,basename ## _ ## field_name ## _set_cb,basename ## _ ## field_name ## _tostr_cb},{0,0,0},0,desc,FLDFILL}
 
 //"Custom" handler for sma_period enumeration for backwards compatibility
-static void io_graph_sma_period_set_cb(void* rec, const char* buf, guint len, const void* vs, const void* u2 _U_)
+static void io_graph_sma_period_set_cb(void* rec, const char* buf, unsigned len, const void* vs, const void* u2 _U_)
 {
-    guint i;
+    unsigned i;
     char* str = g_strndup(buf,len);
     const char* cstr;
     ((io_graph_settings_t*)rec)->sma_period = 0;
@@ -212,7 +221,7 @@ static void io_graph_sma_period_set_cb(void* rec, const char* buf, guint len, co
 
     for (i=0; (cstr = ((const value_string*)vs)[i].strptr) ;i++) {
         if (g_str_equal(cstr,str)) {
-            ((io_graph_settings_t*)rec)->sma_period = (guint32)((const value_string*)vs)[i].value;
+            ((io_graph_settings_t*)rec)->sma_period = (uint32_t)((const value_string*)vs)[i].value;
             g_free(str);
             return;
         }
@@ -222,7 +231,7 @@ static void io_graph_sma_period_set_cb(void* rec, const char* buf, guint len, co
 //Duplicated because macro covers both functions
 static void io_graph_sma_period_tostr_cb(void* rec, char** out_ptr, unsigned* out_len, const void* vs, const void* u2 _U_)
 {
-    guint i;
+    unsigned i;
     for (i=0;((const value_string*)vs)[i].strptr;i++) {
         if (((const value_string*)vs)[i].value == ((io_graph_settings_t*)rec)->sma_period) {
             *out_ptr = g_strdup(((const value_string*)vs)[i].strptr);
@@ -234,9 +243,9 @@ static void io_graph_sma_period_tostr_cb(void* rec, char** out_ptr, unsigned* ou
     *out_len = (unsigned)strlen("None");
 }
 
-static bool sma_period_chk_enum(void* u1 _U_, const char* strptr, guint len, const void* v, const void* u3 _U_, char** err) {
+static bool sma_period_chk_enum(void* u1 _U_, const char* strptr, unsigned len, const void* v, const void* u3 _U_, char** err) {
     char *str = g_strndup(strptr,len);
-    guint i;
+    unsigned i;
     const value_string* vs = (const value_string *)v;
 
     //Original UAT had just raw numbers and not enumerated values with "interval SMA"
@@ -256,13 +265,13 @@ static bool sma_period_chk_enum(void* u1 _U_, const char* strptr, guint len, con
         if (g_strcmp0(vs[i].strptr,str) == 0) {
             *err = NULL;
             g_free(str);
-            return TRUE;
+            return true;
         }
     }
 
     *err = ws_strdup_printf("invalid value: %s",str);
     g_free(str);
-    return FALSE;
+    return false;
 }
 
 #define UAT_FLD_SMA_PERIOD(basename,field_name,title,enum,desc) \
@@ -273,8 +282,8 @@ UAT_BOOL_ENABLE_CB_DEF(io_graph, enabled, io_graph_settings_t)
 UAT_CSTRING_CB_DEF(io_graph, name, io_graph_settings_t)
 UAT_DISPLAY_FILTER_CB_DEF(io_graph, dfilter, io_graph_settings_t)
 UAT_COLOR_CB_DEF(io_graph, color, io_graph_settings_t)
-UAT_VS_DEF(io_graph, style, io_graph_settings_t, guint32, 0, "Line")
-UAT_VS_DEF(io_graph, yaxis, io_graph_settings_t, guint32, 0, "Packets")
+UAT_VS_DEF(io_graph, style, io_graph_settings_t, uint32_t, 0, "Line")
+UAT_VS_DEF(io_graph, yaxis, io_graph_settings_t, uint32_t, 0, "Packets")
 UAT_PROTO_FIELD_CB_DEF(io_graph, yfield, io_graph_settings_t)
 UAT_DEC_CB_DEF(io_graph, y_axis_factor, io_graph_settings_t)
 
@@ -493,13 +502,13 @@ IOGraphDialog::~IOGraphDialog()
 
 void IOGraphDialog::copyFromProfile(QString filename)
 {
-    guint orig_data_len = iog_uat_->raw_data->len;
+    unsigned orig_data_len = iog_uat_->raw_data->len;
 
-    gchar *err = NULL;
+    char *err = NULL;
     if (uat_load(iog_uat_, filename.toUtf8().constData(), &err)) {
-        iog_uat_->changed = TRUE;
+        iog_uat_->changed = true;
         uat_model_->reloadUat();
-        for (guint i = orig_data_len; i < iog_uat_->raw_data->len; i++) {
+        for (unsigned i = orig_data_len; i < iog_uat_->raw_data->len; i++) {
             createIOGraph(i);
         }
     } else {
@@ -523,7 +532,7 @@ void IOGraphDialog::addGraph(bool checked, QString name, QString dfilter, QRgb c
         newRowData.append(val_to_str_const(value_units, y_axis_vs, "Events"));
     }
     newRowData.append(yfield);
-    newRowData.append(val_to_str_const((guint32) moving_average, moving_avg_vs, "None"));
+    newRowData.append(val_to_str_const((uint32_t) moving_average, moving_avg_vs, "None"));
     newRowData.append(y_axis_factor);
 
     QModelIndex newIndex = uat_model_->appendEntry(newRowData);
@@ -568,7 +577,7 @@ void IOGraphDialog::createIOGraph(int currentRow)
     ioGraphs_.append(new IOGraph(ui->ioPlot));
     IOGraph* iog = ioGraphs_[currentRow];
 
-    connect(this, SIGNAL(recalcGraphData(capture_file *, bool)), iog, SLOT(recalcGraphData(capture_file *, bool)));
+    connect(this, SIGNAL(recalcGraphData(capture_file *)), iog, SLOT(recalcGraphData(capture_file *)));
     connect(this, SIGNAL(reloadValueUnitFields()), iog, SLOT(reloadValueUnitField()));
     connect(&cap_file_, SIGNAL(captureEvent(CaptureEvent)),
             iog, SLOT(captureEvent(CaptureEvent)));
@@ -577,9 +586,7 @@ void IOGraphDialog::createIOGraph(int currentRow)
     connect(iog, SIGNAL(requestReplot()), this, SLOT(scheduleReplot()));
 
     syncGraphSettings(currentRow);
-    if (iog->visible()) {
-        scheduleRetap();
-    }
+    iog->setNeedRetap(true);
 }
 
 void IOGraphDialog::addDefaultGraph(bool enabled, int idx)
@@ -628,10 +635,6 @@ void IOGraphDialog::syncGraphSettings(int row)
         return;
 
     bool visible = graphIsEnabled(row);
-    bool retap = !iog->visible() && visible;
-    // XXX - Do we really need to retap every time we make the graph
-    // visible from invisible? If we have tapped before and nothing
-    // has changed, we might be able to get away with only a recalc.
     QString data_str;
 
     iog->setName(uat_model_->data(uat_model_->index(row, colName)).toString());
@@ -656,7 +659,6 @@ void IOGraphDialog::syncGraphSettings(int row)
     if (!iog->configError().isEmpty()) {
         hint_err_ = iog->configError();
         visible = false;
-        retap = false;
     } else {
         hint_err_.clear();
     }
@@ -668,11 +670,7 @@ void IOGraphDialog::syncGraphSettings(int row)
     updateLegend();
 
     if (visible) {
-        if (retap) {
-            scheduleRetap();
-        } else {
-            scheduleReplot();
-        }
+        scheduleReplot();
     }
 }
 
@@ -963,6 +961,7 @@ void IOGraphDialog::getGraphInfo()
 void IOGraphDialog::updateLegend()
 {
     QCustomPlot *iop = ui->ioPlot;
+    QSet<format_size_units_e> format_units_set;
     QSet<QString> vu_label_set;
     QString intervalText = ui->intervalComboBox->itemText(ui->intervalComboBox->currentIndex());
 
@@ -975,10 +974,8 @@ void IOGraphDialog::updateLegend()
             IOGraph *iog = ioGraphs_.value(row, Q_NULLPTR);
             if (graphIsEnabled(row) && iog) {
                 QString label(iog->valueUnitLabel());
-                if (!iog->scaledValueUnit().isEmpty()) {
-                    label += " (" + iog->scaledValueUnit() + ")";
-                }
                 vu_label_set.insert(label);
+                format_units_set.insert(iog->formatUnits());
             }
         }
     }
@@ -987,6 +984,28 @@ void IOGraphDialog::updateLegend()
     if (vu_label_set.size() < 1) {
         iop->legend->layer()->replot();
         return;
+    }
+
+    format_size_units_e format_units = FORMAT_SIZE_UNIT_NONE;
+    if (format_units_set.size() == 1) {
+        format_units = format_units_set.values()[0];
+    }
+
+    QSharedPointer<QCPAxisTickerSi> si_ticker = qSharedPointerDynamicCast<QCPAxisTickerSi>(iop->yAxis->ticker());
+    if (format_units != FORMAT_SIZE_UNIT_NONE) {
+        if (si_ticker) {
+            si_ticker->setUnit(format_units);
+        } else {
+            iop->yAxis->setTicker(QSharedPointer<QCPAxisTickerSi>(new QCPAxisTickerSi(format_units, QString(), ui->logCheckBox->isChecked())));
+        }
+    } else {
+        if (si_ticker) {
+            if (ui->logCheckBox->isChecked()) {
+                iop->yAxis->setTicker(QSharedPointer<QCPAxisTickerLog>(new QCPAxisTickerLog));
+            } else {
+                iop->yAxis->setTicker(QSharedPointer<QCPAxisTicker>(new QCPAxisTicker));
+            }
+       }
     }
 
     // All the same. Use the Y Axis label.
@@ -1127,7 +1146,7 @@ void IOGraphDialog::mouseMoved(QMouseEvent *event)
             QString msg = is_packet_configuration_namespace() ? tr("No packets in interval") : tr("No events in interval");
             QString val;
             if (interval_packet > 0) {
-                packet_num_ = (guint32) interval_packet;
+                packet_num_ = (uint32_t) interval_packet;
                 if (is_packet_configuration_namespace()) {
                     msg = QString("%1 %2")
                             .arg(!file_closed_ ? tr("Click to select packet") : tr("Packet"))
@@ -1220,18 +1239,8 @@ void IOGraphDialog::updateStatistics()
         if (need_recalc_ && !file_closed_ && prefs.gui_io_graph_automatic_update) {
             need_recalc_ = false;
             need_replot_ = true;
-            int enabled_graphs = 0;
 
-            if (uat_model_ != NULL) {
-                for (int row = 0; row < uat_model_->rowCount(); row++) {
-                    if (graphIsEnabled(row)) {
-                        ++enabled_graphs;
-                    }
-                }
-            }
-            // With multiple visible graphs, disable Y scaling to avoid
-            // multiple, distinct units.
-            emit recalcGraphData(cap_file_.capFile(), enabled_graphs == 1);
+            emit recalcGraphData(cap_file_.capFile());
             if (!tracer_->graph()) {
                 if (base_graph_ && base_graph_->data()->size() > 0) {
                     tracer_->setGraph(base_graph_);
@@ -1258,7 +1267,7 @@ void IOGraphDialog::loadProfileGraphs()
         iog_uat_ = uat_new("I/O Graphs",
                            sizeof(io_graph_settings_t),
                            "io_graphs",
-                           TRUE,
+                           true,
                            &iog_settings_,
                            &num_io_graphs_,
                            0, /* doesn't affect anything that requires a GUI update */
@@ -1320,6 +1329,8 @@ void IOGraphDialog::on_intervalComboBox_currentIndexChanged(int)
                 iog->setInterval(interval);
                 if (iog->visible()) {
                     need_retap = true;
+                } else {
+                    iog->setNeedRetap(true);
                 }
             }
         }
@@ -1365,6 +1376,12 @@ void IOGraphDialog::on_graphUat_currentItemChanged(const QModelIndex &current, c
         ui->clearToolButton->setEnabled(true);
         ui->moveUpwardsToolButton->setEnabled(true);
         ui->moveDownwardsToolButton->setEnabled(true);
+        if (graphIsEnabled(current.row())) {
+            // Try to set the tracer to the new current graph.
+            // If it's not enabled, don't try to switch from the
+            // old graph to the one in the first row.
+            getGraphInfo();
+        }
     } else {
         ui->deleteToolButton->setEnabled(false);
         ui->copyToolButton->setEnabled(false);
@@ -1520,20 +1537,28 @@ void IOGraphDialog::on_zoomRadioButton_toggled(bool checked)
 void IOGraphDialog::on_logCheckBox_toggled(bool checked)
 {
     QCustomPlot *iop = ui->ioPlot;
+    QSharedPointer<QCPAxisTickerSi> si_ticker = qSharedPointerDynamicCast<QCPAxisTickerSi>(iop->yAxis->ticker());
+    if (si_ticker != nullptr) {
+        si_ticker->setLog(checked);
+    }
 
     if (checked) {
         iop->yAxis->setScaleType(QCPAxis::stLogarithmic);
-        iop->yAxis->setTicker(QSharedPointer<QCPAxisTickerLog>(new QCPAxisTickerLog));
+        if (si_ticker == nullptr) {
+            iop->yAxis->setTicker(QSharedPointer<QCPAxisTickerLog>(new QCPAxisTickerLog));
+        }
     } else {
         iop->yAxis->setScaleType(QCPAxis::stLinear);
-        iop->yAxis->setTicker(QSharedPointer<QCPAxisTicker>(new QCPAxisTicker));
+        if (si_ticker == nullptr) {
+            iop->yAxis->setTicker(QSharedPointer<QCPAxisTicker>(new QCPAxisTicker));
+        }
     }
     iop->replot();
 }
 
 void IOGraphDialog::on_automaticUpdateCheckBox_toggled(bool checked)
 {
-    prefs.gui_io_graph_automatic_update = checked ? TRUE : FALSE;
+    prefs.gui_io_graph_automatic_update = checked ? true : false;
 
     prefs_main_write();
 
@@ -1545,7 +1570,7 @@ void IOGraphDialog::on_automaticUpdateCheckBox_toggled(bool checked)
 
 void IOGraphDialog::on_enableLegendCheckBox_toggled(bool checked)
 {
-    prefs.gui_io_graph_enable_legend = checked ? TRUE : FALSE;
+    prefs.gui_io_graph_enable_legend = checked ? true : false;
 
     prefs_main_write();
 
@@ -1800,7 +1825,7 @@ IOGraph::IOGraph(QCustomPlot *parent) :
 //        QMessageBox::critical(this, tr("%1 failed to register tap listener").arg(name_),
 //                             error_string->str);
 //        config_err_ = error_string->str;
-        g_string_free(error_string, TRUE);
+        g_string_free(error_string, true);
     }
 }
 
@@ -1815,8 +1840,8 @@ IOGraph::~IOGraph() {
 }
 
 // Construct a full filter string from the display filter and value unit / Y axis.
-// Check for errors and sets config_err_ if any are found.
-void IOGraph::setFilter(const QString &filter)
+// Check for errors and sets config_err_ and returns false if any are found.
+bool IOGraph::setFilter(const QString &filter)
 {
     GString *error_string;
     QString full_filter(filter.trimmed());
@@ -1834,7 +1859,7 @@ void IOGraph::setFilter(const QString &filter)
             config_err_ = QString::fromUtf8(df_err->msg);
             df_error_free(&df_err);
             filter_ = full_filter;
-            return;
+            return false;
         }
     }
 
@@ -1842,8 +1867,8 @@ void IOGraph::setFilter(const QString &filter)
     error_string = check_field_unit(vu_field_.toUtf8().constData(), NULL, val_units_);
     if (error_string) {
         config_err_ = error_string->str;
-        g_string_free(error_string, TRUE);
-        return;
+        g_string_free(error_string, true);
+        return false;
     }
 
     // Make sure vu_field_ survives edt tree pruning by adding it to our filter
@@ -1860,18 +1885,17 @@ void IOGraph::setFilter(const QString &filter)
         error_string = set_tap_dfilter(this, full_filter.toUtf8().constData());
         if (error_string) {
             config_err_ = error_string->str;
-            g_string_free(error_string, TRUE);
-            return;
+            g_string_free(error_string, true);
+            return false;
         }
 
         filter_ = filter;
         full_filter_ = full_filter;
         /* If we changed the tap filter the graph is visible, we need to
-         * retap. (If it's not visible, we'll retap when it becomes
-         * visible, see syncGraphSettings.) Note that setting the tap
-         * dfilter will mark the tap as needing a redraw, which will
-         * cause a recalculation (via tapDraw) via the (fairly long)
-         * main application timer.
+         * retap.
+         * Note that setting the tap dfilter will mark the tap as needing a
+         * redraw, which will cause a recalculation (via tapDraw) via the
+         * (fairly long) main application timer.
          */
         /* XXX - When changing from an advanced graph to one that doesn't
          * use the field, we don't actually need to retap if filter and
@@ -1884,10 +1908,9 @@ void IOGraph::setFilter(const QString &filter)
          * we could test the simple case where filter and vu_field are
          * the same string.
          */
-        if (visible_) {
-            emit requestRetap();
-        }
+        setNeedRetap(true);
     }
+    return true;
 }
 
 void IOGraph::applyCurrentColor()
@@ -1919,14 +1942,28 @@ void IOGraph::setVisible(bool visible)
         bars_->setVisible(visible_);
     }
     if (old_visibility != visible_) {
-        // XXX - If the number of enabled graphs changed to or from 1, we
-        // need to recalculate to possibly change the rescaling. (This is
-        // why QCP recommends doing scaling in the axis ticker instead.)
-        // If we can't determined number of enabled graphs here, always
-        // request a recalculation instead of a replot. (At least until we
-        // change the scaling to be done in the ticker.)
-        //emit requestReplot();
-        emit requestRecalc();
+        if (visible_ && need_retap_) {
+            need_retap_ = false;
+            emit requestRetap();
+        } else {
+            // XXX - If the number of enabled graphs changed to or from 1, we
+            // need to recalculate to possibly change the rescaling. (This is
+            // why QCP recommends doing scaling in the axis ticker instead.)
+            // If we can't determine the number of enabled graphs here, always
+            // request a recalculation instead of a replot. (At least until we
+            // change the scaling to be done in the ticker.)
+            //emit requestReplot();
+            emit requestRecalc();
+        }
+    }
+}
+
+void IOGraph::setNeedRetap(bool retap)
+{
+    if (visible_ && retap) {
+        emit requestRetap();
+    } else {
+        need_retap_ = retap;
     }
 }
 
@@ -2077,17 +2114,19 @@ void IOGraph::setValueUnits(int val_units)
         if (old_val_units != val_units) {
             // If val_units changed, switching between a type that doesn't
             // use the vu_field/hfi/edt to one of the advanced graphs that
-            // does requires a retap. setFilter will handle that.
-            // XXX - If we are switching between LOAD and one of the
-            // other advanced graphs, we also need to retap because
-            // LOAD doesn't fill in the io_graph_item_t the same way.
-            // We don't do that currently.
-            setFilter(filter_); // Check config & prime vu field
-            if (val_units < IOG_ITEM_UNIT_CALC_SUM) {
-                // XXX - Is this necessary? Won't modelDataChanged()
-                // always be called for colYAxis and that schedule
-                // a recalculation?
-                emit requestRecalc();
+            // does requires a retap. setFilter will handle that, because
+            // the full filter strings will be different.
+            if (setFilter(filter_)) { // Check config & prime vu field
+                if (val_units == IOG_ITEM_UNIT_CALC_LOAD ||
+                    old_val_units == IOG_ITEM_UNIT_CALC_LOAD) {
+                    // LOAD graphs fill in the io_graph_item_t differently
+                    // than other advanced graphs, so we have to retap even
+                    // if the filter is the same. (update_io_graph_item could
+                    // instead calculate and store LOAD information for any
+                    // advanced graph type, but the tradeoff might not be
+                    // worth it.)
+                    setNeedRetap(true);
+                }
             }
         }
     }
@@ -2176,7 +2215,7 @@ void IOGraph::clearAllData()
     start_time_ = 0.0;
 }
 
-void IOGraph::recalcGraphData(capture_file *cap_file, bool enable_scaling)
+void IOGraph::recalcGraphData(capture_file *cap_file)
 {
     /* Moving average variables */
     unsigned int mavg_in_average_count = 0, mavg_left = 0;
@@ -2198,7 +2237,7 @@ void IOGraph::recalcGraphData(capture_file *cap_file, bool enable_scaling)
          * just to make sure average on leftmost and rightmost displayed
          * values is as reliable as possible
          */
-        guint64 warmup_interval = 0;
+        uint64_t warmup_interval = 0;
 
 //        for (; warmup_interval < first_interval; warmup_interval += interval_) {
 //            mavg_cumulated += get_it_value(io, i, (int)warmup_interval/interval_);
@@ -2208,8 +2247,8 @@ void IOGraph::recalcGraphData(capture_file *cap_file, bool enable_scaling)
         mavg_cumulated += getItemValue((int)warmup_interval/interval_, cap_file);
         mavg_in_average_count++;
         for (warmup_interval = interval_;
-            ((warmup_interval < (0 + (moving_avg_period_ / 2) * (guint64)interval_)) &&
-             (warmup_interval <= (cur_idx_ * (guint64)interval_)));
+            ((warmup_interval < (0 + (moving_avg_period_ / 2) * (uint64_t)interval_)) &&
+             (warmup_interval <= (cur_idx_ * (uint64_t)interval_)));
              warmup_interval += interval_) {
 
             mavg_cumulated += getItemValue((int)warmup_interval / interval_, cap_file);
@@ -2259,71 +2298,41 @@ void IOGraph::recalcGraphData(capture_file *cap_file, bool enable_scaling)
 //        qDebug() << "=rgd i" << i << ts << val;
     }
 
-    // attempt to rescale time values to specific units if this
-    // is the only enabled graph
-    if (enable_scaling && visible_) {
-        calculateScaledValueUnit();
-    } else {
-        scaled_value_unit_.clear();
-    }
-
     emit requestReplot();
 }
 
-void IOGraph::calculateScaledValueUnit()
+format_size_units_e IOGraph::formatUnits() const
 {
-    // Reset unit and recalculate if needed.
-    scaled_value_unit_.clear();
-
-    // If there is no field, scaling is not possible.
-    if (hf_index_ < 0) {
-        return;
-    }
-
     switch (val_units_) {
+    case IOG_ITEM_UNIT_PACKETS:
+    case IOG_ITEM_UNIT_CALC_FRAMES:
+        return FORMAT_SIZE_UNIT_PACKETS;
+    case IOG_ITEM_UNIT_BYTES:
+        return FORMAT_SIZE_UNIT_BYTES;
+    case IOG_ITEM_UNIT_BITS:
+        return FORMAT_SIZE_UNIT_BITS;
+    case IOG_ITEM_UNIT_CALC_LOAD:
+        return FORMAT_SIZE_UNIT_ERLANGS;
+        break;
+    case IOG_ITEM_UNIT_CALC_FIELDS:
+        return FORMAT_SIZE_UNIT_FIELDS;
+        break;
     case IOG_ITEM_UNIT_CALC_SUM:
     case IOG_ITEM_UNIT_CALC_MAX:
     case IOG_ITEM_UNIT_CALC_MIN:
     case IOG_ITEM_UNIT_CALC_AVERAGE:
         // Unit is not yet known, continue detecting it.
-        break;
+        if (hf_index_ > 0) {
+            if (proto_registrar_get_ftype(hf_index_) == FT_RELATIVE_TIME) {
+                return FORMAT_SIZE_UNIT_SECONDS;
+            }
+            // Could we look if it's BASE_UNIT_STRING and use that?
+            // One complication is that prefixes shouldn't be combined,
+            // and some unit strings are already prefixed units.
+        }
+        return FORMAT_SIZE_UNIT_NONE;
     default:
-        // Unit is Packets, Bytes, Bits, etc.
-        return;
-    }
-
-    if (proto_registrar_get_ftype(hf_index_) == FT_RELATIVE_TIME) {
-        // find maximum absolute value and scale accordingly
-        double maxValue = 0;
-        if (graph_) {
-            maxValue = maxValueFromGraphData(*graph_->data());
-        } else if (bars_) {
-            maxValue = maxValueFromGraphData(*bars_->data());
-        }
-        // If the maximum value is zero, then either we have no data or
-        // everything is zero, do not scale the unit in this case.
-        if (maxValue == 0) {
-            return;
-        }
-
-        // XXX GTK+ always uses "ms" for log scale, should we do that too?
-        int value_multiplier;
-        if (maxValue >= 1.0) {
-            scaled_value_unit_ = "s";
-            value_multiplier = 1;
-        } else if (maxValue >= 0.001) {
-            scaled_value_unit_ = "ms";
-            value_multiplier = 1000;
-        } else {
-            scaled_value_unit_ = "us";
-            value_multiplier = 1000000;
-        }
-
-        if (graph_) {
-            scaleGraphData(*graph_->data(), value_multiplier);
-        } else if (bars_) {
-            scaleGraphData(*bars_->data(), value_multiplier);
-        }
+        return FORMAT_SIZE_UNIT_NONE;
     }
 }
 
@@ -2448,6 +2457,21 @@ tap_packet_status IOGraph::tapPacket(void *iog_ptr, packet_info *pinfo, epan_dis
     /* some sanity checks */
     if ((idx < 0) || (idx >= max_io_items_)) {
         iog->cur_idx_ = (int)iog->items_.size() - 1;
+        return TAP_PACKET_DONT_REDRAW;
+    }
+
+    /* If the graph isn't visible, don't do the work or redraw, but mark
+     * the graph in need of a retap if it is ever enabled. The alternative
+     * is to do the work, but clear pending retaps when the taps are reset
+     * (which indicates something else triggered a retap.) The tradeoff would
+     * be more calculation and memory usage when a graph is disabled in
+     * exchange for fewer scenarios that involve retaps when toggling the
+     * enabled/disabled taps.
+     */
+    if (!iog->visible()) {
+        if (idx > iog->cur_idx_) {
+            iog->need_retap_ = true;
+        }
         return TAP_PACKET_DONT_REDRAW;
     }
 
