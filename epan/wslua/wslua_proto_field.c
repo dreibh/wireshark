@@ -204,9 +204,9 @@ static range_string * range_string_from_table(lua_State* L, int idx) {
                     return NULL;
                 }
                 if (key_count == 1) /* We incremented it above */
-                    r.value_min = wslua_toguint64(L, -1);
+                    r.value_min = wslua_touint64(L, -1);
                 else
-                    r.value_max = wslua_toguint64(L, -1);
+                    r.value_max = wslua_touint64(L, -1);
                 break;
 
             case 3:
@@ -285,7 +285,7 @@ static value_string* value_string_from_table(lua_State* L, int idx) {
             return NULL;
         }
 
-        v.value = wslua_toguint32(L,-2);
+        v.value = wslua_touint32(L,-2);
         v.strptr = g_strdup(lua_tostring(L,-1));
 
         g_array_append_val(vs,v);
@@ -342,7 +342,7 @@ static val64_string* val64_string_from_table(lua_State* L, int idx) {
             return NULL;
         }
 
-        v.value = wslua_toguint64(L, -2);
+        v.value = wslua_touint64(L, -2);
         v.strptr = g_strdup(lua_tostring(L,-1));
 
         g_array_append_val(vs,v);
@@ -420,7 +420,7 @@ static uint64_t get_mask(lua_State* L, int idx, uint64_t default_value) {
 
     switch(lua_type(L, idx)) {
         case LUA_TNUMBER:
-            mask = (uint64_t)wslua_optguint32(L, idx, (lua_Number)default_value);
+            mask = (uint64_t)wslua_optuint32(L, idx, (lua_Number)default_value);
             break;
         case LUA_TSTRING:
         case LUA_TUSERDATA:
@@ -806,6 +806,12 @@ WSLUA_CONSTRUCTOR ProtoField_new(lua_State* L) {
     } else {
         f->vs = NULL;
     }
+    if (f->vs) {
+        lua_pushvalue(L, WSLUA_OPTARG_ProtoField_new_VALUESTRING);
+        f->valuestring_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    } else {
+        f->valuestring_ref = LUA_NOREF;
+    }
     f->mask = mask;
     if (blob && strcmp(blob, f->name) != 0) {
         f->blob = g_strdup(blob);
@@ -941,6 +947,12 @@ static int ProtoField_integer(lua_State* L, enum ftenum type) {
         f->vs = FRAMENUM_TYPE(framenum_type);
     } else {
         f->vs = NULL;
+    }
+    if (f->vs) {
+        lua_pushvalue(L, 4);
+        f->valuestring_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    } else {
+        f->valuestring_ref = LUA_NOREF;
     }
     f->mask = mask;
     if (blob && strcmp(blob, f->name) != 0) {
@@ -1113,8 +1125,14 @@ static int ProtoField_boolean(lua_State* L, enum ftenum type) {
     f->name = g_strdup(name);
     f->abbrev = g_strdup(abbr);
     f->type = type;
-    f->vs = TFS(tfs);
     f->base = base;
+    f->vs = TFS(tfs);
+    if (f->vs) {
+        lua_pushvalue(L, 4);
+        f->valuestring_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    } else {
+        f->valuestring_ref = LUA_NOREF;
+    }
     f->mask = mask;
     if (blob && strcmp(blob, f->name) != 0) {
         f->blob = g_strdup(blob);
@@ -1165,8 +1183,9 @@ static int ProtoField_time(lua_State* L,enum ftenum type) {
     f->name = g_strdup(name);
     f->abbrev = g_strdup(abbr);
     f->type = type;
-    f->vs = NULL;
     f->base = base;
+    f->vs = NULL;
+    f->valuestring_ref = LUA_NOREF;
     f->mask = 0;
     if (blob && strcmp(blob, f->name) != 0) {
         f->blob = g_strdup(blob);
@@ -1223,11 +1242,14 @@ static int ProtoField_floating(lua_State* L,enum ftenum type) {
     f->abbrev = g_strdup(abbr);
     f->type = type;
     if (uns) {
-        f->vs = uns;
         f->base = BASE_NONE | BASE_UNIT_STRING;
+        f->vs = uns;
+        lua_pushvalue(L, 3);
+        f->valuestring_ref = luaL_ref(L, LUA_REGISTRYINDEX);
     } else {
-        f->vs = NULL;
         f->base = BASE_NONE;
+        f->vs = NULL;
+        f->valuestring_ref = LUA_NOREF;
     }
     f->mask = 0;
     if (blob && strcmp(blob, f->name) != 0) {
@@ -1297,8 +1319,9 @@ static int ProtoField_other_display(lua_State* L,enum ftenum type) {
     f->name = g_strdup(name);
     f->abbrev = g_strdup(abbr);
     f->type = type;
-    f->vs = NULL;
     f->base = base;
+    f->vs = NULL;
+    f->valuestring_ref = LUA_NOREF;
     f->mask = 0;
     if (blob && strcmp(blob, f->name) != 0) {
         f->blob = g_strdup(blob);
@@ -1364,8 +1387,9 @@ static int ProtoField_other(lua_State* L,enum ftenum type) {
     f->name = g_strdup(name);
     f->abbrev = g_strdup(abbr);
     f->type = type;
-    f->vs = NULL;
     f->base = BASE_NONE;
+    f->vs = NULL;
+    f->valuestring_ref = LUA_NOREF;
     f->mask = 0;
     if (blob && strcmp(blob, f->name) != 0) {
         f->blob = g_strdup(blob);
@@ -1452,6 +1476,35 @@ PROTOFIELD_OTHER(rel_oid,FT_REL_OID)
 PROTOFIELD_OTHER(systemid,FT_SYSTEM_ID)
 PROTOFIELD_OTHER(eui64,FT_EUI64)
 
+/* WSLUA_ATTRIBUTE ProtoField_type RO The type of the field. */
+WSLUA_ATTRIBUTE_INTEGER_GETTER(ProtoField,type);
+
+/* WSLUA_ATTRIBUTE ProtoField_abbr RO The abbreviated name of the field. */
+WSLUA_ATTRIBUTE_NAMED_STRING_GETTER(ProtoField,abbr,abbrev);
+
+/* WSLUA_ATTRIBUTE ProtoField_name RO The actual name of the field. */
+WSLUA_ATTRIBUTE_STRING_GETTER(ProtoField,name);
+
+/* WSLUA_ATTRIBUTE ProtoField_type RO The base of the field. */
+WSLUA_ATTRIBUTE_INTEGER_GETTER(ProtoField,base);
+
+/* WSLUA_ATTRIBUTE ProtoField_type RO The valuestring of the field. */
+WSLUA_METAMETHOD ProtoField_get_valuestring(lua_State* L) {
+    ProtoField f = checkProtoField(L,1);
+    if (f->valuestring_ref != LUA_NOREF) {
+        lua_rawgeti(L, LUA_REGISTRYINDEX, f->valuestring_ref);
+    } else {
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+/* WSLUA_ATTRIBUTE ProtoField_type RO The mask of the field. */
+WSLUA_ATTRIBUTE_INTEGER_GETTER(ProtoField,mask);
+
+/* WSLUA_ATTRIBUTE ProtoField_desc RO The description of this field. */
+WSLUA_ATTRIBUTE_NAMED_STRING_GETTER(ProtoField,desc,blob);
+
 WSLUA_METAMETHOD ProtoField__tostring(lua_State* L) {
     /* Returns a string with info about a protofield (for debugging purposes). */
     ProtoField f = checkProtoField(L,1);
@@ -1484,6 +1537,9 @@ static int ProtoField__gc(lua_State* L) {
     g_free(f->abbrev);
     g_free(f->blob);
     proto_free_field_strings(f->type, f->base, f->vs);
+    if (f->valuestring_ref != LUA_NOREF) {
+        luaL_unref(L, LUA_REGISTRYINDEX, f->valuestring_ref);
+    }
     g_free(f);
 
     return 0;
@@ -1526,13 +1582,28 @@ WSLUA_METHODS ProtoField_methods[] = {
     { NULL, NULL }
 };
 
+/* This table is ultimately registered as a sub-table of the class' metatable,
+ * and if __index/__newindex is invoked then it calls the appropriate function
+ * from this table for getting/setting the members.
+ */
+WSLUA_ATTRIBUTES ProtoField_attributes[] = {
+    WSLUA_ATTRIBUTE_ROREG(ProtoField,type),
+    WSLUA_ATTRIBUTE_ROREG(ProtoField,abbr),
+    WSLUA_ATTRIBUTE_ROREG(ProtoField,name),
+    WSLUA_ATTRIBUTE_ROREG(ProtoField,base),
+    WSLUA_ATTRIBUTE_ROREG(ProtoField,valuestring),
+    WSLUA_ATTRIBUTE_ROREG(ProtoField,mask),
+    WSLUA_ATTRIBUTE_ROREG(ProtoField,desc),
+    { NULL, NULL, NULL }
+};
+
 WSLUA_META ProtoField_meta[] = {
     WSLUA_CLASS_MTREG(ProtoField,tostring),
     { NULL, NULL }
 };
 
 int ProtoField_register(lua_State* L) {
-    WSLUA_REGISTER_CLASS(ProtoField);
+    WSLUA_REGISTER_CLASS_WITH_ATTRS(ProtoField);
     return 0;
 }
 

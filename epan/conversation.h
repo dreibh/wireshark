@@ -103,7 +103,8 @@ typedef enum {
     CONVERSATION_IDN,
     CONVERSATION_IP,		/* IP */
     CONVERSATION_IPV6,		/* IPv6 */
-    CONVERSATION_ETH     	/* ETHERNET */
+    CONVERSATION_ETH,		/* ETHERNET */
+    CONVERSATION_VSPC_VMOTION,	/* VMware vSPC vMotion (Telnet) */
 } conversation_type;
 
 /*
@@ -166,6 +167,7 @@ typedef enum {
     CE_UINT64,              /* 64-bit unsigned integer */
     CE_INT,                 /* signed integer */
     CE_INT64,               /* signed integer */
+    CE_BLOB,                /* arbitrary binary data */
 } conversation_element_type;
 
 /**
@@ -200,6 +202,10 @@ typedef struct conversation_element {
         uint64_t uint64_val;
         int int_val;
         int64_t int64_val;
+        struct {
+            const uint8_t *val;
+            size_t len;
+        } blob;
     };
 } conversation_element_t;
 

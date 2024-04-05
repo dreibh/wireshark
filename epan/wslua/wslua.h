@@ -60,26 +60,26 @@
 /* type conversion macros - lua_Number is a double, so casting isn't kosher; and
    using Lua's already-available lua_tointeger() and luaL_checkinteger() might be different
    on different machines; so use these instead please! */
-#define wslua_togint(L,i)       (int)            ( lua_tointeger(L,i) )
-#define wslua_togint32(L,i)     (int32_t)          ( lua_tonumber(L,i) )
-#define wslua_togint64(L,i)     (int64_t)          ( lua_tonumber(L,i) )
-#define wslua_toguint(L,i)      (unsigned)           ( lua_tointeger(L,i) )
-#define wslua_toguint32(L,i)    (uint32_t)         ( lua_tonumber(L,i) )
-#define wslua_toguint64(L,i)    (uint64_t)         ( lua_tonumber(L,i) )
+#define wslua_toint(L,i)       (int)             ( lua_tointeger(L,i) )
+#define wslua_toint32(L,i)     (int32_t)         ( lua_tonumber(L,i) )
+#define wslua_toint64(L,i)     (int64_t)         ( lua_tonumber(L,i) )
+#define wslua_touint(L,i)      (unsigned)        ( lua_tointeger(L,i) )
+#define wslua_touint32(L,i)    (uint32_t)        ( lua_tonumber(L,i) )
+#define wslua_touint64(L,i)    (uint64_t)        ( lua_tonumber(L,i) )
 
-#define wslua_checkgint(L,i)    (int)            ( luaL_checkinteger(L,i) )
-#define wslua_checkgint32(L,i)  (int32_t)          ( luaL_checknumber(L,i) )
-#define wslua_checkgint64(L,i)  (int64_t)          ( luaL_checknumber(L,i) )
-#define wslua_checkguint(L,i)   (unsigned)           ( luaL_checkinteger(L,i) )
-#define wslua_checkguint32(L,i) (uint32_t)         ( luaL_checknumber(L,i) )
-#define wslua_checkguint64(L,i) (uint64_t)         ( luaL_checknumber(L,i) )
+#define wslua_checkint(L,i)    (int)             ( luaL_checkinteger(L,i) )
+#define wslua_checkint32(L,i)  (int32_t)         ( luaL_checknumber(L,i) )
+#define wslua_checkint64(L,i)  (int64_t)         ( luaL_checknumber(L,i) )
+#define wslua_checkuint(L,i)   (unsigned)        ( luaL_checkinteger(L,i) )
+#define wslua_checkuint32(L,i) (uint32_t)        ( luaL_checknumber(L,i) )
+#define wslua_checkuint64(L,i) (uint64_t)        ( luaL_checknumber(L,i) )
 
-#define wslua_optgint(L,i,d)    (int)            ( luaL_optinteger(L,i,d) )
-#define wslua_optgint32(L,i,d)  (int32_t)          ( luaL_optnumber(L,i,d) )
-#define wslua_optgint64(L,i,d)  (int64_t)          ( luaL_optnumber(L,i,d) )
-#define wslua_optguint(L,i,d)   (unsigned)           ( luaL_optinteger(L,i,d) )
-#define wslua_optguint32(L,i,d) (uint32_t)         ( luaL_optnumber(L,i,d) )
-#define wslua_optguint64(L,i,d) (uint64_t)         ( luaL_optnumber(L,i,d) )
+#define wslua_optint(L,i,d)    (int)             ( luaL_optinteger(L,i,d) )
+#define wslua_optint32(L,i,d)  (int32_t)         ( luaL_optnumber(L,i,d) )
+#define wslua_optint64(L,i,d)  (int64_t)         ( luaL_optnumber(L,i,d) )
+#define wslua_optuint(L,i,d)   (unsigned)        ( luaL_optinteger(L,i,d) )
+#define wslua_optuint32(L,i,d) (uint32_t)        ( luaL_optnumber(L,i,d) )
+#define wslua_optuint64(L,i,d) (uint64_t)        ( luaL_optnumber(L,i,d) )
 
 
 struct _wslua_tvb {
@@ -114,6 +114,7 @@ typedef struct _wslua_field_t {
     enum ftenum type;
     unsigned base;
     const void* vs;
+    int valuestring_ref;
     uint64_t mask;
 } wslua_field_t;
 
@@ -514,11 +515,11 @@ extern int wslua_reg_attributes(lua_State *L, const wslua_attribute_table *t, bo
 #define WSLUA_ATTRIBUTE_NAMED_BOOLEAN_GETTER(C,name,member) \
     WSLUA_ATTRIBUTE_GET(C,name,{lua_pushboolean(L, obj->member );})
 
-#define WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(C,name,member) \
-    WSLUA_ATTRIBUTE_GET(C,name,{lua_pushnumber(L,(lua_Number)(obj->member));})
+#define WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(C,name,member) \
+    WSLUA_ATTRIBUTE_GET(C,name,{lua_pushinteger(L,(lua_Integer)(obj->member));})
 
-#define WSLUA_ATTRIBUTE_NUMBER_GETTER(C,member) \
-    WSLUA_ATTRIBUTE_NAMED_NUMBER_GETTER(C,member,member)
+#define WSLUA_ATTRIBUTE_INTEGER_GETTER(C,member) \
+    WSLUA_ATTRIBUTE_NAMED_INTEGER_GETTER(C,member,member)
 
 #define WSLUA_ATTRIBUTE_BLOCK_NUMBER_GETTER(C,name,block) \
     WSLUA_ATTRIBUTE_GET(C,name,{lua_pushnumber(L,(lua_Number)(block));})
@@ -573,15 +574,15 @@ extern int wslua_reg_attributes(lua_State *L, const wslua_attribute_table *t, bo
 
 /* to make this integral-safe, we treat it as int32 and then cast
    Note: This will truncate 64-bit integers (but then Lua itself only has doubles */
-#define WSLUA_ATTRIBUTE_NAMED_NUMBER_SETTER(C,name,member,cast) \
+#define WSLUA_ATTRIBUTE_NAMED_INTEGER_SETTER(C,name,member,cast) \
     WSLUA_ATTRIBUTE_SET(C,name, { \
-        if (! lua_isnumber(L,-1) ) \
-            return luaL_error(L, "%s's attribute `%s' must be a number", #C , #name ); \
-        obj->member = (cast) wslua_togint32(L,-1); \
+        if (! lua_isinteger(L,-1) ) \
+            return luaL_error(L, "%s's attribute `%s' must be an integer", #C , #name ); \
+        obj->member = (cast) wslua_toint32(L,-1); \
     })
 
-#define WSLUA_ATTRIBUTE_NUMBER_SETTER(C,member,cast) \
-    WSLUA_ATTRIBUTE_NAMED_NUMBER_SETTER(C,member,member,cast)
+#define WSLUA_ATTRIBUTE_INTEGER_SETTER(C,member,cast) \
+    WSLUA_ATTRIBUTE_NAMED_INTEGER_SETTER(C,member,member,cast)
 
 #define WSLUA_ATTRIBUTE_NAMED_STRING_SETTER(C,field,member,need_free) \
     static int C##_set_##field (lua_State* L) { \
@@ -645,7 +646,7 @@ extern int wslua_reg_attributes(lua_State *L, const wslua_attribute_table *t, bo
 
 #define WSLUA_REG_GLOBAL_BOOL(L,n,v) { lua_pushboolean(L,v); lua_setglobal(L,n); }
 #define WSLUA_REG_GLOBAL_STRING(L,n,v) { lua_pushstring(L,v); lua_setglobal(L,n); }
-#define WSLUA_REG_GLOBAL_NUMBER(L,n,v) { lua_pushnumber(L,v); lua_setglobal(L,n); }
+#define WSLUA_REG_GLOBAL_INTEGER(L,n,v) { lua_pushinteger(L,v); lua_setglobal(L,n); }
 
 #define WSLUA_RETURN(i) return (i)
 

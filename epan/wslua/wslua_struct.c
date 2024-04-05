@@ -218,7 +218,7 @@ static int getnum (lua_State *L, const char **fmt, int df) {
 static size_t optsize (lua_State *L, char opt, const char **fmt) {
   switch (opt) {
     case 'B': case 'b': return sizeof(char);
-    case 'H': case 'h': return sizeof(gshort);
+    case 'H': case 'h': return sizeof(short);
     case 'L': case 'l': return sizeof(long);
     case 'E': case 'e': return sizeof(int64_t);
     case 'T': return sizeof(size_t);
@@ -505,7 +505,7 @@ WSLUA_CONSTRUCTOR Struct_unpack (lua_State *L) {
         if (size == 0) {
           if (!lua_isnumber(L, -1))
             luaL_error(L, "format `c0' needs a previous size");
-          size = wslua_toguint32(L, -1);
+          size = wslua_touint32(L, -1);
           lua_pop(L, 1);
           luaL_argcheck(L, pos+size <= ld, 2, "data string too short");
         }
