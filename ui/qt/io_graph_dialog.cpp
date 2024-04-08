@@ -148,9 +148,9 @@ static const value_string moving_avg_vs[] = {
     { 0, NULL }
 };
 
-static io_graph_settings_t *iog_settings_ = NULL;
-static unsigned num_io_graphs_ = 0;
-static uat_t *iog_uat_ = NULL;
+static io_graph_settings_t *iog_settings_;
+static unsigned num_io_graphs_;
+static uat_t *iog_uat_;
 
 // y_axis_factor was added in 3.6. Provide backward compatibility.
 static const char *iog_uat_defaults_[] = {
@@ -893,7 +893,7 @@ void IOGraphDialog::toggleTracerStyle(bool force_default)
 IOGraph *IOGraphDialog::currentActiveGraph() const
 {
     QModelIndex index = ui->graphUat->currentIndex();
-    if (index.isValid()) {
+    if (index.isValid() && graphIsEnabled(index.row())) {
         return ioGraphs_.value(index.row(), NULL);
     }
 
@@ -1209,18 +1209,19 @@ void IOGraphDialog::mouseReleased(QMouseEvent *event)
 void IOGraphDialog::resetAxes()
 {
     QCustomPlot *iop = ui->ioPlot;
-    QCPRange x_range = iop->xAxis->scaleType() == QCPAxis::stLogarithmic ?
-                iop->xAxis->range().sanitizedForLogScale() : iop->xAxis->range();
-
     double pixel_pad = 10.0; // per side
 
     iop->rescaleAxes(true);
 
+    QCPRange x_range = iop->xAxis->scaleType() == QCPAxis::stLogarithmic ?
+                iop->xAxis->range().sanitizedForLogScale() : iop->xAxis->range();
     double axis_pixels = iop->xAxis->axisRect()->width();
     iop->xAxis->scaleRange((axis_pixels + (pixel_pad * 2)) / axis_pixels, x_range.center());
 
+    QCPRange y_range = iop->yAxis->scaleType() == QCPAxis::stLogarithmic ?
+                iop->yAxis->range().sanitizedForLogScale() : iop->yAxis->range();
     axis_pixels = iop->yAxis->axisRect()->height();
-    iop->yAxis->scaleRange((axis_pixels + (pixel_pad * 2)) / axis_pixels, iop->yAxis->range().center());
+    iop->yAxis->scaleRange((axis_pixels + (pixel_pad * 2)) / axis_pixels, y_range.center());
 
     auto_axes_ = true;
     iop->replot();
@@ -1675,7 +1676,7 @@ void IOGraphDialog::on_actionToggleTimeOrigin_triggered()
 
 void IOGraphDialog::on_actionCrosshairs_triggered()
 {
-
+    toggleTracerStyle();
 }
 
 void IOGraphDialog::on_buttonBox_helpRequested()
@@ -2173,13 +2174,20 @@ bool IOGraph::removeFromLegend()
     return false;
 }
 
+// This returns what graph key offset corresponds with relative time 0.0,
+// i.e. when absolute times are used the difference between abs_ts and
+// rel_ts of the first tapped packet. Generally the same for all graphs
+// that are displayed and have some data, unless they're on the opposite
+// sides of time references.
+// XXX - If the graph spans a time reference, it's not clear how we want
+// to switch from relative to absolute times.
 double IOGraph::startOffset() const
 {
-    if (graph_ && qSharedPointerDynamicCast<QCPAxisTickerDateTime>(graph_->keyAxis()->ticker()) && graph_->data()->size() > 0) {
-        return graph_->data()->at(0)->key;
+    if (graph_ && qSharedPointerDynamicCast<QCPAxisTickerDateTime>(graph_->keyAxis()->ticker())) {
+        return start_time_;
     }
-    if (bars_ && qSharedPointerDynamicCast<QCPAxisTickerDateTime>(bars_->keyAxis()->ticker()) && bars_->data()->size() > 0) {
-        return bars_->data()->at(0)->key;
+    if (bars_ && qSharedPointerDynamicCast<QCPAxisTickerDateTime>(bars_->keyAxis()->ticker())) {
+        return start_time_;
     }
     return 0.0;
 }

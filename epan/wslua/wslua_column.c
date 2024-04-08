@@ -22,8 +22,8 @@
 /* WSLUA_CONTINUE_MODULE Pinfo */
 
 
-static GPtrArray* outstanding_Column = NULL;
-static GPtrArray* outstanding_Columns = NULL;
+static GPtrArray* outstanding_Column;
+static GPtrArray* outstanding_Columns;
 
 CLEAR_OUTSTANDING(Column,expired, true)
 CLEAR_OUTSTANDING(Columns,expired, true)
@@ -198,10 +198,7 @@ WSLUA_METHOD Column_prepend(lua_State *L) {
 }
 
 WSLUA_METHOD Column_fence(lua_State *L) {
-    /* Sets Column text fence, to prevent overwriting.
-
-       @since 1.10.6
-     */
+    /* Sets Column text fence, to prevent overwriting. */
     Column c = checkColumn(L,1);
 
     if (c->cinfo)
@@ -211,10 +208,7 @@ WSLUA_METHOD Column_fence(lua_State *L) {
 }
 
 WSLUA_METHOD Column_clear_fence(lua_State *L) {
-    /* Clear Column text fence.
-
-       @since 1.11.3
-     */
+    /* Clear Column text fence. */
     Column c = checkColumn(L,1);
 
     if (c->cinfo)

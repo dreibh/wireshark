@@ -72,7 +72,7 @@ static inline guint64 KEEP_32MSB_OF_GUINT64(guint64 nb) {
  * packet to the capture program but a checksummed packet got put onto
  * the wire.
  */
-static bool tcp_check_checksum = false;
+static bool tcp_check_checksum;
 
 /*
  * Window scaling values to be used when not known (set as a preference) */
@@ -502,7 +502,7 @@ static bool tcp_no_subdissector_on_error = true;
 
 /* Enable buffering of out-of-order TCP segments before passing it to a
  * subdissector (depends on "tcp_desegment"). */
-static bool tcp_reassemble_out_of_order = false;
+static bool tcp_reassemble_out_of_order;
 
 /*
  * FF: https://www.rfc-editor.org/rfc/rfc6994.html
@@ -524,10 +524,10 @@ static bool tcp_exp_options_rfc6994 = true;
 static bool tcp_fastrt_precedence = true;
 
 /* Process info, currently discovered via IPFIX */
-static bool tcp_display_process_info = false;
+static bool tcp_display_process_info;
 
 /* Read the sequence number as syn cookie */
-static bool read_seq_as_syn_cookie = false;
+static bool read_seq_as_syn_cookie;
 
 /*
  *  TCP option
@@ -749,7 +749,7 @@ static guint32 mptcp_stream_count;
  * Maps an MPTCP token to a mptcp_analysis structure
  * Collisions are not handled
  */
-static wmem_tree_t *mptcp_tokens = NULL;
+static wmem_tree_t *mptcp_tokens;
 
 static int * const tcp_option_mptcp_capable_v0_flags[] = {
   &hf_tcp_option_mptcp_checksum_flag,
@@ -998,6 +998,19 @@ static const char* tcp_conv_get_filter_type(conv_item_t* conv, conv_filter_type_
 
 static ct_dissector_info_t tcp_ct_dissector_info = {&tcp_conv_get_filter_type};
 
+/*
+ * callback function for conversation stats
+ */
+static int tcp_conv_cb_update(conversation_t *conv)
+{
+    struct tcp_analysis *tcpd;
+    tcpd=get_tcp_conversation_data_idempotent(conv);
+    if(tcpd)
+        return tcpd->flow1.flow_count + tcpd->flow2.flow_count;
+    else
+        return 0;
+}
+
 static tap_packet_status
 tcpip_conversation_packet(void *pct, packet_info *pinfo, epan_dissect_t *edt _U_, const void *vip, tap_flags_t flags)
 {
@@ -1006,8 +1019,9 @@ tcpip_conversation_packet(void *pct, packet_info *pinfo, epan_dissect_t *edt _U_
 
     const struct tcpheader *tcphdr=(const struct tcpheader *)vip;
 
-    add_conversation_table_data_with_conv_id(hash, &tcphdr->ip_src, &tcphdr->ip_dst, tcphdr->th_sport, tcphdr->th_dport, (conv_id_t) tcphdr->th_stream, 1, pinfo->fd->pkt_len,
-                                              &pinfo->rel_ts, &pinfo->abs_ts, &tcp_ct_dissector_info, CONVERSATION_TCP);
+    add_conversation_table_data_extended(hash, &tcphdr->ip_src, &tcphdr->ip_dst, tcphdr->th_sport, tcphdr->th_dport, (conv_id_t) tcphdr->th_stream, 1, pinfo->fd->pkt_len,
+                                              &pinfo->rel_ts, &pinfo->abs_ts, &tcp_ct_dissector_info, CONVERSATION_TCP, (guint32)pinfo->num, tcp_conv_cb_update);
+
 
     return TAP_PACKET_REDRAW;
 }
@@ -1670,13 +1684,13 @@ static void conversation_completeness_fill(gchar *buf, guint32 value)
 static bool tcp_analyze_seq           = true;
 static bool tcp_relative_seq          = true;
 static bool tcp_track_bytes_in_flight = true;
-static bool tcp_bif_seq_based         = false;
+static bool tcp_bif_seq_based;
 static bool tcp_calculate_ts          = true;
 
 static bool tcp_analyze_mptcp                   = true;
 static bool mptcp_relative_seq                  = true;
-static bool mptcp_analyze_mappings              = false;
-static bool mptcp_intersubflows_retransmission  = false;
+static bool mptcp_analyze_mappings;
+static bool mptcp_intersubflows_retransmission;
 
 
 #define TCP_A_RETRANSMISSION          0x0001
@@ -1816,6 +1830,9 @@ init_tcp_conversation_data(packet_info *pinfo, int direction)
     tcpd->flow2.closing_initiator = FALSE;
     tcpd->stream = tcp_stream_count++;
     tcpd->server_port = 0;
+    tcpd->flow_direction = 0;
+    tcpd->flow1.flow_count = 0;
+    tcpd->flow2.flow_count = 0;
 
     return tcpd;
 }
@@ -1845,6 +1862,16 @@ mptcp_attach_subflow(struct mptcp_analysis* mptcpd, struct tcp_analysis* tcpd) {
     tcpd->mptcp_analysis = mptcpd;
 }
 
+struct tcp_analysis *
+get_tcp_conversation_data_idempotent(conversation_t *conv)
+{
+    struct tcp_analysis *tcpd;
+
+    /* Get the data for this conversation */
+    tcpd=(struct tcp_analysis *)conversation_get_proto_data(conv, proto_tcp);
+
+    return tcpd;
+}
 
 struct tcp_analysis *
 get_tcp_conversation_data(conversation_t *conv, packet_info *pinfo)
@@ -2777,6 +2804,41 @@ finished_checking_retransmission_type:
             tcpd->fwd->tcp_analyze_seq_info->nextseqframe=pinfo->num;
             tcpd->fwd->tcp_analyze_seq_info->nextseqtime.secs=pinfo->abs_ts.secs;
             tcpd->fwd->tcp_analyze_seq_info->nextseqtime.nsecs=pinfo->abs_ts.nsecs;
+
+            /* Count the flows turns by checking all packets carrying real data
+             * Packets not ordered are ignored.
+             */
+            if((!tcpd->ta ) ||
+               !(tcpd->ta->flags & TCP_A_RETRANSMISSION ||
+                 tcpd->ta->flags & TCP_A_OUT_OF_ORDER ||
+                 tcpd->ta->flags & TCP_A_FAST_RETRANSMISSION ||
+                 tcpd->ta->flags & TCP_A_SPURIOUS_RETRANSMISSION)) {
+
+                if( seglen>0) {
+                    /* check direction */
+                    gint8         direction;
+                    direction=cmp_address(&pinfo->src, &pinfo->dst);
+
+                    /* if the addresses are equal, match the ports instead */
+                    if(direction==0) {
+                        direction= (pinfo->srcport > pinfo->destport) ? 1 : -1;
+                    }
+
+                    /* invert the direction and increment the counter */
+                    if(direction != tcpd->flow_direction) {
+                        tcpd->flow_direction = direction;
+                        tcpd->fwd->flow_count++;
+                    }
+                    /* if the direction was not reversed, maybe are we
+                     * facing the first flow ? Yes, if the counter still equals 0.
+                     */
+                    else {
+                        if(tcpd->fwd->flow_count==0) {
+                            tcpd->fwd->flow_count++;
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -5810,7 +5872,7 @@ dissect_tcpopt_echo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 }
 
 /* If set, do not put the TCP timestamp information on the summary line */
-static bool tcp_ignore_timestamps = false;
+static bool tcp_ignore_timestamps;
 
 static int
 dissect_tcpopt_timestamp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
@@ -7417,7 +7479,7 @@ tcp_dissect_options(tvbuff_t *tvb, int offset, guint length,
    This has been separated into a stand alone routine to other protocol
    dissectors can call to it, e.g., SOCKS. */
 
-static bool try_heuristic_first = false;
+static bool try_heuristic_first;
 
 
 /* this function can be called with tcpd==NULL as from the msproxy dissector */

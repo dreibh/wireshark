@@ -191,7 +191,7 @@ static void lua_tap_draw(void *tapdata) {
 }
 
 /* TODO: we should probably use a Lua table here */
-static GPtrArray *listeners = NULL;
+static GPtrArray *listeners;
 
 static void deregister_Listener (lua_State* L _U_, Listener tap) {
     if (tap->all_fields) {
@@ -277,9 +277,6 @@ WSLUA_CONSTRUCTOR Listener_list (lua_State *L) { /*
     Gets a Lua array table of all registered `Listener` tap names.
 
     Note: This is an expensive operation, and should only be used for troubleshooting.
-
-    @since 1.11.3
-
     ===== Example
 
     [source,lua]

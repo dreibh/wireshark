@@ -28,10 +28,10 @@ WSLUA_FUNCTION wslua_get_version(lua_State* L) { /* Gets the Wireshark version a
 }
 
 
-static char *current_plugin_version = NULL;
-static char *current_plugin_description = NULL;
-static char *current_plugin_repository = NULL;
-static char *current_plugin_spdx_id = NULL;
+static char *current_plugin_version;
+static char *current_plugin_description;
+static char *current_plugin_repository;
+static char *current_plugin_spdx_id;
 
 const char* get_current_plugin_version(void) {
     return current_plugin_version ? current_plugin_version : "";
@@ -90,8 +90,6 @@ WSLUA_FUNCTION wslua_set_plugin_info(lua_State* L) {
 
     set_plugin_info(my_info)
     ----
-
-    @since 1.99.8
     */
 #define WSLUA_ARG_set_plugin_info_TABLE 1 /* The Lua table of information. */
 
@@ -147,7 +145,7 @@ WSLUA_FUNCTION wslua_format_time(lua_State* LS) { /* Formats a relative timestam
 }
 
 WSLUA_FUNCTION wslua_get_preference(lua_State *L) {
-    /* Get a preference value. @since 3.5.0 */
+    /* Get a preference value. */
 #define WSLUA_ARG_get_preference_PREFERENCE 1 /* The name of the preference. */
     const char* preference = luaL_checkstring(L,WSLUA_ARG_get_preference_PREFERENCE);
 
@@ -227,7 +225,7 @@ WSLUA_FUNCTION wslua_get_preference(lua_State *L) {
 }
 
 WSLUA_FUNCTION wslua_set_preference(lua_State *L) {
-    /* Set a preference value. @since 3.5.0 */
+    /* Set a preference value. */
 #define WSLUA_ARG_set_preference_PREFERENCE 1 /* The name of the preference. */
 #define WSLUA_ARG_set_preference_VALUE 2 /* The preference value to set. */
     const char* preference = luaL_checkstring(L,WSLUA_ARG_set_preference_PREFERENCE);
@@ -315,7 +313,7 @@ WSLUA_FUNCTION wslua_set_preference(lua_State *L) {
 }
 
 WSLUA_FUNCTION wslua_reset_preference(lua_State *L) {
-    /* Reset a preference to default value. @since 3.5.0 */
+    /* Reset a preference to default value. */
 #define WSLUA_ARG_reset_preference_PREFERENCE 1 /* The name of the preference. */
     const char* preference = luaL_checkstring(L,WSLUA_ARG_reset_preference_PREFERENCE);
 
@@ -345,7 +343,7 @@ WSLUA_FUNCTION wslua_reset_preference(lua_State *L) {
 }
 
 WSLUA_FUNCTION wslua_apply_preferences(lua_State *L) {
-    /* Write preferences to file and apply changes. @since 3.5.0 */
+    /* Write preferences to file and apply changes. */
     char *pf_path = NULL;
     int err = write_prefs(&pf_path);
 
