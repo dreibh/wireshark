@@ -1211,6 +1211,10 @@ find_package(GCRYPT "1.8.0" REQUIRED)
 # C Asynchronous resolver
 reset_find_package(CARES)
 find_package(CARES "1.13.0" REQUIRED)
+if (CARES_VERSION VERSION_GREATER_EQUAL "1.28.0")
+	# Suppress deprecation warnings.
+	add_compile_definitions(CARES_NO_DEPRECATED)
+endif ()
 find_package(LEX REQUIRED)
 find_package(Perl)
 find_package(PCRE2 REQUIRED)
@@ -1994,9 +1998,6 @@ feature_summary(WHAT ALL)
 if(WIN32)
 	set(PLATFORM_UI_SRC
 		ui/win32/file_dlg_win32.cpp
-	)
-	set(PLATFORM_UI_RC_FILES
-		resources/file_dlg_win32.rc
 	)
 elseif(APPLE)
 	set(PLATFORM_UI_SRC

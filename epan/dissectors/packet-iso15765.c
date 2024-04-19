@@ -36,8 +36,8 @@
  */
 
 /*
- * Support for FlexRay variant, see: https://www.autosar.org/fileadmin/user_upload/standards/classic/20-11/AUTOSAR_SWS_FlexRayARTransportLayer.pdf
- */
+ * Support for FlexRay variant, see: https://www.autosar.org/fileadmin/standards/R20-11/CP/AUTOSAR_SWS_FlexRayARTransportLayer.pdf
+*/
 
 #include "config.h"
 
@@ -50,6 +50,7 @@
 #include <epan/uat.h>
 #include <wsutil/bits_ctz.h>
 #include <wsutil/bits_count_ones.h>
+#include <wiretap/wtap.h>
 
 #include "packet-socketcan.h"
 #include "packet-lin.h"
@@ -92,13 +93,38 @@ typedef struct iso15765_identifier {
 
 typedef struct iso15765_frame {
     guint32  seq;
-    guint32  offset;
+    guint32  last_byte_seen;
     guint32  len;
+    guint32  bytes_in_cf;
     gboolean error;
-    gboolean complete;
+    gboolean ff_seen;
     guint16  last_frag_id;
     guint8   frag_id_high[16];
 } iso15765_frame_t;
+
+typedef struct iso15765_seq_key {
+    guint32 bus_type;
+    guint32 frame_id;
+    guint32 iface_id;
+} iso15765_seq_key_t;
+
+static guint
+iso15765_seq_hash_func(gconstpointer v)
+{
+    const iso15765_seq_key_t* key = (const iso15765_seq_key_t*)v;
+    return (key->frame_id ^ key->bus_type);
+}
+
+static gint
+iso15765_seq_equal_func(gconstpointer v1, gconstpointer v2)
+{
+    const iso15765_seq_key_t* key1 = (const iso15765_seq_key_t*)v1;
+    const iso15765_seq_key_t* key2 = (const iso15765_seq_key_t*)v2;
+
+    return (key1->bus_type == key2->bus_type &&
+        key1->frame_id == key2->frame_id &&
+        key1->iface_id == key2->iface_id);
+}
 
 static const value_string iso15765_message_types[] = {
     {ISO15765_MESSAGE_TYPES_SINGLE_FRAME, "Single Frame"},
@@ -190,6 +216,7 @@ static dissector_handle_t iso15765_handle_pdu_transport;
 static dissector_table_t subdissector_table;
 
 static reassembly_table iso15765_reassembly_table;
+static wmem_map_t* iso15765_seq_table;
 static wmem_map_t *iso15765_frame_table;
 
 static int hf_iso15765_fragments;
@@ -577,6 +604,7 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
     guint32     full_len;
     gboolean    fragmented = FALSE;
     gboolean    complete = FALSE;
+    guint32     iface_id = (pinfo->rec->presence_flags & WTAP_HAS_INTERFACE_ID) ? pinfo->rec->rec_header.packet_header.interface_id : 0;
 
     iso15765_info_t iso15765data;
 
@@ -700,9 +728,20 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
 
             /* Save information */
             if (!(pinfo->fd->visited)) {
+                iso15765_seq_key_t* key;
+                void* old_value;
+                iso15765_seq_key_t temp_key = { bus_type, frame_id, iface_id };
+                msg_seqid++;
+                if (!wmem_map_lookup_extended(iso15765_seq_table, &temp_key, (const void**)&key, &old_value)) {
+                    key = wmem_new(wmem_file_scope(), iso15765_seq_key_t);
+                    *key = temp_key;
+                }
+                wmem_map_insert(iso15765_seq_table, key, GUINT_TO_POINTER(msg_seqid));
+
                 iso15765_frame_t *iso15765_frame = wmem_new0(wmem_file_scope(), iso15765_frame_t);
-                iso15765_frame->seq = iso15765_info->seq = ++msg_seqid;
+                iso15765_frame->seq = iso15765_info->seq = msg_seqid;
                 iso15765_frame->len = full_len;
+                iso15765_frame->bytes_in_cf = MAX(8, tvb_reported_length(tvb)) - pci_offset - 1;
 
                 wmem_map_insert(iso15765_frame_table, GUINT_TO_POINTER(iso15765_info->seq), iso15765_frame);
             }
@@ -730,7 +769,9 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
 
             /* Save information */
             if (!(pinfo->fd->visited)) {
-                iso15765_info->seq = msg_seqid;
+                iso15765_seq_key_t temp_key = { bus_type, frame_id, iface_id };
+                void* old_value = wmem_map_lookup(iso15765_seq_table, &temp_key);
+                iso15765_info->seq = old_value ? GPOINTER_TO_UINT(old_value) : 0;
             }
             break;
         }
@@ -805,9 +846,20 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
 
             /* Save information */
             if (!(pinfo->fd->visited)) {
+                iso15765_seq_key_t* key;
+                void* old_value;
+                iso15765_seq_key_t temp_key = { bus_type, frame_id, iface_id };
+                msg_seqid++;
+                if (!wmem_map_lookup_extended(iso15765_seq_table, &temp_key, (const void **)&key, &old_value)) {
+                    key = wmem_new(wmem_file_scope(), iso15765_seq_key_t);
+                    *key = temp_key;
+                }
+                wmem_map_insert(iso15765_seq_table, key, GUINT_TO_POINTER(msg_seqid));
+
                 iso15765_frame_t *iso15765_frame = wmem_new0(wmem_file_scope(), iso15765_frame_t);
-                iso15765_frame->seq = iso15765_info->seq = ++msg_seqid;
+                iso15765_frame->seq = iso15765_info->seq = msg_seqid;
                 iso15765_frame->len = full_len;
+                iso15765_frame->bytes_in_cf = MAX(8, tvb_reported_length(tvb)) - pci_offset - 1;
 
                 wmem_map_insert(iso15765_frame_table, GUINT_TO_POINTER(iso15765_info->seq), iso15765_frame);
             }
@@ -853,25 +905,37 @@ dissect_iso15765(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint32 bu
             if (!iso15765_frame->error) {
                 gboolean       save_fragmented = pinfo->fragmented;
                 guint32        len = data_length;
+                guint32        missing_bytes = 0;
                 fragment_head *frag_msg;
 
                 /* Check if it's the last packet */
                 if (!(pinfo->fd->visited)) {
                     iso15765_info->bytes_used = data_length;
 
-                    /* Update the last_frag_id */
-                    if (frag_id > iso15765_frame->last_frag_id) {
+                    if (frag_id > iso15765_frame->last_frag_id || !iso15765_frame->ff_seen) {
+                        if (frag_id > iso15765_frame->last_frag_id + 1) {
+                            missing_bytes = (frag_id - iso15765_frame->last_frag_id - 1) * iso15765_frame->bytes_in_cf;
+                        }
+                        /* Update the last_frag_id */
+                        iso15765_frame->ff_seen = TRUE;
                         iso15765_frame->last_frag_id = frag_id;
-                    }
 
-                    iso15765_frame->offset += len;
-                    if (iso15765_frame->offset >= iso15765_frame->len) {
-                        iso15765_info->last = TRUE;
-                        iso15765_frame->complete = TRUE;
-                        len -= (iso15765_frame->offset - iso15765_frame->len);
 
-                        /* Determine how many bytes were needed to calculate padding latter. */
-                        iso15765_info->bytes_used = data_length - (iso15765_frame->offset - iso15765_frame->len);
+                        /* Here we use iso15765_frame->last_byte_seen to make sure that we correctly detect
+                         * the last Consecutive Frame, even if some frames were missing in the middle.
+                         * Note that the last Consecutive Frame might not be the last packet,
+                         * as it might arrive out of order.
+                         */
+                        iso15765_frame->last_byte_seen += missing_bytes;
+                        iso15765_frame->last_byte_seen += len;
+                        if (iso15765_frame->last_byte_seen >= iso15765_frame->len) {
+                            iso15765_info->last = TRUE;
+                            len -= (iso15765_frame->last_byte_seen - iso15765_frame->len);
+
+                            /* Determine how many bytes were needed to calculate padding latter. */
+                            iso15765_info->bytes_used = data_length - (iso15765_frame->last_byte_seen - iso15765_frame->len);
+                        }
+
                     }
                 }
                 pinfo->fragmented = TRUE;
@@ -1223,6 +1287,7 @@ proto_register_iso15765(void) {
         "A table to define the PDU Transport Config", config_pdu_transport_config_uat);
 
 
+    iso15765_seq_table = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), iso15765_seq_hash_func, iso15765_seq_equal_func);
     iso15765_frame_table = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
 
     reassembly_table_register(&iso15765_reassembly_table, &addresses_reassembly_table_functions);

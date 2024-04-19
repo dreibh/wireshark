@@ -16,9 +16,9 @@
  */
 
 #include "config.h"
-#include "wtap_opttypes.h"
-
 #define WS_LOG_DOMAIN LOG_DOMAIN_WIRETAP
+
+#include "wtap_opttypes.h"
 
 #include <stdlib.h>
 #include <string.h>
@@ -4283,18 +4283,20 @@ typedef struct compute_options_size_t
     compute_option_size_func compute_option_size;
 } compute_options_size_t;
 
+/*
+ * As it says at the top of the file, an option sizer "calculates how many
+ * bytes the option's data requires, not including any padding bytes."
+ * Callers are responsible for rounding up to multiples of 4 bytes.
+ * compute_block_options_size() does that for each option in the block;
+ * option writers that call an option sizer (which helps ensure that the
+ * sizes are internally consistent) should do the same.
+ */
+
 static uint32_t pcapng_compute_string_option_size(wtap_optval_t *optval)
 {
-    uint32_t size = 0, pad;
+    uint32_t size = 0;
 
     size = (uint32_t)strlen(optval->stringval) & 0xffff;
-    if ((size % 4)) {
-        pad = 4 - (size % 4);
-    } else {
-        pad = 0;
-    }
-
-    size += pad;
 
     return size;
 }
@@ -4302,16 +4304,9 @@ static uint32_t pcapng_compute_string_option_size(wtap_optval_t *optval)
 #if 0
 static uint32_t pcapng_compute_bytes_option_size(wtap_optval_t *optval)
 {
-    uint32_t size = 0, pad;
+    uint32_t size = 0;
 
     size = (uint32_t)g_bytes_get_size(optval->byteval) & 0xffff;
-    if ((size % 4)) {
-        pad = 4 - (size % 4);
-    } else {
-        pad = 0;
-    }
-
-    size += pad;
 
     return size;
 }
@@ -4321,7 +4316,6 @@ static uint32_t pcapng_compute_if_filter_option_size(wtap_optval_t *optval)
 {
     if_filter_opt_t* filter = &optval->if_filterval;
     uint32_t size;
-    uint32_t pad;
 
     if (filter->type == if_filter_pcap) {
         size = (uint32_t)(strlen(filter->data.filter_str) + 1) & 0xffff;
@@ -4331,18 +4325,12 @@ static uint32_t pcapng_compute_if_filter_option_size(wtap_optval_t *optval)
         /* Unknown type; don't write it */
         size = 0;
     }
-    if ((size % 4)) {
-        pad = 4 - (size % 4);
-    } else {
-        pad = 0;
-    }
-    size += pad;
     return size;
 }
 
 static uint32_t pcapng_compute_custom_option_size(wtap_optval_t *optval)
 {
-    size_t size, pad;
+    size_t size;
 
     /* PEN */
     size = sizeof(uint32_t);
@@ -4359,13 +4347,6 @@ static uint32_t pcapng_compute_custom_option_size(wtap_optval_t *optval)
     if (size > 65535) {
         size = 65535;
     }
-    if ((size % 4)) {
-        pad = 4 - (size % 4);
-    } else {
-        pad = 0;
-    }
-
-    size += pad;
 
     return (uint32_t)size;
 }
@@ -4374,7 +4355,6 @@ static uint32_t pcapng_compute_packet_hash_option_size(wtap_optval_t *optval)
 {
     packet_hash_opt_t* hash = &optval->packet_hash;
     uint32_t size;
-    uint32_t pad;
 
     switch (hash->type) {
     case OPT_HASH_CRC32:
@@ -4394,12 +4374,16 @@ static uint32_t pcapng_compute_packet_hash_option_size(wtap_optval_t *optval)
         size = hash->hash_bytes->len;
         break;
     }
-    if ((size % 4)) {
-        pad = 4 - (size % 4);
-    } else {
-        pad = 0;
-    }
-    size += pad;
+    /* XXX - What if the size of the hash bytes doesn't match the
+     * expected size? We can:
+     * 1) Return 0, and omit it when writing
+     * 2) Return hash_bytes->len, and write it out exactly as we have it
+     * 3) Return the correct size here, and when writing err or possibly
+     * truncate.
+     */
+    /* Account for the size of the algorithm type field. */
+    size += 1;
+
     return size;
 }
 
@@ -4407,7 +4391,6 @@ static uint32_t pcapng_compute_packet_verdict_option_size(wtap_optval_t *optval)
 {
     packet_verdict_opt_t* verdict = &optval->packet_verdictval;
     uint32_t size;
-    uint32_t pad;
 
     switch (verdict->type) {
 
@@ -4416,23 +4399,22 @@ static uint32_t pcapng_compute_packet_verdict_option_size(wtap_optval_t *optval)
         break;
 
     case packet_verdict_linux_ebpf_tc:
-        size = 9;
+        size = 8;
         break;
 
     case packet_verdict_linux_ebpf_xdp:
-        size = 9;
+        size = 8;
         break;
 
     default:
         size = 0;
         break;
     }
-    if ((size % 4)) {
-        pad = 4 - (size % 4);
-    } else {
-        pad = 0;
+    /* Account for the type octet */
+    if (size) {
+        size += 1;
     }
-    size += pad;
+
     return size;
 }
 
@@ -4473,6 +4455,15 @@ compute_block_option_size(wtap_block_t block _U_, unsigned option_id, wtap_optty
 
     /*
      * Are we writing this option?
+     */
+    /*
+     * XXX: The option length field is 16 bits. If size > 65535 (how?
+     * was the block was obtained from some format other than pcapng?),
+     * are we going to silently omit the option (in which case we shouldn't
+     * add the size here), or err out when writing it (in which case
+     * it's probably fine to add the size or not?) Adding it here and
+     * then omitting it when writing, as some of the routines do, means
+     * creating a corrupt file.
      */
     if (size != 0) {
         /*
@@ -4925,10 +4916,11 @@ static bool pcapng_write_packet_verdict_option(wtap_dumper *wdh, unsigned option
     const uint32_t zero_pad = 0;
     uint32_t pad;
 
+    size = pcapng_compute_packet_verdict_option_size(optval);
+
     switch (verdict->type) {
 
     case packet_verdict_hardware:
-        size = verdict->data.verdict_bytes->len;
         if (size > 65535) {
             /*
              * Too big to fit in the option.
@@ -4947,13 +4939,12 @@ static bool pcapng_write_packet_verdict_option(wtap_dumper *wdh, unsigned option
         if (!wtap_dump_file_write(wdh, &type, sizeof(uint8_t), err))
             return false;
 
-        if (!wtap_dump_file_write(wdh, verdict->data.verdict_bytes->data, size,
-                                  err))
+        if (!wtap_dump_file_write(wdh, verdict->data.verdict_bytes->data,
+                                  verdict->data.verdict_bytes->len, err))
             return false;
         break;
 
     case packet_verdict_linux_ebpf_tc:
-        size = 9;
         option_hdr.type         = option_id;
         option_hdr.value_length = (uint16_t)size;
         if (!wtap_dump_file_write(wdh, &option_hdr, 4, err))
@@ -4969,7 +4960,6 @@ static bool pcapng_write_packet_verdict_option(wtap_dumper *wdh, unsigned option
         break;
 
     case packet_verdict_linux_ebpf_xdp:
-        size = 9;
         option_hdr.type         = option_id;
         option_hdr.value_length = (uint16_t)size;
         if (!wtap_dump_file_write(wdh, &option_hdr, 4, err))
@@ -4988,6 +4978,63 @@ static bool pcapng_write_packet_verdict_option(wtap_dumper *wdh, unsigned option
         /* Unknown - don't write it out. */
         return true;
     }
+
+    /* write padding (if any) */
+    if ((size % 4)) {
+        pad = 4 - (size % 4);
+        if (!wtap_dump_file_write(wdh, &zero_pad, pad, err))
+            return false;
+    }
+    return true;
+}
+
+static bool pcapng_write_packet_hash_option(wtap_dumper *wdh, unsigned option_id, wtap_optval_t *optval, int *err)
+{
+    packet_hash_opt_t* hash = &optval->packet_hash;
+    struct pcapng_option_header option_hdr;
+    uint8_t type;
+    size_t size;
+    const uint32_t zero_pad = 0;
+    uint32_t pad;
+
+    size = pcapng_compute_packet_hash_option_size(optval);
+
+    if (size > 65535) {
+        /*
+         * Too big to fit in the option.
+         * Don't write anything.
+         *
+         * XXX - truncate it?  Report an error?
+         */
+        return true;
+    }
+
+    if (size > hash->hash_bytes->len + 1) {
+        /*
+         * We don't have enough bytes to write.
+         * pcapng_compute_packet_hash_option_size() should return 0 if
+         * we want to silently omit the option instead, or should return
+         * the length if we want to blindly copy it.
+         * XXX - Is this the best error type?
+         */
+        *err = WTAP_ERR_UNWRITABLE_REC_DATA;
+        return false;
+    }
+
+    type = hash->type;
+
+    option_hdr.type         = option_id;
+    /* Include type byte */
+    option_hdr.value_length = (uint16_t)size;
+    if (!wtap_dump_file_write(wdh, &option_hdr, 4, err))
+        return false;
+
+    if (!wtap_dump_file_write(wdh, &type, sizeof(uint8_t), err))
+        return false;
+
+    if (!wtap_dump_file_write(wdh, hash->hash_bytes->data, size - 1,
+                              err))
+        return false;
 
     /* write padding (if any) */
     if ((size % 4)) {
@@ -5237,8 +5284,14 @@ static bool write_wtap_epb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsi
             return false;
         break;
     case OPT_PKT_VERDICT:
-        if (!pcapng_write_packet_verdict_option(wdh, OPT_EPB_QUEUE, optval,
+        if (!pcapng_write_packet_verdict_option(wdh, OPT_EPB_VERDICT, optval,
                                                 err))
+            return false;
+        break;
+    case OPT_PKT_HASH:
+        if (!pcapng_write_packet_hash_option(wdh, OPT_EPB_HASH, optval,
+                                             err))
+            return false;
         break;
     default:
         /* Unknown options - write by datatype? */
