@@ -44,15 +44,13 @@ class QCPAxisTickerDateTime;
 // GTK+ set this to 100000 (NUM_IO_ITEMS) before raising it to unlimited
 // in commit 524583298beb671f43e972476693866754d38a38.
 // This is the maximum index returned from get_io_graph_index that will
-// be added to the graph. Thus, for a minimum interval size of 1 ms we
-// can span no more than 4.66 days, and if we decrease the minimum interval
-// size without increasing this it would decrease proportionately (e.g.
-// for 1 μs no more than 16.8 s.)
+// be added to the graph. Thus, for a minimum interval size of 1 μs no
+// more than 33.55 s.
 // Each io_graph_item_t is 88 bytes on a system with 64 bit time_t, so
-// the max size we'll attempt to allocate for the array of items is 1.375 GiB
+// the max size we'll attempt to allocate for the array of items is 2.75 GiB
 // (plus a tiny amount extra for the std::vector bookkeeping.)
-// 2^24 = 16777216
-const int max_io_items_ = 1 << 24;
+// 2^25 = 16777216
+const int max_io_items_ = 1 << 25;
 
 // XXX - Move to its own file?
 class IOGraph : public QObject {
@@ -88,6 +86,7 @@ public:
     QCPGraph *graph() const { return graph_; }
     QCPBars *bars() const { return bars_; }
     double startOffset() const;
+    nstime_t startTime() const;
     int packetFromTime(double ts) const;
     bool hasItemToShow(int idx, double value) const;
     double getItemValue(int idx, const capture_file *cap_file) const;
@@ -136,7 +135,7 @@ private:
     QString vu_field_;
     int hf_index_;
     int interval_;
-    double start_time_;
+    nstime_t start_time_;
 
     // Cached data. We should be able to change the Y axis without retapping as
     // much as is feasible.
@@ -196,7 +195,7 @@ private:
     QCPGraph *base_graph_;
     QCPItemTracer *tracer_;
     uint32_t packet_num_;
-    double start_time_;
+    nstime_t start_time_;
     bool mouse_drags_;
     QRubberBand *rubber_band_;
     QPoint rb_origin_;

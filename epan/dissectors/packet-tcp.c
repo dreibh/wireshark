@@ -8542,7 +8542,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                 tcpd->fwd->maxnextseq = tcph->th_seq + 1;
             }
         }
-        /* Initiliaze the is_first_ack */
+        /* Initialize the is_first_ack */
         tcpd->fwd->is_first_ack = TRUE;
     }
     if(tcph->th_flags & TH_FIN) {
@@ -10223,7 +10223,7 @@ proto_register_tcp(void)
     register_conversation_table(proto_tcp, FALSE, tcpip_conversation_packet, tcpip_endpoint_packet);
     register_conversation_filter("tcp", "TCP", tcp_filter_valid, tcp_build_filter_by_id, NULL);
 
-    register_seq_analysis("tcp", "TCP Flows", proto_tcp, NULL, 0, tcp_seq_analysis_packet);
+    register_seq_analysis("tcp", "TCP Flows", proto_tcp, NULL, TL_REQUIRES_NOTHING, tcp_seq_analysis_packet);
 
     /* considers MPTCP as a distinct protocol (even if it's a TCP option) */
     proto_mptcp = proto_register_protocol("Multipath Transmission Control Protocol", "MPTCP", "mptcp");

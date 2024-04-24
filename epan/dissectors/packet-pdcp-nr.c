@@ -2190,7 +2190,9 @@ static int dissect_pdcp_nr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
         proto_item_set_generated(security_ti);
 
         /* Setup frame */
-        if (pinfo->num > pdu_security->algorithm_configuration_frame) {
+        if (pdu_security->algorithm_configuration_frame &&
+            pinfo->num > pdu_security->algorithm_configuration_frame) {
+            /* Must be set, and be seen before this frame */
             ti = proto_tree_add_uint(security_tree, hf_pdcp_nr_security_setup_frame,
                                      tvb, 0, 0, pdu_security->algorithm_configuration_frame);
             proto_item_set_generated(ti);
@@ -2255,7 +2257,7 @@ static int dissect_pdcp_nr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 
         /**********************************/
         /* User-plane messages            */
-        gboolean is_user_plane;
+        bool is_user_plane;
 
         /* Data/Control flag */
         proto_tree_add_item_ret_boolean(pdcp_tree, hf_pdcp_nr_data_control, tvb, offset, 1, ENC_BIG_ENDIAN, &is_user_plane);
@@ -2548,12 +2550,12 @@ static int dissect_pdcp_nr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
             sdap_ti = proto_tree_add_item(pdcp_tree, proto_sdap, tvb, pdcp_offset, 1, ENC_NA);
             sdap_tree = proto_item_add_subtree(sdap_ti, ett_sdap);
             if (p_pdcp_info->direction == PDCP_NR_DIRECTION_UPLINK) {
-                gboolean data_control;
+                bool data_control;
                 proto_tree_add_item_ret_boolean(sdap_tree, hf_sdap_data_control, tvb, pdcp_offset, 1, ENC_NA, &data_control);
                 proto_tree_add_item(sdap_tree, hf_sdap_reserved, tvb, pdcp_offset, 1, ENC_NA);
                 proto_item_append_text(sdap_ti, " (%s", tfs_get_string(data_control, &pdu_type_bit));
             } else {
-                gboolean rdi, rqi;
+                bool rdi, rqi;
                 proto_tree_add_item_ret_boolean(sdap_tree, hf_sdap_rdi, tvb, pdcp_offset, 1, ENC_NA, &rdi);
                 proto_tree_add_item_ret_boolean(sdap_tree, hf_sdap_rqi, tvb, pdcp_offset, 1, ENC_NA, &rqi);
                 proto_item_append_text(sdap_ti, " (RDI=%s, RQI=%s",
@@ -2561,11 +2563,13 @@ static int dissect_pdcp_nr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
             }
             /* QFI is common to both directions */
             proto_tree_add_item_ret_uint(sdap_tree, hf_sdap_qfi, tvb, pdcp_offset, 1, ENC_NA, &qfi);
+
+            /* Did SDAP come out of main tvb?  If ciphered, was already taken off the front.. */
             if (!payload_deciphered) {
-                offset++;
+                offset += sdap_length;
+                payload_length -= sdap_length;
             }
             proto_item_append_text(sdap_ti, "  QFI=%u)", qfi);
-            payload_length--;
         }
 
         if (payload_length > 0) {

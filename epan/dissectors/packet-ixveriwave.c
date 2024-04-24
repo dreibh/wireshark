@@ -1509,7 +1509,7 @@ ethernettap_dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_t
     int         offset = 0;
     tvbuff_t   *next_tvb;
     guint       length, length_remaining;
-    gboolean    vwf_txf = FALSE;
+    bool        vwf_txf = false;
     ifg_info   *p_ifg_info;
     proto_item *ti;
 
@@ -1634,7 +1634,7 @@ decode_ht_sig(proto_tree *tree, tvbuff_t *tvb, int offset,
     guint bw;
     guint stbc_streams;
     guint feccoding;
-    gboolean short_gi;
+    bool short_gi;
     guint ness;
 
     /* HT-SIG1 */
@@ -1681,7 +1681,7 @@ decode_ht_sig(proto_tree *tree, tvbuff_t *tvb, int offset,
     proto_tree_add_item_ret_boolean(tree, hf_radiotap_ht_short_gi,
                                     tvb, offset, 3, ENC_LITTLE_ENDIAN,
                                     &short_gi);
-    phdr->phy_info.info_11n.has_short_gi = TRUE;
+    phdr->phy_info.info_11n.has_short_gi = true;
     phdr->phy_info.info_11n.short_gi = short_gi;
     proto_tree_add_item_ret_uint(tree, hf_radiotap_ht_ness,
                                  tvb, offset, 3, ENC_LITTLE_ENDIAN,
@@ -1702,14 +1702,14 @@ decode_vht_sig(proto_tree *tree, tvbuff_t *tvb, int offset,
                struct ieee_802_11_phdr *phdr)
 {
     guint bw;
-    gboolean stbc;
+    bool stbc;
     guint group_id;
     guint partial_aid;
-    gboolean txop_ps_not_allowed;
-    gboolean short_gi;
-    gboolean short_gi_nsym_disambig;
-    gboolean ldpc_ofdmsymbol;
-    gboolean beamformed;
+    bool txop_ps_not_allowed;
+    bool short_gi;
+    bool short_gi_nsym_disambig;
+    bool ldpc_ofdmsymbol;
+    bool beamformed;
 
     /* VHT-SIG-A1 */
     proto_tree_add_item_ret_uint(tree, hf_radiotap_vht_bw,
@@ -1739,7 +1739,7 @@ decode_vht_sig(proto_tree *tree, tvbuff_t *tvb, int offset,
     proto_tree_add_item_ret_boolean(tree, hf_radiotap_vht_stbc,
                                     tvb, offset, 3, ENC_LITTLE_ENDIAN,
                                     &stbc);
-    phdr->phy_info.info_11ac.has_stbc = TRUE;
+    phdr->phy_info.info_11ac.has_stbc = true;
     phdr->phy_info.info_11ac.stbc = stbc;
     proto_tree_add_item_ret_uint(tree, hf_radiotap_vht_group_id,
                                  tvb, offset, 3, ENC_LITTLE_ENDIAN,
@@ -1771,7 +1771,7 @@ decode_vht_sig(proto_tree *tree, tvbuff_t *tvb, int offset,
     proto_tree_add_item_ret_boolean(tree, hf_radiotap_vht_txop_ps_not_allowed,
                                     tvb, offset, 3, ENC_LITTLE_ENDIAN,
                                     &txop_ps_not_allowed);
-    phdr->phy_info.info_11ac.has_txop_ps_not_allowed = TRUE;
+    phdr->phy_info.info_11ac.has_txop_ps_not_allowed = true;
     phdr->phy_info.info_11ac.txop_ps_not_allowed = txop_ps_not_allowed;
     offset += 3;
 
@@ -1779,12 +1779,12 @@ decode_vht_sig(proto_tree *tree, tvbuff_t *tvb, int offset,
     proto_tree_add_item_ret_boolean(tree, hf_radiotap_vht_short_gi,
                                     tvb, offset, 3, ENC_LITTLE_ENDIAN,
                                     &short_gi);
-    phdr->phy_info.info_11ac.has_short_gi = TRUE;
+    phdr->phy_info.info_11ac.has_short_gi = true;
     phdr->phy_info.info_11ac.short_gi = short_gi;
     proto_tree_add_item_ret_boolean(tree, hf_radiotap_vht_short_gi_nsym_disambig,
                                     tvb, offset, 3, ENC_LITTLE_ENDIAN,
                                     &short_gi_nsym_disambig);
-    phdr->phy_info.info_11ac.has_short_gi_nsym_disambig = TRUE;
+    phdr->phy_info.info_11ac.has_short_gi_nsym_disambig = true;
     phdr->phy_info.info_11ac.short_gi_nsym_disambig = short_gi_nsym_disambig;
     if ((group_id == 0) || (group_id == 63)) // SU VHT type
     {
@@ -1810,7 +1810,7 @@ decode_vht_sig(proto_tree *tree, tvbuff_t *tvb, int offset,
         proto_tree_add_item_ret_boolean(tree, hf_radiotap_vht_beamformed,
                                         tvb, offset, 3, ENC_LITTLE_ENDIAN,
                                         &beamformed);
-        phdr->phy_info.info_11ac.has_beamformed = TRUE;
+        phdr->phy_info.info_11ac.has_beamformed = true;
         phdr->phy_info.info_11ac.beamformed = beamformed;
     }
     else
@@ -1909,7 +1909,7 @@ wlantap_dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     ifg_info   *p_ifg_info;
     proto_item *ti;
-    gboolean    short_preamble;
+    bool        short_preamble;
     guint8      nss;
 
     struct ieee_802_11_phdr phdr;
@@ -1984,7 +1984,7 @@ wlantap_dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     if ((vw_rflags & FLAGS_CHAN_HT) || (vw_rflags & FLAGS_CHAN_VHT)) {
         if (vw_rflags & FLAGS_CHAN_VHT) {
             phdr.phy = PHDR_802_11_PHY_11AC;
-            phdr.phy_info.info_11ac.has_short_gi = TRUE;
+            phdr.phy_info.info_11ac.has_short_gi = true;
             phdr.phy_info.info_11ac.short_gi = ((vw_rflags & FLAGS_CHAN_SHORTGI) != 0);
             /*
              * XXX - this probably has only one user, so only one MCS index
@@ -2002,7 +2002,7 @@ wlantap_dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             phdr.phy_info.info_11n.has_mcs_index = TRUE;
             phdr.phy_info.info_11n.mcs_index = rate_mcs_index;
 
-            phdr.phy_info.info_11n.has_short_gi = TRUE;
+            phdr.phy_info.info_11n.has_short_gi = true;
             phdr.phy_info.info_11n.short_gi = ((vw_rflags & FLAGS_CHAN_SHORTGI) != 0);
 
             phdr.phy_info.info_11n.has_greenfield = TRUE;
@@ -2026,7 +2026,7 @@ wlantap_dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
          */
         if (vw_chanflags & CHAN_CCK) {
             phdr.phy = PHDR_802_11_PHY_11B;
-            phdr.phy_info.info_11b.has_short_preamble = TRUE;
+            phdr.phy_info.info_11b.has_short_preamble = true;
             phdr.phy_info.info_11b.short_preamble = short_preamble;
         }
         phdr.has_data_rate = TRUE;
@@ -2065,7 +2065,7 @@ wlantap_dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     if (dbm != 100) {
         proto_tree_add_item(tap_tree, hf_radiotap_dbm_antd, tvb, offset, 1, ENC_NA);
     }
-    offset+=2;  /* also skips paddng octet */
+    offset+=2;  /* also skips padding octet */
 
     /* VeriWave flags */
     vw_flags = tvb_get_letohs(tvb, offset);
@@ -2247,7 +2247,7 @@ wlantap_dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
     next_tvb = tvb_new_subset_remaining(tvb, length);
 
-    /* dissect the 802.11 radio informaton and header next */
+    /* dissect the 802.11 radio information and header next */
     call_dissector_with_data(ieee80211_radio_handle, next_tvb, pinfo, tree, &phdr);
 }
 
@@ -2322,7 +2322,7 @@ wlantap_dissect_octo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         {
             /* CCK */
             phdr.phy = PHDR_802_11_PHY_11B;
-            phdr.phy_info.info_11b.has_short_preamble = TRUE;
+            phdr.phy_info.info_11b.has_short_preamble = true;
             phdr.phy_info.info_11b.short_preamble = short_preamble;
         }
         break;
@@ -2515,7 +2515,7 @@ wlantap_dissect_octo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 proto_tree_add_uint(vw_infoC_tree, hf_radiotap_vht_mu_mimo_flg,
                     tvb, offset, 1, vht_mu_mimo_flg);
 
-                // extract user Postiion in case of mu-mimo
+                // extract user Position in case of mu-mimo
                 proto_tree_add_item(vw_infoC_tree, hf_radiotap_vht_user_pos, tvb, offset, 1, ENC_NA);
 
             } else {
@@ -2941,7 +2941,7 @@ wlantap_dissect_octo(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         /* There's data to dissect; grab the rest of the frame. */
         next_tvb = tvb_new_subset_remaining(tvb, length);
 
-        /* dissect the 802.11 radio informaton and header next */
+        /* dissect the 802.11 radio information and header next */
         call_dissector_with_data(ieee80211_radio_handle, next_tvb, pinfo, tree, &phdr);
     }
 }
@@ -4052,7 +4052,7 @@ framing signal deasserted.  this is caused by software setting the drain all reg
         { "Layer 1 Info[1]", "ixveriwave.info.layer_1_info_1",
         FT_UINT24, BASE_DEC, NULL, 0x020000, NULL, HFILL } },
     { &hf_radiotap_vw_info_rx_vht_frame_received_with_vht_sig_b_length,
-        { "VHT frame received with the use of the VHT_SIG_B.LENGTH", "ixveriwave.info.vht_frame_received_with_vht_sig_b_lengt",
+        { "VHT frame received with the use of the VHT_SIG_B.LENGTH", "ixveriwave.info.vht_frame_received_with_vht_sig_b_length",
         FT_BOOLEAN, 24, NULL, 0x040000, NULL, HFILL } },
     { &hf_radiotap_vw_info_rx_vht_frame_received_without_vht_sig_b_length,
         { "VHT frame received without the use of VHT_SIG_B.LENGTH", "ixveriwave.info.vht_frame_received_without_vht_sig_b_length",

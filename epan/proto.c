@@ -3506,7 +3506,7 @@ ptvcursor_add_ret_string(ptvcursor_t* ptvc, int hf, gint length, const guint enc
 /* Gets data from tvbuff, adds it to proto_tree, increments offset,
  * and returns proto_item* and boolean value retreived */
 proto_item*
-ptvcursor_add_ret_boolean(ptvcursor_t* ptvc, int hfindex, gint length, const guint encoding, gboolean *retval)
+ptvcursor_add_ret_boolean(ptvcursor_t* ptvc, int hfindex, gint length, const guint encoding, bool *retval)
 {
 	header_field_info *hfinfo;
 	field_info		*new_fi;
@@ -3748,7 +3748,7 @@ proto_tree_add_item_ret_varint(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 proto_item *
 proto_tree_add_item_ret_boolean(proto_tree *tree, int hfindex, tvbuff_t *tvb,
                                 const gint start, gint length,
-                                const guint encoding, gboolean *retval)
+                                const guint encoding, bool *retval)
 {
 	header_field_info *hfinfo;
 	field_info	  *new_fi;
