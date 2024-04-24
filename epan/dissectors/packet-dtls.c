@@ -1295,8 +1295,8 @@ dissect_dtls13_record(tvbuff_t *tvb, packet_info *pinfo _U_,
   offset += seq_length;
 
   if (l_bit) {
-    length_pi = proto_tree_add_item(dtls_record_tree, hf_dtls_record_length, tvb,
-                                    offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(dtls_record_tree, hf_dtls_record_length, tvb,
+                        offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
   }
   else {

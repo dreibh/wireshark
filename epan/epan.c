@@ -62,6 +62,10 @@
 #include "wscbor.h"
 #include <dtd.h>
 
+#ifdef HAVE_PLUGINS
+#include <wsutil/plugins.h>
+#endif
+
 #ifdef HAVE_LUA
 #include <lua.h>
 #include <wslua/wslua.h>
@@ -113,8 +117,10 @@ static wmem_allocator_t *pinfo_pool_cache;
 gboolean wireshark_abort_on_dissector_bug;
 gboolean wireshark_abort_on_too_many_items;
 
+#ifdef HAVE_PLUGINS
 /* Used for bookkeeping, includes all libwireshark plugin types (dissector, tap, epan). */
 static plugins_t *libwireshark_plugins;
+#endif
 
 /* "epan_plugins" are a specific type of libwireshark plugin (the name isn't the best for clarity). */
 static GSList *epan_plugins;
@@ -198,32 +204,21 @@ epan_plugin_cleanup(gpointer data, gpointer user_data _U_)
 	((epan_plugin *)data)->cleanup();
 }
 
+#ifdef HAVE_PLUGINS
 void epan_register_plugin(const epan_plugin *plug)
 {
-	if (epan_plugins_supported() != 0) {
-		ws_debug("epan_register_plugin: plugins not enabled or supported by the platform");
-		return;
-	}
 	epan_plugins = g_slist_prepend(epan_plugins, (epan_plugin *)plug);
 	if (plug->register_all_protocols)
 		epan_plugin_register_all_procotols = g_slist_prepend(epan_plugin_register_all_procotols, plug->register_all_protocols);
 	if (plug->register_all_handoffs)
 		epan_plugin_register_all_handoffs = g_slist_prepend(epan_plugin_register_all_handoffs, plug->register_all_handoffs);
 }
-
-void epan_plugins_get_descriptions(plugin_description_callback callback, void *user_data)
+#else /* HAVE_PLUGINS */
+void epan_register_plugin(const epan_plugin *plug _U_)
 {
-	GSList *l;
-
-	for (l = epan_plugins; l != NULL; l = l->next) {
-		((epan_plugin *)l->data)->get_descriptions(callback, user_data);
-	}
+	ws_warning("epan_register_plugin: built without support for binary plugins");
 }
-
-void epan_plugins_dump_all(void)
-{
-	epan_plugins_get_descriptions(plugins_print_description, NULL);
-}
+#endif /* HAVE_PLUGINS */
 
 int epan_plugins_supported(void)
 {
@@ -232,6 +227,13 @@ int epan_plugins_supported(void)
 #else
 	return -1;
 #endif
+}
+
+static void epan_plugin_register_all_tap_listeners(gpointer data, gpointer user_data _U_)
+{
+	epan_plugin *plug = (epan_plugin *)data;
+	if (plug->register_all_tap_listeners)
+		plug->register_all_tap_listeners();
 }
 
 gboolean
@@ -274,7 +276,9 @@ epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
 	except_init();
 
 	if (load_plugins) {
+#ifdef HAVE_PLUGINS
 		libwireshark_plugins = plugins_init(WS_PLUGIN_EPAN);
+#endif
 	}
 
 	/* initialize libgcrypt (beware, it won't be thread-safe) */
@@ -324,6 +328,7 @@ epan_init(register_cb cb, gpointer client_data, gboolean load_plugins)
 		conversation_filters_init();
 		g_slist_foreach(epan_plugins, epan_plugin_init, NULL);
 		proto_init(epan_plugin_register_all_procotols, epan_plugin_register_all_handoffs, cb, client_data);
+		g_slist_foreach(epan_plugins, epan_plugin_register_all_tap_listeners, NULL);
 		packet_cache_proto_handles();
 		dfilter_init();
 		wscbor_init();
@@ -446,8 +451,10 @@ epan_cleanup(void)
 
 	wmem_cleanup_scopes();
 
+#ifdef HAVE_PLUGINS
 	plugins_cleanup(libwireshark_plugins);
 	libwireshark_plugins = NULL;
+#endif
 }
 
 struct epan_session {

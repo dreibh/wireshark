@@ -60,8 +60,6 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 
-#define PLUGIN_PATH_COLUMN 5
-
 AuthorListModel::AuthorListModel(QObject * parent) :
 AStringListListModel(parent)
 {
@@ -98,27 +96,13 @@ QStringList AuthorListModel::headerColumns() const
     return QStringList() << tr("Name") << tr("Email");
 }
 
-static const char *
-scope_to_str(plugin_scope_e scope)
-{
-    switch (scope) {
-        case WS_PLUGIN_SCOPE_NONE :     return "";
-        case WS_PLUGIN_SCOPE_USER:      return "personal";
-        case WS_PLUGIN_SCOPE_GLOBAL:    return "global";
-        case WS_PLUGIN_SCOPE_CLI:       return "cli";
-    }
-    return "";
-}
-
+#ifdef HAVE_PLUGINS
 static void plugins_add_description(const char *name, const char *version,
-                                    uint32_t flags, const char *spdx_id _U_,
-                                    const char *blurb, const char *home_url,
-                                    const char *filename, plugin_scope_e scope,
+                                    uint32_t flags, const char *filename,
                                     void *user_data)
 {
     QList<QStringList> *plugin_data = (QList<QStringList> *)user_data;
     QStringList plugin_types;
-
     if (flags & WS_PLUGIN_DESC_DISSECTOR)
         plugin_types << "dissector";
     if (flags & WS_PLUGIN_DESC_FILE_TYPE)
@@ -129,58 +113,36 @@ static void plugins_add_description(const char *name, const char *version,
         plugin_types << "epan";
     if (flags & WS_PLUGIN_DESC_TAP_LISTENER)
         plugin_types << "tap listener";
-    if (flags & WS_PLUGIN_DESC_DFUNCTION)
-        plugin_types << "dfunction";
+    if (flags & WS_PLUGIN_DESC_DFILTER)
+        plugin_types << "dfilter";
     if (plugin_types.empty())
         plugin_types << "unknown";
-
-    QStringList plugin_row = QStringList() << name << version << plugin_types.join(", ")
-                                << scope_to_str(scope) << blurb << filename << home_url;
-    *plugin_data << plugin_row;
-}
-
-#ifdef HAVE_LUA
-// This exists only to add "lua script" to the type, otherwise we could use
-// plugins_add_description(). Eventually lua scripts
-// should support plugin functional flags too
-// and the "lua script" type can be dropped, or moved to
-// a new binary/lua/extcap type column (but not really).
-static void wslua_plugins_add_description(const char *name, const char *version,
-                                    uint32_t flags _U_, const char *spdx_id _U_,
-                                    const char *blurb, const char *home_url,
-                                    const char *filename, plugin_scope_e scope,
-                                    void *user_data)
-{
-    QList<QStringList> *plugin_data = (QList<QStringList> *)user_data;
-    QStringList plugin_row = QStringList() << name << version << "lua script"
-                                << scope_to_str(scope) << blurb << filename << home_url;
+    QStringList plugin_row = QStringList() << name << version << plugin_types.join(", ") << filename;
     *plugin_data << plugin_row;
 }
 #endif
 
-static void extcap_plugins_add_description(const char *name, const char *version,
+static void other_plugins_add_description(const char *name, const char *version,
                                     const char *types, const char *filename,
                                     void *user_data)
 {
     QList<QStringList> *plugin_data = (QList<QStringList> *)user_data;
-    QStringList plugin_row = QStringList() << name << version << types
-                                << "" << "" << filename << "";
+    QStringList plugin_row = QStringList() << name << version << types << filename;
     *plugin_data << plugin_row;
 }
 
 PluginListModel::PluginListModel(QObject *parent) : AStringListListModel(parent)
 {
     QList<QStringList> plugin_data;
-
+#ifdef HAVE_PLUGINS
     plugins_get_descriptions(plugins_add_description, &plugin_data);
-
-    epan_plugins_get_descriptions(plugins_add_description, &plugin_data);
-
-#ifdef HAVE_LUA
-    wslua_plugins_get_descriptions(wslua_plugins_add_description, &plugin_data);
 #endif
 
-    extcap_get_descriptions(extcap_plugins_add_description, &plugin_data);
+#ifdef HAVE_LUA
+    wslua_plugins_get_descriptions(other_plugins_add_description, &plugin_data);
+#endif
+
+    extcap_get_descriptions(other_plugins_add_description, &plugin_data);
 
     typeNames_ << QString("");
     foreach(QStringList row, plugin_data)
@@ -201,8 +163,7 @@ QStringList PluginListModel::typeNames() const
 
 QStringList PluginListModel::headerColumns() const
 {
-    return QStringList() << tr("Name") << tr("Version") << tr("Type")
-                << tr("Scope") << tr("Description") << tr("Path") << tr("Homepage");
+    return QStringList() << tr("Name") << tr("Version") << tr("Type") << tr("Path");
 }
 
 ShortcutListModel::ShortcutListModel(QObject * parent):
@@ -264,13 +225,13 @@ FolderListModel::FolderListModel(QObject * parent):
     /* program */
     appendRow(QStringList() << tr("Program") << get_progfile_dir() << tr("Program files"));
 
-    if (plugins_supported()) {
-        /* pers plugins */
-        appendRow(QStringList() << tr("Personal Plugins") << get_plugins_pers_dir() << tr("Binary plugins"));
+#ifdef HAVE_PLUGINS
+    /* pers plugins */
+    appendRow(QStringList() << tr("Personal Plugins") << get_plugins_pers_dir_with_version() << tr("Binary plugins"));
 
-        /* global plugins */
-        appendRow(QStringList() << tr("Global Plugins") << get_plugins_dir() << tr("Binary plugins"));
-    }
+    /* global plugins */
+    appendRow(QStringList() << tr("Global Plugins") << get_plugins_dir_with_version() << tr("Binary plugins"));
+#endif
 
 #ifdef HAVE_LUA
     /* pers plugins */
@@ -387,8 +348,8 @@ AboutDialog::AboutDialog(QWidget *parent) :
     ui->tblPlugins->setRootIsDecorated(false);
     UrlLinkDelegate *plugin_delegate = new UrlLinkDelegate(this);
     script_pattern = QString("\\.(lua|py)$");
-    plugin_delegate->setColCheck(PLUGIN_PATH_COLUMN, script_pattern);
-    ui->tblPlugins->setItemDelegateForColumn(PLUGIN_PATH_COLUMN, plugin_delegate);
+    plugin_delegate->setColCheck(3, script_pattern);
+    ui->tblPlugins->setItemDelegateForColumn(3, plugin_delegate);
     ui->cmbType->addItems(pluginModel->typeNames());
     ui->tblPlugins->setContextMenuPolicy(Qt::CustomContextMenu);
     ui->tblPlugins->setTextElideMode(Qt::ElideMiddle);
@@ -628,7 +589,7 @@ void AboutDialog::showInFolderActionTriggered()
 
     foreach (QModelIndex index, selectedRows)
     {
-        QString cf_path = tree->model()->index(index.row(), PLUGIN_PATH_COLUMN).data().toString();
+        QString cf_path = tree->model()->index(index.row(), 3).data().toString();
         desktop_show_in_folder(cf_path);
     }
 }
@@ -701,7 +662,7 @@ void AboutDialog::copyActionTriggered(bool copyRow)
 
 void AboutDialog::on_tblPlugins_doubleClicked(const QModelIndex &index)
 {
-    const int path_col = PLUGIN_PATH_COLUMN;
+    const int path_col = 3;
     if (index.column() != path_col) {
         return;
     }

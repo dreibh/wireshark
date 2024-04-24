@@ -723,6 +723,7 @@ ber_proto_tree_add_item(packet_info *pinfo, proto_tree *tree,
                         gint length, const guint encoding)
 {
     header_field_info *hfinfo;
+    proto_item* ti;
 
     hfinfo = proto_registrar_get_nth((guint)hfindex);
     if (hfinfo != NULL) {
@@ -791,7 +792,13 @@ ber_proto_tree_add_item(packet_info *pinfo, proto_tree *tree,
                 return ber_add_bad_length_error(pinfo, tree,
                     hfinfo->name, tvb, start, length);
             break;
-
+        case FT_STRING:
+            if (length == 0) {
+                ti = proto_tree_add_item(tree, hfindex, tvb, start, length, encoding);
+                proto_item_append_text(ti, "<MISSING>");
+                return ti;
+            }
+            break;
         default:
             break;
         }
