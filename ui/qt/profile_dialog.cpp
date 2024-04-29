@@ -10,8 +10,6 @@
 #include "config.h"
 
 #include "wsutil/filesystem.h"
-#include "wsutil/utf8_entities.h"
-#include "epan/prefs.h"
 
 #include <ui/qt/utils/qt_ui_utils.h>
 
@@ -73,6 +71,13 @@ ProfileDialog::ProfileDialog(QWidget *parent) :
     pd_ui_->hintLabel->setAttribute(Qt::WA_MacSmallSize, true);
 #endif
 
+    QString as_tooltip = pd_ui_->autoSwitchLimitLabel->toolTip();
+    pd_ui_->autoSwitchSpinBox->setToolTip(as_tooltip);
+    if (!is_packet_configuration_namespace()) {
+        pd_ui_->autoSwitchLimitLabel->setText(tr("Auto switch event limit"));
+    }
+    pd_ui_->autoSwitchSpinBox->setValue(recent.gui_profile_switch_check_count);
+
     import_button_ = pd_ui_->buttonBox->addButton(tr("Import", "noun"), QDialogButtonBox::ActionRole);
 
 #ifdef HAVE_MINIZIP
@@ -110,6 +115,13 @@ ProfileDialog::ProfileDialog(QWidget *parent) :
               this, &ProfileDialog::filterChanged);
 
     currentItemChanged();
+
+    connect(pd_ui_->newToolButton, &StockIconToolButton::clicked, this, &ProfileDialog::newToolButtonClicked);
+    connect(pd_ui_->deleteToolButton, &StockIconToolButton::clicked, this, &ProfileDialog::deleteToolButtonClicked);
+    connect(pd_ui_->copyToolButton, &StockIconToolButton::clicked, this, &ProfileDialog::copyToolButtonClicked);
+    connect(pd_ui_->buttonBox, &QDialogButtonBox::accepted, this, &ProfileDialog::buttonBoxAccepted);
+    connect(pd_ui_->buttonBox, &QDialogButtonBox::rejected, this, &ProfileDialog::buttonBoxRejected);
+    connect(pd_ui_->buttonBox, &QDialogButtonBox::helpRequested, this, &ProfileDialog::buttonBoxHelpRequested);
 
     pd_ui_->profileTreeView->resizeColumnToContents(ProfileModel::COL_NAME);
     pd_ui_->profileTreeView->resizeColumnToContents(ProfileModel::COL_TYPE);
@@ -151,7 +163,7 @@ int ProfileDialog::execAction(ProfileDialog::ProfileAction profile_action)
         ret = exec();
         break;
     case NewProfile:
-        on_newToolButton_clicked();
+        newToolButtonClicked();
         ret = exec();
         break;
     case ImportZipProfile:
@@ -376,7 +388,7 @@ void ProfileDialog::currentItemChanged(const QModelIndex &, const QModelIndex &)
     updateWidgets();
 }
 
-void ProfileDialog::on_newToolButton_clicked()
+void ProfileDialog::newToolButtonClicked()
 {
     pd_ui_->lineProfileFilter->setText("");
     pd_ui_->cmbProfileTypes->setCurrentIndex(ProfileSortModel::AllProfiles);
@@ -394,7 +406,7 @@ void ProfileDialog::on_newToolButton_clicked()
         updateWidgets();
 }
 
-void ProfileDialog::on_deleteToolButton_clicked()
+void ProfileDialog::deleteToolButtonClicked()
 {
     QModelIndexList profiles = selectedProfiles();
     if (profiles.count() <= 0)
@@ -416,7 +428,7 @@ void ProfileDialog::on_deleteToolButton_clicked()
     updateWidgets();
 }
 
-void ProfileDialog::on_copyToolButton_clicked()
+void ProfileDialog::copyToolButtonClicked()
 {
     QModelIndexList profiles = selectedProfiles();
     if (profiles.count() > 1)
@@ -443,10 +455,12 @@ void ProfileDialog::on_copyToolButton_clicked()
         updateWidgets();
 }
 
-void ProfileDialog::on_buttonBox_accepted()
+void ProfileDialog::buttonBoxAccepted()
 {
     bool write_recent = true;
     bool item_data_removed = false;
+
+    recent.gui_profile_switch_check_count = pd_ui_->autoSwitchSpinBox->value();
 
     QModelIndex index = sort_model_->mapToSource(pd_ui_->profileTreeView->currentIndex());
 
@@ -519,14 +533,14 @@ void ProfileDialog::on_buttonBox_accepted()
     }
 }
 
-void ProfileDialog::on_buttonBox_rejected()
+void ProfileDialog::buttonBoxRejected()
 {
     QString msg;
     if (! model_->clearImported(&msg))
         QMessageBox::critical(this, tr("Error"), msg);
 }
 
-void ProfileDialog::on_buttonBox_helpRequested()
+void ProfileDialog::buttonBoxHelpRequested()
 {
     mainApp->helpTopicAction(HELP_CONFIG_PROFILES_DIALOG);
 }
@@ -727,3 +741,4 @@ void ProfileDialog::resetTreeView()
         pd_ui_->profileTreeView->header()->hide();
     }
 }
+

@@ -200,6 +200,7 @@ SequenceDialog::SequenceDialog(QWidget &parent, CaptureFile &cf, SequenceInfo *i
     connect(sp, SIGNAL(mousePress(QMouseEvent*)), this, SLOT(diagramClicked(QMouseEvent*)));
     connect(sp, SIGNAL(mouseMove(QMouseEvent*)), this, SLOT(mouseMoved(QMouseEvent*)));
     connect(sp, SIGNAL(mouseWheel(QWheelEvent*)), this, SLOT(mouseWheeled(QWheelEvent*)));
+    connect(sp, &QCustomPlot::afterLayout, this, &SequenceDialog::layoutAxisLabels);
 
     // Button must be enabled by VoIP dialogs
     player_button_->setVisible(false);
@@ -329,7 +330,7 @@ void SequenceDialog::hScrollBarChanged(int value)
 {
     if (qAbs(ui->sequencePlot->xAxis2->range().center()-value/100.0) > 0.01) {
       ui->sequencePlot->xAxis2->setRange(value/100.0, ui->sequencePlot->xAxis2->range().size(), Qt::AlignCenter);
-      ui->sequencePlot->replot();
+      ui->sequencePlot->replot(QCustomPlot::rpQueuedReplot);
     }
 }
 
@@ -337,7 +338,7 @@ void SequenceDialog::vScrollBarChanged(int value)
 {
     if (qAbs(ui->sequencePlot->yAxis->range().center()-value/100.0) > 0.01) {
       ui->sequencePlot->yAxis->setRange(value/100.0, ui->sequencePlot->yAxis->range().size(), Qt::AlignCenter);
-      ui->sequencePlot->replot();
+      ui->sequencePlot->replot(QCustomPlot::rpQueuedReplot);
     }
 }
 
@@ -552,12 +553,20 @@ void SequenceDialog::panAxes(int x_pixels, int y_pixels)
     double v_pan = 0.0;
 
     h_pan = sp->xAxis2->range().size() * x_pixels / sp->xAxis2->axisRect()->width();
+    // The nodes are placed on integer x values from 0 to num_nodes - 1.
+    // We allow 0.5 of margin around a node (also reflected in the
+    // horizontalScrollBar range.)
     if (h_pan < 0) {
         h_pan = qMax(h_pan, min_left_ - sp->xAxis2->range().lower);
     } else {
-        h_pan = qMin(h_pan, info_->sainfo()->num_nodes - sp->xAxis2->range().upper);
+        h_pan = qMin(h_pan, info_->sainfo()->num_nodes - 0.5 - sp->xAxis2->range().upper);
     }
 
+    if (sp->yAxis->rangeReversed()) {
+        // For reversed axes, lower still references the mathemathetically
+        // smaller number than upper, so reverse the direction.
+        y_pixels = -y_pixels;
+    }
     v_pan = sp->yAxis->range().size() * y_pixels / sp->yAxis->axisRect()->height();
     if (v_pan < 0) {
         v_pan = qMax(v_pan, min_top_ - sp->yAxis->range().lower);
@@ -565,13 +574,13 @@ void SequenceDialog::panAxes(int x_pixels, int y_pixels)
         v_pan = qMin(v_pan, num_items_ - sp->yAxis->range().upper);
     }
 
-    if (h_pan && !(sp->xAxis2->range().contains(min_left_) && sp->xAxis2->range().contains(info_->sainfo()->num_nodes))) {
+    if (h_pan && !(sp->xAxis2->range().contains(min_left_) && sp->xAxis2->range().contains(info_->sainfo()->num_nodes - 0.5))) {
         sp->xAxis2->moveRange(h_pan);
-        sp->replot();
+        sp->replot(QCustomPlot::rpQueuedReplot);
     }
     if (v_pan && !(sp->yAxis->range().contains(min_top_) && sp->yAxis->range().contains(num_items_))) {
         sp->yAxis->moveRange(v_pan);
-        sp->replot();
+        sp->replot(QCustomPlot::rpQueuedReplot);
     }
 }
 
@@ -603,13 +612,21 @@ void SequenceDialog::resetAxes(bool keep_lower)
     ui->verticalScrollBar->setRange((rmin - 1.0) * 100, (num_items_ - 0.5 - rmin) * 100);
     yAxisChanged(sp->yAxis->range());
 
+    sp->replot(QCustomPlot::rpQueuedReplot);
+}
+
+void SequenceDialog::layoutAxisLabels()
+{
     // It would be exceedingly handy if we could do one or both of the
     // following:
     // - Position an axis label above its axis inline with the tick labels.
     // - Anchor a QCPItemText to one of the corners of a QCPAxis.
-    // Neither of those appear to be possible, so we first call replot in
-    // order to lay out our X axes, place our labels, the call replot again.
-    sp->replot(QCustomPlot::rpQueuedReplot);
+    // Neither of those appear to be possible, so we place our labels using
+    // absolute positioning immediately after the layout size and positions
+    // are set, and right before the replot (or print) draw step occurs,
+    // using the new QCustomPlot 2.1.0 QCustomPlot::afterLayout signal.
+
+    QCustomPlot *sp = ui->sequencePlot;
 
     QRect axis_rect = sp->axisRect()->rect();
 
@@ -623,8 +640,6 @@ void SequenceDialog::resetAxes(bool keep_lower)
                                        + sp->yAxis2->tickLabelPadding()
                                        + sp->yAxis2->offset(),
                                        axis_rect.top()  / 2);
-
-    sp->replot(QCustomPlot::rpRefreshHint);
 }
 
 void SequenceDialog::resetView()
