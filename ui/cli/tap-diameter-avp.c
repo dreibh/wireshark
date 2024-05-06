@@ -82,7 +82,7 @@ diam_tree_to_csv(proto_node *node, void * data)
 	char		  *val_tmp = NULL;
 	ftenum_t	   ftype;
 	field_info	  *fi;
-	header_field_info *hfi;
+	const header_field_info *hfi;
 
 	if (!node) {
 		fprintf(stderr, "traverse end: empty node. node='%p' data='%p'\n", (void *)node, (void *)data);
@@ -124,12 +124,12 @@ diameteravp_packet(void *pds, packet_info *pinfo, epan_dissect_t *edt _U_, const
 	uint32_t diam_child_node = 0;
 	proto_node *current = NULL;
 	proto_node *node = NULL;
-	header_field_info *hfi = NULL;
+	const header_field_info *hfi = NULL;
 	field_info *finfo = NULL;
 	const diameter_req_ans_pair_t *dp = (const diameter_req_ans_pair_t *)pdi;
 	diameteravp_t *ds = NULL;
 
-	/* Validate paramerers. */
+	/* Validate parameters */
 	if (!dp || !edt || !edt->tree)
 		return ret;
 
@@ -230,7 +230,7 @@ diameteravp_init(const char *opt_arg, void *userdata _U_)
 	while (tokens[opt_count])
 		opt_count++;
 	if (opt_count > 2) {
-		/* if the token is a not-null string and it's not *, the conversion must succeeed */
+		/* if the token is a not-null string and it's not *, the conversion must succeed */
 		if (strlen(tokens[2]) > 0 && tokens[2][0] != '*') {
 			if (!ws_strtou32(tokens[2], NULL, &ds->cmd_code)) {
 				fprintf(stderr, "Invalid integer token: %s\n", tokens[2]);

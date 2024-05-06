@@ -547,7 +547,7 @@ ip_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, const
     return TAP_PACKET_REDRAW;
 }
 
-static gboolean
+static bool
 ip_filter_valid(packet_info *pinfo, void *user_data _U_)
 {
     return proto_is_frame_protocol(pinfo->layers, "ip");
@@ -566,7 +566,7 @@ ip_build_filter(packet_info *pinfo, void *user_data _U_)
  */
 static reassembly_table ip_reassembly_table;
 
-static gboolean
+static bool
 capture_ip(const guchar *pd, int offset, int len, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header _U_) {
   if (!BYTES_ARE_IN_FRAME(offset, len, IPH_MIN_LEN))
     return FALSE;

@@ -47,9 +47,8 @@ class SequenceDialog : public WiresharkDialog
     Q_OBJECT
 
 public:
-    explicit SequenceDialog(QWidget &parent, CaptureFile &cf, SequenceInfo *info = NULL);
+    explicit SequenceDialog(QWidget &parent, CaptureFile &cf, SequenceInfo *info = NULL, bool voipFeatures = false);
     ~SequenceDialog();
-    void enableVoIPFeatures();
 
 protected:
     bool event(QEvent *event);
@@ -70,6 +69,7 @@ private slots:
     void vScrollBarChanged(int value);
     void xAxisChanged(QCPRange range);
     void yAxisChanged(QCPRange range);
+    void showContextMenu(const QPoint &pos);
     void diagramClicked(QMouseEvent *event);
     void mouseMoved(QMouseEvent *event);
     void mouseWheeled(QWheelEvent *event);
@@ -79,13 +79,14 @@ private slots:
     void exportDiagram();
     void layoutAxisLabels();
 
+    void addressChanged(int index);
+    void displayFilterCheckBoxToggled(bool checked);
+
     void on_buttonBox_clicked(QAbstractButton *button);
     void on_actionGoToPacket_triggered();
     void on_actionGoToNextPacket_triggered() { goToAdjacentPacket(true); }
     void on_actionGoToPreviousPacket_triggered() { goToAdjacentPacket(false); }
-    void on_displayFilterCheckBox_toggled(bool checked);
     void on_flowComboBox_activated(int index);
-    void on_addressComboBox_activated(int index);
     void on_actionMoveRight10_triggered();
     void on_actionMoveLeft10_triggered();
     void on_actionMoveUp10_triggered();
@@ -123,6 +124,7 @@ private:
     QPointer<RtpStreamDialog> rtp_stream_dialog_;       // Singleton pattern used
     bool voipFeaturesEnabled;
 
+    void enableVoIPFeatures();
     void zoomXAxis(bool in);
     void panAxes(int x_pixels, int y_pixels);
     void resetAxes(bool keep_lower = false);

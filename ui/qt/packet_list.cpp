@@ -657,7 +657,7 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
 
         for (unsigned i = 0; i < finfo_array->len; i++) {
             field_info *fi = (field_info *)g_ptr_array_index (finfo_array, i);
-            header_field_info *hfinfo =  fi->hfinfo;
+            const header_field_info *hfinfo =  fi->hfinfo;
 
             if (prefs_is_registered_protocol(hfinfo->abbrev)) {
                 if (hfinfo->parent == -1) {
@@ -770,6 +770,7 @@ void PacketList::contextMenuEvent(QContextMenuEvent *event)
 
     main_menu_item = window()->findChild<QMenu *>("menuEditCopy");
     submenu = new QMenu(main_menu_item->title(), ctx_menu);
+    submenu->setToolTipsVisible(true);
     ctx_menu->addMenu(submenu);
 
     QAction * action = submenu->addAction(tr("Summary as Text"));
@@ -1830,7 +1831,7 @@ void PacketList::sectionResized(int col, int, int new_width)
         // visible.
         //
         // Don't set column width when columns changed or setting column
-        // visibility because we may get a sectionReized() from QTreeView
+        // visibility because we may get a sectionResized() from QTreeView
         // with values from a old columns layout.
         //
         // Don't set column width when hiding a column.

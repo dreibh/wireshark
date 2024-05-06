@@ -200,7 +200,7 @@ is_string_address_field(enum ftenum ftype, const char *abbrev) {
     return false;
 }
 
-static gboolean
+static bool
 is_filter_valid(packet_info *pinfo, void *cfi_ptr)
 {
     conv_filter_info *cfi = (conv_filter_info *)cfi_ptr;
@@ -516,7 +516,7 @@ extract_syscall_conversation_fields (packet_info *pinfo, falco_conv_filter_field
     return true;
 }
 
-static gboolean sysdig_syscall_filter_valid(packet_info *pinfo, void *user_data _U_) {
+static bool sysdig_syscall_filter_valid(packet_info *pinfo, void *user_data _U_) {
     if (!proto_is_frame_protocol(pinfo->layers, "sysdig")) {
         return false;
     }
@@ -529,7 +529,7 @@ static gboolean sysdig_syscall_filter_valid(packet_info *pinfo, void *user_data 
     return true;
 }
 
-static gboolean sysdig_syscall_container_filter_valid(packet_info *pinfo, void *user_data) {
+static bool sysdig_syscall_container_filter_valid(packet_info *pinfo, void *user_data) {
     if (!sysdig_syscall_filter_valid(pinfo, user_data)) {
         return false;
     }
@@ -542,7 +542,7 @@ static gboolean sysdig_syscall_container_filter_valid(packet_info *pinfo, void *
     return cff.container_id != NULL;
 }
 
-static gboolean sysdig_syscall_fd_filter_valid(packet_info *pinfo, void *user_data) {
+static bool sysdig_syscall_fd_filter_valid(packet_info *pinfo, void *user_data) {
     if (!sysdig_syscall_filter_valid(pinfo, user_data)) {
         return false;
     }
@@ -1262,6 +1262,8 @@ proto_register_falcoplugin(void)
     WS_DIR *dir;
     WS_DIRENT *file;
     char *filename;
+    // XXX Falco plugins should probably be installed in a path that reflects
+    // the Falco version or its plugin API version.
     char *spdname = g_build_filename(get_plugins_dir(), "falco", NULL);
     char *ppdname = g_build_filename(get_plugins_pers_dir(), "falco", NULL);
 

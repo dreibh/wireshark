@@ -38,8 +38,6 @@ typedef union _stream_addr {
 
 struct _follow_info;
 
-typedef gboolean (*follow_print_line_func)(char *, size_t, gboolean, void *);
-
 #define SUBSTREAM_UNUSED	G_GUINT64_CONSTANT(0xFFFFFFFFFFFFFFFF)
 
 typedef struct {
@@ -73,7 +71,7 @@ typedef gchar* (*follow_index_filter_func)(guint stream, guint sub_stream);
 typedef gchar* (*follow_address_filter_func)(address* src_addr, address* dst_addr, int src_port, int dst_port);
 typedef gchar* (*follow_port_to_display_func)(wmem_allocator_t *allocator, guint port);
 typedef guint32 (*follow_stream_count_func)(void);
-typedef gboolean (*follow_sub_stream_id_func)(guint stream, guint sub_stream, gboolean le, guint *sub_stream_out);
+typedef bool (*follow_sub_stream_id_func)(guint stream, guint sub_stream, gboolean le, guint *sub_stream_out);
 
 WS_DLL_PUBLIC
 void register_follow_stream(const int proto_id, const char* tap_listener,

@@ -197,7 +197,7 @@ eth_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, cons
   return TAP_PACKET_REDRAW;
 }
 
-static gboolean
+static bool
 eth_filter_valid(packet_info *pinfo, void *user_data _U_)
 {
     return (pinfo->dl_src.type == AT_ETHER);
@@ -226,7 +226,7 @@ eth_build_filter(packet_info *pinfo, void *user_data _U_)
 #define ETHERNET_802_3  2
 #define ETHERNET_SNAP   3
 
-static gboolean
+static bool
 capture_eth(const guchar *pd, int offset, int len, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header)
 {
   guint16 etype, length;

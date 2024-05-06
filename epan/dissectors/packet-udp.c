@@ -351,7 +351,7 @@ udpip_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, co
     return TAP_PACKET_REDRAW;
 }
 
-static gboolean
+static bool
 udp_filter_valid(packet_info *pinfo, void *user_data _U_)
 {
     return proto_is_frame_protocol(pinfo->layers, "udp");
@@ -844,7 +844,7 @@ udp_dissect_pdus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     return offset;
 }
 
-static gboolean
+static bool
 capture_udp(const guchar *pd _U_, int offset _U_, int len _U_, capture_packet_info_t *cpinfo, const union wtap_pseudo_header *pseudo_header _U_)
 {
     guint16 src_port, dst_port, low_port, high_port;
