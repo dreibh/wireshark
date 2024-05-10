@@ -38,11 +38,13 @@ static int hf_z21_filtered_main_current;
 static int hf_z21_temperature;
 static int hf_z21_supply_voltage;
 static int hf_z21_track_voltage;
+static int hf_z21_broadcast_flags;
 static int hf_z21_central_state;
 static int hf_z21_central_state_ex;
 static int hf_z21_systemstate_reserved;
 static int hf_z21_capabilities;
 static int hf_z21_status;
+static int hf_z21_loco_mode;
 static int hf_z21_loco_address;
 static int hf_z21_loco_direction_and_speed;
 static int hf_z21_loco_direction;
@@ -90,7 +92,21 @@ static int hf_z21_loco_info_extensions;
 static int hf_z21_loco_func_switch_type;
 static int hf_z21_loco_func_index;
 static int hf_z21_speed_steps;
+static int hf_z21_hw_type;
 static int hf_z21_firmware_version;
+static int hf_z21_broadcast_flags_driving_switching;
+static int hf_z21_broadcast_flags_rmbus;
+static int hf_z21_broadcast_flags_railcom_subscribed;
+static int hf_z21_broadcast_flags_system_status;
+static int hf_z21_broadcast_flags_driving_switching_ex;
+static int hf_z21_broadcast_flags_loconet;
+static int hf_z21_broadcast_flags_loconet_driving;
+static int hf_z21_broadcast_flags_loconet_switching;
+static int hf_z21_broadcast_flags_loconet_detector;
+static int hf_z21_broadcast_flags_railcom;
+static int hf_z21_broadcast_flags_can_detector;
+static int hf_z21_broadcast_flags_can_booster;
+static int hf_z21_broadcast_flags_fast_clock;
 static int hf_z21_state_emergency_stop;
 static int hf_z21_state_track_voltage_off;
 static int hf_z21_state_short_circuit;
@@ -192,15 +208,21 @@ static expert_field ei_z21_invalid_checksum;
  * not comparing the values numerically, just matching them
  * in the packets. */
 #define Z21_LAN_GET_SERIAL_NUMBER               0x1000
+#define Z21_LAN_GET_HWINFO                      0x1A00
 #define Z21_LAN_LOGOFF                          0x3000
-/* Responses and requests based on the X-BUS protocol are transmittted
+/* Responses and requests based on the X-BUS protocol are transmitted
  * with the Z21-LAN-Header 0x40 and the specific command is indicated
  * with additional bytes inside the data field. */
 #define Z21_LAN_X_BC                            0x4000
+#define Z21_LAN_SET_BROADCASTFLAGS              0x5000
+#define Z21_LAN_GET_BROADCASTFLAGS              0x5100
+#define Z21_LAN_GET_LOCOMODE                    0x6000
+#define Z21_LAN_SET_LOCOMODE                    0x6100
 #define Z21_LAN_RMBUS_DATACHANGED               0x8000
 #define Z21_LAN_RMBUS_GETDATA                   0x8100
 #define Z21_LAN_RMBUS_PROGRAMMODULE             0x8200
 #define Z21_LAN_SYSTEMSTATE_DATACHANGED         0x8400
+#define Z21_LAN_SYSTEMSTATE_GETDATA             0x8500
 #define Z21_LAN_RAILCOM_DATACHANGED             0x8800
 #define Z21_LAN_RAILCOM_GETDATA                 0x8900
 #define Z21_LAN_LOCONET_Z21_RX                  0xA000
@@ -297,6 +319,9 @@ static const value_string z21_command_vals[] = {
     { Z21_LAN_FAST_CLOCK_DATA,                  "LAN_FAST_CLOCK_DATA" },
     { Z21_LAN_FAST_CLOCK_SETTINGS_GET,          "LAN_FAST_CLOCK_SETTINGS_GET" },
     { Z21_LAN_FAST_CLOCK_SETTINGS_SET,          "LAN_FAST_CLOCK_SETTINGS_SET" },
+    { Z21_LAN_GET_BROADCASTFLAGS,               "LAN_GET_BROADCASTFLAGS" },
+    { Z21_LAN_GET_HWINFO,                       "LAN_GET_HWINFO" },
+    { Z21_LAN_GET_LOCOMODE,                     "LAN_GET_LOCOMODE" },
     { Z21_LAN_GET_SERIAL_NUMBER,                "LAN_GET_SERIAL_NUMBER" },
     { Z21_LAN_LOCONET_DETECTOR,                 "LAN_LOCONET_DETECTOR" },
     { Z21_LAN_LOCONET_DISPATCH_ADDR,            "LAN_LOCONET_DISPATCH_ADDR" },
@@ -309,7 +334,10 @@ static const value_string z21_command_vals[] = {
     { Z21_LAN_RMBUS_DATACHANGED,                "LAN_RMBUS_DATACHANGED" },
     { Z21_LAN_RMBUS_GETDATA,                    "LAN_RMBUS_GETDATA" },
     { Z21_LAN_RMBUS_PROGRAMMODULE,              "LAN_RMBUS_PROGRAMMODULE" },
+    { Z21_LAN_SET_BROADCASTFLAGS,               "LAN_SET_BROADCASTFLAGS" },
+    { Z21_LAN_SET_LOCOMODE,                     "LAN_SET_LOCOMODE" },
     { Z21_LAN_SYSTEMSTATE_DATACHANGED,          "LAN_SYSTEMSTATE_DATACHANGED" },
+    { Z21_LAN_SYSTEMSTATE_GETDATA,              "LAN_SYSTEMSTATE_GETDATA" },
     { Z21_LAN_X_BC,                             "LAN_X_xxx" }, /* Unspecified X-Bus command */
     { Z21_LAN_X_BC_PROGRAMMING_MODE,            "LAN_X_BC_PROGRAMMING_MODE" },
     { Z21_LAN_X_BC_STOPPED,                     "LAN_X_BC_STOPPED" },
@@ -356,6 +384,27 @@ static const value_string z21_command_vals[] = {
     { Z21_LAN_X_TURNOUT_INFO,                   "LAN_X_TURNOUT_INFO" },
     { Z21_LAN_X_UNKNOWN_COMMAND,                "LAN_X_UNKNOWN_COMMAND" },
     { Z21_LAN_ZLINK_GET_HWINFO,                 "LAN_ZLINK_GET_HWINFO" },
+    { 0, NULL },
+};
+
+static const value_string z21_loco_mode_vals[] = {
+    { 0, "DCC Format" },
+    { 1, "MM Format" },
+    { 0, NULL },
+};
+
+static const value_string z21_hw_type_vals[] = {
+    { 0x00000200, "Z21a" },
+    { 0x00000201, "Z21b" },
+    { 0x00000202, "SmartRail" },
+    { 0x00000203, "z21small" },
+    { 0x00000204, "z21start" },
+    { 0x00000205, "Z21 Single Booster" },
+    { 0x00000206, "Z21 Dual Booster" },
+    { 0x00000211, "Z21 XL Series" },
+    { 0x00000212, "Z21 XL Booster" },
+    { 0x00000301, "Z21 Switch Decoder" },
+    { 0x00000302, "Z21 Signal Decoder" },
     { 0, NULL },
 };
 
@@ -429,6 +478,22 @@ dissect_z21_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
     gint32 main_current, temp_gint32;
     char *buffer;
     float temp_float;
+    static int * const broadcast_flags_bits[] = {
+        &hf_z21_broadcast_flags_loconet_detector,
+        &hf_z21_broadcast_flags_loconet_switching,
+        &hf_z21_broadcast_flags_loconet_driving,
+        &hf_z21_broadcast_flags_loconet,
+        &hf_z21_broadcast_flags_can_detector,
+        &hf_z21_broadcast_flags_railcom,
+        &hf_z21_broadcast_flags_can_booster,
+        &hf_z21_broadcast_flags_driving_switching_ex,
+        &hf_z21_broadcast_flags_system_status,
+        &hf_z21_broadcast_flags_fast_clock,
+        &hf_z21_broadcast_flags_railcom_subscribed,
+        &hf_z21_broadcast_flags_rmbus,
+        &hf_z21_broadcast_flags_driving_switching,
+        NULL
+    };
     static int * const state_bits_byte1[] = {
         &hf_z21_state_programming_mode,
         &hf_z21_state_short_circuit,
@@ -1410,6 +1475,41 @@ dissect_z21_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data 
                 tvb, offset, datalen-4, ENC_NA);
             offset += datalen-4;
             break;
+        case Z21_LAN_GET_LOCOMODE:
+        case Z21_LAN_SET_LOCOMODE:
+            address_bytes = tvb_get_guint16(tvb, offset, ENC_BIG_ENDIAN);
+            addr = address_bytes & 0x3FFF;
+            proto_tree_add_uint(z21_tree, hf_z21_loco_address, tvb, offset, 2, addr);
+            offset += 2;
+            col_append_fstr(pinfo->cinfo, COL_INFO, ", Loco=%d", addr);
+            if (datalen > 6) {
+                unsigned mode = tvb_get_guint8(tvb, offset);
+                proto_tree_add_uint(z21_tree, hf_z21_loco_mode, tvb, offset, 1, mode);
+                offset += 1;
+                col_append_fstr(pinfo->cinfo, COL_INFO, ", Mode: %d", mode);
+            }
+            break;
+        case Z21_LAN_GET_BROADCASTFLAGS:
+        case Z21_LAN_SET_BROADCASTFLAGS:
+            if (datalen == 8) {
+                proto_tree_add_bitmask_with_flags(z21_tree, tvb, offset, hf_z21_broadcast_flags,
+                    ett_z21, broadcast_flags_bits, ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+                offset += 4;
+            }
+            break;
+        case Z21_LAN_GET_HWINFO:
+            if (datalen == 12) {
+                unsigned hwtype = tvb_get_guint32(tvb, offset, ENC_LITTLE_ENDIAN);
+                proto_tree_add_uint(z21_tree, hf_z21_hw_type, tvb, offset, 1, hwtype);
+                offset += 4;
+                version = tvb_get_guint32(tvb, offset, ENC_LITTLE_ENDIAN);
+                buffer = wmem_strdup_printf(pinfo->pool, "%x.%02x",
+                    version >> 8, version & 0xff);
+                proto_tree_add_string(z21_tree, hf_z21_firmware_version,
+                    tvb, offset, 2, buffer);
+                offset += 4;
+            }
+            break;
         }
         if (offset < datalen) {
             /* Just dump all the rest, if any */
@@ -1517,6 +1617,11 @@ proto_register_z21(void)
             FT_FLOAT, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
+        { &hf_z21_broadcast_flags,
+          { "Broadcast flags", "z21.broadcastflags",
+            FT_UINT32, BASE_HEX, NULL, 0x0,
+            NULL, HFILL }
+        },
         { &hf_z21_central_state,
           { "Central state, first byte", "z21.centralstate1",
             FT_UINT8, BASE_HEX, NULL, 0x0,
@@ -1540,6 +1645,71 @@ proto_register_z21(void)
         { &hf_z21_status,
           { "Status", "z21.status",
             FT_UINT8, BASE_HEX, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_driving_switching,
+          { "Broadcasts messages concerning driving and switching", "z21.broadcastflags.driving_switching",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00000001,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_rmbus,
+          { "Changes of the feedback devices on the R-Bus", "z21.broadcastflags.rmbus",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00000002,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_railcom_subscribed,
+          { "Changes of RailCom data of subscribed locomotives", "z21.broadcastflags.railcom_subscribed",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00000004,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_system_status,
+          { "Changes of the Z21 system status", "z21.broadcastflags.system_status",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00000100,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_driving_switching_ex,
+          { "Extends flag 0x00000001, LAN_X_LOCO_INFO is sent for all modified locomotives", "z21.broadcastflags.driving_switching_ex",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00010000,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_loconet,
+          { "Forward messages from LocoNet without locos and switches", "z21.broadcastflags.loconet",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x01000000,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_loconet_driving,
+          { "Forward locomotive-specific LocoNet", "z21.broadcastflags.loconet_driving",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x02000000,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_loconet_switching,
+          { "Forward switch-specific LocoNet", "z21.broadcastflags.loconet_switching",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x04000000,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_loconet_detector,
+          { "Changes of LocoNet track occupancy detectors", "z21.broadcastflags.emergencystop",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x08000000,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_railcom,
+          { "Changes of RailCom data", "z21.broadcastflags.railcom",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00040000,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_can_detector,
+          { "Changes of CAN-Bus track occupancy detectors", "z21.broadcastflags.can_detector",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00080000,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_can_booster,
+          { "Forward CAN-Bus booster status messages", "z21.broadcastflags.can_booster",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00020000,
+            NULL, HFILL }
+        },
+        { &hf_z21_broadcast_flags_fast_clock,
+          { "Fast clock time messages", "z21.broadcastflags.fast_clock",
+            FT_BOOLEAN, 32, TFS(&tfs_enabled_disabled), 0x00000010,
             NULL, HFILL }
         },
         { &hf_z21_state_emergency_stop,
@@ -1625,6 +1795,11 @@ proto_register_z21(void)
         { &hf_z21_capability_needs_unlock_code,
           { "Needs unlock code", "z21.capability.needsunlockcode",
             FT_BOOLEAN, 8, TFS(&tfs_yes_no), 0x80,
+            NULL, HFILL }
+        },
+        { &hf_z21_loco_mode,
+          { "Locomotive mode", "z21.locomode",
+            FT_UINT8, BASE_DEC, VALS(z21_loco_mode_vals), 0x0,
             NULL, HFILL }
         },
         { &hf_z21_loco_address,
@@ -1850,6 +2025,11 @@ proto_register_z21(void)
         { &hf_z21_speed_steps,
           { "Speed steps", "z21.speedsteps",
             FT_UINT8, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_z21_hw_type,
+          { "Hardware type", "z21.hwtype",
+            FT_UINT32, BASE_HEX, VALS(z21_hw_type_vals), 0x0,
             NULL, HFILL }
         },
         { &hf_z21_firmware_version,
