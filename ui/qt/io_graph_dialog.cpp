@@ -523,12 +523,15 @@ IOGraphDialog::IOGraphDialog(QWidget &parent, CaptureFile &cf, QString displayFi
     loadSplitterState(ui->splitter);
 
     //XXX - resize columns?
+    //ui->graphUat->header()->resizeSections(QHeaderView::ResizeToContents);
 
     ProgressFrame::addToButtonBox(ui->buttonBox, &parent);
 
     connect(iop, SIGNAL(mousePress(QMouseEvent*)), this, SLOT(graphClicked(QMouseEvent*)));
     connect(iop, SIGNAL(mouseMove(QMouseEvent*)), this, SLOT(mouseMoved(QMouseEvent*)));
     connect(iop, SIGNAL(mouseRelease(QMouseEvent*)), this, SLOT(mouseReleased(QMouseEvent*)));
+
+    connect(iop, &QCustomPlot::beforeReplot, this, &IOGraphDialog::updateLegend);
 
     MainWindow *main_window = qobject_cast<MainWindow *>(mainApp->mainWindow());
     if (main_window != nullptr) {
@@ -710,7 +713,6 @@ void IOGraphDialog::syncGraphSettings(int row)
 
     getGraphInfo();
     updateHint();
-    updateLegend();
 
     if (visible) {
         scheduleReplot();
@@ -726,9 +728,6 @@ void IOGraphDialog::scheduleReplot(bool now)
 {
     need_replot_ = true;
     if (now) updateStatistics();
-    // A plot finished, force an update of the legend now in case a time unit
-    // was involved (which might append "(ms)" to the label).
-    updateLegend();
 }
 
 void IOGraphDialog::scheduleRecalc(bool now)
@@ -1154,7 +1153,6 @@ void IOGraphDialog::updateLegend()
     else {
         iop->legend->setVisible(false);
     }
-    iop->legend->layer()->replot();
 }
 
 QRectF IOGraphDialog::getZoomRanges(QRect zoom_rect)
@@ -1321,9 +1319,18 @@ void IOGraphDialog::updateStatistics()
 {
     if (!isVisible()) return;
 
-    if (need_retap_ && !file_closed_ && prefs.gui_io_graph_automatic_update) {
+    /* XXX - If we're currently retapping, what we really want to do is
+     * abort the current tap and start over. process_specified_records()
+     * in file.c doesn't let us do that, because it doesn't know whether
+     * it's holding cf->read_lock for something that could be restarted
+     * (like tapping or dissection) or something that needs to run to
+     * completion (saving, printing.)
+     *
+     * So we wait and see if we're no longer tapping the next check.
+     */
+    if (need_retap_ && !file_closed_ && !retapDepth() && prefs.gui_io_graph_automatic_update) {
         need_retap_ = false;
-        cap_file_.retapPackets();
+        QTimer::singleShot(0, &cap_file_, &CaptureFile::retapPackets);
         // The user might have closed the window while tapping, which means
         // we might no longer exist.
     } else {
@@ -1388,6 +1395,8 @@ void IOGraphDialog::loadProfileGraphs()
     ui->graphUat->setModel(uat_model_);
     ui->graphUat->setItemDelegate(uat_delegate_);
 
+    ui->graphUat->setHeader(new ResizeHeaderView(Qt::Horizontal, ui->graphUat));
+
     connect(uat_model_, &UatModel::dataChanged, this, &IOGraphDialog::modelDataChanged);
     connect(uat_model_, &UatModel::modelReset, this, &IOGraphDialog::modelRowsReset);
     connect(uat_model_, &UatModel::rowsInserted, this, &IOGraphDialog::modelRowsInserted);
@@ -1435,8 +1444,6 @@ void IOGraphDialog::on_intervalComboBox_currentIndexChanged(int)
     if (need_retap) {
         scheduleRetap(true);
     }
-
-    updateLegend();
 }
 
 void IOGraphDialog::on_todCheckBox_toggled(bool checked)
@@ -1530,7 +1537,6 @@ void IOGraphDialog::modelRowsMoved(const QModelIndex &source, int sourceStart, i
             iog->bars()->setLayer(iog->bars()->layer());
         }
     }
-    updateLegend();
     ui->ioPlot->replot();
 }
 
@@ -1697,7 +1703,7 @@ void IOGraphDialog::on_enableLegendCheckBox_toggled(bool checked)
 
     prefs_main_write();
 
-    updateLegend();
+    ui->ioPlot->legend->layer()->replot();
 }
 
 void IOGraphDialog::on_actionReset_triggered()
