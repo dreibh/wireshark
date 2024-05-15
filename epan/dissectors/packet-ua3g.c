@@ -3658,6 +3658,7 @@ static const value_string str_unsolicited_msg_hard_config_ram[] = {
     {0, NULL}
 };
 
+/* TODO: these values are clearly wrong - needs to fit into 2 bits */
 static const value_string str_unsolicited_msg_subtype[] = {
     {0x03, "2x40"},
     {0x04, "1x20"},
@@ -3682,6 +3683,8 @@ static const value_string str_unsolicited_msg_hard_design[] = {
     {0x06, "Alpha"},
     {0, NULL}
 };
+
+/* TODO: these values are clearly wrong - needs to fit into 2 bits */
 static const value_string str_unsolicited_msg_hard_subtype[] = {
     {0x06, "2x40"},
     {0x07, "1x20"},
@@ -3851,7 +3854,7 @@ decode_unsolicited_msg(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
                                 }
 
                                 if (length >= 1) {
-                                    int * const capability_info[] = {
+                                    static int * const capability_info[] = {
                                         &hf_ua3g_unsolicited_msg_capability_info_vpn,
                                         &hf_ua3g_unsolicited_msg_capability_info_ipsec,
                                         &hf_ua3g_unsolicited_msg_capability_info_dtls,

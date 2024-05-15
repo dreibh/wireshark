@@ -906,6 +906,7 @@ static const value_string ieee80211_supported_rates_vals[] = {
   { 0xE0, "48(B)" },
   { 0xEC, "54(B)" },
   /* BSS membership selector */
+  { 0xFA, "HE PHY" },
   { 0xFB, "SAE Hash to Element Only" },
   { 0xFC, "EPD" }, /* 802.11ak */
   { 0xFD, "GLK" }, /* 802.11ak */
@@ -27810,7 +27811,7 @@ dissect_multi_link_per_sta(tvbuff_t *tvb, packet_info *pinfo _U_,
       gboolean seen_request = FALSE, seen_ext_request = FALSE;
 
       while (tvb_captured_length_remaining(tvb, offset) >= 2) {
-        const guint8 ids[] = { TAG_TSPEC };
+        static const guint8 ids[] = { TAG_TSPEC };
         guint8 elt_type = 0;
 
         if (tvb_captured_length_remaining(tvb, offset) < 2) {
@@ -34193,7 +34194,7 @@ ieee80211_tag_scs_descriptor(tvbuff_t *tvb, packet_info *pinfo,
 
     /* There can be zero or one TSPEC elements */
     if (tvb_captured_length_remaining(tvb, offset) > 0) {
-      const guint8 ids[] = { TAG_TSPEC };
+      static const guint8 ids[] = { TAG_TSPEC };
       if(add_tagged_field(pinfo, tree, tvb, offset, 0, ids, G_N_ELEMENTS(ids), NULL) == 0){
         /* Add an expert info */
       }

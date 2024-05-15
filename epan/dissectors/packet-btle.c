@@ -1026,7 +1026,7 @@ static const gchar * adv_pdu_type_str_get(const btle_context_t *btle_context, gu
 static guint32
 reverse_bits_per_byte(const guint32 val)
 {
-    const guint8 nibble_rev[16] = {
+    static const guint8 nibble_rev[16] = {
         0x0, 0x8, 0x4, 0xc, 0x2, 0xa, 0x6, 0xe,
         0x1, 0x9, 0x5, 0xd, 0x3, 0xb, 0x7, 0xf
     };
@@ -2516,7 +2516,7 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
                     key[3].length = 1;
                     key[3].key = &pinfo->num;
-                    wmem_tree_insert32_array(periodic_adv_info_tree, key, connection_parameter_info);
+                    wmem_tree_insert32_array(connection_parameter_info_tree, key, connection_parameter_info);
                 }
 
                 sf = tvb_get_guint16(tvb, offset, ENC_LITTLE_ENDIAN);
