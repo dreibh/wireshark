@@ -35,6 +35,7 @@
 class QRubberBand;
 class QTimer;
 class QAbstractButton;
+class CopyFromProfileButton;
 
 class QCPBars;
 class QCPGraph;
@@ -78,6 +79,7 @@ public:
     void setPlotStyle(int style);
     QString valueUnitLabel() const;
     format_size_units_e formatUnits() const;
+    io_graph_item_unit_t valueUnits() const { return val_units_; }
     void setValueUnits(int val_units);
     QString valueUnitField() const { return vu_field_; }
     void setValueUnitField(const QString &vu_field);
@@ -154,16 +156,18 @@ class IOGraphDialog : public WiresharkDialog
     Q_OBJECT
 
 public:
-    explicit IOGraphDialog(QWidget &parent, CaptureFile &cf, QString displayFilter = QString());
+    explicit IOGraphDialog(QWidget &parent, CaptureFile &cf, QString displayFilter = QString(), io_graph_item_unit_t value_units = IOG_ITEM_UNIT_PACKETS, QString yfield = QString());
     ~IOGraphDialog();
 
     enum UatColumns { colEnabled = 0, colName, colDFilter, colColor, colStyle, colYAxis, colYField, colSMAPeriod, colYAxisFactor, colMaxNum};
 
     void addGraph(bool checked, QString name, QString dfilter, QRgb color_idx, IOGraph::PlotStyles style,
                   io_graph_item_unit_t value_units, QString yfield, int moving_average, int yaxisfactor);
+    void addGraph(bool checked, QString dfilter, io_graph_item_unit_t value_units, QString yfield);
     void addGraph(bool copy_from_current = false);
     void addDefaultGraph(bool enabled, int idx = 0);
     void syncGraphSettings(int row);
+    qsizetype graphCount() const;
 
 public slots:
     void scheduleReplot(bool now = false);
@@ -172,6 +176,7 @@ public slots:
     void reloadFields();
 
 protected:
+    void captureFileClosing();
     void keyPressEvent(QKeyEvent *event);
     void reject();
 
@@ -190,6 +195,7 @@ signals:
 
 private:
     Ui::IOGraphDialog *ui;
+    CopyFromProfileButton *copy_profile_bt_;
 
     //Model and delegate were chosen over UatFrame because add/remove/copy
     //buttons would need realignment (UatFrame has its own)

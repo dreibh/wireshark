@@ -1360,7 +1360,7 @@ smb2stat_packet(void *pss, packet_info *pinfo, epan_dissect_t *edt _U_, const vo
 	 * retransmissions triggered by the expiry of the rexmit timer (RTOs). Only calculating SRT
 	 * for the last received response accomplishes this goal without requiring the TCP pref
 	 * "Do not call subdissectors for error packets" to be set. */
-	if ((si->saved->frame_req == 0) || (si->saved->frame_res != pinfo->num))
+	if (si->saved->frame_res != pinfo->num)
 		return TAP_PACKET_DONT_REDRAW;
 
 	smb2_srt_table = g_array_index(data->srt_array, srt_stat_table*, i);
@@ -1465,6 +1465,7 @@ static void seskey_list_free_cb(void *r)
 }
 
 static gboolean seskey_find_sid_key(guint64 sesid, guint8 *out_seskey,
+				    guint *out_seskey_len,
 				    guint8 *out_s2ckey16,
 				    guint8 *out_c2skey16,
 				    guint8 *out_s2ckey32,
@@ -1492,14 +1493,17 @@ static gboolean seskey_find_sid_key(guint64 sesid, guint8 *out_seskey,
 	for (i = 0; i < num_seskey_list; i++) {
 		const smb2_seskey_field_t *p = &seskey_list[i];
 		if (memcmp(&sesid_le, p->id, SMB_SESSION_ID_SIZE) == 0) {
-			memset(out_seskey, 0, NTLMSSP_KEY_LEN);
+			*out_seskey_len = 0;
+			memset(out_seskey, 0, NTLMSSP_KEY_LEN*2);
 			memset(out_s2ckey16, 0, AES_KEY_SIZE);
 			memset(out_c2skey16, 0, AES_KEY_SIZE);
 			memset(out_s2ckey32, 0, AES_KEY_SIZE*2);
 			memset(out_c2skey32, 0, AES_KEY_SIZE*2);
 
-			if (p->seskey_len != 0)
+			if (p->seskey_len > 0 && p->seskey_len <= NTLMSSP_KEY_LEN*2) {
 				memcpy(out_seskey, p->seskey, p->seskey_len);
+				*out_seskey_len = p->seskey_len;
+			}
 			if (p->s2ckey_len == AES_KEY_SIZE)
 				memcpy(out_s2ckey16, p->s2ckey, p->s2ckey_len);
 			if (p->s2ckey_len == AES_KEY_SIZE*2)
@@ -1696,12 +1700,18 @@ smb2_get_session(smb2_conv_info_t *conv _U_, guint64 id, packet_info *pinfo, smb
 		ses->fids = wmem_map_new(wmem_file_scope(), smb2_fid_info_hash, smb2_fid_info_equal);
 		ses->files = wmem_map_new(wmem_file_scope(), smb2_eo_files_hash, smb2_eo_files_equal);
 
-		seskey_find_sid_key(id, ses->session_key,
+		ses->session_key_frame = UINT32_MAX;
+		seskey_find_sid_key(id,
+				    ses->session_key,
+				    &ses->session_key_len,
 				    ses->client_decryption_key16,
 				    ses->server_decryption_key16,
 				    ses->client_decryption_key32,
 				    ses->server_decryption_key32);
 		if (pinfo && si) {
+			if (ses->session_key_len != 0) {
+				ses->session_key_frame = pinfo->num;
+			}
 			if (si->flags & SMB2_FLAGS_RESPONSE) {
 				ses->server_port = pinfo->srcport;
 			} else {
@@ -1748,7 +1758,7 @@ smb2_add_session_info(proto_tree *ses_tree, proto_item *ses_item, tvbuff_t *tvb,
 static void smb2_key_derivation(const guint8 *KI, guint32 KI_len,
 			 const guint8 *Label, guint32 Label_len,
 			 const guint8 *Context, guint32 Context_len,
-			 guint8 KO[16], guint32 KO_len)
+			 guint8 *KO, guint32 KO_len)
 {
 	gcry_md_hd_t  hd     = NULL;
 	guint8        buf[4];
@@ -3817,7 +3827,7 @@ static void smb2_generate_decryption_keys(smb2_conv_info_t *conv, smb2_sesid_inf
 		return;
 
 	/* otherwise, generate them from session key, if it's there */
-	if (!has_seskey)
+	if (!has_seskey || ses->session_key_len == 0)
 		return;
 
 	/* generate decryption keys */
@@ -3852,7 +3862,7 @@ static void smb2_generate_decryption_keys(smb2_conv_info_t *conv, smb2_sesid_inf
 					    ses->preauth_hash, SMB2_PREAUTH_HASH_SIZE,
 					    ses->server_decryption_key16, 16);
 			smb2_key_derivation(ses->session_key,
-					    NTLMSSP_KEY_LEN,
+					    ses->session_key_len,
 					    "SMBC2SCipherKey", 16,
 					    ses->preauth_hash, SMB2_PREAUTH_HASH_SIZE,
 					    ses->server_decryption_key32, 32);
@@ -3864,7 +3874,7 @@ static void smb2_generate_decryption_keys(smb2_conv_info_t *conv, smb2_sesid_inf
 					    ses->preauth_hash, SMB2_PREAUTH_HASH_SIZE,
 					    ses->client_decryption_key16, 16);
 			smb2_key_derivation(ses->session_key,
-					    NTLMSSP_KEY_LEN,
+					    ses->session_key_len,
 					    "SMBS2CCipherKey", 16,
 					    ses->preauth_hash, SMB2_PREAUTH_HASH_SIZE,
 					    ses->client_decryption_key32, 32);
@@ -3974,8 +3984,10 @@ dissect_smb2_session_setup_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 				si->session->domain_name = wmem_strdup(wmem_file_scope(), ntlmssph->domain_name);
 				si->session->host_name = wmem_strdup(wmem_file_scope(), ntlmssph->host_name);
 				/* don't overwrite session key from preferences */
-				if (memcmp(si->session->session_key, zeros, SMB_SESSION_ID_SIZE) == 0) {
+				if (memcmp(si->session->session_key, zeros, NTLMSSP_KEY_LEN) == 0) {
 					memcpy(si->session->session_key, ntlmssph->session_key, NTLMSSP_KEY_LEN);
+					si->session->session_key_len = NTLMSSP_KEY_LEN;
+					si->session->session_key_frame = pinfo->num;
 				}
 				si->session->auth_frame = pinfo->num;
 			}
@@ -4246,10 +4258,9 @@ dissect_smb2_session_setup_response(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 			update_preauth_hash(si->conv->preauth_hash_current, pinfo, tvb);
 		} else {
 			/*
-			 * Session is established, we can generate the keys
+			 * Session is established, remember the last preauth hash
 			 */
 			memcpy(si->session->preauth_hash, si->conv->preauth_hash_current, SMB2_PREAUTH_HASH_SIZE);
-			smb2_generate_decryption_keys(si->conv, si->session);
 		}
 
 		/* In all cases, stash the preauth hash */
@@ -4281,7 +4292,10 @@ dissect_smb2_session_setup_response(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 
 	/* If we have found a uid->acct_name mapping, store it */
 #ifdef HAVE_KERBEROS
-	if (!pinfo->fd->visited && si->status == 0) {
+	if (!pinfo->fd->visited &&
+	    ((si->session->session_key_frame == UINT32_MAX) ||
+	     (si->session->session_key_frame < pinfo->num)))
+	{
 		enc_key_t *ek;
 
 		if (krb_decrypt) {
@@ -4289,16 +4303,59 @@ dissect_smb2_session_setup_response(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 		}
 
 		for (ek=enc_key_list;ek;ek=ek->next) {
+			if (!ek->is_ap_rep_key) {
+				continue;
+			}
 			if (ek->fd_num == (int)pinfo->num) {
 				break;
 			}
 		}
 
 		if (ek != NULL) {
-			/* TODO: fill in the correct user/dom/host information */
+			/*
+			 * If we remembered information from the PAC content
+			 * from GSSAPI AP exchange we use it, otherwise we
+			 * can only give a hint about the used session key.
+			 */
+			if (ek->pac_names.account_name) {
+				si->session->acct_name = wmem_strdup(wmem_file_scope(),
+								     ek->pac_names.account_name);
+				si->session->domain_name = wmem_strdup(wmem_file_scope(),
+								       ek->pac_names.account_domain);
+				if (ek->pac_names.device_sid) {
+					si->session->host_name = wmem_strdup_printf(wmem_file_scope(),
+										    "DEVICE[%s]",
+										    ek->pac_names.device_sid);
+				} else {
+					si->session->host_name = NULL;
+				}
+			} else {
+				si->session->acct_name = wmem_strdup_printf(wmem_file_scope(),
+									    "KERBEROS[%s]",
+									    ek->key_origin);
+				si->session->domain_name = wmem_strdup_printf(wmem_file_scope(),
+									      "KERBEROS[%s]",
+									      ek->id_str);
+				si->session->host_name = NULL;
+			}
+			/* don't overwrite session key from preferences */
+			if (memcmp(si->session->session_key, zeros, NTLMSSP_KEY_LEN) == 0) {
+				si->session->session_key_len = MIN(NTLMSSP_KEY_LEN*2, ek->keylength);
+				memcpy(si->session->session_key,
+				       ek->keyvalue,
+				       si->session->session_key_len);
+				si->session->session_key_frame = pinfo->num;
+			}
 		}
 	}
 #endif
+
+	if (si->status == 0) {
+		/*
+		 * Session is established, we can generate the keys
+		 */
+		smb2_generate_decryption_keys(si->conv, si->session);
+	}
 
 	return offset;
 }
@@ -11637,6 +11694,7 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, gboolea
 					ssi                  = wmem_new0(wmem_file_scope(), smb2_saved_info_t);
 					ssi->msg_id          = ssi_key.msg_id;
 					ssi->frame_req       = pinfo->num;
+					ssi->frame_res       = UINT32_MAX;
 					ssi->req_time        = pinfo->abs_ts;
 					ssi->extra_info_type = SMB2_EI_NONE;
 					g_hash_table_insert(si->conv->unmatched, ssi, ssi);
@@ -11683,13 +11741,13 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, gboolea
 			}
 
 			if (!(si->flags & SMB2_FLAGS_RESPONSE)) {
-				if (ssi->frame_res) {
+				if (ssi->frame_res != UINT32_MAX) {
 					proto_item *tmp_item;
 					tmp_item = proto_tree_add_uint(header_tree, hf_smb2_response_in, tvb, 0, 0, ssi->frame_res);
 					proto_item_set_generated(tmp_item);
 				}
 			} else {
-				if (ssi->frame_req) {
+				if (ssi->frame_req != UINT32_MAX) {
 					proto_item *tmp_item;
 					nstime_t    t, deltat;
 

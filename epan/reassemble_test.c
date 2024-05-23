@@ -105,11 +105,11 @@ static struct _fd_flags {
     {FD_MULTIPLETAILS        ,"MT"},
     {FD_TOOLONGFRAGMENT      ,"TL"},
 };
-#define N_FD_FLAGS (signed)(sizeof(fd_flags)/sizeof(struct _fd_flags))
+#define N_FD_FLAGS array_length(fd_flags)
 
 static void
 print_fd_head(fragment_head *fd) {
-    int i;
+    unsigned int i;
 
     g_assert_true(fd != NULL);
     printf("        %16p %16p %3u %3u", (void *)fd, (void *)(fd->next), fd->frame, fd->len);
@@ -121,7 +121,7 @@ print_fd_head(fragment_head *fd) {
     } else {
         printf(" %16s", "<null tvb_data>");
     }
-    for (i=0; i < N_FD_FLAGS; i++) {
+    for (i = 0; i < N_FD_FLAGS; i++) {
         printf(" %s", (fd->flags & fd_flags[i].flag) ? fd_flags[i].flag_name : "  ");
     }
     printf("\n");
@@ -129,7 +129,7 @@ print_fd_head(fragment_head *fd) {
 
 static void
 print_fd_item(fragment_item *fd) {
-    int i;
+    unsigned int i;
 
     g_assert_true(fd != NULL);
     printf("        %16p %16p %3u %3u %3u", (void *)fd, (void *)(fd->next), fd->frame, fd->offset, fd->len);
@@ -139,7 +139,7 @@ print_fd_item(fragment_item *fd) {
     } else {
         printf(" %16s", "<null tvb_data>");
     }
-    for (i=0; i < N_FD_FLAGS; i++) {
+    for (i = 0; i < N_FD_FLAGS; i++) {
         printf(" %s", (fd->flags & fd_flags[i].flag) ? fd_flags[i].flag_name : "  ");
     }
     printf("\n");
@@ -3268,7 +3268,7 @@ main(int argc _U_, char **argv _U_)
     set_address(&pinfo.dst,AT_IPv4,4,dst);
 
     /*************************************************************************/
-    for(i=0; i < sizeof(tests)/sizeof(tests[0]); i++ ) {
+    for(i=0; i < array_length(tests); i++ ) {
         /* re-init the fragment tables */
         reassembly_table_init(&test_reassembly_table,
                               &addresses_reassembly_table_functions);

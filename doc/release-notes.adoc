@@ -30,6 +30,8 @@ representations for numeric fields).
 
 Display filter functions can be implemented as runtime-loadable C plugins.
 
+Display filters can be translated to pcap filters using menu:Copy[Display filter as pcap filter] if each display filter field has a corresponding pcap filter equivalent.
+
 Custom columns can be defined using any valid field expression, such as
 display filter functions, slices, arithmetic calculations, logical tests,
 raw byte addressing, and the layer modifier.
@@ -196,6 +198,9 @@ The following features are new (or have been significantly updated) since versio
 
   ** A number of crasher bugs have been fixed.
 
+  ** The protocol tree context menu can open a I/O graph of the currently
+     selected field. wsbuglink:11362[]
+
   ** Smaller intervals can be used, down to 1 microsecond. wsbuglink:13682[]
 
   ** A larger number of I/O Graph item buckets can be used, up to 2^25^
@@ -239,6 +244,10 @@ The following features are new (or have been significantly updated) since versio
 
   ** Pending graph changes are saved when changing profiles with the
      I/O Graphs dialog open.
+
+  ** I/O Graph dialog windows for closed capture files are no longer affected
+     by changing the list of graphs (either in that dialogs or in other dialogs
+     for the currently open file.)
 
   ** Temporary graphs that have just been added and will not be saved
      unless the configuration has changed are more clearly marked with

@@ -1469,7 +1469,10 @@ static int
 dissect_ndr_nt_SID_hf_through_ptr(tvbuff_t *tvb, int offset, packet_info *pinfo,
 		   proto_tree *tree, dcerpc_info *di, guint8 *drep)
 {
-	offset = dissect_ndr_nt_SID(tvb, offset, pinfo, tree, di, drep);
+	offset = dissect_ndr_nt_SID_with_options(tvb, offset, pinfo, tree,
+						 di, drep,
+						 CB_STR_ITEM_LEVELS(2),
+						 di->hf_index);
 
 	return offset;
 }
@@ -1477,23 +1480,34 @@ dissect_ndr_nt_SID_hf_through_ptr(tvbuff_t *tvb, int offset, packet_info *pinfo,
 static gint ett_nt_sid_pointer;
 
 int
-dissect_ndr_nt_PSID(tvbuff_t *tvb, int offset,
-		    packet_info *pinfo, proto_tree *parent_tree,
-		    dcerpc_info *di, guint8 *drep)
+dissect_ndr_nt_PSID_cb(tvbuff_t *tvb, int offset,
+		       packet_info *pinfo, proto_tree *parent_tree,
+		       dcerpc_info *di, guint8 *drep,
+		       dcerpc_callback_fnct_t *callback, void *callback_args)
 {
 	proto_item *item;
 	proto_tree *tree;
 	int old_offset=offset;
 
 	tree = proto_tree_add_subtree(parent_tree, tvb, offset, -1,
-			ett_nt_sid_pointer, &item, "SID pointer:");
+			ett_nt_sid_pointer, &item, "SID pointer");
 
-	offset = dissect_ndr_pointer(tvb, offset, pinfo, tree, di, drep,
+	offset = dissect_ndr_pointer_cb(tvb, offset, pinfo, tree, di, drep,
 			dissect_ndr_nt_SID_hf_through_ptr, NDR_POINTER_UNIQUE,
-			"SID pointer", hf_nt_domain_sid);
+			"SID pointer", hf_nt_domain_sid,
+			callback, callback_args);
 
 	proto_item_set_len(item, offset-old_offset);
 	return offset;
+}
+
+int
+dissect_ndr_nt_PSID(tvbuff_t *tvb, int offset,
+		    packet_info *pinfo, proto_tree *parent_tree,
+		    dcerpc_info *di, guint8 *drep)
+{
+	return dissect_ndr_nt_PSID_cb(tvb, offset, pinfo, parent_tree,
+				      di, drep, NULL, NULL);
 }
 
 static const true_false_string tfs_nt_acb_disabled = {

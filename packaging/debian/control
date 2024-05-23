@@ -19,7 +19,7 @@ Build-Depends: asciidoctor,
                libglib2.0-dev,
                libgnutls28-dev,
                libkrb5-dev,
-               liblua5.3-dev,
+               liblua5.4-dev | liblua5.3-dev,
                liblz4-dev,
                libmaxminddb-dev,
                libminizip-dev,
@@ -96,12 +96,13 @@ Description: network traffic analyzer - graphical interface
  packets off the wire. Wireshark can decode too many protocols to list
  here.
 
+# We override the binary version, so use the source version here.
 Package: logray
 Build-Profiles: <pkg.wireshark.logray>
 Architecture: any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
-         wireshark-common (= ${binary:Version}),
+         wireshark-common (= ${source:Version}),
          libfalcosecurity0t64,
          libqt6svg6
 # Recommends: libqt6multimedia6

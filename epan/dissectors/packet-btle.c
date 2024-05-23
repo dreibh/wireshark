@@ -1685,7 +1685,7 @@ control_proc_start(tvbuff_t *tvb,
 
         if (proc_info && proc_info->proc_opcode == opcode) {
             proto_item *sub_item;
-            for (guint i = 1; i < sizeof(proc_info->frames)/sizeof(proc_info->frames[0]); i++) {
+            for (guint i = 1; i < array_length(proc_info->frames); i++) {
                 if (proc_info->frames[i]) {
                     sub_item = proto_tree_add_uint(btle_tree, hf_response_in_frame, tvb, 0, 0, proc_info->frames[i]);
                     proto_item_set_generated(sub_item);
@@ -2355,7 +2355,7 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
             break;
         case 0x07: /* ADV_EXT_IND / AUX_ADV_IND / AUX_SYNC_IND / AUX_CHAIN_IND / AUX_SCAN_RSP */
-        case 0x08: /* AUX_CONNNECT_RSP */
+        case 0x08: /* AUX_CONNECT_RSP */
         {
             guint8 tmp, ext_header_len, flags, acad_len;
             proto_item  *ext_header_item, *ext_flags_item;
