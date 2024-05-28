@@ -1910,7 +1910,13 @@ bool WiresharkMainWindow::testCaptureFileClose(QString before_what, FileCloseCon
              */
             discard_button->setFocus();
 #endif
-
+            /*
+             * On Windows, if multiple Wireshark processes are open, another
+             * application has focus, and "Close all [Wireshark] windows" is
+             * chosen from the taskbar, we need to activate the window to
+             * at least flash the taskbar (#16309).
+             */
+            activateWindow();
             msg_dialog.exec();
             /* According to the Qt doc:
              * when using QMessageBox with custom buttons, exec() function returns an opaque value.
@@ -2700,6 +2706,13 @@ void WiresharkMainWindow::addMenuActions(QList<QAction *> &actions, int menu_gro
         switch (menu_group) {
         case REGISTER_PACKET_ANALYZE_GROUP_UNSORTED:
         case REGISTER_PACKET_STAT_GROUP_UNSORTED:
+        case REGISTER_STAT_GROUP_GENERIC:
+            // XXX - The Lua documentation claims that ANALYZE_GROUP_UNSORTED
+            // is under the Analyze menu, and STAT_GROUP_GENERIC and
+            // PACKET_STAT_GROUP_UNSORTED are distinguished by whether they
+            // go before the separator in the group of non protocol-specific
+            // actions or after the separator with the protocol-specific
+            // actions. We currently put them all in the same place.
             main_ui_->menuStatistics->insertAction(
                             main_ui_->actionStatistics_REGISTER_STAT_GROUP_UNSORTED,
                             action);
@@ -2724,6 +2737,12 @@ void WiresharkMainWindow::addMenuActions(QList<QAction *> &actions, int menu_gro
             break;
         case REGISTER_STAT_GROUP_TELEPHONY_MTP3:
             main_ui_->menuMTP3->addAction(action);
+            break;
+        case REGISTER_STAT_GROUP_TELEPHONY_SCTP:
+            // XXX - There are two SCTP menus, under Analyze and Telephony,
+            // that have the same default actions. The default actions from
+            // Analyze are copied to the PacketList context menu.
+            main_ui_->menuTelephonySCTP->addAction(action);
             break;
         case REGISTER_TOOLS_GROUP_UNSORTED:
         {
@@ -2768,6 +2787,7 @@ void WiresharkMainWindow::removeMenuActions(QList<QAction *> &actions, int menu_
         switch (menu_group) {
         case REGISTER_PACKET_ANALYZE_GROUP_UNSORTED:
         case REGISTER_PACKET_STAT_GROUP_UNSORTED:
+        case REGISTER_STAT_GROUP_GENERIC:
             main_ui_->menuStatistics->removeAction(action);
             break;
         case REGISTER_STAT_GROUP_RESPONSE_TIME:
@@ -2790,6 +2810,9 @@ void WiresharkMainWindow::removeMenuActions(QList<QAction *> &actions, int menu_
             break;
         case REGISTER_STAT_GROUP_TELEPHONY_MTP3:
             main_ui_->menuMTP3->removeAction(action);
+            break;
+        case REGISTER_STAT_GROUP_TELEPHONY_SCTP:
+            main_ui_->menuTelephonySCTP->removeAction(action);
             break;
         case REGISTER_TOOLS_GROUP_UNSORTED:
         {

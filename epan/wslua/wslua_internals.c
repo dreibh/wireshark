@@ -15,6 +15,7 @@
  */
 
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_WSLUA
 #include "wslua.h"
 #include <stdio.h>
 
@@ -22,16 +23,6 @@
  * to Lua code. These are normally not used by dissectors, just for debugging
  * (and the "wslua global" test). Enable by setting WSLUA_WITH_INTROSPECTION */
 #define WSLUA_WITH_INTROSPECTION
-
-#if LUA_VERSION_NUM == 501
-/* Compatibility with Lua 5.1, function was added in 5.2 */
-static
-int lua_absindex(lua_State *L, int idx) {
-  return (idx > 0 || idx <= LUA_REGISTRYINDEX)
-         ? idx
-         : lua_gettop(L) + 1 + idx;
-}
-#endif
 
 WSLUA_API int wslua__concat(lua_State* L) {
     /* Concatenate two objects to a string */
