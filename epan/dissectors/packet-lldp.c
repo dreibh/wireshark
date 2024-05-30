@@ -1398,12 +1398,6 @@ static const value_string profinet_port3_status_vals[] = {
 	{ 0,	NULL }
 };
 
-static const value_string profinet_port3_status_OnOff[] = {
-	{ 0,	"OFF" },
-	{ 1,	"ON" },
-	{ 0,	NULL }
-};
-
 static const value_string profinet_port3_status_PreambleLength[] = {
 	{ 0,	"Seven octets" },
 	{ 1,	"One octet" },
@@ -3910,8 +3904,7 @@ dissect_profinet_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, pr
 	guint8 subType;
 	guint32 offset = 0;
 	proto_item	*tf = NULL;
-	guint16 class2_PortStatus;
-	guint16 class3_PortStatus;
+	guint32 class3_PortStatus;
 	guint32 port_rx_delay_local;
 	guint32 port_rx_delay_remote;
 	guint32 port_tx_delay_local;
@@ -3978,16 +3971,13 @@ dissect_profinet_tlv(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, pr
 	}
 	case 2:		/* LLDP_PNIO_PORTSTATUS */
 	{
-		class2_PortStatus = tvb_get_ntohs(tvb, offset);
-		proto_tree_add_uint(tree, hf_profinet_class2_port_status, tvb, offset, 2, class2_PortStatus);
+		proto_tree_add_item(tree, hf_profinet_class2_port_status, tvb, offset, 2, ENC_BIG_ENDIAN);
 		offset+=2;
-		class3_PortStatus = tvb_get_ntohs(tvb, offset);
-		proto_tree_add_uint(tree, hf_profinet_class3_port_status, tvb, offset, 2, class3_PortStatus);
-		proto_tree_add_uint(tree, hf_profinet_class3_port_status_reserved, tvb, offset, 2, class3_PortStatus);
-		proto_tree_add_uint(tree, hf_profinet_class3_port_status_Fragmentation, tvb, offset, 2, class3_PortStatus);
-		proto_tree_add_uint(tree, hf_profinet_class3_port_status_PreambleLength, tvb, offset, 2, class3_PortStatus);
+		proto_tree_add_item_ret_uint(tree, hf_profinet_class3_port_status, tvb, offset, 2, ENC_BIG_ENDIAN, &class3_PortStatus);
+		proto_tree_add_item(tree, hf_profinet_class3_port_status_reserved, tvb, offset, 2, ENC_BIG_ENDIAN);
+		proto_tree_add_item(tree, hf_profinet_class3_port_status_Fragmentation, tvb, offset, 2, ENC_BIG_ENDIAN);
+		proto_tree_add_item(tree, hf_profinet_class3_port_status_PreambleLength, tvb, offset, 2, ENC_BIG_ENDIAN);
 
-		class3_PortStatus = class3_PortStatus & 0x7;
 		col_append_fstr(pinfo->cinfo, COL_INFO, "RTClass3 Port Status = %s", val_to_str(class3_PortStatus, profinet_port3_status_vals, "Unknown %d"));
 		/*offset+=2;*/
 		break;
@@ -6241,7 +6231,7 @@ proto_register_lldp(void)
 			VALS(civic_address_type_values), 0x0, "Unknown", HFILL }
 		},
 		{ &hf_media_civic_addr_len,
-			{ "CA Length", "lldp.media.civic.length", FT_UINT8, BASE_DEC,
+			{ "CA Length", "lldp.media.civic.addr_length", FT_UINT8, BASE_DEC,
 			NULL, 0x0, NULL, HFILL }
 		},
 		{ &hf_media_civic_addr_value,
@@ -6330,8 +6320,8 @@ proto_register_lldp(void)
 		},
 		/* class3_port state got some new BITs */
 		{ &hf_profinet_class3_port_status_Fragmentation,
-			{ "RTClass3_PortStatus.Fragmentation",	"lldp.profinet.rtc3_port_status.fragmentation", FT_UINT16, BASE_HEX,
-			VALS(profinet_port3_status_OnOff), 0x1000, NULL, HFILL }
+			{ "RTClass3_PortStatus.Fragmentation",	"lldp.profinet.rtc3_port_status.fragmentation", FT_BOOLEAN, 16,
+			TFS(&tfs_on_off), 0x1000, NULL, HFILL }
 		},
 		{ &hf_profinet_class3_port_status_reserved,
 			{ "RTClass3_PortStatus.reserved",	"lldp.profinet.rtc3_port_status.reserved", FT_UINT16, BASE_HEX,
