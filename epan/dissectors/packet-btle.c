@@ -648,6 +648,7 @@ typedef struct _connection_info_t {
     guint32  interface_id;
     guint32  adapter_id;
     guint32  access_address;
+    guint32  crc_init;
 
     guint8   master_bd_addr[6];
     guint8   slave_bd_addr[6];
@@ -1494,6 +1495,45 @@ dissect_ctrl_pdu_without_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *btl
     return offset;
 }
 
+static gint
+dissect_crc(tvbuff_t *tvb,
+            proto_tree *btle_tree,
+            gint offset,
+            packet_info *pinfo,
+            guint32 length,
+            const connection_info_t *connection_info,
+            const btle_context_t *btle_context,
+            guint32 access_address)
+{
+    /* BT spec Vol 6, Part B, Section 1.2: CRC is big endian and bits in byte are flipped */
+    guint32 packet_crc = reverse_bits_per_byte(tvb_get_ntoh24(tvb, offset));
+    proto_item *sub_item = proto_tree_add_uint(btle_tree, hf_crc, tvb, offset, 3, packet_crc);
+
+    if (btle_context && btle_context->crc_checked_at_capture) {
+        if (!btle_context->crc_valid_at_capture) {
+            expert_add_info(pinfo, sub_item, &ei_crc_incorrect);
+        }
+    } else if ((access_address == ACCESS_ADDRESS_ADVERTISING) || connection_info)  {
+        /* CRC can be calculated */
+        guint32 crc_init;
+
+        if (access_address == ACCESS_ADDRESS_ADVERTISING) {
+            crc_init = 0x555555;
+        } else {
+            crc_init = connection_info->crc_init;
+        }
+
+        guint32 crc = btle_crc(tvb, length, crc_init);
+        if (packet_crc != crc) {
+            expert_add_info(pinfo, sub_item, &ei_crc_incorrect);
+        }
+    } else {
+        expert_add_info(pinfo, sub_item, &ei_crc_cannot_be_determined);
+    }
+
+    return 3;
+}
+
 /* Checks if it is possible to add the frame at the given index
  * to the given control procedure context.
  *
@@ -1897,6 +1937,48 @@ guess_btle_pdu_type_from_access(guint32 interface_id,
     return BTLE_PDU_TYPE_DATA;
 }
 
+static const btle_context_t * get_btle_context(packet_info *pinfo,
+                                               void *data,
+                                               guint32 *adapter_id_out,
+                                               guint32 *interface_id_out)
+{
+    const btle_context_t * btle_context = NULL;
+    bluetooth_data_t *bluetooth_data = NULL;
+    ubertooth_data_t *ubertooth_data = NULL;
+
+    wmem_list_frame_t * list_data = wmem_list_frame_prev(wmem_list_tail(pinfo->layers));
+    if (list_data) {
+        gint previous_proto = GPOINTER_TO_INT(wmem_list_frame_data(list_data));
+
+        if ((previous_proto == proto_btle_rf)||(previous_proto == proto_nordic_ble)) {
+            btle_context = (const btle_context_t *) data;
+            bluetooth_data = btle_context->previous_protocol_data.bluetooth_data;
+        } else if (previous_proto == proto_bluetooth) {
+            bluetooth_data = (bluetooth_data_t *) data;
+        }
+
+        if (bluetooth_data && bluetooth_data->previous_protocol_data_type == BT_PD_UBERTOOTH_DATA) {
+            ubertooth_data = bluetooth_data->previous_protocol_data.ubertooth_data;
+        }
+    }
+
+    if (bluetooth_data)
+        *interface_id_out = bluetooth_data->interface_id;
+    else if (pinfo->rec->presence_flags & WTAP_HAS_INTERFACE_ID)
+        *interface_id_out = pinfo->rec->rec_header.packet_header.interface_id;
+    else
+        *interface_id_out = HCI_INTERFACE_DEFAULT;
+
+    if (ubertooth_data)
+        *adapter_id_out = ubertooth_data->bus_id << 8 | ubertooth_data->device_address;
+    else if (bluetooth_data)
+        *adapter_id_out = bluetooth_data->adapter_id;
+    else
+        *adapter_id_out = HCI_ADAPTER_DEFAULT;
+
+    return btle_context;
+}
+
 static gint
 dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
@@ -1913,47 +1995,23 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     connection_info_t     *connection_info = NULL;
     wmem_tree_t           *wmem_tree;
     wmem_tree_key_t        key[5], ae_had_key[4];
-    guint32                interface_id;
-    guint32                adapter_id;
+
     guint32                connection_access_address;
     guint32                frame_number;
-    enum {CRC_INDETERMINATE,
-          CRC_CAN_BE_CALCULATED,
-          CRC_INCORRECT,
-          CRC_CORRECT} crc_status = CRC_INDETERMINATE;
-    guint32      crc_init = 0x555555; /* default to advertising channel's value */
-    guint32      packet_crc;
-    const btle_context_t  *btle_context   = NULL;
-    bluetooth_data_t      *bluetooth_data = NULL;
-    ubertooth_data_t      *ubertooth_data = NULL;
-    gint                   previous_proto;
-    wmem_list_frame_t     *list_data;
+
     proto_item            *item;
     guint                  item_value;
     guint8                 btle_pdu_type = BTLE_PDU_TYPE_UNKNOWN;
 
-    list_data = wmem_list_frame_prev(wmem_list_tail(pinfo->layers));
-    if (list_data) {
-        previous_proto = GPOINTER_TO_INT(wmem_list_frame_data(list_data));
-
-        if ((previous_proto == proto_btle_rf)||(previous_proto == proto_nordic_ble)) {
-            btle_context = (const btle_context_t *) data;
-            bluetooth_data = btle_context->previous_protocol_data.bluetooth_data;
-        } else if (previous_proto == proto_bluetooth) {
-            bluetooth_data = (bluetooth_data_t *) data;
-        }
-
-        if (bluetooth_data && bluetooth_data->previous_protocol_data_type == BT_PD_UBERTOOTH_DATA) {
-            ubertooth_data = bluetooth_data->previous_protocol_data.ubertooth_data;
-        }
-    }
+    guint32                interface_id;
+    guint32                adapter_id;
+    const btle_context_t *btle_context = get_btle_context(pinfo,
+                                                          data,
+                                                          &adapter_id,
+                                                          &interface_id);
 
     src_bd_addr = (guint8 *) wmem_alloc(pinfo->pool, 6);
     dst_bd_addr = (guint8 *) wmem_alloc(pinfo->pool, 6);
-
-    if (btle_context && btle_context->crc_checked_at_capture) {
-        crc_status = btle_context->crc_valid_at_capture ? CRC_CORRECT : CRC_INCORRECT;
-    }
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "LE LL");
 
@@ -1984,20 +2042,6 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         offset += 1;
     }
 
-    if (bluetooth_data)
-        interface_id = bluetooth_data->interface_id;
-    else if (pinfo->rec->presence_flags & WTAP_HAS_INTERFACE_ID)
-        interface_id = pinfo->rec->rec_header.packet_header.interface_id;
-    else
-        interface_id = HCI_INTERFACE_DEFAULT;
-
-    if (ubertooth_data)
-        adapter_id = ubertooth_data->bus_id << 8 | ubertooth_data->device_address;
-    else if (bluetooth_data)
-        adapter_id = bluetooth_data->adapter_id;
-    else
-        adapter_id = HCI_ADAPTER_DEFAULT;
-
     frame_number = pinfo->num;
 
     if (btle_context) {
@@ -2019,12 +2063,6 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         guint8       header, pdu_type;
         gboolean     ch_sel_valid = FALSE, tx_add_valid = FALSE, rx_add_valid = FALSE;
         gboolean     is_periodic_adv = FALSE;
-
-        if (crc_status == CRC_INDETERMINATE &&
-            access_address == ACCESS_ADDRESS_ADVERTISING) {
-            /* Advertising channel CRCs can aways be calculated, because CRCInit is always known. */
-            crc_status = CRC_CAN_BE_CALCULATED;
-        }
 
         key[0].length = 1;
         key[0].key = &interface_id;
@@ -2252,6 +2290,9 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
             break;
         case 0x05: /* CONNECT_IND */
+        {
+            guint32 connect_ind_crc_init;
+
             offset = dissect_bd_addr(hf_initiator_addresss, pinfo, btle_tree, tvb, offset, FALSE, interface_id, adapter_id, src_bd_addr);
             offset = dissect_bd_addr(hf_advertising_address, pinfo, btle_tree, tvb, offset, TRUE, interface_id, adapter_id, dst_bd_addr);
 
@@ -2282,7 +2323,7 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
             connection_access_address = tvb_get_letohl(tvb, offset);
             offset += 4;
 
-            proto_tree_add_item(link_layer_data_tree, hf_link_layer_data_crc_init, tvb, offset, 3, ENC_LITTLE_ENDIAN);
+            proto_tree_add_item_ret_uint(link_layer_data_tree, hf_link_layer_data_crc_init, tvb, offset, 3, ENC_LITTLE_ENDIAN, &connect_ind_crc_init);
             offset += 3;
 
             item = proto_tree_add_item_ret_uint(link_layer_data_tree, hf_link_layer_data_window_size, tvb, offset, 1, ENC_LITTLE_ENDIAN, &item_value);
@@ -2332,6 +2373,7 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                 connection_info->interface_id   = interface_id;
                 connection_info->adapter_id     = adapter_id;
                 connection_info->access_address = connection_access_address;
+                connection_info->crc_init       = connect_ind_crc_init;
 
                 memcpy(connection_info->master_bd_addr, src_bd_addr, 6);
                 memcpy(connection_info->slave_bd_addr,  dst_bd_addr, 6);
@@ -2354,6 +2396,7 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
             }
 
             break;
+        }
         case 0x07: /* ADV_EXT_IND / AUX_ADV_IND / AUX_SYNC_IND / AUX_CHAIN_IND / AUX_SCAN_RSP */
         case 0x08: /* AUX_CONNECT_RSP */
         {
@@ -4323,13 +4366,6 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                 proto_item_set_generated(item);
             }
         }
-
-        if ((crc_status == CRC_INDETERMINATE) &&
-            btle_context && btle_context->connection_info_valid) {
-            /* the surrounding context has provided CRCInit */
-            crc_init = btle_context->connection_info.CRCInit;
-            crc_status = CRC_CAN_BE_CALCULATED;
-        }
     } else if (btle_pdu_type == BTLE_PDU_TYPE_BROADCASTISO) {
         broadcastiso_connection_info_t *broadcastiso_connection_info = NULL;
         guint32      seed_access_address = access_address & 0x0041ffff;
@@ -4445,32 +4481,25 @@ dissect_btle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         }
 
     } else {
-        /* Unknown physical channel PDU type */
+        /* Unknown physical channel PDU type. Assume CRC size is 3 bytes */
         if (tvb_reported_length_remaining(tvb, offset) > 3) {
                 proto_tree_add_expert(btle_tree, pinfo, &ei_unknown_data, tvb, offset, tvb_reported_length_remaining(tvb, offset) - 3);
-                offset += tvb_reported_length_remaining(tvb, offset) - 3;
+                length = tvb_reported_length_remaining(tvb, offset) - 3;
+                offset += length;
+        } else {
+            /* Length is unknown. */
+            length = 0;
         }
     }
 
-    /* BT spec Vol 6, Part B, Section 1.2: CRC is big endian and bits in byte are flipped */
-    packet_crc = reverse_bits_per_byte(tvb_get_ntoh24(tvb, offset));
-    sub_item = proto_tree_add_uint(btle_tree, hf_crc, tvb, offset, 3, packet_crc);
-    offset += 3;
-    if (crc_status == CRC_CAN_BE_CALCULATED) {
-        guint32 crc = btle_crc(tvb, length, crc_init);
-        crc_status = (packet_crc == crc) ? CRC_CORRECT : CRC_INCORRECT;
-    }
-    switch(crc_status) {
-    case CRC_INDETERMINATE:
-        expert_add_info(pinfo, sub_item, &ei_crc_cannot_be_determined);
-        break;
-    case CRC_INCORRECT:
-        expert_add_info(pinfo, sub_item, &ei_crc_incorrect);
-        break;
-    case CRC_CORRECT:
-    default:
-        break;
-    }
+    offset += dissect_crc(tvb,
+                          btle_tree,
+                          offset,
+                          pinfo,
+                          length,
+                          connection_info,
+                          btle_context,
+                          access_address);
 
     return offset;
 }
