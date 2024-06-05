@@ -408,7 +408,7 @@ static int mtp3_str_addr_len(const address* addr _U_)
     return 50;
 }
 
-static const char* mtp3_addr_col_filter_str(const address* addr _U_, gboolean is_src)
+static const char* mtp3_addr_col_filter_str(const address* addr _U_, bool is_src)
 {
     if (is_src)
         return "mtp3.opc";
@@ -1083,7 +1083,7 @@ proto_register_mtp3(void)
   };
 
   static stat_tap_table_ui mtp3_stat_table = {
-    REGISTER_STAT_GROUP_TELEPHONY_MTP3,
+    REGISTER_TELEPHONY_GROUP_MTP3,
     "MTP3 Statistics",
     "mtp3",
     "mtp3,msus",

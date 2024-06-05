@@ -4365,7 +4365,7 @@ dissect_nsap(tvbuff_t *parameter_tvb, gint offset, gint len, proto_tree *paramet
   afi = tvb_get_guint8(parameter_tvb, offset);
 
   switch (afi) {
-    case NSAP_IDI_IANA_ICP_BIN:  /* IANA ICP Binary fortmat*/
+    case NSAP_IDI_IANA_ICP_BIN:  /* IANA ICP Binary format*/
       proto_tree_add_item(parameter_tree, hf_isup_idp, parameter_tvb, offset, 3, ENC_NA);
 
       proto_tree_add_uint(parameter_tree, hf_afi, parameter_tvb, offset, 1, afi);
@@ -12283,7 +12283,7 @@ proto_register_isup(void)
   /* Register the stats_tree */
   stats_tree_cfg *st_config = stats_tree_register("isup", "isup_msg", "_ISUP Messages",
                                  0, msg_stats_tree_packet, msg_stats_tree_init, NULL);
-  stats_tree_set_group(st_config, REGISTER_STAT_GROUP_TELEPHONY);
+  stats_tree_set_group(st_config, REGISTER_TELEPHONY_GROUP_UNSORTED);
 }
 
 

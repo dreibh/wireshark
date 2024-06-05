@@ -16595,7 +16595,7 @@ void proto_register_ansi_map(void) {
         {&hf_ansi_map_cdmachanneldata_lc_mask_b6,
          { "Long Code Mask (byte 6) MSB", "ansi_map.cdmachanneldata.lc_mask_b6",
            FT_UINT8, BASE_HEX, NULL, 0x03,
-           "Long Code Mask MSB (byte 6)", HFILL }},
+           NULL, HFILL }},
         {&hf_ansi_map_cdmachanneldata_lc_mask_b5,
          { "Long Code Mask (byte 5)", "ansi_map.cdmachanneldata.lc_mask_b5",
            FT_UINT8, BASE_HEX, NULL, 0xff,
@@ -19399,7 +19399,7 @@ void proto_register_ansi_map(void) {
 
     /* TAP STAT INFO */
     static stat_tap_table_ui stat_table = {
-        REGISTER_STAT_GROUP_TELEPHONY_ANSI,
+        REGISTER_TELEPHONY_GROUP_ANSI,
         "Map Operation Statistics",
         "ansi_map",
         "ansi_map",

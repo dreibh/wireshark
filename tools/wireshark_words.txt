@@ -82,6 +82,7 @@ anonsvn
 anonymization
 antsel
 aperiodic
+appcheader
 appdata
 append
 apphdr
@@ -108,11 +109,14 @@ asn2wrs
 assembler
 assignee
 assignor
+assistive
 assoc
+asterix
 async
 asynchronous
 asynchronously
 asyncmap
+atapi
 atheros
 atime
 atomically
@@ -207,6 +211,7 @@ bugzilla
 buildbot
 builtin
 bulleted
+bundler
 butype
 byte
 byteorder
@@ -516,6 +521,7 @@ deutschland
 devcap
 deviceid
 devmode
+devno
 dfdpck
 dfilter
 dfilters
@@ -1036,6 +1042,7 @@ libsmi
 licmgr
 lidaddr
 linearity
+lineno
 linkaddr
 linkcss
 linker
@@ -1368,6 +1375,7 @@ osmux
 ospf6
 outhdr
 overridable
+p2pstar
 pacch
 packetcable
 packetization
@@ -1441,6 +1449,7 @@ pname
 polestar
 polycom
 polygon
+polynom
 popup
 portcounters
 portid
@@ -1483,6 +1492,7 @@ procid
 profidrive
 profienergy
 profinet
+programmatic
 promisc
 promiscsniff
 promiscuously
@@ -1703,6 +1713,7 @@ revertive
 revocations
 rf4ce
 rfcomm
+rffpcnex
 rfinfo
 rfmon
 rgoose
@@ -1737,6 +1748,7 @@ rxlen
 rxlev
 rxmcsmap
 rxreq
+s3interval
 s7comm
 sabme
 sacch
@@ -1746,6 +1758,7 @@ sanitize
 sanitizers
 sapgui
 satisfiable
+satnet
 saturates
 savvius
 scalability
@@ -1822,6 +1835,7 @@ signon
 simplestatusbit
 simulcast
 singulation
+sinteger
 sistemas
 sizeof
 skippable
@@ -1844,6 +1858,7 @@ solera
 someip
 someipsd
 sonet
+spacebar
 spacings
 spare
 spare1
@@ -2071,6 +2086,7 @@ txchannel
 txmcsmap
 type1
 type2
+type2mimo
 type3
 typedef
 typeof
@@ -2088,6 +2104,7 @@ uievent
 uint16
 uint32
 uint8
+uinteger
 ulmap
 ulsch
 umask
@@ -2251,6 +2268,7 @@ usability
 usbmon
 usbms
 usbpcap
+usecs
 usenet
 userauth
 userdata
@@ -2262,6 +2280,7 @@ utilization
 utils
 utran
 uuencoded
+uuids
 v1250
 v1310
 v1410

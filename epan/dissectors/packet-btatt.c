@@ -4390,6 +4390,11 @@ save_handle(packet_info *pinfo, bluetooth_uuid_t uuid, guint32 handle,
 
         frame_number = pinfo->num;
         direction = pinfo->p2p_dir;
+        if (uuid.bt_uuid == 0x2ADB || uuid.bt_uuid == 0x2ADD) {
+            // Mesh Provisioning Data In and Mesh Proxy Data In
+            // are in the opposite direction
+            direction = !direction;
+        }
 
         key[0].length = 1;
         key[0].key    = &bluetooth_data->interface_id;
@@ -4878,8 +4883,8 @@ dissect_attribute_value(proto_tree *tree, proto_item *patron_item, packet_info *
     if (offset == tvb_captured_length(tvb))
         return old_offset + offset;
 
-    /* hier wird subddisector aufgerufen */
-    /* dort wird auch von einem neuen PAket ausgegangen, was es natürlich nicht ist, darum fehelern und kein subddisector aufgerufen*/
+    /* hier wird subdissector aufgerufen */
+    /* dort wird auch von einem neuen PAket ausgegangen, was es natürlich nicht ist, darum fehelern und kein subdissector aufgerufen*/
     if (dissector_try_string(bluetooth_uuid_table, print_numeric_bluetooth_uuid(pinfo->pool, &uuid), tvb, pinfo, tree, att_data))
         return old_offset + length;
     else if (!uuid.bt_uuid) {
