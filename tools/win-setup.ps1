@@ -75,6 +75,7 @@ $X64Archives = @{
     "bcg729/bcg729-1.0.4-win64ws.zip" = "9a095fda4c39860d96f0c568830faa6651cd17635f68e27aa6de46c689aa0ee2";
     "brotli/brotli-1.0.9-1-win64ws.zip" = "3f8d24aec8668201994327ff8d8542fe507d1d468a500a1aec50d0415f695aab";
     "c-ares/c-ares-1.27.0-1-x64-windows-ws.zip" = "c9f1fb4836d55ae3aca0be077d2363678454820f9efad5c09371351a8770b5fc";
+   "falcosecurity-libs/falcosecurity-libs-0.17.1-1-x64-ws.zip" = "371278147543e4b92dc404040b01aeacf221347f434f7b67143acd474555eecf";
     "gnutls/gnutls-3.8.4-2-x64-mingw-dynamic-ws.zip" = "e875c6c34f633c487ce390e25a4d26a3e27d3dca3f9fdfa1d8fd66026d1e257c";
     "krb5/krb5-1.20.1-1-x64-windows-ws.zip" = "a1e5c582afce6e2f72f0f5bd66df2c0f3cc984532a1da5314fc89d7b7f29cdbf";
     "libgcrypt/libgcrypt-1.10.2-2-x64-mingw-dynamic-ws.zip" = "477cfce91d791b34df75a5ad83626f1ac2ee147eff7965e52266a4fc3da0f920";
@@ -105,6 +106,7 @@ $Arm64Archives = @{
     "bcg729/bcg729-1.1.1-1-win64armws.zip" = "f4d76b9acf0d0e12e87a020e9805d136a0e8775e061eeec23910a10828153625";
     "brotli/brotli-1.0.9-1-win64armws.zip" = "5ba1b62ebc514d55c3eae85a00ff107e587b6e7cb1275e2d33fcddcd49f8e2af";
     "c-ares/c-ares-1.27.0-1-arm64-windows-ws.zip" = "d96bd88aeed45350b2d14f023bd6d9e5dc63aa3bb0b47da85e4e125d6f74bfcf";
+    "falcosecurity-libs/falcosecurity-libs-0.17.1-2-arm64-ws.zip" = "c9a2e0ae1636b53fd843c87bb136eebe24595d658eb7a82ca9aff2d25b185902";
     "gnutls/gnutls-3.8.4-2-arm64-mingw-dynamic-ws.zip" = "17f28b4a47857db86d9c3f9b7ba12528c8e6368524314fb0fe5ea9303f1a58f9";
     "krb5/krb5-1.20.1-1-arm64-windows-ws.zip" = "6afe3185ea7621224544683a89d7c724d32bef6f1b552738dbc713ceb2151437";
     "libgcrypt/libgcrypt-1.10.2-2-arm64-mingw-dynamic-ws.zip" = "cd42fa2739a204e129d655e1b0dda83ceb27399812b8b2eccddae4a9ecd8d0ce";
@@ -126,7 +128,7 @@ $Arm64Archives = @{
     "speexdsp/speexdsp-1.2.1-1-win64armws.zip" = "1759a9193065f27e50dd79dbb1786d24031ac43ccc48c40dca46d8a48552e3bb";
     "vcpkg-export/vcpkg-export-20240524-1-arm64-windows-ws.zip" = "5d1e186b77ec3bc7072253be90b6aa36d7e317bccc382209c1570b60e488000b";
     "WinSparkle/WinSparkle-0.8.0-4-gb320893.zip" = "3ae42326bcd34594bc21b1e7948863a839ee76e87d9f4cf6b59b9d9f9a083881";
-    "zlib-ng/zlib-ng-2.1.5-1-win64armws.zip" = "de3a42d0096a17085b27630402a710b036cc8e3c85029ad37536d929697271e5";
+    "zlib-ng/zlib-ng-2.1.5-1-arm64-windows-ws.zip" = "de3a42d0096a17085b27630402a710b036cc8e3c85029ad37536d929697271e5";
     "zstd/zstd-1.5.5-1-win64armws.zip" = "0e448875380cc5d5f5539d994062201bfa564e4a27466bc3fdfec84d9008e51d";
 }
 
