@@ -131,6 +131,7 @@ typedef struct {
 #ifdef HAVE_KERBEROS
 	enc_key_t *last_decryption_key;
 	enc_key_t *last_added_key;
+	enc_key_t *current_ticket_key;
 	tvbuff_t *last_ticket_enc_part_tvb;
 #endif
 	gint save_encryption_key_parent_hf_index;
@@ -191,6 +192,11 @@ static int dissect_kerberos_KrbFastReq(bool implicit_tag _U_, tvbuff_t *tvb _U_,
 static int dissect_kerberos_KrbFastResponse(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 static int dissect_kerberos_FastOptions(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 #endif
+static int dissect_kerberos_KRB5_SRP_PA_ANNOUNCE(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+static int dissect_kerberos_KRB5_SRP_PA_INIT(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+static int dissect_kerberos_KRB5_SRP_PA_SERVER_CHALLENGE(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+static int dissect_kerberos_KRB5_SRP_PA_CLIENT_RESPONSE(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+static int dissect_kerberos_KRB5_SRP_PA_SERVER_VERIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 /* Desegment Kerberos over TCP messages */
 static bool krb_desegment = true;
@@ -462,6 +468,14 @@ static int hf_kerberos_restriction_type;          /* Int32 */
 static int hf_kerberos_restriction;               /* OCTET_STRING */
 static int hf_kerberos_PA_KERB_KEY_LIST_REQ_item;  /* ENCTYPE */
 static int hf_kerberos_kerbKeyListRep_key;        /* PA_KERB_KEY_LIST_REP_item */
+static int hf_kerberos_group;                     /* KRB5_SRP_GROUP */
+static int hf_kerberos_salt;                      /* OCTET_STRING */
+static int hf_kerberos_iterations;                /* UInt32 */
+static int hf_kerberos_groups;                    /* SET_OF_KRB5_SRP_PA */
+static int hf_kerberos_groups_item;               /* KRB5_SRP_PA */
+static int hf_kerberos_as_req_01;                 /* Checksum */
+static int hf_kerberos_group_01;                  /* UInt32 */
+static int hf_kerberos_a;                         /* OCTET_STRING */
 static int hf_kerberos_newpasswd;                 /* OCTET_STRING */
 static int hf_kerberos_targname;                  /* PrincipalName */
 static int hf_kerberos_targrealm;                 /* Realm */
@@ -480,9 +494,9 @@ static int hf_kerberos_encryptedKrbFastResponse_cipher;  /* T_encryptedKrbFastRe
 static int hf_kerberos_enc_fast_rep;              /* EncryptedKrbFastResponse */
 static int hf_kerberos_encryptedChallenge_cipher;  /* T_encryptedChallenge_cipher */
 static int hf_kerberos_cipher;                    /* OCTET_STRING */
-static int hf_kerberos_groups;                    /* SEQUENCE_SIZE_1_MAX_OF_SPAKEGroup */
-static int hf_kerberos_groups_item;               /* SPAKEGroup */
-static int hf_kerberos_group;                     /* SPAKEGroup */
+static int hf_kerberos_groups_01;                 /* SEQUENCE_SIZE_1_MAX_OF_SPAKEGroup */
+static int hf_kerberos_groups_item_01;            /* SPAKEGroup */
+static int hf_kerberos_group_02;                  /* SPAKEGroup */
 static int hf_kerberos_pubkey;                    /* OCTET_STRING */
 static int hf_kerberos_factors;                   /* SEQUENCE_SIZE_1_MAX_OF_SPAKESecondFactor */
 static int hf_kerberos_factors_item;              /* SPAKESecondFactor */
@@ -648,6 +662,10 @@ static int ett_kerberos_PA_PAC_OPTIONS;
 static int ett_kerberos_KERB_AD_RESTRICTION_ENTRY_U;
 static int ett_kerberos_PA_KERB_KEY_LIST_REQ;
 static int ett_kerberos_PA_KERB_KEY_LIST_REP;
+static int ett_kerberos_KRB5_SRP_PA;
+static int ett_kerberos_KRB5_SRP_PA_ANNOUNCE;
+static int ett_kerberos_SET_OF_KRB5_SRP_PA;
+static int ett_kerberos_KRB5_SRP_PA_INIT_U;
 static int ett_kerberos_ChangePasswdData;
 static int ett_kerberos_PA_AUTHENTICATION_SET_ELEM;
 static int ett_kerberos_KrbFastArmor;
@@ -705,7 +723,8 @@ typedef enum _KERBEROS_AUTHDATA_TYPE_enum {
   KERBEROS_AD_AP_OPTIONS = 143,
   KERBEROS_AD_TARGET_PRINCIPAL = 144,
   KERBEROS_AD_SIGNTICKET_OLDER = -17,
-  KERBEROS_AD_SIGNTICKET = 512
+  KERBEROS_AD_SIGNTICKET = 512,
+  KERBEROS_AD_PFS = 513
 } KERBEROS_AUTHDATA_TYPE_enum;
 
 /* enumerated values for ADDR_TYPE */
@@ -788,6 +807,7 @@ typedef enum _KERBEROS_PADATA_TYPE_enum {
   KERBEROS_PA_SUPPORTED_ETYPES = 165,
   KERBEROS_PA_EXTENDED_ERROR = 166,
   KERBEROS_PA_PAC_OPTIONS = 167,
+  KERBEROS_PA_SRP = 250,
   KERBEROS_PA_PROV_SRV_LOCATION =  -1
 } KERBEROS_PADATA_TYPE_enum;
 
@@ -1308,6 +1328,22 @@ save_EncAPRepPart_subkey(tvbuff_t *tvb, int offset, int length,
 		return;
 	}
 
+	private_data->last_added_key->is_ap_rep_key = true;
+
+	if (private_data->last_decryption_key != NULL &&
+	    private_data->last_decryption_key->is_ticket_key)
+	{
+		enc_key_t *ak = private_data->last_added_key;
+		enc_key_t *tk = private_data->last_decryption_key;
+
+		/*
+		 * The enc_key_t structures and their strings
+		 * in pac_names are all allocated on wmem_epan_scope(),
+		 * so we don't need to copy the content.
+		 */
+		ak->pac_names = tk->pac_names;
+	}
+
 	kerberos_key_map_insert(kerberos_app_session_keys, private_data->last_added_key);
 }
 
@@ -1326,7 +1362,20 @@ save_EncTicketPart_key(tvbuff_t *tvb, int offset, int length,
 		       int parent_hf_index,
 		       int hf_index)
 {
+	kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+
 	save_encryption_key(tvb, offset, length, actx, tree, parent_hf_index, hf_index);
+
+	if (actx->pinfo->fd->visited) {
+		return;
+	}
+
+	if (private_data->last_added_key == NULL) {
+		return;
+	}
+
+	private_data->current_ticket_key = private_data->last_added_key;
+	private_data->current_ticket_key->is_ticket_key = true;
 }
 
 static void
@@ -2295,7 +2344,6 @@ encode_krb5_enc_tkt_part(const krb5_enc_tkt_part *rep, krb5_data **code);
 static int
 keytype_for_cksumtype(krb5_cksumtype checksum)
 {
-#define _ARRAY_SIZE(X) (sizeof(X) / sizeof((X)[0]))
 	static const int keytypes[] = {
 		18,
 		17,
@@ -2303,7 +2351,7 @@ keytype_for_cksumtype(krb5_cksumtype checksum)
 	};
 	guint i;
 
-	for (i = 0; i < _ARRAY_SIZE(keytypes); i++) {
+	for (i = 0; i < array_length(keytypes); i++) {
 		krb5_cksumtype checksumtype = 0;
 		krb5_error_code ret;
 
@@ -3774,6 +3822,64 @@ static const true_false_string tfs_gss_flags_dce_style = {
 	"Not using DCE-STYLE"
 };
 
+static int dissect_kerberos_KRB5_SRP_PA_APPLICATIONS(bool implicit_tag, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index)
+{
+	kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+	proto_item *pi1 = proto_item_get_parent(actx->created_item);
+	proto_item *pi2 = proto_item_get_parent(pi1);
+	gint8 ber_class;
+	bool pc;
+	gint32 tag;
+
+	/*
+	 * dissect_ber_octet_string_wcb() always passes
+	 * implicit_tag=FALSE, offset=0 and hf_index=-1
+	 */
+	ws_assert(implicit_tag == FALSE);
+	ws_assert(offset == 0);
+	ws_assert(hf_index <= 0);
+
+	get_ber_identifier(tvb, offset, &ber_class, &pc, &tag);
+	if (ber_class != BER_CLASS_APP) {
+		if (kerberos_private_is_kdc_req(private_data)) {
+			goto unknown;
+		}
+		if (private_data->errorcode != KRB5_ET_KRB5KDC_ERR_PREAUTH_REQUIRED) {
+			goto unknown;
+		}
+
+		proto_item_append_text(pi1, " KRB5_SRP_PA_ANNOUNCE");
+		proto_item_append_text(pi2, ": KRB5_SRP_PA_ANNOUNCE");
+		return dissect_kerberos_KRB5_SRP_PA_ANNOUNCE(implicit_tag, tvb, offset, actx, tree, hf_index);
+	}
+
+	switch (tag) {
+	case 0:
+		proto_item_append_text(pi1, " KRB5_SRP_PA_INIT");
+		proto_item_append_text(pi2, ": KRB5_SRP_PA_INIT");
+		return dissect_kerberos_KRB5_SRP_PA_INIT(implicit_tag, tvb, offset, actx, tree, hf_index);
+	case 1:
+		proto_item_append_text(pi1, " KRB5_SRP_PA_SERVER_CHALLENGE");
+		proto_item_append_text(pi2, ": KRB5_SRP_PA_SERVER_CHALLENGE");
+		return dissect_kerberos_KRB5_SRP_PA_SERVER_CHALLENGE(implicit_tag, tvb, offset, actx, tree, hf_index);
+	case 2:
+		proto_item_append_text(pi1, " KRB5_SRP_PA_CLIENT_RESPONSE");
+		proto_item_append_text(pi2, ": KRB5_SRP_PA_CLIENT_RESPONSE");
+		return dissect_kerberos_KRB5_SRP_PA_CLIENT_RESPONSE(implicit_tag, tvb, offset, actx, tree, hf_index);
+	case 3:
+		proto_item_append_text(pi1, " KRB5_SRP_PA_SERVER_VERIFIER");
+		proto_item_append_text(pi2, ": KRB5_SRP_PA_SERVER_VERIFIER");
+		return dissect_kerberos_KRB5_SRP_PA_SERVER_VERIFIER(implicit_tag, tvb, offset, actx, tree, hf_index);
+	default:
+		break;
+	}
+
+unknown:
+	proto_item_append_text(pi1, " KRB5_SRP_PA_UNKNOWN: ber_class:%u ber_pc=%u ber_tag:%"PRIu32"", ber_class, pc, tag);
+	proto_item_append_text(pi2, ": KRB5_SRP_PA_UNKNOWN");
+	return tvb_reported_length_remaining(tvb, offset);
+}
+
 #ifdef HAVE_KERBEROS
 static guint8 *
 decrypt_krb5_data_asn1(proto_tree *tree, asn1_ctx_t *actx,
@@ -3812,6 +3918,7 @@ dissect_krb5_decrypt_ticket_data (bool imp_tag _U_, tvbuff_t *tvb, int offset, a
 	if(plaintext){
 		kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
 		tvbuff_t *last_ticket_enc_part_tvb = private_data->last_ticket_enc_part_tvb;
+		enc_key_t *current_ticket_key = private_data->current_ticket_key;
 		tvbuff_t *child_tvb;
 		child_tvb = tvb_new_child_real_data(tvb, plaintext, length, length);
 
@@ -3819,7 +3926,9 @@ dissect_krb5_decrypt_ticket_data (bool imp_tag _U_, tvbuff_t *tvb, int offset, a
 		add_new_data_source(actx->pinfo, child_tvb, "Krb5 Ticket");
 
 		private_data->last_ticket_enc_part_tvb = child_tvb;
+		private_data->current_ticket_key = NULL;
 		offset=dissect_kerberos_Applications(FALSE, child_tvb, 0, actx , tree, /* hf_index*/ -1);
+		private_data->current_ticket_key = current_ticket_key;
 		private_data->last_ticket_enc_part_tvb = last_ticket_enc_part_tvb;
 	}
 	return offset;
@@ -4499,8 +4608,9 @@ dissect_krb5_PAC_LOGON_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset, 
 	proto_item *item;
 	proto_tree *tree;
 	guint8 drep[4] = { 0x10, 0x00, 0x00, 0x00}; /* fake DREP struct */
-	static dcerpc_info di;      /* fake dcerpc_info struct */
-	static dcerpc_call_value call_data;
+	/* fake dcerpc_info struct */
+	dcerpc_call_value call_data = { .flags = 0, };
+	dcerpc_info di = { .ptype = UINT8_MAX, .call_data = &call_data, };
 
 	item = proto_tree_add_item(parent_tree, hf_krb_pac_logon_info, tvb, offset, -1, ENC_NA);
 	tree = proto_item_add_subtree(item, ett_krb_pac_logon_info);
@@ -4511,14 +4621,11 @@ dissect_krb5_PAC_LOGON_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset, 
 	offset = dissect_krb5_PAC_NDRHEADERBLOB(tree, tvb, offset, &drep[0], actx);
 
 	/* the PAC_LOGON_INFO blob */
-	/* fake whatever state the dcerpc runtime support needs */
-	di.conformant_run=0;
-	/* we need di->call_data->flags.NDR64 == 0 */
-	di.call_data=&call_data;
 	init_ndr_pointer_list(&di);
 	offset = dissect_ndr_pointer(tvb, offset, actx->pinfo, tree, &di, drep,
 									netlogon_dissect_PAC_LOGON_INFO, NDR_POINTER_UNIQUE,
 									"PAC_LOGON_INFO:", -1);
+	free_ndr_pointer_list(&di);
 
 	return offset;
 }
@@ -4590,8 +4697,9 @@ dissect_krb5_PAC_S4U_DELEGATION_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int
 	proto_item *item;
 	proto_tree *tree;
 	guint8 drep[4] = { 0x10, 0x00, 0x00, 0x00}; /* fake DREP struct */
-	static dcerpc_info di;      /* fake dcerpc_info struct */
-	static dcerpc_call_value call_data;
+	/* fake dcerpc_info struct */
+	dcerpc_call_value call_data = { .flags = 0, };
+	dcerpc_info di = { .ptype = UINT8_MAX, .call_data = &call_data, };
 
 	item = proto_tree_add_item(parent_tree, hf_krb_pac_s4u_delegation_info, tvb, offset, -1, ENC_NA);
 	tree = proto_item_add_subtree(item, ett_krb_pac_s4u_delegation_info);
@@ -4601,16 +4709,12 @@ dissect_krb5_PAC_S4U_DELEGATION_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int
 	 */
 	offset = dissect_krb5_PAC_NDRHEADERBLOB(tree, tvb, offset, &drep[0], actx);
 
-
 	/* the S4U_DELEGATION_INFO blob. See [MS-PAC] */
-	/* fake whatever state the dcerpc runtime support needs */
-	di.conformant_run=0;
-	/* we need di->call_data->flags.NDR64 == 0 */
-	di.call_data=&call_data;
 	init_ndr_pointer_list(&di);
 	offset = dissect_ndr_pointer(tvb, offset, actx->pinfo, tree, &di, drep,
 									netlogon_dissect_PAC_S4U_DELEGATION_INFO, NDR_POINTER_UNIQUE,
 									"PAC_S4U_DELEGATION_INFO:", -1);
+	free_ndr_pointer_list(&di);
 
 	return offset;
 }
@@ -4634,12 +4738,16 @@ static int * const hf_krb_pac_upn_flags_fields[] = {
 static int
 dissect_krb5_PAC_UPN_DNS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_)
 {
+#ifdef HAVE_KERBEROS
+	kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+#endif /* HAVE_KERBEROS */
 	proto_item *item;
 	proto_tree *tree;
 	guint16 dns_offset, dns_len;
 	guint16 upn_offset, upn_len;
 	guint16 samaccountname_offset = 0, samaccountname_len = 0;
 	guint16 objectsid_offset = 0, objectsid_len = 0;
+	char *sid_str = NULL;
 	guint32 flags;
 
 	item = proto_tree_add_item(parent_tree, hf_krb_pac_upn_dns_info, tvb, offset, -1, ENC_NA);
@@ -4700,8 +4808,37 @@ dissect_krb5_PAC_UPN_DNS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset
 	if (objectsid_offset != 0 && objectsid_len != 0) {
 		tvbuff_t *sid_tvb;
 		sid_tvb=tvb_new_subset_length(tvb, objectsid_offset, objectsid_len);
-		dissect_nt_sid(sid_tvb, 0, tree, "objectSid", NULL, -1);
+		dissect_nt_sid(sid_tvb, 0, tree, "objectSid", &sid_str, -1);
 	}
+
+#ifdef HAVE_KERBEROS
+	if (private_data->current_ticket_key != NULL) {
+		enc_key_t *ek = private_data->current_ticket_key;
+
+		if (samaccountname_offset != 0 && samaccountname_len != 0) {
+			ek->pac_names.account_name = tvb_get_string_enc(wmem_epan_scope(),
+									tvb,
+									samaccountname_offset,
+									samaccountname_len,
+									ENC_UTF_16|ENC_LITTLE_ENDIAN);
+		} else {
+			ek->pac_names.account_name = tvb_get_string_enc(wmem_epan_scope(),
+									tvb,
+									upn_offset,
+									upn_len,
+									ENC_UTF_16|ENC_LITTLE_ENDIAN);
+		}
+		ek->pac_names.account_domain = tvb_get_string_enc(wmem_epan_scope(),
+								  tvb,
+								  dns_offset,
+								  dns_len,
+								  ENC_UTF_16|ENC_LITTLE_ENDIAN);
+		if (sid_str != NULL) {
+			ek->pac_names.account_sid = wmem_strdup(wmem_epan_scope(),
+								sid_str);
+		}
+	}
+#endif /* HAVE_KERBEROS */
 
 	return dns_offset;
 }
@@ -4723,11 +4860,22 @@ dissect_krb5_PAC_CLIENT_CLAIMS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int 
 static int
 dissect_krb5_PAC_DEVICE_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_)
 {
+#ifdef HAVE_KERBEROS
+	kerberos_private_data_t *private_data = kerberos_get_private_data(actx);
+	const char *device_sid = NULL;
+#endif /* HAVE_KERBEROS */
 	proto_item *item;
 	proto_tree *tree;
 	guint8 drep[4] = { 0x10, 0x00, 0x00, 0x00}; /* fake DREP struct */
-	static dcerpc_info di;      /* fake dcerpc_info struct */
-	static dcerpc_call_value call_data;
+	/* fake dcerpc_info struct */
+	dcerpc_call_value call_data = { .flags = 0, };
+	dcerpc_info di = { .ptype = UINT8_MAX, .call_data = &call_data, };
+
+#ifdef HAVE_KERBEROS
+	if (private_data->current_ticket_key != NULL) {
+		call_data.private_data = &device_sid;
+	}
+#endif /* HAVE_KERBEROS */
 
 	item = proto_tree_add_item(parent_tree, hf_krb_pac_device_info, tvb, offset, -1, ENC_NA);
 	tree = proto_item_add_subtree(item, ett_krb_pac_device_info);
@@ -4738,14 +4886,23 @@ dissect_krb5_PAC_DEVICE_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset,
 	offset = dissect_krb5_PAC_NDRHEADERBLOB(tree, tvb, offset, &drep[0], actx);
 
 	/* the PAC_DEVICE_INFO blob */
-	/* fake whatever state the dcerpc runtime support needs */
-	di.conformant_run=0;
-	/* we need di->call_data->flags.NDR64 == 0 */
-	di.call_data=&call_data;
 	init_ndr_pointer_list(&di);
 	offset = dissect_ndr_pointer(tvb, offset, actx->pinfo, tree, &di, drep,
 				     netlogon_dissect_PAC_DEVICE_INFO, NDR_POINTER_UNIQUE,
 				     "PAC_DEVICE_INFO:", -1);
+	free_ndr_pointer_list(&di);
+
+#ifdef HAVE_KERBEROS
+	if (private_data->current_ticket_key != NULL) {
+		enc_key_t *ek = private_data->current_ticket_key;
+
+		/*
+		 * netlogon_dissect_PAC_DEVICE_INFO allocated on
+		 * wmem_epan_scope() for us
+		 */
+		ek->pac_names.device_sid = device_sid;
+	}
+#endif /* HAVE_KERBEROS */
 
 	return offset;
 }
@@ -5508,6 +5665,7 @@ static const value_string kerberos_AUTHDATA_TYPE_vals[] = {
   { KERBEROS_AD_TARGET_PRINCIPAL, "aD-TARGET-PRINCIPAL" },
   { KERBEROS_AD_SIGNTICKET_OLDER, "aD-SIGNTICKET-OLDER" },
   { KERBEROS_AD_SIGNTICKET, "aD-SIGNTICKET" },
+  { KERBEROS_AD_PFS, "aD-PFS" },
   { 0, NULL }
 };
 
@@ -5955,6 +6113,7 @@ static const value_string kerberos_PADATA_TYPE_vals[] = {
   { KERBEROS_PA_SUPPORTED_ETYPES, "pA-SUPPORTED-ETYPES" },
   { KERBEROS_PA_EXTENDED_ERROR, "pA-EXTENDED-ERROR" },
   { KERBEROS_PA_PAC_OPTIONS, "pA-PAC-OPTIONS" },
+  { KERBEROS_PA_SRP, "pA-SRP" },
   { KERBEROS_PA_PROV_SRV_LOCATION, "pA-PROV-SRV-LOCATION" },
   { 0, NULL }
 };
@@ -6070,6 +6229,9 @@ dissect_kerberos_T_padata_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, int of
     break;
   case KERBEROS_PA_SPAKE:
     offset=dissect_ber_octet_string_wcb(FALSE, actx, sub_tree, tvb, offset,hf_index, dissect_kerberos_PA_SPAKE);
+    break;
+  case KERBEROS_PA_SRP:
+    offset=dissect_ber_octet_string_wcb(FALSE, actx, sub_tree, tvb, offset,hf_index, dissect_kerberos_KRB5_SRP_PA_APPLICATIONS);
     break;
   default:
     offset=dissect_ber_octet_string_wcb(FALSE, actx, sub_tree, tvb, offset,hf_index, NULL);
@@ -7151,6 +7313,7 @@ static const value_string kerberos_ERROR_CODE_vals[] = {
   {  74, "eRR-REVOCATION-STATUS-UNAVAILABLE" },
   {  75, "eRR-CLIENT-NAME-MISMATCH" },
   {  76, "eRR-KDC-NAME-MISMATCH" },
+  {  91, "eRR-KDC-MORE-PREAUTH-DATA-REQUIRED" },
   { 0, NULL }
 };
 
@@ -7628,6 +7791,121 @@ dissect_kerberos_PA_KERB_KEY_LIST_REP(bool implicit_tag _U_, tvbuff_t *tvb _U_, 
 }
 
 
+static const value_string kerberos_KRB5_SRP_GROUP_vals[] = {
+  {   0, "kRB5-SRP-GROUP-INVALID" },
+  {   1, "kRB5-SRP-GROUP-RFC5054-4096-PBKDF2-SHA512" },
+  { 0, NULL }
+};
+
+
+static int
+dissect_kerberos_KRB5_SRP_GROUP(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
+                                                NULL);
+
+  return offset;
+}
+
+
+static const ber_sequence_t KRB5_SRP_PA_sequence[] = {
+  { &hf_kerberos_group      , BER_CLASS_CON, 0, 0, dissect_kerberos_KRB5_SRP_GROUP },
+  { &hf_kerberos_salt       , BER_CLASS_CON, 1, 0, dissect_kerberos_OCTET_STRING },
+  { &hf_kerberos_iterations , BER_CLASS_CON, 2, 0, dissect_kerberos_UInt32 },
+  { NULL, 0, 0, 0, NULL }
+};
+
+static int
+dissect_kerberos_KRB5_SRP_PA(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
+                                   KRB5_SRP_PA_sequence, hf_index, ett_kerberos_KRB5_SRP_PA);
+
+  return offset;
+}
+
+
+static const ber_sequence_t SET_OF_KRB5_SRP_PA_set_of[1] = {
+  { &hf_kerberos_groups_item, BER_CLASS_UNI, BER_UNI_TAG_SEQUENCE, BER_FLAGS_NOOWNTAG, dissect_kerberos_KRB5_SRP_PA },
+};
+
+static int
+dissect_kerberos_SET_OF_KRB5_SRP_PA(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_set_of(implicit_tag, actx, tree, tvb, offset,
+                                 SET_OF_KRB5_SRP_PA_set_of, hf_index, ett_kerberos_SET_OF_KRB5_SRP_PA);
+
+  return offset;
+}
+
+
+static const ber_sequence_t KRB5_SRP_PA_ANNOUNCE_sequence[] = {
+  { &hf_kerberos_groups     , BER_CLASS_CON, 0, 0, dissect_kerberos_SET_OF_KRB5_SRP_PA },
+  { &hf_kerberos_as_req_01  , BER_CLASS_CON, 1, 0, dissect_kerberos_Checksum },
+  { NULL, 0, 0, 0, NULL }
+};
+
+static int
+dissect_kerberos_KRB5_SRP_PA_ANNOUNCE(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
+                                   KRB5_SRP_PA_ANNOUNCE_sequence, hf_index, ett_kerberos_KRB5_SRP_PA_ANNOUNCE);
+
+  return offset;
+}
+
+
+static const ber_sequence_t KRB5_SRP_PA_INIT_U_sequence[] = {
+  { &hf_kerberos_group_01   , BER_CLASS_CON, 0, 0, dissect_kerberos_UInt32 },
+  { &hf_kerberos_a          , BER_CLASS_CON, 1, 0, dissect_kerberos_OCTET_STRING },
+  { NULL, 0, 0, 0, NULL }
+};
+
+static int
+dissect_kerberos_KRB5_SRP_PA_INIT_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
+                                   KRB5_SRP_PA_INIT_U_sequence, hf_index, ett_kerberos_KRB5_SRP_PA_INIT_U);
+
+  return offset;
+}
+
+
+
+static int
+dissect_kerberos_KRB5_SRP_PA_INIT(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
+                                      hf_index, BER_CLASS_APP, 0, FALSE, dissect_kerberos_KRB5_SRP_PA_INIT_U);
+
+  return offset;
+}
+
+
+
+static int
+dissect_kerberos_KRB5_SRP_PA_SERVER_CHALLENGE(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
+                                      hf_index, BER_CLASS_APP, 1, FALSE, dissect_kerberos_OCTET_STRING);
+
+  return offset;
+}
+
+
+
+static int
+dissect_kerberos_KRB5_SRP_PA_CLIENT_RESPONSE(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
+                                      hf_index, BER_CLASS_APP, 2, FALSE, dissect_kerberos_OCTET_STRING);
+
+  return offset;
+}
+
+
+
+static int
+dissect_kerberos_KRB5_SRP_PA_SERVER_VERIFIER(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
+                                      hf_index, BER_CLASS_APP, 3, FALSE, dissect_kerberos_OCTET_STRING);
+
+  return offset;
+}
+
+
 static const ber_sequence_t ChangePasswdData_sequence[] = {
   { &hf_kerberos_newpasswd  , BER_CLASS_CON, 0, 0, dissect_kerberos_OCTET_STRING },
   { &hf_kerberos_targname   , BER_CLASS_CON, 1, BER_FLAGS_OPTIONAL, dissect_kerberos_PrincipalName },
@@ -7937,7 +8215,7 @@ dissect_kerberos_SPAKESecondFactorType(bool implicit_tag _U_, tvbuff_t *tvb _U_,
 
 
 static const ber_sequence_t SEQUENCE_SIZE_1_MAX_OF_SPAKEGroup_sequence_of[1] = {
-  { &hf_kerberos_groups_item, BER_CLASS_UNI, BER_UNI_TAG_INTEGER, BER_FLAGS_NOOWNTAG, dissect_kerberos_SPAKEGroup },
+  { &hf_kerberos_groups_item_01, BER_CLASS_UNI, BER_UNI_TAG_INTEGER, BER_FLAGS_NOOWNTAG, dissect_kerberos_SPAKEGroup },
 };
 
 static int
@@ -7950,7 +8228,7 @@ dissect_kerberos_SEQUENCE_SIZE_1_MAX_OF_SPAKEGroup(bool implicit_tag _U_, tvbuff
 
 
 static const ber_sequence_t SPAKESupport_sequence[] = {
-  { &hf_kerberos_groups     , BER_CLASS_CON, 0, 0, dissect_kerberos_SEQUENCE_SIZE_1_MAX_OF_SPAKEGroup },
+  { &hf_kerberos_groups_01  , BER_CLASS_CON, 0, 0, dissect_kerberos_SEQUENCE_SIZE_1_MAX_OF_SPAKEGroup },
   { NULL, 0, 0, 0, NULL }
 };
 
@@ -7992,7 +8270,7 @@ dissect_kerberos_SEQUENCE_SIZE_1_MAX_OF_SPAKESecondFactor(bool implicit_tag _U_,
 
 
 static const ber_sequence_t SPAKEChallenge_sequence[] = {
-  { &hf_kerberos_group      , BER_CLASS_CON, 0, 0, dissect_kerberos_SPAKEGroup },
+  { &hf_kerberos_group_02   , BER_CLASS_CON, 0, 0, dissect_kerberos_SPAKEGroup },
   { &hf_kerberos_pubkey     , BER_CLASS_CON, 1, 0, dissect_kerberos_OCTET_STRING },
   { &hf_kerberos_factors    , BER_CLASS_CON, 2, 0, dissect_kerberos_SEQUENCE_SIZE_1_MAX_OF_SPAKESecondFactor },
   { NULL, 0, 0, 0, NULL }
@@ -9585,6 +9863,38 @@ void proto_register_kerberos(void) {
       { "key", "kerberos.kerbKeyListRep.key_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "PA_KERB_KEY_LIST_REP_item", HFILL }},
+    { &hf_kerberos_group,
+      { "group", "kerberos.group",
+        FT_INT32, BASE_DEC, VALS(kerberos_KRB5_SRP_GROUP_vals), 0,
+        "KRB5_SRP_GROUP", HFILL }},
+    { &hf_kerberos_salt,
+      { "salt", "kerberos.salt",
+        FT_BYTES, BASE_NONE, NULL, 0,
+        "OCTET_STRING", HFILL }},
+    { &hf_kerberos_iterations,
+      { "iterations", "kerberos.iterations",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        "UInt32", HFILL }},
+    { &hf_kerberos_groups,
+      { "groups", "kerberos.groups",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        "SET_OF_KRB5_SRP_PA", HFILL }},
+    { &hf_kerberos_groups_item,
+      { "KRB5-SRP-PA", "kerberos.KRB5_SRP_PA_element",
+        FT_NONE, BASE_NONE, NULL, 0,
+        NULL, HFILL }},
+    { &hf_kerberos_as_req_01,
+      { "as-req", "kerberos.as_req_element",
+        FT_NONE, BASE_NONE, NULL, 0,
+        "Checksum", HFILL }},
+    { &hf_kerberos_group_01,
+      { "group", "kerberos.group",
+        FT_UINT32, BASE_DEC, NULL, 0,
+        "UInt32", HFILL }},
+    { &hf_kerberos_a,
+      { "a", "kerberos.a",
+        FT_BYTES, BASE_NONE, NULL, 0,
+        "OCTET_STRING", HFILL }},
     { &hf_kerberos_newpasswd,
       { "newpasswd", "kerberos.newpasswd",
         FT_BYTES, BASE_NONE, NULL, 0,
@@ -9657,15 +9967,15 @@ void proto_register_kerberos(void) {
       { "cipher", "kerberos.cipher",
         FT_BYTES, BASE_NONE, NULL, 0,
         "OCTET_STRING", HFILL }},
-    { &hf_kerberos_groups,
+    { &hf_kerberos_groups_01,
       { "groups", "kerberos.groups",
         FT_UINT32, BASE_DEC, NULL, 0,
         "SEQUENCE_SIZE_1_MAX_OF_SPAKEGroup", HFILL }},
-    { &hf_kerberos_groups_item,
+    { &hf_kerberos_groups_item_01,
       { "SPAKEGroup", "kerberos.SPAKEGroup",
         FT_INT32, BASE_DEC, VALS(kerberos_SPAKEGroup_vals), 0,
         NULL, HFILL }},
-    { &hf_kerberos_group,
+    { &hf_kerberos_group_02,
       { "group", "kerberos.group",
         FT_INT32, BASE_DEC, VALS(kerberos_SPAKEGroup_vals), 0,
         "SPAKEGroup", HFILL }},
@@ -10033,6 +10343,10 @@ void proto_register_kerberos(void) {
     &ett_kerberos_KERB_AD_RESTRICTION_ENTRY_U,
     &ett_kerberos_PA_KERB_KEY_LIST_REQ,
     &ett_kerberos_PA_KERB_KEY_LIST_REP,
+    &ett_kerberos_KRB5_SRP_PA,
+    &ett_kerberos_KRB5_SRP_PA_ANNOUNCE,
+    &ett_kerberos_SET_OF_KRB5_SRP_PA,
+    &ett_kerberos_KRB5_SRP_PA_INIT_U,
     &ett_kerberos_ChangePasswdData,
     &ett_kerberos_PA_AUTHENTICATION_SET_ELEM,
     &ett_kerberos_KrbFastArmor,

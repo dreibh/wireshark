@@ -2155,6 +2155,76 @@ netlogon_dissect_PAC_S4U_DELEGATION_INFO(tvbuff_t *tvb, int offset,
     return offset;
 }
 
+struct device_sid_callback_args {
+    const char **device_sid_ptr;
+    guint32 user_rid;
+    const char *domain_sid;
+    const char *device_sid;
+};
+
+static void device_sid_callback_fnct(packet_info *pinfo _U_,
+                                     proto_tree *tree _U_,
+                                     proto_item *item _U_,
+                                     dcerpc_info *di,
+                                     tvbuff_t *tvb _U_,
+                                     int start_offset _U_,
+                                     int end_offset _U_,
+                                     void *callback_args)
+{
+    struct device_sid_callback_args *args =
+        (struct device_sid_callback_args *)callback_args;
+    dcerpc_call_value *dcv = (dcerpc_call_value *)di->call_data;
+    const char *p = NULL;
+    ptrdiff_t len;
+
+    if (di->ptype != UINT8_MAX) {
+        return;
+    }
+
+    if (dcv == NULL) {
+        return;
+    }
+
+    if (args == NULL) {
+        return;
+    }
+
+    args->domain_sid = (const char *)dcv->private_data;
+    if (args->domain_sid == NULL) {
+        /* this should not happen... */
+        return;
+    }
+
+    len = strnlen(args->domain_sid, 64);
+
+    /* remove any debug info after the sid */
+    p = memchr(args->domain_sid, ' ', len);
+    if (p != NULL) {
+        ptrdiff_t mlen = p - args->domain_sid;
+        if (mlen < len) {
+            len = mlen;
+        }
+    }
+    p = memchr(args->domain_sid, '(', len);
+    if (p != NULL) {
+        ptrdiff_t mlen = p - args->domain_sid;
+        if (mlen < len) {
+            len = mlen;
+        }
+    }
+
+    /*
+     * we know we're called dissect_krb5_PAC_DEVICE_INFO
+     * so we should allocate the device_sid on wmem_epan_scope()
+     */
+    args->device_sid = wmem_strdup_printf(wmem_epan_scope(),
+                                          "%*.*s-%" PRIu32 "",
+                                          (int)len, (int)len,
+                                          args->domain_sid,
+                                          args->user_rid);
+    *args->device_sid_ptr = args->device_sid;
+}
+
 /*
  * IDL typedef struct {
  * IDL   long UserId;
@@ -2173,13 +2243,28 @@ netlogon_dissect_PAC_DEVICE_INFO(tvbuff_t *tvb, int offset,
                                  packet_info *pinfo, proto_tree *tree,
                                  dcerpc_info *di, guint8 *drep)
 {
+    dcerpc_call_value *dcv = (dcerpc_call_value *)di->call_data;
+    struct device_sid_callback_args *args = NULL;
+    guint32 *user_rid_ptr = NULL;
+
+    if (dcv && di->ptype == UINT8_MAX && dcv->private_data) {
+        args = wmem_new0(pinfo->pool, struct device_sid_callback_args);
+        /*
+         * dissect_krb5_PAC_DEVICE_INFO passes
+         * a pointer to const char *device_sid
+         */
+        args->device_sid_ptr = dcv->private_data;
+        user_rid_ptr = &args->user_rid;
+    }
+
     offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep,
-                                hf_netlogon_user_rid, NULL);
+                                hf_netlogon_user_rid, user_rid_ptr);
 
     offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep,
                                 hf_netlogon_group_rid, NULL);
 
-    offset = dissect_ndr_nt_PSID(tvb, offset, pinfo, tree, di, drep);
+    offset = dissect_ndr_nt_PSID_cb(tvb, offset, pinfo, tree, di, drep,
+                                    device_sid_callback_fnct, args);
 
     offset = netlogon_dissect_GROUP_MEMBERSHIPS(tvb, offset,
                               pinfo, tree, di, drep,
@@ -8070,7 +8155,7 @@ static int dissect_secchan_nl_auth_message(tvbuff_t *tvb, int offset,
 
 /* Subdissectors */
 
-static dcerpc_sub_dissector dcerpc_netlogon_dissectors[] = {
+static const dcerpc_sub_dissector dcerpc_netlogon_dissectors[] = {
     { NETLOGON_NETRLOGONUASLOGON, "NetrLogonUasLogon",
       netlogon_dissect_netrlogonuaslogon_rqst,
       netlogon_dissect_netrlogonuaslogon_reply },
@@ -8878,11 +8963,11 @@ proto_register_dcerpc_netlogon(void)
 
         { &hf_netlogon_supportedenctypes,
           { "Supported Encryption Types", "netlogon.encryption.types", FT_UINT32, BASE_HEX,
-            NULL, 0x0, "Encryption types", HFILL }},
+            NULL, 0x0, NULL, HFILL }},
 
         { &hf_netlogon_workstation_flags,
           { "Workstation Flags", "netlogon.workstation.flags", FT_UINT32, BASE_HEX,
-            NULL, 0x0, "Flags", HFILL }},
+            NULL, 0x0, NULL, HFILL }},
 
         { &hf_netlogon_reserved,
           { "Reserved", "netlogon.reserved", FT_UINT32, BASE_HEX,
@@ -9342,36 +9427,36 @@ proto_register_dcerpc_netlogon(void)
             NULL, 0x0, "Negotiation Flags", HFILL }},
 
         { &hf_netlogon_neg_flags_80000000,
-          { "Supports Kerberos Auth", "ntlmssp.neg_flags.supports_kerberos_auth", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_80000000, "supports kerberos", HFILL }},
+          { "Supports Kerberos Auth", "ntlmssp.neg_flags.supports_kerberos_auth", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_80000000, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_40000000,
           { "Authenticated RPC supported", "ntlmssp.neg_flags.na4000000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_40000000, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_20000000,
-          { "Authenticated RPC via lsass supported", "ntlmssp.neg_flags.na2000000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_20000000, "rpc via lsass", HFILL }},
+          { "Authenticated RPC via lsass supported", "ntlmssp.neg_flags.na2000000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_20000000, NULL, HFILL }},
 
 #if 0
         { &hf_netlogon_neg_flags_10000000,
-          { "Not used 10000000", "ntlmssp.neg_flags.na1000000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_10000000, "Not used", HFILL }},
+          { "Not used 10000000", "ntlmssp.neg_flags.na1000000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_10000000, NULL, HFILL }},
 #endif
 
 #if 0
         { &hf_netlogon_neg_flags_8000000,
-          { "Not used 8000000", "ntlmssp.neg_flags.na800000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_8000000, "Not used", HFILL }},
+          { "Not used 8000000", "ntlmssp.neg_flags.na800000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_8000000, NULL, HFILL }},
 #endif
 
 #if 0
         { &hf_netlogon_neg_flags_4000000,
-          { "Not used 4000000", "ntlmssp.neg_flags.na400000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_4000000, "Not used", HFILL }},
+          { "Not used 4000000", "ntlmssp.neg_flags.na400000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_4000000, NULL, HFILL }},
 #endif
 
 #if 0
         { &hf_netlogon_neg_flags_2000000,
-          { "Not used 2000000", "ntlmssp.neg_flags.na200000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_2000000, "Not used", HFILL }},
+          { "Not used 2000000", "ntlmssp.neg_flags.na200000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_2000000, NULL, HFILL }},
 #endif
 
         { &hf_netlogon_neg_flags_1000000,
-          { "AES supported", "ntlmssp.neg_flags.na100000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_AES, "AES", HFILL }},
+          { "AES supported", "ntlmssp.neg_flags.na100000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_AES, NULL, HFILL }},
 
 #if 0
         { &hf_netlogon_neg_flags_800000,
@@ -9393,16 +9478,16 @@ proto_register_dcerpc_netlogon(void)
           { "Cross forest trust", "ntlmssp.neg_flags.na80000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_80000, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_40000,
-          { "GetDomainInfo supported", "ntlmssp.neg_flags.na40000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_40000, "GetDomainInfo", HFILL }},
+          { "GetDomainInfo supported", "ntlmssp.neg_flags.na40000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_40000, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_20000,
           { "ServerPasswordSet2 supported", "ntlmssp.neg_flags.na20000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_20000, "PasswordSet2", HFILL }},
 
         { &hf_netlogon_neg_flags_10000,
-          { "DNS trusts supported", "ntlmssp.neg_flags.na10000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_10000, "DNS Trusts", HFILL }},
+          { "DNS trusts supported", "ntlmssp.neg_flags.na10000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_10000, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_8000,
-          { "Transitive trusts", "ntlmssp.neg_flags.na8000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_8000, "Transitive trust", HFILL }},
+          { "Transitive trusts", "ntlmssp.neg_flags.na8000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_8000, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_4000,
           { "Strong key", "ntlmssp.neg_flags.na4000", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_STRONGKEY, NULL, HFILL }},
@@ -9435,16 +9520,16 @@ proto_register_dcerpc_netlogon(void)
           { "Restarting full DC sync", "ntlmssp.neg_flags.na20", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_20, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_10,
-          { "BDC handling Changelogs", "ntlmssp.neg_flags.na10", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_10, "BDC Changelog", HFILL }},
+          { "BDC handling Changelogs", "ntlmssp.neg_flags.na10", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_10, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_8,
-          { "Promotion count(deprecated)", "ntlmssp.neg_flags.na8", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_8, "Promotion count", HFILL }},
+          { "Promotion count(deprecated)", "ntlmssp.neg_flags.na8", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_8, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_4,
-          { "RC4 encryption", "ntlmssp.neg_flags.na4", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_4, "RC4", HFILL }},
+          { "RC4 encryption", "ntlmssp.neg_flags.na4", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_4, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_2,
-          { "NT3.5 BDC continuous update", "ntlmssp.neg_flags.na2", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_2, "NT3.5", HFILL }},
+          { "NT3.5 BDC continuous update", "ntlmssp.neg_flags.na2", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_2, NULL, HFILL }},
 
         { &hf_netlogon_neg_flags_1,
           { "Account lockout", "ntlmssp.neg_flags.na1", FT_BOOLEAN, 32, TFS(&tfs_set_notset), NETLOGON_FLAG_1, NULL, HFILL }},
@@ -9848,7 +9933,7 @@ proto_register_dcerpc_netlogon(void)
 
         { &hf_netlogon_secchan_verf,
           { "Secure Channel Verifier", "netlogon.secchan.verifier", FT_NONE, BASE_NONE,
-            NULL, 0x0, "Verifier", HFILL }},
+            NULL, 0x0, NULL, HFILL }},
 
         { &hf_netlogon_secchan_verf_signalg,
           { "Sign algorithm", "netlogon.secchan.signalg", FT_UINT16, BASE_HEX,

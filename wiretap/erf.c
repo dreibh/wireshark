@@ -116,7 +116,7 @@ static const struct {
   { 99,       WTAP_ENCAP_ERF }, /*this type added so WTAP_ENCAP_ERF will work and then be treated at ERF->ERF*/
 };
 
-#define NUM_ERF_ENCAPS (sizeof erf_to_wtap_map / sizeof erf_to_wtap_map[0])
+#define NUM_ERF_ENCAPS array_length(erf_to_wtap_map)
 
 #define ERF_META_TAG_HEADERLEN 4
 #define ERF_META_TAG_TOTAL_ALIGNED_LENGTH(taglength)  ((((uint32_t)taglength + 0x3U) & ~0x3U) + ERF_META_TAG_HEADERLEN)
@@ -679,7 +679,7 @@ static bool erf_read_header(wtap *wth, FILE_T fh,
   struct wtap_erf_eth_hdr eth_hdr;
   uint32_t skiplen = 0;
   int     i       = 0;
-  int     max     = sizeof(pseudo_header->erf.ehdr_list)/sizeof(struct erf_ehdr);
+  int     max     = array_length(pseudo_header->erf.ehdr_list);
   erf_t *priv = (erf_t*)wth->priv;
   int    interface_id;
 

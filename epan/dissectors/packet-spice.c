@@ -1243,7 +1243,7 @@ dissect_ImageJPEG(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, const gui
     return JPEG_Size + 4;
 }
 
-#ifdef HAVE_ZLIB
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
 static void
 dissect_ImageZLIB_GLZ_stream(tvbuff_t *tvb, proto_tree *ZLIB_GLZ_tree, packet_info *pinfo,
                              guint32 offset, guint32 ZLIB_GLZSize, guint32 ZLIB_uncompSize)
@@ -1253,7 +1253,7 @@ dissect_ImageZLIB_GLZ_stream(tvbuff_t *tvb, proto_tree *ZLIB_GLZ_tree, packet_in
     tvbuff_t   *uncompressed_tvb;
 
     Uncomp_tree = proto_tree_add_subtree_format(ZLIB_GLZ_tree, tvb, offset, ZLIB_GLZSize, ett_Uncomp_tree, &ti, "ZLIB stream (%u bytes)", ZLIB_GLZSize);
-    uncompressed_tvb = tvb_child_uncompress(tvb, tvb, offset, ZLIB_GLZSize);
+    uncompressed_tvb = tvb_child_uncompress_zlib(tvb, tvb, offset, ZLIB_GLZSize);
     if (uncompressed_tvb != NULL) {
         add_new_data_source(pinfo, uncompressed_tvb, "Uncompressed GLZ stream");
         dissect_ImageGLZ_RGB(uncompressed_tvb, Uncomp_tree, 0, ZLIB_uncompSize);

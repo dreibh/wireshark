@@ -469,8 +469,8 @@ void LograyMainWindow::queuedFilterAction(QString action_filter, FilterAction::A
 #ifdef HAVE_LIBPCAP
 void LograyMainWindow::captureCapturePrepared(capture_session *session) {
     setTitlebarForCaptureInProgress();
-
     setWindowIcon(mainApp->captureIcon());
+    pushLiveCaptureInProgress();
 
     /* Disable menu items that make no sense if you're currently running
        a capture. */
@@ -489,6 +489,7 @@ void LograyMainWindow::captureCaptureUpdateStarted(capture_session *session) {
        switching to the next multiple file. */
     setTitlebarForCaptureInProgress();
     setWindowIcon(mainApp->captureIcon());
+    pushLiveCaptureInProgress();
 
     bool handle_toolbars = (session->session_will_restart ? false : true);
     setForCaptureInProgress(true, handle_toolbars, session->capture_opts->ifaces);
@@ -871,24 +872,6 @@ void LograyMainWindow::startCapture() {
     info_data_.ui.ui = this;
     if (capture_start(&global_capture_opts, NULL, &cap_session_, &info_data_,
                       main_window_update)) {
-        capture_options *capture_opts = cap_session_.capture_opts;
-        GString *interface_names;
-
-        /* Add "interface name<live capture in progress>" on main status bar */
-        interface_names = get_iface_list_string(capture_opts, 0);
-        if (strlen(interface_names->str) > 0) {
-            g_string_append(interface_names, ":");
-        }
-        g_string_append(interface_names, " ");
-
-        mainApp->popStatus(WiresharkApplication::FileStatus);
-        QString msg = QString("%1<live capture in progress>").arg(interface_names->str);
-        QString msgtip = QString("to file: ");
-        if (capture_opts->save_file)
-            msgtip += capture_opts->save_file;
-        mainApp->pushStatus(WiresharkApplication::FileStatus, msg, msgtip);
-        g_string_free(interface_names, true);
-
         /* The capture succeeded, which means the capture filter syntax is
          valid; add this capture filter to the recent capture filter list. */
         QByteArray filter_ba;
@@ -916,6 +899,28 @@ void LograyMainWindow::startCapture() {
     } else {
         CaptureFile::globalCapFile()->window = NULL;
     }
+#endif // HAVE_LIBPCAP
+}
+
+void LograyMainWindow::pushLiveCaptureInProgress() {
+#ifdef HAVE_LIBPCAP
+    capture_options *capture_opts = cap_session_.capture_opts;
+    GString *interface_names;
+
+    /* Add "interface name<live capture in progress>" on main status bar */
+    interface_names = get_iface_list_string(capture_opts, 0);
+    if (strlen(interface_names->str) > 0) {
+        g_string_append(interface_names, ":");
+    }
+    g_string_append(interface_names, " ");
+
+    mainApp->popStatus(WiresharkApplication::FileStatus);
+    QString msg = QString("%1<live capture in progress>").arg(interface_names->str);
+    QString msgtip = QString("to file: ");
+    if (capture_opts->save_file)
+        msgtip += capture_opts->save_file;
+    mainApp->pushStatus(WiresharkApplication::FileStatus, msg, msgtip);
+    g_string_free(interface_names, true);
 #endif // HAVE_LIBPCAP
 }
 
@@ -3011,27 +3016,33 @@ void LograyMainWindow::connectStatisticsMenuActions()
         capture_file_properties_dialog->show();
     });
 
-    connect(main_ui_->actionStatisticsResolvedAddresses, &QAction::triggered, this, &LograyMainWindow::showResolvedAddressesDialog);
+    main_ui_->actionStatisticsResolvedAddresses->setVisible(false); // Hide for now.
+    // connect(main_ui_->actionStatisticsResolvedAddresses, &QAction::triggered, this, &LograyMainWindow::showResolvedAddressesDialog);
 
-    connect(main_ui_->actionStatisticsProtocolHierarchy, &QAction::triggered, this, [=]() {
-        ProtocolHierarchyDialog *phd = new ProtocolHierarchyDialog(*this, capture_file_);
-        connect(phd, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
-                this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
-        phd->show();
-    });
+    main_ui_->actionStatisticsProtocolHierarchy->setVisible(false); // Hide for now.
+    // connect(main_ui_->actionStatisticsProtocolHierarchy, &QAction::triggered, this, [=]() {
+    //     ProtocolHierarchyDialog *phd = new ProtocolHierarchyDialog(*this, capture_file_);
+    //     connect(phd, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
+    //             this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)));
+    //     phd->show();
+    // });
 
-    connect(main_ui_->actionStatisticsConversations, &QAction::triggered, this, &LograyMainWindow::showConversationsDialog);
-    connect(main_ui_->actionStatisticsEndpoints, &QAction::triggered, this, &LograyMainWindow::showEndpointsDialog);
+    main_ui_->actionStatisticsConversations->setVisible(false); // Hide for now.
+    // connect(main_ui_->actionStatisticsConversations, &QAction::triggered, this, &LograyMainWindow::showConversationsDialog);
+    main_ui_->actionStatisticsEndpoints->setVisible(false); // Hide for now.
+    // connect(main_ui_->actionStatisticsEndpoints, &QAction::triggered, this, &LograyMainWindow::showEndpointsDialog);
 
-    connect(main_ui_->actionStatisticsPacketLengths, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("plen"); });
+    main_ui_->actionStatisticsPacketLengths->setVisible(false); // Hide for now.
+    // connect(main_ui_->actionStatisticsPacketLengths, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("plen"); });
 
     connect(main_ui_->actionStatisticsIOGraph, &QAction::triggered, this, [=]() { statCommandIOGraph(NULL, NULL); });
 
-    connect(main_ui_->actionStatisticsFlowGraph, &QAction::triggered, this, [=]() {
-        QMessageBox::warning(this, "Oops", "SequenceDialog depends on RTPStreamDialog");
-        //    SequenceDialog *sequence_dialog = new SequenceDialog(*this, capture_file_);
-        //    sequence_dialog->show();
-    });
+    main_ui_->actionStatisticsFlowGraph->setVisible(false); // Hide for now.
+    // connect(main_ui_->actionStatisticsFlowGraph, &QAction::triggered, this, [=]() {
+    //     QMessageBox::warning(this, "Oops", "SequenceDialog depends on RTPStreamDialog");
+    //     //    SequenceDialog *sequence_dialog = new SequenceDialog(*this, capture_file_);
+    //     //    sequence_dialog->show();
+    // });
 }
 
 void LograyMainWindow::openStatisticsTreeDialog(const char *abbr)
@@ -3045,20 +3056,57 @@ void LograyMainWindow::openStatisticsTreeDialog(const char *abbr)
 // -z io,stat
 void LograyMainWindow::statCommandIOGraph(const char *, void *)
 {
+    showIOGraphDialog(IOG_ITEM_UNIT_PACKETS, QString());
+}
+
+void LograyMainWindow::showIOGraphDialog(io_graph_item_unit_t value_units, QString yfield)
+{
     const DisplayFilterEdit *df_edit = qobject_cast<DisplayFilterEdit *>(df_combo_box_->lineEdit());
+    IOGraphDialog *iog_dialog = nullptr;
     QString displayFilter;
     if (df_edit)
         displayFilter = df_edit->text();
 
-    IOGraphDialog *iog_dialog = new IOGraphDialog(*this, capture_file_, displayFilter);
-    connect(iog_dialog, SIGNAL(goToPacket(int)), packet_list_, SLOT(goToPacket(int)));
-    connect(this, SIGNAL(reloadFields()), iog_dialog, SLOT(reloadFields()));
+    if (!yfield.isEmpty()) {
+        QList<IOGraphDialog *> iographdialogs = findChildren<IOGraphDialog *>();
+        // GeometryStateDialogs aren't parented on Linux and Windows
+        // (see geometry_state_dialog.h), so we search for an
+        // I/O Dialog in all the top level widgets.
+        if (iographdialogs.isEmpty()) {
+            foreach(QWidget *topLevelWidget, mainApp->topLevelWidgets()) {
+                if (qobject_cast<IOGraphDialog*>(topLevelWidget)) {
+                    iographdialogs << qobject_cast<IOGraphDialog*>(topLevelWidget);
+                }
+            }
+        }
+        bool iog_found = false;
+        foreach(iog_dialog, iographdialogs) {
+            if (!iog_dialog->fileClosed()) {
+                iog_found = true;
+                iog_dialog->addGraph(true, displayFilter, value_units, yfield);
+                break;
+            }
+        }
+        if (!iog_found) {
+            iog_dialog = nullptr;
+        }
+    }
+
+    if (iog_dialog == nullptr) {
+        iog_dialog = new IOGraphDialog(*this, capture_file_, displayFilter, value_units, yfield);
+        connect(iog_dialog, SIGNAL(goToPacket(int)), packet_list_, SLOT(goToPacket(int)));
+        connect(this, &LograyMainWindow::reloadFields, iog_dialog, &IOGraphDialog::reloadFields);
+    }
     iog_dialog->show();
 }
 
 // Tools Menu
 
-// XXX No log tools yet
+void LograyMainWindow::connectToolsMenuActions()
+{
+    // We don't have any built in tools yet, so hide it until we add actions via Lua scripts.
+    main_ui_->menuTools->hide();
+}
 
 // Help Menu
 void LograyMainWindow::connectHelpMenuActions()

@@ -366,19 +366,16 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
 
     menu_groups_ = QList<register_stat_group_t>()
             << REGISTER_PACKET_ANALYZE_GROUP_UNSORTED
-            << REGISTER_ANALYZE_GROUP_CONVERSATION_FILTER
             << REGISTER_PACKET_STAT_GROUP_UNSORTED
             << REGISTER_STAT_GROUP_GENERIC
-            << REGISTER_STAT_GROUP_CONVERSATION_LIST
-            << REGISTER_STAT_GROUP_ENDPOINT_LIST
             << REGISTER_STAT_GROUP_RESPONSE_TIME
             << REGISTER_STAT_GROUP_RSERPOOL
-            << REGISTER_STAT_GROUP_TELEPHONY
-            << REGISTER_STAT_GROUP_TELEPHONY_ANSI
-            << REGISTER_STAT_GROUP_TELEPHONY_GSM
-            << REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU
-            << REGISTER_STAT_GROUP_TELEPHONY_MTP3
-            << REGISTER_STAT_GROUP_TELEPHONY_SCTP
+            << REGISTER_TELEPHONY_GROUP_UNSORTED
+            << REGISTER_TELEPHONY_GROUP_ANSI
+            << REGISTER_TELEPHONY_GROUP_GSM
+            << REGISTER_TELEPHONY_GROUP_3GPP_UU
+            << REGISTER_TELEPHONY_GROUP_MTP3
+            << REGISTER_TELEPHONY_GROUP_SCTP
             << REGISTER_TOOLS_GROUP_UNSORTED;
 
     setWindowIcon(mainApp->normalIcon());
@@ -402,23 +399,25 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     //To prevent users use features before initialization complete
     //Otherwise unexpected problems may occur
     setFeaturesEnabled(false);
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(setFeaturesEnabled()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(applyGlobalCommandLineOptions()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(zoomText()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(initViewColorizeMenu()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(addStatsPluginsToMenu()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(addDynamicMenus()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(addPluginIFStructures()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(initConversationMenus()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(initExportObjectsMenus()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(initFollowStreamMenus()));
+    connect(mainApp, &MainApplication::appInitialized, this, [this]() { setFeaturesEnabled(); });
+    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::applyGlobalCommandLineOptions);
+    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::zoomText);
+    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::initViewColorizeMenu);
+    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::addStatsPluginsToMenu);
+    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::addDynamicMenus);
+    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::addPluginIFStructures);
+    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::initConversationMenus);
+    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::initExportObjectsMenus);
+    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::initFollowStreamMenus);
+    connect(mainApp, &MainApplication::appInitialized, this,
+            [this]() { addDisplayFilterTranslationActions(main_ui_->menuEditCopy); });
 
-    connect(mainApp, SIGNAL(profileChanging()), this, SLOT(saveWindowGeometry()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(layoutPanes()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(layoutToolbars()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(updatePreferenceActions()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(zoomText()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(updateTitlebar()));
+    connect(mainApp, &MainApplication::profileChanging, this, &WiresharkMainWindow::saveWindowGeometry);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::layoutPanes);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::layoutToolbars);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::updatePreferenceActions);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::zoomText);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::updateTitlebar);
 
     connect(mainApp, SIGNAL(updateRecentCaptureStatus(const QString &, qint64, bool)), this, SLOT(updateRecentCaptures()));
     connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(updateRecentCaptures()));
@@ -436,6 +435,8 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     connect(funnel_statistics_, &FunnelStatistics::setDisplayFilter, this, &WiresharkMainWindow::setDisplayFilter);
     connect(funnel_statistics_, SIGNAL(openCaptureFile(QString, QString)),
             this, SLOT(openCaptureFile(QString, QString)));
+
+    connect(df_combo_box_, &QComboBox::editTextChanged, this, &WiresharkMainWindow::updateDisplayFilterTranslationActions);
 
     file_set_dialog_ = new FileSetDialog(this);
     connect(file_set_dialog_, SIGNAL(fileSetOpenCaptureFile(QString)),
@@ -1906,7 +1907,13 @@ bool WiresharkMainWindow::testCaptureFileClose(QString before_what, FileCloseCon
              */
             discard_button->setFocus();
 #endif
-
+            /*
+             * On Windows, if multiple Wireshark processes are open, another
+             * application has focus, and "Close all [Wireshark] windows" is
+             * chosen from the taskbar, we need to activate the window to
+             * at least flash the taskbar (#16309).
+             */
+            activateWindow();
             msg_dialog.exec();
             /* According to the Qt doc:
              * when using QMessageBox with custom buttons, exec() function returns an opaque value.
@@ -2696,6 +2703,13 @@ void WiresharkMainWindow::addMenuActions(QList<QAction *> &actions, int menu_gro
         switch (menu_group) {
         case REGISTER_PACKET_ANALYZE_GROUP_UNSORTED:
         case REGISTER_PACKET_STAT_GROUP_UNSORTED:
+        case REGISTER_STAT_GROUP_GENERIC:
+            // XXX - The Lua documentation claims that ANALYZE_GROUP_UNSORTED
+            // is under the Analyze menu, and STAT_GROUP_GENERIC and
+            // PACKET_STAT_GROUP_UNSORTED are distinguished by whether they
+            // go before the separator in the group of non protocol-specific
+            // actions or after the separator with the protocol-specific
+            // actions. We currently put them all in the same place.
             main_ui_->menuStatistics->insertAction(
                             main_ui_->actionStatistics_REGISTER_STAT_GROUP_UNSORTED,
                             action);
@@ -2706,20 +2720,26 @@ void WiresharkMainWindow::addMenuActions(QList<QAction *> &actions, int menu_gro
         case REGISTER_STAT_GROUP_RSERPOOL:
             main_ui_->menuRSerPool->addAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY:
+        case REGISTER_TELEPHONY_GROUP_UNSORTED:
             main_ui_->menuTelephony->addAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_ANSI:
+        case REGISTER_TELEPHONY_GROUP_ANSI:
             main_ui_->menuANSI->addAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_GSM:
+        case REGISTER_TELEPHONY_GROUP_GSM:
             main_ui_->menuGSM->addAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU:
+        case REGISTER_TELEPHONY_GROUP_3GPP_UU:
             main_ui_->menuLTE->addAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_MTP3:
+        case REGISTER_TELEPHONY_GROUP_MTP3:
             main_ui_->menuMTP3->addAction(action);
+            break;
+        case REGISTER_TELEPHONY_GROUP_SCTP:
+            // XXX - There are two SCTP menus, under Analyze and Telephony,
+            // that have the same default actions. The default actions from
+            // Analyze are copied to the PacketList context menu.
+            main_ui_->menuTelephonySCTP->addAction(action);
             break;
         case REGISTER_TOOLS_GROUP_UNSORTED:
         {
@@ -2764,6 +2784,7 @@ void WiresharkMainWindow::removeMenuActions(QList<QAction *> &actions, int menu_
         switch (menu_group) {
         case REGISTER_PACKET_ANALYZE_GROUP_UNSORTED:
         case REGISTER_PACKET_STAT_GROUP_UNSORTED:
+        case REGISTER_STAT_GROUP_GENERIC:
             main_ui_->menuStatistics->removeAction(action);
             break;
         case REGISTER_STAT_GROUP_RESPONSE_TIME:
@@ -2772,20 +2793,23 @@ void WiresharkMainWindow::removeMenuActions(QList<QAction *> &actions, int menu_
         case REGISTER_STAT_GROUP_RSERPOOL:
             main_ui_->menuRSerPool->removeAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY:
+        case REGISTER_TELEPHONY_GROUP_UNSORTED:
             main_ui_->menuTelephony->removeAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_ANSI:
+        case REGISTER_TELEPHONY_GROUP_ANSI:
             main_ui_->menuANSI->removeAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_GSM:
+        case REGISTER_TELEPHONY_GROUP_GSM:
             main_ui_->menuGSM->removeAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU:
+        case REGISTER_TELEPHONY_GROUP_3GPP_UU:
             main_ui_->menuLTE->removeAction(action);
             break;
-        case REGISTER_STAT_GROUP_TELEPHONY_MTP3:
+        case REGISTER_TELEPHONY_GROUP_MTP3:
             main_ui_->menuMTP3->removeAction(action);
+            break;
+        case REGISTER_TELEPHONY_GROUP_SCTP:
+            main_ui_->menuTelephonySCTP->removeAction(action);
             break;
         case REGISTER_TOOLS_GROUP_UNSORTED:
         {
@@ -2817,12 +2841,12 @@ void WiresharkMainWindow::removeMenuActions(QList<QAction *> &actions, int menu_
 void WiresharkMainWindow::addDynamicMenus()
 {
     // Manual additions
-    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_GSM, main_ui_->actionTelephonyGsmMapSummary);
-    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU, main_ui_->actionTelephonyLteMacStatistics);
-    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU, main_ui_->actionTelephonyLteRlcStatistics);
-    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU, main_ui_->actionTelephonyLteRlcGraph);
-    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY_MTP3, main_ui_->actionTelephonyMtp3Summary);
-    mainApp->addDynamicMenuGroupItem(REGISTER_STAT_GROUP_TELEPHONY, main_ui_->actionTelephonySipFlows);
+    mainApp->addDynamicMenuGroupItem(REGISTER_TELEPHONY_GROUP_GSM, main_ui_->actionTelephonyGsmMapSummary);
+    mainApp->addDynamicMenuGroupItem(REGISTER_TELEPHONY_GROUP_3GPP_UU, main_ui_->actionTelephonyLteMacStatistics);
+    mainApp->addDynamicMenuGroupItem(REGISTER_TELEPHONY_GROUP_3GPP_UU, main_ui_->actionTelephonyLteRlcStatistics);
+    mainApp->addDynamicMenuGroupItem(REGISTER_TELEPHONY_GROUP_3GPP_UU, main_ui_->actionTelephonyLteRlcGraph);
+    mainApp->addDynamicMenuGroupItem(REGISTER_TELEPHONY_GROUP_MTP3, main_ui_->actionTelephonyMtp3Summary);
+    mainApp->addDynamicMenuGroupItem(REGISTER_TELEPHONY_GROUP_UNSORTED, main_ui_->actionTelephonySipFlows);
 
     // Fill in each menu
     foreach(register_stat_group_t menu_group, menu_groups_) {
@@ -2833,16 +2857,16 @@ void WiresharkMainWindow::addDynamicMenus()
     // Empty menus don't show up: https://bugreports.qt.io/browse/QTBUG-33728
     // We've added a placeholder in order to make sure some menus are visible.
     // Hide them as needed.
-    if (mainApp->dynamicMenuGroupItems(REGISTER_STAT_GROUP_TELEPHONY_ANSI).length() > 0) {
+    if (mainApp->dynamicMenuGroupItems(REGISTER_TELEPHONY_GROUP_ANSI).length() > 0) {
         main_ui_->actionTelephonyANSIPlaceholder->setVisible(false);
     }
-    if (mainApp->dynamicMenuGroupItems(REGISTER_STAT_GROUP_TELEPHONY_GSM).length() > 0) {
+    if (mainApp->dynamicMenuGroupItems(REGISTER_TELEPHONY_GROUP_GSM).length() > 0) {
         main_ui_->actionTelephonyGSMPlaceholder->setVisible(false);
     }
-    if (mainApp->dynamicMenuGroupItems(REGISTER_STAT_GROUP_TELEPHONY_3GPP_UU).length() > 0) {
+    if (mainApp->dynamicMenuGroupItems(REGISTER_TELEPHONY_GROUP_3GPP_UU).length() > 0) {
         main_ui_->actionTelephonyLTEPlaceholder->setVisible(false);
     }
-    if (mainApp->dynamicMenuGroupItems(REGISTER_STAT_GROUP_TELEPHONY_MTP3).length() > 0) {
+    if (mainApp->dynamicMenuGroupItems(REGISTER_TELEPHONY_GROUP_MTP3).length() > 0) {
         main_ui_->actionTelephonyMTP3Placeholder->setVisible(false);
     }
 }

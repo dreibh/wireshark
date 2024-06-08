@@ -4826,7 +4826,7 @@ quic_get_stream_id_ge(guint streamid, guint sub_stream_id, guint *sub_stream_id_
 }
 
 static bool
-quic_get_sub_stream_id(guint streamid, guint sub_stream_id, gboolean le, guint *sub_stream_id_out)
+quic_get_sub_stream_id(guint streamid, guint sub_stream_id, bool le, guint *sub_stream_id_out)
 {
     if (le) {
         return quic_get_stream_id_le(streamid, sub_stream_id, sub_stream_id_out);
@@ -5538,7 +5538,7 @@ proto_register_quic(void)
         { &hf_quic_fragments,
           { "Reassembled QUIC STREAM Data Fragments", "quic.fragments",
             FT_NONE, BASE_NONE, NULL, 0x0,
-            "QUIC STREAM Data Fragments", HFILL }
+            NULL, HFILL }
         },
         { &hf_quic_reassembled_in,
           { "Reassembled PDU in frame", "quic.reassembled_in",

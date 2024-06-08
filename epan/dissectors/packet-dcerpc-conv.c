@@ -134,7 +134,7 @@ conv_dissect_who_are_you2_resp (tvbuff_t *tvb, int offset,
 }
 
 
-static dcerpc_sub_dissector conv_dissectors[] = {
+static const dcerpc_sub_dissector conv_dissectors[] = {
 	{ 0, "who_are_you",
 	  conv_dissect_who_are_you_rqst, conv_dissect_who_are_you_resp },
 	{ 1, "who_are_you2",
@@ -171,7 +171,7 @@ proto_register_conv (void)
 	{ &hf_conv_who_are_you2_resp_seq,
 	    {"Sequence Number", "conv.who_are_you2_resp_seq", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 	{ &hf_conv_who_are_you2_resp_casuuid,
-	    {"Client's address space UUID", "conv.who_are_you2_resp_casuuid", FT_GUID, BASE_NONE, NULL, 0x0, "UUID", HFILL }}
+	    {"Client's address space UUID", "conv.who_are_you2_resp_casuuid", FT_GUID, BASE_NONE, NULL, 0x0, NULL, HFILL }}
 	};
 
 	static gint *ett[] = {

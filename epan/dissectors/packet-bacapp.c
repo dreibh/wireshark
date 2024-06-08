@@ -7116,7 +7116,7 @@ fGetMaxAPDUSize(guint8 idx)
     /* check the size of the Array, deliver either the entry
        or the first entry if idx is outside of the array (bug 3736 comment#7) */
 
-    if ((idx & 0x0f) >= (gint)(sizeof(MaxAPDUSize)/sizeof(guint)))
+    if ((idx & 0x0f) >= (gint)array_length(MaxAPDUSize))
         return MaxAPDUSize[0];
     else
         return MaxAPDUSize[idx & 0x0f];
@@ -11017,8 +11017,7 @@ BACnetPropertyStatesEnums[] = {
     {  59, BACnetAuditLevel },
     {  60, BACnetAuditOperation }
 };
-#define BACnetPropertyStatesEnums_Size \
-    (sizeof(BACnetPropertyStatesEnums) / sizeof(BACnetPropertyStatesEnums[0]))
+#define BACnetPropertyStatesEnums_Size array_length(BACnetPropertyStatesEnums)
 
 static guint
 fBACnetPropertyStates(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, guint offset)

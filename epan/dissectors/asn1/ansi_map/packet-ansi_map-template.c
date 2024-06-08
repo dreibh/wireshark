@@ -4427,10 +4427,10 @@ static stat_tap_table_item stat_fields[] = {{TABLE_ITEM_UINT, TAP_ALIGN_RIGHT, "
 static void ansi_map_stat_init(stat_tap_table_ui* new_stat)
 {
     const char *table_name = "ANSI MAP Operation Statistics";
-    int num_fields = sizeof(stat_fields)/sizeof(stat_tap_table_item);
+    int num_fields = array_length(stat_fields);
     stat_tap_table *table;
     int i = 0;
-    stat_tap_table_item_type items[sizeof(stat_fields)/sizeof(stat_tap_table_item)];
+    stat_tap_table_item_type items[array_length(stat_fields)];
 
     table = stat_tap_find_table(new_stat, table_name);
     if (table) {
@@ -5018,7 +5018,7 @@ void proto_register_ansi_map(void) {
         {&hf_ansi_map_cdmachanneldata_lc_mask_b6,
          { "Long Code Mask (byte 6) MSB", "ansi_map.cdmachanneldata.lc_mask_b6",
            FT_UINT8, BASE_HEX, NULL, 0x03,
-           "Long Code Mask MSB (byte 6)", HFILL }},
+           NULL, HFILL }},
         {&hf_ansi_map_cdmachanneldata_lc_mask_b5,
          { "Long Code Mask (byte 5)", "ansi_map.cdmachanneldata.lc_mask_b5",
            FT_UINT8, BASE_HEX, NULL, 0xff,
@@ -5413,7 +5413,7 @@ void proto_register_ansi_map(void) {
 
     /* TAP STAT INFO */
     static stat_tap_table_ui stat_table = {
-        REGISTER_STAT_GROUP_TELEPHONY_ANSI,
+        REGISTER_TELEPHONY_GROUP_ANSI,
         "Map Operation Statistics",
         "ansi_map",
         "ansi_map",
@@ -5422,7 +5422,7 @@ void proto_register_ansi_map(void) {
         ansi_map_stat_reset,
         NULL,
         NULL,
-        sizeof(stat_fields)/sizeof(stat_tap_table_item), stat_fields,
+        array_length(stat_fields), stat_fields,
         0, NULL,
         NULL,
         0

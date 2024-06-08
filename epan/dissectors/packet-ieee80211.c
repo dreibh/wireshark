@@ -8953,7 +8953,7 @@ wlan_endpoint_packet(void *pit, packet_info *pinfo, epan_dissect_t *edt _U_, con
 }
 
 static const char*
-wlan_col_filter_str(const address* addr _U_, gboolean is_src)
+wlan_col_filter_str(const address* addr _U_, bool is_src)
 {
   if (is_src)
     return "wlan.sa";
@@ -8962,13 +8962,13 @@ wlan_col_filter_str(const address* addr _U_, gboolean is_src)
 }
 
 static const char*
-wlan_bssid_col_filter_str(const address* addr _U_, gboolean is_src _U_)
+wlan_bssid_col_filter_str(const address* addr _U_, bool is_src _U_)
 {
   return "wlan.bssid";
 }
 
 static const char*
-wlan_ra_ta_col_filter_str(const address* addr _U_, gboolean is_src)
+wlan_ra_ta_col_filter_str(const address* addr _U_, bool is_src)
 {
   if (is_src)
     return "wlan.ta";
@@ -8977,7 +8977,7 @@ wlan_ra_ta_col_filter_str(const address* addr _U_, gboolean is_src)
 }
 
 static const char*
-wlan_aid_col_filter_str(const address* addr _U_, gboolean is_src _U_)
+wlan_aid_col_filter_str(const address* addr _U_, bool is_src _U_)
 {
   return "wlan.fc.sid.association_id";
 }
@@ -33350,7 +33350,7 @@ dissect_he_capabilities(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
                         ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
   offset += 6;
 
-  /* Get and isolate the phy channel witdth set */
+  /* Get and isolate the phy channel width set */
   phy_channel_width_set = tvb_get_guint8(tvb, offset) >> 1;
   /* Save this info so we can refer to it later. It might need to be global */
   p_add_proto_data(wmem_file_scope(), pinfo, proto_wlan, HE_CHANNEL_WIDTH_KEY,
@@ -40548,7 +40548,7 @@ dissect_ieee80211_common(tvbuff_t *tvb, packet_info *pinfo,
 
   p_add_proto_data(wmem_file_scope(), pinfo, proto_wlan, IS_S1G_KEY, GINT_TO_POINTER(isS1G));
 
-  /* Handling for one-one mapping between assocations and conversations */
+  /* Handling for one-one mapping between associations and conversations */
   if (!pinfo->fd->visited) {
     p_add_proto_data(wmem_file_scope(), pinfo, proto_wlan, ASSOC_COUNTER_KEY,
                      GUINT_TO_POINTER(association_counter));
@@ -44219,12 +44219,12 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_ff_fst_action_code,
       {"FST Action Code", "wlan.fst.action_code",
        FT_UINT8, BASE_HEX, VALS(ff_fst_action_flags), 0,
-       "Action Code", HFILL }},
+       NULL, HFILL }},
 
     {&hf_ieee80211_ff_robust_av_streaming_action_code,
      {"Robust AV Streaming Action Code", "wlan.robust_av_streaming.action_code",
       FT_UINT8, BASE_HEX, VALS(ff_robust_av_streaming_action_flags), 0,
-      "Action Code", HFILL }},
+      NULL, HFILL }},
 
     {&hf_ieee80211_ff_llt,
       {"Link Loss Timeout", "wlan.fst.llt",
@@ -44813,7 +44813,7 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_ff_block_ack_params_buffer_size,
      {"Number of Buffers (1 Buffer = 2304 Bytes)", "wlan.fixed.baparams.buffersize",
       FT_UINT16, BASE_DEC, NULL, 0xFFC0,
-      "Number of Buffers", HFILL }},
+      NULL, HFILL }},
 
     {&hf_ieee80211_ff_block_ack_timeout,
      {"Block Ack Timeout", "wlan.fixed.batimeout",

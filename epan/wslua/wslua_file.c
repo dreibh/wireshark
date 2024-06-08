@@ -13,6 +13,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_WSLUA
 
 #include "wslua_file_common.h"
 
@@ -198,11 +199,6 @@ static int File_read_line(lua_State *L, FILE_T ft) {
  * Lua string in the end.
  */
 #define WSLUA_BUFFERSIZE 1024
-
-/* Lua 5.1 used lua_objlen() instead of lua_rawlen() */
-#if LUA_VERSION_NUM == 501
-#define lua_rawlen lua_objlen
-#endif
 
 /**
  * Reads some data and returns the number of bytes read.

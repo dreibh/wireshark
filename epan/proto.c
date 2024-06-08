@@ -18,6 +18,7 @@
 #include <inttypes.h>
 #include <errno.h>
 
+#include <wsutil/array.h>
 #include <wsutil/bits_ctz.h>
 #include <wsutil/bits_count_ones.h>
 #include <wsutil/sign_ext.h>
@@ -245,16 +246,16 @@ static void mark_truncated(char *label_str, gsize name_pos, const size_t size);
 static void label_mark_truncated(char *label_str, gsize name_pos);
 #define LABEL_MARK_TRUNCATED_START(label_str) label_mark_truncated(label_str, 0)
 
-static void fill_label_boolean(field_info *fi, gchar *label_str);
-static void fill_label_bitfield_char(field_info *fi, gchar *label_str);
-static void fill_label_bitfield(field_info *fi, gchar *label_str, gboolean is_signed);
-static void fill_label_bitfield64(field_info *fi, gchar *label_str, gboolean is_signed);
-static void fill_label_char(field_info *fi, gchar *label_str);
-static void fill_label_number(field_info *fi, gchar *label_str, gboolean is_signed);
-static void fill_label_number64(field_info *fi, gchar *label_str, gboolean is_signed);
+static void fill_label_boolean(const field_info *fi, gchar *label_str);
+static void fill_label_bitfield_char(const field_info *fi, gchar *label_str);
+static void fill_label_bitfield(const field_info *fi, gchar *label_str, gboolean is_signed);
+static void fill_label_bitfield64(const field_info *fi, gchar *label_str, gboolean is_signed);
+static void fill_label_char(const field_info *fi, gchar *label_str);
+static void fill_label_number(const field_info *fi, gchar *label_str, gboolean is_signed);
+static void fill_label_number64(const field_info *fi, gchar *label_str, gboolean is_signed);
 
-static size_t fill_display_label_float(field_info *fi, gchar *label_str);
-static void fill_label_float(field_info *fi, gchar *label_str);
+static size_t fill_display_label_float(const field_info *fi, gchar *label_str);
+static void fill_label_float(const field_info *fi, gchar *label_str);
 
 static const char *hfinfo_number_value_format_display(const header_field_info *hfinfo, int display, char buf[NUMBER_LABEL_LENGTH], guint32 value);
 static const char *hfinfo_number_value_format_display64(const header_field_info *hfinfo, int display, char buf[NUMBER_LABEL_LENGTH], guint64 value);
@@ -6904,7 +6905,7 @@ hfinfo_remove_from_gpa_name_map(const header_field_info *hfinfo)
 }
 
 int
-proto_item_fill_display_label(field_info *finfo, gchar *display_label_str, const int label_str_size)
+proto_item_fill_display_label(const field_info *finfo, gchar *display_label_str, const int label_str_size)
 {
 	const header_field_info *hfinfo = finfo->hfinfo;
 	int label_len = 0;
@@ -9844,7 +9845,7 @@ label_fill_descr(char *label_str, gsize pos, const header_field_info *hfinfo, co
 }
 
 void
-proto_item_fill_label(field_info *fi, gchar *label_str)
+proto_item_fill_label(const field_info *fi, gchar *label_str)
 {
 	const header_field_info  *hfinfo;
 	const char	   *str;
@@ -9980,17 +9981,6 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 			wmem_free(NULL, tmp);
 			break;
 
-		case FT_AX25:
-			addr.type = AT_AX25;
-			addr.len  = AX25_ADDR_LEN;
-			addr.data = fvalue_get_bytes_data(fi->value);
-
-			addr_str = (char*)address_to_str(NULL, &addr);
-			snprintf(label_str, ITEM_LABEL_LENGTH,
-				   "%s: %s", hfinfo->name, addr_str);
-			wmem_free(NULL, addr_str);
-			break;
-
 		case FT_VINES:
 			addr.type = AT_VINES;
 			addr.len  = VINES_ADDR_LEN;
@@ -10106,6 +10096,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 		case FT_UINT_STRING:
 		case FT_STRINGZPAD:
 		case FT_STRINGZTRUNC:
+		case FT_AX25:
 			str = fvalue_get_string(fi->value);
 			label_fill(label_str, 0, hfinfo, str);
 			break;
@@ -10129,7 +10120,7 @@ proto_item_fill_label(field_info *fi, gchar *label_str)
 }
 
 static void
-fill_label_boolean(field_info *fi, gchar *label_str)
+fill_label_boolean(const field_info *fi, gchar *label_str)
 {
 	char	*p;
 	int      bitfield_byte_length = 0, bitwidth;
@@ -10237,7 +10228,7 @@ hf_try_val64_to_str_const(guint64 value, const header_field_info *hfinfo, const 
 
 /* Fills data for bitfield chars with val_strings */
 static void
-fill_label_bitfield_char(field_info *fi, gchar *label_str)
+fill_label_bitfield_char(const field_info *fi, gchar *label_str)
 {
 	char       *p;
 	int         bitfield_byte_length, bitwidth;
@@ -10291,7 +10282,7 @@ fill_label_bitfield_char(field_info *fi, gchar *label_str)
 
 /* Fills data for bitfield ints with val_strings */
 static void
-fill_label_bitfield(field_info *fi, gchar *label_str, gboolean is_signed)
+fill_label_bitfield(const field_info *fi, gchar *label_str, gboolean is_signed)
 {
 	char       *p;
 	int         bitfield_byte_length, bitwidth;
@@ -10366,7 +10357,7 @@ fill_label_bitfield(field_info *fi, gchar *label_str, gboolean is_signed)
 }
 
 static void
-fill_label_bitfield64(field_info *fi, gchar *label_str, gboolean is_signed)
+fill_label_bitfield64(const field_info *fi, gchar *label_str, gboolean is_signed)
 {
 	char       *p;
 	int         bitfield_byte_length, bitwidth;
@@ -10441,7 +10432,7 @@ fill_label_bitfield64(field_info *fi, gchar *label_str, gboolean is_signed)
 }
 
 static void
-fill_label_char(field_info *fi, gchar *label_str)
+fill_label_char(const field_info *fi, gchar *label_str)
 {
 	const header_field_info *hfinfo = fi->hfinfo;
 	guint32            value;
@@ -10474,7 +10465,7 @@ fill_label_char(field_info *fi, gchar *label_str)
 }
 
 static void
-fill_label_number(field_info *fi, gchar *label_str, gboolean is_signed)
+fill_label_number(const field_info *fi, gchar *label_str, gboolean is_signed)
 {
 	const header_field_info *hfinfo = fi->hfinfo;
 	guint32            value;
@@ -10540,7 +10531,7 @@ fill_label_number(field_info *fi, gchar *label_str, gboolean is_signed)
 }
 
 static void
-fill_label_number64(field_info *fi, gchar *label_str, gboolean is_signed)
+fill_label_number64(const field_info *fi, gchar *label_str, gboolean is_signed)
 {
 	const header_field_info *hfinfo = fi->hfinfo;
 	guint64            value;
@@ -10594,7 +10585,7 @@ fill_label_number64(field_info *fi, gchar *label_str, gboolean is_signed)
 }
 
 static size_t
-fill_display_label_float(field_info *fi, gchar *label_str)
+fill_display_label_float(const field_info *fi, gchar *label_str)
 {
 	int display;
 	int digits;
@@ -10649,7 +10640,7 @@ fill_display_label_float(field_info *fi, gchar *label_str)
 }
 
 void
-fill_label_float(field_info *fi, gchar *label_str)
+fill_label_float(const field_info *fi, gchar *label_str)
 {
 	gchar tmp[ITEM_LABEL_LENGTH];
 
@@ -12163,7 +12154,7 @@ proto_registrar_dump_ftypes(void)
  * freed once the next packet is dissected.
  */
 static gboolean
-construct_match_selected_string(field_info *finfo, epan_dissect_t *edt,
+construct_match_selected_string(const field_info *finfo, epan_dissect_t *edt,
 				char **filter)
 {
 	const header_field_info *hfinfo;
@@ -12324,7 +12315,7 @@ construct_match_selected_string(field_info *finfo, epan_dissect_t *edt,
  * otherwise.
  */
 gboolean
-proto_can_match_selected(field_info *finfo, epan_dissect_t *edt)
+proto_can_match_selected(const field_info *finfo, epan_dissect_t *edt)
 {
 	return construct_match_selected_string(finfo, edt, NULL);
 }
@@ -12336,7 +12327,7 @@ proto_can_match_selected(field_info *finfo, epan_dissect_t *edt)
  * The string is wmem allocated and must be freed with "wmem_free(NULL, ...)".
  */
 char *
-proto_construct_match_selected_string(field_info *finfo, epan_dissect_t *edt)
+proto_construct_match_selected_string(const field_info *finfo, epan_dissect_t *edt)
 {
 	char *filter = NULL;
 

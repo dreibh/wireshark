@@ -853,6 +853,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-btmesh-beacon.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-btmesh-proxy.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-btmcap.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-btp-matter.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-btrfcomm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-btsap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-btsdp.c
@@ -1513,6 +1514,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-miop.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mip6.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-miwi-p2pstar.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mka.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mle.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mmse.c
@@ -1779,6 +1781,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-riemann.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ripng.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-rk512.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rlc-lte.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rlc-nr.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rlm.c
@@ -1840,6 +1843,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapigs.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapms.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapni.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-saprfc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-saprouter.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapsnc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sasp.c
@@ -2256,6 +2260,7 @@ target_include_directories(dissectors
 		${SMI_INCLUDE_DIRS}
 		${SNAPPY_INCLUDE_DIRS}
 		${ZLIB_INCLUDE_DIRS}
+		${ZLIBNG_INCLUDE_DIRS}
 		${ZSTD_INCLUDE_DIRS}
 	PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}

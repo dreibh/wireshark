@@ -1305,7 +1305,7 @@ static struct encap_type_info encap_table_base[] = {
 };
 
 WS_DLL_LOCAL
-int wtap_num_encap_types = sizeof(encap_table_base) / sizeof(struct encap_type_info);
+int wtap_num_encap_types = array_length(encap_table_base);
 static GArray* encap_table_arr;
 
 #define encap_table_entry(encap)	\
@@ -1500,7 +1500,7 @@ static const char *wtap_errlist[] = {
 	/* WTAP_ERR_TIME_STAMP_NOT_SUPPORTED */
 	"We don't support writing that record's time stamp to that file type",
 };
-#define	WTAP_ERRLIST_SIZE	(sizeof wtap_errlist / sizeof wtap_errlist[0])
+#define	WTAP_ERRLIST_SIZE	array_length(wtap_errlist)
 
 const char *
 wtap_strerror(int err)

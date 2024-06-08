@@ -11,6 +11,7 @@
  */
 
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_WSLUA
 
 #include <epan/wmem_scopes.h>
 
@@ -74,31 +75,36 @@ WSLUA_FUNCTION wslua_register_menu(lua_State* L) { /*  Register a menu item in o
     * MENU_PACKET_ANALYZE_UNSORTED: menu:Analyze[]
     * MENU_PACKET_STAT_UNSORTED: menu:Statistics[]
     * MENU_STAT_GENERIC: menu:Statistics[], first section
-    * MENU_STAT_CONVERSATION_LIST: menu:Statistics[Conversation List]
-    * MENU_STAT_ENDPOINT_LIST: menu:Statistics[Endpoint List]
     * MENU_STAT_RESPONSE_TIME: menu:Statistics[Service Response Time]
-    * MENU_STAT_RSERPOOL = menu:Statistics[Reliable Server Pooling (RSerPool)]
-    * MENU_STAT_TELEPHONY: menu:Telephony[]
-    * MENU_STAT_TELEPHONY_ANSI: menu:Telephony[ANSI]
-    * MENU_STAT_TELEPHONY_GSM: menu:Telephony[GSM]
-    * MENU_STAT_TELEPHONY_3GPP_UU: menu:Telephony[3GPP Uu]
-    * MENU_STAT_TELEPHONY_MTP3: menu:Telephony[MTP3]
-    * MENU_STAT_TELEPHONY_SCTP: menu:Telephony[SCTP]
-    * MENU_ANALYZE: menu:Analyze[]
-    * MENU_ANALYZE_CONVERSATION: menu:Analyze[Conversation Filter]
+    * MENU_STAT_RSERPOOL: menu:Statistics[Reliable Server Pooling (RSerPool)]
+    * MENU_TELEPHONY_UNSORTED: menu:Telephony[]
+    * MENU_TELEPHONY_ANSI: menu:Telephony[ANSI]
+    * MENU_TELEPHONY_GSM: menu:Telephony[GSM]
+    * MENU_TELEPHONY_3GPP_UU: menu:Telephony[3GPP Uu]
+    * MENU_TELEPHONY_MTP3: menu:Telephony[MTP3]
+    * MENU_TELEPHONY_SCTP: menu:Telephony[SCTP]
     * MENU_TOOLS_UNSORTED: menu:Tools[]
 
     Valid log (Logray) items are:
     * MENU_LOG_ANALYZE_UNSORTED: menu:Analyze[]
-    * MENU_LOG_STAT_UNSORTED = 16
+    * MENU_LOG_STAT_UNSORTED: menu:Statistics[]
 
     The following are deprecated and shouldn't be used in new code:
+    * MENU_ANALYZE_CONVERSATION_FILTER, menu:Analyze[Conversation Filter] registration is not yet supported in Lua
+    * MENU_STAT_CONVERSATION_LIST, menu:Statistics[Conversations] registration is not yet supported in Lua
+    * MENU_STAT_ENDPOINT_LIST, menu:Statistics[Endpoints] registration is not yet supported in Lua
     * MENU_ANALYZE_UNSORTED, superseded by MENU_PACKET_ANALYZE_UNSORTED
     * MENU_ANALYZE_CONVERSATION, superseded by MENU_ANALYZE_CONVERSATION_FILTER
     * MENU_STAT_CONVERSATION, superseded by MENU_STAT_CONVERSATION_LIST
     * MENU_STAT_ENDPOINT, superseded by MENU_STAT_ENDPOINT_LIST
     * MENU_STAT_RESPONSE, superseded by MENU_STAT_RESPONSE_TIME
     * MENU_STAT_UNSORTED, superseded by MENU_PACKET_STAT_UNSORTED
+    * MENU_STAT_TELEPHONY, superseded by MENU_TELEPHONY_UNSORTED
+    * MENU_STAT_TELEPHONY_ANSI, superseded by MENU_TELEPHONY_ANSI
+    * MENU_STAT_TELEPHONY_GSM, superseded by MENU_TELEPHONY_GSM
+    * MENU_STAT_TELEPHONY_3GPP_UU, superseded by MENU_TELEPHONY_3GPP_UU
+    * MENU_STAT_TELEPHONY_MTP3, superseded by MENU_TELEPHONY_MTP3
+    * MENU_STAT_TELEPHONY_SCTP, superseded by MENU_TELEPHONY_SCTP
  */
 
     const char* name = luaL_checkstring(L,WSLUA_ARG_register_menu_NAME);

@@ -1825,7 +1825,7 @@ static gint dissect_dmp_sic (tvbuff_t *tvb, packet_info *pinfo,
             value = tvb_get_ntohl (tvb, offset);
           }
         } else {
-          /* Characterts [A-Z0-9] only */
+          /* Characters [A-Z0-9] only */
           if ((key & 0xE0) == 0xC0) {        /* bit 7-4: 110x */
             length = 4;
             bytes = 3;
@@ -3119,7 +3119,7 @@ static gint dissect_dmp_message (tvbuff_t *tvb, packet_info *pinfo,
   } else if (len > 0 && (dmp.body_format == FREE_TEXT ||
                          dmp.body_format == FREE_TEXT_SUBJECT)) {
     if (compr_alg == ALGORITHM_ZLIB) {
-      if ((body_tvb = tvb_child_uncompress (tvb, tvb, offset, len)) != NULL) {
+      if ((body_tvb = tvb_child_uncompress_zlib(tvb, tvb, offset, len)) != NULL) {
         body_len = tvb_captured_length (body_tvb);
         add_new_data_source (pinfo, body_tvb, "Uncompressed User data");
         tf = proto_tree_add_item (message_tree, hf_message_body_data,
@@ -3367,7 +3367,7 @@ static gint dissect_dmp_notification (tvbuff_t *tvb, packet_info *pinfo,
     offset += len;
 
     if ((dmp.notif_type == ON) && (on_typex < 0x03)) {
-      /* ACP127 Receipient */
+      /* ACP127 Recipient */
       len = tvb_strsize (tvb, offset);
       tf = proto_tree_add_uint_format (notif_tree, hf_notif_acp127,
                                        tvb, offset, len, len,
@@ -4165,13 +4165,13 @@ void proto_register_dmp (void)
     */
     { &hf_addr_recipient,
       { "Recipient Number", "dmp.recipient", FT_NONE, BASE_NONE,
-        NULL, 0x0, "Recipient", HFILL } },
+        NULL, 0x0, NULL, HFILL } },
     { &hf_addr_originator,
       { "Originator", "dmp.originator", FT_NONE, BASE_NONE,
         NULL, 0x0, NULL, HFILL } },
     { &hf_addr_reporting_name,
       { "Reporting Name Number", "dmp.reporting_name", FT_NONE,
-        BASE_NONE, NULL, 0x0, "Reporting Name", HFILL } },
+        BASE_NONE, NULL, 0x0, NULL, HFILL } },
     { &hf_addr_dl_expanded,
       { "DL Expanded", "dmp.dl_expanded", FT_BOOLEAN, BASE_NONE,
         NULL, 0x0, "Message has been DL expanded", HFILL } },
@@ -4550,14 +4550,14 @@ void proto_register_dmp (void)
     { &hf_report_reason,
       { "Reason (P1)", "dmp.report_reason", FT_UINT8, BASE_DEC,
         VALS (p1_NonDeliveryReasonCode_vals), 0x3F,
-        "Reason", HFILL } },
+        NULL, HFILL } },
     { &hf_report_info_present_ndr,
       { "Info Present", "dmp.info_present", FT_BOOLEAN, 8,
         TFS (&tfs_present_absent), 0x80, NULL, HFILL } },
     { &hf_report_diagn,
       { "Diagnostic (P1)", "dmp.report_diagnostic", FT_UINT8, BASE_DEC,
         VALS (p1_NonDeliveryDiagnosticCode_vals), 0x7F,
-        "Diagnostic", HFILL } },
+        NULL, HFILL } },
     { &hf_report_suppl_info_len,
       { "Supplementary Information", "dmp.suppl_info_len", FT_UINT8,
         BASE_DEC, NULL, 0x0, "Supplementary Information Length", HFILL } },
@@ -4621,10 +4621,10 @@ void proto_register_dmp (void)
         NULL, 0x0, NULL, HFILL } },
     { &hf_ack_reason,
       { "Ack Reason", "dmp.ack_reason", FT_UINT8, BASE_DEC,
-        VALS (ack_reason), 0x0, "Reason", HFILL } },
+        VALS (ack_reason), 0x0, NULL, HFILL } },
     { &hf_ack_diagnostic,
       { "Ack Diagnostic", "dmp.ack_diagnostic", FT_UINT8, BASE_DEC,
-        NULL, 0x0, "Diagnostic", HFILL } },
+        NULL, 0x0, NULL, HFILL } },
     { &hf_ack_recips,
       { "Recipient List", "dmp.ack_rec_list", FT_NONE, BASE_NONE,
         NULL, 0x0, NULL, HFILL } },

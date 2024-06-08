@@ -287,8 +287,8 @@ wireshark -o mgcp.display_dissect_tree:TRUE -o mgcp.udp.callagent_port:2627
 You can get a list of all available preference strings from the
 preferences file. See <<AppFiles>> for details.
 
-User access tables can be overridden using “uat,” followed by
-the UAT file name and a valid record for the file:
+<<ChUserTable,User Accessible Tables>> can be overridden using “uat,”
+followed by the UAT file name and a valid record for the file:
 
 ----
 wireshark -o "uat:user_dlts:\"User 0 (DLT=147)\",\"http\",\"0\",\"\",\"0\",\"\""
@@ -757,6 +757,8 @@ The interface list can always be populated after Wireshark is started via menu:C
 Selecting _Disable external capture interfaces_ prevents Wireshark from spawning extcap programs to list off their capture interfaces.
 This might be a time consuming operation delaying the start of the program, however on most systems this is not an issue.
 
+[#ChCustPrefsExpertSection]
+
 ==== Expert Items
 
 These preferences allow you to modify the severity set for expert items.
@@ -816,6 +818,8 @@ The _Filter Expression_ is the <<ChWorkBuildDisplayFilterSection,display filter 
 
 The _Comment_ is the comment text which appears in a bubble when the mouse hovers over the button.
 
+[#ChCustPrefsNameSection]
+
 ==== Name Resolution
 
 These preferences allow you to configure which numeric identifiers in protocols are translated into human readable text.
@@ -861,6 +865,8 @@ The _SMI (MIB and PIB) modules_ btn:[Edit...] button provides access to the dial
 
 The _MaxMind database directories_ btn:[Edit...] button provides access to the dialog to manage the directories where the MaxMind database files can be found. See <<ChMaxMindDbPaths>>.
 
+[#ChCustPrefsProtocolsSection]
+
 ==== Protocols
 
 Wireshark supports quite a few protocols, which is reflected in the long list of child entries of the “Protocols” pane.
@@ -898,6 +904,8 @@ same payload but have a different value for their VLAN Tag, a MAC Address, or we
 if the respective deinterlacing key is activated.
 
 The preference _The max number of hashes to keep in memory for determining duplicate frames_ allows you to set how large the set of frames to consider for duplication is.
+
+[#ChCustPrefsRSASection]
 
 ==== RSA Keys
 
@@ -976,49 +984,13 @@ Configuration files stored in each profile include:
 
 * Display Filters (dfilters) (<<ChWorkDefineFilterSection>>)
 
+* Display Filter Macros (dmacros) (<<ChWorkDefineFilterMacrosSection>>)
+
 * Coloring Rules (colorfilters) (<<ChCustColorizationSection>>)
 
 * Disabled Protocols (disabled_protos) (<<ChAdvEnabledProtocols>>)
 
-* User Accessible Tables:
-+
---
-* Custom HTTP headers (custom_http_header_fields)
-
-* Custom IMF headers (imf_header_fields)
-
-* Custom LDAP AttributeValue types (custom_ldap_attribute_types)
-
-* Display Filter Macros (dfilter_macros) (<<ChDisplayFilterMacrosSection>>)
-
-* ESS Category Attributes (ess_category_attributes)
-  (<<ChEssCategoryAttributes>>)
-
-* MaxMind Database Paths (maxmind_db_paths) (<<ChMaxMindDbPaths>>)
-
-* IEEE 802.11 WLAN Decryption Keys (80211_keys) (<<Ch80211Keys>>)
-
-* IKEv2 decryption table (ikev2_decryption_table) (<<ChIKEv2DecryptionSection>>)
-
-* K12 Protocols (k12_protos) (<<ChK12ProtocolsSection>>)
-
-* Object Identifier Names and Associated Syntaxes (<<ChObjectIdentifiers>>)
-
-* PRES Users Context List (pres_context_list) (<<ChPresContextList>>)
-
-* SCCP Users Table (sccp_users) (<<ChSccpUsers>>)
-
-* SNMP Enterprise Specific Trap Types (snmp_specific_traps)
-  (<<ChSNMPEnterpriseSpecificTrapTypes>>)
-
-* SNMP Users (snmp_users) (<<ChSNMPUsersSection>>)
-
-* User DLTs Table (user_dlts) (<<ChUserDLTsSection>>)
-
-* Protobuf Search Paths (protobuf_search_paths) (<<ChProtobufSearchPaths>>)
-
-* Protobuf UDP Message Types (protobuf_udp_message_types) (<<ChProtobufUDPMessageTypes>>)
---
+* Most User Accessible Tables (<<ChUserTable>>)
 
 * Changed dissector assignments (__decode_as_entries__), which can be set in the “Decode
   As...” dialog box (<<ChAdvDecodeAs>>).
@@ -1091,55 +1063,83 @@ Manually changing your profile will disable this behavior until you open a diffe
 
 [#ChUserTable]
 
-=== User Table
+=== User Accessible Tables
 
-The User Table editor is used for managing various tables in Wireshark. Its main
-dialog works very similarly to that of <<ChCustColorizationSection>>.
+User Accessible Tables are a type of preference table which may be
+associated with particular <<ChCustPrefsProtocolsSection,protocols>> or
+with the application as a whole.
 
-[#ChDisplayFilterMacrosSection]
+User Accessible Tables have a common editor dialog which works as described
+in <<ChCustPrefsExpertSection>> and <<ChCustFilterButtons>>. Note that
+the name of the file appears in the lower right corner of the dialog.
 
-=== Display Filter Macros
+The files are saved in a CSV format, where values are either double quoted
+ASCII strings (using C-style backslash escapes for non-printable characters)
+or unquoted hexstrings, depending on the field type. They can be edited directly
+when Wireshark is not running, though this is discouraged. Entries can
+also be appended to the table by passing an appropriate CSV formatted
+record string <<ChCustCommandLine,on the command line>>.
 
-Display Filter Macros are a mechanism to create shortcuts for complex filters.
-For example, defining a display filter macro named _$$tcp_conv$$_ whose text is
+// There's a number of newer dissector UATs that aren't mentioned here
+// and could use help sections.
 
-----
-(ip.src == $1 and ip.dst == $2 and tcp.srcport == $3 and tcp.dstport == $4)
-or (ip.src == $2 and ip.dst == $1 and tcp.srcport == $4 and tcp.dstport == $3)
-----
+Most UATs are stored in the
+<<ChCustConfigProfilesSection,configuration profile>>:
 
-would allow to use a display filter like
+--
+* Custom HTTP headers (custom_http_header_fields)
 
-----
-$tcp_conv(10.1.1.2,10.1.1.3,1200,1400)
-----
+* Custom IMF headers (imf_header_fields)
 
-or alternatively
+* Custom LDAP AttributeValue types (custom_ldap_attribute_types)
 
-----
-${tcp_conv:10.1.1.2;10.1.1.3;1200;1400}
-----
+* <<ChCustFilterButtons,Display Filter Buttons>> (dfilter_buttons)
 
-or
+* <<ChWorkDefineFilterMacrosSection,Display Filter Macros>> (dfilter_macros), prior to Wireshark 4.4
 
-----
-${tcp_conv;10.1.1.2;10.1.1.3;1200;1400}
-----
+* <<ChCustPrefsNameSection,DNS Servers>> (addr_resolve_dns_servers)
 
-instead of typing the whole filter. Both notations are equivalent. Once defined, a macro can
-be used in <<ChWorkDefineFilterSection,saved display (but not
-capture) filters>> and <<ChCustFilterButtons,filter buttons>>.
+* <<ChEssCategoryAttributes,ESS Category Attributes>> (ess_category_attributes)
 
-Display Filter Macros can be managed by selecting menu:Analyze[Display Filter Macros] from
-the menu.  The table has the following fields:
+* <<ChCustPrefsExpertSection,Expert Item Severity>> (expert_severity)
 
-Macro Name::
-The name of the macro. The name must consist of ASCII alphanumerics or
-the '_' character. (Note that the presence of a '.' character would
-indicate a <<_field_references,field reference>>.)
+* <<Ch80211Keys,IEEE 802.11 WLAN Decryption Keys>> (80211_keys)
 
-Macro Expression::
-The replacement text for the macro it uses $1, $2, $3, ... as the input arguments.
+* <<ChIKEv2DecryptionSection,IKEv2 decryption table>> (ikev2_decryption_table)
+
+* <<ChStatIOGraphs,I/O Graphs>> (io_graphs)
+
+* <<ChK12ProtocolsSection,K12 Protocols>> (k12_protos)
+
+* <<ChObjectIdentifiers,Object Identifier Names and Associated Syntaxes>> ()
+
+* <<ChStatPacketLengths,Packet Lengths>> (packet_lengths)
+
+* <<ChPresContextList,PRES Users Context List>> (pres_context_list)
+
+* <<ChSccpUsers,SCCP Users Table>> (sccp_users)
+
+* <<ChSNMPEnterpriseSpecificTrapTypes,SNMP Enterprise Specific Trap Types>> (snmp_specific_traps)
+
+* <<ChSNMPUsersSection,SNMP Users>> (snmp_users)
+
+* <<ChUserDLTsSection,User DLTs Table>> (user_dlts)
+
+* <<ChProtobufSearchPaths,Protobuf Search Paths>> (protobuf_search_paths)
+
+* <<ChProtobufUDPMessageTypes,Protobuf UDP Message Types>> (protobuf_udp_message_types)
+--
+
+Other UATs are stored in the personal configuration directory and are
+common to all profiles:
+
+--
+* <<ChMaxMindDbPaths,MaxMind Database Paths>> (maxmind_db_paths)
+
+* <<ChCustPrefsRSASection,RSA Private Keys>> (rsa_keys) and <<ChCustPrefsRSASection,PKCS #11 Provider Libraries>> (pkcs11_libs)
+
+* <<ChCustPrefsNameSection,SMI Modules>> (smi_modules) and <<ChCustPrefsNameSection,SMI Paths>> (smi_paths)
+--
 
 [#ChEssCategoryAttributes]
 
@@ -1174,9 +1174,18 @@ Database pathname::
 This specifies a directory containing MaxMind data files. Any files
 ending with _.mmdb_ will be automatically loaded.
 
-The locations for your data files are up to you, but `/usr/share/GeoIP`
-and `/var/lib/GeoIP` are common on Linux and `C:\ProgramData\GeoIP`,
-`C:\Program Files\Wireshark\GeoIP` might be good choices on Windows.
+By default Wireshark will always search for data files in
+`/usr/share/GeoIP` and `/var/lib/GeoIP` on non-Windows platforms
+and in `C:\ProgramData\GeoIP` and `C:\GeoIP` on Windows. You can
+put any additional search paths here, e.g. `C:\Program Files\Wireshark\GeoIP`
+might be a good choice on Windows.
+
+[NOTE]
+====
+While the default search paths are not listed in the user table, they
+are in the list viewable by opening menu:Help[About Wireshark] and
+selecting the "Folders" tab.
+====
 
 [#ChGeoIPDbPaths]
 
@@ -1422,6 +1431,9 @@ Integrity algorithm of the IKE_SA.
 [#ChObjectIdentifiers]
 
 === Object Identifiers
+
+// This table appears under the BER dissector, perhaps it should be moved
+// to the "Name Resolution" preference section?
 
 Many protocols that use ASN.1 use Object Identifiers (OIDs) to uniquely identify
 certain pieces of information. In many cases, they are used in an extension

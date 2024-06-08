@@ -16,6 +16,7 @@
 #include <winsock2.h>
 #endif
 
+#include <wsutil/array.h>
 #include <wsutil/file_util.h>
 
 #include "wtap_opttypes.h"
@@ -270,11 +271,6 @@ extern int wtap_num_file_types;
         (p)[6] = (uint8_t)((v) >> 48);    \
         (p)[7] = (uint8_t)((v) >> 56);    \
     }
-#endif
-
-/* glib doesn't have g_ptr_array_len of all things!*/
-#ifndef g_ptr_array_len
-#define g_ptr_array_len(a)      ((a)->len)
 #endif
 
 /*

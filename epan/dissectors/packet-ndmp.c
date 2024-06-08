@@ -1091,7 +1091,7 @@ dissect_tape_info(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tre
 	offset = dissect_rpc_string(tvb, tree,
 			hf_ndmp_tape_model, offset, NULL);
 
-	/* device capabilites */
+	/* device capabilities */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
 			dissect_tape_dev_cap, hf_ndmp_tape_dev_cap);
 
@@ -1119,7 +1119,7 @@ dissect_scsi_info(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tre
 	offset = dissect_rpc_string(tvb, tree,
 			hf_ndmp_scsi_model, offset, NULL);
 
-	/* device capabilites */
+	/* device capabilities */
 	offset = dissect_rpc_array(tvb, pinfo, tree, offset,
 			dissect_tape_dev_cap, hf_ndmp_tape_dev_cap);
 
@@ -3768,31 +3768,31 @@ proto_register_ndmp(void)
 
 	{ &hf_ndmp_tape_invalid_file_num, {
 		"Invalid file num", "ndmp.tape.invalid.file_num", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_file_num), 0x00000001, "invalid_file_num", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_file_num), 0x00000001, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_soft_errors, {
 		"Soft errors", "ndmp.tape.invalid.soft_errors", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_soft_errors), 0x00000002, "soft_errors", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_soft_errors), 0x00000002, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_block_size, {
 		"Block size", "ndmp.tape.invalid.block_size", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_block_size), 0x00000004, "block_size", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_block_size), 0x00000004, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_block_no, {
 		"Block no", "ndmp.tape.invalid.block_no", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_block_no), 0x00000008, "block_no", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_block_no), 0x00000008, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_total_space, {
 		"Total space", "ndmp.tape.invalid.total_space", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_total_space), 0x00000010, "total_space", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_total_space), 0x00000010, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_space_remain, {
 		"Space remain", "ndmp.tape.invalid.space_remain", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_space_remain), 0x00000020, "space_remain", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_space_remain), 0x00000020, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_invalid_partition, {
 		"Invalid partition", "ndmp.tape.invalid.partition", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_invalid_partition), 0x00000040, "partition", HFILL }},
+		TFS(&tfs_ndmp_tape_invalid_partition), 0x00000040, NULL, HFILL }},
 
 	{ &hf_ndmp_tape_flags, {
 		"Flags", "ndmp.tape.flags", FT_UINT32, BASE_HEX,
@@ -3800,11 +3800,11 @@ proto_register_ndmp(void)
 
 	{ &hf_ndmp_tape_flags_no_rewind, {
 		"No rewind", "ndmp.tape.flags.no_rewind", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_flags_no_rewind), 0x00000008, "no_rewind", HFILL, }},
+		TFS(&tfs_ndmp_tape_flags_no_rewind), 0x00000008, NULL, HFILL, }},
 
 	{ &hf_ndmp_tape_flags_write_protect, {
 		"Write protect", "ndmp.tape.flags.write_protect", FT_BOOLEAN, 32,
-		TFS(&tfs_ndmp_tape_flags_write_protect), 0x00000010, "write_protect", HFILL, }},
+		TFS(&tfs_ndmp_tape_flags_write_protect), 0x00000010, NULL, HFILL, }},
 
 	{ &hf_ndmp_tape_flags_error, {
 		"Error", "ndmp.tape.flags.error", FT_BOOLEAN, 32,

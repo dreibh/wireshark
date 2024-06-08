@@ -76,6 +76,7 @@ set(WMEM_FILES
 set(WSUTIL_PUBLIC_HEADERS
 	802_11-utils.h
 	adler32.h
+	array.h
 	base32.h
 	bits_count_ones.h
 	bits_ctz.h
@@ -376,6 +377,7 @@ target_link_libraries(wsutil
 		${GNUTLS_LIBRARIES}
 		${M_LIBRARIES}
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_LIBRARIES},${PCRE2_LIBRARIES}>
 		${WIN_IPHLPAPI_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
@@ -389,6 +391,7 @@ target_include_directories(wsutil SYSTEM
 	PRIVATE
 		${GMODULE2_INCLUDE_DIRS}
 		${ZLIB_INCLUDE_DIRS}
+		${ZLIBNG_INCLUDE_DIRS}
 		${PCRE2_INCLUDE_DIRS}
 )
 
@@ -430,6 +433,7 @@ target_link_libraries(wsutil_static
 		${GCRYPT_LIBRARIES}
 		${GNUTLS_LIBRARIES}
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_LIBRARIES},${PCRE2_LIBRARIES}>
 		${WIN_IPHLPAPI_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
@@ -443,6 +447,7 @@ target_include_directories(wsutil_static SYSTEM
 	PRIVATE
 		${GMODULE2_INCLUDE_DIRS}
 		${ZLIB_INCLUDE_DIRS}
+		${ZLIBNG_INCLUDE_DIRS}
 		${PCRE2_INCLUDE_DIRS}
 )
 

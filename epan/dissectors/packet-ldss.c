@@ -640,11 +640,11 @@ dissect_ldss_transfer (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 				? "Gzip compressed data: %d bytes"
 				: "File data: %d bytes",
 				tvb_captured_length(tvb));
-#ifdef HAVE_ZLIB
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
 		/* Be nice and uncompress the file data. */
 		if (compression == COMPRESSION_GZIP) {
 			tvbuff_t *uncomp_tvb;
-			uncomp_tvb = tvb_child_uncompress(tvb, tvb, 0, tvb_captured_length(tvb));
+			uncomp_tvb = tvb_child_uncompress_zlib(tvb, tvb, 0, tvb_captured_length(tvb));
 			if (uncomp_tvb != NULL) {
 				/* XXX: Maybe not a good idea to add a data_source for
 				   what may very well be a large buffer since then

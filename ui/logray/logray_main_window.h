@@ -302,6 +302,7 @@ private slots:
      */
     void startCapture(QStringList);
     void startCapture();
+    void pushLiveCaptureInProgress();
     void popLiveCaptureInProgress();
     void stopCapture();
 
@@ -432,6 +433,8 @@ private slots:
 
     void statCommandExpertInfo(const char *, void *);
 
+    void connectToolsMenuActions();
+
     void connectHelpMenuActions();
 
 #ifdef HAVE_SOFTWARE_UPDATE
@@ -450,6 +453,7 @@ private slots:
 
     void openStatisticsTreeDialog(const char *abbr);
     void statCommandIOGraph(const char *, void *);
+    void showIOGraphDialog(io_graph_item_unit_t, QString);
 
     void externalMenuItemTriggered();
 

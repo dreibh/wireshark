@@ -369,29 +369,29 @@ LograyMainWindow::LograyMainWindow(QWidget *parent) :
 
     qRegisterMetaType<FilterAction::Action>("FilterAction::Action");
     qRegisterMetaType<FilterAction::ActionType>("FilterAction::ActionType");
-    connect(this, SIGNAL(filterAction(QString, FilterAction::Action, FilterAction::ActionType)),
-            this, SLOT(queuedFilterAction(QString, FilterAction::Action, FilterAction::ActionType)),
-            Qt::QueuedConnection);
+    connect(this, &LograyMainWindow::filterAction, this, &LograyMainWindow::queuedFilterAction, Qt::QueuedConnection);
 
     //To prevent users use features before initialization complete
     //Otherwise unexpected problems may occur
     setFeaturesEnabled(false);
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(setFeaturesEnabled()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(applyGlobalCommandLineOptions()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(zoomText()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(initViewColorizeMenu()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(addStatsPluginsToMenu()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(addDynamicMenus()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(addPluginIFStructures()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(initConversationMenus()));
-    connect(mainApp, SIGNAL(appInitialized()), this, SLOT(initFollowStreamMenus()));
+    connect(mainApp, &MainApplication::appInitialized, this, [this]() { setFeaturesEnabled(); });
+    connect(mainApp, &MainApplication::appInitialized, this, &LograyMainWindow::applyGlobalCommandLineOptions);
+    connect(mainApp, &MainApplication::appInitialized, this, &LograyMainWindow::zoomText);
+    connect(mainApp, &MainApplication::appInitialized, this, &LograyMainWindow::initViewColorizeMenu);
+    connect(mainApp, &MainApplication::appInitialized, this, &LograyMainWindow::addStatsPluginsToMenu);
+    connect(mainApp, &MainApplication::appInitialized, this, &LograyMainWindow::addDynamicMenus);
+    connect(mainApp, &MainApplication::appInitialized, this, &LograyMainWindow::addPluginIFStructures);
+    connect(mainApp, &MainApplication::appInitialized, this, &LograyMainWindow::initConversationMenus);
+    connect(mainApp, &MainApplication::appInitialized, this, &LograyMainWindow::initFollowStreamMenus);
+    connect(mainApp, &MainApplication::appInitialized, this,
+            [this]() { addDisplayFilterTranslationActions(main_ui_->menuEditCopy); });
 
-    connect(mainApp, SIGNAL(profileChanging()), this, SLOT(saveWindowGeometry()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(layoutPanes()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(layoutToolbars()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(updatePreferenceActions()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(zoomText()));
-    connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(updateTitlebar()));
+    connect(mainApp, &MainApplication::profileChanging, this, &LograyMainWindow::saveWindowGeometry);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &LograyMainWindow::layoutPanes);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &LograyMainWindow::layoutToolbars);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &LograyMainWindow::updatePreferenceActions);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &LograyMainWindow::zoomText);
+    connect(mainApp, &MainApplication::preferencesChanged, this, &LograyMainWindow::updateTitlebar);
 
     connect(mainApp, SIGNAL(updateRecentCaptureStatus(const QString &, qint64, bool)), this, SLOT(updateRecentCaptures()));
     connect(mainApp, SIGNAL(preferencesChanged()), this, SLOT(updateRecentCaptures()));
@@ -409,6 +409,8 @@ LograyMainWindow::LograyMainWindow(QWidget *parent) :
     connect(funnel_statistics_, &FunnelStatistics::setDisplayFilter, this, &LograyMainWindow::setDisplayFilter);
     connect(funnel_statistics_, SIGNAL(openCaptureFile(QString, QString)),
             this, SLOT(openCaptureFile(QString, QString)));
+
+    connect(df_combo_box_, &QComboBox::editTextChanged, this, &LograyMainWindow::updateDisplayFilterTranslationActions);
 
     file_set_dialog_ = new FileSetDialog(this);
     connect(file_set_dialog_, SIGNAL(fileSetOpenCaptureFile(QString)),
@@ -599,6 +601,7 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     connectCaptureMenuActions();
     connectAnalyzeMenuActions();
     connectStatisticsMenuActions();
+    connectToolsMenuActions();
     connectHelpMenuActions();
 
     connect(packet_list_, SIGNAL(packetDissectionChanged()),
@@ -1841,7 +1844,13 @@ bool LograyMainWindow::testCaptureFileClose(QString before_what, FileCloseContex
              */
             discard_button->setFocus();
 #endif
-
+            /*
+             * On Windows, if multiple Wireshark processes are open, another
+             * application has focus, and "Close all [Wireshark] windows" is
+             * chosen from the taskbar, we need to activate the window to
+             * at least flash the taskbar (#16309).
+             */
+            activateWindow();
             msg_dialog.exec();
             /* According to the Qt doc:
              * when using QMessageBox with custom buttons, exec() function returns an opaque value.
@@ -2586,28 +2595,29 @@ void LograyMainWindow::addMenuActions(QList<QAction *> &actions, int menu_group)
                             main_ui_->actionStatistics_REGISTER_STAT_GROUP_UNSORTED,
                             action);
             break;
-//        case REGISTER_TOOLS_GROUP_UNSORTED:
-//        {
-//            // Allow the creation of submenus. Mimics the behavor of
-//            // ui/gtk/main_menubar.c:add_menu_item_to_main_menubar
-//            // and GtkUIManager.
-//            //
-//            // For now we limit the insanity to the "Tools" menu.
-//            QStringList menu_path = action->text().split('/');
-//            QMenu *cur_menu = main_ui_->menuTools;
-//            while (menu_path.length() > 1) {
-//                QString menu_title = menu_path.takeFirst();
-//                QMenu *submenu = cur_menu->findChild<QMenu *>(menu_title.toLower(), Qt::FindDirectChildrenOnly);
-//                if (!submenu) {
-//                    submenu = cur_menu->addMenu(menu_title);
-//                    submenu->setObjectName(menu_title.toLower());
-//                }
-//                cur_menu = submenu;
-//            }
-//            action->setText(menu_path.last());
-//            cur_menu->addAction(action);
-//            break;
-//        }
+        case REGISTER_TOOLS_GROUP_UNSORTED:
+        {
+            main_ui_->menuTools->show(); // Remove this if we ever add any built-in tools.
+            // Allow the creation of submenus. Mimics the behaviour of
+            // ui/gtk/main_menubar.c:add_menu_item_to_main_menubar
+            // and GtkUIManager.
+            //
+            // For now we limit the insanity to the "Tools" menu.
+            QStringList menu_path = action->text().split('/');
+            QMenu *cur_menu = main_ui_->menuTools;
+            while (menu_path.length() > 1) {
+                QString menu_title = menu_path.takeFirst();
+                QMenu *submenu = cur_menu->findChild<QMenu *>(menu_title.toLower(), Qt::FindDirectChildrenOnly);
+                if (!submenu) {
+                    submenu = cur_menu->addMenu(menu_title);
+                    submenu->setObjectName(menu_title.toLower());
+                }
+                cur_menu = submenu;
+            }
+            action->setText(menu_path.last());
+            cur_menu->addAction(action);
+            break;
+        }
         default:
             // Skip packet items.
             return;
@@ -2632,20 +2642,20 @@ void LograyMainWindow::removeMenuActions(QList<QAction *> &actions, int menu_gro
         case REGISTER_LOG_STAT_GROUP_UNSORTED:
             main_ui_->menuStatistics->removeAction(action);
             break;
-//        case REGISTER_TOOLS_GROUP_UNSORTED:
-//        {
-//            // Allow removal of submenus.
-//            // For now we limit the insanity to the "Tools" menu.
-//            QStringList menu_path = action->text().split('/');
-//            QMenu *cur_menu = main_ui_->menuTools;
-//            while (menu_path.length() > 1) {
-//                QString menu_title = menu_path.takeFirst();
-//                QMenu *submenu = cur_menu->findChild<QMenu *>(menu_title.toLower(), Qt::FindDirectChildrenOnly);
-//                cur_menu = submenu;
-//            }
-//            cur_menu->removeAction(action);
-//            break;
-//        }
+        case REGISTER_TOOLS_GROUP_UNSORTED:
+        {
+            // Allow removal of submenus.
+            // For now we limit the insanity to the "Tools" menu.
+            QStringList menu_path = action->text().split('/');
+            QMenu *cur_menu = main_ui_->menuTools;
+            while (menu_path.length() > 1) {
+                QString menu_title = menu_path.takeFirst();
+                QMenu *submenu = cur_menu->findChild<QMenu *>(menu_title.toLower(), Qt::FindDirectChildrenOnly);
+                cur_menu = submenu;
+            }
+            cur_menu->removeAction(action);
+            break;
+        }
         default:
 //            qDebug() << "FIX: Remove" << action->text() << "from the menu";
             break;

@@ -23969,10 +23969,10 @@ static stat_tap_table_item gsm_map_stat_fields[] = {
 static void gsm_map_stat_init(stat_tap_table_ui* new_stat)
 {
   const char *table_name = "GSM MAP Operation Statistics";
-  int num_fields = sizeof(gsm_map_stat_fields)/sizeof(stat_tap_table_item);
+  int num_fields = array_length(gsm_map_stat_fields);
   stat_tap_table* table;
   guint i;
-  stat_tap_table_item_type items[sizeof(gsm_map_stat_fields)/sizeof(stat_tap_table_item)];
+  stat_tap_table_item_type items[array_length(gsm_map_stat_fields)];
 
   memset(items, 0, sizeof(items));
 
@@ -24363,23 +24363,23 @@ void proto_register_gsm_map(void) {
       { &hf_gsm_map_max_brate_ulink,
         { "Maximum bit rate for uplink in kbit/s", "gsm_map.qos.max_brate_ulink",
           FT_UINT32, BASE_DEC, NULL, 0x0,
-          "Maximum bit rate for uplink", HFILL }},
+          NULL, HFILL }},
       { &hf_gsm_map_max_brate_dlink,
         { "Maximum bit rate for downlink in kbit/s", "gsm_map.qos.max_brate_dlink",
           FT_UINT32, BASE_DEC, NULL, 0x0,
-          "Maximum bit rate for downlink", HFILL }},
+          NULL, HFILL }},
       { &hf_gsm_map_qos_transfer_delay,
         { "Transfer delay (Raw data see TS 24.008 for interpretation)", "gsm_map.qos.transfer_delay",
           FT_UINT8, BASE_DEC, NULL, 0xfc,
-          "Transfer delay", HFILL }},
+          NULL, HFILL }},
       { &hf_gsm_map_guaranteed_max_brate_ulink,
         { "Guaranteed bit rate for uplink in kbit/s", "gsm_map.qos.brate_ulink",
           FT_UINT32, BASE_DEC, NULL, 0x0,
-          "Guaranteed bit rate for uplink", HFILL }},
+          NULL, HFILL }},
       { &hf_gsm_map_guaranteed_max_brate_dlink,
         { "Guaranteed bit rate for downlink in kbit/s", "gsm_map.qos.brate_dlink",
           FT_UINT32, BASE_DEC, NULL, 0x0,
-          "Guaranteed bit rate for downlink", HFILL }},
+          NULL, HFILL }},
       { &hf_gsm_map_GSNAddress_IPv4,
         { "GSN-Address IPv4",  "gsm_map.gsnaddress_ipv4",
           FT_IPv4, BASE_NONE, NULL, 0,
@@ -32715,7 +32715,7 @@ void proto_register_gsm_map(void) {
   };
 
   static stat_tap_table_ui gsm_map_stat_table = {
-    REGISTER_STAT_GROUP_TELEPHONY_GSM,
+    REGISTER_TELEPHONY_GROUP_GSM,
     "MAP Operation",
     "gsm_map",
     "gsm_map,operation",
@@ -32724,8 +32724,8 @@ void proto_register_gsm_map(void) {
     gsm_map_stat_reset,
     gsm_map_stat_free_table_item,
     NULL,
-    sizeof(gsm_map_stat_fields)/sizeof(stat_tap_table_item), gsm_map_stat_fields,
-    sizeof(gsm_map_stat_params)/sizeof(tap_param), gsm_map_stat_params,
+    array_length(gsm_map_stat_fields), gsm_map_stat_fields,
+    array_length(gsm_map_stat_params), gsm_map_stat_params,
     NULL,
     0
   };

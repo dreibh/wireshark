@@ -2432,7 +2432,7 @@ static cip_service_info_t enip_obj_spec_service_table[] = {
 cip_service_info_t* cip_get_service_enip(guint32 class_id, guint8 service_id)
 {
    return cip_get_service_one_table(&enip_obj_spec_service_table[0],
-      sizeof(enip_obj_spec_service_table) / sizeof(cip_service_info_t),
+      array_length(enip_obj_spec_service_table),
       class_id,
       service_id);
 }
@@ -2855,7 +2855,7 @@ static void dissect_item_connected_address(packet_info* pinfo, tvbuff_t* tvb, in
 // offset - Starts at Unconn Msg Type
 // returns - input_request_key
 // Dissects the following parts of the Unconnected Message over UDP item: Unconn Msg Type, Transaction Number, Status.
-// The Unconnected Messge field is handled outside of this function.
+// The Unconnected Message field is handled outside of this function.
 static void dissect_item_unconnected_message_over_udp(packet_info* pinfo, tvbuff_t* tvb, int offset, proto_tree* item_tree, enip_request_key_t** input_request_key)
 {
    guint32 ucmm_request;

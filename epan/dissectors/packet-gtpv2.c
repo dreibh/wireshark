@@ -1953,7 +1953,7 @@ static const gtpv2_information_element_instance_t gtpv2_information_element_inst
     {  0, 0, 0, 0, NULL },
 };
 
-#define NUM_GTPV2_IE_INFO_ELEM_INSTANCES (sizeof(gtpv2_information_element_instance_vals)/sizeof(gtpv2_information_element_instance_t))
+#define NUM_GTPV2_IE_INFO_ELEM_INSTANCES array_length(gtpv2_information_element_instance_vals)
 
 /* Code to dissect IE's */
 
@@ -9889,7 +9889,7 @@ void proto_register_gtpv2(void)
         {&hf_gtpv2_rac,
          { "Routing Area Code (RAC)", "gtpv2.rac",
            FT_UINT8, BASE_DEC, NULL, 0,
-           "Routing Area Code", HFILL}
+           NULL, HFILL}
         },
 
         { &hf_gtpv2_rnc_id,

@@ -83,6 +83,12 @@ Principal
 PROV-SRV-LOCATION
 SAMFlags
 TYPED-DATA
+KRB5-PFS-GROUP
+KRB5-PFS-SELECTION
+KRB5-PFS-SELECTIONS
+KRB5-PFS-PROPOSE
+KRB5-PFS-ACCEPT
+KRB5-PFS-ERROR
 
 #.NO_EMIT ONLY_VALS
 Applications
@@ -295,6 +301,9 @@ KrbFastArmorTypes PROT_PREFIX UPPER_CASE
     break;
   case KERBEROS_PA_SPAKE:
     offset=dissect_ber_octet_string_wcb(FALSE, actx, sub_tree, tvb, offset,hf_index, dissect_kerberos_PA_SPAKE);
+    break;
+  case KERBEROS_PA_SRP:
+    offset=dissect_ber_octet_string_wcb(FALSE, actx, sub_tree, tvb, offset,hf_index, dissect_kerberos_KRB5_SRP_PA_APPLICATIONS);
     break;
   default:
     offset=dissect_ber_octet_string_wcb(FALSE, actx, sub_tree, tvb, offset,hf_index, NULL);

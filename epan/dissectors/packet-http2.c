@@ -76,7 +76,7 @@ VALUE_STRING_ARRAY(http2_header_repr_type);
 /*
  * Decompression of zlib or brotli encoded entities.
  */
-#if defined(HAVE_ZLIB) || defined(HAVE_BROTLI)
+#if defined(HAVE_ZLIB) || defined(HAVE_ZLIBNG)|| defined(HAVE_BROTLI)
 static gboolean http2_decompress_body = TRUE;
 #else
 static gboolean http2_decompress_body;
@@ -2607,7 +2607,7 @@ http2_get_stream_id_ge(guint streamid, guint sub_stream_id, guint *sub_stream_id
 }
 
 static bool
-http2_get_sub_stream_id(guint streamid, guint sub_stream_id, gboolean le, guint *sub_stream_id_out)
+http2_get_sub_stream_id(guint streamid, guint sub_stream_id, bool le, guint *sub_stream_id_out)
 {
     if (le) {
         return http2_get_stream_id_le(streamid, sub_stream_id, sub_stream_id_out);
@@ -2810,7 +2810,11 @@ get_body_uncompression_info(packet_info *pinfo, http2_session_t* h2session)
     if (!http2_decompress_body || body_info->is_partial_content == TRUE || content_encoding == NULL) {
         return BODY_UNCOMPRESSION_NONE;
     }
-
+#ifdef HAVE_ZLIBNG
+    if (strncmp(content_encoding, "gzip", 4) == 0 || strncmp(content_encoding, "deflate", 7) == 0) {
+        return BODY_UNCOMPRESSION_ZLIB;
+    }
+#endif
 #ifdef HAVE_ZLIB
     if (strncmp(content_encoding, "gzip", 4) == 0 || strncmp(content_encoding, "deflate", 7) == 0) {
         return BODY_UNCOMPRESSION_ZLIB;
@@ -2951,7 +2955,7 @@ dissect_http2_data_full_body(tvbuff_t *tvb, packet_info *pinfo, http2_session_t*
 
         tvbuff_t *uncompressed_tvb = NULL;
         if (uncompression == BODY_UNCOMPRESSION_ZLIB) {
-            uncompressed_tvb = tvb_child_uncompress(tvb, tvb, 0, datalen);
+            uncompressed_tvb = tvb_child_uncompress_zlib(tvb, tvb, 0, datalen);
         } else if (uncompression == BODY_UNCOMPRESSION_BROTLI) {
             uncompressed_tvb = tvb_child_uncompress_brotli(tvb, tvb, 0, datalen);
         }

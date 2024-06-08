@@ -18,6 +18,7 @@
 #include "tvbuff.h"
 #include "proto.h"
 #include "exceptions.h"
+#include "wsutil/array.h"
 #include "wsutil/pint.h"
 
 #include <ws_diag_control.h>
@@ -662,7 +663,7 @@ varint_tests(void)
 
 	tvb_parent = tvb_new_real_data((const guint8*)"", 0, 0);
 
-	for (size_t ix = 0; ix < (sizeof(varint) / sizeof(varint_test_s)); ++ix) {
+	for (size_t ix = 0; ix < array_length(varint); ++ix) {
 		const varint_test_s *vit = &varint[ix];
 		tvb = tvb_new_child_real_data(tvb_parent, vit->enc, vit->enc_len, vit->enc_len);
 
@@ -766,7 +767,7 @@ zstd_tests (void) {
 
 	};
 
-	for (size_t i = 0; i < sizeof tests / sizeof tests[0]; i++) {
+	for (size_t i = 0; i < array_length(tests); i++) {
 		zstd_testcase *t = tests + i;
 
 		printf ("ZSTD test: %s ... begin\n", t->desc);

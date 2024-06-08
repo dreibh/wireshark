@@ -1211,7 +1211,7 @@ static int atalk_to_str(const address* addr, gchar *buf, int buf_len _U_)
     return atalk_str_len(addr);
 }
 
-static const char* atalk_col_filter_str(const address* addr _U_, gboolean is_src)
+static const char* atalk_col_filter_str(const address* addr _U_, bool is_src)
 {
   if (is_src)
     return "ddp.src";
@@ -1928,7 +1928,7 @@ proto_register_atalk(void)
     { &hf_asp_zero_value,
       { "Pad (0)",         "asp.zero_value",
         FT_BYTES, BASE_NONE, NULL, 0x0,
-        "Pad", HFILL }},
+        NULL, HFILL }},
   };
 
   static hf_register_info hf_zip[] = {
@@ -1938,7 +1938,7 @@ proto_register_atalk(void)
 
     { &hf_zip_zero_value,
       { "Pad (0)",      "zip.zero_value",FT_BYTES, BASE_NONE, NULL, 0x0,
-        "Pad", HFILL }},
+        NULL, HFILL }},
 
     { &hf_zip_atp_function,
       { "Function",     "zip.atp_function", FT_UINT8,  BASE_DEC, VALS(zip_atp_function_vals), 0x0,

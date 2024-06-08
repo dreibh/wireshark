@@ -321,6 +321,9 @@ WSLUA_META Tvb_meta[] = {
 
 int Tvb_register(lua_State* L) {
     WSLUA_REGISTER_CLASS(Tvb);
+    if (outstanding_Tvb != NULL) {
+        g_ptr_array_unref(outstanding_Tvb);
+    }
     outstanding_Tvb = g_ptr_array_new();
     return 0;
 }
@@ -1272,12 +1275,14 @@ WSLUA_METHOD TvbRange_range(lua_State* L) {
     return 0;
 }
 
-WSLUA_METHOD TvbRange_uncompress(lua_State* L) {
-    /* Obtain an uncompressed <<lua_class_TvbRange,`TvbRange`>> from a <<lua_class_TvbRange,`TvbRange`>> */
-#define WSLUA_ARG_TvbRange_uncompress_NAME 2 /* The name to be given to the new data-source. */
+WSLUA_METHOD TvbRange_uncompress_zlib(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing zlib compressed data, decompresses the data and returns a new <<lua_class_TvbRange,`TvbRange`>> containing the uncompressed data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_uncompress_zlib_NAME 2 /* The name to be given to the new data-source. */
     TvbRange tvbr = checkTvbRange(L,1);
-#ifdef HAVE_ZLIB
-    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_uncompress_NAME,"Uncompressed");
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_uncompress_zlib_NAME,"Uncompressed");
     tvbuff_t *uncompr_tvb;
 #endif
 
@@ -1288,8 +1293,8 @@ WSLUA_METHOD TvbRange_uncompress(lua_State* L) {
         return 0;
     }
 
-#ifdef HAVE_ZLIB
-    uncompr_tvb = tvb_child_uncompress(tvbr->tvb->ws_tvb, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
+    uncompr_tvb = tvb_child_uncompress_zlib(tvbr->tvb->ws_tvb, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
     if (uncompr_tvb) {
        add_new_data_source (lua_pinfo, uncompr_tvb, name);
        if (push_TvbRange(L,uncompr_tvb,0,tvb_captured_length(uncompr_tvb))) {
@@ -1303,6 +1308,12 @@ WSLUA_METHOD TvbRange_uncompress(lua_State* L) {
     return 0;
 }
 
+WSLUA_METHOD TvbRange_uncompress(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing zlib compressed data, decompresses the data and returns a new <<lua_class_TvbRange,`TvbRange`>> containing the uncompressed data. Deprecated; use tvbrange:uncompress_zlib() instead. */
+#define WSLUA_ARG_TvbRange_uncompress_NAME 2 /* The name to be given to the new data-source. */
+    return TvbRange_uncompress_zlib(L);
+}
+
 /* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */
 static int TvbRange__gc(lua_State* L) {
     TvbRange tvbr = checkTvbRange(L,1);
@@ -1311,6 +1322,267 @@ static int TvbRange__gc(lua_State* L) {
 
     return 0;
 
+}
+
+WSLUA_METHOD TvbRange_uncompress_brotli(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing Brotli compressed data, decompresses the data and returns a new <<lua_class_TvbRange,`TvbRange`>> containing the uncompressed data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_uncompress_brotli_NAME 2 /* The name to be given to the new data-source. */
+    TvbRange tvbr = checkTvbRange(L,1);
+#ifdef HAVE_BROTLI
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_uncompress_brotli_NAME,"Uncompressed");
+    tvbuff_t *uncompr_tvb;
+#endif
+
+    if (!(tvbr && tvbr->tvb)) return 0;
+
+    if (tvbr->tvb->expired) {
+        luaL_error(L,"expired tvb");
+        return 0;
+    }
+
+#ifdef HAVE_BROTLI
+    uncompr_tvb = tvb_child_uncompress_brotli(tvbr->tvb->ws_tvb, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+    if (uncompr_tvb) {
+       add_new_data_source (lua_pinfo, uncompr_tvb, name);
+       if (push_TvbRange(L,uncompr_tvb,0,tvb_captured_length(uncompr_tvb))) {
+          WSLUA_RETURN(1); /* The <<lua_class_TvbRange,`TvbRange`>>. */
+       }
+    }
+#else
+    luaL_error(L,"Missing support for Brotli");
+#endif
+
+    return 0;
+}
+
+WSLUA_METHOD TvbRange_uncompress_hpack_huff(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing data compressed using the Huffman encoding in HTTP/2 HPACK and HTTP/3 QPACK, decompresses the data and returns a new <<lua_class_TvbRange,`TvbRange`>> containing the uncompressed data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_uncompress_hpack_huff_NAME 2 /* The name to be given to the new data-source. */
+    TvbRange tvbr = checkTvbRange(L,1);
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_uncompress_hpack_huff_NAME,"Uncompressed");
+    tvbuff_t *uncompr_tvb;
+
+    if (!(tvbr && tvbr->tvb)) return 0;
+
+    if (tvbr->tvb->expired) {
+        luaL_error(L,"expired tvb");
+        return 0;
+    }
+
+    uncompr_tvb = tvb_child_uncompress_lz77(tvbr->tvb->ws_tvb, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+    if (uncompr_tvb) {
+       add_new_data_source (lua_pinfo, uncompr_tvb, name);
+       if (push_TvbRange(L,uncompr_tvb,0,tvb_captured_length(uncompr_tvb))) {
+          WSLUA_RETURN(1); /* The <<lua_class_TvbRange,`TvbRange`>>. */
+       }
+    }
+
+    return 0;
+}
+
+WSLUA_METHOD TvbRange_uncompress_lz77(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing Microsoft Plain LZ77 compressed data, decompresses the data and returns a new <<lua_class_TvbRange,`TvbRange`>> containing the uncompressed data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_uncompress_lz77_NAME 2 /* The name to be given to the new data-source. */
+    TvbRange tvbr = checkTvbRange(L,1);
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_uncompress_lz77_NAME,"Uncompressed");
+    tvbuff_t *uncompr_tvb;
+
+    if (!(tvbr && tvbr->tvb)) return 0;
+
+    if (tvbr->tvb->expired) {
+        luaL_error(L,"expired tvb");
+        return 0;
+    }
+
+    uncompr_tvb = tvb_child_uncompress_lz77(tvbr->tvb->ws_tvb, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+    if (uncompr_tvb) {
+       add_new_data_source (lua_pinfo, uncompr_tvb, name);
+       if (push_TvbRange(L,uncompr_tvb,0,tvb_captured_length(uncompr_tvb))) {
+          WSLUA_RETURN(1); /* The <<lua_class_TvbRange,`TvbRange`>>. */
+       }
+    }
+
+    return 0;
+}
+
+WSLUA_METHOD TvbRange_uncompress_lz77huff(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing Microsoft LZ77+Huffman compressed data, decompresses the data and returns a new <<lua_class_TvbRange,`TvbRange`>> containing the uncompressed data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_uncompress_lz77huff_NAME 2 /* The name to be given to the new data-source. */
+    TvbRange tvbr = checkTvbRange(L,1);
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_uncompress_lz77huff_NAME,"Uncompressed");
+    tvbuff_t *uncompr_tvb;
+
+    if (!(tvbr && tvbr->tvb)) return 0;
+
+    if (tvbr->tvb->expired) {
+        luaL_error(L,"expired tvb");
+        return 0;
+    }
+
+    uncompr_tvb = tvb_child_uncompress_lz77huff(tvbr->tvb->ws_tvb, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+    if (uncompr_tvb) {
+       add_new_data_source (lua_pinfo, uncompr_tvb, name);
+       if (push_TvbRange(L,uncompr_tvb,0,tvb_captured_length(uncompr_tvb))) {
+          WSLUA_RETURN(1); /* The <<lua_class_TvbRange,`TvbRange`>>. */
+       }
+    }
+
+    return 0;
+}
+
+WSLUA_METHOD TvbRange_uncompress_lznt1(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing Microsoft LZNT1 compressed data, decompresses the data and returns a new <<lua_class_TvbRange,`TvbRange`>> containing the uncompressed data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_uncompress_lznt1_NAME 2 /* The name to be given to the new data-source. */
+    TvbRange tvbr = checkTvbRange(L,1);
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_uncompress_lznt1_NAME,"Uncompressed");
+    tvbuff_t *uncompr_tvb;
+
+    if (!(tvbr && tvbr->tvb)) return 0;
+
+    if (tvbr->tvb->expired) {
+        luaL_error(L,"expired tvb");
+        return 0;
+    }
+
+    uncompr_tvb = tvb_child_uncompress_lznt1(tvbr->tvb->ws_tvb, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+    if (uncompr_tvb) {
+       add_new_data_source (lua_pinfo, uncompr_tvb, name);
+       if (push_TvbRange(L,uncompr_tvb,0,tvb_captured_length(uncompr_tvb))) {
+          WSLUA_RETURN(1); /* The <<lua_class_TvbRange,`TvbRange`>>. */
+       }
+    }
+
+    return 0;
+}
+
+WSLUA_METHOD TvbRange_uncompress_snappy(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing Snappy compressed data, decompresses the data and returns a new <<lua_class_TvbRange,`TvbRange`>> containing the uncompressed data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_uncompress_snappy_NAME 2 /* The name to be given to the new data-source. */
+    TvbRange tvbr = checkTvbRange(L,1);
+#ifdef HAVE_SNAPPY
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_uncompress_snappy_NAME,"Uncompressed");
+    tvbuff_t *uncompr_tvb;
+#endif
+
+    if (!(tvbr && tvbr->tvb)) return 0;
+
+    if (tvbr->tvb->expired) {
+        luaL_error(L,"expired tvb");
+        return 0;
+    }
+
+#ifdef HAVE_SNAPPY
+    uncompr_tvb = tvb_child_uncompress_snappy(tvbr->tvb->ws_tvb, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+    if (uncompr_tvb) {
+       add_new_data_source (lua_pinfo, uncompr_tvb, name);
+       if (push_TvbRange(L,uncompr_tvb,0,tvb_captured_length(uncompr_tvb))) {
+          WSLUA_RETURN(1); /* The <<lua_class_TvbRange,`TvbRange`>>. */
+       }
+    }
+#else
+    luaL_error(L,"Missing support for Snappy");
+#endif
+
+    return 0;
+}
+
+WSLUA_METHOD TvbRange_uncompress_zstd(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing Zstandard compressed data, decompresses the data and returns a new <<lua_class_TvbRange,`TvbRange`>> containing the uncompressed data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_uncompress_zstd_NAME 2 /* The name to be given to the new data-source. */
+    TvbRange tvbr = checkTvbRange(L,1);
+#ifdef HAVE_ZSTD
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_uncompress_zstd_NAME,"Uncompressed");
+    tvbuff_t *uncompr_tvb;
+#endif
+
+    if (!(tvbr && tvbr->tvb)) return 0;
+
+    if (tvbr->tvb->expired) {
+        luaL_error(L,"expired tvb");
+        return 0;
+    }
+
+#ifdef HAVE_ZSTD
+    uncompr_tvb = tvb_child_uncompress_zstd(tvbr->tvb->ws_tvb, tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+    if (uncompr_tvb) {
+       add_new_data_source (lua_pinfo, uncompr_tvb, name);
+       if (push_TvbRange(L,uncompr_tvb,0,tvb_captured_length(uncompr_tvb))) {
+          WSLUA_RETURN(1); /* The <<lua_class_TvbRange,`TvbRange`>>. */
+       }
+    }
+#else
+    luaL_error(L,"Missing support for ZStandard");
+#endif
+
+    return 0;
+}
+
+WSLUA_METHOD TvbRange_decode_base64(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing Base64 encoded data, return a new <<lua_class_TvbRange,`TvbRange`>> containing the decoded data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_decode_base64_NAME 2 /* The name to be given to the new data-source. */
+    TvbRange tvbr = checkTvbRange(L,1);
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_decode_base64_NAME,"Decoded");
+    tvbuff_t *decoded_tvb;
+
+    if (!(tvbr && tvbr->tvb)) return 0;
+
+    if (tvbr->tvb->expired) {
+        luaL_error(L,"expired tvb");
+        return 0;
+    }
+
+    decoded_tvb = base64_tvb_to_new_tvb(tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+    if (decoded_tvb) {
+       add_new_data_source (lua_pinfo, decoded_tvb, name);
+       if (push_TvbRange(L,decoded_tvb,0,tvb_captured_length(decoded_tvb))) {
+          WSLUA_RETURN(1); /* The <<lua_class_TvbRange,`TvbRange`>>. */
+       }
+    }
+
+    return 0;
+}
+
+WSLUA_METHOD TvbRange_decode_base64url(lua_State* L) {
+    /* Given a <<lua_class_TvbRange,`TvbRange`>> containing base64url encoded data, return a new <<lua_class_TvbRange,`TvbRange`>> containing the decoded data.
+     @since 4.3.0
+     */
+#define WSLUA_ARG_TvbRange_decode_base64url_NAME 2 /* The name to be given to the new data-source. */
+    TvbRange tvbr = checkTvbRange(L,1);
+    const char* name = luaL_optstring(L,WSLUA_ARG_TvbRange_decode_base64url_NAME,"Decoded");
+    tvbuff_t *decoded_tvb;
+
+    if (!(tvbr && tvbr->tvb)) return 0;
+
+    if (tvbr->tvb->expired) {
+        luaL_error(L,"expired tvb");
+        return 0;
+    }
+
+    decoded_tvb = base64uri_tvb_to_new_tvb(tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len);
+    if (decoded_tvb) {
+       add_new_data_source (lua_pinfo, decoded_tvb, name);
+       if (push_TvbRange(L,decoded_tvb,0,tvb_captured_length(decoded_tvb))) {
+          WSLUA_RETURN(1); /* The <<lua_class_TvbRange,`TvbRange`>>. */
+       }
+    }
+
+    return 0;
 }
 
 WSLUA_METHOD TvbRange_len(lua_State* L) {
@@ -1462,6 +1734,16 @@ WSLUA_METHODS TvbRange_methods[] = {
     WSLUA_CLASS_FNREG(TvbRange,le_ustringz),
     WSLUA_CLASS_FNREG(TvbRange,ustringz),
     WSLUA_CLASS_FNREG(TvbRange,uncompress),
+    WSLUA_CLASS_FNREG(TvbRange,uncompress_zlib),
+    WSLUA_CLASS_FNREG(TvbRange,uncompress_brotli),
+    WSLUA_CLASS_FNREG(TvbRange,uncompress_hpack_huff),
+    WSLUA_CLASS_FNREG(TvbRange,uncompress_lz77),
+    WSLUA_CLASS_FNREG(TvbRange,uncompress_lz77huff),
+    WSLUA_CLASS_FNREG(TvbRange,uncompress_lznt1),
+    WSLUA_CLASS_FNREG(TvbRange,uncompress_snappy),
+    WSLUA_CLASS_FNREG(TvbRange,uncompress_zstd),
+    WSLUA_CLASS_FNREG(TvbRange,decode_base64),
+    WSLUA_CLASS_FNREG(TvbRange,decode_base64url),
     WSLUA_CLASS_FNREG(TvbRange,raw),
     { NULL, NULL }
 };
@@ -1475,6 +1757,9 @@ WSLUA_META TvbRange_meta[] = {
 };
 
 int TvbRange_register(lua_State* L) {
+    if (outstanding_TvbRange != NULL) {
+        g_ptr_array_unref(outstanding_TvbRange);
+    }
     outstanding_TvbRange = g_ptr_array_new();
     WSLUA_REGISTER_CLASS(TvbRange);
     return 0;

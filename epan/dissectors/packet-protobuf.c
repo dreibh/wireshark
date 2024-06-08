@@ -1444,7 +1444,9 @@ dissect_protobuf_message(tvbuff_t *tvb, guint offset, guint length, packet_info 
 
     if (message_desc) {
         message_name = pbw_Descriptor_full_name(message_desc);
-        field_count = pbw_Descriptor_field_count(message_desc);
+        /* N.B. extra entries are needed because of possibly repeated items within message.
+           TODO: use dynamic wmem_array_t? Don't fancy void* interface... */
+        field_count = pbw_Descriptor_field_count(message_desc) + 256;
         if (add_default_value && field_count > 0) {
             parsed_fields = wmem_alloc0_array(pinfo->pool, int, field_count);
         }
@@ -1519,11 +1521,17 @@ dissect_protobuf_message(tvbuff_t *tvb, guint offset, guint length, packet_info 
     {
         field_desc = NULL;
         if (!dissect_one_protobuf_field(tvb, &offset, max_offset - offset, pinfo, message_tree, message_desc,
-            is_top_level, &field_desc, prev_field_desc, dumper))
+            is_top_level, &field_desc, prev_field_desc, dumper)) {
             break;
+        }
 
         if (parsed_fields && field_desc) {
-            parsed_fields[parsed_fields_count++] = pbw_FieldDescriptor_number(field_desc);
+            if (parsed_fields_count < field_count) {
+                parsed_fields[parsed_fields_count++] = pbw_FieldDescriptor_number(field_desc);
+            }
+            else {
+                /* TODO: error?  Means default values may not be set/shown.. */
+            }
         }
 
         prev_field_desc = field_desc;
@@ -1646,7 +1654,7 @@ dissect_protobuf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
     guint i;
     const PbwDescriptor* message_desc = NULL;
     const gchar* data_str = NULL;
-    gchar *json_str, *p, *q;
+    gchar *json_str, *p;
 
     /* initialize only the first time the protobuf dissector is called */
     if (!protobuf_dissector_called) {
@@ -1735,6 +1743,33 @@ dissect_protobuf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
         message_desc = find_message_type_by_udp_port(pinfo);
     }
 
+    if (!message_desc) {
+        /* If this was inside an HTTP request, do we have a message type assigned to this URI? */
+        http_req_res_t  *curr = (http_req_res_t *)p_get_proto_data(wmem_file_scope(), pinfo,
+                                                                   proto_http, HTTP_PROTO_DATA_REQRES);
+        if (curr) {
+            if (curr->request_uri) {
+                for (guint n=0; n < num_protobuf_uri_message_types; n++) {
+                    if (uri_matches_pattern(curr->request_uri, protobuf_uri_message_types[n].uri, 1 /* depth */)) {
+                        if (strlen(protobuf_uri_message_types[n].message_type)) {
+                            /* Lookup message type for matching URI */
+                            message_desc = pbw_DescriptorPool_FindMessageTypeByName(pbw_pool,
+                                                                                    protobuf_uri_message_types[n].message_type);
+                        }
+                        /* Found a matched URI, so stop looking */
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    /* If *still* have no schema and a default is configured, try to use that */
+    if (!message_desc && strlen(default_message_type)) {
+        message_desc = pbw_DescriptorPool_FindMessageTypeByName(pbw_pool,
+                                                                default_message_type);
+    }
+
     if (display_json_mapping && message_desc) {
         json_dumper dumper = {
             .output_string = g_string_new(NULL),
@@ -1759,46 +1794,19 @@ dissect_protobuf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
         json_str = g_string_free(dumper.output_string, FALSE);
         if (json_str != NULL) {
             p = json_str;
-            q = NULL;
             /* add each line of json to the protobuf_json_tree */
             do {
-                q = strchr(p, '\n');
+                gchar *q = strchr(p, '\n');
                 if (q != NULL) {
                     *(q++) = '\0'; /* replace the '\n' to '\0' */
                 } /* else (q == NULL) means this is the last line of the JSON */
                 proto_tree_add_string_format(protobuf_json_tree, hf_json_mapping_line, tvb, 0, -1, p, "%s", p);
                 p = q;
-                q = NULL;
             } while (p);
 
             g_free(json_str);
         }
     } else {
-        /* If this was inside an HTTP request, do we have a message type assigned to this URI? */
-        http_req_res_t  *curr = (http_req_res_t *)p_get_proto_data(wmem_file_scope(), pinfo,
-                                                                   proto_http, HTTP_PROTO_DATA_REQRES);
-        if (curr) {
-            if (curr->request_uri) {
-                for (guint n=0; n < num_protobuf_uri_message_types; n++) {
-                    if (uri_matches_pattern(curr->request_uri, protobuf_uri_message_types[n].uri, 1 /* depth */)) {
-                        if (strlen(protobuf_uri_message_types[n].message_type)) {
-                            /* Lookup message type for matching URI */
-                            message_desc = pbw_DescriptorPool_FindMessageTypeByName(pbw_pool,
-                                                                                    protobuf_uri_message_types[n].message_type);
-                        }
-                        /* Found a matched URI, so stop looking */
-                        break;
-                    }
-                }
-            }
-        }
-
-        /* If *still* have no schema and a default is configured, try to use that */
-        if (!message_desc && strlen(default_message_type)) {
-            message_desc = pbw_DescriptorPool_FindMessageTypeByName(pbw_pool,
-                                                                    default_message_type);
-        }
-
         dissect_protobuf_message(tvb, offset, tvb_reported_length_remaining(tvb, offset), pinfo,
                                  protobuf_tree, message_desc,
                                  -1, // no hf item

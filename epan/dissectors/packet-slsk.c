@@ -136,7 +136,7 @@ static expert_field ei_slsk_decompression_failed;
 
 /* desegmentation of SoulSeek Message over TCP */
 static bool slsk_desegment = true;
-#ifdef HAVE_ZLIB
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
 static bool slsk_decompress = true;
 #else
 static bool slsk_decompress;
@@ -463,7 +463,7 @@ static int dissect_slsk_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
           if (slsk_decompress == TRUE){
 
-            tvbuff_t *uncompr_tvb = tvb_child_uncompress(tvb, tvb, offset, comprlen);
+            tvbuff_t *uncompr_tvb = tvb_child_uncompress_zlib(tvb, tvb, offset, comprlen);
 
             if (uncompr_tvb == NULL) {
               proto_tree_add_expert(slsk_tree, pinfo, &ei_slsk_zlib_decompression_failed, tvb, offset, -1);
@@ -575,7 +575,7 @@ static int dissect_slsk_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
           if (slsk_decompress == TRUE){
 
-            tvbuff_t *uncompr_tvb = tvb_child_uncompress(tvb, tvb, offset, comprlen);
+            tvbuff_t *uncompr_tvb = tvb_child_uncompress_zlib(tvb, tvb, offset, comprlen);
 
             if (uncompr_tvb == NULL) {
               ti = proto_tree_add_item(slsk_tree, hf_slsk_compr_packet, tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_NA);
@@ -1030,7 +1030,7 @@ static int dissect_slsk_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
           if (slsk_decompress == TRUE){
 
-            tvbuff_t *uncompr_tvb = tvb_child_uncompress(tvb, tvb, offset, comprlen);
+            tvbuff_t *uncompr_tvb = tvb_child_uncompress_zlib(tvb, tvb, offset, comprlen);
 
             if (uncompr_tvb == NULL) {
               proto_tree_add_expert(slsk_tree, pinfo, &ei_slsk_zlib_decompression_failed, tvb, offset, -1);
@@ -2351,7 +2351,7 @@ proto_register_slsk(void)
       "Whether the SoulSeek dissector should reassemble messages spanning multiple TCP segments."
       " To use this option, you must also enable \"Allow subdissectors to reassemble TCP streams\" in the TCP protocol settings.",
       &slsk_desegment);
-#ifdef HAVE_ZLIB
+#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
   prefs_register_bool_preference(slsk_module, "decompress",
       "Decompress zlib compressed packets inside SoulSeek messages",
       "Whether the SoulSeek dissector should decompress all zlib compressed packets inside messages",

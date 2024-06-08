@@ -2293,7 +2293,7 @@ static hf_register_info hf[] =
     { &hf_u3v_bootstrap_Maximum_Device_Response_Time,
     { "Device Maximum response time in ms", "u3v.bootstrap.Maximum_Device_Response_Time",
     FT_UINT32, BASE_DEC, NULL, 0x0,
-    "Maximum response time in ms", HFILL
+    NULL, HFILL
     } },
 
     { &hf_u3v_bootstrap_Manifest_Table_Address,
@@ -2335,13 +2335,13 @@ static hf_register_info hf[] =
     { &hf_u3v_bootstrap_Timestamp_Latch,
     { "Latch Timestamp", "u3v.bootstrap.Timestamp_Latch",
     FT_UINT32, BASE_DEC, NULL, 0x0,
-    "Timestamp Latch", HFILL
+    NULL, HFILL
     } },
 
     { &hf_u3v_bootstrap_Timestamp_Increment,
     { "Timestamp Increment Value", "u3v.bootstrap.Timestamp_Increment",
     FT_UINT64, BASE_DEC, NULL, 0x0,
-    "Timestamp Increment", HFILL
+    NULL, HFILL
     } },
 
     { &hf_u3v_bootstrap_Access_Privilege,

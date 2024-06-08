@@ -49,6 +49,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	../qt/widgets/range_syntax_lineedit.h
 	../qt/widgets/resize_header_view.h
 	../qt/widgets/resolved_addresses_view.h
+	../qt/widgets/rowmove_tree_view.h
 	../qt/widgets/splash_overlay.h
 	../qt/widgets/stock_icon_tool_button.h
 	../qt/widgets/syntax_line_edit.h
@@ -169,7 +170,6 @@ set(WIRESHARK_QT_HEADERS
 	../qt/file_set_dialog.h
 	../qt/filter_action.h
 	../qt/filter_dialog.h
-	../qt/filter_dialog.h
 	../qt/filter_expression_frame.h
 	../qt/follow_stream_action.h
 	../qt/follow_stream_dialog.h
@@ -184,6 +184,7 @@ set(WIRESHARK_QT_HEADERS
 	../qt/interface_toolbar_reader.h
 	../qt/interface_toolbar.h
 	../qt/io_console_dialog.h
+	../qt/io_graph_action.h
 	../qt/io_graph_dialog.h
 	../qt/layout_preferences_frame.h
 	../qt/main_application.h
@@ -281,6 +282,7 @@ set(WIRESHARK_WIDGET_SRCS
 	../qt/widgets/range_syntax_lineedit.cpp
 	../qt/widgets/resize_header_view.cpp
 	../qt/widgets/resolved_addresses_view.cpp
+	../qt/widgets/rowmove_tree_view.cpp
 	../qt/widgets/splash_overlay.cpp
 	../qt/widgets/stock_icon_tool_button.cpp
 	../qt/widgets/syntax_line_edit.cpp
@@ -408,6 +410,7 @@ set(WIRESHARK_QT_SRC
 	../qt/interface_toolbar_reader.cpp
 	../qt/interface_toolbar.cpp
 	../qt/io_console_dialog.cpp
+	../qt/io_graph_action.cpp
 	../qt/layout_preferences_frame.cpp
 	../qt/main_application.cpp
 	../qt/main_status_bar.cpp
