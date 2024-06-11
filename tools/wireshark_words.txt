@@ -12,6 +12,7 @@
 80mhz
 abbrev
 aborts
+accel
 accelerations
 accelerometer
 acceptor
@@ -22,6 +23,7 @@ acked
 acknack
 acknowledgement
 acknowledgements
+acknowlegement
 acp133
 acquirer
 actioned
@@ -47,6 +49,7 @@ adwin
 aes128
 aes256
 aethra
+afnum
 aggreg
 aggregated
 aggregates
@@ -99,6 +102,7 @@ applicability
 approx
 appset
 appsig
+april
 arabic
 arbitrated
 arcnet
@@ -106,6 +110,7 @@ arduino
 arfcn
 arista
 armscii
+arphrd
 aruba
 ascii
 asciidoc
@@ -144,6 +149,7 @@ authenticators
 authgss
 authn
 authntransitioning
+authorisation
 authorizer
 authtoken
 authtype
@@ -156,6 +162,7 @@ autosar
 available
 avaya
 avrcp
+b100base
 bacapp
 backedup
 backend
@@ -209,6 +216,7 @@ bosch
 bouygues
 bratislava
 britain
+british
 broadcom
 browsers
 bsmap
@@ -400,6 +408,7 @@ congctrl
 connectionless
 connid
 connp
+conout
 const
 contactless
 contextp
@@ -423,6 +432,7 @@ coverity
 cp56time2a
 cpdlc
 cpich
+cplusplus
 cppcheck
 cpubus
 cpuregisters
@@ -438,6 +448,7 @@ crypto
 cryptographic
 csapi
 ctime
+ctrls
 ctrlstat
 ctxinfo
 ctxinst
@@ -448,6 +459,7 @@ customizable
 customization
 customizing
 cyphering
+cyrillic
 daintree
 dallas
 darwin
@@ -483,6 +495,7 @@ debugger
 debuggers
 decapsulation
 decca
+december
 decentralization
 dechunk
 decimals
@@ -507,6 +520,8 @@ defragmentation
 defragmented
 defragmenting
 dehumidification
+deinterlaced
+deinterlacer
 deinterlacing
 deinterleaved
 deleg
@@ -521,6 +536,7 @@ demultiplex
 demultiplexed
 demultiplexer
 demultiplexers
+demultiplexing
 denso
 deobfuscated
 deobfuscation
@@ -574,6 +590,7 @@ dhcpv
 diagdata
 dialed
 dialup
+dicom
 differentiator
 diffie
 diffserv
@@ -594,6 +611,7 @@ dissection
 dissector
 dissectors
 distinguisher
+distrib
 distributions
 diversifications
 diversifier
@@ -621,6 +639,7 @@ dpnss
 drbid
 drdynvc
 droppable
+drsuapi
 dsmcc
 dstmode
 dstport
@@ -643,6 +662,7 @@ econet
 ecpri
 ed137a
 editcap
+edonkey
 eeprom
 effecter
 egprs
@@ -656,6 +676,7 @@ ellipsoid
 emlsr
 emulates
 emule
+enablement
 encap
 encaps
 encapsulating
@@ -676,6 +697,7 @@ endif
 endpoint
 endpt
 engineid
+enlight
 enodeb
 enqueue
 enrollee
@@ -710,6 +732,7 @@ España
 esperanto
 essar
 estonia
+estream
 ethcm
 etheraddr
 ethercat
@@ -731,6 +754,7 @@ executables
 exflags
 exfunc
 exocet
+expandtab
 expansions
 extapp
 extattr
@@ -761,12 +785,14 @@ fastmsg
 fattr
 fdata
 featureful
+february
 fhandle
 fiber
 fibre
 fileseg
 fileset
 filsfils
+filter2d
 firefox
 firewall
 fiveco
@@ -881,6 +907,7 @@ guatemala
 guint
 gzipped
 handoff
+hangul
 hangup
 harqid
 harris
@@ -891,11 +918,13 @@ hazelcast
 hbreq
 hcidump
 headend
+hebrew
 hellman
 heuristic
 heuristics
 hfarr
 hfill,
+hfindex
 hfinfo
 HI2Operations
 histogram
@@ -950,6 +979,10 @@ ifndef
 iftype
 ikev2
 illuminance
+image1d
+image2d
+image3d
+image4dsgis
 imeisv
 immersive
 impinj
@@ -1028,6 +1061,7 @@ ioflag
 iograph
 ionospheric
 iotecha
+ipacc
 ipaccess
 ipaddr
 ipaddress
@@ -1055,6 +1089,7 @@ isatap
 iscsi
 iseries
 isobus
+isocenter
 isochronous
 issuer
 italia
@@ -1153,6 +1188,7 @@ lookups
 loopback
 loran
 lossy
+lsarpc
 lscap
 lstat
 ltype
@@ -1168,12 +1204,14 @@ macos
 macosx
 macros
 macsec
+madge
 madrid
 magnitudes
 mailto
 maintainers
 malloc
 manarg
+manip
 mantissa
 manuf
 mappable
@@ -1184,6 +1222,7 @@ mathieson
 matrixes
 maxbytes
 maxlen
+maxlength
 maxmind
 maxnoof
 maybefcs
@@ -1215,9 +1254,12 @@ meshcop
 messageid
 metadata
 metamethod
+metatraffic
 meteorological
 metermod
+meterset
 metre
+metres
 México
 mfgfield
 mgmtmsg
@@ -1234,6 +1276,7 @@ miniport
 minislot
 minislots
 minizip
+minmax
 minus1
 mirrorlink
 misconfiguration
@@ -1255,6 +1298,7 @@ modulations
 modulo
 modulus
 modus
+monday
 motorola
 móviles
 mozilla
@@ -1264,6 +1308,12 @@ mplstp
 mpquic
 mpsse
 mptcp
+mqcacf
+mqcmd
+mqiacf
+mqiach
+mqiamo
+mqrccf
 mrcpv
 msbuild
 mscldap
@@ -1327,6 +1377,7 @@ ndpsm
 nederland
 negotiability
 neighbour
+neighbours
 nessie
 netboot
 netfilter
@@ -1355,6 +1406,7 @@ niagara
 niagra
 nigam
 nikon
+nintendo
 nistp
 nitnxlate
 njack
@@ -1390,6 +1442,7 @@ notifier
 notset
 notused
 novell
+november
 nowait
 nowrap
 npcap
@@ -1425,9 +1478,11 @@ octal
 octet
 octets
 octetstring
+october
 oextcap
 ofdma
 offloadability
+offsetp
 ofpacpt
 ofpat
 ofpbac
@@ -1450,6 +1505,7 @@ ofptfpt
 ofpxmt
 om2000
 omniidl
+omron
 onboarding
 onduration
 onoff
@@ -1476,6 +1532,7 @@ optiplex
 optreq
 optus
 ordinal
+organisation
 orpcthat
 orthogonal
 oscillatory
@@ -1497,6 +1554,8 @@ panasonic
 parallelism
 parallelization
 param
+parameterfv
+parameteriv
 parameterization
 parameterized
 params
@@ -1680,6 +1739,7 @@ randomization
 randomize
 randomizer
 randpkt
+randr
 raster
 rcsta
 rctxinfo
@@ -1693,6 +1753,7 @@ realloc
 realtek
 realtime
 reassembles
+reassemblies
 reassembly
 reassigning
 reassignments
@@ -1713,7 +1774,9 @@ recalculate
 recalculating
 recalculation
 recalibrate
+recognise
 recognised
+recognises
 recognizer
 recompile
 recompiled
@@ -1800,6 +1863,7 @@ resampled
 resampler
 rescan
 resegment
+resegmentation
 resegmented
 resend
 resequencing
@@ -1853,6 +1917,7 @@ rmcap
 rngrsp
 rnsap
 roamer
+robert
 romania
 rotterdam
 routable
@@ -1896,6 +1961,7 @@ sarajevo
 satisfiable
 satnet
 saturates
+saturday
 savvius
 scalability
 scalable
@@ -1970,6 +2036,7 @@ showtechnic
 shtdn
 siapp
 sidelink
+siginfo
 siglen
 signaal
 signaling
@@ -2026,6 +2093,7 @@ spnego
 spoofing
 spooled
 spooler
+spoolss
 sqlite
 sqlwarn
 srbid
@@ -2034,10 +2102,12 @@ srcip
 srcport
 srtcp
 srvcc
+srvsvc
 sscop
 sshdump
 sshkey
 ssupervisor
+stainfo
 stanag
 standardization
 stateful
@@ -2107,6 +2177,7 @@ subtlv
 subtree
 subtrees
 sudan
+sunday
 superseding
 superset
 suppfeat
@@ -2116,11 +2187,13 @@ sverige
 svhdx
 swedish
 swisscom
+swissvoice
 switchinfo
 sydney
 symantec
 symbl
 symlink
+synchronisation
 synchronizer
 synchronizing
 synchronously
@@ -2184,6 +2257,7 @@ thermister
 thermistor
 throughput
 thunderx
+thursday
 timeout
 timeslot
 timestamp
@@ -2208,6 +2282,7 @@ topologies
 toprowflag
 topup
 toshiba
+tostr
 tostring
 totemsrp
 touchlink
@@ -2237,6 +2312,7 @@ trustdom
 tshark
 tspec
 tstamp
+tuesday
 tunid
 tunneled
 tunneling
@@ -2244,12 +2320,14 @@ tuple
 tuples
 tvbparse
 tvbuff
+tvbuffer
 twamp
 twopc
 txchannel
 txmcsmap
 txpwr
 txsta
+txtmod
 type1
 type2
 type2mimo
@@ -2302,6 +2380,7 @@ uncommented
 uncompensated
 uncompress
 uncompressed
+uncompresses
 uncompressing
 uncompression
 unconfigurable
@@ -2352,6 +2431,7 @@ uninstallation
 uninstalled
 uninstaller
 uninterruptable
+unintuitive
 unistim
 universitaet
 unjoin
@@ -2485,6 +2565,7 @@ virtualization
 virtualized
 vlans
 vldbentry
+vmods
 vmware
 vnode
 vocoder
@@ -2502,8 +2583,10 @@ wbxml
 webcam
 webkit
 websocket
+wednesday
 werror
 whoami
+whois
 wideband
 wifidump
 wikipedia
@@ -2543,11 +2626,19 @@ xchannel
 xcode
 xdist
 xetra
+xf86dri
+xf86vidmode
 xferext
 xferflags
 xferstatus
+xfixes
 xhtml
+xinerama
+xinput
 xmlns
+xprint
+xproto
+xselinux
 xsltproc
 xtreme
 z3950
