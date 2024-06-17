@@ -1046,7 +1046,7 @@ dissect_report_ack_segment(proto_tree *ltp_tree, tvbuff_t *tvb, packet_info *pin
 	ltp_rpt_ack_tree = proto_tree_add_subtree(ltp_tree, tvb,frame_offset, -1,
 												ett_rpt_ack_segm, &ltp_rpt_ack_item, "Report Ack Segment");
 
-	/* Extracing receipt serial number info */
+	/* Extracting receipt serial number info */
 	item_rpt_sno = add_sdnv64_to_tree(ltp_rpt_ack_tree, tvb, pinfo, frame_offset + segment_offset, hf_ltp_rpt_ack_sno, &rpt_sno, &rpt_sno_size);
 	segment_offset += rpt_sno_size;
 
@@ -1364,13 +1364,13 @@ dissect_ltp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 	return offset;
 }
 
-static gboolean
+static bool
 dissect_ltp_heur_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
 	const int packet_len = tvb_reported_length(tvb);
 	if (packet_len <= LTP_MIN_DATA_BUFFER)
 	{
-		return FALSE;
+		return false;
 	}
 
 	int offset = 0;
@@ -1393,11 +1393,11 @@ dissect_ltp_heur_udp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
 	ENDTRY;
 	if (offset != packet_len)
 	{
-		return FALSE;
+		return false;
 	}
 
 	dissect_ltp(tvb, pinfo, tree, data);
-	return TRUE;
+	return true;
 }
 
 /// Conversation address for the session receiver

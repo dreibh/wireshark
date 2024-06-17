@@ -883,7 +883,7 @@ void WiresharkMainWindow::startCapture(QStringList interfaces) {
              */
             if (extcap_requires_configuration(device->name))
             {
-                /* Request openning of extcap options dialog */
+                /* Request opening of extcap options dialog */
                 QString device_name(device->name);
                 emit showExtcapOptions(device_name, false);
                 /* Cancel start of capture */
@@ -2387,7 +2387,7 @@ void WiresharkMainWindow::injectSecrets()
 
         if (ret != QMessageBox::Yes) return;
 
-        QUrl wiki_url = QString(WS_WIKI_URL("TLS/#tls-decryption"));
+        QUrl wiki_url = QString(WS_WIKI_URL("TLS#tls-decryption"));
         QDesktopServices::openUrl(wiki_url);
         return;
     }

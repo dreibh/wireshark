@@ -8,6 +8,7 @@
 3gpp2
 3pcap
 5views
+7login
 80211n
 80mhz
 abbrev
@@ -78,6 +79,7 @@ amperes
 amsdu
 amsterdam
 anacap
+analysing
 analyzers
 analyzes
 andxoffset
@@ -162,6 +164,7 @@ autosar
 available
 avaya
 avrcp
+axcor
 b100base
 bacapp
 backedup
@@ -183,6 +186,7 @@ beamformee
 beamformer
 beamforming
 behaviour
+behaviours
 beijing
 belgacom
 berhad
@@ -280,6 +284,7 @@ ccache
 cccid
 ccitt
 ccpch
+ccsid
 cctrch
 cdma2000
 cdmacallmode
@@ -621,6 +626,7 @@ dlmap
 dlsch
 dmacros
 dmepi
+dmx4all
 dnskey
 dnssec
 dnssrv
@@ -636,6 +642,7 @@ downlink
 doxygen
 dpauxmon
 dpnss
+drange
 drbid
 drdynvc
 droppable
@@ -718,6 +725,7 @@ ephemeris
 epoll
 epsem
 equinf
+equinix
 equiv
 equivalence
 ericsson
@@ -801,6 +809,7 @@ flag1
 flag2
 flanger
 flavored
+flavour
 flexray
 flowid
 flowmod
@@ -812,6 +821,7 @@ foffset
 followup
 foobar
 format0
+forti
 fortigate
 fortinet
 fpiur
@@ -881,6 +891,7 @@ gmprs
 gnodeb
 gnutls
 goaway
+goddard
 golomb
 goodput
 google
@@ -1105,6 +1116,7 @@ jacobson
 january
 japanese
 jetds
+jminfo
 joiners
 jsonraw
 jupmngr
@@ -1254,6 +1266,7 @@ meshcop
 messageid
 metadata
 metamethod
+metatable
 metatraffic
 meteorological
 metermod
@@ -1645,6 +1658,8 @@ preambles
 preauth
 precisions
 precoding
+precompilation
+precompute
 preconfiguration
 preconfigured
 predef
@@ -2020,6 +2035,7 @@ setkey
 setuid
 severities
 sfiocr
+sflag
 sflow
 sftpserver
 sftserver
@@ -2112,6 +2128,7 @@ stanag
 standardization
 stateful
 statfs
+statsum
 statusbar
 stderr
 stdin
@@ -2173,6 +2190,7 @@ subrects
 subselect
 subselection
 subslot
+subsys
 subtlv
 subtree
 subtrees
@@ -2336,6 +2354,7 @@ typedef
 typeof
 uarfcn
 uavcan
+ubertooth
 ubiquisys
 uboot
 ubuntu
@@ -2365,6 +2384,7 @@ unassign
 unassoc
 unassociated
 unauthenticated
+unauthorised
 unavailability
 unbind
 unblocking

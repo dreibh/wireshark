@@ -90,8 +90,8 @@ dissect_credssp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void
 	return dissect_TSRequest_PDU(tvb, pinfo, tree, data);
 }
 
-static gboolean
-dissect_credssp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data _U_)
+static bool
+dissect_credssp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data)
 {
   asn1_ctx_t asn1_ctx;
   int offset = 0;
@@ -125,14 +125,14 @@ dissect_credssp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 
               tap_queue_packet(exported_pdu_tap, pinfo, exp_pdu_data);
             }
-            dissect_credssp(tvb, pinfo, parent_tree, NULL);
-            return TRUE;
+            dissect_credssp(tvb, pinfo, parent_tree, data);
+            return true;
           }
         }
       }
     }
   }
-  return FALSE;
+  return false;
 }
 
 

@@ -4007,15 +4007,15 @@ packet_is_cigi(tvbuff_t *tvb)
 /*
  * The heuristic dissector
  */
-static gboolean
+static bool
 dissect_cigi_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
     /* Does this look like CIGI? */
     if ( !packet_is_cigi(tvb) ) {
-        return FALSE;
+        return false;
     }
     dissect_cigi_pdu(tvb, pinfo, tree);
-    return TRUE;
+    return true;
 }
 
 /*
@@ -7102,7 +7102,7 @@ cigi3_add_trajectory_definition(tvbuff_t *tvb, proto_tree *tree, gint offset)
     return offset;
 }
 
-/* CIGI4 Acceleraion Control */
+/* CIGI4 Acceleration Control */
 static gint
 cigi4_add_acceleration_control(tvbuff_t* tvb, proto_tree* tree, gint offset)
 {

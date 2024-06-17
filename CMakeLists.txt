@@ -1237,6 +1237,7 @@ if (CARES_VERSION VERSION_GREATER_EQUAL "1.28.0")
 endif ()
 find_package(LEX REQUIRED)
 find_package(Perl)
+reset_find_package(PCRE2 PCRE2_DEBUG_LIBRARY)
 find_package(PCRE2 REQUIRED)
 
 if (NOT WIN32)
@@ -1675,7 +1676,6 @@ set(PLUGIN_VERSION_DIR "plugins/${PLUGIN_PATH_ID}")
 
 add_subdirectory( capture )
 add_subdirectory( doc )
-add_subdirectory( docbook EXCLUDE_FROM_ALL )
 add_subdirectory( epan )
 add_subdirectory( extcap )
 add_subdirectory( randpkt_core )
@@ -1727,10 +1727,13 @@ if(ENABLE_APPLICATION_BUNDLE)
 # 	set(_log_datafile_dir "${CMAKE_BINARY_DIR}/run/share/logray")
 endif()
 
-
 # wsutil must be added after DATAFILE_DIR is set such that filesystem.c can
 # learn about the directory location.
 add_subdirectory( wsutil )
+
+# docbook must be added after DATAFILE_DIR is set so that the guides can be
+# copied there for running from the build directory
+add_subdirectory( docbook EXCLUDE_FROM_ALL )
 
 if(BUILD_wireshark AND QT_FOUND)
 	add_subdirectory( ui/qt )
@@ -3853,6 +3856,9 @@ if(RPMBUILD_EXECUTABLE)
 	endif()
 	if (BROTLI_FOUND)
 		list(APPEND _rpmbuild_with_args --with brotli)
+	endif()
+	if(ASCIIDOCTOR_FOUND AND XSLTPROC_EXECUTABLE)
+		list(APPEND _rpmbuild_with_args --with guides)
 	endif()
 
 	execute_process(

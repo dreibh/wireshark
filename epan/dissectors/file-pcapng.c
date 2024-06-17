@@ -2064,10 +2064,10 @@ static void pcapng_shutdown_protocol(void)
     s_local_block_callback_table = NULL;
 }
 
-static gboolean
-dissect_pcapng_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+static bool
+dissect_pcapng_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    return dissect_pcapng(tvb, pinfo, tree, NULL) > 0;
+    return dissect_pcapng(tvb, pinfo, tree, data) > 0;
 }
 
 /* Expected to be called by an external dissector.  For an in-tree example, please see file-pcap-darwin.c */
