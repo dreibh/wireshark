@@ -198,7 +198,7 @@ static int radius_tap;
 
 static radius_vendor_info_t no_vendor = {"Unknown Vendor", 0, NULL, -1, 1, 1, FALSE};
 
-static radius_attr_info_t no_dictionary_entry = {"Unknown-Attribute", { { 0, 0 } }, FALSE, FALSE, radius_octets, NULL, NULL, -1, -1, -1, -1, -1, -1, NULL };
+static radius_attr_info_t no_dictionary_entry = {"Unknown-Attribute", { { 0, 0 } }, FALSE, FALSE, false, radius_octets, NULL, NULL, -1, -1, -1, -1, -1, -1, NULL };
 
 static dissector_handle_t eap_handle;
 static dissector_handle_t radius_handle;
@@ -1812,6 +1812,7 @@ dissect_attribute_value_pairs(proto_tree *tree, packet_info *pinfo, tvbuff_t *tv
 			}
 		}
 
+		/* XXX - Do similar concatenation if dictionary_entry->concat == true */
 		if (avp_type0 == RADIUS_ATTR_TYPE_EAP_MESSAGE) {
 			gint tvb_len;
 
@@ -2189,7 +2190,7 @@ dissect_radius(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 				radius_call->ident = rh.rh_ident;
 				radius_call->code = rh.rh_code;
 				memcpy(radius_call->req_authenticator, authenticator, AUTHENTICATOR_LENGTH);
-				radius_call->responded = FALSE;
+				radius_call->responded = false;
 				radius_call->req_time = pinfo->abs_ts;
 				radius_call->rspcode = 0;
 
@@ -2280,7 +2281,7 @@ dissect_radius(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
 
 				rad_info->request_available = TRUE;
 				rad_info->req_num = radius_call->req_num;
-				radius_call->responded = TRUE;
+				radius_call->responded = true;
 
 				item = proto_tree_add_uint_format(radius_tree,
 					hf_radius_req_frame, tvb, 0, 0,
@@ -2576,7 +2577,7 @@ radius_register_avp_dissector(guint32 vendor_id, guint32 _attribute_id, radius_a
 			/* XXX: Default "standard" values: Should be parameters ?  */
 			vendor->type_octets   = 1;
 			vendor->length_octets = 1;
-			vendor->has_flags     = FALSE;
+			vendor->has_flags     = false;
 
 			g_hash_table_insert(dict->vendors_by_id, GUINT_TO_POINTER(vendor->code), vendor);
 			g_hash_table_insert(dict->vendors_by_name, (gpointer)(vendor->name), vendor);
@@ -2598,7 +2599,8 @@ radius_register_avp_dissector(guint32 vendor_id, guint32 _attribute_id, radius_a
 		dictionary_entry->type = NULL;
 		dictionary_entry->vs = NULL;
 		dictionary_entry->hf = no_dictionary_entry.hf;
-		dictionary_entry->tagged = 0;
+		dictionary_entry->tagged = false;
+		dictionary_entry->concat = false;
 		dictionary_entry->hf_tag = -1;
 		dictionary_entry->hf_len = no_dictionary_entry.hf_len;
 		dictionary_entry->ett = no_dictionary_entry.ett;
