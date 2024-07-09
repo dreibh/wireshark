@@ -125,7 +125,7 @@ static dissector_handle_t atn_cm_handle;
 static dissector_handle_t atn_cpdlc_handle;
 
 static int proto_atn_ulcs;
-static guint32 ulcs_context_value;
+static uint32_t ulcs_context_value;
 static const char *object_identifier_id;
 
 static wmem_tree_t *aarq_data_tree;
@@ -163,15 +163,15 @@ static int dissect_ACSE_apdu_PDU(
     proto_tree *tree _U_,
     void *data _U_);
 
-guint32 dissect_per_object_descriptor_t(
+uint32_t dissect_per_object_descriptor_t(
     tvbuff_t *tvb,
-    guint32 offset,
+    uint32_t offset,
     asn1_ctx_t *actx,
     proto_tree *tree,
     int hf_index,
     tvbuff_t **value_tvb);
 
-static gint dissect_atn_ulcs(
+static int dissect_atn_ulcs(
     tvbuff_t *tvb,
     packet_info *pinfo,
     proto_tree  *tree,
@@ -276,8 +276,8 @@ static int ett_atn_ulcs_Name;
 static int ett_atn_ulcs_RDNSequence;
 static int ett_atn_ulcs_RelativeDistinguishedName;
 static int ett_atn_ulcs_AttributeTypeAndValue;
-static gint ett_atn_ulcs;
-static gint ett_atn_acse;
+static int ett_atn_ulcs;
+static int ett_atn_acse;
 
 
 
@@ -309,7 +309,7 @@ dissect_atn_ulcs_Presentation_context_identifier(tvbuff_t *tvb _U_, int offset _
         1U,
         127U,
         &ulcs_context_value,
-        TRUE);
+        true);
 
 
   return offset;
@@ -329,7 +329,7 @@ dissect_atn_ulcs_T_pdv_list_presentation_data_values_single_asn1_type(tvbuff_t *
 static int
 dissect_atn_ulcs_OCTET_STRING(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, NULL);
+                                       NO_BOUND, NO_BOUND, false, NULL);
 
   return offset;
 }
@@ -354,7 +354,7 @@ dissect_atn_ulcs_T_pdv_list_presentation_data_values_arbitrary(tvbuff_t *tvb _U_
         hf_index,
         NO_BOUND,
         NO_BOUND,
-        FALSE,
+        false,
         NULL,
         0,
         &tvb_usr,
@@ -479,7 +479,7 @@ static int
 dissect_atn_ulcs_Fully_encoded_data(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_atn_ulcs_Fully_encoded_data, Fully_encoded_data_sequence_of,
-                                                  1, 1, TRUE);
+                                                  1, 1, true);
 
   return offset;
 }
@@ -515,9 +515,9 @@ dissect_atn_ulcs_T_data_value_descriptor(tvbuff_t *tvb _U_, int offset _U_, asn1
       hf_index,
       -1,
       -1,
-      FALSE,
+      false,
       &actx->external.data_value_descriptor);
-  actx->external.data_value_descr_present = TRUE;
+  actx->external.data_value_descr_present = true;
 
 
   return offset;
@@ -541,7 +541,7 @@ static int
 dissect_atn_ulcs_T_externalt_encoding_octet_aligned(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
     offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, NULL);
+                                       NO_BOUND, NO_BOUND, false, NULL);
 
 
 
@@ -565,7 +565,7 @@ dissect_atn_ulcs_T_externalt_encoding_arbitrary(tvbuff_t *tvb _U_, int offset _U
     tree, hf_index,
     NO_BOUND,
     NO_BOUND,
-    FALSE,
+    false,
     NULL,
     0,
     &tvb_usr,
@@ -697,7 +697,7 @@ static int * const T_aarq_apdu_protocol_version_bits[] = {
 static int
 dissect_atn_ulcs_T_aarq_apdu_protocol_version(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_bit_string(tvb, offset, actx, tree, hf_index,
-                                     NO_BOUND, NO_BOUND, FALSE, T_aarq_apdu_protocol_version_bits, 1, NULL, NULL);
+                                     NO_BOUND, NO_BOUND, false, T_aarq_apdu_protocol_version_bits, 1, NULL, NULL);
 
   return offset;
 }
@@ -756,7 +756,7 @@ dissect_atn_ulcs_RelativeDistinguishedName(tvbuff_t *tvb _U_, int offset _U_, as
    */
   offset = dissect_per_constrained_set_of(tvb, offset, actx, tree, hf_index,
                                              ett_atn_ulcs_RelativeDistinguishedName, RelativeDistinguishedName_set_of,
-                                             1, 1, FALSE);
+                                             1, 1, false);
 
 
   return offset;
@@ -782,7 +782,7 @@ dissect_atn_ulcs_RDNSequence(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx
    */
   offset = dissect_per_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                       ett_atn_ulcs_RDNSequence, RDNSequence_sequence_of,
-                                      1, 1, FALSE);
+                                      1, 1, false);
 
 
   return offset;
@@ -845,7 +845,7 @@ static int
 dissect_atn_ulcs_AE_qualifier_form2(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
     packet_info * pinfo = actx->pinfo;
     atn_conversation_t *atn_cv = NULL;
-    guint32 ae_qualifier = 0;
+    uint32_t ae_qualifier = 0;
 
     /* dissect  ae-qualifier */
     offset = dissect_per_integer(
@@ -942,7 +942,7 @@ static int * const ACSE_requirements_bits[] = {
 static int
 dissect_atn_ulcs_ACSE_requirements(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_bit_string(tvb, offset, actx, tree, hf_index,
-                                     NO_BOUND, NO_BOUND, FALSE, ACSE_requirements_bits, 2, NULL, NULL);
+                                     NO_BOUND, NO_BOUND, false, ACSE_requirements_bits, 2, NULL, NULL);
 
   return offset;
 }
@@ -978,7 +978,7 @@ dissect_atn_ulcs_Mechanism_name(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *a
 static int
 dissect_atn_ulcs_BIT_STRING(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_bit_string(tvb, offset, actx, tree, hf_index,
-                                     NO_BOUND, NO_BOUND, FALSE, NULL, 0, NULL, NULL);
+                                     NO_BOUND, NO_BOUND, false, NULL, 0, NULL, NULL);
 
   return offset;
 }
@@ -1075,7 +1075,7 @@ dissect_atn_ulcs_Application_context_name_list(tvbuff_t *tvb _U_, int offset _U_
 static int
 dissect_atn_ulcs_Implementation_data(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, NULL);
+                                       NO_BOUND, NO_BOUND, false, NULL);
 
   return offset;
 }
@@ -1089,7 +1089,7 @@ static int
 dissect_atn_ulcs_Association_information(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_atn_ulcs_Association_information, Association_information_sequence_of,
-                                                  1, 1, TRUE);
+                                                  1, 1, true);
 
   return offset;
 }
@@ -1120,7 +1120,7 @@ dissect_atn_ulcs_AARQ_apdu(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
     packet_info * pinfo = actx->pinfo;
     aarq_data_t *aarq_data = NULL;
     atn_conversation_t *atn_cv = NULL;
-    guint32 aircraft_24_bit_address = 0;
+    uint32_t aircraft_24_bit_address = 0;
 
     /* AARQ/DT: dstref present, srcref is always zero */
     if((pinfo->clnp_dstref) && (!pinfo->clnp_srcref)){
@@ -1187,7 +1187,7 @@ dissect_atn_ulcs_AARQ_apdu(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
 
         /* alloc aarq data */
         aarq_data = wmem_new(wmem_file_scope(), aarq_data_t);
-        aarq_data-> aarq_pending = FALSE;
+        aarq_data-> aarq_pending = false;
 
         /* insert aarq data */
         wmem_tree_insert32(aarq_data_tree ,aircraft_24_bit_address,(void*)aarq_data);
@@ -1196,13 +1196,13 @@ dissect_atn_ulcs_AARQ_apdu(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
     /* check for pending AARQ/AARE sequences */
     /* if "aarq_data-> aarq_pending" is set this means that there is already one  */
     /* AARQ/AARE sequence pending (is unwise to overwrite AARE/AARQ) */
-    if (aarq_data-> aarq_pending == FALSE ) {
+    if (aarq_data-> aarq_pending == false ) {
 
       /* init aarq data */
       memset(aarq_data,0,sizeof(aarq_data_t));
 
       aarq_data->cv = atn_cv;
-      aarq_data-> aarq_pending = TRUE;
+      aarq_data-> aarq_pending = true;
     }
 
 
@@ -1218,7 +1218,7 @@ static int * const T_aare_apdu_protocol_version_bits[] = {
 static int
 dissect_atn_ulcs_T_aare_apdu_protocol_version(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_bit_string(tvb, offset, actx, tree, hf_index,
-                                     NO_BOUND, NO_BOUND, FALSE, T_aare_apdu_protocol_version_bits, 1, NULL, NULL);
+                                     NO_BOUND, NO_BOUND, false, T_aare_apdu_protocol_version_bits, 1, NULL, NULL);
 
   return offset;
 }
@@ -1236,7 +1236,7 @@ static int
 dissect_atn_ulcs_Associate_result(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
  /* extension present: last param set to true. asn2wrs didn't take notice of that */
  offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 2U, NULL, TRUE);
+                                                            0U, 2U, NULL, true);
 
   return offset;
 }
@@ -1265,7 +1265,7 @@ static const value_string atn_ulcs_T_acse_service_user_vals[] = {
 static int
 dissect_atn_ulcs_T_acse_service_user(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 14U, NULL, TRUE);
+                                                            0U, 14U, NULL, true);
 
   return offset;
 }
@@ -1282,7 +1282,7 @@ static const value_string atn_ulcs_T_acse_service_provider_vals[] = {
 static int
 dissect_atn_ulcs_T_acse_service_provider(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 2U, NULL, TRUE);
+                                                            0U, 2U, NULL, true);
 
   return offset;
 }
@@ -1331,7 +1331,7 @@ static const per_sequence_t AARE_apdu_sequence[] = {
 static int
 dissect_atn_ulcs_AARE_apdu(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   packet_info * pinfo = actx->pinfo;
-  guint32 aircraft_24_bit_address = 0 ;
+  uint32_t aircraft_24_bit_address = 0 ;
   atn_conversation_t *atn_cv = NULL;
   aarq_data_t *aarq_data = NULL;
 
@@ -1409,7 +1409,7 @@ dissect_atn_ulcs_AARE_apdu(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
 
   /* clear aarq data */
   memset(aarq_data,0,sizeof(aarq_data_t));
-  aarq_data-> aarq_pending  =  FALSE;
+  aarq_data-> aarq_pending  =  false;
 
     offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_atn_ulcs_AARE_apdu, AARE_apdu_sequence);
@@ -1433,7 +1433,7 @@ static int
 dissect_atn_ulcs_Release_request_reason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
  /* extension present: last param set to true. asn2wrs didn't take notice of that */
  offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 30U, NULL, TRUE);
+                                                            0U, 30U, NULL, true);
 
   return offset;
 }
@@ -1475,7 +1475,7 @@ dissect_atn_ulcs_Release_response_reason(tvbuff_t *tvb _U_, int offset _U_, asn1
     0U,
     30U,
     NULL,
-    TRUE);
+    true);
 
 
   return offset;
@@ -1507,7 +1507,7 @@ static const value_string atn_ulcs_ABRT_source_vals[] = {
 static int
 dissect_atn_ulcs_ABRT_source(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 1U, NULL, TRUE);
+                                                            0U, 1U, NULL, true);
 
   return offset;
 }
@@ -1528,7 +1528,7 @@ static uint32_t ABRT_diagnostic_value_map[6+0] = {1, 2, 3, 4, 5, 6};
 static int
 dissect_atn_ulcs_ABRT_diagnostic(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_enumerated(tvb, offset, actx, tree, hf_index,
-                                     6, NULL, TRUE, 0, ABRT_diagnostic_value_map);
+                                     6, NULL, true, 0, ABRT_diagnostic_value_map);
 
   return offset;
 }
@@ -1582,7 +1582,7 @@ dissect_atn_ulcs_ACSE_apdu(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
 static int dissect_Fully_encoded_data_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, FALSE, pinfo);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, false, pinfo);
   offset = dissect_atn_ulcs_Fully_encoded_data(tvb, offset, &asn1_ctx, tree, hf_atn_ulcs_Fully_encoded_data_PDU);
   offset += 7; offset >>= 3;
   return offset;
@@ -1590,7 +1590,7 @@ static int dissect_Fully_encoded_data_PDU(tvbuff_t *tvb _U_, packet_info *pinfo 
 static int dissect_ACSE_apdu_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, FALSE, pinfo);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, false, pinfo);
   offset = dissect_atn_ulcs_ACSE_apdu(tvb, offset, &asn1_ctx, tree, hf_atn_ulcs_ACSE_apdu_PDU);
   offset += 7; offset >>= 3;
   return offset;
@@ -1643,7 +1643,7 @@ static int hf_atn_ses_param_ind;
 static int hf_atn_ses_param_b1;
 static int hf_atn_ses_param_b2;
 
-static gint ett_atn_ses;
+static int ett_atn_ses;
 
 #define ATN_SES_PROTO "ICAO Doc9705 ULCS Session (ISO 8326/8327-1:1994)"
 
@@ -1690,7 +1690,7 @@ static const value_string atn_ses_type[] =
 
 static int hf_atn_pres_err;
 static int hf_atn_pres_pdu_type;
-static gint ett_atn_pres;
+static int ett_atn_pres;
 
 #define ATN_SES_PRES_MASK 0xf803
 #define PRES_CPR_ER_MASK    0x70
@@ -1744,9 +1744,9 @@ static int  atn_ulcs_Externalt_encoding(
 }
 
 /* re-implementing external data: packet-per.c */
-static guint32  atn_per_external_type(
+static uint32_t atn_per_external_type(
     tvbuff_t *tvb _U_,
-    guint32 offset,
+    uint32_t offset,
     asn1_ctx_t *actx,
     proto_tree *tree _U_,
     int hf_index _U_,
@@ -1778,12 +1778,12 @@ static guint32  atn_per_external_type(
 
 /* determine 24-bit aircraft address(ARS) */
 /* from 20-byte ATN NSAP. */
-guint32 get_aircraft_24_bit_address_from_nsap(
+uint32_t get_aircraft_24_bit_address_from_nsap(
     packet_info *pinfo)
 {
-    const guint8* addr = NULL;
-    guint32 ars =0;
-    guint32 adr_prefix =0;
+    const uint8_t* addr = NULL;
+    uint32_t ars =0;
+    uint32_t adr_prefix =0;
 
     /* check NSAP address type*/
     if( (pinfo->src.type != get_osi_address_type()) ||
@@ -1801,7 +1801,7 @@ guint32 get_aircraft_24_bit_address_from_nsap(
     /* from an aircraft it's downlink */
 
     /* convert addr into 32-bit integer */
-    addr = (const guint8 *)pinfo->src.data;
+    addr = (const uint8_t *)pinfo->src.data;
     adr_prefix =
         ((addr[0]<<24) |
         (addr[1]<<16) |
@@ -1827,7 +1827,7 @@ guint32 get_aircraft_24_bit_address_from_nsap(
     /* from an aircraft it's downlink */
 
     /* convert addr into 32-bit integer */
-    addr = (const guint8 *)pinfo->dst.data;
+    addr = (const uint8_t *)pinfo->dst.data;
     adr_prefix = ((addr[0]<<24) |
         (addr[1]<<16) |
         (addr[2]<<8) |
@@ -1854,8 +1854,8 @@ guint32 get_aircraft_24_bit_address_from_nsap(
 int check_heur_msg_type(packet_info *pinfo  _U_)
 {
     int t = no_msg;
-    const guint8* addr = NULL;
-    guint32 adr_prefix =0;
+    const uint8_t* addr = NULL;
+    uint32_t adr_prefix =0;
 
     /* check NSAP address type*/
     if( (pinfo->src.type != get_osi_address_type()) || (pinfo->dst.type != get_osi_address_type())) {
@@ -1865,7 +1865,7 @@ int check_heur_msg_type(packet_info *pinfo  _U_)
     if( (pinfo->src.len != 20) || (pinfo->dst.len != 20)) {
         return t; }
 
-    addr = (const guint8 *)pinfo->src.data;
+    addr = (const uint8_t *)pinfo->src.data;
 
     /* convert address to 32-bit integer  */
     adr_prefix = ((addr[0]<<24) | (addr[1]<<16) | (addr[2]<<8) | addr[3] );
@@ -1878,7 +1878,7 @@ int check_heur_msg_type(packet_info *pinfo  _U_)
         t = dm; /* source is an aircraft: it's a downlink PDU */
     }
 
-    addr = (const guint8 *)pinfo->dst.data;
+    addr = (const uint8_t *)pinfo->dst.data;
 
     /* convert address to 32-bit integer  */
     adr_prefix = ((addr[0]<<24) | (addr[1]<<16) | (addr[2]<<8) | addr[3] );
@@ -1907,12 +1907,12 @@ wmem_tree_t *get_atn_conversation_tree(void){
 /* at transport layer (cotp) but this isn't working yet. */
 atn_conversation_t * find_atn_conversation(
     address *address1,
-    guint16 clnp_ref1,
+    uint16_t clnp_ref1,
     address *address2 )
 {
     atn_conversation_t *cv = NULL;
-    guint32 key = 0;
-    guint32 tmp = 0;
+    uint32_t key = 0;
+    uint32_t tmp = 0;
 
     tmp = add_address_to_hash( tmp, address1);
     key = (tmp << 16) | clnp_ref1 ;
@@ -1932,13 +1932,13 @@ atn_conversation_t * find_atn_conversation(
 /* a conversation may be referenced from both endpoints */
 atn_conversation_t * create_atn_conversation(
     address *address1,
-    guint16 clnp_ref1,
+    uint16_t clnp_ref1,
     address *address2,
     atn_conversation_t *conversation)
 {
     atn_conversation_t *cv = NULL;
-    guint32 key = 0;
-    guint32 tmp = 0;
+    uint32_t key = 0;
+    uint32_t tmp = 0;
 
     tmp = add_address_to_hash( tmp, address1);
     key = (tmp << 16) | clnp_ref1 ;
@@ -1975,15 +1975,15 @@ dissect_atn_ulcs(
     int offset = 0;
     proto_item *ti = NULL;
     proto_tree *atn_ulcs_tree = NULL;
-    guint8 value_pres = 0;
-    guint8 value_ses = 0;
-    guint16 value_ses_pres = 0;
+    uint8_t value_pres = 0;
+    uint8_t value_ses = 0;
+    uint16_t value_ses_pres = 0;
 
     root_tree = tree;
 
     /* data pointer */
     /* decode as PDV-list */
-    if ( (int)(intptr_t)  data == FALSE )
+    if ( (int)(intptr_t)  data == false )
     {
         ti = proto_tree_add_item(
             tree,
@@ -2007,7 +2007,7 @@ dissect_atn_ulcs(
     }
 
     /* decode as SPDU, PPDU and ACSE PDU */
-    if ( (int)(intptr_t)  data == TRUE )
+    if ( (int)(intptr_t)  data == true )
     {
         /* get session and presentation PDU's */
         value_ses_pres = tvb_get_ntohs(tvb, offset);
@@ -2157,7 +2157,7 @@ static bool dissect_atn_ulcs_heur(
                 tvb,
                 pinfo,
                 tree,
-                (void*) TRUE);
+                (void*) true);
             return true;
         default:  /* no SPDU */
             break;
@@ -2175,7 +2175,7 @@ static bool dissect_atn_ulcs_heur(
         /* PDV-list PDU may contain */
         /* application protocol data (CM, CPDLC) */
         /* or an ACSE PDU */
-            dissect_atn_ulcs(tvb, pinfo, tree, (void*) FALSE);
+            dissect_atn_ulcs(tvb, pinfo, tree, (void*) false);
             return true;
             break;
         default:  /* no or unsupported PDU */
@@ -2529,7 +2529,7 @@ void proto_register_atn_ulcs (void)
           HFILL}},
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
     &ett_atn_ulcs_Fully_encoded_data,
     &ett_atn_ulcs_PDV_list,
     &ett_atn_ulcs_T_presentation_data_values,

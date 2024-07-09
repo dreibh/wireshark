@@ -28,6 +28,8 @@
 /* #define HAVE_SNOW3G */
 /* #define HAVE_ZUC */
 
+#include "packet-mac-lte.h"
+#include "packet-rlc-lte.h"
 #include "packet-pdcp-lte.h"
 
 void proto_register_pdcp_lte(void);
@@ -574,7 +576,7 @@ typedef struct
 } pdcp_channel_status;
 
 /* The sequence analysis channel hash table.
-   Maps key -> status */
+   Maps pdcp_channel_hash_key -> *pdcp_channel_status */
 static wmem_map_t *pdcp_sequence_analysis_channel_hash;
 
 
@@ -1628,6 +1630,59 @@ void set_pdcp_lte_security_algorithms_failed(guint16 ueid)
     }
 }
 
+/* Reset UE's bearers */
+void pdcp_lte_reset_ue_bearers(packet_info *pinfo, guint16 ueid, gboolean including_drb_am)
+{
+    if (PINFO_FD_VISITED(pinfo)) {
+        return;
+    }
+
+    pdcp_channel_hash_key channel_key;
+    pdcp_channel_status  *p_channel_status;
+
+    channel_key.notUsed = 0;
+    channel_key.ueId = ueid;
+    channel_key.plane = SIGNALING_PLANE;
+
+    /* SRBs (1-2, both directions) */
+    for (uint32_t channelId=1; channelId <= 2; ++channelId) {
+        for (uint32_t direction=0; direction <=1; ++direction) {
+            /* Update key */
+            channel_key.channelId = channelId;
+            channel_key.direction = direction;
+
+            p_channel_status = (pdcp_channel_status*)wmem_map_lookup(pdcp_sequence_analysis_channel_hash,
+                                                                     get_channel_hash_key(&channel_key));
+            if (p_channel_status) {
+                p_channel_status->hfn = 0;
+                p_channel_status->previousFrameNum = 0;
+                p_channel_status->previousSequenceNumber = -1;
+            }
+        }
+    }
+
+    /* DRBs (1-32, both directions) */
+    channel_key.plane = USER_PLANE;
+    for (uint32_t channelId=1; channelId <= 32; ++channelId) {
+        for (uint32_t direction=0; direction <=1; ++direction) {
+            /* Update key */
+            channel_key.channelId = channelId;
+            channel_key.direction = direction;
+
+            p_channel_status = (pdcp_channel_status*)wmem_map_lookup(pdcp_sequence_analysis_channel_hash,
+                                                                     get_channel_hash_key(&channel_key));
+            if (p_channel_status) {
+                if (including_drb_am || get_mac_lte_channel_mode(ueid, channelId) == RLC_UM_MODE) {
+                    p_channel_status->hfn = 0;
+                    p_channel_status->previousFrameNum = 0;
+                    p_channel_status->previousSequenceNumber = -1;
+                }
+            }
+        }
+    }
+}
+
+
 /* Decipher payload if algorithm is supported and plausible inputs are available */
 static tvbuff_t *decipher_payload(tvbuff_t *tvb, packet_info *pinfo, int *offset,
                                   pdu_security_settings_t *pdu_security_settings,
@@ -1966,12 +2021,12 @@ static int dissect_pdcp_lte(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     if ((global_pdcp_lte_layer_to_show == ShowRLCLayer) &&
         (p_get_proto_data(wmem_file_scope(), pinfo, proto_rlc_lte, 0) != NULL)) {
 
-        col_set_writable(pinfo->cinfo, COL_INFO, FALSE);
+        col_set_writable(pinfo->cinfo, COL_INFO, false);
     }
     else {
         /* TODO: won't help with multiple PDCP-or-traffic PDUs / frame... */
         col_clear(pinfo->cinfo, COL_INFO);
-        col_set_writable(pinfo->cinfo, COL_INFO, TRUE);
+        col_set_writable(pinfo->cinfo, COL_INFO, true);
     }
 
     /* Create pdcp tree. */
@@ -2505,10 +2560,10 @@ static int dissect_pdcp_lte(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             if (rrc_handle != 0) {
                 /* Call RRC dissector if have one */
                 tvbuff_t *rrc_payload_tvb = tvb_new_subset_length(payload_tvb, offset, data_length);
-                gboolean was_writable = col_get_writable(pinfo->cinfo, COL_INFO);
+                bool was_writable = col_get_writable(pinfo->cinfo, COL_INFO);
 
                 /* We always want to see this in the info column */
-                col_set_writable(pinfo->cinfo, COL_INFO, TRUE);
+                col_set_writable(pinfo->cinfo, COL_INFO, true);
 
                 call_dissector_only(rrc_handle, rrc_payload_tvb, pinfo, pdcp_tree, NULL);
 
@@ -2581,7 +2636,7 @@ static int dissect_pdcp_lte(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
                         /* Don't update info column for ROHC unless configured to */
                         if (global_pdcp_lte_layer_to_show != ShowTrafficLayer) {
-                            col_set_writable(pinfo->cinfo, COL_INFO, FALSE);
+                            col_set_writable(pinfo->cinfo, COL_INFO, false);
                         }
 
                         switch (tvb_get_guint8(ip_payload_tvb, 0) & 0xf0) {
@@ -2598,7 +2653,7 @@ static int dissect_pdcp_lte(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
                         /* Freeze the columns again because we don't want other layers writing to info */
                         if (global_pdcp_lte_layer_to_show == ShowTrafficLayer) {
-                            col_set_writable(pinfo->cinfo, COL_INFO, FALSE);
+                            col_set_writable(pinfo->cinfo, COL_INFO, false);
                         }
 
                     }
@@ -2635,7 +2690,7 @@ static int dissect_pdcp_lte(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
             /* Only enable writing to column if configured to show ROHC */
             if (global_pdcp_lte_layer_to_show != ShowTrafficLayer) {
-                col_set_writable(pinfo->cinfo, COL_INFO, FALSE);
+                col_set_writable(pinfo->cinfo, COL_INFO, false);
             }
             else {
                 col_clear(pinfo->cinfo, COL_INFO);

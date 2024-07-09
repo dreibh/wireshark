@@ -4355,12 +4355,12 @@ static int
 dissect_HI2Operations_UUS1_Content(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
 /* Heuristic test to see if it's our content */
-    gint8    tmp_class;
+    int8_t   tmp_class;
     bool tmp_pc;
-    gint32   tmp_tag;
+    int32_t  tmp_tag;
     int      tmp_offset;
-    guint    length = tvb_captured_length(tvb);
-    guint32  tmp_length;
+    unsigned length = tvb_captured_length(tvb);
+    uint32_t tmp_length;
     bool tmp_ind;
 
     /* Check for min length */
@@ -4407,15 +4407,15 @@ dissect_HI2Operations_UUS1_Content(bool implicit_tag _U_, tvbuff_t *tvb _U_, int
 static int dissect_IRIsContent_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_HI2Operations_IRIsContent(FALSE, tvb, offset, &asn1_ctx, tree, hf_HI2Operations_IRIsContent_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_HI2Operations_IRIsContent(false, tvb, offset, &asn1_ctx, tree, hf_HI2Operations_IRIsContent_PDU);
   return offset;
 }
 static int dissect_UUS1_Content_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_HI2Operations_UUS1_Content(FALSE, tvb, offset, &asn1_ctx, tree, hf_HI2Operations_UUS1_Content_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_HI2Operations_UUS1_Content(false, tvb, offset, &asn1_ctx, tree, hf_HI2Operations_UUS1_Content_PDU);
   return offset;
 }
 
@@ -6449,7 +6449,7 @@ void proto_register_HI2Operations(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_HI2Operations_CommunicationIdentifier,
     &ett_HI2Operations_Network_Identifier,
     &ett_HI2Operations_Network_Element_Identifier,

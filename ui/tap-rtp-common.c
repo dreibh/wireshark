@@ -107,7 +107,7 @@ void rtpstream_info_free_all(rtpstream_info_t *info)
 
 /****************************************************************************/
 /* GCompareFunc style comparison function for rtpstream_info_t */
-int rtpstream_info_cmp(gconstpointer aa, gconstpointer bb)
+int rtpstream_info_cmp(const void *aa, const void *bb)
 {
     const rtpstream_info_t *a = (const rtpstream_info_t *)aa;
     const rtpstream_info_t *b = (const rtpstream_info_t *)bb;
@@ -229,7 +229,7 @@ register_tap_listener_rtpstream(rtpstream_tapinfo_t *tapinfo, const char *fstrin
             if (tap_error) {
                 tap_error(error_string);
             }
-            g_string_free(error_string, true);
+            g_string_free(error_string, TRUE);
             exit(1);
         }
 
@@ -287,7 +287,7 @@ static void update_payload_names(rtpstream_info_t *stream_info, const struct _rt
         g_free(stream_info->all_payload_type_names);
     }
     stream_info->all_payload_type_names = payload_type_names->str;
-    g_string_free(payload_type_names, false);
+    g_string_free(payload_type_names, FALSE);
 }
 
 bool rtpstream_is_payload_used(const rtpstream_info_t *stream_info, const uint8_t payload_type)
@@ -462,8 +462,7 @@ void rtpstream_info_calculate(const rtpstream_info_t *strinfo, rtpstream_info_ca
 
         calc->packet_count = strinfo->packet_count;
         /* packet count, lost packets */
-        calc->packet_expected = (strinfo->rtp_stats.stop_seq_nr + strinfo->rtp_stats.seq_cycles*0x10000)
-            - strinfo->rtp_stats.start_seq_nr + 1;
+        calc->packet_expected = strinfo->rtp_stats.stop_seq_nr - strinfo->rtp_stats.start_seq_nr + 1;
         calc->total_nr = strinfo->rtp_stats.total_nr;
         calc->lost_num = calc->packet_expected - strinfo->rtp_stats.total_nr;
         if (calc->packet_expected) {
@@ -559,7 +558,7 @@ void rtpstream_info_analyse_process(rtpstream_info_t *stream_info, const packet_
 
 /****************************************************************************/
 /* Get hash for rtpstream_info_t */
-unsigned rtpstream_to_hash(gconstpointer key)
+unsigned rtpstream_to_hash(const void *key)
 {
     if (key) {
         return rtpstream_id_to_hash(&((rtpstream_info_t *)key)->id);

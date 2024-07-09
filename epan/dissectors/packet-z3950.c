@@ -47,13 +47,13 @@
 #include "packet-tcp.h"
 
 typedef struct z3950_atinfo_t {
-    gint     atsetidx;
-    gint     attype;
+    int      atsetidx;
+    int      attype;
 } z3950_atinfo_t;
 
 typedef struct z3950_diaginfo_t {
-    gint     diagsetidx;
-    gint     diagcondition;
+    int      diagsetidx;
+    int      diagcondition;
 } z3950_diaginfo_t;
 
 #define PNAME  "Z39.50 Protocol"
@@ -99,9 +99,9 @@ typedef struct z3950_diaginfo_t {
 #define marc_char_to_int(x)        ((x) - '0')
 
 typedef struct marc_directory_entry {
-    guint32 tag;
-    guint32 length;
-    guint32 starting_character;
+    uint32_t tag;
+    uint32_t length;
+    uint32_t starting_character;
 } marc_directory_entry;
 
 static dissector_handle_t z3950_handle;
@@ -2025,7 +2025,7 @@ static int
 dissect_z3950_printable_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
     tvbuff_t *next_tvb = NULL;
     int hf_alternate = 0;
-    guint old_offset = offset;
+    unsigned old_offset = offset;
 
     if (hf_index == hf_z3950_referenceId) {
         hf_alternate = hf_z3950_referenceId_printable;
@@ -2085,7 +2085,7 @@ dissect_z3950_OCTET_STRING(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset 
 static int
 dissect_z3950_ReferenceId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-              hf_index, BER_CLASS_CON, 2, TRUE,
+              hf_index, BER_CLASS_CON, 2, true,
               dissect_z3950_printable_OCTET_STRING);
 
 
@@ -2114,7 +2114,7 @@ dissect_z3950_ProtocolVersion_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int of
 static int
 dissect_z3950_ProtocolVersion(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 3, TRUE, dissect_z3950_ProtocolVersion_U);
+                                      hf_index, BER_CLASS_CON, 3, true, dissect_z3950_ProtocolVersion_U);
 
   return offset;
 }
@@ -2153,7 +2153,7 @@ dissect_z3950_Options_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_
 static int
 dissect_z3950_Options(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 4, TRUE, dissect_z3950_Options_U);
+                                      hf_index, BER_CLASS_CON, 4, true, dissect_z3950_Options_U);
 
   return offset;
 }
@@ -2333,7 +2333,7 @@ dissect_z3950_OtherInformation_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int o
 static int
 dissect_z3950_OtherInformation(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 201, TRUE, dissect_z3950_OtherInformation_U);
+                                      hf_index, BER_CLASS_CON, 201, true, dissect_z3950_OtherInformation_U);
 
   return offset;
 }
@@ -2400,7 +2400,7 @@ dissect_z3950_InitializeResponse(bool implicit_tag _U_, tvbuff_t *tvb _U_, int o
 static int
 dissect_z3950_DatabaseName(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 105, TRUE, dissect_z3950_InternationalString);
+                                      hf_index, BER_CLASS_CON, 105, true, dissect_z3950_InternationalString);
 
   return offset;
 }
@@ -2423,7 +2423,7 @@ dissect_z3950_SEQUENCE_OF_DatabaseName(bool implicit_tag _U_, tvbuff_t *tvb _U_,
 static int
 dissect_z3950_ElementSetName(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 103, TRUE, dissect_z3950_InternationalString);
+                                      hf_index, BER_CLASS_CON, 103, true, dissect_z3950_InternationalString);
 
   return offset;
 }
@@ -2498,10 +2498,10 @@ dissect_z3950_AttributeSetId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offse
 
   if (oid_tvb) {
     packet_info *pinfo = actx->pinfo;
-    guint len = tvb_reported_length_remaining(oid_tvb, 0);
-    gchar *oid_str = oid_encoded2string(pinfo->pool,
+    unsigned len = tvb_reported_length_remaining(oid_tvb, 0);
+    char *oid_str = oid_encoded2string(pinfo->pool,
                                         tvb_get_ptr(oid_tvb, 0, len), len);
-    gint attribute_set_idx = Z3950_ATSET_UNKNOWN;
+    int attribute_set_idx = Z3950_ATSET_UNKNOWN;
     z3950_atinfo_t *atinfo_data;
 
     if (g_strcmp0(oid_str, Z3950_ATSET_BIB1_OID) == 0) {
@@ -2526,7 +2526,7 @@ dissect_z3950_AttributeSetId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offse
 
 static int
 dissect_z3950_T_attributeElement_attributeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint att_type=0;
+  int att_type=0;
   packet_info *pinfo = actx->pinfo;
   z3950_atinfo_t *atinfo_data;
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
@@ -2545,7 +2545,7 @@ dissect_z3950_T_attributeElement_attributeType(bool implicit_tag _U_, tvbuff_t *
 
 static int
 dissect_z3950_T_attributeValue_numeric(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint att_value=0;
+  int att_value=0;
   packet_info *pinfo = actx->pinfo;
   z3950_atinfo_t *atinfo_data;
   const value_string *att_value_string = NULL;
@@ -2703,7 +2703,7 @@ dissect_z3950_SEQUENCE_OF_AttributeElement(bool implicit_tag _U_, tvbuff_t *tvb 
 static int
 dissect_z3950_AttributeList(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 44, TRUE, dissect_z3950_SEQUENCE_OF_AttributeElement);
+                                      hf_index, BER_CLASS_CON, 44, true, dissect_z3950_SEQUENCE_OF_AttributeElement);
 
   return offset;
 }
@@ -2713,7 +2713,7 @@ dissect_z3950_AttributeList(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset
 static int
 dissect_z3950_T_general(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-              hf_index, BER_CLASS_CON, 2, TRUE,
+              hf_index, BER_CLASS_CON, 2, true,
               dissect_z3950_printable_OCTET_STRING);
 
 
@@ -2815,7 +2815,7 @@ dissect_z3950_AttributesPlusTerm_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int
 static int
 dissect_z3950_AttributesPlusTerm(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 102, TRUE, dissect_z3950_AttributesPlusTerm_U);
+                                      hf_index, BER_CLASS_CON, 102, true, dissect_z3950_AttributesPlusTerm_U);
 
   return offset;
 }
@@ -2825,7 +2825,7 @@ dissect_z3950_AttributesPlusTerm(bool implicit_tag _U_, tvbuff_t *tvb _U_, int o
 static int
 dissect_z3950_ResultSetId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 31, TRUE, dissect_z3950_InternationalString);
+                                      hf_index, BER_CLASS_CON, 31, true, dissect_z3950_InternationalString);
 
   return offset;
 }
@@ -2850,7 +2850,7 @@ dissect_z3950_ResultSetPlusAttributes_U(bool implicit_tag _U_, tvbuff_t *tvb _U_
 static int
 dissect_z3950_ResultSetPlusAttributes(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 214, TRUE, dissect_z3950_ResultSetPlusAttributes_U);
+                                      hf_index, BER_CLASS_CON, 214, true, dissect_z3950_ResultSetPlusAttributes_U);
 
   return offset;
 }
@@ -2995,7 +2995,7 @@ dissect_z3950_Operator_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U
 static int
 dissect_z3950_Operator(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 46, FALSE, dissect_z3950_Operator_U);
+                                      hf_index, BER_CLASS_CON, 46, false, dissect_z3950_Operator_U);
 
   return offset;
 }
@@ -3156,7 +3156,7 @@ dissect_z3950_PresentStatus_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offs
 static int
 dissect_z3950_PresentStatus(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 27, TRUE, dissect_z3950_PresentStatus_U);
+                                      hf_index, BER_CLASS_CON, 27, true, dissect_z3950_PresentStatus_U);
 
   return offset;
 }
@@ -3171,10 +3171,10 @@ dissect_z3950_T_diagnosticSetId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int of
 
   if (oid_tvb) {
     packet_info *pinfo = actx->pinfo;
-    guint len = tvb_reported_length_remaining(oid_tvb, 0);
-    gchar *oid_str = oid_encoded2string(pinfo->pool,
+    unsigned len = tvb_reported_length_remaining(oid_tvb, 0);
+    char *oid_str = oid_encoded2string(pinfo->pool,
                                         tvb_get_ptr(oid_tvb, 0, len), len);
-    gint diagset_idx = Z3950_DIAGSET_UNKNOWN;
+    int diagset_idx = Z3950_DIAGSET_UNKNOWN;
     z3950_diaginfo_t *diaginfo_data;
 
     if (g_strcmp0(oid_str, Z3950_DIAGSET_BIB1_OID) == 0) {
@@ -3199,7 +3199,7 @@ dissect_z3950_T_diagnosticSetId(bool implicit_tag _U_, tvbuff_t *tvb _U_, int of
 
 static int
 dissect_z3950_T_condition(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint diag_condition=0;
+  int diag_condition=0;
   packet_info *pinfo = actx->pinfo;
   z3950_diaginfo_t *diaginfo_data;
   offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
@@ -3676,7 +3676,7 @@ dissect_z3950_DeleteSetStatus_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int of
 static int
 dissect_z3950_DeleteSetStatus(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 33, TRUE, dissect_z3950_DeleteSetStatus_U);
+                                      hf_index, BER_CLASS_CON, 33, true, dissect_z3950_DeleteSetStatus_U);
 
   return offset;
 }
@@ -4657,7 +4657,7 @@ dissect_z3950_CloseReason_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset
 static int
 dissect_z3950_CloseReason(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 211, TRUE, dissect_z3950_CloseReason_U);
+                                      hf_index, BER_CLASS_CON, 211, true, dissect_z3950_CloseReason_U);
 
   return offset;
 }
@@ -4738,14 +4738,14 @@ static const ber_choice_t PDU_choice[] = {
 
 static int
 dissect_z3950_PDU(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint choice;
+  int choice;
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  PDU_choice, hf_index, ett_z3950_PDU,
                                  &choice);
 
   if (choice >= 0) {
     packet_info *pinfo = actx->pinfo;
-    gint32 tag = PDU_choice[choice].tag;
+    int32_t tag = PDU_choice[choice].tag;
 
     col_set_str(pinfo->cinfo, COL_INFO,
       val_to_str_const(tag, z3950_PDU_vals, "Unknown Z39.50 PDU"));
@@ -4759,7 +4759,7 @@ dissect_z3950_PDU(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1
 static int
 dissect_z3950_DBName(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 2, TRUE, dissect_z3950_VisibleString);
+                                      hf_index, BER_CLASS_CON, 2, true, dissect_z3950_VisibleString);
 
   return offset;
 }
@@ -8533,85 +8533,85 @@ dissect_z3950_SearchInfoReport(bool implicit_tag _U_, tvbuff_t *tvb _U_, int off
 static int dissect_OCLC_UserInformation_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_OCLC_UserInformation(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_OCLC_UserInformation_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_OCLC_UserInformation(false, tvb, offset, &asn1_ctx, tree, hf_z3950_OCLC_UserInformation_PDU);
   return offset;
 }
 static int dissect_SutrsRecord_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_SutrsRecord(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_SutrsRecord_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_SutrsRecord(false, tvb, offset, &asn1_ctx, tree, hf_z3950_SutrsRecord_PDU);
   return offset;
 }
 static int dissect_OPACRecord_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_OPACRecord(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_OPACRecord_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_OPACRecord(false, tvb, offset, &asn1_ctx, tree, hf_z3950_OPACRecord_PDU);
   return offset;
 }
 static int dissect_DiagnosticFormat_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_DiagnosticFormat(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_DiagnosticFormat_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_DiagnosticFormat(false, tvb, offset, &asn1_ctx, tree, hf_z3950_DiagnosticFormat_PDU);
   return offset;
 }
 static int dissect_Explain_Record_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_Explain_Record(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_Explain_Record_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_Explain_Record(false, tvb, offset, &asn1_ctx, tree, hf_z3950_Explain_Record_PDU);
   return offset;
 }
 static int dissect_BriefBib_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_BriefBib(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_BriefBib_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_BriefBib(false, tvb, offset, &asn1_ctx, tree, hf_z3950_BriefBib_PDU);
   return offset;
 }
 static int dissect_GenericRecord_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_GenericRecord(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_GenericRecord_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_GenericRecord(false, tvb, offset, &asn1_ctx, tree, hf_z3950_GenericRecord_PDU);
   return offset;
 }
 static int dissect_TaskPackage_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_TaskPackage(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_TaskPackage_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_TaskPackage(false, tvb, offset, &asn1_ctx, tree, hf_z3950_TaskPackage_PDU);
   return offset;
 }
 static int dissect_PromptObject_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_PromptObject(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_PromptObject_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_PromptObject(false, tvb, offset, &asn1_ctx, tree, hf_z3950_PromptObject_PDU);
   return offset;
 }
 static int dissect_DES_RN_Object_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_DES_RN_Object(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_DES_RN_Object_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_DES_RN_Object(false, tvb, offset, &asn1_ctx, tree, hf_z3950_DES_RN_Object_PDU);
   return offset;
 }
 static int dissect_KRBObject_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_KRBObject(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_KRBObject_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_KRBObject(false, tvb, offset, &asn1_ctx, tree, hf_z3950_KRBObject_PDU);
   return offset;
 }
 static int dissect_SearchInfoReport_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_z3950_SearchInfoReport(FALSE, tvb, offset, &asn1_ctx, tree, hf_z3950_SearchInfoReport_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_z3950_SearchInfoReport(false, tvb, offset, &asn1_ctx, tree, hf_z3950_SearchInfoReport_PDU);
   return offset;
 }
 
@@ -8623,7 +8623,7 @@ dissect_z3950(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     proto_tree      *z3950_tree = NULL;
     int                     offset = 0;
     asn1_ctx_t asn1_ctx;
-    asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+    asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
 
     /* make entry in the Protocol column on summary display */
@@ -8633,14 +8633,14 @@ dissect_z3950(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     z3950_item = proto_tree_add_item(tree, proto_z3950, tvb, 0, -1, ENC_NA);
     z3950_tree = proto_item_add_subtree(z3950_item, ett_z3950);
 
-    return dissect_z3950_PDU(FALSE, tvb, offset, &asn1_ctx, z3950_tree, -1);
+    return dissect_z3950_PDU(false, tvb, offset, &asn1_ctx, z3950_tree, -1);
 }
 
-static guint
+static unsigned
 get_z3950_pdu_len(packet_info *pinfo _U_, tvbuff_t *tvb, int offset, void *data _U_)
 {
-    guint plen;
-    guint ber_offset;
+    unsigned plen;
+    unsigned ber_offset;
     TRY {
         /* Skip past identifier */
         ber_offset = get_ber_identifier(tvb, offset, NULL, NULL, NULL);
@@ -12197,7 +12197,7 @@ void proto_register_z3950(void) {
     };
 
     /* List of subtrees */
-    static gint *ett[] = {
+    static int *ett[] = {
 		  &ett_z3950,
 /* MARC etts */
                   &ett_marc_record,
@@ -12654,9 +12654,9 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
                *directory_tree,
                *fields_tree;
     marc_directory_entry *marc_directory;
-    guint len = tvb_reported_length(tvb);
-    const guint8 *marc_value_str;
-    guint record_length = 0,
+    unsigned len = tvb_reported_length(tvb);
+    const uint8_t *marc_value_str;
+    unsigned record_length = 0,
           data_offset = 0,
           length_of_field_size,
           starting_character_position_size,
@@ -12664,7 +12664,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
           directory_entry_count,
           dir_index,
           offset = 0;
-    guint32 marc_value_char;
+    uint32_t marc_value_char;
 
     record_item = proto_tree_add_item(tree, hf_marc_record,
                            tvb, 0, len, ENC_NA);
@@ -12686,7 +12686,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
 
     if (marc_value_str) {
         if (isdigit_string(marc_value_str)) {
-            record_length = (guint)strtoul(marc_value_str, NULL, 10);
+            record_length = (unsigned)strtoul(marc_value_str, NULL, 10);
         }
         else {
             expert_add_info_format(pinfo, item,
@@ -12754,7 +12754,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
     offset += 5;
     if (marc_value_str) {
         if (isdigit_string(marc_value_str)) {
-            data_offset = (guint)strtoul(marc_value_str, NULL, 10);
+            data_offset = (unsigned)strtoul(marc_value_str, NULL, 10);
         }
         else {
             expert_add_info_format(pinfo, item,
@@ -12837,7 +12837,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
     dir_index = 0;
     /* Minus one for the terminator character */
     while (offset < (data_offset - 1)) {
-        guint32 tag_value = 0,
+        uint32_t tag_value = 0,
                 length_value = 0,
                 starting_char_value = 0;
         proto_item *length_item;
@@ -12855,7 +12855,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
         offset += 3;
         if (marc_value_str) {
             if (isdigit_string(marc_value_str)) {
-                tag_value = (guint)strtoul(marc_value_str, NULL, 10);
+                tag_value = (unsigned)strtoul(marc_value_str, NULL, 10);
             }
             else {
                 expert_add_info_format(pinfo, item,
@@ -12872,7 +12872,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
         offset += length_of_field_size;
         if (marc_value_str) {
             if (isdigit_string(marc_value_str)) {
-                length_value = (guint)strtoul(marc_value_str, NULL, 10);
+                length_value = (unsigned)strtoul(marc_value_str, NULL, 10);
             }
             else {
                 expert_add_info_format(pinfo, length_item,
@@ -12888,7 +12888,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
         offset += starting_character_position_size;
         if (marc_value_str) {
             if (isdigit_string(marc_value_str)) {
-                starting_char_value = (guint)strtoul(marc_value_str, NULL, 10);
+                starting_char_value = (unsigned)strtoul(marc_value_str, NULL, 10);
             }
             else {
                 expert_add_info_format(pinfo, item,
@@ -12924,7 +12924,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
     fields_tree = proto_item_add_subtree(fields_item, ett_marc_fields);
 
     for (dir_index = 0; dir_index < directory_entry_count; dir_index++) {
-        const gchar *tag_str;
+        const char *tag_str;
         proto_item *field_item;
         proto_tree *field_tree;
 
@@ -12951,7 +12951,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
             offset += 1;
         }
         else {
-            guint next_offset = offset + marc_directory[dir_index].length - 1;
+            unsigned next_offset = offset + marc_directory[dir_index].length - 1;
             proto_tree_add_item(field_tree, hf_marc_field_indicator1,
                     tvb, offset, 1, ENC_ASCII);
             offset += 1;
@@ -12959,7 +12959,7 @@ dissect_marc_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
                     tvb, offset, 1, ENC_ASCII);
             offset += 1;
             do {
-                gint next_subfield;
+                int next_subfield;
                 proto_tree_add_item(field_tree, hf_marc_field_subfield_indicator,
                         tvb, offset, 1, ENC_ASCII);
                 offset += 1;

@@ -17940,8 +17940,8 @@ dissect_lix2_MMSElementDescriptor(bool implicit_tag _U_, tvbuff_t *tvb _U_, int 
 static int dissect_XIRIPayload_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_lix2_XIRIPayload(FALSE, tvb, offset, &asn1_ctx, tree, hf_lix2_XIRIPayload_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_lix2_XIRIPayload(false, tvb, offset, &asn1_ctx, tree, hf_lix2_XIRIPayload_PDU);
   return offset;
 }
 
@@ -23962,7 +23962,7 @@ void proto_register_lix2(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_lix2_XIRIPayload,
     &ett_lix2_XIRIEvent,
     &ett_lix2_IRIPayload,

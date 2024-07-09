@@ -1100,7 +1100,7 @@ typedef struct
 #define L_LBMC_CNTL_UME_ACK_ID_HDR_T_ID SIZEOF(lbmc_cntl_ume_ack_id_hdr_t, id)
 #define L_LBMC_CNTL_UME_ACK_ID_HDR_T (gint) sizeof(lbmc_cntl_ume_ack_id_hdr_t)
 
-/* LBMC control UME retranmission request header */
+/* LBMC control UME retransmission request header */
 typedef struct
 {
     lbm_uint8_t next_hdr;
@@ -14351,13 +14351,14 @@ void proto_register_lbmc(void)
     lbmc_message_table = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
 
     register_seq_analysis("lbm_uim", "UIM Flows", proto_lbmc, "lbm_uim", TL_REQUIRES_COLUMNS, lbm_uim_seq_analysis_packet);
+
+    lbmc_uim_tap_handle = register_tap("lbm_uim");
+    lbmc_stream_tap_handle = register_tap("lbm_stream");
 }
 
 /* The registration hand-off routine */
 void proto_reg_handoff_lbmc(void)
 {
-    lbmc_uim_tap_handle = register_tap("lbm_uim");
-    lbmc_stream_tap_handle = register_tap("lbm_stream");
 }
 
 /*

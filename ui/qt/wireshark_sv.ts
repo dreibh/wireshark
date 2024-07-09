@@ -8891,6 +8891,10 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>THROUGHPUT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>LOAD</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11500,14 +11504,22 @@ Till exempel, använd 1 timma för att en ny fil skall skapas varje timma vid he
         <translation>Spara som …</translation>
     </message>
     <message>
+        <source>Decoded as %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Save Selected Packet Bytes As…</source>
         <translation>Spara valda paketbyte som …</translation>
     </message>
+    <message>
+        <source>compressed %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <source>Displaying %Ln byte(s).</source>
-        <translation>
-            <numerusform>Visar %Ln byte.</numerusform>
-            <numerusform>Visar %Ln byte.</numerusform>
+        <source>Using %Ln byte(s).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
         </translation>
     </message>
     <message>
@@ -13292,7 +13304,7 @@ a:hover {
     </message>
     <message>
         <source>&amp;Contents</source>
-        <translation>&amp;Innehåll</translation>
+        <translation type="vanished">&amp;Innehåll</translation>
     </message>
     <message>
         <source>TShark</source>
@@ -13561,7 +13573,7 @@ a:hover {
     </message>
     <message>
         <source>Help contents</source>
-        <translation>Hjälpinnehåll</translation>
+        <translation type="vanished">Hjälpinnehåll</translation>
     </message>
     <message>
         <source>FAQs</source>
@@ -14326,6 +14338,14 @@ a:hover {
     <message>
         <source>&amp;Wireless</source>
         <translation>&amp;Trådlöst</translation>
+    </message>
+    <message>
+        <source>&amp;User&apos;s Guide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark User&apos;s Guide</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display Filters</source>

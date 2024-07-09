@@ -1918,7 +1918,7 @@ process_quic_crypto(tvbuff_t *tvb, int offset, int length, packet_info *pinfo,
 {
 
     tvbuff_t *next_tvb = tvb_new_subset_length(tvb, offset, length);
-    col_set_writable(pinfo->cinfo, -1, FALSE);
+    col_set_writable(pinfo->cinfo, -1, false);
     /*
      * Dissect TLS handshake record. The Client/Server Hello (CH/SH)
      * are contained in the Initial Packet. 0-RTT keys are ready
@@ -1928,7 +1928,7 @@ process_quic_crypto(tvbuff_t *tvb, int offset, int length, packet_info *pinfo,
      * These keys will be loaded in the first HS/0-RTT/1-RTT msg.
      */
     call_dissector_with_data(tls13_handshake_handle, next_tvb, pinfo, tree, GUINT_TO_POINTER(crypto_info->offset));
-    col_set_writable(pinfo->cinfo, -1, TRUE);
+    col_set_writable(pinfo->cinfo, -1, true);
 }
 
 /**
@@ -5676,6 +5676,8 @@ proto_register_quic(void)
      * bytes, but in practice these do not exist yet.
      */
     quic_proto_dissector_table = register_dissector_table("quic.proto", "QUIC Protocol", proto_quic, FT_STRING, STRING_CASE_SENSITIVE);
+
+    quic_follow_tap = register_tap("quic_follow");
 }
 
 void
@@ -5684,7 +5686,6 @@ proto_reg_handoff_quic(void)
     tls13_handshake_handle = find_dissector("tls13-handshake");
     dissector_add_uint_with_preference("udp.port", 0, quic_handle);
     heur_dissector_add("udp", dissect_quic_heur, "QUIC", "quic", proto_quic, HEURISTIC_ENABLE);
-    quic_follow_tap = register_tap("quic_follow");
 }
 
 gboolean

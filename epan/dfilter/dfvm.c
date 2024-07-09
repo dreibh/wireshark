@@ -359,7 +359,7 @@ append_call_function(wmem_strbuf_t *buf, const char *func, const char *func_type
 			sep = ", ";
 		}
 		wmem_strbuf_append(buf, gs->str);
-		g_string_free(gs, true);
+		g_string_free(gs, TRUE);
 	}
 	wmem_strbuf_append_printf(buf, ")%s", func_type);
 }
@@ -737,7 +737,7 @@ dfvm_dump(FILE *f, dfilter_t *df, uint16_t flags)
 }
 
 static int
-compare_finfo_layer(gconstpointer _a, gconstpointer _b)
+compare_finfo_layer(const void *_a, const void *_b)
 {
 	const field_info *a = *(const field_info **)_a;
 	const field_info *b = *(const field_info **)_b;

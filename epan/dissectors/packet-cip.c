@@ -1279,6 +1279,12 @@ value_string_ext cip_gs_vals_ext = VALUE_STRING_EXT_INIT(cip_gs_vals);
 #define CM_ES_NODE_ADDRESS_CHANGED_AFTER_SCHEDULED    0x812
 #define CM_ES_NOT_CONFIGURED_MULTICAST                0x813
 #define CM_ES_INVALID_PROD_CONS_DATA_FORMAT           0x814
+#define CM_ES_EGRESS_RULE_DENY                        0x916
+#define CM_ES_EGRESS_RULE_CIPHER_NOT_ALLOWED          0x917
+#define CM_ES_NO_MATCHING_INGRESS_RULE                0x918
+#define CM_ES_INGRESS_RULE_DENY                       0x919
+#define CM_ES_INGRESS_RULE_DENY_NON_SECURE            0x91A
+#define CM_ES_NO_MATCHING_EGRESS_RULE                 0x91B
 
 /* Translate function to string - CIP Extended Status codes */
 static const value_string cip_cm_ext_st_vals[] = {
@@ -1368,6 +1374,12 @@ static const value_string cip_cm_ext_st_vals[] = {
    { CM_ES_NODE_ADDRESS_CHANGED_AFTER_SCHEDULED,   "Node address has changed since the network was scheduled" },
    { CM_ES_NOT_CONFIGURED_MULTICAST,               "Not configured for off-subnet multicast" },
    { CM_ES_INVALID_PROD_CONS_DATA_FORMAT,          "Invalid produce/consume data format" },
+   { CM_ES_EGRESS_RULE_DENY,                       "Egress Rule deny" },
+   { CM_ES_EGRESS_RULE_CIPHER_NOT_ALLOWED,         "Egress Rule Cipher not allowed" },
+   { CM_ES_NO_MATCHING_INGRESS_RULE,               "No matching Ingress Rules" },
+   { CM_ES_INGRESS_RULE_DENY,                      "Ingress Rule deny" },
+   { CM_ES_INGRESS_RULE_DENY_NON_SECURE,           "Ingress Rule deny non-secure" },
+   { CM_ES_NO_MATCHING_EGRESS_RULE,                "No matching Egress Rule" },
 
    { 0,                          NULL }
 };
@@ -3457,6 +3469,7 @@ const value_string cip_class_names_vals[] = {
    { 0x60,     "Authority"                      },
    { 0x61,     "Password Authenticator"         },
    { 0x62,     "Certificate Authenticator"      },
+   { 0x63,     "Ingress Egress"                 },
    { 0x67,     "PCCC Class"                     },
    { 0xF0,     "ControlNet"                     },
    { 0xF1,     "ControlNet Keeper"              },
@@ -4150,7 +4163,7 @@ int dissect_optional_attr_list(packet_info *pinfo, proto_tree *tree, proto_item 
       // Display attribute name.
       if (cip_req_info && cip_req_info->ciaData)
       {
-          attribute_info_t* attr;
+          const attribute_info_t* attr;
           attr = cip_get_attribute(cip_req_info->ciaData->iClass, 1, i);
           if (attr)
           {
@@ -4325,7 +4338,7 @@ static int dissect_identity_reset(packet_info *pinfo _U_, proto_tree *tree, prot
    return parsed_len;
 }
 
-static attribute_info_t cip_attribute_vals[] = {
+static const attribute_info_t cip_attribute_vals[] = {
     /* Identity Object (class attributes) */
    {0x01, TRUE, 1, 0, CLASS_ATTRIBUTE_1_NAME, cip_uint, &hf_attr_class_revision, NULL },
    {0x01, TRUE, 2, 1, CLASS_ATTRIBUTE_2_NAME, cip_uint, &hf_attr_class_max_instance, NULL },
@@ -4478,7 +4491,7 @@ static cip_service_info_t* cip_get_service_cip(guint32 class_id, guint8 service_
 
 typedef struct attribute_val_array {
    size_t size;
-   attribute_info_t* attrs;
+   const attribute_info_t* attrs;
 } attribute_val_array_t;
 
 /* Each entry in this table (eg: cip_attribute_vals) is a list of:
@@ -4495,13 +4508,13 @@ static attribute_val_array_t all_attribute_vals[] = {
    {array_length(cip_motion_attribute_vals), cip_motion_attribute_vals},
 };
 
-attribute_info_t* cip_get_attribute(guint class_id, guint instance, guint attribute)
+const attribute_info_t* cip_get_attribute(guint class_id, guint instance, guint attribute)
 {
    size_t i, j;
    attribute_val_array_t* att_array;
-   attribute_info_t* pattr;
+   const attribute_info_t* pattr;
 
-   static attribute_info_t class_attribute_vals[] = {
+   static const attribute_info_t class_attribute_vals[] = {
       { 0, TRUE, 1, -1, CLASS_ATTRIBUTE_1_NAME, cip_uint, &hf_attr_class_revision, NULL },
       { 0, TRUE, 2, -1, CLASS_ATTRIBUTE_2_NAME, cip_uint, &hf_attr_class_max_instance, NULL },
       { 0, TRUE, 3, -1, CLASS_ATTRIBUTE_3_NAME, cip_uint, &hf_attr_class_num_instance, NULL },
@@ -5940,8 +5953,8 @@ int dissect_cip_segment_single(packet_info *pinfo, tvbuff_t *tvb, int offset, pr
 
                   if (req_data != NULL)
                   {
-                     attribute_info_t* att_info = cip_get_attribute(req_data->iClass, req_data->iInstance,
-                                                  req_data->iAttribute);
+                     const attribute_info_t* att_info = cip_get_attribute(req_data->iClass, req_data->iInstance,
+                                                                          req_data->iAttribute);
                      if (att_info != NULL)
                      {
                         proto_item_append_text(cia_ret_item, " (%s)", att_info->text);
@@ -6284,7 +6297,7 @@ static int dissect_cip_stringi(packet_info *pinfo, proto_tree *tree, proto_item 
 }
 
 int dissect_cip_attribute(packet_info *pinfo, proto_tree *tree, proto_item *item, tvbuff_t *tvb,
-                         attribute_info_t* attr, int offset, int total_len)
+                          const attribute_info_t* attr, int offset, int total_len)
 {
    int i, temp_data, temp_time, hour, min, sec, ms,
       consumed = 0;
@@ -6541,7 +6554,7 @@ dissect_cip_set_attribute_single_req(tvbuff_t *tvb, packet_info *pinfo, proto_tr
                                   int offset, cip_simple_request_info_t* req_data)
 {
    int parsed_len = 0;
-   attribute_info_t* attr;
+   const attribute_info_t* attr;
 
    attr = cip_get_attribute(req_data->iClass, req_data->iInstance, req_data->iAttribute);
    if (attr != NULL)
@@ -6556,7 +6569,7 @@ int dissect_cip_get_attribute_list_req(tvbuff_t *tvb, packet_info *pinfo, proto_
                                   int offset, cip_simple_request_info_t* req_data)
 {
    int i, att_count, att_value;
-   attribute_info_t* pattribute;
+   const attribute_info_t* pattribute;
    proto_item *att_list, *att_item;
    proto_tree* att_tree;
 
@@ -6600,7 +6613,7 @@ dissect_cip_set_attribute_list_req(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 {
    int i, start_offset, att_count,
        att_value, att_size;
-   attribute_info_t* attr;
+   const attribute_info_t* attr;
    proto_item *att_list, *att_item;
    proto_tree *att_tree, *att_list_tree;
 
@@ -6881,7 +6894,7 @@ static void build_get_attr_all_table(void)
 {
    size_t i, j;
    attribute_val_array_t* att_array;
-   attribute_info_t* pattr;
+   const attribute_info_t* pattr;
    cip_gaa_key_t key;
    cip_gaa_key_t* new_key;
    cip_gaa_val_t *gaa_val;
@@ -6911,7 +6924,7 @@ static void build_get_attr_all_table(void)
 
          if ((pattr->gaa_index >= 0) && (pattr->gaa_index > last_attribute_index))
          {
-             wmem_list_append(gaa_val->attributes, pattr);
+             wmem_list_append(gaa_val->attributes, (attribute_info_t *)pattr);
              last_attribute_index = pattr->gaa_index;
          }
       }
@@ -6923,7 +6936,7 @@ int dissect_cip_get_attribute_all_rsp(tvbuff_t *tvb, packet_info *pinfo, proto_t
 {
    int att_size;
    gint len_remain;
-   attribute_info_t* attr;
+   const attribute_info_t* attr;
    proto_item *att_item;
    proto_tree *att_tree;
    cip_gaa_key_t key;
@@ -6944,7 +6957,7 @@ int dissect_cip_get_attribute_all_rsp(tvbuff_t *tvb, packet_info *pinfo, proto_t
        (attribute_list != NULL);
         attribute_list = wmem_list_frame_next(attribute_list))
    {
-      attr = (attribute_info_t *)wmem_list_frame_data(attribute_list);
+      attr = (const attribute_info_t *)wmem_list_frame_data(attribute_list);
       len_remain = tvb_reported_length_remaining(tvb, offset);
 
       /* If there are no more attributes defined or there is no data left. */
@@ -6971,7 +6984,7 @@ dissect_cip_get_attribute_list_rsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree
    int i, start_offset, att_count,
        att_value, att_status;
    guint att_size;
-   attribute_info_t* attr;
+   const attribute_info_t* attr;
    proto_item *att_list, *att_item;
    proto_tree *att_tree, *att_list_tree;
 
@@ -7037,7 +7050,7 @@ dissect_cip_set_attribute_list_rsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree
                                   int offset, cip_simple_request_info_t* req_data)
 {
    int i, start_offset, att_count, att_value;
-   attribute_info_t* attr;
+   const attribute_info_t* attr;
    proto_item *att_list, *att_item;
    proto_tree *att_tree, *att_list_tree;
 
@@ -7087,7 +7100,7 @@ dissect_cip_get_attribute_single_rsp(tvbuff_t *tvb, packet_info *pinfo, proto_tr
 {
    int parsed_len = 0;
    int total_len;
-   attribute_info_t* attr;
+   const attribute_info_t* attr;
 
    total_len = tvb_reported_length_remaining(tvb, offset);
    attr = cip_get_attribute(req_data->iClass, req_data->iInstance, req_data->iAttribute);

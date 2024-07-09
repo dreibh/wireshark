@@ -53,7 +53,7 @@ WSLUA_CONSTRUCTOR Dissector_get (lua_State *L) {
 
 /* Allow dissector key names to be sorted alphabetically. */
 static int
-compare_dissector_key_name(gconstpointer dissector_a, gconstpointer dissector_b)
+compare_dissector_key_name(const void *dissector_a, const void *dissector_b)
 {
   return strcmp((const char*)dissector_a, (const char*)dissector_b);
 }
@@ -811,7 +811,7 @@ WSLUA_METAMETHOD DissectorTable__tostring(lua_State* L) {
     }
 
     lua_pushstring(L,s->str);
-    g_string_free(s,true);
+    g_string_free(s,TRUE);
     WSLUA_RETURN(1); /* A string of debug information about the <<lua_class_DissectorTable,`DissectorTable`>>. */
 }
 

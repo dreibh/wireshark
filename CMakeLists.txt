@@ -598,7 +598,8 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 	list(APPEND LOCAL_CFLAGS /diagnostics:caret /Zo /utf-8 /guard:cf)
 	set(WS_LINK_FLAGS "${WS_LINK_FLAGS} /guard:cf")
 	set(WS_LINK_FLAGS "${WS_LINK_FLAGS} /STACK:0x800000")
-	# /Qspectre is not available for VS2015 or older VS2017. Test for its availability.
+	# /Qspectre depends on the optional "Microsoft.VisualStudio.Component...Spectre" components,
+	# so we need to test for its availability.
 	set(WIRESHARK_COMMON_FLAGS /Qspectre)
 
 	if(ENABLE_CODE_ANALYSIS)
@@ -1407,8 +1408,13 @@ ws_find_package(ZLIBNG ENABLE_ZLIBNG HAVE_ZLIBNG)
     ws_find_package(ZLIB ENABLE_ZLIB HAVE_ZLIB)
 #endif()
 
-# Minizip compression
-ws_find_package(Minizip ENABLE_MINIZIP HAVE_MINIZIP)
+# Minizip-ng compression
+ws_find_package(Minizipng ENABLE_MINIZIPNG HAVE_MINIZIPNG)
+
+if(NOT MINIZIPNG_FOUND)
+  # Minizip compression
+  ws_find_package(Minizip ENABLE_MINIZIP HAVE_MINIZIP)
+endif()
 
 # Brotli compression
 ws_find_package(BROTLI ENABLE_BROTLI HAVE_BROTLI)
@@ -2027,6 +2033,11 @@ set_package_properties(Minizip PROPERTIES
 	DESCRIPTION "Mini zip and unzip based on zlib"
 	PURPOSE "Support for profiles import/export"
 )
+set_package_properties(Minizipng PROPERTIES
+	URL "https://github.com/zlib-ng/minizip-ng"
+	DESCRIPTION "A fork of the minizip library - Mini zip and unzip based on zlib"
+	PURPOSE "Support for profiles import/export"
+)
 set_package_properties(SMI PROPERTIES
 	URL "https://www.ibr.cs.tu-bs.de/projects/libsmi/"
 	DESCRIPTION "Library to access SMI management information"
@@ -2137,7 +2148,7 @@ set(INSTALL_FILES
 set(DOC_FILES
 	resources/share/doc/wireshark/pdml2html.xsl
 	doc/README.xml-output
-	docbook/ws.css
+	doc/ws.css
 )
 
 if (BUILD_logray)
@@ -2146,7 +2157,7 @@ if (BUILD_logray)
 	)
 
 	set(LOG_INSTALL_FILES
-		docbook/ws.css
+		doc/ws.css
 		resources/share/logray/colorfilters
 		resources/share/logray/dfilter_buttons
 	)
@@ -2154,44 +2165,44 @@ endif()
 
 if (ASCIIDOCTOR_FOUND)
 	list(APPEND DOC_FILES
-		${CMAKE_BINARY_DIR}/doc/androiddump.html
-		${CMAKE_BINARY_DIR}/doc/udpdump.html
-		${CMAKE_BINARY_DIR}/doc/capinfos.html
-		${CMAKE_BINARY_DIR}/doc/captype.html
-		${CMAKE_BINARY_DIR}/doc/ciscodump.html
-		${CMAKE_BINARY_DIR}/doc/dumpcap.html
-		${CMAKE_BINARY_DIR}/doc/editcap.html
-		${CMAKE_BINARY_DIR}/doc/extcap.html
-		${CMAKE_BINARY_DIR}/doc/mergecap.html
-		${CMAKE_BINARY_DIR}/doc/randpkt.html
-		${CMAKE_BINARY_DIR}/doc/randpktdump.html
-		${CMAKE_BINARY_DIR}/doc/etwdump.html
-		${CMAKE_BINARY_DIR}/doc/rawshark.html
-		${CMAKE_BINARY_DIR}/doc/reordercap.html
-		${CMAKE_BINARY_DIR}/doc/sshdump.html
-		${CMAKE_BINARY_DIR}/doc/wifidump.html
-		${CMAKE_BINARY_DIR}/doc/text2pcap.html
-		${CMAKE_BINARY_DIR}/doc/tshark.html
-		${CMAKE_BINARY_DIR}/doc/wireshark.html
-		${CMAKE_BINARY_DIR}/doc/wireshark-filter.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/androiddump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/udpdump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/capinfos.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/captype.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/ciscodump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/dumpcap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/editcap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/extcap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/mergecap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/randpkt.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/randpktdump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/etwdump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/rawshark.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/reordercap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/sshdump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/wifidump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/text2pcap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/tshark.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/wireshark.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/wireshark-filter.html
 		${CMAKE_BINARY_DIR}/doc/release-notes.html
 	)
 	if(MAXMINDDB_FOUND)
-		list(APPEND DOC_FILES ${CMAKE_BINARY_DIR}/doc/mmdbresolve.html)
+		list(APPEND DOC_FILES ${CMAKE_BINARY_DIR}/doc/man_pages/mmdbresolve.html)
 	endif()
 
 	if (BUILD_corbaidl2wrs)
-		list(APPEND DOC_FILES ${CMAKE_BINARY_DIR}/doc/idl2wrs.html)
+		list(APPEND DOC_FILES ${CMAKE_BINARY_DIR}/doc/man_pages/idl2wrs.html)
 	endif()
 	if (BUILD_xxx2deb)
 		list(APPEND DOC_FILES
-			${CMAKE_BINARY_DIR}/doc/asn2deb.html
-			${CMAKE_BINARY_DIR}/doc/idl2deb.html
+			${CMAKE_BINARY_DIR}/doc/man_pages/asn2deb.html
+			${CMAKE_BINARY_DIR}/doc/man_pages/idl2deb.html
 		)
 	endif()
 	if (BUILD_logray)
 		list(APPEND DOC_FILES
-			${CMAKE_BINARY_DIR}/doc/falcodump.html
+			${CMAKE_BINARY_DIR}/doc/man_pages/falcodump.html
 		)
 	endif()
 endif()
@@ -2278,6 +2289,14 @@ if(USE_REPOSITORY)
 	if (MINIZIP_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${MINIZIP_DLL_DIR}/${MINIZIP_DLL}")
 		list (APPEND THIRD_PARTY_PDBS "${MINIZIP_DLL_DIR}/${MINIZIP_PDB}")
+	endif()
+	if (MINIZIPNG_FOUND)
+		foreach( _dll ${MINIZIPNG_DLLS} )
+			list (APPEND THIRD_PARTY_DLLS "${MINIZIPNG_DLL_DIR}/${_dll}")
+		endforeach(_dll)
+		foreach( _pdb ${MINIZIPNG_PDBS} )
+			list (APPEND THIRD_PARTY_PDBS "${MINIZIPNG_DLL_DIR}/${_pdb}")
+		endforeach(_pdb)
 	endif()
 	if (NGHTTP2_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${NGHTTP2_DLL_DIR}/${NGHTTP2_DLL}")
@@ -2555,6 +2574,7 @@ add_custom_command(
 )
 
 file(GLOB _radius_src_files RELATIVE ${_protocol_data_dir}
+	CONFIGURE_DEPENDS
 	${_protocol_data_dir}/radius/README.radius_dictionary
 	${_protocol_data_dir}/radius/custom.includes
 	${_protocol_data_dir}/radius/dictionary
@@ -2824,6 +2844,7 @@ if(BUILD_wireshark AND QT_FOUND)
 		${ZLIB_LIBRARIES}
 		${ZLIBNG_LIBRARIES}
 		${MINIZIP_LIBRARIES}
+		${MINIZIPNG_LIBRARIES}
 	)
 
 	add_executable(wireshark WIN32 MACOSX_BUNDLE ${wireshark_FILES} ${EXTRA_WIRESHARK_BUNDLE_FILES})
@@ -2938,6 +2959,7 @@ if(BUILD_logray AND QT_FOUND)
 		${ZLIB_LIBRARIES}
 		${ZLIBNG_LIBRARIES}
 		${MINIZIP_LIBRARIES}
+		${MINIZIPNG_LIBRARIES}
 	)
 
 	add_executable(logray WIN32 MACOSX_BUNDLE ${logray_FILES} ${EXTRA_LOGRAY_BUNDLE_FILES})

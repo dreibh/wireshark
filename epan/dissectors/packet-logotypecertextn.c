@@ -477,8 +477,8 @@ dissect_logotypecertextn_LogotypeExtn(bool implicit_tag _U_, tvbuff_t *tvb _U_, 
 static int dissect_LogotypeExtn_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_logotypecertextn_LogotypeExtn(FALSE, tvb, offset, &asn1_ctx, tree, hf_logotypecertextn_LogotypeExtn_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_logotypecertextn_LogotypeExtn(false, tvb, offset, &asn1_ctx, tree, hf_logotypecertextn_LogotypeExtn_PDU);
   return offset;
 }
 
@@ -656,7 +656,7 @@ void proto_register_logotypecertextn(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_logotypecertextn_LogotypeExtn,
     &ett_logotypecertextn_SEQUENCE_OF_LogotypeInfo,
     &ett_logotypecertextn_SEQUENCE_OF_OtherLogotypeInfo,

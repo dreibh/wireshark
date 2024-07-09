@@ -253,7 +253,7 @@ WSLUA_CONSTRUCTOR Listener_new(lua_State* L) {
         g_free(tap);
         /* WSLUA_ERROR(new_tap,"tap registration error"); */
         lua_pushfstring(L,"Error while registering tap:\n%s",error->str);
-        g_string_free(error,true);
+        g_string_free(error,TRUE);
         return luaL_error(L,lua_tostring(L,-1));
     }
 
@@ -269,7 +269,7 @@ WSLUA_CONSTRUCTOR Listener_new(lua_State* L) {
 
 /* Allow dissector key names to be sorted alphabetically */
 static int
-compare_dissector_key_name(gconstpointer dissector_a, gconstpointer dissector_b)
+compare_dissector_key_name(const void *dissector_a, const void *dissector_b)
 {
   return strcmp((const char*)dissector_a, (const char*)dissector_b);
 }

@@ -26,8 +26,8 @@
 class DecodeAsItem
 {
 public:
-    DecodeAsItem(const char *table_name = NULL, gconstpointer selector = NULL);
-    DecodeAsItem(const decode_as_t *entry, gconstpointer selector = NULL);
+    DecodeAsItem(const char *table_name = NULL, const void *selector = NULL);
+    DecodeAsItem(const decode_as_t *entry, const void *selector = NULL);
     virtual ~DecodeAsItem();
 
     const char* tableName() const { return tableName_; }
@@ -45,7 +45,7 @@ public:
     void updateHandles();
 
 private:
-    void init(const char *table_name, gconstpointer selector = NULL);
+    void init(const char *table_name, const void *selector = NULL);
 
     const char* tableName_;
     const char* tableUIName_;
@@ -68,6 +68,15 @@ class DecodeAsModel : public QAbstractTableModel
 public:
     DecodeAsModel(QObject *parent, capture_file *cf = NULL);
     virtual ~DecodeAsModel();
+
+    struct UIntEntry {
+        QByteArray table;
+        uint32_t    key;
+        QByteArray pref_name;
+
+        UIntEntry(const char* t, uint32_t k, const char* pref_suffix) :
+            table(t), key(k), pref_name(t) { pref_name.append(pref_suffix); }
+    };
 
     enum DecodeAsColumn {
         colTable = 0, // aka "Field" (or dissector table like "TCP Port")
@@ -96,7 +105,7 @@ public:
     bool copyRow(int dst_row, int src_row);
     bool copyFromProfile(QString filename, const char **err);
 
-    static QString entryString(const char *table_name, gconstpointer value);
+    static QString entryString(const char *table_name, const void *value);
 
     void applyChanges();
 
@@ -112,7 +121,7 @@ protected:
 private:
     capture_file *cap_file_;
     QList<DecodeAsItem *> decode_as_items_;
-    QList<QPair<const char *, uint32_t> > changed_uint_entries_;
+    QList<UIntEntry> changed_uint_entries_;
     QList<QPair<const char *, const char *> > changed_string_entries_;
 };
 

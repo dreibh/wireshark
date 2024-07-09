@@ -214,14 +214,13 @@ variables:
     - printf "\e[0Ksection_start:%s:ci_env_section[collapsed=true]\r\e[0KCI environment variables" "$(date +%s)"
     - env | grep ^CI | sort
     - printf "\e[0Ksection_end:%s:ci_env_section\r\e[0K" "$(date +%s)"
-    - export PATH=$PATH:$HOME/.python-env/bin
     - brew --version
     - printf "\e[0Ksection_start:%s:brew_section[collapsed=true]\r\e[0KInstalling prerequisites" "$( date +%s)"
     - ./tools/macos-setup-brew.sh --install-optional --install-test-deps
     - printf "\e[0Ksection_end:%s:brew_section\r\e[0K" "$( date +%s)"
-    # Homebrew implemented PEP 668, so install Python packages using venv for now.
-    - python3 -m venv $HOME/.python-env
-    - $HOME/.python-env/bin/pip3 install pytest pytest-xdist
+    - python3 -m venv $CI_PROJECT_DIR/.venv
+    - source $CI_PROJECT_DIR/.venv/bin/activate
+    - pip3 install pytest pytest-xdist
     - export PYTEST_ADDOPTS=--skip-missing-programs=dumpcap,rawshark
     - mkdir -p ccache
     - ccache --show-stats
@@ -292,13 +291,8 @@ Source Package:
     - if [ -n "$SCHEDULE_TYPE" ] ; then exit 0 ; fi
     - stat --format="%n %s bytes" wireshark-*.tar.*
     - for digest in sha512 sha256 sha1 ; do openssl $digest wireshark-*.tar.* ; done
-    # This will break if we produce multiple tarballs, which is arguably a good thing.
-    - if [ -n "$S3_DESTINATION_DIST" ] ; then aws s3 cp wireshark-*.tar.* "$S3_DESTINATION_DIST/" ; fi
-    - |
-      if [ -n "$S3_DESTINATION_RELEASE" ] ; then
-        aws s3 cp release-notes-*.txt "$S3_DESTINATION_RELEASE/"
-        aws s3 cp release-notes-*.html "$S3_DESTINATION_RELEASE/"
-      fi
+    - if [ -n "$MC_DESTINATION_DIST" ] ; then mc --quiet cp wireshark-*.tar.* "$MC_DESTINATION_DIST/" ; fi
+    - if [ -n "$MC_DESTINATION_RELEASE" ] ; then mc --quiet cp release-notes-*.{txt,html} "$MC_DESTINATION_RELEASE/" ; fi
   artifacts:
     paths:
       - wireshark-*.tar.*
@@ -653,12 +647,7 @@ Documentation:
     - ninja all_guides
     - cd docbook
     - for HTML_DIR in ws[ud]g_html{,_chunked} ; do zip -9 -r "$HTML_DIR.zip" "$HTML_DIR" ; done
-    - |
-      if [ -n "$S3_DESTINATION_DOCS" ] ; then
-        for DOC_FILE in ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} ; do
-          aws s3 cp "$DOC_FILE" "$S3_DESTINATION_DOCS/"
-        done
-      fi
+    - if [ -n "$MC_DESTINATION_DOCS" ] ; then mc --quiet cp ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} "$MC_DESTINATION_DOCS/" ; fi
     - mv -v ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} ../..
   after_script:
     - if [ "$CI_JOB_STATUS" != "success" ]; then exit 0 ; fi
@@ -789,8 +778,9 @@ Clang + Code Checks:
   needs: [ 'Commit Check' ]
   script:
     - source /clang-latest.env
-    - apt-get update && apt-get --yes install python3-pip
-    - pip3 install pyspellchecker
+    - apt-get update && apt-get --yes install python3-venv
+    - python3 -m venv $CI_PROJECT_DIR/.venv
+    - source $CI_PROJECT_DIR/.venv/bin/activate
     # build-ubuntu puts us in `build`.
     - cd ..
     - mkdir cppcheck
@@ -808,6 +798,7 @@ Clang + Code Checks:
     - printf "\e[0Ksection_end:%s:asn1_section\r\e[0K" "$( date +%s)"
     - printf "\e[0Ksection_start:%s:pidl_section[collapsed=true]\r\e[0KRegenerating PIDL dissectors" "$( date +%s)"
     - ninja pidl-dissectors
+    - ninja idl2wrs-dissectors
     - git diff --exit-code ${CI_COMMIT_SHA} ..
     - printf "\e[0Ksection_end:%s:pidl_section\r\e[0K" "$( date +%s)"
     - mkdir ../html
@@ -821,6 +812,7 @@ Clang + Code Checks:
     - ninja checkAPI
     - ninja shellcheck
     - cd ..
+    - pip3 install pyspellchecker
     - ./tools/check_spelling.py --no-wikipedia --comments --commits $NUM_COMMITS | tee spelling_check.txt
     - ./tools/check_typed_item_calls.py --consecutive --label --mask --check-bitmask-fields --commits $NUM_COMMITS | tee item_calls_check.txt
     - ./tools/check_tfs.py --check-value-strings --commits $NUM_COMMITS | tee tfs_check.txt
@@ -992,7 +984,7 @@ Clang Static Analyzer:
     - if [ -d logs ] ; then mv logs $SB_DIR ; fi
     - chmod -R u=rwX,go=rX "$SB_DIR"
     - zip -9 -r "${SB_DIR}.zip" "$SB_DIR"
-    - if [ -n "$S3_DESTINATION_ANALYSIS" ] ; then aws s3 cp "${SB_DIR}.zip" "$S3_DESTINATION_ANALYSIS/" ; fi
+    - if [ -n "$MC_DESTINATION_ANALYSIS" ] ; then mc --quiet cp "${SB_DIR}.zip" "$MC_DESTINATION_ANALYSIS/" ; fi
 
 # Windows runners are still beta, at least technically:
 # https://docs.gitlab.com/ee/user/gitlab_com/index.html#windows-shared-runners-beta
@@ -1006,17 +998,15 @@ Visual Studio Code Analysis:
   script:
     - py -m venv sarif-tools.venv
     - sarif-tools.venv\Scripts\pip.exe install sarif-tools
-    - msiexec.exe /i https://awscli.amazonaws.com/AWSCLIV2.msi
-    - $env:Path += ";C:\Program Files\Amazon\AWSCLIV2"
+    - New-Item -Path C:\MinIO -Type "directory"
+    - Invoke-Webrequest -OutFile C:\MinIO\mc.exe https://dl.min.io/client/mc/release/windows-amd64/archive/mc.RELEASE.2024-07-03T20-17-25Z
+    - if ($( Get-FileHash -Algorithm SHA256 -Path C:\MinIO\mc.exe ).Hash -ne "A379139FB32C0ADDB6C05786782602B5106D13402759AC1B4A88285A4D5EAAD3" ) { Exit 1 }
     - $env:caexcludepath = "C:\Qt;$env:INCLUDE"
     - cmake -DENABLE_CODE_ANALYSIS=ON -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount:2 Wireshark.sln
     - $report = "visual-c++-analyze-" + (Get-Date -format "yyyy-MM-dd") + ".html"
     - sarif-tools.venv\Scripts\sarif html --output $report
-    - |
-      if (Test-Path env:S3_DESTINATION_ANALYSIS) {
-        aws s3 cp "$report" "$env:S3_DESTINATION_ANALYSIS/"
-      }
+    - if (Test-Path env:MC_DESTINATION_ANALYSIS) { C:\MinIO\mc --quiet cp "$report" "$env:MC_DESTINATION_ANALYSIS/" }
 
 # Build all doxygen docs
 API Reference:
@@ -1029,10 +1019,7 @@ API Reference:
     - ninja wsar_html_zip 2>&1 > doxygen_output.txt | tee doxygen_errors.txt
     - mv wsar_html.zip doxygen_{output,errors}.txt ..
     - cd ..
-    - |
-      if [ -n "$S3_DESTINATION_DOCS" ] ; then
-        aws s3 cp wsar_html.zip "$S3_DESTINATION_DOCS/"
-      fi
+    - if [ -n "$MC_DESTINATION_DOCS" ] ; then mc --quiet cp wsar_html.zip "$MC_DESTINATION_DOCS/" ; fi
   after_script:
     - if [ "$CI_JOB_STATUS" != "success" ]; then exit 0 ; fi
   artifacts:
@@ -1089,19 +1076,8 @@ Code Lines and Data:
       #
       FIN
     - build/run/tshark -G manuf | sed -e 's,:00:00:00/24,,' >> manuf
-    - |
-      if [ -n "$S3_DESTINATION_ANALYSIS" ] ; then
-        aws s3 cp "$CLOC_OUT" "$S3_DESTINATION_ANALYSIS/"
-        aws s3 cp "$SCC_OUT" "$S3_DESTINATION_ANALYSIS/"
-        aws s3 cp "$SLOC_OUT" "$S3_DESTINATION_ANALYSIS/"
-        aws s3 cp "$TOKEI_OUT" "$S3_DESTINATION_ANALYSIS/"
-      fi
-    - |
-      if [ -n "$S3_DESTINATION_DATA" ] ; then
-        for DATA_FILE in manuf ; do
-          aws s3 cp "$DATA_FILE" "$S3_DESTINATION_DATA/"
-        done
-      fi
+    - if [ -n "$MC_DESTINATION_ANALYSIS" ] ; then mc --quiet cp "$CLOC_OUT" "$SCC_OUT" "$SLOC_OUT" "$TOKEI_OUT" "$MC_DESTINATION_ANALYSIS/" ; fi
+    - if [ -n "$MC_DESTINATION_DATA" ] ; then mc --quiet cp manuf "$MC_DESTINATION_DATA/" ; fi
   artifacts:
     paths:
     - manuf
@@ -1143,11 +1119,7 @@ Code Lines and Data:
     - FUZZ_ERRORS="/tmp/fuzz/$( basename "$FUZZ_CAPTURE" .pcap ).err"
     - printf "\nfuzz-test.sh stderr:\n" >> "$FUZZ_ERRORS"
     - cat fuzz-test.err >> "$FUZZ_ERRORS"
-    - |
-      if [ -n "$S3_DESTINATION_FUZZ" ] ; then
-        aws s3 cp "$FUZZ_CAPTURE" "$S3_DESTINATION_FUZZ/"
-        aws s3 cp "$FUZZ_ERRORS" "$S3_DESTINATION_FUZZ/"
-      fi
+    - if [ -n "$MC_DESTINATION_FUZZ" ] ; then mc --quiet cp "$FUZZ_CAPTURE" "$FUZZ_ERRORS" "$MC_DESTINATION_FUZZ/"
 
 ASan Menagerie Fuzz:
   extends: .fuzz-ubuntu

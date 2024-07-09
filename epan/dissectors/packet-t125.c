@@ -193,7 +193,7 @@ dissect_t125_Connect_Initial_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int off
 static int
 dissect_t125_Connect_Initial(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_APP, 101, TRUE, dissect_t125_Connect_Initial_U);
+                                      hf_index, BER_CLASS_APP, 101, true, dissect_t125_Connect_Initial_U);
 
   return offset;
 }
@@ -267,7 +267,7 @@ dissect_t125_Connect_Response_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int of
 static int
 dissect_t125_Connect_Response(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_APP, 102, TRUE, dissect_t125_Connect_Response_U);
+                                      hf_index, BER_CLASS_APP, 102, true, dissect_t125_Connect_Response_U);
 
   return offset;
 }
@@ -292,7 +292,7 @@ dissect_t125_Connect_Additional_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int 
 static int
 dissect_t125_Connect_Additional(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_APP, 103, TRUE, dissect_t125_Connect_Additional_U);
+                                      hf_index, BER_CLASS_APP, 103, true, dissect_t125_Connect_Additional_U);
 
   return offset;
 }
@@ -316,7 +316,7 @@ dissect_t125_Connect_Result_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offs
 static int
 dissect_t125_Connect_Result(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_APP, 104, TRUE, dissect_t125_Connect_Result_U);
+                                      hf_index, BER_CLASS_APP, 104, true, dissect_t125_Connect_Result_U);
 
   return offset;
 }
@@ -352,8 +352,8 @@ dissect_t125_ConnectMCSPDU(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset 
 static int dissect_ConnectMCSPDU_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_t125_ConnectMCSPDU(FALSE, tvb, offset, &asn1_ctx, tree, hf_t125_ConnectMCSPDU_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_t125_ConnectMCSPDU(false, tvb, offset, &asn1_ctx, tree, hf_t125_ConnectMCSPDU_PDU);
   return offset;
 }
 
@@ -363,9 +363,9 @@ dissect_t125(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *d
 {
   proto_item *item = NULL;
   proto_tree *tree = NULL;
-  gint8 ber_class;
+  int8_t ber_class;
   bool pc;
-  gint32 tag;
+  int32_t tag;
 
   top_tree = parent_tree;
 
@@ -390,24 +390,24 @@ dissect_t125(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *d
 static bool
 dissect_t125_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data _U_)
 {
-  gint8 ber_class;
+  int8_t ber_class;
   bool pc;
-  gint32 tag;
+  int32_t tag;
   volatile bool failed;
 
   /*
    * We must catch all the "ran past the end of the packet" exceptions
-   * here and, if we catch one, just return FALSE.  It's too painful
+   * here and, if we catch one, just return false.  It's too painful
    * to have a version of dissect_per_sequence() that checks all
    * references to the tvbuff before making them and returning "no"
    * if they would fail.
    */
-  failed = FALSE;
+  failed = false;
   TRY {
     /* could be BER */
     get_ber_identifier(tvb, 0, &ber_class, &pc, &tag);
   } CATCH_BOUNDS_ERRORS {
-    failed = TRUE;
+    failed = true;
   } ENDTRY;
 
   if (failed) {
@@ -425,7 +425,7 @@ dissect_t125_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, vo
    * This might not be enough, but since t125 only catch COTP packets,
    * it should not be a problem.
    */
-  guint8 first_byte = tvb_get_guint8(tvb, 0) >> 2;
+  uint8_t first_byte = tvb_get_guint8(tvb, 0) >> 2;
   switch (first_byte) {
     case HF_T125_ERECT_DOMAIN_REQUEST:
     case HF_T125_ATTACH_USER_REQUEST:
@@ -551,7 +551,7 @@ void proto_register_t125(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
 	  &ett_t125,
     &ett_t125_DomainParameters,
     &ett_t125_Connect_Initial_U,

@@ -232,7 +232,7 @@ static void extcap_iface_print(void * data, void * userdata _U_)
         printf ("\n");
 }
 
-static int extcap_iface_compare(gconstpointer  a, gconstpointer  b)
+static int extcap_iface_compare(const void *   a, const void *   b)
 {
     const extcap_interface * iface_a = (const extcap_interface *)a;
 
@@ -408,7 +408,7 @@ void extcap_cmdline_debug(char** ar, const unsigned n)
     for (i = 0; i < n; i++)
         g_string_append_printf(cmdline, "%s ", ar[i]);
     ws_debug("%s", cmdline->str);
-    g_string_free(cmdline, true);
+    g_string_free(cmdline, TRUE);
 }
 
 /*

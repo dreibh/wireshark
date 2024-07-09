@@ -74,7 +74,7 @@ WSLUA_METAMETHOD PrivateTable__tostring(lua_State* L) {
 
     lua_pushstring(L,key_string->str);
 
-    g_string_free (key_string, true);
+    g_string_free (key_string, TRUE);
     g_list_free (keys);
 
     WSLUA_RETURN(1); /* A string with all keys in the table, mostly for debugging. */
@@ -117,7 +117,7 @@ static int PrivateTable__newindex(lua_State* L) {
     if (string) {
       g_hash_table_replace (priv->table, (void *) g_strdup(name), (void *) g_strdup(string));
     } else {
-      g_hash_table_remove (priv->table, (gconstpointer) name);
+      g_hash_table_remove (priv->table, (const void *) name);
     }
 
     return 1;

@@ -57,9 +57,9 @@ static int proto_camel;
 static int date_format = 1; /*assume european date format */
 static int camel_tap;
 /* Global variables */
-static guint32 opcode=0;
-static guint32 errorCode=0;
-static guint32 camel_ver;
+static uint32_t opcode=0;
+static uint32_t errorCode=0;
+static uint32_t camel_ver;
 
 /* When several Camel components are received in a single TCAP message,
    we have to use several buffers for the stored parameters
@@ -607,32 +607,32 @@ static int dissect_camel_SpecializedResourceReportArgV23(bool implicit_tag _U_, 
 
 /* XXX - can we get rid of these and always do the SRT work? */
 static bool gcamel_PersistentSRT=false;
-static gboolean gcamel_DisplaySRT=FALSE;
-gboolean gcamel_StatSRT=FALSE;
+static bool gcamel_DisplaySRT=false;
+bool gcamel_StatSRT=false;
 
 /* Initialize the subtree pointers */
-static gint ett_camel;
-static gint ett_camelisup_parameter;
-static gint ett_camel_AccessPointName;
-static gint ett_camel_pdptypenumber;
-static gint ett_camel_cause;
-static gint ett_camel_RPcause;
-static gint ett_camel_stat;
-static gint ett_camel_calledpartybcdnumber;
-static gint ett_camel_callingpartynumber;
-static gint ett_camel_originalcalledpartyid;
-static gint ett_camel_redirectingpartyid;
-static gint ett_camel_locationnumber;
-static gint ett_camel_additionalcallingpartynumber;
-static gint ett_camel_calledAddressValue;
-static gint ett_camel_callingAddressValue;
-static gint ett_camel_assistingSSPIPRoutingAddress;
-static gint ett_camel_correlationID;
-static gint ett_camel_dTMFDigitsCompleted;
-static gint ett_camel_dTMFDigitsTimeOut;
-static gint ett_camel_number;
-static gint ett_camel_digitsResponse;
-static gint ett_camel_timeandtimezone;
+static int ett_camel;
+static int ett_camelisup_parameter;
+static int ett_camel_AccessPointName;
+static int ett_camel_pdptypenumber;
+static int ett_camel_cause;
+static int ett_camel_RPcause;
+static int ett_camel_stat;
+static int ett_camel_calledpartybcdnumber;
+static int ett_camel_callingpartynumber;
+static int ett_camel_originalcalledpartyid;
+static int ett_camel_redirectingpartyid;
+static int ett_camel_locationnumber;
+static int ett_camel_additionalcallingpartynumber;
+static int ett_camel_calledAddressValue;
+static int ett_camel_callingAddressValue;
+static int ett_camel_assistingSSPIPRoutingAddress;
+static int ett_camel_correlationID;
+static int ett_camel_dTMFDigitsCompleted;
+static int ett_camel_dTMFDigitsTimeOut;
+static int ett_camel_number;
+static int ett_camel_digitsResponse;
+static int ett_camel_timeandtimezone;
 
 static int ett_camel_AChChargingAddress;
 static int ett_camel_AOCBeforeAnswer;
@@ -848,14 +848,14 @@ static dissector_handle_t  camel_v4_handle;
 
 /* Global variables */
 
-static guint8 PDPTypeOrganization;
-static guint8 PDPTypeNumber;
+static uint8_t PDPTypeOrganization;
+static uint8_t PDPTypeNumber;
 const char *camel_obj_id;
-gboolean is_ExtensionField;
+bool is_ExtensionField;
 
 /* Global hash tables*/
 static wmem_map_t *srt_calls;
-static guint32 camelsrt_global_SessionId=1;
+static uint32_t camelsrt_global_SessionId=1;
 
 static int camel_opcode_type;
 #define CAMEL_OPCODE_INVOKE        1
@@ -1263,9 +1263,9 @@ static const value_string camel_err_code_string_vals[] = {
 #ifdef DEBUG_CAMELSRT
 #include <stdio.h>
 #include <stdarg.h>
-static guint debug_level = 99;
+static unsigned debug_level = 99;
 
-static void dbg(guint level, char *fmt, ...) {
+static void dbg(unsigned level, char *fmt, ...) {
   va_list ap;
 
   if (level > debug_level) return;
@@ -1279,8 +1279,8 @@ static void
 camelstat_init(struct register_srt* srt _U_, GArray* srt_array)
 {
   srt_stat_table *camel_srt_table;
-  gchar* tmp_str;
-  guint32 i;
+  char* tmp_str;
+  uint32_t i;
 
   camel_srt_table = init_srt_table("CAMEL Commands", NULL, srt_array, NB_CAMELSRT_CATEGORY, NULL, NULL, NULL);
   for (i = 0; i < NB_CAMELSRT_CATEGORY; i++)
@@ -1294,7 +1294,7 @@ camelstat_init(struct register_srt* srt _U_, GArray* srt_array)
 static tap_packet_status
 camelstat_packet(void *pcamel, packet_info *pinfo, epan_dissect_t *edt _U_, const void *psi, tap_flags_t flags _U_)
 {
-  guint idx = 0;
+  unsigned idx = 0;
   srt_stat_table *camel_srt_table;
   const struct camelsrt_info_t * pi=(const struct camelsrt_info_t *)psi;
   srt_data_t *data = (srt_data_t *)pcamel;
@@ -1325,12 +1325,12 @@ static char camel_number_to_char(int number)
 /*
  * 24.011 8.2.5.4
  */
-static guint8
-dissect_RP_cause_ie(tvbuff_t *tvb, guint32 offset, _U_ guint len,
-                    proto_tree *tree, int hf_cause_value, guint8 *cause_value)
+static uint8_t
+dissect_RP_cause_ie(tvbuff_t *tvb, uint32_t offset, _U_ unsigned len,
+                    proto_tree *tree, int hf_cause_value, uint8_t *cause_value)
 {
-  guint8 oct;
-  guint32 curr_offset;
+  uint8_t oct;
+  uint32_t curr_offset;
 
   curr_offset = offset;
   oct = tvb_get_guint8(tvb, curr_offset);
@@ -1386,9 +1386,9 @@ dissect_camel_AChBillingChargingCharacteristics(bool implicit_tag _U_, tvbuff_t 
 	return offset;
  subtree = proto_item_add_subtree(actx->created_item, ett_camel_CAMEL_AChBillingChargingCharacteristics);
  if((camel_ver == 2)||(camel_ver == 1)){
-	return  dissect_camel_CAMEL_AChBillingChargingCharacteristicsV2(FALSE, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_AChBillingChargingCharacteristics);
+	return  dissect_camel_CAMEL_AChBillingChargingCharacteristicsV2(false, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_AChBillingChargingCharacteristics);
  }
- dissect_camel_CAMEL_AChBillingChargingCharacteristics(FALSE, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_AChBillingChargingCharacteristics);
+ dissect_camel_CAMEL_AChBillingChargingCharacteristics(false, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_AChBillingChargingCharacteristics);
 
 
   return offset;
@@ -1467,8 +1467,8 @@ dissect_camel_Digits(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, a
 */
  tvbuff_t	*parameter_tvb;
  proto_tree *subtree;
- gint ett = -1;
- bool digits = FALSE;
+ int ett = -1;
+ bool digits = false;
 
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
                                        &parameter_tvb);
@@ -1486,19 +1486,19 @@ dissect_camel_Digits(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, a
 	ett = ett_camel_assistingSSPIPRoutingAddress;
   } else if (hf_index == hf_camel_correlationID) {
 	ett = ett_camel_correlationID;
-	digits = (opcode == opcode_establishTemporaryConnection) ? TRUE : FALSE;
+	digits = (opcode == opcode_establishTemporaryConnection) ? true : false;
   } else if (hf_index == hf_camel_dTMFDigitsCompleted) {
 	ett = ett_camel_dTMFDigitsCompleted;
-	digits = TRUE;
+	digits = true;
   } else if (hf_index == hf_camel_dTMFDigitsTimeOut) {
 	ett = ett_camel_dTMFDigitsTimeOut;
-	digits = TRUE;
+	digits = true;
   } else if (hf_index == hf_camel_number) {
 	ett = ett_camel_number;
-	digits = TRUE;
+	digits = true;
   } else if (hf_index == hf_camel_digitsResponse) {
 	ett = ett_camel_digitsResponse;
-	digits = TRUE;
+	digits = true;
   }
 
   subtree = proto_item_add_subtree(actx->created_item, ett);
@@ -2083,7 +2083,7 @@ static int
 dissect_camel_Cause(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
 tvbuff_t *parameter_tvb;
-guint8 Cause_value;
+uint8_t Cause_value;
 proto_tree *subtree;
 
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
@@ -2240,7 +2240,7 @@ dissect_camel_CallResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U
  if (!parameter_tvb)
 	return offset;
  subtree = proto_item_add_subtree(actx->created_item, ett_camel_CAMEL_CallResult);
- dissect_camel_CAMEL_CallResult(FALSE, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_CallResult);
+ dissect_camel_CAMEL_CallResult(false, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_CallResult);
 
 
   return offset;
@@ -2301,7 +2301,7 @@ dissect_camel_INTEGER_1_864000(bool implicit_tag _U_, tvbuff_t *tvb _U_, int off
 static int
 dissect_camel_T_audibleIndicator(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   if (tvb_reported_length_remaining(tvb,offset) < 2)
-	offset = dissect_camel_BOOLEAN(TRUE, tvb, offset, actx , tree, hf_camel_audibleIndicatorTone);
+	offset = dissect_camel_BOOLEAN(true, tvb, offset, actx , tree, hf_camel_audibleIndicatorTone);
   else
   offset = dissect_camel_AudibleIndicator(implicit_tag, tvb, offset, actx, tree, hf_index);
 
@@ -2323,7 +2323,7 @@ dissect_camel_T_local(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &opcode);
 
-  if (is_ExtensionField == FALSE){
+  if (is_ExtensionField == false){
 	if (camel_opcode_type == CAMEL_OPCODE_RETURN_ERROR){
 	  errorCode = opcode;
 	  col_append_str(actx->pinfo->cinfo, COL_INFO,
@@ -2381,7 +2381,7 @@ dissect_camel_T_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, 
   if(camel_obj_id){
     offset=call_ber_oid_callback(camel_obj_id, tvb, offset, actx->pinfo, tree, NULL);
   }
-  is_ExtensionField = FALSE;
+  is_ExtensionField = false;
 
 
   return offset;
@@ -2398,7 +2398,7 @@ static const ber_sequence_t ExtensionField_sequence[] = {
 static int
 dissect_camel_ExtensionField(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 	camel_obj_id = NULL;
-	is_ExtensionField =TRUE;
+	is_ExtensionField =true;
 
   offset = dissect_ber_sequence(implicit_tag, actx, tree, tvb, offset,
                                    ExtensionField_sequence, hf_index, ett_camel_ExtensionField);
@@ -3242,8 +3242,8 @@ dissect_camel_DateAndTime(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _
 * otherwise.
 */
 
-  guint8 digit_pair;
-  guint8 i = 0, curr_offset;
+  uint8_t digit_pair;
+  uint8_t i = 0, curr_offset;
   char camel_time[CAMEL_DATE_AND_TIME_LEN];
   char c[CAMEL_DATE_AND_TIME_LEN]; /*temporary container*/
 
@@ -4077,7 +4077,7 @@ dissect_camel_FCIBillingChargingCharacteristics(bool implicit_tag _U_, tvbuff_t 
  if (!parameter_tvb)
 	return offset;
  subtree = proto_item_add_subtree(actx->created_item, ett_camel_CAMEL_FCIBillingChargingCharacteristics);
- dissect_camel_CAMEL_FCIBillingChargingCharacteristics(FALSE, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_FCIBillingChargingCharacteristics);
+ dissect_camel_CAMEL_FCIBillingChargingCharacteristics(false, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_FCIBillingChargingCharacteristics);
 
 
   return offset;
@@ -4096,7 +4096,7 @@ dissect_camel_FCIGPRSBillingChargingCharacteristics(bool implicit_tag _U_, tvbuf
  if (!parameter_tvb)
 	return offset;
  subtree = proto_item_add_subtree(actx->created_item, ett_camel_CAMEL_FCIGPRSBillingChargingCharacteristics);
- dissect_camel_CAMEL_FCIGPRSBillingChargingCharacteristics(FALSE, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_FCIGPRSBillingChargingCharacteristics);
+ dissect_camel_CAMEL_FCIGPRSBillingChargingCharacteristics(false, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_FCIGPRSBillingChargingCharacteristics);
 
 
   return offset;
@@ -4115,7 +4115,7 @@ dissect_camel_FCISMSBillingChargingCharacteristics(bool implicit_tag _U_, tvbuff
  if (!parameter_tvb)
 	return offset;
  subtree = proto_item_add_subtree(actx->created_item, ett_camel_CAMEL_FCISMSBillingChargingCharacteristics);
- dissect_camel_CAMEL_FCISMSBillingChargingCharacteristics(FALSE, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_FCISMSBillingChargingCharacteristics);
+ dissect_camel_CAMEL_FCISMSBillingChargingCharacteristics(false, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_FCISMSBillingChargingCharacteristics);
 
 
   return offset;
@@ -4540,9 +4540,9 @@ dissect_camel_T_cellGlobalIdOrServiceAreaIdOrLAI(bool implicit_tag _U_, tvbuff_t
  subtree = proto_item_add_subtree(actx->created_item, ett_camel_pdptypenumber);
 
  if (tvb_reported_length_remaining(tvb,start_offset) == 7){
-	dissect_gsm_map_CellGlobalIdOrServiceAreaIdFixedLength(TRUE, tvb, start_offset, actx, subtree, hf_camel_cellGlobalIdOrServiceAreaIdFixedLength);
+	dissect_gsm_map_CellGlobalIdOrServiceAreaIdFixedLength(true, tvb, start_offset, actx, subtree, hf_camel_cellGlobalIdOrServiceAreaIdFixedLength);
  }else{
-	dissect_gsm_map_LAIFixedLength(TRUE, tvb, start_offset, actx, subtree, hf_camel_locationAreaId);
+	dissect_gsm_map_LAIFixedLength(true, tvb, start_offset, actx, subtree, hf_camel_locationAreaId);
  }
 
   return offset;
@@ -4619,16 +4619,16 @@ dissect_camel_TimeAndTimezone(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offs
  tvbuff_t  *parameter_tvb;
  proto_tree *subtree;
  proto_item *item;
- gchar *digit_str;
- guint length;
- gchar year[5];
- gchar month[3];
- gchar day[3];
- gchar hour[3];
- gchar minute[3];
- gchar second[3];
+ char *digit_str;
+ unsigned length;
+ char year[5];
+ char month[3];
+ char day[3];
+ char hour[3];
+ char minute[3];
+ char second[3];
 
- guint8 oct;
+ uint8_t oct;
  int8_t tz;
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
                                        &parameter_tvb);
@@ -5030,7 +5030,7 @@ static int
 dissect_camel_RPCause(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
 tvbuff_t *parameter_tvb;
-guint8 Cause_value;
+uint8_t Cause_value;
 proto_tree *subtree;
 
   offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
@@ -5059,7 +5059,7 @@ dissect_camel_SCIBillingChargingCharacteristics(bool implicit_tag _U_, tvbuff_t 
  if (!parameter_tvb)
 	return offset;
  subtree = proto_item_add_subtree(actx->created_item, ett_camel_CAMEL_SCIBillingChargingCharacteristics);
- dissect_camel_CAMEL_SCIBillingChargingCharacteristics(FALSE, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_SCIBillingChargingCharacteristics);
+ dissect_camel_CAMEL_SCIBillingChargingCharacteristics(false, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_SCIBillingChargingCharacteristics);
 
 
   return offset;
@@ -5078,7 +5078,7 @@ dissect_camel_SCIGPRSBillingChargingCharacteristics(bool implicit_tag _U_, tvbuf
  if (!parameter_tvb)
 	return offset;
  subtree = proto_item_add_subtree(actx->created_item, ett_camel_CAMEL_SCIGPRSBillingChargingCharacteristics);
- dissect_camel_CAMEL_SCIGPRSBillingChargingCharacteristics(FALSE, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_SCIGPRSBillingChargingCharacteristics);
+ dissect_camel_CAMEL_SCIGPRSBillingChargingCharacteristics(false, parameter_tvb, 0, actx, subtree, hf_camel_CAMEL_SCIGPRSBillingChargingCharacteristics);
 
 
   return offset;
@@ -6855,400 +6855,400 @@ dissect_camel_ROS(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1
 static int dissect_PAR_cancelFailed_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_PAR_cancelFailed(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_PAR_cancelFailed_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_PAR_cancelFailed(false, tvb, offset, &asn1_ctx, tree, hf_camel_PAR_cancelFailed_PDU);
   return offset;
 }
 static int dissect_PAR_requestedInfoError_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_PAR_requestedInfoError(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_PAR_requestedInfoError_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_PAR_requestedInfoError(false, tvb, offset, &asn1_ctx, tree, hf_camel_PAR_requestedInfoError_PDU);
   return offset;
 }
 static int dissect_UnavailableNetworkResource_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_UnavailableNetworkResource(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_UnavailableNetworkResource_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_UnavailableNetworkResource(false, tvb, offset, &asn1_ctx, tree, hf_camel_UnavailableNetworkResource_PDU);
   return offset;
 }
 static int dissect_PAR_taskRefused_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_PAR_taskRefused(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_PAR_taskRefused_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_PAR_taskRefused(false, tvb, offset, &asn1_ctx, tree, hf_camel_PAR_taskRefused_PDU);
   return offset;
 }
 static int dissect_CAP_GPRS_ReferenceNumber_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_CAP_GPRS_ReferenceNumber(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_CAP_GPRS_ReferenceNumber_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_CAP_GPRS_ReferenceNumber(false, tvb, offset, &asn1_ctx, tree, hf_camel_CAP_GPRS_ReferenceNumber_PDU);
   return offset;
 }
 static int dissect_PlayAnnouncementArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_PlayAnnouncementArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_PlayAnnouncementArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_PlayAnnouncementArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_PlayAnnouncementArg_PDU);
   return offset;
 }
 static int dissect_PromptAndCollectUserInformationArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_PromptAndCollectUserInformationArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_PromptAndCollectUserInformationArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_PromptAndCollectUserInformationArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_PromptAndCollectUserInformationArg_PDU);
   return offset;
 }
 static int dissect_ReceivedInformationArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ReceivedInformationArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ReceivedInformationArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ReceivedInformationArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ReceivedInformationArg_PDU);
   return offset;
 }
 static int dissect_SpecializedResourceReportArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_SpecializedResourceReportArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_SpecializedResourceReportArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_SpecializedResourceReportArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_SpecializedResourceReportArg_PDU);
   return offset;
 }
 static int dissect_ApplyChargingArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ApplyChargingArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ApplyChargingArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ApplyChargingArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ApplyChargingArg_PDU);
   return offset;
 }
 static int dissect_ApplyChargingReportArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ApplyChargingReportArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ApplyChargingReportArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ApplyChargingReportArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ApplyChargingReportArg_PDU);
   return offset;
 }
 static int dissect_AssistRequestInstructionsArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_AssistRequestInstructionsArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_AssistRequestInstructionsArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_AssistRequestInstructionsArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_AssistRequestInstructionsArg_PDU);
   return offset;
 }
 static int dissect_CallGapArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_CallGapArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_CallGapArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_CallGapArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_CallGapArg_PDU);
   return offset;
 }
 static int dissect_CallInformationReportArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_CallInformationReportArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_CallInformationReportArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_CallInformationReportArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_CallInformationReportArg_PDU);
   return offset;
 }
 static int dissect_CallInformationRequestArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_CallInformationRequestArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_CallInformationRequestArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_CallInformationRequestArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_CallInformationRequestArg_PDU);
   return offset;
 }
 static int dissect_CancelArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_CancelArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_CancelArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_CancelArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_CancelArg_PDU);
   return offset;
 }
 static int dissect_CollectInformationArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_CollectInformationArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_CollectInformationArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_CollectInformationArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_CollectInformationArg_PDU);
   return offset;
 }
 static int dissect_ConnectArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ConnectArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ConnectArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ConnectArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ConnectArg_PDU);
   return offset;
 }
 static int dissect_ConnectToResourceArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ConnectToResourceArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ConnectToResourceArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ConnectToResourceArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ConnectToResourceArg_PDU);
   return offset;
 }
 static int dissect_ContinueWithArgumentArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ContinueWithArgumentArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ContinueWithArgumentArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ContinueWithArgumentArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ContinueWithArgumentArg_PDU);
   return offset;
 }
 static int dissect_DisconnectForwardConnectionWithArgumentArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_DisconnectForwardConnectionWithArgumentArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_DisconnectForwardConnectionWithArgumentArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_DisconnectForwardConnectionWithArgumentArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_DisconnectForwardConnectionWithArgumentArg_PDU);
   return offset;
 }
 static int dissect_DisconnectLegArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_DisconnectLegArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_DisconnectLegArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_DisconnectLegArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_DisconnectLegArg_PDU);
   return offset;
 }
 static int dissect_EntityReleasedArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_EntityReleasedArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_EntityReleasedArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_EntityReleasedArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_EntityReleasedArg_PDU);
   return offset;
 }
 static int dissect_EstablishTemporaryConnectionArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_EstablishTemporaryConnectionArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_EstablishTemporaryConnectionArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_EstablishTemporaryConnectionArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_EstablishTemporaryConnectionArg_PDU);
   return offset;
 }
 static int dissect_EventReportBCSMArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_EventReportBCSMArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_EventReportBCSMArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_EventReportBCSMArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_EventReportBCSMArg_PDU);
   return offset;
 }
 static int dissect_FurnishChargingInformationArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_FurnishChargingInformationArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_FurnishChargingInformationArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_FurnishChargingInformationArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_FurnishChargingInformationArg_PDU);
   return offset;
 }
 static int dissect_InitialDPArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_InitialDPArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_InitialDPArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_InitialDPArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_InitialDPArg_PDU);
   return offset;
 }
 static int dissect_InitiateCallAttemptArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_InitiateCallAttemptArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_InitiateCallAttemptArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_InitiateCallAttemptArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_InitiateCallAttemptArg_PDU);
   return offset;
 }
 static int dissect_InitiateCallAttemptRes_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_InitiateCallAttemptRes(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_InitiateCallAttemptRes_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_InitiateCallAttemptRes(false, tvb, offset, &asn1_ctx, tree, hf_camel_InitiateCallAttemptRes_PDU);
   return offset;
 }
 static int dissect_MoveLegArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_MoveLegArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_MoveLegArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_MoveLegArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_MoveLegArg_PDU);
   return offset;
 }
 static int dissect_PlayToneArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_PlayToneArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_PlayToneArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_PlayToneArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_PlayToneArg_PDU);
   return offset;
 }
 static int dissect_ReleaseCallArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ReleaseCallArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ReleaseCallArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ReleaseCallArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ReleaseCallArg_PDU);
   return offset;
 }
 static int dissect_RequestReportBCSMEventArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_RequestReportBCSMEventArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_RequestReportBCSMEventArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_RequestReportBCSMEventArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_RequestReportBCSMEventArg_PDU);
   return offset;
 }
 static int dissect_ResetTimerArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ResetTimerArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ResetTimerArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ResetTimerArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ResetTimerArg_PDU);
   return offset;
 }
 static int dissect_SendChargingInformationArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_SendChargingInformationArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_SendChargingInformationArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_SendChargingInformationArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_SendChargingInformationArg_PDU);
   return offset;
 }
 static int dissect_SplitLegArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_SplitLegArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_SplitLegArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_SplitLegArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_SplitLegArg_PDU);
   return offset;
 }
 static int dissect_ApplyChargingGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ApplyChargingGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ApplyChargingGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ApplyChargingGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ApplyChargingGPRSArg_PDU);
   return offset;
 }
 static int dissect_ApplyChargingReportGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ApplyChargingReportGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ApplyChargingReportGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ApplyChargingReportGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ApplyChargingReportGPRSArg_PDU);
   return offset;
 }
 static int dissect_CancelGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_CancelGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_CancelGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_CancelGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_CancelGPRSArg_PDU);
   return offset;
 }
 static int dissect_ConnectGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ConnectGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ConnectGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ConnectGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ConnectGPRSArg_PDU);
   return offset;
 }
 static int dissect_ContinueGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ContinueGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ContinueGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ContinueGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ContinueGPRSArg_PDU);
   return offset;
 }
 static int dissect_EntityReleasedGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_EntityReleasedGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_EntityReleasedGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_EntityReleasedGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_EntityReleasedGPRSArg_PDU);
   return offset;
 }
 static int dissect_EventReportGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_EventReportGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_EventReportGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_EventReportGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_EventReportGPRSArg_PDU);
   return offset;
 }
 static int dissect_FurnishChargingInformationGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_FurnishChargingInformationGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_FurnishChargingInformationGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_FurnishChargingInformationGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_FurnishChargingInformationGPRSArg_PDU);
   return offset;
 }
 static int dissect_InitialDPGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_InitialDPGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_InitialDPGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_InitialDPGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_InitialDPGPRSArg_PDU);
   return offset;
 }
 static int dissect_ReleaseGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ReleaseGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ReleaseGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ReleaseGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ReleaseGPRSArg_PDU);
   return offset;
 }
 static int dissect_RequestReportGPRSEventArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_RequestReportGPRSEventArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_RequestReportGPRSEventArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_RequestReportGPRSEventArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_RequestReportGPRSEventArg_PDU);
   return offset;
 }
 static int dissect_ResetTimerGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ResetTimerGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ResetTimerGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ResetTimerGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ResetTimerGPRSArg_PDU);
   return offset;
 }
 static int dissect_SendChargingInformationGPRSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_SendChargingInformationGPRSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_SendChargingInformationGPRSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_SendChargingInformationGPRSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_SendChargingInformationGPRSArg_PDU);
   return offset;
 }
 static int dissect_ConnectSMSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ConnectSMSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ConnectSMSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ConnectSMSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ConnectSMSArg_PDU);
   return offset;
 }
 static int dissect_EventReportSMSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_EventReportSMSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_EventReportSMSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_EventReportSMSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_EventReportSMSArg_PDU);
   return offset;
 }
 static int dissect_FurnishChargingInformationSMSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_FurnishChargingInformationSMSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_FurnishChargingInformationSMSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_FurnishChargingInformationSMSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_FurnishChargingInformationSMSArg_PDU);
   return offset;
 }
 static int dissect_InitialDPSMSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_InitialDPSMSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_InitialDPSMSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_InitialDPSMSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_InitialDPSMSArg_PDU);
   return offset;
 }
 static int dissect_ReleaseSMSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ReleaseSMSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ReleaseSMSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ReleaseSMSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ReleaseSMSArg_PDU);
   return offset;
 }
 static int dissect_RequestReportSMSEventArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_RequestReportSMSEventArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_RequestReportSMSEventArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_RequestReportSMSEventArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_RequestReportSMSEventArg_PDU);
   return offset;
 }
 static int dissect_ResetTimerSMSArg_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_ResetTimerSMSArg(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_ResetTimerSMSArg_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_ResetTimerSMSArg(false, tvb, offset, &asn1_ctx, tree, hf_camel_ResetTimerSMSArg_PDU);
   return offset;
 }
 static int dissect_CAP_U_ABORT_REASON_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_camel_CAP_U_ABORT_REASON(FALSE, tvb, offset, &asn1_ctx, tree, hf_camel_CAP_U_ABORT_REASON_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_camel_CAP_U_ABORT_REASON(false, tvb, offset, &asn1_ctx, tree, hf_camel_CAP_U_ABORT_REASON_PDU);
   return offset;
 }
 
@@ -7459,8 +7459,8 @@ static int dissect_returnErrorData(proto_tree *tree, tvbuff_t *tvb, int offset,a
  */
 
 /* compare 2 keys */
-static gint
-camelsrt_call_equal(gconstpointer k1, gconstpointer k2)
+static int
+camelsrt_call_equal(const void *k1, const void *k2)
 {
   const struct camelsrt_call_info_key_t *key1 = (const struct camelsrt_call_info_key_t *) k1;
   const struct camelsrt_call_info_key_t *key2 = (const struct camelsrt_call_info_key_t *) k2;
@@ -7469,8 +7469,8 @@ camelsrt_call_equal(gconstpointer k1, gconstpointer k2)
 }
 
 /* calculate a hash key */
-static guint
-camelsrt_call_hash(gconstpointer k)
+static unsigned
+camelsrt_call_hash(const void *k)
 {
   const struct camelsrt_call_info_key_t *key = (const struct camelsrt_call_info_key_t *) k;
   return key->SessionIdKey;
@@ -7555,11 +7555,11 @@ camelsrt_init_routine(void)
  */
 static void
 update_camelsrt_call(struct camelsrt_call_t *p_camelsrt_call, packet_info *pinfo,
-                     guint msg_category)
+                     unsigned msg_category)
 {
   p_camelsrt_call->category[msg_category].req_num = pinfo->num;
   p_camelsrt_call->category[msg_category].rsp_num = 0;
-  p_camelsrt_call->category[msg_category].responded = FALSE;
+  p_camelsrt_call->category[msg_category].responded = false;
   p_camelsrt_call->category[msg_category].req_time = pinfo->abs_ts;
 }
 
@@ -7575,7 +7575,7 @@ camelsrt_close_call_matching(packet_info *pinfo,
   struct camelsrt_call_info_key_t camelsrt_call_key;
   nstime_t delta;
 
-  p_camelsrt_info->bool_msginfo[CAMELSRT_SESSION]=TRUE;
+  p_camelsrt_info->bool_msginfo[CAMELSRT_SESSION]=true;
 #ifdef DEBUG_CAMELSRT
   dbg(10,"\n Session end #%u\n", pinfo->num);
 #endif
@@ -7592,9 +7592,9 @@ camelsrt_close_call_matching(packet_info *pinfo,
 #endif
     /* Calculate Service Response Time */
     nstime_delta(&delta, &pinfo->abs_ts, &p_camelsrt_call->category[CAMELSRT_SESSION].req_time);
-    p_camelsrt_call->category[CAMELSRT_SESSION].responded = TRUE;
-    p_camelsrt_info->msginfo[CAMELSRT_SESSION].request_available = TRUE;
-    p_camelsrt_info->msginfo[CAMELSRT_SESSION].is_delta_time = TRUE;
+    p_camelsrt_call->category[CAMELSRT_SESSION].responded = true;
+    p_camelsrt_info->msginfo[CAMELSRT_SESSION].request_available = true;
+    p_camelsrt_info->msginfo[CAMELSRT_SESSION].is_delta_time = true;
     p_camelsrt_info->msginfo[CAMELSRT_SESSION].delta_time = delta; /* give it to tap */
     p_camelsrt_info->msginfo[CAMELSRT_SESSION].req_time = p_camelsrt_call->category[CAMELSRT_SESSION].req_time;
 
@@ -7652,7 +7652,7 @@ camelsrt_begin_call_matching(packet_info *pinfo,
   struct camelsrt_call_t *p_camelsrt_call;
   struct camelsrt_call_info_key_t camelsrt_call_key;
 
-  p_camelsrt_info->bool_msginfo[CAMELSRT_SESSION]=TRUE;
+  p_camelsrt_info->bool_msginfo[CAMELSRT_SESSION]=true;
 
   /* prepare the key data */
   camelsrt_call_key.SessionIdKey = p_camelsrt_info->tcap_session_id;
@@ -7691,7 +7691,7 @@ static void
 camelsrt_request_call_matching(tvbuff_t *tvb, packet_info *pinfo,
                                proto_tree *tree,
                                struct camelsrt_info_t *p_camelsrt_info,
-                               guint srt_type )
+                               unsigned srt_type )
 {
   struct camelsrt_call_t *p_camelsrt_call;
   struct camelsrt_call_info_key_t camelsrt_call_key;
@@ -7746,7 +7746,7 @@ camelsrt_request_call_matching(tvbuff_t *tvb, packet_info *pinfo,
       dbg(70,"ACR3 %u %u",p_camelsrt_call->category[CAMELSRT_VOICE_ACR3].req_num, p_camelsrt_call->category[CAMELSRT_VOICE_ACR3].rsp_num);
 #endif
     } /* not ACR */
-    p_camelsrt_info->bool_msginfo[srt_type]=TRUE;
+    p_camelsrt_info->bool_msginfo[srt_type]=true;
 
 
     if (p_camelsrt_call->category[srt_type].req_num == 0) {
@@ -7765,7 +7765,7 @@ camelsrt_request_call_matching(tvbuff_t *tvb, packet_info *pinfo,
 #ifdef DEBUG_CAMELSRT
           dbg(21,"Display_duplicate with req %d ", p_camelsrt_call->category[srt_type].req_num);
 #endif
-          p_camelsrt_info->msginfo[srt_type].is_duplicate = TRUE;
+          p_camelsrt_info->msginfo[srt_type].is_duplicate = true;
           if (gcamel_DisplaySRT){
             hidden_item = proto_tree_add_uint(tree, hf_camelsrt_Duplicate, tvb, 0,0, 77);
                 proto_item_set_hidden(hidden_item);
@@ -7808,7 +7808,7 @@ camelsrt_request_call_matching(tvbuff_t *tvb, packet_info *pinfo,
  */
 static void
 camelsrt_display_DeltaTime(proto_tree *tree, tvbuff_t *tvb, nstime_t *value_ptr,
-                           guint category)
+                           unsigned category)
 {
   proto_item *ti;
 
@@ -7860,7 +7860,7 @@ static void
 camelsrt_report_call_matching(tvbuff_t *tvb, packet_info *pinfo,
                               proto_tree *tree,
                               struct camelsrt_info_t *p_camelsrt_info,
-                              guint srt_type)
+                              unsigned srt_type)
 {
   struct camelsrt_call_t *p_camelsrt_call;
   struct camelsrt_call_info_key_t camelsrt_call_key;
@@ -7899,7 +7899,7 @@ camelsrt_report_call_matching(tvbuff_t *tvb, packet_info *pinfo,
       dbg(70,"Report ACR %u ",srt_type);
 #endif
     } /* not ACR */
-    p_camelsrt_info->bool_msginfo[srt_type]=TRUE;
+    p_camelsrt_info->bool_msginfo[srt_type]=true;
 
     if (p_camelsrt_call->category[srt_type].rsp_num == 0) {
       if  ( (p_camelsrt_call->category[srt_type].req_num != 0)
@@ -7923,7 +7923,7 @@ camelsrt_report_call_matching(tvbuff_t *tvb, packet_info *pinfo,
 #ifdef DEBUG_CAMELSRT
         dbg(21,"Display_duplicate rsp=%d ", p_camelsrt_call->category[srt_type].rsp_num);
 #endif
-        p_camelsrt_info->msginfo[srt_type].is_duplicate = TRUE;
+        p_camelsrt_info->msginfo[srt_type].is_duplicate = true;
         if ( gcamel_DisplaySRT ){
           hidden_item = proto_tree_add_uint(tree, hf_camelsrt_Duplicate, tvb, 0,0, 77);
           proto_item_set_hidden(hidden_item);
@@ -7935,8 +7935,8 @@ camelsrt_report_call_matching(tvbuff_t *tvb, packet_info *pinfo,
          (p_camelsrt_call->category[srt_type].rsp_num != 0) &&
          (p_camelsrt_call->category[srt_type].rsp_num == pinfo->num) ) {
 
-      p_camelsrt_call->category[srt_type].responded = TRUE;
-      p_camelsrt_info->msginfo[srt_type].request_available = TRUE;
+      p_camelsrt_call->category[srt_type].responded = true;
+      p_camelsrt_info->msginfo[srt_type].request_available = true;
 #ifdef DEBUG_CAMELSRT
       dbg(20,"Display_frameReqlink %d ",p_camelsrt_call->category[srt_type].req_num);
 #endif
@@ -7952,7 +7952,7 @@ camelsrt_report_call_matching(tvbuff_t *tvb, packet_info *pinfo,
       /* Calculate Service Response Time */
       nstime_delta(&delta, &pinfo->abs_ts, &p_camelsrt_call->category[srt_type].req_time);
 
-      p_camelsrt_info->msginfo[srt_type].is_delta_time = TRUE;
+      p_camelsrt_info->msginfo[srt_type].is_delta_time = true;
       p_camelsrt_info->msginfo[srt_type].delta_time = delta; /* give it to tap */
       p_camelsrt_info->msginfo[srt_type].req_time = p_camelsrt_call->category[srt_type].req_time;
 
@@ -8097,8 +8097,8 @@ camelsrt_razinfo(void)
 }
 
 
-static guint8 camel_pdu_type;
-static guint8 camel_pdu_size;
+static uint8_t camel_pdu_type;
+static uint8_t camel_pdu_size;
 
 
 static int
@@ -8120,8 +8120,8 @@ dissect_camel_camelPDU(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ct
     col_add_str(actx->pinfo->cinfo, COL_INFO, val_to_str(camel_pdu_type, camel_Component_vals, "Unknown Camel (%u)"));
     col_append_str(actx->pinfo->cinfo, COL_INFO, " ");
 
-    is_ExtensionField =FALSE;
-    offset = dissect_camel_ROS(TRUE, tvb, offset, actx, tree, hf_index);
+    is_ExtensionField =false;
+    offset = dissect_camel_ROS(true, tvb, offset, actx, tree, hf_index);
 
     return offset;
 }
@@ -8134,7 +8134,7 @@ dissect_camel_all(int version, const char* col_protocol, const char* suffix,
   proto_tree  *tree = NULL, *stat_tree = NULL;
   struct tcap_private_t * p_private_tcap = (struct tcap_private_t*)data;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
   col_set_str(pinfo->cinfo, COL_PROTOCOL, col_protocol);
 
@@ -8150,7 +8150,7 @@ dissect_camel_all(int version, const char* col_protocol, const char* suffix,
      to store service response time related data */
   gp_camelsrt_info=camelsrt_razinfo();
 
-  dissect_camel_camelPDU(FALSE, tvb, 0, &asn1_ctx , tree, -1, p_private_tcap);
+  dissect_camel_camelPDU(false, tvb, 0, &asn1_ctx , tree, -1, p_private_tcap);
 
   /* If a Tcap context is associated to this transaction */
   if (gp_camelsrt_info->tcap_context ) {
@@ -8264,7 +8264,7 @@ camel_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *edt _U_
 static void
 camel_stat_reset(stat_tap_table* table)
 {
-  guint element;
+  unsigned element;
   stat_tap_table_item_type* item_data;
 
   for (element = 0; element < table->num_elements; element++)
@@ -8276,21 +8276,21 @@ camel_stat_reset(stat_tap_table* table)
 }
 
 static void
-camel_stat_free_table_item(stat_tap_table* table _U_, guint row _U_, guint column, stat_tap_table_item_type* field_data)
+camel_stat_free_table_item(stat_tap_table* table _U_, unsigned row _U_, unsigned column, stat_tap_table_item_type* field_data)
 {
   if (column != MESSAGE_TYPE_COLUMN) return;
   g_free((char*)field_data->value.string_value);
 }
 
 /*--- proto_reg_handoff_camel ---------------------------------------*/
-static void range_delete_callback(guint32 ssn, gpointer ptr _U_)
+static void range_delete_callback(uint32_t ssn, void *ptr _U_)
 {
   if (ssn) {
     delete_itu_tcap_subdissector(ssn, camel_handle);
   }
 }
 
-static void range_add_callback(guint32 ssn, gpointer ptr _U_)
+static void range_add_callback(uint32_t ssn, void *ptr _U_)
 {
   if (ssn) {
     add_itu_tcap_subdissector(ssn, camel_handle);
@@ -8298,12 +8298,12 @@ static void range_add_callback(guint32 ssn, gpointer ptr _U_)
 }
 
 void proto_reg_handoff_camel(void) {
-  static gboolean camel_prefs_initialized = FALSE;
+  static bool camel_prefs_initialized = false;
   static range_t *ssn_range;
 
   if (!camel_prefs_initialized) {
 
-    camel_prefs_initialized = TRUE;
+    camel_prefs_initialized = true;
 
     register_ber_oid_dissector_handle("0.4.0.0.1.0.50.0",camel_v1_handle, proto_camel, "CAP-v1-gsmSSF-to-gsmSCF-AC" );
     register_ber_oid_dissector_handle("0.4.0.0.1.0.50.1",camel_v2_handle, proto_camel, "CAP-v2-gsmSSF-to-gsmSCF-AC" );
@@ -10459,7 +10459,7 @@ void proto_register_camel(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_camel,
     &ett_camelisup_parameter,
     &ett_camel_AccessPointName,
@@ -10692,7 +10692,7 @@ void proto_register_camel(void) {
   expert_module_t* expert_camel;
 
   static tap_param camel_stat_params[] = {
-    { PARAM_FILTER, "filter", "Filter", NULL, TRUE }
+    { PARAM_FILTER, "filter", "Filter", NULL, true }
   };
 
   static stat_tap_table_ui camel_stat_table = {
@@ -10746,7 +10746,7 @@ void proto_register_camel(void) {
 
   prefs_register_enum_preference(camel_module, "date.format", "Date Format",
                                   "The date format: (DD/MM) or (MM/DD)",
-                                  &date_format, date_options, FALSE);
+                                  &date_format, date_options, false);
 
 
   prefs_register_range_preference(camel_module, "tcap.ssn",

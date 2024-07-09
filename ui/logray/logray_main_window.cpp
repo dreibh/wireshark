@@ -670,7 +670,7 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     main_ui_->actionHelpMPText2pcap->setToolTip(gchar_free_to_qstring(topic_action_url(LOCALPAGE_MAN_TEXT2PCAP)));
     main_ui_->actionHelpMPTShark->setToolTip(gchar_free_to_qstring(topic_action_url(LOCALPAGE_MAN_TSHARK)));
 
-    main_ui_->actionHelpContents->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_USERGUIDE)));
+    main_ui_->actionHelpContents->setToolTip(gchar_free_to_qstring(topic_action_url(HELP_CONTENT)));
     main_ui_->actionHelpWebsite->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_HOME)));
     main_ui_->actionHelpFAQ->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_FAQ)));
     main_ui_->actionHelpAsk->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_ASK)));
@@ -684,6 +684,9 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
 LograyMainWindow::~LograyMainWindow()
 {
     disconnect(main_ui_->mainStack, 0, 0, 0);
+    if (previous_focus_ != nullptr) {
+        disconnect(previous_focus_, &QWidget::destroyed, this, &LograyMainWindow::resetPreviousFocus);
+    }
 
 #ifndef Q_OS_MAC
     // Below dialogs inherit GeometryStateDialog
@@ -801,6 +804,23 @@ void LograyMainWindow::removeInterfaceToolbar(const char *menu_title)
     menu->menuAction()->setVisible(!menu->actions().isEmpty());
 }
 
+void LograyMainWindow::updateStyleSheet()
+{
+#ifdef Q_OS_MAC
+    // TODO: The event type QEvent::ApplicationPaletteChange is not sent to all child widgets.
+    // Workaround this by doing it manually for all AccordionFrame.
+    main_ui_->addressEditorFrame->updateStyleSheet();
+    main_ui_->columnEditorFrame->updateStyleSheet();
+    main_ui_->filterExpressionFrame->updateStyleSheet();
+    main_ui_->goToFrame->updateStyleSheet();
+    main_ui_->preferenceEditorFrame->updateStyleSheet();
+    main_ui_->searchFrame->updateStyleSheet();
+
+    df_combo_box_->updateStyleSheet();
+    welcome_page_->updateStyleSheets();
+#endif
+}
+
 bool LograyMainWindow::eventFilter(QObject *obj, QEvent *event) {
 
     // The user typed some text. Start filling in a filter.
@@ -824,6 +844,7 @@ bool LograyMainWindow::event(QEvent *event)
     switch (event->type()) {
     case QEvent::ApplicationPaletteChange:
         initMainToolbarIcons();
+        updateStyleSheet();
         break;
     default:
         break;
@@ -2639,6 +2660,12 @@ void LograyMainWindow::removeMenuActions(QList<QAction *> &actions, int menu_gro
                 cur_menu = submenu;
             }
             cur_menu->removeAction(action);
+            // Remove empty submenus.
+            while (cur_menu != main_ui_->menuTools) {
+                QMenu *empty_menu = (cur_menu->isEmpty() ? cur_menu : NULL);
+                cur_menu = dynamic_cast<QMenu *>(cur_menu->parent());
+                delete empty_menu;
+            }
             break;
         }
         default:

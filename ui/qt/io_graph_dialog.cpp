@@ -138,6 +138,7 @@ static const value_string y_axis_packet_vs[] = {
     { IOG_ITEM_UNIT_CALC_MAX, "MAX(Y Field)" },
     { IOG_ITEM_UNIT_CALC_MIN, "MIN(Y Field)" },
     { IOG_ITEM_UNIT_CALC_AVERAGE, "AVG(Y Field)" },
+    { IOG_ITEM_UNIT_CALC_THROUGHPUT, "THROUGHPUT(Y Field)" },
     { IOG_ITEM_UNIT_CALC_LOAD, "LOAD(Y Field)" },
     { 0, NULL }
 };
@@ -2127,7 +2128,7 @@ IOGraph::IOGraph(QCustomPlot *parent) :
 //        QMessageBox::critical(this, tr("%1 failed to register tap listener").arg(name_),
 //                             error_string->str);
 //        config_err_ = error_string->str;
-        g_string_free(error_string, true);
+        g_string_free(error_string, TRUE);
         tap_registered_ = false;
     }
 }
@@ -2178,7 +2179,7 @@ bool IOGraph::setFilter(const QString &filter)
     error_string = check_field_unit(vu_field_.toUtf8().constData(), NULL, val_units_);
     if (error_string) {
         config_err_ = error_string->str;
-        g_string_free(error_string, true);
+        g_string_free(error_string, TRUE);
         return false;
     }
 
@@ -2196,7 +2197,7 @@ bool IOGraph::setFilter(const QString &filter)
         error_string = set_tap_dfilter(this, full_filter.toUtf8().constData());
         if (error_string) {
             config_err_ = error_string->str;
-            g_string_free(error_string, true);
+            g_string_free(error_string, TRUE);
             return false;
         }
 

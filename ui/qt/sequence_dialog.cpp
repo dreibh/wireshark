@@ -35,17 +35,7 @@
 #include <QPoint>
 
 // To do:
-// - Resize or show + hide the Time and Comment axes (#4972), possibly via
-//   one of the following:
-//   - Split the time, diagram, and comment sections into three separate
-//     widgets inside a QSplitter. This would resemble the GTK+ UI, but we'd
-//     have to coordinate between the three and we'd lose time and comment
-//     values in PDF and PNG exports.
-//   - Add separate controls for the width and/or visibility of the Time and
-//     Comment columns.
-//   - Fake a splitter widget by catching mouse events in the plot area.
-//     Drawing a QCPItemLine or QCPItemPixmap over each Y axis might make
-//     this easier.
+// - Resize the Time and Comment axis as well?
 // - For general flows, let the user show columns other than COL_INFO.
 //   (#12549)
 // - Add UTF8 to text dump
@@ -76,6 +66,7 @@ SequenceDialog::SequenceDialog(QWidget &parent, CaptureFile &cf, SequenceInfo *i
     num_items_(0),
     packet_num_(0),
     sequence_w_(1),
+    axis_pressed_(false),
     current_rtp_sai_hovered_(nullptr),
     voipFeaturesEnabled(voipFeatures)
 {
@@ -104,16 +95,33 @@ SequenceDialog::SequenceDialog(QWidget &parent, CaptureFile &cf, SequenceInfo *i
     //sp->axisRect()->setRangeDragAxes(sp->xAxis2, sp->yAxis);
     //sp->setInteractions(QCP::iRangeDrag);
 
+    sp->setInteraction(QCP::iSelectAxes, true);
+    sp->xAxis->setSelectableParts(QCPAxis::spNone);
+    sp->xAxis2->setSelectableParts(QCPAxis::spNone);
+    sp->yAxis->setSelectableParts(QCPAxis::spNone);
+    sp->yAxis2->setSelectableParts(QCPAxis::spAxis);
+
     sp->xAxis->setVisible(false);
     sp->xAxis->setPadding(0);
     sp->xAxis->setLabelPadding(0);
     sp->xAxis->setTickLabelPadding(0);
 
+    // Light border for the diagram
     QPen base_pen(ColorUtils::alphaBlend(palette().text(), palette().base(), 0.25));
     base_pen.setWidthF(0.5);
     sp->xAxis2->setBasePen(base_pen);
     sp->yAxis->setBasePen(base_pen);
     sp->yAxis2->setBasePen(base_pen);
+    // Keep the border the same if/when the axis is selected, instead of blue
+    sp->xAxis2->setSelectedBasePen(base_pen);
+    sp->yAxis->setSelectedBasePen(base_pen);
+    sp->yAxis2->setSelectedBasePen(base_pen);
+
+    /* QCP documentation for setTicks() says "setting show to false does not imply
+     * that tick labels are invisible, too." In practice it seems to make them
+     * invisible, though, so set the length to 0.
+     */
+    sp->yAxis2->setTickLength(0);
 
     sp->xAxis2->setVisible(true);
     sp->yAxis2->setVisible(true);
@@ -223,9 +231,11 @@ SequenceDialog::SequenceDialog(QWidget &parent, CaptureFile &cf, SequenceInfo *i
     connect(ui->verticalScrollBar, SIGNAL(valueChanged(int)), this, SLOT(vScrollBarChanged(int)));
     connect(sp->xAxis2, SIGNAL(rangeChanged(QCPRange)), this, SLOT(xAxisChanged(QCPRange)));
     connect(sp->yAxis, SIGNAL(rangeChanged(QCPRange)), this, SLOT(yAxisChanged(QCPRange)));
-    connect(sp, SIGNAL(mousePress(QMouseEvent*)), this, SLOT(diagramClicked(QMouseEvent*)));
-    connect(sp, SIGNAL(mouseMove(QMouseEvent*)), this, SLOT(mouseMoved(QMouseEvent*)));
-    connect(sp, SIGNAL(mouseWheel(QWheelEvent*)), this, SLOT(mouseWheeled(QWheelEvent*)));
+    connect(sp, &QCustomPlot::mousePress, this, &SequenceDialog::diagramClicked);
+    connect(sp, &QCustomPlot::mouseRelease, this, &SequenceDialog::mouseReleased);
+    connect(sp, &QCustomPlot::mouseMove, this, &SequenceDialog::mouseMoved);
+    connect(sp, &QCustomPlot::mouseWheel, this, &SequenceDialog::mouseWheeled);
+    connect(sp, &QCustomPlot::axisDoubleClick, this, &SequenceDialog::axisDoubleClicked);
     connect(sp, &QCustomPlot::afterLayout, this, &SequenceDialog::layoutAxisLabels);
 }
 
@@ -385,6 +395,11 @@ void SequenceDialog::diagramClicked(QMouseEvent *event)
 {
     current_rtp_sai_selected_ = NULL;
     if (event) {
+        QCPAxis *yAxis2 = ui->sequencePlot->yAxis2;
+        if (std::abs(event->pos().x() - yAxis2->axisRect()->right()) < 5) {
+            yAxis2->setSelectedParts(QCPAxis::spAxis);
+            axis_pressed_ = true;
+        }
         seq_analysis_item_t *sai = seq_diagram_->itemForPosY(event->pos().y());
         if (voipFeaturesEnabled) {
             ui->actionSelectRtpStreams->setEnabled(false);
@@ -411,12 +426,47 @@ void SequenceDialog::diagramClicked(QMouseEvent *event)
 
 }
 
+void SequenceDialog::axisDoubleClicked(QCPAxis *axis, QCPAxis::SelectablePart, QMouseEvent*)
+{
+    if (axis == ui->sequencePlot->yAxis2) {
+        QCP::MarginSides autoMargins = axis->axisRect()->autoMargins();
+        axis->axisRect()->setAutoMargins(autoMargins | QCP::msRight);
+        ui->sequencePlot->replot();
+        axis->axisRect()->setAutoMargins(autoMargins);
+        ui->sequencePlot->replot();
+    }
+}
+
+void SequenceDialog::mouseReleased(QMouseEvent*)
+{
+    QCustomPlot *sp = ui->sequencePlot;
+    sp->yAxis2->setSelectedParts(QCPAxis::spNone);
+    axis_pressed_ = false;
+    sp->replot(QCustomPlot::rpQueuedReplot);
+}
+
 void SequenceDialog::mouseMoved(QMouseEvent *event)
 {
     current_rtp_sai_hovered_ = NULL;
     packet_num_ = 0;
     QString hint;
+    Qt::CursorShape shape = Qt::ArrowCursor;
     if (event) {
+        QCPAxis *yAxis2 = ui->sequencePlot->yAxis2;
+        // For some reason we need this extra bool and can't rely just on
+        // yAxis2->selectedParts().testFlag(QCPAxis::spAxis)
+        if (axis_pressed_) {
+            int x = qMax(event->pos().x(), yAxis2->axisRect()->left());
+            QMargins margins = yAxis2->axisRect()->margins();
+            margins += QMargins(0, 0, yAxis2->axisRect()->right() - x, 0);
+            yAxis2->axisRect()->setMargins(margins);
+            shape = Qt::SplitHCursor;
+            ui->sequencePlot->replot(QCustomPlot::rpQueuedReplot);
+        } else {
+            if (std::abs(event->pos().x() - yAxis2->axisRect()->right()) < 5) {
+                shape = Qt::SplitHCursor;
+            }
+        }
         seq_analysis_item_t *sai = seq_diagram_->itemForPosY(event->pos().y());
         if (sai) {
             if (GA_INFO_TYPE_RTP == sai->info_type) {
@@ -427,6 +477,10 @@ void SequenceDialog::mouseMoved(QMouseEvent *event)
             packet_num_ = sai->frame_number;
             hint = QString("Packet %1: %2").arg(packet_num_).arg(sai->comment);
         }
+    }
+
+    if (ui->sequencePlot->cursor().shape() != shape) {
+        ui->sequencePlot->setCursor(QCursor(shape));
     }
 
     if (hint.isEmpty()) {
@@ -586,7 +640,7 @@ void SequenceDialog::fillDiagram()
                                        NULL, sequence_analysis_get_packet_func(analysis), NULL, NULL);
             if (error_string) {
                 report_failure("Sequence dialog - tap registration failed: %s", error_string->str);
-                g_string_free(error_string, true);
+                g_string_free(error_string, TRUE);
             }
 
             cf_retap_packets(cap_file_.capFile());

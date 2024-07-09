@@ -107,7 +107,7 @@ char* scs_subscribe(SCS_collection* c, const char* s) {
 	unsigned* ip = NULL;
 	size_t len = 0;
 
-	g_hash_table_lookup_extended(c->hash,(gconstpointer)s,(void * *)&orig,(void * *)&ip);
+	g_hash_table_lookup_extended(c->hash,(const void *)s,(void * *)&orig,(void * *)&ip);
 
 	if (ip) {
 		(*ip)++;
@@ -152,7 +152,7 @@ void scs_unsubscribe(SCS_collection* c, char* s) {
 	unsigned* ip = NULL;
 	size_t len = 0xffff;
 
-	g_hash_table_lookup_extended(c->hash,(gconstpointer)s,(void * *)&orig,(void * *)&ip);
+	g_hash_table_lookup_extended(c->hash,(const void *)s,(void * *)&orig,(void * *)&ip);
 
 	if (ip) {
 		if (*ip == 0) {
@@ -752,7 +752,7 @@ char* avpl_to_str(AVPL* avpl) {
 		g_free(avp_s);
 	}
 
-	r = g_string_free(s,false);
+	r = g_string_free(s,FALSE);
 
 	/* g_strchug(r); ? */
 	return r;
@@ -770,7 +770,7 @@ extern char* avpl_to_dotstr(AVPL* avpl) {
 		g_free(avp_s);
 	}
 
-	r = g_string_free(s,false);
+	r = g_string_free(s,FALSE);
 
 	/* g_strchug(r); ? */
 	return r;

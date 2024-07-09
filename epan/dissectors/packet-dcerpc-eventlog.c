@@ -5,7 +5,7 @@
 	Pidl is a perl based IDL compiler for DCE/RPC idl files.
 	It is maintained by the Samba team, not the Wireshark team.
 	Instructions on how to download and install Pidl can be
-	found at https://gitlab.com/wireshark/wireshark/-/wikis/Pidl
+	found at https://wiki.wireshark.org/Pidl
 */
 
 
@@ -383,7 +383,7 @@ eventlog_dissect_bitmap_eventlogReadFlags(tvbuff_t *tvb _U_, int offset _U_, pac
 		&hf_eventlog_eventlogReadFlags_EVENTLOG_BACKWARDS_READ,
 		NULL
 	};
-	guint32 flags;
+	uint32_t flags;
 	ALIGN_TO_4_BYTES;
 
 	item = proto_tree_add_bitmask_with_flags(parent_tree, tvb, offset, hf_index,
@@ -424,7 +424,7 @@ eventlog_dissect_bitmap_eventlogEventTypes(tvbuff_t *tvb _U_, int offset _U_, pa
 		&hf_eventlog_eventlogEventTypes_EVENTLOG_AUDIT_FAILURE,
 		NULL
 	};
-	guint32 flags;
+	uint32_t flags;
 	ALIGN_TO_4_BYTES;
 
 	item = proto_tree_add_bitmask_with_flags(parent_tree, tvb, offset, hf_index,

@@ -335,7 +335,7 @@ static const ber_sequence_t PA_PK_AS_REQ_Win2k_sequence[] = {
 
 int
 dissect_pkinit_PA_PK_AS_REQ_Win2k(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-	guint8 v = 1;
+	uint8_t v = 1;
 
 	if (kerberos_is_win2k_pkinit(actx)) {
 		p_set_proto_data(actx->pinfo->pool, actx->pinfo, proto_pkinit, 0, &v);
@@ -365,35 +365,35 @@ dissect_pkinit_PA_PK_AS_REP_Win2k(bool implicit_tag _U_, tvbuff_t *tvb _U_, int 
 static int dissect_AuthPack_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_pkinit_AuthPack(FALSE, tvb, offset, &asn1_ctx, tree, hf_pkinit_AuthPack_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_pkinit_AuthPack(false, tvb, offset, &asn1_ctx, tree, hf_pkinit_AuthPack_PDU);
   return offset;
 }
 static int dissect_KRB5PrincipalName_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_pkinit_KRB5PrincipalName(FALSE, tvb, offset, &asn1_ctx, tree, hf_pkinit_KRB5PrincipalName_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_pkinit_KRB5PrincipalName(false, tvb, offset, &asn1_ctx, tree, hf_pkinit_KRB5PrincipalName_PDU);
   return offset;
 }
 static int dissect_KDCDHKeyInfo_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_pkinit_KDCDHKeyInfo(FALSE, tvb, offset, &asn1_ctx, tree, hf_pkinit_KDCDHKeyInfo_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_pkinit_KDCDHKeyInfo(false, tvb, offset, &asn1_ctx, tree, hf_pkinit_KDCDHKeyInfo_PDU);
   return offset;
 }
 
 
 int
 dissect_pkinit_PA_PK_AS_REQ(proto_tree *tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_) {
-  offset = dissect_pkinit_PaPkAsReq(FALSE, tvb, offset, actx, tree, -1);
+  offset = dissect_pkinit_PaPkAsReq(false, tvb, offset, actx, tree, -1);
   return offset;
 }
 
 int
 dissect_pkinit_PA_PK_AS_REP(proto_tree *tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_) {
-  offset = dissect_pkinit_PaPkAsRep(FALSE, tvb, offset, actx, tree, -1);
+  offset = dissect_pkinit_PaPkAsRep(false, tvb, offset, actx, tree, -1);
   return offset;
 }
 
@@ -560,7 +560,7 @@ void proto_register_pkinit(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_pkinit_PaPkAsReq,
     &ett_pkinit_SEQUENCE_OF_TrustedCA,
     &ett_pkinit_TrustedCA,

@@ -458,7 +458,7 @@ static int hf_dap_SearchControlOptions_separateFamilyMembers;
 static int hf_dap_SearchControlOptions_searchFamily;
 
 /* Initialize the subtree pointers */
-static gint ett_dap;
+static int ett_dap;
 static int ett_dap_ServiceControls;
 static int ett_dap_T_manageDSAITPlaneRef;
 static int ett_dap_ServiceControlOptions;
@@ -2020,7 +2020,7 @@ static const ber_sequence_t DirectoryBindArgument_set[] = {
 int
 dissect_dap_DirectoryBindArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
 
-	guint32 len;
+	uint32_t len;
 
 	/* check and see if this is an empty set */
 	dissect_ber_length(actx->pinfo, tree, tvb, offset+1, &len, NULL);
@@ -2076,7 +2076,7 @@ static const value_string dap_ServiceProblem_vals[] = {
 
 static int
 dissect_dap_ServiceProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  guint32 problem;
+  uint32_t problem;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem);
@@ -2105,7 +2105,7 @@ const value_string dap_SecurityProblem_vals[] = {
 
 int
 dissect_dap_SecurityProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  guint32 problem;
+  uint32_t problem;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem);
@@ -2759,7 +2759,7 @@ static const value_string dap_LimitProblem_vals[] = {
 
 static int
 dissect_dap_LimitProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  guint32 problem;
+  uint32_t problem;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem);
@@ -2952,7 +2952,7 @@ static const value_string dap_T_subset_vals[] = {
 
 static int
 dissect_dap_T_subset(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  guint32 subset;
+  uint32_t subset;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &subset);
@@ -4433,7 +4433,7 @@ static const value_string dap_UpdateProblem_vals[] = {
 
 static int
 dissect_dap_UpdateProblem(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  guint32 problem;
+  uint32_t problem;
 
     offset = dissect_ber_integer(implicit_tag, actx, tree, tvb, offset, hf_index,
                                                 &problem);
@@ -4542,204 +4542,204 @@ dissect_dap_UpdateError(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_
 static int dissect_DirectoryBindArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_DirectoryBindArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_DirectoryBindArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_DirectoryBindArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_DirectoryBindArgument_PDU);
   return offset;
 }
 static int dissect_DirectoryBindResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_DirectoryBindResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_DirectoryBindResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_DirectoryBindResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_DirectoryBindResult_PDU);
   return offset;
 }
 static int dissect_DirectoryBindError_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_DirectoryBindError(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_DirectoryBindError_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_DirectoryBindError(false, tvb, offset, &asn1_ctx, tree, hf_dap_DirectoryBindError_PDU);
   return offset;
 }
 static int dissect_ReadArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_ReadArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_ReadArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_ReadArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_ReadArgument_PDU);
   return offset;
 }
 static int dissect_ReadResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_ReadResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_ReadResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_ReadResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_ReadResult_PDU);
   return offset;
 }
 static int dissect_CompareArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_CompareArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_CompareArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_CompareArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_CompareArgument_PDU);
   return offset;
 }
 static int dissect_CompareResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_CompareResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_CompareResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_CompareResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_CompareResult_PDU);
   return offset;
 }
 static int dissect_AbandonArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_AbandonArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_AbandonArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_AbandonArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_AbandonArgument_PDU);
   return offset;
 }
 static int dissect_AbandonResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_AbandonResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_AbandonResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_AbandonResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_AbandonResult_PDU);
   return offset;
 }
 static int dissect_ListArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_ListArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_ListArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_ListArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_ListArgument_PDU);
   return offset;
 }
 static int dissect_ListResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_ListResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_ListResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_ListResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_ListResult_PDU);
   return offset;
 }
 static int dissect_SearchArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_SearchArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_SearchArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_SearchArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_SearchArgument_PDU);
   return offset;
 }
 static int dissect_SearchResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_SearchResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_SearchResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_SearchResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_SearchResult_PDU);
   return offset;
 }
 static int dissect_AddEntryArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_AddEntryArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_AddEntryArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_AddEntryArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_AddEntryArgument_PDU);
   return offset;
 }
 static int dissect_AddEntryResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_AddEntryResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_AddEntryResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_AddEntryResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_AddEntryResult_PDU);
   return offset;
 }
 static int dissect_RemoveEntryArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_RemoveEntryArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_RemoveEntryArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_RemoveEntryArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_RemoveEntryArgument_PDU);
   return offset;
 }
 static int dissect_RemoveEntryResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_RemoveEntryResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_RemoveEntryResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_RemoveEntryResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_RemoveEntryResult_PDU);
   return offset;
 }
 static int dissect_ModifyEntryArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_ModifyEntryArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_ModifyEntryArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_ModifyEntryArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_ModifyEntryArgument_PDU);
   return offset;
 }
 static int dissect_ModifyEntryResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_ModifyEntryResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_ModifyEntryResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_ModifyEntryResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_ModifyEntryResult_PDU);
   return offset;
 }
 static int dissect_ModifyDNArgument_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_ModifyDNArgument(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_ModifyDNArgument_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_ModifyDNArgument(false, tvb, offset, &asn1_ctx, tree, hf_dap_ModifyDNArgument_PDU);
   return offset;
 }
 static int dissect_ModifyDNResult_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_ModifyDNResult(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_ModifyDNResult_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_ModifyDNResult(false, tvb, offset, &asn1_ctx, tree, hf_dap_ModifyDNResult_PDU);
   return offset;
 }
 static int dissect_Abandoned_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_Abandoned(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_Abandoned_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_Abandoned(false, tvb, offset, &asn1_ctx, tree, hf_dap_Abandoned_PDU);
   return offset;
 }
 static int dissect_AbandonFailedError_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_AbandonFailedError(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_AbandonFailedError_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_AbandonFailedError(false, tvb, offset, &asn1_ctx, tree, hf_dap_AbandonFailedError_PDU);
   return offset;
 }
 static int dissect_AttributeError_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_AttributeError(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_AttributeError_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_AttributeError(false, tvb, offset, &asn1_ctx, tree, hf_dap_AttributeError_PDU);
   return offset;
 }
 static int dissect_NameError_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_NameError(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_NameError_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_NameError(false, tvb, offset, &asn1_ctx, tree, hf_dap_NameError_PDU);
   return offset;
 }
 static int dissect_Referral_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_Referral(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_Referral_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_Referral(false, tvb, offset, &asn1_ctx, tree, hf_dap_Referral_PDU);
   return offset;
 }
 static int dissect_SecurityError_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_SecurityError(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_SecurityError_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_SecurityError(false, tvb, offset, &asn1_ctx, tree, hf_dap_SecurityError_PDU);
   return offset;
 }
 static int dissect_ServiceError_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_ServiceError(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_ServiceError_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_ServiceError(false, tvb, offset, &asn1_ctx, tree, hf_dap_ServiceError_PDU);
   return offset;
 }
 static int dissect_UpdateError_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dap_UpdateError(FALSE, tvb, offset, &asn1_ctx, tree, hf_dap_UpdateError_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dap_UpdateError(false, tvb, offset, &asn1_ctx, tree, hf_dap_UpdateError_PDU);
   return offset;
 }
 
@@ -6429,7 +6429,7 @@ void proto_register_dap(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_dap,
     &ett_dap_ServiceControls,
     &ett_dap_T_manageDSAITPlaneRef,
@@ -6643,7 +6643,7 @@ void proto_reg_handoff_dap(void) {
   /* ABSTRACT SYNTAXES */
 
   /* Register DAP with ROS (with no use of RTSE) */
-  register_ros_protocol_info("2.5.9.1", &dap_ros_info, 0, "id-as-directory-access", FALSE);
+  register_ros_protocol_info("2.5.9.1", &dap_ros_info, 0, "id-as-directory-access", false);
 
   register_idmp_protocol_info("2.5.33.0", &dap_ros_info, 0, "dap-ip");
 

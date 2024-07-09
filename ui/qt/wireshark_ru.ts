@@ -8922,6 +8922,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>THROUGHPUT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>LOAD</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11534,15 +11538,23 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Сохранить как…</translation>
     </message>
     <message>
+        <source>Decoded as %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Save Selected Packet Bytes As…</source>
         <translation>Сохранение выбранных байтов пакета как…</translation>
     </message>
+    <message>
+        <source>compressed %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <source>Displaying %Ln byte(s).</source>
-        <translation>
-            <numerusform>Показ %Ln байта.</numerusform>
-            <numerusform>Показ %Ln байтов.</numerusform>
-            <numerusform>Показ %Ln байтов.</numerusform>
+        <source>Using %Ln byte(s).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
         </translation>
     </message>
     <message>
@@ -13328,7 +13340,7 @@ a:hover {
     </message>
     <message>
         <source>&amp;Contents</source>
-        <translation>&amp;Содержание</translation>
+        <translation type="vanished">&amp;Содержание</translation>
     </message>
     <message>
         <source>TShark</source>
@@ -13597,7 +13609,7 @@ a:hover {
     </message>
     <message>
         <source>Help contents</source>
-        <translation>Содержание справки</translation>
+        <translation type="vanished">Содержание справки</translation>
     </message>
     <message>
         <source>FAQs</source>
@@ -14362,6 +14374,14 @@ a:hover {
     <message>
         <source>&amp;Wireless</source>
         <translation>&amp;Беспроводная связь</translation>
+    </message>
+    <message>
+        <source>&amp;User&apos;s Guide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark User&apos;s Guide</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display Filters</source>

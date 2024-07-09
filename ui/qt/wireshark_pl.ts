@@ -8914,6 +8914,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>THROUGHPUT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>LOAD</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11526,15 +11530,23 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Zapisz jako…</translation>
     </message>
     <message>
+        <source>Decoded as %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Save Selected Packet Bytes As…</source>
         <translation>Zapisz zaznaczone bajty pakietu jako</translation>
     </message>
+    <message>
+        <source>compressed %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <source>Displaying %Ln byte(s).</source>
-        <translation>
-            <numerusform>Wyświetl %Ln bajt.</numerusform>
-            <numerusform>Wyświetl %Ln bajtów.</numerusform>
-            <numerusform>Wyświetl %Ln bajtów.</numerusform>
+        <source>Using %Ln byte(s).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
         </translation>
     </message>
     <message>
@@ -13315,7 +13327,7 @@ a:hover {
     </message>
     <message>
         <source>&amp;Contents</source>
-        <translation>Podrę&amp;cznik</translation>
+        <translation type="vanished">Podrę&amp;cznik</translation>
     </message>
     <message>
         <source>TShark</source>
@@ -13584,7 +13596,7 @@ a:hover {
     </message>
     <message>
         <source>Help contents</source>
-        <translation>Pomoc</translation>
+        <translation type="vanished">Pomoc</translation>
     </message>
     <message>
         <source>FAQs</source>
@@ -14349,6 +14361,14 @@ a:hover {
     <message>
         <source>&amp;Wireless</source>
         <translation>Bezprze&amp;wodowe</translation>
+    </message>
+    <message>
+        <source>&amp;User&apos;s Guide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark User&apos;s Guide</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display Filters</source>

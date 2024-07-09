@@ -5,7 +5,7 @@
 #
 # SPDX-License-Identifier: GPL-2.0-or-later
 '''\
-convert-glib-types.py - Convert glib types to their C and C99 eqivalents.
+convert-glib-types.py - Convert glib types to their C and C99 equivalents.
 '''
 
 # Imports
@@ -40,6 +40,8 @@ type_map = {
     'gdouble': 'double',
     'gpointer ': 'void *', # 'void *foo' instead of 'void * foo'
     'gpointer': 'void *',
+    'gconstpointer ': 'const void *', # 'void *foo' instead of 'void * foo'
+    'gconstpointer': 'const void *',
     # Is gsize the same as size_t on the platforms we support?
     # https://gitlab.gnome.org/GNOME/glib/-/issues/2493
     'gsize': 'size_t',
@@ -110,11 +112,11 @@ def convert_file(file):
     print(f'Converted {file}')
 
 def main():
-    parser = argparse.ArgumentParser(description='Convert glib types to their C and C99 eqivalents.')
+    parser = argparse.ArgumentParser(description='Convert glib types to their C and C99 equivalents.')
     parser.add_argument('files', metavar='FILE', nargs='*')
     args = parser.parse_args()
 
-    # Build a padded version of type_map which attempts to preseve alignment
+    # Build a padded version of type_map which attempts to preserve alignment
     for glib_type, c99_type in type_map.items():
         pg_type = glib_type + '  '
         pc_type = c99_type + ' '

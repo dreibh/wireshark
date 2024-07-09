@@ -402,7 +402,7 @@ dissect_x509ce_T_uniformResourceIdentifier(bool implicit_tag _U_, tvbuff_t *tvb 
 
 static int
 dissect_x509ce_T_iPAddress(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  guint32 len = tvb_reported_length(tvb);
+  uint32_t len = tvb_reported_length(tvb);
   switch (len) {
   case 4: /* IPv4 */
     proto_tree_add_item(tree, hf_x509ce_IPAddress_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1613,7 +1613,7 @@ dissect_x509ce_NtdsObjectSid_U(bool implicit_tag _U_, tvbuff_t *tvb _U_, int off
 static int
 dissect_x509ce_NtdsObjectSid(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_ber_tagged_type(implicit_tag, actx, tree, tvb, offset,
-                                      hf_index, BER_CLASS_CON, 0, TRUE, dissect_x509ce_NtdsObjectSid_U);
+                                      hf_index, BER_CLASS_CON, 0, true, dissect_x509ce_NtdsObjectSid_U);
 
   return offset;
 }
@@ -1753,309 +1753,309 @@ dissect_x509ce_SecurityLevel(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offse
 static int dissect_AuthorityKeyIdentifier_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_AuthorityKeyIdentifier(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_AuthorityKeyIdentifier_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_AuthorityKeyIdentifier(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_AuthorityKeyIdentifier_PDU);
   return offset;
 }
 static int dissect_SubjectKeyIdentifier_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_SubjectKeyIdentifier(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_SubjectKeyIdentifier_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_SubjectKeyIdentifier(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_SubjectKeyIdentifier_PDU);
   return offset;
 }
 static int dissect_KeyUsage_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_KeyUsage(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_KeyUsage_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_KeyUsage(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_KeyUsage_PDU);
   return offset;
 }
 static int dissect_KeyPurposeIDs_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_KeyPurposeIDs(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_KeyPurposeIDs_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_KeyPurposeIDs(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_KeyPurposeIDs_PDU);
   return offset;
 }
 static int dissect_PrivateKeyUsagePeriod_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_PrivateKeyUsagePeriod(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_PrivateKeyUsagePeriod_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_PrivateKeyUsagePeriod(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_PrivateKeyUsagePeriod_PDU);
   return offset;
 }
 static int dissect_CertificatePoliciesSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CertificatePoliciesSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificatePoliciesSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CertificatePoliciesSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificatePoliciesSyntax_PDU);
   return offset;
 }
 static int dissect_PolicyMappingsSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_PolicyMappingsSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_PolicyMappingsSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_PolicyMappingsSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_PolicyMappingsSyntax_PDU);
   return offset;
 }
 static int dissect_GeneralNames_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_GeneralNames(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_GeneralNames_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_GeneralNames(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_GeneralNames_PDU);
   return offset;
 }
 static int dissect_AttributesSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_AttributesSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_AttributesSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_AttributesSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_AttributesSyntax_PDU);
   return offset;
 }
 static int dissect_BasicConstraintsSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_BasicConstraintsSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_BasicConstraintsSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_BasicConstraintsSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_BasicConstraintsSyntax_PDU);
   return offset;
 }
 static int dissect_NameConstraintsSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_NameConstraintsSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_NameConstraintsSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_NameConstraintsSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_NameConstraintsSyntax_PDU);
   return offset;
 }
 static int dissect_PolicyConstraintsSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_PolicyConstraintsSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_PolicyConstraintsSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_PolicyConstraintsSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_PolicyConstraintsSyntax_PDU);
   return offset;
 }
 static int dissect_SkipCerts_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_SkipCerts(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_SkipCerts_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_SkipCerts(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_SkipCerts_PDU);
   return offset;
 }
 static int dissect_CRLNumber_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CRLNumber(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLNumber_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CRLNumber(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLNumber_PDU);
   return offset;
 }
 static int dissect_CRLReason_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CRLReason(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLReason_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CRLReason(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLReason_PDU);
   return offset;
 }
 static int dissect_HoldInstruction_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_HoldInstruction(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_HoldInstruction_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_HoldInstruction(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_HoldInstruction_PDU);
   return offset;
 }
 static int dissect_CRLScopeSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CRLScopeSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLScopeSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CRLScopeSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLScopeSyntax_PDU);
   return offset;
 }
 static int dissect_StatusReferrals_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_StatusReferrals(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_StatusReferrals_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_StatusReferrals(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_StatusReferrals_PDU);
   return offset;
 }
 static int dissect_CRLStreamIdentifier_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CRLStreamIdentifier(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLStreamIdentifier_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CRLStreamIdentifier(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLStreamIdentifier_PDU);
   return offset;
 }
 static int dissect_OrderedListSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_OrderedListSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_OrderedListSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_OrderedListSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_OrderedListSyntax_PDU);
   return offset;
 }
 static int dissect_DeltaInformation_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_DeltaInformation(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_DeltaInformation_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_DeltaInformation(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_DeltaInformation_PDU);
   return offset;
 }
 static int dissect_CRLDistPointsSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CRLDistPointsSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLDistPointsSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CRLDistPointsSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CRLDistPointsSyntax_PDU);
   return offset;
 }
 static int dissect_IssuingDistPointSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_IssuingDistPointSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_IssuingDistPointSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_IssuingDistPointSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_IssuingDistPointSyntax_PDU);
   return offset;
 }
 static int dissect_BaseCRLNumber_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_BaseCRLNumber(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_BaseCRLNumber_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_BaseCRLNumber(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_BaseCRLNumber_PDU);
   return offset;
 }
 static int dissect_ToBeRevokedSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_ToBeRevokedSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_ToBeRevokedSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_ToBeRevokedSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_ToBeRevokedSyntax_PDU);
   return offset;
 }
 static int dissect_RevokedGroupsSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_RevokedGroupsSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_RevokedGroupsSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_RevokedGroupsSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_RevokedGroupsSyntax_PDU);
   return offset;
 }
 static int dissect_ExpiredCertsOnCRL_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_ExpiredCertsOnCRL(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_ExpiredCertsOnCRL_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_ExpiredCertsOnCRL(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_ExpiredCertsOnCRL_PDU);
   return offset;
 }
 static int dissect_AAIssuingDistPointSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_AAIssuingDistPointSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_AAIssuingDistPointSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_AAIssuingDistPointSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_AAIssuingDistPointSyntax_PDU);
   return offset;
 }
 static int dissect_CertificateAssertion_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CertificateAssertion(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificateAssertion_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CertificateAssertion(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificateAssertion_PDU);
   return offset;
 }
 static int dissect_CertificatePairExactAssertion_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CertificatePairExactAssertion(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificatePairExactAssertion_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CertificatePairExactAssertion(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificatePairExactAssertion_PDU);
   return offset;
 }
 static int dissect_CertificatePairAssertion_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CertificatePairAssertion(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificatePairAssertion_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CertificatePairAssertion(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificatePairAssertion_PDU);
   return offset;
 }
 static int dissect_CertificateListExactAssertion_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CertificateListExactAssertion(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificateListExactAssertion_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CertificateListExactAssertion(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificateListExactAssertion_PDU);
   return offset;
 }
 static int dissect_CertificateListAssertion_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CertificateListAssertion(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificateListAssertion_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CertificateListAssertion(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificateListAssertion_PDU);
   return offset;
 }
 static int dissect_PkiPathMatchSyntax_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_PkiPathMatchSyntax(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_PkiPathMatchSyntax_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_PkiPathMatchSyntax(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_PkiPathMatchSyntax_PDU);
   return offset;
 }
 static int dissect_EnhancedCertificateAssertion_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_EnhancedCertificateAssertion(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_EnhancedCertificateAssertion_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_EnhancedCertificateAssertion(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_EnhancedCertificateAssertion_PDU);
   return offset;
 }
 static int dissect_CertificateTemplate_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CertificateTemplate(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificateTemplate_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CertificateTemplate(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CertificateTemplate_PDU);
   return offset;
 }
 static int dissect_NtdsCaSecurity_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_NtdsCaSecurity(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_NtdsCaSecurity_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_NtdsCaSecurity(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_NtdsCaSecurity_PDU);
   return offset;
 }
 static int dissect_NtdsObjectSid_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_NtdsObjectSid(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_NtdsObjectSid_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_NtdsObjectSid(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_NtdsObjectSid_PDU);
   return offset;
 }
 static int dissect_EntrustVersionInfo_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_EntrustVersionInfo(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_EntrustVersionInfo_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_EntrustVersionInfo(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_EntrustVersionInfo_PDU);
   return offset;
 }
 static int dissect_NFTypes_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_NFTypes(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_NFTypes_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_NFTypes(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_NFTypes_PDU);
   return offset;
 }
 static int dissect_ScramblerCapabilities_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_ScramblerCapabilities(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_ScramblerCapabilities_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_ScramblerCapabilities(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_ScramblerCapabilities_PDU);
   return offset;
 }
 static int dissect_CiplusInfo_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CiplusInfo(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CiplusInfo_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CiplusInfo(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CiplusInfo_PDU);
   return offset;
 }
 static int dissect_CicamBrandId_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_CicamBrandId(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_CicamBrandId_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_CicamBrandId(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_CicamBrandId_PDU);
   return offset;
 }
 static int dissect_SecurityLevel_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_x509ce_SecurityLevel(FALSE, tvb, offset, &asn1_ctx, tree, hf_x509ce_SecurityLevel_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_x509ce_SecurityLevel(false, tvb, offset, &asn1_ctx, tree, hf_x509ce_SecurityLevel_PDU);
   return offset;
 }
 
@@ -2105,17 +2105,17 @@ static int
 dissect_x509ce_invalidityDate_callback(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
-  return dissect_x509ce_GeneralizedTime(FALSE, tvb, 0, &asn1_ctx, tree, hf_x509ce_id_ce_invalidityDate);
+  return dissect_x509ce_GeneralizedTime(false, tvb, 0, &asn1_ctx, tree, hf_x509ce_id_ce_invalidityDate);
 }
 
 static int
 dissect_x509ce_baseUpdateTime_callback(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  return dissect_x509ce_GeneralizedTime(FALSE, tvb, 0, &asn1_ctx, tree, hf_x509ce_id_ce_baseUpdateTime);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  return dissect_x509ce_GeneralizedTime(false, tvb, 0, &asn1_ctx, tree, hf_x509ce_id_ce_baseUpdateTime);
 }
 
 /*--- proto_register_x509ce ----------------------------------------------*/
@@ -2969,7 +2969,7 @@ void proto_register_x509ce(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_x509ce_AuthorityKeyIdentifier,
     &ett_x509ce_KeyUsage,
     &ett_x509ce_KeyPurposeIDs,

@@ -33,15 +33,23 @@ wtap_open_return_val blf_open(wtap *wth, int *err, char **err_info);
  *    Object header (object type dependent, may be empty)
  *    Object contents
  *
- * The objects in the sequence appear to be LOG_CONTAINER objects,
- * each of which contains a sequence of objects.
+ * As per
+ *
+ *    https://gitlab.com/wireshark/wireshark/-/issues/19896#note_1967971057
+ *
+ * the sequence may have one (or more?) metadata objects at the beginning.
+ * After those, if present, there are zero or more LOG_CONTAINER objects,
+ * containing data for all subsequent objects.  An object may be split
+ * between LOG_CONTAINER objects, as per
+ *
+ *    https://gitlab.com/wireshark/wireshark/-/issues/19377#note_1651998569
  *
  * A LOG_CONTAINER object's contents are of the form:
  *
  *    Log container header
- *    Sequence of BLF objects
+ *    Data for contained objects.
  * 
- * The contents of the container may be compressed using zlib.
+ * The data in a LOG_CONTAINER object may be compressed using zlib.
  */
 
 #define BLF_HEADER_TYPE_DEFAULT                   1
@@ -497,6 +505,20 @@ typedef struct blf_linmessage {
 */
 } blf_linmessage_t;
 
+typedef struct blf_linrcverror {
+    uint16_t channel;
+    uint8_t  id;
+    uint8_t  dlc;
+    uint8_t  fsmId;
+    uint8_t  fsmState;
+    uint8_t  headerTime;
+    uint8_t  fullTime;
+    uint8_t  stateReason;
+    uint8_t  offendingByte;
+    uint8_t  shortError;
+    uint8_t  timeoutDuringDlcDetection;
+} blf_linrcverror_t;
+
 typedef struct blf_linsenderror {
     uint16_t channel;
     uint8_t  id;
@@ -506,6 +528,12 @@ typedef struct blf_linsenderror {
     uint8_t  headerTime;
     uint8_t  fullTime;
 } blf_linsenderror_t;
+
+typedef struct blf_linwakeupevent {
+    uint16_t    channel;
+    uint8_t     signal;
+    uint8_t     external;
+} blf_linwakeupevent_t;
 
 typedef struct blf_linbusevent {
     uint64_t sof;
@@ -573,6 +601,26 @@ typedef struct blf_lincrcerror2 {
 */
 } blf_lincrcerror2_t;
 
+typedef struct blf_linrcverror2 {
+    blf_lindatabytetimestampevent_t linDataByteTimestampEvent;
+    uint8_t                         data[8];
+    uint8_t                         fsmId;      /* Obsolete */
+    uint8_t                         fsmState;   /* Obsolete */
+    uint8_t                         stateReason;
+    uint8_t                         offendingByte;
+    uint8_t                         shortError;
+    uint8_t                         timeoutDuringDlcDetection;
+    uint8_t                         isEtf;
+    uint8_t                         hasDataBytes;
+/*  These fields are optional and skipping does not hurt us.
+    uint32_t                        respBaudrate;
+    uint8_t                         res[4];
+    double                          exactHeaderBaudrate;
+    uint32_t                        earlyStopBitOffset;
+    uint32_t                        earlyStopBitOffsetResponse;
+*/
+} blf_linrcverror2_t;
+
 typedef struct blf_linsenderror2 {
     blf_linmessagedescriptor_t  linMessageDescriptor;
     uint64_t                    eoh;
@@ -586,6 +634,29 @@ typedef struct blf_linsenderror2 {
     uint32_t                    earlyStopBitOffset;
 */
 } blf_linsenderror2_t;
+
+typedef struct blf_linwakeupevent2 {
+    blf_linbusevent_t   linBusEvent;
+    uint8_t             lengthInfo; /* Wake-up lenght: 0 = OK; 1 = Too short; 2 = Too long. */
+    uint8_t             signal;
+    uint8_t             external;
+    uint8_t             res;
+} blf_linwakeupevent2_t;
+
+typedef struct blf_linsleepmodeevent {
+    uint16_t    channel;
+    uint8_t     reason;
+    uint8_t     flags;
+} blf_linsleepmodeevent_t;
+
+#define BLF_LIN_WU_SLEEP_REASON_START_STATE         0   /* Initial state of the interface */
+#define BLF_LIN_SLEEP_REASON_GO_TO_SLEEP_FRAME      1
+#define BLF_LIN_SLEEP_REASON_BUS_IDLE_TIMEOUT       2
+#define BLF_LIN_SLEEP_REASON_SILENT_SLEEPMODE_CMD   3   /* Command to shorten bus idle timeout */
+#define BLF_LIN_WU_REASON_EXTERNAL_WAKEUP_SIG       9
+#define BLF_LIN_WU_REASON_INTERNAL_WAKEUP_SIG       10
+#define BLF_LIN_WU_REASON_BUS_TRAFFIC               11
+#define BLF_LIN_NO_SLEEP_REASON_BUS_TRAFFIC         18  /* LIN hardware does not go into Sleep mode in spite of request to do so */
 
 
 /* see https://bitbucket.org/tobylorenz/vector_blf/src/master/src/Vector/BLF/AppText.h */

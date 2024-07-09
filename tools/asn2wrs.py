@@ -1809,7 +1809,7 @@ class EthCtx:
     def eth_output_types(self):
         def out_pdu(f):
             t = self.eth_hf[f]['ethtype']
-            impl = 'FALSE'
+            impl = 'false'
             out = ''
             if (not self.eth_hf[f]['pdu']['export']):
                 out += 'static '
@@ -1822,20 +1822,20 @@ class EthCtx:
             ret_par = 'offset'
             if (self.Per()):
                 if (self.Aligned()):
-                    aligned = 'TRUE'
+                    aligned = 'true'
                 else:
-                    aligned = 'FALSE'
+                    aligned = 'false'
                 out += "  asn1_ctx_t asn1_ctx;\n"
                 out += self.eth_fn_call('asn1_ctx_init', par=(('&asn1_ctx', 'ASN1_ENC_PER', aligned, 'pinfo'),))
             if (self.Ber()):
                 out += "  asn1_ctx_t asn1_ctx;\n"
-                out += self.eth_fn_call('asn1_ctx_init', par=(('&asn1_ctx', 'ASN1_ENC_BER', 'TRUE', 'pinfo'),))
+                out += self.eth_fn_call('asn1_ctx_init', par=(('&asn1_ctx', 'ASN1_ENC_BER', 'true', 'pinfo'),))
                 par=((impl, 'tvb', off_par,'&asn1_ctx', 'tree', self.eth_hf[f]['fullname']),)
             elif (self.Per()):
                 par=(('tvb', off_par, '&asn1_ctx', 'tree', self.eth_hf[f]['fullname']),)
             elif (self.Oer()):
                 out += "  asn1_ctx_t asn1_ctx;\n"
-                out += self.eth_fn_call('asn1_ctx_init', par=(('&asn1_ctx', 'ASN1_ENC_OER', 'TRUE', 'pinfo'),))
+                out += self.eth_fn_call('asn1_ctx_init', par=(('&asn1_ctx', 'ASN1_ENC_OER', 'true', 'pinfo'),))
                 par=(('tvb', off_par,'&asn1_ctx', 'tree', self.eth_hf[f]['fullname']),)
             else:
                 par=((),)
@@ -2214,7 +2214,7 @@ class EthCtx:
             print(', '.join(dep))
         # end of print_mod()
         (mod_ord, mod_cyc) = dependency_compute(self.module_ord, self.module, ignore_fn = lambda t: t not in self.module)
-        print("\n# ASN.1 Moudules")
+        print("\n# ASN.1 Modules")
         print("Module name                     Dependency")
         print("-" * 100)
         new_ord = False
@@ -2222,7 +2222,7 @@ class EthCtx:
             print_mod(m)
             new_ord = new_ord or (self.module_ord.index(m) != mod_ord.index(m))
         if new_ord:
-            print("\n# ASN.1 Moudules - in dependency order")
+            print("\n# ASN.1 Modules - in dependency order")
             print("Module name                     Dependency")
             print("-" * 100)
             for m in (mod_ord):
@@ -3375,8 +3375,8 @@ class Type (Node):
                     (minv, maxv, ext) = self.constr.subtype[1].GetSize(ectx)
         if minv == 'MIN': minv = 'NO_BOUND'
         if maxv == 'MAX': maxv = 'NO_BOUND'
-        if (ext): ext = 'TRUE'
-        else: ext = 'FALSE'
+        if (ext): ext = 'true'
+        else: ext = 'false'
         return (minv, maxv, ext)
 
     def eth_get_value_constr(self, ectx):
@@ -3397,8 +3397,8 @@ class Type (Node):
                 maxv = "UINT64_C(%s)" % (str(maxv))
             else:
                 maxv += 'U'
-        if (ext): ext = 'TRUE'
-        else: ext = 'FALSE'
+        if (ext): ext = 'true'
+        else: ext = 'false'
         return (minv, maxv, ext)
 
     def eth_get_alphabet_constr(self, ectx):
@@ -3986,9 +3986,9 @@ class TaggedType (Type):
         pars['TYPE_REF_FN'] = 'dissect_%(TYPE_REF_PROTO)s_%(TYPE_REF_TNAME)s'
         (pars['TAG_CLS'], pars['TAG_TAG']) = self.GetTag(ectx)
         if self.HasImplicitTag(ectx):
-            pars['TAG_IMPL'] = 'TRUE'
+            pars['TAG_IMPL'] = 'true'
         else:
-            pars['TAG_IMPL'] = 'FALSE'
+            pars['TAG_IMPL'] = 'false'
         return pars
 
     def eth_type_default_body(self, ectx, tname):
@@ -4814,9 +4814,9 @@ class EnumeratedType (Type):
         pars = Type.eth_type_default_pars(self, ectx, tname)
         (root_num, ext_num, map_table) = self.get_vals_etc(ectx)[1:]
         if self.ext is not None:
-            ext = 'TRUE'
+            ext = 'true'
         else:
-            ext = 'FALSE'
+            ext = 'false'
         pars['ROOT_NUM'] = str(root_num)
         pars['EXT'] = ext
         pars['EXT_NUM'] = str(ext_num)
@@ -7323,11 +7323,11 @@ def p_cls_syntax_list_2 (t):
 # X.681
 def p_cls_syntax_1 (t):
     'cls_syntax : Type IDENTIFIED BY Value'
-    t[0] = { get_class_fieled(' ') : t[1], get_class_fieled(' '.join((t[2], t[3]))) : t[4] }
+    t[0] = { get_class_field(' ') : t[1], get_class_field(' '.join((t[2], t[3]))) : t[4] }
 
 def p_cls_syntax_2 (t):
     'cls_syntax : HAS PROPERTY Value'
-    t[0] = { get_class_fieled(' '.join(t[1:-1])) : t[-1:][0] }
+    t[0] = { get_class_field(' '.join(t[1:-1])) : t[-1:][0] }
 
 # X.880
 def p_cls_syntax_3 (t):
@@ -7340,17 +7340,17 @@ def p_cls_syntax_3 (t):
                    | PRIORITY Value
                    | ALWAYS RESPONDS BooleanValue
                    | IDEMPOTENT BooleanValue '''
-    t[0] = { get_class_fieled(' '.join(t[1:-1])) : t[-1:][0] }
+    t[0] = { get_class_field(' '.join(t[1:-1])) : t[-1:][0] }
 
 def p_cls_syntax_4 (t):
     '''cls_syntax : ARGUMENT Type
                    | RESULT Type
                    | PARAMETER Type '''
-    t[0] = { get_class_fieled(t[1]) : t[2] }
+    t[0] = { get_class_field(t[1]) : t[2] }
 
 def p_cls_syntax_5 (t):
     'cls_syntax : CODE Value'
-    fld = get_class_fieled(t[1]);
+    fld = get_class_field(t[1]);
     t[0] = { fld : t[2] }
     if isinstance(t[2], ChoiceValue):
         fldt = fld + '.' + t[2].choice
@@ -7360,7 +7360,7 @@ def p_cls_syntax_6 (t):
     '''cls_syntax : ARGUMENT Type OPTIONAL BooleanValue
                    | RESULT Type OPTIONAL BooleanValue
                    | PARAMETER Type OPTIONAL BooleanValue '''
-    t[0] = { get_class_fieled(t[1]) : t[2], get_class_fieled(' '.join((t[1], t[3]))) : t[4] }
+    t[0] = { get_class_field(t[1]) : t[2], get_class_field(' '.join((t[1], t[3]))) : t[4] }
 
 # 12 Information object set definition and assignment
 
@@ -7506,7 +7506,7 @@ def is_class_syntax(name):
         return False
     return name in class_syntaxes[class_current_syntax]
 
-def get_class_fieled(name):
+def get_class_field(name):
     if not class_current_syntax:
         return None
     return class_syntaxes[class_current_syntax][name]

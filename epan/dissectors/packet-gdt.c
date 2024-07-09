@@ -1005,8 +1005,8 @@ dissect_gdt_GDTMessage(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_,
 static int dissect_GDTMessage_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_gdt_GDTMessage(FALSE, tvb, offset, &asn1_ctx, tree, hf_gdt_GDTMessage_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_gdt_GDTMessage(false, tvb, offset, &asn1_ctx, tree, hf_gdt_GDTMessage_PDU);
   return offset;
 }
 
@@ -1237,7 +1237,7 @@ void proto_register_gdt(void) {
     };
 
     /* List of subtrees */
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_gdt,
     &ett_gdt_Header,
     &ett_gdt_EndPointDescriptor,
@@ -1275,11 +1275,11 @@ void proto_register_gdt(void) {
 
 /*--- proto_reg_handoff_gdt -------------------------------------------*/
 void proto_reg_handoff_gdt(void) {
-    static gboolean initialized = FALSE;
+    static bool initialized = false;
 
     if (!initialized) {
         dissector_add_for_decode_as("sctp.ppi", gdt_handle);
         dissector_add_uint("sctp.ppi", GDT_PROTOCOL_ID, gdt_handle);
-        initialized = TRUE;
+        initialized = true;
     }
 }

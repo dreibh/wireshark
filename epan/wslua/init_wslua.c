@@ -733,7 +733,7 @@ static int wslua_panic(lua_State* LS) {
     return 0; /* keep gcc happy */
 }
 
-static int string_compare(gconstpointer a, gconstpointer b) {
+static int string_compare(const void *a, const void *b) {
     return strcmp((const char*)a, (const char*)b);
 }
 
@@ -1287,7 +1287,7 @@ static int wslua_console_print(lua_State *_L)
     else {
         wslua_gui_print_func_ptr(gstr->str, wslua_gui_print_data_ptr);
     }
-    g_string_free(gstr, true);
+    g_string_free(gstr, TRUE);
     return 0;
 }
 

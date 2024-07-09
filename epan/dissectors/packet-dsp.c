@@ -183,7 +183,7 @@ static int hf_dsp_signed;                         /* BOOLEAN */
 static int hf_dsp_other;                          /* EXTERNAL */
 
 /* Initialize the subtree pointers */
-static gint ett_dsp;
+static int ett_dsp;
 static int ett_dsp_ChainedReadArgumentData;
 static int ett_dsp_ChainedReadArgument;
 static int ett_dsp_T_signedChainedReadArgument;
@@ -1637,22 +1637,22 @@ dissect_dsp_DitBridgeKnowledge(bool implicit_tag _U_, tvbuff_t *tvb _U_, int off
 static int dissect_AccessPoint_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dsp_AccessPoint(FALSE, tvb, offset, &asn1_ctx, tree, hf_dsp_AccessPoint_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dsp_AccessPoint(false, tvb, offset, &asn1_ctx, tree, hf_dsp_AccessPoint_PDU);
   return offset;
 }
 static int dissect_MasterAndShadowAccessPoints_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dsp_MasterAndShadowAccessPoints(FALSE, tvb, offset, &asn1_ctx, tree, hf_dsp_MasterAndShadowAccessPoints_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dsp_MasterAndShadowAccessPoints(false, tvb, offset, &asn1_ctx, tree, hf_dsp_MasterAndShadowAccessPoints_PDU);
   return offset;
 }
 static int dissect_DitBridgeKnowledge_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
-  offset = dissect_dsp_DitBridgeKnowledge(FALSE, tvb, offset, &asn1_ctx, tree, hf_dsp_DitBridgeKnowledge_PDU);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
+  offset = dissect_dsp_DitBridgeKnowledge(false, tvb, offset, &asn1_ctx, tree, hf_dsp_DitBridgeKnowledge_PDU);
   return offset;
 }
 
@@ -1679,7 +1679,7 @@ dissect_dsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 		return 0;
 	session  = (struct SESSION_DATA_STRUCTURE*)data;
 
-	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, TRUE, pinfo);
+	asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
 
 	item = proto_tree_add_item(parent_tree, proto_dsp, tvb, 0, -1, ENC_NA);
 	tree = proto_item_add_subtree(item, ett_dsp);
@@ -1842,7 +1842,7 @@ dissect_dsp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 
 	  while (tvb_reported_length_remaining(tvb, offset) > 0){
 	    old_offset=offset;
-	    offset=(*dsp_dissector)(FALSE, tvb, offset, &asn1_ctx, tree, -1);
+	    offset=(*dsp_dissector)(false, tvb, offset, &asn1_ctx, tree, -1);
 	    if(offset == old_offset){
 	      proto_tree_add_expert(tree, pinfo, &ei_dsp_zero_pdu, tvb, offset, -1);
 	      break;
@@ -2411,7 +2411,7 @@ void proto_register_dsp(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_dsp,
     &ett_dsp_ChainedReadArgumentData,
     &ett_dsp_ChainedReadArgument,
@@ -2535,6 +2535,6 @@ void proto_reg_handoff_dsp(void) {
   /* ABSTRACT SYNTAXES */
 
   /* Register DSP with ROS (with no use of RTSE) */
-  register_ros_oid_dissector_handle("2.5.9.2", dsp_handle, 0, "id-as-directory-system", FALSE);
+  register_ros_oid_dissector_handle("2.5.9.2", dsp_handle, 0, "id-as-directory-system", false);
 
 }

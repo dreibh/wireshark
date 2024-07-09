@@ -230,7 +230,7 @@ static const char *token_str[] = {"",
 typedef struct {
     uint8_t dest_addr[6];
     uint8_t src_addr[6];
-    uint16_t l3pid;
+    uint16_t ethertype;
 } hdr_ethernet_t;
 
 static hdr_ethernet_t HDR_ETHERNET;
@@ -500,7 +500,7 @@ write_current_packet(bool cont)
                 memcpy(HDR_ETHERNET.dest_addr, hdr_eth_dest_addr, 6);
                 memcpy(HDR_ETHERNET.src_addr, hdr_eth_src_addr, 6);
             }
-            HDR_ETHERNET.l3pid = g_htons(hdr_ethernet_proto);
+            HDR_ETHERNET.ethertype = g_htons(hdr_ethernet_proto);
             memcpy(&packet_buf[prefix_index], &HDR_ETHERNET, sizeof(HDR_ETHERNET));
             prefix_index += (int)sizeof(HDR_ETHERNET);
         }
@@ -1784,14 +1784,14 @@ text_import_pre_open(wtap_dump_params * const params, int file_type_subtype, con
         if (info_str->str) {
             wtap_block_add_string_option(shb_hdr, OPT_SHB_HARDWARE, info_str->str, info_str->len);
         }
-        g_string_free(info_str, true);
+        g_string_free(info_str, TRUE);
 
         info_str = g_string_new("");
         get_os_version_info(info_str);
         if (info_str->str) {
             wtap_block_add_string_option(shb_hdr, OPT_SHB_OS, info_str->str, info_str->len);
         }
-        g_string_free(info_str, true);
+        g_string_free(info_str, TRUE);
 
         wtap_block_add_string_option_format(shb_hdr, OPT_SHB_USERAPPL, "%s", get_appname_and_version());
 

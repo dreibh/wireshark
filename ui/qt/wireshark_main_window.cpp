@@ -619,6 +619,7 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
             proto_tree_, &ProtoTree::setCaptureFile);
 
     connect(mainApp, &MainApplication::zoomMonospaceFont, packet_list_, &PacketList::setMonospaceFont);
+    connect(mainApp, &MainApplication::zoomRegularFont, packet_list_, &PacketList::setRegularFont);
     connect(mainApp, &MainApplication::zoomMonospaceFont, proto_tree_, &ProtoTree::setMonospaceFont);
 
     connectFileMenuActions();
@@ -703,7 +704,7 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     main_ui_->actionHelpMPText2pcap->setToolTip(gchar_free_to_qstring(topic_action_url(LOCALPAGE_MAN_TEXT2PCAP)));
     main_ui_->actionHelpMPTShark->setToolTip(gchar_free_to_qstring(topic_action_url(LOCALPAGE_MAN_TSHARK)));
 
-    main_ui_->actionHelpContents->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_USERGUIDE)));
+    main_ui_->actionHelpContents->setToolTip(gchar_free_to_qstring(topic_action_url(HELP_CONTENT)));
     main_ui_->actionHelpWebsite->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_HOME)));
     main_ui_->actionHelpFAQ->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_FAQ)));
     main_ui_->actionHelpAsk->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_ASK)));
@@ -717,6 +718,9 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
 WiresharkMainWindow::~WiresharkMainWindow()
 {
     disconnect(main_ui_->mainStack, 0, 0, 0);
+    if (previous_focus_ != nullptr) {
+        disconnect(previous_focus_, &QWidget::destroyed, this, &WiresharkMainWindow::resetPreviousFocus);
+    }
 
 #ifndef Q_OS_MAC
     // Below dialogs inherit GeometryStateDialog

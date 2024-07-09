@@ -6757,8 +6757,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message numerus="yes">
         <source>%Ln bit(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln ビット</numerusform>
         </translation>
     </message>
     <message>
@@ -7388,8 +7388,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message numerus="yes">
         <source>%Ln bit(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%Ln ビット</numerusform>
         </translation>
     </message>
 </context>
@@ -8863,6 +8863,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>AVERAGE</source>
         <translation>平均</translation>
+    </message>
+    <message>
+        <source>THROUGHPUT</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>LOAD</source>
@@ -11471,13 +11475,21 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>…として保存</translation>
     </message>
     <message>
+        <source>Decoded as %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Save Selected Packet Bytes As…</source>
         <translation>…として選択したパケットバイト列を保存</translation>
     </message>
+    <message>
+        <source>compressed %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <source>Displaying %Ln byte(s).</source>
-        <translation>
-            <numerusform>%Ln バイトを表示中</numerusform>
+        <source>Using %Ln byte(s).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
         </translation>
     </message>
     <message>
@@ -13261,7 +13273,7 @@ a:hover {
     </message>
     <message>
         <source>&amp;Contents</source>
-        <translation>目次(&amp;C)</translation>
+        <translation type="vanished">目次(&amp;C)</translation>
     </message>
     <message>
         <source>TShark</source>
@@ -13530,7 +13542,7 @@ a:hover {
     </message>
     <message>
         <source>Help contents</source>
-        <translation>ヘルプ目次</translation>
+        <translation type="vanished">ヘルプ目次</translation>
     </message>
     <message>
         <source>FAQs</source>
@@ -14295,6 +14307,14 @@ a:hover {
     <message>
         <source>&amp;Wireless</source>
         <translation>無線(&amp;W)</translation>
+    </message>
+    <message>
+        <source>&amp;User&apos;s Guide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark User&apos;s Guide</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display Filters</source>

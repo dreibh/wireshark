@@ -5,7 +5,7 @@
 	Pidl is a perl based IDL compiler for DCE/RPC idl files.
 	It is maintained by the Samba team, not the Wireshark team.
 	Instructions on how to download and install Pidl can be
-	found at https://gitlab.com/wireshark/wireshark/-/wikis/Pidl
+	found at https://wiki.wireshark.org/Pidl
 */
 
 
@@ -353,7 +353,7 @@ fsrvp_dissect_fssagent_share_mapping(tvbuff_t *tvb _U_, int offset _U_, packet_i
 	proto_item *item = NULL;
 	proto_tree *tree = NULL;
 	int old_offset;
-	guint32 level;
+	uint32_t level;
 
 	old_offset = offset;
 	if (parent_tree) {

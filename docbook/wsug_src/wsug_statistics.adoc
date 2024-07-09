@@ -188,11 +188,10 @@ In the screenshot there are many more TLS and Git PDUs than there are packets.
 
 A network conversation is the traffic between two specific endpoints. For
 example, an IP conversation is all the traffic between two IP addresses. The
-description of the known endpoint types can be found in
+description of the known endpoint types can be found in <<ChStatEndpoints>>.
 
 The conversations are influenced by the _Deinterlacing conversations key_
 preference.
-<<ChStatEndpoints>>.
 
 [#ChStatConversationsWindow]
 
@@ -464,6 +463,9 @@ For MAX and MIN values, hovering and clicking the graph will show and take you t
 LOAD(Y Field):::
 If the “Y Field” is a relative time value, this is the sum of the “Y Field” values divided by the interval time.
 This can be useful for tracking response times.
+
+THROUGHPUT(Y Field):::
+If the “Y Field” is a payload counted in Bytes (as frame.len, ip.len, ipv6.plen..), this is the throughput expressed in bits per second.
 
 Y Field::
 The display filter field from which to extract values for the Y axis calculations listed above.

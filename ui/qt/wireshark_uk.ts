@@ -8821,6 +8821,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>THROUGHPUT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>LOAD</source>
         <translation type="unfinished"></translation>
     </message>
@@ -11404,11 +11408,19 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished">Зберегти як...</translation>
     </message>
     <message>
+        <source>Decoded as %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Save Selected Packet Bytes As…</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>compressed %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message numerus="yes">
-        <source>Displaying %Ln byte(s).</source>
+        <source>Using %Ln byte(s).</source>
         <translation type="unfinished">
             <numerusform></numerusform>
             <numerusform></numerusform>
@@ -13117,7 +13129,7 @@ a:hover {
     </message>
     <message>
         <source>&amp;Contents</source>
-        <translation>&amp;Зміст</translation>
+        <translation type="vanished">&amp;Зміст</translation>
     </message>
     <message>
         <source>TShark</source>
@@ -13383,10 +13395,6 @@ a:hover {
     <message>
         <source>Wireless Toolbar</source>
         <translation>Панель Бездротової Мережі</translation>
-    </message>
-    <message>
-        <source>Help contents</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>FAQs</source>
@@ -14150,6 +14158,14 @@ a:hover {
     </message>
     <message>
         <source>&amp;Wireless</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;User&apos;s Guide</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark User&apos;s Guide</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

@@ -61,19 +61,19 @@ static void ras_call_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 
 /* Item of ras request list*/
 typedef struct _h225ras_call_t {
-  guint32 requestSeqNum;
+  uint32_t requestSeqNum;
   e_guid_t guid;
-  guint32 req_num;  /* frame number request seen */
-  guint32 rsp_num;  /* frame number response seen */
+  uint32_t req_num;  /* frame number request seen */
+  uint32_t rsp_num;  /* frame number response seen */
   nstime_t req_time;  /* arrival time of request */
-  gboolean responded; /* true, if request has been responded */
+  bool responded; /* true, if request has been responded */
   struct _h225ras_call_t *next_call; /* pointer to next ras request with same SequenceNumber and conversation handle */
 } h225ras_call_t;
 
 
 /* Item of ras-request key list*/
 typedef struct _h225ras_call_info_key {
-  guint reqSeqNum;
+  unsigned reqSeqNum;
   conversation_t *conversation;
 } h225ras_call_info_key;
 
@@ -893,7 +893,7 @@ static int hf_h225_stopped;                       /* NULL */
 static int hf_h225_notAvailable;                  /* NULL */
 
 /* Initialize the subtree pointers */
-static gint ett_h225;
+static int ett_h225;
 static int ett_h225_H323_UserInformation;
 static int ett_h225_T_user_data;
 static int ett_h225_H323_UU_PDU;
@@ -1135,25 +1135,25 @@ static int ett_h225_ServiceControlResponse;
 static int ett_h225_T_result;
 
 /* Preferences */
-static guint h225_tls_port = TLS_PORT_CS;
+static unsigned h225_tls_port = TLS_PORT_CS;
 static bool h225_reassembly = true;
 static bool h225_h245_in_tree = true;
 static bool h225_tp_in_tree = true;
 
 /* Global variables */
-static guint32 ipv4_address;
+static uint32_t ipv4_address;
 static ws_in6_addr ipv6_address;
 static ws_in6_addr ipv6_address_zeros = {{0}};
-static guint32 ip_port;
-static gboolean contains_faststart;
+static uint32_t ip_port;
+static bool contains_faststart;
 static e_guid_t *call_id_guid;
 
 /* NonStandardParameter */
 static const char *nsiOID;
-static guint32 h221NonStandard;
-static guint32 t35CountryCode;
-static guint32 t35Extension;
-static guint32 manufacturerCode;
+static uint32_t h221NonStandard;
+static uint32_t t35CountryCode;
+static uint32_t t35Extension;
+static uint32_t manufacturerCode;
 
 /* TunnelledProtocol */
 static const char *tpOID;
@@ -1274,7 +1274,7 @@ dissect_h225_T_h245Ip(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, p
 
   ipv4_address = 0;
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       4, 4, FALSE, &value_tvb);
+                                       4, 4, false, &value_tvb);
 
   if (value_tvb)
     ipv4_address = tvb_get_ipv4(value_tvb, 0);
@@ -1287,7 +1287,7 @@ dissect_h225_T_h245Ip(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, p
 static int
 dissect_h225_T_h245IpPort(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 65535U, &ip_port, FALSE);
+                                                            0U, 65535U, &ip_port, false);
 
   return offset;
 }
@@ -1312,7 +1312,7 @@ dissect_h225_T_h245IpAddress(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx
 static int
 dissect_h225_OCTET_STRING_SIZE_4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       4, 4, FALSE, NULL);
+                                       4, 4, false, NULL);
 
   return offset;
 }
@@ -1322,7 +1322,7 @@ dissect_h225_OCTET_STRING_SIZE_4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
 static int
 dissect_h225_INTEGER_0_65535(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 65535U, NULL, FALSE);
+                                                            0U, 65535U, NULL, false);
 
   return offset;
 }
@@ -1393,7 +1393,7 @@ dissect_h225_T_h245IpSourceRoute(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
 static int
 dissect_h225_OCTET_STRING_SIZE_6(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       6, 6, FALSE, NULL);
+                                       6, 6, false, NULL);
 
   return offset;
 }
@@ -1403,7 +1403,7 @@ dissect_h225_OCTET_STRING_SIZE_6(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
 static int
 dissect_h225_OCTET_STRING_SIZE_2(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       2, 2, FALSE, NULL);
+                                       2, 2, false, NULL);
 
   return offset;
 }
@@ -1432,7 +1432,7 @@ dissect_h225_T_h245Ip6(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, 
 
   ipv6_address = ipv6_address_zeros;
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       16, 16, FALSE, &value_tvb);
+                                       16, 16, false, &value_tvb);
 
   if (value_tvb)
     tvb_get_ipv6(value_tvb, 0, &ipv6_address);
@@ -1445,7 +1445,7 @@ dissect_h225_T_h245Ip6(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, 
 static int
 dissect_h225_T_h245Ip6port(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 65535U, &ip_port, FALSE);
+                                                            0U, 65535U, &ip_port, false);
 
   return offset;
 }
@@ -1470,7 +1470,7 @@ dissect_h225_T_h245Ip6Address(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *act
 static int
 dissect_h225_OCTET_STRING_SIZE_16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       16, 16, FALSE, NULL);
+                                       16, 16, false, NULL);
 
   return offset;
 }
@@ -1480,7 +1480,7 @@ dissect_h225_OCTET_STRING_SIZE_16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 static int
 dissect_h225_OCTET_STRING_SIZE_1_20(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       1, 20, FALSE, NULL);
+                                       1, 20, false, NULL);
 
   return offset;
 }
@@ -1499,7 +1499,7 @@ dissect_h225_T_nsiOID(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, p
 static int
 dissect_h225_T_t35CountryCode(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 255U, &t35CountryCode, FALSE);
+                                                            0U, 255U, &t35CountryCode, false);
 
   return offset;
 }
@@ -1509,7 +1509,7 @@ dissect_h225_T_t35CountryCode(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *act
 static int
 dissect_h225_T_t35Extension(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 255U, &t35Extension, FALSE);
+                                                            0U, 255U, &t35Extension, false);
 
   return offset;
 }
@@ -1519,7 +1519,7 @@ dissect_h225_T_t35Extension(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx 
 static int
 dissect_h225_T_manufacturerCode(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 65535U, &manufacturerCode, FALSE);
+                                                            0U, 65535U, &manufacturerCode, false);
 
   return offset;
 }
@@ -1560,7 +1560,7 @@ static const per_choice_t NonStandardIdentifier_choice[] = {
 
 static int
 dissect_h225_NonStandardIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
 
   nsiOID = "";
   h221NonStandard = 0;
@@ -1590,7 +1590,7 @@ dissect_h225_T_nsp_data(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_,
   tvbuff_t *next_tvb = NULL;
 
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, &next_tvb);
+                                       NO_BOUND, NO_BOUND, false, &next_tvb);
 
   if (next_tvb && tvb_reported_length(next_tvb)) {
     call_dissector((nsp_handle)?nsp_handle:data_handle, next_tvb, actx->pinfo, tree);
@@ -1653,7 +1653,7 @@ dissect_h225_H245TransportAddress(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
   if (h225_pi) {
-    h225_pi->is_h245 = TRUE;
+    h225_pi->is_h245 = true;
     h225_pi->h245_address = ipv4_address;
     h225_pi->h245_port = ip_port;
   }
@@ -1683,24 +1683,24 @@ dissect_h225_H245TransportAddress(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 static int
 dissect_h225_DialedDigits(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   tvbuff_t *value_tvb = NULL;
-  guint len = 0;
+  unsigned len = 0;
   h225_packet_info* h225_pi;
 
   offset = dissect_per_restricted_character_string(tvb, offset, actx, tree, hf_index,
-                                                      1, 128, FALSE, "0123456789#*,", 13,
+                                                      1, 128, false, "0123456789#*,", 13,
                                                       &value_tvb);
 
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
-  if (h225_pi && h225_pi->is_destinationInfo == TRUE) {
+  if (h225_pi && h225_pi->is_destinationInfo == true) {
     if (value_tvb) {
       len = tvb_reported_length(value_tvb);
       /* XXX - should this be allocated as an ephemeral string? */
       if (len > sizeof h225_pi->dialedDigits - 1)
         len = sizeof h225_pi->dialedDigits - 1;
-      tvb_memcpy(value_tvb, (guint8*)h225_pi->dialedDigits, 0, len);
+      tvb_memcpy(value_tvb, (uint8_t*)h225_pi->dialedDigits, 0, len);
     }
     h225_pi->dialedDigits[len] = '\0';
-    h225_pi->is_destinationInfo = FALSE;
+    h225_pi->is_destinationInfo = false;
   }
 
   return offset;
@@ -1711,7 +1711,7 @@ dissect_h225_DialedDigits(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U
 static int
 dissect_h225_BMPString_SIZE_1_256(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_BMPString(tvb, offset, actx, tree, hf_index,
-                                          1, 256, FALSE);
+                                          1, 256, false);
 
   return offset;
 }
@@ -1721,7 +1721,7 @@ dissect_h225_BMPString_SIZE_1_256(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 static int
 dissect_h225_IA5String_SIZE_1_512(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_IA5String(tvb, offset, actx, tree, hf_index,
-                                          1, 512, FALSE,
+                                          1, 512, false,
                                           NULL);
 
   return offset;
@@ -1732,7 +1732,7 @@ dissect_h225_IA5String_SIZE_1_512(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 static int
 dissect_h225_IpV4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       4, 4, FALSE, NULL);
+                                       4, 4, false, NULL);
 
   return offset;
 }
@@ -1902,7 +1902,7 @@ dissect_h225_PublicTypeOfNumber(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *a
 static int
 dissect_h225_NumberDigits(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_restricted_character_string(tvb, offset, actx, tree, hf_index,
-                                                      1, 128, FALSE, "0123456789#*,", 13,
+                                                      1, 128, false, "0123456789#*,", 13,
                                                       NULL);
 
   return offset;
@@ -2016,7 +2016,7 @@ dissect_h225_TBCD_STRING(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_
 static int
 dissect_h225_TBCD_STRING_SIZE_3_16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_size_constrained_type(tvb, offset, actx, tree, hf_index, dissect_h225_TBCD_STRING,
-                                                "TBCD_STRING", 3, 16, FALSE);
+                                                "TBCD_STRING", 3, 16, false);
 
   return offset;
 }
@@ -2026,7 +2026,7 @@ dissect_h225_TBCD_STRING_SIZE_3_16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t
 static int
 dissect_h225_TBCD_STRING_SIZE_16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_size_constrained_type(tvb, offset, actx, tree, hf_index, dissect_h225_TBCD_STRING,
-                                                "TBCD_STRING", 16, 16, FALSE);
+                                                "TBCD_STRING", 16, 16, false);
 
   return offset;
 }
@@ -2036,7 +2036,7 @@ dissect_h225_TBCD_STRING_SIZE_16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
 static int
 dissect_h225_TBCD_STRING_SIZE_1_4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_size_constrained_type(tvb, offset, actx, tree, hf_index, dissect_h225_TBCD_STRING,
-                                                "TBCD_STRING", 1, 4, FALSE);
+                                                "TBCD_STRING", 1, 4, false);
 
   return offset;
 }
@@ -2068,7 +2068,7 @@ dissect_h225_T_system_id(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_
 static int
 dissect_h225_OCTET_STRING_SIZE_1(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       1, 1, FALSE, NULL);
+                                       1, 1, false, NULL);
 
   return offset;
 }
@@ -2103,7 +2103,7 @@ dissect_h225_ANSI_41_UIM(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_
 static int
 dissect_h225_OCTET_STRING_SIZE_1_4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       1, 4, FALSE, NULL);
+                                       1, 4, false, NULL);
 
   return offset;
 }
@@ -2113,7 +2113,7 @@ dissect_h225_OCTET_STRING_SIZE_1_4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t
 static int
 dissect_h225_TBCD_STRING_SIZE_15_16(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_size_constrained_type(tvb, offset, actx, tree, hf_index, dissect_h225_TBCD_STRING,
-                                                "TBCD_STRING", 15, 16, FALSE);
+                                                "TBCD_STRING", 15, 16, false);
 
   return offset;
 }
@@ -2198,7 +2198,7 @@ dissect_h225_NatureOfAddress(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx
 static int
 dissect_h225_IsupDigits(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_restricted_character_string(tvb, offset, actx, tree, hf_index,
-                                                      1, 128, FALSE, "0123456789ABCDE", 15,
+                                                      1, 128, false, "0123456789ABCDE", 15,
                                                       NULL);
 
   return offset;
@@ -2314,7 +2314,7 @@ dissect_h225_SEQUENCE_OF_AliasAddress(tvbuff_t *tvb _U_, int offset _U_, asn1_ct
 static int
 dissect_h225_OCTET_STRING_SIZE_1_256(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       1, 256, FALSE, NULL);
+                                       1, 256, false, NULL);
 
   return offset;
 }
@@ -2364,7 +2364,7 @@ dissect_h225_GatekeeperInfo(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx 
 int
 dissect_h225_BandWidth(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 4294967295U, NULL, FALSE);
+                                                            0U, 4294967295U, NULL, false);
 
   return offset;
 }
@@ -2374,7 +2374,7 @@ dissect_h225_BandWidth(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, 
 static int
 dissect_h225_INTEGER_1_256(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            1U, 256U, NULL, FALSE);
+                                                            1U, 256U, NULL, false);
 
   return offset;
 }
@@ -2727,7 +2727,7 @@ dissect_h225_BOOLEAN(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, pr
 static int
 dissect_h225_BIT_STRING_SIZE_32(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_bit_string(tvb, offset, actx, tree, hf_index,
-                                     32, 32, FALSE, NULL, 0, NULL, NULL);
+                                     32, 32, false, NULL, 0, NULL, NULL);
 
   return offset;
 }
@@ -2746,7 +2746,7 @@ dissect_h225_T_tunnelledProtocolObjectID(tvbuff_t *tvb _U_, int offset _U_, asn1
 static int
 dissect_h225_IA5String_SIZE_1_64(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_IA5String(tvb, offset, actx, tree, hf_index,
-                                          1, 64, FALSE,
+                                          1, 64, false,
                                           NULL);
 
   return offset;
@@ -2847,7 +2847,7 @@ dissect_h225_EndpointType(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U
 int
 dissect_h225_CallReferenceValue(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 65535U, NULL, FALSE);
+                                                            0U, 65535U, NULL, false);
 
   return offset;
 }
@@ -2870,7 +2870,7 @@ dissect_h225_SEQUENCE_OF_CallReferenceValue(tvbuff_t *tvb _U_, int offset _U_, a
 int
 dissect_h225_GloballyUniqueID(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       16, 16, FALSE, (tvbuff_t **)actx->value_ptr);
+                                       16, 16, false, (tvbuff_t **)actx->value_ptr);
 
   return offset;
 }
@@ -3118,7 +3118,7 @@ dissect_h225_T_cryptoEPPwdHash(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
 int
 dissect_h225_GatekeeperIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_BMPString(tvb, offset, actx, tree, hf_index,
-                                          1, 128, FALSE);
+                                          1, 128, false);
 
   return offset;
 }
@@ -3196,7 +3196,7 @@ dissect_h225_FastStart_item(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx 
   codec_str[0] = '\0';
 
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, &value_tvb);
+                                       NO_BOUND, NO_BOUND, false, &value_tvb);
 
   if (value_tvb && tvb_reported_length(value_tvb)) {
     dissect_h245_FastStart_OLC(value_tvb, actx->pinfo, tree, codec_str);
@@ -3208,9 +3208,9 @@ dissect_h225_FastStart_item(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx 
     char temp[50];
     snprintf(temp, 50, "%s %s", h225_pi->frame_label, codec_str);
     (void) g_strlcpy(h225_pi->frame_label, temp, 50);
-    h225_pi->is_faststart = TRUE;
+    h225_pi->is_faststart = true;
   }
-  contains_faststart = TRUE;
+  contains_faststart = true;
 
   return offset;
 }
@@ -3233,7 +3233,7 @@ dissect_h225_FastStart(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, 
 static int
 dissect_h225_EndpointIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_BMPString(tvb, offset, actx, tree, hf_index,
-                                          1, 128, FALSE);
+                                          1, 128, false);
 
   return offset;
 }
@@ -3321,7 +3321,7 @@ dissect_h225_T_connectionParameters(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_
 static int
 dissect_h225_IA5String_SIZE_1_32(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_IA5String(tvb, offset, actx, tree, hf_index,
-                                          1, 32, FALSE,
+                                          1, 32, false,
                                           NULL);
 
   return offset;
@@ -3377,7 +3377,7 @@ const value_string h225_ScreeningIndicator_vals[] = {
 int
 dissect_h225_ScreeningIndicator(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_enumerated(tvb, offset, actx, tree, hf_index,
-                                     4, NULL, TRUE, 0, NULL);
+                                     4, NULL, true, 0, NULL);
 
   return offset;
 }
@@ -3387,7 +3387,7 @@ dissect_h225_ScreeningIndicator(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *a
 static int
 dissect_h225_INTEGER_0_255(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 255U, NULL, FALSE);
+                                                            0U, 255U, NULL, false);
 
   return offset;
 }
@@ -3397,7 +3397,7 @@ dissect_h225_INTEGER_0_255(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
 static int
 dissect_h225_IA5String_SIZE_0_512(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_IA5String(tvb, offset, actx, tree, hf_index,
-                                          0, 512, FALSE,
+                                          0, 512, false,
                                           NULL);
 
   return offset;
@@ -3408,7 +3408,7 @@ dissect_h225_IA5String_SIZE_0_512(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 static int
 dissect_h225_H248SignalsDescriptor(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, NULL);
+                                       NO_BOUND, NO_BOUND, false, NULL);
 
   return offset;
 }
@@ -3418,7 +3418,7 @@ dissect_h225_H248SignalsDescriptor(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t
 static int
 dissect_h225_BMPString_SIZE_1_512(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_BMPString(tvb, offset, actx, tree, hf_index,
-                                          1, 512, FALSE);
+                                          1, 512, false);
 
   return offset;
 }
@@ -3450,7 +3450,7 @@ dissect_h225_T_billingMode(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
 static int
 dissect_h225_INTEGER_1_4294967295(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            1U, 4294967295U, NULL, FALSE);
+                                                            1U, 4294967295U, NULL, false);
 
   return offset;
 }
@@ -3579,7 +3579,7 @@ dissect_h225_SEQUENCE_OF_ServiceControlSession(tvbuff_t *tvb _U_, int offset _U_
 static int
 dissect_h225_INTEGER_0_4294967295(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 4294967295U, NULL, FALSE);
+                                                            0U, 4294967295U, NULL, false);
 
   return offset;
 }
@@ -3589,7 +3589,7 @@ dissect_h225_INTEGER_0_4294967295(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 static int
 dissect_h225_IA5String_SIZE_1_128(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_IA5String(tvb, offset, actx, tree, hf_index,
-                                          1, 128, FALSE,
+                                          1, 128, false,
                                           NULL);
 
   return offset;
@@ -3600,7 +3600,7 @@ dissect_h225_IA5String_SIZE_1_128(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 static int
 dissect_h225_OCTET_STRING_SIZE_3_4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       3, 4, FALSE, NULL);
+                                       3, 4, false, NULL);
 
   return offset;
 }
@@ -3694,7 +3694,7 @@ dissect_h225_CallCapacity(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U
 static int
 dissect_h225_OCTET_STRING_SIZE_2_4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       2, 4, FALSE, NULL);
+                                       2, 4, false, NULL);
 
   return offset;
 }
@@ -3717,7 +3717,7 @@ dissect_h225_T_cic_2_4(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, 
 static int
 dissect_h225_OCTET_STRING_SIZE_2_5(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       2, 5, FALSE, NULL);
+                                       2, 5, false, NULL);
 
   return offset;
 }
@@ -3785,11 +3785,11 @@ dissect_h225_CircuitIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
 
 static int
 dissect_h225_T_standard(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  guint32 value_int = (guint32)-1;
+  uint32_t value_int = (uint32_t)-1;
   gef_ctx_t *gefx;
 
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 16383U, &value_int, TRUE);
+                                                            0U, 16383U, &value_int, true);
 
   gefx = gef_ctx_get(actx->private_data);
   if (gefx) gefx->id = wmem_strdup_printf(actx->pinfo->pool, "%u", value_int);
@@ -3801,7 +3801,7 @@ dissect_h225_T_standard(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_,
 
 static int
 dissect_h225_T_oid(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  const gchar *oid_str = NULL;
+  const char *oid_str = NULL;
   gef_ctx_t *gefx;
 
   offset = dissect_per_object_identifier_str(tvb, offset, actx, tree, hf_index, &oid_str);
@@ -3840,7 +3840,7 @@ dissect_h225_GenericIdentifier(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
   if (gefx) {
     ti = proto_tree_add_string(tree, hf_h225_debug_dissector_try_string, tvb, offset>>3, 0, gefx->key);
   proto_item_set_hidden(ti);
-    dissector_try_string_new(gef_name_dissector_table, gefx->key, tvb_new_subset_length_caplen(tvb, offset>>3, 0, 0), actx->pinfo, tree, FALSE, actx);
+    dissector_try_string_new(gef_name_dissector_table, gefx->key, tvb_new_subset_length_caplen(tvb, offset>>3, 0, 0), actx->pinfo, tree, false, actx);
   }
   actx->private_data = gefx;  /* subdissector could overwrite it */
   return offset;
@@ -3855,7 +3855,7 @@ dissect_h225_T_raw(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, prot
   proto_item* ti;
 
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, &value_tvb);
+                                       NO_BOUND, NO_BOUND, false, &value_tvb);
 
   gefx = gef_ctx_get(actx->private_data);
   if (gefx) {
@@ -3872,7 +3872,7 @@ dissect_h225_T_raw(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, prot
 static int
 dissect_h225_IA5String(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_IA5String(tvb, offset, actx, tree, hf_index,
-                                          NO_BOUND, NO_BOUND, FALSE,
+                                          NO_BOUND, NO_BOUND, false,
                                           NULL);
 
   return offset;
@@ -3883,7 +3883,7 @@ dissect_h225_IA5String(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, 
 static int
 dissect_h225_BMPString(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_BMPString(tvb, offset, actx, tree, hf_index,
-                                          NO_BOUND, NO_BOUND, FALSE);
+                                          NO_BOUND, NO_BOUND, false);
 
   return offset;
 }
@@ -3897,7 +3897,7 @@ static int
 dissect_h225_SEQUENCE_SIZE_1_512_OF_EnumeratedParameter(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_h225_SEQUENCE_SIZE_1_512_OF_EnumeratedParameter, SEQUENCE_SIZE_1_512_OF_EnumeratedParameter_sequence_of,
-                                                  1, 512, FALSE);
+                                                  1, 512, false);
 
   return offset;
 }
@@ -3911,7 +3911,7 @@ static int
 dissect_h225_SEQUENCE_SIZE_1_16_OF_GenericData(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_h225_SEQUENCE_SIZE_1_16_OF_GenericData, SEQUENCE_SIZE_1_16_OF_GenericData_sequence_of,
-                                                  1, 16, FALSE);
+                                                  1, 16, false);
 
   return offset;
 }
@@ -4074,7 +4074,7 @@ dissect_h225_ParallelH245Control_item(tvbuff_t *tvb _U_, int offset _U_, asn1_ct
   tvbuff_t *h245_tvb = NULL;
 
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, &h245_tvb);
+                                       NO_BOUND, NO_BOUND, false, &h245_tvb);
 
   next_tvb_add_handle(h245_list, h245_tvb, (h225_h245_in_tree)?tree:NULL, h245dg_handle);
 
@@ -4128,7 +4128,7 @@ dissect_h225_SEQUENCE_OF_ExtendedAliasAddress(tvbuff_t *tvb _U_, int offset _U_,
 static int
 dissect_h225_INTEGER_1_31(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            1U, 31U, NULL, FALSE);
+                                                            1U, 31U, NULL, false);
 
   return offset;
 }
@@ -4138,7 +4138,7 @@ dissect_h225_INTEGER_1_31(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U
 static int
 dissect_h225_BMPString_SIZE_1_80(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_BMPString(tvb, offset, actx, tree, hf_index,
-                                          1, 80, FALSE);
+                                          1, 80, false);
 
   return offset;
 }
@@ -4220,7 +4220,7 @@ static const per_sequence_t Setup_UUIE_sequence[] = {
 static int
 dissect_h225_Setup_UUIE(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   h225_packet_info* h225_pi;
-  contains_faststart = FALSE;
+  contains_faststart = false;
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_h225_Setup_UUIE, Setup_UUIE_sequence);
 
@@ -4518,7 +4518,7 @@ static const per_choice_t ReleaseCompleteReason_choice[] = {
 
 int
 dissect_h225_ReleaseCompleteReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -4599,7 +4599,7 @@ static const per_choice_t FacilityReason_choice[] = {
 
 static int
 dissect_h225_FacilityReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -4858,10 +4858,10 @@ static const per_choice_t T_h323_message_body_choice[] = {
 
 static int
 dissect_h225_T_h323_message_body(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 message_body_val;
+  int32_t message_body_val;
   h225_packet_info* h225_pi;
 
-  contains_faststart = FALSE;
+  contains_faststart = false;
   call_id_guid = NULL;
   offset = dissect_per_choice(tvb, offset, actx, tree, hf_index,
                                  ett_h225_T_h323_message_body, T_h323_message_body_choice,
@@ -4882,7 +4882,7 @@ dissect_h225_T_h323_message_body(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
     }
   }
 
-  if (contains_faststart == TRUE )
+  if (contains_faststart == true )
   {
     col_append_str(actx->pinfo->cinfo, COL_INFO, "OpenLogicalChannel " );
   }
@@ -4900,7 +4900,7 @@ dissect_h225_T_h4501SupplementaryService_item(tvbuff_t *tvb _U_, int offset _U_,
   tvbuff_t *h4501_tvb = NULL;
 
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, &h4501_tvb);
+                                       NO_BOUND, NO_BOUND, false, &h4501_tvb);
 
   if (h4501_tvb && tvb_reported_length(h4501_tvb)) {
     call_dissector(h4501_handle, h4501_tvb, actx->pinfo, tree);
@@ -4942,7 +4942,7 @@ dissect_h225_H245Control_item(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *act
   tvbuff_t *h245_tvb = NULL;
 
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, &h245_tvb);
+                                       NO_BOUND, NO_BOUND, false, &h245_tvb);
 
   next_tvb_add_handle(h245_list, h245_tvb, (h225_h245_in_tree)?tree:NULL, h245dg_handle);
 
@@ -4997,7 +4997,7 @@ dissect_h225_T_messageContent_item(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t
   tvbuff_t *next_tvb = NULL;
 
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, &next_tvb);
+                                       NO_BOUND, NO_BOUND, false, &next_tvb);
 
   next_tvb_add_handle(tp_list, next_tvb, (h225_tp_in_tree)?tree:NULL, tp_handle);
 
@@ -5040,7 +5040,7 @@ dissect_h225_T_tunnelledSignallingMessage(tvbuff_t *tvb _U_, int offset _U_, asn
 static int
 dissect_h225_OCTET_STRING(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, NULL);
+                                       NO_BOUND, NO_BOUND, false, NULL);
 
   return offset;
 }
@@ -5090,7 +5090,7 @@ dissect_h225_H323_UU_PDU(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_
 static int
 dissect_h225_OCTET_STRING_SIZE_1_131(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       1, 131, FALSE, NULL);
+                                       1, 131, false, NULL);
 
   return offset;
 }
@@ -5180,7 +5180,7 @@ dissect_h225_SEQUENCE_OF_TransportAddress(tvbuff_t *tvb _U_, int offset _U_, asn
 static int
 dissect_h225_INTEGER_0_127(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            0U, 127U, NULL, FALSE);
+                                                            0U, 127U, NULL, false);
 
   return offset;
 }
@@ -5333,7 +5333,7 @@ dissect_h225_RequestSeqNum(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
   if (h225_pi != NULL) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            1U, 65535U, &(h225_pi->requestSeqNum), FALSE);
+                                                            1U, 65535U, &(h225_pi->requestSeqNum), false);
 
   }
   return offset;
@@ -5344,7 +5344,7 @@ dissect_h225_RequestSeqNum(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _
 int
 dissect_h225_TimeToLive(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            1U, 4294967295U, NULL, FALSE);
+                                                            1U, 4294967295U, NULL, false);
 
   return offset;
 }
@@ -5354,7 +5354,7 @@ dissect_h225_TimeToLive(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_,
 static int
 dissect_h225_H248PackagesDescriptor(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       NO_BOUND, NO_BOUND, FALSE, NULL);
+                                       NO_BOUND, NO_BOUND, false, NULL);
 
   return offset;
 }
@@ -5438,7 +5438,7 @@ dissect_h225_IntegrityMechanism(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *a
 static int
 dissect_h225_BIT_STRING(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_bit_string(tvb, offset, actx, tree, hf_index,
-                                     NO_BOUND, NO_BOUND, FALSE, NULL, 0, NULL, NULL);
+                                     NO_BOUND, NO_BOUND, false, NULL, 0, NULL, NULL);
 
   return offset;
 }
@@ -5587,7 +5587,7 @@ dissect_h225_RasUsageInformation(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
 static int
 dissect_h225_OCTET_STRING_SIZE_2_32(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_octet_string(tvb, offset, actx, tree, hf_index,
-                                       2, 32, FALSE, NULL);
+                                       2, 32, false, NULL);
 
   return offset;
 }
@@ -5666,7 +5666,7 @@ dissect_h225_CallCreditCapability(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 static int
 dissect_h225_PrintableString(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_PrintableString(tvb, offset, actx, tree, hf_index,
-                                          NO_BOUND, NO_BOUND, FALSE,
+                                          NO_BOUND, NO_BOUND, false,
                                           NULL);
 
   return offset;
@@ -5677,7 +5677,7 @@ dissect_h225_PrintableString(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx
 static int
 dissect_h225_INTEGER_1_255(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            1U, 255U, NULL, FALSE);
+                                                            1U, 255U, NULL, false);
 
   return offset;
 }
@@ -5879,7 +5879,7 @@ static const per_choice_t GatekeeperRejectReason_choice[] = {
 
 static int
 dissect_h225_GatekeeperRejectReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -5953,7 +5953,7 @@ static int
 dissect_h225_SEQUENCE_SIZE_1_256_OF_QOSCapability(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_sequence_of(tvb, offset, actx, tree, hf_index,
                                                   ett_h225_SEQUENCE_SIZE_1_256_OF_QOSCapability, SEQUENCE_SIZE_1_256_OF_QOSCapability_sequence_of,
-                                                  1, 256, FALSE);
+                                                  1, 256, false);
 
   return offset;
 }
@@ -6039,7 +6039,7 @@ dissect_h225_RegistrationRequest(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *
 static int
 dissect_h225_INTEGER_1_65535(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   offset = dissect_per_constrained_integer(tvb, offset, actx, tree, hf_index,
-                                                            1U, 65535U, NULL, FALSE);
+                                                            1U, 65535U, NULL, false);
 
   return offset;
 }
@@ -6183,7 +6183,7 @@ static const per_choice_t RegistrationRejectReason_choice[] = {
 
 static int
 dissect_h225_RegistrationRejectReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -6248,7 +6248,7 @@ static const per_choice_t UnregRequestReason_choice[] = {
 
 static int
 dissect_h225_UnregRequestReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -6335,7 +6335,7 @@ static const per_choice_t UnregRejectReason_choice[] = {
 
 static int
 dissect_h225_UnregRejectReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -6401,7 +6401,7 @@ dissect_h225_DestinationInfo_item(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
 
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
   if (h225_pi != NULL) {
-    h225_pi->is_destinationInfo = TRUE;
+    h225_pi->is_destinationInfo = true;
   }
   offset = dissect_h225_AliasAddress(tvb, offset, actx, tree, hf_index);
 
@@ -6607,7 +6607,7 @@ static const per_choice_t AdmissionRejectReason_choice[] = {
 
 static int
 dissect_h225_AdmissionRejectReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -6741,7 +6741,7 @@ static const per_choice_t BandRejectReason_choice[] = {
 
 static int
 dissect_h225_BandRejectReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -6795,7 +6795,7 @@ static const per_choice_t DisengageReason_choice[] = {
 
 static int
 dissect_h225_DisengageReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -6884,7 +6884,7 @@ static const per_choice_t DisengageRejectReason_choice[] = {
 
 static int
 dissect_h225_DisengageRejectReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -7032,7 +7032,7 @@ static const per_choice_t LocationRejectReason_choice[] = {
 
 static int
 dissect_h225_LocationRejectReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -7405,7 +7405,7 @@ static const per_choice_t InfoRequestNakReason_choice[] = {
 
 static int
 dissect_h225_InfoRequestNakReason(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  gint32 value;
+  int32_t value;
   h225_packet_info* h225_pi;
   h225_pi = (h225_packet_info*)p_get_proto_data(actx->pinfo->pool, actx->pinfo, proto_h225, 0);
 
@@ -7618,7 +7618,7 @@ static const per_choice_t RasMessage_choice[] = {
 
 int
 dissect_h225_RasMessage(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-    gint32 rasmessage_value;
+    int32_t rasmessage_value;
     h225_packet_info* h225_pi;
 
   call_id_guid = NULL;
@@ -7645,7 +7645,7 @@ dissect_h225_RasMessage(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_,
 static int dissect_H323_UserInformation_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, TRUE, pinfo);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, true, pinfo);
   offset = dissect_h225_H323_UserInformation(tvb, offset, &asn1_ctx, tree, hf_h225_H323_UserInformation_PDU);
   offset += 7; offset >>= 3;
   return offset;
@@ -7653,7 +7653,7 @@ static int dissect_H323_UserInformation_PDU(tvbuff_t *tvb _U_, packet_info *pinf
 int dissect_h225_ExtendedAliasAddress_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, TRUE, pinfo);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, true, pinfo);
   offset = dissect_h225_ExtendedAliasAddress(tvb, offset, &asn1_ctx, tree, hf_h225_h225_ExtendedAliasAddress_PDU);
   offset += 7; offset >>= 3;
   return offset;
@@ -7661,7 +7661,7 @@ int dissect_h225_ExtendedAliasAddress_PDU(tvbuff_t *tvb _U_, packet_info *pinfo 
 static int dissect_RasMessage_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   int offset = 0;
   asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, TRUE, pinfo);
+  asn1_ctx_init(&asn1_ctx, ASN1_ENC_PER, true, pinfo);
   offset = dissect_h225_RasMessage(tvb, offset, &asn1_ctx, tree, hf_h225_RasMessage_PDU);
   offset += 7; offset >>= 3;
   return offset;
@@ -7676,7 +7676,7 @@ void proto_reg_handoff_h225(void);
  */
 
 /* compare 2 keys */
-static gint h225ras_call_equal(gconstpointer k1, gconstpointer k2)
+static int h225ras_call_equal(const void *k1, const void *k2)
 {
   const h225ras_call_info_key* key1 = (const h225ras_call_info_key*) k1;
   const h225ras_call_info_key* key2 = (const h225ras_call_info_key*) k2;
@@ -7686,7 +7686,7 @@ static gint h225ras_call_equal(gconstpointer k1, gconstpointer k2)
 }
 
 /* calculate a hash key */
-static guint h225ras_call_hash(gconstpointer k)
+static unsigned h225ras_call_hash(const void *k)
 {
   const h225ras_call_info_key* key = (const h225ras_call_info_key*) k;
 
@@ -7719,7 +7719,7 @@ h225ras_call_t * new_h225ras_call(h225ras_call_info_key *h225ras_call_key, packe
   h225ras_call->req_num = pinfo->num;
   h225ras_call->rsp_num = 0;
   h225ras_call->requestSeqNum = h225ras_call_key->reqSeqNum;
-  h225ras_call->responded = FALSE;
+  h225ras_call->responded = false;
   h225ras_call->next_call = NULL;
   h225ras_call->req_time=pinfo->abs_ts;
   h225ras_call->guid=*guid;
@@ -7742,7 +7742,7 @@ h225ras_call_t * append_h225ras_call(h225ras_call_t *prev_call, packet_info *pin
   h225ras_call->req_num = pinfo->num;
   h225ras_call->rsp_num = 0;
   h225ras_call->requestSeqNum = prev_call->requestSeqNum;
-  h225ras_call->responded = FALSE;
+  h225ras_call->responded = false;
   h225ras_call->next_call = NULL;
   h225ras_call->req_time=pinfo->abs_ts;
   h225ras_call->guid=*guid;
@@ -7800,7 +7800,7 @@ static int
 dissect_h225_h225_RasMessage(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_){
   proto_item *it;
   proto_tree *tr;
-  guint32 offset=0;
+  uint32_t offset=0;
   h225_packet_info* h225_pi;
 
   /* Init struct for collecting h225_packet_info */
@@ -7856,29 +7856,29 @@ typedef enum
 } h225_stat_columns;
 
 typedef struct _h225_table_item {
-  guint count;     /* Message count */
-  guint table_idx; /* stat_table index */
+  unsigned count;     /* Message count */
+  unsigned table_idx; /* stat_table index */
 } h225_table_item_t;
 
 static stat_tap_table_item h225_stat_fields[] = {{TABLE_ITEM_STRING, TAP_ALIGN_LEFT, "Message Type or Reason", "%-25s"}, {TABLE_ITEM_UINT, TAP_ALIGN_RIGHT, "Count", "%d"}};
 
-static guint ras_msg_idx[RAS_MSG_TYPES];
-static guint cs_msg_idx[CS_MSG_TYPES];
+static unsigned ras_msg_idx[RAS_MSG_TYPES];
+static unsigned cs_msg_idx[CS_MSG_TYPES];
 
-static guint grj_reason_idx[GRJ_REASONS];
-static guint rrj_reason_idx[RRJ_REASONS];
-static guint urq_reason_idx[URQ_REASONS];
-static guint urj_reason_idx[URJ_REASONS];
-static guint arj_reason_idx[ARJ_REASONS];
-static guint brj_reason_idx[BRJ_REASONS];
-static guint drq_reason_idx[DRQ_REASONS];
-static guint drj_reason_idx[DRJ_REASONS];
-static guint lrj_reason_idx[LRJ_REASONS];
-static guint irqnak_reason_idx[IRQNAK_REASONS];
-static guint rel_cmp_reason_idx[REL_CMP_REASONS];
-static guint facility_reason_idx[FACILITY_REASONS];
+static unsigned grj_reason_idx[GRJ_REASONS];
+static unsigned rrj_reason_idx[RRJ_REASONS];
+static unsigned urq_reason_idx[URQ_REASONS];
+static unsigned urj_reason_idx[URJ_REASONS];
+static unsigned arj_reason_idx[ARJ_REASONS];
+static unsigned brj_reason_idx[BRJ_REASONS];
+static unsigned drq_reason_idx[DRQ_REASONS];
+static unsigned drj_reason_idx[DRJ_REASONS];
+static unsigned lrj_reason_idx[LRJ_REASONS];
+static unsigned irqnak_reason_idx[IRQNAK_REASONS];
+static unsigned rel_cmp_reason_idx[REL_CMP_REASONS];
+static unsigned facility_reason_idx[FACILITY_REASONS];
 
-static guint other_idx;
+static unsigned other_idx;
 
 static void h225_stat_init(stat_tap_table_ui* new_stat)
 {
@@ -8217,7 +8217,7 @@ h225_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *edt _U_,
 static void
 h225_stat_reset(stat_tap_table* table)
 {
-  guint element;
+  unsigned element;
   stat_tap_table_item_type* item_data;
 
   for (element = 0; element < table->num_elements; element++)
@@ -11352,7 +11352,7 @@ void proto_register_h225(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_h225,
     &ett_h225_H323_UserInformation,
     &ett_h225_T_user_data,
@@ -11596,7 +11596,7 @@ void proto_register_h225(void) {
   };
 
   static tap_param h225_stat_params[] = {
-    { PARAM_FILTER, "filter", "Filter", NULL, TRUE }
+    { PARAM_FILTER, "filter", "Filter", NULL, true }
   };
 
   static stat_tap_table_ui h225_stat_table = {
@@ -11680,9 +11680,9 @@ void proto_register_h225(void) {
 void
 proto_reg_handoff_h225(void)
 {
-  static gboolean h225_prefs_initialized = FALSE;
+  static bool h225_prefs_initialized = false;
   static dissector_handle_t q931_tpkt_handle;
-  static guint saved_h225_tls_port;
+  static unsigned saved_h225_tls_port;
 
   if (!h225_prefs_initialized) {
     dissector_add_uint_range_with_preference("udp.port", UDP_PORT_RAS_RANGE, h225ras_handle);
@@ -11691,7 +11691,7 @@ proto_reg_handoff_h225(void)
     h245dg_handle = find_dissector("h245dg");
     h4501_handle = find_dissector_add_dependency("h4501", proto_h225);
     data_handle = find_dissector("data");
-    h225_prefs_initialized = TRUE;
+    h225_prefs_initialized = true;
     q931_tpkt_handle = find_dissector("q931.tpkt");
   } else {
     ssl_dissector_delete(saved_h225_tls_port, q931_tpkt_handle);
@@ -11748,7 +11748,7 @@ static void ras_call_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
   h225ras_call_info_key h225ras_call_key;
   h225ras_call_t *h225ras_call = NULL;
   nstime_t delta;
-  guint msg_category;
+  unsigned msg_category;
 
   if(pi->msg_type == H225_RAS && pi->msg_tag < 21) {
     /* make RAS request/response matching only for tags from 0 to 20 for now */
@@ -11794,7 +11794,7 @@ static void ras_call_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
             } else {
               /* No, so it's a duplicate request.
                  Mark it as such. */
-              pi->is_duplicate = TRUE;
+              pi->is_duplicate = true;
               hidden_item = proto_tree_add_uint(tree, hf_h225_ras_dup, tvb, 0,0, pi->requestSeqNum);
               proto_item_set_hidden(hidden_item);
             }
@@ -11864,7 +11864,7 @@ static void ras_call_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
             if (h225ras_call->rsp_num != pinfo->num) {
               /* No, so it's a duplicate response.
                  Mark it as such. */
-              pi->is_duplicate = TRUE;
+              pi->is_duplicate = true;
               hidden_item = proto_tree_add_uint(tree, hf_h225_ras_dup, tvb, 0,0, pi->requestSeqNum);
               proto_item_set_hidden(hidden_item);
             }
@@ -11872,8 +11872,8 @@ static void ras_call_matching(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 
           if(h225ras_call->req_num != 0){
             proto_item *ti;
-            h225ras_call->responded = TRUE;
-            pi->request_available = TRUE;
+            h225ras_call->responded = true;
+            pi->request_available = true;
 
             /* Indicate the frame to which this is a reply. */
             ti = proto_tree_add_uint_format(tree, hf_h225_ras_req_frame, tvb, 0, 0, h225ras_call->req_num,
