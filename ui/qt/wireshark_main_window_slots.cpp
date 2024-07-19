@@ -19,7 +19,7 @@
 
 /*
  * The generated Ui_WiresharkMainWindow::setupUi() can grow larger than our configured limit,
- * so turn off -Wframe-larger-than= for ui_main_window.h.
+ * so turn off -Wframe-larger-than= for ui_wireshark_main_window.h.
  */
 DIAG_OFF(frame-larger-than=)
 #include <ui_wireshark_main_window.h>
@@ -1714,8 +1714,7 @@ void WiresharkMainWindow::addStatsPluginsToMenu() {
 
             QString stat_name = cfg_name_parts.takeLast().trimmed();
             if (!cfg_name_parts.isEmpty()) {
-                QString menu_name = cfg_name_parts.join("/").trimmed();
-                parent_menu = findOrAddMenu(parent_menu, menu_name);
+                parent_menu = findOrAddMenu(parent_menu, cfg_name_parts);
             }
 
             stats_tree_action = new QAction(stat_name, this);

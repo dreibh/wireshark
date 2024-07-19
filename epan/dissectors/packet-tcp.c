@@ -2596,8 +2596,8 @@ finished_fwd:
                         bool is_sacked = false;
                         int i=0;
                         while( !is_sacked && i<tcpd->rev->tcp_analyze_seq_info->num_sack_ranges ) {
-                            is_sacked = ((seq >= tcpd->rev->tcp_analyze_seq_info->sack_left_edge[i+1])
-                                        && (nextseq <= tcpd->rev->tcp_analyze_seq_info->sack_right_edge[i+1]));
+                            is_sacked = ((seq >= tcpd->rev->tcp_analyze_seq_info->sack_left_edge[i])
+                                        && (nextseq <= tcpd->rev->tcp_analyze_seq_info->sack_right_edge[i]));
                             i++;
                         }
 
@@ -2985,8 +2985,8 @@ finished_checking_retransmission_type:
             if(tcpd->rev->tcp_analyze_seq_info->num_sack_ranges > 0) {
                 int i;
                 for(i = 0; i<tcpd->rev->tcp_analyze_seq_info->num_sack_ranges; i++) {
-                    delivered += (tcpd->rev->tcp_analyze_seq_info->sack_right_edge[i+1] -
-                                  tcpd->rev->tcp_analyze_seq_info->sack_left_edge[i+1]);
+                    delivered += (tcpd->rev->tcp_analyze_seq_info->sack_right_edge[i] -
+                                  tcpd->rev->tcp_analyze_seq_info->sack_left_edge[i]);
                 }
                 in_flight -= delivered;
             }
@@ -4604,7 +4604,7 @@ again:
             /* We only enter here if dissect_tcp set can_desegment,
              * which means that these bytes exist. */
             fd->data = tvb_memdup(wmem_file_scope(), tvb, offset, fd->len);
-            wmem_list_insert_sorted(tcpd->fwd->ooo_segments, fd, compare_ooo_segment_item);
+            wmem_list_append_sorted(tcpd->fwd->ooo_segments, fd, compare_ooo_segment_item);
         }
         ipfd_head = NULL;
     } else {
@@ -5635,8 +5635,9 @@ dissect_tcpopt_wscale(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void*
     int offset = 0;
     struct tcp_analysis *tcpd;
 
+    /* find the conversation for this TCP session and its stored data */
     conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0);
-    tcpd=get_tcp_conversation_data(stratconv,pinfo);
+    tcpd=get_tcp_conversation_data_idempotent(stratconv);
 
     wscale_pi = proto_tree_add_item(tree, proto_tcp_option_wscale, tvb, offset, -1, ENC_NA);
     wscale_tree = proto_item_add_subtree(wscale_pi, ett_tcp_option_wscale);
@@ -5694,8 +5695,9 @@ dissect_tcpopt_sack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
      * and SACK handling for the in-flight update
      */
     if(tcp_analyze_seq) {
-        /* find(or create if needed) the conversation for this tcp session */
-        tcpd=get_tcp_conversation_data(NULL,pinfo);
+        /* find the conversation for this TCP session and its stored data */
+        conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0);
+        tcpd=get_tcp_conversation_data_idempotent(stratconv);
 
         if (tcpd) {
             if (tcp_relative_seq) {
@@ -5776,13 +5778,12 @@ dissect_tcpopt_sack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
                                    (tcp_analyze_seq && tcp_relative_seq) ? " (relative)" : "");
         tcp_info_append_uint(pinfo, "SLE", leftedge);
         tcp_info_append_uint(pinfo, "SRE", rightedge);
-        num_sack_ranges++;
 
         /* Store blocks for BiF analysis */
         if (tcp_analyze_seq && tcpd && tcpd->fwd->tcp_analyze_seq_info && tcp_track_bytes_in_flight && num_sack_ranges < MAX_TCP_SACK_RANGES) {
-            tcpd->fwd->tcp_analyze_seq_info->num_sack_ranges = num_sack_ranges;
             tcpd->fwd->tcp_analyze_seq_info->sack_left_edge[num_sack_ranges] = leftedge;
-            tcpd->fwd->tcp_analyze_seq_info->sack_right_edge[num_sack_ranges] = rightedge;
+            tcpd->fwd->tcp_analyze_seq_info->sack_right_edge[num_sack_ranges++] = rightedge;
+            tcpd->fwd->tcp_analyze_seq_info->num_sack_ranges = num_sack_ranges;
         }
 
         /* Update tap info */
@@ -6650,7 +6651,8 @@ dissect_tcpopt_scps(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
     uint8_t     connid;
     int         offset = 0, optlen = tvb_reported_length(tvb);
 
-    tcpd = get_tcp_conversation_data(NULL,pinfo);
+    conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0);
+    tcpd=get_tcp_conversation_data_idempotent(stratconv);
 
     /* check direction and get ua lists */
     direction=cmp_address(&pinfo->src, &pinfo->dst);
@@ -6879,7 +6881,8 @@ dissect_tcpopt_snack(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     if (!tcp_option_len_check(length_item, pinfo, tvb_reported_length(tvb), TCPOLEN_SNACK))
         return tvb_captured_length(tvb);
 
-    tcpd = get_tcp_conversation_data(NULL,pinfo);
+    conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0);
+    tcpd=get_tcp_conversation_data_idempotent(stratconv);
 
     /* The SNACK option reports missing data with a granularity of segments. */
     proto_tree_add_item_ret_uint(field_tree, hf_tcp_option_snack_offset,

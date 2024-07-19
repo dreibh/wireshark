@@ -108,7 +108,7 @@ static const value_string DEGRADATION_FACTOR_INDICATOR[] = {
 };
 
 // table for SBAS L1 CRC24Q computation
-static const guint32 CRC24Q_TBL[] = {
+static const uint32_t CRC24Q_TBL[] = {
     0x000000, 0x864CFB, 0x8AD50D, 0x0C99F6, 0x93E6E1, 0x15AA1A, 0x1933EC, 0x9F7F17,
     0xA18139, 0x27CDC2, 0x2B5434, 0xAD18CF, 0x3267D8, 0xB42B23, 0xB8B2D5, 0x3EFE2E,
     0xC54E89, 0x430272, 0x4F9B84, 0xC9D77F, 0x56A868, 0xD0E493, 0xDC7D65, 0x5A319E,
@@ -464,6 +464,18 @@ static int hf_sbas_l1_mt24_v0_delta_z_2;
 static int hf_sbas_l1_mt24_v0_delta_a_2_f0;
 static int hf_sbas_l1_mt24_v0_iodp;
 static int hf_sbas_l1_mt24_v0_spare;
+static int hf_sbas_l1_mt24_v1_prn_mask_nr;
+static int hf_sbas_l1_mt24_v1_iod;
+static int hf_sbas_l1_mt24_v1_delta_x;
+static int hf_sbas_l1_mt24_v1_delta_y;
+static int hf_sbas_l1_mt24_v1_delta_z;
+static int hf_sbas_l1_mt24_v1_delta_a_f0;
+static int hf_sbas_l1_mt24_v1_delta_x_vel;
+static int hf_sbas_l1_mt24_v1_delta_y_vel;
+static int hf_sbas_l1_mt24_v1_delta_z_vel;
+static int hf_sbas_l1_mt24_v1_delta_a_f1;
+static int hf_sbas_l1_mt24_v1_t_lt;
+static int hf_sbas_l1_mt24_v1_iodp;
 
 // see ICAO Annex 10, Vol I, Table B-48
 static int hf_sbas_l1_mt25;
@@ -592,17 +604,17 @@ static int ett_sbas_l1_mt63;
 
 // compute the CRC24Q checksum for an SBAS L1 nav msg
 // see ICAO Annex 10, Vol I, Appendix B, Section 3.5.3.5
-static guint32 sbas_crc24q(const guint8 *data) {
-    guint32 crc = 0;
+static uint32_t sbas_crc24q(const uint8_t *data) {
+    uint32_t crc = 0;
 
     // source byte and bit level index
-    gint s8 = 0, s1 = 7;
+    int s8 = 0, s1 = 7;
 
-    guint8 s,d = 0;
+    uint8_t s,d = 0;
 
     // At byte level, nav msg needs to be right aligned.
     // So, pretend that 6 bits (with value zero) have been processed.
-    guint8 d1 = 6;
+    uint8_t d1 = 6;
 
     // process 226 bits nav msg (= 28 bytes + 2 bits)
     while ((s8 < 28) || (s8 == 28 && s1 > 5)) {
@@ -638,38 +650,38 @@ static guint32 sbas_crc24q(const guint8 *data) {
 }
 
 /* Format GEO position (X or Y axis) with 2600m resolution */
-static void fmt_geo_xy_position(gchar *label, gint32 c) {
+static void fmt_geo_xy_position(char *label, int32_t c) {
     snprintf(label, ITEM_LABEL_LENGTH, "%d m", c * 2600);
 }
 
 /* Format GEO position (Z axis) with 26000m resolution */
-static void fmt_geo_z_position(gchar *label, gint32 c) {
+static void fmt_geo_z_position(char *label, int32_t c) {
     snprintf(label, ITEM_LABEL_LENGTH, "%d m", c * 26000);
 }
 
 /* Format GEO velocity (X or Y axis) with 10m/s resolution */
-static void fmt_geo_xy_velocity(gchar *label, gint32 c) {
+static void fmt_geo_xy_velocity(char *label, int32_t c) {
     snprintf(label, ITEM_LABEL_LENGTH, "%d m/s", c * 10);
 }
 
 /* Format GEO velocity (Z axis) with 60m/s resolution */
-static void fmt_geo_z_velocity(gchar *label, gint32 c) {
+static void fmt_geo_z_velocity(char *label, int32_t c) {
     snprintf(label, ITEM_LABEL_LENGTH, "%d m/s", c * 60);
 }
 
 /* Format time of almanac with 64s resolution */
-static void fmt_time_of_almanac(gchar *label, guint32 c) {
+static void fmt_time_of_almanac(char *label, uint32_t c) {
     c = c * 64;
     snprintf(label, ITEM_LABEL_LENGTH, "%us (%02u:%02u:%02u)", c, c / 3600, (c / 60) % 60, c % 60);
 }
 
 /* Format clock corrections */
-static void fmt_clock_correction(gchar *label, gint32 c) {
+static void fmt_clock_correction(char *label, int32_t c) {
     snprintf(label, ITEM_LABEL_LENGTH, "%d * 2^-31 s", c);
 }
 
 /* Format corrections with 0.125m resolution */
-static void fmt_correction_125m(gchar *label, gint32 c) {
+static void fmt_correction_125m(char *label, int32_t c) {
     c = c * 125;
     if (c >= 0) {
         snprintf(label, ITEM_LABEL_LENGTH, "%d.%03dm", c / 1000, c % 1000);
@@ -680,23 +692,23 @@ static void fmt_correction_125m(gchar *label, gint32 c) {
 }
 
 /* Format velocity corrections with 2^-11 m/s resolution */
-static void fmt_velo_correction(gchar *label, gint32 c) {
-    gint64 temp = c * INT64_C(48828125);
+static void fmt_velo_correction(char *label, int32_t c) {
+    int64_t temp = c * INT64_C(48828125);
     if (c >= 0) {
-        snprintf(label, ITEM_LABEL_LENGTH, " %" G_GINT64_FORMAT ".%011" G_GINT64_FORMAT "m/s", temp / 100000000000, temp % 100000000000);
+        snprintf(label, ITEM_LABEL_LENGTH, " %" PRId64 ".%011" PRId64 "m/s", temp / 100000000000, temp % 100000000000);
     }
     else {
-        snprintf(label, ITEM_LABEL_LENGTH, "-%" G_GINT64_FORMAT ".%011" G_GINT64_FORMAT "m/s", -temp / 100000000000, -temp % 100000000000);
+        snprintf(label, ITEM_LABEL_LENGTH, "-%" PRId64 ".%011" PRId64 "m/s", -temp / 100000000000, -temp % 100000000000);
     }
 }
 
 /* Format clock rate corrections with 2^-39 s/s resolution */
-static void fmt_clk_rate_correction(gchar *label, gint32 c) {
+static void fmt_clk_rate_correction(char *label, int32_t c) {
     snprintf(label, ITEM_LABEL_LENGTH, "%d * 2^-39s/s", c);
 }
 
 /* Format time of applicability with 16s resolution */
-static void fmt_time_of_applicability(gchar *label, guint32 c) {
+static void fmt_time_of_applicability(char *label, uint32_t c) {
     c = c * 16;
     snprintf(label, ITEM_LABEL_LENGTH, "%us (%02u:%02u:%02u)", c, c / 3600, (c / 60) % 60, c % 60);
 }
@@ -704,7 +716,7 @@ static void fmt_time_of_applicability(gchar *label, guint32 c) {
 /* Dissect SBAS L1 message */
 static int dissect_sbas_l1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
     tvbuff_t *next_tvb;
-    guint32 preamble, mt, cmp_crc;
+    uint32_t preamble, mt, cmp_crc;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "SBAS L1");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -734,7 +746,7 @@ static int dissect_sbas_l1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     }
 
     // checksum
-    cmp_crc = sbas_crc24q((guint8 *)tvb_memdup(pinfo->pool, tvb, 0, 29));
+    cmp_crc = sbas_crc24q((uint8_t *)tvb_memdup(pinfo->pool, tvb, 0, 29));
     proto_tree_add_checksum(sbas_l1_tree, tvb, 28, hf_sbas_l1_chksum, -1,
             &ei_sbas_l1_crc, NULL, cmp_crc, ENC_BIG_ENDIAN, PROTO_CHECKSUM_VERIFY);
 
@@ -1080,7 +1092,7 @@ static int dissect_sbas_l1_mt7(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 
 /* Dissect SBAS L1 MT 17 */
 static int dissect_sbas_l1_mt17(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
-    guint8 i;
+    uint8_t i;
     tvbuff_t *prn_tvb;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "SBAS L1 MT17");
@@ -1095,7 +1107,7 @@ static int dissect_sbas_l1_mt17(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
         if (prn_tvb) {
             add_new_data_source(pinfo, prn_tvb, "PRN data");
 
-            guint16 prn = (tvb_get_guint16(prn_tvb, 0, ENC_BIG_ENDIAN) >> 6) & 0xff;
+            uint16_t prn = (tvb_get_uint16(prn_tvb, 0, ENC_BIG_ENDIAN) >> 6) & 0xff;
 
             proto_tree *prn_tree = proto_tree_add_subtree_format(sbas_l1_mt17_tree, tvb, (6 + i * 67) / 8, (i == 0) ? 10 : 9, ett_sbas_l1_mt17_prn_data[i], NULL, "PRN %u", prn);
 
@@ -1120,7 +1132,7 @@ static int dissect_sbas_l1_mt17(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
 /* Dissect SBAS L1 MT 24 */
 static int dissect_sbas_l1_mt24(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
-    guint32 velocity_code;
+    uint32_t velocity_code;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "SBAS L1 MT24");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -1164,13 +1176,27 @@ static int dissect_sbas_l1_mt24(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
         proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v0_iodp,          tvb, 26, 2, ENC_BIG_ENDIAN);
         proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v0_spare,         tvb, 27, 1, ENC_NA);
     }
+    else {
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_prn_mask_nr, tvb, 14, 1, ENC_NA);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_iod,         tvb, 14, 2, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_delta_x,     tvb, 15, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_delta_y,     tvb, 17, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_delta_z,     tvb, 18, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_delta_a_f0,  tvb, 20, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_delta_x_vel, tvb, 21, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_delta_y_vel, tvb, 22, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_delta_z_vel, tvb, 23, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_delta_a_f1,  tvb, 24, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_t_lt,        tvb, 25, 2, ENC_BIG_ENDIAN);
+        proto_tree_add_item(sbas_l1_mt24_tree, hf_sbas_l1_mt24_v1_iodp,        tvb, 27, 1, ENC_NA);
+    }
 
     return tvb_captured_length(tvb);
 }
 
 /* Dissect SBAS L1 MT 25 */
 static int dissect_sbas_l1_mt25(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
-    guint32 velocity_code;
+    uint32_t velocity_code;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "SBAS L1 MT25");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -1311,14 +1337,14 @@ static int dissect_sbas_l1_mt26(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     proto_item *ti = proto_tree_add_item(tree, hf_sbas_l1_mt26, tvb, 0, 32, ENC_NA);
     proto_tree *sbas_l1_mt26_tree = proto_item_add_subtree(ti, ett_sbas_l1_mt26);
 
-    guint32 igp_band_id;
+    uint32_t igp_band_id;
     proto_item* pi_igp_band_id = proto_tree_add_item_ret_uint(sbas_l1_mt26_tree, hf_sbas_l1_mt26_igp_band_id,
             tvb, 0, 2, ENC_BIG_ENDIAN, &igp_band_id);
     if (igp_band_id > 10) {
         expert_add_info_format(pinfo, pi_igp_band_id, &ei_sbas_l1_mt26_igp_band_id, "Invalid IGP Band Identifier");
     }
 
-    guint32 igp_block_id;
+    uint32_t igp_block_id;
     proto_item* pi_igp_block_id = proto_tree_add_item_ret_uint(sbas_l1_mt26_tree, hf_sbas_l1_mt26_igp_block_id,
             tvb, 1, 1, ENC_NA, &igp_block_id);
     if (igp_block_id > 13) {
@@ -1688,6 +1714,18 @@ void proto_register_sbas_l1(void) {
         {&hf_sbas_l1_mt24_v0_delta_a_2_f0,  {"da_i_f0",                                  "sbas_l1.mt24.v0.da_f0_2",       FT_INT16,  BASE_CUSTOM, CF_FUNC(&fmt_clock_correction), 0x07fe, NULL, HFILL}},
         {&hf_sbas_l1_mt24_v0_iodp,          {"Issue of Data PRN (IODP)",                 "sbas_l1.mt24.v0.iodp",          FT_UINT16, BASE_DEC,    NULL,                           0x0180,   NULL, HFILL}},
         {&hf_sbas_l1_mt24_v0_spare,         {"Spare",                                    "sbas_l1.mt24.v0.spare",         FT_UINT8,  BASE_DEC,    NULL,                           0x40,   NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_prn_mask_nr,   {"PRN Mask Number",                          "sbas_l1.mt24.v1.prn_mask_nr",   FT_UINT8,  BASE_DEC,    NULL,                           0x7e, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_iod,           {"Issue of Data (IOD_i)",                    "sbas_l1.mt24.v1.iod",           FT_UINT16, BASE_DEC,    NULL,                           0x01fe, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_delta_x,       {"dx_i",                                     "sbas_l1.mt24.v1.dx",            FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_correction_125m),      0x01ffc000, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_delta_y,       {"dy_i",                                     "sbas_l1.mt24.v1.dy",            FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_correction_125m),      0x3ff80000, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_delta_z,       {"dz_i",                                     "sbas_l1.mt24.v1.dz",            FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_correction_125m),      0x07ff0000, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_delta_a_f0,    {"da_i_f0",                                  "sbas_l1.mt24.v1.da_f0",         FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_clock_correction),     0xffe00000, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_delta_x_vel,   {"dx_vel_i",                                 "sbas_l1.mt24.v1.dx_vel",        FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_velo_correction),      0x1fe00000, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_delta_y_vel,   {"dy_vel_i",                                 "sbas_l1.mt24.v1.dy_vel",        FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_velo_correction),      0x1fe00000, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_delta_z_vel,   {"dz_vel_i",                                 "sbas_l1.mt24.v1.dz_vel",        FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_velo_correction),      0x1fe00000, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_delta_a_f1,    {"da_i_f1",                                  "sbas_l1.mt24.v1.da_f1",         FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_clk_rate_correction),  0x1fe00000, NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_t_lt,          {"t_i_lt",                                   "sbas_l1.mt24.v1.t_lt",          FT_UINT16, BASE_CUSTOM, CF_FUNC(&fmt_time_of_applicability),0x1fff,     NULL, HFILL}},
+        {&hf_sbas_l1_mt24_v1_iodp,          {"Issue of Data PRN (IODP)",                 "sbas_l1.mt24.v1.iodp",          FT_UINT8,  BASE_DEC,    NULL,                               0xc0,       NULL, HFILL}},
 
         // MT25
         {&hf_sbas_l1_mt25,                       {"MT25",                     "sbas_l1.mt25",                     FT_NONE,   BASE_NONE,   NULL,                               0x0,        NULL, HFILL}},
@@ -1800,7 +1838,7 @@ void proto_register_sbas_l1(void) {
         {&ei_sbas_l1_mt26_igp_block_id, {"sbas_l1.mt26.illegal_igp_block_id", PI_PROTOCOL, PI_WARN, "Illegal IGP Block Identifier", EXPFILL}},
     };
 
-    static gint *ett[] = {
+    static int *ett[] = {
         &ett_sbas_l1,
         &ett_sbas_l1_mt0,
         &ett_sbas_l1_mt1,

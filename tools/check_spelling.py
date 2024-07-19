@@ -12,8 +12,9 @@ import subprocess
 import argparse
 import signal
 import glob
-from collections import Counter
 
+from spellchecker import SpellChecker
+from collections import Counter
 from html.parser import HTMLParser
 import urllib.request
 
@@ -51,7 +52,6 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 # Create spellchecker, and augment with some Wireshark words.
-from spellchecker import SpellChecker
 # Set up our dict with words from text file.
 spell = SpellChecker()
 spell.word_frequency.load_text_file('./tools/wireshark_words.txt')
@@ -280,7 +280,7 @@ def removeContractions(code_string):
 def removeComments(code_string):
     code_string = re.sub(re.compile(r"/\*.*?\*/", re.DOTALL), "" , code_string) # C-style comment
     # Avoid matching // where it is allowed, e.g.,  https://www... or file:///...
-    code_string = re.sub(re.compile(r"(?<!:)(?<!/)(?<!\")(?<!"")(?<!\"\s\s)(?<!file:/)(?<!\,\s)//.*?\n" ) ,"" , code_string)             # C++-style comment
+    code_string = re.sub(re.compile(r"(?<!:)(?<!/)(?<!\")(?<!\")(?<!\"\s\s)(?<!file:/)(?<!\,\s)//.*?\n" ) ,"" , code_string)             # C++-style comment
     return code_string
 
 def getCommentWords(code_string):
@@ -499,7 +499,7 @@ if not args.no_wikipedia:
         parser.feed(content)
         content = parser.content.strip()
 
-        wiki_db = dict(l.lower().split('->', maxsplit=1) for l in content.splitlines())
+        wiki_db = dict(line.lower().split('->', maxsplit=1) for line in content.splitlines())
         del wiki_db['cmo']      # All false positives.
         del wiki_db['ect']      # Too many false positives.
         del wiki_db['thru']     # We'll let that one thru. ;-)
@@ -514,11 +514,11 @@ if not args.no_wikipedia:
                 spell.word_frequency.remove_words([word])
                 #print('Removed', word)
                 removed += 1
-            except:
+            except Exception:
                 pass
 
         print('Removed', removed, 'known bad words')
-    except:
+    except Exception:
         print('Failed to fetch and/or parse Wikipedia mispellings!')
 
 
@@ -555,7 +555,7 @@ if args.open:
     # Filter files.
     files_staged = list(filter(lambda f : isAppropriateFile(f) and not isGeneratedFile(f), files_staged))
     for f in files_staged:
-        if not f in files:
+        if f not in files:
             files.append(f)
 
 if args.glob:

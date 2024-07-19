@@ -116,7 +116,7 @@ static int hf_btl2cap_continuation_to;
 static int hf_btl2cap_reassembled_in;
 static int hf_btl2cap_min_interval;
 static int hf_btl2cap_max_interval;
-static int hf_btl2cap_slave_latency;
+static int hf_btl2cap_peripheral_latency;
 static int hf_btl2cap_timeout_multiplier;
 static int hf_btl2cap_conn_param_result;
 static int hf_btl2cap_credits;
@@ -1405,7 +1405,7 @@ dissect_movechanrequest(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tre
     proto_tree_add_item(tree, hf_btl2cap_icid, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset += 2;
 
-    ctrl_id = tvb_get_guint8(tvb, offset);
+    ctrl_id = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(tree, hf_btl2cap_dcontroller, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
 
@@ -1428,8 +1428,8 @@ dissect_options(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *t
     }
 
     while (length > 0) {
-        option_type   = tvb_get_guint8(tvb, offset);
-        option_length = tvb_get_guint8(tvb, offset + 1);
+        option_type   = tvb_get_uint8(tvb, offset);
+        option_length = tvb_get_uint8(tvb, offset + 1);
 
         ti_option = proto_tree_add_none_format(tree,
                 hf_btl2cap_option, tvb,
@@ -1484,8 +1484,8 @@ dissect_options(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *t
             case 0x04: /* Retransmission and Flow Control*/
                 if (config_data)
                 {
-                    config_data->mode     = tvb_get_guint8(tvb, offset);
-                    config_data->txwindow = tvb_get_guint8(tvb, offset + 1);
+                    config_data->mode     = tvb_get_uint8(tvb, offset);
+                    config_data->txwindow = tvb_get_uint8(tvb, offset + 1);
                 }
                 proto_tree_add_item(ti_option_subtree, hf_btl2cap_option_retransmissionmode, tvb, offset, 1, ENC_LITTLE_ENDIAN);
                 offset += 1;
@@ -2017,7 +2017,7 @@ static int
 dissect_connparamrequest(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
 {
     proto_item *item;
-    uint16_t max_interval, slave_latency;
+    uint16_t max_interval, peripheral_latency;
 
     item = proto_tree_add_item(tree, hf_btl2cap_min_interval, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     proto_item_append_text(item, " (%g msec)",  tvb_get_letohs(tvb, offset) * 1.25);
@@ -2026,11 +2026,11 @@ dissect_connparamrequest(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tr
     proto_item_append_text(item, " (%g msec)",  tvb_get_letohs(tvb, offset) * 1.25);
     max_interval = tvb_get_letohs(tvb, offset);
     offset += 2;
-    item = proto_tree_add_item(tree, hf_btl2cap_slave_latency, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    slave_latency = tvb_get_letohs(tvb, offset);
+    item = proto_tree_add_item(tree, hf_btl2cap_peripheral_latency, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+    peripheral_latency = tvb_get_letohs(tvb, offset);
 
-    if(slave_latency >= 500 || max_interval == 0 ||
-       slave_latency > 10.0 * tvb_get_letohs(tvb, offset + 2) / (max_interval *1.25))
+    if(peripheral_latency >= 500 || max_interval == 0 ||
+       peripheral_latency > 10.0 * tvb_get_letohs(tvb, offset + 2) / (max_interval *1.25))
         expert_add_info(pinfo, item, &ei_btl2cap_parameter_mismatch);
 
     offset += 2;
@@ -2811,11 +2811,11 @@ dissect_btl2cap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                     "Command: ");
             btl2cap_cmd_tree = proto_item_add_subtree(ti_command, ett_btl2cap_cmd);
 
-            cmd_code = tvb_get_guint8(tvb, offset);
+            cmd_code = tvb_get_uint8(tvb, offset);
             proto_tree_add_item(btl2cap_cmd_tree, hf_btl2cap_cmd_code,   tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset += 1;
 
-            cmd_ident = tvb_get_guint8(tvb, offset);
+            cmd_ident = tvb_get_uint8(tvb, offset);
             proto_tree_add_item(btl2cap_cmd_tree, hf_btl2cap_cmd_ident,  tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset += 1;
 
@@ -3573,8 +3573,8 @@ proto_register_btl2cap(void)
             FT_UINT16, BASE_DEC, NULL, 0,
             NULL, HFILL }
         },
-        { &hf_btl2cap_slave_latency,
-          { "Slave Latency",           "btl2cap.slave_latency",
+        { &hf_btl2cap_peripheral_latency,
+          { "Peripheral Latency",           "btl2cap.peripheral_latency",
             FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_ll_connection_event, 0,
             NULL, HFILL }
         },

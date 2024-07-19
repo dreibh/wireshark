@@ -1034,7 +1034,7 @@ sync_pipe_run_command_actual(char **argv, char **data, char **primary_msg,
     GIOChannel *sync_pipe_read_io;
     ws_process_id fork_child;
     char *wait_msg;
-    char buffer[PIPE_BUF_SIZE+1] = {0};
+    char *buffer = g_malloc(PIPE_BUF_SIZE + 1);
     ssize_t nread;
     char indicator;
     int32_t exec_errno = 0;
@@ -1052,6 +1052,7 @@ sync_pipe_run_command_actual(char **argv, char **data, char **primary_msg,
         *primary_msg = msg;
         *secondary_msg = NULL;
         *data = NULL;
+        g_free(buffer);
         return -1;
     }
 
@@ -1074,6 +1075,7 @@ sync_pipe_run_command_actual(char **argv, char **data, char **primary_msg,
                itself while going down. Even in the rare cases that this isn't the
                case, the child will get an error when writing to the broken pipe
                the next time, cleaning itself up then. */
+            g_io_channel_unref(sync_pipe_read_io);
             ret = sync_pipe_wait_for_child(fork_child, &wait_msg);
             if(nread == 0) {
                 /* We got an EOF from the sync pipe.  That means that it exited
@@ -1096,6 +1098,7 @@ sync_pipe_run_command_actual(char **argv, char **data, char **primary_msg,
             }
             *secondary_msg = NULL;
             *data = NULL;
+            g_free(buffer);
 
             return -1;
         }
@@ -1241,6 +1244,7 @@ sync_pipe_run_command_actual(char **argv, char **data, char **primary_msg,
         }
     } while (indicator != SP_SUCCESS && ret != -1);
 
+    g_free(buffer);
     return ret;
 }
 
@@ -1470,7 +1474,7 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
     int ret;
     GIOChannel *message_read_io;
     char *wait_msg;
-    char buffer[PIPE_BUF_SIZE+1] = {0};
+    char *buffer = g_malloc(PIPE_BUF_SIZE + 1);
     ssize_t nread;
     char indicator;
     int32_t exec_errno = 0;
@@ -1486,6 +1490,7 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
 
     if (!argv) {
         *msg = g_strdup("We don't know where to find dumpcap.");
+        g_free(buffer);
         return -1;
     }
 
@@ -1503,6 +1508,7 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
     argv = sync_pipe_add_arg(argv, &argc, "--signal-pipe");
     ret = create_dummy_signal_pipe(msg);
     if (ret == -1) {
+        g_free(buffer);
         return -1;
     }
     argv = sync_pipe_add_arg(argv, &argc, dummy_control_id);
@@ -1511,6 +1517,7 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
     ret = sync_pipe_open_command(argv, data_read_fd, &message_read_io, NULL,
                                  fork_child, NULL, msg, update_cb);
     if (ret == -1) {
+        g_free(buffer);
         return -1;
     }
 
@@ -1533,9 +1540,9 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
                itself while going down. Even in the rare cases that this isn't the
                case, the child will get an error when writing to the broken pipe
                the next time, cleaning itself up then. */
-            ret = sync_pipe_wait_for_child(*fork_child, &wait_msg);
             g_io_channel_unref(message_read_io);
             ws_close(*data_read_fd);
+            ret = sync_pipe_wait_for_child(*fork_child, &wait_msg);
             if(nread == 0) {
                 /* We got an EOF from the sync pipe.  That means that it exited
                    before giving us any data to read.  If ret is -1, we report
@@ -1555,6 +1562,7 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
                     *msg = combined_msg;
                 }
             }
+            g_free(buffer);
             return -1;
         }
 
@@ -1625,6 +1633,7 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
                 *msg = g_strdup(primary_msg_text);
                 ret = -1;
             }
+            g_free(buffer);
             return ret;
 
         case SP_LOG_MSG:
@@ -1673,6 +1682,7 @@ sync_interface_stats_open(int *data_read_fd, ws_process_id *fork_child, char **d
         }
     } while (indicator != SP_SUCCESS && ret != -1);
 
+    g_free(buffer);
     return ret;
 }
 
@@ -1823,14 +1833,13 @@ pipe_read_block(GIOChannel *pipe_io, char *indicator, int len, char *msg,
               header[0], header[1], header[2], header[3]);
 
         /* we have a problem here, try to read some more bytes from the pipe to debug where the problem really is */
-        memcpy(msg, header, sizeof(header));
-        g_io_channel_read_chars(pipe_io, &msg[sizeof(header)], len-sizeof(header), &bytes_read, &err);
+        g_io_channel_read_chars(pipe_io, msg, len, &bytes_read, &err);
         if (err != NULL) { /* error */
             ws_debug("read from pipe %p: error(%u): %s", pipe_io, err->code, err->message);
             g_clear_error(&err);
         }
-        *err_msg = ws_strdup_printf("Unknown message from dumpcap reading header, try to show it as a string: %s",
-                                   msg);
+        *err_msg = ws_strdup_printf("Message %c from dumpcap with length %d > buffer size %d! Partial message: %s",
+                                    *indicator, required, len, msg);
         return -1;
     }
     len = required;
@@ -1859,7 +1868,7 @@ static gboolean
 sync_pipe_input_cb(GIOChannel *pipe_io, capture_session *cap_session)
 {
     int  ret;
-    char buffer[SP_MAX_MSG_LEN+1] = {0};
+    char *buffer = g_malloc(SP_MAX_MSG_LEN + 1);
     ssize_t nread;
     char indicator;
     int32_t exec_errno = 0;
@@ -1918,6 +1927,7 @@ sync_pipe_input_cb(GIOChannel *pipe_io, capture_session *cap_session)
         } else {
             extcap_request_stop(cap_session);
         }
+        g_free(buffer);
         return false;
     }
 
@@ -1944,6 +1954,7 @@ sync_pipe_input_cb(GIOChannel *pipe_io, capture_session *cap_session)
                "standard output", as the capture file. */
             sync_pipe_stop(cap_session);
             cap_session->closed(cap_session, NULL);
+            g_free(buffer);
             return false;
         }
         break;
@@ -2019,6 +2030,7 @@ sync_pipe_input_cb(GIOChannel *pipe_io, capture_session *cap_session)
         break;
     }
 
+    g_free(buffer);
     return true;
 }
 

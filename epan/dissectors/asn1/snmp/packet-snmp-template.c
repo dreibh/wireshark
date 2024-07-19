@@ -147,6 +147,15 @@ static snmp_usm_decoder_t priv_protos[] = {
 	snmp_usm_priv_aes256
 };
 
+#define PRIVKEYEXP_USM_3DESDESEDE_00	0
+#define PRIVKEYEXP_AGENTPP				1
+
+static const value_string priv_key_exp_types[] = {
+	{ PRIVKEYEXP_USM_3DESDESEDE_00, "draft-reeder-snmpv3-usm-3desede-00" },
+	{ PRIVKEYEXP_AGENTPP, "AGENT++" },
+	{ 0, NULL }
+};
+
 static snmp_ue_assoc_t* ueas;
 static unsigned num_ueas;
 static snmp_ue_assoc_t* localized_ues;
@@ -535,15 +544,15 @@ dissect_snmp_variable_date_and_time(proto_tree *tree, packet_info *pinfo, int hf
 	char *str;
 
 	year			= tvb_get_ntohs(tvb,offset);
-	month			= tvb_get_guint8(tvb,offset+2);
-	day			= tvb_get_guint8(tvb,offset+3);
-	hour			= tvb_get_guint8(tvb,offset+4);
-	minutes			= tvb_get_guint8(tvb,offset+5);
-	seconds			= tvb_get_guint8(tvb,offset+6);
-	deci_seconds		= tvb_get_guint8(tvb,offset+7);
+	month			= tvb_get_uint8(tvb,offset+2);
+	day			= tvb_get_uint8(tvb,offset+3);
+	hour			= tvb_get_uint8(tvb,offset+4);
+	minutes			= tvb_get_uint8(tvb,offset+5);
+	seconds			= tvb_get_uint8(tvb,offset+6);
+	deci_seconds		= tvb_get_uint8(tvb,offset+7);
 	if(length > 8){
-		hour_from_utc	= tvb_get_guint8(tvb,offset+9);
-		min_from_utc	= tvb_get_guint8(tvb,offset+10);
+		hour_from_utc	= tvb_get_uint8(tvb,offset+9);
+		min_from_utc	= tvb_get_uint8(tvb,offset+10);
 
 		str = wmem_strdup_printf(pinfo->pool,
 			 "%u-%u-%u, %u:%u:%u.%u UTC %s%u:%u",
@@ -1027,11 +1036,11 @@ indexing_done:
 
 				if(value_len > 0) {
 					/* extend sign bit */
-					if(tvb_get_guint8(tvb, int_val_offset)&0x80) {
+					if(tvb_get_uint8(tvb, int_val_offset)&0x80) {
 						val=-1;
 					}
 					for(i=0;i<value_len;i++) {
-						val=(val<<8)|tvb_get_guint8(tvb, int_val_offset);
+						val=(val<<8)|tvb_get_uint8(tvb, int_val_offset);
 						int_val_offset++;
 					}
 				}
@@ -1098,7 +1107,7 @@ indexing_done:
 				 * Check if this is an unsigned int64 with
 				 * a big value.
 				 */
-				if (value_len > 9 || tvb_get_guint8(tvb, value_offset) != 0) {
+				if (value_len > 9 || tvb_get_uint8(tvb, value_offset) != 0) {
 					/* It is.  Fail. */
 					proto_tree_add_expert_format(pt_varbind,actx->pinfo,&ei_snmp_uint_too_large,tvb,value_offset,value_len,"Integral value too large");
 					goto already_added;
@@ -1259,7 +1268,7 @@ dissect_snmp_engineid(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, int o
 
 	/* first bit: engine id conformance */
 	if (len_remain<1) return offset;
-	conformance = ((tvb_get_guint8(tvb, offset)>>7) & 0x01);
+	conformance = ((tvb_get_uint8(tvb, offset)>>7) & 0x01);
 	proto_tree_add_item(tree, hf_snmp_engineid_conform, tvb, offset, 1, ENC_BIG_ENDIAN);
 
 	/* 4-byte enterprise number/name */
@@ -1289,7 +1298,7 @@ dissect_snmp_engineid(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, int o
 
 		/* 1-byte format specifier */
 		if (len_remain<1) return offset;
-		format = tvb_get_guint8(tvb, offset);
+		format = tvb_get_uint8(tvb, offset);
 		item = proto_tree_add_uint_format(tree, hf_snmp_engineid_format, tvb, offset, 1, format, "Engine ID Format: %s (%d)",
 						  val_to_str_const(format, snmp_engineid_format_vals, "Reserved/Enterprise-specific"),
 						  format);
@@ -1381,7 +1390,7 @@ dissect_snmp_engineid(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, int o
 
 
 static void set_ue_keys(snmp_ue_assoc_t* n ) {
-	unsigned key_size = auth_hash_len[n->user.authModel];
+	unsigned const key_size = auth_hash_len[n->user.authModel];
 
 	n->user.authKey.data = (uint8_t *)g_malloc(key_size);
 	n->user.authKey.len = key_size;
@@ -1418,12 +1427,43 @@ static void set_ue_keys(snmp_ue_assoc_t* n ) {
 
 		/* extend key if needed */
 		while (key_len < need_key_len) {
-			snmp_usm_password_to_key(n->user.authModel,
-						 n->user.privKey.data,
-						 key_len,
-						 n->engine.data,
-						 n->engine.len,
-						 n->user.privKey.data + key_len);
+			switch (n->priv_key_exp) {
+				/* Baed on draft-reeder-snmpv3-usm-3desede-00, section 2.1 */
+				case PRIVKEYEXP_USM_3DESDESEDE_00:
+				{
+					snmp_usm_password_to_key(n->user.authModel,
+								n->user.privKey.data + (key_len - key_size),
+								key_size,
+								n->engine.data,
+								n->engine.len,
+								n->user.privKey.data + key_len);
+					break;
+				}
+				/* Based on snmp++ method PrivAES::extend_short_key in Agent++ */
+				case PRIVKEYEXP_AGENTPP:
+				{
+					/* Key expansion in Agent++
+					 * K1 = key
+					 * K2 = hash(K1)
+					 * K3 = hash(K1 | K2)
+					 * localized_key = K1 | K2 | K3
+					 */
+					gcry_md_hd_t hash_handle;
+
+					if (gcry_md_open(&hash_handle, auth_hash_algo[n->user.authModel], 0)) {
+						return;
+					}
+
+					gcry_md_write(hash_handle, n->user.privKey.data, key_len);
+					memcpy(n->user.privKey.data + key_len, gcry_md_read(hash_handle, 0), key_size);
+					gcry_md_close(hash_handle);
+
+					break;
+				}
+
+				default:
+					break;
+			}
 
 			key_len += key_size;
 		}
@@ -1561,6 +1601,7 @@ snmp_users_update_cb(void* p _U_, char** err)
 		return false;
 	}
 
+        g_string_free(es, TRUE);
 	return true;
 }
 
@@ -1915,7 +1956,7 @@ check_ScopedPdu(tvbuff_t* tvb)
 			&& ( (!pc) || (ber_class!=BER_CLASS_UNI) || (tag!=BER_UNI_TAG_ENUMERATED) )
 			)) return false;
 
-	if((tvb_get_guint8(tvb, offset)==0)&&(tvb_get_guint8(tvb, offset+1)==0))
+	if((tvb_get_uint8(tvb, offset)==0)&&(tvb_get_uint8(tvb, offset+1)==0))
 		return true;
 
 	hoffset = offset;
@@ -2125,7 +2166,6 @@ dissect_snmp_pdu(tvbuff_t *tvb, int offset, packet_info *pinfo,
 		 */
 		expert_add_info(pinfo, item, &ei_snmp_version_unknown);
 		return length_remaining;
-		break;
 	}
 
 	/* There may be appended data after the SNMP data, so treat as raw
@@ -2341,6 +2381,7 @@ UAT_LSTRING_CB_DEF(snmp_users,privPassword,snmp_ue_assoc_t,user.privPassword.dat
 UAT_BUFFER_CB_DEF(snmp_users,engine_id,snmp_ue_assoc_t,engine.data,engine.len)
 UAT_VS_DEF(snmp_users,auth_model,snmp_ue_assoc_t,unsigned,0,"MD5")
 UAT_VS_DEF(snmp_users,priv_proto,snmp_ue_assoc_t,unsigned,0,"DES")
+UAT_VS_DEF(snmp_users,priv_key_exp,snmp_ue_assoc_t,unsigned,0,"draft-reeder-snmpv3-usm-3desede-00")
 
 static void *
 snmp_specific_trap_copy_cb(void *dest, const void *orig, size_t len _U_)
@@ -2561,6 +2602,7 @@ void proto_register_snmp(void) {
 		UAT_FLD_LSTRING(snmp_users,authPassword,"Password","The password used for authenticating packets for this entry"),
 		UAT_FLD_VS(snmp_users,priv_proto,"Privacy protocol",priv_types,"Algorithm to be used for privacy."),
 		UAT_FLD_LSTRING(snmp_users,privPassword,"Privacy password","The password used for encrypting packets for this entry"),
+		UAT_FLD_VS(snmp_users,priv_key_exp,"Key expansion method",priv_key_exp_types,"Privacy protocol key expansion method"),
 		UAT_END_FIELDS
 	};
 
@@ -2578,6 +2620,10 @@ void proto_register_snmp(void) {
 				    renew_ue_cache,
 				    NULL,
 				    users_fields);
+
+	static const char *assocs_uat_defaults[] = {
+		NULL, NULL, NULL, NULL, NULL, NULL, "draft-reeder-snmpv3-usm-3desede-00"};
+	uat_set_default_values(assocs_uat, assocs_uat_defaults);
 
 	static uat_field_t specific_traps_flds[] = {
 		UAT_FLD_CSTRING(specific_traps,enterprise,"Enterprise OID","Enterprise Object Identifier"),

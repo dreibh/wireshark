@@ -1276,7 +1276,28 @@ QRectF IOGraphDialog::getZoomRanges(QRect zoom_rect)
 
 void IOGraphDialog::showContextMenu(const QPoint &pos)
 {
-    ctx_menu_.popup(ui->ioPlot->mapToGlobal(pos));
+    if (ui->ioPlot->legend->selectTest(pos, false) >= 0) {
+        QMenu *menu = new QMenu(this);
+        menu->setAttribute(Qt::WA_DeleteOnClose);
+#if QT_VERSION >= QT_VERSION_CHECK(6, 2, 0)
+        menu->addAction(tr("Move to top left"), this, &IOGraphDialog::moveLegend)->setData((Qt::AlignTop|Qt::AlignLeft).toInt());
+        menu->addAction(tr("Move to top center"), this, &IOGraphDialog::moveLegend)->setData((Qt::AlignTop|Qt::AlignHCenter).toInt());
+        menu->addAction(tr("Move to top right"), this, &IOGraphDialog::moveLegend)->setData((Qt::AlignTop|Qt::AlignRight).toInt());
+        menu->addAction(tr("Move to bottom left"), this, &IOGraphDialog::moveLegend)->setData((Qt::AlignBottom|Qt::AlignLeft).toInt());
+        menu->addAction(tr("Move to bottom center"), this, &IOGraphDialog::moveLegend)->setData((Qt::AlignBottom|Qt::AlignHCenter).toInt());
+        menu->addAction(tr("Move to bottom right"), this, &IOGraphDialog::moveLegend)->setData((Qt::AlignBottom|Qt::AlignRight).toInt());
+#else
+        menu->addAction(tr("Move to top left"), this, &IOGraphDialog::moveLegend)->setData(static_cast<Qt::Alignment::Int>(Qt::AlignTop|Qt::AlignLeft));
+        menu->addAction(tr("Move to top center"), this, &IOGraphDialog::moveLegend)->setData(static_cast<Qt::Alignment::Int>(Qt::AlignTop|Qt::AlignHCenter));
+        menu->addAction(tr("Move to top right"), this, &IOGraphDialog::moveLegend)->setData(static_cast<Qt::Alignment::Int>(Qt::AlignTop|Qt::AlignRight));
+        menu->addAction(tr("Move to bottom left"), this, &IOGraphDialog::moveLegend)->setData(static_cast<Qt::Alignment::Int>(Qt::AlignBottom|Qt::AlignLeft));
+        menu->addAction(tr("Move to bottom center"), this, &IOGraphDialog::moveLegend)->setData(static_cast<Qt::Alignment::Int>(Qt::AlignBottom|Qt::AlignHCenter));
+        menu->addAction(tr("Move to bottom right"), this, &IOGraphDialog::moveLegend)->setData(static_cast<Qt::Alignment::Int>(Qt::AlignBottom|Qt::AlignRight));
+#endif
+        menu->popup(ui->ioPlot->mapToGlobal(pos));
+    } else {
+        ctx_menu_.popup(ui->ioPlot->mapToGlobal(pos));
+    }
 }
 
 void IOGraphDialog::graphClicked(QMouseEvent *event)
@@ -1351,6 +1372,20 @@ void IOGraphDialog::mouseReleased(QMouseEvent *event)
         }
     } else if (iop->cursor().shape() == Qt::ClosedHandCursor) {
         iop->setCursor(QCursor(Qt::OpenHandCursor));
+    }
+}
+
+void IOGraphDialog::moveLegend()
+{
+    if (QAction *contextAction = qobject_cast<QAction*>(sender())) {
+        if (contextAction->data().canConvert<Qt::Alignment::Int>()) {
+#if QT_VERSION >= QT_VERSION_CHECK(6, 2, 0)
+            ui->ioPlot->axisRect()->insetLayout()->setInsetAlignment(0, Qt::Alignment::fromInt(contextAction->data().value<Qt::Alignment::Int>()));
+#else
+            ui->ioPlot->axisRect()->insetLayout()->setInsetAlignment(0, static_cast<Qt::Alignment>(contextAction->data().value<Qt::Alignment::Int>()));
+#endif
+            ui->ioPlot->replot();
+        }
     }
 }
 
@@ -2649,10 +2684,8 @@ format_size_units_e IOGraph::formatUnits() const
         return FORMAT_SIZE_UNIT_BITS;
     case IOG_ITEM_UNIT_CALC_LOAD:
         return FORMAT_SIZE_UNIT_ERLANGS;
-        break;
     case IOG_ITEM_UNIT_CALC_FIELDS:
         return FORMAT_SIZE_UNIT_FIELDS;
-        break;
     case IOG_ITEM_UNIT_CALC_SUM:
     case IOG_ITEM_UNIT_CALC_MAX:
     case IOG_ITEM_UNIT_CALC_MIN:
@@ -2667,6 +2700,8 @@ format_size_units_e IOGraph::formatUnits() const
             // and some unit strings are already prefixed units.
         }
         return FORMAT_SIZE_UNIT_NONE;
+    case IOG_ITEM_UNIT_CALC_THROUGHPUT:
+        return FORMAT_SIZE_UNIT_BITS_S;
     default:
         return FORMAT_SIZE_UNIT_NONE;
     }
@@ -2733,6 +2768,7 @@ bool IOGraph::showsZero() const
     case IOG_ITEM_UNIT_CALC_MIN:
     case IOG_ITEM_UNIT_CALC_AVERAGE:
     case IOG_ITEM_UNIT_CALC_LOAD:
+    case IOG_ITEM_UNIT_CALC_THROUGHPUT:
         // These are not the same sort of "omitted zeros" as above,
         // but changing val_units_ always results in a recalculation
         // so it doesn't matter (see modelDataChanged)
@@ -2771,6 +2807,7 @@ bool IOGraph::hasItemToShow(int idx, double value) const
     case IOG_ITEM_UNIT_CALC_MIN:
     case IOG_ITEM_UNIT_CALC_AVERAGE:
     case IOG_ITEM_UNIT_CALC_LOAD:
+    case IOG_ITEM_UNIT_CALC_THROUGHPUT:
         if (item->fields) {
             result = true;
         }

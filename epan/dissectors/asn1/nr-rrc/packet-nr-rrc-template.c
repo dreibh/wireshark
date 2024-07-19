@@ -1,7 +1,7 @@
 /* packet-nr-rrc-template.c
  * NR;
  * Radio Resource Control (RRC) protocol specification
- * (3GPP TS 38.331 V17.8.0 Release 17) packet dissection
+ * (3GPP TS 38.331 V18.2.0 Release 18) packet dissection
  * Copyright 2018-2024, Pascal Quantin
  *
  * Wireshark - Network traffic analyzer
@@ -154,12 +154,13 @@ static int ett_nr_rrc_sl_ParametersEUTRA2_r16;
 static int ett_nr_rrc_sl_ParametersEUTRA3_r16;
 static int ett_nr_rrc_absTimeInfo;
 static int ett_nr_rrc_assistanceDataSIB_Element_r16;
-static int ett_nr_sl_V2X_ConfigCommon_r16;
-static int ett_nr_tdd_Config_r16;
-static int ett_nr_coarseLocationInfo_r17;
-static int ett_nr_sl_MeasResultsCandRelay_r17;
-static int ett_nr_sl_MeasResultServingRelay_r17;
-static int ett_nr_ReferenceLocation_r17;
+static int ett_nr_rrc_sl_V2X_ConfigCommon_r16;
+static int ett_nr_rrc_tdd_Config_r16;
+static int ett_nr_rrc_coarseLocationInfo_r17;
+static int ett_nr_rrc_sl_MeasResultsCandRelay_r17;
+static int ett_nr_rrc_sl_MeasResultServingRelay_r17;
+static int ett_nr_rrc_ReferenceLocation_r17;
+static int ett_nr_rrc_wayPointLocation_r18;
 
 static expert_field ei_nr_rrc_number_pages_le15;
 
@@ -302,7 +303,7 @@ dissect_nr_rrc_warningMessageSegment(tvbuff_t *warning_msg_seg_tvb, proto_tree *
   tvbuff_t *cb_data_page_tvb, *cb_data_tvb;
   int i;
 
-  nb_of_pages = tvb_get_guint8(warning_msg_seg_tvb, 0);
+  nb_of_pages = tvb_get_uint8(warning_msg_seg_tvb, 0);
   ti = proto_tree_add_uint(tree, hf_nr_rrc_warningMessageSegment_nb_pages, warning_msg_seg_tvb, 0, 1, nb_of_pages);
   if (nb_of_pages > 15) {
     expert_add_info_format(pinfo, ti, &ei_nr_rrc_number_pages_le15,
@@ -310,7 +311,7 @@ dissect_nr_rrc_warningMessageSegment(tvbuff_t *warning_msg_seg_tvb, proto_tree *
     nb_of_pages = 15;
   }
   for (i = 0, offset = 1; i < nb_of_pages; i++) {
-    length = tvb_get_guint8(warning_msg_seg_tvb, offset+82);
+    length = tvb_get_uint8(warning_msg_seg_tvb, offset+82);
     cb_data_page_tvb = tvb_new_subset_length(warning_msg_seg_tvb, offset, length);
     cb_data_tvb = dissect_cbs_data(dataCodingScheme, cb_data_page_tvb, tree, pinfo, 0);
     if (cb_data_tvb) {
@@ -566,6 +567,12 @@ static void
 nr_rrc_TimeSinceCHO_Reconfig_r17_fmt(char *s, uint32_t v)
 {
   snprintf(s, ITEM_LABEL_LENGTH, "%.1fs (%u)", (float)v/10, v);
+}
+
+static void
+nr_rrc_FlightPathUpdateDistanceThr_r18_fmt(char *s, uint32_t v)
+{
+  snprintf(s, ITEM_LABEL_LENGTH, "%um (%u)", v*5, v);
 }
 
 static int
@@ -1043,12 +1050,13 @@ proto_register_nr_rrc(void) {
     &ett_nr_rrc_sl_ParametersEUTRA3_r16,
     &ett_nr_rrc_absTimeInfo,
     &ett_nr_rrc_assistanceDataSIB_Element_r16,
-    &ett_nr_sl_V2X_ConfigCommon_r16,
-    &ett_nr_tdd_Config_r16,
-    &ett_nr_coarseLocationInfo_r17,
-    &ett_nr_sl_MeasResultsCandRelay_r17,
-    &ett_nr_sl_MeasResultServingRelay_r17,
-    &ett_nr_ReferenceLocation_r17
+    &ett_nr_rrc_sl_V2X_ConfigCommon_r16,
+    &ett_nr_rrc_tdd_Config_r16,
+    &ett_nr_rrc_coarseLocationInfo_r17,
+    &ett_nr_rrc_sl_MeasResultsCandRelay_r17,
+    &ett_nr_rrc_sl_MeasResultServingRelay_r17,
+    &ett_nr_rrc_ReferenceLocation_r17,
+    &ett_nr_rrc_wayPointLocation_r18
   };
 
   static ei_register_info ei[] = {

@@ -97,10 +97,10 @@ static const value_string le_pdus[] =
 {
     { 0, "Advertising or Data (Unspecified Direction)" },
     { 1, "Auxiliary Advertising" },
-    { 2, "Data, Master to Slave" },
-    { 3, "Data, Slave to Master" },
-    { 4, "Connected Isochronous, Master to Slave" },
-    { 5, "Connected Isochronous, Slave to Master" },
+    { 2, "Data, Central to Peripheral" },
+    { 3, "Data, Peripheral to Central" },
+    { 4, "Connected Isochronous, Central to Peripheral" },
+    { 5, "Connected Isochronous, Peripheral to Central" },
     { 6, "Broadcast Isochronous" },
     { 7, "Reserved" },
     { 0, NULL }
@@ -190,24 +190,24 @@ dissect_btle_rf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         context.aux_pdu_type = (flags & 0x3000) >> 12;
         context.aux_pdu_type_valid = true;
         break;
-    case 2: // Data, Master to Slave
+    case 2: // Data, Central to Peripheral
         context.pdu_type = BTLE_PDU_TYPE_DATA;
-        context.direction = BTLE_DIR_MASTER_SLAVE;
+        context.direction = BTLE_DIR_CENTRAL_PERIPHERAL;
         pinfo->p2p_dir = P2P_DIR_SENT;
         break;
-    case 3: // Data, Slave to Master
+    case 3: // Data, Peripheral to Central
         context.pdu_type = BTLE_PDU_TYPE_DATA;
-        context.direction = BTLE_DIR_SLAVE_MASTER;
+        context.direction = BTLE_DIR_PERIPHERAL_CENTRAL;
         pinfo->p2p_dir = P2P_DIR_RECV;
         break;
-    case 4: // Connected Isochronous, Master to Slave
+    case 4: // Connected Isochronous, Central to Peripheral
         context.pdu_type = BTLE_PDU_TYPE_CONNECTEDISO;
-        context.direction = BTLE_DIR_MASTER_SLAVE;
+        context.direction = BTLE_DIR_CENTRAL_PERIPHERAL;
         pinfo->p2p_dir = P2P_DIR_SENT;
         break;
-    case 5: // Connected Isochronous, Slave to Master
+    case 5: // Connected Isochronous, Peripheral to Central
         context.pdu_type = BTLE_PDU_TYPE_CONNECTEDISO;
-        context.direction = BTLE_DIR_SLAVE_MASTER;
+        context.direction = BTLE_DIR_PERIPHERAL_CENTRAL;
         pinfo->p2p_dir = P2P_DIR_RECV;
         break;
     case 6: // Broadcast Isochronous
@@ -222,7 +222,7 @@ dissect_btle_rf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     btle_rf_tree = proto_item_add_subtree(ti, ett_btle_rf);
 
     ti = proto_tree_add_item(btle_rf_tree, hf_btle_rf_channel, tvb, 0, 1, ENC_LITTLE_ENDIAN);
-    rf_channel  = tvb_get_guint8(tvb, 0);
+    rf_channel  = tvb_get_uint8(tvb, 0);
     proto_item_append_text(ti, ", %d MHz, %s %d", 2402+2*rf_channel,
                            btle_rf_channel_type(rf_channel),
                            btle_rf_channel_index(rf_channel));
@@ -250,7 +250,7 @@ dissect_btle_rf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     if (flags & LE_AA_OFFENSES_VALID) {
         proto_tree_add_item(btle_rf_tree, hf_btle_rf_access_address_offenses, tvb, 3, 1, ENC_LITTLE_ENDIAN);
-        aa_offenses = tvb_get_guint8(tvb, 3);
+        aa_offenses = tvb_get_uint8(tvb, 3);
         if (aa_offenses > 0) {
             if (flags & LE_REF_AA_VALID) {
                 context.aa_category = E_AA_BIT_ERRORS;

@@ -207,7 +207,9 @@ sub Enum($$$$)
 
 	my $enum_size = $e->{BASE_TYPE};
 	$enum_size =~ s/uint//g;
-	$self->register_type($name, "offset = $dissectorname(tvb, offset, pinfo, tree, di, drep, \@HF\@, \@PARAM\@);", "FT_UINT$enum_size", "BASE_DEC", "0", "VALS($valsstring)", $enum_size / 8);
+	my $ws_base = "BASE_DEC";
+	$ws_base = "BASE_HEX" if (property_matches($e, "flag", ".*LIBNDR_PRINT_ARRAY_HEX.*"));
+	$self->register_type($name, "offset = $dissectorname(tvb, offset, pinfo, tree, di, drep, \@HF\@, \@PARAM\@);", "FT_UINT$enum_size", $ws_base, "0", "VALS($valsstring)", $enum_size / 8);
 }
 
 sub Pipe($$$$)
@@ -646,18 +648,18 @@ sub Function($$$)
 	} elsif ($fn->{RETURN_TYPE} eq "NTSTATUS") {
 		$self->pidl_code("offset = dissect_ntstatus(tvb, offset, pinfo, tree, di, drep, hf\_$ifname\_status, &status);\n");
 		$self->pidl_code("if (status != 0)");
-		$self->pidl_code("\tcol_append_fstr(pinfo->cinfo, COL_INFO, \", Error: %s\", val_to_str(status, NT_errors, \"Unknown NT status 0x%08x\"));\n");
+		$self->pidl_code("\tcol_append_fstr(pinfo->cinfo, COL_INFO, \", Error: %s\", val_to_str_ext(status, &NT_errors_ext, \"Unknown NT status 0x%08x\"));\n");
 		$return_types{$ifname}->{"status"} = ["NTSTATUS", "NT Error"];
 	} elsif ($fn->{RETURN_TYPE} eq "WERROR") {
 		$self->pidl_code("offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf\_$ifname\_werror, &status);\n");
 		$self->pidl_code("if (status != 0)");
-		$self->pidl_code("\tcol_append_fstr(pinfo->cinfo, COL_INFO, \", Error: %s\", val_to_str(status, WERR_errors, \"Unknown DOS error 0x%08x\"));\n");
+		$self->pidl_code("\tcol_append_fstr(pinfo->cinfo, COL_INFO, \", Error: %s\", val_to_str_ext(status, &WERR_errors_ext, \"Unknown DOS error 0x%08x\"));\n");
 
 		$return_types{$ifname}->{"werror"} = ["WERROR", "Windows Error"];
 	} elsif ($fn->{RETURN_TYPE} eq "HRESULT") {
 		$self->pidl_code("offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf\_$ifname\_hresult, &status);\n");
 		$self->pidl_code("if (status != 0)");
-		$self->pidl_code("\tcol_append_fstr(pinfo->cinfo, COL_INFO, \", Error: %s\", val_to_str(status, HRES_errors, \"Unknown HRES error 0x%08x\"));\n");
+		$self->pidl_code("\tcol_append_fstr(pinfo->cinfo, COL_INFO, \", Error: %s\", val_to_str_ext(status, &HRES_errors_ext, \"Unknown HRES error 0x%08x\"));\n");
 		$return_types{$ifname}->{"hresult"} = ["HRESULT", "HRES Windows Error"];
 	} elsif (my $type = getType($fn->{RETURN_TYPE})) {
 		if ($type->{DATA}->{TYPE} eq "ENUM") {
@@ -1069,7 +1071,7 @@ sub ProcessInterface($$)
 		my ($type, $desc) = @{$return_types{$x->{NAME}}->{$_}};
 		my $dt = $self->find_type($type);
 		$dt or die("Unable to find information about return type `$type'");
-		$self->register_hf_field("hf_$x->{NAME}_$_", $desc, "$x->{NAME}.$_", $dt->{FT_TYPE}, "BASE_HEX", $dt->{VALSSTRING}, 0, "");
+		$self->register_hf_field("hf_$x->{NAME}_$_", $desc, "$x->{NAME}.$_", $dt->{FT_TYPE}, $dt->{BASE_TYPE}, $dt->{VALSSTRING}, 0, "");
 		$self->{hf_used}->{"hf_$x->{NAME}_$_"} = 1;
 	}
 
@@ -1144,11 +1146,11 @@ sub Initialize($$)
 	$self->register_type("SID",
 		"offset = dissect_ndr_nt_SID_with_options(tvb, offset, pinfo, tree, di, drep, param, \@HF\@);","FT_STRING", "BASE_NONE", 0, "NULL", 4);
 	$self->register_type("WERROR",
-		"offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, \@HF\@, \@PARAM\@);","FT_UINT32", "BASE_DEC", 0, "VALS(WERR_errors)", 4);
+		"offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, \@HF\@, \@PARAM\@);","FT_UINT32", "BASE_HEX|BASE_EXT_STRING", 0, "&WERR_errors_ext", 4);
 	$self->register_type("NTSTATUS",
-		"offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, \@HF\@, \@PARAM\@);","FT_UINT32", "BASE_DEC", 0, "VALS(NT_errors)", 4);
+		"offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, \@HF\@, \@PARAM\@);","FT_UINT32", "BASE_HEX|BASE_EXT_STRING", 0, "&NT_errors_ext", 4);
 	$self->register_type("HRESULT",
-		"offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, \@HF\@, \@PARAM\@);","FT_UINT32", "BASE_DEC", 0, "VALS(HRES_errors)", 4);
+		"offset = PIDL_dissect_uint32(tvb, offset, pinfo, tree, di, drep, \@HF\@, \@PARAM\@);","FT_UINT32", "BASE_HEX|BASE_EXT_STRING", 0, "&HRES_errors_ext", 4);
 	$self->register_type("ipv6address", "proto_tree_add_item(tree, \@HF\@, tvb, offset, 16, ENC_NA); offset += 16;", "FT_IPv6", "BASE_NONE", 0, "NULL", 16);
 	$self->register_type("ipv4address", "proto_tree_add_item(tree, \@HF\@, tvb, offset, 4, ENC_BIG_ENDIAN); offset += 4;", "FT_IPv4", "BASE_NONE", 0, "NULL", 4);
 

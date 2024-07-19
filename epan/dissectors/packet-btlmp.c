@@ -568,14 +568,14 @@ dissect_btlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     for (unsigned i = 0; i < array_length(hf_opcode); ++i)
         proto_tree_add_item(btlmp_tree, hf_opcode[i], tvb, offset, 1, ENC_LITTLE_ENDIAN);
-    opcode = tvb_get_guint8(tvb, offset) >> 1;
+    opcode = tvb_get_uint8(tvb, offset) >> 1;
     offset += 1;
     if (opcode >= 0x7c) {
         opcode &= 3;
         proto_tree_add_item(btlmp_tree, hf_escopcode[opcode], tvb, offset, 1, ENC_LITTLE_ENDIAN);
         ++opcode;
         opcode <<= 8;
-        opcode |= tvb_get_guint8(tvb, offset);
+        opcode |= tvb_get_uint8(tvb, offset);
         offset += 1;
     }
     switch (opcode) {
@@ -879,14 +879,14 @@ dissect_btlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     case 0x401: // LMP_accepted_ext
         proto_tree_add_item(btlmp_tree, hf_accept_opcode, tvb, offset, 1, ENC_LITTLE_ENDIAN);
         ++offset;
-        proto_tree_add_item(btlmp_tree, hf_accept_escopcode[tvb_get_guint8(tvb, offset - 1) & 3], tvb, offset, 1, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(btlmp_tree, hf_accept_escopcode[tvb_get_uint8(tvb, offset - 1) & 3], tvb, offset, 1, ENC_LITTLE_ENDIAN);
         ++offset;
         break;
 
     case 0x402: // LMP_not_accepted_ext
         proto_tree_add_item(btlmp_tree, hf_accept_opcode, tvb, offset, 1, ENC_LITTLE_ENDIAN);
         ++offset;
-        proto_tree_add_item(btlmp_tree, hf_accept_escopcode[tvb_get_guint8(tvb, offset - 1) & 3], tvb, offset, 1, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(btlmp_tree, hf_accept_escopcode[tvb_get_uint8(tvb, offset - 1) & 3], tvb, offset, 1, ENC_LITTLE_ENDIAN);
         ++offset;
         proto_tree_add_item(btlmp_tree, hf_errorcode, tvb, offset, 1, ENC_LITTLE_ENDIAN);
         ++offset;
@@ -898,7 +898,7 @@ dissect_btlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         ++offset;
         proto_tree_add_item(btlmp_tree, hf_param_max_supported_page, tvb, offset, 1, ENC_LITTLE_ENDIAN);
         ++offset;
-        switch (tvb_get_guint8(tvb, offset - 2)) {
+        switch (tvb_get_uint8(tvb, offset - 2)) {
         case 0:
             for (unsigned i = 0; i < array_length(hf_param_feature_page0_byte0); ++i)
                 proto_tree_add_item(btlmp_tree, hf_param_feature_page0_byte0[i], tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -981,8 +981,8 @@ dissect_btlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         break;
 
     case 0x40c: // LMP_eSCO_link_req
-        btbredr_rf_add_esco_link(connection_info, pinfo, tvb_get_guint8(tvb, offset), tvb_get_guint8(tvb, offset + 1),
-                                 tvb_get_guint16(tvb, offset + 8, ENC_LITTLE_ENDIAN), tvb_get_guint16(tvb, offset + 10, ENC_LITTLE_ENDIAN));
+        btbredr_rf_add_esco_link(connection_info, pinfo, tvb_get_uint8(tvb, offset), tvb_get_uint8(tvb, offset + 1),
+                                 tvb_get_uint16(tvb, offset + 8, ENC_LITTLE_ENDIAN), tvb_get_uint16(tvb, offset + 10, ENC_LITTLE_ENDIAN));
         proto_tree_add_item(btlmp_tree, hf_param_escohandle, tvb, offset, 1, ENC_LITTLE_ENDIAN);
         ++offset;
         proto_tree_add_item(btlmp_tree, hf_param_escoltaddr, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -1011,7 +1011,7 @@ dissect_btlmp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         break;
 
     case 0x40d: // LMP_remove_eSCO_link_req
-        btbredr_rf_remove_esco_link(connection_info, pinfo, tvb_get_guint8(tvb, offset));
+        btbredr_rf_remove_esco_link(connection_info, pinfo, tvb_get_uint8(tvb, offset));
         proto_tree_add_item(btlmp_tree, hf_param_escohandle, tvb, offset, 1, ENC_LITTLE_ENDIAN);
         ++offset;
         proto_tree_add_item(btlmp_tree, hf_errorcode, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -1383,12 +1383,12 @@ proto_register_btlmp(void)
             NULL, HFILL }
         },
         {  &hf_param_feature_page0_byte4[4],
-            { "AFH capable slave",                              "btlmp.feature.page0.afhcapableslave",
+            { "AFH capable peripheral",                              "btlmp.feature.page0.afhcapableperipheral",
             FT_UINT8, BASE_DEC, NULL, 0x08,
             NULL, HFILL }
         },
         {  &hf_param_feature_page0_byte4[5],
-            { "AFH classification slave",                       "btlmp.feature.page0.afhclassificationslave",
+            { "AFH classification peripheral",                       "btlmp.feature.page0.afhclassificationperipheral",
             FT_UINT8, BASE_DEC, NULL, 0x10,
             NULL, HFILL }
         },
@@ -1428,12 +1428,12 @@ proto_register_btlmp(void)
             NULL, HFILL }
         },
         {  &hf_param_feature_page0_byte5[4],
-            { "AFH capable master",                             "btlmp.feature.page0.afhcapablemaster",
+            { "AFH capable central",                             "btlmp.feature.page0.afhcapablecentral",
             FT_UINT8, BASE_DEC, NULL, 0x08,
             NULL, HFILL }
         },
         {  &hf_param_feature_page0_byte5[5],
-            { "AFH classification master",                      "btlmp.feature.page0.afhclassificationmaster",
+            { "AFH classification central",                      "btlmp.feature.page0.afhclassificationcentral",
             FT_UINT8, BASE_DEC, NULL, 0x10,
             NULL, HFILL }
         },
@@ -1563,12 +1563,12 @@ proto_register_btlmp(void)
             NULL, HFILL }
         },
         {  &hf_param_feature_page2_byte0[1],
-            { "Connectionless Slave Broadcast - Master",        "btlmp.feature.page2.csbmaster",
+            { "Connectionless Peripheral Broadcast - Central",        "btlmp.feature.page2.cpbcentral",
             FT_UINT8, BASE_DEC, NULL, 0x01,
             NULL, HFILL }
         },
         {  &hf_param_feature_page2_byte0[2],
-            { "Connectionless Slave Broadcast - Slave",         "btlmp.feature.page2.csbslave",
+            { "Connectionless Peripheral Broadcast - Peripheral",         "btlmp.feature.page2.cpbperipheral",
             FT_UINT8, BASE_DEC, NULL, 0x02,
             NULL, HFILL }
         },

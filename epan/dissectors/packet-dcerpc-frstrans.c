@@ -1620,7 +1620,7 @@ frstrans_dissect_CheckConnectivity_response(tvbuff_t *tvb _U_, int offset _U_, p
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frstrans_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
@@ -1724,7 +1724,7 @@ frstrans_dissect_EstablishConnection_response(tvbuff_t *tvb _U_, int offset _U_,
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frstrans_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
@@ -1774,7 +1774,7 @@ frstrans_dissect_EstablishSession_response(tvbuff_t *tvb _U_, int offset _U_, pa
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frstrans_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
@@ -1989,7 +1989,7 @@ frstrans_dissect_RequestUpdates_response(tvbuff_t *tvb _U_, int offset _U_, pack
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frstrans_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
@@ -2081,7 +2081,7 @@ frstrans_dissect_RequestVersionVector_response(tvbuff_t *tvb _U_, int offset _U_
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frstrans_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
@@ -2146,7 +2146,7 @@ frstrans_dissect_AsyncPoll_response(tvbuff_t *tvb _U_, int offset _U_, packet_in
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frstrans_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
@@ -2481,7 +2481,7 @@ frstrans_dissect_InitializeFileTransferAsync_response(tvbuff_t *tvb _U_, int off
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frstrans_werror, &status);
 
 	if (status != 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str(status, WERR_errors, "Unknown DOS error 0x%08x"));
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", Error: %s", val_to_str_ext(status, &WERR_errors_ext, "Unknown DOS error 0x%08x"));
 
 	return offset;
 }
@@ -2608,7 +2608,7 @@ void proto_register_dcerpc_frstrans(void)
 	{ &hf_frstrans_frstrans_AsyncResponseContext_sequence_number,
 	  { "Sequence Number", "frstrans.frstrans_AsyncResponseContext.sequence_number", FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL }},
 	{ &hf_frstrans_frstrans_AsyncResponseContext_status,
-	  { "Status", "frstrans.frstrans_AsyncResponseContext.status", FT_UINT32, BASE_DEC, VALS(WERR_errors), 0, NULL, HFILL }},
+	  { "Status", "frstrans.frstrans_AsyncResponseContext.status", FT_UINT32, BASE_HEX|BASE_EXT_STRING, &WERR_errors_ext, 0, NULL, HFILL }},
 	{ &hf_frstrans_frstrans_AsyncVersionVectorResponse_epoque_vector,
 	  { "Epoque Vector", "frstrans.frstrans_AsyncVersionVectorResponse.epoque_vector", FT_NONE, BASE_NONE, NULL, 0, NULL, HFILL }},
 	{ &hf_frstrans_frstrans_AsyncVersionVectorResponse_epoque_vector_count,
@@ -2646,13 +2646,13 @@ void proto_register_dcerpc_frstrans(void)
 	{ &hf_frstrans_frstrans_EstablishConnection_downstream_flags,
 	  { "Downstream Flags", "frstrans.frstrans_EstablishConnection.downstream_flags", FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL }},
 	{ &hf_frstrans_frstrans_EstablishConnection_downstream_protocol_version,
-	  { "Downstream Protocol Version", "frstrans.frstrans_EstablishConnection.downstream_protocol_version", FT_UINT32, BASE_DEC, VALS(frstrans_frstrans_ProtocolVersion_vals), 0, NULL, HFILL }},
+	  { "Downstream Protocol Version", "frstrans.frstrans_EstablishConnection.downstream_protocol_version", FT_UINT32, BASE_HEX, VALS(frstrans_frstrans_ProtocolVersion_vals), 0, NULL, HFILL }},
 	{ &hf_frstrans_frstrans_EstablishConnection_replica_set_guid,
 	  { "Replica Set Guid", "frstrans.frstrans_EstablishConnection.replica_set_guid", FT_GUID, BASE_NONE, NULL, 0, NULL, HFILL }},
 	{ &hf_frstrans_frstrans_EstablishConnection_upstream_flags,
 	  { "Upstream Flags", "frstrans.frstrans_EstablishConnection.upstream_flags", FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL }},
 	{ &hf_frstrans_frstrans_EstablishConnection_upstream_protocol_version,
-	  { "Upstream Protocol Version", "frstrans.frstrans_EstablishConnection.upstream_protocol_version", FT_UINT32, BASE_DEC, VALS(frstrans_frstrans_ProtocolVersion_vals), 0, NULL, HFILL }},
+	  { "Upstream Protocol Version", "frstrans.frstrans_EstablishConnection.upstream_protocol_version", FT_UINT32, BASE_HEX, VALS(frstrans_frstrans_ProtocolVersion_vals), 0, NULL, HFILL }},
 	{ &hf_frstrans_frstrans_EstablishSession_connection_guid,
 	  { "Connection Guid", "frstrans.frstrans_EstablishSession.connection_guid", FT_GUID, BASE_NONE, NULL, 0, NULL, HFILL }},
 	{ &hf_frstrans_frstrans_EstablishSession_content_set_guid,
@@ -2794,7 +2794,7 @@ void proto_register_dcerpc_frstrans(void)
 	{ &hf_frstrans_opnum,
 	  { "Operation", "frstrans.opnum", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }},
 	{ &hf_frstrans_werror,
-	  { "Windows Error", "frstrans.werror", FT_UINT32, BASE_HEX, VALS(WERR_errors), 0, NULL, HFILL }},
+	  { "Windows Error", "frstrans.werror", FT_UINT32, BASE_HEX|BASE_EXT_STRING, &WERR_errors_ext, 0, NULL, HFILL }},
 	};
 
 
