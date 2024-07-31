@@ -632,9 +632,9 @@ static const fragment_items isakmp_frag_items = {
 /*
 * IPSEC Situation Definition (RFC2407)
 */
-#define SIT_IDENTITY_ONLY       0x01
-#define SIT_SECRECY             0x02
-#define SIT_INTEGRITY           0x04
+#define SIT_IDENTITY_ONLY       0x00000001
+#define SIT_SECRECY             0x00000002
+#define SIT_INTEGRITY           0x00000004
 
 
 static const value_string exchange_v1_type[] = {
@@ -4818,7 +4818,7 @@ dissect_ikev2_fragmentation(tvbuff_t *tvb, int offset, proto_tree *tree,
 
     if (defrag_decrypted_isakmp_tvb && key_info && message_next_payload_set) {
       /* Completely reassembled  - already decrypted - dissect reassembled payload if know next payload type */
-      col_append_fstr(pinfo->cinfo, COL_INFO, " (reassembled)");
+      col_append_str(pinfo->cinfo, COL_INFO, " (reassembled)");
       dissect_payloads(defrag_decrypted_isakmp_tvb, tree,
                       2,           /* Could store with next_payload, but wouldn't be here otherwise.. */
                       message_next_payload,

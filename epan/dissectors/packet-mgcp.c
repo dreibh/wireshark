@@ -582,7 +582,7 @@ static void dissect_mgcp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 	tvbuff_t *next_tvb;
 	const char *verb_name = "";
 	mgcp_info_t* mi = wmem_new0(pinfo->pool, mgcp_info_t);
-	sdp_setup_info_t setup_info = { .hf_id = 0, .hf_type = SDP_TRACE_ID_HF_TYPE_GUINT32 };
+	sdp_setup_info_t setup_info = { .hf_id = 0, .hf_type = SDP_TRACE_ID_HF_TYPE_UINT32 };
 	media_content_info_t content_info = { MEDIA_CONTAINER_SIP_DATA, NULL, NULL, &setup_info };
 
 	mi->mgcp_type = MGCP_OTHERS;
@@ -1161,7 +1161,7 @@ static void dissect_mgcp_firstline(tvbuff_t *tvb, packet_info *pinfo, proto_tree
 		do
 		{
 			tvb_current_len = tvb_reported_length_remaining(tvb, tvb_previous_offset);
-			tvb_current_offset = tvb_find_guint8(tvb, tvb_previous_offset, tvb_current_len, ' ');
+			tvb_current_offset = tvb_find_uint8(tvb, tvb_previous_offset, tvb_current_len, ' ');
 			if (tvb_current_offset == -1)
 			{
 				tvb_current_offset = tvb_len;
@@ -2245,7 +2245,7 @@ static int tvb_find_dot_line(tvbuff_t* tvb, int offset, int len, int* next_offse
 
 	do
 	{
-		tvb_current_offset = tvb_find_guint8(tvb, tvb_current_offset+1,
+		tvb_current_offset = tvb_find_uint8(tvb, tvb_current_offset+1,
 		                                     tvb_current_len, '.');
 		tvb_current_len = maxoffset - tvb_current_offset + 1;
 

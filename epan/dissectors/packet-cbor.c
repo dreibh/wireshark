@@ -1118,7 +1118,7 @@ proto_register_cbor(void)
 	expert_register_field_array(expert_cbor, ei, array_length(ei));
 
 	cbor_handle = register_dissector("cbor", dissect_cbor, proto_cbor);
-	cborseq_handle = register_dissector("cborseq", dissect_cborseq, proto_cbor);
+	cborseq_handle = register_dissector_with_description("cborseq", "CBOR Sequence", dissect_cborseq, proto_cbor);
 }
 
 void
@@ -1128,6 +1128,9 @@ proto_reg_handoff_cbor(void)
 	dissector_add_string("media_type", "application/senml+cbor", cbor_handle); /* RFC 8428 */
 	dissector_add_string("media_type", "application/sensml+cbor", cbor_handle); /* RFC 8428 */
 	dissector_add_string("media_type", "application/cbor-seq", cborseq_handle); /* RFC 8742 */
+
+	dissector_add_string("media_type.suffix", "cbor", cbor_handle);
+	dissector_add_string("media_type.suffix", "cbor-seq", cborseq_handle);
 }
 
 /*

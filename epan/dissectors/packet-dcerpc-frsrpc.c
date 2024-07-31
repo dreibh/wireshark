@@ -10,7 +10,6 @@
 
 
 #include "config.h"
-#include <glib.h>
 #include <string.h>
 #include <epan/packet.h>
 
@@ -638,11 +637,11 @@ static int frsrpc_dissect_element_FrsStartPromotionParent_parent_guid(tvbuff_t *
 static int frsrpc_dissect_element_FrsStartPromotionParent_parent_guid_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
 static int frsrpc_dissect_element_FrsStartPromotionParent_parent_guid__(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
 static int
-frsrpc_dissect_element_CommPktChangeOrderCommand_file_name(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di, guint8 *drep _U_)
+frsrpc_dissect_element_CommPktChangeOrderCommand_file_name(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di, uint8_t *drep _U_)
 {
 	int conformant = di->conformant_run;
 	if (!conformant) {
-		guint32 soffset = dissect_null_term_wstring(tvb, offset, pinfo, tree, drep, hf_frsrpc_CommPktChangeOrderCommand_file_name, 0);
+		uint32_t soffset = dissect_null_term_wstring(tvb, offset, pinfo, tree, drep, hf_frsrpc_CommPktChangeOrderCommand_file_name, 0);
 		/* The difference has to be 4 due to the uint16 of the length  + null terminator utf16*/
 		DISSECTOR_ASSERT(soffset - offset < 261);
 		offset += 261;
@@ -650,9 +649,9 @@ frsrpc_dissect_element_CommPktChangeOrderCommand_file_name(tvbuff_t *tvb _U_, in
 	return offset;
 }
 int
-frsrpc_dissect_struct_CommPktChunk(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di, guint8 *drep _U_, int hf_index _U_, guint32 param _U_)
+frsrpc_dissect_struct_CommPktChunk(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *parent_tree _U_, dcerpc_info* di, uint8_t *drep _U_, int hf_index _U_, uint32_t param _U_)
 {
-	guint1632 type = 0;
+	uint1632_t type = 0;
 	int i = 0;
 	const char *s = NULL;
 	proto_item *item = NULL;
@@ -680,13 +679,13 @@ frsrpc_dissect_struct_CommPktChunk(tvbuff_t *tvb _U_, int offset _U_, packet_inf
 	return offset;
 }
 int
-frsrpc_dissect_enum_CommPktCommand(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di, guint8 *drep _U_, int hf_index _U_, guint32 *param _U_)
+frsrpc_dissect_enum_CommPktCommand(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di, uint8_t *drep _U_, int hf_index _U_, uint32_t *param _U_)
 {
-	guint32 parameter=0;
+	uint32_t parameter=0;
 	int i = 0;
 	const char *s = NULL;
 	if(param){
-		parameter=(guint32)*param;
+		parameter=(uint32_t)*param;
 	}
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_index, &parameter);
 	for (i=0; frsrpc_frsrpc_CommPktCommand_vals[i].strptr != NULL; i++) {
@@ -698,14 +697,14 @@ frsrpc_dissect_enum_CommPktCommand(tvbuff_t *tvb _U_, int offset _U_, packet_inf
 		col_append_fstr(pinfo->cinfo, COL_INFO, ",command = %s",
 				s);
 	if(param){
-		*param=(guint32)parameter;
+		*param=(uint32_t)parameter;
 	}
 	return offset;
 }
 static int
-frsrpc_dissect_struct_frsrpc_CommPktChunkCtr(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, guint8 *drep _U_, int hf_index, guint32 param _U_)
+frsrpc_dissect_struct_frsrpc_CommPktChunkCtr(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, dcerpc_info* di, uint8_t *drep _U_, int hf_index, uint32_t param _U_)
 {
-	guint32 remaining = tvb_reported_length_remaining(tvb, offset);
+	uint32_t remaining = tvb_reported_length_remaining(tvb, offset);
 	int align_status = di->no_align;
 	if (remaining > 0) {
 		proto_item *item = proto_tree_add_item(tree, hf_index, tvb, offset, -1, ENC_NA);
@@ -729,12 +728,12 @@ frsrpc_dissect_struct_frsrpc_CommPktChunkCtr(tvbuff_t *tvb, int offset, packet_i
 static int
 frsrpc_dissect_element_CommPktChunkGuidName_guid(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkGuidName_guid_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -757,12 +756,12 @@ frsrpc_dissect_element_CommPktChunkGuidName_guid_(tvbuff_t *tvb _U_, int offset 
 static int
 frsrpc_dissect_element_CommPktChunkGuidName_name(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkGuidName_name_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2140,12 +2139,12 @@ frsrpc_dissect_element_CommPktChunkData_connection(tvbuff_t *tvb _U_, int offset
 static int
 frsrpc_dissect_element_CommPktChunkData_join_guid(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkData_join_guid_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2176,12 +2175,12 @@ frsrpc_dissect_element_CommPktChunkData_last_join_time(tvbuff_t *tvb _U_, int of
 static int
 frsrpc_dissect_element_CommPktChunkData_vvector(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkData_vvector_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2204,12 +2203,12 @@ frsrpc_dissect_element_CommPktChunkData_vvector_(tvbuff_t *tvb _U_, int offset _
 static int
 frsrpc_dissect_element_CommPktChunkData_join_time(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkData_join_time_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2232,12 +2231,12 @@ frsrpc_dissect_element_CommPktChunkData_join_time_(tvbuff_t *tvb _U_, int offset
 static int
 frsrpc_dissect_element_CommPktChunkData_replica_version_guid(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkData_replica_version_guid_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2300,12 +2299,12 @@ frsrpc_dissect_element_CommPktChunkData_file_offset(tvbuff_t *tvb _U_, int offse
 static int
 frsrpc_dissect_element_CommPktChunkData_gvsn(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkData_gvsn_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2328,12 +2327,12 @@ frsrpc_dissect_element_CommPktChunkData_gvsn_(tvbuff_t *tvb _U_, int offset _U_,
 static int
 frsrpc_dissect_element_CommPktChunkData_co_guid(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkData_co_guid_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2364,12 +2363,12 @@ frsrpc_dissect_element_CommPktChunkData_co_sequence_number(tvbuff_t *tvb _U_, in
 static int
 frsrpc_dissect_element_CommPktChunkData_remote_co(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkData_remote_co_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2392,12 +2391,12 @@ frsrpc_dissect_element_CommPktChunkData_remote_co_(tvbuff_t *tvb _U_, int offset
 static int
 frsrpc_dissect_element_CommPktChunkData_co_ext_win2k(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunkData_co_ext_win2k_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2439,7 +2438,7 @@ frsrpc_dissect_CommPktChunkData(tvbuff_t *tvb _U_, int offset _U_, packet_info *
 	proto_item *item = NULL;
 	proto_tree *tree = NULL;
 	int old_offset;
-	guint32 level = param;
+	uint32_t level = param;
 
 	old_offset = offset;
 	if (parent_tree) {
@@ -2565,12 +2564,12 @@ frsrpc_dissect_element_CommPktChunk_type(tvbuff_t *tvb _U_, int offset _U_, pack
 static int
 frsrpc_dissect_element_CommPktChunk_data(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_, uint32_t *type)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_CommPktChunk_data_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2715,12 +2714,12 @@ frsrpc_dissect_element_FrsSendCommPktReq_ctr(tvbuff_t *tvb _U_, int offset _U_, 
 static int
 frsrpc_dissect_element_FrsSendCommPktReq_ctr_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_FrsSendCommPktReq_ctr_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -2836,7 +2835,7 @@ frsrpc_dissect_element_FrsSendCommPkt_req(tvbuff_t *tvb _U_, int offset _U_, pac
 static int
 frsrpc_dissect_FrsSendCommPkt_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="FrsSendCommPkt";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_werror, &status);
@@ -2960,7 +2959,7 @@ frsrpc_dissect_element_FrsVerifyPromotionParent___ndr_guid_size(tvbuff_t *tvb _U
 static int
 frsrpc_dissect_FrsVerifyPromotionParent_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="FrsVerifyPromotionParent";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_werror, &status);
@@ -3150,12 +3149,12 @@ frsrpc_dissect_element_FrsStartPromotionParent_connection_guid(tvbuff_t *tvb _U_
 static int
 frsrpc_dissect_element_FrsStartPromotionParent_connection_guid_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_FrsStartPromotionParent_connection_guid_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -3186,12 +3185,12 @@ frsrpc_dissect_element_FrsStartPromotionParent_partner_guid(tvbuff_t *tvb _U_, i
 static int
 frsrpc_dissect_element_FrsStartPromotionParent_partner_guid_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_FrsStartPromotionParent_partner_guid_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -3222,12 +3221,12 @@ frsrpc_dissect_element_FrsStartPromotionParent_parent_guid(tvbuff_t *tvb _U_, in
 static int
 frsrpc_dissect_element_FrsStartPromotionParent_parent_guid_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint3264 size;
+	uint3264_t size;
 	int conformant = di->conformant_run;
 	tvbuff_t *subtvb;
 
 	if (!conformant) {
-		guint32 saved_flags = di->call_data->flags;
+		uint32_t saved_flags = di->call_data->flags;
 		offset = dissect_ndr_uint3264(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_frsrpc_FrsStartPromotionParent_parent_guid_, &size);
 		di->call_data->flags &= ~DCERPC_IS_NDR64;
 		subtvb = tvb_new_subset_length_caplen(tvb, offset, (const int)size, -1);
@@ -3265,7 +3264,7 @@ frsrpc_dissect_element_FrsStartPromotionParent_parent_guid__(tvbuff_t *tvb _U_, 
 static int
 frsrpc_dissect_FrsStartPromotionParent_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="FrsStartPromotionParent";
 	offset = frsrpc_dissect_element_FrsStartPromotionParent_parent_guid(tvb, offset, pinfo, tree, di, drep);
@@ -3317,7 +3316,7 @@ frsrpc_dissect_FrsStartPromotionParent_request(tvbuff_t *tvb _U_, int offset _U_
 static int
 frsrpc_dissect_FrsNOP_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="FrsNOP";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_frsrpc_werror, &status);

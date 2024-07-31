@@ -4504,6 +4504,30 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Move to top left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Move to top center</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Move to top right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Move to bottom left</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Move to bottom center</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Move to bottom right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Portable Document Format (*.pdf)</source>
         <translation>PDF 형식 (*.pdf)</translation>
     </message>
@@ -14122,10 +14146,6 @@ a:hover {
         <translation>레이아웃 초기화</translation>
     </message>
     <message>
-        <source>Reset appearance layout to default size</source>
-        <translation>외관 레이아웃을 기본 크기로 초기화</translation>
-    </message>
-    <message>
         <source>Seconds Since First Captured Packet</source>
         <translation>최초로 캡처된 패킷부터 지난 초 단위 시간</translation>
     </message>
@@ -14492,6 +14512,10 @@ a:hover {
     <message>
         <source>Normal Size</source>
         <translation>보통 크기</translation>
+    </message>
+    <message>
+        <source>Reset layout to default size</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Resize Columns</source>

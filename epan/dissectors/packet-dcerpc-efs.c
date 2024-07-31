@@ -10,7 +10,6 @@
 
 
 #include "config.h"
-#include <glib.h>
 #include <string.h>
 #include <epan/packet.h>
 
@@ -125,7 +124,7 @@ static int efs_dissect_element_EfsRpcAddUsersToFile_FileName(tvbuff_t *tvb _U_, 
 static int efs_dissect_element_EfsRpcSetFileEncryptionKey_pEncryptionCertificate(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
 static int efs_dissect_element_EfsRpcSetFileEncryptionKey_pEncryptionCertificate_(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_);
 static int
-efs_dissect_struct_dom_sid(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, dcerpc_info* di, guint8 *drep _U_, int hf_index _U_, guint32 param _U_)
+efs_dissect_struct_dom_sid(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tree, dcerpc_info* di, uint8_t *drep _U_, int hf_index _U_, uint32_t param _U_)
 {
 	if(di->conformant_run){
 		/* just a run to handle conformant arrays, no scalars to dissect */
@@ -579,7 +578,7 @@ efs_dissect_element_EfsRpcOpenFileRaw_Flags(tvbuff_t *tvb _U_, int offset _U_, p
 static int
 efs_dissect_EfsRpcOpenFileRaw_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcOpenFileRaw";
 	offset = efs_dissect_element_EfsRpcOpenFileRaw_pvContext(tvb, offset, pinfo, tree, di, drep);
@@ -627,7 +626,7 @@ efs_dissect_element_EfsRpcReadFileRaw_pvContext_(tvbuff_t *tvb _U_, int offset _
 static int
 efs_dissect_EfsRpcReadFileRaw_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcReadFileRaw";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);
@@ -670,7 +669,7 @@ efs_dissect_element_EfsRpcWriteFileRaw_pvContext_(tvbuff_t *tvb _U_, int offset 
 static int
 efs_dissect_EfsRpcWriteFileRaw_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcWriteFileRaw";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);
@@ -747,7 +746,7 @@ efs_dissect_element_EfsRpcEncryptFileSrv_Filename(tvbuff_t *tvb _U_, int offset 
 static int
 efs_dissect_EfsRpcEncryptFileSrv_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcEncryptFileSrv";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);
@@ -794,7 +793,7 @@ efs_dissect_element_EfsRpcDecryptFileSrv_Reserved(tvbuff_t *tvb _U_, int offset 
 static int
 efs_dissect_EfsRpcDecryptFileSrv_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcDecryptFileSrv";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);
@@ -859,7 +858,7 @@ efs_dissect_element_EfsRpcQueryUsersOnFile_pUsers__(tvbuff_t *tvb _U_, int offse
 static int
 efs_dissect_EfsRpcQueryUsersOnFile_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcQueryUsersOnFile";
 	offset = efs_dissect_element_EfsRpcQueryUsersOnFile_pUsers(tvb, offset, pinfo, tree, di, drep);
@@ -925,7 +924,7 @@ efs_dissect_element_EfsRpcQueryRecoveryAgents_pRecoveryAgents__(tvbuff_t *tvb _U
 static int
 efs_dissect_EfsRpcQueryRecoveryAgents_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcQueryRecoveryAgents";
 	offset = efs_dissect_element_EfsRpcQueryRecoveryAgents_pRecoveryAgents(tvb, offset, pinfo, tree, di, drep);
@@ -966,7 +965,7 @@ efs_dissect_element_EfsRpcRemoveUsersFromFile_FileName(tvbuff_t *tvb _U_, int of
 static int
 efs_dissect_EfsRpcRemoveUsersFromFile_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcRemoveUsersFromFile";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);
@@ -1004,7 +1003,7 @@ efs_dissect_element_EfsRpcAddUsersToFile_FileName(tvbuff_t *tvb _U_, int offset 
 static int
 efs_dissect_EfsRpcAddUsersToFile_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcAddUsersToFile";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);
@@ -1047,7 +1046,7 @@ efs_dissect_element_EfsRpcSetFileEncryptionKey_pEncryptionCertificate_(tvbuff_t 
 static int
 efs_dissect_EfsRpcSetFileEncryptionKey_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcSetFileEncryptionKey";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);
@@ -1074,7 +1073,7 @@ efs_dissect_EfsRpcSetFileEncryptionKey_request(tvbuff_t *tvb _U_, int offset _U_
 static int
 efs_dissect_EfsRpcNotSupported_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcNotSupported";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);
@@ -1099,7 +1098,7 @@ efs_dissect_EfsRpcNotSupported_request(tvbuff_t *tvb _U_, int offset _U_, packet
 static int
 efs_dissect_EfsRpcFileKeyInfo_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcFileKeyInfo";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);
@@ -1124,7 +1123,7 @@ efs_dissect_EfsRpcFileKeyInfo_request(tvbuff_t *tvb _U_, int offset _U_, packet_
 static int
 efs_dissect_EfsRpcDuplicateEncryptionInfoFile_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="EfsRpcDuplicateEncryptionInfoFile";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_efs_werror, &status);

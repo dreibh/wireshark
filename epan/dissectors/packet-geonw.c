@@ -496,11 +496,11 @@ _geonw_to_str(const uint8_t* addrdata, char *buf, int buf_len _U_)
         *buf++ = '0';
     *buf++ = '.';
     // Station Type
-    guint32_to_str_buf((addrdata[0] & 0x7C) >> 2, buf, 26);
+    uint32_to_str_buf((addrdata[0] & 0x7C) >> 2, buf, 26);
     buf += (unsigned) strlen(buf);
     *buf++ = '.';
     // Country Code
-    guint32_to_str_buf(((uint32_t)(addrdata[0] & 0x03) << 8) + addrdata[1], buf, 23); // > 23
+    uint32_to_str_buf(((uint32_t)(addrdata[0] & 0x03) << 8) + addrdata[1], buf, 23); // > 23
     buf += (unsigned) strlen(buf);
     *buf++ = '.';
     // LL_ADDR
@@ -582,7 +582,7 @@ geonw_addr_resolve(hashgeonw_t *tp) {
     val = (addr[0] & 0x7C) >> 2;
     const char *string = try_val_to_str(val, itss_type_small_names);
     if (string == NULL) {
-        guint32_to_str_buf(val, rname, MAXNAMELEN-2);
+        uint32_to_str_buf(val, rname, MAXNAMELEN-2);
         l1 = (uint8_t) strlen(rname);
     }
     else {
@@ -594,7 +594,7 @@ geonw_addr_resolve(hashgeonw_t *tp) {
     val = ((uint32_t)(addr[0] & 0x03) << 8) + addr[1];
     string = try_val_to_str(val, E164_ISO3166_country_code_short_value);
     if (string == NULL) {
-        guint32_to_str_buf(val, rname, MAXNAMELEN-12);
+        uint32_to_str_buf(val, rname, MAXNAMELEN-12);
         l2 = (uint8_t) strlen(rname);
     }
     else {
@@ -733,7 +733,7 @@ static geonw_transaction_t *transaction_start(packet_info * pinfo, proto_tree * 
             it = proto_tree_add_item(tree, hf_geonw_no_resp, NULL, 0, 0, ENC_NA);
             proto_item_set_generated(it);
 
-            col_append_fstr(pinfo->cinfo, COL_INFO, " (no response found!)");
+            col_append_str(pinfo->cinfo, COL_INFO, " (no response found!)");
 
             /* Expert info. */
             expert_add_info_format(pinfo, it, &ei_geonw_resp_not_found, "No response seen to LS Request");
@@ -1203,11 +1203,11 @@ dissect_sec_var_len(tvbuff_t *tvb, int *offset, packet_info *pinfo, proto_tree *
     proto_tree *subtree;
 
     // Determine length
-    var_len = tvb_get_guint8(tvb, *offset);
+    var_len = tvb_get_uint8(tvb, *offset);
     *offset+=1;
     mask = 0x80;
     while(mask && (var_len & mask)) {
-        tmp_val = tvb_get_guint8(tvb, *offset);
+        tmp_val = tvb_get_uint8(tvb, *offset);
         *offset += 1;
         var_len = ((var_len & ~mask) << 8) + tmp_val;
         mask <<= 7;
@@ -1234,13 +1234,13 @@ dissect_sec_intx(tvbuff_t *tvb, int *offset, packet_info *pinfo, proto_tree *tre
     proto_tree *subtree;
 
     // Determine length
-    tmp_val = tvb_get_guint8(tvb, *offset);
+    tmp_val = tvb_get_uint8(tvb, *offset);
     *offset+=1;
     mask = 0x80;
     while(mask && (tmp_val & mask)) {
         tmp_val &= ~mask;
         tmp_val <<= 8;
-        tmp_val += tvb_get_guint8(tvb, *offset);
+        tmp_val += tvb_get_uint8(tvb, *offset);
         *offset += 1;
         mask <<= 7;
         //var_len++;
@@ -1791,7 +1791,7 @@ dissect_sec_signer_info(tvbuff_t *tvb, int *offset, packet_info *pinfo, proto_tr
 
     increment_dissection_depth(pinfo);
 
-    tmp_val = tvb_get_guint8(tvb, *offset);
+    tmp_val = tvb_get_uint8(tvb, *offset);
     if (tmp_val == self) {
         // No additional data shall be given
         proto_tree_add_item(tree, hf_sgeonw_signer_info_type, tvb, *offset, 1, ENC_BIG_ENDIAN);
@@ -1904,7 +1904,7 @@ dissect_sec_payload(tvbuff_t *tvb, int *offset, packet_info *pinfo, proto_tree *
     proto_tree *field_tree;
     proto_item *ti;
 
-    tmp_val = tvb_get_guint8(tvb, *offset);
+    tmp_val = tvb_get_uint8(tvb, *offset);
     if (tmp_val == signed_external) {
         proto_tree_add_item(part_tree, hf_sgeonw_payload_field_type, tvb, *offset, 1, ENC_BIG_ENDIAN);
         *offset += 1;
@@ -1962,7 +1962,7 @@ dissect_secured_message(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tre
     secmsg_item = proto_tree_add_item(tree, hf_geonw_sec, tvb, offset, 0, ENC_NA); // Length cannot be determined now
     proto_tree *secmsg_tree = proto_item_add_subtree(secmsg_item, ett_geonw_sec);
 
-    version = tvb_get_guint8(tvb, offset);
+    version = tvb_get_uint8(tvb, offset);
     if (version == 3) {
         tvbuff_t *next_tvb = tvb_new_subset_remaining(tvb, offset);
         call_dissector(ieee1609dot2_handle, next_tvb, pinfo, secmsg_tree);
@@ -2161,14 +2161,14 @@ dissect_geonw_internal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     col_clear(pinfo->cinfo,COL_INFO);
 
     if (!skip_bh) {
-        bh_next_header = tvb_get_guint8(tvb, 0) & 0x0f;
+        bh_next_header = tvb_get_uint8(tvb, 0) & 0x0f;
         hdr_len = BH_LEN;
     } else {
         bh_next_header = skip_bh;
     }
 
     if (bh_next_header == BH_NH_COMMON_HDR) {
-        header_type = tvb_get_guint8(tvb, hdr_len + 1);
+        header_type = tvb_get_uint8(tvb, hdr_len + 1);
         hdr_len += CH_LEN;
         switch(header_type & HT_MASK) {
             case HT_BEACON:
@@ -2251,7 +2251,7 @@ dissect_geonw_internal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
             tvb = next_tvb;
             bh_next_header = BH_NH_COMMON_HDR;
             offset = 0;
-            header_type = tvb_get_guint8(tvb, 1);
+            header_type = tvb_get_uint8(tvb, 1);
 
             hdr_len = CH_LEN;
             switch(header_type & HT_MASK) {
@@ -2640,7 +2640,7 @@ dissect_geonw_internal(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
             case HTST_TSB_SINGLE:
                 // Reserved 32 bits
                 // See usage in 636-4 subpart 2 for ITS-5G
-                reserved = tvb_get_guint32(tvb, offset, ENC_BIG_ENDIAN);
+                reserved = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
                 if (reserved) {
                     ti = proto_tree_add_item(geonw_sh_tree, hf_geonw_dccmco, tvb, offset, 4, ENC_NA);
                     proto_tree *dccmco = proto_item_add_subtree(ti, ett_geonw_dccmco);

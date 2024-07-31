@@ -118,7 +118,7 @@ static void
 gcsna_message_decode(proto_item *item, tvbuff_t *tvb, proto_tree *tree, unsigned *offset, proto_tree *mainTree, uint16_t *noerror, packet_info *pinfo)
 {
     uint16_t msgId = -1;
-    msgId = tvb_get_guint8(tvb, *offset);
+    msgId = tvb_get_uint8(tvb, *offset);
     *offset += 1;
 
     switch (msgId)
@@ -338,7 +338,7 @@ dissect_gcsna(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *dat
 
     /*Add the protocol name to display*/
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "gcsna");
-    col_add_fstr(pinfo->cinfo, COL_INFO, "[gcsna]");
+    col_set_str(pinfo->cinfo, COL_INFO, "[gcsna]");
 
     item = proto_tree_add_item(tree, hf_gcsna_msghdr, tvb, 0, -1, ENC_NA);
     gcsna_msghdr_tree_start = proto_item_add_subtree(item, ett_gcsna_msghdr);

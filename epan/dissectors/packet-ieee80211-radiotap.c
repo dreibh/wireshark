@@ -2053,7 +2053,7 @@ dissect_radiotap_u_sig(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
 	uint32_t mask;
 	bool bw_known = false;
 	struct ieee_802_11be *info_11be = &phdr->phy_info.info_11be;
-	uint32_t usig_common = tvb_get_letohs(tvb, offset);
+	uint32_t usig_common = tvb_get_letohl(tvb, offset);
 
 	phdr->phy = PHDR_802_11_PHY_11BE;
 
@@ -3160,8 +3160,8 @@ dissect_radiotap_channel(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree
 		};
 
 		chan_str = ieee80211_mhz_to_str(freq);
-		col_add_fstr(pinfo->cinfo,
-			     COL_FREQ_CHAN, "%s", chan_str);
+		col_add_str(pinfo->cinfo,
+				 COL_FREQ_CHAN, chan_str);
 		proto_tree_add_uint_format_value(tree,
 					   hf_radiotap_channel_frequency,
 					   tvb, offset, 2, freq,

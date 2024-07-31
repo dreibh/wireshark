@@ -691,12 +691,12 @@ gluster_rpc4_0_dissect_dict(proto_tree *tree, tvbuff_t *tvb, int hfindex, int of
 			val_len = 8;
 			dict_item = proto_tree_add_string_format(subtree, hf_gluster_dict_value, tvb, offset, val_len,
 								NULL, "%s: %"PRId64, key,
-								tvb_get_gint64(tvb, offset, ENC_BIG_ENDIAN));
+								tvb_get_int64(tvb, offset, ENC_BIG_ENDIAN));
 		} else if (val_type == 3) {
 			val_len = 8;
 			dict_item = proto_tree_add_string_format(subtree, hf_gluster_dict_value, tvb, offset, val_len,
 								NULL, "%s: %"PRIu64, key,
-								tvb_get_guint64(tvb, offset, ENC_BIG_ENDIAN));
+								tvb_get_uint64(tvb, offset, ENC_BIG_ENDIAN));
 		} else if (val_type == 4) {
 			val_len = 8;
 			dict_item = proto_tree_add_string_format(subtree, hf_gluster_dict_value, tvb, offset, val_len,
@@ -1957,7 +1957,7 @@ glusterfs_gfs3_3_op_lookup_call(tvbuff_t *tvb,
 	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, &name);
 	offset = gluster_rpc_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	if(length == 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Filename: (nameless, by GFID)");
+		col_append_str(pinfo->cinfo, COL_INFO, ", Filename: (nameless, by GFID)");
 	else
 		col_append_fstr(pinfo->cinfo, COL_INFO, ", Filename: %s", name);
 
@@ -2885,7 +2885,7 @@ glusterfs_gfs4_0_op_lookup_call(tvbuff_t *tvb,
 	offset = dissect_rpc_string(tvb, tree, hf_glusterfs_bname, offset, &name);
 	offset = gluster_rpc4_0_dissect_dict(tree, tvb, hf_glusterfs_dict, offset);
 	if(length == 0)
-		col_append_fstr(pinfo->cinfo, COL_INFO, ", Filename: (nameless, by GFID)");
+		col_append_str(pinfo->cinfo, COL_INFO, ", Filename: (nameless, by GFID)");
 	else
 		col_append_fstr(pinfo->cinfo, COL_INFO, ", Filename: %s", name);
 

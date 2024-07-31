@@ -49,13 +49,13 @@ test_searches(tvbuff_t *tvb, int offset, search_test_params *sp)
 	volatile bool ex_thrown = false;
 
 	TRY {
-		sp->g8.offset = tvb_find_guint8(tvb, offset, -1, sp->g8.needle);
+		sp->g8.offset = tvb_find_uint8(tvb, offset, -1, sp->g8.needle);
 		if (sp->g16.test) {
-			sp->g16.offset = tvb_find_guint16(tvb, offset, -1, sp->g16.needle);
+			sp->g16.offset = tvb_find_uint16(tvb, offset, -1, sp->g16.needle);
 		}
 		if (sp->mempbrk.test) {
 			sp->mempbrk.offset =
-				tvb_ws_mempbrk_pattern_guint8(tvb, offset, -1,
+				tvb_ws_mempbrk_pattern_uint8(tvb, offset, -1,
 					&sp->mempbrk.pattern, &sp->mempbrk.found_needle);
 		}
 	}
@@ -243,7 +243,7 @@ test(tvbuff_t *tvb, const char* name,
 
 		if (ex_thrown) {
 			printf("07: Failed TVB=%s Exception when retrieving "
-					"guint32 from offset 0\n", name);
+					"uint32_t from offset 0\n", name);
 			failed = true;
 			return false;
 		}
@@ -270,7 +270,7 @@ test(tvbuff_t *tvb, const char* name,
 
 		if (ex_thrown) {
 			printf("09: Failed TVB=%s Exception when retrieving "
-					"guint32 from offset 0\n", name);
+					"uint32_t from offset 0\n", name);
 			failed = true;
 			return false;
 		}
@@ -333,7 +333,7 @@ test(tvbuff_t *tvb, const char* name,
 		}
 
 		/* If the uint8_t at this offset is nonzero, try
-		 * tvb_ws_mempbrk_pattern_guint8 as well.
+		 * tvb_ws_mempbrk_pattern_uint8 as well.
 		 * ws_mempbrk_compile("\0") is not effective... */
 		sp.mempbrk.test = expected_data[i] != 0;
 		if (sp.mempbrk.test) {

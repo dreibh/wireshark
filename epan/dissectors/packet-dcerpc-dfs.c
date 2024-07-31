@@ -10,7 +10,6 @@
 
 
 #include "config.h"
-#include <glib.h>
 #include <string.h>
 #include <epan/packet.h>
 
@@ -3374,7 +3373,7 @@ netdfs_dissect_element_dfs_Add_flags(tvbuff_t *tvb _U_, int offset _U_, packet_i
 static int
 netdfs_dissect_dfs_Add_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_Add";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -3468,7 +3467,7 @@ netdfs_dissect_element_dfs_Remove_sharename_(tvbuff_t *tvb _U_, int offset _U_, 
 static int
 netdfs_dissect_dfs_Remove_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_Remove";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -3576,7 +3575,7 @@ netdfs_dissect_element_dfs_SetInfo_info_(tvbuff_t *tvb _U_, int offset _U_, pack
 static int
 netdfs_dissect_dfs_SetInfo_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_SetInfo";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -3688,7 +3687,7 @@ netdfs_dissect_element_dfs_GetInfo_info_(tvbuff_t *tvb _U_, int offset _U_, pack
 static int
 netdfs_dissect_dfs_GetInfo_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_GetInfo";
 	offset = netdfs_dissect_element_dfs_GetInfo_info(tvb, offset, pinfo, tree, di, drep);
@@ -3775,7 +3774,7 @@ netdfs_dissect_element_dfs_Enum_total_(tvbuff_t *tvb _U_, int offset _U_, packet
 static int
 netdfs_dissect_dfs_Enum_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_Enum";
 	offset = netdfs_dissect_element_dfs_Enum_info(tvb, offset, pinfo, tree, di, drep);
@@ -3814,7 +3813,7 @@ netdfs_dissect_dfs_Enum_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *
 static int
 netdfs_dissect_dfs_Rename_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_Rename";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -3839,7 +3838,7 @@ netdfs_dissect_dfs_Rename_request(tvbuff_t *tvb _U_, int offset _U_, packet_info
 static int
 netdfs_dissect_dfs_Move_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_Move";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -3864,7 +3863,7 @@ netdfs_dissect_dfs_Move_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *
 static int
 netdfs_dissect_dfs_ManagerGetConfigInfo_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_ManagerGetConfigInfo";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -3889,7 +3888,7 @@ netdfs_dissect_dfs_ManagerGetConfigInfo_request(tvbuff_t *tvb _U_, int offset _U
 static int
 netdfs_dissect_dfs_ManagerSendSiteInfo_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_ManagerSendSiteInfo";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4028,7 +4027,7 @@ netdfs_dissect_element_dfs_AddFtRoot_unknown2__(tvbuff_t *tvb _U_, int offset _U
 static int
 netdfs_dissect_dfs_AddFtRoot_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_AddFtRoot";
 	offset = netdfs_dissect_element_dfs_AddFtRoot_unknown2(tvb, offset, pinfo, tree, di, drep);
@@ -4155,7 +4154,7 @@ netdfs_dissect_element_dfs_RemoveFtRoot_unknown__(tvbuff_t *tvb _U_, int offset 
 static int
 netdfs_dissect_dfs_RemoveFtRoot_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_RemoveFtRoot";
 	offset = netdfs_dissect_element_dfs_RemoveFtRoot_unknown(tvb, offset, pinfo, tree, di, drep);
@@ -4239,7 +4238,7 @@ netdfs_dissect_element_dfs_AddStdRoot_flags(tvbuff_t *tvb _U_, int offset _U_, p
 static int
 netdfs_dissect_dfs_AddStdRoot_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_AddStdRoot";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4304,7 +4303,7 @@ netdfs_dissect_element_dfs_RemoveStdRoot_flags(tvbuff_t *tvb _U_, int offset _U_
 static int
 netdfs_dissect_dfs_RemoveStdRoot_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_RemoveStdRoot";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4363,7 +4362,7 @@ netdfs_dissect_element_dfs_ManagerInitialize_flags(tvbuff_t *tvb _U_, int offset
 static int
 netdfs_dissect_dfs_ManagerInitialize_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_ManagerInitialize";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4439,7 +4438,7 @@ netdfs_dissect_element_dfs_AddStdRootForced_store(tvbuff_t *tvb _U_, int offset 
 static int
 netdfs_dissect_dfs_AddStdRootForced_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_AddStdRootForced";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4472,7 +4471,7 @@ netdfs_dissect_dfs_AddStdRootForced_request(tvbuff_t *tvb _U_, int offset _U_, p
 static int
 netdfs_dissect_dfs_GetDcAddress_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_GetDcAddress";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4497,7 +4496,7 @@ netdfs_dissect_dfs_GetDcAddress_request(tvbuff_t *tvb _U_, int offset _U_, packe
 static int
 netdfs_dissect_dfs_SetDcAddress_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_SetDcAddress";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4545,7 +4544,7 @@ netdfs_dissect_element_dfs_FlushFtTable_rootshare(tvbuff_t *tvb _U_, int offset 
 static int
 netdfs_dissect_dfs_FlushFtTable_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_FlushFtTable";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4574,7 +4573,7 @@ netdfs_dissect_dfs_FlushFtTable_request(tvbuff_t *tvb _U_, int offset _U_, packe
 static int
 netdfs_dissect_dfs_Add2_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_Add2";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4599,7 +4598,7 @@ netdfs_dissect_dfs_Add2_request(tvbuff_t *tvb _U_, int offset _U_, packet_info *
 static int
 netdfs_dissect_dfs_Remove2_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_Remove2";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);
@@ -4687,7 +4686,7 @@ netdfs_dissect_element_dfs_EnumEx_total_(tvbuff_t *tvb _U_, int offset _U_, pack
 static int
 netdfs_dissect_dfs_EnumEx_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_EnumEx";
 	offset = netdfs_dissect_element_dfs_EnumEx_info(tvb, offset, pinfo, tree, di, drep);
@@ -4728,7 +4727,7 @@ netdfs_dissect_dfs_EnumEx_request(tvbuff_t *tvb _U_, int offset _U_, packet_info
 static int
 netdfs_dissect_dfs_SetInfo2_response(tvbuff_t *tvb _U_, int offset _U_, packet_info *pinfo _U_, proto_tree *tree _U_, dcerpc_info* di _U_, uint8_t *drep _U_)
 {
-	guint32 status;
+	uint32_t status;
 
 	di->dcerpc_procedure_name="dfs_SetInfo2";
 	offset = dissect_ndr_uint32(tvb, offset, pinfo, tree, di, drep, hf_netdfs_werror, &status);

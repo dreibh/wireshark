@@ -32,11 +32,11 @@ variables:
   # Skip irrelevant SAST scanners:
   SAST_EXCLUDED_ANALYZERS: "brakeman,eslint,security-code-scan,semgrep,spotbugs"
 
-# Automatically cancel pipelines if new changes are pushed to a branch.
-# workflow:auto_cancel:on_new_commit defaults to "conservative", which
-# prevents pipeline cancellation if we have any non-interruptible jobs.
-default:
-  interruptible: true
+workflow:
+  auto_cancel:
+    # Automatically cancel pipelines if new changes are pushed to a branch
+    # and the job is interruptible. Jobs are not interruptible by default.
+    on_new_commit: interruptible
 
 # Scheduled builds additionally set SCHEDULE_TYPE, which can be one of:
 # - 2x-daily: Twice daily at 07:00 and 19:00 UTC
@@ -72,10 +72,12 @@ default:
 # Incoming merge requests.
 .if-merge-request:
   - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    interruptible: true
 # Incoming non-detached merge requests. Must be used for runners which are only
 # available in wireshark/wireshark, e.g. wireshark-windows-*
 .if-w-w-only-merge-request:
   - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
+    interruptible: true
 # Scheduled jobs. Care should be taken when changing this since the scheduler
 # often doesn't report errors.
 .if-weekly-schedule:
@@ -635,7 +637,7 @@ Documentation:
   rules:
     - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
       changes:
-        - "docbook/**/*"
+        - "doc/**/*"
         - "epan/wslua/**/*"
     - if: '$CI_PIPELINE_SOURCE == "push"'
       when: manual
@@ -651,7 +653,7 @@ Documentation:
     - cmake -GNinja ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja all_guides
-    - cd docbook
+    - cd doc
     - for HTML_DIR in ws[ud]g_html{,_chunked} ; do zip -9 -r "$HTML_DIR.zip" "$HTML_DIR" ; done
     - if [ -n "$MC_DESTINATION_DOCS" ] ; then mc --quiet cp ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} "$MC_DESTINATION_DOCS/" ; fi
     - mv -v ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} ../..
@@ -798,8 +800,8 @@ Clang + Code Checks:
     # We don't have an "All options" job, so build fuzzshark and tfshark here.
     - cmake -DENABLE_CHECKHF_CONFLICT=on -DCMAKE_EXPORT_COMPILE_COMMANDS=on -DCMAKE_C_CLANG_TIDY=clang-tidy-$CLANG_VERSION -DCMAKE_CXX_CLANG_TIDY=clang-tidy-$CLANG_VERSION -DBUILD_fuzzshark=ON -DBUILD_tfshark=On -DBUILD_logray=ON -DENABLE_DEBUG=ON -DENABLE_CCACHE=ON -DENABLE_WERROR=ON -G Ninja ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
-    - printf "\e[0Ksection_start:%s:asn1_section[collapsed=true]\r\e[0KRegenerating ASN.1 dissectors" "$( date +%s)"
-    - ninja asn1
+    - printf "\e[0Ksection_start:%s:asn1_section[collapsed=false]\r\e[0KRegenerating ASN.1 dissectors" "$( date +%s)"
+    - ninja --quiet asn1
     - git diff --exit-code ${CI_COMMIT_SHA} ..
     - printf "\e[0Ksection_end:%s:asn1_section\r\e[0K" "$( date +%s)"
     - printf "\e[0Ksection_start:%s:pidl_section[collapsed=true]\r\e[0KRegenerating PIDL dissectors" "$( date +%s)"

@@ -1547,7 +1547,7 @@ dissect_ntlmssp_target_info_list(tvbuff_t *_tvb, packet_info *pinfo, proto_tree 
       break;
 
       case NTLM_TARGET_INFO_TIMESTAMP:
-        dissect_nt_64bit_time(tvb, target_info_tree, content_offset, *hf_array_p[item_type]);
+        dissect_nttime(tvb, target_info_tree, content_offset, *hf_array_p[item_type], ENC_LITTLE_ENDIAN);
         break;
 
       case NTLM_TARGET_INFO_RESTRICTIONS:
@@ -1599,8 +1599,9 @@ dissect_ntlmv2_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int
   proto_tree_add_item(ntlmv2_tree, hf_ntlmssp_ntlmv2_response_z, tvb, offset, 6, ENC_NA);
   offset += 6;
 
-  offset = dissect_nt_64bit_time(
-    tvb, ntlmv2_tree, offset, hf_ntlmssp_ntlmv2_response_time);
+  dissect_nttime(
+    tvb, ntlmv2_tree, offset, hf_ntlmssp_ntlmv2_response_time, ENC_LITTLE_ENDIAN);
+  offset += 8;
   proto_tree_add_item(
     ntlmv2_tree, hf_ntlmssp_ntlmv2_response_chal, tvb,
     offset, 8, ENC_NA);
@@ -2173,6 +2174,11 @@ dissect_ntlmssp_auth (tvbuff_t *tvb, packet_info *pinfo, int offset,
       /* If we are in EXTENDED SESSION SECURITY then we can now initialize cipher */
       if ((conv_ntlmssp_info->flags & NTLMSSP_NEGOTIATE_EXTENDED_SESSIONSECURITY))
       {
+        if (conv_ntlmssp_info->rc4_state_initialized) {
+          /* XXX - Do we really need to reinitialize the cipher contexts? */
+          gcry_cipher_close(conv_ntlmssp_info->rc4_handle_server);
+          gcry_cipher_close(conv_ntlmssp_info->rc4_handle_client);
+        }
         conv_ntlmssp_info->rc4_state_initialized = false;
         ntlmssp_create_session_key(pinfo,
                                    ntlmssp_tree,
@@ -2437,7 +2443,9 @@ decrypt_data_payload(tvbuff_t *tvb, int offset, uint32_t encrypted_block_length,
       decrypted_payloads = g_slist_prepend(decrypted_payloads,
                                            packet_ntlmssp_info->decrypted_payload);
       if (key != NULL) {
-        g_hash_table_insert(hash_packet, key, packet_ntlmssp_info);
+        uint8_t *perm_key = g_new(uint8_t, NTLMSSP_KEY_LEN);
+        memcpy(perm_key, key, NTLMSSP_KEY_LEN);
+        g_hash_table_insert(hash_packet, perm_key, packet_ntlmssp_info);
       }
 
       /* Do the decryption of the payload */
@@ -2887,7 +2895,7 @@ header_hash(const void *pointer)
 static gboolean
 header_equal(const void *pointer1, const void *pointer2)
 {
-  if (!memcmp(pointer1, pointer2, 16)) {
+  if (!memcmp(pointer1, pointer2, NTLMSSP_KEY_LEN)) {
     return TRUE;
   }
   else {
@@ -2898,7 +2906,7 @@ header_equal(const void *pointer1, const void *pointer2)
 static void
 ntlmssp_init_protocol(void)
 {
-  hash_packet = g_hash_table_new(header_hash, header_equal);
+  hash_packet = g_hash_table_new_full(header_hash, header_equal, g_free, NULL);
 }
 
 static void

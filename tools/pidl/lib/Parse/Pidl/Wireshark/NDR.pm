@@ -429,7 +429,7 @@ sub ElementLevel($$$$$$$$)
 		my $hf2 = $self->register_hf_field($hf."_", "Subcontext length", "$ifname.$pn.$_->{NAME}subcontext", "FT_UINT$num_bits", "BASE_HEX", "NULL", 0, "");
 		$num_bits = 3264 if ($num_bits == 32);
 		$self->{hf_used}->{$hf2} = 1;
-		$self->pidl_code("guint$num_bits size;");
+		$self->pidl_code("uint${num_bits}_t size;");
 		$self->pidl_code("int conformant = di->conformant_run;");
 		$self->pidl_code("tvbuff_t *subtvb;");
 		$self->pidl_code("");
@@ -437,7 +437,7 @@ sub ElementLevel($$$$$$$$)
 		# and conformant run skips the dissections of scalars ...
 		$self->pidl_code("if (!conformant) {");
 		$self->indent;
-		$self->pidl_code("guint32 saved_flags = di->call_data->flags;");
+		$self->pidl_code("uint32_t saved_flags = di->call_data->flags;");
 		$self->pidl_code("offset = dissect_ndr_uint$num_bits(tvb, offset, pinfo, tree, di, drep, $hf2, &size);");
 		# This is a subcontext, there is normally no such thing as
 		# 64 bit NDR is subcontext so we clear the flag so that we can
@@ -622,10 +622,10 @@ sub Function($$$)
 	if ( not defined($fn->{RETURN_TYPE})) {
 	} elsif ($fn->{RETURN_TYPE} eq "NTSTATUS" or $fn->{RETURN_TYPE} eq "WERROR" or $fn->{RETURN_TYPE} eq "HRESULT")
 	{
-		$self->pidl_code("guint32 status;\n");
+		$self->pidl_code("uint32_t status;\n");
 	} elsif (my $type = getType($fn->{RETURN_TYPE})) {
 		if ($type->{DATA}->{TYPE} eq "ENUM") {
-			$self->pidl_code("g".Parse::Pidl::Typelist::enum_type_fn($type->{DATA}) . " status;\n");
+			$self->pidl_code(Parse::Pidl::Typelist::enum_type_fn($type->{DATA}) . "_t status;\n");
 		} elsif ($type->{DATA}->{TYPE} eq "SCALAR") {
 			$self->pidl_code(mapWireScalarType($fn->{RETURN_TYPE}) . " status;\n");
 		} else {
@@ -663,7 +663,6 @@ sub Function($$$)
 		$return_types{$ifname}->{"hresult"} = ["HRESULT", "HRES Windows Error"];
 	} elsif (my $type = getType($fn->{RETURN_TYPE})) {
 		if ($type->{DATA}->{TYPE} eq "ENUM") {
-			my $return_type = "g".Parse::Pidl::Typelist::enum_type_fn($type->{DATA});
 			my $return_dissect = "dissect_ndr_" .Parse::Pidl::Typelist::enum_type_fn($type->{DATA});
 
 			$self->pidl_code("offset = $return_dissect(tvb, offset, pinfo, tree, di, drep, hf\_$ifname\_$fn->{RETURN_TYPE}_status, &status);");
@@ -859,7 +858,7 @@ sub Union($$$$)
 	$self->pidl_code("proto_tree *tree = NULL;");
 	$self->pidl_code("int old_offset;");
 	if (!defined $switch_type) {
-		$self->pidl_code("guint32 level = param;");
+		$self->pidl_code("uint32_t level = param;");
 	} else {
 		$self->pidl_code("$switch_type level;");
 	}
@@ -1138,9 +1137,9 @@ sub Initialize($$)
 	$self->register_type("GUID", "offset = dissect_ndr_uuid_t(tvb, offset, pinfo, tree, di, drep, \@HF\@, NULL);","FT_GUID", "BASE_NONE", 0, "NULL", 4);
 	$self->register_type("policy_handle", "offset = PIDL_dissect_policy_hnd(tvb, offset, pinfo, tree, di, drep, \@HF\@, \@PARAM\@);","FT_BYTES", "BASE_NONE", 0, "NULL", 4);
 	$self->register_type("NTTIME", "offset = dissect_ndr_nt_NTTIME(tvb, offset, pinfo, tree, di, drep, \@HF\@);","FT_ABSOLUTE_TIME", "ABSOLUTE_TIME_LOCAL", 0, "NULL", 4);
-	$self->register_type("NTTIME_hyper", "offset = dissect_ndr_nt_NTTIME(tvb, offset, pinfo, tree, di, drep, \@HF\@);","FT_ABSOLUTE_TIME", "ABSOLUTE_TIME_LOCAL", 0, "NULL", 4);
+	$self->register_type("NTTIME_hyper", "offset = dissect_ndr_nt_NTTIME_hyper(tvb, offset, pinfo, tree, di, drep, \@HF\@);","FT_ABSOLUTE_TIME", "ABSOLUTE_TIME_LOCAL", 0, "NULL", 4);
 	$self->register_type("time_t", "offset = dissect_ndr_time_t(tvb, offset, pinfo,tree, di, drep, \@HF\@, NULL);","FT_ABSOLUTE_TIME", "ABSOLUTE_TIME_LOCAL", 0, "NULL", 4);
-	$self->register_type("NTTIME_1sec", "offset = dissect_ndr_nt_NTTIME(tvb, offset, pinfo, tree, di, drep, \@HF\@);", "FT_ABSOLUTE_TIME", "ABSOLUTE_TIME_LOCAL", 0, "NULL", 4);
+	$self->register_type("NTTIME_1sec", "offset = dissect_ndr_nt_NTTIME_1sec(tvb, offset, pinfo, tree, di, drep, \@HF\@);", "FT_ABSOLUTE_TIME", "ABSOLUTE_TIME_LOCAL", 0, "NULL", 4);
 	$self->register_type("dom_sid28",
 		"offset = dissect_ndr_nt_SID28(tvb, offset, pinfo, tree, di, drep, \@HF\@);", "FT_STRING", "BASE_NONE", 0, "NULL", 4);
 	$self->register_type("SID",
@@ -1182,7 +1181,6 @@ sub Parse($$$$$)
 	$self->{res}->{headers} = "\n";
 	$self->{res}->{headers} .= "#include \"config.h\"\n";
 
-	$self->{res}->{headers} .= "#include <glib.h>\n";
 	$self->{res}->{headers} .= "#include <string.h>\n";
 	$self->{res}->{headers} .= "#include <epan/packet.h>\n\n";
 

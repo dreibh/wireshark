@@ -3002,7 +3002,7 @@ dissect_h265(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 			else
 			{
 				if ((tvb_get_uint8(tvb, offset) & 0x40) == 0x40) {
-					col_append_fstr(pinfo->cinfo, COL_INFO, " End");
+					col_append_str(pinfo->cinfo, COL_INFO, " End");
 				}
 				return offset;
 			}
@@ -3114,13 +3114,13 @@ dissect_h265_bytestream(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 		offset += 3;
 		int nal_length = tvb_reported_length_remaining(tvb, offset);
 		/* Search for \0\0\1 or \0\0\0\1 */
-		end_offset = tvb_find_guint16(tvb, offset, -1, 0);
+		end_offset = tvb_find_uint16(tvb, offset, -1, 0);
 		while (end_offset != -1) {
-			if (tvb_find_guint16(tvb, end_offset + 1, 3, 1) != -1) {
+			if (tvb_find_uint16(tvb, end_offset + 1, 3, 1) != -1) {
 				nal_length = end_offset - offset;
 				break;
 			}
-			end_offset = tvb_find_guint16(tvb, end_offset + 1, -1, 0);
+			end_offset = tvb_find_uint16(tvb, end_offset + 1, -1, 0);
 		}
 
 		/* If end_offset is -1, we got to the end; assume this is the

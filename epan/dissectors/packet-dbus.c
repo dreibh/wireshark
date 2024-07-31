@@ -523,7 +523,7 @@ is_dbus_signature_valid(const char *signature, dbus_packet_t *packet) {
 		case SIG_CODE_STRUCT_CLOSE:
 		case SIG_CODE_DICT_ENTRY_CLOSE:
 			if (wmem_stack_count(expected_chars) == 0 ||
-				(char)(guintptr)wmem_stack_pop(expected_chars) != sig_code) {
+				(char)(uintptr_t)wmem_stack_pop(expected_chars) != sig_code) {
 				return false;
 			}
 			break;
@@ -1420,23 +1420,23 @@ dissect_dbus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
 static unsigned
 get_dbus_message_len(packet_info *pinfo _U_, tvbuff_t *tvb,
                      int offset, void *data _U_) {
-	uint32_t (*get_guint32)(tvbuff_t *, const int);
+	uint32_t (*get_uint32)(tvbuff_t *, const int);
 
 	uint32_t len_body, len_hdr;
 
 	switch (tvb_get_uint8(tvb, offset)) {
 		case 'l':
-			get_guint32 = tvb_get_letohl;
+			get_uint32 = tvb_get_letohl;
 			break;
 		case 'B':
 		default:
-			get_guint32 = tvb_get_ntohl;
+			get_uint32 = tvb_get_ntohl;
 			break;
 	}
 
-	len_hdr = DBUS_HEADER_LEN + get_guint32(tvb, offset + 12);
+	len_hdr = DBUS_HEADER_LEN + get_uint32(tvb, offset + 12);
 	len_hdr = WS_ROUNDUP_8(len_hdr);
-	len_body = get_guint32(tvb, offset + 4);
+	len_body = get_uint32(tvb, offset + 4);
 
 	return len_hdr + len_body;
 }

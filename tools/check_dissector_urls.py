@@ -217,7 +217,7 @@ args = parser.parse_args()
 
 
 def is_dissector_file(filename):
-    p = re.compile(r'epan/dissectors/packet-.*\.c')
+    p = re.compile(r'.*(packet|file)-.*\.c')
     return p.match(filename)
 
 
@@ -262,7 +262,6 @@ elif args.open:
 elif args.docs:
     # Find links from doc folder(s)
     find_links_in_folder(os.path.join(os.path.dirname(__file__), '..', 'doc'))
-    find_links_in_folder(os.path.join(os.path.dirname(__file__), '..', 'docbook'))
 
 else:
     # Find links from dissector folder.

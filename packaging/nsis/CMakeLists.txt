@@ -53,7 +53,6 @@ file(TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}" TOP_SRC_DIR)
 # STAGING_DIR depends on the build configuration so we pass it
 # on the command line below.
 file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/doc" DOC_DIR)
-file(TO_NATIVE_PATH "${CMAKE_BINARY_DIR}/docbook" DOCBOOK_DIR)
 set (MMDBRESOLVE_EXE ${MAXMINDDB_FOUND})
 
 # To do:
@@ -287,8 +286,9 @@ macro( ADD_NSIS_PACKAGE_TARGETS )
 			DEPENDS
 				${WIRESHARK_NSIS_FILES}
 				copy_data_files
-				user_guide_html
 				faq_html
+				user_guide_html
+				release_notes_html
 		)
 		set_target_properties(wireshark_nsis_prep PROPERTIES
 			FOLDER "Packaging"
@@ -358,8 +358,6 @@ macro( ADD_NSIS_PACKAGE_TARGETS )
 endmacro( ADD_NSIS_PACKAGE_TARGETS )
 
 set(CLEAN_FILES
-	#NEWS.txt
-	#user-guide.chm
 	${DATAFILE_DIR}/uninstall-wireshark.exe
 	wireshark-${VERSION}-${WIRESHARK_TARGET_PLATFORM}.exe
 	wireshark-config.nsh

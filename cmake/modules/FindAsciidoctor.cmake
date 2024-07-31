@@ -45,7 +45,7 @@ if(ASCIIDOCTOR_EXECUTABLE)
         # --failure-level=WARN
         # --trace
         --quiet
-        --attribute build_dir=${CMAKE_BINARY_DIR}/docbook
+        --attribute build_dir=${CMAKE_BINARY_DIR}/doc
         --attribute css_dir=${CMAKE_SOURCE_DIR}/doc
         --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/ws_utils.rb
         --require ${CMAKE_SOURCE_DIR}/doc/asciidoctor-macros/commaize-block.rb
@@ -190,12 +190,10 @@ if(ASCIIDOCTOR_EXECUTABLE)
         )
     endfunction()
 
-    # news: release-notes.txt
-    #         ${CMAKE_COMMAND} -E copy_if_different release-notes.txt ../NEWS
-
     FIND_PROGRAM(ASCIIDOCTOR_PDF_EXECUTABLE
         NAMES
             asciidoctorj
+            asciidoctor-pdf.bat
             asciidoctor-pdf
         PATHS
             /bin
@@ -225,6 +223,9 @@ if(ASCIIDOCTOR_EXECUTABLE)
                     ${_output_pdf}
             COMMAND ${_asciidoctor_pdf_common_command}
                     --out-file "${_output_pdf}"
+                    -a pdf-fontsdir=${CMAKE_SOURCE_DIR}/resources/fonts
+                    -a pdf-themesdir=${CMAKE_SOURCE_DIR}/doc/asciidoctor-themes
+                    -a pdf-theme=wsug
                     ${CMAKE_CURRENT_SOURCE_DIR}/${_asciidocsource}
             DEPENDS
                     ${CMAKE_SOURCE_DIR}/doc/attributes.adoc
@@ -248,6 +249,7 @@ if(ASCIIDOCTOR_EXECUTABLE)
     FIND_PROGRAM(ASCIIDOCTOR_EPUB_EXECUTABLE
         NAMES
             asciidoctorj
+            asciidoctor-epub3.bat
             asciidoctor-epub3
         PATHS
             /bin

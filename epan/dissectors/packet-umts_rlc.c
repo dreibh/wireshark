@@ -1541,21 +1541,21 @@ iter_same(void *key, void *value, void *data) {
 /**
  * Used for looking up and old ciphering counter value in the counter_map tree.
  * @param key is created with GINT_TO_POINTER
- * @param value is pointer to an array of 2 guint32s
- * @param data is a pointer to an array of 3 guint32s
+ * @param value is pointer to an array of 2 uint32_t
+ * @param data is a pointer to an array of 3 uint32_t
  */
 static gboolean
 rlc_find_old_counter(void *key, void *value, void *data) {
 
     /*If true we found the correct frame*/
     if( (uint32_t)GPOINTER_TO_INT(key) >= ((uint32_t *)data)[0] ){
-        return true;
+        return TRUE;
     }
     /*Overwrite the data since the previous one wasn't correct*/
     ((uint32_t*)data)[1] = ((uint32_t*)value)[0];
     ((uint32_t*)data)[2] = ((uint32_t*)value)[1];
 
-    return false;
+    return FALSE;
 }
 
 static void

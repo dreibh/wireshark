@@ -2225,7 +2225,7 @@ _tvb_get_bits64(tvbuff_t *tvb, unsigned bit_offset, const int total_no_of_bits)
 	{
 		/* the required bits don't extend to the end of the first octet */
 		uint8_t right_shift = required_bits_in_first_octet - total_no_of_bits;
-		value = (tvb_get_guint8(tvb, octet_offset) >> right_shift) & bit_mask8[total_no_of_bits % 8];
+		value = (tvb_get_uint8(tvb, octet_offset) >> right_shift) & bit_mask8[total_no_of_bits % 8];
 	}
 	else
 	{
@@ -2236,7 +2236,7 @@ _tvb_get_bits64(tvbuff_t *tvb, unsigned bit_offset, const int total_no_of_bits)
 		required_bits_in_first_octet %= 8;
 		if(required_bits_in_first_octet != 0)
 		{
-			value = tvb_get_guint8(tvb, octet_offset) & bit_mask8[required_bits_in_first_octet];
+			value = tvb_get_uint8(tvb, octet_offset) & bit_mask8[required_bits_in_first_octet];
 			remaining_bit_length -= required_bits_in_first_octet;
 			octet_offset ++;
 		}
@@ -2248,7 +2248,7 @@ _tvb_get_bits64(tvbuff_t *tvb, unsigned bit_offset, const int total_no_of_bits)
 			case 0:
 				/* 8 - 15 bits. (note that 0 - 7 would have dropped out of the while() loop) */
 				value <<= 8;
-				value += tvb_get_guint8(tvb, octet_offset);
+				value += tvb_get_uint8(tvb, octet_offset);
 				remaining_bit_length -= 8;
 				octet_offset ++;
 				break;
@@ -2282,7 +2282,7 @@ _tvb_get_bits64(tvbuff_t *tvb, unsigned bit_offset, const int total_no_of_bits)
 		if(remaining_bit_length)
 		{
 			value <<= remaining_bit_length;
-			value += (tvb_get_guint8(tvb, octet_offset) >> (8 - remaining_bit_length));
+			value += (tvb_get_uint8(tvb, octet_offset) >> (8 - remaining_bit_length));
 		}
 	}
 	return value;
@@ -2310,7 +2310,7 @@ _tvb_get_bits64_le(tvbuff_t *tvb, unsigned bit_offset, const int total_no_of_bit
 	{
 		/* not aligned, extract bits from first octet */
 		shift = 8 - (bit_offset % 8);
-		value = tvb_get_guint8(tvb, octet_offset) >> (bit_offset % 8);
+		value = tvb_get_uint8(tvb, octet_offset) >> (bit_offset % 8);
 		if (shift > remaining_bits)
 		{
 			/* keep only the requested bits */
@@ -2343,7 +2343,7 @@ _tvb_get_bits64_le(tvbuff_t *tvb, unsigned bit_offset, const int total_no_of_bit
 		}
 		else if (remaining_bits >= 8)
 		{
-			value |= ((uint64_t)tvb_get_guint8(tvb, octet_offset) << shift);
+			value |= ((uint64_t)tvb_get_uint8(tvb, octet_offset) << shift);
 			shift += 8;
 			remaining_bits -= 8;
 			octet_offset += 1;
@@ -2351,7 +2351,7 @@ _tvb_get_bits64_le(tvbuff_t *tvb, unsigned bit_offset, const int total_no_of_bit
 		else
 		{
 			unsigned mask = (1 << remaining_bits) - 1;
-			value |= (((uint64_t)tvb_get_guint8(tvb, octet_offset) & mask) << shift);
+			value |= (((uint64_t)tvb_get_uint8(tvb, octet_offset) & mask) << shift);
 			shift += remaining_bits;
 			remaining_bits = 0;
 			octet_offset += 1;
@@ -2368,7 +2368,7 @@ tvb_get_bits(tvbuff_t *tvb, const unsigned bit_offset, const int no_of_bits, con
 }
 
 static int
-tvb_find_guint8_generic(tvbuff_t *tvb, unsigned abs_offset, unsigned limit, uint8_t needle)
+tvb_find_uint8_generic(tvbuff_t *tvb, unsigned abs_offset, unsigned limit, uint8_t needle)
 {
 	const uint8_t *ptr;
 	const uint8_t *result;
@@ -2392,7 +2392,7 @@ tvb_find_guint8_generic(tvbuff_t *tvb, unsigned abs_offset, unsigned limit, uint
  * in that case, -1 will be returned if the boundary is reached before
  * finding needle. */
 int
-tvb_find_guint8(tvbuff_t *tvb, const int offset, const int maxlength, const uint8_t needle)
+tvb_find_uint8(tvbuff_t *tvb, const int offset, const int maxlength, const uint8_t needle)
 {
 	const uint8_t *result;
 	unsigned	      abs_offset = 0;
@@ -2423,15 +2423,15 @@ tvb_find_guint8(tvbuff_t *tvb, const int offset, const int maxlength, const uint
 		}
 	}
 
-	if (tvb->ops->tvb_find_guint8)
-		return tvb->ops->tvb_find_guint8(tvb, abs_offset, limit, needle);
+	if (tvb->ops->tvb_find_uint8)
+		return tvb->ops->tvb_find_uint8(tvb, abs_offset, limit, needle);
 
-	return tvb_find_guint8_generic(tvb, offset, limit, needle);
+	return tvb_find_uint8_generic(tvb, offset, limit, needle);
 }
 
-/* Same as tvb_find_guint8() with 16bit needle. */
+/* Same as tvb_find_uint8() with 16bit needle. */
 int
-tvb_find_guint16(tvbuff_t *tvb, const int offset, const int maxlength,
+tvb_find_uint16(tvbuff_t *tvb, const int offset, const int maxlength,
 		 const uint16_t needle)
 {
 	unsigned	      abs_offset = 0;
@@ -2456,7 +2456,7 @@ tvb_find_guint16(tvbuff_t *tvb, const int offset, const int maxlength,
 
 	do {
 		int offset1 =
-			tvb_find_guint8(tvb, pos, limit - searched_bytes, needle1);
+			tvb_find_uint8(tvb, pos, limit - searched_bytes, needle1);
 		int offset2 = -1;
 
 		if (offset1 == -1) {
@@ -2469,7 +2469,7 @@ tvb_find_guint16(tvbuff_t *tvb, const int offset, const int maxlength,
 			return -1;
 		}
 
-		offset2 = tvb_find_guint8(tvb, offset1 + 1, 1, needle2);
+		offset2 = tvb_find_uint8(tvb, offset1 + 1, 1, needle2);
 
 		searched_bytes += 1;
 
@@ -2487,7 +2487,7 @@ tvb_find_guint16(tvbuff_t *tvb, const int offset, const int maxlength,
 }
 
 static inline int
-tvb_ws_mempbrk_guint8_generic(tvbuff_t *tvb, unsigned abs_offset, unsigned limit, const ws_mempbrk_pattern* pattern, unsigned char *found_needle)
+tvb_ws_mempbrk_uint8_generic(tvbuff_t *tvb, unsigned abs_offset, unsigned limit, const ws_mempbrk_pattern* pattern, unsigned char *found_needle)
 {
 	const uint8_t *ptr;
 	const uint8_t *result;
@@ -2512,7 +2512,7 @@ tvb_ws_mempbrk_guint8_generic(tvbuff_t *tvb, unsigned abs_offset, unsigned limit
  * in that case, -1 will be returned if the boundary is reached before
  * finding needle. */
 int
-tvb_ws_mempbrk_pattern_guint8(tvbuff_t *tvb, const int offset, const int maxlength,
+tvb_ws_mempbrk_pattern_uint8(tvbuff_t *tvb, const int offset, const int maxlength,
 			const ws_mempbrk_pattern* pattern, unsigned char *found_needle)
 {
 	const uint8_t *result;
@@ -2544,10 +2544,10 @@ tvb_ws_mempbrk_pattern_guint8(tvbuff_t *tvb, const int offset, const int maxleng
 		}
 	}
 
-	if (tvb->ops->tvb_ws_mempbrk_pattern_guint8)
-		return tvb->ops->tvb_ws_mempbrk_pattern_guint8(tvb, abs_offset, limit, pattern, found_needle);
+	if (tvb->ops->tvb_ws_mempbrk_pattern_uint8)
+		return tvb->ops->tvb_ws_mempbrk_pattern_uint8(tvb, abs_offset, limit, pattern, found_needle);
 
-	return tvb_ws_mempbrk_guint8_generic(tvb, abs_offset, limit, pattern, found_needle);
+	return tvb_ws_mempbrk_uint8_generic(tvb, abs_offset, limit, pattern, found_needle);
 }
 
 /* Find size of stringz (NUL-terminated string) by looking for terminating
@@ -2564,7 +2564,7 @@ tvb_strsize(tvbuff_t *tvb, const int offset)
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
 	check_offset_length(tvb, offset, 0, &abs_offset, &junk_length);
-	nul_offset = tvb_find_guint8(tvb, abs_offset, -1, 0);
+	nul_offset = tvb_find_uint8(tvb, abs_offset, -1, 0);
 	if (nul_offset == -1) {
 		/*
 		 * OK, we hit the end of the tvbuff, so we should throw
@@ -2616,7 +2616,7 @@ tvb_strnlen(tvbuff_t *tvb, const int offset, const unsigned maxlength)
 
 	check_offset_length(tvb, offset, 0, &abs_offset, &junk_length);
 
-	result_offset = tvb_find_guint8(tvb, abs_offset, maxlength, 0);
+	result_offset = tvb_find_uint8(tvb, abs_offset, maxlength, 0);
 
 	if (result_offset == -1) {
 		return -1;
@@ -4150,7 +4150,7 @@ tvb_find_line_end(tvbuff_t *tvb, const int offset, int len, int *next_offset, co
 	/*
 	 * Look either for a CR or an LF.
 	 */
-	eol_offset = tvb_ws_mempbrk_pattern_guint8(tvb, offset, len, &pbrk_crlf, &found_needle);
+	eol_offset = tvb_ws_mempbrk_pattern_uint8(tvb, offset, len, &pbrk_crlf, &found_needle);
 	if (eol_offset == -1) {
 		/*
 		 * No CR or LF - line is presumably continued in next packet.
@@ -4208,7 +4208,7 @@ tvb_find_line_end(tvbuff_t *tvb, const int offset, int len, int *next_offset, co
 				 * Well, we can at least look at the next
 				 * byte.
 				 */
-				if (tvb_get_guint8(tvb, eol_offset + 1) == '\n') {
+				if (tvb_get_uint8(tvb, eol_offset + 1) == '\n') {
 					/*
 					 * It's an LF; skip over the CR.
 					 */
@@ -4283,13 +4283,13 @@ tvb_find_line_end_unquoted(tvbuff_t *tvb, const int offset, int len, int *next_o
 			/*
 			 * Yes - look only for the terminating quote.
 			 */
-			char_offset = tvb_find_guint8(tvb, cur_offset, len,
+			char_offset = tvb_find_uint8(tvb, cur_offset, len,
 				'"');
 		} else {
 			/*
 			 * Look either for a CR, an LF, or a '"'.
 			 */
-			char_offset = tvb_ws_mempbrk_pattern_guint8(tvb, cur_offset, len, &pbrk_crlf_dquote, &c);
+			char_offset = tvb_ws_mempbrk_pattern_uint8(tvb, cur_offset, len, &pbrk_crlf_dquote, &c);
 		}
 		if (char_offset == -1) {
 			/*
@@ -4339,7 +4339,7 @@ tvb_find_line_end_unquoted(tvbuff_t *tvb, const int offset, int len, int *next_o
 					 * Yes; is it followed by an LF?
 					 */
 					if (char_offset + 1 < eob_offset &&
-						tvb_get_guint8(tvb, char_offset + 1)
+						tvb_get_uint8(tvb, char_offset + 1)
 						  == '\n') {
 						/*
 						 * Yes; skip over the CR.
@@ -4418,7 +4418,7 @@ tvb_skip_wsp(tvbuff_t *tvb, const int offset, const int maxlength)
 	/* Skip past spaces, tabs, CRs and LFs until run out or meet something else */
 	for (counter = offset;
 		 counter < end &&
-		  ((tempchar = tvb_get_guint8(tvb,counter)) == ' ' ||
+		  ((tempchar = tvb_get_uint8(tvb,counter)) == ' ' ||
 		  tempchar == '\t' || tempchar == '\r' || tempchar == '\n');
 		 counter++);
 
@@ -4434,7 +4434,7 @@ tvb_skip_wsp_return(tvbuff_t *tvb, const int offset)
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
 	for (counter = offset; counter > 0 &&
-		((tempchar = tvb_get_guint8(tvb,counter)) == ' ' ||
+		((tempchar = tvb_get_uint8(tvb,counter)) == ' ' ||
 		tempchar == '\t' || tempchar == '\n' || tempchar == '\r'); counter--);
 	counter++;
 
@@ -4442,7 +4442,7 @@ tvb_skip_wsp_return(tvbuff_t *tvb, const int offset)
 }
 
 int
-tvb_skip_guint8(tvbuff_t *tvb, int offset, const int maxlength, const uint8_t ch)
+tvb_skip_uint8(tvbuff_t *tvb, int offset, const int maxlength, const uint8_t ch)
 {
 	int end, tvb_len;
 
@@ -4457,7 +4457,7 @@ tvb_skip_guint8(tvbuff_t *tvb, int offset, const int maxlength, const uint8_t ch
 		end = tvb_len;
 
 	while (offset < end) {
-		uint8_t tempch = tvb_get_guint8(tvb, offset);
+		uint8_t tempch = tvb_get_uint8(tvb, offset);
 
 		if (tempch != ch)
 			break;
@@ -4494,7 +4494,7 @@ int tvb_get_token_len(tvbuff_t *tvb, const int offset, int len, int *next_offset
 	/*
 	* Look either for a space, CR, or LF.
 	*/
-	eot_offset = tvb_ws_mempbrk_pattern_guint8(tvb, offset, len, &pbrk_whitespace, &found_needle);
+	eot_offset = tvb_ws_mempbrk_pattern_uint8(tvb, offset, len, &pbrk_whitespace, &found_needle);
 	if (eot_offset == -1) {
 		/*
 		* No space, CR or LF - token is presumably continued in next packet.
@@ -4736,7 +4736,7 @@ tvb_get_varint(tvbuff_t *tvb, unsigned offset, unsigned maxlen, uint64_t *value,
 		uint64_t b; /* current byte */
 
 		for (i = 0; ((i < FT_VARINT_MAX_LEN) && (i < maxlen)); ++i) {
-			b = tvb_get_guint8(tvb, offset++);
+			b = tvb_get_uint8(tvb, offset++);
 			*value |= ((b & 0x7F) << (i * 7)); /* add lower 7 bits to val */
 
 			if (b < 0x80) {
@@ -4753,7 +4753,7 @@ tvb_get_varint(tvbuff_t *tvb, unsigned offset, unsigned maxlen, uint64_t *value,
 		uint64_t b; /* current byte */
 
 		for (i = 0; ((i < FT_VARINT_MAX_LEN) && (i < maxlen)); ++i) {
-			b = tvb_get_guint8(tvb, offset++);
+			b = tvb_get_uint8(tvb, offset++);
 			*value |= ((b & 0x7F) << (i * 7)); /* add lower 7 bits to val */
 
 			if (b < 0x80) {
@@ -4772,7 +4772,7 @@ tvb_get_varint(tvbuff_t *tvb, unsigned offset, unsigned maxlen, uint64_t *value,
 		uint64_t b; /* current byte */
 
 		for (i = 0; ((i < FT_VARINT_MAX_LEN) && (i < maxlen)); ++i) {
-			b = tvb_get_guint8(tvb, offset++);
+			b = tvb_get_uint8(tvb, offset++);
 			if ((i == 9) && (*value >= UINT64_C(1)<<(64-7))) {
 				// guaranteed overflow, not valid SDNV
 				return 0;
@@ -4791,7 +4791,7 @@ tvb_get_varint(tvbuff_t *tvb, unsigned offset, unsigned maxlen, uint64_t *value,
 	case ENC_VARINT_QUIC:
 	{
 		/* calculate variable length */
-		*value = tvb_get_guint8(tvb, offset);
+		*value = tvb_get_uint8(tvb, offset);
 		switch((*value) >> 6) {
 		case 0: /* 0b00 => 1 byte length (6 bits Usable) */
 			(*value) &= 0x3F;

@@ -518,10 +518,10 @@ handle_message_sasl(tvbuff_t    *tvb,
     if(command) {
         /* This gives us the offset into the buffer of the terminating character of
          * the command, the '\n'. + 1 to get the number of bytes used for the
-         * command in the buffer. tvb_find_guint8() returns -1 if not found so the + 1
+         * command in the buffer. tvb_find_uint8() returns -1 if not found so the + 1
          * will result in a newline_offset of 0 if not found.
          */
-        int newline_offset = tvb_find_guint8(tvb, offset + command->length, -1, '\n') + 1;
+        int newline_offset = tvb_find_uint8(tvb, offset + command->length, -1, '\n') + 1;
 
         /* If not found see if we should request another segment. */
         if(0 == newline_offset) {
@@ -915,7 +915,7 @@ parse_arg(tvbuff_t      *tvb,
             int           packet_length        = (int)tvb_reported_length(tvb);
 
             if(*signature == NULL || *signature_length < 1) {
-                col_add_fstr(pinfo->cinfo, COL_INFO, "BAD DATA: An array argument needs a signature.");
+                col_set_str(pinfo->cinfo, COL_INFO, "BAD DATA: An array argument needs a signature.");
                 return tvb_reported_length(tvb);
             }
 

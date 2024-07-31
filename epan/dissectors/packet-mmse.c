@@ -498,7 +498,7 @@ get_value_length(tvbuff_t *tvb, unsigned offset, unsigned *byte_count, packet_in
     if (field < 31)
         *byte_count = 1;
     else {                      /* Must be 31 so, Uintvar follows       */
-        field = tvb_get_guintvar(tvb, offset, byte_count, pinfo, &ei_mmse_oversized_uintvar);
+        field = tvb_get_uintvar(tvb, offset, byte_count, pinfo, &ei_mmse_oversized_uintvar);
         (*byte_count)++;
     }
 
@@ -801,7 +801,7 @@ dissect_mmse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint8_t pdut,
                     length = tvb_get_uint8(tvb, offset);
                     if (length == 0x1F) {
                         unsigned length_len = 0;
-                        length = tvb_get_guintvar(tvb, offset + 1,
+                        length = tvb_get_uintvar(tvb, offset + 1,
                                 &length_len, pinfo, &ei_mmse_oversized_uintvar);
                         length += 1 + length_len;
                     } else {
@@ -977,7 +977,7 @@ dissect_mmse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint8_t pdut,
                     length = tvb_get_uint8(tvb, offset);
                     if (length == 0x1F) {
                         unsigned length_len = 0;
-                        length = tvb_get_guintvar(tvb, offset + 1,
+                        length = tvb_get_uintvar(tvb, offset + 1,
                                 &length_len, pinfo, &ei_mmse_oversized_uintvar);
                         length += 1 + length_len;
                     } else {
@@ -1032,7 +1032,7 @@ dissect_mmse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint8_t pdut,
                     length = tvb_get_uint8(tvb, offset);
                     if (length == 0x1F) {
                         unsigned length_len = 0;
-                        length = tvb_get_guintvar(tvb, offset + 1,
+                        length = tvb_get_uintvar(tvb, offset + 1,
                                 &length_len, pinfo, &ei_mmse_oversized_uintvar);
                         length += 1 + length_len;
                     } else {
@@ -1200,9 +1200,9 @@ dissect_mmse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint8_t pdut,
                         proto_tree_add_string_format(mmse_tree, hf_mmse_header_string, tvb, offset - 1,
                                 length + 1, str, "%s: %s (Not decoded)", hdr_name, str);
                     } else { /* General form with length */
-                        if (peek == 0x1F) { /* Value length in guintvar */
+                        if (peek == 0x1F) { /* Value length in uintvar */
                             unsigned length_len = 0;
-                            length = 1 + tvb_get_guintvar(tvb, offset + 1,
+                            length = 1 + tvb_get_uintvar(tvb, offset + 1,
                                     &length_len, pinfo, &ei_mmse_oversized_uintvar);
                             length += length_len;
                         } else { /* Value length in octet */
