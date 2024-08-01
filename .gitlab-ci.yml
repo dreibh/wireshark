@@ -652,11 +652,12 @@ Documentation:
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
     - cmake -GNinja ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
-    - ninja all_guides
+    - ninja all_guides faq_html
     - cd doc
     - for HTML_DIR in ws[ud]g_html{,_chunked} ; do zip -9 -r "$HTML_DIR.zip" "$HTML_DIR" ; done
-    - if [ -n "$MC_DESTINATION_DOCS" ] ; then mc --quiet cp ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} "$MC_DESTINATION_DOCS/" ; fi
-    - mv -v ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} ../..
+    - gzip -9 faq.html
+    - if [ -n "$MC_DESTINATION_DOCS" ] ; then mc --quiet cp ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} faq.html.gz "$MC_DESTINATION_DOCS/" ; fi
+    - mv -v ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} faq.html.gz ../..
   after_script:
     - if [ "$CI_JOB_STATUS" != "success" ]; then exit 0 ; fi
   artifacts:
@@ -669,6 +670,7 @@ Documentation:
       - "Wireshark Developer's Guide.pdf"
       - "Wireshark User's Guide.epub"
       - "Wireshark Developer's Guide.epub"
+      - faq.html.gz
   needs: []
 
 
@@ -825,6 +827,7 @@ Clang + Code Checks:
     - ./tools/check_typed_item_calls.py --consecutive --label --mask --check-bitmask-fields --commits $NUM_COMMITS | tee item_calls_check.txt
     - ./tools/check_tfs.py --check-value-strings --commits $NUM_COMMITS | tee tfs_check.txt
     - ./tools/check_val_to_str.py --commits $NUM_COMMITS | tee val_to_str_check.txt
+    - ./tools/check_col_apis.py --commits $NUM_COMMITS | tee col_apis_check.txt
   artifacts:
     paths:
       - clang_report.txt
@@ -834,6 +837,7 @@ Clang + Code Checks:
       - item_calls_check.txt
       - tfs_check.txt
       - val_to_str_check.txt
+      - col_apis_check.txt
       - checkhf_conflict.txt
       - html/
 

@@ -108,6 +108,7 @@
 
 #include "packet-ieee802154.h"
 #include "packet-sll.h"
+#include "packet-zbee-tlv.h"
 
 void proto_register_ieee802154(void);
 void proto_reg_handoff_ieee802154(void);
@@ -3052,7 +3053,7 @@ ieee802154_decrypt_payload(tvbuff_t *tvb, unsigned mhr_len, packet_info *pinfo, 
         decrypt_info.status = &status;
         decrypt_info.key = NULL; /* payload function will fill that in */
 
-        if (ptr2)  // if this pointer is not null that mean we foound trel
+        if (ptr2)  // if this pointer is not null that mean we found trel
             payload_tvb = decrypt_ieee802154_payload(tvb, mhr_len, pinfo, NULL, packet, &decrypt_info,
                 ieee802154_set_trel_key, dissect_ieee802154_decrypt);
         else
@@ -3167,8 +3168,15 @@ unsigned ieee802154_dissect_frame_payload(tvbuff_t *tvb, packet_info *pinfo, pro
             switch (packet->frame_type) {
             case IEEE802154_FCF_BEACON:
                 if (!dissector_try_heuristic(ieee802154_beacon_subdissector_list, payload_tvb, pinfo, tree, &hdtbl_entry, packet)) {
-                    /* Could not subdissect, call the data dissector instead. */
-                    call_data_dissector(payload_tvb, pinfo, tree);
+                    unsigned offset;
+                    offset = dissect_zbee_tlvs(payload_tvb, pinfo, tree, 0, NULL, ZBEE_TLV_SRC_TYPE_DEFAULT, 0);
+                    if (tvb_captured_length_remaining(payload_tvb, offset) > 0)
+                    {
+                      tvbuff_t *payload_tvb_remaining;
+                      payload_tvb_remaining = tvb_new_subset_remaining(payload_tvb, offset);
+                      /* Could not subdissect, call the data dissector instead. */
+                      call_data_dissector(payload_tvb_remaining, pinfo, tree);
+                    }
                 }
                 break;
 
