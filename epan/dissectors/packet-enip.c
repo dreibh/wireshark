@@ -35,6 +35,7 @@
 #include <epan/expert.h>
 #include <epan/decode_as.h>
 #include <epan/proto_data.h>
+#include <epan/tfs.h>
 #include <ipproto.h>
 
 #include "packet-tcp.h"
@@ -3706,7 +3707,7 @@ proto_register_enip(void)
 
       { &hf_enip_listid_delay,
         { "Max Response Delay", "enip.listid_delay",
-          FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0,
+          FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0,
           "Maximum random delay allowed by target", HFILL }},
 
       { &hf_enip_options,
@@ -5135,7 +5136,7 @@ proto_register_enip(void)
       /* Beacon Timeout */
       { &hf_dlr_beacontimeout,
         { "Beacon Timeout", "enip.dlr.beacontimeout",
-          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_microseconds, 0,
+          FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_microseconds), 0,
           NULL, HFILL }
       },
       /* Beacon Reserved */

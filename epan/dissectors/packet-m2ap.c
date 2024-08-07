@@ -23,6 +23,7 @@
 #include <epan/asn1.h>
 #include <epan/expert.h>
 #include <epan/proto_data.h>
+#include <wsutil/array.h>
 
 #include "packet-per.h"
 #include "packet-e212.h"
@@ -4278,11 +4279,11 @@ proto_register_m2ap(void) {
         "ENB_MBMS_Configuration_data_Item", HFILL }},
     { &hf_m2ap_mBMS_E_RAB_MaximumBitrateDL,
       { "mBMS-E-RAB-MaximumBitrateDL", "m2ap.mBMS_E_RAB_MaximumBitrateDL",
-        FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_bit_sec, 0,
+        FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_sec), 0,
         "BitRate", HFILL }},
     { &hf_m2ap_mBMS_E_RAB_GuaranteedBitrateDL,
       { "mBMS-E-RAB-GuaranteedBitrateDL", "m2ap.mBMS_E_RAB_GuaranteedBitrateDL",
-        FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_bit_sec, 0,
+        FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_sec), 0,
         "BitRate", HFILL }},
     { &hf_m2ap_eNB_ID,
       { "eNB-ID", "m2ap.eNB_ID",

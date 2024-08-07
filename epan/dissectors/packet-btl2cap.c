@@ -24,6 +24,8 @@
 #include <epan/decode_as.h>
 #include <epan/proto_data.h>
 #include <epan/reassemble.h>
+#include <epan/unit_strings.h>
+
 #include <wiretap/wtap.h>
 
 #include "packet-bluetooth.h"
@@ -3575,7 +3577,7 @@ proto_register_btl2cap(void)
         },
         { &hf_btl2cap_peripheral_latency,
           { "Peripheral Latency",           "btl2cap.peripheral_latency",
-            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_ll_connection_event, 0,
+            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_ll_connection_event), 0,
             NULL, HFILL }
         },
         { &hf_btl2cap_timeout_multiplier,

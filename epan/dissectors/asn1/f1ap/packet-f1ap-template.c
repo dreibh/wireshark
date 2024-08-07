@@ -19,6 +19,9 @@
 #include <epan/sctpppids.h>
 #include <epan/proto_data.h>
 #include <epan/stats_tree.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
+#include <wsutil/array.h>
 
 #include "packet-per.h"
 #include "packet-f1ap.h"

@@ -23,6 +23,7 @@
 #include <epan/oids.h>
 #include <epan/asn1.h>
 #include <epan/expert.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-ansi_tcap.h"
@@ -784,7 +785,7 @@ static const value_string ain_nature_of_carrier_vals[] = {
 
 
 /* AIN OPERATIONS */
-const value_string ain_opr_code_strings[] = {
+static const value_string ain_opr_code_strings[] = {
   { 26116                                   , "callInfoFromResource" },
   { 28161                                   , "close" },
   { 26118                                   , "cTRClear" },

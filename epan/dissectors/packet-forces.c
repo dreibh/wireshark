@@ -15,6 +15,7 @@
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/expert.h>
+#include <epan/unit_strings.h>
 
 void proto_register_forces(void);
 void proto_reg_handoff_forces(void);
@@ -647,7 +648,7 @@ proto_register_forces(void)
         },
         { &hf_forces_tlv_length,
             { "Length", "forces.tlv.length",
-            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0, NULL, HFILL }
+            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0, NULL, HFILL }
         },
         /*flags*/
         { &hf_forces_flags,
@@ -698,7 +699,7 @@ proto_register_forces(void)
         },
         { &hf_forces_lfbselect_tlv_type_operation_length,
             { "Length", "forces.lfbselect.tlv.type.operation.length",
-            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0, NULL, HFILL }
+            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0, NULL, HFILL }
         },
         { &hf_forces_lfbselect_tlv_type_operation_path_type,
             { "Type", "forces.lfbselect.tlv.type.operation.path.type",
@@ -739,7 +740,7 @@ proto_register_forces(void)
         },
         { &hf_forces_redirect_tlv_meta_data_tlv_length,
             { "Length", "forces.redirect.tlv.meta.data.tlv.length",
-            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0, NULL, HFILL }
+            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0, NULL, HFILL }
         },
         { &hf_forces_redirect_tlv_meta_data_tlv_meta_data_ilv,
             { "Meta Data ILV", "forces.redirect.tlv.meta.data.tlv.meta.data.ilv",
@@ -751,7 +752,7 @@ proto_register_forces(void)
         },
         { &hf_forces_redirect_tlv_meta_data_tlv_meta_data_ilv_length,
             { "Length", "forces.redirect.tlv.meta.data.tlv.meta.data.ilv.length",
-            FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0, NULL, HFILL }
+            FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0, NULL, HFILL }
         },
         { &hf_forces_redirect_tlv_redirect_data_tlv_type,
             { "Type", "forces.redirect.tlv.redirect.data.tlv.type",
@@ -759,7 +760,7 @@ proto_register_forces(void)
         },
         { &hf_forces_redirect_tlv_redirect_data_tlv_length,
             { "Length", "forces.redirect.tlv.redirect.data.tlv.length",
-            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0, NULL, HFILL }
+            FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0, NULL, HFILL }
         },
         { &hf_forces_asresult_association_setup_result,
             { "Association Setup Result", "forces.teardown.reason",

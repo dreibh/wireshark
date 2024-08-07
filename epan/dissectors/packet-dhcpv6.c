@@ -53,6 +53,8 @@
 #include <epan/arptypes.h>
 #include <epan/sminmpec.h>
 #include <epan/strutil.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 #include "packet-tcp.h"
 #include "packet-arp.h"
 #include "packet-dns.h"
@@ -3265,7 +3267,7 @@ proto_register_dhcpv6(void)
         { &hf_option_preference,
           { "Pref-value", "dhcpv6.option_preference", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL}},
         { &hf_elapsed_time,
-          { "Elapsed time", "dhcpv6.elapsed_time", FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0, NULL, HFILL}},
+          { "Elapsed time", "dhcpv6.elapsed_time", FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0, NULL, HFILL}},
         { &hf_auth_protocol,
           { "Protocol", "dhcpv6.auth.protocol", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL}},
         { &hf_auth_algorithm,

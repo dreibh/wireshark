@@ -14,6 +14,9 @@
 #include <epan/packet.h>
 #include <epan/tap.h>
 #include <epan/addr_resolv.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
+
 void proto_register_bat(void);
 void proto_reg_handoff_bat(void);
 
@@ -696,12 +699,12 @@ void proto_register_bat(void)
 		},
 		{ &hf_bat_batman_gwflags_dl_speed,
 		  { "Download Speed", "bat.batman.gwflags.dl_speed",
-		    FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_kbit, 0x0,
+		    FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbit), 0x0,
 		    NULL, HFILL }
 		},
 		{ &hf_bat_batman_gwflags_ul_speed,
 		  { "Upload Speed", "bat.batman.gwflags.ul_speed",
-		    FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_kbit, 0x0,
+		    FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbit), 0x0,
 		    NULL, HFILL }
 		},
 		{ &hf_bat_batman_seqno,

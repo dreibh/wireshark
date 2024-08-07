@@ -19,6 +19,8 @@
 #include <epan/reassemble.h>
 #include <epan/conversation.h>
 #include <epan/proto_data.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 
 #include "packet-iwarp-ddp-rdmap.h"
 
@@ -976,7 +978,7 @@ proto_register_iwarp_ddp_rdmap(void)
 				NULL, HFILL} },
 		{ &hf_iwarp_rdma_rdmardsz, {
 				"RDMA Read Message Size", "iwarp_rdma.rdmardsz",
-				FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+				FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
 				NULL, HFILL} },
 		{ &hf_iwarp_rdma_srcstag, {
 				"Data Source STag", "iwarp_rdma.srcstag",

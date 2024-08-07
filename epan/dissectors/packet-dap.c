@@ -22,6 +22,7 @@
 #include <epan/oids.h>
 #include <epan/asn1.h>
 #include <epan/proto_data.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-acse.h"
@@ -653,7 +654,7 @@ static expert_field ei_dap_anonymous;
 
 
 /* DAP OPERATIONS */
-const value_string dap_opr_code_string_vals[] = {
+static const value_string dap_opr_code_string_vals[] = {
 	{ op_ros_bind, "directoryBind" },
 	{ id_opcode_read, "read" },
 	{ id_opcode_compare, "compare" },

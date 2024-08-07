@@ -33,6 +33,8 @@
 #include <epan/prefs.h>
 #include <epan/expert.h>
 #include <epan/to_str.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 
 #include "packet-arp.h"
 #include "packet-tcp.h"
@@ -1331,7 +1333,7 @@ proto_register_dhcpfo(void)
 		},
 		{&hf_dhcpfo_receive_timer,
 			{"Receive timer", "dhcpfo.receivetimer",
-			FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_second_seconds, 0,
+			FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_second_seconds), 0,
 			NULL, HFILL }
 		},
 		{&hf_dhcpfo_message_digest,

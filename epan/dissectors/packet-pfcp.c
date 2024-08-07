@@ -28,8 +28,11 @@
 #include <epan/addr_resolv.h> /* Needed for BASE_ENTERPRISES */
 #include <epan/tap.h>
 #include <epan/srt_table.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 #include <proto.h>
 #include <tvbuff.h>
+#include <wsutil/array.h>
 #include "packet-e164.h"
 #include "packet-e212.h"
 #include "packet-ip.h"
@@ -14754,7 +14757,7 @@ proto_register_pfcp(void)
         },
         { &hf_pfcp_user_plane_inactivity_timer,
         { "User Plane Inactivity Timer", "pfcp.user_plane_inactivity_time",
-            FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0,
+            FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0,
             NULL, HFILL }
         },
 
@@ -15111,7 +15114,7 @@ proto_register_pfcp(void)
 
         { &hf_pfcp_ethernet_inactivity_timer,
         { "Ethernet Inactivity Timer", "pfcp.ethernet",
-            FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0,
+            FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0,
             NULL, HFILL }
         },
 
@@ -15330,7 +15333,7 @@ proto_register_pfcp(void)
 
         { &hf_pfcp_validity_time_value,
         { "Validity Time value", "pfcp.validity_time_value",
-            FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0x0,
+            FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0x0,
             NULL, HFILL }
         },
         { &hf_pfcp_validity_time_str,

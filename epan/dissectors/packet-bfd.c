@@ -32,6 +32,8 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 
 #include "packet-bfd.h"
 #include "packet-mpls.h"
@@ -741,7 +743,7 @@ proto_register_bfd(void)
         },
         { &hf_bfd_message_length,
           { "Message Length", "bfd.message_length",
-            FT_UINT8, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+            FT_UINT8, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
             "Length of the BFD Control packet, in bytes", HFILL }
         },
         { &hf_bfd_my_discriminator,
@@ -781,7 +783,7 @@ proto_register_bfd(void)
         },
         { &hf_bfd_auth_len,
           { "Authentication Length", "bfd.auth.len",
-            FT_UINT8, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+            FT_UINT8, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
             "The length, in bytes, of the authentication section", HFILL }
         },
         { &hf_bfd_auth_key,

@@ -15,6 +15,7 @@
 #include <epan/conversation.h>
 #include <epan/to_str.h>
 #include <epan/prefs.h>
+#include <epan/unit_strings.h>
 
 void proto_register_bt_tracker(void);
 void proto_reg_handoff_bt_tracker(void);
@@ -565,7 +566,7 @@ proto_register_bt_tracker(void)
     },
     { &hf_bt_tracker_extension_len,
       { "Extension Length", "bt-tracker.extension_len",
-      FT_UINT8, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+      FT_UINT8, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
       NULL, HFILL }
     },
     { &hf_bt_tracker_extension_unknown,

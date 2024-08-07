@@ -23,7 +23,9 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/proto_data.h>
+#include <epan/tfs.h>
 #include <wsutil/wsjson.h>
+#include <wsutil/array.h>
 
 #include "packet-gsm_a_common.h"
 #include "packet-media-type.h"

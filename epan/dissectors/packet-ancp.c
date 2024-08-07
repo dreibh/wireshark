@@ -23,6 +23,8 @@
 
 #include <epan/packet.h>
 #include <epan/stats_tree.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 #include <wsutil/ws_roundup.h>
 #include "packet-tcp.h"
 
@@ -776,7 +778,7 @@ proto_register_ancp(void)
         { &hf_ancp_timer,
             { "Timer", "ancp.timer",
                 FT_UINT8, BASE_DEC|BASE_UNIT_STRING,
-                &units_milliseconds, 0x0,
+                UNS(&units_milliseconds), 0x0,
                 NULL, HFILL }
         },
         { &hf_ancp_adj_code,

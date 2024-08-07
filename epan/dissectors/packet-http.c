@@ -36,6 +36,7 @@
 #include <epan/export_object.h>
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
+#include <epan/unit_strings.h>
 #include <glib.h>
 #include "packet-http.h"
 #include "packet-http2.h"
@@ -4700,7 +4701,7 @@ proto_register_http(void)
 		NULL, HFILL }},
 	    { &hf_http_chunk_size,
 	      { "Chunk size", "http.chunk_size",
-		FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_octet_octets, 0,
+		FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_octet_octets), 0,
 		NULL, HFILL }},
 	    { &hf_http_chunk_data,
 	      { "Chunk data", "http.chunk_data",

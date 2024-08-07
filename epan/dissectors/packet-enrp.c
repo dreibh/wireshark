@@ -26,9 +26,12 @@
 #include <epan/stat_tap_ui.h>
 #include <epan/expert.h>
 #include <epan/proto_data.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 
 #include <wsutil/str_util.h>
 #include <wsutil/ws_roundup.h>
+#include <wsutil/array.h>
 
 #include "packet-asap+enrp-common.h"
 
@@ -1123,7 +1126,7 @@ proto_register_enrp(void)
     { &hf_pool_handle,            { "Pool Handle",                 "enrp.pool_handle_pool_handle",                  FT_BYTES,   BASE_NONE,  NULL,                              0x0,                        NULL, HFILL } },
     { &hf_pe_pe_identifier,       { "PE Identifier",               "enrp.pool_element_pe_identifier",               FT_UINT32,  BASE_HEX,  NULL,                              0x0,                        NULL, HFILL } },
     { &hf_home_enrp_id,           { "Home ENRP Server Identifier", "enrp.pool_element_home_enrp_server_identifier", FT_UINT32,  BASE_HEX,  NULL,                              0x0,                        NULL, HFILL } },
-    { &hf_reg_life,               { "Registration Life",           "enrp.pool_element_registration_life",           FT_INT32,   BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,                        NULL, HFILL } },
+    { &hf_reg_life,               { "Registration Life",           "enrp.pool_element_registration_life",           FT_INT32,   BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,                        NULL, HFILL } },
     { &hf_server_identifier,      { "Server Identifier",           "enrp.server_information_server_identifier",     FT_UINT32,  BASE_HEX,  NULL,                              0x0,                        NULL, HFILL } },
     { &hf_cookie,                 { "Cookie",                      "enrp.cookie",                                   FT_BYTES,   BASE_NONE,  NULL,                              0x0,                        NULL, HFILL } },
     { &hf_pe_identifier,          { "PE Identifier",               "enrp.pe_identifier",                            FT_UINT32,  BASE_HEX,  NULL,                              0x0,                        NULL, HFILL } },

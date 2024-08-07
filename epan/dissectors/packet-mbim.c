@@ -44,6 +44,9 @@
 #include <epan/to_str.h>
 #include <epan/strutil.h>
 #include <epan/ipproto.h>
+#include <epan/conversation.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 #include <wiretap/wtap.h>
 
 #include "packet-gsm_a_common.h"
@@ -7523,7 +7526,7 @@ dissect_mbim_control(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
     struct mbim_info *mbim_info = NULL;
 
     if (data) {
-        usb_trans_info_t *usb_trans_info = ((usb_conv_info_t *)data)->usb_trans_info;
+        usb_trans_info_t *usb_trans_info = ((urb_info_t *)data)->usb_trans_info;
         if (usb_trans_info && (usb_trans_info->setup.request == 0x00)) {
             tree = proto_tree_get_parent_tree(tree);
         }
@@ -9797,15 +9800,15 @@ dissect_mbim_bulk(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 static bool
 dissect_mbim_bulk_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    usb_conv_info_t *usb_conv_info = (usb_conv_info_t *)data;
+    urb_info_t *urb = (urb_info_t *)data;
 
-    if ((usb_conv_info == NULL) ||
-        ((usb_conv_info->interfaceClass != IF_CLASS_CDC_DATA) &&
-        (usb_conv_info->interfaceClass != IF_CLASS_UNKNOWN))) {
+    if ((urb == NULL) || (urb->conv == NULL) ||
+        ((urb->conv->interfaceClass != IF_CLASS_CDC_DATA) &&
+        (urb->conv->interfaceClass != IF_CLASS_UNKNOWN))) {
         return false;
     }
 
-    if (dissect_mbim_bulk(tvb, pinfo, tree, usb_conv_info)) {
+    if (dissect_mbim_bulk(tvb, pinfo, tree, urb)) {
         return true;
     }
     return false;
@@ -9814,30 +9817,30 @@ dissect_mbim_bulk_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 static int
 dissect_mbim_decode_as(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 {
-    usb_conv_info_t *usb_conv_info;
+    urb_info_t *urb;
     usb_trans_info_t *usb_trans_info;
 
     if (!data || (tvb_reported_length(tvb) == 0)) {
         return 0;
     }
 
-    usb_conv_info = (usb_conv_info_t *)data;
-    usb_trans_info = usb_conv_info->usb_trans_info;
+    urb = (urb_info_t *)data;
+    usb_trans_info = urb->usb_trans_info;
 
-    switch (usb_conv_info->transfer_type) {
+    switch (urb->transfer_type) {
         case URB_CONTROL:
             if (!usb_trans_info) {
-                return dissect_mbim_control(tvb, pinfo, tree, usb_conv_info);
+                return dissect_mbim_control(tvb, pinfo, tree, urb);
             } else if ((usb_trans_info->setup.request == 0x00) && (pinfo->srcport == NO_ENDPOINT)) {
                 /* Skip Send Encapsulated Command header */
                 tvbuff_t *mbim_tvb = tvb_new_subset_remaining(tvb, 7);
-                return dissect_mbim_control(mbim_tvb, pinfo, tree, usb_conv_info);
+                return dissect_mbim_control(mbim_tvb, pinfo, tree, urb);
             } else if ((usb_trans_info->setup.request == 0x01) && (pinfo->srcport != NO_ENDPOINT)) {
-                return dissect_mbim_control(tvb, pinfo, tree, usb_conv_info);
+                return dissect_mbim_control(tvb, pinfo, tree, urb);
             }
             break;
         case URB_BULK:
-            return dissect_mbim_bulk(tvb, pinfo, tree, usb_conv_info);
+            return dissect_mbim_bulk(tvb, pinfo, tree, urb);
         default:
             break;
     }
@@ -11065,12 +11068,12 @@ proto_register_mbim(void)
         },
         { &hf_mbim_packet_service_info_uplink_speed,
             { "Uplink Speed", "mbim.control.packet_service_info.uplink_speed",
-               FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_bit_sec, 0,
+               FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_sec), 0,
               NULL, HFILL }
         },
         { &hf_mbim_packet_service_info_downlink_speed,
             { "Downlink Speed", "mbim.control.packet_service_info.downlink_speed",
-               FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_bit_sec, 0,
+               FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_sec), 0,
               NULL, HFILL }
         },
         { &hf_mbim_packet_service_info_frequency_range,
@@ -11085,7 +11088,7 @@ proto_register_mbim(void)
         },
         { &hf_mbim_set_signal_state_signal_strength_interval,
             { "Signal Strength Interval", "mbim.control.set_signal_state.signal_strength_interval",
-               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0,
+               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0,
               NULL, HFILL }
         },
         { &hf_mbim_set_signal_state_rssi_threshold,
@@ -11110,12 +11113,12 @@ proto_register_mbim(void)
         },
         { &hf_mbim_signal_state_element_rsrp_threshold,
             { "RSRP Threshold", "mbim.control.signal_state_element.rsrp_threshold",
-               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_dbm, 0,
+               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_dbm), 0,
               NULL, HFILL }
         },
         { &hf_mbim_signal_state_element_snr_threshold,
             { "SNR Threshold", "mbim.control.signal_state_element.snr_threshold",
-               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_decibels, 0,
+               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_decibels), 0,
               NULL, HFILL }
         },
         { &hf_mbim_signal_state_element_system_type,
@@ -11135,7 +11138,7 @@ proto_register_mbim(void)
         },
         { &hf_mbim_signal_state_info_signal_strength_interval,
             { "Signal Strength Interval", "mbim.control.signal_state_info.signal_strength_interval",
-               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0,
+               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0,
               NULL, HFILL }
         },
         { &hf_mbim_signal_state_info_rssi_threshold,
@@ -13070,7 +13073,7 @@ proto_register_mbim(void)
         },
         { &hf_mbim_ms_transmission_status_hysteresis_timer,
             { "Hysteresis Timer", "mbim.control.ms_transmission_status.hysteresis_timer",
-               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_seconds, 0,
+               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0,
               NULL, HFILL }
         },
         { &hf_mbim_adpclk_activate_state,
@@ -13095,22 +13098,22 @@ proto_register_mbim(void)
         },
         { &hf_mbim_adpclk_freq_info_adpclk_freq_value_center_freq,
             { "Center Frequency", "mbim.control.adpclk_freq_info.adpclk_freq_value.center_freq",
-               FT_UINT64, BASE_DEC|BASE_UNIT_STRING, &units_hz, 0,
+               FT_UINT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_hz), 0,
               NULL, HFILL }
         },
         { &hf_mbim_adpclk_freq_info_adpclk_freq_value_freq_spread,
             { "Frequency Spread", "mbim.control.adpclk_freq_info.adpclk_freq_value.freq_spread",
-               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_hz, 0,
+               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_hz), 0,
               NULL, HFILL }
         },
         { &hf_mbim_adpclk_freq_info_adpclk_freq_value_noise_power,
             { "Noise Power", "mbim.control.adpclk_freq_info.adpclk_freq_value.noise_power",
-               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_dbm, 0,
+               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_dbm), 0,
               NULL, HFILL }
         },
         { &hf_mbim_adpclk_freq_info_adpclk_freq_value_rssi,
             { "Relative Signal Strength Indication", "mbim.control.adpclk_freq_info.adpclk_freq_value.rssi",
-               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, &units_dbm, 0,
+               FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_dbm), 0,
               NULL, HFILL }
         },
         { &hf_mbim_adpclk_freq_info_adpclk_freq_value_connect_status,
@@ -13125,12 +13128,12 @@ proto_register_mbim(void)
         },
         { &hf_mbim_nrtc_app_info_period,
             { "Period", "mbim.control.nrtc_app_info.period",
-               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0,
+               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0,
               NULL, HFILL }
         },
         { &hf_mbim_nrtc_app_info_duration,
             { "Duration", "mbim.control.nrtc_app_info.duration",
-               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0,
+               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0,
               NULL, HFILL }
         },
         { &hf_mbim_nrtcws_config_mode,
@@ -13170,22 +13173,22 @@ proto_register_mbim(void)
         },
         { &hf_mbim_nrtcws_info_wlan_safe_rx_min,
             { "WLAN Safe Rx Min", "mbim.control.nrtcws_info.wlan_safe_rx_min",
-               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_mhz, 0,
+               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_mhz), 0,
               NULL, HFILL }
         },
         { &hf_mbim_nrtcws_info_wlan_safe_rx_max,
             { "WLAN Safe Rx Max", "mbim.control.nrtcws_info.wlan_safe_rx_max",
-               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_mhz, 0,
+               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_mhz), 0,
               NULL, HFILL }
         },
         { &hf_mbim_nrtcws_info_bt_safe_rx_min,
             { "BT Safe Rx Min", "mbim.control.nrtcws_info.bt_safe_rx_min",
-               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_mhz, 0,
+               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_mhz), 0,
               NULL, HFILL }
         },
         { &hf_mbim_nrtcws_info_bt_safe_rx_max,
             { "BT Safe Rx Max", "mbim.control.nrtcws_info.bt_safe_rx_max",
-               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_mhz, 0,
+               FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_mhz), 0,
               NULL, HFILL }
         },
         { &hf_mbim_nrtcws_info_lte_sps_period,
@@ -13370,7 +13373,7 @@ proto_register_mbim(void)
         },
         { &hf_mbim_atds_projection_table_bar5min,
             { "Bar5 Min", "mbim.control.atds_projection_table.bar5min",
-               FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_dbm, 0,
+               FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_dbm), 0,
               NULL, HFILL }
         },
         { &hf_mbim_atds_projection_table_a5,
@@ -13385,7 +13388,7 @@ proto_register_mbim(void)
         },
         { &hf_mbim_atds_projection_table_bar4min,
             { "Bar4 Min", "mbim.control.atds_projection_table.bar4min",
-               FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_dbm, 0,
+               FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_dbm), 0,
               NULL, HFILL }
         },
         { &hf_mbim_atds_projection_table_a4,
@@ -13400,7 +13403,7 @@ proto_register_mbim(void)
         },
         { &hf_mbim_atds_projection_table_bar3min,
             { "Bar3 Min", "mbim.control.atds_projection_table.bar3min",
-               FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_dbm, 0,
+               FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_dbm), 0,
               NULL, HFILL }
         },
         { &hf_mbim_atds_projection_table_a3,
@@ -13415,7 +13418,7 @@ proto_register_mbim(void)
         },
         { &hf_mbim_atds_projection_table_bar2min,
             { "Bar2 Min", "mbim.control.atds_projection_table.bar2min",
-               FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_dbm, 0,
+               FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_dbm), 0,
               NULL, HFILL }
         },
         { &hf_mbim_atds_projection_table_a2,
@@ -13430,7 +13433,7 @@ proto_register_mbim(void)
         },
         { &hf_mbim_atds_projection_table_bar1min,
             { "Bar1 Min", "mbim.control.atds_projection_table.bar1min",
-               FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_dbm, 0,
+               FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_dbm), 0,
               NULL, HFILL }
         },
         { &hf_mbim_atds_projection_table_a1,
@@ -13445,7 +13448,7 @@ proto_register_mbim(void)
         },
         { &hf_mbim_atds_projection_table_bar0min,
             { "Bar0 Min", "mbim.control.atds_projection_table.bar0min",
-               FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_dbm, 0,
+               FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_dbm), 0,
               NULL, HFILL }
         },
         { &hf_mbim_atds_projection_table_a0,

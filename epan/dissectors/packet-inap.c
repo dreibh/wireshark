@@ -24,6 +24,7 @@
 #include <epan/oids.h>
 #include <epan/expert.h>
 #include <epan/asn1.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-inap.h"
@@ -1286,7 +1287,7 @@ static expert_field ei_inap_unknown_returnErrorData;
 
 
 /* INAP OPERATIONS */
-const value_string inap_opr_code_strings[] = {
+static const value_string inap_opr_code_strings[] = {
   { opcode_activateServiceFiltering         , "activateServiceFiltering" },
   { opcode_activityTest                     , "activityTest" },
   { opcode_analysedInformation              , "analysedInformation" },

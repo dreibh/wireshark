@@ -25,9 +25,12 @@
 #include <epan/to_str.h>
 #include <epan/sctpppids.h>
 #include <epan/stat_tap_ui.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 
 #include <wsutil/str_util.h>
 #include <wsutil/ws_roundup.h>
+#include <wsutil/array.h>
 
 #include "packet-asap+enrp-common.h"
 
@@ -918,7 +921,7 @@ proto_register_asap(void)
     { &hf_pool_handle,            { "Pool Handle",                 "asap.pool_handle_pool_handle",                  FT_BYTES,   BASE_NONE,  NULL,                             0x0,                       NULL, HFILL } },
     { &hf_pe_pe_identifier,       { "PE Identifier",               "asap.pool_element_pe_identifier",               FT_UINT32,  BASE_HEX,  NULL,                             0x0,                       NULL, HFILL } },
     { &hf_home_enrp_id,           { "Home ENRP Server Identifier", "asap.pool_element_home_enrp_server_identifier", FT_UINT32,  BASE_HEX,  NULL,                             0x0,                       NULL, HFILL } },
-    { &hf_reg_life,               { "Registration Life",           "asap.pool_element_registration_life",           FT_INT32,   BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,                       NULL, HFILL } },
+    { &hf_reg_life,               { "Registration Life",           "asap.pool_element_registration_life",           FT_INT32,   BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,                       NULL, HFILL } },
     { &hf_cookie,                 { "Cookie",                      "asap.cookie",                                   FT_BYTES,   BASE_NONE,  NULL,                             0x0,                       NULL, HFILL } },
     { &hf_pe_identifier,          { "PE Identifier",               "asap.pe_identifier",                            FT_UINT32,  BASE_HEX,  NULL,                             0x0,                       NULL, HFILL } },
     { &hf_pe_checksum,            { "PE Checksum",                 "asap.pe_checksum",                              FT_UINT16,  BASE_HEX,  NULL,                             0x0,                       NULL, HFILL } },

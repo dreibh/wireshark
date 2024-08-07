@@ -23,6 +23,7 @@
 #include <epan/expert.h>
 #include <epan/strutil.h>
 #include <epan/proto_data.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-acse.h"
@@ -872,7 +873,7 @@ static dissector_handle_t p1_handle;
 
 
 /* P3 ABSTRACT-OPERATIONS */
-const value_string p3_opr_code_string_vals[] = {
+static const value_string p3_opr_code_string_vals[] = {
 	{ op_ros_bind, "mts_bind" },
 	{ op_message_submission, "message_submission" },
 	{ op_probe_submission, "probe_submission" },

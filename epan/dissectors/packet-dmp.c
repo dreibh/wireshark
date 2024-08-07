@@ -33,11 +33,12 @@
 #include <epan/expert.h>
 #include <epan/crc16-tvb.h>
 #include <epan/asn1.h>
-#include <epan/strutil.h>
 #include <epan/uat.h>
 #include <epan/proto_data.h>
+#include <epan/tfs.h>
 
 #include <wsutil/str_util.h>
+#include <wsutil/array.h>
 
 #include "packet-p1.h"
 #include "packet-p22.h"

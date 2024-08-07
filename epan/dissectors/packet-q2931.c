@@ -12,11 +12,12 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 #include <epan/oui.h>
 #include <epan/nlpid.h>
 #include <epan/etypes.h>
 #include <epan/expert.h>
-#include <wsutil/str_util.h>
 #include "packet-q931.h"
 #include "packet-arp.h"
 
@@ -2088,7 +2089,7 @@ proto_register_q2931(void)
 		},
 		{ &hf_q2931_aal1_partially_filled_cells_method,
 		  { "Partially filled cells method", "q2931.aal1.partially_filled_cells_method",
-		    FT_UINT8, BASE_DEC|BASE_UNIT_STRING, &units_octet_octets, 0x0,
+		    FT_UINT8, BASE_DEC|BASE_UNIT_STRING, UNS(&units_octet_octets), 0x0,
 		    NULL, HFILL }
 		},
 		{ &hf_q2931_aal1_forward_max_cpcs_sdu_size,
@@ -2168,7 +2169,7 @@ proto_register_q2931(void)
 		},
 		{ &hf_q2931_bband_low_layer_info_default_packet_size,
 		  { "Default packet size", "q2931.bband_low_layer_info.default_packet_size",
-		    FT_UINT8, BASE_DEC|BASE_UNIT_STRING, &units_octet_octets, 0x0F,
+		    FT_UINT8, BASE_DEC|BASE_UNIT_STRING, UNS(&units_octet_octets), 0x0F,
 		    NULL, HFILL }
 		},
 		{ &hf_q2931_bband_low_layer_info_packet_window_size,
@@ -2343,7 +2344,7 @@ proto_register_q2931(void)
 		},
 		{ &hf_q2931_e2e_transit_delay_cumulative,
 		  { "Cumulative transit delay", "q2931.e2e_transit_delay.cumulative",
-		    FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_milliseconds, 0x0,
+		    FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
 		    NULL, HFILL }
 		},
 		{ &hf_q2931_e2e_transit_delay_maximum_end_to_end,
@@ -2498,7 +2499,7 @@ proto_register_q2931(void)
 		},
 		{ &hf_q2931_atm_identifier_value,
 		  { "Value", "q2931.atm_identifier_value",
-		    FT_UINT24, BASE_DEC|BASE_UNIT_STRING, &units_cells_s, 0x0,
+		    FT_UINT24, BASE_DEC|BASE_UNIT_STRING, UNS(&units_cells_s), 0x0,
 		    NULL, HFILL }
 		},
 		{ &hf_q2931_aal_parameter_identifier,

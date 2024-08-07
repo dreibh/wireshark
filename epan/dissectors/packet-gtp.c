@@ -55,8 +55,9 @@
 #include <epan/uat.h>
 #include <epan/proto_data.h>
 #include <epan/etypes.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 
-#include "packet-ppp.h"
 #include "packet-radius.h"
 #include "packet-gsm_a_common.h"
 #include "packet-gsm_map.h"
@@ -70,7 +71,6 @@
 #include "packet-pdcp-nr.h"
 #include "packet-pdcp-lte.h"
 #include "packet-rohc.h"
-#include "packet-s1ap.h"
 
 void proto_register_gtp(void);
 void proto_reg_handoff_gtp(void);
@@ -12439,42 +12439,42 @@ proto_register_gtp(void)
         },
         { &hf_gtp_ext_apn_ambr_ul,
           { "APN-AMBR for Uplink", "gtp.apn_ambr_ul",
-            FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_kbps, 0x0,
+            FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbps), 0x0,
             NULL, HFILL}
         },
         { &hf_gtp_ext_apn_ambr_dl,
           { "APN-AMBR for Downlink", "gtp.apn_ambr_dl",
-            FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_kbps, 0x0,
+            FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbps), 0x0,
             NULL, HFILL}
         },
         { &hf_gtp_ext_sub_ue_ambr_ul,
           { "Subscribed UE-AMBR for Uplink", "gtp.sub_ue_ambr_ul",
-            FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_kbps, 0x0,
+            FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbps), 0x0,
             NULL, HFILL}
         },
         { &hf_gtp_ext_sub_ue_ambr_dl,
           { "Subscribed UE-AMBR for Downlink", "gtp.sub_ue_ambr_dl",
-            FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_kbps, 0x0,
+            FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbps), 0x0,
             NULL, HFILL}
         },
         { &hf_gtp_ext_auth_ue_ambr_ul,
           { "Authorized UE-AMBR for Uplink", "gtp.auth_ue_ambr_ul",
-            FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_kbps, 0x0,
+            FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbps), 0x0,
             NULL, HFILL}
         },
         { &hf_gtp_ext_auth_ue_ambr_dl,
           { "Authorized UE-AMBR for Downlink", "gtp.auth_ue_ambr_dl",
-            FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_kbps, 0x0,
+            FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbps), 0x0,
             NULL, HFILL}
         },
         { &hf_gtp_ext_auth_apn_ambr_ul,
           { "Authorized APN-AMBR for Uplink", "gtp.auth_apn_ambr_ul",
-            FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_kbps, 0x0,
+            FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbps), 0x0,
             NULL, HFILL}
         },
         { &hf_gtp_ext_auth_apn_ambr_dl,
           { "Authorized APN-AMBR for Downlink", "gtp.auth_apn_ambr_dl",
-            FT_INT32, BASE_DEC|BASE_UNIT_STRING, &units_kbps, 0x0,
+            FT_INT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_kbps), 0x0,
             NULL, HFILL}
         },
         { &hf_gtp_ext_ggsn_back_off_time_units,

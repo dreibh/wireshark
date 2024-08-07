@@ -1,30 +1,6 @@
 /* common.c */
-/*
- * Copyright (C) Reuben Thomas 2000-2020
- * Copyright (C) Shmuel Zeigerman 2004-2020
-
- * Permission is hereby granted, free of charge, to any person
- * obtaining a copy of this software and associated
- * documentation files (the "Software"), to deal in the
- * Software without restriction, including without limitation
- * the rights to use, copy, modify, merge, publish, distribute,
- * sublicense, and/or sell copies of the Software, and to
- * permit persons to whom the Software is furnished to do so,
- * subject to the following conditions:
-
- * The above copyright notice and this permission notice shall
- * be included in all copies or substantial portions of the
- * Software.
-
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY
- * KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
- * WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR
- * PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS
- * OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR
- * OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR
- * OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
- */
+/* See Copyright Notice in the file LICENSE */
+/* SPDX-License-Identifier: MIT */
 
 #include <wireshark.h>
 DIAG_OFF_CLANG(shorten-64-to-32)
@@ -293,11 +269,13 @@ int bufferZ_next (TBuffer *buf, size_t *iter, size_t *num, const char **str) {
   return 0;
 }
 
+#if LUA_VERSION_NUM > 501
 int luaL_typerror (lua_State *L, int narg, const char *tname) {
   const char *msg = lua_pushfstring(L, "%s expected, got %s",
                                     tname, luaL_typename(L, narg));
   return luaL_argerror(L, narg, msg);
 }
+#endif
 
 #ifndef REX_NOEMBEDDEDTEST
 static int ud_topointer (lua_State *L) {

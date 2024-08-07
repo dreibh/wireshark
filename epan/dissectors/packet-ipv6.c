@@ -40,9 +40,10 @@
 #include <epan/exported_pdu.h>
 #include <epan/exceptions.h>
 #include <epan/iana-ip.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 
 #include <wiretap/erf_record.h>
-#include <wsutil/str_util.h>
 #include "packet-ip.h"
 #include "packet-juniper.h"
 #include "packet-sflow.h"
@@ -4989,7 +4990,7 @@ proto_register_ipv6(void)
         },
         { &hf_ipv6_hopopts_len_oct,
             { "Length", "ipv6.hopopts.len_oct",
-                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
                 "Extension header length in octets", HFILL }
         }
     };
@@ -5007,7 +5008,7 @@ proto_register_ipv6(void)
         },
         { &hf_ipv6_dstopts_len_oct,
             { "Length", "ipv6.dstopts.len_oct",
-                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
                 "Extension header length in octets", HFILL }
         }
     };
@@ -5027,7 +5028,7 @@ proto_register_ipv6(void)
         },
         { &hf_ipv6_routing_len_oct,
             { "Length", "ipv6.routing.len_oct",
-                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_byte_bytes, 0x0,
+                FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_byte_bytes), 0x0,
                 "Extension header length in octets", HFILL }
         },
         { &hf_ipv6_routing_type,

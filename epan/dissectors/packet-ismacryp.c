@@ -20,6 +20,7 @@
 
 #include <epan/packet.h>
 #include <epan/prefs.h>
+#include <epan/unit_strings.h>
 
 void proto_register_ismacryp(void);
 void proto_reg_handoff_ismacryp(void);
@@ -707,7 +708,7 @@ void proto_register_ismacryp (void)
 #endif
 
 		{ &hf_ismacryp_au_headers_length,
-		  { "AU Headers Length", "ismacryp.au_headers.length", FT_UINT16, BASE_DEC|BASE_UNIT_STRING, &units_bit_bits, 0x0,
+		  { "AU Headers Length", "ismacryp.au_headers.length", FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_bit_bits), 0x0,
 		    NULL, HFILL }},
 
 		{ &hf_ismacryp_header_byte,

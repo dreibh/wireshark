@@ -26,6 +26,8 @@
 #include <epan/uat.h>
 #include <epan/reassemble.h>
 #include <epan/to_str.h>
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
 
 #define BTMESH_NOT_USED 0
 #define BTMESH_KEY_ENTRY_VALID 4
@@ -8598,7 +8600,7 @@ proto_register_btmesh(void)
         },
         { &hf_btmesh_cntr_receivewindow,
             { "ReceiveWindow", "btmesh.cntr.receivewindow",
-                FT_UINT8, BASE_DEC | BASE_UNIT_STRING, &units_milliseconds, 0x0,
+                FT_UINT8, BASE_DEC | BASE_UNIT_STRING, UNS(&units_milliseconds), 0x0,
                 NULL, HFILL }
         },
         { &hf_btmesh_cntr_queuesize,

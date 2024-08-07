@@ -18,6 +18,8 @@
 #include <epan/expert.h>
 #include <epan/prefs.h>
 #include <epan/asn1.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 
 #include "packet-bssgp.h"
 #include "packet-e212.h"

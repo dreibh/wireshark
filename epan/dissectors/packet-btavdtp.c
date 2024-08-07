@@ -15,10 +15,10 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/prefs.h>
+#include <epan/unit_strings.h>
 
 #include "packet-bluetooth.h"
 #include "packet-btl2cap.h"
-#include "packet-btsdp.h"
 #include "packet-btavdtp.h"
 #include "packet-btavrcp.h"
 #include "packet-rtp.h"
@@ -3131,32 +3131,32 @@ proto_register_aptx(void)
         },
         { &hf_aptx_cumulative_frame_duration,
             { "Cumulative Frame Duration",      "aptx.cumulative_frame_duration",
-            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, &units_milliseconds, 0x00,
+            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x00,
             NULL, HFILL }
         },
         { &hf_aptx_delta_time,
             { "Delta time",                      "aptx.delta_time",
-            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, &units_milliseconds, 0x00,
+            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x00,
             NULL, HFILL }
         },
         { &hf_aptx_avrcp_song_position,
             { "AVRCP Song Position",             "aptx.avrcp_song_position",
-            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, &units_milliseconds, 0x00,
+            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x00,
             NULL, HFILL }
         },
         { &hf_aptx_delta_time_from_the_beginning,
             { "Delta time from the beginning",   "aptx.delta_time_from_the_beginning",
-            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, &units_milliseconds, 0x00,
+            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x00,
             NULL, HFILL }
         },
         { &hf_aptx_cumulative_duration,
             { "Cumulative Music Duration",      "aptx.cumulative_music_duration",
-            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, &units_milliseconds, 0x00,
+            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x00,
             NULL, HFILL }
         },
         { &hf_aptx_diff,
             { "Diff",                            "aptx.diff",
-            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, &units_milliseconds, 0x00,
+            FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, UNS(&units_milliseconds), 0x00,
             NULL, HFILL }
         },
     };

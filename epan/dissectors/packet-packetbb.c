@@ -18,6 +18,7 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/to_str.h>
+#include <wsutil/array.h>
 
 void proto_reg_handoff_packetbb(void);
 void proto_register_packetbb(void);
@@ -408,6 +409,11 @@ static int dissect_pbb_tlvblock(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     tlvType = tvb_get_uint8(tvb, offset++);
     tlvFlags = tvb_get_uint8(tvb, offset++);
 
+    if ((tlvFlags & TLV_HAS_TYPEEXT) != 0) {
+      /* skip over ext-type */
+      offset++;
+    }
+
     indexStart = 0;
     indexEnd = addrCount ? (addrCount - 1) : 0;
 
@@ -421,7 +427,8 @@ static int dissect_pbb_tlvblock(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 
     if ((tlvFlags & TLV_HAS_VALUE) != 0) {
       if ((tlvFlags & TLV_HAS_EXTLEN) != 0) {
-        length = tvb_get_ntohs(tvb, offset++);
+        length = tvb_get_ntohs(tvb, offset);
+        offset += 2;
       }
       else {
         length = tvb_get_uint8(tvb, offset++);
