@@ -44,8 +44,8 @@
         <translation>Папки</translation>
     </message>
     <message>
-        <source>Filter by path</source>
-        <translation>Фильтр по пути размещения</translation>
+        <source>Search Folders</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Plugins</source>
@@ -898,7 +898,7 @@
     </message>
     <message>
         <source>Compress with g&amp;zip</source>
-        <translation>Сжать с помощью g&amp;zip</translation>
+        <translation type="vanished">Сжать с помощью g&amp;zip</translation>
     </message>
     <message>
         <source>Open Capture File</source>
@@ -1951,29 +1951,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
 </context>
 <context>
-    <name>ColumnTypeDelegate</name>
-    <message>
-        <source>Default</source>
-        <translation type="unfinished">По умолчанию</translation>
-    </message>
-    <message>
-        <source>Left</source>
-        <translation type="unfinished">Влево</translation>
-    </message>
-    <message>
-        <source>Center</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Right</source>
-        <translation type="unfinished">Вправо</translation>
-    </message>
-    <message>
-        <source>Unknown</source>
-        <translation type="unfinished">Неизвестно</translation>
-    </message>
-</context>
-<context>
     <name>CompiledFilterOutput</name>
     <message>
         <source>Compiled Filter Output</source>
@@ -1986,6 +1963,25 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Copy filter text to the clipboard.</source>
         <translation>Копировать текст фильтра в буфер обмена.</translation>
+    </message>
+</context>
+<context>
+    <name>CompressionGroupBox</name>
+    <message>
+        <source>Compression options</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Uncompressed</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Compress with g&amp;zip</source>
+        <translation type="unfinished">Сжать с помощью g&amp;zip</translation>
+    </message>
+    <message>
+        <source>Compress with &amp;LZ4</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -6951,6 +6947,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Последняя использованная папка</translation>
     </message>
     <message>
+        <source>The current working directory</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Show up to</source>
         <translation>Показывать до</translation>
     </message>
@@ -7379,6 +7379,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Show Field Values</source>
         <translation>Показать значения полей</translation>
+    </message>
+    <message>
+        <source>Refresh</source>
+        <translation type="unfinished">Обновить</translation>
     </message>
     <message>
         <source>Save Diagram As…</source>
@@ -8828,6 +8832,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>DRB-%1</source>
         <translation>DRB-%1</translation>
+    </message>
+    <message>
+        <source>Left</source>
+        <translation type="unfinished">Влево</translation>
+    </message>
+    <message>
+        <source>Center</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Right</source>
+        <translation type="unfinished">Вправо</translation>
     </message>
     <message>
         <source>Unknown</source>
@@ -11422,6 +11438,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 </context>
 <context>
     <name>ShortcutListModel</name>
+    <message>
+        <source>Display Filter Input</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Jump to display filter input box</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Shortcut</source>
         <translation>Комбинация клавиш</translation>

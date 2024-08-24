@@ -24,11 +24,13 @@
 #include <epan/prefs.h>
 #include <epan/conversation.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
 #include "packet-scsi.h"
 #include <epan/crc32-tvb.h>
 #include <wsutil/crc32.h>
 #include <wsutil/inet_addr.h>
 #include <wsutil/strtoi.h>
+#include <wsutil/array.h>
 #include <wsutil/ws_roundup.h>
 
 void proto_register_iscsi(void);
@@ -2382,7 +2384,7 @@ dissect_iscsi(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool check_po
         uint32_t data_segment_len;
         uint32_t pduLen = 48;
         uint8_t secondPduByte = tvb_get_uint8(tvb, offset + 1);
-        int badPdu = false;
+        bool badPdu = false;
         uint8_t ahsLen=0;
         uint32_t data_segment_offset, data_segment_len_padded;
 

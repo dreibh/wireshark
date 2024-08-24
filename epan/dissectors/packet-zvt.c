@@ -31,9 +31,10 @@
 
 #include "config.h"
 
+#include <wsutil/array.h>
 #include <epan/packet.h>
-#include <epan/addr_resolv.h>
 #include <epan/expert.h>
+#include <epan/tfs.h>
 #include "packet-tcp.h"
 
 /* special characters of the serial transport protocol */

@@ -30,6 +30,7 @@ set(PIDL_DISSECTOR_NAMES
 	mdssvc
 	misc
 	nspi
+	rcg
 	rfr
 	samr
 	srvsvc
@@ -125,6 +126,9 @@ set(PIDL_DISSECTOR_nspi_EXTRA_DEPS
 	mapicodes_enum.h
 	mapitags_enum.h
 )
+set(PIDL_DISSECTOR_rcg_EXTRA_DEPS
+	idl_types.h
+)
 set(PIDL_DISSECTOR_rfr_EXTRA_DEPS
 	idl_types.h
 	mapicodes_enum.h
@@ -194,6 +198,7 @@ foreach(PROTOCOL_NAME IN LISTS PIDL_DISSECTOR_NAMES)
 		WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}/${PROTOCOL_NAME}"
 		DEPENDS
 			"${CMAKE_SOURCE_DIR}/tools/pidl/pidl"
+			"${CMAKE_SOURCE_DIR}/tools/pidl/lib/Parse/Pidl/Wireshark/NDR.pm"
 			${PROTOCOL_NAME}/${PROTOCOL_NAME}.idl
 			${PROTOCOL_NAME}/${PROTOCOL_NAME}.cnf
 			${PIDL_DISSECTOR_${PROTOCOL_NAME}_EXTRA_DEPS}

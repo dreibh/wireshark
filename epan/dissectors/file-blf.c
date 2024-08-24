@@ -24,6 +24,7 @@
 #include <epan/expert.h>
 
 #include <wiretap/blf.h>
+#include <wsutil/array.h>
 
 static int proto_blf;
 static int proto_blf_ethernetstatus_obj;
@@ -571,7 +572,7 @@ dissect_blf_lobj(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int of
             }
 
             /* TODO: actually the objects might overlap containers, which we do not consider here... */
-            if (sub_tvb) {
+            if (sub_tvb && tvb_captured_length(sub_tvb) > 0) {
                 unsigned offset_sub = 0;
                 ti = proto_tree_add_item(objtree, hf_blf_cont_payload, sub_tvb, 0, offset_orig + obj_length - offset, ENC_NA);
                 subtree = proto_item_add_subtree(ti, ett_blf_logcontainer_payload);

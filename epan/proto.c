@@ -18,6 +18,9 @@
 #include <inttypes.h>
 #include <errno.h>
 
+#include <epan/tfs.h>
+#include <epan/unit_strings.h>
+
 #include <wsutil/array.h>
 #include <wsutil/bits_ctz.h>
 #include <wsutil/bits_count_ones.h>
@@ -648,6 +651,10 @@ proto_init(GSList *register_all_plugin_protocols_list,
 
 	/* sort the protocols by protocol name */
 	protocols = g_list_sort(protocols, proto_compare_name);
+
+	/* sort the dissector handles in dissector tables (for -G reports
+	 * and -d error messages. The GUI sorts the handles itself.) */
+	packet_all_tables_sort_handles();
 
 	/* We've assigned all the subtree type values; allocate the array
 	   for them, and zero it out. */
@@ -11300,7 +11307,10 @@ every_finfo(proto_node *node, void * data)
 	return false;
 }
 
-/* Return GPtrArray* of field_info pointers containing all hfindexes that appear in a tree. */
+/* Return GPtrArray* of field_info pointers containing all hfindexes that appear in a tree.
+ * The caller does need to free the returned GPtrArray with
+ * g_ptr_array_free(<array>, true).
+ */
 GPtrArray *
 proto_all_finfos(proto_tree *tree)
 {

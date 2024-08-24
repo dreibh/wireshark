@@ -16,6 +16,9 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/unit_strings.h>
+
+#include <wsutil/array.h>
 #include <epan/to_str.h>
 
 void proto_register_slimp3(void);
@@ -239,8 +242,8 @@ dissect_slimp3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
     uint16_t    opcode;
     unsigned char      lcd_char;
     char        lcd_str[MAX_LCD_STR_LEN + 1];
-    int         to_server    = false;
-    int         old_protocol = false;
+    bool        to_server    = false;
+    bool        old_protocol = false;
     address     tmp_addr;
     bool        in_str;
     int         lcd_strlen;

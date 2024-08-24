@@ -10,20 +10,16 @@
 
 #ifndef __PACKET_H__
 #define __PACKET_H__
-#include <wireshark.h>
 
 #include <wsutil/array.h>
 #include <wiretap/wtap_opttypes.h>
 #include "proto.h"
 #include "tvbuff.h"
 #include "epan.h"
-#include "value_string.h"
 #include "frame_data.h"
 #include "packet_info.h"
 #include "column-utils.h"
 #include "guid-utils.h"
-#include "tfs.h"
-#include "unit_strings.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -53,6 +49,7 @@ struct epan_range;
 
 extern void packet_init(void);
 extern void packet_cache_proto_handles(void);
+extern void packet_all_tables_sort_handles(void);
 extern void packet_cleanup(void);
 
 /* Handle for dissectors you call directly or register with "dissector_add_uint()".

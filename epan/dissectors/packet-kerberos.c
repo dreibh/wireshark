@@ -67,6 +67,7 @@
 #include <epan/expert.h>
 #include <epan/prefs.h>
 #include <epan/srt_table.h>
+#include <epan/tfs.h>
 #include <wsutil/wsgcrypt.h>
 #include <wsutil/file_util.h>
 #include <wsutil/str_util.h>
@@ -922,7 +923,7 @@ static void krb5_conf_add_request(asn1_ctx_t *actx)
 		 * replace the pointer with the one allocated on
 		 * wmem_file_scope()
 		 */
-		krqf = (kerberos_frame_t *)wmem_list_frame_data(wf);
+		wmem_list_frame_data(wf);
 		/* The next one should be the response */
 		wf = wmem_list_frame_next(wf);
 	}

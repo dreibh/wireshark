@@ -19,6 +19,8 @@
 #include <epan/prefs.h>
 #include <epan/reassemble.h>
 #include <epan/to_str.h>
+#include <epan/tfs.h>
+#include <wsutil/array.h>
 #include "wsutil/pint.h"
 
 /*
@@ -1608,7 +1610,7 @@ defragment_by_sequence(packet_info *pinfo, tvbuff_t *tvb, int offset, int mpf,
 {
 	fragment_head *fd_head;
 	int frag_number = -1;
-	int more_frags = true;
+	bool more_frags = true;
 	tvbuff_t *rh_tvb = NULL;
 	int frag_len;
 

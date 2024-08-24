@@ -18,9 +18,7 @@
 #include "wslua.h"
 #include "init_wslua.h"
 
-#include <epan/dissectors/packet-frame.h>
 #include <errno.h>
-#include <math.h>
 #include <stdio.h>
 #include <epan/expert.h>
 #include <epan/ex-opt.h>
@@ -29,6 +27,7 @@
 #include <wsutil/privileges.h>
 #include <wsutil/file_util.h>
 #include <wsutil/wslog.h>
+#include <wsutil/array.h>
 
 /* linked list of Lua plugins */
 typedef struct _wslua_plugin {
@@ -683,6 +682,7 @@ static bool lua_load_plugin(const char* filename) {
     lua_getglobal(L, "require");
 
     lua_pushstring(L, trimmed);
+    g_free(trimmed);
 
     /* Ignore the return from "require" by passing 0 as nresults to lua_pcall
      * (we could add it to the global table using the name as dolibrary() does,
