@@ -38,7 +38,6 @@ static dissector_handle_t do_irp_handle_udp;
 static dissector_handle_t do_irp_handle_tcp;
 
 static int proto_do_irp;
-expert_module_t* expert_do_irp;
 
 /* Fields Generic */
 static int hf_do_irp_string_len;
@@ -1172,7 +1171,7 @@ decode_header_body_credential(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
             offset += decode_pk_data(tvb, pinfo, do_irp_body_tree, offset);
 
         }
-        /* All error resposes */
+        /* All error responses */
         else if(
             (respcode >= DO_IRP_RC_ERROR && respcode <= DO_IRP_RC_SERVER_NOT_RESP) ||
             (respcode >= DO_IRP_RC_INVALID_ADMIN && respcode <= DO_IRP_RC_ACCESS_DENIED) ||
@@ -2132,6 +2131,8 @@ proto_register_do_irp(void)
         &ett_do_irp_hssite_server_if_flags,
         &ett_do_irp_pk
     };
+
+    expert_module_t* expert_do_irp;
 
     do_irp_request_hash_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), do_irp_handle_hash, do_irp_handle_equal);
 

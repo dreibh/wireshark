@@ -15,7 +15,6 @@
 
 #include <epan/packet.h>
 #include <epan/exported_pdu.h>
-#include <epan/address_types.h>
 #include <epan/tap.h>
 #include <wiretap/wtap.h>
 
@@ -187,7 +186,6 @@ WS_DLL_PUBLIC int exp_pdu_data_dissector_table_num_value_populate_data(packet_in
 
 	return exp_pdu_data_dissector_table_num_value_size(pinfo, data);
 }
-
 
 exp_pdu_data_item_t exp_pdu_data_src_ip = {exp_pdu_data_src_ip_size, exp_pdu_data_src_ip_populate_data, NULL};
 exp_pdu_data_item_t exp_pdu_data_dst_ip = {exp_pdu_data_dst_ip_size, exp_pdu_data_dst_ip_populate_data, NULL};

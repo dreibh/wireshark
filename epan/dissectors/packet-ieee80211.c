@@ -5290,7 +5290,8 @@ static int hf_ieee80211_wide_bw_new_channel_center_freq_segment1;
 
 static int hf_ieee80211_operat_notification_mode;
 static int hf_ieee80211_operat_mode_field_channel_width;
-static int hf_ieee80211_operat_mode_field_reserved;
+static int hf_ieee80211_operat_mode_field_160_80plus80_bw;
+static int hf_ieee80211_operat_mode_field_no_ldpc;
 static int hf_ieee80211_operat_mode_field_rxnss;
 static int hf_ieee80211_operat_mode_field_rxnsstype;
 
@@ -5388,7 +5389,7 @@ static int hf_ieee80211_s1g_cap_short_gi_for_4_mhz;
 static int hf_ieee80211_s1g_cap_short_gi_for_8_mhz;
 static int hf_ieee80211_s1g_cap_short_gi_for_16_mhz;
 static int hf_ieee80211_s1g_cap_supported_channel_width;
-static int hf_ieee80211_s1g_cap_rx_lpdc;
+static int hf_ieee80211_s1g_cap_rx_ldpc;
 static int hf_ieee80211_s1g_cap_tx_stbc;
 static int hf_ieee80211_s1g_cap_rx_stbc;
 static int hf_ieee80211_s1g_cap_su_beamformer_capable;
@@ -23385,7 +23386,8 @@ dissect_operating_mode_notification(tvbuff_t *tvb, packet_info *pinfo _U_, proto
   int offset = 0;
   static int * const ieee80211_operat_mode_field[] = {
     &hf_ieee80211_operat_mode_field_channel_width,
-    &hf_ieee80211_operat_mode_field_reserved,
+    &hf_ieee80211_operat_mode_field_160_80plus80_bw,
+    &hf_ieee80211_operat_mode_field_no_ldpc,
     &hf_ieee80211_operat_mode_field_rxnss,
     &hf_ieee80211_operat_mode_field_rxnsstype,
     NULL
@@ -23706,7 +23708,7 @@ static int * const ieee80211_s1g_cap_byte1[] = {
 };
 
 static int * const ieee80211_s1g_cap_byte2[] = {
-  &hf_ieee80211_s1g_cap_rx_lpdc,
+  &hf_ieee80211_s1g_cap_rx_ldpc,
   &hf_ieee80211_s1g_cap_tx_stbc,
   &hf_ieee80211_s1g_cap_rx_stbc,
   &hf_ieee80211_s1g_cap_su_beamformer_capable,
@@ -48579,12 +48581,17 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_operat_mode_field_channel_width,
      {"Channel Width", "wlan.operat_mode_field.channelwidth",
-      FT_UINT8, BASE_HEX, VALS(operating_mode_field_channel_width), 0x03,
+      FT_UINT8, BASE_HEX, NULL, 0x03,
       NULL, HFILL }},
 
-    {&hf_ieee80211_operat_mode_field_reserved,
-     {"Reserved", "wlan.operat_mode_field.reserved",
-      FT_UINT8, BASE_HEX, NULL, 0x0C,
+    {&hf_ieee80211_operat_mode_field_160_80plus80_bw,
+     {"160/80+80 BW", "wlan.operat_mode_field.160_80plus80_bw",
+      FT_UINT8, BASE_HEX, NULL, 0x04,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_operat_mode_field_no_ldpc,
+     {"No LDPC", "wlan.operat_mode_field.no_ldpc",
+      FT_UINT8, BASE_HEX, NULL, 0x08,
       NULL, HFILL }},
 
     {&hf_ieee80211_operat_mode_field_rxnss,
@@ -48800,7 +48807,7 @@ proto_register_ieee80211(void)
       FT_UINT8, BASE_HEX, VALS(s1g_supported_channel_width_vals), 0xC0,
       NULL, HFILL }},
 
-    {&hf_ieee80211_s1g_cap_rx_lpdc,
+    {&hf_ieee80211_s1g_cap_rx_ldpc,
      {"Rx LDPC", "wlan.s1g.capabilities.rx_ldpc",
       FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01, NULL, HFILL }},
 

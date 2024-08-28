@@ -896,7 +896,7 @@ static const value_string netscaler_reset_window_error_code_vals[] = {
     { 9952,  "Reset on SSL FATAL ALERT RCVD." },
     { 9953,  "Reset on triggering of timeout action." },
     { 9956,  "QOS incomplete POST handling error." },
-    { 9957,  "AppQoS Persistent sercvice is down." },
+    { 9957,  "AppQoS Persistent service is down." },
     { 9958,  "Not used+C187:C199." },
     { 9959,  "Not used." },
     { 9960,  "MPTCP options error." },
@@ -1661,6 +1661,7 @@ follow_tcp_tap_listener(void *tapdata, packet_info *pinfo,
 
 #define EXP_PDU_TCP_INFO_DATA_LEN   20
 #define EXP_PDU_TCP_INFO_VERSION    1
+#define EXP_PDU_TAG_TCP_STREAM_ID_LEN   4
 
 static int exp_pdu_tcp_dissector_data_size(packet_info *pinfo _U_, void* data _U_)
 {
@@ -1714,6 +1715,7 @@ handle_export_pdu_dissection_table(packet_info *pinfo, tvbuff_t *tvb, uint32_t p
         }
         exp_pdu_data_item_t exp_pdu_data_table_value = {exp_pdu_data_dissector_table_num_value_size, exp_pdu_data_dissector_table_num_value_populate_data, NULL};
         exp_pdu_data_item_t exp_pdu_data_dissector_data = {exp_pdu_tcp_dissector_data_size, exp_pdu_tcp_dissector_data_populate_data, NULL};
+
         const exp_pdu_data_item_t *tcp_exp_pdu_items[] = {
             &exp_pdu_data_src_ip,
             &exp_pdu_data_dst_ip,
@@ -1736,6 +1738,9 @@ handle_export_pdu_dissection_table(packet_info *pinfo, tvbuff_t *tvb, uint32_t p
         exp_pdu_data->tvb_reported_length = tvb_reported_length(tvb);
         exp_pdu_data->pdu_tvb = tvb;
 
+        /* match uint is restored after calling dissector, so in order to have the right value in exported PDU
+         * we need to set it here.
+         */
         tap_queue_packet(exported_pdu_tap, pinfo, exp_pdu_data);
     }
 }
@@ -8300,6 +8305,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     if (tcpd) {
         item = proto_tree_add_uint(tcp_tree, hf_tcp_stream, tvb, offset, 0, tcpd->stream);
         proto_item_set_generated(item);
+        tcpinfo.stream = tcpd->stream;
 
         if (tcppd) {
             item = proto_tree_add_uint(tcp_tree, hf_tcp_stream_pnum, tvb, offset, 0, tcppd->pnum);
@@ -8770,7 +8776,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
         /* Check if the window value of this reset packet is in the NetScaler error code range */
         const char *tcp_ns_reset_window_error_descr = try_val_to_str(real_window, netscaler_reset_window_error_code_vals);
-        if (tcp_ns_reset_window_error_descr != NULL) { /* If its in the Netcaler range, add tree */
+        if (tcp_ns_reset_window_error_descr != NULL) { /* If its in the Netscaler range, add tree */
             item = proto_tree_add_string(tcp_tree, hf_tcp_ns_reset_window_error_code, tvb,
                    offset + 14, 2,tcp_ns_reset_window_error_descr);
             proto_item_set_generated(item);

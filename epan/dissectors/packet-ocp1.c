@@ -62,7 +62,6 @@ static dissector_handle_t ocp1_tcp_handle;
 static dissector_handle_t ocp1_udp_handle;
 
 static int proto_ocp1;
-expert_module_t* expert_ocp1;
 
 /* Header Fields */
 static int hf_ocp1_sync_value;
@@ -2631,7 +2630,7 @@ dissect_ocp1_pdu(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree
             if (tvb_get_uint16(tvb, offset + 8, ENC_BIG_ENDIAN) != 0x01)
                 return 0;
 
-            /* Message length possibe are 2 bytes (sec) or 4 bytes (msec) */
+            /* Message length possible are 2 bytes (sec) or 4 bytes (msec) */
             if (header_pdu_size != 11 && header_pdu_size != 13)
                 return 0;
 
@@ -3336,6 +3335,8 @@ proto_register_ocp1(void)
         &ett_ocp1_params_ocaver,
         &ett_ocp1_params_ptp
     };
+
+    expert_module_t* expert_ocp1;
 
     oca_request_hash_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), oca_handle_hash, oca_handle_equal);
 

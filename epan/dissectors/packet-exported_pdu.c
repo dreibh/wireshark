@@ -13,10 +13,10 @@
 
 #include <epan/packet.h>
 #include <wiretap/wtap.h>
-#include <epan/to_str.h>
 #include <epan/address_types.h>
 #include <epan/exported_pdu.h>
 #include <epan/expert.h>
+#include <wsutil/array.h>
 #include "packet-e212.h"
 #include "packet-mtp3.h"
 #include "packet-dvbci.h"
@@ -505,7 +505,7 @@ dissect_exported_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
                 else {
                     col_clear(pinfo->cinfo, COL_INFO);
                 }
-                dissector_try_uint_new(dis_tbl, dissector_table_val, payload_tvb, pinfo, tree, false, dissector_data);
+                dissector_try_uint_new(dis_tbl, dissector_table_val, payload_tvb, pinfo, tree, true, dissector_data);
             }
         }
         default:
