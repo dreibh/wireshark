@@ -75,6 +75,16 @@ static int hf_nmea0183_vhw_water_speed_knot_unit;
 static int hf_nmea0183_vhw_water_speed_kilometer;
 static int hf_nmea0183_vhw_water_speed_kilometer_unit;
 
+static int hf_nmea0183_vtg_true_course;
+static int hf_nmea0183_vtg_true_course_unit;
+static int hf_nmea0183_vtg_magnetic_course;
+static int hf_nmea0183_vtg_magnetic_course_unit;
+static int hf_nmea0183_vtg_ground_speed_knot;
+static int hf_nmea0183_vtg_ground_speed_knot_unit;
+static int hf_nmea0183_vtg_ground_speed_kilometer;
+static int hf_nmea0183_vtg_ground_speed_kilometer_unit;
+static int hf_nmea0183_vtg_mode;
+
 static int hf_nmea0183_zda_time;
 static int hf_nmea0183_zda_time_hour;
 static int hf_nmea0183_zda_time_minute;
@@ -112,6 +122,10 @@ static expert_field ei_nmea0183_vhw_true_heading_unit_incorrect;
 static expert_field ei_nmea0183_vhw_magnetic_heading_unit_incorrect;
 static expert_field ei_nmea0183_vhw_water_speed_knot_unit_incorrect;
 static expert_field ei_nmea0183_vhw_water_speed_kilometer_unit_incorrect;
+static expert_field ei_nmea0183_vtg_true_course_unit_incorrect;
+static expert_field ei_nmea0183_vtg_magnetic_course_unit_incorrect;
+static expert_field ei_nmea0183_vtg_ground_speed_knot_unit_incorrect;
+static expert_field ei_nmea0183_vtg_ground_speed_kilometer_unit_incorrect;
 
 static int proto_nmea0183;
 
@@ -941,7 +955,42 @@ dissect_nmea0183_sentence_vhw(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
     offset += dissect_nmea0183_field(tvb, pinfo, subtree, offset, hf_nmea0183_vhw_water_speed_kilometer, "kilometer per hour");
 
     dissect_nmea0183_field_fixed_text(tvb, pinfo, subtree, offset, hf_nmea0183_vhw_water_speed_kilometer_unit,
-                                                "K", &ei_nmea0183_vhw_water_speed_kilometer_unit_incorrect);
+                                      "K", &ei_nmea0183_vhw_water_speed_kilometer_unit_incorrect);
+
+    return tvb_captured_length(tvb);
+}
+
+/* Dissect a VTG sentence. */
+static int
+dissect_nmea0183_sentence_vtg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
+{
+    int offset = 0;
+
+    proto_tree *subtree = proto_tree_add_subtree(tree, tvb, offset,
+                                                 tvb_captured_length(tvb), ett_nmea0183_sentence,
+                                                 NULL, "VTG sentence - Track made good and Ground speed");
+
+    offset += dissect_nmea0183_field(tvb, pinfo, subtree, offset, hf_nmea0183_vtg_true_course, "degree");
+
+    offset += dissect_nmea0183_field_fixed_text(tvb, pinfo, subtree, offset, hf_nmea0183_vtg_true_course_unit,
+                                                "T", &ei_nmea0183_vtg_true_course_unit_incorrect);
+
+    offset += dissect_nmea0183_field(tvb, pinfo, subtree, offset, hf_nmea0183_vtg_magnetic_course, "degree");
+
+    offset += dissect_nmea0183_field_fixed_text(tvb, pinfo, subtree, offset, hf_nmea0183_vtg_magnetic_course_unit,
+                                                "M", &ei_nmea0183_vtg_magnetic_course_unit_incorrect);
+
+    offset += dissect_nmea0183_field(tvb, pinfo, subtree, offset, hf_nmea0183_vtg_ground_speed_knot, "knot");
+
+    offset += dissect_nmea0183_field_fixed_text(tvb, pinfo, subtree, offset, hf_nmea0183_vtg_ground_speed_knot_unit,
+                                                "N", &ei_nmea0183_vtg_ground_speed_knot_unit_incorrect);
+
+    offset += dissect_nmea0183_field(tvb, pinfo, subtree, offset, hf_nmea0183_vtg_ground_speed_kilometer, "kilometer per hour");
+
+    offset += dissect_nmea0183_field_fixed_text(tvb, pinfo, subtree, offset, hf_nmea0183_vtg_ground_speed_kilometer_unit,
+                                                "K", &ei_nmea0183_vtg_ground_speed_kilometer_unit_incorrect);
+
+    dissect_nmea0183_field_faa_mode(tvb, pinfo, subtree, offset, hf_nmea0183_vtg_mode);
 
     return tvb_captured_length(tvb);
 }
@@ -1077,6 +1126,10 @@ dissect_nmea0183(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
     {
         offset += dissect_nmea0183_sentence_vhw(data_tvb, pinfo, nmea0183_tree);
     }
+    else if (g_ascii_strcasecmp(sentence_id, "VTG") == 0)
+    {
+        offset += dissect_nmea0183_sentence_vtg(data_tvb, pinfo, nmea0183_tree);
+    }
     else if (g_ascii_strcasecmp(sentence_id, "ZDA") == 0)
     {
         offset += dissect_nmea0183_sentence_zda(data_tvb, pinfo, nmea0183_tree);
@@ -1139,12 +1192,12 @@ void proto_register_nmea0183(void)
          {"Talker ID", "nmea0183.talker",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 Talker ID", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_sentence_id,
          {"Sentence ID", "nmea0183.sentence",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 Sentence ID", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_unknown_field,
          {"Field", "nmea0183.unknown_field",
           FT_STRING, BASE_NONE,
@@ -1154,12 +1207,12 @@ void proto_register_nmea0183(void)
          {"Checksum", "nmea0183.checksum",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 Checksum", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_checksum_calculated,
          {"Calculated checksum", "nmea0183.checksum_calculated",
           FT_UINT8, BASE_HEX,
           NULL, 0x0,
-          "NMEA 0183 Calculated checksum", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_dpt_depth,
          {"Water depth", "nmea0183.dpt_depth",
           FT_STRING, BASE_NONE,
@@ -1179,67 +1232,67 @@ void proto_register_nmea0183(void)
          {"UTC Time of position", "nmea0183.gga_time",
           FT_NONE, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA UTC Time field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_time_hour,
          {"Hour", "nmea0183.gga_time_hour",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA UTC hour", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_time_minute,
          {"Minute", "nmea0183.gga_time_minute",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA UTC minute", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_time_second,
          {"Second", "nmea0183.gga_time_second",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA UTC second", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_latitude,
          {"Latitude", "nmea0183.gga_latitude",
           FT_NONE, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Latitude field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_latitude_degree,
          {"Degree", "nmea0183.gga_latitude_degree",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Latitude Degree", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_latitude_minute,
          {"Minute", "nmea0183.gga_latitude_minute",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Latitude Minute", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_latitude_direction,
          {"Direction", "nmea0183.gga_latitude_direction",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Latitude Direction", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_longitude,
          {"Longitude", "nmea0183.gga_longitude",
           FT_NONE, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Longitude field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_longitude_degree,
          {"Degree", "nmea0183.gga_longitude_degree",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Longitude Degree", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_longitude_minute,
          {"Minute", "nmea0183.gga_longitude_minute",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Longitude Minute", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_longitude_direction,
          {"Direction", "nmea0183.gga_longitude_direction",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Longitude Direction", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_quality,
          {"Quality indicator", "nmea0183.gga_quality",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Quality indicator", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_number_satellites,
          {"Number of satellites", "nmea0183.gga_number_satellites",
           FT_STRING, BASE_NONE,
@@ -1274,7 +1327,7 @@ void proto_register_nmea0183(void)
          {"Age of differential GPS", "nmea0183.gga_age_dgps",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GGA Age of differential GPS data in seconds", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gga_dgps_station,
          {"Differential GPS station id", "nmea0183.gga_dgps_station",
           FT_STRING, BASE_NONE,
@@ -1284,67 +1337,67 @@ void proto_register_nmea0183(void)
          {"Latitude", "nmea0183.gll_latitude",
           FT_NONE, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL Latitude field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_latitude_degree,
          {"Degree", "nmea0183.gll_latitude_degree",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL Latitude Degree", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_latitude_minute,
          {"Minute", "nmea0183.gll_latitude_minute",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL Latitude Minute", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_latitude_direction,
          {"Direction", "nmea0183.gll_latitude_direction",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL Latitude Direction", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_longitude,
          {"Longitude", "nmea0183.gll_longitude",
           FT_NONE, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL Longitude field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_longitude_degree,
          {"Degree", "nmea0183.gll_longitude_degree",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL Longitude Degree", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_longitude_minute,
          {"Minute", "nmea0183.gll_longitude_minute",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL Longitude Minute", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_longitude_direction,
          {"Direction", "nmea0183.gll_longitude_direction",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL Longitude Direction", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_time,
          {"UTC Time of position", "nmea0183.gll_time",
           FT_NONE, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL UTC Time field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_time_hour,
          {"Hour", "nmea0183.gll_time_hour",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL UTC hour", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_time_minute,
          {"Minute", "nmea0183.gll_time_minute",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL UTC minute", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_time_second,
          {"Second", "nmea0183.gll_time_second",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL UTC second", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_status,
          {"Status", "nmea0183.gll_status",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 GLL Status", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_gll_mode,
          {"FAA mode", "nmea0183.gll_mode",
           FT_STRING, BASE_NONE,
@@ -1354,7 +1407,7 @@ void proto_register_nmea0183(void)
          {"True heading", "nmea0183.hdt_heading",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 HDT Heading, degrees True", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_hdt_unit,
          {"Heading unit", "nmea0183.hdt_unit",
           FT_STRING, BASE_NONE,
@@ -1374,7 +1427,7 @@ void proto_register_nmea0183(void)
          {"True heading", "nmea0183.vhw_true_heading",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 VHW Heading, degrees True", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_vhw_true_heading_unit,
          {"Heading unit", "nmea0183.vhw_true_heading_unit",
           FT_STRING, BASE_NONE,
@@ -1384,7 +1437,7 @@ void proto_register_nmea0183(void)
          {"Magnetic heading", "nmea0183.vhw_magnetic_heading",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 VHW Heading, degrees Magnetic", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_vhw_magnetic_heading_unit,
          {"Heading unit", "nmea0183.vhw_magnetic_heading_unit",
           FT_STRING, BASE_NONE,
@@ -1394,7 +1447,7 @@ void proto_register_nmea0183(void)
          {"Water speed", "nmea0183.vhw_water_speed_knot",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 VHW Water speed, knots", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_vhw_water_speed_knot_unit,
          {"Speed unit", "nmea0183.vhw_water_speed_knot_unit",
           FT_STRING, BASE_NONE,
@@ -1404,57 +1457,102 @@ void proto_register_nmea0183(void)
          {"Water speed", "nmea0183.vhw_water_speed_kilometer",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 VHW Water speed, kilometers per hour", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_vhw_water_speed_kilometer_unit,
          {"Speed unit", "nmea0183.vhw_water_speed_kilometer_unit",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
           "NMEA 0183 VHW Water speed unit, must be K", HFILL}},
+        {&hf_nmea0183_vtg_true_course,
+         {"True course over ground", "nmea0183.vtg_true_course",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          NULL, HFILL}},
+        {&hf_nmea0183_vtg_true_course_unit,
+         {"Course unit", "nmea0183.vtg_true_course_unit",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          "NMEA 0183 VTG Course unit, must be T", HFILL}},
+        {&hf_nmea0183_vtg_magnetic_course,
+         {"Magnetic course over ground", "nmea0183.vtg_magnetic_course",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          NULL, HFILL}},
+        {&hf_nmea0183_vtg_magnetic_course_unit,
+         {"Course unit", "nmea0183.vtg_magnetic_course_unit",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          "NMEA 0183 VTG Course unit, must be M", HFILL}},
+        {&hf_nmea0183_vtg_ground_speed_knot,
+         {"Speed over ground", "nmea0183.vtg_ground_speed_knot",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          NULL, HFILL}},
+        {&hf_nmea0183_vtg_ground_speed_knot_unit,
+         {"Speed unit", "nmea0183.vtg_ground_speed_knot_unit",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          "NMEA 0183 VTG Ground speed unit, must be N", HFILL}},
+        {&hf_nmea0183_vtg_ground_speed_kilometer,
+         {"Speed over ground", "nmea0183.vtg_ground_speed_kilometer",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          NULL, HFILL}},
+        {&hf_nmea0183_vtg_ground_speed_kilometer_unit,
+         {"Speed unit", "nmea0183.vtg_ground_speed_kilometer_unit",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          "NMEA 0183 VTG Ground speed unit, must be K", HFILL}},
+        {&hf_nmea0183_vtg_mode,
+         {"FAA mode", "nmea0183.vtg_mode",
+          FT_STRING, BASE_NONE,
+          NULL, 0x0,
+          "NMEA 0183 VTG FAA mode indicator (NMEA 2.3 and later)", HFILL}},
         {&hf_nmea0183_zda_time,
          {"UTC Time", "nmea0183.zda_time",
           FT_NONE, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 ZDA UTC Time field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_zda_time_hour,
          {"Hour", "nmea0183.zda_time_hour",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 ZDA UTC hour", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_zda_time_minute,
          {"Minute", "nmea0183.zda_time_minute",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 ZDA UTC minute", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_zda_time_second,
          {"Second", "nmea0183.zda_time_second",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 ZDA UTC second", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_zda_date_day,
          {"Day", "nmea0183.zda_date_day",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 ZDA Day field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_zda_date_month,
          {"Month", "nmea0183.zda_date_month",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 ZDA Month field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_zda_date_year,
          {"Year", "nmea0183.zda_date_year",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 ZDA Year field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_zda_local_zone_hour,
          {"Local zone hour", "nmea0183.zda_local_zone_hour",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 ZDA Local zone hour field", HFILL}},
+          NULL, HFILL}},
         {&hf_nmea0183_zda_local_zone_minute,
          {"Local zone minute", "nmea0183.zda_local_zone_minute",
           FT_STRING, BASE_NONE,
           NULL, 0x0,
-          "NMEA 0183 ZDA Local zone minute field", HFILL}}};
+          NULL, HFILL}}};
 
     /* Setup protocol subtree array */
     static int *ett[] = {
@@ -1517,6 +1615,18 @@ void proto_register_nmea0183(void)
           "Incorrect speed unit (should be 'N')", EXPFILL}},
         {&ei_nmea0183_vhw_water_speed_kilometer_unit_incorrect,
          {"nmea0183.vhw_water_speed_kilometer_unit_incorrect", PI_PROTOCOL, PI_WARN,
+          "Incorrect speed unit (should be 'K')", EXPFILL}},
+        {&ei_nmea0183_vtg_true_course_unit_incorrect,
+         {"nmea0183.vtg_true_course_unit_incorrect", PI_PROTOCOL, PI_WARN,
+          "Incorrect course unit (should be 'T')", EXPFILL}},
+        {&ei_nmea0183_vtg_magnetic_course_unit_incorrect,
+         {"nmea0183.vtg_magnetic_course_unit_incorrect", PI_PROTOCOL, PI_WARN,
+          "Incorrect course unit (should be 'M')", EXPFILL}},
+        {&ei_nmea0183_vtg_ground_speed_knot_unit_incorrect,
+         {"nmea0183.vtg_ground_speed_knot_unit_incorrect", PI_PROTOCOL, PI_WARN,
+          "Incorrect speed unit (should be 'N')", EXPFILL}},
+        {&ei_nmea0183_vtg_ground_speed_kilometer_unit_incorrect,
+         {"nmea0183.vtg_ground_speed_kilometer_unit_incorrect", PI_PROTOCOL, PI_WARN,
           "Incorrect speed unit (should be 'K')", EXPFILL}}};
 
     proto_nmea0183 = proto_register_protocol("NMEA 0183 protocol", "NMEA 0183", "nmea0183");
