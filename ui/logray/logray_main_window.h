@@ -40,8 +40,6 @@
 
 #include <config.h>
 
-#include <glib.h>
-
 #include "file.h"
 
 #include "ui/ws_ui_util.h"
@@ -81,7 +79,6 @@ class FilterDialog;
 class FunnelStatistics;
 class WelcomePage;
 class PacketCommentDialog;
-class PacketDiagram;
 class PacketList;
 class ProtoTree;
 class FilterExpressionToolBar;
@@ -117,7 +114,7 @@ public:
     void removeAdditionalToolbar(QString toolbarName);
 
     void addInterfaceToolbar(const iface_toolbar *toolbar_entry);
-    void removeInterfaceToolbar(const gchar *menu_title);
+    void removeInterfaceToolbar(const char *menu_title);
 
     QString getMwFileName();
     void setMwFileName(QString fileName);
@@ -221,11 +218,12 @@ private:
     void setMenusForFileSet(bool enable_list_files);
     void setWindowIcon(const QIcon &icon);
     QString replaceWindowTitleVariables(QString title);
+    void updateStyleSheet();
 
-    void externalMenuHelper(ext_menu_t * menu, QMenu  * subMenu, gint depth);
+    void externalMenuHelper(ext_menu_t * menu, QMenu  * subMenu, int depth);
 
     void setForCaptureInProgress(bool capture_in_progress = false, bool handle_toolbars = false, GArray *ifaces = NULL);
-    QMenu* findOrAddMenu(QMenu *parent_menu, QString& menu_text);
+    QMenu* findOrAddMenu(QMenu *parent_menu, const QStringList& menu_parts);
 
     void captureFileReadStarted(const QString &action);
 
@@ -256,11 +254,11 @@ public slots:
      * @param cf_path Path to the file.
      * @param display_filter Display filter to apply. May be empty.
      * @param type File type.
-     * @param is_tempfile TRUE/FALSE.
+     * @param is_tempfile true/false.
      * @return True on success, false on failure.
      */
     // XXX We might want to return a cf_read_status_t or a CaptureFile.
-    bool openCaptureFile(QString cf_path, QString display_filter, unsigned int type, gboolean is_tempfile = FALSE);
+    bool openCaptureFile(QString cf_path, QString display_filter, unsigned int type, bool is_tempfile = false);
     bool openCaptureFile(QString cf_path = QString(), QString display_filter = QString()) { return openCaptureFile(cf_path, display_filter, WTAP_TYPE_AUTO); }
     void filterPackets(QString new_filter = QString(), bool force = false);
     void updateForUnsavedChanges();
@@ -294,8 +292,6 @@ private slots:
 
     void initViewColorizeMenu();
     void initConversationMenus();
-    static bool addExportObjectsMenuItem(const void *key, void *value, void *userdata);
-    void initExportObjectsMenus();
     static bool addFollowStreamMenuItem(const void *key, void *value, void *userdata);
     void initFollowStreamMenus();
 
@@ -307,6 +303,7 @@ private slots:
      */
     void startCapture(QStringList);
     void startCapture();
+    void pushLiveCaptureInProgress();
     void popLiveCaptureInProgress();
     void stopCapture();
 
@@ -386,8 +383,6 @@ private slots:
     // gtk/main_menubar.c
 
     void connectFileMenuActions();
-    void exportPacketBytes();
-    void exportPDU();
     void printFile();
 
     void connectEditMenuActions();
@@ -397,7 +392,7 @@ private slots:
     void editConfigurationProfiles();
     void editTimeShiftFinished(int);
     void addPacketCommentFinished(PacketCommentDialog* pc_dialog, int result);
-    void editPacketCommentFinished(PacketCommentDialog* pc_dialog, int result, guint nComment);
+    void editPacketCommentFinished(PacketCommentDialog* pc_dialog, int result, unsigned nComment);
     void deleteAllPacketComments();
     void deleteAllPacketCommentsFinished(int result);
     void showPreferencesDialog(QString module_name);
@@ -433,12 +428,13 @@ private slots:
     void filterMenuAboutToShow();
 
     void applyConversationFilter();
-    void applyExportObject();
 
-    void openFollowStreamDialog(int proto_id, guint stream_num, guint sub_stream_num, bool use_stream_index = true);
+    void openFollowStreamDialog(int proto_id, unsigned stream_num, unsigned sub_stream_num, bool use_stream_index = true);
     void openFollowStreamDialog(int proto_id);
 
     void statCommandExpertInfo(const char *, void *);
+
+    void connectToolsMenuActions();
 
     void connectHelpMenuActions();
 
@@ -456,8 +452,9 @@ private slots:
     void showConversationsDialog();
     void showEndpointsDialog();
 
-    void openStatisticsTreeDialog(const gchar *abbr);
+    void openStatisticsTreeDialog(const char *abbr);
     void statCommandIOGraph(const char *, void *);
+    void showIOGraphDialog(io_graph_item_unit_t, QString);
 
     void externalMenuItemTriggered();
 

@@ -22,6 +22,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/capture_filter_combo.h
 	widgets/capture_filter_edit.h
 	widgets/clickable_label.h
+	widgets/compression_group_box.h
 	widgets/copy_from_profile_button.h
 	widgets/detachable_tabwidget.h
 	widgets/display_filter_combo.h
@@ -45,8 +46,13 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/path_selection_edit.h
 	widgets/pref_module_view.h
 	widgets/profile_tree_view.h
+	widgets/qcp_axis_ticker_elided.h
+	widgets/qcp_axis_ticker_si.h
+	widgets/qcp_string_legend_item.h
 	widgets/range_syntax_lineedit.h
+	widgets/resize_header_view.h
 	widgets/resolved_addresses_view.h
+	widgets/rowmove_tree_view.h
 	widgets/rtp_audio_graph.h
 	widgets/splash_overlay.h
 	widgets/stock_icon_tool_button.h
@@ -74,6 +80,7 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/field_information.h
 	utils/frame_information.h
 	utils/idata_printable.h
+	utils/profile_switcher.h
 	utils/proto_node.h
 	utils/qt_ui_utils.h
 	utils/rtp_audio_file.h
@@ -173,7 +180,6 @@ set(WIRESHARK_QT_HEADERS
 	file_set_dialog.h
 	filter_action.h
 	filter_dialog.h
-	filter_dialog.h
 	filter_expression_frame.h
 	firewall_rules_dialog.h
 	follow_stream_action.h
@@ -191,6 +197,7 @@ set(WIRESHARK_QT_HEADERS
 	interface_toolbar_reader.h
 	interface_toolbar.h
 	io_console_dialog.h
+	io_graph_action.h
 	io_graph_dialog.h
 	layout_preferences_frame.h
 	lbm_lbtrm_transport_dialog.h
@@ -284,6 +291,7 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/capture_filter_combo.cpp
 	widgets/capture_filter_edit.cpp
 	widgets/clickable_label.cpp
+	widgets/compression_group_box.cpp
 	widgets/copy_from_profile_button.cpp
 	widgets/detachable_tabwidget.cpp
 	widgets/display_filter_combo.cpp
@@ -307,8 +315,13 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/path_selection_edit.cpp
 	widgets/pref_module_view.cpp
 	widgets/profile_tree_view.cpp
+	widgets/qcp_axis_ticker_elided.cpp
+	widgets/qcp_axis_ticker_si.cpp
+	widgets/qcp_string_legend_item.cpp
 	widgets/range_syntax_lineedit.cpp
+	widgets/resize_header_view.cpp
 	widgets/resolved_addresses_view.cpp
+	widgets/rowmove_tree_view.cpp
 	widgets/rtp_audio_graph.cpp
 	widgets/splash_overlay.cpp
 	widgets/stock_icon_tool_button.cpp
@@ -335,6 +348,7 @@ set(WIRESHARK_UTILS_SRCS
 	utils/data_printer.cpp
 	utils/field_information.cpp
 	utils/frame_information.cpp
+	utils/profile_switcher.cpp
 	utils/proto_node.cpp
 	utils/qt_ui_utils.cpp
 	utils/rtp_audio_file.cpp
@@ -443,6 +457,7 @@ set(WIRESHARK_QT_SRC
 	interface_toolbar_reader.cpp
 	interface_toolbar.cpp
 	io_console_dialog.cpp
+	io_graph_action.cpp
 	layout_preferences_frame.cpp
 	lbm_lbtrm_transport_dialog.cpp
 	lbm_lbtru_transport_dialog.cpp
@@ -658,6 +673,7 @@ set(WIRESHARK_QT_TS
 	wireshark_en.ts # lupdate -pluralonly
 	wireshark_es.ts
 	wireshark_fr.ts
+	wireshark_hu.ts
 	wireshark_it.ts
 	wireshark_ja_JP.ts
 	wireshark_ko.ts
@@ -804,6 +820,9 @@ if(USE_qt6)
 	if(Qt6Multimedia_FOUND)
 		target_link_libraries(qtui PUBLIC Qt6::Multimedia)
 	endif()
+	if(Qt6DBus_FOUND)
+		target_link_libraries(qtui PUBLIC Qt6::DBus)
+	endif()
 endif()
 
 target_include_directories(qtui
@@ -815,6 +834,7 @@ target_include_directories(qtui
 		${QT5_INCLUDE_DIRS}
 		${GCRYPT_INCLUDE_DIRS}
 		${MINIZIP_INCLUDE_DIRS}
+		${MINIZIPNG_INCLUDE_DIRS}
 		${PCAP_INCLUDE_DIRS}
 		${SPEEXDSP_INCLUDE_DIRS}
 		${WINSPARKLE_INCLUDE_DIRS}

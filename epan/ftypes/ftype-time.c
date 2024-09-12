@@ -12,14 +12,13 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <math.h>
 
 #include <epan/to_str.h>
 #include <wsutil/time_util.h>
 #include <wsutil/ws_strptime.h>
 #include <wsutil/safe-math.h>
-
+#include <wsutil/array.h>
 
 static enum ft_result
 cmp_order(const fvalue_t *a, const fvalue_t *b, int *cmp)
@@ -683,7 +682,7 @@ void
 ftype_register_time(void)
 {
 
-	static ftype_t abstime_type = {
+	static const ftype_t abstime_type = {
 		FT_ABSOLUTE_TIME,		/* ftype */
 		0,				/* wire_size */
 		time_fvalue_new,		/* new_value */
@@ -721,7 +720,7 @@ ftype_register_time(void)
 		time_divide,			/* divide */
 		NULL,				/* modulo */
 	};
-	static ftype_t reltime_type = {
+	static const ftype_t reltime_type = {
 		FT_RELATIVE_TIME,		/* ftype */
 		0,				/* wire_size */
 		time_fvalue_new,		/* new_value */

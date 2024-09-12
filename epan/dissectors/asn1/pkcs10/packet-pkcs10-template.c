@@ -25,6 +25,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <wsutil/array.h>
 
 #include <epan/oids.h>
 #include <epan/asn1.h>
@@ -59,7 +60,7 @@ void proto_register_pkcs10(void) {
 	};
 
 	/* List of subtrees */
-	static gint *ett[] = {
+	static int *ett[] = {
 #include "packet-pkcs10-ettarr.c"
 	};
 	/* Register protocol */

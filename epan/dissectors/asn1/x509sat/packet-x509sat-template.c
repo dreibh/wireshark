@@ -16,6 +16,7 @@
 #include <epan/asn1.h>
 #include <epan/proto_data.h>
 #include <epan/strutil.h>
+#include <wsutil/array.h>
 
 #include "packet-ber.h"
 #include "packet-p1.h"
@@ -48,7 +49,7 @@ void proto_register_x509sat(void) {
   };
 
   /* List of subtrees */
-  static gint *ett[] = {
+  static int *ett[] = {
 #include "packet-x509sat-ettarr.c"
   };
 

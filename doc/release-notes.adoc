@@ -1,13 +1,13 @@
 include::attributes.adoc[]
 :stylesheet: ws.css
 :linkcss:
-:copycss: {stylesheet}
+:copycss: {css_dir}/{stylesheet}
 
 = Wireshark {wireshark-version} Release Notes
 // Asciidoctor Syntax Quick Reference:
 // https://asciidoctor.org/docs/asciidoc-syntax-quick-reference/
 
-This is an experimental release intended to test new features for Wireshark 4.4.
+This is an experimental release intended to test new features for Wireshark 5.0.
 
 == What is Wireshark?
 
@@ -18,14 +18,6 @@ It is used for troubleshooting, analysis, development and education.
 
 // Add a summary of **major** changes here.
 // Add other changes to "New and Updated Features" below.
-
-Improved display filter support for value strings (optional string
-representations for numeric fields).
-
-Display filter functions can be implemented as runtime-loadable C plugins.
-
-Plugin registration API was refactored. Plugin authors must update their
-plugins as described below.
 
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
@@ -40,105 +32,25 @@ See the “New and Updated Features” section below for more details.
 
 === New and Updated Features
 
-The following features are new (or have been significantly updated) since version 4.2.0:
+The following features are either new or have been significantly updated since version 4.4.0:
+
+// * The Windows installers now ship with Npcap 1.79.
+//   They previously shipped with Npcap 1.78.
 
 //* The Windows installers now ship with Qt 6.5.2.
 //  They previously shipped with Qt 6.2.3.
 
-* Display filter syntax-related enhancements:
+* Mergecap, Editcap, TShark and Text2pcap have an `--compress` option to
+  compress output to different formats. For now, it supports the gzip
+  and LZ4 compression formats. When the option is not given, the desired
+  compression format can also be deduced from the output filename
+  extension, e.g. gzip for .gz.
 
-  ** Better handling of comparisons with value strings. Now the display filter engine can
-     correctly handle cases where multiple different numeric values map to the same value
-     string, including but not limited to range-type value strings.
+// === Removed Features and Support
 
-  ** Fields with value strings now support regular expression matching.
 
-  ** Date and time values now support arithmetic, with some restrictions:
-     the multiplier/divisor must be an integer or float and appear on the right-hand
-     side of the operator.
+// === Removed Dissectors
 
-  ** The keyword "bitand" can be used as an alternative syntax for the bitwise-and operator.
-
-  ** Functions alone can now be used as an entire logical expression.
-     The result of the expression is the truthiness of the function return
-     value (or of all values if more than one). This is useful for example to write
-     "len(something)" instead of "len(something) != 0". Even more so if a function
-     returns itself a boolean value, it is now possible to write
-     "bool_test(some.field)" instead of having to write "bool_test(some.field) == True"
-     (both forms are now valid).
-
-  ** Display filter references can be written without curly braces. It
-     is now possible to write `$frame.number` instead of `${frame.number}` for example.
-
-  ** Added new display filter functions to test various IP address properties.
-     Check the wireshark-filter(5) manpage for more information.
-
-  ** Display filter macros can be written with a semicolon after the macro
-     name before the argument list, e.g. `${mymacro;arg1;...;argN}`, instead
-     of `${mymacro:arg1;...;argN}`. The version with semicolons works better
-     with pop-up suggestions when editing the display filter, so the version
-     with the colon might be removed in the future.
-
-  ** Display filter macros can be written using a function-like notation.
-     The macro `${mymacro:arg1;...;argN}` can be written
-     `$mymacro(arg1,...,argN)`.
-
-* Display filter functions can be implemented as libwireshark plugins. Plugins are loaded
-  during startup from the usual binary plugin configuration directories. See the
-  `ipaddr.c` source file in the distribution for an example of a display filter C plugin
-  and the doc/plugins.example folder for generic instructions how to build a plugin.
-
-* Display filter autocompletions now also include display filter functions.
-
-* The display filter macro configuration file has changed format. It now uses
-  the same format as the "dfilters" file and has been renamed accordingly to
-  "dmacros". Internally it no longer uses the UAT API and the display filter macro
-  GUI dialog has been updated. There is some basic migration logic implemented
-  but it is advisable to check that the "dfilter_macros" (old) and
-  "dmacros" (new) files in the profile directory are consistent.
-
-* When selecting "Manage Interfaces" from "Capture Options", Wireshark only
-  attempts to reconnect to rpcap (remote) hosts that were connected to in the
-  last session, instead of every remote host that the current profile has ever
-  connected to. wsbuglink:17484[]
-
-* Adding interfaces at startup is about twice as fast, and has many fewer
-  UAC pop-ups when npcap is installed with access restricted to Administrators
-  on Windows
-
-* The Resolved Addresses dialog only shows what addresses and ports are
-  present in the file (not including information from static files), and
-  selected rows or the entire table can be saved or copied to the clipboard
-  in several formats.
-
-* New menu:Tools[Install Plugin] option provides a convenient method to install
-  a binary plugin to the personal folder.
-
-* The personal binary plugins folder now has higher priority than the global
-  folder.
-
-* The binary plugins folder path no longer uses an X.Y version component. Plugins
-  are required to add the ABI version to the file name.
-
-* Truncated fields in the detail view are now displayed as "Field name […]: data" instead of "Field name [truncated]: data"
-
-* When capturing files in multiple file mode, a pattern that places the date and time
-  before the index number can be used (e.g., foo_20240714110102_00001.pcap instead of
-  foo_00001_20240714110102.pcap). This causes filenames to sort in chronological order
-  across file sets from different captures. The File Set dialog has been updated to
-  handle the new pattern, which has been capable of being produced by tshark since
-  version 3.6.0
-
-* The "Follow Stream" dialog can now show delta times between turns and all packets and events.
-
-=== Removed Features and Support
-
-* The tshark `-G` option with no argument is deprecated and will be removed in
-  a future version. Use `tshark -G fields` to produce the same report.
-
-=== Removed Dissectors
-
-The Parlay dissector has been removed.
 
 //=== New File Format Decoding Support
 
@@ -153,46 +65,32 @@ The Parlay dissector has been removed.
 // git log --oneline --diff-filter=A --stat v4.3.0rc0.. epan/dissectors plugins
 [commaize]
 --
-MAC NR Framed (mac-nr-framed)
-RF4CE Network Layer (RF4CE)
-RF4CE Profile (RF4CE Profile)
-EGNOS Message Server (EMS) file format
+Lenbrook Service Discovery Protocol (LSDP)
 --
 
 === Updated Protocol Support
 
-* IPv6: The "show address detail" preference is now enabled by default. The
-  address details provided have been extended to include more special purpose address
-  block properties (forwardable, globally-routable, etc).
-
-Too many other protocol updates have been made to list them all here.
+Too many protocol updates have been made to list them all here.
 
 //=== New and Updated Capture File Support
 
-// There is no new or updated capture file support in this release.
+There is no new or updated capture file support in this release.
 // Add one file type per line between the -- delimiters.
-[commaize]
---
-EGNOS Messager Server (EMS) files
---
+// [commaize]
+// --
+// --
 
 // === New and Updated Capture Interfaces support
-[commaize]
---
-u-blox GNSS receivers
---
+// [commaize]
+// --
+// --
 
 //=== New and Updated Codec support
 
 //_Non-empty section placeholder._
 
-=== Major API Changes
+// === Major API Changes
 
-* Plugin registration API was refactored. Plugin authors must do the following:
-  1 - Remove the existing boilerplate (version, want_major` and `want_minor` and
-  plugin API declarations. 2 - Add a struct ws_module to the plugin.
-  3 - Call one of the WIRESHARK_PLUGIN_REGISTER_* macros. See README.plugins
-  sections 5 and doc/plugins.example/hello.c for details and examples.
 
 == Getting Wireshark
 
@@ -221,8 +119,7 @@ https://www.wireshark.org/docs/
 Community support is available on
 https://ask.wireshark.org/[Wireshark’s Q&A site]
 and on the wireshark-users mailing list.
-Subscription information and archives for all of Wireshark’s mailing lists can be found on
-https://www.wireshark.org/lists/[the web site].
+Subscription information and archives for all of Wireshark’s mailing lists can be found on https://lists.wireshark.org/lists/[the mailing list site].
 
 Bugs and feature requests can be reported on
 https://gitlab.com/wireshark/wireshark/-/issues[the issue tracker].

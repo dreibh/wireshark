@@ -56,25 +56,9 @@ endif()
 
 # Updated by tools/make-version.py
 set(PROJECT_MAJOR_VERSION 4)
-set(PROJECT_MINOR_VERSION 3)
+set(PROJECT_MINOR_VERSION 5)
 set(PROJECT_PATCH_VERSION 0)
 set(PROJECT_BUILD_VERSION 0)
-# ABI version for plugins. It must be incremented by one for
-# every odd minor release number.
-# start at 1 (arbitrary).
-# release 4.3.X (unstable) = ABI version 1 (start)
-# release 4.4.X (stable)   = ABI version 1 (stable release, freeze ABI 1)
-# release 4.5.X (unstable) = ABI version 2 (increment for new unstable release, ABI break)
-# release 4.6.X (stable)   = ABI version 2 (stable release, freeze ABI 2)
-# release 4.7.X (unstable) = ABI version 3 (increment for new unstable release, ABI break)
-# release 5.0.X (stable)   = ABI version 3 (stable release, freeze ABI 3)
-# etc.
-set(PROJECT_ABI_VERSION_EPAN    1)
-set(PROJECT_ABI_VERSION_WIRETAP 1)
-# Codecs API/ABI is much more narrow and stable than the other two so this
-# may not need to be incremented every X.Y release.
-set(PROJECT_ABI_VERSION_CODEC   1)
-
 set(PROJECT_VERSION_EXTENSION "")
 
 if(DEFINED ENV{WIRESHARK_VERSION_EXTRA})
@@ -248,8 +232,8 @@ if(WIN32)
 	file(TO_CMAKE_PATH ${EXTRA_INSTALLER_DIR} _file_download_dir)
 
 	# Download Npcap required by the Windows installer
-	set(NPCAP_VERSION "1.78")
-	set(NPCAP_SHA256 "deeb39ae22a44ea2698c4a58732e621bc45b84686a444c405491fef946898d90")
+	set(NPCAP_VERSION "1.79")
+	set(NPCAP_SHA256 "a95577ebbc67fc45b319e2ef3a55f4e9b211fe82ed4cb9d8be6b1a9e2425ce53")
 	set(NPCAP_FILENAME "npcap-${NPCAP_VERSION}.exe")
 	set(NPCAP_URL "${LIBS_URL}/Npcap/${NPCAP_FILENAME}")
 	FetchContent_Declare(Npcap
@@ -305,12 +289,6 @@ if(WIN32 AND NOT USE_MSYSTEM)
 	set(CMAKE_INSTALL_INCLUDEDIR "include")
 	set(CMAKE_INSTALL_DATADIR ".")
 	set(CMAKE_INSTALL_DOCDIR ".")
-else()
-	# By default INSTALL_DATADIR is set to INSTALL_DATAROOTDIR, set the
-	# proper value here.
-	set(CMAKE_INSTALL_DATADIR "share/${PROJECT_NAME}"
-		CACHE PATH "Read-only architecture-independent data"
-	)
 endif()
 include(GNUInstallDirs)
 
@@ -319,9 +297,9 @@ set(PROJECT_INSTALL_INCLUDEDIR "${CMAKE_INSTALL_INCLUDEDIR}/${PROJECT_NAME}")
 # Make sure our executables can load our libraries if we install into
 # a non-default directory on Unix-like systems other than macOS.
 # https://gitlab.kitware.com/cmake/community/wikis/doc/cmake/RPATH-handling
-set(LIBRARY_INSTALL_RPATH "")
-set(EXECUTABLE_INSTALL_RPATH "")
-set(EXTCAP_INSTALL_RPATH "")
+set(LIBRARY_INSTALL_RPATH "${CMAKE_INSTALL_RPATH}")
+set(EXECUTABLE_INSTALL_RPATH "${CMAKE_INSTALL_RPATH}")
+set(EXTCAP_INSTALL_RPATH "${CMAKE_INSTALL_RPATH}")
 if(NOT (WIN32 OR APPLE OR USE_STATIC))
 	# Try to set a RPATH for installed binaries if the library directory is
 	# not already included in the default search list.
@@ -620,7 +598,8 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 	list(APPEND LOCAL_CFLAGS /diagnostics:caret /Zo /utf-8 /guard:cf)
 	set(WS_LINK_FLAGS "${WS_LINK_FLAGS} /guard:cf")
 	set(WS_LINK_FLAGS "${WS_LINK_FLAGS} /STACK:0x800000")
-	# /Qspectre is not available for VS2015 or older VS2017. Test for its availability.
+	# /Qspectre depends on the optional "Microsoft.VisualStudio.Component...Spectre" components,
+	# so we need to test for its availability.
 	set(WIRESHARK_COMMON_FLAGS /Qspectre)
 
 	if(ENABLE_CODE_ANALYSIS)
@@ -695,9 +674,12 @@ else() # ! MSVC
 		# -O<X> and -g get set by the CMAKE_BUILD_TYPE
 		-Wall
 		-Wextra
+		-Wformat
+		-Wformat=2
+		-Wtrampolines			# Enable warnings about trampolines that require executable stacks
+		-Wbidi-chars=any
 		-Wpointer-arith
 		-Wformat-security
-		-fno-strict-overflow
 		-fexcess-precision=fast	# GCC-only
 		-Wvla
 		-Wattributes
@@ -709,6 +691,21 @@ else() # ! MSVC
 		-Wunreachable-code	# Clang-only
 		-Wdocumentation		# Clang-only
 		-Wlogical-op		# GCC-only
+
+		# Run-time protections mechanisms
+		-fstrict-flex-arrays=3			# Consider a trailing array in a struct as a flexible array if declared as []
+		-fstack-clash-protection		# Increased reliability of stack overflow detection
+		-fcf-protection=full		# Enable control flow protection to counter Return Oriented Programming (ROP) and Jump Oriented Programming (JOP) attacks on many x86 architectures
+		-mbranch-protection=standard	# Enable branch protection to counter Return Oriented Programming (ROP) and Jump Oriented Programming (JOP) attacks on AArch64
+		-D_GLIBCXX_ASSERTIONS				# Precondition checks for C++ standard library calls. Can impact performance.
+		-fstack-protector-strong			# Stack smashing protector
+		-fno-delete-null-pointer-checks		# Force retention of null pointer checks
+		# The above used to fail on macOS El Capitan clang (see below in PEDANTIC) Does it work now?
+		-fno-strict-overflow			# Defines signed overflow as wrapping on gcc and clang, prevents optimizations that assume overflow never happens
+		-fno-strict-aliasing				# Do not assume strict aliasing
+		-ftrivial-auto-var-init			# Perform trivial auto variable initialization
+		-fexceptions					# Enable exception propagation to harden multi-threaded C code
+
 		#
 		# Disable errors unconditionally for some static analysis warnings
 		# that are dormant at lower optimizations levels or active only in
@@ -718,7 +715,7 @@ else() # ! MSVC
 		# priority target for action. That is very disruptive
 		# with -Werror enabled (the default on the master branch).
 		#
-		-Wno-error=stringop-overflow=
+		#-Wno-error=stringop-overflow=
 		#
 		# XXX Now that we have a CI job with Release build type (using
 		# -O3 optimization level) the dormancy issue should be ameliorated
@@ -731,8 +728,41 @@ else() # ! MSVC
 		# We want to be able to build with -Werror in that case. New
 		# code should not introduce new deprecations in any case.
 		#
-		-Wno-error=deprecated-declarations
+		#-Wno-error=deprecated-declarations
 	)
+
+	if (CMAKE_C_COMPILER_ID MATCHES "Clang")
+		# Avoid "argument unused during compilation" warnings for
+		# -fstack-clash-protection and -mbranch-protection=standard
+		list(APPEND WIRESHARK_COMMON_FLAGS -Qunused-arguments)
+	endif()
+
+	if(NOT CMAKE_BUILD_TYPE STREQUAL "Debug")
+		# _FORTIFY_SOURCE requires -O1 or higher, and the Debug
+		# build type has no optimization
+		if((CMAKE_C_COMPILER_ID STREQUAL "GNU" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "12.0") OR
+		   (CMAKE_C_COMPILER_ID MATCHES "Clang" AND CMAKE_C_COMPILER_VERSION VERSION_GREATER_EQUAL "9.0"))
+			# On some gcc < 12.0, test_compiler_flag will report that
+			# -D_FORTIFY_SOURCE=3 is valid, but actually trying to compile
+			# with it will give a warning that it has the same effect as
+			# -D_FORTIFY_SOURCE=2
+			list(APPEND WIRESHARK_COMMON_FLAGS
+			-U_FORTIFY_SOURCE	# Run-time buffer overflow detection. For dist like Ubuntu, U_FORTIFY_SOURCE must be input before D_FORTIFY_SOURCE
+			-D_FORTIFY_SOURCE=3				# Fortify sources with compile- and run-time checks for unsafe libc usage and buffer overflows. Requires -O1 or higher
+			)
+		endif()
+	endif()
+
+	# test_compiler_flag doesn't seem to test that a flag is supported on
+	# a cross-compiled target, only for the native architecture. (Thus
+	# conversely it does work to verify that -mbranch-protection=standard
+	# doesn't work on x64 when compiling natively.)
+	# TODO: Check that this approach works.
+	#if(NOT CMAKE_CROSSCOMPILING)
+	#	list(APPEND WIRESHARK_COMMON_FLAGS
+	#	-fhardened					# Enable pre-determined set of hardening options in GCC. Currently, -fhardened is only supported on GNU/Linux targets
+	#	)
+	#endif()
 
 	if((NOT ENABLE_ASAN) AND (NOT ENABLE_TSAN) AND (NOT ENABLE_UBSAN) AND (NOT DISABLE_FRAME_LARGER_THAN_WARNING))
 		#
@@ -760,6 +790,8 @@ else() # ! MSVC
 		-Wshadow
 		-Wold-style-definition
 		-Wstrict-prototypes
+		-Wincompatible-pointer-types
+		-Wint-conversion
 	)
 
 	#
@@ -789,6 +821,7 @@ else() # ! MSVC
 	# Not all warnings are the same. They fall on a spectrum from "critical"
 	# to "pedantic nonsense". These are warnings that realistically are worth
 	# fixing eventually.
+	# TODO https://gitlab.com/wireshark/wireshark/-/issues/19995
 	#
 	if(ENABLE_TODO_WARNINGS)
 		list(APPEND WIRESHARK_COMMON_FLAGS
@@ -797,6 +830,9 @@ else() # ! MSVC
 			#
 			-Wmissing-prototypes
 			-Wmissing-declarations
+
+			-Wconversion
+			-Wsign-conversion
 			#
 			# A bunch of "that might not work on SPARC" code blocks
 			# this one for now; some of it is code that *will* work
@@ -815,6 +851,8 @@ else() # ! MSVC
 			# seem to flag very interesting issues.
 			#
 			-Wno-format-truncation # Enabled with -Wall
+
+			-Wno-format-nonliteral	# Enabled with -Wformat=2
 		)
 		list(APPEND WIRESHARK_C_ONLY_FLAGS
 			-Wno-pointer-sign # Enabled with -Wall
@@ -969,18 +1007,48 @@ endif()
 include(CMakePushCheckState)
 
 if(ENABLE_ASAN)
-	# Available since MSVC 2019 version 16.9
+	# Available since MSVC 2019 version 16.9 (https://gitlab.com/wireshark/wireshark/-/merge_requests/14912 for more details)
 	cmake_push_check_state()
 	set(ASAN_FLAG "-fsanitize=address")
 	set(CMAKE_REQUIRED_FLAGS ${ASAN_FLAG})
+	if(MSVC)
+		message(NOTICE "ENABLE_ASAN was requested. Checking if ASAN is supported requires SPECTRE-mitigation to be disabled globally impacting all build types.")
+		message(NOTICE "If ASAN is supported, then it is re-enabled selectively depending on the build types.")
+		set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} /Qspectre-")
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /Qspectre-")
+	endif()
 	check_c_compiler_flag(${ASAN_FLAG} C__fsanitize_address_VALID)
 	check_cxx_compiler_flag(${ASAN_FLAG} CXX__fsanitize_address_VALID)
 	cmake_pop_check_state()
 	if(NOT C__fsanitize_address_VALID OR NOT CXX__fsanitize_address_VALID)
 		message(FATAL_ERROR "ENABLE_ASAN was requested, but not supported!")
 	endif()
-	add_compile_options(${ASAN_FLAG})
-	if (MSVC)
+	if(MSVC)
+		message(NOTICE "ASAN is supported.")
+		if(ENABLE_ASAN_WITH_SPECTRE)
+			message(NOTICE "ENABLE_ASAN_WITH_SPECTRE was requested.")
+			message(NOTICE "For Debug and RelWithDebInfo, SPECTRE-mitigation has been re-enabled and ASAN has been enabled too.")
+			add_compile_options("$<$<CONFIG:Debug>:/Qspectre>" "$<$<CONFIG:Debug>:${ASAN_FLAG}>")
+			add_compile_options("$<$<CONFIG:RelWithDebInfo>:/Qspectre>" "$<$<CONFIG:RelWithDebInfo>:${ASAN_FLAG}>")
+			set(CPU ${WIRESHARK_TARGET_PLATFORM})
+			if (${CPU} MATCHES "win32")
+				set(CPU x86)
+			endif()
+			add_link_options("$<$<CONFIG:Debug>:/libpath:$ENV{VCToolsInstallDir}lib\\spectre\\${CPU}>" "$<$<CONFIG:Debug>:/libpath:$ENV{VCToolsInstallDir}lib\\${CPU}>")
+			add_link_options("$<$<CONFIG:RelWithDebInfo>:/libpath:$ENV{VCToolsInstallDir}lib\\spectre\\${CPU}>" "$<$<CONFIG:RelWithDebInfo>:/libpath:$ENV{VCToolsInstallDir}lib\\${CPU}>")
+		else()
+			message(NOTICE "ENABLE_ASAN_WITH_SPECTRE was not requested")
+			message(NOTICE "For Debug and RelWithDebInfo, SPECTRE-mitigation stays disabled and ASAN has been enabled.")
+			add_compile_options("$<$<CONFIG:Debug>:${ASAN_FLAG}>")
+			add_compile_options("$<$<CONFIG:RelWithDebInfo>:${ASAN_FLAG}>")
+		endif()
+		message(NOTICE "For Release and MinSizeRel, SPECTRE-mitigation has been re-enabled and ASAN has been skipped.")
+		add_compile_options("$<$<CONFIG:Release>:/Qspectre>")
+		add_compile_options("$<$<CONFIG:MinSizeRel>:/Qspectre>")
+	else()
+		add_compile_options(${ASAN_FLAG})
+	endif()
+	if(MSVC)
 		# Using ASAN makes some of our code require object files with
 		# a 32-bit index to the section table instead of 16-bit.
 		# This makes the .obj files slightly larger (~2%) and makes
@@ -994,12 +1062,11 @@ if(ENABLE_ASAN)
 		# add_link_options since CMake 3.13 (our minimum)
 		add_link_options(${ASAN_FLAG})
 	endif()
-	# Disable ASAN for build-time tools, e.g. lemon
-	# (MSVC doesn't support this flag)
-	check_c_compiler_flag(-fno-sanitize=all C__fno_sanitize_all_VALID)
-	if(C__fno_sanitize_all_VALID)
-		set(NO_SANITIZE_CFLAGS "-fno-sanitize=all")
-		set(NO_SANITIZE_LDFLAGS "-fno-sanitize=all")
+endif()
+
+if(MSVC)
+	if(NOT ENABLE_ASAN AND ENABLE_ASAN_WITH_SPECTRE)
+		message(FATAL_ERROR "ENABLE_ASAN_WITH_SPECTRE was requested, but without ENABLE_ASAN!")
 	endif()
 endif()
 
@@ -1032,6 +1099,20 @@ if(ENABLE_UBSAN)
 	set(CMAKE_CXX_FLAGS "-fsanitize=undefined ${CMAKE_CXX_FLAGS}")
 endif()
 
+if(ENABLE_LSAN)
+	# Available since Clang >= 3.4 and GCC >= 4.9
+	cmake_push_check_state()
+	set(CMAKE_REQUIRED_LIBRARIES "-fsanitize=leak")
+	check_c_compiler_flag(-fsanitize=leak C__fsanitize_leak_VALID)
+	check_cxx_compiler_flag(-fsanitize=leak CXX__fsanitize_leak_VALID)
+	cmake_pop_check_state()
+	if(NOT C__fsanitize_leak_VALID OR NOT CXX__fsanitize_leak_VALID)
+		message(FATAL_ERROR "ENABLE_LSAN was requested, but not supported!")
+	endif()
+	set(CMAKE_C_FLAGS "-fsanitize=leak ${CMAKE_C_FLAGS}")
+	set(CMAKE_CXX_FLAGS "-fsanitize=leak ${CMAKE_CXX_FLAGS}")
+endif()
+
 if(ENABLE_FUZZER)
 	# Available since Clang >= 6
 	# Will enable coverage flags which can be used by the fuzzshark target.
@@ -1045,6 +1126,16 @@ if(ENABLE_FUZZER)
 	endif()
 	set(CMAKE_C_FLAGS "-fsanitize=fuzzer-no-link ${CMAKE_C_FLAGS}")
 	set(CMAKE_CXX_FLAGS "-fsanitize=fuzzer-no-link ${CMAKE_CXX_FLAGS}")
+endif()
+
+if(ENABLE_ASAN OR ENABLE_TSAN OR ENABLE_UBSAN OR ENABLE_LSAN OR ENABLE_FUZZER)
+	# Disable sanitizers for build-time tools, e.g. lemon
+	# (MSVC doesn't support this flag)
+	check_c_compiler_flag(-fno-sanitize=all C__fno_sanitize_all_VALID)
+	if(C__fno_sanitize_all_VALID)
+		set(NO_SANITIZE_CFLAGS "-fno-sanitize=all")
+		set(NO_SANITIZE_LDFLAGS "-fno-sanitize=all")
+	endif()
 endif()
 
 if(MSVC)
@@ -1217,8 +1308,13 @@ find_package(GCRYPT "1.8.0" REQUIRED)
 # C Asynchronous resolver
 reset_find_package(CARES)
 find_package(CARES "1.13.0" REQUIRED)
+if (CARES_VERSION VERSION_GREATER_EQUAL "1.28.0")
+	# Suppress deprecation warnings.
+	add_compile_definitions(CARES_NO_DEPRECATED)
+endif ()
 find_package(LEX REQUIRED)
 find_package(Perl)
+reset_find_package(PCRE2 PCRE2_DEBUG_LIBRARY)
 find_package(PCRE2 REQUIRED)
 
 if (NOT WIN32)
@@ -1264,9 +1360,17 @@ if(BUILD_wireshark OR BUILD_logray)
 				Widgets
 				Concurrent
 				Core5Compat
+				DBus
 			OPTIONAL_COMPONENTS
 				Multimedia
 		)
+
+		if (WIN32 AND Qt6Widgets_VERSION VERSION_LESS 6.5.3)
+			message(WARNING "Qt 6.5.3 or later is required.")
+		endif()
+		if (APPLE AND Qt6Widgets_VERSION VERSION_LESS 6.5.3)
+			message(WARNING "Qt 6.5.3 or later is required.")
+		endif()
 	else(USE_qt6)
 		set(qtver 5)
 		if(DEFINED ENV{WIRESHARK_QT5_PREFIX_PATH})
@@ -1296,6 +1400,10 @@ if(BUILD_wireshark OR BUILD_logray)
 		)
 		if(WIN32)
 			list(APPEND QT5_PACKAGELIST Qt5WinExtras)
+		endif()
+		if(NOT WIN32 AND NOT APPLE)
+			# DBus is a core component of Qt6, but was an add-on in Qt5.
+			list(APPEND QT5_OPTIONAL_PACKAGELIST Qt5DBus)
 		endif()
 		foreach(_qt5_package IN LISTS QT5_PACKAGELIST)
 			find_package(${_qt5_package} REQUIRED ${QT5_FIND_PACKAGE_OPTIONS})
@@ -1335,6 +1443,9 @@ if(BUILD_wireshark OR BUILD_logray)
 	if(Qt6Multimedia_FOUND OR Qt5Multimedia_FOUND)
 		set(QT_MULTIMEDIA_LIB 1)
 	endif()
+	if(Qt6DBus_FOUND OR Qt5DBus_FOUND)
+		set(QT_DBUS_LIB 1)
+	endif()
 	if(NOT DEFINED MOC_OPTIONS)
 		# Squelch moc verbose "nothing to do" output
 		set(MOC_OPTIONS -nn)
@@ -1355,11 +1466,21 @@ ws_find_package(GNUTLS ENABLE_GNUTLS HAVE_LIBGNUTLS "3.5.8")
 # Kerberos
 ws_find_package(KERBEROS ENABLE_KERBEROS HAVE_KERBEROS)
 
-# Zlib compression
-ws_find_package(ZLIB ENABLE_ZLIB HAVE_ZLIB)
+# Zlib-ng compression
+ws_find_package(ZLIBNG ENABLE_ZLIBNG HAVE_ZLIBNG)
 
-# Minizip compression
-ws_find_package(Minizip ENABLE_MINIZIP HAVE_MINIZIP)
+#if(NOT ZLIBNG_FOUND)
+    # Zlib compression
+    ws_find_package(ZLIB ENABLE_ZLIB HAVE_ZLIB)
+#endif()
+
+# Minizip-ng compression
+ws_find_package(Minizipng ENABLE_MINIZIPNG HAVE_MINIZIPNG)
+
+if(NOT MINIZIPNG_FOUND)
+  # Minizip compression
+  ws_find_package(Minizip ENABLE_MINIZIP HAVE_MINIZIP)
+endif()
 
 # Brotli compression
 ws_find_package(BROTLI ENABLE_BROTLI HAVE_BROTLI)
@@ -1382,9 +1503,9 @@ ws_find_package(NGHTTP3 ENABLE_NGHTTP3 HAVE_NGHTTP3)
 # Embedded Lua interpreter
 if(FETCH_lua)
 	# Download and build lua
-	include(${CMAKE_SOURCE_DIR}/cmake/external/lua52/Lua52.cmake)
+	include(${CMAKE_SOURCE_DIR}/cmake/external/lua54/Lua54.cmake)
 else()
-	set(LUA_FIND_VERSIONS "5.2;5.1" CACHE STRING "Lua versions valid for the build (as a list)")
+	set(LUA_FIND_VERSIONS "5.4;5.3" CACHE STRING "Lua versions valid for the build (as a list)")
 	ws_find_package(Lua ENABLE_LUA HAVE_LUA)
 endif()
 
@@ -1515,13 +1636,13 @@ if (QT_FOUND)
 		# https://doc.qt.io/qt-5.11/supported-platforms-and-configurations.html
 		# https://doc.qt.io/qt-5.15/supported-platforms.html
 		# https://doc-snapshots.qt.io/qt6-dev/supported-platforms.html
-		if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.5.0")
+		if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.5.0" AND MIN_MACOS_VERSION VERSION_LESS "11.0")
 			set(MIN_MACOS_VERSION 11.0)
-		elseif(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.0.0")
+		elseif(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.0.0" AND MIN_MACOS_VERSION VERSION_LESS "10.14")
 			set(MIN_MACOS_VERSION 10.14)
-		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.14.0")
+		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.14.0" AND MIN_MACOS_VERSION VERSION_LESS "10.13")
 			set(MIN_MACOS_VERSION 10.13)
-		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.12.0")
+		elseif(Qt5Widgets_VERSION VERSION_GREATER_EQUAL "5.12.0" AND MIN_MACOS_VERSION VERSION_LESS "10.12")
 			set(MIN_MACOS_VERSION 10.12)
 		endif()
 		if(CMAKE_OSX_DEPLOYMENT_TARGET AND CMAKE_OSX_DEPLOYMENT_TARGET VERSION_LESS MIN_MACOS_VERSION)
@@ -1603,11 +1724,34 @@ include( UseCheckAPI )
 # If you change the nesting level be sure to check also the INSTALL_RPATH
 # target property.
 if(WIN32 AND NOT USE_MSYSTEM)
-	set(EXTCAP_INSTALL_LIBDIR "extcap" CACHE INTERNAL "The extcap dir")
+	set(EXTCAP_INSTALL_LIBDIR "extcap/${PROJECT_NAME}" CACHE INTERNAL "The Wireshark extcap dir")
+	if (BUILD_logray)
+		set(LOG_EXTCAP_INSTALL_LIBDIR "extcap/${LOG_PROJECT_NAME}" CACHE INTERNAL "The Logray extcap dir")
+	endif()
 else()
-	set(EXTCAP_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/extcap" CACHE INTERNAL "The extcap dir")
+	set(EXTCAP_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/extcap" CACHE INTERNAL "The Wireshark extcap dir")
+	if (BUILD_logray)
+		set(LOG_EXTCAP_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${LOG_PROJECT_NAME}/extcap" CACHE INTERNAL "The Logray extcap dir")
+	endif()
 endif()
-set(EXTCAP_INSTALL_FULL_LIBDIR "${CMAKE_INSTALL_PREFIX}/${EXTCAP_INSTALL_LIBDIR}")
+
+if(APPLE)
+	#
+	# As https://developer.apple.com/library/archive/technotes/tn2206/_index.html
+	# says,
+	#
+	# "Note that a location where code is expected to reside cannot generally
+	# contain directories full of nested code, because those directories tend
+	# to be interpreted as bundles. So this occasional practice is not
+	# recommended and not officially supported. If you do do this, do not use
+	# periods in the directory names. The code signing machinery interprets
+	# directories with periods in their names as code bundles and will reject
+	# them if they don't conform to the expected code bundle layout."
+	#
+	set(PLUGIN_PATH_ID "${PROJECT_MAJOR_VERSION}-${PROJECT_MINOR_VERSION}")
+else()
+	set(PLUGIN_PATH_ID "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}")
+endif()
 
 # Directory where plugins and Lua dissectors can be found.
 if(WIN32 AND NOT USE_MSYSTEM)
@@ -1616,10 +1760,10 @@ else()
 	set(PLUGIN_INSTALL_LIBDIR "${CMAKE_INSTALL_LIBDIR}/${PROJECT_NAME}/plugins" CACHE INTERNAL "The plugin dir")
 endif()
 set(PLUGIN_INSTALL_FULL_LIBDIR "${CMAKE_INSTALL_PREFIX}/${PLUGIN_INSTALL_LIBDIR}")
+set(PLUGIN_INSTALL_VERSION_LIBDIR "${PLUGIN_INSTALL_LIBDIR}/${PLUGIN_PATH_ID}")
+set(PLUGIN_VERSION_DIR "plugins/${PLUGIN_PATH_ID}")
 
 add_subdirectory( capture )
-add_subdirectory( doc )
-add_subdirectory( docbook EXCLUDE_FROM_ALL )
 add_subdirectory( epan )
 add_subdirectory( extcap )
 add_subdirectory( randpkt_core )
@@ -1671,10 +1815,13 @@ if(ENABLE_APPLICATION_BUNDLE)
 # 	set(_log_datafile_dir "${CMAKE_BINARY_DIR}/run/share/logray")
 endif()
 
-
 # wsutil must be added after DATAFILE_DIR is set such that filesystem.c can
 # learn about the directory location.
 add_subdirectory( wsutil )
+
+# doc/ must be added after DATAFILE_DIR is set so that the guides can be
+# copied there for running from the build directory
+add_subdirectory( doc )
 
 if(BUILD_wireshark AND QT_FOUND)
 	add_subdirectory( ui/qt )
@@ -1712,7 +1859,7 @@ if(ENABLE_PLUGINS)
 		plugins/epan/wimaxmacphy
 		plugins/epan/dfilter/ipaddr
 		plugins/wiretap/usbdump
-		plugins/codecs/g711
+		plugins/codecs/G711
 		plugins/codecs/l16_mono
 		${CUSTOM_PLUGIN_SRC_DIR}
 	)
@@ -1724,13 +1871,13 @@ if(ENABLE_PLUGINS)
 	endif()
 	if(SPANDSP_FOUND)
 		list(APPEND PLUGIN_SRC_DIRS
-			plugins/codecs/g722
-			plugins/codecs/g726
+			plugins/codecs/G722
+			plugins/codecs/G726
 		)
 	endif()
 	if(BCG729_FOUND)
 		list(APPEND PLUGIN_SRC_DIRS
-			plugins/codecs/g729
+			plugins/codecs/G729
 		)
 	endif()
 	if(AMRNB_FOUND)
@@ -1740,7 +1887,7 @@ if(ENABLE_PLUGINS)
 	endif()
 	if(ILBC_FOUND)
 		list(APPEND PLUGIN_SRC_DIRS
-			plugins/codecs/ilbc
+			plugins/codecs/iLBC
 		)
 	endif()
 	if(OPUS_FOUND)
@@ -1768,22 +1915,22 @@ endif()
 
 if(ENABLE_APPLICATION_BUNDLE)
 	if(CMAKE_CFG_INTDIR STREQUAL ".")
-		set(_plugin_dir "${CMAKE_BINARY_DIR}/run/Wireshark.app/Contents/PlugIns/wireshark")
+		set(_plugin_dir "${CMAKE_BINARY_DIR}/run/Wireshark.app/Contents/PlugIns/wireshark/${PLUGIN_PATH_ID}")
 	else()
 		# Xcode
-		set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Wireshark.app/Contents/PlugIns/wireshark")
+		set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Wireshark.app/Contents/PlugIns/wireshark/${PLUGIN_PATH_ID}")
 	endif()
 	if(CMAKE_CFG_INTDIR STREQUAL ".")
-		set(_logray_plugin_dir "${CMAKE_BINARY_DIR}/run/Logray.app/Contents/PlugIns/logray")
+		set(_logray_plugin_dir "${CMAKE_BINARY_DIR}/run/Logray.app/Contents/PlugIns/logray/${PLUGIN_PATH_ID}")
 	else()
 		# Xcode
-		set(_logray_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Logray.app/Contents/PlugIns/logray")
+		set(_logray_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/Logray.app/Contents/PlugIns/logray/${PLUGIN_PATH_ID}")
 	endif()
 elseif(MSVC AND NOT CMAKE_CFG_INTDIR STREQUAL ".")
-	set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/plugins")
+	set(_plugin_dir "${CMAKE_BINARY_DIR}/run/$<CONFIG>/${PLUGIN_VERSION_DIR}")
 	set(_logray_plugin_dir ${_plugin_dir})
 else()
-	set(_plugin_dir "${DATAFILE_DIR}/plugins")
+	set(_plugin_dir "${DATAFILE_DIR}/${PLUGIN_VERSION_DIR}")
 	set(_logray_plugin_dir ${_plugin_dir})
 endif()
 set (PLUGIN_DIR ${_plugin_dir} CACHE INTERNAL "Build time plugin location.")
@@ -1904,7 +2051,7 @@ set_package_properties(LZ4 PROPERTIES
 set_package_properties(SNAPPY PROPERTIES
 	DESCRIPTION "A fast compressor/decompressor from Google"
 	URL "https://google.github.io/snappy/"
-	PURPOSE "Snappy decompression in CQL and Kafka dissectors"
+	PURPOSE "Snappy decompression in Couchbase, CQL, Kafka and Mongo dissectors"
 )
 set_package_properties(ZSTD PROPERTIES
 	DESCRIPTION "A compressor/decompressor from Facebook providing better compression than Snappy at a cost of speed"
@@ -1951,6 +2098,11 @@ set_package_properties(Minizip PROPERTIES
 	DESCRIPTION "Mini zip and unzip based on zlib"
 	PURPOSE "Support for profiles import/export"
 )
+set_package_properties(Minizipng PROPERTIES
+	URL "https://github.com/zlib-ng/minizip-ng"
+	DESCRIPTION "A fork of the minizip library - Mini zip and unzip based on zlib"
+	PURPOSE "Support for profiles import/export"
+)
 set_package_properties(SMI PROPERTIES
 	URL "https://www.ibr.cs.tu-bs.de/projects/libsmi/"
 	DESCRIPTION "Library to access SMI management information"
@@ -1987,9 +2139,6 @@ feature_summary(WHAT ALL)
 if(WIN32)
 	set(PLATFORM_UI_SRC
 		ui/win32/file_dlg_win32.cpp
-	)
-	set(PLATFORM_UI_RC_FILES
-		resources/file_dlg_win32.rc
 	)
 elseif(APPLE)
 	set(PLATFORM_UI_SRC
@@ -2038,7 +2187,8 @@ set(TSHARK_TAP_SRC
 
 )
 
-# Installed into ${DATAFILE_DIR}
+# Copied into ${DATAFILE_DIR} at build time and ${CMAKE_INSTALL_DATADIR}/wireshark
+# at install time.
 set(INSTALL_DIRS
 	resources/share/wireshark/profiles
 	resources/protocols/diameter
@@ -2048,7 +2198,8 @@ set(INSTALL_DIRS
 	resources/protocols/wimaxasncp
 )
 
-# Installed into ${DATAFILE_DIR}
+# Copied into ${DATAFILE_DIR} at build time and ${CMAKE_INSTALL_DATADIR}/wireshark
+# at install time.
 set(INSTALL_FILES
 	resources/share/wireshark/cfilters
 	resources/share/wireshark/colorfilters
@@ -2062,7 +2213,7 @@ set(INSTALL_FILES
 set(DOC_FILES
 	resources/share/doc/wireshark/pdml2html.xsl
 	doc/README.xml-output
-	docbook/ws.css
+	doc/ws.css
 )
 
 if (BUILD_logray)
@@ -2071,7 +2222,7 @@ if (BUILD_logray)
 	)
 
 	set(LOG_INSTALL_FILES
-		docbook/ws.css
+		doc/ws.css
 		resources/share/logray/colorfilters
 		resources/share/logray/dfilter_buttons
 	)
@@ -2079,44 +2230,44 @@ endif()
 
 if (ASCIIDOCTOR_FOUND)
 	list(APPEND DOC_FILES
-		${CMAKE_BINARY_DIR}/doc/androiddump.html
-		${CMAKE_BINARY_DIR}/doc/udpdump.html
-		${CMAKE_BINARY_DIR}/doc/capinfos.html
-		${CMAKE_BINARY_DIR}/doc/captype.html
-		${CMAKE_BINARY_DIR}/doc/ciscodump.html
-		${CMAKE_BINARY_DIR}/doc/dumpcap.html
-		${CMAKE_BINARY_DIR}/doc/editcap.html
-		${CMAKE_BINARY_DIR}/doc/extcap.html
-		${CMAKE_BINARY_DIR}/doc/mergecap.html
-		${CMAKE_BINARY_DIR}/doc/randpkt.html
-		${CMAKE_BINARY_DIR}/doc/randpktdump.html
-		${CMAKE_BINARY_DIR}/doc/etwdump.html
-		${CMAKE_BINARY_DIR}/doc/rawshark.html
-		${CMAKE_BINARY_DIR}/doc/reordercap.html
-		${CMAKE_BINARY_DIR}/doc/sshdump.html
-		${CMAKE_BINARY_DIR}/doc/wifidump.html
-		${CMAKE_BINARY_DIR}/doc/text2pcap.html
-		${CMAKE_BINARY_DIR}/doc/tshark.html
-		${CMAKE_BINARY_DIR}/doc/wireshark.html
-		${CMAKE_BINARY_DIR}/doc/wireshark-filter.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/androiddump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/udpdump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/capinfos.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/captype.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/ciscodump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/dumpcap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/editcap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/extcap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/mergecap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/randpkt.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/randpktdump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/etwdump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/rawshark.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/reordercap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/sshdump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/wifidump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/text2pcap.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/tshark.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/wireshark.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/wireshark-filter.html
 		${CMAKE_BINARY_DIR}/doc/release-notes.html
 	)
 	if(MAXMINDDB_FOUND)
-		list(APPEND DOC_FILES ${CMAKE_BINARY_DIR}/doc/mmdbresolve.html)
+		list(APPEND DOC_FILES ${CMAKE_BINARY_DIR}/doc/man_pages/mmdbresolve.html)
 	endif()
 
 	if (BUILD_corbaidl2wrs)
-		list(APPEND DOC_FILES ${CMAKE_BINARY_DIR}/doc/idl2wrs.html)
+		list(APPEND DOC_FILES ${CMAKE_BINARY_DIR}/doc/man_pages/idl2wrs.html)
 	endif()
 	if (BUILD_xxx2deb)
 		list(APPEND DOC_FILES
-			${CMAKE_BINARY_DIR}/doc/asn2deb.html
-			${CMAKE_BINARY_DIR}/doc/idl2deb.html
+			${CMAKE_BINARY_DIR}/doc/man_pages/asn2deb.html
+			${CMAKE_BINARY_DIR}/doc/man_pages/idl2deb.html
 		)
 	endif()
 	if (BUILD_logray)
 		list(APPEND DOC_FILES
-			${CMAKE_BINARY_DIR}/doc/falcodump.html
+			${CMAKE_BINARY_DIR}/doc/man_pages/falcodump.html
 		)
 	endif()
 endif()
@@ -2204,6 +2355,14 @@ if(USE_REPOSITORY)
 		list (APPEND THIRD_PARTY_DLLS "${MINIZIP_DLL_DIR}/${MINIZIP_DLL}")
 		list (APPEND THIRD_PARTY_PDBS "${MINIZIP_DLL_DIR}/${MINIZIP_PDB}")
 	endif()
+	if (MINIZIPNG_FOUND)
+		foreach( _dll ${MINIZIPNG_DLLS} )
+			list (APPEND THIRD_PARTY_DLLS "${MINIZIPNG_DLL_DIR}/${_dll}")
+		endforeach(_dll)
+		foreach( _pdb ${MINIZIPNG_PDBS} )
+			list (APPEND THIRD_PARTY_PDBS "${MINIZIPNG_DLL_DIR}/${_pdb}")
+		endforeach(_pdb)
+	endif()
 	if (NGHTTP2_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${NGHTTP2_DLL_DIR}/${NGHTTP2_DLL}")
 		list (APPEND THIRD_PARTY_PDBS "${NGHTTP2_DLL_DIR}/${NGHTTP2_PDB}")
@@ -2222,7 +2381,7 @@ if(USE_REPOSITORY)
 		list (APPEND THIRD_PARTY_DLLS "${BCG729_DLL_DIR}/${BCG729_DLL}")
 	endif(BCG729_FOUND)
 	if (AMRNB_FOUND)
-		list (APPEND OPTIONAL_DLLS "${AMRNB_DLL_DIR}/${AMRNB_DLL}")
+		list (APPEND THIRD_PARTY_DLLS "${AMRNB_DLL_DIR}/${AMRNB_DLL}")
 	endif(AMRNB_FOUND)
 	if (ILBC_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${ILBC_DLL_DIR}/${ILBC_DLL}")
@@ -2289,6 +2448,10 @@ if(USE_REPOSITORY)
 		list (APPEND THIRD_PARTY_DLLS "${ZLIB_DLL_DIR}/${ZLIB_DLL}")
 		list (APPEND THIRD_PARTY_PDBS "${ZLIB_DLL_DIR}/${ZLIB_PDB}")
 	endif(ZLIB_FOUND)
+	if (ZLIBNG_FOUND)
+		list (APPEND THIRD_PARTY_DLLS "${ZLIBNG_DLL_DIR}/${ZLIBNG_DLL}")
+		list (APPEND THIRD_PARTY_PDBS "${ZLIBNG_DLL_DIR}/${ZLIBNG_PDB}")
+	endif(ZLIBNG_FOUND)
 	if (BROTLI_FOUND)
 		foreach( _dll ${BROTLI_DLLS} )
 			list (APPEND THIRD_PARTY_DLLS "${BROTLI_DLL_DIR}/${_dll}")
@@ -2355,7 +2518,7 @@ endif()
 set(copy_data_files_depends)
 
 if(WIN32)
-	foreach(_install_as_txt_file COPYING NEWS README.md)
+	foreach(_install_as_txt_file COPYING README.md)
 		# On Windows, install some files with a .txt extension so that they're
 		# double-clickable.
 		string(REGEX REPLACE ".md$" "" _no_md_file ${_install_as_txt_file})
@@ -2386,21 +2549,26 @@ foreach(_install_file ${INSTALL_FILES} ${DOC_FILES})
 	list(APPEND copy_data_files_depends "${_output_file}")
 endforeach()
 
-if (BUILD_logray AND ENABLE_APPLICATION_BUNDLE)
-	foreach(_install_file ${LOG_INSTALL_FILES})
-		get_filename_component(_install_file_src "${_install_file}" ABSOLUTE)
-		get_filename_component(_install_basename "${_install_file}" NAME)
-		set(_output_file "${LOG_DATAFILE_DIR}/${_install_basename}")
-		add_custom_command(OUTPUT "${_output_file}"
-			COMMAND ${CMAKE_COMMAND} -E copy_if_different
-				"${_install_file_src}"
-				"${_output_file}"
-			DEPENDS
-				docs
-				"${_install_file}"
-		)
-		list(APPEND copy_data_files_depends "${_output_file}")
-	endforeach()
+if (BUILD_logray)
+	if (ENABLE_APPLICATION_BUNDLE)
+		foreach(_install_file ${LOG_INSTALL_FILES})
+			get_filename_component(_install_file_src "${_install_file}" ABSOLUTE)
+			get_filename_component(_install_basename "${_install_file}" NAME)
+			set(_output_file "${LOG_DATAFILE_DIR}/${_install_basename}")
+			add_custom_command(OUTPUT "${_output_file}"
+				COMMAND ${CMAKE_COMMAND} -E copy_if_different
+					"${_install_file_src}"
+					"${_output_file}"
+				DEPENDS
+					docs
+					"${_install_file}"
+			)
+			list(APPEND copy_data_files_depends "${_output_file}")
+		endforeach()
+	else()
+		# XXX The default profile (colorfilters, dfilters) is at the
+		# top-level resources directory for both Wireshark and Logray.
+	endif()
 endif()
 
 set(_protocol_data_dir ${CMAKE_SOURCE_DIR}/resources/protocols)
@@ -2471,6 +2639,7 @@ add_custom_command(
 )
 
 file(GLOB _radius_src_files RELATIVE ${_protocol_data_dir}
+	CONFIGURE_DEPENDS
 	${_protocol_data_dir}/radius/README.radius_dictionary
 	${_protocol_data_dir}/radius/custom.includes
 	${_protocol_data_dir}/radius/dictionary
@@ -2738,7 +2907,9 @@ if(BUILD_wireshark AND QT_FOUND)
 		$<$<BOOL:${WIN32}>:uxtheme.lib>
 		${SPEEXDSP_LIBRARIES}
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		${MINIZIP_LIBRARIES}
+		${MINIZIPNG_LIBRARIES}
 	)
 
 	add_executable(wireshark WIN32 MACOSX_BUNDLE ${wireshark_FILES} ${EXTRA_WIRESHARK_BUNDLE_FILES})
@@ -2851,7 +3022,9 @@ if(BUILD_logray AND QT_FOUND)
 		$<$<BOOL:${WIN32}>:uxtheme.lib>
 		${SPEEXDSP_LIBRARIES}
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		${MINIZIP_LIBRARIES}
+		${MINIZIPNG_LIBRARIES}
 	)
 
 	add_executable(logray WIN32 MACOSX_BUNDLE ${logray_FILES} ${EXTRA_LOGRAY_BUNDLE_FILES})
@@ -2908,7 +3081,10 @@ if(BUILD_logray AND QT_FOUND)
 		BUNDLE DESTINATION ${CMAKE_INSTALL_BINDIR}
 	)
 
-	if(QT_WINDEPLOYQT_EXECUTABLE)
+	# The build can fail if the copy_logray_qt_dlls target is run at
+	# the same time as the copy_qt_dlls target, so just assume that
+	# copy_qt_dlls will provide everything we need for now.
+	if(QT_WINDEPLOYQT_EXECUTABLE AND NOT BUILD_wireshark)
 		add_custom_target(copy_logray_qt_dlls ALL)
 		set_target_properties(copy_logray_qt_dlls PROPERTIES FOLDER "Copy Tasks")
 		# Will we ever need to use --debug? Windeployqt seems to
@@ -2930,14 +3106,16 @@ if(BUILD_logray AND QT_FOUND)
 			\"\${CMAKE_INSTALL_PREFIX}/${CMAKE_INSTALL_BINDIR}/Logray.exe\")"
 		)
 
-	endif(QT_WINDEPLOYQT_EXECUTABLE)
+	endif(QT_WINDEPLOYQT_EXECUTABLE AND NOT BUILD_wireshark)
 endif()
 
 if (BUILD_logray AND FALCO_PLUGINS)
 	add_custom_target(copy_falco_plugins)
 	add_custom_command(TARGET copy_falco_plugins
-		COMMAND ${CMAKE_COMMAND} -E make_directory ${LOGRAY_PLUGIN_DIR}/falco
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FALCO_PLUGINS} ${LOGRAY_PLUGIN_DIR}/falco
+		# XXX Falco plugins should probably be installed in a path that reflects
+		# the Falco version or its plugin API version.
+		COMMAND ${CMAKE_COMMAND} -E make_directory ${LOGRAY_PLUGIN_DIR}/../falco
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${FALCO_PLUGINS} ${LOGRAY_PLUGIN_DIR}/../falco
 		VERBATIM
 	)
 	add_dependencies(logray copy_falco_plugins)
@@ -3000,7 +3178,6 @@ if(BUILD_tshark)
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
-		${M_LIBRARIES}
 	)
 	set(tshark_FILES
 		$<TARGET_OBJECTS:capture_opts>
@@ -3074,7 +3251,6 @@ if(BUILD_sharkd)
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
 		${SPEEXDSP_LIBRARIES}
-		${M_LIBRARIES}
 		${GCRYPT_LIBRARIES}
 	)
 	set(sharkd_FILES
@@ -3144,6 +3320,7 @@ if(BUILD_text2pcap)
 		ui
 		epan
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 	)
 	set(text2pcap_FILES
 		$<TARGET_OBJECTS:cli_main>
@@ -3163,6 +3340,7 @@ if(BUILD_mergecap)
 		ui
 		wiretap
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
 	set(mergecap_FILES
@@ -3182,6 +3360,7 @@ if(BUILD_reordercap)
 		ui
 		wiretap
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
 	set(reordercap_FILES
@@ -3202,6 +3381,7 @@ if(BUILD_capinfos)
 		wiretap
 		wsutil
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		${GCRYPT_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
@@ -3224,6 +3404,7 @@ if(BUILD_captype)
 		wiretap
 		wsutil
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
 	set(captype_FILES
@@ -3243,6 +3424,7 @@ if(BUILD_editcap)
 		ui
 		wiretap
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		${GCRYPT_LIBRARIES}
 		${CMAKE_DL_LIBS}
 	)
@@ -3266,11 +3448,11 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 		pcap::pcap
 		${CAP_LIBRARIES}
 		${ZLIB_LIBRARIES}
+		${ZLIBNG_LIBRARIES}
 		${NL_LIBRARIES}
 		${APPLE_CORE_FOUNDATION_LIBRARY}
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 		${WIN_WS2_32_LIBRARY}
-		${M_LIBRARIES}
 	)
 	if(UNIX)
 		list(APPEND CAPUTILS_SRC
@@ -3302,7 +3484,7 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 	add_executable(dumpcap ${dumpcap_FILES})
 	set_extra_executable_properties(dumpcap "Executables")
 	target_link_libraries(dumpcap ${dumpcap_LIBS})
-	target_include_directories(dumpcap SYSTEM PRIVATE ${ZLIB_INCLUDE_DIRS} ${NL_INCLUDE_DIRS})
+	target_include_directories(dumpcap SYSTEM PRIVATE ${ZLIB_INCLUDE_DIRS} ${ZLIBNG_INCLUDE_DIRS} ${NL_INCLUDE_DIRS})
 	target_compile_definitions(dumpcap PRIVATE ENABLE_STATIC)
 	executable_link_mingw_unicode(dumpcap)
 	install(TARGETS dumpcap
@@ -3776,11 +3958,17 @@ if(RPMBUILD_EXECUTABLE)
 	if (NGHTTP2_FOUND)
 		list(APPEND _rpmbuild_with_args --with nghttp2)
 	endif()
+	if (NGHTTP3_FOUND)
+		list(APPEND _rpmbuild_with_args --with nghttp3)
+	endif()
 	if (SYSTEMD_FOUND)
 		list(APPEND _rpmbuild_with_args --with sdjournal)
 	endif()
 	if (BROTLI_FOUND)
 		list(APPEND _rpmbuild_with_args --with brotli)
+	endif()
+	if(ASCIIDOCTOR_FOUND AND XSLTPROC_EXECUTABLE)
+		list(APPEND _rpmbuild_with_args --with guides)
 	endif()
 
 	execute_process(
@@ -3946,8 +4134,21 @@ install(
 		GROUP_READ
 		WORLD_READ
 	DESTINATION
-		${CMAKE_INSTALL_DATADIR}
+		${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
 )
+
+if (BUILD_logray)
+	install(
+		FILES
+			${LOG_INSTALL_FILES}
+		PERMISSIONS
+			OWNER_WRITE OWNER_READ
+			GROUP_READ
+			WORLD_READ
+		DESTINATION
+			${CMAKE_INSTALL_DATADIR}/${LOG_PROJECT_NAME}
+	)
+endif()
 
 install(
 	FILES
@@ -3958,13 +4159,13 @@ install(
 
 if(ASCIIDOCTOR_FOUND AND XSLTPROC_EXECUTABLE)
 	install(
-		DIRECTORY "${CMAKE_BINARY_DIR}/docbook/wsug_html_chunked"
+		DIRECTORY "${CMAKE_BINARY_DIR}/doc/wsug_html_chunked"
 		DESTINATION "${CMAKE_INSTALL_DOCDIR}"
 		COMPONENT "UserGuide"
 		EXCLUDE_FROM_ALL
 	)
 	install(
-		DIRECTORY "${CMAKE_BINARY_DIR}/docbook/wsdg_html_chunked"
+		DIRECTORY "${CMAKE_BINARY_DIR}/doc/wsdg_html_chunked"
 		DESTINATION "${CMAKE_INSTALL_DOCDIR}"
 		COMPONENT "DeveloperGuide"
 		EXCLUDE_FROM_ALL
@@ -4051,7 +4252,7 @@ install(
 	DIRECTORY
 		${INSTALL_DIRS}
 	DESTINATION
-		${CMAKE_INSTALL_DATADIR}
+		${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}
 	FILE_PERMISSIONS
 		OWNER_WRITE OWNER_READ
 		GROUP_READ
@@ -4064,6 +4265,26 @@ install(
 	PATTERN ".svn" EXCLUDE
 	PATTERN "Makefile.*" EXCLUDE
 )
+
+if (BUILD_logray)
+	install(
+		DIRECTORY
+			${LOG_INSTALL_DIRS}
+		DESTINATION
+			${CMAKE_INSTALL_DATADIR}/${LOG_PROJECT_NAME}
+		FILE_PERMISSIONS
+			OWNER_WRITE OWNER_READ
+			GROUP_READ
+			WORLD_READ
+		DIRECTORY_PERMISSIONS
+			OWNER_EXECUTE OWNER_WRITE OWNER_READ
+			GROUP_EXECUTE GROUP_READ
+			WORLD_EXECUTE WORLD_READ
+		PATTERN ".git" EXCLUDE
+		PATTERN ".svn" EXCLUDE
+		PATTERN "Makefile.*" EXCLUDE
+	)
+endif()
 
 if(WIN32 AND NOT USE_MSYSTEM)
 	# Note: CMake export mechanism misbehaves with a '.' in the
@@ -4081,7 +4302,7 @@ configure_package_config_file(WiresharkConfig.cmake.in
 	PATH_VARS
 		CMAKE_INSTALL_LIBDIR
 		CMAKE_INSTALL_INCLUDEDIR
-		PLUGIN_INSTALL_LIBDIR
+		PLUGIN_INSTALL_VERSION_LIBDIR
 		EXTCAP_INSTALL_LIBDIR
 )
 
@@ -4248,18 +4469,23 @@ if(SHELLCHECK_EXECUTABLE)
 	add_custom_command(TARGET shellcheck POST_BUILD
 		COMMAND shellcheck --external-sources
 			resources/stock_icons/svg-to-png.sh
+			resources/stock_icons/layouts-to-png.sh
 			packaging/appimage/Logray-AppRun.in
 			packaging/appimage/Wireshark-AppRun.in
 			"packaging/macosx/ChmodBPF/root/Library/Application Support/Wireshark/ChmodBPF/ChmodBPF"
 			packaging/macosx/osx-app.sh.in
 			packaging/macosx/osx-dmg.sh.in
 			packaging/source/git-export-release.sh.in
+			tools/arch-setup.sh
+			tools/bsd-setup.sh
 			tools/debian-setup.sh
 			tools/fuzz-test.sh
 			tools/gen-bugnote
+			tools/macos-setup-brew.sh
 			tools/pre-commit
 			tools/randpkt-test.sh
 			tools/release-update-debian-soversions.sh
+			tools/rpm-setup.sh
 			tools/test-captures.sh
 			tools/update-tx
 			tools/valgrind-wireshark.sh

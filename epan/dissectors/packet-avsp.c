@@ -63,12 +63,12 @@ static dissector_handle_t avsp_handle;
 static int proto_avsp;
 
 /* sub trees */
-static gint ett_avsp;
-static gint ett_avsp_ts_48;
-static gint ett_avsp_ts_64;
-static gint ett_avsp_tgen_hdr;
-static gint ett_avsp_tgen_hdr_ctrl;
-static gint ett_avsp_tgen_payload;
+static int ett_avsp;
+static int ett_avsp_ts_48;
+static int ett_avsp_ts_64;
+static int ett_avsp_tgen_hdr;
+static int ett_avsp_tgen_hdr_ctrl;
+static int ett_avsp_tgen_payload;
 
 /* AVSP Timestamp subtype header fields */
 static int hf_avsp_subtype;
@@ -148,10 +148,10 @@ static expert_field ei_avsp_tgen_unknown_version;
 static int
 dissect_avsp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_)
 {
-    volatile guint8 offset = 0;
-    guint32 version, subtype, tgen_payload_len = 0;
-    guint64 tgen_ctrl;
-    guint32 tgen_seq_num;
+    volatile int offset = 0;
+    uint32_t version, subtype, tgen_payload_len = 0;
+    uint64_t tgen_ctrl;
+    uint32_t tgen_seq_num;
     const char* str;
 
     tvbuff_t* volatile tgen_payload_tvb = NULL;
@@ -193,7 +193,7 @@ dissect_avsp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_
             ti = proto_tree_add_item(avsp_tree, hf_avsp_ts_64_tai, tvb, 0, -1,
                 ENC_NA);
             avsp_64_tree = proto_item_add_subtree(ti, ett_avsp);
-            col_add_str(pinfo->cinfo, COL_INFO, "64bit TAI timestamp");
+            col_set_str(pinfo->cinfo, COL_INFO, "64bit TAI timestamp");
             proto_tree_add_item(avsp_64_tree, hf_avsp_ts_64_sec, tvb, offset,
                 4, ENC_BIG_ENDIAN);
             offset += 4;
@@ -205,7 +205,7 @@ dissect_avsp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_
             ti = proto_tree_add_item(avsp_tree, hf_avsp_ts_64_utc, tvb, 0, -1,
                 ENC_NA);
             avsp_64_tree = proto_item_add_subtree(ti, ett_avsp);
-            col_add_str(pinfo->cinfo, COL_INFO, "64bit UTC timestamp");
+            col_set_str(pinfo->cinfo, COL_INFO, "64bit UTC timestamp");
             proto_tree_add_item(avsp_64_tree, hf_avsp_ts_64_sec, tvb, offset,
                 4, ENC_BIG_ENDIAN);
             offset += 4;
@@ -217,7 +217,7 @@ dissect_avsp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_
             ti = proto_tree_add_item(avsp_tree, hf_avsp_ts_48_tai, tvb, 0, -1,
                 ENC_NA);
             avsp_48_tree = proto_item_add_subtree(ti, ett_avsp);
-            col_add_str(pinfo->cinfo, COL_INFO, "48bit TAI timestamp");
+            col_set_str(pinfo->cinfo, COL_INFO, "48bit TAI timestamp");
             proto_tree_add_item(avsp_48_tree, hf_avsp_ts_48_sec, tvb, offset,
                 2, ENC_BIG_ENDIAN);
             offset += 2;
@@ -229,7 +229,7 @@ dissect_avsp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_
             ti = proto_tree_add_item(avsp_tree, hf_avsp_ts_48_utc, tvb, 0, -1,
                 ENC_NA);
             avsp_48_tree = proto_item_add_subtree(ti, ett_avsp);
-            col_add_str(pinfo->cinfo, COL_INFO, "48bit UTC timestamp");
+            col_set_str(pinfo->cinfo, COL_INFO, "48bit UTC timestamp");
             proto_tree_add_item(avsp_48_tree, hf_avsp_ts_48_sec, tvb, offset,
                 2, ENC_BIG_ENDIAN);
             offset += 2;
@@ -243,7 +243,7 @@ dissect_avsp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_
             return tvb_captured_length(tvb);
         }
 
-        guint16 encap_proto;
+        uint16_t encap_proto;
         encap_proto = tvb_get_ntohs(tvb, offset);
         proto_tree_add_uint(avsp_tree, hf_avsp_etype, tvb, offset, 2, encap_proto);
         offset += 2;
@@ -269,7 +269,7 @@ dissect_avsp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_
 
         switch (version) {
         case ARISTA_TGEN_VER_1:
-            col_add_str(pinfo->cinfo, COL_INFO, "Arista TGen Frame");
+            col_set_str(pinfo->cinfo, COL_INFO, "Arista TGen Frame");
 
             /* Get TGen Header Control Word. */
             ti = proto_tree_add_item(avsp_tree, hf_avsp_tgen_hdr, tvb, offset, 6,
@@ -316,7 +316,7 @@ dissect_avsp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_
             ENDTRY;
 
             /* Get the TGen payload captured length. */
-            guint16 tgen_payload_captured_len = tvb_captured_length(tgen_payload_tvb);
+            uint16_t tgen_payload_captured_len = tvb_captured_length(tgen_payload_tvb);
 
             /* Add the TGen payload to the tree, with a heading that displays
                the TGgen payload captured length. */
@@ -495,7 +495,7 @@ void proto_register_avsp(void)
     };
 
     /* Setup protocol subtree array */
-    static gint* ett[] = {
+    static int* ett[] = {
         &ett_avsp,               /* main avsp tree */
         &ett_avsp_ts_48,         /* subtree above for 48 bit timestamp */
         &ett_avsp_ts_64,         /* subtree above for 64 bit timestamp */

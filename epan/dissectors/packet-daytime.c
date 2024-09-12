@@ -13,6 +13,7 @@
 #include "config.h"
 
 #include <epan/packet.h>
+#include <epan/tfs.h>
 
 void proto_register_daytime(void);
 void proto_reg_handoff_daytime(void);
@@ -24,7 +25,7 @@ static int proto_daytime;
 static int hf_daytime_string;
 static int hf_response_request;
 
-static gint ett_daytime;
+static int ett_daytime;
 
 /* This dissector works for TCP and UDP daytime packets */
 #define DAYTIME_PORT 13
@@ -69,7 +70,7 @@ proto_register_daytime(void)
     },
   };
 
-  static gint *ett[] = {
+  static int *ett[] = {
     &ett_daytime,
   };
 

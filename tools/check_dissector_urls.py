@@ -191,8 +191,8 @@ async def check_all_links(links):
         except (asyncio.CancelledError):
             await session.close()
 
-    for l in links:
-        l.validate()
+    for link in links:
+        link.validate()
 
 
 #################################################################
@@ -217,7 +217,7 @@ args = parser.parse_args()
 
 
 def is_dissector_file(filename):
-    p = re.compile(r'epan/dissectors/packet-.*\.c')
+    p = re.compile(r'.*(packet|file)-.*\.c')
     return p.match(filename)
 
 
@@ -225,7 +225,7 @@ def is_dissector_file(filename):
 if args.file:
     # Add specified file(s)
     for f in args.file:
-        if not f.startswith('epan'):
+        if not os.path.isfile(f) and not f.startswith('epan'):
             f = os.path.join('epan', 'dissectors', f)
         if not os.path.isfile(f):
             print('Chosen file', f, 'does not exist.')
@@ -262,7 +262,6 @@ elif args.open:
 elif args.docs:
     # Find links from doc folder(s)
     find_links_in_folder(os.path.join(os.path.dirname(__file__), '..', 'doc'))
-    find_links_in_folder(os.path.join(os.path.dirname(__file__), '..', 'docbook'))
 
 else:
     # Find links from dissector folder.
@@ -288,21 +287,21 @@ asyncio.run(check_all_links(links))
 if os.path.exists('failures.txt'):
     shutil.copyfile('failures.txt', 'failures_last_run.txt')
 with open('failures.txt', 'w') as f_f:
-    for l in links:
-        if l.tested and not l.success:
-            f_f.write(str(l) + '\n')
+    for link in links:
+        if link.tested and not link.success:
+            f_f.write(str(link) + '\n')
 # And successes
 with open('successes.txt', 'w') as f_s:
-    for l in links:
-        if l.tested and l.success:
-            f_s.write(str(l) + '\n')
+    for link in links:
+        if link.tested and link.success:
+            f_s.write(str(link) + '\n')
 
 
 # Count and show overall stats.
 passed, failed = 0, 0
-for l in links:
-    if l.tested:
-        if l.success:
+for link in links:
+    if link.tested:
+        if link.success:
             passed += 1
         else:
             failed += 1
