@@ -2795,21 +2795,21 @@ static const value_string param_subcategory_vals[] = {
 };
 */
 
-static inline const char *format_param_str(tvbuff_t *tvb, int offset, int len) {
+static inline const char *format_param_str(wmem_allocator_t *scope, tvbuff_t *tvb, int offset, int len) {
     char *param_str;
 
-    param_str = tvb_get_string_enc(wmem_packet_scope(), tvb, offset, len, ENC_UTF_8|ENC_NA);
+    param_str = tvb_get_string_enc(scope, tvb, offset, len, ENC_UTF_8|ENC_NA);
 
     if (len < 2) {
         return param_str;
     }
-    return format_text_chr(wmem_packet_scope(), param_str, len - 1, ' '); /* Leave terminating NULLs alone. */
+    return format_text_chr(scope, param_str, len - 1, ' '); /* Leave terminating NULLs alone. */
 }
 
 /* Code to actually dissect the packets */
 
 static int
-dissect_header_lens_v1(tvbuff_t *tvb, proto_tree *tree, int encoding, int * const *hf_indexes)
+dissect_header_lens_v1(tvbuff_t *tvb, proto_tree *tree, unsigned encoding, int * const *hf_indexes)
 {
     int param_count;
     proto_item *ti;
@@ -2829,7 +2829,7 @@ dissect_header_lens_v1(tvbuff_t *tvb, proto_tree *tree, int encoding, int * cons
 }
 
 static int
-dissect_header_lens_v2(tvbuff_t *tvb, wtap_syscall_header* syscall_header, proto_tree *tree, int encoding)
+dissect_header_lens_v2(tvbuff_t *tvb, wtap_syscall_header* syscall_header, proto_tree *tree, unsigned encoding)
 {
     uint32_t param_count;
     proto_item *ti;
@@ -2847,7 +2847,7 @@ dissect_header_lens_v2(tvbuff_t *tvb, wtap_syscall_header* syscall_header, proto
 }
 
 static int
-dissect_header_lens_v2_large(tvbuff_t *tvb, wtap_syscall_header* syscall_header, proto_tree *tree, int encoding)
+dissect_header_lens_v2_large(tvbuff_t *tvb, wtap_syscall_header* syscall_header, proto_tree *tree, unsigned encoding)
 {
     uint32_t param_count;
     proto_item *ti;
@@ -2867,7 +2867,7 @@ dissect_header_lens_v2_large(tvbuff_t *tvb, wtap_syscall_header* syscall_header,
 /* Dissect events */
 
 static int
-dissect_event_params(tvbuff_t *tvb, packet_info *pinfo, const char **event_name, wtap_syscall_header* syscall_header, proto_tree *tree, int encoding, int * const *hf_indexes, sysdig_event_param_data *event_param_data)
+dissect_event_params(tvbuff_t *tvb, packet_info *pinfo, const char **event_name, wtap_syscall_header* syscall_header, proto_tree *tree, unsigned encoding, int * const *hf_indexes, sysdig_event_param_data *event_param_data)
 {
     int len_offset = 0;
     int param_offset;
@@ -2906,7 +2906,7 @@ dissect_event_params(tvbuff_t *tvb, packet_info *pinfo, const char **event_name,
         const int hf_index = *hf_indexes[cur_param];
         if (proto_registrar_get_ftype(hf_index) == FT_STRING) {
             proto_tree_add_string(tree, hf_index, tvb, param_offset, param_len,
-                                  format_param_str(tvb, param_offset, param_len));
+                                  format_param_str(pinfo->pool, tvb, param_offset, param_len));
         } else {
             proto_tree_add_item(tree, hf_index, tvb, param_offset, param_len, encoding);
             if (hf_index == hf_param_data_bytes) {
@@ -2933,7 +2933,7 @@ dissect_sysdig_event(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_item *ti;
     proto_tree *se_tree, *syscall_tree;
     unsigned    event_type = pinfo->rec->rec_header.syscall_header.event_type;
-    int         encoding = pinfo->rec->rec_header.syscall_header.byte_order == G_BIG_ENDIAN ? ENC_BIG_ENDIAN : ENC_LITTLE_ENDIAN;
+    unsigned    encoding = pinfo->rec->rec_header.syscall_header.byte_order == G_BIG_ENDIAN ? ENC_BIG_ENDIAN : ENC_LITTLE_ENDIAN;
     const struct _event_col_info *cur_col_info;
     const struct _event_tree_info *cur_tree_info;
 
@@ -2982,7 +2982,7 @@ dissect_sysdig_event(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                     col_append_fstr(pinfo->cinfo, COL_INFO, ", %s=", cur_param->param_name);
                     switch (cur_param->param_ftype) {
                     case FT_STRING:
-                        col_append_str(pinfo->cinfo, COL_INFO, format_param_str(tvb, param_offset, param_len));
+                        col_append_str(pinfo->cinfo, COL_INFO, format_param_str(pinfo->pool, tvb, param_offset, param_len));
                         break;
                     case FT_UINT64:
                         col_append_fstr(pinfo->cinfo, COL_INFO, "%" PRIu64, tvb_get_uint64(tvb, param_offset, encoding));

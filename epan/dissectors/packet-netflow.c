@@ -3215,8 +3215,8 @@ static int      hf_pie_ntop_radius_user_imei;
 static int      hf_pie_ntop_radius_framed_ip_addr;
 static int      hf_pie_ntop_radius_acct_session_id;
 static int      hf_pie_ntop_radius_acct_status_type;
-static int      hf_pie_ntop_radius_acct_in_octects;
-static int      hf_pie_ntop_radius_acct_out_octects;
+static int      hf_pie_ntop_radius_acct_in_octets;
+static int      hf_pie_ntop_radius_acct_out_octets;
 static int      hf_pie_ntop_radius_acct_in_pkts;
 static int      hf_pie_ntop_radius_acct_out_pkts;
 static int      hf_pie_ntop_imap_login;
@@ -4846,16 +4846,15 @@ dissect_v8_aggpdu(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *pdutree
     case V8PDU_TOSAS_METHOD:
         offset = flow_process_aspair(pdutree, tvb, offset);
 
+        offset = flow_process_ints(pdutree, tvb, offset);
+
         if (verspec == V8PDU_TOSAS_METHOD) {
             proto_tree_add_item(pdutree, hf_cflow_tos, tvb,
                                 offset++, 1, ENC_BIG_ENDIAN);
             offset = flow_process_textfield(pdutree, tvb, offset, 1, hf_cflow_padding);
             offset = flow_process_textfield(pdutree, tvb, offset, 2, hf_cflow_reserved);
         }
-        /* ACF - Seen in the wild and documented here...
-           http://www.caida.org/tools/measurement/cflowd/configuration/configuration-9.html#ss9.1
-        */
-        offset = flow_process_ints(pdutree, tvb, offset);
+
         break;
 
     case V8PDU_PROTO_METHOD:
@@ -4927,9 +4926,9 @@ dissect_v8_aggpdu(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *pdutree
         proto_tree_add_item(pdutree, hf_cflow_dstnet, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
 
-        proto_tree_add_item(pdutree, hf_cflow_srcmask, tvb, offset++, 1, ENC_BIG_ENDIAN);
-
         proto_tree_add_item(pdutree, hf_cflow_dstmask, tvb, offset++, 1, ENC_BIG_ENDIAN);
+
+        proto_tree_add_item(pdutree, hf_cflow_srcmask, tvb, offset++, 1, ENC_BIG_ENDIAN);
 
         if ((verspec == V8PDU_TOSMATRIX_METHOD) ||
             (verspec == V8PDU_PREPORTPROTOCOL_METHOD)) {
@@ -9248,13 +9247,13 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
 
         case (NTOP_BASE + 252):           /* RADIUS_ACCT_IN_OCTETS */
         case ((VENDOR_NTOP << 16) | 252): /* RADIUS_ACCT_IN_OCTETS */
-            ti = proto_tree_add_item(pdutree, hf_pie_ntop_radius_acct_in_octects,
+            ti = proto_tree_add_item(pdutree, hf_pie_ntop_radius_acct_in_octets,
                                      tvb, offset, length, ENC_BIG_ENDIAN);
             break;
 
         case (NTOP_BASE + 253):           /* RADIUS_ACCT_OUT_OCTETS */
         case ((VENDOR_NTOP << 16) | 253): /* RADIUS_ACCT_OUT_OCTETS */
-            ti = proto_tree_add_item(pdutree, hf_pie_ntop_radius_acct_out_octects,
+            ti = proto_tree_add_item(pdutree, hf_pie_ntop_radius_acct_out_octets,
                                      tvb, offset, length, ENC_BIG_ENDIAN);
             break;
 
@@ -17427,14 +17426,14 @@ proto_register_netflow(void)
           NULL, HFILL}
         },
         /* ntop, 35632 / 252 */
-        {&hf_pie_ntop_radius_acct_in_octects,
-         {"RADIUS Accounting Input Octets", "cflow.pie.ntop.radius_acct_in_octects",
+        {&hf_pie_ntop_radius_acct_in_octets,
+         {"RADIUS Accounting Input Octets", "cflow.pie.ntop.radius_acct_in_octets",
           FT_UINT32, BASE_DEC, NULL, 0x0,
           NULL, HFILL}
         },
         /* ntop, 35632 / 253 */
-        {&hf_pie_ntop_radius_acct_out_octects,
-         {"RADIUS Accounting Output Octets", "cflow.pie.ntop.radius_acct_out_octects",
+        {&hf_pie_ntop_radius_acct_out_octets,
+         {"RADIUS Accounting Output Octets", "cflow.pie.ntop.radius_acct_out_octets",
           FT_UINT32, BASE_DEC, NULL, 0x0,
           NULL, HFILL}
         },

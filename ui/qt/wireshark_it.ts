@@ -2716,6 +2716,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Salva mappa dei terminatori</translation>
     </message>
     <message>
+        <source>Hide aggregated</source>
+        <translation>Nascondi aggregati</translation>
+    </message>
+    <message>
+        <source>Hide IPv4 aggregated endpoints (see subnets file &amp; IPv4 preferences)</source>
+        <translation>Nascondi i terminatori IPv4 aggregati (vedi file di sottoreti e preferenze IPv4)</translation>
+    </message>
+    <message>
         <source>Failed to save map file %1.</source>
         <translation>Impossibile salvare il file di mappa %1.</translation>
     </message>
@@ -7515,10 +7523,6 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
 </context>
 <context>
     <name>PacketList</name>
-    <message>
-        <source>Protocol Preferences</source>
-        <translation>Preferenze di protocollo</translation>
-    </message>
     <message>
         <source>Summary as Text</source>
         <translation>Riepilogo come testo</translation>

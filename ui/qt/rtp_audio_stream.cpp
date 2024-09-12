@@ -206,7 +206,7 @@ quint32 RtpAudioStream::calculateAudioOutRate(QAudioDeviceInfo out_device, unsig
 {
     quint32 out_rate;
 
-    // Use the first non-zero rate we find. Ajust it to match
+    // Use the first non-zero rate we find. Adjust it to match
     // our audio hardware.
     QAudioFormat format;
     format.setSampleRate(sample_rate);
@@ -399,7 +399,7 @@ void RtpAudioStream::decodeAudio(QAudioDeviceInfo out_device)
             if (timing_mode_ == Uninterrupted) {
                 silence_samples = 0;
             } else {
-                silence_samples = (int)((rtp_time - rtp_time_prev)*sample_rate - decoded_bytes_prev / SAMPLE_BYTES);
+                silence_samples = (qint64)((rtp_time - rtp_time_prev)*sample_rate - decoded_bytes_prev / SAMPLE_BYTES);
                 silence_samples = silence_samples * audio_out_rate_ / sample_rate;
             }
 

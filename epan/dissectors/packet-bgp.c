@@ -451,7 +451,7 @@ static dissector_handle_t bgp_handle;
 #define BGP_EXT_COM_STYPE_AS4_S_AS      0x09    /* Source AS [RFC6514] */
 #define BGP_EXT_COM_STYPE_AS4_CIS_V     0x10    /* Cisco VPN Identifier [Eric_Rosen] */
 #define BGP_EXT_COM_STYPE_AS4_RT_REC    0x13    /* Route-Target Record [draft-ietf-bess-service-chaining] */
-#define BGP_EXT_COM_STYPE_AS2_RT_EC     0x15    /* RT-derived-EC [draft-zzhang-idr-rt-derived-community] */
+#define BGP_EXT_COM_STYPE_AS4_RT_EC     0x15    /* RT-derived-EC [draft-zzhang-idr-rt-derived-community] */
 
 /* Non-Transitive Four-Octet AS-Specific Extended Community Sub-Types */
 
@@ -1678,7 +1678,7 @@ static const value_string bgpext_com_stype_tr_as4[] = {
     { BGP_EXT_COM_STYPE_AS4_S_AS,     "Source AS" },
     { BGP_EXT_COM_STYPE_AS4_CIS_V,    "Cisco VPN Identifier" },
     { BGP_EXT_COM_STYPE_AS4_RT_REC,   "Route-Target Record"},
-    { BGP_EXT_COM_STYPE_AS4_RT_REC,   "RT-derived-EC" },
+    { BGP_EXT_COM_STYPE_AS4_RT_EC,    "RT-derived-EC" },
     { 0, NULL}
 };
 
@@ -1777,7 +1777,6 @@ static const value_string bgpext_com_tunnel_type[] = {
 };
 
 static const value_string bgpext_com_stype_ntr_opaque[] = {
-    { BGP_EXT_COM_STYPE_OPA_COST,       "Cost" },
     { BGP_EXT_COM_STYPE_OPA_OR_VAL_ST,  "BGP Origin Validation state" },
     { BGP_EXT_COM_STYPE_OPA_COST,       "Cost Community" },
     { BGP_EXT_COM_STYPE_OPA_RT,         "Route Target" },
@@ -2012,9 +2011,6 @@ static const value_string capability_vals[] = {
     { BGP_CAPABILITY_LONG_LIVED_GRACEFUL_RESTART,   "Long-Lived Graceful Restart (LLGR) Capability" },
     { BGP_CAPABILITY_CP_ORF,                        "CP-ORF Capability" },
     { BGP_CAPABILITY_FQDN,                          "FQDN Capability" },
-    { BGP_CAPABILITY_ROUTE_REFRESH_CISCO,           "Route refresh capability (Cisco)" },
-    { BGP_CAPABILITY_ORF_CISCO,                     "Cooperative route filtering capability (Cisco)" },
-    { BGP_CAPABILITY_MULTISESSION_CISCO,            "Multisession BGP Capability (Cisco)" },
     { BGP_CAPABILITY_BFD_STRICT,                    "BFD Strict-Mode capability" },
     { BGP_CAPABILITY_SOFT_VERSION,                  "Software Version Capability" },
     { BGP_CAPABILITY_PATHS_LIMIT,                   "PATHS-LIMIT Capability" },
@@ -7869,6 +7865,13 @@ decode_prefix_MP(proto_tree *tree, int hf_path_id, int hf_addr4, int hf_addr6,
             case SAFNUM_LAB_VPNUNICAST:
             case SAFNUM_LAB_VPNMULCAST:
             case SAFNUM_LAB_VPNUNIMULC:
+                end = offset + tlen;
+                /* Heuristic to detect if IPv4 prefix are using Path Identifiers */
+                if (detect_add_path_prefix46(tvb, offset, end, 255)) {
+                    /* snarf path identifier */
+                    offset += 4;
+                    total_length += 4;
+                }
                 plen =  tvb_get_uint8(tvb, offset);
                 stack_strbuf = wmem_strbuf_create(pinfo->pool);
                 labnum = decode_MPLS_stack(tvb, offset + 1, stack_strbuf);
@@ -7894,13 +7897,17 @@ decode_prefix_MP(proto_tree *tree, int hf_path_id, int hf_addr4, int hf_addr6,
                                                  (offset + 8 + length) - start_offset,
                                                  ett_bgp_prefix, NULL, "BGP Prefix");
 
+                if (total_length > 0) {
+                    proto_tree_add_item(prefix_tree, hf_path_id, tvb, start_offset, 4, ENC_BIG_ENDIAN);
+                    start_offset += 4;
+                }
                 proto_tree_add_item(prefix_tree, hf_bgp_prefix_length, tvb, start_offset, 1, ENC_NA);
                 proto_tree_add_string(prefix_tree, hf_bgp_label_stack, tvb, start_offset + 1, 3 * labnum, wmem_strbuf_get_str(stack_strbuf));
                 proto_tree_add_string(prefix_tree, hf_bgp_rd, tvb, start_offset + 1 + 3 * labnum, 8, decode_bgp_rd(pinfo->pool, tvb, offset));
 
                 proto_tree_add_ipv4(prefix_tree, hf_addr4, tvb, offset + 8, length, ip4addr);
 
-                total_length = (1 + labnum * 3 + 8) + length;
+                total_length += (1 + labnum * 3 + 8) + length;
                 break;
 
            case SAFNUM_FSPEC_RULE:
@@ -8060,6 +8067,13 @@ decode_prefix_MP(proto_tree *tree, int hf_path_id, int hf_addr4, int hf_addr6,
             case SAFNUM_LAB_VPNUNICAST:
             case SAFNUM_LAB_VPNMULCAST:
             case SAFNUM_LAB_VPNUNIMULC:
+                end = offset + tlen;
+                /* Heuristic to detect if IPv6 prefix are using Path Identifiers */
+                if (detect_add_path_prefix46(tvb, offset, end, 255)) {
+                    /* snarf path identifier */
+                    offset += 4;
+                    total_length += 4;
+                }
                 plen =  tvb_get_uint8(tvb, offset);
                 stack_strbuf = wmem_strbuf_create(pinfo->pool);
                 labnum = decode_MPLS_stack(tvb, offset + 1, stack_strbuf);
@@ -8080,6 +8094,10 @@ decode_prefix_MP(proto_tree *tree, int hf_path_id, int hf_addr4, int hf_addr6,
                     return -1;
                 }
 
+                if (total_length > 0) {
+                    proto_tree_add_item(tree, hf_path_id, tvb, start_offset, 4, ENC_BIG_ENDIAN);
+                    start_offset += 4;
+                }
                 proto_tree_add_item(tree, hf_bgp_prefix_length, tvb, start_offset, 1, ENC_NA);
                 proto_tree_add_string(tree, hf_bgp_label_stack, tvb, start_offset + 1, labnum * 3, wmem_strbuf_get_str(stack_strbuf));
                 proto_tree_add_string(tree, hf_bgp_rd, tvb, offset, 8, decode_bgp_rd(pinfo->pool, tvb, offset));
@@ -8089,7 +8107,7 @@ decode_prefix_MP(proto_tree *tree, int hf_path_id, int hf_addr4, int hf_addr6,
                 proto_tree_add_ipv6_format_value(tree, hf_addr6, tvb, offset + 8, length,
                                                  &ip6addr, "%s/%u", address_to_str(pinfo->pool, &addr), plen);
 
-                total_length = (1 + labnum * 3 + 8) + length;
+                total_length += (1 + labnum * 3 + 8) + length;
 
                 break;
             case SAFNUM_FSPEC_RULE:

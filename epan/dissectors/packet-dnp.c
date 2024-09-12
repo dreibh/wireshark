@@ -339,6 +339,14 @@
 #define AL_OBJ_BI_FLAG6    0x40     /* Double-bit LSB (0=Off; 1=On) */
 #define AL_OBJ_BI_FLAG7    0x80     /* Point State (0=Off; 1=On) or Double-bit MSB */
 
+#define AL_OBJ_2BI_STATE_INTERMEDIATE 0x00
+#define AL_OBJ_2BI_STATE_OFF          0x01
+#define AL_OBJ_2BI_STATE_ON           0x02
+#define AL_OBJ_2BI_STATE_INDETERM     0x03
+
+#define AL_OBJ_DBI_MASK    0xC0     /* Double bit point state mask
+(0 = Intermediate, 1 = Determined off, 2 = Determined on, 3 = Indeterminate */
+
 /***************************************************************************/
 /* Binary Output Objects */
 #define AL_OBJ_BO_ALL      0x0A00   /* 10 00 Binary Output Default Variation */
@@ -575,7 +583,6 @@
 #define AL_OBJ_FILE_MODE_WRITE  0x02   /* WRITE */
 #define AL_OBJ_FILE_MODE_APPEND 0x03   /* APPEND */
 
-
 /***************************************************************************/
 /* Device Objects */
 #define AL_OBJ_IIN         0x5001   /* 80 01 Internal Indications */
@@ -759,7 +766,19 @@ static int hf_dnp3_al_ana32;
 static int hf_dnp3_al_anaflt;
 static int hf_dnp3_al_anadbl;
 static int hf_dnp3_al_bit;
+static int hf_dnp3_al_bit0;
+static int hf_dnp3_al_bit1;
+static int hf_dnp3_al_bit2;
+static int hf_dnp3_al_bit3;
+static int hf_dnp3_al_bit4;
+static int hf_dnp3_al_bit5;
+static int hf_dnp3_al_bit6;
+static int hf_dnp3_al_bit7;
 static int hf_dnp3_al_2bit;
+static int hf_dnp3_al_2bit0;
+static int hf_dnp3_al_2bit1;
+static int hf_dnp3_al_2bit2;
+static int hf_dnp3_al_2bit3;
 static int hf_dnp3_al_cnt16;
 static int hf_dnp3_al_cnt32;
 static int hf_dnp3_al_ctrlstatus;
@@ -1297,6 +1316,16 @@ static const value_string dnp3_al_aiflag_vals[] = {
 };
 #endif
 
+/* Application Layer Double-bit status values */
+static const value_string dnp3_al_2bit_vals[] = {
+  { AL_OBJ_2BI_STATE_INTERMEDIATE, "Intermediate" },
+  { AL_OBJ_2BI_STATE_OFF,          "Determined Off" },
+  { AL_OBJ_2BI_STATE_ON,           "Determined On" },
+  { AL_OBJ_2BI_STATE_INDETERM,     "Indeterminate" },
+  { 0, NULL }
+};
+static value_string_ext dnp3_al_dbi_vals_ext = VALUE_STRING_EXT_INIT(dnp3_al_2bit_vals);
+
 /* Application Layer File Control Mode values */
 static const value_string dnp3_al_file_mode_vals[] = {
   { AL_OBJ_FILE_MODE_NULL,    "NULL" },
@@ -1440,13 +1469,13 @@ static const value_string dnp3_al_sa_kcm_vals[] = {
   { 0,  "Not used"                                          },
   { 1,  "Obsolete. Do Not Use"                              },
   { 2,  "Obsolete. Do Not Use"                              },
-  { 3,  "Symmetric ASE-128 / SHA-1-HMAC"                    },
-  { 4,  "Symmetric ASE-256 / SHA-256-HMAC"                  },
-  { 5,  "Symmetric ASE-256 / AES-GMAC"                      },
+  { 3,  "Symmetric AES-128 / SHA-1-HMAC"                    },
+  { 4,  "Symmetric AES-256 / SHA-256-HMAC"                  },
+  { 5,  "Symmetric AES-256 / AES-GMAC"                      },
   { 64,  "Obsolete. Do Not Use"                             },
   { 65,  "Obsolete. Do Not Use"                             },
   { 66,  "Obsolete. Do Not Use"                             },
-  { 67,  "Asymmetric RS-1024 / DSA SHA-1 / SHA-1-HMAC"      },
+  { 67,  "Asymmetric RSA-1024 / DSA SHA-1 / SHA-1-HMAC"     },
   { 68,  "Asymmetric RSA-2048 / DSA SHA-256 / SHA-256-HMAC" },
   { 69,  "Asymmetric RSA-3072 / DSA SHA-256 / SHA-256-HMAC" },
   { 70,  "Asymmetric RSA-2048 / DSA SHA-256 / AES-GMAC"     },
@@ -1567,6 +1596,7 @@ static bool dnp3_desegment = true;
 /* Enum for different quality type fields */
 enum QUALITY_TYPE {
   BIN_IN,
+  DBIN_IN,
   BIN_OUT,
   ANA_IN,
   ANA_OUT,
@@ -1713,6 +1743,7 @@ dnp3_al_obj_quality(tvbuff_t *tvb, int offset, uint8_t al_ptflags, proto_tree *p
 
   switch (type) {
     case BIN_IN: /* Binary Input Quality flags */
+    case DBIN_IN: /* 2 bit Binary Input Quality flags */
       if (al_ptflags & AL_OBJ_BI_FLAG5) dnp3_append_2item_text(point_item, quality_item, ", Chatter Filter");
 
       hf0 = hf_dnp3_al_biq_b0;
@@ -1721,8 +1752,13 @@ dnp3_al_obj_quality(tvbuff_t *tvb, int offset, uint8_t al_ptflags, proto_tree *p
       hf3 = hf_dnp3_al_biq_b3;
       hf4 = hf_dnp3_al_biq_b4;
       hf5 = hf_dnp3_al_biq_b5;
-      hf6 = hf_dnp3_al_biq_b6;
-      hf7 = hf_dnp3_al_biq_b7;
+      if (type == BIN_IN) {
+        hf6 = hf_dnp3_al_biq_b6;
+        hf7 = hf_dnp3_al_biq_b7;
+      }
+      else /* MUST be DBIN_IN */ {
+        hf6 = hf_dnp3_al_2bit;
+      }
       break;
 
     case BIN_OUT: /* Binary Output Quality flags */
@@ -1777,7 +1813,9 @@ dnp3_al_obj_quality(tvbuff_t *tvb, int offset, uint8_t al_ptflags, proto_tree *p
   }
 
   if (quality_tree != NULL) {
-    proto_tree_add_item(quality_tree, hf7, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+    if (hf7) {
+      proto_tree_add_item(quality_tree, hf7, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+    }
     proto_tree_add_item(quality_tree, hf6, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(quality_tree, hf5, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     proto_tree_add_item(quality_tree, hf4, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -2222,7 +2260,35 @@ dnp3_al_process_object(tvbuff_t *tvb, packet_info *pinfo, int offset,
                 }
                 proto_item_append_text(point_item, ", Value: %u", al_bit);
               }
-              proto_tree_add_boolean(point_tree, hf_dnp3_al_bit, tvb, data_pos, 1, al_bit);
+              switch(bitindex) {
+              case 0:
+                proto_tree_add_boolean(point_tree, hf_dnp3_al_bit0, tvb, data_pos, 1, al_bi_val);
+                break;
+              case 1:
+                proto_tree_add_boolean(point_tree, hf_dnp3_al_bit1, tvb, data_pos, 1, al_bi_val);
+                break;
+              case 2:
+                proto_tree_add_boolean(point_tree, hf_dnp3_al_bit2, tvb, data_pos, 1, al_bi_val);
+                break;
+              case 3:
+                proto_tree_add_boolean(point_tree, hf_dnp3_al_bit3, tvb, data_pos, 1, al_bi_val);
+                break;
+              case 4:
+                proto_tree_add_boolean(point_tree, hf_dnp3_al_bit4, tvb, data_pos, 1, al_bi_val);
+                break;
+              case 5:
+                proto_tree_add_boolean(point_tree, hf_dnp3_al_bit5, tvb, data_pos, 1, al_bi_val);
+                break;
+              case 6:
+                proto_tree_add_boolean(point_tree, hf_dnp3_al_bit6, tvb, data_pos, 1, al_bi_val);
+                break;
+              case 7:
+                proto_tree_add_boolean(point_tree, hf_dnp3_al_bit7, tvb, data_pos, 1, al_bi_val);
+                break;
+
+              default:
+                break;
+              }
               proto_item_set_len(point_item, prefixbytes + 1);
 
               /* Increment the bit index for next cycle */
@@ -2239,28 +2305,41 @@ dnp3_al_process_object(tvbuff_t *tvb, packet_info *pinfo, int offset,
 
             case AL_OBJ_2BI_NF:    /* Double-bit Input No Flags (Obj:03, Var:01) */
 
-              if (bitindex > 3)
-              {
-                bitindex = 0;
-                offset += (prefixbytes + 1);
-              }
-
               /* Extract the Double-bit from the packed byte */
               al_bi_val = tvb_get_uint8(tvb, offset);
               al_2bit = ((al_bi_val >> (bitindex << 1)) & 3);
 
-              proto_item_append_text(point_item, ", Value: %u", al_2bit);
-              proto_tree_add_uint(point_tree, hf_dnp3_al_2bit, tvb, offset, 1, al_2bit);
-              proto_item_set_len(point_item, prefixbytes + 1);
-
-              /* If we've read the last item, then move the offset past this byte */
-              if (item_num == (num_items-1))
+              proto_item_append_text(point_item, ", State: %s", val_to_str_ext(al_2bit, &dnp3_al_dbi_vals_ext, "Unknown double bit state (0x%02x)"));
+              switch (bitindex)
               {
-                offset += (prefixbytes + 1);
+              case 0:
+                proto_tree_add_uint(point_tree, hf_dnp3_al_2bit0, tvb, offset, 1, al_bi_val);
+                break;
+              case 1:
+                proto_tree_add_uint(point_tree, hf_dnp3_al_2bit1, tvb, offset, 1, al_bi_val);
+                break;
+              case 2:
+                proto_tree_add_uint(point_tree, hf_dnp3_al_2bit2, tvb, offset, 1, al_bi_val);
+                break;
+              case 3:
+                proto_tree_add_uint(point_tree, hf_dnp3_al_2bit3, tvb, offset, 1, al_bi_val);
+                break;
+
+              default:
+                break;
               }
+              proto_item_set_len(point_item, prefixbytes + 1);
 
               /* Increment the bit index for next cycle */
               bitindex++;
+
+              /* If we have counted 4 double bits or read the last item,
+                 reset bit index and move onto the next byte */
+              if ((bitindex > 3) || (item_num == (num_items-1)))
+              {
+                bitindex = 0;
+                offset += (prefixbytes + 1);
+              }
               break;
 
             case AL_OBJ_BI_STAT:    /* Binary Input With Status (Obj:01, Var:02) */
@@ -2296,11 +2375,11 @@ dnp3_al_process_object(tvbuff_t *tvb, packet_info *pinfo, int offset,
 
               /* Get Point Flags */
               al_ptflags = tvb_get_uint8(tvb, data_pos);
-              dnp3_al_obj_quality(tvb, data_pos, al_ptflags, point_tree, point_item, BIN_IN);
+              dnp3_al_obj_quality(tvb, data_pos, al_ptflags, point_tree, point_item, DBIN_IN);
               data_pos += 1;
 
               al_2bit = (al_ptflags >> 6) & 3;
-              proto_item_append_text(point_item, ", Value: %u", al_2bit);
+              proto_item_append_text(point_item, ", State: %s", val_to_str_ext(al_2bit, &dnp3_al_dbi_vals_ext, "Unknown double bit state (0x%02x)"));
               proto_item_set_len(point_item, data_pos - offset);
 
               offset = data_pos;
@@ -2338,7 +2417,7 @@ dnp3_al_process_object(tvbuff_t *tvb, packet_info *pinfo, int offset,
 
               /* Get Point Flags */
               al_ptflags = tvb_get_uint8(tvb, data_pos);
-              dnp3_al_obj_quality(tvb, (offset+prefixbytes), al_ptflags, point_tree, point_item, BIN_IN);
+              dnp3_al_obj_quality(tvb, (offset+prefixbytes), al_ptflags, point_tree, point_item, DBIN_IN);
               data_pos += 1;
 
               /* Get timestamp */
@@ -2347,8 +2426,9 @@ dnp3_al_process_object(tvbuff_t *tvb, packet_info *pinfo, int offset,
               data_pos += 6;
 
               al_2bit = (al_ptflags >> 6) & 3; /* bit shift 11xxxxxx -> 00000011 */
-              proto_item_append_text(point_item, ", Value: %u, Timestamp: %s",
-                                     al_2bit, abs_time_to_str(pinfo->pool, &al_abstime, ABSOLUTE_TIME_UTC, false));
+              proto_item_append_text(point_item, ", State: %s, Timestamp: %s",
+                                     val_to_str_ext(al_2bit, &dnp3_al_dbi_vals_ext, "Unknown double bit state (0x%02x)"),
+                                     abs_time_to_str(pinfo->pool, &al_abstime, ABSOLUTE_TIME_UTC, FALSE));
               proto_item_set_len(point_item, data_pos - offset);
 
               offset = data_pos;
@@ -2359,7 +2439,12 @@ dnp3_al_process_object(tvbuff_t *tvb, packet_info *pinfo, int offset,
 
               /* Get Point Flags */
               al_ptflags = tvb_get_uint8(tvb, data_pos);
-              dnp3_al_obj_quality(tvb, data_pos, al_ptflags, point_tree, point_item, BIN_IN);
+              if (al_obj == AL_OBJ_BIC_RTIME) {
+                dnp3_al_obj_quality(tvb, data_pos, al_ptflags, point_tree, point_item, BIN_IN);
+              }
+              else /* MUST be AL_OBJ_2BIC_RTIME */ {
+                dnp3_al_obj_quality(tvb, data_pos, al_ptflags, point_tree, point_item, DBIN_IN);
+              }
               data_pos += 1;
 
               /* Get relative time in ms, and convert to ns_time */
@@ -2376,15 +2461,15 @@ dnp3_al_process_object(tvbuff_t *tvb, packet_info *pinfo, int offset,
                   al_bit = (al_ptflags & AL_OBJ_BI_FLAG7) >> 7; /* bit shift 1xxxxxxx -> xxxxxxx1 */
                   proto_item_append_text(point_item, ", Value: %u, Timestamp: %s",
                                         al_bit, abs_time_to_str(pinfo->pool, &al_abstime, ABSOLUTE_TIME_UTC, false));
-                  proto_item_set_len(point_item, data_pos - offset);
                   break;
                 case AL_OBJ_2BIC_RTIME:
                   al_2bit = (al_ptflags >> 6) & 3; /* bit shift 11xxxxxx -> 00000011 */
-                  proto_item_append_text(point_item, ", Value: %u, Timestamp: %s",
-                                        al_2bit, abs_time_to_str(pinfo->pool, &al_abstime, ABSOLUTE_TIME_UTC, false));
-                  proto_item_set_len(point_item, data_pos - offset);
+                  proto_item_append_text(point_item, ", State: %s, Timestamp: %s",
+                                         val_to_str_ext(al_2bit, &dnp3_al_dbi_vals_ext, "Unknown double bit state (0x%02x)"),
+                                         abs_time_to_str(pinfo->pool, &al_abstime, ABSOLUTE_TIME_UTC, FALSE));
                   break;
               }
+              proto_item_set_len(point_item, data_pos - offset);
 
               offset = data_pos;
               break;
@@ -4560,10 +4645,74 @@ proto_register_dnp3(void)
           "Digital Value (1 bit)", HFILL }
     },
 
+    { &hf_dnp3_al_bit0,
+      { "Value (bit)", "dnp3.al.bit",
+          FT_BOOLEAN, 8, TFS(&tfs_on_off), 0x01,
+          "Digital Value (1 bit)", HFILL }
+    },
+    { &hf_dnp3_al_bit1,
+      { "Value (bit)", "dnp3.al.bit",
+          FT_BOOLEAN, 8, TFS(&tfs_on_off), 0x02,
+          "Digital Value (1 bit)", HFILL }
+    },
+    { &hf_dnp3_al_bit2,
+      { "Value (bit)", "dnp3.al.bit",
+          FT_BOOLEAN, 8, TFS(&tfs_on_off), 0x04,
+          "Digital Value (1 bit)", HFILL }
+    },
+    { &hf_dnp3_al_bit3,
+      { "Value (bit)", "dnp3.al.bit",
+          FT_BOOLEAN, 8, TFS(&tfs_on_off), 0x08,
+          "Digital Value (1 bit)", HFILL }
+    },
+    { &hf_dnp3_al_bit4,
+      { "Value (bit)", "dnp3.al.bit",
+          FT_BOOLEAN, 8, TFS(&tfs_on_off), 0x10,
+          "Digital Value (1 bit)", HFILL }
+    },
+    { &hf_dnp3_al_bit5,
+      { "Value (bit)", "dnp3.al.bit",
+          FT_BOOLEAN, 8, TFS(&tfs_on_off), 0x20,
+          "Digital Value (1 bit)", HFILL }
+    },
+    { &hf_dnp3_al_bit6,
+      { "Value (bit)", "dnp3.al.bit",
+          FT_BOOLEAN, 8, TFS(&tfs_on_off), 0x40,
+          "Digital Value (1 bit)", HFILL }
+    },
+    { &hf_dnp3_al_bit7,
+      { "Value (bit)", "dnp3.al.bit",
+          FT_BOOLEAN, 8, TFS(&tfs_on_off), 0x80,
+          "Digital Value (1 bit)", HFILL }
+    },
+
     { &hf_dnp3_al_2bit,
-      { "Value (two bit)", "dnp3.al.2bit",
-          FT_UINT8, BASE_DEC, NULL, 0x0,
-          "Digital Value (2 bit)", HFILL }
+      { "Value (Double-bit)", "dnp3.al.2bit",
+          FT_UINT8, BASE_DEC|BASE_EXT_STRING, &dnp3_al_dbi_vals_ext, AL_OBJ_DBI_MASK,
+          "Digital Value (Double-bit)", HFILL }
+    },
+
+    { &hf_dnp3_al_2bit0,
+      { "Value (Double-bit)", "dnp3.al.2bit",
+          FT_UINT8, BASE_DEC|BASE_EXT_STRING, &dnp3_al_dbi_vals_ext, 0x03,
+          "Digital Value (Double-bit)", HFILL }
+    },
+
+    { &hf_dnp3_al_2bit1,
+      { "Value (Double-bit)", "dnp3.al.2bit",
+          FT_UINT8, BASE_DEC|BASE_EXT_STRING, &dnp3_al_dbi_vals_ext, 0x0c,
+          "Digital Value (Double-bit)", HFILL }
+    },
+
+    { &hf_dnp3_al_2bit2,
+      { "Value (Double-bit)", "dnp3.al.2bit",
+          FT_UINT8, BASE_DEC|BASE_EXT_STRING, &dnp3_al_dbi_vals_ext, 0x30,
+          "Digital Value (Double-bit)", HFILL }
+    },
+    { &hf_dnp3_al_2bit3,
+      { "Value (Double-bit)", "dnp3.al.2bit",
+          FT_UINT8, BASE_DEC|BASE_EXT_STRING, &dnp3_al_dbi_vals_ext, 0xc0,
+          "Digital Value (Double-bit)", HFILL }
     },
 
     { &hf_dnp3_al_ana16,

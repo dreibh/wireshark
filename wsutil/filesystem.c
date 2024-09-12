@@ -538,18 +538,37 @@ get_current_executable_path(void)
 }
 #endif /* _WIN32 */
 
+/* Extcap executables are in their own subdirectory. This trims that off and
+ * reduces progfile_dir to the common program file directory. */
 static void trim_progfile_dir(void)
 {
-#ifdef _WIN32
-    char *namespace_last_dir = find_last_pathname_separator(progfile_dir);
-    if (namespace_last_dir && strncmp(namespace_last_dir + 1, CONFIGURATION_NAMESPACE_LOWER, sizeof(CONFIGURATION_NAMESPACE_LOWER)) == 0) {
-        *namespace_last_dir = '\0';
-    }
-#endif
-
     char *progfile_last_dir = find_last_pathname_separator(progfile_dir);
 
+#ifdef _WIN32
+    /*
+     * Check for a namespaced extcap subdirectory.
+     * XXX - Do we only need to do this on Windows, or on other platforms too?
+     */
+    if (progfile_last_dir && strncmp(progfile_last_dir + 1, CONFIGURATION_NAMESPACE_LOWER, sizeof(CONFIGURATION_NAMESPACE_LOWER)) == 0) {
+        char* namespace_last_dir = find_last_pathname_separator(progfile_dir);
+        char namespace_sep = *namespace_last_dir;
+        *namespace_last_dir = '\0';
+
+        progfile_last_dir = find_last_pathname_separator(progfile_dir);
+
+        if (!(progfile_last_dir && strncmp(progfile_last_dir + 1, "extcap", sizeof("extcap")) == 0)) {
+            /*
+             * Not an extcap, restore the namespace separator (it might have been
+             * some other "wireshark" directory, especially on case insensitive
+             * filesystems.)
+             */
+            *namespace_last_dir = namespace_sep;
+            return;
+        }
+    } else
+#endif
     if (! (progfile_last_dir && strncmp(progfile_last_dir + 1, "extcap", sizeof("extcap")) == 0)) {
+        /* Check for a non namespaced extcap directory. */
         return;
     }
 
@@ -1107,7 +1126,11 @@ get_datafile_dir(void)
          */
         datafile_dir = g_strdup(progfile_dir);
     } else {
-        datafile_dir = g_build_filename(install_prefix, DATA_DIR, CONFIGURATION_NAMESPACE_LOWER, (char *)NULL);
+        if (g_path_is_absolute(DATA_DIR)) {
+            datafile_dir = g_build_filename(DATA_DIR, CONFIGURATION_NAMESPACE_LOWER, (char *)NULL);
+        } else {
+            datafile_dir = g_build_filename(install_prefix, DATA_DIR, CONFIGURATION_NAMESPACE_LOWER, (char *)NULL);
+        }
     }
 #endif
     return datafile_dir;
@@ -1159,7 +1182,11 @@ get_doc_dir(void)
          */
         doc_dir = g_strdup(progfile_dir);
     } else {
-        doc_dir = g_build_filename(install_prefix, DOC_DIR, (char *)NULL);
+        if (g_path_is_absolute(DOC_DIR)) {
+            doc_dir = g_strdup(DOC_DIR);
+        } else {
+            doc_dir = g_build_filename(install_prefix, DOC_DIR, (char *)NULL);
+        }
     }
 #endif
     return doc_dir;
@@ -1246,7 +1273,11 @@ init_plugin_dir(void)
          */
         plugin_dir = g_build_filename(get_progfile_dir(), "plugins", (char *)NULL);
     } else {
-        plugin_dir = g_build_filename(install_prefix, PLUGIN_DIR, (char *)NULL);
+        if (g_path_is_absolute(PLUGIN_DIR)) {
+            plugin_dir = g_strdup(PLUGIN_DIR);
+        } else {
+            plugin_dir = g_build_filename(install_prefix, PLUGIN_DIR, (char *)NULL);
+        }
     }
 #endif // HAVE_MSYSTEM / _WIN32
 #endif /* defined(HAVE_PLUGINS) || defined(HAVE_LUA) */
@@ -1379,8 +1410,12 @@ init_extcap_dir(void)
             CONFIGURATION_NAMESPACE_LOWER, (char *)NULL);
     }
     else {
-        extcap_dir = g_build_filename(install_prefix,
-            is_packet_configuration_namespace() ? EXTCAP_DIR : LOG_EXTCAP_DIR, (char *)NULL);
+        if (g_path_is_absolute(EXTCAP_DIR)) {
+            extcap_dir = g_strdup(is_packet_configuration_namespace() ? EXTCAP_DIR : LOG_EXTCAP_DIR);
+        } else {
+            extcap_dir = g_build_filename(install_prefix,
+                is_packet_configuration_namespace() ? EXTCAP_DIR : LOG_EXTCAP_DIR, (char *)NULL);
+        }
     }
 #endif // HAVE_MSYSTEM / _WIN32
 }

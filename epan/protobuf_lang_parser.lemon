@@ -68,7 +68,11 @@ DIAG_ON_LEMON()
 }
 
 %syntax_error {
-    pbl_parser_error(state, "Syntax Error: unexpected token \"%s\"!", yyminor->v);
+    if (yyminor) {
+        pbl_parser_error(state, "Syntax Error: unexpected token \"%s\"", yyminor->v);
+    } else {
+        pbl_parser_error(state, "Syntax Error: missing token");
+    }
     state->grammar_error = TRUE;
 }
 
@@ -619,7 +623,7 @@ pbl_reinit_state(protobuf_lang_state_t *state, pbl_descriptor_pool_t* pool, cons
 
     state->pool = pool;
     state->file = (pbl_file_descriptor_t*) g_hash_table_lookup(pool->proto_files, filepath);
-    state->pParser = ProtobufLangParserAlloc(g_malloc);
+    state->pParser = ProtobufLangParserAlloc(g_malloc0);
 
     if (pool) {
         pool->parser_state = state;

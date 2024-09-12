@@ -493,13 +493,13 @@ static int hf_kerberos_restriction_type;          /* Int32 */
 static int hf_kerberos_restriction;               /* OCTET_STRING */
 static int hf_kerberos_PA_KERB_KEY_LIST_REQ_item;  /* ENCTYPE */
 static int hf_kerberos_kerbKeyListRep_key;        /* PA_KERB_KEY_LIST_REP_item */
-static int hf_kerberos_group;                     /* KRB5_SRP_GROUP */
+static int hf_kerberos_srppa_group;               /* KRB5_SRP_GROUP */
 static int hf_kerberos_salt;                      /* OCTET_STRING */
 static int hf_kerberos_iterations;                /* UInt32 */
 static int hf_kerberos_groups;                    /* SET_OF_KRB5_SRP_PA */
 static int hf_kerberos_groups_item;               /* KRB5_SRP_PA */
 static int hf_kerberos_as_req_01;                 /* Checksum */
-static int hf_kerberos_group_01;                  /* UInt32 */
+static int hf_kerberos_group;                     /* UInt32 */
 static int hf_kerberos_a;                         /* OCTET_STRING */
 static int hf_kerberos_newpasswd;                 /* OCTET_STRING */
 static int hf_kerberos_targname;                  /* PrincipalName */
@@ -521,7 +521,7 @@ static int hf_kerberos_encryptedChallenge_cipher;  /* T_encryptedChallenge_ciphe
 static int hf_kerberos_cipher;                    /* OCTET_STRING */
 static int hf_kerberos_groups_01;                 /* SEQUENCE_SIZE_1_MAX_OF_SPAKEGroup */
 static int hf_kerberos_groups_item_01;            /* SPAKEGroup */
-static int hf_kerberos_group_02;                  /* SPAKEGroup */
+static int hf_kerberos_spake_group;               /* SPAKEGroup */
 static int hf_kerberos_pubkey;                    /* OCTET_STRING */
 static int hf_kerberos_factors;                   /* SEQUENCE_SIZE_1_MAX_OF_SPAKESecondFactor */
 static int hf_kerberos_factors_item;              /* SPAKESecondFactor */
@@ -784,7 +784,6 @@ typedef enum _KERBEROS_PADATA_TYPE_enum {
   KERBEROS_PA_ETYPE_INFO2 =  19,
   KERBEROS_PA_USE_SPECIFIED_KVNO =  20,
   KERBEROS_PA_SAM_REDIRECT =  21,
-  KERBEROS_PA_GET_FROM_TYPED_DATA =  22,
   KERBEROS_TD_PADATA =  22,
   KERBEROS_PA_SAM_ETYPE_INFO =  23,
   KERBEROS_PA_ALT_PRINC =  24,
@@ -919,11 +918,6 @@ static void krb5_conf_add_request(asn1_ctx_t *actx)
 	wf = wmem_list_find_custom(private_data->krb5_conv->frames,
 				   krqf, krb5_frame_compare);
 	if (wf != NULL) {
-		/*
-		 * replace the pointer with the one allocated on
-		 * wmem_file_scope()
-		 */
-		wmem_list_frame_data(wf);
 		/* The next one should be the response */
 		wf = wmem_list_frame_next(wf);
 	}
@@ -6332,7 +6326,6 @@ static const value_string kerberos_PADATA_TYPE_vals[] = {
   { KERBEROS_PA_ETYPE_INFO2, "pA-ETYPE-INFO2" },
   { KERBEROS_PA_USE_SPECIFIED_KVNO, "pA-USE-SPECIFIED-KVNO" },
   { KERBEROS_PA_SAM_REDIRECT, "pA-SAM-REDIRECT" },
-  { KERBEROS_PA_GET_FROM_TYPED_DATA, "pA-GET-FROM-TYPED-DATA" },
   { KERBEROS_TD_PADATA, "tD-PADATA" },
   { KERBEROS_PA_SAM_ETYPE_INFO, "pA-SAM-ETYPE-INFO" },
   { KERBEROS_PA_ALT_PRINC, "pA-ALT-PRINC" },
@@ -6428,10 +6421,10 @@ dissect_kerberos_T_padata_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, int of
     }
     break;
   case KERBEROS_PA_PK_AS_REQ:
-    offset=dissect_ber_octet_string_wcb(false, actx, sub_tree, tvb, offset,hf_index, dissect_pkinit_PaPkAsReq);
+    offset=dissect_ber_octet_string_wcb(false, actx, sub_tree, tvb, offset,hf_index, dissect_pkinit_PA_PK_AS_REQ);
     break;
   case KERBEROS_PA_PK_AS_REP:
-    offset=dissect_ber_octet_string_wcb(false, actx, sub_tree, tvb, offset,hf_index, dissect_pkinit_PaPkAsRep);
+    offset=dissect_ber_octet_string_wcb(false, actx, sub_tree, tvb, offset,hf_index, dissect_pkinit_PA_PK_AS_REP);
     break;
   case KERBEROS_PA_PAC_REQUEST:
     offset=dissect_ber_octet_string_wcb(false, actx, sub_tree, tvb, offset,hf_index, dissect_kerberos_PA_PAC_REQUEST);
@@ -8044,7 +8037,7 @@ dissect_kerberos_KRB5_SRP_GROUP(bool implicit_tag _U_, tvbuff_t *tvb _U_, int of
 
 
 static const ber_sequence_t KRB5_SRP_PA_sequence[] = {
-  { &hf_kerberos_group      , BER_CLASS_CON, 0, 0, dissect_kerberos_KRB5_SRP_GROUP },
+  { &hf_kerberos_srppa_group, BER_CLASS_CON, 0, 0, dissect_kerberos_KRB5_SRP_GROUP },
   { &hf_kerberos_salt       , BER_CLASS_CON, 1, 0, dissect_kerberos_OCTET_STRING },
   { &hf_kerberos_iterations , BER_CLASS_CON, 2, 0, dissect_kerberos_UInt32 },
   { NULL, 0, 0, 0, NULL }
@@ -8088,7 +8081,7 @@ dissect_kerberos_KRB5_SRP_PA_ANNOUNCE(bool implicit_tag _U_, tvbuff_t *tvb _U_, 
 
 
 static const ber_sequence_t KRB5_SRP_PA_INIT_U_sequence[] = {
-  { &hf_kerberos_group_01   , BER_CLASS_CON, 0, 0, dissect_kerberos_UInt32 },
+  { &hf_kerberos_group      , BER_CLASS_CON, 0, 0, dissect_kerberos_UInt32 },
   { &hf_kerberos_a          , BER_CLASS_CON, 1, 0, dissect_kerberos_OCTET_STRING },
   { NULL, 0, 0, 0, NULL }
 };
@@ -8506,7 +8499,7 @@ dissect_kerberos_SEQUENCE_SIZE_1_MAX_OF_SPAKESecondFactor(bool implicit_tag _U_,
 
 
 static const ber_sequence_t SPAKEChallenge_sequence[] = {
-  { &hf_kerberos_group_02   , BER_CLASS_CON, 0, 0, dissect_kerberos_SPAKEGroup },
+  { &hf_kerberos_spake_group, BER_CLASS_CON, 0, 0, dissect_kerberos_SPAKEGroup },
   { &hf_kerberos_pubkey     , BER_CLASS_CON, 1, 0, dissect_kerberos_OCTET_STRING },
   { &hf_kerberos_factors    , BER_CLASS_CON, 2, 0, dissect_kerberos_SEQUENCE_SIZE_1_MAX_OF_SPAKESecondFactor },
   { NULL, 0, 0, 0, NULL }
@@ -9690,7 +9683,7 @@ void proto_register_kerberos(void) {
         NULL, HFILL }},
     { &hf_kerberos_keytype,
       { "keytype", "kerberos.keytype",
-        FT_INT32, BASE_DEC, NULL, 0,
+        FT_INT32, BASE_DEC, VALS(kerberos_ENCTYPE_vals), 0,
         NULL, HFILL }},
     { &hf_kerberos_keyvalue,
       { "keyvalue", "kerberos.keyvalue",
@@ -10128,7 +10121,7 @@ void proto_register_kerberos(void) {
       { "key", "kerberos.kerbKeyListRep.key_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "PA_KERB_KEY_LIST_REP_item", HFILL }},
-    { &hf_kerberos_group,
+    { &hf_kerberos_srppa_group,
       { "group", "kerberos.group",
         FT_INT32, BASE_DEC, VALS(kerberos_KRB5_SRP_GROUP_vals), 0,
         "KRB5_SRP_GROUP", HFILL }},
@@ -10152,7 +10145,7 @@ void proto_register_kerberos(void) {
       { "as-req", "kerberos.as_req_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "Checksum", HFILL }},
-    { &hf_kerberos_group_01,
+    { &hf_kerberos_group,
       { "group", "kerberos.group",
         FT_UINT32, BASE_DEC, NULL, 0,
         "UInt32", HFILL }},
@@ -10240,8 +10233,8 @@ void proto_register_kerberos(void) {
       { "SPAKEGroup", "kerberos.SPAKEGroup",
         FT_INT32, BASE_DEC, VALS(kerberos_SPAKEGroup_vals), 0,
         NULL, HFILL }},
-    { &hf_kerberos_group_02,
-      { "group", "kerberos.group",
+    { &hf_kerberos_spake_group,
+      { "group", "kerberos.spake_group",
         FT_INT32, BASE_DEC, VALS(kerberos_SPAKEGroup_vals), 0,
         "SPAKEGroup", HFILL }},
     { &hf_kerberos_pubkey,

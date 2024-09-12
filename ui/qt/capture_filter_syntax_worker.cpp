@@ -59,6 +59,10 @@ void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
 
     DEBUG_SYNTAX_CHECK("received", "?");
 
+    if (filter.isEmpty()) {
+        emit syntaxResult(filter, SyntaxLineEdit::Empty, QString());
+    }
+
     if (global_capture_opts.num_selected < 1) {
         emit syntaxResult(filter, SyntaxLineEdit::Invalid, QString("No interfaces selected"));
         DEBUG_SYNTAX_CHECK("unknown", "no interfaces");
@@ -85,7 +89,7 @@ void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
     }
 
     foreach(int dlt, active_dlts.values()) {
-        pcap_compile_mtx_.lock();
+        QMutexLocker locker(&pcap_compile_mtx_);
         pd = pcap_open_dead(dlt, DUMMY_SNAPLENGTH);
         if (pd == NULL)
         {
@@ -111,8 +115,6 @@ void CaptureFilterSyntaxWorker::checkFilter(const QString filter)
             pcap_freecode(&fcode);
         }
         pcap_close(pd);
-
-        pcap_compile_mtx_.unlock();
 
         if (state == SyntaxLineEdit::Invalid) break;
     }

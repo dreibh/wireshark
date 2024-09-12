@@ -2709,6 +2709,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>종단점 지도 저장</translation>
     </message>
     <message>
+        <source>Hide aggregated</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hide IPv4 aggregated endpoints (see subnets file &amp; IPv4 preferences)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Failed to save map file %1.</source>
         <translation>%1 지도 파일 저장에 실패하였습니다.</translation>
     </message>
@@ -7491,10 +7499,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 </context>
 <context>
     <name>PacketList</name>
-    <message>
-        <source>Protocol Preferences</source>
-        <translation>프로토콜 설정</translation>
-    </message>
     <message>
         <source>Summary as Text</source>
         <translation>텍스트로 요약</translation>

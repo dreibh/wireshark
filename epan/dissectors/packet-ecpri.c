@@ -294,8 +294,8 @@ static const range_string element_id_coding[] = {
 };
 
 static const value_string raise_ceased_coding[] = {
-        { 0x0,    "Raise a fault" },
-        { 0x1,    "Cease a fault" },
+        { 0x00,    "Raise a fault" },
+        { 0x01,    "Cease a fault" },
         { 0x02,    "Reserved"     },
         { 0x03,    "Reserved"     },
         { 0x04,    "Reserved"     },
@@ -331,8 +331,9 @@ static const range_string fault_notif_coding[] = {
 };
 
 static const true_false_string tfs_c_bit =
-{ "Another eCPRI message follows this one with eCPRI PDU",
-  "This eCPRI message is last one inside eCPRI PDU"
+{
+    "Another eCPRI message follows this one with eCPRI PDU",
+    "This eCPRI message is last one inside eCPRI PDU"
 };
 
 static dissector_handle_t oran_fh_handle;
@@ -480,7 +481,8 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
                 /* Assume that it has claimed the entire tvb */
                 offset = tvb_reported_length(tvb);
             }
-            else {
+            else
+            {
                 /* ORAN FH-CUS dissector didn't handle it */
                 switch (msg_type)
                 {
@@ -789,19 +791,22 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
                 offset += payload_size;
             }
         }
-    } while (concatenation_bit != 0 && reported_length - offset >= ECPRI_HEADER_LENGTH);
-    if (concatenation_bit != false) {
+    } while (concatenation_bit != 0 && ((reported_length - offset) >= ECPRI_HEADER_LENGTH));
+
+    /* Expecting last concatenation bit to be false */
+    if (concatenation_bit != false)
+    {
         expert_add_info_format(pinfo, ti_c_bit, &ei_c_bit, "Concatenation Bit is 1, should be 0");
     }
 
-    /* Not dissected buffer */
+    /* Not dissected buffer - any remainder passed to data dissector */
     if (offset != 0)
     {
         next_tvb = tvb_new_subset_remaining(tvb, offset);
         call_data_dissector(next_tvb, pinfo, tree);
     }
 
-    /* Overall eCPRI length */
+    /* Overall eCPRI length (based upon reported length of tvb passed in) */
     proto_item *length_ti = proto_tree_add_uint(ecpri_tree, hf_ecpri_length, tvb, 0, 0, reported_length);
     proto_item_set_generated(length_ti);
 
@@ -830,12 +835,12 @@ void proto_register_ecpri(void)
             { &hf_pc_id2,    { "PC_ID",               "ecpri.pcid",     FT_UINT32, BASE_HEX,  NULL, 0x0, NULL, HFILL } },
             { &hf_seq_id2,   { "SEQ_ID",              "ecpri.seqid",    FT_UINT32, BASE_HEX,  NULL, 0x0, NULL, HFILL } },
             /* Message Type 4: Remote Memory Access */
-            { &hf_rma_id,      { "Remote Memory Access ID", "ecpri.rmaid",     FT_UINT8,  BASE_HEX,  NULL,                          0x00, NULL, HFILL } },
+            { &hf_rma_id,      { "Remote Memory Access ID", "ecpri.rmaid",     FT_UINT8,  BASE_HEX,  NULL,                          0x0,  NULL, HFILL } },
             { &hf_read_write,  { "Read/Write",              "ecpri.rw",        FT_UINT8,  BASE_HEX,  VALS(read_write_coding),       0xF0, NULL, HFILL } },
             { &hf_request_response, { "Request/Response",   "ecpri.reqresp",   FT_UINT8,  BASE_HEX,  VALS(request_response_coding), 0x0F, NULL, HFILL } },
             { &hf_element_id,  { "Element ID",              "ecpri.elementid", FT_UINT16, BASE_HEX,  NULL,                          0x0,  NULL, HFILL } },
             { &hf_address,     { "Address",                 "ecpri.address",   FT_BYTES,  SEP_COLON, NULL,                          0x0,  NULL, HFILL } },
-            { &hf_data_length, { "Data Length",             "ecpri.length",    FT_UINT16, BASE_DEC,  NULL,                          0x0,  NULL, HFILL } },
+            { &hf_data_length, { "Data Length",             "ecpri.datalength",FT_UINT16, BASE_DEC,  NULL,                          0x0,  NULL, HFILL } },
             /* Message Type 5: One-way Delay Measurement */
             { &hf_measurement_id, { "Measurement ID",  "ecpri.measurementid",  FT_UINT8,  BASE_HEX,                  NULL,               0x0, NULL, HFILL } },
             { &hf_action_type,        { "Action Type", "ecpri.actiontype",     FT_UINT8,  BASE_HEX|BASE_RANGE_STRING, RVALS(action_type_coding), 0x0, NULL, HFILL } },
@@ -844,22 +849,21 @@ void proto_register_ecpri(void)
             { &hf_timestamp_nanosec,  { "Nanoseconds", "ecpri.nanosec",        FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_nanoseconds), 0x0, NULL, HFILL } },
             { &hf_compensation_value, { "Compensation Value", "ecpri.compval", FT_UINT64, BASE_DEC,                  NULL,               0x0, NULL, HFILL } },
             /* Message Type 6: Remote Reset */
-            { &hf_reset_id,     { "Reset ID",       "ecpri.resetid",   FT_UINT16,  BASE_HEX,                   NULL,                   0x00,     NULL, HFILL } },
-            { &hf_reset_code,   { "Reset Code Op",  "ecpri.resetcode", FT_UINT8,   BASE_HEX|BASE_RANGE_STRING, RVALS(reset_coding),    0x00,     NULL, HFILL } },
+            { &hf_reset_id,     { "Reset ID",       "ecpri.resetid",   FT_UINT16,  BASE_HEX,                   NULL,                   0x0,   NULL, HFILL } },
+            { &hf_reset_code,   { "Reset Code Op",  "ecpri.resetcode", FT_UINT8,   BASE_HEX|BASE_RANGE_STRING, RVALS(reset_coding),    0x0,   NULL, HFILL } },
             /* Message Type 7: Event Indication */
-            { &hf_event_id,     { "Event ID",               "ecpri.eventid",    FT_UINT8,  BASE_HEX,                     NULL,                     0x0, NULL, HFILL } },
-            { &hf_event_type,   { "Event Type",             "ecpri.eventtype",  FT_UINT8,  BASE_HEX|BASE_RANGE_STRING,   RVALS(event_type_coding), 0x0, NULL, HFILL } },
-            { &hf_sequence_num, { "Sequence Number",        "ecpri.seqnum",     FT_UINT8,  BASE_DEC,                     NULL,                     0x0, NULL, HFILL } },
-            { &hf_number_faults_notif, { "Number of Faults/Notifications", "ecpri.numberfaultnotif", FT_UINT8, BASE_DEC, NULL,                     0x0, NULL, HFILL } },
-            { &hf_element,      { "Element",                "ecpri.element",    FT_BYTES,  SEP_COLON,                    NULL,                     0x0, NULL, HFILL } },
-            { &hf_element_id2,  { "Element ID",             "ecpri.elementid",  FT_UINT16, BASE_HEX|BASE_RANGE_STRING,   RVALS(element_id_coding), 0x0, NULL, HFILL } },
+            { &hf_event_id,     { "Event ID",               "ecpri.eventid",    FT_UINT8,  BASE_HEX,                     NULL,                      0x0, NULL, HFILL } },
+            { &hf_event_type,   { "Event Type",             "ecpri.eventtype",  FT_UINT8,  BASE_HEX|BASE_RANGE_STRING,   RVALS(event_type_coding),  0x0, NULL, HFILL } },
+            { &hf_sequence_num, { "Sequence Number",        "ecpri.seqnum",     FT_UINT8,  BASE_DEC,                     NULL,                      0x0, NULL, HFILL } },
+            { &hf_number_faults_notif, { "Number of Faults/Notifications", "ecpri.numberfaultnotif", FT_UINT8, BASE_DEC, NULL,                      0x0, NULL, HFILL } },
+            { &hf_element,      { "Element",                "ecpri.element",    FT_BYTES,  SEP_COLON,                    NULL,                      0x0, NULL, HFILL } },
+            { &hf_element_id2,  { "Element ID",             "ecpri.elementid",  FT_UINT16, BASE_HEX|BASE_RANGE_STRING,   RVALS(element_id_coding),  0x0, NULL, HFILL } },
             { &hf_raise_cease,  { "Raise/Cease",            "ecpri.raisecease", FT_UINT8,  BASE_HEX,                     VALS(raise_ceased_coding), 0xF0, NULL, HFILL } },
             { &hf_fault_notif,  { "Fault/Notification",     "ecpri.faultnotif", FT_UINT16, BASE_HEX|BASE_RANGE_STRING,   RVALS(fault_notif_coding), 0x0FFF, NULL, HFILL } },
-            { &hf_add_info,     { "Additional Information", "ecpri.addinfo",    FT_UINT32, BASE_HEX,                     NULL,                     0x0, NULL, HFILL } },
+            { &hf_add_info,     { "Additional Information", "ecpri.addinfo",    FT_UINT32, BASE_HEX,                     NULL,                      0x0, NULL, HFILL } },
             /* Rest of Payload */
-            { &hf_data,         { "User Data",  "ecpri.data",   FT_BYTES,   SEP_COLON,  NULL,   0x0,   NULL,   HFILL } },
-
-            { &hf_ecpri_length, { "eCPRI Length",  "ecpri.length",   FT_UINT32,   BASE_DEC,  NULL,   0x0,   NULL,   HFILL } },
+            { &hf_data,         { "User Data",     "ecpri.data",     FT_BYTES,   SEP_COLON,  NULL,   0x0,   NULL,   HFILL } },
+            { &hf_ecpri_length, { "eCPRI Length",  "ecpri.length",   FT_UINT32,   BASE_DEC,  NULL,   0x0,   "Length in bytes, including header",   HFILL } },
     };
 
     /* Setup protocol subtree array */
@@ -906,7 +910,7 @@ void proto_register_ecpri(void)
             "ecpripref.msg.decoding",
             "Decode Message Types",
             "Decode the Message Types according to eCPRI Specification V1.2",
-    &pref_message_type_decoding);
+            &pref_message_type_decoding);
 }
 
 void proto_reg_handoff_ecpri(void)

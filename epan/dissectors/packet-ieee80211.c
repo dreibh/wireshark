@@ -19537,15 +19537,15 @@ dissect_wfa_rsn_override_2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 }
 
 static int
-ieee80211_tag_rsnx(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data);
+dissect_rsnx_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int tag_len);
 
 static int
-dissect_wfa_rsnx_override(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+dissect_wfa_rsnx_override(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
   int tag_len = tvb_reported_length(tvb);
 
   if (tag_len > 0)
-    ieee80211_tag_rsnx(tvb, pinfo, tree, data);
+    dissect_rsnx_ie(tvb, pinfo, tree, tag_len);
 
   return tag_len;
 }
@@ -26684,7 +26684,7 @@ dissect_a_control_om(proto_tree *tree, tvbuff_t *tvb, int offset,
   uint32_t bits _U_, uint32_t start_bit)
 {
   proto_tree *om_tree = NULL;
-  unsigned the_bits = (tvb_get_letohl(tvb, offset) >> start_bit) & 0x0000003FF;
+  unsigned the_bits = (tvb_get_letohl(tvb, offset) >> start_bit) & 0x00000FFF;
 
   /*
    * We isolated the bits and moved them to the bottom ... so display them
@@ -34822,10 +34822,8 @@ ieee80211_tag_twt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 }
 
 static int
-ieee80211_tag_rsnx(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+dissect_rsnx_ie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int tag_len)
 {
-  int tag_len = tvb_reported_length(tvb);
-  ieee80211_tagged_field_data_t* field_data = (ieee80211_tagged_field_data_t*)data;
   int offset = 0;
   proto_item *octet;
   static int * const octet1[] = {
@@ -34847,12 +34845,6 @@ ieee80211_tag_rsnx(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
     &hf_ieee80211_tag_rsnx_urnm_mfpr,
     NULL
   };
-
-  if (tag_len < 1) {
-    expert_add_info_format(pinfo, field_data->item_tag_length, &ei_ieee80211_tag_length, "Tag Length %u wrong, must be >= 1", tag_len);
-    return 0;
-  }
-  proto_item_append_text(field_data->item_tag, " (%u octet%s)", tag_len, plurality(tag_len, "", "s"));
 
   /* octet 1 */
   octet = proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_tag_rsnx, ett_tag_rsnx_octet1, octet1, ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
@@ -34880,6 +34872,23 @@ ieee80211_tag_rsnx(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
   }
 
   return offset;
+}
+
+static int
+ieee80211_tag_rsnx(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+{
+  int tag_len = tvb_reported_length(tvb);
+  ieee80211_tagged_field_data_t* field_data = (ieee80211_tagged_field_data_t*)data;
+
+  if (tag_len < 1) {
+    expert_add_info_format(pinfo, field_data->item_tag_length, &ei_ieee80211_tag_length, "Tag Length %u wrong, must be >= 1", tag_len);
+    return 0;
+  }
+  proto_item_append_text(field_data->item_tag, " (%u octet%s)", tag_len, plurality(tag_len, "", "s"));
+
+  dissect_rsnx_ie(tvb, pinfo, tree, tag_len);
+
+  return tvb_captured_length(tvb);
 }
 
 static int
@@ -60399,7 +60408,7 @@ proto_register_ieee80211(void)
 
     { &ei_ieee80211_tag_measure_request_beacon_unknown,
       { "wlan.measure.req.beacon.unknown.expert", PI_UNDECODED, PI_WARN,
-        "Unknown Data (not interpreted)", EXPFILL }},
+        "Unknown Measure RequestData (not interpreted)", EXPFILL }},
 
     { &ei_ieee80211_tag_measure_report_unknown,
       { "wlan.measure.rep.unknown.expert", PI_UNDECODED, PI_WARN,
@@ -60407,11 +60416,11 @@ proto_register_ieee80211(void)
 
     { &ei_ieee80211_tag_measure_report_beacon_unknown,
       { "wlan.measure.rep.beacon.unknown.expert", PI_UNDECODED, PI_WARN,
-        "Unknown Data (not interpreted)", EXPFILL }},
+        "Unknown Measure Report Data (not interpreted)", EXPFILL }},
 
     { &ei_ieee80211_tag_measure_report_lci_unknown,
       { "wlan.measure.rep.lci.unknown.expert", PI_UNDECODED, PI_WARN,
-        "Unknown Data (not interpreted)", EXPFILL }},
+        "Unknown Report LCI Data (not interpreted)", EXPFILL }},
 
     { &ei_ieee80211_tag_data,
       { "wlan.tag.data.undecoded", PI_UNDECODED, PI_NOTE,
@@ -60475,7 +60484,7 @@ proto_register_ieee80211(void)
 
     { &ei_ieee80211_invalid_control_id,
       { "wlan.htc.he.a_control.ctrl_id.invalid", PI_PROTOCOL, PI_ERROR,
-        "Invalid control word", EXPFILL }},
+        "Invalid control id", EXPFILL }},
 
     { &ei_ieee80211_invalid_control_length,
       { "wlan.htc.he.a_control.ctrl_length.invalid", PI_PROTOCOL, PI_ERROR,

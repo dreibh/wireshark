@@ -338,6 +338,17 @@ had been applied, two columns ("Total Packets") and ("Percent Filtered") show
 the number of unfiltered total packets and the percentage of packets in this filter
 display.
 
+For IPv4 endpoints only, the _Hide aggregated_ checkbox controls how the traffic
+identified from the _subnets_ file should be displayed. By default (not checked),
+the individual endpoints and the subnets are both displayed, and when checked,
+only the aggregation is. The traffic which is not matching any subnet is kept
+as it is. This checkbox is available only when the IPv4 user preference
+_Aggregate subnets in Statistics Dialogs_ is enabled.
+See <<ChAppFilesConfigurationSection>> for the _subnets_ file
+description.
+image::images/ws-stats-endpoints-ipv4aggregation.png[{screenshot-attrs}]
+
+
 The btn:[Copy] button will copy the list values to the clipboard in CSV
 (Comma Separated Values), YAML format or JSON format. The numbers are generally
 exported without special formatting, but this can be enabled if needed.
@@ -415,7 +426,10 @@ image::images/ws-stats-iographs.png[{screenshot-attrs}]
 As shown above, this window contains a chart drawing area along with a customizable list of graphs.
 Graphs are saved in your current <<ChCustConfigProfilesSection,profile>>.
 They are divided into time intervals, which can be set as described below.
-Hovering over the graph shows the last packet in each interval except as noted below.
+Hovering over the graph shows the last packet number of the selected graph (or by default,
+the first enabled graph in the graphs list) in each interval except as noted below.
+If the graph was customized, instead of the packet number it will show a value computed according
+to the custom settings (ex: MAX,MIN,..).
 Clicking on the graph takes you to the associated packet in the packet list.
 Individual graphs can be configured using the following options:
 
@@ -469,7 +483,8 @@ Requires “Y Field” be a relative time value, and treats it as the duration o
 ended in the containing packet. Useful for response time fields like `smb.time`.
 
 THROUGHPUT(Y Field):::
-If the “Y Field” is a payload counted in Bytes (as frame.len, ip.len, ipv6.plen..), this is the throughput expressed in bits per second.
+If the “Y Field” is a payload (as frame.len, ip.len, ipv6.plen..), this is the computed throughput based on this payload.
+The “Y Axis Factor” needs to be set accordingly to the payload unit to have a value expressed in bits unit (ex: ip.len being expressed as Bytes, set Y Axis Factor to 8).
 
 Y Field::
 The display filter field from which to extract values for the Y axis calculations listed above.
