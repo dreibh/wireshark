@@ -180,6 +180,14 @@ static const enum_val_t conv_deint_options[] = {
     {NULL, NULL, -1}
 };
 
+static const enum_val_t abs_time_format_options[] = {
+    {"NEVER", "Never", ABS_TIME_ASCII_NEVER},
+    {"TREE", "Protocol tree only", ABS_TIME_ASCII_TREE},
+    {"COLUMN", "Protocol tree and columns", ABS_TIME_ASCII_COLUMN},
+    {"ALWAYS", "Always", ABS_TIME_ASCII_ALWAYS},
+    {NULL, NULL, -1}
+};
+
 #if defined(HAVE_PCAP_CREATE)
 /* Can set monitor mode and buffer size. */
 static int num_capture_cols = 7;
@@ -4012,6 +4020,15 @@ prefs_register_modules(void)
                                    "Display all byte fields with a space character between each byte in the packet list.",
                                    &prefs.display_byte_fields_with_spaces);
 
+    /*
+     * Note the -t /  option only affects the display of the packet timestamp
+     * in the default time column; this is for all other absolute times.
+     */
+    prefs_register_enum_preference(protocols_module, "display_abs_time_ascii",
+                                   "Format absolute times like asctime",
+                                   "When to format absolute times similar to asctime instead of ISO 8601, for backwards compatibility with older Wireshark.",
+                                   (int*)&prefs.display_abs_time_ascii, abs_time_format_options, false);
+
     prefs_register_bool_preference(protocols_module, "enable_incomplete_dissectors_check",
                                    "Look for incomplete dissectors",
                                    "Look for dissectors that left some bytes undecoded.",
@@ -4481,6 +4498,7 @@ pre_init_prefs(void)
     /* protocols */
     prefs.display_hidden_proto_items = false;
     prefs.display_byte_fields_with_spaces = false;
+    prefs.display_abs_time_ascii = ABS_TIME_ASCII_TREE;
     prefs.ignore_dup_frames = false;
     prefs.ignore_dup_frames_cache_entries = 10000;
 
@@ -4527,13 +4545,6 @@ reset_pref(pref_t *pref)
 
     case PREF_ENUM:
     case PREF_PROTO_TCP_SNDAMB_ENUM:
-        /*
-         * For now, we save the "description" value, so that if we
-         * save the preferences older versions of Wireshark can at
-         * least read preferences that they supported; we support
-         * either the short name or the description when reading
-         * the preferences file or a "-o" option.
-         */
         *pref->varp.enump = pref->default_val.enumval;
         break;
 
@@ -6689,12 +6700,24 @@ prefs_pref_type_description(pref_t *pref)
     {
         const enum_val_t *enum_valp = pref->info.enum_info.enumvals;
         GString *enum_str = g_string_new("One of: ");
+        GString *desc_str = g_string_new("\nEquivalently, one of: ");
+        bool distinct = false;
         while (enum_valp->name != NULL) {
-            g_string_append(enum_str, enum_valp->description);
+            g_string_append(enum_str, enum_valp->name);
+            g_string_append(desc_str, enum_valp->description);
+            if (g_strcmp0(enum_valp->name, enum_valp->description) != 0) {
+                distinct = true;
+            }
             enum_valp++;
-            if (enum_valp->name != NULL)
+            if (enum_valp->name != NULL) {
                 g_string_append(enum_str, ", ");
+                g_string_append(desc_str, ", ");
+            }
         }
+        if (distinct) {
+            g_string_append(enum_str, desc_str->str);
+        }
+        g_string_free(desc_str, TRUE);
         g_string_append(enum_str, "\n(case-insensitive).");
         return g_string_free(enum_str, FALSE);
     }
@@ -6891,17 +6914,10 @@ prefs_pref_to_str(pref_t *pref, pref_source_t source) {
     case PREF_PROTO_TCP_SNDAMB_ENUM:
     {
         int pref_enumval = *(int *) valp;
-        /*
-         * For now, we return the "description" value, so that if we
-         * save the preferences older versions of Wireshark can at
-         * least read preferences that they supported; we support
-         * either the short name or the description when reading
-         * the preferences file or a "-o" option.
-         */
         const enum_val_t *enum_valp = pref->info.enum_info.enumvals;
         while (enum_valp->name != NULL) {
             if (enum_valp->value == pref_enumval)
-                return g_strdup(enum_valp->description);
+                return g_strdup(enum_valp->name);
             enum_valp++;
         }
         break;
