@@ -179,10 +179,19 @@ static int hf_control_feature_set_connection_subrating_host_support;
 static int hf_control_feature_set_channel_classification;
 static int hf_control_feature_set_adv_coding_selection;
 static int hf_control_feature_set_adv_coding_selection_host_support;
+static int hf_control_feature_set_decision_based_advertising_filtering;
 static int hf_control_feature_set_periodic_adv_with_responses_advertiser;
 static int hf_control_feature_set_periodic_adv_with_responses_scanner;
-static int hf_control_feature_set_reserved_bits;
-static int hf_control_feature_set_reserved;
+static int hf_control_feature_set_unsegmented_frame_mode;
+static int hf_control_feature_set_channel_sounding;
+static int hf_control_feature_set_channel_sounding_host_support;
+static int hf_control_feature_set_channel_sounding_tone_quality_indication;
+static int hf_control_feature_set_reserved_bits_page_7;
+static int hf_control_feature_set_reserved_bits_page_8;
+static int hf_control_feature_set_ll_extended_feature_set;
+static int hf_control_feature_set_monitoring_advertisers;
+static int hf_control_feature_set_frame_space_update;
+static int hf_control_feature_set_reserved_bits_page_9;
 static int hf_control_window_size;
 static int hf_control_window_offset;
 static int hf_control_interval;
@@ -440,9 +449,24 @@ static int * const hfx_control_feature_set_5[] = {
 static int *const hfx_control_feature_set_6[] = {
     &hf_control_feature_set_adv_coding_selection,
     &hf_control_feature_set_adv_coding_selection_host_support,
+    &hf_control_feature_set_decision_based_advertising_filtering,
     &hf_control_feature_set_periodic_adv_with_responses_advertiser,
     &hf_control_feature_set_periodic_adv_with_responses_scanner,
-    &hf_control_feature_set_reserved_bits,
+    &hf_control_feature_set_unsegmented_frame_mode,
+    &hf_control_feature_set_channel_sounding,
+    &hf_control_feature_set_channel_sounding_host_support,
+    NULL
+};
+
+static int *const hfx_control_feature_set_7[] = {
+    &hf_control_feature_set_channel_sounding_tone_quality_indication,
+    &hf_control_feature_set_reserved_bits_page_7,
+    NULL
+};
+
+static int *const hfx_control_feature_set_8[] = {
+    &hf_control_feature_set_reserved_bits_page_8,
+    &hf_control_feature_set_ll_extended_feature_set,
     NULL
 };
 
@@ -693,6 +717,7 @@ static const value_string pdu_type_vals[] = {
     { 0x06, "ADV_SCAN_IND" },
     { 0x07, "ADV_EXT_IND" },
     { 0x08, "AUX_CONNECT_RSP" },
+    { 0x09, "ADV_DECISION_IND" },
     { 0, NULL }
 };
 static value_string_ext pdu_type_vals_ext = VALUE_STRING_EXT_INIT(pdu_type_vals);
@@ -807,6 +832,24 @@ typedef enum
     LL_CTRL_OPCODE_CHANNEL_REPORTING_IND = 0x28,
     LL_CTRL_OPCODE_CHANNEL_STATUS_IND = 0x29,
     LL_CTRL_OPCODE_PERIODIC_SYNC_WR_IND = 0x2A,
+    LL_CTRL_OPCODE_LL_FEATURE_EXT_REQ = 0x2B,
+    LL_CTRL_OPCODE_LL_FEATURE_EXT_RSP = 0x2C,
+    LL_CTRL_OPCODE_LL_CS_SEC_RSP = 0x2D,
+    LL_CTRL_OPCODE_LL_CS_CAPABILITIES_REQ = 0x2E,
+    LL_CTRL_OPCODE_LL_CS_CAPABILITIES_RSP = 0x2F,
+    LL_CTRL_OPCODE_LL_CS_CONFIG_REQ = 0x30,
+    LL_CTRL_OPCODE_LL_CS_CONFIG_RSP = 0x31,
+    LL_CTRL_OPCODE_LL_CS_REQ = 0x32,
+    LL_CTRL_OPCODE_LL_CS_RSP = 0x33,
+    LL_CTRL_OPCODE_LL_CS_IND = 0x34,
+    LL_CTRL_OPCODE_LL_CS_TERMINATE_REQ = 0x35,
+    LL_CTRL_OPCODE_LL_CS_FAE_REQ = 0x36,
+    LL_CTRL_OPCODE_LL_CS_FAE_RSP = 0x37,
+    LL_CTRL_OPCODE_LL_CS_CHANNEL_MAP_IND = 0x38,
+    LL_CTRL_OPCODE_LL_CS_SEQ_REQ = 0x39,
+    LL_CTRL_OPCODE_LL_CS_TERMINATE_RSP = 0x3A,
+    LL_CTRL_OPCODE_LL_FRAME_SPACE_REQ = 0x3B,
+    LL_CTRL_OPCODE_LL_FRAME_SPACE_RSP = 0x3C,
 } ll_ctrl_proc_opcodes_t;
 
 static const value_string control_opcode_vals[] = {
@@ -853,6 +896,24 @@ static const value_string control_opcode_vals[] = {
     { LL_CTRL_OPCODE_CHANNEL_REPORTING_IND, "LL_CHANNEL_REPORTING_IND" },
     { LL_CTRL_OPCODE_CHANNEL_STATUS_IND, "LL_CHANNEL_STATUS_IND" },
     { LL_CTRL_OPCODE_PERIODIC_SYNC_WR_IND, "LL_PERIODIC_SYNC_WR_IND" },
+    { LL_CTRL_OPCODE_LL_FEATURE_EXT_REQ, "LL_CTRL_OPCODE_LL_FEATURE_EXT_REQ" },
+    { LL_CTRL_OPCODE_LL_FEATURE_EXT_RSP, "LL_CTRL_OPCODE_LL_FEATURE_EXT_RSP" },
+    { LL_CTRL_OPCODE_LL_CS_SEC_RSP, "LL_CTRL_OPCODE_LL_CS_SEC_RSP" },
+    { LL_CTRL_OPCODE_LL_CS_CAPABILITIES_REQ, "LL_CTRL_OPCODE_LL_CS_CAPABILITIES_REQ" },
+    { LL_CTRL_OPCODE_LL_CS_CAPABILITIES_RSP, "LL_CTRL_OPCODE_LL_CS_CAPABILITIES_RSP" },
+    { LL_CTRL_OPCODE_LL_CS_CONFIG_REQ, "LL_CTRL_OPCODE_LL_CS_CONFIG_REQ" },
+    { LL_CTRL_OPCODE_LL_CS_CONFIG_RSP, "LL_CTRL_OPCODE_LL_CS_CONFIG_RSP" },
+    { LL_CTRL_OPCODE_LL_CS_REQ, "LL_CTRL_OPCODE_LL_CS_REQ" },
+    { LL_CTRL_OPCODE_LL_CS_RSP, "LL_CTRL_OPCODE_LL_CS_RSP" },
+    { LL_CTRL_OPCODE_LL_CS_IND, "LL_CTRL_OPCODE_LL_CS_IND" },
+    { LL_CTRL_OPCODE_LL_CS_TERMINATE_REQ, "LL_CTRL_OPCODE_LL_CS_TERMINATE_REQ" },
+    { LL_CTRL_OPCODE_LL_CS_FAE_REQ, "LL_CTRL_OPCODE_LL_CS_FAE_REQ" },
+    { LL_CTRL_OPCODE_LL_CS_FAE_RSP, "LL_CTRL_OPCODE_LL_CS_FAE_RSP" },
+    { LL_CTRL_OPCODE_LL_CS_CHANNEL_MAP_IND, "LL_CTRL_OPCODE_LL_CS_CHANNEL_MAP_IND" },
+    { LL_CTRL_OPCODE_LL_CS_SEQ_REQ, "LL_CTRL_OPCODE_LL_CS_SEQ_REQ" },
+    { LL_CTRL_OPCODE_LL_CS_TERMINATE_RSP, "LL_CTRL_OPCODE_LL_CS_TERMINATE_RSP" },
+    { LL_CTRL_OPCODE_LL_FRAME_SPACE_REQ, "LL_CTRL_OPCODE_LL_FRAME_SPACE_REQ" },
+    { LL_CTRL_OPCODE_LL_FRAME_SPACE_RSP, "LL_CTRL_OPCODE_LL_FRAME_SPACE_RSP" },
     { 0, NULL }
 };
 static value_string_ext control_opcode_vals_ext = VALUE_STRING_EXT_INIT(control_opcode_vals);
@@ -874,6 +935,7 @@ static const value_string ll_version_number_vals[] = {
     { 0x0B, "5.2" },
     { 0x0C, "5.3" },
     { 0x0D, "5.4" },
+    { 0x0E, "6.0" },
     { 0, NULL }
 };
 static value_string_ext ll_version_number_vals_ext = VALUE_STRING_EXT_INIT(ll_version_number_vals);
@@ -1071,8 +1133,11 @@ dissect_feature_set(tvbuff_t *tvb, proto_tree *btle_tree, int offset)
     proto_tree_add_bitmask_list(sub_tree, tvb, offset, 1, hfx_control_feature_set_6, ENC_NA);
     offset += 1;
 
-    proto_tree_add_item(sub_tree, hf_control_feature_set_reserved, tvb, offset, 3, ENC_NA);
-    offset += 2;
+    proto_tree_add_bitmask_list(sub_tree, tvb, offset, 1, hfx_control_feature_set_7, ENC_NA);
+    offset += 1;
+
+    proto_tree_add_bitmask_list(sub_tree, tvb, offset, 1, hfx_control_feature_set_8, ENC_NA);
+    offset += 1;
 
     return offset;
 }
@@ -2063,6 +2128,7 @@ dissect_btle_adv(tvbuff_t *tvb,
         break;
     case 0x07: /* ADV_EXT_IND / AUX_ADV_IND / AUX_SYNC_IND / AUX_CHAIN_IND / AUX_SCAN_RSP */
     case 0x08: /* AUX_CONNECT_RSP */
+    case 0x09: /* ADV_DECISION_IND */
     {
         /* 0 + header, 1 = len, 2 = ext_len/adv-mode, 3 = flags */
         uint8_t ext_header_flags = tvb_get_uint8(tvb, offset + 3);
@@ -2353,6 +2419,7 @@ dissect_btle_adv(tvbuff_t *tvb,
     }
     case 0x07: /* ADV_EXT_IND / AUX_ADV_IND / AUX_SYNC_IND / AUX_CHAIN_IND / AUX_SCAN_RSP */
     case 0x08: /* AUX_CONNECT_RSP */
+    case 0x09: /* ADV_DECISION_IND */
     {
         uint8_t tmp, ext_header_len, flags, acad_len;
         proto_item  *ext_header_item, *ext_flags_item;
@@ -2572,7 +2639,9 @@ dissect_btle_adv(tvbuff_t *tvb,
         }
         if (tvb_reported_length_remaining(tvb, offset) > 3) {
             bool ad_processed = false;
-            if (btle_context && pdu_type == 0x07 && btle_context->aux_pdu_type_valid) {
+            if (btle_context &&
+                (pdu_type == 0x07 || pdu_type == 0x09) &&
+                btle_context->aux_pdu_type_valid) {
                 bool ad_reassembled = false;
                 ae_had_info_t *ae_had_info = NULL;
 
@@ -4296,6 +4365,202 @@ dissect_btle_acl_or_iso(tvbuff_t *tvb,
                 }
             }
             break;
+        case LL_CTRL_OPCODE_LL_FEATURE_EXT_REQ:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                control_proc_start(tvb, pinfo, btle_tree, control_proc_item,
+                                    connection_info->direction_info[direction].control_procs,
+                                    last_control_proc[other_direction],
+                                    control_opcode);
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_FEATURE_EXT_RSP:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                if (control_proc_can_add_frame(pinfo,
+                                                last_control_proc[other_direction],
+                                                LL_CTRL_OPCODE_LL_FEATURE_EXT_REQ, 1)) {
+                    control_proc_add_last_frame(tvb,
+                                                pinfo,
+                                                btle_tree,
+                                                control_opcode,
+                                                direction,
+                                                last_control_proc[other_direction],
+                                                last_control_proc[direction],
+                                                1);
+                } else {
+                    expert_add_info(pinfo, control_proc_item, &ei_control_proc_wrong_seq);
+                }
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_SEQ_REQ:
+            if (connection_info && !btle_frame_info->retransmit) {
+                /* The LL_CTRL_OPCODE_LL_CS_SEQ_REQ can only be sent from central to peripheral. */
+                if (direction == BTLE_DIR_CENTRAL_PERIPHERAL) {
+                    control_proc_start(tvb, pinfo, btle_tree, control_proc_item,
+                                        connection_info->direction_info[BTLE_DIR_CENTRAL_PERIPHERAL].control_procs,
+                                        last_control_proc[other_direction],
+                                        control_opcode);
+                } else if (direction == BTLE_DIR_PERIPHERAL_CENTRAL) {
+                    expert_add_info(pinfo, control_proc_item, &ei_control_proc_wrong_seq);
+                }
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_SEC_RSP:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                if (control_proc_can_add_frame(pinfo,
+                                                last_control_proc[other_direction],
+                                                LL_CTRL_OPCODE_LL_CS_SEQ_REQ, 1)) {
+                    control_proc_add_last_frame(tvb,
+                                                pinfo,
+                                                btle_tree,
+                                                control_opcode,
+                                                direction,
+                                                last_control_proc[other_direction],
+                                                last_control_proc[direction],
+                                                1);
+                } else {
+                    expert_add_info(pinfo, control_proc_item, &ei_control_proc_wrong_seq);
+                }
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_CAPABILITIES_REQ:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                control_proc_start(tvb, pinfo, btle_tree, control_proc_item,
+                                    connection_info->direction_info[direction].control_procs,
+                                    last_control_proc[other_direction],
+                                    control_opcode);
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_CAPABILITIES_RSP:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                if (control_proc_can_add_frame(pinfo,
+                                                last_control_proc[other_direction],
+                                                LL_CTRL_OPCODE_LL_CS_CAPABILITIES_REQ, 1)) {
+                    control_proc_add_last_frame(tvb,
+                                                pinfo,
+                                                btle_tree,
+                                                control_opcode,
+                                                direction,
+                                                last_control_proc[other_direction],
+                                                last_control_proc[direction],
+                                                1);
+                } else {
+                    expert_add_info(pinfo, control_proc_item, &ei_control_proc_wrong_seq);
+                }
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_CONFIG_REQ:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                control_proc_start(tvb, pinfo, btle_tree, control_proc_item,
+                                    connection_info->direction_info[direction].control_procs,
+                                    last_control_proc[other_direction],
+                                    control_opcode);
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_CONFIG_RSP:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                if (control_proc_can_add_frame(pinfo,
+                                                last_control_proc[other_direction],
+                                                LL_CTRL_OPCODE_LL_CS_CONFIG_REQ, 1)) {
+                    control_proc_add_last_frame(tvb,
+                                                pinfo,
+                                                btle_tree,
+                                                control_opcode,
+                                                direction,
+                                                last_control_proc[other_direction],
+                                                last_control_proc[direction],
+                                                1);
+                } else {
+                    expert_add_info(pinfo, control_proc_item, &ei_control_proc_wrong_seq);
+                }
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_REQ:
+        case LL_CTRL_OPCODE_LL_CS_RSP:
+        case LL_CTRL_OPCODE_LL_CS_IND:
+            /* TODO: Parse channel sounding start procedure PDUs and
+             * procedure termination. */
+            break;
+        case LL_CTRL_OPCODE_LL_CS_TERMINATE_REQ:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                control_proc_start(tvb, pinfo, btle_tree, control_proc_item,
+                                    connection_info->direction_info[direction].control_procs,
+                                    last_control_proc[other_direction],
+                                    control_opcode);
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_TERMINATE_RSP:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                if (control_proc_can_add_frame(pinfo,
+                                                last_control_proc[other_direction],
+                                                LL_CTRL_OPCODE_LL_CS_TERMINATE_REQ, 1)) {
+                    control_proc_add_last_frame(tvb,
+                                                pinfo,
+                                                btle_tree,
+                                                control_opcode,
+                                                direction,
+                                                last_control_proc[other_direction],
+                                                last_control_proc[direction],
+                                                1);
+                } else {
+                    expert_add_info(pinfo, control_proc_item, &ei_control_proc_wrong_seq);
+                }
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_FAE_REQ:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                control_proc_start(tvb, pinfo, btle_tree, control_proc_item,
+                                    connection_info->direction_info[direction].control_procs,
+                                    last_control_proc[other_direction],
+                                    control_opcode);
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_FAE_RSP:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                if (control_proc_can_add_frame(pinfo,
+                                                last_control_proc[other_direction],
+                                                LL_CTRL_OPCODE_LL_CS_FAE_REQ, 1)) {
+                    control_proc_add_last_frame(tvb,
+                                                pinfo,
+                                                btle_tree,
+                                                control_opcode,
+                                                direction,
+                                                last_control_proc[other_direction],
+                                                last_control_proc[direction],
+                                                1);
+                } else {
+                    expert_add_info(pinfo, control_proc_item, &ei_control_proc_wrong_seq);
+                }
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_CS_CHANNEL_MAP_IND:
+            /* TODO: Parse Channel Sounding Channel Map Update procedu PDU
+             * and procedure termination. */
+        case LL_CTRL_OPCODE_LL_FRAME_SPACE_REQ:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                control_proc_start(tvb, pinfo, btle_tree, control_proc_item,
+                                    connection_info->direction_info[direction].control_procs,
+                                    last_control_proc[other_direction],
+                                    control_opcode);
+            }
+            break;
+        case LL_CTRL_OPCODE_LL_FRAME_SPACE_RSP:
+            if (connection_info && !btle_frame_info->retransmit && direction != BTLE_DIR_UNKNOWN) {
+                if (control_proc_can_add_frame(pinfo,
+                                                last_control_proc[other_direction],
+                                                LL_CTRL_OPCODE_LL_FRAME_SPACE_REQ, 1)) {
+                    control_proc_add_last_frame(tvb,
+                                                pinfo,
+                                                btle_tree,
+                                                control_opcode,
+                                                direction,
+                                                last_control_proc[other_direction],
+                                                last_control_proc[direction],
+                                                1);
+                } else {
+                    expert_add_info(pinfo, control_proc_item, &ei_control_proc_wrong_seq);
+                }
+            }
+            break;
         default:
             offset = dissect_ctrl_pdu_without_data(tvb, pinfo, btle_tree, offset);
             break;
@@ -5304,30 +5569,75 @@ proto_register_btle(void)
             FT_BOOLEAN, 8, NULL, 0x01,
             NULL, HFILL}
         },
-        { &hf_control_feature_set_adv_coding_selection_host_support,
-        { "Advertising Coding Selection (Host Support)", "btle.control.feature_set.adv_coding_selection_host_support",
+        { &hf_control_feature_set_decision_based_advertising_filtering,
+        { "Decision-Based Advertising Filtering", "btle.control.feature_set.hf_control_feature_set_decision_based_advertising_filtering",
             FT_BOOLEAN, 8, NULL, 0x02,
             NULL, HFILL}
         },
-        { &hf_control_feature_set_periodic_adv_with_responses_advertiser,
-        {"Periodic Advertising with Responses - Advertiser", "btle.control.feature_set.periodic_adv_with_responses_advertiser",
+        { &hf_control_feature_set_adv_coding_selection_host_support,
+        { "Advertising Coding Selection (Host Support)", "btle.control.feature_set.adv_coding_selection_host_support",
             FT_BOOLEAN, 8, NULL, 0x04,
             NULL, HFILL}
         },
-        { &hf_control_feature_set_periodic_adv_with_responses_scanner,
-        {"Periodic Advertising with Responses - Scanner", "btle.control.feature_set.adv_with_responses_scanner",
+        { &hf_control_feature_set_periodic_adv_with_responses_advertiser,
+        { "Periodic Advertising with Responses - Advertiser", "btle.control.feature_set.periodic_adv_with_responses_advertiser",
             FT_BOOLEAN, 8, NULL, 0x08,
             NULL, HFILL}
         },
-        { &hf_control_feature_set_reserved_bits,
-        { "Reserved bits", "btle.control.feature_set.reserved_bits",
-            FT_UINT8, BASE_DEC, NULL, 0xF0,
+        { &hf_control_feature_set_periodic_adv_with_responses_scanner,
+        { "Periodic Advertising with Responses - Scanner", "btle.control.feature_set.adv_with_responses_scanner",
+            FT_BOOLEAN, 8, NULL, 0x10,
             NULL, HFILL}
         },
-        { &hf_control_feature_set_reserved,
-            { "Reserved",                        "btle.control.feature_set.reserved",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
-            NULL, HFILL }
+        { &hf_control_feature_set_unsegmented_frame_mode,
+        { "Unsegmented Framed Mode", "btle.control.feature_set.hf_control_feature_set_unsegmented_frame_mode",
+            FT_BOOLEAN, 8, NULL, 0x20,
+            NULL, HFILL}
+        },
+        { &hf_control_feature_set_channel_sounding,
+        { "Channel Sounding", "btle.control.feature_set.hf_control_feature_set_channel_sounding",
+            FT_BOOLEAN, 8, NULL, 0x40,
+            NULL, HFILL}
+        },
+        { &hf_control_feature_set_channel_sounding_host_support,
+        { "Channel Sounding (Host Support)", "btle.control.feature_set.hf_control_feature_set_channel_sounding_host_support",
+            FT_BOOLEAN, 8, NULL, 0x80,
+            NULL, HFILL}
+        },
+        { &hf_control_feature_set_channel_sounding_tone_quality_indication,
+        { "Channel Sounding Tone Quality Indication", "btle.control.feature_set.hf_control_feature_set_channel_sounding_tone_quality_indication",
+            FT_BOOLEAN, 8, NULL, 0x01,
+            NULL, HFILL}
+        },
+        { &hf_control_feature_set_reserved_bits_page_7,
+        { "Reserved bits", "btle.control.feature_set.hf_control_feature_set_reserved_bits_page_7",
+            FT_UINT8, BASE_DEC, NULL, 0xFE,
+            NULL, HFILL}
+        },
+        { &hf_control_feature_set_reserved_bits_page_8,
+        { "Reserved bits", "btle.control.feature_set.hf_control_feature_set_reserved_bits_page_8",
+            FT_UINT8, BASE_DEC, NULL, 0x7F,
+            NULL, HFILL}
+        },
+        { &hf_control_feature_set_ll_extended_feature_set,
+        { "LL Extended Feature Set", "btle.control.feature_set.hf_control_feature_set_ll_extended_feature_set",
+            FT_UINT8, BASE_DEC, NULL, 0x80,
+            NULL, HFILL}
+        },
+        { &hf_control_feature_set_monitoring_advertisers,
+        { "Monitoring Advertisers", "btle.control.feature_set.hf_control_feature_set_monitoring_advertisers",
+            FT_UINT8, BASE_DEC, NULL, 0x01,
+            NULL, HFILL}
+        },
+        { &hf_control_feature_set_frame_space_update,
+        { "Frame Space Update", "btle.control.feature_set.hf_control_feature_set_frame_space_update",
+            FT_UINT8, BASE_DEC, NULL, 0x02,
+            NULL, HFILL}
+        },
+        { &hf_control_feature_set_reserved_bits_page_9,
+        { "Reserved bits", "btle.control.feature_set.hf_control_feature_set_reserved_bits_page_9",
+            FT_UINT8, BASE_DEC, NULL, 0xFC,
+            NULL, HFILL}
         },
         { &hf_control_window_size,
             { "Window Size",                     "btle.control.window_size",
