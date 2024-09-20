@@ -746,6 +746,39 @@ static int hf_ieee1905_controller_capa_flags;
 static int hf_ieee1905_controller_capa_reserved;
 static int hf_ieee1905_controller_capa_early_ap_capa;
 static int hf_ieee1905_controller_capa_kbmb_counter;
+static int hf_ieee1905_wifi_7_agent_capabilities_max_num_mlds;
+static int hf_ieee1905_wifi_7_agent_capabilities_flags;
+static int hf_ieee1905_wifi_7_agent_capabilities_flags_sta_max_links;
+static int hf_ieee1905_wifi_7_agent_capabilities_flags_ap_max_links;
+static int hf_ieee1905_wifi_7_agent_capabilities_flags_ttl_mapping_cap;
+static int hf_ieee1905_wifi_7_agent_capabilities_flags_reserved;
+static int hf_ieee1905_wifi_7_agent_capabilities_reserved;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_num;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_id;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_reserved;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_str_support;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_nstr_support;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_emlsr_support;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_emlmr_support;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_reserved1;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_str_support;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_nstr_support;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_emlsr_support;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_emlmr_support;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_flags_reserved2;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_str_records;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_nstr_records;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_emlsr_records;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_emlmr_records;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_str_records;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_nstr_records;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_emlsr_records;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_emlmr_records;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_record_id;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_record_flags;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_record_flags_freq_separation;
+static int hf_ieee1905_wifi_7_agent_capabilities_radio_record_flags_reserved;
 static int hf_ieee1905_affiliated_sta_metrics_sta_mac_addr;
 static int hf_ieee1905_affiliated_sta_metrics_bytes_sent;
 static int hf_ieee1905_affiliated_sta_metrics_bytes_rcvd;
@@ -764,6 +797,8 @@ static int hf_ieee1905_affiliated_ap_metrics_mcast_bytes_rcvd;
 static int hf_ieee1905_affiliated_ap_metrics_bcast_bytes_sent;
 static int hf_ieee1905_affiliated_ap_metrics_bcast_bytes_rcvd;
 static int hf_ieee1905_affiliated_ap_metrics_reserved;
+static int hf_ieee1905_available_spectrum_inquiry_request_object;
+static int hf_ieee1905_available_spectrum_inquiry_response_object;
 
 static int ett_ieee1905;
 static int ett_ieee1905_flags;
@@ -954,6 +989,13 @@ static int ett_ieee1905_spatial_reuse_rep_hesiga;
 static int ett_qos_mgmt_policy_mscs_list;
 static int ett_qos_mgmt_policy_scs_list;
 static int ett_ieee1905_controller_capa;
+static int ett_wifi_7_agent_capabilities_flags;
+static int ett_wifi_7_agent_capabilities_radio_list;
+static int ett_wifi_7_agent_capabilities_radio;
+static int ett_wifi_7_agent_capabilities_radio_flags;
+static int ett_wifi_7_agent_capabilities_radio_record_list;
+static int ett_wifi_7_agent_capabilities_radio_record;
+static int ett_wifi_7_agent_capabilities_radio_record_flags;
 
 static int ett_ieee1905_fragment;
 static int ett_ieee1905_fragments;
@@ -1035,6 +1077,8 @@ static expert_field ei_ieee1905_extraneous_tlv_data;
 #define AGENT_LIST_MESSAGE                             0x8035
 #define ANTICIPATED_CHANNEL_USAGE_MESSAGE              0x8036
 #define QOS_MANAGEMENT_NOTIFICATION_MESSAGE            0x8037
+#define EARLY_AP_CAPABILITY_REPORT_MESSAGE             0x8043
+#define AVAILABLE_SPECTRUM_INQUIRY_MESSAGE             0x8049
 
 static const value_string ieee1905_message_type_vals[] = {
   { TOPOLOGY_DISCOVERY_MESSAGE,                  "Topology discovery" },
@@ -1111,6 +1155,8 @@ static const value_string ieee1905_message_type_vals[] = {
   { AGENT_LIST_MESSAGE,                          "Agent List" },
   { ANTICIPATED_CHANNEL_USAGE_MESSAGE,           "Anticipated Channel Usage" },
   { QOS_MANAGEMENT_NOTIFICATION_MESSAGE,         "QoS Management Notification" },
+  { EARLY_AP_CAPABILITY_REPORT_MESSAGE,          "Early AP Capability Report" },
+  { AVAILABLE_SPECTRUM_INQUIRY_MESSAGE,          "Available Spectrum Inquiry Message" },
   { 0, NULL }
 };
 static value_string_ext ieee1905_message_type_vals_ext = VALUE_STRING_EXT_INIT(ieee1905_message_type_vals);
@@ -1239,8 +1285,11 @@ static value_string_ext ieee1905_message_type_vals_ext = VALUE_STRING_EXT_INIT(i
 #define QOS_MANAGEMENT_POLICY_TLV               0xDB
 #define QOS_MANAGEMENT_DESCRIPTOR_TLV           0xDC
 #define CONTROLLER_CAPABILITY_TLV               0xDD
+#define WIFI7_AGENT_CAPABILITIES_TLV            0xDF
 #define AFFILIATED_STA_METRICS_TLV              0xE4
 #define AFFILIATED_AP_METRICS_TLV               0xE5
+#define AVAILABLE_SPECTRUM_INQUIRY_REQUEST_TLV  0xE8
+#define AVAILABLE_SPECTRUM_INQUIRY_RESPONSE_TLV 0xE9
 
 static const value_string ieee1905_tlv_types_vals[] = {
   { EOM_TLV,                                 "End of message" },
@@ -1367,9 +1416,11 @@ static const value_string ieee1905_tlv_types_vals[] = {
   { QOS_MANAGEMENT_POLICY_TLV,               "QoS Management Policy" },
   { QOS_MANAGEMENT_DESCRIPTOR_TLV,           "QoS Management Descriptor" },
   { CONTROLLER_CAPABILITY_TLV,               "Controller Capability" },
+  { WIFI7_AGENT_CAPABILITIES_TLV,            "Wi-Fi 7 Agent Capabilities" },
   { AFFILIATED_STA_METRICS_TLV,              "Affiliated STA Metrics" },
   { AFFILIATED_AP_METRICS_TLV,               "Affiliated AP Metrics" },
-
+  { AVAILABLE_SPECTRUM_INQUIRY_REQUEST_TLV,  "Available Spectrum Inquiry Request" },
+  { AVAILABLE_SPECTRUM_INQUIRY_RESPONSE_TLV, "Available Spectrum Inquiry Response" },
   { 0, NULL }
 };
 static value_string_ext ieee1905_tlv_types_vals_ext = VALUE_STRING_EXT_INIT(ieee1905_tlv_types_vals);
@@ -1417,8 +1468,9 @@ static const value_string ieee1905_media_type_1_vals[] = {
   { 4, "IEEE 802.11n (5 GHz)" },
   { 5, "IEEE 802.11ac (5 GHz)" },
   { 6, "IEEE 802.11ad (60 GHz)" },
-  { 7, "IEEE 802.11ax (2.4 GHz)" },
-  { 8, "IEEE 802.11ax (5 GHz)" },
+  { 7, "IEEE 802.11af (whitespace)" },
+  { 8, "IEEE 802.11ax" },
+  { 9, "IEEE 802.11be" },
   { 0, NULL }
 };
 
@@ -1452,6 +1504,7 @@ static const value_string ieee1905_freq_band_vals[] = {
   { 0, "802.11 2.4 GHz" },
   { 1, "802.11 5 GHz" },
   { 2, "802.11 60 GHz" },
+  { 3, "802.11 6 GHz" },
   { 0, NULL }
 };
 
@@ -8008,6 +8061,188 @@ dissect_controller_capability(tvbuff_t *tvb, packet_info *pinfo _U_,
 }
 
 /*
+ * Dissect a Wi-Fi 7 agent capability TLV:
+ */
+static int* const wifi_7_agent_capabilities_flags_headers[] = {
+    &hf_ieee1905_wifi_7_agent_capabilities_flags_ap_max_links,
+    &hf_ieee1905_wifi_7_agent_capabilities_flags_sta_max_links,
+    &hf_ieee1905_wifi_7_agent_capabilities_flags_ttl_mapping_cap,
+    &hf_ieee1905_wifi_7_agent_capabilities_flags_reserved,
+    NULL
+};
+
+static int* const wifi_7_agent_capabilities_radio_flags_headers[] = {
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_str_support,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_nstr_support,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_emlsr_support,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_emlmr_support,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_reserved1,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_str_support,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_nstr_support,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_emlsr_support,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_emlmr_support,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_reserved2,
+    NULL
+};
+
+static int* const wifi_7_agent_capabilities_radio_record_flags_headers[] = {
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_record_flags_freq_separation,
+    &hf_ieee1905_wifi_7_agent_capabilities_radio_record_flags_reserved,
+    NULL
+};
+
+static const value_string tid_to_link_mapping_capability_vals[] = {
+    { 0, "The Agent does not support TID-to-Link mapping" },
+    { 1, "The Agent supports the mapping of each TID to the same or different link set" },
+    { 2, "reserved" },
+    { 3, "The Agent only supports the mapping of all TIDs to the same link set" },
+    { 0, NULL }
+};
+
+static unsigned
+wifi_7_agent_cap_add_record(proto_tree *tree, int hf,
+        tvbuff_t *tvb, const char *list_name, unsigned offset)
+{
+    proto_tree *record_list = NULL;
+    proto_item *rli = NULL;
+    uint32_t record_count = 0, record_num = 0;
+    unsigned record_list_start = 0;
+
+    proto_tree_add_item_ret_uint(tree, hf, tvb, offset, 1, ENC_NA, &record_count);
+    offset += 1;
+
+    if (record_count == 0) {
+        return offset;
+    }
+
+    record_list = proto_tree_add_subtree(tree, tvb, offset, -1,
+                                         ett_wifi_7_agent_capabilities_radio_record_list,
+                                         &rli, list_name);
+
+    record_list_start = offset;
+
+    while (record_num < record_count) {
+        proto_tree *record_tree = NULL;
+        proto_item *ri = NULL;
+
+        record_tree = proto_tree_add_subtree_format(record_list, tvb, offset, -1,
+                                                    ett_wifi_7_agent_capabilities_radio_record,
+                                                    &ri, "Record %u", record_num);
+
+        proto_tree_add_item(record_tree, hf_ieee1905_wifi_7_agent_capabilities_radio_record_id,
+                            tvb, offset, 6, ENC_NA);
+        offset += 6;
+
+        proto_tree_add_bitmask(record_tree, tvb, offset,
+                               hf_ieee1905_wifi_7_agent_capabilities_radio_record_flags,
+                               ett_wifi_7_agent_capabilities_radio_record_flags,
+                               wifi_7_agent_capabilities_radio_record_flags_headers, ENC_NA);
+        offset++;
+
+        record_num++;
+    }
+
+    proto_item_set_len(rli, offset - record_list_start);
+
+    return offset;
+}
+
+static int
+dissect_wifi_7_agent_capabilities(tvbuff_t *tvb, packet_info *pinfo _U_,
+        proto_tree *tree, unsigned offset, uint16_t len _U_)
+{
+    proto_tree *radio_list = NULL;
+    proto_item *rli = NULL;
+    uint32_t radio_count = 0, radio_num = 0;
+    unsigned radio_list_start = 0;
+
+    proto_tree_add_item(tree, hf_ieee1905_wifi_7_agent_capabilities_max_num_mlds, tvb, offset,
+                        1, ENC_NA);
+    offset++;
+
+    proto_tree_add_bitmask(tree, tvb, offset,
+                           hf_ieee1905_wifi_7_agent_capabilities_flags,
+                           ett_wifi_7_agent_capabilities_flags,
+                           wifi_7_agent_capabilities_flags_headers, ENC_NA);
+    offset += 2;
+
+    proto_tree_add_item(tree, hf_ieee1905_wifi_7_agent_capabilities_reserved,
+                        tvb, offset, 13, ENC_NA);
+    offset += 13;
+
+    proto_tree_add_item_ret_uint(tree, hf_ieee1905_wifi_7_agent_capabilities_radio_num,
+                                 tvb, offset, 1, ENC_NA, &radio_count);
+    offset++;
+
+    radio_list = proto_tree_add_subtree(tree, tvb, offset, -1,
+                                        ett_wifi_7_agent_capabilities_radio_list,
+                                        &rli, "Radio List");
+
+    radio_list_start = offset;
+
+    while (radio_num < radio_count) {
+        proto_tree *radio_tree = NULL;
+        proto_item *ri = NULL;
+
+        radio_tree = proto_tree_add_subtree_format(radio_list, tvb, offset,
+                                                   -1, ett_wifi_7_agent_capabilities_radio,
+                                                   &ri, "Radio %u", radio_num);
+
+        proto_tree_add_item(radio_tree, hf_ieee1905_wifi_7_agent_capabilities_radio_id,
+                            tvb, offset, 6, ENC_NA);
+        offset += 6;
+
+        proto_tree_add_item(radio_tree, hf_ieee1905_wifi_7_agent_capabilities_radio_reserved,
+                            tvb, offset, 24, ENC_NA);
+        offset += 24;
+
+        proto_tree_add_bitmask(radio_tree, tvb, offset,
+                               hf_ieee1905_wifi_7_agent_capabilities_radio_flags,
+                               ett_wifi_7_agent_capabilities_radio_flags,
+                               wifi_7_agent_capabilities_radio_flags_headers, ENC_NA);
+        offset += 2;
+
+        offset = wifi_7_agent_cap_add_record(radio_tree,
+                                             hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_str_records,
+                                             tvb, "AP STR Record List", offset);
+
+        offset = wifi_7_agent_cap_add_record(radio_tree,
+                                             hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_nstr_records,
+                                             tvb, "AP NSTR Record List", offset);
+
+        offset = wifi_7_agent_cap_add_record(radio_tree,
+                                             hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_emlsr_records,
+                                             tvb, "AP EMLSR Record List", offset);
+
+        offset = wifi_7_agent_cap_add_record(radio_tree,
+                                             hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_emlmr_records,
+                                             tvb, "AP EMLMR Record List", offset);
+
+        offset = wifi_7_agent_cap_add_record(radio_tree,
+                                             hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_str_records,
+                                             tvb, "bSTA STR Record List", offset);
+
+        offset = wifi_7_agent_cap_add_record(radio_tree,
+                                             hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_nstr_records,
+                                             tvb, "bSTA NSTR Record List", offset);
+
+        offset = wifi_7_agent_cap_add_record(radio_tree,
+                                             hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_emlsr_records,
+                                             tvb, "bSTA EMLSR Record List", offset);
+
+        offset = wifi_7_agent_cap_add_record(radio_tree,
+                                             hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_emlmr_records,
+                                             tvb, "bSTA EMLMR Record List", offset);
+
+        radio_num++;
+    }
+
+    proto_item_set_len(rli, offset - radio_list_start);
+
+    return offset;
+}
+
+/*
  * Dissect an Affiliated STA Metrics TLV:
  */
 static int
@@ -8107,6 +8342,36 @@ dissect_affiliated_ap_metrics(tvbuff_t *tvb _U_, packet_info *pinfo _U_,
 
         offset = end;
     }
+
+    return offset;
+}
+
+/*
+ * Dissect an Available Spectrum Inquiry Request TLV:
+ */
+static int
+dissect_available_spectrum_inquiry_request(tvbuff_t *tvb _U_, packet_info *pinfo _U_,
+        proto_tree *tree, unsigned offset, uint16_t len)
+{
+    /* Content is a JSON message */
+    proto_tree_add_item(tree, hf_ieee1905_available_spectrum_inquiry_request_object,
+                        tvb, offset, len, ENC_ASCII);
+    offset += len;
+
+    return offset;
+}
+
+/*
+ * Dissect an Available Spectrum Inquiry Response TLV:
+ */
+static int
+dissect_available_spectrum_inquiry_response(tvbuff_t *tvb _U_, packet_info *pinfo _U_,
+        proto_tree *tree, unsigned offset, uint16_t len)
+{
+    /* Content is a JSON message */
+    proto_tree_add_item(tree, hf_ieee1905_available_spectrum_inquiry_response_object,
+                        tvb, offset, len, ENC_ASCII);
+    offset += len;
 
     return offset;
 }
@@ -8664,6 +8929,11 @@ dissect_ieee1905_tlv_data(tvbuff_t *tvb, packet_info *pinfo,
                                                tlv_len);
         break;
 
+    case WIFI7_AGENT_CAPABILITIES_TLV:
+        offset = dissect_wifi_7_agent_capabilities(tvb, pinfo, tree, offset,
+                                                   tlv_len);
+        break;
+
     case AFFILIATED_STA_METRICS_TLV:
         offset = dissect_affiliated_sta_metrics(tvb, pinfo, tree, offset,
                                                 tlv_len);
@@ -8672,6 +8942,16 @@ dissect_ieee1905_tlv_data(tvbuff_t *tvb, packet_info *pinfo,
     case AFFILIATED_AP_METRICS_TLV:
         offset = dissect_affiliated_ap_metrics(tvb, pinfo, tree, offset,
                                                tlv_len);
+        break;
+
+    case AVAILABLE_SPECTRUM_INQUIRY_REQUEST_TLV:
+        offset = dissect_available_spectrum_inquiry_request(tvb, pinfo, tree, offset,
+                                                            tlv_len);
+        break;
+
+    case AVAILABLE_SPECTRUM_INQUIRY_RESPONSE_TLV:
+        offset = dissect_available_spectrum_inquiry_response(tvb, pinfo, tree, offset,
+                                                             tlv_len);
         break;
 
     default:
@@ -11994,6 +12274,138 @@ proto_register_ieee1905(void)
             "ieee1905.controller_capa.kbmb_counter",
             FT_BOOLEAN, 8, NULL, 0x80, NULL, HFILL }},
 
+        { &hf_ieee1905_wifi_7_agent_capabilities_max_num_mlds,
+          { "Max number of MLDs", "ieee1905.wifi_7_agent_capabilities.max_num_mlds",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_flags,
+          { "Flags", "ieee1905.wifi_7_agent_capabilities.flags",
+            FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_flags_ap_max_links,
+          { "AP Maximum links", "ieee1905.wifi_7_agent_capabilities.flags.max_links_ap",
+            FT_UINT16, BASE_HEX, NULL, 0xf000, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_flags_sta_max_links,
+          { "STA Maximum links", "ieee1905.wifi_7_agent_capabilities.flags.max_links_sta",
+            FT_UINT16, BASE_HEX, NULL, 0x0f00, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_flags_ttl_mapping_cap,
+          { "TID-to-Link mapping capability", "ieee1905.wifi_7_agent_capabilities.flags.tid_to_link_mapping_capability",
+            FT_UINT16, BASE_HEX, VALS(tid_to_link_mapping_capability_vals), 0x00c0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_flags_reserved,
+          { "Reserved", "ieee1905.wifi_7_agent_capabilities.flags.reserved",
+            FT_UINT16, BASE_HEX, NULL, 0x003f, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_reserved,
+          { "Reserved", "ieee1905.wifi_7_agent_capabilities.reserved",
+            FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_num,
+          { "Number of radios", "ieee1905.wifi_7_agent_capabilities.num_radios",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_id,
+          { "Radio Unique ID", "ieee1905.wifi_7_agent_capabilities.radio_id",
+            FT_ETHER, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_reserved,
+          { "Reserved", "ieee1905.wifi_7_agent_capabilities.radio_reserved",
+            FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags,
+          { "Flags", "ieee1905.wifi_7_agent_capabilities.radio_flags",
+            FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_str_support,
+          { "AP STR Support", "ieee1905.wifi_7_agent_capabilities.radio_flags.ap_str_support",
+            FT_UINT16, BASE_DEC, NULL, 0x8000, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_nstr_support,
+          { "AP NSTR Support", "ieee1905.wifi_7_agent_capabilities.radio_flags.ap_nstr_support",
+            FT_UINT16, BASE_DEC, NULL, 0x4000, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_emlsr_support,
+          { "AP EMLSR Support", "ieee1905.wifi_7_agent_capabilities.radio_flags.ap_emlsr_support",
+            FT_UINT16, BASE_DEC, NULL, 0x2000, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_ap_emlmr_support,
+          { "AP EMLMR Support", "ieee1905.wifi_7_agent_capabilities.radio_flags.ap_emlmr_support",
+            FT_UINT16, BASE_DEC, NULL, 0x1000, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_reserved1,
+          { "Reserved", "ieee1905.wifi_7_agent_capabilities.radio_flags.reserved1",
+            FT_UINT16, BASE_HEX, NULL, 0x0f00, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_str_support,
+          { "bSTA STR Support", "ieee1905.wifi_7_agent_capabilities.radio_flags.bsta_str_support",
+            FT_UINT16, BASE_DEC, NULL, 0x0080, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_nstr_support,
+          { "bSTA NSTR Support", "ieee1905.wifi_7_agent_capabilities.radio_flags.bsta_nstr_support",
+            FT_UINT16, BASE_DEC, NULL, 0x0040, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_emlsr_support,
+          { "bSTA EMLSR Support", "ieee1905.wifi_7_agent_capabilities.radio_flags_bsta_emlsr_support",
+            FT_UINT16, BASE_DEC, NULL, 0x0020, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_bsta_emlmr_support,
+          { "bSTA EMLMR Support", "ieee1905.wifi_7_agent_capabilities.radio_flags.bsta_emlmr_support",
+            FT_UINT16, BASE_DEC, NULL, 0x0010, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_flags_reserved2,
+          { "Reserved", "ieee1905.wifi_7_agent_capabilities.radio_flags.reserved2",
+            FT_UINT16, BASE_HEX, NULL, 0x000f, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_str_records,
+          { "Number of AP STR Records", "ieee1905.wifi_7_agent_capabilities.radio_num_ap_str_records",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_nstr_records,
+          { "Number of AP NSTR Records", "ieee1905.wifi_7_agent_capabilities.radio_num_ap_nstr_records",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_emlsr_records,
+          { "Number of AP EMLSR Records", "ieee1905.wifi_7_agent_capabilities.radio_num_ap_emlsr_records",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_num_ap_emlmr_records,
+          { "Number of AP EMLMR Records", "ieee1905.wifi_7_agent_capabilities.radio_num_ap_emlmr_records",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_str_records,
+          { "Number of bSTA STR Records", "ieee1905.wifi_7_agent_capabilities.radio_num_bsta_str_records",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_nstr_records,
+          { "Number of bSTA NSTR Records", "ieee1905.wifi_7_agent_capabilities.radio_num_bsta_nstr_records",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_emlsr_records,
+          { "Number of bSTA EMLSR Records", "ieee1905.wifi_7_agent_capabilities.radio_num_bsta_emlsr_records",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_num_bsta_emlmr_records,
+          { "Number of bSTA EMLMR Records", "ieee1905.wifi_7_agent_capabilities.radio_num_bsta_emlmr_records",
+            FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_record_id,
+          { "Radio Unique ID", "ieee1905.wifi_7_agent_capabilities.radio_record_id",
+            FT_ETHER, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_record_flags,
+          { "Flags", "ieee1905.wifi_7_agent_capabilities.radio_record_flags",
+            FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_record_flags_freq_separation,
+          { "Freq separation", "ieee1905.wifi_7_agent_capabilities.radio_record_flags.freq_separation",
+            FT_UINT8, BASE_DEC, NULL, 0xf8, NULL, HFILL }},
+
+        { &hf_ieee1905_wifi_7_agent_capabilities_radio_record_flags_reserved,
+          { "Reserved", "ieee1905.wifi_7_agent_capabilities.radio_record_flags.reserved",
+            FT_UINT8, BASE_HEX, NULL, 0x07, NULL, HFILL }},
+
         { &hf_ieee1905_affiliated_sta_metrics_sta_mac_addr,
           { "STA MAC Address", "ieee1905.affiliated_sta_metrics.sta_mac_addr",
             FT_ETHER, BASE_NONE, NULL, 0x0, NULL, HFILL }},
@@ -12065,6 +12477,14 @@ proto_register_ieee1905(void)
         { &hf_ieee1905_affiliated_ap_metrics_reserved,
           { "Reserved", "ieee1905.affiliated_ap_metrics.reserved",
             FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+
+        { &hf_ieee1905_available_spectrum_inquiry_request_object,
+          { "Object", "ieee1905.available_spectrum_inquiry_request.object",
+            FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }},
+
+        { &hf_ieee1905_available_spectrum_inquiry_response_object,
+          { "Object", "ieee1905.available_spectrum_inquiry_response.object",
+            FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }},
 
         { &hf_ieee1905_extra_tlv_data,
           { "Extraneous TLV data", "ieee1905.extra_tlv_data",
@@ -12306,6 +12726,13 @@ proto_register_ieee1905(void)
         &ett_qos_mgmt_policy_mscs_list,
         &ett_qos_mgmt_policy_scs_list,
         &ett_ieee1905_controller_capa,
+        &ett_wifi_7_agent_capabilities_flags,
+        &ett_wifi_7_agent_capabilities_radio_list,
+        &ett_wifi_7_agent_capabilities_radio,
+        &ett_wifi_7_agent_capabilities_radio_flags,
+        &ett_wifi_7_agent_capabilities_radio_record_list,
+        &ett_wifi_7_agent_capabilities_radio_record,
+        &ett_wifi_7_agent_capabilities_radio_record_flags,
         &ett_ieee1905_fragment,
         &ett_ieee1905_fragments,
     };
