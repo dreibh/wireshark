@@ -31,6 +31,7 @@
 #include <epan/sequence_analysis.h>
 #include <epan/tap.h>
 #include <epan/capture_dissectors.h>
+#include <epan/unit_strings.h>
 #include <epan/proto_data.h>
 #include <epan/strutil.h>
 #include <epan/tfs.h>
@@ -1355,6 +1356,12 @@ static const value_string rpl_metric_vals[] = {
   { RPL_METRIC_ETX,  "Link ETX" },
   { RPL_METRIC_LC,   "Link Color" },
   { 0, NULL }
+};
+
+static const value_string rpl_ocp_vals[] = {
+    { 0, "Objective Function Zero (OF0)" },
+    { 1, "Minimum Rank with Hysteresis Objective Function (MRHOF)" },
+    { 0, NULL }
 };
 
 /* RFC 7400 */
@@ -3053,6 +3060,7 @@ dissect_icmpv6_rpl_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree
                     &hf_icmpv6_rpl_opt_config_pcs,
                     NULL
                 };
+                proto_item *pi;
 
                 /* Flags */
                 proto_tree_add_bitmask(icmp6opt_tree, tvb, opt_offset, hf_icmpv6_rpl_opt_config_flag,
@@ -3060,11 +3068,13 @@ dissect_icmpv6_rpl_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree
                 opt_offset += 1;
 
                 /* DIOIntervalDoublings */
-                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_rpl_opt_config_doublings, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
+                pi = proto_tree_add_item(icmp6opt_tree, hf_icmpv6_rpl_opt_config_doublings, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
+                proto_item_append_text(pi, " (Imax=%"PRIu64"ms)", UINT64_C(1) << (tvb_get_uint8(tvb, opt_offset + 1) + tvb_get_uint8(tvb, opt_offset)));
                 opt_offset += 1;
 
                 /* DIOIntervalMin */
-                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_rpl_opt_config_min_interval, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
+                pi = proto_tree_add_item(icmp6opt_tree, hf_icmpv6_rpl_opt_config_min_interval, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
+                proto_item_append_text(pi, " (Imin=%"PRIu64"ms)", UINT64_C(1) << tvb_get_uint8(tvb, opt_offset));
                 opt_offset += 1;
 
                 /* DIORedundancyConstant */
@@ -3088,7 +3098,8 @@ dissect_icmpv6_rpl_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree
                 opt_offset += 1;
 
                 /* Default Lifetime */
-                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_rpl_opt_config_def_lifetime, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
+                pi = proto_tree_add_item(icmp6opt_tree, hf_icmpv6_rpl_opt_config_def_lifetime, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
+                proto_item_append_text(pi, " (%us)", tvb_get_uint8(tvb, opt_offset) * tvb_get_ntohs(tvb, opt_offset + 1));
                 opt_offset += 1;
 
                 /* Lifetime Unit */
@@ -6117,7 +6128,7 @@ proto_register_icmpv6(void)
            { "MinHopRankInc", "icmpv6.rpl.opt.config.min_hop_rank_inc", FT_UINT16, BASE_DEC, NULL, 0x0,
               "Used to configure MinHopRankIncrease", HFILL }},
         { &hf_icmpv6_rpl_opt_config_ocp,
-           { "OCP (Objective Code Point)","icmpv6.rpl.opt.config.ocp", FT_UINT16, BASE_DEC, NULL, 0x0,
+           { "OCP (Objective Code Point)","icmpv6.rpl.opt.config.ocp", FT_UINT16, BASE_DEC, VALS(rpl_ocp_vals), 0x0,
               "The OCP field identifies the OF and is managed by the IANA", HFILL }},
         { &hf_icmpv6_rpl_opt_config_rsv,
            { "Reserved", "icmpv6.rpl.opt.config.rsv", FT_UINT8, BASE_DEC, NULL, 0x0,
@@ -6126,7 +6137,7 @@ proto_register_icmpv6(void)
            { "Default Lifetime", "icmpv6.rpl.opt.config.def_lifetime", FT_UINT8, BASE_DEC, NULL, 0x0,
               "This is the lifetime that is used as default for all RPL routes", HFILL }},
         { &hf_icmpv6_rpl_opt_config_lifetime_unit,
-           { "Lifetime Unit", "icmpv6.rpl.opt.config.lifetime_unit", FT_UINT16, BASE_DEC, NULL, 0x0,
+           { "Lifetime Unit", "icmpv6.rpl.opt.config.lifetime_unit", FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0x0,
               "Provides the unit in seconds that is used to express route lifetimes in RPL", HFILL }},
         { &hf_icmpv6_rpl_opt_target_flag,
            { "Reserved", "icmpv6.rpl.opt.target.flag", FT_NONE, BASE_NONE, NULL, 0x0,
