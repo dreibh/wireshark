@@ -136,7 +136,7 @@ static bool signal_pipe_check_running(void);
 #endif
 static int sync_pipe_fd = 2;
 
-#ifdef ENABLE_ASAN
+#if defined (ENABLE_ASAN) || defined (ENABLE_LSAN)
 /* This has public visibility so that if compiled with shared libasan (the
  * gcc default) function interposition occurs.
  */
@@ -207,6 +207,16 @@ __asan_default_options(void)
     /* By default don't override our exit code if there's a leak or error.
      * We particularly don't want to do this if running as a capture child,
      * because capture/capture_sync doesn't expect the ASan exit codes.
+     */
+    return "exitcode=0";
+}
+
+WS_DLL_PUBLIC const char*
+__lsan_default_options(void)
+{
+    /* By default don't override our exit code if there's a leak or error.
+     * We particularly don't want to do this if running as a capture child,
+     * because capture/capture_sync doesn't expect the LSan exit codes.
      */
     return "exitcode=0";
 }
@@ -776,6 +786,10 @@ show_filter_code(capture_options *capture_opts)
     /* If using libcap: we can now remove NET_RAW and NET_ADMIN capabilities  */
     /*  (euid/egid have already previously been set to ruid/rgid.             */
     /* (See comment in main() for details)                                    */
+    /* XXX - On Linux, if we're capturing on a mac80211 device and enabling   */
+    /* rfmon via libpcap with libnl support, that creates a new monitor mode  */
+    /* device that libpcap will attempt to delete when capture is done. That  */
+    /* will fail with EPERM because we dropped privileges.                    */
 #ifndef HAVE_LIBCAP
     relinquish_special_privs_perm();
 #else
@@ -5815,7 +5829,7 @@ main(int argc, char *argv[])
                     if (if_info->caps == NULL) {
                         if_info->caps = g_new0(if_capabilities_t, 1);
                         if_info->caps->primary_msg = open_status_str;
-                        if_info->caps->secondary_msg = g_strdup(get_pcap_failure_secondary_error_message(open_status, open_status_str));
+                        if_info->caps->secondary_msg = get_pcap_failure_secondary_error_message(open_status, open_status_str);
                     }
                     if_info->caps->status = open_status;
                 }

@@ -678,66 +678,106 @@ Commit Check:
   variables:
     GITLAB_REPO: "$CI_MERGE_REQUEST_PROJECT_URL"
   script:
-    # glab depends on a valid GITALB_TOKEN variable. It will fail when run under outside projects.
-    - if ! command -V glab 2> /dev/null ; then (cd /tmp ; curl -JLO https://gitlab.com/gitlab-org/cli/-/releases/v1.34.0/downloads/glab_1.34.0_Linux_x86_64.deb ; dpkg --install /tmp/glab_1.34.0_Linux_x86_64.deb ) ; fi
-    - glab auth status
-    - >
-      if [[ $NUM_COMMITS > 1 ]] ; then
-        MESSAGE="ℹ️ This merge request has more than one commit. Please squash any trivial ones:
-        ~~~
-        $(git log --oneline --no-decorate "${CI_COMMIT_SHA}~$NUM_COMMITS..${CI_COMMIT_SHA}")
-        ~~~
-        "
-        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
-      fi
     # build-ubuntu puts us in `build`.
     - cd ..
     - git status
+    # We have the following options for displaying information in a merge request
+    # from a pipleline job:
+    #
+    # - The Notes API, which requires a valid GitLab CI_JOB_TOKEN variable, which
+    #   isn't available for outside projects:
+    #   https://gitlab.com/gitlab-org/gitlab/-/issues/464591.
+    #
+    # - Code Quality, which requires extra configuration, using a special container
+    #   image, and writing a custom plugin:
+    #   https://docs.gitlab.com/ee/ci/testing/code_quality.html.
+    #
+    # - Unit test reports, which must be formatted as JUnit XML:
+    #   https://docs.gitlab.com/ee/ci/testing/unit_test_reports.html
+    #   https://www.ibm.com/docs/en/developer-for-zos/14.2?topic=formats-junit-xml-format
+    #
+    # Let's generate a unit test report, even if that means wondering which life choices
+    # led us to assemlbing an XML document from fragments in a shell script which is
+    # embedded in YAML.
+    - FAILURE_COUNT=0
+    - TESTCASES="<testcase class='commit_checks.num_commits' name='num_commits' time='1.0'"
+    - |
+      if [[ $NUM_COMMITS -gt 1 ]] ; then
+        TESTCASES+="><failure>ℹ️ This merge request has more than one commit. Please squash any trivial ones:
+
+        $(git log --oneline --no-decorate "${CI_COMMIT_SHA}~$NUM_COMMITS..${CI_COMMIT_SHA}")
+        </failure></testcase>"
+        FAILURE_COUNT=$(( FAILURE_COUNT + 1 ))
+      else
+        TESTCASES+="/>"
+      fi
     - PC_EXIT_CODE=0
     - ANALYSIS_MESSAGE=$( ./tools/pre-commit "${CI_COMMIT_SHA}~$NUM_COMMITS" ) || PC_EXIT_CODE=1
-    - >
+    - TESTCASES+="<testcase class='commit_checks.pre_commit' name='tools/pre-commit' time='1.0'"
+    - |
       if [ -n "$ANALYSIS_MESSAGE" ] ; then
-        MESSAGE="Pre-commit check results:
-        ~~~
+        TESTCASES+="><failure>Pre-commit check results:
+
         $ANALYSIS_MESSAGE
-        ~~~
-        "
-        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
+        </failure></testcase>"
+        FAILURE_COUNT=$(( FAILURE_COUNT + 1 ))
+      else
+        TESTCASES+="/>"
       fi
     - VC_EXIT_CODE=0
     - ANALYSIS_MESSAGE=$( tools/validate-commit.py ) || VC_EXIT_CODE=1
-    - >
+    - TESTCASES+="<testcase class='commit_checks.validate_commit' name='tools/validate-commit.py' time='1.0'"
+    - |
       if [[ $VC_EXIT_CODE != 0 ]] ; then
-        MESSAGE="Commit validation failure:
-        ~~~
+        TESTCASES+="><failure>Validate-commit check results:
+
         $ANALYSIS_MESSAGE
-        ~~~
-        "
-        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
+        </failure></testcase>"
+        FAILURE_COUNT=$(( FAILURE_COUNT + 1 ))
+      else
+        TESTCASES+="/>"
       fi
     - LC_EXIT_CODE=0
     - ANALYSIS_MESSAGE=$( python3 tools/checklicenses.py ) || LC_EXIT_CODE=1
-    - >
+    - TESTCASES+="<testcase class='commit_checks.check_licenses' name='tools/checklicenses.py' time='1.0'"
+    - |
       if [[ $LC_EXIT_CODE != 0 ]] ; then
-        MESSAGE="License check failure:
-        ~~~
+        TESTCASES+="><failure>License check failure:
+
         $ANALYSIS_MESSAGE
-        ~~~
-        "
-        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
+        </failure></testcase>"
+        FAILURE_COUNT=$(( FAILURE_COUNT + 1 ))
+      else
+        TESTCASES+="/>"
       fi
     - HC_EXIT_CODE=0
     - ANALYSIS_MESSAGE=$( python3 tools/check_help_urls.py ) || HC_EXIT_CODE=1
-    - >
+    - TESTCASES+="<testcase class='commit_checks.check_help_urls' name='tools/check_help_urls.py' time='1.0'"
+    - |
       if [[ $HC_EXIT_CODE != 0 ]] ; then
-        MESSAGE="Help URL check failure:
-        ~~~
+        TESTCASES+="><failure>Help URL check failure:
+
         $ANALYSIS_MESSAGE
-        ~~~
-        "
-        glab mr note $CI_MERGE_REQUEST_IID --unique --message "$MESSAGE" || echo "$MESSAGE"
+        </failure></testcase>"
+        FAILURE_COUNT=$(( FAILURE_COUNT + 1 ))
+      else
+        TESTCASES+="/>"
       fi
+    - |
+      cat > commit_checks.xml <<FIN
+      <?xml version="1.0" encoding="utf-8"?>
+      <testsuites><testsuite name="Commit Checks" errors="0" failures="$FAILURE_COUNT" skipped="0" tests="5" time="5">
+      $TESTCASES
+      </testsuite></testsuites>
+      FIN
+    # - cat commit_checks.xml
     - exit $(( PC_EXIT_CODE || VC_EXIT_CODE || LC_EXIT_CODE || HC_EXIT_CODE ))
+  artifacts:
+    when: always
+    paths:
+      - commit_checks.xml
+    reports:
+      junit: commit_checks.xml
 
 Ubuntu GCC Build:
   extends: .build-ubuntu
@@ -762,15 +802,18 @@ Ubuntu GCC Build:
     - chown -R user .
     - if [ -f run/dumpcap ]; then setcap cap_net_raw,cap_net_admin+eip run/dumpcap; fi
     - if [ -f run/dumpcap ]; then su user -c "run/dumpcap -D" ; fi
-    - su user -c pytest-3
+    - su user -c "pytest-3 --junitxml=../ubuntu_tests.xml"
     # Test CMake install code and CPack config code. Select any one of the archive generators.
     - ninja user_guide_html
     - ninja developer_guide_html
     - cpack -G TZST .
     - ls wireshark-*.tar.zst{,.sha256}
   artifacts:
+    when: always
     paths:
       - gcc_report.html
+    reports:
+      junit: ubuntu_tests.xml
 
 Fedora MinGW Build:
   extends: .build-mingw
@@ -866,8 +909,11 @@ Windows Build:
     - cmake -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off ..
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug test-programs.vcxproj
-    - C:\Windows\py.exe -m pytest --disable-gui --build-type=Debug
-
+    - C:\Windows\py.exe -m pytest --disable-gui --build-type=Debug --junitxml=../windows_tests.xml
+  artifacts:
+    when: always
+    reports:
+      junit: windows_tests.xml
 
 Windows Qt5 Build:
   extends: .build-windows
@@ -895,7 +941,11 @@ macOS Build:
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
     - ninja test-programs
-    - pytest --disable-capture
+    - pytest --disable-capture --junitxml=../macos_tests.xml
+  artifacts:
+    when: always
+    reports:
+      junit: macos_tests.xml
   needs: [ 'Commit Check' ]
 
 # Adapted from https://www.synopsys.com/blogs/software-security/integrating-coverity-scan-with-gitlab-ci/

@@ -32,6 +32,7 @@
 #include <epan/prefs.h>
 #include <epan/expert.h>
 #include <epan/tfs.h>
+#include <wsutil/array.h>
 
 #include "packet-tcp.h"
 
@@ -616,7 +617,7 @@ dissect_bitcoin_msg_addrv2(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
   proto_item *ti;
   int         length;
   uint64_t    count;
-  uint32_t    offset = 0;
+  int         offset = 0;
 
   ti   = proto_tree_add_item(tree, hf_bitcoin_msg_addrv2, tvb, offset, -1, ENC_NA);
   tree = proto_item_add_subtree(ti, ett_bitcoin_msg);
@@ -676,7 +677,13 @@ dissect_bitcoin_msg_addrv2(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
         proto_tree_add_item(subtree, hf_msg_addrv2_address_other, tvb, offset, (unsigned) address_length, ENC_NA);
         break;
     }
-    offset += address_length;
+
+    /*
+     * The above should make sure that the addition won't overflow.
+     * XXX - but what if address length fits in an unsigned int but
+     * not a signed int?
+     */
+    offset += (int)address_length;
 
     proto_tree_add_item(subtree, hf_msg_addrv2_port, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
@@ -1046,7 +1053,7 @@ dissect_bitcoin_msg_tx_common(tvbuff_t *tvb, uint32_t offset, packet_info *pinfo
         offset += component_size_length;
 
         proto_tree_add_item(subsubtree, hf_msg_tx_witness_component_data, tvb, offset, (int) component_size, ENC_NA);
-        offset += component_size;
+        offset += (uint32_t)component_size;
       }
 
       proto_item_set_end(ti, tvb, offset);

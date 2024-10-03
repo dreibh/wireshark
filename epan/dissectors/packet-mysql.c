@@ -2216,7 +2216,7 @@ mysql_dissect_exec_string(tvbuff_t *tvb, packet_info *pinfo _U_, int *param_offs
 			proto_tree_add_item(field_tree, hf_mysql_exec_field_string,
 				tvb, *param_offset, (int)param_len, encoding);
 	}
-	*param_offset += param_len;
+	*param_offset += (int)param_len;
 }
 
 static void
@@ -2231,7 +2231,7 @@ mysql_dissect_exec_bit(tvbuff_t *tvb, packet_info *pinfo _U_, int *param_offset,
 
 	proto_tree_add_item(field_tree, hf_mysql_exec_field_bit,
 			    tvb, *param_offset, (int)param_len, ENC_NA);
-	*param_offset += param_len;
+	*param_offset += (int)param_len;
 }
 
 static void
@@ -2246,7 +2246,7 @@ mysql_dissect_exec_blob(tvbuff_t *tvb, packet_info *pinfo _U_, int *param_offset
 
 	proto_tree_add_item(field_tree, hf_mysql_exec_field_blob,
 			    tvb, *param_offset, (int)param_len, ENC_NA);
-	*param_offset += param_len;
+	*param_offset += (int)param_len;
 }
 
 static void
@@ -2261,7 +2261,7 @@ mysql_dissect_exec_geometry(tvbuff_t *tvb, packet_info *pinfo _U_, int *param_of
 
 	proto_tree_add_item(field_tree, hf_mysql_exec_field_geometry,
 			    tvb, *param_offset, (int)param_len, ENC_NA);
-	*param_offset += param_len;
+	*param_offset += (int)param_len;
 }
 
 static void
@@ -2279,7 +2279,7 @@ mysql_dissect_exec_json(tvbuff_t *tvb, packet_info *pinfo, int *param_offset, pr
 
 	next_tvb = tvb_new_subset_length(tvb, *param_offset, (int)param_len);
 	call_dissector_only(json_handle, next_tvb, pinfo, field_tree, NULL);
-	*param_offset += param_len;
+	*param_offset += (int)param_len;
 }
 
 static void
@@ -2448,7 +2448,7 @@ mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *offset,
 		*offset += lenfle;
 		if (param_name_len>0) {
 			proto_tree_add_item(field_tree, hf_mysql_param_name, tvb, *offset, (int)param_name_len, ENC_ASCII);
-			*offset += param_name_len;
+			*offset += (int)param_name_len;
 		}
 	}
 
@@ -2479,9 +2479,15 @@ mysql_exec_param_offset(tvbuff_t *tvb, proto_tree *req_tree, int offset, int par
 	uint64_t param_length;
 
 	for (int i = 0; i<param_count; i++) {
-		offset += 2; // param type
+		// param type
+		tvb_ensure_bytes_exist(tvb, offset, 2);
+		offset += 2;
+		// param length
 		lenfle = tvb_get_fle(tvb, req_tree, offset, &param_length, NULL);
-		offset += lenfle + param_length;
+		offset += lenfle;
+		// param data
+		tvb_ensure_bytes_exist(tvb, offset, (int)param_length);
+		offset += (int)param_length;
 	}
 
 	return offset;
@@ -2559,7 +2565,9 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 		if ((conn_data->clnt_caps_ext & MYSQL_CAPS_QA) && (conn_data->srv_caps_ext & MYSQL_CAPS_QA)){
 			proto_item *query_attrs_item = proto_tree_add_item(req_tree, hf_mysql_query_attributes, tvb, offset, -1, ENC_NA);
 			proto_item *query_attrs_tree = proto_item_add_subtree(query_attrs_item, ett_query_attributes);
-
+			// XXX - https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query.html
+			// suggests n_params is length encoded. Use tvb_get_fle?
+			// (More than 250 parameters *does* seem unlikely.)
 			int n_params = tvb_get_uint8(tvb, offset);
 			proto_tree_add_item(query_attrs_tree, hf_mysql_query_attributes_count, tvb, offset, 1, ENC_ASCII);
 			offset += 2;
@@ -2584,6 +2592,9 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 				}
 			}
 		}
+		// The SQL statement is a string<EOF>, because it can
+		// contain embedded NUL bytes.
+		// However, we check for a edge case.
 		lenstr = my_tvb_strsize(tvb, offset);
 		// A query string of less than 2 doesn't make sense, this is *likely* to be a case where
 		// we don't have the capability flags from the login/greeting and are missing MYSQL_CAPS_QA
@@ -2592,10 +2603,18 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 		// cases.
 		//
 		// If this is the case we skip 2 bytes and try again.
+		// XXX - This only catches the case when the parameter count is
+		// 0. A more complicated heuristic would involve retrieving the
+		// string from the entire packet according to our chosen encoding,
+		// verifying if it consists entirely of printable characters, and
+		// if not, verify if the string would be printable if we assumed
+		// that query attributes were present, or perhaps checking that
+		// the interpretation of the next several bytes as parameter_count
+		// and parameter_set_count is reasonable.
 		if (lenstr < 2) {
 			offset += 2;
-			lenstr = my_tvb_strsize(tvb, offset);
 		}
+		lenstr = tvb_reported_length_remaining(tvb, offset);
 		proto_tree_add_item(req_tree, hf_mysql_query, tvb, offset, lenstr, my_frame_data->encoding_client);
 		if (mysql_showquery) {
 			col_append_fstr(pinfo->cinfo, COL_INFO, " { %s } ",
@@ -2608,7 +2627,8 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 		break;
 
 	case MYSQL_STMT_PREPARE:
-		lenstr = my_tvb_strsize(tvb, offset);
+		// The SQL Statement is a string<EOF>; it can have embedded NUL bytes.
+		lenstr = tvb_reported_length_remaining(tvb, offset);
 		proto_tree_add_item(req_tree, hf_mysql_query, tvb, offset, lenstr, ENC_ASCII);
 		offset += lenstr;
 		mysql_set_conn_state(pinfo, conn_data, RESPONSE_PREPARE);
@@ -2855,7 +2875,11 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 			}
 			if (param_count != 0) {
 				uint8_t stmt_bound;
-				offset += (param_count + 7) / 8; /* NULL bitmap */
+				int null_bitmap_length;
+				/* NULL bitmap */
+				null_bitmap_length = (int)((param_count + 7) / 8);
+				tvb_ensure_bytes_exist(tvb, offset, null_bitmap_length);
+				offset += null_bitmap_length;
 				proto_tree_add_item(req_tree, hf_mysql_new_parameter_bound_flag, tvb, offset, 1, ENC_NA);
 				stmt_bound = tvb_get_uint8(tvb, offset);
 				offset += 1;

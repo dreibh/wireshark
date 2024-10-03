@@ -342,7 +342,7 @@ decompress(packet_info* pinfo, proto_tree* tree, tvbuff_t* tvb, int offset, int 
 	decompress_stream->avail_in = length;
 	decompress_stream->next_out = decompress_buffer;
 	decompress_stream->avail_out = buffer_size;
-	uLong start = decompress_stream->total_out;
+	size_t start = decompress_stream->total_out;
 	int err = ZLIB_PREFIX(inflate)(decompress_stream, Z_NO_FLUSH);
 	if(err != Z_OK) {
 		proto_item* field = proto_tree_add_string(tree, hf_blip_message_body, tvb, offset, tvb_reported_length_remaining(tvb, offset), "<Error decompressing data>");
@@ -382,7 +382,7 @@ decompress(packet_info* pinfo, proto_tree* tree, tvbuff_t* tvb, int offset, int 
 
 	// Shrink the buffer so that there is not wasted space on the end of it since
 	// it will be long lived in the file scope
-	uLong bodyLength = decompress_stream->total_out - start;
+	size_t bodyLength = decompress_stream->total_out - start;
 	Bytef* shortened_buffer = (Bytef *)wmem_memdup(wmem_file_scope(), decompress_buffer, bodyLength);
 
 	tvbuff_t* decompressedChild = tvb_new_child_real_data(tvb, shortened_buffer, (unsigned)bodyLength, (int)bodyLength);

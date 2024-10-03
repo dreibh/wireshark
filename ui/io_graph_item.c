@@ -157,9 +157,9 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
     case IOG_ITEM_UNIT_PACKETS:
         return asAOT ? MICROSECS_PER_SEC*item->frames/interval_ : item->frames;
     case IOG_ITEM_UNIT_BYTES:
-        return asAOT ? MICROSECS_PER_SEC*item->bytes/interval_ : item->bytes;
+        return (double)(asAOT ? MICROSECS_PER_SEC*item->bytes/interval_ : item->bytes);
     case IOG_ITEM_UNIT_BITS:
-        return asAOT ? MICROSECS_PER_SEC*item->bytes*8/interval_ : item->bytes*8;
+        return (double)(asAOT ? MICROSECS_PER_SEC*item->bytes*8/interval_ : item->bytes*8);
     case IOG_ITEM_UNIT_CALC_FRAMES:
         return item->frames;
     case IOG_ITEM_UNIT_CALC_FIELDS:
@@ -191,10 +191,10 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
             value = item->double_tot;
             break;
         case IOG_ITEM_UNIT_CALC_MAX:
-            value = item->int_max;
+            value = (double)item->int_max;
             break;
         case IOG_ITEM_UNIT_CALC_MIN:
-            value = item->int_min;
+            value = (double)item->int_min;
             break;
         case IOG_ITEM_UNIT_CALC_THROUGHPUT:
             value = item->double_tot*MICROSECS_PER_SEC/interval_;
@@ -224,10 +224,10 @@ double get_io_graph_item(const io_graph_item_t *items_, io_graph_item_unit_t val
             value = item->double_tot;
             break;
         case IOG_ITEM_UNIT_CALC_MAX:
-            value = item->uint_max;
+            value = (double)item->uint_max;
             break;
         case IOG_ITEM_UNIT_CALC_MIN:
-            value = item->uint_min;
+            value = (double)item->uint_min;
             break;
         case IOG_ITEM_UNIT_CALC_THROUGHPUT:
             value = item->double_tot*MICROSECS_PER_SEC/interval_;

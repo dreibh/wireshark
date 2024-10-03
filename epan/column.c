@@ -289,7 +289,7 @@ parse_column_format(fmt_data *cfmt, const char *fmt)
     int col_fmt;
     char *col_custom_fields = NULL;
     long col_custom_occurrence = 0;
-    bool col_resolved = true;
+    char col_display = COLUMN_DISPLAY_STRINGS;
 
     /*
      * Is this a custom column?
@@ -329,7 +329,7 @@ parse_column_format(fmt_data *cfmt, const char *fmt)
         }
         if (cust_format_info->len > 2) {
             p = cust_format_info->pdata[2];
-            col_resolved = (p[0] == 'U') ? false : true;
+            col_display = p[0];
         }
         g_free(fmt_copy);
         g_ptr_array_unref(cust_format_info);
@@ -342,8 +342,26 @@ parse_column_format(fmt_data *cfmt, const char *fmt)
     cfmt->fmt = col_fmt;
     cfmt->custom_fields = col_custom_fields;
     cfmt->custom_occurrence = (int)col_custom_occurrence;
-    cfmt->resolved = col_resolved;
+    cfmt->display = col_display;
     return true;
+}
+
+char *
+column_fmt_data_to_str(const fmt_data *cfmt)
+{
+    if (!cfmt) {
+        return NULL;
+    }
+
+    if ((cfmt->fmt == COL_CUSTOM) && (cfmt->custom_fields)) {
+        return ws_strdup_printf("%s:%s:%d:%c",
+            col_format_to_string(cfmt->fmt),
+            cfmt->custom_fields,
+            cfmt->custom_occurrence,
+            cfmt->display);
+    }
+
+    return ws_strdup(col_format_to_string(cfmt->fmt));
 }
 
 void
@@ -374,7 +392,11 @@ column_dump_column_formats(void)
     printf("%s\t%s\n", col_format_to_string(fmt), col_format_desc(fmt));
   }
 
-  printf("\nFor example, to print Wireshark's default columns with tshark:\n\n"
+  /* XXX - Actually retrieve the default values from prefs. We could also
+   * then output the default columns for Logray, if this is Logray. (tray?)
+   */
+  printf("\nThese format strings are used to specify a column format in preferences.\n"
+    "For example, to print Wireshark's default columns with tshark:\n\n"
 #ifdef _WIN32
   "tshark.exe -o \"gui.column.format:"
     "\\\"No.\\\",\\\"%%m\\\","
@@ -394,6 +416,32 @@ column_dump_column_formats(void)
     "\"Length\",\"%%L\","
     "\"Info\",\"%%i\"'\n");
 #endif
+
+  if (prefs.col_list) {
+    fmt_data *cfmt;
+    char *prefs_fmt;
+    GString *current_cols = g_string_new(NULL);
+    for (GList *elem = g_list_first(prefs.col_list); elem != NULL; elem = elem->next) {
+      cfmt = (fmt_data*)elem->data;
+      prefs_fmt = column_fmt_data_to_str(cfmt);
+      if (current_cols->len != 0) {
+        g_string_append_c(current_cols, ',');
+      }
+#ifdef _WIN32
+      g_string_append_printf(current_cols, "\\\"%s\\\",\\\"%s\\\"", cfmt->title, prefs_fmt);
+#else
+      g_string_append_printf(current_cols, "\"%s\",\"%s\"", cfmt->title, prefs_fmt);
+#endif
+      g_free(prefs_fmt);
+    }
+    printf("\nand to print the current configuration profile's columns with tshark:\n\n"
+#ifdef _WIN32
+    "tshark -o \"gui.column.format:%s\"\n", current_cols->str);
+#else
+    "tshark -o 'gui.column.format:%s'\n", current_cols->str);
+#endif
+    g_string_free(current_cols, TRUE);
+  }
 }
 
 /* Marks each array element true if it can be substituted for the given
@@ -835,8 +883,8 @@ set_column_visible(const int col, bool visible)
   cfmt->visible = visible;
 }
 
-bool
-get_column_resolved(const int col)
+char
+get_column_display_format(const int col)
 {
   GList    *clp = g_list_nth(prefs.col_list, col);
   fmt_data *cfmt;
@@ -846,11 +894,11 @@ get_column_resolved(const int col)
 
   cfmt = (fmt_data *) clp->data;
 
-  return(cfmt->resolved);
+  return(cfmt->display);
 }
 
 void
-set_column_resolved(const int col, bool resolved)
+set_column_display_format(const int col, char display)
 {
   GList    *clp = g_list_nth(prefs.col_list, col);
   fmt_data *cfmt;
@@ -860,7 +908,7 @@ set_column_resolved(const int col, bool resolved)
 
   cfmt = (fmt_data *) clp->data;
 
-  cfmt->resolved = resolved;
+  cfmt->display = display;
 }
 
 const char *
@@ -996,7 +1044,7 @@ get_column_text(column_info *cinfo, const int col)
   ws_assert(cinfo);
   ws_assert(col < cinfo->num_cols);
 
-  if (!get_column_resolved(col) && cinfo->col_expr.col_expr_val[col]) {
+  if ((get_column_display_format(col) == COLUMN_DISPLAY_VALUES) && cinfo->col_expr.col_expr_val[col]) {
       /* Use the unresolved value in col_expr_val */
       return cinfo->col_expr.col_expr_val[col];
   }

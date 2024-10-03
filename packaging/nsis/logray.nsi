@@ -138,7 +138,7 @@ Page custom DisplayAdditionalTasksPage LeaveAdditionalTasksPage
 
   SetOutPath $INSTDIR
   File "${STAGING_DIR}\${EXTCAP_NAME}.html"
-  SetOutPath $INSTDIR\extcap\logray
+  SetOutPath $INSTDIR\extcap
   File "${STAGING_DIR}\extcap\logray\${EXTCAP_NAME}.exe"
 
 !macroend
@@ -818,7 +818,7 @@ File "${STAGING_DIR}\dtds\watcherinfo.dtd"
 SetOutPath $INSTDIR
 
 ; Create the extcap directory
-CreateDirectory $INSTDIR\extcap\logray
+CreateDirectory $INSTDIR\extcap
 
 ;
 ; install the protobuf .proto definitions in the protobuf subdirectory
@@ -884,19 +884,11 @@ Section "${PROGRAM_NAME}" SecLograyQt
 ; by default, Logray.exe is installed
 SetOutPath $INSTDIR
 File "${QT_DIR}\${PROGRAM_NAME_PATH}"
+File /r "${QT_DIR}\translations"
 ; Write an entry for ShellExecute
 WriteRegStr HKEY_LOCAL_MACHINE "Software\Microsoft\Windows\CurrentVersion\App Paths\${PROGRAM_NAME_PATH}" "" '$INSTDIR\${PROGRAM_NAME_PATH}'
 WriteRegStr HKEY_LOCAL_MACHINE "Software\Microsoft\Windows\CurrentVersion\App Paths\${PROGRAM_NAME_PATH}" "Path" '$INSTDIR'
 !include logray-qt-manifest.nsh
-
-${!defineifexist} TRANSLATIONS_FOLDER "${QT_DIR}\translations"
-SetOutPath $INSTDIR
-!ifdef TRANSLATIONS_FOLDER
-  ; Starting from Qt 5.5, *.qm files are put in a translations subfolder
-  File /r "${QT_DIR}\translations"
-!else
-  File "${QT_DIR}\*.qm"
-!endif
 
 ; Is the Start Menu check box checked?
 ${If} $START_MENU_STATE == ${BST_CHECKED}
@@ -1144,7 +1136,7 @@ Delete "$INSTDIR\COPYING*"
 Delete "$INSTDIR\audio\*.*"
 Delete "$INSTDIR\bearer\*.*"
 Delete "$INSTDIR\diameter\*.*"
-Delete "$INSTDIR\extcap\logray\falcodump.*"
+Delete "$INSTDIR\extcap\falcodump.*"
 Delete "$INSTDIR\gpl-2.0-standalone.html"
 Delete "$INSTDIR\Acknowledgements.md"
 Delete "$INSTDIR\generic\*.*"
@@ -1193,7 +1185,7 @@ RMDir "$INSTDIR\accessible"
 RMDir "$INSTDIR\audio"
 RMDir "$INSTDIR\bearer"
 RMDir "$INSTDIR\extcap"
-RMDir "$INSTDIR\extcap\logray"
+RMDir "$INSTDIR\extcap"
 RMDir "$INSTDIR\iconengines"
 RMDir "$INSTDIR\imageformats"
 RMDir "$INSTDIR\mediaservice"

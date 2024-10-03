@@ -87,13 +87,11 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 message(STATUS "Generating build using CMake ${CMAKE_VERSION}")
 
 if(USE_MSYSTEM)
-	# Use the deprecated FindPythonInterp.cmake module to Work around bugs and odd behavior in MSYS2 CMake
-	# searching in the wrong paths for python3.exe using FindPython3.cmake
-	find_package(PythonInterp REQUIRED)
-	set(Python3_EXECUTABLE ${PYTHON_EXECUTABLE} CACHE FILEPATH "")
-else()
-	find_package(Python3 3.6 REQUIRED)
+	# Prevent FindPython3.cmake from using the Python path in the registry,
+	# only use the $PATH environment variable (which is set up for MSYS2).
+	set(Python3_FIND_REGISTRY NEVER)
 endif()
+find_package(Python3 3.6 REQUIRED)
 
 # Set a default build type if none was specified
 set(_default_build_type "RelWithDebInfo")
@@ -576,8 +574,11 @@ if( CMAKE_C_COMPILER_ID MATCHES "MSVC")
 		add_definitions("/D_BIND_TO_CURRENT_CRT_VERSION=1")
 	endif()
 
+	# TODO: Re-enable /W3. It was disabled for a year and some warnings crept
+	# in that will fail with /Wx.
 	set(LOCAL_CFLAGS
 		/MP
+		/W3
 	)
 
 	set(WS_LINK_FLAGS "/LARGEADDRESSAWARE /MANIFEST:NO /INCREMENTAL:NO /RELEASE")
@@ -1418,11 +1419,8 @@ if(BUILD_wireshark OR BUILD_logray)
 			list(APPEND QT5_COMPILE_DEFINITIONS ${${_qt5_package}_COMPILE_DEFINITIONS})
 		endforeach()
 
-		if (Qt5Widgets_VERSION VERSION_LESS 5.11)
-			message(FATAL_ERROR "Qt 5.12 or later is required.")
-		endif()
 		if (Qt5Widgets_VERSION VERSION_LESS 5.12)
-			message(WARNING "Wireshark can be built with this version of Qt, though 5.12 or higher is recommended.")
+			message(FATAL_ERROR "Qt 5.12 or later is required. Qt 6 is recommended.")
 		endif()
 
 		if(APPLE AND "/usr/local/opt/qt5/lib/QtCore.framework" IN_LIST Qt5Core_INCLUDE_DIRS)
