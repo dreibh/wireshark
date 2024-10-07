@@ -46,7 +46,6 @@
 #include <wsutil/time_util.h>
 #include <wsutil/socket.h>
 #include <wsutil/privileges.h>
-#include <wsutil/report_message.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
@@ -1049,18 +1048,6 @@ int
 main(int argc, char *argv[])
 {
     char                *err_msg;
-    static const struct report_message_routines tshark_report_routines = {
-        failure_message,
-        failure_message,
-        open_failure_message,
-        read_failure_message,
-        write_failure_message,
-        cfile_open_failure_message,
-        cfile_dump_open_failure_message,
-        cfile_read_failure_message,
-        cfile_write_failure_message,
-        cfile_close_failure_message
-    };
     int                  opt;
     static const struct ws_option long_options[] = {
         {"help", ws_no_argument, NULL, 'h'},
@@ -1350,7 +1337,7 @@ main(int argc, char *argv[])
     }
 #endif /* HAVE_LUA */
 
-    init_report_message("TShark", &tshark_report_routines);
+    init_report_failure_message("TShark");
 
 #ifdef HAVE_LIBPCAP
     capture_opts_init(&global_capture_opts, capture_opts_get_interface_list);
@@ -4570,6 +4557,7 @@ print_columns(capture_file *cf, const epan_dissect_t *edt)
         const char* col_text = get_column_text(&cf->cinfo, i);
         switch (col_item->col_fmt) {
             case COL_NUMBER:
+            case COL_NUMBER_DIS:
                 column_len = col_len = strlen(col_text);
                 if (column_len < 5)
                     column_len = 5;

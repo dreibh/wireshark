@@ -32,7 +32,6 @@
 #ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
 #endif
-#include <wsutil/report_message.h>
 #include <wsutil/please_report_bug.h>
 #include <wsutil/unicode-utils.h>
 #include <wsutil/version_info.h>
@@ -451,18 +450,6 @@ int main(int argc, char *qt_argv[])
 #endif
     /* Start time in microseconds */
     uint64_t start_time = g_get_monotonic_time();
-    static const struct report_message_routines wireshark_report_routines = {
-        vfailure_alert_box,
-        vwarning_alert_box,
-        open_failure_alert_box,
-        read_failure_alert_box,
-        write_failure_alert_box,
-        cfile_open_failure_alert_box,
-        cfile_dump_open_failure_alert_box,
-        cfile_read_failure_alert_box,
-        cfile_write_failure_alert_box,
-        cfile_close_failure_alert_box
-    };
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     /*
@@ -624,7 +611,7 @@ int main(int argc, char *qt_argv[])
     ws_init_version_info("Logray", gather_wireshark_qt_compiled_info,
                          gather_wireshark_runtime_info);
 
-    init_report_message("Logray", &wireshark_report_routines);
+    init_report_alert_box("Logray");
 
     /* Create the user profiles directory */
     if (create_profiles_dir(&rf_path) == -1) {
@@ -664,6 +651,13 @@ int main(int argc, char *qt_argv[])
     // https://bugreports.qt.io/browse/QTBUG-55510 - Windows have wrong size
 #if defined(Q_OS_WIN)
     QApplication::setAttribute(Qt::AA_EnableHighDpiScaling);
+#endif
+
+    // This function must be called before creating the application object.
+    // Qt::HighDpiScaleFactorRoundingPolicy::PassThrough is the default in Qt6,
+    // so this doesn't have any effect (Round is the default in 5.14 & 5.15)
+#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0) && defined(Q_OS_WIN)
+    QGuiApplication::setHighDpiScaleFactorRoundingPolicy(Qt::HighDpiScaleFactorRoundingPolicy::PassThrough);
 #endif
 
     /* Create The Logray app */

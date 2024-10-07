@@ -69,6 +69,21 @@ write_failure_message(const char *filename, int err)
                filename, g_strerror(err));
 }
 
+/*
+ * Error message for a failed attempt to rename a file other than
+ * a capture file.
+ * "old_filename" is the name of the file being renamed; "new_filename"
+ * is the name to which it's being renamed; "err" is assumed to be a
+ * UNIX-style errno.
+ */
+void
+rename_failure_message(const char *old_filename, const char *new_filename,
+                       int err)
+{
+    cmdarg_err("An error occurred while renaming the file \"%s\" to \"%s\": %s.",
+               old_filename, new_filename, g_strerror(err));
+}
+
 static char *
 input_file_description(const char *fname)
 {
@@ -439,6 +454,11 @@ cfile_write_failure_message(const char *in_filename, const char *out_filename,
         g_free(err_info);
         break;
 
+    case WTAP_ERR_SHORT_WRITE:
+        cmdarg_err("A full write couldn't be done to the %s.",
+                   out_file_string);
+        break;
+
     case WTAP_ERR_INTERNAL:
         cmdarg_err("An internal error occurred while writing record%s to the %s.\n(%s)",
                    in_frame_string, out_file_string,
@@ -459,11 +479,6 @@ cfile_write_failure_message(const char *in_filename, const char *out_filename,
                    out_file_string);
   break;
 #endif
-
-    case WTAP_ERR_SHORT_WRITE:
-        cmdarg_err("A full write couldn't be done to the %s.",
-                   out_file_string);
-        break;
 
     default:
         cmdarg_err("An error occurred while writing to the %s: %s.",
@@ -508,20 +523,6 @@ cfile_close_failure_message(const char *filename, int err, char *err_info)
 
     switch (err) {
 
-    case ENOSPC:
-        cmdarg_err("Not all the packets could be written to the %s because there is "
-                   "no space left on the file system.",
-                   file_string);
-    break;
-
-#ifdef EDQUOT
-    case EDQUOT:
-        cmdarg_err("Not all the packets could be written to the %s because you are "
-                   "too close to, or over your disk quota.",
-                   file_string);
-  break;
-#endif
-
     case WTAP_ERR_CANT_CLOSE:
         cmdarg_err("The %s couldn't be closed for some unknown reason.",
                    file_string);
@@ -540,10 +541,47 @@ cfile_close_failure_message(const char *filename, int err, char *err_info)
         g_free(err_info);
         break;
 
+    case ENOSPC:
+        cmdarg_err("Not all the packets could be written to the %s because there is "
+                   "no space left on the file system.",
+                   file_string);
+    break;
+
+#ifdef EDQUOT
+    case EDQUOT:
+        cmdarg_err("Not all the packets could be written to the %s because you are "
+                   "too close to, or over your disk quota.",
+                   file_string);
+    break;
+#endif
+
     default:
         cmdarg_err("An error occurred while closing the file %s: %s.",
                    file_string, wtap_strerror(err));
         break;
     }
     g_free(file_string);
+}
+
+/*
+ * Register these routines with the report_message mechanism.
+ */
+void
+init_report_failure_message(const char *friendly_program_name)
+{
+    static const struct report_message_routines report_failure_routines = {
+        failure_message,
+        failure_message,
+        open_failure_message,
+        read_failure_message,
+        write_failure_message,
+        rename_failure_message,
+        cfile_open_failure_message,
+        cfile_dump_open_failure_message,
+        cfile_read_failure_message,
+        cfile_write_failure_message,
+        cfile_close_failure_message
+    };
+
+    init_report_message(friendly_program_name, &report_failure_routines);
 }

@@ -49,6 +49,16 @@ extern void read_failure_message(const char *filename, int err);
 extern void write_failure_message(const char *filename, int err);
 
 /*
+ * Error message for a failed attempt to rename a file other than
+ * a capture file.
+ * "old_filename" is the name of the file being renamed; "new_filename"
+ * is the name to which it's being renamed; "err" is assumed to be a
+ * UNIX-style errno.
+ */
+extern void rename_failure_message(const char *old_filename,
+                                   const char *new_filename, int err);
+
+/*
  * Error message for a failed attempt to open a capture file for input.
  * "filename" is the name of the file being opened; "err" is assumed
  * to be a UNIX-style errno or a WTAP_ERR_ value; "err_info" is assumed
@@ -121,6 +131,11 @@ extern void cfile_write_failure_message(const char *in_filename,
  */
 extern void cfile_close_failure_message(const char *filename, int err,
                                         char *err_info);
+
+/*
+ * Register these routines with the report_message mechanism.
+ */
+extern void init_report_failure_message(const char *friendly_program_name);
 
 #ifdef __cplusplus
 }

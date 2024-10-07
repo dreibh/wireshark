@@ -50,7 +50,6 @@
 #include "fileset.h"
 #include "frame_tvbuff.h"
 
-#include "ui/alert_box.h"
 #include "ui/simple_dialog.h"
 #include "ui/main_statusbar.h"
 #include "ui/progress_dlg.h"
@@ -129,8 +128,6 @@ static match_result match_time_reference(capture_file *cf, frame_data *fdata,
         wtap_rec *, Buffer *, void *criterion);
 static bool find_packet(capture_file *cf, ws_match_function match_function,
         void *criterion, search_direction dir);
-
-static void cf_rename_failure_alert_box(const char *filename, int err);
 
 /* Seconds spent processing packets between pushing UI updates. */
 #define PROGBAR_UPDATE_INTERVAL 0.150
@@ -324,7 +321,7 @@ cf_open(capture_file *cf, const char *fname, unsigned int type, bool is_tempfile
     return CF_OK;
 
 fail:
-    cfile_open_failure_alert_box(fname, *err, err_info);
+    report_cfile_open_failure(fname, *err, err_info);
     return CF_ERROR;
 }
 
@@ -781,7 +778,7 @@ cf_read(capture_file *cf, bool reloading)
         /* Put up a message box noting that the read failed somewhere along
            the line.  Don't throw out the stuff we managed to read, though,
            if any. */
-        cfile_read_failure_alert_box(NULL, err, err_info);
+        report_cfile_read_failure(NULL, err, err_info);
         return CF_READ_ERROR;
     } else if (too_many_records) {
         simple_message_box(ESD_TYPE_WARN, NULL,
@@ -1266,8 +1263,10 @@ add_packet_to_packet_list(frame_data *fdata, capture_file *cf,
         }
     }
 
-    if (fdata->passed_dfilter || fdata->ref_time)
+    if (fdata->passed_dfilter || fdata->ref_time) {
         cf->displayed_count++;
+        fdata->dis_num = cf->displayed_count;
+    }
 
     if (add_to_packet_list) {
         /* We fill the needed columns from new_packet_list */
@@ -1626,7 +1625,7 @@ cf_read_record(capture_file *cf, const frame_data *fdata,
     char *err_info;
 
     if (!wtap_seek_read(cf->provider.wth, fdata->file_off, rec, buf, &err, &err_info)) {
-        cfile_read_failure_alert_box(cf->filename, err, err_info);
+        report_cfile_read_failure(cf->filename, err, err_info);
         return false;
     }
     return true;
@@ -2572,7 +2571,7 @@ print_packet(capture_file *cf, frame_data *fdata, wtap_rec *rec, Buffer *buf,
             }
 
             /* Right-justify the packet number column. */
-            if (col_item->col_fmt == COL_NUMBER)
+            if (col_item->col_fmt == COL_NUMBER || col_item->col_fmt == COL_NUMBER_DIS)
                 snprintf(cp, column_len+1, "%*s", args->col_widths[i], col_text);
             else
                 snprintf(cp, column_len+1, "%-*s", args->col_widths[i], col_text);
@@ -2759,7 +2758,7 @@ cf_print_packets(capture_file *cf, print_args_t *print_args,
             }
 
             /* Right-justify the packet number column. */
-/*          if (cf->cinfo.col_fmt[i] == COL_NUMBER)
+/*          if (cf->cinfo.col_fmt[i] == COL_NUMBER || cf->cinfo.col_fmt[i] == COL_NUMBER_DIS)
                 snprintf(cp, column_len+1, "%*s", callback_args.col_widths[visible_col_count], cf->cinfo.columns[i].col_title);
             else*/
             snprintf(cp, column_len+1, "%-*s", callback_args.col_widths[visible_col_count], cf->cinfo.columns[i].col_title);
@@ -5253,7 +5252,7 @@ save_record(capture_file *cf, frame_data *fdata, wtap_rec *rec,
 
     /* and save the packet */
     if (!wtap_dump(args->pdh, &new_rec, ws_buffer_start_ptr(buf), &err, &err_info)) {
-        cfile_write_failure_alert_box(NULL, args->fname, err, err_info, fdata->num,
+        report_cfile_write_failure(NULL, args->fname, err, err_info, fdata->num,
                 args->file_type);
         return false;
     }
@@ -5414,7 +5413,7 @@ rescan_file(capture_file *cf, const char *fname, bool is_tempfile)
        e.g. comments or time-shifted frames.) */
     cf->provider.wth = wtap_open_offline(fname, WTAP_TYPE_AUTO, &err, &err_info, true);
     if (cf->provider.wth == NULL) {
-        cfile_open_failure_alert_box(fname, err, err_info);
+        report_cfile_open_failure(fname, err, err_info);
         return CF_READ_ERROR;
     }
 
@@ -5551,7 +5550,7 @@ rescan_file(capture_file *cf, const char *fname, bool is_tempfile)
         /* Put up a message box noting that the read failed somewhere along
            the line.  Don't throw out the stuff we managed to read, though,
            if any. */
-        cfile_read_failure_alert_box(NULL, err, err_info);
+        report_cfile_read_failure(NULL, err, err_info);
         return CF_READ_ERROR;
     } else
         return CF_READ_OK;
@@ -5569,9 +5568,6 @@ cf_save_records(capture_file *cf, const char *fname, unsigned save_format,
     addrinfo_lists_t *addr_lists;
     unsigned         framenum;
     int              err;
-#ifdef _WIN32
-    char            *display_basename;
-#endif
     enum {
         SAVE_WITH_MOVE,
         SAVE_WITH_COPY,
@@ -5640,7 +5636,7 @@ cf_save_records(capture_file *cf, const char *fname, unsigned save_format,
                        be if we didn't have permission to remove the file from
                        the temporary directory, and that might be fixable - but
                        is it worth requiring the user to go off and fix it?) */
-                    cf_rename_failure_alert_box(fname, errno);
+                    report_rename_failure(cf->filename, fname, errno);
                     goto fail;
                 }
             }
@@ -5708,7 +5704,7 @@ cf_save_records(capture_file *cf, const char *fname, unsigned save_format,
         params.idb_inf = NULL;
 
         if (pdh == NULL) {
-            cfile_dump_open_failure_alert_box(fname, err, err_info, save_format);
+            report_cfile_dump_open_failure(fname, err, err_info, save_format);
             goto fail;
         }
 
@@ -5749,7 +5745,7 @@ cf_save_records(capture_file *cf, const char *fname, unsigned save_format,
         }
 
         if (!wtap_dump_close(pdh, &needs_reload, &err, &err_info)) {
-            cfile_close_failure_alert_box(fname, err, err_info);
+            report_cfile_close_failure(fname, err, err_info);
             wtap_dump_params_cleanup(&params);
             goto fail;
         }
@@ -5768,17 +5764,14 @@ cf_save_records(capture_file *cf, const char *fname, unsigned save_format,
         /* Now do the rename. */
         if (ws_rename(fname_new, fname) == -1) {
             /* Well, the rename failed. */
-            cf_rename_failure_alert_box(fname, errno);
+            report_rename_failure(fname_new, fname, errno);
 #ifdef _WIN32
             /* Attempt to reopen the random file descriptor using the
                current file's filename.  (At this point, the sequential
                file descriptor is closed.) */
             if (!wtap_fdreopen(cf->provider.wth, cf->filename, &err)) {
                 /* Oh, well, we're screwed. */
-                display_basename = g_filename_display_basename(cf->filename);
-                simple_error_message_box(
-                        file_open_error_message(err, false), display_basename);
-                g_free(display_basename);
+                report_cfile_open_failure(cf->filename, err, NULL);
             }
 #endif
             goto fail;
@@ -5820,7 +5813,7 @@ cf_save_records(capture_file *cf, const char *fname, unsigned save_format,
                    new file's filename.  (At this point, the sequential
                    file descriptor is closed.) */
                 if (!wtap_fdreopen(cf->provider.wth, fname, &err)) {
-                    cfile_open_failure_alert_box(fname, err, err_info);
+                    report_cfile_open_failure(fname, err, err_info);
                     cf_close(cf);
                 } else {
                     g_free(cf->filename);
@@ -5967,7 +5960,7 @@ cf_export_specified_packets(capture_file *cf, const char *fname,
     params.idb_inf = NULL;
 
     if (pdh == NULL) {
-        cfile_dump_open_failure_alert_box(fname, err, err_info, save_format);
+        report_cfile_dump_open_failure(fname, err, err_info, save_format);
         goto fail;
     }
 
@@ -6016,7 +6009,7 @@ cf_export_specified_packets(capture_file *cf, const char *fname,
     }
 
     if (!wtap_dump_close(pdh, NULL, &err, &err_info)) {
-        cfile_close_failure_alert_box(fname, err, err_info);
+        report_cfile_close_failure(fname, err, err_info);
         goto fail;
     }
 
@@ -6026,7 +6019,7 @@ cf_export_specified_packets(capture_file *cf, const char *fname,
            on Windows.  Do the rename. */
         if (ws_rename(fname_new, fname) == -1) {
             /* Well, the rename failed. */
-            cf_rename_failure_alert_box(fname, errno);
+            report_rename_failure(fname_new, fname, errno);
             goto fail;
         }
         g_free(fname_new);
@@ -6049,44 +6042,6 @@ fail:
     wtap_dump_params_cleanup(&params);
 
     return CF_WRITE_ERROR;
-}
-
-/*
- * XXX - whether we mention the source pathname, the target pathname,
- * or both depends on the error and on what we find if we look for
- * one or both of them.
- */
-static void
-cf_rename_failure_alert_box(const char *filename, int err)
-{
-    char *display_basename;
-
-    display_basename = g_filename_display_basename(filename);
-    switch (err) {
-
-        case ENOENT:
-            /* XXX - should check whether the source exists and, if not,
-               report it as the problem and, if so, report the destination
-               as the problem. */
-            simple_error_message_box("The path to the file \"%s\" doesn't exist.",
-                    display_basename);
-            break;
-
-        case EACCES:
-            /* XXX - if we're doing a rename after a safe save, we should
-               probably say something else. */
-            simple_error_message_box("You don't have permission to move the capture file to \"%s\".",
-                    display_basename);
-            break;
-
-        default:
-            /* XXX - this should probably mention both the source and destination
-               pathnames. */
-            simple_error_message_box("The file \"%s\" could not be moved: %s.",
-                    display_basename, wtap_strerror(err));
-            break;
-    }
-    g_free(display_basename);
 }
 
 /* Reload the current capture file. */
