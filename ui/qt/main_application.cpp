@@ -496,6 +496,7 @@ void MainApplication::setConfigurationProfile(const char *profile_name, bool wri
 #endif
 
     setMonospaceFont(prefs.gui_font_name);
+    ColorUtils::setScheme(prefs.gui_color_scheme);
 
     // Freeze the packet list early to avoid updating column data before doing a
     // full redissection. The packet list will be thawed when redissection is done.
@@ -1092,13 +1093,13 @@ void MainApplication::refreshLocalInterfaces()
 #ifdef HAVE_LIBPCAP
 GList* MainApplication::getInterfaceList() const
 {
-     return interface_list_copy(cached_if_list_);
+    return interface_list_copy(cached_if_list_);
 }
 
 void MainApplication::setInterfaceList(GList *if_list)
 {
-     free_interface_list(cached_if_list_);
-     cached_if_list_ = interface_list_copy(if_list);
+    free_interface_list(cached_if_list_);
+    cached_if_list_ = interface_list_copy(if_list);
 }
 #endif
 
