@@ -19,9 +19,9 @@
 
 struct NECTORSliceHeader
 {
-   guint8 nsh_type;                         // Type
-   guint8 nsh_flags;                        // Flags (currently unused)
-   guint16 nsh_chunk_id;                    // Chunk ID to differentiate slices of different chunks
+   uint8_t nsh_type;                           // Type
+   uint8_t nsh_flags;                          // Flags (currently unused)
+   uint16_t nsh_chunk_id;                      // Chunk ID to differentiate slices of different chunks
 };
 
 
@@ -30,17 +30,17 @@ struct NECTORSliceHeader
 
 struct NECTORUncodedSliceHeader
 {
-   struct NECTORSliceHeader nush_slice_header;     // Common header
-   guint16                  nush_index;            // Index of slice in chunk
-   char                     nush_payload[];        // The slice data
+   struct NECTORSliceHeader nush_slice_header; // Common header
+   uint16_t                 nush_index;        // Index of slice in chunk
+   char                     nush_payload[];    // The slice data
 };
 
 
 struct NECTORCodedSliceHeader
 {
-   struct NECTORSliceHeader ncsh_slice_header;     // Common header
-   guint16                  ncsh_index;            // Index of slice in chunk (for debug)
-   char                     ncsh_payload[];        // The chunk data
+   struct NECTORSliceHeader ncsh_slice_header; // Common header
+   uint16_t                 ncsh_index;        // Index of slice in chunk (for debug)
+   char                     ncsh_payload[];    // The chunk data
 };
 
 
@@ -65,9 +65,9 @@ static int hf_length            = -1;
 static int hf_type              = -1;
 
 /* Initialize the subtree pointers */
-static gint ett_nector_data     = -1;
-static gint ett_nector_control  = -1;
-static gint ett_xml             = -1;
+static int ett_nector_data     = -1;
+static int ett_nector_control  = -1;
+static int ett_xml             = -1;
 
 /* Reference to XML dissector */
 static dissector_handle_t xml_handle;
@@ -101,26 +101,26 @@ static const value_string nsh_type_values[] = {
 };
 
 
-static guint
+static uint32_t
 dissect_nector_data_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *nector_tree)
 {
-  guint total_length;
+  uint32_t total_length;
 
-  const guint8 type = tvb_get_guint8(message_tvb, NSH_TYPE_OFFSET);
+  const uint8_t type = tvb_get_uint8(message_tvb, NSH_TYPE_OFFSET);
 
   proto_tree_add_item(nector_tree, hf_nsh_type, message_tvb, NSH_TYPE_OFFSET, NSH_TYPE_LENGTH, ENC_BIG_ENDIAN);
   /*flags_item = */ proto_tree_add_item(nector_tree, hf_nsh_flags,  message_tvb, NSH_FLAGS_OFFSET, NSH_FLAGS_LENGTH,  ENC_BIG_ENDIAN);
-  const guint16 nsh_chunk_id = tvb_get_ntohs(message_tvb, NSH_CHUNK_ID_OFFSET);
+  const uint16_t nsh_chunk_id = tvb_get_ntohs(message_tvb, NSH_CHUNK_ID_OFFSET);
   proto_tree_add_item(nector_tree, hf_nsh_chunk_id, message_tvb, NSH_CHUNK_ID_OFFSET, NSH_CHUNK_ID_LENGTH, ENC_BIG_ENDIAN);
   total_length = NSH_CHUNK_ID_OFFSET + NSH_CHUNK_ID_LENGTH;
 
   switch (type) {
     case NSHT_UNCODED: {
         proto_tree_add_item(nector_tree, hf_nush_index, message_tvb, NUSH_INDEX_OFFSET, NUSH_INDEX_LENGTH, ENC_BIG_ENDIAN);
-        const guint16 nush_index = tvb_get_ntohs(message_tvb, NUSH_INDEX_OFFSET);
+        const uint16_t nush_index = tvb_get_ntohs(message_tvb, NUSH_INDEX_OFFSET);
         total_length += NUSH_INDEX_LENGTH;
         if(tvb_captured_length(message_tvb) > NUSH_PAYLOAD_OFFSET) {
-          const guint16 payload_length = tvb_captured_length(message_tvb) - NUSH_PAYLOAD_OFFSET;
+          const uint16_t payload_length = tvb_captured_length(message_tvb) - NUSH_PAYLOAD_OFFSET;
           proto_tree_add_item(nector_tree, hf_nush_payload, message_tvb, NUSH_PAYLOAD_OFFSET, payload_length, ENC_BIG_ENDIAN);
           total_length += payload_length;
           col_add_fstr(pinfo->cinfo, COL_INFO, "Uncoded Slice #%u of Chunk #%u: %u B payload",
@@ -130,10 +130,10 @@ dissect_nector_data_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tre
       break;
     case NSHT_CODED: {
         proto_tree_add_item(nector_tree, hf_ncsh_index, message_tvb, NCSH_INDEX_OFFSET, NCSH_INDEX_LENGTH, ENC_BIG_ENDIAN);
-        const guint16 ncsh_index = tvb_get_ntohs(message_tvb, NCSH_INDEX_OFFSET);
+        const uint16_t ncsh_index = tvb_get_ntohs(message_tvb, NCSH_INDEX_OFFSET);
         total_length += NCSH_INDEX_LENGTH;
         if(tvb_captured_length(message_tvb) > NCSH_PAYLOAD_OFFSET) {
-          const guint16 payload_length = tvb_captured_length(message_tvb) - NCSH_PAYLOAD_OFFSET;
+          const uint16_t payload_length = tvb_captured_length(message_tvb) - NCSH_PAYLOAD_OFFSET;
           proto_tree_add_item(nector_tree, hf_ncsh_payload, message_tvb, NCSH_PAYLOAD_OFFSET, payload_length, ENC_BIG_ENDIAN);
           total_length += payload_length;
           col_add_fstr(pinfo->cinfo, COL_INFO, "Coded Slice #%u of Chunk #%u: %u B payload",
@@ -149,15 +149,15 @@ dissect_nector_data_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tre
 }
 
 
-static guint
+static uint32_t
 dissect_nector_control_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *nector_tree)
 {
-  const guint32 xml_length = tvb_get_guint32(message_tvb, NCTRL_LENGTH_OFFSET, ENC_BIG_ENDIAN);
+  const uint32_t xml_length = tvb_get_uint32(message_tvb, NCTRL_LENGTH_OFFSET, ENC_BIG_ENDIAN);
 
   char* xml = (char*)tvb_get_string_enc(wmem_packet_scope(), message_tvb, NCTRL_MESSAGE_OFFSET, MIN(64, xml_length), ENC_ASCII|ENC_NA);
   char type[64];
   if(sscanf(xml, "<%62s ", (char*)&type) == 1) {
-     proto_tree_add_item(nector_tree, hf_type, message_tvb, NCTRL_MESSAGE_OFFSET + 1, (gint)strlen(type), ENC_BIG_ENDIAN);
+     proto_tree_add_item(nector_tree, hf_type, message_tvb, NCTRL_MESSAGE_OFFSET + 1, strlen(type), ENC_BIG_ENDIAN);
      col_add_fstr(pinfo->cinfo, COL_INFO, "%s", type);
   }
   proto_tree_add_item(nector_tree, hf_length, message_tvb, NCTRL_LENGTH_OFFSET, NCTRL_LENGTH_LENGTH, ENC_BIG_ENDIAN);
@@ -184,7 +184,7 @@ dissect_nector_data(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree,
 
   if (tvb_reported_length(message_tvb) < (NSH_CHUNK_ID_OFFSET + NSH_CHUNK_ID_LENGTH))
     return(0);
-  const guint8 type = tvb_get_guint8(message_tvb, NSH_TYPE_OFFSET);
+  const uint8_t type = tvb_get_uint8(message_tvb, NSH_TYPE_OFFSET);
   if ((type != NSHT_UNCODED) && (type != NSHT_CODED))
     return(0);
 
@@ -200,6 +200,13 @@ dissect_nector_data(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree,
 }
 
 
+static bool
+dissect_nector_data_heur(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+{
+   return dissect_nector_data(message_tvb, pinfo, tree, data) > 0;
+}
+
+
 static int
 dissect_nector_control(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
@@ -208,10 +215,10 @@ dissect_nector_control(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tr
 
   if (tvb_reported_length(message_tvb) < 4)
     return(0);
-  const guint32 xml_length = tvb_get_guint32(message_tvb, 0, ENC_BIG_ENDIAN);
+  const uint32_t xml_length = tvb_get_uint32(message_tvb, 0, ENC_BIG_ENDIAN);
   if ((xml_length < 8) || (xml_length > 65536))
     return(0);
-  if (tvb_get_guint8(message_tvb, NCTRL_MESSAGE_OFFSET) != (guint8)'<')
+  if (tvb_get_uint8(message_tvb, NCTRL_MESSAGE_OFFSET) != (uint8_t)'<')
     return(0);
 
   col_set_str(pinfo->cinfo, COL_PROTOCOL, "NECTOR Control");
@@ -222,6 +229,13 @@ dissect_nector_control(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tr
 
   /* Dissect the message */
   return dissect_nector_control_message(message_tvb, pinfo, nector_tree);
+}
+
+
+static bool
+dissect_nector_control_heur(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+{
+   return dissect_nector_control(message_tvb, pinfo, tree, data) > 0;
 }
 
 
@@ -245,10 +259,10 @@ proto_register_nector(void)
   };
 
   /* Setup protocol subtree array */
-  static gint* def_ett_nector_data[] = {
+  static int* def_ett_nector_data[] = {
     &ett_nector_data
   };
-  static gint* def_ett_nector_control[] = {
+  static int* def_ett_nector_control[] = {
     &ett_nector_control,
     &ett_xml
   };
@@ -267,8 +281,8 @@ proto_register_nector(void)
 void
 proto_reg_handoff_nector(void)
 {
-  heur_dissector_add("udp",  dissect_nector_data,    "NECTOR Data",    "nector_data",    proto_nector_data,    HEURISTIC_ENABLE);
-  heur_dissector_add("tcp",  dissect_nector_control, "NECTOR Control", "nector_control", proto_nector_control, HEURISTIC_ENABLE);
+  heur_dissector_add("udp",  dissect_nector_data_heur,    "NECTOR Data",    "nector_data",    proto_nector_data,    HEURISTIC_ENABLE);
+  heur_dissector_add("tcp",  dissect_nector_control_heur, "NECTOR Control", "nector_control", proto_nector_control, HEURISTIC_ENABLE);
 
   xml_handle = find_dissector_add_dependency("xml", proto_nector_control);
 }
