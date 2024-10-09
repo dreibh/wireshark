@@ -15,14 +15,8 @@ if(DEFINED ENV{FORCE_CMAKE_NINJA_NON_VERBOSE})
 	unset(CMAKE_VERBOSE_MAKEFILE CACHE)
 endif()
 
-# Needed for add_custom_command() WORKING_DIRECTORY generator expressions
-cmake_minimum_required(VERSION 3.13)
-if(POLICY CMP0083)
-	cmake_policy(SET CMP0083 NEW)
-endif()
-if(POLICY CMP0092)
-	cmake_policy(SET CMP0092 NEW)
-endif()
+# https://doc.qt.io/qt-6/cmake-supported-cmake-versions.html
+cmake_minimum_required(VERSION 3.16)
 if(POLICY CMP0135)
 	cmake_policy(SET CMP0135 NEW)
 endif()
@@ -230,8 +224,8 @@ if(WIN32)
 	file(TO_CMAKE_PATH ${EXTRA_INSTALLER_DIR} _file_download_dir)
 
 	# Download Npcap required by the Windows installer
-	set(NPCAP_VERSION "1.79")
-	set(NPCAP_SHA256 "a95577ebbc67fc45b319e2ef3a55f4e9b211fe82ed4cb9d8be6b1a9e2425ce53")
+	set(NPCAP_VERSION "1.80")
+	set(NPCAP_SHA256 "ac4f26d7d9f994d6f04141b2266f02682def51af63c09c96a7268552c94a6535")
 	set(NPCAP_FILENAME "npcap-${NPCAP_VERSION}.exe")
 	set(NPCAP_URL "${LIBS_URL}/Npcap/${NPCAP_FILENAME}")
 	FetchContent_Declare(Npcap

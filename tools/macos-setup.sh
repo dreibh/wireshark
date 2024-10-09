@@ -176,10 +176,10 @@ ZSTD_VERSION=1.5.6
 ZLIBNG_VERSION=2.1.6
 LIBXML2_VERSION=2.11.9 # Matches vcpkg
 LIBXML2_SHA256=780157a1efdb57188ec474dca87acaee67a3a839c2525b2214d318228451809f
-LZ4_VERSION=1.9.4
+LZ4_VERSION=1.10.0
 SBC_VERSION=2.0
 CARES_VERSION=1.31.0
-LIBSSH_VERSION=0.10.5
+LIBSSH_VERSION=0.11.1
 # mmdbresolve
 MAXMINDDB_VERSION=1.9.1
 NGHTTP2_VERSION=1.62.1
@@ -200,8 +200,9 @@ OPENCORE_AMR_SHA256=483eb4061088e2b34b358e47540b5d495a96cd468e361050fae615b1809d
 OPUS_VERSION=1.4
 
 # Falco libs (libsinsp and libscap) and their dependencies. Unset for now.
-#FALCO_LIBS_VERSION=0.17.1
+#FALCO_LIBS_VERSION=0.18.1
 if [ "$FALCO_LIBS_VERSION" ] ; then
+    FALCO_LIBS_SHA256=1812e8236c4cb51d3fe5dd066d71be99f25da7ed22d8feeeebeed09bdc26325f
     JSONCPP_VERSION=1.9.5
     ONETBB_VERSION=2021.11.0
     # 2023-06-01 and later require Abseil.
@@ -2573,6 +2574,7 @@ install_falco_libs() {
         [ -f "falco-libs-$FALCO_LIBS_VERSION.tar.gz" ] || curl "${CURL_REMOTE_NAME_OPTS[@]}" --remote-header-name "https://github.com/falcosecurity/libs/archive/refs/tags/$FALCO_LIBS_VERSION.tar.gz"
         $no_build && echo "Skipping installation" && return
         mv "libs-$FALCO_LIBS_VERSION.tar.gz" "falco-libs-$FALCO_LIBS_VERSION.tar.gz"
+        echo "$FALCO_LIBS_SHA256  falco-libs-$FALCO_LIBS_VERSION.tar.gz" | shasum --algorithm 256 --check
         tar -xf "falco-libs-$FALCO_LIBS_VERSION.tar.gz"
         mv "libs-$FALCO_LIBS_VERSION" "falco-libs-$FALCO_LIBS_VERSION"
         cd "falco-libs-$FALCO_LIBS_VERSION"
