@@ -3826,6 +3826,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Color Scheme:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Light Mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dark Mode</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Font</source>
         <translation type="unfinished"></translation>
     </message>
@@ -14272,6 +14284,10 @@ a:hover {
     </message>
     <message>
         <source>Display Filters</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Display Filter Reference</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
