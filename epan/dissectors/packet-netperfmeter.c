@@ -106,6 +106,10 @@ static int hf_addflow_sndbuffersize;
 static int hf_addflow_maxmsgsize;
 static int hf_addflow_cmt;
 static int hf_addflow_ccid;
+static int hf_addflow_ndiffports;
+static int hf_addflow_pathmgr;
+static int hf_addflow_cc;
+static int hf_addflow_scheduler;
 static int hf_addflow_onoffevents;
 static int hf_addflow_onoffeventarray;
 
@@ -233,6 +237,10 @@ static hf_register_info hf[] = {
    { &hf_addflow_maxmsgsize,         { "Max. Message Size",     "netperfmeter.addflow_maxmsgsize",         FT_UINT16,  BASE_DEC,  NULL,                      0x0, NULL, HFILL } },
    { &hf_addflow_cmt,                { "CMT",                   "netperfmeter.addflow_cmt",                FT_UINT8,   BASE_HEX,  VALS(cmt_values),          0x0, NULL, HFILL } },
    { &hf_addflow_ccid,               { "CCID",                  "netperfmeter.addflow_ccid",               FT_UINT8,   BASE_HEX,  NULL,                      0x0, NULL, HFILL } },
+   { &hf_addflow_ndiffports,         { "NDiffPorts",            "netperfmeter.addflow_ndiffports",         FT_UINT16,  BASE_DEC,  NULL,                      0x0, NULL, HFILL } },
+   { &hf_addflow_pathmgr,            { "Path Manager",          "netperfmeter.addflow_pathmgr",            FT_STRING,  BASE_NONE, NULL,                      0x0, NULL, HFILL } },
+   { &hf_addflow_cc,                 { "Congestion Control",    "netperfmeter.addflow_cc",                 FT_STRING,  BASE_NONE, NULL,                      0x0, NULL, HFILL } },
+   { &hf_addflow_scheduler,          { "Scheduler",             "netperfmeter.addflow_scheduler",          FT_STRING,  BASE_NONE, NULL,                      0x0, NULL, HFILL } },
    { &hf_addflow_onoffevents,        { "On/Off Events",         "netperfmeter.addflow_onoffevents",        FT_UINT16,  BASE_DEC,  NULL,                      0x0, NULL, HFILL } },
    { &hf_addflow_onoffeventarray,    { "On/Off Event",          "netperfmeter.addflow_onoffeventarray",    FT_UINT32,  BASE_DEC,  NULL,                      0x0, NULL, HFILL } },
    { &hf_addflow_flag_debug,         { "Debug",                 "netperfmeter.addflow_flags.debug",        FT_BOOLEAN, 8, TFS(&tfs_set_notset), NPMAFF_DEBUG,       NULL, HFILL } },
@@ -350,7 +358,12 @@ dissect_npm_add_flow_message(tvbuff_t *message_tvb, proto_tree *message_tree, pr
   proto_tree_add_item(message_tree, hf_addflow_cmt,           message_tvb, 140, 1, ENC_BIG_ENDIAN);
   proto_tree_add_item(message_tree, hf_addflow_ccid,          message_tvb, 141, 1, ENC_BIG_ENDIAN);
 
-  onoffitem = proto_tree_add_item(message_tree, hf_addflow_onoffevents, message_tvb, 142, 2, ENC_BIG_ENDIAN);
+  proto_tree_add_item(message_tree, hf_addflow_ndiffports,    message_tvb, 142, 2, ENC_BIG_ENDIAN);
+  proto_tree_add_item(message_tree, hf_addflow_pathmgr,       message_tvb, 144, 16, ENC_UTF_8);
+  proto_tree_add_item(message_tree, hf_addflow_cc,            message_tvb, 160, 16, ENC_UTF_8);
+  proto_tree_add_item(message_tree, hf_addflow_scheduler,     message_tvb, 176, 16, ENC_UTF_8);
+
+  onoffitem = proto_tree_add_item(message_tree, hf_addflow_onoffevents, message_tvb, 192, 2, ENC_BIG_ENDIAN);
 
   onoffevents = tvb_get_ntohs(message_tvb, 142);
   if (onoffevents > 0) {
@@ -536,7 +549,8 @@ dissect_npm_heur(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, vo
 
   /* For TCP, UDP or DCCP:
       Type must either be NETPERFMETER_DATA or NETPERFMETER_IDENTIFY_FLOW */
-  const uint8_t type = tvb_get_uint8(message_tvb, 0);
+  const uint8_t  type = tvb_get_uint8(message_tvb, 0);
+  const uint16_t size = tvb_get_ntohs(message_tvb, 2);
   switch(type) {
     case NETPERFMETER_DATA:
       if (length < 48 + 8)
@@ -556,6 +570,15 @@ dissect_npm_heur(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, vo
         return false;
       }
       break;
+    case NETPERFMETER_ACKNOWLEDGE:
+    case NETPERFMETER_ADD_FLOW:
+    case NETPERFMETER_REMOVE_FLOW:
+    case NETPERFMETER_START:
+    case NETPERFMETER_STOP:
+    case NETPERFMETER_RESULTS:
+      if (length < size)
+        return false;
+     break;
     default:
       /* Not a NetPerfMeter packet */
         return false;
