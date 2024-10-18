@@ -65,13 +65,13 @@
 enum configuration_namespace_e {
     CONFIGURATION_NAMESPACE_UNINITIALIZED,
     CONFIGURATION_NAMESPACE_WIRESHARK,
-    CONFIGURATION_NAMESPACE_LOGRAY
+    CONFIGURATION_NAMESPACE_STRATOSHARK
 };
 enum configuration_namespace_e configuration_namespace = CONFIGURATION_NAMESPACE_UNINITIALIZED;
 
-#define CONFIGURATION_NAMESPACE_PROPER (configuration_namespace == CONFIGURATION_NAMESPACE_WIRESHARK ? "Wireshark" : "Logray")
-#define CONFIGURATION_NAMESPACE_LOWER (configuration_namespace == CONFIGURATION_NAMESPACE_WIRESHARK ? "wireshark" : "logray")
-#define CONFIGURATION_ENVIRONMENT_VARIABLE(suffix) (configuration_namespace == CONFIGURATION_NAMESPACE_WIRESHARK ? "WIRESHARK_" suffix : "LOGRAY_" suffix)
+#define CONFIGURATION_NAMESPACE_PROPER (configuration_namespace == CONFIGURATION_NAMESPACE_WIRESHARK ? "Wireshark" : "Stratoshark")
+#define CONFIGURATION_NAMESPACE_LOWER (configuration_namespace == CONFIGURATION_NAMESPACE_WIRESHARK ? "wireshark" : "stratoshark")
+#define CONFIGURATION_ENVIRONMENT_VARIABLE(suffix) (configuration_namespace == CONFIGURATION_NAMESPACE_WIRESHARK ? "WIRESHARK_" suffix : "STRATOSHARK_" suffix)
 
 char *persconffile_dir;
 char *datafile_dir;
@@ -312,9 +312,9 @@ set_configuration_namespace(const char *namespace_name)
     {
         configuration_namespace = CONFIGURATION_NAMESPACE_WIRESHARK;
     }
-    else if (g_ascii_strcasecmp(namespace_name, "logray") == 0)
+    else if (g_ascii_strcasecmp(namespace_name, "stratoshark") == 0)
     {
-        configuration_namespace = CONFIGURATION_NAMESPACE_LOGRAY;
+        configuration_namespace = CONFIGURATION_NAMESPACE_STRATOSHARK;
     }
     else
     {
@@ -332,7 +332,7 @@ get_configuration_namespace(void)
 
 bool is_packet_configuration_namespace(void)
 {
-    return configuration_namespace != CONFIGURATION_NAMESPACE_LOGRAY;
+    return configuration_namespace != CONFIGURATION_NAMESPACE_STRATOSHARK;
 }
 
 #ifndef _WIN32
@@ -1064,7 +1064,7 @@ get_datafile_dir(void)
         /*
          * The user specified a different directory for data files
          * and we aren't running with special privileges.
-         * Let {WIRESHARK,LOGRAY}_DATA_DIR take precedence.
+         * Let {WIRESHARK,STRATOSHARK}_DATA_DIR take precedence.
          * XXX - We might be able to dispense with the priv check
          */
         datafile_dir = g_strdup(g_getenv(data_dir_envar));
@@ -1234,7 +1234,7 @@ init_plugin_dir(void)
         /*
          * The user specified a different directory for plugins
          * and we aren't running with special privileges.
-         * Let {WIRESHARK,LOGRAY}_PLUGIN_DIR take precedence.
+         * Let {WIRESHARK,STRATOSHARK}_PLUGIN_DIR take precedence.
          */
         plugin_dir = g_strdup(g_getenv(plugin_dir_envar));
     }
@@ -1626,7 +1626,7 @@ get_persconffile_dir_no_profile(void)
     const char *persconf_namespace = CONFIGURATION_NAMESPACE_PROPER;
     if (env != NULL) {
         /*
-         * Concatenate %APPDATA% with "\Wireshark" or "\Logray".
+         * Concatenate %APPDATA% with "\Wireshark" or "\Stratoshark".
          */
         persconffile_dir = g_build_filename(env, persconf_namespace, NULL);
         return persconffile_dir;
@@ -1687,7 +1687,7 @@ get_persconffile_dir_no_profile(void)
         }
     }
     path = g_build_filename(homedir,
-                            configuration_namespace == CONFIGURATION_NAMESPACE_WIRESHARK ? ".wireshark" : ".logray",
+                            configuration_namespace == CONFIGURATION_NAMESPACE_WIRESHARK ? ".wireshark" : ".stratoshark",
                             NULL);
     if (g_file_test(path, G_FILE_TEST_IS_DIR)) {
         g_free(xdg_path);

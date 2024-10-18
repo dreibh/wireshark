@@ -103,12 +103,12 @@ WS_DLL_PUBLIC
 const char *get_ws_vcs_version_info(void);
 
 /*
- * Return a version number string for Logray, including, for builds
- * from a tree checked out from Logray's version control system,
+ * Return a version number string for Stratoshark, including, for builds
+ * from a tree checked out from Stratoshark's version control system,
  * something identifying what version was checked out.
  */
 WS_DLL_PUBLIC
-const char *get_lr_vcs_version_info(void);
+const char *get_ss_vcs_version_info(void);
 
 /*
  * Shorter version of get_ws_vcs_version_info().

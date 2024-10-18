@@ -296,8 +296,8 @@ AboutDialog::AboutDialog(QWidget *parent) :
     QFile f_license;
 
     if (!is_packet_configuration_namespace()) {
-        setWindowTitle(tr("About Logray"));
-        ui->tabWidget->setTabText(ui->tabWidget->indexOf(ui->tab_wireshark), tr("Logray"));
+        setWindowTitle(tr("About Stratoshark"));
+        ui->tabWidget->setTabText(ui->tabWidget->indexOf(ui->tab_wireshark), tr("Stratoshark"));
     }
 
     /* Wireshark tab */
@@ -483,7 +483,7 @@ void AboutDialog::showEvent(QShowEvent * event)
 
 void AboutDialog::updateWiresharkText()
 {
-    QString vcs_version_info_str = is_packet_configuration_namespace() ? get_ws_vcs_version_info() : get_lr_vcs_version_info();
+    QString vcs_version_info_str = is_packet_configuration_namespace() ? get_ws_vcs_version_info() : get_ss_vcs_version_info();
     QString copyright_info_str = get_copyright_info();
     QString license_info_str = get_license_info();
     QString comp_info_str = gstring_free_to_qbytearray(get_compiled_version_info(gather_wireshark_qt_compiled_info));
