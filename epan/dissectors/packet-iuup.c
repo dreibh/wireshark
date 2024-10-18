@@ -28,30 +28,11 @@
 #include <wsutil/crc10.h>
 #include <wsutil/crc6.h>
 
+#include "packet-rtp.h"
+#include "packet-iuup.h"
+
 void proto_reg_handoff_iuup(void);
 void proto_register_iuup(void);
-
-#define ACKNACK_MASK  0x0c
-#define PROCEDURE_MASK  0x0f
-#define FQC_MASK 0xc0
-#define PDUTYPE_MASK 0xf0
-
-typedef struct _iuup_rfci_t {
-    unsigned id;
-    unsigned sum_len;
-    unsigned num_of_subflows;
-    struct {
-        unsigned len;
-    } subflow[8];
-    struct _iuup_rfci_t* next;
-} iuup_rfci_t;
-
-typedef struct {
-    uint32_t id;
-    unsigned num_of_subflows;
-    iuup_rfci_t* rfcis;
-    iuup_rfci_t* last_rfci;
-} iuup_circuit_t;
 
 static int proto_iuup;
 
@@ -135,10 +116,6 @@ static dissector_handle_t iuup_handle;
 
 static bool dissect_fields;
 static bool two_byte_pseudoheader;
-
-#define PDUTYPE_DATA_WITH_CRC 0
-#define PDUTYPE_DATA_NO_CRC 1
-#define PDUTYPE_DATA_CONTROL_PROC 14
 
 static const value_string iuup_pdu_types[] = {
     {PDUTYPE_DATA_WITH_CRC,"Data with CRC"},
@@ -742,10 +719,11 @@ static int dissect_iuup_control(tvbuff_t* tvb, packet_info* pinfo,
     return tvb_captured_length(tvb);
 }
 
-static int dissect_iuup(tvbuff_t* tvb_in, packet_info* pinfo, proto_tree* tree, void* data _U_) {
+static int dissect_iuup(tvbuff_t *tvb_in, packet_info *pinfo, proto_tree *tree, void *data) {
     proto_item* iuup_item = NULL;
     proto_item* pdutype_item = NULL;
     proto_tree* iuup_tree = NULL;
+    struct _rtp_info *rtp_info = NULL;
     uint8_t first_octet;
     uint8_t pdutype;
     unsigned phdr = 0;
@@ -766,6 +744,10 @@ static int dissect_iuup(tvbuff_t* tvb_in, packet_info* pinfo, proto_tree* tree, 
         conversation_set_elements_by_id(pinfo, CONVERSATION_IUUP, phdr);
 
         tvb = tvb_new_subset_length(tvb_in,2,len);
+    } else if (data) {
+        /* Coming from RTP */
+        rtp_info = (struct _rtp_info*)data;
+        rtp_info->info_is_iuup = true;
     }
 
     first_octet = tvb_get_uint8(tvb,0);
