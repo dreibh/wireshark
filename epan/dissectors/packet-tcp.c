@@ -8162,8 +8162,6 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     tcph->th_ack = tcph->th_rawack;
     th_off_x2 = tvb_get_uint8(tvb, offset + 12);
     tcpinfo.flags = tcph->th_flags = tvb_get_ntohs(tvb, offset + 12) & TH_MASK;
-    tcph->th_win = tvb_get_ntohs(tvb, offset + 14);
-    real_window = tcph->th_win;
     tcph->th_hlen = hi_nibble(th_off_x2) * 4;  /* TCP header length, in bytes */
 
     /* find(or create if needed) the conversation for this tcp session
@@ -8181,37 +8179,36 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
     tcpd=get_tcp_conversation_data(conv,pinfo);
 
-    /* If this is a SYN packet, then check if its seq-nr is different
-     * from the base_seq of the retrieved conversation. If this is the
-     * case, create a new conversation with the same addresses and ports
-     * and set the TA_PORTS_REUSED flag. (XXX: There is a small chance
-     * that this is an old duplicate SYN received after the connection
-     * is ESTABLISHED on both sides, the other side will respond with
-     * an appropriate ACK, and this SYN ought to be ignored rather than
-     * create a new conversation.)
-     *
-     * If the seq-nr is the same as the base_seq, it might be a simple
-     * retransmission, reattempting a handshake that was reset (due
-     * to a half-open connection) with the same sequence number, or
-     * (unlikely) a new connection that happens to use the same sequence
-     * number as the previous one (#18333).
-     *
-     * If we have received a RST or FIN on the retrieved conversation,
-     * we can detect that unlikely case, and create a new conversation
-     * in order to clear out the follow info, sequence analysis,
-     * desegmentation, etc.
-     * If not, it's probably a retransmission, and will be marked
-     * as one later, but restore some flow values to reduce the
-     * sequence analysis warnings if our capture file is missing a RST
-     * or FIN segment that was present on the network.
-     *
-     * XXX - Is this affected by MPTCP which can use multiple SYNs?
-     */
-    if (tcpd != NULL  && (tcph->th_flags & (TH_SYN|TH_ACK)) == TH_SYN) {
-        if (tcpd->fwd->static_flags & TCP_S_BASE_SEQ_SET) {
-            if(tcph->th_seq!=tcpd->fwd->base_seq || (tcpd->conversation_completeness & TCP_COMPLETENESS_RST) || (tcpd->conversation_completeness & TCP_COMPLETENESS_FIN)) {
-                if (!(pinfo->fd->visited)) {
-
+    if (!PINFO_FD_VISITED(pinfo)) {
+        /* If this is a SYN packet, then check if its seq-nr is different
+        * from the base_seq of the retrieved conversation. If this is the
+        * case, create a new conversation with the same addresses and ports
+        * and set the TA_PORTS_REUSED flag. (XXX: There is a small chance
+        * that this is an old duplicate SYN received after the connection
+        * is ESTABLISHED on both sides, the other side will respond with
+        * an appropriate ACK, and this SYN ought to be ignored rather than
+        * create a new conversation.)
+        *
+        * If the seq-nr is the same as the base_seq, it might be a simple
+        * retransmission, reattempting a handshake that was reset (due
+        * to a half-open connection) with the same sequence number, or
+        * (unlikely) a new connection that happens to use the same sequence
+        * number as the previous one (#18333).
+        *
+        * If we have received a RST or FIN on the retrieved conversation,
+        * we can detect that unlikely case, and create a new conversation
+        * in order to clear out the follow info, sequence analysis,
+        * desegmentation, etc.
+        * If not, it's probably a retransmission, and will be marked
+        * as one later, but restore some flow values to reduce the
+        * sequence analysis warnings if our capture file is missing a RST
+        * or FIN segment that was present on the network.
+        *
+        * XXX - Is this affected by MPTCP which can use multiple SYNs?
+        */
+        if (tcpd != NULL  && (tcph->th_flags & (TH_SYN|TH_ACK)) == TH_SYN) {
+            if (tcpd->fwd->static_flags & TCP_S_BASE_SEQ_SET) {
+                if(tcph->th_seq!=tcpd->fwd->base_seq || (tcpd->conversation_completeness & TCP_COMPLETENESS_RST) || (tcpd->conversation_completeness & TCP_COMPLETENESS_FIN)) {
                     conv=conversation_new_strat(pinfo, CONVERSATION_TCP, 0);
                     tcpd=get_tcp_conversation_data(conv,pinfo);
 
@@ -8221,15 +8218,13 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
                     /* As above, a new conversation starting with a SYN implies conversation completeness value 1 */
                     conversation_is_new = true;
-                }
-            } else {
-                if (!(pinfo->fd->visited)) {
+                } else {
                     /*
-                     * Sometimes we need to restore the nextseq value.
-                     * As stated in RFC 793 3.4 a RST packet might be
-                     * sent with SEQ being equal to the ACK received,
-                     * thus breaking our flow monitoring. (issue 17616)
-                     */
+                    * Sometimes we need to restore the nextseq value.
+                    * As stated in RFC 793 3.4 a RST packet might be
+                    * sent with SEQ being equal to the ACK received,
+                    * thus breaking our flow monitoring. (issue 17616)
+                    */
                     if(tcp_analyze_seq && tcpd->fwd->tcp_analyze_seq_info) {
                         tcpd->fwd->tcp_analyze_seq_info->nextseq = tcpd->fwd->tcp_analyze_seq_info->maxseqtobeacked;
                     }
@@ -8237,59 +8232,55 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                     if(!tcpd->ta)
                         tcp_analyze_get_acked_struct(pinfo->num, tcph->th_seq, tcph->th_ack, true, tcpd);
                 }
-            }
-        }
-        else {
-            /*
-             * TCP_S_BASE_SEQ_SET being not set, we are dealing with a new conversation,
-             * either created ad hoc above (general case), or by a higher protocol such as FTP.
-             * Track this information, as the Completeness value will be initialized later.
-             * See issue 19092.
-             */
-            if (!(pinfo->fd->visited))
+            } else {
+                /*
+                * TCP_S_BASE_SEQ_SET being not set, we are dealing with a new conversation,
+                * either created ad hoc above (general case), or by a higher protocol such as FTP.
+                * Track this information, as the Completeness value will be initialized later.
+                * See issue 19092.
+                */
                 conversation_is_new = true;
+            }
+            tcpd->had_acc_ecn_setup_syn = (tcph->th_flags & (TH_AE|TH_CWR|TH_ECE)) == (TH_AE|TH_CWR|TH_ECE);
         }
-        tcpd->had_acc_ecn_setup_syn = (tcph->th_flags & (TH_AE|TH_CWR|TH_ECE)) == (TH_AE|TH_CWR|TH_ECE);
-    }
 
-    /* Handle cases of a SYN/ACK packet where there's evidence of a new
-     * conversation but the capture is missing the SYN packet of the
-     * new conversation.
-     *
-     * If this is a SYN/ACK packet, then check if its seq-nr is different
-     * from the base_seq of the retrieved conversation. If this is the
-     * case, create a new conversation as above with a SYN packet, and set
-     * the TA_PORTS_REUSED flag and override the base seq.
-     * If the seq-nr is the same as the base_seq, then do nothing so it
-     * will be marked as a retransmission later, unless we have received
-     * a RST or FIN on the conversation (in which case this is the case
-     * of a RST followed by the same initial sequence number being picked.)
-     *
-     * If this is an unacceptable SYN-ACK and the other side believes that
-     * the conversation is ESTABLISHED, it will be replied to with an
-     * empty ACK with the current sequence number (according to the other
-     * side.) See RFC 9293 3.5.2. This *probably* leads to a situation where
-     * the side sending this SYN-ACK then issues a RST, because the two
-     * sides have different ideas about the connection state. It's not clear
-     * how to handle the annoying edge case where A sends a SYN, B responds
-     * with a SYN-ACK that A intends to accept, but before A can finish
-     * the handshake B responds with another SYN-ACK _with a different seq-nr_
-     * instead of retransmitting, then A responds accepting the first SYN-ACK,
-     * and then B goes on happily using the sequence number from the first
-     * SYN-ACK, forgetting all about the second one it sent instead of sending
-     * a RST. In such a case we'll have changed the seq-nr to the new one
-     * and/or set up a new conversation instead of just ignoring that SYN-ACK.
-     *
-     * XXX - Is this affected by MPTCP which can use multiple SYNs?
-     */
-    if (tcpd != NULL && (tcph->th_flags & (TH_SYN|TH_ACK)) == (TH_SYN|TH_ACK)) {
-        if ((tcpd->fwd->static_flags & TCP_S_BASE_SEQ_SET) &&
-            (tcph->th_seq != tcpd->fwd->base_seq ||
-             (tcpd->conversation_completeness & TCP_COMPLETENESS_RST) ||
-             (tcpd->conversation_completeness & TCP_COMPLETENESS_FIN))) {
-            /* the retrieved conversation might have a different base_seq (issue 16944) */
+        /* Handle cases of a SYN/ACK packet where there's evidence of a new
+        * conversation but the capture is missing the SYN packet of the
+        * new conversation.
+        *
+        * If this is a SYN/ACK packet, then check if its seq-nr is different
+        * from the base_seq of the retrieved conversation. If this is the
+        * case, create a new conversation as above with a SYN packet, and set
+        * the TA_PORTS_REUSED flag and override the base seq.
+        * If the seq-nr is the same as the base_seq, then do nothing so it
+        * will be marked as a retransmission later, unless we have received
+        * a RST or FIN on the conversation (in which case this is the case
+        * of a RST followed by the same initial sequence number being picked.)
+        *
+        * If this is an unacceptable SYN-ACK and the other side believes that
+        * the conversation is ESTABLISHED, it will be replied to with an
+        * empty ACK with the current sequence number (according to the other
+        * side.) See RFC 9293 3.5.2. This *probably* leads to a situation where
+        * the side sending this SYN-ACK then issues a RST, because the two
+        * sides have different ideas about the connection state. It's not clear
+        * how to handle the annoying edge case where A sends a SYN, B responds
+        * with a SYN-ACK that A intends to accept, but before A can finish
+        * the handshake B responds with another SYN-ACK _with a different seq-nr_
+        * instead of retransmitting, then A responds accepting the first SYN-ACK,
+        * and then B goes on happily using the sequence number from the first
+        * SYN-ACK, forgetting all about the second one it sent instead of sending
+        * a RST. In such a case we'll have changed the seq-nr to the new one
+        * and/or set up a new conversation instead of just ignoring that SYN-ACK.
+        *
+        * XXX - Is this affected by MPTCP which can use multiple SYNs?
+        */
+        if (tcpd != NULL && (tcph->th_flags & (TH_SYN|TH_ACK)) == (TH_SYN|TH_ACK)) {
+            if ((tcpd->fwd->static_flags & TCP_S_BASE_SEQ_SET) &&
+                (tcph->th_seq != tcpd->fwd->base_seq ||
+                (tcpd->conversation_completeness & TCP_COMPLETENESS_RST) ||
+                (tcpd->conversation_completeness & TCP_COMPLETENESS_FIN))) {
+                /* the retrieved conversation might have a different base_seq (issue 16944) */
 
-            if (!PINFO_FD_VISITED(pinfo)) {
                 conv=conversation_new_strat(pinfo, CONVERSATION_TCP, 0);
                 tcpd=get_tcp_conversation_data(conv,pinfo);
 
@@ -8300,21 +8291,17 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                 /* As above, a new conversation */
                 conversation_is_new = true;
             }
+            tcpd->had_acc_ecn_setup_syn_ack = ((tcph->th_flags & (TH_AE|TH_CWR)) == TH_CWR) ||
+                                            ((tcph->th_flags & (TH_AE|TH_ECE)) == TH_AE);
         }
-        tcpd->had_acc_ecn_setup_syn_ack = ((tcph->th_flags & (TH_AE|TH_CWR)) == TH_CWR) ||
-                                          ((tcph->th_flags & (TH_AE|TH_ECE)) == TH_AE);
-    }
 
-    /* Do we need to calculate timestamps relative to the tcp-stream? */
-    if (tcp_calculate_ts) {
-        tcppd = (struct tcp_per_packet_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tcp, pinfo->curr_layer_num);
+        /* Do we need to calculate timestamps relative to the tcp-stream? */
+        if (tcp_calculate_ts) {
+            tcppd = (struct tcp_per_packet_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tcp, pinfo->curr_layer_num);
 
-        /*
-         * Calculate the timestamps relative to this conversation (but only on
-         * the first run when frames are accessed sequentially)
-         */
-        if (!(pinfo->fd->visited))
+            /* Calculate the timestamps relative to this conversation */
             tcp_calculate_timestamps(pinfo, tcpd, tcppd);
+        }
     }
 
     if (tcpd) {
@@ -8455,22 +8442,15 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             proto_item_set_generated(pi);
 
             /* handle TCP seq# analysis parse all new segments we see */
-            if(tcp_analyze_seq) {
+            /* We need the window size to perform sequence analysis.
+             * (Zero is a possible value treated specially. */
+            if(tcp_analyze_seq && tvb_bytes_exist(tvb, offset + 14, 2)) {
+
+                /* Get it on every pass so that dissection is the same. */
+                tcph->th_win = tvb_get_ntohs(tvb, offset + 14);
+
                 if(!(pinfo->fd->visited)) {
                     tcp_analyze_sequence_number(pinfo, tcph->th_rawseq, tcph->th_rawack, tcph->th_seglen, tcph->th_flags, tcph->th_win, tcpd, tcppd);
-                }
-            }
-
-            /* re-calculate window size, based on scaling factor */
-            if (!(tcph->th_flags&TH_SYN)) {   /* SYNs are never scaled */
-                if (tcpd && (tcpd->fwd->win_scale>=0)) {
-                    (tcph->th_win)<<=tcpd->fwd->win_scale;
-                }
-                else if (tcpd && (tcpd->fwd->win_scale == -1)) {
-                    /* i.e. Unknown, but wasn't signalled with no scaling, so use preference setting instead! */
-                    if (tcp_default_window_scaling>=0) {
-                        (tcph->th_win)<<=tcp_default_window_scaling;
-                    }
                 }
             }
 
@@ -8499,8 +8479,6 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     tcp_info_append_uint(pinfo, "Seq", tcph->th_seq);
     if (tcph->th_flags&TH_ACK)
         tcp_info_append_uint(pinfo, "Ack", tcph->th_ack);
-
-    tcp_info_append_uint(pinfo, "Win", tcph->th_win);
 
     if (tcp_summary_in_tree) {
         proto_item_append_text(ti, ", Seq: %u", tcph->th_seq);
@@ -8533,12 +8511,11 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
            but it's now time to give up if the header length is bogus. */
         col_append_fstr(pinfo->cinfo, COL_INFO, ", bogus TCP header length (%u, must be at least %u)",
                         tcph->th_hlen, TCPH_MIN_LEN);
-        if (tree) {
-            tf = proto_tree_add_uint_bits_format_value(tcp_tree, hf_tcp_hdr_len, tvb, (offset + 12) << 3, 4, tcph->th_hlen,
-                                                       ENC_BIG_ENDIAN, "%u bytes (%u)", tcph->th_hlen, tcph->th_hlen >> 2);
-            expert_add_info_format(pinfo, tf, &ei_tcp_bogus_header_length,
-                                   "Bogus TCP header length (%u, must be at least %u)", tcph->th_hlen, TCPH_MIN_LEN);
-        }
+
+        tf = proto_tree_add_uint_bits_format_value(tcp_tree, hf_tcp_hdr_len, tvb, (offset + 12) << 3, 4, tcph->th_hlen,
+                                                    ENC_BIG_ENDIAN, "%u bytes (%u)", tcph->th_hlen, tcph->th_hlen >> 2);
+        expert_add_info_format(pinfo, tf, &ei_tcp_bogus_header_length,
+                                "Bogus TCP header length (%u, must be at least %u)", tcph->th_hlen, TCPH_MIN_LEN);
         return offset+12;
     }
 
@@ -8548,10 +8525,10 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
      * Add a CLEANUP function so that the tap_queue_packet gets called
      * if any exception is thrown.
      *
-     * XXX: Could we move this earlier, before the window size and urgent
-     * pointer, for example? Probably, but if so, remember to
-     * CLEANUP_CALL_AND_POP before any return statements, such as the
-     * one above.
+     * XXX - We haven't necessarily retrieved the window size yet. We'll
+     * try to do so before sending it to the tap, but if the header is
+     * truncated to 14 octets, the taps will receive a window size of 0.
+     * Can they handle it with minimal problems?
      */
 
     tcp_tap_cleanup_t *cleanup = wmem_new(pinfo->pool, tcp_tap_cleanup_t);
@@ -8705,48 +8682,6 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
         tf = proto_tree_add_string(field_tree, hf_tcp_flags_str, tvb, offset + 12, 2, flags_str_first_letter);
         proto_item_set_generated(tf);
-        /* As discussed in bug 5541, it is better to use two separate
-         * fields for the real and calculated window size.
-         */
-        proto_tree_add_uint(tcp_tree, hf_tcp_window_size_value, tvb, offset + 14, 2, real_window);
-        scaled_pi = proto_tree_add_uint(tcp_tree, hf_tcp_window_size, tvb, offset + 14, 2, tcph->th_win);
-        proto_item_set_generated(scaled_pi);
-
-        if( !(tcph->th_flags&TH_SYN) && tcpd ) {
-            switch (tcpd->fwd->win_scale) {
-
-            case -1:
-                /* Unknown */
-                {
-                    int16_t win_scale = tcpd->fwd->win_scale;
-                    bool override_with_pref = false;
-
-                    /* Use preference setting (if set) */
-                    if (tcp_default_window_scaling != WindowScaling_NotKnown) {
-                        win_scale = (1 << tcp_default_window_scaling);
-                        override_with_pref = true;
-                    }
-
-                    scaled_pi = proto_tree_add_int_format_value(tcp_tree, hf_tcp_window_size_scalefactor, tvb, offset + 14, 2,
-                                                          win_scale, "%d (%s)",
-                                                          win_scale,
-                                                          (override_with_pref) ? "missing - taken from preference" : "unknown");
-                    proto_item_set_generated(scaled_pi);
-                }
-                break;
-
-            case -2:
-                /* No window scaling used */
-                scaled_pi = proto_tree_add_int_format_value(tcp_tree, hf_tcp_window_size_scalefactor, tvb, offset + 14, 2, tcpd->fwd->win_scale, "%d (no window scaling used)", tcpd->fwd->win_scale);
-                proto_item_set_generated(scaled_pi);
-                break;
-
-            default:
-                /* Scaling from signalled value */
-                scaled_pi = proto_tree_add_int_format_value(tcp_tree, hf_tcp_window_size_scalefactor, tvb, offset + 14, 2, 1<<tcpd->fwd->win_scale, "%d", 1<<tcpd->fwd->win_scale);
-                proto_item_set_generated(scaled_pi);
-            }
-        }
     }
 
     if(tcph->th_flags & TH_SYN) {
@@ -8789,14 +8724,6 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         /* XXX - find a way to know the server port and output only that one */
         expert_add_info(pinfo, tf_rst, &ei_tcp_connection_rst);
 
-        /* Check if the window value of this reset packet is in the NetScaler error code range */
-        const char *tcp_ns_reset_window_error_descr = try_val_to_str(real_window, netscaler_reset_window_error_code_vals);
-        if (tcp_ns_reset_window_error_descr != NULL) { /* If its in the Netscaler range, add tree */
-            item = proto_tree_add_string(tcp_tree, hf_tcp_ns_reset_window_error_code, tvb,
-                   offset + 14, 2,tcp_ns_reset_window_error_descr);
-            proto_item_set_generated(item);
-        }
-
     }
     if(tcp_analyze_seq
             && (tcph->th_flags & (TH_SYN|TH_ACK)) == TH_ACK
@@ -8821,6 +8748,77 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             && (tcph->th_flags & (TH_SYN|TH_ACK)) == TH_ACK) {
         if(tcpd->fwd->is_first_ack) {
             tcpd->fwd->is_first_ack = false;
+        }
+    }
+
+    tcph->th_win = tvb_get_ntohs(tvb, offset + 14);
+    real_window = tcph->th_win;
+    /* re-calculate window size based on scaling factor */
+    if (!(tcph->th_flags&TH_SYN)) {   /* SYNs are never scaled */
+        if (tcpd && (tcpd->fwd->win_scale>=0)) {
+            (tcph->th_win)<<=tcpd->fwd->win_scale;
+        }
+        else if (tcpd && (tcpd->fwd->win_scale == -1)) {
+            /* i.e. Unknown, but wasn't signalled with no scaling, so use preference setting instead! */
+            if (tcp_default_window_scaling>=0) {
+                (tcph->th_win)<<=tcp_default_window_scaling;
+            }
+        }
+    }
+
+    tcp_info_append_uint(pinfo, "Win", tcph->th_win);
+
+    if (tree) {
+        /* As discussed in bug 5541, it is better to use two separate
+         * fields for the real and calculated window size.
+         */
+        proto_tree_add_uint(tcp_tree, hf_tcp_window_size_value, tvb, offset + 14, 2, real_window);
+        if(tcph->th_flags & TH_RST){
+            /* Check if the window value of this reset packet is in the NetScaler error code range */
+            const char *tcp_ns_reset_window_error_descr = try_val_to_str(real_window, netscaler_reset_window_error_code_vals);
+            if (tcp_ns_reset_window_error_descr != NULL) { /* If its in the Netscaler range, add tree */
+                item = proto_tree_add_string(tcp_tree, hf_tcp_ns_reset_window_error_code, tvb,
+                       offset + 14, 2, tcp_ns_reset_window_error_descr);
+                proto_item_set_generated(item);
+            }
+        }
+        scaled_pi = proto_tree_add_uint(tcp_tree, hf_tcp_window_size, tvb, offset + 14, 2, tcph->th_win);
+        proto_item_set_generated(scaled_pi);
+
+        if( !(tcph->th_flags&TH_SYN) && tcpd ) {
+            switch (tcpd->fwd->win_scale) {
+
+            case -1:
+                /* Unknown */
+                {
+                    int16_t win_scale = tcpd->fwd->win_scale;
+                    bool override_with_pref = false;
+
+                    /* Use preference setting (if set) */
+                    if (tcp_default_window_scaling != WindowScaling_NotKnown) {
+                        win_scale = (1 << tcp_default_window_scaling);
+                        override_with_pref = true;
+                    }
+
+                    scaled_pi = proto_tree_add_int_format_value(tcp_tree, hf_tcp_window_size_scalefactor, tvb, offset + 14, 2,
+                                                          win_scale, "%d (%s)",
+                                                          win_scale,
+                                                          (override_with_pref) ? "missing - taken from preference" : "unknown");
+                    proto_item_set_generated(scaled_pi);
+                }
+                break;
+
+            case -2:
+                /* No window scaling used */
+                scaled_pi = proto_tree_add_int_format_value(tcp_tree, hf_tcp_window_size_scalefactor, tvb, offset + 14, 2, tcpd->fwd->win_scale, "%d (no window scaling used)", tcpd->fwd->win_scale);
+                proto_item_set_generated(scaled_pi);
+                break;
+
+            default:
+                /* Scaling from signalled value */
+                scaled_pi = proto_tree_add_int_format_value(tcp_tree, hf_tcp_window_size_scalefactor, tvb, offset + 14, 2, 1<<tcpd->fwd->win_scale, "%d", 1<<tcpd->fwd->win_scale);
+                proto_item_set_generated(scaled_pi);
+            }
         }
     }
 

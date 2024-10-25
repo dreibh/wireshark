@@ -379,6 +379,7 @@ static expert_field ei_oran_udpcomphdr_should_be_zero;
 static expert_field ei_oran_radio_fragmentation_c_plane;
 static expert_field ei_oran_radio_fragmentation_u_plane;
 static expert_field ei_oran_lastRbdid_out_of_range;
+static expert_field ei_oran_rbgMask_beyond_last_rbdid;
 
 
 /* These are the message types handled by this dissector */
@@ -489,7 +490,10 @@ enum section_c_types {
     SEC_C_UE_SCHED = 5,
     SEC_C_CH_INFO = 6,
     SEC_C_LAA = 7,
-    SEC_C_ACK_NACK_FEEDBACK = 8
+    SEC_C_ACK_NACK_FEEDBACK = 8,
+    SEC_C_SINR_REPORTING = 9,
+    SEC_C_RRM_MEAS_REPORTS = 10,
+    SEC_C_REQUEST_RRM_MEAS = 11
 };
 
 static const range_string section_types[] = {
@@ -502,7 +506,10 @@ static const range_string section_types[] = {
     { SEC_C_CH_INFO,           SEC_C_CH_INFO,           "Channel information" },
     { SEC_C_LAA,               SEC_C_LAA,               "LAA (License Assisted Access)" },
     { SEC_C_ACK_NACK_FEEDBACK, SEC_C_ACK_NACK_FEEDBACK, "ACK/NACK Feedback" },
-    { 9,                       255,                     "Reserved for future use" },
+    { SEC_C_SINR_REPORTING,    SEC_C_SINR_REPORTING,    "SINR Reporting" },
+    { SEC_C_RRM_MEAS_REPORTS,  SEC_C_RRM_MEAS_REPORTS,  "RRM Measurement Reports" },
+    { SEC_C_REQUEST_RRM_MEAS,  SEC_C_REQUEST_RRM_MEAS,  "Request RRM Measurements" },
+    { 12,                      255,                     "Reserved for future use" },
     { 0, 0, NULL} };
 
 static const range_string section_types_short[] = {
@@ -515,7 +522,10 @@ static const range_string section_types_short[] = {
     { SEC_C_CH_INFO,           SEC_C_CH_INFO,           "(Channel info)      " },
     { SEC_C_LAA,               SEC_C_LAA,               "(LAA)               " },
     { SEC_C_ACK_NACK_FEEDBACK, SEC_C_ACK_NACK_FEEDBACK, "(ACK/NACK)          " },
-    { 9,                       255,                     "Reserved for future use" },
+    { SEC_C_SINR_REPORTING,    SEC_C_SINR_REPORTING,    "(SINR Reporting)    " },
+    { SEC_C_RRM_MEAS_REPORTS,  SEC_C_RRM_MEAS_REPORTS,  "(RRM Meas Reports)  " },
+    { SEC_C_REQUEST_RRM_MEAS,  SEC_C_REQUEST_RRM_MEAS,  "(Req RRM Meas)      " },
+    { 12,                      255,                     "Reserved for future use" },
     { 0, 0, NULL }
 };
 
@@ -612,46 +622,58 @@ static const value_string exttype_vals[] = {
     {21,    "Variable PRB group size for channel information"},
     {22,    "ACK/NACK request"},
     {23,    "Multiple symbol modulation compression parameters"},
+    {24,    "PUSCH DMRS configuration"},
+    {25,    "Symbol reordering for DMRS-BF"},
+    {26,    "Frequency offset feedback"},
+    {27,    "O-DU controlled dimensionality reduction"},
     {0, NULL}
 };
 
 /**************************************************************************************/
 /* Keep track for each Section Extension, which section types are allowed to carry it */
-#define HIGHEST_EXTTYPE 23
+#define HIGHEST_EXTTYPE 27
 typedef struct {
     bool ST0;
     bool ST1;
     bool ST3;
     bool ST5;
     bool ST6;
+    bool ST10;
+    bool ST11;
 } AllowedCTs_t;
 
 
 static AllowedCTs_t ext_cts[HIGHEST_EXTTYPE] = {
-    /* ST0    ST1    ST3    ST5    ST6     */
-    { false, true,  true,  false, false },  // SE 1      (1,3)
-    { false, true,  true,  false, false },  // SE 2      (1,3)
-    { false, true,  true,  false, false },  // SE 3      (1,3)
-    { false, true,  true,  true,  false },  // SE 4      (1,3,5)
-    { false, true,  true,  true,  false },  // SE 5      (1,3,5)
-    { false, true,  true,  true,  false },  // SE 6      (1,3,5)
-    { true,  false, false, false, false },  // SE 7      (0)
-    { false, false, false, true,  false },  // SE 8      (5)
-    { true,  true,  true,  true,  true  },  // SE 9      (all)
-    { false, true,  true,  true,  false },  // SE 10     (1,3,5)
-    { false, true,  true,  false, false },  // SE 11     (1,3)
-    { false, true,  true,  true,  false },  // SE 12     (1,3,5)
-    { false, true,  true,  true,  false },  // SE 13     (1,3,5)
-    { false, false, false, true,  false },  // SE 14     (5)
-    { false, false, false, true,  true  },  // SE 15     (5,6)
-    { false, false, false, true,  false },  // SE 16     (5)
-    { false, false, false, true,  false },  // SE 17     (5)
-    { false, true,  true,  true,  false },  // SE 18     (1,3,5)
-    { false, true,  true,  false, false },  // SE 19     (1,3)
-    { true,  true,  true,  true,  true  },  // SE 20     (all)
-    { false, false, false, true,  true  },  // SE 21     (5,6)
-    { true,  true,  true,  true,  true  },  // SE 22     (all?)
-    { false, true,  true,  true,  false },  // SE 23     (1,3,5)
+    /* ST0    ST1    ST3    ST5    ST6   ST10    ST11 */
+    { false, true,  true,  false, false, false, false},   // SE 1      (1,3)
+    { false, true,  true,  false, false, false, false},   // SE 2      (1,3)
+    { false, true,  true,  false, false, false, false},   // SE 3      (1,3)
+    { false, true,  true,  true,  false, false, false},   // SE 4      (1,3,5)
+    { false, true,  true,  true,  false, false, false},   // SE 5      (1,3,5)
+    { false, true,  true,  true,  false, false, false},   // SE 6      (1,3,5)
+    { true,  false, false, false, false, false, false},   // SE 7      (0)
+    { false, false, false, true,  false, false, false},   // SE 8      (5)
+    { true,  true,  true,  true,  true,  true,  true },   // SE 9      (all)
+    { false, true,  true,  true,  false, false, false},   // SE 10     (1,3,5)
+    { false, true,  true,  false, false, false, false},   // SE 11     (1,3)
+    { false, true,  true,  true,  false, false, false},   // SE 12     (1,3,5)
+    { false, true,  true,  true,  false, false, false},   // SE 13     (1,3,5)
+    { false, false, false, true,  false, false, false},   // SE 14     (5)
+    { false, false, false, true,  true,  false, false},   // SE 15     (5,6)
+    { false, false, false, true,  false, false, false},   // SE 16     (5)
+    { false, false, false, true,  false, false, false},   // SE 17     (5)
+    { false, true,  true,  true,  false, false, false},   // SE 18     (1,3,5)
+    { false, true,  true,  false, false, false, false},   // SE 19     (1,3)
+    { true,  true,  true,  true,  true,  false, false},   // SE 20     (0,1,3,5)
+    { false, false, false, true,  true,  false, false},   // SE 21     (5,6)
+    { true,  true,  true,  true,  true,  true,  true },   // SE 22     (all)
+    { false, true,  true,  true,  false, false, false},   // SE 23     (1,3,5)
+    { false, false, false, true,  false, false, false },  // SE 24     (5)
+    { false, false, false, true,  false, false, false },  // SE 25     (5)
+    { false, false, false, true,  false, false, false },  // SE 26     (5)
+    { false, false, false, true,  false, false, false },  // SE 27     (5)
+
+
 };
 
 static bool se_allowed_in_st(unsigned se, unsigned ct)
@@ -927,6 +949,7 @@ typedef struct {
 
     uint8_t  ext6_num_bits_set;
     uint8_t  ext6_bits_set[28];  /* Which bit position this entry has */
+    /* TODO: store an f value for each bit position? */
 
     /* Ext 12 config */
     bool     ext12_set;
@@ -948,13 +971,13 @@ typedef struct {
     bool     ext21_set;
     uint8_t  ext21_ci_prb_group_size;
 
-    /* Results (after calling ext11_work_out_bundles()) */
+    /* Results/settings (after calling ext11_work_out_bundles()) */
     uint32_t num_bundles;
 #define MAX_BFW_BUNDLES 512
     struct {
         uint32_t start;      /* first prb of bundle */
         uint32_t end;        /* last prb of bundle*/
-        bool     is_orphan;  /* true if not complete (i.e., < numBundPrb) */
+        bool     is_orphan;  /* true if not complete (i.e., end-start < numBundPrb) */
     } bundles[MAX_BFW_BUNDLES];
 } ext11_settings_t;
 
@@ -964,7 +987,6 @@ typedef struct {
 static void ext11_work_out_bundles(unsigned startPrbc,
                                    unsigned numPrbc,
                                    unsigned numBundPrb,             /* number of PRBs pre (full) bundle */
-                                   bool rad _U_,
                                    ext11_settings_t *settings)
 {
     /* Allocation configured by ext 6 */
@@ -995,6 +1017,11 @@ static void ext11_work_out_bundles(unsigned startPrbc,
         for (uint8_t n=0;
              n < (settings->ext6_num_bits_set * settings->ext6_rbg_size) / numBundPrb;
              n++) {
+
+            /* Watch out for array bound */
+            if (n >= 28) {
+                break;
+            }
 
             /* For each bundle... */
 
@@ -2398,7 +2425,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
 
                 /* repetition */
                 proto_tree_add_bits_item(extension_tree, hf_oran_repetition, tvb, offset*8, 1, ENC_BIG_ENDIAN);
-                /* rbgSize */
+                /* rbgSize (PRBs per bit set in rbgMask) */
                 uint32_t rbgSize;
                 proto_item *rbg_size_ti;
                 rbg_size_ti = proto_tree_add_item_ret_uint(extension_tree, hf_oran_rbgSize, tvb, offset, 1, ENC_BIG_ENDIAN, &rbgSize);
@@ -2443,23 +2470,52 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                         ext11_settings.ext6_rbg_size = 16; break;
                     /* N.B., encoded in 3 bits, so no other values are possible */
                 }
-                /* Record which bits (and count) are set in rbgMask */
-                for (unsigned n=0; n < 28 && ext11_settings.ext6_num_bits_set < 28; n++) {
-                    if ((rbgMask >> n) & 0x01) {
-                        ext11_settings.ext6_bits_set[ext11_settings.ext6_num_bits_set++] = n;
-                    }
-                }
 
+                /* Set to looked-up value */
+                rbgSize = ext11_settings.ext6_rbg_size;
+
+                uint32_t lastRbgid = 0;
                 if (rbgSize != 0) {
                     /* The O-DU shall not use combinations of startPrbc, numPrbc and rbgSize leading to a value of lastRbgid larger than 27 */
-                    uint32_t lastRbgid = (uint32_t)ceil((numPrbc + (startPrbc % rbgSize)) / rbgSize) - 1;
+                    /* i.e., leftmost bit used should not need to go off left end of rbgMask! */
+                    lastRbgid = (uint32_t)ceil((numPrbc + (startPrbc % rbgSize)) / (float)rbgSize) - 1;
                     if (lastRbgid > 27) {
                         expert_add_info_format(pinfo, rbg_size_ti, &ei_oran_lastRbdid_out_of_range,
                                                "SE6: rbgSize (%u) not compatible with startPrbc(%u) and numPrbc(%u)",
                                                rbgSize, startPrbc, numPrbc);
+                        break;
                     }
                 }
 
+                /* Record (and count) which bits are set in rbgMask */
+                bool first_seen = false;
+                unsigned first_seen_pos=0, last_seen_pos=0;
+                for (unsigned n=0; n < 28 && ext11_settings.ext6_num_bits_set < 28; n++) {
+                    if ((rbgMask >> n) & 0x01) {
+                        ext11_settings.ext6_bits_set[ext11_settings.ext6_num_bits_set++] = n;
+                        if (!first_seen) {
+                            first_seen = true;
+                            first_seen_pos = n;
+                        }
+                        last_seen_pos = n;
+                    }
+                }
+
+                /* Show how many bits were set in rbgMask */
+                proto_item_append_text(rbgmask_ti, " (%u bits set)", ext11_settings.ext6_num_bits_set);
+                /* Also, that is the range of bits */
+                if (first_seen) {
+                    proto_item_append_text(rbgmask_ti, " (%u bits spread)", last_seen_pos-first_seen_pos+1);
+                }
+
+                /* Complain if last set bit is beyond lastRbgid */
+                if (first_seen) {
+                    if (last_seen_pos > lastRbgid) {
+                        expert_add_info_format(pinfo, rbgmask_ti, &ei_oran_rbgMask_beyond_last_rbdid,
+                                               "SE6: rbgMask (0x%07x) has bit %u set, but lastRbgId is %u",
+                                               rbgMask, last_seen_pos, lastRbgid);
+                    }
+                }
                 break;
             }
 
@@ -2559,6 +2615,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 if (disableBFWs) {
                     proto_item_append_text(extension_ti, " (disableBFWs)");
                 }
+
                 /* RAD */
                 proto_tree_add_item_ret_boolean(extension_tree, hf_oran_rad,
                                     tvb, offset, 1, ENC_BIG_ENDIAN, &rad);
@@ -2598,7 +2655,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     }
 
                     /* Work out bundles! */
-                    ext11_work_out_bundles(startPrbc, numPrbc, numBundPrb, rad, &ext11_settings);
+                    ext11_work_out_bundles(startPrbc, numPrbc, numBundPrb, &ext11_settings);
                     num_bundles = ext11_settings.num_bundles;
 
                     /* Add (complete) bundles */
@@ -2634,7 +2691,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                         break;
                     }
 
-                    ext11_work_out_bundles(startPrbc, numPrbc, numBundPrb, rad, &ext11_settings);
+                    ext11_work_out_bundles(startPrbc, numPrbc, numBundPrb, &ext11_settings);
                     num_bundles = ext11_settings.num_bundles;
 
                     for (unsigned n=0; n < num_bundles; n++) {
@@ -6341,9 +6398,8 @@ proto_register_oran(void)
         { &ei_oran_udpcomphdr_should_be_zero, { "oran_fh_cus.udcomphdr_should_be_zero", PI_MALFORMED, PI_WARN, "C-Plane udCompHdr in DL should be set to 0", EXPFILL }},
         { &ei_oran_radio_fragmentation_c_plane, { "oran_fh_cus.radio_fragmentation_c_plane", PI_MALFORMED, PI_ERROR, "Radio fragmentation not allowed in C-PLane", EXPFILL }},
         { &ei_oran_radio_fragmentation_u_plane, { "oran_fh_cus.radio_fragmentation_u_plane", PI_UNDECODED, PI_WARN, "Radio fragmentation in C-PLane not yet supported", EXPFILL }},
-        { &ei_oran_lastRbdid_out_of_range, { "oran_fh_cus.lastrbdid_out_of_range", PI_MALFORMED, PI_WARN, "SE 6 has bad rbgSize", EXPFILL }}
-
-
+        { &ei_oran_lastRbdid_out_of_range, { "oran_fh_cus.lastrbdid_out_of_range", PI_MALFORMED, PI_WARN, "SE 6 has bad rbgSize", EXPFILL }},
+        { &ei_oran_rbgMask_beyond_last_rbdid, { "oran_fh_cus.rbgmask_beyond_lastrbdid", PI_MALFORMED, PI_WARN, "rbgMask has bits set beyond lastRbgId", EXPFILL }}
     };
 
     /* Register the protocol name and description */
