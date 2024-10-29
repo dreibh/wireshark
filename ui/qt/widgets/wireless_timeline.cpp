@@ -386,9 +386,9 @@ struct wlan_radio* WirelessTimeline::get_wlan_radio(uint32_t packet_num)
 void WirelessTimeline::doToolTip(struct wlan_radio *wr, QPoint pos, int x)
 {
     if (x < position(wr->start_tsf, 1.0)) {
-        QToolTip::showText(pos, QString("Inter frame space %1 " UTF8_MICRO_SIGN "s").arg(wr->ifs));
+        QToolTip::showText(pos, QStringLiteral("Inter frame space %1 " UTF8_MICRO_SIGN "s").arg(wr->ifs));
     } else {
-        QToolTip::showText(pos, QString("Total duration %1 " UTF8_MICRO_SIGN "s\nNAV %2 " UTF8_MICRO_SIGN "s")
+        QToolTip::showText(pos, QStringLiteral("Total duration %1 " UTF8_MICRO_SIGN "s\nNAV %2 " UTF8_MICRO_SIGN "s")
                            .arg(wr->end_tsf-wr->start_tsf).arg(wr->nav));
     }
 }
@@ -420,11 +420,7 @@ void WirelessTimeline::wheelEvent(QWheelEvent *event)
         zoom_level += steps;
         if (zoom_level < 0) zoom_level = 0;
         if (zoom_level > TIMELINE_MAX_ZOOM) zoom_level = TIMELINE_MAX_ZOOM;
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
         zoom(event->position().x() / width());
-#else
-        zoom(event->posF().x() / width());
-#endif
     }
 }
 

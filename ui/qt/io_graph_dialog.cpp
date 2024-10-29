@@ -443,8 +443,6 @@ IOGraphDialog::IOGraphDialog(QWidget &parent, CaptureFile &cf, QString displayFi
 
     ui->automaticUpdateCheckBox->setChecked(prefs.gui_io_graph_automatic_update ? true : false);
 
-    ui->enableLegendCheckBox->setChecked(prefs.gui_io_graph_enable_legend ? true : false);
-
     ui->actionLegend->setChecked(prefs.gui_io_graph_enable_legend);
     connect(ui->actionLegend, &QAction::triggered, this, &IOGraphDialog::actionLegendTriggered);
     connect(ui->actionTimeOfDay, &QAction::triggered, this, &IOGraphDialog::actionTimeOfDayTriggered);
@@ -1138,7 +1136,7 @@ void IOGraphDialog::updateHint()
     // XXX: ElidedLabel doesn't support rich text / HTML, we
     // used to bold this error
     if (!hint_err_.isEmpty()) {
-        hint += QString("%1 ").arg(hint_err_);
+        hint += QStringLiteral("%1 ").arg(hint_err_);
     }
     if (mouse_drags_) {
         double ts = 0;
@@ -1160,11 +1158,11 @@ void IOGraphDialog::updateHint()
             if (interval_packet > 0) {
                 packet_num_ = (uint32_t) interval_packet;
                 if (is_packet_configuration_namespace()) {
-                    msg = QString("%1 %2")
+                    msg = QStringLiteral("%1 %2")
                             .arg(!file_closed_ ? tr("Click to select packet") : tr("Packet"))
                             .arg(packet_num_);
                 } else {
-                    msg = QString("%1 %2")
+                    msg = QStringLiteral("%1 %2")
                             .arg(!file_closed_ ? tr("Click to select event") : tr("Event"))
                             .arg(packet_num_);
                 }
@@ -1323,8 +1321,12 @@ QRectF IOGraphDialog::getZoomRanges(QRect zoom_rect)
 void IOGraphDialog::showContextMenu(const QPoint &pos)
 {
     if (ui->ioPlot->legend->selectTest(pos, false) >= 0) {
+        // XXX - Should we check if the legend is visible before showing
+        // its context menu instead of the main context menu?
         QMenu *menu = new QMenu(this);
         menu->setAttribute(Qt::WA_DeleteOnClose);
+        menu->addAction(ui->actionLegend);
+        menu->addSeparator();
 #if QT_VERSION >= QT_VERSION_CHECK(6, 2, 0)
         menu->addAction(tr("Move to top left"), this, &IOGraphDialog::moveLegend)->setData((Qt::AlignTop|Qt::AlignLeft).toInt());
         menu->addAction(tr("Move to top center"), this, &IOGraphDialog::moveLegend)->setData((Qt::AlignTop|Qt::AlignHCenter).toInt());
@@ -1361,18 +1363,28 @@ void IOGraphDialog::graphClicked(QMouseEvent *event)
 {
     QCustomPlot *iop = ui->ioPlot;
 
-    if (mouse_drags_) {
-        if (iop->axisRect()->rect().contains(event->pos())) {
-            iop->setCursor(QCursor(Qt::ClosedHandCursor));
+    switch (event->button()) {
+
+    case Qt::LeftButton:
+        if (mouse_drags_) {
+            if (iop->axisRect()->rect().contains(event->pos())) {
+                iop->setCursor(QCursor(Qt::ClosedHandCursor));
+            }
+            on_actionGoToPacket_triggered();
+        } else {
+            if (!rubber_band_) {
+                rubber_band_ = new QRubberBand(QRubberBand::Rectangle, iop);
+            }
+            rb_origin_ = event->pos();
+            rubber_band_->setGeometry(QRect(rb_origin_, QSize()));
+            rubber_band_->show();
         }
-        on_actionGoToPacket_triggered();
-    } else {
-        if (!rubber_band_) {
-            rubber_band_ = new QRubberBand(QRubberBand::Rectangle, iop);
+        break;
+
+    default:
+        if (mouse_drags_) {
+            iop->setCursor(QCursor(Qt::OpenHandCursor));
         }
-        rb_origin_ = event->pos();
-        rubber_band_->setGeometry(QRect(rb_origin_, QSize()));
-        rubber_band_->show();
     }
     iop->setFocus();
 }
@@ -1384,6 +1396,9 @@ void IOGraphDialog::mouseMoved(QMouseEvent *event)
 
     if (event->buttons().testFlag(Qt::LeftButton)) {
         if (mouse_drags_) {
+            // XXX - We might not actually be dragging. QCustomPlot iRangeDrag
+            // controls dragging, and it stops dragging when a button other
+            // than LeftButton is released (even if LeftButton is held down.)
             shape = Qt::ClosedHandCursor;
         } else {
             shape = Qt::CrossCursor;
@@ -1415,7 +1430,7 @@ void IOGraphDialog::mouseReleased(QMouseEvent *event)
 {
     QCustomPlot *iop = ui->ioPlot;
     auto_axes_ = false;
-    if (rubber_band_) {
+    if (rubber_band_ && event->button() == Qt::LeftButton) {
         rubber_band_->hide();
         if (!mouse_drags_) {
             QRectF zoom_ranges = getZoomRanges(QRect(rb_origin_, event->pos()));
@@ -1428,6 +1443,9 @@ void IOGraphDialog::mouseReleased(QMouseEvent *event)
             }
         }
     } else if (iop->cursor().shape() == Qt::ClosedHandCursor) {
+        // QCustomPlot iRangeDrag controls dragging, and it stops dragging
+        // when a button other than LeftButton is released (even if
+        // LeftButton is still held down.)
         iop->setCursor(QCursor(Qt::OpenHandCursor));
     }
 }
@@ -1942,18 +1960,6 @@ void IOGraphDialog::on_automaticUpdateCheckBox_toggled(bool checked)
     }
 }
 
-void IOGraphDialog::on_enableLegendCheckBox_toggled(bool checked)
-{
-    prefs.gui_io_graph_enable_legend = checked ? true : false;
-
-    prefs_main_write();
-
-    // We connect to the "triggered" signal for the QAction, which is
-    // not emitted when setChecked() is called.
-    ui->actionLegend->setChecked(checked);
-    ui->ioPlot->legend->layer()->replot();
-}
-
 void IOGraphDialog::on_actionReset_triggered()
 {
     resetAxes();
@@ -2071,7 +2077,7 @@ void IOGraphDialog::on_buttonBox_accepted()
     // Gaze upon my beautiful graph with lossy artifacts!
     QString jpeg_filter = tr("JPEG File Interchange Format (*.jpeg *.jpg)");
     QString csv_filter = tr("Comma Separated Values (*.csv)");
-    QString filter = QString("%1;;%2;;%3;;%4;;%5")
+    QString filter = QStringLiteral("%1;;%2;;%3;;%4;;%5")
             .arg(pdf_filter)
             .arg(png_filter)
             .arg(bmp_filter)
@@ -2080,7 +2086,7 @@ void IOGraphDialog::on_buttonBox_accepted()
 
     QString save_file = path.canonicalPath();
     if (!file_closed_) {
-        save_file += QString("/%1").arg(cap_file_.fileBaseName());
+        save_file += QStringLiteral("/%1").arg(cap_file_.fileBaseName());
     }
     file_name = WiresharkFileDialog::getSaveFileName(this, mainApp->windowTitleString(tr("Save Graph As…")),
                                              save_file, filter, &extension);
@@ -2118,7 +2124,11 @@ void IOGraphDialog::buttonBoxClicked(QAbstractButton *button)
 
 void IOGraphDialog::actionLegendTriggered(bool checked)
 {
-    ui->enableLegendCheckBox->setChecked(checked);
+    prefs.gui_io_graph_enable_legend = checked ? true : false;
+
+    prefs_main_write();
+
+    ui->ioPlot->legend->layer()->replot();
 }
 
 void IOGraphDialog::actionLogScaleTriggered(bool checked)
@@ -2146,7 +2156,7 @@ void IOGraphDialog::makeCsv(QTextStream &stream) const
                 max_interval = ioGraphs_[row]->maxInterval();
             }
             QString name = ioGraphs_[row]->name().toUtf8();
-            name = QString("\"%1\"").arg(name.replace("\"", "\"\""));  // RFC 4180
+            name = QStringLiteral("\"%1\"").arg(name.replace("\"", "\"\""));  // RFC 4180
             stream << "," << name;
         }
     }
@@ -2302,7 +2312,7 @@ bool IOGraph::setFilter(const QString &filter)
         if (full_filter.isEmpty()) {
             full_filter = vu_field_;
         } else {
-            full_filter += QString(" && (%1)").arg(vu_field_);
+            full_filter += QStringLiteral(" && (%1)").arg(vu_field_);
         }
     }
 

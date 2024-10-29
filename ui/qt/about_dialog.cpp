@@ -76,11 +76,7 @@ AStringListListModel(parent)
 
     while (!ReadFile_authors.atEnd()) {
         QString line = ReadFile_authors.readLine();
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
         QStringList entry = line.split(",", Qt::SkipEmptyParts);
-#else
-        QStringList entry = QStringList() << line.section(',', 0, 0) << line.section(',', 1, 1);
-#endif
         if (entry.size() == 2) {
             appendRow(entry);
         }
@@ -363,7 +359,7 @@ AboutDialog::AboutDialog(QWidget *parent) :
     ui->tblPlugins->setModel(pluginTypeModel);
     ui->tblPlugins->setRootIsDecorated(false);
     UrlLinkDelegate *plugin_delegate = new UrlLinkDelegate(this);
-    script_pattern = QString("\\.(lua|py)$");
+    script_pattern = QStringLiteral("\\.(lua|py)$");
     plugin_delegate->setColCheck(3, script_pattern);
     ui->tblPlugins->setItemDelegateForColumn(3, plugin_delegate);
     ui->cmbType->addItems(pluginModel->typeNames());
@@ -405,21 +401,12 @@ AboutDialog::AboutDialog(QWidget *parent) :
     f_acknowledgements.open(QFile::ReadOnly | QFile::Text);
     QTextStream ReadFile_acks(&f_acknowledgements);
 
-    /* QTextBrowser markdown support added in 5.14. */
-#if QT_VERSION >= QT_VERSION_CHECK(5, 14, 0)
     QTextBrowser *textBrowserAcks = new QTextBrowser();
     textBrowserAcks->setMarkdown(ReadFile_acks.readAll());
     textBrowserAcks->setReadOnly(true);
     textBrowserAcks->setOpenExternalLinks(true);
     textBrowserAcks->moveCursor(QTextCursor::Start);
     ui->ackVerticalLayout->addWidget(textBrowserAcks);
-#else
-    QPlainTextEdit *pte = new QPlainTextEdit();
-    pte->setPlainText(ReadFile_acks.readAll());
-    pte->setReadOnly(true);
-    pte->moveCursor(QTextCursor::Start);
-    ui->ackVerticalLayout->addWidget(pte);
-#endif
 
     /* License */
     f_license.setFileName(":/about/gpl-2.0-standalone.html");
