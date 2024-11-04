@@ -39,13 +39,15 @@ def name_has_one_of(name, substring_list):
 # An individual call to an API we are interested in.
 # Used by APICheck below.
 class Call:
-    def __init__(self, hf_name, macros, line_number=None, length=None, fields=None):
+    def __init__(self, function_name, hf_name, macros, line_number=None, offset=None, length=None, fields=None):
         self.hf_name = hf_name
         self.line_number = line_number
         self.fields = fields
         self.length = None
         if length:
             try:
+                #if offset.find('*') != -1 and offset.find('*') != 0 and offset.find('8') != -1:
+                #    print(hf_name, function_name, offset)
                 self.length = int(length)
             except Exception:
                 if length.isupper():
@@ -148,7 +150,8 @@ class APICheck:
                                 length = m.group(3)
 
                         # Add call. We have length if re had 3 groups.
-                        self.calls.append(Call(m.group(2),
+                        self.calls.append(Call(self.fun_name,
+                                               m.group(2),
                                                macros,
                                                line_number=line_number,
                                                length=length,
@@ -242,7 +245,7 @@ class ProtoTreeAddItemCheck(APICheck):
             # proto_tree_add_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
             #                     const gint start, gint length, const unsigned encoding)
             self.fun_name = 'proto_tree_add_item'
-            self.p = re.compile('[^\n]*' + self.fun_name + r'\s*\(\s*[a-zA-Z0-9_]+?,\s*([a-zA-Z0-9_]+?),\s*[a-zA-Z0-9_\+\s]+?,\s*[^,.]+?,\s*(.+),\s*([^,.]+?)\);')
+            self.p = re.compile('[^\n]*' + self.fun_name + r'\s*\(\s*[a-zA-Z0-9_]+?,\s*([a-zA-Z0-9_]+?),\s*[a-zA-Z0-9_\+\s]+?,\s*([^,.]+?),\s*(.+),\s*([^,.]+?)\);')
         else:
             # proto_item *
             # ptvcursor_add(ptvcursor_t *ptvc, int hfindex, gint length,
@@ -279,7 +282,7 @@ class ProtoTreeAddItemCheck(APICheck):
                         if m.group(0).count('(') != m.group(0).count(')'):
                             continue
 
-                        enc = m.group(3)
+                        enc = m.group(4)
                         hf_name = m.group(1)
                         if not enc.startswith('ENC_'):
                             if enc not in { 'encoding', 'enc', 'client_is_le', 'cigi_byte_order', 'endian', 'endianess', 'machine_encoding', 'byte_order', 'bLittleEndian',
@@ -318,7 +321,7 @@ class ProtoTreeAddItemCheck(APICheck):
                                 print('Warning:', self.file + ':' + str(line_number),
                                       self.fun_name + ' called for "' + hf_name + '"',  'check last/enc param:', enc, '?')
                                 warnings_found += 1
-                        self.calls.append(Call(hf_name, macros, line_number=line_number, length=m.group(2)))
+                        self.calls.append(Call(self.fun_name, hf_name, macros, line_number=line_number, offset=m.group(2), length=m.group(3)))
 
     def check_against_items(self, items_defined, items_declared, items_declared_extern,
                             check_missing_items=False, field_arrays=None):
@@ -965,7 +968,7 @@ def findExpertItems(filename, macros):
 
 
 
-# These are the valid valies from expert.h
+# These are the valid values from expert.h
 valid_groups = set(['PI_GROUP_MASK', 'PI_CHECKSUM', 'PI_SEQUENCE',
                     'PI_RESPONSE_CODE', 'PI_REQUEST_CODE', 'PI_UNDECODED', 'PI_REASSEMBLE',
                     'PI_MALFORMED', 'PI_DEBUG', 'PI_PROTOCOL', 'PI_SECURITY', 'PI_COMMENTS_GROUP',
@@ -1017,6 +1020,7 @@ class ExpertEntries:
         self.filename = filename
         self.entries = []
         self.summaries = set()  # key is (name, severity)
+        self.reverselookup = {}  # summary -> previous-item
         self.filters = set()
 
     def AddEntry(self, entry):
@@ -1026,9 +1030,11 @@ class ExpertEntries:
 
         # If summaries are not unique, can't tell apart from expert window (need to look into frame to see details)
         if (entry.summary, entry.severity) in self.summaries:
-            print('Warning:', self.filename, 'Expert summary', '"' + entry.summary + '"', 'has already been seen (now in', entry.name+')')
+            print('Warning:', self.filename, 'Expert summary', '"' + entry.summary + '"',
+                  'has already been seen (now in', entry.name, '- previously in', self.reverselookup[entry.summary], ')')
             warnings_found += 1
         self.summaries.add((entry.summary, entry.severity))
+        self.reverselookup[entry.summary] = entry.name
 
         # Not sure if anyone ever filters on these, but check if are unique
         if entry.filter in self.filters:
@@ -1299,7 +1305,7 @@ class Item:
         return (value & (0x1 << n)) != 0
 
     # Output a warning if non-contiguous bits are found in the mask (uint64_t).
-    # Note that this legimately happens in several dissectors where multiple reserved/unassigned
+    # Note that this legitimately happens in several dissectors where multiple reserved/unassigned
     # bits are conflated into one field.
     # - there is probably a cool/efficient way to check this (+1 => 1-bit set?)
     def check_contiguous_bits(self, mask):
