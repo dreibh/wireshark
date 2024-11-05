@@ -43,6 +43,14 @@
 /* Dissector will use SCTP PPID 70, 71 or 72 or SCTP port 37464. */
 #define SCTP_PORT_E2AP 37464
 
+/* RC Version (can't infer from OIDs..) */
+enum manual_rc_version_choice {
+    RC_Version_1=1,
+    RC_Version_3=3
+};
+/* Default to later available version */
+static int e2ap_rc_version_pref_choice = (int)RC_Version_3;
+
 void proto_register_e2ap(void);
 void proto_reg_handoff_e2ap(void);
 
@@ -1969,12 +1977,16 @@ static ran_function_dissector_t* lookup_ranfunction_dissector(packet_info *pinfo
                 ti = proto_tree_add_string(tree, hf_e2ap_frame_version, tvb, 0, 0, frame_version);
                 proto_item_set_generated(ti);
 
-                char *dissector_version = oid_resolved_from_string(pinfo->pool, table->entries[n].dissector->oid);
+                /* N.B. in case of RC, this won't work! Would also be nice to include minor_version, but string wouldn't match */
+                char dissector_version[16];
+                snprintf(dissector_version, 16, "%s v%u",
+                         ran_function_to_str(table->entries[n].ran_function),
+                         table->entries[n].dissector->major_version);
                 ti = proto_tree_add_string(tree, hf_e2ap_dissector_version, tvb, 0, 0, dissector_version);
                 proto_item_set_generated(ti);
 
-                if (strcmp(frame_version, dissector_version) != 0) {
-                    /* Expert info for version mismatch! */
+                if ((table->entries[n].ran_function != RC_RANFUNCTIONS) && (strcmp(frame_version, dissector_version) != 0)) {
+                    /* Expert info for version mismatch!  Have given up on RC though... */
                     expert_add_info_format(pinfo, ti, &ei_e2ap_ran_function_dissector_mismatch,
                                            "Dissector version mismatch - frame is %s but dissector is %s",
                                            frame_version, dissector_version);
@@ -2040,7 +2052,7 @@ static void update_dissector_using_oid(packet_info *pinfo, ran_function_t ran_fu
         return;
     }
 
-    // Get mapping in use
+    /* Get mapping in use */
     struct e2ap_private_data *e2ap_data = e2ap_get_private_data(pinfo);
     unsigned ran_function_id = e2ap_data->ran_function_id;
     ran_function_id_mapping_t *mapping = NULL;
@@ -2061,13 +2073,26 @@ static void update_dissector_using_oid(packet_info *pinfo, ran_function_t ran_fu
     }
 
     /* Set dissector pointer in ran_function_id_mapping_t */
-    for (uint32_t n=0; n < available->num_available_dissectors; n++) {
-        /* If exact match, set it */
-        if (strcmp(frame_oid, available->ran_function_dissectors[n]->oid) == 0) {
-            mapping->dissector = available->ran_function_dissectors[n];
-            found = true;
-            break;
+    if (ran_function != RC_RANFUNCTIONS) {
+        for (uint32_t n=0; n < available->num_available_dissectors; n++) {
+            /* If exact match, set it */
+            if (strcmp(frame_oid, available->ran_function_dissectors[n]->oid) == 0) {
+                mapping->dissector = available->ran_function_dissectors[n];
+                found = true;
+                break;
+            }
         }
+    }
+    else {
+        /* Special case for RC, which doesn't differentiate versions by OID. Lookup preference instead */
+        for (uint32_t n=0; n < available->num_available_dissectors; n++) {
+            if (available->ran_function_dissectors[n]->major_version == e2ap_rc_version_pref_choice) {
+                mapping->dissector = available->ran_function_dissectors[n];
+                found = true;
+                break;
+            }
+        }
+
     }
 
     /* If not exact match, just set to first one available (TODO: closest above better?) */
@@ -2163,8 +2188,6 @@ static int dissect_E2SM_NI_JSON_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 /* Dissector tables */
 static dissector_table_t e2ap_ies_dissector_table;
 
-//static dissector_table_t e2ap_ies_p1_dissector_table;
-//static dissector_table_t e2ap_ies_p2_dissector_table;
 static dissector_table_t e2ap_extension_dissector_table;
 static dissector_table_t e2ap_proc_imsg_dissector_table;
 static dissector_table_t e2ap_proc_sout_dissector_table;
@@ -3433,9 +3456,18 @@ dissect_e2ap_RANfunctionDefinition(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t
       /* Have we found a match on the name? */
       if (tvb_strneql(parameter_tvb, m, g_ran_function_name_table[n], name_len) == 0) {
         /* We don't yet know the OID (should be OK),
-           so for now just call with the first/only available dissector for this RAN Function name */
+	   so for now, call with the last/only available dissector for this RAN Function name */
+
         if (g_ran_functions_available_dissectors[n].num_available_dissectors) {
-          g_ran_functions_available_dissectors[n].ran_function_dissectors[0]->functions.ran_function_definition_dissector(parameter_tvb, actx->pinfo, tree, NULL);
+	  /* Choose the one with the highest major version number */
+	  unsigned best_index=0, highest_version=0;
+	  for (unsigned d=0; d < g_ran_functions_available_dissectors[n].num_available_dissectors; d++) {
+	    if (g_ran_functions_available_dissectors[n].ran_function_dissectors[d]->major_version > highest_version) {
+	      best_index = d;
+	    }
+	  }
+	  /* Use it */
+	  g_ran_functions_available_dissectors[n].ran_function_dissectors[best_index]->functions.ran_function_definition_dissector(parameter_tvb, actx->pinfo, tree, NULL);
           found = true;
           found_index = n;
           break;
@@ -14799,17 +14831,17 @@ proto_reg_handoff_e2ap(void)
 
   /* RC */
   // TODO: appears to be the same???  Asking for clarification from ORAN..
-  oid_add_from_string("RC  v1",         "1.3.6.1.4.1.53148.1.1.2.3");
-  //oid_add_from_string("RC  v3",         "1.3.6.1.4.1.53148.1.1.2.3");
-  //oid_add_from_string("RC  v4",         "1.3.6.1.4.1.53148.1.1.2.3");
+  oid_add_from_string("RC v1",         "1.3.6.1.4.1.53148.1.1.2.3");
+  //oid_add_from_string("RC v3",         "1.3.6.1.4.1.53148.1.1.2.3");
+  //oid_add_from_string("RC v4",         "1.3.6.1.4.1.53148.1.1.2.3");
 
   /* NI */
-  oid_add_from_string("NI  v1",         "1.3.6.1.4.1.53148.1.1.2.1");
-  oid_add_from_string("NI  v2",         "1.3.6.1.4.1.53148.1.2.2.1");
-  oid_add_from_string("NI  v3",         "1.3.6.1.4.1.53148.1.3.2.1");
-  oid_add_from_string("NI  v4",         "1.3.6.1.4.1.53148.1.4.2.1");
-  oid_add_from_string("NI  v5",         "1.3.6.1.4.1.53148.1.5.2.1");
-  oid_add_from_string("NI  v6",         "1.3.6.1.4.1.53148.1.6.2.1");
+  oid_add_from_string("NI v1",         "1.3.6.1.4.1.53148.1.1.2.1");
+  oid_add_from_string("NI v2",         "1.3.6.1.4.1.53148.1.2.2.1");
+  oid_add_from_string("NI v3",         "1.3.6.1.4.1.53148.1.3.2.1");
+  oid_add_from_string("NI v4",         "1.3.6.1.4.1.53148.1.4.2.1");
+  oid_add_from_string("NI v5",         "1.3.6.1.4.1.53148.1.5.2.1");
+  oid_add_from_string("NI v6",         "1.3.6.1.4.1.53148.1.6.2.1");
 
 
   /* CCC */
@@ -18955,6 +18987,7 @@ void proto_register_e2ap(void) {
   /* Register dissector */
   e2ap_handle = register_dissector("e2ap", dissect_e2ap, proto_e2ap);
 
+  module_t *e2ap_module;
   expert_e2ap = expert_register_protocol(proto_e2ap);
   expert_register_field_array(expert_e2ap, ei, array_length(ei));
 
@@ -18968,6 +19001,21 @@ void proto_register_e2ap(void) {
   e2ap_proc_sout_dissector_table = register_dissector_table("e2ap.proc.sout", "E2AP-ELEMENTARY-PROCEDURE SuccessfulOutcome", proto_e2ap, FT_UINT32, BASE_DEC);
   e2ap_proc_uout_dissector_table = register_dissector_table("e2ap.proc.uout", "E2AP-ELEMENTARY-PROCEDURE UnsuccessfulOutcome", proto_e2ap, FT_UINT32, BASE_DEC);
   e2ap_n2_ie_type_dissector_table = register_dissector_table("e2ap.n2_ie_type", "E2AP N2 IE Type", proto_e2ap, FT_STRING, STRING_CASE_SENSITIVE);
+
+  /* Preference settings */
+  e2ap_module = prefs_register_protocol(proto_e2ap, NULL);
+
+  static const enum_val_t rc_version_vals[] = {
+      {"version-1",        "Version-1",           RC_Version_1},
+      {"version-3",        "Version-3",           RC_Version_3},
+      {NULL, NULL, -1}
+  };
+
+  prefs_register_enum_preference(e2ap_module, "rc_manual_version_choice",
+      "Manual choice of RC dissector version to call",
+      "Set version of RC dissector to use for that RANFunction. Unfortunately, so far all "
+      "OIDs say they are version 1..",
+      &e2ap_rc_version_pref_choice, rc_version_vals, true);
 
   register_init_routine(&e2ap_init_protocol);
 
