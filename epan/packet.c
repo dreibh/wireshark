@@ -1586,7 +1586,7 @@ dissector_is_uint_changed(dissector_table_t const sub_dissectors, const uint32_t
    of bytes consumed by the dissector, otherwise return 0. */
 
 int
-dissector_try_uint_new(dissector_table_t sub_dissectors, const uint32_t uint_val,
+dissector_try_uint_with_data(dissector_table_t sub_dissectors, const uint32_t uint_val,
 		       tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 		       const bool add_proto_name, void *data)
 {
@@ -1647,7 +1647,7 @@ dissector_try_uint(dissector_table_t sub_dissectors, const uint32_t uint_val,
 		   tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
 
-	return dissector_try_uint_new(sub_dissectors, uint_val, tvb, pinfo, tree, true, NULL);
+	return dissector_try_uint_with_data(sub_dissectors, uint_val, tvb, pinfo, tree, true, NULL);
 }
 
 /* Look for a given value in a given uint dissector table and, if found,
@@ -1970,13 +1970,6 @@ dissector_try_string_new(dissector_table_t sub_dissectors, const char *string,
 	return 0;
 }
 
-int
-dissector_try_string(dissector_table_t sub_dissectors, const char *string,
-		     tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
-{
-	return dissector_try_string_new(sub_dissectors, string, tvb, pinfo, tree, true, data);
-}
-
 /* Look for a given value in a given string dissector table and, if found,
    return the dissector handle for that value. */
 dissector_handle_t
@@ -2194,7 +2187,7 @@ dissector_handle_t dissector_get_guid_handle(
 int dissector_try_payload(dissector_table_t sub_dissectors,
     tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
-	return dissector_try_uint(sub_dissectors, 0, tvb, pinfo, tree);
+	return dissector_try_uint_with_data(sub_dissectors, 0, tvb, pinfo, tree, true, NULL);
 }
 
 /* Use the currently assigned payload dissector for the dissector table and,
@@ -2203,7 +2196,7 @@ int dissector_try_payload(dissector_table_t sub_dissectors,
 int dissector_try_payload_new(dissector_table_t sub_dissectors,
     tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name, void *data)
 {
-	return dissector_try_uint_new(sub_dissectors, 0, tvb, pinfo, tree, add_proto_name, data);
+	return dissector_try_uint_with_data(sub_dissectors, 0, tvb, pinfo, tree, add_proto_name, data);
 }
 
 /* Change the entry for a dissector in a payload (FT_NONE) dissector table
