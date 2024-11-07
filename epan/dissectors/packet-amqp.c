@@ -9840,7 +9840,7 @@ dissect_amqp_0_9_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
         if (content_params != NULL && content_params->type != NULL) {
             body_tvb = tvb_new_subset_length(tvb, 7, length);
-            dissector_try_string_new(media_type_subdissector_table, content_params->type, body_tvb, pinfo, amqp_tree, true, NULL);
+            dissector_try_string_with_data(media_type_subdissector_table, content_params->type, body_tvb, pinfo, amqp_tree, true, NULL);
         }
         break;
     case AMQP_0_9_FRAME_TYPE_HEARTBEAT:
@@ -10093,7 +10093,7 @@ get_amqp_1_0_value_formatter(tvbuff_t *tvb,
         }
         else
         {
-            /* multi-type and custom fileds must be converted to a string */
+            /* multi-type and custom fields must be converted to a string */
             *length_size = element_type->formatter(tvb, offset, element_type->known_size, &value);
 
             if (code/16 > 0x9) /* variable width code is 0xa[0-9] or 0xb[0-9] */

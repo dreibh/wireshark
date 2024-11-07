@@ -1917,7 +1917,7 @@ dissector_is_string_changed(dissector_table_t const sub_dissectors, const char *
    the dissector with the arguments supplied, and return length of dissected data,
    otherwise return 0. */
 int
-dissector_try_string_new(dissector_table_t sub_dissectors, const char *string,
+dissector_try_string_with_data(dissector_table_t sub_dissectors, const char *string,
 		     tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name, void *data)
 {
 	dtbl_entry_t            *dtbl_entry;
@@ -2109,7 +2109,7 @@ void dissector_add_guid(const char *name, guid_key* guid_val, dissector_handle_t
 /* Look for a given value in a given guid dissector table and, if found,
    call the dissector with the arguments supplied, and return true,
    otherwise return false. */
-int dissector_try_guid_new(dissector_table_t sub_dissectors,
+int dissector_try_guid_with_data(dissector_table_t sub_dissectors,
     guid_key* guid_val, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name, void *data)
 {
 	dtbl_entry_t            *dtbl_entry;
@@ -2156,12 +2156,6 @@ int dissector_try_guid_new(dissector_table_t sub_dissectors,
 	return 0;
 }
 
-int dissector_try_guid(dissector_table_t sub_dissectors,
-    guid_key* guid_val, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
-{
-	return dissector_try_guid_new(sub_dissectors, guid_val, tvb, pinfo, tree, true, NULL);
-}
-
 /** Look for a given value in a given guid dissector table and, if found,
  * return the current dissector handle for that value.
  *
@@ -2184,16 +2178,7 @@ dissector_handle_t dissector_get_guid_handle(
 /* Use the currently assigned payload dissector for the dissector table and,
    if any, call the dissector with the arguments supplied, and return the
    number of bytes consumed, otherwise return 0. */
-int dissector_try_payload(dissector_table_t sub_dissectors,
-    tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
-{
-	return dissector_try_uint_with_data(sub_dissectors, 0, tvb, pinfo, tree, true, NULL);
-}
-
-/* Use the currently assigned payload dissector for the dissector table and,
-   if any, call the dissector with the arguments supplied, and return the
-   number of bytes consumed, otherwise return 0. */
-int dissector_try_payload_new(dissector_table_t sub_dissectors,
+int dissector_try_payload_with_data(dissector_table_t sub_dissectors,
     tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name, void *data)
 {
 	return dissector_try_uint_with_data(sub_dissectors, 0, tvb, pinfo, tree, add_proto_name, data);
