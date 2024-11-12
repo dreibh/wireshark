@@ -1998,7 +1998,7 @@ dissect_HI2Operations_T_operator_Identifier(bool implicit_tag _U_, tvbuff_t *tvb
   tvb_len = tvb_reported_length(tvb);
   network_operator_id_tree = proto_tree_add_subtree(tree, tvb, 0, tvb_len, ett_HI2Operations_eps_network, NULL, "operator-Identifier");
 
-  dissect_e212_mcc_mnc_wmem_packet_str(tvb, actx->pinfo, network_operator_id_tree, 0, E212_NONE, true);
+  dissect_e212_mcc_mnc_wmem_packet_str(tvb, actx->pinfo, network_operator_id_tree, 0, E212_SERV_NET, true);
 
   offset = tvb_len;
 
@@ -2230,8 +2230,19 @@ dissect_HI2Operations_National_Parameters(bool implicit_tag _U_, tvbuff_t *tvb _
 
 static int
 dissect_HI2Operations_EPSCorrelationNumber(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-  offset = dissect_ber_octet_string(implicit_tag, actx, tree, tvb, offset, hf_index,
-                                       NULL);
+  unsigned tvb_len;
+  proto_item *item;
+  uint64_t value;
+
+  tvb_len = tvb_reported_length(tvb);
+
+  item = proto_tree_add_item(tree, hf_HI2Operations_ePSCorrelationNumber, tvb, offset, tvb_len, ENC_NA);
+
+  value = tvb_get_uint64_with_length(tvb, offset, tvb_len, ENC_BIG_ENDIAN);
+  proto_item_append_text(item, " (%"PRId64")", value);
+
+  offset = tvb_len;
+
 
   return offset;
 }

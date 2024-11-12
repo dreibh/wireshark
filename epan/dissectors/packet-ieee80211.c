@@ -2855,8 +2855,8 @@ static const value_string vht_tpe_pwr_units[] = {
   { 1, "Local EIRP PSD" },
   { 2, "Regulatory client EIRP" },
   { 3, "Regulatory client EIRP PSD" },
-  { 4, "Reserved" },
-  { 5, "Reserved" },
+  { 4, "Additional regulatory client EIRP" },
+  { 5, "Additional regulatory client EIRP PSD" },
   { 6, "Reserved" },
   { 7, "Reserved" },
   {0x00, NULL}
@@ -6137,8 +6137,11 @@ static int hf_ieee80211_vht_tpe_pwr_constr_20;
 static int hf_ieee80211_vht_tpe_pwr_constr_40;
 static int hf_ieee80211_vht_tpe_pwr_constr_80;
 static int hf_ieee80211_vht_tpe_pwr_constr_160;
+static int hf_ieee80211_vht_tpe_pwr_constr_320;
 static int hf_ieee80211_vht_tpe_any_bw_psd;
 static int hf_ieee80211_vht_tpe_psd;
+static int hf_ieee80211_vht_tpe_ext_count;
+static int hf_ieee80211_vht_tpe_ext_reserved;
 
 static int hf_ieee80211_beamform_feedback_seg_retrans_bitmap;
 
@@ -22469,9 +22472,9 @@ dissect_vht_tx_pwr_envelope(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   uint8_t i;
   unsigned mtpi;
 
-  if (tag_len < 2 || tag_len > 9) {
+  if (tag_len < 2 || tag_len > 18) {
     expert_add_info_format(pinfo, field_data->item_tag_length, &ei_ieee80211_tag_length,
-                           "VHT TX PWR Envelope IE length %u wrong, must be >= 2 and <= 9", tag_len);
+                           "VHT TX PWR Envelope IE length %u wrong, must be >= 2 and <= 18", tag_len);
     return 1;
   }
 
@@ -22491,6 +22494,7 @@ dissect_vht_tx_pwr_envelope(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
   case 1:
   case 3:
+  case 5:
     /* Is it a power spectral density? */
     /* Handle the zero case */
     if (opt_ie_cnt == 0) {
@@ -22519,7 +22523,7 @@ dissect_vht_tx_pwr_envelope(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       opt_ie_cnt = 1; /* Add an expert info here ... */
       break;
     }
-    for (i= 0; i < opt_ie_cnt; i++) {
+    for (i = 0; i < opt_ie_cnt; i++) {
       proto_tree *psd_tree;
       psd_tree = proto_tree_add_subtree_format(tree, tvb, offset, 1,
                                                ett_tpe_psd, NULL,
@@ -22528,10 +22532,29 @@ dissect_vht_tx_pwr_envelope(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                           tvb, offset, 1, ENC_NA);
       offset += 1;
     }
+    /* Extension Max Tx Power */
+    if (offset < tag_len) {
+        proto_tree *psd_tree;
+        uint8_t j;
+        uint8_t ext_cnt = tvb_get_uint8(tvb, offset) & 0x0f;
+
+        proto_tree_add_item(tree, hf_ieee80211_vht_tpe_ext_count, tvb, offset, 1, ENC_NA);
+        proto_tree_add_item(tree, hf_ieee80211_vht_tpe_ext_reserved, tvb, offset, 1, ENC_NA);
+        offset += 1;
+        for (j = 0; j < ext_cnt; j++) {
+          psd_tree = proto_tree_add_subtree_format(tree, tvb, offset, 1,
+                                                   ett_tpe_psd, NULL,
+                                                   "20 MHz Channel #%u", i+j);
+          proto_tree_add_item(psd_tree, hf_ieee80211_vht_tpe_psd,
+                              tvb, offset, 1, ENC_NA);
+          offset += 1;
+        }
+    }
     break;
 
   case 0:
   case 2:
+  case 4:
     /* Power Constraint info is mandatory only for 20MHz, others are optional*/
     /* Power is expressed in terms of 0.5dBm from -64 to 63 and is encoded
      * as 8-bit 2's compliment */
@@ -22558,6 +22581,11 @@ dissect_vht_tx_pwr_envelope(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         offset += 1;
         break;
       }
+    }
+    /* Extension Max Tx Power */
+    if (offset < tag_len) {
+        proto_tree_add_item(tree, hf_ieee80211_vht_tpe_pwr_constr_320, tvb, offset, 1, ENC_NA);
+        offset += 1;
     }
     break;
   default:
@@ -35575,14 +35603,14 @@ ieee80211_tag_mic(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
   int tag_len = tvb_reported_length(tvb);
   ieee80211_tagged_field_data_t* field_data = (ieee80211_tagged_field_data_t*)data;
 
-  if (tag_len != 16)
+  if ((tag_len != 16) && (tag_len != 24))
   {
     expert_add_info_format(pinfo, field_data->item_tag_length, &ei_ieee80211_tag_length,
-                           "MIC Tag Length %u wrong, must be = 16", tag_len);
+                           "MIC Tag Length %u wrong, must be 16 or 24", tag_len);
     return tvb_captured_length(tvb);
   }
 
-  proto_tree_add_item(tree, hf_ieee80211_mesh_mic, tvb, 0, 16, ENC_NA);
+  proto_tree_add_item(tree, hf_ieee80211_mesh_mic, tvb, 0, tag_len, ENC_NA);
   return tvb_captured_length(tvb);
 }
 
@@ -50503,6 +50531,11 @@ proto_register_ieee80211(void)
       FT_INT8, BASE_CUSTOM, CF_FUNC(vht_tpe_custom), 0,
       NULL, HFILL }},
 
+    {&hf_ieee80211_vht_tpe_pwr_constr_320,
+     {"Local Max Tx Pwr Constraint 320 MHz", "wlan.vht.tpe.pwr_constr_320",
+      FT_INT8, BASE_CUSTOM, CF_FUNC(vht_tpe_custom), 0,
+      NULL, HFILL }},
+
     {&hf_ieee80211_vht_tpe_any_bw_psd,
      {"Max Tx Power Spectral Density", "wlan.vht.tpe.max_tx_psd",
       FT_INT8, BASE_CUSTOM, CF_FUNC(tpe_psd_custom), 0, NULL, HFILL }},
@@ -50510,6 +50543,16 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_vht_tpe_psd,
      {"Power Spectral Density", "wlan.vht.tpe.psd",
       FT_INT8, BASE_CUSTOM, CF_FUNC(tpe_psd_custom), 0, NULL, HFILL }},
+
+    {&hf_ieee80211_vht_tpe_ext_count,
+     {"Extension Count", "wlan.vht.tpe.extension_count",
+      FT_UINT8, BASE_DEC, NULL , 0x0f,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_vht_tpe_ext_reserved,
+     {"Reserved", "wlan.vht.tpe.extension_reserved",
+      FT_UINT8, BASE_HEX, NULL , 0xf0,
+      NULL, HFILL }},
 
     {&hf_ieee80211_txbf_csi_num_bf_ant,
      {"Max antennae STA can support when CSI feedback required", "wlan.txbf.csinumant",
@@ -51781,72 +51824,72 @@ proto_register_ieee80211(void)
       "(not interpreted)", HFILL }},
 
     {&hf_ieee80211_tag_measure_report_beacon_sub_last_report_indication,
-     {"Last Report", "wlan.measure.req.beacon.sub.last_report",
+     {"Last Report", "wlan.measure.rep.beacon.sub.last_report",
       FT_BOOLEAN, BASE_NONE, TFS(&tfs_yes_no), 0,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_sub_id,
-     {"SubElement ID", "wlan.measure.req.lci.sub.id",
+     {"SubElement ID", "wlan.measure.rep.lci.sub.id",
       FT_UINT8, BASE_DEC, VALS(ieee80211_tag_measure_report_lci_sub_id_vals), 0,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_lci,
-     {"LCI", "wlan.measure.req.lci.lci",
+     {"LCI", "wlan.measure.rep.lci.lci",
       FT_BYTES, BASE_NONE, NULL, 0,
       "Location Configuration Information", HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_z_sta_floor_info,
-     {"STA Floor Info", "wlan.measure.req.lci.z.sta_floor_info",
+     {"STA Floor Info", "wlan.measure.rep.lci.z.sta_floor_info",
       FT_UINT16, BASE_HEX, NULL, 0x0,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_z_sta_floor_info_expected_to_move,
-     {"Expected To Move", "wlan.measure.req.lci.z.sta_floor_info.expected_to_move",
+     {"Expected To Move", "wlan.measure.rep.lci.z.sta_floor_info.expected_to_move",
       FT_UINT16, BASE_DEC, NULL, 0x0003,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_z_sta_floor_info_sta_floor_number,
-     {"STA Floor Number", "wlan.measure.req.lci.z.sta_floor_info.sta_floor_number",
+     {"STA Floor Number", "wlan.measure.rep.lci.z.sta_floor_info.sta_floor_number",
       FT_UINT16, BASE_DEC, NULL, 0xFFFC,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_z_sta_height_above_floor,
-     {"STA Height Above Floor", "wlan.measure.req.lci.z.sta_height_above_floor",
+     {"STA Height Above Floor", "wlan.measure.rep.lci.z.sta_height_above_floor",
       FT_UINT24, BASE_DEC, NULL, 0x0,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_z_sta_height_above_floor_uncertainty,
-     {"STA Height Above Floor Uncertainty", "wlan.measure.req.lci.z.sta_height_above_floor_uncertainty",
+     {"STA Height Above Floor Uncertainty", "wlan.measure.rep.lci.z.sta_height_above_floor_uncertainty",
       FT_UINT8, BASE_DEC, NULL, 0x0,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_urp,
-     {"Usage Rules/Policy Parameters", "wlan.measure.req.lci.urp",
+     {"Usage Rules/Policy Parameters", "wlan.measure.rep.lci.urp",
       FT_UINT8, BASE_HEX, NULL, 0x0,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_urp_retransmission_allowed,
-     {"Retransmission Allowed", "wlan.measure.req.lci.urp.retransmission_allowed",
+     {"Retransmission Allowed", "wlan.measure.rep.lci.urp.retransmission_allowed",
       FT_BOOLEAN, 8, NULL, 0x01,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_urp_retention_expires_relative_present,
-     {"Retention Expires Relative Present", "wlan.measure.req.lci.urp.retention_expires_relative_present",
+     {"Retention Expires Relative Present", "wlan.measure.rep.lci.urp.retention_expires_relative_present",
       FT_BOOLEAN, 8, NULL, 0x02,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_urp_sta_location_policy,
-     {"STA Location Policy", "wlan.measure.req.lci.urp.sta_location_policy",
+     {"STA Location Policy", "wlan.measure.rep.lci.urp.sta_location_policy",
       FT_BOOLEAN, 8, NULL, 0x04,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_urp_reserved,
-     {"Reserved", "wlan.measure.req.lci.urp.reserved",
+     {"Reserved", "wlan.measure.rep.lci.urp.reserved",
       FT_UINT8, BASE_HEX, NULL, 0xF8,
       NULL, HFILL }},
 
     {&hf_ieee80211_tag_measure_report_lci_urp_retention_expires_relative,
-     {"Retention Expires Relative", "wlan.measure.req.lci.urp.retention_expires_relative",
+     {"Retention Expires Relative", "wlan.measure.rep.lci.urp.retention_expires_relative",
       FT_UINT16, BASE_DEC, NULL, 0x0,
       NULL, HFILL }},
 
