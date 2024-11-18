@@ -125,11 +125,11 @@ rtrim_gstring(GString *str)
 static void
 features_to_columns(feature_list l, GString *str)
 {
-	const uint8_t linelen = 80;	// Same value used in end_string()
-	const uint8_t linepad = 9;	// left-side padding
+	const uint8_t linelen = 85;	// Same value used in end_string() +10
+	const uint8_t linepad = 2;	// left-side padding
 	uint8_t ncols = 0;		// number of columns to show
 	uint8_t maxlen = 0;		// length of longest item
-	unsigned num = 0;			// number of items in list
+	unsigned num = 0;		// number of items in list
 	gchar *c;
 	GPtrArray *a;
 	GList *iter;
@@ -209,7 +209,13 @@ get_appname_and_version(void)
 void
 gather_pcre2_compile_info(feature_list l)
 {
-	with_feature(l, "PCRE2");
+#define PCRE2_DATE_QUOTE(str) #str
+#define PCRE2_DATE_EXPAND_AND_QUOTE(str) PCRE2_DATE_QUOTE(str)
+	/*
+	 * PCRE2_PRERELEASE appears to be empty for a regular release;
+	 * I don't know what it is for a pre-release.
+	 */
+	with_feature(l, "PCRE2 %u.%u %s", PCRE2_MAJOR, PCRE2_MINOR, PCRE2_DATE_EXPAND_AND_QUOTE(PCRE2_DATE));
 }
 
 void
@@ -247,18 +253,19 @@ get_compiled_version_info(gather_feature_func gather_compile)
 	GString *str;
 	GList *l = NULL, *with_list = NULL, *without_list = NULL;
 
-	str = g_string_new("Compiler info: ");
-	g_string_append_printf(str, "%d-bit, ", (int)sizeof(str) * 8);
+	str = g_string_new("Compile-time info:\n");
+	g_string_append_printf(str, " Bit width: %d-bit\n", (int)sizeof(str) * 8);
 
 	/* Compiler info */
+	g_string_append_printf(str, "  Compiler: ");
 	get_compiler_info(str);
 
 #ifdef GLIB_MAJOR_VERSION
 	g_string_append_printf(str,
-		", GLib %d.%d.%d", GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION,
+		"      GLib: %d.%d.%d", GLIB_MAJOR_VERSION, GLIB_MINOR_VERSION,
 		GLIB_MICRO_VERSION);
 #else
-	g_string_append(str, "GLib ?.?.?");
+	g_string_append(str, "      GLib: version unknown");
 #endif
 #ifdef WS_DISABLE_DEBUG
 	g_string_append(str, ", release build");
@@ -266,7 +273,7 @@ get_compiled_version_info(gather_feature_func gather_compile)
 #ifdef WS_DISABLE_ASSERT
 	g_string_append(str, ", without assertions");
 #endif
-	g_string_append(str, ".\n");
+	g_string_append(str, "\n");
 
 	if (gather_compile != NULL) {
 		gather_compile(&l);
@@ -276,7 +283,7 @@ get_compiled_version_info(gather_feature_func gather_compile)
 	separate_features(&l, &with_list, &without_list);
 	free_features(&l);
 
-	g_string_append(str, "    With:\n");
+	g_string_append(str, " With:\n");
 	features_to_columns(&with_list, str);
 	free_features(&with_list);
 	if (without_list != NULL) {
@@ -478,6 +485,7 @@ get_compiler_info(GString *str)
 	#else
 		g_string_append(str, "unknown compiler");
 	#endif
+	g_string_append(str, "\n");
 }
 
 void
@@ -571,7 +579,7 @@ get_runtime_version_info(gather_feature_func gather_runtime)
 	separate_features(&l, &with_list, &without_list);
 	free_features(&l);
 
-	g_string_append(str, "    With:\n");
+	g_string_append(str, " With:\n");
 	features_to_columns(&with_list, str);
 	free_features(&with_list);
 	if (without_list != NULL) {
