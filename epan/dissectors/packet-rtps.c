@@ -477,6 +477,7 @@ static dissector_table_t rtps_type_name_table;
 #define PID_EXTENDED                            (0x3f01)
 #define PID_LIST_END                            (0x3f02)
 #define PID_UNICAST_LOCATOR_EX                  (0x8007)
+#define PID_TOPIC_NAME_ALIASES                  (0x8028)
 
 #define PID_IDENTITY_TOKEN                      (0x1001)
 #define PID_PERMISSIONS_TOKEN                   (0x1002)
@@ -1043,6 +1044,8 @@ static int hf_rtps_fragment_number_num_bits;
 static int hf_rtps_bitmap_num_bits;
 static int hf_rtps_param_partition_num;
 static int hf_rtps_param_partition;
+static int hf_rtps_param_topic_alias_num;
+static int hf_rtps_param_topic_alias;
 static int hf_rtps_param_filter_expression;
 static int hf_rtps_param_expression_parameters_num;
 static int hf_rtps_param_expression_parameters;
@@ -1507,6 +1510,7 @@ static expert_field ei_rtps_pid_type_csonsistency_invalid_size;
 static expert_field ei_rtps_uncompression_error;
 static expert_field ei_rtps_value_too_large;
 static expert_field ei_rtps_invalid_psk;
+static expert_field ei_rtps_invalid_fragment_size;
 
 /***************************************************************************/
 /* Value-to-String Tables */
@@ -1959,6 +1963,7 @@ static const value_string parameter_id_rti_vals[] = {
   { PID_ENDPOINT_SECURITY_ATTRIBUTES,   "PID_ENDPOINT_SECURITY_ATTRIBUTES" },
   { PID_TYPE_OBJECT_LB,                 "PID_TYPE_OBJECT_LB" },
   { PID_UNICAST_LOCATOR_EX,             "PID_UNICAST_LOCATOR_EX"},
+  { PID_TOPIC_NAME_ALIASES,             "PID_TOPIC_NAME_ALIASES" },
   { 0, NULL }
 };
 static const value_string parameter_id_toc_vals[] = {
@@ -9012,6 +9017,11 @@ static bool dissect_parameter_sequence_v1(proto_tree *rtps_parameter_tree, packe
       rtps_util_add_seq_string(rtps_parameter_tree, pinfo, tvb, offset, encoding,
                                hf_rtps_param_partition_num, hf_rtps_param_partition, "name");
       break;
+    case PID_TOPIC_NAME_ALIASES:
+      ENSURE_LENGTH(4);
+      rtps_util_add_seq_string(rtps_parameter_tree, pinfo, tvb, offset, encoding,
+                               hf_rtps_param_topic_alias_num, hf_rtps_param_topic_alias, "Topic alias");
+      break;
 
     /* 0...2...........7...............15.............23...............31
      * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
@@ -13188,6 +13198,12 @@ static void dissect_RTPS_DATA_FRAG_kind(tvbuff_t *tvb, packet_info *pinfo, int o
 
   /* Fragment size */
   proto_tree_add_item_ret_uint(tree, hf_rtps_data_frag_size, tvb, offset, 2, encoding, &frag_size);
+  if (frag_size == 0) {
+    // A zero fragment size means we don't advance our offset in loops, so
+    // treat that as invalid.
+    proto_tree_add_expert_format(tree, pinfo, &ei_rtps_invalid_fragment_size, tvb, offset, 2,
+      "Invalid fragment size: %u", frag_size);
+  }
   offset += 2;
 
   /* sampleSize */
@@ -13203,7 +13219,7 @@ static void dissect_RTPS_DATA_FRAG_kind(tvbuff_t *tvb, packet_info *pinfo, int o
   }
 
   /* SerializedData */
-  {
+  if (frag_size > 0) {
     char label[20];
     snprintf(label, 9, "fragment");
     if ((flags & FLAG_RTPS_DATA_FRAG_K) != 0) {
@@ -16983,6 +16999,12 @@ void proto_register_rtps(void) {
         NULL, HFILL }
     },
 
+    { &hf_rtps_param_topic_alias_num,
+      { "Number of topic aliases", "rtps.param.topic_alias_num",
+        FT_INT32, BASE_DEC, NULL, 0,
+        NULL, HFILL }
+    },
+
     { &hf_rtps_param_expression_parameters_num,
       { "Number of expression params", "rtps.param.expression_parameters_num",
         FT_INT32, BASE_DEC, NULL, 0,
@@ -16991,6 +17013,12 @@ void proto_register_rtps(void) {
 
     { &hf_rtps_param_partition,
       { "name", "rtps.param.partition",
+        FT_STRING, BASE_NONE, NULL, 0,
+        NULL, HFILL }
+    },
+
+    { &hf_rtps_param_topic_alias,
+      { "Topic alias", "rtps.param.topic_alias",
         FT_STRING, BASE_NONE, NULL, 0,
         NULL, HFILL }
     },
@@ -18587,7 +18615,8 @@ void proto_register_rtps(void) {
      { &ei_rtps_uncompression_error, { "rtps.uncompression_error", PI_PROTOCOL, PI_WARN, "Unable to uncompress the compressed payload.", EXPFILL }},
      { &ei_rtps_value_too_large, { "rtps.value_too_large", PI_MALFORMED, PI_ERROR, "Length value goes past the end of the packet", EXPFILL }},
      { &ei_rtps_checksum_check_error, { "rtps.checksum_error", PI_CHECKSUM, PI_ERROR, "Error: Unexpected checksum", EXPFILL }},
-     { &ei_rtps_invalid_psk, { "rtps.psk_decryption_error", PI_UNDECODED, PI_ERROR, "Unable to decrypt content using PSK", EXPFILL }}
+     { &ei_rtps_invalid_psk, { "rtps.psk_decryption_error", PI_UNDECODED, PI_ERROR, "Unable to decrypt content using PSK", EXPFILL }},
+     { &ei_rtps_invalid_fragment_size, { "rtps.fragment_size", PI_MALFORMED, PI_WARN, "Invalid fragment size", EXPFILL }},
   };
 
   module_t *rtps_module;
