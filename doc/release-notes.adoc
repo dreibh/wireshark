@@ -34,8 +34,10 @@ See the “New and Updated Features” section below for more details.
 
 The following features are either new or have been significantly updated since version 4.4.0:
 
-// * The Windows installers now ship with Npcap 1.79.
-//   They previously shipped with Npcap 1.78.
+* The Windows installers now ship with Npcap 1.80.
+  They previously shipped with Npcap 1.79.
+
+* Source packages are now compressed using zstd.
 
 //* The Windows installers now ship with Qt 6.5.2.
 //  They previously shipped with Qt 6.2.3.
@@ -66,8 +68,19 @@ The following features are either new or have been significantly updated since v
   extension field that precedes the NTS Authenticator and Encrypted Extension Fields
   extension field) are checked for validity.
 
+* The TCP Stream Graph axes now use units with SI prefixes. wsbuglink:20197[]
+
 * Custom columns have an option to show the values using the same format as
   in Packet Details.
+
+* Custom column complex expressions (e.g., with arithmetic, filter functions,
+  etc.) that return numeric results are sorted numerically instead of
+  lexicographically.
+
+* A display filter function `double` is added to allow explicitly converting
+  field types like integers and times to doubles. This can be used to perform
+  further arithmetic operations on fields of different types, including in
+  custom column definitions.
 
 * The minimum width of the I/O Graph dialog window is reduced, so it should
   work better on small resolution desktops, especially in certain languages.
@@ -91,9 +104,6 @@ The following features are either new or have been significantly updated since v
   a way that adds them to the `package.loaded` table, as though through
   `require`, so that `require("bit")` and `require("rex_pcre2")` statements
   in Lua dissectors, while usually superfluous, behave as expected. wsbuglink:20213[]
-
-* The Windows installers now ship with Npcap 1.80.
-  They previously shipped with Npcap 1.79.
 
 // === Removed Features and Support
 
