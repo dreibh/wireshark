@@ -74,13 +74,24 @@ ftype_register(enum ftenum ftype, const ftype_t *ft)
 
 /* from README.dissector:
 	Note that the formats used must all belong to the same list as defined below:
-	- FT_INT8, FT_INT16, FT_INT24 and FT_INT32
-	- FT_UINT8, FT_UINT16, FT_UINT24, FT_UINT32, FT_IPXNET and FT_FRAMENUM
-	- FT_UINT64 and FT_EUI64
-	- FT_STRING, FT_STRINGZ and FT_UINT_STRING
-	- FT_FLOAT and FT_DOUBLE
-	- FT_BYTES, FT_UINT_BYTES, FT_AX25, FT_ETHER, FT_VINES, FT_OID and FT_REL_OID
+	- FT_INT8, FT_INT16, FT_INT24 and FT_INT32, FT_CHAR, FT_UINT8, FT_UINT16,
+	  FT_UINT24, FT_UINT32, FT_IPXNET, FT_FRAMENUM, FT_INT40, FT_INT48, FT_INT56
+	  FT_INT64, FT_UINT40, FT_UINT48, FT_UINT56, FT_UINT64 and FT_EUI64
 	- FT_ABSOLUTE_TIME and FT_RELATIVE_TIME
+	- FT_STRING, FT_STRINGZ, FT_UINT_STRING, FT_STRINGZPAD, FT_STRINGZTRUNC, and FT_AX25
+	- FT_FLOAT, FT_DOUBLE, FT_IEEE_11073_SFLOAT and FT_IEEE_11073_FLOAT
+	- FT_BYTES, FT_UINT_BYTES, FT_ETHER, FT_VINES and FT_FCWWN
+	- FT_OID, FT_REL_OID and FT_SYSTEM_ID
+
+   We thus divide the types into equivalence classes of compatible types.
+   The same field abbreviation can be used by more than one field, even of
+   different types, so long as the types are compatible.
+
+   This function returns the canonical representative of a type. It can
+   be used to check if two fields are compatible.
+
+   XXX - Currently epan/dfilter/semcheck.c has its own implementation of
+   compatible types.
 */
 static enum ftenum
 same_ftype(const enum ftenum ftype)
@@ -90,29 +101,30 @@ same_ftype(const enum ftenum ftype)
 		case FT_INT16:
 		case FT_INT24:
 		case FT_INT32:
-			return FT_INT32;
-
+		case FT_CHAR:
 		case FT_UINT8:
 		case FT_UINT16:
 		case FT_UINT24:
 		case FT_UINT32:
-			return FT_UINT32;
-
+		case FT_IPXNET:
+		case FT_FRAMENUM:
 		case FT_INT40:
 		case FT_INT48:
 		case FT_INT56:
 		case FT_INT64:
-			return FT_INT64;
-
 		case FT_UINT40:
 		case FT_UINT48:
 		case FT_UINT56:
 		case FT_UINT64:
+		case FT_EUI64: /* Really byte strings, but in ZigBee are stored in reverse order / Little-Endian so treated as integer */
 			return FT_UINT64;
 
 		case FT_STRING:
 		case FT_STRINGZ:
 		case FT_UINT_STRING:
+		case FT_STRINGZPAD:
+		case FT_STRINGZTRUNC:
+		case FT_AX25:
 			return FT_STRING;
 
 		case FT_FLOAT:
@@ -121,17 +133,25 @@ same_ftype(const enum ftenum ftype)
 
 		case FT_BYTES:
 		case FT_UINT_BYTES:
+		case FT_ETHER:
+		case FT_VINES:
+		case FT_FCWWN:
 			return FT_BYTES;
 
 		case FT_OID:
 		case FT_REL_OID:
+		case FT_SYSTEM_ID:
+			/* XXX - dfilter/semcheck.c treats this group as compatible with BYTES */
 			return FT_OID;
 
 		/* XXX: the following are unique for now */
 		case FT_IPv4:
 		case FT_IPv6:
+		case FT_IEEE_11073_SFLOAT: /* XXX - should be able to compare with DOUBLE (#19011) */
+		case FT_IEEE_11073_FLOAT:  /* XXX - should be able to compare with DOUBLE */
 
 		/* everything else is unique */
+		/* XXX - README.dissector claims the time types are compatible. */
 		default:
 			return ftype;
 	}
@@ -732,6 +752,8 @@ fvalue_to_sinteger(const fvalue_t *fv, int32_t *repr)
 		return res;
 	if (val > INT32_MAX)
 		return FT_OVERFLOW;
+	if (val < INT32_MIN)
+		return FT_UNDERFLOW;
 
 	*repr = (int32_t)val;
 	return FT_OK;
@@ -1357,16 +1379,16 @@ fvalue_matches(const fvalue_t *a, const ws_regex_t *re)
 	return yes ? FT_TRUE : FT_FALSE;
 }
 
-bool
+ft_bool_t
 fvalue_is_zero(const fvalue_t *a)
 {
-	return a->ftype->is_zero(a);
+	return a->ftype->is_zero(a) ? FT_TRUE : FT_FALSE;
 }
 
-bool
+ft_bool_t
 fvalue_is_negative(const fvalue_t *a)
 {
-	return a->ftype->is_negative(a);
+	return a->ftype->is_negative(a) ? FT_TRUE : FT_FALSE;
 }
 
 static fvalue_t *

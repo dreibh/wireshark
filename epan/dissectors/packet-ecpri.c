@@ -29,23 +29,25 @@
 #include <epan/unit_strings.h>
 #include <proto.h>
 
+#include "epan/dissectors/packet-ptp.h"
+
 /**************************************************************************************************/
 /* Definition for eCPRI lengths                                                                   */
 /**************************************************************************************************/
 /* eCPRI Common Header (4 Bytes) */
-#define ECPRI_HEADER_LENGTH                         4
+#define ECPRI_HEADER_LENGTH                         4U
 /* Message Type Length */
-#define ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH         4
-#define ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH         4
-#define ECPRI_MSG_TYPE_2_PAYLOAD_MIN_LENGTH         4
-#define ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH         8
-#define ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH        12
-#define ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH        20
-#define ECPRI_MSG_TYPE_6_PAYLOAD_MIN_LENGTH         3
-#define ECPRI_MSG_TYPE_7_PAYLOAD_MIN_LENGTH         4
-#define ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH         9
-#define ECPRI_MSG_TYPE_11_PAYLOAD_LENGTH           12
-#define ECPRI_MSG_TYPE_7_ELEMENT_SIZE               8
+#define ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH         4U
+#define ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH         4U
+#define ECPRI_MSG_TYPE_2_PAYLOAD_MIN_LENGTH         4U
+#define ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH         8U
+#define ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH        12U
+#define ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH        20U
+#define ECPRI_MSG_TYPE_6_PAYLOAD_MIN_LENGTH         3U
+#define ECPRI_MSG_TYPE_7_PAYLOAD_MIN_LENGTH         4U
+#define ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH         9U
+#define ECPRI_MSG_TYPE_11_PAYLOAD_LENGTH           12U
+#define ECPRI_MSG_TYPE_7_ELEMENT_SIZE               8U
 
 /**************************************************************************************************/
 /* Definition for Action Types in Message Type 5: One-way Delay Measurement                       */
@@ -155,6 +157,7 @@ static int hf_one_way_delay_measurement_timestamp;
 static int hf_one_way_delay_measurement_timestamp_seconds;
 static int hf_one_way_delay_measurement_timestamp_nanoseconds;
 static int hf_one_way_delay_measurement_compensation_value;
+static int hf_one_way_delay_measurement_compensation_value_subns;
 static int hf_one_way_delay_measurement_dummy_bytes;
 
 /* Fields for Message Type 6: Remote Reset */
@@ -190,9 +193,6 @@ static int hf_iwf_delay_control_action_type;
 static int hf_iwf_delay_control_delay_a;
 static int hf_iwf_delay_control_delay_b;
 
-/* Overall length of eCPRI frame */
-static int hf_ecpri_length;
-
 /**************************************************************************************************/
 /* Preference to use the eCPRI Specification 1.2 encoding                                         */
 /**************************************************************************************************/
@@ -210,6 +210,7 @@ static expert_field ei_ecpri_frame_length;
 static expert_field ei_payload_size;
 static expert_field ei_comp_val;
 static expert_field ei_time_stamp;
+static expert_field ei_compensation_value_nonzero;
 static expert_field ei_data_length;
 static expert_field ei_c_bit;
 static expert_field ei_fault_notif;
@@ -443,7 +444,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
     /* Proto Items/Trees for Message Type 5: One-way Delay Measurement */
     proto_item *timestamp_item;
     proto_tree *timestamp_tree;
-    proto_item *ti_comp_val;
+    proto_tree *comp_tree;
     /* Proto Items/Trees for Message Type 7: Event Indication */
     proto_item *element_item;
     proto_tree *element_tree;
@@ -457,13 +458,14 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
     uint32_t num_faults_notif;
     uint32_t action_type;
     uint32_t fault_notif;
-    uint16_t payload_size;
-    uint32_t data_length;
-    uint16_t reported_length;
-    uint16_t remaining_length;
+    uint16_t payload_size;           /* size of this ecpri message beyond 4-byte header */
+
+    unsigned int reported_length;    /* total reported length of this overall tvb */
+    unsigned int remaining_length;   /* length remaining in current message */
+
     uint32_t time_stamp_ns;
     uint64_t time_stamp_s;
-    uint64_t comp_val;
+    int64_t  comp_val;
 
     reported_length = tvb_reported_length(tvb);
 
@@ -492,11 +494,11 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
             offset = offset + 4 - (offset % 4);
         }
 
-        /* Read Payload Size */
+        /* Read ahead to eCPRI Payload Size */
         payload_size = tvb_get_ntohs(tvb, offset+2);
 
         /* eCPRI tree */
-        if (payload_size + ECPRI_HEADER_LENGTH <= reported_length)
+        if ((unsigned int)(offset + ECPRI_HEADER_LENGTH + payload_size) <= reported_length)
         {
             ecpri_item = proto_tree_add_item(tree, proto_ecpri, tvb, offset, payload_size + ECPRI_HEADER_LENGTH, ENC_NA);
         }
@@ -506,9 +508,11 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
             expert_add_info_format(
                 pinfo, ecpri_item, &ei_ecpri_frame_length,
                 "eCPRI frame length %u is too small, Should be min. %d",
-                reported_length, payload_size + ECPRI_HEADER_LENGTH);
+                reported_length-offset, ECPRI_HEADER_LENGTH + payload_size);
         }
         ecpri_tree = proto_item_add_subtree(ecpri_item, ett_ecpri);
+        /* TODO: create a subtvb for just this message (ECPRI_HEADER_LENGTH + payload_size) from offset? */
+        /* This would simplify some of the confusing range checks below.. */
 
         /* eCPRI header subtree */
         header_item = proto_tree_add_string_format(ecpri_tree, hf_common_header, tvb, offset, ECPRI_HEADER_LENGTH, "", "eCPRI Common Header");
@@ -533,6 +537,11 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
         ti_payload_size = proto_tree_add_item(header_tree, hf_common_header_ecpri_payload_size, tvb, offset, 2, ENC_BIG_ENDIAN);
         offset += 2;
 
+        /* Note if C is set (i.e. further messages to follow after this one) */
+        if (concatenation_bit) {
+            proto_item_append_text(header_item, "   (further eCPRI message in frame)");
+        }
+
         /* eCPRI payload-subtree */
         /* Length Check */
         if (reported_length >= ECPRI_HEADER_LENGTH + payload_size)
@@ -550,9 +559,9 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
         }
 
         payload_tree = proto_item_add_subtree(payload_item, ett_ecpri_payload);
-        remaining_length = reported_length - offset;
+        remaining_length = payload_size;
 
-        /* Call the FH CUS dissector if preference set */
+        /* Call the FH CUS dissector (for all message types) if preference set */
         if (pref_message_type_decoding)
         {
             tvbuff_t *fh_tvb = tvb_new_subset_length(tvb, offset, payload_size);
@@ -564,15 +573,15 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
             /***********************************************************************************************/
             if (call_dissector_only(oran_fh_handle, fh_tvb, pinfo, tree, &msg_type))
             {
-                /* Assume that it has claimed the entire tvb */
-                offset = tvb_reported_length(tvb);
+                /* Assume that it has claimed the entire paylength offered to it */
+                offset += payload_size;
             }
             else
             {
                 /* ORAN FH-CUS dissector didn't handle it */
                 switch (msg_type)
                 {
-                case ECPRI_MESSAGE_TYPE_IQ_DATA: /* 3.2.4.1. IQ Data */
+                case ECPRI_MESSAGE_TYPE_IQ_DATA: /* Message Type 0: 3.2.4.1. IQ Data */
                     /* N.B. if ORAN dissector is enabled, it will handle this type instead! */
                     if (payload_size < ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH)
                     {
@@ -587,19 +596,19 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_iq_data_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iq_data_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
-                        proto_tree_add_item(payload_tree, hf_iq_data_seq_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iq_data_seq_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
                         remaining_length -= ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH;
                         if (remaining_length >= payload_size - ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH)
                         {
-                            proto_tree_add_item(payload_tree, hf_iq_data_iq_samples_of_user_data, tvb, offset, payload_size - ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH, ENC_NA);
+                            proto_tree_add_item(ecpri_tree, hf_iq_data_iq_samples_of_user_data, tvb, offset, payload_size - ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH, ENC_NA);
                             offset += payload_size - ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH;
                         }
                     }
                     break;
-                case ECPRI_MESSAGE_TYPE_BIT_SEQUENCE: /* 3.2.4.2. Bit Sequence */
+                case ECPRI_MESSAGE_TYPE_BIT_SEQUENCE: /* Message Type 1: 3.2.4.2. Bit Sequence */
                     if (payload_size < ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH)
                     {
                         expert_add_info_format(
@@ -613,20 +622,20 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_bit_sequence_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_bit_sequence_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
-                        proto_tree_add_item(payload_tree, hf_bit_sequence_seq_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_bit_sequence_seq_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
                         remaining_length -= ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH;
                         if (remaining_length >= payload_size - ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH)
                         {
-                            proto_tree_add_item(payload_tree, hf_bit_sequence_bit_sequence_of_user_data, tvb, offset, payload_size - ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH, ENC_NA);
+                            proto_tree_add_item(ecpri_tree, hf_bit_sequence_bit_sequence_of_user_data, tvb, offset, payload_size - ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH, ENC_NA);
                             offset += payload_size - ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH;
                         }
                     }
                     break;
 
-                case ECPRI_MESSAGE_TYPE_REAL_TIME_CONTROL_DATA: /* 3.2.4.3. Real-Time Control Data */
+                case ECPRI_MESSAGE_TYPE_REAL_TIME_CONTROL_DATA: /* Message Type 2: 3.2.4.3. Real-Time Control Data */
                     /* N.B. if ORAN dissector is enabled, it will handle this type instead! */
                     if (payload_size < ECPRI_MSG_TYPE_2_PAYLOAD_MIN_LENGTH)
                     {
@@ -641,20 +650,20 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_2_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_real_time_control_data_rtc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_real_time_control_data_rtc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
-                        proto_tree_add_item(payload_tree, hf_real_time_control_data_seq_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_real_time_control_data_seq_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
                         remaining_length -= ECPRI_MSG_TYPE_2_PAYLOAD_MIN_LENGTH;
                         if (remaining_length >= payload_size - ECPRI_MSG_TYPE_2_PAYLOAD_MIN_LENGTH)
                         {
-                            proto_tree_add_item(payload_tree, hf_real_time_control_data_rtc_data, tvb, offset, payload_size - ECPRI_MSG_TYPE_2_PAYLOAD_MIN_LENGTH, ENC_NA);
+                            proto_tree_add_item(ecpri_tree, hf_real_time_control_data_rtc_data, tvb, offset, payload_size - ECPRI_MSG_TYPE_2_PAYLOAD_MIN_LENGTH, ENC_NA);
                             offset += payload_size - ECPRI_MSG_TYPE_2_PAYLOAD_MIN_LENGTH;
                         }
                     }
                     break;
 
-                case ECPRI_MESSAGE_TYPE_GENERIC_DATA_TRANSFER: /* 3.2.4.4. Generic Data Transfer */
+                case ECPRI_MESSAGE_TYPE_GENERIC_DATA_TRANSFER: /* Message Type 3: 3.2.4.4. Generic Data Transfer */
                     if (payload_size < ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH)
                     {
                         expert_add_info_format(
@@ -668,20 +677,20 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_generic_data_transfer_pc_id, tvb, offset, 4, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_generic_data_transfer_pc_id, tvb, offset, 4, ENC_BIG_ENDIAN);
                         offset += 4;
-                        proto_tree_add_item(payload_tree, hf_generic_data_transfer_seq_id, tvb, offset, 4, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_generic_data_transfer_seq_id, tvb, offset, 4, ENC_BIG_ENDIAN);
                         offset += 4;
                         remaining_length -= ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH;
                         if (remaining_length >= payload_size - ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH)
                         {
-                            proto_tree_add_item(payload_tree, hf_generic_data_transfer_data_transferred, tvb, offset, payload_size - ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH, ENC_NA);
+                            proto_tree_add_item(ecpri_tree, hf_generic_data_transfer_data_transferred, tvb, offset, payload_size - ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH, ENC_NA);
                             offset += payload_size - ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH;
                         }
                     }
                     break;
 
-                case ECPRI_MESSAGE_TYPE_REMOTE_MEMORY_ACCESS: /* 3.2.4.5. Remote Memory Access */
+                case ECPRI_MESSAGE_TYPE_REMOTE_MEMORY_ACCESS: /* Message Type 4: 3.2.4.5. Remote Memory Access */
                     if (payload_size < ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH)
                     {
                         expert_add_info_format(
@@ -695,23 +704,25 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_remote_memory_access_id, tvb, offset, 1, ENC_NA);
+                        proto_tree_add_item(ecpri_tree, hf_remote_memory_access_id, tvb, offset, 1, ENC_NA);
                         offset += 1;
-                        proto_tree_add_item(payload_tree, hf_remote_memory_access_read_write, tvb, offset, 1, ENC_NA);
-                        proto_tree_add_item(payload_tree, hf_remote_memory_access_request_response, tvb, offset, 1, ENC_NA);
+                        proto_tree_add_item(ecpri_tree, hf_remote_memory_access_read_write, tvb, offset, 1, ENC_NA);
+                        proto_tree_add_item(ecpri_tree, hf_remote_memory_access_request_response, tvb, offset, 1, ENC_NA);
                         offset += 1;
-                        proto_tree_add_item(payload_tree, hf_remote_memory_access_element_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_remote_memory_access_element_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
-                        proto_tree_add_item(payload_tree, hf_remote_memory_access_address, tvb, offset, 6, ENC_NA);
+                        proto_tree_add_item(ecpri_tree, hf_remote_memory_access_address, tvb, offset, 6, ENC_NA);
                         offset += 6;
-                        ti_data_length = proto_tree_add_item_ret_uint(payload_tree, hf_remote_memory_access_data_length, tvb, offset, 2, ENC_BIG_ENDIAN, &data_length);
+                        /* Data length */
+                        unsigned int data_length;
+                        ti_data_length = proto_tree_add_item_ret_uint(ecpri_tree, hf_remote_memory_access_data_length, tvb, offset, 2, ENC_BIG_ENDIAN, &data_length);
                         offset += 2;
                         remaining_length -= ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH;
                         if (remaining_length >= (payload_size - ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH))
                         {
                             if (data_length == ((uint32_t)(payload_size - ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH)))
                             {
-                                proto_tree_add_item(payload_tree, hf_remote_memory_access_data, tvb, offset, payload_size - ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH, ENC_NA);
+                                proto_tree_add_item(ecpri_tree, hf_remote_memory_access_data, tvb, offset, payload_size - ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH, ENC_NA);
                                 offset += payload_size - ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH;
                             }
                             else if (data_length < ((uint32_t)(payload_size - ECPRI_MSG_TYPE_4_PAYLOAD_MIN_LENGTH)))
@@ -732,7 +743,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
                     }
                     break;
 
-                case ECPRI_MESSAGE_TYPE_ONE_WAY_DELAY_MEASUREMENT: /* 3.2.4.6. One-way Delay Measurement */
+                case ECPRI_MESSAGE_TYPE_ONE_WAY_DELAY_MEASUREMENT: /* Message Type 5: 3.2.4.6. One-way Delay Measurement */
                     if (payload_size < ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH)
                     {
                         expert_add_info_format(
@@ -746,67 +757,66 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_one_way_delay_measurement_id, tvb, offset, 1, ENC_NA);
+                        /* Measurement ID (1 byte) */
+                        proto_tree_add_item(ecpri_tree, hf_one_way_delay_measurement_id, tvb, offset, 1, ENC_NA);
                         offset += 1;
-                        proto_tree_add_item_ret_uint(payload_tree, hf_one_way_delay_measurement_action_type, tvb, offset, 1, ENC_NA, &action_type);
+                        /* Action Type (1 byte) */
+                        proto_tree_add_item_ret_uint(ecpri_tree, hf_one_way_delay_measurement_action_type, tvb, offset, 1, ENC_NA, &action_type);
                         offset += 1;
-                        /* Time Stamp for seconds and nano-seconds */
-                        timestamp_item = proto_tree_add_item(payload_tree, hf_one_way_delay_measurement_timestamp, tvb, offset, 10, ENC_NA);
+
+                        /* Time Stamp for seconds and nano-seconds (6 bytes seconds, 4 bytes nanoseconds) */
+                        timestamp_item = proto_tree_add_item(ecpri_tree, hf_one_way_delay_measurement_timestamp, tvb, offset, 10, ENC_NA);
                         timestamp_tree = proto_item_add_subtree(timestamp_item, ett_ecpri_timestamp);
                         proto_tree_add_item_ret_uint64(timestamp_tree, hf_one_way_delay_measurement_timestamp_seconds, tvb, offset, 6, ENC_BIG_ENDIAN, &time_stamp_s);
                         offset += 6;
                         proto_tree_add_item_ret_uint(timestamp_tree, hf_one_way_delay_measurement_timestamp_nanoseconds, tvb, offset, 4, ENC_BIG_ENDIAN, &time_stamp_ns);
                         offset += 4;
-                        if (action_type >= ECPRI_MSG_TYPE_5_RESERVED_MIN)
-                        {
-                            expert_add_info_format(
-                                pinfo, timestamp_item, &ei_time_stamp,
-                                "Time stamp is not defined for Action Type %u",
-                                action_type);
-                        }
-                        else if (
-                            action_type != ECPRI_MSG_TYPE_5_REQ &&
+                        /* Isn't set for all action types */
+                        if (action_type != ECPRI_MSG_TYPE_5_REQ &&
                             action_type != ECPRI_MSG_TYPE_5_RESPONSE &&
                             action_type != ECPRI_MSG_TYPE_5_FOLLOWUP &&
                             time_stamp_s != 0 && time_stamp_ns != 0)
                         {
                             expert_add_info_format(
                                 pinfo, timestamp_item, &ei_time_stamp,
-                                "Time stamp is not defined for Action Type %u, should be 0",
-                                action_type);
+                                "Time stamp is not defined for Action Type %u (%s), should be 0",
+                                action_type, rval_to_str_const(action_type, one_way_delay_measurement_action_type_coding, "Unknown"));
                         }
-                        ti_comp_val = proto_tree_add_item_ret_uint64(payload_tree, hf_one_way_delay_measurement_compensation_value, tvb, offset, 8, ENC_BIG_ENDIAN, &comp_val);
-                        proto_item_append_text(ti_comp_val, " = %fns", comp_val / 65536.0);
+                        else {
+                            /* Show value in ts root */
+                            proto_item_append_text(timestamp_item, " (%" PRId64 ".%09u seconds)", time_stamp_s, time_stamp_ns);
+                        }
 
-                        if (action_type >= ECPRI_MSG_TYPE_5_RESERVED_MIN)
-                        {
-                            expert_add_info_format(
-                                pinfo, timestamp_item, &ei_time_stamp,
-                                "Compensation Value is not defined for Action Type %u",
-                                action_type);
-                        }
-                        else if (
-                            action_type != ECPRI_MSG_TYPE_5_REQ &&
+                        /* Compensation value (8 bytes). Same format as PTP's correctionField */
+                        dissect_ptp_v2_timeInterval(tvb, (uint16_t*)&offset, ecpri_tree, "Compensation value",
+                                                    hf_one_way_delay_measurement_compensation_value,
+                                                    hf_one_way_delay_measurement_compensation_value_subns,
+                                                    &comp_tree,
+                                                    &comp_val);
+                        /* Isn't valid for all Action Types */
+                        if (action_type != ECPRI_MSG_TYPE_5_REQ &&
                             action_type != ECPRI_MSG_TYPE_5_RESPONSE &&
                             action_type != ECPRI_MSG_TYPE_5_FOLLOWUP &&
                             comp_val != 0)
                         {
                             expert_add_info_format(
-                                pinfo, ti_comp_val, &ei_comp_val,
-                                "Compensation Value is not defined for Action Type %u, should be 0",
-                                action_type);
+                                pinfo, comp_tree, &ei_compensation_value_nonzero,
+                                "Compensation Value is not defined for Action Type %u (%s), should be 0",
+                                action_type, rval_to_str_const(action_type, one_way_delay_measurement_action_type_coding, "Unknown"));
                         }
-                        offset += 8;
+
+                        /* Any remaining bytes are dummy */
                         remaining_length -= ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH;
-                        if (remaining_length >= payload_size - ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH)
+                        if (remaining_length > 0)
                         {
-                            proto_tree_add_item(payload_tree, hf_one_way_delay_measurement_dummy_bytes, tvb, offset, payload_size - ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH, ENC_NA);
-                            offset += payload_size - ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH;
+                            proto_tree_add_item(ecpri_tree, hf_one_way_delay_measurement_dummy_bytes, tvb, offset,
+                                                payload_size - ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH, ENC_NA);
+                            offset += (payload_size - ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH);
                         }
                     }
                     break;
 
-                case ECPRI_MESSAGE_TYPE_REMOTE_RESET: /* 3.2.4.7. Remote Reset */
+                case ECPRI_MESSAGE_TYPE_REMOTE_RESET: /* Message Type 6: 3.2.4.7. Remote Reset */
                     if (payload_size < ECPRI_MSG_TYPE_6_PAYLOAD_MIN_LENGTH)
                     {
                         expert_add_info_format(
@@ -820,20 +830,20 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_6_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_remote_reset_reset_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_remote_reset_reset_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
-                        proto_tree_add_item(payload_tree, hf_remote_reset_reset_code, tvb, offset, 1, ENC_NA);
+                        proto_tree_add_item(ecpri_tree, hf_remote_reset_reset_code, tvb, offset, 1, ENC_NA);
                         offset += 1;
                         remaining_length -= ECPRI_MSG_TYPE_6_PAYLOAD_MIN_LENGTH;
                         if (remaining_length >= payload_size - ECPRI_MSG_TYPE_6_PAYLOAD_MIN_LENGTH)
                         {
-                            proto_tree_add_item(payload_tree, hf_remote_reset_vendor_specific_payload, tvb, offset, payload_size - ECPRI_MSG_TYPE_6_PAYLOAD_MIN_LENGTH, ENC_NA);
+                            proto_tree_add_item(ecpri_tree, hf_remote_reset_vendor_specific_payload, tvb, offset, payload_size - ECPRI_MSG_TYPE_6_PAYLOAD_MIN_LENGTH, ENC_NA);
                             offset += payload_size - ECPRI_MSG_TYPE_6_PAYLOAD_MIN_LENGTH;
                         }
                     }
                     break;
 
-                case ECPRI_MESSAGE_TYPE_EVENT_INDICATION: /* 3.2.4.8. Event Indication */
+                case ECPRI_MESSAGE_TYPE_EVENT_INDICATION: /* Message Type 7: 3.2.4.8. Event Indication */
                     if (payload_size < ECPRI_MSG_TYPE_7_PAYLOAD_MIN_LENGTH)
                     {
                         expert_add_info_format(
@@ -847,13 +857,13 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_7_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_event_indication_event_id, tvb, offset, 1, ENC_NA);
+                        proto_tree_add_item(ecpri_tree, hf_event_indication_event_id, tvb, offset, 1, ENC_NA);
                         offset += 1;
-                        proto_tree_add_item_ret_uint(payload_tree, hf_event_indication_event_type, tvb, offset, 1, ENC_NA, &event_type);
+                        proto_tree_add_item_ret_uint(ecpri_tree, hf_event_indication_event_type, tvb, offset, 1, ENC_NA, &event_type);
                         offset += 1;
-                        proto_tree_add_item(payload_tree, hf_event_indication_sequence_number, tvb, offset, 1, ENC_NA);
+                        proto_tree_add_item(ecpri_tree, hf_event_indication_sequence_number, tvb, offset, 1, ENC_NA);
                         offset += 1;
-                        ti_num_faults = proto_tree_add_item_ret_uint(payload_tree, hf_event_indication_number_of_faults_notifications, tvb, offset, 1, ENC_NA, &num_faults_notif);
+                        ti_num_faults = proto_tree_add_item_ret_uint(ecpri_tree, hf_event_indication_number_of_faults_notifications, tvb, offset, 1, ENC_NA, &num_faults_notif);
                         offset += 1;
                         /* Only for Event Type Fault Indication (0x00) and Notification Indication (0x02) */
                         if (event_type == ECPRI_MSG_TYPE_7_FAULT_INDICATION || event_type == ECPRI_MSG_TYPE_7_NOTIF_INDICATION)
@@ -875,7 +885,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
                                 /* Dissect elements in loop */
                                 for (uint32_t i = 0; i < num_faults_notif; i++)
                                 {
-                                    element_item = proto_tree_add_item(payload_tree, hf_event_indication_element, tvb, offset, ECPRI_MSG_TYPE_7_ELEMENT_SIZE, ENC_NA);
+                                    element_item = proto_tree_add_item(ecpri_tree, hf_event_indication_element, tvb, offset, ECPRI_MSG_TYPE_7_ELEMENT_SIZE, ENC_NA);
                                     proto_item_prepend_text(element_item, "#%u: ", i + 1);
                                     element_tree = proto_item_add_subtree(element_item, ett_ecpri_element);
 
@@ -980,7 +990,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
                     }
                     break;
 
-                case ECPRI_MESSAGE_TYPE_IWF_STARTUP: /* 3.2.4.9. IWF Start-Up */
+                case ECPRI_MESSAGE_TYPE_IWF_STARTUP: /* Message Type 8: 3.2.4.9. IWF Start-Up */
                     if (payload_size < ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH)
                     {
                         expert_add_info_format(
@@ -994,40 +1004,40 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_iwf_start_up_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iwf_start_up_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
 
-                        proto_tree_add_item(payload_tree, hf_iwf_start_up_hyperframe_number, tvb, offset, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iwf_start_up_hyperframe_number, tvb, offset, 1, ENC_BIG_ENDIAN);
                         offset += 1;
 
-                        proto_tree_add_item(payload_tree, hf_iwf_start_up_subframe_number, tvb, offset, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iwf_start_up_subframe_number, tvb, offset, 1, ENC_BIG_ENDIAN);
                         offset += 1;
 
                         /* Time Stamp as nanoseconds */
-                        proto_tree_add_item(payload_tree, hf_iwf_start_up_timestamp, tvb, offset, 4, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iwf_start_up_timestamp, tvb, offset, 4, ENC_BIG_ENDIAN);
                         offset += 4;
 
                         /* F, S, r (skipped), Line Rate */
-                        proto_tree_add_item(payload_tree, hf_iwf_start_up_fec_bit_indicator, tvb, offset, 1, ENC_BIG_ENDIAN);
-                        proto_tree_add_item(payload_tree, hf_iwf_start_up_scrambling_bit_indicator, tvb, offset, 1, ENC_BIG_ENDIAN);
-                        proto_tree_add_item(payload_tree, hf_iwf_start_up_line_rate, tvb, offset, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iwf_start_up_fec_bit_indicator, tvb, offset, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iwf_start_up_scrambling_bit_indicator, tvb, offset, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iwf_start_up_line_rate, tvb, offset, 1, ENC_BIG_ENDIAN);
                         offset += 1;
 
                         remaining_length -= ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH;
                         if (remaining_length >= payload_size - ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH)
                         {
-                            proto_tree_add_item(payload_tree, hf_iwf_start_up_data_transferred, tvb, offset, payload_size - ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH, ENC_NA);
+                            proto_tree_add_item(ecpri_tree, hf_iwf_start_up_data_transferred, tvb, offset, payload_size - ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH, ENC_NA);
                             offset += payload_size - ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH;
                         }
                     }
                     break;
-                case ECPRI_MESSAGE_TYPE_IWF_OPERATION: /* 3.2.4.10. IWF Operation */
+                case ECPRI_MESSAGE_TYPE_IWF_OPERATION: /* Message Type 9: 3.2.4.10. IWF Operation */
                     proto_tree_add_expert(payload_tree, pinfo, &ei_ecpri_not_dis_yet, tvb, offset, -1);
                     break;
-                case ECPRI_MESSAGE_TYPE_IWF_MAPPING: /* 3.2.4.11. IWF Mapping */
+                case ECPRI_MESSAGE_TYPE_IWF_MAPPING: /* Message Type 10: 3.2.4.11. IWF Mapping */
                     proto_tree_add_expert(payload_tree, pinfo, &ei_ecpri_not_dis_yet, tvb, offset, -1);
                     break;
-                case ECPRI_MESSAGE_TYPE_IWF_DELAY_CONTROL: /* 3.2.4.12. IWF Delay Control */
+                case ECPRI_MESSAGE_TYPE_IWF_DELAY_CONTROL: /* Message Type 11: 3.2.4.12. IWF Delay Control */
                     if (payload_size != ECPRI_MSG_TYPE_11_PAYLOAD_LENGTH)
                     {
                         expert_add_info_format(
@@ -1041,29 +1051,29 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_11_PAYLOAD_LENGTH)
                     {
-                        proto_tree_add_item(payload_tree, hf_iwf_delay_control_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iwf_delay_control_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
 
-                        proto_tree_add_item(payload_tree, hf_iwf_delay_control_delay_control_id, tvb, offset, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_iwf_delay_control_delay_control_id, tvb, offset, 1, ENC_BIG_ENDIAN);
                         offset += 1;
 
                         proto_item *ti_iwf_delay_control_action_type;
                         uint32_t iwf_delay_control_action_type;
                         ti_iwf_delay_control_action_type = proto_tree_add_item_ret_uint(
-                            payload_tree, hf_iwf_delay_control_action_type, tvb, offset, 1, ENC_NA, &iwf_delay_control_action_type);
+                            ecpri_tree, hf_iwf_delay_control_action_type, tvb, offset, 1, ENC_NA, &iwf_delay_control_action_type);
                         offset += 1;
 
                         proto_item *ti_iwf_delay_control_delay_a;
                         uint32_t iwf_delay_control_delay_a;
                         ti_iwf_delay_control_delay_a = proto_tree_add_item_ret_uint(
-                            payload_tree, hf_iwf_delay_control_delay_a, tvb, offset, 4, ENC_BIG_ENDIAN, &iwf_delay_control_delay_a);
+                            ecpri_tree, hf_iwf_delay_control_delay_a, tvb, offset, 4, ENC_BIG_ENDIAN, &iwf_delay_control_delay_a);
                         proto_item_append_text(ti_iwf_delay_control_delay_a, " = %fns", iwf_delay_control_delay_a / 16.0);
                         offset += 4;
 
                         proto_item *ti_iwf_delay_control_delay_b;
                         uint32_t iwf_delay_control_delay_b;
                         ti_iwf_delay_control_delay_b = proto_tree_add_item_ret_uint(
-                            payload_tree, hf_iwf_delay_control_delay_b, tvb, offset, 4, ENC_BIG_ENDIAN, &iwf_delay_control_delay_b);
+                            ecpri_tree, hf_iwf_delay_control_delay_b, tvb, offset, 4, ENC_BIG_ENDIAN, &iwf_delay_control_delay_b);
                         proto_item_append_text(ti_iwf_delay_control_delay_b, " = %fns", iwf_delay_control_delay_b / 16.0);
                         offset += 4;
 
@@ -1095,7 +1105,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
         /* If Preference not chosen,  Payload will be not decoded */
         else
         {
-            if (reported_length >= offset + payload_size)
+            if ((unsigned int)(offset + payload_size) <= reported_length)
             {
                 offset += payload_size;
             }
@@ -1105,7 +1115,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
     /* Expecting last concatenation bit to be false */
     if (concatenation_bit != false)
     {
-        expert_add_info_format(pinfo, ti_c_bit, &ei_c_bit, "Concatenation Bit is 1, should be 0");
+        expert_add_info_format(pinfo, ti_c_bit, &ei_c_bit, "Last concatenation Bit is 1, should be 0");
     }
 
     /* Not dissected buffer - any remainder passed to data dissector */
@@ -1115,10 +1125,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
         call_data_dissector(next_tvb, pinfo, tree);
     }
 
-    /* Overall eCPRI length (based upon reported length of tvb passed in) */
-    proto_item *length_ti = proto_tree_add_uint(ecpri_tree, hf_ecpri_length, tvb, 0, 0, reported_length);
-    proto_item_set_generated(length_ti);
-
+    /* Claiming entire frame */
     return reported_length;
 }
 
@@ -1134,7 +1141,6 @@ void proto_register_ecpri(void)
         { &hf_common_header_ecpri_payload_size, { "Payload Size", "ecpri.size", FT_UINT16, BASE_DEC, NULL, 0x0, "Size of eCPRI message payload in bytes", HFILL } },
     /* eCPRI Payload */
         { &hf_payload,   { "eCPRI Payload", "ecpri.payload", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
-        { &hf_ecpri_length, { "eCPRI Length", "ecpri.length", FT_UINT32, BASE_DEC, NULL, 0x0, "Length in bytes, including header", HFILL } },
     /* Message Type 0: IQ Data */
         { &hf_iq_data_pc_id, { "PC_ID", "ecpri.pcid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_iq_data_seq_id, { "SEQ_ID", "ecpri.iqd.seqid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
@@ -1165,7 +1171,8 @@ void proto_register_ecpri(void)
         { &hf_one_way_delay_measurement_timestamp, { "Timestamp", "ecpri.owdm.timestamp", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
         { &hf_one_way_delay_measurement_timestamp_seconds, { "Seconds", "ecpri.owdm.sec", FT_UINT48, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0x0, NULL, HFILL } },
         { &hf_one_way_delay_measurement_timestamp_nanoseconds, { "Nanoseconds", "ecpri.owdm.nanosec", FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_nanoseconds), 0x0, NULL, HFILL } },
-        { &hf_one_way_delay_measurement_compensation_value, { "Compensation Value", "ecpri.owdm.compval", FT_UINT64, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+        { &hf_one_way_delay_measurement_compensation_value, { "Compensation", "ecpri.owdm.compval", FT_INT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_nanosecond_nanoseconds), 0x0, NULL, HFILL } },
+        { &hf_one_way_delay_measurement_compensation_value_subns, { "Compensation (subns)", "ecpri.owdm.compval-subns", FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, UNS(&units_nanosecond_nanoseconds), 0x0, NULL, HFILL } },
         { &hf_one_way_delay_measurement_dummy_bytes, { "Dummy bytes", "ecpri.owdm.owdmdata", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
     /* Message Type 6: Remote Reset */
         { &hf_remote_reset_reset_id, { "Reset ID", "ecpri.rr.resetid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
@@ -1208,16 +1215,17 @@ void proto_register_ecpri(void)
     };
 
     static ei_register_info ei[] = {
-        { &ei_ecpri_frame_length,   { "ecpri.frame.length.invalid", PI_PROTOCOL, PI_ERROR, "Invalid eCPRI Frame Length", EXPFILL }},
-        { &ei_payload_size,         { "ecpri.payload.size.invalid", PI_PROTOCOL, PI_ERROR, "Invalid Payload Size",       EXPFILL }},
-        { &ei_data_length,          { "ecpri.data.length.invalid",  PI_PROTOCOL, PI_ERROR, "Invalid Data Length",        EXPFILL }},
-        { &ei_comp_val,             { "ecpri.comp.val.invalid",     PI_PROTOCOL, PI_ERROR, "Invalid Compensation Value", EXPFILL }},
-        { &ei_time_stamp,           { "ecpri.time.stamp.invalid",   PI_PROTOCOL, PI_ERROR, "Invalid Time Stamp",         EXPFILL }},
-        { &ei_c_bit,                { "ecpri.concat.bit.invalid",   PI_PROTOCOL, PI_ERROR, "Invalid Concatenation Bit",  EXPFILL }},
-        { &ei_fault_notif,          { "ecpri.fault.notif.invalid",  PI_PROTOCOL, PI_ERROR, "Invalid Fault/Notification", EXPFILL }},
-        { &ei_number_faults,        { "ecpri.num.faults.invalid",   PI_PROTOCOL, PI_ERROR, "Invalid Number of Faults",   EXPFILL }},
-        { &ei_iwf_delay_control_action_type, { "ecpri.action.type.invalid", PI_PROTOCOL, PI_ERROR, "Invalid Action Type", EXPFILL }},
-        { &ei_ecpri_not_dis_yet,    { "ecpri.not_dissected_yet",    PI_PROTOCOL, PI_NOTE,  "Not dissected yet",   EXPFILL }}
+        { &ei_ecpri_frame_length,            { "ecpri.frame.length.invalid",       PI_PROTOCOL, PI_ERROR, "Invalid eCPRI Frame Length", EXPFILL }},
+        { &ei_payload_size,                  { "ecpri.payload.size.invalid",       PI_PROTOCOL, PI_ERROR, "Invalid Payload Size",       EXPFILL }},
+        { &ei_data_length,                   { "ecpri.data.length.invalid",        PI_PROTOCOL, PI_ERROR, "Invalid Data Length",        EXPFILL }},
+        { &ei_comp_val,                      { "ecpri.comp.val.invalid",           PI_PROTOCOL, PI_ERROR, "Invalid Compensation Value", EXPFILL }},
+        { &ei_time_stamp,                    { "ecpri.time.stamp.invalid",         PI_PROTOCOL, PI_ERROR, "Invalid Time Stamp",         EXPFILL }},
+        { &ei_compensation_value_nonzero,    { "ecpri.compensation-value.nonzero", PI_PROTOCOL, PI_WARN,  "Compensation Value should be zero",         EXPFILL }},
+        { &ei_c_bit,                         { "ecpri.concat.bit.invalid",         PI_PROTOCOL, PI_ERROR, "Invalid Concatenation Bit",  EXPFILL }},
+        { &ei_fault_notif,                   { "ecpri.fault.notif.invalid",        PI_PROTOCOL, PI_ERROR, "Invalid Fault/Notification", EXPFILL }},
+        { &ei_number_faults,                 { "ecpri.num.faults.invalid",         PI_PROTOCOL, PI_ERROR, "Invalid Number of Faults",   EXPFILL }},
+        { &ei_iwf_delay_control_action_type, { "ecpri.action.type.invalid",        PI_PROTOCOL, PI_ERROR, "Invalid Action Type", EXPFILL }},
+        { &ei_ecpri_not_dis_yet,             { "ecpri.not_dissected_yet",          PI_PROTOCOL, PI_NOTE,  "Not dissected yet",   EXPFILL }}
     };
 
     expert_module_t* expert_ecpri;

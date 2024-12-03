@@ -15,6 +15,7 @@
 
 #include <extcap/extcap-base.h>
 #include <extcap/ssh-base.h>
+#include <wsutil/application_flavor.h>
 #include <wsutil/interface.h>
 #include <wsutil/file_util.h>
 #include <wsutil/strtoi.h>
@@ -315,8 +316,11 @@ int main(int argc, char *argv[])
     char* interface_description = g_strdup("SSH remote syscall capture");
     bool modern_bpf = 0;
 
+    /* Set the program name. */
+    g_set_prgname("sshdig");
+
     /* Initialize log handler early so we can have proper logging during startup. */
-    extcap_log_init("sshdig");
+    extcap_log_init();
 
     sshdig_extcap_interface = g_path_get_basename(argv[0]);
     if (g_str_has_suffix(sshdig_extcap_interface, ".exe")) {
@@ -332,7 +336,8 @@ int main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    err_msg = configuration_init(argv[0], "Stratoshark");
+    err_msg = configuration_init(argv[0]);
+    set_application_flavor(APPLICATION_FLAVOR_STRATOSHARK);
     if (err_msg != NULL) {
         ws_warning("Can't get pathname of directory containing the extcap program: %s.",
                 err_msg);

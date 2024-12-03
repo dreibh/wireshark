@@ -1952,6 +1952,7 @@ static expert_field ei_ptp_v2_period_invalid;
 
 /* Config for Analysis features */
 static bool ptp_analyze_messages = true;
+static bool ptp_analyze_messages_with_minor_version = false;
 static unsigned ptp_analysis_max_consecutive_delta = 10;
 
 /* Definitions for Analysis features */
@@ -2048,6 +2049,10 @@ static wmem_map_t *ptp_clocks;
 static uint64_t
 calculate_frame_key(uint8_t ptp_major, uint8_t ptp_minor, uint8_t majorsdoid, uint8_t minorsdoid, uint8_t messagetype, uint8_t domain, uint16_t portid, uint16_t seqid)
 {
+    if (!ptp_analyze_messages_with_minor_version) {
+        ptp_minor = 0;
+    }
+
     DISSECTOR_ASSERT(ptp_minor % 16 == 0);
     DISSECTOR_ASSERT(ptp_major <= 15);
     DISSECTOR_ASSERT(majorsdoid % 16 == 0);
@@ -2878,8 +2883,10 @@ dissect_ptp_v2_text(tvbuff_t *tvb, uint16_t *cur_offset, proto_tree *tree, int h
     }
 }
 
-static void
-dissect_ptp_v2_timeInterval(tvbuff_t *tvb, uint16_t *cur_offset, proto_tree *tree, const char* name, int hf_ptp_v2_timeInterval_ns, int hf_ptp_v2_timeInterval_subns)
+void
+dissect_ptp_v2_timeInterval(tvbuff_t *tvb, uint16_t *cur_offset, proto_tree *tree, const char* name,
+                            int hf_ptp_v2_timeInterval_ns, int hf_ptp_v2_timeInterval_subns,
+                            proto_tree **tree_out, int64_t *ns_out)
 {
 
     double      time_double;
@@ -2888,6 +2895,9 @@ dissect_ptp_v2_timeInterval(tvbuff_t *tvb, uint16_t *cur_offset, proto_tree *tre
     proto_tree *ptptimeInterval_subtree;
 
     time_ns = tvb_get_ntoh64(tvb, *cur_offset);
+    /* TODO: should flag 'too big' if see distinguished value of 0x7FFFFFFFFFFFFFFF?
+     * https://standards.ieee.org/wp-content/uploads/import/documents/interpretations/1588-2008_interp.pdf
+     * notes that this field can cope with about 40 hours.. */
     time_double = (1.0*time_ns) / 65536.0;
     time_ns = time_ns >> 16;
     time_subns = tvb_get_ntohs(tvb, *cur_offset+6);
@@ -2901,7 +2911,10 @@ dissect_ptp_v2_timeInterval(tvbuff_t *tvb, uint16_t *cur_offset, proto_tree *tre
     proto_tree_add_double(ptptimeInterval_subtree,
         hf_ptp_v2_timeInterval_subns, tvb, *cur_offset+6, 2, (time_subns/65536.0));
 
+    /* Set output args */
     *cur_offset = *cur_offset + 8;
+    if (tree_out) *tree_out = ptptimeInterval_subtree;
+    if (ns_out) *ns_out = time_ns;
 }
 
 static void
@@ -3390,7 +3403,9 @@ dissect_ptp_v2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool ptpv2_o
 
         temp = PTP_V2_CORRECTIONNS_OFFSET;
 
-        dissect_ptp_v2_timeInterval(tvb, &temp, ptp_tree, "correctionField", hf_ptp_v2_correction, hf_ptp_v2_correctionsubns);
+        dissect_ptp_v2_timeInterval(tvb, &temp, ptp_tree, "correctionField",
+                                    hf_ptp_v2_correction, hf_ptp_v2_correctionsubns,
+                                    NULL, NULL);
 
         proto_tree_add_item(ptp_tree,
             hf_ptp_v2_messagetypespecific, tvb, PTP_V2_MESSAGE_TYPE_SPECIFIC_OFFSET, 4, ENC_BIG_ENDIAN);
@@ -4592,7 +4607,8 @@ dissect_ptp_v2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool ptpv2_o
                                                                     ptp_tlv_tree,
                                                                     "phaseOffsetTx",
                                                                     hf_ptp_v2_sig_tlv_l1syncext_phaseOffsetTx_ns,
-                                                                    hf_ptp_v2_sig_tlv_l1syncext_phaseOffsetTx_subns);
+                                                                    hf_ptp_v2_sig_tlv_l1syncext_phaseOffsetTx_subns,
+                                                                    NULL, NULL);
 
                                         value_offset = tlv_offset + PTP_V2_SIG_TLV_L1SYNCEXT_PHASE_OFFSET_TX_TIMESTAMP_OFFSET;
                                         dissect_ptp_v2_timetstamp(tvb,
@@ -4608,7 +4624,8 @@ dissect_ptp_v2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool ptpv2_o
                                                                     ptp_tlv_tree,
                                                                     "freqOffsetTx",
                                                                     hf_ptp_v2_sig_tlv_l1syncext_freqOffsetTx_ns,
-                                                                    hf_ptp_v2_sig_tlv_l1syncext_freqOffsetTx_subns);
+                                                                    hf_ptp_v2_sig_tlv_l1syncext_freqOffsetTx_subns,
+                                                                    NULL, NULL);
 
                                         value_offset = tlv_offset + PTP_V2_SIG_TLV_L1SYNCEXT_FREQ_OFFSET_TX_TIMESTAMP_OFFSET;
                                         dissect_ptp_v2_timetstamp(tvb,
@@ -4910,9 +4927,11 @@ dissect_ptp_v2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool ptpv2_o
                                 Offset +=2;
 
                                 dissect_ptp_v2_timeInterval(tvb, &Offset, ptp_managementData_tree,
-                                    "Offset from Master", hf_ptp_v2_mm_offset_ns, hf_ptp_v2_mm_offset_subns);
+                                    "Offset from Master", hf_ptp_v2_mm_offset_ns, hf_ptp_v2_mm_offset_subns,
+                                    NULL, NULL);
                                 dissect_ptp_v2_timeInterval(tvb, &Offset, ptp_managementData_tree,
-                                    "Mean path delay", hf_ptp_v2_mm_pathDelay_ns, hf_ptp_v2_mm_pathDelay_subns);
+                                    "Mean path delay", hf_ptp_v2_mm_pathDelay_ns, hf_ptp_v2_mm_pathDelay_subns,
+                                    NULL, NULL);
                                 break;
                             }
                             case PTP_V2_MM_ID_PARENT_DATA_SET:
@@ -5007,7 +5026,9 @@ dissect_ptp_v2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool ptpv2_o
                                 Offset +=1;
 
                                 dissect_ptp_v2_timeInterval(tvb, &Offset, ptp_managementData_tree,
-                                    "Peer mean path delay", hf_ptp_v2_mm_peerMeanPathDelay_ns, hf_ptp_v2_mm_peerMeanPathDelay_subns);
+                                    "Peer mean path delay",
+                                    hf_ptp_v2_mm_peerMeanPathDelay_ns, hf_ptp_v2_mm_peerMeanPathDelay_subns,
+                                    NULL, NULL);
 
                                 proto_tree_add_item(ptp_managementData_tree, hf_ptp_v2_mm_logAnnounceInterval, tvb,
                                     Offset, 1, ENC_BIG_ENDIAN);
@@ -5359,7 +5380,9 @@ dissect_ptp_v2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool ptpv2_o
                                 Offset +=1;
 
                                 dissect_ptp_v2_timeInterval(tvb, &Offset, ptp_managementData_tree,
-                                    "Peer mean path delay", hf_ptp_v2_mm_peerMeanPathDelay_ns, hf_ptp_v2_mm_peerMeanPathDelay_subns);
+                                    "Peer mean path delay",
+                                    hf_ptp_v2_mm_peerMeanPathDelay_ns, hf_ptp_v2_mm_peerMeanPathDelay_subns,
+                                    NULL, NULL);
                                 break;
                             }
                             case PTP_V2_MM_ID_PRIMARY_DOMAIN:
@@ -8066,6 +8089,10 @@ proto_register_ptp(void)
     prefs_register_bool_preference(ptp_module, "analyze_ptp_messages", "Analyze PTP messages",
                                    "Make the PTP dissector analyze PTP messages. Accurate Capture Timestamps required!",
                                    &ptp_analyze_messages);
+
+    prefs_register_bool_preference(ptp_module, "analyze_ptp_strict_minor_version_matching", "Analysis: Only match messages, if minor version matches",
+                                   "Take minor version for matching of messages into account!",
+                                   &ptp_analyze_messages_with_minor_version);
 
     prefs_register_uint_preference(ptp_module, "analyze_ptp_delta", "Analysis: Max message delta",
                                    "Maximum allowed time between messages of same type when finding "

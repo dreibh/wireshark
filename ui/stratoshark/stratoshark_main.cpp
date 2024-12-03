@@ -21,6 +21,7 @@
 #endif
 
 #include <ws_exit_codes.h>
+#include <wsutil/application_flavor.h>
 #include <wsutil/clopts_common.h>
 #include <wsutil/cmdarg_err.h>
 #include <ui/urls.h>
@@ -454,6 +455,9 @@ int main(int argc, char *qt_argv[])
     /* Start time in microseconds */
     uint64_t start_time = g_get_monotonic_time();
 
+    /* Set the program name. */
+    g_set_prgname("stratoshark");
+
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     /*
      * See:
@@ -489,7 +493,7 @@ int main(int argc, char *qt_argv[])
     cmdarg_err_init(stratoshark_cmdarg_err, stratoshark_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init("stratoshark", vcmdarg_err);
+    ws_log_init(vcmdarg_err);
     /* For backward compatibility with GLib logging and Wireshark 3.4. */
     ws_log_console_writer_set_use_stdout(true);
 
@@ -558,7 +562,8 @@ int main(int argc, char *qt_argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    /* configuration_init_error = */ configuration_init(argv[0], "Stratoshark");
+    /* configuration_init_error = */ configuration_init(argv[0]);
+    set_application_flavor(APPLICATION_FLAVOR_STRATOSHARK);
     /* ws_log(NULL, LOG_LEVEL_DEBUG, "progfile_dir: %s", get_progfile_dir()); */
 
 #ifdef _WIN32
@@ -888,12 +893,6 @@ int main(int argc, char *qt_argv[])
             if_cap_query->monitor_mode = interface_opts->monitor_mode;
             if_cap_query->auth_username = NULL;
             if_cap_query->auth_password = NULL;
-#ifdef HAVE_PCAP_REMOTE
-            if (interface_opts->auth_type == CAPTURE_AUTH_PWD) {
-                if_cap_query->auth_username = interface_opts->auth_username;
-                if_cap_query->auth_password = interface_opts->auth_password;
-            }
-#endif
             if_cap_queries = g_list_prepend(if_cap_queries, if_cap_query);
         }
         if_cap_queries = g_list_reverse(if_cap_queries);
@@ -930,14 +929,7 @@ int main(int argc, char *qt_argv[])
     splash_update(RA_INTERFACES, NULL, NULL);
 
     if (!global_commandline_info.cf_name && !prefs.capture_no_interface_load) {
-        /* Allow only extcap interfaces to be found */
-        GList * filter_list = NULL;
-        filter_list = g_list_append(filter_list, GUINT_TO_POINTER((unsigned) IF_EXTCAP));
-        // The below starts the stats; we don't need that since Stratoshark only
-        // supports extcaps.
-        //ssApp->scanLocalInterfaces(filter_list);
-        fill_in_local_interfaces_filtered(filter_list, main_window_update);
-        g_list_free(filter_list);
+        ssApp->scanLocalInterfaces(nullptr);
     }
 
     capture_opts_trim_snaplen(&global_capture_opts, MIN_PACKET_SIZE);
