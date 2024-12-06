@@ -15,7 +15,7 @@
  * eCPRI Transport Network V2.0 -- Specifications
  * https://www.cpri.info/downloads/eCPRI_v_2.0_2019_05_10c.pdf
  *
- * May carry ORAN FH-CUS (packet-oran.c) - Message Types, 0, 2, 5
+ * May carry ORAN FH-CUS (packet-oran.c) - Message Types, 0, 2
  * See https://specifications.o-ran.org/specifications, WG4, Fronthaul Interfaces Workgroup
  * ------------------------------------------------------------------------------------------------
  */
@@ -121,13 +121,14 @@ static int hf_common_header_c_bit;
 static int hf_common_header_ecpri_message_type;
 static int hf_common_header_ecpri_payload_size;
 
+/* Common to several message types */
+static int hf_pc_id;
+
 /* Fields for Message Type 0: IQ Data */
-static int hf_iq_data_pc_id;
 static int hf_iq_data_seq_id;
 static int hf_iq_data_iq_samples_of_user_data;
 
 /* Fields for Message Type 1: Bit Sequence */
-static int hf_bit_sequence_pc_id;
 static int hf_bit_sequence_seq_id;
 static int hf_bit_sequence_bit_sequence_of_user_data;
 
@@ -137,7 +138,6 @@ static int hf_real_time_control_data_seq_id;
 static int hf_real_time_control_data_rtc_data;
 
 /* Fields for Message Type 3: Generic Data Transfer */
-static int hf_generic_data_transfer_pc_id;
 static int hf_generic_data_transfer_seq_id;
 static int hf_generic_data_transfer_data_transferred;
 
@@ -160,6 +160,11 @@ static int hf_one_way_delay_measurement_compensation_value;
 static int hf_one_way_delay_measurement_compensation_value_subns;
 static int hf_one_way_delay_measurement_dummy_bytes;
 
+static int hf_one_way_delay_measurement_calculated_delay;
+static int hf_one_way_delay_measurement_calculated_delay_request_frame;
+static int hf_one_way_delay_measurement_calculated_delay_response_frame;
+
+
 /* Fields for Message Type 6: Remote Reset */
 static int hf_remote_reset_reset_id;
 static int hf_remote_reset_reset_code;
@@ -177,7 +182,6 @@ static int hf_event_indication_fault_notification;
 static int hf_event_indication_additional_information;
 
 /* Fields for Message Type 8: IWF Start-Up */
-static int hf_iwf_start_up_pc_id;
 static int hf_iwf_start_up_hyperframe_number; /* #Z field */
 static int hf_iwf_start_up_subframe_number; /* #X field */
 static int hf_iwf_start_up_timestamp;
@@ -187,16 +191,15 @@ static int hf_iwf_start_up_line_rate;
 static int hf_iwf_start_up_data_transferred;
 
 /* Fields for Message Type 11: IWF Delay Control */
-static int hf_iwf_delay_control_pc_id;
 static int hf_iwf_delay_control_delay_control_id;
 static int hf_iwf_delay_control_action_type;
 static int hf_iwf_delay_control_delay_a;
 static int hf_iwf_delay_control_delay_b;
 
 /**************************************************************************************************/
-/* Preference to use the eCPRI Specification 1.2 encoding                                         */
+/* Preference to use the eCPRI Specification 2.0 encoding                                         */
 /**************************************************************************************************/
-static bool pref_message_type_decoding    = true;
+static bool pref_message_type_decoding = true;
 
 /**************************************************************************************************/
 /* eCPRI Handle                                                                                   */
@@ -217,6 +220,9 @@ static expert_field ei_fault_notif;
 static expert_field ei_number_faults;
 static expert_field ei_iwf_delay_control_action_type;
 static expert_field ei_ecpri_not_dis_yet;
+static expert_field ei_owd_no_response;
+static expert_field ei_owd_no_request;
+
 
 /**************************************************************************************************/
 /* Field Encoding of Message Types                                                                */
@@ -417,6 +423,39 @@ static const true_false_string tfs_c_bit =
     "This eCPRI message is last one inside eCPRI PDU"
 };
 
+
+/**************************************************************************************************/
+/* Tracking/remembering One-Way Delay measurements                                                */
+/**************************************************************************************************/
+
+/* Table maintained on first pass from measurement-id (uint32_t) -> meas_state_t* */
+/* N.B. maintaining in a single table, assuming that the same ID will not be reused within */
+/* the same capture. If this is not valid, can move table into conversation object later. */
+static wmem_tree_t *meas_id_table;
+
+/* Table consulted on subsequent passes: frame_num -> meas_result_t */
+static wmem_tree_t *meas_results_table;
+
+typedef struct {
+    /* Inputs for delay calculation */
+    bool         t1_known;
+    uint64_t     t1;
+    int64_t      tcv1;
+    uint32_t     t1_frame_number;
+    bool         t2_known;
+    uint64_t     t2;
+    int64_t      tcv2;
+    uint32_t     t2_frame_number;
+} meas_state_t;
+
+typedef struct {
+    uint64_t delay_in_ns;
+    uint32_t request_frame;
+    uint32_t response_frame;
+} meas_result_t;
+
+
+/* Cached for calling ORAN FH CUS dissector for message types that it handles */
 static dissector_handle_t oran_fh_handle;
 
 /**************************************************************************************************/
@@ -596,7 +635,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_0_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(ecpri_tree, hf_iq_data_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
                         proto_tree_add_item(ecpri_tree, hf_iq_data_seq_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
@@ -622,7 +661,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_1_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(ecpri_tree, hf_bit_sequence_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
                         proto_tree_add_item(ecpri_tree, hf_bit_sequence_seq_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
@@ -677,7 +716,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_3_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(ecpri_tree, hf_generic_data_transfer_pc_id, tvb, offset, 4, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_pc_id, tvb, offset, 4, ENC_BIG_ENDIAN);
                         offset += 4;
                         proto_tree_add_item(ecpri_tree, hf_generic_data_transfer_seq_id, tvb, offset, 4, ENC_BIG_ENDIAN);
                         offset += 4;
@@ -758,11 +797,16 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
                     if (remaining_length >= ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH)
                     {
                         /* Measurement ID (1 byte) */
-                        proto_tree_add_item(ecpri_tree, hf_one_way_delay_measurement_id, tvb, offset, 1, ENC_NA);
+                        unsigned int meas_id;
+                        proto_tree_add_item_ret_uint(ecpri_tree, hf_one_way_delay_measurement_id, tvb, offset, 1, ENC_NA, &meas_id);
                         offset += 1;
                         /* Action Type (1 byte) */
                         proto_tree_add_item_ret_uint(ecpri_tree, hf_one_way_delay_measurement_action_type, tvb, offset, 1, ENC_NA, &action_type);
                         offset += 1;
+
+                        col_append_fstr(pinfo->cinfo, COL_INFO, "   (MeasId=%u, ActionType=%s)",
+                                        meas_id,
+                                        rval_to_str_const(action_type, one_way_delay_measurement_action_type_coding, "Unknown"));
 
                         /* Time Stamp for seconds and nano-seconds (6 bytes seconds, 4 bytes nanoseconds) */
                         timestamp_item = proto_tree_add_item(ecpri_tree, hf_one_way_delay_measurement_timestamp, tvb, offset, 10, ENC_NA);
@@ -788,7 +832,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
                         }
 
                         /* Compensation value (8 bytes). Same format as PTP's correctionField */
-                        dissect_ptp_v2_timeInterval(tvb, (uint16_t*)&offset, ecpri_tree, "Compensation value",
+                        dissect_ptp_v2_timeInterval(tvb, &offset, ecpri_tree, "Compensation value",
                                                     hf_one_way_delay_measurement_compensation_value,
                                                     hf_one_way_delay_measurement_compensation_value_subns,
                                                     &comp_tree,
@@ -809,9 +853,92 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
                         remaining_length -= ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH;
                         if (remaining_length > 0)
                         {
-                            proto_tree_add_item(ecpri_tree, hf_one_way_delay_measurement_dummy_bytes, tvb, offset,
-                                                payload_size - ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH, ENC_NA);
+                            proto_item *dummy_ti = proto_tree_add_item(ecpri_tree, hf_one_way_delay_measurement_dummy_bytes, tvb, offset,
+                                                                       payload_size - ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH, ENC_NA);
                             offset += (payload_size - ECPRI_MSG_TYPE_5_PAYLOAD_MIN_LENGTH);
+                            /* Only useful to send dummy bytes for requests */
+                            if ((action_type != ECPRI_MSG_TYPE_5_REQ) &&
+                                (action_type != ECPRI_MSG_TYPE_5_REQ_FOLLOWUP)) {
+                                proto_item_append_text(dummy_ti, " (dummy bytes are only needed for action types 0-1");
+                            }
+                        }
+
+                        /* For involved message types, try to work out and show the delay */
+                        if ((action_type == ECPRI_MSG_TYPE_5_REQ) ||
+                            (action_type == ECPRI_MSG_TYPE_5_FOLLOWUP) ||
+                            (action_type == ECPRI_MSG_TYPE_5_RESPONSE)) {
+
+                            meas_state_t* meas = (meas_state_t*)wmem_tree_lookup32(meas_id_table, meas_id);
+                            if (!PINFO_FD_VISITED(pinfo)) {
+                                /* First pass, fill in details for this measurement ID */
+                                if (meas == NULL) {
+                                    /* Allocate new state, and add to table */
+                                    meas = wmem_new0(wmem_file_scope(), meas_state_t);
+                                    wmem_tree_insert32(meas_id_table, meas_id, meas);
+                                }
+
+                                /* Request - fill in t1 and tcv1 */
+                                if ((action_type == ECPRI_MSG_TYPE_5_REQ) ||
+                                    (action_type == ECPRI_MSG_TYPE_5_FOLLOWUP)) {
+                                    meas->t1_known = true;
+                                    meas->t1 = time_stamp_s*1000000000 + time_stamp_ns;
+                                    meas->tcv1 = comp_val;
+                                    meas->t1_frame_number = pinfo->num;
+                                }
+                                /* Response - fill in t2 and tcv2 */
+                                else {
+                                    meas->t2_known = true;
+                                    meas->t2 = time_stamp_s*1000000000 + time_stamp_ns;
+                                    meas->tcv2 = comp_val;
+                                    meas->t2_frame_number = pinfo->num;
+                                }
+
+                                /* Do calculation if possible */
+                                if (meas->t1_known && meas->t2_known) {
+                                    meas_result_t *result = wmem_new0(wmem_file_scope(), meas_result_t);
+                                    result->delay_in_ns = (meas->t2 - meas->tcv2) - (meas->t1 - meas->tcv1);
+                                    result->request_frame = meas->t1_frame_number;
+                                    result->response_frame = meas->t2_frame_number;
+                                    /* Insert result for this frame and the requesting frame.. */
+                                    wmem_tree_insert32(meas_results_table, meas->t2_frame_number, result);
+                                    wmem_tree_insert32(meas_results_table, meas->t1_frame_number, result);
+                                }
+                            }
+                            else {
+                                /* Subsequent passes, show any calculated delays */
+                                meas_result_t *result = wmem_tree_lookup32(meas_results_table, pinfo->num);
+                                if (result) {
+                                    proto_item *delay_ti = proto_tree_add_uint64(ecpri_tree, hf_one_way_delay_measurement_calculated_delay,
+                                                                                 tvb, 0, 0, result->delay_in_ns);
+                                    PROTO_ITEM_SET_GENERATED(delay_ti);
+
+                                    /* Link to other frame involved in the calculation */
+                                    proto_item *frame_ti;
+                                    if (action_type == ECPRI_MSG_TYPE_5_RESPONSE) {
+                                        frame_ti = proto_tree_add_uint(ecpri_tree, hf_one_way_delay_measurement_calculated_delay_request_frame,
+                                                                       tvb, 0, 0, result->request_frame);
+                                        col_append_fstr(pinfo->cinfo, COL_INFO, "   [Delay=%" PRIu64 "uns]", result->delay_in_ns);
+                                    }
+                                    else {
+                                        frame_ti = proto_tree_add_uint(ecpri_tree, hf_one_way_delay_measurement_calculated_delay_response_frame,
+                                                                       tvb, 0, 0, result->response_frame);
+                                    }
+                                    PROTO_ITEM_SET_GENERATED(frame_ti);
+                                }
+                                else {
+                                    /* The other part of the exchange must be missing, so report */
+                                    if ((action_type == ECPRI_MSG_TYPE_5_REQ) ||
+                                        (action_type == ECPRI_MSG_TYPE_5_FOLLOWUP)) {
+                                        /* Missing response */
+                                        expert_add_info(pinfo, ecpri_tree, &ei_owd_no_response);
+                                    }
+                                    else {
+                                        /* Request not found */
+                                        expert_add_info(pinfo, ecpri_tree, &ei_owd_no_request);
+                                    }
+
+                                }
+                            }
                         }
                     }
                     break;
@@ -1004,7 +1131,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_8_PAYLOAD_MIN_LENGTH)
                     {
-                        proto_tree_add_item(ecpri_tree, hf_iwf_start_up_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
 
                         proto_tree_add_item(ecpri_tree, hf_iwf_start_up_hyperframe_number, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1032,10 +1159,16 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
                     }
                     break;
                 case ECPRI_MESSAGE_TYPE_IWF_OPERATION: /* Message Type 9: 3.2.4.10. IWF Operation */
-                    proto_tree_add_expert(payload_tree, pinfo, &ei_ecpri_not_dis_yet, tvb, offset, -1);
+                    //proto_tree_add_item(ecpri_tree, hf_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                    //offset += 2;
+                    /* TODO: */
+                    proto_tree_add_expert(payload_tree, pinfo, &ei_ecpri_not_dis_yet, tvb, offset, payload_size);
                     break;
                 case ECPRI_MESSAGE_TYPE_IWF_MAPPING: /* Message Type 10: 3.2.4.11. IWF Mapping */
-                    proto_tree_add_expert(payload_tree, pinfo, &ei_ecpri_not_dis_yet, tvb, offset, -1);
+                    //proto_tree_add_item(ecpri_tree, hf_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                    //offset += 2;
+                    /* TODO: */
+                    proto_tree_add_expert(payload_tree, pinfo, &ei_ecpri_not_dis_yet, tvb, offset, payload_size);
                     break;
                 case ECPRI_MESSAGE_TYPE_IWF_DELAY_CONTROL: /* Message Type 11: 3.2.4.12. IWF Delay Control */
                     if (payload_size != ECPRI_MSG_TYPE_11_PAYLOAD_LENGTH)
@@ -1051,7 +1184,7 @@ static int dissect_ecpri(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
 
                     if (remaining_length >= ECPRI_MSG_TYPE_11_PAYLOAD_LENGTH)
                     {
-                        proto_tree_add_item(ecpri_tree, hf_iwf_delay_control_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(ecpri_tree, hf_pc_id, tvb, offset, 2, ENC_BIG_ENDIAN);
                         offset += 2;
 
                         proto_tree_add_item(ecpri_tree, hf_iwf_delay_control_delay_control_id, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1141,12 +1274,12 @@ void proto_register_ecpri(void)
         { &hf_common_header_ecpri_payload_size, { "Payload Size", "ecpri.size", FT_UINT16, BASE_DEC, NULL, 0x0, "Size of eCPRI message payload in bytes", HFILL } },
     /* eCPRI Payload */
         { &hf_payload,   { "eCPRI Payload", "ecpri.payload", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
+    /* Common to several message types */
+        { &hf_pc_id, { "PC_ID", "ecpri.pcid", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL } },
     /* Message Type 0: IQ Data */
-        { &hf_iq_data_pc_id, { "PC_ID", "ecpri.pcid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_iq_data_seq_id, { "SEQ_ID", "ecpri.iqd.seqid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_iq_data_iq_samples_of_user_data, { "IQ Samples of User Data", "ecpri.iqd.iqdata", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
     /* Message Type 1: Bit Sequence */
-        { &hf_bit_sequence_pc_id, { "PC_ID", "ecpri.pcid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_bit_sequence_seq_id, { "SEQ_ID", "ecpri.bs.seqid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_bit_sequence_bit_sequence_of_user_data, { "Bit Sequence", "ecpri.bs.bitseq", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
     /* Message Type 2: Real-Time Control Data */
@@ -1154,7 +1287,6 @@ void proto_register_ecpri(void)
         { &hf_real_time_control_data_seq_id, { "SEQ_ID", "ecpri.rtcd.seqid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_real_time_control_data_rtc_data, { "Real-Time Control Data", "ecpri.rtcd.rtcdata", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
     /* Message Type 3: Generic Data Transfer */
-        { &hf_generic_data_transfer_pc_id, { "PC_ID", "ecpri.pcid", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_generic_data_transfer_seq_id, { "SEQ_ID", "ecpri.gdt.seqid", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_generic_data_transfer_data_transferred, { "Data transferred", "ecpri.gdt.gendata", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
     /* Message Type 4: Remote Memory Access */
@@ -1174,6 +1306,9 @@ void proto_register_ecpri(void)
         { &hf_one_way_delay_measurement_compensation_value, { "Compensation", "ecpri.owdm.compval", FT_INT64, BASE_DEC|BASE_UNIT_STRING, UNS(&units_nanosecond_nanoseconds), 0x0, NULL, HFILL } },
         { &hf_one_way_delay_measurement_compensation_value_subns, { "Compensation (subns)", "ecpri.owdm.compval-subns", FT_DOUBLE, BASE_NONE|BASE_UNIT_STRING, UNS(&units_nanosecond_nanoseconds), 0x0, NULL, HFILL } },
         { &hf_one_way_delay_measurement_dummy_bytes, { "Dummy bytes", "ecpri.owdm.owdmdata", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
+        { &hf_one_way_delay_measurement_calculated_delay, { "Calculated Delay", "ecpri.owdm.calculated-delay", FT_UINT64, BASE_DEC, NULL, 0x0, "Calculated delay in ns", HFILL } },
+        { &hf_one_way_delay_measurement_calculated_delay_request_frame, { "Request Frame", "ecpri.owdm.request-frame", FT_FRAMENUM, BASE_NONE, NULL, 0x0, "Request frame used in calculation", HFILL } },
+        { &hf_one_way_delay_measurement_calculated_delay_response_frame, { "Response Frame", "ecpri.owdm.response-frame", FT_FRAMENUM, BASE_NONE, NULL, 0x0, "Response frame used to answer this request", HFILL } },
     /* Message Type 6: Remote Reset */
         { &hf_remote_reset_reset_id, { "Reset ID", "ecpri.rr.resetid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_remote_reset_reset_code, { "Reset Code Op", "ecpri.rr.resetcode", FT_UINT8, BASE_HEX|BASE_RANGE_STRING, RVALS(remote_reset_reset_coding), 0x0, NULL, HFILL } },
@@ -1189,7 +1324,6 @@ void proto_register_ecpri(void)
         { &hf_event_indication_fault_notification, { "Fault/Notification", "ecpri.ei.faultnotif", FT_UINT16, BASE_HEX|BASE_RANGE_STRING, RVALS(event_indication_fault_notif_coding), 0x0FFF, NULL, HFILL } },
         { &hf_event_indication_additional_information, { "Additional Information", "ecpri.ei.addinfo", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL } },
     /* Message Type 8: IWF Start-Up */
-        { &hf_iwf_start_up_pc_id, { "PC_ID", "ecpri.pcid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_iwf_start_up_hyperframe_number, { "Hyperframe Number #Z", "ecpri.iwfsu.hfn", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
         { &hf_iwf_start_up_subframe_number, { "Subframe Number #Y", "ecpri.iwfsu.sfn", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
         { &hf_iwf_start_up_timestamp, { "Timestamp", "ecpri.iwfsu.timestamp", FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_nanoseconds), 0x0, NULL, HFILL } },
@@ -1198,7 +1332,6 @@ void proto_register_ecpri(void)
         { &hf_iwf_start_up_line_rate, { "Line Rate", "ecpri.iwfsu.linerate", FT_UINT8, BASE_HEX|BASE_RANGE_STRING, RVALS(iwf_start_up_line_rate_coding), 0x1F, NULL, HFILL } },
         { &hf_iwf_start_up_data_transferred, { "Data transferred", "ecpri.iwfsu.vendorpayload", FT_BYTES, SEP_COLON, NULL, 0x0, NULL, HFILL } },
     /* Message Type 11: IWF Delay Control */
-        { &hf_iwf_delay_control_pc_id, { "PC_ID", "ecpri.pcid", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_iwf_delay_control_delay_control_id, { "Delay Control ID", "ecpri.iwfdc.id", FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_iwf_delay_control_action_type, { "Action Type", "ecpri.iwfdc.actiontype", FT_UINT8, BASE_HEX|BASE_RANGE_STRING, RVALS(iwf_delay_control_action_type_coding), 0x0, NULL, HFILL } },
         { &hf_iwf_delay_control_delay_a, { "Delay A", "ecpri.iwfdc.delaya", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
@@ -1220,12 +1353,14 @@ void proto_register_ecpri(void)
         { &ei_data_length,                   { "ecpri.data.length.invalid",        PI_PROTOCOL, PI_ERROR, "Invalid Data Length",        EXPFILL }},
         { &ei_comp_val,                      { "ecpri.comp.val.invalid",           PI_PROTOCOL, PI_ERROR, "Invalid Compensation Value", EXPFILL }},
         { &ei_time_stamp,                    { "ecpri.time.stamp.invalid",         PI_PROTOCOL, PI_ERROR, "Invalid Time Stamp",         EXPFILL }},
-        { &ei_compensation_value_nonzero,    { "ecpri.compensation-value.nonzero", PI_PROTOCOL, PI_WARN,  "Compensation Value should be zero",         EXPFILL }},
+        { &ei_compensation_value_nonzero,    { "ecpri.compensation-value.nonzero", PI_PROTOCOL, PI_WARN,  "Compensation Value should be zero",  EXPFILL }},
         { &ei_c_bit,                         { "ecpri.concat.bit.invalid",         PI_PROTOCOL, PI_ERROR, "Invalid Concatenation Bit",  EXPFILL }},
         { &ei_fault_notif,                   { "ecpri.fault.notif.invalid",        PI_PROTOCOL, PI_ERROR, "Invalid Fault/Notification", EXPFILL }},
         { &ei_number_faults,                 { "ecpri.num.faults.invalid",         PI_PROTOCOL, PI_ERROR, "Invalid Number of Faults",   EXPFILL }},
         { &ei_iwf_delay_control_action_type, { "ecpri.action.type.invalid",        PI_PROTOCOL, PI_ERROR, "Invalid Action Type", EXPFILL }},
-        { &ei_ecpri_not_dis_yet,             { "ecpri.not_dissected_yet",          PI_PROTOCOL, PI_NOTE,  "Not dissected yet",   EXPFILL }}
+        { &ei_ecpri_not_dis_yet,             { "ecpri.not_dissected_yet",          PI_PROTOCOL, PI_NOTE,  "Not dissected yet",   EXPFILL }},
+        { &ei_owd_no_response,               { "ecpri.owd.no_response",            PI_SEQUENCE, PI_WARN,  "No Response for One-Way Delay Measurement Request",   EXPFILL }},
+        { &ei_owd_no_request,                { "ecpri.owd.no_rerequest",           PI_SEQUENCE, PI_WARN,  "Request for One-Way Delay Measurement Response not found",   EXPFILL }}
     };
 
     expert_module_t* expert_ecpri;
@@ -1252,6 +1387,9 @@ void proto_register_ecpri(void)
             "Decode Message Types",
             "Decode the Message Types according to eCPRI Specification V2.0",
             &pref_message_type_decoding);
+
+    meas_id_table = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
+    meas_results_table = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
 }
 
 void proto_reg_handoff_ecpri(void)
