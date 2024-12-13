@@ -575,7 +575,7 @@ IOGraphDialog::IOGraphDialog(QWidget &parent, CaptureFile &cf, QString displayFi
 
     connect(iop, &QCustomPlot::beforeReplot, this, &IOGraphDialog::updateLegend);
 
-    MainWindow *main_window = qobject_cast<MainWindow *>(mainApp->mainWindow());
+    MainWindow *main_window = mainApp->mainWindow();
     if (main_window != nullptr) {
         connect(main_window, &MainWindow::framesSelected, this, &IOGraphDialog::selectedFrameChanged);
     }
@@ -1165,7 +1165,7 @@ void IOGraphDialog::updateHint()
                             .arg(!file_closed_ ? tr("Click to select event") : tr("Event"))
                             .arg(packet_num_);
                 }
-                val = " = " + QString::number(tracer_->position->value(), 'g', 4);
+                val = QStringLiteral(" = %1").arg(tracer_->position->value(), 0, 'g', 4);
             }
             // XXX - If Time of Day is selected, should we use ISO 8601
             // timestamps or something similar here instead of epoch time?

@@ -40,6 +40,8 @@
 
 #include "extcap.h"
 
+#include <ui/qt/main_window.h>
+
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/variant_pointer.h>
@@ -269,7 +271,7 @@ FolderListModel::FolderListModel(QObject * parent):
 
 #ifdef Q_OS_MAC
     /* Mac Extras */
-    QString extras_path = mainApp->applicationDirPath() + "/../Resources/Extras";
+    QString extras_path = QStringLiteral("%1/../Resources/Extras").arg(mainApp->applicationDirPath());
     appendRow(QStringList() << tr("macOS Extras") << QDir::cleanPath(extras_path) << tr("Extra macOS packages"));
 
 #endif

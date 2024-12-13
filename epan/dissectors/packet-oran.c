@@ -12,7 +12,7 @@
  /*
    * Dissector for the O-RAN Fronthaul CUS protocol specification.
    * See https://specifications.o-ran.org/specifications, WG4, Fronthaul Interfaces Workgroup
-   * The current implementation is based on the ORAN-WG4.CUS.0-v15.00 specification
+   * The current implementation is based on the ORAN-WG4.CUS.0-v16.01 specification
    */
 
 #include <config.h>
@@ -84,6 +84,18 @@ static int hf_oran_section_id;
 static int hf_oran_rb;
 static int hf_oran_symInc;
 static int hf_oran_startPrbc;
+static int hf_oran_reMask_re1;
+static int hf_oran_reMask_re2;
+static int hf_oran_reMask_re3;
+static int hf_oran_reMask_re4;
+static int hf_oran_reMask_re5;
+static int hf_oran_reMask_re6;
+static int hf_oran_reMask_re7;
+static int hf_oran_reMask_re8;
+static int hf_oran_reMask_re9;
+static int hf_oran_reMask_re10;
+static int hf_oran_reMask_re11;
+static int hf_oran_reMask_re12;
 static int hf_oran_reMask;
 static int hf_oran_numPrbc;
 static int hf_oran_numSymbol;
@@ -359,7 +371,7 @@ static int hf_oran_sinr_value;
 
 static int hf_oran_measurement_report;
 static int hf_oran_mf;
-static int hf_oran_meas_data_size;;
+static int hf_oran_meas_data_size;
 static int hf_oran_meas_type_id;
 static int hf_oran_ipn_power;
 static int hf_oran_ue_tae;
@@ -417,6 +429,9 @@ static int ett_oran_sym_prb_pattern;
 static int ett_oran_measurement_report;
 static int ett_oran_sresmask;
 static int ett_oran_c_section;
+static int ett_oran_remask;
+
+
 
 
 /* Expert info */
@@ -494,6 +509,10 @@ static unsigned pref_num_weights_per_bundle = 32;
 static unsigned pref_num_bf_antennas = 32;
 static bool pref_showIQSampleValues = true;
 
+static int  pref_support_udcompLen = 2;             /* start heuristic, can force other settings if necessary */
+static bool udcomplen_heuristic_result_set = false;
+static bool udcomplen_heuristic_result = false;
+
 
 static const enum_val_t dl_compression_options[] = {
     { "COMP_NONE",                             "No Compression",                                                             COMP_NONE },
@@ -518,9 +537,12 @@ static const enum_val_t ul_compression_options[] = {
     { NULL, NULL, 0 }
 };
 
-
-static bool pref_support_udcompLen = false;
-
+static const enum_val_t udcomp_support_options[] = {
+    { "NOT_SUPPORTED",              "Not Supported",        0 },
+    { "SUPPORTED",                  "Supported",            1 },
+    { "HEURISITC",                  "Attempt Heuristic",    2 },
+    { NULL, NULL, 0 }
+};
 
 static const value_string e_bit[] = {
     { 0, "More fragments follow" },
@@ -1078,6 +1100,10 @@ static const true_false_string beam_numbers_included_tfs = {
   "time-domain beam numbers included in this command"
 };
 
+static const true_false_string applicable_not_applicable_tfs = {
+  "applicable",
+  "not applicable"
+};
 
 
 /* Forward declaration */
@@ -1639,7 +1665,7 @@ static int dissect_bfwCompParam(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
     /* Can't go on if compression scheme not supported */
     if (!(*supported) && meth_ti) {
         expert_add_info_format(pinfo, meth_ti, &ei_oran_unsupported_bfw_compression_method,
-                               "BFW Compression method %u (%s) not supported by dissector",
+                               "BFW Compression method %u (%s) not decompressed by dissector",
                                bfw_comp_method,
                                val_to_str_const(bfw_comp_method, bfw_comp_headers_comp_meth, "reserved"));
     }
@@ -1919,8 +1945,8 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
 
     uint32_t sectionId = 0;
 
-    uint32_t startPrbc, startPrbu;
-    uint32_t numPrbc, numPrbu;
+    uint32_t startPrbc=0, startPrbu=0;
+    uint32_t numPrbc=0, numPrbu=0;
     uint32_t ueId = 0;
     uint32_t beamId = 0;
     proto_item *beamId_ti = NULL;
@@ -1979,8 +2005,26 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
         }
 
         if (sectionType != SEC_C_SINR_REPORTING) {
+            static int * const  remask_flags[] = {
+                &hf_oran_reMask_re1,
+                &hf_oran_reMask_re2,
+                &hf_oran_reMask_re3,
+                &hf_oran_reMask_re4,
+                &hf_oran_reMask_re5,
+                &hf_oran_reMask_re6,
+                &hf_oran_reMask_re7,
+                &hf_oran_reMask_re8,
+                &hf_oran_reMask_re9,
+                &hf_oran_reMask_re10,
+                &hf_oran_reMask_re11,
+                &hf_oran_reMask_re12,
+                NULL
+            };
+
             /* reMask */
-            proto_tree_add_item(c_section_tree, hf_oran_reMask, tvb, offset, 2, ENC_BIG_ENDIAN);
+            uint64_t remask;
+            proto_tree_add_bitmask_ret_uint64(c_section_tree, tvb, offset,
+                                              hf_oran_reMask, ett_oran_remask, remask_flags, ENC_BIG_ENDIAN, &remask);
             offset++;
             /* numSymbol */
             uint32_t numSymbol;
@@ -4581,7 +4625,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
                     /* lsb is symbol 0 */
                     for (unsigned s=0; s < 14; s++) {
                         if ((startSymbolId & (1 << s)) && (startSymbolId > s)) {
-                            proto_item_append_text(symbol_mask_ti, " (startSumbolId is %u, so some lower symbol bits ignored!)", startSymbolId);
+                            proto_item_append_text(symbol_mask_ti, " (startSymbolId is %u, so some lower symbol bits ignored!)", startSymbolId);
                             /* TODO: expert info too? */
                             break;
                         }
@@ -5038,6 +5082,57 @@ static int dissect_oran_u_re(tvbuff_t *tvb, proto_tree *tree,
 }
 
 
+static bool udcomplen_appears_present(bool udcomphdr_present, tvbuff_t *tvb, int offset)
+{
+    if (!udcomplen_heuristic_result_set) {
+        /* All sections will start the same way */
+        unsigned int section_bytes_before_field = (udcomphdr_present) ? 6 : 4;
+
+        /* Move offset back to the start of the section */
+        offset -= section_bytes_before_field;
+
+        do {
+            /* This field appears several bytes into the U-plane section */
+            uint32_t length_remaining = tvb_reported_length_remaining(tvb, offset);
+            /* Are there enough bytes to still read the length field? */
+            if (section_bytes_before_field+2 > length_remaining) {
+                udcomplen_heuristic_result = false;
+                udcomplen_heuristic_result_set = true;
+                break;
+            }
+
+            /* Read the length field */
+            uint16_t udcomplen = tvb_get_ntohs(tvb, offset+section_bytes_before_field);
+
+            /* Is this less than a valid section? Realistic minimal section will be bigger than this..
+             * Could take into account numPrbU, etc */
+            if (udcomplen < section_bytes_before_field+2) {
+                udcomplen_heuristic_result = false;
+                udcomplen_heuristic_result_set = true;
+                break;
+            }
+
+            /* Does this section fit into the frame? */
+            if (udcomplen > length_remaining) {
+                udcomplen_heuristic_result = false;
+                udcomplen_heuristic_result_set = true;
+                break;
+            }
+
+            /* Move past this section */
+            offset += udcomplen;
+
+            /* Are we at the end of the frame? */
+            /* TODO: if frame is less than 60 bytes, there may be > 4 bytes, likely zeros.. */
+            if (tvb_reported_length_remaining(tvb, offset) < 4) {
+                udcomplen_heuristic_result = true;
+                udcomplen_heuristic_result_set = true;
+            }
+        } while (!udcomplen_heuristic_result_set);
+    }
+    return udcomplen_heuristic_result;
+}
+
 /* User plane dissector (section 8) */
 static int
 dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
@@ -5261,17 +5356,29 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
         }
 
         /* udCompLen (when supported, methods 5,6,7,8) */
-        if (pref_support_udcompLen && (compression >= BFP_AND_SELECTIVE_RE)) {
-            ud_comp_len_ti = proto_tree_add_item_ret_uint(section_tree, hf_oran_udCompLen, tvb, offset, 2, ENC_NA, &ud_comp_len);
-            if (ud_comp_len <= 1) {
-                proto_item_append_text(ud_comp_len_ti, " (reserved)");
+        if (compression >= BFP_AND_SELECTIVE_RE) {
+            bool supported = (pref_support_udcompLen==1) || /* supported */
+                             (pref_support_udcompLen==2 && udcomplen_appears_present(includeUdCompHeader, tvb, offset));
+
+            if (supported) {
+                ud_comp_len_ti = proto_tree_add_item_ret_uint(section_tree, hf_oran_udCompLen, tvb, offset, 2, ENC_NA, &ud_comp_len);
+                if (ud_comp_len <= 1) {
+                    proto_item_append_text(ud_comp_len_ti, " (reserved)");
+                }
+                /* TODO: report if less than a viable section in frame? */
+                /* Check that there is this much length left in the frame */
+                if ((int)ud_comp_len > tvb_reported_length_remaining(tvb, section_start_offset)) {
+                    expert_add_info_format(pinfo, ud_comp_len_ti, &ei_oran_ud_comp_len_wrong_size,
+                                           "udCompLen indicates %u bytes in section, but only %u are left in frame",
+                                           ud_comp_len, tvb_reported_length_remaining(tvb, section_start_offset));
+                }
+                /* Actual length of section will be checked below, at the end of the section */
+                offset += 2;
             }
-            offset += 2;
         }
 
-        uint64_t sresmask1, sresmask2;
-
-        /* sReSMask1 + sReSMask2 */
+        /* sReSMask1 + sReSMask2 (depends upon compression method) */
+        uint64_t sresmask1=0, sresmask2=0;
         if (compression == BFP_AND_SELECTIVE_RE_WITH_MASKS ||
             compression == MOD_COMPR_AND_SELECTIVE_RE_WITH_MASKS)
         {
@@ -5486,6 +5593,12 @@ dissect_oran(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
             /* Not dissecting other types - assume these are handled by eCPRI dissector */
             return 0;
     }
+}
+
+static void oran_init_protocol(void)
+{
+    udcomplen_heuristic_result_set = false;
+    udcomplen_heuristic_result = false;
 }
 
 
@@ -5743,6 +5856,90 @@ proto_register_oran(void)
         },
 
         /* Section 7.5.3.5 */
+        {&hf_oran_reMask_re1,
+         {"RE 1", "oran_fh_cus.reMask-RE1",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x8000,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re2,
+         {"RE 2", "oran_fh_cus.reMask-RE2",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x4000,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re3,
+         {"RE 3", "oran_fh_cus.reMask-RE3",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x2000,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re4,
+         {"RE 4", "oran_fh_cus.reMask-RE4",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x1000,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re5,
+         {"RE 5", "oran_fh_cus.reMask-RE5",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x0800,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re6,
+         {"RE 6", "oran_fh_cus.reMask-RE6",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x0400,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re7,
+         {"RE 7", "oran_fh_cus.reMask-RE7",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x0200,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re8,
+         {"RE 8", "oran_fh_cus.reMask-RE8",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x0100,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re9,
+         {"RE 9", "oran_fh_cus.reMask-RE9",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x0080,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re10,
+         {"RE 10", "oran_fh_cus.reMask-RE10",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x0040,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re11,
+         {"RE 11", "oran_fh_cus.reMask-RE11",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x0020,
+          NULL,
+          HFILL}
+        },
+        {&hf_oran_reMask_re12,
+         {"RE 12", "oran_fh_cus.reMask-RE12",
+          FT_BOOLEAN, 16,
+          TFS(&applicable_not_applicable_tfs), 0x0010,
+          NULL,
+          HFILL}
+        },
         {&hf_oran_reMask,
          {"RE Mask", "oran_fh_cus.reMask",
           FT_UINT16, BASE_HEX,
@@ -7762,7 +7959,8 @@ proto_register_oran(void)
         &ett_oran_sym_prb_pattern,
         &ett_oran_measurement_report,
         &ett_oran_sresmask,
-        &ett_oran_c_section
+        &ett_oran_c_section,
+        &ett_oran_remask
     };
 
     expert_module_t* expert_oran;
@@ -7864,11 +8062,13 @@ proto_register_oran(void)
 
     prefs_register_obsolete_preference(oran_module, "oran.num_bf_weights");
 
-    prefs_register_bool_preference(oran_module, "oran.support_udcomplen", "udCompLen supported",
-        "When enabled, U-Plane messages with relevant compression schemes will include udCompLen", &pref_support_udcompLen);
+    prefs_register_enum_preference(oran_module, "oran.support_udcomplen", "udCompLen supported",
+        "When enabled, U-Plane messages with relevant compression schemes will include udCompLen", &pref_support_udcompLen, udcomp_support_options, false);
 
     flow_states_table = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
     flow_results_table = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
+
+    register_init_routine(&oran_init_protocol);
 }
 
 /* Simpler form of proto_reg_handoff_oran which can be used if there are

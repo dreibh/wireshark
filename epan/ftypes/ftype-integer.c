@@ -854,23 +854,6 @@ boolean_from_sinteger64(fvalue_t *fv, const char *s _U_, int64_t value, char **e
 	return true;
 }
 
-static bool
-boolean_from_string(fvalue_t *fv, const char *s, size_t len, char **err_msg _U_)
-{
-	if (g_ascii_strncasecmp(s, "true", len) == 0) {
-		fv->value.uinteger64 = 1;
-		return true;
-	}
-	if (g_ascii_strncasecmp(s, "false", len) == 0) {
-		fv->value.uinteger64 = 0;
-		return true;
-	}
-
-	if (err_msg)
-		*err_msg = ws_strdup_printf("expected \"True\" or \"False\", not \"%s\"", s);
-	return false;
-}
-
 static char *
 boolean_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int field_display _U_)
 {
@@ -962,55 +945,6 @@ static char *
 ipxnet_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype, int field_display _U_)
 {
 	return uinteger64_to_repr(scope, fv, rtype, BASE_HEX);
-}
-
-/* EUI64-specific */
-static bool
-eui64_from_literal(fvalue_t *fv, const char *s, bool allow_partial_value _U_, char **err_msg)
-{
-	GByteArray	*bytes;
-	bool	res;
-	union {
-		uint64_t value;
-		uint8_t bytes[8];
-	} eui64;
-
-	bytes = g_byte_array_new();
-	res = hex_str_to_bytes(s, bytes, true);
-	if (!res || bytes->len != 8) {
-		if (err_msg != NULL)
-			*err_msg = ws_strdup_printf("\"%s\" is not a valid EUI-64 address.", s);
-		g_byte_array_free(bytes, true);
-		return false;
-	}
-
-	memcpy(eui64.bytes, bytes->data, 8);
-	g_byte_array_free(bytes, true);
-	fv->value.uinteger64 = GUINT64_FROM_BE(eui64.value);
-	return true;
-}
-
-static bool
-eui64_from_uinteger64(fvalue_t *fv, const char *s _U_, uint64_t value, char **err_msg _U_)
-{
-	fv->value.uinteger64 = value;
-	return true;
-}
-
-static char *
-eui64_to_repr(wmem_allocator_t *scope, const fvalue_t *fv, ftrepr_t rtype _U_, int field_display _U_)
-{
-	union {
-		uint64_t value;
-		uint8_t bytes[8];
-	} eui64;
-
-	/* Copy and convert the address from host to network byte order. */
-	eui64.value = GUINT64_TO_BE(fv->value.uinteger64);
-
-	return wmem_strdup_printf(scope, "%.2x:%.2x:%.2x:%.2x:%.2x:%.2x:%.2x:%.2x",
-	    eui64.bytes[0], eui64.bytes[1], eui64.bytes[2], eui64.bytes[3],
-	    eui64.bytes[4], eui64.bytes[5], eui64.bytes[6], eui64.bytes[7]);
 }
 
 void
@@ -1669,7 +1603,7 @@ ftype_register_integers(void)
 		NULL,				/* copy_value */
 		NULL,				/* free_value */
 		boolean_from_literal,		/* val_from_literal */
-		boolean_from_string,		/* val_from_string */
+		NULL,				/* val_from_string */
 		uint64_from_charconst,		/* val_from_charconst */
 		boolean_from_uinteger64,	/* val_from_uinteger64 */
 		boolean_from_sinteger64,	/* val_from_sinteger64 */
@@ -1779,45 +1713,6 @@ ftype_register_integers(void)
 		uint64_modulo,			/* modulo */
 	};
 
-	static const ftype_t eui64_type = {
-		FT_EUI64,			/* ftype */
-		FT_EUI64_LEN,			/* wire_size */
-		int64_fvalue_new,		/* new_value */
-		NULL,				/* copy_value */
-		NULL,				/* free_value */
-		eui64_from_literal,		/* val_from_literal */
-		NULL,				/* val_from_string */
-		NULL,				/* val_from_charconst */
-		eui64_from_uinteger64,		/* val_from_uinteger64 */
-		NULL,				/* val_from_sinteger64 */
-		NULL,				/* val_from_double */
-		eui64_to_repr,			/* val_to_string_repr */
-
-		uint64_val_to_uinteger64,	/* val_to_uinteger64 */
-		uint64_val_to_sinteger64,	/* val_to_sinteger64 */
-		uint64_val_to_double,		/* val_to_double */
-
-		{ .set_value_uinteger64 = set_uinteger64 },	/* union set_value */
-		{ .get_value_uinteger64 = get_uinteger64 },	/* union get_value */
-
-		uint64_cmp_order,		/* cmp_order */
-		NULL,				/* cmp_contains */
-		NULL,				/* cmp_matches */
-
-		uint64_hash,			/* hash */
-		uint64_is_zero,			/* is_zero */
-		uint64_is_negative,		/* is_negative */
-		NULL,				/* len */
-		NULL,				/* slice */
-		uint64_bitwise_and,		/* bitwise_and */
-		uint64_unary_minus,		/* unary_minus */
-		uint64_add,			/* add */
-		uint64_subtract,		/* subtract */
-		NULL,				/* multiply */
-		NULL,				/* divide */
-		NULL,				/* modulo */
-	};
-
 	ftype_register(FT_CHAR, &char_type);
 	ftype_register(FT_UINT8, &uint8_type);
 	ftype_register(FT_UINT16, &uint16_type);
@@ -1838,7 +1733,6 @@ ftype_register_integers(void)
 	ftype_register(FT_BOOLEAN, &boolean_type);
 	ftype_register(FT_IPXNET, &ipxnet_type);
 	ftype_register(FT_FRAMENUM, &framenum_type);
-	ftype_register(FT_EUI64, &eui64_type);
 }
 
 void
@@ -1864,7 +1758,6 @@ ftype_register_pseudofields_integer(int proto)
 	static int hf_ft_boolean;
 	static int hf_ft_ipxnet;
 	static int hf_ft_framenum;
-	static int hf_ft_eui64;
 
 	static hf_register_info hf_ftypes[] = {
 		{ &hf_ft_char,
@@ -1965,11 +1858,6 @@ ftype_register_pseudofields_integer(int proto)
 		{ &hf_ft_framenum,
 		    { "FT_FRAMENUM", "_ws.ftypes.framenum",
 			FT_FRAMENUM, BASE_NONE, NULL, 0x00,
-			NULL, HFILL }
-		},
-		{ &hf_ft_eui64,
-		    { "FT_EUI64", "_ws.ftypes.eui64",
-			FT_EUI64, BASE_NONE, NULL, 0x00,
 			NULL, HFILL }
 		},
 	};

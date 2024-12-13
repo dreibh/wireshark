@@ -161,12 +161,9 @@ void DisplayFilterEdit::setType(DisplayFilterEditType type)
 
 void DisplayFilterEdit::connectToMainWindow()
 {
-    connect(this, &DisplayFilterEdit::filterPackets, qobject_cast<MainWindow *>(mainApp->mainWindow()),
-            &MainWindow::filterPackets);
-    connect(this, &DisplayFilterEdit::showPreferencesDialog,
-            qobject_cast<MainWindow *>(mainApp->mainWindow()), &MainWindow::showPreferencesDialog);
-    connect(qobject_cast<MainWindow *>(mainApp->mainWindow()), &MainWindow::displayFilterSuccess,
-            this, &DisplayFilterEdit::displayFilterSuccess);
+    connect(this, &DisplayFilterEdit::filterPackets, mainApp->mainWindow(), &MainWindow::filterPackets);
+    connect(this, &DisplayFilterEdit::showPreferencesDialog, mainApp->mainWindow(), &MainWindow::showPreferencesDialog);
+    connect(mainApp->mainWindow(), &MainWindow::displayFilterSuccess, this, &DisplayFilterEdit::displayFilterSuccess);
 }
 
 void DisplayFilterEdit::contextMenuEvent(QContextMenuEvent *event) {
@@ -241,13 +238,14 @@ void DisplayFilterEdit::alignActionButtons()
         rightMargin = 0;
     }
 
-    SyntaxLineEdit::setStyleSheet(style_sheet_ + QStringLiteral(
-            "SyntaxLineEdit {"
-            "  padding-left: %1px;"
-            "  margin-left: %2px;"
-            "  margin-right: %3px;"
+    SyntaxLineEdit::setStyleSheet(QStringLiteral(
+            "%1SyntaxLineEdit {"
+            "  padding-left: %2px;"
+            "  margin-left: %3px;"
+            "  margin-right: %4px;"
             "}"
             )
+            .arg(style_sheet_)
             .arg(leftPadding)
             .arg(leftMargin)
             .arg(rightMargin)

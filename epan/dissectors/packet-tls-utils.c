@@ -540,9 +540,13 @@ const value_string ssl_extension_curves[] = {
     { 258, "ffdhe4096" }, /* RFC 7919 */
     { 259, "ffdhe6144" }, /* RFC 7919 */
     { 260, "ffdhe8192" }, /* RFC 7919 */
+    { 512, "MLKEM512"}, /* draft-connolly-tls-mlkem-key-agreement-03 */
+    { 513, "MLKEM768"}, /* draft-connolly-tls-mlkem-key-agreement-03 */
+    { 514, "MLKEM1024"}, /* draft-connolly-tls-mlkem-key-agreement-03 */
     { 2570, "Reserved (GREASE)" }, /* RFC 8701 */
     { 4587, "SecP256r1MLKEM768" }, /* draft-kwiatkowski-tls-ecdhe-mlkem-02 */
-    { 4588, "X25519MLKEM768" }, /* draft-kwiatkowski-tls-ecdhe-mlkem-02 */
+    { 4588, "MLKEM768X25519" }, /* draft-kwiatkowski-tls-ecdhe-mlkem */
+    { 4589, "SecP384r1MLKEM1024" }, /* draft-kwiatkowski-tls-ecdhe-mlkem-03 */
     { 6682, "Reserved (GREASE)" }, /* RFC 8701 */
     { 10794, "Reserved (GREASE)" }, /* RFC 8701 */
     { 14906, "Reserved (GREASE)" }, /* RFC 8701 */
@@ -567,11 +571,8 @@ const value_string ssl_extension_curves[] = {
         see https://github.com/open-quantum-safe/oqs-provider/blob/main/oqs-template/oqs-kem-info.md
         These use IANA unassigned values and this list may be incomplete.
      */
-    { 0x0200, "frodo640aes" },
     { 0x2F00, "p256_frodo640aes" },
-    { 0x0201, "frodo640shake" },
     { 0x2F01, "p256_frodo640shake" },
-    { 0x0202, "frodo976aes" },
     { 0x2F02, "p384_frodo976aes" },
     { 0x0203, "frodo976shake" },
     { 0x2F03, "p384_frodo976shake" },
@@ -6627,7 +6628,21 @@ tls13_change_key(SslDecryptSession *ssl, ssl_master_key_map_t *mk_map,
 
     StringInfo *secret = tls13_load_secret(ssl, mk_map, is_from_server, type);
     if (!secret) {
-        return;
+        if (type != TLS_SECRET_HANDSHAKE) {
+            return;
+        }
+        /*
+         * Workaround for when for some reason we don't have the handshake
+         * secret but do have the application traffic secret. (#20240)
+         * If we can't find the handshake secret, we'll never decrypt the
+         * Finished message, so we won't know when to change to the app
+         * traffic key, so we do so now.
+         */
+        type = TLS_SECRET_APP;
+        secret = tls13_load_secret(ssl, mk_map, is_from_server, type);
+        if (!secret) {
+            return;
+        }
     }
 
     if (tls13_generate_keys(ssl, secret, is_from_server)) {

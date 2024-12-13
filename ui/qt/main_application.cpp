@@ -573,16 +573,16 @@ void MainApplication::applyCustomColorsFromRecent()
     }
 }
 
-// Return the first top-level QMainWindow.
-QWidget *MainApplication::mainWindow()
+// Return the first top-level MainWindow.
+MainWindow *MainApplication::mainWindow()
 {
     foreach (QWidget *tlw, topLevelWidgets()) {
-        QMainWindow *tlmw = qobject_cast<QMainWindow *>(tlw);
+        MainWindow *tlmw = qobject_cast<MainWindow *>(tlw);
         if (tlmw && tlmw->isVisible()) {
             return tlmw;
         }
     }
-    return 0;
+    return nullptr;
 }
 
 void MainApplication::storeCustomColorsInRecent()
@@ -1217,7 +1217,7 @@ void MainApplication::loadLanguage(const QString newLanguage)
     if (QFile::exists(QStringLiteral("%1/%2/wireshark_%3.qm")
             .arg(get_datafile_dir()).arg("languages").arg(localeLanguage)))
         switchTranslator(mainApp->translator,
-                QStringLiteral("wireshark_%1.qm").arg(localeLanguage), QString(get_datafile_dir()) + QStringLiteral("/languages"));
+                QStringLiteral("wireshark_%1.qm").arg(localeLanguage), QStringLiteral("%1/languages").arg(get_datafile_dir()));
     if (QFile::exists(QStringLiteral("%1/wireshark_%3.qm")
             .arg(gchar_free_to_qstring(get_persconffile_path("languages", false))).arg(localeLanguage)))
         switchTranslator(mainApp->translator,
@@ -1354,14 +1354,15 @@ void MainApplication::captureEventHandler(CaptureEvent ev)
 
 void MainApplication::pushStatus(StatusInfo status, const QString &message, const QString &messagetip)
 {
-    if (! mainWindow() || ! qobject_cast<MainWindow *>(mainWindow()))
+    MainWindow * mw = mainWindow();
+    if (! mw) {
         return;
-
-    MainWindow * mw = qobject_cast<MainWindow *>(mainWindow());
-    if (! mw->statusBar())
-        return;
+    }
 
     MainStatusBar * bar = mw->statusBar();
+    if (! bar) {
+        return;
+    }
 
     switch(status)
     {
@@ -1388,14 +1389,15 @@ void MainApplication::pushStatus(StatusInfo status, const QString &message, cons
 
 void MainApplication::popStatus(StatusInfo status)
 {
-    if (! mainWindow() || ! qobject_cast<MainWindow *>(mainWindow()))
+    MainWindow * mw = mainWindow();
+    if (! mw) {
         return;
-
-    MainWindow * mw = qobject_cast<MainWindow *>(mainWindow());
-    if (! mw->statusBar())
-        return;
+    }
 
     MainStatusBar * bar = mw->statusBar();
+    if (! bar) {
+        return;
+    }
 
     switch(status)
     {
@@ -1422,10 +1424,11 @@ void MainApplication::popStatus(StatusInfo status)
 
 void MainApplication::gotoFrame(int frame)
 {
-    if (! mainWindow() || ! qobject_cast<MainWindow *>(mainWindow()))
+    MainWindow * mw = mainWindow();
+    if (! mw) {
         return;
+    }
 
-    MainWindow * mw = qobject_cast<MainWindow *>(mainWindow());
     mw->gotoFrame(frame);
 }
 

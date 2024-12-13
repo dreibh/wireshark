@@ -132,8 +132,9 @@ compatible_ftypes(ftenum_t a, ftenum_t b)
 		case FT_FCWWN:
 		case FT_REL_OID:
 		case FT_SYSTEM_ID:
+		case FT_EUI64:
 
-			return (b == FT_ETHER || b == FT_BYTES || b == FT_UINT_BYTES || b == FT_OID || b == FT_VINES || b == FT_FCWWN || b == FT_REL_OID || b == FT_SYSTEM_ID);
+			return (b == FT_ETHER || b == FT_BYTES || b == FT_UINT_BYTES || b == FT_OID || b == FT_VINES || b == FT_FCWWN || b == FT_REL_OID || b == FT_SYSTEM_ID || b == FT_EUI64);
 
 		case FT_UINT8:
 		case FT_UINT16:
@@ -148,7 +149,6 @@ compatible_ftypes(ftenum_t a, ftenum_t b)
 		case FT_UINT48:
 		case FT_UINT56:
 		case FT_UINT64:
-		case FT_EUI64:
 			return ftype_can_val_to_uinteger64(b);
 
 		case FT_INT8:
@@ -409,6 +409,9 @@ mk_uint64_fvalue(uint64_t val)
 static enum mk_result
 mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *s, stnode_t *st)
 {
+	static const true_false_string  default_tf = { "True", "False" };
+	const true_false_string	*tf;
+
 	/* Early return? */
 	switch(hfinfo->type) {
 		case FT_NONE:
@@ -466,6 +469,34 @@ mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *
 			ASSERT_FTYPE_NOT_REACHED(hfinfo->type);
 	}
 
+	fvalue_t *fv;
+
+	/* Always handle FT_BOOLEAN (fallback to default tfs). */
+	if (hfinfo->type == FT_BOOLEAN) {
+		tf = hfinfo->strings ? (const true_false_string *)hfinfo->strings : &default_tf;
+
+		if (g_ascii_strcasecmp(s, tf->true_string) == 0) {
+			fv = mk_boolean_fvalue(true);
+			stnode_replace(st, STTYPE_FVALUE, fv);
+			return MK_OK_BOOLEAN;
+		}
+		if (g_ascii_strcasecmp(s, tf->false_string) == 0) {
+			fv = mk_boolean_fvalue(false);
+			stnode_replace(st, STTYPE_FVALUE, fv);
+			return MK_OK_BOOLEAN;
+		}
+		df_error_free(&dfw->error);
+		/* XXX - If the FT_BOOLEAN has a non-default tfs, should "True" or
+		 * "False" (with quotes, so a string not a literal in the grammar)
+		 * fall back to matching the default string with a deprecation
+		 * warning?
+		 */
+		dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "expected \"%s\" or \"%s\", not \"%s\" for %s.",
+								tf->true_string, tf->false_string,
+								s, hfinfo->abbrev);
+		return MK_ERROR;
+	}
+
 	/* Do val_strings exist? */
 	if (!hfinfo->strings) {
 		dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "%s cannot accept strings as values.",
@@ -478,27 +509,10 @@ mk_fvalue_from_val_string(dfwork_t *dfw, header_field_info *hfinfo, const char *
 	 * I happen to have now. */
 	df_error_free(&dfw->error);
 
-	fvalue_t *fv;
 	uint64_t val = 0, val_max = 0;
 	size_t count = 0;
 
-	if (hfinfo->type == FT_BOOLEAN) {
-		const true_false_string	*tf = (const true_false_string *)hfinfo->strings;
-
-		if (g_ascii_strcasecmp(s, tf->true_string) == 0) {
-			fv = mk_boolean_fvalue(true);
-			stnode_replace(st, STTYPE_FVALUE, fv);
-			return MK_OK_BOOLEAN;
-		}
-		if (g_ascii_strcasecmp(s, tf->false_string) == 0) {
-			fv = mk_boolean_fvalue(false);
-			stnode_replace(st, STTYPE_FVALUE, fv);
-			return MK_OK_BOOLEAN;
-		}
-		dfilter_fail(dfw, DF_ERROR_GENERIC, stnode_location(st), "\"%s\" cannot be found among the possible values for %s.",
-								s, hfinfo->abbrev);
-	}
-	else if (hfinfo->display & BASE_RANGE_STRING) {
+	if (hfinfo->display & BASE_RANGE_STRING) {
 		const range_string *vals = (const range_string *)hfinfo->strings;
 
 		while (vals->strptr != NULL && count <= 1) {
@@ -618,6 +632,7 @@ is_bytes_type(enum ftenum type)
 		case FT_OID:
 		case FT_REL_OID:
 		case FT_SYSTEM_ID:
+		case FT_EUI64:
 			return true;
 
 		case FT_NONE:
@@ -656,7 +671,6 @@ is_bytes_type(enum ftenum type)
 		case FT_INT48:
 		case FT_INT56:
 		case FT_INT64:
-		case FT_EUI64:
 			return false;
 
 		case FT_NUM_TYPES:

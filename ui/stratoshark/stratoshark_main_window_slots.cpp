@@ -468,7 +468,7 @@ void StratosharkMainWindow::queuedFilterAction(QString action_filter, FilterActi
         break;
     case FilterAction::ActionWebLookup:
     {
-        QString url = QStringLiteral("https://www.google.com/search?q=") + new_filter;
+        QString url = QStringLiteral("https://www.google.com/search?q=%1").arg(new_filter);
         QDesktopServices::openUrl(QUrl(url));
         break;
     }
@@ -2629,8 +2629,8 @@ void StratosharkMainWindow::openPacketDialog(bool from_reference)
 
         connect(packet_dialog, &PacketDialog::showProtocolPreferences,
                 this, &StratosharkMainWindow::showPreferencesDialog);
-        connect(packet_dialog, SIGNAL(editProtocolPreference(preference*, pref_module*)),
-                main_ui_->preferenceEditorFrame, SLOT(editPreference(preference*, pref_module*)));
+        connect(packet_dialog, SIGNAL(editProtocolPreference(pref_t*,module_t*)),
+                main_ui_->preferenceEditorFrame, SLOT(editPreference(pref_t*,module_t*)));
 
         connect(this, &StratosharkMainWindow::closePacketDialogs, packet_dialog, &PacketDialog::close);
         zoomText(); // Emits mainApp->zoomMonospaceFont(QFont)
@@ -3203,7 +3203,7 @@ void StratosharkMainWindow::connectHelpMenuActions()
     });
 
     connect(main_ui_->actionHelpContents, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(HELP_CONTENT); });
-    connect(main_ui_->actionHelpMPWireshark, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK); });
+    connect(main_ui_->actionHelpMPStratoshark, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_STRATOSHARK); });
     connect(main_ui_->actionHelpMPWireshark_Filter, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_WIRESHARK_FILTER); });
     connect(main_ui_->actionHelpMPCapinfos, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_CAPINFOS); });
     connect(main_ui_->actionHelpMPDumpcap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_DUMPCAP); });
