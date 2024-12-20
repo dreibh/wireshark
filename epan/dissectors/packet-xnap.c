@@ -1653,9 +1653,9 @@ static int hf_xnap_secondaryRATRestriction;       /* T_secondaryRATRestriction *
 static int hf_xnap_ExtendedSliceSupportList_item;  /* S_NSSAI */
 static int hf_xnap_ExtTLAs_item;                  /* ExtTLA_Item */
 static int hf_xnap_iPsecTLA;                      /* TransportLayerAddress */
-static int hf_xnap_gTPTransportLayerAddresses;    /* GTPTLAs */
+static int hf_xnap_gtptlas;                       /* GTPTLAs */
 static int hf_xnap_GTPTLAs_item;                  /* GTPTLA_Item */
-static int hf_xnap_gTPTransportLayerAddresses_01;  /* TransportLayerAddress */
+static int hf_xnap_gTPTransportLayerAddresses;    /* TransportLayerAddress */
 static int hf_xnap_f1TerminatingBHInformation_List;  /* F1TerminatingBHInformation_List */
 static int hf_xnap_F1TerminatingBHInformation_List_item;  /* F1TerminatingBHInformation_Item */
 static int hf_xnap_dLTNLAddress;                  /* IABTNLAddress */
@@ -13090,7 +13090,7 @@ dissect_xnap_ExtendedUEIdentityIndexValue(tvbuff_t *tvb _U_, int offset _U_, asn
 
 
 static const per_sequence_t GTPTLA_Item_sequence[] = {
-  { &hf_xnap_gTPTransportLayerAddresses_01, ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_xnap_TransportLayerAddress },
+  { &hf_xnap_gTPTransportLayerAddresses, ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_xnap_TransportLayerAddress },
   { &hf_xnap_iE_Extensions  , ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_ProtocolExtensionContainer },
   { NULL, 0, 0, NULL }
 };
@@ -13120,7 +13120,7 @@ dissect_xnap_GTPTLAs(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, pr
 
 static const per_sequence_t ExtTLA_Item_sequence[] = {
   { &hf_xnap_iPsecTLA       , ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_TransportLayerAddress },
-  { &hf_xnap_gTPTransportLayerAddresses, ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_GTPTLAs },
+  { &hf_xnap_gtptlas        , ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_GTPTLAs },
   { &hf_xnap_iE_Extensions  , ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_ProtocolExtensionContainer },
   { NULL, 0, 0, NULL }
 };
@@ -35440,7 +35440,7 @@ void proto_register_xnap(void) {
         FT_UINT32, BASE_DEC, VALS(xnap_Criticality_vals), 0,
         NULL, HFILL }},
     { &hf_xnap_protocolIE_Field_value,
-      { "value", "xnap.value_element",
+      { "value", "xnap.protocolIE_Field_value_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "ProtocolIE_Field_value", HFILL }},
     { &hf_xnap_ProtocolExtensionContainer_item,
@@ -35448,7 +35448,7 @@ void proto_register_xnap(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_xnap_extension_id,
-      { "id", "xnap.id",
+      { "id", "xnap.extension_id",
         FT_UINT32, BASE_DEC|BASE_EXT_STRING, &xnap_ProtocolIE_ID_vals_ext, 0,
         "ProtocolIE_ID", HFILL }},
     { &hf_xnap_extensionValue,
@@ -35460,11 +35460,11 @@ void proto_register_xnap(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_xnap_private_id,
-      { "id", "xnap.id",
+      { "id", "xnap.private_id",
         FT_UINT32, BASE_DEC, VALS(xnap_PrivateIE_ID_vals), 0,
         "PrivateIE_ID", HFILL }},
     { &hf_xnap_privateIE_Field_value,
-      { "value", "xnap.value_element",
+      { "value", "xnap.privateIE_Field_value_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "PrivateIE_Field_value", HFILL }},
     { &hf_xnap_a2XPC5QoSFlowList,
@@ -36907,15 +36907,15 @@ void proto_register_xnap(void) {
       { "iPsecTLA", "xnap.iPsecTLA",
         FT_BYTES, BASE_NONE, NULL, 0,
         "TransportLayerAddress", HFILL }},
-    { &hf_xnap_gTPTransportLayerAddresses,
-      { "gTPTransportLayerAddresses", "xnap.gTPTransportLayerAddresses",
+    { &hf_xnap_gtptlas,
+      { "gTPTransportLayerAddresses", "xnap.gtptlas",
         FT_UINT32, BASE_DEC, NULL, 0,
         "GTPTLAs", HFILL }},
     { &hf_xnap_GTPTLAs_item,
       { "GTPTLA-Item", "xnap.GTPTLA_Item_element",
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
-    { &hf_xnap_gTPTransportLayerAddresses_01,
+    { &hf_xnap_gTPTransportLayerAddresses,
       { "gTPTransportLayerAddresses", "xnap.gTPTransportLayerAddresses",
         FT_BYTES, BASE_NONE, NULL, 0,
         "TransportLayerAddress", HFILL }},
@@ -41200,11 +41200,11 @@ void proto_register_xnap(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_xnap_initiatingMessage_value,
-      { "value", "xnap.value_element",
+      { "value", "xnap.initiatingMessage_value_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "InitiatingMessage_value", HFILL }},
     { &hf_xnap_successfulOutcome_value,
-      { "value", "xnap.value_element",
+      { "value", "xnap.successfulOutcome_value_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "SuccessfulOutcome_value", HFILL }},
     { &hf_xnap_value,

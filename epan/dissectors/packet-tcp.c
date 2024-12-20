@@ -462,6 +462,7 @@ static expert_field ei_tcp_analysis_tfo_syn;
 static expert_field ei_tcp_analysis_tfo_ack;
 static expert_field ei_tcp_analysis_tfo_ignored;
 static expert_field ei_tcp_analysis_partial_ack;
+static expert_field ei_tcp_analysis_ambiguous_ack;
 static expert_field ei_tcp_scps_capable;
 static expert_field ei_tcp_option_sack_dsack;
 static expert_field ei_tcp_option_snack_sequence;
@@ -2883,6 +2884,13 @@ finished_fwd:
                     while(ual) {
                         if(GE_SEQ(seq,ual->seq) && LE_SEQ(seq+seglen,ual->nextseq)) {
                             pk_already_seen = true;
+                            /* As we know this packet has retransmissions, we are marking it
+                             * as eligible to Karn's algo.
+                             */
+                            ual->karn_flag = true;
+                            if(!tcpd->ta) {
+                                tcp_analyze_get_acked_struct(pinfo->num, seq, ack, true, tcpd);
+                            }
                             break;
                         }
                         ual=ual->next;
@@ -3013,6 +3021,22 @@ finished_checking_retransmission_type:
         if( (flags&(TH_SYN|TH_FIN)) ) {
             nextseq+=1;
         }
+
+        /* All Retransmissions are marked for later Karn discovery.
+         * It's very unlikely that we will ever meet a TCP client
+         * that just acknowledges a Fast Retransmission segment without
+         * jumping over and also acknowledging the ones that triggered
+         * the fast retransmission. Or maybe under heavy load ?
+         */
+        if(tcpd->ta &&
+          (tcpd->ta->flags & TCP_A_RETRANSMISSION ||
+           tcpd->ta->flags & TCP_A_FAST_RETRANSMISSION)) {
+            ual->karn_flag=true;
+        }
+        else {
+            ual->karn_flag=false;
+        }
+
         ual->nextseq=nextseq;
     }
 
@@ -3124,6 +3148,17 @@ finished_checking_retransmission_type:
             nstime_delta(&tcpd->ta->ts, &pinfo->abs_ts, &ual->ts);
             /* mark it as a full segment ACK */
             tcpd->ta->partial_ack=0;
+
+            if (tcppd) {
+                if (ual->karn_flag) {
+                    tcpd->ta->iskarn=true;
+                    tcppd->karn_flag=true;
+                }
+                else {
+                    tcpd->ta->iskarn=false;
+                    tcppd->karn_flag=false;
+                }
+            }
         }
         /* If this acknowledges part of the segment, adjust the segment info for the acked part.
          * This typically happens in the context of GSO/GRO or Retransmissions with
@@ -3148,6 +3183,20 @@ finished_checking_retransmission_type:
              * 'tcp.analysis.partial_ack'.
              */
             tcpd->ta->partial_ack=1;
+
+            /* identify ambiguous ACKs following Karn's definition
+             */
+            if (tcppd) {
+                if (ual->karn_flag) {
+                    tcpd->ta->iskarn=true;
+                    tcppd->karn_flag=true;
+                }
+                else {
+                    tcpd->ta->iskarn=false;
+                    tcppd->karn_flag=false;
+                }
+            }
+
             continue;
         }
         /* If this acknowledges a segment prior to this one, leave this segment alone and move on */
@@ -3874,12 +3923,18 @@ tcp_print_sequence_number_analysis(packet_info *pinfo, tvbuff_t *tvb, proto_tree
     /* encapsulate all proto_tree_add_xxx in ifs so we only print what
        data we actually have */
     if(ta->frame_acked) {
+
+
         item = proto_tree_add_uint(tree, hf_tcp_analysis_acks_frame,
             tvb, 0, 0, ta->frame_acked);
             proto_item_set_generated(item);
 
         if(ta->partial_ack) {
             expert_add_info(pinfo, item, &ei_tcp_analysis_partial_ack);
+        }
+
+        if(ta->iskarn) {
+            expert_add_info(pinfo, item, &ei_tcp_analysis_ambiguous_ack);
         }
 
         /* only display RTT if we actually have something we are acking */
@@ -4530,6 +4585,35 @@ again:
             }
 
             if(tcpd->ta && first_pdu) {
+                if(tcpd->ta->flags&TCP_A_KEEP_ALIVE) {
+                    /* RFC 9293 3.8.4. TCP Keep-Alives
+                     * Keep-alive packets MUST only be sent when no sent data
+                     * is outstanding (no new or unacknowledged data.)
+                     * A multisegment PDU boundary can never span a keep-alive
+                     * (unlike a Zero Window Probe or retransmission); if
+                     * a MSP started at the same sequence number as this, then
+                     * most likely the first packet of the TCP stream seen was
+                     * also a keep-alive, couldn't be identified as one, and
+                     * was passed to the next dissector which treated it as
+                     * starting a MSP. (#20287)
+                     *
+                     * This unfortunately doesn't help if this is somehow
+                     * a one-octet retransmission instead of a keep-alive.
+                     */
+                    nbytes = tvb_reported_length_remaining(tvb, offset);
+                    /* This MUST be only 1 (we don't get here for zero). */
+                    proto_tree_add_bytes_format(tcp_tree, hf_tcp_segment_data, tvb,
+                        offset, nbytes, NULL,
+                        "TCP keep-alive garbage octet%s",
+                        plurality(nbytes, "", "s"));
+                    if (has_unfinished_msp && msp->seq == seq) {
+                        /* MSPs cannot span this (probably not an MSP at
+                         * all but another garbage octet) */
+                        msp->nxtpdu = nxtseq;
+                    }
+                    goto clean_exit;
+                }
+
                 if((tcpd->ta->flags&TCP_A_OLD_DATA) == TCP_A_OLD_DATA) {
                     nbytes = tcpd->ta->new_data_seq - seq;
 
@@ -4580,6 +4664,18 @@ again:
                     !(msp->flags & MSP_FLAGS_MISSING_FIRST_SEGMENT) && msp->last_frame != pinfo->num) {
                 const char* str;
                 bool is_retransmission = false;
+
+                if(tcpd->ta && tcpd->ta->flags&TCP_A_KEEP_ALIVE) {
+                    /* Same logic as in the OOO processing case. */
+                    nbytes = tvb_reported_length_remaining(tvb, offset);
+                    /* This MUST be only 1 (we don't get here for zero). */
+                    proto_tree_add_bytes_format(tcp_tree, hf_tcp_segment_data, tvb,
+                        offset, nbytes, NULL,
+                        "TCP keep-alive garbage octet%s",
+                        plurality(nbytes, "", "s"));
+                    msp->nxtpdu = nxtseq;
+                    goto clean_exit;
+                }
 
                 /* Yes.  This could be because we've dissected this frame before
                  * or because this is a retransmission of a previously-seen
@@ -8474,7 +8570,12 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
                 tcph->th_win = tvb_get_ntohs(tvb, offset + 14);
 
                 if(!(pinfo->fd->visited)) {
+                    tcppd = (struct tcp_per_packet_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tcp, pinfo->curr_layer_num);
                     tcp_analyze_sequence_number(pinfo, tcph->th_rawseq, tcph->th_rawack, tcph->th_seglen, tcph->th_flags, tcph->th_win, tcpd, tcppd);
+                }
+                /* load the tcppd data as it may contain 'volatile' data such as Karn's indications */
+                else {
+                    tcppd = (struct tcp_per_packet_data_t *)p_get_proto_data(wmem_file_scope(), pinfo, proto_tcp, pinfo->curr_layer_num);
                 }
             }
 
@@ -8541,6 +8642,10 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         expert_add_info_format(pinfo, tf, &ei_tcp_bogus_header_length,
                                 "Bogus TCP header length (%u, must be at least %u)", tcph->th_hlen, TCPH_MIN_LEN);
         return offset+12;
+    }
+
+    if(tcp_analyze_seq && tcpd->fwd->tcp_analyze_seq_info && tcppd) {
+        tcph->flagkarn = tcppd->karn_flag;
     }
 
     /* Now we certainly have enough information to be willing to send
@@ -10224,6 +10329,7 @@ proto_register_tcp(void)
         { &ei_tcp_analysis_tfo_ack, { "tcp.analysis.tfo_ack", PI_SEQUENCE, PI_NOTE, "TCP SYN-ACK accepting TFO data", EXPFILL }},
         { &ei_tcp_analysis_tfo_ignored, { "tcp.analysis.tfo_ignored", PI_SEQUENCE, PI_NOTE, "TCP SYN-ACK ignoring TFO data", EXPFILL }},
         { &ei_tcp_analysis_partial_ack, { "tcp.analysis.partial_ack", PI_SEQUENCE, PI_NOTE, "Partial Acknowledgement of a segment", EXPFILL }},
+        { &ei_tcp_analysis_ambiguous_ack, { "tcp.analysis.ambiguous_ack", PI_SEQUENCE, PI_NOTE, "Ambiguous ACK following Karn's definition", EXPFILL }},
         { &ei_tcp_connection_fin_active, { "tcp.connection.fin_active", PI_SEQUENCE, PI_NOTE, "This frame initiates the connection closing", EXPFILL }},
         { &ei_tcp_connection_fin_passive, { "tcp.connection.fin_passive", PI_SEQUENCE, PI_NOTE, "This frame undergoes the connection closing", EXPFILL }},
         { &ei_tcp_scps_capable, { "tcp.analysis.scps_capable", PI_SEQUENCE, PI_NOTE, "Connection establish request (SYN-ACK): SCPS Capabilities Negotiated", EXPFILL }},

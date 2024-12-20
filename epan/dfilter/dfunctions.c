@@ -580,6 +580,7 @@ ul_semcheck_value_string(dfwork_t *dfw, const char *func_name, ftenum_t logical_
                             GSList *param_list, df_loc_t func_loc _U_)
 {
     header_field_info *hfinfo;
+    const char *abbrev;
 
     ws_assert(g_slist_length(param_list) == 1);
     stnode_t *param = param_list->data;
@@ -589,13 +590,23 @@ ul_semcheck_value_string(dfwork_t *dfw, const char *func_name, ftenum_t logical_
     if (stnode_type_id(param) == STTYPE_FIELD) {
         dfw->field_count++;
         hfinfo = sttype_field_hfinfo(param);
-        /* XXX - We should check all fields with the same abbreviation. */
-        if (hfinfo->strings != NULL && hfinfo->type != FT_FRAMENUM && hfinfo->type != FT_PROTOCOL) {
-            sttype_field_set_value_string(param, true);
-            return FT_STRING;
+        abbrev = hfinfo->abbrev;
+
+        while (hfinfo->same_name_prev_id != -1) {
+            /* Rewind (shouldn't be necessary.) */
+            hfinfo = proto_registrar_get_nth(hfinfo->same_name_prev_id);
+        }
+
+        for (; hfinfo; hfinfo = hfinfo->same_name_next) {
+            if (FT_IS_INTEGER(hfinfo->type) && hfinfo->strings != NULL && hfinfo->type != FT_FRAMENUM) {
+                /* The dfvm VALUE_STRING instruction doesn't support floating
+                 * types, even though they can be BASE_CUSTOM. */
+                sttype_field_set_value_string(param, true);
+                return FT_STRING;
+            }
         }
         dfunc_fail(dfw, param, "Field \"%s\" does not have a value string.",
-				hfinfo->abbrev);
+				abbrev);
     }
     dfunc_fail(dfw, param, "Only fields can be used as parameter for %s()", func_name);
 }
