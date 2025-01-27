@@ -1445,14 +1445,27 @@ typedef struct wtap_rec {
         wtap_custom_block_header custom_block_header;
     } rec_header;
 
-    wtap_block_t block ;         /* packet block; holds comments and verdicts in its options */
-    bool block_was_modified; /* true if ANY aspect of the block has been modified */
+    /*
+     * XXX - some if not all of the rec_header information may belong
+     * here, or may already be here.  Eliminating rec_header in favor
+     * of this might simplify the process of adding new record/block
+     * types.
+     *
+     * It also has a type field that's somewhat equivalent to rec_type.
+     *
+     * It's null for some record types.
+     */
+    wtap_block_t block;          /* block information */
+    bool block_was_modified;     /* true if ANY aspect of the block has been modified */
 
     /*
      * We use a Buffer so that we don't have to allocate and free
      * a buffer for the options for each record.
      */
     Buffer    options_buf;       /* file-type specific data */
+
+    /* Buffer for the record data. */
+    Buffer    data;
 } wtap_rec;
 
 /*
@@ -1906,8 +1919,7 @@ void wtap_set_cb_new_secrets(wtap *wth, wtap_new_secrets_callback_t add_new_secr
  *
  * @wth a wtap * returned by a call that opened a file for reading.
  * @rec a pointer to a wtap_rec, filled in with information about the
- * record.
- * @buf a pointer to a Buffer, filled in with data from the record.
+ * record and the data from the record.
  * @param err a positive "errno" value, or a negative number indicating
  * the type of error, if the read failed.
  * @param err_info for some errors, a string giving more details of
@@ -1918,8 +1930,8 @@ void wtap_set_cb_new_secrets(wtap *wth, wtap_new_secrets_callback_t add_new_secr
  * @return true on success, false on failure.
  */
 WS_DLL_PUBLIC
-bool wtap_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
-    char **err_info, int64_t *offset);
+bool wtap_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
+    int64_t *offset);
 
 /** Read the record at a specified offset in a capture file, filling in
  * *phdr and *buf.
@@ -1929,8 +1941,7 @@ bool wtap_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
  * @seek_off a int64_t giving an offset value returned by a previous
  * wtap_read() call.
  * @rec a pointer to a struct wtap_rec, filled in with information
- * about the record.
- * @buf a pointer to a Buffer, filled in with data from the record.
+ * about the record and the data from the record.
  * @param err a positive "errno" value, or a negative number indicating
  * the type of error, if the read failed.
  * @param err_info for some errors, a string giving more details of
@@ -1939,11 +1950,15 @@ bool wtap_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
  */
 WS_DLL_PUBLIC
 bool wtap_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    Buffer *buf, int *err, char **err_info);
+    int *err, char **err_info);
 
 /*** initialize a wtap_rec structure ***/
 WS_DLL_PUBLIC
-void wtap_rec_init(wtap_rec *rec);
+void wtap_rec_init(wtap_rec *rec, gsize space);
+
+/*** Apply a snapshot value ***/
+WS_DLL_PUBLIC
+void wtap_rec_apply_snapshot(wtap_rec *rec, uint32_t snaplen);
 
 /*** Re-initialize a wtap_rec structure ***/
 WS_DLL_PUBLIC
@@ -1974,6 +1989,8 @@ WS_DLL_PUBLIC
 const char *wtap_compression_type_description(wtap_compression_type compression_type);
 WS_DLL_PUBLIC
 const char *wtap_compression_type_extension(wtap_compression_type compression_type);
+WS_DLL_PUBLIC
+const char *wtap_compression_type_name(wtap_compression_type compression_type);
 WS_DLL_PUBLIC
 GSList *wtap_get_all_compression_type_extensions_list(void);
 WS_DLL_PUBLIC

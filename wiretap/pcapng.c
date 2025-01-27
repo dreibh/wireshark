@@ -43,11 +43,11 @@
 #define ROUND_TO_4BYTE(len) WS_ROUNDUP_4(len)
 
 static bool
-pcapng_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
+pcapng_read(wtap *wth, wtap_rec *rec, int *err,
             char **err_info, int64_t *data_offset);
 static bool
 pcapng_seek_read(wtap *wth, int64_t seek_off,
-                 wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+                 wtap_rec *rec, int *err, char **err_info);
 static void
 pcapng_close(wtap *wth);
 
@@ -265,11 +265,10 @@ typedef struct {
  *
  * A "read" routine returns a block as a libwiretap record, filling
  * in the wtap_rec structure with the appropriate record type and
- * other information, and filling in the supplied Buffer with
+ * other information, and filling in the structure's Buffer with
  * data for which there's no place in the wtap_rec structure.
  *
- * A "write" routine takes a libwiretap record and Buffer and writes
- * out a block.
+ * A "write" routine takes a libwiretap record and out a block.
  */
 typedef struct {
     block_reader reader;
@@ -908,9 +907,9 @@ pcapng_process_nflx_custom_option(wtapng_block_t *wblock,
     case NFLX_OPT_TYPE_TCPINFO:
         ws_debug("BBLog tcpinfo of length: %u", length);
         if (wblock->type == BLOCK_TYPE_CB_COPY) {
-            ws_buffer_assure_space(wblock->frame_buffer, length);
+            ws_buffer_assure_space(&wblock->rec->data, length);
             wblock->rec->rec_header.custom_block_header.length = length + 4;
-            memcpy(ws_buffer_start_ptr(wblock->frame_buffer), value, length);
+            memcpy(ws_buffer_start_ptr(&wblock->rec->data), value, length);
             memcpy(&temp, value, sizeof(uint64_t));
             temp = GUINT64_FROM_LE(temp);
             wblock->rec->ts.secs = section_info->bblog_offset_tv_sec + temp;
@@ -1180,7 +1179,6 @@ pcapng_process_options(FILE_T fh, wtapng_block_t *wblock,
                     return false;
                 }
                 break;
-
             default:
                 if (process_option == NULL ||
                     !(*process_option)(wblock, (const section_info_t *)section_info, option_code,
@@ -1189,6 +1187,7 @@ pcapng_process_options(FILE_T fh, wtapng_block_t *wblock,
                     g_free(option_content);
                     return false;
                 }
+                break;
         }
         option_ptr += rounded_option_length; /* multiple of 4 bytes, so it remains aligned */
         opt_bytes_remaining -= rounded_option_length;
@@ -2313,7 +2312,7 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
     wblock->rec->ts.secs = (time_t)(wblock->rec->ts.secs + iface_info.tsoffset);
 
     /* "(Enhanced) Packet Block" read capture data */
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer,
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data,
                                 packet.cap_len - pseudo_header_len, err, err_info))
         return false;
     block_read += packet.cap_len - pseudo_header_len;
@@ -2357,8 +2356,7 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
         wtap_block_add_uint64_option(wblock->block, OPT_PKT_DROPCOUNT, (uint64_t)packet.drops_count);
     }
 
-    pcap_read_post_process(false, iface_info.wtap_encap,
-                           wblock->rec, ws_buffer_start_ptr(wblock->frame_buffer),
+    pcap_read_post_process(false, iface_info.wtap_encap, wblock->rec,
                            section_info->byte_swapped, fcslen);
 
     /*
@@ -2497,7 +2495,7 @@ pcapng_read_simple_packet_block(FILE_T fh, pcapng_block_header_t *bh,
     memset((void *)&wblock->rec->rec_header.packet_header.pseudo_header, 0, sizeof(union wtap_pseudo_header));
 
     /* "Simple Packet Block" read capture data */
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer,
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data,
                                 simple_packet.cap_len, err, err_info))
         return false;
 
@@ -2507,8 +2505,7 @@ pcapng_read_simple_packet_block(FILE_T fh, pcapng_block_header_t *bh,
             return false;
     }
 
-    pcap_read_post_process(false, iface_info.wtap_encap,
-                           wblock->rec, ws_buffer_start_ptr(wblock->frame_buffer),
+    pcap_read_post_process(false, iface_info.wtap_encap, wblock->rec,
                            section_info->byte_swapped, iface_info.fcslen);
 
     /*
@@ -3094,7 +3091,7 @@ pcapng_handle_generic_custom_block(FILE_T fh, pcapng_block_header_t *bh,
     wblock->rec->rec_header.custom_block_header.length = bh->block_total_length - MIN_CB_SIZE;
     wblock->rec->rec_header.custom_block_header.pen = pen;
     wblock->rec->rec_header.custom_block_header.copy_allowed = (bh->block_type == BLOCK_TYPE_CB_COPY);
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer, to_read, err, err_info)) {
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data, to_read, err, err_info)) {
         return false;
     }
     /*
@@ -3171,6 +3168,7 @@ pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
     uint32_t event_len;
     uint16_t event_type;
     uint32_t nparams = 0;
+    uint32_t flags = 0;
     unsigned min_event_size;
 
     switch (bh->block_type) {
@@ -3198,6 +3196,14 @@ pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
     if (!wtap_read_bytes(fh, &cpu_id, sizeof cpu_id, err, err_info)) {
         ws_debug("failed to read sysdig event cpu id");
         return false;
+    }
+    if (bh->block_type == BLOCK_TYPE_SYSDIG_EVF || bh->block_type == BLOCK_TYPE_SYSDIG_EVF_V2 || bh->block_type == BLOCK_TYPE_SYSDIG_EVF_V2_LARGE) {
+        // XXX Unused for now.
+        if (!wtap_read_bytes(fh, &flags, sizeof flags, err, err_info)) {
+            ws_debug("failed to read sysdig flags");
+            return false;
+        }
+        min_event_size += 4;
     }
     if (!wtap_read_bytes(fh, &wire_ts, sizeof wire_ts, err, err_info)) {
         ws_debug("failed to read sysdig event timestamp");
@@ -3260,7 +3266,7 @@ pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
     wblock->rec->rec_header.syscall_header.event_filelen = block_read;
 
     /* "Sysdig Event Block" read event data */
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer,
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data,
                                 block_read, err, err_info))
         return false;
 
@@ -3291,7 +3297,7 @@ pcapng_read_systemd_journal_export_block(wtap *wth, FILE_T fh, pcapng_block_head
     entry_length = bh->block_total_length - MIN_BLOCK_SIZE;
 
     /* Includes padding bytes. */
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer,
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data,
                                 entry_length, err, err_info)) {
         return false;
     }
@@ -3300,9 +3306,9 @@ pcapng_read_systemd_journal_export_block(wtap *wth, FILE_T fh, pcapng_block_head
      * We don't have memmem available everywhere, so we get to add space for
      * a trailing \0 for strstr below.
      */
-    ws_buffer_assure_space(wblock->frame_buffer, entry_length+1);
+    ws_buffer_assure_space(&wblock->rec->data, entry_length+1);
 
-    char *buf_ptr = (char *) ws_buffer_start_ptr(wblock->frame_buffer);
+    char *buf_ptr = (char *) ws_buffer_start_ptr(&wblock->rec->data);
     while (entry_length > 0 && buf_ptr[entry_length-1] == '\0') {
         entry_length--;
     }
@@ -3633,7 +3639,9 @@ pcapng_read_block(wtap *wth, FILE_T fh, pcapng_t *pn,
             case(BLOCK_TYPE_SYSDIG_EVENT):
             case(BLOCK_TYPE_SYSDIG_EVENT_V2):
             case(BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE):
-            /* case(BLOCK_TYPE_SYSDIG_EVF): */
+            case(BLOCK_TYPE_SYSDIG_EVF):
+            case(BLOCK_TYPE_SYSDIG_EVF_V2):
+            case(BLOCK_TYPE_SYSDIG_EVF_V2_LARGE):
                 if (!pcapng_read_sysdig_event_block(wth, fh, &bh, section_info, wblock, err, err_info))
                     return false;
                 break;
@@ -3945,7 +3953,6 @@ pcapng_open(wtap *wth, int *err, char **err_info)
     wblock.type = bh.block_type;
     wblock.block = NULL;
     /* we don't expect any packet blocks yet */
-    wblock.frame_buffer = NULL;
     wblock.rec = NULL;
 
     switch (pcapng_read_section_header_block(wth->fh, &bh, &first_section,
@@ -4056,8 +4063,14 @@ pcapng_open(wtap *wth, int *err, char **err_info)
      * a pcapng that has a new link-layer type in an IDB in the middle of
      * the file, as they will discover in the middle that no, they can't
      * successfully write the output file as desired.
+     *
+     * If this is a live capture, and we're reading the initially written
+     * header, we'll loop until we reach EOF. (If compressed, it might
+     * also set WTAP_ERR_SHORT_READ from the stream / frame end not being
+     * present until the file is closed.) So we'll need to clear that at
+     * some point before reading packets.
      */
-    while (1) {
+    while (!file_eof(wth->fh)) {
         /* peek at next block */
         /* Try to read the (next) block header */
         saved_offset = file_tell(wth->fh);
@@ -4123,14 +4136,13 @@ pcapng_open(wtap *wth, int *err, char **err_info)
 
 /* classic wtap: read packet */
 static bool
-pcapng_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
-            char **err_info, int64_t *data_offset)
+pcapng_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
+            int64_t *data_offset)
 {
     pcapng_t *pcapng = (pcapng_t *)wth->priv;
     section_info_t *current_section, new_section;
     wtapng_block_t wblock;
 
-    wblock.frame_buffer  = buf;
     wblock.rec = rec;
 
     /* read next block */
@@ -4182,8 +4194,7 @@ pcapng_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
 
 /* classic wtap: seek to file position and read packet */
 static bool
-pcapng_seek_read(wtap *wth, int64_t seek_off,
-                 wtap_rec *rec, Buffer *buf,
+pcapng_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
                  int *err, char **err_info)
 {
     pcapng_t *pcapng = (pcapng_t *)wth->priv;
@@ -4228,7 +4239,6 @@ pcapng_seek_read(wtap *wth, int64_t seek_off,
         section_number--;
     }
 
-    wblock.frame_buffer = buf;
     wblock.rec = rec;
 
     /* read the block */
@@ -6961,7 +6971,7 @@ static const struct supported_block_type pcapng_blocks_supported[] = {
     /* Multiple blocks of decryption secrets. */
     { WTAP_BLOCK_DECRYPTION_SECRETS, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(decryption_secrets_block_options_supported) },
 
-    /* Multiple blocks of decryption secrets. */
+    /* Multiple blocks of meta evens.. */
     { WTAP_BLOCK_META_EVENT, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(meta_events_block_options_supported) },
 
     /* And, obviously, multiple packets. */

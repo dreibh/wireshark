@@ -28,6 +28,8 @@
 #include "capture_opts.h"
 #include "ringbuffer.h"
 
+#include <wiretap/wtap.h> /* For WTAP_MAX_PACKET_SIZE_STANDARD */
+
 #include <wsutil/clopts_common.h>
 #include <wsutil/cmdarg_err.h>
 #include <wsutil/file_util.h>
@@ -77,9 +79,7 @@ capture_opts_init(capture_options *capture_opts, GList *(*get_iface_list)(int *,
 #endif
     capture_opts->default_options.extcap_control_in  = NULL;
     capture_opts->default_options.extcap_control_out = NULL;
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
     capture_opts->default_options.buffer_size     = DEFAULT_CAPTURE_BUFFER_SIZE;
-#endif
     capture_opts->default_options.monitor_mode    = false;
 #ifdef HAVE_PCAP_REMOTE
     capture_opts->default_options.src_type        = CAPTURE_IFLOCAL;
@@ -204,9 +204,7 @@ capture_opts_log(const char *log_domain, enum ws_log_level log_level, capture_op
         ws_log(log_domain, log_level, "Extcap[%02d]          : %s", i, interface_opts->extcap ? interface_opts->extcap : "(unspecified)");
         ws_log(log_domain, log_level, "Extcap FIFO[%02d]     : %s", i, interface_opts->extcap_fifo ? interface_opts->extcap_fifo : "(unspecified)");
         ws_log(log_domain, log_level, "Extcap PID[%02d]      : %"PRIdMAX, i, (intmax_t)interface_opts->extcap_pid);
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
         ws_log(log_domain, log_level, "Buffer size[%02d]     : %d (MB)", i, interface_opts->buffer_size);
-#endif
         ws_log(log_domain, log_level, "Monitor Mode[%02d]    : %s", i, interface_opts->monitor_mode?"TRUE":"FALSE");
 #ifdef HAVE_PCAP_REMOTE
         ws_log(log_domain, log_level, "Capture source[%02d]  : %s", i,
@@ -245,9 +243,7 @@ capture_opts_log(const char *log_domain, enum ws_log_level log_level, capture_op
     ws_log(log_domain, log_level, "Promiscuous Mode[df]: %s", capture_opts->default_options.promisc_mode?"TRUE":"FALSE");
     ws_log(log_domain, log_level, "Extcap[df]          : %s", capture_opts->default_options.extcap ? capture_opts->default_options.extcap : "(unspecified)");
     ws_log(log_domain, log_level, "Extcap FIFO[df]     : %s", capture_opts->default_options.extcap_fifo ? capture_opts->default_options.extcap_fifo : "(unspecified)");
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
     ws_log(log_domain, log_level, "Buffer size[df]     : %d (MB)", capture_opts->default_options.buffer_size);
-#endif
     ws_log(log_domain, log_level, "Monitor Mode[df]    : %s", capture_opts->default_options.monitor_mode?"TRUE":"FALSE");
 #ifdef HAVE_PCAP_REMOTE
     ws_log(log_domain, log_level, "Capture source[df]  : %s",
@@ -639,9 +635,7 @@ fill_in_interface_opts_defaults(interface_options *interface_opts, const capture
 #endif
     interface_opts->extcap_control_in = g_strdup(capture_opts->default_options.extcap_control_in);
     interface_opts->extcap_control_out = g_strdup(capture_opts->default_options.extcap_control_out);
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
     interface_opts->buffer_size = capture_opts->default_options.buffer_size;
-#endif
     interface_opts->monitor_mode = capture_opts->default_options.monitor_mode;
 #ifdef HAVE_PCAP_REMOTE
     interface_opts->src_type = capture_opts->default_options.src_type;
@@ -983,7 +977,6 @@ capture_opts_add_opt(capture_options *capture_opts, int opt, const char *optarg_
             return 1;
         }
         break;
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
     case 'B':        /* Buffer size */
         if (capture_opts->ifaces->len > 0) {
             interface_options *interface_opts;
@@ -994,7 +987,6 @@ capture_opts_add_opt(capture_options *capture_opts, int opt, const char *optarg_
             capture_opts->default_options.buffer_size = get_positive_int(optarg_str_p, "buffer size");
         }
         break;
-#endif
     case 'c':        /* Capture n packets */
         /* XXX Use set_autostop_criterion instead? */
         capture_opts->has_autostop_packets = true;
@@ -1033,7 +1025,6 @@ capture_opts_add_opt(capture_options *capture_opts, int opt, const char *optarg_
             return status;
         }
         break;
-#ifdef HAVE_PCAP_CREATE
     case 'I':        /* Capture in monitor mode */
         if (capture_opts->ifaces->len > 0) {
             interface_options *interface_opts;
@@ -1044,7 +1035,6 @@ capture_opts_add_opt(capture_options *capture_opts, int opt, const char *optarg_
             capture_opts->default_options.monitor_mode = true;
         }
         break;
-#endif
     case 'l':        /* tshark "Line-buffer" standard output */
         capture_opts->update_interval = 0;
         /* Wireshark uses 'l' for Automatic scrolling in live capture mode,
@@ -1156,21 +1146,18 @@ capture_opts_add_opt(capture_options *capture_opts, int opt, const char *optarg_
             cmdarg_err("--compress-type can be set only once");
             return 1;
         }
-        if (strcmp(optarg_str_p, "none") == 0) {
-            ;
-        } else if (strcmp(optarg_str_p, "gzip") == 0) {
-#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
-            ;
-#else
-            cmdarg_err("'gzip' compression is not supported");
-            return 1;
-#endif
-        } else {
-#if defined (HAVE_ZLIB) || defined (HAVE_ZLIBNG)
-            cmdarg_err("parameter of --compress-type can be 'none' or 'gzip'");
-#else
-            cmdarg_err("parameter of --compress-type can only be 'none'");
-#endif
+        if (!wtap_can_write_compression_type(wtap_name_to_compression_type(optarg_str_p))) {
+            cmdarg_err("\"%s\" isn't a valid output compression mode", optarg_str_p);
+            cmdarg_err("The available output compression type(s) are:");
+            GSList *output_compression_types;
+            output_compression_types = wtap_get_all_output_compression_type_names_list();
+            for (GSList *compression_type = output_compression_types;
+                compression_type != NULL;
+                compression_type = g_slist_next(compression_type)) {
+
+                cmdarg_err_cont("    %s", (const char*)compression_type->data);
+            }
+            g_slist_free(output_compression_types);
             return 1;
         }
         capture_opts->compress_type = g_strdup(optarg_str_p);
@@ -1536,12 +1523,8 @@ collect_ifaces(capture_options *capture_opts)
 #endif
             interface_opts.extcap_control_in = NULL;
             interface_opts.extcap_control_out = NULL;
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
             interface_opts.buffer_size =  device->buffer;
-#endif
-#ifdef HAVE_PCAP_CREATE
             interface_opts.monitor_mode = device->monitor_mode_enabled;
-#endif
 #ifdef HAVE_PCAP_REMOTE
             interface_opts.src_type = CAPTURE_IFREMOTE;
             interface_opts.remote_host = g_strdup(device->remote_opts.remote_host_opts.remote_host);

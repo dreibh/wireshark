@@ -229,12 +229,13 @@ The btn:[Copy] button will copy the list values to the clipboard in CSV
 exported without special formatting, but this can be enabled if needed.
 
 The btn:[Follow Stream...] button will show the stream contents as described
-in <<ChAdvFollowStream>> dialog. The btn:[Graph...] button will show a graph
-as described in <<ChStatIOGraphs>>.
+in <<ChAdvFollowStream>> dialog. The btn:[Graph...] button will show a
+Time Sequence graph as described in <<ChStatTCPStreamGraphs>>.
 
-btn:[Conversation Types] lets you choose which traffic type tabs are shown.
+
+btn:[Protocol] lets you choose which traffic type tabs are shown.
 See <<ChStatEndpoints>> for a list of endpoint types. The enabled types
-are saved in your profile settings.
+are saved in your profile settings, as well as the last opened tab.
 
 [TIP]
 ====
@@ -354,9 +355,9 @@ The btn:[Copy] button will copy the list values to the clipboard in CSV
 exported without special formatting, but this can be enabled if needed.
 The btn:[Map] button will show the endpoints mapped in your web browser.
 
-btn:[Endpoint Types] lets you choose which traffic type tabs are shown. See
+btn:[Protocol] lets you choose which traffic type tabs are shown. See
 <<ChStatEndpoints>> above for a list of endpoint types. The enabled
-types are saved in your profile settings.
+types are saved in your profile settings, as well as the last opened tab.
 
 [TIP]
 ====
@@ -853,7 +854,18 @@ Throughput:: Average throughput and goodput.
 
 Round Trip Time:: Round trip time vs time or sequence number. RTT is
 based on the acknowledgment timestamp corresponding to a particular
-segment.
+segment. The sampling method selects which segments are taken into
+account and how the RTT is computed:
+
+* `All Data Packets`, all segments carrying data are computed, and when
+present, SACK is ignored.
+* `All Data Packets w/ SACK`, all segments carrying data are computed,
+the RTT value is based on SACK if present.
+* `Data Packets matching RTT`, only segments with a corresponding RTT
+value in the packet list are computed.
+* `Data Packets matching Karn RTT`, only segments with a corresponding RTT
+value in the packet list are computed, ambiguous ACKs following Karn's
+definition are excluded.
 
 Window Scaling:: Window size and outstanding bytes.
 

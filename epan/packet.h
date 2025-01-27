@@ -769,12 +769,6 @@ WS_DLL_PUBLIC bool deregister_depend_dissector(const char* parent, const char* d
  */
 WS_DLL_PUBLIC depend_dissector_list_t find_depend_dissector_list(const char* name);
 
-
-/* Do all one-time initialization. */
-extern void dissect_init(void);
-
-extern void dissect_cleanup(void);
-
 /*
  * Given a tvbuff, and a length from a packet header, adjust the length
  * of the tvbuff to reflect the specified length.
@@ -885,13 +879,13 @@ typedef struct file_data_s
  * Dissectors should never modify the record data.
  */
 extern void dissect_record(struct epan_dissect *edt, int file_type_subtype,
-    wtap_rec *rec, const uint8_t *data, frame_data *fd, column_info *cinfo);
+    wtap_rec *rec, frame_data *fd, column_info *cinfo);
 
 /*
- * Dissectors should never modify the packet data.
+ * Dissectors should never modify the file data.
  */
 extern void dissect_file(struct epan_dissect *edt,
-    wtap_rec *rec, const uint8_t *data, frame_data *fd, column_info *cinfo);
+    wtap_rec *rec, frame_data *fd, column_info *cinfo);
 
 /* Structure passed to the ethertype dissector */
 typedef struct ethertype_data_s

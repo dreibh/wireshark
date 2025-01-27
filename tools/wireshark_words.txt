@@ -188,6 +188,7 @@ autocompletions
 autoconf
 autoconfiguration
 autodiscovery
+autokey
 autoneg
 autosar
 available
@@ -235,6 +236,7 @@ bidir
 bidirection
 bidirectional
 bidirectionally
+biflow
 bifuel
 bigint
 bigtk
@@ -246,6 +248,7 @@ bitmask
 bitrate
 bitstring
 blackhole
+bluedroid
 bnode
 bogota
 boolflag
@@ -256,6 +259,7 @@ bootp
 bootup
 bosch
 bouygues
+bpsec
 brasil
 bratislava
 britain
@@ -265,6 +269,7 @@ brotli
 browsers
 bsmap
 bssap
+bssgp
 bssid
 bssids
 bssmap
@@ -416,6 +421,7 @@ cmake
 cmctrl
 cmdcontrol
 cmdmfg
+cmdset
 cmstatus
 codabar
 codebook
@@ -563,6 +569,7 @@ dbprop
 dbuild
 dccreq
 dcerpc
+dcmake
 dcname
 dcomp
 dct3trace
@@ -608,6 +615,7 @@ deduplicate
 deenabled
 deenablement
 deencapsulate
+defaultsc
 defence
 deferral
 defrag
@@ -671,12 +679,14 @@ designator
 destip
 destport
 determinant
+detune
 deutschland
 devaddr
 devcap
 devel
 devfs
 deviceid
+devid
 devmode
 devno
 devtype
@@ -700,6 +710,7 @@ differentiator
 diffie
 diffserv
 Digicel
+digin
 digitech
 digitel
 digitizer
@@ -767,6 +778,7 @@ drsuapi
 dsmcc
 dstmode
 dstport
+dtnum
 dtwin
 dumpcap
 duple
@@ -847,6 +859,7 @@ enumerator
 enums
 envchange
 epasv
+epdan
 epdcch
 eperm
 ephemeris
@@ -1061,6 +1074,7 @@ goroutines
 gostr
 gpointer
 gprscdr
+gprsmeasurementparams
 gprsmeasurementparams3g
 gpsascii
 granularity
@@ -1084,6 +1098,7 @@ guatemala
 guint
 gzipped
 handoff
+handoverto
 hangul
 hangup
 hangzhou
@@ -1160,6 +1175,7 @@ ideographic
 idiographic
 idl2deb
 idl2wrs
+idlfile
 idltype
 iec60870
 ieee1609dot
@@ -1211,6 +1227,7 @@ inited
 initialisation
 initialise
 initialised
+initialiser
 initialising
 initialization
 initializations
@@ -1271,6 +1288,7 @@ ioflag
 iograph
 ionospheric
 iotecha
+iowait
 ipacc
 ipaccess
 ipaddr
@@ -1280,6 +1298,7 @@ ipconfig
 ipdum
 iperf
 ipfix
+ipint
 ipmap
 ipphone
 ipprim
@@ -1532,6 +1551,7 @@ midamble
 middlebox
 migratable
 milano
+milli
 millimeters
 millimetre
 millimetres
@@ -1567,6 +1587,7 @@ modulus
 modus
 moldudp
 monday
+monlist
 monmap
 monterrey
 moscow
@@ -1590,6 +1611,7 @@ mqrccf
 mrcpv
 msbuild
 mscldap
+msgasy
 msgflag
 msgid
 msglen
@@ -1655,6 +1677,7 @@ ndriver
 nederland
 negotiability
 neighbour
+neighbourcelldescription3g
 neighbouring
 neighbours
 nessie
@@ -1818,6 +1841,7 @@ onboarding
 onduration
 onoff
 ontime
+ooorder
 opcfoundation
 opcode
 opcodes
@@ -1898,6 +1922,7 @@ passivated
 passkey
 passthrough
 passwd
+pathbuf
 pathconf
 paxos
 pbcch
@@ -1946,6 +1971,7 @@ plaintext
 planar
 plano
 plcinterface
+plessey
 plixer
 plmnid
 plugin
@@ -2117,7 +2143,9 @@ raytheon
 rcode
 rcsta
 rctxinfo
+rdata
 rdeth
+rdpmt
 rdpudp
 rdstls
 rdtci
@@ -2233,6 +2261,7 @@ reproducible
 reprogrammable
 reprogramming
 republish
+reqid
 reqinfo
 reqseq
 reqtype
@@ -2303,6 +2332,7 @@ rffpcnex
 rfinfo
 rfmon
 rgoose
+rhsalias
 richard
 rinfo
 ripemd
@@ -2432,6 +2462,7 @@ sessionkey
 setattr
 setcap
 setconf
+setiv
 setkey
 settl
 setuid
@@ -2485,6 +2516,7 @@ sminfo
 smpdirected
 smpte
 smrse
+smscb
 sname
 snaplen
 snarf
@@ -2701,6 +2733,7 @@ telefonica
 Telefónica
 Teléfonos
 telekom
+telem
 telematic
 telematics
 telenet
@@ -2720,6 +2753,7 @@ texas
 text2pcap
 textbox
 tfields
+tfmcc
 tfmccack
 tfshark
 thales
@@ -2729,6 +2763,7 @@ thompson
 throughput
 thunderx
 thursday
+timefmt
 timeout
 timeserv
 timeslot
@@ -2839,6 +2874,7 @@ uint32
 uint8
 uinteger
 ulmap
+ulong
 ulsch
 umask
 unack
@@ -3041,6 +3077,7 @@ validations
 validator
 valstringname
 varbyte
+varinfo
 varint
 vbucket
 vbuckets
@@ -3088,7 +3125,9 @@ vodafone
 voipmetrics
 volerr
 volid
+volser
 voltype
+vrfid
 vserver
 vtotal
 vxlan
@@ -3166,6 +3205,7 @@ xprint
 xproto
 xselinux
 xsltproc
+xtension
 xtest
 xtreme
 yyextra
@@ -3174,6 +3214,7 @@ yyterminate
 yytext
 z3950
 zbncp
+zboss
 ze3dd
 zeroes
 zigbee

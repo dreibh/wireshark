@@ -469,6 +469,7 @@ static expert_field ei_tcp_option_snack_sequence;
 static expert_field ei_tcp_option_wscale_shift_invalid;
 static expert_field ei_tcp_option_mss_absent;
 static expert_field ei_tcp_option_mss_present;
+static expert_field ei_tcp_option_mss_exceeded;
 static expert_field ei_tcp_option_sack_perm_absent;
 static expert_field ei_tcp_option_sack_perm_present;
 static expert_field ei_tcp_short_segment;
@@ -887,7 +888,7 @@ static const value_string netscaler_reset_window_error_code_vals[] = {
     { 9900,  "PI reset." },
     { 9901,  "Cache buffer large data error." },
     { 9902,  "HTML injection connection abort." },
-    { 9903,  "GSLB feature is disabled. Donot accept any connections and close any existing ones." },
+    { 9903,  "GSLB feature is disabled. Do not accept any connections and close any existing ones." },
     { 9904,  "Reset on AAA error." },
     { 9905,  "Database not responding." },
     { 9906,  "Local GSLB sites have been removed, send RST." },
@@ -2040,12 +2041,6 @@ init_tcp_conversation_data(packet_info *pinfo, int direction)
     nstime_set_zero(&tcpd->ts_first_rtt);
     tcpd->ts_prev.secs=pinfo->abs_ts.secs;
     tcpd->ts_prev.nsecs=pinfo->abs_ts.nsecs;
-    tcpd->flow1.valid_bif = true;
-    tcpd->flow2.valid_bif = true;
-    tcpd->flow1.push_bytes_sent = 0;
-    tcpd->flow2.push_bytes_sent = 0;
-    tcpd->flow1.push_set_last = false;
-    tcpd->flow2.push_set_last = false;
     tcpd->flow1.closing_initiator = false;
     tcpd->flow2.closing_initiator = false;
     tcpd->stream = tcp_stream_count++;
@@ -2054,6 +2049,8 @@ init_tcp_conversation_data(packet_info *pinfo, int direction)
     tcpd->flow_direction = 0;
     tcpd->flow1.flow_count = 0;
     tcpd->flow2.flow_count = 0;
+    tcpd->flow1.mss = -1;
+    tcpd->flow2.mss = -1;
 
     return tcpd;
 }
@@ -2485,7 +2482,7 @@ tcp_analyze_sequence_number(packet_info *pinfo, uint32_t seq, uint32_t ack, uint
     }
 
     if( flags & TH_ACK ) {
-        tcpd->rev->valid_bif = 1;
+        tcpd->rev->tcp_analyze_seq_info->valid_bif = true;
     }
 
     /* ZERO WINDOW PROBE
@@ -2534,7 +2531,7 @@ tcp_analyze_sequence_number(packet_info *pinfo, uint32_t seq, uint32_t ack, uint
         tcpd->ta->flags|=TCP_A_LOST_PACKET;
 
         /* Disable BiF until an ACK is seen in the other direction */
-        tcpd->fwd->valid_bif = 0;
+        tcpd->fwd->tcp_analyze_seq_info->valid_bif = false;
     }
 
 
@@ -3030,7 +3027,8 @@ finished_checking_retransmission_type:
          */
         if(tcpd->ta &&
           (tcpd->ta->flags & TCP_A_RETRANSMISSION ||
-           tcpd->ta->flags & TCP_A_FAST_RETRANSMISSION)) {
+           tcpd->ta->flags & TCP_A_FAST_RETRANSMISSION ||
+           tcpd->ta->flags & TCP_A_SPURIOUS_RETRANSMISSION)) {
             ual->karn_flag=true;
         }
         else {
@@ -3249,7 +3247,7 @@ finished_checking_retransmission_type:
         if(!tcp_bif_seq_based) {
             ual=tcpd->fwd->tcp_analyze_seq_info->segments;
 
-            if (seglen!=0 && ual && tcpd->fwd->valid_bif) {
+            if (seglen!=0 && ual && tcpd->fwd->tcp_analyze_seq_info->valid_bif) {
                 uint32_t first_seq, last_seq;
 
                 dry_bif_handling = true;
@@ -3268,7 +3266,7 @@ finished_checking_retransmission_type:
                 in_flight = last_seq-first_seq;
             }
         } else { /* calculation based on SEQ numbers (see issue 7703) */
-            if (seglen!=0 && tcpd->fwd->tcp_analyze_seq_info && tcpd->fwd->valid_bif) {
+            if (seglen!=0 && tcpd->fwd->tcp_analyze_seq_info && tcpd->fwd->tcp_analyze_seq_info->valid_bif) {
 
                 dry_bif_handling = true;
 
@@ -3300,22 +3298,22 @@ finished_checking_retransmission_type:
             }
             }
 
-            if((flags & TH_PUSH) && !tcpd->fwd->push_set_last) {
-              tcpd->fwd->push_bytes_sent += seglen;
-              tcpd->fwd->push_set_last = true;
-            } else if ((flags & TH_PUSH) && tcpd->fwd->push_set_last) {
-              tcpd->fwd->push_bytes_sent = seglen;
-              tcpd->fwd->push_set_last = true;
-            } else if (tcpd->fwd->push_set_last) {
-              tcpd->fwd->push_bytes_sent = seglen;
-              tcpd->fwd->push_set_last = false;
+            if((flags & TH_PUSH) && !tcpd->fwd->tcp_analyze_seq_info->push_set_last) {
+              tcpd->fwd->tcp_analyze_seq_info->push_bytes_sent += seglen;
+              tcpd->fwd->tcp_analyze_seq_info->push_set_last = true;
+            } else if ((flags & TH_PUSH) && tcpd->fwd->tcp_analyze_seq_info->push_set_last) {
+              tcpd->fwd->tcp_analyze_seq_info->push_bytes_sent = seglen;
+              tcpd->fwd->tcp_analyze_seq_info->push_set_last = true;
+            } else if (tcpd->fwd->tcp_analyze_seq_info->push_set_last) {
+              tcpd->fwd->tcp_analyze_seq_info->push_bytes_sent = seglen;
+              tcpd->fwd->tcp_analyze_seq_info->push_set_last = false;
             } else {
-              tcpd->fwd->push_bytes_sent += seglen;
+              tcpd->fwd->tcp_analyze_seq_info->push_bytes_sent += seglen;
             }
             if(!tcpd->ta) {
               tcp_analyze_get_acked_struct(pinfo->fd->num, seq, ack, true, tcpd);
             }
-            tcpd->ta->push_bytes_sent = tcpd->fwd->push_bytes_sent;
+            tcpd->ta->push_bytes_sent = tcpd->fwd->tcp_analyze_seq_info->push_bytes_sent;
         }
     }
 
@@ -5945,6 +5943,11 @@ dissect_tcpopt_mss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
     int offset = 0;
     struct tcpheader *tcph = (struct tcpheader *)data;
     uint32_t mss;
+    struct tcp_analysis *tcpd;
+
+    /* find the conversation for this TCP session and its stored data */
+    conversation_t *stratconv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0);
+    tcpd=get_tcp_conversation_data_idempotent(stratconv);
 
     item = proto_tree_add_item(tree, proto_tcp_option_mss, tvb, offset, -1, ENC_NA);
     exp_tree = proto_item_add_subtree(item, ett_tcp_option_mss);
@@ -5963,6 +5966,12 @@ dissect_tcpopt_mss(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* da
     proto_tree_add_item_ret_uint(exp_tree, hf_tcp_option_mss_val, tvb, offset + 2, 2, ENC_BIG_ENDIAN, &mss);
     proto_item_append_text(item, ": %u bytes", mss);
     tcp_info_append_uint(pinfo, "MSS", mss);
+
+    /* Only SYN packets are supposed to have this option
+     * XXX - we could restrict a bit more with seq_analyze */
+    if( tcpd && (tcph->th_flags & TH_SYN) && !pinfo->fd->visited ) {
+        tcpd->fwd->mss=mss;
+    }
 
     return tvb_captured_length(tvb);
 }
@@ -9153,6 +9162,35 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 
     }
 
+    /* Handle default MSS values for IPv4 and IPv6
+     * If MSS is still -1 after dissecting the options,
+     * apply the default values (as per RFC 9293).
+     */
+    if(tcp_analyze_seq && conversation_is_new &&
+       !pinfo->fd->visited &&
+       tcpd->fwd->mss==-1) {
+
+        switch(pinfo->src.type) {
+        case AT_IPv4:
+            tcpd->fwd->mss = 536;
+            tcpd->rev->mss = 536;
+            break;
+        case AT_IPv6:
+            tcpd->fwd->mss = 1220;
+            tcpd->rev->mss = 1220;
+            break;
+        default:
+            DISSECTOR_ASSERT_NOT_REACHED();
+            break;
+        }
+    }
+
+    /* If SYN (and hence MSS value) for that direction is missing,
+     * the default MSS value might not be realistic */
+    if (tcph->th_have_seglen && tcph->th_seglen>(uint32_t)tcpd->fwd->mss) {
+        expert_add_info(pinfo, NULL, &ei_tcp_option_mss_exceeded);
+    }
+
     /* handle TCP seq# analysis, print any extra SEQ/ACK data for this segment*/
     if(tcp_analyze_seq) {
         uint32_t use_seq = tcph->th_seq;
@@ -10338,6 +10376,7 @@ proto_register_tcp(void)
         { &ei_tcp_option_wscale_shift_invalid, { "tcp.options.wscale.shift.invalid", PI_PROTOCOL, PI_WARN, "Window scale shift exceeds 14", EXPFILL }},
         { &ei_tcp_option_mss_absent, { "tcp.options.mss.absent", PI_PROTOCOL, PI_NOTE, "The SYN packet does not contain a MSS option", EXPFILL }},
         { &ei_tcp_option_mss_present, { "tcp.options.mss.present", PI_PROTOCOL, PI_WARN, "The non-SYN packet does contain a MSS option", EXPFILL }},
+        { &ei_tcp_option_mss_exceeded, { "tcp.options.mss.exceeded", PI_PROTOCOL, PI_NOTE, "This packet's length exceeds MSS (common with TSO or incomplete conversations)", EXPFILL }},
         { &ei_tcp_option_sack_perm_absent, { "tcp.options.sack_perm.absent", PI_PROTOCOL, PI_NOTE, "The SYN packet does not contain a SACK PERM option", EXPFILL }},
         { &ei_tcp_option_sack_perm_present, { "tcp.options.sack_perm.present", PI_PROTOCOL, PI_WARN, "The non-SYN packet does contain a SACK PERM option", EXPFILL }},
         { &ei_tcp_short_segment, { "tcp.short_segment", PI_MALFORMED, PI_WARN, "Short segment", EXPFILL }},

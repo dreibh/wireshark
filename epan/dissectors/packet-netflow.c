@@ -1755,6 +1755,9 @@ static const value_string v10_template_types_ixia[] = {
     {  327, "SIP Content Type"},
     {  328, "SIP Route"},
     {  329, "SIP Geolocation"},
+    {  378, "Extended HTTP URI"},
+    {  379, "App Octet Delta Count"},
+    {  380, "Reverse App Octet Delta Count"},
     { 0, NULL }
 };
 static value_string_ext v10_template_types_ixia_ext = VALUE_STRING_EXT_INIT(v10_template_types_ixia);
@@ -3681,6 +3684,9 @@ static int      hf_pie_ixia_session_ip_scrambling_key_hash;
 static int      hf_pie_ixia_ja4a;
 static int      hf_pie_ixia_ja4b;
 static int      hf_pie_ixia_ja4c;
+static int      hf_pie_ixia_uri_extended;
+static int      hf_pie_ixia_app_octet_delta_count;
+static int      hf_pie_ixia_reverse_app_octet_delta_count;
 
 static int      hf_pie_netscaler;
 static int      hf_pie_netscaler_roundtriptime;
@@ -8434,7 +8440,7 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             ti = proto_tree_add_item(pdutree, hf_pie_fastip_meter_os_nodename,
                                      tvb, offset, length, ENC_ASCII);
             break;
-        case ((VENDOR_FASTIP << 16) | 3) : /* METER_OS_RELASE */
+        case ((VENDOR_FASTIP << 16) | 3) : /* METER_OS_RELEASE */
             ti = proto_tree_add_item(pdutree, hf_pie_fastip_meter_os_release,
                                      tvb, offset, length, ENC_ASCII);
             break;
@@ -11411,6 +11417,18 @@ dissect_v9_v10_pdu_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pdutree, 
             ti = proto_tree_add_item(pdutree, hf_pie_ixia_ja4c,
                                      tvb, offset, length, ENC_ASCII);
             break;
+        case ((VENDOR_IXIA << 16) | 378):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_uri_extended,
+                                     tvb, offset, length, ENC_ASCII);
+            break;
+        case ((VENDOR_IXIA << 16) | 379):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_app_octet_delta_count,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
+        case ((VENDOR_IXIA << 16) | 380):
+            ti = proto_tree_add_item(pdutree, hf_pie_ixia_reverse_app_octet_delta_count,
+                                     tvb, offset, length, ENC_BIG_ENDIAN);
+            break;
             /* END Ixia Communications */
 
             /* START Netscaler Communications */
@@ -13011,8 +13029,13 @@ dissect_v9_v10_template_fields(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree
             tmplt_p->fields_p[fields_type][i].length  = length;
             tmplt_p->fields_p[fields_type][i].pen     = pen;
             tmplt_p->fields_p[fields_type][i].pen_str = pen_str;
-            if (length != VARIABLE_LENGTH) { /* Don't include "variable length" in the total */
+            /* The length is the minimum length of a record and is used to determine whether a record exists
+             * or is padding.
+             */
+            if (length != VARIABLE_LENGTH) {
                 tmplt_p->length    += length;
+            } else {
+                tmplt_p->length    += 1; /* a variable length field is at least 1 octet. */
             }
         }
 
@@ -20333,6 +20356,27 @@ proto_register_netflow(void)
          {"JA4 Fingerprint Part C", "cflow.pie.ixia.ja4c",
           FT_STRING, BASE_NONE, NULL, 0x0,
           "Third Part of a JA4 Fingerprint", HFILL}
+        },
+
+        /* ixia, 3054 / 378 */
+        {&hf_pie_ixia_uri_extended,
+         {"Extended HTTP URI", "cflow.pie.ixia.uri-extended",
+          FT_STRING, BASE_NONE, NULL, 0x0,
+          "Extended URI in HTTP requests", HFILL}
+        },
+
+        /* ixia, 3054 / 379 */
+        {&hf_pie_ixia_app_octet_delta_count,
+         {"App Octet Delta Count", "cflow.pie.ixia.app-octet-delta-count",
+          FT_UINT64, BASE_DEC, NULL, 0x0,
+          "Application Octet Delta Count", HFILL}
+        },
+
+        /* ixia, 3054 / 380 */
+        {&hf_pie_ixia_reverse_app_octet_delta_count,
+         {"Reverse App Octet Delta Count", "cflow.pie.ixia.reverse-app-octet-delta-count",
+          FT_UINT64, BASE_DEC, NULL, 0x0,
+          "In bi-directional flows, application octet delta count for the server back to client", HFILL}
         },
 
         /* Netscaler root (a hidden item to allow filtering) */

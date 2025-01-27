@@ -114,6 +114,8 @@ tapall_tcpip_packet(void *pct, packet_info *pinfo, epan_dissect_t *edt _U_, cons
         copy_address(&segment->ip_src, &tcphdr->ip_src);
         copy_address(&segment->ip_dst, &tcphdr->ip_dst);
 
+        segment->ack_karn=tcphdr->flagkarn;
+
         segment->num_sack_ranges = MIN(MAX_TCP_SACK_RANGES, tcphdr->num_sack_ranges);
         if (segment->num_sack_ranges > 0) {
             /* Copy entries in the order they happen */
@@ -322,9 +324,7 @@ select_tcpip_session(capture_file *cf)
 
     epan_dissect_init(&edt, cf->epan, true, false);
     epan_dissect_prime_with_dfilter(&edt, sfcode);
-    epan_dissect_run_with_taps(&edt, cf->cd_t, &cf->rec,
-                               ws_buffer_start_ptr(&cf->buf),
-                               fdata, NULL);
+    epan_dissect_run_with_taps(&edt, cf->cd_t, &cf->rec, fdata, NULL);
     epan_dissect_cleanup(&edt);
     remove_tap_listener(&th);
     dfilter_free(sfcode);
@@ -361,7 +361,7 @@ select_tcpip_session(capture_file *cf)
     return th_stream;
 }
 
-int rtt_is_retrans(struct rtt_unack *list, unsigned int seqno)
+bool rtt_is_retrans(struct rtt_unack *list, unsigned int seqno)
 {
     struct rtt_unack *u;
 

@@ -83,7 +83,7 @@ $X64Archives = @{
     "libmaxminddb/libmaxminddb-1.4.3-1-win64ws.zip" = "ee89944a19ab6e1c873bdecb9fc6205d317c41e6da6ec1d30bc892fddfd143da";
     "libpcap/libpcap-1.10.4-1-x64-windows-ws.zip" = "ad18ee1da72ce9df524b8baf9c185f237e534ef8e356c0b3eb3a5d6762004656";
     "libsmi/libsmi-2021-01-15-2-x64-windows-ws.zip" = "ee8e349427d2a4ee9c18fc6b5839bd6df41685ecba03506179c21425e04f3413";
-    "libssh/libssh-0.11.0-1-x64-mingw-dynamic-ws.zip" = "c2c99819ddcffcd55085cb794beed03610453b234b60e35154c4b7542967832e";
+    "libssh/libssh-0.11.1-1-x64-mingw-dynamic-ws.zip" = "bce4f23eac58c96bd772844983ae5ce786b9f894be4a50c71135514a30c46ed4";
     "lua/lua-5.4.6-unicode-win64-vc14.zip" = "f0c6c7eb28733425b16717beb338d44c041dfbb5c6807e618d96bd754276aaff";
     "lz4/lz4-1.10.0-1-x64-windows-ws.zip" = "8b838f68cc90efa2d7c37f2bc651d153487bc336525d67f9c224a3e4bccf3583";
     "minizip/minizip-1.3-1-x64-windows-ws.zip" = "eb0bb5fffda5328e192d0d7951ff0254e64dcd736d46909fde7db792c1c53bcc";
@@ -96,9 +96,9 @@ $X64Archives = @{
     "snappy/snappy-1.2.1-1-x64-windows-ws.zip" = "e2ffccb26e91881b42d03061dcc728a98af9037705cb4595c8ccbe8d912b5d68";
     "spandsp/spandsp-0.0.6-5-x64-windows-ws.zip" = "cbb18310876ec6f081662253a2d37f5174ac60c58b0b7cd6759852fbcfaa7d7f";
     "speexdsp/speexdsp-1.21.1-1-win64ws.zip" = "d36db62e64ffaee38d9f607bef07d3778d8957ad29757f3eba169eb135f1a4e5";
-    "vcpkg-export/vcpkg-export-20240524-1-x64-windows-ws.zip" = "c566f41f20ae87fa4357d204f92cbbe2f236bc1df28c3d106fecfe21a8fbfa11";
+    "vcpkg-export/vcpkg-export-20250124-1-x64-windows-ws.zip" = "8587711d1b95fe3708355b71139a28036e0c17f60840a8805f014b70c036d460";
     "WinSparkle/WinSparkle-0.8.0-4-gb320893.zip" = "3ae42326bcd34594bc21b1e7948863a839ee76e87d9f4cf6b59b9d9f9a083881";
-    "zlib-ng/zlib-ng-2.1.5-1-x64-windows-ws.zip" = "a9f90e349d041d464afc1e0926d628ebee02e7093ab9983c5a7808e2b70d7873";
+    "zlib-ng/zlib-ng-2.2.3-1-x64-windows-ws.zip" = "8b4e5ba1b61688eccb7e315c2f4ce1ef0c4301172f265bd41455e1df6a5a9522";
     "zstd/zstd-1.5.6-1-x64-windows-ws.zip" = "f3f59351d273a1c1f2b84b60164556c8d2726155da2148f917d260d9efd16b6e";
 }
 
@@ -116,7 +116,7 @@ $Arm64Archives = @{
     "libmaxminddb/libmaxminddb-1.4.3-1-win64armws.zip" = "9996327f301cb4a4de797bc024ad0471acd95c1850a2afc849c57fcc93360610";
     "libpcap/libpcap-1.10.4-1-arm64-windows-ws.zip" = "98dbac265e3617eb0ab1a690902a4989e022d0761098c2753bff4cd0189419b3";
     "libsmi/libsmi-2021-01-15-2-arm64-windows-ws.zip" = "3f5b7507a19436bd6494e2cbc89856a5980950f931f7cf0d637a8e764914d015";
-    "libssh/libssh-0.11.0-1-arm64-mingw-dynamic-ws.zip" = "3604a87444ab7d9343e2235047c85c5d68dbdb40abda8cbbcc09ccf8a20703d6";
+    "libssh/libssh-0.11.1-1-arm64-mingw-dynamic-ws.zip" = "aca24901203612f3feef0d7a8954afd81379a9a35486565a13147bf10d5f0f1b";
     "lua/lua-5.4.6-unicode-arm64-windows-vc14.zip" = "a28c38acde71de5c495420cd8bf480e2e41f1a14bac81503b700fc64a9679b95";
     "lz4/lz4-1.10.0-1-arm64-windows-ws.zip" = "ee51fbf87bf359fa7835be89797c3488daf502e36e26337b0e649030aab7a09b";
     "minizip/minizip-1.3-1-arm64-windows-ws.zip" = "e5b35d064ff10f1ab1ee9193a0965fd1eb3d1e16eab5a905ab3fea9b14fb5afe";
@@ -129,9 +129,9 @@ $Arm64Archives = @{
     "snappy/snappy-1.2.1-1-arm64-windows-ws.zip" = "71d6987360eb1a10abd0d070768e6b7b250c6ea87feaee044ecbc8864c7e57f4";
     "spandsp/spandsp-0.0.6-5-arm64-windows-ws.zip" = "fdf01e3c33e739ff9399b7d42cd8230c97cb27ce51865a0f06285a8f68206b6c";
     "speexdsp/speexdsp-1.2.1-1-win64armws.zip" = "1759a9193065f27e50dd79dbb1786d24031ac43ccc48c40dca46d8a48552e3bb";
-    "vcpkg-export/vcpkg-export-20240524-1-arm64-windows-ws.zip" = "5d1e186b77ec3bc7072253be90b6aa36d7e317bccc382209c1570b60e488000b";
+    "vcpkg-export/vcpkg-export-20250124-1-arm64-windows-ws.zip" = "29f234a5dc64c43e1b3aca8c47561ea877cdfc21abfeafc97174770023a097dc";
     "WinSparkle/WinSparkle-0.8.0-4-gb320893.zip" = "3ae42326bcd34594bc21b1e7948863a839ee76e87d9f4cf6b59b9d9f9a083881";
-    "zlib-ng/zlib-ng-2.1.5-1-arm64-windows-ws.zip" = "de3a42d0096a17085b27630402a710b036cc8e3c85029ad37536d929697271e5";
+    "zlib-ng/zlib-ng-2.2.3-1-arm64-windows-ws.zip" = "bea4250059565c3cc49a382d8ec3f82b70c51c3ccca41c5d3daec6862d22d8f8";
     "zstd/zstd-1.5.6-1-arm64-windows-ws.zip" = "167261f9605a28f8f5a45a2fa400daa5072290a89d5fdc218595da52d57f938b";
 }
 

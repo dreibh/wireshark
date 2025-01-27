@@ -183,6 +183,7 @@ static char* delimiter_char = " ";
 static bool dissect_color;
 static unsigned hexdump_source_option = HEXDUMP_SOURCE_MULTI; /* Default - Enable legacy multi-source mode */
 static unsigned hexdump_ascii_option = HEXDUMP_ASCII_INCLUDE; /* Default - Enable legacy undelimited ASCII dump */
+static unsigned hexdump_timestamp_option = HEXDUMP_TIMESTAMP_NONE; /* Default - no timestamp preamble */
 
 static print_format_e print_format = PR_FMT_TEXT;
 static print_stream_t *print_stream;
@@ -254,8 +255,7 @@ typedef enum {
 static process_file_status_t process_cap_file(capture_file *, char *, int, bool, int, int64_t, int, wtap_compression_type);
 
 static bool process_packet_single_pass(capture_file *cf,
-        epan_dissect_t *edt, int64_t offset, wtap_rec *rec, Buffer *buf,
-        unsigned tap_flags);
+        epan_dissect_t *edt, int64_t offset, wtap_rec *rec, unsigned tap_flags);
 static void show_print_file_io_error(void);
 static bool write_preamble(capture_file *cf);
 static bool print_packet(capture_file *cf, epan_dissect_t *edt);
@@ -353,12 +353,12 @@ static void
 list_output_compression_types(void) {
     GSList *output_compression_types;
 
-    fprintf(stderr, "tshark: The available output compression type(s) for the \"--compress\" flag are:\n");
+    cmdarg_err("The available output compression type(s) are:");
     output_compression_types = wtap_get_all_output_compression_type_names_list();
     for (GSList *compression_type = output_compression_types;
         compression_type != NULL;
         compression_type = g_slist_next(compression_type)) {
-            fprintf(stderr, "   %s\n", (const char *)compression_type->data);
+            cmdarg_err_cont("   %s", (const char *)compression_type->data);
         }
 
     g_slist_free(output_compression_types);
@@ -434,20 +434,12 @@ print_usage(FILE *output)
     fprintf(output, "                           name or idx of interface (def: first non-loopback)\n");
     fprintf(output, "  -f <capture filter>      packet filter in libpcap filter syntax\n");
     fprintf(output, "  -s <snaplen>, --snapshot-length <snaplen>\n");
-#ifdef HAVE_PCAP_CREATE
     fprintf(output, "                           packet snapshot length (def: appropriate maximum)\n");
-#else
-    fprintf(output, "                           packet snapshot length (def: %u)\n", WTAP_MAX_PACKET_SIZE_STANDARD);
-#endif
     fprintf(output, "  -p, --no-promiscuous-mode\n");
     fprintf(output, "                           don't capture in promiscuous mode\n");
-#ifdef HAVE_PCAP_CREATE
     fprintf(output, "  -I, --monitor-mode       capture in monitor mode, if available\n");
-#endif
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
     fprintf(output, "  -B <buffer size>, --buffer-size <buffer size>\n");
     fprintf(output, "                           size of kernel buffer in MiB (def: %dMiB)\n", DEFAULT_CAPTURE_BUFFER_SIZE);
-#endif
     fprintf(output, "  -y <link type>, --linktype <link type>\n");
     fprintf(output, "                           link layer type (def: first appropriate)\n");
     fprintf(output, "  --time-stamp-type <type> timestamp method for interface\n");
@@ -542,6 +534,8 @@ print_usage(FILE *output)
     fprintf(output, "     ascii                 include ASCII dump text (-x default)\n");
     fprintf(output, "     delimit               delimit ASCII dump text with '|' characters\n");
     fprintf(output, "     noascii               exclude ASCII dump text\n");
+    fprintf(output, "     time                  include frame timestamp preamble\n");
+    fprintf(output, "     notime                do not include frame timestamp preamble (-x default)\n");
     fprintf(output, "     help                  display help for --hexdump and exit\n");
     fprintf(output, "  -T pdml|ps|psml|json|jsonraw|ek|tabs|text|fields|?\n");
     fprintf(output, "                           format of text output (def: text)\n");
@@ -666,6 +660,9 @@ hexdump_option_help(FILE *output)
     fprintf(output, "  delimit                  add hexdump, delimit ASCII dump text with '|' characters\n");
     fprintf(output, "  noascii                  add hexdump, exclude ASCII dump text\n");
     fprintf(output, "\n");
+    fprintf(output, "Timestamp options:\n");
+    fprintf(output, "  time                     add hexdump, include frame timestamp preamble (uses the format from -t)\n");
+    fprintf(output, "  notime                   add hexdump, do not include frame timestamp preamble (-x default)\n");
     fprintf(output, "Miscellaneous:\n");
     fprintf(output, "  help                     display this help and exit\n");
     fprintf(output, "\n");
@@ -1443,14 +1440,10 @@ main(int argc, char *argv[])
 #ifdef HAVE_PCAP_REMOTE
             case 'A':        /* Authentication */
 #endif
-#ifdef HAVE_PCAP_CREATE
             case 'I':        /* Capture in monitor mode, if available */
-#endif
             case 's':        /* Set the snapshot (capture) length */
             case 'y':        /* Set the pcap data link type */
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
             case 'B':        /* Buffer size */
-#endif
             case LONGOPT_COMPRESS_TYPE:        /* compress type */
             case LONGOPT_CAPTURE_TMPDIR:       /* capture temp directory */
             case LONGOPT_UPDATE_INTERVAL:      /* sync pipe update interval */
@@ -1902,6 +1895,10 @@ main(int argc, char *argv[])
                     hexdump_ascii_option = HEXDUMP_ASCII_DELIMIT;
                 else if (strcmp(ws_optarg, "noascii") == 0)
                     hexdump_ascii_option = HEXDUMP_ASCII_EXCLUDE;
+                else if (strcmp(ws_optarg, "time") == 0)
+                    hexdump_timestamp_option = HEXDUMP_TIMESTAMP;
+                else if (strcmp(ws_optarg, "notime") == 0)
+                    hexdump_timestamp_option = HEXDUMP_TIMESTAMP_NONE;
                 else if (strcmp("help", ws_optarg) == 0) {
                     hexdump_option_help(stdout);
                     exit_status = EXIT_SUCCESS;
@@ -1944,6 +1941,7 @@ main(int argc, char *argv[])
                         list_capture_types();
                         break;
                     case LONGOPT_COMPRESS:
+                    case LONGOPT_COMPRESS_TYPE:
                         list_output_compression_types();
                         break;
                     default:
@@ -2093,10 +2091,21 @@ main(int argc, char *argv[])
         goto clean_exit;
     }
 
+    /* XXX - We have two different long options for compression type;
+     * one (undocumented) for live capturing and one for not. That is confusing.
+     * LONGOPT_COMPRESS doesn't set "capture_option_specified" because it can be
+     * used when capturing or when not capturing.
+     */
     if (compression_type != WTAP_UNCOMPRESSED && is_capturing) {
-        cmdarg_err("Writing to compressed output is not supported for live captures");
-        exit_status = WS_EXIT_INVALID_OPTION;
-        goto clean_exit;
+#ifdef HAVE_LIBPCAP
+        exit_status = capture_opts_add_opt(&global_capture_opts, LONGOPT_COMPRESS_TYPE, wtap_compression_type_name(compression_type));
+        if (exit_status != 0) {
+            goto clean_exit;
+        }
+#else
+        capture_option_specified = true;
+        arg_error = true;
+#endif
     }
 
 #ifndef HAVE_LIBPCAP
@@ -3166,7 +3175,6 @@ capture_input_new_packets(capture_session *cap_session, int to_read)
         bool create_proto_tree;
         epan_dissect_t *edt;
         wtap_rec rec;
-        Buffer buf;
 
         /*
          * Determine whether we need to create a protocol tree.
@@ -3201,12 +3209,11 @@ capture_input_new_packets(capture_session *cap_session, int to_read)
         bool visible = print_packet_info && print_details && output_fields_num_fields(output_fields) == 0;
         edt = epan_dissect_new(cf->epan, create_proto_tree, visible);
 
-        wtap_rec_init(&rec);
-        ws_buffer_init(&buf, 1514);
+        wtap_rec_init(&rec, 1514);
 
         while (to_read-- && cf->provider.wth) {
             wtap_cleareof(cf->provider.wth);
-            ret = wtap_read(cf->provider.wth, &rec, &buf, &err, &err_info, &data_offset);
+            ret = wtap_read(cf->provider.wth, &rec, &err, &err_info, &data_offset);
             reset_epan_mem(cf, edt, create_proto_tree, print_packet_info && print_details);
             if (ret == false) {
                 /* read from file failed, tell the capture child to stop */
@@ -3214,7 +3221,7 @@ capture_input_new_packets(capture_session *cap_session, int to_read)
                 wtap_close(cf->provider.wth);
                 cf->provider.wth = NULL;
             } else {
-                ret = process_packet_single_pass(cf, edt, data_offset, &rec, &buf,
+                ret = process_packet_single_pass(cf, edt, data_offset, &rec,
                         tap_flags);
             }
             if (ret != false) {
@@ -3227,7 +3234,6 @@ capture_input_new_packets(capture_session *cap_session, int to_read)
         epan_dissect_free(edt);
 
         wtap_rec_cleanup(&rec);
-        ws_buffer_free(&buf);
 
     } else {
         /*
@@ -3378,7 +3384,7 @@ capture_cleanup(int signum _U_)
 
 static bool
 process_packet_first_pass(capture_file *cf, epan_dissect_t *edt,
-        int64_t offset, wtap_rec *rec, Buffer *buf)
+        int64_t offset, wtap_rec *rec)
 {
     frame_data     fdlocal;
     uint32_t       framenum;
@@ -3447,9 +3453,7 @@ process_packet_first_pass(capture_file *cf, epan_dissect_t *edt,
         }
 
         elapsed_start = g_get_monotonic_time();
-        epan_dissect_run(edt, cf->cd_t, rec,
-                ws_buffer_start_ptr(buf),
-                &fdlocal, cinfo);
+        epan_dissect_run(edt, cf->cd_t, rec, &fdlocal, cinfo);
         tshark_elapsed.first_pass.dissect += g_get_monotonic_time() - elapsed_start;
 
         /* Run the read filter if we have one. */
@@ -3555,14 +3559,12 @@ process_cap_file_first_pass(capture_file *cf, int max_packet_count,
         int64_t max_byte_count, int *err, char **err_info)
 {
     wtap_rec        rec;
-    Buffer          buf;
     epan_dissect_t *edt = NULL;
     int64_t         data_offset;
     pass_status_t   status = PASS_SUCCEEDED;
     int             framenum = 0;
 
-    wtap_rec_init(&rec);
-    ws_buffer_init(&buf, 1514);
+    wtap_rec_init(&rec, 1514);
 
     /* Allocate a frame_data_sequence for all the frames. */
     cf->provider.frames = new_frame_data_sequence();
@@ -3593,14 +3595,14 @@ process_cap_file_first_pass(capture_file *cf, int max_packet_count,
 
     ws_debug("tshark: reading records for first pass");
     *err = 0;
-    while (wtap_read(cf->provider.wth, &rec, &buf, err, err_info, &data_offset)) {
+    while (wtap_read(cf->provider.wth, &rec, err, err_info, &data_offset)) {
         if (read_interrupted) {
             status = PASS_INTERRUPTED;
             break;
         }
         framenum++;
 
-        if (process_packet_first_pass(cf, edt, data_offset, &rec, &buf)) {
+        if (process_packet_first_pass(cf, edt, data_offset, &rec)) {
             /* Stop reading if we hit a stop condition */
             if (max_packet_count > 0 && framenum >= max_packet_count) {
                 ws_debug("tshark: max_packet_count (%d) reached", max_packet_count);
@@ -3632,16 +3634,12 @@ process_cap_file_first_pass(capture_file *cf, int max_packet_count,
     cf->provider.prev_dis = NULL;
     cf->provider.prev_cap = NULL;
 
-    ws_buffer_free(&buf);
-    wtap_rec_cleanup(&rec);
-
     return status;
 }
 
 static bool
 process_packet_second_pass(capture_file *cf, epan_dissect_t *edt,
-        frame_data *fdata, wtap_rec *rec,
-        Buffer *buf, unsigned tap_flags _U_)
+        frame_data *fdata, wtap_rec *rec, unsigned tap_flags _U_)
 {
     column_info    *cinfo;
     bool            passed;
@@ -3704,9 +3702,7 @@ process_packet_second_pass(capture_file *cf, epan_dissect_t *edt,
          * We need it later, e.g. in order to copy the options. */
         block = wtap_block_ref(rec->block);
         elapsed_start = g_get_monotonic_time();
-        epan_dissect_run_with_taps(edt, cf->cd_t, rec,
-                ws_buffer_start_ptr(buf),
-                fdata, cinfo);
+        epan_dissect_run_with_taps(edt, cf->cd_t, rec, fdata, cinfo);
         tshark_elapsed.second_pass.dissect += g_get_monotonic_time() - elapsed_start;
 
         /* Run the display filter if we have one. */
@@ -3777,7 +3773,6 @@ process_cap_file_second_pass(capture_file *cf, wtap_dumper *pdh,
         int max_write_packet_count)
 {
     wtap_rec        rec;
-    Buffer          buf;
     int             framenum = 0;
     int             write_framenum = 0;
     frame_data     *fdata;
@@ -3796,8 +3791,7 @@ process_cap_file_second_pass(capture_file *cf, wtap_dumper *pdh,
         return PASS_WRITE_ERROR;
     }
 
-    wtap_rec_init(&rec);
-    ws_buffer_init(&buf, 1514);
+    wtap_rec_init(&rec, 1514);
 
     /* Do we have any tap listeners with filters? */
     filtering_tap_listeners = have_filtering_tap_listeners();
@@ -3848,21 +3842,21 @@ process_cap_file_second_pass(capture_file *cf, wtap_dumper *pdh,
             break;
         }
         fdata = frame_data_sequence_find(cf->provider.frames, framenum);
-        if (!wtap_seek_read(cf->provider.wth, fdata->file_off, &rec, &buf, err,
+        if (!wtap_seek_read(cf->provider.wth, fdata->file_off, &rec, err,
                     err_info)) {
             /* Error reading from the input file. */
             status = PASS_READ_ERROR;
             break;
         }
         ws_debug("tshark: invoking process_packet_second_pass() for frame #%d", framenum);
-        if (process_packet_second_pass(cf, edt, fdata, &rec, &buf, tap_flags)) {
+        if (process_packet_second_pass(cf, edt, fdata, &rec, tap_flags)) {
             /* Either there's no read filtering or this packet passed the
                filter, so, if we're writing to a capture file, write
                this packet out. */
             write_framenum++;
             if (pdh != NULL) {
                 ws_debug("tshark: writing packet #%d to outfile packet #%d", framenum, write_framenum);
-                if (!wtap_dump(pdh, &rec, ws_buffer_start_ptr(&buf), err, err_info)) {
+                if (!wtap_dump(pdh, &rec, ws_buffer_start_ptr(&rec.data), err, err_info)) {
                     /* Error writing to the output file. */
                     ws_debug("tshark: error writing to a capture file (%d)", *err);
                     *err_framenum = framenum;
@@ -3883,7 +3877,6 @@ process_cap_file_second_pass(capture_file *cf, wtap_dumper *pdh,
     if (edt)
         epan_dissect_free(edt);
 
-    ws_buffer_free(&buf);
     wtap_rec_cleanup(&rec);
 
     return status;
@@ -3897,7 +3890,6 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
         volatile uint32_t *err_framenum)
 {
     wtap_rec        rec;
-    Buffer          buf;
     bool create_proto_tree = false;
     bool            filtering_tap_listeners;
     unsigned        tap_flags;
@@ -3907,8 +3899,7 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
     int64_t         data_offset;
     pass_status_t   status = PASS_SUCCEEDED;
 
-    wtap_rec_init(&rec);
-    ws_buffer_init(&buf, 1514);
+    wtap_rec_init(&rec, 1514);
 
     /* Do we have any tap listeners with filters? */
     filtering_tap_listeners = have_filtering_tap_listeners();
@@ -3961,7 +3952,7 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
     set_resolution_synchrony(true);
 
     *err = 0;
-    while (wtap_read(cf->provider.wth, &rec, &buf, err, err_info, &data_offset)) {
+    while (wtap_read(cf->provider.wth, &rec, err, err_info, &data_offset)) {
         if (read_interrupted) {
             status = PASS_INTERRUPTED;
             break;
@@ -3981,7 +3972,7 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
 
         reset_epan_mem(cf, edt, create_proto_tree, print_packet_info && print_details);
 
-        if (process_packet_single_pass(cf, edt, data_offset, &rec, &buf, tap_flags)) {
+        if (process_packet_single_pass(cf, edt, data_offset, &rec, tap_flags)) {
             /* Either there's no read filtering or this packet passed the
                filter, so, if we're writing to a capture file, write
                this packet out. */
@@ -3989,7 +3980,7 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
             if (pdh != NULL) {
                 ws_debug("tshark: writing packet #%d to outfile as #%d",
                         framenum, write_framenum);
-                if (!wtap_dump(pdh, &rec, ws_buffer_start_ptr(&buf), err, err_info)) {
+                if (!wtap_dump(pdh, &rec, ws_buffer_start_ptr(&rec.data), err, err_info)) {
                     /* Error writing to the output file. */
                     ws_debug("tshark: error writing to a capture file (%d)", *err);
                     *err_framenum = framenum;
@@ -4035,7 +4026,6 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
     if (edt)
         epan_dissect_free(edt);
 
-    ws_buffer_free(&buf);
     wtap_rec_cleanup(&rec);
 
     return status;
@@ -4328,7 +4318,7 @@ out:
 
 static bool
 process_packet_single_pass(capture_file *cf, epan_dissect_t *edt, int64_t offset,
-        wtap_rec *rec, Buffer *buf, unsigned tap_flags _U_)
+        wtap_rec *rec, unsigned tap_flags _U_)
 {
     frame_data      fdata;
     column_info    *cinfo;
@@ -4400,9 +4390,7 @@ process_packet_single_pass(capture_file *cf, epan_dissect_t *edt, int64_t offset
          * We need it later, e.g. in order to copy the options. */
         block = wtap_block_ref(rec->block);
         elapsed_start = g_get_monotonic_time();
-        epan_dissect_run_with_taps(edt, cf->cd_t, rec,
-                ws_buffer_start_ptr(buf),
-                &fdata, cinfo);
+        epan_dissect_run_with_taps(edt, cf->cd_t, rec, &fdata, cinfo);
         tshark_elapsed.first_pass.dissect += g_get_monotonic_time() - elapsed_start;
 
         /* Run the filter if we have it. */
@@ -4859,7 +4847,7 @@ print_packet(capture_file *cf, epan_dissect_t *edt)
             if (!print_line(print_stream, 0, ""))
                 return false;
         }
-        if (!print_hex_data(print_stream, edt, hexdump_source_option | hexdump_ascii_option))
+        if (!print_hex_data(print_stream, edt, hexdump_source_option | hexdump_ascii_option | hexdump_timestamp_option))
             return false;
         if (!print_line(print_stream, 0, separator))
             return false;

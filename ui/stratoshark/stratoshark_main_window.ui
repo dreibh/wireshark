@@ -237,6 +237,7 @@
     <addaction name="separator"/>
     <addaction name="actionHelpWiki"/>
     <addaction name="actionHelpSampleCaptures"/>
+    <addaction name="actionHelpReleaseNotes"/>
     <addaction name="separator"/>
     <addaction name="actionHelpAbout"/>
    </widget>
@@ -1704,7 +1705,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>UTC Date and Time of Day (1970-01-01 01:02:03.123456)</string>
+    <string>UTC Date and Time of Day (1970-01-01 01:02:03.123456Z)</string>
    </property>
    <property name="toolTip">
     <string>Show event times as the UTC date and time of day.</string>
@@ -1718,7 +1719,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456)</string>
+    <string>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456Z)</string>
    </property>
    <property name="toolTip">
     <string>Show event times as the UTC year, day of the year and time of day.</string>
@@ -1729,7 +1730,7 @@
     <bool>true</bool>
    </property>
    <property name="text">
-    <string>UTC Time of Day (01:02:03.123456)</string>
+    <string>UTC Time of Day (01:02:03.123456Z)</string>
    </property>
    <property name="toolTip">
     <string>Show event times as the UTC time of day.</string>
@@ -2217,6 +2218,11 @@
    </property>
    <property name="text">
     <string>&amp;Full Screen</string>
+   </property>
+  </action>
+  <action name="actionHelpReleaseNotes">
+   <property name="text">
+    <string>Release Notes</string>
    </property>
   </action>
  </widget>

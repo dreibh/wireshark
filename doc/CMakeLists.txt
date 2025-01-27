@@ -87,10 +87,10 @@ endif()
 
 set(WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN1_FILES ${MAN1_INSTALL_FILES} PARENT_SCOPE)
 set(WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN4_FILES ${MAN4_INSTALL_FILES} PARENT_SCOPE)
-# XXX We need a Stratoshark-specific man page list, which might overlap with Wireshark's.
-# Just install everything for now.
-set(STRATOSHARK_BUNDLE_RESOURCE_SHARE_MAN1_FILES ${WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN1_FILES} PARENT_SCOPE)
-set(STRATOSHARK_BUNDLE_RESOURCE_SHARE_MAN4_FILES ${WIRESHARK_BUNDLE_RESOURCE_SHARE_MAN4_FILES} PARENT_SCOPE)
+# It might be nice to have Stratoshark-specific man page list, but that would also
+# add more complexity here. Just install everything for now.
+set(STRATOSHARK_BUNDLE_RESOURCE_SHARE_MAN1_FILES ${MAN1_INSTALL_FILES} PARENT_SCOPE)
+set(STRATOSHARK_BUNDLE_RESOURCE_SHARE_MAN4_FILES ${MAN4_INSTALL_FILES} PARENT_SCOPE)
 
 set(MAN_INCLUDES man_pages/diagnostic-options.adoc man_pages/dissection-options.adoc man_pages/files.adoc)
 
@@ -108,18 +108,22 @@ if(ASCIIDOCTOR_FOUND)
 endif()
 
 if(ASCIIDOCTOR_FOUND)
-	ASCIIDOCTOR2HTML(release-notes.adoc)
-	ASCIIDOCTOR2TXT(release-notes.adoc)
+	ASCIIDOCTOR2HTML("Wireshark_Release_Notes.adoc" CONVERT_UNDERSCORES)
+	ASCIIDOCTOR2TXT("Wireshark_Release_Notes.adoc" CONVERT_UNDERSCORES)
+	ASCIIDOCTOR2HTML("Stratoshark_Release_Notes.adoc" CONVERT_UNDERSCORES)
+	ASCIIDOCTOR2TXT("Stratoshark_Release_Notes.adoc" CONVERT_UNDERSCORES)
 
 	add_custom_target(release_notes_html
 		DEPENDS
-			${CMAKE_CURRENT_BINARY_DIR}/release-notes.html
+			"${CMAKE_CURRENT_BINARY_DIR}/Wireshark Release Notes.html"
+			"${CMAKE_CURRENT_BINARY_DIR}/Stratoshark Release Notes.html"
 	)
 	set_target_properties(release_notes_html PROPERTIES FOLDER "Documentation")
 
 	add_custom_target(release_notes_txt
 		DEPENDS
-			${CMAKE_CURRENT_BINARY_DIR}/release-notes.txt
+			"${CMAKE_CURRENT_BINARY_DIR}/Wireshark Release Notes.txt"
+			"${CMAKE_CURRENT_BINARY_DIR}/Stratoshark Release Notes.txt"
 			release_notes_html
 	)
 	set_target_properties(release_notes_txt PROPERTIES FOLDER "Documentation")
@@ -130,13 +134,6 @@ if(ASCIIDOCTOR_FOUND)
 			release_notes_txt
 	)
 	set_target_properties(release_notes PROPERTIES FOLDER "Documentation")
-
-	ASCIIDOCTOR2HTML(faq.adoc)
-	add_custom_target(faq_html DEPENDS ${CMAKE_CURRENT_BINARY_DIR}/faq.html)
-	set_doc_target_properties(faq_html)
-
-	add_custom_target(faq DEPENDS faq_html)
-	set_doc_target_properties(faq)
 endif()
 
 
@@ -167,7 +164,8 @@ if(ASCIIDOCTOR_FOUND)
 	install(
 		FILES
 			${HTML_INSTALL_FILES}
-			${CMAKE_CURRENT_BINARY_DIR}/release-notes.html
+			"${CMAKE_CURRENT_BINARY_DIR}/Wireshark Release Notes.html"
+			"${CMAKE_CURRENT_BINARY_DIR}/Stratoshark Release Notes.html"
 		DESTINATION
 			${CMAKE_INSTALL_DOCDIR}
 		COMPONENT "ReleaseNotes"

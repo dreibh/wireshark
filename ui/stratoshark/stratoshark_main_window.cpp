@@ -681,6 +681,7 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     main_ui_->actionHelpDownloads->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_DOWNLOAD)));
     main_ui_->actionHelpWiki->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_WIKI)));
     main_ui_->actionHelpSampleCaptures->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_SAMPLE_CAPTURES)));
+    main_ui_->actionHelpReleaseNotes->setToolTip(gchar_free_to_qstring(topic_action_url(LOCALPAGE_STRATOSHARK_RELEASE_NOTES)));
 
     showWelcome();
 }
@@ -2006,9 +2007,9 @@ void StratosharkMainWindow::initMainToolbarIcons()
     // Toolbar actions. The GNOME HIG says that we should have a menu icon for each
     // toolbar item but that clutters up our menu. Set menu icons sparingly.
 
-    main_ui_->actionCaptureStart->setIcon(StockIcon("x-capture-start-circle"));
+    main_ui_->actionCaptureStart->setIcon(StockIcon("x-capture-start"));
     main_ui_->actionCaptureStop->setIcon(StockIcon("x-capture-stop"));
-    main_ui_->actionCaptureRestart->setIcon(StockIcon("x-capture-restart-circle"));
+    main_ui_->actionCaptureRestart->setIcon(StockIcon("x-capture-restart"));
     main_ui_->actionCaptureOptions->setIcon(StockIcon("x-capture-options"));
 
     // Menu icons are disabled in stratoshark_main_window.ui for these File-> items.
@@ -2668,7 +2669,7 @@ void StratosharkMainWindow::addPluginIFStructures()
         if (menu->parent_menu) {
             QMenu *sortUnderneath = searchSubMenu(QString(menu->parent_menu));
             if (sortUnderneath)
-                subMenu = sortUnderneath->addMenu(menu->label);
+                subMenu = findOrAddMenu(sortUnderneath, QStringList() << menu->label);
         }
 
         if (!subMenu)

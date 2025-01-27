@@ -1053,7 +1053,10 @@ class ExpertEntry:
 
         global errors_found, warnings_found
 
-        # Some immediate checks
+        # Remove any line breaks
+        summary = re.sub(re.compile(r'\"\s*\n\s*\"' ) ,'' , summary)
+
+        # Some immediate checks (already covered by other scripts)
         if group not in valid_groups:
             print('Error:', filename, 'Expert group', group, 'is not in', valid_groups)
             errors_found += 1
@@ -1069,6 +1072,11 @@ class ExpertEntry:
         if summary.endswith(' '):
             print('Warning:', filename, 'Expert info summary', '"' + summary + '"', 'for', name, 'ends with space')
             warnings_found += 1
+        if summary.find('  ') != -1:
+            print('Warning:', filename, 'Expert info summary', '"' + summary + '"', 'for', name, 'has a double space')
+            warnings_found += 1
+
+
 
         # The summary field is shown in the expert window without substituting args..
         if summary.find('%') != -1:
@@ -1220,6 +1228,16 @@ class Item:
         #    self.item_type == 'FT_UINT32' and self.mask_value == 0x0):
         #    print('Warning: ' + self.filename, self.hf, 'filter "' + self.filter + '", label "' + label + '"', 'item type is', self.item_type, '- could be FT_FRANENUM?')
         #    warnings_found += 1
+
+        if item_type == 'FT_IPv4':
+            if label.endswith('6') or filter.endswith('6'):
+                print('Warning: ' + filename, hf, 'filter ' + filter + 'label', label, 'but is a v4 field')
+                warnings_found += 1
+        if item_type == 'FT_IPv6':
+            if label.endswith('4') or filter.endswith('4'):
+                print('Warning: ' + filename, hf, 'filter ' + filter + 'label', label, 'but is a v6 field')
+                warnings_found += 1
+
 
 
     def __str__(self):
@@ -1773,8 +1791,8 @@ apiChecks.append(ProtoTreeAddItemCheck(True)) # for ptvcursor_add()
 
 
 def removeComments(code_string):
-    code_string = re.sub(re.compile(r"/\*.*?\*/",re.DOTALL ) ,"" , code_string) # C-style comment
-    code_string = re.sub(re.compile(r"//.*?\n" ) ,"" , code_string)             # C++-style comment
+    code_string = re.sub(re.compile(r"/\*.*?\*/",re.DOTALL ) ,"" , code_string)     # C-style comment
+    code_string = re.sub(re.compile(r"(?<!http:)//.*?\n" ) ,"" , code_string)       # C++-style comment
     code_string = re.sub(re.compile(r"#if 0.*?#endif",re.DOTALL ) ,"" , code_string) # Ignored region
 
     return code_string

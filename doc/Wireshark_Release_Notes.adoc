@@ -14,6 +14,10 @@ This is an experimental release intended to test new features for Wireshark 5.0.
 Wireshark is the world’s most popular network protocol analyzer.
 It is used for troubleshooting, analysis, development and education.
 
+Wireshark is hosted by the Wireshark Foundation, a nonprofit which promotes protocol analysis education.
+Wireshark and the foundation depend on your contributions in order to do their work.
+If you or your organization would like to contribute or become a sponsor, please visit https://wiresharkfoundation.org[wiresharkfoundation.org].
+
 == What’s New
 
 // Add a summary of **major** changes here.
@@ -37,19 +41,40 @@ The following features are either new or have been significantly updated since v
 * The Windows installers now ship with Npcap 1.80.
   They previously shipped with Npcap 1.79.
 
+* The Windows installers now ship with Qt 6.8.1.
+  They previously shipped with Qt 6.5.3.
+
+* WinPcap is no longer supported. On Windows, use Npcap instead, uninstalling
+  WinPcap if necessary. The last release ever of WinPcap, 4.1.3, was on
+  2013-03-08 and only supports up to Windows 8, which is no longer supported
+  by Microsoft or Wireshark.
+
 * Source packages are now compressed using zstd.
 
-//* The Windows installers now ship with Qt 6.5.2.
-//  They previously shipped with Qt 6.2.3.
+* Live captures can be compressed while writing. (Previously there was
+  support for compressing when performing multiple file capture, at file
+  rotation time.) The `--compress` option in TShark works on live captures
+  as well. wsbuglink:9311[]
 
-* The default format for absolute times when output with -T fields, -T json,
-  and the "show" field of -T pdml, or when in custom columns (including CSV
-  output of columns) has been changed to ISO 8601. (This was already the case
-  for -T ek.) For backwards compatibility, a preference has been added,
-  protocols.display_abs_time_ascii. This can be set to continue to format
-  times in a manner similar to asctime. (E.g., Dec 18, 2017 05:28:39.071704055 EST.)
-  This preference can also be set to never use ascii time and to use ISO 8601 time
-  in the protocol tree (Packet Details) as well.
+* Absolute time fields, regardless of field display in the Packet Details,
+  are always written in ISO 8601 format in UTC with -T json. This was already
+  the case for -T ek since version 4.2.0. JSON is primarily a data interchange
+  format read by software, so a standard format is desirable.
+
+* When absolute times field are output with -T fields, the "show" field of -T
+  pdml, or in custom columns (including CSV output of columns), the formatting
+  similar to asctime (e.g., Dec 18, 2017 05:28:39.071704055 EST) has been
+  deprecated in favor of ISO 8601. For backwards compatibility, a preference
+  has been added, protocols.display_abs_time_ascii, which can be set to continue
+  to format times as before. This preference can also be set to never use ASCII
+  time and to use ISO 8601 time formatting in the protocol tree (Packet Details)
+  as well. It is possible that a future release will remove the ascitime style
+  formatting entirely.
+
+* UTC frame time column formats (including "Time (format as specified)" when
+  a UTC time display format is selected) have a "Z" suffix per ISO 8601. Local
+  time formats remain unqualified (including if the local time zone is UTC.)
+  Custom columns displaying FT_ABSOLUTE_TIME already had time zone indication.
 
 * The TShark `-G` option for generating glossary reports does not need to be the
   first option given on the command line anymore. In addition, the reports now
@@ -117,8 +142,18 @@ The following features are either new or have been significantly updated since v
 
 * The `ethers` file can also contain EUI-64 to name mappings. wsbuglink:15487[]
 
-// === Removed Features and Support
+* Wireshark "Import from Hex Dump" and text2pcap support byte groups with 2 to
+  4 bytes (with an option for little-endian byte order), and support hexadecimal
+  offsets with a `0x` or `0X` prefix (as produced by `tcpdump -x`, among others).
+  wsbuglink:16193[]
 
+* Frame timestamps can be added as preamble to hex dumps in Wireshark from
+  the "Print" and "Export Packet Dissection" dialogs, and in TShark with
+  the `--hexdump time` option. wsbuglink:17132[]
+
+=== Removed Features and Support
+
+Wireshark no longer supports AirPcap and WinPcap.
 
 // === Removed Dissectors
 
@@ -138,7 +173,9 @@ The following features are either new or have been significantly updated since v
 --
 Lenbrook Service Discovery Protocol (LSDP)
 Network Time Security Key Establishment Protocol (NTS-KE)
+Roughtime (Roughtime)
 Universal Measurement and Calibration Protocol (XCP)
+vSomeIP Internal Protocol (vSomeIP)
 --
 
 === Updated Protocol Support

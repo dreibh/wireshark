@@ -575,6 +575,16 @@ proto_tree_write_node_pdml(proto_node *node, void *data)
             break;
         default:
             dfilter_string = fvalue_to_string_repr(NULL, fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
+            /* XXX - doc/README.xml-output describes the show attribute as:
+             * show - the representation of the packet data ('value') as it
+             *        would appear in a display filter.
+             *
+             * which (along with the name of the variable) would argue for using
+             * FTREPR_DFILTER. However, FTREPR_DFILTER adds quotes to some but
+             * not all field types, so it could not be used. The treatment of
+             * FT_ABSOLUTE_VALUE is particularly different between DISPLAY and
+             * DFILTER, though.
+             */
             if (dfilter_string != NULL) {
 
                 fputs("\" show=\"", pdata->fh);
@@ -1925,7 +1935,12 @@ print_hex_data(print_stream_t *stream, epan_dissect_t *edt, unsigned hexdump_opt
     const unsigned char *cp;
     unsigned      length;
     struct data_source *src;
+    char          timebuf[NSTIME_ISO8601_BUFSIZE];
 
+    if ((HEXDUMP_TIMESTAMP_OPTION(hexdump_options) == HEXDUMP_TIMESTAMP)) {
+        set_fd_time(edt->session, edt->pi.fd, timebuf);
+        print_line(stream, 0, timebuf);
+    }
     /*
      * Set "multiple_sources" iff this frame has more than one
      * data source; if it does, we need to print the name of

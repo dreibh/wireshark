@@ -122,7 +122,7 @@ typedef struct kerberos_conv_t {
 typedef struct kerberos_frame_t {
 	struct kerberos_frame_t *req;
 	uint32_t frame;
-	nstime_t time;
+	nstime_t frame_time;
 	uint32_t msg_type;
 	int srt_idx;
 } kerberos_frame_t;
@@ -613,7 +613,9 @@ static int ett_krb_pac_credential_info;
 static int ett_krb_pac_s4u_delegation_info;
 static int ett_krb_pac_upn_dns_info;
 static int ett_krb_pac_upn_dns_info_flags;
+static int ett_krb_pac_client_claims_info;
 static int ett_krb_pac_device_info;
+static int ett_krb_pac_device_claims_info;
 static int ett_krb_pac_server_checksum;
 static int ett_krb_pac_privsvr_checksum;
 static int ett_krb_pac_client_info_type;
@@ -925,7 +927,7 @@ static void krb5_conf_add_request(asn1_ctx_t *actx)
 	}
 
 	krqf->frame = pinfo->num;
-	krqf->time = pinfo->abs_ts;
+	krqf->frame_time = pinfo->abs_ts;
 	krqf->msg_type = private_data->msg_type;
 	krqf->srt_idx = -1;
 
@@ -979,7 +981,7 @@ static void krb5_conf_add_response(asn1_ctx_t *actx)
 	}
 
 	krpf->frame = pinfo->num;
-	krpf->time = pinfo->abs_ts;
+	krpf->frame_time = pinfo->abs_ts;
 	krpf->msg_type = private_data->msg_type;
 	krpf->srt_idx = -1;
 
@@ -1031,7 +1033,7 @@ static void krb5_conf_add_response(asn1_ctx_t *actx)
 	}
 
 	private_data->frame_req = krqf->frame;
-	private_data->req_time = krqf->time;
+	private_data->req_time = krqf->frame_time;
 
 	tap_queue_packet(kerberos_tap, pinfo, krpf);
 }
@@ -1062,7 +1064,7 @@ krb5stat_packet(void *pss _U_, packet_info *pinfo, epan_dissect_t *edt _U_, cons
 		return TAP_PACKET_DONT_REDRAW;
 
 	krb5_srt_table = g_array_index(data->srt_array, srt_stat_table*, 0);
-	add_srt_table_data(krb5_srt_table, krpf->srt_idx, &krpf->req->time, pinfo);
+	add_srt_table_data(krb5_srt_table, krpf->srt_idx, &krpf->req->frame_time, pinfo);
 	return TAP_PACKET_REDRAW;
 }
 
@@ -5086,17 +5088,15 @@ dissect_krb5_PAC_UPN_DNS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset
 }
 
 static int
-dissect_krb5_PAC_CLIENT_CLAIMS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_)
+dissect_krb5_PAC_CLIENT_CLAIMS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx)
 {
-	int length = tvb_captured_length_remaining(tvb, offset);
-
-	if (length == 0) {
-		return offset;
-	}
-
-	proto_tree_add_item(parent_tree, hf_krb_pac_client_claims_info, tvb, offset, -1, ENC_NA);
-
-	return offset;
+	int length = tvb_reported_length_remaining(tvb, offset);
+	return netlogon_dissect_CLAIMS_SET_METADATA_BLOB(tvb, offset, length,
+							 actx->pinfo,
+							 parent_tree,
+							 hf_krb_pac_client_claims_info,
+							 ett_krb_pac_client_claims_info,
+							 "PAC_CLIENT_CLAIMS_INFO:");
 }
 
 static int
@@ -5152,15 +5152,13 @@ dissect_krb5_PAC_DEVICE_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset,
 static int
 dissect_krb5_PAC_DEVICE_CLAIMS_INFO(proto_tree *parent_tree, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_)
 {
-	int length = tvb_captured_length_remaining(tvb, offset);
-
-	if (length == 0) {
-		return offset;
-	}
-
-	proto_tree_add_item(parent_tree, hf_krb_pac_device_claims_info, tvb, offset, -1, ENC_NA);
-
-	return offset;
+	int length = tvb_reported_length_remaining(tvb, offset);
+	return netlogon_dissect_CLAIMS_SET_METADATA_BLOB(tvb, offset, length,
+							 actx->pinfo,
+							 parent_tree,
+							 hf_krb_pac_device_claims_info,
+							 ett_krb_pac_device_claims_info,
+							 "PAC_DEVICE_CLAIMS_INFO:");
 }
 
 static int
@@ -10673,7 +10671,9 @@ void proto_register_kerberos(void) {
 		&ett_krb_pac_s4u_delegation_info,
 		&ett_krb_pac_upn_dns_info,
 		&ett_krb_pac_upn_dns_info_flags,
+		&ett_krb_pac_client_claims_info,
 		&ett_krb_pac_device_info,
+		&ett_krb_pac_device_claims_info,
 		&ett_krb_pac_server_checksum,
 		&ett_krb_pac_privsvr_checksum,
 		&ett_krb_pac_client_info_type,
