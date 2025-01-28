@@ -1195,6 +1195,8 @@ class TestSharkd:
         # just skip for now.
         if not features.have_nghttp2:
             pytest.skip('Requires nghttp2.')
+        if not features.have_brotli:
+            pytest.skip('Requires brotli.')
 
         check_sharkd_session((
             {"jsonrpc":"2.0", "id":1, "method":"load",
@@ -1408,7 +1410,7 @@ class TestSharkd:
             "params":{"name": "uat:garbage-pref", "value": "\"\""}
             },
         ), (
-            {"jsonrpc":"2.0","id":1,"error":{"code":-4005,"message":"Unable to set the preference"}},
+            {"jsonrpc":"2.0","id":1,"error":{"code":-4005,"message":"Unable to set the preference: Unknown preference"}},
         ))
 
     def test_sharkd_req_dumpconf_bad(self, check_sharkd_session):

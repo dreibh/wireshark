@@ -88,7 +88,6 @@ cleanup_in_file(merge_in_file_t *in_file)
     in_file->idb_index_map = NULL;
 
     wtap_rec_cleanup(&in_file->rec);
-    ws_buffer_free(&in_file->frame_buffer);
 }
 
 static void
@@ -237,8 +236,7 @@ merge_open_in_files(unsigned in_file_count, const char *const *in_file_names,
             *err_fileno = i;
             return 0;
         }
-        wtap_rec_init(&files[i].rec);
-        ws_buffer_init(&files[i].frame_buffer, 1514);
+        wtap_rec_init(&files[i].rec, 1514);
         files[i].size = size;
         files[i].idb_index_map = g_array_new(false, false, sizeof(unsigned));
 
@@ -367,8 +365,7 @@ merge_read_packet(int in_file_count, merge_in_file_t in_files[],
              * No packet available, and we haven't seen an error or EOF yet,
              * so try to read the next packet.
              */
-            if (!wtap_read(in_files[i].wth, &in_files[i].rec,
-                           &in_files[i].frame_buffer, err, err_info,
+            if (!wtap_read(in_files[i].wth, &in_files[i].rec, err, err_info,
                            &data_offset)) {
                 if (*err != 0) {
                     in_files[i].state = GOT_ERROR;
@@ -453,8 +450,7 @@ merge_append_read_packet(int in_file_count, merge_in_file_t in_files[],
     for (i = 0; i < in_file_count; i++) {
         if (in_files[i].state == AT_EOF)
             continue; /* This file is already at EOF */
-        if (wtap_read(in_files[i].wth, &in_files[i].rec,
-                      &in_files[i].frame_buffer, err, err_info,
+        if (wtap_read(in_files[i].wth, &in_files[i].rec, err, err_info,
                       &data_offset))
             break; /* We have a packet */
         if (*err != 0) {
@@ -1034,7 +1030,6 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
     merge_in_file_t    *in_file;
     int                 count = 0;
     bool                stop_flag = false;
-    wtap_rec *rec,      snap_rec;
 
     for (;;) {
         *err = 0;
@@ -1085,8 +1080,6 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
             break;
         }
 
-        rec = &in_file->rec;
-
         if (wtap_file_type_subtype_supports_block(file_type,
                                                   WTAP_BLOCK_IF_ID_AND_INFO) != BLOCK_NOT_SUPPORTED) {
             if (!process_new_idbs(pdh, in_files, in_file_count, mode, idb_inf, err, err_info)) {
@@ -1095,25 +1088,12 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
             }
         }
 
-        switch (rec->rec_type) {
-
-        case REC_TYPE_PACKET:
-            if (rec->presence_flags & WTAP_HAS_CAP_LEN) {
-                if (snaplen != 0 &&
-                    rec->rec_header.packet_header.caplen > snaplen) {
-                    /*
-                     * The dumper will only write up to caplen bytes out,
-                     * so we only need to change that value, instead of
-                     * cloning the whole packet with fewer bytes.
-                     *
-                     * XXX: but do we need to change the IDBs' snap_len?
-                     */
-                    snap_rec = *rec;
-                    snap_rec.rec_header.packet_header.caplen = snaplen;
-                    rec = &snap_rec;
-                }
-            }
-            break;
+        /*
+         * Do we have a snapshot length?
+         */
+        if (snaplen != 0) {
+            /* Yes - apply it. */
+            wtap_rec_apply_snapshot(&in_file->rec, snaplen);
         }
 
         /*
@@ -1131,8 +1111,8 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
              * now, we hardcode that, but we need to figure
              * out a more general way to handle this.
              */
-            if (rec->rec_type == REC_TYPE_PACKET) {
-                if (!map_rec_interface_id(rec, in_file)) {
+            if (in_file->rec.rec_type == REC_TYPE_PACKET) {
+                if (!map_rec_interface_id(&in_file->rec, in_file)) {
                     status = MERGE_ERR_BAD_PHDR_INTERFACE_ID;
                     break;
                 }
@@ -1159,12 +1139,13 @@ merge_process_packets(wtap_dumper *pdh, const int file_type,
             }
         }
 
-        if (!wtap_dump(pdh, rec, ws_buffer_start_ptr(&in_file->frame_buffer),
+        if (!wtap_dump(pdh, &in_file->rec,
+                       ws_buffer_start_ptr(&in_file->rec.data),
                        err, err_info)) {
             status = MERGE_ERR_CANT_WRITE_OUTFILE;
             break;
         }
-        wtap_rec_reset(rec);
+        wtap_rec_reset(&in_file->rec);
     }
 
     if (cb)

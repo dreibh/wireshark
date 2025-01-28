@@ -18,7 +18,6 @@
 #include <epan/epan.h>
 #include <epan/epan_dissect.h>
 #include <epan/to_str.h>
-#include <epan/to_str.h>
 #include <epan/expert.h>
 #include <epan/column.h>
 #include <epan/column-info.h>
@@ -26,13 +25,13 @@
 #include <epan/dfilter/dfilter.h>
 #include <epan/prefs.h>
 #include <epan/print.h>
-#include <epan/charsets.h>
 #include <wsutil/array.h>
 #include <wsutil/json_dumper.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/utf8_entities.h>
 #include <wsutil/str_util.h>
 #include <wsutil/ws_assert.h>
+#include <epan/strutil.h>
 #include <ftypes/ftypes.h>
 
 #define PDML_VERSION "0"
@@ -576,6 +575,16 @@ proto_tree_write_node_pdml(proto_node *node, void *data)
             break;
         default:
             dfilter_string = fvalue_to_string_repr(NULL, fi->value, FTREPR_DISPLAY, fi->hfinfo->display);
+            /* XXX - doc/README.xml-output describes the show attribute as:
+             * show - the representation of the packet data ('value') as it
+             *        would appear in a display filter.
+             *
+             * which (along with the name of the variable) would argue for using
+             * FTREPR_DFILTER. However, FTREPR_DFILTER adds quotes to some but
+             * not all field types, so it could not be used. The treatment of
+             * FT_ABSOLUTE_VALUE is particularly different between DISPLAY and
+             * DFILTER, though.
+             */
             if (dfilter_string != NULL) {
 
                 fputs("\" show=\"", pdata->fh);
@@ -1806,70 +1815,16 @@ get_field_data(GSList *src_list, field_info *fi)
 static void
 print_escaped_xml(FILE *fh, const char *unescaped_string)
 {
-    const char *p;
-
-#define ESCAPED_BUFFER_SIZE 256
-#define ESCAPED_BUFFER_LIMIT (ESCAPED_BUFFER_SIZE - (int)sizeof("&quot;"))
-    static char temp_buffer[ESCAPED_BUFFER_SIZE];
-    int         offset = 0;
+    char* buff;
 
     if (fh == NULL || unescaped_string == NULL) {
         return;
     }
 
-    /* XXX: Why not use xml_escape() from epan/strutil.h ? */
-    for (p = unescaped_string; *p != '\0' && (offset <= ESCAPED_BUFFER_LIMIT); p++) {
-        switch (*p) {
-        case '&':
-            (void) g_strlcpy(&temp_buffer[offset], "&amp;", ESCAPED_BUFFER_SIZE-offset);
-            offset += 5;
-            break;
-        case '<':
-            (void) g_strlcpy(&temp_buffer[offset], "&lt;", ESCAPED_BUFFER_SIZE-offset);
-            offset += 4;
-            break;
-        case '>':
-            (void) g_strlcpy(&temp_buffer[offset], "&gt;", ESCAPED_BUFFER_SIZE-offset);
-            offset += 4;
-            break;
-        case '"':
-            (void) g_strlcpy(&temp_buffer[offset], "&quot;", ESCAPED_BUFFER_SIZE-offset);
-            offset += 6;
-            break;
-        case '\'':
-            (void) g_strlcpy(&temp_buffer[offset], "&#x27;", ESCAPED_BUFFER_SIZE-offset);
-            offset += 6;
-            break;
-        case '\t':
-        case '\n':
-        case '\r':
-            temp_buffer[offset++] = *p;
-            break;
-        default:
-            /* XML 1.0 doesn't allow ASCII control characters, except
-             * for the three whitespace ones above (which do *not*
-             * include '\v' and '\f', so not the same group as isspace),
-             * even as character references.
-             * There's no official way to escape them, so we'll do this. */
-            if (g_ascii_iscntrl(*p)) {
-                offset += snprintf(&temp_buffer[offset], ESCAPED_BUFFER_SIZE-offset, "\\x%x", (uint8_t)*p);
-            } else {
-                /* Just copy character */
-                temp_buffer[offset++] = *p;
-            }
-        }
-        if (offset > ESCAPED_BUFFER_LIMIT) {
-            /* Getting close to end of buffer so flush to fh */
-            temp_buffer[offset] = '\0';
-            fputs(temp_buffer, fh);
-            offset = 0;
-        }
-    }
-    if (offset) {
-        /* Flush any outstanding data */
-        temp_buffer[offset] = '\0';
-        fputs(temp_buffer, fh);
-    }
+    buff = xml_escape(unescaped_string);
+
+    fputs(buff, fh);
+    g_free(buff);
 }
 
 static void
@@ -1980,7 +1935,12 @@ print_hex_data(print_stream_t *stream, epan_dissect_t *edt, unsigned hexdump_opt
     const unsigned char *cp;
     unsigned      length;
     struct data_source *src;
+    char          timebuf[NSTIME_ISO8601_BUFSIZE];
 
+    if ((HEXDUMP_TIMESTAMP_OPTION(hexdump_options) == HEXDUMP_TIMESTAMP)) {
+        set_fd_time(edt->session, edt->pi.fd, timebuf);
+        print_line(stream, 0, timebuf);
+    }
     /*
      * Set "multiple_sources" iff this frame has more than one
      * data source; if it does, we need to print the name of
@@ -2464,14 +2424,14 @@ static void proto_tree_get_node_field_values(proto_node *node, void *data)
     call_data = (write_field_data_t *)data;
     fi = PNODE_FINFO(node);
 
-    /* dissection with an invisible proto tree? */
-    ws_assert(fi);
-
-    field_index = g_hash_table_lookup(call_data->fields->field_indicies, fi->hfinfo->abbrev);
-    if (NULL != field_index) {
-        format_field_values(call_data->fields, field_index,
-                            get_node_field_value(fi, call_data->edt) /* g_ alloc'd string */
-            );
+    /* check for a faked item with an invisible tree */
+    if (fi) {
+        field_index = g_hash_table_lookup(call_data->fields->field_indicies, fi->hfinfo->abbrev);
+        if (NULL != field_index) {
+            format_field_values(call_data->fields, field_index,
+                                get_node_field_value(fi, call_data->edt) /* g_ alloc'd string */
+                );
+        }
     }
 
     /* Recurse here. */
@@ -2483,7 +2443,7 @@ static void proto_tree_get_node_field_values(proto_node *node, void *data)
 
 static void write_specified_fields(fields_format format, output_fields_t *fields, epan_dissect_t *edt, column_info *cinfo _U_, FILE *fh, json_dumper *dumper)
 {
-    size_t    i;
+    unsigned    i;
 
     write_field_data_t data;
 

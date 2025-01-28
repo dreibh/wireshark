@@ -81,15 +81,14 @@
     </message>
     <message>
         <source>About Stratoshark</source>
-        <oldsource>About Logray</oldsource>
-        <translation type="unfinished">Logray 정보</translation>
-    </message>
-    <message>
-        <source>Logray</source>
-        <translation type="vanished">Logray</translation>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Stratoshark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;h3&gt;System Call and Event Log Analyzer&lt;/h3&gt;</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -1207,12 +1206,7 @@
         <source>Created by Stratoshark %1
 
 </source>
-        <oldsource>Created by Logray %1
-
-</oldsource>
-        <translation type="unfinished">Logray %1에서 생성됨
-
-</translation>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -1379,6 +1373,10 @@
         <translation>pcap</translation>
     </message>
     <message>
+        <source>Compression:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Instead of using a single capture file, multiple files will be created.&lt;/p&gt;&lt;p&gt;The generated file names will contain an incrementing number and the start time of the capture.&lt;/p&gt;&lt;p&gt;NOTE: If enabled, at least one of the new-file criteria MUST be selected.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;캡처 파일을 여러 개 생성합니다.&lt;/p&gt;&lt;p&gt;생성된 파일 이름은 일련 번호와 캡처 시작 시간을 포함합니다.&lt;/p&gt;&lt;p&gt;참고: 이 옵션을 활성화하면 새로운 파일 생성 기준 중 하나 이상을 선택해야 합니다.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1450,7 +1448,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>compression</source>
-        <translation>압축</translation>
+        <translation type="vanished">압축</translation>
     </message>
     <message>
         <source>None</source>
@@ -1459,6 +1457,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>gzip</source>
         <translation>gzip</translation>
+    </message>
+    <message>
+        <source>LZ4</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>File infix pattern</source>
@@ -1903,10 +1905,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>유형</translation>
     </message>
     <message>
-        <source>Fields</source>
-        <translation>필드</translation>
-    </message>
-    <message>
         <source>Field Occurrence</source>
         <translation>필드 출현 횟수</translation>
     </message>
@@ -1921,6 +1919,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Width</source>
         <translation>폭</translation>
+    </message>
+    <message>
+        <source>Custom Expression</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Alignment</source>
@@ -2375,6 +2377,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Apply a read filter %1</source>
         <translation>읽기 필터 적용 %1</translation>
+    </message>
+    <message>
+        <source>Enter a custom column expression %1</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Current filter: %1</source>
@@ -3047,12 +3053,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>모든 파일 (</translation>
     </message>
     <message>
-        <source>Open File</source>
-        <translation>파일 열기</translation>
+        <source>%1 Open File</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Select File</source>
-        <translation>파일 선택</translation>
+        <source>%1 Select File</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -3090,16 +3096,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 <context>
     <name>FieldFilterEdit</name>
     <message>
-        <source>Display filter entry</source>
-        <translation>표시 필터 항목</translation>
+        <source>Field entry</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Enter a field %1</source>
         <translation>필드 입력 %1</translation>
     </message>
     <message>
-        <source>Invalid filter: </source>
-        <translation>잘못된 필터: </translation>
+        <source>Invalid field: </source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -4151,10 +4157,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>자동 업데이트</translation>
     </message>
     <message>
-        <source>Enable legend</source>
-        <translation>범례 활성화</translation>
-    </message>
-    <message>
         <source>Reset Graph</source>
         <translation>그래프 초기화</translation>
     </message>
@@ -4288,6 +4290,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>T</translation>
     </message>
     <message>
+        <source>Toggle X-axis between relative time and time of day</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Toggle Y-axis between logarithmic and linear scale</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Crosshairs</source>
         <translation>십자선</translation>
     </message>
@@ -4298,6 +4308,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Space</source>
         <translation>Space</translation>
+    </message>
+    <message>
+        <source>Legend</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Toggle legend</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Zoom In X Axis</source>
@@ -4927,10 +4945,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>패킷 형식 정규 표현식</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifieing data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;Required is only a data group, also supported are time, dir and seqno.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;파일에서 각각 패킷을 가져올 때 이름 있는 그룹을 통해서 가져올 데이터를 나타내는 Perl 호환 정규 표현식입니다. 앵커 문자 ^, $는 각각 줄의 맨 처음과 맨 끝과 일치합니다.&lt;/p&gt;&lt;p&gt;필수 항목은 데이터 그룹이며, 선택적 항목은 시간, 방향, 순서 번호입니다.&lt;/p&gt;&lt;p&gt;정규 표현식 플래그: DUPNAMES, MULTILINE, NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
         <source>This is regexHintLabel, it will be set to default_regex_hint</source>
         <translation>정규 표현식 힌트 레이블이며 default_regex_hint로 지정됨</translation>
     </message>
@@ -5009,6 +5023,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>None</source>
         <translation>없음</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Whether to treat multiple byte groups as being in little-endian byte order, instead of the default, network (big-endian) order.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Little-endian:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifying data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;The only required group is data, but time, dir and seqno are also supported.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&lt;small&gt;&lt;i&gt;recommended regex:&lt;/small&gt;&lt;/i&gt;</source>
@@ -5179,8 +5205,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>지원되는 필드는 data, dir, time, seqno</translation>
     </message>
     <message>
-        <source>Missing capturing group data (use (?</source>
-        <translation>그룹 데이터를 캡처하는 표현식 없음(사용: (?</translation>
+        <source>Missing capturing group data (use (?&lt;data&gt;(...)) )</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Import From Hex Dump</source>
@@ -5254,12 +5280,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>외부 캡처 인터페이스가 비활성화되었습니다.</translation>
     </message>
     <message>
+        <source>&lt;p&gt;Local interfaces are unavailable because WinPcap is installed but is no longer supported.&lt;/p&gt;&lt;p&gt;You can fix this by uninstalling WinPcap and installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;p&gt;Local interfaces are unavailable because no packet capture driver is installed.&lt;/p&gt;&lt;p&gt;You can fix this by installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
         <translation>&lt;p&gt;설치된 패킷 캡처 드라이버가 없어서 사용 가능한 로컬 인터페이스가 없습니다.&lt;/p&gt;&lt;p&gt;문제를 해결하려면 &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;을 설치하십시오.&lt;/p&gt;</translation>
     </message>
     <message>
-        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed or &lt;pre&gt;net start npf&lt;/pre&gt; if you have WinPcap installed. Both commands must be run as Administrator.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;패킷 캡처 드라이버를 불러오지 않았기 때문에 로컬 인터페이스를 사용할 수 없습니다.&lt;/p&gt;&lt;p&gt;Npcap이 설치된 경우 &lt;pre&gt;net start npcap&lt;/pre&gt;을 실행하거나 WinPcap이 설치된 경우 &lt;pre&gt;net start npf&lt;/pre&gt;를 실행하여 이 문제를 해결할 수 있습니다. 두 명령 모두 관리자 권한으로 실행해야 합니다.&lt;/p&gt;</translation>
+        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed. The command must be run as Administrator.&lt;/p&gt;</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&lt;p&gt;You don&apos;t have permission to capture on local interfaces.&lt;/p&gt;&lt;p&gt;You can fix this by &lt;a href=&quot;file://%1&quot;&gt;installing ChmodBPF&lt;/a&gt;.&lt;/p&gt;</source>
@@ -6908,6 +6938,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Display filter as %1</source>
         <translation>%1(으)로 표시 필터</translation>
     </message>
+    <message>
+        <source>The Wireshark Network Analyzer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>The Stratoshark System Call and Log Analyzer</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Capturing from %1</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>MainWindowPreferencesFrame</name>
@@ -7528,6 +7570,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Generate hexdumps for secondary data sources like reassembled or decrypted buffers in addition to the frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;프레임 외에도 재조합하거나 복호화한 것 등의 2차 데이터 원본의 16진수 덤프를 생성합니다&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
+    <message>
+        <source>Include timestamp preamble</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include each frame timestamp immediately before its hex dump, using the current time display format.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>PacketList</name>
@@ -7813,6 +7863,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Preferences</source>
         <translation>설정</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation type="unfinished">복사</translation>
+    </message>
+    <message numerus="yes">
+        <source>Copy Row(s)</source>
+        <translation type="unfinished">
+            <numerusform>행 복사</numerusform>
+        </translation>
     </message>
 </context>
 <context>
@@ -8277,8 +8337,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>필터 필드 참조</translation>
     </message>
     <message>
-        <source>Copied </source>
-        <translation>복사됨 </translation>
+        <source>Copied %1</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>
@@ -8457,34 +8517,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 </context>
 <context>
     <name>QObject</name>
-    <message>
-        <source>Average Throughput (bits/s)</source>
-        <translation>평균 처리량(비트/초)</translation>
-    </message>
-    <message>
-        <source>Round Trip Time (ms)</source>
-        <translation>왕복 시간(ms)</translation>
-    </message>
-    <message>
-        <source>Segment Length (B)</source>
-        <translation>세그먼트 길이(바이트)</translation>
-    </message>
-    <message>
-        <source>Sequence Number (B)</source>
-        <translation>시퀀스 번호(바이트)</translation>
-    </message>
-    <message>
-        <source>Time (s)</source>
-        <translation>시간(초)</translation>
-    </message>
-    <message>
-        <source>Window Size (B)</source>
-        <translation>윈도 크기(바이트)</translation>
-    </message>
-    <message>
-        <source>Unacked (Outstanding) Bytes (B)</source>
-        <translation>ACK되지 않은(대기 중) 바이트(바이트)</translation>
-    </message>
     <message>
         <source>[no capture file]</source>
         <translation>[캡처 파일 없음]</translation>
@@ -8878,8 +8910,9 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>잘못된 표시 필터</translation>
     </message>
     <message>
-        <source>The filter expression %1 isn&apos;t a valid display filter. (%2).</source>
-        <translation>필터 표현식 %1이(가) 올바른 표시 필터가 아닙니다. (%2).</translation>
+        <source>The filter expression &quot;%1&quot; isn&apos;t a valid display filter.
+(%2).</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Error</source>
@@ -8972,6 +9005,34 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>LOAD</source>
         <translation>부하</translation>
+    </message>
+    <message>
+        <source>Average Throughput</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Round Trip Time</source>
+        <translation type="unfinished">왕복 시간</translation>
+    </message>
+    <message>
+        <source>Segment Length</source>
+        <translation type="unfinished">세그먼트 길이</translation>
+    </message>
+    <message>
+        <source>Sequence Number</source>
+        <translation type="unfinished">시퀀스 번호</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation type="unfinished">시간</translation>
+    </message>
+    <message>
+        <source>Window Size</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unacked (Outstanding) Bytes</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -11942,6 +12003,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>확대</translation>
     </message>
     <message>
+        <source>Sampling Method</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Select which packets and how the RTT sampling is done</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Display Round Trip Time vs Sequence Number</source>
         <translation>왕복 시간 대 시퀀스 번호 표시</translation>
     </message>
@@ -12236,6 +12305,38 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>4</source>
         <translation>4</translation>
+    </message>
+    <message>
+        <source>All Data Packets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Sampling from all data packets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>All Data Packets w/ SACK</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Sampling from all data packets w/ SACK</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Data Packets matching RTT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Sampling from RTT packets</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Data Packets matching Karn RTT</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Sampling from Karn RTT packets</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Zoom In X Axis</source>
@@ -13098,17 +13199,15 @@ a:hover {
     </message>
     <message>
         <source>You are sniffing the glue that holds your system together using Stratoshark </source>
-        <oldsource>You are sniffing the glue that holds your system together using Logray </oldsource>
-        <translation type="unfinished">Logray를 사용하여 시스템을 고정하는 접착제의 냄새를 맡고(스니핑) 있습니다 </translation>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>You are running Stratoshark </source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>You are running Wireshark </source>
         <translation>실행 중인 Wireshark 버전: </translation>
-    </message>
-    <message>
-        <source>You are running Stratoshark </source>
-        <oldsource>You are running Logray </oldsource>
-        <translation type="unfinished">실행 중인 Logray 버전: </translation>
     </message>
     <message>
         <source> You receive automatic updates.</source>
@@ -13184,14 +13283,6 @@ a:hover {
     <message>
         <source>802.11 Preferences</source>
         <translation>802.11 설정</translation>
-    </message>
-    <message>
-        <source>AirPcap Control Panel</source>
-        <translation type="vanished">AirPcap 제어판</translation>
-    </message>
-    <message>
-        <source>Open the AirPcap Control Panel</source>
-        <translation type="vanished">AirPcap 제어판 열기</translation>
     </message>
     <message>
         <source>Unable to set channel or offset.</source>
@@ -14428,6 +14519,22 @@ a:hover {
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>First Packet in Conversation</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Go to the first packet in this conversation</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Last Packet in Conversation</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Go to the last packet in this conversation</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Capture &amp;Filters…</source>
         <translation>캡처 필터(&amp;F)…</translation>
     </message>
@@ -14672,24 +14779,12 @@ a:hover {
         <translation>이전에 표시된 패킷부터 초 단위의 지난 시간으로 패킷 시간을 표시합니다.</translation>
     </message>
     <message>
-        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456)</source>
-        <translation>UTC 날짜와 시간(1970-01-01 01:02:03.123456)</translation>
-    </message>
-    <message>
         <source>Show packet times as the UTC date and time of day.</source>
         <translation>UTC 날짜와 시간으로 패킷 시간을 표현합니다.</translation>
     </message>
     <message>
-        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456)</source>
-        <translation>UTC 년, 연중일, 시간(1970/001 01:02:03.123456)</translation>
-    </message>
-    <message>
         <source>Show packet times as the UTC year, day of the year and time of day.</source>
         <translation>UTC 년, 연중일, 시간으로 패킷 시간을 표시합니다.</translation>
-    </message>
-    <message>
-        <source>UTC Time of Day (01:02:03.123456)</source>
-        <translation>UTC 시간(01:02:03.123456)</translation>
     </message>
     <message>
         <source>Show packet times as the UTC time of day.</source>
@@ -14942,6 +15037,18 @@ a:hover {
         <translation>표시된 모든 항목 마크 해제(&amp;U)</translation>
     </message>
     <message>
+        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456Z)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456Z)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>UTC Time of Day (01:02:03.123456Z)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>All VoIP Calls</source>
         <translation>모든 VoIP 호</translation>
     </message>
@@ -15114,16 +15221,8 @@ a:hover {
         <translation>파일을 병합하기 전에 변경된 내용을 저장해야 합니다.</translation>
     </message>
     <message>
-        <source>Invalid Display Filter</source>
-        <translation>잘못된 표시 필터</translation>
-    </message>
-    <message>
         <source>Invalid Read Filter</source>
         <translation>잘못된 읽기 필터</translation>
-    </message>
-    <message>
-        <source>The filter expression %1 isn&apos;t a valid read filter. (%2).</source>
-        <translation>필터 표현식 %1은(는) 잘못된 읽기 필터입니다. (%2).</translation>
     </message>
     <message>
         <source> before importing a capture</source>
@@ -15162,6 +15261,11 @@ a:hover {
     <message>
         <source>Unable to drop files during capture.</source>
         <translation>캡처 중에는 파일을 버릴 수 없습니다.</translation>
+    </message>
+    <message>
+        <source>The filter expression &quot;%1&quot; isn&apos;t a valid read filter.
+(%2).</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Unknown file type returned by merge dialog.</source>
@@ -15230,14 +15334,6 @@ a:hover {
         <source>Stop and Continue &amp;without Saving</source>
         <oldsource>Stop and Continue without Saving</oldsource>
         <translation>정지하고 저장하지 않고 계속(&amp;W)</translation>
-    </message>
-    <message>
-        <source>The Wireshark Network Analyzer</source>
-        <translation>Wireshark 네트워크 분석기</translation>
-    </message>
-    <message>
-        <source>Capturing from %1</source>
-        <translation>%1에서 캡처 중</translation>
     </message>
     <message>
         <source> before opening another file</source>

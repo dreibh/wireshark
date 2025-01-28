@@ -334,13 +334,13 @@ call_isobus_subdissector(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, co
     isobus_info.source_addr = source_addr;
 
     /* try PGN */
-    int ret = dissector_try_uint_new(subdissector_table_pgn, pgn, tvb, pinfo, tree, add_proto_name, &isobus_info);
+    int ret = dissector_try_uint_with_data(subdissector_table_pgn, pgn, tvb, pinfo, tree, add_proto_name, &isobus_info);
     if (ret > 0) {
         return ret;
     }
 
     /* try PDU Format */
-    return dissector_try_uint_new(subdissector_table_pdu_format, pdu_format, tvb, pinfo, tree, add_proto_name, &isobus_info);
+    return dissector_try_uint_with_data(subdissector_table_pdu_format, pdu_format, tvb, pinfo, tree, add_proto_name, &isobus_info);
 }
 
 /* Code to actually dissect the packets */
@@ -743,9 +743,9 @@ proto_register_isobus(void) {
         { &hf_isobus_ac_name_manufacturer, {
             "Manufacturer", "isobus.ac.name.manufacturer", FT_UINT64, BASE_DEC, NULL, 0x00000000ffe00000, NULL, HFILL } },
         { &hf_isobus_ac_name_function_instance, {
-            "Function Instance", "isobus.ac.name.function_instance", FT_UINT64, BASE_DEC, NULL, 0x000000f000000000, NULL, HFILL } },
+            "Function Instance", "isobus.ac.name.function_instance", FT_UINT64, BASE_DEC, NULL, 0x000000f800000000, NULL, HFILL } },
         { &hf_isobus_ac_name_ecu_instance, {
-            "ECU Instance", "isobus.ac.name.ecu_instance", FT_UINT64, BASE_DEC, NULL, 0x0000000f00000000, NULL, HFILL } },
+            "ECU Instance", "isobus.ac.name.ecu_instance", FT_UINT64, BASE_DEC, NULL, 0x0000000700000000, NULL, HFILL } },
         { &hf_isobus_ac_name_function, {
             "Function", "isobus.ac.name.function", FT_UINT64, BASE_DEC, NULL, 0x0000ff0000000000, NULL, HFILL } },
         { &hf_isobus_ac_name_reserved, {

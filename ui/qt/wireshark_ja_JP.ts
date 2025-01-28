@@ -81,16 +81,15 @@
     </message>
     <message>
         <source>About Stratoshark</source>
-        <oldsource>About Logray</oldsource>
-        <translation type="unfinished">Lograyについて</translation>
-    </message>
-    <message>
-        <source>Logray</source>
-        <translation type="vanished">Logray</translation>
+        <translation>Stratosharkについて</translation>
     </message>
     <message>
         <source>Stratoshark</source>
-        <translation type="unfinished"></translation>
+        <translation>Stratoshark</translation>
+    </message>
+    <message>
+        <source>&lt;h3&gt;System Call and Event Log Analyzer&lt;/h3&gt;</source>
+        <translation>&lt;h3&gt;システムコールとイベントログのアナライザ&lt;/h3&gt;</translation>
     </message>
     <message>
         <source>The directory does not exist</source>
@@ -1207,10 +1206,7 @@
         <source>Created by Stratoshark %1
 
 </source>
-        <oldsource>Created by Logray %1
-
-</oldsource>
-        <translation type="unfinished">Logray %1 によって作成されました
+        <translation>Stratoshark %1 により作成
 
 </translation>
     </message>
@@ -1379,6 +1375,10 @@
         <translation>pcap形式</translation>
     </message>
     <message>
+        <source>Compression:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Instead of using a single capture file, multiple files will be created.&lt;/p&gt;&lt;p&gt;The generated file names will contain an incrementing number and the start time of the capture.&lt;/p&gt;&lt;p&gt;NOTE: If enabled, at least one of the new-file criteria MUST be selected.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;1つのキャプチャファイルを用いる代わりに複数のファイルが作成されます。&lt;/p&gt;&lt;p&gt;生成されたファイル名は連番とキャプチャ開始時間を含みます。&lt;/p&gt;&lt;p&gt;注意:有効にすると少なくとも1つの新規ファイルの基準が選択されなければなりません。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1449,7 +1449,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>compression</source>
-        <translation>圧縮</translation>
+        <translation type="vanished">圧縮</translation>
     </message>
     <message>
         <source>None</source>
@@ -1458,6 +1458,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>gzip</source>
         <translation>gzip</translation>
+    </message>
+    <message>
+        <source>LZ4</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>File infix pattern</source>
@@ -1902,10 +1906,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>種別</translation>
     </message>
     <message>
-        <source>Fields</source>
-        <translation>フィールド</translation>
-    </message>
-    <message>
         <source>Field Occurrence</source>
         <translation>フィールド出現位置</translation>
     </message>
@@ -1920,6 +1920,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Width</source>
         <translation>幅</translation>
+    </message>
+    <message>
+        <source>Custom Expression</source>
+        <translation>カスタム式</translation>
     </message>
     <message>
         <source>Alignment</source>
@@ -2374,6 +2378,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Apply a read filter %1</source>
         <translation>読込フィルタ %1 を適用</translation>
+    </message>
+    <message>
+        <source>Enter a custom column expression %1</source>
+        <translation>%1 のカスタム列の式を入力してください</translation>
     </message>
     <message>
         <source>Current filter: %1</source>
@@ -3046,12 +3054,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>すべてのファイル(</translation>
     </message>
     <message>
-        <source>Open File</source>
-        <translation>ファイルを開く</translation>
+        <source>%1 Open File</source>
+        <translation>%1 ファイルを開く</translation>
     </message>
     <message>
-        <source>Select File</source>
-        <translation>ファイルを選択</translation>
+        <source>%1 Select File</source>
+        <translation>%1 ファイルを選択</translation>
     </message>
 </context>
 <context>
@@ -3089,16 +3097,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 <context>
     <name>FieldFilterEdit</name>
     <message>
-        <source>Display filter entry</source>
-        <translation>表示フィルタエントリ</translation>
+        <source>Field entry</source>
+        <translation>フィールドエントリ</translation>
     </message>
     <message>
         <source>Enter a field %1</source>
         <translation>フィールド %1 を入力</translation>
     </message>
     <message>
-        <source>Invalid filter: </source>
-        <translation>無効なフィルタ:</translation>
+        <source>Invalid field: </source>
+        <translation>無効なフィールド: </translation>
     </message>
 </context>
 <context>
@@ -4150,10 +4158,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>自動アップデート</translation>
     </message>
     <message>
-        <source>Enable legend</source>
-        <translation>凡例を有効化</translation>
-    </message>
-    <message>
         <source>Reset Graph</source>
         <translation>グラフをリセット</translation>
     </message>
@@ -4287,6 +4291,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>T</translation>
     </message>
     <message>
+        <source>Toggle X-axis between relative time and time of day</source>
+        <translation>X軸を相対時間と時刻で切り替えます</translation>
+    </message>
+    <message>
+        <source>Toggle Y-axis between logarithmic and linear scale</source>
+        <translation>Y軸を対数スケールと線形スケールで切り替える</translation>
+    </message>
+    <message>
         <source>Crosshairs</source>
         <translation>十字カーソル</translation>
     </message>
@@ -4297,6 +4309,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Space</source>
         <translation>スペース</translation>
+    </message>
+    <message>
+        <source>Legend</source>
+        <translation>凡例</translation>
+    </message>
+    <message>
+        <source>Toggle legend</source>
+        <translation>凡例の表示を切り替える</translation>
     </message>
     <message>
         <source>Zoom In X Axis</source>
@@ -4926,10 +4946,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>パケット形式正規表現</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifieing data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;Required is only a data group, also supported are time, dir and seqno.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;インポートするデータを識別する名前付きグループとともにファイルにある１つのパケットをキャプチャするPerl互換正規表現 アンカー、 ^ および $ 記号も新規の行の前後に合致します。 &lt;/p&gt;&lt;p&gt;必須はデータグループのみ、またtime,dirおよびseqnoもサポートされます。&lt;/p&gt;&lt;p&gt;Regex フラグ: DUPNAMES, MULTILINE および NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
         <source>This is regexHintLabel, it will be set to default_regex_hint</source>
         <translation>これは regexHintLabel です。default_regex_hint に設定されます</translation>
     </message>
@@ -5008,6 +5024,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>None</source>
         <translation>なし</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Whether to treat multiple byte groups as being in little-endian byte order, instead of the default, network (big-endian) order.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;デフォルトのネットワークでの（ビックエンディアン）順のかわりに、リトルエンディアンのバイト順であるとして複数バイトグループを取り扱うかどうか&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Little-endian:</source>
+        <translation>リトルエンディアン:</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifying data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;The only required group is data, but time, dir and seqno are also supported.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl互換の正規表現で、ファイル内の単一のパケットをキャプチャします。インポートするデータを識別する名前付きグループが含まれます。  アンカー ^ および $ は、改行の前後にも適合します。&lt;/p&gt;&lt;p&gt; 必須のグループは data だけですが、time, dir および seqno もサポートされています。&lt;/p&gt;&lt;p&gt;正規表現のフラグ: DUPNAMES、MULTILINE、NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;small&gt;&lt;i&gt;recommended regex:&lt;/small&gt;&lt;/i&gt;</source>
@@ -5178,8 +5206,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>サポートされているフィールドは data, dir, time, seqno です</translation>
     </message>
     <message>
-        <source>Missing capturing group data (use (?</source>
-        <translation>キャプチャグループデータが不明（使用中？）</translation>
+        <source>Missing capturing group data (use (?&lt;data&gt;(...)) )</source>
+        <translation>キャプチャグループデータが欠けています ( (?&lt;data&gt;(...))を使用してください )</translation>
     </message>
     <message>
         <source>Import From Hex Dump</source>
@@ -5253,12 +5281,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>外部のキャプチャインターフェース無効化</translation>
     </message>
     <message>
+        <source>&lt;p&gt;Local interfaces are unavailable because WinPcap is installed but is no longer supported.&lt;/p&gt;&lt;p&gt;You can fix this by uninstalling WinPcap and installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
+        <translation>&lt;p&gt;WinPcapがインストールされているものの、もはやサポートされていないためにローカルインターフェースは利用できません。&lt;/p&gt;&lt;p&gt;WinPcapをアンインストールして &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;をインストールすることにより修正することができます。&lt;/p&gt;</translation>
+    </message>
+    <message>
         <source>&lt;p&gt;Local interfaces are unavailable because no packet capture driver is installed.&lt;/p&gt;&lt;p&gt;You can fix this by installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
         <translation>&lt;p&gt;キャプチャドライバがインストールされていないのでローカルインターフェースは利用できません。&lt;p&gt;以下をインストールすることで修正できます。 &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;。&lt;/p&gt;</translation>
     </message>
     <message>
-        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed or &lt;pre&gt;net start npf&lt;/pre&gt; if you have WinPcap installed. Both commands must be run as Administrator.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;キャプチャドライバが読み込まれていないためローカルインターフェースは利用できません。&lt;/p&gt;&lt;p&gt;以下を実行することで修正することができます。 もしNpcapをインストールした場合、&lt;pre&gt;net start npcap&lt;/pre&gt; もしWinPcapをインストールした場合、&lt;pre&gt;net start npf&lt;/pre&gt; 両方のコマンドは管理者権限として実行する必要があります。&lt;/p&gt;</translation>
+        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed. The command must be run as Administrator.&lt;/p&gt;</source>
+        <translation>&lt;p&gt;パケットキャプチャドライバが読み込まれていないためローカルインターフェースは利用できません。&lt;/p&gt;&lt;p&gt;もしNpcapをインストールしていたら &lt;pre&gt;net start npcap&lt;/pre&gt; を実行することで修正できます。このコマンドは管理者として実行しなければなりません。&lt;/p&gt;</translation>
     </message>
     <message>
         <source>&lt;p&gt;You don&apos;t have permission to capture on local interfaces.&lt;/p&gt;&lt;p&gt;You can fix this by &lt;a href=&quot;file://%1&quot;&gt;installing ChmodBPF&lt;/a&gt;.&lt;/p&gt;</source>
@@ -6911,6 +6943,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Display filter as %1</source>
         <translation>%1 として表示フィルタ</translation>
     </message>
+    <message>
+        <source>The Wireshark Network Analyzer</source>
+        <translation>ワイヤーシャーク ネットワークアナライザ</translation>
+    </message>
+    <message>
+        <source>The Stratoshark System Call and Log Analyzer</source>
+        <translation>Stratoshark システムコールログアナライザ</translation>
+    </message>
+    <message>
+        <source>Capturing from %1</source>
+        <translation>%1 からキャプチャ中</translation>
+    </message>
 </context>
 <context>
     <name>MainWindowPreferencesFrame</name>
@@ -7531,6 +7575,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Generate hexdumps for secondary data sources like reassembled or decrypted buffers in addition to the frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;フレームに加えて第二データソースに対し再組立てや復号化したバッファなどの16進数ダンプを作成します。&lt;/html&gt;</translation>
     </message>
+    <message>
+        <source>Include timestamp preamble</source>
+        <translation>タイムスタンププランブルを含む</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include each frame timestamp immediately before its hex dump, using the current time display format.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;現在の時刻表示形式で16進数ダンプの直前に各フレームのタイムスタンプを含めてください&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
 </context>
 <context>
     <name>PacketList</name>
@@ -7816,6 +7868,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Preferences</source>
         <translation>設定</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>コピー</translation>
+    </message>
+    <message numerus="yes">
+        <source>Copy Row(s)</source>
+        <translation>
+            <numerusform>行をコピー</numerusform>
+        </translation>
     </message>
 </context>
 <context>
@@ -8280,8 +8342,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>フィルタフィールドリファレンス</translation>
     </message>
     <message>
-        <source>Copied </source>
-        <translation>コピー済</translation>
+        <source>Copied %1</source>
+        <translation>%1 コピー済</translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>
@@ -8460,34 +8522,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 </context>
 <context>
     <name>QObject</name>
-    <message>
-        <source>Average Throughput (bits/s)</source>
-        <translation>平均スループット(bits/s)</translation>
-    </message>
-    <message>
-        <source>Round Trip Time (ms)</source>
-        <translation>往復遅延時間(ミリ秒)</translation>
-    </message>
-    <message>
-        <source>Segment Length (B)</source>
-        <translation>セグメント長(バイト)</translation>
-    </message>
-    <message>
-        <source>Sequence Number (B)</source>
-        <translation>シーケンス番号(バイト)</translation>
-    </message>
-    <message>
-        <source>Time (s)</source>
-        <translation>時間(秒)</translation>
-    </message>
-    <message>
-        <source>Window Size (B)</source>
-        <translation>ウインドウサイズ(バイト)</translation>
-    </message>
-    <message>
-        <source>Unacked (Outstanding) Bytes (B)</source>
-        <translation>ACKされていない(未処理の)バイト(B)</translation>
-    </message>
     <message>
         <source>[no capture file]</source>
         <translation>[キャプチャファイルなし]</translation>
@@ -8881,8 +8915,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>無効な表示フィルタ</translation>
     </message>
     <message>
-        <source>The filter expression %1 isn&apos;t a valid display filter. (%2).</source>
-        <translation>%1 フィルターの書式は有効な表示フィルタではありません (%2)</translation>
+        <source>The filter expression &quot;%1&quot; isn&apos;t a valid display filter.
+(%2).</source>
+        <translation>フィルタ式 &quot;%1&quot; は有効な表示フィルタではありません
+(%2)</translation>
     </message>
     <message>
         <source>Error</source>
@@ -8975,6 +9011,34 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>LOAD</source>
         <translation>読込</translation>
+    </message>
+    <message>
+        <source>Average Throughput</source>
+        <translation>平均スループット</translation>
+    </message>
+    <message>
+        <source>Round Trip Time</source>
+        <translation>往復遅延時間</translation>
+    </message>
+    <message>
+        <source>Segment Length</source>
+        <translation>セグメント長</translation>
+    </message>
+    <message>
+        <source>Sequence Number</source>
+        <translation>シーケンス番号</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>時間</translation>
+    </message>
+    <message>
+        <source>Window Size</source>
+        <translation>ウィンドウサイズ</translation>
+    </message>
+    <message>
+        <source>Unacked (Outstanding) Bytes</source>
+        <translation>ACKされていない(未処理の)バイト</translation>
     </message>
 </context>
 <context>
@@ -11945,6 +12009,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>ズーム</translation>
     </message>
     <message>
+        <source>Sampling Method</source>
+        <translation>サンプリング方法</translation>
+    </message>
+    <message>
+        <source>Select which packets and how the RTT sampling is done</source>
+        <translation> どのパケットを選択し、どのようにRTTのサンプリングを行うかを選択します。</translation>
+    </message>
+    <message>
         <source>Display Round Trip Time vs Sequence Number</source>
         <translation>往復遅延時間対シーケンス番号を表示</translation>
     </message>
@@ -12239,6 +12311,38 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>4</source>
         <translation>4</translation>
+    </message>
+    <message>
+        <source>All Data Packets</source>
+        <translation>すべてのデータパケット</translation>
+    </message>
+    <message>
+        <source>Sampling from all data packets</source>
+        <translation>すべてのデータパケットからサンプリング</translation>
+    </message>
+    <message>
+        <source>All Data Packets w/ SACK</source>
+        <translation>すべてのデータパケットでSACKのもの</translation>
+    </message>
+    <message>
+        <source>Sampling from all data packets w/ SACK</source>
+        <translation>すべてのデータパケットでSACKのものからサンプリング</translation>
+    </message>
+    <message>
+        <source>Data Packets matching RTT</source>
+        <translation>RTTに適合するデータパケット</translation>
+    </message>
+    <message>
+        <source>Sampling from RTT packets</source>
+        <translation>RTTパケットからサンプリング</translation>
+    </message>
+    <message>
+        <source>Data Packets matching Karn RTT</source>
+        <translation>Karn RTTに適合するデータパケット</translation>
+    </message>
+    <message>
+        <source>Sampling from Karn RTT packets</source>
+        <translation>Karn RTTパケットからサンプリング</translation>
     </message>
     <message>
         <source>Zoom In X Axis</source>
@@ -13101,17 +13205,15 @@ a:hover {
     </message>
     <message>
         <source>You are sniffing the glue that holds your system together using Stratoshark </source>
-        <oldsource>You are sniffing the glue that holds your system together using Logray </oldsource>
-        <translation type="unfinished">あなたはLograyを使ってシステムを互いに繋ぐ膠をキャプチャしています</translation>
+        <translation>あなたはStratosharkを使ってシステムを互いに繋ぐ膠をキャプチャしています</translation>
+    </message>
+    <message>
+        <source>You are running Stratoshark </source>
+        <translation>Stratosharkを起動中です </translation>
     </message>
     <message>
         <source>You are running Wireshark </source>
         <translation>Wiresharkを起動中</translation>
-    </message>
-    <message>
-        <source>You are running Stratoshark </source>
-        <oldsource>You are running Logray </oldsource>
-        <translation type="unfinished">Lograyを起動中です </translation>
     </message>
     <message>
         <source> You receive automatic updates.</source>
@@ -13187,14 +13289,6 @@ a:hover {
     <message>
         <source>802.11 Preferences</source>
         <translation>802.11設定</translation>
-    </message>
-    <message>
-        <source>AirPcap Control Panel</source>
-        <translation type="vanished">AirPcapコントロールパネル</translation>
-    </message>
-    <message>
-        <source>Open the AirPcap Control Panel</source>
-        <translation type="vanished">AirPcapコントロールパネルを開く</translation>
     </message>
     <message>
         <source>Unable to set channel or offset.</source>
@@ -14431,6 +14525,22 @@ a:hover {
         <translation>表示フィルタ参照</translation>
     </message>
     <message>
+        <source>First Packet in Conversation</source>
+        <translation>対話の最初のパケット</translation>
+    </message>
+    <message>
+        <source>Go to the first packet in this conversation</source>
+        <translation>この対話の最初のパケットへ移動</translation>
+    </message>
+    <message>
+        <source>Last Packet in Conversation</source>
+        <translation>対話の最後のパケット</translation>
+    </message>
+    <message>
+        <source>Go to the last packet in this conversation</source>
+        <translation>この対話の最後のパケットへ移動</translation>
+    </message>
+    <message>
         <source>Capture &amp;Filters…</source>
         <translation>キャプチャフィルタ…(&amp;F)</translation>
     </message>
@@ -14675,24 +14785,12 @@ a:hover {
         <translation>パケット時間を前に表示されたパケットからの秒数で表示します</translation>
     </message>
     <message>
-        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456)</source>
-        <translation>UTC日時 (1973-06-14 01:02:03.123456)</translation>
-    </message>
-    <message>
         <source>Show packet times as the UTC date and time of day.</source>
         <translation>パケット時間をUTC日付および時刻で表示します</translation>
     </message>
     <message>
-        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456)</source>
-        <translation>UTC年、通年日、時刻 (1970/001 01:02:03.123456)</translation>
-    </message>
-    <message>
         <source>Show packet times as the UTC year, day of the year and time of day.</source>
         <translation>パケット時間をUTC年、通年日、時刻で表示します</translation>
-    </message>
-    <message>
-        <source>UTC Time of Day (01:02:03.123456)</source>
-        <translation>UTC時刻 (01:02:03.123456)</translation>
     </message>
     <message>
         <source>Show packet times as the UTC time of day.</source>
@@ -14945,6 +15043,18 @@ a:hover {
         <translation>表示されているものすべてをマーク解除(&amp;U)</translation>
     </message>
     <message>
+        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456Z)</source>
+        <translation>UTC日時 (1970-01-01 01:02:03.123456Z)</translation>
+    </message>
+    <message>
+        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456Z)</source>
+        <translation>UTC年、通年日、時刻  (1970/001 01:02:03.123456Z)</translation>
+    </message>
+    <message>
+        <source>UTC Time of Day (01:02:03.123456Z)</source>
+        <translation>UTC時刻 (01:02:03.123456Z)</translation>
+    </message>
+    <message>
         <source>All VoIP Calls</source>
         <translation>すべてのVoIP通話</translation>
     </message>
@@ -15117,16 +15227,8 @@ a:hover {
         <translation>ファイルを結合する前に変更を保存する必要があります</translation>
     </message>
     <message>
-        <source>Invalid Display Filter</source>
-        <translation>無効な表示フィルタ</translation>
-    </message>
-    <message>
         <source>Invalid Read Filter</source>
         <translation>無効な読込フィルタ</translation>
-    </message>
-    <message>
-        <source>The filter expression %1 isn&apos;t a valid read filter. (%2).</source>
-        <translation>フィルタ式 %1 は有効な読込みフィルタではありません(%2)</translation>
     </message>
     <message>
         <source> before importing a capture</source>
@@ -15165,6 +15267,12 @@ a:hover {
     <message>
         <source>Unable to drop files during capture.</source>
         <translation>キャプチャ中にファイルをドロップできません</translation>
+    </message>
+    <message>
+        <source>The filter expression &quot;%1&quot; isn&apos;t a valid read filter.
+(%2).</source>
+        <translation>フィルタ式 &quot;%1&quot; は有効なリードフィルタではありません
+(%2).</translation>
     </message>
     <message>
         <source>Unknown file type returned by merge dialog.</source>
@@ -15233,14 +15341,6 @@ a:hover {
         <source>Stop and Continue &amp;without Saving</source>
         <oldsource>Stop and Continue without Saving</oldsource>
         <translation>保存せずに停止して続ける(&amp;w)</translation>
-    </message>
-    <message>
-        <source>The Wireshark Network Analyzer</source>
-        <translation>ワイヤーシャークネットワークアナライザ</translation>
-    </message>
-    <message>
-        <source>Capturing from %1</source>
-        <translation>%1 からキャプチャ中</translation>
     </message>
     <message>
         <source> before opening another file</source>

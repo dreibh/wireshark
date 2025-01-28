@@ -4,6 +4,7 @@
  * Copyright 2008, Jens Steinhauser <jens.steinhauser@omicron.at>
  * Copyright 2019, Dwayne Rich <dwayne_rich@selinc.com>
  * Copyright 2020, Dmitriy Eliseev <eliseev_d@ntcees.ru>
+ * Copyright 2024, Ivan Ugryumov <ugrumov.i@yandex.ru>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -193,8 +194,9 @@ enum FrameType {
 /* Structures to save CFG frame content. */
 
 /* type to indicate the format for (D)FREQ/PHASORS/ANALOG in data frame	 */
-typedef enum {	integer,	/* 16 bit signed integer */
-	       floating_point	/* single precision floating point */
+typedef enum {
+	integer,	/* 16-bit signed integer */
+	floating_point	/* single precision floating point */
 } data_format;
 
 typedef enum { rect, polar } phasor_notation_e;
@@ -240,7 +242,7 @@ typedef struct {
 	uint16_t		id;		/* (Stream Source ID) identifies source of stream */
 	uint32_t		time_base;	/* Time base - resolution of FRACSEC time stamp. */
 	wmem_array_t	*config_blocks; /* Contains a config_block struct for
-				      * every PMU included in the config frame */
+									 * every PMU included in the config frame */
 } config_frame;
 
 /* strings for type bits in SYNC */
@@ -474,17 +476,17 @@ static const value_string      data_statb03to00names[] = {
 };
 
 /* strings to decode the commands (CMD Field) according Table 15, p.26
-*  0000 0000 0000 0001  -  Turn off transmission of data frames
-*  0000 0000 0000 0010  -  Turn on transmission of data frames
-*  0000 0000 0000 0011  -  Send HDR frame
-*  0000 0000 0000 0100  -  Send CFG-1 frame.
-*  0000 0000 0000 0101  -  Send CFG-2 frame.
-*  0000 0000 0000 0110  -  Send CFG-3 frame (optional command).
-*  0000 0000 0000 1000  -  Extended frame.
-*  0000 0000 xxxx xxxx  -  All undesignated codes reserved.
-*  0000 yyyy xxxx xxxx  -  All codes where yyyy ≠ 0 available for user designation.
-*  zzzz xxxx xxxx xxxx  -  All codes where zzzz ≠ 0 reserved.
-*/
+ *  0000 0000 0000 0001  -  Turn off transmission of data frames
+ *  0000 0000 0000 0010  -  Turn on transmission of data frames
+ *  0000 0000 0000 0011  -  Send HDR frame
+ *  0000 0000 0000 0100  -  Send CFG-1 frame.
+ *  0000 0000 0000 0101  -  Send CFG-2 frame.
+ *  0000 0000 0000 0110  -  Send CFG-3 frame (optional command).
+ *  0000 0000 0000 1000  -  Extended frame.
+ *  0000 0000 xxxx xxxx  -  All undesignated codes reserved.
+ *  0000 yyyy xxxx xxxx  -  All codes where yyyy ≠ 0 available for user designation.
+ *  zzzz xxxx xxxx xxxx  -  All codes where zzzz ≠ 0 reserved.
+ */
 static const range_string command_names[] = {
 	{  0x0000, 0x0000, "reserved codes"		},
 	{  0x0001, 0x0001, "data transmission off"	},
@@ -503,13 +505,13 @@ static const range_string command_names[] = {
 
 
 /******************************************************************************
-* functions
-******************************************************************************/
+ * functions
+ ******************************************************************************/
 
 /* read in the size length for names found in config 3 frames
-	0 - no name
-	1-255 - length of name
-*/
+   0 - no name
+   1-255 - length of name
+ */
 static uint8_t get_name_length(tvbuff_t *tvb, int offset)
 {
 	uint8_t name_length;
@@ -571,14 +573,9 @@ static config_frame *config_frame_fast(tvbuff_t *tvb)
 	offset += 2;
 
 	while (num_pmu) {
-		uint16_t	     format_flags;
-		int	     num_ph,
-			     num_an,
-			     num_dg;
-		int	     i,
-			     phunit,
-			     anunit,
-			     fnom;
+		uint16_t	format_flags;
+		uint16_t	i, num_ph, num_an, num_dg;
+		int	        phunit, anunit, fnom;
 		config_block block;
 
 		/* initialize the block */
@@ -699,10 +696,7 @@ static config_frame * config_3_frame_fast(tvbuff_t *tvb)
 	offset += 2;
 	while ((num_pmu) && (frame_not_fragmented)) {
 		uint16_t	     format_flags;
-		int	     num_ph,
-			     num_an,
-			     num_dg;
-		int	     i;
+		uint16_t	     i, num_ph, num_an, num_dg;
 		uint8_t	     name_length;
 		config_block block;
 
@@ -943,7 +937,7 @@ static int dissect_single_phasor(tvbuff_t *tvb, int offset,
 			   field. However, the angle field is restricted to ±31416. A value of 0x8000 (–32768) used in the angle field
 			   will be used to signify absent data.
 			   bullet 6.3.1 page 16 IEEE Std C37.118.2-2011
-			*/
+			 */
 			if (*phase_imag_unscaled == -32768) {
 				*phase_imag_unscaled = NAN;
 				*mag_real_unscaled = NAN;
@@ -971,7 +965,7 @@ static int dissect_single_phasor(tvbuff_t *tvb, int offset,
 			/* For fixed-point data in rectangular format the PDC will use
 			   0x8000 (–32768) as the substitute for the absent data.
 			   bullet 6.3.1 page 16 IEEE Std C37.118.2-2011
-			*/
+			 */
 			if (*mag_real_unscaled == -32768) {
 				*mag_real_unscaled = NAN;
 			}
@@ -1111,7 +1105,7 @@ static int dissect_ANALOG(tvbuff_t *tvb, proto_tree *tree, config_block *block, 
 			}
 			else {
 				/* the "standard" doesn't say if this is signed or unsigned,
-				* so I just use int16_t */
+				 * so I just use int16_t */
 				int16_t tmp_i;
 				float tmp_f;
 
@@ -1457,7 +1451,7 @@ static int dissect_config_frame(tvbuff_t *tvb, proto_item *config_item)
 		proto_tree *temp_tree;
 		char	   *str;
 
-		int oldoffset = offset; /* to calculate the length of the whole PMU block later */
+		int old_offset = offset; /* to calculate the length of the whole PMU block later */
 
 		/* STN with new tree to add the rest of the PMU block */
 		str = (char *)tvb_get_string_enc(wmem_packet_scope(), tvb, offset, CHNAM_LEN, ENC_ASCII);
@@ -1502,7 +1496,7 @@ static int dissect_config_frame(tvbuff_t *tvb, proto_item *config_item)
 		proto_tree_add_item(station_tree, hf_conf_cfgcnt, tvb, offset, 2, ENC_BIG_ENDIAN); offset += 2;
 
 		/* set the correct length for the "Station :" item */
-		proto_item_set_len(station_item, offset - oldoffset);
+		proto_item_set_len(station_item, offset - old_offset);
 	} /* for() PMU blocks */
 
 	/* DATA_RATE */
@@ -1552,7 +1546,7 @@ static int dissect_config_3_frame(tvbuff_t *tvb, proto_item *config_item)
 	for (j = 0; j < num_pmu; j++) {
 		uint16_t   num_ph, num_an, num_dg, i;
 		uint8_t    name_length;
-		int        oldoffset;
+		int        old_offset;
 		float      pmu_lat, pmu_long, pmu_elev;
 		proto_item *station_item;
 		proto_tree *station_tree;
@@ -1561,7 +1555,7 @@ static int dissect_config_3_frame(tvbuff_t *tvb, proto_item *config_item)
 		char       *unspecified_location = "Unspecified Location";
 		uint8_t    g_pmu_id_array[G_PMU_ID_LEN];
 
-		oldoffset = offset; /* to calculate the length of the whole PMU block later */
+		old_offset = offset; /* to calculate the length of the whole PMU block later */
 
 		/* STN with new tree to add the rest of the PMU block */
 		name_length = get_name_length(tvb, offset);
@@ -1694,7 +1688,7 @@ static int dissect_config_3_frame(tvbuff_t *tvb, proto_item *config_item)
 		offset += 2;
 
 		/* set the correct length for the "Station :" item */
-		proto_item_set_len(station_item, offset - oldoffset);
+		proto_item_set_len(station_item, offset - old_offset);
 	} /* for() PMU blocks */
 
 	/* DATA_RATE */
@@ -1909,7 +1903,7 @@ static int dissect_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 		if (conversation) {
 			config_frame *conf = (config_frame *)conversation_get_proto_data(conversation, proto_synphasor);
 			/* no problem if 'conf' is NULL, the frame dissector checks this again */
-		p_add_proto_data(wmem_file_scope(), pinfo, proto_synphasor, 0, conf);
+			p_add_proto_data(wmem_file_scope(), pinfo, proto_synphasor, 0, conf);
 		}
 	} /* if (!visited) */
 
@@ -1962,9 +1956,9 @@ static int dissect_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
 					dissect_command_frame(sub_tvb, sub_item, pinfo);
 					break;
 				case CFG3:
-					/* Note:  The C37.118-2.2001 stanadard is vague on how to handle fragmented frames.
-						  Until further clarification is given, fragmented frames with the CONT_IDX
-						  are not supported. */
+					/* Note:  The C37.118-2.2001 standard is vague on how to handle fragmented frames.
+					   Until further clarification is given, fragmented frames with the CONT_IDX
+					   are not supported. */
 					if (tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN) != 0) {
 						proto_item_append_text(sub_item, ", CFG-3 Fragmented Frame (Not Supported)");
 					}

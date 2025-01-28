@@ -785,6 +785,7 @@ static int hf_xnap_nodemeasurementFailedReportCharacteristics_AveragePacketDelay
 static int hf_xnap_nodemeasurementFailedReportCharacteristics_AveragePacketLossDL;
 static int hf_xnap_nodemeasurementFailedReportCharacteristics_MeasuredUETrajectory;
 static int hf_xnap_nodemeasurementFailedReportCharacteristics_Reserved;
+static int hf_xnap_extensionValue_data;
 static int hf_xnap_A2XPC5QoSParameters_PDU;       /* A2XPC5QoSParameters */
 static int hf_xnap_AdditionalListofPDUSessionResourceChangeConfirmInfo_SNterminated_PDU;  /* AdditionalListofPDUSessionResourceChangeConfirmInfo_SNterminated */
 static int hf_xnap_AdditionLocationInformation_PDU;  /* AdditionLocationInformation */
@@ -1652,9 +1653,9 @@ static int hf_xnap_secondaryRATRestriction;       /* T_secondaryRATRestriction *
 static int hf_xnap_ExtendedSliceSupportList_item;  /* S_NSSAI */
 static int hf_xnap_ExtTLAs_item;                  /* ExtTLA_Item */
 static int hf_xnap_iPsecTLA;                      /* TransportLayerAddress */
-static int hf_xnap_gTPTransportLayerAddresses;    /* GTPTLAs */
+static int hf_xnap_gtptlas;                       /* GTPTLAs */
 static int hf_xnap_GTPTLAs_item;                  /* GTPTLA_Item */
-static int hf_xnap_gTPTransportLayerAddresses_01;  /* TransportLayerAddress */
+static int hf_xnap_gTPTransportLayerAddresses;    /* TransportLayerAddress */
 static int hf_xnap_f1TerminatingBHInformation_List;  /* F1TerminatingBHInformation_List */
 static int hf_xnap_F1TerminatingBHInformation_List_item;  /* F1TerminatingBHInformation_Item */
 static int hf_xnap_dLTNLAddress;                  /* IABTNLAddress */
@@ -13089,7 +13090,7 @@ dissect_xnap_ExtendedUEIdentityIndexValue(tvbuff_t *tvb _U_, int offset _U_, asn
 
 
 static const per_sequence_t GTPTLA_Item_sequence[] = {
-  { &hf_xnap_gTPTransportLayerAddresses_01, ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_xnap_TransportLayerAddress },
+  { &hf_xnap_gTPTransportLayerAddresses, ASN1_EXTENSION_ROOT    , ASN1_NOT_OPTIONAL, dissect_xnap_TransportLayerAddress },
   { &hf_xnap_iE_Extensions  , ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_ProtocolExtensionContainer },
   { NULL, 0, 0, NULL }
 };
@@ -13119,7 +13120,7 @@ dissect_xnap_GTPTLAs(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, pr
 
 static const per_sequence_t ExtTLA_Item_sequence[] = {
   { &hf_xnap_iPsecTLA       , ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_TransportLayerAddress },
-  { &hf_xnap_gTPTransportLayerAddresses, ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_GTPTLAs },
+  { &hf_xnap_gtptlas        , ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_GTPTLAs },
   { &hf_xnap_iE_Extensions  , ASN1_EXTENSION_ROOT    , ASN1_OPTIONAL    , dissect_xnap_ProtocolExtensionContainer },
   { NULL, 0, 0, NULL }
 };
@@ -33128,35 +33129,37 @@ static int dissect_ProtocolIEFieldValue(tvbuff_t *tvb, packet_info *pinfo, proto
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  return (dissector_try_uint_new(xnap_ies_dissector_table, xnap_data->protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(xnap_ies_dissector_table, xnap_data->protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_ProtocolExtensionFieldExtensionValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  return (dissector_try_uint_new(xnap_extension_dissector_table, xnap_data->protocol_ie_id, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  if (!dissector_try_uint_with_data(xnap_extension_dissector_table, xnap_data->protocol_ie_id, tvb, pinfo, tree, false, NULL))
+    proto_tree_add_item(tree, hf_xnap_extensionValue_data, tvb, 0, -1, ENC_NA);
+  return tvb_captured_length(tvb);
 }
 
 static int dissect_InitiatingMessageValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  return (dissector_try_uint_new(xnap_proc_imsg_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(xnap_proc_imsg_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_SuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  return (dissector_try_uint_new(xnap_proc_sout_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(xnap_proc_sout_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int dissect_UnsuccessfulOutcomeValue(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
   struct xnap_private_data *xnap_data = xnap_get_private_data(pinfo);
 
-  return (dissector_try_uint_new(xnap_proc_uout_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
+  return (dissector_try_uint_with_data(xnap_proc_uout_dissector_table, xnap_data->procedure_code, tvb, pinfo, tree, false, NULL)) ? tvb_captured_length(tvb) : 0;
 }
 
 static int
@@ -33431,6 +33434,10 @@ void proto_register_xnap(void) {
     { &hf_xnap_nodemeasurementFailedReportCharacteristics_Reserved,
       { "Reserved", "xnap.nodemeasurementFailedReportCharacteristics.Reserved",
         FT_UINT32, BASE_HEX, NULL, 0x03ffffff,
+        NULL, HFILL }},
+    { &hf_xnap_extensionValue_data,
+      { "Data", "xnap.extensionValue.data",
+        FT_BYTES, BASE_NONE|BASE_ALLOW_ZERO, NULL, 0,
         NULL, HFILL }},
     { &hf_xnap_A2XPC5QoSParameters_PDU,
       { "A2XPC5QoSParameters", "xnap.A2XPC5QoSParameters_element",
@@ -35433,7 +35440,7 @@ void proto_register_xnap(void) {
         FT_UINT32, BASE_DEC, VALS(xnap_Criticality_vals), 0,
         NULL, HFILL }},
     { &hf_xnap_protocolIE_Field_value,
-      { "value", "xnap.value_element",
+      { "value", "xnap.protocolIE_Field_value_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "ProtocolIE_Field_value", HFILL }},
     { &hf_xnap_ProtocolExtensionContainer_item,
@@ -35441,7 +35448,7 @@ void proto_register_xnap(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_xnap_extension_id,
-      { "id", "xnap.id",
+      { "id", "xnap.extension_id",
         FT_UINT32, BASE_DEC|BASE_EXT_STRING, &xnap_ProtocolIE_ID_vals_ext, 0,
         "ProtocolIE_ID", HFILL }},
     { &hf_xnap_extensionValue,
@@ -35453,11 +35460,11 @@ void proto_register_xnap(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_xnap_private_id,
-      { "id", "xnap.id",
+      { "id", "xnap.private_id",
         FT_UINT32, BASE_DEC, VALS(xnap_PrivateIE_ID_vals), 0,
         "PrivateIE_ID", HFILL }},
     { &hf_xnap_privateIE_Field_value,
-      { "value", "xnap.value_element",
+      { "value", "xnap.privateIE_Field_value_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "PrivateIE_Field_value", HFILL }},
     { &hf_xnap_a2XPC5QoSFlowList,
@@ -36900,15 +36907,15 @@ void proto_register_xnap(void) {
       { "iPsecTLA", "xnap.iPsecTLA",
         FT_BYTES, BASE_NONE, NULL, 0,
         "TransportLayerAddress", HFILL }},
-    { &hf_xnap_gTPTransportLayerAddresses,
-      { "gTPTransportLayerAddresses", "xnap.gTPTransportLayerAddresses",
+    { &hf_xnap_gtptlas,
+      { "gTPTransportLayerAddresses", "xnap.gtptlas",
         FT_UINT32, BASE_DEC, NULL, 0,
         "GTPTLAs", HFILL }},
     { &hf_xnap_GTPTLAs_item,
       { "GTPTLA-Item", "xnap.GTPTLA_Item_element",
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
-    { &hf_xnap_gTPTransportLayerAddresses_01,
+    { &hf_xnap_gTPTransportLayerAddresses,
       { "gTPTransportLayerAddresses", "xnap.gTPTransportLayerAddresses",
         FT_BYTES, BASE_NONE, NULL, 0,
         "TransportLayerAddress", HFILL }},
@@ -41193,11 +41200,11 @@ void proto_register_xnap(void) {
         FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_xnap_initiatingMessage_value,
-      { "value", "xnap.value_element",
+      { "value", "xnap.initiatingMessage_value_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "InitiatingMessage_value", HFILL }},
     { &hf_xnap_successfulOutcome_value,
-      { "value", "xnap.value_element",
+      { "value", "xnap.successfulOutcome_value_element",
         FT_NONE, BASE_NONE, NULL, 0,
         "SuccessfulOutcome_value", HFILL }},
     { &hf_xnap_value,

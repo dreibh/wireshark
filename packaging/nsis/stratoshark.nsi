@@ -67,9 +67,9 @@ BrandingText "Stratoshark${U+00ae} Installer"
 ; is usually not associated with an appropriate text editor. We should use extension "txt"
 ; for a text file or "html" for an html README file.
 !define MUI_FINISHPAGE_TITLE_3LINES
-; !define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\NEWS.txt"
-; !define MUI_FINISHPAGE_SHOWREADME_TEXT "Show News"
-; !define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
+!define MUI_FINISHPAGE_SHOWREADME "$INSTDIR\Stratoshark Release Notes.html"
+!define MUI_FINISHPAGE_SHOWREADME_TEXT "Open the release notes"
+!define MUI_FINISHPAGE_SHOWREADME_NOTCHECKED
 ; NSIS runs as Administrator and will run Stratoshark as Administrator
 ; if these are enabled.
 ;!define MUI_FINISHPAGE_RUN "$INSTDIR\${PROGRAM_NAME_PATH}"
@@ -452,12 +452,13 @@ File "${STAGING_DIR}\README.txt"
 File "${STAGING_DIR}\wka"
 File "${STAGING_DIR}\pdml2html.xsl"
 File "${STAGING_DIR}\ws.css"
-;File "${STAGING_DIR}\stratoshark.html"
+File "${STAGING_DIR}\stratoshark.html"
 File "${STAGING_DIR}\wireshark-filter.html"
 File "${STAGING_DIR}\dumpcap.exe"
 File "${STAGING_DIR}\dumpcap.html"
 File "${STAGING_DIR}\extcap.html"
 File "${STAGING_DIR}\ipmap.html"
+File "${STAGING_DIR}\Stratoshark Release Notes.html"
 
 ; C-runtime redistributable
 ; vc_redist.x64.exe or vc_redist.x86.exe - copy and execute the redistributable installer
@@ -918,6 +919,7 @@ SetOutPath '$INSTDIR\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan'
 File "${STAGING_DIR}\plugins\${MAJOR_VERSION}.${MINOR_VERSION}\epan\falco-bridge.dll"
 SetOutPath '$INSTDIR\plugins\falco'
 File "${STAGING_DIR}\plugins\falco\cloudtrail.dll"
+File "${STAGING_DIR}\plugins\falco\gcpaudit.dll"
 !include "custom_plugins.txt"
 
 ;-------------------------------------------
@@ -1004,6 +1006,13 @@ Section "Falcodump" SecFalcodump
 SectionEnd
 !insertmacro CheckExtrasFlag "falcodump"
 
+!ifdef LIBSSH_FOUND
+Section "Sshdig" SecSshdig
+!insertmacro InstallExtcap "sshdig"
+SectionEnd
+!insertmacro CheckExtrasFlag "sshdig"
+!endif
+
 SectionGroupEnd ; "External Capture (extcap)"
 
 Section "-Clear Partial Selected"
@@ -1015,9 +1024,6 @@ Section "Documentation" SecDocumentation
 ;-------------------------------------------
 SetOutPath "$INSTDIR\Wireshark User's Guide"
 File /r "${DOC_DIR}\wsug_html_chunked\*.*"
-
-SetOutPath $INSTDIR
-File "${DOC_DIR}\faq.html"
 SectionEnd
 !endif
 
@@ -1138,6 +1144,7 @@ Delete "$INSTDIR\audio\*.*"
 Delete "$INSTDIR\bearer\*.*"
 Delete "$INSTDIR\diameter\*.*"
 Delete "$INSTDIR\extcap\falcodump.*"
+Delete "$INSTDIR\extcap\sshdig.*"
 Delete "$INSTDIR\gpl-2.0-standalone.html"
 Delete "$INSTDIR\Acknowledgements.md"
 Delete "$INSTDIR\generic\*.*"
@@ -1180,7 +1187,7 @@ Delete "$INSTDIR\browser_sslkeylog.lua"
 Delete "$INSTDIR\console.lua"
 Delete "$INSTDIR\dtd_gen.lua"
 Delete "$INSTDIR\init.lua"
-Delete "$INSTDIR\release-notes.html"
+Delete "$INSTDIR\Stratoshark Release Notes.html"
 
 RMDir "$INSTDIR\accessible"
 RMDir "$INSTDIR\audio"
@@ -1280,6 +1287,9 @@ SectionEnd
 
   !insertmacro MUI_DESCRIPTION_TEXT ${SecExtcapGroup} "External Capture Interfaces"
   !insertmacro MUI_DESCRIPTION_TEXT ${SecFalcodump} "Provide capture interfaces from Falco plugins."
+  !ifdef LIBSSH_FOUND
+  !insertmacro MUI_DESCRIPTION_TEXT ${SecSshdig} "Provide remote capture through SSH. (sysdig)"
+  !endif
 
 !insertmacro MUI_FUNCTION_DESCRIPTION_END
 

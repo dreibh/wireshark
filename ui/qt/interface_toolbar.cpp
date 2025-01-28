@@ -31,7 +31,7 @@ DIAG_ON(restrict)
 #include "main_application.h"
 #include <ui_interface_toolbar.h>
 
-#include "capture_opts.h"
+#include "ui/capture_opts.h"
 #include "ui/capture_globals.h"
 #include "sync_pipe.h"
 #include "wsutil/file_util.h"
@@ -184,7 +184,11 @@ QWidget *InterfaceToolbar::createCheckbox(iface_toolbar_control *control)
         setDefaultValue(control->num, default_value);
     }
 
-    connect(checkbox, SIGNAL(stateChanged(int)), this, SLOT(onCheckBoxChanged(int)));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 7, 0)
+    connect(checkbox, &QCheckBox::checkStateChanged, this, &InterfaceToolbar::onCheckBoxChanged);
+#else
+    connect(checkbox, &QCheckBox::stateChanged, this, &InterfaceToolbar::onCheckBoxChanged);
+#endif
 
     ui->leftLayout->addWidget(checkbox);
 
@@ -201,11 +205,11 @@ QWidget *InterfaceToolbar::createButton(iface_toolbar_control *control)
     {
         case INTERFACE_ROLE_CONTROL:
             setDefaultValue(control->num, (char *)control->display);
-            connect(button, SIGNAL(clicked()), this, SLOT(onControlButtonClicked()));
+            connect(button, &QPushButton::clicked, this, &InterfaceToolbar::onControlButtonClicked);
             break;
 
         case INTERFACE_ROLE_HELP:
-            connect(button, SIGNAL(clicked()), this, SLOT(onHelpButtonClicked()));
+            connect(button, &QPushButton::clicked, this, &InterfaceToolbar::onHelpButtonClicked);
             if (help_link_.isEmpty())
             {
                 // No help URL provided
@@ -214,11 +218,11 @@ QWidget *InterfaceToolbar::createButton(iface_toolbar_control *control)
             break;
 
         case INTERFACE_ROLE_LOGGER:
-            connect(button, SIGNAL(clicked()), this, SLOT(onLogButtonClicked()));
+            connect(button, &QPushButton::clicked, this, &InterfaceToolbar::onLogButtonClicked);
             break;
 
         case INTERFACE_ROLE_RESTORE:
-            connect(button, SIGNAL(clicked()), this, SLOT(onRestoreButtonClicked()));
+            connect(button, &QPushButton::clicked, this, &InterfaceToolbar::onRestoreButtonClicked);
             break;
 
         default:
@@ -274,7 +278,11 @@ QWidget *InterfaceToolbar::createSelector(iface_toolbar_control *control)
         default_list_[control->num].append(interface_value);
     }
 
-    connect(combobox, SIGNAL(currentIndexChanged(int)), this, SLOT(onComboBoxChanged(int)));
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    connect(combobox, &QComboBox::currentIndexChanged, this, &InterfaceToolbar::onComboBoxChanged);
+#else
+    connect(combobox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &InterfaceToolbar::onComboBoxChanged);
+#endif
 
     ui->leftLayout->addWidget(label);
     ui->leftLayout->addWidget(combobox);
@@ -297,7 +305,7 @@ QWidget *InterfaceToolbar::createString(iface_toolbar_control *control)
         setDefaultValue(control->num, control->default_value.string);
     }
 
-    connect(lineedit, SIGNAL(editedTextApplied()), this, SLOT(onLineEditChanged()));
+    connect(lineedit, &InterfaceToolbarLineEdit::editedTextApplied, this, &InterfaceToolbar::onLineEditChanged);
 
     ui->leftLayout->addWidget(label);
     ui->leftLayout->addWidget(lineedit);
@@ -309,6 +317,13 @@ QWidget *InterfaceToolbar::createString(iface_toolbar_control *control)
 
 void InterfaceToolbar::setWidgetValue(QWidget *widget, int command, QByteArray payload)
 {
+    // The QString(const QByteArray&) constructor will implicitly convert
+    // payload to a QString. In Qt5 this truncates at the first '\0'.
+    // (So string array payloads must be split first before converting.)
+    // In Qt6 those are converted to UTF-16 U+0000. (So convert then split is OK.)
+    // Other functions, like QComboBox::findData(), take a QVariant.
+    // In Qt5 QVariants from QStrings and QByteArrays compare equal if the
+    // QByteArray would convert to the same string; in Qt6 they don't.
     if (QComboBox *combobox = qobject_cast<QComboBox *>(widget))
     {
         combobox->blockSignals(true);
@@ -326,8 +341,8 @@ void InterfaceToolbar::setWidgetValue(QWidget *widget, int command, QByteArray p
 
             case commandControlAdd:
             {
-                QString value;
-                QString display;
+                QByteArray value;
+                QByteArray display;
                 if (payload.contains('\0'))
                 {
                     // The payload contains "value\0display"
@@ -681,8 +696,8 @@ void InterfaceToolbar::onLogButtonClicked()
     if (!interface_[ifname].log_dialog.contains(num))
     {
         interface_[ifname].log_dialog[num] = new FunnelTextDialog(window(), ifname + " " + button->text());
-        connect(interface_[ifname].log_dialog[num], SIGNAL(accepted()), this, SLOT(closeLog()));
-        connect(interface_[ifname].log_dialog[num], SIGNAL(rejected()), this, SLOT(closeLog()));
+        connect(interface_[ifname].log_dialog[num], &FunnelTextDialog::accepted, this, &InterfaceToolbar::closeLog);
+        connect(interface_[ifname].log_dialog[num], &FunnelTextDialog::rejected, this, &InterfaceToolbar::closeLog);
 
         interface_[ifname].log_dialog[num]->setText(interface_[ifname].log_text[num]);
     }
@@ -725,12 +740,11 @@ void InterfaceToolbar::startReaderThread(QString ifname, void *control_in)
     InterfaceToolbarReader *reader = new InterfaceToolbarReader(ifname, control_in);
     reader->moveToThread(thread);
 
-    connect(thread, SIGNAL(started()), reader, SLOT(loop()));
-    connect(reader, SIGNAL(finished()), thread, SLOT(quit()));
-    connect(reader, SIGNAL(finished()), reader, SLOT(deleteLater()));
-    connect(thread, SIGNAL(finished()), reader, SLOT(deleteLater()));
-    connect(reader, SIGNAL(received(QString, int, int, QByteArray)),
-            this, SLOT(controlReceived(QString, int, int, QByteArray)));
+    connect(thread, &QThread::started, reader, &InterfaceToolbarReader::loop);
+    connect(reader, &InterfaceToolbarReader::finished, thread, &QThread::quit);
+    connect(reader, &InterfaceToolbarReader::finished, reader, &InterfaceToolbarReader::deleteLater);
+    connect(thread, &QThread::finished, reader, &InterfaceToolbarReader::deleteLater);
+    connect(reader, &InterfaceToolbarReader::received, this, &InterfaceToolbar::controlReceived);
 
     interface_[ifname].reader_thread = thread;
 
@@ -968,7 +982,7 @@ void InterfaceToolbar::interfaceListChanged()
         if (device->hidden)
             continue;
 
-        if (interface_.keys().contains(device->name))
+        if (interface_.contains(device->name))
         {
             ui->interfacesComboBox->addItem(device->name);
             if (selected_ifname.compare(device->name) == 0)

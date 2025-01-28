@@ -1,8 +1,8 @@
 /* packet-hsfz.c
  * HSFZ Dissector
  * By Dr. Lars Voelker <lars.voelker@technica-engineering.de>
- * Copyright 2013-2019 BMW Group, Dr. Lars Voelker
- * Copyright 2020-2023 Technica Engineering, Dr. Lars Voelker
+ * Copyright 2013-2019 BMW Group, Dr. Lars Völker
+ * Copyright 2020-2025 Technica Engineering, Dr. Lars Völker
  * Copyright 2023-2023 BMW Group, Hermann Leinsle
  *
  * Wireshark - Network traffic analyzer
@@ -120,11 +120,6 @@ udf_free_one_id_string_cb(void *r)   {
     if (rec->name) g_free(rec->name);
 }
 
-static void
-udf_free_one_id_string_data(void *data _U_)  {
-    /* nothing to free here since we did not malloc data in udf_post_update_one_id_string_template_cb */
-}
-
 static bool
 udf_update_diag_addr_cb(void *r, char **err) {
     udf_one_id_string_t *rec = (udf_one_id_string_t *)r;
@@ -135,7 +130,7 @@ udf_update_diag_addr_cb(void *r, char **err) {
     }
 
     if (rec->name == NULL || rec->name[0] == 0) {
-        *err = g_strdup_printf("ECU Name cannot be empty");
+        *err = g_strdup("ECU Name cannot be empty");
         return (*err == NULL);
     }
 
@@ -147,49 +142,35 @@ UAT_HEX_CB_DEF(udf_diag_addr, id, udf_one_id_string_t)
 UAT_CSTRING_CB_DEF(udf_diag_addr, name, udf_one_id_string_t)
 
 static void
-udf_free_key(void *key) {
-    wmem_free(wmem_epan_scope(), key);
-}
+udf_post_update_diag_addr_cb(void) {
+    if (ht_diag_addr) {
+        g_hash_table_destroy(ht_diag_addr);
+    }
 
-static void
-udf_post_update_one_id_string_template_cb(udf_one_id_string_t *udf_data, unsigned udf_data_num, GHashTable *ht) {
-    unsigned i;
-    int *key = NULL;
-    int tmp;
+    ht_diag_addr = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
 
-    if (udf_data_num>0) {
-        for (i = 0; i < udf_data_num; i++) {
-            key = wmem_new(wmem_epan_scope(), int);
-            tmp = udf_data[i].id;
-            *key = tmp;
-
-            g_hash_table_insert(ht, key, udf_data[i].name);
-        }
+    for (unsigned i = 0; i < udf_diag_addr_num; i++) {
+        g_hash_table_insert(ht_diag_addr, GUINT_TO_POINTER(udf_diag_addr[i].id), udf_diag_addr[i].name);
     }
 }
 
 static void
-udf_post_update_diag_addr_cb(void) {
+reset_diag_addr_cb(void) {
+    /* destroy hash table, if it exists */
     if (ht_diag_addr) {
         g_hash_table_destroy(ht_diag_addr);
         ht_diag_addr = NULL;
     }
-
-    ht_diag_addr = g_hash_table_new_full(g_int_hash, g_int_equal, &udf_free_key, &udf_free_one_id_string_data);
-    udf_post_update_one_id_string_template_cb(udf_diag_addr, udf_diag_addr_num, ht_diag_addr);
 }
 
-static char*
+static char *
 get_name_from_ht_diag_addr(unsigned identifier) {
-    unsigned key = identifier;
-
     if (ht_diag_addr == NULL) {
         return NULL;
     }
 
-    return (char *)g_hash_table_lookup(ht_diag_addr, &key);
+    return (char *)g_hash_table_lookup(ht_diag_addr, GUINT_TO_POINTER(identifier));;
 }
-
 
 /**********************************
  ****** The dissector itself ******
@@ -197,12 +178,10 @@ get_name_from_ht_diag_addr(unsigned identifier) {
 
 static uint8_t
 dissect_hsfz_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, int hf_specific_address) {
-    proto_item *ti;
     uint32_t tmp;
-    char *name;
+    proto_item *ti = proto_tree_add_item_ret_uint(tree, hf_specific_address, tvb, offset, 1, ENC_NA, &tmp);
 
-    ti = proto_tree_add_item_ret_uint(tree, hf_specific_address, tvb, offset, 1, ENC_NA, &tmp);
-    name = get_name_from_ht_diag_addr((unsigned)tmp);
+    char *name = get_name_from_ht_diag_addr(tmp);
     if (name != NULL) {
         proto_item_append_text(ti, " (%s)", name);
     }
@@ -388,7 +367,7 @@ void proto_register_hsfz(void) {
         udf_update_diag_addr_cb,                /* update callback       */
         udf_free_one_id_string_cb,              /* free callback         */
         udf_post_update_diag_addr_cb,           /* post update callback  */
-        NULL,                                   /* reset callback        */
+        reset_diag_addr_cb,                     /* reset callback        */
         diag_addr_uat_fields                    /* UAT field definitions */
     );
 

@@ -42,6 +42,7 @@ dumpcap - Dump network traffic
 [ *--temp-dir* <directory> ]
 [ *-w* <outfile> ]
 [ *-y*|*--linktype* <capture link type> ]
+[ *--application-flavor* [wireshark|stratoshark] ]
 [ *--capture-comment* <comment> ]
 [ *--list-time-stamp-types* ]
 [ *--time-stamp-type* <type> ]
@@ -62,7 +63,7 @@ data from a live network and write the packets to a file.  *Dumpcap*'s
 default capture file format is *pcapng* format. The *-F* option can
 be specified to write the output file in the *pcap* format instead.
 
-Without any options set it will use the libpcap, Npcap, or WinPcap library to
+Without any options set it will use the libpcap or Npcap library to
 capture traffic from the first available network interface and writes
 the received raw packet data, along with the packets' time stamps into a
 capture file.
@@ -108,8 +109,8 @@ fills up, *Dumpcap* will switch writing to the next file and so on.
 
 The created filenames are based on the filename given with the *-w*
 option, the number of the file and on the creation date and time, e.g.
-outfile_00001_20240714120117.pcapng,
-outfile_00002_20240714120523.pcapng, ...
+outfile_00001_20250714120117.pcapng,
+outfile_00002_20250714120523.pcapng, ...
 
 With the __files__ option it's also possible to form a "ring buffer".
 This will fill up new files until the number of files specified,
@@ -451,6 +452,11 @@ this option. If the capture link type is not set specifically,
 the default capture link type is used if provided.
 --
 
+--application-flavor [wireshark|stratoshark]::
+Set the application flavor.
+Make the *-D* option output and other behavior suitable for packet capture or system call and log capture.
+The default flavor is "wireshark".
+
 --capture-comment  <comment>::
 +
 --
@@ -463,6 +469,13 @@ single file.
 This option may be specified multiple times.  Note that Wireshark
 currently only displays the first comment of a capture file.
 --
+
+////
+The --compress-type option is not documented anywhere.
+
+Should we document it? Deprecate it in favor of using compress as
+used in other tools?
+////
 
 --list-time-stamp-types::
 List time stamp types supported for the interface. If no time stamp type can be

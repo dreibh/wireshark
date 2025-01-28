@@ -473,7 +473,6 @@ static const value_string dect_mitel_eth_prim_coding_val[] = {
 	{ DECT_MITEL_ETH_MAC_MOD_REQ,              "MAC_MOD_REQ" },
 	{ DECT_MITEL_ETH_MAC_MOD_CNF,              "MAC_MOD_CNF" },
 	{ DECT_MITEL_ETH_MAC_MOD_IND,              "MAC_MOD_IND" },
-	{ DECT_MITEL_ETH_MAC_MOD_REQ,              "MAC_MOD_REQ" },
 	{ DECT_MITEL_ETH_MAC_RECORD_AUDIO,         "MAC_RECORD_AUDIO" },
 	{ DECT_MITEL_ETH_MAC_INFO_IND,             "MAC_INFO_IND" },
 	{ DECT_MITEL_ETH_MAC_GET_DEF_CKEY_IND,     "MAC_GET_DEF_CKEY_IND" },
@@ -1830,8 +1829,8 @@ void proto_register_dect_mitel_eth(void)
 			}
 		},
 		{ &hf_dect_mitel_eth_rfpc_extended_capabilities2_dprs_data_category,
-			{ "Light data services", "dect_mitel_eth.rfpc.extended_capabilities2.dprs_data_category", FT_UINT8, BASE_HEX,
-				VALS(dect_mitel_eth_rfpc_extended_capabilities2_dprs_data_category_val), 0x78, NULL, HFILL
+			{ "DPRS data category", "dect_mitel_eth.rfpc.extended_capabilities2.dprs_data_category", FT_UINT24, BASE_HEX,
+				VALS(dect_mitel_eth_rfpc_extended_capabilities2_dprs_data_category_val), 0x780000, NULL, HFILL
 			}
 		},
 		{ &hf_dect_mitel_eth_rfpc_extended_capabilities2_ng_dect_1,

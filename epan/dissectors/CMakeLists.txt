@@ -90,6 +90,7 @@ set(CLEAN_ASN1_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cmip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cmp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cms.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-cosem.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-credssp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-crmf.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dap.c
@@ -174,6 +175,7 @@ set(CLEAN_ASN1_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-q932-ros.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-qsig.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ranap.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-rc-v3.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rnsap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-roon_discovery.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ros.c
@@ -238,11 +240,6 @@ set_target_properties(dissectors-corba PROPERTIES
 	FOLDER "Libs/epan/dissectors"
 	COMPILE_DEFINITIONS "WS_BUILD_DLL"
 )
-
-if(WIN32 AND CMAKE_GENERATOR STREQUAL "Visual Studio 12 2013 Win64")
-	# CORBA IDL dissectors are triggering a MSVC 2013 x64 /O2 bug leading to a NULL pointer dereference (see bug 12495)
-	target_compile_options(dissectors-corba PRIVATE $<$<CONFIG:Release>:/Ox> $<$<CONFIG:RelWithDebInfo>:/Ox>)
-endif()
 
 set(NCP2222_DISSECTOR_SRC
 	${CMAKE_CURRENT_BINARY_DIR}/packet-ncp2222.c
@@ -443,6 +440,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-ip.h
 	packet-ipmi.h
 	packet-ipsec.h
+	packet-ipv6.h
 	packet-ipx.h
 	packet-irdma.h
 	packet-isakmp.h
@@ -635,6 +633,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-uaudp.h
 	packet-uavcan-dsdl.h
 	packet-ubertooth.h
+	packet-ubx-galileo_e1b_inav.h
 	packet-udp.h
 	packet-uds.h
 	packet-umts_fp.h
@@ -642,6 +641,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-umts_rlc.h
 	packet-usb.h
 	packet-usb-hid.h
+	packet-usb-ptp.h
 	packet-usbip.h
 	packet-vxlan.h
 	packet-wap.h
@@ -705,8 +705,10 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/file-png.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-rbm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-rfc7468.c
+	${CMAKE_CURRENT_SOURCE_DIR}/file-riff.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-rtpdump.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-tiff.c
+	${CMAKE_CURRENT_SOURCE_DIR}/file-ttl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-2dparityfec.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-3com-njack.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-3com-xns.c
@@ -826,6 +828,8 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bpv6.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bpv7.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bpsec.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-bpsec-defaultsc.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-bpsec-cose.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bssap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bssgp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bt-dht.c
@@ -844,7 +848,9 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthci_evt.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthci_iso.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthci_sco.c
-	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthci_vendor.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthci_vendor_android.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthci_vendor_broadcom.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthci_vendor_intel.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthcrp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthfp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bthid.c
@@ -1803,6 +1809,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rmt-norm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rohc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-roofnet.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-roughtime.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rpc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rpcap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rpcrdma.c
@@ -1856,6 +1863,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sapsnc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sasp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sbas_l1.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-sbas_l5.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sbus.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sbc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sccp.c
@@ -2043,6 +2051,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-usb-i1d3.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-usb-masstorage.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-usb-printer.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-usb-ptp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-usb-video.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-usb.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-usbip.c
@@ -2074,6 +2083,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vrt.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vsip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vsock.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-vsomeip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vssmonitoring.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vtp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vuze-dht.c
@@ -2112,6 +2122,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-x25.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-x29.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-x75.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-xcp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xcsl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xdmcp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xip.c
@@ -2287,18 +2298,20 @@ install(FILES ${DISSECTOR_PUBLIC_HEADERS}
 	EXCLUDE_FROM_ALL
 )
 
-file(GLOB DISSECTOR_HEADERS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "*.h")
-CHECKAPI(
-	NAME
-	  dissectors
-	SWITCHES
-	  --group dissectors-prohibited
-	  --group dissectors-restricted:5 --summary-group dissectors-restricted
-	SOURCES
-	  ${ALL_DISSECTOR_SRC}
-	  ${DISSECTOR_SUPPORT_SRC}
-	  ${DISSECTOR_HEADERS}
-)
+if(NOT WIN32) # We're well past Windows' command line length limits
+	file(GLOB DISSECTOR_HEADERS RELATIVE "${CMAKE_CURRENT_SOURCE_DIR}" "*.h")
+	CHECKAPI(
+		NAME
+		dissectors
+		SWITCHES
+		--group dissectors-prohibited
+		--group dissectors-restricted:5 --summary-group dissectors-restricted
+		SOURCES
+		${ALL_DISSECTOR_SRC}
+		${DISSECTOR_SUPPORT_SRC}
+		${DISSECTOR_HEADERS}
+	)
+endif()
 
 #
 # Editor modelines  -  https://www.wireshark.org/tools/modelines.html

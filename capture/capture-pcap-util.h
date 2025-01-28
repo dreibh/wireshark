@@ -16,9 +16,9 @@
 
 #ifdef HAVE_LIBPCAP
 
-#include <pcap.h>
+#include <pcap/pcap.h>
 
-#include "capture_opts.h"
+#include "ui/capture_opts.h"
 
 #endif
 

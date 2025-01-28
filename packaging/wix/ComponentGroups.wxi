@@ -61,7 +61,7 @@
           <File Id="filIpmap_html" KeyPath="yes" Source="$(var.Staging.Dir)\ipmap.html" />
         </Component>
         <Component Id="cmpReleaseNotes_html" Guid="*">
-          <File Id="filReleaseNotes_html" KeyPath="yes" Source="$(var.Staging.Dir)\release-notes.html" />
+          <File Id="filReleaseNotes_html" KeyPath="yes" Source="$(var.Staging.Dir)\Wireshark Release Notes.html" />
         </Component>
       </DirectoryRef>
     </Fragment>
@@ -590,23 +590,6 @@
       <ComponentRef Id="cmpUdpdump_html" />
     </ComponentGroup>
   </Fragment>
-
-  <?ifdef DOC_DIR?>
-    <!-- User Guide is created by heat -->
-    <!-- FAQ -->
-    <Fragment>
-      <DirectoryRef Id="INSTALLFOLDER">
-        <Component Id="cmpFAQ_html" Guid="*">
-          <File Id="filFAQ_html" KeyPath="yes" Source="$(var.DOC_DIR)\faq.html" />
-        </Component>
-      </DirectoryRef>
-    </Fragment>
-    <Fragment>
-      <ComponentGroup Id="CG.Documentation">
-        <ComponentRef Id="cmpFAQ_html" />
-      </ComponentGroup>
-    </Fragment>
-  <?endif?>
 
   <!-- Shortcuts -->
   <Fragment>

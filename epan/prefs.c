@@ -23,6 +23,7 @@
 #include <glib.h>
 
 #include <stdio.h>
+#include <wsutil/application_flavor.h>
 #include <wsutil/filesystem.h>
 #include <epan/addr_resolv.h>
 #include <epan/oids.h>
@@ -33,7 +34,7 @@
 #include <epan/strutil.h>
 #include <epan/column.h>
 #include <epan/decode_as.h>
-#include <capture_opts.h>
+#include <ui/capture_opts.h>
 #include <wsutil/file_util.h>
 #include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
@@ -195,8 +196,6 @@ static const enum_val_t abs_time_format_options[] = {
     {NULL, NULL, -1}
 };
 
-#if defined(HAVE_PCAP_CREATE)
-/* Can set monitor mode and buffer size. */
 static int num_capture_cols = 7;
 static const char *capture_cols[7] = {
     "INTERFACE",
@@ -209,32 +208,6 @@ static const char *capture_cols[7] = {
 };
 #define CAPTURE_COL_TYPE_DESCRIPTION \
     "Possible values: INTERFACE, LINK, PMODE, SNAPLEN, MONITOR, BUFFER, FILTER\n"
-#elif defined(CAN_SET_CAPTURE_BUFFER_SIZE)
-/* Can set buffer size but not monitor mode. */
-static int num_capture_cols = 6;
-static const char *capture_cols[6] = {
-    "INTERFACE",
-    "LINK",
-    "PMODE",
-    "SNAPLEN",
-    "BUFFER",
-    "FILTER"
-};
-#define CAPTURE_COL_TYPE_DESCRIPTION \
-    "Possible values: INTERFACE, LINK, PMODE, SNAPLEN, BUFFER, FILTER\n"
-#else
-/* Can neither set buffer size nor monitor mode. */
-static int num_capture_cols = 5;
-static const char *capture_cols[5] = {
-    "INTERFACE",
-    "LINK",
-    "PMODE",
-    "SNAPLEN",
-    "FILTER"
-};
-#define CAPTURE_COL_TYPE_DESCRIPTION \
-    "Possible values: INTERFACE, LINK, PMODE, SNAPLEN, FILTER\n"
-#endif
 
 static const enum_val_t gui_packet_list_elide_mode[] = {
     {"LEFT", "LEFT", ELIDE_LEFT},
@@ -1152,7 +1125,7 @@ module_find_pref_cb(const void *key _U_, void *value, void *data)
 
 /* Tries to find a preference, setting containing_module to the (sub)module
  * holding this preference. */
-static struct preference *
+static pref_t *
 prefs_find_preference_with_submodule(module_t *module, const char *name,
         module_t **containing_module)
 {
@@ -1184,10 +1157,10 @@ prefs_find_preference_with_submodule(module_t *module, const char *name,
     if (containing_module)
         *containing_module = arg.submodule ? arg.submodule : module;
 
-    return (struct preference *) list_entry->data;
+    return (pref_t *) list_entry->data;
 }
 
-struct preference *
+pref_t *
 prefs_find_preference(module_t *module, const char *name)
 {
     return prefs_find_preference_with_submodule(module, name, NULL);
@@ -4310,7 +4283,7 @@ pre_init_prefs(void)
     static const char **col_fmt = col_fmt_packets;
     int num_cols = 7;
 
-    if (!is_packet_configuration_namespace()) {
+    if (application_flavor_is_stratoshark()) {
         static const char *col_fmt_logs[] = {
             "No.",              "%m",
             "Time",             "%t",
@@ -5132,7 +5105,7 @@ prefs_set_pref(char *prefarg, char **errmsg)
     return ret;
 }
 
-unsigned prefs_get_uint_value_real(pref_t *pref, pref_source_t source)
+unsigned prefs_get_uint_value(pref_t *pref, pref_source_t source)
 {
     switch (source)
     {
@@ -5148,15 +5121,6 @@ unsigned prefs_get_uint_value_real(pref_t *pref, pref_source_t source)
     }
 
     return 0;
-}
-
-unsigned prefs_get_uint_value(const char *module_name, const char* pref_name)
-{
-    pref_t *pref = prefs_find_preference(prefs_find_module(module_name), pref_name);
-    if (pref == NULL) {
-        return 0;
-    }
-    return prefs_get_uint_value_real(pref, pref_current);
 }
 
 char* prefs_get_password_value(pref_t *pref, pref_source_t source)

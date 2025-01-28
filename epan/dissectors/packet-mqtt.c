@@ -819,7 +819,7 @@ static unsigned dissect_mqtt_properties(tvbuff_t *tvb, packet_info *pinfo, proto
   ti = proto_tree_add_item(mqtt_tree, hf_property, tvb, offset, mqtt_prop_offset + mqtt_prop_len, ENC_NA);
   mqtt_prop_tree = proto_item_add_subtree(ti, ett_mqtt_property);
 
-  proto_tree_add_item(mqtt_prop_tree, hf_mqtt_property_len, tvb, offset, mqtt_prop_offset, ENC_BIG_ENDIAN);
+  proto_tree_add_item(mqtt_prop_tree, hf_mqtt_property_len, tvb, offset, mqtt_prop_offset, ENC_VARINT_PROTOBUF);
   offset += mqtt_prop_offset;
 
   const unsigned bytes_to_read = offset + mqtt_prop_len;
@@ -1228,8 +1228,8 @@ static int dissect_mqtt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
       if (mqtt_properties.content_type)
       {
         tvbuff_t *msg_tvb = tvb_new_subset_length(tvb, offset, mqtt_payload_len);
-        int bytes_read = dissector_try_string(media_type_dissector_table, mqtt_properties.content_type,
-                                              msg_tvb, pinfo, tree, NULL);
+        int bytes_read = dissector_try_string_with_data(media_type_dissector_table, mqtt_properties.content_type,
+                                              msg_tvb, pinfo, tree, true, NULL);
 
         msg_handled = msg_handled | (bytes_read != 0);
       }

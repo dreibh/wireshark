@@ -62,7 +62,6 @@
 #include <epan/packet.h>
 #include <epan/ftypes/ftypes.h>
 #include "file.h"
-#include "frame_tvbuff.h"
 #include <epan/disabled_protos.h>
 #include <epan/prefs.h>
 #include <epan/column.h>
@@ -133,11 +132,9 @@ static bool want_pcap_pkthdr;
 cf_status_t raw_cf_open(capture_file *cf, const char *fname);
 static bool load_cap_file(capture_file *cf);
 static bool process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
-                               wtap_rec *rec, Buffer *buf);
+                               wtap_rec *rec);
 static void show_print_file_io_error(int err);
 
-static void rawshark_cmdarg_err(const char *fmt, va_list ap);
-static void rawshark_cmdarg_err_cont(const char *fmt, va_list ap);
 static void protocolinfo_init(char *field);
 static bool parse_field_string_format(char *format);
 
@@ -431,6 +428,9 @@ main(int argc, char *argv[])
 
     static const char    optstring[] = OPTSTRING_INIT;
 
+    /* Set the program name. */
+    g_set_prgname("rawshark");
+
     /*
      * Set the C-language locale to the native environment and set the
      * code page to UTF-8 on Windows.
@@ -441,20 +441,15 @@ main(int argc, char *argv[])
     setlocale(LC_ALL, "");
 #endif
 
-    cmdarg_err_init(rawshark_cmdarg_err, rawshark_cmdarg_err_cont);
+    cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init("rawshark", vcmdarg_err);
+    ws_log_init(vcmdarg_err);
 
     /* Early logging command-line initialization. */
     ws_log_parse_args(&argc, argv, vcmdarg_err, WS_EXIT_INVALID_OPTION);
 
     ws_noisy("Finished log init and parsing command line log arguments");
-
-    /* Initialize the version information. */
-    ws_init_version_info("Rawshark",
-                         epan_gather_compile_info,
-                         NULL);
 
 #ifdef _WIN32
     create_app_running_mutex();
@@ -482,11 +477,16 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    err_msg = configuration_init(argv[0], NULL);
+    err_msg = configuration_init(argv[0]);
     if (err_msg != NULL) {
         fprintf(stderr, "rawshark: Can't get pathname of rawshark program: %s.\n",
                 err_msg);
     }
+
+    /* Initialize the version information. */
+    ws_init_version_info("Rawshark",
+                         epan_gather_compile_info,
+                         NULL);
 
     init_report_failure_message("rawshark");
 
@@ -806,15 +806,15 @@ clean_exit:
 /**
  * Read data from a raw pipe.  The "raw" data consists of a libpcap
  * packet header followed by the payload.
- * @param buf [IN] A POSIX file descriptor.  Because that's _exactly_ the sort
- *           of thing you want to use in Windows.
+ * @param rec [IN/OUT] A wtap_rec into which to read packet metadata
+ *           and data.
  * @param err [OUT] Error indicator.  Uses wiretap values.
  * @param err_info [OUT] Error message.
  * @param data_offset [OUT] data offset in the pipe.
  * @return true on success, false on failure.
  */
 static bool
-raw_pipe_read(wtap_rec *rec, Buffer *buf, int *err, char **err_info, int64_t *data_offset) {
+raw_pipe_read(wtap_rec *rec, int *err, char **err_info, int64_t *data_offset) {
     struct pcap_pkthdr mem_hdr;
     struct pcaprec_hdr disk_hdr;
     ssize_t bytes_read = 0;
@@ -893,8 +893,8 @@ raw_pipe_read(wtap_rec *rec, Buffer *buf, int *err, char **err_info, int64_t *da
         return false;
     }
 
-    ws_buffer_assure_space(buf, bytes_needed);
-    ptr = ws_buffer_start_ptr(buf);
+    ws_buffer_assure_space(&rec->data, bytes_needed);
+    ptr = ws_buffer_start_ptr(&rec->data);
     while (bytes_needed > 0) {
         bytes_read = ws_read(fd, ptr, bytes_needed);
         if (bytes_read == 0) {
@@ -921,22 +921,19 @@ load_cap_file(capture_file *cf)
     int64_t      data_offset = 0;
 
     wtap_rec     rec;
-    Buffer       buf;
     epan_dissect_t edt;
 
-    wtap_rec_init(&rec);
-    ws_buffer_init(&buf, 1514);
+    wtap_rec_init(&rec, 1514);
 
     epan_dissect_init(&edt, cf->epan, true, false);
 
-    while (raw_pipe_read(&rec, &buf, &err, &err_info, &data_offset)) {
-        process_packet(cf, &edt, data_offset, &rec, &buf);
+    while (raw_pipe_read(&rec, &err, &err_info, &data_offset)) {
+        process_packet(cf, &edt, data_offset, &rec);
     }
 
     epan_dissect_cleanup(&edt);
 
     wtap_rec_cleanup(&rec);
-    ws_buffer_free(&buf);
     if (err != 0) {
         /* Print a message noting that the read failed somewhere along the line. */
         cfile_read_failure_message(cf->filename, err, err_info);
@@ -948,7 +945,7 @@ load_cap_file(capture_file *cf)
 
 static bool
 process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
-               wtap_rec *rec, Buffer *buf)
+               wtap_rec *rec)
 {
     frame_data fdata;
     bool passed;
@@ -998,9 +995,7 @@ process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
     /* We only need the columns if we're printing packet info but we're
      *not* verbose; in verbose mode, we print the protocol tree, not
      the protocol summary. */
-    epan_dissect_run_with_taps(edt, cf->cd_t, rec,
-                               frame_tvbuff_new_buffer(&cf->provider, &fdata, buf),
-                               &fdata, &cf->cinfo);
+    epan_dissect_run_with_taps(edt, cf->cd_t, rec, &fdata, &cf->cinfo);
 
     frame_data_set_after_dissect(&fdata, &cum_bytes);
     prev_dis_frame = fdata;
@@ -1451,27 +1446,6 @@ raw_cf_open(capture_file *cf, const char *fname)
     cf->provider.prev_cap = NULL;
 
     return CF_OK;
-}
-
-/*
- * Report an error in command-line arguments.
- */
-static void
-rawshark_cmdarg_err(const char *fmt, va_list ap)
-{
-    fprintf(stderr, "rawshark: ");
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
-}
-
-/*
- * Report additional information for an error in command-line arguments.
- */
-static void
-rawshark_cmdarg_err_cont(const char *fmt, va_list ap)
-{
-    vfprintf(stderr, fmt, ap);
-    fprintf(stderr, "\n");
 }
 
 /*

@@ -18,8 +18,6 @@
 #include "epan/prefs-int.h"
 #include "ui/preference_utils.h"
 
-#include "frame_tvbuff.h"
-
 #include <wsutil/utf8_entities.h>
 
 #include "byte_view_tab.h"
@@ -47,8 +45,7 @@ PacketDialog::PacketDialog(QWidget &parent, CaptureFile &cf, frame_data *fdata) 
     ui->prefsLayout->insertSpacing(1, 20);
     ui->prefsLayout->addStretch();
 
-    wtap_rec_init(&rec_);
-    ws_buffer_init(&buf_, 1514);
+    wtap_rec_init(&rec_, 1514);
 
     edt_.session = NULL;
     edt_.tvb = NULL;
@@ -58,7 +55,7 @@ PacketDialog::PacketDialog(QWidget &parent, CaptureFile &cf, frame_data *fdata) 
 
     setWindowSubtitle(tr("Packet %1").arg(fdata->num));
 
-    if (!cf_read_record(cap_file_.capFile(), fdata, &rec_, &buf_)) {
+    if (!cf_read_record(cap_file_.capFile(), fdata, &rec_)) {
         reject();
         return;
     }
@@ -68,7 +65,6 @@ PacketDialog::PacketDialog(QWidget &parent, CaptureFile &cf, frame_data *fdata) 
     col_custom_prime_edt(&edt_, &(cap_file_.capFile()->cinfo));
 
     epan_dissect_run(&edt_, cap_file_.capFile()->cd_t, &rec_,
-                     frame_tvbuff_new_buffer(&cap_file_.capFile()->provider, fdata, &buf_),
                      fdata, &(cap_file_.capFile()->cinfo));
     epan_dissect_fill_in_columns(&edt_, true, true);
 
@@ -119,7 +115,7 @@ PacketDialog::PacketDialog(QWidget &parent, CaptureFile &cf, frame_data *fdata) 
     QStringList col_parts;
     for (int i = 0; i < cap_file_.capFile()->cinfo.num_cols; ++i) {
         // ElidedLabel doesn't support rich text / HTML
-        col_parts << QString("%1: %2")
+        col_parts << QStringLiteral("%1: %2")
                      .arg(get_column_title(i))
                      .arg(get_column_text(&cap_file_.capFile()->cinfo, i));
     }
@@ -153,8 +149,8 @@ PacketDialog::PacketDialog(QWidget &parent, CaptureFile &cf, frame_data *fdata) 
 
     connect(proto_tree_, SIGNAL(showProtocolPreferences(QString)),
             this, SIGNAL(showProtocolPreferences(QString)));
-    connect(proto_tree_, SIGNAL(editProtocolPreference(preference*,pref_module*)),
-            this, SIGNAL(editProtocolPreference(preference*,pref_module*)));
+    connect(proto_tree_, SIGNAL(editProtocolPreference(pref_t*,module_t*)),
+            this, SIGNAL(editProtocolPreference(pref_t*,module_t*)));
 
 #if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
     connect(ui->layoutComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged), this, &PacketDialog::layoutChanged);
@@ -173,7 +169,6 @@ PacketDialog::~PacketDialog()
     delete ui;
     epan_dissect_cleanup(&edt_);
     wtap_rec_cleanup(&rec_);
-    ws_buffer_free(&buf_);
 }
 
 void PacketDialog::captureFileClosing()
@@ -201,11 +196,11 @@ void PacketDialog::setHintText(FieldInformation * finfo)
          QString field_str;
 
          if (pos.length < 2) {
-             hint = QString(tr("Byte %1")).arg(pos.start);
+             hint = tr("Byte %1").arg(pos.start);
          } else {
-             hint = QString(tr("Bytes %1-%2")).arg(pos.start).arg(pos.start + pos.length - 1);
+             hint = tr("Bytes %1-%2").arg(pos.start).arg(pos.start + pos.length - 1);
          }
-         hint += QString(": %1 (%2)")
+         hint += QStringLiteral(": %1 (%2)")
                  .arg(finfo->headerInfo().name)
                  .arg(finfo->headerInfo().abbreviation);
      }

@@ -28,7 +28,7 @@
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/proto_data.h>
-
+#include <wsutil/array.h>
 #include "packet-tcp.h"
 #include "packet-tls.h"
 #include "packet-thrift.h"
@@ -633,10 +633,6 @@ dissect_thrift_field_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             header->fid_pi = proto_tree_add_bits_item(header->fh_tree, hf_thrift_fid_delta, tvb, header->type_offset << OCTETS_TO_BITS_SHIFT, TCP_THRIFT_NIBBLE_SHIFT, ENC_BIG_ENDIAN);
             if (delta == TCP_THRIFT_DELTA_NOT_SET) {
                 proto_item_append_text(header->fid_pi, " (Not Set)");
-            }
-            if (gen_bool && is_thrift_compact_bool_type(header->type.compact)) {
-                proto_item *bool_item = proto_tree_add_boolean(tree, hf_thrift_bool, tvb, header->type_offset, TBP_THRIFT_TYPE_LEN, 2 - header->type.compact);
-                proto_item_set_generated(bool_item);
             }
             if (gen_bool && is_thrift_compact_bool_type(header->type.compact)) {
                 proto_item *bool_item = proto_tree_add_boolean(tree, hf_thrift_bool, tvb, header->type_offset, TBP_THRIFT_TYPE_LEN, 2 - header->type.compact);
@@ -2770,13 +2766,16 @@ dissect_thrift_compact_struct(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
  *
  * This function is used only for linear containers (list, set, map).
  * It uses the same type identifiers as TCompactProtocol, except for
- * the bool type which is encoded in the same way as BOOL_FALSE (2).
+ * the bool type which is encoded either as BOOL_TRUE (1) or BOOL_FALSE (2)
+ * depending on the implementation (due to a wide-spread bug that became a
+ * de-facto standard in large parts of the library).
  */
 static int
 // NOLINTNEXTLINE(misc-no-recursion)
 dissect_thrift_compact_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int *offset, thrift_option_data_t *thrift_opt, proto_tree *header_tree, int type, proto_item *type_pi)
 {
     switch (type) {
+    case DE_THRIFT_C_BOOL_TRUE:
     case DE_THRIFT_C_BOOL_FALSE:
         ABORT_ON_INCOMPLETE_PDU(TBP_THRIFT_BOOL_LEN);
         proto_tree_add_item(tree, hf_thrift_bool, tvb, *offset, TBP_THRIFT_BOOL_LEN, ENC_BIG_ENDIAN);
@@ -3155,7 +3154,7 @@ dissect_thrift_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int o
     }
 
     /***********************************************************/
-    /* Call method dissector here using dissector_try_string() */
+    /* Call method dissector here using dissector_try_string_with_data() */
     /* except in case of EXCEPTION for detailed dissection.    */
     /***********************************************************/
     thrift_opt->previous_field_id = 0;
@@ -3188,7 +3187,7 @@ dissect_thrift_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int o
     }
     if (thrift_opt->mtype != ME_THRIFT_T_EXCEPTION) {
         if (pinfo->can_desegment > 0) pinfo->can_desegment++;
-        len = dissector_try_string(thrift_method_name_dissector_table, method_str, msg_tvb, pinfo, tree, thrift_opt);
+        len = dissector_try_string_with_data(thrift_method_name_dissector_table, method_str, msg_tvb, pinfo, tree, true, thrift_opt);
         if (pinfo->can_desegment > 0) pinfo->can_desegment--;
     } else {
         /* Attach the expert_info to the method type as it is a protocol-level exception. */

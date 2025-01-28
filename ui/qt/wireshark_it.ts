@@ -81,16 +81,15 @@
     </message>
     <message>
         <source>About Stratoshark</source>
-        <oldsource>About Logray</oldsource>
-        <translation type="unfinished">Informazioni su Logray</translation>
-    </message>
-    <message>
-        <source>Logray</source>
-        <translation type="vanished">Logray</translation>
+        <translation>Informazioni su Stratoshark</translation>
     </message>
     <message>
         <source>Stratoshark</source>
-        <translation type="unfinished"></translation>
+        <translation>Stratoshark</translation>
+    </message>
+    <message>
+        <source>&lt;h3&gt;System Call and Event Log Analyzer&lt;/h3&gt;</source>
+        <translation>&lt;h3&gt;Analizzatore delle chiamate di sistema e del registro degli eventi&lt;/h3&gt;</translation>
     </message>
     <message>
         <source>The directory does not exist</source>
@@ -1214,10 +1213,7 @@
         <source>Created by Stratoshark %1
 
 </source>
-        <oldsource>Created by Logray %1
-
-</oldsource>
-        <translation type="unfinished">Creato da Logray %1
+        <translation>Creato da Stratoshark %1
 
 </translation>
     </message>
@@ -1386,6 +1382,10 @@
         <translation>pcap</translation>
     </message>
     <message>
+        <source>Compression:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Instead of using a single capture file, multiple files will be created.&lt;/p&gt;&lt;p&gt;The generated file names will contain an incrementing number and the start time of the capture.&lt;/p&gt;&lt;p&gt;NOTE: If enabled, at least one of the new-file criteria MUST be selected.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Invece di usare un singolo file di cattura, saranno creati file multipli.&lt;/p&gt;&lt;p&gt;I nomi di file generati conterranno un numero incrementale e l&apos;orario di inizio della cattura.&lt;/p&gt;&lt;p&gt;NOTA: se abilitata, almeno uno dei criteri per i nuovi file DEVE essere selezionato.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1457,7 +1457,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>compression</source>
-        <translation>compressione</translation>
+        <translation type="vanished">compressione</translation>
     </message>
     <message>
         <source>None</source>
@@ -1466,6 +1466,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>gzip</source>
         <translation>gzip</translation>
+    </message>
+    <message>
+        <source>LZ4</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>File infix pattern</source>
@@ -1910,10 +1914,6 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Tipo</translation>
     </message>
     <message>
-        <source>Fields</source>
-        <translation>Campi</translation>
-    </message>
-    <message>
         <source>Field Occurrence</source>
         <translation>Occorrenze del campo</translation>
     </message>
@@ -1928,6 +1928,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Width</source>
         <translation>Larghezza</translation>
+    </message>
+    <message>
+        <source>Custom Expression</source>
+        <translation>Espressione personalizzata</translation>
     </message>
     <message>
         <source>Alignment</source>
@@ -2382,6 +2386,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Apply a read filter %1</source>
         <translation>Applica un filtro di lettura %1</translation>
+    </message>
+    <message>
+        <source>Enter a custom column expression %1</source>
+        <translation>Inserisci un&apos;espressione di colonna personalizzata %1</translation>
     </message>
     <message>
         <source>Current filter: %1</source>
@@ -3054,12 +3062,12 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Tutti i file (</translation>
     </message>
     <message>
-        <source>Open File</source>
-        <translation>Apri file</translation>
+        <source>%1 Open File</source>
+        <translation>%1 Apri file</translation>
     </message>
     <message>
-        <source>Select File</source>
-        <translation>Seleziona file</translation>
+        <source>%1 Select File</source>
+        <translation>%1 Seleziona file</translation>
     </message>
 </context>
 <context>
@@ -3097,16 +3105,16 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
 <context>
     <name>FieldFilterEdit</name>
     <message>
-        <source>Display filter entry</source>
-        <translation>Voce del filtro di visualizzazione</translation>
+        <source>Field entry</source>
+        <translation>Nome campo</translation>
     </message>
     <message>
         <source>Enter a field %1</source>
         <translation>Digita un campo %1</translation>
     </message>
     <message>
-        <source>Invalid filter: </source>
-        <translation>Filtro non valido: </translation>
+        <source>Invalid field: </source>
+        <translation>Campo non valido:</translation>
     </message>
 </context>
 <context>
@@ -4168,10 +4176,6 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Aggiornamento automatico</translation>
     </message>
     <message>
-        <source>Enable legend</source>
-        <translation>Abilita la legenda</translation>
-    </message>
-    <message>
         <source>Reset Graph</source>
         <translation>Ripristina il grafico</translation>
     </message>
@@ -4305,6 +4309,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>T</translation>
     </message>
     <message>
+        <source>Toggle X-axis between relative time and time of day</source>
+        <translation>Commuta l&apos;asse X tra tempo relativo e ora del giorno</translation>
+    </message>
+    <message>
+        <source>Toggle Y-axis between logarithmic and linear scale</source>
+        <translation>Commuta l&apos;asse Y tra scala logaritmica e lineare</translation>
+    </message>
+    <message>
         <source>Crosshairs</source>
         <translation>Reticolo</translation>
     </message>
@@ -4315,6 +4327,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Space</source>
         <translation>Spazio</translation>
+    </message>
+    <message>
+        <source>Legend</source>
+        <translation>Legenda</translation>
+    </message>
+    <message>
+        <source>Toggle legend</source>
+        <translation>Commuta la legenda</translation>
     </message>
     <message>
         <source>Zoom In X Axis</source>
@@ -4944,10 +4964,6 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Espressione regolare di formato del pacchetto</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifieing data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;Required is only a data group, also supported are time, dir and seqno.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Espressione regolare Perl che cattura un singolo pacchetto nel file con gruppi con nomi che identificano i dati da importare. Le ancore ^ e $ verificano anche prima/dopo le interruzioni di riga &lt;/p&gt;&lt;p&gt;È richiesto un solo gruppo di dati, sono supportati anche ora, dir e numseq.&lt;/p&gt;&lt;p&gt;Argomenti delle espressioni regolari: DUPNAMES, MULTILINE e NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
         <source>This is regexHintLabel, it will be set to default_regex_hint</source>
         <translation>Questa è etichettaSuggerimentoRegex, sarà impostata a default_regex_hint.</translation>
     </message>
@@ -5026,6 +5042,19 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>None</source>
         <translation>Nessuno</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Whether to treat multiple byte groups as being in little-endian byte order, instead of the default, network (big-endian) order.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Decidi se trattare più gruppi di byte come se fossero in ordine little-endian, anziché nell&apos;ordine di rete predefinito (big-endian).
+&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Little-endian:</source>
+        <translation>Little-endian:</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifying data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;The only required group is data, but time, dir and seqno are also supported.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Espressione regolare compatibile con Perl che cattura un singolo pacchetto nel file con gruppi con nome che identificano i dati da importare. Le ancore ^ e $ verificano anche prima/dopo le nuove righe &lt;/p&gt;&lt;p&gt;L&apos;unico gruppo richiesto è data, ma sono supportati anche time, dir e seqno.&lt;/p&gt;&lt;p&gt;Argomenti di espressioni regolari: DUPNAMES, MULTILINE e NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;small&gt;&lt;i&gt;recommended regex:&lt;/small&gt;&lt;/i&gt;</source>
@@ -5196,8 +5225,8 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>I campi supportati sono dati, dir, ora, numseq</translation>
     </message>
     <message>
-        <source>Missing capturing group data (use (?</source>
-        <translation>mancano i dati del gruppo di cattura (usa (?</translation>
+        <source>Missing capturing group data (use (?&lt;data&gt;(...)) )</source>
+        <translation>Mancano i dati del gruppo di cattura (usa (?&lt;data&gt;(...)) )</translation>
     </message>
     <message>
         <source>Import From Hex Dump</source>
@@ -5271,12 +5300,16 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Interfacce di cattura esterne disabilitate.</translation>
     </message>
     <message>
+        <source>&lt;p&gt;Local interfaces are unavailable because WinPcap is installed but is no longer supported.&lt;/p&gt;&lt;p&gt;You can fix this by uninstalling WinPcap and installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
+        <translation>&lt;p&gt;Le interfacce locali non sono disponibili poiché WinPcap è installato, ma non più supportato.&lt;/p&gt;&lt;p&gt;Puoi correggere questo problema disinstallando WinPcap e installando &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</translation>
+    </message>
+    <message>
         <source>&lt;p&gt;Local interfaces are unavailable because no packet capture driver is installed.&lt;/p&gt;&lt;p&gt;You can fix this by installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
         <translation>&lt;p&gt;Le interfacce locali non sono disponibili poiché non è installato alcun driver di cattura.&lt;/p&gt;&lt;p&gt;Puoi correggere questo problema installando &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</translation>
     </message>
     <message>
-        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed or &lt;pre&gt;net start npf&lt;/pre&gt; if you have WinPcap installed. Both commands must be run as Administrator.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;Le interfacce locali non sono disponibili poiché non è caricato alcun driver di cattura.&lt;/p&gt;&lt;p&gt;Puoi correggere questo problema eseguendo &lt;pre&gt;net start npcap&lt;/pre&gt;, se ha installato Npcap o &lt;pre&gt;net start npf&lt;/pre&gt;, se hai installato WinPcap. Entrambi i comandi devono essere eseguiti come amministratore.&lt;/p&gt;</translation>
+        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed. The command must be run as Administrator.&lt;/p&gt;</source>
+        <translation>&lt;p&gt;Le interfacce locali non sono disponibili poiché non è caricato alcun driver di cattura dei pacchetti.&lt;/p&gt;&lt;p&gt;Puoi correggere questo problema eseguendo &lt;pre&gt;net start npcap&lt;/pre&gt;, se ha installato Npcap. Il comando deve essere eseguito come amministratore.&lt;/p&gt;</translation>
     </message>
     <message>
         <source>&lt;p&gt;You don&apos;t have permission to capture on local interfaces.&lt;/p&gt;&lt;p&gt;You can fix this by &lt;a href=&quot;file://%1&quot;&gt;installing ChmodBPF&lt;/a&gt;.&lt;/p&gt;</source>
@@ -6930,6 +6963,18 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <source>Display filter as %1</source>
         <translation>Filtro di visualizzazione come %1</translation>
     </message>
+    <message>
+        <source>The Wireshark Network Analyzer</source>
+        <translation>L&apos;analizzatore di rete Wireshark</translation>
+    </message>
+    <message>
+        <source>The Stratoshark System Call and Log Analyzer</source>
+        <translation>Analizzatore di chiamate di sistema e registri Stratoshark</translation>
+    </message>
+    <message>
+        <source>Capturing from %1</source>
+        <translation>Cattura da %1</translation>
+    </message>
 </context>
 <context>
     <name>MainWindowPreferencesFrame</name>
@@ -7552,6 +7597,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Generate hexdumps for secondary data sources like reassembled or decrypted buffers in addition to the frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Genera dump esadecimali per le fonti di dati secondarie come buffer riassemblati o decifrati in aggiunta al frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
+    <message>
+        <source>Include timestamp preamble</source>
+        <translation>Includi il preambolo della marca temporale</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include each frame timestamp immediately before its hex dump, using the current time display format.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Includi ogni marca temporale del frame immediatamente prima del suo dump esadecimale, utilizzando il formato di visualizzazione dell&apos;ora attuale.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
 </context>
 <context>
     <name>PacketList</name>
@@ -7837,6 +7890,17 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Preferences</source>
         <translation>Preferenze</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>Copia</translation>
+    </message>
+    <message numerus="yes">
+        <source>Copy Row(s)</source>
+        <translation>
+            <numerusform>Copia riga</numerusform>
+            <numerusform>Copia righe</numerusform>
+        </translation>
     </message>
 </context>
 <context>
@@ -8308,8 +8372,8 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Riferimento campo di filtro</translation>
     </message>
     <message>
-        <source>Copied </source>
-        <translation>Copiato</translation>
+        <source>Copied %1</source>
+        <translation>Copiati %1</translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>
@@ -8488,34 +8552,6 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
 </context>
 <context>
     <name>QObject</name>
-    <message>
-        <source>Average Throughput (bits/s)</source>
-        <translation>Capacità trasmissiva media (bit/s)</translation>
-    </message>
-    <message>
-        <source>Round Trip Time (ms)</source>
-        <translation>Round Trip Time (ms)</translation>
-    </message>
-    <message>
-        <source>Segment Length (B)</source>
-        <translation>Lunghezza del segmento (B)</translation>
-    </message>
-    <message>
-        <source>Sequence Number (B)</source>
-        <translation>Numero di sequenza (B)</translation>
-    </message>
-    <message>
-        <source>Time (s)</source>
-        <translation>Tempo (s)</translation>
-    </message>
-    <message>
-        <source>Window Size (B)</source>
-        <translation>Dimensione della finestra (B)</translation>
-    </message>
-    <message>
-        <source>Unacked (Outstanding) Bytes (B)</source>
-        <translation>Byte senza ack (eccezionali) (B)</translation>
-    </message>
     <message>
         <source>[no capture file]</source>
         <translation>[nessun file di cattura]</translation>
@@ -8909,8 +8945,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Filtro di visualizzazione non valido</translation>
     </message>
     <message>
-        <source>The filter expression %1 isn&apos;t a valid display filter. (%2).</source>
-        <translation>L&apos;espressione %1 non è un filtro di visualizzazione valido. (%2).</translation>
+        <source>The filter expression &quot;%1&quot; isn&apos;t a valid display filter.
+(%2).</source>
+        <translation>L&apos;espressione &quot;%1&quot; non è un filtro di visualizzazione valido.
+(%2).</translation>
     </message>
     <message>
         <source>Error</source>
@@ -9003,6 +9041,34 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>LOAD</source>
         <translation>CARICO</translation>
+    </message>
+    <message>
+        <source>Average Throughput</source>
+        <translation>Throughput medio</translation>
+    </message>
+    <message>
+        <source>Round Trip Time</source>
+        <translation>Round Trip Time</translation>
+    </message>
+    <message>
+        <source>Segment Length</source>
+        <translation>Lunghezza segmento</translation>
+    </message>
+    <message>
+        <source>Sequence Number</source>
+        <translation>Numero sequenza</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Tempo</translation>
+    </message>
+    <message>
+        <source>Window Size</source>
+        <translation>Dimensione finestra</translation>
+    </message>
+    <message>
+        <source>Unacked (Outstanding) Bytes</source>
+        <translation>Byte senza ack (eccezionali)</translation>
     </message>
 </context>
 <context>
@@ -11972,6 +12038,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>ingrandisce</translation>
     </message>
     <message>
+        <source>Sampling Method</source>
+        <translation>Metodo di campionamento</translation>
+    </message>
+    <message>
+        <source>Select which packets and how the RTT sampling is done</source>
+        <translation>Seleziona quali pacchetti e come viene eseguito il campionamento RTT</translation>
+    </message>
+    <message>
         <source>Display Round Trip Time vs Sequence Number</source>
         <translation>Visualizza Round Trip Time e numero di sequenza </translation>
     </message>
@@ -12266,6 +12340,38 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>4</source>
         <translation>4</translation>
+    </message>
+    <message>
+        <source>All Data Packets</source>
+        <translation>Tutti i pacchetti di dati</translation>
+    </message>
+    <message>
+        <source>Sampling from all data packets</source>
+        <translation>Campionamento da tutti i pacchetti di dati</translation>
+    </message>
+    <message>
+        <source>All Data Packets w/ SACK</source>
+        <translation>Tutti i pacchetti di dati con SACK</translation>
+    </message>
+    <message>
+        <source>Sampling from all data packets w/ SACK</source>
+        <translation>Campionamento da tutti i pacchetti di dati con SACK</translation>
+    </message>
+    <message>
+        <source>Data Packets matching RTT</source>
+        <translation>Pacchetti di dati che corrispondono a RTT</translation>
+    </message>
+    <message>
+        <source>Sampling from RTT packets</source>
+        <translation>Campionamento dai pacchetti RTT</translation>
+    </message>
+    <message>
+        <source>Data Packets matching Karn RTT</source>
+        <translation>Pacchetti di dati che corrispondono a Karn RTT</translation>
+    </message>
+    <message>
+        <source>Sampling from Karn RTT packets</source>
+        <translation>Campionamento dai pacchetti Karn RTT</translation>
     </message>
     <message>
         <source>Zoom In X Axis</source>
@@ -13129,17 +13235,15 @@ a:hover {
     </message>
     <message>
         <source>You are sniffing the glue that holds your system together using Stratoshark </source>
-        <oldsource>You are sniffing the glue that holds your system together using Logray </oldsource>
-        <translation type="unfinished">Questo è il collante che tiene insieme il tuo sistema usando Logray</translation>
+        <translation>Questo è il collante che tiene insieme il tuo sistema usando Stratoshark</translation>
+    </message>
+    <message>
+        <source>You are running Stratoshark </source>
+        <translation>Stai eseguendo Stratoshark</translation>
     </message>
     <message>
         <source>You are running Wireshark </source>
         <translation>Stai eseguendo Wireshark </translation>
-    </message>
-    <message>
-        <source>You are running Stratoshark </source>
-        <oldsource>You are running Logray </oldsource>
-        <translation type="unfinished">Stai eseguendo Logray</translation>
     </message>
     <message>
         <source> You receive automatic updates.</source>
@@ -13215,14 +13319,6 @@ a:hover {
     <message>
         <source>802.11 Preferences</source>
         <translation>Preferenze 802.11</translation>
-    </message>
-    <message>
-        <source>AirPcap Control Panel</source>
-        <translation type="vanished">Pannello di controllo AirPcap</translation>
-    </message>
-    <message>
-        <source>Open the AirPcap Control Panel</source>
-        <translation type="vanished">Apri il pannello di controllo AirPcap</translation>
     </message>
     <message>
         <source>Unable to set channel or offset.</source>
@@ -14459,6 +14555,22 @@ a:hover {
         <translation>Riferimento del filtro di visualizzazione</translation>
     </message>
     <message>
+        <source>First Packet in Conversation</source>
+        <translation>Primo pacchetto in conversazione</translation>
+    </message>
+    <message>
+        <source>Go to the first packet in this conversation</source>
+        <translation>Vai al primo pacchetto in questa conversazione</translation>
+    </message>
+    <message>
+        <source>Last Packet in Conversation</source>
+        <translation>Ultimo pacchetto in conversazione</translation>
+    </message>
+    <message>
+        <source>Go to the last packet in this conversation</source>
+        <translation>Vai all&apos;ultimo pacchetto in questa conversazione</translation>
+    </message>
+    <message>
         <source>Capture &amp;Filters…</source>
         <translation>&amp;Filtri di cattura...</translation>
     </message>
@@ -14703,24 +14815,12 @@ a:hover {
         <translation>Mostra gli orari del pacchetto come secondi dal precedente pacchetto visualizzato.</translation>
     </message>
     <message>
-        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456)</source>
-        <translation>Date e ora del giorno UTC (1970-01-01 01:02:03.123456)</translation>
-    </message>
-    <message>
         <source>Show packet times as the UTC date and time of day.</source>
         <translation>Mostra gli orari del pacchetto come data e ora del giorno UTC.</translation>
     </message>
     <message>
-        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456)</source>
-        <translation>Anno, giorno dell&apos;anno e ora del giorno UTC (1970/001 01:02:03.123456)</translation>
-    </message>
-    <message>
         <source>Show packet times as the UTC year, day of the year and time of day.</source>
         <translation>Mostra l&apos;orario dei pacchetti come anno, giorno dell&apos;anno e ora del giorno UTC.</translation>
-    </message>
-    <message>
-        <source>UTC Time of Day (01:02:03.123456)</source>
-        <translation>Ora del giorno UTC (01:02:03.123456)</translation>
     </message>
     <message>
         <source>Show packet times as the UTC time of day.</source>
@@ -14973,6 +15073,18 @@ a:hover {
         <translation>Rim&amp;uovi la selezione da tutti i visualizzati</translation>
     </message>
     <message>
+        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456Z)</source>
+        <translation>Data e ora del giorno UTC (1970-01-01 01:02:03.123456Z)</translation>
+    </message>
+    <message>
+        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456Z)</source>
+        <translation>Anno, giorno dell&apos;anno e ora del giorno UTC (1970/001 01:02:03.123456Z)</translation>
+    </message>
+    <message>
+        <source>UTC Time of Day (01:02:03.123456Z)</source>
+        <translation>Ora del giorno UTC (01:02:03.123456Z)</translation>
+    </message>
+    <message>
         <source>All VoIP Calls</source>
         <translation>Tutte le chiamate VoIP</translation>
     </message>
@@ -15145,16 +15257,8 @@ a:hover {
         <translation>Le modifiche devono essere salvate prima di unire.</translation>
     </message>
     <message>
-        <source>Invalid Display Filter</source>
-        <translation>Filtro di visualizzazione non valido</translation>
-    </message>
-    <message>
         <source>Invalid Read Filter</source>
         <translation>Filtro di lettura non valido</translation>
-    </message>
-    <message>
-        <source>The filter expression %1 isn&apos;t a valid read filter. (%2).</source>
-        <translation>L&apos;espressione %1 non è un filtro di lettura valido. (%2).</translation>
     </message>
     <message>
         <source> before importing a capture</source>
@@ -15193,6 +15297,12 @@ a:hover {
     <message>
         <source>Unable to drop files during capture.</source>
         <translation>Impossibile scartare file durante la cattura.</translation>
+    </message>
+    <message>
+        <source>The filter expression &quot;%1&quot; isn&apos;t a valid read filter.
+(%2).</source>
+        <translation>L&apos;espressione &quot;%1&quot; non è un filtro di lettura valido.
+(%2).</translation>
     </message>
     <message>
         <source>Unknown file type returned by merge dialog.</source>
@@ -15261,14 +15371,6 @@ a:hover {
         <source>Stop and Continue &amp;without Saving</source>
         <oldsource>Stop and Continue without Saving</oldsource>
         <translation>Ferma e continua senza sal&amp;vare</translation>
-    </message>
-    <message>
-        <source>The Wireshark Network Analyzer</source>
-        <translation>Wireshark l&apos;analizzatore di rete</translation>
-    </message>
-    <message>
-        <source>Capturing from %1</source>
-        <translation>Cattura da %1</translation>
     </message>
     <message>
         <source> before opening another file</source>

@@ -112,6 +112,9 @@ topic_action_url(topic_action_e action)
     case(LOCALPAGE_MAN_WIRESHARK):
         url = doc_file_url("wireshark.html");
         break;
+    case(LOCALPAGE_MAN_STRATOSHARK):
+        url = doc_file_url("stratoshark.html");
+        break;
     case(LOCALPAGE_MAN_WIRESHARK_FILTER):
         url = doc_file_url("wireshark-filter.html");
         break;
@@ -141,8 +144,11 @@ topic_action_url(topic_action_e action)
         break;
 
     /* Release Notes */
-    case(LOCALPAGE_RELEASE_NOTES):
-        url = doc_file_url("release-notes.html");
+    case(LOCALPAGE_WIRESHARK_RELEASE_NOTES):
+        url = doc_file_url("Wireshark Release Notes.html");
+        break;
+    case(LOCALPAGE_STRATOSHARK_RELEASE_NOTES):
+        url = doc_file_url("Stratoshark Release Notes.html");
         break;
 
     /* local help pages (User's Guide) */

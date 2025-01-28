@@ -794,16 +794,16 @@ call_avp_subdissector(uint32_t vendorid, uint32_t code, tvbuff_t *subtvb, packet
 	TRY {
 		switch (vendorid) {
 		case 0:
-			dissector_try_uint_new(diameter_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
+			dissector_try_uint_with_data(diameter_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
 			break;
 		case VENDOR_ERICSSON:
-			dissector_try_uint_new(diameter_ericsson_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
+			dissector_try_uint_with_data(diameter_ericsson_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
 			break;
 		case VENDOR_VERIZON:
-			dissector_try_uint_new(diameter_verizon_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
+			dissector_try_uint_with_data(diameter_verizon_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
 			break;
 		case VENDOR_THE3GPP:
-			dissector_try_uint_new(diameter_3gpp_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
+			dissector_try_uint_with_data(diameter_3gpp_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
 			break;
 		default:
 			break;
@@ -958,9 +958,25 @@ dissect_diameter_avp(diam_ctx_t *c, tvbuff_t *tvb, int offset, diam_sub_dis_t *d
 		offset += 4;
 	}
 
+	/* Data is empty so return now */
 	if ( len == (uint32_t)(vendor_flag ? 12 : 8) ) {
-		/* Data is empty so return now */
-		proto_tree_add_expert(avp_tree, c->pinfo, &ei_diameter_avp_no_data, tvb, offset, 0);
+		/* AVP=Requested-Service-Unit(437) may be empty.
+		 *
+		 * RFC 4006, 8.16 (page 64):
+		 * The Requested-Service-Unit AVP MAY contain the amount of requested
+		 * service units or the requested monetary value.  It MUST be present in
+		 * the initial interrogation and within the intermediate interrogations
+		 * in which new quota is requested.
+		 *
+		 * Command-Code = "Credit-Control" (272)
+		 * ApplicationID = "Diameter Credit Control Application" (4)
+		 */
+		if (!((code == 437)
+		     && (diam_sub_dis_inf->cmd_code == 272)
+			 && (diam_sub_dis_inf->parent_message_is_request)
+			 && (diam_sub_dis_inf->application_id == 4))) {
+			proto_tree_add_expert(avp_tree, c->pinfo, &ei_diameter_avp_no_data, tvb, offset, 0);
+		}
 		/* pad_len is always 0 in this case, but kept here for consistency */
 		return len+pad_len;
 	}
@@ -990,7 +1006,7 @@ dissect_diameter_avp(diam_ctx_t *c, tvbuff_t *tvb, int offset, diam_sub_dis_t *d
 		&& (diam_sub_dis_inf->vendor_id != VENDOR_THE3GPP))
 	{
 		/* call subdissector */
-		if (!dissector_try_uint_new(diameter_expr_result_vnd_table, diam_sub_dis_inf->vendor_id,
+		if (!dissector_try_uint_with_data(diameter_expr_result_vnd_table, diam_sub_dis_inf->vendor_id,
 					    subtvb, c->pinfo, avp_tree, false, diam_sub_dis_inf)) {
 			/* No subdissector for this vendor ID, use the generic one */
 			dissect_diameter_other_vendor_exp_res(c, subtvb, avp_tree, diam_sub_dis_inf);

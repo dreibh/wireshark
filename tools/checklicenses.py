@@ -36,6 +36,7 @@ ALLOWED_LICENSES = [
     'BSD (2 clause)',
     'BSD (2 clause) GPL (v2 or later)',
     'BSD (3 clause)',
+    'BSD (4 clause (University of California-Specific))',
     'GPL (v2 or later)',
     'ISC',
     'ISC GPL (v2 or later)',
@@ -132,6 +133,12 @@ PATH_SPECIFIC_ALLOWED_LICENSES = {
     ],
     '.gitlab/': [
         'UNKNOWN',
+    ],
+    'wsutil/dtoa.c': [
+        'dtoa',
+    ],
+    'wsutil/dtoa.h': [
+        'dtoa',
     ],
     'wsutil/safe-math.h': [ # Public domain (CC0)
         'UNKNOWN',

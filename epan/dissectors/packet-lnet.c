@@ -260,16 +260,16 @@ get_lnet_conv(packet_info *pinfo, uint64_t match_bits) {
     conv_info = (lnet_conv_info_t *)conversation_get_proto_data(conversation, proto_lnet);
     if (!conv_info) {
         conv_info = wmem_new0(wmem_file_scope(), lnet_conv_info_t);
-        conv_info->pdus = wmem_map_new(wmem_file_scope(), g_direct_hash, g_direct_equal);
+        conv_info->pdus = wmem_map_new(wmem_file_scope(), g_int64_hash, g_int64_equal);
 
         conversation_add_proto_data(conversation, proto_lnet, conv_info);
     }
 
-    info = (struct lnet_trans_info *)wmem_map_lookup(conv_info->pdus, GUINT_TO_POINTER(match_bits));
+    info = (struct lnet_trans_info *)wmem_map_lookup(conv_info->pdus, &match_bits);
     if (info == NULL) {
         info = wmem_new0(wmem_file_scope(), struct lnet_trans_info);
         info->match_bits = match_bits;
-        wmem_map_insert(conv_info->pdus, GUINT_TO_POINTER(info->match_bits), info);
+        wmem_map_insert(conv_info->pdus, &info->match_bits, info);
     }
 
     return info;
@@ -808,7 +808,7 @@ dissect_lnet_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
         case LNET_MSG_PUT:
             conv = get_lnet_conv(pinfo, match);
 
-            offset += dissector_try_uint_new(subdissector_table, tvb_get_letohl(tvb, LNET_PTL_INDEX_OFFSET_PUT),
+            offset += dissector_try_uint_with_data(subdissector_table, tvb_get_letohl(tvb, LNET_PTL_INDEX_OFFSET_PUT),
                                              next_tvb, pinfo, tree, true, conv);
             break;
         default:

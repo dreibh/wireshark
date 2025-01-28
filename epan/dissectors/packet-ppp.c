@@ -1433,19 +1433,23 @@ dissect_lcp_simple_opt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int 
  * CHAP Algorithms
  */
 /* 0-4: Reserved */
-#define CHAP_ALG_MD5    5       /* CHAP with MD5 */
-#define CHAP_AGL_SHA1   6       /* CHAP with SHA-1 [Black] */
-/* 7-127: Unassigned */
+#define CHAP_ALG_MD5      5       /* CHAP with MD5 */
+#define CHAP_AGL_SHA1     6       /* CHAP with SHA-1 [Black] */
+#define CHAP_AGL_SHA256   7       /* CHAP with SHA-256 */
+#define CHAP_AGL_SHA3_256 8       /* CHAP with SHA3-256 */
+/* 9-127: Unassigned */
 #define CHAP_ALG_MSV1   128     /* MS-CHAP */
 #define CHAP_ALG_MSV2   129     /* MS-CHAP-2 */
 
-static const range_string chap_alg_rvals[] = {
-    {0,             4,             "Reserved"},
-    {CHAP_ALG_MD5,  CHAP_ALG_MD5,  "CHAP with MD5"},
-    {CHAP_AGL_SHA1, CHAP_AGL_SHA1, "CHAP with SHA-1"},
-    {CHAP_ALG_MSV1, CHAP_ALG_MSV1, "MS-CHAP"},
-    {CHAP_ALG_MSV2, CHAP_ALG_MSV2, "MS-CHAP-2"},
-    {0,             0,             NULL}
+const range_string chap_alg_rvals[] = {
+    {0,                 4,                 "Reserved"},
+    {CHAP_ALG_MD5,      CHAP_ALG_MD5,      "CHAP with MD5"},
+    {CHAP_AGL_SHA1,     CHAP_AGL_SHA1,     "CHAP with SHA-1"},
+    {CHAP_AGL_SHA256,   CHAP_AGL_SHA256,   "CHAP with SHA-256"},
+    {CHAP_AGL_SHA3_256, CHAP_AGL_SHA3_256, "CHAP with SHA3-256"},
+    {CHAP_ALG_MSV1,     CHAP_ALG_MSV1,     "MS-CHAP"},
+    {CHAP_ALG_MSV2,     CHAP_ALG_MSV2,     "MS-CHAP-2"},
+    {0,                 0,                 NULL}
 };
 
 
@@ -6113,7 +6117,7 @@ dissect_ppp_usb( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
         (tvb_memeql(tvb, 0, &buf2[1], sizeof(buf2) - 1) == 0)) {
         /* It's missing the 0x7e framing character.  What TODO?
          * Should we try faking it by sticking 0x7e in front?  Or try telling
-         * dissect_ppp_raw_hdlc() NOT to look for the 0x7e frame deliminator?
+         * dissect_ppp_raw_hdlc() NOT to look for the 0x7e frame delimiter?
          * Or is this a bug in libpcap (used 1.1.0)?
          * Or a bug in the Linux kernel (tested with 2.6.24.4)  Or a bug in
          * usbmon?  Or is the data we're looking at really just part of the

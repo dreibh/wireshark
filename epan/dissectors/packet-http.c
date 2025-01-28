@@ -2180,6 +2180,15 @@ dissecting_body:
 			}
 #endif
 
+#ifdef HAVE_ZSTD
+			if (http_decompress_body &&
+			    g_ascii_strcasecmp(headers->content_encoding, "zstd") == 0)
+			{
+				uncomp_tvb = tvb_child_uncompress_zstd(tvb, next_tvb, 0,
+				    tvb_captured_length(next_tvb));
+			}
+#endif
+
 			if (http_decompress_body &&
 			    g_ascii_strcasecmp(headers->content_encoding, "xpress") == 0)
 			{
@@ -3866,7 +3875,7 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 				 * found (the data does not, but the list node
 				 * does.) A wmem_list would prevent that.
 				 */
-				conv_data->req_list = g_slist_append(conv_data->req_list, GUINT_TO_POINTER(req_trans));
+				conv_data->req_list = g_slist_append(conv_data->req_list, req_trans);
 				curr_req_res->req_has_range = true;
 			}
 			}

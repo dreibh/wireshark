@@ -17,7 +17,7 @@
 #include <stdint.h>
 #endif
 
-#include "capture_opts.h"
+#include "ui/capture_opts.h"
 
 #include <epan/fifo_string_cache.h>
 #include <wsutil/processes.h>
@@ -99,12 +99,11 @@ struct _capture_session {
     gid_t     group;                      /**< group of the cfile */
 #endif
     bool  session_will_restart;       /**< Set when session will restart */
-    uint32_t   count;                      /**< Total number of frames captured */
+    uint64_t   count;                      /**< Total number of frames captured */
     uint32_t   count_pending;              /**< Number of frames captured but not yet read */
     capture_options *capture_opts;        /**< options for this capture */
     capture_file *cf;                     /**< handle to cfile */
-    wtap_rec rec;                         /**< record we're reading packet metadata into */
-    Buffer buf;                           /**< Buffer we're reading packet data into */
+    wtap_rec rec;                         /**< record we're reading packet information into */
     struct wtap *wtap;                    /**< current wtap file */
     struct _info_data *cap_data_info;     /**< stats for this capture */
 

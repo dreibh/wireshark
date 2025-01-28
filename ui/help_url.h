@@ -42,6 +42,7 @@ typedef enum {
 
     /* local manual pages */
     LOCALPAGE_MAN_WIRESHARK = 100,
+    LOCALPAGE_MAN_STRATOSHARK,
     LOCALPAGE_MAN_WIRESHARK_FILTER,
     LOCALPAGE_MAN_CAPINFOS,
     LOCALPAGE_MAN_DUMPCAP,
@@ -53,7 +54,8 @@ typedef enum {
     LOCALPAGE_MAN_TSHARK,
 
     /* Release Notes */
-    LOCALPAGE_RELEASE_NOTES,
+    LOCALPAGE_WIRESHARK_RELEASE_NOTES,
+    LOCALPAGE_STRATOSHARK_RELEASE_NOTES,
 
     /* help pages (textfiles or HTML User's Guide) */
     HELP_CONTENT = 200,
