@@ -36,6 +36,8 @@
 #define SBAS_L1_PREAMBLE_2 0x9a
 #define SBAS_L1_PREAMBLE_3 0xc6
 
+const char *EMS_L1_SVC_FLAG = "L1";
+
 // User Range Accuracy mapping
 // see ICAO Annex 10, Vol I, 8th edition, Appendix B, Table B-64
 static const value_string URA[] = {
@@ -878,7 +880,7 @@ static int ett_sbas_l1_mt63;
 
 // compute the CRC24Q checksum for an SBAS L1 nav msg
 // see ICAO Annex 10, Vol I, 8th edition, Appendix B, Section 3.5.3.5
-static uint32_t sbas_crc24q(const uint8_t *data) {
+uint32_t sbas_crc24q(const uint8_t *data) {
     uint32_t crc = 0;
 
     // source byte and bit level index
@@ -2419,7 +2421,7 @@ void proto_register_sbas_l1(void) {
         {&hf_sbas_l1_mt25_h1_v0_delta_z_1,       {"dz_i",                     "sbas_l1.mt25.h1.v0.dz_1",          FT_INT16,  BASE_CUSTOM, CF_FUNC(&fmt_correction_125m),      0x01ff,     NULL, HFILL}},
         {&hf_sbas_l1_mt25_h1_v0_delta_a_1_f0,    {"da_i_f0",                  "sbas_l1.mt25.h1.v0.da_f0_1",       FT_INT16,  BASE_CUSTOM, CF_FUNC(&fmt_clock_correction),     0xffc0,     NULL, HFILL}},
         {&hf_sbas_l1_mt25_h1_v0_prn_mask_nr_2,   {"PRN Mask Number",          "sbas_l1.mt25.h1.v0.prn_mask_nr_2", FT_UINT8,  BASE_DEC,    NULL,                               0x3f,       NULL, HFILL}},
-        {&hf_sbas_l1_mt25_h1_v0_iod_2,           {"Issue of Data (IOD_i)",    "sbas_l1.mt25.h1.v0.iod_2",         FT_UINT8,  BASE_DEC,    NULL,                               0xff,       NULL, HFILL}},
+        {&hf_sbas_l1_mt25_h1_v0_iod_2,           {"Issue of Data (IOD_i)",    "sbas_l1.mt25.h1.v0.iod_2",         FT_UINT8,  BASE_DEC,    NULL,                               0x00,       NULL, HFILL}},
         {&hf_sbas_l1_mt25_h1_v0_delta_x_2,       {"dx_i",                     "sbas_l1.mt25.h1.v0.dx_2",          FT_INT16,  BASE_CUSTOM, CF_FUNC(&fmt_correction_125m),      0xff80,     NULL, HFILL}},
         {&hf_sbas_l1_mt25_h1_v0_delta_y_2,       {"dy_i",                     "sbas_l1.mt25.h1.v0.dy_2",          FT_INT16,  BASE_CUSTOM, CF_FUNC(&fmt_correction_125m),      0x7fc0,     NULL, HFILL}},
         {&hf_sbas_l1_mt25_h1_v0_delta_z_2,       {"dz_i",                     "sbas_l1.mt25.h1.v0.dz_2",          FT_INT16,  BASE_CUSTOM, CF_FUNC(&fmt_correction_125m),      0x3fe0,     NULL, HFILL}},
@@ -2637,8 +2639,10 @@ void proto_register_sbas_l1(void) {
 
 
 void proto_reg_handoff_sbas_l1(void) {
-    dissector_add_uint("ubx.rxm.sfrbx.gnssid", GNSS_ID_SBAS,
-        create_dissector_handle(dissect_sbas_l1, proto_sbas_l1));
+    dissector_handle_t sbas_l1_dissector_handle = create_dissector_handle(dissect_sbas_l1, proto_sbas_l1);
+
+    dissector_add_uint("ubx.rxm.sfrbx.gnssid", GNSS_ID_SBAS, sbas_l1_dissector_handle);
+    dissector_add_string("ems.svc_flag", EMS_L1_SVC_FLAG, sbas_l1_dissector_handle);
 
     dissector_add_uint("sbas_l1.mt", 0,  create_dissector_handle(dissect_sbas_l1_mt0,  proto_sbas_l1));
     dissector_add_uint("sbas_l1.mt", 1,  create_dissector_handle(dissect_sbas_l1_mt1,  proto_sbas_l1));
