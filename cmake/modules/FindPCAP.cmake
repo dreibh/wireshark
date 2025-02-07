@@ -95,34 +95,69 @@ if(NOT PC_PCAP_FOUND AND NOT WIN32)
 endif()
 
 #
+# CMake 3.25 adds a VALIDATOR option to find_path and find_library
+# that makes it easier to only find includes and libraries that have
+# necessary symbols and functions.
+#
+#function(pcap_include_check validator_result_var item)
+#  cmake_push_check_state()
+#  set( CMAKE_REQUIRED_INCLUDES "${item}" )
+#
+#  include(CheckSymbolExists)
+#
+#  # libpcap 1.5.0 (2013-11-07)
+#  check_symbol_exists(PCAP_ERROR_PROMISC_PERM_DENIED "pcap/pcap.h" HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
+#
+#  if (NOT HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
+#    set(${validator_result_var} FALSE PARENT_SCOPE)
+#  endif()
+#
+#  cmake_pop_check_state()
+#endfunction()
+
+#
 # Locate the actual include directory. For pkg-config the
 # PC_PCAP_INCLUDE_DIRS variable could be empty if the default
 # header search path is sufficient to locate the header file.
 # For macOS, the directory returned by pcap-config is wrong, so
 # this will make sure to find a valid path.
 #
-find_path(PCAP_INCLUDE_DIR
-  NAMES
-    pcap/pcap.h
-  PATH_SUFFIXES
-    wpcap
-  HINTS
-    ${PC_PCAP_INCLUDE_DIRS}
-    ${PCAP_CONFIG_INCLUDE_DIRS}
-    "${PCAP_HINTS}/Include"
-)
+if (WIN32 AND (CMAKE_CROSSCOMPILING OR USE_MSYSTEM))
+  # For cross-compiling, just use the internal headers.
+  # We have to turn off the sysroot.
+  find_path(PCAP_INCLUDE_DIR
+    NAMES
+      pcap/pcap.h
+    PATHS
+      "${CMAKE_SOURCE_DIR}/libpcap"
+    NO_DEFAULT_PATH
+    NO_CMAKE_FIND_ROOT_PATH
+    #VALIDATOR pcap_include_check
+  )
+else()
+  find_path(PCAP_INCLUDE_DIR
+    NAMES
+      pcap/pcap.h
+    HINTS
+      ${PC_PCAP_INCLUDE_DIRS}
+      ${PCAP_CONFIG_INCLUDE_DIRS}
+      "${PCAP_HINTS}/Include"
+    PATHS
+      "${CMAKE_SOURCE_DIR}/libpcap"
+    #VALIDATOR pcap_include_check
+  )
+endif()
 
 # On Windows we load wpcap.dll explicitly and probe its functions in
 # capture\capture-wpcap.c. We don't want to link with pcap.lib since
 # that would bring in the non-capturing (null) pcap.dll from the vcpkg
-# library.
-if(WIN32 AND NOT CMAKE_CROSSCOMPILING)
+# library, similarly the non-capturing libpcap.dll from the MSYS2 library.
+if(WIN32)
   set(_pkg_required_vars PCAP_INCLUDE_DIR)
 else()
   find_library(PCAP_LIBRARY
     NAMES
       pcap
-      wpcap
     HINTS
       ${PC_PCAP_LIBRARY_DIRS}
       ${PCAP_CONFIG_LIBRARY_DIRS}
@@ -187,7 +222,7 @@ if(PCAP_FOUND)
 
   include(CheckSymbolExists)
 
-  if(WIN32 AND NOT CMAKE_CROSSCOMPILING)
+  if(WIN32)
     #
     # Prepopulate some values. Npcap has these in its SDK, and compilation
     # checks on Windows can be slow.  We check whether they're present at run
@@ -197,19 +232,18 @@ if(PCAP_FOUND)
     set(HAVE_PCAP_OPEN TRUE)
     set(HAVE_PCAP_SETSAMPLING TRUE)
     set(HAVE_PCAP_SET_TSTAMP_PRECISION TRUE)
-    set(HAVE_PCAP_SET_TSTAMP_TYPE TRUE)
   else(WIN32)
     #
-    # Make sure we have at least libpcap 1.0, because we require at
-    # least libpcap 1.0's APIs.
+    # Make sure we have at least libpcap 1.5, because we require at
+    # least libpcap 1.5's APIs.
     #
-    # We check whether pcap_create is defined in the pcap header,
-    # using it as a proxy for all the 1.0 API's.  if not, we fail.
+    # We check whether pcap_set_tstamp_precision is defined in the pcap header,
+    # using it as a proxy for all the 1.5 API's.  if not, we fail.
     #
-    check_function_exists( "pcap_create" HAVE_PCAP_CREATE )
-    if( NOT HAVE_PCAP_CREATE )
-      message(FATAL_ERROR "You need libpcap 1.0 or later")
-    endif( NOT HAVE_PCAP_CREATE )
+    check_function_exists( "pcap_set_tstamp_precision" HAVE_PCAP_SET_TSTAMP_PRECISION )
+    if( NOT HAVE_PCAP_SET_TSTAMP_PRECISION )
+      message(FATAL_ERROR "You need libpcap 1.5 or later")
+    endif()
 
     #
     # macOS Sonoma's libpcap includes stub versions of the remote-
@@ -283,19 +317,15 @@ if(PCAP_FOUND)
     endif( HAVE_PCAP_OPEN )
   endif()
 
-  # This function became available in libpcap release 1.5.1. (2013-12-04)
-  check_function_exists( "pcap_set_tstamp_precision" HAVE_PCAP_SET_TSTAMP_PRECISION )
-  # This function became available in libpcap release 1.2.1. (2012-01-01)
-  check_function_exists( "pcap_set_tstamp_type" HAVE_PCAP_SET_TSTAMP_TYPE )
   # Remote pcap checks
   if( HAVE_PCAP_OPEN )
     set( HAVE_PCAP_REMOTE 1 )
   endif()
 
-  # libpcap 1.5.0 (2013-11-07)
   check_symbol_exists(PCAP_ERROR_PROMISC_PERM_DENIED "pcap/pcap.h" HAVE_PCAP_ERROR_PROMISC_PERM_DENIED)
-  # libpcap 1.2.1 (2012-01-01)
-  check_symbol_exists(PCAP_WARNING_TSTAMP_TYPE_NOTSUP "pcap/pcap.h" HAVE_PCAP_WARNING_TSTAMP_TYPE_NOTSUP)
+  if( NOT HAVE_PCAP_ERROR_PROMISC_PERM_DENIED )
+    message(FATAL_ERROR "You need libpcap 1.5 or later")
+  endif()
 
   cmake_pop_check_state()
 endif()

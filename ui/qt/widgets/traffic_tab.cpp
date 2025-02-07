@@ -133,17 +133,24 @@ QTreeView * TrafficTab::createTree(int protoId)
         tree->setSelectionModel(ism);
         connect(ism, &QItemSelectionModel::currentChanged, this, &TrafficTab::doCurrentIndexChange);
 
+        // Initially resize to the header widths (inc. hidden/filtered columns).
+        for (int col = 0; col < tree->model()->columnCount(); col++) {
+            tree->resizeColumnToContents(col);
+        }
+
         tree->applyRecentColumns();
 
         tree->sortByColumn(0, Qt::AscendingOrder);
 
         connect(proxyModel, &TrafficDataFilterProxy::modelReset, this, [tree]() {
             if (tree->model()->rowCount() > 0) {
-                for (int col = 0; col < tree->model()->columnCount(); col++)
-                    tree->resizeColumnToContents(col);
+                for (int col = 0; col < tree->model()->columnCount(); col++) {
+                    tree->widenColumnToContents(col);
+                }
             }
         });
         connect(proxyModel, &TrafficDataFilterProxy::modelReset, this, &TrafficTab::modelReset);
+        connect(proxyModel, &TrafficDataFilterProxy::layoutChanged, this, &TrafficTab::modelReset);
 
         /* If the columns for the tree have changed, contact the tab. By also having the tab
          * columns changed signal connecting back to the tree, it will propagate to all trees
@@ -350,6 +357,7 @@ QVariant TrafficTab::currentItemData(int role)
     return QVariant();
 }
 
+// update current tab label to include row count
 void TrafficTab::modelReset()
 {
     if (! qobject_cast<TrafficDataFilterProxy *>(sender()))
