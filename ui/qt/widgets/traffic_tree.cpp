@@ -318,7 +318,7 @@ bool TrafficDataFilterProxy::filterAcceptsRow(int source_row, const QModelIndex 
     ATapDataModel * dataModel = qobject_cast<ATapDataModel *>(sourceModel());
     if (dataModel) {
         bool isFiltered = dataModel->data(dataModel->index(source_row, 0), ATapDataModel::ROW_IS_FILTERED).toBool();
-        if (isFiltered && dataModel->filter().length() > 0)
+        if (isFiltered)
             return false;
         /* XXX: What if the filter column is now hidden? Should the filter
          * still apply or should it be cleared? Right now it is still applied.
@@ -758,7 +758,7 @@ QMenu * TrafficTree::createActionSubMenu(FilterAction::Action cur_action, QModel
             }
             foreach (FilterAction::ActionDirection ad, FilterAction::actionDirections()) {
                 FilterAction *fa = new FilterAction(subsubmenu, cur_action, at, ad);
-                QString filter = get_conversation_filter(conv_item, (conv_direction_e) fad_to_cd_[fa->actionDirection()]);
+                QString filter = gchar_free_to_qstring(get_conversation_filter(conv_item, (conv_direction_e) fad_to_cd_[fa->actionDirection()]));
                 fa->setProperty("filter", filter);
                 subsubmenu->addAction(fa);
                 connect(fa, &QAction::triggered, this, &TrafficTree::useFilterAction);

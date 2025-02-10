@@ -183,6 +183,16 @@ void TrafficTab::useNanosecondTimestamps(bool nanoseconds)
     }
 }
 
+void TrafficTab::limitToDisplayFilter(bool limit)
+{
+    for(int idx = 0; idx < count(); idx++)
+    {
+        ATapDataModel * atdm = dataModelForTabIndex(idx);
+        if (atdm)
+            atdm->limitToDisplayFilter(limit);
+    }
+}
+
 void TrafficTab::disableTap()
 {
     for(int idx = 0; idx < count(); idx++)
@@ -199,7 +209,6 @@ void TrafficTab::disableTap()
 void TrafficTab::setOpenTabs(QList<int> protocols)
 {
     QList<int> tabs = _tabs.keys();
-    QList<int> remove;
     blockSignals(true);
 
     foreach(int protocol, protocols)
@@ -496,8 +505,7 @@ TrafficTab::writeGeoIPMapFile(QFile * fp, bool json_only, TrafficDataFilterProxy
 
         if (!ipmap.open(QIODevice::ReadOnly)) {
             QMessageBox::warning(this, tr("Map file error"), tr("Could not open base file %1 for reading: %2")
-                .arg(get_datafile_path("ipmap.html"))
-                .arg(g_strerror(errno))
+                .arg(get_datafile_path("ipmap.html"), g_strerror(errno))
             );
             return false;
         }
@@ -646,7 +654,7 @@ void TrafficTab::attachTab(QWidget * content, QString name)
 {
     ATapDataModel * model = dataModelForWidget(content);
     if (!model) {
-        attachTab(content, name);
+        DetachableTabWidget::attachTab(content, name);
         return;
     }
 

@@ -529,6 +529,7 @@ cf_read(capture_file *cf, bool reloading)
 
     dfilter_free(cf->dfcode);
     cf->dfcode = dfcode;
+    tap_load_main_filter(dfcode);
 
     /* The compiled dfilter might have a field reference; recompiling it
      * means that the field references won't match anything. That's what
@@ -1542,6 +1543,7 @@ cf_filter_packets(capture_file *cf, char *dftext, bool force)
      * recompiling in cf_continue_tail() */
     dfilter_free(cf->dfcode);
     cf->dfcode = dfcode;
+    tap_load_main_filter(dfcode);
 
     /* Now rescan the packet list, applying the new filter, but not
      * throwing away information constructed on a previous pass.
@@ -1634,6 +1636,7 @@ cf_read_current_record(capture_file *cf)
    some dissector has changed, meaning some dissector might construct
    its state differently from the way it was constructed the last time). */
 static void
+// NOLINTNEXTLINE(misc-no-recursion)
 rescan_packets(capture_file *cf, const char *action, const char *action_item, bool redissect)
 {
     /* Rescan packets new packet list */
@@ -1690,6 +1693,7 @@ rescan_packets(capture_file *cf, const char *action, const char *action_item, bo
 
     dfilter_free(cf->dfcode);
     cf->dfcode = dfcode;
+    tap_load_main_filter(dfcode);
 
     /* Do we have any tap listeners with filters? */
     filtering_tap_listeners = have_filtering_tap_listeners();
@@ -2053,6 +2057,7 @@ rescan_packets(capture_file *cf, const char *action, const char *action_item, bo
      * change) was requested, the rescan above is aborted and restarted here. */
     if (queued_rescan_type != RESCAN_NONE) {
         redissect = redissect || queued_rescan_type == RESCAN_REDISSECT;
+        // We recurse here, but if we have a deep queue at this point we have other problems.
         rescan_packets(cf, "Reprocessing", "all packets", redissect);
     }
 }
