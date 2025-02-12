@@ -1207,6 +1207,31 @@ dissector_add_uint_sanity_check(const char *name, uint32_t pattern, dissector_ha
 }
 #endif
 
+/* Get and check subdissector table and handle
+ * @return true if subdissector and handle exist */
+static bool
+dissector_get_table_checked(const char *name, dissector_handle_t handle, dissector_table_t *sub_dissectors)
+{
+	*sub_dissectors = find_dissector_table(name);
+
+	/*
+	 * Make sure the handle and the dissector table exist.
+	 */
+	if (handle == NULL) {
+		ws_dissector_oops("handle to register \"%s\" to doesn't exist\n",
+		    name);
+		return false;
+	}
+	if (*sub_dissectors == NULL) {
+		ws_dissector_oops("dissector table \"%s\" doesn't exist\n"
+		    "Protocol being registered is \"%s\"\n",
+		    name, proto_get_protocol_long_name(handle->protocol));
+		return false;
+	}
+
+	return true;
+}
+
 /* Add an entry to a uint dissector table. */
 void
 dissector_add_uint(const char *name, const uint32_t pattern, dissector_handle_t handle)
@@ -1214,27 +1239,8 @@ dissector_add_uint(const char *name, const uint32_t pattern, dissector_handle_t 
 	dissector_table_t  sub_dissectors;
 	dtbl_entry_t      *dtbl_entry;
 
-	sub_dissectors = find_dissector_table(name);
-
-	/*
-	 * Make sure the handle and the dissector table exist.
-	 */
-	if (handle == NULL) {
-		fprintf(stderr, "OOPS: handle to register \"%s\" to doesn't exist\n",
-		    name);
-		if (wireshark_abort_on_dissector_bug)
-			abort();
+	if (!dissector_get_table_checked(name, handle, &sub_dissectors))
 		return;
-	}
-	if (sub_dissectors == NULL) {
-		fprintf(stderr, "OOPS: dissector table \"%s\" doesn't exist\n",
-		    name);
-		fprintf(stderr, "Protocol being registered is \"%s\"\n",
-		    proto_get_protocol_long_name(handle->protocol));
-		if (wireshark_abort_on_dissector_bug)
-			abort();
-		return;
-	}
 
 	switch (sub_dissectors->type) {
 
@@ -1746,29 +1752,12 @@ void
 dissector_add_string(const char *name, const char *pattern,
 		     dissector_handle_t handle)
 {
-	dissector_table_t  sub_dissectors = find_dissector_table(name);
+	dissector_table_t  sub_dissectors;
 	dtbl_entry_t      *dtbl_entry;
 	char *key;
 
-	/*
-	 * Make sure the handle and the dissector table exist.
-	 */
-	if (handle == NULL) {
-		fprintf(stderr, "OOPS: handle to register \"%s\" to doesn't exist\n",
-		    name);
-		if (wireshark_abort_on_dissector_bug)
-			abort();
+	if (!dissector_get_table_checked(name, handle, &sub_dissectors))
 		return;
-	}
-	if (sub_dissectors == NULL) {
-		fprintf(stderr, "OOPS: dissector table \"%s\" doesn't exist\n",
-		    name);
-		fprintf(stderr, "Protocol being registered is \"%s\"\n",
-		    proto_get_protocol_long_name(handle->protocol));
-		if (wireshark_abort_on_dissector_bug)
-			abort();
-		return;
-	}
 
 	switch (sub_dissectors->type) {
 
@@ -2028,28 +2017,11 @@ dissector_get_default_string_handle(const char *name, const char *string)
 /* Add an entry to a "custom" dissector table. */
 void dissector_add_custom_table_handle(const char *name, void *pattern, dissector_handle_t handle)
 {
-	dissector_table_t  sub_dissectors = find_dissector_table(name);
+	dissector_table_t  sub_dissectors;
 	dtbl_entry_t      *dtbl_entry;
 
-	/*
-	 * Make sure the handle and the dissector table exist.
-	 */
-	if (handle == NULL) {
-		fprintf(stderr, "OOPS: handle to register \"%s\" to doesn't exist\n",
-		    name);
-		if (wireshark_abort_on_dissector_bug)
-			abort();
+	if (!dissector_get_table_checked(name, handle, &sub_dissectors))
 		return;
-	}
-	if (sub_dissectors == NULL) {
-		fprintf(stderr, "OOPS: dissector table \"%s\" doesn't exist\n",
-		    name);
-		fprintf(stderr, "Protocol being registered is \"%s\"\n",
-		    proto_get_protocol_long_name(handle->protocol));
-		if (wireshark_abort_on_dissector_bug)
-			abort();
-		return;
-	}
 
 	ws_assert(sub_dissectors->type == FT_BYTES);
 
@@ -2085,27 +2057,8 @@ void dissector_add_guid(const char *name, guid_key* guid_val, dissector_handle_t
 	dissector_table_t  sub_dissectors;
 	dtbl_entry_t      *dtbl_entry;
 
-	sub_dissectors = find_dissector_table(name);
-
-	/*
-	 * Make sure the handle and the dissector table exist.
-	 */
-	if (handle == NULL) {
-		fprintf(stderr, "OOPS: handle to register \"%s\" to doesn't exist\n",
-		    name);
-		if (wireshark_abort_on_dissector_bug)
-			abort();
+	if (!dissector_get_table_checked(name, handle, &sub_dissectors))
 		return;
-	}
-	if (sub_dissectors == NULL) {
-		fprintf(stderr, "OOPS: dissector table \"%s\" doesn't exist\n",
-		    name);
-		fprintf(stderr, "Protocol being registered is \"%s\"\n",
-		    proto_get_protocol_long_name(handle->protocol));
-		if (wireshark_abort_on_dissector_bug)
-			abort();
-		return;
-	}
 
 	if (sub_dissectors->type != FT_GUID) {
 		ws_assert_not_reached();
@@ -2278,22 +2231,12 @@ packet_all_tables_sort_handles(void)
 void
 dissector_add_for_decode_as(const char *name, dissector_handle_t handle)
 {
-	dissector_table_t  sub_dissectors = find_dissector_table(name);
+	dissector_table_t  sub_dissectors;
 	GSList            *entry;
 	dissector_handle_t dup_handle;
 
-	/*
-	 * Make sure the dissector table exists.
-	 */
-	if (sub_dissectors == NULL) {
-		fprintf(stderr, "OOPS: dissector table \"%s\" doesn't exist\n",
-		    name);
-		fprintf(stderr, "Protocol being registered is \"%s\"\n",
-		    proto_get_protocol_long_name(handle->protocol));
-		if (wireshark_abort_on_dissector_bug)
-			abort();
+	if (!dissector_get_table_checked(name, handle, &sub_dissectors))
 		return;
-	}
 
 	/*
 	 * Make sure it supports Decode As.
@@ -2304,12 +2247,10 @@ dissector_add_for_decode_as(const char *name, dissector_handle_t handle)
 		dissector_name = dissector_handle_get_dissector_name(handle);
 		if (dissector_name == NULL)
 			dissector_name = "(anonymous)";
-		fprintf(stderr, "Registering dissector %s for protocol %s in dissector table %s, which doesn't support Decode As\n",
+		ws_dissector_bug("Registering dissector %s for protocol %s in dissector table %s, which doesn't support Decode As\n",
 				    dissector_name,
 				    proto_get_protocol_short_name(handle->protocol),
 				    name);
-		if (wireshark_abort_on_dissector_bug)
-			abort();
 		return;
 	}
 
@@ -2356,12 +2297,10 @@ dissector_add_for_decode_as(const char *name, dissector_handle_t handle)
 				dup_dissector_name = dissector_handle_get_dissector_name(dup_handle);
 				if (dup_dissector_name == NULL)
 					dup_dissector_name = "(anonymous)";
-				fprintf(stderr, "Dissectors %s and %s in dissector table %s have the same description %s\n",
+				ws_dissector_bug("Dissectors %s and %s in dissector table %s have the same description %s\n",
 				    dissector_name ? dissector_name : "(anonymous)",
 				    dup_dissector_name,
 				    name, handle->description);
-				if (wireshark_abort_on_dissector_bug)
-					abort();
 			}
 		}
 	}
@@ -2387,12 +2326,10 @@ dissector_add_for_decode_as(const char *name, dissector_handle_t handle)
 					dup_dissector_name = "(anonymous)";
 					fprintf(stderr, "Dissector for %s is anonymous", proto_get_protocol_short_name(dup_handle->protocol));
 				}
-				fprintf(stderr, "Dissectors %s and %s in dissector table %s would have the same Decode As preference\n",
+				ws_dissector_bug("Dissectors %s and %s in dissector table %s would have the same Decode As preference\n",
 				    dissector_name ? dissector_name : "(anonymous)",
 				    dup_dissector_name,
 				    name);
-				if (wireshark_abort_on_dissector_bug)
-					abort();
 			}
 		}
 	}
@@ -3700,9 +3637,7 @@ call_dissector_with_data(dissector_handle_t handle, tvbuff_t *tvb,
 		 * The protocol was disabled, or the dissector rejected
 		 * it.  Just dissect this packet as data.
 		 */
-		DISSECTOR_ASSERT(data_handle->protocol != NULL);
-		call_dissector_work(data_handle, tvb, pinfo, tree, true, NULL);
-		return tvb_captured_length(tvb);
+		return call_data_dissector(tvb, pinfo, tree);
 	}
 	return ret;
 }
@@ -3717,6 +3652,7 @@ call_dissector(dissector_handle_t handle, tvbuff_t *tvb,
 int
 call_data_dissector(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
 {
+	DISSECTOR_ASSERT(data_handle->protocol != NULL);
 	return call_dissector_work(data_handle, tvb, pinfo, tree, true, NULL);
 }
 
