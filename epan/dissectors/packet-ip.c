@@ -1789,7 +1789,7 @@ static const value_string dscp_short_vals[] = {
   { IPDSFIELD_DSCP_AF43,    "AF43"   },
   { IPDSFIELD_DSCP_CS5,     "CS5"    },
   { IPDSFIELD_VOICE_ADMIT,  "VOICE-ADMIT" },
-  { IPDSFIELD_DSCP_EF,      "EF PHB" },
+  { IPDSFIELD_DSCP_EF,      "EF"     },
   { IPDSFIELD_DSCP_CS6,     "CS6"    },
   { IPDSFIELD_DSCP_CS7,     "CS7"    },
   { 0,                      NULL     }};
@@ -2416,7 +2416,7 @@ dissect_ip_v4(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
     conversation_t *conv;
 
     /* find (and extend) an existing conversation, or create a new one */
-    conv = find_conversation_strat(pinfo, CONVERSATION_IP, NO_PORT_X);
+    conv = find_conversation_strat(pinfo, CONVERSATION_IP, NO_PORT_X, false);
     if(!conv) {
       conv=conversation_new_strat(pinfo, CONVERSATION_IP, NO_PORTS);
     }
