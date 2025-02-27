@@ -87,7 +87,8 @@ static int hf_smb2_cmd;
 static int hf_smb2_nt_status;
 static int hf_smb2_response_to;
 static int hf_smb2_response_in;
-static int hf_smb2_time;
+static int hf_smb2_time_req;
+static int hf_smb2_time_resp;
 static int hf_smb2_preauth_hash;
 static int hf_smb2_header_len;
 static int hf_smb2_msg_id;
@@ -394,6 +395,8 @@ static int hf_smb2_checksum_algorithm;
 static int hf_smb2_integrity_reserved;
 static int hf_smb2_integrity_flags;
 static int hf_smb2_integrity_flags_enforcement_off;
+static int hf_smb2_integrity_crc_chunk_size;
+static int hf_smb2_integrity_cluster_size;
 static int hf_smb2_FILE_OBJECTID_BUFFER;
 static int hf_smb2_lease_key;
 static int hf_smb2_lease_state;
@@ -613,6 +616,11 @@ static int hf_smb2_cchunk_xfer_len;
 static int hf_smb2_cchunk_chunks_written;
 static int hf_smb2_cchunk_bytes_written;
 static int hf_smb2_cchunk_total_written;
+
+static int hf_smb2_dupext_src_offset;
+static int hf_smb2_dupext_dst_offset;
+static int hf_smb2_dupext_byte_count;
+
 static int hf_smb2_reparse_data_buffer;
 static int hf_smb2_reparse_tag;
 static int hf_smb2_reparse_guid;
@@ -2268,6 +2276,7 @@ static const value_string compression_format_vals[] = {
 
 static const value_string checksum_algorithm_vals[] = {
 	{ 0x0000, "CHECKSUM_TYPE_NONE" },
+	{ 0x0001, "CHECKSUM_TYPE_CRC32" },
 	{ 0x0002, "CHECKSUM_TYPE_CRC64" },
 	{ 0xFFFF, "CHECKSUM_TYPE_UNCHANGED" },
 	{ 0, NULL }
@@ -2320,7 +2329,7 @@ static const value_string smb2_ioctl_vals[] = {
 	{0x000900E3, "FSCTL_READ_RAW_ENCRYPTED"},
 	{0x000900F0, "FSCTL_EXTEND_VOLUME"},
 	{0x00090244, "FSCTL_CSV_TUNNEL_REQUEST"},
-	{0x0009027C, "FSCTL_GET_INTEGRITY_INFORMATION"},
+	{0x0009027C, "FSCTL_GET_INTEGRITY_INFORMATION"},              /* dissector implemented */
 	{0x00090284, "FSCTL_QUERY_FILE_REGIONS"},                     /* dissector implemented */
 	{0x000902c8, "FSCTL_CSV_SYNC_TUNNEL_REQUEST"},
 	{0x00090300, "FSCTL_QUERY_SHARED_VIRTUAL_DISK_SUPPORT"},      /* dissector implemented */
@@ -2352,6 +2361,7 @@ static const value_string smb2_ioctl_vals[] = {
 	{0x000980D0, "FSCTL_ENABLE_UPGRADE"},
 	{0x00098208, "FSCTL_FILE_LEVEL_TRIM"},
 	{0x00098268, "FSCTL_OFFLOAD_WRITE"},			      /* dissector implemented */
+	{0x00098344, "FSCTL_DUPLICATE_EXTENTS_TO_FILE"},	      /* dissector implemented */
 	{0x0009C040, "FSCTL_SET_COMPRESSION"},			      /* dissector implemented */
 	{0x0009C280, "FSCTL_SET_INTEGRITY_INFORMATION"},	      /* dissector implemented */
 	{0x00110018, "FSCTL_PIPE_WAIT"},			      /* dissector implemented */
@@ -8574,6 +8584,32 @@ dissect_smb2_FSCTL_SET_COMPRESSION(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
 }
 
 static int
+dissect_smb2_FSCTL_GET_INTEGRITY_INFORMATION(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, bool data_in _U_)
+{
+	static int * const integrity_flags[] = {
+		&hf_smb2_integrity_flags_enforcement_off,
+		NULL
+	};
+
+	proto_tree_add_item(tree, hf_smb2_checksum_algorithm, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+
+	proto_tree_add_item(tree, hf_smb2_integrity_reserved, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+	offset += 2;
+
+	proto_tree_add_bitmask(tree, tvb, offset, hf_smb2_integrity_flags, ett_smb2_integrity_flags, integrity_flags, ENC_LITTLE_ENDIAN);
+	offset += 4;
+
+	proto_tree_add_item(tree, hf_smb2_integrity_crc_chunk_size, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+
+	proto_tree_add_item(tree, hf_smb2_integrity_cluster_size, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	offset += 4;
+
+	return offset;
+}
+
+static int
 dissect_smb2_FSCTL_SET_INTEGRITY_INFORMATION(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int offset, bool data_in)
 {
 	static int * const integrity_flags[] = {
@@ -8969,6 +9005,32 @@ dissect_smb2_FSCTL_GET_NTFS_VOLUME_DATA(tvbuff_t *tvb, packet_info *pinfo _U_, p
 	proto_tree_add_item(tree, hf_smb2_ioctl_get_ntfs_volume_data_mft_zone_end, tvb, offset, 8, ENC_LITTLE_ENDIAN);
 }
 
+static void
+dissect_smb2_FSCTL_DUPLICATE_EXTENTS_TO_FILE(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, gboolean data_in, void *data)
+{
+	/*
+	 * Note: si is NULL for some callers from packet-smb.c
+	 */
+	smb2_info_t *si = (smb2_info_t *)data;
+
+	/* Output is simpler - handle that first. */
+	if (!data_in) {
+		return;
+	}
+
+	/* fid */
+	offset = dissect_smb2_fid(tvb, pinfo, tree, offset, si, FID_MODE_USE);
+
+	proto_tree_add_item(tree, hf_smb2_dupext_src_offset, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+	offset += 8;
+
+	proto_tree_add_item(tree, hf_smb2_dupext_dst_offset, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+	offset += 8;
+
+	proto_tree_add_item(tree, hf_smb2_dupext_byte_count, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+	offset += 8;
+}
+
 void
 dissect_smb2_ioctl_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, proto_tree *top_tree, uint32_t ioctl_function, bool data_in, void *private_data _U_)
 {
@@ -9062,6 +9124,9 @@ dissect_smb2_ioctl_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, pro
 	case 0x00090284: /* FSCTL_QUERY_FILE_REGIONS */
 		dissect_smb2_FSCTL_QUERY_FILE_REGIONS(tvb, pinfo, tree, 0, data_in);
 		break;
+	case 0x0009027c: /* FSCTL_GET_INTEGRITY_INFORMATION request or response */
+		dissect_smb2_FSCTL_GET_INTEGRITY_INFORMATION(tvb, pinfo, tree, 0, data_in);
+		break;
 	case 0x0009C280: /* FSCTL_SET_INTEGRITY_INFORMATION request or response */
 		dissect_smb2_FSCTL_SET_INTEGRITY_INFORMATION(tvb, pinfo, tree, 0, data_in);
 		break;
@@ -9073,6 +9138,9 @@ dissect_smb2_ioctl_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, pro
 		break;
 	case 0x00090440:
 		dissect_smb2_FSCTL_REFS_STREAM_SNAPSHOT_MANAGEMENT(tvb, pinfo, tree, 0, data_in);
+		break;
+	case 0x00098344: /* FSCTL_DUPLICATE_EXTENTS_TO_FILE */
+		dissect_smb2_FSCTL_DUPLICATE_EXTENTS_TO_FILE(tvb, pinfo, tree, 0, data_in, private_data);
 		break;
 	default:
 		proto_tree_add_item(tree, hf_smb2_unknown, tvb, 0, tvb_captured_length(tvb), ENC_NA);
@@ -12676,6 +12744,7 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, bool fi
 					&& ssi) {
 					/* just  set the response frame and move it to the matched table */
 					ssi->frame_res = pinfo->num;
+					ssi->resp_time = pinfo->abs_ts;
 					g_hash_table_remove(si->conv->unmatched, ssi);
 					g_hash_table_insert(si->conv->matched, ssi, ssi);
 				}
@@ -12714,8 +12783,15 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, bool fi
 			if (!(si->flags & SMB2_FLAGS_RESPONSE)) {
 				if (ssi->frame_res != UINT32_MAX) {
 					proto_item *tmp_item;
+					nstime_t    deltat;
+
 					tmp_item = proto_tree_add_uint(header_tree, hf_smb2_response_in, tvb, 0, 0,
 						ssi->frame_res);
+					proto_item_set_generated(tmp_item);
+
+					nstime_delta(&deltat, &ssi->resp_time, &pinfo->abs_ts);
+					tmp_item = proto_tree_add_time(header_tree, hf_smb2_time_req, tvb,
+								       0, 0, &deltat);
 					proto_item_set_generated(tmp_item);
 				}
 			} else {
@@ -12728,7 +12804,7 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, bool fi
 					proto_item_set_generated(tmp_item);
 					t = pinfo->abs_ts;
 					nstime_delta(&deltat, &t, &ssi->req_time);
-					tmp_item = proto_tree_add_time(header_tree, hf_smb2_time, tvb,
+					tmp_item = proto_tree_add_time(header_tree, hf_smb2_time_resp, tvb,
 					0, 0, &deltat);
 					proto_item_set_generated(tmp_item);
 				}
@@ -12864,7 +12940,12 @@ proto_register_smb2(void)
 			FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0, "The response to this packet is in this packet", HFILL }
 		},
 
-		{ &hf_smb2_time,
+		{ &hf_smb2_time_req,
+			{ "Time to response", "smb2.time", FT_RELATIVE_TIME, BASE_NONE,
+			NULL, 0, "Time between Request and Response for SMB2 cmds", HFILL }
+		},
+
+		{ &hf_smb2_time_resp,
 			{ "Time from request", "smb2.time", FT_RELATIVE_TIME, BASE_NONE,
 			NULL, 0, "Time between Request and Response for SMB2 cmds", HFILL }
 		},
@@ -14482,6 +14563,16 @@ proto_register_smb2(void)
 			NULL, 0x1, "If checksum error enforcement is off", HFILL }
 		},
 
+		{ &hf_smb2_integrity_crc_chunk_size,
+			{ "Checksum Chunk Size", "smb2.integrity_crc_chunk_size", FT_UINT32, BASE_DEC,
+			NULL, 0, NULL, HFILL }
+		},
+
+		{ &hf_smb2_integrity_cluster_size,
+			{ "Cluster Size", "smb2.cluster_size", FT_UINT32, BASE_DEC,
+			NULL, 0, NULL, HFILL }
+		},
+
 		{ &hf_smb2_share_type,
 			{ "Share Type", "smb2.share_type", FT_UINT8, BASE_HEX,
 			VALS(smb2_share_type_vals), 0, "Type of share", HFILL }
@@ -15518,6 +15609,20 @@ proto_register_smb2(void)
 			{ "Total Bytes Written", "smb2.fsctl.cchunk.total_written", FT_UINT32, BASE_DEC,
 			NULL, 0x0, NULL, HFILL }
 		},
+
+		{ &hf_smb2_dupext_src_offset,
+			{ "Source File Offset", "smb2.fsctl.dupext.src_offset", FT_UINT64, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_smb2_dupext_dst_offset,
+			{ "Target File Offset", "smb2.fsctl.dupext.dst_offset", FT_UINT64, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_smb2_dupext_byte_count,
+			{ "Byte Count", "smb2.fsctl.dupext.byte_count", FT_UINT64, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }
+		},
+
 		{ &hf_smb2_reparse_tag,
 			{ "Reparse Tag", "smb2.reparse_tag", FT_UINT32, BASE_HEX,
 			VALS(reparse_tag_vals), 0x0, NULL, HFILL }
