@@ -209,12 +209,15 @@ WSLUA_CONSTRUCTOR DissectorTable_new (lua_State *L) {
         proto_id = proto_get_id_by_short_name(proto->name);
     }
 
+    name = g_strdup(name);
+    ui_name = g_strdup(ui_name);
+
     dt->table = (type == FT_NONE) ?
         register_decode_as_next_proto(proto_id, name, ui_name, NULL) :
         register_dissector_table(name, ui_name, proto_id, type, base);
     dt->heur_list = NULL;
-    dt->name = g_strdup(name);
-    dt->ui_name = g_strdup(ui_name);
+    dt->name = name;
+    dt->ui_name = ui_name;
     dt->created = true;
     dt->expired = false;
 
@@ -782,7 +785,7 @@ WSLUA_METHOD DissectorTable_get_dissector (lua_State *L) {
     /*
      Try to obtain a dissector from a table.
      */
-#define WSLUA_ARG_DissectorTable_get_dissector_PATTERN 2 /* The pattern to be matched (either an integer or a string depending on the table's type). */
+#define WSLUA_ARG_DissectorTable_get_dissector_PATTERN 2 /* The pattern to be matched, depending on the table's type. */
 
     DissectorTable dt = checkDissectorTable(L,1);
     ftenum_t type;
@@ -801,9 +804,13 @@ WSLUA_METHOD DissectorTable_get_dissector (lua_State *L) {
         const e_guid_t* guid = fvalue_get_guid(fval);
         guid_key gk = {*guid, 0};
         handle = dissector_get_guid_handle(dt->table,&gk);
-    } else if ( type == FT_UINT32 || type == FT_UINT16 || type ==  FT_UINT8 || type ==  FT_UINT24 ) {
+    } else if ( type == FT_UINT8 || type == FT_UINT16 || type == FT_UINT24 || type == FT_UINT32 ) {
         uint32_t port = wslua_checkuint32(L, WSLUA_ARG_DissectorTable_get_dissector_PATTERN);
         handle = dissector_get_uint_handle(dt->table,port);
+    } else if ( type == FT_NONE ) {
+        handle = dissector_get_payload_handle(dt->table);
+    } else {
+        luaL_error(L,"Strange type %d for DissectorTable %s",type,dt->name);
     }
 
     if (handle) {
