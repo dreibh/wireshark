@@ -79,8 +79,12 @@ include( CMakeOptions.txt )
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# We require minimum C++11
-set(CMAKE_CXX_STANDARD 11)
+# We require minimum C++11. libscap and libsinsp require C++ 17.
+if(BUILD_stratoshark OR BUILD_falcodump)
+	set(CMAKE_CXX_STANDARD 17)
+else()
+	set(CMAKE_CXX_STANDARD 11)
+endif()
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -3841,6 +3845,7 @@ endif()
 
 
 string(REPLACE "-" "_" RPM_VERSION "${PROJECT_VERSION}")
+string(REPLACE "-" "_" STRATOSHARK_RPM_VERSION "${STRATOSHARK_VERSION}")
 configure_file(packaging/rpm/wireshark.spec.in ${CMAKE_BINARY_DIR}/packaging/rpm/SPECS/wireshark.spec)
 if(RPMBUILD_EXECUTABLE)
 	foreach(_rpm_dir BUILD RPMS SOURCES SPECS SRPMS)
@@ -3922,6 +3927,9 @@ if(RPMBUILD_EXECUTABLE)
 	else()
 		list(APPEND _rpmbuild_with_args --with qt5 --without qt6)
 	endif()
+	if(SINSP_FOUND AND BUILD_stratoshark AND BUILD_falcodump)
+		list(APPEND _rpmbuild_with_args --with stratoshark)
+	endif()
 	if (MAXMINDDB_FOUND)
 		list(APPEND _rpmbuild_with_args --with mmdbresolve)
 	endif()
@@ -3989,7 +3997,7 @@ if(RPMBUILD_EXECUTABLE)
 			-ba SPECS/wireshark.spec
 		DEPENDS copy-dist
 		WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/packaging/rpm"
-		COMMENT "Create a rpm from the current git commit."
+		COMMENT "Create an RPM package from the current git commit."
 	)
 endif()
 
