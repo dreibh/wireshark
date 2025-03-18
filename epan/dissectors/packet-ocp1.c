@@ -887,7 +887,7 @@ decode_params_OcaVersion(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 static int
 decode_params_OcaTimeNTP(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 {
-    proto_tree_add_item(tree, hf_ocp1_params_time_ntp, tvb, offset, 8, ENC_TIME_NTP);
+    proto_tree_add_item(tree, hf_ocp1_params_time_ntp, tvb, offset, 8, ENC_TIME_NTP|ENC_BIG_ENDIAN);
     return 8;
 }
 
@@ -901,7 +901,7 @@ decode_params_OcaTimePTP(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
     proto_tree_add_item(tree, hf_ocp1_params_time_ptp_negative, tvb, offset_m, 1, ENC_BIG_ENDIAN);
     offset_m += 1;
 
-    ti = proto_tree_add_item(tree, hf_ocp1_params_time_ptp, tvb, offset_m, 12, ENC_TIME_SECS_NSECS);
+    ti = proto_tree_add_item(tree, hf_ocp1_params_time_ptp, tvb, offset_m, 12, ENC_TIME_SECS_NSECS|ENC_BIG_ENDIAN);
 
     pt = proto_item_add_subtree(ti, ett_ocp1_params_ptp);
     proto_tree_add_item(pt, hf_ocp1_params_time_ptp_seconds, tvb, offset_m, 8, ENC_BIG_ENDIAN);
@@ -1248,7 +1248,7 @@ decode_params_OcaDeviceManager(tvbuff_t *tvb, int offset, int length, uint16_t m
             plen += 4; /* ono */
             plen += tvb_get_uint16(tvb, offset_m + plen, ENC_BIG_ENDIAN) + 2;   /* string length + length field (uint16) */
             plen += tvb_get_uint16(tvb, offset_m + plen, ENC_BIG_ENDIAN)*2 + 2; /* ClassID field count (uint16) + count x ID (uint16) */
-            plen += 2; /* OcaClassVersioNumber */
+            plen += 2; /* OcaClassVersionNumber */
             list_tree = proto_tree_add_subtree_format(p1_tree, tvb, offset_m, plen, ett_ocp1_params_manager_desc, NULL, "Manager Descriptor Item %d", i+1 );
             offset_m += decode_params_OcaManagerDescriptor(tvb, offset_m, list_tree);
         }

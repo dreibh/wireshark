@@ -135,6 +135,9 @@ typedef struct _chop_t {
 GTree *frames_user_comments;
 GPtrArray *capture_comments;
 
+/* Table of replacement timestamps */
+GTree *frames_replace_timestamp;
+
 #define MAX_SELECTIONS 512
 static struct select_item     selectfrm[MAX_SELECTIONS];
 static unsigned               max_selected;
@@ -158,6 +161,7 @@ static bool                   discard_all_secrets;
 static bool                   discard_cap_comments;
 static bool                   set_unused;
 static bool                   discard_pkt_comments;
+static bool                   preserve_pkt_comments;
 static bool                   do_extract_secrets;
 
 static int                    do_strict_time_adjustment;
@@ -923,7 +927,7 @@ print_usage(FILE *output)
     fprintf(output, "                         to) the given time.\n");
     fprintf(output, "  -B <stop time>         only read packets whose timestamp is before the\n");
     fprintf(output, "                         given time.\n");
-    fprintf(output, "                         Time format for -A/-B options is\n");
+    fprintf(output, "                         Time format for -A/-B/-R options is\n");
     fprintf(output, "                         YYYY-MM-DDThh:mm:ss[.nnnnnnnnn][Z|+-hh:mm]\n");
     fprintf(output, "                         Unix epoch timestamps are also supported.\n");
     fprintf(output, "\n");
@@ -960,6 +964,8 @@ print_usage(FILE *output)
     fprintf(output, "                         choplen is positive and at least 1 is negative.\n");
     fprintf(output, "  -L                     adjust the frame (i.e. reported) length when chopping\n");
     fprintf(output, "                         and/or snapping.\n");
+    fprintf(output, "  -R <framenum>:<time>   replace the timestamp for given frame number.\n");
+    fprintf(output, "                         Accept the same time format as used for -A/-B options.\n");
     fprintf(output, "  -t <time adjustment>   adjust the timestamp of each packet.\n");
     fprintf(output, "                         <time adjustment> is in relative seconds (e.g. -0.5).\n");
     fprintf(output, "  -S <strict adjustment> adjust timestamp of packets if necessary to ensure\n");
@@ -986,7 +992,20 @@ print_usage(FILE *output)
     fprintf(output, "                         example).\n");
     fprintf(output, "                         e.g. -I 26 in case of Ether/IP will ignore\n");
     fprintf(output, "                         ether(14) and IP header(20 - 4(src ip) - 4(dst ip)).\n");
-    fprintf(output, "  -a <framenum>:<comment> Add or replace comment for given frame number\n");
+    fprintf(output, "  -a <framenum>:<comment> Add or replace packet comment for given frame number.\n");
+    fprintf(output, "                         Any pre-existing packet comments from the input file\n");
+    fprintf(output, "                         for the specified frame will be replaced unless used\n");
+    fprintf(output, "                         in conjunction with \"--preserve-packet-comments\".\n");
+    fprintf(output, "  --discard-packet-comments\n");
+    fprintf(output, "                         Discard all pre-existing packet comments from the input\n");
+    fprintf(output, "                         file when writing the output file.  Does not discard\n");
+    fprintf(output, "                         new comments added by \"-a\" in the same command line.\n");
+    fprintf(output, "  --preserve-packet-comments\n");
+    fprintf(output, "                         Preserve from the input file all pre-existing packet\n");
+    fprintf(output, "                         comments when adding a new packet comment with \"-a\".\n");
+    fprintf(output, "                         Without this option each \"-a\" will cause to be\n");
+    fprintf(output, "                         discarded any pre-existing comments for the specified\n");
+    fprintf(output, "                         frame.\n");
     fprintf(output, "\n");
     fprintf(output, "Output File(s):\n");
     fprintf(output, "                         if the output file(s) have the .gz extension, then\n");
@@ -1017,10 +1036,6 @@ print_usage(FILE *output)
     fprintf(output, "                         when writing the output file.  Does not discard\n");
     fprintf(output, "                         comments added by \"--capture-comment\" in the same\n");
     fprintf(output, "                         command line.\n");
-    fprintf(output, "  --discard-packet-comments\n");
-    fprintf(output, "                         Discard all packet comments from the input file\n");
-    fprintf(output, "                         when writing the output file.  Does not discard\n");
-    fprintf(output, "                         comments added by \"-a\" in the same command line.\n");
     fprintf(output, "  --compress <type>      Compress the output file using the type compression format.\n");
     fprintf(output, "\n");
     fprintf(output, "Miscellaneous:\n");
@@ -1370,17 +1385,18 @@ main(int argc, char *argv[])
     char         *read_err_info, *write_err_info;
     int           opt;
 
-#define LONGOPT_NO_VLAN                 LONGOPT_BASE_APPLICATION+1
-#define LONGOPT_SKIP_RADIOTAP_HEADER    LONGOPT_BASE_APPLICATION+2
-#define LONGOPT_SEED                    LONGOPT_BASE_APPLICATION+3
-#define LONGOPT_INJECT_SECRETS          LONGOPT_BASE_APPLICATION+4
-#define LONGOPT_DISCARD_ALL_SECRETS     LONGOPT_BASE_APPLICATION+5
-#define LONGOPT_CAPTURE_COMMENT         LONGOPT_BASE_APPLICATION+6
-#define LONGOPT_DISCARD_CAPTURE_COMMENT LONGOPT_BASE_APPLICATION+7
-#define LONGOPT_SET_UNUSED              LONGOPT_BASE_APPLICATION+8
-#define LONGOPT_DISCARD_PACKET_COMMENTS LONGOPT_BASE_APPLICATION+9
-#define LONGOPT_EXTRACT_SECRETS         LONGOPT_BASE_APPLICATION+10
-#define LONGOPT_COMPRESS                LONGOPT_BASE_APPLICATION+11
+#define LONGOPT_NO_VLAN                  LONGOPT_BASE_APPLICATION+1
+#define LONGOPT_SKIP_RADIOTAP_HEADER     LONGOPT_BASE_APPLICATION+2
+#define LONGOPT_SEED                     LONGOPT_BASE_APPLICATION+3
+#define LONGOPT_INJECT_SECRETS           LONGOPT_BASE_APPLICATION+4
+#define LONGOPT_DISCARD_ALL_SECRETS      LONGOPT_BASE_APPLICATION+5
+#define LONGOPT_CAPTURE_COMMENT          LONGOPT_BASE_APPLICATION+6
+#define LONGOPT_DISCARD_CAPTURE_COMMENT  LONGOPT_BASE_APPLICATION+7
+#define LONGOPT_SET_UNUSED               LONGOPT_BASE_APPLICATION+8
+#define LONGOPT_DISCARD_PACKET_COMMENTS  LONGOPT_BASE_APPLICATION+9
+#define LONGOPT_PRESERVE_PACKET_COMMENTS LONGOPT_BASE_APPLICATION+10
+#define LONGOPT_EXTRACT_SECRETS          LONGOPT_BASE_APPLICATION+11
+#define LONGOPT_COMPRESS                 LONGOPT_BASE_APPLICATION+12
 
     static const struct ws_option long_options[] = {
         {"novlan", ws_no_argument, NULL, LONGOPT_NO_VLAN},
@@ -1394,6 +1410,7 @@ main(int argc, char *argv[])
         {"discard-capture-comment", ws_no_argument, NULL, LONGOPT_DISCARD_CAPTURE_COMMENT},
         {"set-unused", ws_no_argument, NULL, LONGOPT_SET_UNUSED},
         {"discard-packet-comments", ws_no_argument, NULL, LONGOPT_DISCARD_PACKET_COMMENTS},
+        {"preserve-packet-comments", ws_no_argument, NULL, LONGOPT_PRESERVE_PACKET_COMMENTS},
         {"extract-secrets", ws_no_argument, NULL, LONGOPT_EXTRACT_SECRETS},
         {"compress", ws_required_argument, NULL, LONGOPT_COMPRESS},
         {0, 0, 0, 0 }
@@ -1473,7 +1490,7 @@ main(int argc, char *argv[])
     wtap_init(true);
 
     /* Process the options */
-    while ((opt = ws_getopt_long(argc, argv, "a:A:B:c:C:dD:E:F:hi:I:Lo:rs:S:t:T:vVw:", long_options, NULL)) != -1) {
+    while ((opt = ws_getopt_long(argc, argv, "a:A:B:c:C:dD:E:F:hi:I:Lo:rR:s:S:t:T:vVw:", long_options, NULL)) != -1) {
         if (opt != LONGOPT_EXTRACT_SECRETS && opt != 'V') {
             edit_option_specified = true;
         }
@@ -1582,6 +1599,12 @@ main(int argc, char *argv[])
         case LONGOPT_DISCARD_PACKET_COMMENTS:
         {
             discard_pkt_comments = true;
+            break;
+        }
+
+        case LONGOPT_PRESERVE_PACKET_COMMENTS:
+        {
+            preserve_pkt_comments = true;
             break;
         }
 
@@ -1786,6 +1809,44 @@ main(int argc, char *argv[])
             }
             keep_em = true;
             break;
+
+        case 'R':
+        {
+            uint64_t frame_number;
+            int string_start_index = 0;
+            nstime_t in_time;
+
+            if ((sscanf(ws_optarg, "%" SCNu64 ":%n", &frame_number, &string_start_index) < 1) || (string_start_index == 0)) {
+                cmdarg_err("\"%s\" isn't a valid <frame>:<date-time>", ws_optarg);
+                ret = WS_EXIT_INVALID_OPTION;
+                goto clean_exit;
+            }
+
+            if ((NULL != iso8601_to_nstime(&in_time, ws_optarg+string_start_index, ISO8601_DATETIME)) || (NULL != unix_epoch_to_nstime(&in_time, ws_optarg+string_start_index))) {
+                ;
+            }
+            else {
+                cmdarg_err("\"%s\" isn't a valid date and time", ws_optarg+string_start_index);
+                ret = WS_EXIT_INVALID_OPTION;
+                goto clean_exit;
+            }
+
+            /* Lazily create the table */
+            if (!frames_replace_timestamp) {
+                frames_replace_timestamp = g_tree_new_full(framenum_compare, NULL, g_free, g_free);
+            }
+
+            /* Insert this entry (framenum -> timestamp as a string)
+             *
+             * XXX: We currently choose to use a copy of the timestamp as
+             * a string over an nstime_t so that the exact string used for
+             * the timestamp can be reported in any stderr messages later.
+             */
+            uint64_t *frame_p = g_new(uint64_t, 1);
+            *frame_p = frame_number;
+            g_tree_replace(frames_replace_timestamp, frame_p, g_strdup(ws_optarg+string_start_index));
+            break;
+        }
 
         case 's':
             snaplen = get_nonzero_uint32(ws_optarg, "snapshot length");
@@ -2479,9 +2540,12 @@ main(int argc, char *argv[])
                 const char *comment =
                     (const char*)g_tree_lookup(frames_user_comments, &read_count);
                 if (comment != NULL) {
-                    /* Erase any existing comments before adding the new one */
-                    while (WTAP_OPTTYPE_SUCCESS == wtap_block_remove_nth_option_instance(read_rec.block, OPT_COMMENT, 0)) {
-                        read_rec.block_was_modified = true;
+
+                    if(!preserve_pkt_comments) {
+                        /* Erase any existing comments before adding the new one */
+                        while (WTAP_OPTTYPE_SUCCESS == wtap_block_remove_nth_option_instance(read_rec.block, OPT_COMMENT, 0)) {
+                            read_rec.block_was_modified = true;
+                        }
                     }
 
                     /* The comment is not modified by dumper, cast away. */
@@ -2491,6 +2555,27 @@ main(int argc, char *argv[])
                     read_rec.block_was_modified = false;
                 }
             }
+
+            /* Replace Timestamp */
+            if (frames_replace_timestamp) {
+                const char *timestamp_string = (const char*)g_tree_lookup(frames_replace_timestamp, &read_count);
+
+                if (timestamp_string != NULL) {
+                    if(verbose) {
+                        fprintf(stderr, "New timestamp for packet %" PRIu64 ": %s\n", read_count, timestamp_string);
+                    }
+
+                    nstime_t new_time;
+
+                    if ((NULL != iso8601_to_nstime(&new_time, timestamp_string, ISO8601_DATETIME)) || (NULL != unix_epoch_to_nstime(&new_time, timestamp_string))) {
+                        read_rec.ts.secs = new_time.secs;
+                        read_rec.ts.nsecs = new_time.nsecs;
+                    }
+                    else {
+                        fprintf(stderr, "Couldn't use replacement timestamp \"%s\" for packet %" PRIu64 "\n", timestamp_string, read_count);
+                    }
+                }
+            } /* replace timestamp */
 
             if (discard_all_secrets) {
                 /*
@@ -2595,6 +2680,9 @@ clean_exit:
     }
     if (frames_user_comments) {
         g_tree_destroy(frames_user_comments);
+    }
+    if (frames_replace_timestamp) {
+        g_tree_destroy(frames_replace_timestamp);
     }
     if (dsb_filenames) {
         g_array_free(dsb_types, TRUE);

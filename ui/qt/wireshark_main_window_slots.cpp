@@ -3599,9 +3599,8 @@ void WiresharkMainWindow::connectStatisticsMenuActions()
 
 void WiresharkMainWindow::openTcpStreamDialog(int graph_type)
 {
-    TCPStreamDialog *stream_dialog = new TCPStreamDialog(this, capture_file_.capFile(), (tcp_graph_type)graph_type);
+    TCPStreamDialog *stream_dialog = new TCPStreamDialog(this, capture_file_, (tcp_graph_type)graph_type);
     connect(stream_dialog, &TCPStreamDialog::goToPacket, this, [=](int packet_num) {packet_list_->goToPacket(packet_num);});
-    connect(this, &WiresharkMainWindow::setCaptureFile, stream_dialog, &TCPStreamDialog::setCaptureFile);
     if (stream_dialog->result() == QDialog::Accepted) {
         stream_dialog->show();
     }
@@ -3997,11 +3996,11 @@ void WiresharkMainWindow::connectHelpMenuActions()
     connect(main_ui_->actionHelpMPReordercap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_REORDERCAP); });
     connect(main_ui_->actionHelpMPText2pcap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_TEXT2PCAP); });
     connect(main_ui_->actionHelpMPTShark, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_TSHARK); });
-    connect(main_ui_->actionHelpWebsite, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_HOME); });
+    connect(main_ui_->actionHelpWebsite, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_WIRESHARK_HOME); });
     connect(main_ui_->actionHelpFAQ, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_FAQ); });
     connect(main_ui_->actionHelpAsk, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_ASK); });
-    connect(main_ui_->actionHelpDownloads, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_DOWNLOAD); });
-    connect(main_ui_->actionHelpWiki, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_WIKI); });
+    connect(main_ui_->actionHelpDownloads, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_WIRESHARK_DOWNLOAD); });
+    connect(main_ui_->actionHelpWiki, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_WIRESHARK_WIKI); });
     connect(main_ui_->actionHelpSampleCaptures, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_SAMPLE_FILES); });
     connect(main_ui_->actionHelpReleaseNotes, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_WIRESHARK_RELEASE_NOTES); });
 }

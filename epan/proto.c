@@ -6300,7 +6300,7 @@ proto_tree_add_mac48_detail(const mac_hf_list_t *list_specific,
 	}
 
 	/* Add the item for the specific address type */
-	ret_val = proto_tree_add_item(tree, *list_specific->hf_addr, tvb, offset, 6, ENC_NA);
+	ret_val = proto_tree_add_item(tree, *list_specific->hf_addr, tvb, offset, 6, ENC_BIG_ENDIAN);
 	if (idx >= 0) {
 		addr_tree = proto_item_add_subtree(ret_val, idx);
 	}
@@ -6316,7 +6316,7 @@ proto_tree_add_mac48_detail(const mac_hf_list_t *list_specific,
 	}
 
 	if (list_specific->hf_oui != NULL) {
-		addr_item = proto_tree_add_item(addr_tree, *list_specific->hf_oui, tvb, offset, 3, ENC_NA);
+		addr_item = proto_tree_add_item(addr_tree, *list_specific->hf_oui, tvb, offset, 3, ENC_BIG_ENDIAN);
 		proto_item_set_generated(addr_item);
 		proto_item_set_hidden(addr_item);
 
@@ -6339,7 +6339,7 @@ proto_tree_add_mac48_detail(const mac_hf_list_t *list_specific,
 		return ret_val;
 	}
 
-	addr_item = proto_tree_add_item(addr_tree, *list_generic->hf_addr, tvb, offset, 6, ENC_NA);
+	addr_item = proto_tree_add_item(addr_tree, *list_generic->hf_addr, tvb, offset, 6, ENC_BIG_ENDIAN);
 	proto_item_set_hidden(addr_item);
 
 	if (list_generic->hf_addr_resolved != NULL) {
@@ -6350,7 +6350,7 @@ proto_tree_add_mac48_detail(const mac_hf_list_t *list_specific,
 	}
 
 	if (list_generic->hf_oui != NULL) {
-		addr_item = proto_tree_add_item(addr_tree, *list_generic->hf_oui, tvb, offset, 3, ENC_NA);
+		addr_item = proto_tree_add_item(addr_tree, *list_generic->hf_oui, tvb, offset, 3, ENC_BIG_ENDIAN);
 		proto_item_set_generated(addr_item);
 		proto_item_set_hidden(addr_item);
 
@@ -11930,6 +11930,12 @@ proto_registrar_dump_fieldcount(void)
 static void
 elastic_add_base_mapping(json_dumper *dumper)
 {
+	json_dumper_set_member_name(dumper, "index_patterns");
+	json_dumper_begin_array(dumper);
+	// The index names from write_json_index() in print.c
+	json_dumper_value_string(dumper, "packets-*");
+	json_dumper_end_array(dumper);
+
 	json_dumper_set_member_name(dumper, "settings");
 	json_dumper_begin_object(dumper);
 	json_dumper_set_member_name(dumper, "index.mapping.total_fields.limit");
@@ -11938,39 +11944,41 @@ elastic_add_base_mapping(json_dumper *dumper)
 }
 
 static char*
-ws_type_to_elastic(unsigned type _U_)
+ws_type_to_elastic(unsigned type)
 {
 	switch(type) {
-		case FT_UINT16:
+		case FT_INT8:
+			return "byte";
+		case FT_UINT8:
 		case FT_INT16:
+			return "short";
+		case FT_UINT16:
 		case FT_INT32:
 		case FT_UINT24:
 		case FT_INT24:
 			return "integer";
-		case FT_INT8:
-		case FT_UINT8:
-			return "short";
 		case FT_FRAMENUM:
 		case FT_UINT32:
 		case FT_UINT40:
 		case FT_UINT48:
 		case FT_UINT56:
-		case FT_UINT64: // Actually it's not handled by 'long' elastic type.
+		case FT_INT40:
 		case FT_INT48:
+		case FT_INT56:
 		case FT_INT64:
 			return "long";
+		case FT_UINT64:
+			return "unsigned long"; // ElasticSearch since 7.0, OpenSearch 2.8
 		case FT_FLOAT:
-		case FT_DOUBLE:
 			return "float";
+		case FT_DOUBLE:
+		case FT_RELATIVE_TIME: // "scaled_float" with "scaling_factor" 1e9 superior?
+			return "double";
 		case FT_IPv6:
 		case FT_IPv4:
 			return "ip";
 		case FT_ABSOLUTE_TIME:
-		case FT_RELATIVE_TIME:
-			return "date";
-		case FT_BYTES:
-		case FT_UINT_BYTES:
-			return "byte";
+			return "date_nanos"; // This is a 64 bit integer of nanoseconds, so it does have a Y2262 problem
 		case FT_BOOLEAN:
 			return "boolean";
 		default:
@@ -11990,6 +11998,9 @@ dot_to_underscore(char* str)
 }
 
 /* Dumps a mapping file for ElasticSearch
+ * This is the v1 (legacy) _template API.
+ * At some point it may need to be updated with the composable templates
+ * introduced in Elasticsearch 7.8 (_index_template)
  */
 void
 proto_registrar_dump_elastic(const char* filter)
@@ -12027,7 +12038,7 @@ proto_registrar_dump_elastic(const char* filter)
 	json_dumper_set_member_name(&dumper, "mappings");
 	json_dumper_begin_object(&dumper); // 2.mappings
 	json_dumper_set_member_name(&dumper, "dynamic");
-	json_dumper_value_anyf(&dumper, "false");
+	json_dumper_value_anyf(&dumper, "false"); // XXX - Should this be "true"? (#15780)
 
 	json_dumper_set_member_name(&dumper, "properties");
 	json_dumper_begin_object(&dumper); // 3.properties

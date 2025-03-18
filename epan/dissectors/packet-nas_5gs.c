@@ -1020,6 +1020,37 @@ static const value_string nas_5gs_epd_vals[] = {
     { 0,    NULL }
 };
 
+
+
+/* Format functions  XXXX Should these be in a common file in epan? */
+/* Copied from gsm_a_common dissector */
+
+static void
+nas_5gs_degreesLatitude_fmt(char* s, uint32_t v)
+{
+    snprintf(s, ITEM_LABEL_LENGTH, "%s%f degrees (%u)",
+        (v & 0x00800000) ? "-" : "",
+        ((float)(v & 0x7fffff) / 8388607.0) * 90, v);
+}
+
+static void
+nas_5gs_degreesLongitude_fmt(char* s, uint32_t v)
+{
+    int32_t longitude = (int32_t)v;
+
+    longitude |= (longitude & 0x800000) ? 0xff000000 : 0x00000000;
+    /* (X/0xffffff) *360 = degrees */
+
+    snprintf(s, ITEM_LABEL_LENGTH, "%f degrees (%d)",
+        ((float)longitude / 16777215.0) * 360, longitude);
+}
+
+static void
+nas_5gs_radius_fmt(char* s, uint32_t v)
+{
+    snprintf(s, ITEM_LABEL_LENGTH, "%um (%u)", 5 * v, v);
+}
+
 struct nas5gs_private_data {
     uint8_t sec_hdr_type;
     uint32_t payload_container_type;
@@ -10612,6 +10643,8 @@ de_nas_5gs_ue_policies_andsp_wlansp_rule(tvbuff_t* tvb, packet_info* pinfo _U_, 
                         }
                         break;
                     case 2: /* WLAN location */
+                        /* Fall trough */
+                    case 3: /* Geo location */
                         /* Figure 5.3.2.10a: Location sub entry {entry type= WLAN location or Geo location} */
                         /* Length of location sub entry */
                         proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_sub_ent_len, tvb, current_offset, 2, ENC_BIG_ENDIAN, &wlan_sub_ent_len);
@@ -10622,43 +10655,45 @@ de_nas_5gs_ue_policies_andsp_wlansp_rule(tvbuff_t* tvb, packet_info* pinfo _U_, 
                         current_offset++;
                         uint32_t o;
                         for (o = 0; o < num_loc_fields; o++) {
-                            /* Length of WLAN location field */
-                            proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_wlan_loc_field_len, tvb, current_offset, 1, ENC_BIG_ENDIAN, &wlan_sub_ent_len);
-                            current_offset++;
-                            /* WLAN location field type */
-                            proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_wlan_sub_ent_type, tvb, current_offset, 1, ENC_BIG_ENDIAN, &wlan_sub_ent_type);
-                            current_offset++;
-                            /* WLAN location field contents */
-                            switch (wlan_sub_ent_type) {
-                            case 0x81: /* HESSID */
-                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_hessid, tvb, current_offset, 6, ENC_BIG_ENDIAN);
-                                current_offset += 6;
-                                break;
-                            case 0x82: /* SSID */
-                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_ssid, tvb, current_offset, wlan_sub_ent_len - 1, ENC_NA);
-                                current_offset += wlan_sub_ent_len - 1;
-                                break;
-                            case 0x84: /* BSSID */
-                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_bssid, tvb, current_offset, 6, ENC_BIG_ENDIAN);
-                                current_offset += 6;
-                                break;
-                            default:
-                                current_offset += wlan_sub_ent_len - 3;
-                                break;
+                            if (loc_entry_type == 2) {
+                                    /* WLAN location */
+                                    /* Length of WLAN location field */
+                                proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_wlan_loc_field_len, tvb, current_offset, 1, ENC_BIG_ENDIAN, &wlan_sub_ent_len);
+                                current_offset++;
+                                /* WLAN location field type */
+                                proto_tree_add_item_ret_uint(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_wlan_sub_ent_type, tvb, current_offset, 1, ENC_BIG_ENDIAN, &wlan_sub_ent_type);
+                                current_offset++;
+                                /* WLAN location field contents */
+                                switch (wlan_sub_ent_type) {
+                                case 0x81: /* HESSID */
+                                    proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_hessid, tvb, current_offset, 6, ENC_BIG_ENDIAN);
+                                    current_offset += 6;
+                                    break;
+                                case 0x82: /* SSID */
+                                    proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_ssid, tvb, current_offset, wlan_sub_ent_len - 1, ENC_NA);
+                                    current_offset += wlan_sub_ent_len - 1;
+                                    break;
+                                case 0x84: /* BSSID */
+                                    proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_wlansp_loc_bssid, tvb, current_offset, 6, ENC_BIG_ENDIAN);
+                                    current_offset += 6;
+                                    break;
+                                default:
+                                    current_offset += wlan_sub_ent_len - 3;
+                                    break;
+                                }
+                            } else {
+                                /* Geo location */
+                                /* Anchor latitude  */
+                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_geo_loc_anc_lat, tvb, current_offset, 4, ENC_BIG_ENDIAN);
+                                current_offset += 4;
+                                /* Anchor longitude */
+                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_geo_loc_anc_long, tvb, current_offset, 4, ENC_BIG_ENDIAN);
+                                current_offset += 4;
+                                /* Radius */
+                                proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_geo_loc_rad, tvb, current_offset, 2, ENC_BIG_ENDIAN);
+                                current_offset += 2;
                             }
                         }
-                        break;
-                    case 3: /* Geo location */
-                        proto_item_set_len(item, 10 + 2);
-                        /* Anchor latitude  */
-                        proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_geo_loc_anc_lat, tvb, current_offset, 4, ENC_BIG_ENDIAN);
-                        current_offset += 4;
-                        /* Anchor longitude */
-                        proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_geo_loc_anc_long, tvb, current_offset, 4, ENC_BIG_ENDIAN);
-                        current_offset += 4;
-                        /* Radius */
-                        proto_tree_add_item(loc_tree_sub_tree, hf_nas_5gs_geo_loc_rad, tvb, current_offset, 2, ENC_BIG_ENDIAN);
-                        current_offset += 2;
                         break;
                     default:
                         break;
@@ -15994,17 +16029,17 @@ proto_register_nas_5gs(void)
         },
         { &hf_nas_5gs_geo_loc_anc_lat,
         { "Anchor latitude", "nas-5gs.andsp.wlansp.geo_loc_anc_lat",
-            FT_UINT32, BASE_DEC, NULL, 0x0,
+            FT_UINT32, BASE_CUSTOM, CF_FUNC(nas_5gs_degreesLatitude_fmt), 0x0,
             NULL, HFILL }
         },
         { &hf_nas_5gs_geo_loc_anc_long,
         { "Anchor longitude", "nas-5gs.andsp.wlansp.geo_loc_anc_long",
-            FT_UINT32, BASE_DEC, NULL, 0x0,
+            FT_UINT32, BASE_CUSTOM, CF_FUNC(nas_5gs_degreesLongitude_fmt), 0x0,
             NULL, HFILL }
         },
         { &hf_nas_5gs_geo_loc_rad,
         { "Radius", "nas-5gs.andsp.wlansp.geo_loc_rad",
-            FT_UINT32, BASE_DEC, NULL, 0x0,
+            FT_UINT32, BASE_CUSTOM, CF_FUNC(nas_5gs_radius_fmt), 0x0,
             NULL, HFILL }
         },
     };
