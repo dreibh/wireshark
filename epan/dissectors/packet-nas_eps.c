@@ -998,7 +998,7 @@ static const value_string nas_emm_elem_strings[] = {
     { DE_EMM_NONCE, "Nonce" },                                                 /* 9.9.3.25 Nonce */
     { DE_EMM_PAGING_ID, "Paging identity" },                                   /* 9.9.3.25A Paging identity */
     { DE_EMM_P_TMSI_SIGN, "P-TMSI signature" },                                /* 9.9.3.26 P-TMSI signature, See subclause 10.5.5.8 in 3GPP TS 24.008 [6]. */
-    { DE_EMM_EXT_CAUSE, " Extended EMM cause" },                               /* 9.9.3.26A Extended EMM cause */
+    { DE_EMM_EXT_CAUSE, "Extended EMM cause" },                                /* 9.9.3.26A Extended EMM cause */
     { DE_EMM_SERV_TYPE, "Service type" },                                      /* 9.9.3.27 Service type ,See subclause 10.5.5.15 in 3GPP TS 24.008 [6]. */
     { DE_EMM_SHORT_MAC, "Short MAC" },                                         /* 9.9.3.28 Short MAC */
     { DE_EMM_TZ, "Time zone" },                                                /* 9.9.3.29 Time zone, See subclause 10.5.3.8 in 3GPP TS 24.008 [6]. */
@@ -5278,15 +5278,21 @@ nas_emm_detach_req_DL(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint3
 static void
 nas_emm_detach_req(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len)
 {
+    unsigned ul_lv_len;
+
     if (pinfo->link_dir == P2P_DIR_UL) {
         nas_emm_detach_req_UL(tvb, tree, pinfo, offset, len);
         return;
-    }else if (pinfo->link_dir == P2P_DIR_DL) {
+    } else if (pinfo->link_dir == P2P_DIR_DL) {
         nas_emm_detach_req_DL(tvb, tree, pinfo, offset, len);
         return;
     }
 
-    if (len >= 8) {
+    if (len >= 2) {
+        /* Check UL mandatory DE_EMM_EPS_MID length */
+        ul_lv_len = tvb_get_uint8(tvb, offset + 1);
+    }
+    if (len >= 8 && ul_lv_len == (len - 2)) {
         nas_emm_detach_req_UL(tvb, tree, pinfo, offset, len);
     } else {
         nas_emm_detach_req_DL(tvb, tree, pinfo, offset, len);
