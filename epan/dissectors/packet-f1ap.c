@@ -5,7 +5,7 @@
 
 /* packet-f1ap.c
  * Routines for E-UTRAN F1 Application Protocol (F1AP) packet dissection
- * Copyright 2018-2024, Pascal Quantin <pascal@wireshark.org>
+ * Copyright 2018-2025, Pascal Quantin <pascal@wireshark.org>
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -13,7 +13,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * References: 3GPP TS 38.473 V18.4.0 (2024-12)
+ * References: 3GPP TS 38.473 V18.5.0 (2025-03)
  */
 
 #include "config.h"
@@ -5380,6 +5380,7 @@ typedef struct {
 /* Global variables */
 static dissector_handle_t f1ap_handle;
 static dissector_handle_t nr_rrc_ul_ccch_handle;
+static dissector_handle_t nr_rrc_ul_ccch1_handle;
 static dissector_handle_t nr_rrc_dl_ccch_handle;
 static dissector_handle_t nr_rrc_ul_dcch_handle;
 static dissector_handle_t nr_pdcp_handle;
@@ -24859,7 +24860,7 @@ dissect_f1ap_PosAssistanceInformationFailureList(tvbuff_t *tvb _U_, int offset _
 
   if (param_tvb) {
     proto_tree *subtree = proto_item_add_subtree(actx->created_item, ett_f1ap_PosAssistance_Information);
-    dissect_nrppa_Assistance_Information_PDU(param_tvb, actx->pinfo, subtree, NULL);
+    dissect_nrppa_AssistanceInformationFailureList_PDU(param_tvb, actx->pinfo, subtree, NULL);
   }
 
 
@@ -27940,7 +27941,16 @@ dissect_f1ap_RRCContainer(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U
         col_append_str(actx->pinfo->cinfo, COL_PROTOCOL, "/");
         col_set_fence(actx->pinfo->cinfo, COL_PROTOCOL);
         col_set_fence(actx->pinfo->cinfo, COL_INFO);
-        call_dissector(nr_rrc_ul_ccch_handle, param_tvb, actx->pinfo, subtree);
+        switch (tvb_captured_length(param_tvb)){
+          case 6:
+            call_dissector(nr_rrc_ul_ccch_handle, param_tvb, actx->pinfo, subtree);
+            break;
+          case 8:
+            call_dissector(nr_rrc_ul_ccch1_handle, param_tvb, actx->pinfo, subtree);
+            break;
+          default:
+            break;
+        }
         break;
       case id_ULRRCMessageTransfer:
         switch (f1ap_data->srb_id) {
@@ -56794,6 +56804,7 @@ proto_reg_handoff_f1ap(void)
   dissector_add_uint_with_preference("sctp.port", SCTP_PORT_F1AP, f1ap_handle);
   dissector_add_uint("sctp.ppi", F1AP_PROTOCOL_ID, f1ap_handle);
   nr_rrc_ul_ccch_handle = find_dissector_add_dependency("nr-rrc.ul.ccch", proto_f1ap);
+  nr_rrc_ul_ccch1_handle = find_dissector_add_dependency("nr-rrc.ul.ccch1", proto_f1ap);
   nr_rrc_dl_ccch_handle = find_dissector_add_dependency("nr-rrc.dl.ccch", proto_f1ap);
   nr_rrc_ul_dcch_handle = find_dissector_add_dependency("nr-rrc.ul.dcch", proto_f1ap);
   nr_pdcp_handle = find_dissector_add_dependency("pdcp-nr", proto_f1ap);

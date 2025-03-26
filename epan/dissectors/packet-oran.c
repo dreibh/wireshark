@@ -147,6 +147,7 @@ static int hf_oran_lbtCWR_Rst;
 static int hf_oran_reserved;
 static int hf_oran_reserved_1bit;
 static int hf_oran_reserved_2bits;
+static int hf_oran_reserved_3bits;
 static int hf_oran_reserved_4bits;
 static int hf_oran_reserved_last_4bits;
 static int hf_oran_reserved_last_5bits;
@@ -392,6 +393,8 @@ static int hf_oran_num_fo_fb;
 static int hf_oran_freq_offset_fb;
 
 static int hf_oran_num_sinr_per_prb;
+static int hf_oran_num_sinr_per_prb_right;
+
 static int hf_oran_sinr_value;
 
 static int hf_oran_measurement_report;
@@ -830,6 +833,7 @@ static const value_string exttype_vals[] = {
     {25,    "Symbol reordering for DMRS-BF"},
     {26,    "Frequency offset feedback"},
     {27,    "O-DU controlled dimensionality reduction"},
+    {28,    "O-DU controlled frequency resolution for SINR reporting"},
     {0, NULL}
 };
 
@@ -875,6 +879,7 @@ static AllowedCTs_t ext_cts[HIGHEST_EXTTYPE] = {
     { false, false, false, true,  false, false, false },  // SE 25     (5)
     { false, false, false, true,  false, false, false },  // SE 26     (5)
     { false, false, false, true,  false, false, false },  // SE 27     (5)
+    { false, false, false, true,  false, false, false },  // SE 28     (5)
 };
 
 static bool se_allowed_in_st(unsigned se, unsigned ct)
@@ -893,8 +898,12 @@ static bool se_allowed_in_st(unsigned se, unsigned ct)
             return ext_cts[se-1].ST5;
         case 6:
             return ext_cts[se-1].ST6;
+        case 10:
+            return ext_cts[se-1].ST10;
+        case 11:
+            return ext_cts[se-1].ST11;
         default:
-            /* New section type that includes 'ef'.. assume ok */
+            /* New/unknown section type that includes 'ef'.. assume ok */
             return true;
     }
 }
@@ -3834,7 +3843,6 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 /* Reserved (8 bits). N.B., added after draft? */
                 proto_tree_add_item(extension_tree, hf_oran_reserved_8bits, tvb, offset, 1, ENC_BIG_ENDIAN);
                 offset += 1;
-
                 /* Reserved (1 bit) */
                 proto_tree_add_item(extension_tree, hf_oran_reserved_1bit, tvb, offset, 1, ENC_BIG_ENDIAN);
                 /* numFoFb (7 bits) */
@@ -3897,6 +3905,36 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 }
                 break;
             }
+
+            case 28: /* SE 28: O-DU controlled frequency resolution for SINR reporting */
+            {
+                /* reserved (3 bits) */
+                proto_tree_add_item(extension_tree, hf_oran_reserved_3bits, tvb, offset, 1, ENC_BIG_ENDIAN);
+                /* numUeSinrRpt */
+                uint32_t num_ue_sinr_rpt;
+                proto_tree_add_item_ret_uint(extension_tree, hf_oran_reserved_3bits, tvb, offset, 1, ENC_BIG_ENDIAN, &num_ue_sinr_rpt);
+                offset += 1;
+
+                for (uint32_t n=0; n < num_ue_sinr_rpt; n++) {
+                    /* reserved (1 bit) */
+                    proto_tree_add_item(extension_tree, (n % 2) ? hf_oran_reserved_1bit : hf_oran_reserved_bit4,
+                                        tvb, offset, 1, ENC_BIG_ENDIAN);
+
+                    /* numSinrPerPrb (3 bits) */
+                    proto_tree_add_item(extension_tree, (n % 2) ? hf_oran_num_sinr_per_prb : hf_oran_num_sinr_per_prb_right,
+                                        tvb, offset, 1, ENC_BIG_ENDIAN);
+                    if (n % 2) {
+                        offset += 1;
+                    }
+                }
+
+                /* May need to skip beyond half-used byte */
+                if (num_ue_sinr_rpt % 2) {
+                    offset += 1;
+                }
+                break;
+            }
+
 
             default:
                 /* Other/unexpected extension types */
@@ -4827,8 +4865,8 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
             break;
         }
 
-        case SEC_C_RRM_MEAS_REPORTS:
-        case SEC_C_REQUEST_RRM_MEAS:
+        case SEC_C_RRM_MEAS_REPORTS:    /* Section Type 10 */
+        case SEC_C_REQUEST_RRM_MEAS:    /* Section Type 11 */
             /* reserved (16 bits) */
             proto_tree_add_item(section_tree, hf_oran_reserved_16bits, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset += 2;
@@ -6628,6 +6666,12 @@ proto_register_oran(void)
             NULL, 0xc0,
             NULL, HFILL}
         },
+        { &hf_oran_reserved_3bits,
+          { "reserved", "oran_fh_cus.reserved",
+            FT_UINT8, BASE_HEX,
+            NULL, 0xe0,
+            NULL, HFILL}
+        },
         { &hf_oran_reserved_4bits,
           { "reserved", "oran_fh_cus.reserved",
             FT_UINT8, BASE_HEX,
@@ -8111,6 +8155,12 @@ proto_register_oran(void)
             VALS(num_sinr_per_prb_vals), 0xe0,
             "number of SINR values per PRB", HFILL}
         },
+        { &hf_oran_num_sinr_per_prb_right,
+          { "numSinrPerPrb", "oran_fh_cus.numSinrPerPrb",
+            FT_UINT8, BASE_DEC,
+            VALS(num_sinr_per_prb_vals), 0x0e,
+            "number of SINR values per PRB", HFILL}
+        },
 
         /* 7.5.3.68 */
         { &hf_oran_sinr_value,
@@ -8200,7 +8250,7 @@ proto_register_oran(void)
         },
 
         /* 7.5.27.2 */
-        {&hf_oran_beam_type,
+        { &hf_oran_beam_type,
          {"beamType", "oran_fh_cus.beamType",
           FT_UINT16, BASE_DEC,
           VALS(beam_type_vals), 0xc0,
@@ -8208,7 +8258,7 @@ proto_register_oran(void)
           HFILL}
         },
         /* 7.5.3.65 */
-        {&hf_oran_meas_cmd_size,
+        { &hf_oran_meas_cmd_size,
          {"measCmdSize", "oran_fh_cus.measCmdSize",
           FT_UINT16, BASE_DEC,
           NULL, 0x0,
