@@ -80,6 +80,7 @@ typedef struct conv_filter_info {
 typedef struct bridge_info {
     sinsp_source_info_t *ssi;
     uint32_t source_id;
+    data_source_media_type_e media_type;
     int proto;
     hf_register_info* hf;
     int* hf_ids;
@@ -557,6 +558,11 @@ create_source_hfids(bridge_info* bi)
     }
 }
 
+// Plugins whose data should be displayed as JSON.
+// XXX This should probably be a preference.
+// We could also do this by numeric ID: https://github.com/falcosecurity/plugins
+static const char *json_plugins[] = {"cloudtrail"};
+
 void
 import_plugin(char* fname)
 {
@@ -576,6 +582,13 @@ import_plugin(char* fname)
     const char *source_name = get_sinsp_source_name(bi->ssi);
     const char *plugin_name = g_strdup_printf("%s Falco Bridge Plugin", source_name);
     bi->proto = proto_register_protocol(plugin_name, source_name, source_name);
+
+    bi->media_type = DS_MEDIA_TYPE_APPLICATION_OCTET_STREAM;
+    for (size_t i = 0; i < array_length(json_plugins); i++) {
+        if (strcmp(json_plugins[i], source_name) == 0) {
+            bi->media_type = DS_MEDIA_TYPE_APPLICATION_JSON;
+        }
+    }
 
     static dissector_handle_t ct_handle;
     ct_handle = create_dissector_handle(dissect_sinsp_plugin, bi->proto);
@@ -876,7 +889,13 @@ dissect_falco_bridge(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *
         proto_item_append_text(idti, " (%s)", source_name);
         col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)", source_name);
 
-        tvbuff_t* plugin_tvb = tvb_new_subset_length(tvb, 12, tvb_captured_length(tvb) - 12);
+        tvbuff_t *plugin_tvb = tvb;
+        if (bi->media_type == DS_MEDIA_TYPE_APPLICATION_JSON) {
+            int plugin_data_len = tvb_captured_length_remaining(tvb, 12);
+            plugin_tvb = tvb_new_child_real_data(tvb, tvb_get_ptr(tvb, 12, plugin_data_len), plugin_data_len, tvb_reported_length_remaining(tvb, 12));
+            struct data_source *source = add_new_data_source(pinfo, plugin_tvb, source_name);
+            set_data_source_media_type(source, DS_MEDIA_TYPE_APPLICATION_JSON);
+        }
         dissect_sinsp_plugin(plugin_tvb, pinfo, fb_tree, bi);
     }
 
@@ -1160,7 +1179,7 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
     /* Clear out stuff in the info column */
     col_clear(pinfo->cinfo, COL_INFO);
 
-    proto_item *ti = tree;
+    proto_item* ti = proto_tree_add_item(tree, bi->proto, tvb, 0, payload_len, ENC_NA);
     proto_tree* fb_tree = proto_item_add_subtree(ti, ett_sinsp_span);
 
     uint8_t* payload = (uint8_t*)tvb_get_ptr(tvb, 0, payload_len);
@@ -1214,13 +1233,13 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
             }
         }
 
-
+        proto_item *sf_ti = NULL;
         if (sfe->type == FT_STRINGZ && hfinfo->type == FT_STRINGZ) {
-            proto_item *pi = proto_tree_add_string(fb_tree, bi->hf_ids[fld_idx], tvb, 0, payload_len, sfe->res.str);
+            sf_ti = proto_tree_add_string(fb_tree, bi->hf_ids[fld_idx], tvb, sfe->data_start, sfe->data_length, sfe->res.str);
             if (bi->field_flags[fld_idx] & BFF_INFO) {
                 col_append_sep_fstr(pinfo->cinfo, COL_INFO, ", ", "%s", sfe->res.str);
                 // Mark it hidden, otherwise we end up with a bunch of empty "Info" tree items.
-                proto_item_set_hidden(pi);
+                proto_item_set_hidden(sf_ti);
             }
 
             if ((strcmp(hfinfo->abbrev, "ct.response") == 0 ||
@@ -1230,12 +1249,12 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
                     strcmp(sfe->res.str, "null") != 0) {
                tvbuff_t *json_tvb = tvb_new_child_real_data(tvb, sfe->res.str, (unsigned)strlen(sfe->res.str), (unsigned)strlen(sfe->res.str));
                add_new_data_source(pinfo, json_tvb, "JSON Object");
-               proto_tree *json_tree = proto_item_add_subtree(pi, ett_json);
+               proto_tree *json_tree = proto_item_add_subtree(sf_ti, ett_json);
                char *col_info_text = wmem_strdup(pinfo->pool, col_get_text(pinfo->cinfo, COL_INFO));
                call_dissector(json_handle, json_tvb, pinfo, json_tree);
 
-               /* Restore Protocol and Info columns */
-               col_set_str(pinfo->cinfo, COL_INFO, col_info_text);
+                /* Restore Protocol and Info columns */
+                col_set_str(pinfo->cinfo, COL_INFO, col_info_text);
             }
             int addr_fld_idx = bi->hf_id_to_addr_id[fld_idx];
             if (addr_fld_idx >= 0) {
@@ -1244,12 +1263,12 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
                 proto_tree *addr_tree;
                 proto_item *addr_item = NULL;
                 if (ws_inet_pton4(sfe->res.str, &v4_addr)) {
-                    addr_tree = proto_item_add_subtree(pi, ett_address);
-                    addr_item = proto_tree_add_ipv4(addr_tree, bi->hf_v4_ids[addr_fld_idx], tvb, 0, 0, v4_addr);
+                    addr_tree = proto_item_add_subtree(sf_ti, ett_address);
+                    addr_item = proto_tree_add_ipv4(addr_tree, bi->hf_v4_ids[addr_fld_idx], tvb, sfe->data_start, sfe->data_length, v4_addr);
                     set_address(&pinfo->net_src, AT_IPv4, sizeof(ws_in4_addr), &v4_addr);
                 } else if (ws_inet_pton6(sfe->res.str, &v6_addr)) {
-                    addr_tree = proto_item_add_subtree(pi, ett_address);
-                    addr_item = proto_tree_add_ipv6(addr_tree, bi->hf_v6_ids[addr_fld_idx], tvb, 0, 0, &v6_addr);
+                    addr_tree = proto_item_add_subtree(sf_ti, ett_address);
+                    addr_item = proto_tree_add_ipv6(addr_tree, bi->hf_v6_ids[addr_fld_idx], tvb, sfe->data_start, sfe->data_length, &v6_addr);
                     set_address(&pinfo->net_src, AT_IPv6, sizeof(ws_in6_addr), &v6_addr);
                 }
                 if (addr_item) {
@@ -1275,7 +1294,7 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
             }
         }
         else if (sfe->type == FT_UINT64 && hfinfo->type == FT_UINT64) {
-            proto_tree_add_uint64(fb_tree, bi->hf_ids[fld_idx], tvb, 0, payload_len, sfe->res.u64);
+            proto_tree_add_uint64(fb_tree, bi->hf_ids[fld_idx], tvb, sfe->data_start, sfe->data_length, sfe->res.u64);
             if (cur_conv_filter) {
                 switch (hfinfo->display) {
                 case BASE_HEX:
@@ -1298,6 +1317,9 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
         else {
             REPORT_DISSECTOR_BUG("Field %s has an unrecognized or mismatched type %u != %u",
                 hfinfo->abbrev, sfe->type, hfinfo->type);
+        }
+        if (sf_ti && sfe->is_generated) {
+            proto_item_set_generated(sf_ti);
         }
     }
 

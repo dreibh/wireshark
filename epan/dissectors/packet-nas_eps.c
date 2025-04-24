@@ -7809,7 +7809,7 @@ proto_register_nas_eps(void)
         NULL, HFILL }
     },
     { &hf_nas_eps_emm_tai_tac,
-        { "Tracking area code(TAC)","nas-eps.emm.tai_tac",
+        { "Tracking area code (TAC)","nas-eps.emm.tai_tac",
         FT_UINT16, BASE_DEC,  NULL, 0x0,
         NULL, HFILL }
     },
@@ -8681,22 +8681,22 @@ proto_register_nas_eps(void)
         NULL, HFILL }
     },
     { &hf_nas_eps_esm_embr_ul,
-        { "Maximum bit rate for uplink(ext)","nas-eps.esm.embr_ul",
+        { "Maximum bit rate for uplink (ext)","nas-eps.esm.embr_ul",
         FT_UINT8,BASE_DEC, NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_nas_eps_esm_embr_dl,
-        { "Maximum bit rate for downlink(ext)","nas-eps.esm.embr_dl",
+        { "Maximum bit rate for downlink (ext)","nas-eps.esm.embr_dl",
         FT_UINT8,BASE_DEC, NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_nas_eps_esm_egbr_ul,
-        { "Guaranteed bit rate for uplink(ext)","nas-eps.esm.egbr_ul",
+        { "Guaranteed bit rate for uplink (ext)","nas-eps.esm.egbr_ul",
         FT_UINT8,BASE_DEC, NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_nas_eps_esm_egbr_dl,
-        { "Guaranteed bit rate for downlink(ext)","nas-eps.esm.egbr_dl",
+        { "Guaranteed bit rate for downlink (ext)","nas-eps.esm.egbr_dl",
         FT_UINT8,BASE_DEC, NULL, 0x0,
         NULL, HFILL }
     },
@@ -9374,7 +9374,7 @@ proto_register_nas_eps(void)
   };
 
     static ei_register_info ei[] = {
-        { &ei_nas_eps_extraneous_data, { "nas-eps.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec(report to wireshark.org)", EXPFILL }},
+        { &ei_nas_eps_extraneous_data, { "nas-eps.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec (report to wireshark.org)", EXPFILL }},
         { &ei_nas_eps_unknown_identity, { "nas-eps.emm.unknown_identity", PI_PROTOCOL, PI_WARN, "Type of identity not known", EXPFILL }},
         { &ei_nas_eps_unknown_type_of_list, { "nas-eps.emm.tai_unknown_list_type", PI_PROTOCOL, PI_WARN, "Unknown type of list", EXPFILL }},
         { &ei_nas_eps_wrong_nb_of_elems, { "nas-eps.emm.tai_wrong_number_of_elems", PI_PROTOCOL, PI_ERROR, "[Wrong number of elements?]", EXPFILL }},

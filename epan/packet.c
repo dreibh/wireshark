@@ -56,6 +56,7 @@ static dissector_handle_t data_handle;
 struct data_source {
 	tvbuff_t *tvb;
 	char *name;
+	data_source_media_type_e media_type;
 };
 
 /*
@@ -405,17 +406,25 @@ postseq_cleanup_all_protocols(void)
  * Add a new data source to the list of data sources for a frame, given
  * the tvbuff for the data source and its name.
  */
-void
-add_new_data_source(packet_info *pinfo, tvbuff_t *tvb, const char *name)
+struct data_source *add_new_data_source(packet_info *pinfo, tvbuff_t *tvb, const char *name)
 {
 	struct data_source *src;
 
 	src = wmem_new(pinfo->pool, struct data_source);
 	src->tvb = tvb;
 	src->name = wmem_strdup(pinfo->pool, name);
+	src->media_type = DS_MEDIA_TYPE_APPLICATION_OCTET_STREAM;
 	/* This could end up slow, but we should never have that many data
 	 * sources so it probably doesn't matter */
 	pinfo->data_src = g_slist_append(pinfo->data_src, src);
+	return src;
+}
+
+void set_data_source_media_type(struct data_source *src, data_source_media_type_e media_type)
+{
+	if (src) {
+		src->media_type = media_type;
+	}
 }
 
 void
@@ -439,7 +448,10 @@ get_data_source_name(const struct data_source *src)
 tvbuff_t *
 get_data_source_tvb(const struct data_source *src)
 {
-	return src->tvb;
+	if (src) {
+		return src->tvb;
+	}
+	return NULL;
 }
 
 /*
@@ -448,6 +460,9 @@ get_data_source_tvb(const struct data_source *src)
 tvbuff_t *
 get_data_source_tvb_by_name(packet_info *pinfo, const char *name)
 {
+	if (!pinfo) {
+		return NULL;
+	}
 	GSList *source;
 	for (source = pinfo->data_src; source; source = source->next) {
 		struct data_source *this_source = (struct data_source *)source->data;
@@ -456,6 +471,14 @@ get_data_source_tvb_by_name(packet_info *pinfo, const char *name)
 		}
 	}
 	return NULL;
+}
+
+data_source_media_type_e get_data_source_media_type(const struct data_source *src)
+{
+	if (src) {
+		return src->media_type;
+	}
+	return DS_MEDIA_TYPE_APPLICATION_OCTET_STREAM;
 }
 
 
@@ -534,7 +557,9 @@ dissect_record(epan_dissect_t *edt, int file_type_subtype, wtap_rec *rec,
 		break;
 
 	case REC_TYPE_SYSCALL:
-		record_type = "System Call";
+		// We handle multiple types of data here, so use "Event"
+		// instead of "System Call"
+		record_type = "Event";
 		break;
 
 	case REC_TYPE_SYSTEMD_JOURNAL_EXPORT:
@@ -3793,7 +3818,6 @@ depend_dissector_list_t find_depend_dissector_list(const char* name)
  * Field 1 = layer type, e.g. "tcp.port"
  * Field 2 = selector - decimal for integer tables, strings for string tables,
  *           blank for payload tables. Custom and GUID tables aren't shown.
- *           (XXX - Should integer tables respect the table base, e.g. use hex?)
  * Field 3 = "decode as" name, e.g. "http"
  *
  * XXX - View -> Internals -> Dissector Tables in the GUI includes the UI name,
@@ -3815,6 +3839,8 @@ dissector_dump_decodes_display(const char *table_name,
 	dissector_handle_t  handle;
 	int                 proto_id;
 	const char         *decode_as;
+	char                fstring[32];
+	int                 field_width = 0;
 
 	ws_assert(sub_dissectors);
 
@@ -3830,11 +3856,34 @@ dissector_dump_decodes_display(const char *table_name,
 		decode_as = proto_get_protocol_filter_name(proto_id);
 		ws_assert(decode_as != NULL);
 		switch (sub_dissectors->type) {
-			case FT_UINT8:
-			case FT_UINT16:
-			case FT_UINT24:
 			case FT_UINT32:
-				printf("%s\t%u\t%s\n", table_name, GPOINTER_TO_UINT(key), decode_as);
+				field_width += 2;
+				// fallthrough
+			case FT_UINT24:
+				field_width += 2;
+				// fallthrough
+			case FT_UINT16:
+				field_width += 2;
+				// fallthrough
+			case FT_UINT8:
+				field_width += 2;
+				switch (sub_dissectors->param)
+				{
+					case BASE_OCT:
+						snprintf(fstring, 32, "%%s\t0%%o\t%%s\n");
+						break;
+
+					case BASE_HEX:
+						snprintf(fstring, 32, "%%s\t0x%%0%ux\t%%s\n", field_width);
+						break;
+
+					case BASE_DEC:
+					default:
+						snprintf(fstring, 32, "%%s\t%%u\t%%s\n");
+						break;
+				};
+
+				printf(fstring, table_name, GPOINTER_TO_UINT(key), decode_as);
 				break;
 
 			case FT_STRING:
@@ -3969,12 +4018,8 @@ dissector_dump_dissector_tables_display (void *key, void *user_data _U_)
 			printf("\tBASE_HEX");
 			break;
 
-		case BASE_DEC_HEX:
-			printf("\tBASE_DEC_HEX");
-			break;
-
-		case BASE_HEX_DEC:
-			printf("\tBASE_HEX_DEC");
+		case BASE_OCT:
+			printf("\tBASE_OCT");
 			break;
 
 		default:

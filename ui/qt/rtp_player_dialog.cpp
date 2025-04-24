@@ -326,6 +326,7 @@ RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_
                 QCP::iRangeDrag |
                 QCP::iRangeZoom
                 );
+    ui->audioPlot->axisRect()->setRangeZoom(Qt::Horizontal);
 
     graph_ctx_menu_->addSeparator();
     list_ctx_menu_ = new QMenu(this);
@@ -2107,6 +2108,35 @@ void RtpPlayerDialog::on_todCheckBox_toggled(bool)
     x_axis->moveRange(move);
     drawStartPlayMarker();
     ui->audioPlot->replot();
+}
+
+void RtpPlayerDialog::on_visualSRSpinBox_editingFinished()
+{
+    lockUI();
+    // Show information for a user - it can last a long time...
+    playback_error_.clear();
+    ui->hintLabel->setText("<i><small>" + tr("Resampling waveform...") + "</i></small>");
+    mainApp->processEvents();
+
+    int row_count = ui->streamTreeWidget->topLevelItemCount();
+
+    // Reset stream values
+    for (int row = 0; row < row_count; row++) {
+        QTreeWidgetItem *ti = ui->streamTreeWidget->topLevelItem(row);
+        RtpAudioStream *audio_stream = ti->data(stream_data_col_, Qt::UserRole).value<RtpAudioStream*>();
+
+        audio_stream->setVisualSampleRate(static_cast<unsigned>(ui->visualSRSpinBox->value()));
+        audio_stream->decodeVisual();
+    }
+
+    for (int col = 0; col < ui->streamTreeWidget->columnCount() - 1; col++) {
+        ui->streamTreeWidget->resizeColumnToContents(col);
+    }
+
+    createPlot();
+
+    updateWidgets();
+    unlockUI();
 }
 
 void RtpPlayerDialog::on_buttonBox_helpRequested()
