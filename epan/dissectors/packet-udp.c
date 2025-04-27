@@ -197,7 +197,7 @@ get_udp_conversation_data(conversation_t *conv, packet_info *pinfo)
 
     /* Did the caller supply the conversation pointer? */
     if (conv == NULL)
-        conv = find_or_create_conversation(pinfo);
+        conv = find_or_create_conversation_strat(pinfo);
 
     /* Get the data for this conversation */
     udpd = conversation_get_proto_data(conv, proto_udp);
@@ -375,7 +375,7 @@ static char *udp_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo,
      * Eventually the endpoint API should support storing multiple
      * endpoints and UDP should be changed to use the endpoint API.
      */
-    conv = find_conversation_strat(pinfo, CONVERSATION_UDP, 0);
+    conv = find_conversation_strat(pinfo, CONVERSATION_UDP, 0, false);
     if (((pinfo->net_src.type == AT_IPv4 && pinfo->net_dst.type == AT_IPv4) ||
         (pinfo->net_src.type == AT_IPv6 && pinfo->net_dst.type == AT_IPv6))
         && (pinfo->ptype == PT_UDP) &&
@@ -398,7 +398,7 @@ static char *udp_follow_index_filter(unsigned stream, unsigned sub_stream _U_)
     return ws_strdup_printf("udp.stream eq %u", stream);
 }
 
-static char *udp_follow_address_filter(address *src_addr, address *dst_addr, int src_port, int dst_port)
+char *udp_follow_address_filter(address *src_addr, address *dst_addr, int src_port, int dst_port)
 {
     const char   *ip_version = src_addr->type == AT_IPv6 ? "v6" : "";
     char          src_addr_str[WS_INET6_ADDRSTRLEN];
@@ -593,8 +593,8 @@ decode_udp_ports(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
     /* determine if this packet is part of a conversation and call dissector */
     /* for the conversation if available */
-    if (try_conversation_dissector(&pinfo->dst, &pinfo->src, CONVERSATION_UDP,
-             uh_dport, uh_sport, next_tvb, pinfo, tree, NULL, NO_ADDR_B|NO_PORT_B)) {
+    if (try_conversation_dissector_strat(pinfo, CONVERSATION_UDP,
+             next_tvb, tree, NULL, NO_ADDR_B|NO_PORT_B)) {
         handle_export_pdu_conversation(pinfo, next_tvb, uh_dport, uh_sport);
         return;
     }
@@ -1217,10 +1217,37 @@ dissect(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t ip_proto)
     pinfo->srcport = udph->uh_sport;
     pinfo->destport = udph->uh_dport;
 
-    /* find (and extend) an existing conversation, or create a new one */
-    conv = find_conversation_strat(pinfo, CONVERSATION_UDP, 0);
+    /* Find (and extend) an existing conversation, or create a new one.
+     * Don't try finding at all costs (NO_GREEDY)
+     */
+    conv = find_conversation_strat(pinfo, CONVERSATION_UDP, NO_GREEDY, false);
     if(!conv) {
+
+        /* For new conversations, check first if there is already a conversation that
+         * was created with a flag (e.g., NO_ADDR_B or NO_PORT_B) and that could match.
+         * Create this conversation, then apply the dissector if any.
+         */
+        conversation_t *masked_conv = NULL;
+
+        masked_conv = find_conversation_strat(pinfo, CONVERSATION_UDP, 0, false);
+
         conv=conversation_new_strat(pinfo, CONVERSATION_UDP, 0);
+        if(masked_conv) {
+            // apply the higher protocol dissector
+            dissector_handle_t l7_handle = conversation_get_dissector(masked_conv, pinfo->num);
+            if(l7_handle) {
+                conversation_set_dissector(conv, l7_handle);
+
+                // XXX - A related frame indication might be nice to have in some cases
+            }
+        }
+
+    }
+    else {
+        /* Explicitly and immediately move forward the conversation last_frame */
+        if (!(pinfo->fd->visited) && (pinfo->num > conv->last_frame)) {
+            conv->last_frame = pinfo->num;
+        }
     }
 
     udpd = get_udp_conversation_data(conv, pinfo);

@@ -25,6 +25,7 @@ import convertspec as convert
 # Path to default upstream repository
 upstream_repo = 'https://zoranbosnjak.github.io/asterix-specs'
 dissector_file = 'epan/dissectors/packet-asterix.c'
+script_path = os.path.dirname(os.path.realpath(__file__))
 
 class Offset(object):
     """Keep track of number of added bits.
@@ -524,27 +525,32 @@ def part1(ctx, get_ref, catalogue):
 
     for item in catalogue:
         # adjust 'repetitive fx' item
-        if get_rule(item['rule'])['type'] == 'Repetitive' and get_rule(item['rule'])['rep']['type'] == 'Fx':
+        if get_rule(item['rule'])['type'] == 'Repetitive' and \
+           get_rule(item['rule'])['rep']['type'] == 'Fx':
             var = get_rule(item['rule'])['variation'].copy()
-            if var['type'] != 'Element':
-                raise Exception("Expecting 'Element'")
+            vt = var['type']
             item = item.copy()
+            if vt == 'Element':
+                items = [{
+                    'definition': None,
+                    'description': None,
+                    'name': 'Subitem',
+                    'remark': None,
+                    'spare': False,
+                    'title': 'Subitem',
+                    'rule': {
+                        'type': 'ContextFree',
+                        'value': var,
+                    },}]
+            elif vt == 'Group':
+                items = var['items']
+            else:
+                raise Exception("Unexpected type", vt)
             item['rule'] = {
                 'type': 'ContextFree',
                 'value': {
                     'type': 'Extended',
-                    'items': [{
-                        'definition': None,
-                        'description': None,
-                        'name': 'Subitem',
-                        'remark': None,
-                        'spare': False,
-                        'title': 'Subitem',
-                        'rule': {
-                            'type': 'ContextFree',
-                            'value': var,
-                        },
-                    }, None]
+                    'items': items + [None],
                 }
             }
         handle_item([], item)
@@ -638,7 +644,7 @@ class Output(object):
 
     def __enter__(self):
         if self.update:
-            self.f = open(dissector_file, 'w')
+            self.f = open(os.path.join(script_path, '..', '..', dissector_file), 'w')
         return self
 
     def __exit__(self, exc_type, exc_value, exc_traceback):
@@ -695,6 +701,11 @@ def is_valid(spec):
         if t == 'Element':
             return True
         elif t == 'Group':
+            # do not allow nested items
+            for i in variation['items']:
+                if not i['spare']:
+                    if get_rule(i['rule'])['type'] != 'Element':
+                        return False
             return all([check_item(i) for i in variation['items']])
         elif t == 'Extended':
             trailing_fx = variation['items'][-1] == None
@@ -779,12 +790,11 @@ def main():
         part4(ctx, set([spec['number'] for spec in jsons]))
 
         # use context buffer to render template
-        script_path = os.path.dirname(os.path.realpath(__file__))
         with open(os.path.join(script_path, 'packet-asterix-template.c')) as f:
             template_lines = f.readlines()
 
         # All input is collected and rendered.
-        # It's safe to update the disector.
+        # It's safe to update the dissector.
 
         # copy each line of the template to required output,
         # if the 'insertion' is found in the template,

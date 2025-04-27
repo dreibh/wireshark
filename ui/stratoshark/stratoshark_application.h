@@ -11,17 +11,11 @@
 
 #include <main_application.h>
 
-// To do:
-// - Remove SequenceDiagram dependency on RTPStreamDialog
-// - Remove PacketListModel dependency on WirelessTimeline
-
 class StratosharkApplication : public MainApplication
 {
 public:
     explicit StratosharkApplication(int &argc, char **argv);
     ~StratosharkApplication();
-
-    void refreshLocalInterfaces() override;
 
 private:
     void initializeIcons() override;

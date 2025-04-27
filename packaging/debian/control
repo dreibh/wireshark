@@ -36,7 +36,7 @@ Build-Depends: asciidoctor,
                libsnappy-dev,
                libspandsp-dev,
                libspeexdsp-dev,
-               libssh-gcrypt-dev,
+               libssh-dev (>= 0.11.1-1) | libssh-gcrypt-dev,
                libsystemd-dev,
                libxkbcommon-dev,
                libxml2-dev,
@@ -85,11 +85,14 @@ Architecture: any
 Depends: ${shlibs:Depends},
          ${misc:Depends},
          wireshark-common (= ${binary:Version}),
-         libqt6svg6
+         libqt6svg6,
+         qt6-qpa-plugins
 Recommends: libqt6multimedia6
-Breaks: wireshark-qt,
+Breaks: libwireshark-data (<< 4.4.3-2~),
+        wireshark-qt,
         wireshark-gtk (<< 3.0.0~)
-Replaces: wireshark-qt,
+Replaces: libwireshark-data (<< 4.4.3-2~),
+          wireshark-qt,
           wireshark-gtk (<< 3.0.0~)
 Description: network traffic analyzer - graphical interface
  Wireshark is a network "sniffer" - a tool that captures and analyzes
@@ -104,7 +107,8 @@ Depends: ${shlibs:Depends},
          ${misc:Depends},
          wireshark-common (= ${source:Version}),
          libfalcosecurity0t64,
-         libqt6svg6
+         libqt6svg6,
+         qt6-qpa-plugins
 # Recommends: libqt6multimedia6
 Description: system call and log analyzer - graphical interface
  Stratoshark is a system call and log analyzer. It can capture and analyze
@@ -125,7 +129,7 @@ Package: wireshark-dev
 Architecture: any
 Section: devel
 Depends: ${misc:Depends}, omniidl (>= 4.0.1-2), libpcap0.8-dev,
- libglib2.0-dev, python3:any, python3-ply, snacc,
+ libglib2.0-dev, python3:any, python3-ply, esnacc,
  libwireshark-dev, libwiretap-dev
 Description: network traffic analyzer - development tools
  Wireshark is a network "sniffer" - a tool that captures and analyzes

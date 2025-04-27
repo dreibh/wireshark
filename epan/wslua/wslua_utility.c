@@ -147,7 +147,7 @@ WSLUA_FUNCTION wslua_get_preference(lua_State *L) {
         switch (prefs_get_type(pref)) {
             case PREF_UINT:
             {
-                unsigned uint_value = prefs_get_uint_value_real(pref, pref_current);
+                unsigned uint_value = prefs_get_uint_value(pref, pref_current);
                 lua_pushinteger(L, uint_value);
                 break;
             }
@@ -190,6 +190,27 @@ WSLUA_FUNCTION wslua_get_preference(lua_State *L) {
                 char *range_value = range_convert_range(NULL, prefs_get_range_value_real(pref, pref_current));
                 lua_pushstring(L,range_value);
                 wmem_free(NULL, range_value);
+                break;
+            }
+            case PREF_UAT:
+            {
+                uat_t* get_uat = prefs_get_uat_value(pref);
+                if (get_uat != NULL) {
+                    lua_newtable(L);
+                    for (unsigned int idx = 0; idx < get_uat->user_data->len; idx++) {
+                        lua_pushinteger(L, idx + 1);
+                        lua_newtable(L);
+                        void *rec = UAT_INDEX_PTR(get_uat, idx);
+                        unsigned int colnum;
+                        for(colnum = 0; colnum < get_uat->ncols; colnum++) {
+                            lua_pushinteger(L, colnum + 1);
+                            char *str = uat_fld_tostr(rec, &(get_uat->fields[colnum]));
+                            lua_pushstring(L, str);
+                            lua_settable(L, -3);
+                        }
+                        lua_settable(L, -3);
+                    }
+                }
                 break;
             }
             default:
@@ -488,7 +509,7 @@ static int statcmd_init_cb_error_handler(lua_State* L _U_) {
     return 0;
 }
 
-static void statcmd_init(const char *opt_arg, void* userdata) {
+static bool statcmd_init(const char *opt_arg, void* userdata) {
     statcmd_t* sc = (statcmd_t *)userdata;
     lua_State* L = sc->L;
 
@@ -515,6 +536,7 @@ static void statcmd_init(const char *opt_arg, void* userdata) {
             break;
     }
 
+    return true;
 }
 
 WSLUA_FUNCTION wslua_register_stat_cmd_arg(lua_State* L) {

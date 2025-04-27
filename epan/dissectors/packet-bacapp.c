@@ -46,8 +46,6 @@ static int bacapp_tap;
 #define BACAPP_SEGMENT_NAK 0x02
 #define BACAPP_SENT_BY 0x01
 
-#define BACAPP_MAX_RECURSION_DEPTH 50 // Arbitrary
-
 /**
  * dissect_bacapp ::= CHOICE {
  *  confirmed-request-PDU       [0] BACnet-Confirmed-Request-PDU,
@@ -6845,7 +6843,6 @@ static int ett_bacapp_value;
 static expert_field ei_bacapp_bad_length;
 static expert_field ei_bacapp_bad_tag;
 static expert_field ei_bacapp_opening_tag;
-static expert_field ei_bacapp_max_recursion_depth_reached;
 
 static int32_t propertyIdentifier = -1;
 static int32_t propertyArrayIndex = -1;
@@ -7116,6 +7113,27 @@ static const fragment_items msg_frag_items = {
     "Message fragments"
 };
 
+/* calculate an extended sequence number. The sequence number is an 8-bit
+ * counter, and can rollover with very large data length. */
+static uint32_t
+calculate_extended_seqno(uint32_t prev_seqno, uint8_t raw_seqno)
+{
+    uint32_t seqno = (prev_seqno & 0xffffff00) | raw_seqno;
+    /* The Window Size must be in a range 1 to 127 (see ANSI/ASHRAE Std
+     * 135-2016 5.3), and this guarantees that, e.g., sequence number 128
+     * will not be transmitted unless a SegmentACK has been received for
+     * sequence number 0, so any subsequent sequence number 0 must actually
+     * be sequence number 256 after rollover.
+     */
+    if (seqno + 0x80 < prev_seqno) {
+        seqno += 0x100;
+    } else if (prev_seqno + 0x80 < seqno) {
+        /* Unlikely, out-of-order packet backwards over the wrap boundary. */
+        seqno -= 0x100;
+    }
+    return seqno;
+}
+
 #if 0
 /* if BACnet uses the reserved values, then patch the corresponding values here, maximum 16 values are defined */
 /* FIXME: fGetMaxAPDUSize is commented out, as it is not used. It was used to set variables which were not later used. */
@@ -7236,11 +7254,11 @@ fUnsigned64(tvbuff_t *tvb, unsigned offset, uint32_t lvt, uint64_t *val)
 {
     bool valid = false;
     int64_t  value = 0;
-    uint8_t  data, i;
+    uint8_t  data;
 
     if (lvt && (lvt <= 8)) {
         valid = true;
-        for (i = 0; i < lvt; i++) {
+        for (unsigned i = 0; i < lvt; i++) {
             data = tvb_get_uint8(tvb, offset+i);
             value = (value << 8) + data;
         }
@@ -9147,12 +9165,7 @@ fAbstractSyntaxNType(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsign
         snprintf(ar, sizeof(ar), "Abstract Type: ");
     }
 
-    unsigned recursion_depth = p_get_proto_depth(pinfo, proto_bacapp);
-    if (recursion_depth > BACAPP_MAX_RECURSION_DEPTH) {
-        proto_tree_add_expert(tree, pinfo, &ei_bacapp_max_recursion_depth_reached, tvb, 0, 0);
-        return offset;
-    }
-    p_set_proto_depth(pinfo, proto_bacapp, recursion_depth + 1);
+    increment_dissection_depth(pinfo);
 
     while (tvb_reported_length_remaining(tvb, offset) > 0) {  /* exit loop if nothing happens inside */
         lastoffset = offset;
@@ -9911,8 +9924,7 @@ fAbstractSyntaxNType(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsign
     }
 
 cleanup:
-    recursion_depth = p_get_proto_depth(pinfo, proto_bacapp);
-    p_set_proto_depth(pinfo, proto_bacapp, recursion_depth);
+    decrement_dissection_depth(pinfo);
     return offset;
 }
 
@@ -16781,15 +16793,40 @@ dissect_bacapp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
 
     if (fragment) { /* fragmented */
         fragment_head *frag_msg;
+        uint32_t ext_seqno = bacapp_seqno;
 
         pinfo->fragmented = true;
 
+        if (!PINFO_FD_VISITED(pinfo)) {
+            frag_msg = fragment_get(&msg_reassembly_table, pinfo, bacapp_invoke_id, NULL);
+            if (frag_msg && frag_msg->first_gap) {
+                /* If we have permanently lost segments then using the last
+                 * contiguous sequence number isn't quite right - but we
+                 * won't be able to defragment in that case anyway.
+                 */
+                uint32_t prev_seqno = frag_msg->first_gap->offset;
+                ext_seqno = calculate_extended_seqno(prev_seqno, bacapp_seqno);
+
+                if (ext_seqno != bacapp_seqno) {
+                    p_add_proto_data(wmem_file_scope(), pinfo, proto_bacapp, bacapp_seqno, GUINT_TO_POINTER(ext_seqno));
+                }
+            }
+        } else {
+            /* This is not really necessary (because the fragment number is not
+             * used by fragment_add_seq_check on the second pass) but makes the
+             * fragment number in the Info column be the extended one.
+             */
+            ext_seqno = GPOINTER_TO_UINT(p_get_proto_data(wmem_file_scope(), pinfo, proto_bacapp, bacapp_seqno));
+            if (ext_seqno == 0) {
+                ext_seqno = bacapp_seqno;
+            }
+        }
         frag_msg = fragment_add_seq_check(&msg_reassembly_table,
             tvb, data_offset,
             pinfo,
             bacapp_invoke_id,      /* ID for fragments belonging together */
             NULL,
-            bacapp_seqno,          /* fragment sequence number */
+            ext_seqno,             /* fragment sequence number */
             tvb_reported_length_remaining(tvb, data_offset), /* fragment length - to the end */
             flag & BACAPP_MORE_SEGMENTS); /* Last fragment reached? */
         new_tvb = process_reassembled_data(tvb, data_offset, pinfo,
@@ -16801,7 +16838,7 @@ dissect_bacapp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _
                            " (Message Reassembled)");
         } else { /* Not last packet of reassembled Short Message */
             col_append_fstr(pinfo->cinfo, COL_INFO,
-                            " (Message fragment %u)", bacapp_seqno);
+                            " (Message fragment %u)", ext_seqno);
         }
         if (new_tvb) { /* take it all */
             switch (bacapp_type) {
@@ -17119,8 +17156,6 @@ proto_register_bacapp(void)
         { &ei_bacapp_bad_length, { "bacapp.bad_length", PI_MALFORMED, PI_ERROR, "Wrong length indicated", EXPFILL }},
         { &ei_bacapp_bad_tag, { "bacapp.bad_tag", PI_MALFORMED, PI_ERROR, "Wrong tag found", EXPFILL }},
         { &ei_bacapp_opening_tag, { "bacapp.bad_opening_tag", PI_MALFORMED, PI_ERROR, "Expected Opening Tag!", EXPFILL }},
-        { &ei_bacapp_max_recursion_depth_reached, { "bacapp.max_recursion_depth_reached",
-            PI_PROTOCOL, PI_WARN, "Maximum allowed recursion depth reached. Dissection stopped.", EXPFILL }}
     };
 
     expert_module_t* expert_bacapp;

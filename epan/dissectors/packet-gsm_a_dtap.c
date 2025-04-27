@@ -3056,7 +3056,7 @@ de_u2u(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, uns
     proto_tree_add_item(subtree, hf_gsm_a_dtap_data, tvb, curr_offset, len - 1, ENC_NA);
 
     u2u_tvb = tvb_new_subset_length(tvb, curr_offset, len - 1);
-    dissector_try_uint_new(u2u_dissector_table, proto_discr, u2u_tvb, pinfo, proto_tree_get_root(tree), true, NULL);
+    dissector_try_uint_with_data(u2u_dissector_table, proto_discr, u2u_tvb, pinfo, proto_tree_get_root(tree), true, NULL);
 
 
     return (len);
@@ -4028,11 +4028,11 @@ de_gcc_call_ref(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_
     if (value & 0x10){
         proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_NA);
         proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_call_priority, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_spare_1, tvb, curr_offset, 4, ENC_NA);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_spare_1, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
     }
     else{
         proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_NA);
-        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_spare_4, tvb, curr_offset, 4, ENC_NA);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_gcc_spare_4, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
     }
 
     curr_offset += 4;
@@ -4208,11 +4208,11 @@ de_bcc_call_ref(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_
     if (value & 0x10){
         proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_NA);
         proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_priority, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_spare_1, tvb, curr_offset, 4, ENC_NA);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_spare_1, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
     }
     else{
         proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_ref_has_priority, tvb, curr_offset, 4, ENC_NA);
-        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_spare_4, tvb, curr_offset, 4, ENC_NA);
+        proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_spare_4, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
     }
 
     curr_offset += 4;
@@ -4236,7 +4236,7 @@ static const range_string bcc_call_state_vals[] = {
 static uint16_t
 de_bcc_call_state(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
 {
-    proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_state, tvb, offset, 2, ENC_NA);
+    proto_tree_add_item(tree, hf_gsm_a_dtap_bcc_call_state, tvb, offset, 1, ENC_NA);
 
     return 1;
 }
@@ -7783,7 +7783,7 @@ proto_register_gsm_a_dtap(void)
         },
         { &hf_gsm_a_dtap_bcc_call_state,
           { "Call state", "gsm_a.dtap.bcc.call_state",
-            FT_UINT24, BASE_DEC|BASE_RANGE_STRING, RVALS(bcc_call_state_vals), 0x0,
+            FT_UINT8, BASE_DEC|BASE_RANGE_STRING, RVALS(bcc_call_state_vals), 0x0,
             NULL, HFILL }
         },
         { &hf_gsm_a_dtap_bcc_cause_structure,
@@ -8414,7 +8414,7 @@ proto_register_gsm_a_dtap(void)
         { &ei_gsm_a_dtap_end_mark_unexpected, { "gsm_a.dtap.end_mark_unexpected", PI_MALFORMED, PI_WARN, "\'f\' end mark present in unexpected position", EXPFILL }},
         { &ei_gsm_a_dtap_invalid_ia5_character, { "gsm_a.dtap.invalid_ia5_character", PI_MALFORMED, PI_WARN, "Invalid IA5 character(s) in string (value > 127)", EXPFILL }},
         { &ei_gsm_a_dtap_keypad_info_not_dtmf_digit, { "gsm_a.dtap.keypad_info_not_dtmf_digit", PI_MALFORMED, PI_WARN, "Keypad information contains character that is not a DTMF digit", EXPFILL }},
-        { &ei_gsm_a_dtap_extraneous_data, { "gsm_a.dtap.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec(report to wireshark.org)", EXPFILL }},
+        { &ei_gsm_a_dtap_extraneous_data, { "gsm_a.dtap.extraneous_data", PI_PROTOCOL, PI_NOTE, "Extraneous Data, dissector bug or later version spec (report to wireshark.org)", EXPFILL }},
         { &ei_gsm_a_dtap_missing_mandatory_element, { "gsm_a.dtap.missing_mandatory_element", PI_PROTOCOL, PI_ERROR, "Missing Mandatory element, rest of dissection is suspect", EXPFILL }},
         { &ei_gsm_a_dtap_coding_scheme, { "gsm_a.dtap.coding_scheme.unknown", PI_PROTOCOL, PI_WARN, "Text string encoded according to an unknown Coding Scheme", EXPFILL } },
         { &ei_gsm_a_dtap_ti_not_valid,{ "gsm_a.dtap.ti_not_valid", PI_PROTOCOL, PI_ERROR, "If TI bits = 7, length must be > 2", EXPFILL } },

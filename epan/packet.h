@@ -14,6 +14,7 @@
 #include <wsutil/array.h>
 #include <wiretap/wtap_opttypes.h>
 #include "proto.h"
+#include "range.h"
 #include "tvbuff.h"
 #include "epan.h"
 #include "frame_data.h"
@@ -25,7 +26,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
-struct epan_range;
+
 
 /** @defgroup packet General Packet Dissection
  *
@@ -41,7 +42,7 @@ struct epan_range;
 	((unsigned)(offset) + (unsigned)(len) > (unsigned)(offset) && \
 	 (unsigned)(offset) + (unsigned)(len) <= (unsigned)(captured_len))
 
-/* 0 is case insensitive for backwards compatibility with tables that
+/* 0 is case sensitive for backwards compatibility with tables that
  * used false or BASE_NONE for case sensitive, which was the default.
  */
 #define STRING_CASE_SENSITIVE 0
@@ -219,52 +220,58 @@ WS_DLL_PUBLIC void dissector_add_uint(const char *name, const uint32_t pattern,
 WS_DLL_PUBLIC void dissector_add_uint_with_preference(const char *name, const uint32_t pattern,
     dissector_handle_t handle);
 
-/* Add an range of entries to a uint dissector table. */
-WS_DLL_PUBLIC void dissector_add_uint_range(const char *abbrev, struct epan_range *range,
+/** Add an range of entries to a uint dissector table. */
+WS_DLL_PUBLIC void dissector_add_uint_range(const char *abbrev, range_t *range,
     dissector_handle_t handle);
 
-/* Add an range of entries to a uint dissector table with "preference" automatically added. */
+/** Add an range of entries to a uint dissector table with "preference" automatically added. */
 WS_DLL_PUBLIC void dissector_add_uint_range_with_preference(const char *abbrev, const char* range_str,
     dissector_handle_t handle);
 
-/* Delete the entry for a dissector in a uint dissector table
+/** Delete the entry for a dissector in a uint dissector table
    with a particular pattern. */
 WS_DLL_PUBLIC void dissector_delete_uint(const char *name, const uint32_t pattern,
     dissector_handle_t handle);
 
-/* Delete an range of entries from a uint dissector table. */
-WS_DLL_PUBLIC void dissector_delete_uint_range(const char *abbrev, struct epan_range *range,
+/** Delete an range of entries from a uint dissector table. */
+WS_DLL_PUBLIC void dissector_delete_uint_range(const char *abbrev, range_t *range,
     dissector_handle_t handle);
 
-/* Delete all entries from a dissector table. */
+/** Delete all entries from a dissector table. */
 WS_DLL_PUBLIC void dissector_delete_all(const char *name, dissector_handle_t handle);
 
-/* Change the entry for a dissector in a uint dissector table
+/** Change the entry for a dissector in a uint dissector table
    with a particular pattern to use a new dissector handle. */
 WS_DLL_PUBLIC void dissector_change_uint(const char *abbrev, const uint32_t pattern,
     dissector_handle_t handle);
 
-/* Reset an entry in a uint dissector table to its initial value. */
+/** Reset an entry in a uint dissector table to its initial value. */
 WS_DLL_PUBLIC void dissector_reset_uint(const char *name, const uint32_t pattern);
 
-/* Return true if an entry in a uint dissector table is found and has been
+/** Return true if an entry in a uint dissector table is found and has been
  * changed (i.e. dissector_change_uint() has been called, such as from
  * Decode As, prefs registered via dissector_add_uint_[range_]with_preference),
  * etc.), otherwise return false.
  */
 WS_DLL_PUBLIC bool dissector_is_uint_changed(dissector_table_t const sub_dissectors, const uint32_t uint_val);
 
-/* Look for a given value in a given uint dissector table and, if found,
+/** Look for a given value in a given uint dissector table and, if found,
    call the dissector with the arguments supplied, and return the number
    of bytes consumed, otherwise return 0. */
 WS_DLL_PUBLIC int dissector_try_uint(dissector_table_t sub_dissectors,
     const uint32_t uint_val, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
 
-/* Look for a given value in a given uint dissector table and, if found,
+/** Look for a given value in a given uint dissector table and, if found,
    call the dissector with the arguments supplied, and return the number
    of bytes consumed, otherwise return 0. */
-WS_DLL_PUBLIC int dissector_try_uint_new(dissector_table_t sub_dissectors,
+
+WS_DLL_PUBLIC int dissector_try_uint_with_data(dissector_table_t sub_dissectors,
     const uint32_t uint_val, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name, void *data);
+
+WS_DEPRECATED_X("Use dissector_try_uint_with_data instead")
+static inline int dissector_try_uint_new(dissector_table_t sub_dissectors,
+	const uint32_t uint_val, tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, const bool add_proto_name, void* data) \
+{	return dissector_try_uint_with_data(sub_dissectors, uint_val, tvb, pinfo, tree, add_proto_name, data); }
 
 /** Look for a given value in a given uint dissector table and, if found,
  * return the current dissector handle for that value.
@@ -309,17 +316,28 @@ WS_DLL_PUBLIC void dissector_reset_string(const char *name, const char *pattern)
  */
 WS_DLL_PUBLIC bool dissector_is_string_changed(dissector_table_t const subdissectors, const char *string);
 
-/* Look for a given string in a given dissector table and, if found, call
+
+/** Look for a given string in a given dissector table and, if found, call
    the dissector with the arguments supplied, and return the number of
    bytes consumed, otherwise return 0. */
-WS_DLL_PUBLIC int dissector_try_string(dissector_table_t sub_dissectors,
-    const char *string, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data);
+WS_DLL_PUBLIC int dissector_try_string_with_data(dissector_table_t sub_dissectors,
+	const char* string, tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, const bool add_proto_name, void* data);
 
 /* Look for a given string in a given dissector table and, if found, call
    the dissector with the arguments supplied, and return the number of
    bytes consumed, otherwise return 0. */
-WS_DLL_PUBLIC int dissector_try_string_new(dissector_table_t sub_dissectors,
-    const char *string, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name,void *data);
+WS_DEPRECATED_X("Use dissector_try_string_with_data instead")
+static inline int
+dissector_try_string(dissector_table_t sub_dissectors, const char* string,\
+	tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data) \
+	{ return dissector_try_string_with_data(sub_dissectors, string, tvb, pinfo, tree, true, data); }
+
+WS_DEPRECATED_X("Use dissector_try_string_with_data instead")
+static inline int
+dissector_try_string_new(dissector_table_t sub_dissectors, const char* string, \
+	tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, const bool add_proto_name, void* data) \
+{ return dissector_try_string_with_data(sub_dissectors, string, tvb, pinfo, tree, add_proto_name, data); }
+
 
 /** Look for a given value in a given string dissector table and, if found,
  * return the current dissector handle for that value.
@@ -366,16 +384,10 @@ typedef struct _guid_key {
 WS_DLL_PUBLIC void dissector_add_guid(const char *name, guid_key* guid_val,
     dissector_handle_t handle);
 
-/* Look for a given value in a given guid dissector table and, if found,
+/** Look for a given value in a given guid dissector table and, if found,
    call the dissector with the arguments supplied, and return true,
    otherwise return false. */
-WS_DLL_PUBLIC int dissector_try_guid(dissector_table_t sub_dissectors,
-    guid_key* guid_val, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
-
-/* Look for a given value in a given guid dissector table and, if found,
-   call the dissector with the arguments supplied, and return true,
-   otherwise return false. */
-WS_DLL_PUBLIC int dissector_try_guid_new(dissector_table_t sub_dissectors,
+WS_DLL_PUBLIC int dissector_try_guid_with_data(dissector_table_t sub_dissectors,
     guid_key* guid_val, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name, void *data);
 
 /* Delete a GUID from a dissector table. */
@@ -395,14 +407,24 @@ WS_DLL_PUBLIC dissector_handle_t dissector_get_guid_handle(
 /* Use the currently assigned payload dissector for the dissector table and,
    if any, call the dissector with the arguments supplied, and return the
    number of bytes consumed, otherwise return 0. */
-WS_DLL_PUBLIC int dissector_try_payload(dissector_table_t sub_dissectors,
-    tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree);
+WS_DLL_PUBLIC int dissector_try_payload_with_data(dissector_table_t sub_dissectors,
+    tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name, void *data);
+
+WS_DEPRECATED_X("Use dissector_try_payload_with_data instead")
+static inline int dissector_try_payload_new(dissector_table_t sub_dissectors,
+	tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, const bool add_proto_name, void* data){ \
+	return dissector_try_payload_with_data(sub_dissectors, tvb, pinfo, tree, add_proto_name, data); \
+}
 
 /* Use the currently assigned payload dissector for the dissector table and,
    if any, call the dissector with the arguments supplied, and return the
    number of bytes consumed, otherwise return 0. */
-WS_DLL_PUBLIC int dissector_try_payload_new(dissector_table_t sub_dissectors,
-    tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, const bool add_proto_name, void *data);
+WS_DEPRECATED_X("Use dissector_try_payload_with_data instead")
+static inline int dissector_try_payload(dissector_table_t sub_dissectors,
+	tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree) {
+	\
+	return dissector_try_payload_with_data(sub_dissectors, tvb, pinfo, tree, true, NULL); \
+}
 
 /* Change the entry for a dissector in a payload (FT_NONE) dissector table
    with a particular pattern to use a new dissector handle. */
@@ -747,12 +769,6 @@ WS_DLL_PUBLIC bool deregister_depend_dissector(const char* parent, const char* d
  */
 WS_DLL_PUBLIC depend_dissector_list_t find_depend_dissector_list(const char* name);
 
-
-/* Do all one-time initialization. */
-extern void dissect_init(void);
-
-extern void dissect_cleanup(void);
-
 /*
  * Given a tvbuff, and a length from a packet header, adjust the length
  * of the tvbuff to reflect the specified length.
@@ -812,22 +828,49 @@ register_final_registration_routine(void (*func)(void));
 extern void
 final_registration_all_protocols(void);
 
-/*
+// XXX Should we move frame_data.encoding here?
+typedef enum {
+    DS_MEDIA_TYPE_APPLICATION_OCTET_STREAM,
+    DS_MEDIA_TYPE_APPLICATION_JSON,
+} data_source_media_type_e;
+
+struct data_source;
+
+/**
  * Add a new data source to the list of data sources for a frame, given
- * the tvbuff for the data source and its name.
+ * the tvbuff for the data source and its name. The media type will be
+ * set to DS_MEDIA_TYPE_APPLICATION_OCTET_STREAM.
+ * @param pinfo Packet info.
+ * @param tvb The tvbuff to associate with the data source.
+ * @param name A display-freindly name of the data source.
+ * @return An opaque pointer to the data source.
  */
-WS_DLL_PUBLIC void add_new_data_source(packet_info *pinfo, tvbuff_t *tvb,
+WS_DLL_PUBLIC struct data_source* add_new_data_source(packet_info *pinfo, tvbuff_t *tvb,
     const char *name);
+
+/**
+ * Set the media type for the data source. This will be used as a hint
+ * to display the source's tvbuff.
+ * @param src The data source.
+ * @param media_type A valid media type.
+ */
+WS_DLL_PUBLIC void set_data_source_media_type(struct data_source *src, data_source_media_type_e media_type);
+
 /* Removes the last-added data source, if it turns out it wasn't needed */
 WS_DLL_PUBLIC void remove_last_data_source(packet_info *pinfo);
 
 /*
  * Return the data source name, tvb.
  */
-struct data_source;
 WS_DLL_PUBLIC char *get_data_source_name(const struct data_source *src);
 WS_DLL_PUBLIC tvbuff_t *get_data_source_tvb(const struct data_source *src);
 WS_DLL_PUBLIC tvbuff_t *get_data_source_tvb_by_name(packet_info *pinfo, const char *name);
+/**
+ * Get a data source's media type.
+ * @param src The data source.
+ * @return A media type.
+ */
+WS_DLL_PUBLIC data_source_media_type_e get_data_source_media_type(const struct data_source *src);
 
 /*
  * Free up a frame's list of data sources.
@@ -863,13 +906,13 @@ typedef struct file_data_s
  * Dissectors should never modify the record data.
  */
 extern void dissect_record(struct epan_dissect *edt, int file_type_subtype,
-    wtap_rec *rec, tvbuff_t *tvb, frame_data *fd, column_info *cinfo);
+    wtap_rec *rec, frame_data *fd, column_info *cinfo);
 
 /*
- * Dissectors should never modify the packet data.
+ * Dissectors should never modify the file data.
  */
 extern void dissect_file(struct epan_dissect *edt,
-    wtap_rec *rec, tvbuff_t *tvb, frame_data *fd, column_info *cinfo);
+    wtap_rec *rec, frame_data *fd, column_info *cinfo);
 
 /* Structure passed to the ethertype dissector */
 typedef struct ethertype_data_s

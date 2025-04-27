@@ -825,7 +825,7 @@ static int read_c2(tvbuff_t *tvb, int offset, uint16_t *v, int *len);
 static void validate_c2(packet_info *pinfo, proto_item *pi, uint16_t, int len);
 
 static int dof_dissect_pdu(dissector_t dissector, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *result);
-static int dof_dissect_pdu_as_field(dissector_t disector, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int item, int ett, void *result);
+static int dof_dissect_pdu_as_field(dissector_t dissector, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int item, int ett, void *result);
 
 #if 0 /* TODO not used yet */
 static void dof_session_add_proto_data(dof_session_data *session, int proto, void *proto_data);
@@ -5186,7 +5186,6 @@ static void learn_operation_sid(dof_2009_1_pdu_20_opid *opid, uint8_t length, co
 static void generateMac(gcry_cipher_hd_t cipher_state, uint8_t *nonce, const uint8_t *epp, int a_len, uint8_t *data, int len, uint8_t *mac, int mac_len)
 {
     uint16_t i;
-    uint16_t cnt;
 
     /* a_len = 1, t = mac_len, q = 4: (t-2)/2 : (q-1) -> 4B */
     mac[0] = 0x43 | (((mac_len - 2) / 2) << 3);
@@ -5201,7 +5200,7 @@ static void generateMac(gcry_cipher_hd_t cipher_state, uint8_t *nonce, const uin
     mac[1] ^= (a_len);
     i = 2;
 
-    for (cnt = 0; cnt < a_len; cnt++, i++)
+    for (int cnt = 0; cnt < a_len; cnt++, i++)
     {
         if (i % 16 == 0)
             gcry_cipher_encrypt(cipher_state, mac, 16, NULL, 0);
@@ -5210,7 +5209,7 @@ static void generateMac(gcry_cipher_hd_t cipher_state, uint8_t *nonce, const uin
     }
 
     i = 0;
-    for (cnt = 0; cnt < len; cnt++, i++)
+    for (int cnt = 0; cnt < len; cnt++, i++)
     {
         if (i % 16 == 0)
             gcry_cipher_encrypt(cipher_state, mac, 16, NULL, 0);
@@ -5223,8 +5222,7 @@ static void generateMac(gcry_cipher_hd_t cipher_state, uint8_t *nonce, const uin
 
 static int decrypt(ccm_session_data *session, ccm_packet_data *pdata, uint8_t *nonce, const uint8_t *epp, int a_len, uint8_t *data, int len)
 {
-    unsigned short i;
-
+    int i;
     unsigned char ctr[16];
     unsigned char encrypted_ctr[16];
     unsigned char mac[16];
@@ -5323,7 +5321,7 @@ static int dissect_app_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
         col_add_fstr(pinfo->cinfo, COL_PROTOCOL, "APP(%u)", app);
 
         /* call the next dissector */
-        if (dissector_try_uint_new(app_dissectors, app, tvb, pinfo, tree, true, data))
+        if (dissector_try_uint_with_data(app_dissectors, app, tvb, pinfo, tree, true, data))
         {
             col_set_fence(pinfo->cinfo, COL_PROTOCOL);
             col_set_fence(pinfo->cinfo, COL_INFO);
@@ -5408,7 +5406,7 @@ static int dof_dissect_dpp_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
         }
 
         /* call the next dissector */
-        if (dissector_try_uint_new(dof_dpp_dissectors, dpp_version, tvb, pinfo, dpp_root, false, data))
+        if (dissector_try_uint_with_data(dof_dpp_dissectors, dpp_version, tvb, pinfo, dpp_root, false, data))
         {
             col_set_fence(pinfo->cinfo, COL_PROTOCOL);
             col_set_fence(pinfo->cinfo, COL_INFO);
@@ -5446,7 +5444,7 @@ static int dof_dissect_dnp_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
     proto_tree_add_item(dnp_tree, hf_2008_1_dnp_1_version, tvb, offset, 1, ENC_NA);
 
     /* call the next dissector */
-    if (dissector_try_uint_new(dnp_dissectors, dnp_version, tvb, pinfo, dnp_root, false, api_data))
+    if (dissector_try_uint_with_data(dnp_dissectors, dnp_version, tvb, pinfo, dnp_root, false, api_data))
     {
         /* Since the transport may have additional packets in this frame, protect our work. */
         col_set_fence(pinfo->cinfo, COL_PROTOCOL);

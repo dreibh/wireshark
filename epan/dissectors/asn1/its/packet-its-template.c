@@ -119,6 +119,8 @@ static dissector_handle_t its_handle;
 
 static expert_field ei_its_no_sub_dis;
 
+static bool wrappedcontainers_as_extended;
+
 // TAP
 static int its_tap;
 
@@ -235,7 +237,7 @@ static int dissect_regextval_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 {
     its_private_data_t *re = (its_private_data_t*)data;
     // XXX What to do when region_id = noRegion? Test length is zero?
-    if (!dissector_try_uint_new(regionid_subdissector_table, ((uint32_t) re->region_id<<16) + (uint32_t) re->type, tvb, pinfo, tree, false, NULL))
+    if (!dissector_try_uint_with_data(regionid_subdissector_table, ((uint32_t) re->region_id<<16) + (uint32_t) re->type, tvb, pinfo, tree, false, NULL))
         call_data_dissector(tvb, pinfo, tree);
     return tvb_captured_length(tvb);
 }
@@ -244,7 +246,7 @@ static int dissect_regextval_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 static int dissect_cpmcontainers_pdu(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_)
 {
     // XXX What to do when region_id = noRegion? Test length is zero?
-    if (!dissector_try_uint_new(cpmcontainer_subdissector_table, its_get_private_data(pinfo)->CpmContainerId, tvb, pinfo, tree, false, NULL))
+    if (!dissector_try_uint_with_data(cpmcontainer_subdissector_table, its_get_private_data(pinfo)->CpmContainerId, tvb, pinfo, tree, false, NULL))
         call_data_dissector(tvb, pinfo, tree);
     return tvb_captured_length(tvb);
 }
@@ -1005,6 +1007,7 @@ void proto_register_its(void)
     };
 
     expert_module_t* expert_its;
+    module_t* its_module;
 
     proto_its = proto_register_protocol("Intelligent Transport Systems", "ITS", "its");
 
@@ -1058,6 +1061,14 @@ void proto_register_its(void)
     register_decode_as(&its_da);
 
     its_tap = register_tap("its");
+
+    its_module = prefs_register_protocol(proto_its,
+        proto_reg_handoff_its);
+
+    prefs_register_bool_preference(its_module, "wrappedcontainers_as_extended",
+        "Dissect WrappedCpmContainers as extendable",
+        "Some asn1 compilers generates code as if WrappedCpmContainers was extensible(Wrong)",
+        &wrappedcontainers_as_extended);
 }
 
 #define BTP_SUBDISS_SZ 2
@@ -1080,7 +1091,7 @@ void proto_register_its(void)
 #define ITS_TIS_TPG_PROT_VER 1
 #define ITS_CPM_PROT_VERv1 1
 #define ITS_CPM_PROT_VER 2
-#define ITS_VAM_PROT_VER 2
+#define ITS_VAM_PROT_VER 3
 #define ITS_IMZM_PROT_VER 2
 
 void proto_reg_handoff_its(void)

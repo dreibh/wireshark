@@ -83,6 +83,16 @@ class TestDecrypt80211:
         assert grep_output(stdout, 'DHCP Request')          # Verifies TK is correct
         assert grep_output(stdout, r'Echo \(ping\) request') # Verifies TK is correct
 
+    def test_80211_wpa2_psk_ccmp_tkip(self, cmd_tshark, capture_file, features, test_env):
+        '''IEEE 802.11 decode WPA2 PSK CCMP/TKIP'''
+        # Included in git sources test/captures/wpa2-psk-ccmp-tkip.pcapng.gz
+        stdout = subprocess.check_output((cmd_tshark,
+                '-o', 'wlan.enable_decryption: TRUE',
+                '-r', capture_file('wpa2-psk-ccmp-tkip.pcapng.gz'),
+                '-Y', 'wlan.analysis.tk == 79712dd69a793c86a04b51e6aab91690 || wlan.analysis.gtk == c72aa2501e3be7d774badbd3b6c2bbe9',
+                ), encoding='utf-8', env=test_env)
+        assert count_output(stdout, r'ICMP.*Echo \(ping\)') == 5 # Verify unicast and broadcast frame decryption
+
     def test_80211_wpa_tdls(self, cmd_tshark, capture_file, features, test_env):
         '''WPA decode traffic in a TDLS (Tunneled Direct-Link Setup) session (802.11z)'''
         # Included in git sources test/captures/wpa-test-decode-tdls.pcap.gz
@@ -256,6 +266,20 @@ class TestDecrypt80211:
         assert grep_output(stdout, 'Who has 192.168.1.1')    # Verifies GTK decryption
         assert grep_output(stdout, r'Echo \(ping\) request') # Verifies TK decryption
 
+    def test_80211_wpa3_ft_sae_h2e(self, cmd_tshark, capture_file, test_env):
+        '''IEEE 802.11 decode WPA3 FT SAE H2E'''
+        # Included in git sources test/captures/wpa3-ft-sae-h2e.pcapng.gz
+        stdout = subprocess.check_output((cmd_tshark,
+                '-o', 'wlan.enable_decryption: TRUE',
+                '-r', capture_file('wpa3-ft-sae-h2e.pcapng.gz'),
+                '-Y', 'wlan.analysis.tk == 8c75edf396af8dea241eb72b2793489b || wlan.analysis.gtk == a31a5307ed7b250603cf1a33d1c1eee6 || wlan.analysis.tk == e80866b0ed3b534e1a924a1674e664ba',
+                ), encoding='utf-8', env=test_env)
+        assert count_output(stdout, 'DHCP Request') == 4
+        assert count_output(stdout, 'DHCP ACK') == 2
+        assert count_output(stdout, 'ARP.*Who has') == 4
+        assert count_output(stdout, 'ARP.*is at') == 2
+        assert count_output(stdout, r'ICMP.*Echo \(ping\)') == 4
+
 class TestDecrypt80211UserTk:
     def test_80211_user_tk_tkip(self, cmd_tshark, capture_file, test_env):
         '''IEEE 802.11 decode TKIP using user TK'''
@@ -359,7 +383,7 @@ class TestDecryptDTLS:
         key_file = os.path.join(dirs.key_dir, 'udt-dtls.key')
         stdout = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('udt-dtls.pcapng.gz'),
-                '-o', 'dtls.keys_list:0.0.0.0,0,data,{}'.format(key_file),
+                '-o', 'uat:rsa_keys:"{}",""'.format(key_file.replace('\\', '\\x5c')),
                 '-Y', 'dtls && udt.type==ack',
             ), encoding='utf-8', env=test_env)
         assert grep_output(stdout, 'UDT')
@@ -387,7 +411,7 @@ class TestDecryptTLS:
         key_file = os.path.join(dirs.key_dir, 'rsa-p-lt-q.key')
         stdout = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('rsa-p-lt-q.pcap'),
-                '-o', 'tls.keys_list:0.0.0.0,443,http,{}'.format(key_file),
+                '-o', 'uat:ssl_keys:"","","","{}",""'.format(key_file.replace('\\', '\\x5c')),
                 '-Tfields',
                 '-e', 'http.request.uri',
                 '-Y', 'http',
@@ -444,7 +468,7 @@ class TestDecryptTLS:
         # Test protocol alias while at it (ssl -> tls)
         stdout = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('tls-renegotiation.pcap'),
-                '-o', 'tls.keys_list:0.0.0.0,4433,http,{}'.format(key_file),
+                '-o', 'uat:rsa_keys:"{}",""'.format(key_file.replace('\\', '\\x5c')),
                 '-d', 'tcp.port==4433,ssl',
                 '-Tfields',
                 '-e', 'http.content_length',
@@ -593,8 +617,8 @@ class TestDecryptTLS:
         key_file = os.path.join(dirs.key_dir, 'tls-over-tls.key')
         output = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('tls-over-tls.pcapng.gz'),
-                '-o', 'tls.keys_list:0.0.0.0,443,http,{}'.format(key_file),
-                '-z', 'expert,tls.handshake.certificates',
+                '-o', 'uat:rsa_keys:"{}",""'.format(key_file.replace('\\', '\\x5c')),
+                '-z', 'expert,warn,tls.handshake.certificates',
                 '-Tfields',
                 '-e', 'tls.handshake.certificate_length',
                 '-Y', 'tls.handshake.certificates',
@@ -1453,3 +1477,16 @@ class TestDecryptSmb2:
                            r'\\172.31.9.163\IPC$', '56dc03ab00000000',
                            '484c30bf3e17e322e0d217764d4584a325ec0495519c3f1547e0f996ab76c4c4',
                            '46b64f320a0f856b63b3a0dc2c058a67267830a8cbdd44a088fbf1d0308a981f', env=test_env)
+
+
+class TestDecryptVNCExtendedClipboard:
+
+    def test_utf8_clipboard_ok(self, cmd_tshark, capture_file, test_env):
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('vnc_clipboard.pcap.gz'),
+                '-Tfields',
+                '-e', 'vnc.clipboard.text',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, '😀😃😄😁😆😅😂🤣😊😇')
+        assert grep_output(stdout, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ')
+        assert grep_output(stdout, 'абвгдежзийклмнопрстуфхцчшщъыьэюя')

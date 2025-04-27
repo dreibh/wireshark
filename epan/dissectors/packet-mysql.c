@@ -90,6 +90,9 @@ void proto_reg_handoff_mysql(void);
 #define MYSQL_FLD_TIMESTAMP_FLAG      0x0400
 #define MYSQL_FLD_SET_FLAG            0x0800
 
+/* param flags */
+#define PARAM_UNSIGNED 0x80
+
 /* extended capabilities: 4.1+ client only
  *
  * These are libmysqlclient flags and NOT present
@@ -1269,12 +1272,6 @@ static int hf_mysql_affected_rows;
 static int hf_mysql_insert_id;
 static int hf_mysql_num_warn;
 static int hf_mysql_stmt_id;
-static int hf_mysql_query_attributes;
-static int hf_mysql_query_attributes_count;
-static int hf_mysql_query_attributes_send_types_to_server;
-static int hf_mysql_query_attribute_name_type;
-static int hf_mysql_query_attribute_name;
-static int hf_mysql_query_attribute_value;
 static int hf_mysql_query;
 static int hf_mysql_shutdown;
 static int hf_mysql_option;
@@ -1314,6 +1311,7 @@ static int hf_mysql_binlog_gtid_data;
 static int hf_mysql_binlog_gtid_data_length;
 static int hf_mysql_binlog_hb_event_filename;
 static int hf_mysql_binlog_hb_event_log_position;
+static int hf_mysql_binlog_semisync_flag;
 static int hf_mysql_clone_command_code;
 static int hf_mysql_clone_response_code;
 static int hf_mysql_eof;
@@ -1557,6 +1555,12 @@ static const value_string state_vals[] = {
 	{CLONE_EXIT,           "cloning shutting down"},
 	{RESPONSE_LOCALINFILE, "local infile"},
 	{INFILE_DATA,          "local infile data"},
+	{0, NULL}
+};
+
+static const value_string mysql_binlog_semisync_flag_vals[] = {
+	{0, "Ack not requested"},
+	{1, "Ack requested"},
 	{0, NULL}
 };
 
@@ -2435,7 +2439,7 @@ mysql_dissect_exec_param(proto_item *req_tree, tvbuff_t *tvb, int *offset,
 	*offset += 1; /* type */
 
 	proto_tree_add_item(field_tree, hf_mysql_exec_unsigned, tvb, *offset, 1, ENC_NA);
-	if ((tvb_get_uint8(tvb, *offset) & 128) == 128) {
+	if ((tvb_get_uint8(tvb, *offset) & PARAM_UNSIGNED) == PARAM_UNSIGNED) {
 		param_unsigned = 1;
 	} else {
 		param_unsigned = 0;
@@ -2517,6 +2521,8 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 		return mysql_dissect_auth_sha2(tvb, pinfo, offset, tree, conn_data);
 	case INFILE_DATA:
 		return mysql_dissect_loaddata(tvb, pinfo, offset, tree, conn_data);
+	case BINLOG_DUMP:
+		return mysql_dissect_binlog_event_packet(tvb, pinfo, offset, tree, tree);
 	default:;
 	}
 
@@ -2563,33 +2569,36 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 		/* Check both the extended capabilities of the client and server. The flag is set by the client
 		 * even if the server didn't set it. This is only actively used if both set the flag. */
 		if ((conn_data->clnt_caps_ext & MYSQL_CAPS_QA) && (conn_data->srv_caps_ext & MYSQL_CAPS_QA)){
-			proto_item *query_attrs_item = proto_tree_add_item(req_tree, hf_mysql_query_attributes, tvb, offset, -1, ENC_NA);
-			proto_item *query_attrs_tree = proto_item_add_subtree(query_attrs_item, ett_query_attributes);
 			// XXX - https://dev.mysql.com/doc/dev/mysql-server/latest/page_protocol_com_query.html
 			// suggests n_params is length encoded. Use tvb_get_fle?
 			// (More than 250 parameters *does* seem unlikely.)
 			int n_params = tvb_get_uint8(tvb, offset);
-			proto_tree_add_item(query_attrs_tree, hf_mysql_query_attributes_count, tvb, offset, 1, ENC_ASCII);
+			proto_tree_add_item(req_tree, hf_mysql_num_params, tvb, offset, 1, ENC_ASCII);
 			offset += 2;
 
-			if (n_params > 0) {
+			if ((n_params > 0) && (n_params <= 250)) {
 				int null_count = (n_params + 7) / 8;
-				proto_tree_add_item(query_attrs_tree, hf_mysql_unused, tvb, offset, null_count, ENC_ASCII);
+				proto_tree_add_item(req_tree, hf_mysql_unused, tvb, offset, null_count, ENC_ASCII);
 				offset += null_count;
 
-				proto_tree_add_item(query_attrs_tree, hf_mysql_query_attributes_send_types_to_server, tvb, offset, 1, ENC_ASCII);
+				proto_tree_add_item(req_tree, hf_mysql_new_parameter_bound_flag, tvb, offset, 1, ENC_ASCII);
 				offset += 1;
 
 				unsigned encoding = my_frame_data->encoding_client;
 
-				for (int i = 0; i < n_params; ++i) {
-					proto_tree_add_item(query_attrs_tree, hf_mysql_query_attribute_name_type, tvb, offset, 2, ENC_ASCII);
-					offset += 2;
-					offset = mysql_field_add_lestring(tvb, offset, query_attrs_tree, hf_mysql_query_attribute_name, encoding);
+				if (conn_data->clnt_caps_ext & MYSQL_CAPS_QA) {
+					param_offset = mysql_exec_param_offset(tvb, req_tree, offset, (unsigned)n_params);
+				} else {
+					param_offset = offset + (unsigned)n_params * 2;
 				}
-				for (int i = 0; i < n_params; ++i) {
-					offset = mysql_field_add_lestring(tvb, offset, query_attrs_tree, hf_mysql_query_attribute_value, encoding);
+
+				for (int i = 0; i<n_params; i++) {
+					if (!mysql_dissect_exec_param(req_tree, tvb, &offset, &param_offset,
+						0, pinfo, encoding,
+						conn_data->clnt_caps_ext & MYSQL_CAPS_QA))
+						break;
 				}
+				offset = param_offset;
 			}
 		}
 		// The SQL statement is a string<EOF>, because it can
@@ -2766,7 +2775,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 
 		/* rest is data */
 		lenstr = tvb_reported_length_remaining(tvb, offset);
-		if (tree &&  lenstr > 0) {
+		if (tree && lenstr > 0) {
 			proto_tree_add_item(req_tree, hf_mysql_payload, tvb, offset, lenstr, ENC_NA);
 		}
 		offset += lenstr;
@@ -2911,7 +2920,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 			}
 		} else {
 			lenstr = tvb_reported_length_remaining(tvb, offset);
-			if (tree &&  lenstr > 0) {
+			if (tree && lenstr > 0) {
 				ti = proto_tree_add_item(req_tree, hf_mysql_payload, tvb, offset, lenstr, ENC_NA);
 				expert_add_info(pinfo, ti, &ei_mysql_prepare_response_needed);
 			}
@@ -2968,7 +2977,7 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 
 		/* binlog file name ? */
 		lenstr = tvb_reported_length_remaining(tvb, offset);
-		if (tree &&  lenstr > 0) {
+		if (tree && lenstr > 0) {
 			proto_tree_add_item(req_tree, hf_mysql_binlog_file_name, tvb, offset, lenstr, ENC_ASCII);
 		}
 		offset += lenstr;
@@ -3423,9 +3432,7 @@ mysql_dissect_ok_packet(tvbuff_t *tvb, packet_info *pinfo, int offset,
 	offset += fle;
 
 	fle= tvb_get_fle(tvb, tree, offset, &insert_id, NULL);
-	if (tree && insert_id) {
-		proto_tree_add_uint64(tree, hf_mysql_insert_id, tvb, offset, fle, insert_id);
-	}
+	proto_tree_add_uint64(tree, hf_mysql_insert_id, tvb, offset, fle, insert_id);
 	offset += fle;
 
 	if (tvb_reported_length_remaining(tvb, offset) > 0) {
@@ -3900,6 +3907,12 @@ mysql_dissect_response_prepare(tvbuff_t *tvb, packet_info *pinfo, int offset, pr
 
 /**
   Enumeration type for the different types of log events.
+
+  For MySQL, see Log_event_type in
+  https://github.com/mysql/mysql-server/blob/trunk/libs/mysql/binlog/event/binlog_event.h
+
+  For MariaDB, see
+  https://mariadb.com/kb/en/2-binlog-event-header/#event-type
 */
 enum Log_event_type {
 	/**
@@ -3991,63 +4004,81 @@ enum Log_event_type {
 	  Add new events here - right above this comment!
 	  Existing events (except ENUM_END_EVENT) should never change their numbers
 	*/
+
+	/* MariaDB specific events, starting at 0xa0 / 160 */
+	ANNOTATE_ROWS_EVENT = 160,
+	BINLOG_CHECKPOINT_EVENT = 161,
+	GTID_EVENT = 162,
+	GTID_LIST_EVENT = 163,
+	START_ENCRYPTION_EVENT = 164,
+	QUERY_COMPRESSED_EVENT = 165,
+	WRITE_ROWS_COMPRESSED_V1 = 166,
+	UPDATE_ROWS_COMPRESSED_V1 = 167,
+	DELETE_ROWS_COMPRESSED_V1 = 168,
+	WRITE_ROWS_V1 = 169,
+	UPDATE_ROWS_V1 = 170,
+	DELETE_ROWS_V1 = 171,
+
 	ENUM_END_EVENT /* end marker */
 };
 
 static const value_string mysql_binlog_event_type_vals[] = {
+	// MySQL Events
 	{0, "Unknown"},
-
 	{1, "START_EVENT_V3"},
 	{2, "Query"},
 	{3, "Stop"},
 	{4, "Rotate"},
 	{5, "Intvar"},
-
+	// 6
 	{7, "SLAVE_EVENT"},
-
+	// 8
 	{9, "Append_block"},
 	{11, "Delete_file"},
-
+	// 12
 	{13, "RAND"},
 	{14, "User_var"},
 	{15, "Format_desc"},
 	{16, "Xid"},
 	{17, "Begin_load_query"},
 	{18, "Execute_load_query"},
-
 	{19, "Table_map"},
-
+	// 20-22
 	{23, "Write_rows_v1"},
 	{24, "Update_rows_v1"},
 	{25, "Delete_rows_v1"},
-
 	{26, "Incident"},
-
 	{27, "Heartbeat"},
-
 	{28, "Ignorable"},
 	{29, "Rows_query"},
-
 	{30, "Write_rows"},
 	{31, "Update_rows"},
 	{32, "Delete_rows"},
-
 	{33, "Gtid"},
 	{34, "Anonymous_Gtid"},
-
 	{35, "Previous_gtids"},
-
 	{36, "Transaction_context"},
-
 	{37, "View_change"},
-
 	{38, "XA_prepare"},
-
 	{39, "Update_rows_partial"},
-
 	{40, "Transaction_payload"},
-
 	{41, "Heartbeat_v2"},
+	{42, "GTID_tagged"},
+
+	// MariaDB events
+	{160, "Annotate_rows"},
+	{161, "Binlog_checkpoint"},
+	{162, "Gtid"},
+	{163, "Gtid_list"},
+	{164, "Start_encryption"},
+	{165, "Query_compressed"},
+	{166, "Write_rows_compressed"},
+	{167, "Update_rows_compressed"},
+	{168, "Delete_rows_compressed"},
+	{169, "MariaDB_Write_rows_v1"},
+	{170, "MariaDB_Update_rows_v1"},
+	{171, "MariaDB_Delete_rows_v1"},
+
 	{0, NULL},
 };
 
@@ -4104,6 +4135,27 @@ mysql_dissect_binlog_event_heartbeat_v2(tvbuff_t *tvb, packet_info *pinfo, int o
 	return offset;
 }
 
+// https://jan.kneschke.de/projects/mysql/mysql-55s-semi-sync-replication-the-protocol-side/
+static int
+mysql_dissect_binlog_semisync_ack(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree)
+{
+	int lenstr;
+
+	col_append_str(pinfo->cinfo, COL_INFO, "Semisync ACK");
+	proto_item_append_text(tree, " - Semisync ACK");
+
+	proto_tree_add_item(tree, hf_mysql_binlog_position8, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+	offset += 8;
+
+	lenstr = tvb_reported_length_remaining(tvb, offset);
+	if (tree && lenstr > 0) {
+		proto_tree_add_item(tree, hf_mysql_binlog_file_name, tvb, offset, lenstr, ENC_ASCII);
+	}
+	offset += lenstr;
+
+	return offset;
+}
+
 static int
 mysql_dissect_binlog_event_header(tvbuff_t *tvb, int offset, proto_tree *tree, proto_item *pi)
 {
@@ -4133,26 +4185,45 @@ static int
 mysql_dissect_binlog_event_packet(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree, proto_item *pi)
 {
 	uint8_t event_type;
-	int fle;
+	int fle, semisync_marker;
+	bool is_response = true;
 
-	col_append_str(pinfo->cinfo, COL_INFO, "Binlog Event " );
+	if (pinfo->destport == pinfo->match_uint) {
+		is_response = false;
+	}
+
+	col_append_str(pinfo->cinfo, COL_INFO, is_response ? "Binlog Event " : " Binlog Event ");
 	col_set_fence(pinfo->cinfo, COL_INFO);
 
-	event_type = tvb_get_uint8(tvb, offset + 4);
-	offset = mysql_dissect_binlog_event_header(tvb, offset, tree, pi);
+	semisync_marker = tvb_get_uint8(tvb, offset);
 
-	switch (event_type) {
-		case HEARTBEAT_LOG_EVENT_V2:
-			offset = mysql_dissect_binlog_event_heartbeat_v2(tvb, pinfo, offset, tree);
-			break;
-		default:
-			fle = tvb_reported_length_remaining(tvb, offset);
-			offset += fle - 4;
-			break;
+	if (is_response) {
+		if (semisync_marker == 0xef) {
+			offset++; // Marker
+			proto_tree_add_item(tree, hf_mysql_binlog_semisync_flag, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+			offset++; // Flag
+		}
+
+		event_type = tvb_get_uint8(tvb, offset + 4);
+		offset = mysql_dissect_binlog_event_header(tvb, offset, tree, pi);
+
+		switch (event_type) {
+			case HEARTBEAT_LOG_EVENT_V2:
+				offset = mysql_dissect_binlog_event_heartbeat_v2(tvb, pinfo, offset, tree);
+				break;
+			default:
+				fle = tvb_reported_length_remaining(tvb, offset);
+				offset += fle - 4;
+				break;
+		}
+		// checksum
+		proto_tree_add_item(tree, hf_mysql_binlog_event_checksum, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+		offset += 4;
+	} else {
+		if (semisync_marker == 0xef)
+			offset++; // just a marker
+		offset = mysql_dissect_binlog_semisync_ack(tvb, pinfo, offset, tree);
 	}
-	// checksum
-	proto_tree_add_item(tree, hf_mysql_binlog_event_checksum, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-	offset += 4;
 
 	return offset;
 }
@@ -5452,36 +5523,6 @@ void proto_register_mysql(void)
 		FT_UINT32, BASE_DEC, NULL, 0x0,
 		NULL, HFILL }},
 
-		{ &hf_mysql_query_attributes,
-                { "Query Attributes", "mysql.query_attrs",
-                        FT_NONE, BASE_NONE, NULL, 0x0,
-                        NULL, HFILL }},
-
-		{ &hf_mysql_query_attributes_count,
-                { "Count", "mysql.query_attrs_count",
-                        FT_UINT8, BASE_DEC, NULL,  0x0,
-                        NULL, HFILL }},
-
-		{ &hf_mysql_query_attributes_send_types_to_server,
-                { "Send types to server", "mysql.query_attrs_send_types_to_server",
-                        FT_BOOLEAN, BASE_NONE, NULL, 0x0,
-                        NULL, HFILL }},
-
-		{ &hf_mysql_query_attribute_name_type,
-                { "Attribute Name Type", "mysql.query_attr_name_type",
-                        FT_UINT16, BASE_HEX, NULL, 0x0,
-                        NULL, HFILL }},
-
-		{ &hf_mysql_query_attribute_name,
-                { "Attribute Name", "mysql.query_attr_name",
-                        FT_STRING, BASE_NONE, NULL, 0x0,
-                        NULL, HFILL }},
-
-		{ &hf_mysql_query_attribute_value,
-                { "Attribute Value", "mysql.query_attr_value",
-                        FT_STRING, BASE_NONE, NULL, 0x0,
-                        NULL, HFILL }},
-
 		{ &hf_mysql_query,
 		{ "Statement", "mysql.query",
 		FT_STRING, BASE_NONE, NULL, 0x0,
@@ -5681,6 +5722,11 @@ void proto_register_mysql(void)
 		{ "Binlog Position", "mysql.binlog.hb_event.log_position",
 		FT_UINT64, BASE_DEC, NULL, 0x0,
 		"position of the next event", HFILL }},
+
+		{ &hf_mysql_binlog_semisync_flag,
+		{ "Semisync Flag", "mysql.binlog.semisync.flag",
+		FT_UINT8, BASE_DEC, VALS(mysql_binlog_semisync_flag_vals), 0x0,
+		NULL, HFILL }},
 
 		{ &hf_mysql_clone_command_code,
 		{ "Clone Command Code", "mysql.clone.command_code",

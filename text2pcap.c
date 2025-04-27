@@ -100,6 +100,7 @@
 #include "wiretap/pcap-encap.h"
 
 #define LONGOPT_COMPRESS                LONGOPT_BASE_APPLICATION+1
+#define LONGOPT_LITTLE_ENDIAN           LONGOPT_BASE_APPLICATION+2
 
 /*--- Options --------------------------------------------------------------------*/
 
@@ -390,6 +391,7 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
         {"help", ws_no_argument, NULL, 'h'},
         {"version", ws_no_argument, NULL, 'v'},
         {"compress", ws_required_argument, NULL, LONGOPT_COMPRESS},
+        {"little-endian", ws_no_argument, NULL, LONGOPT_LITTLE_ENDIAN},
         {0, 0, 0, 0 }
     };
     const char *interface_name = NULL;
@@ -747,6 +749,10 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
             }
             break;
 
+        case LONGOPT_LITTLE_ENDIAN:
+            info->hexdump.little_endian = true;
+            break;
+
         case '?':
             switch(ws_optopt) {
             case 'E':
@@ -1026,28 +1032,6 @@ parse_options(int argc, char *argv[], text_import_info_t * const info, wtap_dump
     return EXIT_SUCCESS;
 }
 
-/*
- * General errors and warnings are reported with an console message
- * in text2pcap.
- */
-static void
-text2pcap_cmdarg_err(const char *msg_format, va_list ap)
-{
-    fprintf(stderr, "text2pcap: ");
-    vfprintf(stderr, msg_format, ap);
-    fprintf(stderr, "\n");
-}
-
-/*
- * Report additional information for an error in command-line arguments.
- */
-static void
-text2pcap_cmdarg_err_cont(const char *msg_format, va_list ap)
-{
-    vfprintf(stderr, msg_format, ap);
-    fprintf(stderr, "\n");
-}
-
 int
 main(int argc, char *argv[])
 {
@@ -1057,10 +1041,13 @@ main(int argc, char *argv[])
     wtap_dump_params params;
     uint64_t bytes_written;
 
-    cmdarg_err_init(text2pcap_cmdarg_err, text2pcap_cmdarg_err_cont);
+    /* Set the program name. */
+    g_set_prgname("text2pcap");
+
+    cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init("text2pcap", vcmdarg_err);
+    ws_log_init(vcmdarg_err);
 
     /* Early logging command-line initialization. */
     ws_log_parse_args(&argc, argv, vcmdarg_err, WS_EXIT_INVALID_OPTION);
@@ -1076,7 +1063,7 @@ main(int argc, char *argv[])
     /*
      * Make sure our plugin path is initialized for wtap_init.
      */
-    configuration_init_error = configuration_init(argv[0], NULL);
+    configuration_init_error = configuration_init(argv[0]);
     if (configuration_init_error != NULL) {
         cmdarg_err("Can't get pathname of directory containing the text2pcap program: %s.",
                 configuration_init_error);

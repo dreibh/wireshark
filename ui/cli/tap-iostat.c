@@ -12,12 +12,16 @@
 
 #include <stdlib.h>
 #include <string.h>
+#include <locale.h>
 
 #include <epan/epan_dissect.h>
 #include <epan/tap.h>
 #include <epan/stat_tap_ui.h>
 #include "globals.h"
 #include <wsutil/ws_assert.h>
+#include <wsutil/time_util.h>
+#include <wsutil/to_str.h>
+#include <wsutil/cmdarg_err.h>
 
 #define CALC_TYPE_FRAMES 0
 #define CALC_TYPE_BYTES  1
@@ -54,7 +58,7 @@ typedef struct _io_stat_t {
     unsigned invl_prec;      /* Decimal precision of the time interval (1=10s, 2=100s etc) */
     unsigned int num_cols;         /* The number of columns of stats in the table */
     struct _io_stat_item_t *items;  /* Each item is a single cell in the table */
-    time_t start_time;    /* Time of first frame matching the filter */
+    nstime_t start_time;    /* Time of first frame matching the filter */
     /* The following are all per-column fixed information arrays */
     const char **filters; /* 'io,stat' cmd strings (e.g., "AVG(smb.time)smb.time") */
     uint64_t *max_vals;    /* The max value sans the decimal or nsecs portion in each stat column */
@@ -77,6 +81,8 @@ typedef struct _io_stat_item_t {
         double double_counter;
     };
 } io_stat_item_t;
+
+static char *io_decimal_point;
 
 #define NANOSECS_PER_SEC UINT64_C(1000000000)
 
@@ -107,8 +113,8 @@ iostat_packet(void *arg, packet_info *pinfo, epan_dissect_t *edt, const void *du
         relative_time = last_relative_time;
     }
 
-    if (mit->parent->start_time == 0) {
-        mit->parent->start_time = pinfo->abs_ts.secs - pinfo->rel_ts.secs;
+    if (nstime_is_unset(&mit->parent->start_time)) {
+        nstime_delta(&mit->parent->start_time, &pinfo->abs_ts, &pinfo->rel_ts);
     }
 
     /* The prev item is always the last interval in which we saw packets. */
@@ -550,24 +556,430 @@ typedef struct {
 } column_width;
 
 static void
+fill_abs_time(const nstime_t* the_time, char *time_buf, char *decimal_point, unsigned invl_prec, bool local)
+{
+    struct tm tm, *tmp;
+    char *ptr;
+    size_t remaining = NSTIME_ISO8601_BUFSIZE;
+    int num_bytes;
+
+    if (local) {
+        tmp = ws_localtime_r(&the_time->secs, &tm);
+    } else {
+        tmp = ws_gmtime_r(&the_time->secs, &tm);
+    }
+
+    if (tmp == NULL) {
+        snprintf(time_buf, remaining, "XX:XX:XX");
+        return;
+    }
+
+    ptr = time_buf;
+    num_bytes = snprintf(time_buf, NSTIME_ISO8601_BUFSIZE,
+        "%02d:%02d:%02d",
+        tmp->tm_hour,
+        tmp->tm_min,
+        tmp->tm_sec);
+    if (num_bytes < 0) {
+        // snprintf failed
+        snprintf(time_buf, remaining, "XX:XX:XX");
+        return;
+    }
+    ptr += num_bytes;
+    remaining -= num_bytes;
+    if (invl_prec != 0) {
+        num_bytes = format_fractional_part_nsecs(ptr, remaining,
+            (uint32_t)the_time->nsecs, decimal_point, invl_prec);
+        ptr += num_bytes;
+        remaining -= num_bytes;
+    }
+
+    if (!local) {
+        if (remaining == 1 && num_bytes > 0) {
+            /*
+             * If we copied a fractional part but there's only room
+             * for the terminating '\0', replace the last digit of
+             * the fractional part with the "Z". (Remaining is at
+             * least 1, otherwise we would have returned above.)
+             */
+            ptr--;
+            remaining++;
+        }
+        (void)g_strlcpy(ptr, "Z", remaining);
+    }
+    return;
+}
+
+static void
+fill_abs_ydoy_time(const nstime_t* the_time, char *time_buf, char *decimal_point, unsigned invl_prec, bool local)
+{
+    struct tm tm, *tmp;
+    char *ptr;
+    size_t remaining = NSTIME_ISO8601_BUFSIZE;
+    int num_bytes;
+
+    if (local) {
+        tmp = ws_localtime_r(&the_time->secs, &tm);
+    } else {
+        tmp = ws_gmtime_r(&the_time->secs, &tm);
+    }
+
+    if (tmp == NULL) {
+        snprintf(time_buf, remaining, "XXXX/XXX XX:XX:XX");
+        return;
+    }
+
+    ptr = time_buf;
+    num_bytes = snprintf(time_buf, NSTIME_ISO8601_BUFSIZE,
+        "%04d/%03d %02d:%02d:%02d",
+        tmp->tm_year + 1900,
+        tmp->tm_yday + 1,
+        tmp->tm_hour,
+        tmp->tm_min,
+        tmp->tm_sec);
+    if (num_bytes < 0) {
+        // snprintf failed
+        snprintf(time_buf, remaining, "XXXX/XXX XX:XX:XX");
+        return;
+    }
+    ptr += num_bytes;
+    remaining -= num_bytes;
+    if (invl_prec != 0) {
+        num_bytes = format_fractional_part_nsecs(ptr, remaining,
+            (uint32_t)the_time->nsecs, decimal_point, invl_prec);
+        ptr += num_bytes;
+        remaining -= num_bytes;
+    }
+
+    if (!local) {
+        if (remaining == 1 && num_bytes > 0) {
+            /*
+             * If we copied a fractional part but there's only room
+             * for the terminating '\0', replace the last digit of
+             * the fractional part with the "Z". (Remaining is at
+             * least 1, otherwise we would have returned above.)
+             */
+            ptr--;
+            remaining++;
+        }
+        (void)g_strlcpy(ptr, "Z", remaining);
+    }
+    return;
+}
+
+/* Calc the total width of each row in the stats table and build the printf format string for each
+*  column based on its field type, width, and name length.
+*  NOTE: The magnitude of all types including float and double are stored in iot->max_vals which
+*        is an *integer*. */
+static unsigned
+iostat_calc_cols_width_and_fmt(io_stat_t *iot, uint64_t interval, column_width* col_w, char**fmts)
+{
+    unsigned tabrow_w, type, ftype, namelen;
+    unsigned fr_mag;    /* The magnitude of the max frame number in this column */
+    unsigned val_mag;   /* The magnitude of the max value in this column */
+    char *fmt = NULL;
+
+    tabrow_w = 0;
+    for (unsigned j=0; j < iot->num_cols; j++) {
+        type = iot->calc_type[j];
+        if (type == CALC_TYPE_FRAMES_AND_BYTES) {
+            namelen = 5;
+        } else {
+            namelen = (unsigned int)strlen(calc_type_table[type].func_name);
+        }
+        if (type == CALC_TYPE_FRAMES
+         || type == CALC_TYPE_FRAMES_AND_BYTES) {
+
+            fr_mag = magnitude(iot->max_frame[j], 15);
+            fr_mag = MAX(6, fr_mag);
+            col_w[j].fr = fr_mag;
+            tabrow_w += col_w[j].fr + 3;
+
+            if (type == CALC_TYPE_FRAMES) {
+                fmt = g_strdup_printf(" %%%uu |", fr_mag);
+            } else {
+                /* CALC_TYPE_FRAMES_AND_BYTES
+                */
+                val_mag = magnitude(iot->max_vals[j], 15);
+                val_mag = MAX(5, val_mag);
+                col_w[j].val = val_mag;
+                tabrow_w += (col_w[j].val + 3);
+                fmt = g_strdup_printf(" %%%uu | %%%u"PRIu64 " |", fr_mag, val_mag);
+            }
+            if (fmt)
+                fmts[j] = fmt;
+            continue;
+        }
+        switch (type) {
+        case CALC_TYPE_BYTES:
+        case CALC_TYPE_COUNT:
+
+            val_mag = magnitude(iot->max_vals[j], 15);
+            val_mag = MAX(5, val_mag);
+            col_w[j].val = val_mag;
+            fmt = g_strdup_printf(" %%%u"PRIu64" |", val_mag);
+            break;
+
+        default:
+            ftype = proto_registrar_get_ftype(iot->hf_indexes[j]);
+            switch (ftype) {
+                case FT_FLOAT:
+                case FT_DOUBLE:
+                    val_mag = magnitude(iot->max_vals[j], 15);
+                    fmt = g_strdup_printf(" %%%u.6f |", val_mag);
+                    col_w[j].val = val_mag + 7;
+                    break;
+                case FT_RELATIVE_TIME:
+                    /* Convert FT_RELATIVE_TIME field to seconds
+                    *  CALC_TYPE_LOAD was already converted in iostat_packet() ) */
+                    if (type == CALC_TYPE_LOAD) {
+                        iot->max_vals[j] /= interval;
+                    } else if (type != CALC_TYPE_AVG) {
+                        iot->max_vals[j] = (iot->max_vals[j] + UINT64_C(500000000)) / NANOSECS_PER_SEC;
+                    }
+                    val_mag = magnitude(iot->max_vals[j], 15);
+                    fmt = g_strdup_printf(" %%%uu.%%06u |", val_mag);
+                    col_w[j].val = val_mag + 7;
+                   break;
+
+                default:
+                    val_mag = magnitude(iot->max_vals[j], 15);
+                    val_mag = MAX(namelen, val_mag);
+                    col_w[j].val = val_mag;
+
+                    switch (ftype) {
+                    case FT_UINT8:
+                    case FT_UINT16:
+                    case FT_UINT24:
+                    case FT_UINT32:
+                    case FT_UINT64:
+                        fmt = g_strdup_printf(" %%%u"PRIu64 " |", val_mag);
+                        break;
+                    case FT_INT8:
+                    case FT_INT16:
+                    case FT_INT24:
+                    case FT_INT32:
+                    case FT_INT64:
+                        fmt = g_strdup_printf(" %%%u"PRId64 " |", val_mag);
+                        break;
+                    }
+            } /* End of ftype switch */
+        } /* End of calc_type switch */
+        tabrow_w += col_w[j].val + 3;
+        if (fmt)
+            fmts[j] = fmt;
+    } /* End of for loop (columns) */
+
+    return tabrow_w;
+}
+
+static void
+iostat_draw_filters(unsigned borderlen, const io_stat_t *iot)
+{
+    const char *filter;
+    size_t len_filt;
+    GString *filt_str;
+
+    /* Display the list of filters and their column numbers vertically */
+    for (unsigned j=0; j<iot->num_cols; j++) {
+        if (j == 0) {
+            filt_str = g_string_new("| Col ");
+        } else {
+            filt_str = g_string_new("|     ");
+        };
+        g_string_append_printf(filt_str, "%2u: ", j + 1);
+        if (!iot->filters[j]) {
+            /* An empty (no filter) comma field was specified */
+            g_string_append(filt_str, "Frames and bytes");
+        } else {
+            filter = iot->filters[j];
+            len_filt = strlen(filter);
+            /* borderlen has been adjusted to try to accommodate the widest
+             * filter, but only up to a limit (currently 102 bytes), and so
+             * filters wider than that must still wrap. */
+            /* 11 is the length of "| Col XX: " plus the trailing "|" */
+            size_t max_w = borderlen - 11;
+
+            while (len_filt > max_w) {
+                const char *pos;
+                size_t len;
+                unsigned int next_start;
+
+                /* Find the pos of the last space in filter up to max_w. If a
+                 * space is found, copy up to that space; otherwise, wrap the
+                 * filter at max_w. */
+                pos = g_strrstr_len(filter, max_w, " ");
+                if (pos) {
+                    len = (size_t)(pos-filter);
+                    /* Skip the space when wrapping. */
+                    next_start = (unsigned int) len+1;
+                } else {
+                    len = max_w;
+                    next_start = (unsigned int)len;
+                }
+                g_string_append_len(filt_str, filter, len);
+                g_string_append_printf(filt_str, "%*s", (int)(borderlen - filt_str->len), "|");
+
+                puts(filt_str->str);
+                g_string_free(filt_str, TRUE);
+
+                filt_str = g_string_new("|         ");
+                filter = &filter[next_start];
+                len_filt = strlen(filter);
+            }
+
+            g_string_append(filt_str, filter);
+        }
+        g_string_append_printf(filt_str, "%*s", (int)(borderlen - filt_str->len), "|");
+        puts(filt_str->str);
+        g_string_free(filt_str, TRUE);
+    }
+}
+
+static void
+iostat_draw_header(unsigned borderlen, const io_stat_t *iot, const nstime_t *duration, const nstime_t *interval, ws_tsprec_e invl_prec)
+{
+    unsigned i;
+    char time_buf[NSTIME_ISO8601_BUFSIZE];
+
+    /* Display the top border */
+    printf("\n");
+    for (i=0; i<borderlen; i++)
+        printf("=");
+
+    printf("\n|%-*s|\n", borderlen - 2, " IO Statistics");
+    printf("|%-*s|\n", borderlen - 2, "");
+
+    /* For some reason, we print the total duration in microsecond precision
+     * here if the interval is in seconds precision, and use the interval
+     * precision otherwise.
+     */
+    ws_tsprec_e dur_prec = (invl_prec == WS_TSPREC_SEC) ? WS_TSPREC_USEC : invl_prec;
+    nstime_t dur_rounded;
+    nstime_rounded(&dur_rounded, duration, dur_prec);
+    int dur_mag = magnitude(duration->secs, 5);
+    int dur_w = dur_mag + (invl_prec == 0 ? 0 : invl_prec+1);
+
+    GString *dur_str = g_string_new("| Duration: ");
+    display_signed_time(time_buf, NSTIME_ISO8601_BUFSIZE, &dur_rounded, dur_prec);
+    g_string_append_printf(dur_str, "%*s secs", dur_w, time_buf);
+    g_string_append_printf(dur_str, "%*s", (int)(borderlen - dur_str->len), "|");
+    puts(dur_str->str);
+    g_string_free(dur_str, TRUE);
+
+    GString *invl_str = g_string_new("| Interval: ");
+    display_signed_time(time_buf, NSTIME_ISO8601_BUFSIZE, interval, invl_prec);
+    g_string_append_printf(invl_str, "%*s secs", dur_w, time_buf);
+    g_string_append_printf(invl_str, "%*s", (int)(borderlen - invl_str->len), "|");
+    puts(invl_str->str);
+    g_string_free(invl_str, TRUE);
+
+    printf("|%-*s|\n", borderlen - 2, "");
+
+    iostat_draw_filters(borderlen, iot);
+
+    printf("|-");
+    for (i=0; i<borderlen-3; i++) {
+        printf("-");
+    }
+    printf("|\n");
+}
+
+static void
+iostat_draw_header_row(unsigned borderlen, const io_stat_t *iot, const column_width *col_w, unsigned invl_col_w, unsigned tabrow_w)
+{
+    unsigned j, type, numpad = 1;
+    char *filler_s = NULL;
+
+    /* Display spaces above "Interval (s)" label */
+    printf("|%*s", invl_col_w - 1, "|");
+
+    /* Display column number headers */
+    for (j=0; j < iot->num_cols; j++) {
+        int padding;
+        if (iot->calc_type[j] == CALC_TYPE_FRAMES_AND_BYTES)
+            padding = col_w[j].fr + col_w[j].val + 3;
+        else if (iot->calc_type[j] == CALC_TYPE_FRAMES)
+            padding = col_w[j].fr;
+        else
+            padding = col_w[j].val;
+
+        printf("%-2d%*s|", j+1, padding, "");
+    }
+    if (tabrow_w < borderlen) {
+        filler_s = g_strdup_printf("%*s", borderlen - tabrow_w, "|");
+        printf("%s", filler_s);
+    }
+    printf("\n");
+
+    GString *timestamp_str;
+    switch (timestamp_get_type()) {
+    case TS_ABSOLUTE:
+    case TS_UTC:
+        timestamp_str = g_string_new("| Time    ");
+        break;
+    case TS_ABSOLUTE_WITH_YMD:
+    case TS_ABSOLUTE_WITH_YDOY:
+    case TS_UTC_WITH_YMD:
+    case TS_UTC_WITH_YDOY:
+        timestamp_str = g_string_new("| Date and time");
+        break;
+    case TS_RELATIVE:
+    case TS_NOT_SET:
+        timestamp_str = g_string_new("| Interval");
+        break;
+    default:
+        timestamp_str = g_string_new(NULL);
+        break;
+    }
+
+    printf("%s%*s", timestamp_str->str, (int)(invl_col_w - timestamp_str->len), "|");
+    g_string_free(timestamp_str, TRUE);
+
+    /* Display the stat label in each column */
+    for (j=0; j < iot->num_cols; j++) {
+        type = iot->calc_type[j];
+        if (type == CALC_TYPE_FRAMES) {
+            printcenter (calc_type_table[type].func_name, col_w[j].fr, numpad);
+        } else if (type == CALC_TYPE_FRAMES_AND_BYTES) {
+            printcenter ("Frames", col_w[j].fr, numpad);
+            printcenter ("Bytes", col_w[j].val, numpad);
+        } else {
+            printcenter (calc_type_table[type].func_name, col_w[j].val, numpad);
+        }
+    }
+    if (filler_s) {
+        printf("%s", filler_s);
+    }
+    printf("\n|-");
+
+    for (j=0; j<tabrow_w-3; j++)
+        printf("-");
+    printf("|");
+
+    if (filler_s) {
+        printf("%s", filler_s);
+        g_free(filler_s);
+    }
+
+    printf("\n");
+}
+
+static void
 iostat_draw(void *arg)
 {
     uint32_t num;
     uint64_t interval, duration, t, invl_end, dv;
-    unsigned int i, j, k, num_cols, num_rows, dur_secs_orig, dur_nsecs_orig, dur_secs, dur_nsecs, dur_mag,
-        invl_mag, invl_prec, tabrow_w, borderlen, invl_col_w, numpad = 1, namelen, len_filt, type,
+    unsigned int i, j, k, num_cols, num_rows, dur_secs, dur_mag,
+        invl_mag, invl_prec, tabrow_w, borderlen, invl_col_w, type,
         maxfltr_w, ftype;
-    unsigned int fr_mag;    /* The magnitude of the max frame number in this column */
-    unsigned int val_mag;   /* The magnitude of the max value in this column */
-    char *spaces, *spaces_s, *filler_s = NULL, **fmts, *fmt = NULL;
-    const char *filter;
-    static char dur_mag_s[3], invl_prec_s[3], fr_mag_s[3], val_mag_s[3], *invl_fmt, *full_fmt;
+    char **fmts, *fmt = NULL;
+    static char *invl_fmt, *full_fmt;
     io_stat_item_t *mit, **stat_cols, *item, **item_in_column;
     bool last_row = false;
     io_stat_t *iot;
     column_width *col_w;
-    struct tm *tm_time;
-    time_t the_time;
+    char time_buf[NSTIME_ISO8601_BUFSIZE];
 
     mit = (io_stat_item_t *)arg;
     iot = mit->parent;
@@ -593,11 +1005,7 @@ iostat_draw(void *arg)
 
     /* Calc the capture duration's magnitude (dur_mag) */
     dur_secs  = (unsigned int)(duration/UINT64_C(1000000));
-    dur_secs_orig = dur_secs;
-    dur_nsecs = (unsigned int)(duration%UINT64_C(1000000));
-    dur_nsecs_orig = dur_nsecs;
     dur_mag = magnitude((uint64_t)dur_secs, 5);
-    snprintf(dur_mag_s, 3, "%u", dur_mag);
 
     /* Calc the interval's magnitude */
     invl_mag = magnitude(interval/UINT64_C(1000000), 5);
@@ -628,7 +1036,6 @@ iostat_draw(void *arg)
         duration += 5*(dv/10);
         duration = (duration/dv) * dv;
         dur_secs  = (unsigned int)(duration/UINT64_C(1000000));
-        dur_nsecs = (unsigned int)(duration%UINT64_C(1000000));
         /*
          * Recalc dur_mag in case rounding has increased its magnitude */
         dur_mag  = magnitude((uint64_t)dur_secs, 5);
@@ -636,11 +1043,16 @@ iostat_draw(void *arg)
     if (iot->interval == UINT64_MAX)
         interval = duration;
 
+    //int dur_w = dur_mag + (invl_prec == 0 ? 0 : invl_prec+1);
+
     /* Calc the width of the time interval column (incl borders and padding). */
-    if (invl_prec == 0)
+    if (invl_prec == 0) {
+        invl_fmt = g_strdup_printf("%%%du", dur_mag);
         invl_col_w = (2*dur_mag) + 8;
-    else
+    } else {
+        invl_fmt = g_strdup_printf("%%%du.%%0%du", dur_mag, invl_prec);
         invl_col_w = (2*dur_mag) + (2*invl_prec) + 10;
+    }
 
     /* Update the width of the time interval column if date is shown */
     switch (timestamp_get_type()) {
@@ -648,116 +1060,21 @@ iostat_draw(void *arg)
     case TS_ABSOLUTE_WITH_YDOY:
     case TS_UTC_WITH_YMD:
     case TS_UTC_WITH_YDOY:
-        invl_col_w = MAX(invl_col_w, 23);
+        // We don't show more than 6 fractional digits (+Z) currently.
+        // NSTIME_ISO8601_BUFSIZE is enough room for 9 frac digits + Z + '\0'
+        // That's 4 extra characters, which leaves room for the "|  |".
+        invl_col_w = MAX(invl_col_w, NSTIME_ISO8601_BUFSIZE + invl_prec - 6);
         break;
 
     default:
+        // Make it as least as twice as wide as "> Dur|" for the final interval
         invl_col_w = MAX(invl_col_w, 12);
         break;
     }
 
-    borderlen = MAX(borderlen, invl_col_w);
-
-    /* Calc the total width of each row in the stats table and build the printf format string for each
-    *  column based on its field type, width, and name length.
-    *  NOTE: The magnitude of all types including float and double are stored in iot->max_vals which
-    *        is an *integer*. */
-    tabrow_w = invl_col_w;
-    for (j=0; j<num_cols; j++) {
-        type = iot->calc_type[j];
-        if (type == CALC_TYPE_FRAMES_AND_BYTES) {
-            namelen = 5;
-        } else {
-            namelen = (unsigned int)strlen(calc_type_table[type].func_name);
-        }
-        if (type == CALC_TYPE_FRAMES
-         || type == CALC_TYPE_FRAMES_AND_BYTES) {
-
-            fr_mag = magnitude(iot->max_frame[j], 15);
-            fr_mag = MAX(6, fr_mag);
-            col_w[j].fr = fr_mag;
-            tabrow_w += col_w[j].fr + 3;
-            snprintf(fr_mag_s, 3, "%u", fr_mag);
-
-            if (type == CALC_TYPE_FRAMES) {
-                fmt = g_strconcat(" %", fr_mag_s, "u |", NULL);
-            } else {
-                /* CALC_TYPE_FRAMES_AND_BYTES
-                */
-                val_mag = magnitude(iot->max_vals[j], 15);
-                val_mag = MAX(5, val_mag);
-                col_w[j].val = val_mag;
-                tabrow_w += (col_w[j].val + 3);
-                snprintf(val_mag_s, 3, "%u", val_mag);
-                fmt = g_strconcat(" %", fr_mag_s, "u |", " %", val_mag_s, PRIu64 " |", NULL);
-            }
-            if (fmt)
-                fmts[j] = fmt;
-            continue;
-        }
-        switch (type) {
-        case CALC_TYPE_BYTES:
-        case CALC_TYPE_COUNT:
-
-            val_mag = magnitude(iot->max_vals[j], 15);
-            val_mag = MAX(5, val_mag);
-            col_w[j].val = val_mag;
-            snprintf(val_mag_s, 3, "%u", val_mag);
-            fmt = g_strconcat(" %", val_mag_s, PRIu64 " |", NULL);
-            break;
-
-        default:
-            ftype = proto_registrar_get_ftype(iot->hf_indexes[j]);
-            switch (ftype) {
-                case FT_FLOAT:
-                case FT_DOUBLE:
-                    val_mag = magnitude(iot->max_vals[j], 15);
-                    snprintf(val_mag_s, 3, "%u", val_mag);
-                    fmt = g_strconcat(" %", val_mag_s, ".6f |", NULL);
-                    col_w[j].val = val_mag + 7;
-                    break;
-                case FT_RELATIVE_TIME:
-                    /* Convert FT_RELATIVE_TIME field to seconds
-                    *  CALC_TYPE_LOAD was already converted in iostat_packet() ) */
-                    if (type == CALC_TYPE_LOAD) {
-                        iot->max_vals[j] /= interval;
-                    } else if (type != CALC_TYPE_AVG) {
-                        iot->max_vals[j] = (iot->max_vals[j] + UINT64_C(500000000)) / NANOSECS_PER_SEC;
-                    }
-                    val_mag = magnitude(iot->max_vals[j], 15);
-                    snprintf(val_mag_s, 3, "%u", val_mag);
-                    fmt = g_strconcat(" %", val_mag_s, "u.%06u |", NULL);
-                    col_w[j].val = val_mag + 7;
-                   break;
-
-                default:
-                    val_mag = magnitude(iot->max_vals[j], 15);
-                    val_mag = MAX(namelen, val_mag);
-                    col_w[j].val = val_mag;
-                    snprintf(val_mag_s, 3, "%u", val_mag);
-
-                    switch (ftype) {
-                    case FT_UINT8:
-                    case FT_UINT16:
-                    case FT_UINT24:
-                    case FT_UINT32:
-                    case FT_UINT64:
-                        fmt = g_strconcat(" %", val_mag_s, PRIu64 " |", NULL);
-                        break;
-                    case FT_INT8:
-                    case FT_INT16:
-                    case FT_INT24:
-                    case FT_INT32:
-                    case FT_INT64:
-                        fmt = g_strconcat(" %", val_mag_s, PRId64 " |", NULL);
-                        break;
-                    }
-            } /* End of ftype switch */
-        } /* End of calc_type switch */
-        tabrow_w += col_w[j].val + 3;
-        if (fmt)
-            fmts[j] = fmt;
-    } /* End of for loop (columns) */
+    /* Calculate the width and format string of all the other columns, and add
+     * the total to the interval column width for the entire total. */
+    tabrow_w = invl_col_w + iostat_calc_cols_width_and_fmt(iot, interval, col_w, fmts);
 
     borderlen = MAX(borderlen, tabrow_w);
 
@@ -784,181 +1101,11 @@ iostat_draw(void *arg)
     if (borderlen-tabrow_w == 1)
         borderlen++;
 
-    /* Display the top border */
-    printf("\n");
-    for (i=0; i<borderlen; i++)
-        printf("=");
+    nstime_t invl_time = NSTIME_INIT_SECS_USECS(interval/UINT64_C(1000000), interval%UINT64_C(1000000));
+    iostat_draw_header(borderlen, iot, &cfile.elapsed_time, &invl_time, invl_prec);
 
-    spaces = (char *)g_malloc(borderlen+1);
-    for (i=0; i<borderlen; i++)
-        spaces[i] = ' ';
-    spaces[borderlen] = '\0';
+    iostat_draw_header_row(borderlen, iot, col_w, invl_col_w, tabrow_w);
 
-    spaces_s = &spaces[16];
-    printf("\n| IO Statistics%s|\n", spaces_s);
-    spaces_s = &spaces[2];
-    printf("|%s|\n", spaces_s);
-
-    if (invl_prec == 0) {
-        invl_fmt = g_strconcat("%", dur_mag_s, "u", NULL);
-        full_fmt = g_strconcat("| Duration: ", invl_fmt, ".%6u secs%s|\n", NULL);
-        spaces_s = &spaces[25 + dur_mag];
-        printf(full_fmt, dur_secs_orig, dur_nsecs_orig, spaces_s);
-        g_free(full_fmt);
-        full_fmt = g_strconcat("| Interval: ", invl_fmt, " secs%s|\n", NULL);
-        spaces_s = &spaces[18 + dur_mag];
-        printf(full_fmt, (uint32_t)(interval/UINT64_C(1000000)), spaces_s);
-    } else {
-        snprintf(invl_prec_s, 3, "%u", invl_prec);
-        invl_fmt = g_strconcat("%", dur_mag_s, "u.%0", invl_prec_s, "u", NULL);
-        full_fmt = g_strconcat("| Duration: ", invl_fmt, " secs%s|\n", NULL);
-        spaces_s = &spaces[19 + dur_mag + invl_prec];
-        printf(full_fmt, dur_secs, dur_nsecs/(int)dv, spaces_s);
-        g_free(full_fmt);
-
-        full_fmt = g_strconcat("| Interval: ", invl_fmt, " secs%s|\n", NULL);
-        spaces_s = &spaces[19 + dur_mag + invl_prec];
-        printf(full_fmt, (uint32_t)(interval/UINT64_C(1000000)),
-               (uint32_t)((interval%UINT64_C(1000000))/dv), spaces_s);
-    }
-    g_free(full_fmt);
-
-    spaces_s = &spaces[2];
-    printf("|%s|\n", spaces_s);
-
-    /* Display the list of filters and their column numbers vertically */
-    printf("| Col");
-    for (j=0; j<num_cols; j++) {
-        printf((j == 0 ? "%2u: " : "|    %2u: "), j+1);
-        if (!iot->filters[j]) {
-            /*
-            * An empty (no filter) comma field was specified */
-            spaces_s = &spaces[16 + 10];
-            printf("Frames and bytes%s|\n", spaces_s);
-        } else {
-            filter = iot->filters[j];
-            len_filt = (unsigned int) strlen(filter);
-
-            /* If the width of the widest filter exceeds the width of the stat table, borderlen has
-            *  been set to 102 bytes above and filters wider than 102 will wrap at 91 bytes. */
-            if (len_filt+11 <= borderlen) {
-                printf("%s", filter);
-                if (len_filt+11 <= borderlen) {
-                    spaces_s = &spaces[len_filt + 10];
-                    printf("%s", spaces_s);
-                }
-                printf("|\n");
-            } else {
-                char *sfilter1, *sfilter2;
-                const char *pos;
-                size_t len;
-                unsigned int next_start, max_w = borderlen-11;
-
-                do {
-                    if (len_filt > max_w) {
-                        sfilter1 = g_strndup(filter, (size_t) max_w);
-                        /*
-                        * Find the pos of the last space in sfilter1. If a space is found, set
-                        * sfilter2 to the string prior to that space and print it; otherwise, wrap
-                        * the filter at max_w. */
-                        pos = g_strrstr(sfilter1, " ");
-                        if (pos) {
-                            len = (size_t)(pos-sfilter1);
-                            next_start = (unsigned int) len+1;
-                        } else {
-                            len = (size_t) strlen(sfilter1);
-                            next_start = (unsigned int)len;
-                        }
-                        sfilter2 = g_strndup(sfilter1, len);
-                        printf("%s%s|\n", sfilter2, &spaces[len+10]);
-                        g_free(sfilter1);
-                        g_free(sfilter2);
-
-                        printf("|        ");
-                        filter = &filter[next_start];
-                        len_filt = (unsigned int) strlen(filter);
-                    } else {
-                        printf("%s%s|\n", filter, &spaces[strlen(filter)+10]);
-                        break;
-                    }
-                } while (1);
-            }
-        }
-    }
-
-    printf("|-");
-    for (i=0; i<borderlen-3; i++) {
-        printf("-");
-    }
-    printf("|\n");
-
-    /* Display spaces above "Interval (s)" label */
-    spaces_s = &spaces[borderlen-(invl_col_w-2)];
-    printf("|%s|", spaces_s);
-
-    /* Display column number headers */
-    for (j=0; j<num_cols; j++) {
-        if (iot->calc_type[j] == CALC_TYPE_FRAMES_AND_BYTES)
-            spaces_s = &spaces[borderlen - (col_w[j].fr + col_w[j].val)] - 3;
-        else if (iot->calc_type[j] == CALC_TYPE_FRAMES)
-            spaces_s = &spaces[borderlen - col_w[j].fr];
-        else
-            spaces_s = &spaces[borderlen - col_w[j].val];
-
-        printf("%-2d%s|", j+1, spaces_s);
-    }
-    if (tabrow_w < borderlen) {
-        filler_s = &spaces[tabrow_w+1];
-        printf("%s|", filler_s);
-    }
-
-    k = 11;
-    switch (timestamp_get_type()) {
-    case TS_ABSOLUTE:
-        printf("\n| Time    ");
-        break;
-    case TS_ABSOLUTE_WITH_YMD:
-    case TS_ABSOLUTE_WITH_YDOY:
-    case TS_UTC_WITH_YMD:
-    case TS_UTC_WITH_YDOY:
-        printf("\n| Date and time");
-        k = 16;
-        break;
-    case TS_RELATIVE:
-    case TS_NOT_SET:
-        printf("\n| Interval");
-        break;
-    default:
-        break;
-    }
-
-    spaces_s = &spaces[borderlen-(invl_col_w-k)];
-    printf("%s|", spaces_s);
-
-    /* Display the stat label in each column */
-    for (j=0; j<num_cols; j++) {
-        type = iot->calc_type[j];
-        if (type == CALC_TYPE_FRAMES) {
-            printcenter (calc_type_table[type].func_name, col_w[j].fr, numpad);
-        } else if (type == CALC_TYPE_FRAMES_AND_BYTES) {
-            printcenter ("Frames", col_w[j].fr, numpad);
-            printcenter ("Bytes", col_w[j].val, numpad);
-        } else {
-            printcenter (calc_type_table[type].func_name, col_w[j].val, numpad);
-        }
-    }
-    if (filler_s)
-        printf("%s|", filler_s);
-    printf("\n|-");
-
-    for (i=0; i<tabrow_w-3; i++)
-        printf("-");
-    printf("|");
-
-    if (tabrow_w < borderlen)
-        printf("%s|", &spaces[tabrow_w+1]);
-
-    printf("\n");
     t = 0;
     if (invl_prec == 0 && dur_mag == 1)
         full_fmt = g_strconcat("|  ", invl_fmt, " <> ", invl_fmt, "  |", NULL);
@@ -994,84 +1141,42 @@ iostat_draw(void *arg)
 
         /* Patch for Absolute Time */
         /* XXX - has a Y2.038K problem with 32-bit time_t */
-        the_time = (time_t)(iot->start_time + (t/UINT64_C(1000000)));
+        nstime_t the_time = NSTIME_INIT_SECS_USECS(t / 1000000, t % 1000000);
+        nstime_add(&the_time, &iot->start_time);
 
         /* Display the interval for this row */
         switch (timestamp_get_type()) {
         case TS_ABSOLUTE:
-          tm_time = localtime(&the_time);
-          if (tm_time != NULL) {
-            printf("| %02d:%02d:%02d |",
-               tm_time->tm_hour,
-               tm_time->tm_min,
-               tm_time->tm_sec);
-          } else
-            printf("| XX:XX:XX |");
+          fill_abs_time(&the_time, time_buf, io_decimal_point, invl_prec, true);
+          // invl_col_w includes the "|  |"
+          printf("| %-*s |", invl_col_w - 4, time_buf);
           break;
 
         case TS_ABSOLUTE_WITH_YMD:
-          tm_time = localtime(&the_time);
-          if (tm_time != NULL) {
-            printf("| %04d-%02d-%02d %02d:%02d:%02d |",
-               tm_time->tm_year + 1900,
-               tm_time->tm_mon + 1,
-               tm_time->tm_mday,
-               tm_time->tm_hour,
-               tm_time->tm_min,
-               tm_time->tm_sec);
-          } else
-            printf("| XXXX-XX-XX XX:XX:XX |");
+          format_nstime_as_iso8601(time_buf, NSTIME_ISO8601_BUFSIZE, &the_time,
+            io_decimal_point, true, invl_prec);
+          printf("| %-*s |", invl_col_w - 4, time_buf);
           break;
 
         case TS_ABSOLUTE_WITH_YDOY:
-          tm_time = localtime(&the_time);
-          if (tm_time != NULL) {
-            printf("| %04d/%03d %02d:%02d:%02d |",
-               tm_time->tm_year + 1900,
-               tm_time->tm_yday + 1,
-               tm_time->tm_hour,
-               tm_time->tm_min,
-               tm_time->tm_sec);
-          } else
-            printf("| XXXX/XXX XX:XX:XX |");
+          fill_abs_ydoy_time(&the_time, time_buf, io_decimal_point, invl_prec, true);
+          printf("| %-*s |", invl_col_w - 4, time_buf);
           break;
 
         case TS_UTC:
-          tm_time = gmtime(&the_time);
-          if (tm_time != NULL) {
-            printf("| %02d:%02d:%02d |",
-               tm_time->tm_hour,
-               tm_time->tm_min,
-               tm_time->tm_sec);
-          } else
-            printf("| XX:XX:XX |");
+          fill_abs_time(&the_time, time_buf, io_decimal_point, invl_prec, false);
+          printf("| %-*s |", invl_col_w - 4, time_buf);
           break;
 
         case TS_UTC_WITH_YMD:
-          tm_time = gmtime(&the_time);
-          if (tm_time != NULL) {
-            printf("| %04d-%02d-%02d %02d:%02d:%02d |",
-               tm_time->tm_year + 1900,
-               tm_time->tm_mon + 1,
-               tm_time->tm_mday,
-               tm_time->tm_hour,
-               tm_time->tm_min,
-               tm_time->tm_sec);
-          } else
-            printf("| XXXX-XX-XX XX:XX:XX |");
+          format_nstime_as_iso8601(time_buf, NSTIME_ISO8601_BUFSIZE, &the_time,
+            io_decimal_point, false, invl_prec);
+          printf("| %-*s |", invl_col_w - 4, time_buf);
           break;
 
         case TS_UTC_WITH_YDOY:
-          tm_time = gmtime(&the_time);
-          if (tm_time != NULL) {
-            printf("| %04d/%03d %02d:%02d:%02d |",
-               tm_time->tm_year + 1900,
-               tm_time->tm_yday + 1,
-               tm_time->tm_hour,
-               tm_time->tm_min,
-               tm_time->tm_sec);
-          } else
-            printf("| XXXX/XXX XX:XX:XX |");
+          fill_abs_ydoy_time(&the_time, time_buf, io_decimal_point, invl_prec, false);
+          printf("| %-*s |", invl_col_w - 4, time_buf);
           break;
 
         case TS_RELATIVE:
@@ -1081,10 +1186,9 @@ iostat_draw(void *arg)
                   int maxw;
                   maxw = dur_mag >= 3 ? dur_mag+1 : 3;
                   g_free(full_fmt);
-                  snprintf(dur_mag_s, 3, "%u", maxw);
-                  full_fmt = g_strconcat( dur_mag == 1 ? "|  " : "| ",
-                                          invl_fmt, " <> ", "%-",
-                                          dur_mag_s, "s|", NULL);
+                  full_fmt = g_strdup_printf("| %s%s <> %%-%ds|",
+                                            dur_mag == 1 ? " " : "",
+                                            invl_fmt, maxw);
                   printf(full_fmt, (uint32_t)(t/UINT64_C(1000000)), "Dur");
               } else {
                   printf(full_fmt, (uint32_t)(t/UINT64_C(1000000)),
@@ -1198,8 +1302,9 @@ iostat_draw(void *arg)
                 printf(fmt, (uint64_t)0, (uint64_t)0);
             }
         }
-        if (filler_s)
-            printf("%s|", filler_s);
+        if (tabrow_w < borderlen) {
+            printf("%*s", borderlen - tabrow_w, "|");
+        }
         printf("\n");
         t += interval;
 
@@ -1209,6 +1314,9 @@ iostat_draw(void *arg)
     }
     printf("\n");
     g_free(iot->items);
+    for (i = 0; i < iot->num_cols; i++) {
+        g_free((char*)iot->filters[i]);
+    }
     g_free((gpointer)iot->filters);
     g_free(iot->max_vals);
     g_free(iot->max_frame);
@@ -1219,14 +1327,13 @@ iostat_draw(void *arg)
     g_free(invl_fmt);
     g_free(full_fmt);
     g_free(fmts);
-    g_free(spaces);
     g_free(stat_cols);
     g_free(item_in_column);
 }
 
 
-static void
-register_io_tap(io_stat_t *io, unsigned int i, const char *filter)
+static bool
+register_io_tap(io_stat_t *io, unsigned int i, const char *filter, GString *err)
 {
     GString *error_string;
     const char *flt;
@@ -1377,16 +1484,23 @@ register_io_tap(io_stat_t *io, unsigned int i, const char *filter)
     error_string = register_tap_listener("frame", &io->items[i], flt, TL_REQUIRES_PROTO_TREE, NULL,
                                        iostat_packet, i ? NULL : iostat_draw, NULL);
     if (error_string) {
-        g_free(io->items);
-        g_free(io);
-        fprintf(stderr, "\ntshark: Couldn't register io,stat tap: %s\n",
-            error_string->str);
+        /* Accumulate errors about all the possible filters tried at the same
+         * starting character.
+         */
+        if (err->len) {
+            g_string_append_c(err, '\n');
+        }
+        g_string_append(err, error_string->str);
         g_string_free(error_string, TRUE);
-        exit(1);
+        return false;
     }
+
+    /* On success, clear old errors (from splitting on internal commas). */
+    g_string_truncate(err, 0);
+    return true;
 }
 
-static void
+static bool
 iostat_init(const char *opt_arg, void *userdata _U_)
 {
     double interval_float;
@@ -1395,33 +1509,42 @@ iostat_init(const char *opt_arg, void *userdata _U_)
     io_stat_t *io;
     const char *filters, *str, *pos;
 
+    io_decimal_point = localeconv()->decimal_point;
+
+    /* XXX - Why can't the last character be a comma? Shouldn't it be
+     * fine for the last filter to be empty? Even in the case of locales
+     * that use ',' for the decimal separator, there shouldn't be any
+     * difference between interpreting a terminating ',' as a decimal
+     * point for the interval, and interpreting it as a separator followed
+     * by an empty filter.
+     */
     if ((*(opt_arg+(strlen(opt_arg)-1)) == ',') ||
         (sscanf(opt_arg, "io,stat,%lf%n", &interval_float, (int *)&idx) != 1) ||
         (idx < 8)) {
-        fprintf(stderr, "\ntshark: invalid \"-z io,stat,<interval>[,<filter>][,<filter>]...\" argument\n");
-        exit(1);
+        cmdarg_err("\ntshark: invalid \"-z io,stat,<interval>[,<filter>][,<filter>]...\" argument\n");
+        return false;
     }
 
     filters = opt_arg+idx;
     if (*filters) {
         if (*filters != ',') {
-            /* For locale's that use ',' instead of '.', the comma might
+            /* For locales that use ',' instead of '.', the comma might
              * have been consumed during the floating point conversion. */
             --filters;
             if (*filters != ',') {
-                fprintf(stderr, "\ntshark: invalid \"-z io,stat,<interval>[,<filter>][,<filter>]...\" argument\n");
-                exit(1);
+                cmdarg_err("\ntshark: invalid \"-z io,stat,<interval>[,<filter>][,<filter>]...\" argument\n");
+                return false;
             }
         }
-    } else
-        filters = NULL;
+    }
+    /* filters now either starts with ',' or '\0' */
 
     switch (timestamp_get_type()) {
     case TS_DELTA:
     case TS_DELTA_DIS:
     case TS_EPOCH:
-        fprintf(stderr, "\ntshark: invalid -t operand. io,stat only supports -t <r|a|ad|adoy|u|ud|udoy>\n");
-        exit(1);
+        cmdarg_err("\ntshark: invalid -t operand. io,stat only supports -t <r|a|ad|adoy|u|ud|udoy>\n");
+        return false;
     default:
         break;
     }
@@ -1468,16 +1591,26 @@ iostat_init(const char *opt_arg, void *userdata _U_)
         }
     }
     if (io->interval < 1) {
-        fprintf(stderr,
-            "\ntshark: \"-z\" interval must be >=0.000001 seconds or \"0\" for the entire capture duration.\n");
-        exit(10);
+        cmdarg_err("\ntshark: \"-z\" interval must be >=0.000001 seconds or \"0\" for the entire capture duration.\n");
+        return false;
     }
 
     /* Find how many ',' separated filters we have */
+    /* Filter can have internal commas, so this is only an upper bound on the
+     * number of filters. In the display filter grammar, commas only appear
+     * inside delimiters (quoted strings, slices, sets, and functions), so
+     * splitting in the wrong place produces an invalid filter. That is, there
+     * can be at most only one valid interpretation (but might be none).
+     *
+     * XXX - If the grammar changes to allow commas in other places, then there
+     * is ambiguity.
+     *
+     * Perhaps ideally we'd verify the filters before doing allocation.
+     */
     io->num_cols = 1;
-    io->start_time = 0;
+    nstime_set_unset(&io->start_time);
 
-    if (filters && (*filters != '\0')) {
+    if (*filters != '\0') {
         /* Eliminate the first comma. */
         filters++;
         str = filters;
@@ -1499,34 +1632,62 @@ iostat_init(const char *opt_arg, void *userdata _U_)
         io->max_frame[i] = 0;
     }
 
+    bool success;
+    GString *err = g_string_new(NULL);
+
     /* Register a tap listener for each filter */
-    if ((!filters) || (filters[0] == 0)) {
-        register_io_tap(io, 0, NULL);
+    if (filters[0] == '\0') {
+        success = register_io_tap(io, 0, NULL, err);
     } else {
         char *filter;
         i = 0;
         str = filters;
-        do {
-            pos = (char*) strchr(str, ',');
+        pos = str;
+        while ((pos = strchr(pos, ',')) != NULL) {
             if (pos == str) {
-                register_io_tap(io, i, NULL);
-            } else if (pos == NULL) {
-                str = (const char*) g_strstrip((char*)str);
-                filter = g_strdup(str);
-                if (*filter)
-                    register_io_tap(io, i, filter);
-                else
-                    register_io_tap(io, i, NULL);
+                /* Consecutive commas - an empty filter. */
+                filter = NULL;
             } else {
+                /* Likely a filter. */
                 filter = (char *)g_malloc((pos-str)+1);
                 (void) g_strlcpy( filter, str, (size_t) ((pos-str)+1));
                 filter = g_strstrip(filter);
-                register_io_tap(io, i, (char *) filter);
             }
-            str = pos+1;
+            success = register_io_tap(io, i, filter, err);
+            /* Advance to the next position to look for commas. */
+            pos++;
+            if (success) {
+                /* Also advance the filter start on success. */
+                str = pos;
+                i++;
+            } else {
+                g_free(filter);
+            }
+        }
+        /* No more commas, the rest of the string is the last filter. */
+        filter = g_strstrip(g_strdup(str));
+        if (*filter) {
+            success = register_io_tap(io, i, filter, err);
+        } else {
+            success = register_io_tap(io, i, NULL, err);
+        }
+        if (success) {
             i++;
-        } while (pos);
+        }
+        io->num_cols = i;
     }
+
+    if (!success) {
+        cmdarg_err("\ntshark: Couldn't register io,stat tap: %s\n",
+            err->str);
+        g_string_free(err, TRUE);
+        g_free(io->items);
+        g_free(io);
+        return false;
+    }
+    g_string_free(err, TRUE);
+    return true;
+
 }
 
 static stat_tap_ui iostat_ui = {

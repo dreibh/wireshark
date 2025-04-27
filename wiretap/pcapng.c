@@ -43,11 +43,11 @@
 #define ROUND_TO_4BYTE(len) WS_ROUNDUP_4(len)
 
 static bool
-pcapng_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
+pcapng_read(wtap *wth, wtap_rec *rec, int *err,
             char **err_info, int64_t *data_offset);
 static bool
 pcapng_seek_read(wtap *wth, int64_t seek_off,
-                 wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+                 wtap_rec *rec, int *err, char **err_info);
 static void
 pcapng_close(wtap *wth);
 
@@ -145,14 +145,11 @@ typedef struct pcapng_custom_block_s {
 #define MIN_ISB_SIZE    ((uint32_t)(MIN_BLOCK_SIZE + sizeof(pcapng_interface_statistics_block_t)))
 
 /*
- * Minimum Sysdig size = minimum block size + packed size of sysdig_event_phdr.
- * Minimum Sysdig event v2 header size = minimum block size + packed size of sysdig_event_v2_phdr (which, in addition
- * to sysdig_event_phdr, includes the nparams 32bit value).
+ * We split libscap events into two parts: A preamble from which we read metadata
+ * and the event itself which we pass to epan.
  */
-#define SYSDIG_EVENT_HEADER_SIZE ((16 + 64 + 64 + 32 + 16)/8) /* CPU ID + TS + TID + Event len + Event type */
-#define MIN_SYSDIG_EVENT_SIZE    ((uint32_t)(MIN_BLOCK_SIZE + SYSDIG_EVENT_HEADER_SIZE))
-#define SYSDIG_EVENT_V2_HEADER_SIZE ((16 + 64 + 64 + 32 + 16 + 32)/8) /* CPU ID + TS + TID + Event len + Event type + nparams */
-#define MIN_SYSDIG_EVENT_V2_SIZE    ((uint32_t)(MIN_BLOCK_SIZE + SYSDIG_EVENT_V2_HEADER_SIZE))
+#define MIN_SYSDIG_PREAMBLE_SIZE (16/8) /* CPU ID */
+#define MIN_SYSDIG_EVENT_SIZE    ((64 + 64 + 32 + 16)/8) /* Timestamp + Thread ID + Event len + Event type */
 
 /*
  * We require __REALTIME_TIMESTAMP in the Journal Export Format reader in
@@ -175,18 +172,6 @@ struct pcapng_option {
     uint16_t type;
     uint16_t value_length;
 };
-
-/* Option codes: 16-bit field */
-#define OPT_EPB_FLAGS        0x0002
-#define OPT_EPB_HASH         0x0003
-#define OPT_EPB_DROPCOUNT    0x0004
-#define OPT_EPB_PACKETID     0x0005
-#define OPT_EPB_QUEUE        0x0006
-#define OPT_EPB_VERDICT      0x0007
-
-#define OPT_NRB_DNSNAME      0x0002
-#define OPT_NRB_DNSV4ADDR    0x0003
-#define OPT_NRB_DNSV6ADDR    0x0004
 
 /* MSBit of option code means "local type" */
 #define OPT_LOCAL_FLAG       0x8000
@@ -265,11 +250,10 @@ typedef struct {
  *
  * A "read" routine returns a block as a libwiretap record, filling
  * in the wtap_rec structure with the appropriate record type and
- * other information, and filling in the supplied Buffer with
+ * other information, and filling in the structure's Buffer with
  * data for which there's no place in the wtap_rec structure.
  *
- * A "write" routine takes a libwiretap record and Buffer and writes
- * out a block.
+ * A "write" routine takes a libwiretap record and out a block.
  */
 typedef struct {
     block_reader reader;
@@ -332,6 +316,8 @@ register_pcapng_block_type_handler(unsigned block_type, block_reader reader,
 
     case BLOCK_TYPE_IRIG_TS:
     case BLOCK_TYPE_ARINC_429:
+    case BLOCK_TYPE_HP_MIB:
+    case BLOCK_TYPE_HP_CEB:
         /*
          * Yes, and we don't already handle it.  Allow a plugin to
          * handle it.
@@ -429,7 +415,7 @@ register_pcapng_block_type_handler(unsigned block_type, block_reader reader,
  */
 #define BT_INDEX_SHB        0
 #define BT_INDEX_IDB        1
-#define BT_INDEX_PBS        2  /* all packet blocks */
+#define BT_INDEX_PBS        2  /* all packet blocks: PB/EPB/SPB */
 #define BT_INDEX_NRB        3
 #define BT_INDEX_ISB        4
 #define BT_INDEX_EVT        5
@@ -908,9 +894,9 @@ pcapng_process_nflx_custom_option(wtapng_block_t *wblock,
     case NFLX_OPT_TYPE_TCPINFO:
         ws_debug("BBLog tcpinfo of length: %u", length);
         if (wblock->type == BLOCK_TYPE_CB_COPY) {
-            ws_buffer_assure_space(wblock->frame_buffer, length);
+            ws_buffer_assure_space(&wblock->rec->data, length);
             wblock->rec->rec_header.custom_block_header.length = length + 4;
-            memcpy(ws_buffer_start_ptr(wblock->frame_buffer), value, length);
+            memcpy(ws_buffer_start_ptr(&wblock->rec->data), value, length);
             memcpy(&temp, value, sizeof(uint64_t));
             temp = GUINT64_FROM_LE(temp);
             wblock->rec->ts.secs = section_info->bblog_offset_tv_sec + temp;
@@ -1180,7 +1166,6 @@ pcapng_process_options(FILE_T fh, wtapng_block_t *wblock,
                     return false;
                 }
                 break;
-
             default:
                 if (process_option == NULL ||
                     !(*process_option)(wblock, (const section_info_t *)section_info, option_code,
@@ -1189,6 +1174,7 @@ pcapng_process_options(FILE_T fh, wtapng_block_t *wblock,
                     g_free(option_content);
                     return false;
                 }
+                break;
         }
         option_ptr += rounded_option_length; /* multiple of 4 bytes, so it remains aligned */
         opt_bytes_remaining -= rounded_option_length;
@@ -1443,6 +1429,36 @@ pcapng_process_if_descr_block_option(wtapng_block_t *wblock,
             pcapng_process_string_option(wblock, option_code, option_length,
                                          option_content);
             break;
+        case(OPT_IDB_IP4ADDR):
+            /*
+             * Interface network address and netmask. This option can be
+             * repeated multiple times within the same Interface
+             * Description Block when multiple IPv4 addresses are assigned
+             * to the interface. 192 168 1 1 255 255 255 0
+             */
+            break;
+        case(OPT_IDB_IP6ADDR):
+            /*
+             * Interface network address and prefix length (stored in the
+             * last byte). This option can be repeated multiple times
+             * within the same Interface Description Block when multiple
+             * IPv6 addresses are assigned to the interface.
+             * 2001:0db8:85a3:08d3:1319:8a2e:0370:7344/64 is written (in
+             * hex) as "20 01 0d b8 85 a3 08 d3 13 19 8a 2e 03 70 73 44
+             * 40"
+             */
+            break;
+        case(OPT_IDB_MACADDR):
+            /*
+             * Interface Hardware MAC address (48 bits). 00 01 02 03 04 05
+             */
+            break;
+        case(OPT_IDB_EUIADDR):
+            /*
+             * Interface Hardware EUI address (64 bits), if available.
+             * 02 34 56 FF FE 78 9A BC
+             */
+             break;
         case(OPT_IDB_SPEED): /* if_speed */
             pcapng_process_uint64_option(wblock, section_info,
                                          OPT_SECTION_BYTE_ORDER,
@@ -1453,9 +1469,19 @@ pcapng_process_if_descr_block_option(wtapng_block_t *wblock,
             pcapng_process_uint8_option(wblock, option_code, option_length,
                                         option_content);
             break;
+        case(OPT_IDB_TZONE): /* if_tzone */
             /*
-             * if_tzone      10  Time zone for GMT support (TODO: specify better). TODO: give a good example
+             * Time zone for GMT support.  This option has never been
+             * specified in greater detail and, unless it were to identify
+             * something such as an IANA time zone database timezone,
+             * would be insufficient for converting between UTC and local
+             * time.  Therefore, it SHOULD NOT be used; instead, the
+             * if_iana_tzname option SHOULD be used if time zone
+             * information is to be specified.
+             *
+             * Given that, we don't do anything with it.
              */
+             break;
         case(OPT_IDB_FILTER): /* if_filter */
             if (option_length < 1) {
                 *err = WTAP_ERR_BAD_FILE;
@@ -1525,54 +1551,6 @@ pcapng_process_if_descr_block_option(wtapng_block_t *wblock,
             pcapng_process_uint8_option(wblock, option_code, option_length,
                                         option_content);
             break;
-        case(OPT_IDB_HARDWARE): /* if_hardware */
-            pcapng_process_string_option(wblock, option_code, option_length,
-                                         option_content);
-            break;
-        /* TODO: process these! */
-        case(OPT_IDB_IP4ADDR):
-            /*
-             * Interface network address and netmask. This option can be
-             * repeated multiple times within the same Interface
-             * Description Block when multiple IPv4 addresses are assigned
-             * to the interface. 192 168 1 1 255 255 255 0
-             */
-            break;
-        case(OPT_IDB_IP6ADDR):
-            /*
-             * Interface network address and prefix length (stored in the
-             * last byte). This option can be repeated multiple times
-             * within the same Interface Description Block when multiple
-             * IPv6 addresses are assigned to the interface.
-             * 2001:0db8:85a3:08d3:1319:8a2e:0370:7344/64 is written (in
-             * hex) as "20 01 0d b8 85 a3 08 d3 13 19 8a 2e 03 70 73 44
-             * 40"
-             */
-            break;
-        case(OPT_IDB_MACADDR):
-            /*
-             * Interface Hardware MAC address (48 bits). 00 01 02 03 04 05
-             */
-            break;
-        case(OPT_IDB_EUIADDR):
-            /*
-             * Interface Hardware EUI address (64 bits), if available.
-             * TODO: give a good example
-             */
-             break;
-        case(OPT_IDB_TZONE):
-            /*
-             * Time zone for GMT support.  This option has never been
-             * specified in greater detail and, unless it were to identify
-             * something such as an IANA time zone database timezone,
-             * would be insufficient for converting between UTC and local
-             * time.  Therefore, it SHOULD NOT be used; instead, the
-             * if_iana_tzname option SHOULD be used if time zone
-             * information is to be specified.
-             *
-             * Given that, we don't do anything with it.
-             */
-             break;
         case(OPT_IDB_TSOFFSET):
             /*
              * A 64-bit integer value that specifies an offset (in
@@ -1586,6 +1564,26 @@ pcapng_process_if_descr_block_option(wtapng_block_t *wblock,
                                         option_code, option_length,
                                         option_content);
              break;
+        case(OPT_IDB_HARDWARE): /* if_hardware */
+            pcapng_process_string_option(wblock, option_code, option_length,
+                                         option_content);
+            break;
+        case(OPT_IDB_TXSPEED): /* if_txspeed */
+            pcapng_process_uint64_option(wblock, section_info,
+                                         OPT_SECTION_BYTE_ORDER,
+                                         option_code, option_length,
+                                         option_content);
+            break;
+        case(OPT_IDB_RXSPEED): /* if_rxspeed */
+            pcapng_process_uint64_option(wblock, section_info,
+                                         OPT_SECTION_BYTE_ORDER,
+                                         option_code, option_length,
+                                         option_content);
+            break;
+        case(OPT_IDB_IANA_TZNAME): /* if_iana_tzname */
+            pcapng_process_string_option(wblock, option_code, option_length,
+                                         option_content);
+            break;
         default:
             if (!pcapng_process_unhandled_option(wblock, BT_INDEX_IDB,
                                                  section_info, option_code,
@@ -1976,7 +1974,7 @@ pcapng_process_packet_block_option(wtapng_block_t *wblock,
      * in one of those places as standardized option types.
      */
     switch (option_code) {
-        case(OPT_EPB_FLAGS):
+        case(OPT_PKT_FLAGS):
             if (option_length != 4) {
                 *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup_printf("pcapng: packet block flags option length %u is not 4",
@@ -1989,7 +1987,7 @@ pcapng_process_packet_block_option(wtapng_block_t *wblock,
                                          option_code, option_length,
                                          option_content);
             break;
-        case(OPT_EPB_HASH):
+        case(OPT_PKT_HASH):
             if (option_length < 1) {
                 *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup_printf("pcapng: packet block hash option length %u is < 1",
@@ -2007,7 +2005,7 @@ pcapng_process_packet_block_option(wtapng_block_t *wblock,
             ws_debug("hash type %u, data len %u",
                      option_content[0], option_length - 1);
             break;
-        case(OPT_EPB_DROPCOUNT):
+        case(OPT_PKT_DROPCOUNT):
             if (option_length != 8) {
                 *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup_printf("pcapng: packet block drop count option length %u is not 8",
@@ -2020,7 +2018,7 @@ pcapng_process_packet_block_option(wtapng_block_t *wblock,
                                          option_code, option_length,
                                          option_content);
             break;
-        case(OPT_EPB_PACKETID):
+        case(OPT_PKT_PACKETID):
             if (option_length != 8) {
                 *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup_printf("pcapng: packet block packet id option length %u is not 8",
@@ -2033,7 +2031,7 @@ pcapng_process_packet_block_option(wtapng_block_t *wblock,
                                          option_code, option_length,
                                          option_content);
             break;
-        case(OPT_EPB_QUEUE):
+        case(OPT_PKT_QUEUE):
             if (option_length != 4) {
                 *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup_printf("pcapng: packet block queue option length %u is not 4",
@@ -2046,7 +2044,7 @@ pcapng_process_packet_block_option(wtapng_block_t *wblock,
                                          option_code, option_length,
                                          option_content);
             break;
-        case(OPT_EPB_VERDICT):
+        case(OPT_PKT_VERDICT):
             if (option_length < 1) {
                 *err = WTAP_ERR_BAD_FILE;
                 *err_info = ws_strdup_printf("pcapng: packet block verdict option length %u is < 1",
@@ -2110,6 +2108,20 @@ pcapng_process_packet_block_option(wtapng_block_t *wblock,
             wtap_packet_verdict_free(&packet_verdict);
             ws_debug("verdict type %u, data len %u",
                      option_content[0], option_length - 1);
+            break;
+        case(OPT_PKT_PROCIDTHRDID):
+            if (option_length != 8) {
+                *err = WTAP_ERR_BAD_FILE;
+                *err_info = ws_strdup_printf("pcapng: packet block process id thread id option length %u is not 8",
+                                            option_length);
+                /* XXX - free anything? */
+                return false;
+            }
+            // XXX - It's two concatenated 32 bit unsigned integers
+            pcapng_process_uint64_option(wblock, section_info,
+                                         OPT_SECTION_BYTE_ORDER,
+                                         option_code, option_length,
+                                         option_content);
             break;
         default:
             if (!pcapng_process_unhandled_option(wblock, BT_INDEX_PBS,
@@ -2313,7 +2325,7 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
     wblock->rec->ts.secs = (time_t)(wblock->rec->ts.secs + iface_info.tsoffset);
 
     /* "(Enhanced) Packet Block" read capture data */
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer,
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data,
                                 packet.cap_len - pseudo_header_len, err, err_info))
         return false;
     block_read += packet.cap_len - pseudo_header_len;
@@ -2357,8 +2369,7 @@ pcapng_read_packet_block(FILE_T fh, pcapng_block_header_t *bh,
         wtap_block_add_uint64_option(wblock->block, OPT_PKT_DROPCOUNT, (uint64_t)packet.drops_count);
     }
 
-    pcap_read_post_process(false, iface_info.wtap_encap,
-                           wblock->rec, ws_buffer_start_ptr(wblock->frame_buffer),
+    pcap_read_post_process(false, iface_info.wtap_encap, wblock->rec,
                            section_info->byte_swapped, fcslen);
 
     /*
@@ -2497,7 +2508,7 @@ pcapng_read_simple_packet_block(FILE_T fh, pcapng_block_header_t *bh,
     memset((void *)&wblock->rec->rec_header.packet_header.pseudo_header, 0, sizeof(union wtap_pseudo_header));
 
     /* "Simple Packet Block" read capture data */
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer,
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data,
                                 simple_packet.cap_len, err, err_info))
         return false;
 
@@ -2507,8 +2518,7 @@ pcapng_read_simple_packet_block(FILE_T fh, pcapng_block_header_t *bh,
             return false;
     }
 
-    pcap_read_post_process(false, iface_info.wtap_encap,
-                           wblock->rec, ws_buffer_start_ptr(wblock->frame_buffer),
+    pcap_read_post_process(false, iface_info.wtap_encap, wblock->rec,
                            section_info->byte_swapped, iface_info.fcslen);
 
     /*
@@ -2523,8 +2533,8 @@ pcapng_read_simple_packet_block(FILE_T fh, pcapng_block_header_t *bh,
 #define NRES_IP4RECORD 1
 #define NRES_IP6RECORD 2
 #define PADDING4(x) ((((x + 3) >> 2) << 2) - x)
-/* IPv6 + MAXNAMELEN */
-#define INITIAL_NRB_REC_SIZE (16 + 64)
+/* IPv6 + MAXDNSNAMELEN */
+#define INITIAL_NRB_REC_SIZE (16 + MAXDNSNAMELEN)
 
 /*
  * Find the end of the NUL-terminated name the beginning of which is pointed
@@ -2745,7 +2755,7 @@ pcapng_read_name_resolution_block(FILE_T fh, pcapng_block_header_t *bh,
                     }
                     hashipv4_t *tp = g_new0(hashipv4_t, 1);
                     tp->addr = v4_addr;
-                    (void) g_strlcpy(tp->name, namep, MAXNAMELEN);
+                    (void) g_strlcpy(tp->name, namep, MAXDNSNAMELEN);
                     nrb_mand->ipv4_addr_list = g_list_prepend(nrb_mand->ipv4_addr_list, tp);
                 }
 
@@ -2806,7 +2816,7 @@ pcapng_read_name_resolution_block(FILE_T fh, pcapng_block_header_t *bh,
                     }
                     hashipv6_t *tp = g_new0(hashipv6_t, 1);
                     memcpy(tp->addr, ws_buffer_start_ptr(&nrb_rec), sizeof tp->addr);
-                    (void) g_strlcpy(tp->name, namep, MAXNAMELEN);
+                    (void) g_strlcpy(tp->name, namep, MAXDNSNAMELEN);
                     nrb_mand->ipv6_addr_list = g_list_prepend(nrb_mand->ipv6_addr_list, tp);
                 }
 
@@ -3094,7 +3104,7 @@ pcapng_handle_generic_custom_block(FILE_T fh, pcapng_block_header_t *bh,
     wblock->rec->rec_header.custom_block_header.length = bh->block_total_length - MIN_CB_SIZE;
     wblock->rec->rec_header.custom_block_header.pen = pen;
     wblock->rec->rec_header.custom_block_header.copy_allowed = (bh->block_type == BLOCK_TYPE_CB_COPY);
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer, to_read, err, err_info)) {
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data, to_read, err, err_info)) {
         return false;
     }
     /*
@@ -3157,36 +3167,55 @@ pcapng_read_custom_block(FILE_T fh, pcapng_block_header_t *bh,
     return true;
 }
 
+static inline bool
+sysdig_has_flags(unsigned block_type) {
+    return block_type == BLOCK_TYPE_SYSDIG_EVF
+        || block_type == BLOCK_TYPE_SYSDIG_EVF_V2
+        || block_type == BLOCK_TYPE_SYSDIG_EVF_V2_LARGE;
+}
+
+static inline bool
+sysdig_has_nparams(unsigned block_type) {
+    return block_type == BLOCK_TYPE_SYSDIG_EVENT_V2
+        || block_type == BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE
+        || block_type == BLOCK_TYPE_SYSDIG_EVF_V2
+        || block_type == BLOCK_TYPE_SYSDIG_EVF_V2_LARGE;
+}
+
+// Preamble:
+//   uint16_t CPU ID
+//   uint32_t Flags (optional, sysdig_has_flags)
+// Event header (libs:driver/ppm_events_public.h:ppm_evt_hdr):
+//   uint64_t Timestamp
+//   uint64_t Thread ID
+//   uint32_t Event length. Includes this header.
+//   uint16_t Event type
+//   uint32_t Number of params (optional, sysdig_has_nparams)
+
 static bool
 pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
-                               const section_info_t *section_info,
+                               section_info_t *section_info,
                                wtapng_block_t *wblock,
                                int *err, char **err_info)
 {
-    unsigned block_read;
     uint16_t cpu_id;
-    uint64_t wire_ts;
     uint64_t ts;
     uint64_t thread_id;
     uint32_t event_len;
     uint16_t event_type;
     uint32_t nparams = 0;
-    unsigned min_event_size;
+    uint32_t flags = 0;
+    bool has_flags = sysdig_has_flags(bh->block_type);
+    bool has_nparams = sysdig_has_nparams(bh->block_type);
+    unsigned preamble_len = MIN_SYSDIG_PREAMBLE_SIZE + (has_flags ? 4 : 0);
+    unsigned event_header_len = MIN_SYSDIG_EVENT_SIZE + (has_nparams ? 4 : 0);
 
-    switch (bh->block_type) {
-        case BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE:
-        case BLOCK_TYPE_SYSDIG_EVENT_V2:
-            min_event_size = MIN_SYSDIG_EVENT_V2_SIZE;
-            break;
-        default:
-            min_event_size = MIN_SYSDIG_EVENT_SIZE;
-            break;
-    }
+    wblock->block = wtap_block_create(WTAP_BLOCK_SYSDIG_EVENT);
 
-    if (bh->block_total_length < min_event_size) {
+    if (bh->block_total_length < MIN_BLOCK_SIZE + preamble_len + event_header_len) {
         *err = WTAP_ERR_BAD_FILE;
         *err_info = ws_strdup_printf("pcapng: total block length %u of a Sysdig event block is too small (< %u)",
-                                    bh->block_total_length, min_event_size);
+                                    bh->block_total_length, MIN_BLOCK_SIZE + preamble_len + event_header_len);
         return false;
     }
 
@@ -3194,12 +3223,21 @@ pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
     wblock->rec->rec_header.syscall_header.record_type = bh->block_type;
     wblock->rec->presence_flags = WTAP_HAS_CAP_LEN /*|WTAP_HAS_INTERFACE_ID */;
     wblock->rec->tsprec = WTAP_TSPREC_NSEC;
+    wblock->rec->rec_header.syscall_header.pathname = wth->pathname;
 
+    // Preamble
     if (!wtap_read_bytes(fh, &cpu_id, sizeof cpu_id, err, err_info)) {
         ws_debug("failed to read sysdig event cpu id");
         return false;
     }
-    if (!wtap_read_bytes(fh, &wire_ts, sizeof wire_ts, err, err_info)) {
+    if (has_flags) {
+        if (!wtap_read_bytes(fh, &flags, sizeof flags, err, err_info)) {
+            ws_debug("failed to read sysdig flags");
+            return false;
+        }
+    }
+    // Event header
+    if (!wtap_read_bytes(fh, &ts, sizeof ts, err, err_info)) {
         ws_debug("failed to read sysdig event timestamp");
         return false;
     }
@@ -3215,17 +3253,13 @@ pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
         ws_debug("failed to read sysdig event type");
         return false;
     }
-    if (bh->block_type == BLOCK_TYPE_SYSDIG_EVENT_V2 || bh->block_type == BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE) {
+    if (has_nparams) {
         if (!wtap_read_bytes(fh, &nparams, sizeof nparams, err, err_info)) {
             ws_debug("failed to read sysdig number of parameters");
             return false;
         }
     }
 
-    wblock->rec->rec_header.syscall_header.pathname = wth->pathname;
-    wblock->rec->rec_header.syscall_header.byte_order = G_BYTE_ORDER;
-
-    /* XXX Use Gxxx_FROM_LE macros instead? */
     if (section_info->byte_swapped) {
         wblock->rec->rec_header.syscall_header.byte_order =
 #if G_BYTE_ORDER == G_LITTLE_ENDIAN
@@ -3233,19 +3267,15 @@ pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
 #else
             G_LITTLE_ENDIAN;
 #endif
-        wblock->rec->rec_header.syscall_header.cpu_id = GUINT16_SWAP_LE_BE(cpu_id);
-        ts = GUINT64_SWAP_LE_BE(wire_ts);
-        wblock->rec->rec_header.syscall_header.thread_id = GUINT64_SWAP_LE_BE(thread_id);
-        wblock->rec->rec_header.syscall_header.event_len = GUINT32_SWAP_LE_BE(event_len);
-        wblock->rec->rec_header.syscall_header.event_type = GUINT16_SWAP_LE_BE(event_type);
-        wblock->rec->rec_header.syscall_header.nparams = GUINT32_SWAP_LE_BE(nparams);
+        cpu_id = GUINT16_SWAP_LE_BE(cpu_id);
+        ts = GUINT64_SWAP_LE_BE(ts);
+        flags = GUINT32_SWAP_LE_BE(flags);
+        thread_id = GUINT64_SWAP_LE_BE(thread_id);
+        event_len = GUINT32_SWAP_LE_BE(event_len);
+        event_type = GUINT16_SWAP_LE_BE(event_type);
+        nparams = GUINT32_SWAP_LE_BE(nparams);
     } else {
-        wblock->rec->rec_header.syscall_header.cpu_id = cpu_id;
-        ts = wire_ts;
-        wblock->rec->rec_header.syscall_header.thread_id = thread_id;
-        wblock->rec->rec_header.syscall_header.event_len = event_len;
-        wblock->rec->rec_header.syscall_header.event_type = event_type;
-        wblock->rec->rec_header.syscall_header.nparams = nparams;
+        wblock->rec->rec_header.syscall_header.byte_order = G_BYTE_ORDER;
     }
 
     if (ts) {
@@ -3255,21 +3285,59 @@ pcapng_read_sysdig_event_block(wtap *wth, FILE_T fh, pcapng_block_header_t *bh,
     wblock->rec->ts.secs = (time_t) (ts / 1000000000);
     wblock->rec->ts.nsecs = (int) (ts % 1000000000);
 
-    block_read = bh->block_total_length - min_event_size;
+    unsigned block_remaining = bh->block_total_length - MIN_BLOCK_SIZE - preamble_len - event_header_len;
+    if (event_len > block_remaining + event_header_len) {
+        ws_debug("Truncating event length %u to %u", event_len, block_remaining + event_header_len);
+        // ...or should we just return false here?
+        event_len = block_remaining + event_header_len;
+    }
 
-    wblock->rec->rec_header.syscall_header.event_filelen = block_read;
+    uint32_t event_data_len = event_len - event_header_len;
 
-    /* "Sysdig Event Block" read event data */
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer,
-                                block_read, err, err_info))
+    wblock->rec->rec_header.syscall_header.cpu_id = cpu_id;
+    wblock->rec->rec_header.syscall_header.flags = flags;
+    wblock->rec->rec_header.syscall_header.thread_id = thread_id;
+    wblock->rec->rec_header.syscall_header.event_len = event_len;
+    wblock->rec->rec_header.syscall_header.event_data_len = event_data_len;
+    wblock->rec->rec_header.syscall_header.event_type = event_type;
+    wblock->rec->rec_header.syscall_header.nparams = nparams;
+
+    // Event data
+    // XXX Should we include the event header here? It would ensure that
+    // we always have data and avoid the "consumed = 1" workaround in the
+    // Falco Bridge dissector.
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data, event_data_len, err, err_info)) {
         return false;
+    }
 
-    /* XXX Read comment? */
+    unsigned pad_len = 0;
+    if ((event_len + preamble_len) % 4) {
+        pad_len = 4 - ((event_len + preamble_len) % 4);
+    }
+    if (pad_len && file_seek(fh, pad_len, SEEK_CUR, err) < 0) {
+        return false;   /* Seek error */
+    }
+
+    /* Options */
+    unsigned opt_cont_buf_len = block_remaining - (event_data_len + pad_len);
+    if (!pcapng_process_options(fh, wblock, section_info, opt_cont_buf_len,
+                                NULL,
+                                OPT_LITTLE_ENDIAN, err, err_info))
+        return false;
 
     /*
      * We return these to the caller in pcapng_read().
      */
     wblock->internal = false;
+
+    /*
+     * We want dissectors (particularly packet_frame) to be able to
+     * access packet comments and whatnot that are in the block. wblock->block
+     * will be unref'd by pcapng_seek_read(), so move the block to where
+     * dissectors can find it.
+     */
+    wblock->rec->block = wblock->block;
+    wblock->block = NULL;
 
     return true;
 }
@@ -3291,7 +3359,7 @@ pcapng_read_systemd_journal_export_block(wtap *wth, FILE_T fh, pcapng_block_head
     entry_length = bh->block_total_length - MIN_BLOCK_SIZE;
 
     /* Includes padding bytes. */
-    if (!wtap_read_packet_bytes(fh, wblock->frame_buffer,
+    if (!wtap_read_bytes_buffer(fh, &wblock->rec->data,
                                 entry_length, err, err_info)) {
         return false;
     }
@@ -3300,9 +3368,9 @@ pcapng_read_systemd_journal_export_block(wtap *wth, FILE_T fh, pcapng_block_head
      * We don't have memmem available everywhere, so we get to add space for
      * a trailing \0 for strstr below.
      */
-    ws_buffer_assure_space(wblock->frame_buffer, entry_length+1);
+    ws_buffer_assure_space(&wblock->rec->data, entry_length+1);
 
-    char *buf_ptr = (char *) ws_buffer_start_ptr(wblock->frame_buffer);
+    char *buf_ptr = (char *) ws_buffer_start_ptr(&wblock->rec->data);
     while (entry_length > 0 && buf_ptr[entry_length-1] == '\0') {
         entry_length--;
     }
@@ -3633,7 +3701,9 @@ pcapng_read_block(wtap *wth, FILE_T fh, pcapng_t *pn,
             case(BLOCK_TYPE_SYSDIG_EVENT):
             case(BLOCK_TYPE_SYSDIG_EVENT_V2):
             case(BLOCK_TYPE_SYSDIG_EVENT_V2_LARGE):
-            /* case(BLOCK_TYPE_SYSDIG_EVF): */
+            case(BLOCK_TYPE_SYSDIG_EVF):
+            case(BLOCK_TYPE_SYSDIG_EVF_V2):
+            case(BLOCK_TYPE_SYSDIG_EVF_V2_LARGE):
                 if (!pcapng_read_sysdig_event_block(wth, fh, &bh, section_info, wblock, err, err_info))
                     return false;
                 break;
@@ -3945,7 +4015,6 @@ pcapng_open(wtap *wth, int *err, char **err_info)
     wblock.type = bh.block_type;
     wblock.block = NULL;
     /* we don't expect any packet blocks yet */
-    wblock.frame_buffer = NULL;
     wblock.rec = NULL;
 
     switch (pcapng_read_section_header_block(wth->fh, &bh, &first_section,
@@ -4056,8 +4125,14 @@ pcapng_open(wtap *wth, int *err, char **err_info)
      * a pcapng that has a new link-layer type in an IDB in the middle of
      * the file, as they will discover in the middle that no, they can't
      * successfully write the output file as desired.
+     *
+     * If this is a live capture, and we're reading the initially written
+     * header, we'll loop until we reach EOF. (If compressed, it might
+     * also set WTAP_ERR_SHORT_READ from the stream / frame end not being
+     * present until the file is closed.) So we'll need to clear that at
+     * some point before reading packets.
      */
-    while (1) {
+    while (!file_eof(wth->fh)) {
         /* peek at next block */
         /* Try to read the (next) block header */
         saved_offset = file_tell(wth->fh);
@@ -4123,14 +4198,13 @@ pcapng_open(wtap *wth, int *err, char **err_info)
 
 /* classic wtap: read packet */
 static bool
-pcapng_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
-            char **err_info, int64_t *data_offset)
+pcapng_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
+            int64_t *data_offset)
 {
     pcapng_t *pcapng = (pcapng_t *)wth->priv;
     section_info_t *current_section, new_section;
     wtapng_block_t wblock;
 
-    wblock.frame_buffer  = buf;
     wblock.rec = rec;
 
     /* read next block */
@@ -4182,8 +4256,7 @@ pcapng_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
 
 /* classic wtap: seek to file position and read packet */
 static bool
-pcapng_seek_read(wtap *wth, int64_t seek_off,
-                 wtap_rec *rec, Buffer *buf,
+pcapng_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
                  int *err, char **err_info)
 {
     pcapng_t *pcapng = (pcapng_t *)wth->priv;
@@ -4228,7 +4301,6 @@ pcapng_seek_read(wtap *wth, int64_t seek_off,
         section_number--;
     }
 
-    wblock.frame_buffer = buf;
     wblock.rec = rec;
 
     /* read the block */
@@ -4449,7 +4521,9 @@ compute_block_option_size(wtap_block_t block _U_, unsigned option_id, wtap_optty
         break;
     default:
         /* Block-type dependent; call the callback. */
-        size = (*options_size->compute_option_size)(block, option_id, option_type, optval);
+        if (options_size->compute_option_size) {
+            size = (*options_size->compute_option_size)(block, option_id, option_type, optval);
+        }
         break;
     }
 
@@ -5237,23 +5311,26 @@ compute_epb_option_size(wtap_block_t block _U_, unsigned option_id, wtap_opttype
 
     switch(option_id)
     {
-    case OPT_EPB_FLAGS:
+    case OPT_PKT_FLAGS:
         size = 4;
         break;
-    case OPT_EPB_DROPCOUNT:
+    case OPT_PKT_HASH:
+        size = pcapng_compute_packet_hash_option_size(optval);
+        break;
+    case OPT_PKT_DROPCOUNT:
         size = 8;
         break;
-    case OPT_EPB_PACKETID:
+    case OPT_PKT_PACKETID:
         size = 8;
         break;
-    case OPT_EPB_QUEUE:
+    case OPT_PKT_QUEUE:
         size = 4;
         break;
-    case OPT_EPB_VERDICT:
+    case OPT_PKT_VERDICT:
         size = pcapng_compute_packet_verdict_option_size(optval);
         break;
-    case OPT_EPB_HASH:
-        size = pcapng_compute_packet_hash_option_size(optval);
+    case OPT_PKT_PROCIDTHRDID:
+        size = 8;
         break;
     default:
         /* Unknown options - size by datatype? */
@@ -5268,29 +5345,31 @@ static bool write_wtap_epb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsi
     switch(option_id)
     {
     case OPT_PKT_FLAGS:
-        if (!pcapng_write_uint32_option(wdh, OPT_EPB_FLAGS, optval, err))
-            return false;
-        break;
-    case OPT_PKT_DROPCOUNT:
-        if (!pcapng_write_uint64_option(wdh, OPT_EPB_DROPCOUNT, optval, err))
-            return false;
-        break;
-    case OPT_PKT_PACKETID:
-        if (!pcapng_write_uint64_option(wdh, OPT_EPB_PACKETID, optval, err))
-            return false;
-        break;
-    case OPT_PKT_QUEUE:
-        if (!pcapng_write_uint32_option(wdh, OPT_EPB_QUEUE, optval, err))
-            return false;
-        break;
-    case OPT_PKT_VERDICT:
-        if (!pcapng_write_packet_verdict_option(wdh, OPT_EPB_VERDICT, optval,
-                                                err))
+        if (!pcapng_write_uint32_option(wdh, OPT_PKT_FLAGS, optval, err))
             return false;
         break;
     case OPT_PKT_HASH:
-        if (!pcapng_write_packet_hash_option(wdh, OPT_EPB_HASH, optval,
-                                             err))
+        if (!pcapng_write_packet_hash_option(wdh, OPT_PKT_HASH, optval, err))
+            return false;
+        break;
+    case OPT_PKT_DROPCOUNT:
+        if (!pcapng_write_uint64_option(wdh, OPT_PKT_DROPCOUNT, optval, err))
+            return false;
+        break;
+    case OPT_PKT_PACKETID:
+        if (!pcapng_write_uint64_option(wdh, OPT_PKT_PACKETID, optval, err))
+            return false;
+        break;
+    case OPT_PKT_QUEUE:
+        if (!pcapng_write_uint32_option(wdh, OPT_PKT_QUEUE, optval, err))
+            return false;
+        break;
+    case OPT_PKT_VERDICT:
+        if (!pcapng_write_packet_verdict_option(wdh, OPT_PKT_VERDICT, optval, err))
+            return false;
+        break;
+    case OPT_PKT_PROCIDTHRDID:
+        if (!pcapng_write_uint64_option(wdh, OPT_PKT_PROCIDTHRDID, optval, err))
             return false;
         break;
     default:
@@ -5373,7 +5452,6 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
     const uint32_t zero_pad = 0;
     uint32_t pad_len;
     uint32_t phdr_len;
-    uint32_t options_total_length = 0;
     wtap_block_t int_data;
     wtapng_if_descr_mandatory_t *int_data_mand;
 
@@ -5461,7 +5539,7 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
 
     /* write (enhanced) packet block header */
     bh.block_type = BLOCK_TYPE_EPB;
-    bh.block_total_length = (uint32_t)sizeof(bh) + (uint32_t)sizeof(epb) + phdr_len + rec->rec_header.packet_header.caplen + pad_len + options_total_length + options_size + 4;
+    bh.block_total_length = (uint32_t)sizeof(bh) + (uint32_t)sizeof(epb) + phdr_len + rec->rec_header.packet_header.caplen + pad_len + options_size + 4;
 
     if (!wtap_dump_file_write(wdh, &bh, sizeof bh, err))
         return false;
@@ -5518,90 +5596,88 @@ pcapng_write_sysdig_event_block(wtap_dumper *wdh, const wtap_rec *rec,
     pcapng_block_header_t bh;
     const uint32_t zero_pad = 0;
     uint32_t pad_len;
-#if 0
-    bool have_options = false;
-    struct pcapng_option option_hdr;
-    uint32_t comment_len = 0, comment_pad_len = 0;
-#endif
-    uint32_t options_total_length = 0;
-    uint16_t cpu_id;
-    uint64_t hdr_ts;
-    uint64_t ts;
-    uint64_t thread_id;
-    uint32_t event_len;
-    uint16_t event_type;
+    uint32_t options_size = 0;
+    bool has_flags = sysdig_has_flags(rec->rec_header.syscall_header.record_type);
+    bool has_nparams = sysdig_has_nparams(rec->rec_header.syscall_header.record_type);
+    unsigned preamble_len = MIN_SYSDIG_PREAMBLE_SIZE + (has_flags ? 4 : 0);
+    unsigned event_header_len = MIN_SYSDIG_EVENT_SIZE + (has_nparams ? 4 : 0);
 
     /* Don't write anything we're not willing to read. */
-    if (rec->rec_header.syscall_header.event_filelen > WTAP_MAX_PACKET_SIZE_STANDARD) {
+    if (rec->rec_header.syscall_header.event_data_len > WTAP_MAX_PACKET_SIZE_STANDARD) {
         *err = WTAP_ERR_PACKET_TOO_LARGE;
         return false;
     }
 
-    if (rec->rec_header.syscall_header.event_filelen % 4) {
-        pad_len = 4 - (rec->rec_header.syscall_header.event_filelen % 4);
+    if ((rec->rec_header.syscall_header.event_data_len + event_header_len + preamble_len) % 4) {
+        pad_len = 4 - ((rec->rec_header.syscall_header.event_data_len + event_header_len + preamble_len) % 4);
     } else {
         pad_len = 0;
     }
 
-#if 0
-    /* Check if we should write comment option */
-    if (rec->opt_comment) {
-        have_options = true;
-        comment_len = (uint32_t)strlen(rec->opt_comment) & 0xffff;
-        if ((comment_len % 4)) {
-            comment_pad_len = 4 - (comment_len % 4);
-        } else {
-            comment_pad_len = 0;
-        }
-        options_total_length = options_total_length + comment_len + comment_pad_len + 4 /* comment options tag */ ;
+    if (rec->block != NULL) {
+        /* Compute size of all the options */
+        options_size = compute_options_size(rec->block, NULL);
     }
-    if (have_options) {
-        /* End-of options tag */
-        options_total_length += 4;
-    }
-#endif
 
     /* write sysdig event block header */
-    bh.block_type = BLOCK_TYPE_SYSDIG_EVENT;
-    bh.block_total_length = (uint32_t)sizeof(bh) + SYSDIG_EVENT_HEADER_SIZE + rec->rec_header.syscall_header.event_filelen + pad_len + options_total_length + 4;
+    bh.block_type = rec->rec_header.syscall_header.record_type;
+    bh.block_total_length = MIN_BLOCK_SIZE + preamble_len + event_header_len + rec->rec_header.syscall_header.event_data_len + pad_len + options_size;
 
-    if (!wtap_dump_file_write(wdh, &bh, sizeof bh, err))
+    if (!wtap_dump_file_write(wdh, &bh, sizeof(bh), err))
         return false;
 
-    /* Sysdig is always LE? */
-    cpu_id = GUINT16_TO_LE(rec->rec_header.syscall_header.cpu_id);
-    hdr_ts = (((uint64_t)rec->ts.secs) * 1000000000) + rec->ts.nsecs;
-    ts = GUINT64_TO_LE(hdr_ts);
-    thread_id = GUINT64_TO_LE(rec->rec_header.syscall_header.thread_id);
-    event_len = GUINT32_TO_LE(rec->rec_header.syscall_header.event_len);
-    event_type = GUINT16_TO_LE(rec->rec_header.syscall_header.event_type);
+    uint16_t cpu_id = rec->rec_header.syscall_header.cpu_id;
+    uint64_t ts = (((uint64_t)rec->ts.secs) * 1000000000) + rec->ts.nsecs;
+    uint64_t thread_id = rec->rec_header.syscall_header.thread_id;
+    uint32_t event_len = rec->rec_header.syscall_header.event_data_len + event_header_len;
+    uint16_t event_type = rec->rec_header.syscall_header.event_type;
 
+    // Preamble
     if (!wtap_dump_file_write(wdh, &cpu_id, sizeof cpu_id, err))
         return false;
 
-    if (!wtap_dump_file_write(wdh, &ts, sizeof ts, err))
+    if (has_flags) {
+        uint32_t flags = rec->rec_header.syscall_header.flags;
+        if (!wtap_dump_file_write(wdh, &flags, sizeof(flags), err)) {
+            return false;
+        }
+    }
+
+    // Event header
+    if (!wtap_dump_file_write(wdh, &ts, sizeof(ts), err))
         return false;
 
-    if (!wtap_dump_file_write(wdh, &thread_id, sizeof thread_id, err))
+    if (!wtap_dump_file_write(wdh, &thread_id, sizeof(thread_id), err))
         return false;
 
-    if (!wtap_dump_file_write(wdh, &event_len, sizeof event_len, err))
+    if (!wtap_dump_file_write(wdh, &event_len, sizeof(event_len), err))
         return false;
 
-    if (!wtap_dump_file_write(wdh, &event_type, sizeof event_type, err))
+    if (!wtap_dump_file_write(wdh, &event_type, sizeof(event_type), err))
         return false;
 
-    /* write event data */
-    if (!wtap_dump_file_write(wdh, pd, rec->rec_header.syscall_header.event_filelen, err))
+    if (has_nparams) {
+        uint32_t nparams = rec->rec_header.syscall_header.nparams;
+        if (!wtap_dump_file_write(wdh, &nparams, sizeof(nparams), err)) {
+            return false;
+        }
+    }
+
+    /* Event data */
+    if (!wtap_dump_file_write(wdh, pd, rec->rec_header.syscall_header.event_data_len, err))
         return false;
 
-    /* write padding (if any) */
+    /* Write padding (if any) */
     if (pad_len != 0) {
         if (!wtap_dump_file_write(wdh, &zero_pad, pad_len, err))
             return false;
     }
 
-    /* XXX Write comment? */
+    /* Write options, if we have any */
+    if (options_size != 0) {
+        if (!write_options(wdh, rec->block, NULL, err))
+            return false;
+    }
 
     /* write block footer */
     if (!wtap_dump_file_write(wdh, &bh.block_total_length,
@@ -6595,9 +6671,8 @@ static bool pcapng_write_internal_blocks(wtap_dumper *wdh, int *err)
     return true;
 }
 
-static bool pcapng_dump(wtap_dumper *wdh,
-                            const wtap_rec *rec,
-                            const uint8_t *pd, int *err, char **err_info)
+static bool pcapng_dump(wtap_dumper *wdh, const wtap_rec *rec,
+                        int *err, char **err_info)
 {
 #ifdef HAVE_PLUGINS
     block_handler *handler;
@@ -6620,12 +6695,12 @@ static bool pcapng_dump(wtap_dumper *wdh,
                 (!(rec->presence_flags & WTAP_HAS_INTERFACE_ID) || rec->rec_header.packet_header.interface_id == 0) &&
                 (!(rec->presence_flags & WTAP_HAS_CAP_LEN) || rec->rec_header.packet_header.len == rec->rec_header.packet_header.caplen) &&
                 (rec->block == NULL || compute_options_size(rec->block, compute_epb_option_size) == 0)) {
-                if (!pcapng_write_simple_packet_block(wdh, rec, pd, err, err_info)) {
+                if (!pcapng_write_simple_packet_block(wdh, rec, ws_buffer_start_ptr(&rec->data), err, err_info)) {
                     return false;
                 }
             }
             else {
-                if (!pcapng_write_enhanced_packet_block(wdh, rec, pd, err, err_info)) {
+                if (!pcapng_write_enhanced_packet_block(wdh, rec, ws_buffer_start_ptr(&rec->data), err, err_info)) {
                     return false;
                 }
             }
@@ -6641,7 +6716,7 @@ static bool pcapng_dump(wtap_dumper *wdh,
                 (handler = (block_handler *)g_hash_table_lookup(block_handlers,
                                                                 GUINT_TO_POINTER(rec->rec_header.ft_specific_header.record_type))) != NULL) {
                 /* Yes. Call it to write out this record. */
-                if (!handler->writer(wdh, rec, pd, err))
+                if (!handler->writer(wdh, rec, ws_buffer_start_ptr(&rec->data), err))
                     return false;
             } else
 #endif
@@ -6653,13 +6728,13 @@ static bool pcapng_dump(wtap_dumper *wdh,
             break;
 
         case REC_TYPE_SYSCALL:
-            if (!pcapng_write_sysdig_event_block(wdh, rec, pd, err)) {
+            if (!pcapng_write_sysdig_event_block(wdh, rec, ws_buffer_start_ptr(&rec->data), err)) {
                 return false;
             }
             break;
 
         case REC_TYPE_SYSTEMD_JOURNAL_EXPORT:
-            if (!pcapng_write_systemd_journal_export_block(wdh, rec, pd, err)) {
+            if (!pcapng_write_systemd_journal_export_block(wdh, rec, ws_buffer_start_ptr(&rec->data), err)) {
                 return false;
             }
             break;
@@ -6667,12 +6742,12 @@ static bool pcapng_dump(wtap_dumper *wdh,
         case REC_TYPE_CUSTOM_BLOCK:
             switch (rec->rec_header.custom_block_header.pen) {
             case PEN_NFLX:
-                if (!pcapng_write_bblog_block(wdh, rec, pd, err)) {
+                if (!pcapng_write_bblog_block(wdh, rec, ws_buffer_start_ptr(&rec->data), err)) {
                     return false;
                 }
                 break;
             default:
-                if (!pcapng_write_custom_block(wdh, rec, pd, err)) {
+                if (!pcapng_write_custom_block(wdh, rec, ws_buffer_start_ptr(&rec->data), err)) {
                     return false;
                 }
                 break;
@@ -6854,7 +6929,10 @@ static const struct supported_option_type interface_block_options_supported[] = 
     { OPT_IDB_OS, ONE_OPTION_SUPPORTED },
     { OPT_IDB_FCSLEN, ONE_OPTION_SUPPORTED },
     { OPT_IDB_TSOFFSET, ONE_OPTION_SUPPORTED },
-    { OPT_IDB_HARDWARE, ONE_OPTION_SUPPORTED }
+    { OPT_IDB_HARDWARE, ONE_OPTION_SUPPORTED },
+    { OPT_IDB_TXSPEED, ONE_OPTION_SUPPORTED },
+    { OPT_IDB_RXSPEED, ONE_OPTION_SUPPORTED },
+    { OPT_IDB_IANA_TZNAME, ONE_OPTION_SUPPORTED }
 };
 
 /* Options for name resolution blocks. */
@@ -6907,11 +6985,12 @@ static const struct supported_option_type meta_events_block_options_supported[] 
 static const struct supported_option_type packet_block_options_supported[] = {
     { OPT_COMMENT, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_PKT_FLAGS, ONE_OPTION_SUPPORTED },
+    { OPT_PKT_HASH, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_PKT_DROPCOUNT, ONE_OPTION_SUPPORTED },
     { OPT_PKT_PACKETID, ONE_OPTION_SUPPORTED },
     { OPT_PKT_QUEUE, ONE_OPTION_SUPPORTED },
-    { OPT_PKT_HASH, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_PKT_VERDICT, MULTIPLE_OPTIONS_SUPPORTED },
+    { OPT_PKT_PROCIDTHRDID, ONE_OPTION_SUPPORTED },
     { OPT_CUSTOM_STR_COPY, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_BIN_COPY, MULTIPLE_OPTIONS_SUPPORTED },
     { OPT_CUSTOM_STR_NO_COPY, MULTIPLE_OPTIONS_SUPPORTED },
@@ -6961,7 +7040,7 @@ static const struct supported_block_type pcapng_blocks_supported[] = {
     /* Multiple blocks of decryption secrets. */
     { WTAP_BLOCK_DECRYPTION_SECRETS, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(decryption_secrets_block_options_supported) },
 
-    /* Multiple blocks of decryption secrets. */
+    /* Multiple blocks of meta evens.. */
     { WTAP_BLOCK_META_EVENT, MULTIPLE_BLOCKS_SUPPORTED, OPTION_TYPES_SUPPORTED(meta_events_block_options_supported) },
 
     /* And, obviously, multiple packets. */

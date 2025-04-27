@@ -23,6 +23,7 @@
 #include <glib.h>
 
 #include <stdio.h>
+#include <wsutil/application_flavor.h>
 #include <wsutil/filesystem.h>
 #include <epan/addr_resolv.h>
 #include <epan/oids.h>
@@ -33,7 +34,7 @@
 #include <epan/strutil.h>
 #include <epan/column.h>
 #include <epan/decode_as.h>
-#include <capture_opts.h>
+#include <ui/capture_opts.h>
 #include <wsutil/file_util.h>
 #include <wsutil/report_message.h>
 #include <wsutil/wslog.h>
@@ -195,8 +196,6 @@ static const enum_val_t abs_time_format_options[] = {
     {NULL, NULL, -1}
 };
 
-#if defined(HAVE_PCAP_CREATE)
-/* Can set monitor mode and buffer size. */
 static int num_capture_cols = 7;
 static const char *capture_cols[7] = {
     "INTERFACE",
@@ -209,32 +208,6 @@ static const char *capture_cols[7] = {
 };
 #define CAPTURE_COL_TYPE_DESCRIPTION \
     "Possible values: INTERFACE, LINK, PMODE, SNAPLEN, MONITOR, BUFFER, FILTER\n"
-#elif defined(CAN_SET_CAPTURE_BUFFER_SIZE)
-/* Can set buffer size but not monitor mode. */
-static int num_capture_cols = 6;
-static const char *capture_cols[6] = {
-    "INTERFACE",
-    "LINK",
-    "PMODE",
-    "SNAPLEN",
-    "BUFFER",
-    "FILTER"
-};
-#define CAPTURE_COL_TYPE_DESCRIPTION \
-    "Possible values: INTERFACE, LINK, PMODE, SNAPLEN, BUFFER, FILTER\n"
-#else
-/* Can neither set buffer size nor monitor mode. */
-static int num_capture_cols = 5;
-static const char *capture_cols[5] = {
-    "INTERFACE",
-    "LINK",
-    "PMODE",
-    "SNAPLEN",
-    "FILTER"
-};
-#define CAPTURE_COL_TYPE_DESCRIPTION \
-    "Possible values: INTERFACE, LINK, PMODE, SNAPLEN, FILTER\n"
-#endif
 
 static const enum_val_t gui_packet_list_elide_mode[] = {
     {"LEFT", "LEFT", ELIDE_LEFT},
@@ -1152,7 +1125,7 @@ module_find_pref_cb(const void *key _U_, void *value, void *data)
 
 /* Tries to find a preference, setting containing_module to the (sub)module
  * holding this preference. */
-static struct preference *
+static pref_t *
 prefs_find_preference_with_submodule(module_t *module, const char *name,
         module_t **containing_module)
 {
@@ -1184,10 +1157,10 @@ prefs_find_preference_with_submodule(module_t *module, const char *name,
     if (containing_module)
         *containing_module = arg.submodule ? arg.submodule : module;
 
-    return (struct preference *) list_entry->data;
+    return (pref_t *) list_entry->data;
 }
 
-struct preference *
+pref_t *
 prefs_find_preference(module_t *module, const char *name)
 {
     return prefs_find_preference_with_submodule(module, name, NULL);
@@ -1847,22 +1820,6 @@ prefs_register_uat_preference(module_t *module, const char *name,
                               const char *title, const char *description,
                               uat_t* uat)
 {
-
-    pref_t* preference = register_preference(module, name, title, description, PREF_UAT);
-
-    preference->varp.uat = uat;
-}
-
-/*
- * Register a uat 'preference' for QT only. It adds a button that opens the uat's window in the
- * preferences tab of the module.
- */
-extern void
-prefs_register_uat_preference_qt(module_t *module, const char *name,
-                              const char *title, const char *description,
-                              uat_t* uat)
-{
-
     pref_t* preference = register_preference(module, name, title, description, PREF_UAT);
 
     preference->varp.uat = uat;
@@ -2109,31 +2066,6 @@ prefs_set_preference_effect_fields(module_t *module, const char *name)
     if (pref) {
         prefs_set_effect_flags(pref, prefs_get_effect_flags(pref) | PREF_EFFECT_FIELDS);
     }
-}
-
-/*
- * Check to see if a preference is obsolete.
- */
-extern bool
-prefs_get_preference_obsolete(pref_t *pref)
-{
-    if (pref)
-        return (IS_PREF_OBSOLETE(pref->type) ? true : false);
-
-    return true;
-}
-
-/*
- * Make a preference obsolete.
- */
-extern prefs_set_pref_e
-prefs_set_preference_obsolete(pref_t *pref)
-{
-    if (pref) {
-        SET_PREF_OBSOLETE(pref->type);
-        return PREFS_SET_OK;
-    }
-    return PREFS_SET_NO_SUCH_PREF;
 }
 
 unsigned
@@ -2484,6 +2416,14 @@ static const enum_val_t st_sort_col_vals[] = {
     { "max",     "Maximum value of the node", ST_SORT_COL_MAX },
     { "burst",   "Burst rate of the node", ST_SORT_COL_BURSTRATE },
     { NULL,      NULL,         0 }
+};
+
+static const enum_val_t st_format_vals[] = {
+    { "text",  "Plain text",             ST_FORMAT_PLAIN },
+    { "csv",   "Comma separated values", ST_FORMAT_CSV   },
+    { "xml",   "XML document",           ST_FORMAT_XML   },
+    { "yaml",  "YAML document",          ST_FORMAT_YAML  },
+    { NULL,    NULL,                     0 }
 };
 
 static void
@@ -3974,20 +3914,20 @@ prefs_register_modules(void)
             "system is sorted.",
             &prefs.st_sort_defcolflag, st_sort_col_vals, false);
 
-     prefs_register_bool_preference(stats_module, "st_sort_defdescending",
+    prefs_register_bool_preference(stats_module, "st_sort_defdescending",
             "Default stats_tree sort order is descending",
             "When selected, statistics based on the stats_tree system will by default "
             "be sorted in descending order.",
             &prefs.st_sort_defdescending);
 
-     prefs_register_bool_preference(stats_module, "st_sort_casesensitve",
+    prefs_register_bool_preference(stats_module, "st_sort_casesensitve",
             "Case sensitive sort of stats_tree item names",
             "When selected, the item/node names of statistics based on the stats_tree "
             "system will be sorted taking case into account. Else the case of the name "
             "will be ignored.",
             &prefs.st_sort_casesensitve);
 
-     prefs_register_bool_preference(stats_module, "st_sort_rng_nameonly",
+    prefs_register_bool_preference(stats_module, "st_sort_rng_nameonly",
             "Always sort 'range' nodes by name",
             "When selected, the stats_tree nodes representing a range of values "
             "(0-49, 50-100, etc.) will always be sorted by name (the range of the "
@@ -3995,7 +3935,7 @@ prefs_register_modules(void)
             " the tree.",
             &prefs.st_sort_rng_nameonly);
 
-     prefs_register_bool_preference(stats_module, "st_sort_rng_fixorder",
+    prefs_register_bool_preference(stats_module, "st_sort_rng_fixorder",
             "Always sort 'range' nodes in ascending order",
             "When selected, the stats_tree nodes representing a range of values "
             "(0-49, 50-100, etc.) will always be sorted ascending; else it follows "
@@ -4003,12 +3943,29 @@ prefs_register_modules(void)
             "'range' nodes by name\" is also selected.",
             &prefs.st_sort_rng_fixorder);
 
-     prefs_register_bool_preference(stats_module, "st_sort_showfullname",
+    prefs_register_bool_preference(stats_module, "st_sort_showfullname",
             "Display the full stats_tree plug-in name",
             "When selected, the full name (including menu path) of the stats_tree "
             "plug-in is show in windows. If cleared the plug-in name is shown "
             "without menu path (only the part of the name after last '/' character.)",
             &prefs.st_sort_showfullname);
+
+    prefs_register_enum_preference(stats_module, "output_format",
+            "Default output format",
+            "Sets the default output format for statistical data. Only supported "
+            "by taps using the stats_tree system currently; other taps may honor "
+            "this preference in the future. ",
+            &prefs.st_format, st_format_vals, false);
+
+    module_t *conv_module;
+    // avoid using prefs_register_stat to prevent lint complaint about recursion
+    conv_module = prefs_register_module(stats_module, "conv", "Conversations",
+            "Conversations & Endpoints", NULL, NULL, true);
+    prefs_register_bool_preference(conv_module, "machine_readable",
+            "Display exact (machine-readable) byte counts",
+            "When enabled, exact machine-readable byte counts are displayed. "
+            "When disabled, human readable numbers with SI prefixes are displayed.",
+            &prefs.conv_machine_readable);
 
     /* Protocols */
     protocols_module = prefs_register_module(NULL, "protocols", "Protocols",
@@ -4310,7 +4267,7 @@ pre_init_prefs(void)
     static const char **col_fmt = col_fmt_packets;
     int num_cols = 7;
 
-    if (!is_packet_configuration_namespace()) {
+    if (application_flavor_is_stratoshark()) {
         static const char *col_fmt_logs[] = {
             "No.",              "%m",
             "Time",             "%t",
@@ -4498,6 +4455,7 @@ pre_init_prefs(void)
     prefs.st_sort_defcolflag = ST_SORT_COL_COUNT;
     prefs.st_sort_defdescending = true;
     prefs.st_sort_showfullname = false;
+    prefs.conv_machine_readable = false;
 
     /* protocols */
     prefs.display_hidden_proto_items = false;
@@ -5132,7 +5090,7 @@ prefs_set_pref(char *prefarg, char **errmsg)
     return ret;
 }
 
-unsigned prefs_get_uint_value_real(pref_t *pref, pref_source_t source)
+unsigned prefs_get_uint_value(pref_t *pref, pref_source_t source)
 {
     switch (source)
     {
@@ -5148,15 +5106,6 @@ unsigned prefs_get_uint_value_real(pref_t *pref, pref_source_t source)
     }
 
     return 0;
-}
-
-unsigned prefs_get_uint_value(const char *module_name, const char* pref_name)
-{
-    pref_t *pref = prefs_find_preference(prefs_find_module(module_name), pref_name);
-    if (pref == NULL) {
-        return 0;
-    }
-    return prefs_get_uint_value_real(pref, pref_current);
 }
 
 char* prefs_get_password_value(pref_t *pref, pref_source_t source)
@@ -6495,6 +6444,8 @@ set_pref(char *pref_name, const char *value, void *private_data,
 
         case PREF_STATIC_TEXT:
         case PREF_UAT:
+            break;
+
         case PREF_PROTO_TCP_SNDAMB_ENUM:
         {
             /* There's no point in setting the TCP sequence override

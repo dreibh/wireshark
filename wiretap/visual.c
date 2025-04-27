@@ -145,14 +145,14 @@ struct visual_write_info
 
 
 /* Local functions to handle file reads and writes */
-static bool visual_read(wtap *wth, wtap_rec *rec, Buffer *buf,
-    int *err, char **err_info, int64_t *data_offset);
-static bool visual_seek_read(wtap *wth, int64_t seek_off,
-    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
-static bool visual_read_packet(wtap *wth, FILE_T fh,
-    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+static bool visual_read(wtap *wth, wtap_rec *rec, int *err,
+    char **err_info, int64_t *data_offset);
+static bool visual_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+    int *err, char **err_info);
+static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
+    int *err, char **err_info);
 static bool visual_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    const uint8_t *pd, int *err, char **err_info);
+    int *err, char **err_info);
 static bool visual_dump_finish(wtap_dumper *wdh, int *err,
     char **err_info);
 static void visual_dump_free(wtap_dumper *wdh);
@@ -272,8 +272,8 @@ wtap_open_return_val visual_open(wtap *wth, int *err, char **err_info)
    in a loop to sequentially read the entire file one time.  After
    the file has been read once, any Future access to the packets is
    done through seek_read. */
-static bool visual_read(wtap *wth, wtap_rec *rec, Buffer *buf,
-    int *err, char **err_info, int64_t *data_offset)
+static bool visual_read(wtap *wth, wtap_rec *rec, int *err,
+    char **err_info, int64_t *data_offset)
 {
     struct visual_read_info *visual = (struct visual_read_info *)wth->priv;
 
@@ -289,19 +289,19 @@ static bool visual_read(wtap *wth, wtap_rec *rec, Buffer *buf,
 
     *data_offset = file_tell(wth->fh);
 
-    return visual_read_packet(wth, wth->fh, rec, buf, err, err_info);
+    return visual_read_packet(wth, wth->fh, rec, err, err_info);
 }
 
 /* Read packet header and data for random access. */
-static bool visual_seek_read(wtap *wth, int64_t seek_off,
-    wtap_rec *rec, Buffer *buf, int *err, char **err_info)
+static bool visual_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+    int *err, char **err_info)
 {
     /* Seek to the packet header */
     if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
         return false;
 
     /* Read the packet. */
-    if (!visual_read_packet(wth, wth->random_fh, rec, buf, err, err_info)) {
+    if (!visual_read_packet(wth, wth->random_fh, rec, err, err_info)) {
         if (*err == 0)
             *err = WTAP_ERR_SHORT_READ;
         return false;
@@ -309,9 +309,8 @@ static bool visual_seek_read(wtap *wth, int64_t seek_off,
     return true;
 }
 
-static bool
-visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
-        Buffer *buf, int *err, char **err_info)
+static bool visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
+    int *err, char **err_info)
 {
     struct visual_read_info *visual = (struct visual_read_info *)wth->priv;
     struct visual_pkt_hdr vpkt_hdr;
@@ -523,7 +522,7 @@ visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
     }
 
     /* Read the packet data */
-    if (!wtap_read_packet_bytes(fh, buf, packet_size, err, err_info))
+    if (!wtap_read_bytes_buffer(fh, &rec->data, packet_size, err, err_info))
         return false;
 
     if (wth->file_encap == WTAP_ENCAP_CHDLC_WITH_PHDR)
@@ -544,7 +543,7 @@ visual_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
            be configured for auto-detect, in which case the encapsulation
            hint is 13, and the encapsulation must be guessed from the
            packet contents.  Auto-detect is the default. */
-        pd = ws_buffer_start_ptr(buf);
+        pd = ws_buffer_start_ptr(&rec->data);
 
         /* If PPP is specified in the encap hint, then use that */
         if (vpkt_hdr.encap_hint == 14)
@@ -637,7 +636,7 @@ static bool visual_dump_open(wtap_dumper *wdh, int *err, char **err_info _U_)
 /* Write a packet to a Visual dump file.
    Returns true on success, false on failure. */
 static bool visual_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    const uint8_t *pd, int *err, char **err_info _U_)
+    int *err, char **err_info _U_)
 {
     const union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
     struct visual_write_info * visual = (struct visual_write_info *)wdh->priv;
@@ -754,7 +753,7 @@ static bool visual_dump(wtap_dumper *wdh, const wtap_rec *rec,
         return false;
 
     /* Write the packet data */
-    if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
+    if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data), rec->rec_header.packet_header.caplen, err))
         return false;
 
     /* Store the frame offset in the index table. */

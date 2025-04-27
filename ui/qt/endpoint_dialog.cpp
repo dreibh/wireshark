@@ -12,6 +12,7 @@
 #include <epan/maxmind_db.h>
 
 #include <epan/prefs.h>
+#include <epan/prefs-int.h>
 #include <epan/to_str.h>
 
 #include "ui/recent.h"
@@ -128,14 +129,15 @@ void EndpointDialog::tabChanged(int idx)
 
             /* enable/disable the Hide Aggregation checkbox for IPv4 */
             // XXX - Maybe we can find a better way not relying on the protoname
-            unsigned is_pref_set = 0;
-            module_t *ip_module = prefs_find_module("ip");
-            if (ip_module) {
-                is_pref_set = prefs_get_uint_value("ip", "conv_agg_flag");
+            pref_t *pref;
+            bool is_pref_set = false;
+            pref = prefs_find_preference(prefs_find_module("ip"), "conv_agg_flag");
+            if (pref) {
+                is_pref_set = prefs_get_bool_value(pref, pref_current);
             }
 
             QString protoname = proto_get_protocol_short_name(find_protocol_by_id(current_tab_data.protoId()));
-            if(is_pref_set && protoname.toUtf8().data()== QString("IPv4")) {
+            if(is_pref_set && protoname.toUtf8().data()== QStringLiteral("IPv4")) {
                 aggregated_ck_ ->setEnabled(true);
             }
             else {
@@ -152,7 +154,12 @@ void EndpointDialog::tabChanged(int idx)
             // Move the selected tab to the head
             if (selected_tab != nullptr) {
                 recent.endpoint_tabs = g_list_remove_link(recent.endpoint_tabs, selected_tab);
+#if GLIB_CHECK_VERSION(2, 62, 0)
+                recent.endpoint_tabs = g_list_insert_before_link(recent.endpoint_tabs, recent.endpoint_tabs, selected_tab);
+#else
                 recent.endpoint_tabs = g_list_prepend(recent.endpoint_tabs, selected_tab->data);
+                g_list_free_1(selected_tab);
+#endif
             }
         }
     }
@@ -202,7 +209,20 @@ void EndpointDialog::aggregationToggled(bool checked)
         return;
     }
 
-    ATapDataModel * atdm = trafficTab()->dataModelForTabIndex(1);
+    // Defaults to 0 but we can't reach this place if IPv4 is not selected anyway
+    int protoTabIndex = 0;
+
+    // Identify which tab number corresponds to IPv4
+    QList<int> _enabledProtocols = trafficList()->protocols(true);
+    for (int i=0; i< _enabledProtocols.size(); i++) {
+        QString protoname = proto_get_protocol_short_name(find_protocol_by_id(_enabledProtocols.at(i))) ;
+        if("IPv4" == protoname) {
+            protoTabIndex = i;
+            break;
+        }
+    }
+
+    ATapDataModel * atdm = trafficTab()->dataModelForTabIndex(protoTabIndex);
     if(atdm) {
         atdm->updateFlags(checked);
     }

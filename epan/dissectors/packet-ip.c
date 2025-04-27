@@ -279,6 +279,7 @@ static expert_field ei_ip_bogus_ip_version;
 static expert_field ei_ip_bogus_header_length;
 
 static dissector_handle_t ip_handle;
+static dissector_handle_t ipv4_handle;
 static dissector_table_t ip_option_table;
 
 static int ett_geoip_info;
@@ -1789,7 +1790,7 @@ static const value_string dscp_short_vals[] = {
   { IPDSFIELD_DSCP_AF43,    "AF43"   },
   { IPDSFIELD_DSCP_CS5,     "CS5"    },
   { IPDSFIELD_VOICE_ADMIT,  "VOICE-ADMIT" },
-  { IPDSFIELD_DSCP_EF,      "EF PHB" },
+  { IPDSFIELD_DSCP_EF,      "EF"     },
   { IPDSFIELD_DSCP_CS6,     "CS6"    },
   { IPDSFIELD_DSCP_CS7,     "CS7"    },
   { 0,                      NULL     }};
@@ -1876,7 +1877,7 @@ ip_try_dissect(bool heur_first, unsigned nxt, tvbuff_t *tvb, packet_info *pinfo,
     return true;
   }
 
-  if (dissector_try_uint_new(ip_dissector_table, nxt, tvb, pinfo,
+  if (dissector_try_uint_with_data(ip_dissector_table, nxt, tvb, pinfo,
                              tree, true, iph)) {
     return true;
   }
@@ -2416,7 +2417,7 @@ dissect_ip_v4(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
     conversation_t *conv;
 
     /* find (and extend) an existing conversation, or create a new one */
-    conv = find_conversation_strat(pinfo, CONVERSATION_IP, NO_PORT_X);
+    conv = find_conversation_strat(pinfo, CONVERSATION_IP, NO_PORT_X, false);
     if(!conv) {
       conv=conversation_new_strat(pinfo, CONVERSATION_IP, NO_PORTS);
     }
@@ -2481,6 +2482,23 @@ dissect_ip_v4(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
   return tvb_captured_length(tvb);
 }
 
+/*
+ * Dissector that doesn't assume the packet is IPv4, it looks at the
+ * upper 4 bits of the first octet and:
+ *
+ *    if they're 4, dissects the packet as IPv4;
+ *
+ *    if they're 6, dissects the packet as IPv6;
+ *
+ *    otherwise, reports it as an error.
+ *
+ * This handles some strange cases where IPv6 packets are encapsulated
+ * with a header that indicates an IPv4 packet (see commit
+ * a784b121502575a8930de9a34accb85c29ce9b80, which, as I remember, was
+ * done to handle such a case), as well as cases where there is no
+ * header to distinguish between IPv4 and IPv6 (e.g., LINKTYPE_RAW
+ * packets in pcap and pcapng files).
+ */
 static int
 dissect_ip(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
@@ -3086,8 +3104,8 @@ proto_register_ip(void)
   static ei_register_info ei[] = {
      { &ei_ip_opt_len_invalid, { "ip.opt.len.invalid", PI_PROTOCOL, PI_WARN, "Invalid length for option", EXPFILL }},
      { &ei_ip_opt_deprecated, { "ip.opt.deprecated", PI_DEPRECATED, PI_NOTE, "Option type is deprecated", EXPFILL }},
-     { &ei_ip_opt_sec_prot_auth_fti, { "ip.opt.len.invalid", PI_PROTOCOL, PI_WARN, "Field Termination Indicator set to 1 for last byte of option", EXPFILL }},
-     { &ei_ip_extraneous_data, { "ip.opt.len.invalid", PI_PROTOCOL, PI_WARN, "Extraneous data in option", EXPFILL }},
+     { &ei_ip_opt_sec_prot_auth_fti, { "ip.opt.fti_1_last_byte", PI_PROTOCOL, PI_WARN, "Field Termination Indicator set to 1 for last byte of option", EXPFILL }},
+     { &ei_ip_extraneous_data, { "ip.opt.len.extra_found", PI_PROTOCOL, PI_WARN, "Extraneous data in option", EXPFILL }},
      { &ei_ip_opt_ptr_before_address, { "ip.opt.ptr.before_address", PI_PROTOCOL, PI_WARN, "Pointer points before first address", EXPFILL }},
      { &ei_ip_opt_ptr_middle_address, { "ip.opt.ptr.middle_address", PI_PROTOCOL, PI_WARN, "Pointer points to middle of address", EXPFILL }},
      { &ei_ip_subopt_too_long, { "ip.subopt_too_long", PI_PROTOCOL, PI_WARN, "Suboption would go past end of option", EXPFILL }},
@@ -3173,6 +3191,7 @@ proto_register_ip(void)
   register_init_routine(ip_init);
 
   ip_handle = register_dissector("ip", dissect_ip, proto_ip);
+  ipv4_handle = register_dissector("ipv4", dissect_ip_v4, proto_ip);
   reassembly_table_register(&ip_reassembly_table,
                         &addresses_reassembly_table_functions);
   ip_tap = register_tap("ip");
@@ -3208,12 +3227,10 @@ proto_register_ip(void)
 void
 proto_reg_handoff_ip(void)
 {
-  dissector_handle_t ipv4_handle;
   capture_dissector_handle_t clip_cap_handle;
   int proto_clip;
 
   ipv6_handle = find_dissector("ipv6");
-  ipv4_handle = create_dissector_handle(dissect_ip_v4, proto_ip);
 
   dissector_add_uint("ethertype", ETHERTYPE_IP, ipv4_handle);
   dissector_add_uint("erf.types.type", ERF_TYPE_IPV4, ip_handle);
@@ -3239,13 +3256,13 @@ proto_reg_handoff_ip(void)
   dissector_add_uint("l2tp.pw_type", L2TPv3_PW_IP, ip_handle);
   dissector_add_for_decode_as_with_preference("udp.port", ip_handle);
   dissector_add_for_decode_as("pcli.payload", ip_handle);
-  dissector_add_uint("wtap_encap", WTAP_ENCAP_RAW_IP4, ip_handle);
   dissector_add_uint("enc", BSD_AF_INET, ip_handle);
   dissector_add_uint("vxlan.next_proto", VXLAN_IPV4, ip_handle);
   dissector_add_uint("nsh.next_proto", NSH_IPV4, ip_handle);
 
   heur_dissector_add("tipc", dissect_ip_heur, "IP over TIPC", "ip_tipc", proto_ip, HEURISTIC_ENABLE);
   heur_dissector_add("zbee_zcl_se.tun", dissect_ip_heur, "IP over ZigBee SE Tunneling", "ip_zbee_zcl_se.tun", proto_ip, HEURISTIC_ENABLE);
+  heur_dissector_add("gtp.tpdu", dissect_ip_heur, "IP over GTP", "ip_gtp.tpdu", proto_ip, HEURISTIC_ENABLE);
 
   capture_dissector_add_uint("ethertype", ETHERTYPE_IP, ip_cap_handle);
   capture_dissector_add_uint("ax25.pid", AX25_P_IP, ip_cap_handle);

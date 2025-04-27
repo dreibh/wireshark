@@ -683,8 +683,6 @@ f5eth_tmmdist_stats_tree_init(stats_tree *st)
     st_node_tmmbytedist = stats_tree_create_node(st, st_str_tmmdist_bytes, 0, STAT_DT_INT, true);
 } /* f5eth_tmmdist_stats_tree_init() */
 
-#define PER_TMM_STAT_NAME_BUF_LEN (sizeof("slot SSS,tmm TTT"))
-
 /*-----------------------------------------------------------------------------------------------*/
 /**
  * @brief Per-packet tmm distribution statistics
@@ -709,7 +707,7 @@ f5eth_tmmdist_stats_tree_packet(
     int st_node_tot_bytes;
     int st_node_tmm_pkts;
     int st_node_tmm_bytes;
-    char tmm_stat_name_buffer[PER_TMM_STAT_NAME_BUF_LEN];
+    char *tmm_stat_name;
 
     if (tdata == NULL)
         return TAP_PACKET_DONT_REDRAW;
@@ -720,17 +718,16 @@ f5eth_tmmdist_stats_tree_packet(
     if(check_f5eth_tap_magic(tdata) == 0) return TAP_PACKET_DONT_REDRAW;
      */
 
-    snprintf(tmm_stat_name_buffer, PER_TMM_STAT_NAME_BUF_LEN, "slot %3d,tmm %3d", tdata->slot,
-        tdata->tmm);
+    tmm_stat_name = wmem_strdup_printf(NULL, "slot %3d,tmm %3d", tdata->slot, tdata->tmm);
 
     pkt_len = pinfo->fd->pkt_len - tdata->trailer_len;
 
     st_node_tot_pkts  = tick_stat_node(st, st_str_tmmdist_pkts, 0, true);
     st_node_tot_bytes = increase_stat_node(st, st_str_tmmdist_bytes, 0, true, pkt_len);
 
-    st_node_tmm_pkts = tick_stat_node(st, tmm_stat_name_buffer, st_node_tot_pkts, true);
+    st_node_tmm_pkts = tick_stat_node(st, tmm_stat_name, st_node_tot_pkts, true);
     st_node_tmm_bytes =
-        increase_stat_node(st, tmm_stat_name_buffer, st_node_tot_bytes, true, pkt_len);
+        increase_stat_node(st, tmm_stat_name, st_node_tot_bytes, true, pkt_len);
     if (tdata->ingress == 1) {
         tick_stat_node(st, st_str_tmm_dir_in, st_node_tmm_pkts, false);
         increase_stat_node(st, st_str_tmm_dir_in, st_node_tmm_bytes, false, pkt_len);
@@ -779,6 +776,7 @@ f5eth_tmmdist_stats_tree_packet(
         increase_stat_node(st, st_str_tmm_flow_none, st_node_tmm_bytes, false, 0);
     }
 
+    wmem_free(NULL, tmm_stat_name);
     return TAP_PACKET_REDRAW;
 } /* f5eth_tmmdist_stats_tree_packet() */
 
@@ -2618,7 +2616,7 @@ dissect_dpt_trailer_noise(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     pattern = tvb_get_ntohs(tvb, F5_DPT_V1_TLV_TYPE_OFF) << 16
               | tvb_get_ntohs(tvb, F5_DPT_V1_TLV_VERSION_OFF);
     return (
-        dissector_try_uint_new(noise_subdissector_table, pattern, tvb, pinfo, tree, false, data));
+        dissector_try_uint_with_data(noise_subdissector_table, pattern, tvb, pinfo, tree, false, data));
 } /* dissect_dpt_trailer_noise() */
 
 /*---------------------------------------------------------------------------*/
@@ -2732,7 +2730,7 @@ dissect_dpt_trailer(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
         }
         provider_id = tvb_get_ntohs(tvb, o + F5_DPT_V1_TLV_PROVIDER_OFF);
         tvb_dpt_tlv = tvb_new_subset_length(tvb, o, tvb_dpt_tlv_len);
-        if (dissector_try_uint_new(
+        if (dissector_try_uint_with_data(
                 provider_subdissector_table, provider_id, tvb_dpt_tlv, pinfo, tree, false, data)
             == 0) {
             /* Render the TLV header as unknown */
@@ -3546,7 +3544,7 @@ dissect_dpt_trailer_tls(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
     pattern = tvb_get_ntohs(tvb, F5_DPT_V1_TLV_TYPE_OFF) << 16
               | tvb_get_ntohs(tvb, F5_DPT_V1_TLV_VERSION_OFF);
     return (
-        dissector_try_uint_new(tls_subdissector_table, pattern, tvb, pinfo, tree, false, tls_data));
+        dissector_try_uint_with_data(tls_subdissector_table, pattern, tvb, pinfo, tree, false, tls_data));
 } /* dissect_f5dpt_tls() */
 
 /*-----------------------------------------------------------------------------------------------*/

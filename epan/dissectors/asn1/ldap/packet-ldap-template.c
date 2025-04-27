@@ -137,6 +137,7 @@ static int hf_mscldap_netlogon_ipaddress_family;
 static int hf_mscldap_netlogon_ipaddress_port;
 static int hf_mscldap_netlogon_ipaddress;
 static int hf_mscldap_netlogon_ipaddress_ipv4;
+static int hf_mscldap_netlogon_ipaddress_zero;
 static int hf_mscldap_netlogon_opcode;
 static int hf_mscldap_netlogon_flags;
 static int hf_mscldap_netlogon_flags_pdc;
@@ -166,6 +167,7 @@ static int hf_mscldap_username_z;
 static int hf_mscldap_username;
 static int hf_mscldap_sitename;
 static int hf_mscldap_clientsitename;
+static int hf_mscldap_nextclosestsitename;
 static int hf_mscldap_netlogon_lm_token;
 static int hf_mscldap_netlogon_nt_token;
 static int hf_ldap_sid;
@@ -1590,23 +1592,30 @@ static int dissect_NetLogon_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
         old_offset = offset + 4;
         item = proto_tree_add_item(tree, hf_mscldap_netlogon_ipaddress, tvb, old_offset, 4, ENC_BIG_ENDIAN);
 
-        if (tree) {
-          proto_tree *subtree;
+        proto_tree *subtree;
 
-          subtree = proto_item_add_subtree(item, ett_mscldap_ipdetails);
+        subtree = proto_item_add_subtree(item, ett_mscldap_ipdetails);
 
-          /* get sockaddr family */
-          proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_family, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-          offset +=2;
+        /* get sockaddr family */
+        proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_family, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+        offset +=2;
 
-          /* get sockaddr port */
-          proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_port, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-          offset +=2;
+        /* get sockaddr port */
+        proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_port, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+        offset +=2;
 
-          /* get IP address */
-          proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
-        }
+        /* get IP address */
+        proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
 
+        /* sin_zero (reserved 8 bytes, MUST be set to zero and ignored on receipt) */
+        proto_tree_add_item(subtree, hf_mscldap_netlogon_ipaddress_zero, tvb, offset, 8, ENC_NA);
+        offset += 8;
+      }
+      if ((version & NETLOGON_NT_VERSION_WITH_CLOSEST_SITE) == NETLOGON_NT_VERSION_WITH_CLOSEST_SITE){
+          old_offset=offset;
+          offset=dissect_mscldap_string(pinfo->pool, tvb, offset, 255, &str);
+          proto_tree_add_string(tree, hf_mscldap_nextclosestsitename, tvb, old_offset, offset-old_offset, str);
       }
 
       break;
@@ -1935,6 +1944,11 @@ void proto_register_ldap(void) {
         FT_UINT16, BASE_DEC, NULL, 0x0,
         NULL, HFILL }},
 
+    { &hf_mscldap_netlogon_ipaddress_zero,
+      { "Reserved", "mscldap.netlogon.ipaddress.zero",
+        FT_BYTES, BASE_NONE, NULL, 0x0,
+        "MUST be set to zero", HFILL }},
+
     { &hf_mscldap_netlogon_ipaddress,
       { "IP Address","mscldap.netlogon.ipaddress",
         FT_IPv4, BASE_NONE, NULL, 0x0,
@@ -2019,6 +2033,11 @@ void proto_register_ldap(void) {
       { "Client Site", "mscldap.clientsitename",
         FT_STRING, BASE_NONE, NULL, 0x0,
         "Site name of the client", HFILL }},
+
+    { &hf_mscldap_nextclosestsitename,
+      { "Next Closest Site", "mscldap.nextclosestsitename",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        "Name of the site that is closest by cost to ClientSiteName without being equal", HFILL }},
 
     { &hf_ldap_sid,
       { "Sid", "ldap.sid",
@@ -2205,7 +2224,7 @@ void proto_register_ldap(void) {
 
   static ei_register_info ei[] = {
      { &ei_ldap_exceeded_filter_length, { "ldap.exceeded_filter_length", PI_UNDECODED, PI_ERROR, "Filter length exceeds number. Giving up", EXPFILL }},
-     { &ei_ldap_too_many_filter_elements, { "ldap.too_many_filter_elements", PI_UNDECODED, PI_ERROR, "Found more than %%u filter elements. Giving up.", EXPFILL }},
+     { &ei_ldap_too_many_filter_elements, { "ldap.too_many_filter_elements", PI_UNDECODED, PI_ERROR, "Found too many filter elements. Giving up.", EXPFILL }},
   };
 
   expert_module_t* expert_ldap;
@@ -2273,6 +2292,8 @@ void proto_register_ldap(void) {
 void
 proto_reg_handoff_ldap(void)
 {
+  dissector_handle_t ldap_sid_handle = NULL;
+
   dissector_add_uint_with_preference("udp.port", UDP_PORT_CLDAP, cldap_handle);
 
   gssapi_handle = find_dissector_add_dependency("gssapi", proto_ldap);
@@ -2385,11 +2406,20 @@ proto_reg_handoff_ldap(void)
   oid_add_from_string("iPlanet Replication Modrdn Extra Mods Control",                              "2.16.840.1.113730.3.4.999");
 
 
+  ldap_sid_handle = create_dissector_handle(dissect_ldap_sid, proto_ldap);
   dissector_add_string("ldap.name", "netlogon", create_dissector_handle(dissect_NetLogon_PDU, proto_cldap));
   dissector_add_string("ldap.name", "objectGUID", create_dissector_handle(dissect_ldap_guid, proto_ldap));
   dissector_add_string("ldap.name", "supportedControl", create_dissector_handle(dissect_ldap_oid, proto_ldap));
   dissector_add_string("ldap.name", "supportedCapabilities", create_dissector_handle(dissect_ldap_oid, proto_ldap));
-  dissector_add_string("ldap.name", "objectSid", create_dissector_handle(dissect_ldap_sid, proto_ldap));
+  dissector_add_string("ldap.name", "mS-DS-CreatorSID", ldap_sid_handle);
+  dissector_add_string("ldap.name", "msDS-QuotaTrustee", ldap_sid_handle);
+  dissector_add_string("ldap.name", "objectSid", ldap_sid_handle);
+  dissector_add_string("ldap.name", "securityIdentifier", ldap_sid_handle);
+  dissector_add_string("ldap.name", "sIDHistory", ldap_sid_handle);
+  dissector_add_string("ldap.name", "syncWithSID", ldap_sid_handle);
+  dissector_add_string("ldap.name", "tokenGroups", ldap_sid_handle);
+  dissector_add_string("ldap.name", "tokenGroupsGlobalAndUniversal", ldap_sid_handle);
+  dissector_add_string("ldap.name", "tokenGroupsNoGCAcceptable", ldap_sid_handle);
   dissector_add_string("ldap.name", "nTSecurityDescriptor", create_dissector_handle(dissect_ldap_nt_sec_desc, proto_ldap));
 
 #include "packet-ldap-dis-tab.c"

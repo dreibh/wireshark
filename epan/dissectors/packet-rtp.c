@@ -1210,7 +1210,7 @@ srtp_add_address(packet_info *pinfo, const port_type ptype, address *addr, int p
      * Check if the ip address and port combination is not
      * already registered as a conversation.
      */
-    p_conv = find_conversation(setup_frame_number, addr, &null_addr, conversation_pt_to_conversation_type(ptype), port, other_port,
+    p_conv = find_conversation_strat_xtd(pinfo, setup_frame_number, addr, &null_addr, conversation_pt_to_conversation_type(ptype), port, other_port,
                    NO_ADDR_B | (!other_port ? NO_PORT_B : 0));
 
     if (p_conv) {
@@ -1243,7 +1243,7 @@ srtp_add_address(packet_info *pinfo, const port_type ptype, address *addr, int p
         /* XXX - If setup_frame_number < pinfo->num, creating this conversation
          * can mean that the dissection is different on later passes.
          */
-        p_conv = conversation_new(setup_frame_number, addr, &null_addr, conversation_pt_to_conversation_type(ptype),
+        p_conv = conversation_new_strat_xtd(pinfo, setup_frame_number, addr, &null_addr, conversation_pt_to_conversation_type(ptype),
                                   (uint32_t)port, (uint32_t)other_port,
                       NO_ADDR2 | (!other_port ? NO_PORT2 : 0));
     }
@@ -1447,11 +1447,11 @@ dissect_rtp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
     }
 
     /* Create a conversation in case none exists so as to allow reassembly code to work */
-    if (!find_conversation(pinfo->num, &pinfo->net_dst, &pinfo->net_src, conversation_pt_to_conversation_type(pinfo->ptype),
+    if (!find_conversation_strat_xtd(pinfo, pinfo->num, &pinfo->net_dst, &pinfo->net_src, conversation_pt_to_conversation_type(pinfo->ptype),
                            pinfo->destport, pinfo->srcport, NO_ADDR_B)) {
         conversation_t *p_conv;
         struct _rtp_conversation_info *p_conv_data;
-        p_conv = conversation_new(pinfo->num, &pinfo->net_dst, &pinfo->net_src, conversation_pt_to_conversation_type(pinfo->ptype),
+        p_conv = conversation_new_strat_xtd(pinfo, pinfo->num, &pinfo->net_dst, &pinfo->net_src, conversation_pt_to_conversation_type(pinfo->ptype),
                                   pinfo->destport, pinfo->srcport, NO_ADDR2);
         p_conv_data = (struct _rtp_conversation_info *)conversation_get_proto_data(p_conv, proto_rtp);
         if (! p_conv_data) {
@@ -1565,8 +1565,8 @@ process_rtp_payload(tvbuff_t *newtvb, packet_info *pinfo, proto_tree *tree,
             const char *payload_type_str = rtp_dyn_payload_get_name(p_packet_data->rtp_dyn_payload, payload_type);
             if (payload_type_str) {
                 int len;
-                len = dissector_try_string(rtp_dyn_pt_dissector_table,
-                    payload_type_str, newtvb, pinfo, tree, rtp_info);
+                len = dissector_try_string_with_data(rtp_dyn_pt_dissector_table,
+                    payload_type_str, newtvb, pinfo, tree, true, rtp_info);
                 /* If payload type string set from conversation and
                 * no matching dissector found it's probably because no subdissector
                 * exists. Don't call the dissectors based on payload number
@@ -1581,7 +1581,7 @@ process_rtp_payload(tvbuff_t *newtvb, packet_info *pinfo, proto_tree *tree,
     }
 
     /* if we don't found, it is static OR could be set static from the preferences */
-    if (dissector_try_uint_new(rtp_pt_dissector_table, payload_type, newtvb, pinfo, tree, true, rtp_info))
+    if (dissector_try_uint_with_data(rtp_pt_dissector_table, payload_type, newtvb, pinfo, tree, true, rtp_info))
         proto_item_set_hidden(rtp_data);
 }
 
@@ -2517,7 +2517,7 @@ dissect_rtp( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
                     pinfo, rtp_hext_tree);
             }
             else {
-                if ( !(dissector_try_uint_new(rtp_hdr_ext_dissector_table, hdr_extension_id, newtvb, pinfo, rtp_hext_tree, false, rtp_info)) ) {
+                if ( !(dissector_try_uint_with_data(rtp_hdr_ext_dissector_table, hdr_extension_id, newtvb, pinfo, rtp_hext_tree, false, rtp_info)) ) {
                     unsigned int hdrext_offset;
 
                     hdrext_offset = offset;
@@ -2747,7 +2747,7 @@ dissect_rtp_shim_header(tvbuff_t *tvb, int start, packet_info *pinfo _U_, proto_
             proto_tree_add_uint( rtp_tree, hf_rtp_version, tvb,
                 offset, 1, octet1);
         }
-        return offset;
+        return 0;
     }
 
     padding_set = RTP_PADDING( octet1 );
@@ -2918,12 +2918,12 @@ get_rtp_packet_info(packet_info *pinfo, struct _rtp_info *rtp_info)
         conversation_t *p_conv;
 
         /* First time, get info from conversation */
-        p_conv = find_conversation(pinfo->num, &pinfo->net_dst, &pinfo->net_src,
+        p_conv = find_conversation_strat_xtd(pinfo, pinfo->num, &pinfo->net_dst, &pinfo->net_src,
                                    conversation_pt_to_conversation_type(pinfo->ptype),
                                    pinfo->destport, pinfo->srcport, NO_ADDR_B);
         if (!p_conv) {
             /* Create a conversation in case none exists (decode as is used for marking the packet as RTP) */
-            p_conv = conversation_new(pinfo->num, &pinfo->net_dst, &pinfo->net_src,
+            p_conv = conversation_new_strat_xtd(pinfo, pinfo->num, &pinfo->net_dst, &pinfo->net_src,
                 conversation_pt_to_conversation_type(pinfo->ptype),
                 pinfo->destport, pinfo->srcport, NO_ADDR2);
         }

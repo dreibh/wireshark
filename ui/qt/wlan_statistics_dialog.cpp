@@ -178,7 +178,7 @@ public:
                 << auth_ << deauth_ << other_ << text(col_protection_);
     }
     const QString filterExpression() {
-        QString filter_expr = QString("wlan.addr==%1")
+        QString filter_expr = QStringLiteral("wlan.addr==%1")
                 .arg(address_to_qstring(&addr_));
         return filter_expr;
     }
@@ -443,10 +443,10 @@ public:
     }
 
     const QString filterExpression() {
-        QString filter_expr = QString("(wlan.bssid==%1")
+        QString filter_expr = QStringLiteral("(wlan.bssid==%1")
                 .arg(address_to_qstring(&bssid_));
         if (!ssid_.isEmpty() && ssid_[0] != '\0') {
-            filter_expr += QString(" || wlan.ssid==\"%1\"")
+            filter_expr += QStringLiteral(" || wlan.ssid==\"%1\"")
                     .arg(ssid_.constData());
         }
         filter_expr += ")";
@@ -725,7 +725,7 @@ QList<QVariant> WlanStatisticsDialog::treeItemData(QTreeWidgetItem *it) const
 
 // Stat command + args
 
-static void
+static bool
 wlan_statistics_init(const char *args, void*) {
     QStringList args_l = QString(args).split(',');
     QByteArray filter;
@@ -733,6 +733,7 @@ wlan_statistics_init(const char *args, void*) {
         filter = QStringList(args_l.mid(2)).join(",").toUtf8();
     }
     mainApp->emitStatCommandSignal("WlanStatistics", filter.constData(), NULL);
+    return true;
 }
 
 static stat_tap_ui wlan_statistics_ui = {

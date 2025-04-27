@@ -75,6 +75,7 @@
 #include "packet-tls.h"
 #include "packet-dtls.h"
 #include "packet-http2.h"
+#include <wsutil/array.h>
 
 // parent knob to turn on-off the entire query-response statistics (at runtime)
 // qr = Query-Response
@@ -408,6 +409,10 @@ static int hf_dns_svcb_param_ipv4hint_ip;
 static int hf_dns_svcb_param_ipv6hint_ip;
 static int hf_dns_svcb_param_dohpath;
 static int hf_dns_svcb_param_odohconfig;
+static int hf_dns_dsync_type;
+static int hf_dns_dsync_scheme;
+static int hf_dns_dsync_target_port;
+static int hf_dns_dsync_target_name;
 static int hf_dns_openpgpkey;
 static int hf_dns_spf_length;
 static int hf_dns_spf;
@@ -809,6 +814,7 @@ typedef struct _dns_conv_info_t {
 #define T_ZONEMD        63              /* Message Digest for DNS Zones (RFC8976) */
 #define T_SVCB          64              /* draft-ietf-dnsop-svcb-https-01 */
 #define T_HTTPS         65              /* draft-ietf-dnsop-svcb-https-01 */
+#define T_DSYNC         66              /* draft-ietf-dnsop-generalized-notify */
 #define T_SPF           99              /* SPF RR (RFC 4408) section 3 */
 #define T_UINFO        100              /* [IANA-Reserved] */
 #define T_UID          101              /* [IANA-Reserved] */
@@ -1087,6 +1093,19 @@ static const value_string hip_algo_vals[] = {
   { 0,                   NULL }
 };
 
+/*
+  DSYNC: Location of Synchronization Endpoints
+  https://www.iana.org/assignments/dns-parameters/dns-parameters.xhtml#dsync-location-of-synchronization-endpoints
+*/
+
+static const range_string dsync_scheme_vals[] = {
+  {   0,   0, "Null scheme (no-op)"      },
+  {   1,   1, "NOTIFY"                   },
+  {   2, 127, "Unassigned"               },
+  { 128, 255, "Reserved for Private Use" },
+  {   0,   0, NULL                       }
+};
+
 /* RFC 3123 */
 #define DNS_APL_NEGATION       (1<<7)
 #define DNS_APL_AFDLENGTH      (0x7F<<0)
@@ -1181,6 +1200,7 @@ static const value_string dns_types_vals[] = {
   { T_ZONEMD,     "ZONEMD"     }, /* RFC 8976 */
   { T_SVCB,       "SVCB"       }, /* draft-ietf-dnsop-svcb-https-01 */
   { T_HTTPS,      "HTTPS"      }, /* draft-ietf-dnsop-svcb-https-01 */
+  { T_DSYNC,      "DSYNC"      }, /* draft-ietf-dnsop-generalized-notify */
   { T_SPF,        "SPF"        }, /* RFC 4408 */
   { T_UINFO,      "UINFO"      }, /* IANA reserved */
   { T_UID,        "UID"        }, /* IANA reserved */
@@ -1282,6 +1302,7 @@ static const value_string dns_types_description_vals[] = {
   { T_ZONEMD,     "" }, /* RFC 8976 */
   { T_SVCB,       "(General Purpose Service Endpoints)" }, /*  draft-ietf-dnsop-svcb-https*/
   { T_HTTPS,      "(HTTPS Specific Service Endpoints)" }, /*  draft-ietf-dnsop-svcb-https*/
+  { T_DSYNC,      "(Endpoint discovery for delegation synchronization)" }, /* draft-ietf-dnsop-generalized-notify */
   { T_SPF,        "" }, /* RFC 4408 */
   { T_UINFO,      "" }, /* IANA reserved */
   { T_UID,        "" }, /* IANA reserved */
@@ -1440,6 +1461,7 @@ static const range_string dns_dso_type_rvals[] = {
 #define DNS_SVCB_KEY_ECH              5 /* draft-ietf-tls-svcb-ech-00 */
 #define DNS_SVCB_KEY_IPV6HINT         6
 #define DNS_SVCB_KEY_DOHPATH          7 /* draft-ietf-add-svcb-dns-08 */
+#define DNS_SVCB_KEY_OHTTP            8 /* rfc9540 */
 #define DNS_SVCB_KEY_ODOHCONFIG   32769 /* draft-pauly-dprive-oblivious-doh-02 */
 #define DNS_SVCB_KEY_RESERVED     65535
 
@@ -1456,6 +1478,7 @@ static const value_string dns_svcb_param_key_vals[] = {
   { DNS_SVCB_KEY_ECH,           "ech" },
   { DNS_SVCB_KEY_IPV6HINT,      "ipv6hint" },
   { DNS_SVCB_KEY_DOHPATH,       "dohpath" },
+  { DNS_SVCB_KEY_OHTTP,         "ohttp" },
   { DNS_SVCB_KEY_ODOHCONFIG,    "odohconfig" },
   { DNS_SVCB_KEY_RESERVED,      "key65535" },
   { 0,                          NULL }
@@ -4063,6 +4086,8 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
               cur_offset += svc_param_length;
               proto_item_append_text(svcb_param_ti, "=%s", dohpath);
               break;
+            case DNS_SVCB_KEY_OHTTP:
+              break;
             case DNS_SVCB_KEY_ODOHCONFIG:
               dissect_dns_svcparam_base64(svcb_param_tree, svcb_param_ti, hf_dns_svcb_param_odohconfig, tvb, cur_offset, svc_param_length);
               cur_offset += svc_param_length;
@@ -4077,6 +4102,22 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
           }
         }
       }
+    }
+    break;
+
+    case T_DSYNC: /* Endpoint discovery for delegation synchronization (66) */
+    {
+      const char   *dsync_name;
+      int           dsync_name_len;
+
+      proto_tree_add_item(rr_tree, hf_dns_dsync_type, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
+      proto_tree_add_item(rr_tree, hf_dns_dsync_scheme, tvb, cur_offset + 2, 1, ENC_BIG_ENDIAN);
+      proto_tree_add_item(rr_tree, hf_dns_dsync_target_port, tvb, cur_offset + 3, 2, ENC_BIG_ENDIAN);
+
+      used_bytes = get_dns_name(tvb, cur_offset + 5, 0, dns_data_offset, &dsync_name, &dsync_name_len);
+      name_out = format_text(pinfo->pool, (const unsigned char*)dsync_name, dsync_name_len);
+      proto_tree_add_string(rr_tree, hf_dns_dsync_target_name, tvb, cur_offset + 5, used_bytes, name_out);
+
     }
     break;
 
@@ -4278,7 +4319,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
 
         sub_tvb=tvb_new_subset_length(tvb, cur_offset, tsig_siglen);
 
-        if (!dissector_try_string(dns_tsig_dissector_table, tsig_algname, sub_tvb, pinfo, mac_tree, NULL)) {
+        if (!dissector_try_string_with_data(dns_tsig_dissector_table, tsig_algname, sub_tvb, pinfo, mac_tree, true, NULL)) {
           expert_add_info_format(pinfo, mac_item, &ei_dns_tsig_alg,
                 "No dissector for algorithm:%s", name_out);
         }
@@ -5235,7 +5276,7 @@ static tap_packet_status dns_stats_tree_packet(stats_tree* st, packet_info* pinf
           val_to_str(pi->packet_qr, dns_qr_vals, "Unknown qr (%d)"));
   stats_tree_tick_pivot(st, st_node_packet_qtypes,
           val_to_str(pi->packet_qtype, dns_types_vals, "Unknown packet type (%d)"));
-  if (dns_qname_stats) {
+  if (dns_qname_stats && pi->qname_len > 0) {
         stats_tree_tick_pivot(st, st_node_packet_qnames, pi->qname);
   }
   stats_tree_tick_pivot(st, st_node_packet_qclasses,
@@ -5489,7 +5530,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
         ip6_to_str_buf(pinfo->src.data, buf, sizeof(buf));
       }
       st_node = tick_stat_node(st, buf, st_node_qr_qf_packets, true);
-      if (dns_qr_qrn_statistics_enabled) {
+      if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
     }
@@ -5499,7 +5540,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       ws_debug("qo = Query-Opcode\n");
       tick_stat_node(st, st_str_qr_qo_packets, st_node_qr_q_packets, true);
       st_node = tick_stat_node(st, val_to_str(pi->packet_opcode, opcode_vals, "Unknown opcode (%d)"), st_node_qr_qo_packets, true);
-      if (dns_qr_qrn_statistics_enabled) {
+      if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
     }
@@ -5514,7 +5555,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       else {
         st_node = tick_stat_node(st, "Iteration Desired", st_node_qr_qk_packets, true);
       }
-      if (dns_qr_qrn_statistics_enabled) {
+      if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
     }
@@ -5524,7 +5565,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       ws_debug("qt = Query-Type\n");
       tick_stat_node(st, st_str_qr_qt_packets, st_node_qr_q_packets, true);
       st_node = tick_stat_node(st, val_to_str(pi->packet_qtype, dns_types_vals, "Unknown packet type (%d)"), st_node_qr_qt_packets, true);
-      if (dns_qr_qrn_statistics_enabled) {
+      if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
     }
@@ -5629,7 +5670,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       else {
         st_node = tick_stat_node(st, "> 64KB", st_node_qr_qp_packets, true);
       }
-      if (dns_qr_qrn_statistics_enabled) {
+      if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
     }
@@ -5651,7 +5692,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       if (dns_qr_qs_u_statistics_enabled) {
         ws_debug("qs_u = Query-Service_Unanswered\n");
         if (!pi->retransmission) {
-          if (dns_qr_qrn_statistics_enabled) {
+          if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
             stats_tree_tick_pivot(st, st_node_qr_qs_u_packets, pi->qname);
           }
           else {
@@ -5664,7 +5705,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       if (dns_qr_qs_r_statistics_enabled) {
         ws_debug("qs_r = Query-Service_Retransmission\n");
         if (pi->retransmission) {
-          if (dns_qr_qrn_statistics_enabled) {
+          if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
             stats_tree_tick_pivot(st, st_node_qr_qs_r_packets, pi->qname);
           }
           else {
@@ -5696,7 +5737,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
         ip6_to_str_buf(pinfo->src.data, buf, sizeof(buf));
       }
       st_node = tick_stat_node(st, buf, st_node_qr_rf_packets, true);
-      if (dns_qr_qrn_statistics_enabled) {
+      if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
     }
@@ -5706,7 +5747,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       ws_debug("rc = Response-Code\n");
       tick_stat_node(st, st_str_qr_rc_packets, st_node_qr_r_packets, true);
       st_node = tick_stat_node(st, val_to_str(pi->packet_rcode, rcode_vals, "Unknown rcode (%d)"), st_node_qr_rc_packets, true);
-      if (dns_qr_qrn_statistics_enabled) {
+      if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
     }
@@ -5721,7 +5762,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       else {
         st_node = tick_stat_node(st, "Non-Authoritative", st_node_qr_rk_packets, true);
       }
-      if (dns_qr_qrn_statistics_enabled) {
+      if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
     }
@@ -5777,12 +5818,14 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       }
       if (dns_qr_qrn_statistics_enabled) {
         if (pi->nanswers == 0) {
-          if (dns_qr_qrn_aud_zv_statistics_enabled) {
+          if (dns_qr_qrn_aud_zv_statistics_enabled && pi->qname_len > 0) {
             tick_stat_node(st, pi->qname, st_node, false);
           }
         }
         else {
-          tick_stat_node(st, pi->qname, st_node, false);
+          if (pi->qname_len > 0) {
+            tick_stat_node(st, pi->qname, st_node, false);
+          }
         }
       }
     }
@@ -5838,12 +5881,14 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       }
       if (dns_qr_qrn_statistics_enabled) {
         if (pi->nauthorities == 0) {
-          if (dns_qr_qrn_aud_zv_statistics_enabled) {
+          if (dns_qr_qrn_aud_zv_statistics_enabled && pi->qname_len > 0) {
             tick_stat_node(st, pi->qname, st_node, false);
           }
         }
         else {
-          tick_stat_node(st, pi->qname, st_node, false);
+          if (pi->qname_len > 0) {
+            tick_stat_node(st, pi->qname, st_node, false);
+          }
         }
       }
     }
@@ -5899,12 +5944,14 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       }
       if (dns_qr_qrn_statistics_enabled) {
         if (pi->nadditionals == 0) {
-          if (dns_qr_qrn_aud_zv_statistics_enabled) {
+          if (dns_qr_qrn_aud_zv_statistics_enabled && pi->qname_len > 0) {
             tick_stat_node(st, pi->qname, st_node, false);
           }
         }
         else {
-          tick_stat_node(st, pi->qname, st_node, false);
+          if (pi->qname_len > 0) {
+            tick_stat_node(st, pi->qname, st_node, false);
+          }
         }
       }
     }
@@ -5970,7 +6017,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       else {
         st_node = tick_stat_node(st, "> 64KB", st_node_qr_rp_packets, true);
       }
-      if (dns_qr_qrn_statistics_enabled) {
+      if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
     }
@@ -5986,20 +6033,20 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
         ws_debug("rs_a = Response-Service_Answered (ms)\n");
         if (!pi->retransmission && !pi->unsolicited) {
           st_node = avg_stat_node_add_value_float(st, st_str_qr_rs_a_packets, st_node_qr_rs_packets, true, (float)(pi->rrt.secs * 1000. + pi->rrt.nsecs / 1000000.0));
-          if (dns_qr_qrn_statistics_enabled) {
+          if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
             avg_stat_node_add_value_float(st, pi->qname, st_node, false, (float)(pi->rrt.secs * 1000. + pi->rrt.nsecs / 1000000.0));
           }
           // filling in qs_a = Answered (ms)
           if (dns_qr_qs_a_statistics_enabled) {
             st_node = avg_stat_node_add_value_float(st, st_str_qr_qs_a_packets, st_node_qr_qs_packets, true, (float)(pi->rrt.secs * 1000. + pi->rrt.nsecs / 1000000.0));
-            if (dns_qr_qrn_statistics_enabled) {
+            if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
               avg_stat_node_add_value_float(st, pi->qname, st_node, false, (float)(pi->rrt.secs * 1000. + pi->rrt.nsecs / 1000000.0));
             }
           }
           // decrementing qs_u = Unanswered
           if (dns_qr_qs_u_statistics_enabled) {
             increase_stat_node(st, st_str_qr_qs_u_packets, st_node_qr_qs_packets, false, -1);
-            if (dns_qr_qrn_statistics_enabled) {
+            if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
               increase_stat_node(st, pi->qname, st_node_qr_qs_u_packets, false, -1);
             }
           }
@@ -6011,7 +6058,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
         ws_debug("rs_u = Response-Service_Unsolicited\n");
         // service statistics (total responses = unsolicited + retransmissions + non-retransmissions)
         if (pi->unsolicited) { // unsolicited = responses without queries being present in this capture
-          if (dns_qr_qrn_statistics_enabled) {
+          if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
             stats_tree_tick_pivot(st, st_node_qr_rs_u_packets, pi->qname);
           }
           else {
@@ -6024,7 +6071,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       if (dns_qr_rs_r_statistics_enabled) {
         ws_debug("rs_r = Response-Service_Retransmission\n");
         if (pi->retransmission && !pi->unsolicited) {
-          if (dns_qr_qrn_statistics_enabled) {
+          if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
             stats_tree_tick_pivot(st, st_node_qr_rs_r_packets, pi->qname);
           }
           else {
@@ -6043,7 +6090,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
       // responses, ttl count will be 2 but summation of answers, authorities
       // and additionals could be more as each response could contain multiple
       // answers, authorities and additionals. if ttl count is changed to
-      // reflect summation, then it would standout withing its siblings like
+      // reflect summation, then it would standout within its siblings like
       // rcode, payload etc.
       //tick_stat_node(st, st_str_qr_rt_packets, st_node_qr_r_packets, true);
 
@@ -6052,7 +6099,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
         ws_debug("rt_a = Response-TTL_Answers\n");
         unsigned ui_limit = pi->nanswers;
         if (ui_limit > TTL_MAXIMUM_ELEMENTS) { // limit check to avoid overflow
-          ws_debug("rt_a = Response-TTL_Answers (answers(%u) > (%u)TTL_MAXIMUM_ELEMENTS) (iterating upto TTL_MAXIMUM_ELEMENTS)\n", ui_limit, TTL_MAXIMUM_ELEMENTS);
+          ws_debug("rt_a = Response-TTL_Answers (answers(%u) > (%u)TTL_MAXIMUM_ELEMENTS) (iterating up to TTL_MAXIMUM_ELEMENTS)\n", ui_limit, TTL_MAXIMUM_ELEMENTS);
           ui_limit = TTL_MAXIMUM_ELEMENTS;
         }
         for (unsigned ui = 0; ui < ui_limit; ui++) {
@@ -6081,7 +6128,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
           else {
             st_node = tick_stat_node(st, "> year", st_node_qr_rt_a_packets, true);
           }
-          if (dns_qr_qrn_statistics_enabled) {
+          if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
             tick_stat_node(st, pi->qname, st_node, false);
           }
         }
@@ -6092,7 +6139,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
         ws_debug("rt_u = Response-TTL_aUthority\n");
         unsigned ui_limit = pi->nauthorities;
         if (ui_limit > TTL_MAXIMUM_ELEMENTS) { // limit check to avoid overflow
-          ws_debug("rt_a = Response-TTL_Answers (authorities(%u) > (%u)TTL_MAXIMUM_ELEMENTS) (iterating upto TTL_MAXIMUM_ELEMENTS)\n", ui_limit, TTL_MAXIMUM_ELEMENTS);
+          ws_debug("rt_a = Response-TTL_Answers (authorities(%u) > (%u)TTL_MAXIMUM_ELEMENTS) (iterating up to TTL_MAXIMUM_ELEMENTS)\n", ui_limit, TTL_MAXIMUM_ELEMENTS);
           ui_limit = TTL_MAXIMUM_ELEMENTS;
         }
         for (unsigned ui = 0; ui < ui_limit; ui++) {
@@ -6121,7 +6168,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
           else {
             st_node = tick_stat_node(st, "> year", st_node_qr_rt_u_packets, true);
           }
-          if (dns_qr_qrn_statistics_enabled) {
+          if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
             tick_stat_node(st, pi->qname, st_node, false);
           }
         }
@@ -6132,7 +6179,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
         ws_debug("rt_d = Response-TTL_aDditional\n");
         unsigned ui_limit = pi->nadditionals;
         if (ui_limit > TTL_MAXIMUM_ELEMENTS) { // limit check to avoid overflow
-          ws_debug("rt_a = Response-TTL_Answers (additionals(%u) > (%u)TTL_MAXIMUM_ELEMENTS) (iterating upto TTL_MAXIMUM_ELEMENTS)\n", ui_limit, TTL_MAXIMUM_ELEMENTS);
+          ws_debug("rt_a = Response-TTL_Answers (additionals(%u) > (%u)TTL_MAXIMUM_ELEMENTS) (iterating up to TTL_MAXIMUM_ELEMENTS)\n", ui_limit, TTL_MAXIMUM_ELEMENTS);
           ui_limit = TTL_MAXIMUM_ELEMENTS;
         }
         for (unsigned ui = 0; ui < ui_limit; ui++) {
@@ -6161,7 +6208,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
           else {
             st_node = tick_stat_node(st, "> year", st_node_qr_rt_d_packets, true);
           }
-          if (dns_qr_qrn_statistics_enabled) {
+          if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
             tick_stat_node(st, pi->qname, st_node, false);
           }
         }
@@ -6766,6 +6813,26 @@ proto_register_dns(void)
       { "ODoHConfig", "dns.svcb.svcparam.odohconfig",
         FT_BYTES, BASE_NONE, NULL, 0x0,
         "Oblivious DoH keys", HFILL }},
+
+    { &hf_dns_dsync_type,
+      { "RR Type", "dns.dsync.type",
+        FT_UINT16, BASE_DEC|BASE_EXT_STRING, &dns_types_vals_ext, 0x0,
+        NULL, HFILL }},
+
+    { &hf_dns_dsync_scheme,
+      { "Scheme", "dns.dsync.scheme",
+        FT_UINT8, BASE_DEC|BASE_RANGE_STRING, RVALS(dsync_scheme_vals), 0x0,
+        NULL, HFILL }},
+
+    { &hf_dns_dsync_target_port,
+      { "Target Port", "dns.dsync.target.port",
+        FT_UINT16, BASE_DEC, NULL, 0x0,
+        NULL, HFILL }},
+
+    { &hf_dns_dsync_target_name,
+      { "Target Domain Name", "dns.dsync.target.name",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
 
     { &hf_dns_spf_length,
       { "SPF Length", "dns.spf.length",
@@ -7943,6 +8010,7 @@ proto_register_dns(void)
     &ett_dns_dso_tlv,
     &ett_dns_svcb,
     &ett_dns_extraneous,
+    &ett_dns_dnscrypt
   };
 
   module_t *dns_module;

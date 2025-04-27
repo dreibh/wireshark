@@ -368,10 +368,10 @@ dissect_btpa(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
         high_port = dst_port;
     }
 
-    if (dissector_try_uint_new(btpa_subdissector_table, low_port, next_tvb, pinfo, tree, true, NULL))
+    if (dissector_try_uint_with_data(btpa_subdissector_table, low_port, next_tvb, pinfo, tree, true, NULL))
         return tvb_captured_length(tvb);
 
-    if (dissector_try_uint_new(btpa_subdissector_table, high_port, next_tvb, pinfo, tree, true, NULL))
+    if (dissector_try_uint_with_data(btpa_subdissector_table, high_port, next_tvb, pinfo, tree, true, NULL))
         return tvb_captured_length(tvb);
 
     if (dissector_try_heuristic(btpa_heur_subdissector_list, next_tvb, pinfo, tree, &hdtbl_entry, NULL))
@@ -419,7 +419,7 @@ dissect_btpb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_
     if (have_tap_listener(btpb_follow_tap))
         tap_queue_packet(btpb_follow_tap, pinfo, next_tvb);
 
-    if (dissector_try_uint_new(btpb_subdissector_table, dst_port, next_tvb, pinfo, tree, true, NULL)) {
+    if (dissector_try_uint_with_data(btpb_subdissector_table, dst_port, next_tvb, pinfo, tree, true, NULL)) {
         return tvb_captured_length(tvb);
     }
     if (dissector_try_heuristic(btpb_heur_subdissector_list, next_tvb, pinfo, tree, &hdtbl_entry, NULL)) {
@@ -2964,6 +2964,12 @@ display_heading( char *result, uint32_t hexver )
 }
 
 static void
+display_cbr( char *result, uint8_t hexver )
+{
+    snprintf( result, ITEM_LABEL_LENGTH, "%.2f %% (%u)", hexver * 100.0 / 255.0, hexver);
+}
+
+static void
 display_elevation( char *result, int32_t hexver )
 {
     //  0x0000 to 0xEFFF: positive numbers with a range from 0 to +6 143,9 meters. All numbers above +6 143,9 are
@@ -3231,12 +3237,12 @@ proto_register_geonw(void)
 
         { &hf_geonw_dccmco_cbr_l_0_hop,
           { "Local channel busy ratio", "geonw.cbr_l0hop",
-            FT_UINT8, BASE_DEC, NULL, 0x80,
+            FT_UINT8, BASE_CUSTOM, CF_FUNC(display_cbr), 0x00,
             NULL, HFILL }},
 
         { &hf_geonw_dccmco_cbr_l_1_hop,
           { "Max neighbouring CBR", "geonw.cbr_l1hop",
-            FT_UINT8, BASE_DEC, NULL, 0x80,
+            FT_UINT8, BASE_CUSTOM, CF_FUNC(display_cbr), 0x00,
             NULL, HFILL }},
 
         { &hf_geonw_dccmco_output_power,

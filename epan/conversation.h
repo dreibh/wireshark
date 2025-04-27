@@ -52,7 +52,8 @@ extern "C" {
 #define NO_ADDR_B 0x00010000
 #define NO_PORT_B 0x00020000
 #define NO_PORT_X 0x00040000
-#define NO_ANC    0x00080000
+#define NO_GREEDY 0x00100000
+#define EXACT_EXCLUDED 0x00200000
 
 /** Flags to handle endpoints */
 #define USE_LAST_ENDPOINT 0x08		/**< Use last endpoint created, regardless of type */
@@ -112,6 +113,8 @@ typedef enum {
     CONVERSATION_VSPC_VMOTION,	/* VMware vSPC vMotion (Telnet) */
     CONVERSATION_OPENVPN,
     CONVERSATION_PROXY,
+    CONVERSATION_GNSS,
+    CONVERSATION_DNP3
 } conversation_type;
 
 /*
@@ -159,6 +162,9 @@ typedef enum {
 #define ENDPOINT_MCTP		CONVERSATION_MCTP
 #define ENDPOINT_NVME_MI	CONVERSATION_NVME_MI
 #define ENDPOINT_SNMP		CONVERSATION_SNMP
+#define ENDPOINT_IP		CONVERSATION_IP
+#define ENDPOINT_IPv6		CONVERSATION_IPv6
+#define ENDPOINT_ETH		CONVERSATION_ETH
 
 typedef conversation_type endpoint_type;
 
@@ -349,7 +355,10 @@ WS_DLL_PUBLIC WS_RETNONNULL conversation_t *conversation_new_deinterlacer(const 
  *        Options except for NO_PORT2 and NO_PORT2_FORCE can be ORed.
  * @return The new conversation.
  */
-WS_DLL_PUBLIC WS_RETNONNULL conversation_t *conversation_new_strat(packet_info *pinfo, const conversation_type ctype, const unsigned options);
+WS_DLL_PUBLIC WS_RETNONNULL conversation_t *conversation_new_strat(const packet_info *pinfo, const conversation_type ctype, const unsigned options);
+
+WS_DLL_PUBLIC WS_RETNONNULL conversation_t *conversation_new_strat_xtd(const packet_info *pinfo, const uint32_t setup_frame, const address *addr1, const address *addr2,
+    const conversation_type ctype, const uint32_t port1, const uint32_t port2, const unsigned options);
 
 /**
  * Search for a conversation based on the structure and values of an element list.
@@ -426,14 +435,19 @@ WS_DLL_PUBLIC conversation_t *find_conversation_by_id(const uint32_t frame, cons
 
 /**  A helper function that calls find_conversation() using data from pinfo,
  *  and returns a conversation according to the runtime deinterlacing strategy.
- *  The frame number and addresses are taken from pinfo.
+ *  The frame number and addresses are taken from pinfo, and direction.
  */
-WS_DLL_PUBLIC conversation_t *find_conversation_strat(const packet_info *pinfo, const conversation_type ctype, const unsigned options);
+WS_DLL_PUBLIC conversation_t *find_conversation_strat(const packet_info *pinfo, const conversation_type ctype, const unsigned options, const bool direction);
+WS_DLL_PUBLIC conversation_t *find_conversation_strat_xtd(const packet_info *pinfo, const uint32_t setup_frame, const address *addr1, const address *addr2,
+    const conversation_type ctype, const uint32_t port1, const uint32_t port2, const unsigned options);
+
 
 /**  A helper function that calls find_conversation() using data from pinfo
  *  The frame number and addresses are taken from pinfo.
  */
 WS_DLL_PUBLIC conversation_t *find_conversation_pinfo(const packet_info *pinfo, const unsigned options);
+
+WS_DLL_PUBLIC conversation_t *find_conversation_pinfo_strat(const packet_info *pinfo, const unsigned options);
 
 /**  A helper function that calls find_conversation() using data from pinfo.
  *  It's a simplified version of find_conversation_pinfo() to avoid
@@ -453,7 +467,8 @@ WS_DLL_PUBLIC conversation_t *find_conversation_pinfo_ro(const packet_info *pinf
  * @param pinfo Packet info.
  * @return The existing or new conversation.
  */
-WS_DLL_PUBLIC WS_RETNONNULL conversation_t *find_or_create_conversation(packet_info *pinfo);
+WS_DLL_PUBLIC WS_RETNONNULL conversation_t *find_or_create_conversation(const packet_info *pinfo);
+WS_DLL_PUBLIC WS_RETNONNULL conversation_t *find_or_create_conversation_strat(const packet_info *pinfo);
 
 /**  A helper function that calls find_conversation_by_id() and, if a
  *  conversation is not found, calls conversation_new_by_id().
@@ -537,6 +552,9 @@ WS_DLL_PUBLIC uint32_t conversation_get_id_from_elements(struct _packet_info *pi
 WS_DLL_PUBLIC bool try_conversation_dissector(const address *addr_a, const address *addr_b, const conversation_type ctype,
     const uint32_t port_a, const uint32_t port_b, tvbuff_t *tvb, packet_info *pinfo,
     proto_tree *tree, void* data, const unsigned options);
+
+WS_DLL_PUBLIC bool try_conversation_dissector_strat(packet_info *pinfo, const conversation_type ctype,
+    tvbuff_t *tvb, proto_tree *tree, void* data, const unsigned options);
 
 WS_DLL_PUBLIC bool try_conversation_dissector_by_id(const conversation_type ctype, const uint32_t id, tvbuff_t *tvb,
     packet_info *pinfo, proto_tree *tree, void* data);

@@ -201,7 +201,6 @@ static expert_field ei_dtls_cid_invalid_enc_content;
 static GHashTable      *dtls_key_hash;
 static wmem_stack_t    *key_list_stack;
 static uat_t           *dtlsdecrypt_uat;
-static const char      *dtls_keys_list;
 #endif
 static reassembly_table    dtls_reassembly_table;
 static dissector_table_t   dtls_associations;
@@ -247,19 +246,8 @@ static SSL_COMMON_LIST_T(dissect_dtls_hf);
 static void
 dtls_init(void)
 {
-  module_t *dtls_module = prefs_find_module("dtls");
-  pref_t   *keys_list_pref;
-
   ssl_data_alloc(&dtls_decrypted_data, 32);
   ssl_data_alloc(&dtls_compressed_data, 32);
-
-  /* We should have loaded "keys_list" by now. Mark it obsolete */
-  if (dtls_module) {
-    keys_list_pref = prefs_find_preference(dtls_module, "keys_list");
-    if (! prefs_get_preference_obsolete(keys_list_pref)) {
-      prefs_set_preference_obsolete(keys_list_pref);
-    }
-  }
 
   ssl_init_cid_list();
 }
@@ -330,36 +318,6 @@ dtls_reset_uat(void)
 {
   g_hash_table_destroy(dtls_key_hash);
   dtls_key_hash = NULL;
-}
-
-static void
-dtls_parse_old_keys(void)
-{
-  char           **old_keys, **parts, *err;
-  unsigned         i;
-  char           *uat_entry;
-
-  /* Import old-style keys */
-  if (dtlsdecrypt_uat && dtls_keys_list && dtls_keys_list[0]) {
-    old_keys = g_strsplit(dtls_keys_list, ";", 0);
-    for (i = 0; old_keys[i] != NULL; i++) {
-      parts = g_strsplit(old_keys[i], ",", 4);
-      if (parts[0] && parts[1] && parts[2] && parts[3]) {
-        char *path = uat_esc(parts[3], (unsigned)strlen(parts[3]));
-        uat_entry = wmem_strdup_printf(NULL, "\"%s\",\"%s\",\"%s\",\"%s\",\"\"",
-                        parts[0], parts[1], parts[2], path);
-        g_free(path);
-        if (!uat_load_str(dtlsdecrypt_uat, uat_entry, &err)) {
-          ssl_debug_printf("dtls_parse: Can't load UAT string %s: %s\n",
-                           uat_entry, err);
-          g_free(err);
-        }
-        wmem_free(NULL, uat_entry);
-      }
-      g_strfreev(parts);
-    }
-    g_strfreev(old_keys);
-  }
 }
 #endif  /* HAVE_LIBGNUTLS */
 
@@ -672,39 +630,8 @@ dissect_dtls_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
   return false;
 }
 
-static bool
-dtls_is_null_cipher(unsigned cipher )
-{
-  switch(cipher) {
-  case 0x0000:
-  case 0x0001:
-  case 0x0002:
-  case 0x002c:
-  case 0x002d:
-  case 0x002e:
-  case 0x003b:
-  case 0x00b0:
-  case 0x00b1:
-  case 0x00b4:
-  case 0x00b5:
-  case 0x00b8:
-  case 0x00b9:
-  case 0xc001:
-  case 0xc006:
-  case 0xc00b:
-  case 0xc010:
-  case 0xc015:
-  case 0xc039:
-  case 0xc03a:
-  case 0xc03b:
-    return true;
-  default:
-    return false;
-  }
-}
-
 static void
-dtls_save_decrypted_record(packet_info *pinfo, int record_id, uint8_t content_type, uint8_t curr_layer_num_ssl, bool inner_content_type)
+dtls_save_decrypted_record(packet_info *pinfo, int record_id, uint8_t content_type, SslDecoder *decoder, uint8_t curr_layer_num_ssl, bool inner_content_type)
 {
     const unsigned char *data = dtls_decrypted_data.data;
     unsigned datalen = dtls_decrypted_data_avail;
@@ -732,7 +659,10 @@ dtls_save_decrypted_record(packet_info *pinfo, int record_id, uint8_t content_ty
         }
     }
 
-    ssl_add_record_info(proto_dtls, pinfo, data, datalen, record_id, NULL, (ContentType)content_type, curr_layer_num_ssl);
+    // For DTLS 1.3, the record sequence number was encrypted, so store it.
+    // tls_decrypt_aead_record does not increment decoder->seq after
+    // successful authentication for DTLS 1.3 (unlike for TLS.)
+    ssl_add_record_info(proto_dtls, pinfo, data, datalen, record_id, NULL, (ContentType)content_type, curr_layer_num_ssl, decoder->seq);
 }
 
 static bool
@@ -745,8 +675,8 @@ decrypt_dtls_record(tvbuff_t *tvb, packet_info *pinfo, uint32_t offset, SslDecry
 
   /* if we can decrypt and decryption have success
    * add decrypted data to this packet info */
-  if (!ssl || ((ssl->session.version != DTLSV1DOT3_VERSION) && !(ssl->state & SSL_HAVE_SESSION_KEY))) {
-    ssl_debug_printf("decrypt_dtls_record: no session key\n");
+  if (!ssl) {
+    ssl_debug_printf("decrypt_dtls_record: no session\n");
     return false;
   }
   ssl_debug_printf("decrypt_dtls_record: app_data len %d, ssl state %X\n",
@@ -762,7 +692,7 @@ decrypt_dtls_record(tvbuff_t *tvb, packet_info *pinfo, uint32_t offset, SslDecry
     decoder = ssl->client;
   }
 
-  if (!decoder && !dtls_is_null_cipher(ssl->session.cipher)) {
+  if (!decoder) {
     ssl_debug_printf("decrypt_dtls_record: no decoder available\n");
     return false;
   }
@@ -781,26 +711,12 @@ decrypt_dtls_record(tvbuff_t *tvb, packet_info *pinfo, uint32_t offset, SslDecry
   /* run decryption and add decrypted payload to protocol data, if decryption
    * is successful*/
   dtls_decrypted_data_avail = dtls_decrypted_data.data_len;
-  if (ssl->state & SSL_HAVE_SESSION_KEY || ssl->session.version == DTLSV1DOT3_VERSION) {
-    if (!decoder) {
-      ssl_debug_printf("decrypt_dtls_record: no decoder available\n");
-      return false;
-    }
-    success = ssl_decrypt_record(ssl, decoder, content_type, record_version, false,
-                           tvb_get_ptr(tvb, offset, record_length), record_length, cid, cid_length,
-                           &dtls_compressed_data, &dtls_decrypted_data, &dtls_decrypted_data_avail) == 0;
-  }
-  else if (dtls_is_null_cipher(ssl->session.cipher)) {
-    /* Non-encrypting cipher NULL-XXX */
-    tvb_memcpy(tvb, dtls_decrypted_data.data, offset, record_length);
-    dtls_decrypted_data_avail = dtls_decrypted_data.data_len = record_length;
-    success = true;
-  } else {
-    success = false;
-  }
+  success = ssl_decrypt_record(ssl, decoder, content_type, record_version, false,
+                         tvb_get_ptr(tvb, offset, record_length), record_length, cid, cid_length,
+                         &dtls_compressed_data, &dtls_decrypted_data, &dtls_decrypted_data_avail) == 0;
 
   if (success) {
-    dtls_save_decrypted_record(pinfo, tvb_raw_offset(tvb)+offset, content_type, curr_layer_num_ssl, ssl->session.version == DTLSV1DOT3_VERSION);
+    dtls_save_decrypted_record(pinfo, tvb_raw_offset(tvb)+offset, content_type, decoder, curr_layer_num_ssl, ssl->session.version == DTLSV1DOT3_VERSION);
   }
   return success;
 }
@@ -1738,18 +1654,8 @@ dissect_dtls13_record(tvbuff_t *tvb, packet_info *pinfo _U_,
   decrypted = ssl_get_record_info(tvb, proto_dtls, pinfo, tvb_raw_offset(tvb)+offset, curr_layer_num_ssl, &record);
   if (decrypted)
   {
-    /* on first pass add seq suffix decrypted info */
-    if (ssl) {
-      if (is_from_server && ssl->server) {
-        // XXX - Should the cast depend on seq_length ?
-        record->dtls13_seq_suffix = (uint16_t)ssl->server->seq;
-      } else if (ssl->client) {
-        record->dtls13_seq_suffix = (uint16_t)ssl->client->seq;
-      }
-    }
-
     ti = proto_tree_add_uint(dtls_record_tree, hf_dtls_record_sequence_suffix_dec, tvb, hdr_start + 1 + cid_length,
-                             seq_length, record->dtls13_seq_suffix);
+                             seq_length, (uint16_t)record->record_seq);
     proto_item_set_generated(ti);
     add_new_data_source(pinfo, decrypted, "Decrypted DTLS");
     /* real content type*/
@@ -2184,7 +2090,7 @@ dissect_dtls_handshake(tvbuff_t *tvb, packet_info *pinfo,
             }
             ssl_dissect_hnd_cli_hello(&dissect_dtls_hf, sub_tvb, pinfo,
                                       ssl_hand_tree, 0, length, session, ssl,
-                                      &dtls_hfs);
+                                      &dtls_hfs, NULL);
             if (ssl) {
                 tls_save_crandom(ssl, tls_get_master_key_map(false));
                 /* force DTLSv1.3 version if early data is seen */
@@ -2292,6 +2198,7 @@ dissect_dtls_handshake(tvbuff_t *tvb, packet_info *pinfo,
           case SSL_HND_ENCRYPTED_EXTS:
           case SSL_HND_END_OF_EARLY_DATA: /* TLS 1.3 */
           case SSL_HND_COMPRESSED_CERTIFICATE:
+          case SSL_HND_MESSAGE_HASH:
             break;
           case SSL_HND_ENCRYPTED_EXTENSIONS: /* TLS 1.3 */
             ssl_dissect_hnd_encrypted_extensions(&dissect_dtls_hf, sub_tvb, pinfo, ssl_hand_tree, 0, length, session, ssl, 1);
@@ -3118,7 +3025,7 @@ proto_register_dtls(void)
                               &dtlskeylist_uats,              /* data_ptr */
                               &ndtlsdecrypt,                  /* numitems_ptr */
                               UAT_AFFECTS_DISSECTION,         /* affects dissection of packets, but not set of named fields */
-                              "ChK12ProtocolsSection",        /* TODO, need revision - help */
+                              NULL,                           /* TODO, need revision - help */
                               dtlsdecrypt_copy_cb,
                               NULL, /* dtlsdecrypt_update_cb? */
                               dtlsdecrypt_free_cb,
@@ -3131,10 +3038,7 @@ proto_register_dtls(void)
                                   "A table of RSA keys for DTLS decryption",
                                   dtlsdecrypt_uat);
 
-    prefs_register_string_preference(dtls_module, "keys_list", "RSA keys list (deprecated)",
-                                     "Semicolon-separated list of private RSA keys used for DTLS decryption. "
-                                     "Used by versions of Wireshark prior to 1.6",
-                                     &dtls_keys_list);
+    prefs_register_obsolete_preference(dtls_module, "keys_list");
 #endif  /* HAVE_LIBGNUTLS */
 
     prefs_register_filename_preference(dtls_module, "debug_file", "DTLS debug file",
@@ -3179,7 +3083,6 @@ proto_reg_handoff_dtls(void)
 
 #ifdef HAVE_LIBGNUTLS
   dtls_parse_uat();
-  dtls_parse_old_keys();
 #endif
 
   if (initialized == false) {

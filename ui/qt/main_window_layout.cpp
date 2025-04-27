@@ -54,7 +54,7 @@ QWidget* MainWindow::getLayoutWidget(layout_pane_content_e type) {
         case layout_pane_content_pbytes:
             return byte_view_tab_;
         case layout_pane_content_pdiagram:
-            return packet_diagram_;
+            return packet_diagram_ ? packet_diagram_ : &empty_pane_;
         default:
             ws_assert_not_reached();
             return NULL;
@@ -242,4 +242,9 @@ void MainWindow::applyRecentPaneGeometry()
         master_split_.setSizes(master_sizes);
         extra_split_.setSizes(extra_sizes);
     }
+}
+
+void MainWindow::updateForUnsavedChanges() {
+    updateTitlebar();
+    setMenusForCaptureFile();
 }

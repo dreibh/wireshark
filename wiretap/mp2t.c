@@ -53,7 +53,7 @@ void register_mp2t(void);
 
 static bool
 mp2t_read_packet(mp2t_filetype_t *mp2t, FILE_T fh, int64_t offset,
-                 wtap_rec *rec, Buffer *buf, int *err,
+                 wtap_rec *rec, int *err,
                  char **err_info)
 {
     uint64_t tmp;
@@ -62,8 +62,8 @@ mp2t_read_packet(mp2t_filetype_t *mp2t, FILE_T fh, int64_t offset,
      * MP2T_SIZE will always be less than WTAP_MAX_PACKET_SIZE_STANDARD, so
      * we don't have to worry about the packet being too big.
      */
-    ws_buffer_assure_space(buf, MP2T_SIZE);
-    if (!wtap_read_bytes_or_eof(fh, ws_buffer_start_ptr(buf), MP2T_SIZE, err, err_info))
+    ws_buffer_assure_space(&rec->data, MP2T_SIZE);
+    if (!wtap_read_bytes_or_eof(fh, ws_buffer_start_ptr(&rec->data), MP2T_SIZE, err, err_info))
         return false;
 
     rec->rec_type = REC_TYPE_PACKET;
@@ -97,7 +97,7 @@ mp2t_read_packet(mp2t_filetype_t *mp2t, FILE_T fh, int64_t offset,
 }
 
 static bool
-mp2t_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
+mp2t_read(wtap *wth, wtap_rec *rec, int *err,
         char **err_info, int64_t *data_offset)
 {
     mp2t_filetype_t *mp2t;
@@ -118,8 +118,7 @@ mp2t_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
 
     *data_offset = file_tell(wth->fh);
 
-    if (!mp2t_read_packet(mp2t, wth->fh, *data_offset, rec, buf, err,
-                          err_info)) {
+    if (!mp2t_read_packet(mp2t, wth->fh, *data_offset, rec, err, err_info)) {
         return false;
     }
 
@@ -135,7 +134,7 @@ mp2t_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
 
 static bool
 mp2t_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-        Buffer *buf, int *err, char **err_info)
+        int *err, char **err_info)
 {
     mp2t_filetype_t *mp2t;
 
@@ -145,8 +144,7 @@ mp2t_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 
     mp2t = (mp2t_filetype_t*) wth->priv;
 
-    if (!mp2t_read_packet(mp2t, wth->random_fh, seek_off, rec, buf,
-                          err, err_info)) {
+    if (!mp2t_read_packet(mp2t, wth->random_fh, seek_off, rec, err, err_info)) {
         if (*err == 0)
             *err = WTAP_ERR_SHORT_READ;
         return false;
@@ -457,7 +455,7 @@ static int mp2t_dump_can_write_encap(int encap)
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
 static bool mp2t_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    const uint8_t *pd, int *err, char **err_info _U_)
+    int *err, char **err_info _U_)
 {
     /* We can only write packet records. */
     if (rec->rec_type != REC_TYPE_PACKET) {
@@ -479,7 +477,7 @@ static bool mp2t_dump(wtap_dumper *wdh, const wtap_rec *rec,
      * Note this drops existing headers and trailers currently, since we
      * don't include them in the record.
      */
-    if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err)) {
+    if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data), rec->rec_header.packet_header.caplen, err)) {
         return false;
     }
 

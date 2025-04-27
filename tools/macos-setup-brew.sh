@@ -20,8 +20,10 @@ function print_usage() {
     printf "The basic usage installs the needed software\\n\\n"
     printf "Usage: %s [--install-optional] [--install-dmg-deps] [...other options...]\\n" "$0"
     printf "\\t--install-optional: install optional software as well\\n"
+    printf "\\t--install-doc-deps: install packages required to build the documentation\\n"
     printf "\\t--install-dmg-deps: install packages required to build the .dmg file\\n"
     printf "\\t--install-sparkle-deps: install the Sparkle automatic updater\\n"
+    printf "\\t--install-test-deps: install packages required for automated testing\\n"
     printf "\\t--install-all: install everything\\n"
     printf "\\t--install-stratoshark: install everything to compile Stratoshark and Falco bridge\\n"
     printf "\\t[other]: other options are passed as-is to brew\\n"
@@ -135,6 +137,7 @@ STRATOSHARK_LIST=(
     jsoncpp
     onetbb
     re2
+    uthash
 )
 
 ACTUAL_LIST=( "${BUILD_LIST[@]}" "${REQUIRED_LIST[@]}" )
@@ -164,7 +167,7 @@ if [ $INSTALL_DMG_DEPS -ne 0 ] ; then
 fi
 
 if [ $INSTALL_SPARKLE_DEPS -ne 0 ] ; then
-    brew cask install sparkle
+    brew install --cask sparkle
 fi
 
 if [ $INSTALL_TEST_DEPS -ne 0 ] ; then

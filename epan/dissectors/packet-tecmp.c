@@ -1,7 +1,7 @@
 /* packet-tecmp.c
  * Technically Enhanced Capture Module Protocol (TECMP) dissector.
  * By <lars.voelker@technica-engineering.de>
- * Copyright 2019-2024 Dr. Lars Voelker
+ * Copyright 2019-2025 Dr. Lars Völker
  * Copyright 2020      Ayoub Kaanich
  *
  * Wireshark - Network traffic analyzer
@@ -17,6 +17,12 @@
   * which is somewhat similar to active network tap, towards a logger or PC to
   * record or analyze the captured data.
   * Capture Modules capture data of LIN, CAN, FlexRay, Ethernet, RS232, or other sources.
+  *
+  * See
+  *
+  *    https://github.com/Technica-Engineering/libtecmp/tree/master/docs
+  *
+  * for specifications for the protocol.
   */
 
 #include <config.h>
@@ -830,14 +836,14 @@ typedef struct _interface_config {
 #define DATAFILE_TECMP_CONTROL_MSG_IDS "TECMP_control_message_identifiers"
 
 static GHashTable *data_tecmp_devices;
-static generic_one_id_string_t* tecmp_devices;
+static generic_one_id_string_t *tecmp_devices;
 static unsigned tecmp_devices_num;
 
 UAT_HEX_CB_DEF(tecmp_devices, id, generic_one_id_string_t)
 UAT_CSTRING_CB_DEF(tecmp_devices, name, generic_one_id_string_t)
 
 static GHashTable *data_tecmp_interfaces;
-static interface_config_t* tecmp_interfaces;
+static interface_config_t *tecmp_interfaces;
 static unsigned tecmp_interfaces_num;
 
 UAT_HEX_CB_DEF(tecmp_interfaces, id, interface_config_t)
@@ -845,23 +851,11 @@ UAT_CSTRING_CB_DEF(tecmp_interfaces, name, interface_config_t)
 UAT_HEX_CB_DEF(tecmp_interfaces, bus_id, interface_config_t)
 
 static GHashTable *data_tecmp_ctrlmsgids;
-static generic_one_id_string_t* tecmp_ctrl_msgs;
+static generic_one_id_string_t *tecmp_ctrl_msgs;
 static unsigned tecmp_ctrl_msg_num;
 
 UAT_HEX_CB_DEF(tecmp_ctrl_msgs, id, generic_one_id_string_t)
 UAT_CSTRING_CB_DEF(tecmp_ctrl_msgs, name, generic_one_id_string_t)
-
-/* generic UAT */
-static void
-tecmp_free_key(void *key) {
-    wmem_free(wmem_epan_scope(), key);
-}
-
-static void
-simple_free(void *data) {
-    /* we need to free because of the g_strdup in post_update*/
-    g_free(data);
-}
 
 /* ID -> Name */
 static void *
@@ -892,41 +886,11 @@ update_generic_one_identifier_16bit(void *r, char **err) {
 }
 
 static void
-free_generic_one_id_string_cb(void* r) {
+free_generic_one_id_string_cb(void *r) {
     generic_one_id_string_t *rec = (generic_one_id_string_t *)r;
     /* freeing result of g_strdup */
     g_free(rec->name);
     rec->name = NULL;
-}
-
-static void
-post_update_one_id_string_template_cb(generic_one_id_string_t *data, unsigned data_num, GHashTable *ht) {
-    unsigned   i;
-    int    *key = NULL;
-
-    for (i = 0; i < data_num; i++) {
-        key = wmem_new(wmem_epan_scope(), int);
-        *key = data[i].id;
-
-        g_hash_table_insert(ht, key, g_strdup(data[i].name));
-    }
-}
-
-static char *
-ht_lookup_name(GHashTable *ht, unsigned int identifier) {
-    char           *tmp = NULL;
-    unsigned int   *id = NULL;
-
-    if (ht == NULL) {
-        return NULL;
-    }
-
-    id = wmem_new(wmem_epan_scope(), unsigned int);
-    *id = (unsigned int)identifier;
-    tmp = (char *)g_hash_table_lookup(ht, id);
-    wmem_free(wmem_epan_scope(), id);
-
-    return tmp;
 }
 
 /* ID -> ID, Name */
@@ -971,26 +935,13 @@ free_interface_config_cb(void *r) {
     rec->name = NULL;
 }
 
-static interface_config_t *
-ht_lookup_interface_config(unsigned int identifier) {
-    interface_config_t   *tmp = NULL;
-    unsigned int       *id = NULL;
-
+static char *
+ht_interface_config_to_string(unsigned int identifier) {
     if (data_tecmp_interfaces == NULL) {
         return NULL;
     }
 
-    id = wmem_new(wmem_epan_scope(), unsigned int);
-    *id = (unsigned int)identifier;
-    tmp = (interface_config_t *)g_hash_table_lookup(data_tecmp_interfaces, id);
-    wmem_free(wmem_epan_scope(), id);
-
-    return tmp;
-}
-
-static char *
-ht_interface_config_to_string(unsigned int identifier) {
-    interface_config_t   *tmp = ht_lookup_interface_config(identifier);
+    interface_config_t *tmp = g_hash_table_lookup(data_tecmp_interfaces, GUINT_TO_POINTER(identifier));
     if (tmp == NULL) {
         return NULL;
     }
@@ -1000,7 +951,11 @@ ht_interface_config_to_string(unsigned int identifier) {
 
 static uint16_t
 ht_interface_config_to_bus_id(unsigned int identifier) {
-    interface_config_t   *tmp = ht_lookup_interface_config(identifier);
+    if (data_tecmp_interfaces == NULL) {
+        return 0;
+    }
+
+    interface_config_t *tmp = g_hash_table_lookup(data_tecmp_interfaces, GUINT_TO_POINTER(identifier));
     if (tmp == NULL) {
         /* 0 means basically any or none */
         return 0;
@@ -1012,22 +967,34 @@ ht_interface_config_to_bus_id(unsigned int identifier) {
 /*** UAT TECMP_DEVICE_IDs ***/
 
 static void
-post_update_tecmp_devices_cb(void) {
-    /* destroy old hash table, if it exists */
+reset_tecmp_devices_cb(void) {
+    /* destroy hash table, if it exists */
     if (data_tecmp_devices) {
         g_hash_table_destroy(data_tecmp_devices);
         data_tecmp_devices = NULL;
     }
+}
+
+static void
+post_update_tecmp_devices_cb(void) {
+    reset_tecmp_devices_cb();
 
     /* create new hash table */
-    data_tecmp_devices = g_hash_table_new_full(g_int_hash, g_int_equal, &tecmp_free_key, &simple_free);
-    post_update_one_id_string_template_cb(tecmp_devices, tecmp_devices_num, data_tecmp_devices);
+    data_tecmp_devices = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+
+    for (unsigned i = 0; i < tecmp_devices_num; i++) {
+        g_hash_table_insert(data_tecmp_devices, GUINT_TO_POINTER(tecmp_devices[i].id), tecmp_devices[i].name);
+    }
 }
 
 static void
 add_device_id_text(proto_item *ti, uint16_t device_id) {
     /* lets check configured entries first */
-    const char *descr = ht_lookup_name(data_tecmp_devices, device_id);
+    const char *descr = NULL;
+
+    if (data_tecmp_devices != NULL) {
+        descr = g_hash_table_lookup(data_tecmp_devices, GUINT_TO_POINTER(device_id));
+    }
 
     if (descr == NULL) {
         /* lets check specific  */
@@ -1058,27 +1025,23 @@ add_device_id_text(proto_item *ti, uint16_t device_id) {
 /*** UAT TECMP_INTERFACE_IDs ***/
 
 static void
-post_update_tecmp_interfaces_cb(void) {
-    unsigned  i;
-    int   *key = NULL;
-
-    /* destroy old hash table, if it exists */
+reset_tecmp_interfaces_cb(void) {
+    /* destroy hash table, if it exists */
     if (data_tecmp_interfaces) {
         g_hash_table_destroy(data_tecmp_interfaces);
         data_tecmp_interfaces = NULL;
     }
+}
+
+static void
+post_update_tecmp_interfaces_cb(void) {
+    reset_tecmp_interfaces_cb();
 
     /* create new hash table */
-    data_tecmp_interfaces = g_hash_table_new_full(g_int_hash, g_int_equal, &tecmp_free_key, NULL);
+    data_tecmp_interfaces = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
 
-    if (data_tecmp_interfaces == NULL || tecmp_interfaces == NULL || tecmp_interfaces_num == 0) {
-        return;
-    }
-
-    for (i = 0; i < tecmp_interfaces_num; i++) {
-        key = wmem_new(wmem_epan_scope(), int);
-        *key = tecmp_interfaces[i].id;
-        g_hash_table_insert(data_tecmp_interfaces, key, &tecmp_interfaces[i]);
+    for (unsigned i = 0; i < tecmp_interfaces_num; i++) {
+        g_hash_table_insert(data_tecmp_interfaces, GUINT_TO_POINTER(tecmp_interfaces[i].id), &tecmp_interfaces[i]);
     }
 }
 
@@ -1096,22 +1059,33 @@ add_interface_id_text_and_name(proto_item *ti, uint32_t interface_id, tvbuff_t *
 /*** UAT TECMP_CONTROL_MESSAGE_IDs ***/
 
 static void
-post_update_tecmp_control_messages_cb(void) {
-    /* destroy old hash table, if it exists */
+reset_tecmp_control_messages_cb(void) {
+    /* destroy hash table, if it exists */
     if (data_tecmp_ctrlmsgids) {
         g_hash_table_destroy(data_tecmp_ctrlmsgids);
         data_tecmp_ctrlmsgids = NULL;
     }
+}
+
+static void
+post_update_tecmp_control_messages_cb(void) {
+    reset_tecmp_control_messages_cb();
 
     /* create new hash table */
-    data_tecmp_ctrlmsgids = g_hash_table_new_full(g_int_hash, g_int_equal, &tecmp_free_key, &simple_free);
-    post_update_one_id_string_template_cb(tecmp_ctrl_msgs, tecmp_ctrl_msg_num, data_tecmp_ctrlmsgids);
+    data_tecmp_ctrlmsgids = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, NULL);
+
+    for (unsigned i = 0; i < tecmp_ctrl_msg_num; i++) {
+        g_hash_table_insert(data_tecmp_ctrlmsgids, GUINT_TO_POINTER(tecmp_ctrl_msgs[i].id), tecmp_ctrl_msgs[i].name);
+    }
 }
 
 static const char*
-resolve_control_message_id(uint16_t control_message_id)
-{
-    const char *tmp = ht_lookup_name(data_tecmp_ctrlmsgids, control_message_id);
+resolve_control_message_id(uint16_t control_message_id) {
+    const char *tmp = NULL;
+
+    if (data_tecmp_ctrlmsgids != NULL) {
+        tmp = g_hash_table_lookup(data_tecmp_ctrlmsgids, GUINT_TO_POINTER(control_message_id));
+    }
 
     /* lets look at the static values, if nothing is configured */
     if (tmp == NULL) {
@@ -1592,8 +1566,8 @@ dissect_tecmp_status_device_vendor_data(tvbuff_t *tvb, packet_info *pinfo _U_, p
         uint64_t secs = tmp64 / 1000000000;
         uint64_t mins = secs / 60;
         secs -= mins * 60;
-        uint64_t hours = mins / 24;
-        mins -= hours * 24;
+        uint64_t hours = mins / 60;
+        mins -= hours * 60;
         proto_item_append_text(ti, " ns (%d:%02d:%02d.%09d)", (uint32_t)hours, (uint32_t)mins, (uint32_t)secs, (uint32_t)nanos);
 
         if (tmp64 < timestamp_ns) {
@@ -1996,12 +1970,15 @@ dissect_tecmp_log_or_replay_stream(tvbuff_t *tvb, packet_info *pinfo, proto_tree
                     length2 = MAX(0, MIN((int)length2, tvb_captured_length_remaining(sub_tvb, offset2) - 1));
                 }
 
+                /* LIN encodes a sleep frame by setting ID to LIN_DIAG_MASTER_REQUEST_FRAME and the first byte to 0x00 */
+                bool ignore_lin_payload = (lin_info.id == LIN_DIAG_MASTER_REQUEST_FRAME && tvb_get_uint8(sub_tvb, offset2) == 0x00);
+
                 if (length2 > 0) {
                     lin_info.len = tvb_captured_length_remaining(sub_tvb, offset2);
                     payload_tvb = tvb_new_subset_length(sub_tvb, offset2, length2);
                     uint32_t bus_frame_id = lin_info.id | (lin_info.bus_id << 16);
-                    if (!dissector_try_uint_new(lin_subdissector_table, bus_frame_id, payload_tvb, pinfo, tree, false, &lin_info)) {
-                        if (!dissector_try_uint_new(lin_subdissector_table, lin_info.id, payload_tvb, pinfo, tree, false, &lin_info)) {
+                    if (ignore_lin_payload || !dissector_try_uint_with_data(lin_subdissector_table, bus_frame_id, payload_tvb, pinfo, tree, false, &lin_info)) {
+                        if (ignore_lin_payload || !dissector_try_uint_with_data(lin_subdissector_table, lin_info.id, payload_tvb, pinfo, tree, false, &lin_info)) {
                             dissect_data(payload_tvb, pinfo, tree, device_id, tecmp_msg_type, data_type, interface_id);
                         }
                     }
@@ -3252,7 +3229,7 @@ proto_register_tecmp(void) {
         update_generic_one_identifier_16bit,    /* update callback       */
         free_generic_one_id_string_cb,          /* free callback         */
         post_update_tecmp_devices_cb,           /* post update callback  */
-        NULL,                                   /* reset callback        */
+        reset_tecmp_devices_cb,                 /* reset callback        */
         tecmp_device_id_uat_fields              /* UAT field definitions */
     );
 
@@ -3271,7 +3248,7 @@ proto_register_tecmp(void) {
         update_interface_config,                /* update callback       */
         free_interface_config_cb,               /* free callback         */
         post_update_tecmp_interfaces_cb,        /* post update callback  */
-        NULL,                                   /* reset callback        */
+        reset_tecmp_interfaces_cb,              /* reset callback        */
         tecmp_interface_id_uat_fields           /* UAT field definitions */
     );
 

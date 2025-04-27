@@ -18,6 +18,7 @@ ADD_CUSTOM_CMAKE_INCLUDE()
 set(WIRESHARK_WIDGET_HEADERS
 	widgets/additional_toolbar.h
 	widgets/apply_line_edit.h
+	widgets/base_data_source_view.h
 	widgets/byte_view_text.h
 	widgets/capture_filter_combo.h
 	widgets/capture_filter_edit.h
@@ -40,6 +41,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/find_line_edit.h
 	widgets/follow_stream_text.h
 	widgets/interface_toolbar_lineedit.h
+	widgets/json_data_source_view.h
 	widgets/label_stack.h
 	widgets/overlay_scroll_bar.h
 	widgets/packet_list_header.h
@@ -190,6 +192,7 @@ set(WIRESHARK_QT_HEADERS
 	funnel_text_dialog.h
 	geometry_state_dialog.h
 	glib_mainloop_on_qeventloop.h
+	graph.h
 	gsm_map_summary_dialog.h
 	iax2_analysis_dialog.h
 	import_text_dialog.h
@@ -197,6 +200,7 @@ set(WIRESHARK_QT_HEADERS
 	interface_toolbar_reader.h
 	interface_toolbar.h
 	io_console_dialog.h
+	io_graph.h
 	io_graph_action.h
 	io_graph_dialog.h
 	layout_preferences_frame.h
@@ -219,6 +223,7 @@ set(WIRESHARK_QT_HEADERS
 	packet_diagram.h
 	packet_dialog.h
 	packet_format_group_box.h
+	packet_format_stack.h
 	packet_list.h
 	packet_range_group_box.h
 	preference_editor_frame.h
@@ -309,6 +314,7 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/find_line_edit.cpp
 	widgets/follow_stream_text.cpp
 	widgets/interface_toolbar_lineedit.cpp
+	widgets/json_data_source_view.cpp
 	widgets/label_stack.cpp
 	widgets/overlay_scroll_bar.cpp
 	widgets/packet_list_header.cpp
@@ -478,6 +484,7 @@ set(WIRESHARK_QT_SRC
 	packet_diagram.cpp
 	packet_dialog.cpp
 	packet_format_group_box.cpp
+	packet_format_stack.cpp
 	packet_list.cpp
 	packet_range_group_box.cpp
 	preference_editor_frame.cpp
@@ -546,7 +553,9 @@ endif()
 set(WIRESHARK_QT_TAP_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/expert_info_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/funnel_statistics.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/graph.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/gsm_map_summary_dialog.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/io_graph.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/io_graph_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/lte_mac_statistics_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/lte_rlc_statistics_dialog.cpp
@@ -625,6 +634,7 @@ set(WIRESHARK_QT_UI
 	packet_comment_dialog.ui
 	packet_dialog.ui
 	packet_format_group_box.ui
+	packet_format_json_group_box.ui
 	packet_range_group_box.ui
 	preference_editor_frame.ui
 	preferences_dialog.ui
@@ -670,6 +680,7 @@ if(HAVE_PCAP_REMOTE)
 endif()
 
 set(WIRESHARK_QT_TS
+	wireshark_ca.ts
 	wireshark_de.ts
 	wireshark_en.ts # lupdate -pluralonly
 	wireshark_es.ts
@@ -711,7 +722,19 @@ add_custom_command(
 		${CMAKE_SOURCE_DIR}/AUTHORS
 )
 
-set(WIRESHARK_QT_QRC
+# Drop the file modification time of source files from generated files
+# to help with reproducible builds. We do not use QFileInfo.lastModified
+# so this has no unwanted side effects. This mtime started appearing in
+# Qt 5.8. The option to force the old file format without mtime was
+# added in Qt 5.9. See https://bugreports.qt.io/browse/QTBUG-58769.
+# Force the compression algorithm to zlib, since zstd requires format
+# version 3. See https://gitlab.com/wireshark/wireshark/-/issues/18100.
+# Use the number of dashes for each argument as documented at
+# https://doc.qt.io/qt-6/rcc.html.
+set(CMAKE_AUTORCC_OPTIONS --format-version 1)
+list(APPEND CMAKE_AUTORCC_OPTIONS -compress-algo zlib)
+
+qt_add_resources(WIRESHARK_QT_QRC
 	../../resources/about.qrc
 	../../resources/languages/languages.qrc
 	../../resources/layout.qrc
@@ -719,38 +742,13 @@ set(WIRESHARK_QT_QRC
 	../../resources/wsicon.qrc
 	${CMAKE_CURRENT_BINARY_DIR}/i18n.qrc
 	${CMAKE_CURRENT_BINARY_DIR}/authors.qrc
-	${CMAKE_CURRENT_BINARY_DIR}/authors.csv
+	OPTIONS ${CMAKE_AUTORCC_OPTIONS}
 )
-
-if(NOT Qt${qtver}Widgets_VERSION VERSION_LESS "5.9")
-	# Drop the file modification time of source files from generated files
-	# to help with reproducible builds. We do not use QFileInfo.lastModified
-	# so this has no unwanted side effects. This mtime started appearing in
-	# Qt 5.8. The option to force the old file format without mtime was
-	# added in Qt 5.9. See https://bugreports.qt.io/browse/QTBUG-58769.
-	# Force the compression algorithm to zlib, since zstd requires format
-	# version 3. See https://gitlab.com/wireshark/wireshark/-/issues/18100.
-	# Use the number of dashes for each argument as documented at
-	# https://doc.qt.io/qt-6/rcc.html.
-	set(CMAKE_AUTORCC_OPTIONS --format-version 1)
-	if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "5.13")
-		list(APPEND CMAKE_AUTORCC_OPTIONS -compress-algo zlib)
-	endif()
-endif()
 
 if (USE_qt6)
 	QT6_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS} OPTIONS -silent)
 else()
 	QT5_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS} OPTIONS -silent)
-endif()
-
-if (WIN32)
-	add_custom_target(copy_qt_translations ALL)
-	add_custom_command(TARGET copy_qt_translations
-		POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:wireshark>/translations
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${WIRESHARK_QT_QM} $<TARGET_FILE_DIR:wireshark>/translations
-	)
 endif()
 
 add_custom_target(
@@ -759,6 +757,16 @@ add_custom_target(
 		${WIRESHARK_QT_QM}
 )
 set_target_properties(translations PROPERTIES FOLDER "UI")
+
+if (WIN32)
+	add_custom_target(copy_qt_translations ALL)
+	add_custom_command(TARGET copy_qt_translations
+		POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:wireshark>/translations
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${WIRESHARK_QT_QM} $<TARGET_FILE_DIR:wireshark>/translations
+	)
+	add_dependencies(copy_qt_translations translations)
+endif()
 
 set_source_files_properties(
 	${WIRESHARK_QT_NONGENERATED_SRC}
@@ -838,6 +846,8 @@ target_include_directories(qtui
 		${PCAP_INCLUDE_DIRS}
 		${SPEEXDSP_INCLUDE_DIRS}
 		${WINSPARKLE_INCLUDE_DIRS}
+		$<$<CXX_COMPILER_ID:MSVC>:${ZLIB_INCLUDE_DIRS}>
+		$<$<CXX_COMPILER_ID:MSVC>:${ZLIBNG_INCLUDE_DIRS}>
 	PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}
@@ -853,7 +863,8 @@ set_target_properties(qtui PROPERTIES
 	FOLDER "UI"
 	AUTOMOC ON
 	AUTOUIC ON
-	AUTORCC ON
+	# AUTORCC not needed with qt_add_resources
+	#AUTORCC ON
 	# Ensure .qm files are generated before autogenerating i18n.qrc
 	AUTOGEN_TARGET_DEPENDS "${WIRESHARK_QT_QM}"
 )

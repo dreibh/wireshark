@@ -1269,6 +1269,64 @@ tvb_get_uint64(tvbuff_t *tvb, const int offset, const unsigned encoding) {
 	}
 }
 
+uint64_t
+tvb_get_uint64_with_length(tvbuff_t *tvb, const int offset, unsigned length, const unsigned encoding)
+{
+	uint64_t value;
+
+	switch (length) {
+
+	case 1:
+		value = tvb_get_uint8(tvb, offset);
+		break;
+
+	case 2:
+		value = (encoding & ENC_LITTLE_ENDIAN) ? tvb_get_letohs(tvb, offset)
+						       : tvb_get_ntohs(tvb, offset);
+		break;
+
+	case 3:
+		value = (encoding & ENC_LITTLE_ENDIAN) ? tvb_get_letoh24(tvb, offset)
+						       : tvb_get_ntoh24(tvb, offset);
+		break;
+
+	case 4:
+		value = (encoding & ENC_LITTLE_ENDIAN) ? tvb_get_letohl(tvb, offset)
+						       : tvb_get_ntohl(tvb, offset);
+		break;
+
+	case 5:
+		value = (encoding & ENC_LITTLE_ENDIAN) ? tvb_get_letoh40(tvb, offset)
+						       : tvb_get_ntoh40(tvb, offset);
+		break;
+
+	case 6:
+		value = (encoding & ENC_LITTLE_ENDIAN) ? tvb_get_letoh48(tvb, offset)
+						       : tvb_get_ntoh48(tvb, offset);
+		break;
+
+	case 7:
+		value = (encoding & ENC_LITTLE_ENDIAN) ? tvb_get_letoh56(tvb, offset)
+						       : tvb_get_ntoh56(tvb, offset);
+		break;
+
+	case 8:
+		value = (encoding & ENC_LITTLE_ENDIAN) ? tvb_get_letoh64(tvb, offset)
+						       : tvb_get_ntoh64(tvb, offset);
+		break;
+
+	default:
+		if (length < 1) {
+			value = 0;
+		} else {
+			value = (encoding & ENC_LITTLE_ENDIAN) ? tvb_get_letoh64(tvb, offset)
+							       : tvb_get_ntoh64(tvb, offset);
+		}
+		break;
+	}
+	return value;
+}
+
 int64_t
 tvb_get_int64(tvbuff_t *tvb, const int offset, const unsigned encoding) {
 	if (encoding & ENC_LITTLE_ENDIAN) {
@@ -2125,16 +2183,10 @@ tvb_get_letohguid(tvbuff_t *tvb, const int offset, e_guid_t *guid)
 	memcpy(guid->data4, ptr + 8, sizeof guid->data4);
 }
 
-/*
- * NOTE: to support code written when proto_tree_add_item() took a
- * bool as its last argument, with false meaning "big-endian"
- * and true meaning "little-endian", we treat any non-zero value of
- * "encoding" as meaning "little-endian".
- */
 void
 tvb_get_guid(tvbuff_t *tvb, const int offset, e_guid_t *guid, const unsigned encoding)
 {
-	if (encoding) {
+	if (encoding & ENC_LITTLE_ENDIAN) {
 		tvb_get_letohguid(tvb, offset, guid);
 	} else {
 		tvb_get_ntohguid(tvb, offset, guid);
@@ -2178,6 +2230,7 @@ tvb_get_bits_array(wmem_allocator_t *scope, tvbuff_t *tvb, const int bit_offset,
 uint8_t
 tvb_get_bits8(tvbuff_t *tvb, unsigned bit_offset, const int no_of_bits)
 {
+	DISSECTOR_ASSERT_HINT(no_of_bits <= 8, "Too many bits requested for 8-bit return type");
 	return (uint8_t)_tvb_get_bits64(tvb, bit_offset, no_of_bits);
 }
 
@@ -2185,6 +2238,7 @@ tvb_get_bits8(tvbuff_t *tvb, unsigned bit_offset, const int no_of_bits)
 uint16_t
 tvb_get_bits16(tvbuff_t *tvb, unsigned bit_offset, const int no_of_bits, const unsigned encoding)
 {
+	DISSECTOR_ASSERT_HINT(no_of_bits <= 16, "Too many bits requested for 16-bit return type");
 	return (uint16_t)tvb_get_bits64(tvb, bit_offset, no_of_bits, encoding);
 }
 
@@ -2192,6 +2246,7 @@ tvb_get_bits16(tvbuff_t *tvb, unsigned bit_offset, const int no_of_bits, const u
 uint32_t
 tvb_get_bits32(tvbuff_t *tvb, unsigned bit_offset, const int no_of_bits, const unsigned encoding)
 {
+	DISSECTOR_ASSERT_HINT(no_of_bits <= 32, "Too many bits requested for 32-bit return type");
 	return (uint32_t)tvb_get_bits64(tvb, bit_offset, no_of_bits, encoding);
 }
 
@@ -2199,6 +2254,8 @@ tvb_get_bits32(tvbuff_t *tvb, unsigned bit_offset, const int no_of_bits, const u
 uint64_t
 tvb_get_bits64(tvbuff_t *tvb, unsigned bit_offset, const int no_of_bits, const unsigned encoding)
 {
+	DISSECTOR_ASSERT_HINT(no_of_bits <= 64, "Too many bits requested for 64-bit return type");
+
 	/* encoding determines bit numbering within octet array */
 	if (encoding & ENC_LITTLE_ENDIAN) {
 		return _tvb_get_bits64_le(tvb, bit_offset, no_of_bits);
@@ -3719,7 +3776,7 @@ tvb_get_dect_standard_8bits_stringz(wmem_allocator_t *scope, tvbuff_t *tvb, int 
 	/* XXX, conversion between signed/unsigned integer */
 	if (lengthp)
 		*lengthp = size;
-	return get_t61_string(scope, ptr, size);
+	return get_dect_standard_8bits_string(scope, ptr, size);
 }
 
 uint8_t *

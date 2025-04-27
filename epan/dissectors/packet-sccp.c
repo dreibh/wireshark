@@ -2483,11 +2483,11 @@ dissect_sccp_data_param(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, scc
   /* Save SSN for Decode As */
   p_add_proto_data(pinfo->pool, pinfo, proto_sccp, 0, GUINT_TO_POINTER((unsigned)ssn));
 
-  if ((ssn != INVALID_SSN) && dissector_try_uint_new(sccp_ssn_dissector_table, ssn, tvb, pinfo, tree, true, sccp_info)) {
+  if ((ssn != INVALID_SSN) && dissector_try_uint_with_data(sccp_ssn_dissector_table, ssn, tvb, pinfo, tree, true, sccp_info)) {
     return;
   }
 
-  if ((other_ssn != INVALID_SSN) && dissector_try_uint_new(sccp_ssn_dissector_table, other_ssn, tvb, pinfo, tree, true, sccp_info)) {
+  if ((other_ssn != INVALID_SSN) && dissector_try_uint_with_data(sccp_ssn_dissector_table, other_ssn, tvb, pinfo, tree, true, sccp_info)) {
     return;
   }
 
@@ -4145,7 +4145,7 @@ proto_register_sccp(void)
   static ei_register_info ei[] = {
      { &ei_sccp_wrong_length, { "sccp.wrong_length", PI_MALFORMED, PI_ERROR, "Wrong length indicated.", EXPFILL }},
      { &ei_sccp_international_standard_address, { "sccp.international_standard_address", PI_MALFORMED, PI_WARN,
-            "Address is coded to international standards.  This doesn't normally happen in ANSI networks.", EXPFILL }},
+            "Address is coded to international standards. This doesn't normally happen in ANSI networks.", EXPFILL }},
      { &ei_sccp_no_ssn_present, { "sccp.ssn.not_present", PI_PROTOCOL, PI_WARN, "Message is routed on SSN, but SSN is not present", EXPFILL }},
      { &ei_sccp_ssn_zero, { "sccp.ssn.is_zero", PI_PROTOCOL, PI_WARN, "Message is routed on SSN, but SSN is zero (unspecified)", EXPFILL }},
      { &ei_sccp_class_unexpected, { "sccp.class_unexpected", PI_MALFORMED, PI_ERROR, "Unexpected message class for this message type", EXPFILL }},

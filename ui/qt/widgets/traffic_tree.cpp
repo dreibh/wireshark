@@ -318,7 +318,7 @@ bool TrafficDataFilterProxy::filterAcceptsRow(int source_row, const QModelIndex 
     ATapDataModel * dataModel = qobject_cast<ATapDataModel *>(sourceModel());
     if (dataModel) {
         bool isFiltered = dataModel->data(dataModel->index(source_row, 0), ATapDataModel::ROW_IS_FILTERED).toBool();
-        if (isFiltered && dataModel->filter().length() > 0)
+        if (isFiltered)
             return false;
         /* XXX: What if the filter column is now hidden? Should the filter
          * still apply or should it be cleared? Right now it is still applied.
@@ -480,7 +480,7 @@ bool TrafficDataFilterProxy::lessThan(const QModelIndex &source_left, const QMod
                 qint64 lpart = subnet.indexOf("/");
                 ws_in4_addr ip4addr;
 
-                if(ws_inet_pton4(subnet.left(lpart).toUtf8().data(), &ip4addr)) {
+                if(ws_inet_pton4(subnet.left(int(lpart)).toUtf8().data(), &ip4addr)) {
                     quint32 valA = g_ntohl(ip4addr);
                     quint32 valB = model->data(source_right, ATapDataModel::DATA_IPV4_INTEGER).value<quint32>();
                     result = valA < valB;
@@ -490,7 +490,7 @@ bool TrafficDataFilterProxy::lessThan(const QModelIndex &source_left, const QMod
                 QString subnet = datB.toString();
                 qint64 lpart = subnet.indexOf("/");
                 ws_in4_addr ip4addr;
-                if(ws_inet_pton4(subnet.left(lpart).toUtf8().data(), &ip4addr)) {
+                if(ws_inet_pton4(subnet.left(int(lpart)).toUtf8().data(), &ip4addr)) {
                     quint32 valA = model->data(source_left, ATapDataModel::DATA_IPV4_INTEGER).value<quint32>();
                     quint32 valB = g_ntohl(ip4addr);
                     result = valA < valB;
@@ -627,14 +627,24 @@ TrafficTree::TrafficTree(QString baseName, GList ** recentColumnList, QWidget *p
 
 void TrafficTree::setModel(QAbstractItemModel * model)
 {
+    QTreeView::setModel(model);
+
+    if (this->model()) {
+        TrafficDataFilterProxy * proxy = qobject_cast<TrafficDataFilterProxy *>(model);
+        if (proxy) {
+            disconnect(_header, &TrafficTreeHeaderView::filterOnColumn, proxy, &TrafficDataFilterProxy::filterForColumn);
+            disconnect(proxy, &TrafficDataFilterProxy::dataChanged, this, &TrafficTree::handleDataChanged);
+            disconnect(proxy, &TrafficDataFilterProxy::layoutChanged, this, &TrafficTree::handleLayoutChanged);
+        }
+    }
     if (model) {
         TrafficDataFilterProxy * proxy = qobject_cast<TrafficDataFilterProxy *>(model);
         if (proxy) {
             connect(_header, &TrafficTreeHeaderView::filterOnColumn, proxy, &TrafficDataFilterProxy::filterForColumn);
+            connect(proxy, &TrafficDataFilterProxy::dataChanged, this, &TrafficTree::handleDataChanged);
+            connect(proxy, &TrafficDataFilterProxy::layoutChanged, this, &TrafficTree::handleLayoutChanged);
         }
     }
-
-    QTreeView::setModel(model);
 }
 
 void TrafficTree::tapListenerEnabled(bool enable)
@@ -716,7 +726,7 @@ QMenu * TrafficTree::createActionSubMenu(FilterAction::Action cur_action, QModel
 
     QMenu * subMenu = new QMenu(FilterAction::actionName(cur_action));
     subMenu->setEnabled(_tapEnabled);
-    foreach (FilterAction::ActionType at, FilterAction::actionTypes()) {
+    foreach (FilterAction::ActionType at, FilterAction::actionTypes(cur_action)) {
         if (isConversation && conv_item) {
             QMenu *subsubmenu = subMenu->addMenu(FilterAction::actionTypeName(at));
 
@@ -725,20 +735,20 @@ QMenu * TrafficTree::createActionSubMenu(FilterAction::Action cur_action, QModel
                 QString filter;
                 switch (conv_item->ctype) {
                 case CONVERSATION_TCP:
-                    filter = QString("%1.stream eq %2").arg("tcp").arg(conv_item->conv_id);
+                    filter = QStringLiteral("%1.stream eq %2").arg("tcp").arg(conv_item->conv_id);
                     break;
                 case CONVERSATION_UDP:
-                    filter = QString("%1.stream eq %2").arg("udp").arg(conv_item->conv_id);
+                    filter = QStringLiteral("%1.stream eq %2").arg("udp").arg(conv_item->conv_id);
                     break;
                 case CONVERSATION_IP:
-                    filter = QString("%1.stream eq %2").arg("ip").arg(conv_item->conv_id);
+                    filter = QStringLiteral("%1.stream eq %2").arg("ip").arg(conv_item->conv_id);
                     break;
                 case CONVERSATION_IPV6:
-                    filter = QString("%1.stream eq %2").arg("ipv6").arg(conv_item->conv_id);
+                    filter = QStringLiteral("%1.stream eq %2").arg("ipv6").arg(conv_item->conv_id);
                     break;
                 case CONVERSATION_ETH:
                 default:
-                    filter = QString("%1.stream eq %2").arg("eth").arg(conv_item->conv_id);
+                    filter = QStringLiteral("%1.stream eq %2").arg("eth").arg(conv_item->conv_id);
                     break;
                 }
                 FilterAction * act = new FilterAction(subsubmenu, cur_action, at, tr("Filter on stream id"));
@@ -748,7 +758,7 @@ QMenu * TrafficTree::createActionSubMenu(FilterAction::Action cur_action, QModel
             }
             foreach (FilterAction::ActionDirection ad, FilterAction::actionDirections()) {
                 FilterAction *fa = new FilterAction(subsubmenu, cur_action, at, ad);
-                QString filter = get_conversation_filter(conv_item, (conv_direction_e) fad_to_cd_[fa->actionDirection()]);
+                QString filter = gchar_free_to_qstring(get_conversation_filter(conv_item, (conv_direction_e) fad_to_cd_[fa->actionDirection()]));
                 fa->setProperty("filter", filter);
                 subsubmenu->addAction(fa);
                 connect(fa, &QAction::triggered, this, &TrafficTree::useFilterAction);
@@ -801,8 +811,10 @@ void TrafficTree::useFilterAction()
     QString filter = fa->property("filter").toString();
     if (filter.length() > 0)
     {
-        MainWindow * mainWin = (MainWindow *)(mainApp->mainWindow());
-        mainWin->setDisplayFilter(filter, fa->action(), fa->actionType());
+        MainWindow * mainWin = mainApp->mainWindow();
+        if (mainWin) {
+            mainWin->setDisplayFilter(filter, fa->action(), fa->actionType());
+        }
     }
 }
 
@@ -817,6 +829,45 @@ void TrafficTree::resizeAction()
 {
     for (int col = 0; col < model()->columnCount(); col++)
         resizeColumnToContents(col);
+}
+
+void TrafficTree::widenColumnToContents(int col)
+{
+    if (!model())
+        return;
+
+    if (col < 0 || col >= model()->columnCount())
+        return;
+
+    int content_width = sizeHintForColumn(col);
+    if (!isHeaderHidden()) {
+        content_width = qMax(content_width, header()->sectionSizeHint(col));
+    }
+    if (content_width > columnWidth(col)) {
+        setColumnWidth(col, content_width);
+    }
+}
+
+
+void TrafficTree::handleDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight,
+#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
+    const QVector<int>
+#else
+    const QList<int>
+#endif
+    )
+{
+    for (int col = topLeft.column(); col <= bottomRight.column(); ++col) {
+        widenColumnToContents(col);
+    }
+}
+
+void TrafficTree::handleLayoutChanged(const QList<QPersistentModelIndex>, QAbstractItemModel::LayoutChangeHint)
+{
+    for (int col = 0; col < model()->columnCount(); ++col) {
+        widenColumnToContents(col);
+    }
+    scrollTo(currentIndex());
 }
 
 void TrafficTree::toggleSaveRawAction()
@@ -852,7 +903,7 @@ void TrafficTree::copyToClipboard(eTrafficTreeClipboard type)
                 if (!v.isValid()) {
                     rdsl << "\"\"";
                 } else if (v.userType() == QMetaType::QString) {
-                    rdsl << QString("\"%1\"").arg(v.toString());
+                    rdsl << QStringLiteral("\"%1\"").arg(v.toString());
                 } else {
                     rdsl << v.toString();
                 }

@@ -14,19 +14,58 @@
 
 #include "config.h"
 
+#include <epan/conversation.h>
 #include <epan/packet.h>
 #include <epan/tfs.h>
+#include <epan/unit_strings.h>
+#include <proto.h>
+#include <wmem_scopes.h>
 #include <wsutil/array.h>
 #include <wsutil/pint.h>
 #include <wsutil/utf8_entities.h>
 
 #include "packet-ubx.h"
+#include "wsutil/wmem/wmem_core.h"
 
 /*
  * Dissects Galileo E1-B I/NAV navigation messages
  * as encoded by UBX (in UBX-RXM-SFRBX messages).
  * Based on Galileo OS SIS ICD Issue 2.1
  */
+
+const value_string DAY_NUMBER[] = {
+    {0, "not defined"},
+    {1, "Sunday"},
+    {2, "Monday"},
+    {3, "Tuesday"},
+    {4, "Wednesday"},
+    {5, "Thursday"},
+    {6, "Friday"},
+    {7, "Saturday"},
+    {0, NULL},
+};
+
+static const value_string GAL_SAR_SHORT_RLM_MSG_CODE[] = {
+    { 0, "Spare"},
+    { 1, "Acknowledgement Service"},
+    { 2, "Spare"},
+    { 3, "Spare"},
+    { 4, "Spare"},
+    { 5, "Spare"},
+    { 6, "Spare"},
+    { 7, "Spare"},
+    { 8, "Spare"},
+    { 9, "Spare"},
+    {10, "Spare"},
+    {11, "Spare"},
+    {12, "Spare"},
+    {13, "Spare"},
+    {14, "Spare"},
+    {15, "Test Service"},
+    { 0, NULL},
+};
+
+#define CONVERSATION_SAR_RLM 1
 
 // Initialize the protocol and registered fields
 static int proto_ubx_gal_inav;
@@ -40,8 +79,9 @@ static int hf_ubx_gal_inav_data_16_1;
 static int hf_ubx_gal_inav_osnma;
 static int hf_ubx_gal_inav_sar_start_bit;
 static int hf_ubx_gal_inav_sar_long_rlm;
-static int hf_ubx_gal_inav_sar_beacon_1;
 static int hf_ubx_gal_inav_sar_rlm_data;
+static int hf_ubx_gal_inav_sar_beacon_id;
+static int hf_ubx_gal_inav_sar_msg_code;
 static int hf_ubx_gal_inav_spare;
 static int hf_ubx_gal_inav_ssp;
 static int hf_ubx_gal_inav_crc;
@@ -94,6 +134,18 @@ static int hf_ubx_gal_inav_word4_a_f1;
 static int hf_ubx_gal_inav_word4_a_f2;
 static int hf_ubx_gal_inav_word4_spare;
 
+static int hf_ubx_gal_inav_word6;
+static int hf_ubx_gal_inav_word6_a0;
+static int hf_ubx_gal_inav_word6_a1;
+static int hf_ubx_gal_inav_word6_delta_t_ls;
+static int hf_ubx_gal_inav_word6_t_0t;
+static int hf_ubx_gal_inav_word6_wn_0t;
+static int hf_ubx_gal_inav_word6_wn_lsf;
+static int hf_ubx_gal_inav_word6_dn;
+static int hf_ubx_gal_inav_word6_delta_t_lsf;
+static int hf_ubx_gal_inav_word6_tow;
+static int hf_ubx_gal_inav_word6_spare;
+
 static dissector_table_t ubx_gal_inav_word_dissector_table;
 
 static int ett_ubx_gal_inav;
@@ -102,7 +154,9 @@ static int ett_ubx_gal_inav_word1;
 static int ett_ubx_gal_inav_word2;
 static int ett_ubx_gal_inav_word3;
 static int ett_ubx_gal_inav_word4;
+static int ett_ubx_gal_inav_word6;
 static int ett_ubx_gal_inav_sar;
+static int ett_ubx_gal_inav_sar_rlm;
 
 static const value_string GAL_PAGE_TYPE[] = {
     {0, "nominal"},
@@ -117,6 +171,32 @@ static const value_string GAL_SSP[] = {
     {0, NULL},
 };
 
+#define SAR_LONG_RLM_PARTS_NUM 8
+#define SAR_LONG_RLM_LENGTH (SAR_LONG_RLM_PARTS_NUM * 20 / 8)
+#define SAR_SHORT_RLM_PARTS_NUM 4
+#define SAR_SHORT_RLM_LENGTH (SAR_SHORT_RLM_PARTS_NUM * 20 / 8)
+
+typedef struct sar_rlm_part {
+    uint32_t frame;
+    bool long_rlm;
+    uint32_t rlm_data;
+} sar_rlm_part;
+
+/* Format A_0 for GST-UTC Conversion with 2^-30s resolution */
+void fmt_a0(char *label, int64_t c) {
+    snprintf(label, ITEM_LABEL_LENGTH, "%" PRId64 " * 2^-30s", c);
+}
+
+/* Format A_1 for GST-UTC Conversion with 2^-50s/s resolution */
+void fmt_a1(char *label, int32_t c) {
+    snprintf(label, ITEM_LABEL_LENGTH, "%d * 2^-50s/s", c);
+}
+
+/* Format t_0t for GST-UTC Conversion with 3600s resolution */
+static void fmt_t_0t(char *label, uint32_t c) {
+    snprintf(label, ITEM_LABEL_LENGTH, "%us", c * 3600);
+}
+
 /* Format clock correction (with scale factor 60) for
  * t_0c
  */
@@ -127,7 +207,7 @@ static void fmt_clk_correction(char *label, uint32_t c) {
 /* Format radians (with 2^-29 scale factor) for
  * amplitude of harmonic correction terms
  */
-static void fmt_lat_correction(char *label, int16_t c) {
+void fmt_lat_correction(char *label, int32_t c) {
     snprintf(label, ITEM_LABEL_LENGTH, "%d * 2^-29 radians", c);
 }
 
@@ -153,7 +233,7 @@ static void fmt_semi_circles(char *label, int32_t c) {
  * - right ascension
  * - mean motion difference
  */
-static void fmt_semi_circles_rate(char *label, int16_t c) {
+void fmt_semi_circles_rate(char *label, int32_t c) {
     snprintf(label, ITEM_LABEL_LENGTH, "%d * 2^-43 semi-circles/s", c);
 }
 
@@ -222,13 +302,15 @@ static void fmt_t0e(char *label, uint32_t c) {
 }
 
 /* Dissect Galileo E1-B I/NAV navigation message */
-static int dissect_ubx_gal_inav(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_) {
+static int dissect_ubx_gal_inav(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data) {
     tvbuff_t *next_tvb;
 
     bool sar_start, sar_long_rlm;
-    uint32_t inav_type = 0, even_page_type, odd_page_type;
+    uint32_t inav_type = 0, even_page_type, odd_page_type, sar_rlm_data;
     uint64_t data_122_67 = 0, data_66_17 = 0, data_16_1 = 0;
     uint8_t *word;
+    sar_rlm_part *sar_rlm_parts = NULL;
+    int i;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "Galileo E1-B I/NAV");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -266,12 +348,105 @@ static int dissect_ubx_gal_inav(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
         proto_tree *sar_tree = proto_tree_add_subtree(gal_inav_tree, tvb, 23, 4, ett_ubx_gal_inav_sar, NULL, "SAR");
         proto_tree_add_item_ret_boolean(sar_tree, hf_ubx_gal_inav_sar_start_bit, tvb, 23, 4, ENC_BIG_ENDIAN, &sar_start);
         proto_tree_add_item_ret_boolean(sar_tree, hf_ubx_gal_inav_sar_long_rlm,  tvb, 23, 4, ENC_BIG_ENDIAN, &sar_long_rlm);
-        if (sar_start) {
-            proto_tree_add_item(sar_tree, hf_ubx_gal_inav_sar_beacon_1, tvb, 23, 4, ENC_BIG_ENDIAN);
-        }
-        else {
-            // TODO: add more elaborate dissection for subsequent RLM data (requiring state tracking)
-            proto_tree_add_item(sar_tree, hf_ubx_gal_inav_sar_rlm_data, tvb, 23, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint(sar_tree, hf_ubx_gal_inav_sar_rlm_data,     tvb, 23, 4, ENC_BIG_ENDIAN, &sar_rlm_data);
+
+        // manage SAR RLM parts via conversations
+        uint8_t *svid = (uint8_t *) data;
+        if (svid != NULL) {
+
+            // try to find already existing conversation
+            conversation_element_t constellation = {.type = CE_INT, .int_val = GNSS_ID_GALILEO};
+            conversation_element_t type = {.type = CE_INT, .int_val = CONVERSATION_SAR_RLM};
+            conversation_element_t prn = {.type = CE_INT, .int_val = *svid};
+            conversation_element_t end = {.type = CE_CONVERSATION_TYPE, .conversation_type_val = CONVERSATION_GNSS};
+            conversation_element_t ce[4] = {constellation, type, prn, end};
+            conversation_t *c = find_conversation_full(pinfo->num, ce);
+
+            if (c == NULL && sar_start) {
+                // No conversation found. As the start bit is set, start a new one.
+                c = conversation_new_full(pinfo->num, ce);
+
+                sar_rlm_parts = (sar_rlm_part *) wmem_alloc0_array(wmem_file_scope(), sar_rlm_part, sar_long_rlm ? SAR_LONG_RLM_PARTS_NUM : SAR_SHORT_RLM_PARTS_NUM);
+
+                sar_rlm_parts[0].frame = pinfo->num;
+                sar_rlm_parts[0].long_rlm = sar_long_rlm;
+                sar_rlm_parts[0].rlm_data = sar_rlm_data;
+
+                conversation_add_proto_data(c, proto_ubx_gal_inav, sar_rlm_parts);
+            }
+            else if (c != NULL && sar_start) {
+                // Check whether the conversation found starts at the
+                // current frame. (If not, a new conversation needs to be
+                // created as the start bit is set.
+                sar_rlm_parts = (sar_rlm_part *) conversation_get_proto_data(c, proto_ubx_gal_inav);
+
+                if (sar_rlm_parts != NULL && sar_rlm_parts[0].frame != pinfo->num) {
+                    // Separate conversation found, start a new one.
+                    c = conversation_new_full(pinfo->num, ce);
+
+                    sar_rlm_parts = (sar_rlm_part *) wmem_alloc0_array(wmem_file_scope(), sar_rlm_part, sar_long_rlm ? SAR_LONG_RLM_PARTS_NUM : SAR_SHORT_RLM_PARTS_NUM);
+
+                    sar_rlm_parts[0].frame = pinfo->num;
+                    sar_rlm_parts[0].long_rlm = sar_long_rlm;
+                    sar_rlm_parts[0].rlm_data = sar_rlm_data;
+
+                    conversation_add_proto_data(c, proto_ubx_gal_inav, sar_rlm_parts);
+                }
+
+            }
+            else if (c != NULL) {
+                // Check whether packet data still needs to be added to the conversation.
+                sar_rlm_parts = (sar_rlm_part *) conversation_get_proto_data(c, proto_ubx_gal_inav);
+
+                if (sar_rlm_parts != NULL && sar_rlm_parts[0].long_rlm == sar_long_rlm) {
+                    for (i = 0; i < (sar_long_rlm ? SAR_LONG_RLM_PARTS_NUM : SAR_SHORT_RLM_PARTS_NUM); i++) {
+                        if (sar_rlm_parts[i].frame == 0) {
+                            sar_rlm_parts[i].frame = pinfo->num;
+                            sar_rlm_parts[i].long_rlm = sar_long_rlm;
+                            sar_rlm_parts[i].rlm_data = sar_rlm_data;
+                            break;
+                        }
+                        else if (sar_rlm_parts[i].frame == pinfo->num) {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // display SAR RLM if all parts are available
+            if (c != NULL && sar_rlm_parts != NULL) {
+                for (i = 0; i < (sar_long_rlm ? SAR_LONG_RLM_PARTS_NUM : SAR_SHORT_RLM_PARTS_NUM); i++) {
+                    if (sar_rlm_parts[i].frame == 0) {
+                        break;
+                    }
+                }
+
+                if (!sar_long_rlm && i == SAR_SHORT_RLM_PARTS_NUM) {
+                    // All parts of a Short-RLM are available in the conversation.
+                    // Now dissect it.
+
+                    // reserve buffer for short RLM
+                    uint8_t *buf = wmem_alloc(pinfo->pool, SAR_SHORT_RLM_LENGTH);
+
+                    // fill buffer with RLM parts
+                    phton32(buf, (sar_rlm_parts[0].rlm_data << 12) | (sar_rlm_parts[1].rlm_data >> 8));
+                    phton32(buf + 4, (sar_rlm_parts[1].rlm_data << 24) | (sar_rlm_parts[2].rlm_data << 4) | (sar_rlm_parts[3].rlm_data >> 16));
+                    phton16(buf + 8, (sar_rlm_parts[3].rlm_data & 0xffff));
+
+                    tvbuff_t *rlm_tvb = tvb_new_child_real_data(tvb, (uint8_t *)buf, SAR_SHORT_RLM_LENGTH, SAR_SHORT_RLM_LENGTH);
+                    add_new_data_source(pinfo, rlm_tvb, "Galileo E1-B I/NAV SAR Short-RLM");
+
+                    // dissect RLM
+                    proto_tree *sar_rlm_tree = proto_tree_add_subtree(sar_tree, rlm_tvb, 0, SAR_SHORT_RLM_LENGTH, ett_ubx_gal_inav_sar_rlm, NULL, "Short-RLM (re-assembled)");
+
+                    proto_tree_add_item(sar_rlm_tree, hf_ubx_gal_inav_sar_beacon_id, rlm_tvb, 0, 8, ENC_BIG_ENDIAN);
+                    proto_tree_add_item(sar_rlm_tree, hf_ubx_gal_inav_sar_msg_code,  rlm_tvb, 6, 4, ENC_BIG_ENDIAN);
+                }
+                else if (sar_long_rlm && i == SAR_LONG_RLM_PARTS_NUM) {
+                    // All parts of a Long-RLM are available in the conversation.
+                    // TODO: Now dissect it.
+                }
+            }
         }
 
         proto_tree_add_item(gal_inav_tree, hf_ubx_gal_inav_spare,       tvb, 26, 1, ENC_NA);
@@ -397,26 +572,49 @@ static int dissect_ubx_gal_inav_word4(tvbuff_t *tvb, packet_info *pinfo _U_, pro
     return tvb_captured_length(tvb);
 }
 
+/* Dissect word 6 - GST-UTC conversion parameters */
+static int dissect_ubx_gal_inav_word6(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_) {
+    col_append_str(pinfo->cinfo, COL_INFO, "Word 6 (GST-UTC conversion parameters)");
+
+    proto_item *ti = proto_tree_add_item(tree, hf_ubx_gal_inav_word6, tvb, 0, 16, ENC_NA);
+    proto_tree *word_tree = proto_item_add_subtree(ti, ett_ubx_gal_inav_word6);
+
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word_type,         tvb,  0, 1, ENC_NA);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_a0,          tvb,  0, 8, ENC_BIG_ENDIAN);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_a1,          tvb,  4, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_delta_t_ls,  tvb,  7, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_t_0t,        tvb,  8, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_wn_0t,       tvb,  9, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_wn_lsf,      tvb, 10, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_dn,          tvb, 11, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_delta_t_lsf, tvb, 12, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_tow,         tvb, 12, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(word_tree, hf_ubx_gal_inav_word6_spare,       tvb, 15, 1, ENC_NA);
+
+    return tvb_captured_length(tvb);
+}
+
 void proto_register_ubx_gal_inav(void) {
 
     static hf_register_info hf[] = {
-        {&hf_ubx_gal_inav_even_odd,      {"Even/Odd",      "gal_inav.even_odd",      FT_BOOLEAN, 8,         TFS(&tfs_odd_even),  0x80,               NULL, HFILL}},
-        {&hf_ubx_gal_inav_page_type,     {"Page Type",     "gal_inav.page_type",     FT_UINT8,   BASE_DEC,  VALS(GAL_PAGE_TYPE), 0x40,               NULL, HFILL}},
-        {&hf_ubx_gal_inav_type,          {"Type",          "gal_inav.type",          FT_UINT8,   BASE_DEC,  NULL,                0x3f,               NULL, HFILL}},
-        {&hf_ubx_gal_inav_data_122_67,   {"Data (122-67)", "gal_inav.data_122_67",   FT_UINT64,  BASE_HEX,  NULL,                0x00ffffffffffffff, NULL, HFILL}},
-        {&hf_ubx_gal_inav_data_66_17,    {"Data (66-17)",  "gal_inav.data_66_17",    FT_UINT64,  BASE_HEX,  NULL,                0xffffffffffffc000, NULL, HFILL}},
-        {&hf_ubx_gal_inav_data_16_1,     {"Data (16-1)",   "gal_inav.data_16_1",     FT_UINT64,  BASE_HEX,  NULL,                0x3fffc00000000000, NULL, HFILL}},
-        {&hf_ubx_gal_inav_osnma,         {"OSNMA",         "gal_inav.osnma",         FT_UINT64,  BASE_HEX,  NULL,                0x00003fffffffffc0, NULL, HFILL}},
-        {&hf_ubx_gal_inav_sar_start_bit, {"Start bit",     "gal_inav.sar.start_bit", FT_BOOLEAN, 32,        NULL,                0x20000000,         NULL, HFILL}},
-        {&hf_ubx_gal_inav_sar_long_rlm,  {"Long RLM",      "gal_inav.sar.long_rlm",  FT_BOOLEAN, 32,        NULL,                0x10000000,         NULL, HFILL}},
-        {&hf_ubx_gal_inav_sar_beacon_1,  {"Beacon (1/3)",  "gal_inav.sar.beacon_1",  FT_UINT32,  BASE_HEX,  NULL,                0x0fffff00,         NULL, HFILL}},
-        {&hf_ubx_gal_inav_sar_rlm_data,  {"RLM data",      "gal_inav.sar.rlm_data",  FT_UINT32,  BASE_HEX,  NULL,                0x0fffff00,         NULL, HFILL}},
-        {&hf_ubx_gal_inav_spare,         {"Spare",         "gal_inav.spare",         FT_UINT8,   BASE_HEX,  NULL,                0xc0,               NULL, HFILL}},
-        {&hf_ubx_gal_inav_reserved_1,    {"Reserved 1",    "gal_inav.reserved_1",    FT_NONE,    BASE_NONE, NULL,                0x0,                NULL, HFILL}},
-        {&hf_ubx_gal_inav_crc,           {"CRC",           "gal_inav.crc",           FT_UINT32,  BASE_HEX,  NULL,                0x3fffffc0,         NULL, HFILL}},
-        {&hf_ubx_gal_inav_ssp,           {"SSP",           "gal_inav.ssp",           FT_UINT32,  BASE_HEX,  VALS(GAL_SSP),       0x003fc000,         NULL, HFILL}},
-        {&hf_ubx_gal_inav_tail,          {"Tail",          "gal_inav.tail",          FT_UINT8,   BASE_HEX,  NULL,                0x3f,               NULL, HFILL}},
-        {&hf_ubx_gal_inav_pad,           {"Pad",           "gal_inav.pad",           FT_UINT8,   BASE_HEX,  NULL,                0x0,                NULL, HFILL}},
+        {&hf_ubx_gal_inav_even_odd,      {"Even/Odd",      "gal_inav.even_odd",      FT_BOOLEAN, 8,         TFS(&tfs_odd_even),               0x80,               NULL, HFILL}},
+        {&hf_ubx_gal_inav_page_type,     {"Page Type",     "gal_inav.page_type",     FT_UINT8,   BASE_DEC,  VALS(GAL_PAGE_TYPE),              0x40,               NULL, HFILL}},
+        {&hf_ubx_gal_inav_type,          {"Type",          "gal_inav.type",          FT_UINT8,   BASE_DEC,  NULL,                             0x3f,               NULL, HFILL}},
+        {&hf_ubx_gal_inav_data_122_67,   {"Data (122-67)", "gal_inav.data_122_67",   FT_UINT64,  BASE_HEX,  NULL,                             0x00ffffffffffffff, NULL, HFILL}},
+        {&hf_ubx_gal_inav_data_66_17,    {"Data (66-17)",  "gal_inav.data_66_17",    FT_UINT64,  BASE_HEX,  NULL,                             0xffffffffffffc000, NULL, HFILL}},
+        {&hf_ubx_gal_inav_data_16_1,     {"Data (16-1)",   "gal_inav.data_16_1",     FT_UINT64,  BASE_HEX,  NULL,                             0x3fffc00000000000, NULL, HFILL}},
+        {&hf_ubx_gal_inav_osnma,         {"OSNMA",         "gal_inav.osnma",         FT_UINT64,  BASE_HEX,  NULL,                             0x00003fffffffffc0, NULL, HFILL}},
+        {&hf_ubx_gal_inav_sar_start_bit, {"Start bit",     "gal_inav.sar.start_bit", FT_BOOLEAN, 32,        NULL,                             0x20000000,         NULL, HFILL}},
+        {&hf_ubx_gal_inav_sar_long_rlm,  {"Long RLM",      "gal_inav.sar.long_rlm",  FT_BOOLEAN, 32,        NULL,                             0x10000000,         NULL, HFILL}},
+        {&hf_ubx_gal_inav_sar_rlm_data,  {"RLM data",      "gal_inav.sar.rlm_data",  FT_UINT32,  BASE_HEX,  NULL,                             0x0fffff00,         NULL, HFILL}},
+        {&hf_ubx_gal_inav_sar_beacon_id, {"Beacon ID",     "gal_inav.sar.beacon_id", FT_UINT64,  BASE_HEX,  NULL,                             0xfffffffffffffff0, NULL, HFILL}},
+        {&hf_ubx_gal_inav_sar_msg_code,  {"Message code",  "gal_inav.sar.msg_code",  FT_UINT32,  BASE_HEX,  VALS(GAL_SAR_SHORT_RLM_MSG_CODE), 0x000f0000,         NULL, HFILL}},
+        {&hf_ubx_gal_inav_spare,         {"Spare",         "gal_inav.spare",         FT_UINT8,   BASE_HEX,  NULL,                             0xc0,               NULL, HFILL}},
+        {&hf_ubx_gal_inav_reserved_1,    {"Reserved 1",    "gal_inav.reserved_1",    FT_NONE,    BASE_NONE, NULL,                             0x0,                NULL, HFILL}},
+        {&hf_ubx_gal_inav_crc,           {"CRC",           "gal_inav.crc",           FT_UINT32,  BASE_HEX,  NULL,                             0x3fffffc0,         NULL, HFILL}},
+        {&hf_ubx_gal_inav_ssp,           {"SSP",           "gal_inav.ssp",           FT_UINT32,  BASE_HEX,  VALS(GAL_SSP),                    0x003fc000,         NULL, HFILL}},
+        {&hf_ubx_gal_inav_tail,          {"Tail",          "gal_inav.tail",          FT_UINT8,   BASE_HEX,  NULL,                             0x3f,               NULL, HFILL}},
+        {&hf_ubx_gal_inav_pad,           {"Pad",           "gal_inav.pad",           FT_UINT8,   BASE_HEX,  NULL,                             0x0,                NULL, HFILL}},
 
         // Data words
         {&hf_ubx_gal_inav_word_type,     {"Type",                "gal_inav.word.type",     FT_UINT8,      BASE_DEC,  NULL, 0xfc, NULL, HFILL}},
@@ -468,6 +666,19 @@ void proto_register_ubx_gal_inav(void) {
         {&hf_ubx_gal_inav_word4_a_f1,        {"SV clock drift correction coefficient (a_f1)",                                        "gal_inav.word4.a_f1",        FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_sv_clk_drift),      0x1fffff00, NULL, HFILL}},
         {&hf_ubx_gal_inav_word4_a_f2,        {"SV clock drift rate correction coefficient (a_f2)",                                   "gal_inav.word4.a_f2",        FT_INT32,  BASE_CUSTOM, CF_FUNC(&fmt_sv_clk_drift_rate), 0x000000fc, NULL, HFILL}},
         {&hf_ubx_gal_inav_word4_spare,       {"Spare",                                                                               "gal_inav.word4.spare",       FT_UINT8,  BASE_HEX,    NULL,                            0x03,       NULL, HFILL}},
+
+        // Word 6
+        {&hf_ubx_gal_inav_word6,             {"Word 6 (GST-UTC conversion parameters)",                                         "gal_inav.word6",             FT_NONE,   BASE_NONE,                 NULL,                       0x0,                NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_a0,          {"Constant term of polynomial (A_0)",                                              "gal_inav.word6.a_0",         FT_INT64,  BASE_CUSTOM,               CF_FUNC(&fmt_a0),           0x03fffffffc000000, NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_a1,          {"1st order term of polynomial (A_1)",                                             "gal_inav.word6.a_1",         FT_INT32,  BASE_CUSTOM,               CF_FUNC(&fmt_a1),           0x03fffffc,         NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_delta_t_ls,  {"Leap Second count before leap second adjustment (" UTF8_CAPITAL_DELTA "t_LS)",   "gal_inav.word6.delta_t_ls",  FT_INT16,  BASE_DEC|BASE_UNIT_STRING, UNS(&units_second_seconds), 0x03fc,             NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_t_0t,        {"UTC data reference Time of Week (t_0t)",                                         "gal_inav.word6.t_0t",        FT_UINT16, BASE_CUSTOM,               CF_FUNC(&fmt_t_0t),         0x03fc,             NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_wn_0t,       {"UTC data reference Week Number (WN_0t)",                                         "gal_inav.word6.wn_0t",       FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_week_weeks),     0x03fc,             NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_wn_lsf,      {"Week Number of leap second adjustment (WN_LSF)",                                 "gal_inav.word6.wn_lsf",      FT_UINT16, BASE_DEC|BASE_UNIT_STRING, UNS(&units_week_weeks),     0x03fc,             NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_dn,          {"Day Number at the end of which a leap second adjustment becomes effective (DN)", "gal_inav.word6.dn",          FT_UINT16, BASE_DEC, VALS(DAY_NUMBER),                            0x0380,             NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_delta_t_lsf, {"Leap Second count after leap second adjustment (" UTF8_CAPITAL_DELTA "t_LSF)",   "gal_inav.word6.delta_t_lsf", FT_INT16,  BASE_DEC|BASE_UNIT_STRING, UNS(&units_second_seconds), 0x7f80,             NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_tow,         {"Time of Week (TOW)",                                                             "gal_inav.word6.tow",         FT_UINT32, BASE_DEC|BASE_UNIT_STRING, UNS(&units_second_seconds), 0x007ffff8,         NULL, HFILL}},
+        {&hf_ubx_gal_inav_word6_spare,       {"Spare",                                                                          "gal_inav.word6.spare",       FT_UINT8,  BASE_HEX,                  NULL,                       0x07,               NULL, HFILL}},
     };
 
     static int *ett[] = {
@@ -477,7 +688,9 @@ void proto_register_ubx_gal_inav(void) {
         &ett_ubx_gal_inav_word2,
         &ett_ubx_gal_inav_word3,
         &ett_ubx_gal_inav_word4,
+        &ett_ubx_gal_inav_word6,
         &ett_ubx_gal_inav_sar,
+        &ett_ubx_gal_inav_sar_rlm,
     };
 
     proto_ubx_gal_inav = proto_register_protocol("Galileo E1-B I/NAV Navigation Message", "Galileo I/NAV", "gal_inav");
@@ -499,4 +712,5 @@ void proto_reg_handoff_ubx_gal_inav(void) {
     dissector_add_uint("ubx.rxm.sfrbx.gal_inav.word", 2, create_dissector_handle(dissect_ubx_gal_inav_word2, proto_ubx_gal_inav));
     dissector_add_uint("ubx.rxm.sfrbx.gal_inav.word", 3, create_dissector_handle(dissect_ubx_gal_inav_word3, proto_ubx_gal_inav));
     dissector_add_uint("ubx.rxm.sfrbx.gal_inav.word", 4, create_dissector_handle(dissect_ubx_gal_inav_word4, proto_ubx_gal_inav));
+    dissector_add_uint("ubx.rxm.sfrbx.gal_inav.word", 6, create_dissector_handle(dissect_ubx_gal_inav_word6, proto_ubx_gal_inav));
 }

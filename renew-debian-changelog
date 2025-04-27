@@ -52,7 +52,7 @@ chmod +x tools/make-version.py.new
 # => remove "# " all lines!
 grep -v "^# " debian/control |
 sed -e "s/Wireshark Self-made package <wireshark@example.com>/$MAINTAINER/g" \
-    -e "s/debhelper (>= [0-9]*)/debhelper/g" -e "s/libsmi2-dev,/libglib2.0-dev,libsmi2-dev,libsmi2-common,rsplib-tools,subnetcalc,traceroute,whois,libcap2-bin,lynx,doxygen,git,/g" \
+    -e "s/debhelper (>= [0-9]*)/debhelper/g" -e "s/libsmi2-dev,/libsmi2-dev,rsplib-tools,subnetcalc,traceroute,whois,/g" \
     -e "s/libgnutls-dev/libgnutls28-dev | libgnutls-dev | libgnutls26-dev/g" \
     -e "s/Recommends: libqt/Recommends: rsplib-tools,subnetcalc,traceroute,hipercontracer,whois,libcap2-bin,libqt/g" \
     >debian/control.new

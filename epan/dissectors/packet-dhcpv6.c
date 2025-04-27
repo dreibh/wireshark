@@ -32,6 +32,8 @@
  * RFC7598 (Configuration of Softwire Address and Port-Mapped Clients)
  * RFC8415 (Dynamic Host Configuration Protocol for IPv6 (DHCPv6))
  * RFC8520 (Manufacturer Usage Descriptions) replaces "draft-ietf-opsawg-mud-02"
+ * RFC9463 (Discovery of Network-designated Resolvers - DoT, DoH, DoQ)
+ * RFC9686 (Registering self-generated addresses)
  * CL-SP-CANN-DHCP-Reg-I15-180509 (CableLabs' DHCP Options Registry) latest
  *
  * Note that protocol constants are still subject to change, based on IANA
@@ -380,6 +382,8 @@ static dissector_table_t dhcpv6_enterprise_opts_dissector_table;
 
 #define DHCPV4_QUERY            20  /* [RFC7341] */
 #define DHCPV4_RESPONSE         21  /* [RFC7341] */
+#define ADDR_REG_INFORM         36  /* [RFC9686] */
+#define ADDR_REG_REPLY          37  /* [RFC9686] */
 /* TODO: add support the following message types
 #define ACTIVELEASEQUERY        22  [RFC7653]
 #define STARTTLS                23  [RFC7653]
@@ -395,7 +399,7 @@ static dissector_table_t dhcpv6_enterprise_opts_dissector_table;
 #define DISCONNECT              33  [RFC8156]
 #define STATE                   34  [RFC8156]
 #define CONTACT                 35  [RFC8156]
-                                36-255 Unassigned
+                                38-255 Unassigned
 *********************************************************************************************/
 
 /********************************************************************************************/
@@ -540,6 +544,7 @@ static dissector_table_t dhcpv6_enterprise_opts_dissector_table;
 #define OPTION_S46_BIND_IPV6_PREFIX    137  /* RFC 8539 */
 #define OPTION_IPv6_ADDRESS_ANDSF      143  /* RFC 6153 */
 #define OPTION_V6_DNR                  144  /* RFC 9463 */
+#define OPTION_ADDR_REG_ENABLE         148  /* RFC 9686 */
 
 /* temporary value until defined by IETF */
 #define OPTION_MIP6_HA                 165
@@ -574,6 +579,8 @@ static const value_string msgtype_vals[] = {
     { RECONFIGURE_REPLY,             "Reconfigure-reply" },
     { DHCPV4_QUERY,                  "4o6 Query" },
     { DHCPV4_RESPONSE,               "4o6 Response" },
+    { ADDR_REG_INFORM,               "Address Registration Inform" },
+    { ADDR_REG_REPLY,                "Address Registration Reply" },
     { 0, NULL }
 };
 static value_string_ext msgtype_vals_ext = VALUE_STRING_EXT_INIT(msgtype_vals);
@@ -717,12 +724,19 @@ static const value_string opttype_vals[] = {
     { OPTION_S46_BIND_IPV6_PREFIX,   "Softwire Source Binding Prefix Hint" },
     { OPTION_IPv6_ADDRESS_ANDSF,     "ANDSF IPv6 Address" },
     { OPTION_V6_DNR,                 "Discovery of Network DNS Resolvers" },
+    { OPTION_ADDR_REG_ENABLE,        "Address Registration Enable" },
+    /* temporary value until defined by IETF */
     { OPTION_MIP6_HA,                "Mobile IPv6 Home Agent" },
     { OPTION_MIP6_HOA,               "Mobile IPv6 Home Address" },
     { OPTION_NAI,                    "Network Access Identifier" },
     { 0,        NULL }
 };
 static value_string_ext opttype_vals_ext = VALUE_STRING_EXT_INIT(opttype_vals);
+
+static const value_string infinity_val[] = {
+    { DHCPV6_LEASEDURATION_INFINITY, "infinity" },
+    { 0, NULL }
+};
 
 static const value_string statuscode_vals[] =
 {
@@ -2246,21 +2260,8 @@ dhcpv6_option(tvbuff_t *tvb, packet_info *pinfo, proto_tree *bp_tree,
         }
         proto_tree_add_string(subtree, hf_iaid, tvb, off,
                                     4, tvb_arphrdaddr_to_str(pinfo->pool, tvb, off, 4, opttype));  /* XXX: IAID is opaque ? review ... */
-        if (tvb_get_ntohl(tvb, off+4) == DHCPV6_LEASEDURATION_INFINITY) {
-            proto_tree_add_uint_format_value(subtree, hf_iaid_t1, tvb, off+4,
-                                    4, DHCPV6_LEASEDURATION_INFINITY, "infinity");
-        } else {
-            proto_tree_add_item(subtree, hf_iaid_t1, tvb, off+4,
-                                    4, ENC_BIG_ENDIAN);
-        }
-
-        if (tvb_get_ntohl(tvb, off+8) == DHCPV6_LEASEDURATION_INFINITY) {
-            proto_tree_add_uint_format_value(subtree, hf_iaid_t2, tvb, off+8,
-                                    4, DHCPV6_LEASEDURATION_INFINITY, "infinity");
-        } else {
-            proto_tree_add_item(subtree, hf_iaid_t2, tvb, off+8,
-                                    4, ENC_BIG_ENDIAN);
-        }
+        proto_tree_add_item(subtree, hf_iaid_t1, tvb, off+4, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(subtree, hf_iaid_t2, tvb, off+8, 4, ENC_BIG_ENDIAN);
 
         temp_optlen = 12;
         while ((optlen - temp_optlen) > 0) {
@@ -2291,8 +2292,6 @@ dhcpv6_option(tvbuff_t *tvb, packet_info *pinfo, proto_tree *bp_tree,
         break;
     case OPTION_IAADDR:
     {
-        uint32_t preferred_lifetime, valid_lifetime;
-
         if (optlen < 24) {
             expert_add_info_format(pinfo, option_item, &ei_dhcpv6_malformed_option, "IA_TA: malformed option");
             break;
@@ -2301,23 +2300,8 @@ dhcpv6_option(tvbuff_t *tvb, packet_info *pinfo, proto_tree *bp_tree,
         proto_tree_add_item(subtree, hf_iaaddr_ip, tvb, off, 16, ENC_NA);
         col_append_fstr(pinfo->cinfo, COL_INFO, "IAA: %s ", tvb_ip6_to_str(pinfo->pool, tvb, off));
 
-        preferred_lifetime = tvb_get_ntohl(tvb, off + 16);
-        valid_lifetime = tvb_get_ntohl(tvb, off + 20);
-
-        if (preferred_lifetime == DHCPV6_LEASEDURATION_INFINITY) {
-            proto_tree_add_uint_format_value(subtree, hf_iaaddr_pref_lifetime, tvb, off+16,
-                                    4, DHCPV6_LEASEDURATION_INFINITY, "infinity");
-        } else {
-            proto_tree_add_item(subtree, hf_iaaddr_pref_lifetime, tvb, off+16,
-                                    4, ENC_BIG_ENDIAN);
-        }
-        if (valid_lifetime == DHCPV6_LEASEDURATION_INFINITY) {
-            proto_tree_add_uint_format(subtree, hf_iaaddr_valid_lifetime, tvb, off+20,
-                                    4, DHCPV6_LEASEDURATION_INFINITY, "Preferred lifetime: infinity");
-        } else {
-            proto_tree_add_item(subtree, hf_iaaddr_valid_lifetime, tvb, off+20,
-                                    4, ENC_BIG_ENDIAN);
-        }
+        proto_tree_add_item(subtree, hf_iaaddr_pref_lifetime, tvb, off+16, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(subtree, hf_iaaddr_valid_lifetime, tvb, off+20, 4, ENC_BIG_ENDIAN);
 
         temp_optlen = 24;
         while ((optlen - temp_optlen) > 0) {
@@ -2417,7 +2401,7 @@ dhcpv6_option(tvbuff_t *tvb, packet_info *pinfo, proto_tree *bp_tree,
         opt_tvb = tvb_new_subset_length(tvb, off, optlen);
 
         // Find a per-vendor dissector or fallback to the generic-enterprise-dissector.
-        if (!dissector_try_uint_new(dhcpv6_enterprise_opts_dissector_table, enterprise_no, opt_tvb, pinfo, subtree, false, &msgtype)) {
+        if (!dissector_try_uint_with_data(dhcpv6_enterprise_opts_dissector_table, enterprise_no, opt_tvb, pinfo, subtree, false, &msgtype)) {
             proto_tree_add_item(subtree, hf_vendoropts_enterprise, tvb, off, 4, ENC_BIG_ENDIAN);
             int optoffset = 0;
 
@@ -2815,20 +2799,8 @@ dhcpv6_option(tvbuff_t *tvb, packet_info *pinfo, proto_tree *bp_tree,
             break;
         }
 
-        if (tvb_get_ntohl(tvb, off) == DHCPV6_LEASEDURATION_INFINITY) {
-            proto_tree_add_uint_format_value(subtree, hf_iaprefix_pref_lifetime, tvb, off,
-                                    4, DHCPV6_LEASEDURATION_INFINITY, "infinity");
-        } else {
-            proto_tree_add_item(subtree, hf_iaprefix_pref_lifetime, tvb, off,
-                                    4, ENC_BIG_ENDIAN);
-        }
-        if (tvb_get_ntohl(tvb, off + 4) == DHCPV6_LEASEDURATION_INFINITY) {
-            proto_tree_add_uint_format_value(subtree, hf_iaprefix_valid_lifetime, tvb, off+4,
-                                    4, DHCPV6_LEASEDURATION_INFINITY, "infinity");
-        } else {
-            proto_tree_add_item(subtree, hf_iaprefix_valid_lifetime, tvb, off+4,
-                                    4, ENC_BIG_ENDIAN);
-        }
+        proto_tree_add_item(subtree, hf_iaprefix_pref_lifetime, tvb, off, 4, ENC_BIG_ENDIAN);
+        proto_tree_add_item(subtree, hf_iaprefix_valid_lifetime, tvb, off+4, 4, ENC_BIG_ENDIAN);
         proto_tree_add_item(subtree, hf_iaprefix_pref_len, tvb, off+8, 1, ENC_BIG_ENDIAN);
         proto_tree_add_item(subtree, hf_iaprefix_pref_addr, tvb, off+9, 16, ENC_NA);
         temp_optlen = 25;
@@ -3438,17 +3410,17 @@ proto_register_dhcpv6(void)
         { &hf_iaid,
           { "IAID", "dhcpv6.iaid", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL}},
         { &hf_iaid_t1,
-          { "T1", "dhcpv6.iaid.t1", FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL}},
+          { "T1", "dhcpv6.iaid.t1", FT_UINT32, BASE_DEC|BASE_SPECIAL_VALS, VALS(infinity_val), 0, NULL, HFILL}},
         { &hf_iaid_t2,
-          { "T2", "dhcpv6.iaid.t2", FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL}},
+          { "T2", "dhcpv6.iaid.t2", FT_UINT32, BASE_DEC|BASE_SPECIAL_VALS, VALS(infinity_val), 0, NULL, HFILL}},
         { &hf_iata,
           { "IATA", "dhcpv6.iata", FT_STRING, BASE_NONE, NULL, 0x0, NULL, HFILL}},
         { &hf_iaaddr_ip,
           { "IPv6 address", "dhcpv6.iaaddr.ip", FT_IPv6, BASE_NONE, NULL, 0x0, NULL, HFILL}},
         { &hf_iaaddr_pref_lifetime,
-          { "Preferred lifetime", "dhcpv6.iaaddr.pref_lifetime", FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL}},
+          { "Preferred lifetime", "dhcpv6.iaaddr.pref_lifetime", FT_UINT32, BASE_DEC|BASE_SPECIAL_VALS, VALS(infinity_val), 0, NULL, HFILL}},
         { &hf_iaaddr_valid_lifetime,
-          { "Valid lifetime", "dhcpv6.iaaddr.valid_lifetime", FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL}},
+          { "Valid lifetime", "dhcpv6.iaaddr.valid_lifetime", FT_UINT32, BASE_DEC|BASE_SPECIAL_VALS, VALS(infinity_val), 0, NULL, HFILL}},
         { &hf_requested_option_code,
           { "Requested Option code", "dhcpv6.requested_option_code", FT_UINT16, BASE_DEC | BASE_EXT_STRING, &opttype_vals_ext, 0, NULL, HFILL }},
         { &hf_option_preference,
@@ -3548,9 +3520,9 @@ proto_register_dhcpv6(void)
         { &hf_aftr_name,
           { "DS-Lite AFTR Name", "dhcpv6.aftr_name", FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL }},
         { &hf_iaprefix_pref_lifetime,
-          { "Preferred lifetime", "dhcpv6.iaprefix.pref_lifetime", FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL}},
+          { "Preferred lifetime", "dhcpv6.iaprefix.pref_lifetime", FT_UINT32, BASE_DEC|BASE_SPECIAL_VALS, VALS(infinity_val), 0, NULL, HFILL}},
         { &hf_iaprefix_valid_lifetime,
-          { "Valid lifetime", "dhcpv6.iaprefix.valid_lifetime", FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL}},
+          { "Valid lifetime", "dhcpv6.iaprefix.valid_lifetime", FT_UINT32, BASE_DEC|BASE_SPECIAL_VALS, VALS(infinity_val), 0, NULL, HFILL}},
         { &hf_iaprefix_pref_len,
           { "Prefix length", "dhcpv6.iaprefix.pref_len", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }},
         { &hf_iaprefix_pref_addr,
@@ -3860,7 +3832,7 @@ proto_register_dhcpv6(void)
 
     static ei_register_info ei_bulk_leasequery[] = {
         { &ei_dhcpv6_bulk_leasequery_bad_query_type, { "dhcpv6.bulk_leasequery.bad_query_type", PI_MALFORMED, PI_WARN, "LQ-QUERY: Query types only supported by Bulk Leasequery", EXPFILL }},
-        { &ei_dhcpv6_bulk_leasequery_bad_msg_type, { "dhcpv6.bulk_leasequery.bad_msg_type", PI_MALFORMED, PI_WARN, "Message Type %d not allowed by DHCPv6 Bulk Leasequery", EXPFILL }},
+        { &ei_dhcpv6_bulk_leasequery_bad_msg_type, { "dhcpv6.bulk_leasequery.bad_msg_type", PI_MALFORMED, PI_WARN, "Message Type not allowed by DHCPv6 Bulk Leasequery", EXPFILL }},
     };
 
     expert_module_t *expert_dhcpv6;

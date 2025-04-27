@@ -27,9 +27,9 @@ WS_DLL_PUBLIC
 int wtap_fstat(wtap *wth, ws_statb64 *statb, int *err);
 
 typedef bool (*subtype_read_func)(struct wtap*, wtap_rec *,
-                                      Buffer *, int *, char **, int64_t *);
+                                  int *, char **, int64_t *);
 typedef bool (*subtype_seek_read_func)(struct wtap*, int64_t, wtap_rec *,
-                                           Buffer *, int *, char **);
+                                       int *, char **);
 
 /**
  * Struct holding data of the currently read file.
@@ -90,9 +90,8 @@ typedef void *WFILE_T;
 typedef bool (*subtype_add_idb_func)(struct wtap_dumper*, wtap_block_t,
                                          int *, char **);
 
-typedef bool (*subtype_write_func)(struct wtap_dumper*,
-                                       const wtap_rec *rec,
-                                       const uint8_t*, int*, char**);
+typedef bool (*subtype_write_func)(struct wtap_dumper*, const wtap_rec*,
+                                   int*, char**);
 typedef bool (*subtype_finish_func)(struct wtap_dumper*, int*, char**);
 
 struct wtap_dumper {
@@ -314,7 +313,8 @@ wtap_read_bytes(FILE_T fh, void *buf, unsigned int count, int *err,
     char **err_info);
 
 /*
- * Read packet data into a Buffer, growing the buffer as necessary.
+ * Read a given number of bytes from a file into a Buffer, growing the
+ * buffer as necessary.
  *
  * This returns an error on a short read, even if the short read hit
  * the EOF immediately.  (The assumption is that each packet has a
@@ -324,7 +324,7 @@ wtap_read_bytes(FILE_T fh, void *buf, unsigned int count, int *err,
  */
 WS_DLL_PUBLIC
 bool
-wtap_read_packet_bytes(FILE_T fh, Buffer *buf, unsigned length, int *err,
+wtap_read_bytes_buffer(FILE_T fh, Buffer *buf, unsigned length, int *err,
     char **err_info);
 
 /*
@@ -332,15 +332,16 @@ wtap_read_packet_bytes(FILE_T fh, Buffer *buf, unsigned length, int *err,
  * as a single packet.
  */
 bool
-wtap_full_file_read(wtap *wth, wtap_rec *rec, Buffer *buf,
-    int *err, char **err_info, int64_t *data_offset);
+wtap_full_file_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
+    int64_t *data_offset);
 
 /*
  * Implementation of wth->subtype_seek_read that reads the full file contents
  * as a single packet.
  */
 bool
-wtap_full_file_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+wtap_full_file_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+    int *err, char **err_info);
 
 /**
  * Add an IDB to the interface data for a file.

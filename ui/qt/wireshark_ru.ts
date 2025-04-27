@@ -80,12 +80,16 @@
         <translation>Лицензия</translation>
     </message>
     <message>
-        <source>About Logray</source>
-        <translation>О журнале Logray</translation>
+        <source>About Stratoshark</source>
+        <translation>О Stratoshark</translation>
     </message>
     <message>
-        <source>Logray</source>
-        <translation>Журнал</translation>
+        <source>Stratoshark</source>
+        <translation>Stratoshark</translation>
+    </message>
+    <message>
+        <source>&lt;h3&gt;System Call and Event Log Analyzer&lt;/h3&gt;</source>
+        <translation>&lt;h3&gt;Анализатор системных вызовов и журналов событий&lt;/h3&gt;</translation>
     </message>
     <message>
         <source>The directory does not exist</source>
@@ -727,6 +731,10 @@
         <source>Packet bytes</source>
         <translation>Байты пакета</translation>
     </message>
+    <message>
+        <source>Event data</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>ByteViewText</name>
@@ -753,6 +761,10 @@
     <message>
         <source>Show text based on packet</source>
         <translation>Показать привязанный к пакету текст</translation>
+    </message>
+    <message>
+        <source>Show text based on event</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>…as ASCII</source>
@@ -1213,10 +1225,10 @@
 </translation>
     </message>
     <message>
-        <source>Created by Logray %1
+        <source>Created by Stratoshark %1
 
 </source>
-        <translation>Создано журналом Logray %1
+        <translation>Создано Stratoshark %1
 
 </translation>
     </message>
@@ -1385,6 +1397,10 @@
         <translation>pcap</translation>
     </message>
     <message>
+        <source>Compression:</source>
+        <translation>Сжатие:</translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Instead of using a single capture file, multiple files will be created.&lt;/p&gt;&lt;p&gt;The generated file names will contain an incrementing number and the start time of the capture.&lt;/p&gt;&lt;p&gt;NOTE: If enabled, at least one of the new-file criteria MUST be selected.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Вместо одного файла захвата будет создаваться несколько файлов.&lt;/p&gt;&lt;p&gt;Имена файлов будут содержать возрастающее числовое значение и время начала захвата.&lt;/p&gt;&lt;p&gt;ВНИМАНИЕ: При включении параметра НЕОБХОДИМО выбрать хотя бы один из критериев для создания нового файла.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -1455,16 +1471,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Включите режим монитора на всех интерфейсах 802.11</translation>
     </message>
     <message>
-        <source>compression</source>
-        <translation>сжатие</translation>
-    </message>
-    <message>
         <source>None</source>
         <translation>Нет</translation>
     </message>
     <message>
         <source>gzip</source>
         <translation>gzip</translation>
+    </message>
+    <message>
+        <source>LZ4</source>
+        <translation>LZ4</translation>
     </message>
     <message>
         <source>File infix pattern</source>
@@ -1909,10 +1925,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Тип</translation>
     </message>
     <message>
-        <source>Fields</source>
-        <translation>Поля</translation>
-    </message>
-    <message>
         <source>Field Occurrence</source>
         <translation>Вхождение поля</translation>
     </message>
@@ -1927,6 +1939,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Width</source>
         <translation>Ширина</translation>
+    </message>
+    <message>
+        <source>Custom Expression</source>
+        <translation>Пользовательское выражение</translation>
     </message>
     <message>
         <source>Alignment</source>
@@ -2090,6 +2106,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Graph a TCP conversation.</source>
         <translation>Построение графика диалога TCP.</translation>
+    </message>
+    <message>
+        <source>I/O Graphs</source>
+        <translation>Графики ввода/вывода</translation>
+    </message>
+    <message>
+        <source>I/OGraph TCP conversations.</source>
+        <translation>I/O График TCP-обменов.</translation>
     </message>
 </context>
 <context>
@@ -2381,6 +2405,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Apply a read filter %1</source>
         <translation>Примените фильтр чтения %1</translation>
+    </message>
+    <message>
+        <source>Enter a custom column expression %1</source>
+        <translation>Введите пользовательское выражение для столбца %1</translation>
     </message>
     <message>
         <source>Current filter: %1</source>
@@ -3053,12 +3081,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Все Файлы (</translation>
     </message>
     <message>
-        <source>Open File</source>
-        <translation>Открыть файл</translation>
+        <source>%1 Open File</source>
+        <translation>%1 Открыть файл</translation>
     </message>
     <message>
-        <source>Select File</source>
-        <translation>Выбрать файл</translation>
+        <source>%1 Select File</source>
+        <translation>%1 Выбрать файл</translation>
     </message>
 </context>
 <context>
@@ -3096,16 +3124,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 <context>
     <name>FieldFilterEdit</name>
     <message>
-        <source>Display filter entry</source>
-        <translation>Запись фильтра отображения</translation>
+        <source>Field entry</source>
+        <translation>Ввод поля</translation>
     </message>
     <message>
         <source>Enter a field %1</source>
         <translation>Ввести поле %1</translation>
     </message>
     <message>
-        <source>Invalid filter: </source>
-        <translation>Недопустимый фильтр: </translation>
+        <source>Invalid field: </source>
+        <translation>Недопустимое поле:</translation>
     </message>
 </context>
 <context>
@@ -3851,15 +3879,15 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Color Scheme:</source>
-        <translation type="unfinished"></translation>
+        <translation>Цветовая схема:</translation>
     </message>
     <message>
         <source>Light Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Светлый режим</translation>
     </message>
     <message>
         <source>Dark Mode</source>
-        <translation type="unfinished"></translation>
+        <translation>Темный режим</translation>
     </message>
     <message>
         <source>Font</source>
@@ -4177,10 +4205,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Автоматическое обновление</translation>
     </message>
     <message>
-        <source>Enable legend</source>
-        <translation>Включить легенду</translation>
-    </message>
-    <message>
         <source>Reset Graph</source>
         <translation>Сбросить график</translation>
     </message>
@@ -4314,6 +4338,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>T</translation>
     </message>
     <message>
+        <source>Toggle X-axis between relative time and time of day</source>
+        <translation>Переключение оси X между относительным временем и временем суток</translation>
+    </message>
+    <message>
+        <source>Toggle Y-axis between logarithmic and linear scale</source>
+        <translation>Переключение оси Y между логарифмической и линейной шкалой</translation>
+    </message>
+    <message>
         <source>Crosshairs</source>
         <translation>Перекрестия</translation>
     </message>
@@ -4324,6 +4356,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Space</source>
         <translation>Пробел</translation>
+    </message>
+    <message>
+        <source>Legend</source>
+        <translation>Легенда</translation>
+    </message>
+    <message>
+        <source>Toggle legend</source>
+        <translation>Отключить легенду</translation>
     </message>
     <message>
         <source>Zoom In X Axis</source>
@@ -4953,10 +4993,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Регулярное выражение для описания формата пакета</translation>
     </message>
     <message>
-        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifieing data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;Required is only a data group, also supported are time, dir and seqno.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl-совместимое регулярное выражение для захвата пакета в файл с включением именованных групп, позволяющих идентифицировать импортируемые данные. Якоря ^ и $ также могут использоваться для сопоставления местоположения до или после перевода строк &lt;/p&gt;&lt;p&gt;Обязательна для включения только группа data, но также поддерживаются группы time, dir и seqno.&lt;/p&gt;&lt;p&gt;Флаги регулярного выражения: DUPNAMES, MULTILINE и NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
-    </message>
-    <message>
         <source>This is regexHintLabel, it will be set to default_regex_hint</source>
         <translation>Это подпись regexHintLabel, которой будет присвоено значение default_regex_hint</translation>
     </message>
@@ -5035,6 +5071,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>None</source>
         <translation>Не используются</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Whether to treat multiple byte groups as being in little-endian byte order, instead of the default, network (big-endian) order.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Следует ли рассматривать несколько групп байтов как расположенные в порядке little-endian, а не в порядке по умолчанию, сетевом (big-endian).&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Little-endian:</source>
+        <translation>Младший эндианальный:</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl compatible regular expression capturing a single packet in the file with named groups identifying data to import. Anchors ^ and $ also match before/after newlines &lt;/p&gt;&lt;p&gt;The only required group is data, but time, dir and seqno are also supported.&lt;/p&gt;&lt;p&gt;Regex flags: DUPNAMES, MULTILINE and NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Perl-совместимое регулярное выражение, перехватывающее один пакет в файле с именованными группами, определяющими данные для импорта. Якоря ^ и $ также совпадают до/после новой строки &lt;/p&gt;&lt;p&gt;Единственная обязательная группа - data, но также поддерживаются time, dir и seqno.&lt;/p&gt;&lt;p&gt;Флаги Regex: DUPNAMES, MULTILINE и NOEMPTY&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;small&gt;&lt;i&gt;recommended regex:&lt;/small&gt;&lt;/i&gt;</source>
@@ -5205,8 +5253,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Поддерживаемые поля: data, dir, time, seqno</translation>
     </message>
     <message>
-        <source>Missing capturing group data (use (?</source>
-        <translation>Отсутствуют данные группы захвата (use (?</translation>
+        <source>Missing capturing group data (use (?&lt;data&gt;(...)) )</source>
+        <translation>Отсутствующие данные о группе захвата (используйте (?&lt;data&gt;(...)))</translation>
     </message>
     <message>
         <source>Import From Hex Dump</source>
@@ -5280,12 +5328,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Внешние интерфейсы захвата отключены.</translation>
     </message>
     <message>
+        <source>&lt;p&gt;Local interfaces are unavailable because WinPcap is installed but is no longer supported.&lt;/p&gt;&lt;p&gt;You can fix this by uninstalling WinPcap and installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
+        <translation>&lt;p&gt;Локальные интерфейсы недоступны, потому что установлен WinPcap, но он больше не поддерживается.&lt;/p&gt;&lt;p&gt; Вы можете исправить это, удалив WinPcap и установив&lt;a href=&quot;https://npcap.com/&quot;&gt; Npcap&lt;/a&gt;.&lt;/p&gt;</translation>
+    </message>
+    <message>
         <source>&lt;p&gt;Local interfaces are unavailable because no packet capture driver is installed.&lt;/p&gt;&lt;p&gt;You can fix this by installing &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</source>
         <translation>&lt;p&gt;Локальные интерфейсы недоступны, так как не установлен драйвер захвата пакетов.&lt;/p&gt;&lt;p&gt;Для устранения этой проблемы необходимо установить &lt;a href=&quot;https://npcap.com/&quot;&gt;Npcap&lt;/a&gt;.&lt;/p&gt;</translation>
     </message>
     <message>
-        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed or &lt;pre&gt;net start npf&lt;/pre&gt; if you have WinPcap installed. Both commands must be run as Administrator.&lt;/p&gt;</source>
-        <translation>&lt;p&gt;Локальные интерфейсы недоступны, так как не загружен драйвер захвата пакетов.&lt;/p&gt;&lt;p&gt;Для устранения этой проблемы необходимо запустить команду &lt;pre&gt;net start npcap&lt;/pre&gt;, если установлен Npcap, или командой &lt;pre&gt;net start npf&lt;/pre&gt;, если установлен WinPcap. Обе команды должны быть запущены от имени «Администратора».&lt;/p&gt;</translation>
+        <source>&lt;p&gt;Local interfaces are unavailable because the packet capture driver isn&apos;t loaded.&lt;/p&gt;&lt;p&gt;You can fix this by running &lt;pre&gt;net start npcap&lt;/pre&gt; if you have Npcap installed. The command must be run as Administrator.&lt;/p&gt;</source>
+        <translation>&lt;p&gt;Локальные интерфейсы недоступны, потому что не загружен драйвер захвата пакетов.&lt;/p&gt;&lt;p&gt; Вы можете исправить это, выполнив команду &lt;pre&gt;net start npcap&lt;/pre&gt;, если у вас установлен Npcap. Команда должна быть запущена от имени администратора.&lt;/p&gt;</translation>
     </message>
     <message>
         <source>&lt;p&gt;You don&apos;t have permission to capture on local interfaces.&lt;/p&gt;&lt;p&gt;You can fix this by &lt;a href=&quot;file://%1&quot;&gt;installing ChmodBPF&lt;/a&gt;.&lt;/p&gt;</source>
@@ -5425,6 +5477,13 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Capture filter</source>
         <translation>Фильтр захвата</translation>
+    </message>
+</context>
+<context>
+    <name>JsonDataSourceView</name>
+    <message>
+        <source>Event JSON</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -6944,6 +7003,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Display filter as %1</source>
         <translation>Отображение фильтра в виде %1</translation>
     </message>
+    <message>
+        <source>The Wireshark Network Analyzer</source>
+        <translation>Сетевой анализатор Wireshark</translation>
+    </message>
+    <message>
+        <source>The Stratoshark System Call and Log Analyzer</source>
+        <translation>Анализатор системных вызовов и журналов Stratoshark</translation>
+    </message>
+    <message>
+        <source>Capturing from %1</source>
+        <translation>Захват с %1</translation>
+    </message>
 </context>
 <context>
     <name>MainWindowPreferencesFrame</name>
@@ -7499,10 +7570,52 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
 </context>
 <context>
-    <name>PacketFormatGroupBox</name>
+    <name>PacketFormatBlankGroupBox</name>
+    <message>
+        <source>The selected format has no options</source>
+        <translation>Выбранный формат не имеет опций</translation>
+    </message>
+</context>
+<context>
+    <name>PacketFormatJSONGroupBox</name>
     <message>
         <source>GroupBox</source>
-        <translation>Групповой блок</translation>
+        <translation>GroupBox</translation>
+    </message>
+    <message>
+        <source>Packet Format</source>
+        <translation>Формат пакета</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Avoid duplicate keys in the JSON by using a list for sibling fields with the same key&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Избегайте дублирования ключей в JSON, используя список для полей-близнецов с одинаковым ключом&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>No duplicate keys</source>
+        <translation>Никаких дубликатов ключей</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a name/value pair for each field with the field value&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Экспортируйте пару имя/значение для каждого поля со значением поля&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Values</source>
+        <translation>Значение</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a name/value pair for each field with the hex bytes of its packet data&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Экспортируйте пару имя/значение для каждого поля с шестнадцатеричными байтами его пакетных данных&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Raw Bytes</source>
+        <translation>Сырой байт</translation>
+    </message>
+</context>
+<context>
+    <name>PacketFormatTextGroupBox</name>
+    <message>
+        <source>GroupBox</source>
+        <translation>Групповой бокс</translation>
     </message>
     <message>
         <source>Packet Format</source>
@@ -7510,51 +7623,51 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Packet summary lines similar to the packet list&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Строки сводки пакетов соответствуют списку пакетов&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Строки сводки пакетов, аналогичные списку пакетов&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Summary line</source>
-        <translation>Итоговая строка</translation>
+        <translation>Сводная линия</translation>
     </message>
     <message>
         <source>Include column headings</source>
-        <translation>Добавлять заголовки столбцов</translation>
+        <translation>Включите заголовки столбцов</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Packet details similar to the protocol tree&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Подробная информация о пакете, аналогичная представлению в виде дерева протоколов&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Детали пакетов, аналогичные дереву протоколов&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Details:</source>
-        <translation>Подробная информация:</translation>
+        <translation>Детали:</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export only top-level packet detail items&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Экспортировать только элементы информации о пакетах самого высокого уровня&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Экспортируйте только детали пакетов верхнего уровня&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>All co&amp;llapsed</source>
-        <translation>Всё свё&amp;рнуто</translation>
+        <translation>Все ко&amp;ллапсы</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Expand and collapse packet details as they are currently displayed.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Разворачивать и сворачивать подробную информацию о пакетах в соответствии с текущим отображением.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Разворачивайте и сворачивайте сведения о пакете в том виде, в котором они отображаются в данный момент.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>As displa&amp;yed</source>
-        <translation>Согласно отображ&amp;ению</translation>
+        <translation>Как вытесненный</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export all packet detail items&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Экспортировать все элементы информации о пакетах&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Экспорт всех подробных элементов пакета&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>All e&amp;xpanded</source>
-        <translation>Всё р&amp;азвёрнуто</translation>
+        <translation>Всё и расширенное</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a hexdump of the packet data similar to the packet bytes view&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Экспортировать шестнадцатеричный дамп данных пакета аналогично просмотру байтов пакета&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Экспортируйте шестнадцатеричный дамп данных пакета, аналогичный представлению байтов пакета&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Bytes</source>
@@ -7562,11 +7675,19 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Include secondary data sources</source>
-        <translation>Включать вторичные источники данных</translation>
+        <translation>Включите источники вторичных данных</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Generate hexdumps for secondary data sources like reassembled or decrypted buffers in addition to the frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Генерировать шестнадцатеричные дампы для вторичных источников данных в виде пересобранных или расшифрованных буферов, в добавление к кадру&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Генерируйте шестнадцатеричные дампы для вторичных источников данных, таких как пересобранные или расшифрованные буферы, в дополнение к кадру&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Include timestamp preamble</source>
+        <translation>Включить преамбулу временной метки</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include each frame timestamp immediately before its hex dump, using the current time display format.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Включите временную метку каждого кадра непосредственно перед его шестнадцатеричным дампом, используя формат отображения текущего времени.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
 </context>
 <context>
@@ -7853,6 +7974,18 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Preferences</source>
         <translation>Параметры</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>Копировать</translation>
+    </message>
+    <message numerus="yes">
+        <source>Copy Row(s)</source>
+        <translation type="unfinished">
+            <numerusform>Копировать Строку</numerusform>
+            <numerusform>Копировать Строки</numerusform>
+            <numerusform>Копировать Строки</numerusform>
+        </translation>
     </message>
 </context>
 <context>
@@ -8331,8 +8464,8 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Справка по полю фильтра</translation>
     </message>
     <message>
-        <source>Copied </source>
-        <translation>Скопировано </translation>
+        <source>Copied %1</source>
+        <translation>Скопировано %1</translation>
     </message>
     <message>
         <source>Wiki Page for %1</source>
@@ -8511,34 +8644,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 </context>
 <context>
     <name>QObject</name>
-    <message>
-        <source>Average Throughput (bits/s)</source>
-        <translation>Средняя пропускная способность (бит/с)</translation>
-    </message>
-    <message>
-        <source>Round Trip Time (ms)</source>
-        <translation>Время приёма-передачи (мс)</translation>
-    </message>
-    <message>
-        <source>Segment Length (B)</source>
-        <translation>Длина сегмента (Б)</translation>
-    </message>
-    <message>
-        <source>Sequence Number (B)</source>
-        <translation>Порядковый номер (Б)</translation>
-    </message>
-    <message>
-        <source>Time (s)</source>
-        <translation>Время (с)</translation>
-    </message>
-    <message>
-        <source>Window Size (B)</source>
-        <translation>Размер окна (Б)</translation>
-    </message>
-    <message>
-        <source>Unacked (Outstanding) Bytes (B)</source>
-        <translation>Нераспакованные (выданные) байты (B)</translation>
-    </message>
     <message>
         <source>[no capture file]</source>
         <translation>[нет файла захвата]</translation>
@@ -8932,8 +9037,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Недопустимый фильтр отображения</translation>
     </message>
     <message>
-        <source>The filter expression %1 isn&apos;t a valid display filter. (%2).</source>
-        <translation>Выражение фильтра %1 не является допустимым фильтром отображения. (%2).</translation>
+        <source>The filter expression &quot;%1&quot; isn&apos;t a valid display filter.
+(%2).</source>
+        <translation>Выражение фильтра &quot;%1&quot; не является допустимым фильтром отображения.
+(%2).</translation>
     </message>
     <message>
         <source>Error</source>
@@ -9026,6 +9133,34 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>LOAD</source>
         <translation>ЗАГРУЗКА</translation>
+    </message>
+    <message>
+        <source>Average Throughput</source>
+        <translation>Средняя пропускная способность</translation>
+    </message>
+    <message>
+        <source>Round Trip Time</source>
+        <translation>Время поездки туда и обратно</translation>
+    </message>
+    <message>
+        <source>Segment Length</source>
+        <translation>Длина сегмента</translation>
+    </message>
+    <message>
+        <source>Sequence Number</source>
+        <translation>Порядковый номер</translation>
+    </message>
+    <message>
+        <source>Time</source>
+        <translation>Время</translation>
+    </message>
+    <message>
+        <source>Window Size</source>
+        <translation>Размер окна</translation>
+    </message>
+    <message>
+        <source>Unacked (Outstanding) Bytes</source>
+        <translation>Нераспакованные (неиспользованные) байты</translation>
     </message>
 </context>
 <context>
@@ -12004,6 +12139,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>масштаб</translation>
     </message>
     <message>
+        <source>Sampling Method</source>
+        <translation>Метод выборки</translation>
+    </message>
+    <message>
+        <source>Select which packets and how the RTT sampling is done</source>
+        <translation>Выбор пакетов и способа выборки RTT</translation>
+    </message>
+    <message>
         <source>Display Round Trip Time vs Sequence Number</source>
         <translation>Отображать время приёма-передачи в зависимости от номера последовательности</translation>
     </message>
@@ -12298,6 +12441,38 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>4</source>
         <translation>4</translation>
+    </message>
+    <message>
+        <source>All Data Packets</source>
+        <translation>Все пакеты данных</translation>
+    </message>
+    <message>
+        <source>Sampling from all data packets</source>
+        <translation>Выборка из всех пакетов данных</translation>
+    </message>
+    <message>
+        <source>All Data Packets w/ SACK</source>
+        <translation>Все пакеты данных/ SACK</translation>
+    </message>
+    <message>
+        <source>Sampling from all data packets w/ SACK</source>
+        <translation>Выборка из всех пакетов данных/ SACK</translation>
+    </message>
+    <message>
+        <source>Data Packets matching RTT</source>
+        <translation>Пакеты данных, соответствующие RTT</translation>
+    </message>
+    <message>
+        <source>Sampling from RTT packets</source>
+        <translation>Выборка из пакетов RTT</translation>
+    </message>
+    <message>
+        <source>Data Packets matching Karn RTT</source>
+        <translation>Пакеты данных, соответствующие Karn RTT</translation>
+    </message>
+    <message>
+        <source>Sampling from Karn RTT packets</source>
+        <translation>Выборка из пакетов Karn RTT</translation>
     </message>
     <message>
         <source>Zoom In X Axis</source>
@@ -12611,6 +12786,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Name resolution</source>
         <translation>Разрешение имён</translation>
+    </message>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Display exact numbers instead of rounding with SI prefixes. (Exact numbers always used when sorting.)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Отображение точных чисел вместо округления с префиксами SI. (Точные числа всегда используются при сортировке)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Display raw data</source>
+        <translation>Отображение исходных данных</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Only show conversations matching the current display filter&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -13161,16 +13344,16 @@ a:hover {
         <translation>Все составные звенья Интернета анализировать поможет Wireshark </translation>
     </message>
     <message>
-        <source>You are sniffing the glue that holds your system together using Logray </source>
-        <translation>Вы нюхаете клей, который держит вашу систему вместе, используя Logray </translation>
+        <source>You are sniffing the glue that holds your system together using Stratoshark </source>
+        <translation>С помощью Stratoshark вы обнаруживаете клей, на котором держится ваша система.</translation>
+    </message>
+    <message>
+        <source>You are running Stratoshark </source>
+        <translation>Вы запускаете Stratoshark</translation>
     </message>
     <message>
         <source>You are running Wireshark </source>
         <translation>Работа производится в Wireshark </translation>
-    </message>
-    <message>
-        <source>You are running Logray </source>
-        <translation>Вы используете Logray </translation>
     </message>
     <message>
         <source> You receive automatic updates.</source>
@@ -13246,14 +13429,6 @@ a:hover {
     <message>
         <source>802.11 Preferences</source>
         <translation>Параметры 802.11</translation>
-    </message>
-    <message>
-        <source>AirPcap Control Panel</source>
-        <translation>Панель управления AirPcap</translation>
-    </message>
-    <message>
-        <source>Open the AirPcap Control Panel</source>
-        <translation>Открыть панель управления AirPcap</translation>
     </message>
     <message>
         <source>Unable to set channel or offset.</source>
@@ -14487,7 +14662,23 @@ a:hover {
     </message>
     <message>
         <source>Display Filter Reference</source>
-        <translation type="unfinished"></translation>
+        <translation>Ссылка на фильтр дисплея</translation>
+    </message>
+    <message>
+        <source>First Packet in Conversation</source>
+        <translation>Первый пакет в разговоре</translation>
+    </message>
+    <message>
+        <source>Go to the first packet in this conversation</source>
+        <translation>Перейдите к первому пакету в этой беседе.</translation>
+    </message>
+    <message>
+        <source>Last Packet in Conversation</source>
+        <translation>Последний пакет в разговоре</translation>
+    </message>
+    <message>
+        <source>Go to the last packet in this conversation</source>
+        <translation>Перейдите к последнему пакету в этой беседе.</translation>
     </message>
     <message>
         <source>Capture &amp;Filters…</source>
@@ -14734,24 +14925,12 @@ a:hover {
         <translation>Показывать временные характеристики пакетов в виде числа секунд с момента захвата отображаемого пакета.</translation>
     </message>
     <message>
-        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456)</source>
-        <translation>Дата и время суток в UTC (1970-01-01 01:02:03.123456)</translation>
-    </message>
-    <message>
         <source>Show packet times as the UTC date and time of day.</source>
         <translation>Показывать временные характеристики пакетов в виде даты и времени суток в UTC.</translation>
     </message>
     <message>
-        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456)</source>
-        <translation>Год, день года и время суток в UTC (1970/001 01:02:03.123456)</translation>
-    </message>
-    <message>
         <source>Show packet times as the UTC year, day of the year and time of day.</source>
         <translation>Показывать временные характеристики пакетов в виде года, дня года и времени суток в UTC.</translation>
-    </message>
-    <message>
-        <source>UTC Time of Day (01:02:03.123456)</source>
-        <translation>Время суток в UTC (01:02:03.123456)</translation>
     </message>
     <message>
         <source>Show packet times as the UTC time of day.</source>
@@ -15004,6 +15183,18 @@ a:hover {
         <translation>&amp;Снять отметку со всего отображённого</translation>
     </message>
     <message>
+        <source>UTC Date and Time of Day (1970-01-01 01:02:03.123456Z)</source>
+        <translation>Дата и время дня по Гринвичу (1970-01-01 01:02:03.123456Z)</translation>
+    </message>
+    <message>
+        <source>UTC Year, Day of Year, and Time of Day (1970/001 01:02:03.123456Z)</source>
+        <translation>Год, день года и время суток UTC (1970/001 01:02:03.123456Z)</translation>
+    </message>
+    <message>
+        <source>UTC Time of Day (01:02:03.123456Z)</source>
+        <translation>Время дня по Гринвичу (01:02:03.123456Z)</translation>
+    </message>
+    <message>
         <source>All VoIP Calls</source>
         <translation>Все вызовы VoIP</translation>
     </message>
@@ -15176,16 +15367,8 @@ a:hover {
         <translation>Необходимо сохранить изменения перед объединением файлов.</translation>
     </message>
     <message>
-        <source>Invalid Display Filter</source>
-        <translation>Недопустимый фильтр отображения</translation>
-    </message>
-    <message>
         <source>Invalid Read Filter</source>
         <translation>Недопустимый фильтр чтения</translation>
-    </message>
-    <message>
-        <source>The filter expression %1 isn&apos;t a valid read filter. (%2).</source>
-        <translation>Выражение фильтра %1 не является допустимым фильтром чтения. (%2).</translation>
     </message>
     <message>
         <source> before importing a capture</source>
@@ -15224,6 +15407,12 @@ a:hover {
     <message>
         <source>Unable to drop files during capture.</source>
         <translation>Нельзя перетаскивать файлы во время захвата.</translation>
+    </message>
+    <message>
+        <source>The filter expression &quot;%1&quot; isn&apos;t a valid read filter.
+(%2).</source>
+        <translation>Выражение фильтра &quot;%1&quot; не является допустимым фильтром чтения.
+(%2).</translation>
     </message>
     <message>
         <source>Unknown file type returned by merge dialog.</source>
@@ -15292,14 +15481,6 @@ a:hover {
         <source>Stop and Continue &amp;without Saving</source>
         <oldsource>Stop and Continue without Saving</oldsource>
         <translation>Остановить и продолжить &amp;без сохранения</translation>
-    </message>
-    <message>
-        <source>The Wireshark Network Analyzer</source>
-        <translation>Сетевой анализатор Wireshark</translation>
-    </message>
-    <message>
-        <source>Capturing from %1</source>
-        <translation>Захват из %1</translation>
     </message>
     <message>
         <source> before opening another file</source>

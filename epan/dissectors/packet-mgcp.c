@@ -21,7 +21,10 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+#define WS_LOG_DOMAIN "packet-mgcp"
+
 #include "config.h"
+#include <wireshark.h>
 
 #include <stdlib.h>
 
@@ -899,7 +902,7 @@ static int tvb_parse_param(tvbuff_t* tvb, int offset, int len, int** hf, mgcp_in
 					if (tempchar == ':')
 					{
 						/* Looks like a valid vendor param name */
-						//fprintf(stderr, "MGCP Extension: %s\n", tvb_get_string_enc(wmem_packet_scope(), tvb, tvb_current_offset, ext_off, ENC_ASCII));
+						ws_debug("MGCP Extension: %s", tvb_get_string_enc(wmem_packet_scope(), tvb, tvb_current_offset, ext_off, ENC_ASCII));
 						switch (plus_minus)
 						{
 							case '+':
@@ -2262,7 +2265,7 @@ static int tvb_find_dot_line(tvbuff_t* tvb, int offset, int len, int* next_offse
 			/* Are the characters that follow the dot a newline or carriage return ? */
 			if (tempchar == '\r' || tempchar == '\n')
 			{
-				/* Do we have any characters that proceed the . ? */
+				/* Do we have any characters that precede the . ? */
 				if (tvb_current_offset == 0)
 				{
 					break;
@@ -2271,7 +2274,7 @@ static int tvb_find_dot_line(tvbuff_t* tvb, int offset, int len, int* next_offse
 				{
 					tempchar = tvb_get_uint8(tvb, tvb_current_offset-1);
 
-					/* Are the characters that follow the dot a newline or a
+					/* Are the characters that precede the dot a newline or a
 					   carriage return ? */
 					if (tempchar == '\r' || tempchar == '\n')
 					{

@@ -567,7 +567,7 @@ memiszero(const void *ptr, size_t count)
 }
 
 static bool
-process_packet_data(wtap_rec *rec, Buffer *target, uint8_t *buffer,
+process_packet_data(wtap_rec *rec, uint8_t *buffer,
                     unsigned record_len, k12_t *k12, int *err, char **err_info)
 {
     uint32_t type;
@@ -606,13 +606,11 @@ process_packet_data(wtap_rec *rec, Buffer *target, uint8_t *buffer,
 
     rec->rec_header.packet_header.len = rec->rec_header.packet_header.caplen = length;
 
-    ws_buffer_assure_space(target, length);
-    memcpy(ws_buffer_start_ptr(target), buffer + buffer_offset, length);
+    ws_buffer_append(&rec->data, buffer + buffer_offset, length);
 
     /* extra information need by some protocols */
     extra_len = record_len - buffer_offset - length;
-    ws_buffer_assure_space(&(k12->extra_info), extra_len);
-    memcpy(ws_buffer_start_ptr(&(k12->extra_info)),
+    ws_buffer_append(&(k12->extra_info),
            buffer + buffer_offset + length, extra_len);
     rec->rec_header.packet_header.pseudo_header.k12.extra_info = (uint8_t*)ws_buffer_start_ptr(&(k12->extra_info));
     rec->rec_header.packet_header.pseudo_header.k12.extra_length = extra_len;
@@ -664,7 +662,7 @@ process_packet_data(wtap_rec *rec, Buffer *target, uint8_t *buffer,
     return true;
 }
 
-static bool k12_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err, char **err_info, int64_t *data_offset) {
+static bool k12_read(wtap *wth, wtap_rec *rec, int *err, char **err_info, int64_t *data_offset) {
     k12_t *k12 = (k12_t *)wth->priv;
     k12_src_desc_t* src_desc;
     uint8_t* buffer;
@@ -727,11 +725,11 @@ static bool k12_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err, char **err
 
     } while ( ((type & K12_MASK_PACKET) != K12_REC_PACKET && (type & K12_MASK_PACKET) != K12_REC_D0020) || !src_id || !src_desc );
 
-    return process_packet_data(rec, buf, buffer, (unsigned)len, k12, err, err_info);
+    return process_packet_data(rec, buffer, (unsigned)len, k12, err, err_info);
 }
 
 
-static bool k12_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *buf, int *err, char **err_info) {
+static bool k12_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, int *err, char **err_info) {
     k12_t *k12 = (k12_t *)wth->priv;
     uint8_t* buffer;
     int len;
@@ -757,7 +755,7 @@ static bool k12_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec, Buffer *bu
 
     buffer = k12->rand_read_buff;
 
-    status = process_packet_data(rec, buf, buffer, (unsigned)len, k12, err, err_info);
+    status = process_packet_data(rec, buffer, (unsigned)len, k12, err, err_info);
 
     K12_DBG(5,("k12_seek_read: DONE OK"));
 
@@ -1264,7 +1262,7 @@ static void k12_dump_src_setting(void *k _U_, void *v, void *p) {
 }
 
 static bool k12_dump(wtap_dumper *wdh, const wtap_rec *rec,
-                         const uint8_t *pd, int *err, char **err_info _U_) {
+                     int *err, char **err_info _U_) {
     const union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
     k12_dump_t *k12 = (k12_dump_t *)wdh->priv;
     uint32_t len;
@@ -1321,7 +1319,7 @@ static bool k12_dump(wtap_dumper *wdh, const wtap_rec *rec,
 
     obj.record.ts = GUINT64_TO_BE((((uint64_t)rec->ts.secs - 631152000) * 2000000) + (rec->ts.nsecs / 1000 * 2));
 
-    memcpy(obj.record.frame,pd,rec->rec_header.packet_header.caplen);
+    memcpy(obj.record.frame,ws_buffer_start_ptr(&rec->data),rec->rec_header.packet_header.caplen);
 
     return k12_dump_record(wdh,len,obj.buffer, err);
 }

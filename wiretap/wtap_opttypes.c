@@ -626,7 +626,7 @@ bool wtap_block_foreach_option(wtap_block_t block, wtap_block_foreach_func func,
     for (i = 0; i < block->options->len; i++) {
         opt = &g_array_index(block->options, wtap_option_t, i);
         opttype = GET_OPTION_TYPE(block->info->options, opt->option_id);
-        if (!func(block, opt->option_id, opttype->data_type, &opt->value, user_data))
+        if (func && !func(block, opt->option_id, opttype->data_type, &opt->value, user_data))
             return false;
     }
     return true;
@@ -1767,7 +1767,7 @@ static void *copy_hashipv4(const void *src, void *user_data _U_
     hashipv4_t *src_ipv4 = (hashipv4_t*)src;
     hashipv4_t *dst = g_new0(hashipv4_t, 1);
     dst->addr = src_ipv4->addr;
-    (void) g_strlcpy(dst->name, src_ipv4->name, MAXNAMELEN);
+    (void) g_strlcpy(dst->name, src_ipv4->name, MAXDNSNAMELEN);
     return dst;
 }
 
@@ -1776,7 +1776,7 @@ static void *copy_hashipv4(const void *src, void *user_data _U_
     hashipv6_t *src_ipv6 = (hashipv6_t*)src;
     hashipv6_t *dst = g_new0(hashipv6_t, 1);
     dst->addr = src_ipv4->addr;
-    (void) g_strlcpy(dst->name, src_ipv4->name, MAXNAMELEN);
+    (void) g_strlcpy(dst->name, src_ipv4->name, MAXDNSNAMELEN);
     return dst;
 }
 
@@ -1898,6 +1898,12 @@ static void pkt_create(wtap_block_t block)
     block->mandatory_data = NULL;
 }
 
+static void sysdig_create(wtap_block_t block)
+{
+    /* Ensure this is null, so when g_free is called on it, it simply returns */
+    block->mandatory_data = NULL;
+}
+
 static void sjeb_create(wtap_block_t block)
 {
     /* Ensure this is null, so when g_free is called on it, it simply returns */
@@ -1961,6 +1967,10 @@ void wtap_opttypes_initialize(void)
         WTAP_OPTTYPE_STRING,
         0
     };
+    // "ipv4addr"
+    // "ipv6addr"
+    // "macaddr"
+    // "euiaddr"
     static const wtap_opttype_t if_speed = {
         "speed",
         "IDB Speed",
@@ -1973,6 +1983,7 @@ void wtap_opttypes_initialize(void)
         WTAP_OPTTYPE_UINT8, /* XXX - signed? */
         0
     };
+    // "tzone"
     static const wtap_opttype_t if_filter = {
         "filter",
         "IDB Filter",
@@ -2000,6 +2011,24 @@ void wtap_opttypes_initialize(void)
     static const wtap_opttype_t if_hardware = {
         "hardware",
         "IDB Hardware",
+        WTAP_OPTTYPE_STRING,
+        0
+    };
+    static const wtap_opttype_t if_tx_speed = {
+        "txspeed",
+        "IDB Tx Speed",
+        WTAP_OPTTYPE_UINT64,
+        0
+    };
+    static const wtap_opttype_t if_rx_speed = {
+        "rxspeed",
+        "IDB Rx Speed",
+        WTAP_OPTTYPE_UINT64,
+        0
+    };
+    static const wtap_opttype_t if_iana_tzname = {
+        "iana_tzname",
+        "IDB IANA timezone name",
         WTAP_OPTTYPE_STRING,
         0
     };
@@ -2129,6 +2158,12 @@ void wtap_opttypes_initialize(void)
         WTAP_OPTTYPE_UINT32,
         0
     };
+    static const wtap_opttype_t pkt_hash = {
+        "hash",
+        "Hash of packet data",
+        WTAP_OPTTYPE_PACKET_HASH,
+        WTAP_OPTTYPE_FLAG_MULTIPLE_ALLOWED
+    };
     static const wtap_opttype_t pkt_dropcount = {
         "dropcount",
         "Packets Dropped since last packet",
@@ -2147,17 +2182,27 @@ void wtap_opttypes_initialize(void)
         WTAP_OPTTYPE_UINT32,
         0
     };
-    static const wtap_opttype_t pkt_hash = {
-        "hash",
-        "Hash of packet data",
-        WTAP_OPTTYPE_PACKET_HASH,
-        WTAP_OPTTYPE_FLAG_MULTIPLE_ALLOWED
-    };
     static const wtap_opttype_t pkt_verdict = {
         "verdict",
         "Packet Verdict",
         WTAP_OPTTYPE_PACKET_VERDICT,
         WTAP_OPTTYPE_FLAG_MULTIPLE_ALLOWED
+    };
+    static const wtap_opttype_t pkt_proc_id_thread_id = {
+        "procidthreadid",
+        "Process ID thread ID",
+        WTAP_OPTTYPE_UINT64,
+        0
+    };
+
+    static wtap_blocktype_t sysdig_block = {
+        WTAP_BLOCK_SYSDIG_EVENT,
+        "Sysdig event",
+        "Sysdig Event Block",
+        sysdig_create,
+        NULL,
+        NULL,
+        NULL
     };
 
     static wtap_blocktype_t journal_block = {
@@ -2201,6 +2246,9 @@ void wtap_opttypes_initialize(void)
     wtap_opttype_option_register(&idb_block, OPT_IDB_FCSLEN, &if_fcslen);
     wtap_opttype_option_register(&idb_block, OPT_IDB_TSOFFSET, &if_tsoffset);
     wtap_opttype_option_register(&idb_block, OPT_IDB_HARDWARE, &if_hardware);
+    wtap_opttype_option_register(&idb_block, OPT_IDB_TXSPEED, &if_tx_speed);
+    wtap_opttype_option_register(&idb_block, OPT_IDB_TXSPEED, &if_rx_speed);
+    wtap_opttype_option_register(&idb_block, OPT_IDB_IANA_TZNAME, &if_iana_tzname);
 
     /*
      * Register the NRB and the options that can appear in it.
@@ -2240,11 +2288,17 @@ void wtap_opttypes_initialize(void)
      */
     wtap_opttype_block_register(&pkt_block);
     wtap_opttype_option_register(&pkt_block, OPT_PKT_FLAGS, &pkt_flags);
+    wtap_opttype_option_register(&pkt_block, OPT_PKT_HASH, &pkt_hash);
     wtap_opttype_option_register(&pkt_block, OPT_PKT_DROPCOUNT, &pkt_dropcount);
     wtap_opttype_option_register(&pkt_block, OPT_PKT_PACKETID, &pkt_id);
     wtap_opttype_option_register(&pkt_block, OPT_PKT_QUEUE, &pkt_queue);
-    wtap_opttype_option_register(&pkt_block, OPT_PKT_HASH, &pkt_hash);
     wtap_opttype_option_register(&pkt_block, OPT_PKT_VERDICT, &pkt_verdict);
+    wtap_opttype_option_register(&pkt_block, OPT_PKT_PROCIDTHRDID, &pkt_proc_id_thread_id);
+
+    /*
+     * Register the Sysdig block and the (no) options that can appear in it.
+     */
+    wtap_opttype_block_register(&sysdig_block);
 
     /*
      * Register the SJEB and the (no) options that can appear in it.

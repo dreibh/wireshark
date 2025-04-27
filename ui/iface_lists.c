@@ -42,10 +42,8 @@ fill_from_ifaces (interface_t *device)
             continue;
         }
 
-#if defined(HAVE_PCAP_CREATE)
         device->buffer = interface_opts->buffer_size;
         device->monitor_mode_enabled = interface_opts->monitor_mode;
-#endif
         device->pmode = interface_opts->promisc_mode;
         device->has_snaplen = interface_opts->has_snaplen;
         device->snaplen = interface_opts->snaplen;
@@ -91,12 +89,16 @@ get_iface_display_name(const char *description, const if_info_t *if_info)
         /* We have a friendly name from the OS. */
 #ifdef _WIN32
         /*
-         * On Windows, if we have a friendly name, just show it,
-         * don't show the name, as that's a string made out of
-         * the device GUID, and not at all friendly.
+         * On Windows, if we have a non-extcap capture device with a
+         * friendly name, just show it, don't show the name, as that's a
+         * string made out of the device GUID, and not at all friendly.
+         * Extcaps don't have GUIDs and might have multiple interfaces,
+         * so we do need to append our interface name in that case.
          */
-        return ws_strdup_printf("%s", if_info->friendly_name);
-#else
+        if (if_info->type != IF_EXTCAP) {
+            return ws_strdup_printf("%s", if_info->friendly_name);
+        }
+#endif
         /*
          * On UN*X, if we have a friendly name, show it along
          * with the interface name; the interface name is short
@@ -104,7 +106,6 @@ get_iface_display_name(const char *description, const if_info_t *if_info)
          * to interface names, so we should show it.
          */
         return ws_strdup_printf("%s: %s", if_info->friendly_name, if_info->name);
-#endif
     }
 
     if (if_info->vendor_description) {
@@ -319,11 +320,9 @@ scan_local_interfaces_filtered(GList * allowed_types, void (*update_cb)(void))
             }
             device.cfilter      = g_strdup(global_capture_opts.default_options.cfilter);
             device.timestamp_type = g_strdup(global_capture_opts.default_options.timestamp_type);
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
             if ((device.buffer = capture_dev_user_buffersize_find(if_info->name)) == -1) {
                 device.buffer = global_capture_opts.default_options.buffer_size;
             }
-#endif
 
             /* Extcap devices start with no cached args */
             device.external_cap_args_settings = NULL;
@@ -402,7 +401,6 @@ scan_local_interfaces_filtered(GList * allowed_types, void (*update_cb)(void))
         }
         if (caps != NULL && !caps->primary_msg) {
             GList *lt_list = caps->data_link_types;
-#if defined(HAVE_PCAP_CREATE)
             device.monitor_mode_enabled = monitor_mode && caps->can_set_rfmon;
             device.monitor_mode_supported = caps->can_set_rfmon;
             if (device.monitor_mode_enabled) {
@@ -425,7 +423,6 @@ scan_local_interfaces_filtered(GList * allowed_types, void (*update_cb)(void))
                     lt_list = (device.monitor_mode_enabled) ? caps->data_link_types_rfmon : caps->data_link_types;
                 }
             }
-#endif
             /*
              * Process the list of link-layer header types.
              */
@@ -453,10 +450,8 @@ scan_local_interfaces_filtered(GList * allowed_types, void (*update_cb)(void))
                 set_active_dlt(&device, global_capture_opts.default_options.linktype);
             }
         } else {
-#if defined(HAVE_PCAP_CREATE)
             device.monitor_mode_enabled = false;
             device.monitor_mode_supported = false;
-#endif
             device.active_dlt = -1;
         }
 
@@ -521,13 +516,9 @@ scan_local_interfaces_filtered(GList * allowed_types, void (*update_cb)(void))
                 g_strdup(device.name);
             device.hidden       = false;
             device.selected     = true;
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
             device.buffer = interface_opts->buffer_size;
-#endif
-#if defined(HAVE_PCAP_CREATE)
             device.monitor_mode_enabled = interface_opts->monitor_mode;
             device.monitor_mode_supported = false;
-#endif
             device.pmode = interface_opts->promisc_mode;
             device.has_snaplen = interface_opts->has_snaplen;
             device.snaplen = interface_opts->snaplen;
@@ -636,7 +627,7 @@ update_local_interfaces(void)
 
     for (i = 0; i < global_capture_opts.all_ifaces->len; i++) {
         device = &g_array_index(global_capture_opts.all_ifaces, interface_t, i);
-        device->if_info.type = capture_dev_user_linktype_find(device->name);
+        device->active_dlt = capture_dev_user_linktype_find(device->name);
         g_free(device->display_name);
         descr = capture_dev_user_descr_find(device->name);
         device->display_name = get_iface_display_name(descr, &device->if_info);

@@ -41,7 +41,7 @@ IOConsoleDialog::IOConsoleDialog(QWidget &parent,
     ui->setupUi(this);
 
     if (title.isEmpty())
-        title = QString("Console");
+        title = QStringLiteral("Console");
 
     loadGeometry(0, 0, title);
     loadSplitterState(ui->splitter);
@@ -56,13 +56,16 @@ IOConsoleDialog::IOConsoleDialog(QWidget &parent,
     connect(clear_button, &QPushButton::clicked, this, &IOConsoleDialog::on_clearActivated);
 
     ui->inputTextEdit->setFont(mainApp->monospaceFont());
-    ui->inputTextEdit->setPlaceholderText(QString(tr("Use %1 to evaluate."))
+    ui->inputTextEdit->setPlaceholderText(tr("Use %1 to evaluate.")
             .arg(eval_button->shortcut().toString(QKeySequence::NativeText)));
 
     ui->outputTextEdit->setFont(mainApp->monospaceFont());
     ui->outputTextEdit->setReadOnly(true);
 
-    ui->hintLabel->clear();
+    // Shrink down to a small but nonzero size.
+    int one_em = fontMetrics().height();
+    ui->hintLabel->setMinimumSize(one_em, one_em);
+    clearHintText();
 
     // Install print
     open_cb_(print_function, this, callback_data_);
@@ -77,7 +80,7 @@ IOConsoleDialog::~IOConsoleDialog()
 
 void IOConsoleDialog::setHintText(const QString &text)
 {
-    ui->hintLabel->setText(QString("<small><i>%1.</i></small>").arg(text));
+    ui->hintLabel->setText(QStringLiteral("<small><i>%1.</i></small>").arg(text));
 }
 
 void IOConsoleDialog::clearHintText()
@@ -88,7 +91,7 @@ void IOConsoleDialog::clearHintText()
 void IOConsoleDialog::clearSuccessHint()
 {
     // Text changed so we no longer have a success.
-    ui->hintLabel->clear();
+    clearHintText();
     // Disconnect this slot until the next success.
     disconnect(ui->inputTextEdit, &QTextEdit::textChanged, this, &IOConsoleDialog::clearSuccessHint);
 }
@@ -134,7 +137,6 @@ void IOConsoleDialog::appendOutputText(const QString &text)
 
 void IOConsoleDialog::on_clearActivated()
 {
-    ui->inputTextEdit->clear();
     ui->outputTextEdit->clear();
-    ui->hintLabel->clear();
+    clearHintText();
 }

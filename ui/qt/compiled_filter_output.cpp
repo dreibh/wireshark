@@ -13,14 +13,11 @@
 #include "compiled_filter_output.h"
 
 #ifdef HAVE_LIBPCAP
-#ifdef __MINGW32__
-#include <_bsd_types.h>
-#endif
-#include <pcap.h>
+#include <pcap/pcap.h>
 #endif
 
-#include "capture_opts.h"
 #include <wiretap/wtap.h>
+#include "ui/capture_opts.h"
 #include "ui/capture_globals.h"
 
 #include "main_application.h"

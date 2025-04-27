@@ -88,6 +88,7 @@ void proto_reg_handoff_icmpv6(void);
  * RFC 8781: Discovering PREF64 in Router Advertisements
  * RFC 8505: Registration Extensions for IPv6 over Low-Power Wireless Personal Area Network (6LoWPAN) Neighbor Discovery
  * RFC 8801: Discovering Provisioning Domain Names and Data
+ * RFC 9009: Efficient Route Invalidation
  * http://www.iana.org/assignments/icmpv6-parameters (last updated 2016-02-24)
  */
 
@@ -115,6 +116,7 @@ static int hf_icmpv6_nd_ra_flag_o;
 static int hf_icmpv6_nd_ra_flag_h;
 static int hf_icmpv6_nd_ra_flag_prf;
 static int hf_icmpv6_nd_ra_flag_p;
+static int hf_icmpv6_nd_ra_flag_s;
 static int hf_icmpv6_nd_ra_flag_rsv;
 static int hf_icmpv6_nd_ra_router_lifetime;
 static int hf_icmpv6_nd_ra_reachable_time;
@@ -147,6 +149,7 @@ static int hf_icmpv6_opt_prefix_flag;
 static int hf_icmpv6_opt_prefix_flag_l;
 static int hf_icmpv6_opt_prefix_flag_a;
 static int hf_icmpv6_opt_prefix_flag_r;
+static int hf_icmpv6_opt_prefix_flag_p;
 static int hf_icmpv6_opt_prefix_flag_reserved;
 static int hf_icmpv6_opt_prefix_valid_lifetime;
 static int hf_icmpv6_opt_prefix_preferred_lifetime;
@@ -214,12 +217,8 @@ static int hf_icmpv6_opt_padding;
 static int hf_icmpv6_opt_rdnss_lifetime;
 static int hf_icmpv6_opt_rdnss;
 static int hf_icmpv6_opt_efo;
-static int hf_icmpv6_opt_efo_m;
-static int hf_icmpv6_opt_efo_o;
-static int hf_icmpv6_opt_efo_h;
-static int hf_icmpv6_opt_efo_prf;
-static int hf_icmpv6_opt_efo_p;
 static int hf_icmpv6_opt_efo_rsv;
+static int hf_icmpv6_opt_efo_pex;
 static int hf_icmpv6_opt_hkr_pad_length;
 static int hf_icmpv6_opt_hkr_at;
 static int hf_icmpv6_opt_hkr_reserved;
@@ -382,7 +381,7 @@ static int hf_icmpv6_ni_reply_ipv4_address;
 /* RFC 4884: Extended ICMP */
 static int hf_icmpv6_length;
 
-/* RPL: RFC 6550/6997 : Routing and Discovery of P2P Routes in Low-Power and Lossy Networks. */
+/* RPL: RFC 6550/6997/9009 : Routing and Discovery of P2P Routes in Low-Power and Lossy Networks. Efficient route invalidation. */
 static int hf_icmpv6_rpl_dis_flag;
 static int hf_icmpv6_rpl_dio_instance;
 static int hf_icmpv6_rpl_dio_version;
@@ -408,6 +407,21 @@ static int hf_icmpv6_rpl_daoack_flag_rsv;
 static int hf_icmpv6_rpl_daoack_sequence;
 static int hf_icmpv6_rpl_daoack_status;
 static int hf_icmpv6_rpl_daoack_dodagid;
+static int hf_icmpv6_rpl_dco_instance;
+static int hf_icmpv6_rpl_dco_flags;
+static int hf_icmpv6_rpl_dco_flag_k;
+static int hf_icmpv6_rpl_dco_flag_d;
+static int hf_icmpv6_rpl_dco_flag_rsv;
+static int hf_icmpv6_rpl_dco_status;
+static int hf_icmpv6_rpl_dco_sequence;
+static int hf_icmpv6_rpl_dco_dodagid;
+static int hf_icmpv6_rpl_dcoack_instance;
+static int hf_icmpv6_rpl_dcoack_flag;
+static int hf_icmpv6_rpl_dcoack_flag_d;
+static int hf_icmpv6_rpl_dcoack_flag_rsv;
+static int hf_icmpv6_rpl_dcoack_sequence;
+static int hf_icmpv6_rpl_dcoack_status;
+static int hf_icmpv6_rpl_dcoack_dodagid;
 static int hf_icmpv6_rpl_cc_instance;
 static int hf_icmpv6_rpl_cc_flag;
 static int hf_icmpv6_rpl_cc_flag_r;
@@ -496,6 +510,7 @@ static int hf_icmpv6_rpl_opt_target_prefix_length;
 static int hf_icmpv6_rpl_opt_target_prefix;
 static int hf_icmpv6_rpl_opt_transit_flag;
 static int hf_icmpv6_rpl_opt_transit_flag_e;
+static int hf_icmpv6_rpl_opt_transit_flag_i;
 static int hf_icmpv6_rpl_opt_transit_flag_rsv;
 static int hf_icmpv6_rpl_opt_transit_pathseq;
 static int hf_icmpv6_rpl_opt_transit_pathctl;
@@ -639,6 +654,8 @@ static int ett_icmpv6_flag_secure;
 static int ett_icmpv6_flag_rpl_dio;
 static int ett_icmpv6_flag_rpl_dao;
 static int ett_icmpv6_flag_rpl_daoack;
+static int ett_icmpv6_flag_rpl_dco;
+static int ett_icmpv6_flag_rpl_dcoack;
 static int ett_icmpv6_flag_rpl_cc;
 static int ett_icmpv6_opt_name;
 static int ett_icmpv6_cga_param_name;
@@ -762,16 +779,18 @@ static const value_string icmpv6_type_val[] = {
 #define ICMP6_DST_UNREACH_INGR_EGR              5       /* source address failed ingress/egress policy */
 #define ICMP6_DST_UNREACH_REJECT                6       /* reject route to destination */
 #define ICMP6_DST_UNREACH_ERROR                 7       /* error in Source Routing Header */
+#define ICMP6_DST_UNREACH_HEADERS_TOO_LONG      8       /* headers too long */
 
 static const value_string icmpv6_unreach_code_val[] = {
-    { ICMP6_DST_UNREACH_NOROUTE,     "no route to destination" },
-    { ICMP6_DST_UNREACH_ADMIN,       "Administratively prohibited" },
-    { ICMP6_DST_UNREACH_BEYONDSCOPE, "Beyond scope of source address" },
-    { ICMP6_DST_UNREACH_ADDR,        "Address unreachable" },
-    { ICMP6_DST_UNREACH_NOPORT,      "Port unreachable" },
-    { ICMP6_DST_UNREACH_INGR_EGR,    "Source address failed ingress/egress policy" },
-    { ICMP6_DST_UNREACH_REJECT,      "Reject route to destination" },
-    { ICMP6_DST_UNREACH_ERROR,       "Error in Source Routing Header" }, /* [RFC6550] [RFC6554] */
+    { ICMP6_DST_UNREACH_NOROUTE,          "No route to destination" },
+    { ICMP6_DST_UNREACH_ADMIN,            "Administratively prohibited" },
+    { ICMP6_DST_UNREACH_BEYONDSCOPE,      "Beyond scope of source address" },
+    { ICMP6_DST_UNREACH_ADDR,             "Address unreachable" },
+    { ICMP6_DST_UNREACH_NOPORT,           "Port unreachable" },
+    { ICMP6_DST_UNREACH_INGR_EGR,         "Source address failed ingress/egress policy" },
+    { ICMP6_DST_UNREACH_REJECT,           "Reject route to destination" },
+    { ICMP6_DST_UNREACH_ERROR,            "Error in Source Routing Header" }, /* [RFC6550] [RFC6554] */
+    { ICMP6_DST_UNREACH_HEADERS_TOO_LONG, "Headers too long" }, /* [RFC8883] */
     { 0, NULL }
 };
 
@@ -779,8 +798,8 @@ static const value_string icmpv6_unreach_code_val[] = {
 #define ICMP6_TIME_EXCEED_REASSEMBLY    1       /* ttl==0 in reass */
 
 static const value_string icmpv6_timeex_code_val[] = {
-    { ICMP6_TIME_EXCEED_TRANSIT,    "hop limit exceeded in transit" },
-    { ICMP6_TIME_EXCEED_REASSEMBLY, "fragment reassembly time exceeded" },
+    { ICMP6_TIME_EXCEED_TRANSIT,    "Hop limit exceeded in transit" },
+    { ICMP6_TIME_EXCEED_REASSEMBLY, "Fragment reassembly time exceeded" },
     { 0, NULL }
 };
 
@@ -788,12 +807,26 @@ static const value_string icmpv6_timeex_code_val[] = {
 #define ICMP6_PARAMPROB_NEXTHEADER              1       /* unrecognized next header */
 #define ICMP6_PARAMPROB_OPTION                  2       /* unrecognized option */
 #define ICMP6_PARAMPROB_FIRSTFRAG               3       /* IPv6 First Fragment has incomplete IPv6 Header Chain [RFC 7112] */
+#define ICMP6_PARAMPROB_HEADERERROR             4       /* SR Upper-layer Header Error [RFC8754] */
+#define ICMP6_PARAMPROB_NEXTHEADER_INTERMEDIATE 5       /* Unrecognized Next Header type encountered by intermediate node [RFC8883] */
+#define ICMP6_PARAMPROB_HEADER_TOO_BIG          6       /* Extension header too big [RFC8883] */
+#define ICMP6_PARAMPROB_HEADER_CHAIN_TOO_LONG   7       /* Extension header chain too long [RFC8883] */
+#define ICMP6_PARAMPROB_TOO_MANY_EXTENTIONS     8       /* Too many extension headers [RFC8883] */
+#define ICMP6_PARAMPROB_TOO_MANY_OPTIONS        9       /* Too many options in extension header [RFC8883] */
+#define ICMP6_PARAMPROB_OPTION_TOO_BIG         10       /* Option too big [RFC8883] */
 
 static const value_string icmpv6_paramprob_code_val[] = {
-    { ICMP6_PARAMPROB_HEADER,     "erroneous header field encountered" },
-    { ICMP6_PARAMPROB_NEXTHEADER, "unrecognized Next Header type encountered" },
-    { ICMP6_PARAMPROB_OPTION,     "unrecognized IPv6 option encountered" },
-    { ICMP6_PARAMPROB_FIRSTFRAG,  "IPv6 First Fragment has incomplete IPv6 Header Chain" },
+    { ICMP6_PARAMPROB_HEADER,                  "Erroneous header field encountered" },
+    { ICMP6_PARAMPROB_NEXTHEADER,              "Unrecognized Next Header type encountered" },
+    { ICMP6_PARAMPROB_OPTION,                  "Unrecognized IPv6 option encountered" },
+    { ICMP6_PARAMPROB_FIRSTFRAG,               "IPv6 First Fragment has incomplete IPv6 Header Chain" },
+    { ICMP6_PARAMPROB_HEADERERROR,             "SR Upper-layer Header Error" },
+    { ICMP6_PARAMPROB_NEXTHEADER_INTERMEDIATE, "Unrecognized Next Header type encountered by intermediate node" },
+    { ICMP6_PARAMPROB_HEADER_TOO_BIG,          "Extension header too big" },
+    { ICMP6_PARAMPROB_HEADER_CHAIN_TOO_LONG,   "Extension header chain too long" },
+    { ICMP6_PARAMPROB_TOO_MANY_EXTENTIONS,     "Too many extension headers" },
+    { ICMP6_PARAMPROB_TOO_MANY_OPTIONS,        "Too many options in extension header" },
+    { ICMP6_PARAMPROB_OPTION_TOO_BIG,          "Option too big" },
     { 0, NULL }
 };
 
@@ -978,6 +1011,10 @@ static const true_false_string tfs_ni_flag_a = {
 #define ND_OPT_6CIO                     36
 #define ND_OPT_CAPPORT                  37
 #define ND_OPT_PREF64                   38
+#define ND_OPT_CRYPTOID_PARAMETERS      39
+#define ND_OPT_NDP_SIGNATURE            40
+#define ND_OPT_RESOURCE_DIR_ADDRESS     41
+#define ND_OPT_CONSISTENT_UPTIME        42
 
 static const value_string option_vals[] = {
 /*  1 */   { ND_OPT_SOURCE_LINKADDR,           "Source link-layer address" },
@@ -1018,10 +1055,16 @@ static const value_string option_vals[] = {
 /* 36 */   { ND_OPT_6CIO,                      "6LoWPAN Capability Indication Option" },   /* [RFC7400] */
 /* 37 */   { ND_OPT_CAPPORT,                   "DHCP Captive-Portal" },                    /* [RFC7710] */
 /* 38 */   { ND_OPT_PREF64,                    "PREF64 Option" },                          /* [RFC8781] */
-/* 39-137  Unassigned */
+/* 39 */   { ND_OPT_CRYPTOID_PARAMETERS,       "Crypto-ID Parameters Option (CIPO)" },     /* [RFC8928] */
+/* 40 */   { ND_OPT_NDP_SIGNATURE,             "NDP Signature Option (NDPSO)" },           /* [RFC8928] */
+/* 41 */   { ND_OPT_RESOURCE_DIR_ADDRESS,      "Resource Directory Address Option" },      /* [RFC9176] */
+/* 42 */   { ND_OPT_CONSISTENT_UPTIME,         "Consistent Uptime Option" },               /* [RFC-ietf-6lo-multicast-registration-19] */
+/* 43-137  Unassigned */
    { 138,                              "CARD Request" },                           /* [RFC4065] */
    { 139,                              "CARD Reply" },                             /* [RFC4065] */
-/* 140-252 Unassigned */
+/* 140-143 Unassigned */
+   { 144,                              "Encrypted DNS Option" },                   /* [RFC9463] */
+/* 145-252 Unassigned */
    { 253,                              "RFC3692-style Experiment 1" },             /* [RFC4727] */
    { 254,                              "RFC3692-style Experiment 2" },             /* [RFC4727] */
    { 0,                                NULL }
@@ -1032,7 +1075,8 @@ static const value_string option_vals[] = {
 #define ND_RA_FLAG_H    0x20
 #define ND_RA_FLAG_PRF  0x18
 #define ND_RA_FLAG_P    0x04
-#define ND_RA_FLAG_RSV  0x03
+#define ND_RA_FLAG_S    0x02
+#define ND_RA_FLAG_RSV  0x01
 
 #define ND_NA_FLAG_R    0x80000000
 #define ND_NA_FLAG_S    0x40000000
@@ -1156,22 +1200,23 @@ static const value_string icmpv6_option_cert_type_vals[] = {
 #define ND_RA_FLAG_RTPREF_MASK  0x18 /* 00011000 */
 #define ND_RA_FLAG_RESERV_MASK  0xE7 /* 11100111 */
 
-/* RFC 5075/5175 : IPv6 Router Advertisement Flags Option */
-#define FLAGS_EO_M      0x8000
-#define FLAGS_EO_O      0x4000
-#define FLAGS_EO_H      0x2000
-#define FLAGS_EO_PRF    0x1800
-#define FLAGS_EO_P      0x0400
-#define FLAGS_EO_RSV    0x02FF
+/* RFC 5175 : IPv6 Router Advertisement Flags Expansion Option */
+#define FLAGS_EO_RSV    0xFFFFFFFFFFFC
+#define FLAGS_EO_PEX    0x000000000003
 
+/* RFC 6275: Mobility Support in IPv6 */
+#define FLAGS_MIP6_M   0x8000
+#define FLAGS_MIP6_O   0x4000
+#define FLAGS_MIP6_RSV 0x3FFF
 
-
-/* RPL : RFC 6550 : Routing over Low-Power and Lossy Networks. */
+/* RPL: RFC 6550 : Routing over Low-Power and Lossy Networks. */
 /* RPL ICMPv6 Codes */
 #define ICMP6_RPL_DIS           0x00   /* DODAG Information Solicitation */
 #define ICMP6_RPL_DIO           0x01   /* DODAG Information Object */
 #define ICMP6_RPL_DAO           0x02   /* Destination Advertisement Object */
 #define ICMP6_RPL_DAOACK        0x03   /* Destination Advertisement Object Ack */
+#define ICMP6_RPL_DCO           0x07   /* Destination Cleanup Object */
+#define ICMP6_RPL_DCOACK        0x08   /* Destination Cleanup Object Acknowledgement */
 #define ICMP6_RPL_P2P_DRO       0x04   /* P2P Discovery Reply Object */
 #define ICMP6_RPL_P2P_DROACK    0x05   /* P2P Discovery Reply Object Acknowledgement */
 #define ICMP6_RPL_SDIS          0x80   /* Secure DODAG Information Solicitation */
@@ -1197,6 +1242,15 @@ static const value_string icmpv6_option_cert_type_vals[] = {
 /* RPL DAO ACK Flags */
 #define RPL_DAOACK_FLAG_D               0x80
 #define RPL_DAOACK_FLAG_RESERVED        0x7F
+
+/* RPL DCO Flags */
+#define RPL_DCO_FLAG_K                  0x80
+#define RPL_DCO_FLAG_D                  0x40
+#define RPL_DCO_FLAG_RESERVED           0x3F
+
+/* RPL DCO ACK Flags */
+#define RPL_DCOACK_FLAG_D               0x80
+#define RPL_DCOACK_FLAG_RESERVED        0x7F
 
 /* RPL CC Flags */
 #define RPL_CC_FLAG_R               0x80
@@ -1233,7 +1287,8 @@ static const value_string icmpv6_option_cert_type_vals[] = {
 #define RPL_OPT_CONFIG_FLAG_PCS         0x07
 #define RPL_OPT_CONFIG_FLAG_RESERVED    0xF0
 #define RPL_OPT_TRANSIT_FLAG_E          0x80
-#define RPL_OPT_TRANSIT_FLAG_RSV        0x7F
+#define RPL_OPT_TRANSIT_FLAG_I          0x40
+#define RPL_OPT_TRANSIT_FLAG_RSV        0x3F
 #define RPL_OPT_TRANSIT_PATHCTL_PC1     0xC0
 #define RPL_OPT_TRANSIT_PATHCTL_PC2     0x30
 #define RPL_OPT_TRANSIT_PATHCTL_PC3     0x0C
@@ -1291,6 +1346,8 @@ static const value_string rpl_code_val[] = {
     { ICMP6_RPL_DIO,        "DODAG Information Object" },
     { ICMP6_RPL_DAO,        "Destination Advertisement Object" },
     { ICMP6_RPL_DAOACK,     "Destination Advertisement Object Acknowledgment" },
+    { ICMP6_RPL_DCO,        "Destination Cleanup Object" },
+    { ICMP6_RPL_DCOACK,     "Destination Cleanup Object Acknowledgment" },
     { ICMP6_RPL_SDIS,       "Secure DODAG Information Solicitation" },
     { ICMP6_RPL_SDIO,       "Secure DODAG Information Object" },
     { ICMP6_RPL_SDAO,       "Secure Destination Advertisement Object" },
@@ -1836,6 +1893,7 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
                     &hf_icmpv6_opt_prefix_flag_l,
                     &hf_icmpv6_opt_prefix_flag_a,
                     &hf_icmpv6_opt_prefix_flag_r,
+                    &hf_icmpv6_opt_prefix_flag_p,
                     &hf_icmpv6_opt_prefix_flag_reserved,
                     NULL
                 };
@@ -2382,20 +2440,13 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
             case ND_OPT_FLAGS_EXTENSION: /* RA Flags Extension Option (26) */
             {
                 static int * const extension_flags[] = {
-                    &hf_icmpv6_opt_efo_m,
-                    &hf_icmpv6_opt_efo_o,
-                    &hf_icmpv6_opt_efo_h,
-                    &hf_icmpv6_opt_efo_prf,
-                    &hf_icmpv6_opt_efo_p,
                     &hf_icmpv6_opt_efo_rsv,
+                    &hf_icmpv6_opt_efo_pex,
                     NULL
                 };
 
                 proto_tree_add_bitmask(icmp6opt_tree, tvb, opt_offset, hf_icmpv6_opt_efo, ett_icmpv6_flag_efo, extension_flags, ENC_BIG_ENDIAN);
-                opt_offset += 2;
-
-                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_reserved, tvb, opt_offset, 4, ENC_NA);
-                opt_offset += 4;
+                opt_offset += 6;
                 break;
             }
             case ND_OPT_HANDOVER_KEY_REQUEST: /* Handover Key Request Option (27) */
@@ -3151,6 +3202,7 @@ dissect_icmpv6_rpl_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree
             case RPL_OPT_TRANSIT: {
                 static int * const rpl_transit_flags[] = {
                     &hf_icmpv6_rpl_opt_transit_flag_e,
+                    &hf_icmpv6_rpl_opt_transit_flag_i,
                     &hf_icmpv6_rpl_opt_transit_flag_rsv,
                     NULL
                 };
@@ -3610,6 +3662,84 @@ dissect_rpl_control(tvbuff_t *tvb, int rpl_offset, packet_info *pinfo _U_, proto
             if(flags & RPL_DAOACK_FLAG_D)
             {
                 proto_tree_add_item(icmp6_tree, hf_icmpv6_rpl_daoack_dodagid, tvb, rpl_offset, 16, ENC_NA);
+                rpl_offset += 16;
+            }
+
+            /* Options */
+            rpl_offset = dissect_icmpv6_rpl_opt(tvb, rpl_offset, pinfo, icmp6_tree, icmp6_code);
+            break;
+        }
+        case ICMP6_RPL_DCO: /* Destination Cleanup Object (7) */
+
+        {
+            uint8_t flags;
+            static int * const rpl_dco_flags[] = {
+                &hf_icmpv6_rpl_dco_flag_k,
+                &hf_icmpv6_rpl_dco_flag_d,
+                &hf_icmpv6_rpl_dco_flag_rsv,
+                NULL
+            };
+
+            /* DCO Instance */
+            proto_tree_add_item(icmp6_tree, hf_icmpv6_rpl_dco_instance, tvb, rpl_offset, 1, ENC_BIG_ENDIAN);
+            rpl_offset += 1;
+
+            /* Flags */
+            proto_tree_add_bitmask(icmp6_tree, tvb, rpl_offset, hf_icmpv6_rpl_dco_flags,
+                                ett_icmpv6_flag_rpl_dco, rpl_dco_flags, ENC_BIG_ENDIAN);
+            flags = tvb_get_uint8(tvb, rpl_offset);
+            rpl_offset += 1;
+
+            /* RPL status */
+            proto_tree_add_item(icmp6_tree, hf_icmpv6_rpl_dco_status, tvb, rpl_offset, 1, ENC_BIG_ENDIAN);
+            rpl_offset += 1;
+
+            /* Sequence */
+            proto_tree_add_item(icmp6_tree, hf_icmpv6_rpl_dco_sequence, tvb, rpl_offset, 1, ENC_BIG_ENDIAN);
+            rpl_offset += 1;
+
+            /* DODAGID */
+            if(flags & RPL_DCO_FLAG_D)
+            {
+                proto_tree_add_item(icmp6_tree, hf_icmpv6_rpl_dco_dodagid, tvb, rpl_offset, 16, ENC_NA);
+                rpl_offset += 16;
+            }
+            /* Options */
+            rpl_offset = dissect_icmpv6_rpl_opt(tvb, rpl_offset, pinfo, icmp6_tree, icmp6_code);
+            break;
+        }
+        case ICMP6_RPL_DCOACK: /* Destination Advertisement Object Acknowledgment (8) */
+
+        {
+            uint8_t flags;
+            static int * const rpl_dcoack_flags[] = {
+                &hf_icmpv6_rpl_dcoack_flag_d,
+                &hf_icmpv6_rpl_dcoack_flag_rsv,
+                NULL
+            };
+
+            /* DCO Instance */
+            proto_tree_add_item(icmp6_tree, hf_icmpv6_rpl_dcoack_instance, tvb, rpl_offset, 1, ENC_BIG_ENDIAN);
+            rpl_offset += 1;
+
+            /* Flags */
+            proto_tree_add_bitmask(icmp6_tree, tvb, rpl_offset, hf_icmpv6_rpl_dcoack_flag,
+                                ett_icmpv6_flag_rpl_dcoack, rpl_dcoack_flags, ENC_BIG_ENDIAN);
+            flags = tvb_get_uint8(tvb, rpl_offset);
+            rpl_offset += 1;
+
+            /* DCO Sequence */
+            proto_tree_add_item(icmp6_tree, hf_icmpv6_rpl_dcoack_sequence, tvb, rpl_offset, 1, ENC_BIG_ENDIAN);
+            rpl_offset += 1;
+
+            /* Status */
+            proto_tree_add_item(icmp6_tree, hf_icmpv6_rpl_dcoack_status, tvb, rpl_offset, 1, ENC_BIG_ENDIAN);
+            rpl_offset += 1;
+
+            /* DODAGID */
+            if(flags & RPL_DCOACK_FLAG_D)
+            {
+                proto_tree_add_item(icmp6_tree, hf_icmpv6_rpl_dcoack_dodagid, tvb, rpl_offset, 16, ENC_NA);
                 rpl_offset += 16;
             }
 
@@ -4551,6 +4681,7 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                     &hf_icmpv6_nd_ra_flag_h,
                     &hf_icmpv6_nd_ra_flag_prf,
                     &hf_icmpv6_nd_ra_flag_p,
+                    &hf_icmpv6_nd_ra_flag_s,
                     &hf_icmpv6_nd_ra_flag_rsv,
                     NULL
                 };
@@ -5060,6 +5191,9 @@ proto_register_icmpv6(void)
         { &hf_icmpv6_nd_ra_flag_p,
           { "ND Proxy", "icmpv6.nd.ra.flag.p", FT_BOOLEAN, 8, TFS(&tfs_set_notset), ND_RA_FLAG_P,
             "Neighbor Discovery Proxy (Experimental - RFC4389)" , HFILL }},
+          { &hf_icmpv6_nd_ra_flag_s,
+          { "SNAC Router", "icmpv6.nd.ra.flag.s", FT_BOOLEAN, 8, TFS(&tfs_set_notset), ND_RA_FLAG_S,
+            "Indicates whether the router operates as Stub Network Auto-Configuring (SNAC) router" , HFILL }},
         { &hf_icmpv6_nd_ra_flag_rsv,
           { "Reserved", "icmpv6.nd.ra.flag.rsv", FT_UINT8, BASE_DEC, NULL, ND_RA_FLAG_RSV,
             "Must be Zero", HFILL }},
@@ -5149,15 +5283,18 @@ proto_register_icmpv6(void)
             NULL, HFILL }},
         { &hf_icmpv6_opt_prefix_flag_l,
           { "On-link flag(L)", "icmpv6.opt.prefix.flag.l", FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x80,
-            "When set, indicates that this prefix can be used for on-link determination", HFILL }},
+            "When set, indicates that this prefix can be used for on-link determination, and traffic to those destinations is sent directly (not via routers)", HFILL }},
         { &hf_icmpv6_opt_prefix_flag_a,
           { "Autonomous address-configuration flag(A)", "icmpv6.opt.prefix.flag.a", FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x40,
-            "When set indicates that this prefix can be used for stateless address configuration", HFILL }},
+            "When set, indicates that this prefix can be used for stateless address configuration", HFILL }},
         { &hf_icmpv6_opt_prefix_flag_r,
           { "Router address flag(R)", "icmpv6.opt.prefix.flag.r", FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x20,
-            "When set indicates that the Prefix field contains a complete IP address assigned to the sending router", HFILL }},
+            "When set, indicates that the Prefix field contains a complete IP address assigned to the sending router", HFILL }},
+        { &hf_icmpv6_opt_prefix_flag_p,
+          { "Prefix Delegation preferred flag (P)", "icmpv6.opt.prefix.flag.p", FT_BOOLEAN, 8, TFS(&tfs_set_notset), 0x10,
+            "When set, indicates that the network prefers that clients use Prefix Delegation (PD) instead of acquiring individual addresses via SLAAC or DHCPv6 address assignment.", HFILL }},
         { &hf_icmpv6_opt_prefix_flag_reserved,
-          { "Reserved", "icmpv6.opt.prefix.flag.reserved", FT_UINT8, BASE_DEC, NULL, 0x1f,
+          { "Reserved", "icmpv6.opt.prefix.flag.reserved", FT_UINT8, BASE_DEC, NULL, 0xf,
             NULL, HFILL }},
         { &hf_icmpv6_opt_prefix_valid_lifetime,
           { "Valid Lifetime", "icmpv6.opt.prefix.valid_lifetime", FT_UINT32, BASE_DEC|BASE_SPECIAL_VALS, VALS(unique_infinity), 0x00,
@@ -5363,26 +5500,14 @@ proto_register_icmpv6(void)
           { "Recursive DNS Servers", "icmpv6.opt.rdnss", FT_IPv6, BASE_NONE, NULL, 0x0,
             NULL, HFILL }},
         { &hf_icmpv6_opt_efo,
-          { "Flags Expansion Option", "icmpv6.opt.efo", FT_UINT16, BASE_HEX, NULL, 0x0,
+          { "Flags Expansion Option", "icmpv6.opt.efo", FT_UINT48, BASE_HEX, NULL, 0x0,
             NULL, HFILL }},
-        { &hf_icmpv6_opt_efo_m,
-          { "Managed address configuration", "icmpv6.opt.efo.m", FT_BOOLEAN, 16, TFS(&tfs_set_notset), FLAGS_EO_M,
-            "When set, it indicates that addresses are available via DHCPv6", HFILL }},
-        { &hf_icmpv6_opt_efo_o,
-          { "Other configuration", "icmpv6.opt.efo.o", FT_BOOLEAN, 16, TFS(&tfs_set_notset), FLAGS_EO_O,
-            "When set, it indicates that other configuration information is available via DHCPv6", HFILL }},
-        { &hf_icmpv6_opt_efo_h,
-          { "Home Agent", "icmpv6.opt.efo.h", FT_BOOLEAN, 16, TFS(&tfs_set_notset), FLAGS_EO_H,
-            "When set, it indicate that the router sending this Router Advertisement is also functioning as a Mobile IPv6 home agent on this link", HFILL }},
-        { &hf_icmpv6_opt_efo_prf,
-          { "Prf (Default Router Preference)", "icmpv6.opt.efo.prf", FT_UINT16, BASE_DEC, VALS(nd_flag_router_pref), FLAGS_EO_PRF,
-            "Indicates whether to prefer this router over other default routers", HFILL }},
-        { &hf_icmpv6_opt_efo_p,
-          { "Proxy", "icmpv6.opt.efo.p", FT_BOOLEAN, 16, TFS(&tfs_set_notset), FLAGS_EO_P,
-           NULL, HFILL }},
         { &hf_icmpv6_opt_efo_rsv,
-          { "Reserved", "icmpv6.opt.efo.rsv", FT_UINT16, BASE_DEC, NULL, FLAGS_EO_RSV,
+          { "Reserved", "icmpv6.opt.efo.rsv", FT_UINT48, BASE_HEX, NULL, FLAGS_EO_RSV,
             "Must be Zero", HFILL }},
+        { &hf_icmpv6_opt_efo_pex,
+          { "Private Experimentation", "icmpv6.opt.efo.pex", FT_UINT48, BASE_HEX, NULL, FLAGS_EO_PEX,
+            NULL, HFILL }},
         { &hf_icmpv6_opt_hkr_pad_length,
           { "Pad Length", "icmpv6.opt.hkr.pad_length", FT_UINT8, BASE_DEC, NULL, 0x0,
             "The number of padding octets beyond the end of the Handover Key", HFILL }},
@@ -5672,13 +5797,13 @@ proto_register_icmpv6(void)
           { "Flags", "icmpv6.mip6.flag", FT_UINT16, BASE_HEX, NULL, 0x0,
             NULL, HFILL }},
         { &hf_icmpv6_mip6_flag_m,
-          { "Managed address configuration", "icmpv6.mip6.flag.m", FT_BOOLEAN, 16, TFS(&tfs_set_notset), FLAGS_EO_M,
+          { "Managed address configuration", "icmpv6.mip6.flag.m", FT_BOOLEAN, 16, TFS(&tfs_set_notset), FLAGS_MIP6_M,
             "When set, it indicates that addresses are available via DHCPv6", HFILL }},
         { &hf_icmpv6_mip6_flag_o,
-          { "Other configuration", "icmpv6.mip6.flag.o", FT_BOOLEAN, 16, TFS(&tfs_set_notset), FLAGS_EO_O,
+          { "Other configuration", "icmpv6.mip6.flag.o", FT_BOOLEAN, 16, TFS(&tfs_set_notset), FLAGS_MIP6_O,
             "When set, it indicates that other configuration information is available via DHCPv6", HFILL }},
         { &hf_icmpv6_mip6_flag_rsv,
-          { "Reserved", "icmpv6.mip6.flag.rsv", FT_UINT16, BASE_DEC, NULL, 0x3FFF,
+          { "Reserved", "icmpv6.mip6.flag.rsv", FT_UINT16, BASE_DEC, NULL, FLAGS_MIP6_RSV,
             "Must be Zero", HFILL }},
 
         /* RFC3810: Multicast Listener Discovery Version 2 (MLDv2) for IPv6 */
@@ -5891,6 +6016,51 @@ proto_register_icmpv6(void)
              "Indicates the completion", HFILL }},
         { &hf_icmpv6_rpl_daoack_dodagid,
            { "DODAGID", "icmpv6.rpl.daoack.dodagid", FT_IPv6, BASE_NONE, NULL, 0x0,
+             "IPv6 address integer set by a DODAG root which uniquely identifies a DODAG", HFILL }},
+        { &hf_icmpv6_rpl_dco_instance,
+           { "RPLInstanceID", "icmpv6.rpl.dco.instance", FT_UINT8, BASE_DEC, NULL, 0x0,
+             "Indicating the topology instance associated with the DODAG as learned from the DIO", HFILL }},
+        { &hf_icmpv6_rpl_dco_flags,
+           { "Flags", "icmpv6.rpl.dco.flags", FT_UINT8, BASE_HEX, NULL, 0x0,
+             NULL, HFILL }},
+        { &hf_icmpv6_rpl_dco_flag_k,
+           { "DCO-ACK Request (K)", "icmpv6.rpl.dco.flag.k", FT_BOOLEAN, 8, NULL, RPL_DCO_FLAG_K,
+             "Indicates that the recipient is expected to send a DCO-ACK back", HFILL }},
+        { &hf_icmpv6_rpl_dco_flag_d,
+           { "DODAGID Present (D)", "icmpv6.rpl.dco.flag.d", FT_BOOLEAN, 8, NULL, RPL_DCO_FLAG_D,
+             "Indicates that the DODAGID field is present", HFILL }},
+        { &hf_icmpv6_rpl_dco_flag_rsv,
+           { "Reserved", "icmpv6.rpl.dco.flag.rsv", FT_UINT8, BASE_DEC, NULL, RPL_DCO_FLAG_RESERVED,
+             "Must be zero", HFILL }},
+        {&hf_icmpv6_rpl_dco_status,
+           {"RPL Status", "icmpv6.rpl.dco.status", FT_UINT8, BASE_DEC, NULL, 0x0,
+            "Set by the root common parent that generates the DCO, propagated unchanged", HFILL }},
+        { &hf_icmpv6_rpl_dco_sequence,
+           { "DCO Sequence", "icmpv6.rpl.dco.sequence", FT_UINT8, BASE_DEC, NULL, 0x0,
+             "Incremented at each unique DCO message from a node and echoed in the DCO-ACK message", HFILL }},
+        { &hf_icmpv6_rpl_dco_dodagid,
+           { "DODAGID", "icmpv6.rpl.dco.dodagid", FT_IPv6, BASE_NONE, NULL, 0x0,
+             "IPv6 address set by a DODAG root which uniquely identifies a DODAG", HFILL }},
+        { &hf_icmpv6_rpl_dcoack_instance,
+           { "RPLInstanceID", "icmpv6.rpl.dcoack.instance", FT_UINT8, BASE_DEC, NULL, 0x0,
+             "Indicating the topology instance associated with the DODAG, as learned from the DIO", HFILL }},
+        { &hf_icmpv6_rpl_dcoack_flag,
+           { "Flag", "icmpv6.rpl.dcoack.flag", FT_UINT8, BASE_HEX, NULL, 0x0,
+             NULL, HFILL }},
+        { &hf_icmpv6_rpl_dcoack_flag_d,
+           { "DODAGID Present (D)", "icmpv6.rpl.dcoack.flag.d", FT_BOOLEAN, 8, NULL, RPL_DCOACK_FLAG_D,
+             "Indicates that the DODAGID field is present", HFILL }},
+        { &hf_icmpv6_rpl_dcoack_flag_rsv,
+           { "Reserved", "icmpv6.rpl.dcoack.flag.rsv", FT_UINT8, BASE_DEC, NULL, RPL_DCOACK_FLAG_RESERVED,
+             "Must be zero", HFILL }},
+        { &hf_icmpv6_rpl_dcoack_sequence,
+           { "DCO-ACK Sequence", "icmpv6.rpl.dcoack.sequence", FT_UINT8, BASE_DEC, NULL, 0x0,
+             "Incremented at each DCO message from a node, and echoed in the DCO-ACK by the recipient", HFILL }},
+        { &hf_icmpv6_rpl_dcoack_status,
+           { "Status", "icmpv6.rpl.dcoack.status", FT_UINT8, BASE_DEC, NULL, 0x0,
+             "Indicates the completion", HFILL }},
+        { &hf_icmpv6_rpl_dcoack_dodagid,
+           { "DODAGID", "icmpv6.rpl.dcoack.dodagid", FT_IPv6, BASE_NONE, NULL, 0x0,
              "IPv6 address integer set by a DODAG root which uniquely identifies a DODAG", HFILL }},
         { &hf_icmpv6_rpl_cc_instance,
            { "RPLInstanceID", "icmpv6.rpl.cc.instance", FT_UINT8, BASE_DEC, NULL, 0x0,
@@ -6156,6 +6326,9 @@ proto_register_icmpv6(void)
          { &hf_icmpv6_rpl_opt_transit_flag_e,
            { "External", "icmpv6.rpl.opt.transit.flag.e", FT_BOOLEAN, 8, TFS(&tfs_set_notset), RPL_OPT_TRANSIT_FLAG_E,
              "Indicate that the parent router redistributes external targets into the RPL network", HFILL }},
+         { &hf_icmpv6_rpl_opt_transit_flag_i,
+           { "InvalidatePreviousRoute", "icmpv6.rpl.opt.transit.flag.i", FT_BOOLEAN, 8, TFS(&tfs_set_notset), RPL_OPT_TRANSIT_FLAG_I,
+             "Indicate to the common ancestor that it wishes to invalidate any previous route between the two paths", HFILL }},
          { &hf_icmpv6_rpl_opt_transit_flag_rsv,
            { "Reserved", "icmpv6.rpl.opt.transit.flag.rsv", FT_UINT8, BASE_DEC, NULL, RPL_OPT_TRANSIT_FLAG_RSV,
              "Must be Zero", HFILL }},
@@ -6445,6 +6618,8 @@ proto_register_icmpv6(void)
         &ett_icmpv6_flag_rpl_dio,
         &ett_icmpv6_flag_rpl_dao,
         &ett_icmpv6_flag_rpl_daoack,
+        &ett_icmpv6_flag_rpl_dco,
+        &ett_icmpv6_flag_rpl_dcoack,
         &ett_icmpv6_flag_rpl_cc,
         &ett_icmpv6_opt_name,
         &ett_icmpv6_cga_param_name,

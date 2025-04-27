@@ -16,7 +16,6 @@
 #include "epan/epan_dissect.h"
 
 #include "file.h"
-#include "frame_tvbuff.h"
 
 #include "rtp_analysis_dialog.h"
 
@@ -156,7 +155,7 @@ RtpPlayerDialog *RtpPlayerDialog::openRtpPlayerDialog(QWidget &parent, CaptureFi
 }
 
 RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_running _U_) :
-    WiresharkDialog(parent, cf)
+    RtpBaseDialog(parent, cf)
 #ifdef QT_MULTIMEDIA_LIB
     , ui(new Ui::RtpPlayerDialog)
     , first_stream_rel_start_time_(0.0)
@@ -327,6 +326,7 @@ RtpPlayerDialog::RtpPlayerDialog(QWidget &parent, CaptureFile &cf, bool capture_
                 QCP::iRangeDrag |
                 QCP::iRangeZoom
                 );
+    ui->audioPlot->axisRect()->setRangeZoom(Qt::Horizontal);
 
     graph_ctx_menu_->addSeparator();
     list_ctx_menu_ = new QMenu(this);
@@ -590,12 +590,12 @@ void RtpPlayerDialog::createPlot(bool rescale_axes)
             QDateTime date_time2 = QDateTime::fromMSecsSinceEpoch((audio_stream->stopRelTime() + first_stream_abs_start_time_ - audio_stream->startRelTime()) * 1000.0);
             QString time_str1 = date_time1.toString("yyyy-MM-dd hh:mm:ss.zzz");
             QString time_str2 = date_time2.toString("yyyy-MM-dd hh:mm:ss.zzz");
-            span_str = QString("%1 - %2 (%3)")
+            span_str = QStringLiteral("%1 - %2 (%3)")
                 .arg(time_str1)
                 .arg(time_str2)
                 .arg(QString::number(audio_stream->stopRelTime() - audio_stream->startRelTime(), 'f', prefs.gui_decimal_places1));
         } else {
-            span_str = QString("%1 - %2 (%3)")
+            span_str = QStringLiteral("%1 - %2 (%3)")
                 .arg(QString::number(audio_stream->startRelTime(), 'f', prefs.gui_decimal_places1))
                 .arg(QString::number(audio_stream->stopRelTime(), 'f', prefs.gui_decimal_places1))
                 .arg(QString::number(audio_stream->stopRelTime() - audio_stream->startRelTime(), 'f', prefs.gui_decimal_places1));
@@ -682,7 +682,7 @@ void RtpPlayerDialog::fillTappedColumns()
 
     // Get all rows, immutable list. Later changes in rows might reorder them
     QList<QTreeWidgetItem *> items = ui->streamTreeWidget->findItems(
-        QString("*"), Qt::MatchWrap | Qt::MatchWildcard | Qt::MatchRecursive);
+        QStringLiteral("*"), Qt::MatchWrap | Qt::MatchWildcard | Qt::MatchRecursive);
 
     // Update rows by calculated values, it might reorder them in view...
     foreach(QTreeWidgetItem *ti, items) {
@@ -697,11 +697,11 @@ void RtpPlayerDialog::fillTappedColumns()
                 (rtpstream->rtp_stats.first_packet_num == rtpstream->setup_frame_number)
                ) {
                 int packet = rtpstream->rtp_stats.first_packet_num;
-                ti->setText(first_pkt_col_, QString("RTP %1").arg(packet));
+                ti->setText(first_pkt_col_, QStringLiteral("RTP %1").arg(packet));
                 ti->setData(first_pkt_col_, Qt::UserRole, QVariant(packet));
             } else {
                 int packet = rtpstream->setup_frame_number;
-                ti->setText(first_pkt_col_, QString("SETUP %1").arg(rtpstream->setup_frame_number));
+                ti->setText(first_pkt_col_, QStringLiteral("SETUP %1").arg(rtpstream->setup_frame_number));
                 ti->setData(first_pkt_col_, Qt::UserRole, QVariant(packet));
             }
             ti->setText(num_pkts_col_, QString::number(rtpstream->packet_count));
@@ -763,7 +763,7 @@ void RtpPlayerDialog::addSingleRtpStream(rtpstream_id_t *id)
         } else {
             audio_routing.setChannel(channel_mono);
         }
-        ti->setToolTip(channel_col_, QString(tr("Double click on cell to change audio routing")));
+        ti->setToolTip(channel_col_, tr("Double click on cell to change audio routing"));
         formatAudioRouting(ti, audio_routing);
         audio_stream->setAudioRouting(audio_routing);
 
@@ -2108,6 +2108,35 @@ void RtpPlayerDialog::on_todCheckBox_toggled(bool)
     x_axis->moveRange(move);
     drawStartPlayMarker();
     ui->audioPlot->replot();
+}
+
+void RtpPlayerDialog::on_visualSRSpinBox_editingFinished()
+{
+    lockUI();
+    // Show information for a user - it can last a long time...
+    playback_error_.clear();
+    ui->hintLabel->setText("<i><small>" + tr("Resampling waveform...") + "</i></small>");
+    mainApp->processEvents();
+
+    int row_count = ui->streamTreeWidget->topLevelItemCount();
+
+    // Reset stream values
+    for (int row = 0; row < row_count; row++) {
+        QTreeWidgetItem *ti = ui->streamTreeWidget->topLevelItem(row);
+        RtpAudioStream *audio_stream = ti->data(stream_data_col_, Qt::UserRole).value<RtpAudioStream*>();
+
+        audio_stream->setVisualSampleRate(static_cast<unsigned>(ui->visualSRSpinBox->value()));
+        audio_stream->decodeVisual();
+    }
+
+    for (int col = 0; col < ui->streamTreeWidget->columnCount() - 1; col++) {
+        ui->streamTreeWidget->resizeColumnToContents(col);
+    }
+
+    createPlot();
+
+    updateWidgets();
+    unlockUI();
 }
 
 void RtpPlayerDialog::on_buttonBox_helpRequested()

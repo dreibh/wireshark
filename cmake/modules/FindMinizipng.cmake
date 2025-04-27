@@ -1,5 +1,6 @@
 #
-# - Find minizip-ng libraries
+# - Find minizip-ng library, only if it has the compatibility layer with
+#   the original minizip
 #
 #  MINIZIPNG_INCLUDE_DIRS - where to find minizip-ng headers.
 #  MINIZIPNG_LIBRARIES    - List of libraries when using minizip-ng.
@@ -16,15 +17,15 @@ endif()
 
 find_path(MINIZIPNG_INCLUDE_DIR
   NAMES
-    mz_compat.h
-    minizip-ng/mz_compat.h
+    unzip.h
+    minizip-ng/unzip.h
   HINTS
     ${MINIZIPNG_INCLUDE_DIRS}
     "${MINIZIPNG_HINTS}/include"
 )
 
 get_filename_component(MINIZIPNG_PARENT_DIR ${MINIZIPNG_INCLUDE_DIR} DIRECTORY)
-if(EXISTS "${MINIZIPNG_PARENT_DIR}/minizip-ng/mz_compat.h")
+if(EXISTS "${MINIZIPNG_PARENT_DIR}/minizip-ng/unzip.h")
   set(MINIZIPNG_INCLUDE_DIR "${MINIZIPNG_PARENT_DIR}")
 endif()
 
@@ -106,6 +107,12 @@ if(MINIZIPNG_FOUND)
     AddWSWinDLLS(MINIZIPNG MINIZIPNG_HINTS "bz2*" "zstd*")
 
     mark_as_advanced(MINIZIPNG_DLL_DIR MINIZIPNG_DLLS MINIZIPNG_PDBS)
+  endif()
+  if(MINIZIPNG_INCLUDE_DIR)
+    set(_version_regex "^#define[ \t]+MZ_VERSION[ \t(]+\"([^\"]+)\".*")
+    file(STRINGS "${MINIZIPNG_INCLUDE_DIR}/minizip-ng/mz.h" MINIZIPNG_VERSION REGEX "${_version_regex}")
+    string(REGEX REPLACE "${_version_regex}" "\\1" MINIZIPNG_VERSION "${MINIZIPNG_VERSION}")
+    unset(_version_regex)
   endif()
 else()
   set(MINIZIPNG_LIBRARIES)

@@ -52,7 +52,7 @@ extern "C" {
  * (dissector) code cannot.
  */
 
-/* obscure data type to handle an uat */
+/* opaque data type to handle an uat */
 typedef struct epan_uat uat_t;
 /********************************************
  * Callbacks:
@@ -278,7 +278,7 @@ typedef struct _uat_field_t {
  * @param data_ptr Although a void*, this is really a pointer to a null terminated array of pointers to the data
  * @param num_items_ptr A pointer with number of items
  * @param flags flags indicating what this UAT affects
- * @param help A pointer to help text
+ * @param help A pointer to the name of a Users Guide section
  * @param copy_cb A function that copies the data in the struct
  * @param update_cb Will be called when a record is updated
  * @param free_cb Will be called to destroy a struct in the dataset
@@ -372,6 +372,8 @@ bool uat_fld_chk_str(void*, const char*, unsigned, const void*, const void*, cha
 bool uat_fld_chk_oid(void*, const char*, unsigned, const void*, const void*, char** err);
 WS_DLL_PUBLIC
 bool uat_fld_chk_proto(void*, const char*, unsigned, const void*, const void*, char** err);
+WS_DLL_PUBLIC
+bool uat_fld_chk_field(void*, const char*, unsigned, const void*, const void*, char** err);
 WS_DLL_PUBLIC
 bool uat_fld_chk_num_dec(void*, const char*, unsigned, const void*, const void*, char** err);
 WS_DLL_PUBLIC
@@ -499,7 +501,7 @@ static void basename ## _ ## field_name ## _tostr_cb(void* rec, char** out_ptr, 
 #define UAT_PROTO_FIELD_CB_DEF(basename,field_name,rec_t) UAT_CSTRING_CB_DEF(basename,field_name,rec_t)
 
 #define UAT_FLD_PROTO_FIELD(basename,field_name,title,desc) \
-    {#field_name, title, PT_TXTMOD_PROTO_FIELD, {uat_fld_chk_str,basename ## _ ## field_name ## _set_cb,basename ## _ ## field_name ## _tostr_cb},{0,0,0},0,desc,FLDFILL}
+    {#field_name, title, PT_TXTMOD_PROTO_FIELD, {uat_fld_chk_field,basename ## _ ## field_name ## _set_cb,basename ## _ ## field_name ## _tostr_cb},{0,0,0},0,desc,FLDFILL}
 
 /*
  * OID - just a CSTRING with a specific check routine

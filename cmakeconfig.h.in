@@ -17,7 +17,7 @@
 #define VERSION_MICRO ${PROJECT_PATCH_VERSION}
 
 /* Version number of Stratoshark and associated utilities */
-#define LOG_VERSION "${LOG_PROJECT_VERSION}${VERSION_EXTRA}"
+#define STRATOSHARK_VERSION "${STRATOSHARK_VERSION}${VERSION_EXTRA}"
 
 #define PLUGIN_PATH_ID "${PLUGIN_PATH_ID}"
 #define VERSION_FLAVOR "${VERSION_FLAVOR}"
@@ -63,6 +63,9 @@
 
 /* Define to use the MaxMind DB library */
 #cmakedefine HAVE_MAXMINDDB 1
+/* MaxmindDB version */
+#define MAXMINDDB_VERSION "${MAXMINDDB_VERSION}"
+
 
 /* Define to 1 if you have the <ifaddrs.h> header file. */
 #cmakedefine HAVE_IFADDRS_H 1
@@ -177,6 +180,7 @@
 
 /* Define to use snappy library */
 #cmakedefine HAVE_SNAPPY 1
+#define SNAPPY_VERSION "${SNAPPY_VERSION}"
 
 /* Define to use zstd library */
 #cmakedefine HAVE_ZSTD 1
@@ -223,38 +227,14 @@
 /* Define to 1 if you have the macOS CFPropertyListCreateWithStream function */
 #cmakedefine HAVE_CFPROPERTYLISTCREATEWITHSTREAM 1
 
-/* Define to 1 if you have the `pcap_create' function. */
-#cmakedefine HAVE_PCAP_CREATE 1
-
-/* Define to 1 if the capture buffer size can be set. */
-#cmakedefine CAN_SET_CAPTURE_BUFFER_SIZE 1
-
-/* Define to 1 if you have the `pcap_freecode' function. */
-#cmakedefine HAVE_PCAP_FREECODE 1
-
-/* Define to 1 if you have the `pcap_free_datalinks' function. */
-#cmakedefine HAVE_PCAP_FREE_DATALINKS 1
-
 /* Define to 1 if you have the `pcap_open' function. */
 #cmakedefine HAVE_PCAP_OPEN 1
 
-/* Define to 1 if you have libpcap/WinPcap/Npcap remote capturing support. */
+/* Define to 1 if you have libpcap/Npcap remote capturing support. */
 #cmakedefine HAVE_PCAP_REMOTE 1
 
 /* Define to 1 if you have the `pcap_setsampling' function. */
 #cmakedefine HAVE_PCAP_SETSAMPLING 1
-
-/* Define to 1 if you have the `pcap_set_tstamp_precision' function. */
-#cmakedefine HAVE_PCAP_SET_TSTAMP_PRECISION 1
-
-/* Define to 1 if you have the `pcap_set_tstamp_type' function. */
-#cmakedefine HAVE_PCAP_SET_TSTAMP_TYPE 1
-
-/* Define to 1 if you have the `PCAP_ERROR_PROMISC_PERM_DENIED' symbol. */
-#cmakedefine HAVE_PCAP_ERROR_PROMISC_PERM_DENIED 1
-
-/* Define to 1 if you have the `PCAP_WARNING_TSTAMP_TYPE_NOTSUP' symbol. */
-#cmakedefine HAVE_PCAP_WARNING_TSTAMP_TYPE_NOTSUP 1
 
 /* Define to 1 if you have the <pwd.h> header file. */
 #cmakedefine HAVE_PWD_H 1
@@ -421,7 +401,7 @@
  * are added if and only if HAVE_REMOTE is defined, and will fill them in,
  * even if they're not there.
  *
- * Yes, this is q WinPcap bug; if your project has a public header file
+ * Yes, this is a WinPcap bug; if your project has a public header file
  * that checks or otherwise uses a #define that's defined by your project's
  * configuration process, and don't ensure that it's always defined
  * appropriately when that header file is included, before its first use,
@@ -445,6 +425,10 @@
  * No version of the WinPcap SDK provided libpcap 1.9.0-or-later headers.
  * The Npcap SDK, as of SDK version 1.04, provides them, so this is
  * only necessary for building with the WinPcap SDK.
+ *
+ * Building against the WinPcap SDK isn't supported anymore, nor is running
+ * with the WinPcap DLL installed, so needing this is very unlikely, though
+ * libpcap 1.9.0 or later is not yet required.
  */
 #ifdef HAVE_PCAP_REMOTE
 #define HAVE_REMOTE

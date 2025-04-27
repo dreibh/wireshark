@@ -33,8 +33,11 @@
 #include <signal.h>
 #include <errno.h>
 
+#include <wsutil/application_flavor.h>
 #include <wsutil/array.h>
 #include <wsutil/cmdarg_err.h>
+#include <wsutil/report_message.h>
+#include <wsutil/failure_message_simple.h>
 #include <wsutil/strtoi.h>
 #include <cli_main.h>
 #include <wsutil/version_info.h>
@@ -68,7 +71,7 @@
 
 #include "sync_pipe.h"
 
-#include "capture_opts.h"
+#include "ui/capture_opts.h"
 #include <capture/capture_session.h>
 #include <capture/capture_sync.h>
 
@@ -109,6 +112,7 @@
 
 #ifdef _WIN32
 #include "wsutil/win32-utils.h"
+#include "wsutil/console_win32.h"
 #ifdef DEBUG_DUMPCAP
 #include <conio.h>          /* _getch() */
 #endif
@@ -274,6 +278,7 @@ typedef struct _pcap_pipe_info {
 typedef struct _pcapng_pipe_info {
     pcapng_block_header_t bh;                  /**< Pcapng general block header when capturing from a pipe */
     GArray *src_iface_to_global;               /**< Int array mapping local IDB numbers to global_ld.interface_data */
+    bool byte_swapped;                         /**< true if data in the pipe is byte swapped. */
 } pcapng_pipe_info_t;
 
 struct _loop_data; /* forward declaration so we can use it in the cap_pipe_dispatch function pointer */
@@ -355,9 +360,8 @@ typedef struct _loop_data {
     GArray   *saved_idbs;          /**< Array of saved_idb_t, written when we have a new section or output file. */
     GRWLock   saved_shb_idb_lock;  /**< Saved IDB RW mutex */
     /* output file(s) */
-    FILE     *pdh;
+    pcapio_writer* pdh;
     int       save_file_fd;
-    char     *io_buffer;           /**< Our IO buffer if we increase the size from the standard size */
     uint64_t  bytes_written;       /**< Bytes written for the current file. */
     /* autostop conditions */
     int       packets_written;     /**< Packets written for the current file. */
@@ -462,7 +466,7 @@ print_usage(FILE *output)
     fprintf(output, "\n");
     fprintf(output, "Capture interface:\n");
     fprintf(output, "  -i <interface>, --interface <interface>\n");
-    fprintf(output, "                           name or idx of interface (def: first non-loopback),\n"
+    fprintf(output, "                           name or idx of interface (def: first non-loopback)\n"
 #ifdef HAVE_PCAP_REMOTE
                     "                           or for remote capturing, use one of these formats:\n"
                     "                               rpcap://<host>/<interface>\n"
@@ -477,20 +481,12 @@ print_usage(FILE *output)
     fprintf(output, "                           from which we're capturing\n");
     fprintf(output, "  -f <capture filter>      packet filter in libpcap filter syntax\n");
     fprintf(output, "  -s <snaplen>, --snapshot-length <snaplen>\n");
-#ifdef HAVE_PCAP_CREATE
     fprintf(output, "                           packet snapshot length (def: appropriate maximum)\n");
-#else
-    fprintf(output, "                           packet snapshot length (def: %u)\n", WTAP_MAX_PACKET_SIZE_STANDARD);
-#endif
     fprintf(output, "  -p, --no-promiscuous-mode\n");
     fprintf(output, "                           don't capture in promiscuous mode\n");
-#ifdef HAVE_PCAP_CREATE
     fprintf(output, "  -I, --monitor-mode       capture in monitor mode, if available\n");
-#endif
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
     fprintf(output, "  -B <buffer size>, --buffer-size <buffer size>\n");
     fprintf(output, "                           size of kernel buffer in MiB (def: %dMiB)\n", DEFAULT_CAPTURE_BUFFER_SIZE);
-#endif
     fprintf(output, "  -y <link type>, --linktype <link type>\n");
     fprintf(output, "                           link layer type (def: first appropriate)\n");
     fprintf(output, "  --time-stamp-type <type> timestamp method for interface\n");
@@ -498,7 +494,7 @@ print_usage(FILE *output)
     fprintf(output, "  -L, --list-data-link-types\n");
     fprintf(output, "                           print list of link-layer types of iface and exit\n");
     fprintf(output, "  --list-time-stamp-types  print list of timestamp types for iface and exit\n");
-    fprintf(output, "  --update-interval        interval between updates with new packets (def: %dms)\n", DEFAULT_UPDATE_INTERVAL);
+    fprintf(output, "  --update-interval        interval between updates with new packets, in milliseconds (def: %dms)\n", DEFAULT_UPDATE_INTERVAL);
     fprintf(output, "  -d                       print generated BPF code for capture filter\n");
     fprintf(output, "  -k <freq>,[<type>],[<center_freq1>],[<center_freq2>]\n");
     fprintf(output, "                           set channel on wifi interface\n");
@@ -536,8 +532,11 @@ print_usage(FILE *output)
     fprintf(output, "                                          an exact multiple of NUM secs\n");
     fprintf(output, "                          printname:FILE - print filename to FILE when written\n");
     fprintf(output, "                                           (can use 'stdout' or 'stderr')\n");
+    fprintf(output, "  -F                       output file type (default: pcapng)\n");
+    fprintf(output, "                           an empty \"-F\" option will list the file types\n");
     fprintf(output, "  -n                       use pcapng format instead of pcap (default)\n");
     fprintf(output, "  -P                       use libpcap format instead of pcapng\n");
+
     fprintf(output, "  --capture-comment <comment>\n");
     fprintf(output, "                           add a capture comment to the output file\n");
     fprintf(output, "                           (only for pcapng)\n");
@@ -554,6 +553,9 @@ print_usage(FILE *output)
     fprintf(output, "                           within dumpcap\n");
     fprintf(output, "  -t                       use a separate thread per interface\n");
     fprintf(output, "  -q                       don't report packet capture counts\n");
+    fprintf(output, "  -Q                       suppress all non-error status messages to stderr\n");
+    fprintf(output, "  --application-flavor <flavor>\n");
+    fprintf(output, "                           set the application flavor\n");
     fprintf(output, "  -v, --version            print version information and exit\n");
     fprintf(output, "  -h, --help               display this help and exit\n");
     fprintf(output, "\n");
@@ -2247,6 +2249,12 @@ pcap_pipe_open_live(int fd,
         hdr->version_minor = GUINT16_SWAP_LE_BE(hdr->version_minor);
         hdr->snaplen = GUINT32_SWAP_LE_BE(hdr->snaplen);
         hdr->network = GUINT32_SWAP_LE_BE(hdr->network);
+
+        /* XXX - There are some link-layer types, like Linux USB or Linux SLL
+         * carrying CAN bus, that have metadata fields in host byte order in
+         * the packet data. We don't byte-swap those currently, but should.
+         * Fail with an error on those link-layer types?
+         */
     }
     /*
      * The link-layer header type field of the pcap header is
@@ -2346,35 +2354,10 @@ pcapng_read_shb(capture_src *pcap_src,
     {
     case PCAPNG_MAGIC:
         ws_debug("pcapng SHB MAGIC");
+        pcap_src->cap_pipe_info.pcapng.byte_swapped = false;
         break;
     case PCAPNG_SWAPPED_MAGIC:
         ws_debug("pcapng SHB SWAPPED MAGIC");
-        /*
-         * pcapng sources can contain all sorts of block types.
-         * Rather than add a bunch of complexity to this code (which is
-         * often privileged), punt and tell the user to swap bytes
-         * elsewhere.
-         *
-         * XXX - punting means that the Wireshark test suite must be
-         * modified to:
-         *
-         *  1) have both little-endian and big-endian versions of
-         *     all pcapng files piped to dumpcap;
-         *
-         *  2) pipe the appropriate file to dumpcap, depending on
-         *     the byte order of the host on which the tests are
-         *     being run;
-         *
-         * as per comments in bug 15772 and 15754.
-         *
-         * Are we *really* certain that the complexity added would be
-         * significant enough to make adding it a security risk?  And
-         * why would this code even be running with any elevated
-         * privileges if you're capturing from a pipe?  We should not
-         * only have given up all additional privileges if we're reading
-         * from a pipe, we should give them up in such a fashion that
-         * we can't reclaim them.
-         */
 #if G_BYTE_ORDER == G_BIG_ENDIAN
 #define OUR_ENDIAN "big"
 #define IFACE_ENDIAN "little"
@@ -2382,10 +2365,33 @@ pcapng_read_shb(capture_src *pcap_src,
 #define OUR_ENDIAN "little"
 #define IFACE_ENDIAN "big"
 #endif
-        snprintf(errmsg, errmsgl,
-                   "Interface %u is " IFACE_ENDIAN " endian but we're " OUR_ENDIAN " endian.",
-                   pcap_src->interface_id);
-        return -1;
+        if (!global_ld.pcapng_passthrough) {
+            /* Dumpcap is generating its own SHB and IDBs, which will have the
+             * opposite endianness of this source SHB. To handle this, we'd have
+             * to byte swap various elements (including in other block types);
+             * we don't do that for pcapng yet.
+             *
+             * We also might have to byte-swap some fields in the packet data,
+             * at least for link-layer types like Linux USB or Linux SLL
+             * carrying CAN bus that have metadata fields in host byte order.
+             *
+             * XXX - If *all* the input pcapng SHBs are the opposite byte order
+             * of the host, we could generate an opposite byte order SHB and
+             * IDBs. It still wouldn't handle the mixed case.
+             */
+            snprintf(errmsg, errmsgl,
+                       "Interface %u is " IFACE_ENDIAN " endian but we're " OUR_ENDIAN " endian.",
+                       pcap_src->interface_id);
+            return -1;
+        }
+        /* Remember that this pipe's current section is byte swapped; we're
+         * passing everything through, but still need to swap the block total
+         * length and, for other block types, the block type, to read correctly.
+         */
+        pcap_src->cap_pipe_info.pcapng.byte_swapped = true;
+        pcapng_block_header_t *bh = &pcap_src->cap_pipe_info.pcapng.bh;
+        bh->block_total_length = GUINT32_SWAP_LE_BE(bh->block_total_length);
+        break;
     default:
         /* Not a pcapng type we know about, or not pcapng at all. */
         snprintf(errmsg, errmsgl,
@@ -2498,7 +2504,7 @@ pcapng_adjust_block(capture_src *pcap_src, const pcapng_block_header_t *bh, uint
  */
 static bool is_data_block(uint32_t block_type)
 {
-    // Any block types that lead to calling wtap_read_packet_bytes in
+    // Any block types that lead to calling wtap_read_bytes_buffer in
     // wiretap/pcapng.c should be listed here.
     switch (block_type) {
         case BLOCK_TYPE_PB:
@@ -3006,10 +3012,16 @@ pcapng_pipe_dispatch(loop_data *ld, capture_src *pcap_src, char *errmsg, size_t 
              *
              * Continue the read process.
              */
-            pcapng_read_shb(pcap_src, errmsg, errmsgl);
+            if (pcapng_read_shb(pcap_src, errmsg, errmsgl)) {
+                break;
+            }
             return 1;
         }
 
+        if (pcap_src->cap_pipe_info.pcapng.byte_swapped) {
+            bh->block_type = GUINT32_SWAP_LE_BE(bh->block_type);
+            bh->block_total_length = GUINT32_SWAP_LE_BE(bh->block_total_length);
+        }
         if ((bh->block_total_length & 0x03) != 0) {
             snprintf(errmsg, errmsgl,
                        "Total length of pcapng block read from pipe is %u, which is not a multiple of 4.",
@@ -3115,14 +3127,22 @@ capture_loop_open_input(capture_options *capture_opts, loop_data *ld,
     capture_src        *pcap_src;
     unsigned            i;
 
-    if ((use_threads == false) &&
-        (capture_opts->ifaces->len > 1)) {
-        snprintf(errmsg, errmsg_len,
-                   "Using threads is required for capturing on multiple interfaces.");
-        return false;
+    if (capture_opts->ifaces->len > 1) {
+        /* If we have more than one input, then we're definitely not passing
+         * blocks through. Setting it here will cause pcapng_read_shb to fail
+         * on a SHB of endianness opposite our host, since we don't handle
+         * byte swapping the data in each block.
+         */
+        ld->pcapng_passthrough = false;
+
+        if (use_threads == false) {
+            snprintf(errmsg, errmsg_len,
+                       "Using threads is required for capturing on multiple interfaces.");
+            return false;
+        }
     }
 
-    int pcapng_src_count = 0;
+    unsigned pcapng_src_count = 0;
     for (i = 0; i < capture_opts->ifaces->len; i++) {
         interface_opts = &g_array_index(capture_opts->ifaces, interface_options, i);
         pcap_src = g_new0(capture_src, 1);
@@ -3159,10 +3179,8 @@ capture_loop_open_input(capture_options *capture_opts, loop_data *ld,
         if (pcap_src->pcap_h != NULL) {
             /* we've opened "iface" as a network device */
 
-#ifdef HAVE_PCAP_SET_TSTAMP_PRECISION
             /* Find out if we're getting nanosecond-precision time stamps */
             pcap_src->ts_nsec = have_high_resolution_timestamp(pcap_src->pcap_h);
-#endif
 
 #if defined(HAVE_PCAP_SETSAMPLING)
             if (interface_opts->sampling_method != CAPTURE_SAMP_NONE) {
@@ -3281,6 +3299,7 @@ capture_loop_open_input(capture_options *capture_opts, loop_data *ld,
             /*
              * Add our pcapng interface entry.
              */
+            ld->pcapng_passthrough = false;
             saved_idb_t idb_source = { 0 };
             idb_source.interface_id = i;
             g_rw_lock_writer_lock (&ld->saved_shb_idb_lock);
@@ -3301,11 +3320,18 @@ capture_loop_open_input(capture_options *capture_opts, loop_data *ld,
          * Yes; pass through SHBs and IDBs from the source, rather
          * than generating our own.
          */
-        ld->pcapng_passthrough = true;
         g_rw_lock_writer_lock (&ld->saved_shb_idb_lock);
+        ws_assert(global_ld.pcapng_passthrough == true);
         ws_assert(global_ld.saved_idbs->len == 0);
         ws_debug("%s: Pass through SHBs and IDBs directly", G_STRFUNC);
         g_rw_lock_writer_unlock (&ld->saved_shb_idb_lock);
+    } else {
+        /*
+         * No; that means we'll generate our own SHB and IDBs. If the source
+         * is a pipe with byte order different than our own, we'll have to
+         * byte swap various elements; we don't do that for pcapng yet.
+         */
+        ws_assert(global_ld.pcapng_passthrough == false);
     }
 
     /* If not using libcap: we now can now set euid/egid to ruid/rgid         */
@@ -3386,14 +3412,10 @@ capture_loop_init_filter(pcap_t *pcap_h, bool from_cap_pipe,
             return INITFILTER_BAD_FILTER;
         }
         if (pcap_setfilter(pcap_h, &fcode) < 0) {
-#ifdef HAVE_PCAP_FREECODE
             pcap_freecode(&fcode);
-#endif
             return INITFILTER_OTHER_ERROR;
         }
-#ifdef HAVE_PCAP_FREECODE
         pcap_freecode(&fcode);
-#endif
     }
 
     return INITFILTER_NO_ERROR;
@@ -3532,25 +3554,7 @@ capture_loop_init_output(capture_options *capture_opts, loop_data *ld, char *err
     if (capture_opts->multi_files_on) {
         ld->pdh = ringbuf_init_libpcap_fdopen(&err);
     } else {
-        ld->pdh = ws_fdopen(ld->save_file_fd, "wb");
-        if (ld->pdh == NULL) {
-            err = errno;
-        } else {
-            size_t buffsize = IO_BUF_SIZE;
-#ifdef HAVE_STRUCT_STAT_ST_BLKSIZE
-            ws_statb64 statb;
-
-            if (ws_fstat64(ld->save_file_fd, &statb) == 0) {
-                if (statb.st_blksize > IO_BUF_SIZE) {
-                    buffsize = statb.st_blksize;
-                }
-            }
-#endif
-            /* Increase the size of the IO buffer */
-            ld->io_buffer = (char *)g_malloc(buffsize);
-            setvbuf(ld->pdh, ld->io_buffer, _IOFBF, buffsize);
-            ws_debug("capture_loop_init_output: buffsize %zu", buffsize);
-        }
+        ld->pdh = writecap_fdopen(ld->save_file_fd, wtap_name_to_compression_type(capture_opts->compress_type), &err);
     }
     if (ld->pdh) {
         bool successful;
@@ -3568,10 +3572,8 @@ capture_loop_init_output(capture_options *capture_opts, loop_data *ld, char *err
                                                 pcap_src->ts_nsec, &ld->bytes_written, &err);
         }
         if (!successful) {
-            fclose(ld->pdh);
+            writecap_close(ld->pdh, NULL);
             ld->pdh = NULL;
-            g_free(ld->io_buffer);
-            ld->io_buffer = NULL;
         }
     }
 
@@ -3635,16 +3637,7 @@ capture_loop_close_output(capture_options *capture_opts, loop_data *ld, int *err
                 }
             }
         }
-        if (fclose(ld->pdh) == EOF) {
-            if (err_close != NULL) {
-                *err_close = errno;
-            }
-            success = false;
-        } else {
-            success = true;
-        }
-        g_free(ld->io_buffer);
-        ld->io_buffer = NULL;
+        success = writecap_close(ld->pdh, err_close);
         return success;
     }
 }
@@ -4012,8 +4005,14 @@ capture_loop_open_output(capture_options *capture_opts, int *save_file_fd,
         } else {
             suffix = ".pcap";
         }
+        const char* compression_suffix = wtap_compression_type_extension(wtap_name_to_compression_type(capture_opts->compress_type));
+        /* If not compressed, compression_suffix is NULL and g_strjoin
+         * handles the string list terminating early correctly.
+         */
+        suffix = g_strjoin(".", suffix, compression_suffix, NULL);
         *save_file_fd = create_tempfile(capture_opts->temp_dir, &capfile_name, prefix, suffix, &err_tempfile);
         g_free(prefix);
+        g_free(suffix);
         is_tempfile = true;
     }
 
@@ -4093,11 +4092,9 @@ do_file_switch_or_stop(capture_options *capture_opts)
             }
 
             if (!successful) {
-                fclose(global_ld.pdh);
+                writecap_close(global_ld.pdh, NULL);
                 global_ld.pdh = NULL;
                 global_ld.go = false;
-                g_free(global_ld.io_buffer);
-                global_ld.io_buffer = NULL;
                 return false;
             }
             if (global_ld.file_duration_timer) {
@@ -4106,7 +4103,7 @@ do_file_switch_or_stop(capture_options *capture_opts)
             if (global_ld.next_interval_time) {
                 global_ld.next_interval_time = get_next_time_interval(global_ld.interval_s);
             }
-            fflush(global_ld.pdh);
+            writecap_flush(global_ld.pdh, NULL);
             if (global_ld.inpkts_to_sync_pipe) {
                 if (!quiet)
                     report_packet_count(global_ld.inpkts_to_sync_pipe);
@@ -4202,7 +4199,7 @@ handle_npcap_bug(char *adapter_name _U_, char *cap_err_str _U_)
 
     if (!have_npcap) {
         /*
-         * We're not using Npcap, so don't recomment a user
+         * We're not using Npcap, so don't recommend a user
          * file a bug against Npcap.
          */
         return g_strdup("");
@@ -4251,7 +4248,6 @@ capture_loop_start(capture_options *capture_opts, bool *stats_known, struct pcap
     global_ld.err                 = 0;  /* no error seen yet */
     global_ld.pdh                 = NULL;
     global_ld.save_file_fd        = -1;
-    global_ld.io_buffer           = NULL;
     global_ld.file_count          = 0;
     global_ld.file_duration_timer = NULL;
     global_ld.next_interval_time  = 0;
@@ -4325,7 +4321,7 @@ capture_loop_start(capture_options *capture_opts, bool *stats_known, struct pcap
            message to our parent so that they'll open the capture file and
            update its windows to indicate that we have a live capture in
            progress. */
-        fflush(global_ld.pdh);
+        writecap_flush(global_ld.pdh, NULL);
         report_new_capture_file(capture_opts->save_file);
     }
 
@@ -4418,7 +4414,7 @@ capture_loop_start(capture_options *capture_opts, bool *stats_known, struct pcap
 
         if (inpkts > 0) {
             if (capture_opts->output_to_pipe) {
-                fflush(global_ld.pdh);
+                writecap_flush(global_ld.pdh, NULL);
             }
         } /* inpkts */
 
@@ -4448,7 +4444,7 @@ capture_loop_start(capture_options *capture_opts, bool *stats_known, struct pcap
             /* Let the parent process know. */
             if (global_ld.inpkts_to_sync_pipe) {
                 /* do sync here */
-                fflush(global_ld.pdh);
+                writecap_flush(global_ld.pdh, NULL);
 
                 /* Send our parent a message saying we've written out
                    "global_ld.inpkts_to_sync_pipe" packets to the capture file. */
@@ -4496,7 +4492,7 @@ capture_loop_start(capture_options *capture_opts, bool *stats_known, struct pcap
                 break;
             }
             if (capture_opts->output_to_pipe) {
-                fflush(global_ld.pdh);
+                writecap_flush(global_ld.pdh, NULL);
             }
         }
     }
@@ -4818,13 +4814,13 @@ capture_loop_wrote_one_packet(capture_src *pcap_src) {
 
     /* check -c NUM */
     if (global_capture_opts.has_autostop_packets && global_ld.packets_captured >= global_capture_opts.autostop_packets) {
-        fflush(global_ld.pdh);
+        writecap_flush(global_ld.pdh, NULL);
         global_ld.go = false;
         return;
     }
     /* check -a packets:NUM (treat like -c NUM) */
     if (global_capture_opts.has_autostop_written_packets && global_ld.packets_captured >= global_capture_opts.autostop_written_packets) {
-        fflush(global_ld.pdh);
+        writecap_flush(global_ld.pdh, NULL);
         global_ld.go = false;
         return;
     }
@@ -4888,7 +4884,7 @@ capture_loop_write_pcapng_cb(capture_src *pcap_src, const pcapng_block_header_t 
                                        bh->block_total_length,
                                        &global_ld.bytes_written, &err);
 
-        fflush(global_ld.pdh);
+        writecap_flush(global_ld.pdh, NULL);
         if (!successful) {
             global_ld.go = false;
             global_ld.err = err;
@@ -5149,11 +5145,12 @@ gather_dumpcap_runtime_info(feature_list l)
     gather_caplibs_runtime_info(l);
 }
 
-#define LONGOPT_IFNAME             LONGOPT_BASE_APPLICATION+1
-#define LONGOPT_IFDESCR            LONGOPT_BASE_APPLICATION+2
-#define LONGOPT_CAPTURE_COMMENT    LONGOPT_BASE_APPLICATION+3
+#define LONGOPT_IFNAME              LONGOPT_BASE_APPLICATION+1
+#define LONGOPT_IFDESCR             LONGOPT_BASE_APPLICATION+2
+#define LONGOPT_CAPTURE_COMMENT     LONGOPT_BASE_APPLICATION+3
+#define LONGOPT_APPLICATION_FLAVOR  LONGOPT_BASE_APPLICATION+4
 #ifdef _WIN32
-#define LONGOPT_SIGNAL_PIPE        LONGOPT_BASE_APPLICATION+4
+#define LONGOPT_SIGNAL_PIPE         LONGOPT_BASE_APPLICATION+5
 #endif
 
 /* And now our feature presentation... [ fade to music ] */
@@ -5169,6 +5166,7 @@ main(int argc, char *argv[])
         {"ifname", ws_required_argument, NULL, LONGOPT_IFNAME},
         {"ifdescr", ws_required_argument, NULL, LONGOPT_IFDESCR},
         {"capture-comment", ws_required_argument, NULL, LONGOPT_CAPTURE_COMMENT},
+        {"application-flavor", ws_required_argument, NULL, LONGOPT_APPLICATION_FLAVOR},
 #ifdef _WIN32
         {"signal-pipe", ws_required_argument, NULL, LONGOPT_SIGNAL_PIPE},
 #endif
@@ -5197,6 +5195,9 @@ main(int argc, char *argv[])
     struct utsname    osinfo;
 #endif
     GString          *str;
+
+    /* Set the program name. */
+    g_set_prgname("dumpcap");
 
     /*
      * Determine if dumpcap is being requested to run in a special
@@ -5259,7 +5260,15 @@ main(int argc, char *argv[])
     cmdarg_err_init(dumpcap_cmdarg_err, dumpcap_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init_with_writer("dumpcap", dumpcap_log_writer, vcmdarg_err);
+    ws_log_init_with_writer(dumpcap_log_writer, vcmdarg_err);
+
+#ifdef _WIN32
+    /* If running as a capture child, under no circumstances attempt to wait
+     * for the user to press a key before detaching from a console. */
+    if (capture_child) {
+        set_console_wait(false);
+    }
+#endif
 
     /* Early logging command-line initialization. */
     ws_log_parse_args(&argc, argv, vcmdarg_err, 1);
@@ -5337,7 +5346,8 @@ main(int argc, char *argv[])
 
     /* Initialize the pcaps list and IDBs */
     global_ld.pcaps = g_array_new(FALSE, FALSE, sizeof(capture_src *));
-    global_ld.pcapng_passthrough = false;
+    /* Assume, for now, that there will be only one input, which is pcapng. */
+    global_ld.pcapng_passthrough = true;
     global_ld.saved_shb = NULL;
     global_ld.saved_idbs = g_array_new(FALSE, TRUE, sizeof(saved_idb_t));
 
@@ -5476,6 +5486,8 @@ main(int argc, char *argv[])
     relinquish_privs_except_capture();
 #endif
 
+    init_report_failure_message_simple("dumpcap");
+
     /* Set the initial values in the capture options. This might be overwritten
        by the command line parameters. */
     capture_opts_init(&global_capture_opts, get_interface_list);
@@ -5498,6 +5510,9 @@ main(int argc, char *argv[])
         case 'v':        /* Show version and exit */
             show_version();
             exit_main(0);
+            break;
+        case LONGOPT_APPLICATION_FLAVOR:
+            set_application_flavor(application_name_to_flavor(ws_optarg));
             break;
         /*** capture option specific ***/
         case 'a':        /* autostop criteria */
@@ -5522,12 +5537,8 @@ main(int argc, char *argv[])
 #ifdef HAVE_PCAP_SETSAMPLING
         case 'm':        /* Sampling */
 #endif
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
         case 'B':        /* Buffer size */
-#endif
-#ifdef HAVE_PCAP_CREATE
         case 'I':        /* Monitor mode */
-#endif
         case LONGOPT_COMPRESS_TYPE:        /* compress type */
         case LONGOPT_CAPTURE_TMPDIR:       /* capture temp directory */
         case LONGOPT_UPDATE_INTERVAL:      /* sync pipe update interval */
@@ -5977,7 +5988,6 @@ main(int argc, char *argv[])
         exit_main(status);
     }
 
-#ifdef HAVE_PCAP_SET_TSTAMP_TYPE
     for (j = 0; j < global_capture_opts.ifaces->len; j++) {
         interface_options *interface_opts;
 
@@ -5990,7 +6000,6 @@ main(int argc, char *argv[])
             }
         }
     }
-#endif
 
     /* We're supposed to do a capture, or print the BPF code for a filter. */
 

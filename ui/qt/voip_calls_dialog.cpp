@@ -135,7 +135,7 @@ VoipCallsDialog::VoipCallsDialog(QWidget &parent, CaptureFile &cf, bool all_flow
     voip_calls_init_all_taps(&tapinfo_);
     if (cap_file_.isValid() && cap_file_.capFile()->dfilter) {
         // Activate display filter checking
-        tapinfo_.apply_display_filter = true;
+        voip_calls_set_apply_display_filter(&tapinfo_, true);
         ui->displayFilterCheckBox->setChecked(true);
     }
 
@@ -143,8 +143,6 @@ VoipCallsDialog::VoipCallsDialog(QWidget &parent, CaptureFile &cf, bool all_flow
             this, &VoipCallsDialog::displayFilterCheckBoxToggled);
     connect(this, SIGNAL(updateFilter(QString, bool)),
             &parent, SLOT(filterPackets(QString, bool)));
-    connect(&parent, SIGNAL(displayFilterSuccess(bool)),
-            this, SLOT(displayFilterSuccess(bool)));
     connect(this, SIGNAL(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)),
             &parent, SLOT(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)));
     connect(this, SIGNAL(rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *>)),
@@ -326,6 +324,8 @@ void VoipCallsDialog::tapReset(void *tapinfo_ptr)
     voip_calls_tapinfo_t *tapinfo = static_cast<voip_calls_tapinfo_t *>(tapinfo_ptr);
     VoipCallsDialog *voip_calls_dialog = static_cast<VoipCallsDialog *>(tapinfo->tap_data);
 
+    voip_calls_dialog->removeAllCalls();
+
     // Create new callsinfos queue in tapinfo. Current callsinfos are
     // in shown_callsinfos_, so don't free the [shared] data stored in
     // the queue, but do free the queue itself. (Do this before calling
@@ -481,14 +481,14 @@ void VoipCallsDialog::prepareFilter()
     while (cur_ga_item && cur_ga_item->data) {
         seq_analysis_item_t *ga_item = gxx_list_data(seq_analysis_item_t*, cur_ga_item);
         if (selected_calls.contains(ga_item->conv_num)) {
-            frame_numbers += QString("%1,").arg(ga_item->frame_number);
+            frame_numbers += QStringLiteral("%1,").arg(ga_item->frame_number);
         }
         cur_ga_item = gxx_list_next(cur_ga_item);
     }
 
     if (!frame_numbers.isEmpty()) {
         frame_numbers.chop(1);
-        filter_str = QString("frame.number in {%1} or rtp.setup-frame in {%1}").arg(frame_numbers);
+        filter_str = QStringLiteral("frame.number in {%1} or rtp.setup-frame in {%1}").arg(frame_numbers);
     }
 
 #if 0
@@ -709,7 +709,7 @@ void VoipCallsDialog::copyAsCSV()
         foreach (QVariant v, streamRowData(row)) {
             QString strval = v.toString();
             // XXX should quotes (") in strval be stripped/sanitized?
-            rdsl << QString("\"%1\"").arg(strval);
+            rdsl << QStringLiteral("\"%1\"").arg(strval);
         }
         stream << rdsl.join(",") << '\n';
     }
@@ -763,8 +763,7 @@ void VoipCallsDialog::displayFilterCheckBoxToggled(bool checked)
         return;
     }
 
-    tapinfo_.apply_display_filter = checked;
-    removeAllCalls();
+    voip_calls_set_apply_display_filter(&tapinfo_, checked);
 
     cap_file_.retapPackets();
 }
@@ -782,14 +781,6 @@ void VoipCallsDialog::switchTimeOfDay()
     call_infos_model_->setTimeOfDay(checked);
     ui->callTreeView->resizeColumnToContents(VoipCallsInfoModel::StartTime);
     ui->callTreeView->resizeColumnToContents(VoipCallsInfoModel::StopTime);
-}
-
-void VoipCallsDialog::displayFilterSuccess(bool success)
-{
-    if (success && ui->displayFilterCheckBox->isChecked()) {
-        removeAllCalls();
-        cap_file_.retapPackets();
-    }
 }
 
 void VoipCallsDialog::invertSelection()

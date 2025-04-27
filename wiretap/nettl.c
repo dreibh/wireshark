@@ -162,15 +162,14 @@ typedef struct {
         bool is_hpux_11;
 } nettl_t;
 
-static bool nettl_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+static bool nettl_read(wtap *wth, wtap_rec *rec,
                 int *err, char **err_info, int64_t *data_offset);
-static bool nettl_seek_read(wtap *wth, int64_t seek_off,
-                wtap_rec *rec, Buffer *buf,
+static bool nettl_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
                 int *err, char **err_info);
 static bool nettl_read_rec(wtap *wth, FILE_T fh, wtap_rec *rec,
-                Buffer *buf, int *err, char **err_info);
+                int *err, char **err_info);
 static bool nettl_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    const uint8_t *pd, int *err, char **err_info);
+                int *err, char **err_info);
 
 static int nettl_file_type_subtype = -1;
 
@@ -265,12 +264,12 @@ wtap_open_return_val nettl_open(wtap *wth, int *err, char **err_info)
 }
 
 /* Read the next packet */
-static bool nettl_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+static bool nettl_read(wtap *wth, wtap_rec *rec,
     int *err, char **err_info, int64_t *data_offset)
 {
     /* Read record. */
     *data_offset = file_tell(wth->fh);
-    if (!nettl_read_rec(wth, wth->fh, rec, buf, err, err_info)) {
+    if (!nettl_read_rec(wth, wth->fh, rec, err, err_info)) {
         /* Read error or EOF */
         return false;
     }
@@ -295,13 +294,13 @@ static bool nettl_read(wtap *wth, wtap_rec *rec, Buffer *buf,
 
 static bool
 nettl_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-                Buffer *buf, int *err, char **err_info)
+                int *err, char **err_info)
 {
     if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
         return false;
 
     /* Read record. */
-    if (!nettl_read_rec(wth, wth->random_fh, rec, buf, err, err_info)) {
+    if (!nettl_read_rec(wth, wth->random_fh, rec, err, err_info)) {
         /* Read error or EOF */
         if (*err == 0) {
             /* EOF means "short read" in random-access mode */
@@ -313,8 +312,7 @@ nettl_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
 }
 
 static bool
-nettl_read_rec(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf,
-                int *err, char **err_info)
+nettl_read_rec(wtap *wth, FILE_T fh, wtap_rec *rec, int *err, char **err_info)
 {
     union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
     nettl_t *nettl = (nettl_t *)wth->priv;
@@ -575,8 +573,8 @@ nettl_read_rec(wtap *wth, FILE_T fh, wtap_rec *rec, Buffer *buf,
     /*
      * Read the packet data.
      */
-    ws_buffer_assure_space(buf, datalen);
-    pd = ws_buffer_start_ptr(buf);
+    ws_buffer_assure_space(&rec->data, datalen);
+    pd = ws_buffer_start_ptr(&rec->data);
     if (fddihack) {
         /* read in FC, dest, src, DSAP and SSAP */
         bytes_to_read = 15;
@@ -671,9 +669,8 @@ static bool nettl_dump_open(wtap_dumper *wdh, int *err, char **err_info _U_)
 
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
-static bool nettl_dump(wtap_dumper *wdh,
-                           const wtap_rec *rec,
-                           const uint8_t *pd, int *err, char **err_info _U_)
+static bool nettl_dump(wtap_dumper *wdh, const wtap_rec *rec,
+                       int *err, char **err_info _U_)
 {
     const union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
     struct nettlrec_hdr rec_hdr;
@@ -795,7 +792,7 @@ static bool nettl_dump(wtap_dumper *wdh,
 
     /* write actual PDU data */
 
-    if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
+    if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data), rec->rec_header.packet_header.caplen, err))
         return false;
 
     return true;

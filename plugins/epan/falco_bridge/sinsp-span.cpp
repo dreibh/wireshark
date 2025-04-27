@@ -301,7 +301,7 @@ void add_arg_event(uint32_t arg_number,
         sinsp_syscall_category_e args_syscall_category) {
 
     if (arg_number >= array_length(args_event_fields)) {
-        ws_error("falco event has too many arguments (%" PRIu32 ")", arg_number);
+        ws_warning("falco event has too many arguments (%" PRIu32 ")", arg_number);
     }
 
     std::string fname = "evt.arg[" + std::to_string(arg_number) + "]";
@@ -309,7 +309,7 @@ void add_arg_event(uint32_t arg_number,
     const filtercheck_field_info *ffi = &args_event_fields[arg_number];
     std::unique_ptr<sinsp_filter_check> sfc = sinsp_span->filter_checks.new_filter_check_from_fldname(fname.c_str(), &sinsp_span->inspector, true);
     if (!sfc) {
-        ws_error("cannot find expected Falco field evt.arg");
+        ws_warning("cannot find expected Falco field evt.arg");
     }
     sfc->parse_field_name(fname.c_str(), true, false);
     ssi->field_to_category.push_back(args_syscall_category);
@@ -341,7 +341,7 @@ void add_lineage_field(std::string basefname,
     const filtercheck_field_info *ffi = &proc_lineage_event_fields[(ancestor_number - 1) * N_PROC_LINEAGE_ENTRY_FIELDS + field_number];
     std::unique_ptr<sinsp_filter_check> sfc = filter_factory->new_filtercheck(fname.c_str());
     if (!sfc) {
-        ws_error("cannot find expected Falco field evt.arg");
+        ws_warning("cannot find expected Falco field evt.arg");
     }
 
     sfc->parse_field_name(fname.c_str(), true, false);
@@ -356,7 +356,7 @@ void add_lineage_events(uint32_t ancestor_number,
         sinsp_syscall_category_e args_syscall_category) {
 
     if (ancestor_number >= array_length(proc_lineage_event_fields) / N_PROC_LINEAGE_ENTRY_FIELDS) {
-        ws_error("falco lineage mismatch (%" PRIu32 ")", ancestor_number);
+        ws_warning("falco lineage mismatch (%" PRIu32 ")", ancestor_number);
     }
 
     add_lineage_field("proc.aname", ancestor_number, 0, filter_factory, ssi, args_syscall_category);
@@ -690,7 +690,7 @@ char* get_evt_arg_name(void* sinp_evt_info, uint32_t arg_num) {
     ppm_event_info* realinfo = (ppm_event_info*)sinp_evt_info;
 
     if (arg_num > realinfo->nparams) {
-        ws_error("Arg number %u exceeds event parameter count %u", arg_num, realinfo->nparams);
+        ws_warning("Arg number %u exceeds event parameter count %u", arg_num, realinfo->nparams);
         return NULL;
     }
     return realinfo->params[arg_num].name;
@@ -716,7 +716,12 @@ void open_sinsp_capture(sinsp_span_t *sinsp_span, const char *filepath)
     sinsp_span->sfe_ptrs.clear();
     sinsp_span->sfe_lengths.clear();
     sinsp_span->sfe_infos.clear();
-    sinsp_span->inspector.open_savefile(filepath);
+    try {
+        sinsp_span->inspector.open_savefile(filepath);
+    } catch (sinsp_exception &e) {
+        ws_warning("%s", e.what());
+    }
+
     sinsp_span->str_chunk = wmem_map_new(wmem_file_scope(), g_str_hash, g_str_equal);
     sinsp_span->proc_info_chunk = wmem_map_new(wmem_file_scope(), g_int64_hash, g_int64_equal);
 
@@ -789,7 +794,7 @@ static void add_syscall_event_to_cache(sinsp_span_t *sinsp_span, sinsp_source_in
         if (ffi->m_flags == filtercheck_field_flags::EPF_NONE && values[0].len > 0) {
 #endif
             if (sinsp_span->sfe_slab_offset + sfe_idx >= sfe_slab_prealloc) {
-                ws_error("Extracting too many fields for event %u (%d vs %d)", (unsigned) evt->get_num(), (int) sfe_idx, (int) ssi->syscall_event_filter_checks.size());
+                ws_warning("Extracting too many fields for event %u (%d vs %d)", (unsigned) evt->get_num(), (int) sfe_idx, (int) ssi->syscall_event_filter_checks.size());
             }
 
             sinsp_field_extract_t *sfe = &sfe_block[sfe_idx];
@@ -955,7 +960,7 @@ bool extract_syscall_source_fields(sinsp_span_t *sinsp_span, sinsp_source_info_t
 
     // Shouldn't happen
     if (frame_num > sinsp_span->sfe_ptrs.size()) {
-        ws_error("Frame number %u exceeds cache size %d", frame_num, (int) sinsp_span->sfe_ptrs.size());
+        ws_warning("Frame number %u exceeds cache size %d", frame_num, (int) sinsp_span->sfe_ptrs.size());
         return false;
     }
 
@@ -969,7 +974,7 @@ bool extract_syscall_source_fields(sinsp_span_t *sinsp_span, sinsp_source_info_t
 bool get_extracted_syscall_source_fields(sinsp_span_t *sinsp_span, uint32_t frame_num, sinsp_field_extract_t **sinsp_fields, uint32_t *sinsp_field_len, void** sinp_evt_info) {
     // Shouldn't happen
     if (frame_num > sinsp_span->sfe_ptrs.size()) {
-        ws_error("Frame number %u exceeds cache size %d", frame_num, (int) sinsp_span->sfe_ptrs.size());
+        ws_warning("Frame number %u exceeds cache size %d", frame_num, (int) sinsp_span->sfe_ptrs.size());
         return false;
     }
 
@@ -989,6 +994,9 @@ bool extract_plugin_source_fields(sinsp_source_info_t *ssi, uint32_t event_num, 
     }
 
     std::vector<ss_plugin_extract_field> fields;
+#if SINSP_CHECK_VERSION(0, 21, 0)
+    std::vector<ss_plugin_extract_value_offsets> offsets;
+#endif
 
     // PPME_PLUGINEVENT_E events have the following format:
     // | scap_evt header | uint32_t sizeof(id) = 4 | uint32_t evt_datalen | uint32_t id | uint8_t[] evt_data |
@@ -1015,8 +1023,14 @@ bool extract_plugin_source_fields(sinsp_source_info_t *ssi, uint32_t event_num, 
     ssi->evt->init(ssi->evt_storage, 0);
     ssi->evt->set_num(event_num);
 
-    fields.resize(sinsp_field_len);
+    // Extract our field values.
     // We must supply field_id, field, arg, and type.
+    // XXX Handle multiple paths, e.g. in/out byte counts.
+
+    fields.resize(sinsp_field_len);
+#if SINSP_CHECK_VERSION(0, 21, 0)
+    offsets.resize(sinsp_field_len);
+#endif
     for (size_t i = 0; i < sinsp_field_len; i++) {
         fields.at(i).field_id = sinsp_fields[i].field_id;
         fields.at(i).field = sinsp_fields[i].field_name;
@@ -1025,12 +1039,24 @@ bool extract_plugin_source_fields(sinsp_source_info_t *ssi, uint32_t event_num, 
         } else {
             fields.at(i).ftype = FTYPE_UINT64;
         }
+        sinsp_fields[i].is_generated = false;
+        sinsp_fields[i].data_start = 0;
+        sinsp_fields[i].data_length = 0;
+#if SINSP_CHECK_VERSION(0, 21, 0)
+        offsets.at(i) = {nullptr, nullptr};
+#endif
     }
 
     bool status = true;
+#if SINSP_CHECK_VERSION(0, 21, 0)
+    if (!ssi->source->extract_fields_and_offsets(ssi->evt, sinsp_field_len, fields.data(), offsets.data())) {
+        status = false;
+    }
+#else
     if (!ssi->source->extract_fields(ssi->evt, sinsp_field_len, fields.data())) {
         status = false;
     }
+#endif
 
     for (size_t i = 0; i < sinsp_field_len; i++) {
         sinsp_fields[i].is_present = fields.at(i).res_len > 0;
@@ -1042,8 +1068,20 @@ bool extract_plugin_source_fields(sinsp_source_info_t *ssi, uint32_t event_num, 
             } else {
                 status = false;
             }
+#if SINSP_CHECK_VERSION(0, 21, 0)
+            if (offsets.at(i).start && offsets.at(i).length && offsets.at(i).start[0] != UINT32_MAX && offsets.at(i).length[0] != UINT32_MAX) {
+                int start = (int) offsets.at(i).start[0];
+                int length = (int) offsets.at(i).length[0];
+                if (start == 0 && length == 0) {
+                    sinsp_fields[i].is_generated = true;
+                }
+                sinsp_fields[i].data_start = start;
+                sinsp_fields[i].data_length = length;
+            }
+#endif
         }
     }
+
     return status;
 }
 

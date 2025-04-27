@@ -22,8 +22,8 @@ file(TO_NATIVE_PATH "${PLUGIN_INSTALL_LIBDIR}" PATH_PLUGIN_DIR)
 string(REPLACE "\\" "\\\\" PATH_PLUGIN_DIR "${PATH_PLUGIN_DIR}")
 file(TO_NATIVE_PATH "${EXTCAP_INSTALL_LIBDIR}" PATH_EXTCAP_DIR)
 string(REPLACE "\\" "\\\\" PATH_EXTCAP_DIR "${PATH_EXTCAP_DIR}")
-file(TO_NATIVE_PATH "${LOG_EXTCAP_INSTALL_LIBDIR}" PATH_LOG_EXTCAP_DIR)
-string(REPLACE "\\" "\\\\" PATH_LOG_EXTCAP_DIR "${PATH_LOG_EXTCAP_DIR}")
+file(TO_NATIVE_PATH "${STRATOSHARK_EXTCAP_INSTALL_LIBDIR}" PATH_STRATOSHARK_EXTCAP_DIR)
+string(REPLACE "\\" "\\\\" PATH_STRATOSHARK_EXTCAP_DIR "${PATH_STRATOSHARK_EXTCAP_DIR}")
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/path_config.h.in ${CMAKE_CURRENT_BINARY_DIR}/path_config.h)
 
@@ -81,6 +81,7 @@ set(WMEM_FILES
 set(WSUTIL_PUBLIC_HEADERS
 	802_11-utils.h
 	adler32.h
+	application_flavor.h
 	array.h
 	base32.h
 	bits_count_ones.h
@@ -106,6 +107,7 @@ set(WSUTIL_PUBLIC_HEADERS
 	eax.h
 	epochs.h
 	exported_pdu_tlvs.h
+	failure_message_simple.h
 	feature_list.h
 	filesystem.h
 	g711.h
@@ -152,11 +154,13 @@ set(WSUTIL_PUBLIC_HEADERS
 	wsjson.h
 	wslog.h
 	xtea.h
+	zlib_compat.h
 )
 
 set(WSUTIL_COMMON_FILES
 	802_11-utils.c
 	adler32.c
+	application_flavor.c
 	base32.c
 	bitswap.c
 	buffer.c
@@ -175,7 +179,9 @@ set(WSUTIL_COMMON_FILES
 	crc11.c
 	curve25519.c
 	dot11decrypt_wep.c
+	dtoa.c
 	eax.c
+	failure_message_simple.c
 	feature_list.c
 	filesystem.c
 	filter_files.c
@@ -437,6 +443,7 @@ target_link_libraries(wsutil_static
 		${CMAKE_DL_LIBS}
 		${GCRYPT_LIBRARIES}
 		${GNUTLS_LIBRARIES}
+		${M_LIBRARIES}
 		${ZLIB_LIBRARIES}
 		${ZLIBNG_LIBRARIES}
 		$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_LIBRARIES},${PCRE2_LIBRARIES}>

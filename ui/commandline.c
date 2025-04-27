@@ -22,6 +22,7 @@
 
 #include <wsutil/version_info.h>
 
+#include <wsutil/application_flavor.h>
 #include <wsutil/clopts_common.h>
 #include <wsutil/cmdarg_err.h>
 #include <wsutil/filesystem.h>
@@ -37,7 +38,6 @@
 #include <epan/prefs-int.h>
 #include <epan/stat_tap_ui.h>
 
-#include "capture_opts.h"
 #include "persfilepath_opt.h"
 #include "preference_utils.h"
 #include "recent.h"
@@ -45,15 +45,17 @@
 
 #include "../file.h"
 
+#include "ui/capture_opts.h"
 #include "ui/dissect_opts.h"
-
 #include "ui/commandline.h"
+
+#include <wsutil/application_flavor.h>
 
 commandline_param_info_t global_commandline_info;
 
 capture_options global_capture_opts;
 
-void
+static void
 commandline_print_usage(bool for_help_option) {
     FILE *output;
 
@@ -62,62 +64,80 @@ commandline_print_usage(bool for_help_option) {
 #endif
 
     if (for_help_option) {
-        show_help_header("Interactively dump and analyze network traffic.");
+        if (application_flavor_is_wireshark()) {
+            show_help_header("Interactively dump and analyze network traffic.");
+        } else {
+            show_help_header("Interactively dump and analyze system calls and log messages.");
+        }
         output = stdout;
     } else {
         output = stderr;
     }
     fprintf(output, "\n");
-    fprintf(output, "Usage: wireshark [options] ... [ <infile> ]\n");
+    fprintf(output, "Usage: %s [options] ... [ <infile> ]\n", g_get_prgname());
     fprintf(output, "\n");
 
 #ifdef HAVE_LIBPCAP
-    fprintf(output, "Capture interface:\n");
-    fprintf(output, "  -i <interface>, --interface <interface>\n");
-    fprintf(output, "                           name or idx of interface (def: first non-loopback)\n");
-    fprintf(output, "  -f <capture filter>      packet filter in libpcap filter syntax\n");
-    fprintf(output, "  -s <snaplen>, --snapshot-length <snaplen>\n");
-#ifdef HAVE_PCAP_CREATE
-    fprintf(output, "                           packet snapshot length (def: appropriate maximum)\n");
-#else
-    fprintf(output, "                           packet snapshot length (def: %u)\n", WTAP_MAX_PACKET_SIZE_STANDARD);
-#endif
-    fprintf(output, "  -p, --no-promiscuous-mode\n");
-    fprintf(output, "                           don't capture in promiscuous mode\n");
-#ifdef HAVE_PCAP_CREATE
-    fprintf(output, "  -I, --monitor-mode       capture in monitor mode, if available\n");
-#endif
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
-    fprintf(output, "  -B <buffer size>, --buffer-size <buffer size>\n");
-    fprintf(output, "                           size of kernel buffer (def: %dMB)\n", DEFAULT_CAPTURE_BUFFER_SIZE);
-#endif
+    if (application_flavor_is_wireshark()) {
+        fprintf(output, "Capture interface:\n");
+        fprintf(output, "  -i <interface>, --interface <interface>\n");
+        fprintf(output, "                           name or idx of interface (def: first non-loopback)\n");
+        fprintf(output, "  -f <capture filter>      packet filter in libpcap filter syntax\n");
+    } else {
+        fprintf(output, "Capture source:\n");
+        fprintf(output, "  -i <source>, --source <source>\n");
+        fprintf(output, "                           name or idx of source (def: first source listed by -D or --list-sources)\n");
+        fprintf(output, "  -f <capture filter>      filter in libsinsp/libscap filter syntax\n");
+    }
+    if (application_flavor_is_wireshark()) {
+        fprintf(output, "  -s <snaplen>, --snapshot-length <snaplen>\n");
+        fprintf(output, "                           packet snapshot length (def: appropriate maximum)\n");
+        fprintf(output, "  -p, --no-promiscuous-mode\n");
+        fprintf(output, "                           don't capture in promiscuous mode\n");
+        fprintf(output, "  -I, --monitor-mode       capture in monitor mode, if available\n");
+        fprintf(output, "  -B <buffer size>, --buffer-size <buffer size>\n");
+        fprintf(output, "                           size of kernel buffer in MiB (def: %dMiB)\n", DEFAULT_CAPTURE_BUFFER_SIZE);
+    }
     fprintf(output, "  -y <link type>, --linktype <link type>\n");
     fprintf(output, "                           link layer type (def: first appropriate)\n");
     fprintf(output, "  --time-stamp-type <type> timestamp method for interface\n");
-    fprintf(output, "  -D, --list-interfaces    print list of interfaces and exit\n");
+    if (application_flavor_is_wireshark()) {
+        fprintf(output, "  -D, --list-interfaces    print list of interfaces and exit\n");
+    } else {
+        fprintf(output, "  -D, --list-sources       print list of sources and exit\n");
+    }
     fprintf(output, "  -L, --list-data-link-types\n");
     fprintf(output, "                           print list of link-layer types of iface and exit\n");
     fprintf(output, "  --list-time-stamp-types  print list of timestamp types for iface and exit\n");
     fprintf(output, "\n");
     fprintf(output, "Capture display:\n");
     fprintf(output, "  -k                       start capturing immediately (def: do nothing)\n");
-    fprintf(output, "  -S                       update packet display when new packets are captured\n");
-    fprintf(output, "  --update-interval        interval between updates with new packets (def: %dms)\n", DEFAULT_UPDATE_INTERVAL);
+    fprintf(output, "  -S                       update display when new items are captured\n");
     fprintf(output, "  -l                       turn on automatic scrolling while -S is in use\n");
+    fprintf(output, "  --update-interval        interval between updates with new items, in milliseconds (def: %dms)\n", DEFAULT_UPDATE_INTERVAL);
     fprintf(output, "Capture stop conditions:\n");
-    fprintf(output, "  -c <packet count>        stop after n packets (def: infinite)\n");
+    fprintf(output, "  -c <item count>          stop after n items (def: infinite)\n");
     fprintf(output, "  -a <autostop cond.> ..., --autostop <autostop cond.> ...\n");
     fprintf(output, "                           duration:NUM - stop after NUM seconds\n");
     fprintf(output, "                           filesize:NUM - stop this file after NUM KB\n");
     fprintf(output, "                              files:NUM - stop after NUM files\n");
-    fprintf(output, "                            packets:NUM - stop after NUM packets\n");
+    if (application_flavor_is_wireshark()) {
+        fprintf(output, "                            packets:NUM - stop after NUM packets\n");
+    } else {
+        fprintf(output, "                             events:NUM - stop after NUM packets\n");
+    }
     /*fprintf(output, "\n");*/
+    // XXX libscap and libsinsp don't support this, so we should probably omit this if our flavor is Stratoshark.
     fprintf(output, "Capture output:\n");
     fprintf(output, "  -b <ringbuffer opt.> ..., --ring-buffer <ringbuffer opt.>\n");
     fprintf(output, "                           duration:NUM - switch to next file after NUM secs\n");
     fprintf(output, "                           filesize:NUM - switch to next file after NUM KB\n");
     fprintf(output, "                              files:NUM - ringbuffer: replace after NUM files\n");
-    fprintf(output, "                            packets:NUM - switch to next file after NUM packets\n");
+    if (application_flavor_is_wireshark()) {
+        fprintf(output, "                            packets:NUM - switch to next file after NUM packets\n");
+    } else {
+        fprintf(output, "                             events:NUM - switch to next file after NUM events\n");
+    }
     fprintf(output, "                           interval:NUM - switch to next file when the time is\n");
     fprintf(output, "                                          an exact multiple of NUM secs\n");
 #endif  /* HAVE_LIBPCAP */
@@ -133,7 +153,7 @@ commandline_print_usage(bool for_help_option) {
     fprintf(output, "\n");
     fprintf(output, "Processing:\n");
     fprintf(output, "  -R <read filter>, --read-filter <read filter>\n");
-    fprintf(output, "                           packet filter in Wireshark display filter syntax\n");
+    fprintf(output, "                           filter in display filter (wireshark-filter(4)) syntax\n");
     fprintf(output, "  -n                       disable all name resolutions (def: all enabled)\n");
     // Note: the order of the flags here matches the options in the settings dialog e.g. "dsN" only have an effect if "n" is set
     fprintf(output, "  -N <name resolve flags>  enable specific name resolution(s): \"mtndsNvg\"\n");
@@ -144,7 +164,7 @@ commandline_print_usage(bool for_help_option) {
     fprintf(output, "                           enable dissection of proto_name\n");
     fprintf(output, "  --disable-protocol <proto_name>\n");
     fprintf(output, "                           disable dissection of proto_name\n");
-    fprintf(output, "  --only-protocols <proto_name>\n");
+    fprintf(output, "  --only-protocols <protocols>\n");
     fprintf(output, "                           Only enable dissection of these protocols, comma\n");
     fprintf(output, "                           separated. Disable everything else\n");
     fprintf(output, "  --disable-all-protocols\n");
@@ -157,13 +177,13 @@ commandline_print_usage(bool for_help_option) {
     fprintf(output, "\n");
     fprintf(output, "User interface:\n");
     fprintf(output, "  -C <config profile>      start with specified configuration profile\n");
-    fprintf(output, "  -H                       hide the capture info dialog during packet capture\n");
+    fprintf(output, "  -H                       hide the capture info dialog during capture\n");
     fprintf(output, "  -Y <display filter>, --display-filter <display filter>\n");
     fprintf(output, "                           start with the given display filter\n");
-    fprintf(output, "  -g <packet number>       go to specified packet number after \"-r\"\n");
-    fprintf(output, "  -J <jump filter>         jump to the first packet matching the (display)\n");
+    fprintf(output, "  -g <item number>         go to specified item number after \"-r\"\n");
+    fprintf(output, "  -J <jump filter>         jump to the first item matching the display\n");
     fprintf(output, "                           filter\n");
-    fprintf(output, "  -j                       search backwards for a matching packet after \"-J\"\n");
+    fprintf(output, "  -j                       search backwards for a matching item after \"-J\"\n");
     fprintf(output, "  -t (a|ad|adoy|d|dd|e|r|u|ud|udoy)[.[N]]|.[N]\n");
     fprintf(output, "                           format of time stamps (def: r: rel. to first)\n");
     fprintf(output, "  -u s|hms                 output format of seconds (def: s: seconds)\n");
@@ -196,7 +216,7 @@ commandline_print_usage(bool for_help_option) {
 #ifndef _WIN32
     fprintf(output, "  --display <X display>    X display to use\n");
 #endif
-    fprintf(output, "  --fullscreen             start Wireshark in full screen\n");
+    fprintf(output, "  --fullscreen             start %s in full screen\n", application_flavor_name_proper());
 
 #ifdef _WIN32
     destroy_console();
@@ -222,7 +242,7 @@ static const char optstring[] = OPTSTRING;
 #ifndef HAVE_LIBPCAP
 static void print_no_capture_support_error(void)
 {
-    cmdarg_err("This version of Wireshark was not built with support for capturing packets.");
+    cmdarg_err("This version of %s was not built with support for capturing packets.", application_flavor_name_proper());
 }
 #endif
 
@@ -385,7 +405,7 @@ void commandline_early_options(int argc, char *argv[])
 
 #ifndef HAVE_LUA
     if (ex_opt_count("lua_script") > 0) {
-        cmdarg_err("This version of Wireshark was not built with support for Lua scripting.");
+        cmdarg_err("This version of %s was not built with support for Lua scripting.", application_flavor_name_proper());
         exit(1);
     }
 #endif
@@ -538,7 +558,7 @@ void commandline_other_options(int argc, char *argv[], bool opt_reset)
             /*** capture option specific ***/
             case 'a':        /* autostop criteria */
             case 'b':        /* Ringbuffer option */
-            case 'c':        /* Capture xxx packets */
+            case 'c':        /* Capture xxx items */
             case 'f':        /* capture filter */
             case 'F':        /* capture file type */
             case 'H':        /* Hide capture info dialog box */
@@ -547,9 +567,7 @@ void commandline_other_options(int argc, char *argv[], bool opt_reset)
             case LONGOPT_SET_TSTAMP_TYPE: /* Set capture timestamp type */
             case LONGOPT_CAPTURE_TMPDIR: /* capture temp directory */
             case LONGOPT_UPDATE_INTERVAL: /* sync pipe update interval */
-#ifdef HAVE_PCAP_CREATE
             case 'I':        /* Capture in monitor mode, if available */
-#endif
 #ifdef HAVE_PCAP_REMOTE
             case 'A':        /* Authentication */
 #endif
@@ -557,9 +575,7 @@ void commandline_other_options(int argc, char *argv[], bool opt_reset)
             case 'S':        /* "Sync" mode: used for following file ala tail -f */
             case 'w':        /* Write to capture file xxx */
             case 'y':        /* Set the pcap data link type */
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
             case 'B':        /* Buffer size */
-#endif
 #ifdef HAVE_LIBPCAP
                 status = capture_opts_add_opt(&global_capture_opts, opt, ws_optarg);
                 if(status != 0) {
@@ -575,13 +591,13 @@ void commandline_other_options(int argc, char *argv[], bool opt_reset)
             case 'C':
                 /* Configuration profile settings were already processed just ignore them this time*/
                 break;
-            case 'j':        /* Search backwards for a matching packet from filter in option J */
+            case 'j':        /* Search backwards for a matching item from filter in option J */
                 global_commandline_info.jump_backwards = SD_BACKWARD;
                 break;
-            case 'g':        /* Go to packet with the given packet number */
+            case 'g':        /* Go to item with the given item number */
                 global_commandline_info.go_to_packet = get_nonzero_uint32(ws_optarg, "go to packet");
                 break;
-            case 'J':        /* Jump to the first packet which matches the filter criteria */
+            case 'J':        /* Jump to the first item which matches the filter criteria */
                 global_commandline_info.jfilter = ws_optarg;
                 break;
             case 'k':        /* Start capture immediately */
@@ -646,9 +662,9 @@ void commandline_other_options(int argc, char *argv[], bool opt_reset)
                  part of a tap filter.  Instead, we just add the argument
                  to a list of stat arguments. */
                 if (strcmp("help", ws_optarg) == 0) {
-                  fprintf(stderr, "wireshark: The available statistics for the \"-z\" option are:\n");
-                  list_stat_cmd_args();
-                  exit_application(0);
+                    fprintf(stderr, "%s: The available statistics for the \"-z\" option are:\n", g_get_prgname());
+                    list_stat_cmd_args();
+                    exit_application(0);
                 }
                 if (!process_stat_cmd_arg(ws_optarg)) {
                     cmdarg_err("Invalid -z argument.");
@@ -801,7 +817,10 @@ void commandline_other_options(int argc, char *argv[], bool opt_reset)
 
 /* Local function used by commandline_options_drop */
 static int cl_find_custom(const void *elem_data, const void *search_data) {
-    return memcmp(elem_data, search_data, strlen((char *)search_data));
+    const char *prefix = (const char *)search_data;
+    const char *opt_and_val = (const char *)elem_data;
+
+    return strncmp(opt_and_val, prefix, strlen(prefix));
 }
 
 /* Drop any options the user specified on the command line with `-o`

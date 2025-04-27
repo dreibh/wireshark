@@ -40,6 +40,9 @@ static dissector_handle_t eapol_handle;  // for the eapol relay
 
 static dissector_handle_t ieee802154_nofcs_handle;  // for Netricity Segment Control
 
+static dissector_table_t vhie_dissector_table;
+static dissector_table_t vpie_dissector_table;
+
 static reassembly_table netricity_reassembly_table;
 
 
@@ -225,6 +228,7 @@ static int hf_wisun_bsie_bcast_schedule_id;
 static int hf_wisun_vpie;
 static int hf_wisun_vpie_vid;
 static int hf_wisun_lcpie;
+static int hf_wisun_lcpie_channel_plan_tag;
 static int hf_wisun_panie;
 static int hf_wisun_panie_size;
 static int hf_wisun_panie_cost;
@@ -678,9 +682,15 @@ wisun_add_wbxml_uint(tvbuff_t *tvb, proto_tree *tree, int hf, unsigned offset)
     do {
         b = tvb_get_uint8(tvb, offset + len++);
         val = (val << 7) | (b & 0x7f);
-    } while (b & 0x80);
+    } while (b & 0x80 && len < 2);
     proto_tree_add_uint(tree, hf, tvb, offset, len, val);
-    return len;
+    return val;
+}
+
+static unsigned
+wisun_vidlen(unsigned vid)
+{
+    return vid > 0x7f ? 2 : 1;
 }
 
 static void
@@ -830,8 +840,11 @@ dissect_wisun_rslie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, uns
 static int
 dissect_wisun_vhie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset)
 {
-    unsigned vidlen = wisun_add_wbxml_uint(tvb, tree, hf_wisun_vhie_vid, offset);
-    call_data_dissector(tvb_new_subset_remaining(tvb, offset + vidlen), pinfo, tree);
+    unsigned vid = wisun_add_wbxml_uint(tvb, tree, hf_wisun_vhie_vid, offset);
+    if (!dissector_try_uint(vhie_dissector_table, vid,
+                            tvb_new_subset_remaining(tvb, offset + wisun_vidlen(vid)),
+                            pinfo, tree))
+        call_data_dissector(tvb_new_subset_remaining(tvb, offset + wisun_vidlen(vid)), pinfo, tree);
     return tvb_reported_length(tvb);
 }
 
@@ -1282,13 +1295,16 @@ dissect_wisun_vpie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void
 {
     proto_item *item;
     proto_tree *subtree;
-    unsigned vidlen;
+    unsigned vid;
 
     item = proto_tree_add_item(tree, hf_wisun_vpie, tvb, 0, tvb_reported_length(tvb), ENC_NA);
     subtree = proto_item_add_subtree(item, ett_wisun_vpie);
 
-    vidlen = wisun_add_wbxml_uint(tvb, subtree, hf_wisun_vpie_vid, 2);
-    call_data_dissector(tvb_new_subset_remaining(tvb, 2 + vidlen), pinfo, subtree);
+    vid = wisun_add_wbxml_uint(tvb, subtree, hf_wisun_vpie_vid, 2);
+    if (!dissector_try_uint(vpie_dissector_table, vid,
+                            tvb_new_subset_remaining(tvb, 2 + wisun_vidlen(vid)),
+                            pinfo, subtree))
+        call_data_dissector(tvb_new_subset_remaining(tvb, 2 + wisun_vidlen(vid)), pinfo, subtree);
     return tvb_reported_length(tvb);
 }
 
@@ -1305,7 +1321,7 @@ dissect_wisun_lcpie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
     proto_tree_add_bitmask(subtree, tvb, offset, hf_wisun_wsie, ett_wisun_wsie_bitmap, wisun_format_nested_ie, ENC_LITTLE_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item(subtree, hf_wisun_lusie_channel_plan_tag, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item(subtree, hf_wisun_lcpie_channel_plan_tag, tvb, offset, 1, ENC_LITTLE_ENDIAN);
     offset += 1;
 
     return dissect_wisun_schedule_common(tvb, pinfo, offset, subtree);
@@ -1906,7 +1922,7 @@ void proto_register_wisun(void)
         },
 
         { &hf_wisun_vhie_vid,
-          { "Vendor ID", "wisun.vhie.vid", FT_UINT32, BASE_DEC, NULL, 0x0,
+          { "Vendor ID", "wisun.vhie.vid", FT_UINT16, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
@@ -1976,12 +1992,12 @@ void proto_register_wisun(void)
         },
 
         { &hf_wisun_nrie_listening_interval_min,
-          { "Listening Interval Min", "wisun.nriw.listening_interval_min", FT_UINT24, BASE_DEC, NULL, 0x0,
+          { "Listening Interval Min", "wisun.nrie.listening_interval_min", FT_UINT24, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
         { &hf_wisun_nrie_listening_interval_max,
-          { "Listening Interval Max", "wisun.nriw.listening_interval_max", FT_UINT24, BASE_DEC, NULL, 0x0,
+          { "Listening Interval Max", "wisun.nrie.listening_interval_max", FT_UINT24, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
@@ -2247,7 +2263,7 @@ void proto_register_wisun(void)
         },
 
         { &hf_wisun_usie_hop_count,
-          { "Chanel Hop Count", "wisun.usie.hop_count", FT_UINT8, BASE_DEC, NULL, 0x0,
+          { "Channel Hop Count", "wisun.usie.hop_count", FT_UINT8, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
@@ -2297,13 +2313,18 @@ void proto_register_wisun(void)
         },
 
         { &hf_wisun_vpie_vid,
-          { "Vendor ID", "wisun.vpie.vid", FT_UINT32, BASE_DEC, NULL, 0x0,
+          { "Vendor ID", "wisun.vpie.vid", FT_UINT16, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
 
         { &hf_wisun_lcpie,
           { "LCP-IE", "wisun.lcpie", FT_NONE, BASE_NONE, NULL, 0x0,
             "LFN Channel Plan IE", HFILL }
+        },
+
+        { &hf_wisun_lcpie_channel_plan_tag,
+          { "Channel Plan Tag", "wisun.lcpie.channeltag", FT_UINT8, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
         },
 
         { &hf_wisun_panie,
@@ -2713,6 +2734,8 @@ void proto_register_wisun(void)
         &ett_wisun_bsie,
         &ett_wisun_vpie,
         &ett_wisun_lcpie,
+        &ett_wisun_usie_channel_control,
+        &ett_wisun_usie_explicit,
         &ett_wisun_panie,
         &ett_wisun_panie_flags,
         &ett_wisun_netnameie,
@@ -2786,6 +2809,11 @@ void proto_register_wisun(void)
 
     register_dissector("wisun.netricity.sc", dissect_wisun_netricity_sc, proto_wisun_netricity_sc);
     reassembly_table_register(&netricity_reassembly_table, &addresses_reassembly_table_functions);
+
+    vhie_dissector_table = register_dissector_table("wisun.vhie.vid", "Wi-SUN Vendor Header IEs",
+                                                    proto_wisun, FT_UINT16, BASE_DEC);
+    vpie_dissector_table = register_dissector_table("wisun.vpie.vid", "Wi-SUN Vendor Payload IEs",
+                                                    proto_wisun, FT_UINT16, BASE_DEC);
 }
 
 void proto_reg_handoff_wisun(void)

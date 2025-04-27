@@ -62,8 +62,22 @@ typedef enum {
     save_mode_sync_file
 } save_mode_t;
 
+class RtpBaseDialog : public WiresharkDialog
+{
+    Q_OBJECT
+protected:
+    explicit RtpBaseDialog(QWidget &parent, CaptureFile &cf) : WiresharkDialog(parent, cf) {}
+
+#ifdef QT_MULTIMEDIA_LIB
+public slots:
+    virtual void rtpAnalysisReplace() = 0;
+    virtual void rtpAnalysisAdd() = 0;
+    virtual void rtpAnalysisRemove() = 0;
+#endif // QT_MULTIMEDIA_LIB
+};
+
 // Singleton by https://refactoring.guru/design-patterns/singleton/cpp/example#example-1
-class RtpPlayerDialog : public WiresharkDialog
+class RtpPlayerDialog : public RtpBaseDialog
 {
     Q_OBJECT
 #ifdef QT_MULTIMEDIA_LIB
@@ -188,6 +202,7 @@ private slots:
     void on_jitterSpinBox_valueChanged(double);
     void on_timingComboBox_currentIndexChanged(int);
     void on_todCheckBox_toggled(bool checked);
+    void on_visualSRSpinBox_editingFinished();
     void on_buttonBox_helpRequested();
     void on_actionSelectAll_triggered();
     void on_actionSelectInvert_triggered();

@@ -78,19 +78,19 @@ struct shomiti_trailer {
 #define RX_STATUS_FIFO_ERROR		0x0080	/* receive FIFO error */
 #define RX_STATUS_TRIGGERED		0x0001	/* frame did trigger */
 
-static bool snoop_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+static bool snoop_read(wtap *wth, wtap_rec *rec,
     int *err, char **err_info, int64_t *data_offset);
-static bool snoop_seek_read(wtap *wth, int64_t seek_off,
-    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+static bool snoop_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+    int *err, char **err_info);
 static int snoop_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
-    Buffer *buf, int *err, char **err_info);
+    int *err, char **err_info);
 static bool snoop_read_atm_pseudoheader(FILE_T fh,
     union wtap_pseudo_header *pseudo_header, int *err, char **err_info);
 static bool snoop_read_shomiti_wireless_pseudoheader(FILE_T fh,
     union wtap_pseudo_header *pseudo_header, int *err, char **err_info,
     int *header_size);
 static bool snoop_dump(wtap_dumper *wdh, const wtap_rec *rec,
-    const uint8_t *pd, int *err, char **err_info);
+    int *err, char **err_info);
 
 static int snoop_file_type_subtype = -1;
 static int shomiti_file_type_subtype = -1;
@@ -456,14 +456,14 @@ typedef struct {
 
 
 /* Read the next packet */
-static bool snoop_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+static bool snoop_read(wtap *wth, wtap_rec *rec,
     int *err, char **err_info, int64_t *data_offset)
 {
 	int	padbytes;
 
 	*data_offset = file_tell(wth->fh);
 
-	padbytes = snoop_read_packet(wth, wth->fh, rec, buf, err, err_info);
+	padbytes = snoop_read_packet(wth, wth->fh, rec, err, err_info);
 	if (padbytes == -1)
 		return false;
 
@@ -479,13 +479,13 @@ static bool snoop_read(wtap *wth, wtap_rec *rec, Buffer *buf,
 }
 
 static bool
-snoop_seek_read(wtap *wth, int64_t seek_off,
-    wtap_rec *rec, Buffer *buf, int *err, char **err_info)
+snoop_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
+    int *err, char **err_info)
 {
 	if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
 		return false;
 
-	if (snoop_read_packet(wth, wth->random_fh, rec, buf, err, err_info) == -1) {
+	if (snoop_read_packet(wth, wth->random_fh, rec, err, err_info) == -1) {
 		if (*err == 0)
 			*err = WTAP_ERR_SHORT_READ;
 		return false;
@@ -495,7 +495,7 @@ snoop_seek_read(wtap *wth, int64_t seek_off,
 
 static int
 snoop_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
-    Buffer *buf, int *err, char **err_info)
+    int *err, char **err_info)
 {
 	snoop_t *snoop = (snoop_t *)wth->priv;
 	struct snooprec_hdr hdr;
@@ -629,7 +629,7 @@ snoop_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 	/*
 	 * Read the packet data.
 	 */
-	if (!wtap_read_packet_bytes(fh, buf, packet_size, err, err_info))
+	if (!wtap_read_bytes_buffer(fh, &rec->data, packet_size, err, err_info))
 		return -1;	/* failed */
 
 	/*
@@ -638,7 +638,7 @@ snoop_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec,
 	 */
 	if (wth->file_encap == WTAP_ENCAP_ATM_PDUS &&
 	    rec->rec_header.packet_header.pseudo_header.atm.type == TRAF_LANE) {
-		atm_guess_lane_type(rec, ws_buffer_start_ptr(buf));
+		atm_guess_lane_type(rec);
 	}
 
 	return rec_size - ((unsigned)sizeof hdr + packet_size);
@@ -856,9 +856,8 @@ static bool snoop_dump_open(wtap_dumper *wdh, int *err, char **err_info _U_)
 
 /* Write a record for a packet to a dump file.
    Returns true on success, false on failure. */
-static bool snoop_dump(wtap_dumper *wdh,
-	const wtap_rec *rec,
-	const uint8_t *pd, int *err, char **err_info _U_)
+static bool snoop_dump(wtap_dumper *wdh, const wtap_rec *rec,
+	int *err, char **err_info _U_)
 {
 	const union wtap_pseudo_header *pseudo_header = &rec->rec_header.packet_header.pseudo_header;
 	struct snooprec_hdr rec_hdr;
@@ -950,7 +949,8 @@ static bool snoop_dump(wtap_dumper *wdh,
 			return false;
 	}
 
-	if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
+	if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data),
+	    rec->rec_header.packet_header.caplen, err))
 		return false;
 
 	/* Now write the padding. */

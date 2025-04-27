@@ -25,17 +25,19 @@
 static QHash<const QString, register_srt_t *> cfg_str_to_srt_;
 
 extern "C" {
-static void
+static bool
 srt_init(const char *args, void*) {
     QStringList args_l = QString(args).split(',');
     if (args_l.length() > 1) {
-        QString srt = QString("%1,%2").arg(args_l[0]).arg(args_l[1]);
+        QString srt = QStringLiteral("%1,%2").arg(args_l[0]).arg(args_l[1]);
         QString filter;
         if (args_l.length() > 2) {
             filter = QStringList(args_l.mid(2)).join(",");
         }
         mainApp->emitTapParameterSignal(srt, filter, NULL);
     }
+
+    return true;
 }
 }
 
@@ -170,7 +172,7 @@ ServiceResponseTimeDialog::ServiceResponseTimeDialog(QWidget &parent, CaptureFil
     TapParameterDialog(parent, cf, help_topic),
     srt_(srt)
 {
-    QString subtitle = QString("%1 Service Response Time Statistics")
+    QString subtitle = QStringLiteral("%1 Service Response Time Statistics")
             .arg(proto_get_protocol_short_name(find_protocol_by_id(get_srt_proto_id(srt))));
     setWindowSubtitle(subtitle);
     loadGeometry(0, 0, "ServiceResponseTimeDialog");
@@ -336,7 +338,7 @@ const QString ServiceResponseTimeDialog::filterExpression()
             QString field = srtt_ti->filterField();
             QString value = ti->text(SRT_COLUMN_INDEX);
             if (!field.isEmpty() && !value.isEmpty()) {
-                filter_expr = QString("%1==%2").arg(field).arg(value);
+                filter_expr = QStringLiteral("%1==%2").arg(field).arg(value);
             }
         }
     }

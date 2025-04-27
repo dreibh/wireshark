@@ -2464,7 +2464,7 @@ dissect_opt_ioam_dex(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *
 
     extflags = tvb_get_bits8(tvb, offset*8, 8);
     proto_tree_add_bitmask(opt_tree, tvb, offset, hf_ipv6_opt_ioam_dex_extflags,
-                           ett_ipv6_opt_ioam_dex_extflags, ioam_dex_extflags, ENC_NA);
+                           ett_ipv6_opt_ioam_dex_extflags, ioam_dex_extflags, ENC_BIG_ENDIAN);
     offset++;
 
     proto_tree_add_bitmask(opt_tree, tvb, offset, hf_ipv6_opt_ioam_trace_type,
@@ -2472,12 +2472,12 @@ dissect_opt_ioam_dex(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *
     proto_tree_add_item(opt_tree, hf_ipv6_opt_ioam_trace_rsv, tvb, offset + 3, 1, ENC_NA);
     offset += 4;
 
-    if (extflags & 0x2) {
+    if (extflags & 0x80) {
         proto_tree_add_item(opt_tree, hf_ipv6_opt_ioam_dex_extflag_flowid, tvb, offset, 4, ENC_NA);
         offset+=4;
     }
 
-    if (extflags & 0x1) {
+    if (extflags & 0x40) {
         proto_tree_add_item(opt_tree, hf_ipv6_opt_ioam_dex_extflag_seqnum, tvb, offset, 4, ENC_NA);
         offset+=4;
     }
@@ -3742,7 +3742,7 @@ dissect_ipv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
         conversation_t *conv;
 
         /* find (and extend) an existing conversation, or create a new one */
-        conv = find_conversation_strat(pinfo, CONVERSATION_IPV6, NO_PORT_X);
+        conv = find_conversation_strat(pinfo, CONVERSATION_IPV6, NO_PORT_X, false);
         if(!conv) {
             conv=conversation_new_strat(pinfo, CONVERSATION_IPV6, NO_PORTS);
         }
@@ -4907,22 +4907,22 @@ proto_register_ipv6(void)
         },
         { &hf_ipv6_opt_ioam_dex_extflags,
             { "Extension Flags", "ipv6.opt.ioam.dex.extflags",
-                FT_UINT8, BASE_DEC, NULL, 0x0,
+                FT_UINT8, BASE_HEX, NULL, 0x0,
                 NULL, HFILL }
         },
         { &hf_ipv6_opt_ioam_dex_extflag_flag_seqnum,
             { "Sequence Number", "ipv6.opt.ioam.dex.extflag.flag.seqnum",
-                FT_BOOLEAN, 8, NULL, 0x2,
+                FT_BOOLEAN, 8, NULL, 0x40,
                 NULL, HFILL }
         },
         { &hf_ipv6_opt_ioam_dex_extflag_flag_flowid,
             { "Flow ID", "ipv6.opt.ioam.dex.extflag.flag.flowid",
-                FT_BOOLEAN, 8, NULL, 0x1,
+                FT_BOOLEAN, 8, NULL, 0x80,
                 NULL, HFILL }
         },
         { &hf_ipv6_opt_ioam_dex_extflag_flag_rsv,
             { "Reserved", "ipv6.opt.ioam.trace.type.rsv",
-                FT_BOOLEAN, 8, NULL, 0xFC,
+                FT_BOOLEAN, 8, NULL, 0x3F,
                 NULL, HFILL }
         },
         { &hf_ipv6_opt_ioam_dex_extflag_flowid,
@@ -5359,6 +5359,7 @@ proto_register_ipv6(void)
         &ett_ipv6_opt_dff_flags,
         &ett_ipv6_opt_ioam_trace_flags,
         &ett_ipv6_opt_ioam_trace_types,
+        &ett_ipv6_opt_ioam_dex_extflags,
         &ett_ipv6_fragment,
         &ett_ipv6_fragments
     };
@@ -5708,7 +5709,6 @@ proto_reg_handoff_ipv6(void)
     dissector_add_uint("pwach.channel_type", PW_ACH_TYPE_IPV6, ipv6_handle);
     dissector_add_uint("mcc.proto", PW_ACH_TYPE_IPV6, ipv6_handle);
     dissector_add_uint("sflow_245.header_protocol", SFLOW_245_HEADER_IPv6, ipv6_handle);
-    dissector_add_uint("wtap_encap", WTAP_ENCAP_RAW_IP6, ipv6_handle);
     dissector_add_uint("enc", BSD_AF_INET6_BSD, ipv6_handle);
     dissector_add_uint("vxlan.next_proto", VXLAN_IPV6, ipv6_handle);
     dissector_add_uint("nsh.next_proto", NSH_IPV6, ipv6_handle);

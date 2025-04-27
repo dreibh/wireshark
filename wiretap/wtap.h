@@ -1378,10 +1378,11 @@ typedef struct {
     /* uint32_t sentinel; */
     uint64_t  timestamp;        /* ns since epoch - XXX dup of ts */
     uint64_t  thread_id;
-    uint32_t  event_len;        /* length of the event */
-    uint32_t  event_filelen;    /* event data length in the file */
-    uint16_t  event_type;
+    uint32_t  event_len;        /* length of the event (ppm event len) */
+    uint32_t  event_data_len;   /* length of the event data (ppm event len - ppm event header len) */
     uint32_t  nparams;          /* number of parameters of the event */
+    uint32_t  flags;
+    uint16_t  event_type;
     uint16_t  cpu_id;
     /* ... Event ... */
 } wtap_syscall_header;
@@ -1445,14 +1446,27 @@ typedef struct wtap_rec {
         wtap_custom_block_header custom_block_header;
     } rec_header;
 
-    wtap_block_t block ;         /* packet block; holds comments and verdicts in its options */
-    bool block_was_modified; /* true if ANY aspect of the block has been modified */
+    /*
+     * XXX - some if not all of the rec_header information may belong
+     * here, or may already be here.  Eliminating rec_header in favor
+     * of this might simplify the process of adding new record/block
+     * types.
+     *
+     * It also has a type field that's somewhat equivalent to rec_type.
+     *
+     * It's null for some record types.
+     */
+    wtap_block_t block;          /* block information */
+    bool block_was_modified;     /* true if ANY aspect of the block has been modified */
 
     /*
      * We use a Buffer so that we don't have to allocate and free
      * a buffer for the options for each record.
      */
     Buffer    options_buf;       /* file-type specific data */
+
+    /* Buffer for the record data. */
+    Buffer    data;
 } wtap_rec;
 
 /*
@@ -1482,15 +1496,24 @@ typedef struct wtap_rec {
 #define WTAP_HAS_INTERFACE_ID   0x00000004  /**< interface ID */
 #define WTAP_HAS_SECTION_NUMBER 0x00000008  /**< section number */
 
+/*
+ * The old max name length define, both for backwards compatibility and because
+ * other name types (in epan) use it. While Name Resolution Blocks (NRBs) only
+ * support IPv4 and IPv6 currently, they could later support other name types.
+ */
 #ifndef MAXNAMELEN
-#define MAXNAMELEN  	64	/* max name length (hostname and port name) */
+#define MAXNAMELEN  	64	/* max name length (most names: DNS labels, services, eth) */
+#endif
+
+#ifndef MAXDNSNAMELEN
+#define MAXDNSNAMELEN  	256	/* max total length of a domain name in DNS */
 #endif
 
 typedef struct hashipv4 {
     unsigned          addr;
     uint8_t           flags;          /* B0 dummy_entry, B1 resolve, B2 If the address is used in the trace */
     char              ip[WS_INET_ADDRSTRLEN];
-    char              name[MAXNAMELEN];
+    char              name[MAXDNSNAMELEN];
     char              cidr_addr[WS_INET_CIDRADDRSTRLEN];
 } hashipv4_t;
 
@@ -1498,7 +1521,7 @@ typedef struct hashipv6 {
     uint8_t           addr[16];
     uint8_t           flags;          /* B0 dummy_entry, B1 resolve, B2 If the address is used in the trace */
     char              ip6[WS_INET6_ADDRSTRLEN];
-    char              name[MAXNAMELEN];
+    char              name[MAXDNSNAMELEN];
 } hashipv6_t;
 
 /** A struct with lists of resolved addresses.
@@ -1881,7 +1904,7 @@ typedef void (*wtap_new_ipv4_callback_t) (const unsigned addr, const char *name,
 WS_DLL_PUBLIC
 void wtap_set_cb_new_ipv4(wtap *wth, wtap_new_ipv4_callback_t add_new_ipv4);
 
-typedef void (*wtap_new_ipv6_callback_t) (const void *addrp, const char *name, const bool static_entry);
+typedef void (*wtap_new_ipv6_callback_t) (const ws_in6_addr *addrp, const char *name, const bool static_entry);
 WS_DLL_PUBLIC
 void wtap_set_cb_new_ipv6(wtap *wth, wtap_new_ipv6_callback_t add_new_ipv6);
 
@@ -1897,8 +1920,7 @@ void wtap_set_cb_new_secrets(wtap *wth, wtap_new_secrets_callback_t add_new_secr
  *
  * @wth a wtap * returned by a call that opened a file for reading.
  * @rec a pointer to a wtap_rec, filled in with information about the
- * record.
- * @buf a pointer to a Buffer, filled in with data from the record.
+ * record and the data from the record.
  * @param err a positive "errno" value, or a negative number indicating
  * the type of error, if the read failed.
  * @param err_info for some errors, a string giving more details of
@@ -1909,8 +1931,8 @@ void wtap_set_cb_new_secrets(wtap *wth, wtap_new_secrets_callback_t add_new_secr
  * @return true on success, false on failure.
  */
 WS_DLL_PUBLIC
-bool wtap_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
-    char **err_info, int64_t *offset);
+bool wtap_read(wtap *wth, wtap_rec *rec, int *err, char **err_info,
+    int64_t *offset);
 
 /** Read the record at a specified offset in a capture file, filling in
  * *phdr and *buf.
@@ -1920,8 +1942,7 @@ bool wtap_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
  * @seek_off a int64_t giving an offset value returned by a previous
  * wtap_read() call.
  * @rec a pointer to a struct wtap_rec, filled in with information
- * about the record.
- * @buf a pointer to a Buffer, filled in with data from the record.
+ * about the record and the data from the record.
  * @param err a positive "errno" value, or a negative number indicating
  * the type of error, if the read failed.
  * @param err_info for some errors, a string giving more details of
@@ -1930,11 +1951,15 @@ bool wtap_read(wtap *wth, wtap_rec *rec, Buffer *buf, int *err,
  */
 WS_DLL_PUBLIC
 bool wtap_seek_read(wtap *wth, int64_t seek_off, wtap_rec *rec,
-    Buffer *buf, int *err, char **err_info);
+    int *err, char **err_info);
 
 /*** initialize a wtap_rec structure ***/
 WS_DLL_PUBLIC
-void wtap_rec_init(wtap_rec *rec);
+void wtap_rec_init(wtap_rec *rec, gsize space);
+
+/*** Apply a snapshot value ***/
+WS_DLL_PUBLIC
+void wtap_rec_apply_snapshot(wtap_rec *rec, uint32_t snaplen);
 
 /*** Re-initialize a wtap_rec structure ***/
 WS_DLL_PUBLIC
@@ -1965,6 +1990,8 @@ WS_DLL_PUBLIC
 const char *wtap_compression_type_description(wtap_compression_type compression_type);
 WS_DLL_PUBLIC
 const char *wtap_compression_type_extension(wtap_compression_type compression_type);
+WS_DLL_PUBLIC
+const char *wtap_compression_type_name(wtap_compression_type compression_type);
 WS_DLL_PUBLIC
 GSList *wtap_get_all_compression_type_extensions_list(void);
 WS_DLL_PUBLIC
@@ -2342,8 +2369,7 @@ WS_DLL_PUBLIC
 bool wtap_dump_add_idb(wtap_dumper *wdh, wtap_block_t idb, int *err,
      char **err_info);
 WS_DLL_PUBLIC
-bool wtap_dump(wtap_dumper *, const wtap_rec *, const uint8_t *,
-     int *err, char **err_info);
+bool wtap_dump(wtap_dumper *, const wtap_rec *, int *err, char **err_info);
 WS_DLL_PUBLIC
 bool wtap_dump_flush(wtap_dumper *, int *);
 WS_DLL_PUBLIC

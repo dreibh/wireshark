@@ -18,6 +18,7 @@ ADD_CUSTOM_CMAKE_INCLUDE()
 set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/additional_toolbar.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/apply_line_edit.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/base_data_source_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/byte_view_text.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_combo.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_edit.h
@@ -39,6 +40,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/find_line_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/follow_stream_text.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/interface_toolbar_lineedit.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/json_data_source_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/label_stack.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/overlay_scroll_bar.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/packet_list_header.h
@@ -55,7 +57,6 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/splash_overlay.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/stock_icon_tool_button.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/syntax_line_edit.h
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/wireless_timeline.h # Required by PacketListModel
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/tabnav_tree_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/traffic_tab.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/traffic_tree.h
@@ -181,11 +182,13 @@ set(WIRESHARK_QT_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/funnel_text_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/geometry_state_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/glib_mainloop_on_qeventloop.h
+	${CMAKE_SOURCE_DIR}/ui/qt/graph.h
 	${CMAKE_SOURCE_DIR}/ui/qt/import_text_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/interface_frame.h
 	${CMAKE_SOURCE_DIR}/ui/qt/interface_toolbar_reader.h
 	${CMAKE_SOURCE_DIR}/ui/qt/interface_toolbar.h
 	${CMAKE_SOURCE_DIR}/ui/qt/io_console_dialog.h
+	${CMAKE_SOURCE_DIR}/ui/qt/io_graph.h
 	${CMAKE_SOURCE_DIR}/ui/qt/io_graph_action.h
 	${CMAKE_SOURCE_DIR}/ui/qt/io_graph_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/layout_preferences_frame.h
@@ -198,6 +201,7 @@ set(WIRESHARK_QT_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_comment_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_group_box.h
+	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_stack.h
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_list.h
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_range_group_box.h
 	${CMAKE_SOURCE_DIR}/ui/qt/preference_editor_frame.h
@@ -279,6 +283,7 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/find_line_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/follow_stream_text.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/interface_toolbar_lineedit.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/json_data_source_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/label_stack.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/overlay_scroll_bar.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/packet_list_header.cpp
@@ -295,7 +300,6 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/splash_overlay.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/stock_icon_tool_button.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/syntax_line_edit.cpp
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/wireless_timeline.cpp # Required by PacketListModel
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/tabnav_tree_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/traffic_tab.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/traffic_tree.cpp
@@ -431,6 +435,7 @@ set(WIRESHARK_QT_SRC
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_comment_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_group_box.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_stack.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_list.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_range_group_box.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/preference_editor_frame.cpp
@@ -446,9 +451,6 @@ set(WIRESHARK_QT_SRC
 	${CMAKE_SOURCE_DIR}/ui/qt/response_time_delay_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/rsa_keys_frame.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/search_frame.cpp
-	# XXX Depends on RTP Stream Dialog
-	# ${CMAKE_SOURCE_DIR}/ui/qt/sequence_diagram.cpp
-	# ${CMAKE_SOURCE_DIR}/ui/qt/sequence_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/show_packet_bytes_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/simple_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/simple_statistics_dialog.cpp
@@ -492,6 +494,8 @@ set (STRATOSHARK_QT_SRC
 set(WIRESHARK_QT_TAP_SRC
 	${CMAKE_SOURCE_DIR}/ui/qt/expert_info_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/funnel_statistics.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/graph.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/io_graph.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/io_graph_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/stats_tree_dialog.cpp
 	${WIRESHARK_CUSTOM_TAP_SRC}
@@ -544,6 +548,7 @@ set(WIRESHARK_QT_UI
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_comment_dialog.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_dialog.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_group_box.ui
+	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_json_group_box.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_range_group_box.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/preference_editor_frame.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/preferences_dialog.ui
@@ -625,32 +630,34 @@ add_custom_command(
 		${CMAKE_SOURCE_DIR}/AUTHORS
 )
 
-set(STRATOSHARK_QT_QRC
+# Drop the file modification time of source files from generated files
+# to help with reproducible builds. We do not use QFileInfo.lastModified
+# so this has no unwanted side effects. This mtime started appearing in
+# Qt 5.8. The option to force the old file format without mtime was
+# added in Qt 5.9. See https://bugreports.qt.io/browse/QTBUG-58769.
+# Force the compression algorithm to zlib, since zstd requires format
+# version 3. See https://gitlab.com/wireshark/wireshark/-/issues/18100.
+# Use the number of dashes for each argument as documented at
+# https://doc.qt.io/qt-6/rcc.html.
+set(CMAKE_AUTORCC_OPTIONS --format-version 1)
+list(APPEND CMAKE_AUTORCC_OPTIONS -compress-algo zlib)
+
+if (APPLE)
+	set(SS_ICON_QRC "ssicon_mac.qrc")
+else()
+	set(SS_ICON_QRC "ssicon.qrc")
+endif()
+
+qt_add_resources(STRATOSHARK_QT_QRC
 	${CMAKE_SOURCE_DIR}/resources/about.qrc
 	${CMAKE_SOURCE_DIR}/resources/languages/languages.qrc
 	${CMAKE_SOURCE_DIR}/resources/layout.qrc
-	${CMAKE_SOURCE_DIR}/resources/ssicon.qrc
+	${CMAKE_SOURCE_DIR}/resources/${SS_ICON_QRC}
 	${CMAKE_SOURCE_DIR}/resources/stock_icons.qrc
 	${CMAKE_CURRENT_BINARY_DIR}/i18n.qrc
 	${CMAKE_CURRENT_BINARY_DIR}/authors.qrc
-	${CMAKE_CURRENT_BINARY_DIR}/authors.csv
+	OPTIONS ${CMAKE_AUTORCC_OPTIONS}
 )
-
-if(NOT Qt${qtver}Widgets_VERSION VERSION_LESS "5.9")
-	# Drop the file modification time of source files from generated files
-	# to help with reproducible builds. We do not use QFileInfo.lastModified
-	# so this has no unwanted side effects. This mtime started appearing in
-	# Qt 5.8. The option to force the old file format without mtime was
-	# added in Qt 5.9. See https://bugreports.qt.io/browse/QTBUG-58769.
-	# Force the compression algorithm to zlib, since zstd requires format
-	# version 3. See https://gitlab.com/wireshark/wireshark/-/issues/18100.
-	# Use the number of dashes for each argument as documented at
-	# https://doc.qt.io/qt-6/rcc.html.
-	set(CMAKE_AUTORCC_OPTIONS --format-version 1)
-	if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "5.13")
-		list(APPEND CMAKE_AUTORCC_OPTIONS -compress-algo zlib)
-	endif()
-endif()
 
 if (USE_qt6)
 	QT6_ADD_TRANSLATION(STRATOSHARK_QT_QM ${STRATOSHARK_QT_TS} OPTIONS -silent)
@@ -732,6 +739,8 @@ target_include_directories(ui_stratoshark
 		${PCAP_INCLUDE_DIRS}
 		${SPEEXDSP_INCLUDE_DIRS}
 		${WINSPARKLE_INCLUDE_DIRS}
+		$<$<CXX_COMPILER_ID:MSVC>:${ZLIB_INCLUDE_DIRS}>
+		$<$<CXX_COMPILER_ID:MSVC>:${ZLIBNG_INCLUDE_DIRS}>
 	PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}
@@ -763,7 +772,8 @@ set_target_properties(ui_stratoshark PROPERTIES
 	FOLDER "UI"
 	AUTOMOC ON
 	AUTOUIC ON
-	AUTORCC ON
+	# AUTORCC not needed with qt_add_resources
+	#AUTORCC ON
 	# Ensure .qm files are generated before autogenerating i18n.qrc
 	AUTOGEN_TARGET_DEPENDS "${STRATOSHARK_QT_QM}"
 )

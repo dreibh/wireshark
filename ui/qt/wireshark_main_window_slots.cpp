@@ -231,11 +231,11 @@ bool WiresharkMainWindow::openCaptureFile(QString cf_path, QString read_filter, 
             /* Not valid.  Tell the user, and go back and run the file
                selection box again once they dismiss the alert. */
                //bad_dfilter_alert_box(top_level, read_filter->str);
-            QMessageBox::warning(this, tr("Invalid Display Filter"),
-                    QString("The filter expression ") +
+            QMessageBox::warning(this, tr("Invalid Read Filter"),
+                    QStringLiteral("The filter expression \"") +
                     read_filter +
-                    QString(" isn't a valid display filter. (") +
-                    df_err->msg + QString(")."),
+                    QStringLiteral("\" isn't a valid read filter.\n(") +
+                    df_err->msg + QStringLiteral(")."),
                     QMessageBox::Ok);
             df_error_free(&df_err);
             if (!name_param) {
@@ -506,7 +506,7 @@ void WiresharkMainWindow::queuedFilterAction(QString action_filter, FilterAction
         break;
     case FilterAction::ActionWebLookup:
     {
-        QString url = QString("https://www.google.com/search?q=") + new_filter;
+        QString url = QStringLiteral("https://www.google.com/search?q=%1").arg(new_filter);
         QDesktopServices::openUrl(QUrl(url));
         break;
     }
@@ -777,7 +777,7 @@ void WiresharkMainWindow::captureFileReadStarted(const QString &action) {
 //    main_set_for_capture_file(true);
 
     mainApp->popStatus(WiresharkApplication::FileStatus);
-    QString msg = QString(tr("%1: %2")).arg(action).arg(capture_file_.fileName());
+    QString msg = tr("%1: %2").arg(action).arg(capture_file_.fileName());
     QString msgtip = QString();
     mainApp->pushStatus(WiresharkApplication::FileStatus, msg, msgtip);
     showCapture();
@@ -837,7 +837,7 @@ void WiresharkMainWindow::captureFileClosed() {
     main_ui_->statusBar->captureFileClosing();
     mainApp->popStatus(WiresharkApplication::FileStatus);
 
-    setWSWindowTitle();
+    setMainWindowTitle();
     setWindowIcon(mainApp->normalIcon());
     setMenusForSelectedPacket();
     setMenusForSelectedTreeRow();
@@ -882,7 +882,7 @@ void WiresharkMainWindow::startCapture(QStringList interfaces) {
 
     /* did the user ever select a capture interface before? */
     if (global_capture_opts.num_selected == 0) {
-        QString msg = QString(tr("No interface selected."));
+        QString msg = tr("No interface selected.");
         mainApp->pushStatus(WiresharkApplication::TemporaryStatus, msg);
         main_ui_->actionCaptureStart->setChecked(false);
         return;
@@ -907,7 +907,7 @@ void WiresharkMainWindow::startCapture(QStringList interfaces) {
 
     /* If some of extcap was not configured, do not start with the capture */
     if (!can_start_capture) {
-        QString msg = QString(tr("Configure all extcaps before start of capture."));
+        QString msg = tr("Configure all extcaps before start of capture.");
         mainApp->pushStatus(WiresharkApplication::TemporaryStatus, msg);
         main_ui_->actionCaptureStart->setChecked(false);
         return;
@@ -917,7 +917,7 @@ void WiresharkMainWindow::startCapture(QStringList interfaces) {
     // toolbar buttons and menu items. This may not be the
     // case, e.g. with QtMacExtras.
     if (!capture_filter_valid_) {
-        QString msg = QString(tr("Invalid capture filter."));
+        QString msg = tr("Invalid capture filter.");
         mainApp->pushStatus(WiresharkApplication::TemporaryStatus, msg);
         main_ui_->actionCaptureStart->setChecked(false);
         return;
@@ -998,8 +998,8 @@ void WiresharkMainWindow::pushLiveCaptureInProgress() {
     g_string_append(interface_names, " ");
 
     mainApp->popStatus(WiresharkApplication::FileStatus);
-    QString msg = QString("%1<live capture in progress>").arg(interface_names->str);
-    QString msgtip = QString("to file: ");
+    QString msg = QStringLiteral("%1<live capture in progress>").arg(interface_names->str);
+    QString msgtip = QStringLiteral("to file: ");
     if (capture_opts->save_file)
         msgtip += capture_opts->save_file;
     mainApp->pushStatus(WiresharkApplication::FileStatus, msg, msgtip);
@@ -1725,11 +1725,7 @@ void WiresharkMainWindow::addStatsPluginsToMenu() {
 
             parent_menu = main_ui_->menuStatistics;
             // gtk/main_menubar.c compresses double slashes, hence SkipEmptyParts
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 0)
             QStringList cfg_name_parts = QString(cfg->path).split(STATS_TREE_MENU_SEPARATOR, Qt::SkipEmptyParts);
-#else
-            QStringList cfg_name_parts = QString(cfg->path).split(STATS_TREE_MENU_SEPARATOR, QString::SkipEmptyParts);
-#endif
             if (cfg_name_parts.isEmpty()) continue;
 
             QString stat_name = cfg_name_parts.takeLast().trimmed();
@@ -1799,7 +1795,7 @@ void WiresharkMainWindow::onFilterEdit(int uatIndex)
 
 void WiresharkMainWindow::openStatCommandDialog(const QString &menu_path, const char *arg, void *userdata)
 {
-    QString slot = QString("statCommand%1").arg(menu_path);
+    QString slot = QStringLiteral("statCommand%1").arg(menu_path);
     QMetaObject::invokeMethod(this, slot.toLatin1().constData(), Q_ARG(const char *, arg), Q_ARG(void *, userdata));
 }
 
@@ -2932,8 +2928,8 @@ void WiresharkMainWindow::openPacketDialog(bool from_reference)
 
         connect(packet_dialog, &PacketDialog::showProtocolPreferences,
                 this, &WiresharkMainWindow::showPreferencesDialog);
-        connect(packet_dialog, SIGNAL(editProtocolPreference(preference*, pref_module*)),
-                main_ui_->preferenceEditorFrame, SLOT(editPreference(preference*, pref_module*)));
+        connect(packet_dialog, SIGNAL(editProtocolPreference(pref_t*,module_t*)),
+                main_ui_->preferenceEditorFrame, SLOT(editPreference(pref_t*,module_t*)));
 
         connect(this, &WiresharkMainWindow::closePacketDialogs, packet_dialog, &PacketDialog::close);
         zoomText(); // Emits mainApp->zoomMonospaceFont(QFont)
@@ -3022,6 +3018,12 @@ void WiresharkMainWindow::connectGoMenuActions()
     connect(main_ui_->actionGoPreviousConversationPacket, &QAction::triggered, this,
             [this]() { goToConversationFrame(false); });
 
+    connect(main_ui_->actionGoFirstConversationPacket, &QAction::triggered, this,
+        [this]() { goToConversationFrame(true, false); });
+
+    connect(main_ui_->actionGoLastConversationPacket, &QAction::triggered, this,
+        [this]() { goToConversationFrame(false, false); });
+
     connect(main_ui_->actionGoNextHistoryPacket, &QAction::triggered,
             packet_list_, &PacketList::goNextHistoryPacket);
 
@@ -3041,7 +3043,7 @@ void WiresharkMainWindow::connectGoMenuActions()
             [this](bool checked) { packet_list_->setVerticalAutoScroll(checked); });
 }
 
-void WiresharkMainWindow::goToConversationFrame(bool go_next) {
+void WiresharkMainWindow::goToConversationFrame(bool go_next, bool start_current) {
     char      *filter       = NULL;
     dfilter_t *dfcode       = NULL;
     bool       found_packet = false;
@@ -3069,7 +3071,7 @@ void WiresharkMainWindow::goToConversationFrame(bool go_next) {
         return;
     }
 
-    found_packet = cf_find_packet_dfilter(capture_file_.capFile(), dfcode, go_next ? SD_FORWARD : SD_BACKWARD);
+    found_packet = cf_find_packet_dfilter(capture_file_.capFile(), dfcode, go_next ? SD_FORWARD : SD_BACKWARD, start_current);
 
     if (!found_packet) {
         /* We didn't find a packet */
@@ -3435,7 +3437,7 @@ void WiresharkMainWindow::on_actionSCTPFilterThisAssociation_triggered()
 {
     const sctp_assoc_info_t* assoc = SCTPAssocAnalyseDialog::findAssocForPacket(capture_file_.capFile());
     if (assoc) {
-        QString newFilter = QString("sctp.assoc_index==%1").arg(assoc->assoc_id);
+        QString newFilter = QStringLiteral("sctp.assoc_index==%1").arg(assoc->assoc_id);
         assoc = NULL;
         emit filterPackets(newFilter, false);
     }
@@ -3597,9 +3599,8 @@ void WiresharkMainWindow::connectStatisticsMenuActions()
 
 void WiresharkMainWindow::openTcpStreamDialog(int graph_type)
 {
-    TCPStreamDialog *stream_dialog = new TCPStreamDialog(this, capture_file_.capFile(), (tcp_graph_type)graph_type);
+    TCPStreamDialog *stream_dialog = new TCPStreamDialog(this, capture_file_, (tcp_graph_type)graph_type);
     connect(stream_dialog, &TCPStreamDialog::goToPacket, this, [=](int packet_num) {packet_list_->goToPacket(packet_num);});
-    connect(this, &WiresharkMainWindow::setCaptureFile, stream_dialog, &TCPStreamDialog::setCaptureFile);
     if (stream_dialog->result() == QDialog::Accepted) {
         stream_dialog->show();
     }
@@ -3660,7 +3661,8 @@ void WiresharkMainWindow::showIOGraphDialog(io_graph_item_unit_t value_units, QS
     }
 
     if (iog_dialog == nullptr) {
-        iog_dialog = new IOGraphDialog(*this, capture_file_, displayFilter, value_units, yfield);
+        QVector<QString> conv_filters;
+        iog_dialog = new IOGraphDialog(*this, capture_file_, displayFilter, value_units, yfield, false, conv_filters);
         connect(iog_dialog, &IOGraphDialog::goToPacket, this, [=](int packet_num) {packet_list_->goToPacket(packet_num);});
         connect(this, &WiresharkMainWindow::reloadFields, iog_dialog, &IOGraphDialog::reloadFields);
     }
@@ -3671,6 +3673,68 @@ void WiresharkMainWindow::showIOGraphDialog(io_graph_item_unit_t value_units, QS
     }
     iog_dialog->raise();
     iog_dialog->activateWindow();
+}
+
+void WiresharkMainWindow::openIOGraph(bool filtered, QVector<uint> typed_conv_ids, QVector<QVariant> typed_conv_agg)
+{
+    const DisplayFilterEdit *df_edit = qobject_cast<DisplayFilterEdit *>(df_combo_box_->lineEdit());
+    QString displayFilter;
+    if (df_edit && filtered)
+        displayFilter = df_edit->text();
+
+    /* the filters to open the IOGraph dialog with */
+    QVector<QString> conv_filters;
+
+    /* maximum number of graphs to open (too many might break the dialog) */
+    uint max_conv = 10;
+    uint count_conv = 0;
+
+    /* the list received should contain at least 2 elements (conv type + conv ids) */
+    if(typed_conv_ids.size()>1) {
+        const QString pfname = proto_get_protocol_filter_name(typed_conv_ids.at(0));
+
+        // parse the conversations Vector and build the Display Filters Vector
+        int i=1;
+        while(i<typed_conv_ids.size() && (count_conv<max_conv) ) {
+            if( (typed_conv_ids.at(i) != CONV_ID_UNSET) ){
+                conv_filters.append(pfname + ".stream eq " + QString::number(typed_conv_ids.at(i)) );
+                count_conv++;
+                i++;
+            }
+            /* else: not supposed to happen, invalid conversations are ignored */
+        }
+    }
+
+    // parse the aggregated info
+    if(typed_conv_agg.size()>1) {
+        QString fagg;
+
+        bool right_part = false;
+        QString qslft, qsrgt;
+
+        int i=1;
+        while( (i<typed_conv_agg.size()) && (count_conv<max_conv) ) {
+            if(right_part) {
+                qsrgt = QString(typed_conv_agg.at(i).toString());
+
+                QString aggfilter;
+                aggfilter = (qslft==qsrgt) ? QString("ip.src==" + qslft + " && ip.dst==" + qsrgt)
+                                           : QString("ip.addr==" + qslft + " && ip.addr==" + qsrgt);
+
+                conv_filters.append(aggfilter);
+                count_conv++;
+            }
+            else {
+                qslft = QString(typed_conv_agg.at(i).toString());
+            }
+            right_part = !right_part;
+            i++;
+        }
+    }
+
+    IOGraphDialog *iog_dialog = new IOGraphDialog(*this, capture_file_, displayFilter, IOG_ITEM_UNIT_PACKETS, QString(), true, conv_filters);
+    connect(this, SIGNAL(reloadFields()), iog_dialog, SLOT(reloadFields()));
+    iog_dialog->show();
 }
 
 // Telephony Menu
@@ -3932,13 +3996,13 @@ void WiresharkMainWindow::connectHelpMenuActions()
     connect(main_ui_->actionHelpMPReordercap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_REORDERCAP); });
     connect(main_ui_->actionHelpMPText2pcap, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_TEXT2PCAP); });
     connect(main_ui_->actionHelpMPTShark, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_TSHARK); });
-    connect(main_ui_->actionHelpWebsite, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_HOME); });
+    connect(main_ui_->actionHelpWebsite, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_WIRESHARK_HOME); });
     connect(main_ui_->actionHelpFAQ, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_FAQ); });
     connect(main_ui_->actionHelpAsk, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_ASK); });
-    connect(main_ui_->actionHelpDownloads, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_DOWNLOAD); });
-    connect(main_ui_->actionHelpWiki, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_WIKI); });
+    connect(main_ui_->actionHelpDownloads, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_WIRESHARK_DOWNLOAD); });
+    connect(main_ui_->actionHelpWiki, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_WIRESHARK_WIKI); });
     connect(main_ui_->actionHelpSampleCaptures, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_SAMPLE_FILES); });
-    connect(main_ui_->actionHelpReleaseNotes, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_RELEASE_NOTES); });
+    connect(main_ui_->actionHelpReleaseNotes, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_WIRESHARK_RELEASE_NOTES); });
 }
 
 #ifdef HAVE_SOFTWARE_UPDATE
@@ -4004,6 +4068,10 @@ void WiresharkMainWindow::showConversationsDialog()
                 openFollowStreamDialog(proto_id, stream_num, sub_stream_num);
             });
     connect(conv_dialog, &ConversationDialog::openTcpStreamGraph, this, &WiresharkMainWindow::openTcpStreamDialog);
+    connect(conv_dialog, &ConversationDialog::openIOGraph, this,
+            [=](bool filtered, QVector<uint> typed_conv_ids, QVector<QVariant> typed_conv_agg) {
+                openIOGraph(filtered, typed_conv_ids, typed_conv_agg);
+            });
     conv_dialog->show();
 }
 

@@ -18,6 +18,7 @@
 #include "progress_frame.h"
 #include "main_application.h"
 
+#include <ui/qt/main_window.h>
 #include <ui/qt/widgets/traffic_tab.h>
 #include <ui/qt/widgets/traffic_types_list.h>
 
@@ -43,19 +44,22 @@ TrafficTableDialog::TrafficTableDialog(QWidget &parent, CaptureFile &cf, const Q
     loadGeometry(parent.width(), parent.height() * 3 / 4);
 
     ui->absoluteTimeCheckBox->hide();
-    setWindowSubtitle(QString("%1s").arg(table_name));
-    ui->grpSettings->setTitle(QString("%1 Settings").arg(table_name));
+    setWindowSubtitle(QStringLiteral("%1s").arg(table_name));
+    ui->grpSettings->setTitle(QStringLiteral("%1 Settings").arg(table_name));
 
     copy_bt_ = buttonBox()->addButton(tr("Copy"), QDialogButtonBox::ActionRole);
     copy_bt_->setMenu(ui->trafficTab->createCopyMenu(copy_bt_));
 
     if (cf.displayFilter().length() > 0) {
         ui->displayFilterCheckBox->setChecked(true);
-        ui->trafficTab->setFilter(cf.displayFilter());
+        ui->trafficTab->limitToDisplayFilter(true);
     }
 
+    connect(ui->machineReadableCheckBox, &QCheckBox::toggled, ui->trafficTab, &TrafficTab::setMachineReadable);
+    ui->machineReadableCheckBox->setChecked(prefs.conv_machine_readable);
+
     ui->trafficTab->setFocus();
-    ui->trafficTab->useNanosecondTimestamps(cf.timestampPrecision() == WTAP_TSPREC_NSEC);
+    ui->trafficTab->useNanosecondTimestamps(cf.timestampPrecision() == WTAP_TSPREC_NSEC || cf.timestampPrecision() == WTAP_TSPREC_PER_PACKET);
     connect(ui->displayFilterCheckBox, &QCheckBox::toggled, this, &TrafficTableDialog::displayFilterCheckBoxToggled);
     connect(ui->trafficList, &TrafficTypesList::protocolsChanged, ui->trafficTab, &TrafficTab::setOpenTabs);
     connect(ui->trafficTab, &TrafficTab::tabsChanged, ui->trafficList, &TrafficTypesList::selectProtocols);
@@ -135,7 +139,20 @@ void TrafficTableDialog::aggregationSummaryOnlyCheckBoxToggled(bool checked)
         return;
     }
 
-    ATapDataModel * atdm = trafficTab()->dataModelForTabIndex(1);
+    // Defaults to 0 but we can't reach this place if IPv4 is not selected anyway
+    int protoTabIndex = 0;
+
+    // Identify which tab number corresponds to IPv4
+    QList<int> _enabledProtocols = trafficList()->protocols(true);
+    for (int i=0; i< _enabledProtocols.size(); i++) {
+        QString protoname = proto_get_protocol_short_name(find_protocol_by_id(_enabledProtocols.at(i))) ;
+        if("IPv4" == protoname) {
+            protoTabIndex = i;
+            break;
+        }
+    }
+
+    ATapDataModel * atdm = trafficTab()->dataModelForTabIndex(protoTabIndex);
     if(atdm) {
         atdm->updateFlags(checked);
     }
@@ -148,17 +165,13 @@ void TrafficTableDialog::on_nameResolutionCheckBox_toggled(bool checked)
     ui->trafficTab->setNameResolution(checked);
 }
 
-void TrafficTableDialog::displayFilterCheckBoxToggled(bool checked)
+void TrafficTableDialog::displayFilterCheckBoxToggled(bool set_filter)
 {
     if (!cap_file_.isValid()) {
         return;
     }
 
-    if (checked)
-        trafficTab()->setFilter(cap_file_.displayFilter());
-    else
-        trafficTab()->setFilter(QString());
-
+    ui->trafficTab->limitToDisplayFilter(set_filter);
     cap_file_.retapPackets();
 }
 

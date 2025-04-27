@@ -276,6 +276,13 @@ static bool http_decompress_body = true;
  */
 static bool http_check_ascii_headers = false;
 
+/*
+ * Try heuristic sub-dissectors for HTTP message bodies before
+ * sub-dissectors registered to the Content-Type, aka "MIME sniffing".
+ * Disabled by default, per RFC 9110.
+ */
+static bool http_try_heuristic_first;
+
 /* Simple Service Discovery Protocol
  * SSDP is implemented atop HTTP (yes, it really *does* run over UDP).
  * SSDP is the discovery protocol of Universal Plug and Play
@@ -876,7 +883,7 @@ http_seq_stats_tick_request(stats_tree* st, const char* arg_full_uri, int refere
 	}
 }
 
-static char*
+char*
 determine_http_location_target(wmem_allocator_t *scope, const char *base_url, const char * location_url)
 {
 	/* Resolving a base URI + relative URI to an absolute URI ("Relative Resolution")
@@ -2180,6 +2187,15 @@ dissecting_body:
 			}
 #endif
 
+#ifdef HAVE_ZSTD
+			if (http_decompress_body &&
+			    g_ascii_strcasecmp(headers->content_encoding, "zstd") == 0)
+			{
+				uncomp_tvb = tvb_child_uncompress_zstd(tvb, next_tvb, 0,
+				    tvb_captured_length(next_tvb));
+			}
+#endif
+
 			if (http_decompress_body &&
 			    g_ascii_strcasecmp(headers->content_encoding, "xpress") == 0)
 			{
@@ -2313,15 +2329,47 @@ dissecting_body:
 
 		/*
 		 * Do subdissector checks.
-		 *
-		 * First, if we have a Content-Type value, check whether
+		 */
+
+		/*
+		 * Is MIME sniffing enabled?
+		 */
+		if (http_try_heuristic_first) {
+			/*
+			 * Try the heuristic subdissectors.
+			 */
+			uint16_t save_can_desegment = pinfo->can_desegment;
+			if (!(is_request_or_reply || streaming_chunk_mode)) {
+				/* If this isn't a request or reply, and we're not
+				 * in streaming chunk mode, then we didn't try to
+				 * desegment the body. (We think this is file data
+				 * in the middle of a connection.) Allow the heuristic
+				 * dissectors to desegment, if possible.
+				 */
+				pinfo->can_desegment = pinfo->saved_can_desegment;
+			}
+			dissected = dissector_try_heuristic(heur_subdissector_list,
+							    next_tvb, pinfo, tree, &hdtbl_entry, content_info);
+			pinfo->can_desegment = save_can_desegment;
+
+			if (dissected) {
+				/*
+				 * The subdissector dissected the body.
+				 * Fix up the top-level item so that it doesn't
+				 * include the stuff for that protocol.
+				 */
+				if (ti != NULL)
+					proto_item_set_len(ti, offset);
+				goto body_dissected;
+			}
+		}
+
+		/* First, if we have a Content-Type value, check whether
 		 * there's a subdissector for that media type.
 		 */
 		if (headers->content_type != NULL && handle == NULL) {
 			/*
-			 * We didn't find any subdissector that
-			 * registered for the port, and we have a
-			 * Content-Type value.  Is there any subdissector
+			 * We have a Content-Type value.  Is there any subdissector
 			 * for that content type?
 			 */
 
@@ -2392,7 +2440,7 @@ dissecting_body:
 				expert_add_info(pinfo, http_tree, &ei_http_subdissector_failed);
 		}
 
-		if (!dissected) {
+		if (!dissected && !http_try_heuristic_first) {
 			/*
 			 * We don't have a subdissector or we have one and it did not
 			 * dissect the payload - try the heuristic subdissectors.
@@ -2824,16 +2872,31 @@ chunked_encoding_dissector(tvbuff_t **tvb_ptr, packet_info *pinfo,
 }
 
 static bool
-conversation_dissector_is_http(conversation_t *conv, uint32_t frame_num)
+http_conversation_is_connect(conversation_t *conv, uint32_t frame_num)
 {
-	dissector_handle_t conv_handle;
-
-	if (conv == NULL)
+	if (!conv) {
 		return false;
-	conv_handle = conversation_get_dissector(conv, frame_num);
-	return conv_handle == http_handle ||
-	       conv_handle == http_tcp_handle ||
-	       conv_handle == http_sctp_handle;
+	}
+
+	http_conv_t *conv_data = (http_conv_t *)conversation_get_proto_data(conv, proto_http);
+	if (conv_data) {
+		http_req_res_t *curr_req_res = conv_data->req_res_tail;
+		/* Any 2xx (Successful) response indicates the sender will
+		 * switch to tunnel mode immediately after the response header
+		 * section. */
+		if(frame_num >= conv_data->startframe &&
+		   curr_req_res &&
+		   curr_req_res->response_code >= 200 &&
+		   curr_req_res->response_code < 300 &&
+		   curr_req_res->request_method &&
+		   strncmp(curr_req_res->request_method, "CONNECT", 7) == 0 &&
+		   curr_req_res->request_uri) {
+
+			return true;
+		}
+	}
+
+	return false;
 }
 
 /* Call a subdissector to handle HTTP CONNECT's traffic */
@@ -2843,6 +2906,8 @@ http_payload_subdissector(tvbuff_t *tvb, proto_tree *tree,
 {
 	uint32_t *ptr = NULL;
 	uint32_t uri_port, saved_port, srcport, destport;
+	address uri_addr, saved_addr;
+	address *addrp;
 	char **strings; /* An array for splitting the request URI into hostname and port */
 	proto_item *item;
 	proto_tree *proxy_tree;
@@ -2871,32 +2936,46 @@ http_payload_subdissector(tvbuff_t *tvb, proto_tree *tree,
 			proto_item_set_generated(item);
 		}
 
+		/* Set the port and address to the proxied ones so that
+		 * decode_tcp_ports doesn't call the current conversation
+		 * dissector (we must set the address if the URI port is the
+		 * same), and other functions that retrieve conversation data
+		 * or set the conversation dissector don't affect the original
+		 * conversation but the proxied one.
+		 */
 		uri_port = (int)strtol(strings[1], NULL, 10); /* Convert string to a base-10 integer */
 
+		/* Just use the string as a string address. */
+		set_address(&uri_addr, AT_STRINGZ, (int)strlen(strings[0]) + 1, strings[0]);
+		/* We may get stuck in a recursion loop if we let decode_tcp_ports() call us.
+		 * So, if the conversation that would be called also is CONNECT,
+		 * call the data dissector directly instead. The CONNECT method
+		 * is blind forwarding of data and consumes no payload itself
+		 * here, so infinite loops are possible. (Strictly, to avoid a
+		 * loop we must only assure that the same 5-tuple isn't reused,
+		 * which would take more work to check.)
+		 */
 		if (!from_server) {
 			srcport = pinfo->srcport;
 			destport = uri_port;
+			conv = find_conversation(pinfo->num, &pinfo->src, &uri_addr, CONVERSATION_TCP, srcport, destport, 0);
 		} else {
 			srcport = uri_port;
 			destport = pinfo->destport;
+			conv = find_conversation(pinfo->num, &uri_addr, &pinfo->dst, CONVERSATION_TCP, srcport, destport, 0);
 		}
 
-		conv = find_conversation(pinfo->num, &pinfo->src, &pinfo->dst, CONVERSATION_TCP, srcport, destport, 0);
-
-		/* We may get stuck in a recursion loop if we let process_tcp_payload() call us.
-		 * So, if the port in the URI is one we're registered for or we have set up a
-		 * conversation (e.g., one we detected heuristically or via Decode-As) call the data
-		 * dissector directly.
-		 */
-		if (value_is_in_range(http_tcp_range, uri_port) ||
-		    conversation_dissector_is_http(conv, pinfo->num)) {
+		if (http_conversation_is_connect(conv, pinfo->num)) {
 			call_data_dissector(tvb, pinfo, tree);
 		} else {
 			/* set pinfo->{src/dst port} and call the TCP sub-dissector lookup */
-			if (!from_server)
+			if (!from_server) {
 				ptr = &pinfo->destport;
-			else
+				addrp = &pinfo->src;
+			} else {
 				ptr = &pinfo->srcport;
+				addrp = &pinfo->dst;
+			}
 
 			/* Increase pinfo->can_desegment because we are traversing
 			 * http and want to preserve desegmentation functionality for
@@ -2905,12 +2984,15 @@ http_payload_subdissector(tvbuff_t *tvb, proto_tree *tree,
 			if( pinfo->can_desegment>0 )
 				pinfo->can_desegment++;
 
+			copy_address_shallow(&saved_addr, addrp);
+			copy_address_shallow(addrp, &uri_addr);
 			saved_port = *ptr;
 			*ptr = uri_port;
 			decode_tcp_ports(tvb, 0, pinfo, tree,
 				pinfo->srcport, pinfo->destport, NULL,
 				(struct tcpinfo *)data);
 			*ptr = saved_port;
+			copy_address_shallow(addrp, &saved_addr);
 		}
 	}
 }
@@ -3852,7 +3934,7 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 				ws_strtou64(pos, &pos, &first_range_num);
 			}
 			/* req_list is used for req/resp matching and the deletion (and freeing) of matching
-			*  requests and any orphans that preceed them. A GSList is used instead of a wmem map
+			*  requests and any orphans that precede them. A GSList is used instead of a wmem map
 			*  because there are rarely more than 10 requests in the list."
 			*/
 			if (first_range_num > 0) {
@@ -3866,7 +3948,7 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 				 * found (the data does not, but the list node
 				 * does.) A wmem_list would prevent that.
 				 */
-				conv_data->req_list = g_slist_append(conv_data->req_list, GUINT_TO_POINTER(req_trans));
+				conv_data->req_list = g_slist_append(conv_data->req_list, req_trans);
 				curr_req_res->req_has_range = true;
 			}
 			}
@@ -3914,7 +3996,7 @@ process_header(tvbuff_t *tvb, int offset, int next_offset,
 
 				/* Get the position of the matching request if any in the reqs_table.
 				* This is used to remove and free the matching request, and the unmatched
-				* requests (orphans) that preceed it.
+				* requests (orphans) that precede it.
 				* XXX - There is *NO* guarantee that there is
 				* a perfectly matching request, see 15.3.7:
 				* "However, a server might want to send only a
@@ -4352,13 +4434,7 @@ dissect_http_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data
 	 * Check if this is proxied connection and if so, hand of dissection to the
 	 * payload-dissector.
 	 * Response code 200 means "OK" and strncmp() == 0 means the strings match exactly */
-	http_req_res_t *curr_req_res = conv_data->req_res_tail;
-	if(pinfo->num >= conv_data->startframe &&
-	   curr_req_res &&
-	   curr_req_res->response_code == 200 &&
-	   curr_req_res->request_method &&
-	   strncmp(curr_req_res->request_method, "CONNECT", 7) == 0 &&
-	   curr_req_res->request_uri) {
+	if(http_conversation_is_connect(conversation, pinfo->num)) {
 		if (conv_data->startframe == 0 && !PINFO_FD_VISITED(pinfo)) {
 			conv_data->startframe = pinfo->num;
 			conv_data->startoffset = 0;
@@ -4879,6 +4955,12 @@ proto_register_http(void)
 	    "Whether to treat non-ASCII in headers as non-HTTP data "
 	    "and allow other dissectors to process it",
 	    &http_check_ascii_headers);
+	prefs_register_bool_preference(http_module, "try_heuristic_first",
+	    "Try heuristic sub-dissectors first",
+	    "Try to decode HTTP bodies using heuristic sub-dissector "
+	    "(aka MIME sniffing) before using a sub-dissector registered "
+	    "to the Content-Type header or a specific port",
+	    &http_try_heuristic_first);
 	prefs_register_obsolete_preference(http_module, "tcp_alternate_port");
 
 	range_convert_str(wmem_epan_scope(), &global_http_tls_range, TLS_DEFAULT_RANGE, 65535);

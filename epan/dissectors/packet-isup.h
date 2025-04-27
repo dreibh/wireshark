@@ -118,7 +118,7 @@ WS_DLL_PUBLIC value_string_ext q850_cause_code_vals_ext;
 #define PARAM_TYPE_UID_ACTION_IND             116
 #define PARAM_TYPE_UID_CAPAB_IND              117
 #define PARAM_TYPE_REDIRECT_COUNTER           119
-#define PARAM_TYPE_APPLICATON_TRANS           120
+#define PARAM_TYPE_APPLICATION_TRANS          120
 #define PARAM_TYPE_COLLECT_CALL_REQ           121
 #define PARAM_TYPE_CALLING_GEODETIC_LOCATION  129     /* ANSI is the same */
 #define PARAM_TYPE_GENERIC_NR                 192
@@ -159,7 +159,8 @@ WS_DLL_PUBLIC value_string_ext isup_calling_partys_category_value_ext;
 /*
  * Export dissection of some parameters
  */
-void dissect_nsap(tvbuff_t *parameter_tvb,int offset,int len, proto_tree *parameter_tree);
+WS_DLL_PUBLIC
+void dissect_nsap(tvbuff_t *parameter_tvb, int offset, int len, proto_tree *parameter_tree);
 WS_DLL_PUBLIC
 void dissect_isup_called_party_number_parameter(tvbuff_t *parameter_tvb, packet_info *pinfo, proto_tree *parameter_tree, proto_item *parameter_item);
 WS_DLL_PUBLIC

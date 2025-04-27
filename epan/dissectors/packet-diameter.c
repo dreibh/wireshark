@@ -60,6 +60,7 @@
 #include "packet-dtls.h"
 #include "packet-e212.h"
 #include "packet-e164.h"
+#include "packet-eap.h"
 
 void proto_register_diameter(void);
 void proto_reg_handoff_diameter(void);
@@ -284,6 +285,9 @@ static int hf_diameter_user_equipment_info_mac;
 static int hf_diameter_user_equipment_info_eui64;
 static int hf_diameter_user_equipment_info_modified_eui64;
 
+static int hf_diameter_result_code_cmd_level;
+static int hf_diameter_result_code_mscc_level;
+
 static int ett_diameter;
 static int ett_diameter_flags;
 static int ett_diameter_avp_flags;
@@ -329,17 +333,6 @@ static dissector_table_t diameter_3gpp_avp_dissector_table;
 static dissector_table_t diameter_ericsson_avp_dissector_table;
 static dissector_table_t diameter_verizon_avp_dissector_table;
 static dissector_table_t diameter_expr_result_vnd_table;
-
-static const char *avpflags_str[] = {
-	"---",
-	"--P",
-	"-M-",
-	"-MP",
-	"V--",
-	"V-P",
-	"VM-",
-	"VMP",
-};
 
 #define SUBSCRIPTION_ID_TYPE_E164	0
 #define SUBSCRIPTION_ID_TYPE_IMSI	1
@@ -582,6 +575,28 @@ dissect_diameter_user_name(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 		// case User-Name is a User List containing a wild card
 		// or leading digits of IMSI series.
 		break;
+	case DIAM_APPID_3GPP_SWM:
+	case DIAM_APPID_3GPP_STA:
+	case DIAM_APPID_3GPP_S6B:
+		if (cmd_code == 268) {
+			// 3GPP TS 29.273 - For cmd_code 268 (Diameter-EAP),
+			// "The identity shall be represented in NAI form as
+			// specified in IETF RFC 4282 [15] and shall be formatted
+			// as defined in clause 19 of 3GPP TS 23.003 [14]. This
+			// IE shall include the leading digit used to
+			// differentiate between authentication schemes."
+			//
+			// Note that SWa uses the STa application ID, and
+			// SWd uses the application ID associated with
+			// the proxied command (STa here as well).
+			//
+			// For other command codes, the User-Name is different
+			// and does *not* include the leading digit as in EAP.
+			str_len = tvb_reported_length(tvb);
+			dissect_eap_identity_3gpp(tvb, pinfo, tree, 0, str_len);
+			return str_len;
+		}
+		break;
 	}
 
 	return 0;
@@ -633,6 +648,31 @@ dissect_diameter_mip6_feature_vector(tvbuff_t *tvb, packet_info *pinfo _U_, prot
 	}
 
 	return 8;
+}
+
+/* AVP Code: 268 Result-Code */
+static int
+dissect_diameter_result_code(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data)
+{
+	proto_item *pi;
+	diam_sub_dis_t *diam_sub_dis_inf = (diam_sub_dis_t*)data;
+
+	if (!diam_sub_dis_inf->dis_gouped) {
+		// Do not check length. This is done in function "unsigned32_avp"
+		pi = proto_tree_add_item(tree, hf_diameter_result_code_cmd_level, tvb, 0, 4, ENC_BIG_ENDIAN);
+		proto_item_set_generated(pi);
+		return 4;
+	}
+
+	/* AVP: Multiple-Services-Credit-Control(456) */
+	if (diam_sub_dis_inf->group_avp_code == 456) {
+		// Do not check length. This is done in function "unsigned32_avp"
+		pi = proto_tree_add_item(tree, hf_diameter_result_code_mscc_level, tvb, 0, 4, ENC_BIG_ENDIAN);
+		proto_item_set_generated(pi);
+		return 4;
+	}
+
+	return 0;
 }
 
 /* AVP Code: 443 Subscription-Id */
@@ -771,16 +811,16 @@ call_avp_subdissector(uint32_t vendorid, uint32_t code, tvbuff_t *subtvb, packet
 	TRY {
 		switch (vendorid) {
 		case 0:
-			dissector_try_uint_new(diameter_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
+			dissector_try_uint_with_data(diameter_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
 			break;
 		case VENDOR_ERICSSON:
-			dissector_try_uint_new(diameter_ericsson_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
+			dissector_try_uint_with_data(diameter_ericsson_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
 			break;
 		case VENDOR_VERIZON:
-			dissector_try_uint_new(diameter_verizon_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
+			dissector_try_uint_with_data(diameter_verizon_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
 			break;
 		case VENDOR_THE3GPP:
-			dissector_try_uint_new(diameter_3gpp_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
+			dissector_try_uint_with_data(diameter_3gpp_avp_dissector_table, code, subtvb, pinfo, avp_tree, false, diam_sub_dis_inf);
 			break;
 		default:
 			break;
@@ -803,7 +843,6 @@ dissect_diameter_avp(diam_ctx_t *c, tvbuff_t *tvb, int offset, diam_sub_dis_t *d
 	uint32_t code           = tvb_get_ntohl(tvb,offset);
 	uint32_t len            = tvb_get_ntohl(tvb,offset+4);
 	uint32_t vendor_flag    = len & 0x80000000;
-	uint32_t flags_bits_idx = (len & 0xE0000000) >> 29;
 	uint32_t flags_bits     = (len & 0xFF000000) >> 24;
 	uint32_t vendorid       = vendor_flag ? tvb_get_ntohl(tvb,offset+8) : 0 ;
 	wmem_tree_key_t k[3];
@@ -894,7 +933,8 @@ dissect_diameter_avp(diam_ctx_t *c, tvbuff_t *tvb, int offset, diam_sub_dis_t *d
 
 	offset += 4;
 
-	proto_item_set_text(avp_item,"AVP: %s(%u) l=%u f=%s", code_str, code, len, avpflags_str[flags_bits_idx]);
+	proto_item_set_text(avp_item,"%s", code_str);
+
 	if (update_col_info) {
 		col_append_fstr(c->pinfo->cinfo, COL_INFO, " %s", code_str);
 	}
@@ -926,7 +966,6 @@ dissect_diameter_avp(diam_ctx_t *c, tvbuff_t *tvb, int offset, diam_sub_dis_t *d
 
 	/* Vendor flag */
 	if (vendor_flag) {
-		proto_item_append_text(avp_item," vnd=%s", val_to_str(vendorid, vnd_short_vs, "%d"));
 		pi = proto_tree_add_item(avp_tree,hf_diameter_avp_vendor_id,tvb,offset,4,ENC_BIG_ENDIAN);
 		if (vendor == &unknown_vendor) {
 			proto_tree *tu = proto_item_add_subtree(pi,ett_unknown);
@@ -935,9 +974,25 @@ dissect_diameter_avp(diam_ctx_t *c, tvbuff_t *tvb, int offset, diam_sub_dis_t *d
 		offset += 4;
 	}
 
+	/* Data is empty so return now */
 	if ( len == (uint32_t)(vendor_flag ? 12 : 8) ) {
-		/* Data is empty so return now */
-		proto_tree_add_expert(avp_tree, c->pinfo, &ei_diameter_avp_no_data, tvb, offset, 0);
+		/* AVP=Requested-Service-Unit(437) may be empty.
+		 *
+		 * RFC 4006, 8.16 (page 64):
+		 * The Requested-Service-Unit AVP MAY contain the amount of requested
+		 * service units or the requested monetary value.  It MUST be present in
+		 * the initial interrogation and within the intermediate interrogations
+		 * in which new quota is requested.
+		 *
+		 * Command-Code = "Credit-Control" (272)
+		 * ApplicationID = "Diameter Credit Control Application" (4)
+		 */
+		if (!((code == 437)
+		     && (diam_sub_dis_inf->cmd_code == 272)
+			 && (diam_sub_dis_inf->parent_message_is_request)
+			 && (diam_sub_dis_inf->application_id == 4))) {
+			proto_tree_add_expert(avp_tree, c->pinfo, &ei_diameter_avp_no_data, tvb, offset, 0);
+		}
 		/* pad_len is always 0 in this case, but kept here for consistency */
 		return len+pad_len;
 	}
@@ -967,14 +1022,14 @@ dissect_diameter_avp(diam_ctx_t *c, tvbuff_t *tvb, int offset, diam_sub_dis_t *d
 		&& (diam_sub_dis_inf->vendor_id != VENDOR_THE3GPP))
 	{
 		/* call subdissector */
-		if (!dissector_try_uint_new(diameter_expr_result_vnd_table, diam_sub_dis_inf->vendor_id,
+		if (!dissector_try_uint_with_data(diameter_expr_result_vnd_table, diam_sub_dis_inf->vendor_id,
 					    subtvb, c->pinfo, avp_tree, false, diam_sub_dis_inf)) {
 			/* No subdissector for this vendor ID, use the generic one */
 			dissect_diameter_other_vendor_exp_res(c, subtvb, avp_tree, diam_sub_dis_inf);
 		}
 
 		if (diam_sub_dis_inf->avp_str) {
-			proto_item_append_text(avp_item," val=%s", diam_sub_dis_inf->avp_str);
+			proto_item_append_text(avp_item, ": %s", diam_sub_dis_inf->avp_str);
 		}
 	} else {
 		avp_str = a->dissector_rfc(c,a,subtvb, diam_sub_dis_inf);
@@ -986,9 +1041,9 @@ dissect_diameter_avp(diam_ctx_t *c, tvbuff_t *tvb, int offset, diam_sub_dis_t *d
 
 	/* Let the subdissector have precedence filling in the avp_item string */
 	if (diam_sub_dis_inf->avp_str) {
-		proto_item_append_text(avp_item," val=%s", diam_sub_dis_inf->avp_str);
+		proto_item_append_text(avp_item, ": %s", diam_sub_dis_inf->avp_str);
 	} else if (avp_str) {
-		proto_item_append_text(avp_item," val=%s", avp_str);
+		proto_item_append_text(avp_item, ": %s", avp_str);
 	}
 
 
@@ -1353,25 +1408,20 @@ grouped_avp(diam_ctx_t *c, diam_avp_t *a, tvbuff_t *tvb, diam_sub_dis_t *diam_su
 
 	/* Set the flag that we are dissecting a grouped AVP */
 	diam_sub_dis_inf->dis_gouped = true;
+	diam_sub_dis_inf->group_avp_code = a->code;
 	while (offset < len) {
 		offset += dissect_diameter_avp(c, tvb, offset, diam_sub_dis_inf, false);
 	}
 	/* Clear info collected in grouped AVP */
 	diam_sub_dis_inf->vendor_id  = 0;
 	diam_sub_dis_inf->dis_gouped = false;
+	diam_sub_dis_inf->group_avp_code = 0;
 	diam_sub_dis_inf->avp_str = NULL;
 
 	c->tree = pt;
 
 	return NULL;
 }
-
-static const char *msgflags_str[] = {
-	"----", "---T", "--E-", "--ET",
-	"-P--", "-P-T", "-PE-", "-PET",
-	"R---", "R--T", "R-E-", "R-ET",
-	"RP--", "RP-T", "RPE-", "RPET"
-};
 
 static int * const diameter_flags_fields[] = {
 	&hf_diameter_flags_request,
@@ -1460,18 +1510,7 @@ dissect_diameter_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 	proto_tree_add_item_ret_uint(diam_tree, hf_diameter_hopbyhopid, tvb, 12, 4, ENC_BIG_ENDIAN, &hop_by_hop_id);
 	proto_tree_add_item_ret_uint(diam_tree, hf_diameter_endtoendid, tvb, 16, 4, ENC_BIG_ENDIAN, &end_to_end_id);
 
-	col_add_fstr(pinfo->cinfo, COL_INFO,
-			 "cmd=%s%s(%d) flags=%s %s=%s(%d) h2h=%x e2e=%x",
-			 cmd_str,
-			 ((flags_bits>>4)&0x08) ? " Request" : " Answer",
-			 cmd,
-			 msgflags_str[((flags_bits>>4)&0x0f)],
-			 "appl",
-			 val_to_str_ext_const(diam_sub_dis_inf->application_id, dictionary.applications, "Unknown"),
-			 diam_sub_dis_inf->application_id,
-			 hop_by_hop_id,
-			 end_to_end_id);
-
+	col_add_fstr(pinfo->cinfo, COL_INFO, "%s%s", cmd_str, ((flags_bits>>4)&0x08) ? " Request" : " Answer");
 	col_append_str(pinfo->cinfo, COL_INFO, " | ");
 	col_set_fence(pinfo->cinfo, COL_INFO);
 
@@ -2020,7 +2059,7 @@ static const avp_type_t basic_types[] = {
 	{"octetstring"			, simple_avp		, FT_BYTES			, BASE_NONE			, build_simple_avp  },
 	{"octetstringorutf8"	, simple_avp		, FT_BYTES			, BASE_SHOW_ASCII_PRINTABLE	, build_simple_avp  },
 	{"utf8string"			, utf8_avp			, FT_STRING			, BASE_NONE			, build_simple_avp  },
-	{"grouped"				, grouped_avp		, FT_BYTES			, BASE_NONE			, build_simple_avp  },
+	{"grouped"				, grouped_avp		, FT_BYTES			, BASE_NO_DISPLAY_VALUE			, build_simple_avp  },
 	{"integer32"			, integer32_avp		, FT_INT32			, BASE_DEC			, build_simple_avp  },
 	{"unsigned32"			, unsigned32_avp	, FT_UINT32			, BASE_DEC			, build_simple_avp  },
 	{"integer64"			, integer64_avp		, FT_INT64			, BASE_DEC			, build_simple_avp  },
@@ -2521,7 +2560,11 @@ real_register_diameter_fields(void)
 	{ &hf_diameter_user_equipment_info_eui64,
 		{ "EUI64","diameter.user_equipment_info.eui64", FT_EUI64, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 	{ &hf_diameter_user_equipment_info_modified_eui64,
-		{ "Modified EUI64","diameter.user_equipment_info.modified_eui64", FT_EUI64, BASE_NONE, NULL, 0x0, NULL, HFILL }}
+		{ "Modified EUI64","diameter.user_equipment_info.modified_eui64", FT_EUI64, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+	{ &hf_diameter_result_code_cmd_level,
+		{ "Result-Code-Command-Level", "diameter.Result-Code.Command-Level", FT_UINT32, BASE_DEC, NULL, 0x0,	NULL, HFILL }},
+	{ &hf_diameter_result_code_mscc_level,
+		{ "Result-Code-MSCC-Level", "diameter.Result-Code.MSCC-Level", FT_UINT32, BASE_DEC, NULL, 0x0,	NULL, HFILL }}
 	};
 
 	int *ett_base[] = {
@@ -2669,6 +2712,9 @@ proto_reg_handoff_diameter(void)
 
 	/* AVP Code: 266 Vendor-Id */
 	dissector_add_uint("diameter.base", 266, create_dissector_handle(dissect_diameter_vendor_id, proto_diameter));
+
+	/* AVP Code: 268 Result-Code */
+	dissector_add_uint("diameter.base", 268, create_dissector_handle(dissect_diameter_result_code, proto_diameter));
 
 	/* AVP Code: 443 Subscription-Id */
 	dissector_add_uint("diameter.base", 443, create_dissector_handle(dissect_diameter_subscription_id, proto_diameter));

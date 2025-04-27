@@ -35,15 +35,10 @@ InterfaceTreeCacheModel::InterfaceTreeCacheModel(QObject *parent) :
     storage = new QMap<int, QSharedPointer<QMap<InterfaceTreeColumns, QVariant> > >();
 
     checkableColumns << IFTREE_COL_HIDDEN << IFTREE_COL_PROMISCUOUSMODE;
-#ifdef HAVE_PCAP_CREATE
     checkableColumns << IFTREE_COL_MONITOR_MODE;
-#endif
 
     editableColumns << IFTREE_COL_COMMENT << IFTREE_COL_SNAPLEN << IFTREE_COL_PIPE_PATH;
-
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
     editableColumns << IFTREE_COL_BUFFERLEN;
-#endif
 }
 
 InterfaceTreeCacheModel::~InterfaceTreeCacheModel()
@@ -188,12 +183,10 @@ void InterfaceTreeCacheModel::save()
                 {
                     device->pmode = saveValue.toBool();
                 }
-#ifdef HAVE_PCAP_CREATE
                 else if (col == IFTREE_COL_MONITOR_MODE)
                 {
                     device->monitor_mode_enabled = saveValue.toBool();
                 }
-#endif
                 else if (col == IFTREE_COL_SNAPLEN)
                 {
                     int iVal = saveValue.toInt();
@@ -208,12 +201,10 @@ void InterfaceTreeCacheModel::save()
                         device->snaplen = WTAP_MAX_PACKET_SIZE_STANDARD;
                     }
                 }
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
                 else if (col == IFTREE_COL_BUFFERLEN)
                 {
                     device->buffer = saveValue.toInt();
                 }
-#endif
                 ++it;
             }
         }
@@ -224,7 +215,7 @@ void InterfaceTreeCacheModel::save()
 
         content = getColumnContent(idx, IFTREE_COL_COMMENT);
         if (content.isValid() && content.toString().size() > 0)
-            prefStorage[&prefs.capture_devices_descr] << QString("%1(%2)").arg(device->name).arg(content.toString());
+            prefStorage[&prefs.capture_devices_descr] << QStringLiteral("%1(%2)").arg(device->name).arg(content.toString());
 
         bool allowExtendedColumns = true;
 
@@ -237,26 +228,23 @@ void InterfaceTreeCacheModel::save()
             if (content.isValid())
             {
                 bool value = static_cast<Qt::CheckState>(content.toInt()) == Qt::Checked;
-                prefStorage[&prefs.capture_devices_pmode]  << QString("%1(%2)").arg(device->name).arg(value ? 1 : 0);
+                prefStorage[&prefs.capture_devices_pmode]  << QStringLiteral("%1(%2)").arg(device->name).arg(value ? 1 : 0);
             }
 
-#ifdef HAVE_PCAP_CREATE
             content = getColumnContent(idx, IFTREE_COL_MONITOR_MODE, Qt::CheckStateRole);
             if (content.isValid() && static_cast<Qt::CheckState>(content.toInt()) == Qt::Checked)
                     prefStorage[&prefs.capture_devices_monitor_mode] << QString(device->name);
-#endif
 
             content = getColumnContent(idx, IFTREE_COL_SNAPLEN);
             if (content.isValid())
             {
                 int value = content.toInt();
                 prefStorage[&prefs.capture_devices_snaplen]  <<
-                        QString("%1:%2(%3)").arg(device->name).
+                        QStringLiteral("%1:%2(%3)").arg(device->name).
                         arg(device->has_snaplen ? 1 : 0).
                         arg(device->has_snaplen ? value : WTAP_MAX_PACKET_SIZE_STANDARD);
             }
 
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
             content = getColumnContent(idx, IFTREE_COL_BUFFERLEN);
             if (content.isValid())
             {
@@ -264,11 +252,10 @@ void InterfaceTreeCacheModel::save()
                 if (value != -1)
                 {
                     prefStorage[&prefs.capture_devices_buffersize]  <<
-                            QString("%1(%2)").arg(device->name).
+                            QStringLiteral("%1(%2)").arg(device->name).
                             arg(value);
                 }
             }
-#endif
         }
     }
 
@@ -346,10 +333,8 @@ bool InterfaceTreeCacheModel::isAllowedToBeEdited(const QModelIndex &index) cons
         /* extcap interfaces do not have those settings */
         if (col == IFTREE_COL_PROMISCUOUSMODE || col == IFTREE_COL_SNAPLEN)
             return false;
-#ifdef CAN_SET_CAPTURE_BUFFER_SIZE
         if (col == IFTREE_COL_BUFFERLEN)
             return false;
-#endif
     }
 #endif
     return true;

@@ -338,6 +338,12 @@ class TestDfilterArithmetic:
         dfilter = "udp.length == ip.len - 20"
         checkDFilterCount(dfilter, 4)
 
+    def test_sub_4(self, checkDFilterCount):
+        # The RHS is sometimes negative, sometimes equal to LHS.
+        # LHS is a FT_UINT8. It should match twice.
+        dfilter = "ip.proto == ip.len - 311"
+        checkDFilterCount(dfilter, 2)
+
     def test_sub_no_space_1(self, checkDFilterFail):
         # Minus operator requires whitespace preceding it.
         error = '"68-1" cannot be converted to Unsigned integer'
@@ -506,9 +512,11 @@ class TestDfilterTFSValueString:
         dfilter = 'ip.flags.df == True'
         checkDFilterCount(dfilter, 1)
 
-    def test_tfs_2(self, checkDFilterCount):
+    def test_tfs_2(self, checkDFilterFail):
+        # Should this fail or give a warning?
+        error = 'expected "Set" or "Not set", not "True"'
         dfilter = 'ip.flags.df == "True"'
-        checkDFilterCount(dfilter, 1)
+        checkDFilterFail(dfilter, error)
 
     def test_tfs_3(self, checkDFilterCount):
         dfilter = 'ip.flags.df == "Set"'
@@ -526,3 +534,36 @@ class TestDfilterTFSValueString:
         error = 'expected "True" or "False", not "Unset"'
         dfilter = 'frame.ignored == "Unset"'
         checkDFilterFail(dfilter, error)
+
+class TestDfilterValueString:
+    trace_file = "tls-over-tls.pcapng.gz"
+    # This file has VLAN. vlan.priority has multiple hfinfo with the same
+    # abbrev but different value strings (for different versions).
+    # This means that value string tests cannot be optimized, and must
+    # match against the entire string.
+
+    def test_value_string(self, checkDFilterCount):
+        dfilter = 'vlan.priority == "Best Effort (default)"'
+        checkDFilterCount(dfilter, 24)
+
+    def test_value_string_layer(self, checkDFilterCount):
+        dfilter = 'vlan.priority#1 == "Best Effort (default)"'
+        checkDFilterCount(dfilter, 24)
+
+    def test_value_string_layer_2(self, checkDFilterCount):
+        dfilter = 'vlan.priority#2 == "Best Effort (default)"'
+        checkDFilterCount(dfilter, 0)
+
+    # To use "contains" with a value string we must explicitly
+    # convert with the "vals" function. Note that this never
+    # optimizes, so it's always a string comparison.
+    def test_value_string_func(self, checkDFilterCount):
+        dfilter = 'vals(tls.handshake.type) contains "Client"'
+        checkDFilterCount(dfilter, 2)
+
+    # A Client Hello appears in TLS layer 1 in one packet, and
+    # Client Key Exchange appears in TLS layer 1 in another (as
+    # the second record at that layer).
+    def test_value_string_func_layer(self, checkDFilterCount):
+        dfilter = 'vals(tls.handshake.type#1) contains "Client"'
+        checkDFilterCount(dfilter, 2)

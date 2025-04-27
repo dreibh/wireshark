@@ -21,11 +21,11 @@ shopt -s extglob
 DARWIN_MAJOR_VERSION=$(uname -r | sed 's/\([0-9]*\).*/\1/')
 
 #
-# The minimum supported version of Qt is 5.11, so the minimum supported version
-# of macOS is OS X 10.11 (El Capitan), aka Darwin 15.0.
+# The minimum supported version of Qt is 5.15, so the minimum supported version
+# of macOS is OS X 10.13 (High Sierra), aka Darwin 17.0.
 #
-if [[ $DARWIN_MAJOR_VERSION -lt 15 ]]; then
-    echo "This script does not support any versions of macOS before El Capitan" 1>&2
+if [[ $DARWIN_MAJOR_VERSION -lt 17 ]]; then
+    echo "This script does not support any versions of macOS before High Sierra" 1>&2
     exit 1
 fi
 
@@ -106,22 +106,22 @@ PKG_CONFIG_VERSION=0.29.2
 #
 # libgpg-error is required for libgcrypt.
 #
-LIBGPG_ERROR_VERSION=1.47
+LIBGPG_ERROR_VERSION=1.51
 #
 # libgcrypt is required.
 #
-LIBGCRYPT_VERSION=1.10.2
+LIBGCRYPT_VERSION=1.11.0
 #
 # libpcre2 is required.
 #
-PCRE2_VERSION=10.39
+PCRE2_VERSION=10.44
 
 #
 # One or more of the following libraries are required to build Wireshark.
 #
 # To override the version of Qt call the script with some of the variables
 # set to the new values. Setting the variable to empty will disable building
-# the toolkit and will uninstall # any version previously installed by the
+# the toolkit and will uninstall any version previously installed by the
 # script, e.g.
 # "QT_VERSION=5.10.1 ./macos-setup.sh"
 # will build and install with QT 5.10.1.
@@ -200,7 +200,7 @@ OPENCORE_AMR_SHA256=483eb4061088e2b34b358e47540b5d495a96cd468e361050fae615b1809d
 OPUS_VERSION=1.4
 
 # Falco libs (libsinsp and libscap) and their dependencies. Unset for now.
-#FALCO_LIBS_VERSION=0.18.1
+FALCO_LIBS_VERSION=0.18.1
 if [ "$FALCO_LIBS_VERSION" ] ; then
     FALCO_LIBS_SHA256=1812e8236c4cb51d3fe5dd066d71be99f25da7ed22d8feeeebeed09bdc26325f
     JSONCPP_VERSION=1.9.5
@@ -226,7 +226,7 @@ else
     PYTHON3_VERSION=3.12.1
 fi
 BROTLI_VERSION=1.0.9
-# minizip
+# minizip/minizipng
 MINIZIPNG_VERSION=4.0.7
 ZLIB_VERSION=1.3
 # Uncomment to enable automatic updates using Sparkle
@@ -239,7 +239,7 @@ ZLIB_VERSION=1.3
 # dependencies can become quite hairy:
 # https://github.com/Homebrew/homebrew-core/blob/master/Formula/a/asciidoctor.rb
 # Maybe we should install a JRE and use AsciidoctorJ instead?
-ASCIIDOCTOR_VERSION=${ASCIIDOCTOR_VERSION-2.0.16}
+ASCIIDOCTOR_VERSION=${ASCIIDOCTOR_VERSION-2.0.23}
 ASCIIDOCTORPDF_VERSION=${ASCIIDOCTORPDF_VERSION-1.6.1}
 # css_parser 1.13 and later require Ruby 2.7
 
@@ -248,9 +248,10 @@ CSS_PARSER_VERSION=${CSS_PARSER_VERSION-1.12.0}
 # GNU autotools.  They're not supplied with the macOS versions we
 # support, and we currently use them for minizip.
 #
-AUTOCONF_VERSION=2.71
-AUTOMAKE_VERSION=1.16.5
-LIBTOOL_VERSION=2.4.6
+M4_VERSION=1.4.19
+AUTOCONF_VERSION=2.72
+AUTOMAKE_VERSION=1.17
+LIBTOOL_VERSION=2.5.4
 
 install_curl() {
     if [ "$CURL_VERSION" ] && [ ! -f "curl-$CURL_VERSION-done" ] ; then
@@ -375,7 +376,7 @@ uninstall_pcre() {
 install_pcre2() {
     if [ "$PCRE2_VERSION" ] && [ ! -f "pcre2-$PCRE2_VERSION-done" ] ; then
         echo "Downloading, building, and installing pcre2:"
-        [ -f "pcre2-$PCRE2_VERSION.tar.bz2" ] || curl "${CURL_REMOTE_NAME_OPTS[@]}" "https://github.com/PhilipHazel/pcre2/releases/download/pcre2-$PCRE2_VERSION/pcre2-10.39.tar.bz2"
+        [ -f "pcre2-$PCRE2_VERSION.tar.bz2" ] || curl "${CURL_REMOTE_NAME_OPTS[@]}" "https://github.com/PhilipHazel/pcre2/releases/download/pcre2-$PCRE2_VERSION/pcre2-$PCRE2_VERSION.tar.bz2"
         $no_build && echo "Skipping installation" && return
         bzcat "pcre2-$PCRE2_VERSION.tar.bz2" | tar xf -
         cd "pcre2-$PCRE2_VERSION"
@@ -407,6 +408,47 @@ uninstall_pcre2() {
         fi
 
         installed_pcre2_version=""
+    fi
+}
+
+install_m4() {
+    if [ "$M4_VERSION" -a ! -f m4-$M4_VERSION-done ] ; then
+        echo "Downloading, building and installing GNU m4..."
+        [ -f m4-$M4_VERSION.tar.xz ] || curl "${CURL_REMOTE_NAME_OPTS[@]}" https://ftp.gnu.org/gnu/m4/m4-$M4_VERSION.tar.xz
+        $no_build && echo "Skipping installation" && return
+        xzcat m4-$M4_VERSION.tar.xz | tar xf -
+        cd m4-$M4_VERSION
+        ./configure "${CONFIGURE_OPTS[@]}"
+        make "${MAKE_BUILD_OPTS[@]}"
+        $DO_MAKE_INSTALL
+        cd ..
+        touch m4-$M4_VERSION-done
+    fi
+}
+
+uninstall_m4() {
+    if [ -n "$installed_m4_version" ] ; then
+        #
+        # autoconf depends on this, so uninstall it.
+        #
+        uninstall_autoconf "$@"
+
+        echo "Uninstalling GNU m4:"
+        cd m4-$installed_m4_version
+        $DO_MAKE_UNINSTALL
+        make distclean
+        cd ..
+        rm m4-$installed_m4_version-done
+
+        if [ "$#" -eq 1 -a "$1" = "-r" ] ; then
+            #
+            # Get rid of the previously downloaded and unpacked version.
+            #
+            rm -rf m4-$installed_m4_version
+            rm -rf m4-$installed_m4_version.tar.xz
+        fi
+
+        installed_m4_version=""
     fi
 }
 
@@ -1144,13 +1186,10 @@ install_qt() {
         5)
             case $QT_MINOR_VERSION in
 
-            0|1|2|3|4|5|6|7|8|9|10)
+            0|1|2|3|4|5|6|7|8|9|10|11|12|13|14)
                 echo "Qt $QT_VERSION" is too old 1>&2
                 ;;
 
-            11|12|13|14)
-                QT_VOLUME=qt-opensource-mac-x64-$QT_VERSION
-                ;;
             *)
                 echo "The Qt Company no longer provides open source offline installers for Qt $QT_VERSION" 1>&2
                 ;;
@@ -1203,11 +1242,11 @@ uninstall_qt() {
             5*)
                 case $installed_qt_minor_version in
 
-                0|1|2|3|4|5|6|7|8)
+                0|1|2|3|4|5|6|7|8|9|10|11)
                     echo "Qt $installed_qt_version" is too old 1>&2
                     ;;
 
-                9|10|11|12|13|14)
+                12|13|14)
                     installed_qt_volume=qt-opensource-mac-x64-$installed_qt_version.dmg
                     ;;
                 esac
@@ -1386,8 +1425,17 @@ install_gmp() {
         else
             LD64_FLAG=""
         fi
+        if [ "$DARWIN_PROCESSOR_ARCH" = "x86_64" ]
+        then
+            # If contemplating darwin20 or newer, refer to the last two paragraphs of
+            # https://gmplib.org/list-archives/gmp-bugs/2024-October/005539.html
+            # and either ensure that GMP is newer than 6.3.0 or run "autoreconf".
+            GMP_BUILD_OPTION="--build=nehalem-apple-darwin18"
+        else
+            GMP_BUILD_OPTION=""
+        fi
         CFLAGS="$CFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" CXXFLAGS="$CXXFLAGS $VERSION_MIN_FLAGS $SDKFLAGS" LDFLAGS="$LDFLAGS $VERSION_MIN_FLAGS $SDKFLAGS $LD64_FLAG" \
-            ./configure "${CONFIGURE_OPTS[@]}" --enable-fat
+            ./configure "${CONFIGURE_OPTS[@]}" --enable-fat "$GMP_BUILD_OPTION"
         make "${MAKE_BUILD_OPTS[@]}"
         $DO_MAKE_INSTALL
         cd ..
@@ -2062,6 +2110,7 @@ install_libssh() {
         $no_build && echo "Skipping installation" && return
         xzcat libssh-$LIBSSH_VERSION.tar.xz | tar xf -
         cd "libssh-$LIBSSH_VERSION"
+        patch -p1 < "${topdir}/tools/macos-setup-patches/libssh-werror.patch"
         mkdir build
         cd build
         "${DO_CMAKE[@]}" -DWITH_GCRYPT=1 ..
@@ -2572,8 +2621,8 @@ install_falco_libs() {
     if [ "$FALCO_LIBS_VERSION" ] && [ ! -f "falco-libs-$FALCO_LIBS_VERSION-done" ] ; then
         echo "Downloading, building, and installing libsinsp and libscap:"
         [ -f "falco-libs-$FALCO_LIBS_VERSION.tar.gz" ] || curl "${CURL_REMOTE_NAME_OPTS[@]}" --remote-header-name "https://github.com/falcosecurity/libs/archive/refs/tags/$FALCO_LIBS_VERSION.tar.gz"
+        [ -f "falco-libs-$FALCO_LIBS_VERSION.tar.gz" ] || mv "libs-$FALCO_LIBS_VERSION.tar.gz" "falco-libs-$FALCO_LIBS_VERSION.tar.gz"
         $no_build && echo "Skipping installation" && return
-        mv "libs-$FALCO_LIBS_VERSION.tar.gz" "falco-libs-$FALCO_LIBS_VERSION.tar.gz"
         echo "$FALCO_LIBS_SHA256  falco-libs-$FALCO_LIBS_VERSION.tar.gz" | shasum --algorithm 256 --check
         tar -xf "falco-libs-$FALCO_LIBS_VERSION.tar.gz"
         mv "libs-$FALCO_LIBS_VERSION" "falco-libs-$FALCO_LIBS_VERSION"
@@ -2804,7 +2853,7 @@ install_minizip_ng() {
 
 uninstall_minizip_ng() {
     if [ -n "$installed_minizip_ng_version" ] ; then
-        echo "Uninstalling minizip:"
+        echo "Uninstalling minizip-ng:"
         cd minizip-ng-$installed_minizip_ng_version/contrib/minizip
         $DO_MAKE_UNINSTALL
         make distclean
@@ -3427,6 +3476,8 @@ install_all() {
     #
     install_xz
 
+    install_m4
+
     install_autoconf
 
     install_automake
@@ -3471,11 +3522,13 @@ install_all() {
     install_gettext
 
     #
-    # GLib depends on pkg-config.
+    # GLib depends on pkg-config and libxml2.
     # By default, pkg-config depends on GLib; we break the dependency cycle
     # by configuring pkg-config to use its own internal version of GLib.
     #
     install_pkg_config
+
+    install_libxml2
 
     install_glib
 
@@ -3519,8 +3572,6 @@ install_all() {
 
     install_zlibng
 
-    install_libxml2
-
     install_lz4
 
     install_sbc
@@ -3551,9 +3602,9 @@ install_all() {
 
     install_brotli
 
-    install_minizip
-
     install_minizip_ng
+
+    install_minizip
 
     install_sparkle
 
@@ -3626,8 +3677,6 @@ uninstall_all() {
 
         uninstall_zlibng
 
-        uninstall_libxml2
-
         uninstall_lz4
 
         uninstall_sbc
@@ -3653,6 +3702,8 @@ uninstall_all() {
         uninstall_qt
 
         uninstall_glib
+
+        uninstall_libxml2
 
         uninstall_pkg_config
 
@@ -3682,6 +3733,8 @@ uninstall_all() {
         uninstall_automake
 
         uninstall_autoconf
+
+        uninstall_m4
 
         uninstall_pcre
 
@@ -3890,7 +3943,7 @@ then
     installed_opus_version=$( ls opus-*-done 2>/dev/null | sed 's/opus-\(.*\)-done/\1/' )
     installed_python3_version=$( ls python3-*-done 2>/dev/null | sed 's/python3-\(.*\)-done/\1/' )
     installed_brotli_version=$( ls brotli-*-done 2>/dev/null | sed 's/brotli-\(.*\)-done/\1/' )
-    installed_minizip_version=$( ls minizip-*-done 2>/dev/null | sed 's/minizip-\(.*\)-done/\1/' )
+    installed_minizip_version=$( ls minizip-[0-9.]*-done 2>/dev/null | sed 's/minizip-\(.*\)-done/\1/' )
     installed_minizip_ng_version=$( ls minizip-ng-*-done 2>/dev/null | sed 's/minizip-ng-\(.*\)-done/\1/' )
     installed_sparkle_version=$( ls sparkle-*-done 2>/dev/null | sed 's/sparkle-\(.*\)-done/\1/' )
 
@@ -4068,7 +4121,7 @@ fi
 # You need Xcode or the command-line tools installed to get the compilers (xcrun checks both).
 #
  if [ ! -x /usr/bin/xcrun ]; then
-    echo "Please install Xcode (app or command line) first (should be available on DVD or from the Mac App Store)."
+    echo "Please install Xcode (app or command line) first (should be available from the Mac App Store)."
     exit 1
 fi
 
@@ -4088,7 +4141,7 @@ if [ "$QT_VERSION" ]; then
     elif qmake --version >/dev/null 2>&1; then
         :
     else
-        echo "Please install Xcode first (should be available on DVD or from the Mac App Store)."
+        echo "Please install Xcode first (should be available from the Mac App Store)."
         echo "The command-line build tools are not sufficient to build Qt."
         echo "Alternatively build QT according to: https://gist.github.com/shoogle/750a330c851bd1a924dfe1346b0b4a08#:~:text=MacOS%2FQt%5C%20Creator-,Go%20to%20Qt%20Creator%20%3E%20Preferences%20%3E%20Build%20%26%20Run%20%3E%20Kits,for%20both%20compilers%2C%20not%20gcc%20."
         exit 1

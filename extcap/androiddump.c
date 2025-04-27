@@ -58,8 +58,8 @@
 #define PCAP_RECORD_HEADER_LENGTH              16
 
 #ifdef ANDROIDDUMP_USE_LIBPCAP
-    #include <pcap.h>
-    #include <pcap-bpf.h>
+    #include <pcap/pcap.h>
+    #include <pcap/bpf.h>
     #include <pcap/bluetooth.h>
 
     #ifndef DLT_BLUETOOTH_H4_WITH_PHDR
@@ -353,19 +353,6 @@ static const char* interface_to_logbuf(char* interface)
     return logbuf;
 }
 
-/*
- * General errors and warnings are reported through ws_warning() in
- * androiddump.
- *
- * Unfortunately, ws_warning() may be a macro, so we do it by calling
- * g_logv() with the appropriate arguments.
- */
-static void
-androiddump_cmdarg_err(const char *msg_format, va_list ap)
-{
-    ws_logv(LOG_DOMAIN_CAPCHILD, LOG_LEVEL_WARNING, msg_format, ap);
-}
-
 static void useSndTimeout(socket_handle_t  sock) {
     int res;
 #ifdef _WIN32
@@ -386,10 +373,22 @@ static void useSndTimeout(socket_handle_t  sock) {
 
 static void useNonBlockingConnectTimeout(socket_handle_t  sock) {
 #ifdef _WIN32
+    /* On Windows, we set a timeout for the non-blocking connection
+     * and have no timeout on the blocking connection. */
+    int res_snd;
+    int res_rcv;
+    const DWORD socket_timeout = SOCKET_RW_TIMEOUT_MS;
     unsigned long non_blocking = 1;
 
+    /* set timeout when non-blocking to 2s on Windows */
+    res_snd = setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char*)&socket_timeout, sizeof(socket_timeout));
+    res_rcv = setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&socket_timeout, sizeof(socket_timeout));
     /* set socket to non-blocking */
     ioctlsocket(sock, FIONBIO, &non_blocking);
+    if (res_snd != 0)
+        ws_debug("Can't set socket timeout, using default");
+    if (res_rcv != 0)
+        ws_debug("Can't set socket timeout, using default");
 #else
     int flags = fcntl(sock, F_GETFL);
     fcntl(sock, F_SETFL, flags | O_NONBLOCK);
@@ -400,7 +399,11 @@ static void useNormalConnectTimeout(socket_handle_t  sock) {
     int res_snd;
     int res_rcv;
 #ifdef _WIN32
-    const DWORD socket_timeout = SOCKET_RW_TIMEOUT_MS;
+    /* On Windows there is no timeout on the blocking connection, which
+     * means that the error handling from recv(), etc. is different than
+     * on UN*X. (If the socket timeout on Windows were the same as UN*X,
+     * we would need to test WSAGetLastError() in a number of places.) */
+    const DWORD socket_timeout = 0;
     unsigned long non_blocking = 0;
 
     res_snd = setsockopt(sock, SOL_SOCKET, SO_SNDTIMEO, (const char *) &socket_timeout, sizeof(socket_timeout));
@@ -487,15 +490,13 @@ static bool extcap_dumper_dump(struct extcap_dumper extcap_dumper,
     char               *err_info;
     wtap_rec            rec;
 
+    wtap_rec_init(&rec, captured_length);
+
     rec.rec_type = REC_TYPE_PACKET;
     rec.presence_flags = WTAP_HAS_TS;
-    rec.rec_header.packet_header.caplen = (uint32_t) captured_length;
-    rec.rec_header.packet_header.len = (uint32_t) reported_length;
 
     rec.ts.secs = seconds;
     rec.ts.nsecs = (int) nanoseconds;
-
-    rec.block = NULL;
 
 /*  NOTE: Try to handle pseudoheaders manually */
     if (extcap_dumper.encap == EXTCAP_ENCAP_BLUETOOTH_H4_WITH_PHDR) {
@@ -505,24 +506,32 @@ static bool extcap_dumper_dump(struct extcap_dumper extcap_dumper,
 
         rec.rec_header.packet_header.pseudo_header.bthci.sent = GINT32_FROM_BE(*direction) ? 0 : 1;
 
-        rec.rec_header.packet_header.len -= (uint32_t)sizeof(own_pcap_bluetooth_h4_header);
-        rec.rec_header.packet_header.caplen -= (uint32_t)sizeof(own_pcap_bluetooth_h4_header);
-
         buffer += sizeof(own_pcap_bluetooth_h4_header);
+        captured_length -= sizeof(own_pcap_bluetooth_h4_header);
     }
+
+    rec.rec_header.packet_header.caplen = (uint32_t) captured_length;
+    rec.rec_header.packet_header.len = (uint32_t) reported_length;
+
     rec.rec_header.packet_header.pkt_encap = extcap_dumper.encap;
 
-    if (!wtap_dump(extcap_dumper.dumper.wtap, &rec, (const uint8_t *) buffer, &err, &err_info)) {
+    ws_buffer_append(&rec.data, buffer, captured_length);
+
+    if (!wtap_dump(extcap_dumper.dumper.wtap, &rec, &err, &err_info)) {
         cfile_write_failure_message(NULL, fifo, err, err_info, 0,
                                     wtap_dump_file_type_subtype(extcap_dumper.dumper.wtap));
+        wtap_rec_cleanup(&rec);
         return false;
     }
 
     if (!wtap_dump_flush(extcap_dumper.dumper.wtap, &err)) {
         cfile_write_failure_message(NULL, fifo, err, NULL, 0,
                                     wtap_dump_file_type_subtype(extcap_dumper.dumper.wtap));
+        wtap_rec_cleanup(&rec);
         return false;
     }
+
+    wtap_rec_cleanup(&rec);
 #endif
 
     return true;
@@ -819,7 +828,12 @@ static int adb_send(socket_handle_t sock, const char *adb_service) {
     size_t   adb_service_length;
 
     adb_service_length = strlen(adb_service);
-    snprintf(buffer, sizeof(buffer), ADB_HEX4_FORMAT, adb_service_length);
+    result = snprintf(buffer, sizeof(buffer), ADB_HEX4_FORMAT, adb_service_length);
+    if ((size_t)result >= sizeof(buffer)) {
+        /* Truncation (or failure somehow) */
+        ws_warning("Service name too long when sending <%s> to ADB daemon", adb_service);
+        return EXIT_CODE_ERROR_WHILE_SENDING_ADB_PACKET_1;
+    }
 
     result = send(sock, buffer, ADB_HEX4_LEN, 0);
     if (result < ADB_HEX4_LEN) {
@@ -2525,10 +2539,13 @@ int main(int argc, char *argv[]) {
     char            *help_url;
     char            *help_header = NULL;
 
-    cmdarg_err_init(androiddump_cmdarg_err, androiddump_cmdarg_err);
+    /* Set the program name. */
+    g_set_prgname("androiddump");
+
+    cmdarg_err_init(extcap_log_cmdarg_err, extcap_log_cmdarg_err);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    extcap_log_init("androiddump");
+    extcap_log_init();
 
     /*
      * Get credential information for later use.
@@ -2539,7 +2556,7 @@ int main(int argc, char *argv[]) {
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    err_msg = configuration_init(argv[0], NULL);
+    err_msg = configuration_init(argv[0]);
     if (err_msg != NULL) {
         ws_warning("Can't get pathname of directory containing the extcap program: %s.",
                   err_msg);

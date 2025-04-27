@@ -169,7 +169,7 @@ public:
         updateLayout();
 
         if (finfo_->isValid()) {
-            setToolTip(QString("%1 (%2) = %3")
+            setToolTip(QStringLiteral("%1 (%2) = %3")
                        .arg(finfo_->headerInfo().name)
                        .arg(finfo_->headerInfo().abbreviation)
                        .arg(finfo_->toString()));
@@ -490,7 +490,7 @@ void PacketDiagram::contextMenuEvent(QContextMenuEvent *event)
 
 void PacketDiagram::connectToMainWindow()
 {
-    MainWindow *main_window = qobject_cast<MainWindow *>(mainApp->mainWindow());
+    MainWindow *main_window = mainApp->mainWindow();
     if (!main_window) {
         return;
     }
@@ -524,7 +524,7 @@ void PacketDiagram::resetScene(bool reset_root)
         delete scene();
     }
     viewport()->update();
-    QGraphicsScene *new_scene = new QGraphicsScene();
+    QGraphicsScene *new_scene = new QGraphicsScene(this);
     setScene(new_scene);
     connect(new_scene, &QGraphicsScene::selectionChanged, this, &PacketDiagram::sceneSelectionChanged);
     setRootNode(reset_root ? nullptr : root_node_);

@@ -261,9 +261,9 @@ typedef struct {
 } lanalyzer_t;
 
 static bool lanalyzer_read(wtap *wth, wtap_rec *rec,
-    Buffer *buf, int *err, char **err_info, int64_t *data_offset);
+    int *err, char **err_info, int64_t *data_offset);
 static bool lanalyzer_seek_read(wtap *wth, int64_t seek_off,
-    wtap_rec *rec, Buffer *buf, int *err, char **err_info);
+    wtap_rec *rec, int *err, char **err_info);
 static bool lanalyzer_dump_finish(wtap_dumper *wdh, int *err,
     char **err_info);
 
@@ -482,7 +482,7 @@ done:
 #define DESCRIPTOR_LEN  32
 
 static bool lanalyzer_read_trace_record(wtap *wth, FILE_T fh,
-                                            wtap_rec *rec, Buffer *buf, int *err, char **err_info)
+                                            wtap_rec *rec, int *err, char **err_info)
 {
       char         LE_record_type[2];
       char         LE_record_length[2];
@@ -586,29 +586,27 @@ static bool lanalyzer_read_trace_record(wtap *wth, FILE_T fh,
       }
 
       /* Read the packet data */
-      return wtap_read_packet_bytes(fh, buf, packet_size, err, err_info);
+      return wtap_read_bytes_buffer(fh, &rec->data, packet_size, err, err_info);
 }
 
 /* Read the next packet */
-static bool lanalyzer_read(wtap *wth, wtap_rec *rec, Buffer *buf,
+static bool lanalyzer_read(wtap *wth, wtap_rec *rec,
                                int *err, char **err_info, int64_t *data_offset)
 {
       *data_offset = file_tell(wth->fh);
 
       /* Read the record  */
-      return lanalyzer_read_trace_record(wth, wth->fh, rec, buf, err,
-                                         err_info);
+      return lanalyzer_read_trace_record(wth, wth->fh, rec, err, err_info);
 }
 
 static bool lanalyzer_seek_read(wtap *wth, int64_t seek_off,
-                                    wtap_rec *rec, Buffer *buf, int *err, char **err_info)
+                                    wtap_rec *rec, int *err, char **err_info)
 {
       if (file_seek(wth->random_fh, seek_off, SEEK_SET, err) == -1)
             return false;
 
       /* Read the record  */
-      if (!lanalyzer_read_trace_record(wth, wth->random_fh, rec, buf,
-                                       err, err_info)) {
+      if (!lanalyzer_read_trace_record(wth, wth->random_fh, rec, err, err_info)) {
             if (*err == 0)
                   *err = WTAP_ERR_SHORT_READ;
             return false;
@@ -680,9 +678,8 @@ static bool s48write(wtap_dumper *wdh, const uint64_t s48, int *err)
  * Write a record for a packet to a dump file.
  * Returns true on success, false on failure.
  *---------------------------------------------------*/
-static bool lanalyzer_dump(wtap_dumper *wdh,
-        const wtap_rec *rec,
-        const uint8_t *pd, int *err, char **err_info _U_)
+static bool lanalyzer_dump(wtap_dumper *wdh, const wtap_rec *rec,
+        int *err, char **err_info _U_)
 {
       uint64_t x;
       int    len;
@@ -763,7 +760,7 @@ static bool lanalyzer_dump(wtap_dumper *wdh,
       if (!s0write(wdh, 12, err))
             return false;
 
-      if (!wtap_dump_file_write(wdh, pd, rec->rec_header.packet_header.caplen, err))
+      if (!wtap_dump_file_write(wdh, ws_buffer_start_ptr(&rec->data), rec->rec_header.packet_header.caplen, err))
             return false;
 
       return true;

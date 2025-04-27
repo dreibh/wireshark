@@ -781,7 +781,7 @@ dissect_exteap(proto_tree *eap_tree, tvbuff_t *tvb, int offset,
   vendor_context->vendor_type = vendor_type;
 
   next_tvb = tvb_new_subset_remaining(tvb, offset);
-  if (!dissector_try_uint_new(eap_expanded_type_dissector_table,
+  if (!dissector_try_uint_with_data(eap_expanded_type_dissector_table,
     vendor_id, next_tvb, pinfo, eap_tree,
     false, vendor_context)) {
     call_data_dissector(next_tvb, pinfo, eap_tree);
@@ -907,7 +907,7 @@ realm_is_3gpp(char** realm_tokens, unsigned *nrealm_tokensp)
 }
 
 /* Dissect the 3GPP identity */
-static bool
+bool
 dissect_eap_identity_3gpp(tvbuff_t *tvb, packet_info* pinfo, proto_tree* tree, int offset, int size)
 {
   unsigned    mnc = 0;
@@ -966,7 +966,7 @@ dissect_eap_identity_3gpp(tvbuff_t *tvb, packet_info* pinfo, proto_tree* tree, i
     item = proto_tree_add_item(tree, hf_eap_identity_full, tvb, offset + 1, size - 1, ENC_ASCII);
     eap_identity_tree = proto_item_add_subtree(item, ett_identity);
     proto_tree_add_item_ret_uint(eap_identity_tree, hf_eap_identity_prefix, tvb, offset, 1, ENC_NA, &eap_identity_prefix);
-    item = proto_tree_add_string(eap_identity_tree, hf_eap_identity_type,
+    proto_tree_add_string(eap_identity_tree, hf_eap_identity_type,
       tvb, offset, 1, val_to_str_const(eap_identity_prefix, eap_identity_prefix_vals, "Unknown"));
     offset += 1;
     size -= 1;
@@ -1288,18 +1288,17 @@ dissect_eap_aka(proto_tree *eap_tree, tvbuff_t *tvb, packet_info* pinfo, int off
         proto_tree_add_item(attr_tree, hf_eap_aka_reserved, tvb, aoffset, 2, ENC_BIG_ENDIAN);
         aoffset += 2;
         aleft   -= 2;
-        proto_tree_add_item(attr_tree, hf_eap_aka_rand, tvb, aoffset, 2, ENC_NA);
+        proto_tree_add_item(attr_tree, hf_eap_aka_rand, tvb, aoffset, aleft, ENC_NA);
         break;
       case AT_AUTN:
         proto_tree_add_item(attr_tree, hf_eap_aka_reserved, tvb, aoffset, 2, ENC_BIG_ENDIAN);
         aoffset += 2;
         aleft   -= 2;
-        proto_tree_add_item(attr_tree, hf_eap_aka_autn, tvb, aoffset, 2, ENC_NA);
+        proto_tree_add_item(attr_tree, hf_eap_aka_autn, tvb, aoffset, aleft, ENC_NA);
         break;
       case AT_RES:
         proto_tree_add_item_ret_uint(attr_tree, hf_eap_aka_res_len, tvb, aoffset, 2, ENC_BIG_ENDIAN, &actual_length);
         aoffset += 2;
-        aleft   -= 2;
         proto_tree_add_bits_item(attr_tree, hf_eap_aka_res, tvb, aoffset << 3, actual_length, ENC_NA);
         break;
       case AT_AUTS:

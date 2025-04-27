@@ -85,6 +85,7 @@ public:
     void setVerticalAutoScroll(bool enabled = true);
     void setCaptureInProgress(bool in_progress = false, bool auto_scroll = true) { capture_in_progress_ = in_progress; tail_at_end_ = in_progress && auto_scroll; }
     void captureFileReadFinished();
+    void setColumnDelegate();
     void resetColumns();
     bool haveNextHistory(bool update_cur = false);
     bool havePreviousHistory(bool update_cur = false);
@@ -166,7 +167,6 @@ private:
 
     void setFrameReftime(bool set, frame_data *fdata);
     void setColumnVisibility();
-    int sizeHintForColumn(int column) const override;
     void setRecentColumnWidth(int column);
     void drawCurrentPacket();
     void applyRecentColumnWidths();
@@ -179,7 +179,7 @@ signals:
     void editColumn(int column);
     void packetListScrolled(bool at_end);
     void showProtocolPreferences(const QString module_name);
-    void editProtocolPreference(struct preference *pref, struct pref_module *module);
+    void editProtocolPreference(pref_t *pref, module_t *module);
 
     void framesSelected(QList<int>);
     void fieldSelected(FieldInformation *);
@@ -215,7 +215,6 @@ private slots:
     void columnVisibilityTriggered();
     void sectionResized(int col, int, int new_width);
     void sectionMoved(int, int, int);
-    void updateRowHeights(const QModelIndex &ih_index);
     void copySummary();
     void vScrollBarActionTriggered(int);
     void drawFarOverlay();

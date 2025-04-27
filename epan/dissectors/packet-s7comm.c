@@ -309,6 +309,8 @@ static value_string_ext param_errcode_names_ext = VALUE_STRING_EXT_INIT(param_er
 #define S7COMM_FUNCPISERVICE                0x28
 #define S7COMM_FUNC_PLC_STOP                0x29
 
+#define S7COMM_FUNC_INVALID                 0xFF
+
 static const value_string param_functionnames[] = {
     { S7COMM_SERV_CPU,                      "CPU services" },
     { S7COMM_SERV_MODETRANS,                "Mode transition" },
@@ -1431,7 +1433,8 @@ static int * const s7comm_diagdata_registerflag_fields[] = {
     NULL
 };
 
-static heur_dissector_list_t s7comm_heur_subdissector_list;
+static heur_dissector_list_t s7comm_heur_subdissector_list_bsend;
+static heur_dissector_list_t s7comm_heur_subdissector_list_block_data;
 
 static expert_field ei_s7comm_data_blockcontrol_block_num_invalid;
 static expert_field ei_s7comm_ud_blockinfo_block_num_ascii_invalid;
@@ -2833,7 +2836,6 @@ s7comm_syntaxid_1200sym(tvbuff_t *tvb,
     uint32_t tia_var_area2 = 0;
     uint8_t tia_lid_flags = 0;
     uint32_t tia_value = 0;
-    uint16_t i;
     proto_item *sub_item = NULL;
     proto_tree *sub_item_tree = NULL;
 
@@ -2864,7 +2866,7 @@ s7comm_syntaxid_1200sym(tvbuff_t *tvb,
     proto_tree_add_item(tree, hf_s7comm_tia1200_item_crc, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
-    for (i = 0; i < (varspec_length - 10) / 4; i++) {
+    for (int i = 0; i < (varspec_length - 10) / 4; i++) {
         sub_item = proto_tree_add_item(tree, hf_s7comm_tia1200_substructure_item, tvb, offset, 4, ENC_NA);
         sub_item_tree = proto_item_add_subtree(sub_item, ett_s7comm_param_subitem);
         tia_lid_flags = tvb_get_uint8(tvb, offset) >> 4;
@@ -2943,6 +2945,31 @@ s7comm_syntaxid_driveesany(tvbuff_t *tvb,
     offset += 2;
     proto_item_append_text(tree, " (DriveES Parameter: %d[%d])", nr, idx);
     return offset;
+}
+
+/*******************************************************************************************************
+ *
+ * Try for heuristic dissector for the block data (e.g. SDB) and call the data dissector
+ *
+ *******************************************************************************************************/
+static void
+s7comm_try_block_data_heuristic(tvbuff_t *tvb,
+                               packet_info *pinfo,
+                               proto_tree *tree,
+                               uint32_t offset,
+                               uint8_t function,
+                               uint8_t status)
+{
+    heur_dtbl_entry_t* hdtbl_entry = NULL;
+    uint8_t fc[2] = { function , status};
+
+    /* dissect heuristic response data */
+    if (tvb_reported_length_remaining(tvb, offset) > 0) {
+        struct tvbuff* next_tvb = tvb_new_subset_remaining(tvb, offset);
+
+        /*no need to call call_data_dissector() if dissector_try_heuristic() returns false*/
+        dissector_try_heuristic(s7comm_heur_subdissector_list_block_data, next_tvb, pinfo, tree, &hdtbl_entry, fc);
+    }
 }
 
 /*******************************************************************************************************
@@ -3700,6 +3727,7 @@ s7comm_decode_plc_controls_updownload(tvbuff_t *tvb,
 {
     uint8_t len;
     uint8_t function;
+    uint8_t status;
     uint32_t errorcode;
     const char *errorcode_text;
     proto_item *item = NULL;
@@ -3707,6 +3735,7 @@ s7comm_decode_plc_controls_updownload(tvbuff_t *tvb,
 
     function = tvb_get_uint8(tvb, offset);
     offset += 1;
+    status = S7COMM_FUNC_INVALID;
     errorcode = 0;
 
     switch (function) {
@@ -3786,6 +3815,7 @@ s7comm_decode_plc_controls_updownload(tvbuff_t *tvb,
                 }
             } else if (rosctr == S7COMM_ROSCTR_ACK_DATA) {
                 if (plength >= 2) {
+                    status = tvb_get_uint8(tvb, offset);
                     proto_tree_add_bitmask(param_tree, tvb, offset, hf_s7comm_data_blockcontrol_functionstatus,
                         ett_s7comm_data_blockcontrol_status, s7comm_data_blockcontrol_status_fields, ENC_BIG_ENDIAN);
                     offset += 1;
@@ -3798,6 +3828,10 @@ s7comm_decode_plc_controls_updownload(tvbuff_t *tvb,
                     proto_tree_add_item(data_tree, hf_s7comm_data_blockcontrol_unknown1, tvb, offset, 2, ENC_NA);
                     offset += 2;
                     proto_tree_add_item(data_tree, hf_s7comm_readresponse_data, tvb, offset, dlength - 4, ENC_NA);
+
+                    /* try heuristic response data dissector*/
+                    s7comm_try_block_data_heuristic(tvb, pinfo, tree, offset, function, status);
+
                     offset += dlength - 4;
                 }
             }
@@ -5287,7 +5321,7 @@ s7comm_decode_ud_pbc_bsend_subfunc(tvbuff_t *tvb,
     if (tvb_reported_length_remaining(tvb, offset) > 0) {
         struct tvbuff *next_tvb = tvb_new_subset_remaining(tvb,  offset);
         heur_dtbl_entry_t *hdtbl_entry;
-        if (!dissector_try_heuristic(s7comm_heur_subdissector_list, next_tvb, pinfo, tree, &hdtbl_entry, NULL)) {
+        if (!dissector_try_heuristic(s7comm_heur_subdissector_list_bsend, next_tvb, pinfo, tree, &hdtbl_entry, NULL)) {
             call_data_dissector(next_tvb, pinfo, data_tree);
         }
     }
@@ -8585,7 +8619,8 @@ proto_register_s7comm (void)
     expert_register_field_array(expert_s7comm, ei, array_length(ei));
 
     register_init_routine(s7comm_defragment_init);
-    s7comm_heur_subdissector_list = register_heur_dissector_list_with_description("s7comm-bsend", "S7COMM BSEND/BRECV", proto_s7comm);
+    s7comm_heur_subdissector_list_bsend = register_heur_dissector_list_with_description("s7comm-bsend", "S7COMM BSEND/BRECV", proto_s7comm);
+    s7comm_heur_subdissector_list_block_data = register_heur_dissector_list_with_description("s7comm-blk-data", "S7COMM block data", proto_s7comm);
 }
 
 /* Register this protocol */

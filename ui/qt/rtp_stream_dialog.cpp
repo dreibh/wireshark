@@ -106,10 +106,10 @@ public:
         setText(src_port_col_, QString::number(calc.src_port));
         setText(dst_addr_col_, calc.dst_addr_str);
         setText(dst_port_col_, QString::number(calc.dst_port));
-        setText(ssrc_col_, QString("0x%1").arg(calc.ssrc, 0, 16));
+        setText(ssrc_col_, QStringLiteral("0x%1").arg(calc.ssrc, 0, 16));
         if (tod_) {
             QDateTime abs_dt = QDateTime::fromMSecsSinceEpoch(nstime_to_msec(&stream_info_->start_fd->abs_ts));
-            setText(start_time_col_, QString("%1")
+            setText(start_time_col_, QStringLiteral("%1")
                 .arg(abs_dt.toString("yyyy-MM-dd hh:mm:ss.zzz")));
         } else {
           setText(start_time_col_, QString::number(calc.start_time_ms, 'f', 6));
@@ -207,7 +207,7 @@ public:
             ret = calc.problem ? "Problem" : "";
             break;
         case ssrc_fmt_col_:
-            ret = QString("0x%1").arg(calc.ssrc, 0, 16);
+            ret = QStringLiteral("0x%1").arg(calc.ssrc, 0, 16);
             break;
         case lost_perc_col_:
             ret = QString::number(calc.lost_perc, 'f', prefs.gui_decimal_places1);
@@ -318,7 +318,7 @@ RtpStreamDialog *RtpStreamDialog::openRtpStreamDialog(QWidget &parent, CaptureFi
 }
 
 RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
-    WiresharkDialog(parent, cf),
+    RtpBaseDialog(parent, cf),
     ui(new Ui::RtpStreamDialog),
     need_redraw_(false)
 {
@@ -388,7 +388,7 @@ RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
     register_tap_listener_rtpstream(&tapinfo_, NULL, show_tap_registration_error);
     if (cap_file_.isValid() && cap_file_.capFile()->dfilter) {
         // Activate display filter checking
-        tapinfo_.apply_display_filter = true;
+        rtpstream_set_apply_display_filter(&tapinfo_, true);
         ui->displayFilterCheckBox->setChecked(true);
     }
 
@@ -396,8 +396,6 @@ RtpStreamDialog::RtpStreamDialog(QWidget &parent, CaptureFile &cf) :
             this, &RtpStreamDialog::displayFilterCheckBoxToggled);
     connect(this, SIGNAL(updateFilter(QString, bool)),
             &parent, SLOT(filterPackets(QString, bool)));
-    connect(&parent, SIGNAL(displayFilterSuccess(bool)),
-            this, SLOT(displayFilterSuccess(bool)));
     connect(this, SIGNAL(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)),
             &parent, SLOT(rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *>)));
     connect(this, SIGNAL(rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *>)),
@@ -697,8 +695,8 @@ QList<QVariant> RtpStreamDialog::streamRowData(int row) const
 
     // Add additional columns to export
     if (row < 0) {
-        row_data << QString("SSRC formatted");
-        row_data << QString("Lost percentage");
+        row_data << QStringLiteral("SSRC formatted");
+        row_data << QStringLiteral("Lost percentage");
     } else {
         RtpStreamTreeWidgetItem *rsti = static_cast<RtpStreamTreeWidgetItem*>(ui->streamTreeWidget->topLevelItem(row));
         if (rsti) {
@@ -755,7 +753,7 @@ void RtpStreamDialog::on_actionCopyAsCsv_triggered()
             if (!v.isValid()) {
                 rdsl << "\"\"";
             } else if (v.userType() == QMetaType::QString) {
-                rdsl << QString("\"%1\"").arg(v.toString());
+                rdsl << QStringLiteral("\"%1\"").arg(v.toString());
             } else {
                 rdsl << v.toString();
             }
@@ -790,7 +788,7 @@ void RtpStreamDialog::on_actionExportAsRtpDump_triggered()
     if (stream_info) {
         QString file_name;
         QDir path(mainApp->openDialogInitialDir());
-        QString save_file = path.canonicalPath() + "/" + cap_file_.fileBaseName();
+        QString save_file = QStringLiteral("%1/%2").arg(path.canonicalPath(), cap_file_.fileBaseName());
         QString extension;
         file_name = WiresharkFileDialog::getSaveFileName(this, mainApp->windowTitleString(tr("Save RTPDump As…")),
                                                  save_file, "RTPDump Format (*.rtp)", &extension);
@@ -949,7 +947,7 @@ void RtpStreamDialog::displayFilterCheckBoxToggled(bool checked)
         return;
     }
 
-    tapinfo_.apply_display_filter = checked;
+    rtpstream_set_apply_display_filter(&tapinfo_, checked);
 
     cap_file_.retapPackets();
 }
@@ -1036,13 +1034,6 @@ void RtpStreamDialog::rtpAnalysisRemove()
     if (ui->streamTreeWidget->selectedItems().count() < 1) return;
 
     emit rtpAnalysisDialogRemoveRtpStreams(getSelectedRtpIds());
-}
-
-void RtpStreamDialog::displayFilterSuccess(bool success)
-{
-    if (success && ui->displayFilterCheckBox->isChecked()) {
-        cap_file_.retapPackets();
-    }
 }
 
 void RtpStreamDialog::invertSelection()

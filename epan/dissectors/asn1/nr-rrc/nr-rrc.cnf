@@ -312,6 +312,7 @@ SL-BWP-PRS-PoolConfigCommon-r18
 SL-ConfigCommonNR-r16
 SL-DiscConfigCommon-r17
 SL-DiscConfigCommon-v1800
+SL-DiscConfigCommon-v1840
 SL-EUTRA-AnchorCarrierFreqList-r16
 SL-FreqConfigCommon-r16
 SL-MeasConfigCommon-r16
@@ -404,9 +405,13 @@ MIMO-ParametersPerBand/beamReportTiming/scs-15kHz                             mI
 MIMO-ParametersPerBand/ptrs-DensityRecommendationSetDL/scs-15kHz              mIMO-ParametersPerBand_ptrs-DensityRecommendationSetDL_scs-15kHz
 MIMO-ParametersPerBand/ptrs-DensityRecommendationSetUL/scs-15kHz              mIMO-ParametersPerBand_ptrs-DensityRecommendationSetUL_scs-15kHz
 BandNR/channelBWs-DL/fr1/scs-15kHz                                            bandNR_channelBWs-DL_fr1_scs-15kHz
+BandNR/channelBWs-DL/fr1/scs-30kHz                                            scs-30kHz-bit-str-10
 BandNR/channelBWs-UL/fr1/scs-15kHz                                            bandNR_channelBWs-UL_fr1_scs-15kHz
+BandNR/channelBWs-UL/fr1/scs-30kHz                                            scs-30kHz-bit-str-10
 BandNR/eag_4/channelBWs-DL-v1590/fr1/scs-15kHz                                bandNR_eag_4_channelBWs-DL-v1590_fr1_scs-15kHz
+BandNR/eag_4/channelBWs-DL-v1590/fr1/scs-30kHz                                scs-30kHz-bit-str-16
 BandNR/eag_4/channelBWs-UL-v1590/fr1/scs-15kHz                                bandNR_eag_4_channelBWs-UL-v1590_fr1_scs-15kHz
+BandNR/eag_4/channelBWs-UL-v1590/fr1/scs-30kHz                                scs-30kHz-bit-str-16
 BandNR/eag_6/channelBW-DL-IAB-r16/fr1-100mhz/scs-15kHz                        bandNR_eag_6_channelBW-DL-IAB-r16_fr1-100mhz_scs-15kHz
 BandNR/eag_6/channelBW-UL-IAB-r16/fr1-100mhz/scs-15kHz                        bandNR_eag_6_channelBW-UL-IAB-r16_fr1-100mhz_scs-15kHz
 
@@ -494,6 +499,114 @@ BandSidelinkPC5-r16/sl-Reception-r16/scs-CP-PatternRxSidelink-r16/fr2-r16/scs-12
 
 SL-MeasReportQuantity-r16/sl-RSRP-r16                                                               sL-MeasReportQuantity-r16_sl-RSRP-r16
 MasterInformationBlockSidelink/slotIndex-r16                                                        masterInformationBlockSidelink_slotIndex-r16
+
+# Extension group - not handled
+ConditionalReconfiguration-r16/eag_1/scpac-ReferenceConfiguration-r18 scpac-referenceconfiguration-r18-choise
+InvalidSymbolPattern-r16/periodicityAndPattern-r16/n4 n4-bit-str
+InvalidSymbolPattern-r16/periodicityAndPattern-r16/n5 n5-bit-str
+InvalidSymbolPattern-r16/periodicityAndPattern-r16/n8 n8-bit-str
+InvalidSymbolPattern-r16/periodicityAndPattern-r16/n10 n10-bit-str
+InvalidSymbolPattern-r16/periodicityAndPattern-r16/n20 n20-bit-str
+InvalidSymbolPattern-r16/periodicityAndPattern-r16/n40 n40-bit-str
+RateMatchPattern/patternType/bitmaps/periodicityAndPattern/n4 n4-bit-str
+RateMatchPattern/patternType/bitmaps/periodicityAndPattern/n5 n5-bit-str
+RateMatchPattern/patternType/bitmaps/periodicityAndPattern/n8 n8-bit-str
+RateMatchPattern/patternType/bitmaps/periodicityAndPattern/n10 n10-bit-str
+RateMatchPattern/patternType/bitmaps/periodicityAndPattern/n20 n20-bit-str
+RateMatchPattern/patternType/bitmaps/periodicityAndPattern/n40 n40-bit-str
+
+EventTriggerConfig/eventId/eventH1-r18/simulMultiTriggerSingleMeasReport-r18 simulMultiTriggerSingleMeasReport-r18-boolean
+EventTriggerConfig/eventId/eventH2-r18/simulMultiTriggerSingleMeasReport-r18 simulMultiTriggerSingleMeasReport-r18-boolean
+EventTriggerConfig/eventId/eventA3H1-r18/simulMultiTriggerSingleMeasReport-r18 simulMultiTriggerSingleMeasReport-r18-boolean
+EventTriggerConfig/eventId/eventA3H2-r18/simulMultiTriggerSingleMeasReport-r18 simulMultiTriggerSingleMeasReport-r18-boolean
+EventTriggerConfig/eventId/eventA4H1-r18/simulMultiTriggerSingleMeasReport-r18 simulMultiTriggerSingleMeasReport-r18-boolean
+EventTriggerConfig/eventId/eventA4H2-r18/simulMultiTriggerSingleMeasReport-r18 simulMultiTriggerSingleMeasReport-r18-boolean
+EventTriggerConfig/eventId/eventA5H1-r18/simulMultiTriggerSingleMeasReport-r18 simulMultiTriggerSingleMeasReport-r18-boolean
+EventTriggerConfig/eventId/eventA5H2-r18/simulMultiTriggerSingleMeasReport-r18 simulMultiTriggerSingleMeasReport-r18-boolean
+
+CA-ParametersNR-v1700/non-AlignedFrameBoundaries-r17/scs15kHz-15kHz-r17 cs15kHz-15kHz-r17-bit-string
+CA-ParametersNR-v1700/non-AlignedFrameBoundaries-r17/scs15kHz-30kHz-r17 scs15kHz-30kHz-r17-bit-string 
+CA-ParametersNR-v1700/non-AlignedFrameBoundaries-r17/scs15kHz-60kHz-r17 scs15kHz-60kHz-r17-bit-string
+
+BandParametersSidelinkEUTRA-NR-v1710/nr/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr1-r17/scs-15kHz-r17 scs-15kHz-r17-bit-string
+BandParametersSidelinkEUTRA-NR-v1710/nr/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr1-r17/scs-30kHz-r17 scs-30kHz-r17-bit-string
+BandParametersSidelinkEUTRA-NR-v1710/nr/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr1-r17/scs-60kHz-r17 sscs-60kHz-r17-bit-string
+BandParametersSidelinkEUTRA-NR-v1710/nr/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr2-r17/scs-60kHz-r17 scs-60kHz-r17-bit-string
+BandParametersSidelinkEUTRA-NR-v1710/nr/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr2-r17/scs-120kHz-r17 scs-120kHz-r17-bit-string
+
+BandParametersSidelinkDiscovery-r17/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr1-r17/scs-15kHz-r17 scs-15kHz-r17-bit-string
+BandParametersSidelinkDiscovery-r17/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr1-r17/scs-30kHz-r17 scs-30kHz-r17-bit-string
+BandParametersSidelinkDiscovery-r17/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr1-r17/scs-60kHz-r17 sscs-60kHz-r17-bit-string
+BandParametersSidelinkDiscovery-r17/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr2-r17/scs-60kHz-r17 scs-60kHz-r17-bit-string
+BandParametersSidelinkDiscovery-r17/sl-TransmissionMode2-PartialSensing-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr2-r17/scs-120kHz-r17 scs-120kHz-r17-bit-string
+
+BandSidelink-r16/eag_3/sl-TransmissionMode2-RandomResourceSelection-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr1-r17/scs-15kHz-r17 scs-15kHz-r17-bit-str-16
+BandSidelink-r16/eag_3/sl-TransmissionMode2-RandomResourceSelection-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr1-r17/scs-30kHz-r17 scs-30kHz-r17-bit-str-16
+BandSidelink-r16/eag_3/sl-TransmissionMode2-RandomResourceSelection-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr1-r17/scs-60kHz-r17 scs-60kHz-r17-bit-str-16
+BandSidelink-r16/eag_3/sl-TransmissionMode2-RandomResourceSelection-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr2-r17/scs-60kHz-r17 scs-60kHz-r17-bit-str-16
+BandSidelink-r16/eag_3/sl-TransmissionMode2-RandomResourceSelection-r17/scs-CP-PatternTxSidelinkModeTwo-r17/fr2-r17/scs-120kHz-r17 scs-120kHz-r17-bit-str-16
+
+#FeatureSetDownlink-v1720\rtt-BasedPDC-PRS-r17\maxNumberPRS-ResourceProcessedPerSlot-r17\scs-15kHz-r17 scs-15kHz-r17-enum
+#FeatureSetDownlink-v1720\rtt-BasedPDC-PRS-r17\maxNumberPRS-ResourceProcessedPerSlot-r17\scs-30kHz-r17 scs-30kHz-r17-enum
+#FeatureSetDownlink-v1720\rtt-BasedPDC-PRS-r17\maxNumberPRS-ResourceProcessedPerSlot-r17\scs-60kHz-r17 scs-60kHz-r17-enum
+#FeatureSetDownlink-v1720\rtt-BasedPDC-PRS-r17\maxNumberPRS-ResourceProcessedPerSlot-r17\scs-120kHz-r17 scs-120kHz-r17-enum
+
+LocationMeasurementIndication-IEs/measurementIndication/setup setup-LocationMeasurementInfo
+LoggedMeasurementConfiguration-r16-IEs/bt-NameList-r16/setup setup-BT-NameList-r16
+LoggedMeasurementConfiguration-r16-IEs/wlan-NameList-r16/setup setup-WLAN-NameList-r16
+LoggedMeasurementConfiguration-r16-IEs/sensor-NameList-r16/setup setup-Sensor-NameList-r16
+RRCReestablishment-v1700-IEs/sl-L2RemoteUE-Config-r17/setup setup-SL-L2RemoteUE-Config-r17
+RRCReconfiguration-v1560-IEs/mrdc-SecondaryCellGroupConfig/setup setup-MRDC-SecondaryCellGroupConfig
+RRCReconfiguration-v1610-IEs/bap-Config-r16/setup setup-BAP-Config-r16
+RRCReconfiguration-v1610-IEs/t316-r16/setup setup-T316-r16
+RRCReconfiguration-v1610-IEs/needForGapsConfigNR-r16/setup setup-NeedForGapsConfigNR-r16
+RRCReconfiguration-v1610-IEs/onDemandSIB-Request-r16/setup setup-OnDemandSIB-Request-r16
+RRCReconfiguration-v1610-IEs/sl-ConfigDedicatedNR-r16/setup setup-SL-ConfigDedicatedNR-r16
+RRCReconfiguration-v1610-IEs/sl-ConfigDedicatedEUTRA-Info-r16/setup setup-SL-ConfigDedicatedEUTRA-Info-r16
+RRCReconfiguration-v1700-IEs/sl-L2RelayUE-Config-r17/setup setup-SL-L2RelayUE-Config-r17
+RRCReconfiguration-v1700-IEs/sl-L2RemoteUE-Config-r17/setup setup-SL-L2RemoteUE-Config-r17
+RRCReconfiguration-v1700-IEs/needForGapNCSG-ConfigNR-r17/setup setup-NeedForGapNCSG-ConfigNR-r17
+RRCReconfiguration-v1700-IEs/needForGapNCSG-ConfigEUTRA-r17/setup setup-NeedForGapNCSG-ConfigEUTRA-r17
+RRCReconfiguration-v1700-IEs/musim-GapConfig-r17/setup setup-MUSIM-GapConfig-r17
+RRCReconfiguration-v1700-IEs/ul-GapFR2-Config-r17/setup setup-UL-GapFR2-Config-r17
+RRCReconfiguration-v1700-IEs/ue-TxTEG-RequestUL-TDOA-Config-r17/setup setup-UE-TxTEG-RequestUL-TDOA-Config-r17
+RRCReconfiguration-v1800-IEs/aerial-Config-r18/setup setup-Aerial-Config-r18
+RRCReconfiguration-v1800-IEs/sl-IndirectPathAddChange-r18/setup setup-SL-IndirectPathAddChange-r18
+RRCReconfiguration-v1800-IEs/n3c-IndirectPathAddChange-r18/setup setup-N3C-IndirectPathAddChange-r18
+RRCReconfiguration-v1800-IEs/n3c-IndirectPathConfigRelay-r18/setup setup-N3C-IndirectPathConfigRelay-r18
+RRCReconfiguration-v1800-IEs/srs-PosResourceSetAggBW-CombinationList-r18/setup setup-SRS-PosResourceSetAggBW-CombinationList-r18
+RRCReconfiguration-v1800-IEs/ltm-Config-r18/setup setup-LTM-Config-r18
+RRCRelease-v1610-IEs/measIdleConfig-r16/setup setup-MeasIdleConfigDedicated-r16
+
+SDT-Config-r17/sdt-MAC-PHY-CG-Config-r17/setup setup-SDT-CG-Config-r17SuspendConfig
+SDT-MAC-PHY-CG-Config-r17/cg-SDT-ConfigInitialBWP-NUL-r17/setup setup-BWP-UplinkDedicatedSDT-r17
+SDT-MAC-PHY-CG-Config-r17/cg-SDT-ConfigInitialBWP-SUL-r17/setup setup-BWP-UplinkDedicatedSDT-r17
+SDT-MAC-PHY-CG-Config-r17/cg-SDT-TA-ValidationConfig-r17/setup setup-CG-SDT-TA-ValidationConfig-r17
+BWP-DownlinkDedicatedSDT-r17/pdcch-Config-r17/setup setup-PDCCH-Config
+BWP-DownlinkDedicatedSDT-r17/pdsch-Config-r17/setup setup-PDSCH-Config
+BWP-UplinkDedicatedSDT-r17/pusch-Config-r17/setup setup-PUSCH-Config
+SRS-PosRRC-InactiveEnhancedConfig-r18/srs-PosRRC-InactiveAggBW-ConfigList-r18/setup setup-SRS-PosRRC-InactiveAggBW-ConfigList-r18
+SRS-PosRRC-InactiveEnhancedConfig-r18/srs-PosTx-Hopping-r18/setup setup-SRS-PosTx-Hopping-r18
+SRS-PosRRC-InactiveEnhancedConfig-r18/srs-PosRRC-InactiveValidityAreaPreConfigList-r18/setup setup-SRS-PosRRC-InactiveValidityAreaPreConfigList-r18
+SRS-PosRRC-InactiveEnhancedConfig-r18/srs-PosRRC-InactiveValidityAreaNonPreConfig-r18/setup setup-SRS-PosRRC-InactiveValidityAreaConfig-r18
+RRCResume-v1610-IEs/needForGapsConfigNR-r16/setup setup-NeedForGapsConfigNR-r16
+RRCResume-v1700-IEs/sl-ConfigDedicatedNR-r17/setup setup-SL-ConfigDedicatedNR-r16
+RRCResume-v1700-IEs/sl-L2RemoteUE-Config-r17/setup setup-SL-L2RemoteUE-Config-r17
+RRCResume-v1700-IEs/needForGapNCSG-ConfigNR-r17/setup setup-NeedForGapNCSG-ConfigNR-r17
+RRCResume-v1700-IEs/needForGapNCSG-ConfigEUTRA-r17/setup setup-NeedForGapNCSG-ConfigEUTRA-r17
+Aerial-Config-r18/flightPathUpdateThrConfig-r18/flightPathUpdateDistanceThr-r18/setup setup-FlightPathUpdateDistanceThr-r18
+Aerial-Config-r18/flightPathUpdateThrConfig-r18/flightPathUpdateTimeThr-r18/setup setup-FlightPathUpdateTimeThr-r18
+SuspendConfig/eag_1/sdt-Config-r17/setup setup-SDT-Config-r17
+SuspendConfig/eag_1/srs-PosRRC-Inactive-r17/setup setup-SRS-PosRRC-Inactive-r17
+SuspendConfig/eag_3/srs-PosRRC-InactiveEnhanced-r18/setup setup-SRS-PosRRC-InactiveEnhanced-r18
+SCellConfig/eag_3/sCellSIB20-r17/setup setup-SCellSIB20-r17
+ConditionalReconfiguration-r16/eag_1/scpac-ReferenceConfiguration-r18/setup setup-ReferenceConfiguration-r18
+PDSCH-ServingCellConfig/eag_2/pdsch-CodeBlockGroupTransmissionList-r16/setup setup-PDSCH-CodeBlockGroupTransmissionList-r16
+PDSCH-ServingCellConfig/eag_3/downlinkHARQ-FeedbackDisabled-r17/setup setup-DownlinkHARQ-FeedbackDisabled-r17
+LTM-Config-r18/ltm-ReferenceConfiguration-r18/setup setup-ReferenceConfiguration-r18
+PUSCH-ServingCellConfig/codeBlockGroupTransmission/setup setup-PUSCH-CodeBlockGroupTransmission
+PUSCH-ServingCellConfig/eag_2/maxMIMO-LayersDCI-0-2-r16/setup setup-MaxMIMO-LayersDCI-0-2-r16
+PUSCH-ServingCellConfig/eag_3/uplinkHARQ-mode-r17/setup setup-UplinkHARQ-mode-r17
 
 #.FIELD_ATTR
 RRM-Config/eag_1/candidateCellInfoListSN-EUTRA                                 ABBREV=rRM_Config.eag_1.candidateCellInfoListSN_EUTRA
@@ -805,7 +918,7 @@ RAT-Type TYPE_PREFIX
   col_append_str(actx->pinfo->cinfo, COL_INFO, "SIB10 ");
 
 #.FN_HDR SIB11-r16
-  col_append_str(actx->pinfo->cinfo, COL_INFO, "SIB11");
+  col_append_str(actx->pinfo->cinfo, COL_INFO, "SIB11 ");
 
 #.FN_HDR SIB12-r16
   col_append_str(actx->pinfo->cinfo, COL_INFO, "SIB12 ");
@@ -1856,9 +1969,9 @@ T-Reselection DISPLAY=BASE_DEC|BASE_UNIT_STRING STRINGS=UNS(&units_seconds)
     const char *str, *hf_str;
     proto_tree *subtree;
     subtree = proto_item_add_subtree(actx->created_item, ett_nr_rrc_absTimeInfo);
-    str = tvb_bcd_dig_to_str(actx->pinfo->pool, abs_time_info_tvb, 0, 6, NULL, false);
-    hf_str = wmem_strdup_printf(actx->pinfo->pool, "%c%c-%c%c-%c%c %c%c:%c%c:%c%c", str[0], str[1],
-                        str[2], str[3], str[4], str[5], str[6], str[7], str[8], str[9], str[10], str[11]);
+    str = tvb_bcd_dig_to_str_be(actx->pinfo->pool, abs_time_info_tvb, 0, 6, NULL, false);
+    hf_str = wmem_strdup_printf(actx->pinfo->pool, "%c%c-%c%c-%c%c %c%c:%c%c:%c%c", str[0], str[1], str[2],
+                                str[3], str[4], str[5], str[6], str[7], str[8], str[9], str[10], str[11]);
     proto_tree_add_string(subtree, hf_nr_rrc_absolute_time, abs_time_info_tvb, 0, 6, hf_str);
   }
 

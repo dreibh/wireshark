@@ -28,14 +28,15 @@
 #include "config.h"
 
 #include <libsinsp/sinsp.h>
-#include <plugin_manager.h>
+#include <libsinsp/plugin_manager.h>
 
-#include <scap_engines.h>
+#include <libscap/scap_engines.h>
 
 #define WS_LOG_DOMAIN "falcodump"
 
 #include <extcap/extcap-base.h>
 
+#include <wsutil/application_flavor.h>
 #include <wsutil/file_util.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/json_dumper.h>
@@ -238,6 +239,8 @@ void print_cloudtrail_aws_region_config(int arg_num, const char *display, const 
         "ap-southeast-2",
         "ap-southeast-3",
         "ap-southeast-4",
+        "ap-southeast-5",
+        "ap-southeast-7",
         "ca-central-1",
         "ca-west-1",
         "eu-central-1",
@@ -251,6 +254,7 @@ void print_cloudtrail_aws_region_config(int arg_num, const char *display, const 
         "il-central-1",
         "me-central-1",
         "me-south-1",
+        "mx-central-1",
         "sa-east-1",
         "us-east-1",
         "us-east-2",
@@ -410,7 +414,12 @@ const std::pair<std::vector<std::string>,bool> get_json_array(const std::string 
 
 // Given a JSON blob containing a schema properties object, add each property to the
 // given plugin config.
-const std::pair<const std::string,bool> get_schema_properties(const std::string props_blob, int &opt_idx, const std::string option_prefix, const std::string plugin_name, std::vector<struct config_properties> &property_list) {
+// NOLINTNEXTLINE(misc-no-recursion)
+const std::pair<const std::string,bool> get_schema_properties(const std::string props_blob, int &opt_idx, const std::string option_prefix, const std::string plugin_name, std::vector<struct config_properties> &property_list, int depth) {
+    if (++depth > JSON_DUMPER_MAX_DEPTH) {
+        return std::pair<std::string,bool>("max depth exceeded", false);
+    }
+
     std::vector<jsmntok_t> tokens;
     int num_tokens = json_parse(props_blob.c_str(), NULL, 0);
 
@@ -472,7 +481,7 @@ const std::pair<const std::string,bool> get_schema_properties(const std::string 
                 "",
             };
             property_list.push_back(properties);
-            get_schema_properties(jv.first, opt_idx, option_prefix + "-" + name, plugin_name, property_list);
+            get_schema_properties(jv.first, opt_idx, option_prefix + "-" + name, plugin_name, property_list, depth);
             properties = {
                 name,
                 display,
@@ -681,7 +690,7 @@ static bool get_plugin_config_schema(const std::shared_ptr<sinsp_plugin> &plugin
         return false;
     }
     int opt_idx = OPT_SCHEMA_PROPERTIES_START;
-    jv = get_schema_properties(jv.first, opt_idx, "", plugin->name(), plugin_config.property_list);
+    jv = get_schema_properties(jv.first, opt_idx, "", plugin->name(), plugin_config.property_list, 0);
     if (!jv.second) {
         ws_warning("ERROR: Interface \"%s\" has an unsupported or invalid configuration schema: %s", plugin->name().c_str(), jv.first.c_str());
         return false;
@@ -926,8 +935,11 @@ int main(int argc, char **argv)
     sinsp inspector;
     std::string plugin_source;
 
+    /* Set the program name. */
+    g_set_prgname("falcodump");
+
     /* Initialize log handler early so we can have proper logging during startup. */
-    extcap_log_init("falcodump");
+    extcap_log_init();
 
     /*
      * Get credential information for later use.
@@ -938,7 +950,8 @@ int main(int argc, char **argv)
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    configuration_init_error = configuration_init(argv[0], "Stratoshark");
+    configuration_init_error = configuration_init(argv[0]);
+    set_application_flavor(APPLICATION_FLAVOR_STRATOSHARK);
     if (configuration_init_error != NULL) {
         ws_warning("Can't get pathname of directory containing the extcap program: %s.",
                 configuration_init_error);

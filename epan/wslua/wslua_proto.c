@@ -58,7 +58,6 @@ void clear_outstanding_FuncSavers(void) {
     }
 }
 
-
 WSLUA_CLASS_DEFINE(Proto,FAIL_ON_NULL("Proto"));
 /*
   A new protocol in Wireshark.
@@ -423,7 +422,9 @@ WSLUA_ATTRIBUTE_STRING_GETTER(Proto,name);
 /* WSLUA_ATTRIBUTE Proto_description RO The description given to this dissector. */
 WSLUA_ATTRIBUTE_NAMED_STRING_GETTER(Proto,description,desc);
 
-/* WSLUA_ATTRIBUTE Proto_fields RW The `ProtoField`++'++s Lua table of this dissector. */
+/* WSLUA_ATTRIBUTE Proto_fields RW The Lua table of this dissector's ``ProtoField``s.
+   ``ProtoField``s added to this table are registered to the `Proto` (and any
+   removed are deregistered if previously registered.) */
 static int Proto_get_fields(lua_State* L) {
     Proto proto = checkProto(L,1);
     lua_rawgeti(L, LUA_REGISTRYINDEX, proto->fields);
