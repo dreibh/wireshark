@@ -4220,8 +4220,8 @@ static int hf_ieee80211_ff_wme_action_code;     /* Management notification actio
 static int hf_ieee80211_ff_wme_status_code;     /* Management notification setup response status code */
 static int hf_ieee80211_ff_qos_action_code;
 static int hf_ieee80211_ff_dls_action_code;
-static int hf_ieee80211_ff_dst_mac_addr;        /* DLS destination MAC addressi */
-static int hf_ieee80211_ff_src_mac_addr;        /* DLS source MAC addressi */
+static int hf_ieee80211_ff_dst_mac_addr;        /* DLS destination MAC address */
+static int hf_ieee80211_ff_src_mac_addr;        /* DLS source MAC address */
 static int hf_ieee80211_ff_req_ap_addr;
 static int hf_ieee80211_ff_res_ap_addr;
 static int hf_ieee80211_ff_check_beacon;
@@ -4919,6 +4919,12 @@ static int hf_ieee80211_eht_emlsr_para_update;
 static int hf_ieee80211_eht_emlsr_para_update_padding_delay;
 static int hf_ieee80211_eht_emlsr_para_update_tran_delay;
 static int hf_ieee80211_eht_emlsr_para_update_reserved;
+
+static int hf_ieee80211_eht_group_key_data_length;
+static int hf_ieee80211_eht_reconfig_link_id_info;
+static int hf_ieee80211_eht_reconfig_link_id;
+static int hf_ieee80211_eht_reconfig_link_id_reserved;
+static int hf_ieee80211_eht_reconfig_status_code;
 
 static int hf_ieee80211_ff_ant_selection;
 static int hf_ieee80211_ff_ant_selection_0;
@@ -6801,6 +6807,15 @@ static int hf_ieee80211_vs_nintendo_unknown;
 static int hf_ieee80211_vs_aruba_subtype;
 static int hf_ieee80211_vs_aruba_apname;
 static int hf_ieee80211_vs_aruba_data;
+static int hf_ieee80211_vs_aruba_gps_length;
+static int hf_ieee80211_vs_aruba_gps_subversion;
+static int hf_ieee80211_vs_aruba_gps_hop;
+static int hf_ieee80211_vs_aruba_gps_latitude;
+static int hf_ieee80211_vs_aruba_gps_longitude;
+static int hf_ieee80211_vs_aruba_gps_major_axis;
+static int hf_ieee80211_vs_aruba_gps_minor_axis;
+static int hf_ieee80211_vs_aruba_gps_orientation;
+static int hf_ieee80211_vs_aruba_gps_distance;
 
 static int hf_ieee80211_vs_routerboard_unknown;
 static int hf_ieee80211_vs_routerboard_subitem;
@@ -8147,6 +8162,8 @@ static int hf_ieee80211_nonap_sta_regu_conn_reserved;
 
 static int hf_ieee80211_tag_channel_usage_mode;
 
+static int hf_ieee80211_ff_count;
+
 /* ************************************************************************* */
 /*                              RFC 8110 fields                              */
 /* ************************************************************************* */
@@ -8408,6 +8425,8 @@ static int ett_eht_beamforming_feedback_tree;
 static int ett_ff_eht_mimo_beamforming_report_snr;
 static int ett_ff_eht_mimo_mu_exclusive_report;
 static int ett_eht_mu_exclusive_beamforming_rpt_ru_index;
+static int ett_eht_reconfig_status_list;
+static int ett_eht_group_key_data;
 
 static int ett_tag_measure_request_mode_tree;
 static int ett_tag_measure_request_type_tree;
@@ -16346,6 +16365,9 @@ static const range_string protected_he_action_rvals[] = {
 #define EHT_LINK_RECOMMENDATION         7
 #define EHT_MULTI_LINK_OP_UPDATE_REQ    8
 #define EHT_MULTI_LINK_OP_UPDATE_RESP   9
+#define EHT_LINK_RECONFIG_NOTIFY       10
+#define EHT_LINK_RECONFIG_REQ          11
+#define EHT_LINK_RECONFIG_RESP         12
 
 static const range_string protected_eht_action_rvals[] = {
   { EHT_TID_LINK_MAP_REQ, EHT_TID_LINK_MAP_REQ,
@@ -16368,7 +16390,13 @@ static const range_string protected_eht_action_rvals[] = {
         "EHT Multi-Link Operation Update Request" },
   { EHT_MULTI_LINK_OP_UPDATE_RESP, EHT_MULTI_LINK_OP_UPDATE_RESP,
         "EHT Multi-Link Operation Update Response" },
-  { EHT_MULTI_LINK_OP_UPDATE_RESP + 1, 255, "Reserved" },
+  { EHT_LINK_RECONFIG_NOTIFY, EHT_LINK_RECONFIG_NOTIFY,
+        "EHT Link Reconfiguration Notify" },
+  { EHT_LINK_RECONFIG_REQ, EHT_LINK_RECONFIG_REQ,
+        "EHT Link Reconfiguration Request" },
+  { EHT_LINK_RECONFIG_RESP, EHT_LINK_RECONFIG_RESP,
+        "EHT Link Reconfiguration Response" },
+  { EHT_LINK_RECONFIG_RESP + 1, 255, "Reserved" },
   { 0, 0, NULL }
 };
 
@@ -17067,17 +17095,32 @@ add_ff_action_protected_ftm(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
   return offset - start;
 }
 
+static int * const eht_reconfig_link_id_hdrs[] = {
+  &hf_ieee80211_eht_reconfig_link_id,
+  &hf_ieee80211_eht_reconfig_link_id_reserved,
+  NULL
+};
+
+static unsigned
+add_ff_count(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, int offset)
+{
+  proto_tree_add_item(tree, hf_ieee80211_ff_count, tvb, offset, 1,
+                      ENC_LITTLE_ENDIAN);
+  return 1;
+}
+
 static unsigned
 add_ff_action_protected_eht(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset)
 {
   unsigned start = offset;
   uint8_t protected_eht_action;
   proto_item *item;
-  int len = 0;
+  int len = 0, count, i, id;
   uint16_t status;
   bool invalid = false;
   /* Default Extension Element is Multi-Link */
   uint8_t ext_ids[1] = {ETAG_MULTI_LINK};
+  proto_tree *sub_tree;
 
   offset += add_ff_category_code(tree, tvb, pinfo, offset);
 
@@ -17172,22 +17215,16 @@ add_ff_action_protected_eht(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
   case EHT_EPCS_PRIO_ACCESS_REQ:
     offset += add_ff_dialog_token(tree, tvb, pinfo, offset);
     if (tvb_captured_length_remaining(tvb, offset) >= 2) {
-      len = tvb_get_uint8(tvb, offset + 1);
-      if (add_tagged_field_with_validation(pinfo, tree, tvb, offset, 0, NULL,
-          0, false, ext_ids, G_N_ELEMENTS(ext_ids), false, NULL) > 0) {
-        offset += len + 2;
-      }
+      offset += add_tagged_field_with_validation(pinfo, tree, tvb, offset, 0,
+                NULL, 0, FALSE, ext_ids, G_N_ELEMENTS(ext_ids), FALSE, NULL);
     }
     break;
   case EHT_EPCS_PRIO_ACCESS_RESP:
     offset += add_ff_dialog_token(tree, tvb, pinfo, offset);
     offset += add_ff_status_code(tree, tvb, pinfo, offset);
     if (tvb_captured_length_remaining(tvb, offset) >= 2) {
-      len = tvb_get_uint8(tvb, offset + 1);
-      if (add_tagged_field_with_validation(pinfo, tree, tvb, offset, 0, NULL,
-          0, false, ext_ids, G_N_ELEMENTS(ext_ids), false, NULL) > 0) {
-        offset += len + 2;
-      }
+      offset += add_tagged_field_with_validation(pinfo, tree, tvb, offset, 0,
+                NULL, 0, FALSE, ext_ids, G_N_ELEMENTS(ext_ids), FALSE, NULL);
     }
     break;
   case EHT_EPCS_PRIO_ACCESS_TEAR_DOWN:
@@ -17214,7 +17251,7 @@ add_ff_action_protected_eht(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
     if (invalid) {
       expert_add_info_format(pinfo, item, &ei_ieee80211_eht_invalid_action,
                              "Invalid LINK_RECOMMENDATION. "
-                             "There should be AID_BITMAP element"
+                             "There should be AID_BITMAP element "
                              "but none found");
       break;
     }
@@ -17236,7 +17273,7 @@ add_ff_action_protected_eht(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
     if (invalid) {
       expert_add_info_format(pinfo, item, &ei_ieee80211_eht_invalid_action,
                              "Invalid LINK_RECOMMENDATION. "
-                             "There should be MULTI_LINK_TRAFFIC element"
+                             "There should be MULTI_LINK_TRAFFIC element "
                              "but none found");
       break;
     }
@@ -17248,17 +17285,16 @@ add_ff_action_protected_eht(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
     } else {
       invalid = true;
     }
-    if (!invalid && (len >= 1) &&
-        (add_tagged_field_with_validation(pinfo, tree, tvb, offset, 0, NULL,
-         0, false, ext_ids, G_N_ELEMENTS(ext_ids), false, NULL) > 0)) {
-      offset += len + 2;
+    if (!invalid && (len >= 1)) {
+      offset += add_tagged_field_with_validation(pinfo, tree, tvb, offset, 0,
+                NULL, 0, FALSE, ext_ids, G_N_ELEMENTS(ext_ids), FALSE, NULL);
     } else {
       invalid = true;
     }
     if (invalid) {
       expert_add_info_format(pinfo, item, &ei_ieee80211_eht_invalid_action,
                              "Invalid Multi-Link Operation Update Request. "
-                             "There should be Reconf Multi-Link element"
+                             "There should be Reconf Multi-Link element "
                              "but none found");
       break;
     }
@@ -17266,6 +17302,108 @@ add_ff_action_protected_eht(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
   case EHT_MULTI_LINK_OP_UPDATE_RESP:
     offset += add_ff_dialog_token(tree, tvb, pinfo, offset);
     offset += add_ff_status_code(tree, tvb, pinfo, offset);
+    break;
+  case EHT_LINK_RECONFIG_NOTIFY:
+    offset += add_ff_dialog_token(tree, tvb, pinfo, offset);
+    if (tvb_captured_length_remaining(tvb, offset) >= 2) {
+      len = tvb_get_uint8(tvb, offset + 1);
+    } else {
+      invalid = TRUE;
+    }
+    if (!invalid && (len >= 1)) {
+      offset += add_tagged_field_with_validation(pinfo, tree, tvb, offset, 0,
+                NULL, 0, FALSE, ext_ids, G_N_ELEMENTS(ext_ids), FALSE, NULL);
+    } else {
+      invalid = TRUE;
+    }
+    if (invalid) {
+      expert_add_info_format(pinfo, item, &ei_ieee80211_eht_invalid_action,
+                             "Invalid Link Reconfiguration Notify. "
+                             "There should be Reconf Multi-Link element "
+                             "but none found");
+      break;
+    }
+    break;
+  case EHT_LINK_RECONFIG_REQ:
+    offset += add_ff_dialog_token(tree, tvb, pinfo, offset);
+    if (tvb_captured_length_remaining(tvb, offset) >= 2) {
+      len = tvb_get_uint8(tvb, offset + 1);
+    } else {
+      invalid = TRUE;
+    }
+    if (!invalid && (len >= 1)) {
+      offset += add_tagged_field_with_validation(pinfo, tree, tvb, offset, 0,
+                NULL, 0, FALSE, ext_ids, G_N_ELEMENTS(ext_ids), FALSE, NULL);
+    } else {
+      invalid = TRUE;
+    }
+    if (invalid) {
+      expert_add_info_format(pinfo, item, &ei_ieee80211_eht_invalid_action,
+                             "Invalid Link Reconfiguration Req. "
+                             "There should be Reconf Multi-Link element "
+                             "but none found");
+      break;
+    }
+    ext_ids[0] = ETAG_OCI;
+    if (tvb_captured_length_remaining(tvb, offset) >= 2) {
+      len = tvb_get_uint8(tvb, offset + 1);
+    } else {
+      /* OCI element field is optionally present */
+      break;
+    }
+    if (!invalid && (len >= 1) &&
+        (add_tagged_field_with_validation(pinfo, tree, tvb, offset, 0, NULL,
+         0, FALSE, ext_ids, G_N_ELEMENTS(ext_ids), FALSE, NULL) > 0)) {
+      offset += len + 2;
+    } else {
+      invalid = TRUE;
+    }
+    if (invalid) {
+      expert_add_info_format(pinfo, item, &ei_ieee80211_eht_invalid_action,
+                             "Invalid Link Reconfiguration Req. "
+                             "There should be OCI element but none found");
+      break;
+    }
+    break;
+  case EHT_LINK_RECONFIG_RESP:
+    offset += add_ff_dialog_token(tree, tvb, pinfo, offset);
+    count = tvb_get_uint8(tvb, offset);
+    offset += add_ff_count(tree, tvb, pinfo, offset);
+    if (count == 0)
+      break;
+
+    sub_tree = proto_tree_add_subtree(tree, tvb, offset, count * 3,
+                                      ett_eht_reconfig_status_list, NULL,
+                                      "Reconfiguration Status List");
+    for (i = 0; i < count; i++) {
+      proto_tree_add_bitmask(sub_tree, tvb, offset,
+                             hf_ieee80211_eht_reconfig_link_id_info,
+                             ett_eht_multi_link_common_info_link_id,
+                             eht_reconfig_link_id_hdrs, ENC_NA);
+      offset += 1;
+      proto_tree_add_item(sub_tree, hf_ieee80211_eht_reconfig_status_code, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+    }
+
+    if (tvb_captured_length_remaining(tvb, offset) <= 0)
+      break;
+
+    /* Check next is Group Key Data */
+    id = tvb_get_uint8(tvb, offset);
+    if (id != 0xdd && id != 0xff) {
+      sub_tree = proto_tree_add_subtree(tree, tvb, offset, id,
+                                        ett_eht_group_key_data, NULL,
+                                        "Group Key Data");
+      proto_tree_add_item(sub_tree, hf_ieee80211_eht_group_key_data_length, tvb, offset, 1, ENC_NA);
+      offset += 1;
+      while (tvb_reported_length_remaining(tvb, offset)) {
+        id = tvb_get_uint8(tvb, offset);
+        /* Key Data should be MLO KDEs */
+        if (id != 0xdd)
+          break;
+        offset += add_tagged_field(pinfo, sub_tree, tvb, offset, 0, NULL, 0, NULL);
+      }
+    }
     break;
   default:
     expert_add_info_format(pinfo, item, &ei_ieee80211_eht_invalid_action,
@@ -21110,8 +21248,11 @@ this supports:
 }
 
 #define ARUBA_APNAME  3
+#define ARUBA_GPS 9
+
 static const value_string ieee80211_vs_aruba_subtype_vals[] = {
   { ARUBA_APNAME, "AP Name"},
+  { ARUBA_GPS, "GPS Ellipse"},
   { 0,                 NULL }
 };
 static void
@@ -21138,6 +21279,86 @@ dissect_vendor_ie_aruba(proto_item *item, proto_tree *ietree,
     proto_tree_add_item_ret_string(ietree, hf_ieee80211_vs_aruba_apname, tvb,
                          offset, tag_len, ENC_ASCII|ENC_NA, pinfo->pool, &name);
     proto_item_append_text(item, " (%s)", name);
+    break;
+
+  case ARUBA_GPS:
+    {
+      double latitude, longitude, major_axis, minor_axis, orientation, distance;
+      offset += 1;
+      tag_len -= 1;
+      if (tag_len < 1) {
+        expert_add_info_format(pinfo, ietree, &ei_ieee80211_bad_length,
+                          "Malformed Aruba GPS data (insufficient data)");
+        break;
+      }
+
+      uint32_t gps_ie_length = tvb_get_uint8(tvb, offset);
+      offset += 1;
+      tag_len -= 1;
+      gps_ie_length -= 1;
+
+      if (tag_len < gps_ie_length) {
+        expert_add_info_format(pinfo, ietree, &ei_ieee80211_bad_length,
+                      "Truncated Aruba GPS data (IE needs %u bytes but got %u)",
+                      gps_ie_length, tag_len);
+        break;
+      }
+
+      proto_tree_add_item(ietree, hf_ieee80211_vs_aruba_gps_subversion, tvb,
+                        offset, 1, ENC_NA);
+      offset += 1;
+      tag_len -= 1;
+
+      proto_tree_add_item(ietree, hf_ieee80211_vs_aruba_gps_hop, tvb,
+                        offset, 1, ENC_NA);
+      offset += 1;
+      tag_len -= 1;
+
+      latitude = tvb_get_ntohieee_double(tvb, offset);
+      proto_tree_add_double_format_value(ietree, hf_ieee80211_vs_aruba_gps_latitude, tvb,
+                        offset, 8, latitude, "%.6f", latitude);
+      offset += 8;
+      tag_len -= 8;
+
+      longitude = tvb_get_ntohieee_double(tvb, offset);
+      proto_tree_add_double_format_value(ietree, hf_ieee80211_vs_aruba_gps_longitude, tvb,
+                        offset, 8, longitude, "%.6f", longitude);
+      offset += 8;
+      tag_len -= 8;
+
+      major_axis = tvb_get_ntohieee_double(tvb, offset);
+      proto_tree_add_double_format_value(ietree, hf_ieee80211_vs_aruba_gps_major_axis, tvb,
+                        offset, 8, major_axis, "%.6f", major_axis);
+      offset += 8;
+      tag_len -= 8;
+
+      minor_axis = tvb_get_ntohieee_double(tvb, offset);
+      proto_tree_add_double_format_value(ietree, hf_ieee80211_vs_aruba_gps_minor_axis, tvb,
+                        offset, 8, minor_axis, "%.6f", minor_axis);
+      offset += 8;
+      tag_len -= 8;
+
+      orientation = tvb_get_ntohieee_double(tvb, offset);
+      proto_tree_add_double_format_value(ietree, hf_ieee80211_vs_aruba_gps_orientation, tvb,
+                        offset, 8, orientation, "%.6f", orientation);
+      offset += 8;
+      tag_len -= 8;
+
+      distance = tvb_get_ntohieee_double(tvb, offset);
+      proto_tree_add_double_format_value(ietree, hf_ieee80211_vs_aruba_gps_distance, tvb,
+                        offset, 8, distance, "%.6f", distance);
+      offset += 8;
+      tag_len -= 8;
+
+      if (tag_len > 0) {
+        expert_add_info_format(pinfo, ietree, &ei_ieee80211_bad_length,
+                        "Aruba GPS data contains additional %u bytes of unexpected data",
+                        tag_len);
+      }
+
+      proto_item_append_text(item, " (coords: [%.6f, %.6f], ellipse: [%.2fm x %.2fm, %.2f°], distance: %.2fm)",
+                        latitude, longitude, major_axis, minor_axis, orientation, distance);
+    }
     break;
 
   default:
@@ -54423,6 +54644,51 @@ proto_register_ieee80211(void)
       FT_BYTES, BASE_NONE, NULL, 0,
       NULL, HFILL }},
 
+    {&hf_ieee80211_vs_aruba_gps_length,
+      { "GPS Length", "wlan.ie.aruba.gps.length",
+        FT_UINT8, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+
+    { &hf_ieee80211_vs_aruba_gps_subversion,
+      { "GPS Subversion", "wlan.ie.aruba.gps.subversion",
+        FT_UINT8, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+
+    { &hf_ieee80211_vs_aruba_gps_hop,
+      { "GPS Hop", "wlan.ie.aruba.gps.hop",
+        FT_UINT8, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+
+    { &hf_ieee80211_vs_aruba_gps_latitude,
+      { "GPS Latitude", "wlan.ie.aruba.gps.latitude",
+        FT_DOUBLE, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+
+    { &hf_ieee80211_vs_aruba_gps_longitude,
+      { "GPS Longitude", "wlan.ie.aruba.gps.longitude",
+        FT_DOUBLE, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+
+    { &hf_ieee80211_vs_aruba_gps_major_axis,
+      { "GPS Major Axis", "wlan.ie.aruba.gps.major_axis",
+        FT_DOUBLE, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+
+    { &hf_ieee80211_vs_aruba_gps_minor_axis,
+      { "GPS Minor Axis", "wlan.ie.aruba.gps.minor_axis",
+        FT_DOUBLE, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+
+    { &hf_ieee80211_vs_aruba_gps_orientation,
+      { "GPS Orientation", "wlan.ie.aruba.gps.orientation",
+        FT_DOUBLE, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+
+    { &hf_ieee80211_vs_aruba_gps_distance,
+      { "GPS Distance", "wlan.ie.aruba.gps.distance",
+        FT_DOUBLE, BASE_DEC, NULL, 0,
+        NULL, HFILL }},
+
     /* Vendor Specific : Routerboard */
     {&hf_ieee80211_vs_routerboard_unknown,
      {"Unknown", "wlan.vs.routerboard.unknown",
@@ -60379,6 +60645,27 @@ proto_register_ieee80211(void)
      {"Delta SNR", "wlan.eht.mu.exclusive_beamforming_report.delta_snr",
       FT_INT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
+    {&hf_ieee80211_eht_group_key_data_length,
+     {"Key Data Length", "wlan.eht.group_key_data.length",
+      FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }},
+
+    {&hf_ieee80211_eht_reconfig_link_id_info,
+     {"Link ID Info", "wlan.eht.reconfig.link_id_info",
+      FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+
+    {&hf_ieee80211_eht_reconfig_link_id,
+     {"Link ID", "wlan.eht.reconfig.link_id_info.link_id",
+      FT_UINT8, BASE_DEC, NULL, 0x0F, NULL, HFILL }},
+
+    {&hf_ieee80211_eht_reconfig_link_id_reserved,
+     {"Reserved", "wlan.eht.reconfig.link_id_info.reserved",
+      FT_UINT8, BASE_HEX, NULL, 0xF0, NULL, HFILL }},
+
+    {&hf_ieee80211_eht_reconfig_status_code,
+     {"Status code", "wlan.eht.reconfig.status_code",
+      FT_UINT16, BASE_HEX|BASE_EXT_STRING, &ieee80211_status_code_ext, 0,
+      NULL, HFILL }},
+
     {&hf_ieee80211_wfa_rsn_selection,
      {"RSNE Variant", "wlan.wfa_rsn_selection.variant",
       FT_UINT8, BASE_DEC, VALS(wfa_rsne_variant_vals), 0, NULL, HFILL }},
@@ -60415,6 +60702,10 @@ proto_register_ieee80211(void)
      {"Usage Mode", "wlan.channel_usage.mode",
       FT_UINT8, BASE_DEC|BASE_RANGE_STRING,
       RVALS(channel_usage_mode), 0, NULL, HFILL }},
+
+    {&hf_ieee80211_ff_count,
+     {"Count", "wlan.fixed.count",
+      FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }},
   };
 
   static hf_register_info aggregate_fields[] = {
@@ -60698,6 +60989,8 @@ proto_register_ieee80211(void)
     &ett_ff_eht_mimo_beamforming_report_snr,
     &ett_ff_eht_mimo_mu_exclusive_report,
     &ett_eht_mu_exclusive_beamforming_rpt_ru_index,
+    &ett_eht_reconfig_status_list,
+    &ett_eht_group_key_data,
 
     &ett_tag_measure_request_mode_tree,
     &ett_tag_measure_request_type_tree,
