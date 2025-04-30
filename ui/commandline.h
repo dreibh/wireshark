@@ -18,7 +18,7 @@
 extern "C" {
 #endif /* __cplusplus */
 
-extern void commandline_early_options(int argc, char *argv[]);
+extern int commandline_early_options(int argc, char *argv[]);
 
 /* Command-line options that don't have direct API calls to handle the data */
 typedef struct commandline_param_info
@@ -47,6 +47,10 @@ typedef struct commandline_param_info
     GSList *user_opts;
 
 } commandline_param_info_t;
+
+extern const struct ws_option* commandline_long_options(void);
+
+extern const char* commandline_optstring(void);
 
 extern void commandline_override_prefs(int argc, char *argv[], bool opt_reset);
 

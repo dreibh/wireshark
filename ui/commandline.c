@@ -235,9 +235,21 @@ static const struct ws_option long_options[] = {
         LONGOPT_CAPTURE_COMMON
         LONGOPT_DISSECT_COMMON
         LONGOPT_READ_CAPTURE_COMMON
+        LONGOPT_WSLOG
         {0, 0, 0, 0 }
     };
 static const char optstring[] = OPTSTRING;
+
+
+const struct ws_option* commandline_long_options(void)
+{
+    return long_options;
+}
+
+const char* commandline_optstring(void)
+{
+    return optstring;
+}
 
 #ifndef HAVE_LIBPCAP
 static void print_no_capture_support_error(void)
@@ -246,7 +258,7 @@ static void print_no_capture_support_error(void)
 }
 #endif
 
-void commandline_early_options(int argc, char *argv[])
+int commandline_early_options(int argc, char *argv[])
 {
     int opt;
 #ifdef HAVE_LIBPCAP
@@ -305,7 +317,7 @@ void commandline_early_options(int argc, char *argv[])
                             pf_dir_path, g_strerror(errno));
 
                         g_free(pf_dir_path);
-                        exit(WS_EXIT_INVALID_FILE);
+                        return WS_EXIT_INVALID_FILE;
                     }
                     if (copy_persconffile_profile(ws_optarg, ws_optarg, true, &pf_filename,
                             &pf_dir_path, &pf_dir_path2) == -1) {
@@ -315,17 +327,17 @@ void commandline_early_options(int argc, char *argv[])
                         g_free(pf_filename);
                         g_free(pf_dir_path);
                         g_free(pf_dir_path2);
-                        exit(WS_EXIT_INVALID_FILE);
+                        return WS_EXIT_INVALID_FILE;
                     }
                     set_profile_name (ws_optarg);
                 } else {
                     cmdarg_err("Configuration Profile \"%s\" does not exist", ws_optarg);
-                    exit(1);
+                    return WS_EXIT_INVALID_OPTION;
                 }
                 break;
             case 'D':        /* Print a list of capture devices and exit */
 #ifdef HAVE_LIBPCAP
-                exit_status = EXIT_SUCCESS;
+                exit_status = WS_EXIT_NOW;
                 if_list = capture_interface_list(&err, &err_str, NULL);
                 if (err != 0) {
                     /*
@@ -349,7 +361,7 @@ void commandline_early_options(int argc, char *argv[])
                         cmdarg_err("There are no interfaces on which a capture can be done");
                         exit_status = WS_EXIT_NO_INTERFACES;
                     }
-                    exit(exit_status);
+                    return exit_status;
                 }
 #ifdef _WIN32
                 create_console();
@@ -359,15 +371,14 @@ void commandline_early_options(int argc, char *argv[])
 #ifdef _WIN32
                 destroy_console();
 #endif /* _WIN32 */
-                exit(exit_status);
+                return exit_status;
 #else /* HAVE_LIBPCAP */
                 capture_option_specified = true;
 #endif /* HAVE_LIBPCAP */
                 break;
             case 'h':        /* Print help and exit */
                 commandline_print_usage(true);
-                exit(EXIT_SUCCESS);
-                break;
+                return WS_EXIT_NOW;
 #ifdef _WIN32
             case 'i':
                 if (strcmp(ws_optarg, "-") == 0)
@@ -377,7 +388,7 @@ void commandline_early_options(int argc, char *argv[])
             case 'P':        /* Personal file directory path settings - change these before the Preferences and alike are processed */
                 if (!persfilepath_opt(opt, ws_optarg)) {
                     cmdarg_err("-P flag \"%s\" failed (hint: is it quoted and existing?)", ws_optarg);
-                    exit(EXIT_SUCCESS);
+                    return WS_EXIT_NOW;
                 }
                 break;
             case 'v':        /* Show version and exit */
@@ -388,8 +399,7 @@ void commandline_early_options(int argc, char *argv[])
 #ifdef _WIN32
                 destroy_console();
 #endif
-                exit(EXIT_SUCCESS);
-                break;
+                return WS_EXIT_NOW;
             case 'X':
                 /*
                  *  Extension command line options have to be processed before
@@ -406,7 +416,7 @@ void commandline_early_options(int argc, char *argv[])
 #ifndef HAVE_LUA
     if (ex_opt_count("lua_script") > 0) {
         cmdarg_err("This version of %s was not built with support for Lua scripting.", application_flavor_name_proper());
-        exit(1);
+        return WS_EXIT_INVALID_OPTION;
     }
 #endif
 
@@ -414,9 +424,11 @@ void commandline_early_options(int argc, char *argv[])
     if (capture_option_specified) {
         print_no_capture_support_error();
         commandline_print_usage(false);
-        exit(EXIT_SUCCESS);
+        return WS_EXIT_NOW;
     }
 #endif
+
+    return EXIT_SUCCESS;
 }
 
 void commandline_override_prefs(int argc, char *argv[], bool opt_reset)
@@ -595,7 +607,8 @@ void commandline_other_options(int argc, char *argv[], bool opt_reset)
                 global_commandline_info.jump_backwards = SD_BACKWARD;
                 break;
             case 'g':        /* Go to item with the given item number */
-                global_commandline_info.go_to_packet = get_nonzero_uint32(ws_optarg, "go to packet");
+                if (!get_nonzero_uint32(ws_optarg, "go to packet", &global_commandline_info.go_to_packet))
+                    exit_application(WS_EXIT_INVALID_OPTION);
                 break;
             case 'J':        /* Jump to the first item which matches the filter criteria */
                 global_commandline_info.jfilter = ws_optarg;
@@ -702,8 +715,12 @@ void commandline_other_options(int argc, char *argv[], bool opt_reset)
                 arg_error = true;
 #endif
                 break;
-            default:
             case '?':        /* Bad flag - print usage message */
+            default:
+                /* wslog arguments are okay */
+                if (ws_log_is_wslog_arg(opt))
+                    break;
+
                 arg_error = true;
                 break;
             }

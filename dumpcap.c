@@ -11,7 +11,6 @@
 #define WS_LOG_DOMAIN LOG_DOMAIN_CAPCHILD
 
 #include <stdio.h>
-#include <stdlib.h> /* for exit() */
 #include <glib.h>
 
 #include <string.h>
@@ -448,8 +447,6 @@ static void capture_loop_get_errmsg(char *errmsg, size_t errmsglen,
                                     size_t secondary_errmsglen,
                                     const char *fname, int err,
                                     bool is_close);
-
-WS_NORETURN static void exit_main(int err);
 
 static void report_new_capture_file(const char *filename);
 static void report_packet_count(unsigned int packet_count);
@@ -1191,7 +1188,7 @@ report_counts_siginfo(int signum _U_)
 #endif /* SIGINFO */
 
 static void
-exit_main(int status)
+exit_main(void)
 {
     ws_cleanup_sockets();
 
@@ -1212,7 +1209,6 @@ exit_main(int status)
     }
 
     capture_opts_cleanup(&global_capture_opts);
-    exit(status);
 }
 
 #ifdef HAVE_LIBCAP
@@ -5098,7 +5094,10 @@ set_80211_channel(const char *iface, const char *opt)
     }
 
     if (options[0])
-        freq = get_nonzero_uint32(options[0], "802.11 channel frequency");
+        if (!get_nonzero_uint32(options[0], "802.11 channel frequency", &freq)) {
+            ret = EINVAL;
+            goto out;
+        }
 
     if (args >= 1 && options[1]) {
         type = ws80211_str_to_chan_type(options[1]);
@@ -5110,10 +5109,16 @@ set_80211_channel(const char *iface, const char *opt)
     }
 
     if (args >= 2 && options[2])
-        center_freq1 = get_nonzero_uint32(options[2], "VHT center frequency");
+        if (!get_nonzero_uint32(options[2], "VHT center frequency", &center_freq1)) {
+            ret = EINVAL;
+            goto out;
+        }
 
     if (args >= 3 && options[3])
-        center_freq2 = get_nonzero_uint32(options[3], "VHT center frequency 2");
+        if (!get_nonzero_uint32(options[3], "VHT center frequency 2", &center_freq2)) {
+            ret = EINVAL;
+            goto out;
+        }
 
     ret = ws80211_set_freq(iface, freq, type, center_freq1, center_freq2);
 
@@ -5163,6 +5168,7 @@ main(int argc, char *argv[])
         {"help", ws_no_argument, NULL, 'h'},
         {"version", ws_no_argument, NULL, 'v'},
         LONGOPT_CAPTURE_COMMON
+        LONGOPT_WSLOG
         {"ifname", ws_required_argument, NULL, LONGOPT_IFNAME},
         {"ifdescr", ws_required_argument, NULL, LONGOPT_IFDESCR},
         {"capture-comment", ws_required_argument, NULL, LONGOPT_CAPTURE_COMMENT},
@@ -5172,6 +5178,23 @@ main(int argc, char *argv[])
 #endif
         {0, 0, 0, 0 }
     };
+
+#ifdef HAVE_PCAP_REMOTE
+#define OPTSTRING_r "r"
+#define OPTSTRING_u "u"
+#else
+#define OPTSTRING_r
+#define OPTSTRING_u
+#endif
+
+#ifdef HAVE_PCAP_SETSAMPLING
+#define OPTSTRING_m "m:"
+#else
+#define OPTSTRING_m
+#endif
+
+#define OPTSTRING OPTSTRING_CAPTURE_COMMON "C:dghk:" OPTSTRING_m "MN:nPqQ" OPTSTRING_r "St" OPTSTRING_u "vw:Z:"
+    static const char optstring[] = OPTSTRING;
 
     bool              arg_error             = false;
 
@@ -5231,13 +5254,15 @@ main(int argc, char *argv[])
             machine_readable = true;  /* request machine-readable output */
             i++;
             if (i >= argc) {
-                exit_main(1);
+                exit_main();
+                return WS_EXIT_INVALID_OPTION;
             }
 
             if (strcmp(argv[i], SIGNAL_PIPE_CTRL_ID_NONE) != 0) {
                 // get_positive_int calls cmdarg_err
                 if (!ws_strtoi(argv[i], NULL, &sync_pipe_fd) || sync_pipe_fd <= 0) {
-                    exit_main(1);
+                    exit_main();
+                    return WS_EXIT_INVALID_OPTION;
                 }
 #ifdef _WIN32
                 /* On UN*X the fd is the same when we fork + exec.
@@ -5271,7 +5296,7 @@ main(int argc, char *argv[])
 #endif
 
     /* Early logging command-line initialization. */
-    ws_log_parse_args(&argc, argv, vcmdarg_err, 1);
+    ws_log_parse_args(&argc, argv, optstring, long_options, vcmdarg_err, WS_EXIT_INVALID_OPTION);
 
 #if DEBUG_CHILD_DUMPCAP
     /* Assume that if we're specially compiled with dumpcap debugging
@@ -5305,22 +5330,6 @@ main(int argc, char *argv[])
     /* Initialize the version information. */
     ws_init_version_info("Dumpcap", gather_dumpcap_compiled_info,
                          gather_dumpcap_runtime_info);
-
-#ifdef HAVE_PCAP_REMOTE
-#define OPTSTRING_r "r"
-#define OPTSTRING_u "u"
-#else
-#define OPTSTRING_r
-#define OPTSTRING_u
-#endif
-
-#ifdef HAVE_PCAP_SETSAMPLING
-#define OPTSTRING_m "m:"
-#else
-#define OPTSTRING_m
-#endif
-
-#define OPTSTRING OPTSTRING_CAPTURE_COMMON "C:dghk:" OPTSTRING_m "MN:nPqQ" OPTSTRING_r "St" OPTSTRING_u "vw:Z:"
 
 #if defined(__APPLE__) && defined(__LP64__)
     /*
@@ -5359,7 +5368,8 @@ main(int argc, char *argv[])
         g_free(err_msg);
         ws_log(LOG_DOMAIN_CAPCHILD, LOG_LEVEL_ERROR,
                           "%s", please_report_bug());
-        exit_main(1);
+        exit_main();
+        return EXIT_FAILURE;
     }
 
 #ifdef _WIN32
@@ -5500,17 +5510,17 @@ main(int argc, char *argv[])
     global_capture_opts.capture_child = capture_child;
 
     /* Now get our args */
-    while ((opt = ws_getopt_long(argc, argv, OPTSTRING, long_options, NULL)) != -1) {
+    while ((opt = ws_getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
         switch (opt) {
         case 'h':        /* Print help and exit */
             show_help_header("Capture network packets and dump them into a pcapng or pcap file.");
             print_usage(stdout);
-            exit_main(0);
-            break;
+            exit_main();
+            return EXIT_SUCCESS;
         case 'v':        /* Show version and exit */
             show_version();
-            exit_main(0);
-            break;
+            exit_main();
+            return EXIT_SUCCESS;
         case LONGOPT_APPLICATION_FLAVOR:
             set_application_flavor(application_name_to_flavor(ws_optarg));
             break;
@@ -5544,7 +5554,8 @@ main(int argc, char *argv[])
         case LONGOPT_UPDATE_INTERVAL:      /* sync pipe update interval */
             status = capture_opts_add_opt(&global_capture_opts, opt, ws_optarg);
             if (status != 0) {
-                exit_main(status);
+                exit_main();
+                return status;
             }
             break;
             /*** hidden option: Wireshark child mode (using binary output messages) ***/
@@ -5556,7 +5567,8 @@ main(int argc, char *argv[])
                 interface_opts->ifname = g_strdup(ws_optarg);
             } else {
                 cmdarg_err("--ifname must be specified after a -i option");
-                exit_main(1);
+                exit_main();
+                return WS_EXIT_INVALID_OPTION;
             }
             break;
         case LONGOPT_IFDESCR:
@@ -5567,7 +5579,8 @@ main(int argc, char *argv[])
                 interface_opts->descr = g_strdup(ws_optarg);
             } else {
                 cmdarg_err("--ifdescr must be specified after a -i option");
-                exit_main(1);
+                exit_main();
+                return WS_EXIT_INVALID_OPTION;
             }
             break;
         case LONGOPT_CAPTURE_COMMENT:  /* capture comment */
@@ -5587,7 +5600,8 @@ main(int argc, char *argv[])
             if (!capture_child) {
                 /* We have already checked for -Z at the very beginning. */
                 cmdarg_err("--signal-pipe may only be specified with -Z");
-                exit_main(1);
+                exit_main();
+                return WS_EXIT_INVALID_OPTION;
             }
             /*
              * ws_optarg = the control ID, aka the PPID, currently used for the
@@ -5601,7 +5615,8 @@ main(int argc, char *argv[])
                 if (sig_pipe_handle == INVALID_HANDLE_VALUE) {
                     ws_info("Signal pipe: Unable to open %s.  Dead parent?",
                           sig_pipe_name);
-                    exit_main(1);
+                    exit_main();
+                    return WS_EXIT_INVALID_OPTION;
                 }
             }
             break;
@@ -5661,12 +5676,18 @@ main(int argc, char *argv[])
             machine_readable = true;
             break;
         case 'C':
-            pcap_queue_byte_limit = get_positive_int(ws_optarg, "byte_limit");
+            if (!get_positive_int64(ws_optarg, "byte_limit", &pcap_queue_byte_limit))
+                arg_error = true;
             break;
         case 'N':
-            pcap_queue_packet_limit = get_positive_int(ws_optarg, "packet_limit");
+            if (!get_positive_int64(ws_optarg, "packet_limit", &pcap_queue_packet_limit))
+                arg_error = true;
             break;
         default:
+            /* wslog arguments are okay */
+            if (ws_log_is_wslog_arg(opt))
+                break;
+
             cmdarg_err("Invalid Option: %s", argv[ws_optind-1]);
             /* FALLTHROUGH */
         case '?':        /* Bad flag - print usage message */
@@ -5705,21 +5726,25 @@ main(int argc, char *argv[])
     if (arg_error) {
         if (ws_optopt == 'F') {
             capture_opts_list_file_types();
-            exit_main(1);
+            exit_main();
+            return WS_EXIT_INVALID_OPTION;
         }
         print_usage(stderr);
-        exit_main(1);
+        exit_main();
+        return WS_EXIT_INVALID_OPTION;
     }
 
     if (run_once_args > 1) {
         cmdarg_err("Only one of -D, -L, -d, -k or -S may be supplied.");
-        exit_main(1);
+        exit_main();
+        return WS_EXIT_INVALID_OPTION;
     } else if (run_once_args == 1) {
         /* We're supposed to print some information, rather than
            to capture traffic; did they specify a ring buffer option? */
         if (global_capture_opts.multi_files_on) {
             cmdarg_err("Ring buffer requested, but a capture isn't being done.");
-            exit_main(1);
+            exit_main();
+            return WS_EXIT_INVALID_OPTION;
         }
     } else {
         /* We're supposed to capture traffic; */
@@ -5734,7 +5759,8 @@ main(int argc, char *argv[])
             (!global_capture_opts.use_pcapng || global_capture_opts.multi_files_on)) {
             /* XXX - for ringbuffer, should we apply the comments to each file? */
             cmdarg_err("Capture comments can only be set if we capture into a single pcapng file.");
-            exit_main(1);
+            exit_main();
+            return WS_EXIT_INVALID_OPTION;
         }
 
         /* Was the ring buffer option specified and, if so, does it make sense? */
@@ -5760,7 +5786,8 @@ main(int argc, char *argv[])
             }
             if (global_capture_opts.has_file_duration && global_capture_opts.has_file_interval) {
                 cmdarg_err("Ring buffer file duration and interval can't be used at the same time.");
-                exit_main(1);
+                exit_main();
+                return WS_EXIT_INVALID_OPTION;
             }
         }
     }
@@ -5786,12 +5813,14 @@ main(int argc, char *argv[])
                  */
                 if (!machine_readable) {
                     cmdarg_err("There are no interfaces on which a capture can be done");
-                    exit_main(2);
+                    exit_main();
+                    return WS_EXIT_INVALID_INTERFACE;
                 }
             } else {
                 cmdarg_err("%s", err_str);
                 g_free(err_str);
-                exit_main(2);
+                exit_main();
+                return WS_EXIT_INVALID_INTERFACE;
             }
         }
 
@@ -5861,7 +5890,8 @@ main(int argc, char *argv[])
         }
         free_interface_list(if_list);
         if (!print_statistics) {
-            exit_main(status);
+            exit_main();
+            return status;
         }
     }
 
@@ -5871,7 +5901,8 @@ main(int argc, char *argv[])
      */
     if (print_statistics) {
         status = print_statistics_loop(machine_readable);
-        exit_main(status);
+        exit_main();
+        return status;
     }
 
     if (set_chan) {
@@ -5879,12 +5910,14 @@ main(int argc, char *argv[])
 
         if (global_capture_opts.ifaces->len != 1) {
             cmdarg_err("Need one interface");
-            exit_main(2);
+            exit_main();
+            return WS_EXIT_INVALID_INTERFACE;
         }
 
         interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, 0);
         status = set_80211_channel(interface_opts->name, set_chan_arg);
-        exit_main(status);
+        exit_main();
+        return status;
     }
 
     /*
@@ -5894,7 +5927,8 @@ main(int argc, char *argv[])
     status = capture_opts_default_iface_if_necessary(&global_capture_opts, NULL);
     if (status != 0) {
         /* cmdarg_err() already called .... */
-        exit_main(status);
+        exit_main();
+        return status;
     }
 
     if (caps_queries) {
@@ -5973,7 +6007,8 @@ main(int argc, char *argv[])
                                     get_pcap_failure_secondary_error_message(open_status, open_status_str));
                     }
                     g_free(open_status_str);
-                    exit_main(2);
+                    exit_main();
+                    return WS_EXIT_INVALID_INTERFACE;
                 }
 
                 /* XXX: We might want to print also the interface name */
@@ -5985,7 +6020,8 @@ main(int argc, char *argv[])
                     break;
             }
         }
-        exit_main(status);
+        exit_main();
+        return status;
     }
 
     for (j = 0; j < global_capture_opts.ifaces->len; j++) {
@@ -5996,7 +6032,9 @@ main(int argc, char *argv[])
             interface_opts->timestamp_type_id = pcap_tstamp_type_name_to_val(interface_opts->timestamp_type);
             if (interface_opts->timestamp_type_id < 0) {
                 cmdarg_err("Invalid argument to option: --time-stamp-type=%s", interface_opts->timestamp_type);
-                exit_main(1);
+                exit_main();
+                return WS_EXIT_INVALID_OPTION;
+
             }
         }
     }
@@ -6066,7 +6104,8 @@ main(int argc, char *argv[])
 
     if (print_bpf_code) {
         show_filter_code(&global_capture_opts);
-        exit_main(0);
+        exit_main();
+        return EXIT_SUCCESS;
     }
 
     /* We're supposed to do a capture.  Process the ring buffer arguments. */
@@ -6078,12 +6117,13 @@ main(int argc, char *argv[])
     /* Now start the capture. */
     if (capture_loop_start(&global_capture_opts, &stats_known, &stats) == true) {
         /* capture ok */
-        exit_main(0);
-    } else {
-        /* capture failed */
-        exit_main(1);
+        exit_main();
+        return EXIT_SUCCESS;
     }
-    return 0; /* never here, make compiler happy */
+
+    /* capture failed */
+    exit_main();
+    return EXIT_FAILURE;
 }
 
 static void

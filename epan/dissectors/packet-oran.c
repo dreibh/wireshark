@@ -2096,6 +2096,10 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
         }
         offset++;
 
+        if (tap_info->num_section_ids < MAX_SECTION_IDs) {
+            tap_info->section_ids[tap_info->num_section_ids++] = sectionId;
+        }
+
         /* rb */
         uint32_t rb;
         proto_tree_add_item_ret_uint(c_section_tree, hf_oran_rb, tvb, offset, 1, ENC_NA, &rb);
@@ -5779,6 +5783,11 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             proto_item_append_text(ti, " (not default coupling C/U planes using sectionId)");
         }
         offset++;
+
+        if (tap_info->num_section_ids < MAX_SECTION_IDs) {
+            tap_info->section_ids[tap_info->num_section_ids++] = sectionId;
+        }
+
         /* rb */
         uint32_t rb;
         proto_tree_add_item_ret_uint(section_tree, hf_oran_rb, tvb, offset, 1, ENC_NA, &rb);
@@ -6118,7 +6127,7 @@ proto_register_oran(void)
          { "DU Port ID", "oran_fh_cus.du_port_id",
            FT_UINT16, BASE_DEC,
            NULL, 0x0,
-           "Width set in dissector preference", HFILL }
+           "Processing unit at O-RU - width set in dissector preference", HFILL }
        },
 
        /* Section 5.1.3.2.7 */
@@ -6126,7 +6135,7 @@ proto_register_oran(void)
          { "BandSector ID", "oran_fh_cus.bandsector_id",
            FT_UINT16, BASE_DEC,
            NULL, 0x0,
-           "Width set in dissector preference", HFILL }
+           "Aggregated cell identified - width set in dissector preference", HFILL }
        },
 
        /* Section 5.1.3.2.7 */
@@ -6134,7 +6143,7 @@ proto_register_oran(void)
          { "CC ID", "oran_fh_cus.cc_id",
            FT_UINT16, BASE_DEC,
            NULL, 0x0,
-           "Width set in dissector preference", HFILL }
+           "Component Carrier - width set in dissector preference", HFILL }
        },
 
         /* Section 5.1.3.2.7 */
@@ -6142,7 +6151,7 @@ proto_register_oran(void)
           { "RU Port ID", "oran_fh_cus.ru_port_id",
             FT_UINT16, BASE_DEC,
             NULL, 0x0,
-            "Width set in dissector preference", HFILL }
+            "Logical flow - width set in dissector preference", HFILL }
         },
 
         /* Section 5.1.3.2.8 */
