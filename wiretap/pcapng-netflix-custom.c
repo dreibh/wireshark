@@ -12,6 +12,8 @@
 #include "pcapng.h"
 #include "pcapng_module.h"
 
+#include "pcapng-netflix-custom.h"
+
 #define NFLX_BLOCK_TYPE_EVENT   1
 #define NFLX_BLOCK_TYPE_SKIP    2
 
@@ -70,7 +72,7 @@ pcapng_read_nflx_custom_block(FILE_T fh, uint32_t block_payload_length,
              */
             if (block_payload_length < MIN_NFLX_CB_SIZE + (uint32_t)sizeof(uint32_t)) {
                 *err = WTAP_ERR_BAD_FILE;
-                *err_info = ws_strdup_printf("pcapng: total block length %u of a Netflix skip CB is too small (< %u)",
+                *err_info = ws_strdup_printf("pcapng: payload length %u of a Netflix skip CB is too small (< %u)",
                                             block_payload_length,
                                             MIN_NFLX_CB_SIZE + (uint32_t)sizeof(uint32_t));
                 return false;
@@ -193,7 +195,7 @@ pcapng_process_nflx_custom_option(wtapng_block_t *wblock,
 
 bool
 pcapng_write_nflx_custom_block(wtap_dumper *wdh, const wtap_rec *rec, int *err,
-                               char **err_info _U_)
+                               char **err_info)
 {
     pcapng_block_header_t bh;
     uint32_t options_size = 0;
@@ -247,7 +249,8 @@ pcapng_write_nflx_custom_block(wtap_dumper *wdh, const wtap_rec *rec, int *err,
          * This block type supports only comments and custom options,
          * so it doesn't need a callback.
          */
-        if (!pcapng_write_options(wdh, rec->block, NULL, err))
+        if (!pcapng_write_options(wdh, OPT_LITTLE_ENDIAN, rec->block, NULL,
+                                  err, err_info))
             return false;
     }
 
@@ -258,4 +261,10 @@ pcapng_write_nflx_custom_block(wtap_dumper *wdh, const wtap_rec *rec, int *err,
     }
 
     return true;
+}
+
+void register_nflx_custom(void)
+{
+    /* Nothing to register, yet, because there isn't a way to
+       register things, yet. */
 }

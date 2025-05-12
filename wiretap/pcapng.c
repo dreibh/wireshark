@@ -41,6 +41,7 @@
 #include "secrets-types.h"
 
 #include "pcapng-netflix-custom.h"
+#include "pcapng-netflix-custom-int.h"
 
 #define ROUND_TO_4BYTE(len) WS_ROUNDUP_4(len)
 
@@ -57,7 +58,8 @@ static bool
 pcapng_encap_is_ft_specific(int encap);
 
 static bool
-pcapng_write_if_descr_block(wtap_dumper *wdh, wtap_block_t int_data, int *err);
+pcapng_write_if_descr_block(wtap_dumper *wdh, wtap_block_t int_data,
+                            int *err, char **err_info);
 
 /*
  * Minimum block size = size of block header + size of block trailer.
@@ -865,37 +867,34 @@ pcapng_process_bytes_option(wtapng_block_t *wblock, uint16_t option_code,
 }
 
 static bool
-pcapng_process_custom_option(wtapng_block_t *wblock,
-                             section_info_t *section_info,
-                             uint16_t option_code, uint16_t option_length,
-                             const uint8_t *option_content,
-                             pcapng_opt_byte_order_e byte_order,
-                             int *err, char **err_info)
+pcapng_process_custom_option_common(section_info_t *section_info,
+                                    uint16_t option_length,
+                                    const uint8_t *option_content,
+                                    pcapng_opt_byte_order_e byte_order,
+                                    uint32_t *pen,
+                                    int *err, char **err_info)
 {
-    uint32_t pen;
-    bool ret;
-
     if (option_length < 4) {
         *err = WTAP_ERR_BAD_FILE;
         *err_info = ws_strdup_printf("pcapng: option length (%d) too small for custom option",
                                     option_length);
         return false;
     }
-    memcpy(&pen, option_content, sizeof(uint32_t));
+    memcpy(pen, option_content, sizeof(uint32_t));
     switch (byte_order) {
 
     case OPT_SECTION_BYTE_ORDER:
         if (section_info->byte_swapped) {
-            pen = GUINT32_SWAP_LE_BE(pen);
+            *pen = GUINT32_SWAP_LE_BE(*pen);
         }
         break;
 
     case OPT_BIG_ENDIAN:
-        pen = GUINT32_FROM_BE(pen);
+        *pen = GUINT32_FROM_BE(*pen);
         break;
 
     case OPT_LITTLE_ENDIAN:
-        pen = GUINT32_FROM_LE(pen);
+        *pen = GUINT32_FROM_LE(*pen);
         break;
 
     default:
@@ -910,12 +909,54 @@ pcapng_process_custom_option(wtapng_block_t *wblock,
                                     byte_order);
         return false;
     }
+    return true;
+}
+
+static bool
+pcapng_process_custom_string_option(wtapng_block_t *wblock,
+                                    section_info_t *section_info,
+                                    uint16_t option_code,
+                                    uint16_t option_length,
+                                    const uint8_t *option_content,
+                                    pcapng_opt_byte_order_e byte_order,
+                                    int *err, char **err_info)
+{
+    uint32_t pen;
+    bool ret;
+
+    if (!pcapng_process_custom_option_common(section_info, option_length,
+                                             option_content, byte_order,
+                                             &pen, err, err_info)) {
+        return false;
+    }
+    ret = wtap_block_add_custom_string_option(wblock->block, option_code, pen, option_content + 4, option_length - 4) == WTAP_OPTTYPE_SUCCESS;
+    ws_debug("returning %d", ret);
+    return ret;
+}
+
+static bool
+pcapng_process_custom_binary_option(wtapng_block_t *wblock,
+                                    section_info_t *section_info,
+                                    uint16_t option_code,
+                                    uint16_t option_length,
+                                    const uint8_t *option_content,
+                                    pcapng_opt_byte_order_e byte_order,
+                                    int *err, char **err_info)
+{
+    uint32_t pen;
+    bool ret;
+
+    if (!pcapng_process_custom_option_common(section_info, option_length,
+                                             option_content, byte_order,
+                                             &pen, err, err_info)) {
+        return false;
+    }
     switch (pen) {
     case PEN_NFLX:
         ret = pcapng_process_nflx_custom_option(wblock, section_info, option_content + 4, option_length - 4);
         break;
     default:
-        ret = wtap_block_add_custom_option(wblock->block, option_code, pen, option_content + 4, option_length - 4) == WTAP_OPTTYPE_SUCCESS;
+        ret = wtap_block_add_custom_binary_option_from_data(wblock->block, option_code, pen, option_content + 4, option_length - 4) == WTAP_OPTTYPE_SUCCESS;
         ws_debug("Custom option type %u (0x%04x) with unknown pen %u with custom data of length %u", option_code, option_code, pen, option_length - 4);
         break;
     }
@@ -1074,14 +1115,25 @@ pcapng_process_options(FILE_T fh, wtapng_block_t *wblock,
                                              option_ptr);
                 break;
             case(OPT_CUSTOM_STR_COPY):
-            case(OPT_CUSTOM_BIN_COPY):
             case(OPT_CUSTOM_STR_NO_COPY):
+                if (!pcapng_process_custom_string_option(wblock, section_info,
+                                                         option_code,
+                                                         option_length,
+                                                         option_ptr,
+                                                         byte_order,
+                                                         err, err_info)) {
+                    g_free(option_content);
+                    return false;
+                }
+                break;
+            case(OPT_CUSTOM_BIN_COPY):
             case(OPT_CUSTOM_BIN_NO_COPY):
-                if (!pcapng_process_custom_option(wblock, section_info,
-                                                  option_code, option_length,
-                                                  option_ptr,
-                                                  byte_order,
-                                                  err, err_info)) {
+                if (!pcapng_process_custom_binary_option(wblock, section_info,
+                                                         option_code,
+                                                         option_length,
+                                                         option_ptr,
+                                                         byte_order,
+                                                         err, err_info)) {
                     g_free(option_content);
                     return false;
                 }
@@ -4229,20 +4281,29 @@ static uint32_t pcapng_compute_if_filter_option_size(wtap_optval_t *optval)
     return size;
 }
 
-static uint32_t pcapng_compute_custom_option_size(wtap_optval_t *optval)
+static uint32_t pcapng_compute_custom_string_option_size(wtap_optval_t *optval)
+{
+    uint32_t size = 0;
+
+    size = (uint32_t)strlen(optval->custom_stringval.string) & 0xffff;
+
+    return size;
+}
+
+static uint32_t pcapng_compute_custom_binary_option_size(wtap_optval_t *optval)
 {
     size_t size;
 
     /* PEN */
     size = sizeof(uint32_t);
-    switch (optval->custom_opt.pen) {
+    switch (optval->custom_binaryval.pen) {
     case PEN_NFLX:
         /* NFLX type */
         size += sizeof(uint32_t);
-        size += optval->custom_opt.data.nflx_data.custom_data_len;
+        size += optval->custom_binaryval.data.nflx_data.custom_data_len;
         break;
     default:
-        size += optval->custom_opt.data.generic_data.custom_data_len;
+        size += optval->custom_binaryval.data.generic_data.custom_data_len;
         break;
     }
     if (size > 65535) {
@@ -4335,8 +4396,10 @@ compute_block_option_size(wtap_block_t block _U_, unsigned option_id, wtap_optty
         size = pcapng_compute_string_option_size(optval);
         break;
     case OPT_CUSTOM_STR_COPY:
+        size = pcapng_compute_custom_string_option_size(optval);
+        break;
     case OPT_CUSTOM_BIN_COPY:
-        size = pcapng_compute_custom_option_size(optval);
+        size = pcapng_compute_custom_binary_option_size(optval);
         break;
     case OPT_CUSTOM_STR_NO_COPY:
     case OPT_CUSTOM_BIN_NO_COPY:
@@ -4430,8 +4493,10 @@ static uint32_t compute_shb_option_size(wtap_block_t block _U_, unsigned option_
 typedef struct write_options_t
 {
     wtap_dumper *wdh;
-    int *err;
+    pcapng_opt_byte_order_e byte_order;
     write_option_func write_option;
+    int *err;
+    char **err_info;
 }
 write_options_t;
 
@@ -4439,7 +4504,13 @@ static bool pcapng_write_option_eofopt(wtap_dumper *wdh, int *err)
 {
     struct pcapng_option_header option_hdr;
 
-    /* Write end of options */
+    /*
+     * Write end of options.
+     *
+     * OPT_EOFOPT is zero, so we don't need to know the byte order to
+     * be used, as both fields in the option header are zero and thus
+     * unchanged if byte-swapped.
+     */
     option_hdr.type = OPT_EOFOPT;
     option_hdr.value_length = 0;
     if (!wtap_dump_file_write(wdh, &option_hdr, 4, err))
@@ -4516,7 +4587,11 @@ static bool pcapng_write_timestamp_option(wtap_dumper *wdh, unsigned option_id, 
     return true;
 }
 
-static bool pcapng_write_string_option(wtap_dumper *wdh, unsigned option_id, wtap_optval_t *optval, int *err)
+static bool pcapng_write_string_option(wtap_dumper *wdh,
+                                       pcapng_opt_byte_order_e byte_order,
+                                       unsigned option_id,
+                                       wtap_optval_t *optval,
+                                       int *err, char **err_info)
 {
     struct pcapng_option_header option_hdr;
     size_t size = strlen(optval->stringval);
@@ -4535,9 +4610,38 @@ static bool pcapng_write_string_option(wtap_dumper *wdh, unsigned option_id, wta
         return true;
     }
 
+    /* write option header */
     /* String options don't consider pad bytes part of the length */
     option_hdr.type         = (uint16_t)option_id;
     option_hdr.value_length = (uint16_t)size;
+    switch (byte_order) {
+
+    case OPT_SECTION_BYTE_ORDER:
+        /* This is host byte order when writing, so nothing to do. */
+        break;
+
+    case OPT_BIG_ENDIAN:
+        option_hdr.type = GUINT16_TO_BE(option_hdr.type);
+        option_hdr.value_length = GUINT16_TO_BE(option_hdr.value_length);
+        break;
+
+    case OPT_LITTLE_ENDIAN:
+        option_hdr.type = GUINT16_TO_LE(option_hdr.type);
+        option_hdr.value_length = GUINT16_TO_LE(option_hdr.value_length);
+        break;
+
+    default:
+        /*
+         * This indicates somebody passed an invalid option to
+         * pcapng_write_options().
+         *
+         * Report this as an internal error.
+         */
+        *err = WTAP_ERR_INTERNAL;
+        *err_info = ws_strdup_printf("pcapng: invalid byte order %d passed to pcapng_write_options()",
+                                     byte_order);
+        return true;
+    }
     if (!wtap_dump_file_write(wdh, &option_hdr, 4, err))
         return false;
 
@@ -4720,30 +4824,24 @@ static bool pcapng_write_if_filter_option(wtap_dumper *wdh, unsigned option_id, 
     return true;
 }
 
-static bool pcapng_write_custom_option(wtap_dumper *wdh, unsigned option_id, wtap_optval_t *optval, int *err)
+static bool pcapng_write_custom_string_option(wtap_dumper *wdh,
+                                              pcapng_opt_byte_order_e byte_order,
+                                              unsigned option_id,
+                                              wtap_optval_t *optval,
+                                              int *err, char **err_info)
 {
     struct pcapng_option_header option_hdr;
     size_t pad;
+    size_t stringlen;
     size_t size;
     const uint32_t zero_pad = 0;
-    uint32_t pen, type;
-    bool use_little_endian;
+    uint32_t pen;
 
-    if ((option_id == OPT_CUSTOM_STR_NO_COPY) ||
-        (option_id == OPT_CUSTOM_BIN_NO_COPY))
+    if (option_id == OPT_CUSTOM_STR_NO_COPY)
         return true;
-    ws_debug("PEN %d", optval->custom_opt.pen);
-    switch (optval->custom_opt.pen) {
-    case PEN_NFLX:
-        size = sizeof(uint32_t) + sizeof(uint32_t) + optval->custom_opt.data.nflx_data.custom_data_len;
-        use_little_endian = optval->custom_opt.data.nflx_data.use_little_endian;
-        break;
-    default:
-        size = sizeof(uint32_t) + optval->custom_opt.data.generic_data.custom_data_len;
-        use_little_endian = false;
-        break;
-    }
-    ws_debug("use_little_endian %d", use_little_endian);
+    ws_debug("PEN %u", optval->custom_stringval.pen);
+    stringlen = strlen(optval->custom_stringval.string);
+    size = sizeof(uint32_t) + stringlen;
     if (size > 65535) {
         /*
          * Too big to fit in the option.
@@ -4754,39 +4852,154 @@ static bool pcapng_write_custom_option(wtap_dumper *wdh, unsigned option_id, wta
         return true;
     }
 
-    /* write option header */
+    /* write option header and PEN */
+    /* String options don't consider pad bytes part of the length */
     option_hdr.type         = (uint16_t)option_id;
     option_hdr.value_length = (uint16_t)size;
-    if (use_little_endian) {
+    pen                     = optval->custom_stringval.pen;
+    switch (byte_order) {
+
+    case OPT_SECTION_BYTE_ORDER:
+        /* This is host byte order when writing, so nothing to do. */
+        break;
+
+    case OPT_BIG_ENDIAN:
+        option_hdr.type = GUINT16_TO_BE(option_hdr.type);
+        option_hdr.value_length = GUINT16_TO_BE(option_hdr.value_length);
+        pen = GUINT32_TO_BE(pen);
+        break;
+
+    case OPT_LITTLE_ENDIAN:
         option_hdr.type = GUINT16_TO_LE(option_hdr.type);
         option_hdr.value_length = GUINT16_TO_LE(option_hdr.value_length);
+        pen = GUINT32_TO_LE(pen);
+        break;
+
+    default:
+        /*
+         * This indicates somebody passed an invalid option to
+         * pcapng_write_options().
+         *
+         * Report this as an internal error.
+         */
+        *err = WTAP_ERR_INTERNAL;
+        *err_info = ws_strdup_printf("pcapng: invalid byte order %d passed to pcapng_write_options()",
+                                     byte_order);
+        return true;
     }
     if (!wtap_dump_file_write(wdh, &option_hdr, sizeof(struct pcapng_option_header), err))
         return false;
-
-    /* write PEN */
-    pen = optval->custom_opt.pen;
-    if (use_little_endian) {
-        pen = GUINT32_TO_LE(pen);
-    }
     if (!wtap_dump_file_write(wdh, &pen, sizeof(uint32_t), err))
         return false;
 
-    switch (optval->custom_opt.pen) {
+    /* write custom data */
+    if (!wtap_dump_file_write(wdh, optval->custom_stringval.string, stringlen, err)) {
+        return false;
+    }
+
+    /* write padding (if any) */
+    if (size % 4 != 0) {
+        pad = 4 - (size % 4);
+    } else {
+        pad = 0;
+    }
+    if (pad != 0) {
+        if (!wtap_dump_file_write(wdh, &zero_pad, pad, err)) {
+            return false;
+        }
+    }
+    ws_debug("Wrote custom option: type %u, length %u", option_hdr.type, option_hdr.value_length);
+
+    return true;
+}
+
+static bool pcapng_write_custom_binary_option(wtap_dumper *wdh,
+                                              pcapng_opt_byte_order_e byte_order,
+                                              unsigned option_id,
+                                              wtap_optval_t *optval,
+                                              int *err, char **err_info)
+{
+    struct pcapng_option_header option_hdr;
+    size_t pad;
+    size_t size;
+    const uint32_t zero_pad = 0;
+    uint32_t pen, type;
+
+    if (option_id == OPT_CUSTOM_BIN_NO_COPY)
+        return true;
+    ws_debug("PEN %u", optval->custom_binaryval.pen);
+    switch (optval->custom_binaryval.pen) {
+    case PEN_NFLX:
+        size = sizeof(uint32_t) + sizeof(uint32_t) + optval->custom_binaryval.data.nflx_data.custom_data_len;
+        break;
+    default:
+        size = sizeof(uint32_t) + optval->custom_binaryval.data.generic_data.custom_data_len;
+        break;
+    }
+    if (size > 65535) {
+        /*
+         * Too big to fit in the option.
+         * Don't write anything.
+         *
+         * XXX - truncate it?  Report an error?
+         */
+        return true;
+    }
+
+    /* write option header and PEN */
+    option_hdr.type         = (uint16_t)option_id;
+    option_hdr.value_length = (uint16_t)size;
+    pen                     = optval->custom_binaryval.pen;
+    switch (byte_order) {
+
+    case OPT_SECTION_BYTE_ORDER:
+        /* This is host byte order when writing, so nothing to do. */
+        break;
+
+    case OPT_BIG_ENDIAN:
+        option_hdr.type = GUINT16_TO_BE(option_hdr.type);
+        option_hdr.value_length = GUINT16_TO_BE(option_hdr.value_length);
+        pen = GUINT32_TO_BE(pen);
+        break;
+
+    case OPT_LITTLE_ENDIAN:
+        option_hdr.type = GUINT16_TO_LE(option_hdr.type);
+        option_hdr.value_length = GUINT16_TO_LE(option_hdr.value_length);
+        pen = GUINT32_TO_LE(pen);
+        break;
+
+    default:
+        /*
+         * This indicates somebody passed an invalid option to
+         * pcapng_write_options().
+         *
+         * Report this as an internal error.
+         */
+        *err = WTAP_ERR_INTERNAL;
+        *err_info = ws_strdup_printf("pcapng: invalid byte order %d passed to pcapng_write_options()",
+                                     byte_order);
+        return true;
+    }
+    if (!wtap_dump_file_write(wdh, &option_hdr, sizeof(struct pcapng_option_header), err))
+        return false;
+    if (!wtap_dump_file_write(wdh, &pen, sizeof(uint32_t), err))
+        return false;
+
+    switch (optval->custom_binaryval.pen) {
     case PEN_NFLX:
         /* write NFLX type */
-        type = GUINT32_TO_LE(optval->custom_opt.data.nflx_data.type);
+        type = GUINT32_TO_LE(optval->custom_binaryval.data.nflx_data.type);
         ws_debug("type=%d", type);
         if (!wtap_dump_file_write(wdh, &type, sizeof(uint32_t), err))
             return false;
         /* write custom data */
-        if (!wtap_dump_file_write(wdh, optval->custom_opt.data.nflx_data.custom_data, optval->custom_opt.data.nflx_data.custom_data_len, err)) {
+        if (!wtap_dump_file_write(wdh, optval->custom_binaryval.data.nflx_data.custom_data, optval->custom_binaryval.data.nflx_data.custom_data_len, err)) {
             return false;
         }
         break;
     default:
         /* write custom data */
-        if (!wtap_dump_file_write(wdh, optval->custom_opt.data.generic_data.custom_data, optval->custom_opt.data.generic_data.custom_data_len, err)) {
+        if (!wtap_dump_file_write(wdh, optval->custom_binaryval.data.generic_data.custom_data, optval->custom_binaryval.data.generic_data.custom_data_len, err)) {
             return false;
         }
         break;
@@ -4946,23 +5159,38 @@ static bool pcapng_write_packet_hash_option(wtap_dumper *wdh, unsigned option_id
     return true;
 }
 
-static bool write_block_option(wtap_block_t block, unsigned option_id, wtap_opttype_e option_type _U_, wtap_optval_t *optval, void* user_data)
+static bool write_block_option(wtap_block_t block,
+                               unsigned option_id,
+                               wtap_opttype_e option_type _U_,
+                               wtap_optval_t *optval, void* user_data)
 {
     write_options_t* options = (write_options_t*)user_data;
 
     /*
      * Process the option IDs that are the same for all block types here;
-     * call the block-type-specific compute_size function for others.
+     * call the block-type-specific write function for others.
      */
     switch(option_id)
     {
     case OPT_COMMENT:
-        if (!pcapng_write_string_option(options->wdh, option_id, optval, options->err))
+        if (!pcapng_write_string_option(options->wdh, options->byte_order,
+                                        option_id, optval,
+                                        options->err, options->err_info))
             return false;
         break;
     case OPT_CUSTOM_STR_COPY:
+        if (!pcapng_write_custom_string_option(options->wdh,
+                                               options->byte_order,
+                                               option_id, optval,
+                                               options->err, options->err_info))
+            return false;
+        break;
     case OPT_CUSTOM_BIN_COPY:
-        if (!pcapng_write_custom_option(options->wdh, option_id, optval, options->err))
+        if (!pcapng_write_custom_binary_option(options->wdh,
+                                                options->byte_order,
+                                                option_id, optval,
+                                                options->err,
+                                                options->err_info))
             return false;
         break;
     case OPT_CUSTOM_STR_NO_COPY:
@@ -4978,7 +5206,9 @@ static bool write_block_option(wtap_block_t block, unsigned option_id, wtap_optt
     default:
         /* Block-type dependent; call the callback, if we have one. */
         if (options->write_option != NULL &&
-            !(*options->write_option)(options->wdh, block, option_id, option_type, optval, options->err))
+            !(*options->write_option)(options->wdh, block, option_id,
+                                      option_type, optval,
+                                      options->err, options->err_info))
             return false;
         break;
     }
@@ -4986,13 +5216,17 @@ static bool write_block_option(wtap_block_t block, unsigned option_id, wtap_optt
 }
 
 bool
-pcapng_write_options(wtap_dumper *wdh, wtap_block_t block, write_option_func write_option, int *err)
+pcapng_write_options(wtap_dumper *wdh, pcapng_opt_byte_order_e byte_order,
+                     wtap_block_t block, write_option_func write_option,
+                     int *err, char **err_info)
 {
     write_options_t options;
 
     options.wdh = wdh;
-    options.err = err;
+    options.byte_order = byte_order;
     options.write_option = write_option;
+    options.err = err;
+    options.err_info = err_info;
     if (!wtap_block_foreach_option(block, write_block_option, &options))
         return false;
 
@@ -5000,14 +5234,19 @@ pcapng_write_options(wtap_dumper *wdh, wtap_block_t block, write_option_func wri
     return pcapng_write_option_eofopt(wdh, err);
 }
 
-static bool write_wtap_shb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsigned option_id, wtap_opttype_e option_type _U_, wtap_optval_t *optval, int *err)
+static bool write_wtap_shb_option(wtap_dumper *wdh, wtap_block_t block _U_,
+                                  unsigned option_id,
+                                  wtap_opttype_e option_type _U_,
+                                  wtap_optval_t *optval,
+                                  int *err, char **err_info)
 {
     switch(option_id)
     {
     case OPT_SHB_HARDWARE:
     case OPT_SHB_OS:
     case OPT_SHB_USERAPPL:
-        if (!pcapng_write_string_option(wdh, option_id, optval, err))
+        if (!pcapng_write_string_option(wdh, OPT_SECTION_BYTE_ORDER,
+                                        option_id, optval, err, err_info))
             return false;
         break;
     default:
@@ -5022,7 +5261,7 @@ static bool write_wtap_shb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsi
  * one with no options.
  */
 static bool
-pcapng_write_section_header_block(wtap_dumper *wdh, int *err)
+pcapng_write_section_header_block(wtap_dumper *wdh, int *err, char **err_info)
 {
     pcapng_block_header_t bh;
     pcapng_section_header_block_t shb;
@@ -5069,7 +5308,9 @@ pcapng_write_section_header_block(wtap_dumper *wdh, int *err)
     if (wdh_shb) {
         /* Write options, if we have any */
         if (options_size != 0) {
-            if (!pcapng_write_options(wdh, wdh_shb, write_wtap_shb_option, err))
+            if (!pcapng_write_options(wdh, OPT_SECTION_BYTE_ORDER,
+                                      wdh_shb, write_wtap_shb_option,
+                                      err, err_info))
                 return false;
         }
     }
@@ -5167,7 +5408,11 @@ compute_epb_option_size(wtap_block_t block _U_, unsigned option_id, wtap_opttype
     return size;
 }
 
-static bool write_wtap_epb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsigned option_id, wtap_opttype_e option_type _U_, wtap_optval_t *optval, int *err)
+static bool write_wtap_epb_option(wtap_dumper *wdh, wtap_block_t block _U_,
+                                  unsigned option_id,
+                                  wtap_opttype_e option_type _U_,
+                                  wtap_optval_t *optval,
+                                  int *err, char **err_info _U_)
 {
     switch(option_id)
     {
@@ -5335,7 +5580,7 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
              */
             int_data = wtap_rec_generate_idb(rec);
             g_array_append_val(wdh->interface_data, int_data);
-            if (!pcapng_write_if_descr_block(wdh, int_data, err)) {
+            if (!pcapng_write_if_descr_block(wdh, int_data, err, err_info)) {
                 return false;
             }
         }
@@ -5404,7 +5649,9 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
 
     /* Write options, if we have any */
     if (options_size != 0) {
-        if (!pcapng_write_options(wdh, rec->block, write_wtap_epb_option, err))
+        if (!pcapng_write_options(wdh, OPT_SECTION_BYTE_ORDER,
+                                  rec->block, write_wtap_epb_option,
+                                  err, err_info))
             return false;
     }
 
@@ -5418,7 +5665,7 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
 
 static bool
 pcapng_write_sysdig_event_block(wtap_dumper *wdh, const wtap_rec *rec,
-                                int *err, char **err_info _U_)
+                                int *err, char **err_info)
 {
     pcapng_block_header_t bh;
     const uint32_t zero_pad = 0;
@@ -5502,7 +5749,8 @@ pcapng_write_sysdig_event_block(wtap_dumper *wdh, const wtap_rec *rec,
 
     /* Write options, if we have any */
     if (options_size != 0) {
-        if (!pcapng_write_options(wdh, rec->block, NULL, err))
+        if (!pcapng_write_options(wdh, OPT_SECTION_BYTE_ORDER,
+                                  rec->block, NULL, err, err_info))
             return false;
     }
 
@@ -5747,7 +5995,8 @@ static bool
 put_nrb_option(wtap_block_t block _U_, unsigned option_id, wtap_opttype_e option_type _U_, wtap_optval_t* optval, void* user_data)
 {
     uint8_t **opt_ptrp = (uint8_t **)user_data;
-    uint32_t size = 0;
+    size_t stringlen;
+    size_t size = 0;
     struct pcapng_option_header option_hdr;
     uint32_t pad;
 
@@ -5755,8 +6004,19 @@ put_nrb_option(wtap_block_t block _U_, unsigned option_id, wtap_opttype_e option
     {
     case OPT_COMMENT:
     case OPT_NS_DNSNAME:
+        size = strlen(optval->stringval);
+        if (size > 65535) {
+        	/*
+        	 * Too big to fit in the option.
+        	 * Don't write anything.
+        	 *
+        	 * XXX - truncate it?  Report an error?
+        	 */
+        	return true;
+        }
+
+        /* Put option header */
         /* String options don't consider pad bytes part of the length */
-        size = (uint32_t)strlen(optval->stringval) & 0xffff;
         option_hdr.type         = (uint16_t)option_id;
         option_hdr.value_length = (uint16_t)size;
         memcpy(*opt_ptrp, &option_hdr, 4);
@@ -5778,19 +6038,56 @@ put_nrb_option(wtap_block_t block _U_, unsigned option_id, wtap_opttype_e option
         }
         break;
     case OPT_CUSTOM_STR_COPY:
-    case OPT_CUSTOM_BIN_COPY:
-        /* Custom options don't consider pad bytes part of the length */
-        size = (uint32_t)(optval->custom_opt.data.generic_data.custom_data_len + sizeof(uint32_t)) & 0xffff;
+        /* String options don't consider pad bytes part of the length */
+        stringlen = strlen(optval->custom_stringval.string);
+        size = sizeof(uint32_t) + stringlen;
+        if (size > 65535) {
+        	/*
+        	 * Too big to fit in the option.
+        	 * Don't write anything.
+        	 *
+        	 * XXX - truncate it?  Report an error?
+        	 */
+        	return true;
+        }
+
+        /* Put option header and PEN */
+        /* String options don't consider pad bytes part of the length */
         option_hdr.type         = (uint16_t)option_id;
         option_hdr.value_length = (uint16_t)size;
         memcpy(*opt_ptrp, &option_hdr, 4);
         *opt_ptrp += 4;
 
-        memcpy(*opt_ptrp, &optval->custom_opt.pen, sizeof(uint32_t));
+        memcpy(*opt_ptrp, &optval->custom_stringval.pen, sizeof(uint32_t));
+        *opt_ptrp += sizeof(uint32_t);
+        memcpy(*opt_ptrp, optval->custom_stringval.string, size);
+        *opt_ptrp += size;
+
+        if ((size % 4)) {
+            pad = 4 - (size % 4);
+        } else {
+            pad = 0;
+        }
+
+        /* put padding (if any) */
+        if (pad != 0) {
+            memset(*opt_ptrp, 0, pad);
+            *opt_ptrp += pad;
+        }
+        break;
+    case OPT_CUSTOM_BIN_COPY:
+        /* Custom options don't consider pad bytes part of the length */
+        size = (uint32_t)(optval->custom_binaryval.data.generic_data.custom_data_len + sizeof(uint32_t)) & 0xffff;
+        option_hdr.type         = (uint16_t)option_id;
+        option_hdr.value_length = (uint16_t)size;
+        memcpy(*opt_ptrp, &option_hdr, 4);
+        *opt_ptrp += 4;
+
+        memcpy(*opt_ptrp, &optval->custom_binaryval.pen, sizeof(uint32_t));
         *opt_ptrp += sizeof(uint32_t);
 
-        memcpy(*opt_ptrp, optval->custom_opt.data.generic_data.custom_data, optval->custom_opt.data.generic_data.custom_data_len);
-        *opt_ptrp += optval->custom_opt.data.generic_data.custom_data_len;
+        memcpy(*opt_ptrp, optval->custom_binaryval.data.generic_data.custom_data, optval->custom_binaryval.data.generic_data.custom_data_len);
+        *opt_ptrp += optval->custom_binaryval.data.generic_data.custom_data_len;
 
         if ((size % 4)) {
             pad = 4 - (size % 4);
@@ -6119,7 +6416,11 @@ static uint32_t compute_isb_option_size(wtap_block_t block _U_, unsigned option_
     return size;
 }
 
-static bool write_wtap_isb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsigned option_id, wtap_opttype_e option_type _U_, wtap_optval_t *optval, int *err)
+static bool write_wtap_isb_option(wtap_dumper *wdh, wtap_block_t block _U_,
+                                  unsigned option_id,
+                                  wtap_opttype_e option_type _U_,
+                                  wtap_optval_t *optval,
+                                  int *err, char **err_info _U_)
 {
     switch(option_id)
     {
@@ -6144,7 +6445,9 @@ static bool write_wtap_isb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsi
 }
 
 static bool
-pcapng_write_interface_statistics_block(wtap_dumper *wdh, wtap_block_t if_stats, int *err)
+pcapng_write_interface_statistics_block(wtap_dumper *wdh,
+                                        wtap_block_t if_stats,
+                                        int *err, char **err_info)
 {
     pcapng_block_header_t bh;
     pcapng_interface_statistics_block_t isb;
@@ -6174,7 +6477,9 @@ pcapng_write_interface_statistics_block(wtap_dumper *wdh, wtap_block_t if_stats,
 
     /* Write options */
     if (options_size != 0) {
-        if (!pcapng_write_options(wdh, if_stats, write_wtap_isb_option, err))
+        if (!pcapng_write_options(wdh, OPT_SECTION_BYTE_ORDER,
+                                  if_stats, write_wtap_isb_option,
+                                  err, err_info))
             return false;
     }
 
@@ -6230,7 +6535,11 @@ static uint32_t compute_idb_option_size(wtap_block_t block _U_, unsigned option_
     return size;
 }
 
-static bool write_wtap_idb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsigned option_id, wtap_opttype_e option_type _U_, wtap_optval_t *optval, int *err)
+static bool write_wtap_idb_option(wtap_dumper *wdh, wtap_block_t block _U_,
+                                  unsigned option_id,
+                                  wtap_opttype_e option_type _U_,
+                                  wtap_optval_t *optval,
+                                  int *err, char **err_info)
 {
     switch(option_id)
     {
@@ -6238,7 +6547,8 @@ static bool write_wtap_idb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsi
     case OPT_IDB_DESCRIPTION:
     case OPT_IDB_OS:
     case OPT_IDB_HARDWARE:
-        if (!pcapng_write_string_option(wdh, option_id, optval, err))
+        if (!pcapng_write_string_option(wdh, OPT_SECTION_BYTE_ORDER,
+                                        option_id, optval, err, err_info))
             return false;
         break;
     case OPT_IDB_SPEED:
@@ -6270,7 +6580,8 @@ static bool write_wtap_idb_option(wtap_dumper *wdh, wtap_block_t block _U_, unsi
 }
 
 static bool
-pcapng_write_if_descr_block(wtap_dumper *wdh, wtap_block_t int_data, int *err)
+pcapng_write_if_descr_block(wtap_dumper *wdh, wtap_block_t int_data,
+                            int *err, char **err_info)
 {
     pcapng_block_header_t bh;
     pcapng_interface_description_block_t idb;
@@ -6312,7 +6623,9 @@ pcapng_write_if_descr_block(wtap_dumper *wdh, wtap_block_t int_data, int *err)
 
     if (options_size != 0) {
         /* Write options */
-        if (!pcapng_write_options(wdh, int_data, write_wtap_idb_option, err))
+        if (!pcapng_write_options(wdh, OPT_SECTION_BYTE_ORDER,
+                                  int_data, write_wtap_idb_option,
+                                  err, err_info))
             return false;
     }
 
@@ -6325,7 +6638,7 @@ pcapng_write_if_descr_block(wtap_dumper *wdh, wtap_block_t int_data, int *err)
 }
 
 static bool pcapng_add_idb(wtap_dumper *wdh, wtap_block_t idb,
-                               int *err, char **err_info _U_)
+                               int *err, char **err_info)
 {
 	wtap_block_t idb_copy;
 
@@ -6339,7 +6652,7 @@ static bool pcapng_add_idb(wtap_dumper *wdh, wtap_block_t idb,
 	/*
 	 * And write it to the output file.
 	 */
-	return pcapng_write_if_descr_block(wdh, idb_copy, err);
+	return pcapng_write_if_descr_block(wdh, idb_copy, err, err_info);
 }
 
 static bool pcapng_write_internal_blocks(wtap_dumper *wdh, int *err)
@@ -6528,8 +6841,7 @@ static bool pcapng_dump(wtap_dumper *wdh, const wtap_rec *rec,
 
 /* Finish writing to a dump file.
    Returns true on success, false on failure. */
-static bool pcapng_dump_finish(wtap_dumper *wdh, int *err,
-                                   char **err_info _U_)
+static bool pcapng_dump_finish(wtap_dumper *wdh, int *err, char **err_info)
 {
     unsigned i, j;
 
@@ -6553,7 +6865,8 @@ static bool pcapng_dump_finish(wtap_dumper *wdh, int *err,
             if_stats = g_array_index(int_data_mand->interface_statistics, wtap_block_t, j);
             ws_debug("write ISB for interface %u",
                      ((wtapng_if_stats_mandatory_t*)wtap_block_get_mandatory_data(if_stats))->interface_id);
-            if (!pcapng_write_interface_statistics_block(wdh, if_stats, err)) {
+            if (!pcapng_write_interface_statistics_block(wdh, if_stats,
+                                                         err, err_info)) {
                 return false;
             }
         }
@@ -6566,7 +6879,7 @@ static bool pcapng_dump_finish(wtap_dumper *wdh, int *err,
 /* Returns true on success, false on failure; sets "*err" to an error code on
    failure */
 static bool
-pcapng_dump_open(wtap_dumper *wdh, int *err, char **err_info _U_)
+pcapng_dump_open(wtap_dumper *wdh, int *err, char **err_info)
 {
     unsigned i;
 
@@ -6577,7 +6890,7 @@ pcapng_dump_open(wtap_dumper *wdh, int *err, char **err_info _U_)
     wdh->subtype_finish = pcapng_dump_finish;
 
     /* write the section header block */
-    if (!pcapng_write_section_header_block(wdh, err)) {
+    if (!pcapng_write_section_header_block(wdh, err, err_info)) {
         return false;
     }
     ws_debug("wrote section header block.");
@@ -6593,7 +6906,7 @@ pcapng_dump_open(wtap_dumper *wdh, int *err, char **err_info _U_)
 
         idb = g_array_index(wdh->interface_data, wtap_block_t, i);
 
-        if (!pcapng_write_if_descr_block(wdh, idb, err)) {
+        if (!pcapng_write_if_descr_block(wdh, idb, err, err_info)) {
             return false;
         }
 

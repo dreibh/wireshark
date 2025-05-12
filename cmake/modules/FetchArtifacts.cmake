@@ -5,17 +5,13 @@
 # To do:
 # - Add support for Windows and migrate win-setup.ps1 here.
 
-if(APPLE)
-  set(download_prefix "https://dev-libs.wireshark.org/macos/packages")
-else()
-  message(FATAL_ERROR "No artifacts for this system")
-endif()
-
 # It would be nice to be able to make this self-contained, e.g. by
 # extracting artifacts somewhere under CMAKE_BINARY_DIR, but CMake
 # doesn't allow source or build paths in INTERFACE_INCLUDE_DIRECTORIES.
 #
-if (NOT EXISTS ${WIRESHARK_BASE_DIR} OR NOT IS_DIRECTORY ${WIRESHARK_BASE_DIR} OR NOT IS_WRITABLE ${WIRESHARK_BASE_DIR})
+if (NOT IS_DIRECTORY ${WIRESHARK_BASE_DIR})
+# IS_WRITABLE requires CMake 3.29
+# if (NOT IS_DIRECTORY ${WIRESHARK_BASE_DIR} OR NOT IS_WRITABLE ${WIRESHARK_BASE_DIR})
   message(FATAL_ERROR "Please make sure ${WIRESHARK_BASE_DIR} is a directory that is writable by you.")
 endif()
 
@@ -25,6 +21,14 @@ set(ARTIFACTS_DIR ${WIRESHARK_BASE_DIR}/macos-universal-master)
 file(MAKE_DIRECTORY ${ARTIFACTS_DIR})
 list(APPEND CMAKE_PREFIX_PATH ${ARTIFACTS_DIR})
 set(manifest_file ${ARTIFACTS_DIR}/manifest.txt)
+
+if(APPLE)
+  set(download_prefix "https://dev-libs.wireshark.org/macos/packages")
+  set(OSX_APP_LIBPREFIX ${ARTIFACTS_DIR})
+else()
+  message(FATAL_ERROR "No artifacts for this system")
+endif()
+
 
 set(artifacts)
 
@@ -62,7 +66,9 @@ endfunction()
 function(update_artifacts)
   list(JOIN artifacts "\n" list_manifest_contents)
   set(file_manifest_contents)
-  if (IS_READABLE ${manifest_file})
+if (EXISTS ${manifest_file})
+# IS_READABLE requires CMake 3.29
+# if (IS_READABLE ${manifest_file})
     file(READ ${manifest_file} file_manifest_contents)
   endif()
   if(list_manifest_contents STREQUAL file_manifest_contents)
@@ -82,7 +88,7 @@ if(APPLE)
   add_artifact(bcg729/bcg729-1.1.1-1-macos-universal.tar.xz 0e302ac5816fbff353d33a428d25eeaad04d5e2ccd6df20a0003f14431aa63a4)
   add_artifact(brotli/brotli-1.1.0-1-macos-universal.tar.xz afb52675ff9d26a44776b1c53ddb03cf6079ee452ee12a6d2844a58256e7704b)
   add_artifact(c-ares/c-ares-1.34.5-1-macos-universal.tar.xz 158fc19f00529a568738cad60c47bc19374de18935fe12ac5f39364ba2cb0b90)
-  add_artifact(glib/glib-bundle-2.84.1-1-macos-universal.tar.xz 08fe1ed668b7c3447289984fe52ceb3f1fe10585f0fd8e7e98655c6a87472910)
+  add_artifact(glib/glib-bundle-2.84.1-2-macos-universal.tar.xz 4f0d13491cdb1ae1036db190fa9ea60c0781d53453925f727aec1a3b3b93abe7)
   add_artifact(gnutls/gnutls-bundle-3.8.9-1-macos-universal.tar.xz f713df06de9b077ba60d21fc1e0558382a76718fa2853f0e8155639e744f9e9b)
   add_artifact(libgcrypt/libgcrypt-bundle-1.11.0-1-macos-universal.tar.xz a93c989a18be505f78021be45abc1740b4a5cb55505a539fd0b4b1d970b6d183)
   add_artifact(libilbc/libilbc-2.0.2-1-macos-universal.tar.xz cf7c5f34c2101af1fe5b788cce6425b258cdaec03dc3301c4a8d2774a0c06801)

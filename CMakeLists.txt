@@ -280,6 +280,8 @@ endif(WIN32)
 
 if(WIRESHARK_BASE_DIR AND APPLE)
 	include(FetchArtifacts)
+else()
+	set(OSX_APP_LIBPREFIX "/usr/local")
 endif()
 
 include(UseCustomIncludes)
