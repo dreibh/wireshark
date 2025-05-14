@@ -40,6 +40,8 @@
 #include <epan/prefs.h>
 #include <epan/range.h>
 
+#include <wiretap/pcapng-netflix-custom.h>
+
 #include <wsutil/str_util.h>
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
@@ -652,14 +654,7 @@ dissect_record(epan_dissect_t *edt, int file_type_subtype, wtap_rec *rec,
 		break;
 
 	case REC_TYPE_CUSTOM_BLOCK:
-		switch (rec->rec_header.custom_block_header.pen) {
-		case PEN_NFLX:
-			edt->pi.pseudo_header = NULL;
-			break;
-		default:
-			edt->pi.pseudo_header = NULL;
-			break;
-		}
+		edt->pi.pseudo_header = NULL;
 		break;
 
 	}
