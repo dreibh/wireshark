@@ -24,7 +24,7 @@ variables:
   CCACHE_DIR: "${CI_PROJECT_DIR}/ccache"
   # The Qt versions that we ship in the development installers.
   WINDOWS_QT_VERSION: "6.8.1"
-  MACOS_QT_VERSION: "6.5.3"
+  MACOS_QT_VERSION: "6.8.3"
   # Enable color output in various tools.
   # CMake, Ninja, and others: https://bixense.com/clicolors/
   CLICOLOR_FORCE: "1"
@@ -624,7 +624,7 @@ macOS Universal Package:
         rm -rf /tmp/aqt.venv ;
         python3 -m venv /tmp/aqt.venv ;
         /tmp/aqt.venv/bin/pip3 install aqtinstall ;
-        /tmp/aqt.venv/bin/aqt install-qt --outputdir $WIRESHARK_BASE_DIR/Qt mac desktop 6.5.3 clang_64 --modules qt5compat qtmultimedia ;
+        /tmp/aqt.venv/bin/aqt install-qt --outputdir $WIRESHARK_BASE_DIR/Qt mac desktop $MACOS_QT_VERSION clang_64 --modules qt5compat qtmultimedia ;
       fi
     - export CMAKE_PREFIX_PATH="$WIRESHARK_BASE_DIR/Qt/$MACOS_QT_VERSION/macos"
     - export PKG_CONFIG_PATH=
@@ -963,7 +963,7 @@ No options:
   script: |
     cmake -GNinja -DENABLE_CCACHE=ON \
       -DENABLE_BROTLI=OFF -DENABLE_CAP=OFF -DENABLE_CHECKHF_CONFLICT=ON -DENABLE_GNUTLS=OFF \
-      -DENABLE_KERBEROS=OFF -DENABLE_LIBXML2=OFF -DENABLE_ILBC=OFF -DENABLE_LUA=OFF -DENABLE_LZ4=OFF \
+      -DENABLE_KERBEROS=OFF -DENABLE_ILBC=OFF -DENABLE_LUA=OFF -DENABLE_LZ4=OFF \
       -DENABLE_MINIZIP=OFF -DENABLE_NETLINK=OFF -DENABLE_NGHTTP2=OFF -DENABLE_NGHTTP3=OFF \
       -DENABLE_BCG729=OFF -DENABLE_OPUS=OFF -DENABLE_PCAP=OFF -DENABLE_PLUGIN_IFDEMO=ON \
       -DENABLE_PLUGINS=OFF -DENABLE_SBC=OFF -DENABLE_SMI=OFF -DENABLE_SNAPPY=OFF -DENABLE_SPANDSP=OFF \

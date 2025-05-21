@@ -24,11 +24,9 @@
 #include <wsutil/report_message.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/strtoi.h>
-#ifdef HAVE_LIBXML2
 #include <libxml/tree.h>
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
-#endif
 #include "file_wrappers.h"
 #include "wtap-int.h"
 
@@ -1572,7 +1570,7 @@ static const ttl_addr_to_iface_entry_t* ttl_lookup_interface_int(wtap* wth, uint
 
 static void
 ttl_init_rec(wtap_rec* rec, uint64_t timestamp, uint16_t addr, int pkt_encap, uint32_t iface_id, uint32_t caplen, uint32_t len) {
-    rec->rec_type = REC_TYPE_PACKET;
+    wtap_setup_packet_rec(rec, pkt_encap);
     rec->block = wtap_block_create(WTAP_BLOCK_PACKET);
     rec->presence_flags = WTAP_HAS_CAP_LEN | WTAP_HAS_INTERFACE_ID | WTAP_HAS_TS;
     rec->tsprec = WTAP_TSPREC_USEC;
@@ -1583,7 +1581,6 @@ ttl_init_rec(wtap_rec* rec, uint64_t timestamp, uint16_t addr, int pkt_encap, ui
 
     rec->ts_rel_cap_valid = false;
 
-    rec->rec_header.packet_header.pkt_encap = pkt_encap;
     rec->rec_header.packet_header.interface_id = iface_id;
 
     wtap_block_add_uint32_option(rec->block, OPT_PKT_QUEUE, addr);
@@ -2266,7 +2263,6 @@ static ttl_result_t ttl_read_entry(wtap* wth, wtap_rec* rec, int* err, char** er
 
 }
 
-#ifdef HAVE_LIBXML2
 static bool
 ttl_xml_node_get_number(xmlNodePtr node, xmlXPathContextPtr ctx, double *ret) {
     xmlXPathObjectPtr result;
@@ -2383,7 +2379,6 @@ ttl_process_xml_config(ttl_t* ttl, const char* text, int size) {
     xmlFreeDoc(doc);
     return true;
 }
-#endif  /* HAVE_LIBXML2 */
 
 /* Maximum supported line length of preference files */
 #define MAX_LINELEN     1024
@@ -2684,8 +2679,14 @@ ttl_open(wtap* wth, int* err, char** err_info) {
     if (memcmp(header.magic, ttl_magic, sizeof(ttl_magic))) {
         return WTAP_OPEN_NOT_MINE;
     }
-
     /* This seems to be a TLL! */
+
+    /* Check for valid block size */
+    if (header.block_size == 0) {
+        *err = WTAP_ERR_BAD_FILE;
+        *err_info = ws_strdup("ttl: block size cannot be 0");
+        return WTAP_OPEN_ERROR;
+    }
     /* Check for a valid header length */
     if (header.header_size < sizeof(ttl_fileheader_t)) {
         *err = WTAP_ERR_BAD_FILE;
@@ -2717,7 +2718,6 @@ ttl_open(wtap* wth, int* err, char** err_info) {
                 return WTAP_OPEN_ERROR;
             }
             offset += TTL_LOGFILE_INFO_SIZE;
-#ifdef HAVE_LIBXML2
             unsigned int xml_len = header.header_size - offset;
             if (xml_len != 0) {
                 unsigned char* xml = g_try_malloc(xml_len);
@@ -2738,7 +2738,6 @@ ttl_open(wtap* wth, int* err, char** err_info) {
                 g_free(xml);
                 offset += xml_len;
             }
-#endif  /* HAVE_LIBXML2 */
         }
     }
 

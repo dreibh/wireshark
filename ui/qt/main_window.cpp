@@ -42,7 +42,7 @@ MainWindow::MainWindow(QWidget *parent) :
     cur_layout_(QVector<unsigned>()),
     packet_list_(nullptr),
     proto_tree_(nullptr),
-    byte_view_tab_(nullptr),
+    data_source_tab_(nullptr),
     packet_diagram_(nullptr),
     df_combo_box_(nullptr),
     main_status_bar_(nullptr),
@@ -289,9 +289,10 @@ QString MainWindow::replaceWindowTitleVariables(QString title)
     title.replace("%V", get_ws_vcs_version_info());
 
 #ifdef HAVE_LIBPCAP
-    if (global_commandline_info.capture_comments) {
+    char* capture_comment = commandline_get_first_capture_comment();
+    if (capture_comment) {
         // Use the first capture comment from command line.
-        title.replace("%C", (char *)g_ptr_array_index(global_commandline_info.capture_comments, 0));
+        title.replace("%C", capture_comment);
     } else {
         // No capture comment.
         title.remove("%C");

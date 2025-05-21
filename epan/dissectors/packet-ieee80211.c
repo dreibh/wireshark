@@ -20814,7 +20814,7 @@ dissect_vendor_ie_rsn(proto_item * item, proto_tree * tree, tvbuff_t * tvb,
       offset += 6;
 
       proto_tree_add_item(tree, hf_ieee80211_rsn_ie_mlo_gtk_kde_gtk, tvb,
-                          offset, tag_len - 7, ENC_NA);
+                          offset, tag_len - 8, ENC_NA);
 
       proto_item_append_text(item, ": MLO GTK KDE");
       break;
@@ -20834,7 +20834,7 @@ dissect_vendor_ie_rsn(proto_item * item, proto_tree * tree, tvbuff_t * tvb,
       offset += 1;
 
       proto_tree_add_item(tree, hf_ieee80211_rsn_ie_mlo_igtk_kde_igtk, tvb,
-                          offset, tag_len - 9, ENC_NA);
+                          offset, tag_len - 10, ENC_NA);
 
       proto_item_append_text(item, ": MLO IGTK KDE");
       break;
@@ -20854,7 +20854,7 @@ dissect_vendor_ie_rsn(proto_item * item, proto_tree * tree, tvbuff_t * tvb,
       offset += 1;
 
       proto_tree_add_item(tree, hf_ieee80211_rsn_ie_mlo_bigtk_kde_bigtk, tvb,
-                          offset, tag_len - 9, ENC_NA);
+                          offset, tag_len - 10, ENC_NA);
 
       proto_item_append_text(item, ": MLO BIGTK KDE");
       break;
@@ -21250,12 +21250,29 @@ this supports:
   }
 }
 
-#define ARUBA_APNAME  3
+/* info from lswifi https://github.com/joshschmelzle/lswifi/blob/v0.1.49/lswifi/elements.py#L1526 */
+#define ARUBA_CAC 1
+#define ARUBA_MESH 2
+#define ARUBA_APNAME 3
+#define ARUBA_ARM 4
+#define ARUBA_SLB 5
+#define ARUBA_SJ_LOOP_PROTECT 6
+#define ARUBA_AUTO_MESH 7
+#define ARUBA_LCI 8
 #define ARUBA_GPS 9
+#define ARUBA_AP_HEALTH 10
 
 static const value_string ieee80211_vs_aruba_subtype_vals[] = {
+  { ARUBA_CAC, "CAC"},
+  { ARUBA_MESH, "Mesh"},
   { ARUBA_APNAME, "AP Name"},
+  { ARUBA_ARM, "ARM"},
+  { ARUBA_SLB, "SLB"},
+  { ARUBA_SJ_LOOP_PROTECT, "SJ Loop Protect"},
+  { ARUBA_AUTO_MESH, "Auto Mesh"},
+  { ARUBA_LCI, "LCI"},
   { ARUBA_GPS, "GPS Ellipse"},
+  { ARUBA_AP_HEALTH, "AP Health"},
   { 0,                 NULL }
 };
 static void

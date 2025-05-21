@@ -5,19 +5,7 @@
  * By Gerald Combs <gerald@wireshark.org>
  * Copyright 1998 Gerald Combs
  *
- * This program is free software; you can redistribute it and/or
- * modify it under the terms of the GNU General Public License
- * as published by the Free Software Foundation; either version 2
- * of the License, or (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
 #include "config.h"
@@ -664,7 +652,7 @@ add_routing_activation_request_fields(proto_tree *doip_tree, tvbuff_t *tvb, uint
     doip_prototree_add_with_resolv(doip_tree, hf_source_address, hf_source_address_name, tvb, DOIP_ROUTING_ACTIVATION_REQ_SRC_OFFSET, DOIP_ROUTING_ACTIVATION_REQ_SRC_LEN, ENC_BIG_ENDIAN, NULL);
 
     if (version == ISO13400_2010) {
-        proto_tree_add_item(doip_tree, hf_activation_type_v1, tvb, DOIP_ROUTING_ACTIVATION_REQ_TYPE_OFFSET, DOIP_ROUTING_ACTIVATION_REQ_TYPE_LEN_V1, ENC_NA);
+        proto_tree_add_item(doip_tree, hf_activation_type_v1, tvb, DOIP_ROUTING_ACTIVATION_REQ_TYPE_OFFSET, DOIP_ROUTING_ACTIVATION_REQ_TYPE_LEN_V1, ENC_BIG_ENDIAN);
         proto_tree_add_item(doip_tree, hf_reserved_iso, tvb, DOIP_ROUTING_ACTIVATION_REQ_ISO_OFFSET_V1, DOIP_ROUTING_ACTIVATION_REQ_ISO_LEN, ENC_BIG_ENDIAN);
 
         if ( tvb_bytes_exist(tvb, DOIP_ROUTING_ACTIVATION_REQ_OEM_OFFSET_V1, DOIP_ROUTING_ACTIVATION_REQ_OEM_LEN) ) {

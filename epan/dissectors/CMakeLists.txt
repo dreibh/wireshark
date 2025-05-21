@@ -878,6 +878,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bvlc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-bzr.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-c15ch.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-c2p.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-calcappprotocol.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-caneth.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-canopen.c
@@ -2081,6 +2082,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vines.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vj-comp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vlan.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-vlp16.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vmlab.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vmware-hb.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-vnc.c

@@ -138,7 +138,8 @@ typedef enum {
 #define SSL_HND_HELLO_EXT_GREASE_2A2A                   10794
 #define SSL_HND_HELLO_EXT_NPN                           13172 /* 0x3374 */
 #define SSL_HND_HELLO_EXT_GREASE_3A3A                   14906
-#define SSL_HND_HELLO_EXT_ALPS                          17513 /* draft-vvv-tls-alps-01, temporary value used in BoringSSL implementation */
+#define SSL_HND_HELLO_EXT_ALPS_OLD                      17513 /* draft-vvv-tls-alps-01, previous value used in BoringSSL implementation */
+#define SSL_HND_HELLO_EXT_ALPS                          17613 /* draft-vvv-tls-alps-01, current value used in BoringSSL implementation */
 #define SSL_HND_HELLO_EXT_GREASE_4A4A                   19018
 #define SSL_HND_HELLO_EXT_GREASE_5A5A                   23130
 #define SSL_HND_HELLO_EXT_GREASE_6A6A                   27242
@@ -201,6 +202,7 @@ typedef enum {
 #define SSL_HND_QUIC_TP_GOOGLE_CONNECTION_OPTIONS           0x3128
 /* https://github.com/facebookincubator/mvfst/blob/master/quic/QuicConstants.h */
 #define SSL_HND_QUIC_TP_FACEBOOK_PARTIAL_RELIABILITY        0xFF00
+#define SSL_HND_QUIC_TP_VERSION_INFORMATION_DRAFT           0xff73db /* https://datatracker.ietf.org/doc/draft-ietf-quic-version-negotiation/13/ */
 #define SSL_HND_QUIC_TP_MIN_ACK_DELAY_DRAFT_V1              0xFF03DE1A /* https://tools.ietf.org/html/draft-ietf-quic-ack-frequency-01 */
 #define SSL_HND_QUIC_TP_MIN_ACK_DELAY_DRAFT05               0xff04de1a /* https://tools.ietf.org/html/draft-ietf-quic-ack-frequency-04 / draft-05 */
 #define SSL_HND_QUIC_TP_MIN_ACK_DELAY                       0xff04de1b /* https://tools.ietf.org/html/draft-ietf-quic-ack-frequency-07 */

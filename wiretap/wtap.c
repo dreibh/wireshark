@@ -1711,16 +1711,10 @@ static void
 wtap_reset_rec(wtap *wth, wtap_rec *rec)
 {
 	/*
-	 * Set the packet encapsulation to the file's encapsulation
-	 * value; if that's not WTAP_ENCAP_PER_PACKET, it's the
-	 * right answer (and means that the read routine for this
-	 * capture file type doesn't have to set it), and if it
-	 * *is* WTAP_ENCAP_PER_PACKET, the caller needs to set it
-	 * anyway.
-	 *
-	 * Do the same for the packet time stamp resolution.
+	 * Set the time stamp precision to the file's time stamp
+	 * precision value, as a default. If it's per-packet,
+	 * the read routine must override it.
 	 */
-	rec->rec_header.packet_header.pkt_encap = wth->file_encap;
 	rec->tsprec = wth->file_tsprec;
 	rec->block = NULL;
 	rec->block_was_modified = false;
@@ -1737,6 +1731,79 @@ wtap_reset_rec(wtap *wth, wtap_rec *rec)
 	 * XXX - any other buffers?
 	 */
 	ws_buffer_clean(&rec->data);
+}
+
+/**
+ * Set up a wtap_rec for a packet (REC_TYPE_PACKET).
+ */
+void
+wtap_setup_packet_rec(wtap_rec *rec, int encap)
+{
+	rec->rec_type = REC_TYPE_PACKET;
+	rec->rec_type_name = "Packet";
+	rec->rec_header.packet_header.pkt_encap = encap;
+}
+
+/**
+ * Set up a wtap_rec for a file-type specific event
+ * (REC_TYPE_FT_SPECIFIC_EVENT);
+ */
+void
+wtap_setup_ft_specific_event_rec(wtap_rec *rec)
+{
+	rec->rec_type = REC_TYPE_FT_SPECIFIC_EVENT;
+	rec->rec_type_name = "Event";
+}
+
+/**
+ * Set up a wtap_rec for a file-type specific report
+ * (REC_TYPE_FT_SPECIFIC_REPORT);
+ */
+void
+wtap_setup_ft_specific_report_rec(wtap_rec *rec)
+{
+	rec->rec_type = REC_TYPE_FT_SPECIFIC_REPORT;
+	rec->rec_type_name = "Report";
+}
+
+/**
+ * Set up a wtap_rec for a system call (REC_TYPE_SYSCALL).
+ */
+void
+wtap_setup_syscall_rec(wtap_rec *rec)
+{
+	rec->rec_type = REC_TYPE_SYSCALL;
+	// We handle multiple types of data here, so use "Event"
+	// instead of "System Call"
+	//
+	// XXX - the wiretap code could set it, if it knows
+	// an appropriate string.
+	rec->rec_type_name = "Event";
+}
+
+/**
+ * Set up a wtap_rec for a systemd journal export entry
+ * (REC_TYPE_SYSTEMD_JOURNAL_EXPORT).
+ */
+void
+wtap_setup_systemd_journal_export_rec(wtap_rec *rec)
+{
+	rec->rec_type = REC_TYPE_SYSTEMD_JOURNAL_EXPORT;
+	rec->rec_type_name = "Systemd Journal Entry";
+}
+
+/**
+ * Set up a wtap_rec for a custom block (REC_TYPE_CUSTOM_BLCK).
+ */
+void
+wtap_setup_custom_block_rec(wtap_rec *rec, uint32_t pen,
+                            uint32_t payload_length, bool copy_allowed)
+{
+	rec->rec_type = REC_TYPE_CUSTOM_BLOCK;
+	rec->rec_type_name = "PCAPNG Custom Block";
+	rec->rec_header.custom_block_header.pen = pen;
+	rec->rec_header.custom_block_header.length = payload_length;
+	rec->rec_header.custom_block_header.copy_allowed = copy_allowed;
 }
 
 bool
@@ -2043,7 +2110,7 @@ wtap_full_file_read_file(wtap *wth, FILE_T fh, wtap_rec *rec,
 		buffer_size += block_size;
 	}
 
-	rec->rec_type = REC_TYPE_PACKET;
+	wtap_setup_packet_rec(rec, wth->file_encap);
 	rec->presence_flags = 0; /* yes, we have no bananas^Wtime stamp */
 	rec->ts.secs = 0;
 	rec->ts.nsecs = 0;

@@ -45,7 +45,7 @@ DIAG_ON(frame-larger-than=)
 #include "ui/util.h"
 #include "ui/preference_utils.h"
 
-#include "byte_view_tab.h"
+#include "data_source_tab.h"
 #ifdef HAVE_LIBPCAP
 #include "capture_options_dialog.h"
 #endif
@@ -530,7 +530,7 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     connect(mainApp, &WiresharkApplication::captureActive,
             this, &StratosharkMainWindow::captureActive);
 
-    byte_view_tab_ = new ByteViewTab(&master_split_);
+    data_source_tab_ = new DataSourceTab(&master_split_);
 
     // Packet list and proto tree must exist before these are called.
     setMenusForSelectedPacket();
@@ -2064,7 +2064,7 @@ void StratosharkMainWindow::initShowHideMainWidgets()
     shmw_actions[main_ui_->actionViewStatusBar] = main_ui_->statusBar;
     shmw_actions[main_ui_->actionViewPacketList] = packet_list_;
     shmw_actions[main_ui_->actionViewPacketDetails] = proto_tree_;
-    shmw_actions[main_ui_->actionViewPacketBytes] = byte_view_tab_;
+    shmw_actions[main_ui_->actionViewPacketBytes] = data_source_tab_;
 
     foreach(QAction *shmwa, shmw_actions.keys()) {
         shmwa->setData(QVariant::fromValue(shmw_actions[shmwa]));
@@ -2245,7 +2245,7 @@ bool StratosharkMainWindow::addFollowStreamMenuItem(const void *key _U_, void *v
      */
     // XXX - Should we add matches for syscall properties, e.g. file descriptors?
     const char *short_name = (const char*)key;
-    if (g_strcmp0(short_name, "Falco Bridge") == 0) {
+    if (g_strcmp0(short_name, "Falco Events") == 0) {
         follow_action->setText(tr("File Descriptor Stream"));
     }
     // if (g_strcmp0(short_name, "TCP") == 0) {

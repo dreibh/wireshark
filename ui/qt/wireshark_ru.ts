@@ -726,7 +726,7 @@
     </message>
 </context>
 <context>
-    <name>ByteViewTab</name>
+    <name>DataSourceTab</name>
     <message>
         <source>Packet bytes</source>
         <translation>Байты пакета</translation>
@@ -737,7 +737,7 @@
     </message>
 </context>
 <context>
-    <name>ByteViewText</name>
+    <name>HexDataSourceView</name>
     <message>
         <source>Allow hover highlighting</source>
         <translation>Включить подсвечивание при наведении курсора</translation>

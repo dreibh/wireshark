@@ -19,7 +19,6 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/additional_toolbar.h
 	widgets/apply_line_edit.h
 	widgets/base_data_source_view.h
-	widgets/byte_view_text.h
 	widgets/capture_filter_combo.h
 	widgets/capture_filter_edit.h
 	widgets/clickable_label.h
@@ -40,6 +39,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/filter_expression_toolbar.h
 	widgets/find_line_edit.h
 	widgets/follow_stream_text.h
+	widgets/hex_data_source_view.h
 	widgets/interface_toolbar_lineedit.h
 	widgets/json_data_source_view.h
 	widgets/label_stack.h
@@ -149,7 +149,6 @@ set(WIRESHARK_QT_HEADERS
 	bluetooth_device_dialog.h
 	bluetooth_devices_dialog.h
 	bluetooth_hci_summary_dialog.h
-	byte_view_tab.h
 	capture_comment_dialog.h
 	capture_file_dialog.h
 	capture_file_properties_dialog.h
@@ -165,6 +164,7 @@ set(WIRESHARK_QT_HEADERS
 	conversation_dialog.h
 	conversation_hash_tables_dialog.h
 	credentials_dialog.h
+	data_source_tab.h
 	decode_as_dialog.h
 	display_filter_expression_dialog.h
 	dissector_tables_dialog.h
@@ -292,7 +292,6 @@ endif()
 set(WIRESHARK_WIDGET_SRCS
 	widgets/additional_toolbar.cpp
 	widgets/apply_line_edit.cpp
-	widgets/byte_view_text.cpp
 	widgets/capture_filter_combo.cpp
 	widgets/capture_filter_edit.cpp
 	widgets/clickable_label.cpp
@@ -313,6 +312,7 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/filter_expression_toolbar.cpp
 	widgets/find_line_edit.cpp
 	widgets/follow_stream_text.cpp
+	widgets/hex_data_source_view.cpp
 	widgets/interface_toolbar_lineedit.cpp
 	widgets/json_data_source_view.cpp
 	widgets/label_stack.cpp
@@ -416,7 +416,6 @@ set(WIRESHARK_QT_SRC
 	bluetooth_device_dialog.cpp
 	bluetooth_devices_dialog.cpp
 	bluetooth_hci_summary_dialog.cpp
-	byte_view_tab.cpp
 	capture_comment_dialog.cpp
 	capture_file_dialog.cpp
 	capture_file_properties_dialog.cpp
@@ -432,6 +431,7 @@ set(WIRESHARK_QT_SRC
 	conversation_dialog.cpp
 	conversation_hash_tables_dialog.cpp
 	credentials_dialog.cpp
+	data_source_tab.cpp
 	decode_as_dialog.cpp
 	display_filter_expression_dialog.cpp
 	dissector_tables_dialog.cpp

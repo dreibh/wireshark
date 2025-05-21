@@ -1392,8 +1392,8 @@ typedef struct {
 } wtap_systemd_journal_export_header;
 
 typedef struct {
-    uint32_t  length;           /* length of the record */
     uint32_t  pen;              /* private enterprise number */
+    uint32_t  length;           /* length of the Custom Data plus options */
     bool      copy_allowed;     /* CB can be written */
     union {
         struct nflx {
@@ -1438,6 +1438,7 @@ typedef struct wtap_rec {
     int       tsprec;            /* WTAP_TSPREC_ value for this record */
     nstime_t  ts_rel_cap;        /* time stamp relative from capture start */
     bool      ts_rel_cap_valid;  /* is ts_rel_cap valid and can be used? */
+    const char *rec_type_name;   /* name of this record type */
     union {
         wtap_packet_header packet_header;
         wtap_ft_specific_header ft_specific_header;
@@ -1968,6 +1969,46 @@ void wtap_rec_reset(wtap_rec *rec);
 /*** clean up a wtap_rec structure, freeing what wtap_rec_init() allocated */
 WS_DLL_PUBLIC
 void wtap_rec_cleanup(wtap_rec *rec);
+
+/**
+ * Set up a wtap_rec for a packet (REC_TYPE_PACKET).
+ */
+WS_DLL_PUBLIC
+void wtap_setup_packet_rec(wtap_rec *rec, int encap);
+
+/**
+ * Set up a wtap_rec for a file-type specific event
+ * (REC_TYPE_FT_SPECIFIC_EVENT);
+ */
+WS_DLL_PUBLIC
+void wtap_setup_ft_specific_event_rec(wtap_rec *rec);
+
+/**
+ * Set up a wtap_rec for a file-type specific report
+ * (REC_TYPE_FT_SPECIFIC_REPORT);
+ */
+WS_DLL_PUBLIC
+void wtap_setup_ft_specific_report_rec(wtap_rec *rec);
+
+/**
+ * Set up a wtap_rec for a system call (REC_TYPE_SYSCALL).
+ */
+WS_DLL_PUBLIC
+void wtap_setup_syscall_rec(wtap_rec *rec);
+
+/**
+ * Set up a wtap_rec for a systemd journal export entry
+ * (REC_TYPE_SYSTEMD_JOURNAL_EXPORT).
+ */
+WS_DLL_PUBLIC
+void wtap_setup_systemd_journal_export_rec(wtap_rec *rec);
+
+/**
+ * Set up a wtap_rec for a custom block (REC_TYPE_CUSTOM_BLOCK).
+ */
+WS_DLL_PUBLIC
+void wtap_setup_custom_block_rec(wtap_rec *rec, uint32_t pen,
+                                 uint32_t payload_length, bool copy_allowed);
 
 /*
  * Types of compression for a file, including "none".

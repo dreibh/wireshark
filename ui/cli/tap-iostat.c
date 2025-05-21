@@ -725,6 +725,125 @@ fill_abs_ydoy_time(const nstime_t* the_time, char *time_buf, char *decimal_point
     return;
 }
 
+static void
+fill_start_time(const io_stat_t *iot, const nstime_t *rel_time, ws_tsprec_e invl_prec, char *time_buf)
+{
+    nstime_t abs_time;
+    nstime_sum(&abs_time, rel_time, &iot->start_time);
+
+    switch (timestamp_get_type()) {
+    case TS_ABSOLUTE:
+      fill_abs_time(&abs_time, time_buf, io_decimal_point, invl_prec, true);
+      break;
+
+    case TS_ABSOLUTE_WITH_YMD:
+      format_nstime_as_iso8601(time_buf, NSTIME_ISO8601_BUFSIZE, &abs_time,
+        io_decimal_point, true, invl_prec);
+      break;
+
+    case TS_ABSOLUTE_WITH_YDOY:
+      fill_abs_ydoy_time(&abs_time, time_buf, io_decimal_point, invl_prec, true);
+      break;
+
+    case TS_UTC:
+      fill_abs_time(&abs_time, time_buf, io_decimal_point, invl_prec, false);
+      break;
+
+    case TS_UTC_WITH_YMD:
+      format_nstime_as_iso8601(time_buf, NSTIME_ISO8601_BUFSIZE, &abs_time,
+        io_decimal_point, false, invl_prec);
+      break;
+
+    case TS_UTC_WITH_YDOY:
+      fill_abs_ydoy_time(&abs_time, time_buf, io_decimal_point, invl_prec, false);
+      break;
+
+    case TS_RELATIVE:
+    case TS_NOT_SET:
+      display_signed_time(time_buf, NSTIME_ISO8601_BUFSIZE, rel_time, invl_prec);
+      break;
+    case TS_DELTA:
+    case TS_DELTA_DIS:
+    case TS_EPOCH:
+      /* Can't happen - see iostat_init. */
+      ws_assert_not_reached();
+      break;
+    default:
+      break;
+    }
+}
+
+static char*
+iostat_get_item_value(const io_stat_t *iot, io_stat_item_t *item, const char *fmt, unsigned j, uint64_t interval)
+{
+    uint32_t num;
+    unsigned type, ftype;
+
+    type = iot->calc_type[j];
+
+    if (item) {
+        switch (type) {
+        case CALC_TYPE_FRAMES:
+            return g_strdup_printf(fmt, item->frames);
+        case CALC_TYPE_BYTES:
+        case CALC_TYPE_COUNT:
+            return g_strdup_printf(fmt, item->counter);
+        case CALC_TYPE_FRAMES_AND_BYTES:
+            return g_strdup_printf(fmt, item->frames, item->counter);
+
+        case CALC_TYPE_SUM:
+        case CALC_TYPE_MIN:
+        case CALC_TYPE_MAX:
+            ftype = proto_registrar_get_ftype(iot->hf_indexes[j]);
+            switch (ftype) {
+            case FT_FLOAT:
+                return g_strdup_printf(fmt, item->float_counter);
+            case FT_DOUBLE:
+                return g_strdup_printf(fmt, item->double_counter);
+            case FT_RELATIVE_TIME:
+                item->counter = (item->counter + UINT64_C(500)) / UINT64_C(1000);
+                return g_strdup_printf(fmt,
+                       (int)(item->counter/UINT64_C(1000000)),
+                       (int)(item->counter%UINT64_C(1000000)));
+            default:
+                return g_strdup_printf(fmt, item->counter);
+            }
+            break;
+
+        case CALC_TYPE_AVG:
+            num = item->num;
+            if (num == 0)
+                num = 1;
+            ftype = proto_registrar_get_ftype(iot->hf_indexes[j]);
+            switch (ftype) {
+            case FT_FLOAT:
+                return g_strdup_printf(fmt, item->float_counter/num);
+            case FT_DOUBLE:
+                return g_strdup_printf(fmt, item->double_counter/num);
+            case FT_RELATIVE_TIME:
+                item->counter = ((item->counter / (uint64_t)num) + UINT64_C(500)) / UINT64_C(1000);
+                return g_strdup_printf(fmt,
+                       (int)(item->counter/UINT64_C(1000000)),
+                       (int)(item->counter%UINT64_C(1000000)));
+            default:
+                return g_strdup_printf(fmt, item->counter / (uint64_t)num);
+            }
+            break;
+
+        case CALC_TYPE_LOAD:
+            ftype = proto_registrar_get_ftype(iot->hf_indexes[j]);
+            switch (ftype) {
+            case FT_RELATIVE_TIME:
+                return g_strdup_printf(fmt,
+                    (int) (item->counter/interval),
+                       (int)((item->counter%interval)*UINT64_C(1000000) / interval));
+            }
+            break;
+        }
+    }
+    return g_strdup_printf(fmt, (uint64_t)0, (uint64_t)0);
+}
+
 /* Calc the total width of each row in the stats table and build the printf format string for each
 *  column based on its field type, width, and name length.
 *  NOTE: The magnitude of all types including float and double are stored in iot->max_vals which
@@ -754,7 +873,7 @@ iostat_calc_cols_width_and_fmt(io_stat_t *iot, uint64_t interval, column_width* 
             tabrow_w += col_w[j].fr + 3;
 
             if (type == CALC_TYPE_FRAMES) {
-                fmt = g_strdup_printf(" %%%uu |", fr_mag);
+                fmt = g_strdup_printf("%%%uu", fr_mag);
             } else {
                 /* CALC_TYPE_FRAMES_AND_BYTES
                 */
@@ -762,7 +881,7 @@ iostat_calc_cols_width_and_fmt(io_stat_t *iot, uint64_t interval, column_width* 
                 val_mag = MAX(5, val_mag);
                 col_w[j].val = val_mag;
                 tabrow_w += (col_w[j].val + 3);
-                fmt = g_strdup_printf(" %%%uu | %%%u"PRIu64 " |", fr_mag, val_mag);
+                fmt = g_strdup_printf("%%%uu | %%%u"PRIu64, fr_mag, val_mag);
             }
             if (fmt)
                 fmts[j] = fmt;
@@ -775,7 +894,7 @@ iostat_calc_cols_width_and_fmt(io_stat_t *iot, uint64_t interval, column_width* 
             val_mag = magnitude(iot->max_vals[j], 15);
             val_mag = MAX(5, val_mag);
             col_w[j].val = val_mag;
-            fmt = g_strdup_printf(" %%%u"PRIu64" |", val_mag);
+            fmt = g_strdup_printf("%%%u"PRIu64, val_mag);
             break;
 
         default:
@@ -784,7 +903,7 @@ iostat_calc_cols_width_and_fmt(io_stat_t *iot, uint64_t interval, column_width* 
                 case FT_FLOAT:
                 case FT_DOUBLE:
                     val_mag = magnitude(iot->max_vals[j], 15);
-                    fmt = g_strdup_printf(" %%%u.6f |", val_mag);
+                    fmt = g_strdup_printf("%%%u.6f", val_mag);
                     col_w[j].val = val_mag + 7;
                     break;
                 case FT_RELATIVE_TIME:
@@ -796,7 +915,7 @@ iostat_calc_cols_width_and_fmt(io_stat_t *iot, uint64_t interval, column_width* 
                         iot->max_vals[j] = (iot->max_vals[j] + UINT64_C(500000000)) / NANOSECS_PER_SEC;
                     }
                     val_mag = magnitude(iot->max_vals[j], 15);
-                    fmt = g_strdup_printf(" %%%uu.%%06u |", val_mag);
+                    fmt = g_strdup_printf("%%%uu.%%06u", val_mag);
                     col_w[j].val = val_mag + 7;
                    break;
 
@@ -811,14 +930,14 @@ iostat_calc_cols_width_and_fmt(io_stat_t *iot, uint64_t interval, column_width* 
                     case FT_UINT24:
                     case FT_UINT32:
                     case FT_UINT64:
-                        fmt = g_strdup_printf(" %%%u"PRIu64 " |", val_mag);
+                        fmt = g_strdup_printf("%%%u"PRIu64, val_mag);
                         break;
                     case FT_INT8:
                     case FT_INT16:
                     case FT_INT24:
                     case FT_INT32:
                     case FT_INT64:
-                        fmt = g_strdup_printf(" %%%u"PRId64 " |", val_mag);
+                        fmt = g_strdup_printf("%%%u"PRId64, val_mag);
                         break;
                     }
             } /* End of ftype switch */
@@ -1026,13 +1145,10 @@ iostat_draw_header_row(unsigned borderlen, const io_stat_t *iot, const column_wi
 static void
 iostat_draw(void *arg)
 {
-    uint32_t num;
-    uint64_t interval, duration, t, invl_end, dv;
+    uint64_t interval, duration, t, real_invl, dv;
     unsigned int i, j, k, num_cols, num_rows, dur_secs, dur_mag,
-        invl_mag, invl_prec, tabrow_w, borderlen, invl_col_w, type,
-        maxfltr_w, ftype;
+        invl_mag, invl_prec, tabrow_w, borderlen, invl_col_w, maxfltr_w;
     char **fmts, *fmt = NULL;
-    static char *invl_fmt, *full_fmt;
     io_stat_item_t *mit, **stat_cols, *item, **item_in_column;
     bool last_row = false;
     io_stat_t *iot;
@@ -1043,7 +1159,7 @@ iostat_draw(void *arg)
     iot = mit->parent;
     num_cols = iot->num_cols;
     col_w = g_new(column_width, num_cols);
-    fmts = (char **)g_malloc(sizeof(char *) * num_cols);
+    fmts = g_new0(char *, num_cols);
     duration = ((uint64_t)cfile.elapsed_time.secs * UINT64_C(1000000)) +
                 (uint64_t)((cfile.elapsed_time.nsecs + 500) / 1000);
 
@@ -1101,16 +1217,11 @@ iostat_draw(void *arg)
     if (iot->interval == UINT64_MAX)
         interval = duration;
 
-    //int dur_w = dur_mag + (invl_prec == 0 ? 0 : invl_prec+1);
-
-    /* Calc the width of the time interval column (incl borders and padding). */
-    if (invl_prec == 0) {
-        invl_fmt = g_strdup_printf("%%%du", dur_mag);
-        invl_col_w = (2*dur_mag) + 8;
-    } else {
-        invl_fmt = g_strdup_printf("%%%du.%%0%du", dur_mag, invl_prec);
-        invl_col_w = (2*dur_mag) + (2*invl_prec) + 10;
-    }
+    /* This is the max width of a duration. */
+    int dur_w = dur_mag + (invl_prec == 0 ? 0 : invl_prec+1);
+    /* Add a space on the side, and make sure the width is at least as wide
+     * as "Dur". ("Dur" does not need a space between it and "|".) */
+    dur_w = MAX(dur_w + 1, 3);
 
     /* Update the width of the time interval column if date is shown */
     switch (timestamp_get_type()) {
@@ -1121,12 +1232,13 @@ iostat_draw(void *arg)
         // We don't show more than 6 fractional digits (+Z) currently.
         // NSTIME_ISO8601_BUFSIZE is enough room for 9 frac digits + Z + '\0'
         // That's 4 extra characters, which leaves room for the "|  |".
-        invl_col_w = MAX(invl_col_w, NSTIME_ISO8601_BUFSIZE + invl_prec - 6);
+        invl_col_w = NSTIME_ISO8601_BUFSIZE + invl_prec - 6;
         break;
 
     default:
-        // Make it as least as twice as wide as "> Dur|" for the final interval
-        invl_col_w = MAX(invl_col_w, 12);
+        /* Calc the width of the time interval column (incl borders and padding,
+         * which are "|" and " <" on each side.) */
+        invl_col_w = 2*(dur_w + 3);
         break;
     }
 
@@ -1165,10 +1277,6 @@ iostat_draw(void *arg)
     iostat_draw_header_row(borderlen, iot, col_w, invl_col_w, tabrow_w);
 
     t = 0;
-    if (invl_prec == 0 && dur_mag == 1)
-        full_fmt = g_strconcat("|  ", invl_fmt, " <> ", invl_fmt, "  |", NULL);
-    else
-        full_fmt = g_strconcat("| ", invl_fmt, " <> ", invl_fmt, " |", NULL);
 
     if (interval == 0 || duration == 0) {
         num_rows = 0;
@@ -1192,173 +1300,54 @@ iostat_draw(void *arg)
 
         /* Compute the interval for this row */
         if (!last_row) {
-            invl_end = t + interval;
+            real_invl = interval;
         } else {
-            invl_end = duration;
+            real_invl = duration - t;
         }
 
         /* Patch for Absolute Time */
         /* XXX - has a Y2.038K problem with 32-bit time_t */
         nstime_t the_time = NSTIME_INIT_SECS_USECS(t / 1000000, t % 1000000);
-        nstime_add(&the_time, &iot->start_time);
 
         /* Display the interval for this row */
+        /* Get the string representing the start time of this interval. */
+        fill_start_time(iot, &the_time, invl_prec, time_buf);
+        /* Now add the surrounding column information according to our
+         * output format (currently, only text table is supported.) */
         switch (timestamp_get_type()) {
-        case TS_ABSOLUTE:
-          fill_abs_time(&the_time, time_buf, io_decimal_point, invl_prec, true);
-          // invl_col_w includes the "|  |"
-          printf("| %-*s |", invl_col_w - 4, time_buf);
-          break;
-
-        case TS_ABSOLUTE_WITH_YMD:
-          format_nstime_as_iso8601(time_buf, NSTIME_ISO8601_BUFSIZE, &the_time,
-            io_decimal_point, true, invl_prec);
-          printf("| %-*s |", invl_col_w - 4, time_buf);
-          break;
-
-        case TS_ABSOLUTE_WITH_YDOY:
-          fill_abs_ydoy_time(&the_time, time_buf, io_decimal_point, invl_prec, true);
-          printf("| %-*s |", invl_col_w - 4, time_buf);
-          break;
-
-        case TS_UTC:
-          fill_abs_time(&the_time, time_buf, io_decimal_point, invl_prec, false);
-          printf("| %-*s |", invl_col_w - 4, time_buf);
-          break;
-
-        case TS_UTC_WITH_YMD:
-          format_nstime_as_iso8601(time_buf, NSTIME_ISO8601_BUFSIZE, &the_time,
-            io_decimal_point, false, invl_prec);
-          printf("| %-*s |", invl_col_w - 4, time_buf);
-          break;
-
-        case TS_UTC_WITH_YDOY:
-          fill_abs_ydoy_time(&the_time, time_buf, io_decimal_point, invl_prec, false);
-          printf("| %-*s |", invl_col_w - 4, time_buf);
-          break;
 
         case TS_RELATIVE:
         case TS_NOT_SET:
-          if (invl_prec == 0) {
-              if (last_row) {
-                  int maxw;
-                  maxw = dur_mag >= 3 ? dur_mag+1 : 3;
-                  g_free(full_fmt);
-                  full_fmt = g_strdup_printf("| %s%s <> %%-%ds|",
-                                            dur_mag == 1 ? " " : "",
-                                            invl_fmt, maxw);
-                  printf(full_fmt, (uint32_t)(t/UINT64_C(1000000)), "Dur");
-              } else {
-                  printf(full_fmt, (uint32_t)(t/UINT64_C(1000000)),
-                         (uint32_t)(invl_end/UINT64_C(1000000)));
-              }
-          } else {
-              printf(full_fmt, (uint32_t)(t/UINT64_C(1000000)),
-                     (uint32_t)(t%UINT64_C(1000000) / dv),
-                     (uint32_t)(invl_end/UINT64_C(1000000)),
-                     (uint32_t)(invl_end%UINT64_C(1000000) / dv));
-          }
-          break;
-     /* case TS_DELTA:
-        case TS_DELTA_DIS:
-        case TS_EPOCH:
-            are not implemented */
+            /* For relative times, we show both ends of the interval. */
+            printf("|%*s <", dur_w, time_buf);
+            if (invl_prec == 0 && last_row) {
+                g_strlcpy(time_buf, "Dur", NSTIME_ISO8601_BUFSIZE);
+            } else {
+                nstime_add(&the_time, &invl_time);
+                display_signed_time(time_buf, NSTIME_ISO8601_BUFSIZE, &the_time, invl_prec);
+            }
+            printf("> %-*s|", dur_w, time_buf);
+            break;
         default:
-          break;
+            printf("| %-*s |", invl_col_w - 4, time_buf);
+            break;
         }
 
         /* Display stat values in each column for this row */
         for (j=0; j<num_cols; j++) {
             fmt = fmts[j];
             item = item_in_column[j];
-            type = iot->calc_type[j];
 
-            if (item) {
-                switch (type) {
-                case CALC_TYPE_FRAMES:
-                    printf(fmt, item->frames);
-                    break;
-                case CALC_TYPE_BYTES:
-                case CALC_TYPE_COUNT:
-                    printf(fmt, item->counter);
-                    break;
-                case CALC_TYPE_FRAMES_AND_BYTES:
-                    printf(fmt, item->frames, item->counter);
-                    break;
+            /* To try to optimize speed, we could copy the value string with
+             * snprintf into a pre-allocated buffer with the maximum column
+             * width, which we determined (though that's more error-prone.)
+             */
+            char *value = iostat_get_item_value(iot, item, fmt, j, real_invl);
+            printf(" %s |", value);
+            g_free(value);
 
-                case CALC_TYPE_SUM:
-                case CALC_TYPE_MIN:
-                case CALC_TYPE_MAX:
-                    ftype = proto_registrar_get_ftype(iot->hf_indexes[j]);
-                    switch (ftype) {
-                    case FT_FLOAT:
-                        printf(fmt, item->float_counter);
-                        break;
-                    case FT_DOUBLE:
-                        printf(fmt, item->double_counter);
-                        break;
-                    case FT_RELATIVE_TIME:
-                        item->counter = (item->counter + UINT64_C(500)) / UINT64_C(1000);
-                        printf(fmt,
-                               (int)(item->counter/UINT64_C(1000000)),
-                               (int)(item->counter%UINT64_C(1000000)));
-                        break;
-                    default:
-                        printf(fmt, item->counter);
-                        break;
-                    }
-                    break;
-
-                case CALC_TYPE_AVG:
-                    num = item->num;
-                    if (num == 0)
-                        num = 1;
-                    ftype = proto_registrar_get_ftype(iot->hf_indexes[j]);
-                    switch (ftype) {
-                    case FT_FLOAT:
-                        printf(fmt, item->float_counter/num);
-                        break;
-                    case FT_DOUBLE:
-                        printf(fmt, item->double_counter/num);
-                        break;
-                    case FT_RELATIVE_TIME:
-                        item->counter = ((item->counter / (uint64_t)num) + UINT64_C(500)) / UINT64_C(1000);
-                        printf(fmt,
-                               (int)(item->counter/UINT64_C(1000000)),
-                               (int)(item->counter%UINT64_C(1000000)));
-                        break;
-                    default:
-                        printf(fmt, item->counter / (uint64_t)num);
-                        break;
-                    }
-                    break;
-
-                case CALC_TYPE_LOAD:
-                    ftype = proto_registrar_get_ftype(iot->hf_indexes[j]);
-                    switch (ftype) {
-                    case FT_RELATIVE_TIME:
-                        if (!last_row) {
-                            printf(fmt,
-                                (int) (item->counter/interval),
-                                   (int)((item->counter%interval)*UINT64_C(1000000) / interval));
-                        } else {
-                            printf(fmt,
-                                   (int) (item->counter/(invl_end-t)),
-                                   (int)((item->counter%(invl_end-t))*UINT64_C(1000000) / (invl_end-t)));
-                        }
-                        break;
-                    }
-                    break;
-                }
-
-                if (last_row) {
-                    g_free(fmt);
-                } else {
-                    item_in_column[j] = item_in_column[j]->next;
-                }
-            } else {
-                printf(fmt, (uint64_t)0, (uint64_t)0);
-            }
+            if (item)
+                item_in_column[j] = item_in_column[j]->next;
         }
         if (tabrow_w < borderlen) {
             printf("%*s", borderlen - tabrow_w, "|");
@@ -1372,8 +1361,9 @@ iostat_draw(void *arg)
     }
     printf("\n");
     g_free(col_w);
-    g_free(invl_fmt);
-    g_free(full_fmt);
+    for (i=0; i<num_cols; ++i) {
+        g_free(fmts[i]);
+    }
     g_free(fmts);
     g_free(stat_cols);
     g_free(item_in_column);
@@ -1397,7 +1387,7 @@ iostat_reset(void *arg)
     }
 }
 
-/* Our listeneer is being removed, free our memory. */
+/* Our listener is being removed, free our memory. */
 static void
 iostat_finish(void *arg)
 {

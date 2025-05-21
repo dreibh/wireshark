@@ -1,4 +1,4 @@
-/* byte_view_tab.cpp
+/* data_source_tab.cpp
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -7,7 +7,7 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "byte_view_tab.h"
+#include "data_source_tab.h"
 
 #include <QApplication>
 #include <QClipboard>
@@ -22,14 +22,14 @@
 
 #include <ui/qt/main_window.h>
 #include <ui/qt/utils/variant_pointer.h>
-#include <ui/qt/widgets/byte_view_text.h>
+#include <ui/qt/widgets/hex_data_source_view.h>
 #include <ui/qt/widgets/json_data_source_view.h>
 
 // To do:
 // - We might want to add a callback to free_data_sources in so that we
 //   don't have to blindly call clear().
 
-ByteViewTab::ByteViewTab(QWidget *parent, epan_dissect_t *edt_fixed) :
+DataSourceTab::DataSourceTab(QWidget *parent, epan_dissect_t *edt_fixed) :
     QTabWidget(parent),
     cap_file_(0),
     is_fixed_packet_(edt_fixed != NULL),
@@ -49,34 +49,34 @@ ByteViewTab::ByteViewTab(QWidget *parent, epan_dissect_t *edt_fixed) :
     setMinimumSize(one_em, one_em);
 
     if (!edt_fixed) {
-        connect(mainApp, &MainApplication::appInitialized, this, &ByteViewTab::connectToMainWindow);
+        connect(mainApp, &MainApplication::appInitialized, this, &DataSourceTab::connectToMainWindow);
     }
 }
 
 // Connects the byte view with the main window, acting on changes to the packet
 // list selection. It MUST NOT be used with the packet dialog as that is
 // independent of the selection in the packet list.
-void ByteViewTab::connectToMainWindow()
+void DataSourceTab::connectToMainWindow()
 {
-    connect(this, &ByteViewTab::fieldSelected, mainApp->mainWindow(), &MainWindow::fieldSelected);
-    connect(this, &ByteViewTab::fieldHighlight, mainApp->mainWindow(), &MainWindow::fieldHighlight);
+    connect(this, &DataSourceTab::fieldSelected, mainApp->mainWindow(), &MainWindow::fieldSelected);
+    connect(this, &DataSourceTab::fieldHighlight, mainApp->mainWindow(), &MainWindow::fieldHighlight);
 
     /* Connect change of packet selection */
-    connect(mainApp->mainWindow(), &MainWindow::framesSelected, this, &ByteViewTab::ByteViewTab::selectedFrameChanged);
-    connect(mainApp->mainWindow(), &MainWindow::setCaptureFile, this, &ByteViewTab::setCaptureFile);
-    connect(mainApp->mainWindow(), &MainWindow::fieldSelected, this, &ByteViewTab::selectedFieldChanged);
+    connect(mainApp->mainWindow(), &MainWindow::framesSelected, this, &DataSourceTab::DataSourceTab::selectedFrameChanged);
+    connect(mainApp->mainWindow(), &MainWindow::setCaptureFile, this, &DataSourceTab::setCaptureFile);
+    connect(mainApp->mainWindow(), &MainWindow::fieldSelected, this, &DataSourceTab::selectedFieldChanged);
 
-    connect(mainApp->mainWindow(), &MainWindow::captureActive, this, &ByteViewTab::captureActive);
+    connect(mainApp->mainWindow(), &MainWindow::captureActive, this, &DataSourceTab::captureActive);
 }
 
-void ByteViewTab::captureActive(int cap)
+void DataSourceTab::captureActive(int cap)
 {
     if (cap == 0)
     {
-        QList<ByteViewText *> allBVTs = findChildren<ByteViewText *>();
+        QList<HexDataSourceView *> allBVTs = findChildren<HexDataSourceView *>();
         if (allBVTs.count() > 0)
         {
-            ByteViewText * bvt = allBVTs.at(0);
+            HexDataSourceView * bvt = allBVTs.at(0);
             tvbuff_t * stored = bvt->tvb();
 
             if (! stored)
@@ -85,7 +85,7 @@ void ByteViewTab::captureActive(int cap)
     }
 }
 
-void ByteViewTab::addTab(const char *name, const struct data_source *source)
+void DataSourceTab::addTab(const char *name, const struct data_source *source)
 {
 
     if (count() == 1) { // Remove empty placeholder.
@@ -125,7 +125,7 @@ void ByteViewTab::addTab(const char *name, const struct data_source *source)
             encoding = (packet_char_enc)cap_file_->current_frame->encoding;
         }
 
-        data_source_view = new ByteViewText(data, encoding, this);
+        data_source_view = new HexDataSourceView(data, encoding, this);
     }
     }
 
@@ -144,7 +144,7 @@ void ByteViewTab::addTab(const char *name, const struct data_source *source)
         // there is no free_cb (a free_cb implies the data is freed at the
         // same time as the tvb, i.e. when leaving the packet.)
         if (is_fixed_packet_ && count() > 0) {
-            connect(this, &ByteViewTab::detachData, data_source_view, &BaseDataSourceView::detachData);
+            connect(this, &DataSourceTab::detachData, data_source_view, &BaseDataSourceView::detachData);
         }
         // See above - this tvb is (expected to be) scoped to the packet, but
         // the real data is not necessarily so. If this is a PacketDialog
@@ -154,20 +154,20 @@ void ByteViewTab::addTab(const char *name, const struct data_source *source)
         // proto_find_field_from_offset() is OK. See #14363.
         //
         // XXX: It sounds appealing to clone the secondary data source tvbs
-        // and set them to be freed when the byte_view_text is freed, perhaps
+        // and set them to be freed when the hex_data_source_view is freed, perhaps
         // even doing so only when the capture file is closing. However, while
         // relatively simple for the few number of secondary data sources, it
         // would be a pain to change the pointers for every field_info.
         data_source_view->setTvb(tvb);
 
         connect(mainApp, &MainApplication::zoomMonospaceFont, data_source_view, &BaseDataSourceView::setMonospaceFont);
-        connect(data_source_view, &ByteViewText::byteSelected, this, &ByteViewTab::byteViewTextMarked);
+        connect(data_source_view, &HexDataSourceView::byteSelected, this, &DataSourceTab::byteViewTextMarked);
 
-        if (ByteViewText *byte_view_text = qobject_cast<ByteViewText *>(data_source_view)) {
-            connect(byte_view_text, &ByteViewText::byteHovered, this, &ByteViewTab::byteViewTextHovered);
-            connect(byte_view_text, &ByteViewText::byteViewSettingsChanged, this, &ByteViewTab::byteViewSettingsChanged);
-            connect(this, &ByteViewTab::byteViewSettingsChanged, byte_view_text, &ByteViewText::updateByteViewSettings);
-            connect(this, &ByteViewTab::byteViewUnmarkField, byte_view_text, &ByteViewText::unmarkField);
+        if (HexDataSourceView *hex_data_source_view = qobject_cast<HexDataSourceView *>(data_source_view)) {
+            connect(hex_data_source_view, &HexDataSourceView::byteHovered, this, &DataSourceTab::byteViewTextHovered);
+            connect(hex_data_source_view, &HexDataSourceView::byteViewSettingsChanged, this, &DataSourceTab::byteViewSettingsChanged);
+            connect(this, &DataSourceTab::byteViewSettingsChanged, hex_data_source_view, &HexDataSourceView::updateByteViewSettings);
+            connect(this, &DataSourceTab::byteViewUnmarkField, hex_data_source_view, &HexDataSourceView::unmarkField);
         }
     }
 
@@ -177,7 +177,7 @@ void ByteViewTab::addTab(const char *name, const struct data_source *source)
     QTabWidget::setTabToolTip(idx, name);
 }
 
-void ByteViewTab::byteViewTextHovered(int idx)
+void DataSourceTab::byteViewTextHovered(int idx)
 {
     if (idx >= 0 && edt_)
     {
@@ -201,7 +201,7 @@ void ByteViewTab::byteViewTextHovered(int idx)
     emit fieldHighlight((FieldInformation *)0);
 }
 
-void ByteViewTab::byteViewTextMarked(int idx)
+void DataSourceTab::byteViewTextMarked(int idx)
 {
     if (idx >= 0 && edt_)
     {
@@ -224,7 +224,7 @@ void ByteViewTab::byteViewTextMarked(int idx)
     emit fieldSelected((FieldInformation *)0);
 }
 
-BaseDataSourceView *ByteViewTab::findDataSourceViewForTvb(tvbuff_t * search_tvb, int * idx)
+BaseDataSourceView *DataSourceTab::findDataSourceViewForTvb(tvbuff_t * search_tvb, int * idx)
 {
     if (! search_tvb) {
         return nullptr;
@@ -251,24 +251,24 @@ BaseDataSourceView *ByteViewTab::findDataSourceViewForTvb(tvbuff_t * search_tvb,
     return item;
 }
 
-void ByteViewTab::tabInserted(int tab_index) {
+void DataSourceTab::tabInserted(int tab_index) {
     setTabsVisible();
     QTabWidget::tabInserted(tab_index);
 }
 
-void ByteViewTab::tabRemoved(int tab_index) {
+void DataSourceTab::tabRemoved(int tab_index) {
     setTabsVisible();
     QTabWidget::tabRemoved(tab_index);
 }
 
-void ByteViewTab::setTabsVisible() {
+void DataSourceTab::setTabsVisible() {
     if (count() > 1)
         tabBar()->show();
     else
         tabBar()->hide();
 }
 
-void ByteViewTab::selectedFrameChanged(QList<int> frames)
+void DataSourceTab::selectedFrameChanged(QList<int> frames)
 {
     clear();
     qDeleteAll(findChildren<BaseDataSourceView *>());
@@ -312,7 +312,7 @@ void ByteViewTab::selectedFrameChanged(QList<int> frames)
     setCurrentIndex(0);
 }
 
-void ByteViewTab::selectedFieldChanged(FieldInformation *selected)
+void DataSourceTab::selectedFieldChanged(FieldInformation *selected)
 {
     // We need to handle both selection and deselection.
     BaseDataSourceView * data_source_view = qobject_cast<BaseDataSourceView *>(currentWidget());
@@ -363,7 +363,7 @@ void ByteViewTab::selectedFieldChanged(FieldInformation *selected)
         emit byteViewUnmarkField();
     }
 }
-void ByteViewTab::highlightedFieldChanged(FieldInformation *highlighted)
+void DataSourceTab::highlightedFieldChanged(FieldInformation *highlighted)
 {
     BaseDataSourceView * data_source_view = qobject_cast<BaseDataSourceView *>(currentWidget());
     if (!highlighted || !data_source_view) {
@@ -387,14 +387,14 @@ void ByteViewTab::highlightedFieldChanged(FieldInformation *highlighted)
     data_source_view->markAppendix(-1, -1);
 }
 
-void ByteViewTab::setCaptureFile(capture_file *cf)
+void DataSourceTab::setCaptureFile(capture_file *cf)
 {
     selectedFrameChanged(QList<int>());
 
     cap_file_ = cf;
 }
 
-void ByteViewTab::captureFileClosing()
+void DataSourceTab::captureFileClosing()
 {
     emit detachData();
 }

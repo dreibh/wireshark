@@ -19,7 +19,6 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/additional_toolbar.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/apply_line_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/base_data_source_view.h
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/byte_view_text.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_combo.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/clickable_label.h
@@ -39,6 +38,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_expression_toolbar.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/find_line_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/follow_stream_text.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/hex_data_source_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/interface_toolbar_lineedit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/json_data_source_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/label_stack.h
@@ -144,7 +144,6 @@ set(WIRESHARK_QT_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/about_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/accordion_frame.h
 	${CMAKE_SOURCE_DIR}/ui/qt/address_editor_frame.h
-	${CMAKE_SOURCE_DIR}/ui/qt/byte_view_tab.h
 	${CMAKE_SOURCE_DIR}/ui/qt/capture_comment_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/capture_file_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/capture_file_properties_dialog.h
@@ -159,6 +158,7 @@ set(WIRESHARK_QT_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/conversation_colorize_action.h
 	${CMAKE_SOURCE_DIR}/ui/qt/conversation_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/conversation_hash_tables_dialog.h
+	${CMAKE_SOURCE_DIR}/ui/qt/data_source_tab.h
 	${CMAKE_SOURCE_DIR}/ui/qt/decode_as_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/display_filter_expression_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/dissector_tables_dialog.h
@@ -262,7 +262,6 @@ set (STRATOSHARK_QT_HEADERS
 set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/additional_toolbar.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/apply_line_edit.cpp
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/byte_view_text.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_combo.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/clickable_label.cpp
@@ -282,6 +281,7 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_expression_toolbar.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/find_line_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/follow_stream_text.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/hex_data_source_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/interface_toolbar_lineedit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/json_data_source_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/label_stack.cpp
@@ -381,7 +381,6 @@ set(WIRESHARK_QT_SRC
 	${CMAKE_SOURCE_DIR}/ui/qt/about_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/accordion_frame.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/address_editor_frame.cpp
-	${CMAKE_SOURCE_DIR}/ui/qt/byte_view_tab.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/capture_comment_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/capture_file_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/capture_file_properties_dialog.cpp
@@ -396,6 +395,7 @@ set(WIRESHARK_QT_SRC
 	${CMAKE_SOURCE_DIR}/ui/qt/conversation_colorize_action.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/conversation_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/conversation_hash_tables_dialog.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/data_source_tab.cpp
 	# XXX Required by packet list
 	${CMAKE_SOURCE_DIR}/ui/qt/decode_as_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/display_filter_expression_dialog.cpp

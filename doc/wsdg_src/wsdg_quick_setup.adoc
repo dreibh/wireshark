@@ -94,7 +94,7 @@ The setup script is `tools/rpm-setup.sh`; its options are:
 You must first install Xcode.
 
 As with Windows we provide pre-built third party libraries which will be automatically installed if you set the WIRESHARK_BASE_DIR CMake variable to a directory that is writable by you, such as _wireshark-third-party_ at the same level as your Wireshark source code directory.
-You can alternatiely use two scripts to install the packages and libraries required to build Wireshark and its documentation:
+You can alternatively use two scripts to install the packages and libraries required to build Wireshark and its documentation:
 `tools/macos-setup-brew.sh`, which will use the https://brew.sh/[Homebrew] package manager and `tools/macos-setup.sh`, which will build any required libraries and tools locally, except for Qt 6.
 
 `tools/macos-setup-brew.sh` supports the following options:
@@ -104,7 +104,7 @@ You can alternatiely use two scripts to install the packages and libraries requi
 * `--install-dmg-deps` install packages required to build the .dmg file
 * `--install-sparkle-deps` install the Sparkle automatic updater
 * `--install-all` install everything
-* `--install-stratoshark` install libraries required to build Stratoshark and Falco bridge
+* `--install-stratoshark` install libraries required to build Stratoshark and the Falco Events plugin
 * `[other]` other options are passed as-is to brew
 
 `tools/macos-setup.sh` supports the following options:
@@ -774,7 +774,7 @@ on using the <<ChToolsDebugger, Debugger Tools>>.
 ===== Optional: Create User’s and Developer’s Guide
 
 To build the Wireshark User's Guide and the Wireshark Developer's Guide,
-build the `all_guides` target, e.g.  `msbuild all_guides.vcxproj`.
+build the `all_guides` target, e.g.  `msbuild doc\all_guides.vcxproj`.
 Detailed information to build these guides can be found in the file
 _doc\README.documentation.adoc_ in the Wireshark sources.
 
@@ -956,6 +956,7 @@ This guide assumes `paru` is being used.
   paru -S mingw-w64-cmake
   paru -S mingw-w64-glib2
   paru -S mingw-w64-libgcrypt
+  paru -S mingw-w64-libxml2
   paru -S mingw-w64-c-ares
   paru -S mingw-w64-speexdsp
   paru -S mingw-w64-libpcap
@@ -971,7 +972,6 @@ This guide assumes `paru` is being used.
   paru -S mingw-w64-snappy
   paru -S mingw-w64-opus
   paru -S mingw-w64-opencore-amr
-  paru -S mingw-w64-libxml2
   paru -S mingw-w64-libnghttp2
   paru -S mingw-w64-libssh
   paru -S mingw-w64-minizip

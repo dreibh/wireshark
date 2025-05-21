@@ -68,7 +68,7 @@ pcapng_read_sysdig_event_block(wtap* wth, FILE_T fh, pcapng_block_header_t* bh,
         return false;
     }
 
-    wblock->rec->rec_type = REC_TYPE_SYSCALL;
+    wtap_setup_syscall_rec(wblock->rec);
     wblock->rec->rec_header.syscall_header.record_type = bh->block_type;
     wblock->rec->presence_flags = WTAP_HAS_CAP_LEN /*|WTAP_HAS_INTERFACE_ID */;
     wblock->rec->tsprec = WTAP_TSPREC_NSEC;
@@ -155,7 +155,7 @@ pcapng_read_sysdig_event_block(wtap* wth, FILE_T fh, pcapng_block_header_t* bh,
     // Event data
     // XXX Should we include the event header here? It would ensure that
     // we always have data and avoid the "consumed = 1" workaround in the
-    // Falco Bridge dissector.
+    // Falco Events dissector.
     if (!wtap_read_bytes_buffer(fh, &wblock->rec->data, event_data_len, err, err_info)) {
         return false;
     }

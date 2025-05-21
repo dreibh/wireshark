@@ -1646,7 +1646,7 @@ dissect_cmux_parameter(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
         }
         break;
     case 2:
-        proto_tree_add_item(tree, hf_cmux_port_speed, tvb, offset, parameter_length, ENC_NA | ENC_ASCII);
+        proto_tree_add_item(tree, hf_cmux_port_speed, tvb, offset, parameter_length, ENC_NA);
         break;
     case 3:
         proto_tree_add_uint(tree, hf_cmux_n1, tvb, offset, parameter_length, value);
@@ -1931,6 +1931,7 @@ dissect_csim_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             final_tvb = tvb_new_child_real_data(tvb, final_arr, bytes_count, bytes_count);
             add_new_data_source(pinfo, final_tvb, "GSM SIM payload");
             /* Call GSM SIM dissector*/
+            col_append_str(pinfo->cinfo, COL_INFO, " | ");
             call_dissector_with_data(gsm_sim_handle, final_tvb, pinfo, tree, data);
             break;
     }
@@ -2205,7 +2206,7 @@ dissect_at_command(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 i_char = (unsigned) (at_command - at_stream);
                 if (i_char) {
                     proto_tree_add_item(command_tree, hf_at_ignored, tvb, offset,
-                        i_char, ENC_NA | ENC_ASCII);
+                        i_char, ENC_NA);
                     offset += i_char;
                 }
 

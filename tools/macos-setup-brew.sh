@@ -26,7 +26,7 @@ function print_usage() {
     printf "\\t--install-sparkle-deps: install the Sparkle automatic updater\\n"
     printf "\\t--install-test-deps: install packages required for automated testing\\n"
     printf "\\t--install-all: install everything\\n"
-    printf "\\t--install-stratoshark: install everything to compile Stratoshark and Falco bridge\\n"
+    printf "\\t--install-stratoshark: install everything to compile Stratoshark and the Falco Events plugin\\n"
     printf "\\t[other]: other options are passed as-is to brew\\n"
 }
 
@@ -104,6 +104,7 @@ REQUIRED_LIST=(
     c-ares
     glib
     libgcrypt
+    libxml2
     pcre2
     qt6
     speexdsp
@@ -119,7 +120,6 @@ OPTIONAL_LIST=(
     libnghttp3
     libsmi
     libssh
-    libxml2
     lua
     lz4
     minizip
