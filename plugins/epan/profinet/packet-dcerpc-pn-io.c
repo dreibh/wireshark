@@ -166,9 +166,11 @@ static int hf_pn_RedundancyInfo_reserved;
 static int hf_pn_io_number_of_ARDATAInfo;
 
 static int hf_pn_io_cminitiator_activitytimeoutfactor;
-static int hf_pn_io_cminitiator_udprtport;
+static int hf_pn_io_initiator_udprtport;
 static int hf_pn_io_station_name_length;
 static int hf_pn_io_cminitiator_station_name;
+static int hf_pn_io_cmresponder_station_name;
+
 /* static int hf_pn_io_responder_station_name; */
 static int hf_pn_io_arproperties_StartupMode;
 
@@ -2052,6 +2054,10 @@ static const value_string pn_io_index[] = {
     { 0xF8F1, "PDRsiInstances" },
     { 0xF8F2, "Stream Remove using UNIRemoveStreamReq and UNIRemoveStreamRsp" },
     { 0xF8F3, "Stream Renew using UNIRenewStreamReq and UNIRenewStreamRsp" },
+    { 0xF900, "Security request using CIMSecurityServiceReq and CIMSecurityServiceRsp" },
+    { 0xF901, "CIMDCPService" },
+    { 0xF902, "Read Aurditable Event using CIMAurditableEventServiceReq and CIMAuditableEventServiceRsp" },
+    { 0xF920, "CIMElectricPowerReal" },
     { 0xFBFF, "Trigger index for RPC connection monitoring" },
     /*0xFC00 - 0xFFFF reserved for profiles */
     { 0, NULL }
@@ -3081,7 +3087,7 @@ static const range_string pn_io_credential_id_credential_type[] = {
 static const range_string pn_io_number_of_octets[] = {
     { 0x0000, 0x0000, "Reserved" },
     { 0x0001, 0x0FFF, "Mandatory values" },
-    { 0x1000, 0xFFFF, "Optinal values" },
+    { 0x1000, 0xFFFF, "Optimal values" },
     { 0, 0, NULL }
 };
 
@@ -3616,7 +3622,7 @@ static const range_string pn_io_sack_degradation_threshold[] = {
 
 static const value_string pn_io_security_features_key_pair_generation[] = {
     { 0x0, "Not supported" },
-    { 0x1, "Suported" },
+    { 0x1, "Supported" },
     { 0, NULL }
 };
 
@@ -3625,7 +3631,7 @@ static const range_string pn_io_security_capability_usage[] = {
     { 0x01, 0x01, "Symmetric, authentication only" },
     { 0x02, 0x02, "Symmetric, authentication encryption" },
     { 0x03, 0x03, "Key derivation function" },
-    { 0x04, 0x04, "Key aggreement function" },
+    { 0x04, 0x04, "Key agreement function" },
     { 0x05, 0x05, "Digital signature function" },
     { 0x06, 0xFF, "Reserved" },
     { 0, 0, NULL }
@@ -3673,7 +3679,7 @@ static const range_string pn_io_security_operation[] = {
     { 0x0000, 0x0000, "Reserved" },
     { 0x0001, 0x0001, "Get Security Capabilities" },
     { 0x0002, 0x0002, "Get Available CredentialIDs" },
-    { 0x0003, 0x0003, "Get Security Configuation Parameters" },
+    { 0x0003, 0x0003, "Get Security Configuration Parameters" },
     { 0x0004, 0x0004, "Get EE Certification Path" },
     { 0x0005, 0x0005, "Get Trusted CA Certificate" },
     { 0x0006, 0x0006, "Generate Key Pair And CSR" },
@@ -4703,6 +4709,7 @@ typedef struct {
 }DeviceAccessPointItem;
 
 typedef struct {
+    wmem_allocator_t* scope;
     bool inside_useable_modules;
     bool inside_module_item;
     bool inside_module_list;
@@ -4816,7 +4823,7 @@ static void parser_start_element(GMarkupParseContext* context, const char* eleme
                 state->module_ident_number = (uint32_t)strtoul(attribute_values[i], NULL, 0);
             }
             else if (strcmp(attribute_names[i], "ID") == 0) {
-                state->module_id = g_strdup(attribute_values[i]);
+                state->module_id = wmem_strdup(state->scope, attribute_values[i]);
             }
             else if (strcmp(attribute_names[i], "FixedInSlots") == 0) {
                 state->slot_nr = (uint16_t)strtoul(attribute_values[i], NULL, 0);
@@ -4838,13 +4845,13 @@ static void parser_start_element(GMarkupParseContext* context, const char* eleme
         for (int i = 0; attribute_names[i] != NULL; i++) {
             if (strcmp(attribute_names[i], "TextId") == 0) {
                 if (state->inside_device_access_point_item && !state->inside_virtual_submodul_item) {
-                    state->text_id_DAPI = g_strdup(attribute_values[i]);
+                    state->text_id_DAPI = wmem_strdup(state->scope, attribute_values[i]);
                 }
                 else if (state->inside_virtual_submodul_item && state->inside_device_access_point_item) {
-                    state->text_id_virtual_submodul_item = g_strdup(attribute_values[i]);
+                    state->text_id_virtual_submodul_item = wmem_strdup(state->scope, attribute_values[i]);
                 }
                 else if (!state->inside_virtual_submodul_item && state->inside_module_item) {
-                    state->text_id_module_item= g_strdup(attribute_values[i]);
+                    state->text_id_module_item = wmem_strdup(state->scope, attribute_values[i]);
                 }
                 break;
             }
@@ -4855,18 +4862,18 @@ static void parser_start_element(GMarkupParseContext* context, const char* eleme
     }
     /* ModuleItemRef */
     else if (strcmp(element_name, "ModuleItemRef") == 0 && state->inside_useable_modules) {
-        module_item_ref = wmem_new0(wmem_file_scope(), ModuleItemRef);
+        module_item_ref = wmem_new0(state->scope, ModuleItemRef);
 
         for (int i = 0; attribute_names[i] != NULL; i++) {
             if (strcmp(attribute_names[i], "ModuleItemTarget") == 0) {
-                module_item_ref->module_item_target = g_strdup(attribute_values[i]);
+                module_item_ref->module_item_target = wmem_strdup(state->scope, attribute_values[i]);
             }
 
             else if (strcmp(attribute_names[i], "FixedInSlots") == 0) {
-                module_item_ref->fixed_in_slots = g_strdup(attribute_values[i]);
+                module_item_ref->fixed_in_slots = wmem_strdup(state->scope, attribute_values[i]);
             }
             else if (strcmp(attribute_names[i], "UsedInSlots") == 0) {
-                module_item_ref->used_in_slots = g_strdup(attribute_values[i]);
+                module_item_ref->used_in_slots = wmem_strdup(state->scope, attribute_values[i]);
             }
         }
         wmem_list_append(state->module_item_ref_list, module_item_ref);
@@ -4874,13 +4881,13 @@ static void parser_start_element(GMarkupParseContext* context, const char* eleme
     /* VirtualSubmoduleItem inside DAPI */
     else if (strcmp(element_name, "VirtualSubmoduleItem") == 0 && state->inside_device_access_point_item) {
         state->inside_virtual_submodul_item = true;
-        virtual_submodule_item = wmem_new0(wmem_file_scope(), VirtualSubmoduleItem);
+        virtual_submodule_item = wmem_new0(state->scope, VirtualSubmoduleItem);
         for (int i = 0; attribute_names[i] != NULL; i++) {
             if (strcmp(attribute_names[i], "SubmoduleIdentNumber") == 0) {
                 virtual_submodule_item->submodule_ident_number = (uint32_t)strtoul(attribute_values[i], NULL, 0);
             }
             else if (strcmp(attribute_names[i], "ID") == 0) {
-                virtual_submodule_item->ID = g_strdup(attribute_values[i]);
+                virtual_submodule_item->ID = wmem_strdup(state->scope, attribute_values[i]);
             }
         }
         wmem_list_append(state->virtual_submodule_item_list, virtual_submodule_item);
@@ -4918,7 +4925,7 @@ static void parser_start_element(GMarkupParseContext* context, const char* eleme
         state->inside_module_item = true;
         for (int i = 0; attribute_names[i] != NULL; i++) {
             if (strcmp(attribute_names[i], "ID") == 0) {
-                state->module_id = g_strdup(attribute_values[i]);
+                state->module_id = wmem_strdup(state->scope, attribute_values[i]);
             }
             else if (strcmp(attribute_names[i], "ModuleIdentNumber") == 0) {
                 state->module_ident_number = (uint32_t)strtoul(attribute_values[i], NULL, 0);
@@ -4947,7 +4954,7 @@ static void parser_start_element(GMarkupParseContext* context, const char* eleme
     }
     /* DataItem Input*/
     else if (strcmp(element_name, "DataItem") == 0 && state->inside_input) {
-        dataitem = wmem_new0(wmem_file_scope(), DataItem);
+        dataitem = wmem_new0(state->scope, DataItem);
         dataitem->is_input = true;
         for (int i = 0; attribute_names[i] != NULL; i++) {
             if (strcmp(attribute_names[i], "DataType") == 0) {
@@ -4964,7 +4971,7 @@ static void parser_start_element(GMarkupParseContext* context, const char* eleme
     }
     /* DataItem Output */
     else if (strcmp(element_name, "DataItem") == 0 && state->inside_output) {
-        dataitem = wmem_new0(wmem_file_scope(), DataItem);
+        dataitem = wmem_new0(state->scope, DataItem);
         dataitem->is_output = true;
         for (int i = 0; attribute_names[i] != NULL; i++) {
             if (strcmp(attribute_names[i], "DataType") == 0) {
@@ -5002,18 +5009,18 @@ static void parser_start_element(GMarkupParseContext* context, const char* eleme
                 ModuleItem* module_item = (ModuleItem*)wmem_list_frame_data(module_item_frame);
                 if (module_item != NULL && module_item->text_id != NULL) {
                     if (strcmp(module_item->text_id, text_id) == 0) {
-                        module_item->moduleNameStr = g_strdup(value);
+                        module_item->moduleNameStr = wmem_strdup(state->scope, value);
                     }
                 }
             }
             if (state->device_access_point_item != NULL && state->device_access_point_item->text_id != NULL) {
                 if (strcmp(state->device_access_point_item->text_id, text_id) == 0) {
-                    state->device_access_point_item->moduleNameStr = g_strdup(value);
+                    state->device_access_point_item->moduleNameStr = wmem_strdup(state->scope, value);
                 }
             }
             if (state->text_id_virtual_submodul_item != NULL) {
                 if (strcmp(state->text_id_virtual_submodul_item, text_id) == 0) {
-                    state->module_name = g_strdup(value);
+                    state->module_name = wmem_strdup(state->scope, value);
                 }
             }
         }
@@ -5039,14 +5046,14 @@ static void parser_end_element(GMarkupParseContext* context, const char* element
     }
     /* Creates SystemDefinedSubmodule as InterfaceSubmoduleItem */
     else if (strcmp(element_name, "InterfaceSubmoduleItem") == 0) {
-        SystemDefinedSubmodule* interface_submodule_item = wmem_new0(wmem_file_scope(), SystemDefinedSubmodule);
+        SystemDefinedSubmodule* interface_submodule_item = wmem_new0(state->scope, SystemDefinedSubmodule);
         interface_submodule_item->submodule_ident_number = state->submodule_ident_number;
         interface_submodule_item->subslot_number = state->subslot_number;
         wmem_list_append(state->system_defined_submodule_list, interface_submodule_item);
     }
     /* Creates SystemDefinedSubmodule as PortSubmoduleItem */
     else if (strcmp(element_name, "PortSubmoduleItem") == 0) {
-        SystemDefinedSubmodule* port_submodule_item = wmem_new0(wmem_file_scope(), SystemDefinedSubmodule);
+        SystemDefinedSubmodule* port_submodule_item = wmem_new0(state->scope, SystemDefinedSubmodule);
         port_submodule_item->submodule_ident_number = state->submodule_ident_number;
         port_submodule_item->subslot_number = state->subslot_number;
         wmem_list_append(state->system_defined_submodule_list, port_submodule_item);
@@ -5057,14 +5064,14 @@ static void parser_end_element(GMarkupParseContext* context, const char* element
     /* Creates DeviceAccessPointItem*/
     else if (strcmp(element_name, "DeviceAccessPointItem") == 0)
     {
-        state->device_access_point_item = wmem_new0(wmem_file_scope(), DeviceAccessPointItem);
+        state->device_access_point_item = wmem_new0(state->scope, DeviceAccessPointItem);
         state->device_access_point_item->ID = state->module_id;
         state->device_access_point_item->text_id = state->text_id_DAPI;
         state->device_access_point_item->module_ident_number = state->module_ident_number;
         state->device_access_point_item->system_defined_submodule_list = state->system_defined_submodule_list;
         state->device_access_point_item->slot_nr = state->slot_nr;
         state->device_access_point_item->subslot_nr = state->subslot_number_DAPI;
-        state->device_access_point_item->moduleNameStr = (char*)wmem_alloc(wmem_file_scope(), MAX_NAMELENGTH);
+        state->device_access_point_item->moduleNameStr = (char*)wmem_alloc(state->scope, MAX_NAMELENGTH);
         (void)g_strlcpy(state->device_access_point_item->moduleNameStr, "Unknown", MAX_NAMELENGTH);
 
         /* Get submodule_ident_number for API */
@@ -5093,16 +5100,16 @@ static void parser_end_element(GMarkupParseContext* context, const char* element
     }
     /* Creates and initializes a ModuleItem object */
     else if (strcmp(element_name, "ModuleItem") == 0 && state->inside_module_list) {
-        ModuleItem* module_item = wmem_new0(wmem_file_scope(), ModuleItem);
+        ModuleItem* module_item = wmem_new0(state->scope, ModuleItem);
         module_item->ID = state->module_id;
         module_item->subslot_number = state->module_subslot;
         module_item->module_ident_number = state->module_ident_number;
         module_item->submodule_ident_number = state->submodule_ident_number;
-        module_item->data_items = copy_list(wmem_file_scope(), state->current_data_items);
+        module_item->data_items = copy_list(state->scope, state->current_data_items);
         module_item->has_input = state->has_input;
         module_item->has_output = state->has_output;
         module_item->text_id = state->text_id_module_item;
-        module_item->moduleNameStr = (char*)wmem_alloc(wmem_file_scope(), MAX_NAMELENGTH);
+        module_item->moduleNameStr = (char*)wmem_alloc(state->scope, MAX_NAMELENGTH);
         (void)g_strlcpy(module_item->moduleNameStr, "Unknown", MAX_NAMELENGTH);
         wmem_list_append(state->module_item_list, module_item);
         state->has_output = false;
@@ -5141,7 +5148,7 @@ static void parser_end_element(GMarkupParseContext* context, const char* element
                             }
                         }
                         if (ref->used_in_slots != NULL) {
-                            item->used_in_slots = wmem_list_new(wmem_file_scope());
+                            item->used_in_slots = wmem_list_new(state->scope);
                             token = strtok_sys(ref->used_in_slots, " ", &contextptr);
                             while (token != NULL)
                             {
@@ -5150,7 +5157,7 @@ static void parser_end_element(GMarkupParseContext* context, const char* element
                                         return;
                                     }
                                 }
-                                uint32_t* num = wmem_new(wmem_file_scope(), uint32_t);
+                                uint32_t* num = wmem_new(state->scope, uint32_t);
                                 *num = (uint32_t)strtoul(token, NULL, 0);
                                 wmem_list_append(item->used_in_slots, num);
                                 token = strtok_sys(NULL, " ", &contextptr);
@@ -5246,6 +5253,10 @@ static bool gen_conversations(packet_info *pinfo, uint32_t current_fake_aruuid) 
         ParserConvState state = { 0 };
         state.conversation_address_list = wmem_list_new(pinfo->pool);
         state.scope = pinfo->pool;
+        /* XXX - https://docs.gtk.org/glib/markup.html
+         * "[GMarkup]... must not be used if you expect to parse untrusted
+         * input." This is a user provided file.
+         */
         GMarkupParseContext* context = g_markup_parse_context_new(&parser_manual, 0, &state, NULL);
         fp = ws_fopen(pnio_configpath, "rb");
         if (fp != NULL) {
@@ -5315,11 +5326,12 @@ static void extract_pnio_objects_withoutAR(packet_info* pinfo)
 
     GMarkupParseContext* context;
     ParserState state = { 0 };
-    state.module_item_list = wmem_list_new(wmem_file_scope());
-    state.module_item_ref_list = wmem_list_new(wmem_file_scope());
-    state.current_data_items = wmem_list_new(wmem_file_scope());
-    state.virtual_submodule_item_list = wmem_list_new(wmem_file_scope());
-    state.system_defined_submodule_list = wmem_list_new(wmem_file_scope());
+    state.scope = wmem_file_scope();
+    state.module_item_list = wmem_list_new(state.scope);
+    state.module_item_ref_list = wmem_list_new(state.scope);
+    state.current_data_items = wmem_list_new(state.scope);
+    state.virtual_submodule_item_list = wmem_list_new(state.scope);
+    state.system_defined_submodule_list = wmem_list_new(state.scope);
     GMarkupParser parser = {
     .start_element = parser_start_element,
     .end_element = parser_end_element,
@@ -5381,6 +5393,13 @@ static void extract_pnio_objects_withoutAR(packet_info* pinfo)
         station_info = (stationInfo*)conversation_get_proto_data(conversation, current_fake_aruuid);
         if (station_info != NULL) {
             if (!station_info->filled_with_objects) {
+                /* XXX - Opening a file and parsing it can be slow. We should
+                 * parse it once, saving the state in file scoped memory, and
+                 * then copy data from it to the stationInfo as needed for each
+                 * conversation. (If not, the parser state could generally be
+                 * in pinfo->pool scoped memory, and the necessary data copied
+                 * to the file scoped stationInfo.)
+                 */
                 if (extraction_file[0] != '\0') {   /* check the length of the given networkpath (array overflow protection) */
                     if (manual_flag) {
                         fileopen = extraction_file;
@@ -5413,6 +5432,11 @@ static void extract_pnio_objects_withoutAR(packet_info* pinfo)
                             buf[fsize] = '\0';
                             fclose(fp);
 
+                            /* XXX - https://docs.gtk.org/glib/markup.html
+                             * "[GMarkup]... must not be used if you expect to
+                             * parse untrusted input." This is a user provided
+                             * file.
+                             */
                             context = g_markup_parse_context_new(&parser, 0, &state, NULL);
                             if (!g_markup_parse_context_parse(context, buf, -1, NULL)) {
                                 g_markup_parse_context_free(context);
@@ -5633,7 +5657,7 @@ static void extract_pnio_objects_withoutAR(packet_info* pinfo)
                                             }
                                         }
                                     }
-                                    /* Reset frameOffset, becouse the creation of output packet objects begins */
+                                    /* Reset frameOffset, because the creation of output packet objects begins */
                                     frameOffset = 0;
 
                                     /* OUTPUT-CR */
@@ -8349,7 +8373,7 @@ dissect_SecurityRequest_block(tvbuff_t* tvb, int offset,
 
             if (u16SecurityOperation >= 0x0004 && u16SecurityOperation <= 0x000B) {
                 /* CredentialID */
-                credential_item = proto_tree_add_item(tree, hf_pn_io_credential_id, tvb, offset, 4, ENC_NA);
+                credential_item = proto_tree_add_item(tree, hf_pn_io_credential_id, tvb, offset, 4, ENC_BIG_ENDIAN);
                 credential_tree = proto_item_add_subtree(credential_item, ett_pn_io_credential_id);
                 dissect_dcerpc_uint32(tvb, offset, pinfo, credential_tree, drep,
                     hf_pn_io_credential_id_credential_type, &u32CredentialIDCredentialType);
@@ -8377,7 +8401,7 @@ dissect_SecurityRequest_block(tvbuff_t* tvb, int offset,
                 //offset = dissect_dcerpc_uint16(tvb, offset, pinfo, tree, drep, hf_pn_io_private_key_length, &u16PrivateKeyLength);
 
                 /* PrivateKey */
-                proto_tree_add_item(tree, hf_pn_io_private_key, tvb, offset, u16PrivateKeyLength, ENC_ASCII);
+                proto_tree_add_item(tree, hf_pn_io_private_key, tvb, offset, u16PrivateKeyLength, ENC_NA);
                 offset += u16PrivateKeyLength;
             }
 
@@ -8403,7 +8427,7 @@ dissect_SecurityRequest_block(tvbuff_t* tvb, int offset,
                //     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, tree, drep, hf_pn_io_certificate_length, &u16CertificateLength);
 
                     /* Certificate */
-                    proto_tree_add_item(tree, hf_pn_io_certificate, tvb, offset, u16CertificateLength, ENC_ASCII);
+                    proto_tree_add_item(tree, hf_pn_io_certificate, tvb, offset, u16CertificateLength, ENC_NA);
                     offset += u16CertificateLength;
 
                     /* Padding */
@@ -8421,14 +8445,14 @@ dissect_SecurityRequest_block(tvbuff_t* tvb, int offset,
             //    offset = dissect_dcerpc_uint16(tvb, offset, pinfo, tree, drep, hf_pn_io_certificate_length, &u16CertificateLength);
 
                 /* Certificate */
-                proto_tree_add_item(tree, hf_pn_io_certificate, tvb, offset, u16CertificateLength, ENC_ASCII);
+                proto_tree_add_item(tree, hf_pn_io_certificate, tvb, offset, u16CertificateLength, ENC_NA);
                 offset += u16CertificateLength;
             }
 
             if (u16SecurityOperation == 0x000C) /* SetSecurityConfigurationParametersReq */
             {
                 /* SecurityConfigurationParameters */
-                configuration_item = proto_tree_add_item(tree, hf_pn_io_security_configuration_parameters, tvb, offset, 8, ENC_NA);
+                configuration_item = proto_tree_add_item(tree, hf_pn_io_security_configuration_parameters, tvb, offset, 8, ENC_BIG_ENDIAN);
                 configuration_tree = proto_item_add_subtree(configuration_item, ett_pn_io_security_configuration_parameters);
 
                 /* SecurityMode */
@@ -8458,7 +8482,7 @@ dissect_SecurityRequest_block(tvbuff_t* tvb, int offset,
         {
             /* SAMRequestData */
             tvbuff_t *eap_tvb;
-            // Get EAP Data lentgth
+            // Get EAP Data length
             uint16_t length = tvb_get_uint16(tvb, offset+2, ENC_BIG_ENDIAN);
             eap_tvb = tvb_new_subset_length(tvb, offset, length);
             if ((eap_tvb != NULL) && eap_handle != NULL){
@@ -8534,7 +8558,7 @@ dissect_SecurityResponse_block(tvbuff_t* tvb, int offset,
             {
             case(0x0001): /* GetSecurityCapabilitiesRsp */
                 /* SecurityFeatures */
-                features_item = proto_tree_add_item(tree, hf_pn_io_security_features, tvb, offset, 2, ENC_NA);
+                features_item = proto_tree_add_item(tree, hf_pn_io_security_features, tvb, offset, 2, ENC_BIG_ENDIAN);
                 features_tree = proto_item_add_subtree(features_item, ett_pn_io_security_features);
 
                 dissect_dcerpc_uint16(tvb, offset, pinfo, features_tree, drep, hf_pn_io_security_features_key_pair_generation, &u16KeyPairGeneration);
@@ -8548,7 +8572,7 @@ dissect_SecurityResponse_block(tvbuff_t* tvb, int offset,
                 while (u16NumberOfEntries--)
                 {
                     /* SecurityCapability */
-                    capability_item = proto_tree_add_item(tree, hf_pn_io_security_capability, tvb, offset, 2, ENC_NA);
+                    capability_item = proto_tree_add_item(tree, hf_pn_io_security_capability, tvb, offset, 2, ENC_BIG_ENDIAN);
                     capability_tree = proto_item_add_subtree(capability_item, ett_pn_io_security_capability);
                     dissect_dcerpc_uint16(tvb, offset, pinfo, capability_item, drep, hf_pn_io_security_capability_usage, &u16SecurityCapabilityUsage);
                     u16SecurityCapabilityUsage &= 0xF;
@@ -8594,7 +8618,7 @@ dissect_SecurityResponse_block(tvbuff_t* tvb, int offset,
                 while (u16NumberOfEntries--)
                 {
                     /* CredentialID */
-                    credential_item = proto_tree_add_item(tree, hf_pn_io_credential_id, tvb, offset, 4, ENC_NA);
+                    credential_item = proto_tree_add_item(tree, hf_pn_io_credential_id, tvb, offset, 4, ENC_BIG_ENDIAN);
                     credential_tree = proto_item_add_subtree(credential_item, ett_pn_io_credential_id);
                     dissect_dcerpc_uint32(tvb, offset, pinfo, credential_tree, drep,
                         hf_pn_io_credential_id_credential_type, &u32CredentialIDCredentialType);
@@ -8606,7 +8630,7 @@ dissect_SecurityResponse_block(tvbuff_t* tvb, int offset,
                 break;
             case(0x0003): /* GetSecurityConfigurationParametersRsp */
                 /* SecurityConfigurationParameters */
-                configuration_item = proto_tree_add_item(tree, hf_pn_io_security_configuration_parameters, tvb, offset, 8, ENC_NA);
+                configuration_item = proto_tree_add_item(tree, hf_pn_io_security_configuration_parameters, tvb, offset, 8, ENC_BIG_ENDIAN);
                 configuration_tree = proto_item_add_subtree(configuration_item, ett_pn_io_security_configuration_parameters);
 
                 /* SecurityMode */
@@ -8650,7 +8674,7 @@ dissect_SecurityResponse_block(tvbuff_t* tvb, int offset,
                     offset += 2;
 
                     /* Certificate */
-                    proto_tree_add_item(tree, hf_pn_io_certificate, tvb, offset, u16CertificateLength, ENC_ASCII);
+                    proto_tree_add_item(tree, hf_pn_io_certificate, tvb, offset, u16CertificateLength, ENC_NA);
                     offset += u16CertificateLength;
 
                     /* Padding */
@@ -8665,7 +8689,7 @@ dissect_SecurityResponse_block(tvbuff_t* tvb, int offset,
                 offset += 2;
 
                 /* Certificate */
-                proto_tree_add_item(tree, hf_pn_io_certificate, tvb, offset, u16CertificateLength, ENC_ASCII);
+                proto_tree_add_item(tree, hf_pn_io_certificate, tvb, offset, u16CertificateLength, ENC_NA);
                 offset += u16CertificateLength;
                 break;
             case(0x0006): // GenerateKeyPairAndCSRRsp
@@ -8696,7 +8720,7 @@ dissect_SecurityResponse_block(tvbuff_t* tvb, int offset,
             /* SAMResponseData */
             tvbuff_t *eap_tvb;
 
-            // Get EAP Data lentgth
+            // Get EAP Data length
             uint16_t length = tvb_get_uint16(tvb, offset+2, ENC_BIG_ENDIAN);
             eap_tvb = tvb_new_subset_length(tvb, offset, length);
             if ((eap_tvb != NULL) && eap_handle != NULL){
@@ -10432,7 +10456,7 @@ dissect_CIMNetConfDataReal_block(tvbuff_t* tvb, int offset,
     offset_diff = offset - offset_begin;
     if (u16BodyLength != offset_diff) {
         /* TrafficClassTranslationEntry */
-        sub_item = proto_tree_add_item(tree, hf_pn_io_traffic_class_translate_entry, tvb, offset, 4, ENC_NA);
+        sub_item = proto_tree_add_item(tree, hf_pn_io_traffic_class_translate_entry, tvb, offset, 4, ENC_BIG_ENDIAN);
         sub_tree = proto_item_add_subtree(sub_item, ett_pn_io_traffic_class_translate_entry);
 
         /* TrafficClassTranslationEntry.VID */
@@ -10570,7 +10594,7 @@ dissect_CIMNetConfDataAdjust_block(tvbuff_t* tvb, int offset,
     offset_diff = offset - offset_begin;
     if (u16BodyLength != offset_diff) {
         /* TrafficClassTranslationEntry */
-        sub_item = proto_tree_add_item(tree, hf_pn_io_traffic_class_translate_entry, tvb, offset, 4, ENC_NA);
+        sub_item = proto_tree_add_item(tree, hf_pn_io_traffic_class_translate_entry, tvb, offset, 4, ENC_BIG_ENDIAN);
         sub_tree = proto_item_add_subtree(sub_item, ett_pn_io_traffic_class_translate_entry);
 
         /* TrafficClassTranslationEntry.VID */
@@ -10903,7 +10927,7 @@ dissect_CIMNetConfUploadNetworkAttributes_block(tvbuff_t* tvb, int offset,
     offset = dissect_a_block(tvb, offset, pinfo, tree, drep);
 
     /* SupportedBurstSize */
-    sub_item = proto_tree_add_item(tree, hf_pn_io_supported_burst_size, tvb, offset, 4, ENC_NA);
+    sub_item = proto_tree_add_item(tree, hf_pn_io_supported_burst_size, tvb, offset, 8, ENC_BIG_ENDIAN);
     sub_tree = proto_item_add_subtree(sub_item, ett_pn_io_supported_burst_size);
 
     /* SupportedBurstSize.Frames */
@@ -11120,7 +11144,7 @@ dissect_CIMStationEgressRateLimiter_block(tvbuff_t* tvb, int offset,
         u16NumberofEntries--;
 
         /* PortQueueEgressRateLimiter */
-        sub_item = proto_tree_add_item(tree, hf_pn_io_port_queue_egress_rate_limiter, tvb, offset, 8, ENC_NA);
+        sub_item = proto_tree_add_item(tree, hf_pn_io_port_queue_egress_rate_limiter, tvb, offset, 8, ENC_BIG_ENDIAN);
         sub_tree = proto_item_add_subtree(sub_item, ett_pn_io_port_queue_egress_rate_limiter);
 
         dissect_dcerpc_uint64(tvb, offset, pinfo, sub_tree, &di, drep,
@@ -12371,7 +12395,7 @@ dissect_ARData_block(tvbuff_t *tvb, int offset,
                 offset++;
 
                 offset = dissect_dcerpc_uint16(tvb, offset, pinfo, iocr_tree, drep,
-                                hf_pn_io_cminitiator_udprtport, &u16UDPRTPort);
+                                hf_pn_io_initiator_udprtport, &u16UDPRTPort);
                 offset = dissect_dcerpc_uint16(tvb, offset, pinfo, iocr_tree, drep,
                                 hf_pn_io_cmresponder_udprtport, &u16UDPRTPort);
 
@@ -12436,7 +12460,7 @@ dissect_ARData_block(tvbuff_t *tvb, int offset,
             /* RemoteAlarmReference */
             offset = dissect_dcerpc_uint16(tvb, offset, pinfo, ar_tree, drep, hf_pn_io_remotealarmref, &u16RemoteAlarmReference);
             /* InitiatorUDPRTPort*/
-            offset = dissect_dcerpc_uint16(tvb, offset, pinfo, ar_tree, drep, hf_pn_io_cminitiator_udprtport, &u16UDPRTPort);
+            offset = dissect_dcerpc_uint16(tvb, offset, pinfo, ar_tree, drep, hf_pn_io_initiator_udprtport, &u16UDPRTPort);
             /* ResponderUDPRTPort*/
             offset = dissect_dcerpc_uint16(tvb, offset, pinfo, ar_tree, drep, hf_pn_io_cmresponder_udprtport, &u16UDPRTPort);
             /* CMInitiatorStationName*/
@@ -13675,7 +13699,7 @@ dissect_ARBlockReq_block(tvbuff_t *tvb, int offset,
     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, tree, drep,
                         hf_pn_io_cminitiator_activitytimeoutfactor, &u16TimeoutFactor);   /* XXX - special values */
     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, tree, drep,
-                        hf_pn_io_cminitiator_udprtport, &u16UDPRTPort);
+                        hf_pn_io_initiator_udprtport, &u16UDPRTPort);
     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, tree, drep,
                         hf_pn_io_station_name_length, &u16NameLength);
 
@@ -14211,7 +14235,7 @@ dissect_ARServerBlock(tvbuff_t *tvb, int offset,
     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, tree, drep,
                         hf_pn_io_station_name_length, &u16NameLength);
 
-    proto_tree_add_item (tree, hf_pn_io_cminitiator_station_name, tvb, offset, u16NameLength, ENC_ASCII);
+    proto_tree_add_item (tree, hf_pn_io_cmresponder_station_name, tvb, offset, u16NameLength, ENC_ASCII);
     offset += u16NameLength;
     /* Padding to next 4 byte alignment in this block */
     u16padding = u16BodyLength - (2 + u16NameLength);
@@ -14616,7 +14640,7 @@ dissect_ARAlgorithmInfoBlock_block(tvbuff_t* tvb, int offset,
     offset = dissect_pn_padding(tvb, offset, pinfo, tree, 1);
 
     /* RTCAlgorithm */
-    rtc_item = proto_tree_add_item(tree, hf_pn_io_rtc_algorithm, tvb, offset, 2, ENC_NA);
+    rtc_item = proto_tree_add_item(tree, hf_pn_io_rtc_algorithm, tvb, offset, 2, ENC_BIG_ENDIAN);
     rtc_tree = proto_item_add_subtree(rtc_item, ett_pn_io_rtc_algorithm);
 
     dissect_dcerpc_uint16(tvb, offset, pinfo, rtc_tree, drep, hf_pn_io_security_capability_usage, &u16SecurityCapabilityUsage);
@@ -14626,7 +14650,7 @@ dissect_ARAlgorithmInfoBlock_block(tvbuff_t* tvb, int offset,
     u16SecurityCapabilityAlgorithm >>= 8;
 
     /* RTAAlgorithm */
-    rta_item = proto_tree_add_item(tree, hf_pn_io_rta_algorithm, tvb, offset, 2, ENC_NA);
+    rta_item = proto_tree_add_item(tree, hf_pn_io_rta_algorithm, tvb, offset, 2, ENC_BIG_ENDIAN);
     rta_tree = proto_item_add_subtree(rta_item, ett_pn_io_rta_algorithm);
 
     dissect_dcerpc_uint16(tvb, offset, pinfo, rta_tree, drep, hf_pn_io_security_capability_usage, &u16SecurityCapabilityUsage);
@@ -14636,7 +14660,7 @@ dissect_ARAlgorithmInfoBlock_block(tvbuff_t* tvb, int offset,
     u16SecurityCapabilityAlgorithm >>= 8;
 
     /* RPCAlgorithm */
-    rpc_item = proto_tree_add_item(tree, hf_pn_io_rpc_algorithm, tvb, offset, 2, ENC_NA);
+    rpc_item = proto_tree_add_item(tree, hf_pn_io_rpc_algorithm, tvb, offset, 2, ENC_BIG_ENDIAN);
     rpc_tree = proto_item_add_subtree(rpc_item, ett_pn_io_rpc_algorithm);
 
     dissect_dcerpc_uint16(tvb, offset, pinfo, rpc_tree, drep, hf_pn_io_security_capability_usage, &u16SecurityCapabilityUsage);
@@ -14646,7 +14670,7 @@ dissect_ARAlgorithmInfoBlock_block(tvbuff_t* tvb, int offset,
     u16SecurityCapabilityAlgorithm >>= 8;
 
     /* DerivationAlgorithm */
-    derivation_item = proto_tree_add_item(tree, hf_pn_io_derivation_algorithm, tvb, offset, 2, ENC_NA);
+    derivation_item = proto_tree_add_item(tree, hf_pn_io_derivation_algorithm, tvb, offset, 2, ENC_BIG_ENDIAN);
     derivation_tree = proto_item_add_subtree(derivation_item, ett_pn_io_derivation_algorithm);
 
     dissect_dcerpc_uint16(tvb, offset, pinfo, derivation_tree, drep, hf_pn_io_security_capability_usage, &u16SecurityCapabilityUsage);
@@ -14656,7 +14680,7 @@ dissect_ARAlgorithmInfoBlock_block(tvbuff_t* tvb, int offset,
     u16SecurityCapabilityAlgorithm >>= 8;
 
     /* AgreementAlgorithm */
-    agreement_item = proto_tree_add_item(tree, hf_pn_io_agreement_algorithm, tvb, offset, 2, ENC_NA);
+    agreement_item = proto_tree_add_item(tree, hf_pn_io_agreement_algorithm, tvb, offset, 2, ENC_BIG_ENDIAN);
     agreement_tree = proto_item_add_subtree(agreement_item, ett_pn_io_agreement_algorithm);
 
     dissect_dcerpc_uint16(tvb, offset, pinfo, agreement_tree, drep, hf_pn_io_security_capability_usage, &u16SecurityCapabilityUsage);
@@ -14665,8 +14689,8 @@ dissect_ARAlgorithmInfoBlock_block(tvbuff_t* tvb, int offset,
     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, agreement_tree, drep, hf_pn_io_security_capability_algorithm_key_agreement_function, &u16SecurityCapabilityAlgorithm);
     u16SecurityCapabilityAlgorithm >>= 8;
 
-    /* SigatureAlgorithm */
-    signature_item = proto_tree_add_item(tree, hf_pn_io_signature_algorithm, tvb, offset, 2, ENC_NA);
+    /* SignatureAlgorithm */
+    signature_item = proto_tree_add_item(tree, hf_pn_io_signature_algorithm, tvb, offset, 2, ENC_BIG_ENDIAN);
     signature_tree = proto_item_add_subtree(signature_item, ett_pn_io_signature_algorithm);
 
     dissect_dcerpc_uint16(tvb, offset, pinfo, signature_tree, drep, hf_pn_io_security_capability_usage, &u16SecurityCapabilityUsage);
@@ -15857,9 +15881,9 @@ dissect_block(tvbuff_t *tvb, int offset,
     remainingBytes = tvb_reported_length_remaining(tvb, offset);
     if (remainingBytes < 0)
         remainingBytes = 0;
-    if (remainingBytes +2 < u16BodyLength)
+    if (remainingBytes +2 < u16BlockLength)
     {
-        proto_item_append_text(sub_item, " Block_Length: %d greater than remaining Bytes, trying with Blocklen = remaining (%d)", u16BodyLength, remainingBytes);
+        proto_item_append_text(sub_item, " Block_Length: %d greater than remaining Bytes, trying with Blocklen = remaining (%d)", u16BlockLength, remainingBytes);
         u16BodyLength = remainingBytes;
     }
     increment_dissection_depth(pinfo);
@@ -18249,8 +18273,8 @@ proto_register_pn_io (void)
         FT_UINT16, BASE_DEC, NULL, 0x0,
         NULL, HFILL }
     },  /* XXX - special values */
-    { &hf_pn_io_cminitiator_udprtport,
-      { "CMInitiatorUDPRTPort", "pn_io.cminitiator_udprtport",
+    { &hf_pn_io_initiator_udprtport,
+      { "InitiatorUDPRTPort", "pn_io.initiator_udprtport",
         FT_UINT16, BASE_HEX, NULL, 0x0,
         NULL, HFILL }
     },  /* XXX - special values */
@@ -18261,6 +18285,11 @@ proto_register_pn_io (void)
     },
     { &hf_pn_io_cminitiator_station_name,
       { "CMInitiatorStationName", "pn_io.cminitiator_station_name",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }
+    },
+    { &hf_pn_io_cmresponder_station_name,
+      { "CMResponderStationName", "pn_io.cmresponder_station_name",
         FT_STRING, BASE_NONE, NULL, 0x0,
         NULL, HFILL }
     },
@@ -19570,7 +19599,7 @@ proto_register_pn_io (void)
     },
     { &hf_pn_io_traffic_class_translate_entry_vid,
      { "TrafficClassTranslateEntry.VID", "pn_io.traffic_class_translate_entry_vid",
-       FT_UINT32, BASE_HEX | BASE_RANGE_STRING, RVALS(pn_io_traffic_class_translate_entry_vid_vals), 0x3FFF,
+       FT_UINT32, BASE_HEX | BASE_RANGE_STRING, RVALS(pn_io_traffic_class_translate_entry_vid_vals), 0x00003FFF,
        NULL, HFILL }
     },
     { &hf_pn_io_traffic_class_translate_entry_reserved1,
@@ -19580,7 +19609,7 @@ proto_register_pn_io (void)
     },
     { &hf_pn_io_traffic_class_translate_entry_pcp,
      { "TrafficClassTranslateEntry.PCP", "pn_io.traffic_class_translate_entry_pcp",
-       FT_UINT32, BASE_HEX | BASE_RANGE_STRING, RVALS(pn_io_traffic_class_translate_entry_pcp_vals), 0x70000,
+       FT_UINT32, BASE_HEX | BASE_RANGE_STRING, RVALS(pn_io_traffic_class_translate_entry_pcp_vals), 0x00070000,
        NULL, HFILL }
     },
     { &hf_pn_io_traffic_class_translate_entry_reserved2,
@@ -19995,7 +20024,7 @@ proto_register_pn_io (void)
     },
     { &hf_pn_io_supported_burst_size,
       { "SupportedBurstSize", "pn_io.supported_burst_size",
-        FT_UINT16, BASE_HEX, NULL , 0x0,
+        FT_UINT64, BASE_HEX, NULL , 0x0,
         NULL, HFILL }
     },
     { &hf_pn_io_supported_burst_size_frames,
@@ -21823,7 +21852,7 @@ proto_register_pn_io (void)
     },
     { &hf_pn_io_credential_id,
     { "CredentialID", "pn_io.credential_id",
-        FT_UINT64, BASE_HEX, NULL, 0x0,
+        FT_UINT32, BASE_HEX, NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_pn_io_credential_id_credential_type,
@@ -21838,7 +21867,7 @@ proto_register_pn_io (void)
     },
     { &hf_pn_io_private_key_length,
         { "PrivateKeyLength", "pn_io.private_key_length",
-        FT_UINT16, BASE_DEC, NULL, 0xFFFF,
+        FT_UINT16, BASE_DEC, NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_pn_io_private_key,
@@ -21848,7 +21877,7 @@ proto_register_pn_io (void)
     },
     { &hf_pn_io_certificate_length,
     { "CertificateLength", "pn_io.certificate_length",
-        FT_UINT16, BASE_DEC, NULL, 0xFFFF,
+        FT_UINT16, BASE_DEC, NULL, 0x0,
         NULL, HFILL }
     },
     { &hf_pn_io_certificate,
