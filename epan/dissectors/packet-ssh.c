@@ -96,6 +96,8 @@ typedef struct {
 #define SSH_KEX_DH_GROUP14 0x00030014
 #define SSH_KEX_DH_GROUP16 0x00030016
 #define SSH_KEX_DH_GROUP18 0x00030018
+#define SSH_KEX_SNTRUP761X25519 0x00040000
+#define SSH_KEX_MLKEM768X25519 0x00050000
 
 #define SSH_KEX_HASH_SHA1   1
 #define SSH_KEX_HASH_SHA256 2
@@ -217,12 +219,22 @@ struct ssh_flow_data {
     wmem_array_t    *kex_shared_secret;
     bool            do_decrypt;
     bool            ext_ping_openssh_offered;
+    bool            ext_kex_strict;
     ssh_bignum      new_keys[6];
+    uint8_t          *pqkem_ciphertext;
+    uint32_t         pqkem_ciphertext_len;
+    uint8_t          *curve25519_pub;
+    uint32_t         curve25519_pub_len;
+    // storing PQ dissected keys
+    uint8_t *kex_e_pq;  // binary material => no bignum (not traditional DH integer / not math ready)
+    uint8_t *kex_f_pq;  // binary material => no bignum (not traditional DH integer / not math ready)
+    uint32_t kex_e_pq_len;
+    uint32_t kex_f_pq_len;
 };
 
 typedef struct {
-    char       *type;
-    ssh_bignum *key_material;
+    char *type;                     // "PRIVATE_KEY" or "SHARED_SECRET"
+    ssh_bignum *key_material;       // Either private key or shared secret
 } ssh_key_map_entry_t;
 
 static GHashTable * ssh_master_key_map;
@@ -323,6 +335,14 @@ static int hf_ssh_ecdh_q_c_length;
 static int hf_ssh_ecdh_q_s;
 static int hf_ssh_ecdh_q_s_length;
 
+/* Key exchange: Post-Quantum Hybryd KEM */
+static int hf_ssh_hybrid_blob_client;      // client's full PQ blob
+static int hf_ssh_hybrid_blob_client_len;
+static int hf_ssh_hybrid_blob_server;      // server's full PQ blob
+static int hf_ssh_hybrid_blob_server_len;
+static int hf_ssh_pq_kem_client;           // client's PQ public key
+static int hf_ssh_pq_kem_server;           // server's PQ response
+
 /* Extension negotiation */
 static int hf_ssh_ext_count;
 static int hf_ssh_ext_name_length;
@@ -399,8 +419,20 @@ static int hf_ssh_ping_data;
 static int hf_ssh_pong_data_length;
 static int hf_ssh_pong_data;
 
-static int hf_ssh_blob_p;
+static int hf_ssh_blob;
 static int hf_ssh_blob_e;
+static int hf_ssh_blob_n;
+static int hf_ssh_blob_dsa_p;
+static int hf_ssh_blob_dsa_q;
+static int hf_ssh_blob_dsa_g;
+static int hf_ssh_blob_dsa_y;
+static int hf_ssh_blob_ecdsa_curve_id;
+static int hf_ssh_blob_ecdsa_curve_id_length;
+static int hf_ssh_blob_ecdsa_q;
+static int hf_ssh_blob_ecdsa_q_length;
+static int hf_ssh_blob_eddsa_key;
+static int hf_ssh_blob_eddsa_key_length;
+static int hf_ssh_blob_data;
 
 static int hf_ssh_pk_sig_s_length;
 static int hf_ssh_pk_sig_s;
@@ -430,12 +462,16 @@ static int ett_ssh1;
 static int ett_ssh2;
 static int ett_ssh_segments;
 static int ett_ssh_segment;
+static int ett_ssh_pqhybrid_client;
+static int ett_ssh_pqhybrid_server;
 
 static expert_field ei_ssh_packet_length;
 static expert_field ei_ssh_packet_decode;
 static expert_field ei_ssh_channel_number;
 static expert_field ei_ssh_invalid_keylen;
 static expert_field ei_ssh_mac_bad;
+static expert_field ei_ssh2_kex_hybrid_msg_code;
+static expert_field ei_ssh2_kex_hybrid_msg_code_unknown;
 
 static bool ssh_desegment = true;
 
@@ -544,8 +580,9 @@ static const char *ssh_debug_file_name;
 #define CIPHER_AES192_CBC               0x00020002
 #define CIPHER_AES256_CBC               0x00020004
 #define CIPHER_AES128_GCM               0x00040001
-//#define CIPHER_AES192_GCM               0x00040002	-- does not exist
+//#define CIPHER_AES192_GCM               0x00040002        -- does not exist
 #define CIPHER_AES256_GCM               0x00040004
+// DO NOT USE 0x00040000 (used by SSH_KEX_SNTRUP761X25519)
 
 #define CIPHER_MAC_SHA2_256             0x00020001
 
@@ -659,6 +696,13 @@ static int ssh_dissect_kex_ecdh(uint8_t msg_code, tvbuff_t *tvb,
 static int ssh_dissect_kex_hybrid(uint8_t msg_code, tvbuff_t *tvb,
         packet_info *pinfo, int offset, proto_tree *tree,
         struct ssh_flow_data *global_data, unsigned *seq_num);
+static int ssh_dissect_kex_pq_hybrid(uint8_t msg_code, tvbuff_t *tvb,
+        packet_info *pinfo, int offset, proto_tree *tree,
+        struct ssh_flow_data *global_data, unsigned *seq_num);
+static int  // add support of client PQ hybrid key (e)
+ssh_read_e_pq(tvbuff_t *tvb, int offset, struct ssh_flow_data *global_data);
+static int  // add support of server PQ hybrid key (f)
+ssh_read_f_pq(tvbuff_t *tvb, int offset, struct ssh_flow_data *global_data);
 static int ssh_dissect_protocol(tvbuff_t *tvb, packet_info *pinfo,
         struct ssh_flow_data *global_data,
         int offset, proto_tree *tree, int is_response, unsigned *version,
@@ -668,7 +712,7 @@ static int ssh_try_dissect_encrypted_packet(tvbuff_t *tvb, packet_info *pinfo,
 static int ssh_dissect_encrypted_packet(tvbuff_t *tvb, packet_info *pinfo,
         struct ssh_peer_data *peer_data,
         int offset, proto_tree *tree);
-static void ssh_choose_algo(char *client, char *server, char **result);
+static bool ssh_choose_algo(char *client, char *server, char **result);
 static void ssh_set_mac_length(struct ssh_peer_data *peer_data);
 static void ssh_set_kex_specific_dissector(struct ssh_flow_data *global_data);
 
@@ -731,8 +775,8 @@ static int ssh_dissect_connection_generic(tvbuff_t *packet_tvb, packet_info *pin
         int offset, proto_item *msg_type_tree, unsigned msg_code);
 static int ssh_dissect_local_extension(tvbuff_t *packet_tvb, packet_info *pinfo,
         int offset, struct ssh_peer_data *peer_data, proto_item *msg_type_tree, unsigned msg_code);
-static int ssh_dissect_public_key_blob(tvbuff_t *packet_tvb, packet_info *pinfo,
-        int offset, proto_item *msg_type_tree);
+static int ssh_dissect_public_key_blob(tvbuff_t *tvb, packet_info *pinfo,
+        proto_item *msg_type_tree);
 static int ssh_dissect_public_key_signature(tvbuff_t *packet_tvb, packet_info *pinfo,
         int offset, proto_item *msg_type_tree);
 
@@ -1152,7 +1196,9 @@ ssh_tree_add_hostkey(tvbuff_t *tvb, int offset, proto_tree *parent_tree,
 
     // server host key (K_S / Q)
     char *data = (char *)tvb_memdup(wmem_packet_scope(), tvb, last_offset + 4, key_len);
-    ssh_hash_buffer_put_string(global_data->kex_server_host_key_blob, data, key_len);
+    if (global_data) {
+        ssh_hash_buffer_put_string(global_data->kex_server_host_key_blob, data, key_len);
+    }
 
     last_offset += 4;
     proto_tree_add_uint(tree, hf_ssh_hostkey_type_length, tvb, last_offset, 4, type_len);
@@ -1363,6 +1409,16 @@ ssh_dissect_key_exchange(tvbuff_t *tvb, packet_info *pinfo,
                     global_data->peer_data[is_response].seq_num_new_key = global_data->peer_data[is_response].sequence_number;
                     global_data->peer_data[is_response].sequence_number++;
                     ssh_debug_printf("%s->sequence_number{SSH_MSG_NEWKEYS=%d}++ > %d\n", is_response?"server":"client", global_data->peer_data[is_response].seq_num_new_key, global_data->peer_data[is_response].sequence_number);
+                }
+                if (!PINFO_FD_VISITED(pinfo)) {
+                    /* "After sending or receiving a SSH2_MSG_NEWKEYS message,
+                     * reset the packet sequence number to zero. This behaviour
+                     * persists for the duration of the connection (i.e. not
+                     * just the first SSH2_MSG_NEWKEYS) */
+                    if (global_data->ext_kex_strict) {
+                        global_data->peer_data[is_response].sequence_number = 0;
+                        ssh_debug_printf("%s->sequence_number reset to 0 (Strict KEX)\n", is_response?"server":"client");
+                    }
                 }
 
                 // the client sent SSH_MSG_NEWKEYS
@@ -1617,7 +1673,271 @@ static int ssh_dissect_kex_hybrid(uint8_t msg_code, tvbuff_t *tvb,
     col_append_sep_str(pinfo->cinfo, COL_INFO, NULL,
         val_to_str(msg_code, ssh2_kex_hybrid_msg_vals, "Unknown (%u)"));
 
+    const char *kex_name = global_data->kex;
+    switch (msg_code) {
+    case SSH_MSG_KEX_HYBRID_INIT:
+        expert_add_info(pinfo, NULL, &ei_ssh2_kex_hybrid_msg_code_unknown);
+        expert_add_info(pinfo, NULL, &ei_ssh2_kex_hybrid_msg_code);
+        ws_warning("KEX_HYBRID detected: KEX ALGORITHM = %s", kex_name);
+        ws_warning("KEX_HYBRID KEM support in Wireshark / TShark SSH dissector may be missing, partial or experimental");
+        ws_noisy(">>> KEX_HYBRID KEM detected: msg_code = %u, offset = %d, kex = %s", msg_code, offset, kex_name);
+        break;
+    case SSH_MSG_KEX_HYBRID_REPLY:
+        ws_noisy(">>> KEX_HYBRID KEM detected: msg_code = %u, offset = %d, kex = %s", msg_code, offset, kex_name);
+        break;
+    }
+
     return offset;
+}
+
+    /*
+     * === Hybrid KEX Dissection Strategy for Post-Quantum algorithms ===
+     *
+     * This 3 functions:
+     *
+     *   - ssh_dissect_kex_pq_hybrid()
+     *   - ssh_read_e_pq()
+     *   - ssh_read_f_pq()
+     *
+     * handles the dissection of server key exchange payloads for the
+     * post-quantum hybrid key exchange method:
+     *   - sntrup761x25519-sha512
+     *   - mlkem768x25519-sha256
+     *
+     * /!\ Rationale for implementation approach:
+     *
+     * OpenSSH encodes the server's ephemeral key (`Q_S`) as a single SSH `string`
+     * which contains both the post-quantum KEM ciphertext (from sntrup761 / mlkem768)
+     * and the traditional Curve25519 public key. Therefore, we parse one string
+     *
+     *   sntrup761x25519:
+     *   - PQ ciphertext:      1039 bytes (sntrup761)
+     *   - Curve25519 pubkey:   32 bytes
+     *
+     *   mlkem768x25519:
+     *   - PQ ciphertext:      1152 bytes (mlkem768)
+     *   - Curve25519 pubkey:   32 bytes
+     *
+     * This matches how OpenSSH serializes the hybrid key material, and allows Wireshark
+     * to compute the correct key exchange hash and derive session keys accurately.
+     *
+     * /!\ This design is necessary for live decryption support in Wireshark and TShark.
+     *
+     * References:
+     *   - RFC 4253: The SSH Transport Layer Protocol
+     *     - Section 6: string encoding format
+     *     - Section 7.2: Key derivation
+     *   - RFC 8731: Secure Shell (SSH) Key Exchange Method using Curve25519
+     *   - Internet-Draft on sntrup761x25519-sha512
+     *     - https://www.ietf.org/archive/id/draft-josefsson-ntruprime-ssh-02.html
+     *   - Internet-Draft on mlkem768x25519-sha256
+     *     - https://datatracker.ietf.org/doc/draft-ietf-lamps-pq-composite-kem
+     *   - OpenSSH Hybrid KEM Implementation (sntrup761x25519-sha512 / mlkem768x25519-sha256)
+     *     - https://github.com/openssh/openssh-portable/blob/master/kexc25519.c
+     *     - https://github.com/openssh/openssh-portable/blob/master/kexsntrup761x25519.c
+     *     - https://github.com/openssh/openssh-portable/blob/master/kexmlkem768x25519.c
+     *
+     * These hybrid KEX format are experimental and not yet standardized via the IETF.
+     * The parsing logic here is tailored to match OpenSSH's real-world behavior to
+     * ensure accurate decryption support in Wireshark.
+     */
+
+static int
+ssh_dissect_kex_pq_hybrid(uint8_t msg_code, tvbuff_t *tvb,
+        packet_info *pinfo, int offset, proto_tree *tree,
+        struct ssh_flow_data *global_data, unsigned *seq_num)
+{
+    //    SSH PACKET STRUCTURE RFC4253 (e.g. packet of 1228 bytes payload)
+    //    [00 00 04 cc]                       → ssh payload blob length field in tcp packet (e.g. 1228=0x04cc): 4 bytes
+    //    [1228 bytes of SSH PAYLOAD BLOB]    → ssh payload blob field: 1228 bytes
+
+    // Add the message code byte (first field in packet) to the GUI tree.
+    proto_tree_add_item(tree, hf_ssh2_kex_hybrid_msg_code, tvb, offset, 1, ENC_BIG_ENDIAN);
+    offset += 1;  // Move offset past the msg_code byte.
+
+    // Add a descriptive string to Wireshark's "Info" column.
+    col_append_sep_str(pinfo->cinfo, COL_INFO, NULL,
+        val_to_str(msg_code, ssh2_kex_hybrid_msg_vals, "Unknown (%u)"));
+
+    if (msg_code == SSH_MSG_KEX_HYBRID_INIT) {
+        // Print warning when sntrup761x25519-sha512 or mlkem768x25519-sha256 is detected in KEX
+        // This implementation currently rely on SHARED_SECRET only and do not work with PRIVATE_KEY
+        const char *kex_name = global_data->kex;
+        ws_warning("POST-QUANTUM KEX_HYBRID detected: KEX = %s", kex_name);
+        ws_warning("SHARED_SECRET decryption is supported - PRIVATE_KEY decryption is not supported");
+        // Print noisy debug info
+        ws_noisy(">>> HYBRID KEM: msg_code = %u, offset = %d, kex = %s", msg_code, offset, kex_name);
+        }
+
+    switch (msg_code) {
+
+    // Client Key Exchange INIT
+    case SSH_MSG_KEX_HYBRID_INIT: {
+
+        //    SNTRUP761X25519: RFC4253 SSH "string" (binary-encoded structure)
+        //    [00 00 04 a6]                       → length = 1190 (0x04a6)
+        //    [32 bytes of X25519 pubkey]         → ephemeral X25519 public key
+        //    [1158 bytes PQ blob]                → sntrup761 encapsulated client key
+
+        //    MLKEM768X25519: RFC4253 SSH "string" (binary-encoded structure)
+        //    [00 00 04 c0]                       → length = 1216 (0x04c0)
+        //    [32 bytes of X25519 pubkey]         → ephemeral X25519 public key
+        //    [1184 bytes PQ blob]                → mlkem768 encapsulated client key
+
+        ws_debug("CLIENT INIT follow offset pointer - absolute offset: %d", offset); // debug trace offset
+        int new_offset_client = ssh_read_e_pq(tvb, offset, global_data);
+        if (new_offset_client < 0) {
+            uint32_t bad_len = tvb_get_ntohl(tvb, offset);
+            proto_tree_add_expert_format(tree, pinfo, &ei_ssh_invalid_keylen, tvb, offset, 4,
+                "Invalid PQ client key length: %u", bad_len);
+            ws_debug("ExpertInfo: Invalid PQ client key length at offset %d: %u", offset, bad_len);
+
+            return offset + 4;
+            ws_debug("CLIENT INIT validate PQ client key length - offset: %d", offset); // debug trace offset
+        }
+
+        // If this is the first dissection pass (not re-dissect), update sequence tracking.
+        if (!PINFO_FD_VISITED(pinfo)) {
+            if(global_data->peer_data[CLIENT_PEER_DATA].seq_num_ecdh_ini == 0){
+                global_data->peer_data[CLIENT_PEER_DATA].seq_num_ecdh_ini =
+                    global_data->peer_data[CLIENT_PEER_DATA].sequence_number;
+
+                global_data->peer_data[CLIENT_PEER_DATA].sequence_number++;
+
+                ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_PQHYBRID_INIT=%d}++ > %d\n",
+                    CLIENT_PEER_DATA ? "server" : "client",
+                    global_data->peer_data[CLIENT_PEER_DATA].seq_num_ecdh_ini,
+                    global_data->peer_data[CLIENT_PEER_DATA].sequence_number);
+            }
+        }
+
+        // Return the sequence number of the message (for tracking state).
+        *seq_num = global_data->peer_data[CLIENT_PEER_DATA].seq_num_ecdh_ini;
+
+        // PQ-hybrid KEMs cannot use ssh_add_tree_string => manual dissection
+        // Get PQ blob size
+        proto_tree *pq_tree = NULL;
+        uint32_t pq_len = tvb_get_ntohl(tvb, offset);
+        ws_debug("CLIENT INIT PQ blob length - pq_len: %d", pq_len); // debug trace pq_len
+
+        // Add a subtree for dissecting PQ blob
+        proto_tree_add_item(tree, hf_ssh_hybrid_blob_client_len, tvb, offset, 4, ENC_BIG_ENDIAN); //  add blob length
+        offset += 4;  // shift length field
+        pq_tree = proto_tree_add_subtree(tree, tvb, offset, pq_len, ett_ssh_pqhybrid_client, NULL, "Hybrid Key Exchange Blob Client");
+        ws_debug("CLIENT INIT add PQ Hybrid subtree - offset: %d", offset); // debug trace offset
+
+        // Make a new tvb for just the PQ blob string contents
+        tvbuff_t *string_tvb = tvb_new_subset_length(tvb, offset, pq_len);
+
+        // Now dissect string inside the blob and add PQ server response and ECDH Q_S to GUI subtree
+        proto_tree_add_item(pq_tree, hf_ssh_ecdh_q_c, string_tvb, 0, 32, ENC_NA);
+        proto_tree_add_item(pq_tree, hf_ssh_pq_kem_client, string_tvb, 32, pq_len - 32, ENC_NA);
+
+        // retrieve offet from read_f_pq() to shift blob length and consume packet
+        offset = new_offset_client;
+        ws_debug("CLIENT INIT shift PQ blob - offset: %d", offset); // debug trace offset
+        break;
+        }
+
+    // Server Reply Message
+    case SSH_MSG_KEX_HYBRID_REPLY: {
+
+        //    SNTRUP761X25519: RFC4253 SSH "string" (binary-encoded structure)
+        //    [00 00 00 0b]                       → length = 11  // blob offset:0 absolute offset:6
+        //    [73 73 68 2d 65 64 32 35 35 31 39]  → "ssh-ed25519"
+        //    [00 00 00 20]                       → length = 32
+        //    [32 bytes of public key]            → public key
+        //    [00 00 04 2f]                       → length = 1071
+        //    [1071 bytes PQ blob]                → PQ blob (32 x25519 + 1039 sntrup761)
+
+        //    MLKEM768X25519: RFC4253 SSH "string" (binary-encoded structure)
+        //    [00 00 00 0b]                       → length = 11  // blob offset:0 absolute offset:6
+        //    [73 73 68 2d 65 64 32 35 35 31 39]  → "ssh-ed25519"
+        //    [00 00 00 20]                       → length = 32
+        //    [32 bytes of X25519 pubkey]         → ephemeral server X25519 public key
+        //    [00 00 04 a0]                       → length = 1184 (0x04a0)
+        //    [1184 bytes PQ blob]                → PQ blob (32 x25519 + 1152 kyber768)
+
+        ws_debug("SERVER REPLY follow offset pointer - absolute offset: %d", offset); // debug trace offset
+
+        // Add the host key used to sign the key exchange to the GUI tree.
+        offset += ssh_tree_add_hostkey(tvb, offset, tree, "KEX host key", ett_key_exchange_host_key, global_data);
+
+        ws_debug("SERVER REPLY add hostkey tree - offset: %d", offset); // debug trace offset
+
+        int new_offset_server = ssh_read_f_pq(tvb, offset, global_data);
+        if (new_offset_server < 0) {
+            uint32_t bad_len = tvb_get_ntohl(tvb, offset);
+            proto_tree_add_expert_format(tree, pinfo, &ei_ssh_invalid_keylen, tvb, offset, 4,
+                "Invalid PQ server key length: %u", bad_len);
+            ws_debug("ExpertInfo: Invalid PQ server key length at offset %d: %u", offset, bad_len);
+
+            return offset + 4;
+            ws_debug("SERVER REPLY validate PQ server key length - offset: %d", offset); // debug trace offset
+        }
+
+        // Select encryption and MAC based on negotiated algorithms.
+        ssh_choose_enc_mac(global_data);
+
+        // Write session secrets to keylog file (if enabled).
+        ssh_keylog_hash_write_secret(global_data);
+
+        // First-pass sequence number tracking
+        if(global_data->peer_data[SERVER_PEER_DATA].seq_num_ecdh_rep == 0){
+            global_data->peer_data[SERVER_PEER_DATA].seq_num_ecdh_rep =
+                global_data->peer_data[SERVER_PEER_DATA].sequence_number;
+
+            global_data->peer_data[SERVER_PEER_DATA].sequence_number++;
+
+            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_PQHYBRID_REPLY=%d}++ > %d\n",
+                SERVER_PEER_DATA ? "server" : "client",
+                global_data->peer_data[SERVER_PEER_DATA].seq_num_ecdh_rep,
+                global_data->peer_data[SERVER_PEER_DATA].sequence_number);
+        }
+
+        // Store reply sequence number for use by caller
+        *seq_num = global_data->peer_data[SERVER_PEER_DATA].seq_num_ecdh_rep;
+
+        // PQ-hybrid KEMs cannot use ssh_add_tree_string => manual dissection
+        // Get PQ blob size
+        proto_tree *pq_tree = NULL;
+        uint32_t pq_len = tvb_get_ntohl(tvb, offset);
+        ws_debug("SERVER REPLY PQ blob length - pq_len: %d", pq_len); // debug trace pq_len
+
+        // Add a subtree for dissecting PQ blob
+        proto_tree_add_item(tree, hf_ssh_hybrid_blob_server_len, tvb, offset, 4, ENC_BIG_ENDIAN); //  add blob length
+        offset += 4;  // shift length field
+        pq_tree = proto_tree_add_subtree(tree, tvb, offset, pq_len, ett_ssh_pqhybrid_server, NULL, "Hybrid Key Exchange Blob Server");
+        ws_debug("SERVER REPLY add PQ Hybrid subtree - offset: %d", offset); // debug trace offset
+
+        // Make a new tvb for just the PQ blob string contents
+        tvbuff_t *string_tvb = tvb_new_subset_length(tvb, offset, pq_len);
+
+        // Now dissect string inside the blob and add PQ server response and ECDH Q_S to GUI subtree
+        proto_tree_add_item(pq_tree, hf_ssh_ecdh_q_s, string_tvb, 0, 32, ENC_NA);
+        proto_tree_add_item(pq_tree, hf_ssh_pq_kem_server, string_tvb, 32, pq_len - 32, ENC_NA);
+
+        // retrieve offet from read_f_pq() to shift blob length
+        offset = new_offset_server;
+        ws_debug("SERVER REPLY shift PQ blob - offset: %d", offset); // debug trace offset
+
+        // Add the host's digital signature to the GUI tree
+        offset += ssh_tree_add_hostsignature(tvb, pinfo, offset, tree, "KEX host signature",
+                ett_key_exchange_host_sig, global_data);
+        ws_debug("SERVER REPLY add signature tree - offset: %d", offset); // debug trace offset
+        break;
+        }
+    }
+
+    if (msg_code == SSH_MSG_KEX_HYBRID_INIT) {
+        ws_debug("OUT PQ HYBRID KEX - CLIENT INIT track offset: %d", offset); // debug trace offset
+    } else if (msg_code == SSH_MSG_KEX_HYBRID_REPLY) {
+        ws_debug("OUT PQ HYBRID KEX - SERVER REPLY track offset: %d", offset); // debug trace offset
+    } else {
+        ws_debug("OUT PQ HYBRID KEX - track offset: %d", offset); // debug trace offset
+    }
+
+    return offset; // Final offset after packet is processed by ssh_dissect_kex_pq_hybrid()
 }
 
 static ssh_message_info_t*
@@ -1857,10 +2177,19 @@ static void ssh_set_kex_specific_dissector(struct ssh_flow_data *global_data)
         global_data->kex_specific_dissector = ssh_dissect_kex_dh;
     }
     else if (strcmp(kex_name, "mlkem768nistp256-sha256") == 0 ||
-        strcmp(kex_name, "mlkem768x25519-sha256") == 0 ||
         strcmp(kex_name, "mlkem1024nistp384-sha384") == 0)
     {
         global_data->kex_specific_dissector = ssh_dissect_kex_hybrid;
+    }
+    else if (strcmp(kex_name, "sntrup761x25519-sha512") == 0 ||
+        strcmp(kex_name, "mlkem768x25519-sha256") == 0)
+    /* ___add support for post-quantum hybrid KEM */
+    {
+        global_data->kex_specific_dissector = ssh_dissect_kex_pq_hybrid;
+    }
+    else
+    {
+        ws_warning("NOT SUPPORTED OR UNKNOWN KEX DETECTED: ALGORITHM = %s", kex_name);
     }
 }
 
@@ -1877,7 +2206,7 @@ ssh_gslist_compare_strings(const void *a, const void *b)
 }
 
 /* expects that *result is NULL */
-static void
+static bool
 ssh_choose_algo(char *client, char *server, char **result)
 {
     char **server_strings = NULL;
@@ -1885,8 +2214,12 @@ ssh_choose_algo(char *client, char *server, char **result)
     char **step;
     GSList *server_list = NULL;
 
+    static const char* client_strict = "kex-strict-c-v00@openssh.com";
+    static const char* server_strict = "kex-strict-s-v00@openssh.com";
+    bool kex_strict = false;
+
     if (!client || !server || !result || *result)
-        return;
+        return false;
 
     server_strings = g_strsplit(server, ",", 0);
     for (step = server_strings; *step; step++) {
@@ -1902,9 +2235,28 @@ ssh_choose_algo(char *client, char *server, char **result)
         }
     }
 
+    /* Check for the OpenSSH strict key exchange extension designed to
+     * mitigate the Terrapin attack by resetting the packet sequence
+     * number to zero after a SSH2_MSG_NEWKEYS message.
+     * https://www.openssh.com/txt/release-9.6
+     * Also see PROTOCOL in the OpenSSH source distribution.
+     *
+     * OpenSSH says this is activated "when an endpoint that supports this
+     * extension observes this algorithm name in a peer's KEXINIT packet".
+     * We'll have to assume that any endpoint that supports this also
+     * indicates support for it in its own first SSH2_MSG_KEXINIT.
+     */
+    if (g_strv_contains((const char* const*)client_strings, client_strict) &&
+        g_strv_contains((const char* const*)server_strings, server_strict)) {
+
+        kex_strict = true;
+    }
+
     g_strfreev(client_strings);
     g_slist_free(server_list);
     g_strfreev(server_strings);
+
+    return kex_strict;
 }
 
 static int
@@ -2000,7 +2352,7 @@ ssh_dissect_key_init(tvbuff_t *tvb, packet_info *pinfo, int offset,
         !global_data->kex)
     {
         /* Note: we're ignoring first_kex_packet_follows. */
-        ssh_choose_algo(
+        global_data->ext_kex_strict = ssh_choose_algo(
             global_data->peer_data[CLIENT_PEER_DATA].kex_proposal,
             global_data->peer_data[SERVER_PEER_DATA].kex_proposal,
             &global_data->kex);
@@ -2102,6 +2454,7 @@ ssh_keylog_read_file(void)
             break;
         }
 
+        ws_noisy("ssh: raw keylog line read: %s", buf);
         size_t len = strlen(buf);
         while(len>0 && (buf[len-1]=='\r' || buf[len-1]=='\n')){len-=1;buf[len]=0;}
 
@@ -2130,6 +2483,7 @@ ssh_keylog_process_lines(const uint8_t *data, unsigned datalen)
         }
 
         ssh_debug_printf("  checking keylog line: %.*s\n", (int)linelen, line);
+        ws_noisy("ssh: about to process line: %.*s", (int)linelen, line);
 
         char * strippedline = g_strndup(line, linelen);
         ssh_keylog_process_line(strippedline);
@@ -2240,6 +2594,10 @@ ssh_kex_type(char *type)
     if (type) {
         if (g_str_has_prefix(type, "curve25519")) {
             return SSH_KEX_CURVE25519;
+        }else if (g_str_has_prefix(type, "sntrup761x25519")) {
+            return SSH_KEX_SNTRUP761X25519;
+        }else if (g_str_has_prefix(type, "mlkem768x25519")) {
+            return SSH_KEX_MLKEM768X25519;
         }else if (g_str_has_prefix(type, "diffie-hellman-group-exchange")) {
             return SSH_KEX_DH_GEX;
         }else if (g_str_has_prefix(type, "diffie-hellman-group14")) {
@@ -2320,6 +2678,57 @@ ssh_read_f(tvbuff_t *tvb, int offset, struct ssh_flow_data *global_data)
     return true;
 }
 
+static int  // add support of client PQ hybrid key (e)
+ssh_read_e_pq(tvbuff_t *tvb, int offset, struct ssh_flow_data *global_data)
+{
+    // Read length of PQ client key
+    uint32_t length = tvb_get_ntohl(tvb, offset);
+
+    // Sanity check
+    if (length == 0 || length > 65535) {
+        ws_debug("ssh_read_e_pq: Invalid PQ key length: %u", length);
+        return false;
+    }
+
+    // Free any existing data (if dissecting multiple sessions)
+    wmem_free(wmem_file_scope(), global_data->kex_e_pq);
+
+    // Allocate and store the PQ client key
+    global_data->kex_e_pq = (unsigned char *)wmem_alloc(wmem_file_scope(), length);
+    global_data->kex_e_pq_len = length;
+
+    tvb_memcpy(tvb, global_data->kex_e_pq, offset + 4, length);
+
+    ws_debug("Stored %u bytes of client PQ key - stored new_offset_client: %d - offset: %d", length, offset + 4 + length, offset);
+    return offset + 4 + length;  // consuming packet (advancing offset)
+}
+
+static int  // add support of server PQ hybrid key (f)
+ssh_read_f_pq(tvbuff_t *tvb, int offset, struct ssh_flow_data *global_data)
+{
+    // Read length of PQ server key
+    uint32_t length = tvb_get_ntohl(tvb, offset);
+
+    // Sanity check
+    if (length == 0 || length > 65535) {
+        ws_debug("ssh_read_f_pq: Invalid PQ key length: %u", length);
+        return false;
+    }
+
+    // Free any existing data
+    wmem_free(wmem_file_scope(), global_data->kex_f_pq);
+
+    // Allocate and store the PQ server key
+    global_data->kex_f_pq = (unsigned char *)wmem_alloc(wmem_file_scope(), length);
+    global_data->kex_f_pq_len = length;
+
+    tvb_memcpy(tvb, global_data->kex_f_pq, offset + 4, length);
+
+    ws_debug("Stored %u bytes of server PQ key - stored new_offset_server: %d - offset: %d", length, offset + 4 + length, offset);
+    return offset + 4 + length;  // consuming packet (advancing offset)
+}
+
+
 static ssh_bignum *
 ssh_read_mpint(tvbuff_t *tvb, int offset)
 {
@@ -2389,15 +2798,23 @@ ssh_keylog_hash_write_secret(struct ssh_flow_data *global_data)
     }
 
     // shared secret data needs to be written as an mpint, and we need it later
-    if (secret->data[0] & 0x80) {         // Stored in Big endian
-        length = secret->length + 1;
-        char *tmp = (char *)wmem_alloc0(wmem_packet_scope(), length);
-        memcpy(tmp + 1, secret->data, secret->length);
-        tmp[0] = 0;
-        secret->data = tmp;
-        secret->length = length;
+    if (kex_type == SSH_KEX_SNTRUP761X25519 || kex_type == SSH_KEX_MLKEM768X25519) {
+        // For PQ KEMs: use shared_secret as-is, whether SHARED_SECRET or PRIVATE_KEY
+        // Do NOT prepend 0x00 (OpenSSH already encodes correctly for PQ KEM)
+        ssh_hash_buffer_put_string(global_data->kex_shared_secret, secret->data, secret->length);
+    } else {
+        // For all other KEX types (e.g., curve25519, ecdh-sha2, etc.)
+        // Pad with 0x00 if MSB is set, to comply with mpint format (RFC 4251)
+        if (secret->data[0] & 0x80) {         // Stored in Big endian
+            length = secret->length + 1;
+            char *tmp = (char *)wmem_alloc0(wmem_packet_scope(), length);
+            memcpy(tmp + 1, secret->data, secret->length);
+            tmp[0] = 0;
+            secret->data = tmp;
+            secret->length = length;
+        }
+        ssh_hash_buffer_put_string(global_data->kex_shared_secret, secret->data, secret->length);
     }
-    ssh_hash_buffer_put_string(global_data->kex_shared_secret, secret->data, secret->length);
 
     wmem_array_t    * kex_gex_p = wmem_array_new(wmem_packet_scope(), 1);
     if(global_data->kex_gex_p){ssh_hash_buffer_put_string(kex_gex_p, global_data->kex_gex_p->data, global_data->kex_gex_p->length);}
@@ -2407,6 +2824,10 @@ ssh_keylog_hash_write_secret(struct ssh_flow_data *global_data)
     if(global_data->kex_e){ssh_hash_buffer_put_string(kex_e, global_data->kex_e->data, global_data->kex_e->length);}
     wmem_array_t    * kex_f = wmem_array_new(wmem_packet_scope(), 1);
     if(global_data->kex_f){ssh_hash_buffer_put_string(kex_f, global_data->kex_f->data, global_data->kex_f->length);}
+    wmem_array_t    * kex_e_pq = wmem_array_new(wmem_packet_scope(), 1);
+    if(global_data->kex_e_pq){ssh_hash_buffer_put_string(kex_e_pq, global_data->kex_e_pq, global_data->kex_e_pq_len);}
+    wmem_array_t    * kex_f_pq = wmem_array_new(wmem_packet_scope(), 1);
+    if(global_data->kex_f_pq){ssh_hash_buffer_put_string(kex_f_pq, global_data->kex_f_pq, global_data->kex_f_pq_len);}
 
     wmem_array_t    * kex_hash_buffer = wmem_array_new(wmem_packet_scope(), 1);
     ssh_print_data("client_version", (const unsigned char *)wmem_array_get_raw(global_data->kex_client_version), wmem_array_get_count(global_data->kex_client_version));
@@ -2446,6 +2867,20 @@ ssh_keylog_hash_write_secret(struct ssh_flow_data *global_data)
         wmem_array_append(kex_hash_buffer, wmem_array_get_raw(kex_e), wmem_array_get_count(kex_e));
         ssh_print_data("key server (Q_S)", (const unsigned char *)wmem_array_get_raw(kex_f), wmem_array_get_count(kex_f));
         wmem_array_append(kex_hash_buffer, wmem_array_get_raw(kex_f), wmem_array_get_count(kex_f));
+    }
+    if (kex_type==SSH_KEX_SNTRUP761X25519){ // Add support of sntrup761x25519
+        ssh_print_data("key client  (Q_C)", (const unsigned char *)wmem_array_get_raw(kex_e_pq), wmem_array_get_count(kex_e_pq));
+        wmem_array_append(kex_hash_buffer, wmem_array_get_raw(kex_e_pq), wmem_array_get_count(kex_e_pq));
+        ssh_print_data("key server (Q_S)", (const unsigned char *)wmem_array_get_raw(kex_f_pq), wmem_array_get_count(kex_f_pq));
+        wmem_array_append(kex_hash_buffer, wmem_array_get_raw(kex_f_pq), wmem_array_get_count(kex_f_pq));
+        ws_noisy("Switch to SSH_KEX_SNTRUP761X25519");
+    }
+    if (kex_type==SSH_KEX_MLKEM768X25519){ // Add support of mlkem768x25519
+        ssh_print_data("key client  (Q_C)", (const unsigned char *)wmem_array_get_raw(kex_e_pq), wmem_array_get_count(kex_e_pq));
+        wmem_array_append(kex_hash_buffer, wmem_array_get_raw(kex_e_pq), wmem_array_get_count(kex_e_pq));
+        ssh_print_data("key server (Q_S)", (const unsigned char *)wmem_array_get_raw(kex_f_pq), wmem_array_get_count(kex_f_pq));
+        wmem_array_append(kex_hash_buffer, wmem_array_get_raw(kex_f_pq), wmem_array_get_count(kex_f_pq));
+        ws_noisy("Switch to SSH_KEX_MLKEM768X25519");
     }
     ssh_print_data("shared secret", (const unsigned char *)wmem_array_get_raw(global_data->kex_shared_secret), wmem_array_get_count(global_data->kex_shared_secret));
     wmem_array_append(kex_hash_buffer, wmem_array_get_raw(global_data->kex_shared_secret), wmem_array_get_count(global_data->kex_shared_secret));
@@ -2844,7 +3279,9 @@ ssh_decryption_set_cipher_id(struct ssh_peer_data *peer)
     if (!cipher_name) {
         peer->cipher = NULL;
         ws_debug("ERROR: cipher_name is NULL");
-    } else if (0 == strcmp(cipher_name, "chacha20-poly1305@openssh.com")) {
+    } else if (0 == strcmp(cipher_name, "chacha20-poly1305@openssh.com")) { // add chacha20-poly1305@openssh.com
+        peer->cipher_id = GCRY_CIPHER_CHACHA20;
+    } else if (0 == strcmp(cipher_name, "chacha20-poly1305")) { // add chacha20-poly1305
         peer->cipher_id = GCRY_CIPHER_CHACHA20;
     } else if (0 == strcmp(cipher_name, "aes128-gcm@openssh.com")) {
         peer->cipher_id = CIPHER_AES128_GCM;
@@ -3313,7 +3750,7 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 #ifndef _WIN32
             ws_debug("ssh: can't set aes128 cipher iv");
             ws_debug("libgcrypt: %d %s %s", gcry_err_code(err), gcry_strsource(err), gcry_strerror(err));
-#endif	//ndef _WIN32
+#endif        //ndef _WIN32
             return tvb_captured_length(tvb);
         }
         int idx = 12;
@@ -3326,7 +3763,7 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 // TODO: temporary work-around as long as a Windows python bug is triggered by automated tests
 #ifndef _WIN32
             ws_debug("can't authenticate using aes128-gcm: %s\n", gpg_strerror(err));
-#endif	//ndef _WIN32
+#endif        //ndef _WIN32
             return tvb_captured_length(tvb);
         }
 
@@ -3336,7 +3773,7 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 #ifndef _WIN32
             ws_debug("can't decrypt aes-gcm %d %s %s", gcry_err_code(err), gcry_strsource(err), gcry_strerror(err));
 
-#endif	//ndef _WIN32
+#endif        //ndef _WIN32
             return tvb_captured_length(tvb);
         }
 
@@ -3344,7 +3781,7 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 // TODO: temporary work-around as long as a Windows python bug is triggered by automated tests
 #ifndef _WIN32
             ws_debug ("aes128-gcm, gcry_cipher_gettag() failed\n");
-#endif	//ndef _WIN32
+#endif        //ndef _WIN32
             return tvb_captured_length(tvb);
         }
 
@@ -3352,7 +3789,7 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 // TODO: temporary work-around as long as a Windows python bug is triggered by automated tests
 #ifndef _WIN32
             ws_debug("aes-gcm, gcry_cipher_reset failed: %s\n", gpg_strerror (err));
-#endif	//ndef _WIN32
+#endif        //ndef _WIN32
             return tvb_captured_length(tvb);
         }
 
@@ -3906,50 +4343,45 @@ ssh_dissect_userauth_generic(tvbuff_t *packet_tvb, packet_info *pinfo,
         int offset, proto_item *msg_type_tree, unsigned msg_code)
 {
         if(msg_code==SSH_MSG_USERAUTH_REQUEST){
-                unsigned   slen;
-                slen = tvb_get_ntohl(packet_tvb, offset) ;
-                proto_tree_add_item(msg_type_tree, hf_ssh_userauth_user_name_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                uint32_t  slen;
+                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_userauth_user_name_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                 offset += 4;
                 proto_tree_add_item(msg_type_tree, hf_ssh_userauth_user_name, packet_tvb, offset, slen, ENC_ASCII);
                 offset += slen;
-                slen = tvb_get_ntohl(packet_tvb, offset) ;
-                proto_tree_add_item(msg_type_tree, hf_ssh_userauth_service_name_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_userauth_service_name_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                 offset += 4;
                 proto_tree_add_item(msg_type_tree, hf_ssh_userauth_service_name, packet_tvb, offset, slen, ENC_ASCII);
                 offset += slen;
-                slen = tvb_get_ntohl(packet_tvb, offset) ;
-                proto_tree_add_item(msg_type_tree, hf_ssh_userauth_method_name_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_userauth_method_name_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                 offset += 4;
-                proto_tree_add_item(msg_type_tree, hf_ssh_userauth_method_name, packet_tvb, offset, slen, ENC_ASCII);
-
-                uint8_t* key_type;
-                key_type = tvb_get_string_enc(pinfo->pool, packet_tvb, offset, slen, ENC_ASCII|ENC_NA);
+                const uint8_t* key_type;
+                proto_tree_add_item_ret_string(msg_type_tree, hf_ssh_userauth_method_name, packet_tvb, offset, slen, ENC_ASCII, pinfo->pool, &key_type);
                 offset += slen;
                 if (0 == strcmp(key_type, "none")) {
-                }else if (0 == strcmp(key_type, "publickey")) {
+                }else if (0 == strcmp(key_type, "publickey") || 0 == strcmp(key_type, "publickey-hostbound-v00@openssh.com")) {
                         uint8_t bHaveSignature = tvb_get_uint8(packet_tvb, offset);
                         int dissected_len = 0;
                         proto_tree_add_item(msg_type_tree, hf_ssh_userauth_have_signature, packet_tvb, offset, 1, ENC_BIG_ENDIAN);
                         offset += 1;
-                        slen = tvb_get_ntohl(packet_tvb, offset) ;
-                        proto_tree_add_item(msg_type_tree, hf_ssh_userauth_pka_name_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_userauth_pka_name_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                         offset += 4;
                         proto_tree_add_item(msg_type_tree, hf_ssh_userauth_pka_name, packet_tvb, offset, slen, ENC_ASCII);
                         offset += slen;
-                        proto_item *blob_tree = NULL;
-                        slen = tvb_get_ntohl(packet_tvb, offset) ;
-                        proto_tree_add_item(msg_type_tree, hf_ssh_blob_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                        proto_item *ti;
+                        ti = proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_blob_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                         offset += 4;
-                        blob_tree = proto_tree_add_subtree(msg_type_tree, packet_tvb, offset, slen, ett_userauth_pk_blob, NULL, "Public key blob");
-//        proto_tree_add_item(blob_tree, hf_ssh2_msg_code, packet_tvb, offset, 1, ENC_BIG_ENDIAN);
-                        dissected_len = ssh_dissect_public_key_blob(packet_tvb, pinfo, offset, blob_tree) - offset;
+                        dissected_len = ssh_dissect_public_key_blob(tvb_new_subset_length(packet_tvb, offset, slen), pinfo, msg_type_tree);
                         if(dissected_len!=(int)slen){
-                            expert_add_info_format(pinfo, blob_tree, &ei_ssh_packet_decode, "Decoded %d bytes, but packet length is %d bytes", dissected_len, slen);
+                            expert_add_info_format(pinfo, ti, &ei_ssh_packet_decode, "Decoded %d bytes, but packet length is %d bytes", dissected_len, slen);
                         }
                         offset += slen;
+                        if (0 == strcmp(key_type, "publickey-hostbound-v00@openssh.com")) {
+                            // Host key - but should we add it to global data or not?
+                            offset += ssh_tree_add_hostkey(packet_tvb, offset, msg_type_tree, "Server host key",
+                                    ett_key_exchange_host_key, NULL);
+                        }
                         if(bHaveSignature){
-                                slen = tvb_get_ntohl(packet_tvb, offset) ;
-                                proto_tree_add_item(msg_type_tree, hf_ssh_signature_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_signature_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                                 offset += 4;
                                 proto_item *signature_tree = NULL;
                                 signature_tree = proto_tree_add_subtree(msg_type_tree, packet_tvb, offset, slen, ett_userauth_pk_signautre, NULL, "Public key signature");
@@ -3963,14 +4395,12 @@ ssh_dissect_userauth_generic(tvbuff_t *packet_tvb, packet_info *pinfo,
                         uint8_t bChangePassword = tvb_get_uint8(packet_tvb, offset);
                         proto_tree_add_item(msg_type_tree, hf_ssh_userauth_change_password, packet_tvb, offset, 1, ENC_BIG_ENDIAN);
                         offset += 1;
-                        slen = tvb_get_ntohl(packet_tvb, offset) ;
-                        proto_tree_add_item(msg_type_tree, hf_ssh_userauth_password_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_userauth_password_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                         offset += 4;
                         proto_tree_add_item(msg_type_tree, hf_ssh_userauth_password, packet_tvb, offset, slen, ENC_ASCII);
                         offset += slen;
                         if(bChangePassword){
-                            slen = tvb_get_ntohl(packet_tvb, offset) ;
-                            proto_tree_add_item(msg_type_tree, hf_ssh_userauth_new_password_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                            proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_userauth_new_password_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                             offset += 4;
                             proto_tree_add_item(msg_type_tree, hf_ssh_userauth_new_password, packet_tvb, offset, slen, ENC_ASCII);
                             offset += slen;
@@ -3980,8 +4410,7 @@ ssh_dissect_userauth_generic(tvbuff_t *packet_tvb, packet_info *pinfo,
 
         }else if(msg_code==SSH_MSG_USERAUTH_FAILURE){
                 unsigned   slen;
-                slen = tvb_get_ntohl(packet_tvb, offset) ;
-                proto_tree_add_item(msg_type_tree, hf_ssh_auth_failure_list_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_auth_failure_list_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                 offset += 4;
                 proto_tree_add_item(msg_type_tree, hf_ssh_auth_failure_list, packet_tvb, offset, slen, ENC_ASCII);
                 offset += slen;
@@ -4004,12 +4433,9 @@ ssh_dissect_userauth_specific(tvbuff_t *packet_tvb, packet_info *pinfo,
                 offset += 4;
                 proto_tree_add_item(msg_type_tree, hf_ssh_userauth_pka_name, packet_tvb, offset, slen, ENC_ASCII);
                 offset += slen;
-                proto_item *blob_tree = NULL;
-                slen = tvb_get_ntohl(packet_tvb, offset) ;
-                ti = proto_tree_add_item(msg_type_tree, hf_ssh_blob_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                ti = proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_blob_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
                 offset += 4;
-                blob_tree = proto_tree_add_subtree(msg_type_tree, packet_tvb, offset, slen, ett_userauth_pk_blob, NULL, "Public key blob");
-                dissected_len = ssh_dissect_public_key_blob(packet_tvb, pinfo, offset, blob_tree) - offset;
+                dissected_len = ssh_dissect_public_key_blob(tvb_new_subset_length(packet_tvb, offset, slen), pinfo, msg_type_tree);
                 if(dissected_len!=(int)slen){
                     expert_add_info_format(pinfo, ti, &ei_ssh_packet_decode, "Decoded %d bytes, but packet length is %d bytes", dissected_len, slen);
                 }
@@ -4660,7 +5086,7 @@ ssh_dissect_connection_specific(tvbuff_t *packet_tvb, packet_info *pinfo,
                 proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
                 offset += 4;
         }
-	return offset;
+        return offset;
 }
 
 /* Channel mapping {{{ */
@@ -4780,8 +5206,9 @@ set_subdissector_for_channel(struct ssh_peer_data *peer_data, uint32_t recipient
 
         wmem_map_t *channel_info = other_peer_data->channel_info;
         if (channel_info) {
-            uint32_t sender_channel;
-            if (wmem_map_lookup_extended(channel_info, GUINT_TO_POINTER(recipient_channel), NULL, (void**)&sender_channel)) {
+            void *sender_channel_p;
+            if (wmem_map_lookup_extended(channel_info, GUINT_TO_POINTER(recipient_channel), NULL, &sender_channel_p)) {
+                uint32_t sender_channel = GPOINTER_TO_UINT(sender_channel_p);
                 /* Yes. See the handle for the other side too. */
                 if (other_peer_data->channel_handles == NULL) {
                     other_peer_data->channel_handles = wmem_map_new(wmem_file_scope(), g_direct_hash, g_direct_equal);
@@ -4822,12 +5249,9 @@ ssh_dissect_connection_generic(tvbuff_t *packet_tvb, packet_info *pinfo,
                     unsigned   alen;
                     proto_item *ti;
                     int dissected_len = 0;
-                    alen = tvb_get_ntohl(packet_tvb, offset) ;
-                    ti = proto_tree_add_item(msg_type_tree, hf_ssh_global_request_hostkeys_array_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+                    ti = proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_global_request_hostkeys_array_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &alen);
                     offset += 4;
-                    proto_item *blob_tree = NULL;
-                    blob_tree = proto_tree_add_subtree(msg_type_tree, packet_tvb, offset, alen, ett_userauth_pk_blob, NULL, "Public key blob");
-                    dissected_len = ssh_dissect_public_key_blob(packet_tvb, pinfo, offset, blob_tree) - offset;
+                    dissected_len = ssh_dissect_public_key_blob(tvb_new_subset_length(packet_tvb, offset, alen), pinfo, msg_type_tree);
                     if(dissected_len!=(int)alen){
                         expert_add_info_format(pinfo, ti, &ei_ssh_packet_decode, "Decoded %d bytes, but packet length is %d bytes", dissected_len, alen);
                     }
@@ -4867,19 +5291,45 @@ ssh_dissect_local_extension(tvbuff_t *packet_tvb, packet_info *pinfo,
 }
 
 static int
-ssh_dissect_public_key_blob(tvbuff_t *packet_tvb, packet_info *pinfo,
-        int offset, proto_item *msg_type_tree)
+ssh_dissect_public_key_blob(tvbuff_t *tvb, packet_info *pinfo, proto_item *tree)
 {
-        (void)pinfo;
-        unsigned   slen;
-        slen = tvb_get_ntohl(packet_tvb, offset) ;
-        proto_tree_add_item(msg_type_tree, hf_ssh_pk_blob_name_length, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-        offset += 4;
-        proto_tree_add_item(msg_type_tree, hf_ssh_pk_blob_name, packet_tvb, offset, slen, ENC_ASCII);
-        offset += slen;
-        offset += ssh_tree_add_mpint(packet_tvb, offset, msg_type_tree, hf_ssh_blob_e);
-        offset += ssh_tree_add_mpint(packet_tvb, offset, msg_type_tree, hf_ssh_blob_p);
-        return offset;
+    uint32_t slen;
+    const uint8_t* key_type;
+
+    int offset = 0;
+    proto_tree *blob_tree = NULL;
+    proto_item *blob_item = NULL;
+
+    blob_item = proto_tree_add_item(tree, hf_ssh_blob, tvb, offset, tvb_reported_length(tvb), ENC_NA);
+    blob_tree = proto_item_add_subtree(blob_item, ett_userauth_pk_blob);
+    proto_tree_add_item_ret_uint(blob_tree, hf_ssh_pk_blob_name_length, tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
+    offset += 4;
+    proto_tree_add_item_ret_string(blob_tree, hf_ssh_pk_blob_name, tvb, offset, slen, ENC_ASCII, pinfo->pool, &key_type);
+    proto_item_append_text(blob_item, " (type: %s)", key_type);
+    offset += slen;
+
+    if (0 == strcmp(key_type, "ssh-rsa")) {
+        offset += ssh_tree_add_mpint(tvb, offset, blob_tree, hf_ssh_blob_e);
+        offset += ssh_tree_add_mpint(tvb, offset, blob_tree, hf_ssh_blob_n);
+    } else if (0 == strcmp(key_type, "ssh-dss")) {
+        offset += ssh_tree_add_mpint(tvb, offset, blob_tree, hf_ssh_blob_dsa_p);
+        offset += ssh_tree_add_mpint(tvb, offset, blob_tree, hf_ssh_blob_dsa_q);
+        offset += ssh_tree_add_mpint(tvb, offset, blob_tree, hf_ssh_blob_dsa_g);
+        offset += ssh_tree_add_mpint(tvb, offset, blob_tree, hf_ssh_blob_dsa_y);
+    } else if (g_str_has_prefix(key_type, "ecdsa-sha2-")) {
+        offset += ssh_tree_add_string(tvb, offset, blob_tree,
+                            hf_ssh_blob_ecdsa_curve_id, hf_ssh_blob_ecdsa_curve_id_length);
+        offset += ssh_tree_add_string(tvb, offset, blob_tree,
+                            hf_ssh_blob_ecdsa_q, hf_ssh_blob_ecdsa_q_length);
+    } else if (g_str_has_prefix(key_type, "ssh-ed")) {
+        offset += ssh_tree_add_string(tvb, offset, blob_tree,
+                            hf_ssh_blob_eddsa_key, hf_ssh_blob_eddsa_key_length);
+    } else {
+        proto_tree_add_item(blob_tree, hf_ssh_blob_data, tvb, offset, tvb_reported_length_remaining(tvb, offset), ENC_NA);
+        offset += tvb_reported_length_remaining(tvb, offset);
+    }
+
+    return offset;
 }
 
 static int
@@ -5736,13 +6186,73 @@ proto_register_ssh(void)
             FT_UINT32, BASE_DEC, NULL, 0x0,
             NULL, HFILL }},
 
-        { &hf_ssh_blob_p,
-          { "ssh-rsa modulus (n)", "ssh.blob.ssh-rsa.n",
-            FT_BYTES, BASE_NONE, NULL, 0x0,
+        { &hf_ssh_blob,
+          { "Public key blob", "ssh.pk_blob",
+            FT_NONE, BASE_NONE, NULL, 0x0,
             NULL, HFILL }},
 
         { &hf_ssh_blob_e,
-          { "ssh-rsa public exponent (e)", "ssh.blob.ssh-rsa.e",
+          { "ssh-rsa public exponent (e)", "ssh.pk_blob.ssh-rsa.e",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_n,
+          { "ssh-rsa modulus (n)", "ssh.pk_blob.ssh-rsa.n",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_dsa_p,
+          { "DSA prime modulus (p)", "ssh.pk_blob.dsa.p",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_dsa_q,
+          { "DSA prime divisor (q)", "ssh.pk_blob.dsa.q",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_dsa_g,
+          { "DSA subgroup generator (g)", "ssh.pk_blob.dsa.g",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_dsa_y,
+          { "DSA public key (y)", "ssh.pk_blob.dsa.y",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_ecdsa_curve_id,
+          { "ECDSA elliptic curve identifier", "ssh.pk_blob.ecdsa.id",
+            FT_STRING, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_ecdsa_curve_id_length,
+          { "ECDSA elliptic curve identifier length", "ssh.pk_blob.ecdsa.id_length",
+            FT_UINT32, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_ecdsa_q,
+          { "ECDSA public key (Q)", "ssh.pk_blob.ecdsa.q",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_ecdsa_q_length,
+          { "ECDSA public key length", "ssh.pk_blob.ecdsa.q_length",
+            FT_UINT32, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_eddsa_key,
+          { "EdDSA public key", "ssh.pk_blob.eddsa.key",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_eddsa_key_length,
+          { "EdDSA public key length", "ssh.pk_blob.eddsa.key_length",
+            FT_UINT32, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }},
+
+        { &hf_ssh_blob_data,
+          { "Public key blob data", "ssh.pk_blob.data",
             FT_BYTES, BASE_NONE, NULL, 0x0,
             NULL, HFILL }},
 
@@ -5919,7 +6429,38 @@ proto_register_ssh(void)
         { &hf_ssh_segment_data,
           { "SSH segment data", "ssh.segment.data",
             FT_BYTES, BASE_NONE, NULL, 0x00,
-            "The payload of a single SSH segment", HFILL }
+            "The payload of a single SSH segment", HFILL }},
+
+        { &hf_ssh_hybrid_blob_client,
+          { "Hybrid Key Exchange Blob Client", "ssh.kex_hybrid_blob_client",
+            FT_BYTES, BASE_NONE, NULL, 0x0, "Client post-quantum hybrid blob", HFILL }
+        },
+
+        { &hf_ssh_hybrid_blob_client_len,
+          { "Hybrid Key Exchange Blob Client Length", "ssh.kex_hybrid_blob_client_len",
+            FT_UINT32, BASE_DEC, NULL, 0x0, "Length of client post-quantum hybrid blob", HFILL }
+        },
+
+        { &hf_ssh_hybrid_blob_server,
+          { "Hybrid Key Exchange Blob Server", "ssh.kex_hybrid_blob_server",
+            FT_BYTES, BASE_NONE, NULL, 0x0, "Server post-quantum hybrid blob", HFILL }
+        },
+
+        { &hf_ssh_hybrid_blob_server_len,
+          { "Hybrid Key Exchange Blob Server Length", "ssh.kex_hybrid_blob_server_len",
+            FT_UINT32, BASE_DEC, NULL, 0x0, "Length of server post-quantum hybrid blob", HFILL }
+        },
+
+        { &hf_ssh_pq_kem_client,
+          { "Client PQ KEM Public Key", "ssh.kex.pq_kem_client",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            "Post-quantum key (client)", HFILL }
+        },
+
+        { &hf_ssh_pq_kem_server,
+          { "Server PQ KEM Response", "ssh.kex.pq_kem_server",
+            FT_BYTES, BASE_NONE, NULL, 0x0,
+            "Post-quantum ciphertext (server response)", HFILL }
         },
 
     };
@@ -5936,6 +6477,8 @@ proto_register_ssh(void)
         &ett_ssh2,
         &ett_key_init,
         &ett_ssh_segments,
+        &ett_ssh_pqhybrid_client,  // added for PQ hybrid CLIENT dissection
+        &ett_ssh_pqhybrid_server,  // added for PQ hybrid SERVER dissection
         &ett_ssh_segment
     };
 
@@ -5945,8 +6488,10 @@ proto_register_ssh(void)
         { &ei_ssh_channel_number, { "ssh.channel_number.error", PI_PROTOCOL, PI_WARN, "Coud not find channel", EXPFILL }},
         { &ei_ssh_invalid_keylen, { "ssh.key_length.error", PI_PROTOCOL, PI_ERROR, "Invalid key length", EXPFILL }},
         { &ei_ssh_mac_bad,        { "ssh.mac_bad.expert", PI_CHECKSUM, PI_ERROR, "Bad MAC", EXPFILL }},
-    };
+        { &ei_ssh2_kex_hybrid_msg_code, { "ssh.kex_hybrid_msg_code", PI_SECURITY, PI_NOTE, "Hybrid KEX encountered", EXPFILL }},
+        { &ei_ssh2_kex_hybrid_msg_code_unknown, { "ssh.kex_hybrid_msg_code.unknown", PI_UNDECODED, PI_NOTE, "Unknown KEX_HYBRID message code", EXPFILL }},
 
+    };
     module_t *ssh_module;
     expert_module_t *expert_ssh;
 

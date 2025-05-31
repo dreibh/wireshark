@@ -173,7 +173,7 @@ struct pcapng_option {
 
 /* OPT_EPB_HASH sub-types */
 #define OPT_HASH_2COMP    0
-#define OPT_HASH_XOR	  1
+#define OPT_HASH_XOR      1
 #define OPT_HASH_CRC32    2
 #define OPT_HASH_MD5      3
 #define OPT_HASH_SHA1     4
@@ -323,12 +323,12 @@ register_pcapng_block_type_handler(pcapng_block_type_handler_t* handler)
          */
         if (!(handler->type & 0x80000000)) {
             if (!pcapng_block_approved(handler->type)) {
-                    /*
-                    * No; don't allow a plugin to be registered for it, as
-                    * the block type needs to be registered before it's used.
-                    */
+                /*
+                 * No; don't allow a plugin to be registered for it, as
+                 * the block type needs to be registered before it's used.
+                 */
                 ws_warning("Attempt to register plugin for reserved block type 0x%08x not allowed",
-                                handler->type);
+                           handler->type);
                 return;
             }
         }
@@ -875,7 +875,7 @@ pcapng_process_custom_binary_option(wtapng_block_t *wblock,
 
     if (pen_handler != NULL)
     {
-        ret = pen_handler->processor(wblock, section_info, option_content + 4, option_length - 4);
+        ret = pen_handler->processor(wblock, section_info, option_code, option_content + 4, option_length - 4);
     }
     else
     {
@@ -5510,13 +5510,13 @@ put_nrb_option(wtap_block_t block _U_, unsigned option_id, wtap_opttype_e option
     case OPT_NS_DNSNAME:
         size = strlen(optval->stringval);
         if (size > 65535) {
-        	/*
-        	 * Too big to fit in the option.
-        	 * Don't write anything.
-        	 *
-        	 * XXX - truncate it?  Report an error?
-        	 */
-        	return true;
+            /*
+             * Too big to fit in the option.
+             * Don't write anything.
+             *
+             * XXX - truncate it?  Report an error?
+             */
+            return true;
         }
 
         /* Put option header */
@@ -5546,13 +5546,13 @@ put_nrb_option(wtap_block_t block _U_, unsigned option_id, wtap_opttype_e option
         stringlen = strlen(optval->custom_stringval.string);
         size = sizeof(uint32_t) + stringlen;
         if (size > 65535) {
-        	/*
-        	 * Too big to fit in the option.
-        	 * Don't write anything.
-        	 *
-        	 * XXX - truncate it?  Report an error?
-        	 */
-        	return true;
+            /*
+             * Too big to fit in the option.
+             * Don't write anything.
+             *
+             * XXX - truncate it?  Report an error?
+             */
+            return true;
         }
 
         /* Put option header and PEN */
@@ -6144,19 +6144,19 @@ pcapng_write_if_descr_block(wtap_dumper *wdh, wtap_block_t int_data,
 static bool pcapng_add_idb(wtap_dumper *wdh, wtap_block_t idb,
                                int *err, char **err_info)
 {
-	wtap_block_t idb_copy;
+    wtap_block_t idb_copy;
 
-	/*
-	 * Add a copy of this IDB to our array of IDBs.
-	 */
-	idb_copy = wtap_block_create(WTAP_BLOCK_IF_ID_AND_INFO);
-	wtap_block_copy(idb_copy, idb);
-	g_array_append_val(wdh->interface_data, idb_copy);
+    /*
+     * Add a copy of this IDB to our array of IDBs.
+     */
+    idb_copy = wtap_block_create(WTAP_BLOCK_IF_ID_AND_INFO);
+    wtap_block_copy(idb_copy, idb);
+    g_array_append_val(wdh->interface_data, idb_copy);
 
-	/*
-	 * And write it to the output file.
-	 */
-	return pcapng_write_if_descr_block(wdh, idb_copy, err, err_info);
+    /*
+     * And write it to the output file.
+     */
+    return pcapng_write_if_descr_block(wdh, idb_copy, err, err_info);
 }
 
 static bool pcapng_write_internal_blocks(wtap_dumper *wdh, int *err)
@@ -6287,17 +6287,34 @@ static bool pcapng_dump(wtap_dumper *wdh, const wtap_rec *rec,
         case REC_TYPE_FT_SPECIFIC_EVENT:
         case REC_TYPE_FT_SPECIFIC_REPORT:
             /*
+             * Is this an event or report for our file type?
+             */
+            if (rec->rec_header.ft_specific_header.file_type_subtype != pcapng_file_type_subtype) {
+                /*
+                 * No. We can't write that.
+                 */
+                *err = WTAP_ERR_UNWRITABLE_REC_TYPE;
+                *err_info = g_strdup_printf("%s records for \"%s\" files aren't supported for this file type",
+                    rec->rec_type_name,
+                    wtap_file_type_subtype_name(rec->rec_header.ft_specific_header.file_type_subtype));
+                return false;
+            }
+
+            /*
              * Do we have a handler for this block type?
              */
-            if ((handler = (pcapng_block_type_handler_t*)g_hash_table_lookup(block_handlers,
-                                                                GUINT_TO_POINTER(rec->rec_header.ft_specific_header.record_type))) != NULL) {
-                /* Yes. Call it to write out this record. */
-                if (!handler->writer(wdh, rec, err, err_info))
-                    return false;
-            } else
-            {
-                /* No. */
+            handler = (pcapng_block_type_handler_t*)g_hash_table_lookup(block_handlers,
+                                                                        GUINT_TO_POINTER(rec->rec_header.ft_specific_header.record_type));
+            if (handler == NULL) {
+                /* No. We can't write that. */
                 *err = WTAP_ERR_UNWRITABLE_REC_TYPE;
+                *err_info = g_strdup_printf("Pcapng blocks of type 0x%8x aren't supported",
+                                            rec->rec_header.ft_specific_header.record_type);
+                return false;
+            }
+
+            /* Yes. Call it to write out this record. */
+            if (!handler->writer(wdh, rec, err, err_info)) {
                 return false;
             }
             break;
@@ -6333,6 +6350,7 @@ static bool pcapng_dump(wtap_dumper *wdh, const wtap_rec *rec,
         default:
             /* We don't support writing this record type. */
             *err = WTAP_ERR_UNWRITABLE_REC_TYPE;
+            *err_info = wtap_unwritable_rec_type_err_string(rec);
             return false;
     }
 
