@@ -50,6 +50,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/profile_tree_view.h
 	widgets/qcp_axis_ticker_elided.h
 	widgets/qcp_axis_ticker_si.h
+	widgets/qcp_spacer_legend_item.h
 	widgets/qcp_string_legend_item.h
 	widgets/range_syntax_lineedit.h
 	widgets/resize_header_view.h
@@ -226,6 +227,9 @@ set(WIRESHARK_QT_HEADERS
 	packet_format_stack.h
 	packet_list.h
 	packet_range_group_box.h
+	plot.h
+	plot_action.h
+	plot_dialog.h
 	preference_editor_frame.h
 	preferences_dialog.h
 	print_dialog.h
@@ -323,6 +327,7 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/profile_tree_view.cpp
 	widgets/qcp_axis_ticker_elided.cpp
 	widgets/qcp_axis_ticker_si.cpp
+	widgets/qcp_spacer_legend_item.cpp
 	widgets/qcp_string_legend_item.cpp
 	widgets/range_syntax_lineedit.cpp
 	widgets/resize_header_view.cpp
@@ -487,6 +492,7 @@ set(WIRESHARK_QT_SRC
 	packet_format_stack.cpp
 	packet_list.cpp
 	packet_range_group_box.cpp
+	plot_action.cpp
 	preference_editor_frame.cpp
 	preferences_dialog.cpp
 	print_dialog.cpp
@@ -561,6 +567,8 @@ set(WIRESHARK_QT_TAP_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/lte_rlc_statistics_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/mtp3_summary_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/multicast_statistics_dialog.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/plot.cpp
+	${CMAKE_CURRENT_SOURCE_DIR}/plot_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/rtp_stream_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/sctp_all_assocs_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/sctp_assoc_analyse_dialog.cpp
@@ -636,6 +644,7 @@ set(WIRESHARK_QT_UI
 	packet_format_group_box.ui
 	packet_format_json_group_box.ui
 	packet_range_group_box.ui
+	plot_dialog.ui
 	preference_editor_frame.ui
 	preferences_dialog.ui
 	print_dialog.ui

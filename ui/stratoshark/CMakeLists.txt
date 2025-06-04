@@ -49,6 +49,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/profile_tree_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/qcp_axis_ticker_elided.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/qcp_axis_ticker_si.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/qcp_spacer_legend_item.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/qcp_string_legend_item.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/range_syntax_lineedit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/resize_header_view.h
@@ -204,6 +205,9 @@ set(WIRESHARK_QT_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_stack.h
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_list.h
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_range_group_box.h
+	${CMAKE_SOURCE_DIR}/ui/qt/plot.h
+	${CMAKE_SOURCE_DIR}/ui/qt/plot_action.h
+	${CMAKE_SOURCE_DIR}/ui/qt/plot_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/preference_editor_frame.h
 	${CMAKE_SOURCE_DIR}/ui/qt/preferences_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/print_dialog.h
@@ -292,6 +296,7 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/profile_tree_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/qcp_axis_ticker_elided.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/qcp_axis_ticker_si.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/qcp_spacer_legend_item.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/qcp_string_legend_item.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/range_syntax_lineedit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/resize_header_view.cpp
@@ -438,6 +443,7 @@ set(WIRESHARK_QT_SRC
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_stack.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_list.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_range_group_box.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/plot_action.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/preference_editor_frame.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/preferences_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/print_dialog.cpp
@@ -497,6 +503,8 @@ set(WIRESHARK_QT_TAP_SRC
 	${CMAKE_SOURCE_DIR}/ui/qt/graph.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/io_graph.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/io_graph_dialog.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/plot.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/plot_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/stats_tree_dialog.cpp
 	${WIRESHARK_CUSTOM_TAP_SRC}
 )
@@ -550,6 +558,7 @@ set(WIRESHARK_QT_UI
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_group_box.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_format_json_group_box.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/packet_range_group_box.ui
+	${CMAKE_SOURCE_DIR}/ui/qt/plot_dialog.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/preference_editor_frame.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/preferences_dialog.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/print_dialog.ui

@@ -28,6 +28,7 @@
 class QMenu;
 class QSplitter;
 class QStackedWidget;
+class QTextCodec;
 
 class DataSourceTab;
 class DisplayFilterCombo;
@@ -70,6 +71,7 @@ public slots:
     virtual void filterPackets(QString, bool) = 0;
     virtual void showPreferencesDialog(QString module_name) = 0;
     virtual void showIOGraphDialog(io_graph_item_unit_t, QString) = 0;
+    virtual void showPlotDialog(const QString&, bool) = 0;
     void layoutPanes();
     void applyRecentPaneGeometry();
     void updateForUnsavedChanges();
@@ -111,6 +113,7 @@ protected:
     MainStatusBar *main_status_bar_;
     ProfileSwitcher *profile_switcher_;
     bool use_capturing_title_;
+    QMap<QString, QTextCodec *> text_codec_map_;
 
 protected slots:
     void addDisplayFilterTranslationActions(QMenu *copy_menu);
@@ -119,6 +122,7 @@ protected slots:
 
 private:
     QString replaceWindowTitleVariables(QString title);
+    void findTextCodecs();
 
     QVector<QAction *> df_translate_actions_;
     static const char *translator_;

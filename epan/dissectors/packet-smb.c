@@ -25,7 +25,9 @@
 #include <epan/to_str.h>
 #include <epan/export_object.h>
 #include <epan/tfs.h>
+
 #include <wsutil/array.h>
+#include <wsutil/ws_padding_to.h>
 
 #include "packet-windows-common.h"
 #include "packet-smb.h"
@@ -13047,7 +13049,7 @@ dissect_qfi_SMB_FILE_PIPE_LOCAL_INFO(tvbuff_t *tvb, packet_info *pinfo _U_, prot
 	proto_tree_add_item(tree, hf_smb_pipe_end, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	COUNT_BYTES_SUBR(4);
 
-	*trunc = FALSE;
+	*trunc = false;
 	return offset;
 }
 
@@ -13068,7 +13070,7 @@ dissect_qfi_SMB_FILE_PIPE_REMOTE_INFO(tvbuff_t *tvb, packet_info *pinfo _U_, pro
 	proto_tree_add_item(tree, hf_smb_pipe_max_collection_count, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	COUNT_BYTES_SUBR(4);
 
-	*trunc = FALSE;
+	*trunc = false;
 	return offset;
 }
 
@@ -13165,8 +13167,8 @@ dissect_qfi_SMB_FILE_ALL_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 	COUNT_BYTES_SUBR(1);
 
 	/* 2 pad bytes */
-	offset += 2;
-	*bcp   -= 2;
+	CHECK_BYTE_COUNT_SUBR(2);
+	COUNT_BYTES_SUBR(2);
 
 	/* ea length */
 	CHECK_BYTE_COUNT_SUBR(4);
@@ -15301,9 +15303,9 @@ dissect_4_3_4_3(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	COUNT_BYTES_SUBR(4);
 
 	/* The EAs ... they are formatted as in MS-CIFS 2.2.1.2.2 */
+	CHECK_BYTE_COUNT_SUBR(ea_size);
 	proto_tree_add_bytes_format(tree, hf_smb_file_data, tvb, offset, ea_size, NULL, "EAs");
 	COUNT_BYTES_SUBR(ea_size);
-	*bcp -= ea_size;
 
 	/* file name len */
 	CHECK_BYTE_COUNT_SUBR(1);
@@ -15744,6 +15746,7 @@ dissect_4_3_4_6full(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 	COUNT_BYTES_SUBR(4);
 
 	/* skip 4 bytes */
+	CHECK_BYTE_COUNT_SUBR(4);
 	COUNT_BYTES_SUBR(4);
 
 	CHECK_BYTE_COUNT_SUBR(8);
@@ -16006,7 +16009,7 @@ dissect_4_3_4_8(tvbuff_t *tvb, packet_info *pinfo,
 {
 	const char *fn;
 	int         fn_len;
-	int         pad;
+	unsigned    pad;
 
 	DISSECTOR_ASSERT(si);
 
@@ -16037,8 +16040,9 @@ dissect_4_3_4_8(tvbuff_t *tvb, packet_info *pinfo,
 
 	/* Pad to 4 bytes */
 
-	if (offset % 4) {
-		pad = 4 - (offset % 4);
+	pad = WS_PADDING_TO_4(offset);
+	if (pad != 0) {
+		CHECK_BYTE_COUNT_SUBR(pad);
 		COUNT_BYTES_SUBR(pad);
 	}
 
@@ -16054,7 +16058,7 @@ dissect_find_file_unix_info2(tvbuff_t *tvb, packet_info *pinfo,
 	const char *fn;
 	uint32_t    namelen;
 	int         fn_len;
-	int         pad;
+	unsigned    pad;
 
 	DISSECTOR_ASSERT(si);
 
@@ -16098,8 +16102,8 @@ dissect_find_file_unix_info2(tvbuff_t *tvb, packet_info *pinfo,
 
 	/* Pad to 4 bytes */
 
-	if (offset % 4) {
-		pad = 4 - (offset % 4);
+	pad = WS_PADDING_TO_4(offset);
+	if (pad != 0) {
 		CHECK_BYTE_COUNT_SUBR(pad);
 		COUNT_BYTES_SUBR(pad);
 	}
