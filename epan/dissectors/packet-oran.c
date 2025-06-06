@@ -28,6 +28,9 @@
 
 #include <epan/tfs.h>
 
+#include <wsutil/ws_roundup.h>
+#include <wsutil/ws_padding_to.h>
+
 #include "epan/dissectors/packet-oran.h"
 
 /* N.B. dissector preferences are taking the place of (some) M-plane parameters, so unfortunately it can be
@@ -574,6 +577,8 @@ static bool udcomplen_heuristic_result = false;
 
 /* st6-4byte-alignment-required */
 static bool st6_4byte_alignment = false;
+
+static bool show_unscaled_values = false;
 
 static const enum_val_t dl_compression_options[] = {
     { "COMP_NONE",                             "No Compression",                                                             COMP_NONE },
@@ -1802,6 +1807,9 @@ static int dissect_bfwCompParam(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
 static float uncompressed_to_float(uint32_t h)
 {
     int16_t i16 = h & 0x0000ffff;
+    if (show_unscaled_values) {
+        return (float)i16;
+    }
     return ((float)i16) / 0x7fff;
 }
 
@@ -1816,7 +1824,7 @@ static float decompress_value(uint32_t bits, uint32_t comp_method, uint8_t iq_wi
         case COMP_BLOCK_FP:         /* block floating point */
         case BFP_AND_SELECTIVE_RE:
         {
-            /* A.1.2 Block Floating Point Decompression Algorithm */
+            /* A.1.3 Block Floating Point Decompression Algorithm */
             int32_t cPRB = bits;
             uint32_t scaler = 1 << exponent;  /* i.e. 2^exponent */
 
@@ -1827,6 +1835,9 @@ static float decompress_value(uint32_t bits, uint32_t comp_method, uint8_t iq_wi
 
             /* Unscale */
             cPRB *= scaler;
+            if (show_unscaled_values) {
+                return (float)cPRB;
+            }
             uint32_t mantissa_scale_factor = (1 << (iq_width-1)) - 1;
             uint32_t exp_scale_factor = 1 << (iq_width+4);
 
@@ -4139,9 +4150,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
             }
 
             /* Pad out to next 4 bytes */
-            if ((offset-report_start_offset) % 4) {
-                offset += (4 - ((offset-report_start_offset) % 4));
-            }
+            offset += WS_PADDING_TO_4(offset-report_start_offset);
 
             /* End of measurement report tree */
             proto_item_set_end(mr_ti, tvb, offset);
@@ -4807,7 +4816,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
                 offset += 2;
 
                 /* Look up request table in state (which really should be set by now, but test anyway). */
-                if (state) {
+                if (state && state->ack_nack_requests) {
                     ack_nack_request_t *request = wmem_tree_lookup32(state->ack_nack_requests, ackid);
                     if (request != NULL) {
                         /* On first pass, update with this response */
@@ -4837,7 +4846,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
                                        nackid);
 
                 /* Look up request table in state. */
-                if (state) {
+                if (state && state->ack_nack_requests) {
                     ack_nack_request_t *request = wmem_tree_lookup32(state->ack_nack_requests, nackid);
                     if (request) {
                         /* On first pass, update with this response */
@@ -5236,9 +5245,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
                     offset += antmask_length;
 
                     /* Pad to next 4-byte boundary */
-                    if (offset%4) {
-                        offset += (4-(offset%4));
-                    }
+                    offset = WS_ROUNDUP_4(offset);
                     break;
                 }
 
@@ -5304,7 +5311,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
             /* Set end of command tree */
             proto_item_set_end(command_ti, tvb, offset);
 
-            if (ack_nack_req_id != 0) {
+            if (ack_nack_req_id != 0 && state && state->ack_nack_requests) {
                 if (!PINFO_FD_VISITED(pinfo)) {
                     /* Add this request into conversation state on first pass */
                     ack_nack_request_t *request_details = wmem_new0(wmem_file_scope(), ack_nack_request_t);
@@ -8549,6 +8556,9 @@ proto_register_oran(void)
 
     prefs_register_bool_preference(oran_module, "oran.st6_4byte_alignment_required", "Use 4-byte alignment for ST6 sections",
         "Default is 1-byte alignment", &st6_4byte_alignment);
+
+    prefs_register_bool_preference(oran_module, "oran.unscaled_iq", "Show unscaled I/Q values",
+        "", &show_unscaled_values);
 
     flow_states_table = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
     flow_results_table = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
