@@ -92,9 +92,8 @@ typedef struct section_info_t {
     uint16_t version_minor;        /**< Minor version number of this section */
     GArray *interfaces;            /**< Interfaces found in this section */
     int64_t shb_off;               /**< File offset of the SHB for this section */
-    uint32_t bblog_version;        /**< BBLog: version used */
-    uint64_t bblog_offset_tv_sec;  /**< BBLog: UTC offset */
-    uint64_t bblog_offset_tv_usec;
+    GHashTable *custom_block_data; /**< Table, indexed by PEN, for custom block data */
+    GHashTable *local_block_data;  /**< Table, indexed by block type, for local block data */
 } section_info_t;
 
 /*
@@ -117,8 +116,9 @@ typedef struct section_info_t {
 /*
  * Reader and writer routines for pcapng block types.
  */
-typedef bool (*block_reader)(wtap* wth, FILE_T fh, uint32_t block_read,
-                             pcapng_block_header_t* bh, section_info_t* section_info,
+typedef bool (*block_reader)(wtap* wth, FILE_T fh, uint32_t block_size,
+                             uint32_t block_content_size,
+                             section_info_t* section_info,
                              wtapng_block_t *wblock,
                              int *err, char **err_info);
 typedef bool (*block_writer)(wtap_dumper *wdh, const wtap_rec *rec,
@@ -193,7 +193,7 @@ bool pcapng_process_options(FILE_T fh, wtapng_block_t *wblock,
                             section_info_t *section_info,
                             unsigned opt_cont_buf_len,
                             bool (*process_option)(wtapng_block_t *,
-                                                   const section_info_t *,
+                                                   section_info_t *,
                                                    uint16_t, uint16_t,
                                                    const uint8_t *,
                                                    int *, char **),
@@ -211,28 +211,28 @@ void pcapng_process_uint8_option(wtapng_block_t *wblock,
 
 WS_DLL_PUBLIC
 void pcapng_process_uint32_option(wtapng_block_t *wblock,
-                                  const section_info_t *section_info,
+                                  section_info_t *section_info,
                                   pcapng_opt_byte_order_e byte_order,
                                   uint16_t option_code, uint16_t option_length,
                                   const uint8_t *option_content);
 
 WS_DLL_PUBLIC
 void pcapng_process_timestamp_option(wtapng_block_t *wblock,
-                                     const section_info_t *section_info,
+                                     section_info_t *section_info,
                                      pcapng_opt_byte_order_e byte_order,
                                      uint16_t option_code, uint16_t option_length,
                                      const uint8_t *option_content);
 
 WS_DLL_PUBLIC
 void pcapng_process_uint64_option(wtapng_block_t *wblock,
-                                  const section_info_t *section_info,
+                                  section_info_t *section_info,
                                   pcapng_opt_byte_order_e byte_order,
                                   uint16_t option_code, uint16_t option_length,
                                   const uint8_t *option_content);
 
 WS_DLL_PUBLIC
 void pcapng_process_int64_option(wtapng_block_t *wblock,
-                                 const section_info_t *section_info,
+                                 section_info_t *section_info,
                                  pcapng_opt_byte_order_e byte_order,
                                  uint16_t option_code, uint16_t option_length,
                                  const uint8_t *option_content);
@@ -322,6 +322,33 @@ pcapng_write_padding(wtap_dumper *wdh, size_t pad, int *err)
 WS_DLL_PUBLIC
 bool pcapng_write_block_footer(wtap_dumper *wdh, uint32_t block_content_length,
                                int *err);
+
+/*
+ * Structure holding allocation-and-initialization and free functions
+ * for section_info_t-associated custom or local block information.
+ */
+typedef struct {
+    void *(*new)(void);
+    GDestroyNotify free;
+} section_info_funcs_t;
+
+/*
+ * Find custom block information from a section_info_t; add a
+ * newly-created one and return it if none is found.
+ */
+WS_DLL_PUBLIC
+void *pcapng_get_cb_section_info_data(section_info_t *section_info,
+                                      uint32_t pen,
+                                      const section_info_funcs_t *funcs);
+
+/*
+ * Find local block information from a section_info_t; add a
+ * newly-created one and return it if none is found.
+ */
+WS_DLL_PUBLIC
+void *pcapng_get_lb_section_info_data(section_info_t *section_info,
+                                      uint32_t block_type,
+                                      const section_info_funcs_t *funcs);
 
 #ifdef __cplusplus
 }

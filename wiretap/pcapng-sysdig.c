@@ -34,6 +34,21 @@ sysdig_has_nparams(unsigned block_type) {
         || block_type == BLOCK_TYPE_SYSDIG_EVF_V2_LARGE;
 }
 
+/**
+ * Set up a wtap_rec for a system call (REC_TYPE_SYSCALL).
+ */
+void
+wtap_setup_syscall_rec(wtap_rec* rec)
+{
+    rec->rec_type = REC_TYPE_SYSCALL;
+    // We handle multiple types of data here, so use "Event"
+    // instead of "System Call"
+    //
+    // XXX - the wiretap code could set it, if it knows
+    // an appropriate string.
+    rec->rec_type_name = "Event";
+}
+
  // Preamble:
  //   uint16_t CPU ID
  //   uint32_t Flags (optional, sysdig_has_flags)
@@ -45,10 +60,9 @@ sysdig_has_nparams(unsigned block_type) {
  //   uint32_t Number of params (optional, sysdig_has_nparams)
 
 static bool
-pcapng_read_sysdig_event_block(wtap* wth, FILE_T fh, uint32_t block_read _U_,
-    pcapng_block_header_t* bh, section_info_t* section_info,
-    wtapng_block_t* wblock,
-    int* err, char** err_info)
+pcapng_read_sysdig_event_block(wtap* wth, FILE_T fh, uint32_t block_type,
+    uint32_t block_content_length, section_info_t* section_info,
+    wtapng_block_t* wblock, int* err, char** err_info)
 {
     uint16_t cpu_id;
     uint64_t ts;
@@ -57,22 +71,22 @@ pcapng_read_sysdig_event_block(wtap* wth, FILE_T fh, uint32_t block_read _U_,
     uint16_t event_type;
     uint32_t nparams = 0;
     uint32_t flags = 0;
-    bool has_flags = sysdig_has_flags(bh->block_type);
-    bool has_nparams = sysdig_has_nparams(bh->block_type);
+    bool has_flags = sysdig_has_flags(block_type);
+    bool has_nparams = sysdig_has_nparams(block_type);
     unsigned preamble_len = MIN_SYSDIG_PREAMBLE_SIZE + (has_flags ? 4 : 0);
     unsigned event_header_len = MIN_SYSDIG_EVENT_SIZE + (has_nparams ? 4 : 0);
 
     wblock->block = wtap_block_create(WTAP_BLOCK_SYSDIG_EVENT);
 
-    if (bh->block_total_length < MIN_BLOCK_SIZE + preamble_len + event_header_len) {
+    if (block_content_length < preamble_len + event_header_len) {
         *err = WTAP_ERR_BAD_FILE;
-        *err_info = ws_strdup_printf("pcapng: total block length %u of a Sysdig event block is too small (< %u)",
-            bh->block_total_length, MIN_BLOCK_SIZE + preamble_len + event_header_len);
+        *err_info = ws_strdup_printf("pcapng: block content length %u of a Sysdig event block is too small (< %u)",
+            block_content_length, preamble_len + event_header_len);
         return false;
     }
 
     wtap_setup_syscall_rec(wblock->rec);
-    wblock->rec->rec_header.syscall_header.record_type = bh->block_type;
+    wblock->rec->rec_header.syscall_header.record_type = block_type;
     wblock->rec->presence_flags = WTAP_HAS_CAP_LEN /*|WTAP_HAS_INTERFACE_ID */;
     wblock->rec->tsprec = WTAP_TSPREC_NSEC;
     wblock->rec->rec_header.syscall_header.pathname = wth->pathname;
@@ -138,7 +152,7 @@ pcapng_read_sysdig_event_block(wtap* wth, FILE_T fh, uint32_t block_read _U_,
     wblock->rec->ts.secs = (time_t)(ts / 1000000000);
     wblock->rec->ts.nsecs = (int)(ts % 1000000000);
 
-    unsigned block_remaining = bh->block_total_length - MIN_BLOCK_SIZE - preamble_len - event_header_len;
+    unsigned block_remaining = block_content_length - preamble_len - event_header_len;
     if (event_len > block_remaining + event_header_len) {
         ws_debug("Truncating event length %u to %u", event_len, block_remaining + event_header_len);
         // ...or should we just return false here?
@@ -297,8 +311,8 @@ pcapng_process_meta_event(wtap* wth, wtapng_block_t* wblock)
 }
 
 static bool
-pcapng_read_meta_event_block(wtap* wth _U_, FILE_T fh, uint32_t block_read _U_,
-    pcapng_block_header_t* bh, section_info_t* section_info _U_,
+pcapng_read_meta_event_block(wtap* wth _U_, FILE_T fh, uint32_t block_type,
+    uint32_t block_content_length, section_info_t* section_info _U_,
     wtapng_block_t* wblock,
     int* err, char** err_info)
 {
@@ -314,10 +328,8 @@ pcapng_read_meta_event_block(wtap* wth _U_, FILE_T fh, uint32_t block_read _U_,
      * Set the mandatory values for the block.
      */
     mev_mand = (wtapng_meta_event_mandatory_t*)wtap_block_get_mandatory_data(wblock->block);
-    mev_mand->mev_block_type = bh->block_type;
-    mev_mand->mev_data_len = bh->block_total_length -
-        (int)sizeof(pcapng_block_header_t) -
-        (int)sizeof(bh->block_total_length);
+    mev_mand->mev_block_type = block_type;
+    mev_mand->mev_data_len = block_content_length;
 
     /* Sanity check: assume event data can't be larger than 1 GiB */
     if (mev_mand->mev_data_len > 1024 * 1024 * 1024) {
@@ -332,7 +344,7 @@ pcapng_read_meta_event_block(wtap* wth _U_, FILE_T fh, uint32_t block_read _U_,
     }
 
     /* Skip past padding and discard options (not supported yet). */
-    to_read = bh->block_total_length - MIN_BLOCK_SIZE - mev_mand->mev_data_len;
+    to_read = block_content_length - mev_mand->mev_data_len;
     if (!wtap_read_bytes(fh, NULL, to_read, err, err_info)) {
         ws_debug("failed to read Sysdig mev options");
         return false;
@@ -344,6 +356,33 @@ pcapng_read_meta_event_block(wtap* wth _U_, FILE_T fh, uint32_t block_read _U_,
     wblock->internal = true;
 
     return true;
+}
+
+static void sysdig_create(wtap_block_t block)
+{
+    /* Ensure this is null, so when g_free is called on it, it simply returns */
+    block->mandatory_data = NULL;
+}
+
+static void mev_create(wtap_block_t block)
+{
+    block->mandatory_data = g_new0(wtapng_meta_event_mandatory_t, 1);
+}
+
+static void mev_free_mand(wtap_block_t block)
+{
+    wtapng_meta_event_mandatory_t* mand = (wtapng_meta_event_mandatory_t*)block->mandatory_data;
+    g_free(mand->mev_data);
+}
+
+static void mev_copy_mand(wtap_block_t dest_block, wtap_block_t src_block)
+{
+    wtapng_meta_event_mandatory_t* src = (wtapng_meta_event_mandatory_t*)src_block->mandatory_data;
+    wtapng_meta_event_mandatory_t* dst = (wtapng_meta_event_mandatory_t*)dest_block->mandatory_data;
+    dst->mev_block_type = src->mev_block_type;
+    dst->mev_data_len = src->mev_data_len;
+    g_free(dst->mev_data);
+    dst->mev_data = (uint8_t*)g_memdup2(src->mev_data, src->mev_data_len);
 }
 
 void register_sysdig(void)
@@ -371,6 +410,17 @@ void register_sysdig(void)
     static pcapng_block_type_handler_t IL_V2 = { BLOCK_TYPE_SYSDIG_IL_V2, pcapng_read_meta_event_block, NULL, pcapng_process_meta_event, true, BT_INDEX_EVT };
     static pcapng_block_type_handler_t UL_V2 = { BLOCK_TYPE_SYSDIG_UL_V2, pcapng_read_meta_event_block, NULL, pcapng_process_meta_event, true, BT_INDEX_EVT };
 
+    static wtap_blocktype_t sysdig_block = { WTAP_BLOCK_SYSDIG_EVENT, "Sysdig event", "Sysdig Event Block", sysdig_create, NULL, NULL, NULL };
+    static wtap_blocktype_t mev_block = { WTAP_BLOCK_META_EVENT, "MEV", "Meta Event Block", mev_create, mev_free_mand, mev_copy_mand, NULL };
+
+    /*
+     * Register the Sysdig block and the (no) options that can appear in it.
+     */
+    wtap_opttype_block_register(&sysdig_block);
+    /*
+     * Register the Sysdig MEV, currently no options are defined.
+     */
+    wtap_opttype_block_register(&mev_block);
 
     register_pcapng_block_type_handler(&MI);
     register_pcapng_block_type_handler(&PL_V1);

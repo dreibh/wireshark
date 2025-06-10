@@ -106,6 +106,13 @@ typedef struct {
 
 #define DIGEST_MAX_SIZE 48
 
+/* The maximum SSH packet_length accepted. If the packet_length field after
+ * attempted decryption is larger than this, the packet will be assumed to
+ * have failed decryption (possibly due to being continuation data).
+ * (This could be made a preference.)
+ */
+#define SSH_MAX_PACKET_LEN 32768
+
 typedef struct _ssh_message_info_t {
     uint32_t sequence_number;
     unsigned char *plain_data;     /**< Decrypted data. */
@@ -183,6 +190,9 @@ struct ssh_peer_data {
     uint8_t          iv[12];
     uint8_t          hmac_iv[DIGEST_MAX_SIZE];
     unsigned         hmac_iv_len;
+
+    uint8_t          plain0[16];
+    bool             plain0_valid;
 
     wmem_map_t      *channel_info; /**< Map of sender channel numbers to recipient numbers. */
     wmem_map_t      *channel_handles; /**< Map of recipient channel numbers to subdissector handles. */
@@ -476,6 +486,7 @@ static expert_field ei_ssh2_kex_hybrid_msg_code;
 static expert_field ei_ssh2_kex_hybrid_msg_code_unknown;
 
 static bool ssh_desegment = true;
+static bool ssh_ignore_mac_failed;
 
 static dissector_handle_t ssh_handle;
 static dissector_handle_t sftp_handle;
@@ -585,6 +596,7 @@ static const char *ssh_debug_file_name;
 //#define CIPHER_AES192_GCM               0x00040002        -- does not exist
 #define CIPHER_AES256_GCM               0x00040004
 // DO NOT USE 0x00040000 (used by SSH_KEX_SNTRUP761X25519)
+#define CIPHER_NULL                     0x00080000
 
 #define CIPHER_MAC_SHA2_256             0x00020001
 
@@ -754,10 +766,6 @@ static unsigned ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 static bool ssh_decrypt_chacha20(gcry_cipher_hd_t hd, uint32_t seqnr,
         uint32_t counter, const unsigned char *ctext, unsigned ctext_len,
         unsigned char *plain, unsigned plain_len);
-static proto_item * ssh_tree_add_mac(proto_tree *tree, tvbuff_t *tvb, const unsigned offset, const unsigned mac_len,
-        const int hf_mac, const int hf_mac_status, struct expert_field* bad_checksum_expert,
-        packet_info *pinfo, const uint8_t * calc_mac, const unsigned flags);
-
 static int ssh_dissect_decrypted_packet(tvbuff_t *tvb, packet_info *pinfo,
         struct ssh_peer_data *peer_data, proto_tree *tree,
         ssh_message_info_t *message);
@@ -1020,6 +1028,9 @@ ssh_dissect_ssh2(tvbuff_t *tvb, packet_info *pinfo,
             if(!*need_desegmentation){
                 offset = ssh_try_dissect_encrypted_packet(tvb, pinfo,
                         &global_data->peer_data[is_response], offset, ssh2_tree);
+                if (pinfo->desegment_len) {
+                    break;
+                }
             }else{
                 break;
             }
@@ -1492,7 +1503,7 @@ static int ssh_dissect_kex_dh(uint8_t msg_code, tvbuff_t *tvb,
         if(global_data->peer_data[CLIENT_PEER_DATA].seq_num_dh_ini == 0){
             global_data->peer_data[CLIENT_PEER_DATA].sequence_number++;
             global_data->peer_data[CLIENT_PEER_DATA].seq_num_dh_ini = global_data->peer_data[CLIENT_PEER_DATA].sequence_number;
-            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEXDH_INIT}++ > %d\n", CLIENT_PEER_DATA?"serveur":"client", global_data->peer_data[CLIENT_PEER_DATA].sequence_number);
+            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEXDH_INIT}++ > %d\n", CLIENT_PEER_DATA?"server":"client", global_data->peer_data[CLIENT_PEER_DATA].sequence_number);
         }
         *seq_num = global_data->peer_data[CLIENT_PEER_DATA].seq_num_dh_ini;
         break;
@@ -1515,7 +1526,7 @@ static int ssh_dissect_kex_dh(uint8_t msg_code, tvbuff_t *tvb,
         if(global_data->peer_data[SERVER_PEER_DATA].seq_num_dh_rep == 0){
             global_data->peer_data[SERVER_PEER_DATA].sequence_number++;
             global_data->peer_data[SERVER_PEER_DATA].seq_num_dh_rep = global_data->peer_data[SERVER_PEER_DATA].sequence_number;
-            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEXDH_REPLY}++ > %d\n", SERVER_PEER_DATA?"serveur":"client", global_data->peer_data[SERVER_PEER_DATA].sequence_number);
+            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEXDH_REPLY}++ > %d\n", SERVER_PEER_DATA?"server":"client", global_data->peer_data[SERVER_PEER_DATA].sequence_number);
         }
         *seq_num = global_data->peer_data[SERVER_PEER_DATA].seq_num_dh_rep;
         break;
@@ -1551,7 +1562,7 @@ static int ssh_dissect_kex_dh_gex(uint8_t msg_code, tvbuff_t *tvb,
         if(global_data->peer_data[SERVER_PEER_DATA].seq_num_gex_grp == 0){
             global_data->peer_data[SERVER_PEER_DATA].sequence_number++;
             global_data->peer_data[SERVER_PEER_DATA].seq_num_gex_grp = global_data->peer_data[SERVER_PEER_DATA].sequence_number;
-            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_DH_GEX_GROUP}++ > %d\n", SERVER_PEER_DATA?"serveur":"client", global_data->peer_data[SERVER_PEER_DATA].sequence_number);
+            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_DH_GEX_GROUP}++ > %d\n", SERVER_PEER_DATA?"server":"client", global_data->peer_data[SERVER_PEER_DATA].sequence_number);
         }
         *seq_num = global_data->peer_data[SERVER_PEER_DATA].seq_num_gex_grp;
         break;
@@ -1566,7 +1577,7 @@ static int ssh_dissect_kex_dh_gex(uint8_t msg_code, tvbuff_t *tvb,
         if(global_data->peer_data[CLIENT_PEER_DATA].seq_num_gex_ini == 0){
             global_data->peer_data[CLIENT_PEER_DATA].sequence_number++;
             global_data->peer_data[CLIENT_PEER_DATA].seq_num_gex_ini = global_data->peer_data[CLIENT_PEER_DATA].sequence_number;
-            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_DH_GEX_INIT}++ > %d\n", CLIENT_PEER_DATA?"serveur":"client", global_data->peer_data[CLIENT_PEER_DATA].sequence_number);
+            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_DH_GEX_INIT}++ > %d\n", CLIENT_PEER_DATA?"server":"client", global_data->peer_data[CLIENT_PEER_DATA].sequence_number);
         }
         *seq_num = global_data->peer_data[CLIENT_PEER_DATA].seq_num_gex_ini;
         break;
@@ -1586,7 +1597,7 @@ static int ssh_dissect_kex_dh_gex(uint8_t msg_code, tvbuff_t *tvb,
         if(global_data->peer_data[SERVER_PEER_DATA].seq_num_gex_rep == 0){
             global_data->peer_data[SERVER_PEER_DATA].sequence_number++;
             global_data->peer_data[SERVER_PEER_DATA].seq_num_gex_rep = global_data->peer_data[SERVER_PEER_DATA].sequence_number;
-            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_DH_GEX_REPLY}++ > %d\n", SERVER_PEER_DATA?"serveur":"client", global_data->peer_data[SERVER_PEER_DATA].sequence_number);
+            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_DH_GEX_REPLY}++ > %d\n", SERVER_PEER_DATA?"server":"client", global_data->peer_data[SERVER_PEER_DATA].sequence_number);
         }
         *seq_num = global_data->peer_data[SERVER_PEER_DATA].seq_num_gex_rep;
         break;
@@ -1611,7 +1622,7 @@ static int ssh_dissect_kex_dh_gex(uint8_t msg_code, tvbuff_t *tvb,
         if(global_data->peer_data[CLIENT_PEER_DATA].seq_num_gex_req == 0){
             global_data->peer_data[CLIENT_PEER_DATA].sequence_number++;
             global_data->peer_data[CLIENT_PEER_DATA].seq_num_gex_req = global_data->peer_data[CLIENT_PEER_DATA].sequence_number;
-            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_DH_GEX_REQUEST}++ > %d\n", CLIENT_PEER_DATA?"serveur":"client", global_data->peer_data[CLIENT_PEER_DATA].sequence_number);
+            ssh_debug_printf("%s->sequence_number{SSH_MSG_KEX_DH_GEX_REQUEST}++ > %d\n", CLIENT_PEER_DATA?"server":"client", global_data->peer_data[CLIENT_PEER_DATA].sequence_number);
         }
         *seq_num = global_data->peer_data[CLIENT_PEER_DATA].seq_num_gex_req;
         break;
@@ -1694,8 +1705,10 @@ static int ssh_dissect_kex_hybrid(uint8_t msg_code, tvbuff_t *tvb,
     case SSH_MSG_KEX_HYBRID_INIT:
         expert_add_info(pinfo, NULL, &ei_ssh2_kex_hybrid_msg_code_unknown);
         expert_add_info(pinfo, NULL, &ei_ssh2_kex_hybrid_msg_code);
-        ws_warning("KEX_HYBRID detected: KEX ALGORITHM = %s", kex_name);
-        ws_warning("KEX_HYBRID KEM support in Wireshark / TShark SSH dissector may be missing, partial or experimental");
+        if (!PINFO_FD_VISITED(pinfo)) {
+            ws_warning("KEX_HYBRID detected: KEX ALGORITHM = %s", kex_name);
+            ws_warning("KEX_HYBRID KEM support in Wireshark / TShark SSH dissector may be missing, partial or experimental");
+        }
         ws_noisy(">>> KEX_HYBRID KEM detected: msg_code = %u, offset = %d, kex = %s", msg_code, offset, kex_name);
         break;
     case SSH_MSG_KEX_HYBRID_REPLY:
@@ -1779,8 +1792,10 @@ ssh_dissect_kex_pq_hybrid(uint8_t msg_code, tvbuff_t *tvb,
         // Print warning when sntrup761x25519-sha512 or mlkem768x25519-sha256 is detected in KEX
         // This implementation currently rely on SHARED_SECRET only and do not work with PRIVATE_KEY
         const char *kex_name = global_data->kex;
-        ws_warning("POST-QUANTUM KEX_HYBRID detected: KEX = %s", kex_name);
-        ws_warning("SHARED_SECRET decryption is supported - PRIVATE_KEY decryption is not supported");
+        if (!PINFO_FD_VISITED(pinfo)) {
+            ws_warning("POST-QUANTUM KEX_HYBRID detected: KEX = %s", kex_name);
+            ws_warning("SHARED_SECRET decryption is supported - PRIVATE_KEY decryption is not supported");
+        }
         // Print noisy debug info
         ws_noisy(">>> HYBRID KEM: msg_code = %u, offset = %d, kex = %s", msg_code, offset, kex_name);
         }
@@ -1968,7 +1983,7 @@ ssh_get_message(packet_info *pinfo, int record_id)
 
     ssh_message_info_t *message = NULL;
     for (message = packet->messages; message; message = message->next) {
-        ws_debug("%u:looking for message %d now %d", pinfo->num, record_id, message->id);
+        ws_noisy("%u:looking for message %d now %d", pinfo->num, record_id, message->id);
         if (message->id == record_id) {
             return message;
         }
@@ -1981,12 +1996,15 @@ static int
 ssh_try_dissect_encrypted_packet(tvbuff_t *tvb, packet_info *pinfo,
         struct ssh_peer_data *peer_data, int offset, proto_tree *tree)
 {
-    bool can_decrypt = peer_data->cipher != NULL;
+    bool can_decrypt = peer_data->cipher != NULL || peer_data->cipher_id == CIPHER_NULL;
     ssh_message_info_t *message = NULL;
 
     if (can_decrypt) {
         if (!PINFO_FD_VISITED(pinfo)) {
             ssh_decrypt_packet(tvb, pinfo, peer_data, offset);
+            if (pinfo->desegment_len) {
+                return offset;
+            }
         }
 
         int record_id = tvb_raw_offset(tvb) + offset;
@@ -2458,7 +2476,9 @@ ssh_keylog_read_file(void)
      *  90d886612f9c35903db5bb30d11f23c2 PRIVATE_KEY DEF830C22F6C927E31972FFB20B46C96D0A5F2D5E7BE5A3A8804D6BFC431619ED10AF589EEDFF4750DEA00EFD7AFDB814B6F3528729692B1F2482041521AE9DC
      */
     for (;;) {
-        char buf[512];
+        // XXX - What is a reasonable max line length here? Note at a certain
+        // point we have to increase the maximum ssh_kex_make_bignum supports.
+        char buf[2048];
         buf[0] = 0;
 
         if (!fgets(buf, sizeof(buf), ssh_keylog_file)) {
@@ -2536,12 +2556,12 @@ ssh_keylog_process_line(const char *line)
     key_len = strlen(key);
     cookie_len = strlen(cookie);
     if(key_len & 1){
-        ws_debug("ssh keylog: invalid format (key could at least be even!)");
+        ws_debug("ssh keylog: invalid format (key should at least be even!)");
         g_strfreev(split);
         return;
     }
     if(cookie_len & 1){
-        ws_debug("ssh keylog: invalid format (cookie could at least be even!)");
+        ws_debug("ssh keylog: invalid format (cookie should at least be even!)");
         g_strfreev(split);
         return;
     }
@@ -3319,6 +3339,9 @@ ssh_decryption_set_cipher_id(struct ssh_peer_data *peer)
         peer->cipher_id = CIPHER_AES192_CTR;
     } else if (0 == strcmp(cipher_name, "aes256-ctr")) {
         peer->cipher_id = CIPHER_AES256_CTR;
+    } else if (0 == strcmp(cipher_name, "none")) {
+        peer->cipher_id = CIPHER_NULL;
+        peer->length_is_plaintext = 1;
     } else {
         peer->cipher = NULL;
         ws_debug("decryption not supported: %s", cipher_name);
@@ -3611,7 +3634,10 @@ ssh_calc_mac(struct ssh_peer_data *peer_data, uint32_t seqnr, uint8_t* data, uin
 
     memset(calc_mac, 0, DIGEST_MAX_SIZE);
 
-    if (ssh_hmac_init(&hm, peer_data->hmac_iv, peer_data->hmac_iv_len,md) != 0)
+    if (md == -1) {
+        return;
+    }
+    if (ssh_hmac_init(&hm, peer_data->hmac_iv, peer_data->hmac_iv_len, md) != 0)
         return;
 
     /* hash sequence number */
@@ -3661,11 +3687,41 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
     unsigned mac_len, data_len = 0;
     uint8_t calc_mac[DIGEST_MAX_SIZE];
     memset(calc_mac, 0, DIGEST_MAX_SIZE);
+    unsigned remaining = tvb_captured_length_remaining(tvb, offset);
 
     mac_len = peer_data->mac_length;
     seqnr = peer_data->sequence_number;
 
+    /* General algorithm:
+     * 1. If there are not enough bytes for the packet_length, and we can
+     * do reassembly, ask for one more segment.
+     * 2. Retrieve packet_length (encrypted in some modes).
+     * 3. Sanity check packet_length (the field is 4 bytes, but packet_length
+     * is unlikely to be much larger than 32768, which provides good indication
+     * a packet is continuation data or, in some modes, failed decryption.
+     * https://www.rfc-editor.org/rfc/rfc4253.html#section-6.1 )
+     * 4. If there are not enough bytes for packet_length, and we can do
+     * reassembly, tell the TCP dissector how many more bytes we need.
+     * 5. If the packet is truncated and we cannot reassemble, at this
+     * point we conclude that it is the next SSH packet, and advance the
+     * sequence number, invocation_counter, etc. before throwing an exception.
+     * 6. If we do have all the data, we decrypt and check the MAC before
+     * doing all that. (XXX - Advancing seqnr regardless could make sense
+     * in some ciphers.)
+     * 7. Possibly the MAC should be checked before decryption in some ciphers
+     * if we have all the data; possibly there should be a "do not check the
+     * MAC" preference a la TLS.
+     */
+
     if (GCRY_CIPHER_CHACHA20 == peer_data->cipher_id) {
+        if (ssh_desegment && pinfo->can_desegment && remaining < 4) {
+            /* Can do reassembly, and the packet length is split across
+             * segment boundaries. */
+            pinfo->desegment_offset = offset;
+            pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
+            return tvb_captured_length(tvb);
+        }
+
         const char *ctext = (const char *)tvb_get_ptr(tvb, offset, 4);
         uint8_t plain_length_buf[4];
 
@@ -3680,9 +3736,26 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
         ssh_debug_printf("chachapoly_crypt seqnr=%d [%u]\n", seqnr, message_length);
 
         ssh_debug_printf("%s plain for seq = %d len = %u\n", is_response?"s2c":"c2s", seqnr, message_length);
-        if(message_length>32768){
+        if (message_length > SSH_MAX_PACKET_LEN) {
             ws_debug("ssh: unreasonable message length %u", message_length);
             return tvb_captured_length(tvb);
+        }
+        if (remaining < message_length + 4 + mac_len) {
+            // Need desegmentation; as "the chacha20-poly1305@openssh.com AEAD
+            // uses the sequence number as an initialisation vector (IV) to
+            // generate its per-packet MAC key and is otherwise stateless
+            // between packets," we need no special handling here.
+            // https://www.ietf.org/id/draft-miller-sshm-strict-kex-01.html
+            //
+            if (ssh_desegment && pinfo->can_desegment) {
+                pinfo->desegment_offset = offset;
+                pinfo->desegment_len = message_length + 4 + mac_len - remaining;
+                return tvb_captured_length(tvb);
+            }
+            // If we can't desegment, we will have an exception below in
+            // the tvb_get_ptr. Advance the sequence number so that the
+            // next SSH packet start will decrypt correctly.
+            peer_data->sequence_number++;
         }
 
         plain = (char *)wmem_alloc0(pinfo->pool, message_length+4);
@@ -3690,6 +3763,10 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
         const char *ctext2 = (const char *)tvb_get_ptr(tvb, offset+4,
                 message_length);
 
+        /* XXX - "Once the entire packet has been received, the MAC MUST be
+         * checked before decryption," but we decrypt first.
+         * https://datatracker.ietf.org/doc/html/draft-ietf-sshm-chacha20-poly1305-01
+         */
         if (!ssh_decrypt_chacha20(peer_data->cipher, seqnr, 1, ctext2,
                     message_length, plain+4, message_length)) {
             ws_debug("ERROR: could not decrypt packet payload");
@@ -3719,22 +3796,23 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 
         data_len   = message_length + 4;
 
-//        ssh_print_data(is_response?"s2c encrypted":"c2s encrypted", ctext2, message_length+4+mac_len);
         ssh_debug_printf("%s plain text seq=%d", is_response?"s2c":"c2s",seqnr);
         ssh_print_data("", plain, message_length+4);
     } else if (CIPHER_AES128_GCM == peer_data->cipher_id || CIPHER_AES256_GCM == peer_data->cipher_id) {
 
         /* AES GCM for Secure Shell [RFC 5647] */
         /* The message length is Additional Authenticated Data */
-        /* XXX: If there are fewer than 4 octets available, we need to
-         * ask the TCP dissector for DESEGMENT_ONE_MORE_SEGMENT instead
-         * of throwing an exception here, if we're desegmenting.
-         */
+        if (ssh_desegment && pinfo->can_desegment && remaining < 4) {
+            /* Can do reassembly, and the packet length is split across
+             * segment boundaries. */
+            pinfo->desegment_offset = offset;
+            pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
+            return tvb_captured_length(tvb);
+        }
         message_length = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
-        unsigned remaining = tvb_reported_length_remaining(tvb, offset);
         ssh_debug_printf("length: %d, remaining: %d\n", message_length, remaining);
         /* The minimum size of a packet (not counting mac) is 16. */
-        if (message_length < 16) {
+        if (message_length > SSH_MAX_PACKET_LEN || message_length < 16) {
             ws_debug("ssh: unreasonable message length %u", message_length);
             return tvb_captured_length(tvb);
         }
@@ -3745,17 +3823,24 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
             ssh_debug_printf("length not a multiple of block length (16)!\n");
         }
 
-        /* If tvb_reported_length_remaining(tvb, offset + 4) is less
-         * than message_length + mac_len, then we should ask the TCP
-         * dissector for more data if we're desegmenting. That is
-         * simpler than trying to handle fragmentation ourselves.
-         */
-        const char *ctext = (const char *)tvb_get_ptr(tvb, offset + 4,
-                message_length);
-        plain = (char *)wmem_alloc(pinfo->pool, message_length+4);
-        phton32(plain, message_length);
+        if (message_length + 4 + mac_len > remaining) {
+            // Need desegmentation; as the message length was unencrypted
+            // AAD, we need no special handling here.
+            if (pinfo->can_desegment) {
+                pinfo->desegment_offset = offset;
+                pinfo->desegment_len = message_length + 4 + mac_len - remaining;
+                return tvb_captured_length(tvb);
+            }
+            // If we can't desegment, we will have an exception below in
+            // the tvb_get_ptr. Advance the sequence number (less crucial
+            // than with ChaCha20, as it's not an input.)
+            peer_data->sequence_number++;
+        }
 
-        /* gcry_cipher_setiv(peer_data->cipher, iv, 12); */
+        /* Set the IV and increment the invocation_counter for the next
+         * packet. Do this before retrieving the ciphertext with tvb_get_ptr
+         * in case this packet is truncated.
+         */
         if ((err = gcry_cipher_setiv(peer_data->cipher, peer_data->iv, 12))) {
             //gcry_cipher_close(peer_data->cipher);
             //Don't close this unless we also remove the wmem callback
@@ -3766,11 +3851,17 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 #endif        //ndef _WIN32
             return tvb_captured_length(tvb);
         }
+        // Increment invocation_counter for next packet
         int idx = 12;
         do{
             idx -= 1;
             peer_data->iv[idx] += 1;
         }while(idx>4 && peer_data->iv[idx]==0);
+
+        const char *ctext = (const char *)tvb_get_ptr(tvb, offset + 4,
+                message_length);
+        plain = (char *)wmem_alloc(pinfo->pool, message_length+4);
+        phton32(plain, message_length);
 
         if ((err = gcry_cipher_authenticate(peer_data->cipher, plain, 4))) {
 // TODO: temporary work-around as long as a Windows python bug is triggered by automated tests
@@ -3808,7 +3899,6 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 
         data_len   = message_length + 4;
 
-//            ssh_print_data(is_response?"s2c encrypted":"c2s encrypted", ctl, message_length+4+mac_len);
         ssh_debug_printf("%s plain text seq=%d", is_response?"s2c":"c2s",seqnr);
         ssh_print_data("", plain, message_length+4);
 
@@ -3816,48 +3906,77 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
         CIPHER_AES192_CBC == peer_data->cipher_id || CIPHER_AES192_CTR == peer_data->cipher_id ||
         CIPHER_AES256_CBC == peer_data->cipher_id || CIPHER_AES256_CTR == peer_data->cipher_id) {
 
-        message_length = tvb_reported_length_remaining(tvb, offset) - 4 - mac_len;
-
-// TODO: see how to handle fragmentation...
         ws_noisy("Getting raw bytes of length %d", tvb_reported_length_remaining(tvb, offset));
         /* In CBC and CTR mode, the message length is encrypted as well.
-         * We need to decrypt one block to get the length.
-         * If we have fewer than 16 octets, and we're doing desegmentation,
-         * we should tell the TCP dissector we need ONE_MORE_SEGMENT.
+         * We need to decrypt one block, 16 octets, to get the length.
          */
-        const char *cypher_buf0 = (const char *)tvb_get_ptr(tvb, offset, 16);
-
-        char    plain0[16];
-        if (gcry_cipher_decrypt(peer_data->cipher, plain0, 16, cypher_buf0, 16))
-        {
-            ws_debug("can\'t decrypt aes128");
+        if (ssh_desegment && pinfo->can_desegment && remaining < 16) {
+            /* Can do reassembly, and the packet length is split across
+             * segment boundaries. */
+            pinfo->desegment_offset = offset;
+            pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
             return tvb_captured_length(tvb);
         }
+        /* Do we already have the first block decrypted from when the packet
+         * was too large and segmented?
+         */
+        if (!peer_data->plain0_valid) {
+            const char *cypher_buf0 = (const char *)tvb_get_ptr(tvb, offset, 16);
 
-        unsigned message_length_decrypted = pntoh32(plain0);
-        unsigned remaining = tvb_reported_length_remaining(tvb, offset);
+            if (gcry_cipher_decrypt(peer_data->cipher, peer_data->plain0, 16, cypher_buf0, 16))
+            {
+                ws_debug("can\'t decrypt aes128");
+                return tvb_captured_length(tvb);
+            }
+        }
+
+        message_length = pntoh32(peer_data->plain0);
 
         /* The message_length value doesn't include the length of the
          * message_length field itself, so it must be at least 12 bytes.
          */
-        if(message_length_decrypted>32768 || message_length_decrypted < 12){
-            ws_debug("ssh: unreasonable message length %u/%u", message_length_decrypted, message_length);
+        if (message_length > SSH_MAX_PACKET_LEN || message_length < 12){
+            ws_debug("ssh: unreasonable message length %u", message_length);
             return tvb_captured_length(tvb);
         }
 
-        message_length = message_length_decrypted;
         /* SSH requires that the data to be encrypted (message_length+4)
          * be a multiple of the block size, 16 octets. */
         if (message_length % 16 != 12) {
             ssh_debug_printf("total length not a multiple of block length (16)!\n");
         }
+        if (remaining < message_length + 4 + mac_len) {
+            /* Need desegmentation
+             *
+             * We will be handed the full encrypted packet again. We can either
+             * store the decrypted first block, or will need to reset the CTR
+             * or IV appropriately before decrypting the first block again.
+             * libgcrypt does not provide an easy way to get the current value
+             * of the CTR or (or IV/last block for CBC), so we just store the
+             * decrypted first block.
+             */
+            if (ssh_desegment && pinfo->can_desegment) {
+                ws_noisy("  need_desegmentation: offset = %d, reported_length_remaining = %d\n",
+                                offset, tvb_reported_length_remaining(tvb, offset));
+                peer_data->plain0_valid = true;
+                pinfo->desegment_offset = offset;
+                pinfo->desegment_len = message_length + 4 + mac_len - remaining;
+                return tvb_captured_length(tvb);
+            } else {
+                // If we can't desegment, we will have an exception below in
+                // the tvb_get_ptr. Advance the sequence number so that the
+                // the hash will work for the next packet.
+                //
+                // XXX - In CTR mode, we should advance the CTR based on the
+                // known length so we can dissect the next block. We would
+                // also need to reset the CTR after failing to dissect a
+                // packet_length on the continuation data that comes next.
+                peer_data->sequence_number++;
+            }
+        }
+        peer_data->plain0_valid = false;
         plain = (char *)wmem_alloc(pinfo->pool, message_length+4);
-        memcpy(plain, plain0, 16);
-
-        /* If we're desegmenting, we want to test if we have enough
-         * remaining bytes here. It's easier to have the TCP
-         * dissector put together a PDU based on our length.
-         */
+        memcpy(plain, peer_data->plain0, 16);
 
         if (message_length - 12 > 0) {
             /* All of these functions actually do handle the case where
@@ -3871,25 +3990,44 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
             }
         }
 
-        /* XXX: Need to test if we have enough data above if we're
-         * doing desegmentation; the tvb_get_ptr() calls will throw
-         * exceptions if there's not enough data before we get here.
-         */
-        if(message_length_decrypted>remaining){
-            // Need desegmentation
-            ws_noisy("  need_desegmentation: offset = %d, reported_length_remaining = %d\n",
-                            offset, tvb_reported_length_remaining(tvb, offset));
-            /* Make data available to ssh_follow_tap_listener */
-            return tvb_captured_length(tvb);
-        }
-
-//                ssh_print_data(is_response?"s2c encrypted":"c2s encrypted", ctext, message_length+4+mac_len);
         ssh_debug_printf("%s plain text seq=%d", is_response?"s2c":"c2s",seqnr);
         ssh_print_data("", plain, message_length+4);
 
-// TODO: process fragments
         data_len   = message_length + 4;
 
+        // XXX - In -etm modes, should calculate MAC based on ciphertext.
+        ssh_calc_mac(peer_data, seqnr, plain, data_len, calc_mac);
+    } else if (CIPHER_NULL == peer_data->cipher_id) {
+        if (ssh_desegment && pinfo->can_desegment && remaining < 4) {
+            /* Can do reassembly, and the packet length is split across
+             * segment boundaries. */
+            pinfo->desegment_offset = offset;
+            pinfo->desegment_len = DESEGMENT_ONE_MORE_SEGMENT;
+            return tvb_captured_length(tvb);
+        }
+        message_length = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
+        ssh_debug_printf("length: %d, remaining: %d\n", message_length, remaining);
+        if (message_length > SSH_MAX_PACKET_LEN || message_length < 8) {
+            ws_debug("ssh: unreasonable message length %u", message_length);
+            return tvb_captured_length(tvb);
+        }
+
+        if (message_length + 4 + mac_len > remaining) {
+            // Need desegmentation; as the message length was unencrypted
+            // AAD, we need no special handling here.
+            if (pinfo->can_desegment) {
+                pinfo->desegment_offset = offset;
+                pinfo->desegment_len = message_length + 4 + mac_len - remaining;
+                return tvb_captured_length(tvb);
+            }
+            // If we can't desegment, we will have an exception below in
+            // the tvb_memdup. Advance the sequence number (not crucial).
+            peer_data->sequence_number++;
+        }
+        data_len = message_length + 4;
+        plain = tvb_memdup(pinfo->pool, tvb, offset, data_len);
+
+        // XXX - In -etm modes, should calculate MAC based on ciphertext.
         ssh_calc_mac(peer_data, seqnr, plain, data_len, calc_mac);
     }
 
@@ -3901,10 +4039,9 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
             ws_debug("MAC ERR");
             /* Bad MAC, just show the packet as encrypted. We can get
              * this for a known encryption type with no keys currently. */
-            /* XXX: The TLS dissector has a preference to show the attempt
-             * anyway if it failed.
-             */
-            return tvb_captured_length(tvb);
+            if (!ssh_ignore_mac_failed) {
+                return tvb_captured_length(tvb);
+            }
         }
     }
 
@@ -3934,87 +4071,6 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
 
     offset += message_length + mac_len + 4;
     return offset;
-}
-
-proto_item *
-ssh_tree_add_mac(proto_tree *tree, tvbuff_t *tvb, const unsigned offset, const unsigned mac_len,
-                const int hf_mac, const int hf_mac_status, struct expert_field* bad_checksum_expert,
-                packet_info *pinfo, const uint8_t * calc_mac, const unsigned flags)
-{
-//    header_field_info *hfinfo = proto_registrar_get_nth(hf_checksum);
-    proto_item* ti = NULL;
-    proto_item* ti2;
-    bool incorrect_mac = true;
-    char *mac;
-
-//    DISSECTOR_ASSERT_HINT(hfinfo != NULL, "Not passed hfi!");
-/*
-    if (flags & PROTO_CHECKSUM_NOT_PRESENT) {
-        ti = proto_tree_add_uint_format_value(tree, hf_checksum, tvb, offset, len, 0, "[missing]");
-        proto_item_set_generated(ti);
-        if (hf_checksum_status > 0) {
-            ti2 = proto_tree_add_uint(tree, hf_checksum_status, tvb, offset, len, PROTO_CHECKSUM_E_NOT_PRESENT);
-            proto_item_set_generated(ti2);
-        }
-        return ti;
-    }
-*/
-    mac = (char *)tvb_get_ptr(tvb, offset, mac_len);
-    if (flags & PROTO_CHECKSUM_GENERATED) {
-//        ti = proto_tree_add_uint(tree, hf_checksum, tvb, offset, len, computed_checksum);
-//        proto_item_set_generated(ti);
-    } else {
-        ti = proto_tree_add_item(tree, hf_mac, tvb, offset, mac_len, ENC_NA);
-        if (flags & PROTO_CHECKSUM_VERIFY) {
-            if (flags & (PROTO_CHECKSUM_IN_CKSUM|PROTO_CHECKSUM_ZERO)) {
-                if (!memcmp(mac, calc_mac, mac_len)) {
-                    proto_item_append_text(ti, " [correct]");
-                    if (hf_mac_status != -1) {
-                        ti2 = proto_tree_add_uint(tree, hf_mac_status, tvb, offset, 0, PROTO_CHECKSUM_E_GOOD);
-                        proto_item_set_generated(ti2);
-                    }
-                    incorrect_mac = false;
-                } else if (flags & PROTO_CHECKSUM_IN_CKSUM) {
-//                    computed_checksum = in_cksum_shouldbe(checksum, computed_checksum);
-                }
-            } else {
-                if (!memcmp(mac, calc_mac, mac_len)) {
-                    proto_item_append_text(ti, " [correct]");
-                    if (hf_mac_status != -1) {
-                        ti2 = proto_tree_add_uint(tree, hf_mac_status, tvb, offset, 0, PROTO_CHECKSUM_E_GOOD);
-                        proto_item_set_generated(ti2);
-                    }
-                    incorrect_mac = false;
-                }
-            }
-
-            if (incorrect_mac) {
-                if (hf_mac_status != -1) {
-                    ti2 = proto_tree_add_uint(tree, hf_mac_status, tvb, offset, 0, PROTO_CHECKSUM_E_BAD);
-                    proto_item_set_generated(ti2);
-                }
-                if (flags & PROTO_CHECKSUM_ZERO) {
-                    proto_item_append_text(ti, " [incorrect]");
-                    if (bad_checksum_expert != NULL)
-                        expert_add_info_format(pinfo, ti, bad_checksum_expert, "%s", expert_get_summary(bad_checksum_expert));
-                } else {
-                    char *data = (char *)wmem_alloc(pinfo->pool, mac_len*2 + 1);
-                    *bytes_to_hexstr(data, calc_mac, mac_len) = 0;
-                    proto_item_append_text(ti, " incorrect, computed %s", data);
-                    if (bad_checksum_expert != NULL)
-                        expert_add_info_format(pinfo, ti, bad_checksum_expert, "%s", expert_get_summary(bad_checksum_expert));
-                }
-            }
-        } else {
-            if (hf_mac_status != -1) {
-                proto_item_append_text(ti, " [unverified]");
-                ti2 = proto_tree_add_uint(tree, hf_mac_status, tvb, offset, 0, PROTO_CHECKSUM_E_UNVERIFIED);
-                proto_item_set_generated(ti2);
-            }
-        }
-    }
-
-    return ti;
 }
 
 static bool
@@ -4226,8 +4282,7 @@ ssh_dissect_decrypted_packet(tvbuff_t *tvb, packet_info *pinfo,
     offset += padding_length;
 
     if (peer_data->mac_length) {
-        ssh_tree_add_mac(tree, tvb, offset, peer_data->mac_length, hf_ssh_mac_string, hf_ssh_mac_status, &ei_ssh_mac_bad, pinfo, message->calc_mac,
-                                               PROTO_CHECKSUM_VERIFY|PROTO_CHECKSUM_IN_CKSUM);
+        proto_tree_add_checksum_bytes(tree, tvb, offset, hf_ssh_mac_string, hf_ssh_mac_status, &ei_ssh_mac_bad, pinfo, message->calc_mac, peer_data->mac_length, PROTO_CHECKSUM_VERIFY);
         offset += peer_data->mac_length;
     }
     ti = proto_tree_add_uint(tree, hf_ssh_seq_num, tvb, offset, 0, message->sequence_number);
@@ -6530,6 +6585,11 @@ proto_register_ssh(void)
                        "Whether the SSH dissector should reassemble SSH buffers spanning multiple TCP segments. "
                        "To use this option, you must also enable \"Allow subdissectors to reassemble TCP streams\" in the TCP protocol settings.",
                        &ssh_desegment);
+    prefs_register_bool_preference(ssh_module, "ignore_ssh_mac_failed",
+                        "Ignore Message Authentication Code (MAC) failure",
+                        "For troubleshooting purposes, decrypt even if the "
+                        "Message Authentication Code (MAC) check fails.",
+                        &ssh_ignore_mac_failed);
 
     ssh_master_key_map = g_hash_table_new_full(ssh_hash, ssh_equal, ssh_free_glib_allocated_bignum, ssh_free_glib_allocated_entry);
     prefs_register_filename_preference(ssh_module, "keylog_file", "Key log filename",
