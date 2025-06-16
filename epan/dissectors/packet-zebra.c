@@ -1054,7 +1054,7 @@ zebra_route_nexthop(proto_tree *tree, bool request, tvbuff_t *tvb,
 		     (nexthoptype == FRR_NEXTHOP_TYPE_IPV4 ||
 		      nexthoptype == FRR_NEXTHOP_TYPE_IPV4_IFINDEX))) {
 			proto_tree_add_item(tree, hf_zebra_nexthop4, tvb,
-					    offset, 4, ENC_NA);
+					    offset, 4, ENC_BIG_ENDIAN);
 			offset += 4;
 		}
 		if ((version < 4 &&
@@ -1090,7 +1090,7 @@ zebra_route_nexthop(proto_tree *tree, bool request, tvbuff_t *tvb,
 			offset += 1;
 			proto_tree_add_item(tree, hf_zebra_interface, tvb,
 					    offset, interfacenamelength,
-					    ENC_ASCII | ENC_NA);
+					    ENC_ASCII);
 			offset += interfacenamelength;
 		}
 		if (version > 4 &&
@@ -1293,7 +1293,7 @@ zebra_route(proto_tree *tree, bool request, tvbuff_t *tvb, int offset,
 					    offset, 1, ENC_BIG_ENDIAN);
 			offset += 1;
 			proto_tree_add_item(tree, hf_zebra_nexthop4, tvb,
-					    offset, 4, ENC_NA);
+					    offset, 4, ENC_BIG_ENDIAN);
 			offset += 4;
 		} else if (version == 4 &&
 			   (command == FRR_ZAPI4_REDISTRIBUTE_IPV6_ADD ||
@@ -1447,10 +1447,10 @@ static int zebra_vrf(proto_tree *tree, tvbuff_t *tvb, int offset)
 			    ENC_BIG_ENDIAN);
 	offset += 4;
 	proto_tree_add_item(tree, hf_zebra_vrf_netns_name, tvb, offset, 16,
-			    ENC_ASCII | ENC_NA);
+			    ENC_ASCII);
 	offset += 16;
 	proto_tree_add_item(tree, hf_zebra_vrf_name, tvb, offset, 36,
-			    ENC_ASCII | ENC_NA);
+			    ENC_ASCII);
 	offset += 36;
 	return offset;
 }
@@ -1727,7 +1727,7 @@ zebra_nexthop_update(proto_tree *tree, tvbuff_t *tvb, int offset,
 		     (nexthoptype == FRR_NEXTHOP_TYPE_IPV4 ||
 		      nexthoptype == FRR_NEXTHOP_TYPE_IPV4_IFINDEX))) {
 			proto_tree_add_item(tree, hf_zebra_nexthop4, tvb,
-					    offset, 4, ENC_NA);
+					    offset, 4, ENC_BIG_ENDIAN);
 			offset += 4;
 		}
 		if (nexthoptype == ZEBRA_NEXTHOP_TYPE_IFINDEX ||
