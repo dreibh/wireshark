@@ -212,6 +212,7 @@ static const value_string rtcp_sdes_type_vals[] =
 #define RTCP_XR_PR_LOSS_RLE 10
 #define RTCP_XR_MC_ACQ      11
 #define RTCP_XR_IDMS        12
+#define RTCP_XR_DISCARD_RLE 25
 
 static const value_string rtcp_xr_type_vals[] =
 {
@@ -227,6 +228,7 @@ static const value_string rtcp_xr_type_vals[] =
     { RTCP_XR_PR_LOSS_RLE,  "Post-repair Loss RLE Report Block" },
     { RTCP_XR_MC_ACQ,       "Multicast Acquisition Report Block" },
     { RTCP_XR_IDMS,         "Inter-destination Media Synchronization Block" }, /* [https://www.etsi.org/deliver/etsi_ts/183000_183099/183063/][ETSI 183 063][Miguel_Angel_Reina_Ortega] */
+    { RTCP_XR_DISCARD_RLE,  "Discard Run Length Encoding Report Block" },
     { 0, NULL}
 };
 
@@ -629,6 +631,7 @@ static int hf_rtcp_app_mux_localmuxport;
 static int hf_rtcp_xr_block_type;
 static int hf_rtcp_xr_block_specific;
 static int hf_rtcp_xr_block_length;
+static int hf_rtcp_xr_drle_e;
 static int hf_rtcp_xr_thinning;
 static int hf_rtcp_xr_voip_metrics_burst_density;
 static int hf_rtcp_xr_voip_metrics_gap_density;
@@ -1088,10 +1091,14 @@ dissect_rtcp_heur( tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
        use of non-compound RTCP packets in some circumstances.)
        - allow BYE because this happens anyway
        - allow APP because TBCP ("PoC1") packets aren't compound...
-       - allow PSFB for MS */
+       - allow RTPFB for feedback
+       - allow PSFB for MS
+       - allow XR for status reports
+     */
     if (!((packet_type == RTCP_SR)  || (packet_type == RTCP_RR) ||
           (packet_type == RTCP_BYE) || (packet_type == RTCP_APP) ||
-          (packet_type == RTCP_PSFB)))
+          (packet_type == RTCP_RTPFB) || (packet_type == RTCP_PSFB) ||
+          (packet_type == RTCP_XR)))
     {
         return false;
     }
@@ -3470,6 +3477,9 @@ static void parse_xr_type_specific_field(tvbuff_t *tvb, int offset, unsigned blo
     };
 
     switch (block_type) {
+        case RTCP_XR_DISCARD_RLE:
+            proto_tree_add_item(tree, hf_rtcp_xr_drle_e, tvb, offset, 1, ENC_BIG_ENDIAN);
+            /* FALLTHROUGH */
         case RTCP_XR_LOSS_RLE:
         case RTCP_XR_DUP_RLE:
         case RTCP_XR_PKT_RXTIMES:
@@ -3821,7 +3831,8 @@ dissect_rtcp_xr(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree,
         }
 
         case RTCP_XR_LOSS_RLE:
-        case RTCP_XR_DUP_RLE: {
+        case RTCP_XR_DUP_RLE:
+        case RTCP_XR_DISCARD_RLE: {
             /* 8 bytes of fixed header */
             int count = 0, skip = 8;
             proto_tree *chunks_tree;
@@ -6408,6 +6419,18 @@ proto_register_rtcp(void)
                 BASE_DEC,
                                 NULL,
                 0x0F,
+                NULL, HFILL
+            }
+        },
+        {
+            &hf_rtcp_xr_drle_e,
+            {
+                "Early bit",
+                "rtcp.xr.drle.e",
+                FT_BOOLEAN,
+                8,
+                NULL,
+                0x10,
                 NULL, HFILL
             }
         },

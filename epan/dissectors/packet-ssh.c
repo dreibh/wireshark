@@ -190,6 +190,10 @@ struct ssh_peer_data {
 struct ssh_flow_data {
     unsigned   version;
 
+    /* The address/port of the server */
+    address srv_addr;
+    unsigned srv_port;
+
     char*  kex;
     int   (*kex_specific_dissector)(uint8_t msg_code, tvbuff_t *tvb,
             packet_info *pinfo, int offset, proto_tree *tree,
@@ -405,8 +409,12 @@ static int hf_ssh_channel_request_name;
 static int hf_ssh_channel_request_want_reply;
 static int hf_ssh_subsystem_name_len;
 static int hf_ssh_subsystem_name;
+static int hf_ssh_exec_cmd;
+static int hf_ssh_env_name;
+static int hf_ssh_env_value;
 static int hf_ssh_channel_window_adjust;
 static int hf_ssh_channel_data_len;
+static int hf_ssh_channel_data_type_code;
 static int hf_ssh_exit_status;
 static int hf_ssh_disconnect_reason;
 static int hf_ssh_disconnect_description_length;
@@ -588,6 +596,8 @@ static const char *ssh_debug_file_name;
 
 #define CIPHER_MAC_SHA2_256             0x00020001
 
+#define SSH_EXTENDED_DATA_STDERR    1
+
 static const value_string ssh_direction_vals[] = {
     { CLIENT_TO_SERVER_PROPOSAL, "client-to-server" },
     { SERVER_TO_CLIENT_PROPOSAL, "server-to-client" },
@@ -667,6 +677,11 @@ static const value_string ssh1_msg_vals[] = {
     {SSH1_CMSG_SESSION_KEY,              "Session Key"},
     {SSH1_CMSG_USER,                     "User"},
     {0, NULL}
+};
+
+static const value_string ssh_channel_data_type_code_vals[] = {
+    { SSH_EXTENDED_DATA_STDERR, "Standard Error" },
+    { 0, NULL }
 };
 
 static int ssh_dissect_key_init(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree *tree,
@@ -807,12 +822,25 @@ ssh_debug_printf(const char* fmt _U_,...)
 
 #endif /* SSH_DECRYPT_DEBUG */
 
+static void
+ssh_set_server(struct ssh_flow_data *global_data, address *addr, uint32_t port)
+{
+    copy_address_wmem(wmem_file_scope(), &global_data->srv_addr, addr);
+    global_data->srv_port = port;
+}
+
 static bool
-ssh_packet_from_server(struct ssh_flow_data* session _U_, const packet_info* pinfo)
+ssh_packet_from_server(struct ssh_flow_data *session, const packet_info *pinfo)
 {
     bool ret;
-    ret = (pinfo->match_uint == pinfo->srcport);
-    ssh_debug_printf("packet_from_server: is from server - %s\n", (ret) ? "TRUE" : "FALSE");
+    if (session && session->srv_addr.type != AT_NONE) {
+        ret = (session->srv_port == pinfo->srcport) &&
+              addresses_equal(&session->srv_addr, &pinfo->src);
+    } else {
+        ret = (pinfo->match_uint == pinfo->srcport);
+    }
+
+    ssh_debug_printf("packet_from_server: is from server - %s\n", (ret)?"TRUE":"FALSE");
     return ret;
 }
 
@@ -864,6 +892,20 @@ dissect_ssh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         global_data->kex_shared_secret = wmem_array_new(wmem_file_scope(), 1);
         global_data->do_decrypt      = true;
         global_data->ext_ping_openssh_offered = false;
+
+        /* We expect to get the client message first. If this is from an
+         * an assigned server port, call it the server, otherwise call it
+         * the client.
+         * XXX - We don't unambigously know which side is the server and
+         * which the client until the KEX specific _INIT and _REPLY messages;
+         * we ought to be able to handle the cases where the version string or
+         * KEXINIT messages are out of order or where the client version string
+         * is missing. */
+        if (pinfo->match_uint == pinfo->srcport) {
+            ssh_set_server(global_data, &pinfo->src, pinfo->srcport);
+        } else {
+            ssh_set_server(global_data, &pinfo->dst, pinfo->destport);
+        }
 
         conversation_add_proto_data(conversation, proto_ssh, global_data);
     }
@@ -955,6 +997,23 @@ dissect_ssh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     ssh_debug_flush();
 
     return tvb_captured_length(tvb);
+}
+
+static bool
+dissect_ssh_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
+{
+    conversation_t *conversation;
+
+    if (tvb_strneql(tvb, 0, "SSH-", 4) != 0) {
+        return false;
+    }
+
+    conversation = find_or_create_conversation(pinfo);
+    conversation_set_dissector(conversation, ssh_handle);
+
+    dissect_ssh(tvb, pinfo, tree, data);
+
+    return true;
 }
 
 static int
@@ -4102,11 +4161,18 @@ ssh_dissect_decrypted_packet(tvbuff_t *tvb, packet_info *pinfo,
 
     ti = proto_tree_add_uint(tree, hf_ssh_packet_length, packet_tvb,
                     offset, 4, plen);
-    if (plen < 12) {
-        /* plen MUST be at least 12 (minimum packet size is 16, and plen does
-         * not include the packet_length field itself.)
+    if (plen < 8) {
+        /* RFC 4253 6: "[T]he length of the concatenation of 'packet_length',
+         * 'padding_length', 'payload', and 'random padding' MUST be a multiple
+         * of the cipher block size or 8, whichever is larger,... even when
+         * using stream ciphers."
+         *
+         * Modes that do not encrypt plen with the same key as the other three
+         * cannot follow this as written and delete 'packet_length' from the
+         * above sentence. As padding_length is one byte and random_padding at
+         * least four, packet_length must be at least 8 in all modes.
          */
-        expert_add_info_format(pinfo, ti, &ei_ssh_packet_length, "Packet length is %d, MUST be at least 12", plen);
+        expert_add_info_format(pinfo, ti, &ei_ssh_packet_length, "Packet length is %d, MUST be at least 8", plen);
     } else if (plen >= SSH_MAX_PACKET_LEN) {
         expert_add_info_format(pinfo, ti, &ei_ssh_packet_length, "Overly large number %d", plen);
         plen = remain_length-4;
@@ -5061,96 +5127,142 @@ ssh_dissect_connection_specific(tvbuff_t *packet_tvb, packet_info *pinfo,
         struct ssh_peer_data *peer_data, int offset, proto_tree *msg_type_tree,
         unsigned msg_code, ssh_message_info_t *message)
 {
-        uint32_t recipient_channel, sender_channel;
+    uint32_t recipient_channel, sender_channel;
 
-        if(msg_code==SSH_MSG_CHANNEL_OPEN){
-                uint32_t slen;
-                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_type_name_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
-                offset += 4;
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_type_name, packet_tvb, offset, slen, ENC_UTF_8);
-                offset += slen;
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_sender_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                offset += 4;
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_initial_window, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                offset += 4;
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_maximum_packet_size, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                offset += 4;
-        }else if(msg_code==SSH_MSG_CHANNEL_OPEN_CONFIRMATION){
-                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &recipient_channel);
-                offset += 4;
-                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_sender_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &sender_channel);
-                offset += 4;
-                if (!PINFO_FD_VISITED(pinfo)) {
-                    create_channel(peer_data, recipient_channel, sender_channel);
-                }
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_initial_window, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                offset += 4;
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_maximum_packet_size, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                offset += 4;
-        }else if(msg_code==SSH_MSG_CHANNEL_WINDOW_ADJUST){
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                offset += 4;
-                proto_tree_add_item(msg_type_tree, hf_ssh_channel_window_adjust, packet_tvb, offset, 4, ENC_BIG_ENDIAN);         // TODO: maintain count of transferred bytes and window size
-                offset += 4;
-        }else if(msg_code==SSH_MSG_CHANNEL_DATA){
-                proto_item *ti = proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &recipient_channel);
-                offset += 4;
-// TODO: process according to the type of channel
-                uint32_t slen;
-                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_channel_data_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
-                offset += 4;
-                tvbuff_t *next_tvb = tvb_new_subset_length(packet_tvb, offset, slen);
-
-                ssh_channel_info_t *channel = get_channel_info_for_channel(peer_data, recipient_channel);
-                if (channel) {
-                        if (!PINFO_FD_VISITED(pinfo)) {
-                            message->byte_seq = channel->byte_seq;
-                            channel->byte_seq += slen;
-                            message->next_byte_seq = channel->byte_seq;
-                        }
-                        ssh_dissect_channel_data(next_tvb, pinfo, peer_data, msg_type_tree, message, channel);
-                } else {
-                        expert_add_info_format(pinfo, ti, &ei_ssh_channel_number, "Could not find configuration for channel %d", recipient_channel);
-                }
-                offset += slen;
-        }else if(msg_code==SSH_MSG_CHANNEL_EOF){
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                offset += 4;
-        }else if(msg_code==SSH_MSG_CHANNEL_CLOSE){
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                offset += 4;
-        }else if(msg_code==SSH_MSG_CHANNEL_REQUEST){
-                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &recipient_channel);
-                offset += 4;
-                const uint8_t* request_name;
-                uint32_t slen;
-                proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_channel_request_name_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
-                offset += 4;
-                proto_tree_add_item_ret_string(msg_type_tree, hf_ssh_channel_request_name, packet_tvb, offset, slen, ENC_UTF_8, pinfo->pool, &request_name);
-                offset += slen;
-                proto_tree_add_item(msg_type_tree, hf_ssh_channel_request_want_reply, packet_tvb, offset, 1, ENC_BIG_ENDIAN);
-                offset += 1;
-                /* RFC 4254 6.5: "Only one of these requests ["shell", "exec",
-                 * or "subsystem"] can succeed per channel." Set up the
-                 * appropriate handler for future CHANNEL_DATA and
-                 * CHANNEL_EXTENDED_DATA messages on the channel.
-                 */
-                if (0 == strcmp(request_name, "subsystem")) {
-                        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_subsystem_name_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
-                        offset += 4;
-                        const uint8_t* subsystem_name;
-                        proto_tree_add_item_ret_string(msg_type_tree, hf_ssh_subsystem_name, packet_tvb, offset, slen, ENC_UTF_8, pinfo->pool, &subsystem_name);
-                        set_subdissector_for_channel(peer_data, recipient_channel, subsystem_name);
-                        offset += slen;
-                }else if (0 == strcmp(request_name, "exit-status")) {
-                        proto_tree_add_item(msg_type_tree, hf_ssh_exit_status, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                        offset += 4;
-                }
-        }else if(msg_code==SSH_MSG_CHANNEL_SUCCESS){
-                proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
-                offset += 4;
+    if (msg_code == SSH_MSG_CHANNEL_OPEN) {
+        uint32_t slen;
+        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_type_name_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
+        offset += 4;
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_type_name, packet_tvb, offset, slen, ENC_UTF_8);
+        offset += slen;
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_sender_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_initial_window, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_maximum_packet_size, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+    } else if (msg_code == SSH_MSG_CHANNEL_OPEN_CONFIRMATION) {
+        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &recipient_channel);
+        offset += 4;
+        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_sender_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &sender_channel);
+        offset += 4;
+        if (!PINFO_FD_VISITED(pinfo)) {
+            create_channel(peer_data, recipient_channel, sender_channel);
         }
-        return offset;
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_initial_window, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_maximum_packet_size, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+    } else if (msg_code == SSH_MSG_CHANNEL_WINDOW_ADJUST) {
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+        proto_tree_add_item(msg_type_tree, hf_ssh_channel_window_adjust, packet_tvb, offset, 4, ENC_BIG_ENDIAN);         // TODO: maintain count of transferred bytes and window size
+        offset += 4;
+    } else if (msg_code == SSH_MSG_CHANNEL_DATA) {
+        proto_item* ti = proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &recipient_channel);
+        offset += 4;
+        // TODO: process according to the type of channel
+        uint32_t slen;
+        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_channel_data_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
+        offset += 4;
+        tvbuff_t* next_tvb = tvb_new_subset_length(packet_tvb, offset, slen);
+
+        ssh_channel_info_t* channel = get_channel_info_for_channel(peer_data, recipient_channel);
+        if (channel) {
+            if (!PINFO_FD_VISITED(pinfo)) {
+                message->byte_seq = channel->byte_seq;
+                channel->byte_seq += slen;
+                message->next_byte_seq = channel->byte_seq;
+            }
+            ssh_dissect_channel_data(next_tvb, pinfo, peer_data, msg_type_tree, message, channel);
+        } else {
+            expert_add_info_format(pinfo, ti, &ei_ssh_channel_number, "Could not find configuration for channel %d", recipient_channel);
+        }
+        offset += slen;
+    } else if (msg_code == SSH_MSG_CHANNEL_EXTENDED_DATA) {
+        proto_item* ti = proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &recipient_channel);
+        offset += 4;
+        // TODO: process according to the type of channel
+        proto_tree_add_item(msg_type_tree, hf_ssh_channel_data_type_code, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+        uint32_t slen;
+        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_channel_data_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
+        offset += 4;
+        tvbuff_t* next_tvb = tvb_new_subset_length(packet_tvb, offset, slen);
+
+        ssh_channel_info_t* channel = get_channel_info_for_channel(peer_data, recipient_channel);
+        if (channel) {
+            if (!PINFO_FD_VISITED(pinfo)) {
+                message->byte_seq = channel->byte_seq;
+                channel->byte_seq += slen;
+                message->next_byte_seq = channel->byte_seq;
+            }
+            ssh_dissect_channel_data(next_tvb, pinfo, peer_data, msg_type_tree, message, channel);
+        } else {
+            expert_add_info_format(pinfo, ti, &ei_ssh_channel_number, "Could not find configuration for channel %d", recipient_channel);
+        }
+        offset += slen;
+    } else if (msg_code == SSH_MSG_CHANNEL_EOF) {
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+    } else if (msg_code == SSH_MSG_CHANNEL_CLOSE) {
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+    } else if (msg_code == SSH_MSG_CHANNEL_REQUEST) {
+        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &recipient_channel);
+        offset += 4;
+        const uint8_t* request_name;
+        uint32_t slen;
+        proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_channel_request_name_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
+        offset += 4;
+        proto_tree_add_item_ret_string(msg_type_tree, hf_ssh_channel_request_name, packet_tvb, offset, slen, ENC_UTF_8, pinfo->pool, &request_name);
+        offset += slen;
+        proto_tree_add_item(msg_type_tree, hf_ssh_channel_request_want_reply, packet_tvb, offset, 1, ENC_BIG_ENDIAN);
+        offset += 1;
+        /* RFC 4254 6.5: "Only one of these requests ["shell", "exec",
+         * or "subsystem"] can succeed per channel." Set up the
+         * appropriate handler for future CHANNEL_DATA and
+         * CHANNEL_EXTENDED_DATA messages on the channel.
+         *
+         * XXX - For "shell" and "exec", it might make more sense to send
+         * CHANNEL_DATA to the "data-text-lines" dissector rather than "data".
+         * Ideally if a pty has been setup there would be a way to interpret
+         * the escape codes.
+         */
+        if (0 == strcmp(request_name, "subsystem")) {
+            proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_subsystem_name_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
+            offset += 4;
+            const uint8_t* subsystem_name;
+            proto_tree_add_item_ret_string(msg_type_tree, hf_ssh_subsystem_name, packet_tvb, offset, slen, ENC_UTF_8, pinfo->pool, &subsystem_name);
+            set_subdissector_for_channel(peer_data, recipient_channel, subsystem_name);
+            offset += slen;
+        } else if (0 == strcmp(request_name, "env")) {
+            /* The encoding for "env" variables and "exec" commands is not
+             * specified in the SSH protocol, and must match whatever the
+             * server expects. (Unlike CHANNEL_DATA, it is not affected by
+             * whatever is in "env" or anything else in the protocol, and the
+             * strings are passed to execve directly.) In practice the strings
+             * must not have internal NULs (no UTF-16), and OpenSSH for Windows
+             * and IBM z/OS force the use of UTF-8 and ISO-8859-1, respectively.
+             *
+             * These will probably be ASCII-compatible.
+             */
+            proto_tree_add_item_ret_length(msg_type_tree, hf_ssh_env_name, packet_tvb, offset, 4, ENC_BIG_ENDIAN | ENC_UTF_8, &slen);
+            offset += slen;
+            proto_tree_add_item_ret_length(msg_type_tree, hf_ssh_env_value, packet_tvb, offset, 4, ENC_BIG_ENDIAN | ENC_UTF_8, &slen);
+            offset += slen;
+        } else if (0 == strcmp(request_name, "exec")) {
+            proto_tree_add_item_ret_length(msg_type_tree, hf_ssh_exec_cmd, packet_tvb, offset, 4, ENC_BIG_ENDIAN | ENC_UTF_8, &slen);
+            offset += slen;
+        } else if (0 == strcmp(request_name, "exit-status")) {
+            proto_tree_add_item(msg_type_tree, hf_ssh_exit_status, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+            offset += 4;
+        }
+    } else if (msg_code == SSH_MSG_CHANNEL_SUCCESS) {
+        proto_tree_add_item(msg_type_tree, hf_ssh_connection_recipient_channel, packet_tvb, offset, 4, ENC_BIG_ENDIAN);
+        offset += 4;
+    }
+    return offset;
 }
 
 /* Channel mapping {{{ */
@@ -6415,6 +6527,21 @@ proto_register_ssh(void)
             FT_STRING, BASE_NONE, NULL, 0x0,
             NULL, HFILL }},
 
+        { &hf_ssh_exec_cmd,
+          { "Command", "ssh.exec_command",
+            FT_UINT_STRING, BASE_NONE, NULL, 0x0,
+            NULL, HFILL } },
+
+        { &hf_ssh_env_name,
+          { "Variable name", "ssh.env_name",
+            FT_UINT_STRING, BASE_NONE, NULL, 0x0,
+            NULL, HFILL } },
+
+        { &hf_ssh_env_value,
+          { "Variable value", "ssh.env_value",
+            FT_UINT_STRING, BASE_NONE, NULL, 0x0,
+            NULL, HFILL } },
+
         { &hf_ssh_exit_status,
           { "Exit status", "ssh.exit_status",
             FT_UINT32, BASE_HEX, NULL, 0x0,
@@ -6429,6 +6556,11 @@ proto_register_ssh(void)
           { "Data length", "ssh.channel_data_length",
             FT_UINT32, BASE_DEC, NULL, 0x0,
             NULL, HFILL }},
+
+        { &hf_ssh_channel_data_type_code,
+          { "Data Type Code", "ssh.channel_data_type_code",
+            FT_UINT32, BASE_DEC, VALS(ssh_channel_data_type_code_vals), 0x0,
+            NULL, HFILL } },
 
         { &hf_ssh_reassembled_in,
           { "Reassembled PDU in frame", "ssh.reassembled_in",
@@ -6542,7 +6674,7 @@ proto_register_ssh(void)
     };
 
     static ei_register_info ei[] = {
-        { &ei_ssh_packet_length,  { "ssh.packet_length.error", PI_PROTOCOL, PI_WARN, "Overly large number", EXPFILL }},
+        { &ei_ssh_packet_length,  { "ssh.packet_length.error", PI_PROTOCOL, PI_WARN, "Invalid packet length", EXPFILL }},
         { &ei_ssh_padding_length,  { "ssh.padding_length.error", PI_PROTOCOL, PI_WARN, "Invalid padding length", EXPFILL }},
         { &ei_ssh_packet_decode,  { "ssh.packet_decode.error", PI_UNDECODED, PI_WARN, "Packet decoded length not equal to packet length", EXPFILL }},
         { &ei_ssh_channel_number, { "ssh.channel_number.error", PI_PROTOCOL, PI_WARN, "Coud not find channel", EXPFILL }},
@@ -6605,6 +6737,8 @@ proto_reg_handoff_ssh(void)
     dissector_add_uint("sctp.port", SCTP_PORT_SSH, ssh_handle);
     dissector_add_uint("sctp.ppi", SSH_PAYLOAD_PROTOCOL_ID, ssh_handle);
     sftp_handle = find_dissector("sftp");
+
+    heur_dissector_add("tcp", dissect_ssh_heur, "SSH over TCP", "ssh_tcp", proto_ssh, HEURISTIC_ENABLE);
 }
 
 /*
