@@ -35,10 +35,8 @@ static void report_error(mate_config* mc, const char* fmt, ...) {
 extern mate_cfg_pdu* new_pducfg(mate_config* mc, char* name) {
 	mate_cfg_pdu* cfg = g_new(mate_cfg_pdu, 1);
 
-	cfg->name = g_strdup(name);
-	cfg->last_id = 0;
+	cfg->name = name;
 
-	cfg->items = g_hash_table_new(g_direct_hash,g_direct_equal);
 	cfg->transforms = NULL;
 
 	cfg->hfid = -1;
@@ -66,10 +64,9 @@ extern mate_cfg_pdu* new_pducfg(mate_config* mc, char* name) {
 extern mate_cfg_gop* new_gopcfg(mate_config* mc, char* name) {
 	mate_cfg_gop* cfg = g_new(mate_cfg_gop, 1);
 
-	cfg->name = g_strdup(name);
+	cfg->name = name;
 	cfg->last_id = 0;
 
-	cfg->items = g_hash_table_new(g_direct_hash,g_direct_equal);
 	cfg->transforms = NULL;
 
 	cfg->extra = new_avpl("extra");
@@ -101,10 +98,9 @@ extern mate_cfg_gop* new_gopcfg(mate_config* mc, char* name) {
 extern mate_cfg_gog* new_gogcfg(mate_config* mc, char* name) {
 	mate_cfg_gog* cfg = g_new(mate_cfg_gog, 1);
 
-	cfg->name = g_strdup(name);
+	cfg->name = name;
 	cfg->last_id = 0;
 
-	cfg->items = g_hash_table_new(g_direct_hash,g_direct_equal);
 	cfg->transforms = NULL;
 
 	cfg->extra = new_avpl("extra");
@@ -538,8 +534,8 @@ static void analyze_gog_config(void *k _U_, void *v, void *p) {
 
 	/* every key_avp ios an extra as well.
 		one day every Member will have its own extras */
-	merge_avpl(cfg->extra,key_avps,true);
-
+	merge_avpl(cfg->extra,key_avps,false);
+	delete_avpl(key_avps, false);
 
 	analyze_transform_hfrs(mc, cfg->name,cfg->transforms,cfg->my_hfids);
 
@@ -652,16 +648,3 @@ extern mate_config* mate_make_config(const char* filename, int mate_hfid) {
 
 	return mc;
 }
-
-/*
- * Editor modelines  -  https://www.wireshark.org/tools/modelines.html
- *
- * Local variables:
- * c-basic-offset: 8
- * tab-width: 8
- * indent-tabs-mode: t
- * End:
- *
- * vi: set shiftwidth=8 tabstop=8 noexpandtab:
- * :indentSize=8:tabSize=8:noTabs=false:
- */

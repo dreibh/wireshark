@@ -43,9 +43,31 @@ static int hf_aid;
 static int hf_bin_offset;
 static int hf_sfi;
 static int hf_record_nr;
+static int hf_auth_rand_len;
 static int hf_auth_rand;
-static int hf_auth_sres;
+static int hf_auth_autn_len;
+static int hf_auth_autn;
+static int hf_auth_reference;
+static int hf_auth_rfu;
+static int hf_auth_context;
+static int hf_auth_challenge;
+static int hf_auth_response;
+static int hf_auth_status;
+static int hf_auth_res_len;
+static int hf_auth_res;
+static int hf_auth_ck_len;
+static int hf_auth_ck;
+static int hf_auth_ik_len;
+static int hf_auth_ik;
+static int hf_auth_kc_len;
 static int hf_auth_kc;
+static int hf_auth_auts_len;
+static int hf_auth_auts;
+static int hf_auth_gsm_rand;
+static int hf_auth_gsm_sres_len;
+static int hf_auth_gsm_sres;
+static int hf_auth_gsm_kc_len;
+static int hf_auth_gsm_kc;
 static int hf_chan_op;
 static int hf_chan_nr;
 static int hf_le;
@@ -92,6 +114,12 @@ static int hf_tprof_b30;
 static int hf_tprof_b31;
 static int hf_tprof_b32;
 static int hf_tprof_b33;
+static int hf_tprof_b34;
+static int hf_tprof_b35;
+static int hf_tprof_b36;
+static int hf_tprof_b37;
+static int hf_tprof_b38;
+static int hf_tprof_b39;
 static int hf_tprof_unknown_byte;
 /* First byte */
 static int hf_tp_prof_dld;
@@ -322,7 +350,48 @@ static int hf_tp_support_refresh_enforcement_policy;
 static int hf_tp_support_dns_addr_req;
 static int hf_tp_support_nw_access_name_reuse;
 static int hf_tp_ev_poll_intv_nego;
+static int hf_tp_prose_usage_info_reporting;
+static int hf_tp_pa_prov_loci_rat;
+static int hf_tp_evt_wlan_access_status;
+static int hf_tp_wlan_bearer;
+static int hf_tp_pa_prov_loci_wlan_id;
+/* 34th byte */
+static int hf_tp_uri_send_short_msg;
+static int hf_tp_ims_uri_setup_call;
+static int hf_tp_media_type_voice_setup_call;
+static int hf_tp_media_type_video_setup_call;
+static int hf_tp_pa_prov_loci_eutran_timing_advance_info;
+static int hf_tp_refresh_euicc_profile_state_change;
+static int hf_tp_ext_rej_cause_code_nw_reject_eutran;
+static int hf_tp_deprecated_b34;
+/* 35th byte */
+static int hf_tp_pa_get_input_var_timeout;
+static int hf_tp_data_conn_status_change_pdp;
+static int hf_tp_data_conn_status_change_pdn;
+static int hf_tp_refresh_app_update;
+static int hf_tp_pa_lsi_proactive_session_request;
+static int hf_tp_pa_lsi_uicc_platform_reset;
 static int hf_tp_rfu11;
+/* 36th byte */
+static int hf_tp_data_conn_status_change_pdu;
+static int hf_tp_evt_nw_reject_ng_ran;
+static int hf_tp_non_ip_data_delivery;
+static int hf_tp_prov_loci_slice_info;
+static int hf_tp_refresh_sor_cmci_param;
+static int hf_tp_evt_nw_reject_satellite_ng_ran;
+static int hf_tp_cag_feature;
+static int hf_tp_evt_slices_status_change;
+/* 37th byte */
+static int hf_tp_prov_loci_rejected_slice_info;
+static int hf_tp_ext_info_pli;
+static int hf_tp_chaining_pli_env_cmds;
+static int hf_tp_5g_prose_usage_info_reporting;
+static int hf_tp_rfu12;
+/* 38th byte */
+static int hf_tp_rfu13;
+/* 39th byte */
+static int hf_tp_pa_prov_loci_ng_ran_satellite_timing_advance_info;
+static int hf_tp_rfu14;
 
 static int hf_cat_ber_tag;
 
@@ -368,6 +437,14 @@ static int ett_tprof_b30;
 static int ett_tprof_b31;
 static int ett_tprof_b32;
 static int ett_tprof_b33;
+static int ett_tprof_b34;
+static int ett_tprof_b35;
+static int ett_tprof_b36;
+static int ett_tprof_b37;
+static int ett_tprof_b38;
+static int ett_tprof_b39;
+static int ett_auth_challenge;
+static int ett_auth_response;
 
 static dissector_handle_t sub_handle_cap;
 static dissector_handle_t sim_handle, sim_part_handle;
@@ -380,6 +457,7 @@ typedef struct {
 	uint32_t rsp_frame;
 	nstime_t cmd_time;
 	uint8_t  cmd_ins;
+	uint8_t  cmd_p2;
 } gsm_sim_transaction_t;
 
 static wmem_tree_t *transactions;
@@ -706,7 +784,66 @@ static int * const tprof_b33_fields[] = {
 	&hf_tp_support_dns_addr_req,
 	&hf_tp_support_nw_access_name_reuse,
 	&hf_tp_ev_poll_intv_nego,
+	&hf_tp_prose_usage_info_reporting,
+	&hf_tp_pa_prov_loci_rat,
+	&hf_tp_evt_wlan_access_status,
+	&hf_tp_wlan_bearer,
+	&hf_tp_pa_prov_loci_wlan_id,
+	NULL
+};
+
+static int * const tprof_b34_fields[] = {
+	&hf_tp_uri_send_short_msg,
+	&hf_tp_ims_uri_setup_call,
+	&hf_tp_media_type_voice_setup_call,
+	&hf_tp_media_type_video_setup_call,
+	&hf_tp_pa_prov_loci_eutran_timing_advance_info,
+	&hf_tp_refresh_euicc_profile_state_change,
+	&hf_tp_ext_rej_cause_code_nw_reject_eutran,
+	&hf_tp_deprecated_b34,
+	NULL
+};
+
+static int * const tprof_b35_fields[] = {
+	&hf_tp_pa_get_input_var_timeout,
+	&hf_tp_data_conn_status_change_pdp,
+	&hf_tp_data_conn_status_change_pdn,
+	&hf_tp_refresh_app_update,
+	&hf_tp_pa_lsi_proactive_session_request,
+	&hf_tp_pa_lsi_uicc_platform_reset,
 	&hf_tp_rfu11,
+	NULL
+};
+
+static int * const tprof_b36_fields[] = {
+	&hf_tp_data_conn_status_change_pdu,
+	&hf_tp_evt_nw_reject_ng_ran,
+	&hf_tp_non_ip_data_delivery,
+	&hf_tp_prov_loci_slice_info,
+	&hf_tp_refresh_sor_cmci_param,
+	&hf_tp_evt_nw_reject_satellite_ng_ran,
+	&hf_tp_cag_feature,
+	&hf_tp_evt_slices_status_change,
+	NULL
+};
+
+static int * const tprof_b37_fields[] = {
+	&hf_tp_prov_loci_rejected_slice_info,
+	&hf_tp_ext_info_pli,
+	&hf_tp_chaining_pli_env_cmds,
+	&hf_tp_5g_prose_usage_info_reporting,
+	&hf_tp_rfu12,
+	NULL
+};
+
+static int * const tprof_b38_fields[] = {
+	&hf_tp_rfu13,
+	NULL
+};
+
+static int * const tprof_b39_fields[] = {
+	&hf_tp_pa_prov_loci_ng_ran_satellite_timing_advance_info,
+	&hf_tp_rfu14,
 	NULL
 };
 
@@ -719,15 +856,17 @@ static const value_string ber_tlv_cat_tag_vals[] = {
 	{ 0xd2, "GSM/3GPP/3GPP2 - Cell Broadcast Download" },
 	{ 0xd3, "Menu selection" },
 	{ 0xd4, "Call Control" },
-	{ 0xd5, "GSM/3G - MO Short Message control" },
+	{ 0xd5, "GSM/3GPP - MO Short Message control" },
 	{ 0xd6, "Event Download" },
 	{ 0xd7, "Timer Expiration" },
 	{ 0xd8, "Reserved for intra-UICC communication" },
-	{ 0xd9, "3G - USSD Download" },
+	{ 0xd9, "3GPP - USSD Download" },
 	{ 0xda, "MMS Transfer status" },
 	{ 0xdb, "MMS notification download" },
 	{ 0xdc, "Terminal application" },
-	{ 0xdd, "3G - Geographical Location Reporting" },
+	{ 0xdd, "3GPP - Geographical Location Reporting" },
+	{ 0xde, "Envelope Container" },
+	{ 0xdf, "3GPP - ProSe Report tag" },
 	{ 0, NULL }
 };
 
@@ -783,6 +922,25 @@ static const true_false_string apdu_cla_secure_messaging_ind_ext_val = {
 	"No SM used between terminal and card"
 };
 
+static const true_false_string apdu_auth_reference_val = {
+	"Specific reference data (e.g. DF specific/application dependent KEY)",
+	"Global reference data (e.g. MF specific KEY)"
+};
+
+static const value_string apdu_auth_context_vals[] = {
+	{ 0x00, "GSM context" },
+	{ 0x01, "3G/EPS/5G context" },
+	{ 0x02, "VGCS/VBS context" },
+	{ 0x04, "GBA context" },
+	{ 0, NULL }
+};
+
+static const value_string apdu_auth_status_vals[] = {
+	{ 0xDB, "Successful 3G authentication" },
+	{ 0xDC, "Synchronisation failure" },
+	{ 0, NULL }
+};
+
 /* Table 9 of GSM TS 11.11 */
 static const value_string apdu_ins_vals[] = {
 	{ 0xA4, "SELECT" },
@@ -819,6 +977,8 @@ static const value_string apdu_ins_vals[] = {
 	{ 0x76, "SUSPEND UICC" },
 	/* TS 102 221 v15.11.0 */
 	{ 0x78, "GET IDENTITY" },
+	{ 0x7A, "EXCHANGE CAPABILITIES" },
+	{ 0x7C, "MANAGE LSI" },
 	/* GSMA SGP.02 v4.2 */
 	{ 0xCA, "GET DATA" },
 	/* TS TS 102 222 */
@@ -1335,8 +1495,100 @@ static const value_string sfi_vals[] = {
 };
 
 static int
+dissect_auth_challenge(uint8_t context, tvbuff_t *tvb, proto_tree *tree, int offset, int length)
+{
+	proto_item *ti;
+	proto_tree *sub_tree;
+	uint32_t len;
+
+	ti = proto_tree_add_item(tree, hf_auth_challenge, tvb, offset, length, ENC_NA);
+	sub_tree = proto_item_add_subtree(ti, ett_auth_challenge);
+
+	switch (context) {
+	case 0x00: /* GSM context */
+	case 0x01: /* 3G/EPS/5G context */
+		proto_tree_add_item_ret_uint(sub_tree, hf_auth_rand_len, tvb, offset, 1, ENC_NA, &len);
+		offset += 1;
+		proto_tree_add_item(sub_tree, hf_auth_rand, tvb, offset, len, ENC_NA);
+		offset += len;
+		proto_tree_add_item_ret_uint(sub_tree, hf_auth_autn_len, tvb, offset, 1, ENC_NA, &len);
+		offset += 1;
+		proto_tree_add_item(sub_tree, hf_auth_autn, tvb, offset, len, ENC_NA);
+		offset += len;
+		break;
+	default:
+		/* XXX - Dissect according to authentication context */
+		offset += length;
+		break;
+	}
+
+	return offset;
+}
+
+static int
+dissect_auth_response(uint8_t context, tvbuff_t *tvb, proto_tree *tree, int offset, int length)
+{
+	proto_item *ti;
+	proto_tree *sub_tree;
+	uint32_t status = 0;
+	uint32_t len;
+
+	if (context == 0x01) {
+		/* 3G/EPS/5G context - put status outside the response tree */
+		proto_tree_add_item_ret_uint(tree, hf_auth_status, tvb, offset, 1, ENC_NA, &status);
+	}
+
+	ti = proto_tree_add_item(tree, hf_auth_response, tvb, offset, length, ENC_NA);
+	sub_tree = proto_item_add_subtree(ti, ett_auth_response);
+
+	switch (context) {
+	case 0x00: /* GSM context */
+		proto_tree_add_item_ret_uint(sub_tree, hf_auth_gsm_sres_len, tvb, offset, 1, ENC_NA, &len);
+		offset += 1;
+		proto_tree_add_item(sub_tree, hf_auth_gsm_sres, tvb, offset, len, ENC_NA);
+		offset += len;
+		proto_tree_add_item_ret_uint(sub_tree, hf_auth_gsm_kc_len, tvb, offset, 1, ENC_NA, &len);
+		offset += 1;
+		proto_tree_add_item(sub_tree, hf_auth_gsm_kc, tvb, offset, len, ENC_NA);
+		offset += len;
+		break;
+	case 0x01: /* 3G/EPS/5G context */
+		offset += 1; /* Skip status byte already added above */
+		if (status == 0xDB) {
+			proto_tree_add_item_ret_uint(sub_tree, hf_auth_res_len, tvb, offset, 1, ENC_NA, &len);
+			offset += 1;
+			proto_tree_add_item(sub_tree, hf_auth_res, tvb, offset, len, ENC_NA);
+			offset += len;
+			proto_tree_add_item_ret_uint(sub_tree, hf_auth_ck_len, tvb, offset, 1, ENC_NA, &len);
+			offset += 1;
+			proto_tree_add_item(sub_tree, hf_auth_ck, tvb, offset, len, ENC_NA);
+			offset += len;
+			proto_tree_add_item_ret_uint(sub_tree, hf_auth_ik_len, tvb, offset, 1, ENC_NA, &len);
+			offset += 1;
+			proto_tree_add_item(sub_tree, hf_auth_ik, tvb, offset, len, ENC_NA);
+			offset += len;
+			proto_tree_add_item_ret_uint(sub_tree, hf_auth_kc_len, tvb, offset, 1, ENC_NA, &len);
+			offset += 1;
+			proto_tree_add_item(sub_tree, hf_auth_kc, tvb, offset, len, ENC_NA);
+			offset += len;
+		} else if (status == 0xDC) {
+			proto_tree_add_item_ret_uint(sub_tree, hf_auth_auts_len, tvb, offset, 1, ENC_NA, &len);
+			offset += 1;
+			proto_tree_add_item(sub_tree, hf_auth_auts, tvb, offset, len, ENC_NA);
+			offset += len;
+		}
+		break;
+	default:
+		/* XXX - Dissect according to authentication context */
+		offset += length;
+	}
+
+	return offset;
+}
+
+static int
 dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
-		 int offset, packet_info *pinfo, proto_tree *tree, bool isSIMtrace)
+		 int offset, packet_info *pinfo, proto_tree *tree)
 {
 	uint16_t g16;
 	tvbuff_t *subtvb;
@@ -1345,20 +1597,11 @@ dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
 	col_append_fstr(pinfo->cinfo, COL_INFO, "%s ",
 			val_to_str(ins, apdu_ins_vals, "%02x"));
 
-	/*
-	 * If isSIMtrace is true, we expect the response data to follow in
-	 * many of these commands. However, if there's no data (the status
-	 * word having already been removed) it might be that the command
-	 * failed, in which case we don't want to try to add the data and
-	 * throw an exception; displaying the status word is more useful.
-	 *
-	 * XXX - What if there's a partial response? Perhaps we should always
-	 * just add what data we have and not throw an exception.
-	 */
 	switch (ins) {
 	case 0xA4: /* SELECT */
 		if (p3 < 2)
 			break;
+		proto_tree_add_item(tree, hf_lc, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		switch (p1) {
 		case 0x03:	/* parent DF */
 			col_append_str(pinfo->cinfo, COL_INFO, "Parent DF ");
@@ -1386,13 +1629,14 @@ dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
 			col_append_fstr(pinfo->cinfo, COL_INFO, "File %s ",
 					val_to_str(g16, mf_dfs, "%04x"));
 			proto_tree_add_item(tree, hf_file_id, tvb, offset+DATA_OFFS, p3, ENC_BIG_ENDIAN);
-			offset++;
 			break;
 		}
+		offset += DATA_OFFS + p3;
 		/* FIXME: parse response */
 		break;
 	case 0xF2: /* STATUS */
 		/* FIXME: parse response */
+		offset += DATA_OFFS;
 		break;
 	case 0xB0: /* READ BINARY */
 		if (p1 & 0x80) {
@@ -1404,9 +1648,7 @@ dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
 			proto_tree_add_item(tree, hf_bin_offset, tvb, offset+P1_OFFS, 2, ENC_BIG_ENDIAN);
 		}
 		proto_tree_add_item(tree, hf_le, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
-		if (isSIMtrace && tvb_reported_length_remaining(tvb, offset+DATA_OFFS)) {
-			proto_tree_add_item(tree, hf_apdu_data, tvb, offset+DATA_OFFS, p3, ENC_NA);
-		}
+		offset += DATA_OFFS;
 		break;
 	case 0xD6: /* UPDATE BINARY */
 		if (p1 & 0x80) {
@@ -1417,31 +1659,35 @@ dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
 			col_append_fstr(pinfo->cinfo, COL_INFO, "Offset=%u ", p1 << 8 | p2);
 			proto_tree_add_item(tree, hf_bin_offset, tvb, offset+P1_OFFS, 2, ENC_BIG_ENDIAN);
 		}
+		proto_tree_add_item(tree, hf_lc, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		proto_tree_add_item(tree, hf_apdu_data, tvb, offset+DATA_OFFS, p3, ENC_NA);
+		offset += DATA_OFFS + p3;
 		break;
 	case 0xB2: /* READ RECORD */
 		col_append_fstr(pinfo->cinfo, COL_INFO, "RecordNr=%u ", p1);
 		proto_tree_add_item(tree, hf_record_nr, tvb, offset+P1_OFFS, 1, ENC_BIG_ENDIAN);
 		proto_tree_add_item(tree, hf_le, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
-		if (isSIMtrace && tvb_reported_length_remaining(tvb, offset+DATA_OFFS)) {
-			proto_tree_add_item(tree, hf_apdu_data, tvb, offset+DATA_OFFS, p3, ENC_NA);
-		}
+		offset += DATA_OFFS;
 		break;
 	case 0xDC: /* UPDATE RECORD */
 		col_append_fstr(pinfo->cinfo, COL_INFO, "RecordNr=%u ", p1);
 		proto_tree_add_item(tree, hf_record_nr, tvb, offset+P1_OFFS, 1, ENC_BIG_ENDIAN);
+		proto_tree_add_item(tree, hf_lc, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		proto_tree_add_item(tree, hf_apdu_data, tvb, offset+DATA_OFFS, p3, ENC_NA);
+		offset += DATA_OFFS + p3;
 		break;
 	case 0xA2: /* SEARCH RECORD */
 		proto_tree_add_item(tree, hf_seek_mode, tvb, offset+P2_OFFS, 1, ENC_BIG_ENDIAN);
 		proto_tree_add_item(tree, hf_seek_type, tvb, offset+P2_OFFS, 1, ENC_BIG_ENDIAN);
 		offset += DATA_OFFS;
+		proto_tree_add_item(tree, hf_lc, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		proto_tree_add_item(tree, hf_apdu_data, tvb, offset, p3, ENC_NA);
 		offset += p3;
 		if ((p2 & 0xF0) == 0x20)
 			proto_tree_add_item(tree, hf_seek_rec_nr, tvb, offset++, 1, ENC_BIG_ENDIAN);
 		break;
 	case 0x32: /* INCREASE */
+		offset += DATA_OFFS;
 		break;
 	case 0x20: /* VERIFY CHV */
 	case 0x24: /* CHANGE CHV */
@@ -1452,22 +1698,26 @@ dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
 		offset += DATA_OFFS;
 		/* FIXME: actual PIN/PUK code */
 		break;
-	case 0x88: /* RUN GSM ALGO */
-		/* XXX - See ETSI TS 131 102 7.1 AUTHENTICATE and
-		 * ETSI TS 102 221 11.1.16 AUTHENTICATE, this needs to
-		 * be updated for non GSM (#17299)
-		 */
+	case 0x88: /* RUN GSM ALGORITHM / AUTHENTICATE */
+		if (p2 != 0) {
+			proto_tree_add_item(tree, hf_auth_reference, tvb, offset+P2_OFFS, 1, ENC_NA);
+			proto_tree_add_item(tree, hf_auth_rfu, tvb, offset+P2_OFFS, 1, ENC_NA);
+			proto_tree_add_item(tree, hf_auth_context, tvb, offset+P2_OFFS, 1, ENC_NA);
+		}
+		proto_tree_add_item(tree, hf_lc, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		offset += DATA_OFFS;
-		proto_tree_add_item(tree, hf_auth_rand, tvb, offset, 16, ENC_NA);
-		offset += 16;
-		if (isSIMtrace && tvb_reported_length_remaining(tvb, offset)) {
-			proto_tree_add_item(tree, hf_auth_sres, tvb, offset, 4, ENC_NA);
-			offset += 4;
-			proto_tree_add_item(tree, hf_auth_kc, tvb, offset, 8, ENC_NA);
-			offset += 8;
+
+		if (p2 == 0) {
+			/* GSM ALGORITHM */
+			proto_tree_add_item(tree, hf_auth_gsm_rand, tvb, offset, 16, ENC_NA);
+			offset += 16;
+		} else {
+			dissect_auth_challenge(p2 & 0x07, tvb, tree, offset, p3);
+			offset += p3;
 		}
 		break;
 	case 0x10: /* TERMINAL PROFILE */
+		proto_tree_add_item(tree, hf_lc, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		offset += DATA_OFFS;
 		start_offset = offset;
 		ADD_TP_BYTE(1);
@@ -1503,20 +1753,25 @@ dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
 		ADD_TP_BYTE(31);
 		ADD_TP_BYTE(32);
 		ADD_TP_BYTE(33);
+		ADD_TP_BYTE(34);
+		ADD_TP_BYTE(35);
+		ADD_TP_BYTE(36);
+		ADD_TP_BYTE(37);
+		ADD_TP_BYTE(38);
+		ADD_TP_BYTE(39);
 		while ((offset - start_offset) < p3) {
 			proto_tree_add_item(tree, hf_tprof_unknown_byte, tvb, offset++, 1, ENC_BIG_ENDIAN);
 		}
 		break;
 	case 0x12: /* FETCH */
 		proto_tree_add_item(tree, hf_le, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
-		if (isSIMtrace && tvb_reported_length_remaining(tvb, offset+DATA_OFFS)) {
-			subtvb = tvb_new_subset_length(tvb, offset+DATA_OFFS, (p3 == 0) ? 256 : p3);
-			dissect_bertlv(subtvb, pinfo, tree, NULL);
-		}
+		offset += DATA_OFFS;
 		break;
 	case 0x14: /* TERMINAL RESPONSE */
+		proto_tree_add_item(tree, hf_lc, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		subtvb = tvb_new_subset_length(tvb, offset+DATA_OFFS, p3);
 		call_dissector_with_data(sub_handle_cap, subtvb, pinfo, tree, GUINT_TO_POINTER(0x14));
+		offset += DATA_OFFS + p3;
 		break;
 	case 0x70: /* MANAGE CHANNEL */
 		proto_tree_add_item(tree, hf_chan_op, tvb, offset+P1_OFFS, 1, ENC_BIG_ENDIAN);
@@ -1532,19 +1787,19 @@ dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
 		} else {
 			col_append_fstr(pinfo->cinfo, COL_INFO, "(channel: %d) ", p2);
 		}
+		offset += DATA_OFFS;
 		break;
 	case 0x78: /* GET IDENTITY */
 	case 0xC0: /* GET RESPONSE */
 	case 0xCA: /* GET DATA */
 		proto_tree_add_item(tree, hf_le, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
-		if (isSIMtrace && tvb_reported_length_remaining(tvb, offset+DATA_OFFS)) {
-			proto_tree_add_item(tree, hf_apdu_data, tvb, offset+DATA_OFFS, p3, ENC_NA);
-		}
+		offset += DATA_OFFS;
 		break;
 	case 0xC2: /* ENVELOPE */
-		proto_tree_add_item(tree, hf_le, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
+		proto_tree_add_item(tree, hf_lc, tvb, offset+P3_OFFS, 1, ENC_BIG_ENDIAN);
 		subtvb = tvb_new_subset_length(tvb, offset+DATA_OFFS, p3);
 		dissect_bertlv(subtvb, pinfo, tree, NULL);
+		offset += DATA_OFFS + p3;
 		break;
 	case 0x76: /* SUSPEND UICC */
 		proto_tree_add_item(tree, hf_suspend_uicc_op, tvb, offset+P1_OFFS, 1, ENC_BIG_ENDIAN);
@@ -1562,6 +1817,7 @@ dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
 			col_append_str(pinfo->cinfo, COL_INFO, "(resume) ");
 			proto_tree_add_item(tree, hf_suspend_uicc_resume_token, tvb, offset+DATA_OFFS, p3, ENC_NA);
 		}
+		offset += DATA_OFFS;
 		break;
 	/* FIXME: Missing SLEEP */
 	case 0x04: /* INVALIDATE */
@@ -1574,13 +1830,14 @@ dissect_gsm_apdu(uint8_t ins, uint8_t p1, uint8_t p2, uint8_t p3, tvbuff_t *tvb,
 }
 
 static int
-dissect_rsp_apdu_tvb(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, proto_tree *sim_tree, bool isSIMtrace)
+dissect_rsp_apdu_tvb(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree, proto_tree *sim_tree)
 {
 	uint16_t sw;
 	proto_item *ti = NULL;
 	unsigned tvb_len = tvb_reported_length(tvb);
 	gsm_sim_transaction_t *gsm_sim_trans;
 	uint8_t ins = 0x00;
+	uint8_t p2 = 0x00;
 	bool response_only = true;
 
 	/* Receive the largest key that is less than or equal to our frame number */
@@ -1596,24 +1853,36 @@ dissect_rsp_apdu_tvb(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *
 
 	if ((tvb_len-offset) > 2) {
 		tvbuff_t *subtvb;
+		unsigned apdu_len;
 
 		if (gsm_sim_trans && gsm_sim_trans->rsp_frame == pinfo->num) {
 			ins = gsm_sim_trans->cmd_ins;
+			p2 = gsm_sim_trans->cmd_p2;
 		}
+		apdu_len = tvb_len - offset - 2;
 
 		switch (ins) {
 		case 0x12: /* FETCH */
-			subtvb = tvb_new_subset_length(tvb, offset, tvb_len - 2);
+			subtvb = tvb_new_subset_length(tvb, offset, apdu_len);
 			dissect_bertlv(subtvb, pinfo, sim_tree, NULL);
 			response_only = false;
 			break;
 		case 0x76: /* SUSPEND UICC */
 			proto_tree_add_item(sim_tree, hf_suspend_uicc_max_time_unit, tvb, offset, 1, ENC_BIG_ENDIAN);
 			proto_tree_add_item(sim_tree, hf_suspend_uicc_max_time_length, tvb, offset+1, 1, ENC_BIG_ENDIAN);
-			proto_tree_add_item(sim_tree, hf_suspend_uicc_resume_token, tvb, offset+2, tvb_len - 4, ENC_NA);
+			proto_tree_add_item(sim_tree, hf_suspend_uicc_resume_token, tvb, offset+2, apdu_len - 2, ENC_NA);
+			break;
+		case 0x88: /* RUN GSM ALGORITHM / AUTHENTICATE */
+			if (p2 == 0) {
+				/* GSM ALGORITHM */
+				proto_tree_add_item(sim_tree, hf_auth_gsm_sres, tvb, offset, 4, ENC_NA);
+				proto_tree_add_item(sim_tree, hf_auth_gsm_kc, tvb, offset+4, 8, ENC_NA);
+			} else {
+				dissect_auth_response(p2 & 0x07, tvb, sim_tree, offset, apdu_len);
+			}
 			break;
 		default:
-			proto_tree_add_item(sim_tree, hf_apdu_data, tvb, offset, tvb_len - 2, ENC_NA);
+			proto_tree_add_item(sim_tree, hf_apdu_data, tvb, offset, apdu_len, ENC_NA);
 			break;
 		}
 	}
@@ -1649,11 +1918,7 @@ dissect_rsp_apdu_tvb(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *
 		}
 	}
 
-	if (isSIMtrace) {
-		return offset;
-	}
-
-	if (gsm_sim_trans && gsm_sim_trans->rsp_frame == pinfo->num) {
+	if (gsm_sim_trans && gsm_sim_trans->rsp_frame == pinfo->num && gsm_sim_trans->cmd_frame != gsm_sim_trans->rsp_frame) {
 		nstime_t ns;
 
 		ti = proto_tree_add_uint(sim_tree, hf_response_to, NULL, 0, 0, gsm_sim_trans->cmd_frame);
@@ -1674,7 +1939,6 @@ dissect_cmd_apdu_tvb(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *
 	proto_item *ti;
 	proto_tree *sim_tree = NULL;
 	int rc = -1;
-	unsigned tvb_len = tvb_reported_length(tvb);
 	gsm_sim_transaction_t *gsm_sim_trans;
 
 	cla = tvb_get_uint8(tvb, offset);
@@ -1691,6 +1955,7 @@ dissect_cmd_apdu_tvb(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *
 		gsm_sim_trans->rsp_frame = 0;
 		gsm_sim_trans->cmd_time = pinfo->fd->abs_ts;
 		gsm_sim_trans->cmd_ins = ins;
+		gsm_sim_trans->cmd_p2 = p2;
 
 		wmem_tree_insert32(transactions, pinfo->num, gsm_sim_trans);
 	}
@@ -1727,18 +1992,7 @@ dissect_cmd_apdu_tvb(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *
 				val_to_str(cla>>4, apdu_cla_coding_vals, "%01x"));
 	}
 
-	/* If isSIMtrace is true, then the tvb contains the command followed by
-	 * the response. The response consists of response data followed by the
-	 * 2 octet status word. The interpretation of the response data depends
-	 * on the command, so for ease we dissect it in dissect_gsm_apdu.
-	 * Slice off the status word first, though.
-	 */
-	tvbuff_t *next_tvb = tvb;
-	if (isSIMtrace) {
-		/* We already retrieved ins, p1, p2, so tvb_len > 2 */
-		next_tvb = tvb_new_subset_length(tvb, 0, tvb_len - 2);
-	}
-	rc = dissect_gsm_apdu(ins, p1, p2, p3, next_tvb, offset, pinfo, sim_tree, isSIMtrace);
+	rc = dissect_gsm_apdu(ins, p1, p2, p3, tvb, offset, pinfo, sim_tree);
 
 	if (rc == -1 && sim_tree) {
 		/* default dissector */
@@ -1757,14 +2011,19 @@ dissect_cmd_apdu_tvb(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *
 			}
 		}
 	} else {
-		offset += 3+p3;
+		offset = rc;
 	}
 
 	if (isSIMtrace) {
-		return dissect_rsp_apdu_tvb(tvb, tvb_len-2, pinfo, tree, sim_tree, true);
+		/* If isSIMtrace is true, then the tvb contains the command followed by
+		 * the response. The response consists of response data followed by the
+		 * 2 octet status word.
+		 */
+		offset = dissect_rsp_apdu_tvb(tvb, offset, pinfo, tree, sim_tree);
 	}
 
-	if (gsm_sim_trans && gsm_sim_trans->cmd_frame == pinfo->num && gsm_sim_trans->rsp_frame != 0) {
+	if (gsm_sim_trans && gsm_sim_trans->cmd_frame == pinfo->num && gsm_sim_trans->rsp_frame != 0 &&
+		gsm_sim_trans->cmd_frame != gsm_sim_trans->rsp_frame) {
 		ti = proto_tree_add_uint(sim_tree, hf_response_in, NULL, 0, 0, gsm_sim_trans->rsp_frame);
 		proto_item_set_generated(ti);
 	}
@@ -1792,7 +2051,7 @@ static int
 dissect_gsm_sim_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "GSM SIM");
-	dissect_rsp_apdu_tvb(tvb, 0, pinfo, tree, NULL, false);
+	dissect_rsp_apdu_tvb(tvb, 0, pinfo, tree, NULL);
 	return tvb_captured_length(tvb);
 }
 
@@ -1896,17 +2155,127 @@ proto_register_gsm_sim(void)
 			  FT_UINT8, BASE_DEC, NULL, 0,
 			  "Offset into binary file", HFILL }
 		},
+		{ &hf_auth_reference,
+			{ "Reference", "gsm_sim.auth_reference",
+			  FT_BOOLEAN, 8, TFS(&apdu_auth_reference_val), 0x80,
+			  "Authentication Reference", HFILL }
+		},
+		{ &hf_auth_rfu,
+			{ "RFU", "gsm_sim.auth_rfu",
+			  FT_UINT8, BASE_DEC, NULL, 0x78,
+			  "Reserved for Future Use", HFILL }
+		},
+		{ &hf_auth_context,
+			{ "Context", "gsm_sim.auth_context",
+			  FT_UINT8, BASE_DEC, VALS(apdu_auth_context_vals), 0x07,
+			  "Authentication Context", HFILL }
+		},
+		{ &hf_auth_challenge,
+			{ "Challenge", "gsm_sim.auth_challenge",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  "Authentication Challenge", HFILL }
+		},
+		{ &hf_auth_response,
+			{ "Response", "gsm_sim.auth_response",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  "Authentication Response", HFILL }
+		},
+		{ &hf_auth_rand_len,
+			{ "Length of RAND", "gsm_sim.auth_rand_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  "Length of Random Challenge", HFILL }
+		},
 		{ &hf_auth_rand,
+			{ "RAND", "gsm_sim.auth_rand",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  "Random Challenge", HFILL }
+		},
+		{ &hf_auth_autn_len,
+			{ "Length of AUTN", "gsm_sim.auth_autn_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  "Authentication Token Length", HFILL }
+		},
+		{ &hf_auth_autn,
+			{ "AUTN", "gsm_sim.auth_autn",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  "Authentication Token", HFILL }
+		},
+		{ &hf_auth_status,
+			{ "Status", "gsm_sim.auth_status",
+			  FT_UINT8, BASE_HEX, VALS(apdu_auth_status_vals), 0,
+			  "Authentication Status", HFILL }
+		},
+		{ &hf_auth_res_len,
+			{ "Length of RES", "gsm_sim.auth_res_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  "Length of Response", HFILL }
+		},
+		{ &hf_auth_res,
+			{ "RES", "gsm_sim.auth_res",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  "Response", HFILL }
+		},
+		{ &hf_auth_ck_len,
+			{ "Length of CK", "gsm_sim.auth_ck_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_ck,
+			{ "CK", "gsm_sim.auth_ck",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_ik_len,
+			{ "Length of IK", "gsm_sim.auth_ik_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_ik,
+			{ "IK", "gsm_sim.auth_ik",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_kc_len,
+			{ "Length of Kc", "gsm_sim.auth_kc_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_kc,
+			{ "Kc", "gsm_sim.auth_kc",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_auts_len,
+			{ "Length of AUTS", "gsm_sim.auth_auts_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_auts,
+			{ "AUTS", "gsm_sim.auth_auts",
+			  FT_BYTES, BASE_NONE, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_gsm_rand,
 			{ "Random Challenge", "gsm_sim.auth_rand",
 			  FT_BYTES, BASE_NONE, NULL, 0,
 			  "GSM Authentication Random Challenge", HFILL }
 		},
-		{ &hf_auth_sres,
+		{ &hf_auth_gsm_sres_len,
+			{ "Length of SRES", "gsm_sim.auth_sres_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_gsm_sres,
 			{ "SRES", "gsm_sim.auth_sres",
 			  FT_BYTES, BASE_NONE, NULL, 0,
 			  "GSM Authentication SRES Response", HFILL }
 		},
-		{ &hf_auth_kc,
+		{ &hf_auth_gsm_kc_len,
+			{ "Length of Kc", "gsm_sim.auth_kc_len",
+			  FT_UINT8, BASE_DEC, NULL, 0,
+			  NULL, HFILL }
+		},
+		{ &hf_auth_gsm_kc,
 			{ "Kc", "gsm_sim.auth_kc",
 			  FT_BYTES, BASE_NONE, NULL, 0,
 			  "GSM Authentication Kc result", HFILL }
@@ -3175,9 +3544,226 @@ proto_register_gsm_sim(void)
 			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
 			  NULL, HFILL }
 		},
+		{ &hf_tp_prose_usage_info_reporting,
+			{ "ProSe usage information reporting", "gsm_sim.tp.evt.prose_usage_info_reporting",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_pa_prov_loci_rat,
+			{ "Proactive UICC: PROVIDE LOCAL INFORMATION (Supported Radio Access Technologies)", "gsm_sim.tp.pa.prov_loci_rat",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_evt_wlan_access_status,
+			{ "Event: WLAN Access status", "gsm_sim.tp.evt.wlan_access_status",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_wlan_bearer,
+			{ "WLAN bearer support", "gsm_sim.tp.wlan_bearer",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x40,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_pa_prov_loci_wlan_id,
+			{ "Proactive UICC: PROVIDE LOCAL INFORMATION (WLAN identifier of the current WLAN connection)", "gsm_sim.tp.pa.prov_loci_wlan_id",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x80,
+			  NULL, HFILL }
+		},
+
+		/* Terminal Profile Byte 34 */
+		{ &hf_tprof_b34,
+			{ "Terminal Profile Byte 34", "gsm_sim.tp.b34",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL },
+		},
+		{ &hf_tp_uri_send_short_msg,
+			{ "URI support for SEND SHORT MESSAGE", "gsm_sim.tp.uri_send_short_msg",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_ims_uri_setup_call,
+			{ "IMS URI supported for SET UP CALL", "gsm_sim.tp.ims_uri_setup_call",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_media_type_voice_setup_call,
+			{ "Media Type \"Voice\" supported for SET UP CALL and Call Control by USIM", "gsm_sim.tp.media_type_voice_setup_call",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_media_type_video_setup_call,
+			{ "Media Type \"Video\" supported for SET UP CALL and Call Control by USIM", "gsm_sim.tp.media_type_video_setup_call",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_pa_prov_loci_eutran_timing_advance_info,
+			{ "Proactive UICC: PROVIDE LOCAL INFORMATION (E-UTRAN Timing Advance Information)", "gsm_sim.tp.pa.prov_loci_eutran_timing_advance_info",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_refresh_euicc_profile_state_change,
+			{ "REFRESH with \"eUICC Profile State Change\" mode", "gsm_sim.tp.refresh_euicc_profile_state_change",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_ext_rej_cause_code_nw_reject_eutran,
+			{ "Extended Rejection Cause Code in Event: Network Rejection for E-UTRAN", "gsm_sim.tp.ext_rej_cause_code_nw_reject_eutran",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x40,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_deprecated_b34,
+			{ "Deprecated", "gsm_sim.tp.deprecated",
+			  FT_UINT8, BASE_HEX, NULL, 0x80,
+			  NULL, HFILL }
+		},
+
+		/* Terminal Profile Byte 35 */
+		{ &hf_tprof_b35,
+			{ "Terminal Profile Byte 35", "gsm_sim.tp.b35",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL },
+		},
+		{ &hf_tp_pa_get_input_var_timeout,
+			{ "Proactive UICC: GET INPUT (Variable Time out)", "gsm_sim.tp.pa.get_input_var_timeout",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_data_conn_status_change_pdp,
+			{ "Data Connection Status Change Event support - PDP Connection", "gsm_sim.tp.data_conn_status_change_pdp",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_data_conn_status_change_pdn,
+			{ "Data Connection Status Change Event support - PDN Connection", "gsm_sim.tp.data_conn_status_change_pdn",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_refresh_app_update,
+			{ "REFRESH with \"Application Update\" mode", "gsm_sim.tp.refresh_app_update",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_pa_lsi_proactive_session_request,
+			{ "Proactive UICC: LSI COMMAND with \"Proactive Session Request\"", "gsm_sim.tp.pa.lsi_proactive_session_request",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_pa_lsi_uicc_platform_reset,
+			{ "Proactive UICC: LSI COMMAND with \"UICC Platform Reset\"", "gsm_sim.tp.pa.lsi_uicc_platform_reset",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
+			  NULL, HFILL }
+		},
 		{ &hf_tp_rfu11,
 			{ "RFU", "gsm_sim.tp.rfu",
-			  FT_UINT8, BASE_HEX, NULL, 0xf8,
+			  FT_UINT8, BASE_HEX, NULL, 0xc0,
+			  NULL, HFILL },
+		},
+
+		/* Terminal Profile Byte 36 */
+		{ &hf_tprof_b36,
+			{ "Terminal Profile Byte 36", "gsm_sim.tp.b36",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL },
+		},
+		{ &hf_tp_data_conn_status_change_pdu,
+			{ "Data Connection Status Change Event support - PDU Connection", "gsm_sim.tp.data_conn_status_change_pdu",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_evt_nw_reject_ng_ran,
+			{ "Event: Network Rejection for NG-RAN", "gsm_sim.tp.evt.nw_reject_ng_ran",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_non_ip_data_delivery,
+			{ "Non-IP Data Delivery support", "gsm_sim.tp.non_ip_data_delivery",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_prov_loci_slice_info,
+			{ "Support of PROVIDE LOCAL INFORMATION, Slice(s) information", "gsm_sim.tp.prov_loci_slice_info",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_refresh_sor_cmci_param,
+			{ "REFRESH \"Steering of Roaming\" SOR-CMCI parameter support", "gsm_sim.tp.refresh_sor_cmci_param",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x10,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_evt_nw_reject_satellite_ng_ran,
+			{ "Event: Network Rejection for Satellite NG-RAN", "gsm_sim.tp.evt.nw_reject_satellite_ng_ran",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x20,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_cag_feature,
+			{ "Support of CAG feature", "gsm_sim.tp.cag_feature",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x40,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_evt_slices_status_change,
+			{ "Event: Slices Status Change", "gsm_sim.tp.evt.slices_status_change",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x80,
+			  NULL, HFILL }
+		},
+
+		/* Terminal Profile Byte 37 */
+		{ &hf_tprof_b37,
+			{ "Terminal Profile Byte 37", "gsm_sim.tp.b37",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL },
+		},
+		{ &hf_tp_prov_loci_rejected_slice_info,
+			{ "Support of PROVIDE LOCAL INFORMATION, Rejected Slice(s) Information", "gsm_sim.tp.prov_loci_rejected_slice_info",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_ext_info_pli,
+			{ "Support of Extended information for PLI (Location Information), Event: Location Status, Event: Network Rejection", "gsm_sim.tp.ext_info_pli",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x02,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_chaining_pli_env_cmds,
+			{ "Support of chaining of PLI/Envelope commands", "gsm_sim.tp.chaining_pli_env_cmds",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x04,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_5g_prose_usage_info_reporting,
+			{ "5G ProSe usage information reporting", "gsm_sim.tp.5g_prose_usage_info_reporting",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x08,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_rfu12,
+			{ "RFU", "gsm_sim.tp.rfu",
+			  FT_UINT8, BASE_HEX, NULL, 0xf0,
+			  NULL, HFILL },
+		},
+
+		/* Terminal Profile Byte 38 */
+		{ &hf_tprof_b38,
+			{ "Terminal Profile Byte 38", "gsm_sim.tp.b38",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL },
+		},
+		{ &hf_tp_rfu13,
+			{ "RFU", "gsm_sim.tp.rfu",
+			  FT_UINT8, BASE_HEX, NULL, 0xff,
+			  NULL, HFILL },
+		},
+
+		/* Terminal Profile Byte 39 */
+		{ &hf_tprof_b39,
+			{ "Terminal Profile Byte 39", "gsm_sim.tp.b39",
+			  FT_UINT8, BASE_HEX, NULL, 0,
+			  NULL, HFILL },
+		},
+		{ &hf_tp_pa_prov_loci_ng_ran_satellite_timing_advance_info,
+			{ "Proactive UICC: PROVIDE LOCAL INFORMATION (NG-RAN/Satellite NG-RAN Timing Advance Information)", "gsm_sim.tp.pa.prov_loci_ng_ran_satellite_timing_advance_info",
+			  FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported), 0x01,
+			  NULL, HFILL }
+		},
+		{ &hf_tp_rfu14,
+			{ "RFU", "gsm_sim.tp.rfu",
+			  FT_UINT8, BASE_HEX, NULL, 0xfe,
 			  NULL, HFILL },
 		},
 
@@ -3258,7 +3844,15 @@ proto_register_gsm_sim(void)
 		&ett_tprof_b30,
 		&ett_tprof_b31,
 		&ett_tprof_b32,
-		&ett_tprof_b33
+		&ett_tprof_b33,
+		&ett_tprof_b34,
+		&ett_tprof_b35,
+		&ett_tprof_b36,
+		&ett_tprof_b37,
+		&ett_tprof_b38,
+		&ett_tprof_b39,
+		&ett_auth_challenge,
+		&ett_auth_response,
 	};
 
 	proto_gsm_sim = proto_register_protocol("GSM SIM 11.11", "GSM SIM",

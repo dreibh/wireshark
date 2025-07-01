@@ -47,78 +47,25 @@ static int* dbg_gop = &zero;
 static int* dbg_gog = &zero;
 static FILE* dbg_facility;
 
-static gboolean destroy_mate_pdus(void *k _U_, void *v, void *p _U_) {
-	mate_pdu* pdu = (mate_pdu*) v;
+static void free_mate_pdu(mate_pdu *pdu)
+{
 	if (pdu->avpl) delete_avpl(pdu->avpl,true);
 	g_slice_free(mate_max_size, (mate_max_size *)pdu);
-	return TRUE;
 }
-
-static gboolean destroy_mate_gops(void *k _U_, void *v, void *p _U_) {
-	mate_gop* gop = (mate_gop*) v;
-
-	if (gop->avpl) delete_avpl(gop->avpl,true);
-
-	if (gop->gop_key) {
-		if (g_hash_table_lookup(gop->cfg->gop_index,gop->gop_key) == gop) {
-			g_hash_table_remove(gop->cfg->gop_index,gop->gop_key);
-		}
-
-		g_free(gop->gop_key);
-	}
-
-	g_slice_free(mate_max_size,(mate_max_size*)gop);
-
-	return TRUE;
-}
-
 
 static void gog_remove_keys (mate_gog* gog);
-
-static gboolean destroy_mate_gogs(void *k _U_, void *v, void *p _U_) {
-	mate_gog* gog = (mate_gog*) v;
-
-	if (gog->avpl) delete_avpl(gog->avpl,true);
-
-	if (gog->gog_keys) {
-		gog_remove_keys(gog);
-		g_ptr_array_free(gog->gog_keys, true);
-	}
-
-	g_slice_free(mate_max_size,(mate_max_size*)gog);
-
-	return TRUE;
-}
-
-static gboolean return_true(void *k _U_, void *v _U_, void *p _U_) {
-	return TRUE;
-}
-
-static void destroy_pdus_in_cfg(void *k _U_, void *v, void *p _U_) {
-	mate_cfg_pdu* c = (mate_cfg_pdu *)v;
-	g_hash_table_foreach_remove(c->items,destroy_mate_pdus,NULL);
-	c->last_id = 0;
-}
-
 
 static void destroy_gops_in_cfg(void *k _U_, void *v, void *p _U_) {
 	mate_cfg_gop* c = (mate_cfg_gop *)v;
 
-	g_hash_table_foreach_remove(c->gop_index,return_true,NULL);
-	g_hash_table_destroy(c->gop_index);
-	c->gop_index = g_hash_table_new(g_str_hash,g_str_equal);
+	g_hash_table_remove_all(c->gop_index);
+	g_hash_table_remove_all(c->gog_index);
 
-	g_hash_table_foreach_remove(c->gog_index,return_true,NULL);
-	g_hash_table_destroy(c->gog_index);
-	c->gog_index = g_hash_table_new(g_str_hash,g_str_equal);
-
-	g_hash_table_foreach_remove(c->items,destroy_mate_gops,NULL);
 	c->last_id = 0;
 }
 
 static void destroy_gogs_in_cfg(void *k _U_, void *v, void *p _U_) {
 	mate_cfg_gog* c = (mate_cfg_gog *)v;
-	g_hash_table_foreach_remove(c->items,destroy_mate_gogs,NULL);
 	c->last_id = 0;
 }
 
@@ -129,19 +76,19 @@ void initialize_mate_runtime(mate_config* mc) {
 	if (mc) {
 		if (rd == NULL ) {
 			rd = g_new(mate_runtime_data, 1);
+			rd->frames = g_hash_table_new_full(g_direct_hash, g_direct_equal, NULL, (GDestroyNotify)g_ptr_array_unref);
+			rd->pdu_last_ids = g_hash_table_new(g_direct_hash, g_direct_equal);
 		} else {
-			g_hash_table_foreach(mc->pducfgs,destroy_pdus_in_cfg,NULL);
 			g_hash_table_foreach(mc->gopcfgs,destroy_gops_in_cfg,NULL);
 			g_hash_table_foreach(mc->gogcfgs,destroy_gogs_in_cfg,NULL);
 
-			g_hash_table_destroy(rd->frames);
+			g_hash_table_remove_all(rd->frames);
+			g_hash_table_remove_all(rd->pdu_last_ids);
 		}
 
 		rd->current_items = 0;
 		rd->now = -1.0f;
 		rd->highest_analyzed_frame = 0;
-		rd->frames = g_hash_table_new(g_direct_hash,g_direct_equal);
-
 
 		/*mc->dbg_gop_lvl = 5;
 		mc->dbg_gog_lvl = 5;
@@ -576,6 +523,7 @@ static void analyze_pdu(mate_config* mc, mate_pdu* pdu) {
 					gop = new_gop(cfg,pdu,gop_key);
 				} else {
 					g_free(gop_key);
+					delete_avpl(gopkey_match, true);
 					return;
 				}
 
@@ -780,13 +728,13 @@ static mate_pdu* new_pdu(mate_cfg_pdu* cfg, uint32_t framenum, field_info* proto
 
 	dbg_print (dbg_pdu,1,dbg_facility,"new_pdu: type=%s framenum=%i",cfg->name,framenum);
 
-	pdu->id = ++(cfg->last_id);
+	pdu->id = GPOINTER_TO_UINT(g_hash_table_lookup(rd->pdu_last_ids, cfg)) + 1;
+	g_hash_table_replace(rd->pdu_last_ids, cfg, GUINT_TO_POINTER(pdu->id));
 	pdu->cfg = cfg;
 
 	pdu->avpl = new_avpl(cfg->name);
 
 	pdu->frame = framenum;
-	pdu->next_in_frame = NULL;
 	pdu->rel_time = rd->now;
 
 	pdu->gop = NULL;
@@ -902,7 +850,7 @@ extern void mate_analyze_frame(mate_config *mc, packet_info *pinfo, proto_tree* 
 	AVPL* criterium_match;
 
 	mate_pdu* pdu = NULL;
-	mate_pdu* last = NULL;
+	GPtrArray* pdus = NULL;
 
 	rd->now = nstime_to_sec(&pinfo->rel_ts);
 
@@ -960,13 +908,11 @@ extern void mate_analyze_frame(mate_config *mc, packet_info *pinfo, proto_tree* 
 						pdu->avpl = NULL;
 					}
 
-					if (!last) {
-						g_hash_table_insert(rd->frames,GINT_TO_POINTER(pinfo->num),pdu);
-						last = pdu;
-					} else {
-						last->next_in_frame = pdu;
-						last = pdu;
+					if (!pdus) {
+						pdus = g_ptr_array_new_with_free_func((GDestroyNotify)free_mate_pdu);
+						g_hash_table_replace(rd->frames, GINT_TO_POINTER(pinfo->num), pdus);
 					}
+					g_ptr_array_add(pdus, pdu);
 
 				}
 
@@ -978,24 +924,11 @@ extern void mate_analyze_frame(mate_config *mc, packet_info *pinfo, proto_tree* 
 	}
 }
 
-extern mate_pdu* mate_get_pdus(uint32_t framenum) {
+extern GPtrArray* mate_get_pdus(uint32_t framenum) {
 
 	if (rd) {
-		return (mate_pdu*) g_hash_table_lookup(rd->frames,GUINT_TO_POINTER(framenum));
+		return (GPtrArray*) g_hash_table_lookup(rd->frames,GUINT_TO_POINTER(framenum));
 	} else {
 		return NULL;
 	}
 }
-
-/*
- * Editor modelines  -  https://www.wireshark.org/tools/modelines.html
- *
- * Local variables:
- * c-basic-offset: 8
- * tab-width: 8
- * indent-tabs-mode: t
- * End:
- *
- * vi: set shiftwidth=8 tabstop=8 noexpandtab:
- * :indentSize=8:tabSize=8:noTabs=false:
- */
