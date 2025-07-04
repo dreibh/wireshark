@@ -288,10 +288,6 @@ process_packet(capture_file *cf, epan_dissect_t *edt, int64_t offset,
         if (cf->dfcode)
             epan_dissect_prime_with_dfilter(edt, cf->dfcode);
 
-        /* This is the first and only pass, so prime the epan_dissect_t
-           with the hfids postdissectors want on the first pass. */
-        prime_epan_dissect_with_postdissector_wanted_hfids(edt);
-
         frame_data_set_before_dissect(&fdlocal, &cf->elapsed_time,
                 &cf->provider.ref, cf->provider.prev_dis);
         if (cf->provider.ref == &fdlocal) {
@@ -477,6 +473,12 @@ int
 sharkd_load_cap_file(void)
 {
     return load_cap_file(&cfile, 0, 0);
+}
+
+int
+sharkd_load_cap_file_with_limits(int max_packet_count, int64_t max_byte_count)
+{
+    return load_cap_file(&cfile, max_packet_count, max_byte_count);
 }
 
 frame_data *
