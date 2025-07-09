@@ -1,0 +1,24 @@
+#!/bin/bash -e
+
+git fetch --all
+
+git checkout dreibh/hencsat
+git merge upstream/master
+./update
+
+git branch -D dreibh/testing || true
+git branch dreibh/testing || true
+git checkout dreibh/testing
+
+# SYMBBOLS=`find debian/ -name '*.symbols'`
+# git rm -f ${SYMBBOLS}
+# git rm -f debian/wireshark-dev.manpages
+
+git commit -a -m "A test."
+
+./make-ppa
+
+git checkout packaging/debian/
+git checkout dreibh/hencsat
+
+git push

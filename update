@@ -1,0 +1,13 @@
+#!/bin/bash -e
+
+git checkout tools/make-version.py
+git checkout packaging/debian/
+
+if [ ! -e debian ] ; then ln -s packaging/debian/ . ; fi
+git pull
+
+# Rebase to upstream master
+git fetch --all
+git merge upstream/master
+
+./renew-debian-changelog

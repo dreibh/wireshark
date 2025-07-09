@@ -1,0 +1,76 @@
+#!/bin/bash
+
+. ./packaging.conf
+
+# ------ Revert debian/changelog and debian/control -------------------------
+git checkout debian/changelog debian/control debian/rules debian tools/make-version.py debian/*.symbols
+
+# rm -rf debian
+# cp -a debian.td debian
+
+
+# ------ Current GIT version ------------------------------------------------
+CHANGELOG_HEADER="`head -n1 debian/changelog`"
+
+# The package name, e.g. MyApplication
+PACKAGE=`echo $CHANGELOG_HEADER | sed -e "s/(.*//" -e "s/ //g"`
+# The package distribution, e.g. precise, raring, ...
+PACKAGE_DISTRIBUTION=`echo $CHANGELOG_HEADER | sed -e "s/[^)]*)//" -e "s/;.*//g" -e "s/ //g"`
+# The package's version, e.g. 1.2.3-1ubuntu1
+PACKAGE_VERSION=`echo $CHANGELOG_HEADER | sed -e "s/.*(//" -e "s/).*//" -e "s/ //g" -e "s/ //g" -e "s/^[0-9]://g" -e "s/+git[0-9a-f~]*//g"`
+# The package's output version, e.g. 1.2.3-1ubuntu
+OUTPUT_VERSION=`echo $PACKAGE_VERSION   | sed -e "s/\(ubuntu\|ppa\)[0-9]*$/\1/"`
+# The package's Debian version, e.g. 1.2.3-1
+DEBIAN_VERSION=`echo $OUTPUT_VERSION    | sed -e "s/\(ubuntu\|ppa\)$//1"`
+# The package's upstream version, e.g. 1.2.3
+UPSTREAM_VERSION=`echo $DEBIAN_VERSION  | sed -e "s/-[0-9]*$//"`
+# The package's plain upstream version, e.g. 1.2.3 (without e.g. ~svn<xxxx>)
+PLAIN_VERSION=`echo $UPSTREAM_VERSION   | sed -e "s/\([0-9\.]*\)[-+~].*$/\1/"`
+
+GIT_VERSION="git`env LANG=en date -u +"%Y%m%d%H%M%S"`"
+GIT_ID="$GIT_VERSION~`cat .git/ORIG_HEAD | cut -b 1-8`"   # Name may not be too long! Just take 8 digits ...
+
+
+# ------ Change make-version.py ---------------------------------------------
+sed -e "s/git_description = git_last_annotated.*$/git_description = \"v${UPSTREAM_VERSION}+${GIT_ID}\"/g" \
+   <tools/make-version.py >tools/make-version.py.new
+chmod +x tools/make-version.py.new
+
+
+# ------ Create debian/changelog --------------------------------------------
+(
+   echo "wireshark (${UPSTREAM_VERSION}+${GIT_ID}-1ppa1) unstable; urgency=medium"
+   echo ""
+   echo "  * Self-made package"
+   echo ""
+   echo " -- $MAINTAINER  `env LANG=en date +"%a, %02d %b %Y %H:%M:%S %z"`"
+) | tee debian/changelog.new
+
+
+# ------ Change debian/control ----------------------------------------------
+# NOTE: wrap-and-sort does not like comments:
+# => remove "# " all lines!
+grep -v "^# " debian/control |
+sed -e "s/Wireshark Self-made package <wireshark@example.com>/$MAINTAINER/g" \
+    -e "s/debhelper (>= [0-9]*)/debhelper/g" -e "s/libsmi2-dev,/libsmi2-dev,rsplib-tools,subnetcalc,traceroute,whois,/g" \
+    -e "s/libgnutls-dev/libgnutls28-dev | libgnutls-dev | libgnutls26-dev/g" \
+    -e "s/Recommends: libqt/Recommends: rsplib-tools,subnetcalc,traceroute,hipercontracer,whois,libcap2-bin,libqt/g" \
+    >debian/control.new
+
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+# NOTE:
+# Note 1: -e "/^#/d" removes comments. They do not work with wrap-and-sort!
+# Note 2: -e "/libsbc-dev/d" removes libsbc-dev dependency (not available in Ubuntu 12.04)
+# !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
+
+# ------ Change debian/rules ------------------------------------------------
+sed -e "2i DEB_BUILD_OPTIONS=nocheck   # <<-- NOTE: (currently) necessary for packaging!" \
+   <debian/rules >debian/rules.new
+
+
+# ------ Apply changes ------------------------------------------------------
+mv tools/make-version.py.new tools/make-version.py
+mv debian/changelog.new debian/changelog
+mv debian/control.new debian/control
+mv debian/rules.new debian/rules

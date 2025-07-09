@@ -1282,6 +1282,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hdfs.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hdfsdata.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hdmi.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-hencsat.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hicp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hipercontracer.c

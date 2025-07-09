@@ -1,4 +1,5 @@
 #!/usr/bin/make -f
+DEB_BUILD_OPTIONS=nocheck   # <<-- NOTE: (currently) necessary for packaging!
 # Originally made with the aid of dh_make, by Craig Small
 # Sample debian/rules that uses debhelper. GNU copyright 1997 by Joey Hess.
 # Some lines taken from debmake, by Cristoph Lameter.
