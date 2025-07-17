@@ -125,10 +125,6 @@ WS_DLL_PUBLIC
 const char *
 try_val_to_str_idx(const uint32_t val, const value_string *vs, int *idx);
 
-WS_DLL_PUBLIC
-const char *
-char_val_to_str(char val, const value_string *vs, const char *msg);
-
 /* 64-BIT VALUE TO STRING MATCHING */
 
 typedef struct _val64_string {
@@ -138,8 +134,8 @@ typedef struct _val64_string {
 
 WS_DLL_PUBLIC
 const char *
-val64_to_str(const uint64_t val, const val64_string *vs, const char *fmt)
-G_GNUC_PRINTF(3, 0);
+val64_to_str_wmem(wmem_allocator_t* scope, const uint64_t val, const val64_string *vs, const char *fmt)
+G_GNUC_PRINTF(4, 0);
 
 WS_DLL_PUBLIC
 const char *
@@ -252,11 +248,6 @@ void
 val64_string_ext_free(val64_string_ext *vse);
 
 WS_DLL_PUBLIC
-const char *
-val64_to_str_ext(const uint64_t val, val64_string_ext *vse, const char *fmt)
-G_GNUC_PRINTF(3, 0);
-
-WS_DLL_PUBLIC
 char *
 val64_to_str_ext_wmem(wmem_allocator_t *scope, const uint64_t val, val64_string_ext *vse, const char *fmt)
 G_GNUC_PRINTF(4, 0);
@@ -282,8 +273,8 @@ typedef struct _string_string {
 
 WS_DLL_PUBLIC
 const char *
-str_to_str(const char *val, const string_string *vs, const char *fmt)
-G_GNUC_PRINTF(3, 0);
+str_to_str_wmem(wmem_allocator_t* scope, const char *val, const string_string *vs, const char *fmt)
+G_GNUC_PRINTF(4, 0);
 
 WS_DLL_PUBLIC
 const char *

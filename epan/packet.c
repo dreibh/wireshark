@@ -113,12 +113,27 @@ static GHashTable *registered_dissectors;
 
 /*
  * A dissector dependency list.
+ * XXX - These are protocol short names, not dissectors (which is likely
+ * what we want, as protocols are enabled and disabled, not dissectors
+ * other than heuristic dissectors.)
  */
 struct depend_dissector_list {
-	GSList		*dissectors;
+	GHashTable	*dissectors;
 };
 
-/* Maps char *dissector_name to depend_dissector_list_t */
+/* Maps char * protocol short name to depend_dissector_list_t
+ * XXX - This doesn't get freed when proto_deregister_dissector
+ * is called. Might it make sense to store this information in
+ * the proto_t?
+ * XXX - Which direction should these be stored? Issue #1402 discusses,
+ * e.g., if HTTP is enabled then making sure that lower level protocols
+ * like TLS, TCP, IP, etc. are enabled. But here as registered the key
+ * is the protocol of the dissector that calls the other handle (whether
+ * via table or registered with _add_dependency.) That is, "TCP" and
+ * "TLS" are keys that have "HTTP" in their depend_dissector_list, rather
+ * than the other way around. Either use could be interesting (a bit moot
+ * since this isn't actually used yet.)
+ */
 static GHashTable *depend_dissector_lists;
 
 /* Allow protocols to register a "cleanup" routine to be
@@ -149,11 +164,11 @@ static GArray *postdissectors;
 static void
 destroy_depend_dissector_list(void *data)
 {
-	depend_dissector_list_t dissector_list = (depend_dissector_list_t)data;
-	GSList **list = &(dissector_list->dissectors);
+       depend_dissector_list_t dissector_list = (depend_dissector_list_t)data;
+       GHashTable *table = dissector_list->dissectors;
 
-	g_slist_free_full(*list, g_free);
-	g_slice_free(struct depend_dissector_list, dissector_list);
+       g_hash_table_destroy(table);
+       g_slice_free(struct depend_dissector_list, dissector_list);
 }
 
 /*
@@ -2704,11 +2719,6 @@ register_dissector_table(const char *name, const char *ui_name, const int proto,
 {
 	dissector_table_t	sub_dissectors;
 
-	/* Make sure the registration is unique */
-	if (g_hash_table_lookup(dissector_tables, name)) {
-		ws_error("The dissector table %s (%s) is already registered - are you using a buggy plugin?", name, ui_name);
-	}
-
 	/* Create and register the dissector table for this name; returns */
 	/* a pointer to the dissector table. */
 	sub_dissectors = g_slice_new(struct dissector_table);
@@ -2767,7 +2777,10 @@ register_dissector_table(const char *name, const char *ui_name, const int proto,
 	sub_dissectors->param   = param;
 	sub_dissectors->protocol  = (proto == -1) ? NULL : find_protocol_by_id(proto);
 	sub_dissectors->supports_decode_as = false;
-	g_hash_table_insert(dissector_tables, (void *)name, (void *) sub_dissectors);
+	/* Make sure the registration is unique */
+	if (!g_hash_table_insert(dissector_tables, (void *)name, (void *) sub_dissectors)) {
+		ws_error("The dissector table %s (%s) is already registered - are you using a buggy plugin?", name, ui_name);
+	}
 	return sub_dissectors;
 }
 
@@ -2776,11 +2789,6 @@ dissector_table_t register_custom_dissector_table(const char *name,
 	GDestroyNotify key_destroy_func)
 {
 	dissector_table_t	sub_dissectors;
-
-	/* Make sure the registration is unique */
-	if (g_hash_table_lookup(dissector_tables, name)) {
-		ws_error("The dissector table %s (%s) is already registered - are you using a buggy plugin?", name, ui_name);
-	}
 
 	/* Create and register the dissector table for this name; returns */
 	/* a pointer to the dissector table. */
@@ -2797,7 +2805,10 @@ dissector_table_t register_custom_dissector_table(const char *name,
 	sub_dissectors->param   = BASE_NONE;
 	sub_dissectors->protocol  = (proto == -1) ? NULL : find_protocol_by_id(proto);
 	sub_dissectors->supports_decode_as = false;
-	g_hash_table_insert(dissector_tables, (void *)name, (void *) sub_dissectors);
+	/* Make sure the registration is unique */
+	if (!g_hash_table_insert(dissector_tables, (void *)name, (void *) sub_dissectors)) {
+		ws_error("The dissector table %s (%s) is already registered - are you using a buggy plugin?", name, ui_name);
+	}
 	return sub_dissectors;
 }
 
@@ -2897,7 +2908,6 @@ heur_dissector_add(const char *name, heur_dissector_t dissector, const char *dis
 	heur_dissector_list_t  sub_dissectors = find_heur_dissector_list(name);
 	const char            *proto_name;
 	heur_dtbl_entry_t     *hdtbl_entry;
-	unsigned               i, list_size;
 	GSList                *list_entry;
 
 	/*
@@ -2917,10 +2927,9 @@ heur_dissector_add(const char *name, heur_dissector_t dissector, const char *dis
 	}
 
 	/* Verify that sub-dissector is not already in the list */
-	list_size = g_slist_length(sub_dissectors->dissectors);
-	for (i = 0; i < list_size; i++)
+	for (list_entry = sub_dissectors->dissectors;
+		list_entry != NULL; list_entry = list_entry->next)
 	{
-		list_entry = g_slist_nth(sub_dissectors->dissectors, i);
 		hdtbl_entry = (heur_dtbl_entry_t *)list_entry->data;
 		if ((hdtbl_entry->dissector == dissector) &&
 			(hdtbl_entry->protocol == find_protocol_by_id(proto)))
@@ -2939,12 +2948,6 @@ heur_dissector_add(const char *name, heur_dissector_t dissector, const char *dis
 	/* Make sure short_name is "parsing friendly" since it should only be used internally */
 	check_valid_heur_name_or_fail(internal_name);
 
-	/* Ensure short_name is unique */
-	if (g_hash_table_lookup(heuristic_short_names, internal_name) != NULL) {
-		ws_error("Duplicate heuristic short_name \"%s\"!"
-			" This might be caused by an inappropriate plugin or a development error.", internal_name);
-	}
-
 	hdtbl_entry = g_slice_new(heur_dtbl_entry_t);
 	hdtbl_entry->dissector = dissector;
 	hdtbl_entry->protocol  = find_protocol_by_id(proto);
@@ -2955,7 +2958,11 @@ heur_dissector_add(const char *name, heur_dissector_t dissector, const char *dis
 	hdtbl_entry->enabled_by_default = (enable == HEURISTIC_ENABLE);
 
 	/* do the table insertion */
-	g_hash_table_insert(heuristic_short_names, (void *)hdtbl_entry->short_name, hdtbl_entry);
+	/* Ensure short_name is unique */
+	if (!g_hash_table_insert(heuristic_short_names, (void *)hdtbl_entry->short_name, hdtbl_entry)) {
+		ws_error("Duplicate heuristic short_name \"%s\"!"
+			" This might be caused by an inappropriate plugin or a development error.", internal_name);
+	}
 
 	sub_dissectors->dissectors = g_slist_prepend(sub_dissectors->dissectors,
 	    (void *)hdtbl_entry);
@@ -3266,19 +3273,17 @@ register_heur_dissector_list_with_description(const char *name, const char *ui_n
 {
 	heur_dissector_list_t sub_dissectors;
 
-	/* Make sure the registration is unique */
-	if (g_hash_table_lookup(heur_dissector_lists, name) != NULL) {
-		ws_error("The heuristic dissector list %s is already registered - are you using a buggy plugin?", name);
-	}
-
 	/* Create and register the dissector table for this name; returns */
 	/* a pointer to the dissector table. */
 	sub_dissectors = g_slice_new(struct heur_dissector_list);
 	sub_dissectors->protocol  = (proto == -1) ? NULL : find_protocol_by_id(proto);
 	sub_dissectors->ui_name = ui_name;
 	sub_dissectors->dissectors = NULL;	/* initially empty */
-	g_hash_table_insert(heur_dissector_lists, (void *)name,
-			    (void *) sub_dissectors);
+	/* Make sure the registration is unique */
+	if (!g_hash_table_insert(heur_dissector_lists, (void *)name,
+			    (void *) sub_dissectors)) {
+		ws_error("The heuristic dissector list %s is already registered - are you using a buggy plugin?", name);
+	}
 	return sub_dissectors;
 }
 
@@ -3593,18 +3598,7 @@ register_dissector_with_data(const char *name, dissector_cb_t dissector, const i
 static bool
 remove_depend_dissector_from_list(depend_dissector_list_t sub_dissectors, const char *dependent)
 {
-	GSList *found_entry;
-
-	found_entry = g_slist_find_custom(sub_dissectors->dissectors,
-		dependent, (GCompareFunc)strcmp);
-
-	if (found_entry) {
-		g_free(found_entry->data);
-		sub_dissectors->dissectors = g_slist_delete_link(sub_dissectors->dissectors, found_entry);
-		return true;
-	}
-
-	return false;
+	return g_hash_table_remove(sub_dissectors->dissectors, dependent);
 }
 
 static void
@@ -3754,18 +3748,8 @@ void call_heur_dissector_direct(heur_dtbl_entry_t *heur_dtbl_entry, tvbuff_t *tv
 
 }
 
-static int
-find_matching_proto_name(const void *arg1, const void *arg2)
-{
-	const char    *protocol_name = (const char*)arg1;
-	const char    *name   = (const char *)arg2;
-
-	return strcmp(protocol_name, name);
-}
-
 bool register_depend_dissector(const char* parent, const char* dependent)
 {
-	GSList                *list_entry;
 	depend_dissector_list_t sub_dissectors;
 
 	if ((parent == NULL) || (dependent == NULL))
@@ -3778,16 +3762,12 @@ bool register_depend_dissector(const char* parent, const char* dependent)
 	if (sub_dissectors == NULL) {
 		/* parent protocol doesn't exist, create it */
 		sub_dissectors = g_slice_new(struct depend_dissector_list);
-		sub_dissectors->dissectors = NULL;	/* initially empty */
+		sub_dissectors->dissectors = g_hash_table_new(g_str_hash, g_str_equal);	/* initially empty */
 		g_hash_table_insert(depend_dissector_lists, (void *)g_strdup(parent), (void *) sub_dissectors);
 	}
 
 	/* Verify that sub-dissector is not already in the list */
-	list_entry = g_slist_find_custom(sub_dissectors->dissectors, (void *)dependent, find_matching_proto_name);
-	if (list_entry != NULL)
-		return true; /* Dependency already exists */
-
-	sub_dissectors->dissectors = g_slist_prepend(sub_dissectors->dissectors, (void *)g_strdup(dependent));
+	g_hash_table_add(sub_dissectors->dissectors, (void *)dependent);
 	return true;
 }
 

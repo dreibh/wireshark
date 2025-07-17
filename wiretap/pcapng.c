@@ -25,6 +25,8 @@
 #include <string.h>
 #include <errno.h>
 
+#include <jtckdint.h>
+
 #include <wsutil/application_flavor.h>
 #include <wsutil/wslog.h>
 #include <wsutil/strtoi.h>
@@ -41,6 +43,8 @@
 #include "pcap-encap.h"
 #include "pcapng_module.h"
 #include "secrets-types.h"
+
+#define NS_PER_S 1000000000U
 
 static bool
 pcapng_read(wtap *wth, wtap_rec *rec, int *err,
@@ -202,6 +206,7 @@ typedef struct interface_info_s {
     int tsprecision;
     int64_t tsoffset;
     int fcslen;
+    uint8_t tsresol_binary;
 } interface_info_t;
 
 typedef struct {
@@ -1418,7 +1423,7 @@ pcapng_process_if_descr_block_option(wtapng_block_t *wblock,
             /*
              * A 64-bit integer value that specifies an offset (in
              * seconds) that must be added to the timestamp of each packet
-             * to obtain the absolute timestamp of a packet. If this optio
+             * to obtain the absolute timestamp of a packet. If this option
              * is not present, an offset of 0 is assumed (i.e., timestamps
              * in blocks are absolute timestamps.)
              */
@@ -1584,7 +1589,7 @@ pcapng_read_if_descr_block(wtap *wth, FILE_T fh, uint32_t block_type _U_,
              * than their hands, and it applies to more files than
              * pcapng files, e.g. ERF files.)
              */
-            if (time_units_per_second >= 1000000000)
+            if (time_units_per_second >= NS_PER_S)
                 tsprecision = WTAP_TSPREC_NSEC;
             else if (time_units_per_second >= 100000000)
                 tsprecision = WTAP_TSPREC_10_NSEC;
@@ -2169,7 +2174,42 @@ pcapng_read_packet_block(wtap *wth _U_, FILE_T fh, uint32_t block_type,
 
     /* Convert it to seconds and nanoseconds. */
     wblock->rec->ts.secs = (time_t)(ts / iface_info.time_units_per_second);
-    wblock->rec->ts.nsecs = (int)(((ts % iface_info.time_units_per_second) * 1000000000) / iface_info.time_units_per_second);
+    /* This can overflow if iface_info.time_units_per_seconds > (2^64 - 1) / 10^9;
+     * log10((2^64 - 1) / 10^9) ~ 10.266 and log2((2^64 - 1) / 10^9) ~ 32.103,
+     * so that's if the power of 10 exponent is greater than 10 or the power of 2
+     * exponent is greater than 32.
+     *
+     * We could test for and use 128 bit integers and platforms and compilers
+     * that have it (C23, and gcc, clang, and ICC on most 64-bit platforms).
+     * For C23, if we include <limits.h> and BITINT_MAXWIDTH is defined to be
+     * at least 128 (or even just 96) we could use unsigned _BitInt(128).
+     * If __SIZEOF_INT128__ is defined we can use unsigned __int128. Some
+     * testing (including with godbolt.org) suggests it's faster to check
+     * overflow and handle our two special cases.
+     */
+    uint64_t ts_frac = ts % iface_info.time_units_per_second;
+    uint64_t ts_ns;
+    if (ckd_mul(&ts_ns, ts_frac, NS_PER_S)) {
+        /* We have 10^N where N > 10 or 2^N where N > 32. */
+        if (!iface_info.tsresol_binary) {
+            /* 10^N where N > 10, so this divides evenly. */
+            ws_assert(iface_info.time_units_per_second > NS_PER_S);
+            wblock->rec->ts.nsecs = (int)(ts_frac / (iface_info.time_units_per_second / NS_PER_S));
+        } else {
+            /* Multiplying a 64 bit integer by a 32 bit integer, then dividing
+             * by 2^N, where N > 32. */
+            uint64_t ts_frac_low = (ts_frac & 0xFFFFFFFF) * NS_PER_S;
+            uint64_t ts_frac_high = (ts_frac >> 32) * NS_PER_S;
+            // Add the carry.
+            ts_frac_high += ts_frac_low >> 32;
+            //ts_frac_low &= 0xFFFFFFFF;
+            ws_assert(iface_info.tsresol_binary > 32);
+            uint8_t high_shift = iface_info.tsresol_binary - 32;
+            wblock->rec->ts.nsecs = (int)(ts_frac_high >> high_shift);
+        }
+    } else {
+        wblock->rec->ts.nsecs = (int)(ts_ns / iface_info.time_units_per_second);
+    }
 
     /* Add the time stamp offset. */
     wblock->rec->ts.secs = (time_t)(wblock->rec->ts.secs + iface_info.tsoffset);
@@ -3263,7 +3303,6 @@ pcapng_process_idb(wtap *wth, section_info_t *section_info,
 
     wtap_block_copy(int_data, wblock->block);
 
-    /* XXX if_tsoffset; opt 14  A 64 bits integer value that specifies an offset (in seconds)...*/
     /* Interface statistics */
     if_descr_mand->num_stat_entries = 0;
     if_descr_mand->interface_statistics = NULL;
@@ -3295,23 +3334,27 @@ pcapng_process_idb(wtap *wth, section_info_t *section_info,
      * Did we get a time stamp offset option?
      */
     if (wtap_block_get_int64_option_value(wblock->block, OPT_IDB_TSOFFSET,
-                                          &iface_info.tsoffset) == WTAP_OPTTYPE_SUCCESS) {
+                                          &iface_info.tsoffset) != WTAP_OPTTYPE_SUCCESS) {
         /*
-         * Yes.
-         *
-         * Remove the option, as the time stamps we provide will be
-         * absolute time stamps, with the offset added in, so it will
-         * appear as if there were no such option.
-         */
-        wtap_block_remove_option(wblock->block, OPT_IDB_TSOFFSET);
-    } else {
-        /*
-         * No.  Default to 0, meahing that time stamps in the file are
+         * No.  Default to 0, meaning that time stamps in the file are
          * absolute time stamps.
          */
         iface_info.tsoffset = 0;
     }
 
+    /*
+     * Did we get a time stamp precision option?
+     */
+    iface_info.tsresol_binary = 0;
+    uint8_t if_tsresol;
+    if (wtap_block_get_uint8_option_value(wblock->block, OPT_IDB_TSRESOL,
+                                          &if_tsresol) == WTAP_OPTTYPE_SUCCESS) {
+        /* Is the timestamp resolution a power of two? */
+        if (if_tsresol & 0x80) {
+            /* Note that 0x80 and 0x80 mean the same thing, as 2^-0 == 10^-0 */
+            iface_info.tsresol_binary = if_tsresol & 0x7F;
+        }
+    }
     g_array_append_val(section_info->interfaces, iface_info);
 
     wtap_block_unref(wblock->block);
@@ -5064,8 +5107,12 @@ pcapng_write_enhanced_packet_block(wtap_dumper *wdh, const wtap_rec *rec,
 
     /* write block fixed content */
     /* Calculate the time stamp as a 64-bit integer. */
+    /* TODO - This can't overflow currently because we don't allow greater
+     * than nanosecond resolution, but if and when we do, we need to check for
+     * overflow. Normally it shouldn't, but what if there was a time shift?
+     */
     ts = ((uint64_t)rec->ts.secs) * int_data_mand->time_units_per_second +
-        (((uint64_t)rec->ts.nsecs) * int_data_mand->time_units_per_second) / 1000000000;
+        (((uint64_t)rec->ts.nsecs) * int_data_mand->time_units_per_second) / NS_PER_S;
     /*
      * Split the 64-bit timestamp into two 32-bit pieces, using
      * the time stamp resolution for the interface.
@@ -5816,17 +5863,7 @@ static uint32_t compute_idb_option_size(wtap_block_t block _U_, unsigned option_
         size = 1;
         break;
     case OPT_IDB_TSOFFSET:
-        /*
-         * The time stamps handed to us when writing a file are
-         * absolute time staps, so the time stamp offset is
-         * zero.
-         *
-         * We do not adjust them when writing, so we should not
-         * write if_tsoffset options; that is interpreted as
-         * the offset is zero, i.e. the time stamps in the file
-         * are absolute.
-         */
-        size = 0;
+        size = 8;
         break;
     default:
         /* Unknown options - size by datatype? */
@@ -5869,9 +5906,9 @@ static bool write_wtap_idb_option(wtap_dumper *wdh, wtap_block_t block _U_,
             return false;
         break;
     case OPT_IDB_TSOFFSET:
-        /*
-         * As noted above, we discard these.
-         */
+        if (!pcapng_write_uint64_option(wdh, option_id, optval, err))
+            return false;
+        break;
         break;
     default:
         /* Unknown options - size by datatype? */
@@ -5935,19 +5972,10 @@ pcapng_write_if_descr_block(wtap_dumper *wdh, wtap_block_t int_data,
 static bool pcapng_add_idb(wtap_dumper *wdh, wtap_block_t idb,
                                int *err, char **err_info)
 {
-    wtap_block_t idb_copy;
-
     /*
-     * Add a copy of this IDB to our array of IDBs.
+     * Write it to the output file.
      */
-    idb_copy = wtap_block_create(WTAP_BLOCK_IF_ID_AND_INFO);
-    wtap_block_copy(idb_copy, idb);
-    g_array_append_val(wdh->interface_data, idb_copy);
-
-    /*
-     * And write it to the output file.
-     */
-    return pcapng_write_if_descr_block(wdh, idb_copy, err, err_info);
+    return pcapng_write_if_descr_block(wdh, idb, err, err_info);
 }
 
 static bool pcapng_write_internal_blocks(wtap_dumper *wdh, int *err)

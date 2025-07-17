@@ -195,6 +195,7 @@ ADDITIONAL_LIST="
 	libsnappy-dev
 	libspandsp-dev
 	libsystemd-dev
+	libxxhash-dev
 	libzstd-dev
 	ninja-build
 	perl

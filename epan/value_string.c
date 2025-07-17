@@ -122,26 +122,10 @@ try_val_to_str(const uint32_t val, const value_string *vs)
     return try_val_to_str_idx(val, vs, &ignore_me);
 }
 
-const char *
-char_val_to_str(char val, const value_string *vs, const char *msg)
-{
-    const char *ret;
-    char buf[7];
-
-    DISSECTOR_ASSERT(msg != NULL);
-
-    ret = try_val_to_str(val, vs);
-    if (ret != NULL)
-        return ret;
-
-    return wmem_strdup_printf(wmem_packet_scope(), "%s: %s",
-            msg, hfinfo_char_value_format_display(BASE_HEX, buf, val));
-}
-
 /* 64-BIT VALUE STRING */
 
 const char *
-val64_to_str(const uint64_t val, const val64_string *vs, const char *fmt)
+val64_to_str_wmem(wmem_allocator_t* scope, const uint64_t val, const val64_string *vs, const char *fmt)
 {
     const char *ret;
 
@@ -151,7 +135,7 @@ val64_to_str(const uint64_t val, const val64_string *vs, const char *fmt)
     if (ret != NULL)
         return ret;
 
-    return wmem_strdup_printf(wmem_packet_scope(), fmt, val);
+    return wmem_strdup_printf(scope, fmt, val);
 }
 
 const char *
@@ -618,21 +602,6 @@ try_val64_to_str_idx_ext(const uint64_t val, val64_string_ext *vse, int *idx)
     return NULL;
 }
 
-/* Like val_to_str for extended value strings */
-const char *
-val64_to_str_ext(const uint64_t val, val64_string_ext *vse, const char *fmt)
-{
-    const char *ret;
-
-    DISSECTOR_ASSERT(fmt != NULL);
-
-    ret = try_val64_to_str_ext(val, vse);
-    if (ret != NULL)
-        return ret;
-
-    return wmem_strdup_printf(wmem_packet_scope(), fmt, val);
-}
-
 char *
 val64_to_str_ext_wmem(wmem_allocator_t *scope, const uint64_t val, val64_string_ext *vse, const char *fmt)
 {
@@ -808,7 +777,7 @@ _try_val64_to_str_ext_init(const uint64_t val, val64_string_ext *vse)
 
 /* Like val_to_str except for string_string */
 const char *
-str_to_str(const char *val, const string_string *vs, const char *fmt)
+str_to_str_wmem(wmem_allocator_t* scope, const char *val, const string_string *vs, const char *fmt)
 {
     const char *ret;
 
@@ -818,7 +787,7 @@ str_to_str(const char *val, const string_string *vs, const char *fmt)
     if (ret != NULL)
         return ret;
 
-    return wmem_strdup_printf(wmem_packet_scope(), fmt, val);
+    return wmem_strdup_printf(scope, fmt, val);
 }
 
 /* Like try_val_to_str_idx except for string_string */
