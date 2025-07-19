@@ -1488,6 +1488,12 @@ class Item:
                 print('Warning: ' + filename, hf, 'filter ' + filter + 'label', label, 'but is a v6 field')
                 warnings_found += 1
 
+        # TODO: Could/should this entry use one of the port type display types?
+        if False:
+            if item_type == 'FT_UINT16':
+                if label.lower().find('port') != -1:
+                    print('Warning: ' + filename, hf, 'filter "' + filter + '" label "' + label + '" field might be a transport port - should use e.g., BASE_PT_UDP as display??')
+                    warnings_found += 1
 
 
     def __str__(self):
@@ -1512,7 +1518,7 @@ class Item:
                 print('Warning: ' + self.filename, self.hf, 'filter "' + self.filter + '"', label_name, '"' + label + '"', 'has unbalanced parens/braces/brackets')
                 warnings_found += 1
         if self.item_type != 'FT_NONE' and label.endswith(':'):
-            print('Warning: ' + self.filename, self.hf, 'filter "' + self.filter + '"', label_name, '"' + label + '"', 'ends with an unnecessary colon')
+            print('Warning: ' + self.filename, self.hf, 'filter "' + self.filter + '"', label_name, '"' + label + '"', 'with type', self.item_type, 'ends with an unnecessary colon')
             warnings_found += 1
 
     def check_blurb_vs_label(self):
