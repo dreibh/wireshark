@@ -120,10 +120,10 @@ for Arm64 and Intel. wsbuglink:17294[]
   etc.) that return numeric results are sorted numerically instead of
   lexicographically.
 
-* A display filter function `double` is added to allow explicitly converting
-  field types like integers and times to doubles. This can be used to perform
-  further arithmetic operations on fields of different types, including in
-  custom column definitions.
+* Display filter functions `float` and `double` are added to allow explicitly
+  converting field types like integers and times to single and double precision
+  floats. They can be used to perform further arithmetic operations on fields
+  of different types, including in custom column definitions.
 
 * The minimum width of the I/O Graph dialog window is reduced, so it should
   work better on small resolution desktops, especially in certain languages.
@@ -252,7 +252,12 @@ There is no new or updated capture file support in this release.
 // --
 // --
 
-// === New and Updated Capture Interfaces support
+=== New and Updated Capture Interfaces support
+
+* On Windows, etwdump's user-friendliness has been greatly improved
+  thanks to various extcap changes. It should also now display the
+  raw bytes of unknown events.
+
 // [commaize]
 // --
 // --
