@@ -188,6 +188,8 @@ set(CLEAN_ASN1_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-s1ap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sabp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sbc-ap.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-sgp22.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-sgp32.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-smrse.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-snmp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-spnego.c
@@ -2219,6 +2221,10 @@ set(DISSECTOR_FILES
 )
 source_group(dissectors FILES ${DISSECTOR_FILES})
 
+add_lex_files(LEX_FILES DISSECTOR_LEX
+	radius_dict.l
+)
+
 set(ALL_DISSECTOR_SRC
 	${DISSECTOR_FILES}
 	${CORBA_IDL_DISSECTOR_SRC}
@@ -2268,6 +2274,7 @@ set(CLEAN_FILES
 	${NCP2222_DISSECTOR_SRC}
 	${DISSECTOR_SUPPORT_SRC}
 	${DISSECTOR_REG_SRC}
+	${DISSECTOR_LEX}
 )
 
 set_source_files_properties(
@@ -2282,6 +2289,7 @@ add_library(dissectors OBJECT
 
 	${DISSECTOR_FILES}
 	${DISSECTOR_SUPPORT_SRC}
+	${DISSECTOR_LEX}
 )
 
 target_include_directories(dissectors
