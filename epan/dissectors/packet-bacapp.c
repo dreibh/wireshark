@@ -3608,6 +3608,7 @@ BACnetObjectType [] = {
 
 static const value_string
 BACnetObjectTypeAbbrev[] = {
+    {  0, "AI" },
     {  1, "AO" },
     {  2, "AV" },
     {  3, "BI" },
@@ -16033,6 +16034,7 @@ fWriteAccessSpecification(tvbuff_t *tvb, packet_info *pinfo, proto_tree *subtree
             if (tag_is_opening(tag_info)) {
                 offset += fTagHeaderTree(tvb, pinfo, subtree, offset, &tag_no, &tag_info, &lvt);
                 offset  = fBACnetPropertyValue(tvb, pinfo, subtree, offset);
+                offset += fTagHeaderTree(tvb, pinfo, subtree, offset, &tag_no, &tag_info, &lvt);
             } else {
                 expert_add_info(pinfo, subtree, &ei_bacapp_bad_tag);
             }
