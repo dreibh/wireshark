@@ -49,9 +49,10 @@ void proto_reg_handoff_mysql(void);
 
 #define MYSQL_HEADER_LENGTH 4
 
-/* MariaDB Server >= 10.0 sends a 5.5.5- prefix for the version, since
-	 replication doesn't support a two digit version number. Version 5.5.5
-   was never released in MySQL and MariaDB */
+/* MariaDB Server 10.x versions send a 5.5.5- prefix for the version, since
+   replication didn't support a two digit version number. Version 5.5.5
+   was never released in MySQL and MariaDB
+   https://jira.mariadb.org/browse/MDEV-28910 */
 #define MARIADB_RPL_VERSION_HACK "5.5.5-"
 
 /* client/server capabilities
@@ -67,13 +68,13 @@ void proto_reg_handoff_mysql(void);
 #define MYSQL_CAPS_OB 0x0040 /* CLIENT_ODBC */
 #define MYSQL_CAPS_LI 0x0080 /* CLIENT_LOCAL_FILES */
 #define MYSQL_CAPS_IS 0x0100 /* CLIENT_IGNORE_SPACE */
-#define MYSQL_CAPS_CU 0x0200 /* CLIENT_PROTOCOL_41 */
+#define MYSQL_CAPS_CU 0x0200 /* CLIENT_PROTOCOL_41 (was CLIENT_CHANGE_USER) */
 #define MYSQL_CAPS_IA 0x0400 /* CLIENT_INTERACTIVE */
 #define MYSQL_CAPS_SL 0x0800 /* CLIENT_SSL */
-#define MYSQL_CAPS_II 0x1000 /* CLIENT_IGNORE_SPACE */
+#define MYSQL_CAPS_II 0x1000 /* CLIENT_IGNORE_SIGPIPE */
 #define MYSQL_CAPS_TA 0x2000 /* CLIENT_TRANSACTIONS */
-#define MYSQL_CAPS_RS 0x4000 /* CLIENT_RESERVED */
-#define MYSQL_CAPS_SC 0x8000 /* CLIENT_SECURE_CONNECTION */
+#define MYSQL_CAPS_RS 0x4000 /* CLIENT_RESERVED (was CLIENT_PROTOCOL_41) */
+#define MYSQL_CAPS_SC 0x8000 /* CLIENT_RESERVED2 (was CLIENT_SECURE_CONNECTION) */
 
 
 /* field flags */
@@ -234,11 +235,14 @@ static const value_string mysql_clone_response_vals[] = {
 #define MARIADB_BULK_SEND_TYPES 128
 
 /* MariaDB extended capabilities */
+/* https://mariadb.com/docs/server/reference/clientserver-protocol/mariadb-protocol-differences-with-mysql
+ * https://mariadb.com/docs/server/reference/clientserver-protocol/1-connecting/connection#capabilities */
 #define MARIADB_CAPS_PR 0x00000001 /* MARIADB_CLIENT_PROGRESS */
 #define MARIADB_CAPS_CM 0x00000002 /* MARIADB_CLIENT_COM_MULTI */
 #define MARIADB_CAPS_BO 0x00000004 /* MARIADB_CLIENT_STMT_BULK_OPERATIONS */
-#define MARIADB_CAPS_EM 0x00000008 /* MARIADB_CLIENT_EXTENDED_METADATA */
-#define MARIADB_CAPS_ME 0x00000010 /* MARIADB_CLIENT_CACHE_METADATA */
+#define MARIADB_CAPS_EM 0x00000008 /* MARIADB_CLIENT_EXTENDED_METADATA (added 10.5.2) */
+#define MARIADB_CAPS_ME 0x00000010 /* MARIADB_CLIENT_CACHE_METADATA (added 10.6.0) */
+#define MARIADB_CAPS_BU 0x00000020 /* MARIADB_CLIENT_BULK_UNIT_RESULTS (added 11.5.2) */
 
 /* MariaDB bulk indicators */
 #define MARIADB_INDICATOR_NONE       0
@@ -1126,6 +1130,10 @@ static int proto_mysql;
 /* dissector configuration */
 static bool mysql_desegment = true;
 static bool mysql_showquery;
+static bool mysql_deprecate_eof = true;
+static bool mysql_query_attributes;
+static bool mariadb_extended_metadata;
+static bool mariadb_cache_metadata;
 
 /* expand-the-tree flags */
 static int ett_mysql;
@@ -1398,6 +1406,7 @@ static int hf_mariadb_cap_commulti;
 static int hf_mariadb_cap_bulk;
 static int hf_mariadb_cap_extmetadata;
 static int hf_mariadb_cap_cache_metadata;
+static int hf_mariadb_cap_bulk_unit_results;
 static int hf_mariadb_extcaps_server;
 static int hf_mariadb_extcaps_client;
 static int hf_mariadb_bulk_flag_autoid;
@@ -1805,6 +1814,7 @@ static int * const mariadb_extcaps_flags[] = {
 	&hf_mariadb_cap_bulk,
 	&hf_mariadb_cap_extmetadata,
 	&hf_mariadb_cap_cache_metadata,
+	&hf_mariadb_cap_bulk_unit_results,
 	NULL
 };
 
@@ -1828,6 +1838,72 @@ static int * const mysql_fld_flags[] = {
 	&hf_mysql_fld_set,
 	NULL
 };
+
+static mysql_conn_data_t*
+find_or_create_mysql_conn_data(conversation_t *conversation)
+{
+	mysql_conn_data_t *conn_data;
+
+	/* get associated state information, create if necessary */
+	conn_data = (mysql_conn_data_t *)conversation_get_proto_data(conversation, proto_mysql);
+	if (!conn_data) {
+		conn_data = wmem_new0(wmem_file_scope(), mysql_conn_data_t);
+		conn_data->stmts = wmem_tree_new(wmem_file_scope());
+		conn_data->encoding_client = ENC_UTF_8;
+		conn_data->encoding_results = ENC_UTF_8;
+
+		// Client and server capability flags
+		// Set in case the conversation doesn't start with greeting/login,
+		// as some of the capabilities alter dissection in ways that
+		// cannot be easily detected.
+		// It might be inconsistent whether clients set a flag even if
+		// the server denied capability by not setting the flag.
+		// TODO - Preferences to control the defaults. (#19856)
+		/* Always set the 4.1 protocol capabilities. (MySQL 4.1 was
+		 * released October 2004; there are probably very few clients
+		 * that use the older protocol, though another preference
+		 * could be added as necessary.) */
+		conn_data->clnt_caps = MYSQL_CAPS_CU     // CLIENT_PROTOCOL_41
+			^ MYSQL_CAPS_SC;		 // CLIENT_SECURE_CONNECTION / _RESERVED2
+		conn_data->srv_caps = MYSQL_CAPS_CU      // CLIENT_PROTOCOL_41
+			^ MYSQL_CAPS_SC;		 // CLIENT_SECURE_CONNECTION / _RESERVED2
+		/* These two extended capabilities go together. The EOF packet
+		 * was deprecated in order to enable session state tracking.
+		 * Not all clients/connectors support deprecating the EOF. */
+		if (mysql_deprecate_eof) {
+			conn_data->clnt_caps_ext |= MYSQL_CAPS_DE // CLIENT_DEPRECATE_EOF
+				^ MYSQL_CAPS_ST;                  // CLIENT_SESSION_TRACK
+			conn_data->srv_caps_ext |= MYSQL_CAPS_DE  // CLIENT_DEPRECATE_EOF
+				^ MYSQL_CAPS_ST;                  // CLIENT_SESSION_TRACK
+		}
+		/* QUERY_ATTRIBUTES was introduced in MySQL 8.0.23 and is not backwards
+		 * compatible. */
+		if (mysql_query_attributes) {
+			conn_data->clnt_caps_ext |= MYSQL_CAPS_QA; // CLIENT_QUERY_ATTRIBUTES
+			conn_data->srv_caps_ext |= MYSQL_CAPS_QA;  // CLIENT_QUERY_ATTRIBUTES
+		}
+		if (mariadb_extended_metadata) {
+			conn_data->mariadb_client_ext_caps |= MARIADB_CAPS_EM;
+			conn_data->mariadb_server_ext_caps |= MARIADB_CAPS_EM;
+		}
+		if (mariadb_cache_metadata) {
+			conn_data->mariadb_client_ext_caps |= MARIADB_CAPS_ME;
+			conn_data->mariadb_server_ext_caps |= MARIADB_CAPS_ME;
+		}
+
+		// Some extended capabilities add extra to Login packets, but
+		// also to MYSQL_CHANGE_USER commands (since the capabilities
+		// are not resent on a Change User.)
+		// Those include MYSQL_CAPS_PA (PLUGIN_AUTH), added MySQL 5.5.7,
+		// and MYSQL_CAPS_CA (CONNECT_ATTRS) and MYSQL_CAPS_AL
+		// (PLUGIN_AUTH_LENENC_CLIENT_DATA), both added in MySQL 5.6.7.
+		// We could also add preferences for Zlib and Zstandard compression,
+		// and for character sets.
+
+		conversation_add_proto_data(conversation, proto_mysql, conn_data);
+	}
+	return conn_data;
+}
 
 /* Helper function to only set state on first pass */
 static void mysql_set_conn_state(packet_info *pinfo, mysql_conn_data_t *conn_data, mysql_state_t state)
@@ -2137,7 +2213,17 @@ mysql_dissect_login(tvbuff_t *tvb, packet_info *pinfo, int offset,
 	}
 
 	/* password: asciiz or length+ascii */
-	if (conn_data->clnt_caps & MYSQL_CAPS_SC) {
+	if (conn_data->clnt_caps & MYSQL_CAPS_AL) {
+		/* Note the only difference between this case and the
+		 * next is when the authentication data is > 250 bytes. */
+		uint64_t lenstr64;
+		offset += tvb_get_fle(tvb, login_tree, offset, &lenstr64, NULL);
+		lenstr = (uint32_t)lenstr64;
+	} else if (conn_data->clnt_caps & MYSQL_CAPS_SC) {
+		/* Since MySQL 8.0, the documents say to always treat CAPS_SC as
+		 * set if PROTOCOL_41 is in use, and call the bit _RESERVED2.
+		 * At some point clients might stop setting the bit, in which
+		 * case we'd still want to do this if PROTOCOL_41 is in use. */
 		lenstr = tvb_get_uint8(tvb, offset);
 		offset += 1;
 	} else {
@@ -2673,7 +2759,17 @@ mysql_dissect_request(tvbuff_t *tvb,packet_info *pinfo, int offset, proto_tree *
 		proto_tree_add_item(req_tree, hf_mysql_user, tvb,  offset, lenstr, ENC_ASCII);
 		offset += lenstr;
 
-		if (conn_data->clnt_caps & MYSQL_CAPS_SC) {
+		if (conn_data->clnt_caps & MYSQL_CAPS_AL) {
+			/* Note the only difference between this case and the
+			 * next is when the authentication data is > 250 bytes. */
+			uint64_t lenstr64;
+			offset += tvb_get_fle(tvb, req_tree, offset, &lenstr64, NULL);
+			lenstr = (uint32_t)lenstr64;
+		} else if (conn_data->clnt_caps & MYSQL_CAPS_SC) {
+			/* Since MySQL 8.0, the documents say to always treat CAPS_SC as
+			 * set if PROTOCOL_41 is in use, and call the bit _RESERVED2.
+			 * At some point clients might stop setting the bit, in which
+			 * case we'd still want to do this if PROTOCOL_41 is in use. */
 			lenstr = tvb_get_uint8(tvb, offset);
 			offset += 1;
 		} else {
@@ -4104,7 +4200,7 @@ mysql_dissect_binlog_event_heartbeat_v2(tvbuff_t *tvb, packet_info *pinfo, int o
 	proto_item_append_text(parent_item, " OTW_HB_LOG_FILENAME_FIELD");
 	offset += 1;
 
-	fle = tvb_get_fle(tvb, hb_v2_subtree, offset, &num, ENC_NA);
+	fle = tvb_get_fle(tvb, hb_v2_subtree, offset, &num, NULL);
 	offset += fle;
 
 	proto_tree_add_item(hb_v2_subtree, hf_mysql_binlog_hb_event_filename, tvb, offset, (int) num, ENC_ASCII);
@@ -4576,23 +4672,7 @@ dissect_mysql_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* dat
 	conversation= find_or_create_conversation(pinfo);
 
 	/* get associated state information, create if necessary */
-	conn_data= (mysql_conn_data_t *)conversation_get_proto_data(conversation, proto_mysql);
-	if (!conn_data) {
-		conn_data = wmem_new0(wmem_file_scope(), mysql_conn_data_t);
-		conn_data->stmts = wmem_tree_new(wmem_file_scope());
-		conn_data->encoding_client = ENC_UTF_8;
-		conn_data->encoding_results = ENC_UTF_8;
-
-		// Client and server capability flags
-		// Set in case the conversation doesn't start with greeting/login
-		conn_data->clnt_caps = MYSQL_CAPS_CU;    // CLIENT_PROTOCOL_41
-		conn_data->clnt_caps_ext = MYSQL_CAPS_DE // CLIENT_DEPRECATE_EOF
-			^ MYSQL_CAPS_ST;                 // CLIENT_SESSION_TRACK
-		conn_data->srv_caps = MYSQL_CAPS_CU;     // CLIENT_PROTOCOL_41
-		conn_data->srv_caps_ext = MYSQL_CAPS_DE; // CLIENT_DEPRECATE_EOF
-
-		conversation_add_proto_data(conversation, proto_mysql, conn_data);
-	}
+	conn_data = find_or_create_mysql_conn_data(conversation);
 
 	/* Using tvb_raw_offset(tvb) allows storage of multiple "proto data" in a single frame
 	 * (when there are multiple MySQL pdus in a single frame) */
@@ -6143,6 +6223,11 @@ void proto_register_mysql(void)
 		FT_BOOLEAN, 32, TFS(&tfs_set_notset), MARIADB_CAPS_ME,
 		NULL, HFILL }},
 
+		{ &hf_mariadb_cap_bulk_unit_results,
+		{ "Bulk unit results", "mariadb.caps.bu",
+		FT_BOOLEAN, 32, TFS(&tfs_set_notset), MARIADB_CAPS_BU,
+		NULL, HFILL }},
+
 		{ &hf_mariadb_extcaps_server,
 		{ "MariaDB Extended Server Capabilities", "mariadb.extcaps.server",
 		FT_UINT32, BASE_HEX, NULL, 0x0,
@@ -6296,6 +6381,39 @@ void proto_register_mysql(void)
 					"Show SQL Query string in INFO column",
 					"Whether the MySQL dissector should display the SQL query string in the INFO column.",
 					&mysql_showquery);
+
+	prefs_register_bool_preference(mysql_module, "assume_deprecate_eof",
+					"Assume DEPRECATE_EOF capability",
+					"Whether the MySQL dissector should assume that the MYSQL_DEPRECATE_EOF"
+					" capability is negotiated when the login handshake is not captured."
+					" This capability was introduced with MySQL 5.5.7 to enable session"
+					" state tracking but is not supported by all connectors because of"
+					" backwards compatibility issues.",
+					&mysql_deprecate_eof);
+
+	prefs_register_bool_preference(mysql_module, "assume_query_attributes",
+					"Assume QUERY_ATTRIBUTES capability",
+					"Whether the MySQL dissector should assume that the MYSQL_QUERY_ATTRIBUTES"
+					" capability is negotiated when the login handshake is not captured."
+					" This capability was introduced with MySQL 8.0.23 and presents"
+					" backwards compatibility issues.",
+					&mysql_query_attributes);
+
+	prefs_register_bool_preference(mysql_module, "assume_extended_metadata",
+					"Assume MariaDB EXTENDED_METADATA capability",
+					"Whether the MySQL dissector should assume that the MariaDB EXTENDED_METADATA"
+					" capability is negotiated when the login handshake is not captured."
+					" This capability was introduced with MariaDB 10.5.2 and presents"
+					" backwards compatibility issues.",
+					&mariadb_extended_metadata);
+
+	prefs_register_bool_preference(mysql_module, "assume_cache_metadata",
+					"Assume MariaDB CACHE_METADATA capability",
+					"Whether the MySQL dissector should assume that the MariaDB CACHE_METADATA"
+					" capability is negotiated when the login handshake is not captured."
+					" This capability was introduced with MariaDB 10.6.0 and presents"
+					" backwards compatibility issues.",
+					&mariadb_cache_metadata);
 
 	reassembly_table_register(&mysql_reassembly_table,
 		&addresses_ports_reassembly_table_functions);
