@@ -5168,7 +5168,7 @@ tvb_raw_text_add(tvbuff_t *tvb, int offset, int length, int body_offset, packet_
 
         if (ws_encoding_id != (ENC_NA | ENC_ASCII) && ws_encoding_id != (ENC_NA | ENC_UTF_8)) {
             /* Encoding body with the new encoding */
-            char* encoding_name = val_to_str_ext_wmem(pinfo->pool, iana_charset_id,
+            char* encoding_name = val_to_str_ext(pinfo->pool, iana_charset_id,
                 &mibenum_vals_character_sets_ext, "UNKNOWN");
             const uint8_t* data_str = tvb_get_string_enc(pinfo->pool, tvb, body_offset,
                                                         end_offset - body_offset, ws_encoding_id);
@@ -7736,6 +7736,8 @@ void proto_register_sip(void)
 
     register_follow_stream(proto_sip, "sip_follow", sip_follow_conv_filter, sip_follow_index_filter, sip_follow_address_filter,
                            udp_port_to_display, follow_tvb_tap_listener, NULL, NULL);
+
+    register_external_value_string("sip_response_code_vals", sip_response_code_vals);
 }
 
 void

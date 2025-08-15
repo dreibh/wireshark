@@ -2631,7 +2631,7 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 	if (smb_info->request) { /* this is a request */
 		/* function code */
 		cmd = tvb_get_letohs(p_tvb, offset);
-		col_add_fstr(pinfo->cinfo, COL_INFO, "%s Request", val_to_str_ext(cmd, &commands_ext, "Unknown Command (%u)"));
+		col_add_fstr(pinfo->cinfo, COL_INFO, "%s Request", val_to_str_ext(pinfo->pool, cmd, &commands_ext, "Unknown Command (%u)"));
 
 		proto_tree_add_uint(tree, hf_function_code, p_tvb, offset, 2,
 		    cmd);
@@ -2768,7 +2768,7 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 		&&  ( tvb_reported_length(d_tvb)==0 ) ){
 			/* command */
 			col_add_fstr(pinfo->cinfo, COL_INFO, "%s Interim Response",
-					     val_to_str_ext(trp->lanman_cmd, &commands_ext, "Unknown Command (%u)"));
+					     val_to_str_ext(pinfo->pool, trp->lanman_cmd, &commands_ext, "Unknown Command (%u)"));
 
 			proto_tree_add_uint(tree, hf_function_code, p_tvb, 0, 0, trp->lanman_cmd);
 			return true;
@@ -2776,7 +2776,7 @@ dissect_pipe_lanman(tvbuff_t *pd_tvb, tvbuff_t *p_tvb, tvbuff_t *d_tvb,
 
 		/* command */
 		col_add_fstr(pinfo->cinfo, COL_INFO, "%s Response",
-				     val_to_str_ext(trp->lanman_cmd, &commands_ext, "Unknown Command (%u)"));
+				     val_to_str_ext(pinfo->pool, trp->lanman_cmd, &commands_ext, "Unknown Command (%u)"));
 
 		proto_tree_add_uint(tree, hf_function_code, p_tvb, 0, 0,
 		    trp->lanman_cmd);
@@ -3511,7 +3511,7 @@ dissect_pipe_smb(tvbuff_t *sp_tvb, tvbuff_t *s_tvb, tvbuff_t *pd_tvb,
 		    offset, 2, function);
 		offset += 2;
 		col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
-			    val_to_str(function, functions, "Unknown function (0x%04x)"),
+			    val_to_str_wmem(pinfo->pool, function, functions, "Unknown function (0x%04x)"),
 			    smb_info->request ? "Request" : "Response");
 
 		if (tri != NULL)
@@ -3569,7 +3569,7 @@ dissect_pipe_smb(tvbuff_t *sp_tvb, tvbuff_t *s_tvb, tvbuff_t *pd_tvb,
 			proto_tree_add_uint(pipe_tree, hf_smb_pipe_function, NULL,
 			    0, 0, function);
 			col_add_fstr(pinfo->cinfo, COL_INFO, "%s %s",
-				    val_to_str(function, functions, "Unknown function (0x%04x)"),
+				    val_to_str_wmem(pinfo->pool, function, functions, "Unknown function (0x%04x)"),
 				    smb_info->request ? "Request" : "Response");
 
 			fid = tri->fid;

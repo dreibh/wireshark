@@ -382,24 +382,6 @@ static const value_string gsm_dtap_elem_strings[] = {
 };
 value_string_ext gsm_dtap_elem_strings_ext = VALUE_STRING_EXT_INIT(gsm_dtap_elem_strings);
 
-const char *gsm_a_pd_str[] = {
-    "Group Call Control",
-    "Broadcast Call Control",
-    "EPS session management messages",
-    "Call Control; call related SS messages",
-    "GPRS Transparent Transport Protocol (GTTP)",
-    "Mobility Management messages",
-    "Radio Resources Management messages",
-    "EPS mobility management messages",
-    "GPRS Mobility Management messages",
-    "SMS messages",
-    "GPRS Session Management messages",
-    "Non call related SS messages",
-    "Location services specified in 3GPP TS 44.071",
-    "Unknown",
-    "Reserved for extension of the PD to one octet length",
-    "Special conformance testing functions"
-};
 /* L3 Protocol discriminator values according to TS 24 007 (6.4.0)  */
 const value_string protocol_discriminator_vals[] = {
     {0x0,       "Group call control"},
@@ -3549,7 +3531,7 @@ static const value_string gsm_tp_tested_device_vals[] = {
 };
 
 static uint16_t
-de_tp_tested_device(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
+de_tp_tested_device(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
 {
     uint32_t curr_offset;
     unsigned char  oct;
@@ -3558,7 +3540,7 @@ de_tp_tested_device(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uin
 
     oct = tvb_get_uint8(tvb, curr_offset);
     proto_tree_add_uint_format_value(tree, hf_gsm_a_dtap_tp_tested_device, tvb, curr_offset, 1,
-        oct, "%s", val_to_str(oct, gsm_tp_tested_device_vals, "Reserved (%d)"));
+        oct, "%s", val_to_str_wmem(pinfo->pool, oct, gsm_tp_tested_device_vals, "Reserved (%d)"));
     curr_offset+= 1;
 
     return (curr_offset - offset);
@@ -3629,7 +3611,7 @@ static const value_string gsm_positioning_technology_vals[] = {
 };
 
 static uint16_t
-de_tp_ms_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
+de_tp_ms_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
 {
     uint32_t curr_offset;
     unsigned char  oct;
@@ -3638,7 +3620,7 @@ de_tp_ms_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
 
     oct = tvb_get_uint8(tvb, curr_offset);
     proto_tree_add_uint_format_value(tree, hf_gsm_a_dtap_ms_positioning_technology, tvb, curr_offset, 1,
-        oct, "%s", val_to_str(oct, gsm_positioning_technology_vals, "Reserved (%d)"));
+        oct, "%s", val_to_str_wmem(pinfo->pool, oct, gsm_positioning_technology_vals, "Reserved (%d)"));
     curr_offset+= 1;
 
     return (curr_offset - offset);
@@ -3693,7 +3675,7 @@ de_tp_ue_test_loop_mode(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
 }
 
 static uint16_t
-de_tp_ue_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
+de_tp_ue_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo, uint32_t offset, unsigned len _U_, char *add_string _U_, int string_len _U_)
 {
     uint32_t curr_offset;
     unsigned char  oct;
@@ -3703,7 +3685,7 @@ de_tp_ue_positioning_technology(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
     oct = tvb_get_uint8(tvb, curr_offset);
 
     proto_tree_add_uint_format_value(tree, hf_gsm_a_dtap_ue_positioning_technology, tvb, curr_offset, 1,
-        oct, "%s", val_to_str(oct, gsm_positioning_technology_vals, "Reserved (%d)"));
+        oct, "%s", val_to_str_wmem(pinfo->pool, oct, gsm_positioning_technology_vals, "Reserved (%d)"));
     curr_offset+= 1;
 
     return (curr_offset - offset);

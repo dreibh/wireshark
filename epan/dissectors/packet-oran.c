@@ -214,7 +214,8 @@ static int hf_oran_blockScaler;
 static int hf_oran_compBitWidth;
 static int hf_oran_compShift;
 
-static int hf_oran_repetition;
+static int hf_oran_se6_repetition;
+
 static int hf_oran_rbgSize;
 static int hf_oran_rbgMask;
 static int hf_oran_noncontig_priority;
@@ -246,7 +247,7 @@ static int hf_oran_num_weights_per_bundle;
 
 static int hf_oran_ack_nack_req_id;
 
-static int hf_oran_off_start_prb_num_prb_pair;
+static int hf_oran_frequency_range;
 static int hf_oran_off_start_prb;
 static int hf_oran_num_prb;
 
@@ -269,6 +270,7 @@ static int hf_oran_eAxC_mask;
 static int hf_oran_technology;
 static int hf_oran_nullLayerInd;
 
+static int hf_oran_se19_repetition;
 static int hf_oran_portReMask;
 static int hf_oran_portSymbolMask;
 
@@ -466,7 +468,7 @@ static int ett_oran_u_prb;
 static int ett_oran_iq;
 static int ett_oran_bfw_bundle;
 static int ett_oran_bfw;
-static int ett_oran_offset_start_prb_num_prb;
+static int ett_oran_frequency_range;
 static int ett_oran_prb_cisamples;
 static int ett_oran_cisample;
 static int ett_oran_udcomphdr;
@@ -893,13 +895,13 @@ static AllowedCTs_t ext_cts[HIGHEST_EXTTYPE] = {
     { false, true,  true,  false, false, false, false},   // SE 3      (1,3)
     { false, true,  true,  true,  false, false, false},   // SE 4      (1,3,5)
     { false, true,  true,  true,  false, false, false},   // SE 5      (1,3,5)
-    { false, true,  true,  true,  false, false, false},   // SE 6      (1,3,5)
+    { false, true,  true,  true,  false, true,  true },   // SE 6      (1,3,5,10,11)
     { true,  false, false, false, false, false, false},   // SE 7      (0)
     { false, false, false, true,  false, false, false},   // SE 8      (5)
     { true,  true,  true,  true,  true,  true,  true },   // SE 9      (all)
     { false, true,  true,  true,  false, false, false},   // SE 10     (1,3,5)
     { false, true,  true,  false, false, false, false},   // SE 11     (1,3)
-    { false, true,  true,  true,  false, false, false},   // SE 12     (1,3,5)
+    { false, true,  true,  true,  false, true,  true },   // SE 12     (1,3,5,10,11)
     { false, true,  true,  true,  false, false, false},   // SE 13     (1,3,5)
     { false, false, false, true,  false, false, false},   // SE 14     (5)
     { false, false, false, true,  true,  false, false},   // SE 15     (5,6)
@@ -907,15 +909,15 @@ static AllowedCTs_t ext_cts[HIGHEST_EXTTYPE] = {
     { false, false, false, true,  false, false, false},   // SE 17     (5)
     { false, true,  true,  true,  false, false, false},   // SE 18     (1,3,5)
     { false, true,  true,  false, false, false, false},   // SE 19     (1,3)
-    { true,  true,  true,  true,  true,  false, false},   // SE 20     (0,1,3,5)
+    { true,  true,  true,  true,  true,  true,  true },   // SE 20     (0,1,3,5,10,11)
     { false, false, false, true,  true,  false, false},   // SE 21     (5,6)
     { true,  true,  true,  true,  true,  true,  true },   // SE 22     (all)
     { false, true,  true,  true,  false, false, false},   // SE 23     (1,3,5)
-    { false, false, false, true,  false, false, false },  // SE 24     (5)
-    { false, false, false, true,  false, false, false },  // SE 25     (5)
-    { false, false, false, true,  false, false, false },  // SE 26     (5)
-    { false, false, false, true,  false, false, false },  // SE 27     (5)
-    { false, false, false, true,  false, false, false },  // SE 28     (5)
+    { false, false, false, true,  false, false, false},   // SE 24     (5)
+    { false, false, false, true,  false, false, false},   // SE 25     (5)
+    { false, false, false, true,  false, false, false},   // SE 26     (5)
+    { false, false, false, true,  false, false, false},   // SE 27     (5)
+    { false, false, false, true,  false, false, false},   // SE 28     (5)
 };
 
 static bool se_allowed_in_st(unsigned se, unsigned ct)
@@ -1242,6 +1244,17 @@ static const true_false_string measurement_flag_tfs = {
   "at least one additional measurement report or command after the current one",
   "no additional measurement report or command"
 };
+
+static const true_false_string repetition_se6_tfs = {
+  "repeated highest priority data section in the C-Plane message",
+  "no repetition"
+};
+
+static const true_false_string repetition_se19_tfs = {
+  "per port information not present in the extension",
+  "per port info present in the extension"
+};
+
 
 
 /* Forward declaration */
@@ -2908,7 +2921,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 ext11_settings.ext6_set = true;
 
                 /* repetition */
-                proto_tree_add_bits_item(extension_tree, hf_oran_repetition, tvb, offset*8, 1, ENC_BIG_ENDIAN);
+                proto_tree_add_bits_item(extension_tree, hf_oran_se6_repetition, tvb, offset*8, 1, ENC_BIG_ENDIAN);
                 /* rbgSize (PRBs per bit set in rbgMask) */
                 uint32_t rbgSize;
                 proto_item *rbg_size_ti;
@@ -3309,9 +3322,9 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 for (prb_index = 1; extlen_remaining_bytes > 0; prb_index++)
                 {
                     /* Create a subtree for each pair */
-                    proto_item *pair_ti = proto_tree_add_string(extension_tree, hf_oran_off_start_prb_num_prb_pair,
+                    proto_item *pair_ti = proto_tree_add_string(extension_tree, hf_oran_frequency_range,
                                                                 tvb, offset, 2, "");
-                    proto_tree *pair_tree = proto_item_add_subtree(pair_ti, ett_oran_offset_start_prb_num_prb);
+                    proto_tree *pair_tree = proto_item_add_subtree(pair_ti, ett_oran_frequency_range);
 
                     /* offStartPrb */
                     uint32_t off_start_prb;
@@ -3496,26 +3509,29 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 if (disableBFWs) {
                     proto_item_append_text(extension_ti, " (disableBFWs)");
                 }
-                /* Repetition */
+                /* repetition (1 bit) */
                 uint64_t repetition;
-                proto_tree_add_bits_ret_val(extension_tree, hf_oran_repetition, tvb, (offset*8)+1, 1, &repetition, ENC_BIG_ENDIAN);
-                /* numPortc */
+                proto_tree_add_bits_ret_val(extension_tree, hf_oran_se19_repetition, tvb, (offset*8)+1, 1, &repetition, ENC_BIG_ENDIAN);
+                /* numPortc (6 bits) */
                 proto_tree_add_item_ret_uint(extension_tree, hf_oran_numPortc,
                                              tvb, offset, 1, ENC_BIG_ENDIAN, &numPortc);
                 offset++;
 
-                /* priority */
+                /* priority (2 bits) */
                 proto_tree_add_item(extension_tree, hf_oran_noncontig_priority, tvb, offset, 1, ENC_BIG_ENDIAN);
-                /* symbolMask */
+                /* symbolMask (14 bits) */
                 offset = dissect_symbolmask(tvb, extension_tree, offset, NULL, NULL);
 
-                /* bfwCompHdr */
                 uint32_t bfwcomphdr_iq_width, bfwcomphdr_comp_meth;
                 proto_item *comp_meth_ti = NULL;
-                offset = dissect_bfwCompHdr(tvb, extension_tree, offset,
-                                            &bfwcomphdr_iq_width, &bfwcomphdr_comp_meth, &comp_meth_ti);
 
                 if (!repetition) {
+
+                    if (!disableBFWs) {
+                        /* bfwCompHdr */
+                        offset = dissect_bfwCompHdr(tvb, extension_tree, offset,
+                                                    &bfwcomphdr_iq_width, &bfwcomphdr_comp_meth, &comp_meth_ti);
+                    }
 
                     /* Add entries for each port */
                     for (unsigned port=0; port < numPortc; port++) {
@@ -3574,7 +3590,6 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                                 proto_tree *bfw_tree = proto_item_add_subtree(bfw_ti, ett_oran_bfw);
 
                                 /* I */
-                                /* Get bits, and convert to float. */
                                 uint32_t bits = tvb_get_bits32(tvb, bit_offset, bfwcomphdr_iq_width, ENC_BIG_ENDIAN);
                                 float value = decompress_value(bits, bfwcomphdr_comp_meth, bfwcomphdr_iq_width, exponent);
                                 /* Add to tree. */
@@ -3584,7 +3599,6 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                                 proto_item_append_text(bfw_ti, "I%u=%f ", b, value);
 
                                 /* Q */
-                                /* Get bits, and convert to float. */
                                 bits = tvb_get_bits32(tvb, bit_offset, bfwcomphdr_iq_width, ENC_BIG_ENDIAN);
                                 value = decompress_value(bits, bfwcomphdr_comp_meth, bfwcomphdr_iq_width, exponent);
                                 /* Add to tree. */
@@ -3598,13 +3612,6 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                         }
                         else {
                             /* No weights... */
-
-                            /* Reserved (1 bit) */
-                            proto_tree_add_item(extension_tree, hf_oran_reserved_1bit, tvb, offset, 1, ENC_BIG_ENDIAN);
-                            /* beamID (15 bits) */
-                            proto_tree_add_item_ret_uint(extension_tree, hf_oran_beamId, tvb, offset, 2, ENC_BIG_ENDIAN, &beamId);
-                            proto_item_append_text(port_ti, " (beamId=%u)", beamId);
-                            offset += 2;
                         }
 
                         /* Set length of this port entry */
@@ -3635,7 +3642,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     proto_tree_add_item(pattern_tree, hf_oran_symbolMask_ext20, tvb, offset, 2, ENC_BIG_ENDIAN);
                     offset += 1;
                     /* startPuncPrb (10 bits) */
-                    proto_tree_add_item(pattern_tree, hf_oran_startPuncPrb, tvb, offset, 1, ENC_BIG_ENDIAN);
+                    proto_tree_add_item(pattern_tree, hf_oran_startPuncPrb, tvb, offset, 2, ENC_BIG_ENDIAN);
                     offset += 2;
                     /* numPuncPrb (8 bits) */
                     proto_tree_add_item(pattern_tree, hf_oran_numPuncPrb, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -5899,8 +5906,8 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     uint32_t key = make_flow_key(eAxC, ORAN_U_PLANE);
     flow_state_t* state = (flow_state_t*)wmem_tree_lookup32(flow_states_table, key);
     /* Also look up C-PLANE state so may check current compression settings */
-    key = make_flow_key(eAxC, ORAN_C_PLANE);
-    flow_state_t* cplane_state = (flow_state_t*)wmem_tree_lookup32(flow_states_table, key);
+    uint32_t cplane_key = make_flow_key(eAxC, ORAN_C_PLANE);
+    flow_state_t* cplane_state = (flow_state_t*)wmem_tree_lookup32(flow_states_table, cplane_key);
 
     if (!PINFO_FD_VISITED(pinfo)) {
         /* Create conversation if doesn't exist yet */
@@ -7090,10 +7097,10 @@ proto_register_oran(void)
         },
 
         /* Section 7.7.6.6 */
-        { &hf_oran_repetition,
+        { &hf_oran_se6_repetition,
           { "repetition", "oran_fh_cus.repetition",
             FT_BOOLEAN, BASE_NONE,
-            NULL, 0x0,
+            TFS(&repetition_se6_tfs), 0x0,
             "Repetition of a highest priority data section for C-Plane", HFILL}
         },
         /* 7.7.20.9 */
@@ -7110,7 +7117,7 @@ proto_register_oran(void)
             NULL, 0x0fffffff,
             "Each bit indicates whether a corresponding resource block group is present", HFILL}
         },
-        /* 7.7.6.5 */
+        /* 7.7.6.5.  Also 7.7.12.3 and 7.7.19.5 */
         { &hf_oran_noncontig_priority,
           { "priority", "oran_fh_cus.priority",
             FT_UINT8, BASE_HEX,
@@ -7220,11 +7227,11 @@ proto_register_oran(void)
         },
 
         /* Subtree for next 2 items */
-        { &hf_oran_off_start_prb_num_prb_pair,
-          { "Pair", "oran_fh_cus.offStartPrb_numPrb",
+        { &hf_oran_frequency_range,
+          { "Frequency Range", "oran_fh_cus.frequencyRange",
             FT_STRING, BASE_NONE,
             NULL, 0x0,
-            "Pair of offStartPrb and numPrb", HFILL}
+            NULL, HFILL}
         },
 
         /* 7.7.12.4 */
@@ -7656,7 +7663,16 @@ proto_register_oran(void)
             "Whether corresponding layer is nulling-layer or not", HFILL }
         },
 
-        /* Exttype 19 (7.7.19.8) */
+        /* Exttype 19 */
+        /* 7.7.19.3 */
+        { &hf_oran_se19_repetition,
+          { "repetition", "oran_fh_cus.repetition",
+            FT_BOOLEAN, BASE_NONE,
+            TFS(&repetition_se19_tfs), 0x0,
+            "repeat port info flag", HFILL}
+        },
+        /* 7.7.19.8 */
+        /* TODO: break down into each RE as done for 7.5.3.5 ? */
         { &hf_oran_portReMask,
           { "portReMask", "oran_fh_cus.portReMask",
             FT_BOOLEAN, 16,
@@ -7732,8 +7748,8 @@ proto_register_oran(void)
         /* 7.7.20.5 numPuncPrb */
         { &hf_oran_numPuncPrb,
           { "numPuncPrb", "oran_fh_cus.numPuncPrb",
-            FT_UINT24, BASE_DEC,
-            NULL, 0x03ffff,
+            FT_UINT8, BASE_DEC,
+            NULL, 0x0,
             "the number of PRBs of the puncturing pattern", HFILL}
         },
         /* 7.7.20.6 puncReMask */
@@ -8681,7 +8697,7 @@ proto_register_oran(void)
         &ett_oran_iq,
         &ett_oran_bfw_bundle,
         &ett_oran_bfw,
-        &ett_oran_offset_start_prb_num_prb,
+        &ett_oran_frequency_range,
         &ett_oran_prb_cisamples,
         &ett_oran_cisample,
         &ett_oran_udcomphdr,

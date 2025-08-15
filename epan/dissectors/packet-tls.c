@@ -1932,6 +1932,10 @@ process_ssl_payload(tvbuff_t *tvb, int offset, packet_info *pinfo,
             /* No heuristics, no port-based proto, unknown protocol. */
             ssl_debug_printf("%s: no appdata dissector found\n", G_STRFUNC);
             call_data_dissector(next_tvb, pinfo, proto_tree_get_root(tree));
+            if (have_tap_listener(exported_pdu_tap)) {
+                export_pdu_packet(next_tvb, pinfo, EXP_PDU_TAG_DISSECTOR_NAME,
+                                  "data");
+            }
             return;
         }
     }
@@ -5020,6 +5024,10 @@ proto_reg_handoff_ssl(void)
 
     heur_dissector_add("tcp", dissect_ssl_heur, "SSL/TLS over TCP", "tls_tcp", proto_tls, HEURISTIC_ENABLE);
     dissector_add_string("http.upgrade", "tls", tls_handle);
+    dissector_add_string("http.upgrade", "TLS/1.0", tls_handle);
+    dissector_add_string("http.upgrade", "TLS/1.1", tls_handle);
+    dissector_add_string("http.upgrade", "TLS/1.2", tls_handle);
+    dissector_add_string("http.upgrade", "TLS/1.3", tls_handle);
 }
 
 void

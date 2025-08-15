@@ -908,8 +908,8 @@ static const uint8_t *C_BANNER = (const uint8_t*)"ceph v";
 	typedef int base; \
 	VALUE_STRING_ENUM(base##_strings); \
 	VALUE_STRING_ARRAY(base##_strings); \
-	static const char *base##_string(base val) { \
-		return val_to_str(val, base##_strings, "Unknown (0x0"#chars"X)"); \
+	static const char *base##_string(base val, wmem_allocator_t* scope) { \
+		return val_to_str_wmem(scope, val, base##_strings, "Unknown (0x0"#chars"X)"); \
 	}
 
 #define C_MAKE_STRINGS_EXT(base, chars) \
@@ -920,8 +920,8 @@ static const uint8_t *C_BANNER = (const uint8_t*)"ceph v";
 	static value_string_ext \
 	base##_strings_ext = VALUE_STRING_EXT_INIT(base##_strings); \
 	\
-	static const char *base##_string(base val) { \
-		return val_to_str_ext(val, &base##_strings_ext, "Unknown (0x0"#chars"X)"); \
+	static const char *base##_string(base val, wmem_allocator_t* scope) { \
+		return val_to_str_ext(scope, val, &base##_strings_ext, "Unknown (0x0"#chars"X)"); \
 	}
 
 #define c_inet_strings_VALUE_STRING_LIST(V) \
@@ -1369,12 +1369,6 @@ C_MAKE_STRINGS(c_node_type, 2)
 	c_node_type_strings_LIST(V, C_EXTRACT_2)
 
 VALUE_STRING_ARRAY(c_node_type_abbr_strings);
-
-static
-const char *c_node_type_abbr_string(c_node_type val)
-{
-	return val_to_str(val, c_node_type_abbr_strings, "Unknown (0x%02x)");
-}
 
 #define C_MON_SUB_FLAG_ONETIME  0x01
 
@@ -1946,7 +1940,7 @@ unsigned c_dissect_entityaddr(proto_tree *root, int hf, c_entityaddr *out,
 	tree = proto_item_add_subtree(ti, ett_entityaddr);
 
 	d.type = (c_node_type)tvb_get_letohl(tvb, off);
-	d.type_str = c_node_type_string(d.type);
+	d.type_str = c_node_type_string(d.type, pinfo->pool);
 	proto_tree_add_item(tree, hf_node_type,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
@@ -1989,7 +1983,7 @@ unsigned c_dissect_entityname(proto_tree *root, int hf, c_entityname *out,
 	tree = proto_item_add_subtree(ti, ett_entityname);
 
 	d.type	   = (c_node_type)tvb_get_uint8(tvb, off);
-	d.type_str = c_node_type_abbr_string(d.type);
+	d.type_str = val_to_str_wmem(data->pinfo->pool, d.type, c_node_type_abbr_strings, "Unknown (0x%02x)");
 	proto_tree_add_item(tree, hf_node_type,
 			    tvb, off, 1, ENC_LITTLE_ENDIAN);
 	off += 1;
@@ -2074,8 +2068,7 @@ unsigned c_dissect_EntityName(proto_tree *root,
 
 	off = c_dissect_str(tree, hf_EntityName_id, &name, tvb, data->pinfo, off);
 
-	proto_item_append_text(ti, ": %s.%s",
-			       c_node_type_abbr_string(type), name.str);
+	proto_item_append_text(ti, ": %s.%s", val_to_str_wmem(data->pinfo->pool, type, c_node_type_abbr_strings, "Unknown (0x%02x)"), name.str);
 
 	proto_item_set_end(ti, tvb, off);
 	return off;
@@ -2576,7 +2569,7 @@ unsigned c_dissect_hitset_params(proto_tree *root,
 	off = c_dissect_encoded(tree, &enc, 1, 1, tvb, off, data);
 
 	type = (c_hitset_params_type)tvb_get_uint8(tvb, off);
-	proto_item_append_text(ti, ", Type: %s", c_hitset_params_type_string(type));
+	proto_item_append_text(ti, ", Type: %s", c_hitset_params_type_string(type, data->pinfo->pool));
 	ti2 = proto_tree_add_item(tree, hf_hitset_params_type,
 				  tvb, off, 1, ENC_LITTLE_ENDIAN);
 	off += 1;
@@ -2880,8 +2873,8 @@ unsigned c_dissect_pgpool(proto_tree *root,
 	off = enc.end;
 
 	proto_item_append_text(ti, ", Type: %s, Cache Mode: %s",
-			       c_pgpool_type_string(type),
-			       c_pgpool_cachemode_string(cachemode));
+			       c_pgpool_type_string(type, data->pinfo->pool),
+			       c_pgpool_cachemode_string(cachemode, data->pinfo->pool));
 
 	return off;
 }
@@ -3826,7 +3819,7 @@ unsigned c_dissect_osd_op(proto_tree *root, int hf, c_osd_op *out,
 	ti   = proto_tree_add_item(root, hf, tvb, off, -1, ENC_NA);
 	tree = proto_item_add_subtree(ti, ett_osd_op);
 
-	d.type_str = c_osd_optype_string(d.type);
+	d.type_str = c_osd_optype_string(d.type, data->pinfo->pool);
 	proto_item_append_text(ti, ", Type: %s", d.type_str);
 	proto_tree_add_item(tree, hf_osd_op_type, tvb, off, 2, ENC_LITTLE_ENDIAN);
 	off += 2;
@@ -4265,10 +4258,10 @@ unsigned c_dissect_msg_unknown(proto_tree *tree,
 {
 	unsigned off = 0;
 
-	c_set_type(data, c_msg_type_string(data->header.type));
+	c_set_type(data, c_msg_type_string(data->header.type, data->pinfo->pool));
 	proto_item_append_text(data->item_root,
 			       ", Type: %s, Front Len: %u, Middle Len: %u, Data Len %u",
-			       c_msg_type_string(data->header.type),
+			       c_msg_type_string(data->header.type, data->pinfo->pool),
 			       front_len, middle_len, data_len);
 	expert_add_info(data->pinfo, tree, &ei_msg_unknown);
 
@@ -4541,7 +4534,7 @@ unsigned c_dissect_msg_auth(proto_tree *root,
 		{
 			c_auth_proto sp;
 			sp = (c_auth_proto)tvb_get_letohl(tvb, off);
-			proto_item_append_text(ti2, i?",%s":": %s", c_auth_proto_string(sp));
+			proto_item_append_text(ti2, i?",%s":": %s", c_auth_proto_string(sp, data->pinfo->pool));
 			proto_tree_add_item(subtree, hf_msg_auth_supportedproto_proto,
 					    tvb, off, 4, ENC_LITTLE_ENDIAN);
 			off += 4;
@@ -4572,7 +4565,7 @@ unsigned c_dissect_msg_auth(proto_tree *root,
 		}
 
 		proto_item_append_text(ti2, ", Request Type: %s",
-				       c_cephx_req_type_string(type));
+				       c_cephx_req_type_string(type, data->pinfo->pool));
 		break;
 	}
 	default:
@@ -4588,7 +4581,7 @@ unsigned c_dissect_msg_auth(proto_tree *root,
 		off += 4;
 	}
 
-	c_append_text(data, ti, ", Proto: %s", c_auth_proto_string(proto));
+	c_append_text(data, ti, ", Proto: %s", c_auth_proto_string(proto, data->pinfo->pool));
 
 	return off;
 }
@@ -4637,7 +4630,7 @@ unsigned c_dissect_msg_auth_reply(proto_tree *root,
 
 	off = c_dissect_str(tree, hf_msg_auth_reply_msg, NULL, tvb, data->pinfo, off);
 
-	c_append_text(data, ti, ", Proto: %s", c_auth_proto_string(proto));
+	c_append_text(data, ti, ", Proto: %s", c_auth_proto_string(proto, data->pinfo->pool));
 
 	return off;
 }
@@ -4797,7 +4790,7 @@ unsigned c_dissect_msg_client_sess(proto_tree *root,
 			    tvb, off, 4, ENC_LITTLE_ENDIAN);
 	off += 4;
 
-	c_append_text(data, ti, ", Operation: %s", c_session_op_type_string(op));
+	c_append_text(data, ti, ", Operation: %s", c_session_op_type_string(op, data->pinfo->pool));
 
 	return off;
 }
@@ -4882,7 +4875,7 @@ unsigned c_dissect_msg_client_req(proto_tree *root,
 		off += 8;
 	}
 
-	c_append_text(data, ti, ", Operation: %s", c_mds_op_type_string(type));
+	c_append_text(data, ti, ", Operation: %s", c_mds_op_type_string(type, data->pinfo->pool));
 
 	return off;
 }
@@ -4978,7 +4971,7 @@ unsigned c_dissect_msg_client_reply(proto_tree *root,
 	off = c_dissect_data(tree, hf_msg_client_reply_extra, tvb, data->pinfo, off);
 	off = c_dissect_data(tree, hf_msg_client_reply_snaps, tvb, data->pinfo, off);
 
-	c_append_text(data, ti, ", Operation: %s", c_mds_op_type_string(type));
+	c_append_text(data, ti, ", Operation: %s", c_mds_op_type_string(type, data->pinfo->pool));
 
 	return off;
 }
@@ -5398,7 +5391,7 @@ unsigned c_dissect_msg_poolop(proto_tree *root,
 
 	c_append_text(data, ti,
 		      ", Type: %s, Name: %s, Pool: %"PRId32,
-		      c_poolop_type_string(type),
+		      c_poolop_type_string(type, data->pinfo->pool),
 		      name.str,
 		      pool);
 
@@ -5681,7 +5674,7 @@ unsigned c_dissect_msg_mon_election(proto_tree *root,
 			     hf_msg_mon_election_sharing_data, hf_msg_mon_election_sharing_size,
 			     tvb, data->pinfo, off);
 
-	c_append_text(data, ti, ", Operation: %s", c_mon_election_type_string(type));
+	c_append_text(data, ti, ", Operation: %s", c_mon_election_type_string(type, data->pinfo->pool));
 
 	return off;
 }
@@ -5782,7 +5775,7 @@ unsigned c_dissect_msg_mon_paxos(proto_tree *root,
 	}
 
 	c_append_text(data, ti, ", Op: %s, Proposal Number: %"PRIu64,
-		      c_mon_paxos_op_string(op), pn);
+		      c_mon_paxos_op_string(op, data->pinfo->pool), pn);
 
 	return off;
 }
@@ -5848,7 +5841,7 @@ unsigned c_dissect_msg_mon_probe(proto_tree *root,
 	}
 
 	c_append_text(data, ti, ", Type: %s, Name: %s",
-		      c_mon_probe_type_string(type),
+		      c_mon_probe_type_string(type, data->pinfo->pool),
 		      name.str);
 
 	return off;
@@ -5899,7 +5892,7 @@ unsigned c_dissect_msg_osd_ping(proto_tree *root,
 		off += 8;
 	}
 
-	c_append_text(data, ti, ", Operation: %s", c_osd_ping_op_string(op));
+	c_append_text(data, ti, ", Operation: %s", c_osd_ping_op_string(op, data->pinfo->pool));
 	return off;
 }
 
@@ -6191,7 +6184,7 @@ unsigned c_dissect_msg_client_caps(proto_tree *root,
 	proto_item_append_text(ti, ", Op: %s"
 			       ", Inode: 0x%016"PRIX64
 			       ", Relam: 0x%"PRIX64,
-			       c_cap_op_type_string(op),
+			       c_cap_op_type_string(op, data->pinfo->pool),
 			       inode, relam);
 
 	return front_len+middle_len;
@@ -6284,7 +6277,7 @@ unsigned c_dissect_msg_timecheck(proto_tree *root,
 
 	c_append_text(data, ti, ", Operation: %s, Epoch: %"PRIu64
 		      ", Round: %"PRIu64,
-		      c_timecheck_op_string(op),
+		      c_timecheck_op_string(op, data->pinfo->pool),
 		      epoch, round);
 
 	if (op == C_TIMECHECK_OP_PONG)
@@ -6473,7 +6466,7 @@ unsigned c_dissect_msg(proto_tree *tree,
 	off += 4;
 
 	proto_item_append_text(ti, ", Type: %s, From: %s",
-			       c_msg_type_string(type),
+			       c_msg_type_string(type, data->pinfo->pool),
 			       data->header.src.slug);
 	if (front_len ) proto_item_append_text(ti, ", Front Len: %d", front_len);
 	if (middle_len) proto_item_append_text(ti, ", Mid Len: %d",   middle_len);

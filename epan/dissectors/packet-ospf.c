@@ -1508,7 +1508,7 @@ dissect_ospf(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
     packet_type = tvb_get_uint8(tvb, 1);
     col_add_str(pinfo->cinfo, COL_INFO,
-                val_to_str(packet_type, pt_vals, "Unknown (%u)"));
+                val_to_str_wmem(pinfo->pool, packet_type, pt_vals, "Unknown (%u)"));
 
     ospflen = tvb_get_ntohs(tvb, 2);
 
@@ -2845,7 +2845,7 @@ dissect_ospf_lsa_mpls(tvbuff_t *tvb, packet_info *pinfo, int offset, proto_tree 
                     for (i = 0; i < (stlv_len - 4) / 4; i++) {
                         proto_tree_add_uint_format(stlv_tree, hf_ospf_oif_signal_type, tvb, stlv_offset+8+(i*4), 4,
                                             tvb_get_uint8(tvb, stlv_offset+8+(i*4)), "%s: %d free timeslots",
-                                            val_to_str_ext(tvb_get_uint8(tvb, stlv_offset+8+(i*4)),
+                                            val_to_str_ext(pinfo->pool, tvb_get_uint8(tvb, stlv_offset+8+(i*4)),
                                                            &gmpls_sonet_signal_type_str_ext,
                                                            "Unknown Signal Type (%d)"),
                                             tvb_get_ntoh24(tvb, stlv_offset + 9 + i*4));

@@ -22,12 +22,12 @@
 #include <epan/to_str.h>
 #include <epan/strutil.h>
 #include <epan/conversation.h>
-#include <epan/xdlc.h>
 #include <epan/tfs.h>
 #include <wsutil/array.h>
 #include <wiretap/wtap.h>
 
 #include <epan/dissectors/packet-sll.h>
+#include <epan/dissectors/packet-xdlc.h>
 #include "irda-appl.h"
 
 /*
@@ -735,7 +735,7 @@ static void dissect_iap_result(tvbuff_t* tvb, packet_info* pinfo, proto_tree* ro
     }
 
     col_set_str(pinfo->cinfo, COL_INFO, "Result: ");
-    col_append_str(pinfo->cinfo, COL_INFO, val_to_str(retcode, iap_return_vals, "0x%02X"));
+    col_append_str(pinfo->cinfo, COL_INFO, val_to_str_wmem(pinfo->pool, retcode, iap_return_vals, "0x%02X"));
 
     switch (op)
     {
@@ -1063,12 +1063,12 @@ static void dissect_irlmp(tvbuff_t* tvb, packet_info* pinfo, proto_tree* root, u
         opcode = tvb_get_uint8(tvb, offset+2);
 
         col_add_fstr(pinfo->cinfo, COL_INFO, "%d > %d, ", slsap, dlsap);
-        col_append_str(pinfo->cinfo, COL_INFO, val_to_str(opcode, lmp_opcode_vals, "0x%02X"));
+        col_append_str(pinfo->cinfo, COL_INFO, val_to_str_wmem(pinfo->pool, opcode, lmp_opcode_vals, "0x%02X"));
         if ((opcode == ACCESSMODE_CMD) || (opcode == ACCESSMODE_CNF))
         {
             col_append_str(pinfo->cinfo, COL_INFO, " (");
             col_append_str(pinfo->cinfo, COL_INFO,
-                           val_to_str(tvb_get_uint8(tvb, offset+4), lmp_mode_vals, "0x%02X"));
+                           val_to_str_wmem(pinfo->pool, tvb_get_uint8(tvb, offset+4), lmp_mode_vals, "0x%02X"));
             col_append_str(pinfo->cinfo, COL_INFO, ")");
         }
     }

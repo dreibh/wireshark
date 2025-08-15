@@ -1796,7 +1796,7 @@ static void send_hci_summary_status_tap(uint8_t status, packet_info *pinfo, blue
         tap_hci_summary->type = BLUETOOTH_HCI_SUMMARY_STATUS;
         tap_hci_summary->status = status;
         if (try_val_to_str_ext(status, &bthci_cmd_status_vals_ext))
-            tap_hci_summary->name = val_to_str_ext(status, &bthci_cmd_status_vals_ext, "Unknown 0x%02x");
+            tap_hci_summary->name = val_to_str_ext(pinfo->pool, status, &bthci_cmd_status_vals_ext, "Unknown 0x%02x");
         else
             tap_hci_summary->name = NULL;
         tap_queue_packet(bluetooth_hci_summary_tap, pinfo, tap_hci_summary);
@@ -1833,7 +1833,7 @@ static void send_hci_summary_reason_tap(uint8_t reason, packet_info *pinfo, blue
         tap_hci_summary->type = BLUETOOTH_HCI_SUMMARY_REASON;
         tap_hci_summary->reason = reason;
         if (try_val_to_str_ext(reason, &bthci_cmd_status_vals_ext))
-            tap_hci_summary->name = val_to_str_ext(reason, &bthci_cmd_status_vals_ext, "Unknown 0x%02x");
+            tap_hci_summary->name = val_to_str_ext(pinfo->pool, reason, &bthci_cmd_status_vals_ext, "Unknown 0x%02x");
         else
             tap_hci_summary->name = NULL;
         tap_queue_packet(bluetooth_hci_summary_tap, pinfo, tap_hci_summary);
@@ -2718,7 +2718,7 @@ dissect_bthci_evt_command_status(tvbuff_t *tvb, int offset, packet_info *pinfo,
         tap_hci_summary->ocf = opcode & 0x03ff;
         tap_hci_summary->event = 0x0f; /* Command Status */
         if (try_val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext))
-            tap_hci_summary->name = val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x");
+            tap_hci_summary->name = val_to_str_ext(pinfo->pool, opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x");
         else
             tap_hci_summary->name = NULL;
         tap_queue_packet(bluetooth_hci_summary_tap, pinfo, tap_hci_summary);
@@ -2793,7 +2793,7 @@ dissect_bthci_evt_command_status(tvbuff_t *tvb, int offset, packet_info *pinfo,
         return tvb_captured_length(tvb);
     } else {
         col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)",
-                val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x"));
+                val_to_str_ext(pinfo->pool, opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x"));
     }
 
     return offset;
@@ -3090,7 +3090,7 @@ dissect_bthci_evt_cs_result_steps(tvbuff_t *tvb, int offset, packet_info *pinfo 
         pq_tree = proto_item_add_subtree(pq_item, ett_packet_quality);
         proto_tree_add_item(pq_tree, hf_bthci_evt_packet_quality_aa_check, tvb, offset, 1, ENC_NA);
         proto_tree_add_item(pq_tree, hf_bthci_evt_packet_quality_bit_errors, tvb, offset, 1, ENC_NA);
-        proto_item_append_text(step_item, ", AA %s", val_to_str(tvb_get_uint8(tvb, offset) & 0xf, access_address_check_vals, "Unknown 0x%x"));
+        proto_item_append_text(step_item, ", AA %s", val_to_str_wmem(pinfo->pool, tvb_get_uint8(tvb, offset) & 0xf, access_address_check_vals, "Unknown 0x%x"));
         offset += 1;
     }
 
@@ -3143,13 +3143,13 @@ dissect_bthci_evt_le_meta(tvbuff_t *tvb, int offset, packet_info *pinfo,
         tap_hci_summary->event = 0x3E; /* LE Meta */
         tap_hci_summary->subevent = subevent_code;
         if (try_val_to_str(subevent_code, evt_le_meta_subevent))
-            tap_hci_summary->name = val_to_str(subevent_code, evt_le_meta_subevent, "Unknown 0x%04x");
+            tap_hci_summary->name = val_to_str_wmem(pinfo->pool, subevent_code, evt_le_meta_subevent, "Unknown 0x%04x");
         else
             tap_hci_summary->name = NULL;
         tap_queue_packet(bluetooth_hci_summary_tap, pinfo, tap_hci_summary);
     }
 
-    col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)", val_to_str(subevent_code, evt_le_meta_subevent, "Unknown 0x%02x"));
+    col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)", val_to_str_wmem(pinfo->pool, subevent_code, evt_le_meta_subevent, "Unknown 0x%02x"));
 
     offset += 1;
 
@@ -4060,7 +4060,7 @@ dissect_bthci_evt_le_meta(tvbuff_t *tvb, int offset, packet_info *pinfo,
                     report_item = proto_tree_add_none_format(tree, hf_bthci_evt_subevent_responses, tvb, offset, length,
                                                       "Sub-event Response Slot: %u, Data Status: %s",
                                                       tvb_get_uint8(tvb, offset+3),
-                                                      val_to_str(tvb_get_uint8(tvb, offset+4), ext_adv_data_status_vals, "0x%02x"));
+                                                      val_to_str_wmem(pinfo->pool, tvb_get_uint8(tvb, offset+4), ext_adv_data_status_vals, "0x%02x"));
                     report_tree = proto_item_add_subtree(report_item, ett_adv_subevent_responses);
 
                     proto_tree_add_item(report_tree, hf_bthci_evt_tx_power, tvb, offset, 1, ENC_NA);
@@ -4599,7 +4599,7 @@ dissect_bthci_evt_command_complete(tvbuff_t *tvb, int offset,
         tap_hci_summary->ocf = opcode & 0x03ff;
         tap_hci_summary->event = 0x0e; /* Command Complete */
         if (try_val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext))
-            tap_hci_summary->name = val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x");
+            tap_hci_summary->name = val_to_str_ext(pinfo->pool, opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x");
         else
             tap_hci_summary->name = NULL;
         tap_queue_packet(bluetooth_hci_summary_tap, pinfo, tap_hci_summary);
@@ -4671,7 +4671,7 @@ dissect_bthci_evt_command_complete(tvbuff_t *tvb, int offset,
         offset = tvb_captured_length(tvb);
     } else {
         col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)",
-                val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x"));
+                val_to_str_ext(pinfo->pool, opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x"));
     }
 
     if (ogf != HCI_OGF_VENDOR_SPECIFIC) switch(opcode) {
@@ -7236,7 +7236,7 @@ dissect_bthci_evt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
     evt_code = tvb_get_uint8(tvb, offset);
     proto_tree_add_item(bthci_evt_tree, hf_bthci_evt_code, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-    proto_item_append_text(bthci_evt_tree, " - %s", val_to_str_ext(evt_code, &bthci_evt_evt_code_vals_ext,  "Unknown 0x%02x"));
+    proto_item_append_text(bthci_evt_tree, " - %s", val_to_str_ext(pinfo->pool, evt_code, &bthci_evt_evt_code_vals_ext,  "Unknown 0x%02x"));
     offset += 1;
 
     if (have_tap_listener(bluetooth_hci_summary_tap)) {
@@ -7250,7 +7250,7 @@ dissect_bthci_evt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
         tap_hci_summary->type = BLUETOOTH_HCI_SUMMARY_EVENT;
         tap_hci_summary->event = evt_code;
         if (try_val_to_str_ext(evt_code, &bthci_evt_evt_code_vals_ext))
-            tap_hci_summary->name = val_to_str_ext(evt_code, &bthci_evt_evt_code_vals_ext, "Unknown 0x%04x");
+            tap_hci_summary->name = val_to_str_ext(pinfo->pool, evt_code, &bthci_evt_evt_code_vals_ext, "Unknown 0x%04x");
         else
             tap_hci_summary->name = NULL;
         tap_queue_packet(bluetooth_hci_summary_tap, pinfo, tap_hci_summary);
@@ -7263,7 +7263,7 @@ dissect_bthci_evt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "HCI_EVT");
 
-    col_append_str(pinfo->cinfo, COL_INFO, val_to_str_ext(evt_code, &bthci_evt_evt_code_vals_ext, "Unknown 0x%02x"));
+    col_append_str(pinfo->cinfo, COL_INFO, val_to_str_ext(pinfo->pool, evt_code, &bthci_evt_evt_code_vals_ext, "Unknown 0x%02x"));
 
     if (param_length > 0) {
         switch(evt_code) {
@@ -11869,6 +11869,9 @@ proto_register_bthci_evt(void)
 
     hci_evt_vendor_dissector_table = register_decode_as_next_proto(proto_bthci_evt, "bthci_evt.vendor",
                                                            "BT HCI Event Vendor", bthci_evt_vendor_prompt);
+
+    register_external_value_string("bthci_evt_lmp_version", bthci_evt_lmp_version);
+    register_external_value_string("bthci_evt_hci_version", bthci_evt_hci_version);
 }
 
 

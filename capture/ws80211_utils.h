@@ -25,7 +25,8 @@ enum ws80211_channel_type {
 	WS80211_CHAN_HT40PLUS,
 	WS80211_CHAN_VHT80,
 	WS80211_CHAN_VHT80P80,
-	WS80211_CHAN_VHT160
+	WS80211_CHAN_VHT160,
+	WS80211_CHAN_EHT320
 };
 
 #define CHAN_NO_HT	"NOHT"
@@ -35,6 +36,7 @@ enum ws80211_channel_type {
 #define CHAN_VHT80	"VHT80"
 #define CHAN_VHT80P80	"VHT80+80"
 #define CHAN_VHT160	"VHT160"
+#define CHAN_EHT320	"EHT320"
 
 enum ws80211_fcs_validation {
 	WS80211_FCS_ALL,
@@ -100,7 +102,7 @@ void ws80211_free_interfaces(GArray *interfaces);
 int ws80211_set_freq(const char *name, uint32_t freq, int chan_type, uint32_t _U_ center_freq, uint32_t _U_ center_freq2);
 
 int ws80211_str_to_chan_type(const char *s);
-const char *ws80211_chan_type_to_str(int type);
+const char *ws80211_chan_type_to_str(enum ws80211_channel_type type);
 
 /** Check to see if we have FCS filtering.
  *
@@ -124,6 +126,18 @@ int ws80211_set_fcs_validation(const char *name, enum ws80211_fcs_validation fcs
  * @return The path to the helper on success, NULL on failure.
  */
 const char *ws80211_get_helper_path(void);
+
+
+/** Return center frequency of an 80M/160M/320M channel.
+ *
+ * @param control_frequency Control channel frequency in MHz.
+ * @param channel_type The channel type.
+ * @return Center frequency of the channel in MHz or -1 on failure.
+ *
+ * @note -1 is returned for channel types smaller than 80MHz, where
+ * ws80211_set_freq does not need a center frequency.
+ */
+int ws80211_get_center_frequency(int control_frequency, enum ws80211_channel_type channel_type);
 
 #ifdef __cplusplus
 }

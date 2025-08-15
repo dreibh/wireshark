@@ -3733,7 +3733,7 @@ dissect_link_control_cmd(tvbuff_t *tvb, int offset, packet_info *pinfo,
             break;
 
         case 0x003c: /* Flow Spec Modify */
-            proto_tree_add_item(tree, hf_bthci_cmd_logical_link_handle, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+            proto_tree_add_item(tree, hf_bthci_cmd_physical_link_handle, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset++;
             offset = dissect_bthci_cmd_flow_spec(tvb, offset, pinfo, tree, true);
             offset = dissect_bthci_cmd_flow_spec(tvb, offset, pinfo, tree, false);
@@ -6812,9 +6812,9 @@ dissect_bthci_cmd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
     ogf = (uint8_t) (opcode >> 10);
 
     if (ogf == HCI_OGF_VENDOR_SPECIFIC)
-        proto_item_append_text(ti_cmd," - %s", val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext, "Vendor Command 0x%04x"));
+        proto_item_append_text(ti_cmd," - %s", val_to_str_ext(pinfo->pool, opcode, &bthci_cmd_opcode_vals_ext, "Vendor Command 0x%04x"));
     else
-        proto_item_append_text(ti_cmd," - %s", val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x"));
+        proto_item_append_text(ti_cmd," - %s", val_to_str_ext(pinfo->pool, opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x"));
 
     if (have_tap_listener(bluetooth_hci_summary_tap)) {
         bluetooth_hci_summary_tap_t  *tap_hci_summary;
@@ -6828,7 +6828,7 @@ dissect_bthci_cmd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
         tap_hci_summary->ogf = ogf;
         tap_hci_summary->ocf = ocf;
         if (try_val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext))
-            tap_hci_summary->name = val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x");
+            tap_hci_summary->name = val_to_str_ext(pinfo->pool, opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x");
         else
             tap_hci_summary->name = NULL;
         tap_queue_packet(bluetooth_hci_summary_tap, pinfo, tap_hci_summary);
@@ -6908,7 +6908,7 @@ dissect_bthci_cmd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
         proto_tree_add_item(bthci_cmd_tree, hf_bthci_cmd_parameter, tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_NA);
     } else {
-        col_append_str(pinfo->cinfo, COL_INFO, val_to_str_ext(opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x"));
+        col_append_str(pinfo->cinfo, COL_INFO, val_to_str_ext(pinfo->pool, opcode, &bthci_cmd_opcode_vals_ext, "Unknown 0x%04x"));
 
         if (param_length > 0) {
             switch (ogf) {
@@ -11116,6 +11116,11 @@ proto_register_bthci_cmd(void)
 
     vendor_dissector_table = register_decode_as_next_proto(proto_bthci_cmd, "bthci_cmd.vendor",
                                                            "BT HCI Command Vendor", bthci_cmd_vendor_prompt);
+
+    register_external_value_string("bthci_cmd_scan_enable_values", bthci_cmd_scan_enable_values);
+    register_external_value_string("bthci_cmd_encrypt_mode_vals", bthci_cmd_encrypt_mode_vals);
+    register_external_value_string("bthci_cmd_authentication_enable_values", bthci_cmd_authentication_enable_values);
+    register_external_value_string("bthci_cmd_inq_modes", bthci_cmd_inq_modes);
 }
 
 

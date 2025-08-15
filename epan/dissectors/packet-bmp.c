@@ -538,6 +538,7 @@ static int ett_bmpv4_tlv_path_status;
 
 
 static expert_field ei_stat_data_unknown;
+static expert_field ei_bmpv4_tlv_unknown_tlv;
 static expert_field ei_bmpv4_tlv_wrong_cap_size;
 static expert_field ei_bmpv4_tlv_wrong_cap_value;
 static expert_field ei_bmpv4_tlv_string_bad_length;
@@ -575,7 +576,7 @@ typedef struct bmpv4_tlv_info {
  *   ~                      Value (variable)                         ~
  *   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
  */
-static bmpv4_tlv_info bmpv4_dissect_tlv_hdr(tvbuff_t *tvb, proto_tree **tree_ref, int *offset_ref, uint8_t bmp_type) {
+static bmpv4_tlv_info bmpv4_dissect_tlv_hdr(tvbuff_t *tvb, packet_info* pinfo, proto_tree **tree_ref, int *offset_ref, uint8_t bmp_type) {
 
     int offset = *offset_ref;
     proto_tree *tree = *tree_ref;
@@ -592,7 +593,7 @@ static bmpv4_tlv_info bmpv4_dissect_tlv_hdr(tvbuff_t *tvb, proto_tree **tree_ref
                        + tlv.length; /* tlv value length */
 
     proto_item *ti = proto_tree_add_item(tree, hf_bmpv4_tlv, tvb, offset, total_length, ENC_NA);
-    proto_item_append_text(ti, ": %s", val_to_str(tlv.type, bmpv4_tlv_typevals, "Unknown (0x%02x)"));
+    proto_item_append_text(ti, ": %s", val_to_str_wmem(pinfo->pool, tlv.type, bmpv4_tlv_typevals, "Unknown (0x%02x)"));
 
     proto_tree *subtree = proto_item_add_subtree(ti, ett_bmpv4_tlv);
 
@@ -619,7 +620,7 @@ static void bmpv4_dissect_tlvs(proto_tree *tree, tvbuff_t *tvb, int offset, pack
 
     while (tvb_captured_length_remaining(tvb, offset) >= 4) {
         proto_tree *tlv_tree = tree;
-        tlv = bmpv4_dissect_tlv_hdr(tvb, &tlv_tree, &offset, bmp_msg_type);
+        tlv = bmpv4_dissect_tlv_hdr(tvb, pinfo, &tlv_tree, &offset, bmp_msg_type);
 
         switch (tlv.type) {
             case BMPv4_TLV_TYPE_GROUP: {
@@ -693,7 +694,12 @@ static void bmpv4_dissect_tlvs(proto_tree *tree, tvbuff_t *tvb, int offset, pack
                 break;
             }
             default:
-                break;
+                // Unknown TLV
+                proto_tree_add_item(tlv_tree, hf_bmpv4_tlv_value_bytes, tvb, offset, tlv.length, ENC_NA);
+                expert_add_info(pinfo, tlv_tree, &ei_bmpv4_tlv_unknown_tlv);
+                offset += tlv.length;
+
+            break;
         }
     }
 }
@@ -752,7 +758,7 @@ dissect_bmp_peer_down_notification(tvbuff_t *tvb, proto_tree *tree, packet_info 
             proto_tree_add_item_ret_uint(tlv_tree, hf_peer_state_tlv_length, tvb, offset, 2, ENC_BIG_ENDIAN, &length);
             offset += 2;
 
-            proto_item_append_text(tlv_item, ": (t=%d,l=%d) %s", type, length, val_to_str(type, peer_down_tlv_typevals, "Unknown TLV Type (%02d)") );
+            proto_item_append_text(tlv_item, ": (t=%d,l=%d) %s", type, length, val_to_str_wmem(pinfo->pool, type, peer_down_tlv_typevals, "Unknown TLV Type (%02d)") );
             proto_item_set_len(tlv_item, 2 + 2 + length);
 
             proto_tree_add_item(tlv_tree, hf_peer_state_tlv_value, tvb, offset, length, ENC_NA);
@@ -827,7 +833,7 @@ dissect_bmp_peer_up_notification(tvbuff_t *tvb, proto_tree *tree, packet_info *p
         proto_tree_add_item_ret_uint(tlv_tree, hf_peer_state_tlv_length, tvb, offset, 2, ENC_BIG_ENDIAN, &length);
         offset += 2;
 
-        proto_item_append_text(tlv_item, ": (t=%d,l=%d) %s", type, length, val_to_str(type, peer_up_tlv_typevals, "Unknown TLV Type (%02d)") );
+        proto_item_append_text(tlv_item, ": (t=%d,l=%d) %s", type, length, val_to_str_wmem(pinfo->pool, type, peer_up_tlv_typevals, "Unknown TLV Type (%02d)") );
         proto_item_set_len(tlv_item, 2 + 2 + length);
 
         proto_tree_add_item(tlv_tree, hf_peer_state_tlv_value, tvb, offset, length, ENC_NA);
@@ -1033,7 +1039,7 @@ dissect_bmp_termination(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_,
 
     term_type = tvb_get_ntohs(tvb, offset);
     proto_item_append_text(subtree, ", Type %s",
-            val_to_str(term_type, term_typevals, "Unknown (0x%02x)"));
+            val_to_str_wmem(pinfo->pool, term_type, term_typevals, "Unknown (0x%02x)"));
 
     proto_tree_add_item(subtree, hf_term_type, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
@@ -1218,7 +1224,7 @@ dissect_bmp_init(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _U_, int of
 
         init_type = tvb_get_ntohs(tvb, offset);
         proto_item_append_text(pti, ", Type %s",
-                val_to_str(init_type, init_typevals, "Unknown (0x%02x)"));
+                val_to_str_wmem(pinfo->pool, init_type, init_typevals, "Unknown (0x%02x)"));
 
         ti = proto_tree_add_item(parent_tree, hf_init_type, tvb, offset, 2, ENC_BIG_ENDIAN);
         subtree = proto_item_add_subtree(ti, ett_bmp_init_type);
@@ -1309,7 +1315,7 @@ dissect_bmp_route_policy_event(tvbuff_t *tvb, proto_tree *tree, packet_info *pin
         offset += 2;
         single_event_length -= 2;
 
-        proto_item_append_text(tlv_item, ": (t=%d,l=%d) %s", type, length, val_to_str(type, route_policy_tlv_typevals, "Unknown TLV Type (%02d)") );
+        proto_item_append_text(tlv_item, ": (t=%d,l=%d) %s", type, length, val_to_str_wmem(pinfo->pool, type, route_policy_tlv_typevals, "Unknown TLV Type (%02d)") );
         proto_item_set_len(tlv_item, 2 + 2 + length);
 
         proto_tree_add_item(tlv_tree, hf_route_policy_tlv_value, tvb, offset, length, ENC_NA);
@@ -1543,11 +1549,11 @@ dissect_bmp_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data 
     bmp_type = tvb_get_uint8(tvb, 5);
 
     col_add_fstr(pinfo->cinfo, COL_INFO, "Type: %s",
-            val_to_str(bmp_type, bmp_typevals, "Unknown (0x%02x)"));
+            val_to_str_wmem(pinfo->pool, bmp_type, bmp_typevals, "Unknown (0x%02x)"));
 
     ti = proto_tree_add_item(tree, proto_bmp, tvb, 0, -1, ENC_NA);
     proto_item_append_text(ti, ", Type %s",
-            val_to_str(bmp_type, bmp_typevals, "Unknown (0x%02x)"));
+            val_to_str_wmem(pinfo->pool, bmp_type, bmp_typevals, "Unknown (0x%02x)"));
 
     switch (bmp_type) {
         case BMP_MSG_TYPE_ROUTE_MONITORING:
@@ -2124,6 +2130,10 @@ proto_register_bmp(void)
         { &ei_bmpv4_tlv_wrong_cap_size,
           { "bmp.tlv.capability.bad_size", PI_MALFORMED, PI_ERROR,
             "Wrong capability size (should be 1)", EXPFILL }
+        },
+        { &ei_bmpv4_tlv_unknown_tlv,
+          { "bmp.tlv.unknown", PI_UNDECODED, PI_WARN,
+            "TLV Type is unknown", EXPFILL }
         },
         { &ei_bmpv4_tlv_wrong_cap_value,
           { "bmp.tlv.capability.bad_value", PI_MALFORMED, PI_ERROR,

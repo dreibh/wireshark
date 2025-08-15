@@ -269,6 +269,75 @@ static void parse_band_vht_capa(struct ws80211_interface *iface,
 }
 #endif /* HAVE_NL80211_VHT_CAPABILITY */
 
+#ifdef HAVE_NL80211_EHT_CAPABILITY
+static void parse_band_he_cap_phy(struct ws80211_interface *iface,
+				  struct nlattr *tb)
+{
+	/* For our purposes, this should be redundant with the HT and VHT caps
+	 * already parsed. (Would anything support a particular bandwidth for
+	 * HE but not for VHT?) It is here as a useful POC that the EHT code
+	 * below should work if you have 802.11ax but not 802.11be gear. */
+	uint32_t chan_cap_phy;
+	if (!tb) return;
+
+	chan_cap_phy = (nla_get_u32(tb) >> 1) & 0xf;
+	iface->channel_types |= 1 << WS80211_CHAN_HT20;
+	if (chan_cap_phy & 1) {
+		/* 40 MHz in 2.4 GHz band */
+		iface->channel_types |= 1 << WS80211_CHAN_HT40MINUS;
+		iface->channel_types |= 1 << WS80211_CHAN_HT40PLUS;
+	}
+	if (chan_cap_phy & 2) {
+		/* 40 & 80 MHz in the 5 GHz and 6 GHz bands */
+		iface->channel_types |= 1 << WS80211_CHAN_HT40MINUS;
+		iface->channel_types |= 1 << WS80211_CHAN_HT40PLUS;
+		iface->channel_types |= 1 << WS80211_CHAN_VHT80;
+	}
+	if (chan_cap_phy & 4) {
+		/* 160 MHz in the 5 GHz and 6 GHz bands */
+		/* If set, above bit must also be set. */
+		iface->channel_types |= 1 << WS80211_CHAN_VHT160;
+	}
+	if (chan_cap_phy & 8) {
+		/* 160/80+80 MHz in the 5 GHz and 6 GHz bands */
+		/* If set, above bit must also be set. */
+		iface->channel_types |= 1 << WS80211_CHAN_VHT80P80;
+	}
+}
+
+static void parse_band_eht_cap_phy(struct ws80211_interface *iface,
+				   struct nlattr *tb)
+{
+	uint32_t chan_cap_phy;
+	if (!tb) return;
+
+	chan_cap_phy = (nla_get_u32(tb) >> 1) & 1;
+	if (chan_cap_phy == 1) {
+		iface->channel_types |= 1 << WS80211_CHAN_EHT320;
+	}
+}
+
+static void parse_band_iftype_data(struct ws80211_interface *iface _U_,
+			     struct nlattr *tb)
+{
+	struct nlattr *nl_iftype;
+	struct nlattr *tb_iftype[NL80211_BAND_IFTYPE_ATTR_MAX + 1];
+	int rem_iftype;
+
+	if (!tb) return;
+
+	/* HE and EHT capabilities are nested inside this attribute */
+	nla_for_each_nested(nl_iftype, tb, rem_iftype) {
+		nla_parse(tb_iftype, NL80211_BAND_IFTYPE_ATTR_MAX,
+			  (struct nlattr *)nla_data(nl_iftype),
+			  nla_len(nl_iftype), NULL);
+
+		parse_band_he_cap_phy(iface, tb_iftype[NL80211_BAND_IFTYPE_ATTR_HE_CAP_PHY]);
+		parse_band_eht_cap_phy(iface, tb_iftype[NL80211_BAND_IFTYPE_ATTR_EHT_CAP_PHY]);
+	}
+}
+#endif /* HAVE_NL80211_EHT_CAPABILITY */
+
 static void parse_supported_iftypes(struct ws80211_interface *iface,
 				    struct nlattr *tb)
 {
@@ -336,6 +405,9 @@ static void parse_wiphy_bands(struct ws80211_interface *iface,
 #ifdef HAVE_NL80211_VHT_CAPABILITY
 		parse_band_vht_capa(iface, tb_band[NL80211_BAND_ATTR_VHT_CAPA]);
 #endif /* HAVE_NL80211_VHT_CAPABILITY */
+#ifdef HAVE_NL80211_EHT_CAPABILITY
+		parse_band_iftype_data(iface, tb_band[NL80211_BAND_ATTR_IFTYPE_DATA]);
+#endif /* HAVE_NL80211_EHT_CAPABILITY */
 		parse_band_freqs(iface, tb_band[NL80211_BAND_ATTR_FREQS]);
 	}
 }
@@ -510,6 +582,12 @@ static int get_iface_info_handler(struct nl_msg *msg, void *arg)
 				iface_info->pub->current_chan_type = WS80211_CHAN_VHT160;
 				found_ch_width = true;
 				break;
+#ifdef HAVE_NL80211_EHT_CAPABILITY
+			case NL80211_CHAN_WIDTH_320:
+				iface_info->pub->current_chan_type = WS80211_CHAN_EHT320;
+				found_ch_width = true;
+				break;
+#endif /* HAVE_NL80211_EHT_CAPABILITY */
 			}
 		}
 		if (tb_msg[NL80211_ATTR_CENTER_FREQ1]) {
@@ -818,6 +896,12 @@ int ws80211_set_freq(const char *name, uint32_t freq, int chan_type, uint32_t _U
 		NLA_PUT_U32(msg, NL80211_ATTR_CENTER_FREQ1, center_freq);
 		break;
 #endif
+#ifdef HAVE_NL80211_EHT_CAPABILITY
+	case WS80211_CHAN_EHT320:
+		NLA_PUT_U32(msg, NL80211_ATTR_CHANNEL_WIDTH, NL80211_CHAN_WIDTH_320);
+		NLA_PUT_U32(msg, NL80211_ATTR_CENTER_FREQ1, center_freq);
+		break;
+#endif
 	default:
 		break;
 	}
@@ -871,12 +955,14 @@ ws80211_str_to_chan_type(const char *s)
 		ret = WS80211_CHAN_VHT80P80;
 	if (!strcmp(s, CHAN_VHT160))
 		ret = WS80211_CHAN_VHT160;
+	if (!strcmp(s, CHAN_EHT320))
+		ret = WS80211_CHAN_EHT320;
 
 	return ret;
 }
 
 const char
-*ws80211_chan_type_to_str(int type)
+*ws80211_chan_type_to_str(enum ws80211_channel_type type)
 {
 	switch (type) {
 	case WS80211_CHAN_NO_HT:
@@ -893,6 +979,8 @@ const char
 		return CHAN_VHT80P80;
 	case WS80211_CHAN_VHT160:
 		return CHAN_VHT160;
+	case WS80211_CHAN_EHT320:
+		return CHAN_EHT320;
 	}
 	return NULL;
 }
@@ -941,7 +1029,7 @@ int ws80211_str_to_chan_type(const char *s _U_)
 	return -1;
 }
 
-const char *ws80211_chan_type_to_str(int type _U_)
+const char *ws80211_chan_type_to_str(enum ws80211_channel_type type _U_)
 {
 	return NULL;
 }
@@ -979,6 +1067,63 @@ void ws80211_free_interfaces(GArray *interfaces)
 		g_free(iface);
 	}
 	g_array_free(interfaces, true);
+}
+
+int ws80211_get_center_frequency(int control_frequency, enum ws80211_channel_type chan_type)
+{
+    int cf1 = -1;
+    size_t j;
+    const int bw80[] = { 5180, 5260, 5500, 5580, 5660, 5745,
+			 5955, 6035, 6115, 6195, 6275, 6355,
+			 6435, 6515, 6595, 6675, 6755, 6835,
+			 6195, 6995 };
+    const int bw160[] = { 5180, 5500, 5955, 6115, 6275, 6435,
+			  6595, 6755, 6915 };
+    /* based on 11be D2 E.1 Country information and operating classes */
+    const int bw320[] = {5955, 6115, 6275, 6435, 6595, 6755};
+
+    switch (chan_type) {
+    case WS80211_CHAN_VHT80:
+    case WS80211_CHAN_VHT80P80: /* Needs a second cf as well. */
+        for (j = 0; j < array_length(bw80); j++) {
+            if (control_frequency >= bw80[j] && control_frequency < bw80[j] + 80)
+                break;
+        }
+
+        if (j == array_length(bw80))
+            break;
+
+        cf1 = bw80[j] + 30;
+        break;
+    case WS80211_CHAN_VHT160:
+        for (j = 0; j < array_length(bw160); j++) {
+            if (control_frequency >= bw160[j] && control_frequency < bw160[j] + 160)
+                break;
+        }
+
+        if (j == array_length(bw160))
+            break;
+
+        cf1 = bw160[j] + 70;
+        break;
+    case WS80211_CHAN_EHT320:
+        for (j = 0; j < array_length(bw320); j++) {
+            if (control_frequency >= bw320[j] && control_frequency < bw320[j] + 160)
+                break;
+        }
+
+        if (j == array_length(bw320))
+            break;
+
+        cf1 = bw320[j] + 150;
+        break;
+    default:
+    /* Since we explicitly specify HT40MINUS vs HT40PLUS we don't need to
+     * calculate the center freq for those; ws80211_set_freq doesn't need it. */
+        break;
+    }
+
+    return cf1;
 }
 
 /*

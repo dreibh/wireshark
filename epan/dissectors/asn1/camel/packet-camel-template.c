@@ -1075,7 +1075,7 @@ dissect_camel_camelPDU(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ct
     camel_pdu_size = tvb_get_uint8(tvb, offset+1)+2;
 
     /* Populate the info column with PDU type*/
-    col_add_str(actx->pinfo->cinfo, COL_INFO, val_to_str(camel_pdu_type, camel_Component_vals, "Unknown Camel (%u)"));
+    col_add_str(actx->pinfo->cinfo, COL_INFO, val_to_str_wmem(actx->pinfo->pool, camel_pdu_type, camel_Component_vals, "Unknown Camel (%u)"));
     col_append_str(actx->pinfo->cinfo, COL_INFO, " ");
 
     is_ExtensionField =false;
@@ -1589,6 +1589,8 @@ void proto_register_camel(void) {
 
   register_srt_table(proto_camel, PSNAME, 1, camelstat_packet, camelstat_init, NULL);
   register_stat_tap_table_ui(&camel_stat_table);
+
+  register_external_value_string("camelSRTtype_naming", camelSRTtype_naming);
 }
 
 /*

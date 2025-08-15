@@ -5936,7 +5936,7 @@ info_column_filler_initial(uint8_t homeplug_av_mmver,
     /* if packet is vendor specific - display vendor OUI */
     if (homeplug_av_oui) {
         col_append_sep_str(pinfo->cinfo, COL_INFO, ", ",
-                           val_to_str(homeplug_av_oui, homeplug_av_vendors_oui_vals, "OUI:0x%x"));
+                           val_to_str_wmem(pinfo->pool, homeplug_av_oui, homeplug_av_vendors_oui_vals, "OUI:0x%x"));
     }
 
     /* Info depends on type and oui */
@@ -5944,13 +5944,13 @@ info_column_filler_initial(uint8_t homeplug_av_mmver,
     {
     case HOMEPLUG_AV_OUI_ST_IOTECHA:
         col_append_sep_str(pinfo->cinfo, COL_INFO, ", ",
-                           val_to_str_ext(homeplug_av_mmtype,
+                           val_to_str_ext(pinfo->pool, homeplug_av_mmtype,
                                           &homeplug_av_mmtype_st_iotecha_vals_ext,
                                           "Unknown 0x%x"));
         break;
     case HOMEPLUG_AV_OUI_QCA:
         col_append_sep_str(pinfo->cinfo, COL_INFO, ", ",
-                           val_to_str_ext(homeplug_av_mmtype,
+                           val_to_str_ext(pinfo->pool, homeplug_av_mmtype,
                                           &homeplug_av_mmtype_qualcomm_vals_ext,
                                           "Unknown 0x%x"));
         break;
@@ -5958,7 +5958,7 @@ info_column_filler_initial(uint8_t homeplug_av_mmver,
     case HOMEPLUG_AV_OUI_NONE:
         /* if oui is unknown, trying to describe as general MME */
         col_append_sep_str(pinfo->cinfo, COL_INFO, ", ",
-                           val_to_str_ext(homeplug_av_mmtype,
+                           val_to_str_ext(pinfo->pool, homeplug_av_mmtype,
                                           &homeplug_av_mmtype_general_vals_ext,
                                           "Unknown 0x%x"));
         break;

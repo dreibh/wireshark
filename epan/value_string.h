@@ -191,13 +191,8 @@ void
 value_string_ext_free(value_string_ext *vse);
 
 WS_DLL_PUBLIC
-const char *
-val_to_str_ext(const uint32_t val, value_string_ext *vse, const char *fmt)
-G_GNUC_PRINTF(3, 0);
-
-WS_DLL_PUBLIC
 char *
-val_to_str_ext_wmem(wmem_allocator_t *scope, const uint32_t val, value_string_ext *vse, const char *fmt)
+val_to_str_ext(wmem_allocator_t *scope, const uint32_t val, value_string_ext *vse, const char *fmt)
 G_GNUC_PRINTF(4, 0);
 
 WS_DLL_PUBLIC
@@ -354,7 +349,25 @@ WS_DLL_PUBLIC
 const char *
 try_bytesprefix_to_str(const uint8_t *haystack, const size_t haystack_len, const bytes_string *bs);
 
+WS_DLL_PUBLIC
+void register_external_value_string(const char* name, const value_string* vs);
+
+WS_DLL_PUBLIC
+value_string* vs_get_external_value_string(const char* name);
+
+WS_DLL_PUBLIC
+void register_external_value_string_ext(const char* name, const value_string_ext* vse);
+
+WS_DLL_PUBLIC
+value_string_ext* get_external_value_string_ext(const char* name);
+
 /* MISC (generally do not use) */
+
+WS_DLL_LOCAL
+void value_string_externals_init(void);
+
+WS_DLL_LOCAL
+void value_string_externals_cleanup(void);
 
 WS_DLL_LOCAL
 bool

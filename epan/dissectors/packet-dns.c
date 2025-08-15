@@ -1935,7 +1935,7 @@ dissect_dns_query(tvbuff_t *tvb, int offset, int dns_data_offset,
     *is_multiple_responds = true;
   }
 
-  type_name = val_to_str_ext(type, &dns_types_vals_ext, "Unknown (%u)");
+  type_name = val_to_str_ext(pinfo->pool, type, &dns_types_vals_ext, "Unknown (%u)");
 
   /*
    * The name might contain octets that aren't printable characters,
@@ -1967,7 +1967,7 @@ dissect_dns_query(tvbuff_t *tvb, int offset, int dns_data_offset,
     offset += used_bytes - 4;
 
     ti = proto_tree_add_item(q_tree, hf_dns_qry_type, tvb, offset, 2, ENC_BIG_ENDIAN);
-    proto_item_append_text(ti, " %s", val_to_str_ext(type, &dns_types_description_vals_ext, "Unknown (%d)"));
+    proto_item_append_text(ti, " %s", val_to_str_ext(pinfo->pool, type, &dns_types_description_vals_ext, "Unknown (%d)"));
     offset += 2;
 
     if (is_mdns) {
@@ -2040,7 +2040,7 @@ add_rr_to_tree(proto_tree  *rr_tree, tvbuff_t *tvb, int offset,
   offset += namelen;
 
   ti = proto_tree_add_item(rr_tree, hf_dns_rr_type, tvb, offset, 2, ENC_BIG_ENDIAN);
-  proto_item_append_text(ti, " %s", val_to_str_ext(type, &dns_types_description_vals_ext, "Unknown (%d)"));
+  proto_item_append_text(ti, " %s", val_to_str_ext(pinfo->pool, type, &dns_types_description_vals_ext, "Unknown (%d)"));
   offset += 2;
   if (is_mdns) {
     proto_tree_add_item(rr_tree, hf_dns_rr_class_mdns, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -2073,7 +2073,7 @@ add_rr_to_tree(proto_tree  *rr_tree, tvbuff_t *tvb, int offset,
 
 
 static void
-add_opt_rr_to_tree(proto_tree  *rr_tree, tvbuff_t *tvb, int offset,
+add_opt_rr_to_tree(proto_tree *rr_tree, packet_info* pinfo, tvbuff_t *tvb, int offset,
   const char *name, int namelen, bool is_mdns)
 {
   proto_tree *Z_tree;
@@ -2084,7 +2084,7 @@ add_opt_rr_to_tree(proto_tree  *rr_tree, tvbuff_t *tvb, int offset,
   proto_tree_add_string(rr_tree, hf_dns_rr_name, tvb, offset, namelen, name);
   offset += namelen;
   ti = proto_tree_add_item_ret_uint(rr_tree, hf_dns_rr_type, tvb, offset, 2, ENC_BIG_ENDIAN, &type);
-  proto_item_append_text(ti, " %s", val_to_str_ext(type, &dns_types_description_vals_ext, "Unknown (%d)"));
+  proto_item_append_text(ti, " %s", val_to_str_ext(pinfo->pool, type, &dns_types_description_vals_ext, "Unknown (%d)"));
   offset += 2;
   if (is_mdns) {
     proto_tree_add_item(rr_tree, hf_dns_rr_udp_payload_size_mdns, tvb, offset, 2, ENC_BIG_ENDIAN);
@@ -2106,7 +2106,7 @@ add_opt_rr_to_tree(proto_tree  *rr_tree, tvbuff_t *tvb, int offset,
 }
 
 static int
-dissect_type_bitmap(proto_tree *rr_tree, tvbuff_t *tvb, int cur_offset, int rr_len)
+dissect_type_bitmap(proto_tree *rr_tree, packet_info* pinfo, tvbuff_t *tvb, int cur_offset, int rr_len)
 {
   int    mask, blockbase, blocksize;
   int    i, initial_offset, rr_type;
@@ -2127,7 +2127,7 @@ dissect_type_bitmap(proto_tree *rr_tree, tvbuff_t *tvb, int cur_offset, int rr_l
           proto_tree_add_uint_format(rr_tree, hf_dns_rr_type, tvb, cur_offset, 1, rr_type,
             "RR type in bit map: %s %s",
             val_to_str_ext_const(rr_type, &dns_types_vals_ext, " "),
-            val_to_str_ext(rr_type, &dns_types_description_vals_ext, "Unknown (%d)")
+            val_to_str_ext(pinfo->pool, rr_type, &dns_types_description_vals_ext, "Unknown (%d)")
             );
         }
         mask >>= 1;
@@ -2141,7 +2141,7 @@ dissect_type_bitmap(proto_tree *rr_tree, tvbuff_t *tvb, int cur_offset, int rr_l
 }
 
 static int
-dissect_type_bitmap_nxt(proto_tree *rr_tree, tvbuff_t *tvb, int cur_offset, int rr_len)
+dissect_type_bitmap_nxt(proto_tree *rr_tree, packet_info* pinfo, tvbuff_t *tvb, int cur_offset, int rr_len)
 {
   int    mask;
   int    i, initial_offset, rr_type;
@@ -2157,7 +2157,7 @@ dissect_type_bitmap_nxt(proto_tree *rr_tree, tvbuff_t *tvb, int cur_offset, int 
           proto_tree_add_uint_format(rr_tree, hf_dns_rr_type, tvb, cur_offset, 1, rr_type,
             "RR type in bit map: %s %s",
             val_to_str_ext_const(rr_type, &dns_types_vals_ext, " "),
-            val_to_str_ext(rr_type, &dns_types_description_vals_ext, "Unknown (%d)"));
+            val_to_str_ext(pinfo->pool, rr_type, &dns_types_description_vals_ext, "Unknown (%d)"));
         }
       mask >>= 1;
       rr_type++;
@@ -2414,7 +2414,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
   } else {
     flush = 0;
   }
-  type_name = val_to_str_ext(dns_type, &dns_types_vals_ext, "Unknown (%d)");
+  type_name = val_to_str_ext(pinfo->pool, dns_type, &dns_types_vals_ext, "Unknown (%d)");
   class_name = val_to_str_const(dns_class, dns_classes, "Unknown");
 
   data_offset += 4;
@@ -2448,7 +2448,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
     rr_tree = proto_tree_add_subtree_format(dns_tree, tvb, offsetx,
                               (data_offset - data_start) + data_len,
                               ett_dns_rr, &trr, "%s: type %s", name_out, type_name);
-    add_opt_rr_to_tree(rr_tree, tvb, offsetx, name_out, used_bytes - 4, is_mdns);
+    add_opt_rr_to_tree(rr_tree, pinfo, tvb, offsetx, name_out, used_bytes - 4, is_mdns);
   }
   if (is_mdns && flush) {
     proto_item_append_text(trr, ", cache flush");
@@ -3157,7 +3157,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       proto_tree_add_string(rr_tree, hf_dns_nxt_next_domain_name, tvb, cur_offset, used_bytes, name_out);
       cur_offset += used_bytes;
       rr_len     -= used_bytes;
-      dissect_type_bitmap_nxt(rr_tree, tvb, cur_offset, rr_len);
+      dissect_type_bitmap_nxt(rr_tree, pinfo, tvb, cur_offset, rr_len);
     }
     break;
 
@@ -3375,7 +3375,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
         rropt_len -= 2;
 
         rropt = proto_tree_add_item(rr_tree, hf_dns_opt, tvb, cur_offset, 4 + optlen, ENC_NA);
-        proto_item_append_text(rropt, ": %s", val_to_str(optcode, edns0_opt_code_vals, "Unknown (%d)"));
+        proto_item_append_text(rropt, ": %s", val_to_str_wmem(pinfo->pool, optcode, edns0_opt_code_vals, "Unknown (%d)"));
         rropt_tree = proto_item_add_subtree(rropt, ett_dns_opts);
         rropt = proto_tree_add_item(rropt_tree, hf_dns_opt_code, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
         cur_offset += 2;
@@ -3743,7 +3743,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       uint32_t type;
 
       ti = proto_tree_add_item_ret_uint(rr_tree, hf_dns_rrsig_type_covered, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &type);
-      proto_item_append_text(ti, " %s", val_to_str_ext(type, &dns_types_description_vals_ext, "Unknown (%d)"));
+      proto_item_append_text(ti, " %s", val_to_str_ext(pinfo->pool, type, &dns_types_description_vals_ext, "Unknown (%d)"));
       cur_offset += 2;
       rr_len     -= 2;
 
@@ -3799,7 +3799,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       cur_offset += used_bytes;
       rr_len     -= used_bytes;
 
-      dissect_type_bitmap(rr_tree, tvb, cur_offset, rr_len);
+      dissect_type_bitmap(rr_tree, pinfo, tvb, cur_offset, rr_len);
     }
     break;
 
@@ -3900,7 +3900,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       }
 
       rr_len = data_len - (cur_offset - initial_offset);
-      dissect_type_bitmap(rr_tree, tvb, cur_offset, rr_len);
+      dissect_type_bitmap(rr_tree, pinfo, tvb, cur_offset, rr_len);
     }
     break;
 
@@ -4009,7 +4009,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       rr_len = data_len - (cur_offset - initial_offset);
       proto_tree_add_item(rr_tree, hf_dns_csync_type_bitmap, tvb, cur_offset, rr_len, ENC_NA);
 
-      dissect_type_bitmap(rr_tree, tvb, cur_offset, rr_len);
+      dissect_type_bitmap(rr_tree, pinfo, tvb, cur_offset, rr_len);
     }
     break;
 
@@ -4060,7 +4060,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
           proto_tree_add_item_ret_uint(svcb_param_tree, hf_dns_svcb_param_length, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &svc_param_length);
           cur_offset += 2;
 
-          proto_item_append_text(svcb_param_ti, ": %s", val_to_str(svc_param_key, dns_svcb_param_key_vals, "key%u"));
+          proto_item_append_text(svcb_param_ti, ": %s", val_to_str_wmem(pinfo->pool, svc_param_key, dns_svcb_param_key_vals, "key%u"));
           proto_item_set_len(svcb_param_ti, svc_param_length + 4);
 
           switch(svc_param_key) {
@@ -4068,7 +4068,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
               for (svc_param_offset = 0; svc_param_offset < svc_param_length; svc_param_offset += 2) {
                 uint32_t key;
                 proto_tree_add_item_ret_uint(svcb_param_tree, hf_dns_svcb_param_mandatory_key, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &key);
-                proto_item_append_text(svcb_param_ti, "%c%s", (svc_param_offset == 0 ? '=' : ','), val_to_str(key, dns_svcb_param_key_vals, "key%u"));
+                proto_item_append_text(svcb_param_ti, "%c%s", (svc_param_offset == 0 ? '=' : ','), val_to_str_wmem(pinfo->pool, key, dns_svcb_param_key_vals, "key%u"));
                 cur_offset += 2;
               }
               break;
@@ -4689,13 +4689,13 @@ dissect_dns_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   rcode  = (uint16_t)  (flags & F_RCODE);
 
   col_append_sep_fstr(pinfo->cinfo, COL_INFO, NULL, "%s%s 0x%04x",
-                      val_to_str(opcode, opcode_vals, "Unknown operation (%u)"),
+                      val_to_str_wmem(pinfo->pool, opcode, opcode_vals, "Unknown operation (%u)"),
                       (flags&F_RESPONSE)?" response":"", id);
 
   if (flags & F_RESPONSE) {
     if (rcode != RCODE_NOERROR) {
       col_append_fstr(pinfo->cinfo, COL_INFO, " %s",
-              val_to_str(rcode, rcode_vals, "Unknown error (%u)"));
+              val_to_str_wmem(pinfo->pool, rcode, rcode_vals, "Unknown error (%u)"));
     }
   }
 
@@ -5302,18 +5302,18 @@ static tap_packet_status dns_stats_tree_packet(stats_tree* st, packet_info* pinf
   const struct DnsTap *pi = (const struct DnsTap *)p;
   tick_stat_node(st, st_str_packets, 0, false);
   stats_tree_tick_pivot(st, st_node_packet_qr,
-          val_to_str(pi->packet_qr, dns_qr_vals, "Unknown qr (%d)"));
+          val_to_str_wmem(pinfo->pool, pi->packet_qr, dns_qr_vals, "Unknown qr (%d)"));
   stats_tree_tick_pivot(st, st_node_packet_qtypes,
-          val_to_str(pi->packet_qtype, dns_types_vals, "Unknown packet type (%d)"));
+          val_to_str_wmem(pinfo->pool, pi->packet_qtype, dns_types_vals, "Unknown packet type (%d)"));
   if (dns_qname_stats && pi->qname_len > 0) {
         stats_tree_tick_pivot(st, st_node_packet_qnames, pi->qname);
   }
   stats_tree_tick_pivot(st, st_node_packet_qclasses,
-          val_to_str(pi->packet_qclass, dns_classes, "Unknown class (%d)"));
+          val_to_str_wmem(pinfo->pool, pi->packet_qclass, dns_classes, "Unknown class (%d)"));
   stats_tree_tick_pivot(st, st_node_packet_rcodes,
-          val_to_str(pi->packet_rcode, rcode_vals, "Unknown rcode (%d)"));
+          val_to_str_wmem(pinfo->pool, pi->packet_rcode, rcode_vals, "Unknown rcode (%d)"));
   stats_tree_tick_pivot(st, st_node_packet_opcodes,
-          val_to_str(pi->packet_opcode, opcode_vals, "Unknown opcode (%d)"));
+          val_to_str_wmem(pinfo->pool, pi->packet_opcode, opcode_vals, "Unknown opcode (%d)"));
   avg_stat_node_add_value_int(st, st_str_packets_avg_size, 0, false,
           pi->payload_size);
 
@@ -5344,7 +5344,7 @@ static tap_packet_status dns_stats_tree_packet(stats_tree* st, packet_info* pinf
     for (wmem_list_frame_t *type_entry = wmem_list_head(pi->rr_types); type_entry != NULL; type_entry = wmem_list_frame_next(type_entry)) {
       int qtype_val = GPOINTER_TO_INT(wmem_list_frame_data(type_entry));
       stats_tree_tick_pivot(st, st_node_rr_types,
-                            val_to_str(qtype_val, dns_types_vals, "Unknown packet type (%d)"));
+                            val_to_str_wmem(pinfo->pool, qtype_val, dns_types_vals, "Unknown packet type (%d)"));
     }
 
     if (pi->unsolicited) {
@@ -5535,7 +5535,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
   // t  = Total
   if (dns_qr_t_statistics_enabled) {
     ws_debug(" t  = Total\n");
-    stats_tree_tick_pivot(st, st_node_qr_t_packets, val_to_str(pi->packet_qr, dns_qr_vals, "Unknown qr (%d)"));
+    stats_tree_tick_pivot(st, st_node_qr_t_packets, val_to_str_wmem(pinfo->pool, pi->packet_qr, dns_qr_vals, "Unknown qr (%d)"));
   }
 
   // query
@@ -5568,7 +5568,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
     if (dns_qr_qo_statistics_enabled) {
       ws_debug("qo = Query-Opcode\n");
       tick_stat_node(st, st_str_qr_qo_packets, st_node_qr_q_packets, true);
-      st_node = tick_stat_node(st, val_to_str(pi->packet_opcode, opcode_vals, "Unknown opcode (%d)"), st_node_qr_qo_packets, true);
+      st_node = tick_stat_node(st, val_to_str_wmem(pinfo->pool, pi->packet_opcode, opcode_vals, "Unknown opcode (%d)"), st_node_qr_qo_packets, true);
       if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
@@ -5593,7 +5593,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
     if (dns_qr_qt_statistics_enabled) {
       ws_debug("qt = Query-Type\n");
       tick_stat_node(st, st_str_qr_qt_packets, st_node_qr_q_packets, true);
-      st_node = tick_stat_node(st, val_to_str(pi->packet_qtype, dns_types_vals, "Unknown packet type (%d)"), st_node_qr_qt_packets, true);
+      st_node = tick_stat_node(st, val_to_str_wmem(pinfo->pool, pi->packet_qtype, dns_types_vals, "Unknown packet type (%d)"), st_node_qr_qt_packets, true);
       if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
@@ -5775,7 +5775,7 @@ static tap_packet_status dns_qr_stats_tree_packet(stats_tree* st, packet_info* p
     if (dns_qr_rc_statistics_enabled) {
       ws_debug("rc = Response-Code\n");
       tick_stat_node(st, st_str_qr_rc_packets, st_node_qr_r_packets, true);
-      st_node = tick_stat_node(st, val_to_str(pi->packet_rcode, rcode_vals, "Unknown rcode (%d)"), st_node_qr_rc_packets, true);
+      st_node = tick_stat_node(st, val_to_str_wmem(pinfo->pool, pi->packet_rcode, rcode_vals, "Unknown rcode (%d)"), st_node_qr_rc_packets, true);
       if (dns_qr_qrn_statistics_enabled && pi->qname_len > 0) {
         tick_stat_node(st, pi->qname, st_node, false);
       }
