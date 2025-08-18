@@ -218,10 +218,26 @@ falco_events_cleanup(void) {
     close_sinsp_capture(sinsp_span);
 }
 
+// Returns true if the field should be used for conversation filters.
+// XXX This should probably be a preference.
+static bool
+is_conversation_field(enum ftenum ftype, const char *abbrev) {
+    if (ftype != FT_STRINGZ) {
+        return false;
+    }
+
+    if (strcmp(abbrev, "ct.shortsrc") == 0) {
+        return true;
+    } else if (strstr(abbrev, "ct.user.accountid")) {
+        return true;
+    }
+    return false;
+}
+
 // Returns true if the field might contain an IPv4 or IPv6 address.
 // XXX This should probably be a preference.
 static bool
-is_string_address_field(enum ftenum ftype, const char *abbrev) {
+is_source_address_field(enum ftenum ftype, const char *abbrev) {
     if (ftype != FT_STRINGZ) {
         return false;
     }
@@ -429,12 +445,12 @@ create_source_hfids(bridge_info* bi)
              */
             continue;
         }
-        if (sfi.is_numeric_address || is_string_address_field(sfi.type, sfi.abbrev)) {
+        if (sfi.is_numeric_address || is_source_address_field(sfi.type, sfi.abbrev)) {
             bi->addr_fields++;
         }
         bi->visible_fields++;
 
-        if (sfi.is_conversation) {
+        if (sfi.is_conversation || is_conversation_field(sfi.type, sfi.abbrev)) {
             bi->num_conversation_filters++;
         }
     }
@@ -540,7 +556,7 @@ create_source_hfids(bridge_info* bi)
             };
             bi->hf[fld_cnt] = finfo;
 
-            if (sfi.is_conversation) {
+            if (sfi.is_conversation || is_conversation_field(sfi.type, sfi.abbrev)) {
                 ws_assert(conv_fld_cnt < bi->num_conversation_filters);
                 bi->field_flags[fld_cnt] |= BFF_CONVERSATION;
                 bi->conversation_filters[conv_fld_cnt].field_info = &bi->hf[fld_cnt];
@@ -559,7 +575,7 @@ create_source_hfids(bridge_info* bi)
                 bi->field_flags[fld_cnt] |= BFF_INFO;
             }
 
-            if (sfi.is_numeric_address || is_string_address_field(sfi.type, sfi.abbrev)) {
+            if (sfi.is_numeric_address || is_source_address_field(sfi.type, sfi.abbrev)) {
                 ws_assert(addr_fld_cnt < bi->addr_fields);
                 bi->hf_id_to_addr_id[fld_cnt] = addr_fld_cnt;
 
@@ -1275,11 +1291,13 @@ dissect_sinsp_enriched(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void
                         memcpy(&v4_addr, sinsp_fields[sf_idx].res.bytes, 4);
                         proto_tree_add_ipv4(parent_tree, bi->hf_v4_ids[addr_fld_idx], tvb, 0, 0, v4_addr);
                         set_address(&pinfo->net_src, AT_IPv4, sizeof(ws_in4_addr), &v4_addr);
+                        copy_address_shallow(&pinfo->src, &pinfo->net_src);
                     } else if (sinsp_fields[sf_idx].res_len == 16) {
                         ws_in6_addr v6_addr;
                         memcpy(&v6_addr, sinsp_fields[sf_idx].res.bytes, 16);
                         proto_tree_add_ipv6(parent_tree, bi->hf_v6_ids[addr_fld_idx], tvb, 0, 0, &v6_addr);
                         set_address(&pinfo->net_src, AT_IPv6, sizeof(ws_in6_addr), &v6_addr);
+                        copy_address_shallow(&pinfo->src, &pinfo->net_src);
                     } else {
                         ws_warning("Invalid length %u for address field %u", sinsp_fields[sf_idx].res_len, sf_idx);
                     }
@@ -1467,10 +1485,12 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
                     addr_tree = proto_item_add_subtree(sf_ti, ett_address);
                     addr_item = proto_tree_add_ipv4(addr_tree, bi->hf_v4_ids[addr_fld_idx], tvb, sfe->data_start, sfe->data_length, v4_addr);
                     set_address(&pinfo->net_src, AT_IPv4, sizeof(ws_in4_addr), &v4_addr);
+                    copy_address_shallow(&pinfo->src, &pinfo->net_src);
                 } else if (ws_inet_pton6(sfe->res.str, &v6_addr)) {
                     addr_tree = proto_item_add_subtree(sf_ti, ett_address);
                     addr_item = proto_tree_add_ipv6(addr_tree, bi->hf_v6_ids[addr_fld_idx], tvb, sfe->data_start, sfe->data_length, &v6_addr);
                     set_address(&pinfo->net_src, AT_IPv6, sizeof(ws_in6_addr), &v6_addr);
+                    copy_address_shallow(&pinfo->src, &pinfo->net_src);
                 }
                 if (addr_item) {
                     proto_item_set_generated(addr_item);
