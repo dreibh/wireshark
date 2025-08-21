@@ -241,10 +241,16 @@ is_source_address_field(enum ftenum ftype, const char *abbrev) {
     if (ftype != FT_STRINGZ) {
         return false;
     }
-    if (strstr(abbrev, ".srcip")) { // ct.srcip
-        return true;
-    } else if (strstr(abbrev, ".client.ip")) { // okta.client.ip
-        return true;
+
+    const char *addr_suffixes[] = {
+        ".srcip",       // ct.srcip
+        ".callerIP",    // gcp.callerIP
+        ".client.ip",   // okta.client.ip
+    };
+    for (size_t idx = 0; idx < array_length(addr_suffixes); idx++) {
+        if (g_str_has_suffix(abbrev, addr_suffixes[idx])) {
+            return true;
+        }
     }
     return false;
 }
@@ -1466,11 +1472,10 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
                     strcmp(hfinfo->abbrev, "ct.additionaleventdata") == 0 ||
                     strcmp(hfinfo->abbrev, "ct.resources") == 0 ) &&
                     strcmp(sfe->res.str, "null") != 0) {
-               tvbuff_t *json_tvb = tvb_new_child_real_data(tvb, sfe->res.str, (unsigned)strlen(sfe->res.str), (unsigned)strlen(sfe->res.str));
-               add_new_data_source(pinfo, json_tvb, "JSON Object");
-               proto_tree *json_tree = proto_item_add_subtree(sf_ti, ett_json);
-               char *col_info_text = wmem_strdup(pinfo->pool, col_get_text(pinfo->cinfo, COL_INFO));
-               call_dissector(json_handle, json_tvb, pinfo, json_tree);
+                tvbuff_t *json_tvb = tvb_new_subset_length(tvb, sfe->data_start, sfe->data_length);
+                proto_tree *json_tree = proto_item_add_subtree(sf_ti, ett_json);
+                char *col_info_text = wmem_strdup(pinfo->pool, col_get_text(pinfo->cinfo, COL_INFO));
+                call_dissector(json_handle, json_tvb, pinfo, json_tree);
 
                 /* Restore Protocol and Info columns */
                 col_set_str(pinfo->cinfo, COL_INFO, col_info_text);
