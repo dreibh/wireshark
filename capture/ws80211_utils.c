@@ -407,7 +407,6 @@ static void parse_band_freqs(struct ws80211_band *band,
 	if (!tb) return;
 
 	nla_for_each_nested(nl_freq, tb, rem_freq) {
-		uint32_t freq;
 		nla_parse(tb_freq, NL80211_FREQUENCY_ATTR_MAX,
 			  (struct nlattr *)nla_data(nl_freq),
 			  nla_len(nl_freq), freq_policy);
@@ -416,14 +415,7 @@ static void parse_band_freqs(struct ws80211_band *band,
 		if (tb_freq[NL80211_FREQUENCY_ATTR_DISABLED])
 			continue;
 		/* TODO - Look at other attributes like
-		 * NL80211_FREQUENCY_ATTR_NO_HT40_MINUS, etc. for frequencies
-		 * that can't be used with a particular channel type/bw even
-		 * if the PHY supports it in the band. (Note that this is about
-		 * the regulatory domain; e.g. NL80211_FREQUENCY_ATTR_NO_160MHZ
-		 * will be set for 2.4 GHz channels but not for 5/6 GHz channels
-		 * regardless of gear, so we have to look both here and the
-		 * band attribute PHY capabilities.)
-		 * Recent nl80211.h has NL80211_FREQUENCY_ATTR_CAN_MONITOR
+		 * recent nl80211.h has NL80211_FREQUENCY_ATTR_CAN_MONITOR
 		 * "This channel can be used in monitor mode despite other
 		 * (regulatory) restrictions, even if the channel is otherwise
 		 * completely disabled."
@@ -431,7 +423,42 @@ static void parse_band_freqs(struct ws80211_band *band,
 		 * the frequency anyway even if disabled.
 		 */
 
-		freq = nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_FREQ]);
+		struct ws80211_frequency freq = {
+			nla_get_u32(tb_freq[NL80211_FREQUENCY_ATTR_FREQ]),
+			0
+		};
+#ifdef HAVE_NL80211_SPLIT_WIPHY_DUMP
+		/* Advertising these channel limitations was added in
+		 * Linux kernel 3.9 (2013 April, non-LTS), SPLIT_WIPHY_DUMP
+		 * in 3.10 (2013 June, LTS)
+		 */
+		/* XXX - Unfortunately (at least some) drivers in the 6 GHz
+		 * bands don't bother reporting which one of HT40MINUS or
+		 * HT40PLUS they don't support for a given frequency
+		 * (even though in the 6 GHz band HE/802.11ax/Wi-Fi6E
+		 * only supports non-overlapping channels.) They do in the
+		 * other bands. Another reason we need a separate "40 MHz
+		 * whichever of MINUS or PLUS gives non-overlapping channels"
+		 * channel type.
+		 */
+		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_HT40_MINUS]) {
+			freq.channel_mask |= 1 << WS80211_CHAN_HT40MINUS;
+		}
+		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_HT40_PLUS]) {
+			freq.channel_mask |= 1 << WS80211_CHAN_HT40PLUS;
+		}
+		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_80MHZ]) {
+			freq.channel_mask |= 1 << WS80211_CHAN_VHT80;
+		}
+		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_160MHZ]) {
+			freq.channel_mask |= 1 << WS80211_CHAN_VHT160;
+		}
+#ifdef HAVE_NL80211_EHT_CAPABILITY
+		if (tb_freq[NL80211_FREQUENCY_ATTR_NO_320MHZ]) {
+			freq.channel_mask |= 1 << WS80211_CHAN_EHT320;
+		}
+#endif /* HAVE_NL80211_EHT_CAPABILITY */
+#endif /* HAVE_NL80211_SPLIT_WIPHY_DUMP */
 		g_array_append_val(band->frequencies, freq);
 	}
 }
@@ -476,7 +503,7 @@ static void parse_wiphy_bands(struct ws80211_interface *iface,
 		}
 		band = &g_array_index(iface->bands, struct ws80211_band, band_type);
 		if (band->frequencies == NULL) {
-			band->frequencies = g_array_new(false, false, sizeof(uint32_t));
+			band->frequencies = g_array_new(false, false, sizeof(struct ws80211_frequency));
 		}
 #ifdef NL80211_BAND_ATTR_HT_CAPA
 		parse_band_ht_capa(band, tb_band[NL80211_BAND_ATTR_HT_CAPA]);
@@ -1202,59 +1229,59 @@ void ws80211_clear_band(struct ws80211_band *band)
 
 int ws80211_get_center_frequency(int control_frequency, enum ws80211_channel_type chan_type)
 {
-    int cf1 = -1;
-    size_t j;
-    const int bw80[] = { 5180, 5260, 5500, 5580, 5660, 5745,
-			 5955, 6035, 6115, 6195, 6275, 6355,
-			 6435, 6515, 6595, 6675, 6755, 6835,
-			 6195, 6995 };
-    const int bw160[] = { 5180, 5500, 5955, 6115, 6275, 6435,
-			  6595, 6755, 6915 };
-    /* based on 11be D2 E.1 Country information and operating classes */
-    const int bw320[] = {5955, 6115, 6275, 6435, 6595, 6755};
+	int cf1 = -1;
+	size_t j;
+	const int bw80[] = { 5180, 5260, 5500, 5580, 5660, 5745,
+			     5955, 6035, 6115, 6195, 6275, 6355,
+			     6435, 6515, 6595, 6675, 6755, 6835,
+			     6195, 6995 };
+	const int bw160[] = { 5180, 5500, 5955, 6115, 6275, 6435,
+			      6595, 6755, 6915 };
+	/* based on 11be D2 E.1 Country information and operating classes */
+	const int bw320[] = { 5955, 6115, 6275, 6435, 6595, 6755};
 
-    switch (chan_type) {
-    case WS80211_CHAN_VHT80:
-    case WS80211_CHAN_VHT80P80: /* Needs a second cf as well. */
-        for (j = 0; j < array_length(bw80); j++) {
-            if (control_frequency >= bw80[j] && control_frequency < bw80[j] + 80)
-                break;
-        }
+	switch (chan_type) {
+	case WS80211_CHAN_VHT80:
+	case WS80211_CHAN_VHT80P80: /* Needs a second cf as well. */
+		for (j = 0; j < array_length(bw80); j++) {
+			if (control_frequency >= bw80[j] && control_frequency < bw80[j] + 80)
+				break;
+			}
 
-        if (j == array_length(bw80))
-            break;
+		if (j == array_length(bw80))
+			break;
 
-        cf1 = bw80[j] + 30;
-        break;
-    case WS80211_CHAN_VHT160:
-        for (j = 0; j < array_length(bw160); j++) {
-            if (control_frequency >= bw160[j] && control_frequency < bw160[j] + 160)
-                break;
-        }
+		cf1 = bw80[j] + 30;
+		break;
+	case WS80211_CHAN_VHT160:
+		for (j = 0; j < array_length(bw160); j++) {
+			if (control_frequency >= bw160[j] && control_frequency < bw160[j] + 160)
+				break;
+		}
 
-        if (j == array_length(bw160))
-            break;
+		if (j == array_length(bw160))
+			break;
 
-        cf1 = bw160[j] + 70;
-        break;
-    case WS80211_CHAN_EHT320:
-        for (j = 0; j < array_length(bw320); j++) {
-            if (control_frequency >= bw320[j] && control_frequency < bw320[j] + 160)
-                break;
-        }
+		cf1 = bw160[j] + 70;
+		break;
+	case WS80211_CHAN_EHT320:
+		for (j = 0; j < array_length(bw320); j++) {
+			if (control_frequency >= bw320[j] && control_frequency < bw320[j] + 160)
+				break;
+		}
 
-        if (j == array_length(bw320))
-            break;
+		if (j == array_length(bw320))
+			break;
 
-        cf1 = bw320[j] + 150;
-        break;
-    default:
-    /* Since we explicitly specify HT40MINUS vs HT40PLUS we don't need to
-     * calculate the center freq for those; ws80211_set_freq doesn't need it. */
-        break;
-    }
+		cf1 = bw320[j] + 150;
+		break;
+	default:
+	/* Since we explicitly specify HT40MINUS vs HT40PLUS we don't need to
+	* calculate the center freq for those; ws80211_set_freq doesn't need it. */
+		break;
+	}
 
-    return cf1;
+	return cf1;
 }
 
 /*
