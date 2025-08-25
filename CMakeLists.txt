@@ -2288,6 +2288,7 @@ if (ASCIIDOCTOR_FOUND)
 		${CMAKE_BINARY_DIR}/doc/man_pages/reordercap.html
 		${CMAKE_BINARY_DIR}/doc/man_pages/sshdig.html
 		${CMAKE_BINARY_DIR}/doc/man_pages/sshdump.html
+		${CMAKE_BINARY_DIR}/doc/man_pages/strato.html
 		${CMAKE_BINARY_DIR}/doc/man_pages/stratoshark.html
 		${CMAKE_BINARY_DIR}/doc/man_pages/wifidump.html
 		${CMAKE_BINARY_DIR}/doc/man_pages/text2pcap.html
@@ -2661,6 +2662,7 @@ add_custom_command(
 
 file(GLOB _diameter_src_files RELATIVE ${_protocol_data_dir}
 	${_protocol_data_dir}/diameter/*.dtd
+	${_protocol_data_dir}/diameter/*.ent
 	${_protocol_data_dir}/diameter/*.xml
 )
 
@@ -3243,8 +3245,8 @@ endif()
 
 if(BUILD_strato)
 	set(strato_LIBS
-		ui
 		capchild
+		ui
 		caputils
 		wiretap
 		epan

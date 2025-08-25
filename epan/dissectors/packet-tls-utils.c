@@ -2735,6 +2735,7 @@ const val64_string quic_transport_parameter_id[] = {
     { SSL_HND_QUIC_TP_GOOGLE_QUIC_PARAMS, "google_quic_params" },
     { SSL_HND_QUIC_TP_GOOGLE_CONNECTION_OPTIONS, "google_connection_options" },
     { SSL_HND_QUIC_TP_FACEBOOK_PARTIAL_RELIABILITY, "facebook_partial_reliability" },
+    { SSL_HND_QUIC_TP_ADDRESS_DISCOVERY, "address_discovery" },
     { SSL_HND_QUIC_TP_MIN_ACK_DELAY_DRAFT_V1, "min_ack_delay (draft-01)" },
     { SSL_HND_QUIC_TP_MIN_ACK_DELAY_DRAFT05, "min_ack_delay (draft-05)" },
     { SSL_HND_QUIC_TP_MIN_ACK_DELAY, "min_ack_delay" },
@@ -2746,6 +2747,14 @@ const val64_string quic_transport_parameter_id[] = {
     { SSL_HND_QUIC_TP_INITIAL_MAX_PATH_ID_DRAFT11, "initial_max_path_id (draft-11)" },
     { SSL_HND_QUIC_TP_INITIAL_MAX_PATH_ID_DRAFT12, "initial_max_path_id (draft-12)" },
     { SSL_HND_QUIC_TP_INITIAL_MAX_PATH_ID, "initial_max_path_id" },
+    { 0, NULL }
+};
+
+/* https://tools.ietf.org/html/draft-ietf-quic-address-discovery-00 */
+const val64_string quic_address_discovery_vals[] = {
+    { 0, "The node is willing to provide address observations to its peer, but is not interested in receiving address observations itself" },
+    { 1, "The node is interested in receiving address observations, but it is not willing to provide address observations" },
+    { 2, "The node is interested in receiving address observations, and it is willing to provide address observations" },
     { 0, NULL }
 };
 
@@ -5974,6 +5983,18 @@ end:
 
 /*--- Start of dissector-related code below ---*/
 
+/* This is not a "protocol" but ensures that this gets called during
+ * the handoff stage. */
+void proto_reg_handoff_tls_utils(void);
+
+static dissector_handle_t base_tls_handle;
+
+void
+proto_reg_handoff_tls_utils(void)
+{
+    base_tls_handle = find_dissector("tls");
+}
+
 /* get ssl data for this session. if no ssl data is found allocate a new one*/
 SslDecryptSession *
 ssl_get_session(conversation_t *conversation, dissector_handle_t tls_handle)
@@ -5982,6 +6003,8 @@ ssl_get_session(conversation_t *conversation, dissector_handle_t tls_handle)
     SslDecryptSession  *ssl_session;
     int                 proto_ssl;
 
+    /* Note proto_ssl is tls for either the main tls_handle or the
+     * tls13_handshake handle used by QUIC. */
     proto_ssl = dissector_handle_get_protocol_index(tls_handle);
     conv_data = conversation_get_proto_data(conversation, proto_ssl);
     if (conv_data != NULL)
@@ -6027,6 +6050,15 @@ ssl_get_session(conversation_t *conversation, dissector_handle_t tls_handle)
     ssl_session->session.ech = false;
     ssl_session->session.hrr_ech_declined = false;
     ssl_session->session.first_ch_ech_frame = 0;
+
+    /* We want to increment the stream count for the normal tls handle and
+     * dtls handle, but presumably not for the tls13_handshake handle used
+     * by QUIC (it has its own Follow Stream handling, and the QUIC stream
+     * doesn't get sent to the TLS follow tap.)
+     */
+    if (tls_handle == base_tls_handle) {
+        ssl_session->session.stream = tls_increment_stream_count();
+    }
 
     conversation_add_proto_data(conversation, proto_ssl, ssl_session);
     return ssl_session;
@@ -8926,6 +8958,11 @@ ssl_dissect_hnd_hello_ext_quic_transport_parameters(ssl_common_dissect_t *hf, tv
                     quic_add_loss_bits(pinfo, value);
                 }
                 offset += 1;
+            break;
+            case SSL_HND_QUIC_TP_ADDRESS_DISCOVERY:
+                proto_tree_add_item_ret_varint(parameter_tree, hf->hf.hs_ext_quictp_parameter_address_discovery,
+                                               tvb, offset, -1, ENC_VARINT_QUIC, NULL, &len);
+                offset += len;
             break;
             case SSL_HND_QUIC_TP_MIN_ACK_DELAY_OLD:
             case SSL_HND_QUIC_TP_MIN_ACK_DELAY_DRAFT_V1:
