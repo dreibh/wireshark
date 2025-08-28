@@ -525,9 +525,9 @@ static bool parse_json_events(char* filebuf, const NetLogEventConstants netlog_e
     int json_packets_ht_index = 0;
     const int json_array_len = json_get_array_len(json_events);
     jsmntok_t* event_entry = json_get_array_index(json_events, 0);
-    for (int i = 0; i < json_array_len; i++, event_entry = json_get_next_object(event_entry))
+    for (int i = 0; i < json_array_len && event_entry != NULL; i++, event_entry = json_get_next_object(event_entry))
     {
-        if (event_entry == NULL || event_entry->type != JSMN_OBJECT){
+        if (event_entry->type != JSMN_OBJECT){
             ws_debug("Skipping non-object at index %i", i);
             continue;
         }
@@ -657,6 +657,7 @@ static bool parse_json_events(char* filebuf, const NetLogEventConstants netlog_e
             }
             if (!parse_address_port(remote_address, server_ip)){
                 g_free(server_ip);
+                continue;
             }
             g_hash_table_insert(UDP_connection_ids_to_remote_address, GINT_TO_POINTER(event_id), server_ip);
 
