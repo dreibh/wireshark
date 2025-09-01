@@ -950,8 +950,8 @@ int main(int argc, char **argv)
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    configuration_init_error = configuration_init(argv[0]);
     set_application_flavor(APPLICATION_FLAVOR_STRATOSHARK);
+    configuration_init_error = configuration_init(argv[0]);
     if (configuration_init_error != NULL) {
         ws_warning("Can't get pathname of directory containing the extcap program: %s.",
                 configuration_init_error);
@@ -992,6 +992,9 @@ int main(int argc, char **argv)
 
     if (g_list_length(extcap_conf->interfaces) < 1) {
         ws_debug("No source plugins found.");
+        // This should maybe be WS_EXIT_NO_INTERFACES from ws_exit_codes.h,
+        // if we updated the tests to allow that as a valid exit code.
+        ret = EXIT_SUCCESS;
         goto end;
     }
 

@@ -250,11 +250,12 @@ workflow:
     - export WIRESHARK_BASE_DIR=${CI_PROJECT_DIR}/../wireshark-third-party
     - if [ ! -d $WIRESHARK_BASE_DIR ] ; then mkdir $WIRESHARK_BASE_DIR ; fi
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
+    #   -DFALCO_PLUGINS="$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libcloudtrail.so;$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libgcpaudit.so;$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libk8saudit.so"
     - cmake -G Ninja
       -DENABLE_CCACHE=ON
       -DWIRESHARK_BASE_DIR=$WIRESHARK_BASE_DIR
       -DBUILD_stratoshark=on
-      -DFALCO_PLUGINS="$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libcloudtrail.so;$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libgcpaudit.so;$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libk8saudit.so"
+      -DFALCO_PLUGINS="$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libcloudtrail.so"
       -DTEST_EXTRA_ARGS=--disable-capture
       ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
@@ -486,7 +487,7 @@ Arch Linux :
     - export LDFLAGS=-Wl,-rpath,'$ORIGIN/../lib'
     - git clone https://github.com/falcosecurity/libs.git falco-libs
     - cd /tmp/falco-libs
-    - git switch -c 0.18.1 0.18.1
+    - git switch -c 0.20.0 0.20.0
     - printf "\e[0Ksection_start:%s:fslibs_cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
     - cmake -B build -G Ninja -DBUILD_SHARED_LIBS=on -DMINIMAL_BUILD=on -DBUILD_DRIVER=off -DENABLE_ENGINE_KMOD=off -DBUILD_LIBSCAP_EXAMPLES=off -DUSE_BUNDLED_DEPS=off -DUSE_BUNDLED_VALIJSON=on -DCREATE_TEST_TARGETS=off -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib' -DCMAKE_INSTALL_PREFIX=$WIRESHARK_PREFIX
     - printf "\e[0Ksection_end:%s:fslibs_cmake_section\r\e[0K" "$( date +%s)"
@@ -504,7 +505,7 @@ Arch Linux :
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
     - ninja install
-    - install -v -D -m 755 -t $WIRESHARK_PREFIX/lib/stratoshark/plugins/4.5/epan run/plugins/4.5/epan/falco-events.so
+    - install -v -D -m 755 -t $WIRESHARK_PREFIX/lib/stratoshark/plugins/4.7/epan run/plugins/4.7/epan/falco-events.so
     - install -v -D -m 755 -t $WIRESHARK_PREFIX/lib/stratoshark/plugins/falco run/plugins/falco/*.so
     # XXX Need to add an install prereqs script
     - tar -C / -cJf $CI_PROJECT_DIR/wireshark-arch-$WIRESHARK_VERSION.tar.xz opt/wireshark-$WIRESHARK_VERSION
@@ -519,10 +520,11 @@ Windows x64 Package:
     - wireshark-windows-x64-package
   script:
     - C:\Windows\py.exe ..\tools\make-version.py --set-release --wireshark-version-file=wireshark_version.txt --stratoshark-version-file=stratoshark_version.txt ..
+      # -DFALCO_PLUGINS="C:/Development/wireshark-x64-libs/falcosecurity-plugins-2025-08-20-1-x64-ws/cloudtrail.dll;C:/Development/wireshark-x64-libs/falcosecurity-plugins-2025-08-20-1-x64-ws/gcpaudit.dll;C:/Development/wireshark-x64-libs/falcosecurity-plugins-2025-08-20-1-x64-ws/k8saudit.dll"
     - cmake -G "Visual Studio 17 2022" -A x64
       -DENABLE_LTO=off
       -DBUILD_stratoshark=on
-      -DFALCO_PLUGINS="C:/Development/wireshark-x64-libs/falcosecurity-plugins-2025-08-20-1-x64-ws/cloudtrail.dll;C:/Development/wireshark-x64-libs/falcosecurity-plugins-2025-08-20-1-x64-ws/gcpaudit.dll;C:/Development/wireshark-x64-libs/falcosecurity-plugins-2025-08-20-1-x64-ws/k8saudit.dll"
+      -DFALCO_PLUGINS="C:/Development/wireshark-x64-libs/falcosecurity-plugins-2025-08-20-1-x64-ws/cloudtrail.dll"
       -DENABLE_SIGNED_NSIS=on ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount test-programs.vcxproj
@@ -566,10 +568,11 @@ Windows Arm64 Package:
     - wireshark-windows-arm64-package
   script:
     - C:\Windows\py.exe ..\tools\make-version.py --set-release --wireshark-version-file=wireshark_version.txt --stratoshark-version-file=stratoshark_version.txt ..
+      # -DFALCO_PLUGINS="C:/Development/wireshark-arm64-libs/falcosecurity-plugins-2025-08-20-1-arm64-ws/cloudtrail.dll;C:/Development/wireshark-arm64-libs/falcosecurity-plugins-2025-08-20-1-arm64-ws/gcpaudit.dll;C:/Development/wireshark-arm64-libs/falcosecurity-plugins-2025-08-20-1-arm64-ws/k8saudit.dll"
     - cmake -G "Visual Studio 17 2022" -A arm64
       -DENABLE_LTO=off
       -DBUILD_stratoshark=on
-      -DFALCO_PLUGINS="C:/Development/wireshark-arm64-libs/falcosecurity-plugins-2025-08-20-1-arm64-ws/cloudtrail.dll;C:/Development/wireshark-arm64-libs/falcosecurity-plugins-2025-08-20-1-arm64-ws/gcpaudit.dll;C:/Development/wireshark-arm64-libs/falcosecurity-plugins-2025-08-20-1-arm64-ws/k8saudit.dll"
+      -DFALCO_PLUGINS="C:/Development/wireshark-arm64-libs/falcosecurity-plugins-2025-08-20-1-arm64-ws/cloudtrail.dll"
       -DENABLE_SIGNED_NSIS=on ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount test-programs.vcxproj
@@ -638,13 +641,14 @@ macOS Universal Package:
     - cd build
     - ../tools/make-version.py --set-release --wireshark-version-file=wireshark_version.txt --stratoshark-version-file=stratoshark_version.txt ..
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
+    #   -DFALCO_PLUGINS="$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libcloudtrail.so;$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libgcpaudit.so;$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libk8saudit.so"
     - cmake -G Ninja
       -DENABLE_CCACHE=ON
       -DWIRESHARK_BASE_DIR="$WIRESHARK_BASE_DIR"
       -DCMAKE_OSX_DEPLOYMENT_TARGET=12.0
       -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
       -DBUILD_stratoshark=on
-      -DFALCO_PLUGINS="$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libcloudtrail.so;$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libgcpaudit.so;$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libk8saudit.so"
+      -DFALCO_PLUGINS="$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins/libcloudtrail.so"
       -DTEST_EXTRA_ARGS=--enable-release
       ..
     # Temporary hack to fix "Package 'zlib', required by 'libscap', not found"

@@ -1007,8 +1007,8 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    err_msg = configuration_init(argv[0]);
     set_application_flavor(APPLICATION_FLAVOR_STRATOSHARK);
+    err_msg = configuration_init(argv[0]);
     if (err_msg != NULL) {
         fprintf(stderr,
                 "strato: Can't get pathname of directory containing the strato program: %s.\n"
@@ -1277,6 +1277,7 @@ main(int argc, char *argv[])
             case 's':        /* Set the snapshot (capture) length */
             case 'y':        /* Set the pcap data link type */
             case 'B':        /* Buffer size */
+            case LONGOPT_NO_OPTIMIZE:          /* Don't optimize capture filter */
             case LONGOPT_COMPRESS_TYPE:        /* compress type */
             case LONGOPT_CAPTURE_TMPDIR:       /* capture temp directory */
             case LONGOPT_UPDATE_INTERVAL:      /* sync pipe update interval */
