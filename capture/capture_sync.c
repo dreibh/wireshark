@@ -860,6 +860,9 @@ sync_pipe_start(capture_options *capture_opts, GPtrArray *capture_comments,
             argv = sync_pipe_add_arg(argv, &argc, "-f");
             argv = sync_pipe_add_arg(argv, &argc, interface_opts->cfilter);
         }
+        if (!interface_opts->optimize) {
+            argv = sync_pipe_add_arg(argv, &argc, "--no-optimize");
+        }
         if (interface_opts->has_snaplen) {
             char ssnap[ARGV_NUMBER_LEN];
             argv = sync_pipe_add_arg(argv, &argc, "-s");
@@ -1378,8 +1381,8 @@ sync_interface_set_80211_chan(const char *iface, const char *freq, const char *t
  * must be freed with g_free().
  */
 int
-sync_if_bpf_filter_open(const char *ifname, const char* filter,
-                        int linktype, char **data, char **primary_msg,
+sync_if_bpf_filter_open(const char *ifname, const char* filter, int linktype,
+                        bool optimize, char **data, char **primary_msg,
                         char **secondary_msg, void (*update_cb)(void))
 {
     int argc;
@@ -1387,15 +1390,6 @@ sync_if_bpf_filter_open(const char *ifname, const char* filter,
     int ret;
 
     ws_debug("sync_if_bpf_filter_open");
-
-    argv = init_pipe_args(&argc);
-
-    if (!argv) {
-        *primary_msg = g_strdup("We don't know where to find dumpcap.");
-        *secondary_msg = NULL;
-        *data = NULL;
-        return -1;
-    }
 
     const char* linktype_name = linktype_val_to_name(linktype);
     if (linktype != -1) { // Allow -1 for device default
@@ -1407,6 +1401,15 @@ sync_if_bpf_filter_open(const char *ifname, const char* filter,
         }
     }
 
+    argv = init_pipe_args(&argc);
+
+    if (!argv) {
+        *primary_msg = g_strdup("We don't know where to find dumpcap.");
+        *secondary_msg = NULL;
+        *data = NULL;
+        return -1;
+    }
+
     /* Ask for the human-readable BPF code for the capture filter */
     argv = sync_pipe_add_arg(argv, &argc, "-d");
     argv = sync_pipe_add_arg(argv, &argc, "-i");
@@ -1415,8 +1418,13 @@ sync_if_bpf_filter_open(const char *ifname, const char* filter,
         argv = sync_pipe_add_arg(argv, &argc, "-y");
         argv = sync_pipe_add_arg(argv, &argc, linktype_name);
     }
-    argv = sync_pipe_add_arg(argv, &argc, "-f");
-    argv = sync_pipe_add_arg(argv, &argc, filter);
+    if (!optimize) {
+        argv = sync_pipe_add_arg(argv, &argc, "--no-optimize");
+    }
+    if (filter && strcmp(filter, "") != 0) {
+        argv = sync_pipe_add_arg(argv, &argc, "-f");
+        argv = sync_pipe_add_arg(argv, &argc, filter);
+    }
 
     ret = sync_pipe_run_command(argv, data, primary_msg, secondary_msg, update_cb);
     return ret;

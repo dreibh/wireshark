@@ -119,6 +119,7 @@ set(LIBWIRESHARK_PUBLIC_HEADERS
 	ps.h
 	ptvcursor.h
 	range.h
+	read_keytab_file.h
 	reassemble.h
 	reedsolomon.h
 	register.h
@@ -149,7 +150,6 @@ set(LIBWIRESHARK_PUBLIC_HEADERS
 	uat.h
 	uat-int.h
 	unit_strings.h
-	value_string.h
 	wmem_scopes.h
 	wscbor.h
 	wscbor_enc.h
@@ -220,6 +220,7 @@ set(LIBWIRESHARK_NONGENERATED_FILES
 	proto.c
 	proto_data.c
 	range.c
+	read_keytab_file.c
 	reassemble.c
 	reedsolomon.c
 	register.c
@@ -257,7 +258,6 @@ set(LIBWIRESHARK_NONGENERATED_FILES
 	tvbuff_lznt1.c
 	tvbuff_rdp.c
 	uat.c
-	value_string.c
 	wscbor.c
 	wscbor_enc.c
 	unit_strings.c
@@ -359,6 +359,7 @@ target_include_directories(epan
 		${BROTLI_INCLUDE_DIRS}
 		${CARES_INCLUDE_DIRS}
 		${GCRYPT_INCLUDE_DIRS}
+		${KERBEROS_INCLUDE_DIRS}
 		${GLIB2_INCLUDE_DIRS}
 		${GNUTLS_INCLUDE_DIRS}
 		${LIBXML2_INCLUDE_DIRS}

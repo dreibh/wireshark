@@ -14,6 +14,7 @@
 
 #include <epan/packet.h>
 #include <epan/expert.h>
+#include <epan/proto_data.h>
 #include <epan/uat.h>
 
 #include <wsutil/wsgcrypt.h>
@@ -47,6 +48,9 @@
 #define BASIC_PARAMSET_BODY_LENGTH   28
 #define DISTRIBUTED_SAK_AES128_BODY_LEN 28
 #define DISTRIBUTED_SAK_AES256_BODY_LEN 52
+
+/* key for p_[add|get]_proto_data */
+#define CKN_KEY 0
 
 void proto_register_mka(void);
 void proto_reg_handoff_mka(void);
@@ -113,6 +117,8 @@ static int hf_mka_aes_key_wrap_cak;
 static int hf_mka_kmd;
 
 static int hf_mka_suspension_time;
+static int hf_mka_latest_lowest_accept_pn_msb;
+static int hf_mka_old_lowest_accept_pn_msb;
 
 static int hf_mka_icv;
 
@@ -513,18 +519,13 @@ dissect_basic_paramset(proto_tree *mka_tree, packet_info *pinfo, tvbuff_t *tvb, 
 
   mka_add_ckn_info(basic_param_set_tree, tvb, offset, ckn_len);
 
-  /* initialize the private_info hash if not already initialized */
-  if (NULL == pinfo->private_table) {
-      pinfo->private_table = g_hash_table_new(g_str_hash, g_str_equal);
-  }
-
   /* look up the CAK/CKN in the CKN table, and add a private hash table entry if it does not yet exist there */
   const uint8_t *ckn = tvb_memdup(NULL, tvb, offset, ckn_len);
   if (NULL != ckn) {
     mka_ckn_info_t *rec = ckn_info_lookup((uint8_t *)ckn, ckn_len);
     if (NULL != rec) {
       /* add the record to the private hash table for this packet to tell ourselves about the CKN and its keys later on */
-      g_hash_table_insert(pinfo->private_table, "ckn", rec);
+      p_add_proto_data(pinfo->pool, pinfo, proto_mka, CKN_KEY, rec);
     }
 
     g_free((void *)ckn);
@@ -715,64 +716,62 @@ dissect_distributed_sak(proto_tree *mka_tree, packet_info *pinfo, tvbuff_t *tvb,
 
     /* Attempt to unwrap the key using the KEK for the CKN. */
     /* Fetch the KEK for the CKN in the basic parameter set. */
-    if (NULL != pinfo->private_table) {
-      mka_ckn_info_t *rec = g_hash_table_lookup(pinfo->private_table, "ckn");
-      if (NULL == rec) {
-        ws_info("no record for CKN");
-        goto out;
-      }
+    mka_ckn_info_t *rec = p_get_proto_data(pinfo->pool, pinfo, proto_mka, CKN_KEY);
+    if (NULL == rec) {
+      ws_info("no record for CKN");
+      goto out;
+    }
 
-      /* Look up the CKN and if found in the table, use the KEK associated with it. */
-      ws_debug("CKN entry name: %s", rec->name);
+    /* Look up the CKN and if found in the table, use the KEK associated with it. */
+    ws_debug("CKN entry name: %s", rec->name);
 
-      /* If no KEK available, skip the decode. */
-      mka_ckn_info_key_t *key = &(rec->key);
-      if ((NULL == key) || (0 == key->kek_len)) {
-        goto out;
-      }
+    /* If no KEK available, skip the decode. */
+    mka_ckn_info_key_t *key = &(rec->key);
+    if ((NULL == key) || (0 == key->kek_len)) {
+      goto out;
+    }
 
-      /* Open the cipher context. */
-      gcry_cipher_hd_t hd;
-      if (gcry_cipher_open(&hd, GCRY_CIPHER_AES, GCRY_CIPHER_MODE_AESWRAP, 0)) {
-        ws_warning("failed to open cipher context");
-        goto out;
-      }
+    /* Open the cipher context. */
+    gcry_cipher_hd_t hd;
+    if (gcry_cipher_open(&hd, GCRY_CIPHER_AES, GCRY_CIPHER_MODE_AESWRAP, 0)) {
+      ws_warning("failed to open cipher context");
+      goto out;
+    }
 
-      if (gcry_cipher_setkey(hd, key->kek, key->kek_len)) {
-          ws_warning("failed to set KEK");
-          gcry_cipher_close(hd);
-          goto out;
-      }
-
-      /* Unwrap the key with the KEK. */
-      uint8_t *sak = key->saks[distributed_an];
-      if (gcry_cipher_decrypt(hd, sak, key->kek_len, wrappedkey, (key->kek_len + 8)) ) {
-        ws_info("failed to unwrap SAK");
-        memset(sak, 0, MKA_MAX_SAK_LEN);
+    if (gcry_cipher_setkey(hd, key->kek, key->kek_len)) {
+        ws_warning("failed to set KEK");
         gcry_cipher_close(hd);
         goto out;
-      }
-
-      /* Close the cipher context. */
-      gcry_cipher_close(hd);
-
-      if (ws_log_msg_is_active(WS_LOG_DOMAIN, LOG_LEVEL_DEBUG)) {
-        if (AES256_KEY_LEN == key->kek_len) {
-          ws_debug("unwrapped sak: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-                          sak[0], sak[1], sak[2], sak[3], sak[4], sak[5], sak[6], sak[7],
-                          sak[8], sak[9], sak[10], sak[11], sak[12], sak[13], sak[14], sak[15],
-                          sak[16], sak[17], sak[18], sak[19], sak[20], sak[21], sak[22], sak[23],
-                          sak[24], sak[25], sak[26], sak[27], sak[28], sak[29], sak[30], sak[31]);
-        } else {
-            ws_debug("unwrapped sak: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
-                    sak[0], sak[1], sak[2], sak[3], sak[4], sak[5], sak[6], sak[7],
-                    sak[8], sak[9], sak[10], sak[11], sak[12], sak[13], sak[14], sak[15]);
-        }
-      }
-
-      /* Add the unwrapped SAK to the output. */
-      proto_tree_add_bytes_with_length(distributed_sak_tree, hf_mka_aes_key_wrap_unwrapped_sak, tvb, offset, 0, sak, key->kek_len);  //works, no highlights
     }
+
+    /* Unwrap the key with the KEK. */
+    uint8_t *sak = key->saks[distributed_an];
+    if (gcry_cipher_decrypt(hd, sak, key->kek_len, wrappedkey, (key->kek_len + 8)) ) {
+      ws_info("failed to unwrap SAK");
+      memset(sak, 0, MKA_MAX_SAK_LEN);
+      gcry_cipher_close(hd);
+      goto out;
+    }
+
+    /* Close the cipher context. */
+    gcry_cipher_close(hd);
+
+    if (ws_log_msg_is_active(WS_LOG_DOMAIN, LOG_LEVEL_DEBUG)) {
+      if (AES256_KEY_LEN == key->kek_len) {
+        ws_debug("unwrapped sak: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+                        sak[0], sak[1], sak[2], sak[3], sak[4], sak[5], sak[6], sak[7],
+                        sak[8], sak[9], sak[10], sak[11], sak[12], sak[13], sak[14], sak[15],
+                        sak[16], sak[17], sak[18], sak[19], sak[20], sak[21], sak[22], sak[23],
+                        sak[24], sak[25], sak[26], sak[27], sak[28], sak[29], sak[30], sak[31]);
+      } else {
+          ws_debug("unwrapped sak: %02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x%02x",
+                  sak[0], sak[1], sak[2], sak[3], sak[4], sak[5], sak[6], sak[7],
+                  sak[8], sak[9], sak[10], sak[11], sak[12], sak[13], sak[14], sak[15]);
+      }
+    }
+
+    /* Add the unwrapped SAK to the output. */
+    proto_tree_add_bytes_with_length(distributed_sak_tree, hf_mka_aes_key_wrap_unwrapped_sak, tvb, offset, 0, sak, key->kek_len);  //works, no highlights
   }
   else
   {
@@ -955,10 +954,10 @@ dissect_xpn(proto_tree *mka_tree, packet_info *pinfo _U_, tvbuff_t *tvb, int *of
   proto_tree_add_uint(xpn_set_tree, hf_mka_param_body_length, tvb, offset, 2, xpn_len);
   offset += 2;
 
-  proto_tree_add_item(xpn_set_tree, hf_mka_latest_lowest_acceptable_pn, tvb, offset, 4, ENC_NA);
+  proto_tree_add_item(xpn_set_tree, hf_mka_latest_lowest_accept_pn_msb, tvb, offset, 4, ENC_NA);
   offset += 4;
 
-  proto_tree_add_item(xpn_set_tree, hf_mka_old_lowest_acceptable_pn, tvb, offset, 4, ENC_NA);
+  proto_tree_add_item(xpn_set_tree, hf_mka_old_lowest_accept_pn_msb, tvb, offset, 4, ENC_NA);
   offset += 4;
 
   *offset_ptr = offset;
@@ -1089,12 +1088,6 @@ dissect_mka(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 
   proto_tree_add_item(mka_tree, hf_mka_icv, tvb, offset, icv_len, ENC_NA);
 
-  /* free any allocated entries in the private table containing CKN info */
-  if (NULL != pinfo->private_table) {
-      /* destroy the hash table that may have been created */
-      g_hash_table_destroy(pinfo->private_table);
-  }
-
   return tvb_captured_length(tvb);
 }
 
@@ -1159,10 +1152,10 @@ proto_register_mka(void) {
     { &hf_mka_delay_protect,                { "Delay protect", "mka.delay_protect", FT_BOOLEAN, 8, NULL, 0x10, NULL, HFILL }},
     { &hf_mka_latest_key_server_mi,         { "Latest Key: Key Server Member Identifier", "mka.latest_key_server_mi", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
     { &hf_mka_latest_key_number,            { "Latest Key: Key Number", "mka.latest_key_number", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
-    { &hf_mka_latest_lowest_acceptable_pn,  { "Latest Key: Lowest Acceptable PN (32 MSB)", "mka.latest_lowest_acceptable_pn", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+    { &hf_mka_latest_lowest_acceptable_pn,  { "Latest Key: Lowest Acceptable PN (32 LSB)", "mka.latest_lowest_acceptable_pn", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
     { &hf_mka_old_key_server_mi,            { "Old Key: Key Server Member Identifier", "mka.old_key_server_mi", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
     { &hf_mka_old_key_number,               { "Old Key: Key Number", "mka.old_key_number", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
-    { &hf_mka_old_lowest_acceptable_pn,     { "Old Key: Lowest Acceptable PN (32 MSB)", "mka.old_lowest_acceptable_pn", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+    { &hf_mka_old_lowest_acceptable_pn,     { "Old Key: Lowest Acceptable PN (32 LSB)", "mka.old_lowest_acceptable_pn", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
     { &hf_mka_distributed_an,               { "Distributed AN", "mka.distributed_an", FT_UINT8, BASE_DEC, NULL, 0xc0, NULL, HFILL }},
     { &hf_mka_confidentiality_offset,       { "Confidentiality Offset", "mka.confidentiality_offset", FT_UINT8, BASE_DEC, VALS(confidentiality_offset_vals), 0x30, NULL, HFILL }},
@@ -1175,6 +1168,8 @@ proto_register_mka(void) {
     { &hf_mka_kmd,                          { "Key Management Domain", "mka.kmd", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
     { &hf_mka_suspension_time,              { "Suspension time", "mka.suspension_time", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
+    { &hf_mka_latest_lowest_accept_pn_msb,  { "Latest Key: Lowest Acceptable PN (32 MSB)", "mka.latest_lowest_acceptable_pn_msb", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+    { &hf_mka_old_lowest_accept_pn_msb,     { "Old Key: Lowest Acceptable PN (32 MSB)", "mka.old_lowest_acceptable_pn_msb", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
     { &hf_mka_icv,                          { "Integrity Check Value", "mka.icv", FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
