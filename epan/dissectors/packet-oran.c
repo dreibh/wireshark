@@ -2793,6 +2793,8 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                    We can therefore derive TRX (number of antennas).
                  */
 
+                bool using_array = false;
+
                 /* I & Q samples
                    May know how many entries from activeBeamspaceCoefficientMask. */
                 if (num_trx == 0) {
@@ -2801,13 +2803,17 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     unsigned num_weights_pairs = (weights_bytes*8) / (bfwcomphdr_iq_width*2);
                     num_trx = num_weights_pairs;
                 }
+                else {
+                    using_array = true;
+                }
+
                 int bit_offset = offset*8;
 
                 for (unsigned n=0; n < num_trx; n++) {
                     /* Create antenna subtree */
                     int bfw_offset = bit_offset / 8;
 
-                    uint16_t trx_index = (num_trx) ? trx[n] : n+1;
+                    uint16_t trx_index = (using_array) ? trx[n] : n+1;
 
                     proto_item *bfw_ti = proto_tree_add_string_format(extension_tree, hf_oran_bfw,
                                                                       tvb, bfw_offset, 0, "", "TRX %3u: (", trx_index);
@@ -6213,13 +6219,13 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                     int nseconds_between_packets =
                           pinfo->abs_ts.nsecs - timing->first_frame_time.nsecs;
 
+
                     /* Round to nearest microsecond. */
                     uint32_t total_gap = (seconds_between_packets*1000000) +
                                          ((nseconds_between_packets+500) / 1000);
 
-                    proto_item *ti = NULL;
-
                     /* Show how long it has been */
+                    proto_item *ti = NULL;
                     if (pinfo->num != timing->first_frame) {
                         ti = proto_tree_add_uint(timingHeader, hf_oran_u_section_ul_symbol_time, tvb, 0, 0, total_gap);
                         proto_item_set_generated(ti);
@@ -6246,6 +6252,8 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                         ti = proto_tree_add_uint(timingHeader, hf_oran_u_section_ul_symbol_last_frame, tvb, 0, 0, timing->last_frame_in_symbol);
                         proto_item_set_generated(ti);
                     }
+
+                    tap_info->ul_delay_in_us = total_gap;
                 }
             }
         }

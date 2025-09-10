@@ -951,6 +951,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cups.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cvspserver.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-daap.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-darwin.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-data.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-daytime.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-db-lsp.c
@@ -1462,7 +1463,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lbtrm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lbtru.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lbttcp.c
-	${CMAKE_CURRENT_SOURCE_DIR}/packet-ldaneo.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-lda-neo-trailer.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ldp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ldss.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lg8979.c
