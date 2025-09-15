@@ -8,6 +8,9 @@
 20west
 29west
 2bytes
+2encoded
+2string
+2subids
 32apsk
 3gpp2
 3pcap
@@ -269,6 +272,7 @@ bootup
 bosch
 bouygues
 bpsec
+brachy
 brasil
 bratislava
 britain
@@ -285,6 +289,7 @@ bssmap
 btatt
 btbredr
 btcommon
+btgatt
 bthci
 btl2cap
 btmesh
@@ -321,6 +326,7 @@ cannot
 canonicalised
 canonicalize
 canonicalized
+canxl
 capab
 capacitive
 capinfos
@@ -400,6 +406,7 @@ chromaticity
 chset
 chunked
 chunking
+cibcccame
 cicam
 cinfo
 ciphered
@@ -1387,6 +1394,7 @@ janeiro
 january
 japanese
 jetds
+jiangsu
 jminfo
 joiners
 jsonraw
@@ -1400,6 +1408,7 @@ kasme
 kasumi
 kbytes
 kchip
+kdeth
 keepalive
 kerberos
 keybcs
@@ -1513,6 +1522,7 @@ lowpan
 lquota
 lsarpc
 lscap
+lsequence
 lsflags
 lsgsn
 lspping
@@ -1576,6 +1586,7 @@ measurements
 measx
 mediaone
 medion
+medtronic
 megabit
 megaco
 mellanox
@@ -2034,6 +2045,7 @@ peripherals
 peristency
 persian
 persistency
+persresv
 pfname
 pgpool
 pharos
@@ -2085,6 +2097,7 @@ portset
 portstatus
 positioner
 posix
+postel
 postfix
 powercontrol
 pppdump
@@ -2167,6 +2180,7 @@ ptype
 pubdir
 pubkey
 publickey
+pubsub
 pucch
 pusch
 pwach
@@ -2354,6 +2368,7 @@ reprogramming
 republish
 reqid
 reqinfo
+reqlink
 reqseq
 reqtype
 requester
@@ -2685,6 +2700,7 @@ stainfo
 stanag
 standardised
 standardization
+standarisation
 starttls
 stateful
 statfs
@@ -3280,6 +3296,7 @@ wireshark
 wiretap
 wisun
 withfcs
+withings
 withoutfcs
 wksta
 wlansp
@@ -3316,6 +3333,7 @@ xferflags
 xferstatus
 xfixes
 xhtml
+xiaomi
 xidlr
 xidxchg
 xinerama

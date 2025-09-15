@@ -377,7 +377,7 @@ pcapng_read_darwin_legacy_block(wtap* wth, FILE_T fh, uint32_t block_size _U_,
     if (!wtap_read_bytes(fh, &process_info, sizeof process_info, err, err_info)) {
         ws_debug("failed to read packet data");
         *err = WTAP_ERR_BAD_FILE;
-        *err_info = ws_strdup_printf("pcapng: can not read %lu bytes for process info",
+        *err_info = ws_strdup_printf("pcapng: can not read %zu bytes for process info",
                                     sizeof(process_info));
         return false;
     }
@@ -387,7 +387,11 @@ pcapng_read_darwin_legacy_block(wtap* wth, FILE_T fh, uint32_t block_size _U_,
     dpib = wtap_block_create( WTAP_BLOCK_FT_SPECIFIC_INFORMATION);
     dpib->mandatory_data = dpib_mand;
     wblock->block = dpib;
+    /* Add the block to the `wtap->dpibs` array, and increment the block's refcount,
+     * to reflect that the block is now referenced by two entities.
+     */
     wtap_add_dpib(wth, dpib);
+    wtap_block_ref(wblock->block);
 
     /* We don't return these to the caller in pcapng_read(). */
     wblock->internal = true;

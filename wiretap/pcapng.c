@@ -25,8 +25,6 @@
 #include <string.h>
 #include <errno.h>
 
-#include <jtckdint.h>
-
 #include <wsutil/application_flavor.h>
 #include <wsutil/wslog.h>
 #include <wsutil/strtoi.h>
@@ -1015,6 +1013,7 @@ pcapng_process_options(FILE_T fh, wtapng_block_t *wblock,
             *err = WTAP_ERR_INTERNAL;
             *err_info = ws_strdup_printf("pcapng: invalid byte order %d passed to pcapng_process_options()",
                                         byte_order);
+            g_free(option_content);
             return false;
         }
         option_ptr += sizeof (*oh); /* 4 bytes, so it remains aligned */
@@ -2975,6 +2974,9 @@ pcapng_read_custom_block(wtap *wth _U_, FILE_T fh, uint32_t block_type,
             if (*err == WTAP_ERR_REC_MALFORMED) {
                 /* Allow the packet to be kept */
                 wblock->rec->rec_header.packet_header.pkt_encap = WTAP_ENCAP_NULL;
+                *err = 0;
+                g_free(*err_info);
+                *err_info = NULL;
             }
             else {
                 return false;
