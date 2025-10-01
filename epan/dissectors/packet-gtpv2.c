@@ -1729,7 +1729,7 @@ static const gtpv2_information_element_instance_t gtpv2_information_element_inst
     {  GTPV2_CREATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IE_PGW_FQDN, 1, "Alternative PGW-C/SMF FQDN" },
     {  GTPV2_CREATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 0, "Alternative PGW-C/SMF Address" },
     {  GTPV2_CREATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 1, "New PGW-C/SMF Address" },
-    {  GTPV2_CREATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 2, "New PGW Control Plane IP Address" },
+    {  GTPV2_CREATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 2, "PGW Control Plane IP Address" },
     {  GTPV2_CREATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 3, "New SGW-C Address" },
     {  GTPV2_CREATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IE_GROUP_ID, 0, "Group Id" },
     {  GTPV2_CREATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IE_GROUP_ID, 1, "New Group Id" },
@@ -1808,7 +1808,7 @@ static const gtpv2_information_element_instance_t gtpv2_information_element_inst
     {  GTPV2_DELETE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IE_PGW_FQDN, 1, "Alternative PGW-C/SMF FQDN" },
     {  GTPV2_DELETE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 0, "Alternative PGW-C/SMF Address" },
     {  GTPV2_DELETE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 1, "New PGW-C/SMF Address" },
-    {  GTPV2_DELETE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 2, "New PGW Control Plane IP Address" },
+    {  GTPV2_DELETE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 2, "PGW Control Plane IP Address" },
     {  GTPV2_DELETE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 3, "New SGW-C Address" },
     {  GTPV2_DELETE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IE_GROUP_ID, 0, "Group Id" },
     {  GTPV2_DELETE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IE_GROUP_ID, 1, "New Group Id" },
@@ -1851,7 +1851,7 @@ static const gtpv2_information_element_instance_t gtpv2_information_element_inst
     {  GTPV2_UPDATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IE_PGW_FQDN, 1, "Alternative PGW-C/SMF FQDN" },
     {  GTPV2_UPDATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 0, "Alternative PGW-C/SMF Address" },
     {  GTPV2_UPDATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 1, "New PGW-C/SMF Address" },
-    {  GTPV2_UPDATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 2, "New PGW Control Plane IP Address" },
+    {  GTPV2_UPDATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 2, "PGW Control Plane IP Address" },
     {  GTPV2_UPDATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IP_ADDRESS, 3, "New SGW-C Address" },
     {  GTPV2_UPDATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IE_GROUP_ID, 0, "Group Id" },
     {  GTPV2_UPDATE_BEARER_REQUEST, GTPV2_IE_PGW_CHANGE_INFO, GTPV2_IE_GROUP_ID, 1, "New Group Id" },
@@ -9397,12 +9397,12 @@ track_gtpv2_session(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, gtpv
                         imsi = wmem_strdup(wmem_file_scope(), args->imsi);
                         wmem_map_insert(session_imsi, GUINT_TO_POINTER(gtp_session_count++), imsi);
                     } else {
-                        /* If handover from 5G, look up referenceid from earlier HTTP2 streams */
+                        /* If handover from 5G, look up location from earlier HTTP2 streams */
                         static char to_str_back_buf[32];
                         #define BACK_PTR (&to_str_back_buf[31]) /* pointer to NUL string terminator */
 
-                        char* referenceid = uint_to_str_back(BACK_PTR, (uint32_t)gtpv2_hdr->teid);
-                        imsi = http2_get_imsi_from_referenceid(referenceid);
+                        char* location = uint_to_str_back(BACK_PTR, (uint32_t)gtpv2_hdr->teid);
+                        imsi = http2_get_imsi_from_location(location);
                         if(imsi) {
                             wmem_map_insert(session_imsi, GUINT_TO_POINTER(gtp_session_count++), imsi);
                         }

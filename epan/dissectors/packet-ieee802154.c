@@ -53,7 +53,7 @@
  *  CRC16 is calculated using the x^16 + x^12 + x^5 + 1 polynomial
  *  as specified by ITU-T, and is calculated over the IEEE 802.15.4
  *  packet (excluding the FCS) as transmitted over the air. Note,
- *  that because the least significan bits are transmitted first, this
+ *  that because the least significant bits are transmitted first, this
  *  will require reversing the bit-order in each byte. Also, unlike
  *  most CRC algorithms, IEEE 802.15.4 uses an initial and final value
  *  of 0x0000, instead of 0xffff (which is used by the ITU-T).
@@ -4355,7 +4355,7 @@ dissect_hie_rendezvous_time(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *t
 /**
  * Dissect the Time Correction Header IE (7.4.2.7)
  *
- * This field is constructed by taking a signed 16-bit 2's compliment time
+ * This field is constructed by taking a signed 16-bit 2's complement time
  * correction in the range of -2048 us to 2047 us, AND'ing it with 0xfff, and
  * OR'ing again with 0x8000 to indicate a negative acknowledgment.
  */

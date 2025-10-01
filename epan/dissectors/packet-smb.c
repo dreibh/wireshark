@@ -68,13 +68,13 @@ void proto_reg_handoff_smb(void);
  * The document "NT LAN Manager SMB File Sharing Protocol Extensions"
  * can be found at
  *
- *	http://www.samba.org/samba/ftp/specs/smb-nt01.doc
+ *	https://www.samba.org/samba/ftp/specs/smb-nt01.doc
  *
  * (or, presumably a similar path under the Samba mirrors).  As the
  * ".doc" indicates, it's a Word document.  Some of the specs from the
  * Microsoft FTP site can be found in the
  *
- *	http://www.samba.org/samba/ftp/specs/
+ *	https://www.samba.org/samba/ftp/specs/
  *
  * directory as well.
  *
@@ -113,6 +113,7 @@ static int hf_smb_mid;
 static int hf_smb_pid_high;
 static int hf_smb_sig;
 static int hf_smb_response_to;
+static int hf_smb_reassembled_in;
 static int hf_smb_time;
 static int hf_smb_response_in;
 static int hf_smb_continuation_of;
@@ -1641,6 +1642,10 @@ smb_trans_defragment(proto_tree *tree _U_, packet_info *pinfo, tvbuff_t *tvb,
 		fd_head = fragment_add(&smb_trans_reassembly_table, tvb, offset,
 				       pinfo, si->sip->frame_req, NULL,
 				       pos, count, more_frags);
+		if (si->sip->frame_req) {
+			g_hash_table_insert(si->ct->trans_frag_resp, GUINT_TO_POINTER(pinfo->num),
+					    (void *)GUINT_TO_POINTER(si->sip->frame_req));
+		}
 	} else {
 		fd_head = fragment_get(&smb_trans_reassembly_table,
 				       pinfo, si->sip->frame_req, NULL);
@@ -3993,7 +3998,7 @@ dissect_smb_access_mask_bits(tvbuff_t *tvb, proto_tree *parent_tree,
 	/*
 	 * Some of these bits come from
 	 *
-	 *	http://www.samba.org/samba/ftp/specs/smb-nt01.doc
+	 *	https://www.samba.org/samba/ftp/specs/smb-nt01.doc
 	 *
 	 * and others come from the section on ZwOpenFile in "Windows(R)
 	 * NT(R)/2000 Native API Reference".
@@ -4091,7 +4096,7 @@ dissect_nt_create_options_bits(tvbuff_t *tvb, proto_tree *parent_tree,
 	/*
 	 * From
 	 *
-	 *	http://www.samba.org/samba/ftp/specs/smb-nt01.doc
+	 *	https://www.samba.org/samba/ftp/specs/smb-nt01.doc
 	 */
 	static int * const fields[] = {
 		&hf_smb_nt_create_options_directory_file,
@@ -9045,7 +9050,7 @@ dissect_nt_security_flags(tvbuff_t *tvb, proto_tree *parent_tree, int offset)
  * in "Windows(R) NT(R)/2000 Native API Reference"; do those go over
  * the wire as well?  (The spec at
  *
- *	http://www.samba.org/samba/ftp/specs/smb-nt01.doc
+ *	https://www.samba.org/samba/ftp/specs/smb-nt01.doc
  *
  * says that "the FILE_NO_INTERMEDIATE_BUFFERING option is not exported
  * via the SMB protocol.  The NT redirector should convert this option
@@ -17522,7 +17527,7 @@ dissect_transaction_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 	uint16_t              bc;
 	int                   padcnt;
 	bool                  dissected_trans;
-	fragment_head        *r_fd   = NULL;
+	fragment_head        *r_fd   = NULL; /* For first fragment */
 	tvbuff_t             *pd_tvb = NULL, *d_tvb = NULL, *p_tvb = NULL;
 	tvbuff_t             *s_tvb  = NULL, *sp_tvb = NULL;
 	bool                  save_fragmented;
@@ -17544,7 +17549,6 @@ dissect_transaction_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 			 */
 			proto_tree_add_uint_format_value(tree, hf_smb_trans2_subcmd, tvb, 0, 0, -1,
 				"<UNKNOWN> since request packet wasn't seen");
-			col_append_str(pinfo->cinfo, COL_INFO, "<unknown>");
 		} else {
 			si->info_level = t2i->info_level;
 			if (t2i->subcmd == -1) {
@@ -17556,7 +17560,6 @@ dissect_transaction_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 				 */
 				proto_tree_add_uint_format_value(tree, hf_smb_trans2_subcmd, tvb, 0, 0, t2i->subcmd,
 					"<UNKNOWN> since transaction code wasn't found in request packet");
-				col_append_str(pinfo->cinfo, COL_INFO, "<unknown>");
 			} else {
 				proto_tree_add_uint(tree, hf_smb_trans2_subcmd, tvb, 0, 0, t2i->subcmd);
 
@@ -17707,7 +17710,7 @@ dissect_transaction_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 		item = proto_tree_add_uint(tree, hf_bytes_until_total_data_count, tvb, 0, 0, diff);
 		proto_item_set_generated(item);
 	}
-	if (td && t2i) {
+	if (td && t2i && !smb_trans_reassembly) {
 		col_append_fstr(pinfo->cinfo, COL_INFO,
 			", Data: %u of %u", dc + dd, td);
 	}
@@ -17756,11 +17759,56 @@ dissect_transaction_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 			if (pc) {
 				r_fd = smb_trans_defragment(tree, pinfo, tvb,
 							     po, pc, pd, td+tp, si);
-
 			}
 			if ((r_fd == NULL) && dc) {
+				int *ptr;
+				fragment_head *f_fd = NULL; /* For non-first fragment, points to the reassembly if reassembly
+							     * was completed*/
+				fragment_item *f_fi = NULL;
+				proto_item *tmp_item;
+				int frf = -1;
+
 				r_fd = smb_trans_defragment(tree, pinfo, tvb,
 							     od, dc, dd+tp, td+tp, si);
+
+				/* Not the first fragment so see if we have a matching request and
+				 * if so find the reassembly so we can link back to the head.
+				 * We have to do it this convoluted was because this reassembly shows the reassembly
+				 * always in the first fragment and not where it was finally reassembled.
+				 * Should be fixed to be more like other not-ancient reassembly code
+				 * but don't want to touch SMB too much.
+				 */
+				ptr = g_hash_table_lookup(si->ct->trans_frag_resp, GUINT_TO_POINTER(pinfo->num));
+				if (ptr) {
+					frf = GPOINTER_TO_UINT(ptr);
+				}
+				if (frf != -1) {
+				       f_fd = fragment_get(&smb_trans_reassembly_table,
+							   pinfo, frf, NULL);
+				}
+				if (f_fd && !(f_fd->flags & FD_DEFRAGMENTED)) {
+					f_fd = NULL;
+				}
+				if (f_fd) {
+					f_fi = f_fd->next;
+				}
+				while (f_fi && f_fi->offset) {
+					f_fi = f_fi->next;
+				}
+				if (f_fi) {
+					tmp_item = proto_tree_add_uint(tree, hf_smb_reassembled_in, tvb, 0, 0, f_fi->frame);
+					proto_item_set_generated(tmp_item);
+				}
+				if (f_fd) {
+					f_fi = f_fd->next;
+				}
+				while (f_fi) {
+					if (pinfo->num == f_fi->frame) {
+						col_append_fstr(pinfo->cinfo, COL_INFO, " Fragment data %d-%d",
+								f_fi->offset, f_fi->offset + f_fi->len - 1);
+					}
+					f_fi = f_fi->next;
+				}
 			}
 		}
 	}
@@ -18445,6 +18493,8 @@ free_hash_tables(void *ctarg, void *user_data _U_)
 		g_hash_table_destroy(ct->primaries);
 	if (ct->tid_service)
 		g_hash_table_destroy(ct->tid_service);
+	if (ct->trans_frag_resp)
+		g_hash_table_destroy(ct->trans_frag_resp);
 	g_slist_free(ct->GSL_fid_info);
 	g_free(ct);
 }
@@ -18786,6 +18836,9 @@ dissect_smb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 		si->ct->tid_service = g_hash_table_new(
 			smb_saved_info_hash_unmatched,
 			smb_saved_info_equal_unmatched);
+		si->ct->trans_frag_resp = g_hash_table_new(
+			smb_saved_info_hash_unmatched,
+			smb_saved_info_equal_unmatched);
 		si->ct->raw_ntlmssp = 0;
 
 		si->ct->tid_tree = wmem_tree_new(wmem_file_scope());
@@ -18824,7 +18877,7 @@ dissect_smb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 	else if ((si->cmd == SMB_COM_TRANSACTION_SECONDARY)    /* Transaction Secondary */
 		 || (si->cmd == SMB_COM_TRANSACTION2_SECONDARY)   /* Transaction2 Secondary */
 		 || (si->cmd == SMB_COM_NT_TRANSACT_SECONDARY)) { /* NT Transaction Secondary */
-		 /* In the case of secondariy requests there is response to the initial request
+		/* In the case of secondary requests there is response to the initial request
 		    followed by one or more secondary *requests* then another response. Each
 		    of the secondaries should point to the second response as the response
 		    and have "Response in: <second response's frame number>".
@@ -19158,7 +19211,7 @@ dissect_smb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 	/*
 	 * The document at
 	 *
-	 *	http://www.samba.org/samba/ftp/specs/smbpub.txt
+	 *	https://www.samba.org/samba/ftp/specs/smbpub.txt
 	 *
 	 * (a text version of "Microsoft Networks SMB FILE SHARING
 	 * PROTOCOL, Document Version 6.0p") says that:
@@ -19341,6 +19394,10 @@ proto_register_smb(void)
 	{ &hf_smb_response_to,
 		{ "Response to", "smb.response_to", FT_FRAMENUM, BASE_NONE,
 		FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0, "This packet is a response to the packet in this frame", HFILL }},
+
+	{ &hf_smb_reassembled_in,
+		{ "Reassembled in", "smb.reassembled_in", FT_FRAMENUM, BASE_NONE,
+		FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0, "This Transaction PDU was is reassembled in frame", HFILL }},
 
 	{ &hf_smb_time,
 		{ "Time from request", "smb.time", FT_RELATIVE_TIME, BASE_NONE,

@@ -87,8 +87,8 @@ static bool http2_decompress_body;
 /* Track 3GPP session over 5G Service Based Interfaces */
 static bool http2_3gpp_session = false;
 
-/* Relation between referenceid -> imsi */
-static wmem_map_t* http2_referenceid_imsi;
+/* Relation between notifyuri -> imsi */
+static wmem_map_t* http2_notifyuri_imsi;
 
 /* Relation between location -> imsi */
 static wmem_map_t* http2_location_imsi;
@@ -1532,21 +1532,21 @@ http2_set_stream_imsi(packet_info *pinfo, char* imsi)
     stream_info->imsi = imsi;
 }
 
-void http2_add_referenceid_imsi(char* referenceid, const char* imsi)
+void http2_add_notifyuri_imsi(char* notifyuri, const char* imsi)
 {
     if(http2_3gpp_session) {
-        wmem_map_insert(http2_referenceid_imsi,
-                        wmem_strdup(wmem_file_scope(), referenceid),
+        wmem_map_insert(http2_notifyuri_imsi,
+                        wmem_strdup(wmem_file_scope(), notifyuri),
                         wmem_strdup(wmem_file_scope(), imsi));
     }
 }
 
-char*
-http2_get_imsi_from_referenceid(const char* referenceid)
+static char*
+http2_get_imsi_from_notifyuri(const char* notifyuri)
 {
     char *imsi = NULL;
     if(http2_3gpp_session) {
-        imsi = (char *)wmem_map_lookup(http2_referenceid_imsi, referenceid);
+        imsi = (char *)wmem_map_lookup(http2_notifyuri_imsi,notifyuri);
     }
     return imsi;
 }
@@ -1561,7 +1561,7 @@ http2_add_location_imsi(char* location, const char* imsi)
     }
 }
 
-static char*
+char*
 http2_get_imsi_from_location(const char* location)
 {
     char *imsi = NULL;
@@ -1597,13 +1597,13 @@ http2_get_stream_imsi(packet_info *pinfo)
     if(stream_info->imsi && (strcmp(stream_info->imsi, "") != 0)) {
         imsi = stream_info->imsi;
     }
-    else if (stream_info->referenceid && (strcmp(stream_info->referenceid, "") != 0)) {
-        imsi = http2_get_imsi_from_referenceid(stream_info->referenceid);
 
-        /* Will try to look up match between path referenceid and location ID */
-        if(!imsi) {
-           imsi = http2_get_imsi_from_location(stream_info->referenceid);
-        }
+    if(!imsi && stream_info->referenceid && (strcmp(stream_info->referenceid, "") != 0)) {
+        imsi = http2_get_imsi_from_location(stream_info->referenceid);
+    }
+
+    if(!imsi && stream_info->path && (strcmp(stream_info->path, "") != 0)) {
+        imsi = http2_get_imsi_from_notifyuri(stream_info->path);
     }
     return imsi;
 }
@@ -1644,13 +1644,13 @@ http2_set_stream_imsi(packet_info *pinfo _U_, char* imsi _U_)
     return;
 }
 
-void http2_add_referenceid_imsi(char* referenceid _U_, const char* imsi _U_)
+void http2_add_notifyuri_imsi(char* notifyuri _U_, const char* imsi _U_)
 {
     return;
 }
 
 char*
-http2_get_imsi_from_referenceid(const char* referenceid _U_)
+http2_get_imsi_from_notifyuri(const char* notifyuri _U_)
 {
     return NULL;
 }
@@ -2187,7 +2187,7 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
 
             if (regex_location == NULL) {
                 regex_location = g_regex_new (
-                    ".*\\/(chargingdata|sm-policies|pdu-sessions)\\/([A-Za-z0-9\\-.]+).*",
+                    ".*\\/(chargingdata|sm-contexts|sm-policies|pdu-sessions)\\/([A-Za-z0-9\\-.]+).*",
                     G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
             }
 
@@ -2740,7 +2740,7 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, p
 }
 
 /* If the initial/first HEADERS frame (containing ":method" or ":status" header) of this direction is not received
- * (normally because of starting capturing after a long-lived HTTP2 stream like gRPC streaming call has been establied),
+ * (normally because of starting capturing after a long-lived HTTP2 stream like gRPC streaming call has been established),
  * we initialize the information in direction of the stream with the fake headers of wireshark http2 preferences.
  * In an other situation, some http2 headers are unable to be parse in current HEADERS frame because previous HEADERS
  * frames were not captured that causing HPACK index table not completed. Fake headers can also be used in this situation.
@@ -2840,16 +2840,13 @@ static void
 dissect_http2_add_assoc_imsi_to_tracked_3gpp_session(tvbuff_t *tvb, proto_tree *http2_tree, http2_stream_info_t *stream_info) {
     /* Add Associate IMSI */
     if (http2_3gpp_session) {
+        char *imsi = NULL;
         if(stream_info->imsi && (strcmp(stream_info->imsi, "") != 0)) {
             add_assoc_imsi_item(tvb, http2_tree, stream_info->imsi);
-        } else if (stream_info->referenceid && (strcmp(stream_info->referenceid, "") != 0)) {
-            char *imsi = NULL;
-            if((imsi = http2_get_imsi_from_referenceid(stream_info->referenceid))) {
-                add_assoc_imsi_item(tvb, http2_tree, imsi);
-            /* Will try to look up match between path referenceid and location ID */
-            } else if((imsi = http2_get_imsi_from_location(stream_info->referenceid))) {
-                add_assoc_imsi_item(tvb, http2_tree, imsi);
-            }
+        } else if (stream_info->referenceid && (strcmp(stream_info->referenceid, "") != 0) && (imsi = http2_get_imsi_from_location(stream_info->referenceid))) {
+            add_assoc_imsi_item(tvb, http2_tree, imsi);
+        } else if (stream_info->path && (strcmp(stream_info->path, "") != 0) && (imsi = http2_get_imsi_from_notifyuri(stream_info->path))) {
+            add_assoc_imsi_item(tvb, http2_tree, imsi);
         }
     }
 }
@@ -3585,7 +3582,7 @@ check_reassembly_completion_status(tvbuff_t* tvb, packet_info* pinfo, proto_tree
  * tell how many more bytes it will need, it should set pinfo->desegment_len to additional bytes required for parsing
  * message head or just DESEGMENT_ONE_MORE_SEGMENT. It will then be called again as soon as more data becomes available.
  * Please refer to comments of the declaration of reassemble_streaming_data_and_call_subdissector() function in
- * 'epan/reassemble.h' for more requirments about subdissectors.
+ * 'epan/reassemble.h' for more requirements about subdissectors.
  */
 static void
 reassemble_http2_data_according_to_subdissector(tvbuff_t* tvb, packet_info* pinfo, http2_session_t* http2_session,
@@ -5363,7 +5360,7 @@ proto_register_http2(void)
     prefs_register_obsolete_preference(http2_module, "decompress_body");
 #endif
 
-    http2_referenceid_imsi = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), wmem_str_hash, g_str_equal);
+    http2_notifyuri_imsi = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), wmem_str_hash, g_str_equal);
     http2_location_imsi = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), wmem_str_hash, g_str_equal);
 
     /* Fill hash table with static headers */

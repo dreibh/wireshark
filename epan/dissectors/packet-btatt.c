@@ -4191,7 +4191,7 @@ static uint16_t
 get_gatt_char_decl_handle_from_handle(packet_info *pinfo, uint32_t handle,
     btl2cap_data_t *l2cap_data);
 
-bool bluetooth_gatt_has_no_parameter(uint8_t opcode)
+static bool bluetooth_gatt_has_no_parameter(uint8_t opcode)
 {
     return is_readable_request(opcode) ||
             opcode == ATT_OPCODE_WRITE_RESPONSE ||
@@ -4782,7 +4782,7 @@ btatt_call_dissector_by_dissector_name_with_data(const char *dissector_name,
 }
 
 /*
-    dissects attribute handle and takes care of reassemly:
+    dissects attribute handle and takes care of reassembly:
     If sub-dissector sets pinfo->deseg_offset >0 && < pktlen the leftover bytes are stored and front-attached to the next packet
     returns 0 if paket was not handled
     returns #bytes consumed

@@ -1,16 +1,19 @@
-/* @file
+/** @file
  *
- * Wiretap Library
- * Copyright (c) 1998 by Gilbert Ramirez <gram@alumni.rice.edu>
+ * Copyright 2025, Daniel Salloum <daniel.salloum@gmail.com>
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
+ *
  */
 
-#pragma once
+#ifndef __MMODULE_H__
+#define __MMODULE_H__
 
 #include "wtap.h"
 
-wtap_open_return_val json_lines_open(wtap *wth, int *err, char **err_info);
+wtap_open_return_val mmodule_open(wtap *wth, int *err, char **err_info);
+
+#endif
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

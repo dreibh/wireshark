@@ -128,6 +128,12 @@ wtap_file_start_ts(wtap *wth)
 	return &wth->file_start_ts;
 }
 
+const nstime_t*
+wtap_file_end_ts(wtap *wth)
+{
+	return &wth->file_end_ts;
+}
+
 unsigned
 wtap_file_get_num_shbs(wtap *wth)
 {
@@ -1331,6 +1337,9 @@ static const struct encap_type_info encap_table_base[] = {
 
 	/* WTAP_ENCAP_DECT_NR */
 	{ "dect_nr", "DECT-2020 New Radio (NR) MAC layer" },
+
+	/* WTAP_ENCAP_MMODULE */
+	{ "m_module", "Bachmann M-Module File" },
 };
 
 WS_DLL_LOCAL

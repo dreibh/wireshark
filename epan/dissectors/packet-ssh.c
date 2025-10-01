@@ -1079,7 +1079,7 @@ dissect_ssh(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
         /* We expect to get the client message first. If this is from an
          * an assigned server port, call it the server, otherwise call it
          * the client.
-         * XXX - We don't unambigously know which side is the server and
+         * XXX - We don't unambiguously know which side is the server and
          * which the client until the KEX specific _INIT and _REPLY messages;
          * we ought to be able to handle the cases where the version string or
          * KEXINIT messages are out of order or where the client version string
@@ -3868,7 +3868,7 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
     memset(calc_mac, 0, DIGEST_MAX_SIZE);
     unsigned remaining = tvb_captured_length_remaining(tvb, offset);
 
-    mac_len = peer_data->mac_length;
+    mac_len = peer_data->mac_length > 0 ? peer_data->mac_length : 0;
     seqnr = peer_data->sequence_number;
 
     /* General algorithm:
@@ -4519,7 +4519,7 @@ ssh_dissect_decrypted_packet(tvbuff_t *tvb, packet_info *pinfo,
     proto_tree_add_item(tree, hf_ssh_padding_string, packet_tvb, offset, padding_length, ENC_NA);
     offset += padding_length;
 
-    if (peer_data->mac_length) {
+    if (peer_data->mac_length > 0) {
         proto_tree_add_checksum_bytes(tree, tvb, offset, hf_ssh_mac_string, hf_ssh_mac_status, &ei_ssh_mac_bad, pinfo, message->calc_mac, peer_data->mac_length, PROTO_CHECKSUM_VERIFY);
         offset += peer_data->mac_length;
     }
