@@ -49,6 +49,7 @@ addon
 addrbook
 addresp
 addrs
+addrstrlen
 addrtype
 addrv
 adjacency
@@ -491,6 +492,7 @@ compilable
 compilers
 completel
 compr
+comprlen
 computable
 comunicaciones
 concatenate
@@ -579,6 +581,7 @@ customizing
 cwconfig
 cxxflags
 cyber
+cygwin
 cymru
 cyphering
 cyrillic
@@ -1208,6 +1211,8 @@ hspdsch
 hsscch
 hssite
 hsupa
+hsyncend
+hsyncstart
 htonl
 htons
 htotal
@@ -2626,7 +2631,9 @@ shtdn
 siapp
 sidelink
 sigcomp
+sighup
 siginfo
+sigint
 siglen
 signaal
 signaling
@@ -2996,6 +3003,7 @@ tvbparse
 tvbuf
 tvbuff
 tvbuffer
+tvbuffs
 twamp
 twopc
 txchannel
@@ -3249,6 +3257,7 @@ vcard
 vcpkg
 vcredist
 vcxproj
+vdisplay
 vector3d
 venusmngr
 verbose
@@ -3348,6 +3357,7 @@ wsbuglink
 wsbuild
 wscale
 wscbor
+wslog
 wslua
 wsluarm
 wsutil

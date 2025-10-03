@@ -72,9 +72,13 @@ workflow:
   - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
   - if: '$CI_PIPELINE_SOURCE == "web" && $CI_COMMIT_BRANCH == "master" && $CI_PROJECT_URL =~ /.*gitlab.com\/wireshark\/wireshark/'
   - if: '$CI_PIPELINE_SOURCE == "api"'
-# Incoming merge requests.
+# Incoming merge requests, including merge trains
 .if-merge-request:
   - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    interruptible: true
+# Incoming merge requests, excluding merge trains.
+.if-plain-merge-request:
+  - if: '$CI_PIPELINE_SOURCE == "merge_request_event" && $CI_MERGE_REQUEST_EVENT_TYPE != "merge_train"'
     interruptible: true
 # Incoming non-detached merge requests. Must be used for runners which are only
 # available in wireshark/wireshark, e.g. wireshark-windows-*
@@ -634,12 +638,21 @@ macOS Universal Package:
     - wireshark-macos-arm-package
   retry: 1
   before_script:
+    - export PATH="/Library/Frameworks/Python.framework/Versions/3.13/bin:$PATH:$HOME/bin"
     - python3 -m venv $CI_PROJECT_DIR/.venv
     - source $CI_PROJECT_DIR/.venv/bin/activate
     - pip3 install pytest pytest-xdist
   script:
-    - export PATH="/Library/Frameworks/Python.framework/Versions/3.13/bin:$PATH:$HOME/bin"
     - if [[ $MACOS_REINSTALL_THIRD_PARTY == true ]] ; then rm -rf "$WIRESHARK_BASE_DIR" ; fi
+    # Temporary hack
+    - export CMAKE_VERSION=3.31.9
+    - if [ ! -e "$WIRESHARK_BASE_DIR/cmake-${CMAKE_VERSION}-macos-universal/CMake.app/Contents/bin/cmake" ] ; then (
+          cd "$WIRESHARK_BASE_DIR" ;
+          rm -rf cmake-${CMAKE_VERSION}-macos-universal* ;
+          curl -JLO https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-macos-universal.tar.gz ;
+          tar -xf cmake-${CMAKE_VERSION}-macos-universal.tar.gz ;
+      ) fi
+    - export PATH="$WIRESHARK_BASE_DIR/cmake-${CMAKE_VERSION}-macos-universal/CMake.app/Contents/bin:$PATH"
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt" ] ; then mkdir -p "$WIRESHARK_BASE_DIR/Qt" ; fi
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt/$MACOS_QT_VERSION/macos/lib/QtCore.framework" ] ; then
         pip3 install aqtinstall ;
@@ -881,15 +894,15 @@ Ubuntu Qt5 Build:
 # packages work, so disable the MinGW builds for now.
 .Fedora MinGW Build:
   extends: .build-mingw
-  rules: !reference [.if-merge-request]
+  rules: !reference [.if-plain-merge-request]
   needs: [ 'Commit Check' ]
 
 Clang + Code Checks:
   extends: .build-ubuntu
   tags:
     - saas-linux-medium-amd64
-  rules: !reference [.if-merge-request]
-  needs: [ 'Commit Check' ]
+  rules: !reference [.if-plain-merge-request]
+  # needs: [ 'Commit Check' ]
   script:
     - source /clang-latest.env
     - apt-get update && apt-get --yes install python3-venv
@@ -947,7 +960,7 @@ Clang + Code Checks:
 
 No options:
   extends: .build-ubuntu
-  rules: !reference [.if-merge-request]
+  rules: !reference [.if-plain-merge-request]
   needs: [ 'Commit Check' ]
   script: |
     cmake -GNinja -DENABLE_CCACHE=ON \
