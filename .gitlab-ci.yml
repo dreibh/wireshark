@@ -23,8 +23,8 @@ variables:
   GIT_FETCH_EXTRA_FLAGS: "--depth=5000"
   CCACHE_DIR: "${CI_PROJECT_DIR}/ccache"
   # The Qt versions that we ship in the development installers.
-  WINDOWS_QT_VERSION: "6.9.2"
-  MACOS_QT_VERSION: "6.9.2"
+  WINDOWS_QT_VERSION: "6.9.3"
+  MACOS_QT_VERSION: "6.9.3"
   # Enable color output in various tools.
   # CMake, Ninja, and others: https://bixense.com/clicolors/
   CLICOLOR_FORCE: "1"
@@ -644,15 +644,6 @@ macOS Universal Package:
     - pip3 install pytest pytest-xdist
   script:
     - if [[ $MACOS_REINSTALL_THIRD_PARTY == true ]] ; then rm -rf "$WIRESHARK_BASE_DIR" ; fi
-    # Temporary hack
-    - export CMAKE_VERSION=3.31.9
-    - if [ ! -e "$WIRESHARK_BASE_DIR/cmake-${CMAKE_VERSION}-macos-universal/CMake.app/Contents/bin/cmake" ] ; then (
-          cd "$WIRESHARK_BASE_DIR" ;
-          rm -rf cmake-${CMAKE_VERSION}-macos-universal* ;
-          curl -JLO https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-macos-universal.tar.gz ;
-          tar -xf cmake-${CMAKE_VERSION}-macos-universal.tar.gz ;
-      ) fi
-    - export PATH="$WIRESHARK_BASE_DIR/cmake-${CMAKE_VERSION}-macos-universal/CMake.app/Contents/bin:$PATH"
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt" ] ; then mkdir -p "$WIRESHARK_BASE_DIR/Qt" ; fi
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt/$MACOS_QT_VERSION/macos/lib/QtCore.framework" ] ; then
         pip3 install aqtinstall ;
