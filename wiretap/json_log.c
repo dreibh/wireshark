@@ -7,7 +7,7 @@
  */
 
 /*
- * This reads seqences of JSON records which contain timestamps. For general
+ * This reads sequences of JSON records which contain timestamps. For general
  * JSON support, see json.c.
  *
  * The following formats are supported:
@@ -273,6 +273,7 @@ static bool json_log_read_packet(wtap *wth, FILE_T fh, wtap_rec *rec, int *err, 
         return false;
     }
 
+    rec->presence_flags = WTAP_HAS_TS;
     rec->ts = ts;
     rec->tsprec = WTAP_TSPREC_NSEC;
 
