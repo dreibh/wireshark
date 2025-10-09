@@ -154,7 +154,7 @@ dissect_nector_control_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_
 {
   const uint32_t xml_length = tvb_get_uint32(message_tvb, NCTRL_LENGTH_OFFSET, ENC_BIG_ENDIAN);
 
-  char* xml = (char*)tvb_get_string_enc(wmem_packet_scope(), message_tvb, NCTRL_MESSAGE_OFFSET, MIN(64, xml_length), ENC_ASCII|ENC_NA);
+  char* xml = (char*)tvb_get_string_enc(pinfo->pool, message_tvb, NCTRL_MESSAGE_OFFSET, MIN(64, xml_length), ENC_ASCII|ENC_NA);
   char type[64];
   if(sscanf(xml, "<%62s ", (char*)&type) == 1) {
      proto_tree_add_item(nector_tree, hf_type, message_tvb, NCTRL_MESSAGE_OFFSET + 1, (int)strlen(type), ENC_BIG_ENDIAN);
