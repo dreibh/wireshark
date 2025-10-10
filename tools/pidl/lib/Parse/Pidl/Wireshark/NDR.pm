@@ -435,7 +435,7 @@ sub ElementLevel($$$$$$$$)
 			$varswitch = $e->{PROPERTIES}->{switch_is};
 		}
 		my $num_bits = ($l->{HEADER_SIZE}*8);
-		my $hf2 = $self->register_hf_field($hf."_", "Subcontext length", "$ifname.$pn.$_->{NAME}subcontext", "FT_UINT$num_bits", "BASE_HEX", "NULL", 0, "");
+		my $hf2 = $self->register_hf_field($hf."_", "Subcontext length", "$ifname.$pn.$e->{NAME}.subcontext", "FT_UINT$num_bits", "BASE_HEX", "NULL", 0, "");
 		$num_bits = 3264 if ($num_bits == 32);
 		$self->{hf_used}->{$hf2} = 1;
 		$self->pidl_code("uint${num_bits}_t size;");
@@ -475,21 +475,23 @@ sub SwitchType($$;$)
 {
 	my ($e, $type, $nodiscriminant) = @_;
 
-	my $switch_dt =  getType($type);
 	my $switch_type = undef;
-	if ($switch_dt->{DATA}->{TYPE} eq "ENUM") {
-		$switch_type = Parse::Pidl::Typelist::enum_type_fn($switch_dt->{DATA});
-	} elsif ($switch_dt->{DATA}->{TYPE} eq "BITMAP") {
-		$switch_type = Parse::Pidl::Typelist::bitmap_type_fn($switch_dt->{DATA});
-	} elsif ($switch_dt->{DATA}->{TYPE} eq "SCALAR") {
-		if (defined $e->{SWITCH_TYPE}) {
-			$switch_type = "$e->{SWITCH_TYPE}";
-		} else {
-			$switch_type = "$switch_dt->{DATA}->{NAME}";
-		}
-	} elsif (not defined $e->{SWITCH_TYPE}) {
+	if (not defined($type)) {
 		$switch_type = $nodiscriminant;
-	}
+	} else {
+                my $switch_dt =  getType($type);
+                if ($switch_dt->{DATA}->{TYPE} eq "ENUM") {
+                        $switch_type = Parse::Pidl::Typelist::enum_type_fn($switch_dt->{DATA});
+                } elsif ($switch_dt->{DATA}->{TYPE} eq "BITMAP") {
+                        $switch_type = Parse::Pidl::Typelist::bitmap_type_fn($switch_dt->{DATA});
+                } elsif ($switch_dt->{DATA}->{TYPE} eq "SCALAR") {
+                        if (defined $e->{SWITCH_TYPE}) {
+                                $switch_type = "$e->{SWITCH_TYPE}";
+                        } else {
+                                $switch_type = "$switch_dt->{DATA}->{NAME}";
+                        }
+                }
+        }
 
 	return $switch_type
 }
@@ -502,7 +504,7 @@ sub Element($$$$$$)
 
 	my ($call_code, $moreparam);
 	my $param = 0;
-	if (defined $isoruseswitch) {
+	if (defined $isoruseswitch and @$isoruseswitch) {
 		my $type = $isoruseswitch->[0];
 		my $name = $isoruseswitch->[1];
 
@@ -754,6 +756,9 @@ sub Struct($$$$)
 		if (has_property($_, "switch_is")) {
 			my $varswitch = $_->{PROPERTIES}->{switch_is};
 			$switch_info = $varswitchs->{$varswitch};
+			if (not @$switch_info) {
+				warning($_->{ORIGINAL}, "`$v' switch_is discriminant `$varswitch' not found. (Only single identifiers are supported, not expressions as in MIDL.)");
+			}
 		}
 
 		$res.="\t".$self->Element($_, $name, $ifname, $switch_info, %switch_hash)."\n\n";

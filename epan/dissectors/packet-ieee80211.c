@@ -21315,7 +21315,7 @@ this supports:
 
     proto_tree_add_item_ret_string(ietree, hf_ieee80211_vs_cisco_ap_name_v2, tvb, offset, length, ENC_ASCII|ENC_NA, pinfo->pool,&apname);
     proto_item_append_text(ietree, ": AP name v2: %s", apname);
-    // Set to true, so we dont append "Aironet type"
+    // Set to true, so we don't append "Aironet type"
     dont_change = true;
   break;
 
@@ -28369,7 +28369,7 @@ has_comeback_after(uint8_t flags, tvbuff_t *tvb, int offset, int len _U_)
   }
 
   /*
-   * If there is a comeback field and the comback_after is present ...
+   * If there is a comeback field and the comeback_after is present ...
    */
   if (flags & 0x01) {
         /* Check if the comeback_after field is there? */
