@@ -281,12 +281,14 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-ansi_a.h
 	packet-ansi_map.h
 	packet-ansi_tcap.h
+	packet-arcnet.h
 	packet-arp.h
 	packet-asap+enrp-common.h
 	packet-atalk.h
 	packet-atm.h
 	packet-atn-ulcs.h
 	packet-autosar-ipdu-multiplexer.h
+	packet-ax25.h
 	packet-bacapp.h
 	packet-bacnet.h
 	packet-bblog.h
@@ -323,6 +325,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-chdlc.h
 	packet-cip.h
 	packet-cipsafety.h
+	packet-cisco-pid.h
 	packet-cmip.h
 	packet-cmp.h
 	packet-cms.h
@@ -468,6 +471,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-knxip.h
 	packet-knxip_decrypt.h
 	packet-l2tp.h
+	packet-lapd.h
 	packet-lapdm.h
 	packet-lbm.h
 	packet-lbtrm.h
@@ -506,6 +510,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-ncp-int.h
 	packet-ncp-nmas.h
 	packet-ncp-sss.h
+	packet-ncsi-data.h
 	packet-ndmp.h
 	packet-ndps.h
 	packet-netbios.h
@@ -599,6 +604,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-sip.h
 	packet-skinny.h
 	packet-sll.h
+	packet-slowprotocols.h
 	packet-smb.h
 	packet-smb2.h
 	packet-smb-browse.h
@@ -1617,6 +1623,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ncp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ncs.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ncsi.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-ncsi-data.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ndmp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ndp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ndps.c
