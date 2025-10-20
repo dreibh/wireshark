@@ -185,6 +185,7 @@ workflow:
     AQT_HOST: "windows"
     AQT_ARCH: "msvc2022_64"
     VCVARS_ARCH: "64"
+    WIRESHARK_BASE_DIR: "$CI_PROJECT_DIR\\.."
   stage: build
   retry: 1
   before_script:
@@ -194,8 +195,6 @@ workflow:
         & $env:TEMP\aqt.venv\Scripts\pip3.exe install aqtinstall ;
         & $env:TEMP\aqt.venv\Scripts\aqt.exe install-qt --outputdir C:\Qt $env:AQT_HOST desktop $env:WINDOWS_QT_VERSION "win64_$($env:AQT_ARCH)" --modules qt5compat qtmultimedia ;
       }
-    - if (-Not (Test-Path C:\Development)) { New-Item -Path C:\Development -ItemType "directory" }
-    - $env:WIRESHARK_BASE_DIR = "C:\Development"
     - $env:Configuration = "RelWithDebInfo"
     - $env:Path += ";C:\Program Files\CMake\bin"
     - $env:CMAKE_PREFIX_PATH = "C:\Qt\$($env:WINDOWS_QT_VERSION)\$($env:AQT_ARCH)"
@@ -884,6 +883,7 @@ Ubuntu Qt5 Build:
     - job: "Commit Check"
       optional: true
   script:
+    - ../tools/debian-setup.sh --install-qt5-deps
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
     - cmake -G Ninja -DENABLE_CCACHE=ON -DENABLE_WERROR=ON -DUSE_qt6=OFF ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"

@@ -2967,6 +2967,7 @@ get_rtp_packet_info(packet_info *pinfo, struct _rtp_info *rtp_info)
         p_packet_data->media_types = p_conv_data->media_types;
         /* do not increment ref count for the rtp_dyn_payload */
         p_packet_data->rtp_dyn_payload = p_conv_data->rtp_dyn_payload;
+        p_packet_data->dyn_payload_encoding_name = p_packet_data->rtp_dyn_payload ? wmem_strdup(wmem_file_scope(), rtp_dyn_payload_get_name(p_packet_data->rtp_dyn_payload, rtp_info->info_payload_type)) : NULL;
         p_packet_data->rtp_conv_info = p_conv_data->rtp_conv_info;
         p_packet_data->srtp_info = p_conv_data->srtp_info;
         p_packet_data->rtp_sdp_setup_info_list = p_conv_data->rtp_sdp_setup_info_list;
@@ -3631,7 +3632,7 @@ proto_register_rtp(void)
     static build_valid_func rtp_da_build_value[1] = {rtp_value};
     static decode_as_value_t rtp_da_values = {rtp_prompt, 1, rtp_da_build_value};
     static decode_as_t rtp_da = {"rtp", "rtp.pt", 1, 0, &rtp_da_values, NULL, NULL,
-                                decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL};
+                                decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL };
 
     module_t *rtp_module;
     expert_module_t *expert_rtp;
