@@ -152,10 +152,11 @@ static int hf_results_data;
 /* Setup list of Transport Layer protocol types */
 static const value_string proto_type_values[] = {
   { 6,   "TCP" },
-  { 8,   "MPTCP" },
   { 17,  "UDP" },
   { 33,  "DCCP" },
   { 132, "SCTP" },
+  { 261, "QUIC" },
+  { 262, "MPTCP" },
   { 0,   NULL }
 };
 
@@ -213,7 +214,7 @@ static hf_register_info hf[] = {
    { &hf_addflow_flowid,             { "Flow ID",               "netperfmeter.addflow_flowid",             FT_UINT32,  BASE_HEX,  NULL,                      0x0, NULL, HFILL } },
    { &hf_addflow_measurementid,      { "Measurement ID",        "netperfmeter.addflow_measurementid",      FT_UINT64,  BASE_HEX,  NULL,                      0x0, NULL, HFILL } },
    { &hf_addflow_streamid,           { "Stream ID",             "netperfmeter.addflow_streamid",           FT_UINT16,  BASE_DEC,  NULL,                      0x0, NULL, HFILL } },
-   { &hf_addflow_protocol,           { "Protocol",              "netperfmeter.addflow_protocol",           FT_UINT8,   BASE_DEC,  VALS(proto_type_values),   0x0, NULL, HFILL } },
+   { &hf_addflow_protocol,           { "Protocol",              "netperfmeter.addflow_protocol",           FT_UINT16,  BASE_DEC,  VALS(proto_type_values),   0x0, NULL, HFILL } },
    { &hf_addflow_flags,              { "Flags",                 "netperfmeter.addflow_flags",              FT_UINT8,   BASE_HEX,  NULL,                      0x0, NULL, HFILL } },
    { &hf_addflow_description,        { "Description",           "netperfmeter.addflow_description",        FT_STRING,  BASE_NONE, NULL,                      0x0, NULL, HFILL } },
    { &hf_addflow_ordered,            { "Ordered",               "netperfmeter.addflow_ordered",            FT_DOUBLE,  BASE_NONE, NULL,                      0x0, NULL, HFILL } },
@@ -312,16 +313,16 @@ dissect_npm_add_flow_message(tvbuff_t *message_tvb, proto_tree *message_tree, pr
   unsigned int i;
 
   flags_tree = proto_item_add_subtree(flags_item, ett_addflow_flags);
-  proto_tree_add_item(flags_tree, hf_addflow_flag_debug,       message_tvb, 1, 1, ENC_BIG_ENDIAN);
-  proto_tree_add_item(flags_tree, hf_addflow_flag_nodelay,     message_tvb, 1, 1, ENC_BIG_ENDIAN);
-  proto_tree_add_item(flags_tree, hf_addflow_flag_repeatonoff, message_tvb, 1, 1, ENC_BIG_ENDIAN);
+  proto_tree_add_item(flags_tree, hf_addflow_flag_debug,       message_tvb,  1, 1, ENC_BIG_ENDIAN);
+  proto_tree_add_item(flags_tree, hf_addflow_flag_nodelay,     message_tvb,  1, 1, ENC_BIG_ENDIAN);
+  proto_tree_add_item(flags_tree, hf_addflow_flag_repeatonoff, message_tvb,  1, 1, ENC_BIG_ENDIAN);
 
-  proto_tree_add_item(message_tree, hf_addflow_flowid, message_tvb,         4,  4, ENC_BIG_ENDIAN);
-  proto_tree_add_item(message_tree, hf_addflow_measurementid, message_tvb,  8,  8, ENC_BIG_ENDIAN);
-  proto_tree_add_item(message_tree, hf_addflow_streamid, message_tvb,      16,  2, ENC_BIG_ENDIAN);
-  proto_tree_add_item(message_tree, hf_addflow_protocol, message_tvb,      18,  1, ENC_BIG_ENDIAN);
-  proto_tree_add_item(message_tree, hf_addflow_flags, message_tvb,         19,  1, ENC_BIG_ENDIAN);
-  proto_tree_add_item(message_tree, hf_addflow_description, message_tvb,   20, 32, ENC_UTF_8);
+  proto_tree_add_item(message_tree, hf_addflow_flowid,         message_tvb,  4,  4, ENC_BIG_ENDIAN);
+  proto_tree_add_item(message_tree, hf_addflow_measurementid,  message_tvb,  8,  8, ENC_BIG_ENDIAN);
+  proto_tree_add_item(message_tree, hf_addflow_streamid,       message_tvb, 16,  2, ENC_BIG_ENDIAN);
+  proto_tree_add_item(message_tree, hf_addflow_protocol,       message_tvb, 18,  2, ENC_LITTLE_ENDIAN);
+  proto_tree_add_item(message_tree, hf_addflow_flags,          message_tvb, 19,  1, ENC_BIG_ENDIAN);
+  proto_tree_add_item(message_tree, hf_addflow_description,    message_tvb, 20, 32, ENC_UTF_8);
 
   proto_tree_add_double_format_value(message_tree, hf_addflow_ordered, message_tvb, 52, 4,
                                      100.0 * tvb_get_ntohl(message_tvb, 52) / (double)0xffffffff, "%1.3f%%",
@@ -849,6 +850,9 @@ proto_reg_handoff_npm(void)
   dissector_add_uint("sctp.ppi", PPID_NETPERFMETER_DATA_LEGACY,    npm_handle);
   dissector_add_uint("sctp.ppi", NPMP_CTRL_PAYLOAD_PROTOCOL_ID,    npm_handle);
   dissector_add_uint("sctp.ppi", NPMP_DATA_PAYLOAD_PROTOCOL_ID,    npm_handle);
+
+  /* NetPerfMeter protocol over QUIC is detected by ALPN */
+  dissector_add_string("tls.alpn", "netperfmeter", npm_handle);
 
   /* Heuristic dissector for TCP, UDP and DCCP */
   heur_dissector_add("tcp",  dissect_npm_heur, "NetPerfMeter over TCP",  "netperfmeter_tcp",  proto_npm, HEURISTIC_ENABLE);
