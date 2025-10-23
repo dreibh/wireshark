@@ -46,6 +46,8 @@ static uint64_t npm_total_bytes;
 #define PPID_NETPERFMETER_CONTROL_LEGACY   0x29097605
 #define PPID_NETPERFMETER_DATA_LEGACY      0x29097606
 
+#define ALPN_NETPERFMETER_CONTROL   "netperfmeter/control"
+#define ALPN_NETPERFMETER_DATA      "netperfmeter/data"
 
 /* Initialize the protocol and registered fields */
 
@@ -152,6 +154,7 @@ static int hf_results_data;
 /* Setup list of Transport Layer protocol types */
 static const value_string proto_type_values[] = {
   { 6,   "TCP" },
+  { 8,   "MPTCP (old)" },   // NetPerfMeter 1.x, deprecated
   { 17,  "UDP" },
   { 33,  "DCCP" },
   { 132, "SCTP" },
@@ -852,7 +855,10 @@ proto_reg_handoff_npm(void)
   dissector_add_uint("sctp.ppi", NPMP_DATA_PAYLOAD_PROTOCOL_ID,    npm_handle);
 
   /* NetPerfMeter protocol over QUIC is detected by ALPN */
-  dissector_add_string("tls.alpn", "netperfmeter", npm_handle);
+  dissector_add_string("quic.proto",          ALPN_NETPERFMETER_CONTROL, npm_handle);
+  dissector_add_string("quic.proto.datagram", ALPN_NETPERFMETER_CONTROL, npm_handle);
+  dissector_add_string("quic.proto",          ALPN_NETPERFMETER_DATA,    npm_handle);
+  dissector_add_string("quic.proto.datagram", ALPN_NETPERFMETER_DATA,    npm_handle);
 
   /* Heuristic dissector for TCP, UDP and DCCP */
   heur_dissector_add("tcp",  dissect_npm_heur, "NetPerfMeter over TCP",  "netperfmeter_tcp",  proto_npm, HEURISTIC_ENABLE);
