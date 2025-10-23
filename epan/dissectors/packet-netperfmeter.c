@@ -460,14 +460,16 @@ dissect_npm_results_message(tvbuff_t *message_tvb, proto_tree *message_tree, pro
 }
 
 
-static void
+static int
 dissect_npm_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *npm_tree)
 {
-  proto_tree* flags_tree;
+  proto_tree*    flags_tree;
+  const uint8_t  type   = tvb_get_uint8(message_tvb, 0);
+  const uint16_t length = tvb_get_ntohs(message_tvb, 2);
 
   tap_npm_rec_t* tap_rec = wmem_new0(pinfo->pool, tap_npm_rec_t);
-  tap_rec->type        = tvb_get_uint8(message_tvb, 0);
-  tap_rec->size        = tvb_get_ntohs(message_tvb, 2);
+  tap_rec->type        = type;
+  tap_rec->size        = length;
   tap_rec->type_string = val_to_str_const(tap_rec->type, message_type_values, "Unknown NetPerfMeter message type");
   tap_queue_packet(tap_npm, pinfo, tap_rec);
 
@@ -503,6 +505,7 @@ dissect_npm_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *npm_t
       dissect_npm_results_message(message_tvb, npm_tree, flags_tree);
      break;
   }
+  return length;
 }
 
 static int
@@ -513,18 +516,37 @@ dissect_npm(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, void *d
 
   col_append_sep_fstr(pinfo->cinfo, COL_PROTOCOL, NULL, "NetPerfMeter");
 
-  /* In the interest of speed, if "tree" is NULL, don't do any work not
-     necessary to generate protocol tree items. */
-  if (tree) {
-    /* create the npm protocol tree */
-    npm_item = proto_tree_add_item(tree, proto_npm, message_tvb, 0, -1, ENC_NA);
-    npm_tree = proto_item_add_subtree(npm_item, ett_npm);
-  } else {
-    npm_tree = NULL;
-  };
-  /* dissect the message */
-  dissect_npm_message(message_tvb, pinfo, npm_tree);
-  return true;
+  /* Handle partial messages, as well as multiple messages in one segment */
+  unsigned int offset = 0;
+  unsigned int bytesRemaining;
+  while( (bytesRemaining = tvb_reported_length_remaining(message_tvb, offset))  > 0) {
+    if(bytesRemaining < 4) {
+      /* At least a full header of 4 bytes is needed: */
+      pinfo->desegment_len = 4 - bytesRemaining;
+      break;
+    }
+
+    tvbuff_t *subtvb = tvb_new_subset_remaining(message_tvb, offset);
+    const unsigned int messageLength = tvb_get_ntohs(subtvb, 2);
+    if(messageLength > bytesRemaining) {
+      /* Message length is known, wait for the rest */
+      pinfo->desegment_len = messageLength - bytesRemaining;
+      break;
+    }
+
+    /* In the interest of speed, if "tree" is NULL, don't do any work not
+       necessary to generate protocol tree items. */
+    if (tree) {
+      /* create the npm protocol tree */
+      npm_item = proto_tree_add_item(tree, proto_npm, subtvb, 0, -1, ENC_NA);
+      npm_tree = proto_item_add_subtree(npm_item, ett_npm);
+    } else {
+      npm_tree = NULL;
+    };
+    offset += dissect_npm_message(subtvb, pinfo, npm_tree);
+  }
+
+  return tvb_captured_length(message_tvb);
 }
 
 
