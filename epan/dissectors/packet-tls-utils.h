@@ -24,11 +24,6 @@
 #include <epan/unit_strings.h>
 #include <wsutil/wsgcrypt.h>
 
-#ifdef HAVE_LIBGNUTLS
-#include <gnutls/x509.h>
-#include <gnutls/pkcs12.h>
-#endif /* HAVE_LIBGNUTLS */
-
 /* TODO inline this now that Libgcrypt is mandatory? */
 #define SSL_CIPHER_CTX gcry_cipher_hd_t
 #define SSL_DECRYPT_DEBUG
@@ -2956,11 +2951,11 @@ ssl_common_dissect_t name
     }, \
     { & name .ei.hs_ext_cert_status_undecoded, \
         { prefix ".handshake.status_request.undecoded", PI_UNDECODED, PI_NOTE, \
-        "Responder ID list or Request Extensions are not implemented, contact Wireshark developers if you want this to be supported", EXPFILL } \
+        "Responder ID list or Request Extensions are not implemented", EXPFILL } \
     }, \
     { & name .ei.hs_ciphersuite_undecoded, \
         { prefix ".handshake.ciphersuite.undecoded", PI_UNDECODED, PI_NOTE, \
-        "Ciphersuite not implemented, contact Wireshark developers if you want this to be supported", EXPFILL } \
+        "Ciphersuite not implemented", EXPFILL } \
     }, \
     { & name .ei.hs_srv_keyex_illegal, \
         { prefix ".handshake.server_keyex_illegal", PI_PROTOCOL, PI_WARN, \

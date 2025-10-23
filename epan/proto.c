@@ -33,6 +33,7 @@
 #endif
 
 #include <ftypes/ftypes.h>
+#include <ftypes/ftypes-int.h>
 
 #include <epan/packet.h>
 #include "exceptions.h"
@@ -215,7 +216,7 @@ struct ptvcursor {
 			   so only report if different... */ \
 			if ((start_values[m].value == current->value) && \
 			    (strcmp(start_values[m].strptr, current->strptr) != 0)) { \
-				ws_warning("Field '%s' (%s) has a conflicting entry in its" \
+				ws_error("Field '%s' (%s) has a conflicting entry in its" \
 					  " value_string: %" spec " is at indices %u (%s) and %u (%s)", \
 					  hfinfo->name, hfinfo->abbrev, \
 					  current->value, m, start_values[m].strptr, n, current->strptr); \
@@ -12483,11 +12484,7 @@ construct_match_selected_string(const field_info *finfo, epan_dissect_t *edt,
 				char **filter)
 {
 	const header_field_info *hfinfo;
-	char		  *ptr;
-	int		   buf_len;
-	int		   i;
 	int		   start, length, length_remaining;
-	uint8_t		   c;
 
 	if (!finfo)
 		return false;
@@ -12603,22 +12600,9 @@ construct_match_selected_string(const field_info *finfo, epan_dissect_t *edt,
 
 			if (filter != NULL) {
 				start = finfo->start;
-				buf_len = 32 + length * 3;
-				*filter = (char *)wmem_alloc0(NULL, buf_len);
-				ptr = *filter;
-
-				ptr += snprintf(ptr, buf_len-(ptr-*filter),
-					"frame[%d:%d] == ", finfo->start, length);
-				for (i=0; i<length; i++) {
-					c = tvb_get_uint8(finfo->ds_tvb, start);
-					start++;
-					if (i == 0 ) {
-						ptr += snprintf(ptr, buf_len-(ptr-*filter), "%02x", c);
-					}
-					else {
-						ptr += snprintf(ptr, buf_len-(ptr-*filter), ":%02x", c);
-					}
-				}
+				char *str = bytes_to_dfilter_repr(NULL, tvb_get_ptr(finfo->ds_tvb, start, length), length);
+				*filter = wmem_strdup_printf(NULL, "frame[%d:%d] == %s", finfo->start, length, str);
+				wmem_free(NULL, str);
 			}
 			break;
 
