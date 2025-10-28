@@ -85,7 +85,7 @@ DIAG_ON(frame-larger-than=)
 #include "ui/software_update.h"
 #endif
 
-#include "about_dialog.h"
+#include "stratoshark_about_dialog.h"
 #include "capture_file_dialog.h"
 #include "capture_file_properties_dialog.h"
 #ifdef HAVE_LIBPCAP
@@ -108,7 +108,7 @@ DIAG_ON(frame-larger-than=)
 #include "filter_action.h"
 #include "filter_dialog.h"
 #include "follow_stream_action.h"
-#include "follow_stream_dialog.h"
+#include "stratoshark_follow_stream_dialog.h"
 #include "funnel_statistics.h"
 #include "interface_toolbar.h"
 #include "io_graph_dialog.h"
@@ -2848,7 +2848,7 @@ void StratosharkMainWindow::showCaptureOptionsDialog()
         connect(capture_options_dialog_, &CaptureOptionsDialog::showExtcapOptions,
                 this, &StratosharkMainWindow::showExtcapOptionsDialog);
     }
-    capture_options_dialog_->updateInterfaces();
+    capture_options_dialog_->updateInterfaces(&global_capture_opts);
 
     if (capture_options_dialog_->isMinimized()) {
         capture_options_dialog_->showNormal();
@@ -3040,7 +3040,7 @@ void StratosharkMainWindow::applyConversationFilter()
 }
 
 void StratosharkMainWindow::openFollowStreamDialog(int proto_id, unsigned stream_num, unsigned sub_stream_num, bool use_stream_index) {
-    FollowStreamDialog *fsd = new FollowStreamDialog(*this, capture_file_, proto_id);
+    FollowStreamDialog *fsd = new StratosharkFollowStreamDialog(*this, capture_file_, proto_id);
     connect(fsd, &FollowStreamDialog::updateFilter, this, &StratosharkMainWindow::filterPackets);
     connect(fsd, &FollowStreamDialog::goToPacket, this, [=](int packet_num) {packet_list_->goToPacket(packet_num);});
     fsd->addCodecs(text_codec_map_);
@@ -3231,7 +3231,7 @@ void StratosharkMainWindow::connectToolsMenuActions()
 void StratosharkMainWindow::connectHelpMenuActions()
 {
     connect(main_ui_->actionHelpAbout, &QAction::triggered, this, [=]() {
-        AboutDialog *about_dialog = new AboutDialog(this);
+        StratosharkAboutDialog* about_dialog = new StratosharkAboutDialog(this);
 
         if (about_dialog->isMinimized() == true)
         {
