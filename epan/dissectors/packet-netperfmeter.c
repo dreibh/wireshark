@@ -558,16 +558,21 @@ dissect_npm(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 static bool
 dissect_npm_heur(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 {
-  const unsigned length = tvb_captured_length(message_tvb);
-  if (length < 4)
+  const unsigned capturedLength = tvb_captured_length(message_tvb);
+  if (capturedLength < 4)
     return false;
 
-  /* For TCP, UDP or DCCP:
-      Type must either be NETPERFMETER_DATA or NETPERFMETER_IDENTIFY_FLOW */
-  const uint8_t type = tvb_get_uint8(message_tvb, 0);
+  /* For NetPerfMeter Data traffic:
+     * Type must either be NETPERFMETER_DATA or NETPERFMETER_IDENTIFY_FLOW
+     * Size for NETPERFMETER_DATA is variable.
+     For NetPerfMeter Control traffic:
+     * Size except for NETPERFMETER_ADD_FLOW and NETPERFMETER_RESULTS is fixed for each type.
+  */
+  const uint8_t  type   = tvb_get_uint8(message_tvb, 0);
+  const uint16_t length = tvb_get_ntohs(message_tvb, 2);
   switch(type) {
     case NETPERFMETER_DATA:
-      if (length < 48 + 8)
+      if ((length < 56) || (length > capturedLength))
         return false;
       /* Identify NetPerfMeter flow by payload pattern */
       for(int i = 0; i < 8; i++) {
@@ -577,12 +582,33 @@ dissect_npm_heur(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree, vo
       }
       break;
     case NETPERFMETER_IDENTIFY_FLOW:
-      if (length < 24 + 2)
+      if ((length < 26) || (length > capturedLength))
         return false;
       if (tvb_get_ntoh64(message_tvb, 8) != NETPERFMETER_IDENTIFY_FLOW_MAGIC_NUMBER) {
         /* Identify NetPerfMeter flow by NETPERFMETER_IDENTIFY_FLOW_MAGIC_NUMBER */
         return false;
       }
+      break;
+    case NETPERFMETER_ACKNOWLEDGE:
+      if ((length < 24) || (length > capturedLength))
+        return false;
+      break;
+    case NETPERFMETER_ADD_FLOW:
+      if ((length < 194) || (length > capturedLength))
+        return false;
+      break;
+    case NETPERFMETER_REMOVE_FLOW:
+      if ((length < 18) || (length > capturedLength))
+        return false;
+      break;
+    case NETPERFMETER_START:
+    case NETPERFMETER_STOP:
+      if ((length < 16) || (length > capturedLength))
+        return false;
+      break;
+    case NETPERFMETER_RESULTS:
+      if ((length < 4) || (length > capturedLength))
+        return false;
       break;
     default:
       /* Not a NetPerfMeter packet */
