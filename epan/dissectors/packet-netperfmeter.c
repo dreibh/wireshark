@@ -471,8 +471,12 @@ dissect_npm_results_message(tvbuff_t *message_tvb, proto_tree *message_tree, pro
   proto_tree_add_item(flags_tree, hf_results_flag_eof, message_tvb, 1, 1, ENC_BIG_ENDIAN);
 
   const uint16_t message_length = tvb_get_ntohs(message_tvb, 2);
+  const unsigned captured_length = tvb_captured_length(message_tvb);
+  printf("L=%d    c=%d\n", message_length, captured_length);
   if (message_length > 4) {
+    puts("-item1");
     proto_tree_add_item(message_tree, hf_results_data, message_tvb, 4, message_length - 4, ENC_NA);
+    puts("-item2");
   }
 }
 
@@ -485,6 +489,14 @@ dissect_npm_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree,
   proto_tree     *npm_tree;
   const uint8_t  type   = tvb_get_uint8(message_tvb, 0);
   const uint16_t length = tvb_get_ntohs(message_tvb, 2);
+  const unsigned captured_length = tvb_captured_length(message_tvb);
+  printf("M-start %d capt=%d\n", length, captured_length);
+  if(captured_length < length) {
+    printf("    TOO SHORT   T=%d\n!", type);
+    pinfo->desegment_len = length - captured_length;
+    printf("pinfo->desegment_len = %d\n", pinfo->desegment_len);
+    return captured_length;
+  }
 
   tap_npm_rec_t* tap_rec = wmem_new0(pinfo->pool, tap_npm_rec_t);
   tap_rec->type        = type;
@@ -508,6 +520,7 @@ dissect_npm_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree,
   flags_tree = proto_tree_add_item(npm_tree, hf_message_flags,  message_tvb, 1, 1, ENC_BIG_ENDIAN);
   proto_tree_add_item(npm_tree, hf_message_length, message_tvb, 2, 2, ENC_BIG_ENDIAN);
 
+  printf("M TYPE=%d\n", tap_rec->type);
   switch (tap_rec->type) {
     case NETPERFMETER_ACKNOWLEDGE:
       dissect_npm_acknowledge_message(message_tvb, npm_tree);
@@ -531,17 +544,24 @@ dissect_npm_message(tvbuff_t *message_tvb, packet_info *pinfo, proto_tree *tree,
       dissect_npm_stop_message(message_tvb, npm_tree);
      break;
     case NETPERFMETER_RESULTS:
+      puts("R-1");
       dissect_npm_results_message(message_tvb, npm_tree, flags_tree);
+      puts("R-2");
      break;
   }
-  return length;
+  printf("M-RET=%d\n", captured_length);
+  puts("----------");
+  return captured_length;
 }
 
 static unsigned
 get_npm_message_length(packet_info *pinfo _U_, tvbuff_t *tvb,
-                       int offset _U_, void *data _U_)
+                       int offset, void *data _U_)
 {
-   return tvb_get_ntohs(tvb, 2);
+   const uint8_t  type   = tvb_get_uint8(tvb, offset + 0);
+   const uint16_t length = tvb_get_ntohs(tvb, offset + 2);
+   printf("  ---> T=%d L=%d    offset=%d\n", type, length, offset);
+   return length;
 }
 
 static int
