@@ -1143,7 +1143,7 @@ main(int argc, char *argv[])
     cmdarg_err_init(stderr_cmdarg_err, stderr_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init(vcmdarg_err);
+    ws_log_init(vcmdarg_err, "TShark Debug Console");
 
     /* Early logging command-line initialization. */
     ws_log_parse_args(&argc, argv, optstring, long_options, vcmdarg_err, WS_EXIT_INVALID_OPTION);
@@ -1168,7 +1168,7 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    err_msg = configuration_init(argv[0]);
+    err_msg = configuration_init(argv[0], "wireshark");
     if (err_msg != NULL) {
         fprintf(stderr,
                 "tshark: Can't get pathname of directory containing the tshark program: %s.\n"
@@ -1189,7 +1189,7 @@ main(int argc, char *argv[])
 #endif /* _WIN32 */
 
     /* Initialize the version information. */
-    ws_init_version_info("TShark",
+    ws_init_version_info("TShark", application_flavor_name_proper(), get_ws_vcs_version_info,
             gather_tshark_compile_info, gather_tshark_runtime_info);
 
     /* Fail sometimes. Useful for testing fuzz scripts. */

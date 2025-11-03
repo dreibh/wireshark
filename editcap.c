@@ -1465,7 +1465,7 @@ main(int argc, char *argv[])
     memset(&read_rec, 0, sizeof read_rec);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init(vcmdarg_err);
+    ws_log_init(vcmdarg_err, "Editcap Debug Console");
 
     /* Early logging command-line initialization. */
     ws_log_parse_args(&argc, argv, optstring, long_options, vcmdarg_err, WS_EXIT_INVALID_OPTION);
@@ -1485,7 +1485,7 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    configuration_init_error = configuration_init(argv[0]);
+    configuration_init_error = configuration_init(argv[0], "wireshark");
     if (configuration_init_error != NULL) {
         cmdarg_err("Can't get pathname of directory containing the editcap program: %s.",
                 configuration_init_error);
@@ -1493,7 +1493,7 @@ main(int argc, char *argv[])
     }
 
     /* Initialize the version information. */
-    ws_init_version_info("Editcap", NULL, NULL);
+    ws_init_version_info("Editcap", NULL, get_ws_vcs_version_info, NULL, NULL);
 
     init_report_failure_message("editcap");
 

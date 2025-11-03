@@ -1621,7 +1621,7 @@ typedef struct {
     mod_compr_params_t mod_comp_params;
 } flow_state_t;
 
-section_mod_compr_config_t* get_mod_compr_section_to_write(flow_state_t *flow,
+static section_mod_compr_config_t* get_mod_compr_section_to_write(flow_state_t *flow,
                                                            unsigned sectionId)
 {
     if (flow == NULL) {
@@ -1646,7 +1646,7 @@ section_mod_compr_config_t* get_mod_compr_section_to_write(flow_state_t *flow,
     }
 }
 
-section_mod_compr_config_t* get_mod_compr_section_to_read(flow_state_t *flow,
+static section_mod_compr_config_t* get_mod_compr_section_to_read(flow_state_t *flow,
                                                            unsigned sectionId)
 {
     if (flow == NULL) {
@@ -2012,7 +2012,7 @@ static int dissect_active_beamspace_coefficient_mask(tvbuff_t *tvb, proto_tree *
     };
 
     *num_trx_entries = 0;
-    guint64 val;
+    uint64_t val;
     for (unsigned n=0; n < k_octets; n++) {
         proto_tree_add_bitmask_ret_uint64(tree, tvb, offset,
                                           hf_oran_activeBeamspaceCoefficientMask,

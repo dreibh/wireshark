@@ -41,7 +41,7 @@
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
 #include "file_wrappers.h"
-#include "wtap-int.h"
+#include "wtap_module.h"
 
 static const uint8_t blf_magic[] = { 'L', 'O', 'G', 'G' };
 static const uint8_t blf_obj_magic[] = { 'L', 'O', 'B', 'J' };
@@ -3036,7 +3036,7 @@ blf_parse_xml_port(const xmlChar* str, char** name, uint16_t* hwchannel, bool* s
 
     if (str == NULL) return false;
 
-    char** tokens = g_strsplit_set((const gchar*)str, ";", -1);
+    char** tokens = g_strsplit_set((const char*)str, ";", -1);
     if (tokens == NULL) {
         ws_debug("cannot split XML port data");
         return false;

@@ -184,7 +184,7 @@ static void
 wireshark_cmdarg_err(const char *fmt, va_list ap)
 {
 #ifdef _WIN32
-    create_console();
+    create_console("Wireshark Debug Console");
 #endif
     fprintf(stderr, "wireshark: ");
     vfprintf(stderr, fmt, ap);
@@ -200,7 +200,7 @@ static void
 wireshark_cmdarg_err_cont(const char *fmt, va_list ap)
 {
 #ifdef _WIN32
-    create_console();
+    create_console("Wireshark Debug Console");
 #endif
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
@@ -527,7 +527,7 @@ int main(int argc, char *qt_argv[])
     cmdarg_err_init(wireshark_cmdarg_err, wireshark_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init(vcmdarg_err);
+    ws_log_init(vcmdarg_err, "Wireshark Debug Console");
     /* For backward compatibility with GLib logging and Wireshark 3.4. */
     ws_log_console_writer_set_use_stdout(true);
 
@@ -599,7 +599,7 @@ int main(int argc, char *qt_argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    /* configuration_init_error = */ configuration_init(argv[0]);
+    /* configuration_init_error = */ configuration_init(argv[0], "wireshark");
     /* ws_log(NULL, LOG_LEVEL_DEBUG, "progfile_dir: %s", get_progfile_dir()); */
 
 #ifdef _WIN32
@@ -610,7 +610,7 @@ int main(int argc, char *qt_argv[])
 #endif /* _WIN32 */
 
     /* Get the compile-time version information string */
-    ws_init_version_info("Wireshark", gather_wireshark_qt_compiled_info,
+    ws_init_version_info("Wireshark", application_flavor_name_proper(), get_ws_vcs_version_info, gather_wireshark_qt_compiled_info,
                          gather_wireshark_runtime_info);
 
     init_report_alert_box("Wireshark");
@@ -898,7 +898,7 @@ int main(int argc, char *qt_argv[])
         unsigned i;
 
 #ifdef _WIN32
-        create_console();
+        create_console("Wireshark Debug Console");
 #endif /* _WIN32 */
         /* Get the list of link-layer types for the capture devices. */
         ret_val = EXIT_SUCCESS;

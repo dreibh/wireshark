@@ -5294,7 +5294,7 @@ main(int argc, char *argv[])
     cmdarg_err_init(dumpcap_cmdarg_err, dumpcap_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init_with_writer(dumpcap_log_writer, vcmdarg_err);
+    ws_log_init_with_writer(dumpcap_log_writer, vcmdarg_err, "Dumpcap Debug Console");
 
 #ifdef _WIN32
     /* If running as a capture child, under no circumstances attempt to wait
@@ -5337,7 +5337,7 @@ main(int argc, char *argv[])
 #endif
 
     /* Initialize the version information. */
-    ws_init_version_info("Dumpcap", gather_dumpcap_compiled_info,
+    ws_init_version_info("Dumpcap", NULL, get_ws_vcs_version_info, gather_dumpcap_compiled_info,
                          gather_dumpcap_runtime_info);
 
     /* Initialize the pcaps list and IDBs */

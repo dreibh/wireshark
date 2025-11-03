@@ -166,7 +166,7 @@ static void
 stratoshark_cmdarg_err(const char *fmt, va_list ap)
 {
 #ifdef _WIN32
-    create_console();
+    create_console("Stratoshark Debug Console");
 #endif
     fprintf(stderr, "stratoshark: ");
     vfprintf(stderr, fmt, ap);
@@ -182,7 +182,7 @@ static void
 stratoshark_cmdarg_err_cont(const char *fmt, va_list ap)
 {
 #ifdef _WIN32
-    create_console();
+    create_console("Stratoshark Debug Console");
 #endif
     vfprintf(stderr, fmt, ap);
     fprintf(stderr, "\n");
@@ -470,7 +470,7 @@ int main(int argc, char *qt_argv[])
     cmdarg_err_init(stratoshark_cmdarg_err, stratoshark_cmdarg_err_cont);
 
     /* Initialize log handler early so we can have proper logging during startup. */
-    ws_log_init(vcmdarg_err);
+    ws_log_init(vcmdarg_err, "Stratoshark Debug Console");
     /* For backward compatibility with GLib logging and Wireshark 3.4. */
     ws_log_console_writer_set_use_stdout(true);
 
@@ -540,7 +540,7 @@ int main(int argc, char *qt_argv[])
      * executable file.
      */
     set_application_flavor(APPLICATION_FLAVOR_STRATOSHARK);
-    /* configuration_init_error = */ configuration_init(argv[0]);
+    /* configuration_init_error = */ configuration_init(argv[0], "stratoshark");
     /* ws_log(NULL, LOG_LEVEL_DEBUG, "progfile_dir: %s", get_progfile_dir()); */
 
 #ifdef _WIN32
@@ -551,7 +551,7 @@ int main(int argc, char *qt_argv[])
 #endif /* _WIN32 */
 
     /* Get the compile-time version information string */
-    ws_init_version_info("Stratoshark", gather_wireshark_qt_compiled_info,
+    ws_init_version_info("Stratoshark", application_flavor_name_proper(), get_ss_vcs_version_info, gather_wireshark_qt_compiled_info,
                          gather_wireshark_runtime_info);
 
     init_report_alert_box("Stratoshark");
@@ -819,7 +819,7 @@ int main(int argc, char *qt_argv[])
         unsigned i;
 
 #ifdef _WIN32
-        create_console();
+        create_console("Stratoshark Debug Console");
 #endif /* _WIN32 */
         /* Get the list of link-layer types for the capture devices. */
         ret_val = EXIT_SUCCESS;

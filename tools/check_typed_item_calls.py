@@ -640,7 +640,10 @@ known_non_contiguous_fields = { 'wlan.fixed.capabilities.cfpoll.sta',
                                 'hf_h223_mux_mpl',
                                 'rdp.flags.pkt',
                                 'erf.flags.if_raw',  # confirmed by Stephen Donnelly
-                                'oran_fh_cus.sReSMask'
+                                'oran_fh_cus.sReSMask',
+                                'ttl.trace_data.entry.status_info.can_flags',
+                                'ttl.trace_data.entry.status_info.fr_flags',
+                                'ttl.trace_data.entry.status_info.fr_pulse_flags'
                               }
 ##################################################################################################
 
@@ -1812,12 +1815,14 @@ class Item:
     # An item that appears in a bitmask set, needs to have a non-zero mask.
     def check_mask_if_in_field_array(self, mask, field_arrays):
         # Work out if this item appears in a field array
+        found = False
         for arr in field_arrays:
             list = field_arrays[arr][0]
             if self.hf in list:
                 # These need to have a mask - don't judge for being 0
+                found = True
                 break
-        else:
+        if found:
             # It needs to have a non-zero mask.
             if self.mask_read and self.mask_value == 0:
                 print('Error:', self.filename, self.hf, 'is in fields array', arr, 'but has a zero mask - this is not allowed')
