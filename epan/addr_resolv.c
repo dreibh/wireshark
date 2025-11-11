@@ -1001,7 +1001,7 @@ serv_name_lookup(port_type proto, unsigned port)
 }
 
 static void
-initialize_services(void)
+initialize_services(const char* app_env_var_prefix)
 {
     ws_assert(serv_port_hashtable == NULL);
     serv_port_hashtable = wmem_map_new(addr_resolv_scope, serv_port_custom_hash, serv_port_custom_equal);
@@ -1010,17 +1010,17 @@ initialize_services(void)
 
     /* Compute the pathname of the global services file. */
     if (g_services_path == NULL) {
-        g_services_path = get_datafile_path(ENAME_SERVICES);
+        g_services_path = get_datafile_path(ENAME_SERVICES, app_env_var_prefix);
     }
     parse_services_file(g_services_path);
 
     /* Compute the pathname of the personal services file */
     if (g_pservices_path == NULL) {
         /* Check profile directory before personal configuration */
-        g_pservices_path = get_persconffile_path(ENAME_SERVICES, true);
+        g_pservices_path = get_persconffile_path(ENAME_SERVICES, true, app_env_var_prefix);
         if (!parse_services_file(g_pservices_path)) {
             g_free(g_pservices_path);
-            g_pservices_path = get_persconffile_path(ENAME_SERVICES, false);
+            g_pservices_path = get_persconffile_path(ENAME_SERVICES, false, app_env_var_prefix);
             parse_services_file(g_pservices_path);
         }
     }
@@ -1088,23 +1088,23 @@ parse_enterprises_file(const char * path)
 }
 
 static void
-initialize_enterprises(void)
+initialize_enterprises(const char* app_env_var_prefix)
 {
     ws_assert(enterprises_hashtable == NULL);
     enterprises_hashtable = g_hash_table_new_full(NULL, NULL, NULL, g_free);
 
     if (g_enterprises_path == NULL) {
-        g_enterprises_path = get_datafile_path(ENAME_ENTERPRISES);
+        g_enterprises_path = get_datafile_path(ENAME_ENTERPRISES, app_env_var_prefix);
     }
     parse_enterprises_file(g_enterprises_path);
 
     /* Populate entries from profile or personal */
     if (g_penterprises_path == NULL) {
         /* Check profile directory before personal configuration */
-        g_penterprises_path = get_persconffile_path(ENAME_ENTERPRISES, true);
+        g_penterprises_path = get_persconffile_path(ENAME_ENTERPRISES, true, app_env_var_prefix);
         if (!file_exists(g_penterprises_path)) {
             g_free(g_penterprises_path);
-            g_penterprises_path = get_persconffile_path(ENAME_ENTERPRISES, false);
+            g_penterprises_path = get_persconffile_path(ENAME_ENTERPRISES, false, app_env_var_prefix);
         }
     }
     /* Parse personal file (if present) */
@@ -1970,7 +1970,7 @@ eui64_addr_cmp(const void *a, const void *b)
 }
 
 static void
-initialize_ethers(void)
+initialize_ethers(const char* app_env_var_prefix)
 {
     ether_t *eth;
     unsigned mask = 0;
@@ -1987,22 +1987,22 @@ initialize_ethers(void)
 
     /* Compute the pathname of the ethers file. */
     if (g_ethers_path == NULL) {
-        g_ethers_path = g_build_filename(get_systemfile_dir(), ENAME_ETHERS, NULL);
+        g_ethers_path = g_build_filename(get_systemfile_dir(app_env_var_prefix), ENAME_ETHERS, NULL);
     }
 
     /* Compute the pathname of the personal ethers file. */
     if (g_pethers_path == NULL) {
         /* Check profile directory before personal configuration */
-        g_pethers_path = get_persconffile_path(ENAME_ETHERS, true);
+        g_pethers_path = get_persconffile_path(ENAME_ETHERS, true, app_env_var_prefix);
         if (!file_exists(g_pethers_path)) {
             g_free(g_pethers_path);
-            g_pethers_path = get_persconffile_path(ENAME_ETHERS, false);
+            g_pethers_path = get_persconffile_path(ENAME_ETHERS, false, app_env_var_prefix);
         }
     }
 
     /* Compute the pathname of the global manuf file */
     if (g_manuf_path == NULL)
-        g_manuf_path = get_datafile_path(ENAME_MANUF);
+        g_manuf_path = get_datafile_path(ENAME_MANUF, app_env_var_prefix);
     /* Read it and initialize the hash table */
     if (file_exists(g_manuf_path)) {
         set_ethent(g_manuf_path);
@@ -2015,10 +2015,10 @@ initialize_ethers(void)
     /* Compute the pathname of the personal manuf file */
     if (g_pmanuf_path == NULL) {
         /* Check profile directory before personal configuration */
-        g_pmanuf_path = get_persconffile_path(ENAME_MANUF, true);
+        g_pmanuf_path = get_persconffile_path(ENAME_MANUF, true, app_env_var_prefix);
         if (!file_exists(g_pmanuf_path)) {
             g_free(g_pmanuf_path);
-            g_pmanuf_path = get_persconffile_path(ENAME_MANUF, false);
+            g_pmanuf_path = get_persconffile_path(ENAME_MANUF, false, app_env_var_prefix);
         }
     }
     /* Read it and initialize the hash table */
@@ -2032,7 +2032,7 @@ initialize_ethers(void)
 
     /* Compute the pathname of the wka file */
     if (g_wka_path == NULL)
-        g_wka_path = get_datafile_path(ENAME_WKA);
+        g_wka_path = get_datafile_path(ENAME_WKA, app_env_var_prefix);
 
     /* Read it and initialize the hash table */
     set_ethent(g_wka_path);
@@ -2594,7 +2594,7 @@ get_ipxnetbyaddr(uint32_t addr)
 } /* get_ipxnetbyaddr */
 
 static void
-initialize_ipxnets(void)
+initialize_ipxnets(const char* app_env_var_prefix)
 {
     /* Compute the pathname of the ipxnets file.
      *
@@ -2605,7 +2605,7 @@ initialize_ipxnets(void)
      */
     if (g_ipxnets_path == NULL) {
         g_ipxnets_path = wmem_strdup_printf(addr_resolv_scope, "%s" G_DIR_SEPARATOR_S "%s",
-                get_systemfile_dir(), ENAME_IPXNETS);
+                get_systemfile_dir(app_env_var_prefix), ENAME_IPXNETS);
     }
 
     /* Set g_pipxnets_path here, but don't actually do anything
@@ -2613,10 +2613,10 @@ initialize_ipxnets(void)
      */
     if (g_pipxnets_path == NULL) {
         /* Check profile directory before personal configuration */
-        g_pipxnets_path = get_persconffile_path(ENAME_IPXNETS, true);
+        g_pipxnets_path = get_persconffile_path(ENAME_IPXNETS, true, app_env_var_prefix);
         if (!file_exists(g_pipxnets_path)) {
             g_free(g_pipxnets_path);
-            g_pipxnets_path = get_persconffile_path(ENAME_IPXNETS, false);
+            g_pipxnets_path = get_persconffile_path(ENAME_IPXNETS, false, app_env_var_prefix);
         }
     }
 
@@ -2748,7 +2748,7 @@ get_vlannamebyid(uint16_t id)
 } /* get_vlannamebyid */
 
 static void
-initialize_vlans(void)
+initialize_vlans(const char* app_env_var_prefix)
 {
     ws_assert(vlan_hash_table == NULL);
     vlan_hash_table = wmem_map_new(addr_resolv_scope, g_direct_hash, g_direct_equal);
@@ -2758,10 +2758,10 @@ initialize_vlans(void)
      */
     if (g_pvlan_path == NULL) {
         /* Check profile directory before personal configuration */
-        g_pvlan_path = get_persconffile_path(ENAME_VLANS, true);
+        g_pvlan_path = get_persconffile_path(ENAME_VLANS, true, app_env_var_prefix);
         if (!file_exists(g_pvlan_path)) {
             g_free(g_pvlan_path);
-            g_pvlan_path = get_persconffile_path(ENAME_VLANS, false);
+            g_pvlan_path = get_persconffile_path(ENAME_VLANS, false, app_env_var_prefix);
         }
     }
 } /* initialize_vlans */
@@ -3155,7 +3155,7 @@ subnet_entry_set(uint32_t subnet_addr, const uint8_t mask_length, const char* na
 }
 
 static void
-subnet_name_lookup_init(void)
+subnet_name_lookup_init(const char* app_env_var_prefix)
 {
     char* subnetspath;
     uint32_t i;
@@ -3169,14 +3169,14 @@ subnet_name_lookup_init(void)
     }
 
     /* Check profile directory before personal configuration */
-    subnetspath = get_persconffile_path(ENAME_SUBNETS, true);
+    subnetspath = get_persconffile_path(ENAME_SUBNETS, true, app_env_var_prefix);
     if (!read_subnets_file(subnetspath)) {
         if (errno != ENOENT) {
             report_open_failure(subnetspath, errno, false);
         }
 
         g_free(subnetspath);
-        subnetspath = get_persconffile_path(ENAME_SUBNETS, false);
+        subnetspath = get_persconffile_path(ENAME_SUBNETS, false, app_env_var_prefix);
         if (!read_subnets_file(subnetspath) && errno != ENOENT) {
             report_open_failure(subnetspath, errno, false);
         }
@@ -3186,7 +3186,7 @@ subnet_name_lookup_init(void)
     /*
      * Load the global subnets file, if we have one.
      */
-    subnetspath = get_datafile_path(ENAME_SUBNETS);
+    subnetspath = get_datafile_path(ENAME_SUBNETS, app_env_var_prefix);
     if (!read_subnets_file(subnetspath) && errno != ENOENT) {
         report_open_failure(subnetspath, errno, false);
     }
@@ -3315,7 +3315,7 @@ read_ss7pcs_file(const char *ss7pcspath)
 }
 
 static void
-ss7pc_name_lookup_init(void)
+ss7pc_name_lookup_init(const char* app_env_var_prefix)
 {
     char *ss7pcspath;
 
@@ -3326,7 +3326,7 @@ ss7pc_name_lookup_init(void)
     /*
      * Load the user's ss7pcs file
      */
-    ss7pcspath = get_persconffile_path(ENAME_SS7PCS, true);
+    ss7pcspath = get_persconffile_path(ENAME_SS7PCS, true, app_env_var_prefix);
     if (!read_ss7pcs_file(ss7pcspath) && errno != ENOENT) {
         report_open_failure(ss7pcspath, errno, false);
     }
@@ -3664,7 +3664,7 @@ add_manually_resolved(void)
 }
 
 static void
-host_name_lookup_init(void)
+host_name_lookup_init(const char* app_env_var_prefix)
 {
     char *hostspath;
     unsigned i;
@@ -3697,7 +3697,7 @@ host_name_lookup_init(void)
     /*
      * Load the global hosts file, if we have one.
      */
-    hostspath = get_datafile_path(ENAME_HOSTS);
+    hostspath = get_datafile_path(ENAME_HOSTS, app_env_var_prefix);
     if (!read_hosts_file(hostspath, true) && errno != ENOENT) {
         report_open_failure(hostspath, errno, false);
     }
@@ -3705,7 +3705,7 @@ host_name_lookup_init(void)
     /*
      * Load the user's hosts file no matter what, if they have one.
      */
-    hostspath = get_persconffile_path(ENAME_HOSTS, true);
+    hostspath = get_persconffile_path(ENAME_HOSTS, true, app_env_var_prefix);
     if (!read_hosts_file(hostspath, true) && errno != ENOENT) {
         report_open_failure(hostspath, errno, false);
     }
@@ -3728,11 +3728,11 @@ host_name_lookup_init(void)
         }
     }
 
-    subnet_name_lookup_init();
+    subnet_name_lookup_init(app_env_var_prefix);
 
     add_manually_resolved();
 
-    ss7pc_name_lookup_init();
+    ss7pc_name_lookup_init(app_env_var_prefix);
 }
 
 static void
@@ -3767,10 +3767,10 @@ host_name_lookup_cleanup(void)
 }
 
 
-void host_name_lookup_reset(void)
+void host_name_lookup_reset(const char* app_env_var_prefix)
 {
     addr_resolv_cleanup();
-    addr_resolv_init();
+    addr_resolv_init(app_env_var_prefix);
 }
 
 char *
@@ -4236,16 +4236,16 @@ get_ipv6_hash_table(void)
 }
 /* Initialize all the address resolution subsystems in this file */
 void
-addr_resolv_init(void)
+addr_resolv_init(const char* app_env_var_prefix)
 {
     ws_assert(addr_resolv_scope == NULL);
     addr_resolv_scope = wmem_allocator_new(WMEM_ALLOCATOR_BLOCK);
-    initialize_services();
-    initialize_ethers();
-    initialize_ipxnets();
-    initialize_vlans();
-    initialize_enterprises();
-    host_name_lookup_init();
+    initialize_services(app_env_var_prefix);
+    initialize_ethers(app_env_var_prefix);
+    initialize_ipxnets(app_env_var_prefix);
+    initialize_vlans(app_env_var_prefix);
+    initialize_enterprises(app_env_var_prefix);
+    host_name_lookup_init(app_env_var_prefix);
 }
 
 /* Clean up all the address resolution subsystems in this file */

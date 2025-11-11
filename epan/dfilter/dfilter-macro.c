@@ -502,9 +502,9 @@ dfilter_macro_t *macro_new(const char *name, const char *text) {
 	return m;
 }
 
-void dfilter_macro_init(void) {
+void dfilter_macro_init(const char* app_env_var_prefix) {
 	macros_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, (GDestroyNotify)macro_free);
-	dfilter_macro_reload();
+	dfilter_macro_reload(app_env_var_prefix);
 }
 
 static bool check_macro(const char *name, const char *text, const char **errp)
@@ -530,16 +530,16 @@ static bool check_macro(const char *name, const char *text, const char **errp)
 	return true;
 }
 
-void dfilter_macro_reload(void) {
+void dfilter_macro_reload(const char* app_env_var_prefix) {
 
 	/* Check if we need to convert an old dfilter_macro configuration file.
 	 * We do so only if a new one doesn't exist. We need to do this check
 	 * for every reload because the configuration profile might have changed. */
-	convert_old_uat_file();
+	convert_old_uat_file(app_env_var_prefix);
 
 	g_hash_table_remove_all(macros_table);
 
-	filter_list_t *list = ws_filter_list_read(DMACROS_LIST);
+	filter_list_t *list = ws_filter_list_read(DMACROS_LIST, app_env_var_prefix);
 	const char *err;
 
 	for (GList *l = list->list; l != NULL; l = l->next) {
@@ -677,7 +677,7 @@ dfilter_macro_table_iter_next(struct dfilter_macro_table_iter *iter,
 	const char *key;
 	dfilter_macro_t *m;
 
-	if (!g_hash_table_iter_next(&iter->iter, (gpointer *)&key, (gpointer *)&m))
+	if (!g_hash_table_iter_next(&iter->iter, (void **)&key, (void **)&m))
 		return false;
 	if (name_ptr)
 		*name_ptr = key;

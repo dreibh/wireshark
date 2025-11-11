@@ -31,6 +31,7 @@
 #include <wsutil/wslog.h>
 #include <wsutil/version_info.h>
 #include <wsutil/report_message.h>
+#include <wsutil/application_flavor.h>
 #include <wiretap/wtap_opttypes.h>
 
 #include <epan/decode_as.h>
@@ -142,6 +143,12 @@ main(int argc, char *argv[])
     char                *err_msg = NULL;
     e_prefs             *prefs_p;
     int                  ret = EXIT_SUCCESS;
+    const struct file_extension_info* file_extensions;
+    unsigned num_extensions;
+    epan_app_data_t app_data;
+
+    /* Future proof by zeroing out all data */
+    memset(&app_data, 0, sizeof(app_data));
 
     /* Set the program name. */
     g_set_prgname("sharkd");
@@ -197,23 +204,28 @@ main(int argc, char *argv[])
      * dissection-time handlers for file-type-dependent blocks can
      * register using the file type/subtype value for the file type.
      */
-    wtap_init(true);
+    application_file_extensions(&file_extensions, &num_extensions);
+    wtap_init(true, application_configuration_environment_prefix(), file_extensions, num_extensions);
 
     /* Register all dissectors; we must do this before checking for the
        "-G" flag, as the "-G" flag dumps information registered by the
        dissectors, and we must do it before we read the preferences, in
        case any dissectors register preferences. */
-    if (!epan_init(NULL, NULL, true)) {
+    app_data.env_var_prefix = application_configuration_environment_prefix();
+    app_data.col_fmt = application_columns();
+    app_data.num_cols = application_num_columns();
+    app_data.supports_packets = application_flavor_is_wireshark();
+    if (!epan_init(NULL, NULL, true, &app_data)) {
         ret = SHARKD_EPAN_INIT_FAIL;
         goto clean_exit;
     }
 
-    codecs_init();
+    codecs_init(application_configuration_environment_prefix());
 
     /* Load libwireshark settings from the current profile. */
     prefs_p = epan_load_settings();
 
-    if (!color_filters_init(&err_msg, NULL)) {
+    if (!color_filters_init(&err_msg, NULL, application_configuration_environment_prefix())) {
         fprintf(stderr, "%s\n", err_msg);
         g_free(err_msg);
     }
@@ -421,7 +433,7 @@ cf_open(capture_file *cf, const char *fname, unsigned int type, bool is_tempfile
     wtap  *wth;
     char *err_info;
 
-    wth = wtap_open_offline(fname, type, err, &err_info, true);
+    wth = wtap_open_offline(fname, type, err, &err_info, true, application_configuration_environment_prefix());
     if (wth == NULL)
         goto fail;
 

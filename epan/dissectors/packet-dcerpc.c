@@ -867,9 +867,8 @@ decode_dcerpc_reset_all(void)
     }
 }
 
-
-void
-decode_dcerpc_add_show_list(decode_add_show_list_func func, void *user_data)
+static void
+decode_dcerpc_add_show_list(decode_as_add_changed_list_func func, void *user_data)
 {
     g_slist_foreach(decode_dcerpc_bindings, func, user_data);
 }
@@ -940,11 +939,12 @@ decode_dcerpc_add_to_list(void *key, void *value, void *user_data)
 {
     struct dcerpc_decode_as_populate* populate = (struct dcerpc_decode_as_populate*)user_data;
 
-    /*guid_key *k = key;*/
+    /* Make it more obvious the the key type is a guid_key */
+    guid_key *k = key;
     dcerpc_uuid_value *v = (dcerpc_uuid_value *)value;
 
     if (strcmp(v->name, "(none)"))
-        populate->add_to_list("DCE-RPC", v->name, key, populate->ui_element);
+        populate->add_to_list("DCE-RPC", v->name, k, populate->ui_element);
 }
 
 static void
@@ -1017,8 +1017,8 @@ dcerpc_decode_as_change(const char *name, const void *pattern, const void *handl
     decode_dcerpc_bind_values_t *stored_binding;
     const guid_key     *key = (const guid_key *)handle;
 
-    /* remove a probably existing old binding */
-    decode_dcerpc_binding_reset(name, binding);
+    if (binding == NULL)
+        return false;
 
     /*
      * Clone the new binding, update the changing parts, and append it
@@ -1031,6 +1031,9 @@ dcerpc_decode_as_change(const char *name, const void *pattern, const void *handl
     stored_binding->ifname = g_string_new(list_name);
     stored_binding->uuid = key->guid;
     stored_binding->ver = key->ver;
+
+    /* remove a probably existing old binding */
+    decode_dcerpc_binding_reset(name, binding);
 
     decode_dcerpc_bindings = g_slist_append (decode_dcerpc_bindings, stored_binding);
 
@@ -1545,16 +1548,7 @@ dissect_dcerpc_guid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
              */
             reported_length -= dissector_data->auth_info->auth_pad_len;
 
-            /*
-             * If that exceeds the actual amount of data in
-             * the tvbuff (which means we have at least one
-             * byte of authentication padding in the tvbuff),
-             * trim the actual amount.
-             */
-            if (length > reported_length)
-                length = reported_length;
-
-            stub_tvb = tvb_new_subset_length_caplen(tvb, 0, length, reported_length);
+            stub_tvb = tvb_new_subset_length(tvb, 0, reported_length);
             auth_pad_len = dissector_data->auth_info->auth_pad_len;
             auth_pad_offset = reported_length;
         } else {
@@ -1626,7 +1620,7 @@ dissect_dcerpc_guid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
                                         length, plurality(length, "", "s"));
             }
 
-            payload_tvb = tvb_new_subset_length_caplen(stub_tvb, 0, length, length);
+            payload_tvb = tvb_new_subset_length(stub_tvb, 0, length);
             offset = sub_dissect(payload_tvb, 0, pinfo, sub_tree,
                             dissector_data->info, dissector_data->drep);
 
@@ -1692,7 +1686,7 @@ dcerpc_init_finalize(dissector_handle_t guid_handle, guid_key *key, dcerpc_uuid_
     uuid_type_insert(dcerpc_uuid_id, perm_key, perm_value);
 
     /* Register the GUID with the dissector table */
-    dissector_add_guid( "dcerpc.uuid", perm_key, guid_handle );
+    dissector_add_guid(DCERPC_TABLE_NAME, perm_key, guid_handle );
 
     /* add this GUID to the global name resolving */
     guids_add_guid(&perm_key->guid, proto_get_protocol_short_name(perm_value->proto));
@@ -1722,30 +1716,6 @@ dcerpc_init_uuid(int proto, int ett, e_guid_t *uuid, uint16_t ver,
 
     /* Register the GUID with the dissector table */
     guid_handle = create_dissector_handle( dissect_dcerpc_guid, proto);
-
-    dcerpc_init_finalize(guid_handle, &key, &value);
-}
-
-void
-dcerpc_init_from_handle(int proto, e_guid_t *uuid, uint16_t ver,
-                dissector_handle_t guid_handle)
-{
-    guid_key key;
-    dcerpc_uuid_value value;
-
-    key.guid = *uuid;
-    key.ver = ver;
-
-    value.proto    = find_protocol_by_id(proto);
-    value.proto_id = proto;
-    value.ett      = -1;
-    value.name     = proto_get_protocol_short_name(value.proto);
-    value.procs    = NULL;
-    value.opnum_hf = 0;
-
-    if (uuid_type_remove_if_present(dcerpc_uuid_id, &key)) {
-        guids_delete_guid(uuid);
-    }
 
     dcerpc_init_finalize(guid_handle, &key, &value);
 }
@@ -4001,10 +3971,8 @@ dissect_dcerpc_cn_auth(tvbuff_t *tvb, int stub_offset, packet_info *pinfo,
                 /*
                  * Dissect the authentication data.
                  */
-                auth_info->auth_hdr_tvb = tvb_new_subset_length_caplen(tvb, auth_offset, 8, 8);
-                auth_info->auth_tvb = tvb_new_subset_length_caplen(tvb, offset,
-                                              MIN(hdr->auth_len,tvb_reported_length_remaining(tvb, offset)),
-                                              hdr->auth_len);
+                auth_info->auth_hdr_tvb = tvb_new_subset_length(tvb, auth_offset, 8);
+                auth_info->auth_tvb = tvb_new_subset_length(tvb, offset, hdr->auth_len);
 
                 connection = find_or_create_dcerpc_connection(pinfo);
                 auth_context = find_or_create_dcerpc_auth_context(pinfo, auth_info);
@@ -4161,8 +4129,8 @@ dissect_dcerpc_cn_bind(tvbuff_t *tvb, int offset, packet_info *pinfo,
                 proto_item_append_text(iface_item, ": %s", uuid_name);
                 proto_item_append_text(ctx_item, ", %s", uuid_name);
             } else {
-                proto_tree_add_guid_format(iface_tree, hf_dcerpc_cn_bind_if_id, tvb,
-                                           offset, 16, (e_guid_t *) &if_id, "Interface UUID: %s", uuid_str);
+                proto_tree_add_guid_format_value(iface_tree, hf_dcerpc_cn_bind_if_id, tvb,
+                                           offset, 16, (e_guid_t *) &if_id, "%s", uuid_str);
                 proto_item_append_text(iface_item, ": %s", uuid_str);
                 proto_item_append_text(ctx_item, ", %s", uuid_str);
             }
@@ -4365,9 +4333,8 @@ dissect_dcerpc_cn_bind_ack(tvbuff_t *tvb, int offset, packet_info *pinfo,
             if (! uuid_name) {
                 uuid_name = guid_to_str(pinfo->pool, (e_guid_t *) &trans_id);
             }
-            proto_tree_add_guid_format(ctx_tree, hf_dcerpc_cn_ack_trans_id, tvb,
-                                       offset, 16, (e_guid_t *) &trans_id, "Transfer Syntax: %s",
-                                       uuid_name);
+            proto_tree_add_guid_format_value(ctx_tree, hf_dcerpc_cn_ack_trans_id, tvb,
+                                       offset, 16, (e_guid_t *) &trans_id, "%s", uuid_name);
             proto_item_append_text(ctx_item, " %s, %s", result_str, uuid_name);
         }
         offset += 16;
@@ -4445,7 +4412,7 @@ dissect_dcerpc_cn_stub(tvbuff_t *tvb, int offset, packet_info *pinfo,
                        dcerpc_auth_info *auth_info, uint32_t alloc_hint _U_,
                        uint32_t frame)
 {
-    int            length, reported_length;
+    int            reported_length;
     bool           save_fragmented;
     fragment_head *fd_head = NULL;
 
@@ -4457,7 +4424,6 @@ dissect_dcerpc_cn_stub(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
     save_fragmented = pinfo->fragmented;
 
-    length = tvb_reported_length_remaining(tvb, offset);
     reported_length = tvb_reported_length_remaining(tvb, offset);
     if (reported_length < 0 ||
         (uint32_t)reported_length < auth_info->auth_size) {
@@ -4466,10 +4432,8 @@ dissect_dcerpc_cn_stub(tvbuff_t *tvb, int offset, packet_info *pinfo,
         return;
     }
     reported_length -= auth_info->auth_size;
-    if (length > reported_length)
-        length = reported_length;
-    header_tvb = tvb_new_subset_length_caplen(tvb, 0, offset, offset);
-    payload_tvb = tvb_new_subset_length_caplen(tvb, offset, length, reported_length);
+    header_tvb = tvb_new_subset_length(tvb, 0, offset);
+    payload_tvb = tvb_new_subset_length(tvb, offset, reported_length);
     trailer_tvb = auth_info->auth_hdr_tvb;
 
     /* Decrypt the PDU if it is encrypted */
@@ -4965,7 +4929,7 @@ dissect_dcerpc_cn_fault(tvbuff_t *tvb, int offset, packet_info *pinfo,
     uint32_t           status;
     uint32_t           alloc_hint;
     dcerpc_auth_info   auth_info;
-    int                length, reported_length;
+    int                reported_length;
     tvbuff_t          *stub_tvb = NULL;
     proto_item        *pi    = NULL;
     dcerpc_decode_as_data* decode_data = dcerpc_get_decode_data(pinfo);
@@ -5016,7 +4980,6 @@ dissect_dcerpc_cn_fault(tvbuff_t *tvb, int offset, packet_info *pinfo,
      */
     dissect_dcerpc_cn_auth(tvb, offset, pinfo, dcerpc_tree, hdr, &auth_info);
 
-    length = tvb_captured_length_remaining(tvb, offset);
     reported_length = tvb_reported_length_remaining(tvb, offset);
     if (reported_length < 0 ||
         (uint32_t)reported_length < auth_info.auth_size) {
@@ -5025,9 +4988,7 @@ dissect_dcerpc_cn_fault(tvbuff_t *tvb, int offset, packet_info *pinfo,
         return;
     }
     reported_length -= auth_info.auth_size;
-    if (length > reported_length)
-        length = reported_length;
-    stub_tvb = tvb_new_subset_length_caplen(tvb, offset, length, reported_length);
+    stub_tvb = tvb_new_subset_length(tvb, offset, reported_length);
 
     conv = find_conversation_pinfo(pinfo, 0);
     if (!conv) {
@@ -5066,7 +5027,7 @@ dissect_dcerpc_cn_fault(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
         if (value) {
             proto_tree *stub_tree = NULL;
-            int stub_length;
+            int length, stub_length;
             dcerpc_info *di;
             proto_item *parent_pi;
 
@@ -5738,9 +5699,7 @@ dissect_dcerpc_cn(tvbuff_t *tvb, int offset, packet_info *pinfo,
      * offset otherwise.
      */
     subtvb_len = MIN(hdr.frag_len, tvb_reported_length(tvb));
-    fragment_tvb = tvb_new_subset_length_caplen(tvb, start_offset,
-                                  subtvb_len /* length */,
-                                  hdr.frag_len /* reported_length */);
+    fragment_tvb = tvb_new_subset_length(tvb, start_offset, hdr.frag_len);
 
     /*
      * Packet type specific stuff is next.
@@ -6212,7 +6171,7 @@ dissect_dcerpc_dg_stub(tvbuff_t *tvb, int offset, packet_info *pinfo,
     col_append_fstr(pinfo->cinfo, COL_INFO, " opnum: %u len: %u",
                     di->call_data->opnum, hdr->frag_len );
 
-    length = tvb_reported_length_remaining(tvb, offset);
+    length = tvb_captured_length_remaining(tvb, offset);
     reported_length = tvb_reported_length_remaining(tvb, offset);
     stub_length = hdr->frag_len;
     if (length > stub_length)
@@ -6238,8 +6197,7 @@ dissect_dcerpc_dg_stub(tvbuff_t *tvb, int offset, packet_info *pinfo,
              * XXX - authentication info?
              */
             pinfo->fragmented = (hdr->flags1 & PFCL1_FRAG);
-            next_tvb = tvb_new_subset_length_caplen(tvb, offset, length,
-                                      reported_length);
+            next_tvb = tvb_new_subset_length(tvb, offset, reported_length);
             dcerpc_try_handoff(pinfo, tree, dcerpc_tree, next_tvb, true, hdr->drep, di, NULL);
         } else {
             /* PDU is fragmented and this isn't the first fragment */
@@ -6629,15 +6587,15 @@ dissect_dcerpc_dg(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
             proto_tree_add_guid_format(dcerpc_tree, hf_dcerpc_dg_if_id, tvb,
                                        offset, 16, (e_guid_t *) &hdr.if_id, "Interface: %s UUID: %s", uuid_name, uuid_str);
         } else {
-            proto_tree_add_guid_format(dcerpc_tree, hf_dcerpc_dg_if_id, tvb,
-                                       offset, 16, (e_guid_t *) &hdr.if_id, "Interface UUID: %s", uuid_str);
+            proto_tree_add_guid_format_value(dcerpc_tree, hf_dcerpc_dg_if_id, tvb,
+                                       offset, 16, (e_guid_t *) &hdr.if_id, "%s", uuid_str);
         }
     }
     offset += 16;
 
     if (tree) {
-        proto_tree_add_guid_format(dcerpc_tree, hf_dcerpc_dg_act_id, tvb,
-                                   offset, 16, (e_guid_t *) &hdr.act_id, "Activity: %s",
+        proto_tree_add_guid_format_value(dcerpc_tree, hf_dcerpc_dg_act_id, tvb,
+                                   offset, 16, (e_guid_t *) &hdr.act_id, "%s",
                                    guid_to_str(pinfo->pool, (e_guid_t *) &hdr.act_id));
     }
     offset += 16;
@@ -7005,7 +6963,7 @@ proto_register_dcerpc(void)
         { &hf_dcerpc_obj_id,
           { "Object", "dcerpc.obj_id", FT_GUID, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_dcerpc_dg_if_id,
-          { "Interface", "dcerpc.dg_if_id", FT_GUID, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+          { "Interface UUID", "dcerpc.dg_if_id", FT_GUID, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_dcerpc_dg_act_id,
           { "Activity", "dcerpc.dg_act_id", FT_GUID, BASE_NONE, NULL, 0x0, NULL, HFILL }},
         { &hf_dcerpc_opnum,
@@ -7248,9 +7206,9 @@ proto_register_dcerpc(void)
     /* Decode As handling */
     static build_valid_func dcerpc_da_build_value[1] = {dcerpc_value};
     static decode_as_value_t dcerpc_da_values = {dcerpc_prompt, 1, dcerpc_da_build_value};
-    static decode_as_t dcerpc_da = {"dcerpc", "dcerpc.uuid",
+    static decode_as_t dcerpc_da = {"dcerpc", DCERPC_TABLE_NAME,
                                     1, 0, &dcerpc_da_values, NULL, NULL,
-                                    dcerpc_populate_list, decode_dcerpc_binding_reset, dcerpc_decode_as_change, dcerpc_decode_as_free, decode_dcerpc_reset_all };
+                                    dcerpc_populate_list, decode_dcerpc_binding_reset, dcerpc_decode_as_change, dcerpc_decode_as_free, decode_dcerpc_reset_all, decode_dcerpc_add_show_list };
 
     module_t *dcerpc_module;
     expert_module_t* expert_dcerpc;

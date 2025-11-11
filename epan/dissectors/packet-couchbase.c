@@ -2204,7 +2204,7 @@ static void dissect_server_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
     }
   }
 
-  proto_item *ti = proto_tree_add_item(tree, hf_key, tvb, offset, keylen, ENC_UTF_8 | ENC_STR_HEX);
+  proto_item *ti = proto_tree_add_item(tree, hf_key, tvb, offset, keylen, ENC_UTF_8);
 
   switch (opcode) {
     case SERVER_OPCODE_CLUSTERMAP_CHANGE_NOTIFICATION:
@@ -2288,7 +2288,7 @@ dissect_client_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_uint(cid_tree, hf_collection_key_id, tvb, offset,
                             (ok - offset), cid);
         proto_tree_add_item(cid_tree, hf_collection_key_logical, tvb,
-                            ok, keylen - (ok - offset), ENC_UTF_8 | ENC_STR_HEX);
+                            ok, keylen - (ok - offset), ENC_UTF_8);
       }
     }
     offset += keylen;
@@ -3435,10 +3435,11 @@ static void dissect_frame_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
   proto_tree_add_item(couchbase_tree, hf_total_bodylength, tvb, 8, 4, ENC_BIG_ENDIAN);
 
   /*
-   * use little endian (network) encoding for the opaque as this is an opaque
-   * field the client could use for whatever they want
+   * The opaque field uses network byte order (big-endian) like all other
+   * multi-byte fields in the protocol header. This allows clients to
+   * correlate requests with responses.
    */
-  proto_tree_add_item(couchbase_tree, hf_opaque, tvb, 12, 4, ENC_LITTLE_ENDIAN);
+  proto_tree_add_item(couchbase_tree, hf_opaque, tvb, 12, 4, ENC_BIG_ENDIAN);
 
   // Finally we've got the CAS (which observe has a special use for)
   if (opcode == CLIENT_OPCODE_OBSERVE) {

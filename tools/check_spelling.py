@@ -8,7 +8,6 @@
 import os
 import sys
 import re
-import subprocess
 import argparse
 import signal
 import glob
@@ -17,30 +16,18 @@ from spellchecker import SpellChecker
 from collections import Counter
 from html.parser import HTMLParser
 import urllib.request
+from check_common import bcolors, getFilesFromOpen, getFilesFromCommits, isGeneratedFile, removeComments
 
 # Looks for spelling errors among strings found in source or documentation files.
 # N.B.,
 # - To run this script, you should install pyspellchecker (not spellchecker) using pip.
 # - Because of colouring, you may want to pipe into less -R
 
-
 # TODO: check structured doxygen comments?
-
-# For text colouring/highlighting.
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    ADDED = '\033[45m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
 
 # Try to exit soon after Ctrl-C is pressed.
 should_exit = False
+
 
 def signal_handler(sig, frame):
     global should_exit
@@ -50,12 +37,10 @@ def signal_handler(sig, frame):
 signal.signal(signal.SIGINT, signal_handler)
 
 
-
 # Create spellchecker, and augment with some Wireshark words.
 # Set up our dict with words from text file.
 spell = SpellChecker()
 spell.word_frequency.load_text_file('./tools/wireshark_words.txt')
-
 
 
 # Track words that were not found.
@@ -69,38 +54,38 @@ def camelCaseSplit(identifier):
 
 
 # Build this translation table only once.
-replacements = str.maketrans({'.' : ' ',
-                                ',' : ' ',
-                                '`' : ' ',
-                                ':' : ' ',
-                                ';' : ' ',
-                                '"' : ' ',
-                                '\\' : ' ',
-                                '+' : ' ',
-                                '|' : ' ',
-                                '(' : ' ',
-                                ')' : ' ',
-                                '[' : ' ',
-                                ']' : ' ',
-                                '{' : ' ',
-                                '}' : ' ',
-                                '<' : ' ',
-                                '>' : ' ',
-                                '_' : ' ',
-                                '-' : ' ',
-                                '/' : ' ',
-                                '!' : ' ',
-                                '?' : ' ',
-                                '=' : ' ',
-                                '*' : ' ',
-                                '%' : ' ',
-                                '#' : ' ',
-                                '&' : ' ',
-                                '@' : ' ',
-                                '$' : ' ',
-                                '^' : ' ',
-                                "'" : ' ',
-                                '~' : ' '})
+replacements = str.maketrans({'.': ' ',
+                              ',': ' ',
+                              '`': ' ',
+                              ':': ' ',
+                              ';': ' ',
+                              '"': ' ',
+                              '\\': ' ',
+                              '+': ' ',
+                              '|': ' ',
+                              '(': ' ',
+                              ')': ' ',
+                              '[': ' ',
+                              ']': ' ',
+                              '{': ' ',
+                              '}': ' ',
+                              '<': ' ',
+                              '>': ' ',
+                              '_': ' ',
+                              '-': ' ',
+                              '/': ' ',
+                              '!': ' ',
+                              '?': ' ',
+                              '=': ' ',
+                              '*': ' ',
+                              '%': ' ',
+                              '#': ' ',
+                              '&': ' ',
+                              '@': ' ',
+                              '$': ' ',
+                              '^': ' ',
+                              "'": ' ',
+                              '~': ' '})
 
 
 # A File object contains all of the strings to be checked for a given file.
@@ -111,8 +96,7 @@ class File:
 
         filename, extension = os.path.splitext(file)
         # TODO: add '.lua'?  Would also need to check string and comment formats...
-        self.code_file = extension in {'.c', '.cpp', '.h', '.cnf' }
-
+        self.code_file = extension in {'.c', '.cpp', '.h', '.cnf'}
 
     # Add a string found in this file.
     def add(self, value):
@@ -168,9 +152,9 @@ class File:
     def numberPlusUnits(self, word):
         m = re.search(r'^([0-9]+)([a-zA-Z]+)$', word)
         if m:
-            if m.group(2).lower() in { "bit", "bits", "gb", "kbps", "gig", "mb", "th", "mhz", "v", "hz", "k",
-                                       "mbps", "m", "g", "ms", "nd", "nds", "rd", "kb", "kbit", "ghz",
-                                       "khz", "km", "ms", "usec", "sec", "gbe", "ns", "ksps", "qam", "mm" }:
+            if m.group(2).lower() in {"bit", "bits", "gb", "kbps", "gig", "mb", "th", "mhz", "v", "hz", "k",
+                                      "mbps", "m", "g", "ms", "nd", "nds", "rd", "kb", "kbit", "ghz",
+                                      "khz", "km", "ms", "usec", "sec", "gbe", "ns", "ksps", "qam", "mm"}:
                 return True
         return False
 
@@ -178,16 +162,16 @@ class File:
     def spellCheck(self):
 
         num_values = len(self.values)
-        for value_index,v in enumerate(self.values):
+        for value_index, v in enumerate(self.values):
             if should_exit:
                 exit(1)
 
             v = str(v)
 
             # Sometimes parentheses used to show optional letters, so don't leave space
-            #if re.compile(r"^[\S]*\(").search(v):
+            # if re.compile(r"^[\S]*\(").search(v):
             #    v = v.replace('(', '')
-            #if re.compile(r"\S\)").search(v):
+            # if re.compile(r"\S\)").search(v):
             #    v = v.replace(')', '')
 
             # Ignore includes.
@@ -202,7 +186,7 @@ class File:
             v = v.replace('%d', '')
             v = v.replace('%s', '')
             v = v.translate(replacements)
-            v = v.replace('®' , '')
+            v = v.replace('®', '')
             # Quote marks found in some of the docs...
             v = v.replace('“', '')
             v = v.replace('”', '')
@@ -212,20 +196,18 @@ class File:
             # Further split up any camelCase words.
             words = []
             for w in value_words:
-                words +=  camelCaseSplit(w)
+                words += camelCaseSplit(w)
 
             # Check each word within this string in turn.
             for word in words:
                 # Strip trailing digits from word.
                 word = word.rstrip('1234567890')
 
-
                 # Single and collective possession
                 if word.endswith("’s"):
                     word = word[:-2]
                 if word.endswith("s’"):
                     word = word[:-2]
-
 
                 if self.numberPlusUnits(word):
                     continue
@@ -249,20 +231,22 @@ class File:
                     # bcolors.OKGREEN + spell.correction(word) + bcolors.ENDC
                     missing_words.append(word)
 
+
 def removeWhitespaceControl(code_string):
     code_string = code_string.replace('\\n', ' ')
     code_string = code_string.replace('\\r', ' ')
     code_string = code_string.replace('\\t', ' ')
     return code_string
 
+
 # Remove any contractions from the given string.
 def removeContractions(code_string):
-    contractions = [ "wireshark’s", "don’t", "let’s", "isn’t", "won’t", "user’s", "hasn’t", "you’re", "o’clock", "you’ll",
-                     "you’d", "developer’s", "doesn’t", "what’s", "let’s", "haven’t", "can’t", "you’ve",
-                     "shouldn’t", "didn’t", "wouldn’t", "aren’t", "there’s", "packet’s", "couldn’t", "world’s",
-                     "needn’t", "graph’s", "table’s", "parent’s", "entity’s", "server’s", "node’s",
-                     "querier’s", "sender’s", "receiver’s", "computer’s", "frame’s", "vendor’s", "system’s",
-                     "we’ll", "asciidoctor’s", "protocol’s", "microsoft’s", "wasn’t" ]
+    contractions = ["wireshark’s", "don’t", "let’s", "isn’t", "won’t", "user’s", "hasn’t", "you’re", "o’clock", "you’ll",
+                    "you’d", "developer’s", "doesn’t", "what’s", "let’s", "haven’t", "can’t", "you’ve",
+                    "shouldn’t", "didn’t", "wouldn’t", "aren’t", "there’s", "packet’s", "couldn’t", "world’s",
+                    "needn’t", "graph’s", "table’s", "parent’s", "entity’s", "server’s", "node’s",
+                    "querier’s", "sender’s", "receiver’s", "computer’s", "frame’s", "vendor’s", "system’s",
+                    "we’ll", "asciidoctor’s", "protocol’s", "microsoft’s", "wasn’t"]
     for c in contractions:
         code_string = code_string.replace(c, "")
         code_string = code_string.replace(c.capitalize(), "")
@@ -270,18 +254,9 @@ def removeContractions(code_string):
         code_string = code_string.replace(c.capitalize().replace('’', "'"), "")
     return code_string
 
+
 def removeURLs(code_string):
-    code_string = re.sub(re.compile(r'https?://(?:[a-zA-Z0-9./_?&=-]+|%[0-9a-fA-F]{2})+', re.DOTALL), "" , code_string)
-    return code_string
-
-
-def removeComments(code_string):
-    # C-style comment
-    code_string = re.sub(re.compile(r"(?<!/)/\*.*?\*/", re.DOTALL), "" , code_string)
-    # C++-style comment
-    # Avoid matching // where it is allowed, e.g.,  https://www... or file:///...
-    code_string = re.sub(re.compile(r"(?<!:)(?<!/)(?<!\")(?<!\"\s\s)(?<!file:/)(?<!\.)(?<!\,\s)(?<!\\n)//.*?\n" ),
-                         "" , code_string)
+    code_string = re.sub(re.compile(r'https?://(?:[a-zA-Z0-9./_?&=-]+|%[0-9a-fA-F]{2})+', re.DOTALL), "", code_string)
     return code_string
 
 
@@ -294,11 +269,12 @@ def getCommentWords(code_string):
         words += m.group(1).split()
 
     # C comments
-    matches = re.finditer(r'/\*(.*?)\*/', code_string, re.MULTILINE|re.DOTALL)
+    matches = re.finditer(r'/\*(.*?)\*/', code_string, re.MULTILINE | re.DOTALL)
     for m in matches:
         words += m.group(1).split()
 
     return words
+
 
 def removeSingleQuotes(code_string):
     code_string = code_string.replace('\\\\', " ")        # Separate at \\
@@ -308,6 +284,7 @@ def removeSingleQuotes(code_string):
     code_string = code_string.replace('…', ' ')
     code_string = code_string.replace('\\\"', '')
     return code_string
+
 
 def removeHexSpecifiers(code_string):
     # Find all hex numbers
@@ -357,8 +334,7 @@ def findStrings(filename, check_comments=False):
                 # Add to dict.
                 spell.word_frequency.load_words([protocol])
                 spell.known([protocol])
-                print('Protocol is: ' + bcolors.BOLD +  protocol + bcolors.ENDC)
-
+                print('Protocol is: ' + bcolors.BOLD + protocol + bcolors.ENDC)
 
             # Code so only checking strings.
             matches = re.finditer(r'\"([^\"]*)\"', contents)
@@ -372,55 +348,12 @@ def findStrings(filename, check_comments=False):
         return file
 
 
-# Test for whether the given file was automatically generated.
-def isGeneratedFile(filename):
-    # Check file exists - e.g. may have been deleted in a recent commit.
-    if not os.path.exists(filename):
-        return False
-
-    if not filename.endswith('.c'):
-        return False
-
-    # This file is generated, but notice is further in than want to check for all files
-    if filename.endswith('pci-ids.c') or filename.endswith('services-data.c') or filename.endswith('manuf-data.c'):
-        return True
-
-    if filename.endswith('packet-woww.c') or filename.endswith('packet-ncsi-data.c'):
-        return True
-
-    # Open file
-    f_read = open(os.path.join(filename), 'r', encoding="utf8")
-    for line_no,line in enumerate(f_read):
-        # The comment to say that its generated is near the top, so give up once
-        # get a few lines down.
-        if line_no > 10:
-            f_read.close()
-            return False
-        if ('Generated automatically' in line or
-            'Autogenerated from' in line or
-            'is autogenerated' in line or
-            'automatically generated by Pidl' in line or
-            'Created by: The Qt Meta Object Compiler' in line or
-            'This file was generated' in line or
-            'This filter was automatically generated' in line or
-            'This file is auto generated, do not edit!' in line or
-            'This file is autogenerated' in line or
-            'this file is automatically generated' in line):
-
-            f_read.close()
-            return True
-
-    # OK, looks like a hand-written file!
-    f_read.close()
-    return False
-
-
 def isAppropriateFile(filename):
     file, extension = os.path.splitext(filename)
     if 'CMake' in filename:
         return False
     # TODO: add , '.lua' ?
-    return extension in { '.adoc', '.c', '.h', '.cpp', '.pod', '.txt' } or file.endswith('README')
+    return extension in {'.adoc', '.c', '.h', '.cpp', '.pod', '.txt'} or file.endswith('README')
 
 
 def findFilesInFolder(folder, recursive=True):
@@ -454,7 +387,6 @@ def checkFile(filename, check_comments=False):
     file.spellCheck()
 
 
-
 #################################################################
 # Main logic.
 
@@ -483,6 +415,7 @@ parser.add_argument('--show-most-common', action='store', default='100',
 
 args = parser.parse_args()
 
+
 class TypoSourceDocumentParser(HTMLParser):
     def __init__(self):
         super().__init__()
@@ -506,7 +439,7 @@ class TypoSourceDocumentParser(HTMLParser):
 wiki_db = dict()
 if not args.no_wikipedia:
     print('Fetching Wikipedia\'s list of common misspellings.')
-    req_headers = { 'User-Agent': 'Wireshark check-wikipedia-typos' }
+    req_headers = {'User-Agent': 'Wireshark check-wikipedia-typos'}
     req = urllib.request.Request('https://en.wikipedia.org/wiki/Wikipedia:Lists_of_common_misspellings/For_machines', headers=req_headers)
     try:
         response = urllib.request.urlopen(req)
@@ -519,10 +452,10 @@ if not args.no_wikipedia:
         content = parser.content.strip()
 
         wiki_db = dict(line.lower().split('->', maxsplit=1) for line in content.splitlines())
-        del wiki_db['cmo']      # All false positives.
-        del wiki_db['ect']      # Too many false positives.
-        del wiki_db['thru']     # We'll let that one thru. ;-)
-        del wiki_db['sargeant'] # All false positives.
+        del wiki_db['cmo']       # All false positives.
+        del wiki_db['ect']       # Too many false positives.
+        del wiki_db['thru']      # We'll let that one thru. ;-)
+        del wiki_db['sargeant']  # All false positives.
 
         # Remove each word from dict
         removed = 0
@@ -531,7 +464,7 @@ if not args.no_wikipedia:
                 if should_exit:
                     exit(1)
                 spell.word_frequency.remove_words([word])
-                #print('Removed', word)
+                # print('Removed', word)
                 removed += 1
             except Exception:
                 pass
@@ -539,7 +472,6 @@ if not args.no_wikipedia:
         print('Removed', removed, 'known bad words')
     except Exception:
         print('Failed to fetch and/or parse Wikipedia mispellings!')
-
 
 
 # Get files from wherever command-line args indicate.
@@ -553,29 +485,10 @@ if args.file:
         else:
             files.append(f)
 if args.commits:
-    # Get files affected by specified number of commits.
-    command = ['git', 'diff', '--name-only', 'HEAD~' + args.commits]
-    files = [f.decode('utf-8')
-             for f in subprocess.check_output(command).splitlines()]
-    # Filter files
-    files = list(filter(lambda f : os.path.exists(f) and isAppropriateFile(f) and not isGeneratedFile(f), files))
-
+    files = getFilesFromCommits(args.commits, onlyDissectors=False)
 if args.open:
     # Unstaged changes.
-    command = ['git', 'diff', '--name-only']
-    files = [f.decode('utf-8')
-             for f in subprocess.check_output(command).splitlines()]
-    # Filter files.
-    files = list(filter(lambda f : isAppropriateFile(f) and not isGeneratedFile(f), files))
-    # Staged changes.
-    command = ['git', 'diff', '--staged', '--name-only']
-    files_staged = [f.decode('utf-8')
-                    for f in subprocess.check_output(command).splitlines()]
-    # Filter files.
-    files_staged = list(filter(lambda f : isAppropriateFile(f) and not isGeneratedFile(f), files_staged))
-    for f in files_staged:
-        if f not in files:
-            files.append(f)
+    files = getFilesFromOpen(onlyDissectors=False)
 
 if args.glob:
     # Add specified file(s)
@@ -606,7 +519,6 @@ if not args.file and not args.open and not args.commits and not args.glob and no
     files = findFilesInFolder(folder, not args.no_recurse)
 
 
-
 # If scanning a subset of files, list them here.
 print('Examining:')
 if args.file or args.folder or args.commits or args.open or args.glob:
@@ -618,7 +530,6 @@ else:
     print('All dissector modules\n')
 
 
-
 # Now check the chosen files.
 for f in files:
     # Check this file.
@@ -626,7 +537,6 @@ for f in files:
     # But get out if control-C has been pressed.
     if should_exit:
         exit(1)
-
 
 
 # Show the most commonly not-recognised words.

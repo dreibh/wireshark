@@ -644,6 +644,9 @@ static int pref_iqCompressionSINR = COMP_BLOCK_FP;
 static int pref_includeUdCompHeaderUplink = 2;     /* start heuristic */
 static int pref_includeUdCompHeaderDownlink = 2;   /* start heuristic */
 
+/* Are we ignoring UL C-Plane udCompHdr? */
+static bool pref_override_ul_compression = false;
+
 static unsigned pref_data_plane_section_total_rbs = 273;
 static unsigned pref_num_bf_antennas = 32;
 static bool pref_showIQSampleValues = true;
@@ -944,6 +947,8 @@ static const value_string exttype_vals[] = {
     {29,    "Cyclic delay adjustment"},
     {0, NULL}
 };
+static value_string_ext exttype_vals_ext = VALUE_STRING_EXT_INIT(exttype_vals);
+
 
 /**************************************************************************************/
 /* Keep track for each Section Extension, which section types are allowed to carry it */
@@ -2891,7 +2896,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
         offset++;
         proto_item_append_text(sectionHeading, " (ext-%u)", exttype);
 
-        proto_item_append_text(extension_ti, " (ext-%u: %s)", exttype, val_to_str_const(exttype, exttype_vals, "Reserved"));
+        proto_item_append_text(extension_ti, " (ext-%u: %s)", exttype, val_to_str_ext_const(exttype, &exttype_vals_ext, "Reserved"));
 
         /* Don't tap if out of range. */
         if (exttype > 0 && exttype <= HIGHEST_EXTTYPE) {
@@ -2902,7 +2907,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
         if (!se_allowed_in_st(exttype, sectionType)) {
             expert_add_info_format(pinfo, extension_tree, &ei_oran_se_on_unsupported_st,
                                    "SE %u (%s) should not appear in ST %u (%s)!",
-                                   exttype, val_to_str_const(exttype, exttype_vals, "Reserved"),
+                                   exttype, val_to_str_ext_const(exttype, &exttype_vals_ext, "Reserved"),
                                    sectionType, rval_to_str_const(sectionType, section_types, "Unknown"));
         }
 
@@ -4663,7 +4668,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 /* Other/unexpected extension types */
                 expert_add_info_format(pinfo, exttype_ti, &ei_oran_unhandled_se,
                                        "SE %u (%s) not supported by dissector",
-                                       exttype, val_to_str_const(exttype, exttype_vals, "Reserved"));
+                                       exttype, val_to_str_ext_const(exttype, &exttype_vals_ext, "Reserved"));
                 ext_unhandled = true;
                 break;
         }
@@ -6196,7 +6201,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
 
     /* Dissect each C section */
     for (uint32_t i = 0; i < nSections; ++i) {
-        tvbuff_t *section_tvb = tvb_new_subset_length_caplen(tvb, offset, -1, -1);
+        tvbuff_t *section_tvb = tvb_new_subset_remaining(tvb, offset);
         offset += dissect_oran_c_section(section_tvb, oran_tree, pinfo, state, sectionType, tap_info,
                                          protocol_item,
                                          subframeId, slotId,
@@ -6573,7 +6578,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     bool ud_cmp_hdr_cplane = false;
     if (cplane_state && direction == 0) {
         /* Initialise settings from udpCompHdr from C-Plane */
-        if (cplane_state->ul_ud_comp_hdr_set) {
+        if (cplane_state->ul_ud_comp_hdr_set && !pref_override_ul_compression) {
             sample_bit_width = cplane_state->ul_ud_comp_hdr_bit_width;
             compression =      cplane_state->ul_ud_comp_hdr_compression;
             ud_cmp_hdr_cplane = true;
@@ -7315,8 +7320,8 @@ proto_register_oran(void)
         /* Section 7.6.2.1 */
         { &hf_oran_exttype,
           { "extType", "oran_fh_cus.extType",
-            FT_UINT8, BASE_DEC,
-            VALS(exttype_vals), 0x7f,
+            FT_UINT8, BASE_DEC|BASE_EXT_STRING,
+            &exttype_vals_ext, 0x7f,
             "The extension type, which provides additional parameters specific to subject data extension", HFILL}
         },
 
@@ -9725,6 +9730,8 @@ proto_register_oran(void)
         "configuration of the O-RU. This preference instructs the dissector to expect "
         "this field to be present in uplink messages",
         &pref_includeUdCompHeaderUplink, udcomphdr_present_options, false);
+    prefs_register_bool_preference(oran_module, "oran.ignore_cplane_ul_udcomphdr", "Ignore compression settings from C-plane",
+        "When set, override udCompHdr from UL C-Plane with compression method and width configured here", &pref_override_ul_compression);
     prefs_register_uint_preference(oran_module, "oran.ul_slot_us_limit", "Microseconds allowed for UL tx in symbol",
         "Maximum number of microseconds allowed for UL slot transmission before expert warning (zero to disable).  N.B. timing relative to first frame seen for same symbol",
         10, &us_allowed_for_ul_in_symbol);

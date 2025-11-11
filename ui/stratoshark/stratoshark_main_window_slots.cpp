@@ -43,6 +43,7 @@ DIAG_ON(frame-larger-than=)
 
 #include "wsutil/file_util.h"
 #include "wsutil/filesystem.h"
+#include "wsutil/application_flavor.h"
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
 
@@ -1464,7 +1465,7 @@ void StratosharkMainWindow::checkDisplayFilter()
 void StratosharkMainWindow::fieldsChanged()
 {
     char *err_msg = NULL;
-    if (!color_filters_reload(&err_msg, color_filter_add_cb)) {
+    if (!color_filters_reload(&err_msg, color_filter_add_cb, application_configuration_environment_prefix())) {
         simple_dialog(ESD_TYPE_ERROR, ESD_BTN_OK, "%s", err_msg);
         g_free(err_msg);
     }
@@ -1502,7 +1503,7 @@ void StratosharkMainWindow::reloadLuaPlugins()
 
     mainApp->setReloadingLua(true);
 
-    wslua_reload_plugins(NULL, NULL);
+    wslua_reload_plugins(NULL, NULL, application_configuration_environment_prefix());
     funnel_statistics_reload_menus();
     reloadDynamicMenus();
     closePacketDialogs();

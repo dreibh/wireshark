@@ -52,6 +52,7 @@
 #include <wsutil/strtoi.h>
 #include <wsutil/report_message.h>
 #include <wsutil/application_flavor.h>
+#include <wsutil/path_config.h>
 #include <cli_main.h>
 #include <wsutil/version_info.h>
 #include <wiretap/wtap_opttypes.h>
@@ -778,6 +779,7 @@ about_folders(void)
     char                 *path;
     int                   i;
     char                **resultArray;
+    const char           *env_prefix = application_configuration_environment_prefix();
 
     /* "file open" */
 
@@ -796,18 +798,18 @@ about_folders(void)
     printf("%-21s\t%s\n", "Temp:", constpath);
 
     /* pers conf */
-    path = get_persconffile_path("", false);
+    path = get_persconffile_path("", false, env_prefix);
     printf("%-21s\t%s\n", "Personal configuration:", path);
     g_free(path);
 
     /* global conf */
-    constpath = get_datafile_dir();
+    constpath = get_datafile_dir(env_prefix);
     if (constpath != NULL) {
         printf("%-21s\t%s\n", "Global configuration:", constpath);
     }
 
     /* system */
-    constpath = get_systemfile_dir();
+    constpath = get_systemfile_dir(env_prefix);
     printf("%-21s\t%s\n", "System:", constpath);
 
     /* program */
@@ -816,22 +818,22 @@ about_folders(void)
 
 #ifdef HAVE_PLUGINS
     /* pers plugins */
-    printf("%-21s\t%s\n", "Personal Plugins:", get_plugins_pers_dir_with_version());
+    printf("%-21s\t%s\n", "Personal Plugins:", get_plugins_pers_dir_with_version(env_prefix));
 
     /* global plugins */
-    printf("%-21s\t%s\n", "Global Plugins:", get_plugins_dir_with_version());
+    printf("%-21s\t%s\n", "Global Plugins:", get_plugins_dir_with_version(env_prefix));
 #endif
 
 #ifdef HAVE_LUA
     /* pers lua plugins */
-    printf("%-21s\t%s\n", "Personal Lua Plugins:", get_plugins_pers_dir());
+    printf("%-21s\t%s\n", "Personal Lua Plugins:", get_plugins_pers_dir(env_prefix));
 
     /* global lua plugins */
-    printf("%-21s\t%s\n", "Global Lua Plugins:", get_plugins_dir());
+    printf("%-21s\t%s\n", "Global Lua Plugins:", get_plugins_dir(env_prefix));
 #endif
 
     /* Personal Extcap */
-    constpath = get_extcap_pers_dir();
+    constpath = get_extcap_pers_dir(env_prefix);
 
     resultArray = g_strsplit(constpath, G_SEARCHPATH_SEPARATOR_S, 10);
     for(i = 0; resultArray[i]; i++)
@@ -840,7 +842,7 @@ about_folders(void)
     g_strfreev(resultArray);
 
     /* Global Extcap */
-    constpath = get_extcap_dir();
+    constpath = get_extcap_dir(env_prefix, EXTCAP_DIR);
 
     resultArray = g_strsplit(constpath, G_SEARCHPATH_SEPARATOR_S, 10);
     for(i = 0; resultArray[i]; i++)
@@ -861,7 +863,7 @@ about_folders(void)
 
 #ifdef HAVE_LIBSMI
     /* SMI MIBs/PIBs */
-    path = oid_get_default_mib_path();
+    path = oid_get_default_mib_path(application_configuration_environment_prefix());
 
     resultArray = g_strsplit(path, G_SEARCHPATH_SEPARATOR_S, 20);
 
@@ -897,13 +899,13 @@ dump_glossary(const char* glossary, const char* elastic_mapping_filter)
     if (strcmp(glossary, "column-formats") == 0)
         column_dump_column_formats();
     else if (strcmp(glossary, "currentprefs") == 0) {
-        write_prefs(NULL);
+        write_prefs(application_configuration_environment_prefix(), NULL);
     }
     else if (strcmp(glossary, "decodes") == 0) {
         dissector_dump_decodes();
     } else if (strcmp(glossary, "defaultprefs") == 0) {
-        prefs_reset();
-        write_prefs(NULL);
+        prefs_reset(application_configuration_environment_prefix(), application_columns(), application_num_columns());
+        write_prefs(application_configuration_environment_prefix(), NULL);
     } else if (strcmp(glossary, "dissector-tables") == 0)
         dissector_dump_dissector_tables();
     else if (strcmp(glossary, "dissectors") == 0)
@@ -943,7 +945,7 @@ dump_glossary(const char* glossary, const char* elastic_mapping_filter)
         global_services_dump(stdout);
     else if (strcmp(glossary, "plugins") == 0) {
 #ifdef HAVE_PLUGINS
-        codecs_init();
+        codecs_init(application_configuration_environment_prefix());
         plugins_dump_all();
 #endif
 #ifdef HAVE_LUA
@@ -1101,6 +1103,9 @@ main(int argc, char *argv[])
     const char*           glossary = NULL;
     const char*           elastic_mapping_filter = NULL;
     ws_compression_type   volatile compression_type = WS_FILE_UNKNOWN_COMPRESSION;
+    const struct file_extension_info* file_extensions;
+    unsigned num_extensions;
+    epan_app_data_t app_data;
 
     /*
      * The leading + ensures that getopt_long() does not permute the argv[]
@@ -1124,6 +1129,9 @@ main(int argc, char *argv[])
 #define OPTSTRING "+2" OPTSTRING_CAPTURE_COMMON OPTSTRING_DISSECT_COMMON OPTSTRING_READ_CAPTURE_COMMON "M:C:e:E:F:gG:hH:j:J:lo:O:PqQS:T:U:vVw:W:xX:z:"
 
     static const char    optstring[] = OPTSTRING;
+
+    /* Future proof by zeroing out all data */
+    memset(&app_data, 0, sizeof(app_data));
 
     /* Set the program name. */
     g_set_prgname("tshark");
@@ -1225,7 +1233,7 @@ main(int argc, char *argv[])
     while ((opt = ws_getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
         switch (opt) {
             case LONGOPT_GLOBAL_PROFILE:
-                    set_persconffile_dir(get_datafile_dir());
+                    set_persconffile_dir(get_datafile_dir(application_configuration_environment_prefix()));
                     break;
             default:
                 break;
@@ -1242,12 +1250,12 @@ main(int argc, char *argv[])
     while ((opt = ws_getopt_long(argc, argv, optstring, long_options, NULL)) != -1) {
         switch (opt) {
             case 'C':        /* Configuration Profile */
-                if (profile_exists (ws_optarg, false)) {
+                if (profile_exists(application_configuration_environment_prefix(), ws_optarg, false)) {
                     set_profile_name (ws_optarg);
-                } else if (profile_exists (ws_optarg, true)) {
+                } else if (profile_exists(application_configuration_environment_prefix(), ws_optarg, true)) {
                     char  *pf_dir_path, *pf_dir_path2, *pf_filename;
                     /* Copy from global profile */
-                    if (create_persconffile_profile(ws_optarg, &pf_dir_path) == -1) {
+                    if (create_persconffile_profile(application_configuration_environment_prefix(), ws_optarg, &pf_dir_path) == -1) {
                         cmdarg_err("Can't create directory\n\"%s\":\n%s.",
                             pf_dir_path, g_strerror(errno));
 
@@ -1255,7 +1263,7 @@ main(int argc, char *argv[])
                         exit_status = WS_EXIT_INVALID_FILE;
                         goto clean_exit;
                     }
-                    if (copy_persconffile_profile(ws_optarg, ws_optarg, true, &pf_filename,
+                    if (copy_persconffile_profile(application_configuration_environment_prefix(), ws_optarg, ws_optarg, true, &pf_filename,
                             &pf_dir_path, &pf_dir_path2) == -1) {
                         cmdarg_err("Can't copy file \"%s\" in directory\n\"%s\" to\n\"%s\":\n%s.",
                             pf_filename, pf_dir_path2, pf_dir_path, g_strerror(errno));
@@ -1356,21 +1364,22 @@ main(int argc, char *argv[])
      * dissection-time handlers for file-type-dependent blocks can
      * register using the file type/subtype value for the file type.
      */
-    wtap_init(true);
+    application_file_extensions(&file_extensions, &num_extensions);
+    wtap_init(true, application_configuration_environment_prefix(), file_extensions, num_extensions);
 
     /* Register all dissectors; we must do this before checking for the
        "-G" flag, as the "-G" flag dumps information registered by the
        dissectors, and we must do it before we read the preferences, in
        case any dissectors register preferences. */
-    if (!epan_init(NULL, NULL, true)) {
+    app_data.env_var_prefix = application_configuration_environment_prefix();
+    app_data.col_fmt = application_columns();
+    app_data.num_cols = application_num_columns();
+    app_data.tap_reg_listeners = tap_reg_listener;
+    app_data.supports_packets = application_flavor_is_wireshark();
+    if (!epan_init(NULL, NULL, true, &app_data)) {
         exit_status = WS_EXIT_INIT_FAILED;
         goto clean_exit;
     }
-
-    /* Register all tap listeners; we do this before we parse the arguments,
-       as the "-z" argument can specify a registered tap. */
-
-    register_all_tap_listeners(tap_reg_listener);
 
     /* Register extcap preferences only when needed. */
     if (has_extcap_options || is_capturing) {
@@ -2013,7 +2022,7 @@ main(int argc, char *argv[])
     }
 
     if (dissect_color) {
-        if (!color_filters_init(&err_msg, NULL)) {
+        if (!color_filters_init(&err_msg, NULL, application_configuration_environment_prefix())) {
             fprintf(stderr, "%s\n", err_msg);
             g_free(err_msg);
         }
@@ -4475,7 +4484,7 @@ write_preamble(capture_file *cf)
 
         case WRITE_XML:
             if (print_details)
-                write_pdml_preamble(stdout, cf->filename);
+                write_pdml_preamble(stdout, cf->filename, get_doc_dir(application_configuration_environment_prefix()));
             else
                 write_psml_preamble(&cf->cinfo, stdout);
             return !ferror(stdout);
@@ -4943,7 +4952,7 @@ cf_open(capture_file *cf, const char *fname, unsigned int type, bool is_tempfile
     wtap  *wth;
     char *err_info;
 
-    wth = wtap_open_offline(fname, type, err, &err_info, perform_two_pass_analysis);
+    wth = wtap_open_offline(fname, type, err, &err_info, perform_two_pass_analysis, application_configuration_environment_prefix());
     if (wth == NULL)
         goto fail;
 

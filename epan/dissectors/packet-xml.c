@@ -1922,12 +1922,12 @@ static void init_xml_names(void)
 
     xml_new_namespace(xmpli_names, "xml", "version", "encoding", "standalone", NULL);
 
-    dirname = get_persconffile_path("dtds", false);
+    dirname = get_persconffile_path("dtds", false, epan_get_environment_prefix());
 
     if (test_for_directory(dirname) != EISDIR) {
         /* Although dir isn't a directory it may still use memory */
         g_free(dirname);
-        dirname = get_datafile_path("dtds");
+        dirname = get_datafile_path("dtds", epan_get_environment_prefix());
     }
 
     if (test_for_directory(dirname) == EISDIR) {

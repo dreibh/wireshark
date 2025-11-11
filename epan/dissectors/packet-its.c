@@ -7718,7 +7718,7 @@ dissect_its_ItsPduHeader(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_
                                    ett_its_ItsPduHeader, its_ItsPduHeader_sequence);
 
   tap_queue_packet(its_tap, actx->pinfo, actx->private_data);
-  tvbuff_t *next_tvb = tvb_new_subset_length(tvb, offset >> 3, -1);
+  tvbuff_t *next_tvb = tvb_new_subset_remaining(tvb, offset >> 3);
   its_header_t *its_hdr = its_get_private_data(actx->pinfo);
   int data_offset = dissector_try_uint(its_msgid_subdissector_table, (its_hdr->version << 16)+its_hdr->msgId, next_tvb, actx->pinfo, tree);
   if (!data_offset) {
@@ -32260,7 +32260,7 @@ void proto_register_its(void)
     static build_valid_func its_da_build_value[1] = {its_msgid_value};
     static decode_as_value_t its_da_values = {its_msgid_prompt, 1, its_da_build_value};
     static decode_as_t its_da = {"its", "its.msg_id", 1, 0, &its_da_values, NULL, NULL,
-                                    decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL};
+                                    decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL};
 
     register_decode_as(&its_da);
 

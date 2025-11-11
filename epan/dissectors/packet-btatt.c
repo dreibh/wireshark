@@ -2743,6 +2743,8 @@ const value_string characteristic_presentation_namespace_description_btsig_vals[
     {0x0110, "external"},
     {0x0, NULL}
 };
+static value_string_ext characteristic_presentation_namespace_description_btsig_vals_ext = VALUE_STRING_EXT_INIT(characteristic_presentation_namespace_description_btsig_vals);
+
 
 static const value_string esp_trigger_logic_vals[] = {
     {0x00, "Boolean AND"},
@@ -12568,7 +12570,7 @@ proto_register_btatt(void)
         },
         {&hf_btatt_characteristic_presentation_namespace_description_btsig,
             {"Namespace Description", "btatt.characteristic_presentation.namespace_description",
-            FT_UINT16, BASE_HEX, VALS(characteristic_presentation_namespace_description_btsig_vals), 0x0,
+            FT_UINT16, BASE_HEX | BASE_EXT_STRING, &characteristic_presentation_namespace_description_btsig_vals_ext, 0x0,
             NULL, HFILL}
         },
         {&hf_btatt_esp_trigger_logic,
@@ -17583,7 +17585,7 @@ proto_register_btatt(void)
     static decode_as_value_t btatt_handle_da_values = {btatt_handle_prompt, 1, btatt_handle_da_build_value};
     static decode_as_t btatt_handle_da = {"btatt", "btatt.handle",
             1, 0, &btatt_handle_da_values, NULL, NULL,
-            decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL };
+            decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
 
     /* Register the protocol name and description */
     proto_btatt = proto_register_protocol("Bluetooth Attribute Protocol", "BT ATT", "btatt");

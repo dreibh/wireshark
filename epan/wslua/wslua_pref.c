@@ -49,7 +49,7 @@ static bool uat_update_cb(void *r, char **err)
     lua_State *L = luaL_newstate();
     luaL_openlibs(L);
     char *full_path = g_strjoin(G_DIR_SEPARATOR_S,
-        get_persconffile_path("", false),
+        get_persconffile_path("", false, lua_app_env_var_prefix),
         "plugins", "preferences_uat_callbacks.lua", NULL);
     /* if checker file not exist we will accept all walues! */
     if (!file_exists(full_path)) {
@@ -822,7 +822,7 @@ WSLUA_METAMETHOD Prefs__index(lua_State* L) {
                     break;
                 case PREF_UAT:
                     {
-                        uat_load_all();
+                        uat_load_all(lua_app_env_var_prefix);
                         uat_t* get_uat = NULL;
                         if (prefs_p->info.uat_field_list_info.uat_field_list == NULL) {
                             // get uat by pref label in case of existent uat reading.

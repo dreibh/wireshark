@@ -541,22 +541,22 @@ static const value_string zbee_nwk_gp_src_id_names[] = {
 
 /* GP security key type names. */
 static const value_string zbee_nwk_gp_src_sec_keys_type_names[] = {
-    { ZBEE_NWK_GP_SECURITY_KEY_TYPE_DERIVED_INDIVIDUAL_GPD_KEY,        "Derived individual GPD key" },
-    { ZBEE_NWK_GP_SECURITY_KEY_TYPE_GPD_GROUP_KEY,                     "GPD group key" },
     { ZBEE_NWK_GP_SECURITY_KEY_TYPE_NO_KEY,                            "No key" },
+    { ZBEE_NWK_GP_SECURITY_KEY_TYPE_ZB_NWK_KEY,                        "ZigBee NWK key" },
+    { ZBEE_NWK_GP_SECURITY_KEY_TYPE_GPD_GROUP_KEY,                     "GPD group key" },
     { ZBEE_NWK_GP_SECURITY_KEY_TYPE_NWK_KEY_DERIVED_GPD_KEY_GROUP_KEY, "NWK key derived GPD group key" },
     { ZBEE_NWK_GP_SECURITY_KEY_TYPE_PRECONFIGURED_INDIVIDUAL_GPD_KEY,  "Individual, out of the box GPD key" },
-    { ZBEE_NWK_GP_SECURITY_KEY_TYPE_ZB_NWK_KEY,                        "ZigBee NWK key" },
+    { ZBEE_NWK_GP_SECURITY_KEY_TYPE_DERIVED_INDIVIDUAL_GPD_KEY,        "Derived individual GPD key" },
 
     { 0, NULL }
 };
 
 /* GP security levels. */
 static const value_string zbee_nwk_gp_src_sec_levels_names[] = {
+    { ZBEE_NWK_GP_SECURITY_LEVEL_NO,       "No security" },
     { ZBEE_NWK_GP_SECURITY_LEVEL_1LSB,     "1 LSB of frame counter and short MIC only" },
     { ZBEE_NWK_GP_SECURITY_LEVEL_FULL,     "Full frame counter and full MIC only" },
     { ZBEE_NWK_GP_SECURITY_LEVEL_FULLENCR, "Encryption with full frame counter and full MIC" },
-    { ZBEE_NWK_GP_SECURITY_LEVEL_NO,       "No security" },
 
     { 0, NULL }
 };
@@ -1967,7 +1967,7 @@ dissect_zbee_nwk_gp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *d
             add_new_data_source(pinfo, payload_tvb, "Decrypted GP Payload");
             dissect_zbee_nwk_gp_cmd(payload_tvb, pinfo, nwk_tree, data);
         } else {
-            payload_tvb = tvb_new_subset_length_caplen(tvb, offset - packet.payload_len - packet.mic_size, packet.payload_len, -1);
+            payload_tvb = tvb_new_subset_length(tvb, offset - packet.payload_len - packet.mic_size, packet.payload_len);
             call_data_dissector(payload_tvb, pinfo, tree);
         }
     }

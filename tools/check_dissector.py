@@ -9,26 +9,13 @@ import sys
 import os
 import signal
 import argparse
-import subprocess
-import re
+from check_common import isDissectorFile, getFilesFromOpen, getFilesFromCommits, bcolors
 
 # Run battery of tests on one or more dissectors.
 
-# For text colouring/highlighting.
-class bcolors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKGREEN = '\033[92m'
-    ADDED = '\033[45m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
-    UNDERLINE = '\033[4m'
-
-
 # Try to exit soon after Ctrl-C is pressed.
 should_exit = False
+
 
 def signal_handler(sig, frame):
     global should_exit
@@ -39,7 +26,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 
 # Command-line args
-parser = argparse.ArgumentParser(description="Run gamut of tests on dissector(s)")
+parser = argparse.ArgumentParser(description="Run checks on dissector(s)")
 parser.add_argument('--file', action='append',
                     help='specify individual dissector file to test')
 parser.add_argument('--file-list', action='store',
@@ -63,21 +50,6 @@ if not args.file and not args.file_list and not args.open and not args.commits:
 # Get list of files to check.
 dissectors = []
 
-def is_dissector_file(filename):
-    if not filename.endswith('.c'):
-        return False
-
-    abs_path = os.path.abspath(filename)
-    if os.path.join('plugins', 'epan') in abs_path:
-        return True
-    elif os.path.join('epan', 'dissectors') in abs_path:
-        p = re.compile(r'.*(packet|file)-.*\.c$')
-        return p.match(filename)
-    else:
-        return False
-
-
-
 # Individually-selected files
 if args.file:
     for f in args.file:
@@ -85,7 +57,7 @@ if args.file:
                 print('Chosen file', f, 'does not exist.')
                 exit(1)
             else:
-                if is_dissector_file(f):
+                if isDissectorFile(f):
                     dissectors.append(f)
 
 # List of dissectors stored in a file
@@ -102,35 +74,14 @@ if args.file_list:
                     exit(1)
                 else:
                     dissectors.append(f)
-
-
-if args.open:
+elif args.open:
     # Unstaged changes.
-    command = ['git', 'diff', '--name-only']
-    files = [f.decode('utf-8')
-             for f in subprocess.check_output(command).splitlines()]
-    # Filter files.
-    dissectors = [f for f in files if is_dissector_file(f)]
-
-    # Staged changes.
-    command = ['git', 'diff', '--staged', '--name-only']
-    files_staged = [f.decode('utf-8')
-                    for f in subprocess.check_output(command).splitlines()]
-    # Filter files.
-    staged_dissectors = [f for f in files_staged if f not in dissectors and is_dissector_file(f)]
-    dissectors.extend(staged_dissectors)
-
-if args.commits:
-    # Get files affected by specified number of commits.
-    command = ['git', 'diff', '--name-only', 'HEAD~' + args.commits]
-    files = {f.decode('utf-8')
-             for f in subprocess.check_output(command).splitlines()}
-    # Will examine dissector files only
-    files = set(filter(is_dissector_file, files))
-    dissectors.extend(files)
+    dissectors = getFilesFromOpen()
+elif args.commits:
+    dissectors = getFilesFromCommits(args.commits)
 
 # Ensure that all dissectors exist (i.e., cope with deletes/renames)
-dissectors = [ d for d in dissectors if os.path.exists(d) ]
+dissectors = [d for d in dissectors if os.path.exists(d)]
 
 # Tools that should be run on selected files.
 # Boolean arg is for whether build-dir is needed in order to run it.
@@ -139,7 +90,7 @@ tools = [
     ('tools/check_spelling.py --comments --no-wikipedia', False,  True),
     ('tools/check_tfs.py --check-value-strings',          False,  True),
     ('tools/check_typed_item_calls.py --all-checks ' +
-      '--extra-value-string-checks --check-expert-items', False,  True),
+     '--extra-value-string-checks --check-expert-items',  False,  True),
     ('tools/check_static.py',                             True,   False),
     ('tools/check_dissector_urls.py',                     False,  True),
     ('tools/check_val_to_str.py',                         False,  True),
@@ -181,8 +132,8 @@ if len(dissectors):
     for tool in tools:
         if should_exit:
             exit(1)
-        if ((not sys.platform.startswith('win') or tool[2]) and # Supported on this platform?
-            (not tool[1] or (tool[1] and args.build_folder))):   # Have --build-folder if needed?
+        if ((not sys.platform.startswith('win') or tool[2]) and
+                (not tool[1] or (tool[1] and args.build_folder))):
 
             # Run it.
             run_check(tool, dissectors, '.py' in tool[0])

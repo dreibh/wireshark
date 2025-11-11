@@ -29,6 +29,7 @@
 #include <wsutil/inet_addr.h>
 #include <wsutil/exported_pdu_tlvs.h>
 #include <wsutil/report_message.h>
+#include <wsutil/application_flavor.h>
 
 #include "ui/failure_message.h"
 
@@ -464,8 +465,11 @@ static struct extcap_dumper extcap_dumper_open(char *fifo, int encap) {
     int file_type_subtype;
     int err = 0;
     char *err_info = NULL;
+    const struct file_extension_info* file_extensions;
+    unsigned num_extensions;
 
-    wtap_init(false);
+    application_file_extensions(&file_extensions, &num_extensions);
+    wtap_init(false, application_configuration_environment_prefix(), file_extensions, num_extensions);
 
     params.encap = encap;
     params.snaplen = PACKET_LENGTH;
@@ -2526,7 +2530,7 @@ int main(int argc, char *argv[]) {
 
     extcap_conf = g_new0(extcap_parameters, 1);
 
-    help_url = data_file_url("androiddump.html");
+    help_url = data_file_url("androiddump.html", application_configuration_environment_prefix());
     extcap_base_set_util_info(extcap_conf, argv[0], ANDROIDDUMP_VERSION_MAJOR, ANDROIDDUMP_VERSION_MINOR,
         ANDROIDDUMP_VERSION_RELEASE, help_url);
     g_free(help_url);

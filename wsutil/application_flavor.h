@@ -11,6 +11,7 @@
 #pragma once
 
 #include <wireshark.h>
+#include <wiretap/wtap.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -52,32 +53,35 @@ WS_DLL_PUBLIC const char *application_flavor_name_proper(void);
 WS_DLL_PUBLIC const char *application_flavor_name_lower(void);
 
 /**
- * @brief Get the application specific environment variable used to retrieve configuration.
+ * @brief Get the prefix for the application specific environment variable used to retrieve various configurations.
  *
- * @param suffix The suffix appended to the application specific environment variable
- * @return The application name. Must be freed.
+ * @return The application prefix.
  */
-WS_DLL_PUBLIC char* application_configuration_environment_variable(const char* suffix);
+WS_DLL_PUBLIC const char* application_configuration_environment_prefix(void);
 
 /**
- * @brief Get the application specific directory where extcaps can be found
+ * @brief Get the list of application supported file extensions
  *
- * @param install_prefix The prefix prepended to the extcap directory
- * @return The application directory name. Must be freed.
+ * @param file_extensions Returned array of extensions supported by the application
+ * @param num_extensions Returned number of extensions supported by the application
  */
-WS_DLL_PUBLIC char* application_extcap_dir(const char* install_prefix);
+WS_DLL_PUBLIC void application_file_extensions(const struct file_extension_info** file_extensions, unsigned* num_extensions);
+
+/**
+ * @brief Get the default columns for the application
+ */
+WS_DLL_PUBLIC const char** application_columns(void);
+
+/**
+ * @brief Get the default number of columns for the application
+ */
+WS_DLL_PUBLIC unsigned application_num_columns(void);
 
 /**
  * @brief Convenience routine for checking the application flavor.
  * @return true if the application flavor is APPLICATION_FLAVOR_WIRESHARK.
  */
 WS_DLL_PUBLIC bool application_flavor_is_wireshark(void);
-
-/**
- * @brief Convenience routine for checking the application flavor.
- * @return true if the application flavor is APPLICATION_FLAVOR_STRATOSHARK.
- */
-WS_DLL_PUBLIC bool application_flavor_is_stratoshark(void);
 
 #ifdef __cplusplus
 }

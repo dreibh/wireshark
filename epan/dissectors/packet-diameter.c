@@ -2921,7 +2921,7 @@ ddictionary_load(wmem_array_t* hf_array, GPtrArray* ett_array)
 	}
 
 	/* load the dictionary */
-	dir = wmem_strdup_printf(NULL, "%s" G_DIR_SEPARATOR_S "diameter", get_datafile_dir());
+	dir = wmem_strdup_printf(NULL, "%s" G_DIR_SEPARATOR_S "diameter", get_datafile_dir(epan_get_environment_prefix()));
 	bool success = ddictionary_process_file(dir, "./dictionary.xml", &all_data);
 	wmem_free(NULL, dir);
 

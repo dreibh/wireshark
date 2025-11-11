@@ -283,6 +283,7 @@ static expert_field ei_ip_ttl_too_small;
 static expert_field ei_ip_cipso_tag;
 static expert_field ei_ip_bogus_ip_version;
 static expert_field ei_ip_bogus_header_length;
+static expert_field ei_ip_reserved_bit_set;
 
 static dissector_handle_t ip_handle;
 static dissector_handle_t ipv4_handle;
@@ -2170,6 +2171,9 @@ dissect_ip_v4(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
     };
     tf = proto_tree_add_bitmask_with_flags(ip_tree, tvb, offset + 6, hf_ip_flags,
         ett_ip_flags, ip_flags, ENC_BIG_ENDIAN, BMT_NO_FALSE | BMT_NO_TFS | BMT_NO_INT);
+    if (iph->ip_off & IP_RF) {
+      expert_add_info(pinfo, tf, &ei_ip_reserved_bit_set);
+    }
   }
 
   tf = proto_tree_add_uint_format_value(ip_tree, hf_ip_frag_offset, tvb, offset + 6, 2,
@@ -2777,7 +2781,7 @@ proto_register_ip(void)
 
     { &hf_ip_flags_rf,
       { "Reserved bit", "ip.flags.rb", FT_BOOLEAN, 8,
-        TFS(&tfs_set_notset), 0x80, NULL, HFILL }},
+        TFS(&tfs_set_notset), 0x80, "Reserved bit (must be zero; RFC 791)", HFILL } },
 
     { &hf_ip_flags_df,
       { "Don't fragment", "ip.flags.df", FT_BOOLEAN, 8,
@@ -3118,13 +3122,14 @@ proto_register_ip(void)
      { &ei_ip_cipso_tag, { "ip.cipso.malformed", PI_SEQUENCE, PI_ERROR, "Malformed CIPSO tag", EXPFILL }},
      { &ei_ip_bogus_ip_version, { "ip.bogus_ip_version", PI_PROTOCOL, PI_ERROR, "Bogus IP version", EXPFILL }},
      { &ei_ip_bogus_header_length, { "ip.bogus_header_length", PI_PROTOCOL, PI_ERROR, "Bogus IP header length", EXPFILL }},
+     { &ei_ip_reserved_bit_set, { "ip.flags.rb.set", PI_PROTOCOL, PI_WARN, "Reserved bit is set (must be zero)", EXPFILL }},
   };
 
   /* Decode As handling */
   static build_valid_func ip_da_build_value[1] = {ip_value};
   static decode_as_value_t ip_da_values = {ip_prompt, 1, ip_da_build_value};
   static decode_as_t ip_da = {"ip", "ip.proto", 1, 0, &ip_da_values, NULL, NULL,
-                              decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL };
+                              decode_as_default_populate_list, decode_as_default_reset, decode_as_default_change, NULL, NULL, NULL };
 
   module_t *ip_module;
   expert_module_t* expert_ip;
