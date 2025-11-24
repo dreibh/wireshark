@@ -64,6 +64,7 @@ dissector_handle_t cliprdr_handle;
 dissector_handle_t rdpdr_handle;
 dissector_handle_t snd_handle;
 dissector_handle_t ear_handle;
+dissector_handle_t ecam_handle;
 
 #define PNAME  "RDP Dynamic Channel Protocol"
 #define PSNAME "DRDYNVC"
@@ -243,24 +244,22 @@ drdynvc_find_channel_type(const char *name)
 		if (strcmp(knownChannels[i].name, name) == 0)
 			return knownChannels[i].type;
 	}
+
+	// TODO: replace with proper registration of announced ecam sub channels
+	if (strstr(name, "RDCamera_Device_") == name)
+		return DRDYNVC_CHANNEL_CAM;
+
 	return DRDYNVC_CHANNEL_UNKNOWN;
 }
 
 static drdynvc_conv_info_t *
 drdynvc_get_conversation_data(packet_info *pinfo)
 {
-	conversation_t  *conversation, *conversation_tcp;
-	drdynvc_conv_info_t *info;
+	conversation_t *conversation = rdp_find_main_conversation(pinfo);
+	if (!conversation)
+		return NULL;
 
-	conversation = find_or_create_conversation(pinfo);
-
-	info = (drdynvc_conv_info_t *)conversation_get_proto_data(conversation, proto_rdp_drdynvc);
-	if (!info) {
-		conversation_tcp = rdp_find_tcp_conversation_from_udp(conversation);
-		if (conversation_tcp)
-			info = (drdynvc_conv_info_t *)conversation_get_proto_data(conversation_tcp, proto_rdp_drdynvc);
-	}
-
+	drdynvc_conv_info_t *info = (drdynvc_conv_info_t *)conversation_get_proto_data(conversation, proto_rdp_drdynvc);
 	if (info == NULL) {
 		info = wmem_new0(wmem_file_scope(), drdynvc_conv_info_t);
 		info->channels = wmem_multimap_new(wmem_file_scope(), channel_hashFunc, channel_equalFunc);
@@ -374,29 +373,32 @@ dissect_rdp_drdynvc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, 
 
 	proto_tree_add_item(tree, hf_rdp_drdynvc_cbId, tvb, offset, 1, ENC_NA);
 	if (havePri)
-		proto_tree_add_item(tree, hf_rdp_drdynvc_pri, tvb, offset, 1, ENC_NA);
+            proto_tree_add_item(tree, hf_rdp_drdynvc_pri, tvb, offset, 1, ENC_NA);
 	else
-		proto_tree_add_item(tree, hf_rdp_drdynvc_sp, tvb, offset, 1, ENC_NA);
+            proto_tree_add_item(tree, hf_rdp_drdynvc_sp, tvb, offset, 1, ENC_NA);
 	proto_tree_add_item(tree, hf_rdp_drdynvc_cmd, tvb, offset, 1, ENC_NA);
 
 	offset++;
 
 	info = drdynvc_get_conversation_data(pinfo);
-	if (haveChannelId) {
-		offset += dissect_rdp_vlength(tvb, hf_rdp_drdynvc_channelId, offset, cbId, tree, &channelId);
+	if (!info)
+		return offset;
 
-		channel = wmem_multimap_lookup32_le(info->channels, &channelId, pinfo->num);
+	if (haveChannelId) {
+            offset += dissect_rdp_vlength(tvb, hf_rdp_drdynvc_channelId, offset, cbId, tree, &channelId);
+
+            channel = wmem_multimap_lookup32_le(info->channels, &channelId, pinfo->num);
 #if 0
-		if (channel)
-			printf("%d: channels=%p haveChannelId and channel (0x%x) %s\n", pinfo->num, info->channels, channelId, channel->name);
-		else
-			printf("%d: channels=%p haveChannelId and no channel for 0x%x\n", pinfo->num, info->channels, channelId);
+            if (channel)
+                    printf("%d: channels=%p haveChannelId and channel (0x%x) %s\n", pinfo->num, info->channels, channelId, channel->name);
+            else
+                    printf("%d: channels=%p haveChannelId and no channel for 0x%x\n", pinfo->num, info->channels, channelId);
 #endif
 	}
 
 	if (haveLen) {
-		Len = (cbIdSpCmd >> 2) & 0x3;
-		offset += dissect_rdp_vlength(tvb, hf_rdp_drdynvc_length, offset, Len, tree, &fullPduLen);
+            Len = (cbIdSpCmd >> 2) & 0x3;
+            offset += dissect_rdp_vlength(tvb, hf_rdp_drdynvc_length, offset, Len, tree, &fullPduLen);
 	}
 
 	switch (cmdId) {
@@ -551,6 +553,9 @@ dissect_rdp_drdynvc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, 
 					case DRDYNVC_CHANNEL_AUTH_REDIR:
 						call_dissector(ear_handle, tvb_new_subset_remaining(tvb, offset), pinfo, tree);
 						break;
+					case DRDYNVC_CHANNEL_CAM:
+						call_dissector(ecam_handle, tvb_new_subset_remaining(tvb, offset), pinfo, tree);
+						break;
 					case DRDYNVC_CHANNEL_DR:
 						call_dissector(rdpdr_handle, tvb_new_subset_remaining(tvb, offset), pinfo, tree);
 						break;
@@ -670,6 +675,9 @@ dissect_rdp_drdynvc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, 
 						break;
 					case DRDYNVC_CHANNEL_AUTH_REDIR:
 						call_dissector(ear_handle, targetTvb, pinfo, tree);
+						break;
+					case DRDYNVC_CHANNEL_CAM:
+						call_dissector(ecam_handle, targetTvb, pinfo, tree);
 						break;
 					case DRDYNVC_CHANNEL_DR:
 						call_dissector(rdpdr_handle, targetTvb, pinfo, tree);
@@ -925,6 +933,7 @@ void proto_reg_handoff_drdynvc(void) {
 	cliprdr_handle = find_dissector("rdp_cliprdr");
 	snd_handle = find_dissector("rdp_snd");
 	ear_handle = find_dissector("rdp_ear");
+	ecam_handle = find_dissector("rdp_ecam");
 }
 
 /*

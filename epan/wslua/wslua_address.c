@@ -68,7 +68,7 @@ WSLUA_CONSTRUCTOR Address_ether(lua_State *L) {
     const char *name = luaL_checkstring(L, WSLUA_ARG_Address_ether_ETH);
     uint8_t eth_buf[6];
 
-    if(!str_to_eth(name, eth_buf))
+    if(!str_to_eth(name, &eth_buf))
         memset(eth_buf, 0, sizeof(eth_buf));
 
     alloc_address_wmem(NULL, addr, AT_ETHER, sizeof(eth_buf), eth_buf);

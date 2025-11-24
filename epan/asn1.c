@@ -186,7 +186,6 @@ rose_ctx_t *get_rose_ctx(void *ptr) {
 double asn1_get_real(const uint8_t *real_ptr, int len) {
   uint8_t octet;
   const uint8_t *p;
-  uint8_t *buf;
   double val = 0;
 
   /* 8.5.2    If the real value is the value zero,
@@ -262,7 +261,9 @@ double asn1_get_real(const uint8_t *real_ptr, int len) {
       case 0x02: val = NAN; break;
     }
   } else {  /* decimal encoding */
-    buf = g_strndup(p, len);
+    char *buf;
+
+    buf = g_strndup((const char*)p, len);
     val = g_ascii_strtod(buf, NULL);
     g_free(buf);
   }

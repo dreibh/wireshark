@@ -245,6 +245,32 @@ if(WIN32)
 
 	set(LIBS_URL "https://dev-libs.wireshark.org/windows/packages")
 	file(TO_CMAKE_PATH ${EXTRA_INSTALLER_DIR} _file_download_dir)
+
+	# Download Npcap required by the Windows installer.
+	# We do this here and not in FetchArtifacts.cmake because this
+	# is required by both the Visual Studio and MSYS2 builds.
+	set(NPCAP_VERSION "1.83")
+	set(NPCAP_SHA256 "1bf58936296992d6b03e6c36621ca8239a786c13b89d761d210fa21731567ac0")
+	set(NPCAP_FILENAME "npcap-${NPCAP_VERSION}.exe")
+	set(NPCAP_URL "${LIBS_URL}/Npcap/${NPCAP_FILENAME}")
+	FetchContent_Declare(Npcap
+		URL ${NPCAP_URL}
+		DOWNLOAD_DIR ${_file_download_dir}
+		URL_HASH SHA256=${NPCAP_SHA256}
+		DOWNLOAD_NO_EXTRACT True
+	)
+
+	# Download USBPcap required by the Windows installer
+	set(USBPCAP_VERSION "1.5.4.0")
+	set(USBPCAP_SHA256 "87a7edf9bbbcf07b5f4373d9a192a6770d2ff3add7aa1e276e82e38582ccb622")
+	set(USBPCAP_FILENAME "USBPcapSetup-${USBPCAP_VERSION}.exe")
+	set(USBPCAP_URL "${LIBS_URL}/USBPcap/${USBPCAP_FILENAME}")
+	FetchContent_Declare(USBPcap
+		URL ${USBPCAP_URL}
+		DOWNLOAD_DIR ${_file_download_dir}
+		URL_HASH SHA256=${USBPCAP_SHA256}
+		DOWNLOAD_NO_EXTRACT True
+	)
 endif(WIN32)
 
 if(APPLE AND WIRESHARK_BASE_DIR)
@@ -880,9 +906,6 @@ else() # ! MSVC
 			#
 			-Wno-format-nonliteral	# Enabled with -Wformat=2
 		)
-		list(APPEND WIRESHARK_C_ONLY_FLAGS
-			-Wno-pointer-sign # Enabled with -Wall
-		)
 	endif()
 
 	#
@@ -1440,6 +1463,9 @@ if(BUILD_wireshark OR BUILD_stratoshark)
 	endif() # USE_qt6
 
 	set(QT_FOUND ON)
+	if(WIN32)
+		ws_find_package(WinSparkle ENABLE_WINSPARKLE HAVE_SOFTWARE_UPDATE)
+	endif()
 	if(APPLE)
 		ws_find_package(Sparkle ENABLE_SPARKLE HAVE_SOFTWARE_UPDATE 2)
 	endif()
@@ -1540,9 +1566,6 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 	ws_find_package(CAP ENABLE_CAP HAVE_LIBCAP)
 	find_package(SETCAP)
 endif()
-
-# Windows version updates
-ws_find_package(WinSparkle ENABLE_WINSPARKLE HAVE_SOFTWARE_UPDATE)
 
 find_package( Asciidoctor 1.5 )
 find_package( XSLTPROC )

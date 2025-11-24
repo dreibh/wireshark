@@ -187,7 +187,7 @@ writecap_file_open(ws_cwstream* pfile, const char *filename)
 
                 if (ws_stat64(filename, &statb) == 0) {
                     if (statb.st_blksize > IO_BUF_SIZE) {
-                        buffsize = statb.st_blksize;
+                        buffsize = (size_t)statb.st_blksize;
                     }
                 }
 #endif
@@ -224,7 +224,7 @@ writecap_file_fdopen(ws_cwstream* pfile, int fd)
 
                 if (ws_fstat64(fd, &statb) == 0) {
                     if (statb.st_blksize > IO_BUF_SIZE) {
-                        buffsize = statb.st_blksize;
+                        buffsize = (size_t)statb.st_blksize;
                     }
                 }
 #endif
@@ -678,8 +678,8 @@ DIAG_ON(cast-qual)
             return 0;
     }
 
-    /* input was all buffered or compressed (put will fit in int) */
-    return (int)put;
+    /* input was all buffered or compressed */
+    return put;
 }
 
 /* Flush out what we've written so far.  Returns -1, and sets state->err,

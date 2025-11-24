@@ -63,6 +63,7 @@ set(PIDL_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-misc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-nspi.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-rcg.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-rdpdr_smartcard.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-rfr.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-srvsvc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-dcerpc-winreg.c
@@ -134,7 +135,6 @@ set(CLEAN_ASN1_DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lix2.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-llc-v1.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lnpdqp.c
-	${CMAKE_CURRENT_SOURCE_DIR}/packet-log3gpp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-logotypecertextn.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lpp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lppa.c
@@ -1494,6 +1494,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lmp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lnet.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-locamation-im.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-log3gpp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-logcat.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-logcat-text.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-lon.c
@@ -1802,8 +1803,10 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_multitransport.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_conctrl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_cliprdr.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_drdynvc.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_ecam.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_egfx.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_rail.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rdp_snd.c
@@ -2336,6 +2339,16 @@ set_target_properties(dissectors PROPERTIES
 	FOLDER "Libs/epan/dissectors"
 	COMPILE_DEFINITIONS "WS_BUILD_DLL"
 )
+
+# -Wpointer-sign is enabled with -Wall on Clang and GCC.
+# Most of the cases are conversions between pointers to plain char
+# and pointers to uint8_t (aka unsigned char) and harmless.
+check_c_compiler_flag(-Wno-pointer-sign C_Wno_pointer_sign_VALID)
+if(C_Wno_pointer_sign_VALID)
+	target_compile_options(dissectors PUBLIC
+		$<$<COMPILE_LANGUAGE:C>:-Wno-pointer-sign>
+	)
+endif()
 
 install(FILES ${DISSECTOR_PUBLIC_HEADERS}
 	DESTINATION "${PROJECT_INSTALL_INCLUDEDIR}/epan/dissectors"

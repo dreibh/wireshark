@@ -1440,7 +1440,7 @@ main(int argc, char *argv[])
                     cmdarg_err("-M does not support two-pass analysis.");
                     arg_error=true;
                 }
-                if (!get_positive_int(ws_optarg, "epan reset count", &epan_auto_reset_count))
+                if (!get_uint32(ws_optarg, "epan reset count", &epan_auto_reset_count))
                     arg_error = true;
 
                 epan_auto_reset = true;
@@ -4563,7 +4563,7 @@ static bool
 print_columns(capture_file *cf, const epan_dissect_t *edt)
 {
     char   *line_bufp;
-    int     i;
+    unsigned i;
     size_t  buf_offset;
     size_t  column_len;
     size_t  col_len;

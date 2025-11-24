@@ -48,10 +48,12 @@ gcry_error_t ws_cmac_buffer(int algo, void *digest, const void *buffer, size_t l
 	return result;
 }
 
-void crypt_des_ecb(uint8_t *output, const uint8_t *buffer, const uint8_t *key56)
+gcry_error_t
+crypt_des_ecb(uint8_t *output, const uint8_t *buffer, const uint8_t *key56)
 {
 	uint8_t key64[8];
 	gcry_cipher_hd_t handle;
+	gcry_error_t err;
 
 	memset(output, 0x00, 8);
 
@@ -65,23 +67,24 @@ void crypt_des_ecb(uint8_t *output, const uint8_t *buffer, const uint8_t *key56)
 	key64[6] = (key56[5] << 2) | (key56[6] >> 6);
 	key64[7] = (key56[6] << 1);
 
-	if (gcry_cipher_open(&handle, GCRY_CIPHER_DES, GCRY_CIPHER_MODE_ECB, 0)) {
-		return;
+	if ((err = gcry_cipher_open(&handle, GCRY_CIPHER_DES, GCRY_CIPHER_MODE_ECB, 0))) {
+		return err;
 	}
-	if (gcry_cipher_setkey(handle, key64, 8)) {
+	if ((err = gcry_cipher_setkey(handle, key64, 8))) {
 		gcry_cipher_close(handle);
-		return;
+		return err;
 	}
-	gcry_cipher_encrypt(handle, output, 8, buffer, 8);
+	err = gcry_cipher_encrypt(handle, output, 8, buffer, 8);
 	gcry_cipher_close(handle);
+	return err;
 }
 
 size_t rsa_decrypt_inplace(const unsigned len, unsigned char* data, gcry_sexp_t pk, bool pkcs1_padding, char **err)
 {
-	int         rc = 0;
-	size_t      decr_len = 0, i = 0;
-	gcry_sexp_t s_data = NULL, s_plain = NULL;
-	gcry_mpi_t  encr_mpi = NULL, text = NULL;
+	gcry_error_t rc = 0;
+	size_t       decr_len = 0, i = 0, pad_len;
+	gcry_sexp_t  s_data = NULL, s_plain = NULL;
+	gcry_mpi_t   encr_mpi = NULL, text = NULL;
 
 	*err = NULL;
 
@@ -142,16 +145,16 @@ size_t rsa_decrypt_inplace(const unsigned len, unsigned char* data, gcry_sexp_t 
 
 	if (pkcs1_padding) {
 		/* strip the padding*/
-		rc = 0;
+		pad_len = 0;
 		for (i = 1; i < decr_len; i++) {
 			if (data[i] == 0) {
-				rc = (int) i+1;
+				pad_len = i+1;
 				break;
 			}
 		}
 
-		decr_len -= rc;
-		memmove(data, data+rc, decr_len);
+		decr_len -= pad_len;
+		memmove(data, data+pad_len, decr_len);
 	}
 
 out:
@@ -185,7 +188,11 @@ hkdf_expand(int hashalgo, const uint8_t *prk, unsigned prk_len, const uint8_t *i
 
 	for (unsigned offset = 0; offset < out_len; offset += hash_len) {
 		gcry_md_reset(h);
-		gcry_md_setkey(h, prk, prk_len);                    /* Set PRK */
+		err = gcry_md_setkey(h, prk, prk_len);              /* Set PRK */
+		if (err) {
+		    gcry_md_close(h);
+		    return err;
+		}
 		if (offset > 0) {
 			gcry_md_write(h, lastoutput, hash_len);     /* T(1..N) */
 		}
@@ -316,9 +323,9 @@ hpke_expand(uint16_t kdf_id, const uint8_t *prk, const uint8_t *suite_id, const 
             return GPG_ERR_DIGEST_ALGO;
     }
     g_byte_array_append(labeled_info, (uint8_t *)&out_len_be, 2);
-    g_byte_array_append(labeled_info, HPKE_VERSION_ID, sizeof(HPKE_VERSION_ID) - 1);
+    g_byte_array_append(labeled_info, (const uint8_t*)HPKE_VERSION_ID, sizeof(HPKE_VERSION_ID) - 1);
     g_byte_array_append(labeled_info, suite_id, HPKE_SUIT_ID_LEN);
-    g_byte_array_append(labeled_info, label, (unsigned)strlen(label));
+    g_byte_array_append(labeled_info, (const uint8_t*)label, (unsigned)strlen(label));
     g_byte_array_append(labeled_info, info, (unsigned)(1 + hpke_hkdf_len(kdf_id) * 2));
     result = hkdf_expand(hashalgo, prk, (unsigned)hpke_hkdf_len(kdf_id), labeled_info->data, labeled_info->len, out, out_len);
     g_byte_array_free(labeled_info, TRUE);
@@ -380,6 +387,7 @@ hpke_set_nonce(gcry_cipher_hd_t cipher, uint64_t seq, uint8_t *base_nonce, size_
 {
     size_t i;
     uint8_t *nonce = (uint8_t *)wmem_alloc0(NULL, nonce_len);
+    gcry_error_t err;
 
     for (i = 1; i < 9; i++) {
         nonce[nonce_len - i] = seq & 255;
@@ -388,7 +396,9 @@ hpke_set_nonce(gcry_cipher_hd_t cipher, uint64_t seq, uint8_t *base_nonce, size_
     for (i = 0; i < nonce_len; i++) {
         nonce[i] ^= base_nonce[i];
     }
-    return gcry_cipher_setiv(cipher, nonce, nonce_len);
+    err = gcry_cipher_setiv(cipher, nonce, nonce_len);
+    wmem_free(NULL, nonce);
+    return err;
 }
 
 /*
