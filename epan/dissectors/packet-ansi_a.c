@@ -10516,7 +10516,7 @@ dissect_sip_dtap_bsmap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
         {
             ansi_a_tvb = tvb_new_composite();
             msg_type = (uint8_t *) wmem_alloc(pinfo->pool, 1);
-            msg_type[0] = (uint8_t) strtoul(tvb_get_string_enc(pinfo->pool, tvb, offset, 2, ENC_ASCII|ENC_NA), NULL, 16);
+            msg_type[0] = (uint8_t) strtoul((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, 2, ENC_ASCII|ENC_NA), NULL, 16);
 
             if ((begin = tvb_find_uint8(tvb, offset, linelen, '"')) > 0)
             {
@@ -10542,7 +10542,7 @@ dissect_sip_dtap_bsmap(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
                 if ((begin = tvb_find_uint8(tvb, offset, linelen, '=')) > 0)
                 {
                     begin++;
-                    tvb_composite_append(ansi_a_tvb, base64_to_tvb(tvb, tvb_get_string_enc(pinfo->pool, tvb, begin, offset + linelen - begin, ENC_ASCII|ENC_NA)));
+                    tvb_composite_append(ansi_a_tvb, base64_to_tvb(tvb, (char*)tvb_get_string_enc(pinfo->pool, tvb, begin, offset + linelen - begin, ENC_ASCII|ENC_NA)));
                 }
 
                 offset = next_offset;
@@ -10630,7 +10630,7 @@ ansi_a_dtap_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *e
     const ansi_a_tap_rec_t      *data_p = (const ansi_a_tap_rec_t *)data;
     stat_tap_table_item_type* dtap_data;
     stat_tap_table* table;
-    unsigned idx;
+    int idx;
 
     if (data_p->pdu_type == BSSAP_PDU_TYPE_DTAP)
     {
@@ -10639,9 +10639,9 @@ ansi_a_dtap_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *e
 
         table = g_array_index(stat_data->stat_tap_data->tables, stat_tap_table*, 0);
 
-        dtap_data = stat_tap_get_field_data(table, idx, COUNT_COLUMN);
+        dtap_data = stat_tap_get_field_data(table, (unsigned)idx, COUNT_COLUMN);
         dtap_data->value.uint_value++;
-        stat_tap_set_field_data(table, idx, COUNT_COLUMN, dtap_data);
+        stat_tap_set_field_data(table, (unsigned)idx, COUNT_COLUMN, dtap_data);
 
         return TAP_PACKET_REDRAW;
     }
@@ -10709,7 +10709,7 @@ ansi_a_bsmap_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *
     const ansi_a_tap_rec_t      *data_p = (const ansi_a_tap_rec_t *)data;
     stat_tap_table_item_type* dtap_data;
     stat_tap_table* table;
-    unsigned idx;
+    int idx;
 
     if (data_p->pdu_type == BSSAP_PDU_TYPE_BSMAP)
     {
@@ -10718,9 +10718,9 @@ ansi_a_bsmap_stat_packet(void *tapdata, packet_info *pinfo _U_, epan_dissect_t *
 
         table = g_array_index(stat_data->stat_tap_data->tables, stat_tap_table*, 0);
 
-        dtap_data = stat_tap_get_field_data(table, idx, COUNT_COLUMN);
+        dtap_data = stat_tap_get_field_data(table, (unsigned)idx, COUNT_COLUMN);
         dtap_data->value.uint_value++;
-        stat_tap_set_field_data(table, idx, COUNT_COLUMN, dtap_data);
+        stat_tap_set_field_data(table, (unsigned)idx, COUNT_COLUMN, dtap_data);
 
         return TAP_PACKET_REDRAW;
     }
