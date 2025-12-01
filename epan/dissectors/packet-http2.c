@@ -2425,8 +2425,8 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, p
     proto_item *header, *ti, *ti_named_field;
     uint32_t header_name_length;
     uint32_t header_value_length;
-    const uint8_t *header_name;
-    const uint8_t *header_value;
+    const char *header_name;
+    const char *header_value;
     int hoffset = 0;
     nghttp2_hd_inflater *hd_inflater;
     tvbuff_t *header_tvb = NULL;
@@ -2669,7 +2669,7 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, p
         hoffset += 4;
 
         /* Add header name. */
-        proto_tree_add_item_ret_string(header_tree, hf_http2_header_name, header_tvb, hoffset, header_name_length, ENC_ASCII|ENC_NA, pinfo->pool, &header_name);
+        proto_tree_add_item_ret_string(header_tree, hf_http2_header_name, header_tvb, hoffset, header_name_length, ENC_ASCII|ENC_NA, pinfo->pool, (const uint8_t**)&header_name);
         hoffset += header_name_length;
 
         /* header value length */
@@ -2677,14 +2677,14 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, p
         hoffset += 4;
 
         /* Add header value. */
-        proto_tree_add_item_ret_string(header_tree, hf_http2_header_value, header_tvb, hoffset, header_value_length, ENC_ASCII|ENC_NA, pinfo->pool, &header_value);
+        proto_tree_add_item_ret_string(header_tree, hf_http2_header_value, header_tvb, hoffset, header_value_length, ENC_ASCII|ENC_NA, pinfo->pool, (const uint8_t**)&header_value);
         // check if field is http2 header https://tools.ietf.org/html/rfc7541#appendix-A
         ti_named_field = try_add_named_header_field(header_tree, header_tvb, hoffset, header_value_length, header_name, header_value);
 
         /* Add header unescaped. */
         header_unescaped = g_uri_unescape_string(header_value, NULL);
         if (header_unescaped != NULL) {
-            char *header_unescaped_valid = ws_utf8_make_valid(pinfo->pool, header_unescaped, strlen(header_unescaped));
+            char *header_unescaped_valid = (char*)ws_utf8_make_valid(pinfo->pool, (uint8_t*)header_unescaped, strlen(header_unescaped));
             ti = proto_tree_add_string(header_tree, hf_http2_header_unescaped, header_tvb, hoffset, header_value_length, header_unescaped_valid);
             proto_item_set_generated(ti);
             g_free(header_unescaped);
@@ -2750,7 +2750,7 @@ inflate_http2_header_block(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, p
 
         wmem_strbuf_append(headers_buf, "\n");
         follow_data->tvb = tvb_new_child_real_data(header_tvb,
-            wmem_strbuf_get_str(headers_buf), (unsigned)wmem_strbuf_get_len(headers_buf),
+            (const uint8_t*)wmem_strbuf_get_str(headers_buf), (unsigned)wmem_strbuf_get_len(headers_buf),
             (int)wmem_strbuf_get_len(headers_buf));
         follow_data->stream_id = h2session->current_stream_id;
 
@@ -3262,7 +3262,7 @@ dissect_body_data(proto_tree *tree, packet_info *pinfo, http2_session_t* h2sessi
                 if ((boundary_len > 4) && (boundary_len < 70)){
                     boundary_len = boundary_len - 2; /* ignore ending CRLF*/
                     /* We have a potential boundary string */
-                    uint8_t *boundary = tvb_get_string_enc(pinfo->pool, data_tvb, 2, boundary_len, ENC_ASCII | ENC_NA);
+                    const char *boundary = (char*)tvb_get_string_enc(pinfo->pool, data_tvb, 2, boundary_len, ENC_ASCII | ENC_NA);
                     if (tvb_strneql(data_tvb, (length - 4) - boundary_len, boundary, boundary_len) == 0) {
                         /* We have multipart/mixed */
                         /* Populate the content type so we can dissect the body later */
@@ -3717,7 +3717,7 @@ get_real_header_value(packet_info* pinfo, const char* name, bool the_other_direc
                 value_len = pntohu32(data + 4 + name_len);
                 if (4 + name_len + 4 + value_len == hdr->table.data.datalen) {
                     /* return value */
-                    return get_ascii_string(pinfo->pool, data + 4 + name_len + 4, value_len);
+                    return (const char*)get_ascii_string(pinfo->pool, (uint8_t*)(data + 4 + name_len + 4), value_len);
                 }
                 else {
                     return NULL; /* unexpected error */
@@ -3764,11 +3764,13 @@ http2_get_header_value(packet_info *pinfo _U_, const char* name _U_, bool the_ot
  * size changes from a SETTINGS frame are handled in adjust_existing_window.)
  */
 static void
-adjust_window_size(tvbuff_t *tvb, packet_info *pinfo, http2_session_t* http2_session, proto_tree *http2_tree, int32_t adjustment, bool increaseWindow)
+adjust_window_size(tvbuff_t *tvb, packet_info *pinfo, http2_session_t* http2_session, proto_tree *http2_tree, uint32_t adjustment, bool increaseWindow)
 {
     proto_item *ti;
     uint32_t flow_index = select_http2_flow_index(pinfo, http2_session);
-    int32_t finalAdjustment = ((increaseWindow ? 1 : -1) * adjustment);
+    /* This SHOULD NOT overflow because the adjustment value is a 31-bit
+     * unsigned integer. */
+    int32_t finalAdjustment = ((increaseWindow ? 1 : -1) * (int32_t)adjustment);
 
     if (increaseWindow) {
         /* The WINDOW_UPDATE comes in for the other direction */
@@ -3873,7 +3875,7 @@ dissect_http2_data(tvbuff_t *tvb, packet_info *pinfo, http2_session_t* http2_ses
     int datalen;
 
     offset = dissect_frame_padding(tvb, &padding, http2_tree, offset, flags);
-    datalen = tvb_reported_length_remaining(tvb, offset) - padding;
+    datalen = tvb_reported_length_remaining(tvb, offset + padding);
 
     dissect_http2_data_body(tvb_new_subset_length(tvb, offset, datalen), pinfo, http2_session, http2_tree, 0, flags, datalen);
 
@@ -3884,7 +3886,7 @@ dissect_http2_data(tvbuff_t *tvb, packet_info *pinfo, http2_session_t* http2_ses
         offset += padding;
     }
 
-    adjust_window_size(tvb, pinfo, http2_session, http2_tree, (int32_t)datalen, false);
+    adjust_window_size(tvb, pinfo, http2_session, http2_tree, (uint32_t)datalen, false);
 
     return offset;
 }
@@ -4315,7 +4317,7 @@ dissect_http2_goaway(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *http2_tr
 static int
 dissect_http2_window_update(tvbuff_t *tvb, packet_info *pinfo, http2_session_t* http2_session, proto_tree *http2_tree, unsigned offset, uint8_t flags _U_)
 {
-    int32_t wsi;
+    uint32_t wsi;
     proto_item *ti;
 
     proto_tree_add_item(http2_tree, hf_http2_window_update_r, tvb, offset, 4, ENC_BIG_ENDIAN);

@@ -4092,7 +4092,7 @@ static uint8_t *rtps_decrypt_secure_payload(
     packet_info *pinfo,
     int offset,
     size_t secure_payload_len,
-    uint8_t *preshared_secret_key,
+    const char *preshared_secret_key,
     rtps_current_packet_decryption_info_t *decryption_info,
     uint8_t *tag,
     gcry_error_t* error,
@@ -5509,7 +5509,7 @@ static int rtps_util_add_locator_ex_t(proto_tree *tree, packet_info *pinfo, tvbu
  * Returns the new offset after parsing the locator list
  */
 static int rtps_util_add_locator_list(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
-                                int offset, const uint8_t *label, const unsigned encoding) {
+                                int offset, const char *label, const unsigned encoding) {
 
   proto_tree *locator_tree;
   uint32_t num_locators;
@@ -5544,7 +5544,7 @@ static int rtps_util_add_locator_list(proto_tree *tree, packet_info *pinfo, tvbu
 * Returns the new offset after parsing the locator list
 */
 static int rtps_util_add_multichannel_locator_list(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
-    int offset, const uint8_t *label, const unsigned encoding) {
+    int offset, const char *label, const unsigned encoding) {
 
     proto_tree *locator_tree;
     uint32_t num_locators;
@@ -5653,13 +5653,13 @@ static void rtps_util_add_locator_udp_v4(proto_tree *tree, packet_info *pinfo, t
  */
 static void rtps_util_add_guid_prefix_v1(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset,
                         int hf_prefix, int hf_host_id, int hf_app_id, int hf_app_id_instance_id,
-                        int hf_app_id_app_kind, const uint8_t *label) {
+                        int hf_app_id_app_kind, const char *label) {
   uint64_t prefix;
   uint32_t host_id, app_id, instance_id;
   uint8_t  app_kind;
   proto_item *ti;
   proto_tree *guid_tree, *appid_tree;
-  const uint8_t *safe_label = (label == NULL) ? (const uint8_t *)"guidPrefix" : label;
+  const char *safe_label = (label == NULL) ? "guidPrefix" : label;
 
   /* Read values from TVB */
   prefix = tvb_get_ntoh64(tvb, offset);
@@ -6328,7 +6328,7 @@ static const char *rtps_util_typecode_id_to_string(uint32_t typecode_id) {
 // NOLINTNEXTLINE(misc-no-recursion)
 static int rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset, const unsigned encoding,
                         int      indent_level, int is_pointer, uint16_t bitfield, int is_key, const int offset_begin,
-                        char    *name,
+                        const char *name,
                         int      seq_max_len,   /* -1 = not a sequence field */
                         uint32_t *arr_dimension, /* if !NULL: array of 10 int */
                         int      ndds_40_hack) {
@@ -6423,7 +6423,7 @@ static int rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *
      */
     case RTI_CDR_TK_UNION: {
         uint32_t    struct_name_len;
-        uint8_t     *struct_name;
+        char       *struct_name;
         const char *discriminator_name;                    /* for unions */
         char       *discriminator_enum_name = NULL;        /* for unions with enum discriminator */
         /*uint32_t defaultIdx;*/ /* Currently is ignored */
@@ -6431,7 +6431,7 @@ static int rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *
         uint16_t    disc_size;                             /* Currently is ignored */
         uint32_t    disc_offset_begin, num_members, member_name_len;
         uint16_t    member_length;
-        uint8_t    *member_name             = NULL;
+        const char *member_name             = NULL;
         uint32_t    next_offset, field_offset_begin, member_label_count, discriminator_enum_name_length;
         int32_t     member_label;
         unsigned    j;
@@ -6465,7 +6465,7 @@ static int rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *
           /* Enums has also a name that we should print */
           LONG_ALIGN(offset);
           discriminator_enum_name_length = tvb_get_uint32(tvb, offset, encoding);
-          discriminator_enum_name = tvb_get_string_enc(pinfo->pool, tvb, offset+4, discriminator_enum_name_length, ENC_ASCII);
+          discriminator_enum_name = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset+4, discriminator_enum_name_length, ENC_ASCII);
         }
         offset = disc_offset_begin + disc_size;
 #if 0
@@ -6527,7 +6527,7 @@ static int rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *
           offset += 4;
 
           /* Name */
-          member_name = tvb_get_string_enc(pinfo->pool, tvb, offset, member_name_len, ENC_ASCII);
+          member_name = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, member_name_len, ENC_ASCII);
           offset = check_offset_addition(offset, member_name_len, tree, NULL, tvb);
 
           /* is Pointer ? */
@@ -6613,7 +6613,7 @@ static int rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *
      * ->    A4 = 4 bytes alignment, A2 = 2 bytes alignment     <-
      * -> ----------------------------------------------------- <-
      */
-        int8_t *struct_name;
+        const char *struct_name;
         uint32_t struct_name_len, num_members;
         uint32_t next_offset;
         const char *typecode_name;
@@ -6626,7 +6626,7 @@ static int rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *
         offset += 4;
 
         /* struct name */
-        struct_name = tvb_get_string_enc(pinfo->pool, tvb, offset, struct_name_len, ENC_ASCII);
+        struct_name = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, struct_name_len, ENC_ASCII);
         offset = check_offset_addition(offset, struct_name_len, tree, NULL, tvb);
 
 
@@ -6672,7 +6672,7 @@ static int rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *
 
         next_offset = offset;
         for (i = 0; i < num_members; ++i) {
-          uint8_t *member_name;
+          const char *member_name;
           uint32_t member_name_len;
           uint16_t member_length;
           uint32_t field_offset_begin;
@@ -6693,7 +6693,7 @@ static int rtps_util_add_typecode(proto_tree *tree, tvbuff_t *tvb, packet_info *
           offset += 4;
 
           /* Name */
-          member_name = tvb_get_string_enc(pinfo->pool, tvb, offset, member_name_len, ENC_ASCII);
+          member_name = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, member_name_len, ENC_ASCII);
           offset += member_name_len;
 
           if (tk_id == RTI_CDR_TK_ENUM) {
@@ -7197,7 +7197,7 @@ static int rtps_util_add_type_member(proto_tree* tree, packet_info* pinfo,
           offset, -1, tree, &member_type_id);
   rtps_util_add_string(member_property, tvb, offset_tmp, hf_rtps_type_object_name, encoding);
   long_number = tvb_get_uint32(tvb, offset_tmp, encoding);
-  name = tvb_get_string_enc(pinfo->pool, tvb, offset_tmp+4, long_number, ENC_ASCII);
+  name = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset_tmp+4, long_number, ENC_ASCII);
   proto_item_append_text(tree, " %s (ID: %d)", name, member_id);
   if (member_object) {
     member_object->member_id = member_id;
@@ -7402,7 +7402,7 @@ static void rtps_util_add_type_element_module(proto_tree *tree, packet_info * pi
   uint32_t long_number;
   char * name = NULL;
   long_number = tvb_get_uint32(tvb, offset, encoding);
-  name = tvb_get_string_enc(pinfo->pool, tvb, offset+4, long_number, ENC_ASCII);
+  name = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset+4, long_number, ENC_ASCII);
   proto_item_set_text(tree, "module %s", name);
   offset = rtps_util_add_string(tree, tvb, offset, hf_rtps_type_object_element_module_name, encoding);
   rtps_util_add_type_library(tree, pinfo, tvb, offset, encoding, -1);
@@ -10257,7 +10257,7 @@ static int rtps_util_add_rti_topic_query_service_request(proto_tree * tree, pack
 
   LONG_ALIGN_ZERO(offset, alignment_zero);
   topic_name_len = tvb_get_uint32(tvb, offset, encoding);
-  topic_name = tvb_get_string_enc(pinfo->pool, tvb, offset + 4, topic_name_len, ENC_ASCII);
+  topic_name = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset + 4, topic_name_len, ENC_ASCII);
   proto_tree_add_string(topic_query_tree, hf_rtps_topic_query_topic_name, tvb, offset, topic_name_len + 4, topic_name);
   if (topic_name != NULL) {
     submessage_col_info* current_submessage_col_info = NULL;
@@ -11996,7 +11996,7 @@ static bool dissect_parameter_sequence_v1(proto_tree *rtps_parameter_tree, packe
       ENSURE_LENGTH(4);
       {
         uint32_t temp_offset, prop_size;
-        const uint8_t *propName, *propValue;
+        const char *propName, *propValue;
         proto_item *list_item, *item;
         proto_tree *property_list_tree, *property_tree;
         uint32_t seq_size = tvb_get_uint32(tvb, offset, encoding);
@@ -12009,7 +12009,7 @@ static bool dissect_parameter_sequence_v1(proto_tree *rtps_parameter_tree, packe
           temp_offset = offset+4;
           while(seq_size-- > 0) {
             prop_size = tvb_get_uint32(tvb, temp_offset, encoding);
-            propName = tvb_get_string_enc(pinfo->pool, tvb, temp_offset+4, prop_size, ENC_ASCII);
+            propName = (char*)tvb_get_string_enc(pinfo->pool, tvb, temp_offset+4, prop_size, ENC_ASCII);
 
             /* NDDS align strings at 4-bytes word. */
             str_length = (4 + ((prop_size + 3) & 0xfffffffc));
@@ -12018,7 +12018,7 @@ static bool dissect_parameter_sequence_v1(proto_tree *rtps_parameter_tree, packe
             temp_offset += str_length;
 
             prop_size = tvb_get_uint32(tvb, temp_offset, encoding);
-            propValue = tvb_get_string_enc(pinfo->pool, tvb, temp_offset+4, prop_size, ENC_ASCII);
+            propValue = (char*)tvb_get_string_enc(pinfo->pool, tvb, temp_offset+4, prop_size, ENC_ASCII);
 
             /* NDDS align strings at 4-bytes word. */
             str_length = (4 + ((prop_size + 3) & 0xfffffffc));
@@ -13001,7 +13001,7 @@ static void dissect_APP_ACK_CONF(tvbuff_t *tvb,
   *
   */
   int original_offset; /* Offset to the readerEntityId */
-  int32_t virtual_writer_count;
+  uint32_t virtual_writer_count;
   uint32_t wid;
   proto_item *octet_item;
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, APP_ACK_CONF_FLAGS, flags);
@@ -13052,7 +13052,7 @@ static void dissect_APP_ACK_CONF(tvbuff_t *tvb,
     proto_tree *sil_tree_writer_list;
     proto_tree *sil_tree_writer;
 
-    int32_t current_writer_index = 0;
+    uint32_t current_writer_index = 0;
 
     /** Writer list **/
 

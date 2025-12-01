@@ -934,7 +934,7 @@ get_header_field_pstr(wmem_allocator_t *scratch, nghttp3_qpack_nv *header_nv, co
     char             *value;     /* Typed pointer to field's value. */
     uint32_t         value_len;  /* Field's value length. */
 
-    char             *scratch_buffer;
+    uint8_t          *scratch_buffer;
 
     /* Extract the vectors from `header_nv'. */
     namev       = nghttp3_rcbuf_get_buf(header_nv->name);
@@ -951,7 +951,7 @@ get_header_field_pstr(wmem_allocator_t *scratch, nghttp3_qpack_nv *header_nv, co
      * comment above.
      */
     pstr_len = (4 + name_len) + (4 + value_len);
-    scratch_buffer = (char *)wmem_alloc(scratch, pstr_len);
+    scratch_buffer = (uint8_t *)wmem_alloc(scratch, pstr_len);
     phtonu32(&scratch_buffer[0], name_len);
     memcpy(&scratch_buffer[4], name, name_len);
     phtonu32(&scratch_buffer[4 + name_len], value_len);
@@ -1009,8 +1009,8 @@ http3_get_header_value(packet_info *pinfo, const char* name, bool the_other_dire
             in = (http3_header_field_t *)wmem_array_index(header_data->header_fields, i);
             name_len = pntohu32(in->decoded.bytes);
             if (strlen(name) == name_len && strncmp(in->decoded.bytes + 4, name, name_len) == 0) {
-                return get_ascii_string(pinfo->pool,
-                    in->decoded.bytes + 4 + name_len + 4,
+                return (const char*)get_ascii_string(pinfo->pool,
+                    (uint8_t*)in->decoded.bytes + 4 + name_len + 4,
                     pntohu32(in->decoded.bytes + 4 + name_len));
             }
         }
@@ -1210,7 +1210,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
         header_len += in->decoded.len;
 
         /* Now setup the tvb buffer to have the new data */
-        next_tvb = tvb_new_child_real_data(tvb, in->decoded.bytes, in->decoded.len, in->decoded.len);
+        next_tvb = tvb_new_child_real_data(tvb, (uint8_t*)in->decoded.bytes, in->decoded.len, in->decoded.len);
         tvb_composite_append(header_tvb, next_tvb);
     }
 
@@ -1233,9 +1233,9 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
         proto_item              *header;
         proto_tree              *header_tree;
         uint32_t                header_name_length;
-        const uint8_t           *header_name;
+        const char             *header_name;
         uint32_t                header_value_length;
-        const uint8_t           *header_value;
+        const char             *header_value;
 
         in = (http3_header_field_t *)wmem_array_index(header_data->header_fields, i);
 
@@ -1252,7 +1252,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
 
         /* Add header name. */
         proto_tree_add_item_ret_string(header_tree, hf_http3_header_name, header_tvb, hoffset, header_name_length,
-                                       ENC_ASCII | ENC_NA, pinfo->pool, &header_name);
+                                       ENC_ASCII | ENC_NA, pinfo->pool, (const uint8_t**)&header_name);
         hoffset += header_name_length;
 
         /* header value length */
@@ -1262,7 +1262,7 @@ dissect_http3_headers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsig
 
         /* Add header value. */
         proto_tree_add_item_ret_string(header_tree, hf_http3_header_value, header_tvb, hoffset, header_value_length,
-                                       ENC_ASCII | ENC_NA, pinfo->pool, &header_value);
+                                       ENC_ASCII | ENC_NA, pinfo->pool, (const uint8_t**)&header_value);
 
         ti_named_field = try_add_named_header_field(header_tree, header_tvb, hoffset, header_value_length, header_name,
                                                     header_value);
