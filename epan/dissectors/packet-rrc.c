@@ -46430,7 +46430,7 @@ dissect_rrc_DL_TransportChannelType_r5(tvbuff_t *tvb _U_, int offset _U_, asn1_c
             }
             else{
                 /*If it doesn't exists, insert it*/
-                if( (cur_val=(int *)g_tree_lookup(hsdsch_muxed_flows, GUINT_TO_POINTER((unsigned)rrcinf->hrnti[fpinf->cur_tb]))) == NULL ){
+                if( (cur_val=(unsigned *)g_tree_lookup(hsdsch_muxed_flows, GUINT_TO_POINTER((unsigned)rrcinf->hrnti[fpinf->cur_tb]))) == NULL ){
 
                     flowd_p = g_new0(unsigned, 1);
                     *flowd_p = (1U<<flowd);    /*Set the bit to mark it as true*/
@@ -49927,7 +49927,7 @@ dissect_rrc_DL_TransportChannelType_r7(tvbuff_t *tvb _U_, int offset _U_, asn1_c
             }
             else{
                 /*If it doesn't exists, insert it*/
-                if( (cur_val=(int *)g_tree_lookup(hsdsch_muxed_flows, GUINT_TO_POINTER((unsigned)rrcinf->hrnti[fpinf->cur_tb]))) == NULL ){
+                if( (cur_val=(unsigned *)g_tree_lookup(hsdsch_muxed_flows, GUINT_TO_POINTER((unsigned)rrcinf->hrnti[fpinf->cur_tb]))) == NULL ){
 
                     flowd_p = g_new0(unsigned, 1);
                     *flowd_p = (1U<<flowd);    /* Set the bit to mark it as true*/
