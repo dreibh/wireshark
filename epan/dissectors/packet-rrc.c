@@ -18376,7 +18376,8 @@ static const value_string rrc_ims_info_atgw_trans_det_cont_type[] = {
   {2, "ATGW-not-available"},
   {0, NULL}
 };
-static int flowd,type;
+static uint32_t flowd;
+static int type;
 
 /*Stores how many channels we have detected for a HS-DSCH MAC-flow*/
 #define    RRC_MAX_NUM_HSDHSCH_MACDFLOW 8
@@ -18622,7 +18623,7 @@ static const value_string rrc_IntegrityProtectionAlgorithm_vals[] = {
 static int
 dissect_rrc_IntegrityProtectionAlgorithm(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   rrc_ciphering_info *ciphering_info;
-  int32_t integrity_algo;
+  uint32_t integrity_algo;
 
   offset = dissect_per_enumerated(tvb, offset, actx, tree, hf_index,
                                      1, &integrity_algo, false, 0, NULL);
@@ -18632,7 +18633,7 @@ dissect_rrc_IntegrityProtectionAlgorithm(tvbuff_t *tvb _U_, int offset _U_, asn1
   if (ciphering_info == NULL) {
     return offset;
   }
-  ciphering_info->integrity_algorithm = integrity_algo;
+  ciphering_info->integrity_algorithm = (int32_t)integrity_algo;
 
 
   return offset;
@@ -18664,7 +18665,7 @@ static const value_string rrc_CipheringAlgorithm_vals[] = {
 static int
 dissect_rrc_CipheringAlgorithm(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   rrc_ciphering_info *ciphering_info;
-  int32_t ciphering_algo;
+  uint32_t ciphering_algo;
 
   offset = dissect_per_enumerated(tvb, offset, actx, tree, hf_index,
                                      2, &ciphering_algo, false, 0, NULL);
@@ -18674,7 +18675,7 @@ dissect_rrc_CipheringAlgorithm(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *ac
   if (ciphering_info == NULL) {
     return offset;
   }
-  ciphering_info->ciphering_algorithm = ciphering_algo;
+  ciphering_info->ciphering_algorithm = (int32_t)ciphering_algo;
 
 
   return offset;
@@ -39323,11 +39324,11 @@ static const value_string rrc_RRC_StateIndicator_vals[] = {
 
 static int
 dissect_rrc_RRC_StateIndicator(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
-int32_t state_dec = -1;
+uint32_t state_dec = -1;
   offset = dissect_per_enumerated(tvb, offset, actx, tree, hf_index,
                                      4, &state_dec, false, 0, NULL);
 
-if(state_dec >= 0 && state_dec <= 3) {
+if(state_dec <= 3) {
   state_dec++; /* Encoded values are 0-based, Values in the enum are 1-based*/
   private_data_set_rrc_state_indicator(actx,(enum rrc_ue_state)state_dec);
 }
@@ -49538,7 +49539,7 @@ static const value_string rrc_IntegrityProtectionAlgorithm_r7_vals[] = {
 static int
 dissect_rrc_IntegrityProtectionAlgorithm_r7(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   rrc_ciphering_info *ciphering_info;
-  int32_t integrity_algo;
+  uint32_t integrity_algo;
 
   offset = dissect_per_enumerated(tvb, offset, actx, tree, hf_index,
                                      2, &integrity_algo, false, 0, NULL);
@@ -49548,7 +49549,7 @@ dissect_rrc_IntegrityProtectionAlgorithm_r7(tvbuff_t *tvb _U_, int offset _U_, a
   if (ciphering_info == NULL) {
     return offset;
   }
-  ciphering_info->integrity_algorithm = integrity_algo;
+  ciphering_info->integrity_algorithm = (int32_t)integrity_algo;
 
 
   return offset;
@@ -49581,7 +49582,7 @@ static const value_string rrc_CipheringAlgorithm_r7_vals[] = {
 static int
 dissect_rrc_CipheringAlgorithm_r7(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   rrc_ciphering_info *ciphering_info;
-  int32_t ciphering_algo;
+  uint32_t ciphering_algo;
 
   offset = dissect_per_enumerated(tvb, offset, actx, tree, hf_index,
                                      3, &ciphering_algo, false, 0, NULL);
@@ -49591,7 +49592,7 @@ dissect_rrc_CipheringAlgorithm_r7(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t 
   if (ciphering_info == NULL) {
     return offset;
   }
-  ciphering_info->ciphering_algorithm = ciphering_algo;
+  ciphering_info->ciphering_algorithm = (int32_t)ciphering_algo;
 
 
   return offset;
