@@ -490,8 +490,8 @@ nettrace_msg_to_packet(wtap* wth, wtap_rec* rec, const char* text, size_t len, i
 				if (exported_pdu_info.presence_flags & EXP_PDU_TAG_SRC_PORT_BIT) {
 					wtap_buffer_append_epdu_uint(&rec->data, EXP_PDU_TAG_SRC_PORT, exported_pdu_info.src_port);
 				}
-				else if (proxy_exported_pdu_info.presence_flags & EXP_PDU_TAG_DST_PORT_BIT) {
-					wtap_buffer_append_epdu_uint(&rec->data, EXP_PDU_TAG_SRC_PORT, proxy_exported_pdu_info.dst_port);
+				else if (proxy_exported_pdu_info.presence_flags & EXP_PDU_TAG_SRC_PORT_BIT) {
+					wtap_buffer_append_epdu_uint(&rec->data, EXP_PDU_TAG_SRC_PORT, proxy_exported_pdu_info.src_port);
 				}
 				if (exported_pdu_info.presence_flags & EXP_PDU_TAG_DST_PORT_BIT) {
 					wtap_buffer_append_epdu_uint(&rec->data, EXP_PDU_TAG_DST_PORT, exported_pdu_info.dst_port);
@@ -691,7 +691,7 @@ nettrace_close(wtap *wth)
 wtap_open_return_val
 nettrace_3gpp_32_423_file_open(wtap *wth, int *err _U_, char **err_info _U_)
 {
-	nstime_t start_time;
+	nstime_t start_time = NSTIME_INIT_UNSET;
 	nettrace_3gpp_32_423_file_info_t *file_info;
 	xmlDocPtr doc;
 	xmlNodePtr root_element = NULL;

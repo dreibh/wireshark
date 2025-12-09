@@ -402,6 +402,22 @@ capture_opts_get_interface_list(int *err _U_, char **err_str _U_)
 #endif
     return append_extcap_interface_list(NULL);
 }
+
+static void
+commandline_capture_interface_options(FILE* const output)
+{
+    fprintf(output, "Capture source:\n");
+    fprintf(output, "  -i <source>, --source <source>\n");
+    fprintf(output, "                           name or idx of source (def: first source listed by -D or --list-sources)\n");
+    fprintf(output, "  -f <capture filter>      filter in libsinsp/libscap filter syntax\n");
+
+}
+
+static void
+commandline_list_interface_options(FILE* const output)
+{
+    fprintf(output, "  -D, --list-sources       print list of sources and exit\n");
+}
 #endif
 
 /* And now our feature presentation... [ fade to music ] */
@@ -583,7 +599,18 @@ int main(int argc, char *qt_argv[])
         g_free(rf_path);
     }
 
-    ret_val = commandline_early_options(argc, argv);
+    commandline_usage_app_data_t commandline_app_data = {
+        "events",
+        "Stratoshark Debug Console",
+        "Interactively dump and analyze system calls and log messages."
+#ifdef HAVE_LIBPCAP
+        ,
+        commandline_capture_interface_options,
+        commandline_list_interface_options,
+        NULL            // XXX libscap and libsinsp don't support this
+#endif
+    };
+    ret_val = commandline_early_options(argc, argv, &commandline_app_data);
     if (ret_val != EXIT_SUCCESS) {
         if (ret_val == WS_EXIT_NOW) {
             return 0;
@@ -709,6 +736,8 @@ int main(int argc, char *qt_argv[])
     app_data.env_var_prefix = application_configuration_environment_prefix();
     app_data.col_fmt = application_columns();
     app_data.num_cols = application_num_columns();
+    app_data.register_func = register_all_protocols;
+    app_data.handoff_func = register_all_protocol_handoffs;
     app_data.tap_reg_listeners = tap_reg_listener;
     app_data.supports_packets = application_flavor_is_wireshark();
     if (!epan_init(splash_update, NULL, true, &app_data)) {
@@ -794,7 +823,7 @@ int main(int argc, char *qt_argv[])
     prefs_to_capture_opts(&global_capture_opts);
 
     /* Now get our remaining args */
-    commandline_other_options(&global_capture_opts, argc, argv, true);
+    commandline_other_options(&global_capture_opts, argc, argv, &commandline_app_data, true);
 
     /* Convert some command-line parameters to QStrings */
     cf_name = QString(commandline_get_cf_name());
