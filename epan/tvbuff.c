@@ -225,6 +225,23 @@ validate_offset(const tvbuff_t *tvb, const unsigned abs_offset)
 }
 
 static inline int
+validate_offset_and_remaining(const tvbuff_t *tvb, const unsigned offset, unsigned *rem_len)
+{
+	int exception;
+
+	exception = validate_offset(tvb, offset);
+	if (!exception)
+		*rem_len = tvb->length - offset;
+
+	return exception;
+}
+
+/*
+ * The same as validate_offset except this accepts negative offsets, meaning
+ * relative to the end of (captured) length. (That it's captured, not reported,
+ * length is one reason to deprecate signed offsets, #20103.)
+ */
+static inline int
 compute_offset(const tvbuff_t *tvb, const int offset, unsigned *offset_ptr)
 {
 	if (offset >= 0) {
@@ -377,6 +394,7 @@ tvb_new_octet_aligned(tvbuff_t *tvb, uint32_t bit_offset, int32_t no_of_bits)
 	const uint8_t *data;
 
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
+	DISSECTOR_ASSERT_CMPINT(no_of_bits, >=, -1);
 
 	byte_offset = bit_offset >> 3;
 	left = bit_offset % 8; /* for left-shifting */
@@ -394,11 +412,11 @@ tvb_new_octet_aligned(tvbuff_t *tvb, uint32_t bit_offset, int32_t no_of_bits)
 	}
 
 	/* already aligned -> shortcut */
-	if ((left == 0) && (remaining_bits == 0)) {
+	if (((left == 0) && (remaining_bits == 0)) || datalen == 0) {
 		return tvb_new_subset_length_caplen(tvb, byte_offset, datalen, datalen);
 	}
 
-	DISSECTOR_ASSERT(datalen>0);
+	ws_assert(datalen > 0);
 
 	/* If at least one trailing byte is available, we must use the content
 	 * of that byte for the last shift (i.e. tvb_get_ptr() must use datalen + 1).
@@ -443,6 +461,7 @@ tvb_new_octet_right_aligned(tvbuff_t *tvb, uint32_t bit_offset, int32_t no_of_bi
 	const uint8_t *data;
 
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
+	DISSECTOR_ASSERT_CMPINT(no_of_bits, >=, -1);
 
 	byte_offset = bit_offset / 8;
 	/* right shift to put bits in place and discard least significant bits */
@@ -462,11 +481,11 @@ tvb_new_octet_right_aligned(tvbuff_t *tvb, uint32_t bit_offset, int32_t no_of_bi
 	}
 
 	/* already aligned -> shortcut */
-	if ((right == 0) && (remaining_bits == 0)) {
+	if (((right == 0) && (remaining_bits == 0)) || dst_len == 0) {
 		return tvb_new_subset_length_caplen(tvb, byte_offset, dst_len, dst_len);
 	}
 
-	DISSECTOR_ASSERT(dst_len>0);
+	ws_assert(dst_len > 0);
 
 	if (_tvb_captured_length_remaining(tvb, byte_offset) > dst_len) {
 		/* last octet will get data from trailing octet */
@@ -560,14 +579,14 @@ _tvb_captured_length_remaining(const tvbuff_t *tvb, const int offset)
 }
 
 int
-tvb_captured_length_remaining(const tvbuff_t *tvb, const int offset)
+tvb_captured_length_remaining(const tvbuff_t *tvb, const unsigned offset)
 {
-	unsigned abs_offset = 0, rem_length;
+	unsigned rem_length;
 	int   exception;
 
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
-	exception = compute_offset_and_remaining(tvb, offset, &abs_offset, &rem_length);
+	exception = validate_offset_and_remaining(tvb, offset, &rem_length);
 	if (exception)
 		return 0;
 
@@ -608,12 +627,11 @@ tvb_ensure_captured_length_remaining(const tvbuff_t *tvb, const unsigned offset)
 }
 
 /* Validates that 'length' bytes are available starting from
- * offset (pos/neg). Does not throw an exception. */
+ * offset. Does not throw an exception. */
 bool
-tvb_bytes_exist(const tvbuff_t *tvb, const int offset, const int length)
+tvb_bytes_exist(const tvbuff_t *tvb, const unsigned offset, const int length)
 {
-	unsigned abs_offset = 0, abs_length;
-	int   exception;
+	unsigned end_offset;
 
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
@@ -624,8 +642,18 @@ tvb_bytes_exist(const tvbuff_t *tvb, const int offset, const int length)
 	if (length < 0)
 		return false;
 
-	exception = check_offset_length_no_exception(tvb, offset, length, &abs_offset, &abs_length);
-	if (exception)
+	/*
+	 * Compute the offset of the first byte past the length.
+	 * Make sure it doesn't overflow.
+	 */
+	if (ckd_add(&end_offset, offset, length))
+		return false;
+
+	/*
+	 * Check that bytes exist up to right before that offset. (As length is
+	 * positive and there was no overflow we don't need to check offset.)
+	 */
+	if (end_offset > tvb->length)
 		return false;
 
 	return true;
@@ -701,21 +729,14 @@ tvb_ensure_bytes_exist(const tvbuff_t *tvb, const unsigned offset, const int len
 }
 
 bool
-tvb_offset_exists(const tvbuff_t *tvb, const int offset)
+tvb_offset_exists(const tvbuff_t *tvb, const unsigned offset)
 {
-	unsigned abs_offset = 0;
-	int   exception;
-
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
-	exception = compute_offset(tvb, offset, &abs_offset);
-	if (exception)
-		return false;
-
-	/* compute_offset only throws an exception on >, not >= because of the
-	 * comment above check_offset_length_no_exception, but here we want the
-	 * opposite behaviour so we check ourselves... */
-	return abs_offset < tvb->length;
+	/* We don't care why the offset doesn't exist, and unlike some
+	 * other functions we don't accept an offset one past the end,
+	 * so we check ourselves... */
+	return offset < tvb->length;
 }
 
 unsigned
@@ -727,19 +748,18 @@ tvb_reported_length(const tvbuff_t *tvb)
 }
 
 int
-tvb_reported_length_remaining(const tvbuff_t *tvb, const int offset)
+tvb_reported_length_remaining(const tvbuff_t *tvb, const unsigned offset)
 {
-	unsigned abs_offset = 0;
 	int   exception;
 
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
-	exception = compute_offset(tvb, offset, &abs_offset);
+	exception = validate_offset(tvb, offset);
 	if (exception)
 		return 0;
 
-	if (tvb->reported_length >= abs_offset)
-		return tvb->reported_length - abs_offset;
+	if (tvb->reported_length >= offset)
+		return tvb->reported_length - offset;
 	else
 		return 0;
 }
@@ -945,10 +965,6 @@ tvb_memcpy(tvbuff_t *tvb, void *target, const int offset, size_t length)
  * If it did, this could replace some code that calls
  * "tvb_ensure_bytes_exist()" and then allocates a buffer and copies
  * data to it.
- *
- * "composite_get_ptr()" depends on -1 not being
- * an error; does anything else depend on this routine treating -1 as
- * meaning "to the end of the buffer"?
  *
  * If scope is NULL, memory is allocated with g_malloc() and user must
  * explicitly free it with g_free().
@@ -4072,7 +4088,7 @@ tvb_get_raw_bytes_as_string(tvbuff_t *tvb, const int offset, char *buffer, size_
 
 	DISSECTOR_ASSERT(bufsize - 1 < INT_MAX);
 
-	len = tvb_captured_length_remaining(tvb, offset);
+	len = _tvb_captured_length_remaining(tvb, offset);
 	if (len <= 0) {
 		buffer[0] = '\0';
 		return 0;

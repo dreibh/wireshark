@@ -21,6 +21,7 @@
 
 // To do:
 // - Add a preference for the maximum number of modules to display?
+// - Add a field that indicates whether or not the event writes data?
 
 #define PNAME  "MS Procmon Event"
 #define PSNAME "MS Procmon"
@@ -349,6 +350,19 @@ static const value_string process_operation_vals[] = {
         { PROCMON_PROCESS_OPERATION_PROCESS_START,     "Process Start" },
         { PROCMON_PROCESS_OPERATION_PROCESS_STATISTICS, "Process Statistics" },
         { PROCMON_PROCESS_OPERATION_SYSTEM_STATISTICS, "System Statistics" },
+        { 0, NULL }
+};
+
+static const true_false_string process_architecture_tfs = { "64-bit", "32-bit" };
+
+// https://learn.microsoft.com/en-us/windows/win32/debug/system-error-codes--0-499-
+static const value_string system_error_code_vals[] = {
+        { 0x0, "SUCCESS" },
+        { 0x2, "FILE_NOT_FOUND" },
+        { 0x3, "PATH_NOT_FOUND" },
+        { 0x4, "TOO_MANY_OPEN_FILES" },
+        { 0x5, "ACCESS_DENIED" },
+        { 0x6, "INVALID_HANDLE" },
         { 0, NULL }
 };
 
@@ -2474,7 +2488,7 @@ static bool dissect_procmon_network_event(tvbuff_t* tvb, packet_info* pinfo, pro
     offset += 4;
     if (flags & NETWORK_FLAG_IS_SRC_IPv4_MASK)
     {
-        proto_tree_add_item(network_event_tree, hf_procmon_network_src_ipv4, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(network_event_tree, hf_procmon_network_src_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
         proto_tree_add_item(network_event_tree, hf_procmon_network_padding, tvb, offset, 12, ENC_NA);
         offset += 12;
@@ -2486,7 +2500,7 @@ static bool dissect_procmon_network_event(tvbuff_t* tvb, packet_info* pinfo, pro
     }
     if (flags & NETWORK_FLAG_IS_DEST_IPv4_MASK)
     {
-        proto_tree_add_item(network_event_tree, hf_procmon_network_dest_ipv4, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(network_event_tree, hf_procmon_network_dest_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
         offset += 4;
         proto_tree_add_item(network_event_tree, hf_procmon_network_padding, tvb, offset, 12, ENC_NA);
         offset += 12;
@@ -2576,6 +2590,7 @@ dissect_procmon_event(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void 
         proto_tree_add_string(header_tree, hf_procmon_process_description, tvb, offset, 4, proc->description);
         proto_tree_add_boolean(header_tree, hf_procmon_process_is_virtualized, tvb, offset, 4, proc->is_virtualized);
         proto_tree_add_boolean(header_tree, hf_procmon_process_is_64_bit, tvb, offset, 4, proc->is_64_bit);
+        pinfo->user_name = proc->user_name;
         col_clear(pinfo->cinfo, COL_INFO);
         col_add_fstr(pinfo->cinfo, COL_INFO, "%s ", proc->process_name);
         col_set_fence(pinfo->cinfo, COL_INFO);
@@ -2800,7 +2815,7 @@ proto_register_procmon(void)
         },
         { &hf_procmon_process_is_64_bit,
           { "Process Is 64-bit", "procmon.process.is_64_bit",
-            FT_BOOLEAN, BASE_NONE, NULL, 0, NULL, HFILL }
+            FT_BOOLEAN, BASE_NONE, TFS(&process_architecture_tfs), 0, NULL, HFILL }
         },
         { &hf_procmon_module_base_address,
           { "Module Base Address", "procmon.module.base_address",
@@ -2852,7 +2867,7 @@ proto_register_procmon(void)
         },
         { &hf_procmon_event_result,
           { "Event Result", "procmon.event_result",
-            FT_UINT32, BASE_DEC, NULL, 0, NULL, HFILL }
+            FT_UINT32, BASE_DEC_HEX, VALS(system_error_code_vals), 0, NULL, HFILL }
         },
         { &hf_procmon_stack_trace_depth,
           { "Stack Trace Depth", "procmon.stack_trace_depth",

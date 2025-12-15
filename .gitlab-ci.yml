@@ -225,6 +225,7 @@ workflow:
     key: ${CI_JOB_NAME}-master
     paths:
       - ccache/
+      - $CI_PROJECT_DIR/../wireshark-third-party
   variables:
     HOMEBREW_NO_AUTO_UPDATE: "1"
     HOMEBREW_DISPLAY_INSTALL_TIMES: "1"
@@ -256,7 +257,7 @@ workflow:
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt" ] ; then mkdir "$WIRESHARK_BASE_DIR/Qt" ; fi
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt/$MACOS_QT_VERSION/macos/lib/QtCore.framework" ] ; then
         pip3 install aqtinstall ;
-        aqt install-qt --outputdir $WIRESHARK_BASE_DIR/Qt mac desktop $MACOS_QT_VERSION clang_64 --modules qt5compat qtmultimedia ;
+        aqt install-qt --outputdir $WIRESHARK_BASE_DIR/Qt mac desktop $MACOS_QT_VERSION clang_64 --modules qt5compat qtmultimedia --timeout 10 ;
       fi
     - export CMAKE_PREFIX_PATH="$WIRESHARK_BASE_DIR/Qt/$MACOS_QT_VERSION/macos"
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
@@ -652,7 +653,7 @@ macOS Universal Package:
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt" ] ; then mkdir -p "$WIRESHARK_BASE_DIR/Qt" ; fi
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt/$MACOS_QT_VERSION/macos/lib/QtCore.framework" ] ; then
         pip3 install aqtinstall ;
-        aqt install-qt --outputdir $WIRESHARK_BASE_DIR/Qt mac desktop $MACOS_QT_VERSION clang_64 --modules qt5compat qtmultimedia ;
+        aqt install-qt --outputdir $WIRESHARK_BASE_DIR/Qt mac desktop $MACOS_QT_VERSION clang_64 --modules qt5compat qtmultimedia --timeout 10 ;
       fi
     - export CMAKE_PREFIX_PATH="$WIRESHARK_BASE_DIR/Qt/$MACOS_QT_VERSION/macos"
     - export PKG_CONFIG_PATH=
@@ -935,6 +936,10 @@ Clang + Code Checks:
     - ninja corba-dissectors
     - git diff --exit-code ${CI_COMMIT_SHA} ..
     - printf "\e[0Ksection_end:%s:corba_section\r\e[0K" "$( date +%s)"
+    - printf "\e[0Ksection_start:%s:public_header_section[collapsed=false]\r\e[0KGenerating public dissector header list" "$( date +%s)"
+    - ../tools/generate-dissector-lists.py
+    - git diff --exit-code ${CI_COMMIT_SHA} ..
+    - printf "\e[0Ksection_end:%s:public_header_section\r\e[0K" "$( date +%s)"
     - mkdir ../html
     - script --command ninja --flush --quiet --return ../tmp_clang_report.txt
     - ansi2txt < ../tmp_clang_report.txt > ../clang_report.txt

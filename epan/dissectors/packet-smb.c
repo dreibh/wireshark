@@ -427,6 +427,7 @@ static int hf_smb_nt_trans_subcmd;
 static int hf_smb_nt_ioctl_isfsctl;
 static int hf_smb_nt_ioctl_flags_completion_filter;
 static int hf_smb_nt_ioctl_flags_root_handle;
+static int hf_smb_nt_ioctl_data_length;
 static int hf_smb_nt_notify_action;
 static int hf_smb_nt_notify_watch_tree;
 static int hf_smb_nt_notify_completion_filter;
@@ -1819,6 +1820,7 @@ smb_get_unicode_or_ascii_string(wmem_allocator_t *scope, tvbuff_t *tvb, int *off
 	const char *string;
 	int          string_len = 0;
 	int          copylen;
+	const uint8_t *bytes;
 
 	if (*bcp == 0) {
 		/* Not enough data in buffer */
@@ -1861,6 +1863,13 @@ smb_get_unicode_or_ascii_string(wmem_allocator_t *scope, tvbuff_t *tvb, int *off
                  */
 		if(exactlen){
 			copylen = *len;
+
+			/* Fixed strings should be null termined. */
+			if (copylen > 0) {
+				bytes = tvb_get_ptr(tvb, *offsetp, copylen);
+				if (bytes[copylen-1] == '\0')
+					copylen--;
+			}
 
 			if (copylen < 0) {
 				/* This probably means it's a very large unsigned number; just set
@@ -2151,16 +2160,22 @@ LocTimeDiff(time_t lt)
 }
 
 static int
-dissect_smb_UTIME(tvbuff_t *tvb, proto_tree *tree, int offset, int hf_date)
+dissect_smb_UTIME(tvbuff_t *tvb, proto_tree *tree, int offset, int hf_date, const char *name_0, const char *name_ffffffff)
 {
 	uint32_t timeval;
 	nstime_t ts;
 
 	ts.secs = timeval = tvb_get_letohl(tvb, offset);
 	ts.nsecs = 0;
-	if (timeval == 0xffffffff) {
+	if (timeval == 0 && name_0 != NULL) {
 		proto_tree_add_time_format_value(tree, hf_date, tvb, offset, 4, &ts,
-		    "No time specified (0xffffffff)");
+		    "%s (0)", name_0);
+		offset += 4;
+		return offset;
+	}
+	if (timeval == 0xffffffff && name_ffffffff != NULL) {
+		proto_tree_add_time_format_value(tree, hf_date, tvb, offset, 4, &ts,
+		    "%s (0xffffffff)", name_ffffffff);
 		offset += 4;
 		return offset;
 	}
@@ -2941,7 +2956,7 @@ dissect_negprot_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
 		break;
 	case 13:
 		/*
-		 * Server selected a dialect from LAN Manager 1.0 through
+		 * Server selected CorePlus dialect or a dialect from LAN Manager 1.0 through
 		 * LAN Manager 2.1.
 		 */
 		proto_tree_add_uint_format_value(tree, hf_smb_dialect_index,
@@ -2966,7 +2981,7 @@ dissect_negprot_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
 	switch(wc) {
 	case 13:
 		/*
-		 * Server selected a dialect from LAN Manager 1.0 through
+		 * Server selected CorePlus dialect or a dialect from LAN Manager 1.0 through
 		 * LAN Manager 2.1.
 		 */
 
@@ -3010,6 +3025,8 @@ dissect_negprot_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
 		 * first 2 of 4 reserved bytes; the LAN Manager 2.1
 		 * spec says it's a 2-byte encryption key (challenge)
 		 * length.
+		 * Encryption key length for LAN Manager 1 and 2.0
+		 * is stored in byte count.
 		 */
 		chl = tvb_get_letohs(tvb, offset);
 		proto_tree_add_uint(tree, hf_smb_challenge_length, tvb, offset, 2, chl);
@@ -3095,9 +3112,17 @@ dissect_negprot_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
 		}
 
 		/*
-		 * Server selected a dialect from LAN Manager 1.0 through
+		 * Server selected CorePlus dialect or a dialect from LAN Manager 1.0 through
 		 * LAN Manager 2.1.
 		 */
+
+		/*
+		 * Encryption key (challenge) length field (chl) for
+		 * LAN Manager 1 and 2.0 is zero (reserved) and the
+		 * real length is stored in byte count field.
+		 */
+		if (chl == 0)
+			chl = bc;
 
 		/* encrypted challenge/response data */
 		if (chl) {
@@ -3108,20 +3133,15 @@ dissect_negprot_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
 
 		/*
 		 * Primary domain.
-		 *
-		 * XXX - not present if negotiated dialect isn't
-		 * "DOS LANMAN 2.1" or "LANMAN2.1", but we'd either
-		 * have to see the request, or assume what dialect strings
-		 * were sent, to determine that.
-		 *
-		 * Is this something other than a primary domain if the
-		 * negotiated dialect is Windows for Workgroups 3.1a?
-		 * It appears to be 8 bytes of binary data in at least
-		 * one capture - is that an encryption key or something
-		 * such as that?
+		 * Not present if negotiated dialect isn't
+		 * "DOS LANMAN 2.1" or "LANMAN2.1".
+		 * For LAN Manager 1 and 2.0, byte count have been
+		 * already processed because the original value of chl
+		 * was zero and it was changed to bc.
+		 * Always in ASCII as LAN Manager dialects do not support UNICODE.
 		 */
 		dn = smb_get_unicode_or_ascii_string(pinfo->pool, tvb, &offset,
-			si->unicode, &dn_len, false, false, &bc);
+			false, &dn_len, false, false, &bc);
 		if (dn == NULL)
 			goto endofcommand;
 		proto_tree_add_string(tree, hf_smb_primary_domain, tvb,
@@ -4325,7 +4345,7 @@ dissect_open_file_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 	offset = dissect_file_attributes(tvb, tree, offset);
 
 	/* last write time */
-	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time);
+	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time, "No time specified", NULL);
 
 	/* File Size */
 	proto_tree_add_item(tree, hf_smb_file_size, tvb, offset, 4, ENC_LITTLE_ENDIAN);
@@ -4545,7 +4565,7 @@ dissect_create_file_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 	offset = dissect_file_attributes(tvb, tree, offset);
 
 	/* creation time */
-	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_create_time);
+	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_create_time, "Use current server time", NULL);
 
 	BYTE_COUNT;
 
@@ -4612,7 +4632,7 @@ dissect_close_file_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 	offset += 2;
 
 	/* last write time */
-	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time);
+	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time, "Do not change time", "Do not change time");
 
 	/* Keep the path length limit short enough for the user to notice that there
 	* are multiple requests in this packet if any. */
@@ -4876,7 +4896,7 @@ dissect_query_information_response(tvbuff_t *tvb, packet_info *pinfo _U_, proto_
 	offset = dissect_file_attributes(tvb, tree, offset);
 
 	/* Last Write Time */
-	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time);
+	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time, "No time specified", NULL);
 
 	/* File Size */
 	proto_tree_add_item(tree, hf_smb_file_size, tvb, offset, 4, ENC_LITTLE_ENDIAN);
@@ -4910,7 +4930,7 @@ dissect_set_information_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 	offset = dissect_file_attributes(tvb, tree, offset);
 
 	/* last write time */
-	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time);
+	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time, "Do not change time", NULL);
 
 	/* 10 reserved bytes */
 	proto_tree_add_item(tree, hf_smb_reserved, tvb, offset, 10, ENC_NA);
@@ -5399,7 +5419,7 @@ dissect_create_temporary_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
 	offset += 2;
 
 	/* Creation time */
-	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_create_time);
+	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_create_time, "Use current server time", NULL);
 
 	BYTE_COUNT;
 
@@ -5667,7 +5687,7 @@ dissect_write_and_close_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 	offset += 4;
 
 	/* last write time */
-	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time);
+	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time, "Set to current server time", NULL);
 
 	if (wc == 12) {
 		/* 12 reserved bytes */
@@ -7025,7 +7045,7 @@ dissect_open_andx_request(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, i
 	offset = dissect_file_attributes(tvb, tree, offset);
 
 	/* creation time */
-	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_create_time);
+	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_create_time, "Use current server time", NULL);
 
 	/* open function */
 	offset = dissect_open_function(tvb, tree, offset);
@@ -7189,7 +7209,7 @@ dissect_open_andx_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 	offset = dissect_file_attributes(tvb, tree, offset);
 
 	/* last write time */
-	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time);
+	offset = dissect_smb_UTIME(tvb, tree, offset, hf_smb_last_write_time, "No time specified", NULL);
 
 	/* File Size */
 	/* We store the file_size in the fid_info */
@@ -8932,24 +8952,24 @@ static const true_false_string tfs_nt_access_mask_maximum_allowed = {
 	"Maximum allowed is NOT set"
 };
 static const true_false_string tfs_nt_access_mask_system_security = {
-	"SYSTEM SECURITY is set",
-	"System security is NOT set"
+	"READ/WRITE SACL access",
+	"No read/write SACL access"
 };
 static const true_false_string tfs_nt_access_mask_synchronize = {
 	"Can wait on handle to SYNCHRONIZE on completion of I/O",
 	"Can NOT wait on handle to synchronize on completion of I/O"
 };
 static const true_false_string tfs_nt_access_mask_write_owner = {
-	"Can WRITE OWNER (take ownership)",
-	"Can NOT write owner (take ownership)"
+	"WRITE OWNER access (can take ownership)",
+	"No write OWNER access (can not take ownership)"
 };
 static const true_false_string tfs_nt_access_mask_write_dac = {
-	"OWNER may WRITE the DAC",
-	"Owner may NOT write to the DAC"
+	"WRITE DACL access",
+	"No write DACL access"
 };
 static const true_false_string tfs_nt_access_mask_read_control = {
-	"READ ACCESS to owner, group and ACL of the SID",
-	"Read access is NOT granted to owner, group and ACL of the SID"
+	"READ OWNER, GROUP and DACL access",
+	"No read OWNER, GROUP and DACL access"
 };
 static const true_false_string tfs_nt_access_mask_delete = {
 	"DELETE access",
@@ -10323,6 +10343,8 @@ dissect_nt_trans_setup_response(tvbuff_t *tvb, packet_info *pinfo,
 				int len, smb_info_t *si)
 {
 	smb_nt_transact_info_t *nti;
+	proto_tree *tree;
+	proto_item *item = NULL;
 
 	DISSECTOR_ASSERT(si);
 
@@ -10333,7 +10355,7 @@ dissect_nt_trans_setup_response(tvbuff_t *tvb, packet_info *pinfo,
 
 	if (parent_tree) {
 		if (nti != NULL) {
-			proto_tree_add_bytes_format(parent_tree, hf_smb_nt_transaction_setup, tvb, offset, len,
+			item = proto_tree_add_bytes_format(parent_tree, hf_smb_nt_transaction_setup, tvb, offset, len,
 				NULL, "%s Setup",
 				val_to_str_ext(pinfo->pool, nti->subcmd, &nt_cmd_vals_ext, "Unknown NT Transaction (%u)"));
 		} else {
@@ -10353,6 +10375,11 @@ dissect_nt_trans_setup_response(tvbuff_t *tvb, packet_info *pinfo,
 	case NT_TRANS_CREATE:
 		break;
 	case NT_TRANS_IOCTL:
+		if (item != NULL && len >= 2) {
+			tree = proto_item_add_subtree(item, ett_smb_nt_trans_setup);
+			/* data length */
+			proto_tree_add_item(tree, hf_smb_nt_ioctl_data_length, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+		}
 		break;
 	case NT_TRANS_SSD:
 		/* NT SET SECURITY DESC	*/
@@ -13446,7 +13473,7 @@ dissect_qfi_SMB_FILE_PIPE_REMOTE_INFO(tvbuff_t *tvb, packet_info *pinfo _U_, pro
 */
 int
 dissect_qfi_SMB_FILE_NAME_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
-    int offset, uint16_t *bcp, bool *trunc, bool unicode)
+    int offset, uint16_t *bcp, bool *trunc)
 {
 	unsigned    fn_len;
 	const char *fn;
@@ -13456,8 +13483,8 @@ dissect_qfi_SMB_FILE_NAME_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 	proto_tree_add_item_ret_uint(tree, hf_smb_file_name_len, tvb, offset, 4, ENC_LITTLE_ENDIAN, &fn_len);
 	COUNT_BYTES_SUBR(4);
 
-	/* file name */
-	fn = smb_get_unicode_or_ascii_string(pinfo->pool, tvb, &offset, unicode, (int*)&fn_len, true, true, bcp);
+	/* file name, in response it is always in UNICODE */
+	fn = smb_get_unicode_or_ascii_string(pinfo->pool, tvb, &offset, true, (int*)&fn_len, true, true, bcp);
 
 	CHECK_STRING_SUBR(fn);
 
@@ -13537,9 +13564,9 @@ dissect_qfi_SMB_FILE_ALL_INFO(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
 	COUNT_BYTES_SUBR(4);
 
 
-	/* file name */
+	/* file name, in response it is always in UNICODE */
 	CHECK_BYTE_COUNT_SUBR(fn_len);
-	fn = smb_get_unicode_or_ascii_string(pinfo->pool, tvb, &offset, si->unicode, &fn_len, true, true, bcp);
+	fn = smb_get_unicode_or_ascii_string(pinfo->pool, tvb, &offset, true, &fn_len, true, true, bcp);
 	if (fn != NULL) {
 		proto_tree_add_string(tree, hf_smb_file_name, tvb, offset, fn_len,
 			fn);
@@ -14310,7 +14337,7 @@ dissect_qpi_loi_vals(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
 	case 0x0104:	/*Query File Name Info*/
 	case 1009:	/* SMB_FILE_NAME_INFORMATION */
 		offset = dissect_qfi_SMB_FILE_NAME_INFO(tvb, pinfo, tree, offset, bcp,
-		    &trunc, si->unicode);
+		    &trunc);
 		break;
 	case 1014:	/* SMB_FILE_POSITION_INFORMATION */
 		offset = dissect_qsfi_SMB_FILE_POSITION_INFO(tvb, pinfo, tree, offset, bcp,
@@ -14340,7 +14367,7 @@ dissect_qpi_loi_vals(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree,
 	case 0x0108:	/*Query File Alt File Info*/
 	case 1021:	/* SMB_FILE_ALTERNATE_NAME_INFORMATION */
 		offset = dissect_qfi_SMB_FILE_NAME_INFO(tvb, pinfo, tree, offset, bcp,
-		    &trunc, si->unicode);
+		    &trunc);
 		break;
 	case 1022:	/* SMB_FILE_STREAM_INFORMATION */
 		si->unicode = true;
@@ -18644,25 +18671,27 @@ VALUE_STRING_ENUM(HRD_errors);
 VALUE_STRING_ARRAY(HRD_errors);
 static value_string_ext HRD_errors_ext = VALUE_STRING_EXT_INIT(HRD_errors);
 
-static const char *decode_smb_error(wmem_allocator_t* pool, uint8_t errcls, uint16_t errcode)
+static const char *decode_smb_error(wmem_allocator_t* pool, uint8_t errcls, uint16_t errcode, bool show_unknown_errcode)
 {
 
 	switch (errcls) {
 
-	case SMB_SUCCESS:
-		return "No Error";   /* No error ??? */
-
 	case SMB_ERRDOS:
-		return val_to_str_ext(pool, errcode, &DOS_errors_ext, "Unknown DOS error (%x)");
+		return val_to_str_ext(pool, errcode, &DOS_errors_ext, show_unknown_errcode ? "Unknown DOS error (0x%04X)" : "Unknown DOS error");
 
 	case SMB_ERRSRV:
-		return val_to_str_ext(pool, errcode, &SRV_errors_ext, "Unknown SRV error (%x)");
+		return val_to_str_ext(pool, errcode, &SRV_errors_ext, show_unknown_errcode ? "Unknown SRV error (0x%04X)" : "Unknown SRV error");
 
 	case SMB_ERRHRD:
-		return val_to_str_ext(pool, errcode, &HRD_errors_ext, "Unknown HRD error (%x)");
+		return val_to_str_ext(pool, errcode, &HRD_errors_ext, show_unknown_errcode ? "Unknown HRD error (0x%04X)" : "Unknown HRD error");
+
+	case SMB_SUCCESS:
+		if (errcode == 0)
+			return "No Error";
+		/* fallthrough */
 
 	default:
-		return "Unknown error class!";
+		return show_unknown_errcode ? wmem_strdup_printf(pool, "Unknown error (0x%04X)", errcode) : "Unknown error";
 	}
 
 }
@@ -19290,13 +19319,14 @@ dissect_smb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 
 		/* error code */
 		/* XXX - the type of this field depends on the value of
-		 * "errcls", so there is isn't a single value_string array
+		 * "errcls", so there isn't a single value_string array
 		 * fo it, so there can't be a single field for it.
+		 * therefore it is needed to manually print errcode value.
 		 */
 		errcode = tvb_get_letohs(tvb, offset);
 		proto_tree_add_uint_format_value(htree, hf_smb_error_code, tvb,
-			offset, 2, errcode, "%s",
-			decode_smb_error(pinfo->pool, errclass, errcode));
+			offset, 2, errcode, "%s (0x%04X)",
+			decode_smb_error(pinfo->pool, errclass, errcode, false), (unsigned)errcode);
 		offset += 2;
 	}
 
@@ -19436,7 +19466,7 @@ dissect_smb(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* da
 				 */
 				col_append_fstr(
 					pinfo->cinfo, COL_INFO, ", Error: %s",
-					decode_smb_error(pinfo->pool, errclass, errcode));
+					decode_smb_error(pinfo->pool, errclass, errcode, true));
 			}
 		}
 	}
@@ -20682,6 +20712,10 @@ proto_register_smb(void)
 	{ &hf_smb_nt_ioctl_flags_root_handle,
 		{ "Root Handle", "smb.nt.ioctl.flags.root_handle", FT_BOOLEAN, 8,
 		TFS(&tfs_nt_ioctl_flags_root_handle), NT_IOCTL_FLAGS_ROOT_HANDLE, "Apply to this share or root Dfs share", HFILL }},
+
+	{ &hf_smb_nt_ioctl_data_length,
+		{ "Data Length", "smb.nt.ioctl.data_length", FT_UINT16, BASE_DEC,
+		NULL, 0, "IOCTL response output data buffer length", HFILL }},
 
 	{ &hf_smb_nt_notify_action,
 		{ "Action", "smb.nt.notify.action", FT_UINT32, BASE_DEC,

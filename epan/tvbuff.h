@@ -389,11 +389,11 @@ WS_DLL_PUBLIC unsigned tvb_captured_length(const tvbuff_t *tvb);
  * You probably want @ref tvb_reported_length_remaining instead.
  *
  * @param tvb    The tvbuff to query.
- * @param offset The offset from which to compute the remaining bytes (can be negative).
+ * @param offset The offset from which to compute the remaining bytes.
  *
  * @return The number of bytes remaining to the end of the buffer from the given offset.
  */
-WS_DLL_PUBLIC int tvb_captured_length_remaining(const tvbuff_t *tvb, const int offset);
+WS_DLL_PUBLIC int tvb_captured_length_remaining(const tvbuff_t *tvb, const unsigned offset);
 
 /**
  * @brief Same as @ref tvb_captured_length_remaining, but throws an exception if the offset is out of bounds.
@@ -428,7 +428,7 @@ WS_DLL_PUBLIC unsigned tvb_ensure_captured_length_remaining(const tvbuff_t *tvb,
  *
  * @return True if the specified byte range exists within the buffer; false otherwise.
  */
-WS_DLL_PUBLIC bool tvb_bytes_exist(const tvbuff_t *tvb, const int offset,
+WS_DLL_PUBLIC bool tvb_bytes_exist(const tvbuff_t *tvb, const unsigned offset,
     const int length);
 
 /**
@@ -469,7 +469,7 @@ WS_DLL_PUBLIC void tvb_ensure_bytes_exist(const tvbuff_t *tvb,
  * @return true if the offset exists within the buffer; false otherwise.
  */
 WS_DLL_PUBLIC bool tvb_offset_exists(const tvbuff_t *tvb,
-    const int offset);
+    const unsigned offset);
 
 /**
  * @brief Get reported length of buffer.
@@ -488,12 +488,12 @@ WS_DLL_PUBLIC unsigned tvb_reported_length(const tvbuff_t *tvb);
  * No exception is thrown.
  *
  * @param tvb    The tvbuff to query.
- * @param offset The offset from which to compute the remaining bytes (can be negative).
+ * @param offset The offset from which to compute the remaining bytes.
  *
  * @return The number of bytes remaining to the end of the buffer from the given offset.
  */
 WS_DLL_PUBLIC int tvb_reported_length_remaining(const tvbuff_t *tvb,
-    const int offset);
+    const unsigned offset);
 
 /**
  * @brief Same as @ref tvb_reported_length_remaining but throws an exception if the offset is out of bounds.
