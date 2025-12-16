@@ -58,6 +58,9 @@ _tvb_captured_length_remaining(const tvbuff_t *tvb, const int offset);
 static inline const uint8_t*
 ensure_contiguous(tvbuff_t *tvb, const int offset, const int length);
 
+static inline const uint8_t*
+ensure_contiguous_unsigned(tvbuff_t *tvb, const unsigned offset, const unsigned length);
+
 static inline uint8_t *
 tvb_get_raw_string(wmem_allocator_t *scope, tvbuff_t *tvb, const int offset, const int length);
 
@@ -236,6 +239,54 @@ validate_offset_and_remaining(const tvbuff_t *tvb, const unsigned offset, unsign
 	return exception;
 }
 
+/* Returns integer indicating whether the given offset and the end offset
+ * calculated from that offset and the given length are in bounds (0) or
+ * not (exception number).
+ * No exception is thrown; on success, we return 0, otherwise we return an
+ * exception for the caller to throw if appropriate.
+ *
+ * N.B. - we return success (0), if the offset is positive and right
+ * after the end of the tvbuff (i.e., equal to the length).  We do this
+ * so that a dissector constructing a subset tvbuff for the next protocol
+ * will get a zero-length tvbuff, not an exception, if there's no data
+ * left for the next protocol - we want the next protocol to be the one
+ * that gets an exception, so the error is reported as an error in that
+ * protocol rather than the containing protocol.  */
+static inline int
+validate_offset_length_no_exception(const tvbuff_t *tvb,
+				    const unsigned offset, const unsigned length)
+{
+	unsigned end_offset;
+	int   exception;
+
+	/* Compute the offset */
+	exception = validate_offset(tvb, offset);
+	if (exception)
+		return exception;
+
+	/*
+	 * Compute the offset of the first byte past the length,
+	 * checking for an overflow.
+	 */
+	if (ckd_add(&end_offset, offset, length))
+		return BoundsError;
+
+	return validate_offset(tvb, end_offset);
+}
+
+/* Checks offset and length and throws an exception if
+ * either is out of bounds. Sets integer ptrs to the new length. */
+static inline void
+validate_offset_length(const tvbuff_t *tvb,
+		    const unsigned offset, const unsigned length)
+{
+	int exception;
+
+	exception = validate_offset_length_no_exception(tvb, offset, length);
+	if (exception)
+		THROW(exception);
+}
+
 /*
  * The same as validate_offset except this accepts negative offsets, meaning
  * relative to the end of (captured) length. (That it's captured, not reported,
@@ -365,10 +416,12 @@ check_offset_length(const tvbuff_t *tvb,
 		THROW(exception);
 }
 
+/* Internal function so that other translation units can use
+ * check_offset_length. */
 void
 tvb_check_offset_length(const tvbuff_t *tvb,
-		        const int offset, int const length_val,
-		        unsigned *offset_ptr, unsigned *length_ptr)
+			const int offset, int const length_val,
+			unsigned *offset_ptr, unsigned *length_ptr)
 {
 	check_offset_length(tvb, offset, length_val, offset_ptr, length_ptr);
 }
@@ -833,6 +886,54 @@ tvb_offset_from_real_beginning(const tvbuff_t *tvb)
 }
 
 static inline const uint8_t*
+ensure_contiguous_unsigned_no_exception(tvbuff_t *tvb, const unsigned offset, const unsigned length, int *pexception)
+{
+	int   exception;
+
+	exception = validate_offset_length_no_exception(tvb, offset, length);
+	if (exception) {
+		if (pexception)
+			*pexception = exception;
+		return NULL;
+	}
+
+	/*
+	 * Special case: if the caller (e.g. tvb_get_ptr) requested no data,
+	 * then it is acceptable to have an empty tvb (!tvb->real_data).
+	 */
+	if (length == 0) {
+		return NULL;
+	}
+
+	/*
+	 * We know that all the data is present in the tvbuff, so
+	 * no exceptions should be thrown.
+	 */
+	if (tvb->real_data)
+		return tvb->real_data + offset;
+
+	if (tvb->ops->tvb_get_ptr)
+		return tvb->ops->tvb_get_ptr(tvb, offset, length);
+
+	DISSECTOR_ASSERT_NOT_REACHED();
+	return NULL;
+}
+
+static inline const uint8_t*
+ensure_contiguous_unsigned(tvbuff_t *tvb, const unsigned offset, const unsigned length)
+{
+	int           exception = 0;
+	const uint8_t *p;
+
+	p = ensure_contiguous_unsigned_no_exception(tvb, offset, length, &exception);
+	if (p == NULL && length != 0) {
+		DISSECTOR_ASSERT(exception > 0);
+		THROW(exception);
+	}
+	return p;
+}
+
+static inline const uint8_t*
 ensure_contiguous_no_exception(tvbuff_t *tvb, const int offset, const int length, int *pexception)
 {
 	unsigned abs_offset = 0, abs_length = 0;
@@ -918,32 +1019,23 @@ fast_ensure_contiguous(tvbuff_t *tvb, const int offset, const unsigned length)
 /************** ACCESSORS **************/
 
 void *
-tvb_memcpy(tvbuff_t *tvb, void *target, const int offset, size_t length)
+tvb_memcpy(tvbuff_t *tvb, void *target, const unsigned offset, size_t length)
 {
-	unsigned	abs_offset = 0, abs_length = 0;
-
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
 	/*
-	 * XXX - we should eliminate the "length = -1 means 'to the end
-	 * of the tvbuff'" convention, and use other means to achieve
-	 * that; this would let us eliminate a bunch of checks for
-	 * negative lengths in cases where the protocol has a 32-bit
-	 * length field.
-	 *
-	 * Allowing -1 but throwing an assertion on other negative
-	 * lengths is a bit more work with the length being a size_t;
-	 * instead, we check for a length <= 2^31-1.
+	 * XXX - The length is a size_t, but the tvb length and tvb_ops
+	 * only supports an unsigned.
 	 */
-	DISSECTOR_ASSERT(length <= 0x7FFFFFFF);
-	check_offset_length(tvb, offset, (int) length, &abs_offset, &abs_length);
+	DISSECTOR_ASSERT(length <= UINT_MAX);
+	validate_offset_length(tvb, offset, (unsigned)length);
 
 	if (target && tvb->real_data) {
-		return memcpy(target, tvb->real_data + abs_offset, abs_length);
+		return memcpy(target, tvb->real_data + offset, length);
 	}
 
 	if (target && tvb->ops->tvb_memcpy)
-		return tvb->ops->tvb_memcpy(tvb, target, abs_offset, abs_length);
+		return tvb->ops->tvb_memcpy(tvb, target, offset, (unsigned)length);
 
 	/*
 	 * If the length is 0, there's nothing to do.
@@ -961,10 +1053,8 @@ tvb_memcpy(tvbuff_t *tvb, void *target, const int offset, size_t length)
 
 
 /*
- * XXX - this doesn't treat a length of -1 as an error.
- * If it did, this could replace some code that calls
- * "tvb_ensure_bytes_exist()" and then allocates a buffer and copies
- * data to it.
+ * XXX - This could replace some code that calls "tvb_ensure_bytes_exist()"
+ * and then allocates a buffer and copies data to it.
  *
  * If scope is NULL, memory is allocated with g_malloc() and user must
  * explicitly free it with g_free().
@@ -972,23 +1062,48 @@ tvb_memcpy(tvbuff_t *tvb, void *target, const int offset, size_t length)
  * lifetime.
  */
 void *
-tvb_memdup(wmem_allocator_t *scope, tvbuff_t *tvb, const int offset, size_t length)
+tvb_memdup(wmem_allocator_t *scope, tvbuff_t *tvb, const unsigned offset, size_t length)
 {
-	unsigned  abs_offset = 0, abs_length = 0;
 	void  *duped;
 
 	DISSECTOR_ASSERT(tvb && tvb->initialized);
 
-	check_offset_length(tvb, offset, (int) length, &abs_offset, &abs_length);
+	/*
+	 * XXX - The length is a size_t, but the tvb length and tvb_ops
+	 * only supports an unsigned.
+	 */
+	DISSECTOR_ASSERT(length <= UINT_MAX);
+	validate_offset_length(tvb, offset, (unsigned)length);
 
-	if (abs_length == 0)
+	if (length == 0)
 		return NULL;
 
-	duped = wmem_alloc(scope, abs_length);
-	return tvb_memcpy(tvb, duped, abs_offset, abs_length);
+	duped = wmem_alloc(scope, length);
+	return tvb_memcpy(tvb, duped, offset, length);
 }
 
+#if 0
+/* XXX - Is a _remaining variant of this necessary? The user would still need
+ * to get the length from tvb_captured_length_remaining() to productively use
+ * the (not necessarily null terminated) byte array. But see uses of
+ * tvb_get_ptr(...,...,-1) in the repo, which is similar. */
+void *
+tvb_memdup_remaining(wmem_allocator_t *scope, tvbuff_t *tvb, const unsigned offset)
+{
+	void  *duped;
+	unsigned length;
 
+	DISSECTOR_ASSERT(tvb && tvb->initialized);
+
+	validate_offset_and_remaining(tvb, offset, &length);
+
+	if (length == 0)
+		return NULL;
+
+	duped = wmem_alloc(scope, length);
+	return tvb_memcpy(tvb, duped, offset, length);
+}
+#endif
 
 const uint8_t*
 tvb_get_ptr(tvbuff_t *tvb, const int offset, const int length)
@@ -2423,7 +2538,7 @@ tvb_find_uint8_generic(tvbuff_t *tvb, unsigned abs_offset, unsigned limit, uint8
 	const uint8_t *ptr;
 	const uint8_t *result;
 
-	ptr = ensure_contiguous(tvb, abs_offset, limit); /* tvb_get_ptr() */
+	ptr = ensure_contiguous_unsigned(tvb, abs_offset, limit); /* tvb_get_ptr() */
 	if (!ptr)
 		return -1;
 
@@ -2476,7 +2591,7 @@ tvb_find_uint8(tvbuff_t *tvb, const int offset, const int maxlength, const uint8
 	if (tvb->ops->tvb_find_uint8)
 		return tvb->ops->tvb_find_uint8(tvb, abs_offset, limit, needle);
 
-	return tvb_find_uint8_generic(tvb, offset, limit, needle);
+	return tvb_find_uint8_generic(tvb, abs_offset, limit, needle);
 }
 
 /* Same as tvb_find_uint8() with 16bit needle. */
@@ -2542,7 +2657,7 @@ tvb_ws_mempbrk_uint8_generic(tvbuff_t *tvb, unsigned abs_offset, unsigned limit,
 	const uint8_t *ptr;
 	const uint8_t *result;
 
-	ptr = ensure_contiguous(tvb, abs_offset, limit); /* tvb_get_ptr */
+	ptr = ensure_contiguous_unsigned(tvb, abs_offset, limit); /* tvb_get_ptr */
 	if (!ptr)
 		return -1;
 
@@ -2685,11 +2800,11 @@ tvb_strnlen(tvbuff_t *tvb, const int offset, const unsigned maxlength)
  * it returns 0 (meaning "equal") and -1 otherwise, otherwise return -1.
  */
 int
-tvb_strneql(tvbuff_t *tvb, const int offset, const char *str, const size_t size)
+tvb_strneql(tvbuff_t *tvb, const unsigned offset, const char *str, const size_t size)
 {
 	const uint8_t *ptr;
 
-	ptr = ensure_contiguous_no_exception(tvb, offset, (int)size, NULL);
+	ptr = ensure_contiguous_unsigned_no_exception(tvb, offset, (unsigned)size, NULL);
 
 	if (ptr) {
 		int cmp = strncmp((const char *)ptr, str, size);
@@ -2712,11 +2827,11 @@ tvb_strneql(tvbuff_t *tvb, const int offset, const char *str, const size_t size)
  * 0 if it returns 0 (meaning "equal") and -1 otherwise, otherwise return -1.
  */
 int
-tvb_strncaseeql(tvbuff_t *tvb, const int offset, const char *str, const size_t size)
+tvb_strncaseeql(tvbuff_t *tvb, const unsigned offset, const char *str, const size_t size)
 {
 	const uint8_t *ptr;
 
-	ptr = ensure_contiguous_no_exception(tvb, offset, (int)size, NULL);
+	ptr = ensure_contiguous_unsigned_no_exception(tvb, offset, (unsigned)size, NULL);
 
 	if (ptr) {
 		int cmp = g_ascii_strncasecmp((const char *)ptr, str, size);
@@ -2740,11 +2855,11 @@ tvb_strncaseeql(tvbuff_t *tvb, const int offset, const char *str, const size_t s
  * and -1 for error. This function does not throw an exception.
  */
 int
-tvb_memeql(tvbuff_t *tvb, const int offset, const uint8_t *str, size_t size)
+tvb_memeql(tvbuff_t *tvb, const unsigned offset, const uint8_t *str, size_t size)
 {
 	const uint8_t *ptr;
 
-	ptr = ensure_contiguous_no_exception(tvb, offset, (int) size, NULL);
+	ptr = ensure_contiguous_unsigned_no_exception(tvb, offset, (unsigned)size, NULL);
 
 	if (ptr) {
 		int cmp = memcmp(ptr, str, size);
@@ -4313,10 +4428,6 @@ tvb_find_line_end_unquoted(tvbuff_t *tvb, const int offset, int len, int *next_o
 		compiled = true;
 	}
 
-	/*
-	 * XXX - what if "len" is still -1, meaning "offset is past the
-	 * end of the tvbuff"?
-	 */
 	eob_offset = offset + len;
 
 	cur_offset = offset;

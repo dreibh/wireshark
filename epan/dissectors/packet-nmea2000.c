@@ -204,7 +204,7 @@ static const value_string nmea2000_manufacturer_code_vals[] = {
     { 475, "GME aka Standard Communications Pty LTD" },
     { 476, "Humminbird Marine Electronics" },
     { 478, "Ocean Sat BV" },
-    { 481, "Chetco Digitial Instruments" },
+    { 481, "Chetco Digital Instruments" },
     { 493, "Watcheye" },
     { 499, "Lcj Capteurs" },
     { 502, "Attwood Marine" },
@@ -231,7 +231,7 @@ static const value_string nmea2000_manufacturer_code_vals[] = {
     { 605, "Aventics GmbH" },
     { 606, "Intellian" },
     { 612, "SamwonIT" },
-    { 614, "Arlt Tecnologies" },
+    { 614, "Arlt Technologies" },
     { 637, "Bavaria Yacts" },
     { 641, "Diverse Yacht Services" },
     { 644, "Wema U.S.A dba KUS" },
@@ -323,11 +323,11 @@ static const value_string nmea2000_manufacturer_code_vals[] = {
     { 1140, "Across Oceans Systems Ltd." },
     { 1145, "Kiwi Yachting" },
     { 1150, "BSB Artificial Intelligence GmbH" },
-    { 1151, "Orca Technologoes AS" },
+    { 1151, "Orca Technologies AS" },
     { 1154, "TBS Electronics BV" },
-    { 1158, "Technoton Electroics" },
+    { 1158, "Technoton Electronics" },
     { 1160, "MG Energy Systems B.V." },
-    { 1169, "Sea Macine Robotics Inc." },
+    { 1169, "Sea Machine Robotics Inc." },
     { 1171, "Vista Manufacturing" },
     { 1183, "Zipwake" },
     { 1186, "Sailmon BV" },
@@ -614,7 +614,6 @@ dissect_nmea2000_126996(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, voi
         offset += 1;
         /* Load Equivalency 8 bits unsigned NUMBER */
         proto_tree_add_item(nmea2000_tree, hf_nmea2000_load_eq, msg_tvb, offset, 1, ENC_LITTLE_ENDIAN);
-        offset += 1;
     }
 
     return tvb_captured_length(tvb);
@@ -793,7 +792,7 @@ proto_register_nmea2000(void)
         },
         { &hf_nmea2000_angle,
           { "Angle", "nmea2000.angle",
-            FT_UINT8, BASE_DEC, NULL, 0x0,
+            FT_UINT16, BASE_DEC, NULL, 0x0,
             NULL, HFILL }
         },
     };
