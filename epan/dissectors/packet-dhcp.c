@@ -1259,7 +1259,7 @@ static const value_string dhcp_nbnt_vals[] = {
 /*
  * There is confusion around some Client Architecture IDs: RFC 4578 section 2.1
  * lists *requested* architecture IDs, however the actual assigned IDs
- * (https://www.ietf.org/assignments/dhcpv6-parameters/dhcpv6-parameters.xml#processor-architecture)
+ * (https://www.iana.org/assignments/dhcpv6-parameters/dhcpv6-parameters.xhtml#processor-architecture)
  * differ.  Specifically,
  *
  *    EFI Byte Code (EFI BC, EBC) was 7 in RFC 4578, but is assigned 9 by IETF.
@@ -1302,6 +1302,15 @@ static const value_string dhcp_client_arch[] = {
 	{ 0x001e, "RISC-V 128-bit UEFI HTTP" },
 	{ 0x001f, "s390 Basic" },
 	{ 0x0020, "s390 Extended" },
+	{ 0x0021, "MIPS 32-bit UEFI" },
+	{ 0x0022, "MIPS 64-bit UEFI" },
+	{ 0x0023, "Sunway 32-bit UEFI" },
+	{ 0x0024, "Sunway 64-bit UEFI" },
+	{ 0x0025, "LoongArch 32-bit UEFI" },
+	{ 0x0026, "LoongArch 32-bit UEFI HTTP" },
+	{ 0x0027, "LoongArch 64-bit UEFI" },
+	{ 0x0028, "LoongArch 64-bit UEFI HTTP" },
+	{ 0x0029, "ARM rpiboot" },
 	{ 0,	  NULL }
 };
 
@@ -2553,28 +2562,36 @@ dissect_dhcpopt_user_class_information(tvbuff_t *tvb, packet_info *pinfo, proto_
 	 * is a Microsoft variant that has the two-byte length field with most-significant byte
 	 * as zero.
 	 */
-	uint16_t ms_data_length = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
+	uint32_t ms_data_length = tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN);
 	if (ms_data_length <= 0xff) {
 		/* MSB is zero, this is Microsoft */
-		proto_tree_add_uint(tree, hf_dhcp_option77_user_class_binary_data_length, tvb, offset, 2, ms_data_length);
-		offset += 2;
-		proto_tree_add_item(tree, hf_dhcp_option77_user_class_binary_data, tvb, offset, ms_data_length, ENC_STRING);
-		offset += ms_data_length;
-		/* User Class Binary Data is padded to 4-byte boundary */
-		uint16_t padding_length = WS_PADDING_TO_4(ms_data_length);
-		if (padding_length > 0) {
-			proto_tree_add_item(tree, hf_dhcp_option77_user_class_padding, tvb, offset, padding_length, ENC_NA);
-			offset += padding_length;
+		while (tvb_reported_length_remaining(tvb, offset) > 0) {
+			/* Create subtree for instance of User Class. */
+			vtix = proto_tree_add_uint_format_value(tree, hf_dhcp_option77_user_class,
+					tvb, offset, 1, user_class_instance_index, "[%d]", user_class_instance_index);
+			o77_v_tree = proto_item_add_subtree(vtix, ett_dhcp_option77_instance);
+			proto_tree_add_item_ret_uint(o77_v_tree, hf_dhcp_option77_user_class_binary_data_length, tvb, offset, 2, ENC_BIG_ENDIAN, &ms_data_length);
+			offset += 2;
+			proto_tree_add_item(o77_v_tree, hf_dhcp_option77_user_class_binary_data, tvb, offset, ms_data_length, ENC_NA);
+			offset += ms_data_length;
+			/* User Class Binary Data is padded to 4-byte boundary */
+			uint16_t padding_length = WS_PADDING_TO_4(ms_data_length);
+			if (padding_length > 0) {
+				proto_tree_add_item(o77_v_tree, hf_dhcp_option77_user_class_padding, tvb, offset, padding_length, ENC_NA);
+				offset += padding_length;
+			}
+			uint32_t len;
+			proto_tree_add_item_ret_uint(o77_v_tree, hf_dhcp_option77_user_class_name_length, tvb, offset, 2, ENC_BIG_ENDIAN, &len);
+			offset += 2;
+			proto_tree_add_item(o77_v_tree, hf_dhcp_option77_user_class_name, tvb, offset, len, ENC_UTF_16);
+			offset += len;
+			proto_tree_add_item_ret_uint(o77_v_tree, hf_dhcp_option77_user_class_description_length, tvb, offset, 2, ENC_BIG_ENDIAN, &len);
+			offset += 2;
+			proto_tree_add_item(o77_v_tree, hf_dhcp_option77_user_class_description, tvb, offset, len, ENC_UTF_16);
+			offset += len;
+			proto_item_set_end(vtix, tvb, offset);
+			user_class_instance_index++;
 		}
-		uint32_t len;
-		proto_tree_add_item_ret_uint(tree, hf_dhcp_option77_user_class_name_length, tvb, offset, 2, ENC_BIG_ENDIAN, &len);
-		offset += 2;
-		proto_tree_add_item(tree, hf_dhcp_option77_user_class_name, tvb, offset, len, ENC_UTF_16);
-		offset += len;
-		proto_tree_add_item_ret_uint(tree, hf_dhcp_option77_user_class_description_length, tvb, offset, 2, ENC_BIG_ENDIAN, &len);
-		offset += 2;
-		proto_tree_add_item(tree, hf_dhcp_option77_user_class_description, tvb, offset, len, ENC_UTF_16);
-
 		return tvb_captured_length(tvb);
 	}
 
@@ -2941,7 +2958,7 @@ dissect_dhcpopt_civic_location(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
 			if (calength == 0)
 				continue;
 
-			if (tvb_reported_length_remaining(tvb, offset) >= (int)calength)
+			if (tvb_reported_length_remaining(tvb, offset) >= calength)
 			{
 				proto_tree_add_item(tree, hf_dhcp_option_civic_location_ca_value, tvb, offset, calength, ENC_ASCII);
 				offset += calength;
@@ -3088,8 +3105,8 @@ dissect_dhcpopt_sip_servers(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 static int
 dissect_dhcpopt_classless_static_route(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
 {
-	int offset = 0;
-	int i, mask_width, significant_octets;
+	unsigned offset = 0;
+	unsigned i, mask_width, significant_octets;
 	proto_item* route_item;
 
 	/* minimum length is 5 bytes */
@@ -3109,7 +3126,7 @@ dissect_dhcpopt_classless_static_route(tvbuff_t *tvb, packet_info *pinfo, proto_
 			1 + significant_octets + 4, NULL, " ");
 		offset++;
 		/* significant octets + router(4) */
-		if (tvb_reported_length_remaining(tvb, offset + significant_octets + 4) < 0) {
+		if (tvb_reported_length_remaining(tvb, offset) < significant_octets + 4) {
 			expert_add_info_format(pinfo, route_item, &ei_dhcp_bad_length, "Remaining length (%d) < %d bytes", tvb_reported_length_remaining(tvb, offset), significant_octets + 4);
 			break;
 		}
@@ -3214,7 +3231,7 @@ dissect_dhcpopt_vi_vendor_class(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
 		offset += 1;
 
 		s_end = offset + option_data_len;
-		if ( tvb_reported_length_remaining(tvb, s_end) < 0) {
+		if ( tvb_reported_length_remaining(tvb, offset) < option_data_len) {
 			break;
 		}
 
@@ -3397,7 +3414,7 @@ dissect_dhcpopt_dnr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* d
 		proto_item_append_text(dnr_instance_addrs_ti, ":");
 
 		for (uint32_t i = 0; i < addrs_len; i += 4) {
-			proto_tree_add_item(dnr_instance_addrs_tree, hf_dhcp_dnr_addrs_ip, tvb, offset + instance_offset + i, 4, ENC_NA);
+			proto_tree_add_item(dnr_instance_addrs_tree, hf_dhcp_dnr_addrs_ip, tvb, offset + instance_offset + i, 4, ENC_BIG_ENDIAN);
 			proto_item_append_text(dnr_instance_addrs_ti, "%c%s", (i == 0 ? ' ' : ','), tvb_ip_to_str(pinfo->pool, tvb, offset + instance_offset + i));
 		}
 
@@ -5331,7 +5348,7 @@ dissect_dhcpopt_vi_vendor_specific_info(tvbuff_t *tvb, packet_info *pinfo, proto
 		offset += 1;
 
 		s_end = offset + option_data_len;
-		if ( tvb_reported_length_remaining(tvb, s_end) < 0 ) {
+		if ( tvb_reported_length_remaining(tvb, offset) < option_data_len ) {
 			expert_add_info_format(pinfo, vti, &ei_dhcp_option125_enterprise_malformed, "no room left in option for enterprise %u data", enterprise);
 			break;
 		}
@@ -9347,7 +9364,7 @@ proto_register_dhcp(void)
 
 		{ &hf_dhcp_option77_user_class_binary_data,
 		  { "User Class Binary Data", "dhcp.option.user_class_binary_data",
-		    FT_STRING, BASE_NONE, NULL, 0x0,
+		    FT_BYTES, BASE_SHOW_UTF_8_PRINTABLE, NULL, 0x0,
 		    "User Class Binary Data (Microsoft)", HFILL }},
 
 		{ &hf_dhcp_option77_user_class_padding,

@@ -758,7 +758,7 @@ rtsp_create_conversation(packet_info *pinfo, proto_item *ti,
          * port is usually 0, but we'd want to ensure it. (It also would not
          * work if multiple sessions were SETUP simultaneously and media
          * descriptors with different meanings for the same RTP dynamic payload
-         * type were PLAYed on different interleaved channels simulateously.)
+         * type were PLAYed on different interleaved channels simultaneously)
          */
 
         /* Now set the dissector handle of the interleaved channel
@@ -1476,8 +1476,11 @@ dissect_rtspmessage(tvbuff_t *tvb, int offset, packet_info *pinfo,
          * which, if no content length was specified,
          * is -1, i.e. "to the end of the frame.
          */
-        new_tvb = tvb_new_subset_length_caplen(tvb, offset, datalen,
-                reported_datalen);
+        if (reported_datalen == -1) {
+            new_tvb = tvb_new_subset_remaining(tvb, offset);
+        } else {
+            new_tvb = tvb_new_subset_length(tvb, offset, reported_datalen);
+        }
 
         /*
          * Check if next line is RTSP message - pipelining

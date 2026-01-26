@@ -4550,24 +4550,16 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>5 минут</translation>
     </message>
     <message>
-        <source>Wireshark I/O Graphs: %1</source>
-        <translation>Графики ввода/вывода Wireshark: %1</translation>
+        <source>%1 I/O Graphs: %2</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Filtered packets</source>
         <translation>Отфильтрованные пакеты</translation>
     </message>
     <message>
-        <source>Filtered events</source>
-        <translation>Отфильтрованные события</translation>
-    </message>
-    <message>
         <source>All packets</source>
         <translation>Все пакеты</translation>
-    </message>
-    <message>
-        <source>All events</source>
-        <translation>Все события</translation>
     </message>
     <message>
         <source>All Packets</source>
@@ -4578,14 +4570,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Ошибки TCP</translation>
     </message>
     <message>
-        <source>All Events</source>
-        <translation>Все события</translation>
-    </message>
-    <message>
-        <source>All Execs</source>
-        <translation>Все руководители</translation>
-    </message>
-    <message>
         <source>Hover over the graph for details.</source>
         <translation>Поместите указатель мыши над графиком для получения дополнительной информации.</translation>
     </message>
@@ -4594,24 +4578,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Пакеты в интервале отсутствуют</translation>
     </message>
     <message>
-        <source>No events in interval</source>
-        <translation>Нет событий в интервале</translation>
-    </message>
-    <message>
         <source>Click to select packet</source>
         <translation>Щёлкните для выбора пакета</translation>
     </message>
     <message>
         <source>Packet</source>
         <translation>Пакет</translation>
-    </message>
-    <message>
-        <source>Click to select event</source>
-        <translation>Нажмите, чтобы выбрать событие</translation>
-    </message>
-    <message>
-        <source>Event</source>
-        <translation>Событие</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -7004,14 +6976,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>Выбран пакет: %1 %2 </translation>
     </message>
     <message>
-        <source>Selected Event: %1 %2 </source>
-        <translation>Выбранное событие: %1 %2 </translation>
-    </message>
-    <message>
-        <source>Events: %1</source>
-        <translation>События: %1</translation>
-    </message>
-    <message>
         <source> %1 Selected: %2 (%3%)</source>
         <translation> %1 Выбрано: %2 (%3%)</translation>
     </message>
@@ -7039,10 +7003,6 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>No Packets</source>
         <translation>Пакеты отсутствуют</translation>
-    </message>
-    <message>
-        <source>No Events</source>
-        <translation>Нет событий</translation>
     </message>
     <message>
         <source>From Zip File…</source>
@@ -8321,35 +8281,15 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Wireshark Plots: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Stratoshark Plots: %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Filtered packets</source>
         <translation type="unfinished">Отфильтрованные пакеты</translation>
-    </message>
-    <message>
-        <source>Filtered events</source>
-        <translation type="unfinished">Отфильтрованные события</translation>
     </message>
     <message>
         <source>All packets</source>
         <translation type="unfinished">Все пакеты</translation>
     </message>
     <message>
-        <source>All events</source>
-        <translation type="unfinished">Все события</translation>
-    </message>
-    <message>
         <source>Seq. num.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Event latency</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -8373,16 +8313,12 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation type="unfinished">Щёлкните для выбора пакета</translation>
     </message>
     <message>
+        <source>%1 Plots: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Packet</source>
         <translation type="unfinished">Пакет</translation>
-    </message>
-    <message>
-        <source>Click to select event</source>
-        <translation type="unfinished">Нажмите, чтобы выбрать событие</translation>
-    </message>
-    <message>
-        <source>Event</source>
-        <translation type="unfinished">Событие</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -9755,6 +9691,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Display Filter</source>
         <translation type="unfinished"></translation>
     </message>
+    <message>
+        <source>User Interface</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>QObject::QObject::QObject</name>
@@ -10275,9 +10215,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Stream %1 Delta</source>
         <translation>Дельта потока %1</translation>
     </message>
-    <message>
-        <source> %1 streams, </source>
-        <translation> потоков: %1, </translation>
+    <message numerus="yes">
+        <source> %Ln stream(s), </source>
+        <oldsource> %1 streams, </oldsource>
+        <translation type="unfinished">
+            <numerusform> потоков: %1, </numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <source>Save one stream CSV</source>
@@ -10919,9 +10864,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Double click on cell to change audio routing</source>
         <translation>Двойной щелчок по ячейке позволяет изменить маршрутизацию звука</translation>
     </message>
-    <message>
-        <source>%1 streams</source>
-        <translation>Потоков: %1</translation>
+    <message numerus="yes">
+        <source>%Ln stream(s)</source>
+        <oldsource>%1 streams</oldsource>
+        <translation type="unfinished">
+            <numerusform>Потоков: %1</numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <source>, %1 selected</source>
@@ -11276,13 +11226,23 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>as YAML</source>
         <translation>в виде YAML</translation>
     </message>
-    <message>
-        <source>%1 streams</source>
-        <translation>потоки: %1</translation>
+    <message numerus="yes">
+        <source>%Ln stream(s)</source>
+        <oldsource>%1 streams</oldsource>
+        <translation type="unfinished">
+            <numerusform>потоки: %1</numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
-    <message>
-        <source>, %1 selected, %2 total packets</source>
-        <translation>, выбрано: %1, всего пакетов: %2</translation>
+    <message numerus="yes">
+        <source>, %1 selected, %Ln total packet(s)</source>
+        <oldsource>, %1 selected, %2 total packets</oldsource>
+        <translation type="unfinished">
+            <numerusform>, выбрано: %1, всего пакетов: %2</numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <source>Save RTPDump As…</source>
@@ -13865,7 +13825,7 @@ a:hover {
 
 &lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
 
-&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+&lt;th&gt;&lt;a href=&quot;https://discord.gg/fT2jvkawGj&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
 
 &lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
 
@@ -13873,7 +13833,50 @@ a:hover {
 
 &lt;/tr&gt;&lt;/table&gt;
 &lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head&gt;
+        <oldsource>&lt;html&gt;&lt;head&gt;
+&lt;style&gt;
+a:link {
+  color: palette(text);
+  text-decoration: none;
+}
+a:hover {
+  color: palette(text);
+  text-decoration: underline;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;table&gt;&lt;tr&gt;
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/docs/wsug_html_chunked/&quot;&gt;User&apos;s Guide&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://gitlab.com/wireshark/wireshark/-/wikis/&quot;&gt;Wiki&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://ask.wireshark.org/&quot;&gt;Questions and Answers&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/lists/&quot;&gt;Mailing Lists&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://sharkfest.wireshark.org/&quot;&gt;SharkFest&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://wiresharkfoundation.org/donate/&quot;&gt;Donate&lt;/a&gt;&lt;/th&gt;
+
+&lt;/tr&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</oldsource>
+        <translation type="unfinished">&lt;html&gt;&lt;head&gt;
 &lt;style&gt;
 a:link {
   color: palette(text);
@@ -13944,14 +13947,6 @@ a:hover {
     <message>
         <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
         <translation>Все составные звенья Интернета анализировать поможет Wireshark </translation>
-    </message>
-    <message>
-        <source>You are sniffing the glue that holds your system together using Stratoshark </source>
-        <translation>С помощью Stratoshark вы обнаруживаете клей, на котором держится ваша система.</translation>
-    </message>
-    <message>
-        <source>You are running Stratoshark </source>
-        <translation>Вы запускаете Stratoshark</translation>
     </message>
     <message>
         <source>You are running Wireshark </source>
@@ -15421,6 +15416,14 @@ a:hover {
     <message>
         <source>HTTP Request Sequences</source>
         <translation>Последовательности HTTP-запросов</translation>
+    </message>
+    <message>
+        <source>&amp;BPv7</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>BPv7 PDU and block statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>E2AP</source>

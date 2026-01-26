@@ -2448,11 +2448,8 @@ elem_mid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset, u
 
         curr_offset++;
 
-        value = tvb_get_ntohl(tvb, curr_offset);
-
-        proto_tree_add_uint(tree, hf_ansi_a_esn,
-            tvb, curr_offset, 4,
-            value);
+        proto_tree_add_item_ret_uint(tree, hf_ansi_a_esn,
+            tvb, curr_offset, 4, ENC_BIG_ENDIAN, &value);
 
         proto_item_append_text(data_p->elem_item, " - %sESN (0x%04x)",
             data_p->meid_configured ? "p" : "",
@@ -3013,18 +3010,12 @@ elem_downlink_re_aux(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32
 
     curr_offset = offset;
 
-    proto_tree_add_item(tree, hf_ansi_a_downlink_re_num_cells, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-
-    num_cells = tvb_get_uint8(tvb, curr_offset);
-
+    proto_tree_add_item_ret_uint8(tree, hf_ansi_a_downlink_re_num_cells, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &num_cells);
     curr_offset += 1;
 
     NO_MORE_DATA_CHECK(len);
 
-    proto_tree_add_item(tree, hf_ansi_a_cell_id_disc, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-
-    disc = tvb_get_uint8(tvb, curr_offset);
-
+    proto_tree_add_item_ret_uint8(tree, hf_ansi_a_cell_id_disc, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &disc);
     curr_offset += 1;
 
     NO_MORE_DATA_CHECK(len);
@@ -4312,9 +4303,7 @@ elem_tag(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, uint32_t offse
 
     curr_offset = offset;
 
-    proto_tree_add_item(tree, hf_ansi_a_tag_value, tvb, curr_offset, 4, ENC_BIG_ENDIAN);
-
-    value = tvb_get_ntohl(tvb, curr_offset);
+    proto_tree_add_item_ret_uint(tree, hf_ansi_a_tag_value, tvb, curr_offset, 4, ENC_BIG_ENDIAN, &value);
 
     proto_item_append_text(data_p->elem_item, " - (%u)", value);
 
@@ -4408,21 +4397,15 @@ elem_sw_ver(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t offset
 
     curr_offset = offset;
 
-    proto_tree_add_item(tree, hf_ansi_a_sw_ver_major, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-
-    major = tvb_get_uint8(tvb, curr_offset);
+    proto_tree_add_item_ret_uint8(tree, hf_ansi_a_sw_ver_major, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &major);
 
     curr_offset++;
 
-    proto_tree_add_item(tree, hf_ansi_a_sw_ver_minor, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-
-    minor = tvb_get_uint8(tvb, curr_offset);
+    proto_tree_add_item_ret_uint8(tree, hf_ansi_a_sw_ver_minor, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &minor);
 
     curr_offset++;
 
-    proto_tree_add_item(tree, hf_ansi_a_sw_ver_point, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-
-    point = tvb_get_uint8(tvb, curr_offset);
+    proto_tree_add_item_ret_uint8(tree, hf_ansi_a_sw_ver_point, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &point);
 
     proto_item_append_text(data_p->elem_item, " - (IOS %u.%u.%u)", major, minor, point);
 
@@ -5883,10 +5866,7 @@ elem_cdma_sowd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint32_t off
 
     curr_offset = offset;
 
-    proto_tree_add_item(tree, hf_ansi_a_cell_id_disc, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-
-    disc = tvb_get_uint8(tvb, curr_offset);
-
+    proto_tree_add_item_ret_uint8(tree, hf_ansi_a_cell_id_disc, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &disc);
     curr_offset += 1;
 
     curr_offset +=
@@ -6693,7 +6673,7 @@ elem_a2p_bearer_format(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint
 
     num_bearers = 0;
 
-    while ((len - (curr_offset - offset)) > 0)
+    while (len > (curr_offset - offset))
     {
         orig_offset = curr_offset;
 
@@ -10670,15 +10650,10 @@ static stat_tap_table_item bsmap_stat_fields[] = {{TABLE_ITEM_UINT, TAP_ALIGN_RI
 static void ansi_a_bsmap_stat_init(stat_tap_table_ui* new_stat)
 {
     const char *table_name = "ANSI A-I/F BSMAP Statistics";
-    int num_fields = array_length(bsmap_stat_fields);
+    unsigned num_fields = array_length(bsmap_stat_fields);
     stat_tap_table *table;
-    int i = 0;
+    unsigned i = 0;
     stat_tap_table_item_type items[array_length(bsmap_stat_fields)];
-
-    items[IEI_COLUMN].type = TABLE_ITEM_UINT;
-    items[MESSAGE_NAME_COLUMN].type = TABLE_ITEM_STRING;
-    items[COUNT_COLUMN].type = TABLE_ITEM_UINT;
-    items[COUNT_COLUMN].value.uint_value = 0;
 
     table = stat_tap_find_table(new_stat, table_name);
     if (table) {
@@ -10687,6 +10662,12 @@ static void ansi_a_bsmap_stat_init(stat_tap_table_ui* new_stat)
         }
         return;
     }
+
+    memset(items, 0, sizeof(items));
+    items[IEI_COLUMN].type = TABLE_ITEM_UINT;
+    items[MESSAGE_NAME_COLUMN].type = TABLE_ITEM_STRING;
+    items[COUNT_COLUMN].type = TABLE_ITEM_UINT;
+    items[COUNT_COLUMN].value.uint_value = 0;
 
     table = stat_tap_init_table(table_name, num_fields, 0, NULL);
     stat_tap_add_table(new_stat, table);

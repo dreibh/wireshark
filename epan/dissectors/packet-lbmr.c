@@ -2027,7 +2027,7 @@ static tap_packet_status lbmr_match_packet(packet_info * pinfo, const lbmr_tag_e
     dest_addr_h = pntohu32(pinfo->dst.data);
     src_addr_h = pntohu32(pinfo->src.data);
 
-    if (IN_MULTICAST(dest_addr_h))
+    if (in4_addr_is_multicast(dest_addr_h))
     {
         /* Check multicast topic resolution values. */
         if ((dest_addr_h != entry->mc_incoming_address_val_h) && (dest_addr_h != entry->mc_outgoing_address_val_h))
@@ -3422,7 +3422,7 @@ static int dissect_lbmr_tnwg(tvbuff_t * tvb, int offset, packet_info * pinfo, pr
 /*----------------------------------------------------------------------------*/
 static int dissect_lbmr_tmr(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tree)
 {
-    int namelen = 0;
+    unsigned namelen = 0;
     int name_offset = 0;
     char * name = NULL;
     proto_item * ti = NULL;
@@ -4093,7 +4093,7 @@ static int dissect_lbmr_tir_transport(tvbuff_t * tvb, int offset, lbm_uint8_t tr
 
 static int dissect_lbmr_tir_entry(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tree, lbmr_contents_t * contents)
 {
-    int namelen = 0;
+    unsigned namelen = 0;
     int reclen = 0;
     int dissect_len = 0;
     int tinfo_offset = 0;
@@ -4165,7 +4165,7 @@ static int dissect_lbmr_tirs(tvbuff_t * tvb, int offset, uint16_t tir_count, pac
 /*----------------------------------------------------------------------------*/
 static int dissect_lbmr_qqr(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tree, lbmr_contents_t * contents)
 {
-    int namelen = 0;
+    unsigned namelen = 0;
     unsigned reclen = 0;
     char * name = NULL;
 
@@ -4237,10 +4237,10 @@ static int dissect_lbmr_qir_grp_blk(tvbuff_t * tvb, int offset, packet_info * pi
 
 static int dissect_lbmr_qir_entry(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tree, lbmr_contents_t * contents)
 {
-    int qnamelen = 0;
+    unsigned qnamelen = 0;
     int qnameoffset = 0;
     char * qname = NULL;
-    int tnamelen = 0;
+    unsigned tnamelen = 0;
     int tnameoffset = 0;
     char * tname = NULL;
     int reclen = 0;
@@ -4442,14 +4442,14 @@ static int dissect_lbmr_pser(tvbuff_t * tvb, int offset, packet_info * pinfo, pr
 /*----------------------------------------------------------------------------*/
 /* LBMR Queue Management dissection functions.                                */
 /*----------------------------------------------------------------------------*/
-int lbmr_dissect_umq_qmgmt(tvbuff_t * tvb, int offset, packet_info * pinfo, proto_tree * tree)
+unsigned lbmr_dissect_umq_qmgmt(tvbuff_t * tvb, unsigned offset, packet_info * pinfo, proto_tree * tree)
 {
     uint8_t pckt_type = 0;
-    int curr_offset = 0;
+    unsigned curr_offset = 0;
     uint16_t dep16;
     uint16_t idx;
     uint8_t flags_val = 0;
-    int len_dissected = 0;
+    unsigned len_dissected = 0;
     static int * const flags[] =
     {
         &hf_qmgmt_flags_i_flag,

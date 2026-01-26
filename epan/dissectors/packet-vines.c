@@ -73,13 +73,13 @@
 #include <epan/packet.h>
 #include <epan/capture_dissectors.h>
 #include <epan/etypes.h>
-#include <epan/ipproto.h>
 #include <epan/to_str.h>
 #include <epan/tfs.h>
 #include <wsutil/array.h>
 #include "packet-ppp.h"
 #include "packet-llc.h"
 #include "packet-arcnet.h"
+#include "data-iana.h"
 
 
 void proto_register_vines_frp(void);
@@ -291,7 +291,7 @@ enum {
 	PKTTYPE_DGRAM = 0,	/* Unreliable datagram */
 	PKTTYPE_DATA = 1,	/* User Data */
 	PKTTYPE_ERR = 2,	/* Error */
-	PKTTYPE_DISC = 3,	/* Diconnect Request */
+	PKTTYPE_DISC = 3,	/* Disconnect Request */
 	PKTTYPE_PROBE = 4,	/* Probe (retransmit) */
 	PKTTYPE_ACK = 5	/* Acknowledgement */
 };

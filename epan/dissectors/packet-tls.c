@@ -243,7 +243,7 @@ ssl_proto_tree_add_segment_data(
         NULL,
         "%sTLS segment data (%u %s)",
         prefix != NULL ? prefix : "",
-        length == -1 ? tvb_reported_length_remaining(tvb, offset) : length,
+        length,
         plurality(length, "byte", "bytes"));
 }
 
@@ -1598,7 +1598,7 @@ desegment_ssl(tvbuff_t *tvb, packet_info *pinfo, int offset,
     fragment_head *ipfd_head;
     bool           must_desegment;
     bool           called_dissector;
-    int            another_pdu_follows;
+    unsigned       another_pdu_follows;
     bool           another_segment_in_frame = false;
     int            deseg_offset;
     uint32_t       deseg_seq;
@@ -1671,7 +1671,7 @@ again:
     /* Else, find the most previous PDU starting before this sequence number */
     msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32_le(flow->multisegment_pdus, seq-1);
     if (msp && msp->seq <= seq && msp->nxtpdu > seq) {
-        int len;
+        unsigned len;
 
         if (!PINFO_FD_VISITED(pinfo)) {
             msp->last_frame = pinfo->num;
@@ -1683,7 +1683,7 @@ again:
          */
         if (msp->flags & MSP_FLAGS_REASSEMBLE_ENTIRE_SEGMENT) {
             /* The dissector asked for the entire segment */
-            len = MAX(0, tvb_reported_length_remaining(tvb, offset));
+            len = tvb_reported_length_remaining(tvb, offset);
         } else {
             len = MIN(nxtseq, msp->nxtpdu) - seq;
         }
@@ -2295,7 +2295,7 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
         /*
          * Yes - can we do reassembly?
          */
-        ssl_proto_tree_add_segment_data(tree, tvb, offset, -1, NULL);
+        ssl_proto_tree_add_segment_data(tree, tvb, offset, available_bytes, NULL);
         if (tls_desegment && pinfo->can_desegment) {
             /*
              * Yes.  Tell the TCP dissector where the data for this
@@ -2331,7 +2331,7 @@ dissect_ssl3_record(tvbuff_t *tvb, packet_info *pinfo,
             /*
              * Yes - can we do reassembly?
              */
-            ssl_proto_tree_add_segment_data(tree, tvb, offset, -1, NULL);
+            ssl_proto_tree_add_segment_data(tree, tvb, offset, available_bytes, NULL);
             if (tls_desegment && pinfo->can_desegment) {
                 /*
                  * Yes.  Tell the TCP dissector where the data for this
@@ -3509,7 +3509,7 @@ dissect_ssl2_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         /*
          * Yes - can we do reassembly?
          */
-        ssl_proto_tree_add_segment_data(tree, tvb, offset, -1, NULL);
+        ssl_proto_tree_add_segment_data(tree, tvb, offset, available_bytes, NULL);
         if (tls_desegment && pinfo->can_desegment) {
             /*
              * Yes.  Tell the TCP dissector where the data for this
@@ -3551,7 +3551,7 @@ dissect_ssl2_record(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         /*
          * Yes - Can we do reassembly?
          */
-        ssl_proto_tree_add_segment_data(tree, tvb, offset, -1, NULL);
+        ssl_proto_tree_add_segment_data(tree, tvb, offset, available_bytes, NULL);
         if (tls_desegment && pinfo->can_desegment) {
             /*
              * Yes.  Tell the TCP dissector where the data for this

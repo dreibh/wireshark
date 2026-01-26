@@ -1718,6 +1718,7 @@ desegment_quic_stream(tvbuff_t *tvb, int offset, int length, packet_info *pinfo,
     uint32_t seq = (uint32_t)stream_info->stream_offset;
     const uint32_t nxtseq = seq + (uint32_t)length;
     uint32_t reassembly_id = 0;
+    bool first_pdu = true;
 
     // XXX fix the tvb accessors below such that no new tvb is needed.
     tvb = tvb_new_subset_length(tvb, 0, offset + length);
@@ -1751,14 +1752,30 @@ again:
      */
     if ((msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32(stream->multisegment_pdus, seq)) &&
             nxtseq <= msp->nxtpdu) {
-        // XXX: This also happens the second time through the data for an MSP normally
         // TODO show expert info for retransmission? Additional checks may be
         // necessary here to tell a retransmission apart from other (normal?)
         // conditions. See also similar code in packet-tcp.c.
+        bool is_retransmission = false;
+
+        if (msp->first_frame != pinfo->num) {
+            is_retransmission = true;
 #if 0
-        proto_tree_add_debug_text(tree, "TODO retransmission expert info frame %d stream_id=%" PRIu64 " offset=%d visited=%d reassembly_id=0x%08x",
+            proto_tree_add_debug_text(tree, "TODO retransmission expert info frame %d stream_id=%" PRIu64 " offset=%d visited=%d reassembly_id=0x%08x",
                 pinfo->num, stream->stream_id, offset, PINFO_FD_VISITED(pinfo), reassembly_id);
 #endif
+        }
+        if (!is_retransmission) {
+            fh = fragment_get(&quic_reassembly_table, pinfo, msp->first_frame, stream_info);
+            if (fh != NULL && fh->reassembled_in != 0 && fh->reassembled_in != pinfo->num) {
+                proto_item *item = proto_tree_add_uint(tree, hf_quic_reassembled_in, tvb, 0,
+                                                       0, fh->reassembled_in);
+                proto_item_set_generated(item);
+                if (first_pdu) {
+                    col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "[QUIC PDU reassembled in %u]",
+                        fh->reassembled_in);
+                }
+            }
+        }
         return;
     }
     /* Else, find the most previous PDU starting before this sequence number */
@@ -1944,8 +1961,10 @@ again:
                 another_pdu_follows = 0;
                 offset += last_fragment_len;
                 seq += last_fragment_len;
-                if (tvb_captured_length_remaining(tvb, offset) > 0)
+                if (tvb_captured_length_remaining(tvb, offset) > 0) {
+                    first_pdu = false;
                     goto again;
+                }
             } else {
                 proto_item *frag_tree_item;
                 proto_tree *parent_tree = proto_tree_get_parent(tree);
@@ -1989,9 +2008,10 @@ again:
                         deseg_seq, nxtseq+pinfo->desegment_len, stream->multisegment_pdus);
                 }
 
-                /* add this segment as the first one for this new pdu */
+                /* Add this segment as the first one for this new pdu.
+                 * Use the the new MSP's reassembly ID (its first frame). */
                 fragment_add(&quic_reassembly_table, tvb, deseg_offset,
-                             pinfo, reassembly_id, stream_info,
+                             pinfo, msp->first_frame, stream_info,
                              0, nxtseq - deseg_seq,
                              nxtseq < msp->nxtpdu);
             }
@@ -2000,8 +2020,8 @@ again:
              * the MSP should already be created. Retrieve it to see if we
              * know what later frame the PDU is reassembled in.
              */
-            if (((struct tcp_multisegment_pdu *)wmem_tree_lookup32(stream->multisegment_pdus, deseg_seq))) {
-                fh = fragment_get(&quic_reassembly_table, pinfo, reassembly_id, stream_info);
+            if ((msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32(stream->multisegment_pdus, deseg_seq))) {
+                fh = fragment_get(&quic_reassembly_table, pinfo, msp->first_frame, stream_info);
             }
         }
     }
@@ -2016,6 +2036,10 @@ again:
             proto_item *item = proto_tree_add_uint(tree, hf_quic_reassembled_in, tvb, 0,
                                                    0, fh->reassembled_in);
             proto_item_set_generated(item);
+            if (first_pdu) {
+                col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", "[QUIC PDU reassembled in %u]",
+                    fh->reassembled_in);
+            }
         }
 
         /* TODO: Show what's left in the packet as a raw QUIC "segment", like
@@ -2031,6 +2055,7 @@ again:
         pinfo->can_desegment = 2;
         offset += another_pdu_follows;
         seq += another_pdu_follows;
+        first_pdu = false;
         goto again;
     }
 }
@@ -4041,9 +4066,7 @@ dissect_quic_long_header_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *q
     uint32_t    dcil, scil;
     proto_item  *ti;
 
-    version = tvb_get_ntohl(tvb, offset);
-
-    ti = proto_tree_add_item(quic_tree, hf_quic_version, tvb, offset, 4, ENC_BIG_ENDIAN);
+    ti = proto_tree_add_item_ret_uint(quic_tree, hf_quic_version, tvb, offset, 4, ENC_BIG_ENDIAN, &version);
     if ((version & 0x0F0F0F0F) == 0x0a0a0a0a) {
         proto_item_append_text(ti, " (Forcing Version Negotiation)");
     }
@@ -4554,10 +4577,10 @@ quic_get_message_tvb(tvbuff_t *tvb, const unsigned offset, const quic_cid_t *dci
         }
     } else {
         if (quic_gso_heur_dcid_len && (dcid->len >= quic_gso_heur_dcid_len)) {
+            unsigned needle_pos;
             unsigned dcid_offset = offset + 1;
             tvbuff_t *needle_tvb = tvb_new_subset_length(tvb, dcid_offset, dcid->len);
-            int needle_pos = tvb_find_tvb(tvb, needle_tvb, dcid_offset + dcid->len);
-            if (needle_pos != -1) {
+            if (tvb_find_tvb_remaining(tvb, needle_tvb, dcid_offset + dcid->len, &needle_pos)) {
                 return tvb_new_subset_length(tvb, offset, needle_pos - offset - 1);
             }
         }
@@ -5173,8 +5196,9 @@ follow_quic_tap_listener(void *tapdata, packet_info *pinfo, epan_dissect_t *edt 
     // XXX: Ideally, we should also deal with stream retransmission
     // and out of order packets in a similar manner to the TCP dissector,
     // using the offset, plus ACKs and other information.
-    follow_record->data = g_byte_array_sized_new(tvb_captured_length(follow_data->tvb));
-    follow_record->data = g_byte_array_append(follow_record->data, tvb_get_ptr(follow_data->tvb, 0, -1), tvb_captured_length(follow_data->tvb));
+    unsigned length = tvb_captured_length(follow_data->tvb);
+    follow_record->data = g_byte_array_sized_new(length);
+    follow_record->data = g_byte_array_append(follow_record->data, tvb_get_ptr(follow_data->tvb, 0, length), length);
     follow_record->packet_num = pinfo->fd->num;
     follow_record->abs_ts = pinfo->fd->abs_ts;
 

@@ -1169,8 +1169,8 @@ dissect_falco_json_event(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
     // https://cloud.google.com/logging/docs/reference/v2/rest/v2/LogEntry
     const char *gcpaudit_keys[] = { "\"insertId\":", "\"logName\":", NULL };
 
-    const uint8_t *tvb_data = tvb_get_ptr(tvb, 0, -1);
     int tvb_len = tvb_captured_length(tvb);
+    const uint8_t *tvb_data = tvb_get_ptr(tvb, 0, tvb_len);
 
     if (has_keys(tvb_data, tvb_len, k8saudit_keys)) {
         source_id = K8SAUDIT_PLUGIN_ID;
@@ -1629,7 +1629,7 @@ dissect_sinsp_plugin(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* 
     proto_tree* fb_tree = proto_item_add_subtree(ti, ett_sinsp_span);
     // proto_tree *fb_tree = tree;
 
-    uint8_t* payload = (uint8_t*)tvb_get_ptr(tvb, 0, payload_len);
+    const uint8_t* payload = tvb_get_ptr(tvb, 0, payload_len);
 
     plugin_field_extract_t *sinsp_fields = (plugin_field_extract_t*) wmem_alloc(pinfo->pool, sizeof(plugin_field_extract_t) * bi->visible_fields);
     for (uint32_t fld_idx = 0; fld_idx < bi->visible_fields; fld_idx++) {

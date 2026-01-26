@@ -74,7 +74,7 @@ struct ptvcursor {
 	uint8_t	     pushed_tree_max;
 	proto_tree  *tree;
 	tvbuff_t    *tvb;
-	int	     offset;
+	unsigned     offset;
 };
 
 #define cVALS(x) (const value_string*)(x)
@@ -281,6 +281,10 @@ proto_tree_add_fake_node(proto_tree *tree, const header_field_info *hfinfo);
 static void
 get_hfi_length(header_field_info *hfinfo, tvbuff_t *tvb, const int start, int *length,
 		int *item_length, const unsigned encoding);
+
+static void
+get_hfi_length_unsigned(header_field_info * hfinfo, tvbuff_t * tvb, const unsigned start, unsigned* length,
+	unsigned* item_length, const unsigned encoding);
 
 static int
 get_full_length(header_field_info *hfinfo, tvbuff_t *tvb, const int start,
@@ -1304,7 +1308,7 @@ ptvcursor_free_subtree_levels(ptvcursor_t *ptvc)
 /* Allocates an initializes a ptvcursor_t with 3 variables:
  *	proto_tree, tvbuff, and offset. */
 ptvcursor_t *
-ptvcursor_new(wmem_allocator_t *scope, proto_tree *tree, tvbuff_t *tvb, int offset)
+ptvcursor_new(wmem_allocator_t *scope, proto_tree *tree, tvbuff_t *tvb, unsigned offset)
 {
 	ptvcursor_t *ptvc;
 
@@ -1325,7 +1329,7 @@ void
 ptvcursor_free(ptvcursor_t *ptvc)
 {
 	ptvcursor_free_subtree_levels(ptvc);
-	/*g_free(ptvc);*/
+	wmem_free(ptvc->scope, ptvc);
 }
 
 /* Returns tvbuff. */
@@ -1336,7 +1340,7 @@ ptvcursor_tvbuff(ptvcursor_t *ptvc)
 }
 
 /* Returns current offset. */
-int
+unsigned
 ptvcursor_current_offset(ptvcursor_t *ptvc)
 {
 	return ptvc->offset;
@@ -1848,9 +1852,17 @@ get_stringz_value(wmem_allocator_t *scope, proto_tree *tree, tvbuff_t *tvb,
 	if (length < -1) {
 		report_type_length_mismatch(tree, "a string", length, true);
 	}
+
+	/* XXX - Ideally, every "null-terminated string which fits into a
+	 * known length" should be either FT_STRINGZPAD or FT_STRINGZTRUNC
+	 * as appropriate, not a FT_STRINGZ. If so, then we could always call
+	 * tvb_get_stringz_enc here. Failing that, we could treat length 0
+	 * as unknown length as well (since there is a trailing '\0', the real
+	 * length is never zero), allowing switching to unsigned lengths.
+	 */
 	if (length == -1) {
 		/* This can throw an exception */
-		value = tvb_get_stringz_enc(scope, tvb, start, &length, encoding);
+		value = tvb_get_stringz_enc(scope, tvb, start, (unsigned*)&length, encoding);
 	} else {
 		/* In this case, length signifies the length of the string.
 		 *
@@ -3389,13 +3401,12 @@ proto_tree_add_item_ret_uint(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 		    hfinfo->abbrev);
 	}
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
-		{
-			if(retval)
-			{
-				*retval = 0;
-			}
-		} );
+	if (length == 0) {
+		if (retval) {
+			*retval = 0;
+		}
+		return NULL;
+	}
 
 	if (encoding & ENC_STRING) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
@@ -3435,17 +3446,50 @@ proto_tree_add_item_ret_uint(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 	return proto_tree_add_node(tree, new_fi);
 }
 
+proto_item *
+proto_tree_add_item_ret_uint32(proto_tree *tree, int hfindex, tvbuff_t *tvb,
+                               const int start, int length,
+                               const unsigned encoding, uint32_t *retval)
+{
+    return proto_tree_add_item_ret_uint(tree, hfindex, tvb, start, length, encoding, retval);
+}
+
+proto_item *
+proto_tree_add_item_ret_uint8(proto_tree *tree, int hfindex, tvbuff_t *tvb,
+                              const int start, int length,
+                              const unsigned encoding, uint8_t *retval)
+{
+    /* TODO: further restrict by hfinfo->type ? */
+    uint32_t val32;
+    proto_item *item = proto_tree_add_item_ret_uint(tree, hfindex, tvb, start, length, encoding, &val32);
+    *retval = (uint8_t)val32;
+    return item;
+}
+
+proto_item *
+proto_tree_add_item_ret_uint16(proto_tree *tree, int hfindex, tvbuff_t *tvb,
+                               const int start, int length,
+                               const unsigned encoding, uint16_t *retval)
+{
+    /* TODO: further restrict by hfinfo->type ? */
+    uint32_t val32;
+    proto_item *item = proto_tree_add_item_ret_uint(tree, hfindex, tvb, start, length, encoding, &val32);
+    *retval = (uint16_t)val32;
+    return item;
+}
+
+
 /* Gets data from tvbuff, adds it to proto_tree, increments offset,
  * and returns proto_item* and uint value retrieved*/
 proto_item *
-ptvcursor_add_ret_uint(ptvcursor_t *ptvc, int hfindex, int length,
+ptvcursor_add_ret_uint(ptvcursor_t *ptvc, int hfindex, unsigned length,
 	      const unsigned encoding, uint32_t *retval)
 {
 	field_info	  *new_fi;
 	header_field_info *hfinfo;
-	int		   item_length;
-	int		   offset;
-	uint32_t		   value;
+	unsigned	   item_length;
+	unsigned	   offset;
+	uint32_t	   value;
 
 	offset = ptvc->offset;
 	PROTO_REGISTRAR_GET_NTH(hfindex, hfinfo);
@@ -3462,7 +3506,7 @@ ptvcursor_add_ret_uint(ptvcursor_t *ptvc, int hfindex, int length,
 		    hfinfo->abbrev);
 	}
 
-	get_hfi_length(hfinfo, ptvc->tvb, offset, &length, &item_length, encoding);
+	get_hfi_length_unsigned(hfinfo, ptvc->tvb, offset, &length, &item_length, encoding);
 	test_length(hfinfo, ptvc->tvb, offset, item_length, encoding);
 
 	/* I believe it's ok if this is called with a NULL tree */
@@ -3495,14 +3539,14 @@ ptvcursor_add_ret_uint(ptvcursor_t *ptvc, int hfindex, int length,
 /* Gets data from tvbuff, adds it to proto_tree, increments offset,
  * and returns proto_item* and int value retrieved*/
 proto_item *
-ptvcursor_add_ret_int(ptvcursor_t *ptvc, int hfindex, int length,
+ptvcursor_add_ret_int(ptvcursor_t *ptvc, int hfindex, unsigned length,
 	      const unsigned encoding, int32_t *retval)
 {
 	field_info	  *new_fi;
 	header_field_info *hfinfo;
-	int		   item_length;
-	int		   offset;
-	uint32_t		   value;
+	unsigned	   item_length;
+	unsigned	   offset;
+	uint32_t	   value;
 
 	offset = ptvc->offset;
 	PROTO_REGISTRAR_GET_NTH(hfindex, hfinfo);
@@ -3518,7 +3562,7 @@ ptvcursor_add_ret_int(ptvcursor_t *ptvc, int hfindex, int length,
 		    hfinfo->abbrev);
 	}
 
-	get_hfi_length(hfinfo, ptvc->tvb, offset, &length, &item_length, encoding);
+	get_hfi_length_unsigned(hfinfo, ptvc->tvb, offset, &length, &item_length, encoding);
 	test_length(hfinfo, ptvc->tvb, offset, item_length, encoding);
 
 	/* I believe it's ok if this is called with a NULL tree */
@@ -3557,10 +3601,10 @@ proto_item*
 ptvcursor_add_ret_string(ptvcursor_t* ptvc, int hf, int length, const unsigned encoding, wmem_allocator_t *scope, const uint8_t **retval)
 {
 	header_field_info *hfinfo;
-	field_info		*new_fi;
-	const uint8_t	*value;
-	int			item_length;
-	int				offset;
+	field_info	  *new_fi;
+	const uint8_t	  *value;
+	unsigned	  item_length;
+	unsigned	  offset;
 
 	offset = ptvc->offset;
 
@@ -3568,19 +3612,19 @@ ptvcursor_add_ret_string(ptvcursor_t* ptvc, int hf, int length, const unsigned e
 
 	switch (hfinfo->type) {
 	case FT_STRING:
-		value = get_string_value(scope, ptvc->tvb, offset, length, &item_length, encoding);
+		value = get_string_value(scope, ptvc->tvb, offset, length, (int*)&item_length, encoding);
 		break;
 	case FT_STRINGZ:
-		value = get_stringz_value(scope, ptvc->tree, ptvc->tvb, offset, length, &item_length, encoding);
+		value = get_stringz_value(scope, ptvc->tree, ptvc->tvb, offset, length, (int*)&item_length, encoding);
 		break;
 	case FT_UINT_STRING:
-		value = get_uint_string_value(scope, ptvc->tree, ptvc->tvb, offset, length, &item_length, encoding);
+		value = get_uint_string_value(scope, ptvc->tree, ptvc->tvb, offset, length, (int*)&item_length, encoding);
 		break;
 	case FT_STRINGZPAD:
-		value = get_stringzpad_value(scope, ptvc->tvb, offset, length, &item_length, encoding);
+		value = get_stringzpad_value(scope, ptvc->tvb, offset, length, (int*)&item_length, encoding);
 		break;
 	case FT_STRINGZTRUNC:
-		value = get_stringztrunc_value(scope, ptvc->tvb, offset, length, &item_length, encoding);
+		value = get_stringztrunc_value(scope, ptvc->tvb, offset, length, (int*)&item_length, encoding);
 		break;
 	default:
 		REPORT_DISSECTOR_BUG("field %s is not of type FT_STRING, FT_STRINGZ, FT_UINT_STRING, FT_STRINGZPAD, or FT_STRINGZTRUNC",
@@ -3605,13 +3649,13 @@ ptvcursor_add_ret_string(ptvcursor_t* ptvc, int hf, int length, const unsigned e
 /* Gets data from tvbuff, adds it to proto_tree, increments offset,
  * and returns proto_item* and boolean value retrieved */
 proto_item*
-ptvcursor_add_ret_boolean(ptvcursor_t* ptvc, int hfindex, int length, const unsigned encoding, bool *retval)
+ptvcursor_add_ret_boolean(ptvcursor_t* ptvc, int hfindex, unsigned length, const unsigned encoding, bool *retval)
 {
 	header_field_info *hfinfo;
 	field_info		*new_fi;
-	int			item_length;
-	int				offset;
-	uint64_t			value, bitval;
+	unsigned		item_length;
+	unsigned		offset;
+	uint64_t		value, bitval;
 
 	offset = ptvc->offset;
 	PROTO_REGISTRAR_GET_NTH(hfindex, hfinfo);
@@ -3621,19 +3665,17 @@ ptvcursor_add_ret_boolean(ptvcursor_t* ptvc, int hfindex, int length, const unsi
 		    hfinfo->abbrev);
 	}
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
-		{
-			if(retval)
-			{
-				*retval = false;
-			}
-		} );
-
+	if (length == 0) {
+		if (retval) {
+			*retval = 0;
+		}
+		return NULL;
+	}
 	if (encoding & ENC_STRING) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
 	}
 
-	get_hfi_length(hfinfo, ptvc->tvb, offset, &length, &item_length, encoding);
+	get_hfi_length_unsigned(hfinfo, ptvc->tvb, offset, &length, &item_length, encoding);
 	test_length(hfinfo, ptvc->tvb, offset, item_length, encoding);
 
 	/* I believe it's ok if this is called with a NULL tree */
@@ -4374,7 +4416,7 @@ ptvcursor_add(ptvcursor_t *ptvc, int hfindex, int length,
 	field_info	  *new_fi;
 	header_field_info *hfinfo;
 	int		   item_length;
-	int		   offset;
+	unsigned	   offset;
 
 	offset = ptvc->offset;
 	PROTO_REGISTRAR_GET_NTH(hfindex, hfinfo);
@@ -4501,14 +4543,15 @@ validate_proto_tree_add_bytes_ftype(const enum ftenum type)
  */
 proto_item *
 proto_tree_add_bytes_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
-			   const int start, int length, const unsigned encoding,
-			   GByteArray *retval, int *endoff, int *err)
+			  const unsigned start, unsigned length,
+			  const unsigned encoding,
+			  GByteArray *retval, unsigned *endoff, int *err)
 {
 	field_info	  *new_fi;
 	GByteArray	  *bytes = retval;
 	GByteArray	  *created_bytes = NULL;
-	bool	   failed = false;
-	uint32_t		   n = 0;
+	bool		   failed = false;
+	uint32_t	   n = 0;
 	header_field_info *hfinfo;
 	bool	   generate = (bytes || tree) ? true : false;
 
@@ -4519,7 +4562,9 @@ proto_tree_add_bytes_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 	DISSECTOR_ASSERT_HINT(validate_proto_tree_add_bytes_ftype(hfinfo->type),
 		"Called proto_tree_add_bytes_item but not a bytes-based FT_XXX type");
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH(length);
+	if (length == 0) {
+		return NULL;
+	}
 
 	if (encoding & ENC_STR_NUM) {
 		REPORT_DISSECTOR_BUG("Decoding number strings for byte arrays is not supported");
@@ -4640,8 +4685,9 @@ proto_tree_add_bytes_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 
 proto_item *
 proto_tree_add_time_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
-			   const int start, int length, const unsigned encoding,
-			   nstime_t *retval, int *endoff, int *err)
+			   const unsigned start, const unsigned length,
+			   const unsigned encoding,
+			   nstime_t *retval, unsigned *endoff, int *err)
 {
 	field_info	  *new_fi;
 	nstime_t	   time_stamp;
@@ -4652,13 +4698,12 @@ proto_tree_add_time_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 
 	DISSECTOR_ASSERT_HINT(hfinfo != NULL, "Not passed hfi!");
 
-	CHECK_FOR_ZERO_OR_MINUS_LENGTH_AND_CLEANUP(length,
-		{
-			if(retval)
-			{
-				nstime_set_zero(retval);
-			}
-		} );
+	if (length == 0) {
+		if(retval) {
+			nstime_set_zero(retval);
+		}
+		return NULL;
+	}
 
 	nstime_set_zero(&time_stamp);
 
@@ -4752,7 +4797,7 @@ ptvcursor_add_no_advance(ptvcursor_t* ptvc, int hf, int length,
 /* Advance the ptvcursor's offset within its tvbuff without
  * adding anything to the proto_tree. */
 void
-ptvcursor_advance(ptvcursor_t* ptvc, int length)
+ptvcursor_advance(ptvcursor_t* ptvc, unsigned length)
 {
 	if (ckd_add(&ptvc->offset, ptvc->offset, length)) {
 		THROW(ReportedBoundsError);
@@ -4824,6 +4869,9 @@ proto_tree_add_bytes(proto_tree *tree, int hfindex, tvbuff_t *tvb, int start,
 
 	DISSECTOR_ASSERT_FIELD_TYPE(hfinfo, FT_BYTES);
 
+	if (start_ptr == NULL)
+		start_ptr = tvb_get_ptr(tvb, start, length);
+
 	pi = proto_tree_add_pi(tree, hfinfo, tvb, start, &length);
 	proto_tree_set_bytes(PNODE_FINFO(pi), start_ptr, length);
 
@@ -4864,9 +4912,6 @@ proto_tree_add_bytes_format_value(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 	proto_item	  *pi;
 	va_list		   ap;
 
-	if (start_ptr == NULL)
-		start_ptr = tvb_get_ptr(tvb, start, length);
-
 	pi = proto_tree_add_bytes(tree, hfindex, tvb, start, length, start_ptr);
 
 	TRY_TO_FAKE_THIS_REPR_NESTED(pi);
@@ -4885,9 +4930,6 @@ proto_tree_add_bytes_format(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 {
 	proto_item	  *pi;
 	va_list		   ap;
-
-	if (start_ptr == NULL)
-		start_ptr = tvb_get_ptr(tvb, start, length);
 
 	pi = proto_tree_add_bytes(tree, hfindex, tvb, start, length, start_ptr);
 
@@ -5415,6 +5457,11 @@ proto_tree_add_string(proto_tree *tree, int hfindex, tvbuff_t *tvb, int start,
 	 * we can have an empty string right after the end of the
 	 * packet.  (This handles URL-encoded forms where the last field
 	 * has no value so the form ends right after the =.)
+	 *
+	 * XXX - length zero makes sense for FT_STRING, and more or less
+	 * for FT_STRINGZTRUNC, and FT_STRINGZPAD, but doesn't make sense
+	 * for FT_STRINGZ (except that a number of fields that should be
+	 * one of the others are actually registered as FT_STRINGZ.)
 	 */
 	if (item_length != 0)
 		test_length(hfinfo, tvb, start, item_length, ENC_NA);
@@ -6747,6 +6794,41 @@ get_hfi_length(header_field_info *hfinfo, tvbuff_t *tvb, const int start, int *l
 	}
 }
 
+static void
+get_hfi_length_unsigned(header_field_info* hfinfo, tvbuff_t* tvb, const unsigned start, unsigned* length,
+	unsigned* item_length, const unsigned encoding _U_)
+{
+	unsigned length_remaining;
+
+	/*
+	 * We only allow a null tvbuff if the item has a zero length,
+	 * i.e. if there's no data backing it.
+	 */
+	DISSECTOR_ASSERT(tvb != NULL || *length == 0);
+
+
+	*item_length = *length;
+	if (hfinfo->type == FT_PROTOCOL || hfinfo->type == FT_NONE) {
+		/*
+			* These types are for interior nodes of the
+			* tree, and don't have data associated with
+			* them; if the length is negative (XXX - see
+			* above) or goes past the end of the tvbuff,
+			* cut it short at the end of the tvbuff.
+			* That way, if this field is selected in
+			* Wireshark, we don't highlight stuff past
+			* the end of the data.
+			*/
+			/* XXX - what to do, if we don't have a tvb? */
+		if (tvb) {
+			length_remaining = tvb_captured_length_remaining(tvb, start);
+			if (*item_length > 0 && (length_remaining < *item_length)) {
+				*item_length = length_remaining;
+			}
+		}
+	}
+}
+
 static int
 get_full_length(header_field_info *hfinfo, tvbuff_t *tvb, const int start,
 		int length, unsigned item_length, const int encoding)
@@ -6844,10 +6926,8 @@ get_full_length(header_field_info *hfinfo, tvbuff_t *tvb, const int start,
 		}
 		if (length == -1) {
 			/* This can throw an exception */
-			/* XXX - do this without fetching the string? */
-			wmem_free(NULL, tvb_get_stringz_enc(NULL, tvb, start, &length, encoding));
+			item_length = tvb_strsize_enc(tvb, start, encoding);
 		}
-		item_length = length;
 		break;
 
 	case FT_UINT_STRING:
@@ -7973,7 +8053,7 @@ proto_item_set_len(proto_item *pi, const int length)
  * of that tvbuff.
  */
 void
-proto_item_set_end(proto_item *pi, tvbuff_t *tvb, int end)
+proto_item_set_end(proto_item *pi, tvbuff_t *tvb, unsigned end)
 {
 	field_info *fi;
 	int length;
@@ -8000,7 +8080,10 @@ proto_item_get_len(const proto_item *pi)
 	if (!pi)
 		return -1;
 	fi = PITEM_FINFO(pi);
-	return fi ? fi->length : -1;
+	if (fi) {
+		return fi->length;
+	}
+	return -1;
 }
 
 void
@@ -9419,7 +9502,7 @@ tmp_fld_check_assert(header_field_info *hfinfo)
 		const true_false_string *tfs = (const true_false_string*)hfinfo->strings;
 		if (tfs) {
 			if (strcmp(tfs->false_string, tfs->true_string) == 0) {
-				ws_warning("Field '%s' (%s) has identical true and false strings (\"%s\", \"%s\")",
+				ws_error("Field '%s' (%s) has identical true and false strings (\"%s\", \"%s\")",
 						   hfinfo->name, hfinfo->abbrev,
 						   tfs->false_string, tfs->true_string);
 			}
@@ -9952,7 +10035,7 @@ proto_register_field_init(header_field_info *hfinfo, const int parent)
 #ifdef ENABLE_CHECK_FILTER
 			while (same_name_hfinfo) {
 				if (!ftype_similar_types(hfinfo->type, same_name_hfinfo->type))
-					ws_warning("'%s' exists multiple times with incompatible types: %s and %s", hfinfo->abbrev, ftype_name(hfinfo->type), ftype_name(same_name_hfinfo->type));
+					ws_error("'%s' exists multiple times with incompatible types: %s and %s", hfinfo->abbrev, ftype_name(hfinfo->type), ftype_name(same_name_hfinfo->type));
 				same_name_hfinfo = same_name_hfinfo->same_name_next;
 			}
 #endif
@@ -11715,7 +11798,7 @@ proto_find_field_from_offset(proto_tree *tree, unsigned offset, tvbuff_t *tvb)
 }
 
 typedef struct {
-	int length;
+	unsigned length;
 	char *buf;
 } decoded_data_t;
 
@@ -11724,7 +11807,7 @@ check_for_undecoded(proto_node *node, void * data)
 {
 	field_info *fi = PNODE_FINFO(node);
 	decoded_data_t* decoded = (decoded_data_t*)data;
-	int i;
+	unsigned i;
 	unsigned byte;
 	unsigned bit;
 
@@ -12882,7 +12965,7 @@ proto_item_add_bitmask_tree(proto_item *item, tvbuff_t *tvb, const int offset,
 					out = hfinfo_number_value_format(hf, buf, (int32_t) integer32);
 				}
 				proto_item_append_text(item, "%s: %s", hf->name, out);
-				if (hf->display & BASE_UNIT_STRING) {
+				if (hf->strings && hf->display & BASE_UNIT_STRING) {
 					proto_item_append_text(item, "%s", unit_name_string_get_value((uint32_t) tmpval, (const unit_name_string*)hf->strings));
 				}
 				first = false;

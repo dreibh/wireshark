@@ -13,7 +13,7 @@
 
 #include "ws_symbol_export.h"
 
-typedef int (*oer_type_fn)(tvbuff_t*, int, asn1_ctx_t*, proto_tree*, int);
+typedef unsigned (*oer_type_fn)(tvbuff_t*, unsigned, asn1_ctx_t*, proto_tree*, int);
 
 
 /* value for value and size constraints */
@@ -104,7 +104,7 @@ dissect_oer_bit_string(tvbuff_t *tvb, uint32_t offset,  asn1_ctx_t *actx, proto_
 
 //WS_DLL_PUBLIC uint32_t dissect_oer_restricted_character_string(tvbuff_t *tvb, uint32_t offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index, int min_len, int max_len,  bool has_extension, const char *alphabet, int alphabet_length, tvbuff_t **value_tvb);
 
-WS_DLL_PUBLIC uint32_t dissect_oer_enumerated(tvbuff_t *tvb, uint32_t offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index, uint32_t root_num, uint32_t *value, bool has_extension, uint32_t ext_num, uint32_t *value_map);
+WS_DLL_PUBLIC uint32_t dissect_oer_enumerated(tvbuff_t *tvb, uint32_t offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index, uint32_t root_num, uint32_t *value, bool has_extension, uint32_t ext_num, const uint32_t *value_map);
 
 WS_DLL_PUBLIC uint32_t dissect_oer_open_type(tvbuff_t *tvb, uint32_t offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index, oer_type_fn type_cb);
 //WS_DLL_PUBLIC uint32_t dissect_oer_open_type_pdu_new(tvbuff_t *tvb, uint32_t offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index, dissector_t type_cb);

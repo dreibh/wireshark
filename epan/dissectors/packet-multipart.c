@@ -382,8 +382,7 @@ find_first_boundary(tvbuff_t *tvb, int start, const char *boundary,
                     && (tvb_strneql(tvb, offset + 2, boundary,  boundary_len) == 0)))
         {
             /* Boundary string; now check if last */
-            if ((tvb_reported_length_remaining(tvb, offset + 2 + boundary_len + 2) >= 0)
-                    && (tvb_strneql(tvb, offset + 2 + boundary_len, "--", 2) == 0)) {
+            if (tvb_strneql(tvb, offset + 2 + boundary_len, "--", 2) == 0) {
                 *last_boundary = true;
             } else {
                 *last_boundary = false;
@@ -431,8 +430,7 @@ find_next_boundary(tvbuff_t *tvb, int start, const char *boundary,
                     && (tvb_strneql(tvb, next_offset + 2, boundary, boundary_len) == 0)))
         {
             /* Boundary string; now check if last */
-            if ((tvb_reported_length_remaining(tvb, next_offset + 2 + boundary_len + 2) >= 0)
-                    && (tvb_strneql(tvb, next_offset + 2 + boundary_len, "--", 2) == 0)) {
+            if (tvb_strneql(tvb, next_offset + 2 + boundary_len, "--", 2) == 0) {
                 *last_boundary = true;
             } else {
                 *last_boundary = false;
@@ -752,7 +750,7 @@ process_body_part(proto_tree *tree, tvbuff_t *tvb,
                     content_info.media_str = m_info->orig_parameters;
             } else if(encrypt.gssapi_encrypted_tvb) {
                     tmp_tvb = encrypt.gssapi_encrypted_tvb;
-                    proto_tree_add_expert(tree, pinfo, &ei_multipart_decryption_not_possible, tmp_tvb, 0, -1);
+                    proto_tree_add_expert_remaining(tree, pinfo, &ei_multipart_decryption_not_possible, tmp_tvb, 0);
             }
         }
 
@@ -846,7 +844,7 @@ static int dissect_multipart(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
         /*
          * We can't get the required multipart information
          */
-        proto_tree_add_expert(tree, pinfo, &ei_multipart_no_required_parameter, tvb, 0, -1);
+        proto_tree_add_expert_remaining(tree, pinfo, &ei_multipart_no_required_parameter, tvb, 0);
         call_data_dissector(tvb, pinfo, tree);
         return tvb_reported_length(tvb);
     }

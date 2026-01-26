@@ -27,7 +27,6 @@
 
 #include <epan/packet.h>
 #include <epan/in_cksum.h>
-#include <epan/ipproto.h>
 #include <epan/expert.h>
 #include <epan/conversation.h>
 #include <epan/sequence_analysis.h>
@@ -48,6 +47,7 @@
 #include "packet-ieee802154.h"
 #include "packet-6lowpan.h"
 #include "packet-ip.h"
+#include "data-iana.h"
 
 void proto_register_icmpv6(void);
 void proto_reg_handoff_icmpv6(void);
@@ -95,6 +95,8 @@ void proto_reg_handoff_icmpv6(void);
 static int proto_icmpv6;
 static int hf_icmpv6_type;
 static int hf_icmpv6_code;
+static int hf_icmpv6_mcast_ra_ad_interval;
+static int hf_icmpv6_mcast_ra_reserved;
 static int hf_icmpv6_checksum;
 static int hf_icmpv6_checksum_status;
 static int hf_icmpv6_reserved;
@@ -1794,17 +1796,17 @@ static icmp_transaction_t *transaction_end(packet_info *pinfo, proto_tree *tree,
 
 // This is recursive, but we'll run out of PDU before we'll run out of stack.
 // NOLINTNEXTLINE(misc-no-recursion)
-static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree)
+static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree)
 {
     proto_tree *icmp6opt_tree;
     proto_item *ti, *ti_opt, *ti_opt_len;
     uint8_t     opt_type;
-    int         opt_len;
-    int         opt_offset;
+    unsigned    opt_len;
+    unsigned    opt_offset;
     tvbuff_t   *opt_tvb;
     unsigned    used_bytes;
 
-    while ((int)tvb_reported_length(tvb) > offset) {
+    while (tvb_reported_length(tvb) > offset) {
         /* there are more options */
 
         /* ICMPv6 Option */
@@ -1860,7 +1862,7 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
                     /* Padding: 6 bytes */
                     proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_padding, tvb, opt_offset + 8, 6, ENC_NA);
 
-                    link_str = tvb_eui64_to_str(pinfo->pool, tvb, opt_offset);
+                    link_str = tvb_address_to_str(pinfo->pool, tvb, AT_EUI64, opt_offset);
                     col_append_fstr(pinfo->cinfo, COL_INFO, " from %s", link_str);
                     proto_item_append_text(ti, " : %s", link_str);
                 }else{
@@ -1894,7 +1896,7 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
                     /* Padding: 6 bytes */
                     proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_padding, tvb, opt_offset + 8, 6, ENC_NA);
 
-                    link_str = tvb_eui64_to_str(pinfo->pool, tvb, opt_offset);
+                    link_str = tvb_address_to_str(pinfo->pool, tvb, AT_EUI64, opt_offset);
                     col_append_fstr(pinfo->cinfo, COL_INFO, " from %s", link_str);
                     proto_item_append_text(ti, " : %s", link_str);
                 }else{
@@ -2027,7 +2029,7 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
                 proto_item *cga_item;
                 uint16_t ext_data_len;
                 uint8_t padd_length;
-                int par_len;
+                unsigned par_len;
                 asn1_ctx_t asn1_ctx;
 
                 /* Pad Length */
@@ -2270,8 +2272,7 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
                 opt_offset += 1;
 
                 /* Status */
-                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_naack_status, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
-                status = tvb_get_uint8(tvb, opt_offset);
+                proto_tree_add_item_ret_uint8(icmp6opt_tree, hf_icmpv6_opt_naack_status, tvb, opt_offset, 1, ENC_BIG_ENDIAN, &status);
                 opt_offset += 1;
 
                 if(status == 2){
@@ -2644,8 +2645,7 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
                 };
 
                 /* Status */
-                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_aro_status, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
-                status = tvb_get_uint8(tvb, opt_offset);
+                proto_tree_add_item_ret_uint8(icmp6opt_tree, hf_icmpv6_opt_aro_status, tvb, opt_offset, 1, ENC_BIG_ENDIAN, &status);
                 opt_offset += 1;
 
                 /* EARO Opaque */
@@ -2666,7 +2666,7 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
 
                 /* EUI-64 */
                 proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_aro_eui64, tvb, opt_offset, 8, ENC_BIG_ENDIAN);
-                proto_item_append_text(ti, " : Register %s %s", tvb_eui64_to_str(pinfo->pool, tvb, opt_offset), val_to_str(pinfo->pool, status, nd_opt_earo_status_val, "Unknown %d"));
+                proto_item_append_text(ti, " : Register %s %s", tvb_address_to_str(pinfo->pool, tvb, AT_EUI64, opt_offset), val_to_str(pinfo->pool, status, nd_opt_earo_status_val, "Unknown %d"));
                 opt_offset += 8;
 
             }
@@ -2825,8 +2825,8 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
             break;
             case ND_OPT_ENCRYPTED_DNS: /* Encrypted DNS Option (144) */
             {
-                int opt_start = opt_offset;
-                int opt_end = opt_offset + opt_len - 2;
+                unsigned opt_start = opt_offset;
+                unsigned opt_end = opt_offset + opt_len - 2;
                 uint32_t lifetime;
                 uint32_t adn_len = 0;
                 int adn_parsed_len;
@@ -2855,7 +2855,7 @@ static int dissect_icmpv6_nd_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, 
                 proto_tree_add_item_ret_uint(icmp6opt_tree, hf_icmpv6_opt_dnr_auth_domain_name_len, tvb, opt_offset, 2, ENC_BIG_ENDIAN, &adn_len);
                 opt_offset += 2;
 
-                if ((unsigned)opt_offset + adn_len > (unsigned)opt_end) {
+                if (opt_offset + adn_len > opt_end) {
                     expert_add_info_format(pinfo, ti_opt_len, &ei_icmpv6_invalid_option_length, "DNR: truncated option (ADN too long)");
                     break;
                 }
@@ -3989,8 +3989,7 @@ dissect_nodeinfo(tvbuff_t *tvb, int ni_offset, packet_info *pinfo _U_, proto_tre
     };
 
     /* Qtype */
-    proto_tree_add_item(tree, hf_icmpv6_ni_qtype, tvb, ni_offset, 2, ENC_BIG_ENDIAN);
-    qtype = tvb_get_ntohs(tvb, ni_offset);
+    proto_tree_add_item_ret_uint16(tree, hf_icmpv6_ni_qtype, tvb, ni_offset, 2, ENC_BIG_ENDIAN, &qtype);
     ni_offset += 2;
 
     /* Flags */
@@ -4133,8 +4132,7 @@ dissect_rrenum(tvbuff_t *tvb, int rr_offset, packet_info *pinfo, proto_tree *tre
         mp_tree = proto_item_add_subtree(ti_mp, ett_icmpv6_rr_mp);
 
         /* OpCode */
-        proto_tree_add_item(mp_tree, hf_icmpv6_rr_pco_mp_opcode, tvb, rr_offset, 1, ENC_BIG_ENDIAN);
-        opcode = tvb_get_uint8(tvb, rr_offset);
+        proto_tree_add_item_ret_uint8(mp_tree, hf_icmpv6_rr_pco_mp_opcode, tvb, rr_offset, 1, ENC_BIG_ENDIAN, &opcode);
         rr_offset += 1;
 
         /* OpLength */
@@ -4146,21 +4144,18 @@ dissect_rrenum(tvbuff_t *tvb, int rr_offset, packet_info *pinfo, proto_tree *tre
         rr_offset += 1;
 
         /* MatchLen  */
-        ti = proto_tree_add_item(mp_tree, hf_icmpv6_rr_pco_mp_matchlen, tvb, rr_offset, 1, ENC_BIG_ENDIAN);
-        matchlen = tvb_get_uint8(tvb, rr_offset);
+        ti = proto_tree_add_item_ret_uint8(mp_tree, hf_icmpv6_rr_pco_mp_matchlen, tvb, rr_offset, 1, ENC_BIG_ENDIAN, &matchlen);
         if (matchlen > 128) {
             expert_add_info(pinfo, ti, &ei_icmpv6_rr_pco_mp_matchlen);
         }
         rr_offset += 1;
 
         /* MinLen  */
-        proto_tree_add_item(mp_tree, hf_icmpv6_rr_pco_mp_minlen, tvb, rr_offset, 1, ENC_BIG_ENDIAN);
-        minlen = tvb_get_uint8(tvb, rr_offset);
+        proto_tree_add_item_ret_uint8(mp_tree, hf_icmpv6_rr_pco_mp_minlen, tvb, rr_offset, 1, ENC_BIG_ENDIAN, &minlen);
         rr_offset += 1;
 
         /* MaxLen  */
-        proto_tree_add_item(mp_tree, hf_icmpv6_rr_pco_mp_maxlen, tvb, rr_offset, 1, ENC_BIG_ENDIAN);
-        maxlen = tvb_get_uint8(tvb, rr_offset);
+        proto_tree_add_item_ret_uint8(mp_tree, hf_icmpv6_rr_pco_mp_maxlen, tvb, rr_offset, 1, ENC_BIG_ENDIAN, &maxlen);
         rr_offset += 1;
 
         /* Reserved  */
@@ -4206,8 +4201,7 @@ dissect_rrenum(tvbuff_t *tvb, int rr_offset, packet_info *pinfo, proto_tree *tre
             rr_offset += 1;
 
             /* KeepLen */
-            proto_tree_add_item(up_tree, hf_icmpv6_rr_pco_up_keeplen, tvb, rr_offset, 1, ENC_BIG_ENDIAN);
-            keeplen = tvb_get_uint8(tvb, rr_offset);
+            proto_tree_add_item_ret_uint8(up_tree, hf_icmpv6_rr_pco_up_keeplen, tvb, rr_offset, 1, ENC_BIG_ENDIAN, &keeplen);
             rr_offset += 1;
 
             /* FlagMask */
@@ -4268,16 +4262,14 @@ dissect_rrenum(tvbuff_t *tvb, int rr_offset, packet_info *pinfo, proto_tree *tre
         rr_offset +=1;
 
         /* MatchLen */
-        ti = proto_tree_add_item(rm_tree, hf_icmpv6_rr_rm_matchedlen, tvb, rr_offset, 1, ENC_BIG_ENDIAN);
-        matchlen = tvb_get_uint8(tvb, rr_offset);
+        ti = proto_tree_add_item_ret_uint8(rm_tree, hf_icmpv6_rr_rm_matchedlen, tvb, rr_offset, 1, ENC_BIG_ENDIAN, &matchlen);
         if (matchlen > 128) {
             expert_add_info(pinfo, ti, &ei_icmpv6_rr_pco_mp_matchedlen);
         }
         rr_offset +=1;
 
         /* InterfaceIndex */
-        proto_tree_add_item(rm_tree, hf_icmpv6_rr_rm_interfaceindex, tvb, rr_offset, 4, ENC_BIG_ENDIAN);
-        interfaceindex = tvb_get_ntohl(tvb, rr_offset);
+        proto_tree_add_item_ret_uint(rm_tree, hf_icmpv6_rr_rm_interfaceindex, tvb, rr_offset, 4, ENC_BIG_ENDIAN, &interfaceindex);
         rr_offset +=4;
 
         /* MatchedPrefix */
@@ -4478,7 +4470,7 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     vec_t               cksum_vec[4];
     uint32_t            phdr[2];
     uint16_t            cksum;
-    int                 offset;
+    unsigned            offset;
     tvbuff_t           *next_tvb;
     uint8_t             icmp6_type, icmp6_code;
     icmp_transaction_t *trans      = NULL;
@@ -4504,8 +4496,19 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     col_add_str(pinfo->cinfo, COL_INFO, val_to_str(pinfo->pool, icmp6_type, icmpv6_type_val, "Unknown (%d)"));
 
-    if (tree)
-        code_item = proto_tree_add_item(icmp6_tree, hf_icmpv6_code, tvb, offset, 1, ENC_BIG_ENDIAN);
+    switch (icmp6_type) {
+        case ICMP6_MCAST_ROUTER_ADVERT:
+            // Code field is reused for Advertisement Interval
+            proto_tree_add_item(icmp6_tree, hf_icmpv6_mcast_ra_ad_interval, tvb, offset, 1, ENC_BIG_ENDIAN);
+            break;
+        case ICMP6_MCAST_ROUTER_SOLICIT:
+        case ICMP6_MCAST_ROUTER_TERM:
+            // Code field is reserved
+            proto_tree_add_item(icmp6_tree, hf_icmpv6_mcast_ra_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
+            break;
+        default:
+            code_item = proto_tree_add_item(icmp6_tree, hf_icmpv6_code, tvb, offset, 1, ENC_BIG_ENDIAN);
+    }
 
     icmp6_code = tvb_get_uint8(tvb, offset);
     offset += 1;
@@ -4540,8 +4543,10 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
             break;
     }
 
-    if (code_name)
+    if (code_item && code_name) {
+        proto_item_append_text(code_item, " (%s)", code_name);
         col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)", code_name);
+    }
 
     /* RFC 4380
      * 2.7.   Teredo UDP Port
@@ -4550,9 +4555,6 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         col_set_str(pinfo->cinfo, COL_PROTOCOL, "Teredo");
         col_set_str(pinfo->cinfo, COL_INFO, "Direct IPv6 Connectivity Test");
     }
-
-    if (code_name)
-        proto_item_append_text(code_item, " (%s)", code_name);
 
     cksum = tvb_get_ntohs(tvb, offset);
     length = tvb_captured_length(tvb);
@@ -4566,7 +4568,7 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         SET_CKSUM_VEC_PTR(cksum_vec[0], (const uint8_t *)pinfo->src.data, pinfo->src.len);
         SET_CKSUM_VEC_PTR(cksum_vec[1], (const uint8_t *)pinfo->dst.data, pinfo->dst.len);
         phdr[0] = g_htonl(reported_length);
-        phdr[1] = g_htonl(IP_PROTO_ICMPV6);
+        phdr[1] = g_htonl(IP_PROTO_IPV6_ICMP);
         SET_CKSUM_VEC_PTR(cksum_vec[2], (const uint8_t *)&phdr, 8);
         SET_CKSUM_VEC_TVB(cksum_vec[3], tvb, 0, reported_length);
 
@@ -4584,8 +4586,7 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         uint16_t identifier, sequence;
 
         /* Identifier */
-        proto_tree_add_item(icmp6_tree, hf_icmpv6_echo_identifier, tvb, offset, 2, ENC_BIG_ENDIAN);
-        identifier = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item_ret_uint16(icmp6_tree, hf_icmpv6_echo_identifier, tvb, offset, 2, ENC_BIG_ENDIAN, &identifier);
         offset += 2;
 
         /* Sequence Number */
@@ -4962,7 +4963,7 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                 offset += 2;
 
                 /* Show all Home Agent Addresses */
-                while((int)length > offset)
+                while(length > offset)
                 {
                     proto_tree_add_item(icmp6_tree, hf_icmpv6_mip6_home_agent_address, tvb, offset, 16, ENC_NA);
                     offset += 16;
@@ -5045,8 +5046,7 @@ dissect_icmpv6(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                 uint8_t subtype;
 
                 /* Subtype */
-                proto_tree_add_item(icmp6_tree, hf_icmpv6_fmip6_subtype, tvb, offset, 1, ENC_BIG_ENDIAN);
-                subtype = tvb_get_uint8(tvb, offset);
+                proto_tree_add_item_ret_uint8(icmp6_tree, hf_icmpv6_fmip6_subtype, tvb, offset, 1, ENC_BIG_ENDIAN, &subtype);
                 col_append_fstr(pinfo->cinfo, COL_INFO, " (%s)", val_to_str(pinfo->pool, subtype, fmip6_subtype_val, "Unknown (%d)"));
                 offset += 1;
 
@@ -5253,6 +5253,12 @@ proto_register_icmpv6(void)
         { &hf_icmpv6_code,
           { "Code", "icmpv6.code", FT_UINT8, BASE_DEC, NULL, 0x0,
             "Depends on the message type.  It is used to create an additional level of message granularity", HFILL }},
+        { &hf_icmpv6_mcast_ra_ad_interval,
+          { "Ad. Interval", "icmpv6.mcast_ra.adv_int", FT_UINT8, BASE_DEC|BASE_UNIT_STRING, UNS(&units_seconds), 0x0,
+            "Advertisement Interval of MRD Advertisement Packet", HFILL }},
+        { &hf_icmpv6_mcast_ra_reserved,
+          { "Reserved", "icmpv6.mcast_ra.reserved", FT_UINT8, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }},
         { &hf_icmpv6_checksum,
           { "Checksum", "icmpv6.checksum", FT_UINT16, BASE_HEX, NULL, 0x0,
             "Used to detect data corruption in the ICMPv6 message and parts of the IPv6 header", HFILL }},
@@ -6818,9 +6824,9 @@ proto_reg_handoff_icmpv6(void)
 {
     capture_dissector_handle_t icmpv6_cap_handle;
 
-    dissector_add_uint("ip.proto", IP_PROTO_ICMPV6, icmpv6_handle);
+    dissector_add_uint("ip.proto", IP_PROTO_IPV6_ICMP, icmpv6_handle);
     icmpv6_cap_handle = create_capture_dissector_handle(capture_icmpv6, proto_icmpv6);
-    capture_dissector_add_uint("ip.proto", IP_PROTO_ICMPV6, icmpv6_cap_handle);
+    capture_dissector_add_uint("ip.proto", IP_PROTO_IPV6_ICMP, icmpv6_cap_handle);
 
     /*
      * Get a handle for the IPv6 dissector.

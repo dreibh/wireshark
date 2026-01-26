@@ -36,7 +36,6 @@
 #include "config.h"
 
 #include <epan/packet.h>
-#include <epan/ipproto.h>
 #include <epan/asn1.h>
 #include <epan/reassemble.h>
 #include <epan/prefs.h>
@@ -50,6 +49,7 @@
 #include "packet-gsm_a_common.h"
 #include "packet-isakmp.h"
 #include "packet-ber.h"
+#include "data-iana.h"
 
 #include <wsutil/wsgcrypt.h>
 #include <wsutil/array.h>
@@ -155,6 +155,21 @@ static int hf_isakmp_notify_data_dpd_are_you_there;
 static int hf_isakmp_notify_data_dpd_are_you_there_ack;
 static int hf_isakmp_notify_data_unity_load_balance;
 static int hf_isakmp_notify_data_fortinet_network_overlay_id;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_item;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_type;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_value;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_ver;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_fctver;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_uid;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_ip;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_mac;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_host;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_user;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_osver;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_reg_status;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_emssn;
+static int hf_isakmp_notify_data_fortinet_forticlient_connect_emsid;
 static int hf_isakmp_notify_data_accepted_dh_group;
 static int hf_isakmp_notify_data_ipcomp_cpi;
 static int hf_isakmp_notify_data_ipcomp_transform_id;
@@ -435,6 +450,10 @@ static int hf_isakmp_enc_data;
 static int hf_isakmp_enc_iv;
 static int hf_isakmp_enc_icd;
 
+static int hf_isakmp_iketcp_magic;
+static int hf_isakmp_iketcp_length;
+static int hf_isakmp_iketcp_non_esp_marker;
+
 static int ett_isakmp;
 static int ett_isakmp_version;
 static int ett_isakmp_flags;
@@ -449,6 +468,7 @@ static int ett_isakmp_id;
 static int ett_isakmp_notify_data;
 static int ett_isakmp_notify_data_3gpp_emergency_call_numbers_main;
 static int ett_isakmp_notify_data_3gpp_emergency_call_numbers_element;
+static int ett_isakmp_notify_fortinet_forticlient_connnect;
 static int ett_isakmp_ts;
 static int ett_isakmp_kd;
 /* For decrypted IKEv2 Encrypted payload*/
@@ -465,7 +485,9 @@ static expert_field ei_isakmp_bad_fragment_number;
 static expert_field ei_isakmp_notify_data_3gpp_unknown_device_identity;
 
 static dissector_handle_t eap_handle;
+static dissector_handle_t esp_handle;
 static dissector_handle_t isakmp_handle;
+static dissector_handle_t iketcp_handle;
 
 
 static reassembly_table isakmp_cisco_reassembly_table;
@@ -1583,7 +1605,9 @@ static const range_string notifmsg_v2_3gpp_type[] = {
   { 61473,61473,      "Auto-Discovery Receiver (Fortinet)" },
   { 61474,61519,      "Private Use - STATUS TYPES" },
   { 61520,61520,      "Network Overlay ID (Fortinet)" },
-  { 61521,65535,      "Private Use - STATUS TYPES" },
+  { 61521,61695,      "Private Use - STATUS TYPES" },
+  { 61696,61696,      "FORTICLIENT_CONNECT" },
+  { 61697,65535,      "Private Use - STATUS TYPES" },
   { 0,0,        NULL },
 };
 
@@ -1691,7 +1715,7 @@ static const range_string vs_v2_cfgattr[] = {
   { 25,25,       "INTERNAL_DNS_DOMAIN" },
   { 26,26,       "INTERNAL_DNSSEC_TA" },
   { 27,27,       "ENCDNS_IP4" },
-  { 28,20,       "ENCDNS_IP6" },
+  { 28,28,       "ENCDNS_IP6" },
   { 29,29,       "ENCDNS_DIGEST_INFO" },
   { 30,16383,    "RESERVED TO IANA"},
   { 16384,21513, "PRIVATE USE"},
@@ -3631,9 +3655,7 @@ dissect_sa(tvbuff_t *tvb, int offset, int length, proto_tree *tree, int isakmp_v
   /* make a copy of current tree working position which we will use while dissecting other payloads*/
   currtree = tree;
   if (isakmp_version == 1) {
-    doi = tvb_get_ntohl(tvb, offset);
-
-    proto_tree_add_item(tree, hf_isakmp_sa_doi, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_isakmp_sa_doi, tvb, offset, 4, ENC_BIG_ENDIAN, &doi);
 
     offset += 4;
     length -= 4;
@@ -4881,8 +4903,7 @@ dissect_notif(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_t
   offset_end = offset + length;
 
   if (isakmp_version == 1) {
-    doi = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(tree, hf_isakmp_notify_doi, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_isakmp_notify_doi, tvb, offset, 4, ENC_BIG_ENDIAN, &doi);
     offset += 4;
     length -= 4;
   }
@@ -5173,6 +5194,105 @@ dissect_notif(tvbuff_t *tvb, packet_info *pinfo, int offset, int length, proto_t
         break;
       case 61520: /* Network Overlay ID (Fortinet) */
         proto_tree_add_item(tree, hf_isakmp_notify_data_fortinet_network_overlay_id, tvb, offset, length, ENC_BIG_ENDIAN);
+        break;
+      case 61696: /* FORTICLIENT_CONNECT (Fortinet) */ {
+        proto_item *item_tree;
+        proto_tree *forticlient_connnect_tree;
+        proto_tree_add_item(tree, hf_isakmp_notify_data_fortinet_forticlient_connect, tvb, offset, length, ENC_ASCII);
+        while (offset < offset_end) {
+
+          int line_len = tvb_find_uint8(tvb, offset, offset_end-offset, '\n');
+          if (line_len == -1) {
+              break;
+          } else {
+              line_len = line_len - offset;
+          }
+
+          gchar *line = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, line_len, ENC_ASCII);
+
+          /* Parse KEY=VALUE */
+          gchar **tokens = g_strsplit(line, "=", 2);
+
+          item_tree = proto_tree_add_string(tree,
+                                            hf_isakmp_notify_data_fortinet_forticlient_connect_item,
+                                            tvb, offset, line_len,
+                                            line);
+          forticlient_connnect_tree = proto_item_add_subtree(item_tree, ett_isakmp_notify_fortinet_forticlient_connnect);
+          if (tokens[0] && tokens[1]) {
+              int type_len = (int)strlen(tokens[0]);
+              int type_value = (int)strlen(tokens[1]);
+              proto_tree_add_string(forticlient_connnect_tree,
+                                      hf_isakmp_notify_data_fortinet_forticlient_connect_type,
+                                      tvb, offset, type_len,
+                                      tokens[0]);
+              proto_tree_add_string(forticlient_connnect_tree,
+                                      hf_isakmp_notify_data_fortinet_forticlient_connect_value,
+                                      tvb, offset+type_len+1, type_value,
+                                      tokens[1]);
+              if (strcmp(tokens[0], "VER") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_ver,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+
+              } else if (strcmp(tokens[0], "FCTVER") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_fctver,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              } else if (strcmp(tokens[0], "UID") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_uid,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              } else if (strcmp(tokens[0], "IP") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_ip,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              } else if (strcmp(tokens[0], "MAC") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_mac,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              } else if (strcmp(tokens[0], "HOST") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_host,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              } else if (strcmp(tokens[0], "USER") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_user,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              } else if (strcmp(tokens[0], "OSVER") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_osver,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              } else if (strcmp(tokens[0], "REG_STATUS") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_reg_status,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              } else if (strcmp(tokens[0], "EMSSN") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_emssn,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              } else if (strcmp(tokens[0], "EMSID") == 0) {
+                  proto_tree_add_string(forticlient_connnect_tree,
+                                        hf_isakmp_notify_data_fortinet_forticlient_connect_emsid,
+                                        tvb, offset+type_len+1, type_value,
+                                        tokens[1]);
+              }
+          }
+
+          g_strfreev(tokens);
+
+          offset += line_len + 1; /* +1 pour le LF */
+          }
+        }
         break;
       default:
         /* No Default Action */
@@ -6339,6 +6459,77 @@ dissect_gspm(tvbuff_t *tvb, int offset, int length, proto_tree *tree)
 }
 
 /*
+https://datatracker.ietf.org/doc/html/rfc9329#name-tcp-encapsulated-stream-pre
+
+ 4. TCP-Encapsulated Stream Prefix
+
+Each stream of bytes used for IKE and IPsec encapsulation MUST begin with a fixed sequence of 6 bytes as a magic value
+, containing the characters "IKETCP" as ASCII values.
+
+   0      1      2      3      4      5
++------+------+------+------+------+------+
+| 0x49 | 0x4b | 0x45 | 0x54 | 0x43 | 0x50 |
++------+------+------+------+------+------+
+
+
+*/
+
+#define IKETCP_MAGIC 0x494B45544350
+
+static int
+dissect_iketcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
+{
+  int offset = 0;
+  uint32_t length;
+  tvbuff_t *payload_tvb;
+
+  /* IKETCP Magic Packet*/
+  if (tvb_get_ntoh48(tvb, 0) == IKETCP_MAGIC) {
+    col_set_str(pinfo->cinfo, COL_PROTOCOL, "IKETCP");
+    col_set_str(pinfo->cinfo, COL_INFO, "MAGIC PACKET");
+    proto_tree_add_item(tree, hf_isakmp_iketcp_magic, tvb, offset, 6, ENC_ASCII);
+    offset += 6;
+    return offset;
+  }
+
+  /* Check Non-ESP Marker => ISAKMP */
+  if (tvb_get_ntohs(tvb, 2) == 0) {
+    proto_tree_add_item_ret_uint(tree, hf_isakmp_iketcp_length, tvb, offset, 2, ENC_BIG_ENDIAN, &length);
+    offset += 2;
+    proto_tree_add_item(tree, hf_isakmp_iketcp_non_esp_marker, tvb, offset, 4, ENC_NA);
+    offset += 4;
+    payload_tvb = tvb_new_subset_length(tvb, offset, length);
+    offset = dissect_isakmp(payload_tvb, pinfo, tree, data);
+  } else {
+    proto_tree_add_item_ret_uint(tree, hf_isakmp_iketcp_length, tvb, offset, 2, ENC_BIG_ENDIAN, &length);
+    offset += 2;
+    payload_tvb = tvb_new_subset_length(tvb, offset, length);
+    call_dissector(esp_handle, payload_tvb, pinfo, tree);
+    offset += length;
+  }
+
+  return offset;
+}
+
+static bool
+dissect_iketcp_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree _U_, void *data _U_)
+{
+    conversation_t     *conversation;
+
+    if (tvb_captured_length(tvb) < 6) {
+        return false;
+    }
+
+    if (tvb_get_ntoh48(tvb, 0) != IKETCP_MAGIC) {
+        return false;
+    }
+
+    conversation = find_or_create_conversation(pinfo);
+    conversation_set_dissector_from_frame_number(conversation, pinfo->num, iketcp_handle);
+    return true;
+}
+
+/*
  * Protocol initialization
  */
 
@@ -6930,6 +7121,66 @@ proto_register_isakmp(void)
     { &hf_isakmp_notify_data_fortinet_network_overlay_id,
       { "Network Overlay ID", "isakmp.notify.data.fortinet.network_overlay_id",
         FT_UINT8, BASE_DEC_HEX, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect,
+      { "Forticlient connect", "isakmp.notify.data.fortinet.forticlient_connect",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_item,
+      { "Config", "isakmp.notify.data.fortinet.forticlient_connect.item",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_type,
+      { "Type", "isakmp.notify.data.fortinet.forticlient_connect.type",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_value,
+      { "Value", "isakmp.notify.data.fortinet.forticlient_connect.value",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_ver,
+      { "Ver", "isakmp.notify.data.fortinet.forticlient_connect.ver",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_fctver,
+      { "FCTVER", "isakmp.notify.data.fortinet.forticlient_connect.fctver",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_uid,
+      { "UID", "isakmp.notify.data.fortinet.forticlient_connect.uid",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_ip,
+      { "IP", "isakmp.notify.data.fortinet.forticlient_connect.ip",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_mac,
+      { "MAC", "isakmp.notify.data.fortinet.forticlient_connect.mac",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_host,
+      { "Host", "isakmp.notify.data.fortinet.forticlient_connect.host",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_user,
+      { "User", "isakmp.notify.data.fortinet.forticlient_connect.user",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_osver,
+      { "OSVER", "isakmp.notify.data.fortinet.forticlient_connect.osver",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_reg_status,
+      { "REG STATUS", "isakmp.notify.data.fortinet.forticlient_connect.reg_status",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_emssn,
+      { "EMS SN", "isakmp.notify.data.fortinet.forticlient_connect.emssn",
+        FT_STRING, BASE_NONE, NULL, 0x0,
+        NULL, HFILL }},
+    { &hf_isakmp_notify_data_fortinet_forticlient_connect_emsid,
+      { "EMS ID", "isakmp.notify.data.fortinet.forticlient_connect.emsid",
+        FT_STRING, BASE_NONE, NULL, 0x0,
         NULL, HFILL }},
     { &hf_isakmp_notify_data_accepted_dh_group,
       { "Accepted DH group number", "isakmp.notify.data.accepted_dh_group",
@@ -8136,8 +8387,23 @@ proto_register_isakmp(void)
     { &hf_iskamp_notify_data_3gpp_emergency_call_number,
       { "Emergency Number", "isakmp.notify.priv.3gpp.emergency_call_number",
         FT_STRING, BASE_NONE, NULL, 0x0,
-        NULL, HFILL }}
+        NULL, HFILL }},
+
+    /* RFC9329 : IKETCP */
+    { &hf_isakmp_iketcp_magic,
+      { "IKETCP Magic", "isakmp.iketcp.magic",
+        FT_STRING, BASE_NONE, NULL, 0x00,
+        NULL, HFILL }},
+    { &hf_isakmp_iketcp_length,
+      { "Length", "isakmp.iketcp.length",
+        FT_UINT16, BASE_DEC, NULL, 0x00,
+        NULL, HFILL }},
+    { &hf_isakmp_iketcp_non_esp_marker,
+      { "Non-ESP Marker", "isakmp.iketcp.non_esp_marker",
+        FT_BYTES, BASE_NONE, NULL, 0x00,
+        "Should be Zero", HFILL }},
   };
+
 
 
   static int *ett[] = {
@@ -8155,6 +8421,7 @@ proto_register_isakmp(void)
     &ett_isakmp_notify_data,
     &ett_isakmp_notify_data_3gpp_emergency_call_numbers_main,
     &ett_isakmp_notify_data_3gpp_emergency_call_numbers_element,
+    &ett_isakmp_notify_fortinet_forticlient_connnect,
     &ett_isakmp_ts,
     &ett_isakmp_kd,
     &ett_isakmp_decrypted_data,
@@ -8206,6 +8473,7 @@ proto_register_isakmp(void)
                         &addresses_reassembly_table_functions);
 
   isakmp_handle = register_dissector("isakmp", dissect_isakmp, proto_isakmp);
+  iketcp_handle = register_dissector("iketcp", dissect_iketcp, proto_isakmp);
 
   isakmp_module = prefs_register_protocol(proto_isakmp, NULL);
   ikev1_uat = uat_new("IKEv1 Decryption Table",
@@ -8255,6 +8523,8 @@ void
 proto_reg_handoff_isakmp(void)
 {
   eap_handle = find_dissector_add_dependency("eap", proto_isakmp);
+  esp_handle = find_dissector_add_dependency("esp", proto_isakmp);
+  heur_dissector_add("tcp", dissect_iketcp_heur, "IKE over TCP", "iketcp", proto_isakmp, HEURISTIC_ENABLE);
   dissector_add_uint_with_preference("udp.port", UDP_PORT_ISAKMP, isakmp_handle);
   dissector_add_uint_with_preference("tcp.port", TCP_PORT_ISAKMP, isakmp_handle);
 }

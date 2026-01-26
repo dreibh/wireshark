@@ -815,8 +815,8 @@ typedef struct _item_label_t {
 /** Contains the field information for the proto_item. */
 typedef struct field_info {
     const header_field_info *hfinfo;      /**< pointer to registered field information */
-    int                  start;           /**< current start of data in field_info.ds_tvb */
-    int                  length;          /**< current data length of item in field_info.ds_tvb */
+    unsigned             start;           /**< current start of data in field_info.ds_tvb */
+    unsigned             length;          /**< current data length of item in field_info.ds_tvb */
     int                  appendix_start;  /**< start of appendix data */
     int                  appendix_length; /**< length of appendix data */
     int                  tree_type;       /**< one of ETT_ or -1 */
@@ -899,7 +899,7 @@ typedef struct {
     unsigned             count;
     struct _packet_info *pinfo;
     tvbuff_t            *idle_count_ds_tvb;
-    int                  max_start;
+    unsigned             max_start;
     unsigned             start_idle_count;
 } tree_data_t;
 
@@ -1209,7 +1209,7 @@ WS_DLL_PUBLIC void proto_item_set_len(proto_item *pi, const int length);
  @param end this end offset is relative to the beginning of tvb
  @todo make usage clearer, I don't understand it!
  */
-WS_DLL_PUBLIC void proto_item_set_end(proto_item *pi, tvbuff_t *tvb, int end);
+WS_DLL_PUBLIC void proto_item_set_end(proto_item *pi, tvbuff_t *tvb, unsigned end);
 
 /** Get length of a proto_item. Useful after using proto_tree_add_item()
  * to add a variable-length field (e.g., FT_UINT_STRING).
@@ -1411,6 +1411,18 @@ proto_tree_add_item_ret_int64(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_item_ret_uint(proto_tree *tree, int hfindex, tvbuff_t *tvb,
     const int start, int length, const unsigned encoding, uint32_t *retval);
+
+WS_DLL_PUBLIC proto_item *
+proto_tree_add_item_ret_uint32(proto_tree *tree, int hfindex, tvbuff_t *tvb,
+    const int start, int length, const unsigned encoding, uint32_t *retval);
+
+WS_DLL_PUBLIC proto_item *
+proto_tree_add_item_ret_uint8(proto_tree *tree, int hfindex, tvbuff_t *tvb,
+    const int start, int length, const unsigned encoding, uint8_t *retval);
+
+WS_DLL_PUBLIC proto_item *
+proto_tree_add_item_ret_uint16(proto_tree *tree, int hfindex, tvbuff_t *tvb,
+    const int start, int length, const unsigned encoding, uint16_t *retval);
 
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_item_ret_uint64(proto_tree *tree, int hfindex, tvbuff_t *tvb,
@@ -1782,8 +1794,8 @@ proto_tree_add_bytes_with_length(proto_tree *tree, int hfindex, tvbuff_t *tvb, i
  */
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_bytes_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
-    const int start, int length, const unsigned encoding,
-    GByteArray *retval, int *endoff, int *err);
+    const unsigned start, unsigned length, const unsigned encoding,
+    GByteArray *retval, unsigned *endoff, int *err);
 
 /** Add a formatted FT_BYTES to a proto_tree, with the format generating
     the string for the value and with the field name being included
@@ -1863,8 +1875,8 @@ proto_tree_add_time(proto_tree *tree, int hfindex, tvbuff_t *tvb, int start,
  */
 WS_DLL_PUBLIC proto_item *
 proto_tree_add_time_item(proto_tree *tree, int hfindex, tvbuff_t *tvb,
-    const int start, int length, const unsigned encoding,
-    nstime_t *retval, int *endoff, int *err);
+    const unsigned start, const unsigned length, const unsigned encoding,
+    nstime_t *retval, unsigned *endoff, int *err);
 
 
 /** Add a formatted FT_ABSOLUTE_TIME or FT_RELATIVE_TIME to a proto_tree, with

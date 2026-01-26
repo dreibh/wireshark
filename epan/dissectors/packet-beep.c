@@ -548,7 +548,7 @@ dissect_beep_tree(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
     if (tvb_reported_length_remaining(tvb, offset) > 0) { /* Dissect what is left as payload */
 
-      int pl_size = MIN(size, tvb_reported_length_remaining(tvb, offset));
+      int pl_size = MIN(size, (int)tvb_reported_length_remaining(tvb, offset));
 
       /* Except, check the payload length, and only dissect that much */
 
@@ -628,7 +628,7 @@ dissect_beep_tree(tvbuff_t *tvb, int offset, packet_info *pinfo,
     proto_tree *tr = NULL;
 
     if (tree) {
-      tr = proto_tree_add_subtree(tree, tvb, offset, MIN(5, MAX(0, tvb_reported_length_remaining(tvb, offset))),
+      tr = proto_tree_add_subtree(tree, tvb, offset, MIN(5, tvb_reported_length_remaining(tvb, offset)),
                                     ett_trailer, NULL, "Trailer");
 
       proto_tree_add_item(hdr, hf_beep_cmd, tvb, offset, 3, ENC_ASCII);
@@ -659,7 +659,7 @@ dissect_beep_tree(tvbuff_t *tvb, int offset, packet_info *pinfo,
 
     if (request_val) {
 
-      pl_size = MIN(request_val->size, tvb_reported_length_remaining(tvb, offset));
+      pl_size = MIN(request_val->size, (int)tvb_reported_length_remaining(tvb, offset));
 
       if (pl_size == 0) { /* The whole of the rest must be payload */
 
@@ -668,7 +668,7 @@ dissect_beep_tree(tvbuff_t *tvb, int offset, packet_info *pinfo,
       }
 
     } else if (beep_frame_data) {
-      pl_size = MIN(beep_frame_data->pl_size, tvb_reported_length_remaining(tvb, offset));
+      pl_size = MIN(beep_frame_data->pl_size, (int)tvb_reported_length_remaining(tvb, offset));
     } else { /* Just in case */
       pl_size = tvb_reported_length_remaining(tvb, offset);
     }
@@ -814,7 +814,7 @@ dissect_beep(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_
 
     int pl_left = beep_frame_data->pl_left;
 
-    pl_left = MIN(pl_left, MAX(0, tvb_reported_length_remaining(tvb, offset)));
+    pl_left = MIN(pl_left, MAX(0, (int)tvb_reported_length_remaining(tvb, offset)));
 
     /* Add the payload bit, only if we have a tree */
     if (tree && (pl_left > 0)) {

@@ -4533,24 +4533,16 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>5 min</translation>
     </message>
     <message>
-        <source>Wireshark I/O Graphs: %1</source>
-        <translation>Wireshark I/O Graphen: %1</translation>
+        <source>%1 I/O Graphs: %2</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Filtered packets</source>
         <translation>Gefilterte Pakete</translation>
     </message>
     <message>
-        <source>Filtered events</source>
-        <translation>Gefilterte Ereignisse</translation>
-    </message>
-    <message>
         <source>All packets</source>
         <translation>Alle Pakete</translation>
-    </message>
-    <message>
-        <source>All events</source>
-        <translation>Alle Ereignisse</translation>
     </message>
     <message>
         <source>All Packets</source>
@@ -4561,14 +4553,6 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>TCP Fehler</translation>
     </message>
     <message>
-        <source>All Events</source>
-        <translation>Alle Ereignisse</translation>
-    </message>
-    <message>
-        <source>All Execs</source>
-        <translation>Alle Ausführungen</translation>
-    </message>
-    <message>
         <source>Hover over the graph for details.</source>
         <translation>Für mehr Details Maus über den Graphen bewegen.</translation>
     </message>
@@ -4577,24 +4561,12 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Keine Pakete im Intervall</translation>
     </message>
     <message>
-        <source>No events in interval</source>
-        <translation>Keine Ereignisse im Intervall</translation>
-    </message>
-    <message>
         <source>Click to select packet</source>
         <translation>Klicken zur Paketauswahl</translation>
     </message>
     <message>
         <source>Packet</source>
         <translation>Paket</translation>
-    </message>
-    <message>
-        <source>Click to select event</source>
-        <translation>Klicken um das Ereignis auszuwählen</translation>
-    </message>
-    <message>
-        <source>Event</source>
-        <translation>Ereignis</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -6982,14 +6954,6 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Ausgewähltes Paket: %1 %2</translation>
     </message>
     <message>
-        <source>Selected Event: %1 %2 </source>
-        <translation>Ausgewählte Ereignisse: %1 %2 </translation>
-    </message>
-    <message>
-        <source>Events: %1</source>
-        <translation>Ereignisse: %1</translation>
-    </message>
-    <message>
         <source> %1 Selected: %2 (%3%)</source>
         <translation>%1 Ausgewählt: %2 (%3%)</translation>
     </message>
@@ -7017,10 +6981,6 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
     <message>
         <source>No Packets</source>
         <translation>Keine Pakete</translation>
-    </message>
-    <message>
-        <source>No Events</source>
-        <translation>Keine Ereignisse</translation>
     </message>
     <message>
         <source>From Zip File…</source>
@@ -8325,36 +8285,16 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Marker</translation>
     </message>
     <message>
-        <source>Wireshark Plots: %1</source>
-        <translation>Wireshark Plots: %1</translation>
-    </message>
-    <message>
-        <source>Stratoshark Plots: %1</source>
-        <translation>Stratoshark Plots: %1</translation>
-    </message>
-    <message>
         <source>Filtered packets</source>
         <translation>Gefilterte Pakete</translation>
-    </message>
-    <message>
-        <source>Filtered events</source>
-        <translation>Gefilterte Ereignisse</translation>
     </message>
     <message>
         <source>All packets</source>
         <translation>Alle Pakete</translation>
     </message>
     <message>
-        <source>All events</source>
-        <translation>Alle Ereignisse</translation>
-    </message>
-    <message>
         <source>Seq. num.</source>
         <translation>Seq. Nr.</translation>
-    </message>
-    <message>
-        <source>Event latency</source>
-        <translation>Ereignis-Latenz</translation>
     </message>
     <message>
         <source>Frame num.</source>
@@ -8377,16 +8317,12 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <translation>Klicken zur Paketauswahl</translation>
     </message>
     <message>
+        <source>%1 Plots: %2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Packet</source>
         <translation>Paket</translation>
-    </message>
-    <message>
-        <source>Click to select event</source>
-        <translation>Klicken um das Ereignis auszuwählen</translation>
-    </message>
-    <message>
-        <source>Event</source>
-        <translation>Ereignis</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -9751,6 +9687,10 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <source>Display Filter</source>
         <translation>Anzeigefilter</translation>
     </message>
+    <message>
+        <source>User Interface</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>QObject::QObject::QObject</name>
@@ -10271,9 +10211,13 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <source>Stream %1 Delta</source>
         <translation>Delta Stream %1</translation>
     </message>
-    <message>
-        <source> %1 streams, </source>
-        <translation>%1 Streams,</translation>
+    <message numerus="yes">
+        <source> %Ln stream(s), </source>
+        <oldsource> %1 streams, </oldsource>
+        <translation type="unfinished">
+            <numerusform>%1 Streams,</numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <source>Save one stream CSV</source>
@@ -10915,9 +10859,13 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <source>Double click on cell to change audio routing</source>
         <translation>Doppelklick auf Zelle um Audiorouting zu ändern</translation>
     </message>
-    <message>
-        <source>%1 streams</source>
-        <translation>%1 Streams</translation>
+    <message numerus="yes">
+        <source>%Ln stream(s)</source>
+        <oldsource>%1 streams</oldsource>
+        <translation type="unfinished">
+            <numerusform>%1 Streams</numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <source>, %1 selected</source>
@@ -11272,13 +11220,21 @@ Um zum Beispiel eine neue Datei zu jeder vollen Stunde zu haben, 1 Stunde angebe
         <source>as YAML</source>
         <translation>als YAML</translation>
     </message>
-    <message>
-        <source>%1 streams</source>
-        <translation>%1 Streams</translation>
+    <message numerus="yes">
+        <source>%Ln stream(s)</source>
+        <oldsource>%1 streams</oldsource>
+        <translation type="unfinished">
+            <numerusform>%1 Streams</numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
-    <message>
-        <source>, %1 selected, %2 total packets</source>
-        <translation>, %1 ausgewählt, %2 Pakete insgesamt</translation>
+    <message numerus="yes">
+        <source>, %1 selected, %Ln total packet(s)</source>
+        <oldsource>, %1 selected, %2 total packets</oldsource>
+        <translation type="unfinished">
+            <numerusform>, %1 ausgewählt, %2 Pakete insgesamt</numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <source>Save RTPDump As…</source>
@@ -13857,7 +13813,7 @@ a:hover {
 
 &lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
 
-&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+&lt;th&gt;&lt;a href=&quot;https://discord.gg/fT2jvkawGj&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
 
 &lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
 
@@ -13865,7 +13821,50 @@ a:hover {
 
 &lt;/tr&gt;&lt;/table&gt;
 &lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head&gt;
+        <oldsource>&lt;html&gt;&lt;head&gt;
+&lt;style&gt;
+a:link {
+  color: palette(text);
+  text-decoration: none;
+}
+a:hover {
+  color: palette(text);
+  text-decoration: underline;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;table&gt;&lt;tr&gt;
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/docs/wsug_html_chunked/&quot;&gt;User&apos;s Guide&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://gitlab.com/wireshark/wireshark/-/wikis/&quot;&gt;Wiki&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://ask.wireshark.org/&quot;&gt;Questions and Answers&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/lists/&quot;&gt;Mailing Lists&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://sharkfest.wireshark.org/&quot;&gt;SharkFest&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://wiresharkfoundation.org/donate/&quot;&gt;Donate&lt;/a&gt;&lt;/th&gt;
+
+&lt;/tr&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</oldsource>
+        <translation type="unfinished">&lt;html&gt;&lt;head&gt;
 &lt;style&gt;
 a:link {
   color: palette(text);
@@ -13935,14 +13934,6 @@ a:hover {
     <message>
         <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
         <translation>Mit Wireshark den Kleber schnüffeln, der das Internet zusammenhält.</translation>
-    </message>
-    <message>
-        <source>You are sniffing the glue that holds your system together using Stratoshark </source>
-        <translation>Mit Stratoshark den Kleber schnüffeln, der Ihr System zusammenhält.</translation>
-    </message>
-    <message>
-        <source>You are running Stratoshark </source>
-        <translation>Sie nutzen Stratoshark </translation>
     </message>
     <message>
         <source>You are running Wireshark </source>
@@ -15412,6 +15403,14 @@ a:hover {
     <message>
         <source>HTTP Request Sequences</source>
         <translation>HTTP Anfrage Sequenzen</translation>
+    </message>
+    <message>
+        <source>&amp;BPv7</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>BPv7 PDU and block statistics</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>E2AP</source>

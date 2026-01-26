@@ -31,7 +31,7 @@
 #include <wsutil/wslog.h>
 #include <wsutil/version_info.h>
 #include <wsutil/report_message.h>
-#include <wsutil/application_flavor.h>
+#include <app/application_flavor.h>
 #include <wiretap/wtap_opttypes.h>
 
 #include <epan/decode_as.h>
@@ -182,7 +182,7 @@ main(int argc, char *argv[])
     }
 
     /* Initialize the version information. */
-    ws_init_version_info("Sharkd", NULL, get_ws_vcs_version_info,
+    ws_init_version_info("Sharkd", NULL, application_get_vcs_version_info,
                          epan_gather_compile_info,
                          epan_gather_runtime_info);
 
@@ -216,7 +216,6 @@ main(int argc, char *argv[])
     app_data.num_cols = application_num_columns();
     app_data.register_func = register_all_protocols;
     app_data.handoff_func = register_all_protocol_handoffs;
-    app_data.supports_packets = application_flavor_is_wireshark();
     if (!epan_init(NULL, NULL, true, &app_data)) {
         ret = SHARKD_EPAN_INIT_FAIL;
         goto clean_exit;

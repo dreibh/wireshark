@@ -153,7 +153,7 @@ compatible_encoding_args = {
                           'ENC_ASCII_7BITS',
                           'ENC_T61',
                           'ENC_BCD_DIGITS_0_9', 'ENC_BCD_SKIP_FIRST', 'ENC_BCD_ODD_NUM_DIG',
-                          'ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN',   # These are allowed if ENC_BCD_DIGITS_0_9 is set..
+                          'ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN',   # These are allowed if ENC_BCD_DIGITS_0_9 is set, or for ENC_UTF_16, ENC_UCS_2, ENC_UCS_4
                           'ENC_KEYPAD_ABC_TBCD',
                           'ENC_KEYPAD_BC_TBCD',
                           'ENC_GB18030',
@@ -165,10 +165,10 @@ compatible_encoding_args = {
                           # 'ENC_STR_NUM',       # Should also have at least one ENC_SEP_* flag!
                           # 'ENC_STRING',        # OR of previous 2 values
 
-                          'ENC_LITTLE_ENDIAN'  # Only meaniningful for some encodings (ENC_UTF_16, ENC_UCS_2, ENC_UCS_4)
+                          'ENC_BOM'  # Only meaningful for some encodings (ENC_UTF_16, ENC_UCS_2, ENC_UCS_4)
                           ]),
 
-    'FT_CHAR':      set(['ENC_ASCII', 'ENC_VARIANT_QUIC', 'ENC_ASCII_7BITS']),  # TODO: others?
+    'FT_CHAR':      set(['ENC_ASCII', 'ENC_ASCII_7BITS']),  # TODO: others?
 
     # Integral types
     'FT_UINT8':     set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN', 'ENC_HOST_ENDIAN', 'ENC_NA']),
@@ -185,8 +185,8 @@ compatible_encoding_args = {
     'FT_INT48':     set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN', 'ENC_HOST_ENDIAN']),
     'FT_UINT56':    set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN', 'ENC_HOST_ENDIAN']),
     'FT_INT56':     set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN', 'ENC_HOST_ENDIAN']),
-    'FT_UINT64':    set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN', 'ENC_HOST_ENDIAN']),
-    'FT_INT64':     set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN', 'ENC_HOST_ENDIAN']),
+    'FT_UINT64':    set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN', 'ENC_HOST_ENDIAN', 'ENC_VARINT_PROTOBUF', 'ENC_VARINT_QUIC', 'ENC_VARINT_SDNV']),
+    'FT_INT64':     set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN', 'ENC_HOST_ENDIAN', 'ENC_VARINT_ZIGZAG']),
 
     'FT_GUID':      set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN']),
     'FT_EUI64':     set(['ENC_LITTLE_ENDIAN', 'ENC_BIG_ENDIAN']),
@@ -214,10 +214,24 @@ compatible_encoding_args['FT_STRINGZ'] = compatible_encoding_args['FT_STRING']
 compatible_encoding_multiple_flags_allowed = set(['FT_ABSOLUTE_TIME', 'FT_RELATIVE_TIME', 'FT_STRING', 'FT_STRINGZ'])
 
 
+# item type -> set<encodings>
+unsupported_encoding_args = {
+    'FT_STRINGZ':   set(['ENC_BCD_DIGITS_0_9',
+                         'ENC_KEYPAD_ABC_TBCD',
+                         'ENC_KEYPAD_BC_TBCD',
+                         'ENC_DECT_STANDARD_4BITS_TBCD',
+                         'ENC_3GPP_TS_23_038_7BITS_PACKED',
+                         'ENC_3GPP_TS_23_038_7BITS_UNPACKED',
+                         'ENC_ETSI_TS_102_221_ANNEX_A',
+                         'ENC_ASCII_7BITS',
+                         'ENC_APN_STR'])
+}
+
 class EncodingCheckerBasic:
-    def __init__(self, type, allowed_encodings, allow_multiple):
+    def __init__(self, type, allowed_encodings, unsupported_encodings, allow_multiple):
         self.type = type
         self.allowed_encodings = allowed_encodings
+        self.unsupported_encodings = unsupported_encodings
         self.allow_multiple = allow_multiple
         self.encodings_seen = 0
 
@@ -230,9 +244,9 @@ class EncodingCheckerBasic:
 
         # Are more encodings allowed?
         if not self.allow_multiple and self.encodings_seen >= 1:
-            result.error(api_check.file + ':' + str(call.line_number),
-                         api_check.fun_name + ' called for ' + type + ' field "' + call.hf_name + '"', ' with encoding', encoding, 'but only one encoding flag allowed for type')
-            # TODO: enable once error count is zero..
+            # Would ideally make this error once confident about result
+            result.warn(api_check.file + ':' + str(call.line_number),
+                        api_check.fun_name + ' called for ' + type + ' field "' + call.hf_name + '"', ' with encoding', encoding, 'but only one encoding flag allowed for type')
 
         # Is this encoding allowed for this type?
         if encoding not in self.allowed_encodings:
@@ -243,6 +257,13 @@ class EncodingCheckerBasic:
             result.warn(api_check.file + ':' + str(call.line_number),
                         api_check.fun_name + ' called for ' + type + ' field "' + call.hf_name + '"', ' - with bad encoding - ' + '"' + encoding + '"', '-',
                         compatible_encoding_args[type], 'allowed')
+
+        # Warn if encoding not supported for this type
+        if encoding in self.unsupported_encodings:
+            result.warn(api_check.file + ':' + str(call.line_number),
+                        api_check.fun_name + ' called for ' + type + ' field "' + call.hf_name + '"', ' - with unsupported encoding - ' + '"' + encoding + '"')
+
+
         self.encodings_seen += 1
 
 
@@ -251,7 +272,8 @@ class EncodingCheckerBasic:
 def create_enc_checker(type):
     if type in compatible_encoding_args:
         allow_multiple = type in compatible_encoding_multiple_flags_allowed
-        checker = EncodingCheckerBasic(type, compatible_encoding_args[type], allow_multiple)
+        checker = EncodingCheckerBasic(type, compatible_encoding_args[type],
+                                       unsupported_encoding_args[type] if type in unsupported_encoding_args else set(), allow_multiple)
         return checker
     else:
         return None
@@ -620,7 +642,8 @@ known_non_contiguous_fields = {'wlan.fixed.capabilities.cfpoll.sta',
                                'oran_fh_cus.sReSMask',
                                'ttl.trace_data.entry.status_info.can_flags',
                                'ttl.trace_data.entry.status_info.fr_flags',
-                               'ttl.trace_data.entry.status_info.fr_pulse_flags'
+                               'ttl.trace_data.entry.status_info.fr_pulse_flags',
+                               'gsm_sim.select.return_data'     #  ETSI TS 102 221 Table 11.2: Coding of P2
                                }
 ##################################################################################################
 
@@ -1181,11 +1204,11 @@ def findExpertItems(filename, contents, macros, result):
         entries = d.group(2)
 
         # Now separate out each entry
-        matches = re.finditer(r'\{\s*&([a-zA-Z0-9_]*)\s*\,\s*\{\s*\"(.*?)\"\s*\,\s*([A-Z_]*)\,\s*([A-Z_]*)\,\s*\"(.*?)\"\s*\,\s*EXPFILL\s*\}\s*\}',
+        matches = re.finditer(r'\{\s*&([a-zA-Z0-9_]*)\s*\,\s*\{\s*\"(.*?)\"\s*\,\s*([A-Z_]*)\,\s*([A-Z_]*)\,\s*\"(.*?)\".*?\,\s*EXPFILL\s*\}\s*\}',
                               entries, re.MULTILINE | re.DOTALL)
         for match in matches:
             expertEntry = ExpertEntry(filename, name=match.group(1), filter=match.group(2), group=match.group(3),
-                                      severity=match.group(4), summary=match.group(5))
+                                      severity=match.group(4), summary=match.group(5), result=result)
             expertEntries.AddEntry(expertEntry)
 
     return expertEntries
@@ -1292,10 +1315,12 @@ def checkExpertCalls(filename, expertEntries, result):
                         #    errors += 1
                     else:
                         # There may be good reasons for this - they could be specializations..
-                        result.note(filename, 'calling expert_add_info_format() for', item, '- no format specifiers in',
-                                    '"' + format_string + '" - default is ' +
-                                    ('"' + default_string + '"') if default_string is not None else '<??>',
-                                    '- total calls', number_of_calls, '(EXACT MATCH)' if exact_match else '')
+                        # TODO: noteworthy if all usages had same string?
+                        # result.note(filename, 'calling expert_add_info_format() for', item, '- no format specifiers in',
+                        #            '"' + format_string + '" - default is ' +
+                        #            ('"' + default_string + '"') if default_string is not None else '<??>',
+                        #            '- total calls', number_of_calls, '(EXACT MATCH)' if exact_match else '')
+                        pass
                 expertEntries.VerifyCall(item)
 
 
@@ -1312,7 +1337,7 @@ valid_levels = set(['PI_COMMENT', 'PI_CHAT', 'PI_NOTE',
 
 # An individual entry
 class ExpertEntry:
-    def __init__(self, filename, name, filter, group, severity, summary):
+    def __init__(self, filename, name, filter, group, severity, summary, result):
         self.name = name
         self.filter = filter
         self.group = group
@@ -1929,6 +1954,8 @@ class CombinedCallsCheck:
 # if the type is not suitable.
 apiChecks = []
 apiChecks.append(APICheck('proto_tree_add_item_ret_uint', {'FT_CHAR', 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32'}, positive_length=True))
+apiChecks.append(APICheck('proto_tree_add_item_ret_uint8', {'FT_CHAR', 'FT_UINT8'}, positive_length=True))
+apiChecks.append(APICheck('proto_tree_add_item_ret_uint16', {'FT_CHAR', 'FT_UINT8', 'FT_UINT16'}, positive_length=True))
 apiChecks.append(APICheck('proto_tree_add_item_ret_int', {'FT_INT8', 'FT_INT16', 'FT_INT24', 'FT_INT32'}))
 apiChecks.append(APICheck('ptvcursor_add_ret_uint', {'FT_CHAR', 'FT_UINT8', 'FT_UINT16', 'FT_UINT24', 'FT_UINT32'}, positive_length=True))
 apiChecks.append(APICheck('ptvcursor_add_ret_int', {'FT_INT8', 'FT_INT16', 'FT_INT24', 'FT_INT32'}, positive_length=True))
@@ -2168,11 +2195,105 @@ def find_item_extern_declarations(filename, lines):
             items.add(m.group(1))
     return items
 
+fetch_functions = [ 'tvb_get_ntohl', 'tvb_get_letohl', 'tvb_get_ntoh64', 'tvb_get_letoh64',
+                    'tvb_get_uint8', 'tvb_get_ntohs', 'tvb_get_letohs' ]
+
+def line_has_fetch_function(line):
+    for f in fetch_functions:
+        if f in line:
+            return True
+    return False
+
+
+def check_double_fetches(filename, contents, items, result):
+    lines = contents.splitlines()
+    contents = '\n'.join(line for line in lines if line.strip())
+
+    line_re = r'(.*)\n'
+
+    # Look for all calls in this file - note line before and after item added
+    matches = re.finditer(r'\n' + line_re +
+                          r'([\sa-z_\*=]*?)(proto_tree_add_item)\s*\(([a-zA-Z0-9_]+)\s*,\s*([a-zA-Z0-9_]+).*?\)\;\s*\n' +
+                          line_re,
+                          contents, re.MULTILINE)
+
+    for m in matches:
+        hf_name = m.group(5)
+
+        prev_line = m.group(1)
+        prev_line_tokens = prev_line.strip().split(' ')
+
+        next_line = m.group(6)
+        next_line_tokens = next_line.strip().split(' ')
+
+        first_prev_token = prev_line_tokens[0]
+        first_next_token = next_line_tokens[0]
+
+        mask_value = 'unknown'
+        item_type = 'unknown'
+        if hf_name in items:
+            mask_value = items[hf_name].mask_value
+            item_type = items[hf_name].item_type
+        else:
+            continue
+
+        # TODO: verify same value of offset for both calls?
+
+        # Make sure item is a known integer type
+        if 'FT_UINT' in item_type:
+            signed_type = False
+        elif 'FT_INT' in item_type:
+            signed_type = True
+        else:
+            continue
+
+        # Need to get a notion of the width
+        if item_type in field_widths:
+            field_width = int(field_widths[item_type] / 8)
+        else:
+            field_width = 0
+
+        if field_width != 4 and field_width != 8 and field_width != 2 and field_width != 1:
+            continue
+
+        # Use width and signedness to decide which combined function to suggest
+        if field_width == 4:
+            if signed_type:
+                suggest = 'proto_tree_add_item_ret_int'
+            else:
+                suggest = 'proto_tree_add_item_ret_uint'
+        elif field_width == 2:
+            if signed_type:
+                suggest = 'proto_tree_add_item_ret_int16'
+            else:
+                suggest = 'proto_tree_add_item_ret_uint16'
+        elif field_width == 1:
+            if signed_type:
+                suggest = 'proto_tree_add_item_ret_int8' # doesn't exist
+            else:
+                suggest = 'proto_tree_add_item_ret_uint8'
+        else:
+            if signed_type:
+                suggest = 'proto_tree_add_item_ret_int64'
+            else:
+                suggest = 'proto_tree_add_item_ret_uint64'
+
+        if line_has_fetch_function(prev_line) and hf_name.endswith(first_prev_token) and '=' in prev_line_tokens:
+            result.warn(filename, 'PREV: val=', first_prev_token, 'hfname=', hf_name,
+                        'mask=', mask_value, 'type=', item_type,
+                        '- use', suggest + '() ?\n',
+                        m.group(0))
+        elif line_has_fetch_function(next_line) and hf_name.endswith(first_next_token) and '=' in next_line_tokens:
+            result.warn(filename, 'NEXT: val=', first_next_token, 'hfname=', hf_name,
+                        'mask=', mask_value, 'type=', item_type,
+                        '- use', suggest + '() ?\n',
+                        m.group(0))
+
 
 # Run checks on the given dissector file.
 def checkFile(filename, check_mask=False, mask_exact_width=False, check_label=False, check_consecutive=False,
               check_missing_items=False, check_bitmask_fields=False, label_vs_filter=False, extra_value_string_checks=False,
-              check_expert_items=False, check_subtrees=False):
+              check_expert_items=False, check_subtrees=False, check_double_fetch=False):
 
     result = Result()
 
@@ -2229,7 +2350,7 @@ def checkFile(filename, check_mask=False, mask_exact_width=False, check_label=Fa
 
     items_declared = {}
     if check_missing_items:
-        items_declared = find_item_declarations(filename)
+        items_declared = find_item_declarations(filename, lines)
         items_extern_declared = find_item_extern_declarations(filename, lines)
 
     fields = set()
@@ -2270,6 +2391,9 @@ def checkFile(filename, check_mask=False, mask_exact_width=False, check_label=Fa
             for hf in items_defined:
                 items_defined[hf].check_label_vs_filter(reportError=True, reportNumericalMismatch=False)
 
+    if check_double_fetch:
+        check_double_fetches(filename, contents_no_comments, items_defined, result)
+
     for hf in items_defined:
         items_defined[hf].check_boolean_length()
         items_defined[hf].check_string_display()
@@ -2278,126 +2402,130 @@ def checkFile(filename, check_mask=False, mask_exact_width=False, check_label=Fa
     return result
 
 
-#################################################################
-# Main logic.
+if __name__ == '__main__':
 
-# command-line args.  Controls which dissector files should be checked.
-# If no args given, will just scan epan/dissectors folder.
-parser = argparse.ArgumentParser(description='Check calls in dissectors')
-parser.add_argument('--file', action='append',
-                    help='specify individual dissector file to test')
-parser.add_argument('--folder', action='store', default='',
-                    help='specify folder to test')
-parser.add_argument('--commits', action='store',
-                    help='last N commits to check')
-parser.add_argument('--open', action='store_true',
-                    help='check open files')
-parser.add_argument('--mask', action='store_true',
-                    help='when set, check mask field too')
-parser.add_argument('--mask-exact-width', action='store_true',
-                    help='when set, check width of mask against field width')
-parser.add_argument('--label', action='store_true',
-                    help='when set, check label field too')
-parser.add_argument('--consecutive', action='store_true',
-                    help='when set, copy copy/paste errors between consecutive items')
-parser.add_argument('--missing-items', action='store_true',
-                    help='when set, look for used items that were never registered')
-parser.add_argument('--check-bitmask-fields', action='store_true',
-                    help='when set, attempt to check arrays of hf items passed to add_bitmask() calls')
-parser.add_argument('--label-vs-filter', action='store_true',
-                    help='when set, check whether label matches last part of filter')
-parser.add_argument('--extra-value-string-checks', action='store_true',
-                    help='when set, do extra checks on parsed value_strings')
-parser.add_argument('--check-expert-items', action='store_true',
-                    help='when set, do extra checks on expert items')
-parser.add_argument('--check-subtrees', action='store_true',
-                    help='when set, do extra checks ett variables')
-parser.add_argument('--all-checks', action='store_true',
-                    help='when set, apply all checks to selected files')
+    # command-line args.  Controls which dissector files should be checked.
+    # If no args given, will just scan epan/dissectors folder.
+    parser = argparse.ArgumentParser(description='Check calls in dissectors')
+    parser.add_argument('--file', action='append',
+                        help='specify individual dissector file to test')
+    parser.add_argument('--folder', action='store', default='',
+                        help='specify folder to test')
+    parser.add_argument('--commits', action='store',
+                        help='last N commits to check')
+    parser.add_argument('--open', action='store_true',
+                        help='check open files')
+    parser.add_argument('--mask', action='store_true',
+                        help='when set, check mask field too')
+    parser.add_argument('--mask-exact-width', action='store_true',
+                        help='when set, check width of mask against field width')
+    parser.add_argument('--label', action='store_true',
+                        help='when set, check label field too')
+    parser.add_argument('--consecutive', action='store_true',
+                        help='when set, copy copy/paste errors between consecutive items')
+    parser.add_argument('--missing-items', action='store_true',
+                        help='when set, look for used items that were never registered')
+    parser.add_argument('--check-bitmask-fields', action='store_true',
+                        help='when set, attempt to check arrays of hf items passed to add_bitmask() calls')
+    parser.add_argument('--label-vs-filter', action='store_true',
+                        help='when set, check whether label matches last part of filter')
+    parser.add_argument('--extra-value-string-checks', action='store_true',
+                        help='when set, do extra checks on parsed value_strings')
+    parser.add_argument('--check-expert-items', action='store_true',
+                        help='when set, do extra checks on expert items')
+    parser.add_argument('--check-subtrees', action='store_true',
+                        help='when set, do extra checks ett variables')
+    parser.add_argument('--check-double-fetch', action='store_true',
+                        help='when set, attempt to warn for values being double-fetched')
 
-
-args = parser.parse_args()
-
-# Turn all checks on.
-if args.all_checks:
-    args.mask = True
-    args.mask_exact_width = True
-    args.consecutive = True
-    args.check_bitmask_fields = True
-    args.label = True
-    args.label_vs_filter = True
-    # args.extra_value_string_checks = True
-    args.check_expert_items = True
-    # args.check_subtrees = True
-
-if args.check_bitmask_fields:
-    args.mask = True
+    parser.add_argument('--all-checks', action='store_true',
+                        help='when set, apply all checks to selected files')
 
 
-# Get files from wherever command-line args indicate.
-files = []
+    args = parser.parse_args()
 
-if args.file:
-    # Add specified file(s)
-    for f in args.file:
-        if not os.path.isfile(f):
-            print('Chosen file', f, 'does not exist.')
+    # Turn all checks on.
+    if args.all_checks:
+        args.mask = True
+        args.mask_exact_width = True
+        args.consecutive = True
+        args.check_bitmask_fields = True
+        args.label = True
+        args.label_vs_filter = True
+        # args.extra_value_string_checks = True
+        args.check_expert_items = True
+        # args.check_subtrees = True
+        args.check_double_fetch = True
+
+    if args.check_bitmask_fields:
+        args.mask = True
+
+
+    # Get files from wherever command-line args indicate.
+    files = []
+
+    if args.file:
+        # Add specified file(s)
+        for f in args.file:
+            if not os.path.isfile(f):
+                print('Chosen file', f, 'does not exist.')
+                exit(1)
+            else:
+                files.append(f)
+    elif args.folder:
+        # Add all files from a given folder.
+        folder = args.folder
+        if not os.path.isdir(folder):
+            print('Folder', folder, 'not found!')
             exit(1)
-        else:
-            files.append(f)
-elif args.folder:
-    # Add all files from a given folder.
-    folder = args.folder
-    if not os.path.isdir(folder):
-        print('Folder', folder, 'not found!')
-        exit(1)
-    # Find files from folder.
-    print('Looking for files in', folder)
-    files = findDissectorFilesInFolder(folder, recursive=True)
-elif args.commits:
-    files = getFilesFromCommits(args.commits)
-elif args.open:
-    # Unstaged changes.
-    files = getFilesFromOpen()
-else:
-    # Find all dissector files.
-    files = findDissectorFilesInFolder(os.path.join('epan', 'dissectors'))
-    files += findDissectorFilesInFolder(os.path.join('plugins', 'epan'), recursive=True)
-
-
-# If scanning a subset of files, list them here.
-print('Examining:')
-if args.file or args.commits or args.open:
-    if files:
-        print(' '.join(files), '\n')
+        # Find files from folder.
+        print('Looking for files in', folder)
+        files = findDissectorFilesInFolder(folder, recursive=True)
+    elif args.commits:
+        files = getFilesFromCommits(args.commits)
+    elif args.open:
+        # Unstaged changes.
+        files = getFilesFromOpen()
     else:
-        print('No files to check.\n')
-else:
-    print('All dissector modules\n')
+        # Find all dissector files.
+        files = findDissectorFilesInFolder(os.path.join('epan', 'dissectors'))
+        files += findDissectorFilesInFolder(os.path.join('plugins', 'epan'), recursive=True)
 
 
-# Now check the chosen files
-with concurrent.futures.ProcessPoolExecutor() as executor:
-    future_to_file_output = {executor.submit(checkFile, file,
-                                             check_mask=args.mask, mask_exact_width=args.mask_exact_width, check_label=args.label,
-                                             check_consecutive=args.consecutive, check_missing_items=args.missing_items,
-                                             check_bitmask_fields=args.check_bitmask_fields, label_vs_filter=args.label_vs_filter,
-                                             extra_value_string_checks=args.extra_value_string_checks,
-                                             check_expert_items=args.check_expert_items, check_subtrees=args.check_subtrees): file for file in files}
-    for future in concurrent.futures.as_completed(future_to_file_output):
-        if should_exit:
-            exit(1)
-        # File is done - show any output and update warning, error counts
-        result = future.result()
-        output = result.out.getvalue()
-        if len(output):
-            print(output)
+    # If scanning a subset of files, list them here.
+    print('Examining:')
+    if args.file or args.commits or args.open:
+        if files:
+            print(' '.join(files), '\n')
+        else:
+            print('No files to check.\n')
+    else:
+        print('All dissector modules\n')
 
-        warnings_found += result.warnings
-        errors_found += result.errors
 
-# Show summary.
-print(warnings_found, 'warnings')
-if errors_found:
-    print(errors_found, 'errors')
-    exit(1)
+    # Now check the chosen files
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        future_to_file_output = {executor.submit(checkFile, file,
+                                                 check_mask=args.mask, mask_exact_width=args.mask_exact_width, check_label=args.label,
+                                                 check_consecutive=args.consecutive, check_missing_items=args.missing_items,
+                                                 check_bitmask_fields=args.check_bitmask_fields, label_vs_filter=args.label_vs_filter,
+                                                 extra_value_string_checks=args.extra_value_string_checks,
+                                                 check_expert_items=args.check_expert_items, check_subtrees=args.check_subtrees,
+                                                 check_double_fetch=args.check_double_fetch): file for file in files}
+        for future in concurrent.futures.as_completed(future_to_file_output):
+            if should_exit:
+                exit(1)
+            # File is done - show any output and update warning, error counts
+            result = future.result()
+            output = result.out.getvalue()
+            if len(output):
+                print(output)
+
+            warnings_found += result.warnings
+            errors_found += result.errors
+
+    # Show summary.
+    print(warnings_found, 'warnings')
+    if errors_found:
+        print(errors_found, 'errors')
+        exit(1)

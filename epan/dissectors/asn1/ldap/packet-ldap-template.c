@@ -637,8 +637,8 @@ static char *ldapvalue_string;
 /* if the octet string contain all printable ASCII characters, then
  * display it as a string, othervise just display it in hex.
  */
-static int
-dissect_ldap_AssertionValue(bool implicit_tag, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index)
+static unsigned
+dissect_ldap_AssertionValue(bool implicit_tag, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index)
 {
   int8_t ber_class;
   bool pc, ind, is_ascii;
@@ -1685,7 +1685,7 @@ dissect_ldap_oid(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void* 
 #define LDAP_ACCESSMASK_ADS_CONTROL_ACCESS  0x00000100
 
 static void
-ldap_specific_rights(tvbuff_t *tvb, int offset, proto_tree *tree, uint32_t access)
+ldap_specific_rights(tvbuff_t *tvb, unsigned offset, proto_tree *tree, uint32_t access)
 {
   static int * const access_flags[] = {
     &hf_ldap_AccessMask_ADS_CONTROL_ACCESS,

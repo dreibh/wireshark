@@ -43,7 +43,7 @@ DIAG_ON(frame-larger-than=)
 
 #include "wsutil/file_util.h"
 #include "wsutil/filesystem.h"
-#include "wsutil/application_flavor.h"
+#include "app/application_flavor.h"
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
 
@@ -54,7 +54,6 @@ DIAG_ON(frame-larger-than=)
 #include "epan/epan_dissect.h"
 #include "epan/filter_expressions.h"
 #include "epan/prefs.h"
-#include "epan/plugin_if.h"
 #include "epan/uat.h"
 #include "epan/uat-int.h"
 #include <wsutil/value_string.h>
@@ -77,10 +76,12 @@ DIAG_ON(frame-larger-than=)
 #include "ui/ws_ui_util.h"
 #include "ui/all_files_wildcard.h"
 #include "ui/qt/simple_dialog.h"
+#include "ui/plugins/include/plugin_if.h"
 
 #include <ui/qt/utils/variant_pointer.h>
 #include <ui/qt/widgets/drag_drop_toolbar.h>
 #include "ui/qt/widgets/wireshark_file_dialog.h"
+#include <ui/qt/utils/workspace_state.h>
 
 #ifdef HAVE_SOFTWARE_UPDATE
 #include "ui/software_update.h"
@@ -112,9 +113,8 @@ DIAG_ON(frame-larger-than=)
 #include "stratoshark_follow_stream_dialog.h"
 #include "funnel_statistics.h"
 #include "interface_toolbar.h"
-#include "io_graph_dialog.h"
-#include "ui/io_graph_uat.h"
-#include "plot_dialog.h"
+#include "stratoshark_io_graph_dialog.h"
+#include "stratoshark_plot_dialog.h"
 #include <ui/qt/widgets/additional_toolbar.h>
 #include "main_application.h"
 #include "packet_comment_dialog.h"
@@ -486,7 +486,7 @@ void StratosharkMainWindow::queuedFilterAction(QString action_filter, FilterActi
 #ifdef HAVE_LIBPCAP
 void StratosharkMainWindow::captureCapturePrepared(capture_session *session) {
     setTitlebarForCaptureInProgress();
-    setWindowIcon(mainApp->captureIcon());
+    setIconForCaptureInProgress(true);
     pushLiveCaptureInProgress();
 
     /* Disable menu items that make no sense if you're currently running
@@ -505,7 +505,7 @@ void StratosharkMainWindow::captureCaptureUpdateStarted(capture_session *session
     /* We've done this in "prepared" above, but it will be cleared while
        switching to the next multiple file. */
     setTitlebarForCaptureInProgress();
-    setWindowIcon(mainApp->captureIcon());
+    setIconForCaptureInProgress(true);
     pushLiveCaptureInProgress();
 
     bool handle_toolbars = (session->session_will_restart ? false : true);
@@ -529,7 +529,7 @@ void StratosharkMainWindow::captureCaptureUpdateFinished(capture_session *sessio
     setForCaptureInProgress(false, handle_toolbars);
     setMenusForCaptureFile();
 
-    setWindowIcon(mainApp->normalIcon());
+    setIconForCaptureInProgress(false);
     popLiveCaptureInProgress();
 
     if (commandline_is_quit_after_capture()) {
@@ -553,7 +553,7 @@ void StratosharkMainWindow::captureCaptureFixedFinished(capture_session *) {
        display packets */
     setMenusForCaptureFile(true);
 
-    setWindowIcon(mainApp->normalIcon());
+    setIconForCaptureInProgress(false);
     popLiveCaptureInProgress();
 
     if (commandline_is_quit_after_capture()) {
@@ -574,7 +574,7 @@ void StratosharkMainWindow::captureCaptureFailed(capture_session *) {
     main_ui_->statusBar->captureFileClosing();
     mainApp->popStatus(WiresharkApplication::FileStatus);
 
-    setWindowIcon(mainApp->normalIcon());
+    setIconForCaptureInProgress(false);
     popLiveCaptureInProgress();
 
     if (commandline_is_quit_after_capture()) {
@@ -752,7 +752,7 @@ void StratosharkMainWindow::captureFileReadStarted(const QString &action) {
 void StratosharkMainWindow::captureFileReadFinished() {
     if (!capture_file_.capFile()->is_tempfile && capture_file_.capFile()->filename) {
         /* Add this filename to the list of recent files in the "Recent Files" submenu */
-        add_menu_recent_capture_file(capture_file_.capFile()->filename, false);
+        WorkspaceState::instance()->addRecentCaptureFile(qUtf8Printable(capture_file_.capFile()->filename));
 
         /* Remember folder for next Open dialog and save it in recent */
         mainApp->setLastOpenDirFromFilename(capture_file_.capFile()->filename);
@@ -962,120 +962,14 @@ void StratosharkMainWindow::mainStackChanged(int)
     }
 }
 
-// XXX - Copied from ui/gtk/menus.c
-
-/**
- * Add the capture filename (with an absolute path) to the "Recent Files" menu.
- */
-// XXX - We should probably create a RecentFile class.
-void StratosharkMainWindow::updateRecentCaptures() {
-    QAction *ra;
-    QMenu *recentMenu = main_ui_->menuOpenRecentCaptureFile;
-    QString action_cf_name;
-
-    if (!recentMenu) {
-        return;
-    }
-    recentMenu->clear();
-
-#if 0
-#if defined(QT_WINEXTRAS_LIB)
-     QWinJumpList recent_jl(this);
-     QWinJumpListCategory *recent_jlc = recent_jl.recent();
-     if (recent_jlc) {
-         recent_jlc->clear();
-         recent_jlc->setVisible(true);
-     }
-#endif
-#endif
-#if defined(Q_OS_MAC)
-    if (!dock_menu_) {
-        dock_menu_ = new QMenu();
-        dock_menu_->setAsDockMenu();
-    }
-    dock_menu_->clear();
-#endif
-
-    /* Iterate through the actions in menuOpenRecentCaptureFile,
-     * removing special items, a maybe duplicate entry and every item above count_max */
-#if defined(Q_OS_MAC)
-    int shortcut = Qt::Key_0;
-#endif
-    foreach(recent_item_status *ri, mainApp->recentItems()) {
-        // Add the new item
-        ra = new QAction(recentMenu);
-        ra->setData(ri->filename);
-        // XXX - Needs get_recent_item_status or equivalent
-        ra->setEnabled(ri->accessible);
-        recentMenu->insertAction(NULL, ra);
-        action_cf_name = ra->data().toString();
-#if defined(Q_OS_MAC)
-        if (shortcut <= Qt::Key_9) {
-            ra->setShortcut(Qt::META | (Qt::Key)shortcut);
-            shortcut++;
-        }
-#endif
-        ra->setText(action_cf_name);
-        connect(ra, &QAction::triggered, this, &StratosharkMainWindow::recentActionTriggered);
-
-/* This is slow, at least on my VM here. The added links also open Wireshark
- * in a new window. It might make more sense to add a recent item when we
- * open a capture file. */
-#if 0
-#if defined(QT_WINEXTRAS_LIB)
-     if (recent_jlc) {
-         QFileInfo fi(ri->filename);
-         QWinJumpListItem *jli = recent_jlc->addLink(
-             fi.fileName(),
-             QApplication::applicationFilePath(),
-             QStringList() << "-r" << ri->filename
-         );
-         // XXX set icon
-         jli->setWorkingDirectory(QDir::toNativeSeparators(QApplication::applicationDirPath()));
-     }
-#endif
-#endif
-#if defined(Q_OS_MAC)
-        QAction *rda = new QAction(dock_menu_);
-        QFileInfo fi(ri->filename);
-        rda->setText(fi.fileName());
-        dock_menu_->insertAction(NULL, rda);
-        connect(rda, &QAction::triggered, ra, &QAction::trigger);
-#endif
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-        if (recentMenu->actions().count() == static_cast<int>(prefs.gui_recent_files_count_max)) {
-#else
-        if (recentMenu->actions().count() == static_cast<qsizetype>(prefs.gui_recent_files_count_max)) {
-#endif
-            break;
-        }
-    }
-
-    if (recentMenu->actions().count() > 0) {
-        // Separator + "Clear"
-        // XXX - Do we really need this?
-        ra = new QAction(recentMenu);
-        ra->setSeparator(true);
-        recentMenu->insertAction(NULL, ra);
-
-        ra = new QAction(recentMenu);
-        ra->setText(tr("Clear Menu"));
-        recentMenu->insertAction(NULL, ra);
-        connect(ra, &QAction::triggered, mainApp, &MainApplication::clearRecentCaptures);
-    } else {
-        if (main_ui_->actionDummyNoFilesFound) {
-            recentMenu->addAction(main_ui_->actionDummyNoFilesFound);
-        }
-    }
+void StratosharkMainWindow::updateRecentCaptures()
+{
+    populateRecentCapturesMenu();
 }
 
-void StratosharkMainWindow::recentActionTriggered() {
-    QAction *ra = qobject_cast<QAction*>(sender());
-
-    if (ra) {
-        QString cfPath = ra->data().toString();
-        openCaptureFile(cfPath);
-    }
+void StratosharkMainWindow::openRecentCaptureFile(const QString &filename)
+{
+    openCaptureFile(filename);
 }
 
 QString StratosharkMainWindow::commentToMenuText(QString text, int max_len)
@@ -2839,15 +2733,15 @@ void StratosharkMainWindow::showCaptureOptionsDialog()
         connect(capture_options_dialog_, &CaptureOptionsDialog::stopCapture, this, &StratosharkMainWindow::stopCapture);
 
         connect(capture_options_dialog_, &CaptureOptionsDialog::interfacesChanged,
-                this->welcome_page_, &WelcomePage::interfaceSelected);
+                this->welcome_page_, &StratosharkWelcomePage::interfaceSelected);
         connect(capture_options_dialog_, &CaptureOptionsDialog::interfacesChanged,
                 this->welcome_page_->getInterfaceFrame(), &InterfaceFrame::updateSelectedInterfaces);
         connect(capture_options_dialog_, &CaptureOptionsDialog::interfaceListChanged,
                 this->welcome_page_->getInterfaceFrame(), &InterfaceFrame::interfaceListChanged);
         connect(capture_options_dialog_, &CaptureOptionsDialog::captureFilterTextEdited,
-                this->welcome_page_, &WelcomePage::setCaptureFilterText);
+                this->welcome_page_, &StratosharkWelcomePage::setCaptureFilterText);
         // Propagate selection changes from main UI to dialog.
-        connect(this->welcome_page_, &WelcomePage::interfacesChanged,
+        connect(this->welcome_page_, &StratosharkWelcomePage::interfacesChanged,
                 capture_options_dialog_, &CaptureOptionsDialog::interfaceSelected);
 
         connect(capture_options_dialog_, &CaptureOptionsDialog::setFilterValid,
@@ -3136,40 +3030,23 @@ void StratosharkMainWindow::statCommandIOGraph(const char *, void *)
     showIOGraphDialog(IOG_ITEM_UNIT_PACKETS, QString());
 }
 
-UAT_VS_DEF(io_graph, yaxis, io_graph_settings_t, uint32_t, 0, "Events")
-
-static uat_field_t io_graph_event_fields[] = {
-    UAT_FLD_BOOL_ENABLE(io_graph, enabled, "Enabled", "Graph visibility"),
-    UAT_FLD_CSTRING(io_graph, name, "Graph Name", "The name of the graph"),
-    UAT_FLD_DISPLAY_FILTER(io_graph, dfilter, "Display Filter", "Graph packets matching this display filter"),
-    UAT_FLD_COLOR(io_graph, color, "Color", "Graph color (#RRGGBB)"),
-    UAT_FLD_VS(io_graph, style, "Style", io_graph_style_vs, "Graph style (Line, Bars, etc.)"),
-    UAT_FLD_VS(io_graph, yaxis, "Y Axis", y_axis_event_vs, "Y Axis units"),
-    UAT_FLD_PROTO_FIELD(io_graph, yfield, "Y Field", "Apply calculations to this field"),
-    UAT_FLD_SMA_PERIOD(io_graph, sma_period, "SMA Period", moving_avg_vs, "Simple moving average period"),
-    UAT_FLD_DBL(io_graph, y_axis_factor, "Y Axis Factor", "Y Axis Factor"),
-    UAT_FLD_BOOL_ENABLE(io_graph, asAOT, "asAOT", "asAOT"),
-
-    UAT_END_FIELDS
-};
-
 void StratosharkMainWindow::showIOGraphDialog(io_graph_item_unit_t value_units, QString yfield)
 {
     const DisplayFilterEdit *df_edit = qobject_cast<DisplayFilterEdit *>(df_combo_box_->lineEdit());
-    IOGraphDialog *iog_dialog = nullptr;
+    StratosharkIOGraphDialog* iog_dialog = nullptr;
     QString displayFilter;
     if (df_edit)
         displayFilter = df_edit->text();
 
     if (!yfield.isEmpty()) {
-        QList<IOGraphDialog *> iographdialogs = findChildren<IOGraphDialog *>();
+        QList<StratosharkIOGraphDialog*> iographdialogs = findChildren<StratosharkIOGraphDialog*>();
         // GeometryStateDialogs aren't parented on Linux and Windows
         // (see geometry_state_dialog.h), so we search for an
         // I/O Dialog in all the top level widgets.
         if (iographdialogs.isEmpty()) {
             foreach(QWidget *topLevelWidget, mainApp->topLevelWidgets()) {
-                if (qobject_cast<IOGraphDialog*>(topLevelWidget)) {
-                    iographdialogs << qobject_cast<IOGraphDialog*>(topLevelWidget);
+                if (qobject_cast<StratosharkIOGraphDialog*>(topLevelWidget)) {
+                    iographdialogs << qobject_cast<StratosharkIOGraphDialog*>(topLevelWidget);
                 }
             }
         }
@@ -3187,31 +3064,31 @@ void StratosharkMainWindow::showIOGraphDialog(io_graph_item_unit_t value_units, 
     }
 
     if (iog_dialog == nullptr) {
-        iog_dialog = new IOGraphDialog(*this, capture_file_, io_graph_event_fields, "Events", displayFilter, value_units, yfield);
-        connect(iog_dialog, &IOGraphDialog::goToPacket, this, [=](int packet_num) {packet_list_->goToPacket(packet_num);});
-        connect(this, &StratosharkMainWindow::reloadFields, iog_dialog, &IOGraphDialog::reloadFields);
+        iog_dialog = new StratosharkIOGraphDialog(*this, capture_file_);
+        iog_dialog->initialize(*this, displayFilter, value_units, yfield);
+        connect(iog_dialog, &StratosharkIOGraphDialog::goToPacket, this, [=](int packet_num) {packet_list_->goToPacket(packet_num);});
+        connect(this, &StratosharkMainWindow::reloadFields, iog_dialog, &StratosharkIOGraphDialog::reloadFields);
     }
     iog_dialog->show();
 }
 
 // Plot Dialog
-// XXX - The code here is identical on Wireshark's side. Can we unify the two?
 void StratosharkMainWindow::showPlotDialog(const QString& y_field, bool filtered)
 {
-    PlotDialog* dialog = nullptr;
+    StratosharkPlotDialog* dialog = nullptr;
     // Try to find an already existing dialog
-    QList<PlotDialog*> plotDialogs = findChildren<PlotDialog*>();
+    QList<StratosharkPlotDialog*> plotDialogs = findChildren<StratosharkPlotDialog*>();
     // GeometryStateDialogs aren't parented on Linux and Windows
     // (see geometry_state_dialog.h), so we search for a Plot
     // Dialog in all the top level widgets.
     if (plotDialogs.isEmpty()) {
         foreach(QWidget * topLevelWidget, mainApp->topLevelWidgets()) {
-            if (qobject_cast<PlotDialog*>(topLevelWidget)) {
-                plotDialogs << qobject_cast<PlotDialog*>(topLevelWidget);
+            if (qobject_cast<StratosharkPlotDialog*>(topLevelWidget)) {
+                plotDialogs << qobject_cast<StratosharkPlotDialog*>(topLevelWidget);
             }
         }
     }
-    foreach(PlotDialog * foundPlotDialog, plotDialogs) {
+    foreach(StratosharkPlotDialog* foundPlotDialog, plotDialogs) {
         if (!foundPlotDialog->fileClosed()) {
             dialog = foundPlotDialog;
             break;
@@ -3220,8 +3097,9 @@ void StratosharkMainWindow::showPlotDialog(const QString& y_field, bool filtered
 
     if (dialog == nullptr) {
         bool showDefault = y_field.isEmpty();   /* Don't generate default plots if we already have a field to plot. */
-        dialog = new PlotDialog(*this, capture_file_, showDefault);
-        connect(dialog, &PlotDialog::goToPacket, packet_list_, &PacketList::goToPacket);
+        dialog = new StratosharkPlotDialog(*this, capture_file_);
+        dialog->initialize(*this, showDefault);
+        connect(dialog, &StratosharkPlotDialog::goToPacket, packet_list_, &PacketList::goToPacket);
     }
 
     if (!y_field.isEmpty()) {

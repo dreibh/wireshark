@@ -59,7 +59,6 @@
 
 #include <epan/packet.h>
 #include <epan/exceptions.h>
-#include <epan/ipproto.h>
 #include <epan/addr_resolv.h>
 #include "packet-dns.h"
 #include "packet-tcp.h"
@@ -68,10 +67,10 @@
 #include <epan/prefs-int.h>
 #include <epan/strutil.h>
 #include <epan/expert.h>
-#include <epan/afn.h>
 #include <epan/tap.h>
 #include <epan/stats_tree.h>
 #include <epan/tfs.h>
+#include "data-iana.h"
 #include "packet-tls.h"
 #include "packet-dtls.h"
 #include "packet-http2.h"
@@ -2798,8 +2797,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       cur_offset += 4;
       rr_len     -= 4;
 
-      proto_tree_add_item(rr_tree, hf_dns_wks_protocol, tvb, cur_offset, 1, ENC_BIG_ENDIAN);
-      protocol = tvb_get_uint8(tvb, cur_offset);
+      proto_tree_add_item_ret_uint8(rr_tree, hf_dns_wks_protocol, tvb, cur_offset, 1, ENC_BIG_ENDIAN, &protocol);
       cur_offset += 1;
       rr_len     -= 1;
 
@@ -3224,8 +3222,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       uint8_t version;
       proto_item *ti;
 
-      version = tvb_get_uint8(tvb, cur_offset);
-      proto_tree_add_item(rr_tree, hf_dns_loc_version, tvb, cur_offset, 1, ENC_BIG_ENDIAN);
+      proto_tree_add_item_ret_uint8(rr_tree, hf_dns_loc_version, tvb, cur_offset, 1, ENC_BIG_ENDIAN, &version);
       if (version == 0) {
         /* Version 0, the only version RFC 1876 discusses. */
         cur_offset++;
@@ -3284,16 +3281,13 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       const char   *target;
       int           target_len;
 
-      proto_tree_add_item(rr_tree, hf_dns_srv_priority, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
-      priority = tvb_get_ntohs(tvb, cur_offset);
+      proto_tree_add_item_ret_uint16(rr_tree, hf_dns_srv_priority, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &priority);
       cur_offset += 2;
 
-      proto_tree_add_item(rr_tree, hf_dns_srv_weight, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
-      weight = tvb_get_ntohs(tvb, cur_offset);
+      proto_tree_add_item_ret_uint16(rr_tree, hf_dns_srv_weight, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &weight);
       cur_offset += 2;
 
-      proto_tree_add_item(rr_tree, hf_dns_srv_port, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
-      port = tvb_get_ntohs(tvb, cur_offset);
+      proto_tree_add_item_ret_uint16(rr_tree, hf_dns_srv_port, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &port);
       cur_offset += 2;
 
       used_bytes = get_dns_name(pinfo->pool, tvb, cur_offset, 0, dns_data_offset, &target, &target_len);
@@ -3322,32 +3316,27 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       int           replacement_len;
 
       /* Order */
-      proto_tree_add_item(rr_tree, hf_dns_naptr_order, tvb, offset, 2, ENC_BIG_ENDIAN);
-      order = tvb_get_ntohs(tvb, offset);
+      proto_tree_add_item_ret_uint16(rr_tree, hf_dns_naptr_order, tvb, offset, 2, ENC_BIG_ENDIAN, &order);
       offset += 2;
 
       /* Preference */
-      proto_tree_add_item(rr_tree, hf_dns_naptr_preference, tvb, offset, 2, ENC_BIG_ENDIAN);
-      preference = tvb_get_ntohs(tvb, offset);
+      proto_tree_add_item_ret_uint16(rr_tree, hf_dns_naptr_preference, tvb, offset, 2, ENC_BIG_ENDIAN, &preference);
       offset += 2;
 
        /* Flags */
-      proto_tree_add_item(rr_tree, hf_dns_naptr_flags_length, tvb, offset, 1, ENC_BIG_ENDIAN);
-      flags_len = tvb_get_uint8(tvb, offset);
+      proto_tree_add_item_ret_uint8(rr_tree, hf_dns_naptr_flags_length, tvb, offset, 1, ENC_BIG_ENDIAN, &flags_len);
       offset += 1;
       proto_tree_add_item_ret_string(rr_tree, hf_dns_naptr_flags, tvb, offset, flags_len, ENC_ASCII|ENC_NA, pinfo->pool, &flags);
       offset += flags_len;
 
       /* Service */
-      proto_tree_add_item(rr_tree, hf_dns_naptr_service_length, tvb, offset, 1, ENC_BIG_ENDIAN);
-      service_len = tvb_get_uint8(tvb, offset);
+      proto_tree_add_item_ret_uint8(rr_tree, hf_dns_naptr_service_length, tvb, offset, 1, ENC_BIG_ENDIAN, &service_len);
       offset += 1;
       proto_tree_add_item(rr_tree, hf_dns_naptr_service, tvb, offset, service_len, ENC_ASCII);
       offset += service_len;
 
       /* Regex */
-      proto_tree_add_item(rr_tree, hf_dns_naptr_regex_length, tvb, offset, 1, ENC_BIG_ENDIAN);
-      regex_len = tvb_get_uint8(tvb, offset);
+      proto_tree_add_item_ret_uint8(rr_tree, hf_dns_naptr_regex_length, tvb, offset, 1, ENC_BIG_ENDIAN, &regex_len);
       offset += 1;
       proto_tree_add_item(rr_tree, hf_dns_naptr_regex, tvb, offset, regex_len, ENC_ASCII);
       offset += regex_len;
@@ -3547,8 +3536,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
               uint8_t bytes[16];
             } ip_addr = {0};
 
-            family = tvb_get_ntohs(tvb, cur_offset);
-            proto_tree_add_item(rropt_tree, hf_dns_opt_client_family, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint16(rropt_tree, hf_dns_opt_client_family, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &family);
             cur_offset += 2;
             proto_tree_add_item(rropt_tree, hf_dns_opt_client_netmask, tvb, cur_offset, 1, ENC_BIG_ENDIAN);
             cur_offset += 1;
@@ -3564,14 +3552,14 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
             tvb_memcpy(tvb, ip_addr.bytes, cur_offset, addr_len);
             switch (family) {
 
-              case AFNUM_INET:
+              case AFNUM_IP:
               {
                 proto_tree_add_ipv4(rropt_tree, hf_dns_opt_client_addr4, tvb,
                                     cur_offset, addr_len, ip_addr.addr);
               }
               break;
 
-              case AFNUM_INET6:
+              case AFNUM_IP6:
               {
                 proto_tree_add_ipv6(rropt_tree, hf_dns_opt_client_addr6, tvb,
                                     cur_offset, addr_len, (ws_in6_addr *)&ip_addr);
@@ -3722,13 +3710,13 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
         cur_offset += 1;
         rr_len     -= 1;
 
-        if (afamily == AFNUM_INET && afdpart_len <= 4) {
+        if (afamily == AFNUM_IP && afdpart_len <= 4) {
           ws_in4_addr *addr4_copy;
 
           addr4_copy = (ws_in4_addr *)wmem_alloc0(pinfo->pool, 4);
           tvb_memcpy(tvb, (void *)addr4_copy, cur_offset, afdpart_len);
           proto_tree_add_ipv4(rr_tree, hf_dns_apl_afdpart_ipv4, tvb, cur_offset, afdpart_len, *addr4_copy);
-        } else if (afamily == AFNUM_INET6 && afdpart_len <= 16) {
+        } else if (afamily == AFNUM_IP6 && afdpart_len <= 16) {
           ws_in6_addr *addr6_copy;
 
           addr6_copy = (ws_in6_addr *)wmem_alloc0(pinfo->pool, 16);
@@ -4393,8 +4381,7 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       proto_tree_add_item(rr_tree, hf_dns_tsig_error, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
       cur_offset += 2;
 
-      proto_tree_add_item(rr_tree, hf_dns_tsig_other_len, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
-      tsig_otherlen = tvb_get_ntohs(tvb, cur_offset);
+      proto_tree_add_item_ret_uint16(rr_tree, hf_dns_tsig_other_len, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &tsig_otherlen);
       cur_offset += 2;
 
       if (tsig_otherlen != 0) {
@@ -4411,12 +4398,10 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
       int           target_len = rr_len - 4;
       const char   *target;
 
-      proto_tree_add_item(rr_tree, hf_dns_srv_priority, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
-      priority = tvb_get_ntohs(tvb, cur_offset);
+      proto_tree_add_item_ret_uint16(rr_tree, hf_dns_srv_priority, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &priority);
       cur_offset += 2;
 
-      proto_tree_add_item(rr_tree, hf_dns_srv_weight, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
-      weight = tvb_get_ntohs(tvb, cur_offset);
+      proto_tree_add_item_ret_uint16(rr_tree, hf_dns_srv_weight, tvb, cur_offset, 2, ENC_BIG_ENDIAN, &weight);
       cur_offset += 2;
 
       target = (const char*)tvb_get_string_enc(pinfo->pool, tvb, cur_offset, target_len, ENC_ASCII|ENC_NA);
@@ -5327,7 +5312,7 @@ dissect_dns_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
    * - Assume a common QTYPE and QCLASS (IN/CH).
    * - Potentially implement heuristics for TCP by checking the length prefix?
    */
-  int               offset = 0;
+  unsigned          offset = 0;
   uint16_t          flags, quest, ans, auth, add;
   /*
    * max_ans=10 was sufficient for recognizing the majority of DNS messages from
@@ -5364,7 +5349,7 @@ dissect_dns_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
     return false;
 
   /* Do we even have enough space left? */
-  if ( (quest * 6 + (ans + auth + add) * 11) > tvb_reported_length_remaining(tvb, offset + DNS_HDRLEN))
+  if ( (quest * 6U + (ans + auth + add) * 11U) > tvb_reported_length_remaining(tvb, offset + DNS_HDRLEN))
     return false;
 
   dissect_dns(tvb, pinfo, tree, NULL);

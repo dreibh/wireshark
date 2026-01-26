@@ -2772,7 +2772,7 @@ dissect_zcl_price_publish_tier_labels(tvbuff_t *tvb, proto_tree *tree, unsigned 
     proto_tree_add_item(tree, hf_zbee_zcl_price_tier_labels_number_of_labels, tvb, *offset, 1, ENC_NA);
     *offset += 1;
 
-    for (int i = 0; tvb_reported_length_remaining(tvb, *offset) >= 0 && i < number_of_labels; i++) {
+    for (int i = 0; i < number_of_labels; i++) {
         /* Tier ID */
         proto_tree_add_item(tree, hf_zbee_zcl_price_tier_labels_tier_id, tvb, *offset, 1, ENC_NA);
         *offset += 1;
@@ -13329,9 +13329,8 @@ dissect_zcl_device_management_set_event_configuration(proto_tree *tree, tvbuff_t
     /* Event Configuration Payload */
     switch (config_control) {
         case ZBEE_ZCL_DEVICE_MANAGEMENT_CONFIGURATION_CONTROL_APPLY_BY_LIST:
-            number_of_events = tvb_get_uint8(tvb, *offset);
             /* Number of Events */
-            proto_tree_add_item(tree, hf_zbee_zcl_device_management_set_event_configuration_event_configuration_number_of_events, tvb, *offset, 1, ENC_NA);
+            proto_tree_add_item_ret_uint8(tree, hf_zbee_zcl_device_management_set_event_configuration_event_configuration_number_of_events, tvb, *offset, 1, ENC_NA, &number_of_events);
             *offset += 1;
 
             /* Event IDs */
@@ -15042,9 +15041,7 @@ dissect_zcl_ke_initiate(tvbuff_t *tvb, proto_tree *tree, unsigned *offset)
     proto_tree        *subtree;
     uint16_t           suite;
 
-    suite = tvb_get_letohs(tvb, *offset);
-
-    proto_tree_add_item(tree, hf_zbee_zcl_ke_suite, tvb, *offset, 2, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item_ret_uint16(tree, hf_zbee_zcl_ke_suite, tvb, *offset, 2, ENC_LITTLE_ENDIAN, &suite);
     *offset += 2;
 
     proto_tree_add_item(tree, hf_zbee_zcl_ke_ephemeral_time, tvb, *offset, 1, ENC_NA);

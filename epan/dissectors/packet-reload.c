@@ -1500,8 +1500,7 @@ dissect_icecandidates(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint1
     {
       uint32_t priority;
 
-      priority = tvb_get_ntohl(tvb, offset+local_offset + icecandidates_offset);
-      proto_tree_add_item(icecandidate_tree, hf_reload_icecandidate_priority, tvb, offset+local_offset + icecandidates_offset, 4, ENC_BIG_ENDIAN);
+      proto_tree_add_item_ret_uint(icecandidate_tree, hf_reload_icecandidate_priority, tvb, offset+local_offset + icecandidates_offset, 4, ENC_BIG_ENDIAN, &priority);
       icecandidate_offset += 4;
       proto_tree_add_item(icecandidate_tree, hf_reload_icecandidate_type, tvb,
                           offset+local_offset+icecandidates_offset+icecandidate_offset, 1, ENC_BIG_ENDIAN);
@@ -3072,9 +3071,8 @@ static int dissect_diagnosticinfo(tvbuff_t *tvb, proto_tree *tree, uint16_t offs
       instances_per_kindid_tree = proto_item_add_subtree(ti_instances_per_kindid,
                                                          ett_reload_diagnosticinfo_instancesstored_info);
       dissect_kindid(hf_reload_kinddata_kind, tvb, instances_per_kindid_tree, offset+local_offset+instances_offset, &kind);
-      proto_tree_add_item(instances_per_kindid_tree, hf_reload_diagnosticinfo_instancesstored_instances,
-                          tvb, offset+local_offset+instances_offset+4, 8, ENC_BIG_ENDIAN);
-      instances = tvb_get_ntoh64(tvb, offset+local_offset+instances_offset+4);
+      proto_tree_add_item_ret_uint64(instances_per_kindid_tree, hf_reload_diagnosticinfo_instancesstored_instances,
+                                     tvb, offset+local_offset+instances_offset+4, 8, ENC_BIG_ENDIAN, &instances);
       proto_item_append_text(ti_instances_per_kindid, ": %s/%" PRId64,
           ((kind != NULL) && (kind->name != NULL)) ? kind->name : "UNKNOWN KIND", instances);
       instances_offset += 12;

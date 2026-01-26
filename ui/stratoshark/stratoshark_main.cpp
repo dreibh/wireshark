@@ -21,7 +21,7 @@
 #endif
 
 #include <ws_exit_codes.h>
-#include <wsutil/application_flavor.h>
+#include <app/application_flavor.h>     //Stratoshark only
 #include <wsutil/clopts_common.h>
 #include <wsutil/cmdarg_err.h>
 #include <ui/urls.h>
@@ -68,6 +68,7 @@
 #include "ui/persfilepath_opt.h"
 #include "ui/recent.h"
 #include "ui/simple_dialog.h"
+#include "ui/init.h"
 #include "ui/util.h"
 #include "ui/dissect_opts.h"
 #include "ui/commandline.h"
@@ -75,6 +76,7 @@
 #include "ui/preference_utils.h"
 #include "ui/software_update.h"
 #include "ui/taps.h"
+#include "ui/plugins/include/uiqt_plugin.h"
 
 #include "ui/qt/conversation_dialog.h"
 #include "ui/qt/utils/color_utils.h"
@@ -86,6 +88,7 @@
 #include "ui/qt/simple_statistics_dialog.h"
 #include <ui/qt/widgets/splash_overlay.h>
 #include "ui/stratoshark/stratoshark_application.h"
+#include "ui/qt/utils/workspace_state.h"
 
 #include "capture/capture-pcap-util.h"
 
@@ -562,7 +565,7 @@ int main(int argc, char *qt_argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    set_application_flavor(APPLICATION_FLAVOR_STRATOSHARK);
+
     /* configuration_init_error = */ configuration_init(argv[0], "stratoshark");
     /* ws_log(NULL, LOG_LEVEL_DEBUG, "progfile_dir: %s", get_progfile_dir()); */
 
@@ -574,7 +577,7 @@ int main(int argc, char *qt_argv[])
 #endif /* _WIN32 */
 
     /* Get the compile-time version information string */
-    ws_init_version_info("Stratoshark", application_flavor_name_proper(), get_ss_vcs_version_info, gather_wireshark_qt_compiled_info,
+    ws_init_version_info("Stratoshark", application_flavor_name_proper(), application_get_vcs_version_info, gather_wireshark_qt_compiled_info,
                          gather_wireshark_runtime_info);
 
     init_report_alert_box("Stratoshark");
@@ -588,6 +591,7 @@ int main(int argc, char *qt_argv[])
     }
 
     profile_store_persconffiles(true);
+    ui_init();
     recent_init();
 
     /* Read the profile independent recent file.  We have to do this here so we can */
@@ -598,6 +602,9 @@ int main(int argc, char *qt_argv[])
                       rf_path, g_strerror(rf_open_errno));
         g_free(rf_path);
     }
+
+    /* Load the common workspace state (e.g., window positions) */
+    WorkspaceState::instance()->loadCommonState();
 
     commandline_usage_app_data_t commandline_app_data = {
         "events",
@@ -679,8 +686,8 @@ int main(int argc, char *qt_argv[])
     ssApp->applyCustomColorsFromRecent();
 
     // Initialize our language
-    read_language_prefs();
-    ssApp->loadLanguage(language);
+    read_language_prefs(application_configuration_environment_prefix());
+    ssApp->loadLanguage(get_language_used());
 
     /* ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_DEBUG, "Translator %s", language); */
 
@@ -736,10 +743,9 @@ int main(int argc, char *qt_argv[])
     app_data.env_var_prefix = application_configuration_environment_prefix();
     app_data.col_fmt = application_columns();
     app_data.num_cols = application_num_columns();
-    app_data.register_func = register_all_protocols;
-    app_data.handoff_func = register_all_protocol_handoffs;
+    app_data.register_func = register_all_event_dissectors;
+    app_data.handoff_func = register_all_event_dissectors_handoffs;
     app_data.tap_reg_listeners = tap_reg_listener;
-    app_data.supports_packets = application_flavor_is_wireshark();
     if (!epan_init(splash_update, NULL, true, &app_data)) {
         SimpleDialog::displayQueuedMessages(main_w);
         ret_val = WS_EXIT_INIT_FAILED;
@@ -754,6 +760,9 @@ int main(int argc, char *qt_argv[])
     /* Register all audio codecs. */
     codecs_init(application_configuration_environment_prefix());
 
+    /* Register any UI plugins */
+    uiqt_plugin_init(application_configuration_environment_prefix());
+
     // Read the dynamic part of the recent file. This determines whether or
     // not the recent list appears in the main window so the earlier we can
     // call this the better.
@@ -763,7 +772,6 @@ int main(int argc, char *qt_argv[])
                       rf_path, g_strerror(rf_open_errno));
         g_free(rf_path);
     }
-    ssApp->refreshRecentCaptures();
 
     splash_update(RA_LISTENERS, NULL, NULL);
 #ifdef DEBUG_STARTUP_TIME
@@ -1070,6 +1078,7 @@ int main(int argc, char *qt_argv[])
     delete main_w;
 
     recent_cleanup();
+    ui_cleanup();
     epan_cleanup();
 
     extcap_cleanup();
@@ -1091,6 +1100,7 @@ clean_exit:
 #endif
     col_cleanup(&CaptureFile::globalCapFile()->cinfo);
     codecs_cleanup();
+    uiqt_plugin_cleanup();
     wtap_cleanup();
     free_progdirs();
     commandline_options_free();

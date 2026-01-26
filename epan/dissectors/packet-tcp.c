@@ -14,7 +14,6 @@
 #include <epan/capture_dissectors.h>
 #include <epan/exceptions.h>
 #include <epan/addr_resolv.h>
-#include <epan/ipproto.h>
 #include <epan/expert.h>
 #include <epan/ip_opts.h>
 #include <epan/follow.h>
@@ -39,6 +38,8 @@
 #include <wsutil/ws_assert.h>
 
 #include "packet-tcp.h"
+#include "data-iana.h"
+
 
 void proto_register_tcp(void);
 void proto_reg_handoff_tcp(void);
@@ -1090,7 +1091,7 @@ tcp_flags_to_str_first_letter(wmem_allocator_t *scope, const struct tcpheader *t
     wmem_strbuf_t *buf = wmem_strbuf_new(scope, "");
     unsigned i;
     const unsigned flags_count = 12;
-    static const char first_letters[] = "RRRACEUAPRSF";
+    static const char first_letters[] = "RRRAWEUAPRSF";
     static const char digits[] = "01234567";
 
     /* upper three bytes are marked as reserved ('R'). */
@@ -4658,7 +4659,7 @@ desegment_tcp(tvbuff_t *tvb, packet_info *pinfo, int offset,
     bool must_desegment;
     bool called_dissector;
     bool has_gap;
-    int another_pdu_follows;
+    unsigned another_pdu_follows;
     int deseg_offset;
     uint32_t deseg_seq;
     int nbytes;
@@ -5023,8 +5024,12 @@ again:
 
             if (!has_gap) {
                 /* Update the maximum expected seqno if no SYN packet was seen
-                 * before, or if the new segment succeeds previous segments. */
-                tcpd->fwd->maxnextseq = nxtseq;
+                 * before, or if the new segment succeeds previous segments.
+                 * Ignore if nxtseq is lower than the current maxnextseq,
+                 * which might happen if we are dealing with an OOO or retransmission.*/
+                if (LT_SEQ(tcpd->fwd->maxnextseq, nxtseq) || tcpd->fwd->maxnextseq == 0) {
+                    tcpd->fwd->maxnextseq = nxtseq;
+                }
 
                 /* If there is no gap, look for any OOO packets that are now
                  * contiguous. */
@@ -5729,8 +5734,8 @@ tcp_dissect_pdus(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 proto_item_set_generated(item);
 #if 0
         } else {
-                item = proto_tree_add_expert_format((proto_tree *)p_get_proto_data(pinfo->pool, pinfo, proto_tcp, curr_layer_num),
-                                        tvb, offset, -1,
+                item = proto_tree_add_expert_format_remaining((proto_tree *)p_get_proto_data(pinfo->pool, pinfo, proto_tcp, curr_layer_num),
+                                        tvb, offset,
                     "PDU Size: %u cut short at %u",plen,captured_length_remaining);
                 proto_item_set_generated(item);
         }

@@ -553,6 +553,7 @@ static const value_string dsb_secrets_types_vals[] = {
 };
 
 void proto_register_pcapng(void);
+void event_register_pcapng(void);
 void proto_reg_handoff_pcapng(void);
 
 #define BYTE_ORDER_MAGIC_SIZE  4
@@ -2147,8 +2148,8 @@ void register_pcapng_local_block_dissector(uint32_t block_number, local_block_ca
     g_hash_table_insert(s_local_block_callback_table, GUINT_TO_POINTER(block_number), block_callback_info);
 }
 
-void
-proto_register_pcapng(void)
+static void
+common_register_pcapng(void)
 {
     module_t         *module;
     expert_module_t  *expert_module;
@@ -2835,6 +2836,20 @@ proto_register_pcapng(void)
 
     /* Ensure this table will be deleted */
     register_shutdown_routine(&pcapng_shutdown_protocol);
+}
+
+void
+proto_register_pcapng(void)
+{
+    common_register_pcapng();
+}
+
+void
+event_register_pcapng(void)
+{
+    common_register_pcapng();
+
+    /* No need for a handoff function */
 }
 
 void

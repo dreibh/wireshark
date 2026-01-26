@@ -630,9 +630,8 @@ dissect_mailslot_browse(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 		offset += 1;
 
 		/* name of computer to which to send reply */
-		computer_name = (char*)tvb_get_stringz_enc(pinfo->pool, tvb, offset, &namelen, ENC_ASCII);
-		proto_tree_add_string(tree, hf_response_computer_name,
-			tvb, offset, namelen, computer_name);
+		proto_tree_add_item_ret_string(tree, hf_response_computer_name,
+			tvb, offset, -1, ENC_ASCII, pinfo->pool, (const uint8_t**)&computer_name);
 		col_append_fstr(pinfo->cinfo, COL_INFO, " %s", computer_name);
 		break;
 	}
@@ -749,7 +748,7 @@ dissect_mailslot_lanman(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tr
 	const uint8_t *host_name;
 	uint8_t os_major_ver, os_minor_ver;
 	const char *windows_version;
-	int namelen;
+	unsigned namelen;
 
 	col_set_str(pinfo->cinfo, COL_PROTOCOL, "BROWSER");
 	col_clear(pinfo->cinfo, COL_INFO);

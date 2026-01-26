@@ -434,6 +434,8 @@ static void capture_loop_get_errmsg(char *errmsg, size_t errmsglen,
                                     const char *fname, int err,
                                     bool is_close);
 
+static const char* get_vcs_version_info(void);
+
 static void report_new_capture_file(const char *filename);
 static void report_packet_count(unsigned int packet_count);
 static void report_packet_drops(uint32_t received, uint32_t pcap_drops, uint32_t drops, uint32_t flushed, uint32_t ps_ifdrop, char *name);
@@ -3745,7 +3747,7 @@ capture_loop_dispatch(loop_data *ld,
                     inpkts = pcap_dispatch(pcap_src->pcap_h, 1, capture_loop_write_packet_cb, (uint8_t *)pcap_src);
                 }
                 if (inpkts < 0) {
-                    if (inpkts == -1) {
+                    if (inpkts == PCAP_ERROR) {
                         /* Error, rather than pcap_breakloop(). */
                         pcap_src->pcap_err = true;
                     }
@@ -3788,7 +3790,7 @@ capture_loop_dispatch(loop_data *ld,
             }
 #endif
             if (inpkts < 0) {
-                if (inpkts == -1) {
+                if (inpkts == PCAP_ERROR) {
                     /* Error, rather than pcap_breakloop(). */
                     pcap_src->pcap_err = true;
                 }
@@ -5337,7 +5339,7 @@ main(int argc, char *argv[])
 #endif
 
     /* Initialize the version information. */
-    ws_init_version_info("Dumpcap", NULL, get_ws_vcs_version_info, gather_dumpcap_compiled_info,
+    ws_init_version_info("Dumpcap", NULL, get_vcs_version_info, gather_dumpcap_compiled_info,
                          gather_dumpcap_runtime_info);
 
     /* Initialize the pcaps list and IDBs */
@@ -6120,6 +6122,26 @@ main(int argc, char *argv[])
     /* capture failed */
     exit_main();
     return EXIT_FAILURE;
+}
+
+//Done here to not have dumpcap depend on "application flavor" details
+static const char*
+get_vcs_version_info(void)
+{
+    if (strcmp(app_flavor_name, "stratoshark") == 0) {
+#ifdef STRATOSHARK_VCS_VERSION
+        return STRATOSHARK_VERSION " (" STRATOSHARK_VCS_VERSION ")";
+#else
+        return STRATOSHARK_VERSION;
+#endif
+    }
+    else {
+#ifdef WIRESHARK_VCS_VERSION
+        return VERSION " (" WIRESHARK_VCS_VERSION ")";
+#else
+        return VERSION;
+#endif
+    }
 }
 
 static void

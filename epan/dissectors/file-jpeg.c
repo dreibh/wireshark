@@ -705,7 +705,7 @@ process_app0_segment(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, uint32
     proto_tree *subtree_details = NULL;
     uint32_t offset;
     char *str;
-    int str_size;
+    unsigned str_size;
     uint16_t x, y;
 
     if (!tree)
@@ -1006,7 +1006,7 @@ process_app1_segment(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, uint32
     proto_item *ti;
     proto_tree *subtree;
     char *str;
-    int str_size;
+    unsigned str_size;
     int offset = 0;
 
     ti = proto_tree_add_item(tree, hf_marker_segment,
@@ -1050,7 +1050,7 @@ process_app2_segment(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, uint32
     proto_item *ti;
     proto_tree *subtree;
     char *str;
-    int str_size;
+    unsigned str_size;
 
     if (!tree)
         return;
@@ -1766,11 +1766,7 @@ proto_register_jfif(void)
     expert_module_t* expert_jfif;
 
     /* Register the protocol name and description */
-    proto_jfif = proto_register_protocol(
-        "JPEG File Interchange Format",
-        "JFIF (JPEG) image",
-        "image-jfif"
-        );
+    proto_jfif = proto_register_protocol("JPEG File Interchange Format", "JFIF (JPEG) image", "image-jfif");
 
     /* Required function calls to register the header fields
      * and subtrees used */

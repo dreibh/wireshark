@@ -37,7 +37,7 @@ void proto_reg_handoff_ftam(void);
 static int proto_ftam;
 
 /* Declare the function to avoid a compiler warning */
-static int dissect_ftam_OR_Set(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_);
+static unsigned dissect_ftam_OR_Set(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx, proto_tree *tree, int hf_index _U_);
 
 static int hf_ftam_unstructured_text;              /* ISO FTAM unstructured text */
 static int hf_ftam_unstructured_binary;            /* ISO FTAM unstructured binary */
@@ -77,8 +77,8 @@ dissect_ftam_unstructured_binary(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
 static int
 dissect_ftam(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
-	int offset = 0;
-	int old_offset;
+	unsigned offset = 0;
+	unsigned old_offset;
 	proto_item *item=NULL;
 	proto_tree *tree=NULL;
 	asn1_ctx_t asn1_ctx;
@@ -96,7 +96,7 @@ dissect_ftam(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* d
 		old_offset=offset;
 		offset=dissect_ftam_PDU(false, tvb, offset, &asn1_ctx, tree, -1);
 		if(offset == old_offset){
-			proto_tree_add_expert(tree, pinfo, &ei_ftam_zero_pdu, tvb, offset, -1);
+			proto_tree_add_expert_remaining(tree, pinfo, &ei_ftam_zero_pdu, tvb, offset);
 			break;
 		}
 	}

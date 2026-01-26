@@ -375,9 +375,8 @@ dissect_bson_document(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_
     int doc_len = -1;   /* Document length */
 
     e_type = tvb_get_uint8(tvb, offset);
-    tvb_get_stringz_enc(pinfo->pool, tvb, offset+1, &str_len, ENC_ASCII);
 
-    element = proto_tree_add_item(elements_tree, hf_mongo_element_name, tvb, offset+1, str_len-1, ENC_UTF_8);
+    element = proto_tree_add_item_ret_length(elements_tree, hf_mongo_element_name, tvb, offset+1, -1, ENC_UTF_8, &str_len);
     element_sub_tree = proto_item_add_subtree(element, ett_mongo_element);
     proto_tree_add_item(element_sub_tree, hf_mongo_element_type, tvb, offset, 1, ENC_LITTLE_ENDIAN);
 
@@ -433,12 +432,10 @@ dissect_bson_document(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_
         break;
       case BSON_ELEMENT_TYPE_REGEX:
         /* regex pattern */
-        tvb_get_stringz_enc(pinfo->pool, tvb, offset, &str_len, ENC_ASCII);
-        proto_tree_add_item(element_sub_tree, hf_mongo_element_value_regex_pattern, tvb, offset, str_len, ENC_UTF_8);
+        proto_tree_add_item_ret_length(element_sub_tree, hf_mongo_element_value_regex_pattern, tvb, offset, -1, ENC_UTF_8, &str_len);
         offset += str_len;
         /* regex options */
-        tvb_get_stringz_enc(pinfo->pool, tvb, offset, &str_len, ENC_ASCII);
-        proto_tree_add_item(element_sub_tree, hf_mongo_element_value_regex_options, tvb, offset, str_len, ENC_UTF_8);
+        proto_tree_add_item_ret_length(element_sub_tree, hf_mongo_element_value_regex_options, tvb, offset, -1, ENC_UTF_8, &str_len);
         offset += str_len;
         break;
       case BSON_ELEMENT_TYPE_DB_PTR:
@@ -908,7 +905,7 @@ dissect_mongo_op_msg(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_t
 
   offset += 4;
 
-  while (tvb_reported_length_remaining(tvb, offset) > (checksum_present ? 4 : 0)){
+  while (tvb_reported_length_remaining(tvb, offset) > (checksum_present ? 4U : 0U)){
     offset += dissect_op_msg_section(tvb, pinfo, offset, tree, command_name);
   }
 
@@ -1417,7 +1414,7 @@ proto_register_mongo(void)
     },
     { &hf_mongo_element_name,
       { "Element", "mongo.element.name",
-      FT_STRING, BASE_NONE, NULL, 0x0,
+      FT_STRINGZ, BASE_NONE, NULL, 0x0,
       "Element Name", HFILL }
     },
     { &hf_mongo_element_type,
@@ -1477,12 +1474,12 @@ proto_register_mongo(void)
     },
     { &hf_mongo_element_value_regex_pattern,
       { "Value", "mongo.element.value.regex.pattern",
-      FT_STRING, BASE_NONE, NULL, 0x0,
+      FT_STRINGZ, BASE_NONE, NULL, 0x0,
       "Regex Pattern", HFILL }
     },
     { &hf_mongo_element_value_regex_options,
       { "Value", "mongo.element.value.regex.options",
-      FT_STRING, BASE_NONE, NULL, 0x0,
+      FT_STRINGZ, BASE_NONE, NULL, 0x0,
       "Regex Options", HFILL }
     },
     { &hf_mongo_element_value_objectid,

@@ -13,8 +13,7 @@
  /*
   * Dissector for the O-RAN Fronthaul CUS protocol specification.
   * See https://specifications.o-ran.org/specifications, WG4, Fronthaul Interfaces Workgroup
-  * The current implementation is based on the ORAN-WG4.CUS.0-v17.01 specification.
-  *   - haven't spotted any differences in v18.00
+  * The current implementation is based on the ORAN-WG4.CUS.0-v19.00 specification.
   * Note that other eCPRI message types are handled in packet-ecpri.c
   */
 
@@ -38,13 +37,10 @@
  * fiddly to get the preferences into a good state to decode a given capture..
  * TODO:
  * - for U-Plane, track back to last C-Plane frame for that eAxC
- *     - use udCompHdr values from C-Plane if not overridden by U-Plane?
  *     N.B. this matching is tricky see 7.8.1 Coupling of C-Plane and U-Plane
- * - Radio transport layer (eCPRI) fragmentation / reassembly
  * - Detect/indicate signs of application layer fragmentation?
  * - Not handling M-plane setting for "little endian byte order" as applied to IQ samples and beam weights
  * - for section extensions, check more constraints (which other extension types appear with them, order)
- * - when some section extensions are present, some section header fields are effectively ignored - flag any remaining ("ignored, "shall")?
  * - re-order items (decl and hf definitions) to match spec order?
  * - track energy-saving status, and identify TRX or ASM commands as 'Sleep extension'
  */
@@ -66,7 +62,6 @@ static int hf_oran_sequence_id;
 static int hf_oran_e_bit;
 static int hf_oran_subsequence_id;
 static int hf_oran_previous_frame;
-
 
 static int hf_oran_data_direction;
 static int hf_oran_payload_version;
@@ -497,6 +492,12 @@ static int hf_oran_sinr_prb;
 static int hf_oran_oru_control_sinr_slot_mask_id;
 static int hf_oran_pos_meas;
 
+static int hf_oran_ue_radial_speed;
+static int hf_oran_ue_az_aoa;
+static int hf_oran_ue_ze_aoa;
+static int hf_oran_ue_pos_toa_offset;
+
+
 /* Computed fields */
 static int hf_oran_c_eAxC_ID;
 static int hf_oran_refa;
@@ -581,7 +582,7 @@ static void *oran_temporary_key(const packet_info *pinfo _U_, const uint32_t id 
 }
 
 static void *oran_persistent_key(const packet_info *pinfo _U_, const uint32_t id _U_,
-                                     const void *data)
+                                 const void *data)
 {
     return (void *)data;
 }
@@ -680,7 +681,7 @@ static expert_field ei_oran_ul_uplane_symbol_too_long;
 static expert_field ei_oran_reserved_not_zero;
 
 
-/* These are the message types handled by this dissector */
+/* These are the message types handled by this dissector.  Others have handling in packet-ecpri.c */
 #define ECPRI_MT_IQ_DATA            0
 #define ECPRI_MT_RT_CTRL_DATA       2
 
@@ -696,17 +697,6 @@ static unsigned pref_sample_bit_width_uplink   = 14;
 static unsigned pref_sample_bit_width_downlink = 14;
 static unsigned pref_sample_bit_width_sinr   = 14;
 
-/* 8.3.3.15 Compression schemes */
-#define COMP_NONE                             0
-#define COMP_BLOCK_FP                         1
-#define COMP_BLOCK_SCALE                      2
-#define COMP_U_LAW                            3
-#define COMP_MODULATION                       4
-#define BFP_AND_SELECTIVE_RE                  5
-#define MOD_COMPR_AND_SELECTIVE_RE            6
-#define BFP_AND_SELECTIVE_RE_WITH_MASKS       7
-#define MOD_COMPR_AND_SELECTIVE_RE_WITH_MASKS 8
-
 /* TODO: these ideally should be per-flow too */
 static int pref_iqCompressionUplink = COMP_BLOCK_FP;
 static int pref_iqCompressionDownlink = COMP_BLOCK_FP;
@@ -715,8 +705,8 @@ static int pref_iqCompressionSINR = COMP_BLOCK_FP;
 
 
 /* Is udCompHeader present (both directions) */
-static int pref_includeUdCompHeaderUplink = 2;     /* start heuristic */
-static int pref_includeUdCompHeaderDownlink = 2;   /* start heuristic */
+static int pref_includeUdCompHeaderUplink = 2;     /* start using heuristic */
+static int pref_includeUdCompHeaderDownlink = 2;   /* start using heuristic */
 
 /* Are we ignoring UL C-Plane udCompHdr? */
 static bool pref_override_ul_compression = false;
@@ -742,7 +732,7 @@ static unsigned us_allowed_for_ul_in_symbol = 0;
 /* Reassemble U-Plane (at Radio Transport layer) */
 static bool do_radio_transport_layer_reassembly = true;
 
-static const enum_val_t dl_compression_options[] = {
+const enum_val_t dl_compression_options[] = {
     { "COMP_NONE",                             "No Compression",                                                             COMP_NONE },
     { "COMP_BLOCK_FP",                         "Block Floating Point Compression",                                           COMP_BLOCK_FP },
     { "COMP_BLOCK_SCALE",                      "Block Scaling Compression",                                                  COMP_BLOCK_SCALE },
@@ -755,6 +745,7 @@ static const enum_val_t dl_compression_options[] = {
     { NULL, NULL, 0 }
 };
 
+/* No Modulation compression in UL.. */
 static const enum_val_t ul_compression_options[] = {
     { "COMP_NONE",                             "No Compression",                                                           COMP_NONE },
     { "COMP_BLOCK_FP",                         "Block Floating Point Compression",                                         COMP_BLOCK_FP },
@@ -957,7 +948,9 @@ static const value_string meas_type_id_vals[] = {
     { 3,  "UE frequency offset" },
     { 4,  "Interference plus Noise for allocated PRBs" },
     { 5,  "Interference plus Noise for unallocated PRBs" },
-    { 6,  "DMRS SNR per antenna" },
+    { 6,  "DMRS-SNR per antenna" },
+    { 7,  "UE positioning measurement report" },
+    { 8,  "UE radial speed measurement report" },
     { 0, NULL}
 };
 
@@ -1482,7 +1475,7 @@ typedef struct {
 /* Won't be called with numBundPrb=0 */
 static void ext11_work_out_bundles(unsigned startPrbc,
                                    unsigned numPrbc,
-                                   unsigned numBundPrb,             /* number of PRBs pre (full) bundle */
+                                   unsigned numBundPrb,             /* number of PRBs per (full) bundle */
                                    ext11_settings_t *settings)
 {
     /* Allocation configured by ext 6 */
@@ -1499,7 +1492,7 @@ static void ext11_work_out_bundles(unsigned startPrbc,
             bundles_per_entry = 1;
         }
 
-        /* Maybe also be affected by ext 21 */
+        /* Ext6 behaviour may also be affected by ext 21 */
         if (settings->ext21_set) {
             /* N.B., have already checked that numPrbc is not 0 */
 
@@ -1510,8 +1503,10 @@ static void ext11_work_out_bundles(unsigned startPrbc,
         }
 
         unsigned bundles_set = 0;
+        bool reached_orphan = false;
+        /* For each bit set in ext6 rbg mask.. */
         for (unsigned n=0;
-             n < (settings->ext6_num_bits_set * settings->ext6_rbg_size) / numBundPrb;
+             !reached_orphan && n < (settings->ext6_num_bits_set * settings->ext6_rbg_size) / numBundPrb;
              n++) {
 
             /* Watch out for array bound */
@@ -1526,19 +1521,24 @@ static void ext11_work_out_bundles(unsigned startPrbc,
             uint32_t prb_start = (settings->ext6_bits_set[n] * settings->ext6_rbg_size);
 
             /* For each bundle within identified rbgSize block */
-            for (unsigned m=0; m < bundles_per_entry; m++) {
+            for (unsigned m=0; !reached_orphan && m < bundles_per_entry; m++) {
+
                 settings->bundles[bundles_set].start = startPrbc+prb_start+(m*numBundPrb);
+
                 /* Start already beyond end, so doesn't count. */
                 if (settings->bundles[bundles_set].start > (startPrbc+numPrbc-1)) {
-                    break;
+                    settings->num_bundles = bundles_set;
+                    return;
                 }
+
                 /* Bundle consists of numBundPrb bundles */
                 /* TODO: may involve PRBs from >1 rbg blocks.. */
                 settings->bundles[bundles_set].end = startPrbc+prb_start+((m+1)*numBundPrb)-1;
                 if (settings->bundles[bundles_set].end > (startPrbc+numPrbc-1)) {
                     /* Extends beyond end, so counts but is an orphan bundle */
-                    settings->bundles[bundles_set].end = numPrbc;
+                    settings->bundles[bundles_set].end = startPrbc+numPrbc-1;
                     settings->bundles[bundles_set].is_orphan = true;
+                    reached_orphan = true;
                 }
 
                 /* Get out if have reached array bound */
@@ -1563,7 +1563,7 @@ static void ext11_work_out_bundles(unsigned startPrbc,
             settings->bundles[n].end =   settings->bundles[n].start + numBundPrb-1;
             /* Does it go beyond the end? */
             if (settings->bundles[n].end > startPrbc+numPrbc) {
-                settings->bundles[n].end = numPrbc+numPrbc;
+                settings->bundles[n].end = startPrbc+numPrbc;
                 settings->bundles[n].is_orphan = true;
             }
         }
@@ -2097,7 +2097,7 @@ static int dissect_active_beamspace_coefficient_mask(tvbuff_t *tvb, proto_tree *
     /* activeBeamspaceCoefficientMask - ceil(K/8) octets */
     /* K is the number of elements in uncompressed beamforming weight vector.
      * Calculated from parameters describing tx-array or tx-array */
-    unsigned k_octets = (pref_data_plane_section_total_rbs + 7) / 8;
+    unsigned k_octets = (pref_num_bf_antennas + 7) / 8;
 
     static uint16_t trx_enabled[1024];
 
@@ -2125,7 +2125,7 @@ static int dissect_active_beamspace_coefficient_mask(tvbuff_t *tvb, proto_tree *
         /* Add up the set bits for this byte (but be careful not to count beyond last real K bit..) */
         for (unsigned b=0; b < 8; b++) {
             if ((1 << b) & (unsigned)val) {
-                if (((n*8)+b) < pref_data_plane_section_total_rbs) {
+                if (((n*8)+b) < pref_num_bf_antennas) {
                     if (*num_trx_entries < 1024-1) {   /* Don't write beyond array (which should be plenty big) */
                         trx_enabled[(*num_trx_entries)++] = (n*8) + b + 1;
                     }
@@ -2197,6 +2197,9 @@ static int dissect_bfwCompParam(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
             offset = dissect_active_beamspace_coefficient_mask(tvb, bfwcompparam_tree, offset, num_trx_entries, trx_entries);
             *bfw_comp_method = COMP_BLOCK_SCALE;
             *supported = false;                  /* TODO: true once BLOCK SCALE is supported */
+            proto_tree_add_item(bfwcompparam_tree, hf_oran_blockScaler,
+                                tvb, offset, 1, ENC_BIG_ENDIAN);
+            offset++;
             break;
         case 5:                 /* beamspace II (BLOCK FLOATING POINT) */
             /* activeBeamspaceCoefficientMask */
@@ -2213,6 +2216,8 @@ static int dissect_bfwCompParam(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
             /* Not handled */
              break;
     }
+
+    proto_item_set_end(bfwcompparam_ti, tvb, offset);
 
     /* Can't go on if compression scheme not supported */
     if (!(*supported) && meth_ti) {
@@ -2312,7 +2317,7 @@ static float decompress_value(uint32_t bits, uint32_t comp_method, uint8_t iq_wi
             float csf_to_add = 0.0;
             if (csf) {
                 /* Unshift the constellation point */
-                csf_to_add = (float)2.0 / (1 << (iq_width));
+                csf_to_add = (float)1.0 / (1 << (iq_width));
             }
             iqSampleFx += csf_to_add;
 
@@ -2381,16 +2386,9 @@ static uint32_t dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info 
                                   &bfwcomphdr_comp_meth, &exponent, &compression_method_supported,
                                   &num_trx_entries, &trx_entries);
 
-    /* Can't show details of unsupported compression method */
-    if (!compression_method_supported) {
-        /* Don't know how to show, so give up */
-        return offset;
-    }
-
     /* Create Bundle subtree */
     int bit_offset = offset*8;
     int bfw_offset;
-    int prb_offset = offset;
 
     /* contInd */
     proto_tree_add_item(bundle_tree, hf_oran_cont_ind,
@@ -2445,7 +2443,7 @@ static uint32_t dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info 
     }
 
     /* Set extent of bundle */
-    proto_item_set_len(bundle_ti, (bit_offset+7)/8 - prb_offset);
+    proto_item_set_end(bundle_ti, tvb, (bit_offset+7)/8);
 
     return (bit_offset+7)/8;
 }
@@ -2738,6 +2736,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 beamId_ti = proto_tree_add_item_ret_uint(c_section_tree, hf_oran_beamId, tvb, offset, 2, ENC_BIG_ENDIAN, &beamId);
                 offset += 2;
 
+                /* beamId might get invalidated by e.g., ext-6, ext-11, so unused value will still be shown here.. */
                 proto_item_append_text(sectionHeading, ", BeamId: %d", beamId);
                 break;
 
@@ -2758,6 +2757,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 add_reserved_field(c_section_tree, hf_oran_reserved_8bits, tvb, offset, 1);
                 offset += 1;
 
+                /* beamId might get invalidated by e.g., ext-6, ext-11, so unused value will still be shown here.. */
                 proto_item_append_text(sectionHeading, ", BeamId: %d, FreqOffset: %d \u0394f", beamId, freqOffset);
                 break;
             }
@@ -3751,7 +3751,6 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
 
                     /* Add (complete) bundles */
                     for (unsigned b=0; b < num_bundles; b++) {
-
                         offset = dissect_bfw_bundle(tvb, extension_tree, pinfo, offset,
                                                     comp_meth_ti, bfwcomphdr_comp_meth,
                                                     NULL /* no ModCompr */,
@@ -4808,7 +4807,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
             proto_tree *mr_tree = proto_item_add_subtree(mr_ti, ett_oran_measurement_report);
             unsigned report_start_offset = offset;
 
-            /* more fragments (after this one) (1 bit) */
+            /* measurement flag (i.e., more reports after this one) (1 bit) */
             proto_tree_add_item_ret_boolean(mr_tree, hf_oran_mf, tvb, offset, 1, ENC_BIG_ENDIAN, &mf);
 
             /* measTypeId (7 bits) */
@@ -4938,6 +4937,100 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                         offset += 2;
                     }
                     break;
+                case 7:
+                {
+                    /* UE positioning measurement report */
+                    float start_value;
+
+                    /* ueAzAoa (16 bits) */
+                    uint32_t ue_az_aoa;
+                    proto_item *ue_az_aoa_ti = proto_tree_add_item_ret_uint(mr_tree, hf_oran_ue_az_aoa, tvb, offset, 2, ENC_BIG_ENDIAN, &ue_az_aoa);
+                    if (ue_az_aoa <= 0xE0F) {
+                        if (ue_az_aoa >= 0x0708) {
+                            start_value = (ue_az_aoa-0x0708) * (float)0.1;
+                            proto_item_append_text(ue_az_aoa_ti, " (%.1f <= val < %.1f degrees)", start_value, start_value + (float)0.1);
+                        }
+                        else {
+                            start_value = 180 + (ue_az_aoa * (float)0.1);
+                            proto_item_append_text(ue_az_aoa_ti, " (%.1f <= val < %.1f degrees)", start_value, start_value + (float)0.1);
+                        }
+                    }
+                    else if (ue_az_aoa == 0xffff) {
+                        proto_item_append_text(ue_az_aoa_ti, " (invalid measurement result)");
+                    }
+                    else {
+                        proto_item_append_text(ue_az_aoa_ti, " (reserved)");
+                    }
+                    offset += 2;
+
+                    /* Reserved (16 bits) */
+                    add_reserved_field(mr_tree, hf_oran_reserved_16bits, tvb, offset, 2);
+                    offset += 2;
+
+                    /* ueZeAoa (16 bits) */
+                    uint32_t ue_ze_aoa;
+                    proto_item *ue_ze_aoa_ti = proto_tree_add_item_ret_uint(mr_tree, hf_oran_ue_ze_aoa, tvb, offset, 2, ENC_BIG_ENDIAN, &ue_ze_aoa);
+                    if (ue_ze_aoa <= 0x707) {
+                        start_value = ue_ze_aoa * (float)0.1;
+                        proto_item_append_text(ue_ze_aoa_ti, " (%.1f <= val < %.1f degrees)", start_value, start_value + (float)0.1);
+                    }
+                    else if (ue_az_aoa == 0xffff) {
+                        proto_item_append_text(ue_ze_aoa_ti, " (invalid measurement result)");
+                    }
+                    else {
+                        proto_item_append_text(ue_ze_aoa_ti, " (reserved)");
+                    }
+                    offset += 2;
+
+                    /* Reserved (16 bits) */
+                    add_reserved_field(mr_tree, hf_oran_reserved_16bits, tvb, offset, 2);
+                    offset += 2;
+
+                    /* uePosToaOffset (16 bits) */
+                    uint32_t ue_pos_toa_offset;
+                    proto_item *ue_pos_toa_offset_ti = proto_tree_add_item_ret_uint(mr_tree, hf_oran_ue_pos_toa_offset, tvb, offset, 2, ENC_BIG_ENDIAN, &ue_pos_toa_offset);
+                    if (ue_pos_toa_offset == 0) {
+                        proto_item_append_text(ue_pos_toa_offset_ti, " (no UE ToA offset, 0 symbols)");
+                    }
+                    else if (ue_pos_toa_offset <= 0x7fff) {
+                        proto_item_append_text(ue_pos_toa_offset_ti, " (+ve UE ToA offset)");
+                    }
+                    else if (ue_pos_toa_offset == 0x8000) {
+                        proto_item_append_text(ue_pos_toa_offset_ti, " (invalid measurement result)");
+                    }
+                    else {
+                        proto_item_append_text(ue_pos_toa_offset_ti, " (-ve UE ToA offset)");
+                    }
+                    offset += 2;
+
+                    /* Reserved (16 bits) */
+                    add_reserved_field(mr_tree, hf_oran_reserved_16bits, tvb, offset, 2);
+                    offset += 2;
+                    break;
+                }
+                case 8:
+                {
+                    /* UE radial speed measurement report */
+
+                    /* ueRadialSpeed (16 bits) */
+                    uint32_t radial_speed;
+                    proto_item *radial_speed_ti = proto_tree_add_item_ret_uint(mr_tree, hf_oran_ue_radial_speed, tvb, offset, 2, ENC_BIG_ENDIAN, &radial_speed);
+                    if (radial_speed <= 10000) {
+                        proto_item_append_text(radial_speed_ti, " (%.1f km/h)", radial_speed * (float)0.1);
+                    }
+                    else if (radial_speed == 0x8000) {
+                        proto_item_append_text(radial_speed_ti, " (invalid measurement result)");
+                    }
+                    else {
+                        proto_item_append_text(radial_speed_ti, " (reserved value)");
+                    }
+                    offset += 2;
+
+                    /* Reserved (16 bits) */
+                    add_reserved_field(mr_tree, hf_oran_reserved_16bits, tvb, offset, 2);
+                    offset += 2;
+                    break;
+                }
 
                 default:
                     /* Anything else is not expected */
@@ -5022,7 +5115,8 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
 /* bit_width and comp_meth are out params */
 static int dissect_udcomphdr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset,
                              bool ignore,
-                             unsigned *bit_width, unsigned *comp_meth, proto_item **comp_meth_ti)
+                             unsigned *bit_width, unsigned *comp_meth, proto_item **comp_meth_ti,
+                             oran_tap_info *tap_info)
 {
     /* Subtree */
     proto_item *udcomphdr_ti = proto_tree_add_string_format(tree, hf_oran_udCompHdr,
@@ -5041,6 +5135,11 @@ static int dissect_udcomphdr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
     *comp_meth_ti = proto_tree_add_item_ret_uint(udcomphdr_tree, hf_oran_udCompHdrMeth, tvb, offset, 1, ENC_NA, &ud_comp_meth);
     if (comp_meth) {
         *comp_meth = ud_comp_meth;
+    }
+
+    if (!ignore) {
+        tap_info->compression_methods |= (1 << ud_comp_meth);
+        tap_info->compression_width = MAX(tap_info->compression_width, hdr_iq_width);
     }
 
     /* Summary */
@@ -5567,7 +5666,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
             /* udCompHdr */
             offset = dissect_udcomphdr(tvb, pinfo, section_tree, offset,
                                        (direction==1), /* ignore for DL */
-                                       &bit_width, &comp_meth, &comp_meth_ti);
+                                       &bit_width, &comp_meth, &comp_meth_ti, tap_info);
             /* reserved (8 bits) */
             add_reserved_field(section_tree, hf_oran_reserved_8bits, tvb, offset, 1);
             offset += 1;
@@ -5589,7 +5688,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
             /* udCompHdr */
             offset = dissect_udcomphdr(tvb, pinfo, section_tree, offset,
                                        (direction==1), /* ignore for DL */
-                                       &bit_width, &comp_meth, &comp_meth_ti);
+                                       &bit_width, &comp_meth, &comp_meth_ti, tap_info);
             break;
 
         case SEC_C_CH_INFO:     /* Section Type 6 */
@@ -6639,6 +6738,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                         expert_add_info_format(pinfo, ti, &ei_oran_ul_uplane_symbol_too_long,
                                                "UL U-Plane Tx took longer (%u us) than limit set in preferences (%u us)",
                                                total_gap, us_allowed_for_ul_in_symbol);
+                        proto_item_append_text(timingHeader, "  (%uus since first frame seen for symbol)", total_gap);
                     }
 
                     /* Show how many frames were received */
@@ -6658,6 +6758,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                     }
 
                     tap_info->ul_delay_in_us = total_gap;
+                    tap_info->ul_delay_configured_max = us_allowed_for_ul_in_symbol;
                 }
             }
         }
@@ -6748,7 +6849,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             /* 7.5.2.10 */
             /* Extract these values to inform how wide IQ samples in each PRB will be. */
             offset = dissect_udcomphdr(tvb, pinfo, section_tree, offset, false, &sample_bit_width,
-                                       &compression, &ud_comp_meth_item);
+                                       &compression, &ud_comp_meth_item, tap_info);
 
             /* Not part of udCompHdr */
             uint32_t reserved;
@@ -6778,6 +6879,9 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 proto_item *cplane_ti = proto_tree_add_uint(section_tree, hf_oran_ul_cplane_ud_comp_hdr_frame, tvb, offset, 0, cplane_state->ul_ud_comp_hdr_frame);
                 proto_item_set_generated(cplane_ti);
             }
+
+            tap_info->compression_methods |= (1 << compression);
+            tap_info->compression_width = sample_bit_width;
         }
 
         /* Consider fragmentation after first section header */
@@ -6854,7 +6958,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 }
                 /* TODO: report if less than a viable section in frame? */
                 /* Check that there is this much length left in the frame */
-                if ((int)ud_comp_len > tvb_reported_length_remaining(tvb, section_start_offset)) {
+                if (ud_comp_len > tvb_reported_length_remaining(tvb, section_start_offset)) {
                     expert_add_info_format(pinfo, ud_comp_len_ti, &ei_oran_ud_comp_len_wrong_size,
                                            "udCompLen indicates %u bytes in section, but only %u are left in frame",
                                            ud_comp_len, tvb_reported_length_remaining(tvb, section_start_offset));
@@ -7439,7 +7543,6 @@ proto_register_oran(void)
             NULL, 0x0,
             "Number of contiguous PRBs per data section description", HFILL}
         },
-
         /* Section 7.5.3.7 */
         { &hf_oran_numSymbol,
           { "Number of Symbols", "oran_fh_cus.numSymbol",
@@ -7447,7 +7550,6 @@ proto_register_oran(void)
             NULL, 0x0f,
             "Defines number of symbols to which the section control is applicable", HFILL}
         },
-
         /* Section 7.5.3.8 */
         { &hf_oran_ef,
           { "Extension Flag", "oran_fh_cus.ef",
@@ -7455,7 +7557,6 @@ proto_register_oran(void)
             NULL, 0x80,
             "Indicates if more section extensions follow", HFILL}
         },
-
         /* Section 7.5.3.9 */
         { &hf_oran_beamId,
           { "Beam ID", "oran_fh_cus.beamId",
@@ -7528,7 +7629,6 @@ proto_register_oran(void)
             NULL, 0x7fff,
             "logical identifier for set of channel info", HFILL}
         },
-
         /* Section 7.5.3.11 */
         { &hf_oran_freqOffset,
           { "Frequency Offset", "oran_fh_cus.freqOffset",
@@ -7544,7 +7644,6 @@ proto_register_oran(void)
             NULL, 0x0,
             "Signed value to support MMSE operation within O-RU", HFILL}
         },
-
         /* Section 7.5.3.14 */
         { &hf_oran_laaMsgType,
           { "LAA Message Type", "oran_fh_cus.laaMsgType",
@@ -7552,7 +7651,6 @@ proto_register_oran(void)
             RVALS(laaMsgTypes), 0xf0,
             NULL, HFILL}
         },
-
         /* Section 7.5.3.15 */
         { &hf_oran_laaMsgLen,
           { "LAA Message Length", "oran_fh_cus.laaMsgLen",
@@ -7560,7 +7658,6 @@ proto_register_oran(void)
             NULL, 0x0f,
             "number of 32-bit words in the LAA section", HFILL}
         },
-
         /* Section 7.5.3.16 */
         { &hf_oran_lbtHandle,
           { "LBT Handle", "oran_fh_cus.lbtHandle",
@@ -7568,7 +7665,6 @@ proto_register_oran(void)
             NULL, 0x0,
             "label to identify transaction", HFILL}
          },
-
         /* Section 7.5.3.17 */
         { &hf_oran_lbtDeferFactor,
           { "Defer Factor", "oran_fh_cus.lbtDeferFactor",
@@ -7576,7 +7672,6 @@ proto_register_oran(void)
             NULL, 0x07,
             "Defer factor in sensing slots as described in 3GPP TS 36.213 Section 15.1.1", HFILL}
         },
-
         /* Section 7.5.3.18 */
         { &hf_oran_lbtBackoffCounter,
           { "Backoff Counter", "oran_fh_cus.lbtBackoffCounter",
@@ -7584,7 +7679,6 @@ proto_register_oran(void)
             NULL, 0xffc0,
             "LBT backoff counter in sensing slots as described in 3GPP TS 36.213 Section 15.1.1", HFILL}
         },
-
         /* Section 7.5.3.19 */
         { &hf_oran_lbtOffset,
           { "LBT Offset", "oran_fh_cus.lbtOffset",
@@ -7592,7 +7686,6 @@ proto_register_oran(void)
             NULL, 0xffc0,
             "LBT start time in microseconds from the beginning of the subframe scheduled by this message", HFILL}
         },
-
         /* Section 7.5.3.20 */
         { &hf_oran_MCOT,
           { "Maximum Channel Occupancy Time", "oran_fh_cus.MCOT",
@@ -7600,7 +7693,6 @@ proto_register_oran(void)
             NULL, 0x3c,
             "LTE TXOP duration in subframes as described in 3GPP TS 36.213 Section 15.1.1", HFILL}
         },
-
         /* Section 7.5.3.21 */
         { &hf_oran_lbtMode,
           { "LBT Mode", "oran_fh_cus.lbtMode",
@@ -7608,7 +7700,6 @@ proto_register_oran(void)
             VALS(lbtMode_vals), 0x0,
             NULL, HFILL}
         },
-
         /* Section 7.5.3.22 */
         { &hf_oran_lbtPdschRes,
           { "lbtPdschRes", "oran_fh_cus.lbtPdschRes",
@@ -7616,7 +7707,6 @@ proto_register_oran(void)
             VALS(lbtPdschRes_vals), 0xc0,
             "LBT result of SFN/SF", HFILL}
         },
-
         /* Section 7.5.3.23 */
         { &hf_oran_sfStatus,
           { "sfStatus", "oran_fh_cus.sfStatus",
@@ -7624,15 +7714,13 @@ proto_register_oran(void)
             TFS(&tfs_sfStatus), 0x10,
             "Indicates whether the subframe was dropped or transmitted", HFILL}
         },
-
-        /* Section 7.5.3.22 */
+        /* Section 7.5.3.24 */
         { &hf_oran_lbtDrsRes,
           { "lbtDrsRes", "oran_fh_cus.lbtDrsRes",
             FT_BOOLEAN, 8,
             TFS(&tfs_fail_success), 0x80,
             "Indicates whether the subframe was dropped or transmitted", HFILL}
         },
-
         /* Section 7.5.3.25 */
         { &hf_oran_initialPartialSF,
           { "Initial partial SF", "oran_fh_cus.initialPartialSF",
@@ -7640,7 +7728,6 @@ proto_register_oran(void)
             TFS(&tfs_partial_full_sf), 0x40,
             "Indicates whether the initial SF in the LBT process is full or partial", HFILL}
         },
-
         /* Section 7.5.3.26. */
         { &hf_oran_lbtBufErr,
           { "lbtBufErr", "oran_fh_cus.lbtBufErr",
@@ -7648,7 +7735,6 @@ proto_register_oran(void)
             TFS(&tfs_lbtBufErr), 0x80,
             "LBT buffer error", HFILL}
         },
-
         /* Section 7.5.3.27 */
         { &hf_oran_sfnSfEnd,
           { "SFN/SF End", "oran_fh_cus.sfnSfEnd",
@@ -7656,7 +7742,6 @@ proto_register_oran(void)
             NULL, 0x0fff,
             "SFN/SF by which the DRS window must end", HFILL}
         },
-
         /* Section 7.5.3.28 */
         { &hf_oran_lbtCWConfig_H,
           { "lbtCWConfig_H", "oran_fh_cus.lbtCWConfig_H",
@@ -7664,7 +7749,6 @@ proto_register_oran(void)
             NULL, 0x0,
             "HARQ parameters for congestion window management", HFILL}
         },
-
         /* Section 7.5.3.29 */
         { &hf_oran_lbtCWConfig_T,
           { "lbtCWConfig_T", "oran_fh_cus.lbtCWConfig_T",
@@ -7672,7 +7756,6 @@ proto_register_oran(void)
             NULL, 0x0,
             "TB parameters for congestion window management", HFILL}
         },
-
         /* Section 7.5.3.30 */
         { &hf_oran_lbtTrafficClass,
           { "lbtTrafficClass", "oran_fh_cus.lbtTrafficClass",
@@ -7680,7 +7763,6 @@ proto_register_oran(void)
             VALS(lbtTrafficClass_vals), 0x38,
             "Traffic class priority for congestion window management", HFILL}
         },
-
         /* Section 7.5.3.31 */
         { &hf_oran_lbtCWR_Rst,
           { "lbtCWR_Rst", "oran_fh_cus.lbtCWR_Rst",
@@ -7696,7 +7778,6 @@ proto_register_oran(void)
             NULL, 0x0,
             NULL, HFILL}
         },
-
         { &hf_oran_reserved_1bit,
           { "reserved", "oran_fh_cus.reserved",
             FT_UINT8, BASE_HEX,
@@ -7812,20 +7893,19 @@ proto_register_oran(void)
             NULL, HFILL}
         },
 
-
-        /* 7.7.11.10 */
-        { &hf_oran_bundle_offset,
-          { "BundleOffset", "oran_fh_cus.bundleOffset",
-            FT_UINT8, BASE_DEC,
-            NULL, 0x3f,
-            "offset between start of first PRB bundle and startPrbc", HFILL}
-        },
         /* 7.7.11.9 */
         { &hf_oran_cont_ind,
           { "contInd", "oran_fh_cus.contInd",
             FT_BOOLEAN, 8,
             TFS(&continuity_indication_tfs), 0x80,
             "PRB region continuity flag", HFILL}
+        },
+        /* 7.7.11.10 */
+        { &hf_oran_bundle_offset,
+          { "BundleOffset", "oran_fh_cus.bundleOffset",
+            FT_UINT8, BASE_DEC,
+            NULL, 0x3f,
+            "offset between start of first PRB bundle and startPrbc", HFILL}
         },
 
         /* 7.7.1.2 bfwCompHdr (beamforming weight compression header) */
@@ -7999,61 +8079,61 @@ proto_register_oran(void)
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s9,
-          { "symbol 9", "oran_fh_cus.symbolMask.symbol-9",
+          { "symbol  9", "oran_fh_cus.symbolMask.symbol-9",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0200,
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s8,
-          { "symbol 8", "oran_fh_cus.symbolMask.symbol-8",
+          { "symbol  8", "oran_fh_cus.symbolMask.symbol-8",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0100,
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s7,
-          { "symbol 7", "oran_fh_cus.symbolMask.symbol-7",
+          { "symbol  7", "oran_fh_cus.symbolMask.symbol-7",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0080,
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s6,
-          { "symbol 6", "oran_fh_cus.symbolMask.symbol-6",
+          { "symbol  6", "oran_fh_cus.symbolMask.symbol-6",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0040,
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s5,
-          { "symbol 5", "oran_fh_cus.symbolMask.symbol-5",
+          { "symbol  5", "oran_fh_cus.symbolMask.symbol-5",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0020,
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s4,
-          { "symbol 4", "oran_fh_cus.symbolMask.symbol-4",
+          { "symbol  4", "oran_fh_cus.symbolMask.symbol-4",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0010,
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s3,
-          { "symbol 3", "oran_fh_cus.symbolMask.symbol-3",
+          { "symbol  3", "oran_fh_cus.symbolMask.symbol-3",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0008,
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s2,
-          { "symbol 2", "oran_fh_cus.symbolMask.symbol-2",
+          { "symbol  2", "oran_fh_cus.symbolMask.symbol-2",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0004,
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s1,
-          { "symbol 1", "oran_fh_cus.symbolMask.symbol-1",
+          { "symbol  1", "oran_fh_cus.symbolMask.symbol-1",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0002,
             NULL, HFILL}
         },
         { &hf_oran_symbol_mask_s0,
-          { "symbol 0", "oran_fh_cus.symbolMask.symbol-0",
+          { "symbol  0", "oran_fh_cus.symbolMask.symbol-0",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0001,
             NULL, HFILL}
@@ -9397,61 +9477,61 @@ proto_register_oran(void)
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s9,
-          { "symbol 9", "oran_fh_cus.dmrsSymbolMask.symbol-9",
+          { "symbol  9", "oran_fh_cus.dmrsSymbolMask.symbol-9",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0200,
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s8,
-          { "symbol 8", "oran_fh_cus.dmrsSymbolMask.symbol-8",
+          { "symbol  8", "oran_fh_cus.dmrsSymbolMask.symbol-8",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0100,
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s7,
-          { "symbol 7", "oran_fh_cus.dmrsSymbolMask.symbol-7",
+          { "symbol  7", "oran_fh_cus.dmrsSymbolMask.symbol-7",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0080,
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s6,
-          { "symbol 6", "oran_fh_cus.dmrsSymbolMask.symbol-6",
+          { "symbol  6", "oran_fh_cus.dmrsSymbolMask.symbol-6",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0040,
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s5,
-          { "symbol 5", "oran_fh_cus.dmrsSymbolMask.symbol-5",
+          { "symbol  5", "oran_fh_cus.dmrsSymbolMask.symbol-5",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0020,
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s4,
-          { "symbol 4", "oran_fh_cus.dmrsSymbolMask.symbol-4",
+          { "symbol  4", "oran_fh_cus.dmrsSymbolMask.symbol-4",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0010,
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s3,
-          { "symbol 3", "oran_fh_cus.dmrsSymbolMask.symbol-3",
+          { "symbol  3", "oran_fh_cus.dmrsSymbolMask.symbol-3",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0008,
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s2,
-          { "symbol 2", "oran_fh_cus.dmrsSymbolMask.symbol-2",
+          { "symbol  2", "oran_fh_cus.dmrsSymbolMask.symbol-2",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0004,
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s1,
-          { "symbol 1", "oran_fh_cus.dmrsSymbolMask.symbol-1",
+          { "symbol  1", "oran_fh_cus.dmrsSymbolMask.symbol-1",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0002,
             NULL, HFILL}
         },
         { &hf_oran_dmrs_symbol_mask_s0,
-          { "symbol 0", "oran_fh_cus.dmrsSymbolMask.symbol-0",
+          { "symbol  0", "oran_fh_cus.dmrsSymbolMask.symbol-0",
             FT_BOOLEAN, 16,
             TFS(&tfs_present_not_present), 0x0001,
             NULL, HFILL}
@@ -9728,6 +9808,40 @@ proto_register_oran(void)
             "Positioning measurement report request",
             HFILL}
         },
+
+        /* 7.5.3.69 */
+        { &hf_oran_ue_radial_speed,
+          {"ueRadialSpeed", "oran_fh_cus.ueRadialSpeed",
+            FT_UINT16, BASE_DEC,
+            NULL, 0x0,
+            "UE radial speed",
+            HFILL}
+        },
+        /* 7.5.3.70 */
+        { &hf_oran_ue_az_aoa,
+          {"ueAzAoa", "oran_fh_cus.ueAzAoa",
+            FT_UINT16, BASE_DEC,
+            NULL, 0x0,
+            "UE azimuth angle of arrival",
+            HFILL}
+        },
+        /* 7.5.3.71 */
+        { &hf_oran_ue_ze_aoa,
+          {"ueZeAoa", "oran_fh_cus.ueZeAoa",
+            FT_UINT16, BASE_DEC,
+            NULL, 0x0,
+            "UE zenith angle of arrival",
+            HFILL}
+        },
+        /* 7.5.3.72 */
+        { &hf_oran_ue_pos_toa_offset,
+          {"uePosToaOffset", "oran_fh_cus.uePosToaOffset",
+            FT_UINT16, BASE_DEC,
+            NULL, 0x0,
+            "UE positioning time of arrival offset",
+            HFILL}
+        },
+
 
         { &hf_oran_c_section_common,
           { "Common Section", "oran_fh_cus.c-plane.section.common",

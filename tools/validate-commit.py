@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # Verifies whether commit messages adhere to the standards.
 # Checks the author name and email and invokes the tools/commit-msg script.
-# Copy this into .git/hooks/post-commit
+# Preferred setup: run tools/setup-dev.sh (or tools/setup-dev.ps1 on Windows) to
+# configure core.hooksPath=tools/git_hooks and commit.template=.gitmessage.
 #
 # Copyright (c) 2018 Peter Wu <peter@lekensteyn.nl>
 #
@@ -232,7 +233,7 @@ def main():
                 with open(args.commitmsg) as f:
                     return 0 if verify_body(f.read()) else 1
             except Exception:
-                print("Couldn't verify body of message from file '", + args.commitmsg + "'")
+                print("Couldn't verify body of message from file '" + args.commitmsg + "'")
                 return 1
 
 

@@ -99,7 +99,7 @@
 
 #include <epan/funnel.h>
 
-#include <wsutil/application_flavor.h>
+#include <app/application_flavor.h>     //Stratoshark only
 #include <wsutil/path_config.h>
 #include <wsutil/str_util.h>
 #include <wsutil/utf8_entities.h>
@@ -251,7 +251,7 @@ print_elapsed_json(const char *cf_name, const char *dfilter)
 
     json_dumper_begin_object(&dumper);
     json_dumper_set_member_name(&dumper, "version");
-    json_dumper_value_string(&dumper, get_ws_vcs_version_info_short());
+    json_dumper_value_string(&dumper, application_get_vcs_version_info_short());
     if (cf_name) {
         json_dumper_set_member_name(&dumper, "path");
         json_dumper_value_string(&dumper, cf_name);
@@ -1016,7 +1016,6 @@ main(int argc, char *argv[])
      * Attempt to get the pathname of the directory containing the
      * executable file.
      */
-    set_application_flavor(APPLICATION_FLAVOR_STRATOSHARK);
     err_msg = configuration_init(argv[0], "stratoshark");
     if (err_msg != NULL) {
         fprintf(stderr,
@@ -1034,7 +1033,7 @@ main(int argc, char *argv[])
 #endif /* _WIN32 */
 
     /* Initialize the version information. */
-    ws_init_version_info("strato", application_flavor_name_proper(), get_ss_vcs_version_info,
+    ws_init_version_info("strato", application_flavor_name_proper(), application_get_vcs_version_info,
             gather_strato_compile_info, gather_strato_runtime_info);
 
     /* Fail sometimes. Useful for testing fuzz scripts. */
@@ -1203,10 +1202,9 @@ main(int argc, char *argv[])
     app_data.env_var_prefix = application_configuration_environment_prefix();
     app_data.col_fmt = application_columns();
     app_data.num_cols = application_num_columns();
-    app_data.register_func = register_all_protocols;
-    app_data.handoff_func = register_all_protocol_handoffs;
+    app_data.register_func = register_all_event_dissectors;
+    app_data.handoff_func = register_all_event_dissectors_handoffs;
     app_data.tap_reg_listeners = tap_reg_listener;
-    app_data.supports_packets = application_flavor_is_wireshark();
     if (!epan_init(NULL, NULL, true, &app_data)) {
         exit_status = WS_EXIT_INIT_FAILED;
         goto clean_exit;
@@ -3364,7 +3362,7 @@ write_preamble(capture_file *cf)
     switch (output_action) {
 
         case WRITE_TEXT:
-            return print_preamble(print_stream, cf->filename, get_ws_vcs_version_info());
+            return print_preamble(print_stream, cf->filename, application_get_vcs_version_info());
 
         case WRITE_XML:
             if (print_details)

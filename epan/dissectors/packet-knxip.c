@@ -26,7 +26,6 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/proto.h>
-#include <epan/ipproto.h>
 #include <epan/prefs.h>
 #include <epan/proto_data.h>
 #include <epan/to_str.h>
@@ -37,6 +36,7 @@
 
 #include "packet-tcp.h"
 #include "packet-udp.h"
+#include "data-iana.h"
 #include "packet-knxip.h"
 #include "packet-knxip_decrypt.h"
 
@@ -2596,7 +2596,7 @@ static const char* make_key_info(wmem_allocator_t* scope, const uint8_t* key, co
       wmem_strbuf_append_printf(buf, " %02X", *key++);
   }
 
-  return wmem_strbuf_get_str(buf);
+  return wmem_strbuf_finalize(buf);
 }
 
 /* Dissect SECURE_WRAPPER

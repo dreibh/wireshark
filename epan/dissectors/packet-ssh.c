@@ -4157,7 +4157,7 @@ ssh_decrypt_packet(tvbuff_t *tvb, packet_info *pinfo,
         plain = (uint8_t *)wmem_alloc(pinfo->pool, message_length+4);
         memcpy(plain, peer_data->plain0, 16);
 
-        if (message_length - 12 > 0) {
+        if (message_length > 12) {
             /* All of these functions actually do handle the case where
              * there is no data left, so the check is unnecessary.
              */
@@ -4826,7 +4826,7 @@ ssh_proto_tree_add_segment_data(
         NULL,
         "%sSSH segment data (%u %s)",
         prefix != NULL ? prefix : "",
-        length == -1 ? tvb_reported_length_remaining(tvb, offset) : length,
+        length,
         plurality(length, "byte", "bytes"));
 }
 
@@ -4837,7 +4837,7 @@ desegment_ssh(tvbuff_t *tvb, packet_info *pinfo, uint32_t seq,
     fragment_head *ipfd_head;
     bool           must_desegment;
     bool           called_dissector;
-    int            another_pdu_follows;
+    unsigned       another_pdu_follows;
     bool           another_segment_in_frame = false;
     int            deseg_offset, offset = 0;
     uint32_t       deseg_seq;
@@ -4913,7 +4913,7 @@ again:
     /* Else, find the most previous PDU starting before this sequence number */
     msp = (struct tcp_multisegment_pdu *)wmem_tree_lookup32_le(channel->multisegment_pdus, seq-1);
     if (msp && msp->seq <= seq && msp->nxtpdu > seq) {
-        int len;
+        unsigned len;
 
         if (!PINFO_FD_VISITED(pinfo)) {
             msp->last_frame = pinfo->num;
@@ -4925,7 +4925,7 @@ again:
          */
         if (msp->flags & MSP_FLAGS_REASSEMBLE_ENTIRE_SEGMENT) {
             /* The dissector asked for the entire segment */
-            len = MAX(0, tvb_reported_length_remaining(tvb, offset));
+            len = tvb_reported_length_remaining(tvb, offset);
         } else {
             len = MIN(nxtseq, msp->nxtpdu) - seq;
         }

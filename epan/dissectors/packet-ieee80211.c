@@ -177,8 +177,6 @@ static unsigned wlan_key_mic_len;
  * associations
  */
 static uint32_t association_counter;
-/* association_counter is assigned in authentication for AKM 24/MLD */
-static uint32_t assoc_counter_in_auth;
 
 /* Treat all Wi-Fi frames as being S1G frames where it is important */
 static bool treat_as_s1g;
@@ -367,6 +365,19 @@ typedef enum {
   PASN_DATA_KEY,
   HE_CHANNEL_WIDTH_KEY,
   FRAME_TYPE_KEY,
+  MLD_MAC_KEY,
+  MLO_LINK_COUNT,
+  MLO_LINK_ID_FIRST,
+  MLO_LINK_ID_LAST = MLO_LINK_ID_FIRST + DOT11DECRYPT_MAX_MLO_LINKS - 1,
+  MLO_LINK_MAC_FIRST,
+  MLO_LINK_MAC_LAST = MLO_LINK_MAC_FIRST + DOT11DECRYPT_MAX_MLO_LINKS - 1,
+  MLO_GTK_COUNT,
+  MLO_GTK_LINK_ID_FIRST,
+  MLO_GTK_LINK_ID_LAST = MLO_GTK_LINK_ID_FIRST + DOT11DECRYPT_MAX_MLO_LINKS - 1,
+  MLO_GTK_KEY_FIRST,
+  MLO_GTK_KEY_LAST = MLO_GTK_KEY_FIRST + DOT11DECRYPT_MAX_MLO_LINKS - 1,
+  MLO_GTK_KEY_LEN_FIRST,
+  MLO_GTK_KEY_LEN_LAST = MLO_GTK_KEY_LEN_FIRST + DOT11DECRYPT_MAX_MLO_LINKS - 1,
 } wlan_proto_key_t;
 
 /* ************************************************************************* */
@@ -803,16 +814,16 @@ static const value_string tag_num_vals_eid_ext[] = {
   { ETAG_MULTIPLE_AOD_FEEDBACK,               "Multiple AOD Feedback" },
   { ETAG_MULTIPLE_BEST_AWV_ID,                "Multiple Best AWV ID" },
   { ETAG_LOS_LIKELIHOOD,                      "LOS Likelihood" },
-  { ETAG_EHT_OPERATION,                       "EHT Operation (802.11be D3.0)" },
-  { ETAG_MULTI_LINK,                          "Multi-Link (802.11be D3.0)" },
-  { ETAG_EHT_CAPABILITIES,                    "EHT Capabilities (802.11be D3.0)" },
-  { ETAG_TID_TO_LINK_MAPPING,                 "TID-To-Link Mapping (802.11be D3.0)" },
-  { ETAG_MULTI_LINK_TRAFFIC,                  "Multi-Link Traffic Indication (802.11be D3.0)" },
-  { ETAG_QOS_CHARACTERISTICS,                 "QoS Characteristics (802.11be D3.0)" },
+  { ETAG_EHT_OPERATION,                       "EHT Operation" },
+  { ETAG_MULTI_LINK,                          "Multi-Link" },
+  { ETAG_EHT_CAPABILITIES,                    "EHT Capabilities" },
+  { ETAG_TID_TO_LINK_MAPPING,                 "TID-To-Link Mapping" },
+  { ETAG_MULTI_LINK_TRAFFIC,                  "Multi-Link Traffic Indication" },
+  { ETAG_QOS_CHARACTERISTICS,                 "QoS Characteristics" },
   { ETAG_AKM_SUITE_SELECTOR,                  "AKM Suite Selector" },
-  { ETAG_MLO_LINK_INFORMATION,                "MLO Link Information (802.11be D3.0)" },
-  { ETAG_AID_BITMAP,                          "AID Bitmap (802.11be D3.0)" },
-  { ETAG_BANDWIDTH_INDICATION,                "Bandwidth Indication (802.11be D3.0)" },
+  { ETAG_MLO_LINK_INFORMATION,                "MLO Link Information" },
+  { ETAG_AID_BITMAP,                          "AID Bitmap" },
+  { ETAG_BANDWIDTH_INDICATION,                "Bandwidth Indication" },
   { ETAG_NONAP_STA_REGULATORY_CONNECT,        "Non-AP STA Regulatory Connectivity" },
   { 0, NULL }
 };
@@ -1140,6 +1151,7 @@ static const value_string ieee80211_status_code[] = {
   { 139, "Link not accepted because the link on which the (Re)Association Request frame is transmitted is not accepted"},
   { 140, "EPCS priority access is temporarily denied because the receiving AP MLD is unable to verify that the non-AP MLD is authorized for an unspecified reason"},
   { 141, "Operation parameter update denied because the requested operation parameters or capabilities are not acceptable"},
+  { 142, "The non-AP STA MAC address is used by an existing associated non-AP STA"},
   {   0, NULL}
 };
 value_string_ext ieee80211_status_code_ext = VALUE_STRING_EXT_INIT(ieee80211_status_code);
@@ -4692,12 +4704,12 @@ static int hf_ieee80211_eht_common_info_medium_sync_threshold;
 static int hf_ieee80211_eht_common_info_medium_sync_max_txops;
 static int hf_ieee80211_eht_common_field_eml_capabilities;
 static int hf_ieee80211_eht_common_info_eml_capa_emlsr_support;
-static int hf_ieee80211_eht_common_info_eml_capa_emlsr_padding_delay;
-static int hf_ieee80211_eht_common_info_eml_capa_emlsr_transition_delay;
+static int hf_ieee80211_eht_common_info_eml_capa_emlsr_emlmr_padding_delay;
+static int hf_ieee80211_eht_common_info_eml_capa_emlsr_emlmr_transition_delay;
 static int hf_ieee80211_eht_common_info_eml_capa_emlmr_support;
-static int hf_ieee80211_eht_common_info_eml_capa_emlmr_delay;
+static int hf_ieee80211_eht_common_info_eml_capa_reserved1;
 static int hf_ieee80211_eht_common_info_eml_capa_transition_timeout;
-static int hf_ieee80211_eht_common_info_eml_capa_reserved;
+static int hf_ieee80211_eht_common_info_eml_capa_reserved2;
 static int hf_ieee80211_eht_common_field_mld_capabilities;
 static int hf_ieee80211_eht_common_info_mld_max_simul_links;
 static int hf_ieee80211_eht_common_info_mld_srs_support;
@@ -6934,6 +6946,10 @@ static int hf_ieee80211_vs_apple_data;
 static int hf_ieee80211_vs_ubiquiti_type;
 static int hf_ieee80211_vs_ubiquiti_ap_name;
 static int hf_ieee80211_vs_ubiquiti_data;
+
+static int hf_ieee80211_vs_meter_type;
+static int hf_ieee80211_vs_meter_ap_name;
+static int hf_ieee80211_vs_meter_data;
 
 static int hf_ieee80211_rsn_ie_ptk_keyid;
 
@@ -10279,8 +10295,7 @@ dissect_advertisement_protocol_common(packet_info *pinfo, proto_tree *tree,
   }
 
   if (left) {
-    expert_add_info_format(pinfo, item, &ei_ieee80211_extra_data,
-                           "Unexpected extra data in the end");
+    expert_add_info(pinfo, item, &ei_ieee80211_extra_data);
   }
 
   return 2 + tag_len;
@@ -11874,7 +11889,7 @@ static unsigned
 dissect_gas_initial_request(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset,
                             unsigned type, unsigned subtype)
 {
-  uint16_t    req_len;
+  unsigned    req_len;
   int         start = offset;
   proto_item *item;
   proto_tree *query;
@@ -11919,7 +11934,7 @@ static unsigned
 dissect_gas_initial_response(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset,
                              unsigned type, unsigned subtype)
 {
-  uint16_t    resp_len;
+  unsigned    resp_len;
   int         start = offset;
   proto_item *item;
   proto_tree *query;
@@ -11999,7 +12014,7 @@ dissect_gas_comeback_response(proto_tree *tree, tvbuff_t *tvb, packet_info *pinf
                               unsigned type, unsigned subtype _U_, uint8_t frag, bool more,
                               uint8_t dialog_token)
 {
-  uint16_t    resp_len;
+  unsigned    resp_len;
   int         start = offset;
   proto_item *item;
   proto_tree *query;
@@ -13833,25 +13848,6 @@ add_ff_prot_s1g_action(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo _U_, 
   return 1;
 }
 
-static conversation_t *find_or_create_wlan_conversation(packet_info *pinfo)
-{
-  /* HACK to avoid collision with conversation in EAP dissector */
-  pinfo->srcport = GPOINTER_TO_UINT(
-    p_get_proto_data(wmem_file_scope(), pinfo, proto_wlan, ASSOC_COUNTER_KEY));
-  pinfo->destport = pinfo->srcport;
-  return find_or_create_conversation(pinfo);
-}
-
-static ieee80211_conversation_data_t* get_or_create_conversation_data(conversation_t *conversation) {
-  ieee80211_conversation_data_t *conversation_data = (ieee80211_conversation_data_t*)conversation_get_proto_data(conversation, proto_wlan);
-  if (!conversation_data) {
-    conversation_data = wmem_new(wmem_file_scope(), ieee80211_conversation_data_t);
-    conversation_add_proto_data(conversation, proto_wlan, conversation_data);
-    memset(conversation_data, 0, sizeof(ieee80211_conversation_data_t));
-  }
-  return conversation_data;
-}
-
 static unsigned get_group_element_len(unsigned group) {
   switch (group) {
     /* Diffie-Hellman groups */
@@ -14006,8 +14002,6 @@ add_ff_auth_sae(proto_tree *tree, tvbuff_t *tvb,
   {
     uint16_t group;
     unsigned sc_len, elt_len;
-    int is_ap = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool,
-                                 pinfo, proto_wlan, IS_AP_KEY));
 
     /*
      * Order is: Status code,
@@ -14091,21 +14085,6 @@ add_ff_auth_sae(proto_tree *tree, tvbuff_t *tvb,
         proto_tree_add_item(tree, hf_ieee80211_ff_finite_field_element, tvb,
                             offset, elt_len, ENC_NA);
         offset += elt_len;
-
-        /* Create conversation when AP accept SAE commit */
-        if (is_ap) {
-          conversation_t *conversation;
-          ieee80211_conversation_data_t *conversation_data;
-          if (!pinfo->fd->visited) {
-            association_counter++;
-            p_add_proto_data(wmem_file_scope(), pinfo, proto_wlan, ASSOC_COUNTER_KEY,
-                GUINT_TO_POINTER(association_counter));
-            assoc_counter_in_auth = 1;
-          }
-          conversation = find_or_create_wlan_conversation(pinfo);
-          conversation_data = get_or_create_conversation_data(conversation);
-          conversation_data->sae_group = group;
-        }
       }
     }
   }
@@ -18697,7 +18676,7 @@ add_ff_eht_mimo_control_etc(proto_tree *tree _U_, tvbuff_t *tvb _U_,
    * Validate nc_index and nr_index and go no further if they exceed the
    * limits.
    *
-   * 802.11be D3.0
+   * 802.11be
    */
   if (nc_index > 7) {
     expert_add_info_format(pinfo, mci, &ei_ieee80211_eht_invalid_nc_nr,
@@ -20916,6 +20895,7 @@ dissect_rsn_ie_mlo_link(proto_item *item, proto_tree *tree, tvbuff_t *tvb,
                         int offset, uint32_t tag_len _U_, packet_info *pinfo)
 {
   uint8_t info = tvb_get_uint8(tvb, offset);
+  int mlo_links = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLO_LINK_COUNT));
 
   proto_tree_add_bitmask(tree, tvb, offset,
                          hf_ieee80211_rsn_ie_mlo_link_info,
@@ -20925,6 +20905,12 @@ dissect_rsn_ie_mlo_link(proto_item *item, proto_tree *tree, tvbuff_t *tvb,
 
   proto_tree_add_item(tree, hf_ieee80211_rsn_ie_mlo_mac_addr, tvb, offset, 6,
                       ENC_NA);
+  if (mlo_links < DOT11DECRYPT_MAX_MLO_LINKS) {
+    uint8_t link_id = info & 0x0f;
+    save_proto_data_value(pinfo, link_id, MLO_LINK_ID_FIRST + mlo_links);
+    save_proto_data(tvb, pinfo, offset, 6, MLO_LINK_MAC_FIRST + mlo_links);
+    save_proto_data_value(pinfo, mlo_links + 1, MLO_LINK_COUNT);
+  }
   offset += 6;
   if ((info & 0x10) == 0x10) { /* Add the RSNE if present */
     offset += add_tagged_field(pinfo, tree, tvb, offset, 0, NULL, 0, NULL);
@@ -20942,6 +20928,8 @@ dissect_vendor_ie_rsn(proto_item * item, proto_tree * tree, tvbuff_t * tvb,
                       int offset, uint32_t tag_len, packet_info *pinfo)
 {
   uint8_t data_type = tvb_get_uint8(tvb, offset);
+  int mlo_gtk_nb;
+  uint8_t flags;
   proto_tree_add_item(tree, hf_ieee80211_rsn_ie_gtk_kde_data_type, tvb,
                       offset, 1, ENC_NA);
   offset += 1;
@@ -20972,6 +20960,7 @@ dissect_vendor_ie_rsn(proto_item * item, proto_tree * tree, tvbuff_t * tvb,
       proto_tree_add_item(tree, hf_ieee80211_rsn_ie_mac_address_kde_mac, tvb,
                           offset, 6, ENC_NA);
       proto_item_append_text(item, ": MAC Address KDE");
+      save_proto_data(tvb, pinfo, offset, 6, MLD_MAC_KEY);
       break;
     case 4:
     {
@@ -21044,6 +21033,8 @@ dissect_vendor_ie_rsn(proto_item * item, proto_tree * tree, tvbuff_t * tvb,
       proto_item_append_text(item, ": BIGTK KDE");
       break;
     case 16: /* MLO GTK KDE */
+      mlo_gtk_nb = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLO_GTK_COUNT));
+      flags = tvb_get_uint8(tvb, offset);
       proto_tree_add_item(tree, hf_ieee80211_rsn_ie_mlo_gtk_kde_key_id, tvb,
                           offset, 1, ENC_NA);
       proto_tree_add_item(tree, hf_ieee80211_rsn_ie_mlo_gtk_kde_tx, tvb,
@@ -21060,6 +21051,13 @@ dissect_vendor_ie_rsn(proto_item * item, proto_tree * tree, tvbuff_t * tvb,
 
       proto_tree_add_item(tree, hf_ieee80211_rsn_ie_mlo_gtk_kde_gtk, tvb,
                           offset, tag_len - 8, ENC_NA);
+      if (mlo_gtk_nb < DOT11DECRYPT_MAX_MLO_LINKS) {
+        uint8_t link_id = (flags & 0xf0) >> 4;
+        save_proto_data_value(pinfo, link_id, MLO_GTK_LINK_ID_FIRST + mlo_gtk_nb);
+        save_proto_data(tvb, pinfo, offset, tag_len - 8, MLO_GTK_KEY_FIRST + mlo_gtk_nb);
+        save_proto_data_value(pinfo, tag_len - 8, MLO_GTK_KEY_LEN_FIRST + mlo_gtk_nb);
+        save_proto_data_value(pinfo, mlo_gtk_nb + 1, MLO_GTK_COUNT);
+      }
 
       proto_item_append_text(item, ": MLO GTK KDE");
       break;
@@ -21801,6 +21799,38 @@ dissect_vendor_ie_ubiquiti(proto_item *item _U_, proto_tree *ietree,
     }
 }
 
+#define METER_APNAME 0
+static const value_string ieee80211_vs_meter_type_vals[] = {
+    { METER_APNAME, "AP Name"},
+    { 0,           NULL }
+};
+static void
+dissect_vendor_ie_meter(proto_item *item _U_, proto_tree *ietree,
+                       tvbuff_t *tvb, int offset, uint32_t tag_len, packet_info *pinfo)
+{
+    uint32_t type, length;
+    const uint8_t* apname;
+
+    /* VS OUI Type */
+    type = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item(ietree, hf_ieee80211_vs_meter_type, tvb, offset, 1, ENC_NA);
+    proto_item_append_text(item, ": %s", val_to_str_const(type, ieee80211_vs_meter_type_vals, "Unknown"));
+    offset += 1;
+    tag_len -= 1;
+
+    switch(type){
+        case METER_APNAME:
+            length = tag_len;
+            proto_tree_add_item_ret_string(ietree, hf_ieee80211_vs_meter_ap_name, tvb, offset, length, ENC_ASCII|ENC_NA, pinfo->pool, &apname);
+            proto_item_append_text(item, " (%s)", apname);
+            break;
+
+        default:
+            proto_tree_add_item(ietree, hf_ieee80211_vs_meter_data, tvb, offset, tag_len, ENC_NA);
+            break;
+    }
+}
+
 #define RUCKUS_APNAME 3
 static const value_string ieee80211_vs_ruckus_type_vals[] = {
     { RUCKUS_APNAME, "AP Name"},
@@ -22012,6 +22042,7 @@ dissect_vendor_ie_sgdsn(proto_item *item _U_, proto_tree *ietree,
         }
         break;
       default:
+        /* TODO: use/define a more appropriate ei item for this? */
         expert_add_info_format(pinfo, tree, &ei_ieee80211_extra_data, "Unknown type");
         break;
       }
@@ -22495,6 +22526,7 @@ static bool is_ft_akm_suite(uint32_t akm_suite)
     case AKMS_FT_IEEE802_1X_SHA384:
     case AKMS_FT_FILS_SHA256:
     case AKMS_FT_FILS_SHA384:
+    case AKMS_FT_SAE_GROUP_DEPEND:
       return true;
     default:
       return false;
@@ -23518,7 +23550,7 @@ static bool determine_nonce_is_set(tvbuff_t *tvb) {
 }
 
 static uint16_t determine_mic_len(packet_info *pinfo, bool assoc_frame,
-                                 bool *defaulted) {
+                                 bool *defaulted, bool *group_depend) {
   uint16_t eapol_key_mic_len = 16; /* Default MIC length */
   conversation_t *conversation = find_wlan_conversation_pinfo(pinfo);
   ieee80211_conversation_data_t *conversation_data = NULL;
@@ -23546,9 +23578,11 @@ static uint16_t determine_mic_len(packet_info *pinfo, bool assoc_frame,
     /* 3rd - Use AKMS negotiated during association to determine MIC length */
     if (conversation_data->last_akm_suite == AKMS_OWE) {
       /* For OWE the length of MIC depends on the selected group */
+      *group_depend = true;
       eapol_key_mic_len = get_mic_len_owe(conversation_data->owe_group);
     } else if (conversation_data->last_akm_suite == AKMS_SAE_GROUP_DEPEND ||
                conversation_data->last_akm_suite == AKMS_FT_SAE_GROUP_DEPEND) {
+      *group_depend = true;
       *defaulted = true;
     }
     else {
@@ -23559,9 +23593,11 @@ static uint16_t determine_mic_len(packet_info *pinfo, bool assoc_frame,
     /* 3rd - Use AKMS from current packet to determine MIC length */
     if (packet_data->last_akm_suite == AKMS_OWE) {
       /* For OWE the length of MIC depends on the selected group */
+      *group_depend = true;
       eapol_key_mic_len = get_mic_len_owe(packet_data->owe_group);
     } else if (packet_data->last_akm_suite == AKMS_SAE_GROUP_DEPEND ||
                packet_data->last_akm_suite == AKMS_FT_SAE_GROUP_DEPEND) {
+      *group_depend = true;
       *defaulted = true;
     }
     else {
@@ -23583,20 +23619,31 @@ dissect_fast_bss_transition(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
   ieee80211_tagged_field_data_t* field_data = (ieee80211_tagged_field_data_t*)data;
   bool assoc_frame = field_data->sanity_check != NULL;
   int offset = 0;
+  uint64_t mic_control;
   if (tag_len < 82) {
     expert_add_info_format(pinfo, field_data->item_tag_length, &ei_ieee80211_tag_length,
                           "FTIE content length must be at least 82 bytes");
     return 1;
   }
 
-  proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_tag_ft_mic_control,
+  proto_tree_add_bitmask_with_flags_ret_uint64(tree, tvb, offset, hf_ieee80211_tag_ft_mic_control,
                                     ett_tag_ft_mic_control_tree,
                                     ieee80211_tag_ft_mic_control_fields,
-                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND, &mic_control);
   offset += 2;
 
-  bool defaulted_mic_len = false;
-  int mic_len = determine_mic_len(pinfo, assoc_frame, &defaulted_mic_len);
+  bool defaulted_mic_len = false, group_depended_mic_len = false;
+  int mic_len = determine_mic_len(pinfo, assoc_frame, &defaulted_mic_len, &group_depended_mic_len);
+  if (group_depended_mic_len) {
+    /* IEEE 802.11-2024 9.4.2.46 FTE, Table 9-220 MIC Length subfield values */
+    uint8_t mic_len_field = (mic_control & 0x0e) >> 1; /* B1 to B3 */
+    if (mic_len_field == 0)
+        mic_len = 16;
+    else if (mic_len_field == 1)
+      mic_len = 24;
+    else if (mic_len_field == 2)
+      mic_len = 32;
+  }
   save_proto_data(tvb, pinfo, offset, mic_len, FTE_MIC_KEY);
   save_proto_data_value(pinfo, mic_len, FTE_MIC_LEN_KEY);
   proto_tree_add_item(tree, hf_ieee80211_tag_ft_mic,
@@ -27771,9 +27818,7 @@ dissect_ht_control(packet_info* pinfo, proto_tree *tree, tvbuff_t *tvb, int offs
   uint32_t htc;
   bool is_s1g = sta_is_s1g(pinfo);
 
-  htc = tvb_get_letohl(tvb, offset);
-
-  ti = proto_tree_add_item(tree, hf_ieee80211_htc, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+  ti = proto_tree_add_item_ret_uint(tree, hf_ieee80211_htc, tvb, offset, 4, ENC_LITTLE_ENDIAN, &htc);
   htc_tree = proto_item_add_subtree(ti, ett_htc_tree);
 
   /* Check the HT vs. VHT bit. */
@@ -29157,12 +29202,12 @@ static int * const eht_medium_sync_delay_hdrs[] = {
 
 static int * const eht_eml_capabilities_hdrs[] = {
   &hf_ieee80211_eht_common_info_eml_capa_emlsr_support,
-  &hf_ieee80211_eht_common_info_eml_capa_emlsr_padding_delay,
-  &hf_ieee80211_eht_common_info_eml_capa_emlsr_transition_delay,
+  &hf_ieee80211_eht_common_info_eml_capa_emlsr_emlmr_padding_delay,
+  &hf_ieee80211_eht_common_info_eml_capa_emlsr_emlmr_transition_delay,
   &hf_ieee80211_eht_common_info_eml_capa_emlmr_support,
-  &hf_ieee80211_eht_common_info_eml_capa_emlmr_delay,
+  &hf_ieee80211_eht_common_info_eml_capa_reserved1,
   &hf_ieee80211_eht_common_info_eml_capa_transition_timeout,
-  &hf_ieee80211_eht_common_info_eml_capa_reserved,
+  &hf_ieee80211_eht_common_info_eml_capa_reserved2,
   NULL
 };
 
@@ -29243,8 +29288,7 @@ dissect_multi_link(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
   uint8_t multi_link_type = multi_link_control & 0x0007;
   uint16_t present = multi_link_control >> 4;
   int elt = 0, hf_index;
-  int local_link_ids[16];
-  int is_ap;
+  wmem_strbuf_t *link_id_list = wmem_strbuf_create(pinfo->pool);
 
   control = proto_tree_add_item(tree, hf_ieee80211_eht_multi_link_control, tvb,
                                 offset, 2, ENC_LITTLE_ENDIAN);
@@ -29344,24 +29388,6 @@ dissect_multi_link(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
     proto_tree_add_item(common_tree, hf_ieee80211_eht_common_field_length, tvb,
                         offset, 1, ENC_NA);
     offset += 1;
-
-    is_ap = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool,
-                                              pinfo, proto_wlan,
-                                              IS_AP_KEY));
-    if (assoc_counter_in_auth) {
-      conversation_t *conversation = find_wlan_conversation_pinfo(pinfo);
-      if (conversation) {
-        ieee80211_conversation_data_t *conversation_data =
-          (ieee80211_conversation_data_t*)conversation_get_proto_data(conversation, proto_wlan);
-        if (is_ap) {
-            tvb_memcpy(tvb, conversation_data->ap_mld, offset, 6);
-            conversation_data->mld_set = TRUE;
-        } else {
-            tvb_memcpy(tvb, conversation_data->sta_mld, offset, 6);
-            conversation_data->mld_set = TRUE;
-        }
-      }
-    }
 
     proto_tree_add_item(common_tree, hf_ieee80211_eht_common_field_mld_mac,
                         tvb, offset, 6, ENC_NA);
@@ -29570,9 +29596,6 @@ dissect_multi_link(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
                                            multi_link_type, &link_id);
 
       offset += overhead; /* Account for the overhead in the subelt */
-      if (link_id != -1) {
-        local_link_ids[elt] = link_id;
-      }
       break;
     case 221:
       /* Add an expert info saying there are none so far? */
@@ -29583,18 +29606,13 @@ dissect_multi_link(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree,
       break;
     }
     if (link_id != -1) {
+      wmem_strbuf_append_printf(link_id_list, (elt == 0) ? "%d" : "_%d", link_id);
       elt++;
     }
   }
   proto_tree_add_uint(tree, hf_index, tvb, 0, 0, elt);
 
   if (elt) {
-    wmem_strbuf_t *link_id_list = wmem_strbuf_new_sized(pinfo->pool, elt * 2);
-    for (int i = 0; i < elt; i++) {
-      if (local_link_ids[i] != -1) {
-        wmem_strbuf_append_printf(link_id_list, (i == 0) ? "%d" : "_%d", local_link_ids[i]);
-      }
-    }
     proto_tree_add_string(tree, hf_ieee80211_eht_multi_link_link_id_list, tvb,
                           0, 0, link_id_list->str);
   }
@@ -34107,6 +34125,9 @@ ieee80211_tag_vendor_specific_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
     case OUI_UBIQUITI:
       dissect_vendor_ie_ubiquiti(field_data->item_tag, tree, tvb, offset, tag_vs_len, pinfo);
       break;
+    case OUI_METER:
+      dissect_vendor_ie_meter(field_data->item_tag, tree, tvb, offset, tag_vs_len, pinfo);
+      break;
     case OUI_RUCKUS:
       dissect_vendor_ie_ruckus(field_data->item_tag, tree, tvb, offset, tag_vs_len, pinfo);
       break;
@@ -37638,6 +37659,25 @@ ieee_80211_do_association_sanity_check(packet_info *pinfo, association_sanity_ch
   }
 }
 
+static conversation_t *find_or_create_wlan_conversation(packet_info *pinfo)
+{
+  /* HACK to avoid collision with conversation in EAP dissector */
+  pinfo->srcport = GPOINTER_TO_UINT(
+    p_get_proto_data(wmem_file_scope(), pinfo, proto_wlan, ASSOC_COUNTER_KEY));
+  pinfo->destport = pinfo->srcport;
+  return find_or_create_conversation(pinfo);
+}
+
+static ieee80211_conversation_data_t* get_or_create_conversation_data(conversation_t *conversation) {
+  ieee80211_conversation_data_t *conversation_data = (ieee80211_conversation_data_t*)conversation_get_proto_data(conversation, proto_wlan);
+  if (!conversation_data) {
+    conversation_data = wmem_new(wmem_file_scope(), ieee80211_conversation_data_t);
+    conversation_add_proto_data(conversation, proto_wlan, conversation_data);
+  }
+  memset(conversation_data, 0, sizeof(ieee80211_conversation_data_t));
+  return conversation_data;
+}
+
 /* ************************************************************************* */
 /*                     Dissect 802.11 management frame                       */
 /* ************************************************************************* */
@@ -37712,13 +37752,9 @@ dissect_ieee80211_mgt(uint16_t fcf, tvbuff_t *tvb, packet_info *pinfo, proto_tre
       ieee_80211_do_association_sanity_check(pinfo, &association_sanity_check);
 
       if (!pinfo->fd->visited) {
-        if (!assoc_counter_in_auth) {
-          association_counter++;
-          p_add_proto_data(wmem_file_scope(), pinfo, proto_wlan, ASSOC_COUNTER_KEY,
-                           GUINT_TO_POINTER(association_counter));
-        } else {
-          assoc_counter_in_auth = 0;
-        }
+        association_counter++;
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_wlan, ASSOC_COUNTER_KEY,
+                         GUINT_TO_POINTER(association_counter));
       }
       conversation = find_or_create_wlan_conversation(pinfo);
       conversation_data = get_or_create_conversation_data(conversation);
@@ -37765,13 +37801,9 @@ dissect_ieee80211_mgt(uint16_t fcf, tvbuff_t *tvb, packet_info *pinfo, proto_tre
       ieee_80211_do_association_sanity_check(pinfo, &association_sanity_check);
 
       if (!pinfo->fd->visited) {
-        if (!assoc_counter_in_auth) {
-          association_counter++;
-          p_add_proto_data(wmem_file_scope(), pinfo, proto_wlan, ASSOC_COUNTER_KEY,
-                           GUINT_TO_POINTER(association_counter));
-        } else {
-          assoc_counter_in_auth = 0;
-        }
+        association_counter++;
+        p_add_proto_data(wmem_file_scope(), pinfo, proto_wlan, ASSOC_COUNTER_KEY,
+                         GUINT_TO_POINTER(association_counter));
       }
       conversation = find_or_create_wlan_conversation(pinfo);
       conversation_data = get_or_create_conversation_data(conversation);
@@ -38232,7 +38264,7 @@ dissect_ieee80211_block_ack_details(tvbuff_t *tvb, packet_info *pinfo _U_,
     break;
 
   case MULTI_STA_BLOCK_ACK:
-    while (tvb_reported_length_remaining(tvb, offset) > (has_fcs ? 4 : 0)) {
+    while (tvb_reported_length_remaining(tvb, offset) > (has_fcs ? 4U : 0U)) {
         int start = offset;
         proto_item *msta_ti = NULL;
         aid_tid = tvb_get_letohs(tvb, offset);
@@ -40582,9 +40614,6 @@ dissect_ieee80211_pv0(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       set_address_tvb(&whdr->bssid, wlan_bssid_address_type, 6, tvb, 16);
       copy_address_shallow(&whdr->src, &pinfo->dl_src);
       copy_address_shallow(&whdr->dst, &pinfo->dl_dst);
-      if (addresses_data_equal(&whdr->bssid, &whdr->src)) {
-        p_add_proto_data(pinfo->pool, pinfo, proto_wlan, IS_AP_KEY, GINT_TO_POINTER(true));
-      }
 
       seq_control = tvb_get_letohs(tvb, 22);
       frag_number = SEQCTL_FRAGMENT_NUMBER(seq_control);
@@ -41968,7 +41997,7 @@ dissect_ieee80211_unknown_pv(tvbuff_t *tvb, packet_info *pinfo _U_,
    * protocol version. Let's use the PV1 version so that, among other
    * things, it will highlight the entire putative FCF and throw an
    * exception if we have fewer than two octets. */
-  proto_tree_add_item(hdr_tree, hf_ieee80211_fc_pv1_proto_version, tvb, offset, 2, ENC_NA);
+  proto_tree_add_item(hdr_tree, hf_ieee80211_fc_pv1_proto_version, tvb, offset, 2, ENC_LITTLE_ENDIAN);
   len -= 2;  /* We have already dealt with two bytes (FCF) */
   if (phdr->fcs_len == 4) {
     /* This is claimed to have an FCS. Is there enough reported room for it? */
@@ -42313,8 +42342,7 @@ keydata_padding_len(tvbuff_t *tvb)
 }
 
 static void
-get_eapol_parsed(packet_info *pinfo, PDOT11DECRYPT_EAPOL_PARSED eapol_parsed,
-                 ieee80211_conversation_data_t *conv_data)
+get_eapol_parsed(packet_info *pinfo, PDOT11DECRYPT_EAPOL_PARSED eapol_parsed)
 {
   if (!eapol_parsed) {
     return;
@@ -42349,6 +42377,20 @@ get_eapol_parsed(packet_info *pinfo, PDOT11DECRYPT_EAPOL_PARSED eapol_parsed,
   eapol_parsed->gtk = (uint8_t *)p_get_proto_data(pinfo->pool, pinfo, proto_wlan, GTK_KEY);
   eapol_parsed->gtk_len = (uint16_t)
     GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wlan, GTK_LEN_KEY));
+  eapol_parsed->mld_mac = (uint8_t *)p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLD_MAC_KEY);
+
+  eapol_parsed->mlo_link_count = (uint8_t)GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLO_LINK_COUNT));
+  for (int i = 0; i < eapol_parsed->mlo_link_count; ++i) {
+    eapol_parsed->mlo_link[i].id = (uint8_t)GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLO_LINK_ID_FIRST + i));
+    eapol_parsed->mlo_link[i].mac = (uint8_t *)p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLO_LINK_MAC_FIRST + i);
+  }
+
+  eapol_parsed->mlo_gtk_count = (uint8_t)GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLO_GTK_COUNT));
+  for (int i = 0; i < eapol_parsed->mlo_gtk_count; ++i) {
+    eapol_parsed->mlo_gtk[i].link_id = (uint8_t)GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLO_GTK_LINK_ID_FIRST + i));
+    eapol_parsed->mlo_gtk[i].key = (uint8_t *)p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLO_GTK_KEY_FIRST + i);
+    eapol_parsed->mlo_gtk[i].len = (uint8_t)GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MLO_GTK_KEY_LEN_FIRST + i));
+  }
 
   /* For fast bss transition akms */
   eapol_parsed->mdid = (uint8_t *)p_get_proto_data(pinfo->pool, pinfo, proto_wlan, MDID_KEY);
@@ -42360,10 +42402,6 @@ get_eapol_parsed(packet_info *pinfo, PDOT11DECRYPT_EAPOL_PARSED eapol_parsed,
     (uint8_t *)p_get_proto_data(pinfo->pool, pinfo, proto_wlan, FTE_R1KH_ID_KEY);
   eapol_parsed->fte.r1kh_id_len = (uint8_t)
     GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, proto_wlan, FTE_R1KH_ID_LEN_KEY));
-
-  if (conv_data) {
-    eapol_parsed->dh_group = conv_data->sae_group;
-  }
 }
 
 static void
@@ -42430,19 +42468,8 @@ try_decrypt_keydata(packet_info *pinfo)
     return;
   }
 
-  conversation_t *conversation = find_wlan_conversation_pinfo(pinfo);
-  ieee80211_conversation_data_t *conversation_data = NULL;
-  if (conversation) {
-      conversation_data = (ieee80211_conversation_data_t*)conversation_get_proto_data(conversation, proto_wlan);
-      /* Use MLD MAC in EAPOL */
-      if (conversation_data && conversation_data->mld_set) {
-        bssid = conversation_data->ap_mld;
-        sta = conversation_data->sta_mld;
-      }
-  }
-
   memset(&eapol_parsed, 0, sizeof(eapol_parsed));
-  get_eapol_parsed(pinfo, &eapol_parsed, conversation_data);
+  get_eapol_parsed(pinfo, &eapol_parsed);
 
   int ret = Dot11DecryptDecryptKeyData(&dot11decrypt_ctx,
                                         &eapol_parsed,
@@ -42479,19 +42506,8 @@ try_scan_eapol_keys(packet_info *pinfo, DOT11DECRYPT_HS_MSG_TYPE msg_type)
     return;
   }
 
-  conversation_t *conversation = find_wlan_conversation_pinfo(pinfo);
-  ieee80211_conversation_data_t *conversation_data = NULL;
-  if (conversation) {
-      conversation_data = (ieee80211_conversation_data_t*)conversation_get_proto_data(conversation, proto_wlan);
-      /* Use MLD MAC in EAPOL */
-      if (conversation_data && conversation_data->mld_set) {
-        bssid = conversation_data->ap_mld;
-        sta = conversation_data->sta_mld;
-      }
-  }
-
   memset(&eapol_parsed, 0, sizeof(eapol_parsed));
-  get_eapol_parsed(pinfo, &eapol_parsed, conversation_data);
+  get_eapol_parsed(pinfo, &eapol_parsed);
   eapol_parsed.msg_type = msg_type;
 
   Dot11DecryptScanEapolForKeys(&dot11decrypt_ctx,
@@ -42582,7 +42598,7 @@ discover_key_mic_len1(tvbuff_t *tvb, packet_info *pinfo, unsigned offset)
   /*
    * Do the next two bytes give us the length of the remainder?
    */
-  if (tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN) + 2 ==
+  if (tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN) + 2U ==
       tvb_reported_length_remaining(tvb, offset)) {
     conversation_data->discovered_key_mic_len = mic_len;
   }
@@ -42625,7 +42641,7 @@ discover_key_mic_len2(tvbuff_t *tvb, packet_info *pinfo, unsigned offset)
    * have been truncated beyond the key data length field.
    */
   if (tvb_captured_length_remaining(tvb, offset) >= 2 &&
-      tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN) + 2 ==
+      tvb_get_uint16(tvb, offset, ENC_BIG_ENDIAN) + 2U ==
         tvb_reported_length_remaining(tvb, offset)) {
     conversation_data->discovered_key_mic_len = mic_len;
   }
@@ -42653,32 +42669,10 @@ dissect_wlan_rsna_eapol_wpa_or_rsn_key(tvbuff_t *tvb, packet_info *pinfo, proto_
     &hf_wlan_rsna_eapol_wpa_keydes_keyinfo_smk_message,
     NULL
   };
-
-  keyinfo = tvb_get_ntohs(tvb, offset);
-  conversation_t *conversation = find_wlan_conversation_pinfo(pinfo);
-  /* Use link address to get correct conversation in MLD case */
-  if (conversation == NULL) {
-    uint8_t *bssid = (uint8_t *)p_get_proto_data(pinfo->pool, pinfo, proto_wlan, BSSID_KEY);
-    uint8_t *sta = (uint8_t *)p_get_proto_data(pinfo->pool, pinfo, proto_wlan, STA_KEY);
-    /* bssid and sta might not be present if this is Bluetooth AMP (removed
-     * in Bluetooth v5.3), because all data packets have ToDS and FromDS set.
-     * XXX - Decryption might not work properly with AMP as a result. */
-    if (bssid && sta) {
-      if (keyinfo & KEY_INFO_KEY_ACK_MASK) { /* From AP */
-            set_address(&pinfo->src, wlan_address_type, 6, bssid);
-            set_address(&pinfo->dst, wlan_address_type, 6, sta);
-
-      } else {
-            set_address(&pinfo->src, wlan_address_type, 6, sta);
-            set_address(&pinfo->dst, wlan_address_type, 6, bssid);
-      }
-    }
-  }
-
   uint16_t eapol_data_offset = 76;  /* 92 - 16 */
   bool has_nonce = determine_nonce_is_set(tvb);
-  bool defaulted_mic_len = false;
-  uint16_t eapol_key_mic_len = determine_mic_len(pinfo, false, &defaulted_mic_len);
+  bool defaulted_mic_len = false, group_depended_mic_len = false;
+  uint16_t eapol_key_mic_len = determine_mic_len(pinfo, false, &defaulted_mic_len, &group_depended_mic_len);
   save_proto_data_value(pinfo, eapol_key_mic_len, MIC_LEN_KEY);
   eapol_data_offset += eapol_key_mic_len;
   DOT11DECRYPT_HS_MSG_TYPE msg_type = DOT11DECRYPT_HS_MSG_TYPE_INVALID;
@@ -42687,6 +42681,7 @@ dissect_wlan_rsna_eapol_wpa_or_rsn_key(tvbuff_t *tvb, packet_info *pinfo, proto_
    * RSNA key descriptors.
    */
   eapol_data_len = tvb_get_ntohs(tvb, offset+eapol_data_offset);
+  keyinfo = tvb_get_ntohs(tvb, offset);
   if (keyinfo & KEY_INFO_REQUEST_MASK) {
     col_set_str(pinfo->cinfo, COL_INFO, "Key (Request)");
     if (keyinfo & KEY_INFO_ERROR_MASK)
@@ -42711,7 +42706,7 @@ dissect_wlan_rsna_eapol_wpa_or_rsn_key(tvbuff_t *tvb, packet_info *pinfo, proto_
       if (defaulted_mic_len) {
         discover_key_mic_len1(tvb, pinfo, 76);
         /* Must reset the MIC len */
-        eapol_key_mic_len = determine_mic_len(pinfo, false, &defaulted_mic_len);
+        eapol_key_mic_len = determine_mic_len(pinfo, false, &defaulted_mic_len, &group_depended_mic_len);
         save_proto_data_value(pinfo, eapol_key_mic_len, MIC_LEN_KEY);
         eapol_data_offset = 76 + eapol_key_mic_len;
         eapol_data_len = tvb_get_ntohs(tvb, offset + eapol_data_offset);
@@ -42728,7 +42723,7 @@ dissect_wlan_rsna_eapol_wpa_or_rsn_key(tvbuff_t *tvb, packet_info *pinfo, proto_
       /* Get correct MIC LEN if there is no M1 and M2 */
       if (defaulted_mic_len) {
         discover_key_mic_len2(tvb, pinfo, 76);
-        eapol_key_mic_len = determine_mic_len(pinfo, false, &defaulted_mic_len);
+        eapol_key_mic_len = determine_mic_len(pinfo, false, &defaulted_mic_len, &group_depended_mic_len);
         save_proto_data_value(pinfo, eapol_key_mic_len, MIC_LEN_KEY);
         eapol_data_offset = 76 + eapol_key_mic_len;
         eapol_data_len = tvb_get_ntohs(tvb, offset + eapol_data_offset);
@@ -42757,7 +42752,7 @@ dissect_wlan_rsna_eapol_wpa_or_rsn_key(tvbuff_t *tvb, packet_info *pinfo, proto_
         col_set_str(pinfo->cinfo, COL_INFO, "Key (Message 2 of 4)");
         if (defaulted_mic_len) {
           discover_key_mic_len2(tvb, pinfo, 76);
-          eapol_key_mic_len = determine_mic_len(pinfo, false, &defaulted_mic_len);
+          eapol_key_mic_len = determine_mic_len(pinfo, false, &defaulted_mic_len, &group_depended_mic_len);
           save_proto_data_value(pinfo, eapol_key_mic_len, MIC_LEN_KEY);
           eapol_data_offset = 76 + eapol_key_mic_len;
           eapol_data_len = tvb_get_ntohs(tvb, offset + eapol_data_offset);
@@ -43046,6 +43041,11 @@ set_dot11decrypt_keys(void)
 
         memcpy(key.Tk.Tk, dk->key->data, dk->key->len);
         key.Tk.Len = dk->key->len;
+        key.Tk.mld = dk->tk_mld;
+        if (dk->tk_mld) {
+          memcpy(key.Tk.ap_mld_mac, dk->ap_mld_mac, 6);
+          memcpy(key.Tk.sta_mld_mac, dk->sta_mld_mac, 6);
+        }
         keys->Keys[keys->nKeys] = key;
         keys->nKeys += 1;
       }
@@ -55486,6 +55486,22 @@ proto_register_ieee80211(void)
        FT_BYTES, BASE_NONE, NULL, 0,
        NULL, HFILL }},
 
+    /* Vendor Specific : Meter */
+    {&hf_ieee80211_vs_meter_type,
+     {"Subtype", "wlan.vs.meter.type",
+      FT_UINT8, BASE_DEC, VALS(ieee80211_vs_meter_type_vals), 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_vs_meter_ap_name,
+     {"AP Name", "wlan.vs.meter.apname",
+       FT_STRING, BASE_NONE, NULL, 0,
+       NULL, HFILL }},
+
+    {&hf_ieee80211_vs_meter_data,
+     {"Data", "wlan.vs.meter.data",
+       FT_BYTES, BASE_NONE, NULL, 0,
+       NULL, HFILL }},
+
     /* Vendor Specific: Cisco */
       {&hf_ieee80211_vs_cisco_ap_name_v2,
      {"AP Name", "wlan.vs.cisco.apname_v2",
@@ -60419,14 +60435,14 @@ proto_register_ieee80211(void)
       "wlan.eht.multi_link.common_info.eml_capabilities.emlsr_support",
       FT_BOOLEAN, 16, NULL, 0x0001, NULL, HFILL }},
 
-    {&hf_ieee80211_eht_common_info_eml_capa_emlsr_padding_delay,
-     {"EMLSR Padding Delay",
-      "wlan.eht.multi_link.common_info.eml_capabilities.emlsr_padding_delay",
+    {&hf_ieee80211_eht_common_info_eml_capa_emlsr_emlmr_padding_delay,
+     {"EMLSR/EMLMR Padding Delay",
+      "wlan.eht.multi_link.common_info.eml_capabilities.emlsr_emlmr_padding_delay",
       FT_UINT16, BASE_DEC, NULL, 0x000E, NULL, HFILL }},
 
-    {&hf_ieee80211_eht_common_info_eml_capa_emlsr_transition_delay,
-     {"EMLSR Transition Delay",
-      "wlan.eht.multi_link.common_info.eml_capabilities.emlsr_transition_delay",
+    {&hf_ieee80211_eht_common_info_eml_capa_emlsr_emlmr_transition_delay,
+     {"EMLSR/EMLMR Transition Delay",
+      "wlan.eht.multi_link.common_info.eml_capabilities.emlsr_emlmr_transition_delay",
       FT_UINT16, BASE_DEC, NULL, 0x0070, NULL, HFILL }},
 
     {&hf_ieee80211_eht_common_info_eml_capa_emlmr_support,
@@ -60434,9 +60450,9 @@ proto_register_ieee80211(void)
       "wlan.eht.multi_link.common_info.eml_capabilities.emlmr_support",
       FT_BOOLEAN, 16, NULL, 0x0080, NULL, HFILL }},
 
-    {&hf_ieee80211_eht_common_info_eml_capa_emlmr_delay,
-     {"EMLMR Delay",
-      "wlan.eht.multi_link.common_info.eml_capabilities.emlmr_delay",
+    {&hf_ieee80211_eht_common_info_eml_capa_reserved1,
+     {"Reserved",
+      "wlan.eht.multi_link.common_info.eml_capabilities.capa_reserved1",
       FT_UINT16, BASE_DEC, NULL, 0x0700, NULL, HFILL }},
 
     {&hf_ieee80211_eht_common_info_eml_capa_transition_timeout,
@@ -60444,9 +60460,9 @@ proto_register_ieee80211(void)
       "wlan.eht.multi_link.common_info.eml_capabilities.transition_timeout",
       FT_UINT16, BASE_DEC, NULL, 0x7800, NULL, HFILL }},
 
-    {&hf_ieee80211_eht_common_info_eml_capa_reserved,
+    {&hf_ieee80211_eht_common_info_eml_capa_reserved2,
      {"Reserved",
-      "wlan.eht.multi_link.common_info.eml_capabilities.capa_reserved",
+      "wlan.eht.multi_link.common_info.eml_capabilities.capa_reserved2",
       FT_UINT16, BASE_HEX, NULL, 0x8000, NULL, HFILL }},
 
     {&hf_ieee80211_eht_common_field_mld_capabilities,
@@ -60582,7 +60598,7 @@ proto_register_ieee80211(void)
       FT_BOOLEAN, 16, NULL, STA_CTRL_COMPLETE_PROFILE, NULL, HFILL }},
 
     {&hf_ieee80211_eht_profile_mac_address_present,
-     {"MAC Address Present",
+     {"STA MAC Address Present",
       "wlan.eht.multi_link.sta_profile.sta_control.mac_address_present",
       FT_BOOLEAN, 16, NULL, STA_CTRL_MAC_ADDR_PRESENT, NULL, HFILL }},
 
@@ -60736,7 +60752,7 @@ proto_register_ieee80211(void)
       "In Octets unit", HFILL }},
 
     {&hf_ieee80211_eht_sta_profile_operation_para_info_amsdu_length,
-     {"A-MSDU length",
+     {"Maximum A-MSDU length",
       "wlan.eht.multi_link.sta_profile.sta_info.operation_parameter_info.amsdu_length",
       FT_BOOLEAN, 16, TFS(&ht_max_amsdu_flag), 0x0004,
       NULL, HFILL }},
@@ -61063,7 +61079,7 @@ proto_register_ieee80211(void)
       FT_UINT24, BASE_DEC, NULL, 0x0007c0, NULL, HFILL }},
 
     {&hf_ieee80211_eht_phy_bits_40_63_support_of_mcx_15,
-     {"Support Of MCS 15",
+     {"Support Of MCS 15 In MRU",
       "wlan.eht.phy_capabilities.bits_40_63.support_of_mcs_15",
       FT_UINT24, BASE_DEC, NULL, 0x007800, NULL, HFILL }},
 
@@ -61122,7 +61138,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_eht_phy_bits_64_71,
      {"EHT PHY Bits 64-71", "wlan.eht.phy_capabilities.bits_64_71",
-      FT_UINT24, BASE_HEX, NULL, 0x0, NULL, HFILL }},
+      FT_UINT8, BASE_HEX, NULL, 0x0, NULL, HFILL }},
 
     {&hf_ieee80211_eht_phy_bits_64_71_rx_1024_qam_wid_bw_dl_ofdma_sup,
      {"Rx 1024-QAM In Wider Bandwidth DL OFDMA Support",
@@ -61131,7 +61147,7 @@ proto_register_ieee80211(void)
       0x01, NULL, HFILL }},
 
     {&hf_ieee80211_eht_phy_bits_64_71_rx_4096_qam_wid_bw_dl_ofdma_sup,
-     {"Rx 4096-QAM In Wider Bandwidth DL OFDMA SUpport",
+     {"Rx 4096-QAM In Wider Bandwidth DL OFDMA Support",
       "wlan.eht.phy_capabilities.bits_64_71.rx_4096_qam_in_wider_bw_dl_ofdma",
       FT_BOOLEAN, 8, TFS(&tfs_supported_not_supported),
       0x02, NULL, HFILL }},
@@ -61164,42 +61180,42 @@ proto_register_ieee80211(void)
        FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL }},
 
     {&hf_ieee80211_eht_rx_max_nss_20mhz_0_7,
-     {"RX Max NSS That Supports EHt-MCS 0-7",
+     {"RX Max NSS That Supports EHT-MCS 0-7",
       "wlan.eht.supported_eht_mcs_bss_non_sta.rx_max_nss_supports_eht_mcs_0_7",
       FT_UINT32, BASE_HEX, NULL, 0x0000000F, NULL, HFILL }},
 
     {&hf_ieee80211_eht_tx_max_nss_20mhz_0_7,
-     {"TX Max NSS That Supports EHt-MCS 0-7",
+     {"TX Max NSS That Supports EHT-MCS 0-7",
       "wlan.eht.supported_eht_mcs_bss_non_sta.tx_max_nss_supports_eht_mcs_0_7",
       FT_UINT32, BASE_HEX, NULL, 0x000000F0, NULL, HFILL }},
 
     {&hf_ieee80211_eht_rx_max_nss_20mhz_8_9,
-     {"RX Max NSS That Supports EHt-MCS 8-9",
+     {"RX Max NSS That Supports EHT-MCS 8-9",
       "wlan.eht.supported_eht_mcs_bss_non_sta.rx_max_nss_supports_eht_mcs_8_9",
       FT_UINT32, BASE_HEX, NULL, 0x00000F00, NULL, HFILL }},
 
     {&hf_ieee80211_eht_tx_max_nss_20mhz_8_9,
-     {"TX Max NSS That Supports EHt-MCS 8-9",
+     {"TX Max NSS That Supports EHT-MCS 8-9",
       "wlan.eht.supported_eht_mcs_bss_non_sta.tx_max_nss_supports_eht_mcs_8_9",
       FT_UINT32, BASE_HEX, NULL, 0x0000F000, NULL, HFILL }},
 
     {&hf_ieee80211_eht_rx_max_nss_20mhz_10_11,
-     {"RX Max NSS That Supports EHt-MCS 10-11",
+     {"RX Max NSS That Supports EHT-MCS 10-11",
       "wlan.eht.supported_eht_mcs_bss_non_sta.rx_max_nss_supports_eht_mcs_10_11",
       FT_UINT32, BASE_HEX, NULL, 0x000F0000, NULL, HFILL }},
 
     {&hf_ieee80211_eht_tx_max_nss_20mhz_10_11,
-     {"TX Max NSS That Supports EHt-MCS 10-11",
+     {"TX Max NSS That Supports EHT-MCS 10-11",
       "wlan.eht.supported_eht_mcs_bss_non_sta.tx_max_nss_supports_eht_mcs_10_11",
       FT_UINT32, BASE_HEX, NULL, 0x00F00000, NULL, HFILL }},
 
     {&hf_ieee80211_eht_rx_max_nss_20mhz_12_13,
-     {"RX Max NSS That Supports EHt-MCS 12-13",
+     {"RX Max NSS That Supports EHT-MCS 12-13",
       "wlan.eht.supported_eht_mcs_bss_non_sta.rx_max_nss_supports_eht_mcs_12_13",
       FT_UINT32, BASE_HEX, NULL, 0x0F000000, NULL, HFILL }},
 
     {&hf_ieee80211_eht_tx_max_nss_20mhz_12_13,
-     {"TX Max NSS That Supports EHt-MCS 12-13",
+     {"TX Max NSS That Supports EHT-MCS 12-13",
       "wlan.eht.supported_eht_mcs_bss_non_sta.tx_max_nss_supports_eht_mcs_12_13",
       FT_UINT32, BASE_HEX, NULL, 0xF0000000, NULL, HFILL }},
 
@@ -61352,7 +61368,7 @@ proto_register_ieee80211(void)
       FT_UINT8, BASE_HEX, NULL, 0xC0, NULL, HFILL }},
 
     {&hf_ieee80211_eht_ttl_mapping_presence,
-     {"Link Mapping Presence Indicator",
+     {"Link Mapping Presence Bitmap",
       "wlan.eht.tid_to_link_mapping.control.link_mapping_presence_indicator",
       FT_UINT8, BASE_HEX, NULL, 0x00, NULL, HFILL }},
 
@@ -61397,7 +61413,7 @@ proto_register_ieee80211(void)
       FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
 
     {&hf_ieee80211_eht_multi_link_traffic_control,
-     {"Multi-Link Traffic Control",
+     {"Multi-Link Traffic Indication Control",
       "wlan.eht.multi_link_traffic.traffic_control",
       FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL }},
 
@@ -61414,7 +61430,7 @@ proto_register_ieee80211(void)
       FT_UINT16, BASE_HEX, NULL, 0x8000, NULL, HFILL }},
 
     {&hf_ieee80211_eht_multi_link_traffic_indication,
-     {"Traffic Indication List",
+     {"Per-Link Traffic Indication List",
       "wlan.eht.multi_link_traffic.traffic_indication_list",
       FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
@@ -61481,7 +61497,7 @@ proto_register_ieee80211(void)
       FT_UINT24, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
     {&hf_ieee80211_eht_qos_chars_burst_size,
-     {"Burst Size", "wlan.eht.qos_characteristics.burst_size",
+     {"Delay Bounded Burst Size", "wlan.eht.qos_characteristics.burst_size",
       FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
     {&hf_ieee80211_eht_qos_chars_msdu_lifetime,
@@ -61730,7 +61746,7 @@ proto_register_ieee80211(void)
                         "wep:<wep hexadecimal key>\n"
                         "wpa-pwd:<passphrase>[:<ssid>]\n"
                         "wpa-psk:<wpa hexadecimal key>\n"
-                        "tk:<hexadecimal key>\n"
+                        "tk:<hexadecimal key>[:<AP-MLD-MAC>:<STA-MLD-MAC>]\n"
                         "msk:<hexadecimal key>\n"),
       UAT_END_FIELDS
     };

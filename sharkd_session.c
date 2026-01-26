@@ -57,7 +57,7 @@
 #include <ui/tap-rtp-analysis.h>
 #include <ui/cli/tap-protohierstat.h>
 #include <ui/cli/tap-voip.h>
-#include <wsutil/version_info.h>
+#include <app/application_flavor.h>
 #include <epan/to_str.h>
 
 #include <epan/addr_resolv.h>
@@ -1095,7 +1095,7 @@ sharkd_session_process_info(void)
     sharkd_session_print_encap_types();
     sharkd_json_array_close();
 
-    sharkd_json_value_string("version", get_ws_vcs_version_info_short());
+    sharkd_json_value_string("version", application_get_vcs_version_info_short());
 
     sharkd_json_array_open("nstat");
     i = 0;
@@ -4254,7 +4254,7 @@ sharkd_session_process_frame_cb_tree(const char *key, epan_dissect_t *edt, proto
             }
         }
 
-        if (finfo->start >= 0 && finfo->length > 0)
+        if (finfo->length > 0)
             sharkd_json_value_anyf("h", "[%d,%d]", finfo->start, finfo->length);
 
         if (finfo->appendix_start >= 0 && finfo->appendix_length > 0)
@@ -5312,7 +5312,7 @@ sharkd_session_process_complete(char *buf, const jsmntok_t *tokens, int count)
         }
         else
         {
-            prefs_modules_foreach(sharkd_session_process_complete_pref_cb, &data);
+            prefs_modules_foreach(prefs_get_module_tree(), sharkd_session_process_complete_pref_cb, &data);
         }
         sharkd_json_array_close();
     }
@@ -5485,6 +5485,14 @@ sharkd_session_process_dumpconf_cb(pref_t *pref, void *d)
                     sharkd_json_value_anyf("ub", "%u", prefs_get_uint_base(pref));
                 break;
 
+            case PREF_INT:
+                sharkd_json_value_anyf("d", "%d", prefs_get_int_value(pref, pref_current));
+                break;
+
+            case PREF_FLOAT:
+                sharkd_json_value_anyf("f", "%.*f", prefs_get_uint_base(pref), prefs_get_float_value(pref, pref_current));
+                break;
+
             case PREF_BOOL:
                 sharkd_json_value_anyf("b", prefs_get_bool_value(pref, pref_current) ? "1" : "0");
                 break;
@@ -5619,7 +5627,7 @@ sharkd_session_process_dumpconf(char *buf, const jsmntok_t *tokens, int count)
         sharkd_json_result_prologue(rpcid);
 
         sharkd_json_object_open("prefs");
-        prefs_modules_foreach(sharkd_session_process_dumpconf_mod_cb, &data);
+        prefs_modules_foreach(prefs_get_module_tree(), sharkd_session_process_dumpconf_mod_cb, &data);
         sharkd_json_object_close();
 
         sharkd_json_result_epilogue();
@@ -6163,8 +6171,6 @@ sharkd_session_main(int mode_setting)
     /* mmdbresolve was stopped before fork(), force starting it */
     uat_get_table_by_name("MaxMind Database Paths")->post_update_cb();
 #endif
-
-    set_resolution_synchrony(true);
 
     while (fgets(buf, sizeof(buf), stdin))
     {

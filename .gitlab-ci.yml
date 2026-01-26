@@ -225,7 +225,8 @@ workflow:
     key: ${CI_JOB_NAME}-master
     paths:
       - ccache/
-      - $CI_PROJECT_DIR/../wireshark-third-party
+      - _download
+      # It might make sense to cache aqtinstall downloads using `--keep --archive-dest`.
   variables:
     HOMEBREW_NO_AUTO_UPDATE: "1"
     HOMEBREW_DISPLAY_INSTALL_TIMES: "1"
@@ -247,7 +248,7 @@ workflow:
     - python3 -m venv $CI_PROJECT_DIR/.venv
     - source $CI_PROJECT_DIR/.venv/bin/activate
     - pip3 install pytest pytest-xdist
-    - export PYTEST_ADDOPTS=--skip-missing-programs=dumpcap,rawshark
+    - export PYTEST_ADDOPTS="--skip-missing-programs=dumpcap,rawshark --enable-stratoshark"
     - mkdir -p ccache
     - ccache --show-stats
     - mkdir build
@@ -266,12 +267,11 @@ workflow:
       -DWIRESHARK_BASE_DIR=$WIRESHARK_BASE_DIR
       -DBUILD_stratoshark=on
       -DFALCO_PLUGINS="$FALCO_PLUGIN_DIR/libcloudtrail.so;$FALCO_PLUGIN_DIR/libgcpaudit.so;$FALCO_PLUGIN_DIR/libk8saudit.so"
-      -DTEST_EXTRA_ARGS=--disable-capture
       ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
     - ninja test-programs
-    - pytest --disable-capture --junitxml=../macos_tests.xml
+    - pytest --enable-stratoshark --disable-capture --junitxml=../macos_tests.xml
   after_script:
     # The cache should be large enough to be useful but it shouldn't take
     # too long to restore+save each run.
@@ -521,8 +521,8 @@ Arch Linux :
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
     - ninja install
-    - install -v -D -m 755 -t $WIRESHARK_PREFIX/lib/stratoshark/plugins/4.7/epan run/plugins/4.7/epan/falco-events.so
-    - install -v -D -m 755 -t $WIRESHARK_PREFIX/lib/stratoshark/plugins/falco run/plugins/falco/*.so
+    - install -v -D -m 755 -t $WIRESHARK_PREFIX/lib/stratoshark/plugins/4.7/epan run/plugins/stratoshark/4.7/epan/falco-events.so
+    - install -v -D -m 755 -t $WIRESHARK_PREFIX/lib/stratoshark/plugins/falco run/plugins/stratoshark/falco/*.so
     # XXX Need to add an install prereqs script
     - tar -C / -cJf $CI_PROJECT_DIR/wireshark-arch-$WIRESHARK_VERSION.tar.xz opt/wireshark-$WIRESHARK_VERSION
   artifacts:
@@ -569,7 +569,7 @@ Windows x64 Package:
     - $stratosharkNsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Stratoshark-*-x64.exe).Hash.ToLower()
     - Set-Content -Path stratoshark-release-info-$($stratosharkVersion)-windows-x64.ini -Value ("[DEFAULT]`nnsis_sha256 = $stratosharkNsisSha256")
     - if (Test-Path env:MC_DESTINATION_RELEASE) { C:\gitlab-builds\bin\mc --quiet cp $(Get-ChildItem "*shark-release-info-*-windows-*.ini") "$env:MC_DESTINATION_RELEASE/" }
-    - C:\Windows\py.exe -m pytest --enable-release
+    - C:\Windows\py.exe -m pytest --enable-stratoshark --enable-release
   artifacts:
     paths:
       - build/*shark-release-info-*-windows-*.ini
@@ -612,7 +612,7 @@ Windows Arm64 Package:
     - $stratosharkNsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Stratoshark-*-arm64.exe).Hash.ToLower()
     - Set-Content -Path stratoshark-release-info-$($stratosharkVersion)-windows-arm64.ini -Value ("[DEFAULT]`nnsis_sha256 = $stratosharkNsisSha256")
     - if (Test-Path env:MC_DESTINATION_RELEASE) { C:\gitlab-builds\bin\mc --quiet cp $(Get-ChildItem "*shark-release-info-*-windows-*.ini") "$env:MC_DESTINATION_RELEASE/" }
-    - C:\Windows\py.exe -m pytest --enable-release
+    - C:\Windows\py.exe -m pytest --enable-stratoshark --enable-release
   artifacts:
     paths:
       - build/*shark-release-info-*-windows-*.ini
@@ -670,7 +670,7 @@ macOS Universal Package:
       -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
       -DBUILD_stratoshark=on
       -DFALCO_PLUGINS="$FALCO_PLUGIN_DIR/libcloudtrail.so;$FALCO_PLUGIN_DIR/libgcpaudit.so.disabled;$FALCO_PLUGIN_DIR/libk8saudit.so.disabled"
-      -DTEST_EXTRA_ARGS=--enable-release
+      -DTEST_EXTRA_ARGS="--enable-stratoshark;--enable-release"
       ..
     # Temporary hack to fix "Package 'zlib', required by 'libscap', not found"
     - sed -i .bak '/Requires.*zlib/d' $WIRESHARK_BASE_DIR/macos-universal-master/lib/pkgconfig/libscap.pc
@@ -1001,12 +1001,10 @@ Windows Build:
     - job: "Commit Check"
       optional: true
   script:
-    # lib{sinsp,scap} don't support Configuration=Debug, so we can't enable
-    # BUILD_stratoshark or BUILD_falcodump here just yet.
-    - cmake -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off -DBUILD_sshdig=on ..
+    - cmake -G "Visual Studio 17 2022" -A x64 -DENABLE_LTO=off -DBUILD_stratoshark=on ..
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug Wireshark.sln
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug test-programs.vcxproj
-    - C:\Windows\py.exe -m pytest --disable-gui --build-type=Debug --junitxml=../windows_tests.xml
+    - C:\Windows\py.exe -m pytest --build-type=Debug --disable-gui --enable-stratoshark --junitxml=../windows_tests.xml
   artifacts:
     when: always
     reports:
@@ -1016,8 +1014,10 @@ macOS Build:
   extends: .build-macos
   rules: !reference [.if-w-w-only-merge-request]
   # allow_failure: true
-  timeout: 90 minutes
+  # https://support.gitlab.com/hc/en-us/articles/20417424085020-GitLab-com-hosted-macOS-runners-stuck-preparing-the-instance
+  timeout: 45 minutes
   retry:
+    max: 2
     when:
       - runner_system_failure
       - stuck_or_timeout_failure
@@ -1028,6 +1028,52 @@ macOS Build:
   needs:
     - job: "Commit Check"
       optional: true
+
+AI Trailer Reminder:
+  image: registry.gitlab.com/wireshark/wireshark-containers/ubuntu-dev
+  stage: analysis
+  needs: []
+  allow_failure: true
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_PIPELINE_SOURCE == "push"'
+  script:
+    - |
+      zero="0000000000000000000000000000000000000000"
+      if [ "$CI_PIPELINE_SOURCE" = "merge_request_event" ]; then
+        git fetch origin "$CI_MERGE_REQUEST_SOURCE_BRANCH_NAME" --depth 200 || true
+        base="${CI_MERGE_REQUEST_DIFF_BASE_SHA:-$CI_MERGE_REQUEST_TARGET_BRANCH_SHA}"
+        head="${CI_MERGE_REQUEST_SOURCE_BRANCH_SHA:-$CI_COMMIT_SHA}"
+        if [ -n "$base" ] && [ "$base" != "$zero" ]; then
+          range="${base}..${head}"
+        else
+          range="$head"
+        fi
+      else
+        git fetch origin "$CI_COMMIT_REF_NAME" --depth 200 || true
+        if [ -n "$CI_COMMIT_BEFORE_SHA" ] && [ "$CI_COMMIT_BEFORE_SHA" != "$zero" ]; then
+          range="${CI_COMMIT_BEFORE_SHA}..${CI_COMMIT_SHA}"
+        else
+          range="$CI_COMMIT_SHA"
+        fi
+      fi
+      commits=$(git rev-list --no-merges "$range" || true)
+      if [ -z "$commits" ]; then
+        echo "No commits found for range '$range'; skipping AI trailer check."
+        exit 0
+      fi
+      missing=0
+      for c in $commits; do
+        if ! git log -1 --format=%B "$c" | grep -qi '^AI-Assisted:'; then
+          echo "WARNING: Commit $c is missing the 'AI-Assisted: yes|no [tool(s)]' trailer."
+          missing=1
+        fi
+      done
+      if [ $missing -eq 1 ]; then
+        echo "Reminder: please add the AI-Assisted trailer to commit messages (warning only)."
+      else
+        echo "All checked commits include the AI-Assisted trailer."
+      fi
 
 # Adapted from https://www.synopsys.com/blogs/software-security/integrating-coverity-scan-with-gitlab-ci/
 # and https://gitlab.gnome.org/GNOME/glib/-/blob/8f57a5b9/.gitlab-ci.yml#L481
@@ -1048,7 +1094,7 @@ Coverity GCC Scan:
     - tar --directory=/tmp --extract --gzip --file /tmp/cov-analysis-linux64.tar.gz
     - mkdir build
     - cd build
-    - cmake -G Ninja ..
+    - cmake -G Ninja -DENABLE_ASSERT=ON ..
     - /tmp/cov-analysis-linux64-*/bin/cov-build --return-emit-failures --dir ../cov-int ninja
     - cd ..
     - tar --create --gzip --file cov-int.tar.gz cov-int

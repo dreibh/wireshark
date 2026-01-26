@@ -37,6 +37,7 @@
 #include <wsutil/time_util.h>
 #include <wsutil/zlib_compat.h>
 #include <wsutil/pint.h>
+#include <wsutil/ws_assert.h>
 #include <libxml/tree.h>
 #include <libxml/parser.h>
 #include <libxml/xpath.h>
@@ -3399,7 +3400,7 @@ blf_read_apptextmessage(blf_params_t *params, int *err, char **err_info, int64_t
             info_line = ws_strdup_printf("Trace line%s: %s", (apptextheader.reservedAppText1 & 0x00000010) ? "" : " (hidden)", text);
             break;
         default:
-            break;
+            ws_assert_not_reached();
         }
 
         wtap_buffer_append_epdu_string(&params->rec->data, EXP_PDU_TAG_COL_INFO_TEXT, info_line);
@@ -3411,9 +3412,7 @@ blf_read_apptextmessage(blf_params_t *params, int *err, char **err_info, int64_t
         /* We'll write this as a WS UPPER PDU packet with a text blob */
         blf_init_rec(params, flags, object_timestamp, WTAP_ENCAP_WIRESHARK_UPPER_PDU, 0, UINT16_MAX, (uint32_t)ws_buffer_length(&params->rec->data), (uint32_t)ws_buffer_length(&params->rec->data));
         g_free(text);
-        if (info_line) {
-            g_free(info_line);
-        }
+        g_free(info_line);
         return apptextheader.source;
     }
     default:
@@ -3979,6 +3978,15 @@ typedef struct _blf_writer_data {
 } blf_writer_data_t;
 
 static void
+blf_dump_free(wtap_dumper *wdh)
+{
+    blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
+
+    g_array_unref(writer_data->iface_to_channel_array);
+    g_free(writer_data->fileheader);
+}
+
+static void
 blf_dump_init_channel_to_iface_entry(blf_channel_to_iface_entry_t* tmp, unsigned int if_id) {
     tmp->channel = 0;
     tmp->hwchannel = UINT16_MAX;
@@ -3987,17 +3995,14 @@ blf_dump_init_channel_to_iface_entry(blf_channel_to_iface_entry_t* tmp, unsigned
 }
 
 static void
-blf_dump_expand_interface_mapping(wtap_dumper *wdh, int new_size) {
+blf_dump_expand_interface_mapping(wtap_dumper *wdh, unsigned new_size) {
     blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
 
-    int old_size = writer_data->iface_to_channel_array->len;
+    unsigned old_size = writer_data->iface_to_channel_array->len;
 
     if (old_size < new_size) {
         /* we need to expand array */
-        unsigned int number_of_new_elements = new_size - old_size;
-
-        blf_channel_to_iface_entry_t *newdata = g_new0(blf_channel_to_iface_entry_t, number_of_new_elements);
-        g_array_append_vals(writer_data->iface_to_channel_array, newdata, number_of_new_elements);
+        g_array_set_size(writer_data->iface_to_channel_array, new_size);
 
         for (unsigned int i = old_size; i < writer_data->iface_to_channel_array->len; i++) {
             blf_channel_to_iface_entry_t *tmp = &g_array_index(writer_data->iface_to_channel_array, blf_channel_to_iface_entry_t, i);
@@ -4052,7 +4057,8 @@ blf_init_file_header(wtap_dumper *wdh, int *err) {
 
     blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
 
-    writer_data->fileheader = g_new0(blf_fileheader_t, 1);
+    /* currently only support 144 byte length*/
+    writer_data->fileheader = (blf_fileheader_t*)g_malloc0(144);
 
     /* set magic */
     int i;
@@ -4118,6 +4124,9 @@ blf_finalize_file_header(wtap_dumper *wdh, int *err) {
     blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
     blf_fileheader_t *fileheader = writer_data->fileheader;
     int64_t bytes_written = wtap_dump_file_tell(wdh, err);
+    if (bytes_written == -1 || *err != 0) {
+        return false;
+    }
 
     /* update the header and convert all to LE */
     fileheader->api_version = (((WIRESHARK_VERSION_MAJOR * 100) + WIRESHARK_VERSION_MINOR) * 100 + WIRESHARK_VERSION_MICRO) * 100;
@@ -4175,6 +4184,9 @@ static bool blf_dump_close_logcontainer(wtap_dumper *wdh, int *err, char **err_i
     blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
 
     int64_t current_position = wtap_dump_file_tell(wdh, err);
+    if (current_position == -1 || *err != 0) {
+        return false;
+    }
 
     int64_t tmp = wtap_dump_file_seek(wdh, writer_data->logcontainer_start, SEEK_SET, err);
     if (*err != 0 || tmp != 0) {
@@ -4229,6 +4241,9 @@ static bool blf_dump_start_logcontainer(wtap_dumper *wdh, int *err, char **err_i
     fix_endianness_blf_logcontainerheader(&(writer_data->logcontainer_header));
 
     writer_data->logcontainer_start = wtap_dump_file_tell(wdh, err);
+    if (*err != 0) {
+        return false;
+    }
 
     return blf_dump_write_logcontainer(wdh, err, err_info);
 }
@@ -4237,6 +4252,9 @@ static bool blf_dump_check_logcontainer_full(wtap_dumper *wdh, int *err, char **
     const blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
 
     uint64_t position = (uint64_t)wtap_dump_file_tell(wdh, err);
+    if (*err != 0) {
+        return false;
+    }
     if (position - writer_data->logcontainer_start + length <= LOG_CONTAINER_BUFFER_SIZE) {
         return true;
     }
@@ -5290,13 +5308,16 @@ static bool blf_add_idb(wtap_dumper *wdh _U_, wtap_block_t idb _U_, int *err _U_
    Returns true on success, false on failure. */
 static bool blf_dump_finish(wtap_dumper *wdh, int *err, char **err_info) {
     if (!blf_dump_close_logcontainer(wdh, err, err_info)) {
+        blf_dump_free(wdh);
         return false;
     }
 
     if (!blf_finalize_file_header(wdh, err)) {
+        blf_dump_free(wdh);
         return false;
     }
 
+    blf_dump_free(wdh);
     /* File is finished, do not touch anymore ! */
 
     ws_debug("leaving function");
@@ -5338,11 +5359,13 @@ blf_dump_open(wtap_dumper *wdh, int *err, char **err_info) {
 
     /* create the blf header structure and attach to wdh */
     if (!blf_init_file_header(wdh, err)) {
+        blf_dump_free(wdh);
         return false;
     }
 
     /* write space in output file for header */
     if (!blf_write_file_header_zeros(wdh, err)) {
+        blf_dump_free(wdh);
         return false;
     }
 
@@ -5350,10 +5373,12 @@ blf_dump_open(wtap_dumper *wdh, int *err, char **err_info) {
 
     /* Create first log_container */
     if (!blf_dump_start_logcontainer(wdh, err, err_info)) {
+        blf_dump_free(wdh);
         return false;
     }
 
     if (!blf_dump_interface_setup(wdh, err)) {
+        blf_dump_free(wdh);
         return false;
     }
 
@@ -5362,7 +5387,7 @@ blf_dump_open(wtap_dumper *wdh, int *err, char **err_info) {
 
 static const struct file_type_subtype_info blf_info = {
         "Vector Informatik Binary Logging Format (BLF) logfile", "blf", "blf", NULL,
-        false, BLOCKS_SUPPORTED(blf_blocks_supported),
+        true, BLOCKS_SUPPORTED(blf_blocks_supported),
         blf_dump_can_write_encap, blf_dump_open, NULL
 };
 

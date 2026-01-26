@@ -30,14 +30,13 @@
 #include <wsutil/privileges.h>
 #include <wsutil/socket.h>
 #include <wsutil/wslog.h>
-#include <wsutil/application_flavor.h>
 #ifdef HAVE_PLUGINS
 #include <wsutil/plugins.h>
 #endif
 #include <wsutil/please_report_bug.h>
 #include <wsutil/unicode-utils.h>
 #include <wsutil/version_info.h>
-#include <wsutil/application_flavor.h>
+#include <app/application_flavor.h>
 
 #include <epan/addr_resolv.h>
 #include <epan/ex-opt.h>
@@ -70,6 +69,7 @@
 #include "ui/persfilepath_opt.h"
 #include "ui/recent.h"
 #include "ui/simple_dialog.h"
+#include "ui/init.h"
 #include "ui/util.h"
 #include "ui/dissect_opts.h"
 #include "ui/commandline.h"
@@ -79,6 +79,7 @@
 #include "ui/software_update.h"
 #include "ui/taps.h"
 #include "ui/profile.h"
+#include "ui/plugins/include/uiqt_plugin.h"
 
 #include "ui/qt/conversation_dialog.h"
 #include "ui/qt/utils/color_utils.h"
@@ -92,6 +93,7 @@
 #include "ui/qt/simple_statistics_dialog.h"
 #include <ui/qt/widgets/splash_overlay.h>
 #include "ui/qt/wireshark_application.h"
+#include "ui/qt/utils/workspace_state.h"
 
 #include "capture/capture-pcap-util.h"
 
@@ -653,7 +655,7 @@ int main(int argc, char *qt_argv[])
 #endif /* _WIN32 */
 
     /* Get the compile-time version information string */
-    ws_init_version_info("Wireshark", application_flavor_name_proper(), get_ws_vcs_version_info, gather_wireshark_qt_compiled_info,
+    ws_init_version_info("Wireshark", application_flavor_name_proper(), application_get_vcs_version_info, gather_wireshark_qt_compiled_info,
                          gather_wireshark_runtime_info);
 
     init_report_alert_box("Wireshark");
@@ -667,6 +669,7 @@ int main(int argc, char *qt_argv[])
     }
 
     profile_store_persconffiles(true);
+    ui_init();
     recent_init();
 
     /* Read the profile independent recent file.  We have to do this here so we can */
@@ -677,6 +680,9 @@ int main(int argc, char *qt_argv[])
                       rf_path, g_strerror(rf_open_errno));
         g_free(rf_path);
     }
+
+    /* Load the common workspace state (e.g., window positions) */
+    WorkspaceState::instance()->loadCommonState();
 
     commandline_usage_app_data_t commandline_app_data = {
         "events",
@@ -762,8 +768,8 @@ int main(int argc, char *qt_argv[])
     wsApp->applyCustomColorsFromRecent();
 
     // Initialize our language
-    read_language_prefs();
-    wsApp->loadLanguage(language);
+    read_language_prefs(application_configuration_environment_prefix());
+    wsApp->loadLanguage(get_language_used());
 
     /* ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_DEBUG, "Translator %s", language); */
 
@@ -824,7 +830,6 @@ int main(int argc, char *qt_argv[])
     app_data.register_func = register_all_protocols;
     app_data.handoff_func = register_all_protocol_handoffs;
     app_data.tap_reg_listeners = tap_reg_listener;
-    app_data.supports_packets = application_flavor_is_wireshark();
     if (!epan_init(splash_update, NULL, true, &app_data)) {
         SimpleDialog::displayQueuedMessages(main_w);
         ret_val = WS_EXIT_INIT_FAILED;
@@ -839,6 +844,9 @@ int main(int argc, char *qt_argv[])
     /* Register all audio codecs. */
     codecs_init(application_configuration_environment_prefix());
 
+    /* Register any UI plugins */
+    uiqt_plugin_init(application_configuration_environment_prefix());
+
     // Read the dynamic part of the recent file. This determines whether or
     // not the recent list appears in the main window so the earlier we can
     // call this the better.
@@ -848,7 +856,6 @@ int main(int argc, char *qt_argv[])
                       rf_path, g_strerror(rf_open_errno));
         g_free(rf_path);
     }
-    wsApp->refreshRecentCaptures();
 
     splash_update(RA_LISTENERS, NULL, NULL);
 #ifdef DEBUG_STARTUP_TIME
@@ -1188,6 +1195,7 @@ int main(int argc, char *qt_argv[])
     delete main_w;
 
     recent_cleanup();
+    ui_cleanup();
     epan_cleanup();
 
     extcap_cleanup();
@@ -1209,6 +1217,7 @@ clean_exit:
 #endif
     col_cleanup(&CaptureFile::globalCapFile()->cinfo);
     codecs_cleanup();
+    uiqt_plugin_cleanup();
     wtap_cleanup();
     free_progdirs();
     commandline_options_free();

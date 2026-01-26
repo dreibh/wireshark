@@ -13,11 +13,12 @@
 
 #include <epan/packet.h>
 #include <epan/to_str.h>
-#include <epan/ipproto.h>
 #include <epan/expert.h>
 #include <epan/tfs.h>
 #include <wsutil/array.h>
+#include <wsutil/ws_roundup.h>
 #include "packet-wccp.h"
+#include "data-iana.h"
 
 void proto_register_wccp(void);
 void proto_reg_handoff_wccp(void);
@@ -509,7 +510,7 @@ find_wccp_address_table(tvbuff_t *tvb, int offset,
     type = tvb_get_ntohs(tvb, offset);
     item_length = tvb_get_ntohs(tvb, offset+2);
 
-    if ((item_length + 4) > tvb_reported_length_remaining(tvb, offset)) {
+    if ((item_length + 4U) > tvb_reported_length_remaining(tvb, offset)) {
       /* We've run out of packet data without finding an address table,
          so there's no address table in the packet. */
       return;
@@ -1450,24 +1451,21 @@ dissect_wccp2r1_address_table_info(tvbuff_t *tvb, int offset, int length,
 {
   uint16_t address_length;
   uint32_t i;
-  int16_t family;
-  uint16_t table_length;
+  uint16_t family;
+  uint32_t table_length;
   proto_tree *element_tree;
   proto_item *tf;
 
   if (length < 2*4)
     return length - 2*4;
 
-  family = tvb_get_ntohs(tvb, offset);
-  proto_tree_add_item(info_tree, hf_address_table_family, tvb, offset, 2, ENC_BIG_ENDIAN);
+  proto_tree_add_item_ret_uint16(info_tree, hf_address_table_family, tvb, offset, 2, ENC_BIG_ENDIAN, &family);
   EAT_AND_CHECK(2,2);
 
-  address_length = tvb_get_ntohs(tvb, offset);
-  proto_tree_add_item(info_tree, hf_address_table_address_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+  proto_tree_add_item_ret_uint16(info_tree, hf_address_table_address_length, tvb, offset, 2, ENC_BIG_ENDIAN, &address_length);
   EAT_AND_CHECK(2,2);
 
-  table_length =  tvb_get_ntohl(tvb, offset);
-  tf = proto_tree_add_item(info_tree, hf_address_table_length, tvb, offset, 4, ENC_BIG_ENDIAN);
+  tf = proto_tree_add_item_ret_uint(info_tree, hf_address_table_length, tvb, offset, 4, ENC_BIG_ENDIAN, &table_length);
   element_tree = proto_item_add_subtree(tf, ett_table_element);
   EAT(4);
 
@@ -1501,7 +1499,19 @@ dissect_wccp2r1_address_table_info(tvbuff_t *tvb, int offset, int length,
       break;
     default:
       expert_add_info_format(pinfo, tf, &ei_wccp_address_table_family_unknown,
-                      "Unknown address family: %d", wccp_wccp_address_table->family);
+                      "Unknown address family: %u", wccp_wccp_address_table->family);
+      if (address_length % 4) {
+        expert_add_info_format(pinfo, tf, &ei_wccp_length_bad,
+                               "The Address length must be a multiple of 4. Correcting this.");
+        address_length = WS_ROUNDUP_4(address_length);
+      }
+      /* XXX - In addition to an address length that starts out at 0, the
+       * WS_ROUNDUP_ family can "round up" numbers near UINT_MAX to 0. */
+      if (address_length == 0) {
+        expert_add_info_format(pinfo, tf, &ei_wccp_length_bad,
+                               "The Address length must be at least 4. Correcting this.");
+        address_length = 4;
+      }
     };
   }
 

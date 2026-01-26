@@ -901,8 +901,7 @@ dissect_dynamic(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *entry_tree, p
     } else {
         proto_item  *pitem;
 
-        pitem = proto_tree_add_item(entry_tree, hf_elf64_dynamic_tag, tvb, offset, 8, machine_encoding);
-        tag = (machine_encoding == ENC_BIG_ENDIAN) ? tvb_get_ntoh64(tvb, offset) : tvb_get_letoh64(tvb, offset);
+        pitem = proto_tree_add_item_ret_uint64(entry_tree, hf_elf64_dynamic_tag, tvb, offset, 8, machine_encoding, &tag);
         proto_item_append_text(pitem, " (%s)", rval_to_str_const(value_guard(tag), dynamic_tag_rvals, "Unknown"));
         offset += 8;
 
@@ -1223,7 +1222,7 @@ dissect_eh_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *segment_tree,
                                 tvb, offset, 1, machine_encoding);
             offset += 1;
 
-            augmentation_string = (const char*)tvb_get_stringz_enc(pinfo->pool, tvb, offset, &size, ENC_ASCII);
+            augmentation_string = (const char*)tvb_get_stringz_enc(pinfo->pool, tvb, offset, (unsigned*)&size, ENC_ASCII);
             proto_tree_add_item(entry_tree, hf_elf_eh_frame_augmentation_string,
                                 tvb, offset, size, machine_encoding);
             offset += size;

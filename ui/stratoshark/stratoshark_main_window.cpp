@@ -25,7 +25,6 @@ DIAG_ON(frame-larger-than=)
 #include <wsutil/wslog.h>
 #include <wsutil/ws_assert.h>
 #include <epan/prefs.h>
-#include <epan/plugin_if.h>
 
 #include "ui/iface_toolbar.h"
 
@@ -70,6 +69,7 @@ DIAG_ON(frame-larger-than=)
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/stock_icon.h>
 #include <ui/qt/utils/variant_pointer.h>
+#include <ui/qt/utils/workspace_state.h>
 
 #include <QAction>
 #include <QActionGroup>
@@ -83,8 +83,6 @@ DIAG_ON(frame-larger-than=)
 #include <QToolButton>
 #include <QTreeWidget>
 #include <QUrl>
-
-//menu_recent_file_write_all
 
 // If we ever add support for multiple windows this will need to be replaced.
 static StratosharkMainWindow *gbl_cur_main_window_;
@@ -327,9 +325,6 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
     , capture_options_dialog_(NULL)
     , info_data_()
 #endif
-#if defined(Q_OS_MAC)
-    , dock_menu_(NULL)
-#endif
 {
     if (!gbl_cur_main_window_) {
         connect(mainApp, &MainApplication::openStatCommandDialog, this, &StratosharkMainWindow::openStatCommandDialog);
@@ -346,6 +341,11 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
     // iterates over *all* of our children, looking for matching "on_" slots.
     // The fewer children we have at this point the better.
     main_ui_->setupUi(this);
+
+    // Initialize base class menu pointers for recent captures handling
+    recent_captures_menu_ = main_ui_->menuOpenRecentCaptureFile;
+    no_recent_files_action_ = main_ui_->actionDummyNoFilesFound;
+
 #ifdef HAVE_SOFTWARE_UPDATE
     update_action_ = new QAction(tr("Check for Updates…"), main_ui_->menuHelp);
 #endif
@@ -393,7 +393,7 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
     connect(mainApp, &MainApplication::preferencesChanged, this, &StratosharkMainWindow::zoomText);
     connect(mainApp, &MainApplication::preferencesChanged, this, &StratosharkMainWindow::updateTitlebar);
 
-    connect(mainApp, &MainApplication::updateRecentCaptureStatus, this, &StratosharkMainWindow::updateRecentCaptures);
+    connect(WorkspaceState::instance(), &WorkspaceState::recentCaptureFilesChanged, this, &StratosharkMainWindow::updateRecentCaptures);
     connect(mainApp, &MainApplication::preferencesChanged, this, &StratosharkMainWindow::updateRecentCaptures);
     updateRecentCaptures();
 
@@ -564,8 +564,8 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
 
     connect(main_ui_->mainStack, &QStackedWidget::currentChanged, this, &StratosharkMainWindow::mainStackChanged);
 
-    connect(welcome_page_, &WelcomePage::startCapture, this, [this](QStringList) { startCapture(); });
-    connect(welcome_page_, &WelcomePage::recentFileActivated, this, [this](QString cfile) { openCaptureFile(cfile); });
+    connect(welcome_page_, &StratosharkWelcomePage::startCapture, this, [this](QStringList) { startCapture(); });
+    connect(welcome_page_, &StratosharkWelcomePage::recentFileActivated, this, [this](QString cfile) { openCaptureFile(cfile); });
 
     connect(main_ui_->addressEditorFrame, &AddressEditorFrame::redissectPackets,
             this, &StratosharkMainWindow::redissectPackets);
@@ -636,11 +636,11 @@ main_ui_->goToLineEdit->setValidator(goToLineQiv);
     if (iface_tree) {
         connect(iface_tree, &QTreeWidget::itemSelectionChanged, this, &StratosharkMainWindow::interfaceSelectionChanged);
     }
-    connect(main_ui_->welcomePage, &WelcomePage::captureFilterSyntaxChanged,
+    connect(main_ui_->welcomePage, &StratosharkWelcomePage::captureFilterSyntaxChanged,
             this, &StratosharkMainWindow::captureFilterSyntaxChanged);
 
     connect(this, &StratosharkMainWindow::showExtcapOptions, this, &StratosharkMainWindow::showExtcapOptionsDialog);
-    connect(this->welcome_page_, &WelcomePage::showExtcapOptions, this, &StratosharkMainWindow::showExtcapOptionsDialog);
+    connect(this->welcome_page_, &StratosharkWelcomePage::showExtcapOptions, this, &StratosharkMainWindow::showExtcapOptionsDialog);
 
 #endif // HAVE_LIBPCAP
 
@@ -1530,7 +1530,7 @@ bool StratosharkMainWindow::saveAsCaptureFile(capture_file *cf, bool must_suppor
             cf->unsaved_changes = false; //we just saved so we signal that we have no unsaved changes
             updateForUnsavedChanges(); // we update the title bar to remove the *
             /* Add this filename to the list of recent files in the "Recent Files" submenu */
-            add_menu_recent_capture_file(qUtf8Printable(file_name), false);
+            WorkspaceState::instance()->addRecentCaptureFile(qUtf8Printable(file_name));
             return true;
 
         case CF_WRITE_ERROR:
@@ -1668,7 +1668,7 @@ void StratosharkMainWindow::exportSelectedPackets() {
             if (discard_comments)
                 packet_list_->redrawVisiblePackets();
             /* Add this filename to the list of recent files in the "Recent Files" submenu */
-            add_menu_recent_capture_file(qUtf8Printable(file_name), false);
+            WorkspaceState::instance()->addRecentCaptureFile(qUtf8Printable(file_name));
             goto cleanup;
 
         case CF_WRITE_ERROR:
@@ -2388,11 +2388,6 @@ void StratosharkMainWindow::setMenusForFileSet(bool enable_list_files) {
     main_ui_->actionFileSetPreviousFile->setEnabled(enable_prev);
 }
 
-void StratosharkMainWindow::setWindowIcon(const QIcon &icon) {
-    mainApp->setWindowIcon(icon);
-    QMainWindow::setWindowIcon(icon);
-}
-
 void StratosharkMainWindow::updateForUnsavedChanges() {
     updateTitlebar();
     setMenusForCaptureFile();
@@ -2406,8 +2401,7 @@ void StratosharkMainWindow::changeEvent(QEvent* event)
         {
         case QEvent::LanguageChange:
             main_ui_->retranslateUi(this);
-            // make sure that the "Clear Menu" item is retranslated
-            mainApp->emitAppSignal(WiresharkApplication::RecentCapturesChanged);
+            retranslateUiElements();
             // make sure that the color actions in the PacketList and ProtoTree
             // are retranslated
             initConversationMenus();

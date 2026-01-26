@@ -17,7 +17,6 @@
 #include <epan/packet.h>
 #include <epan/expert.h>
 #include <epan/proto_data.h>
-#include <epan/ipproto.h>
 #include <epan/etypes.h>
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
@@ -32,6 +31,7 @@
 
 #include "packet-gsm_a_common.h"
 #include "packet-media-type.h"
+#include "data-iana.h"
 #include "packet-tcp.h"
 
 void proto_register_nas_5gs(void);
@@ -2260,9 +2260,10 @@ dissect_nas_5gs_mm_cag_information_list(tvbuff_t* tvb, proto_tree* tree, packet_
         dissect_e212_mcc_mnc(tvb, pinfo, sub_tree, curr_offset, E212_NONE, true);
         curr_offset += 3;
         if (is_ext) {
-            proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, (curr_offset << 3), 5, ENC_BIG_ENDIAN);
+            proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, (curr_offset << 3), 4, ENC_BIG_ENDIAN);
             proto_tree_add_item_ret_boolean(sub_tree, hf_nas_5gs_mm_cag_info_entry_caili, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &caili);
             proto_tree_add_item_ret_boolean(sub_tree, hf_nas_5gs_mm_cag_info_entry_lci, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &lci);
+            proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, (curr_offset << 3) + 6, 1, ENC_BIG_ENDIAN);
         } else {
             proto_tree_add_bits_item(sub_tree, hf_nas_5gs_spare_bits, tvb, (curr_offset << 3), 7, ENC_BIG_ENDIAN);
             caili = false;
@@ -4904,22 +4905,26 @@ de_nas_5gs_mm_nsag_info(tvbuff_t* tvb _U_, proto_tree* tree _U_, packet_info* pi
     while ((curr_offset - offset) < len) {
         proto_item *item;
         proto_tree *subtree;
-        uint32_t nsag_len, s_nssai_len, tai_len;
+        uint32_t nsag_len, s_nssai_len, tai_len, nsag_start;
 
         subtree = proto_tree_add_subtree_format(tree, tvb, curr_offset, -1, ett_nas_5gs_mm_nsag_info, &item, "NSSRG values for S-NSSAI %u", i);
         proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_nsag_info_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &nsag_len);
         curr_offset++;
         proto_item_set_len(item, nsag_len + 1);
+        nsag_start = curr_offset;
         proto_tree_add_item(subtree, hf_nas_5gs_mm_nsag_id, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+        curr_offset++;
         proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_nsag_info_s_nssai_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &s_nssai_len);
         curr_offset++;
         curr_offset += de_nas_5gs_cmn_s_nssai(tvb, subtree, pinfo, curr_offset, s_nssai_len, NULL, 0);
         proto_tree_add_item(subtree, hf_nas_5gs_mm_nsag_prio, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
         curr_offset++;
-        proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_nsag_tais_list_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &tai_len);
-        curr_offset++;
-        if (tai_len) {
-            curr_offset += de_nas_5gs_mm_5gs_ta_id_list(tvb, subtree, pinfo, curr_offset, tai_len, NULL, 0);
+        if ((curr_offset - nsag_start) < nsag_len) {
+            proto_tree_add_item_ret_uint(subtree, hf_nas_5gs_mm_nsag_tais_list_len, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &tai_len);
+            curr_offset++;
+            if (tai_len) {
+                curr_offset += de_nas_5gs_mm_5gs_ta_id_list(tvb, subtree, pinfo, curr_offset, tai_len, NULL, 0);
+            }
         }
         i++;
     }
@@ -9963,7 +9968,7 @@ nas_5gs_n1_sm_info_from_ue(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo _
             break;
         }
         default:
-            proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, -1);
+            proto_tree_add_expert_remaining(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset);
 
             break;
     }
@@ -10333,7 +10338,7 @@ de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
             offset += length;
             break;
         case 0x90:
-            /* For "connection capabilities” type, the traffic descriptor component value field shall be encoded as
+            /* For "connection capabilities" type, the traffic descriptor component value field shall be encoded as
                a sequence of one octet for number of network capabilities followed by one or more octets,
                each containing a connection capability identifier encoded as follows:
                Bits
@@ -10382,7 +10387,7 @@ de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
             offset += 6;
             break;
         default:
-            proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, -1);
+            proto_tree_add_expert_remaining(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset);
             return;
         }
     }
@@ -10512,7 +10517,7 @@ de_nas_5gs_ursp_r_sel_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
                "non-seamless non-3GPP offload indication type" in the route selection descriptor.*/
             break;
         default:
-            proto_tree_add_expert(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset, -1);
+            proto_tree_add_expert_remaining(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset);
             return;
         }
     }
@@ -12103,7 +12108,7 @@ dissect_nas_5gs_sm_info(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, int
     } else if (!strcmp(n1_msg_class, UNKNOWN_N1_SMINFO)) {
         msg_fcn_p = nas_5gs_unknown_n1_sm_info;
     } else {
-        proto_tree_add_expert_format(tree, pinfo, &ei_nas_5gs_sm_unknown_msg_type, tvb, offset, -1, "Unknown Message Type");
+        proto_tree_add_expert_format_remaining(tree, pinfo, &ei_nas_5gs_sm_unknown_msg_type, tvb, offset, "Unknown Message Type");
         return;
     }
 
@@ -12249,7 +12254,7 @@ dissect_nas_5gs_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int 
             /* dissect Test Procedure messages */
             return call_dissector_with_data(gsm_a_dtap_handle, tvb_new_subset_remaining(tvb, offset - 1), pinfo, sub_tree, data);
         }
-        proto_tree_add_expert_format(sub_tree, pinfo, &ei_nas_5gs_unknown_pd, tvb, offset, -1, "Not a NAS 5GS PD %u (%s)",
+        proto_tree_add_expert_format_remaining(sub_tree, pinfo, &ei_nas_5gs_unknown_pd, tvb, offset, "Not a NAS 5GS PD %u (%s)",
             epd, val_to_str_const(epd, nas_5gs_epd_vals, "Unknown"));
         return 0;
 
@@ -12902,12 +12907,12 @@ proto_register_nas_5gs(void)
         },
         { &hf_nas_5gs_mm_cag_info_entry_lci,
         { "Length of CAG-ID without additional information list (LCI)",   "nas-5gs.mm.cag_info.entry.lci",
-            FT_BOOLEAN, 8, TFS(&tfs_present_absent), 0x02,
+            FT_BOOLEAN, 8, TFS(&tfs_present_absent), 0x04,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_cag_info_entry_caili,
         { "CAG-ID with additional information list indicator (CAILI)",   "nas-5gs.mm.cag_info.entry.caili",
-            FT_BOOLEAN, 8, TFS(&tfs_present_absent), 0x04,
+            FT_BOOLEAN, 8, TFS(&tfs_present_absent), 0x08,
             NULL, HFILL }
         },
         { &hf_nas_5gs_mm_cag_info_entry_cag_without_add_info_list_len,

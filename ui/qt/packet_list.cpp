@@ -18,7 +18,6 @@
 
 #include <epan/column.h>
 #include <epan/expert.h>
-#include <epan/ipproto.h>
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include <epan/proto.h>
@@ -34,7 +33,7 @@
 #include "ui/util.h"
 
 #include "wiretap/wtap_opttypes.h"
-#include "wsutil/application_flavor.h"
+#include "app/application_flavor.h"
 #include "wsutil/str_util.h"
 #include <wsutil/wslog.h>
 
@@ -798,7 +797,7 @@ void PacketList::ctxDecodeAsDialog()
 void PacketList::timerEvent(QTimerEvent *event)
 {
     if (event->timerId() == overlay_timer_id_) {
-        if (!capture_in_progress_) {
+        if (!capture_in_progress_ && model() != nullptr) {
             if (create_near_overlay_) drawNearOverlay();
             if (create_far_overlay_) drawFarOverlay();
         }

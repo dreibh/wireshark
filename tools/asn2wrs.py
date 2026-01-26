@@ -1535,11 +1535,11 @@ class EthCtx:
         out = ""
         if (not self.eth_type[tname]['export'] & EF_TYPE):
             out += 'static '
-        out += "int "
+        out += "unsigned "
         if (self.Ber()):
-            out += "dissect_%s_%s(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_)" % (self.eth_type[tname]['proto'], tname)
+            out += "dissect_%s_%s(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_)" % (self.eth_type[tname]['proto'], tname)
         elif (self.Per() or self.Oer()):
-            out += "dissect_%s_%s(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_)" % (self.eth_type[tname]['proto'], tname)
+            out += "dissect_%s_%s(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_)" % (self.eth_type[tname]['proto'], tname)
         out += ";\n"
         return out
 
@@ -1574,11 +1574,11 @@ class EthCtx:
         out = '\n'
         if (not self.eth_type[tname]['export'] & EF_TYPE):
             out += 'static '
-        out += "int\n"
+        out += "unsigned\n"
         if (self.Ber()):
-            out += "dissect_%s_%s(bool implicit_tag _U_, tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {\n" % (self.eth_type[tname]['proto'], tname)
+            out += "dissect_%s_%s(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {\n" % (self.eth_type[tname]['proto'], tname)
         elif (self.Per() or self.Oer()):
-            out += "dissect_%s_%s(tvbuff_t *tvb _U_, int offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {\n" % (self.eth_type[tname]['proto'], tname)
+            out += "dissect_%s_%s(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {\n" % (self.eth_type[tname]['proto'], tname)
         #if self.conform.get_fn_presence(tname):
         #  out += self.conform.get_fn_text(tname, 'FN_HDR')
         #el
@@ -1869,7 +1869,7 @@ class EthCtx:
             out += 'dissect_'+f+'(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {\n'
             out += self.output_proto_root()
 
-            out += '  int offset = 0;\n'
+            out += '  unsigned offset = 0;\n'
             off_par = 'offset'
             ret_par = 'offset'
             if (self.Per()):
@@ -3269,6 +3269,13 @@ class EthOut:
 
         include = re.compile(r'^\s*#\s*include\s+[<"](?P<fname>[^>"]+)[>"]', re.IGNORECASE)
 
+        # The export file (-exp.h), if non-empty, usually requires epan/asn1.h
+        # If not, it almost certainly requires headers included by asn1.h, e.g.,
+        # packet.h, though those may already be included by other means.
+        # So if we're writing a header file, and including a non-empty export
+        # header, include asn1.h if we haven't included it already.
+        asn1_fname = 'epan/asn1.h'
+        asn1_included = False if out_nm.endswith('.h') else True
         cont_linenum = 0
 
         while (True):
@@ -3278,20 +3285,26 @@ class EthOut:
                 break
             ifile = None
             result = include.search(line)
-            #if (result): print os.path.normcase(os.path.abspath(result.group('fname')))
+            #if (result): print(os.path.normcase(os.path.abspath(result.group('fname'))))
             if (result):
+                if (result.group('fname') == asn1_fname):
+                    asn1_included = True
                 ifile = check_file(os.path.join(os.path.split(in_nm)[0], result.group('fname')), self.created_files)
                 if (not ifile):
                     ifile = check_file(os.path.join(self.outdir, result.group('fname')), self.created_files)
                 if (not ifile):
                     ifile = check_file(result.group('fname'), self.created_files)
             if (ifile):
+                finc = open(ifile, "r")
+                content = finc.read()
+                if not asn1_included and result.group('fname').endswith("-exp.h") and content:
+                    fout.write(f'#include <{asn1_fname}>\n\n')
+                    asn1_included = True
                 if (not suppress_line):
                     fout.write('\n')
                     fout.write('/*--- Included file: ' + ifile + ' ---*/\n')
                     fout.write('#line %u "%s"\n' % (1, rel_dissector_path(ifile)))
-                finc = open(ifile, "r")
-                fout.write(finc.read())
+                fout.write(content)
                 if (not suppress_line):
                     fout.write('\n')
                     fout.write('/*--- End of included file: ' + ifile + ' ---*/\n')

@@ -116,10 +116,8 @@ QString PrefsItem::getModuleName() const
 
 QString PrefsItem::getModuleTitle() const
 {
-    if ((module_ == NULL) && (pref_ == NULL))
+    if (module_ == NULL)
         return name_;
-
-    Q_ASSERT(module_);
 
     return QString(module_->title);
 }
@@ -293,14 +291,14 @@ fill_prefs(module_t *module, void *root_ptr)
     }
 
     if (prefs_module_has_submodules(module))
-        return prefs_modules_foreach_submodules(module, fill_prefs, module_item);
+        return prefs_modules_foreach_submodules(module->submodules, fill_prefs, module_item);
 
     return 0;
 }
 
 void PrefsModel::populate()
 {
-    prefs_modules_foreach_submodules(NULL, fill_prefs, (void *)root_);
+    prefs_modules_for_all_modules(fill_prefs, (void *)root_);
 
     //Add the "specially handled" preferences
     PrefsItem *appearance_item, *appearance_subitem, *special_item;
@@ -542,6 +540,24 @@ bool AdvancedPrefsModel::setData(const QModelIndex &dataindex, const QVariant &v
                 prefs_set_uint_value(item->getPref(), new_val, pref_stashed);
             }
             break;
+        case PREF_INT:
+        {
+            bool ok = true;
+            int new_val = value.toInt(&ok);
+
+            if (ok)
+                prefs_set_int_value(item->getPref(), new_val, pref_stashed);
+        }
+        break;
+        case PREF_FLOAT:
+        {
+            bool ok = true;
+            double new_val = value.toDouble(&ok);
+
+            if (ok)
+                prefs_set_float_value(item->getPref(), new_val, pref_stashed);
+        }
+        break;
         case PREF_BOOL:
             prefs_invert_bool_value(item->getPref(), pref_stashed);
             break;

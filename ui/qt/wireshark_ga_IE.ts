@@ -4551,24 +4551,16 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>5 nóiméad</translation>
     </message>
     <message>
-        <source>Wireshark I/O Graphs: %1</source>
-        <translation>Graif I/O Wireshark: %1</translation>
+        <source>%1 I/O Graphs: %2</source>
+        <translation>%1 Graif I/O: %2</translation>
     </message>
     <message>
         <source>Filtered packets</source>
         <translation>Paicéid scagtha</translation>
     </message>
     <message>
-        <source>Filtered events</source>
-        <translation>Imeachtaí scagtha</translation>
-    </message>
-    <message>
         <source>All packets</source>
         <translation>Gach paicéad</translation>
-    </message>
-    <message>
-        <source>All events</source>
-        <translation>Gach imeacht</translation>
     </message>
     <message>
         <source>All Packets</source>
@@ -4579,14 +4571,6 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>Earráidí TCP</translation>
     </message>
     <message>
-        <source>All Events</source>
-        <translation>Gach Imeacht</translation>
-    </message>
-    <message>
-        <source>All Execs</source>
-        <translation>Gach Execs</translation>
-    </message>
-    <message>
         <source>Hover over the graph for details.</source>
         <translation>Hover thar an graf le haghaidh sonraí.</translation>
     </message>
@@ -4595,24 +4579,12 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>Gan paicéid san eatramh</translation>
     </message>
     <message>
-        <source>No events in interval</source>
-        <translation>Gan imeachtaí san eatramh</translation>
-    </message>
-    <message>
         <source>Click to select packet</source>
         <translation>Cliceáil chun paicéad a roghnú</translation>
     </message>
     <message>
         <source>Packet</source>
         <translation>Paicéad</translation>
-    </message>
-    <message>
-        <source>Click to select event</source>
-        <translation>Cliceáil chun imeacht a roghnú</translation>
-    </message>
-    <message>
-        <source>Event</source>
-        <translation>Imeacht</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -5520,35 +5492,35 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     <name>KeyboardShortcutsDialog</name>
     <message>
         <source>Keyboard Shortcuts</source>
-        <translation type="unfinished"></translation>
+        <translation>Aicearraí Méarchláir</translation>
     </message>
     <message>
         <source>Search Shortcuts</source>
-        <translation type="unfinished"></translation>
+        <translation>Aicearraí Cuardaigh</translation>
     </message>
     <message>
         <source>Print Shortcutlist</source>
-        <translation type="unfinished"></translation>
+        <translation>Priontáil Aicearra Liosta</translation>
     </message>
     <message>
         <source>Close</source>
-        <translation type="unfinished"></translation>
+        <translation>Dún</translation>
     </message>
     <message>
         <source>Copy</source>
-        <translation type="unfinished"></translation>
+        <translation>Cóipeáil</translation>
     </message>
     <message numerus="yes">
         <source>Copy Row(s)</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>Cóipeáil Sraith</numerusform>
+            <numerusform>Cóipeáil Sraitheanna</numerusform>
+            <numerusform>Cóipeáil Sraitheanna</numerusform>
         </translation>
     </message>
     <message>
         <source>%1 %2</source>
-        <translation type="unfinished">%1 %2</translation>
+        <translation>%1 %2</translation>
     </message>
 </context>
 <context>
@@ -7005,14 +6977,6 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>Paicéad Roghnaithe: %1 %2 </translation>
     </message>
     <message>
-        <source>Selected Event: %1 %2 </source>
-        <translation>Teagmhas Roghnaith: %1 %2 </translation>
-    </message>
-    <message>
-        <source>Events: %1</source>
-        <translation>Imeachtaí: %1</translation>
-    </message>
-    <message>
         <source> %1 Selected: %2 (%3%)</source>
         <translation> %1 Roghnaithe: %2 (%3%)</translation>
     </message>
@@ -7040,10 +7004,6 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     <message>
         <source>No Packets</source>
         <translation>Gan Paicéid</translation>
-    </message>
-    <message>
-        <source>No Events</source>
-        <translation>Gan Imeachtaí</translation>
     </message>
     <message>
         <source>From Zip File…</source>
@@ -7296,7 +7256,7 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
     <message>
         <source>Search vendor name using a case-insensitive regular expression.</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuardaigh ainm an díoltóra ag úsáid na habairte rialta neamhíogaire ó thaobh cás de.</translation>
     </message>
     <message>
         <source>Vendor Name</source>
@@ -8351,36 +8311,16 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>Marcóirí</translation>
     </message>
     <message>
-        <source>Wireshark Plots: %1</source>
-        <translation>Plotaí Wireshark: %1</translation>
-    </message>
-    <message>
-        <source>Stratoshark Plots: %1</source>
-        <translation>Plotaí Stratoshark: %1</translation>
-    </message>
-    <message>
         <source>Filtered packets</source>
         <translation>Paicéid scagtha</translation>
-    </message>
-    <message>
-        <source>Filtered events</source>
-        <translation>Imeachtaí scagtha</translation>
     </message>
     <message>
         <source>All packets</source>
         <translation>Gach paicéad</translation>
     </message>
     <message>
-        <source>All events</source>
-        <translation>Gach imeacht</translation>
-    </message>
-    <message>
         <source>Seq. num.</source>
         <translation>Uimh. Sraith.</translation>
-    </message>
-    <message>
-        <source>Event latency</source>
-        <translation>Moill imeachta</translation>
     </message>
     <message>
         <source>Frame num.</source>
@@ -8403,16 +8343,12 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>Cliceáil chun pacáiste a roghnú</translation>
     </message>
     <message>
+        <source>%1 Plots: %2</source>
+        <translation>%1 Plotaí: %2</translation>
+    </message>
+    <message>
         <source>Packet</source>
         <translation>Paicéad</translation>
-    </message>
-    <message>
-        <source>Click to select event</source>
-        <translation>Cliceáil chun imeacht a roghnú</translation>
-    </message>
-    <message>
-        <source>Event</source>
-        <translation>Imeacht</translation>
     </message>
     <message>
         <source>%1 (%2s%3).</source>
@@ -9785,6 +9721,10 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <source>Display Filter</source>
         <translation>Scagaire Taispeána</translation>
     </message>
+    <message>
+        <source>User Interface</source>
+        <translation>Comhéadan Úsáideora</translation>
+    </message>
 </context>
 <context>
     <name>QObject::QObject::QObject</name>
@@ -10305,9 +10245,14 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <source>Stream %1 Delta</source>
         <translation>Sruth %1 Delta</translation>
     </message>
-    <message>
-        <source> %1 streams, </source>
-        <translation> sruthanna %1, </translation>
+    <message numerus="yes">
+        <source> %Ln stream(s), </source>
+        <oldsource> %1 streams, </oldsource>
+        <translation type="unfinished">
+            <numerusform> sruthanna %1, </numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <source>Save one stream CSV</source>
@@ -10949,9 +10894,14 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <source>Double click on cell to change audio routing</source>
         <translation>Cliceáil faoi dhó ar chill chun ródú fuaime a athrú</translation>
     </message>
-    <message>
-        <source>%1 streams</source>
-        <translation>Sruthanna %1</translation>
+    <message numerus="yes">
+        <source>%Ln stream(s)</source>
+        <oldsource>%1 streams</oldsource>
+        <translation type="unfinished">
+            <numerusform>Sruthanna %1</numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <source>, %1 selected</source>
@@ -11306,13 +11256,23 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <source>as YAML</source>
         <translation>mar YAML</translation>
     </message>
-    <message>
-        <source>%1 streams</source>
-        <translation>Sruthanna %1</translation>
+    <message numerus="yes">
+        <source>%Ln stream(s)</source>
+        <oldsource>%1 streams</oldsource>
+        <translation type="unfinished">
+            <numerusform>Sruthanna %1</numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
-    <message>
-        <source>, %1 selected, %2 total packets</source>
-        <translation>, %1 roghnaithe, %2 paicéad iomlán</translation>
+    <message numerus="yes">
+        <source>, %1 selected, %Ln total packet(s)</source>
+        <oldsource>, %1 selected, %2 total packets</oldsource>
+        <translation type="unfinished">
+            <numerusform>, %1 roghnaithe, %2 paicéad iomlán</numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
     </message>
     <message>
         <source>Save RTPDump As…</source>
@@ -13935,7 +13895,7 @@ a:hover {
 
 &lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
 
-&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+&lt;th&gt;&lt;a href=&quot;https://discord.gg/fT2jvkawGj&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
 
 &lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
 
@@ -13943,7 +13903,50 @@ a:hover {
 
 &lt;/tr&gt;&lt;/table&gt;
 &lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head&gt;
+        <oldsource>&lt;html&gt;&lt;head&gt;
+&lt;style&gt;
+a:link {
+  color: palette(text);
+  text-decoration: none;
+}
+a:hover {
+  color: palette(text);
+  text-decoration: underline;
+}
+&lt;/style&gt;
+&lt;/head&gt;
+&lt;body&gt;
+
+&lt;table&gt;&lt;tr&gt;
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/docs/wsug_html_chunked/&quot;&gt;User&apos;s Guide&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://gitlab.com/wireshark/wireshark/-/wikis/&quot;&gt;Wiki&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://ask.wireshark.org/&quot;&gt;Questions and Answers&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://www.wireshark.org/lists/&quot;&gt;Mailing Lists&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://sharkfest.wireshark.org/&quot;&gt;SharkFest&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://discord.com/invite/ts9GZCjGj5&quot;&gt;Wireshark Discord&lt;/a&gt;&lt;/th&gt;
+
+&lt;td style=&quot;padding-left: 8px; padding-right: 8px;&quot;&gt;·&lt;/td&gt;
+
+&lt;th&gt;&lt;a href=&quot;https://wiresharkfoundation.org/donate/&quot;&gt;Donate&lt;/a&gt;&lt;/th&gt;
+
+&lt;/tr&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</oldsource>
+        <translation type="unfinished">&lt;html&gt;&lt;head&gt;
 &lt;style&gt;
 a:nasc {
   dath: pailéad (téacs);
@@ -14014,14 +14017,6 @@ a:hover {
     <message>
         <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
         <translation>Tá tú ag sniffing an gliú go seilbh ar an Idirlíon le chéile ag baint úsáide as Wireshark </translation>
-    </message>
-    <message>
-        <source>You are sniffing the glue that holds your system together using Stratoshark </source>
-        <translation>Tá tú ag sniffing an gliú go seilbh do chóras le chéile ag baint úsáide as Stratoshark </translation>
-    </message>
-    <message>
-        <source>You are running Stratoshark </source>
-        <translation>Tá tú ag rith Stratoshark</translation>
     </message>
     <message>
         <source>You are running Wireshark </source>
@@ -15493,6 +15488,14 @@ a:hover {
         <translation>Seichimh Iarratais HTTP</translation>
     </message>
     <message>
+        <source>&amp;BPv7</source>
+        <translation>&amp;BPv7</translation>
+    </message>
+    <message>
+        <source>BPv7 PDU and block statistics</source>
+        <translation>PDU BPv7 agus staitisticí bloc</translation>
+    </message>
+    <message>
         <source>E2AP</source>
         <translation>E2AP</translation>
     </message>
@@ -15762,11 +15765,11 @@ a:hover {
     </message>
     <message>
         <source>&amp;Keyboard Shortcuts</source>
-        <translation type="unfinished"></translation>
+        <translation>&amp;Aicearraí Méarchláir</translation>
     </message>
     <message>
         <source>Show the current keyboard shortcuts</source>
-        <translation type="unfinished"></translation>
+        <translation>Taispeáin na haicearraí méarchláir reatha</translation>
     </message>
     <message>
         <source>MAP Summary</source>

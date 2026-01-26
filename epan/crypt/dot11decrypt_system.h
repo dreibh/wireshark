@@ -28,8 +28,8 @@
 
 /*	Decryption algorithms fields size definition (bytes)		*/
 #define	DOT11DECRYPT_WPA_NONCE_LEN		         32
-#define	DOT11DECRYPT_WPA_PTK_MAX_LEN			 88	/* TKIP 48, CCMP 64, GCMP-256 88 bytes */
-#define	DOT11DECRYPT_WPA_MICKEY_MAX_LEN			 24
+#define	DOT11DECRYPT_WPA_PTK_MAX_LEN			 96	/* TKIP 48, AKM 18/24/25 96 */
+#define	DOT11DECRYPT_WPA_MICKEY_MAX_LEN			 32
 
 #define	DOT11DECRYPT_WEP_128_KEY_LEN	         16	/* 128 bits	*/
 
@@ -75,6 +75,8 @@
 
 #define DOT11DECRYPT_RSNA_MIN_TRAILER 8
 
+#define DOT11DECRYPT_MAX_MLO_LINKS 3 // Is there actually any device supporting this many links?
+
 /************************************************************************/
 /*      File includes                                                   */
 
@@ -114,9 +116,24 @@ typedef struct _DOT11DECRYPT_SEC_ASSOCIATION {
 		int akm;
 		int cipher;
 		int tmp_group_cipher; /* Keep between HS msg 2 and 3 */
+		int pmk_len;
 		unsigned char ptk[DOT11DECRYPT_WPA_PTK_MAX_LEN]; /* session key used in decryption algorithm */
 		int ptk_len;
-		int dh_group;
+
+		/* MLD info */
+		uint8_t mld : 1; /* 1 if both STA and AP MLD MAC set */
+		uint8_t ap_mld_mac_set : 1;
+		uint8_t sta_mld_mac_set : 1;
+		uint8_t ap_mld_mac[DOT11DECRYPT_MAC_LEN];
+		uint8_t sta_mld_mac[DOT11DECRYPT_MAC_LEN];
+		struct DOT11DECRYPT_MLO_LINK_INFO {
+		        uint8_t id_set : 1;
+		        uint8_t sta_mac_set : 1;
+		        uint8_t ap_mac_set : 1;
+			uint8_t id : 4;
+			uint8_t sta_mac[DOT11DECRYPT_MAC_LEN];
+			uint8_t ap_mac[DOT11DECRYPT_MAC_LEN];
+		} mlo_links[DOT11DECRYPT_MAX_MLO_LINKS];
 	} wpa;
 
 
@@ -168,7 +185,20 @@ typedef struct _DOT11DECRYPT_EAPOL_PARSED {
 	uint16_t mic_len;
 	uint8_t *gtk;
 	uint16_t gtk_len;
-	uint16_t dh_group;
+	uint8_t *mld_mac;
+
+	uint8_t mlo_link_count;
+	struct DOT11DECRYPT_EAPOL_PARSED_MLO_LINK {
+		uint8_t id;
+		uint8_t *mac;
+	} mlo_link[DOT11DECRYPT_MAX_MLO_LINKS];
+
+	uint8_t mlo_gtk_count;
+	struct DOT11DECRYPT_EAPOL_PARSED_MLO_GTK {
+		uint8_t link_id;
+		uint8_t *key;
+		uint8_t len;
+	} mlo_gtk[DOT11DECRYPT_MAX_MLO_LINKS];
 
 	/* For fast bss transition akms */
 	uint8_t *mdid;

@@ -591,9 +591,9 @@ static const value_string table_modcods[] = {
 #define DVB_S2_TABLE_TX_TYPE_CODE_RATE_MASK 0x1C
 #define DVB_S2_TABLE_TX_TYPE_CONSTRAINT_LENGTH_K_MASK 0x01
 #define DVB_S2_TABLE_TX_TYPE_PARAM_INTERLEAVER_MASK 0x01
-#define DVB_S2_TABLE_TX_TYPE_N_MASK 0xF0
+#define DVB_S2_TABLE_TX_TYPE_N_MASK 0xFFF0
 #define DVB_S2_TABLE_TX_TYPE_S_MASK 0x0FC0
-#define DVB_S2_TABLE_TX_TYPE_P_MASK 0xF0
+#define DVB_S2_TABLE_TX_TYPE_P_MASK 0x3FF0
 #define DVB_S2_TABLE_TX_TYPE_N1_12_MASK 0x0FF8
 #define DVB_S2_TABLE_TX_TYPE_K1_12_MASK 0x07FC
 #define DVB_S2_TABLE_TX_TYPE_K2_12_MASK 0x03FE
@@ -929,7 +929,7 @@ static int dissect_dvb_s2_table_desc(tvbuff_t *tvb, int cur_off, proto_tree *dvb
     int remaning_data = 0;
     int capacity_type_flag = 0;
     int traffic_burst_type = 0;
-    int connectivity = 0;
+    uint8_t connectivity = 0;
     int pid_loop_count = 0;
     int k = 0;
     int network_routing_label_loop_count = 0;
@@ -1249,8 +1249,7 @@ static int dissect_dvb_s2_table_desc(tvbuff_t *tvb, int cur_off, proto_tree *dvb
                 traffic_burst_type = tvb_get_uint8(tvb, cur_off + new_off) & DVB_S2_TABLE_DESC_TRAFFIC_BURST_TYPE_MASK;
                 proto_tree_add_item(dvb_s2_hdr_table_desc_tree, hf_dvb_s2_table_lid_traffic_burst_type, tvb, cur_off + new_off, 1, ENC_NA);
                 if (traffic_burst_type == 0) {
-                    connectivity = tvb_get_uint8(tvb, cur_off + new_off) & DVB_S2_TABLE_DESC_CONNECTIVITY_MASK;
-                    proto_tree_add_item(dvb_s2_hdr_table_desc_tree, hf_dvb_s2_table_lid_connectivity, tvb, cur_off + new_off, 1, ENC_NA);
+                    proto_tree_add_item_ret_uint8(dvb_s2_hdr_table_desc_tree, hf_dvb_s2_table_lid_connectivity, tvb, cur_off + new_off, 1, ENC_NA, &connectivity);
                     if (connectivity == 0) {
                         new_off += 1;
                         proto_tree_add_item(dvb_s2_hdr_table_desc_tree, hf_dvb_s2_table_lid_return_vpi, tvb, cur_off + new_off, 1, ENC_NA);
@@ -1958,19 +1957,19 @@ static int dissect_dvb_s2_table_bct(tvbuff_t *tvb, int cur_off, proto_tree *dvb_
                     new_off += 1;
                     if(param_interleaver)
                     {
-                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_n, tvb, cur_off + new_off, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_n, tvb, cur_off + new_off, 2, ENC_BIG_ENDIAN);
                         new_off += 1;
-                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_s, tvb, cur_off + new_off, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_s, tvb, cur_off + new_off, 2, ENC_BIG_ENDIAN);
                         new_off += 1;
-                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_p_interleaver, tvb, cur_off + new_off, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_p_interleaver, tvb, cur_off + new_off, 2, ENC_BIG_ENDIAN);
                         new_off += 1;
-                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_n1_12, tvb, cur_off + new_off, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_n1_12, tvb, cur_off + new_off, 2, ENC_BIG_ENDIAN);
                         new_off += 1;
-                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_k1_12, tvb, cur_off + new_off, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_k1_12, tvb, cur_off + new_off, 2, ENC_BIG_ENDIAN);
                         new_off += 1;
-                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_K2_12, tvb, cur_off + new_off, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_K2_12, tvb, cur_off + new_off, 2, ENC_BIG_ENDIAN);
                         new_off += 1;
-                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_K3_12, tvb, cur_off + new_off, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(dvb_s2_hdr_table_txtype_tree, hf_dvb_s2_table_tx_type_K3_12, tvb, cur_off + new_off, 2, ENC_BIG_ENDIAN);
                         new_off += 1;
                     }
                     else
@@ -2329,7 +2328,7 @@ static int dissect_dvb_s2_table(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
             proto_tree_add_item(dvb_s2_hdr_table_tree, hf_dvb_s2_section_syntax_indic, tvb, cur_off + new_off, 1, ENC_NA);
             proto_tree_add_item(dvb_s2_hdr_table_tree, hf_dvb_s2_reserved_future_use, tvb, cur_off + new_off, 1, ENC_NA);
             proto_tree_add_item(dvb_s2_hdr_table_tree, hf_dvb_s2_reserved_tdt, tvb, cur_off + new_off, 1, ENC_NA);
-            proto_tree_add_item(dvb_s2_hdr_table_tree, hf_dvb_s2_section_length, tvb, cur_off + new_off, 1, ENC_BIG_ENDIAN);
+            proto_tree_add_item(dvb_s2_hdr_table_tree, hf_dvb_s2_section_length, tvb, cur_off + new_off, 2, ENC_BIG_ENDIAN);
             new_off += 2;
         }
         /* parse the TDT table itself for both RCS and RCS2 */
@@ -3357,7 +3356,7 @@ void proto_register_dvb_s2_table(void)
         },
         {&hf_dvb_s2_table_tx_type_n, {
                 "Tx type N", "dvb-s2_table.tx_type.n",
-                FT_UINT8, BASE_DEC, NULL, DVB_S2_TABLE_TX_TYPE_N_MASK,
+                FT_UINT16, BASE_DEC, NULL, DVB_S2_TABLE_TX_TYPE_N_MASK,
                 NULL, HFILL}
         },
         {&hf_dvb_s2_table_tx_type_s, {
@@ -3367,7 +3366,7 @@ void proto_register_dvb_s2_table(void)
         },
         {&hf_dvb_s2_table_tx_type_p_interleaver, {
                 "Tx type p", "dvb-s2_table.tx_type.p",
-                FT_UINT8, BASE_DEC, NULL, DVB_S2_TABLE_TX_TYPE_P_MASK,
+                FT_UINT16, BASE_DEC, NULL, DVB_S2_TABLE_TX_TYPE_P_MASK,
                 NULL, HFILL}
         },
         {&hf_dvb_s2_table_tx_type_n1_12, {
@@ -3790,7 +3789,7 @@ void proto_register_dvb_s2_table(void)
         },
         {&hf_dvb_s2_table_lid_connectivity, {
                 "Connectivity", "dvb-s2_table.desc.lid_connectivity",
-                FT_UINT8, BASE_HEX, NULL, 0x10,
+                FT_UINT8, BASE_HEX, NULL, DVB_S2_TABLE_DESC_CONNECTIVITY_MASK,
                 NULL, HFILL}
         },
         {&hf_dvb_s2_table_lid_return_vpi, {

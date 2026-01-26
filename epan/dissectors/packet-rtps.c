@@ -3773,7 +3773,7 @@ static bool rtps_psk_generate_session_key(
 
 static bool rtps_psk_generate_prk_key(
     uint8_t *output,
-    const char * const prefix,
+    bool is_salt,
     const char *preshared_secret_key,
     uint32_t sender_key_id,
     tvbuff_t *rtps_header_tvb,
@@ -3791,7 +3791,6 @@ static bool rtps_psk_generate_master_sender(
     tvbuff_t *rtps_header_tvb,
     int rtps_header_tvb_offset)
 {
-  const char * const prk_prefix = is_salt ? "PSK-SALT" : "PSK-SKEY";
   const char * const suffix = is_salt ?
       "master salt derivation" :
       "master sender key derivation";
@@ -3801,7 +3800,7 @@ static bool rtps_psk_generate_master_sender(
 
   if (!rtps_psk_generate_prk_key(
       prk_key,
-      prk_prefix,
+      is_salt,
       preshared_secret_key,
       sender_key_id,
       rtps_header_tvb,
@@ -3836,7 +3835,7 @@ static void rtps_generate_public_salt(
  */
 static bool rtps_psk_generate_prk_key(
     uint8_t *output,
-    const char * const prefix,
+    bool is_salt,
     const char *preshared_secret_key,
     uint32_t sender_key_id,
     tvbuff_t *rtps_header_tvb,
@@ -3844,6 +3843,7 @@ static bool rtps_psk_generate_prk_key(
 {
   gcry_error_t error = GPG_ERR_NO_ERROR;
   uint8_t public_salt[RTPS_HMAC_256_BUFFER_SIZE_BYTES];
+  const char * const prefix = is_salt ? "PSK-SALT" : "PSK-SKEY";
 
   rtps_generate_public_salt(
       public_salt,
@@ -14165,7 +14165,6 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
 #define RTPS_HE_CHECKSUM_MD5          (RTPS_HE_CHECKSUM_1_FLAG | RTPS_HE_CHECKSUM_2_FLAG)
 
   uint8_t checksum_type = 0;
-  int initial_offset = offset;
   unsigned checksum_flags = PROTO_CHECKSUM_NO_FLAGS;
   bool is_crc_supported = true;
   /*Checksum can be CRC32, CRC64 and MD5 */
@@ -14174,8 +14173,8 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
     uint32_t crc32c;
     uint64_t crc64;
   } calculated_checksum = {0}, he_checksum = {0};
-  int16_t header_extension_length = 0;
-  int offsetToHeaderExtensionData = 24;
+  tvbuff_t *he_tvb;
+  unsigned header_extension_length = 0;
   rtps_current_packet_decryption_info_t *decryption_info = NULL;
 
   ++offset;
@@ -14188,9 +14187,19 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
       HEADER_EXTENSION_MASK_FLAGS,
       flags);
   ++offset;
-  header_extension_length = tvb_get_int16(tvb, offset, encoding);
+  /* octets_to_next_header has already been retrieved and passed in */
+  header_extension_length = octets_to_next_header;
   proto_tree_add_item(tree, hf_rtps_sm_octets_to_next_header, tvb, offset, 2, encoding);
   offset += 2;
+
+  // Should be 24 (RTPS header size + submessage id, flags, octetsToNextHeader)
+  const unsigned offsetToHeaderExtensionData = offset;
+
+  /* Create a subset tvbuffer so we throw exceptions if the header extension
+   * is larger than its reported length. (Always retrieve the fields from
+   * this tvb before doing a memset or similar.)  */
+  he_tvb = tvb_new_subset_length(tvb, offset, header_extension_length);
+  offset = 0;
 
   if (enable_rtps_psk_decryption) {
     /*
@@ -14209,8 +14218,7 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
 
     if (decryption_info) {
       decryption_info->aad_length =
-          20 /* rtps header size. */
-          + 4 /* header extension submessage id, flags, octetsToNextHeader */
+          offsetToHeaderExtensionData
           + header_extension_length;
 
       /* Do a copy of the bytes, so that we can later zero the necessary parts. */
@@ -14223,50 +14231,46 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
   }
 
   if ((flags & RTPS_HE_MESSAGE_LENGTH_FLAG) == RTPS_HE_MESSAGE_LENGTH_FLAG) {
-    proto_tree_add_item(tree, hf_rtps_message_length, tvb, offset, 4, encoding);
-    offset += 4;
+    proto_tree_add_item(tree, hf_rtps_message_length, he_tvb, offset, 4, encoding);
 
     if (enable_rtps_psk_decryption && decryption_info) {
       memset(
           decryption_info->additional_authenticated_data
-              + offsetToHeaderExtensionData,
+              + offsetToHeaderExtensionData + offset,
           0,
-          RTPS_HE_MESSAGE_LENGTH_FLAG);
-      offsetToHeaderExtensionData += 4;
+          4);
     }
+    offset += 4;
   }
 
   if ((flags & RTPS_HE_TIMESTAMP_FLAG) == RTPS_HE_TIMESTAMP_FLAG) {
     rtps_util_add_timestamp(tree,
-      tvb, offset,
+      he_tvb, offset,
       encoding,
       hf_rtps_timestamp);
-    offset += 8;
 
     if (enable_rtps_psk_decryption) {
       /* No need to zero for AAD. */
-      offsetToHeaderExtensionData += 8;
     }
+    offset += 8;
   }
 
   if ((flags & RTPS_HE_UEXTENSION_FLAG) == RTPS_HE_UEXTENSION_FLAG) {
-    proto_tree_add_item(tree, hf_rtps_uextension, tvb, offset, 4, encoding);
-    offset += 4;
+    proto_tree_add_item(tree, hf_rtps_uextension, he_tvb, offset, 4, encoding);
 
     if (enable_rtps_psk_decryption) {
       /* No need to zero for AAD. */
-      offsetToHeaderExtensionData += 4;
     }
+    offset += 4;
   }
 
   if ((flags & RTPS_HE_WEXTENSION_FLAG) == RTPS_HE_WEXTENSION_FLAG) {
-    proto_tree_add_item(tree, hf_rtps_wextension, tvb, offset, 8, encoding);
-    offset += 8;
+    proto_tree_add_item(tree, hf_rtps_wextension, he_tvb, offset, 8, encoding);
 
     if (enable_rtps_psk_decryption) {
       /* No need to zero for AAD. */
-      offsetToHeaderExtensionData += 8;
     }
+    offset += 8;
   }
 
   checksum_type = (flags & (RTPS_HE_CHECKSUM_2_FLAG | RTPS_HE_CHECKSUM_1_FLAG));
@@ -14294,14 +14298,6 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
         break;
     }
 
-    if (enable_rtps_psk_decryption && decryption_info != NULL) {
-      memset(
-          decryption_info->additional_authenticated_data
-              + offsetToHeaderExtensionData,
-          0,
-          checksum_len);
-    }
-
     /* If the check CRC feature is enabled */
     if (enable_rtps_crc_check && is_crc_supported) {
       char* tvb_zero_checksum = NULL;
@@ -14322,11 +14318,11 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
             rtps_root->tvb_len);
 
         /* Set checksum bytes to 0 */
-        memset(tvb_zero_checksum + offset, 0, checksum_len);
+        memset(tvb_zero_checksum + offsetToHeaderExtensionData + offset, 0, checksum_len);
         switch (checksum_type) {
           case RTPS_HE_CHECKSUM_CRC32:
             /* Checksum is always big endian */
-            he_checksum.crc32c = tvb_get_uint32(tvb, offset, ENC_BIG_ENDIAN);
+            he_checksum.crc32c = tvb_get_uint32(he_tvb, offset, ENC_BIG_ENDIAN);
             calculated_checksum.crc32c = crc32c_calculate_no_swap(
                 tvb_zero_checksum,
                 rtps_root->tvb_len,
@@ -14340,7 +14336,7 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
 
           case RTPS_HE_CHECKSUM_MD5:
             tvb_memcpy(
-                tvb,
+                he_tvb,
                 &he_checksum.md5,
                 offset,
                 checksum_len);
@@ -14360,7 +14356,7 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
       case RTPS_HE_CHECKSUM_CRC32:
         proto_tree_add_checksum(
             tree,
-            tvb,
+            he_tvb,
             offset,
             hf_rtps_header_extension_checksum_crc32c,
             -1,
@@ -14373,7 +14369,7 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
       case RTPS_HE_CHECKSUM_MD5:
         proto_tree_add_checksum_bytes(
             tree,
-            tvb,
+            he_tvb,
             offset,
             hf_rtps_header_extension_checksum_md5,
             -1,
@@ -14388,14 +14384,23 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
       default:
           break;
     }
+
+    if (enable_rtps_psk_decryption && decryption_info != NULL) {
+      memset(
+          decryption_info->additional_authenticated_data
+              + offsetToHeaderExtensionData + offset,
+          0,
+          checksum_len);
+    }
+
     offset += checksum_len;
   }
   if ((flags & RTPS_HE_PARAMETERS_FLAG) == RTPS_HE_PARAMETERS_FLAG) {
     unsigned parameter_endianess = ((flags & RTPS_HE_ENDIANESS_FLAG) == RTPS_HE_ENDIANESS_FLAG)
       ? ENC_LITTLE_ENDIAN
       : ENC_BIG_ENDIAN;
-    dissect_parameter_sequence(tree, pinfo, tvb, offset, parameter_endianess,
-      octets_to_next_header - (offset - initial_offset),
+    dissect_parameter_sequence(tree, pinfo, he_tvb, offset, parameter_endianess,
+      tvb_reported_length_remaining(he_tvb, offset),
       "Parameters", 0x0200, NULL, vendor_id, false, NULL);
   }
 }
@@ -15800,9 +15805,9 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
 
     } else {
       const char *label;
-      if (((flags & FLAG_RTPS_DATA_D) != 0) || ((flags & FLAG_RTPS_DATA_K) == 0)) {
+      if (((flags & FLAG_RTPS_DATA_D) != 0) && ((flags & FLAG_RTPS_DATA_K) == 0)) {
         label = "serializedData";
-      } else if (((flags & FLAG_RTPS_DATA_D) == 0) || ((flags & FLAG_RTPS_DATA_K) != 0)) {
+      } else if (((flags & FLAG_RTPS_DATA_D) == 0) && ((flags & FLAG_RTPS_DATA_K) != 0)) {
         label = "serializedKey";
       } else {
         /* D==1 && K==1 */

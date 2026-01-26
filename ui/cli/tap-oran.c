@@ -32,15 +32,21 @@ enum {
     EXTENSIONS_COLUMN,
     HIGHEST_SLOT_COLUMN,
     MISSING_SNS_COLUMN,
-    NUM_PRBS,
-    NUM_PRBS_ZERO,
-    NUM_RES,
-    NUM_RES_ZERO,
+    NUM_PRBS_COLUMN,
+    NUM_PRBS_ZERO_COLUMN,
+    NUM_RES_COLUMN,
+    NUM_RES_ZERO_COLUMN,
+    COMP_METH_COLUMN,
+    COMP_WIDTH_COLUMN,
     NUM_FLOW_COLUMNS
 };
 
 /* Global stats */
 uint32_t largest_ul_delay_in_us = 0;
+uint32_t ul_configured_max = 0;
+uint32_t ul_within_configured_max = 0;
+uint32_t ul_above_configured_max = 0;
+
 /* Assuming that it is unlikely we have > 255 radio frames.. */
 int      first_radio_frame = -1;
 int      last_radio_frame = -1;
@@ -58,7 +64,9 @@ static const char *flow_titles[] = { " Plane",
                                      "PRBs",
                                      "Zero-PRBs      ",
                                      "REs ",
-                                     "Zero-REs"
+                                     "Zero-REs     ",
+                                     "Comp. Meth",
+                                     "Comp. Width"
                                    };
 
 /* Stats for one Flow */
@@ -76,6 +84,9 @@ typedef struct oran_row_data {
     uint32_t      num_res_zero;
 
     bool          section_ids_present[4096];  /* sectionId is 12 bits */
+
+    uint32_t      compression_methods;
+    uint32_t      compression_width;
 } oran_row_data;
 
 /* Top-level struct for ORAN FH statistics */
@@ -125,6 +136,13 @@ oran_stat_packet(void *phs, packet_info *pinfo _U_, epan_dissect_t *edt _U_,
     /* Update global stats */
     if (si->ul_delay_in_us > largest_ul_delay_in_us) {
         largest_ul_delay_in_us = si->ul_delay_in_us;
+    }
+    ul_configured_max = si->ul_delay_configured_max;
+    if (si->ul_delay_in_us > si->ul_delay_configured_max) {
+        ul_above_configured_max++;
+    }
+    else if (si->ul_delay_in_us > 0) {
+        ul_within_configured_max++;
     }
 
     if (first_radio_frame == -1) {
@@ -195,6 +213,10 @@ oran_stat_packet(void *phs, packet_info *pinfo _U_, epan_dissect_t *edt _U_,
     row->num_prbs_zero += si->num_prbs_zero;
     row->num_res_zero += si->num_res_zero;
 
+    /* Compression settings */
+    row->compression_width = si->compression_width;
+    row->compression_methods |= si->compression_methods;
+
     return TAP_PACKET_REDRAW;
 }
 
@@ -249,7 +271,7 @@ oran_stat_draw(void *phs)
         printf("%s  ", flow_titles[i]);
     }
     /* Divider before rows */
-    printf("\n============================================================================================================================================================================================\n");
+    printf("\n=========================================================================================================================================================================================================================\n");
 
     /* Write a row for each flow */
     for (tmp = hs->flow_list; tmp; tmp=tmp->next) {
@@ -304,15 +326,33 @@ oran_stat_draw(void *phs)
                section_ids,
                extensions,
                row->highest_slot,
-               row->missing_sns);
+               row->missing_sns
+               );
 
         if (row->base_info.userplane) {
             /* U-Plane only */
-            printf(" %8u %10u %10u %10u\n",
+
+            const char* comp_names[] = { "None", "BFP", "Block Scaling",
+                                         "uLaw", "ModCompr",
+                                         "BFP+SelRE", "ModComp+SelRE"};
+
+            /* Looking for first/only match */
+            const char *method = "none";
+            for (int c=0; c <=6; c++) {
+                if ((1 << c) & row->compression_methods) {
+                    method = comp_names[c];
+                    break;
+                }
+
+            }
+
+            printf(" %8u %10u %10u %10u %16s %12u\n",
                    row->num_prbs,
                    row->num_prbs_zero,
                    row->num_res,
-                   row->num_res_zero);
+                   row->num_res_zero,
+                   method,
+                   row->compression_width);
         }
         else {
             printf("\n");
@@ -320,9 +360,14 @@ oran_stat_draw(void *phs)
     }
 
     /* Now show global stats */
-    printf("\n Largest UL delay    First radio frame    Last radio frame\n");
-    printf("=============================================================\n");
-    printf("%17u %20u %19u\n", largest_ul_delay_in_us, first_radio_frame, last_radio_frame);
+    printf("\n First radio frame    Last radio frame\n");
+    printf("=======================================\n");
+    printf("%18u %19u\n", first_radio_frame, last_radio_frame);
+
+    printf("\n Configured Max UL delay    UL Frames within limit    UL frames after limit    Largest UL delay\n");
+    printf("================================================================================================\n");
+    printf("%24u %25u %24u %19u\n", ul_configured_max, ul_within_configured_max, ul_above_configured_max, largest_ul_delay_in_us);
+
 }
 
 /* Create a new ORAN stats struct */

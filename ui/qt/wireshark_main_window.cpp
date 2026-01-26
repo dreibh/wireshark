@@ -26,7 +26,6 @@ DIAG_ON(frame-larger-than=)
 #include <wsutil/ws_assert.h>
 #include <epan/prefs.h>
 #include <epan/stats_tree_priv.h>
-#include <epan/plugin_if.h>
 #include <epan/export_object.h>
 #include <epan/secrets.h>
 
@@ -77,6 +76,7 @@ DIAG_ON(frame-larger-than=)
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/stock_icon.h>
 #include <ui/qt/utils/variant_pointer.h>
+#include <ui/qt/utils/workspace_state.h>
 
 #include <QAction>
 #include <QActionGroup>
@@ -91,8 +91,6 @@ DIAG_ON(frame-larger-than=)
 #include <QTreeWidget>
 #include <QUrl>
 #include <ui/tap-aggregation.h>
-
-//menu_recent_file_write_all
 
 // If we ever add support for multiple windows this will need to be replaced.
 static WiresharkMainWindow *gbl_cur_main_window_;
@@ -350,9 +348,6 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     , capture_options_dialog_(NULL)
     , info_data_()
 #endif
-#if defined(Q_OS_MAC)
-    , dock_menu_(NULL)
-#endif
 {
     if (!gbl_cur_main_window_) {
         connect(mainApp, &MainApplication::openStatCommandDialog, this, &WiresharkMainWindow::openStatCommandDialog);
@@ -369,6 +364,11 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     // iterates over *all* of our children, looking for matching "on_" slots.
     // The fewer children we have at this point the better.
     main_ui_->setupUi(this);
+
+    // Initialize base class menu pointers for recent captures handling
+    recent_captures_menu_ = main_ui_->menuOpenRecentCaptureFile;
+    no_recent_files_action_ = main_ui_->actionDummyNoFilesFound;
+
 #ifdef HAVE_SOFTWARE_UPDATE
     update_action_ = new QAction(tr("Check for Updates…"), main_ui_->menuHelp);
 #endif
@@ -438,7 +438,7 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
         });
     connect(mainApp, &MainApplication::aggregationChanged, [this]() { if (recent.aggregation_view) { aggregationViewChanged(true); } });
 
-    connect(mainApp, &MainApplication::updateRecentCaptureStatus, this, &WiresharkMainWindow::updateRecentCaptures);
+    connect(WorkspaceState::instance(), &WorkspaceState::recentCaptureFilesChanged, this, &WiresharkMainWindow::updateRecentCaptures);
     connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::updateRecentCaptures);
     updateRecentCaptures();
 
@@ -1605,7 +1605,8 @@ bool WiresharkMainWindow::saveAsCaptureFile(capture_file *cf, bool must_support_
             cf->unsaved_changes = false; //we just saved so we signal that we have no unsaved changes
             updateForUnsavedChanges(); // we update the title bar to remove the *
             /* Add this filename to the list of recent files in the "Recent Files" submenu */
-            add_menu_recent_capture_file(qUtf8Printable(file_name), false);
+            WorkspaceState::instance()->addRecentCaptureFile(qUtf8Printable(file_name));
+
             return true;
 
         case CF_WRITE_ERROR:
@@ -1743,7 +1744,7 @@ void WiresharkMainWindow::exportSelectedPackets() {
             if (discard_comments)
                 packet_list_->redrawVisiblePackets();
             /* Add this filename to the list of recent files in the "Recent Files" submenu */
-            add_menu_recent_capture_file(qUtf8Printable(file_name), false);
+            WorkspaceState::instance()->addRecentCaptureFile(qUtf8Printable(file_name));
             goto cleanup;
 
         case CF_WRITE_ERROR:
@@ -2028,8 +2029,8 @@ bool WiresharkMainWindow::testCaptureFileClose(QString before_what, FileCloseCon
         gbl_cur_main_window_->setMwFileName("");
 
         /* captureStop() will close the file if not having any packets */
-        if (capture_file_.capFile() && context != Restart && context != Reload)
-            // Don't really close if Restart or Reload
+        if (capture_file_.capFile() && context != Restart && context != Reload && context != Export)
+            // Don't really close if Restart or Reload or Export
             cf_close(capture_file_.capFile());
     }
 
@@ -2545,11 +2546,6 @@ void WiresharkMainWindow::setMenusForFileSet(bool enable_list_files) {
     main_ui_->actionFileSetPreviousFile->setEnabled(enable_prev);
 }
 
-void WiresharkMainWindow::setWindowIcon(const QIcon &icon) {
-    mainApp->setWindowIcon(icon);
-    QMainWindow::setWindowIcon(icon);
-}
-
 void WiresharkMainWindow::changeEvent(QEvent* event)
 {
     if (0 != event)
@@ -2558,8 +2554,7 @@ void WiresharkMainWindow::changeEvent(QEvent* event)
         {
         case QEvent::LanguageChange:
             main_ui_->retranslateUi(this);
-            // make sure that the "Clear Menu" item is retranslated
-            mainApp->emitAppSignal(WiresharkApplication::RecentCapturesChanged);
+            retranslateUiElements();
             // make sure that the color actions in the PacketList and ProtoTree
             // are retranslated
             initConversationMenus();

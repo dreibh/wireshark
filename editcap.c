@@ -50,7 +50,7 @@
 #include <wsutil/clopts_common.h>
 #include <wsutil/cmdarg_err.h>
 #include <wsutil/filesystem.h>
-#include <wsutil/application_flavor.h>
+#include <app/application_flavor.h>
 #include <wsutil/file_util.h>
 #include <wsutil/file_compressed.h>
 #include <wsutil/plugins.h>
@@ -1495,7 +1495,7 @@ main(int argc, char *argv[])
     }
 
     /* Initialize the version information. */
-    ws_init_version_info("Editcap", NULL, get_ws_vcs_version_info, NULL, NULL);
+    ws_init_version_info("Editcap", NULL, application_get_vcs_version_info, NULL, NULL);
 
     init_report_failure_message("editcap");
 

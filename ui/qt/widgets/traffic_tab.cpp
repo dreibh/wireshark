@@ -15,7 +15,7 @@
 
 #include <wsutil/utf8_entities.h>
 #include <wsutil/filesystem.h>
-#include <wsutil/application_flavor.h>
+#include <app/application_flavor.h>
 
 #include <ui/qt/main_application.h>
 #include <ui/qt/filter_action.h>
@@ -343,7 +343,7 @@ void TrafficTab::insertProtoTab(int protoId, bool emitSignals)
 
     /* We reset the correct tab idxs. That operations is costly, but it is only
      * called during this operation and ensures, that other operations do not
-     * need to iterate, but rather can lookup the indeces. */
+     * need to iterate, but rather can lookup the indices. */
     _tabs.clear();
     for (int idx = 0; idx < count(); idx++) {
         TabData tabData = qvariant_cast<TabData>(tabBar()->tabData(idx));
@@ -375,7 +375,7 @@ void TrafficTab::removeProtoTab(int protoId, bool emitSignals)
 
     /* We reset the correct tab idxs. That operations is costly, but it is only
     * called during this operation and ensures, that other operations do not
-    * need to iterate, but rather can lookup the indeces. */
+    * need to iterate, but rather can lookup the indices. */
     _tabs.clear();
     for (int idx = 0; idx < count(); idx++) {
         TabData tabData = qvariant_cast<TabData>(tabBar()->tabData(idx));

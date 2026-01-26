@@ -16,7 +16,7 @@
 
 #include "cfile.h"
 
-#include <wsutil/application_flavor.h>
+#include <app/application_flavor.h>
 
 #include <main_application.h>
 
@@ -423,7 +423,6 @@ void DataSourceTab::selectedFieldChanged(FieldInformation *selected)
         data_source_view->markField(f_start, f_length);
         data_source_view->markProtocol(p_start, p_length);
         data_source_view->markAppendix(fa_start, fa_length);
-        data_source_view->saveSelected(f_start);
     } else {
         emit byteViewUnmarkField();
     }
@@ -447,9 +446,7 @@ void DataSourceTab::highlightedFieldChanged(FieldInformation *highlighted)
         f_length = highlighted->position().length;
     }
 
-    data_source_view->markField(f_start, f_length, false);
-    data_source_view->markProtocol(-1, -1);
-    data_source_view->markAppendix(-1, -1);
+    data_source_view->markField(f_start, f_length, false, true);
 }
 
 void DataSourceTab::setCaptureFile(capture_file *cf)

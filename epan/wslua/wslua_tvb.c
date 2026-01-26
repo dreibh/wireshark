@@ -293,17 +293,12 @@ WSLUA_METAMETHOD Tvb__eq(lua_State* L) {
     /* it is not an error if their ds_tvb are different... they're just not equal */
     if (len_l == len_r)
     {
-        const char* lp = (const char*)tvb_get_ptr(tvb_l->ws_tvb, 0, len_l);
-        const char* rp = (const char*)tvb_get_ptr(tvb_r->ws_tvb, 0, len_r);
-        int i = 0;
+        const uint8_t* lp = tvb_get_ptr(tvb_l->ws_tvb, 0, len_l);
+        const uint8_t* rp = tvb_get_ptr(tvb_r->ws_tvb, 0, len_r);
 
-        for (; i < len_l; ++i) {
-            if (lp[i] != rp[i]) {
-                lua_pushboolean(L,0);
-                return 1;
-            }
-        }
-        lua_pushboolean(L,1);
+        int ret = memcmp(lp, rp, len_l) == 0 ? 1 : 0;
+
+        lua_pushboolean(L,ret);
     } else {
         lua_pushboolean(L,0);
     }
@@ -927,7 +922,7 @@ WSLUA_METHOD TvbRange_nstime(lua_State* L) {
         lua_pushinteger(L, tvbr->len);
     }
     else {
-        int endoff = 0;
+        unsigned endoff = 0;
         nstime_t *retval = tvb_get_string_time(tvbr->tvb->ws_tvb, tvbr->offset, tvbr->len,
                                                encoding, nstime, &endoff);
         if (!retval || endoff == 0) {
@@ -1028,9 +1023,9 @@ WSLUA_METHOD TvbRange_stringz(lua_State* L) {
 #define WSLUA_OPTARG_TvbRange_stringz_ENCODING 2 /* The encoding to use. Defaults to ENC_ASCII. */
     TvbRange tvbr = checkTvbRange(L,1);
     unsigned encoding = (unsigned)luaL_optinteger(L,WSLUA_OPTARG_TvbRange_stringz_ENCODING, ENC_ASCII|ENC_NA);
-    int offset;
-    gunichar2 uchar;
-    char *str;
+    char *str = NULL;
+    unsigned length;
+    const char* error = NULL;
 
     if ( !(tvbr && tvbr->tvb)) return 0;
     if (tvbr->tvb->expired) {
@@ -1038,35 +1033,29 @@ WSLUA_METHOD TvbRange_stringz(lua_State* L) {
         return 0;
     }
 
-    switch (encoding & ENC_CHARENCODING_MASK) {
+    /* XXX - This leaks outside the length of the TvbRange to scan the entire
+     * underlying tvbuffer. It has always done that, but that does seem odd. */
+    TRY {
+        str = (char*)tvb_get_stringz_enc(NULL,tvbr->tvb->ws_tvb,tvbr->offset,&length,encoding);
+    } CATCH(DissectorError) {
+        /* Presumably an unsupported encoding */
+        error = lua_pushstring(L, GET_MESSAGE);
+    } CATCH_BOUNDS_ERRORS {
+        error = lua_pushstring(L, "Out of bounds");
+    } ENDTRY;
 
-    case ENC_UTF_16:
-    case ENC_UCS_2:
-        offset = tvbr->offset;
-        do {
-            if (!tvb_bytes_exist (tvbr->tvb->ws_tvb, offset, 2)) {
-                luaL_error(L,"out of bounds");
-                return 0;
-            }
-            /* Endianness doesn't matter when looking for null */
-            uchar = tvb_get_ntohs (tvbr->tvb->ws_tvb, offset);
-            offset += 2;
-        } while(uchar != 0);
-        break;
-
-    default:
-        if (tvb_find_uint8 (tvbr->tvb->ws_tvb, tvbr->offset, -1, 0) == -1) {
-            luaL_error(L,"out of bounds");
-            return 0;
-        }
-        break;
+    if (error) {
+        /* By converting the exceptions into Lua errors, we also add
+         * the Lua traceback. */
+        WSLUA_ERROR(TvbRange_stringz, lua_tostring(L, 1));
+        return 0;
     }
 
-    str = (char*)tvb_get_stringz_enc(NULL,tvbr->tvb->ws_tvb,tvbr->offset,NULL,encoding);
     lua_pushstring(L, str);
     wmem_free(NULL, str);
+    lua_pushinteger(L, length);
 
-    WSLUA_RETURN(1); /* The string containing all bytes in the <<lua_class_TvbRange,`TvbRange`>> up to the first terminating zero. */
+    WSLUA_RETURN(2); /* The string containing all bytes in the <<lua_class_TvbRange,`TvbRange`>> up to the first terminating zero, and the length of that string. */
 }
 
 WSLUA_METHOD TvbRange_strsize(lua_State* L) {
@@ -1076,8 +1065,7 @@ WSLUA_METHOD TvbRange_strsize(lua_State* L) {
 #define WSLUA_OPTARG_TvbRange_strsize_ENCODING 2 /* The encoding to use. Defaults to ENC_ASCII. */
     TvbRange tvbr = checkTvbRange(L,1);
     unsigned encoding = (unsigned)luaL_optinteger(L,WSLUA_OPTARG_TvbRange_strsize_ENCODING, ENC_ASCII|ENC_NA);
-    int offset;
-    gunichar2 uchar;
+    const char* error = NULL;
 
     if ( !(tvbr && tvbr->tvb)) return 0;
     if (tvbr->tvb->expired) {
@@ -1085,30 +1073,22 @@ WSLUA_METHOD TvbRange_strsize(lua_State* L) {
         return 0;
     }
 
-    switch (encoding & ENC_CHARENCODING_MASK) {
+    /* XXX - This leaks outside the length of the TvbRange to scan the entire
+     * underlying tvbuffer. It has always done that, but that does seem odd. */
+    TRY {
+        lua_pushinteger(L, tvb_strsize_enc(tvbr->tvb->ws_tvb, tvbr->offset, encoding));
+    } CATCH(DissectorError) {
+        /* Presumably an unsupported encoding */
+        error = lua_pushstring(L, GET_MESSAGE);
+    } CATCH_BOUNDS_ERRORS {
+        error = lua_pushstring(L, "Out of bounds");
+    } ENDTRY;
 
-    case ENC_UTF_16:
-    case ENC_UCS_2:
-        offset = tvbr->offset;
-        do {
-            if (!tvb_bytes_exist (tvbr->tvb->ws_tvb, offset, 2)) {
-                luaL_error(L,"out of bounds");
-                return 0;
-            }
-            /* Endianness doesn't matter when looking for null */
-            uchar = tvb_get_ntohs (tvbr->tvb->ws_tvb, offset);
-            offset += 2;
-        } while (uchar != 0);
-        lua_pushinteger(L, tvb_unicode_strsize(tvbr->tvb->ws_tvb, tvbr->offset));
-        break;
-
-    default:
-        if (tvb_find_uint8 (tvbr->tvb->ws_tvb, tvbr->offset, -1, 0) == -1) {
-            luaL_error(L,"out of bounds");
-            return 0;
-        }
-        lua_pushinteger(L, tvb_strsize(tvbr->tvb->ws_tvb, tvbr->offset));
-        break;
+    if (error) {
+        /* By converting the exceptions into Lua errors, we also add
+         * the Lua traceback. */
+        WSLUA_ERROR(TvbRange_strsize, lua_tostring(L, 1));
+        return 0;
     }
 
     WSLUA_RETURN(1); /* Length of the zero terminated string. */
@@ -1117,7 +1097,7 @@ WSLUA_METHOD TvbRange_strsize(lua_State* L) {
 
 static int TvbRange_ustringz_any(lua_State* L, bool little_endian) {
     /* Obtain a zero terminated string from a TvbRange */
-    int count;
+    unsigned count;
     TvbRange tvbr = checkTvbRange(L,1);
     int offset;
     gunichar2 uchar;
@@ -1203,7 +1183,7 @@ WSLUA_METHOD TvbRange_bytes(lua_State* L) {
         WSLUA_OPTARG_ERROR(TvbRange_nstime, ENCODING, "invalid encoding value");
     }
     else {
-        int endoff = 0;
+        unsigned endoff = 0;
         GByteArray* retval;
 
         ba = g_byte_array_new();
@@ -1230,8 +1210,8 @@ WSLUA_METHOD TvbRange_bitfield(lua_State* L) {
 #define WSLUA_OPTARG_TvbRange_bitfield_LENGTH 3 /* The length in bits of the field. Defaults to 1. */
 
     TvbRange tvbr = checkTvbRange(L,1);
-    int pos = (int)luaL_optinteger(L,WSLUA_OPTARG_TvbRange_bitfield_POSITION,0);
-    int len = (int)luaL_optinteger(L,WSLUA_OPTARG_TvbRange_bitfield_LENGTH,1);
+    unsigned pos = (unsigned)luaL_optinteger(L,WSLUA_OPTARG_TvbRange_bitfield_POSITION,0);
+    unsigned len = (unsigned)luaL_optinteger(L,WSLUA_OPTARG_TvbRange_bitfield_LENGTH,1);
 
     if (!(tvbr && tvbr->tvb)) return 0;
     if (tvbr->tvb->expired) {
@@ -1283,7 +1263,7 @@ WSLUA_METHOD TvbRange_range(lua_State* L) {
         WSLUA_OPTARG_ERROR(TvbRange_range,OFFSET,"offset before start of TvbRange");
         return 0;
     }
-    if (offset > tvbr->len) {
+    if ((unsigned)offset > tvbr->len) {
         WSLUA_OPTARG_ERROR(TvbRange_range,OFFSET,"offset beyond end of TvbRange");
         return 0;
     }
@@ -1294,7 +1274,7 @@ WSLUA_METHOD TvbRange_range(lua_State* L) {
     if (len < 0) {
         luaL_error(L,"out of bounds");
         return 0;
-    } else if ( (len + offset) > tvbr->len) {
+    } else if ( (unsigned)(len + offset) > tvbr->len) {
         luaL_error(L,"Range is out of bounds");
         return 0;
     }
@@ -1660,7 +1640,7 @@ WSLUA_METHOD TvbRange_raw(lua_State* L) {
         WSLUA_OPTARG_ERROR(TvbRange_raw,OFFSET,"offset before start of TvbRange");
         return 0;
     }
-    if (offset > tvbr->len) {
+    if ((unsigned)offset > tvbr->len) {
         WSLUA_OPTARG_ERROR(TvbRange_raw,OFFSET,"offset beyond end of TvbRange");
         return 0;
     }
@@ -1671,7 +1651,7 @@ WSLUA_METHOD TvbRange_raw(lua_State* L) {
     if (len < 0) {
         luaL_error(L,"out of bounds");
         return false;
-    } else if ( (len + offset) > tvbr->len) {
+    } else if ( (unsigned)(len + offset) > tvbr->len) {
         luaL_error(L,"Range is out of bounds");
         return false;
     }
@@ -1693,7 +1673,7 @@ WSLUA_METAMETHOD TvbRange__eq(lua_State* L) {
     {
         const char* lp = (const char*)tvb_get_ptr(tvb_l->tvb->ws_tvb, tvb_l->offset, tvb_l->len);
         const char* rp = (const char*)tvb_get_ptr(tvb_r->tvb->ws_tvb, tvb_r->offset, tvb_r->len);
-        int i = 0;
+        unsigned i = 0;
 
         for (; i < tvb_r->len; ++i) {
             if (lp[i] != rp[i]) {

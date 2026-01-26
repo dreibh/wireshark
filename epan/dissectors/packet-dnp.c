@@ -3782,7 +3782,7 @@ dissect_dnp3_al(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree)
   /* If this packet is NOT the final Application Layer Message, exit and continue
      processing the remaining data in the fragment. */
   if (!(al_ctl & DNP3_AL_FIN)) {
-    t_robj = proto_tree_add_expert(al_tree, pinfo, &ei_dnp3_buffering_user_data_until_final_frame_is_received, tvb, offset, -1);
+    t_robj = proto_tree_add_expert_remaining(al_tree, pinfo, &ei_dnp3_buffering_user_data_until_final_frame_is_received, tvb, offset);
     return 1;
   }
 #endif
@@ -4265,7 +4265,7 @@ dissect_dnp3_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
       tvbuff_t *al_tvb;
       bool      save_fragmented;
 
-      al_tvb = tvb_new_child_real_data(tvb, al_buffer, (unsigned) (al_buffer_ptr-al_buffer), (int) (al_buffer_ptr-al_buffer));
+      al_tvb = tvb_new_child_real_data(tvb, al_buffer, (unsigned) (al_buffer_ptr-al_buffer), (unsigned) (al_buffer_ptr-al_buffer));
 
       /* Check for fragmented packet */
       save_fragmented = pinfo->fragmented;

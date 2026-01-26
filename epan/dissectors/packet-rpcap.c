@@ -623,12 +623,12 @@ dissect_rpcap_findalldevs_if (tvbuff_t *tvb, packet_info *pinfo _U_,
   }
 
   for (i = 0; i < naddr; i++) {
-    offset = dissect_rpcap_findalldevs_ifaddr (tvb, pinfo, tree, offset);
-    if (tvb_reported_length_remaining (tvb, offset) < 0) {
+    if (tvb_reported_length_remaining (tvb, offset) == 0) {
       /* No more data in packet */
       expert_add_info(pinfo, ti, &ei_no_more_data);
       break;
     }
+    offset = dissect_rpcap_findalldevs_ifaddr (tvb, pinfo, tree, offset);
   }
 
   proto_item_set_len (ti, offset - boffset);
@@ -649,12 +649,12 @@ dissect_rpcap_findalldevs_reply (tvbuff_t *tvb, packet_info *pinfo _U_,
   tree = proto_item_add_subtree (ti, ett_findalldevs_reply);
 
   for (i = 0; i < no_devs; i++) {
-    offset = dissect_rpcap_findalldevs_if (tvb, pinfo, tree, offset);
-    if (tvb_reported_length_remaining (tvb, offset) < 0) {
+    if (tvb_reported_length_remaining (tvb, offset) == 0) {
       /* No more data in packet */
       expert_add_info(pinfo, ti, &ei_no_more_data);
       break;
     }
+    offset = dissect_rpcap_findalldevs_if (tvb, pinfo, tree, offset);
   }
 
   proto_item_append_text (ti, ", %d item%s", no_devs, plurality (no_devs, "", "s"));
@@ -738,12 +738,12 @@ dissect_rpcap_filter (tvbuff_t *tvb, packet_info *pinfo,
   offset += 4;
 
   for (i = 0; i < nitems; i++) {
-    offset = dissect_rpcap_filterbpf_insn (tvb, pinfo, tree, offset);
-    if (tvb_reported_length_remaining (tvb, offset) < 0) {
+    if (tvb_reported_length_remaining (tvb, offset) == 0) {
       /* No more data in packet */
       expert_add_info(pinfo, ti, &ei_no_more_data);
       break;
     }
+    offset = dissect_rpcap_filterbpf_insn (tvb, pinfo, tree, offset);
   }
 }
 
@@ -958,8 +958,7 @@ dissect_rpcap_sampling_request (tvbuff_t *tvb, packet_info *pinfo _U_,
   proto_tree_add_item (tree, hf_sampling_dummy2, tvb, offset, 2, ENC_BIG_ENDIAN);
   offset += 2;
 
-  value = tvb_get_ntohl (tvb, offset);
-  proto_tree_add_item (tree, hf_sampling_value, tvb, offset, 4, ENC_BIG_ENDIAN);
+  proto_tree_add_item_ret_uint (tree, hf_sampling_value, tvb, offset, 4, ENC_BIG_ENDIAN, &value);
   offset += 4;
 
   switch (method) {
@@ -995,16 +994,13 @@ dissect_rpcap_packet (tvbuff_t *tvb, packet_info *pinfo, proto_tree *top_tree,
   proto_tree_add_item(tree, hf_timestamp, tvb, offset, 8, ENC_TIME_SECS_USECS|ENC_BIG_ENDIAN);
   offset += 8;
 
-  caplen = tvb_get_ntohl (tvb, offset);
-  ti = proto_tree_add_item (tree, hf_caplen, tvb, offset, 4, ENC_BIG_ENDIAN);
+  ti = proto_tree_add_item_ret_uint (tree, hf_caplen, tvb, offset, 4, ENC_BIG_ENDIAN, &caplen);
   offset += 4;
 
-  len = tvb_get_ntohl (tvb, offset);
-  proto_tree_add_item (tree, hf_len, tvb, offset, 4, ENC_BIG_ENDIAN);
+  proto_tree_add_item_ret_uint (tree, hf_len, tvb, offset, 4, ENC_BIG_ENDIAN, &len);
   offset += 4;
 
-  frame_no = tvb_get_ntohl (tvb, offset);
-  proto_tree_add_item (tree, hf_npkt, tvb, offset, 4, ENC_BIG_ENDIAN);
+  proto_tree_add_item_ret_uint (tree, hf_npkt, tvb, offset, 4, ENC_BIG_ENDIAN, &frame_no);
   offset += 4;
 
   proto_item_append_text (ti, ", Frame %u", frame_no);

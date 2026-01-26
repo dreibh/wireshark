@@ -51,7 +51,7 @@
 #include <wsutil/ws_assert.h>
 #include <wsutil/strtoi.h>
 #include <wsutil/report_message.h>
-#include <wsutil/application_flavor.h>
+#include <app/application_flavor.h>
 #include <wsutil/path_config.h>
 #include <cli_main.h>
 #include <wsutil/version_info.h>
@@ -302,7 +302,7 @@ print_elapsed_json(const char *cf_name, const char *dfilter)
 
     json_dumper_begin_object(&dumper);
     json_dumper_set_member_name(&dumper, "version");
-    json_dumper_value_string(&dumper, get_ws_vcs_version_info_short());
+    json_dumper_value_string(&dumper, application_get_vcs_version_info_short());
     if (cf_name) {
         json_dumper_set_member_name(&dumper, "path");
         json_dumper_value_string(&dumper, cf_name);
@@ -842,7 +842,7 @@ about_folders(void)
     g_strfreev(resultArray);
 
     /* Global Extcap */
-    constpath = get_extcap_dir(env_prefix, EXTCAP_DIR);
+    constpath = get_extcap_dir(env_prefix, application_extcap_dir());
 
     resultArray = g_strsplit(constpath, G_SEARCHPATH_SEPARATOR_S, 10);
     for(i = 0; resultArray[i]; i++)
@@ -1197,7 +1197,7 @@ main(int argc, char *argv[])
 #endif /* _WIN32 */
 
     /* Initialize the version information. */
-    ws_init_version_info("TShark", application_flavor_name_proper(), get_ws_vcs_version_info,
+    ws_init_version_info("TShark", application_flavor_name_proper(), application_get_vcs_version_info,
             gather_tshark_compile_info, gather_tshark_runtime_info);
 
     /* Fail sometimes. Useful for testing fuzz scripts. */
@@ -1377,7 +1377,6 @@ main(int argc, char *argv[])
     app_data.register_func = register_all_protocols;
     app_data.handoff_func = register_all_protocol_handoffs;
     app_data.tap_reg_listeners = tap_reg_listener;
-    app_data.supports_packets = application_flavor_is_wireshark();
     if (!epan_init(NULL, NULL, true, &app_data)) {
         exit_status = WS_EXIT_INIT_FAILED;
         goto clean_exit;
@@ -4485,7 +4484,7 @@ write_preamble(capture_file *cf)
     switch (output_action) {
 
         case WRITE_TEXT:
-            return print_preamble(print_stream, cf->filename, get_ws_vcs_version_info());
+            return print_preamble(print_stream, cf->filename, application_get_vcs_version_info());
 
         case WRITE_XML:
             if (print_details)

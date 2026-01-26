@@ -227,12 +227,12 @@ dissect_p1_mts_apdu (tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree,
 static int
 dissect_p1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data)
 {
-    int offset = 0;
-    int old_offset;
+    unsigned offset = 0;
+    unsigned old_offset;
     proto_item *item;
     proto_tree *tree;
     struct SESSION_DATA_STRUCTURE* session;
-    int (*p1_dissector)(bool implicit_tag _U_, tvbuff_t *tvb, int offset, asn1_ctx_t *actx _U_, proto_tree *tree, int hf_index _U_) = NULL;
+    unsigned (*p1_dissector)(bool implicit_tag _U_, tvbuff_t *tvb, unsigned offset, asn1_ctx_t *actx _U_, proto_tree *tree, int hf_index _U_) = NULL;
     const char *p1_op_name;
     int hf_p1_index = 0;
     asn1_ctx_t asn1_ctx;
@@ -276,7 +276,7 @@ dissect_p1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* dat
       hf_p1_index = hf_p1_MTS_APDU_PDU;
       break;
     default:
-      proto_tree_add_expert(tree, pinfo, &ei_p1_unsupported_pdu, tvb, offset, -1);
+      proto_tree_add_expert_remaining(tree, pinfo, &ei_p1_unsupported_pdu, tvb, offset);
       return tvb_captured_length(tvb);
     }
 
@@ -286,7 +286,7 @@ dissect_p1(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* dat
         old_offset=offset;
         offset=(*p1_dissector)(false, tvb, offset, &asn1_ctx , tree, hf_p1_index);
         if (offset == old_offset) {
-            proto_tree_add_expert(tree, pinfo, &ei_p1_zero_pdu, tvb, offset, -1);
+            proto_tree_add_expert_remaining(tree, pinfo, &ei_p1_zero_pdu, tvb, offset);
             break;
         }
     }
