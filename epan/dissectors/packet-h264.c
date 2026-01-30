@@ -1195,8 +1195,7 @@ dissect_h264_profile(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree)
      *    shall be set equal to 0.
      */
 
-    level_idc = tvb_get_uint8(tvb, offset);
-    level_item = proto_tree_add_item(h264_profile_tree, hf_h264_level_idc, tvb, offset, 1, ENC_BIG_ENDIAN);
+    level_item = proto_tree_add_item_ret_uint(h264_profile_tree, hf_h264_level_idc, tvb, offset, 1, ENC_BIG_ENDIAN, &level_idc);
     if ((level_idc == 11) && (constraint_set3_flag == 1)) {
         proto_item_append_text(level_item," [Level 1b (128kb/s)]");
     } else {
@@ -1664,8 +1663,7 @@ dissect_h264_seq_parameter_set_rbsp(proto_tree *tree, tvbuff_t *tvb, packet_info
     int         ScalingList4x4[6][16], ScalingList8x8[2][64];
 
     /* profile_idc 0 u(8) */
-    profile_idc = tvb_get_uint8(tvb, offset);
-    proto_tree_add_item(tree, hf_h264_profile_idc, tvb, offset, 1, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint8(tree, hf_h264_profile_idc, tvb, offset, 1, ENC_BIG_ENDIAN, &profile_idc);
     offset++;
 
     constraint_set3_flag = (tvb_get_uint8(tvb, offset)&0x10)>>4;
@@ -1692,8 +1690,7 @@ dissect_h264_seq_parameter_set_rbsp(proto_tree *tree, tvbuff_t *tvb, packet_info
     offset++;
 
     /* level_idc 0 u(8) */
-    level_idc = tvb_get_uint8(tvb, offset);
-    level_item = proto_tree_add_item(tree, hf_h264_level_idc, tvb, offset, 1, ENC_BIG_ENDIAN);
+    level_item = proto_tree_add_item_ret_uint(tree, hf_h264_level_idc, tvb, offset, 1, ENC_BIG_ENDIAN, &level_idc);
     if ((level_idc == 11) && (constraint_set3_flag == 1)) {
         proto_item_append_text(level_item,"[Level 1b]");
     } else {
@@ -2426,7 +2423,7 @@ dissect_h264_bytestream(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
 
     tvbuff_t *next_tvb, *rbsp_tvb;
     unsigned offset = 0;
-    int end_offset;
+    unsigned end_offset;
     uint32_t dword;
 
     /* Look for the first start word. Assume byte aligned. */
@@ -2455,23 +2452,23 @@ dissect_h264_bytestream(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
         }
         /* start_code_prefix_one_3bytes */
         offset += 3;
-        int nal_length = tvb_reported_length_remaining(tvb, offset);
+        unsigned nal_length = tvb_reported_length_remaining(tvb, offset);
         /* Search for either \0\0\1 or \0\0\0\1:
          * Find \0\0 and then check if \0\1 is in the next offset or
          * the one after that. (Note none of this throws exceptions.)
          */
-        end_offset = tvb_find_uint16(tvb, offset, -1, 0);
-        while (end_offset != -1) {
-            if (tvb_find_uint16(tvb, end_offset + 1, 3, 1) != -1) {
+        end_offset = offset;
+        while (tvb_find_uint16_remaining(tvb, end_offset, 0, &end_offset)) {
+            if (tvb_find_uint16_length(tvb, end_offset + 1, 3, 1, NULL)) {
                 nal_length = end_offset - offset;
                 break;
             }
-            end_offset = tvb_find_uint16(tvb, end_offset + 1, -1, 0);
+            end_offset++;
         }
 
-        /* If end_offset is -1, we got to the end; assume this is the end
-         * of the NAL. To handle a bytestream that fragments NALs across
-         * lower level packets (does any implementation do this?), we would
+        /* If we got to the end, assume this is the end of the NAL.
+         * To handle a bytestream that fragments NALs across lower
+         * level packets (does any implementation do this?), we would
          * need to use epan/stream.h
          */
 

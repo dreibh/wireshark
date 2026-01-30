@@ -261,7 +261,6 @@ source_group(dissectors-ncp2222 FILES ${NCP2222_DISSECTOR_SRC})
 #
 set(DISSECTOR_PUBLIC_HEADERS
 	# Do not edit this list by hand. Generate it by running tools/generate-dissector-lists.py instead.
-	data-iana.h
 	file-pcapng.h
 	packet-a21.h
 	packet-ansi_a.h
@@ -1290,7 +1289,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-multipart.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mux27010.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-mysql.c
-		${CMAKE_CURRENT_SOURCE_DIR}/packet-nano.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-nano.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-nas_5gs.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-nas_eps.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-nasdaq-itch.c
@@ -1474,6 +1473,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-q708.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-q931.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-q933.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-qcdiag.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-qllc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-qnet6.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-quake.c
@@ -1748,8 +1748,8 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ubdp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ubertooth.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ubx.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/packet-ubx-galileo_e1b_inav.c
-        ${CMAKE_CURRENT_SOURCE_DIR}/packet-ubx-gps_l1_lnav.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-ubx-galileo_e1b_inav.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-ubx-gps_l1_lnav.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-uci.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ucp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-udld.c
@@ -1915,7 +1915,6 @@ set(DISSECTOR_DATA_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/data-bacnet.c
 	${CMAKE_CURRENT_SOURCE_DIR}/data-bluetooth.c
 	${CMAKE_CURRENT_SOURCE_DIR}/data-dmx-manfid.c
-	${CMAKE_CURRENT_SOURCE_DIR}/data-iana.c
 	${CMAKE_CURRENT_SOURCE_DIR}/data-isobus.c
 	${CMAKE_CURRENT_SOURCE_DIR}/data-midi-sysex-id.c
 	${CMAKE_CURRENT_SOURCE_DIR}/data-ncsi.c

@@ -91,6 +91,7 @@
 #include <QLocale>
 #include <QMainWindow>
 #include <QMutableListIterator>
+#include <QProxyStyle>
 #include <QSocketNotifier>
 #include <QThreadPool>
 #include <QUrl>
@@ -191,12 +192,32 @@ void MainApplication::refreshPacketData()
     }
 }
 
+// The Fusion style, and the Mac style, allow QMessageBox text to be
+// selectable by the mouse. The various Windows styles do not. On
+// Windows we switch between the Fusion style and Windows style depending
+// on dark mode, so to make things consistent on Windows (and between
+// Windows and other platforms) alllow it on all styles.
+class MsgBoxTextStyle : public QProxyStyle
+{
+public:
+    MsgBoxTextStyle(QStyle *style = nullptr) : QProxyStyle(style) {}
+    MsgBoxTextStyle(const QString &key) : QProxyStyle(key) {}
+    int styleHint(StyleHint hint, const QStyleOption *option = nullptr,
+        const QWidget *widget = nullptr, QStyleHintReturn *returnData = nullptr) const override
+    {
+        if (hint == QStyle::SH_MessageBox_TextInteractionFlags)
+            return QProxyStyle::styleHint(hint, option, widget, returnData) | Qt::TextSelectableByMouse;
+        return QProxyStyle::styleHint(hint, option, widget, returnData);
+    }
+};
+
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0) && defined(Q_OS_WIN)
 void MainApplication::colorSchemeChanged() {
+    // TODO - Supposedly the windows11 style handles dark mode better.
     if (ColorUtils::themeIsDark()) {
         setStyle(QStyleFactory::create("fusion"));
     } else {
-        setStyle(QStyleFactory::create("windowsvista"));
+        setStyle(new MsgBoxTextStyle("windowsvista"));
     }
 }
 #endif
@@ -411,16 +432,12 @@ void MainApplication::setConfigurationProfile(const char *profile_name, bool wri
     timestamp_set_type(recent.gui_time_format);
     timestamp_set_precision(recent.gui_time_precision);
     timestamp_set_seconds_type (recent.gui_seconds_format);
-    tap_update_timer_.setInterval(prefs.tap_update_interval);
 
     prefs_to_capture_opts(&global_capture_opts);
     prefs_apply_all();
 #ifdef HAVE_LIBPCAP
     update_local_interfaces(&global_capture_opts);
 #endif
-
-    setMonospaceFont(prefs.gui_font_name);
-    ColorUtils::setScheme(prefs.gui_color_scheme);
 
     emit columnsChanged();
     emit colorsChanged();
@@ -591,6 +608,10 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     setAttribute(Qt::AA_DisableWindowContextHelpButton);
 #endif
 
+    // We use a lot of style sheets that base their colors on the main
+    // application palette, so this works better.
+    setAttribute(Qt::AA_UseStyleSheetPropagationInWidgetStyles, true);
+
     // Throw various settings at the wall with the hope that one of them will
     // enable context menu shortcuts QTBUG-69452, QTBUG-109590
     setAttribute(Qt::AA_DontShowShortcutsInContextMenus, false);
@@ -601,19 +622,11 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     packet_data_timer_.start(1000);
 
     tap_update_timer_.setParent(this);
-    tap_update_timer_.setInterval(TAP_UPDATE_DEFAULT_INTERVAL);
+    // tap_update_timer interval is set when preferences are set before init
     connect(this, &MainApplication::appInitialized, &tap_update_timer_, [&]() { tap_update_timer_.start(); });
     connect(this, &MainApplication::appInitialized, [this] { emit aggregationVisiblity(); });
     connect(&tap_update_timer_, &QTimer::timeout, this, &MainApplication::updateTaps);
 
-    // Application-wide style sheet
-    QString app_style_sheet = qApp->styleSheet();
-    app_style_sheet += QStringLiteral(
-        "QMessageBox { "
-        "  messagebox-text-interaction-flags: %1;"
-        "}"
-        ).arg(Qt::TextSelectableByMouse);
-    qApp->setStyleSheet(app_style_sheet);
 
     // If our window text is lighter than the window background, assume the theme is dark.
     prefs_set_gui_theme_is_dark(ColorUtils::themeIsDark());
@@ -625,6 +638,8 @@ MainApplication::MainApplication(int &argc,  char **argv) :
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0) && defined(Q_OS_WIN)
     colorSchemeChanged();
     connect(styleHints(), &QStyleHints::colorSchemeChanged, this, &MainApplication::colorSchemeChanged);
+#else
+    setStyle(new MsgBoxTextStyle);
 #endif
 
     connect(qApp, &QApplication::aboutToQuit, this, &MainApplication::cleanup);
@@ -666,6 +681,8 @@ void MainApplication::emitAppSignal(AppSignal signal)
         emit addressResolutionChanged();
         break;
     case PreferencesChanged:
+        tap_update_timer_.setInterval(prefs.tap_update_interval);
+        setMonospaceFont(prefs.gui_font_name);
         emit preferencesChanged();
         break;
     case PacketDissectionChanged:
@@ -681,6 +698,7 @@ void MainApplication::emitAppSignal(AppSignal signal)
         emit fieldsChanged();
         break;
     case ColorsChanged:
+        ColorUtils::setScheme(prefs.gui_color_scheme);
         emit colorsChanged();
         break;
     case FreezePacketList:
