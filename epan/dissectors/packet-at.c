@@ -1905,12 +1905,16 @@ dissect_csim_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 pitem = proto_tree_add_item(tree, hf_csim_response, tvb, offset,
                                             parameter_length, ENC_ASCII);
             }
-            hex_length = (parameter_length - 2); /* ignoring leading and trailing quotes */
+            hex_length = parameter_length;
+            if (*parameter_stream == '\"') {
+                /* Ignore leading and trailing quotes */
+                hex_length -= 2;
+            }
             if (hex_length % 2 == 1) {
                 expert_add_info(pinfo, pitem, &ei_odd_len);
                 return true;
             }
-            if(hex_length < 1) {
+            if (hex_length < 1) {
                 expert_add_info(pinfo, pitem, &ei_empty_hex);
                 return true;
             }
@@ -1918,7 +1922,9 @@ dissect_csim_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             final_arr = wmem_alloc0_array(pinfo->pool,uint8_t,bytes_count);
             /* Try to parse the hex string into a byte array */
             uint8_t *pos = parameter_stream;
-            pos++; /* skipping first quotes */
+            if (*parameter_stream == '\"') {
+                pos++; /* Skip first quote */
+            }
             for (i = 0; i < bytes_count; i++) {
                 if (!g_ascii_isxdigit(*pos) || !g_ascii_isxdigit(*(pos + 1))) {
                     /* Either current or next char isn't a hex character */
@@ -1931,7 +1937,6 @@ dissect_csim_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             final_tvb = tvb_new_child_real_data(tvb, final_arr, bytes_count, bytes_count);
             add_new_data_source(pinfo, final_tvb, "GSM SIM payload");
             /* Call GSM SIM dissector*/
-            col_append_str(pinfo->cinfo, COL_INFO, " | ");
             call_dissector_with_data(gsm_sim_handle, final_tvb, pinfo, tree, data);
             break;
     }

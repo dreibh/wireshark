@@ -4020,6 +4020,15 @@ blf_dump_set_interface_mapping(wtap_dumper *wdh, uint32_t interface_id, int pkt_
 
     blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
 
+    /*
+     * XXX - will this ever happen add new mappings?
+     *
+     * We expand the interface mapping to include all known interfaces
+     * at the time we open the dump file for writing and every time
+     * we get notified of a new IDB.
+     *
+     * Does that miss any cases?
+     */
     blf_dump_expand_interface_mapping(wdh, interface_id + 1);
 
     blf_channel_to_iface_entry_t *tmp = &g_array_index(writer_data->iface_to_channel_array, blf_channel_to_iface_entry_t, interface_id);
@@ -4314,6 +4323,9 @@ static bool blf_dump_ethernet(wtap_dumper *wdh, const wtap_rec *rec, int *err, c
 
     //blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
     const blf_channel_to_iface_entry_t *iface_entry = blf_dump_get_interface_mapping(wdh, rec, err, err_info);
+    if (iface_entry == NULL) {
+        return false;
+    }
 
     const uint8_t *pd = ws_buffer_start_ptr(&rec->data);
     size_t length = ws_buffer_length(&rec->data);
@@ -4391,6 +4403,9 @@ static bool blf_dump_socketcanxl(wtap_dumper *wdh, const wtap_rec *rec, int *err
 
     //blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
     blf_channel_to_iface_entry_t *iface_entry = blf_dump_get_interface_mapping(wdh, rec, err, err_info);
+    if (iface_entry == NULL) {
+        return false;
+    }
 
     uint8_t  socketcan_vcid = pd[1];
     uint16_t socketcan_id = pntohu16(pd + 2) & CAN_SFF_MASK;
@@ -4482,6 +4497,9 @@ static bool blf_dump_socketcan(wtap_dumper *wdh, const wtap_rec *rec, int *err, 
 
     //blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
     blf_channel_to_iface_entry_t *iface_entry = blf_dump_get_interface_mapping(wdh, rec, err, err_info);
+    if (iface_entry == NULL) {
+        return false;
+    }
 
     uint8_t payload_length = pd[4];
 
@@ -4676,6 +4694,9 @@ static bool blf_dump_flexray(wtap_dumper *wdh, const wtap_rec *rec, int *err, ch
 
     //blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
     blf_channel_to_iface_entry_t *iface_entry = blf_dump_get_interface_mapping(wdh, rec, err, err_info);
+    if (iface_entry == NULL) {
+        return false;
+    }
 
     const uint8_t *pd = ws_buffer_start_ptr(&rec->data);
     size_t length = ws_buffer_length(&rec->data);
@@ -4833,6 +4854,9 @@ static bool blf_dump_lin(wtap_dumper *wdh, const wtap_rec *rec, int *err, char *
 
     //blf_writer_data_t *writer_data = (blf_writer_data_t *)wdh->priv;
     blf_channel_to_iface_entry_t *iface_entry = blf_dump_get_interface_mapping(wdh, rec, err, err_info);
+    if (iface_entry == NULL) {
+        return false;
+    }
 
     const uint8_t *pd = ws_buffer_start_ptr(&rec->data);
     size_t length = ws_buffer_length(&rec->data);
@@ -5183,7 +5207,8 @@ static bool blf_dump_interface_setup(wtap_dumper *wdh, int *err) {
         const wtapng_if_descr_mandatory_t *mand_data = (wtapng_if_descr_mandatory_t *) idb->mandatory_data;
 
         if (mand_data->wtap_encap == WTAP_ENCAP_ETHERNET || mand_data->wtap_encap == WTAP_ENCAP_SLL ||
-            mand_data->wtap_encap == WTAP_ENCAP_LIN || mand_data->wtap_encap == WTAP_ENCAP_SOCKETCAN) {
+            mand_data->wtap_encap == WTAP_ENCAP_LIN || mand_data->wtap_encap == WTAP_ENCAP_SOCKETCAN ||
+            mand_data->wtap_encap == WTAP_ENCAP_FLEXRAY) {
 
             char *iface_name = NULL;
             bool iface_name_found = wtap_block_get_string_option_value(idb, OPT_IDB_NAME, &iface_name) == WTAP_OPTTYPE_SUCCESS;
@@ -5297,9 +5322,13 @@ static int blf_dump_can_write_encap(int wtap_encap) {
     return WTAP_ERR_UNWRITABLE_ENCAP;
 }
 
-static bool blf_add_idb(wtap_dumper *wdh _U_, wtap_block_t idb _U_, int *err _U_, char **err_info _U_) {
+static bool blf_add_idb(wtap_dumper *wdh, wtap_block_t idb _U_, int *err _U_, char **err_info _U_) {
     ws_debug("entering function");
-    /* TODO: is there any reason to keep this? */
+    /*
+     * A new IDB was added to the list of itnerfaces for the file to
+     * which we're writing; update hte interface mapping.
+     */
+    blf_dump_expand_interface_mapping(wdh, wdh->interface_data->len);
 
     return true;
 }

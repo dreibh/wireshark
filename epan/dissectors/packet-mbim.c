@@ -48,6 +48,7 @@
 #include <epan/unit_strings.h>
 #include <epan/iana-info.h>
 #include <wiretap/wtap.h>
+#include <wsutil/ws_padding_to.h>
 
 #include "packet-gsm_a_common.h"
 #include "packet-gsm_map.h"
@@ -935,11 +936,13 @@ static int hf_mbim_ms_uicc_channel;
 static int hf_mbim_ms_uicc_response_length;
 static int hf_mbim_ms_uicc_response_offset;
 static int hf_mbim_ms_uicc_response;
+static int hf_mbim_ms_uicc_padding;
 static int hf_mbim_ms_apdu_secure_messaging;
 static int hf_mbim_ms_apdu_type;
 static int hf_mbim_ms_apdu_command_size;
 static int hf_mbim_ms_apdu_command_offset;
 static int hf_mbim_ms_apdu_command;
+static int hf_mbim_ms_apdu_padding;
 static int hf_mbim_ms_terminal_capability_count;
 static int hf_mbim_ms_terminal_capability_offset;
 static int hf_mbim_ms_terminal_capability_size;
@@ -7185,6 +7188,8 @@ mbim_dissect_ms_apdu(tvbuff_t* tvb, packet_info *pinfo, proto_tree* tree, unsign
 {
     uint32_t base_offset = offset;
     uint32_t command_offset, command_size;
+    uint32_t padding_size;
+
     proto_tree_add_item(tree, hf_mbim_ms_uicc_channel, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
     proto_tree_add_item(tree, hf_mbim_ms_apdu_secure_messaging, tvb, offset, 4, ENC_LITTLE_ENDIAN);
@@ -7217,6 +7222,11 @@ mbim_dissect_ms_apdu(tvbuff_t* tvb, packet_info *pinfo, proto_tree* tree, unsign
             }
         }
     }
+
+    padding_size = WS_PADDING_TO_4(command_size);
+    if (padding_size > 0) {
+        proto_tree_add_item(tree, hf_mbim_ms_apdu_padding, tvb, base_offset + command_offset + command_size, padding_size, ENC_NA);
+    }
 }
 
 static void
@@ -7224,6 +7234,7 @@ mbim_dissect_ms_apdu_info(tvbuff_t* tvb, packet_info *pinfo, proto_tree* tree, u
 {
     uint32_t base_offset = offset;
     uint32_t response_offset, response_length;
+    uint32_t padding_size;
 
     proto_tree_add_item(tree, hf_mbim_ms_uicc_status, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
@@ -7234,20 +7245,33 @@ mbim_dissect_ms_apdu_info(tvbuff_t* tvb, packet_info *pinfo, proto_tree* tree, u
     if (response_offset && response_length) {
         proto_item *item;
         proto_tree *sub_tree;
+        tvbuff_t *response_tvb;
+
+        /* Combine the response APDU and status */
+        response_tvb = tvb_new_composite();
+        tvb_composite_append(response_tvb, tvb_new_subset_length(tvb, base_offset + response_offset, response_length));
+        tvb_composite_append(response_tvb, tvb_new_subset_length(tvb, base_offset, 2));
+        tvb_composite_finalize(response_tvb);
+        add_new_data_source(pinfo, response_tvb, "UICC response");
 
         item = proto_tree_add_item(tree, hf_mbim_ms_uicc_response, tvb, base_offset + response_offset, response_length, ENC_NA);
         if (mbim_uicc_apdu_dissector == UICC_APDU_GSM_SIM) {
             if (gsm_sim_rsp_handle) {
                 sub_tree = proto_item_add_subtree(item, ett_mbim_buffer);
-                call_dissector(gsm_sim_rsp_handle, tvb_new_subset_length(tvb, base_offset + response_offset, response_length), pinfo, sub_tree);
+                call_dissector(gsm_sim_rsp_handle, response_tvb, pinfo, sub_tree);
             }
         } else {
             if (iso7816_handle) {
                 sub_tree = proto_item_add_subtree(item, ett_mbim_buffer);
                 pinfo->p2p_dir = P2P_DIR_RECV;
-                call_dissector(iso7816_handle, tvb_new_subset_length(tvb, base_offset + response_offset, response_length), pinfo, sub_tree);
+                call_dissector(iso7816_handle, response_tvb, pinfo, sub_tree);
             }
         }
+    }
+
+    padding_size = WS_PADDING_TO_4(response_length);
+    if (padding_size > 0) {
+        proto_tree_add_item(tree, hf_mbim_ms_uicc_padding, tvb, base_offset + response_offset + response_length, padding_size, ENC_NA);
     }
 }
 
@@ -14371,6 +14395,11 @@ proto_register_mbim(void)
                FT_BYTES, BASE_NONE, NULL, 0,
               NULL, HFILL }
         },
+        { &hf_mbim_ms_uicc_padding,
+            { "Response Padding", "mbim.control.ms_uicc.padding",
+               FT_BYTES, BASE_NONE, NULL, 0,
+              NULL, HFILL }
+        },
         { &hf_mbim_ms_apdu_secure_messaging,
             { "Secure messaging", "mbim.control.ms_apdu.secure_messaging",
                FT_UINT32, BASE_DEC, VALS(mbim_ms_apdu_secure_messaging_vals), 0,
@@ -14393,6 +14422,11 @@ proto_register_mbim(void)
         },
         { &hf_mbim_ms_apdu_command,
             { "Command", "mbim.control.ms_apdu.command",
+               FT_BYTES, BASE_NONE, NULL, 0,
+              NULL, HFILL }
+        },
+        { &hf_mbim_ms_apdu_padding,
+            { "Command Padding", "mbim.control.ms_apdu.padding",
                FT_BYTES, BASE_NONE, NULL, 0,
               NULL, HFILL }
         },

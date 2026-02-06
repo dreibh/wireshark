@@ -89,6 +89,7 @@ HEADER_CHECK_FLAGS = $(shell pkg-config --cflags glib-2.0) \
 	-Idebian/libwireshark-dev/usr/include/libwireshark-dev/epan/dissectors \
 	-Idebian/libwiretap-dev/usr/include/wireshark \
 	-Idebian/libwsutil-dev/usr/include/wireshark \
+	-Idebian/libuiqt-plugin-dev/usr/include/wireshark \
 
 override_dh_install:
 	dh_install
@@ -115,6 +116,7 @@ endif
 override_dh_makeshlibs:
 	for package in $$(grep 'Package: lib.*[0-9]$$' debian/control  | cut -d' ' -f2); do \
 		lib=$${package%%[0-9]*};\
+		lib=$$(echo "$$lib" | sed 's/-/_/');\
 		major=$${package##*[a-z]}; \
 		echo "$$lib $$major $$package (= $(DEB_VERSION))"  > debian/$$package.shlibs; \
 	done
