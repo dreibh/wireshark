@@ -1475,6 +1475,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-q931.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-q933.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-qcdiag.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-qcdiag_log.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-qllc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-qnet6.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-quake.c
