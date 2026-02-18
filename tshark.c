@@ -2491,7 +2491,7 @@ main(int argc, char *argv[])
             warn_about_capture_filter(rfilter);
 #endif
 
-            exit_status = WS_EXIT_INVALID_INTERFACE;
+            exit_status = WS_EXIT_INVALID_FILTER;
             goto clean_exit;
         }
     }
@@ -3278,19 +3278,17 @@ capture_input_new_packets(capture_session *cap_session, int to_read)
                        passed the filter, and, if we were supposed to
                        print dissection information, we did so successfully. */
                     packet_count++;
-                    ret = true;
                     break;
 
                 case PROCESS_PACKET_DIDNT_PASS:
                     /* There is read filtering and this packet didn't pass
                        the filter. */
-                    ret = false;
                     break;
 
                 case PROCESS_PACKET_PRINT_ERROR:
                     /* Either here's no read filtering or this packet passed
                        the read filter, and we tried to print dissection
-                       informaion, but that failed.  We've already reported
+                       information, but that failed.  We've already reported
                        the error, unless it was EPIPE, in which case we just
                        silently quit; tell the capture child to stop. */
                     sync_pipe_stop(cap_session);
@@ -3959,9 +3957,9 @@ process_cap_file_second_pass(capture_file *cf, wtap_dumper *pdh,
         case PROCESS_PACKET_PRINT_ERROR:
             /* Either here's no read filtering or this packet passed
                the read filter, and we tried to print dissection
-               informaion, but that failed.  We've already reported
+               information, but that failed.  We've already reported
                the error, unless it was EPIPE, in which case we just
-               silently quit; stop processing packes. */
+               silently quit; stop processing packets. */
             got_printing_error = true;
             status = PASS_PRINT_ERROR;
             break;
@@ -4098,7 +4096,7 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
         case PROCESS_PACKET_PRINT_ERROR:
             /* Either here's no read filtering or this packet passed
                the read filter, and we tried to print dissection
-               informaion, but that failed.  We've already reported
+               information, but that failed.  We've already reported
                the error, unless it was EPIPE, in which case we just
                silently quit; tell the capture child to stop. */
             got_printing_error = true;
