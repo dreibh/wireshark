@@ -13,7 +13,6 @@
 #include "packet-rpc.h"
 
 #define NFS_PROGRAM 100003
-#define NFS_CB_PROGRAM 0x40000000
 
 #define FHSIZE 32
 
@@ -204,7 +203,7 @@
 #define NL4_NETADDR 3
 
 extern bool nfs_file_name_snooping;
-extern void nfs_name_snoop_add_name(int xid, tvbuff_t *tvb, unsigned name_offset, unsigned name_len,
+extern void nfs_name_snoop_add_name(uint64_t id, tvbuff_t *tvb, unsigned name_offset, unsigned name_len,
 	unsigned parent_offset, unsigned parent_len, const char *name);
 extern bool nfs_fhandle_reqrep_matching;
 extern unsigned dissect_fhandle(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree *tree,
@@ -216,7 +215,7 @@ extern unsigned dissect_nfs3_post_op_attr(tvbuff_t *tvb, unsigned offset, packet
 	                                 const char* name);
 extern unsigned dissect_nfs2_fattr(tvbuff_t *tvb, unsigned offset, proto_tree *tree, const char* name);
 extern proto_tree* display_access_items(tvbuff_t* tvb, unsigned offset, packet_info* pinfo,
-	                                    proto_tree* tree, uint32_t amask, char mtype, int version,
+	                                    proto_tree* tree, uint32_t amask, uint32_t rmask, char mtype, int version,
 										wmem_strbuf_t* optext, const char* label);
 extern unsigned dissect_access_reply(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tree* tree,
                                 int version, wmem_strbuf_t *optext, rpc_call_info_value *civ);
