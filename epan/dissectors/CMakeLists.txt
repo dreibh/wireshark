@@ -605,6 +605,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cisco-sm.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cisco-ttag.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cisco-wids.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-citp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cl3.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-cl3dcw.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-classicstun.c
@@ -981,6 +982,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hiqnet.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hislip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hl7.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-homeplug-av-vendor-vertexcom.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-homeplug-av.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-homeplug.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-homepna.c
