@@ -5202,7 +5202,7 @@ static bool blf_dump_interface_setup_by_blf_based_idb_desc(wtap_dumper *wdh, int
         }
 
         char *iface_descr = NULL;
-        iface_descr_found = wtap_block_get_string_option_value(idb, OPT_IDB_DESCRIPTION, &iface_descr);
+        iface_descr_found = wtap_block_get_string_option_value(idb, OPT_IDB_DESCRIPTION, &iface_descr) == WTAP_OPTTYPE_SUCCESS;
 
         if (!iface_descr_found) {
             /* This cannot be reached but it removes a warning. */
@@ -5400,7 +5400,7 @@ static bool blf_add_idb(wtap_dumper *wdh, wtap_block_t idb _U_, int *err _U_, ch
      * A new IDB was added to the list of itnerfaces for the file to
      * which we're writing; update hte interface mapping.
      */
-    blf_dump_expand_interface_mapping(wdh, wdh->interface_data->len);
+    blf_dump_interface_setup(wdh, err); // Expands and populates the interface mapping
 
     return true;
 }
