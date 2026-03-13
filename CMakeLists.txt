@@ -499,8 +499,8 @@ endif()
 # be reduced further by setting "job pools" to a lower number.
 #
 if(CMAKE_MAKE_PROGRAM MATCHES "ninja" AND OSS_FUZZ)
-	# Assume oss-fuzz linker jobs do not require more than 1.2G per task
-	set(per_job_memory_mb 1200)
+	# Assume oss-fuzz linker jobs do not require more than 2G per task
+	set(per_job_memory_mb 2000)
 	cmake_host_system_information(RESULT total_memory_mb QUERY TOTAL_PHYSICAL_MEMORY)
 	math(EXPR parallel_link_jobs "${total_memory_mb} / ${per_job_memory_mb}")
 	if(parallel_link_jobs LESS 1)
@@ -999,6 +999,7 @@ else() # ! MSVC
 	set(WIRESHARK_LD_FLAGS
 		# See also CheckCLinkerFlag.cmake
 		-Wl,--as-needed
+		-Wl,--stack,8388608 # For Windows, e.g. MSYS2/mingw
 		# -flto
 		# -fwhopr
 		# -fwhole-program
@@ -2252,6 +2253,7 @@ set(INSTALL_DIRS
 	resources/protocols/qualcomm
 	resources/protocols/radius
 	resources/protocols/tpncp
+	resources/protocols/trdp
 	resources/protocols/wimaxasncp
 	resources/protocols/protobuf
 )
@@ -2352,28 +2354,6 @@ if(USE_REPOSITORY)
 		COMMAND ${CMAKE_COMMAND} -E make_directory "${_dll_output_dir}"
 	)
 
-	# XXX Can (and should) we iterate over these similar to the way
-	# the top-level CMakeLists.txt iterates over the package list?
-
-	# Required DLLs and their corresponding PDBs.
-	add_custom_command(TARGET copy_cli_dlls PRE_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-			"$<IF:$<CONFIG:Debug>,${GLIB2_DLLS_DEBUG},${GLIB2_DLLS_RELEASE}>"
-			"$<IF:$<CONFIG:Debug>,${GLIB2_PDBS_DEBUG},${GLIB2_PDBS_RELEASE}>"
-			"${_dll_output_dir}"
-		WORKING_DIRECTORY $<IF:$<CONFIG:Debug>,${GLIB2_DLL_DIR_DEBUG},${GLIB2_DLL_DIR_RELEASE}>
-		COMMAND_EXPAND_LISTS
-	)
-
-	add_custom_command(TARGET copy_cli_dlls PRE_BUILD
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-			"$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_DLL},${PCRE2_RELEASE_DLL}>"
-			"$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_PDB},${PCRE2_RELEASE_PDB}>"
-			"${_dll_output_dir}"
-		WORKING_DIRECTORY $<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_DLL_DIR},${PCRE2_RELEASE_DLL_DIR}>
-		COMMAND_EXPAND_LISTS
-	)
-
 	if (MSVC AND VLD_FOUND)
 		add_custom_command(TARGET copy_cli_dlls PRE_BUILD
 			COMMAND ${CMAKE_COMMAND} -E "$<IF:$<CONFIG:Debug>,copy_if_different,true>"
@@ -2399,6 +2379,30 @@ if(USE_REPOSITORY)
 			list (APPEND THIRD_PARTY_DLLS "${LIBSSH_DLL_DIR}/${_dll}")
 		endforeach(_dll)
 	endif(LIBSSH_FOUND)
+	foreach(_dll ${GLIB2_DLLS_DEBUG})
+		list(APPEND THIRD_PARTY_DLLS "$<$<CONFIG:Debug>:${GLIB2_DLL_DIR_DEBUG}/${_dll}>")
+	endforeach()
+	foreach(_pdb ${GLIB2_PDBS_DEBUG})
+		list(APPEND THIRD_PARTY_PDBS "$<$<CONFIG:Debug>:${GLIB2_DLL_DIR_DEBUG}/${_pdb}>")
+	endforeach()
+	foreach(_dll ${GLIB2_DLLS_RELEASE})
+		list(APPEND THIRD_PARTY_DLLS "$<$<NOT:$<CONFIG:Debug>>:${GLIB2_DLL_DIR_RELEASE}/${_dll}>")
+	endforeach()
+	foreach(_pdb ${GLIB2_PDBS_RELEASE})
+		list(APPEND THIRD_PARTY_PDBS "$<$<NOT:$<CONFIG:Debug>>:${GLIB2_DLL_DIR_RELEASE}/${_pdb}>")
+	endforeach()
+	foreach(_dll ${PCRE2_DEBUG_DLL})
+		list(APPEND THIRD_PARTY_DLLS "$<$<CONFIG:Debug>:${PCRE2_DEBUG_DLL_DIR}/${_dll}>")
+	endforeach()
+	foreach(_pdb ${PCRE2_DEBUG_PDB})
+		list(APPEND THIRD_PARTY_PDBS "$<$<CONFIG:Debug>:${PCRE2_DEBUG_DLL_DIR}/${_pdb}>")
+	endforeach()
+	foreach(_dll ${PCRE2_RELEASE_DLL})
+		list(APPEND THIRD_PARTY_DLLS "$<$<NOT:$<CONFIG:Debug>>:${PCRE2_RELEASE_DLL_DIR}/${_dll}>")
+	endforeach()
+	foreach(_pdb ${PCRE2_RELEASE_PDB})
+		list(APPEND THIRD_PARTY_PDBS "$<$<NOT:$<CONFIG:Debug>>:${PCRE2_RELEASE_DLL_DIR}/${_pdb}>")
+	endforeach()
 	foreach( _dll ${GCRYPT_DLLS} )
 		list (APPEND THIRD_PARTY_DLLS "${GCRYPT_DLL_DIR}/${_dll}")
 	endforeach(_dll)
@@ -2466,33 +2470,49 @@ if(USE_REPOSITORY)
 		list (APPEND THIRD_PARTY_DLLS "${SMI_DLL_DIR}/${SMI_DLL}")
 		# Wireshark.nsi wants SMI_DIR which is the base SMI directory
 		get_filename_component(SMI_DIR ${SMI_DLL_DIR} DIRECTORY)
+
+		#Make the necessary output directories for the SMI MIBs.
 		add_custom_command(TARGET copy_cli_dlls PRE_BUILD
 			COMMAND ${CMAKE_COMMAND} -E make_directory
 				"${_dll_output_dir}/snmp"
 			COMMAND ${CMAKE_COMMAND} -E make_directory
 				"${_dll_output_dir}/snmp/mibs"
+		)
+
+		set (SMI_MIBS)
+
+		#List of the subdirectories in the SMI share directory that contain desired MIBs.
+		set(MIB_DIRS "mibs/ietf" "mibs/iana" "mibs/irtf" "mibs/site" "mibs/tubs" "pibs" "yang")
+
+		foreach( _mib_dir ${MIB_DIRS} )
+
+			#Grab everything in the subdirectory, but only keep the files.
+			set(MIBS_FILES "")
+			file(GLOB POTENTIAL_MIBS_FILES
+				CONFIGURE_DEPENDS
+				"${SMI_SHARE_DIR}/${_mib_dir}/*"
+			)
+			foreach(_path ${POTENTIAL_MIBS_FILES})
+				if(NOT IS_DIRECTORY "${_path}")
+					list(APPEND MIBS_FILES "${_path}")
+				endif()
+			endforeach()
+
+			add_custom_command(TARGET copy_cli_dlls PRE_BUILD
 			COMMAND ${CMAKE_COMMAND} -E copy_directory
-				"${SMI_SHARE_DIR}/mibs/iana"
+				"${SMI_SHARE_DIR}/${_mib_dir}"
 				"${_dll_output_dir}/snmp/mibs"
-			COMMAND ${CMAKE_COMMAND} -E copy_directory
-				"${SMI_SHARE_DIR}/mibs/ietf"
-				"${_dll_output_dir}/snmp/mibs"
-			COMMAND ${CMAKE_COMMAND} -E copy_directory
-				"${SMI_SHARE_DIR}/mibs/irtf"
-				"${_dll_output_dir}/snmp/mibs"
-			COMMAND ${CMAKE_COMMAND} -E copy_directory
-				"${SMI_SHARE_DIR}/mibs/site"
-				"${_dll_output_dir}/snmp/mibs"
-			COMMAND ${CMAKE_COMMAND} -E copy_directory
-				"${SMI_SHARE_DIR}/mibs/tubs"
-				"${_dll_output_dir}/snmp/mibs"
-			COMMAND ${CMAKE_COMMAND} -E copy_directory
-				"${SMI_SHARE_DIR}/pibs"
-				"${_dll_output_dir}/snmp/mibs"
-			COMMAND ${CMAKE_COMMAND} -E copy_directory
-				"${SMI_SHARE_DIR}/yang"
-				"${_dll_output_dir}/snmp/mibs"
-			#remove the extra directories copied (shallow copying the above would remove the need for this)
+			)
+
+			#Keep track of the MIBs for packaging and installation.
+			list (APPEND SMI_MIBS ${MIBS_FILES})
+
+		endforeach(_mib_dir)
+
+		#remove the extra directories copied
+		#Shallow copying the above would remove the need for this, but there is a character limit (Windows)
+		#on the length of the command, and the SMI_MIBS list can get quite long.
+		add_custom_command(TARGET copy_cli_dlls PRE_BUILD
 			COMMAND ${CMAKE_COMMAND} -E remove_directory
 				"${_dll_output_dir}/snmp/mibs/iana"
 			COMMAND ${CMAKE_COMMAND} -E remove_directory
@@ -2502,6 +2522,11 @@ if(USE_REPOSITORY)
 			COMMAND ${CMAKE_COMMAND} -E remove_directory
 				"${_dll_output_dir}/snmp/mibs/tubs"
 		)
+
+		#Add the MIBs to the list of files to be installed.
+		cmake_path(SET MIBS_INSTALL_DIR NORMALIZE "${CMAKE_INSTALL_BINDIR}/snmp/mibs")
+		install(FILES ${SMI_MIBS} DESTINATION "${MIBS_INSTALL_DIR}")
+
 	endif(SMI_FOUND)
 	if (SNAPPY_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${SNAPPY_DLL_DIR}/${SNAPPY_DLL}")
@@ -2646,6 +2671,7 @@ set(_protocol_data_dir ${CMAKE_SOURCE_DIR}/resources/protocols)
 # TODO shouldn't this use full (relative) paths instead of glob patterns?
 set(DATA_FILES_SRC
 	${_protocol_data_dir}/tpncp/tpncp.dat
+	${_protocol_data_dir}/trdp/iec_61375-2-3.xml
 	${_protocol_data_dir}/wimaxasncp/*.dtd
 	${_protocol_data_dir}/wimaxasncp/*.xml
 )
@@ -4372,9 +4398,16 @@ if(CLEAN_C_FILES)
 	)
 endif()
 
-# CMake 3.31 and later warn, if normalization changes a path (CMP0177).
-# As we want to normalize without the warning, we do it explicitly.
-cmake_path(SET TMP_DST_PATH NORMALIZE "${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}")
+# macOS and Windows bundle Wireshark and Stratoshark separately, so they don't need
+# a "project specific" subdirectory to hold the differences between them.
+# XXX - Maybe this should be its own variable to handle separate or together installations?
+if (WIN32 OR APPLE)
+    set(TMP_DST_PATH "${CMAKE_INSTALL_DATADIR}")
+else()
+    # CMake 3.31 and later warn, if normalization changes a path (CMP0177).
+    # As we want to normalize without the warning, we do it explicitly.
+    cmake_path(SET TMP_DST_PATH NORMALIZE "${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}")
+endif()
 install(
 	FILES
 		${INSTALL_FILES}
@@ -4492,7 +4525,13 @@ install(FILES "${CMAKE_BINARY_DIR}/resources/wireshark.pc"
 	EXCLUDE_FROM_ALL
 )
 
-cmake_path(SET TMP_DST_PATH NORMALIZE "${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}")
+# macOS and Windows bundle Wireshark and Stratoshark separately, so they don't need
+# a "project specific" subdirectory to hold the differences between them.
+if (WIN32 OR APPLE)
+    set(TMP_DST_PATH "${CMAKE_INSTALL_DATADIR}")
+else()
+    cmake_path(SET TMP_DST_PATH NORMALIZE "${CMAKE_INSTALL_DATADIR}/${PROJECT_NAME}")
+endif()
 install(
 	DIRECTORY
 		${INSTALL_DIRS}
