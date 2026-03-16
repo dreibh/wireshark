@@ -26,6 +26,7 @@
 #include <epan/column-utils.h>
 #include <epan/dissectors/packet-tcp.h>
 #include <epan/expert.h>
+#include <epan/strutil.h>
 #include <wsutil/report_message.h>
 #include <wsutil/filesystem.h>
 #include "packet-trdp-dict.h"
@@ -689,15 +690,15 @@ static uint32_t dissect_trdp_generic_body(
                     switch (el->type.id) {
                     case TRDP_TIMEDATE32:
                         proto_tree_add_time_format_value(userdata_element, el->hf_id, tvb, offset, el->width, &nstime,
-                                                         "%ld seconds", nstime.secs);
+                                                         "%ji seconds", (intmax_t)nstime.secs);
                     break;
                     case TRDP_TIMEDATE48:
                         proto_tree_add_time_format_value(userdata_element, el->hf_id, tvb, offset, el->width, &nstime,
-                                                         "%ld.%05ld seconds (=%" G_GUINT64_FORMAT " ticks)", nstime.secs, (nstime.nsecs + 5000L) / 10000L, valu);
+                                                         "%ji.%05ld seconds (=%" G_GUINT64_FORMAT " ticks)", (intmax_t)nstime.secs, (nstime.nsecs + 5000L) / 10000L, valu);
                     break;
                     case TRDP_TIMEDATE64:
                         proto_tree_add_time_format_value(userdata_element, el->hf_id, tvb, offset, el->width, &nstime,
-                                                         "%ld.%06ld seconds", nstime.secs, nstime.nsecs / 1000L);
+                                                         "%ji.%06ld seconds", (intmax_t)nstime.secs, nstime.nsecs / 1000L);
                     break;
 
                     }
@@ -1223,14 +1224,14 @@ void proto_register_trdp(void) {
     while (ElBasics[bitset_offset].id              != TRDP_BITSET8) bitset_offset++;
     while (ElBasics[bitset_offset+bitset_types].id == TRDP_BITSET8) bitset_types++;
 
-    bitsetenumvals = g_new0(enum_val_t, bitset_types + 1);
+    bitsetenumvals = wmem_alloc0_array(wmem_epan_scope(),enum_val_t, bitset_types + 1);
     for (gsize i = 0; i < bitset_types; i++) {
         bitsetenumvals[i].description = ElBasics[i].name;
-        bitsetenumvals[i].name = g_ascii_strdown(ElBasics[i].name, -1);
+        bitsetenumvals[i].name = wmem_ascii_strdown(wmem_epan_scope(), ElBasics[i].name, -1);
         bitsetenumvals[i].value = (int)ElBasics[i].subtype;
     }
 
-    enum_val_t *endianenumvals = g_new0(enum_val_t, 2 + 1);
+    enum_val_t *endianenumvals = wmem_alloc0_array(wmem_epan_scope(), enum_val_t, 2 + 1);
     endianenumvals[0].description = "BE";
     endianenumvals[0].name = "be";
     endianenumvals[0].value = TRDP_ENDSUBTYPE_BIG;
