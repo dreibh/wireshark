@@ -7312,7 +7312,8 @@ proto_item_fill_display_label(const field_info *finfo, char *display_label_str, 
 					number_out = hfinfo_numeric_value_format(hfinfo, number_buf, number);
 					label_len = proto_strlcpy(display_label_str, number_out, label_str_size);
 					hf_str_val = hf_try_val_to_str(number, hfinfo);
-					label_len += proto_strlcpy(display_label_str+label_len, hf_str_val, label_str_size-label_len);
+					if (hf_str_val)
+						label_len += proto_strlcpy(display_label_str+label_len, hf_str_val, label_str_size-label_len);
 				} else {
 					number_out = hf_try_val_to_str(number, hfinfo);
 
@@ -7356,7 +7357,8 @@ proto_item_fill_display_label(const field_info *finfo, char *display_label_str, 
 					number_out = hfinfo_numeric_value_format64(hfinfo, number_buf, number64);
 					label_len = proto_strlcpy(display_label_str, number_out, label_str_size);
 					hf_str_val = hf_try_val64_to_str(number64, hfinfo);
-					label_len += proto_strlcpy(display_label_str+label_len, hf_str_val, label_str_size-label_len);
+					if (hf_str_val)
+						label_len += proto_strlcpy(display_label_str+label_len, hf_str_val, label_str_size-label_len);
 				} else {
 					number_out = hf_try_val64_to_str(number64, hfinfo);
 
@@ -14165,6 +14167,8 @@ const value_string proto_checksum_vals[] = {
 	{ 0,        NULL }
 };
 
+#define PROTO_CHECKSUM_COMPUTED_USED (PROTO_CHECKSUM_VERIFY|PROTO_CHECKSUM_GENERATED|PROTO_CHECKSUM_NOT_PRESENT)
+
 proto_item *
 proto_tree_add_checksum(proto_tree *tree, tvbuff_t *tvb, const unsigned offset,
 		const int hf_checksum, const int hf_checksum_status, struct expert_field* bad_checksum_expert,
@@ -14288,10 +14292,16 @@ proto_tree_add_checksum_bytes(proto_tree *tree, tvbuff_t *tvb, const unsigned of
 
 	PROTO_REGISTRAR_GET_NTH(hf_checksum, hfinfo);
 
-	if (hfinfo->type != FT_BYTES) {
-		REPORT_DISSECTOR_BUG("field %s is not of type FT_BYTES",
-			hfinfo->abbrev);
-	}
+	DISSECTOR_ASSERT_FIELD_TYPE(hfinfo, FT_BYTES);
+
+	/* Make sure a NULL computed_checksum isn't dereferenced.
+	 * If checksum_len is 0 it probably won't crash, but in the VERIFY
+	 * case memcmp(NULL, checksum, 0) is UB until C2y, and in the other
+	 * cases the behavior is unexpected and still a programmer error;
+	 * proto_tree_add_bytes retrieves it from the tvb, thus neither
+	 * _NOT_PRESENT nor _GENERATED is correct.
+	 */
+	DISSECTOR_ASSERT(computed_checksum || ((flags & PROTO_CHECKSUM_COMPUTED_USED) == PROTO_CHECKSUM_NO_FLAGS));
 
 	if (flags & PROTO_CHECKSUM_NOT_PRESENT) {
 		ti = proto_tree_add_bytes_format_value(tree, hf_checksum, tvb, offset, (int)checksum_len, 0, "[missing]");

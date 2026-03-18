@@ -280,6 +280,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-dcerpc.h
 	packet-dcom-dispatch.h
 	packet-dcom.h
+	packet-dns.h
 	packet-dsp.h
 	packet-dtls.h
 	packet-dvbci.h
@@ -1735,7 +1736,6 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tpncp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tr.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-trdp.c
-	${CMAKE_CURRENT_SOURCE_DIR}/packet-trdp-dict.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-trill.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-trel.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-trmac.c
