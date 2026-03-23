@@ -1742,6 +1742,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tsp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tte-pcf.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tte.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-ttl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tsdns.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-trueconf.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-turbocell.c
@@ -1863,6 +1864,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xcsl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xdlc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xdmcp.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-xgt.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xip.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xip-serval.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-xmcp.c
