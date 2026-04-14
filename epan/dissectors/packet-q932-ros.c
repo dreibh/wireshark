@@ -81,6 +81,18 @@ static char problem_str[64];
 static tvbuff_t *arg_next_tvb, *res_next_tvb, *err_next_tvb;
 
 
+/*--- Cyclic dependencies ---*/
+
+/* Invoke/argument -> Invoke/argument */
+static unsigned dissect_q932_ros_InvokeArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* ReturnResult/result/result -> ReturnResult/result/result */
+static unsigned dissect_q932_ros_ResultArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* ReturnError/parameter -> ReturnError/parameter */
+static unsigned dissect_q932_ros_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+
 
 
 static unsigned
@@ -209,6 +221,8 @@ dissect_q932_ros_T_linkedId(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned o
 
 static unsigned
 dissect_q932_ros_InvokeArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // Invoke/argument -> Invoke/argument
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   int len;
 
   len = tvb_reported_length_remaining(tvb, offset);
@@ -218,6 +232,7 @@ dissect_q932_ros_InvokeArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
 
   offset += tvb_reported_length_remaining(tvb, offset);
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -281,6 +296,8 @@ dissect_q932_ros_Invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offse
 
 static unsigned
 dissect_q932_ros_ResultArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // ReturnResult/result/result -> ReturnResult/result/result
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   int len;
 
   len = tvb_reported_length_remaining(tvb, offset);
@@ -291,6 +308,7 @@ dissect_q932_ros_ResultArgument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
   offset += tvb_reported_length_remaining(tvb, offset);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -370,6 +388,8 @@ dissect_q932_ros_ReturnResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned
 
 static unsigned
 dissect_q932_ros_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // ReturnError/parameter -> ReturnError/parameter
+  increment_dissection_depth_by_n(actx->pinfo, 1);
 
   int len;
 
@@ -380,6 +400,7 @@ dissect_q932_ros_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
   offset += tvb_reported_length_remaining(tvb, offset);
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 

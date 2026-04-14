@@ -307,7 +307,10 @@
 #define PCCC_CPU_80_TEST_SINGLE 0x08
 #define PCCC_CPU_80_TEST_DEBUG  0x09
 
-
+/* File Object */
+#define FILE_SAVE_PARAM_SAVE_METHOD_MASK  0x0F
+#define FILE_SAVE_PARAM_SAVE_STATUS_MASK  0x10
+#define FILE_SAVE_PARAM_RESERVED_MASK     0xE0
 
 /* IOI Path types */
 #define CI_SEGMENT_TYPE_MASK        0xE0
@@ -464,8 +467,6 @@ enum cip_datatype {
    cip_time_of_day,
    cip_date_and_time,
    cip_dissector_func,
-
-   /* Currently not supported */
    cip_stringN,
 };
 
@@ -617,8 +618,9 @@ extern void dissect_epath( tvbuff_t *tvb, packet_info *pinfo, proto_tree *path_t
 // Elementary Data Types.
 enum cip_elem_data_types {
     CIP_STRING_TYPE = 0xD0,
-    CIP_SHORT_STRING_TYPE = 0xDA,
-    CIP_STRING2_TYPE = 0xD5
+    CIP_STRING2_TYPE = 0xD5,
+    CIP_STRINGN_TYPE = 0xD9,
+    CIP_SHORT_STRING_TYPE = 0xDA
 };
 
 extern void add_cip_service_to_info_column(packet_info *pinfo, uint8_t service, const value_string* service_vals);

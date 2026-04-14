@@ -160,6 +160,7 @@ QVariant ExpertInfoProxyModel::data(const QModelIndex &proxy_index, int role) co
         return Qt::AlignLeft;
 
     case Qt::DisplayRole:
+    case Qt::AccessibleDescriptionRole:
         source_index = mapToSource(proxy_index);
 
         switch (proxy_index.column())
@@ -190,6 +191,9 @@ QVariant ExpertInfoProxyModel::data(const QModelIndex &proxy_index, int role) co
                         count++;
                 }
 
+                if (role == Qt::AccessibleDescriptionRole) {
+                    return tr("Count: %1").arg(count);
+                }
                 return count;
             }
         }

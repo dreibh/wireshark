@@ -299,17 +299,56 @@ x509if_frame_end(void)
 
 /*--- Cyclic dependencies ---*/
 
+/* Attribute/values/_item -> Attribute/values/_item */
+static unsigned dissect_x509if_T_values_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* Attribute/valuesWithContext/_item/value -> Attribute/valuesWithContext/_item/value */
+static unsigned dissect_x509if_T_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* Context/contextValues/_item -> Context/contextValues/_item */
+static unsigned dissect_x509if_T_contextValues_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* AttributeValue -> AttributeValue */
+/*unsigned dissect_x509if_AttributeValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);*/
+
+/* AttributeValueAssertion/assertion -> AttributeValueAssertion/assertion */
+static unsigned dissect_x509if_T_assertion(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* ContextAssertion/contextValues/_item -> ContextAssertion/contextValues/_item */
+static unsigned dissect_x509if_T_ca_contextValues_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* AttributeTypeAndDistinguishedValue/value -> AttributeTypeAndDistinguishedValue/value */
+static unsigned dissect_x509if_T_atadv_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* AttributeTypeAndDistinguishedValue/valuesWithContext/_item/distingAttrValue -> AttributeTypeAndDistinguishedValue/valuesWithContext/_item/distingAttrValue */
+static unsigned dissect_x509if_T_distingAttrValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
 /* Refinement -> Refinement/and -> Refinement */
 /* Refinement -> Refinement */
 /*unsigned dissect_x509if_Refinement(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);*/
+
+/* RequestAttribute/selectedValues/_item -> RequestAttribute/selectedValues/_item */
+static unsigned dissect_x509if_T_ra_selectedValues_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* RequestAttribute/defaultValues/_item/values/_item -> RequestAttribute/defaultValues/_item/values/_item */
+static unsigned dissect_x509if_T_ra_values_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* ContextProfile/contextValue/_item -> ContextProfile/contextValue/_item */
+static unsigned dissect_x509if_T_contextValue_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 /* ContextCombination -> ContextCombination/and -> ContextCombination */
 /* ContextCombination -> ContextCombination */
 /*unsigned dissect_x509if_ContextCombination(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);*/
 
+/* MatchingUse/restrictionValue -> MatchingUse/restrictionValue */
+static unsigned dissect_x509if_T_restrictionValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
 /* AttributeCombination -> AttributeCombination/and -> AttributeCombination */
 /* AttributeCombination -> AttributeCombination */
 /*unsigned dissect_x509if_AttributeCombination(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);*/
+
+/* ResultAttribute/outputValues/selectedValues/_item -> ResultAttribute/outputValues/selectedValues/_item */
+static unsigned dissect_x509if_T_selectedValues_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
 
 
 
@@ -325,9 +364,12 @@ dissect_x509if_T_type(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset 
 
 static unsigned
 dissect_x509if_T_values_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // Attribute/values/_item -> Attribute/values/_item
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -348,9 +390,12 @@ dissect_x509if_T_values(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offse
 
 static unsigned
 dissect_x509if_T_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // Attribute/valuesWithContext/_item/value -> Attribute/valuesWithContext/_item/value
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback("unknown", tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -367,9 +412,12 @@ dissect_x509if_T_contextType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
 static unsigned
 dissect_x509if_T_contextValues_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // Context/contextValues/_item -> Context/contextValues/_item
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -485,9 +533,12 @@ dissect_x509if_AttributeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
 unsigned
 dissect_x509if_AttributeValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // AttributeValue -> AttributeValue
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -504,9 +555,12 @@ dissect_x509if_T_type_01(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offs
 
 static unsigned
 dissect_x509if_T_assertion(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // AttributeValueAssertion/assertion -> AttributeValueAssertion/assertion
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -532,9 +586,12 @@ dissect_x509if_T_ca_contextType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
 
 static unsigned
 dissect_x509if_T_ca_contextValues_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // ContextAssertion/contextValues/_item -> ContextAssertion/contextValues/_item
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -709,6 +766,8 @@ dissect_x509if_T_type_02(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offs
 
 static unsigned
 dissect_x509if_T_atadv_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // AttributeTypeAndDistinguishedValue/value -> AttributeTypeAndDistinguishedValue/value
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   int old_offset = offset;
   tvbuff_t	*out_tvb;
   char  	*value = NULL;
@@ -756,6 +815,7 @@ dissect_x509if_T_atadv_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
   }
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -763,9 +823,12 @@ dissect_x509if_T_atadv_value(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned 
 
 static unsigned
 dissect_x509if_T_distingAttrValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // AttributeTypeAndDistinguishedValue/valuesWithContext/_item/distingAttrValue -> AttributeTypeAndDistinguishedValue/valuesWithContext/_item/distingAttrValue
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -1044,14 +1107,12 @@ static const ber_choice_t Refinement_choice[] = {
 unsigned
 dissect_x509if_Refinement(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   // Refinement -> Refinement/and -> Refinement
-  actx->pinfo->dissection_depth += 2;
-  increment_dissection_depth(actx->pinfo);
+  increment_dissection_depth_by_n(actx->pinfo, 2);
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  Refinement_choice, hf_index, ett_x509if_Refinement,
                                  NULL);
 
-  actx->pinfo->dissection_depth -= 2;
-  decrement_dissection_depth(actx->pinfo);
+  decrement_dissection_depth_by_n(actx->pinfo, 2);
   return offset;
 }
 
@@ -1316,9 +1377,12 @@ dissect_x509if_T_attributeType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigne
 
 static unsigned
 dissect_x509if_T_ra_selectedValues_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // RequestAttribute/selectedValues/_item -> RequestAttribute/selectedValues/_item
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -1348,9 +1412,12 @@ dissect_x509if_T_entryType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned of
 
 static unsigned
 dissect_x509if_T_ra_values_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // RequestAttribute/defaultValues/_item/values/_item -> RequestAttribute/defaultValues/_item/values/_item
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -1408,9 +1475,12 @@ dissect_x509if_T_contextType_01(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsign
 
 static unsigned
 dissect_x509if_T_contextValue_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // ContextProfile/contextValue/_item -> ContextProfile/contextValue/_item
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -1488,14 +1558,12 @@ static const ber_choice_t ContextCombination_choice[] = {
 unsigned
 dissect_x509if_ContextCombination(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   // ContextCombination -> ContextCombination/and -> ContextCombination
-  actx->pinfo->dissection_depth += 2;
-  increment_dissection_depth(actx->pinfo);
+  increment_dissection_depth_by_n(actx->pinfo, 2);
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  ContextCombination_choice, hf_index, ett_x509if_ContextCombination,
                                  NULL);
 
-  actx->pinfo->dissection_depth -= 2;
-  decrement_dissection_depth(actx->pinfo);
+  decrement_dissection_depth_by_n(actx->pinfo, 2);
   return offset;
 }
 
@@ -1512,9 +1580,12 @@ dissect_x509if_T_restrictionType(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsig
 
 static unsigned
 dissect_x509if_T_restrictionValue(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // MatchingUse/restrictionValue -> MatchingUse/restrictionValue
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -1612,14 +1683,12 @@ static const ber_choice_t AttributeCombination_choice[] = {
 unsigned
 dissect_x509if_AttributeCombination(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   // AttributeCombination -> AttributeCombination/and -> AttributeCombination
-  actx->pinfo->dissection_depth += 2;
-  increment_dissection_depth(actx->pinfo);
+  increment_dissection_depth_by_n(actx->pinfo, 2);
   offset = dissect_ber_choice(actx, tree, tvb, offset,
                                  AttributeCombination_choice, hf_index, ett_x509if_AttributeCombination,
                                  NULL);
 
-  actx->pinfo->dissection_depth -= 2;
-  decrement_dissection_depth(actx->pinfo);
+  decrement_dissection_depth_by_n(actx->pinfo, 2);
   return offset;
 }
 
@@ -1636,9 +1705,12 @@ dissect_x509if_T_attributeType_01(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsi
 
 static unsigned
 dissect_x509if_T_selectedValues_item(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // ResultAttribute/outputValues/selectedValues/_item -> ResultAttribute/outputValues/selectedValues/_item
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 

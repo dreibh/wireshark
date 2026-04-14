@@ -140,8 +140,7 @@ dissect_control(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_tree_add_item(tree, hf_bthcrp_control_transaction_id, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    pitem = proto_tree_add_item(tree, hf_bthcrp_control_parameter_length, tvb, offset, 2, ENC_BIG_ENDIAN);
-    parameter_length = tvb_get_ntohs(tvb, offset);
+    pitem = proto_tree_add_item_ret_uint(tree, hf_bthcrp_control_parameter_length, tvb, offset, 2, ENC_BIG_ENDIAN, &parameter_length);
     offset += 2;
 
     if (!is_client_message && parameter_length < 2) {

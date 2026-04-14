@@ -125,6 +125,27 @@ public:
      */
     void clearRecentCaptureFiles();
 
+    /**
+     * @brief Check if this is a development build.
+     *
+     * Returns true when VERSION_FLAVOR is non-empty (the default
+     * "Development Build" set by CMake).  Release builds either leave
+     * VERSION_FLAVOR empty or undefine it entirely.
+     *
+     * @return true for development builds, false for releases.
+     */
+    static bool isDevelopmentBuild();
+
+    /**
+     * @brief Check if the application is running in portable mode. (Windows only)
+     *
+     * In portable mode, state files are stored in the application directory
+     * instead of a user-specific location. For any other OS than Windows, this will return false.
+     *
+     * @return true if running in portable mode, false otherwise.
+     */
+    static bool isPortableApplication();
+
 signals:
     /**
      * @brief Emitted when the recent capture files list changes.

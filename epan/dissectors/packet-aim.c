@@ -3777,8 +3777,7 @@ static int dissect_aim_sst_buddy_up_req (tvbuff_t *tvb, packet_info *pinfo _U_, 
 	proto_tree_add_item(tree, hf_aim_sst_ref_num, tvb, offset, 2, ENC_BIG_ENDIAN);
 	offset+=2;
 
-	proto_tree_add_item(tree, hf_aim_sst_icon_size, tvb, offset, 2, ENC_BIG_ENDIAN);
-	icon_size = tvb_get_ntohs(tvb, offset);
+	proto_tree_add_item_ret_uint16(tree, hf_aim_sst_icon_size, tvb, offset, 2, ENC_BIG_ENDIAN, &icon_size);
 	offset+=2;
 
 	if (icon_size)

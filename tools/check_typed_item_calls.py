@@ -1740,6 +1740,7 @@ class Item:
                 return
             n += 1
 
+
     def get_field_width_in_bits(self):
         if self.item_type == 'FT_BOOLEAN':
             if self.display == 'BASE_NONE':    # 'NULL' ?
@@ -2046,6 +2047,7 @@ apiChecks.append(TVBGetBits('tvb_get_bits64', maxlen=64))
 def check_filename_in_first_line(filename, result, line):
     # Check if first line names the wrong file?
     try:
+        filename = filename.replace('-template', '')
         ext = filename.split('.')[-1]
         first_line = line[2:]
         file_end_idx = line.find('.' + ext)
@@ -2311,12 +2313,12 @@ def check_double_fetches(filename, contents, items, result):
         # TODO: allow match if underscores are removed?
         if line_has_fetch_function(prev_line) and hf_name.endswith(first_prev_token) and '=' in prev_line_tokens:
             result.warn(filename, 'PREV: val=', first_prev_token, 'hfname=', hf_name,
-                        'mask=', mask_value, 'type=', item_type,
+                        'mask=', hex(mask_value), 'type=', item_type,
                         '- use', suggest + '() ?\n',
                         m.group(0))
         elif line_has_fetch_function(next_line) and hf_name.endswith(first_next_token) and '=' in next_line_tokens:
             result.warn(filename, 'NEXT: val=', first_next_token, 'hfname=', hf_name,
-                        'mask=', mask_value, 'type=', item_type,
+                        'mask=', hex(mask_value), 'type=', item_type,
                         '- use', suggest + '() ?\n',
                         m.group(0))
 

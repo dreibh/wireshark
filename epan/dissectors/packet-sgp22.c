@@ -36,7 +36,6 @@ static int hf_sgp22_GetEuiccInfo2Request_PDU;     /* GetEuiccInfo2Request */
 static int hf_sgp22_EUICCInfo2_PDU;               /* EUICCInfo2 */
 static int hf_sgp22_ProfileInfoListRequest_PDU;   /* ProfileInfoListRequest */
 static int hf_sgp22_ProfileInfoListResponse_PDU;  /* ProfileInfoListResponse */
-static int hf_sgp22_ProfileInfo_PDU;              /* ProfileInfo */
 static int hf_sgp22_StoreMetadataRequest_PDU;     /* StoreMetadataRequest */
 static int hf_sgp22_UpdateMetadataRequest_PDU;    /* UpdateMetadataRequest */
 static int hf_sgp22_PrepareDownloadRequest_PDU;   /* PrepareDownloadRequest */
@@ -500,6 +499,12 @@ static int ett_sgp22_AuthenticateClientResponseEs11_U;
 static int ett_sgp22_AuthenticateClientOkEs11;
 static int ett_sgp22_SEQUENCE_OF_EventEntries;
 static int ett_sgp22_EventEntries;
+
+/*--- Cyclic dependencies ---*/
+
+/* VendorSpecificExtension/_item/vendorSpecificData -> VendorSpecificExtension/_item/vendorSpecificData */
+static unsigned dissect_sgp22_T_vendorSpecificData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
 
 
 static int * const UICCCapability_bits[] = {
@@ -1259,9 +1264,12 @@ dissect_sgp22_T_vendorOid(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned off
 
 static unsigned
 dissect_sgp22_T_vendorSpecificData(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // VendorSpecificExtension/_item/vendorSpecificData -> VendorSpecificExtension/_item/vendorSpecificData
+  increment_dissection_depth_by_n(actx->pinfo, 1);
 offset=call_ber_oid_callback(actx->external.direct_reference, tvb, offset, actx->pinfo, tree, NULL);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -4239,13 +4247,6 @@ static int dissect_ProfileInfoListResponse_PDU(tvbuff_t *tvb _U_, packet_info *p
   offset = dissect_sgp22_ProfileInfoListResponse(false, tvb, offset, &asn1_ctx, tree, hf_sgp22_ProfileInfoListResponse_PDU);
   return offset;
 }
-static int dissect_ProfileInfo_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
-  unsigned offset = 0;
-  asn1_ctx_t asn1_ctx;
-  asn1_ctx_init(&asn1_ctx, ASN1_ENC_BER, true, pinfo);
-  offset = dissect_sgp22_ProfileInfo(false, tvb, offset, &asn1_ctx, tree, hf_sgp22_ProfileInfo_PDU);
-  return offset;
-}
 static int dissect_StoreMetadataRequest_PDU(tvbuff_t *tvb _U_, packet_info *pinfo _U_, proto_tree *tree _U_, void *data _U_) {
   unsigned offset = 0;
   asn1_ctx_t asn1_ctx;
@@ -4717,10 +4718,6 @@ void proto_register_sgp22(void)
     { &hf_sgp22_ProfileInfoListResponse_PDU,
       { "ProfileInfoListResponse", "sgp22.ProfileInfoListResponse",
         FT_UINT32, BASE_DEC, VALS(sgp22_ProfileInfoListResponse_U_vals), 0,
-        NULL, HFILL }},
-    { &hf_sgp22_ProfileInfo_PDU,
-      { "ProfileInfo", "sgp22.ProfileInfo_element",
-        FT_NONE, BASE_NONE, NULL, 0,
         NULL, HFILL }},
     { &hf_sgp22_StoreMetadataRequest_PDU,
       { "StoreMetadataRequest", "sgp22.StoreMetadataRequest_element",
@@ -6217,7 +6214,6 @@ void proto_reg_handoff_sgp22(void)
   register_ber_oid_dissector("2.23.146.1.2.0.2", dissect_TotalPartialCrlNumber_PDU, proto_sgp22, "id-rsp-totalPartialCrlNumber");
   register_ber_oid_dissector("2.23.146.1.2.0.3", dissect_PartialCrlNumber_PDU, proto_sgp22, "id-rsp-partialCrlNumber");
   register_ber_oid_dissector("2.23.146.1.3.1.1", dissect_ActivationCodeRetrievalInfo_PDU, proto_sgp22, "id-rsp-metadata-activationCodeRetrievalInfo");
-  dissector_add_uint("sgp22.request", 0xE3, create_dissector_handle(dissect_ProfileInfo_PDU, proto_sgp22));
   dissector_add_uint("sgp22.request", 0xBF20, create_dissector_handle(dissect_GetEuiccInfo1Request_PDU, proto_sgp22));
   dissector_add_uint("sgp22.response", 0xBF20, create_dissector_handle(dissect_EUICCInfo1_PDU, proto_sgp22));
   dissector_add_uint("sgp22.request", 0xBF21, create_dissector_handle(dissect_PrepareDownloadRequest_PDU, proto_sgp22));

@@ -77,6 +77,9 @@ HexDataSourceView::HexDataSourceView(const QByteArray &data, packet_char_enc enc
     window()->winId(); // Required for screenChanged? https://phabricator.kde.org/D20171
     connect(window()->windowHandle(), &QWindow::screenChanged, viewport(), [=](const QScreen *) { viewport()->update(); });
 
+    verticalScrollBar()->setFocusPolicy(Qt::NoFocus);
+    horizontalScrollBar()->setFocusPolicy(Qt::NoFocus);
+
     setMouseTracking(true);
 
 #ifdef Q_OS_MAC

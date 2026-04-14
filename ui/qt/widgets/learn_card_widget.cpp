@@ -8,164 +8,197 @@
  */
 
 #include <ui/qt/widgets/learn_card_widget.h>
-#include <ui/qt/utils/color_utils.h>
+#include <ui_learn_card_widget.h>
 
-#include <QApplication>
+#include <ui/qt/utils/color_utils.h>
+#include <ui/qt/utils/workspace_state.h>
+
 #include <QLabel>
 #include <QPushButton>
 #include <QDesktopServices>
 #include <QUrl>
 #include <QHBoxLayout>
 #include <QFrame>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QJsonArray>
+#include <QFile>
+#include <QEvent>
 
 #include "ui/urls.h"
 
 LearnCardWidget::LearnCardWidget(QWidget *parent) :
-    QFrame(parent)
-    , main_layout_(new QVBoxLayout(this))
-    , link_container_(nullptr)
-    , compact_link_container_(nullptr)
-    , links_collapsed_(false)
+    QFrame(parent),
+    ui_(new Ui::LearnCardWidget),
+    links_collapsed_(false)
 {
-    links_ = {
-        {
-            "https://www.wireshark.org/docs/wsug_html_chunked/",
-            tr("User Documentation"),
-            tr("Docs"),
-            tr("Read the Wireshark user documentation online.")
-        },
-        {
-            "https://gitlab.com/wireshark/wireshark/-/wikis/",
-            tr("Wiki"),
-            tr("Wiki"),
-            tr("Browse the Wireshark Wiki for how-tos and other information.")
-        },
-        {
-            "https://ask.wireshark.org/",
-            tr("Questions and Answers"),
-            tr("Q&A"),
-            tr("Get answers to your Wireshark questions from the community.")
-        },
-        {
-            "https://www.wireshark.org/lists/",
-            tr("Mailing Lists"),
-            tr("Lists"),
-            tr("Join the Wireshark mailing lists to discuss Wireshark with other users and developers.")
-        }
-    };
+    ui_->setupUi(this);
 
-    setLayout(main_layout_);
-    main_layout_->setContentsMargins(0, 0, 0, 0);
-    main_layout_->setSpacing(0);
-
-    setupHeader();
+    loadLinksFromRessource();
     setupLinks();
     setupActionButtons();
-}
+    updateStyleSheet();
 
-void LearnCardWidget::setupHeader()
-{
-    header_label_ = new ClickableLabel(this);
-    header_label_->setText(tr("<h2>Learn</h2>"));
-    header_label_->setAccessibleName(tr("Learn"));
-    header_label_->setAccessibleDescription(tr("Opens the Wireshark documentation website"));
-    header_label_->setContentsMargins(16, 12, 16, 12);
-    header_label_->setCursor(Qt::PointingHandCursor);
-    connect(header_label_, &ClickableLabel::clicked, this, []() {
+    connect(ui_->learnHeader, &ClickableLabel::clicked, this, []() {
         QDesktopServices::openUrl(QUrl(WS_DOCS_URL));
     });
-    main_layout_->addWidget(header_label_);
+}
 
-    header_separator_ = new QFrame(this);
-    header_separator_->setFrameShape(QFrame::HLine);
-    header_separator_->setFrameShadow(QFrame::Plain);
-    header_separator_->setFixedHeight(1);
-    main_layout_->addWidget(header_separator_);
+LearnCardWidget::~LearnCardWidget()
+{
+    delete ui_;
+}
+
+void LearnCardWidget::loadLinksFromRessource()
+{
+    const QString resource_path = QStringLiteral(":/json/learn_card.json");
+    QFile file(resource_path);
+    if (!file.exists())
+        return;
+    if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
+        qWarning("LearnCardWidget: cannot open %s", qUtf8Printable(resource_path));
+        return;
+    }
+
+    QJsonParseError parse_error;
+    QJsonDocument doc = QJsonDocument::fromJson(file.readAll(), &parse_error);
+    file.close();
+
+    QJsonObject root = doc.object();
+    if (root.value(QStringLiteral("schema_version")).toInt() < 1) {
+        qWarning("LearnCardWidget: unsupported schema_version in %s",
+                 qUtf8Printable(resource_path));
+        return;
+    }
+
+    links_.clear();
+    QJsonArray links_array = root.value(QStringLiteral("links")).toArray();
+    for (const QJsonValue &link_value : links_array) {
+        QJsonObject link_obj = link_value.toObject();
+        LinkType link;
+        link.url = link_obj.value(QStringLiteral("url")).toString();
+        link.label = link_obj.value(QStringLiteral("label")).toString();
+        link.short_label = link_obj.value(QStringLiteral("short_label")).toString();
+        link.tooltip = link_obj.value(QStringLiteral("tooltip")).toString();
+        link.validity = LearnCardWidget::AllVersions;
+        if (link_obj.contains(QStringLiteral("scheme"))) {
+            QString scheme_str = link_obj.value(QStringLiteral("scheme")).toString();
+            if (scheme_str.toLower() == QStringLiteral("stable"))
+                link.validity = LearnCardWidget::ReleaseOnly;
+            else if (scheme_str.toLower() == QStringLiteral("dev"))
+                link.validity = LearnCardWidget::DevOnly;
+        }
+        links_.append(link);
+    }
+
+    buttons_.clear();
+    QJsonArray buttons_array = root.value(QStringLiteral("buttons")).toArray();
+    for (const QJsonValue &button_value : buttons_array) {
+        QJsonObject button_obj = button_value.toObject();
+        ButtonType button;
+        button.url = button_obj.value(QStringLiteral("url")).toString();
+        button.label = button_obj.value(QStringLiteral("label")).toString();
+        button.tooltip = button_obj.value(QStringLiteral("tooltip")).toString();
+        button.color = button_obj.value(QStringLiteral("color")).toString();
+        button.hover_color = button_obj.value(QStringLiteral("hover_color")).toString();
+        button.validity = LearnCardWidget::AllVersions;
+        if (button_obj.contains(QStringLiteral("scheme"))) {
+            QString scheme_str = button_obj.value(QStringLiteral("scheme")).toString();
+            if (scheme_str.toLower() == QStringLiteral("stable"))
+                button.validity = LearnCardWidget::ReleaseOnly;
+            else if (scheme_str.toLower() == QStringLiteral("dev"))
+                button.validity = LearnCardWidget::DevOnly;
+        }
+        buttons_.append(button);
+    }
 }
 
 void LearnCardWidget::setupLinks()
 {
-    // Full vertical link list
-    link_container_ = new QWidget(this);
-    link_container_->setObjectName("learnLinkContainer");
-    QVBoxLayout *link_layout = new QVBoxLayout(link_container_);
-    link_layout->setContentsMargins(16, 4, 16, 4);
-    link_layout->setSpacing(0);
+    // Clear existing layout and link labels
+    if (auto *old_layout = ui_->learnLinkContainer->layout()) {
+        qDeleteAll(ui_->learnLinkContainer->findChildren<QLabel*>(
+            QStringLiteral("learnLink"), Qt::FindDirectChildrenOnly));
+        delete old_layout;
+    }
 
-    foreach (const learn_link_t &link, links_) {
-        QLabel *link_label = new QLabel(this);
-        link_label->setObjectName("learnLink");
+    // Use horizontal layout in collapsed mode, vertical in expanded
+    QBoxLayout *link_layout;
+    if (links_collapsed_) {
+        link_layout = new QHBoxLayout(ui_->learnLinkContainer);
+        link_layout->setContentsMargins(16, 4, 16, 4);
+        link_layout->setSpacing(4);
+    } else {
+        link_layout = new QVBoxLayout(ui_->learnLinkContainer);
+        link_layout->setContentsMargins(16, 4, 16, 4);
+        link_layout->setSpacing(0);
+    }
+
+    for (const LinkType &link : links_) {
+        if (link.validity != LearnCardWidget::AllVersions) {
+            if (link.validity == LearnCardWidget::ReleaseOnly && WorkspaceState::isDevelopmentBuild())
+                continue;
+            if (link.validity == LearnCardWidget::DevOnly && !WorkspaceState::isDevelopmentBuild())
+                continue;
+        }
+
+        auto *link_label = new QLabel(ui_->learnLinkContainer);
+        QString labelText = links_collapsed_ ? link.short_label : link.label;
+        int contentMargin = links_collapsed_ ? 4 : 10;
+
+        link_label->setObjectName(QStringLiteral("learnLink"));
         link_label->setTextFormat(Qt::RichText);
         link_label->setTextInteractionFlags(Qt::TextBrowserInteraction);
         link_label->setOpenExternalLinks(true);
-        link_label->setText(QString("<a href=\"%1\" title=\"%2\">%3</a>")
-                           .arg(link.url, link.tooltip, link.label));
+        link_label->setText(QStringLiteral("<a href=\"%1\" title=\"%2\">%3</a>")
+                           .arg(link.url, link.tooltip, labelText));
+        /* Accessible name needs to be the full label for screen readers */
         link_label->setAccessibleName(link.label);
         link_label->setAccessibleDescription(link.tooltip);
-        link_label->setContentsMargins(10, 4, 10, 4);
+        link_label->setContentsMargins(contentMargin, 4, contentMargin, 4);
         link_layout->addWidget(link_label);
     }
 
-    main_layout_->addWidget(link_container_);
-
-    // Compact horizontal link row (shown when collapsed)
-    compact_link_container_ = new QWidget(this);
-    compact_link_container_->setObjectName("learnCompactLinkContainer");
-    QHBoxLayout *compact_layout = new QHBoxLayout(compact_link_container_);
-    compact_layout->setContentsMargins(16, 4, 16, 4);
-    compact_layout->setSpacing(4);
-
-    foreach (const learn_link_t &link, links_) {
-        QLabel *link_label = new QLabel(this);
-        link_label->setObjectName("learnLink");
-        link_label->setTextFormat(Qt::RichText);
-        link_label->setTextInteractionFlags(Qt::TextBrowserInteraction);
-        link_label->setOpenExternalLinks(true);
-        link_label->setText(QString("<a href=\"%1\" title=\"%2\">%3</a>")
-                           .arg(link.url, link.tooltip, link.short_label));
-        // Use the full label as the accessible name, not short_label, so screen
-        // readers announce e.g. "User Documentation" rather than "Docs" when
-        // the card is in collapsed/compact mode.
-        link_label->setAccessibleName(link.label);
-        link_label->setAccessibleDescription(link.tooltip);
-        link_label->setContentsMargins(4, 4, 4, 4);
-        compact_layout->addWidget(link_label);
-    }
-    compact_layout->addStretch();
-
-    compact_link_container_->setVisible(false);
-    main_layout_->addWidget(compact_link_container_);
-
-    main_layout_->addStretch(1);
+    if (links_collapsed_)
+        link_layout->addStretch(1);
 }
 
 void LearnCardWidget::setupActionButtons()
 {
-    QWidget *button_container = new QWidget(this);
-    button_container->setObjectName("learnButtonContainer");
-    QHBoxLayout *button_layout = new QHBoxLayout(button_container);
-    button_layout->setContentsMargins(16, 12, 16, 12);
-    button_layout->setSpacing(8);
+    // Clear any existing buttons
+    qDeleteAll(ui_->learnButtonContainer->findChildren<QPushButton*>(
+        QStringLiteral("learnButton"), Qt::FindDirectChildrenOnly));
 
-    discord_button_ = new QPushButton(tr("Discord"), this);
-    discord_button_->setToolTip(tr("Join the Wireshark Discord server to chat with other users and developers."));
-    discord_button_->setAccessibleDescription(tr("Join the Wireshark Discord server to chat with other users and developers."));
-    discord_button_->setCursor(Qt::PointingHandCursor);
-    connect(discord_button_, &QPushButton::clicked, this, []() {
-        QDesktopServices::openUrl(QUrl("https://discord.gg/fT2jvkawGj"));
-    });
-    button_layout->addWidget(discord_button_);
+    auto *button_layout = ui_->learnButtonLayout;
 
-    donate_button_ = new QPushButton(tr("Donate"), this);
-    donate_button_->setToolTip(tr("Support the Wireshark project by making a donation to the Wireshark Foundation."));
-    donate_button_->setAccessibleDescription(tr("Support the Wireshark project by making a donation to the Wireshark Foundation."));
-    donate_button_->setCursor(Qt::PointingHandCursor);
-    connect(donate_button_, &QPushButton::clicked, this, []() {
-        QDesktopServices::openUrl(QUrl("https://wiresharkfoundation.org/donate/"));
-    });
-    button_layout->addWidget(donate_button_);
+    auto defColor = QColor(QStringLiteral("#5865F2"));
+    auto defHoverColor = QColor(QStringLiteral("#4752C4"));
 
-    main_layout_->addWidget(button_container);
+    for (const ButtonType &button : buttons_) {
+        if (button.validity != LearnCardWidget::AllVersions) {
+            if (button.validity == LearnCardWidget::ReleaseOnly && WorkspaceState::isDevelopmentBuild())
+                continue;
+            if (button.validity == LearnCardWidget::DevOnly && !WorkspaceState::isDevelopmentBuild())
+                continue;
+        }
+
+        QColor button_color = button.color.isValid() ? button.color : defColor;
+        QColor button_hover_color = button.hover_color.isValid() ? button.hover_color : defHoverColor;
+
+        auto *action_button = new QPushButton(button.label, ui_->learnButtonContainer);
+        action_button->setObjectName(QStringLiteral("learnButton"));
+        action_button->setToolTip(button.tooltip);
+        action_button->setAccessibleDescription(button.tooltip);
+        action_button->setCursor(Qt::PointingHandCursor);
+        action_button->setStyleSheet(QStringLiteral(
+            "QPushButton#learnButton { background-color: %1; }"
+            "QPushButton#learnButton:hover { background-color: %2; }"
+            ).arg(button_color.name(), button_hover_color.name()));
+        connect(action_button, &QPushButton::clicked, this, [url = button.url]() {
+            QDesktopServices::openUrl(QUrl(url));
+        });
+        button_layout->addWidget(action_button);
+    }
 }
 
 void LearnCardWidget::setLinksCollapsed(bool collapsed)
@@ -173,10 +206,15 @@ void LearnCardWidget::setLinksCollapsed(bool collapsed)
     if (links_collapsed_ == collapsed)
         return;
     links_collapsed_ = collapsed;
-    if (link_container_)
-        link_container_->setVisible(!collapsed);
-    if (compact_link_container_)
-        compact_link_container_->setVisible(collapsed);
+
+    // Collapsed: shrink to content. Expanded: fill available space.
+    if (links_collapsed_) {
+        setSizePolicy(QSizePolicy::Preferred, QSizePolicy::Preferred);
+    } else {
+        setSizePolicy(QSizePolicy::Preferred, QSizePolicy::MinimumExpanding);
+    }
+
+    setupLinks();
 }
 
 bool LearnCardWidget::isLinksCollapsed() const
@@ -184,101 +222,30 @@ bool LearnCardWidget::isLinksCollapsed() const
     return links_collapsed_;
 }
 
-void LearnCardWidget::updateStyleSheets(const QColor &header_text_color, const QColor &header_hover_color)
+void LearnCardWidget::updateStyleSheet()
 {
-    QPalette palette = QApplication::palette();
-    QColor base_color = palette.color(QPalette::Base);
-    QColor border_color = ColorUtils::themeIsDark()
-        ? base_color.lighter(200)
-        : base_color.darker(120);
-    QColor card_bg = ColorUtils::themeIsDark()
-        ? base_color.lighter(120)
-        : base_color.darker(105);
-    QColor hover_bg = ColorUtils::hoverBackground();
-    QString link_style = ColorUtils::themeLinkStyle();
+    QString path = ColorUtils::themeIsDark()
+        ? QStringLiteral(":/stylesheets/widgets/learn-card-dark.qss")
+        : QStringLiteral(":/stylesheets/widgets/learn-card-light.qss");
 
-    setStyleSheet(QStringLiteral(
-            "LearnCardWidget {"
-            "  background-color: %1;"
-            "  border: 1px solid %2;"
-            "  border-radius: 6px;"
-            "}"
-            )
-            .arg(card_bg.name(), border_color.name()));
+    QFile f(path);
+    if (!f.open(QIODevice::ReadOnly | QIODevice::Text))
+        return;
 
-    header_label_->setStyleSheet(QStringLiteral(
-            "QLabel {"
-            "  color: %1;"
-            "}"
-            "QLabel::hover {"
-            "  color: %2;"
-            "}"
-            )
-            .arg(header_text_color.name(), header_hover_color.name()));
-
-    header_separator_->setStyleSheet(QStringLiteral(
-            "QFrame {"
-            "  color: %1;"
-            "}"
-            )
-            .arg(border_color.name()));
-
-    QString link_ss = QStringLiteral(
-            "QLabel#learnLink {"
-            "  border-radius: 4px;"
-            "}"
-            "QLabel#learnLink:hover {"
-            "  background-color: %1;"
-            "}"
-            "%2"
-            )
-            .arg(hover_bg.name(QColor::HexArgb), link_style);
-
-    // Apply to each link label via the container
-    QList<QLabel *> link_labels = findChildren<QLabel *>("learnLink");
-    foreach (QLabel *label, link_labels) {
-        label->setStyleSheet(link_ss);
-    }
-
-    // Discord button: brand purple #5865F2
-    discord_button_->setStyleSheet(QStringLiteral(
-            "QPushButton {"
-            "  background-color: #5865F2;"
-            "  color: white;"
-            "  border: none;"
-            "  border-radius: 6px;"
-            "  padding: 10px 12px;"
-            "  font-weight: 500;"
-            "}"
-            "QPushButton:hover {"
-            "  background-color: #4752C4;"
-            "}"
-            ));
-
-    // Donate button: warm red
-    donate_button_->setStyleSheet(QStringLiteral(
-            "QPushButton {"
-            "  background-color: #C0392B;"
-            "  color: white;"
-            "  border: none;"
-            "  border-radius: 6px;"
-            "  padding: 10px 12px;"
-            "  font-weight: 500;"
-            "}"
-            "QPushButton:hover {"
-            "  background-color: #A93226;"
-            "}"
-            ));
-
-    // Button container top border (separator)
-    QWidget *button_container = findChild<QWidget *>("learnButtonContainer");
-    if (button_container) {
-        button_container->setStyleSheet(QStringLiteral(
-                "QWidget#learnButtonContainer {"
-                "  border-top: 1px solid %1;"
-                "}"
-                )
-                .arg(border_color.name()));
-    }
+    setStyleSheet(QString::fromUtf8(f.readAll()));
 }
 
+bool LearnCardWidget::event(QEvent *event)
+{
+    switch (event->type()) {
+    case QEvent::ApplicationPaletteChange:
+        updateStyleSheet();
+        break;
+    case QEvent::LanguageChange:
+        ui_->retranslateUi(this);
+        break;
+    default:
+        break;
+    }
+    return QFrame::event(event);
+}

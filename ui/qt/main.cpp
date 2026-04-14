@@ -76,7 +76,6 @@
 #include "ui/capture_ui_utils.h"
 #include "ui/capture_globals.h"
 #include "ui/preference_utils.h"
-#include "ui/software_update.h"
 #include "ui/taps.h"
 #include "ui/profile.h"
 #include "ui/plugins/include/uiqt_plugin.h"
@@ -94,6 +93,7 @@
 #include <ui/qt/widgets/splash_overlay.h>
 #include "ui/qt/wireshark_application.h"
 #include "ui/qt/utils/workspace_state.h"
+#include "ui/qt/utils/software_update.h"
 
 #include "capture/capture-pcap-util.h"
 
@@ -240,10 +240,10 @@ gather_wireshark_qt_compiled_info(feature_list l)
 #endif
 #endif /* !Q_OS_WIN && !Q_OS_MAC */
 
-    const char *update_info = software_update_info();
-    if (update_info) {
+    QString update_info = SoftwareUpdate::info();
+    if (!update_info.isEmpty()) {
         with_feature(l, "automatic updates");
-        with_feature(l, "%s", update_info);
+        with_feature(l, "%s", update_info.toStdString().c_str());
     } else {
         without_feature(l, "automatic updates");
     }
@@ -911,7 +911,7 @@ int main(int argc, char *qt_argv[])
     ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling extcap_register_preferences, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
     splash_update(RA_EXTCAP, NULL, NULL);
-    extcap_register_preferences();
+    extcap_register_preferences(splash_update, NULL);
 
     /* Apply the extcap command line options now that the extcap preferences
      * are loaded.
@@ -1095,7 +1095,7 @@ int main(int argc, char *qt_argv[])
      * rather than showing the user the welcome page, so we don't call
      * processEvents() here.
      */
-    wsApp->allSystemsGo(application_flavor_name_proper(), VERSION);
+    wsApp->allSystemsGo();
     ws_info("Wireshark is up and ready to go, elapsed time %.3fs", (float) (g_get_monotonic_time() - start_time) / 1000000);
     SimpleDialog::displayQueuedMessages(main_w);
 
@@ -1188,6 +1188,7 @@ int main(int argc, char *qt_argv[])
     profile_register_persconffile("plots");
     profile_register_persconffile("import_hexdump.json");
     profile_register_persconffile("remote_hosts.json");
+    profile_register_persconffile("lua_debugger.json");
 
     profile_store_persconffiles(false);
     init_profile_list();

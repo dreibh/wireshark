@@ -6859,8 +6859,7 @@ dissect_bthci_cmd(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
     proto_tree_add_item(opcode_tree, hfx, tvb, offset, 2, ENC_LITTLE_ENDIAN);
     offset+=2;
 
-    proto_tree_add_item(bthci_cmd_tree, hf_bthci_cmd_param_length, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-    param_length = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item_ret_uint8(bthci_cmd_tree, hf_bthci_cmd_param_length, tvb, offset, 1, ENC_LITTLE_ENDIAN, &param_length);
     offset++;
 
     if (ogf == HCI_OGF_VENDOR_SPECIFIC) {

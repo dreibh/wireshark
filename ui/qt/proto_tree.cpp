@@ -17,6 +17,8 @@
 #include <epan/print.h>
 #include <epan/epan.h>
 #include <epan/epan_dissect.h>
+#include <epan/color_filters.h>
+#include <epan/dissectors/packet-frame.h>
 #include <cfile.h>
 
 #include <ui/qt/utils/color_utils.h>
@@ -31,6 +33,7 @@
 #include <ui/qt/io_graph_action.h>
 #include <ui/qt/plot_action.h>
 #include <ui/qt/protocol_preferences_menu.h>
+#include <ui/qt/models/pref_models.h>
 #include <ui/all_files_wildcard.h>
 #include <ui/urls.h>
 #include "main_application.h"
@@ -59,12 +62,15 @@ ProtoTree::ProtoTree(QWidget *parent, epan_dissect_t *edt_fixed) :
     cap_file_(NULL),
     edt_(edt_fixed)
 {
-    setAccessibleName(tr("Packet details"));
-    setAccessibleDescription(tr("Tree view of the selected packet's fields"));
     // Leave the uniformRowHeights property as-is (false) since items might have
     // have multiple lines (e.g. packet or event comments). If this slows things
     // down too much we should add a custom delegate which handles SizeHintRole.
     setHeaderHidden(true);
+    setFocusPolicy(Qt::StrongFocus);
+
+#ifdef Q_OS_MAC
+    setAttribute(Qt::WA_MacShowFocusRect, true);
+#endif
 
     setStyleSheet(QStringLiteral(
         "QTreeView:item:hover {"
@@ -75,6 +81,9 @@ ProtoTree::ProtoTree(QWidget *parent, epan_dissect_t *edt_fixed) :
     // Shrink down to a small but nonzero size in the main splitter.
     int one_em = fontMetrics().height();
     setMinimumSize(one_em, one_em);
+
+    verticalScrollBar()->setFocusPolicy(Qt::NoFocus);
+    horizontalScrollBar()->setFocusPolicy(Qt::NoFocus);
 
     setModel(proto_tree_model_);
 
@@ -410,6 +419,65 @@ void ProtoTree::contextMenuEvent(QContextMenuEvent *event)
             this, SIGNAL(editProtocolPreference(pref_t*,module_t*)));
 
     ctx_menu->addMenu(proto_prefs_menu);
+
+    // Add actions for coloring rule fields
+    bool is_color_rule_name = fi && fi->hfinfo &&
+        strcmp(fi->hfinfo->abbrev, "frame.coloring_rule.name") == 0;
+    bool is_color_rule_string = fi && fi->hfinfo &&
+        strcmp(fi->hfinfo->abbrev, "frame.coloring_rule.string") == 0;
+
+    if (is_color_rule_name || is_color_rule_string) {
+        // "Coloring Rule Preferences..." positioned right below Protocol Preferences
+        ctx_menu->addAction(tr("Coloring Rule Preferences..."), [this]() {
+            emit showProtocolPreferences(PrefsModel::typeToString(PrefsModel::Layout));
+        });
+
+        // "Coloring Rules..." opens the View -> Coloring Rules dialog
+        ctx_menu->addAction(tr("Coloring Rules..."), [this]() {
+            QAction *coloring_rules_action = window()->findChild<QAction *>("actionViewColoringRules");
+            if (coloring_rules_action)
+                coloring_rules_action->trigger();
+        });
+
+        // Pause/Resume and Resume All (only when multi-color details is enabled)
+        if (prefs.gui_packet_list_multi_color_details) {
+            QString filter_name;
+            if (is_color_rule_name) {
+                filter_name = finfo->toString();
+            } else {
+                // frame.coloring_rule.string: the name field is always the previous sibling
+                QModelIndex nameIdx = index.sibling(index.row() - 1, 0);
+                if (nameIdx.isValid()) {
+                    FieldInformation nameInfo(proto_tree_model_->protoNodeFromIndex(nameIdx), nullptr);
+                    filter_name = nameInfo.toString();
+                }
+            }
+            if (filter_name.startsWith("[PAUSED] ")) {
+                filter_name = filter_name.mid(9);
+            }
+
+            if (!filter_name.isEmpty()) {
+                bool is_paused = color_filter_is_session_disabled(filter_name.toUtf8().constData());
+                QString action_text = is_paused ? tr("Resume Coloring Rule") : tr("Pause Coloring Rule");
+
+                ctx_menu->addAction(action_text, [this, filter_name, is_paused]() {
+                    color_filter_set_session_disabled(filter_name.toUtf8().constData(), !is_paused);
+                    QTimer::singleShot(0, this, [this]() {
+                        emit redissectPacketsRequested();
+                    });
+                });
+
+                ctx_menu->addAction(tr("Resume All Coloring Rules"), [this]() {
+                    color_filter_resume_all(NULL);
+                    QTimer::singleShot(0, this, [this]() {
+                        emit redissectPacketsRequested();
+                    });
+                });
+            }
+        }
+
+    }
+
     ctx_menu->addSeparator();
 
     if (! buildForDialog)
@@ -455,6 +523,28 @@ void ProtoTree::keyReleaseEvent(QKeyEvent *event)
             break;
         default:
             break;
+    }
+}
+
+void ProtoTree::focusInEvent(QFocusEvent *event)
+{
+    QTreeView::focusInEvent(event);
+
+    if (event->reason() == Qt::TabFocusReason || event->reason() == Qt::BacktabFocusReason) {
+        if (model() && model()->rowCount() > 0 && selectionModel()) {
+            if (!selectionModel()->hasSelection()) {
+                QModelIndex first = model()->index(0, 0);
+                if (first.isValid()) {
+                    selectionModel()->setCurrentIndex(first, QItemSelectionModel::ClearAndSelect | QItemSelectionModel::Rows);
+                    setCurrentIndex(first);
+                }
+            }
+
+            // ALWAYS scroll to the current index if we have one
+            if (currentIndex().isValid()) {
+                scrollTo(currentIndex());
+            }
+        }
     }
 }
 

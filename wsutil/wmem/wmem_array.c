@@ -10,10 +10,12 @@
  */
 
 #include "config.h"
+#define WS_LOG_DOMAIN LOG_DOMAIN_WSUTIL
 
-#include <string.h>
+#include "wireshark.h"
+
 #include <stdlib.h>
-#include <glib.h>
+#include <wsutil/wslog.h>
 
 #include "wmem_core.h"
 #include "wmem_array.h"
@@ -71,21 +73,39 @@ void
 wmem_array_grow(wmem_array_t *array, const unsigned to_add)
 {
     unsigned new_alloc_count, new_count;
+    size_t new_size;
+    uint8_t *new_buf;
 
     new_alloc_count = array->alloc_count;
     new_count = array->elem_count + to_add;
 
     while (new_alloc_count < new_count) {
-        new_alloc_count *= 2;
+        if (ckd_mul(&new_alloc_count, new_alloc_count, 2)) {
+            ws_critical("Can't grow array (element count would overflow)!");
+            return;
+        }
     }
 
     if (new_alloc_count == array->alloc_count) {
         return;
     }
 
-    array->buf = (uint8_t *)wmem_realloc(array->allocator, array->buf,
-            new_alloc_count * array->elem_size);
+    if (ckd_mul(&new_size, new_alloc_count, array->elem_size)) {
+        ws_critical("Can't grow array (size would overflow)!");
+        return;
+    }
 
+    new_buf = (uint8_t *)wmem_realloc(array->allocator, array->buf, new_size);
+
+    if ((new_buf == NULL) && new_size) {
+        /* Check degenerate case of elem_size 0, which otherwise works.
+         * Note g_realloc aborts the program on error; the various
+         * wmem allocators might or might not. */
+        ws_critical("Reallocating array failed!");
+        return;
+    }
+
+    array->buf = new_buf;
     array->alloc_count = new_alloc_count;
 }
 

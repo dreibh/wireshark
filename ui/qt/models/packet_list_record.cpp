@@ -14,9 +14,9 @@
 #include <epan/epan_dissect.h>
 #include <epan/column.h>
 #include <epan/conversation.h>
-#include <epan/wmem_scopes.h>
-
 #include <epan/color_filters.h>
+#include <epan/wmem_scopes.h>
+#include <wsutil/wmem/wmem_list.h>
 
 #include <ui/qt/utils/qt_ui_utils.h>
 
@@ -34,12 +34,17 @@ PacketListRecord::PacketListRecord(frame_data *frameData) :
     colorized_(false),
     conv_index_(0),
     read_failed_(false),
-    row_(0)
+    row_(0),
+    expert_severity_(0),
+    color_filters_(NULL),
+    color_filter_count_(0)
 {
 }
 
 PacketListRecord::~PacketListRecord()
 {
+    // Free the GSList but don't free the color_filter_t* (they're global)
+    g_slist_free(color_filters_);
 }
 
 void PacketListRecord::ensureColorized(capture_file *cap_file)
@@ -186,6 +191,7 @@ void PacketListRecord::dissect(capture_file *cap_file, bool dissect_columns, boo
      * attempt to recover from it.
      */
     epan_dissect_run(&edt, cap_file->cd_t, &rec, fdata_, cinfo);
+    expert_severity_ = edt.pi.expert_severity;
 
     if (dissect_columns) {
         /* "Stringify" non frame_data vals */
@@ -196,6 +202,27 @@ void PacketListRecord::dissect(capture_file *cap_file, bool dissect_columns, boo
     if (dissect_color) {
         colorized_ = true;
         color_ver_ = rows_color_ver_;
+
+        // Free previous color list
+        g_slist_free(color_filters_);
+        color_filters_ = NULL;
+        color_filter_count_ = 0;
+
+        // Get all matching colors if any multi-color feature is enabled
+        if (prefs.gui_packet_list_multi_color_mode != PACKET_LIST_MULTI_COLOR_MODE_OFF ||
+            prefs.gui_packet_list_multi_color_details) {
+            wmem_list_t *wm_matches = NULL;
+            fdata_->color_filter = color_filters_colorize_packet_all(&edt, wmem_file_scope(), &wm_matches);
+            if (wm_matches) {
+                for (wmem_list_frame_t *lf = wmem_list_head(wm_matches); lf != NULL; lf = wmem_list_frame_next(lf)) {
+                    color_filters_ = g_slist_append(color_filters_, wmem_list_frame_data(lf));
+                    color_filter_count_++;
+                }
+                wmem_destroy_list(wm_matches);
+            }
+        } else {
+            color_filter_count_ = fdata_->color_filter ? 1 : 0;
+        }
     }
 
     struct conversation * conv = find_conversation_pinfo_ro(&edt.pi, 0);

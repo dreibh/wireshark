@@ -975,6 +975,30 @@ write_recent(void)
     write_recent_enum(rf, "Find packet search type", RECENT_GUI_SEARCH_TYPE, search_type_values,
                       recent.gui_search_type);
 
+    write_recent_boolean(rf, "Welcome page sidebar Learn section visible",
+            RECENT_KEY_SIDEBAR_LEARN_VISIBLE,
+            recent.gui_welcome_page_sidebar_learn_visible);
+
+    write_recent_boolean(rf, "Welcome page sidebar Tips section visible",
+            RECENT_KEY_SIDEBAR_TIPS_VISIBLE,
+            recent.gui_welcome_page_sidebar_tips_visible);
+
+    write_recent_boolean(rf, "Welcome page sidebar Tips event slides",
+            RECENT_KEY_SIDEBAR_TIPS_EVENTS,
+            recent.gui_welcome_page_sidebar_tips_events);
+
+    write_recent_boolean(rf, "Welcome page sidebar Tips sponsorship slides",
+            RECENT_KEY_SIDEBAR_TIPS_SPONSORSHIP,
+            recent.gui_welcome_page_sidebar_tips_sponsorship);
+
+    write_recent_boolean(rf, "Welcome page sidebar Tips tip-of-the-day slides",
+            RECENT_KEY_SIDEBAR_TIPS_TIPS,
+            recent.gui_welcome_page_sidebar_tips_tips);
+
+    fprintf(rf, "\n# Welcome page sidebar Tips slide auto-advance interval in seconds.\n");
+    fprintf(rf, RECENT_KEY_SIDEBAR_TIPS_INTERVAL ": %u\n",
+            recent.gui_welcome_page_sidebar_tips_interval);
+
     window_geom_recent_write_all(rf);
 
     fprintf(rf, "\n# Custom colors.\n");
@@ -1259,30 +1283,6 @@ write_profile_recent(void)
             RECENT_GUI_TSD_GOODPUT_SHOW,
             recent.gui_tsgd_goodput_show);
 
-    write_recent_boolean(rf, "Welcome page sidebar Learn section visible",
-            RECENT_KEY_SIDEBAR_LEARN_VISIBLE,
-            recent.gui_welcome_page_sidebar_learn_visible);
-
-    write_recent_boolean(rf, "Welcome page sidebar Tips section visible",
-            RECENT_KEY_SIDEBAR_TIPS_VISIBLE,
-            recent.gui_welcome_page_sidebar_tips_visible);
-
-    write_recent_boolean(rf, "Welcome page sidebar Tips event slides",
-            RECENT_KEY_SIDEBAR_TIPS_EVENTS,
-            recent.gui_welcome_page_sidebar_tips_events);
-
-    write_recent_boolean(rf, "Welcome page sidebar Tips sponsorship slides",
-            RECENT_KEY_SIDEBAR_TIPS_SPONSORSHIP,
-            recent.gui_welcome_page_sidebar_tips_sponsorship);
-
-    write_recent_boolean(rf, "Welcome page sidebar Tips tip-of-the-day slides",
-            RECENT_KEY_SIDEBAR_TIPS_TIPS,
-            recent.gui_welcome_page_sidebar_tips_tips);
-
-    fprintf(rf, "\n# Welcome page sidebar Tips slide auto-advance interval in seconds.\n");
-    fprintf(rf, RECENT_KEY_SIDEBAR_TIPS_INTERVAL ": %u\n",
-            recent.gui_welcome_page_sidebar_tips_interval);
-
     fclose(rf);
 
     /* XXX - catch I/O errors (e.g. "ran out of disk space") and return
@@ -1370,6 +1370,23 @@ read_set_recent_common_pair_static(char *key, const char *value,
         recent.gui_search_type = (search_type_type)str_to_val(value, search_type_values, SEARCH_TYPE_DISPLAY_FILTER);
     } else if (strcmp(key, RECENT_GUI_CUSTOM_COLORS) == 0) {
         recent.custom_colors = prefs_get_string_list(value);
+    } else if (strcmp(key, RECENT_KEY_SIDEBAR_LEARN_VISIBLE) == 0) {
+        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_learn_visible);
+    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_VISIBLE) == 0) {
+        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_tips_visible);
+    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_EVENTS) == 0) {
+        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_tips_events);
+    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_SPONSORSHIP) == 0) {
+        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_tips_sponsorship);
+    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_TIPS) == 0) {
+        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_tips_tips);
+    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_INTERVAL) == 0) {
+        num = strtol(value, &p, 0);
+        if (p == value || *p != '\0')
+            return PREFS_SET_SYNTAX_ERR;
+        if (num < 1)
+            num = 1;
+        recent.gui_welcome_page_sidebar_tips_interval = (unsigned)num;
     }
 
     return PREFS_SET_OK;
@@ -1561,23 +1578,6 @@ read_set_recent_pair_static(char *key, const char *value,
             return PREFS_SET_SYNTAX_ERR;      /* number must be positive */
         }
         recent.gui_tsgd_ma_window_size = val_as_dbl;
-    } else if (strcmp(key, RECENT_KEY_SIDEBAR_LEARN_VISIBLE) == 0) {
-        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_learn_visible);
-    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_VISIBLE) == 0) {
-        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_tips_visible);
-    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_EVENTS) == 0) {
-        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_tips_events);
-    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_SPONSORSHIP) == 0) {
-        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_tips_sponsorship);
-    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_TIPS) == 0) {
-        parse_recent_boolean(value, &recent.gui_welcome_page_sidebar_tips_tips);
-    } else if (strcmp(key, RECENT_KEY_SIDEBAR_TIPS_INTERVAL) == 0) {
-        num = strtol(value, &p, 0);
-        if (p == value || *p != '\0')
-            return PREFS_SET_SYNTAX_ERR;
-        if (num < 1)
-            num = 1;
-        recent.gui_welcome_page_sidebar_tips_interval = (unsigned)num;
     } else {
         return PREFS_SET_NO_SUCH_PREF;
     }

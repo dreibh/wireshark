@@ -12,15 +12,13 @@
 #ifndef __PCAP_UTIL_INT_H__
 #define __PCAP_UTIL_INT_H__
 
-extern if_info_t *if_info_new(const char *name, const char *description,
-	bool loopback);
 extern void if_info_add_address(if_info_t *if_info, struct sockaddr *addr);
 #ifdef HAVE_PCAP_REMOTE
-extern GList *get_interface_list_findalldevs_ex(const char *hostname,
+extern GList *get_remote_interface_list_common(const char *hostname,
     const char *port, int auth_type, const char *username, const char *passwd,
     int *err, char **err_str);
 #endif /* HAVE_PCAP_REMOTE */
-extern GList *get_interface_list_findalldevs(bool wire_interface, int *err, char **err_str);
+extern GList *get_local_interface_list(int *err, char **err_str);
 
 extern if_capabilities_t *get_if_capabilities_local(interface_options *interface_opts,
     cap_device_open_status *status, char **status_str);

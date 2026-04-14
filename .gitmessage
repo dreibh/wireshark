@@ -10,7 +10,7 @@
 #
 AI-Assisted: no|yes [tool(s)]
 # Required: declare whether AI was used (e.g., "AI-Assisted: yes (Claude)").
-
+#
 # Examples:
 #   CMake: Allow users to override _FORTIFY_SOURCE
 #   tools/check_spelling.py: Speed up using ProcessPoolExecutor

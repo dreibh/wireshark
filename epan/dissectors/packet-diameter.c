@@ -2679,7 +2679,7 @@ ddictionary_print_avp(void* data, void* user_data)
 static bool
 ddictionary_process_command(xmlNodePtr command, GSList** commands)
 {
-	ddict_command_t* element = g_new(ddict_command_t, 1);
+	ddict_command_t* element = g_new0(ddict_command_t, 1);
 	element->name = xmlGetProp(command, (const xmlChar*)"name");
 	element->vendor = xmlGetProp(command, (const xmlChar*)"vendor-id");
 	xmlChar* code = xmlGetProp(command, (const xmlChar*)"code");
@@ -2716,7 +2716,7 @@ ddictionary_process_avp(xmlNodePtr avp, GSList** avps)
 			element->type = xmlGetProp(current_node, (const xmlChar*)"type-name");
 		}
 		else if (xmlStrcmp(current_node->name, (const xmlChar*)"enum") == 0) {
-			ddict_avp_enum_t* avp_enum = g_new(ddict_avp_enum_t, 1);
+			ddict_avp_enum_t* avp_enum = g_new0(ddict_avp_enum_t, 1);
 
 			avp_enum->name = xmlGetProp(current_node, (const xmlChar*)"name");
 			code = xmlGetProp(current_node, (const xmlChar*)"code");

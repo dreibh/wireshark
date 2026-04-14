@@ -7421,8 +7421,7 @@ static int dissect_ccm_dsp(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
     ti = proto_tree_add_item(tree, hf_ccm_dsp_option, tvb, offset, len, ENC_NA);
     ccm_tree = proto_item_add_subtree(ti, ett_ccm_dsp_option);
 
-    strength_count = tvb_get_uint8(tvb, offset);
-    proto_tree_add_item(ccm_tree, hf_ccm_dsp_strength_count, tvb, offset++, 1, ENC_NA);
+    proto_tree_add_item_ret_uint8(ccm_tree, hf_ccm_dsp_strength_count, tvb, offset++, 1, ENC_NA, &strength_count);
 
     for (i = 0; i < strength_count; i++)
         proto_tree_add_item(ccm_tree, hf_ccm_dsp_strength, tvb, offset++, 1, ENC_NA);
@@ -11304,7 +11303,7 @@ static void dof_register_dpp_2(void)
 
     static ei_register_info ei[] =
     {
-        { &ei_dpp2_dof_10_flags_zero, { "dof.dpp.v2.flags_zero", PI_UNDECODED, PI_ERROR, "DPS-10: Reserved flag bits must be zero.", EXPFILL } },
+        { &ei_dpp2_dof_10_flags_zero, { "dof.dpp.v2.flags_zero", PI_UNDECODED, PI_ERROR, "DPPv2: Reserved flag bits must be zero.", EXPFILL } },
         { &ei_dpp_default_flags, { "dof.dpp.v2.flags_included", PI_COMMENTS_GROUP, PI_NOTE, "Default flag value is included explicitly.", EXPFILL } },
         { &ei_dpp_explicit_sender_sid_included, { "dof.dpp.v2.sender_sid_included", PI_PROTOCOL, PI_NOTE, "Explicit SID could be optimized, same as sender.", EXPFILL } },
         { &ei_dpp_explicit_receiver_sid_included, { "dof.dpp.v2.receiver_sid_included", PI_PROTOCOL, PI_NOTE, "Explicit SID could be optimized, same as receiver.", EXPFILL } },

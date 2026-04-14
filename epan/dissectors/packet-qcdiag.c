@@ -1409,7 +1409,7 @@ dissect_qcdiag_log_config_setmask(tvbuff_t *tvb, uint32_t offset, packet_info *p
 
     /* If Request assumed, there are 12 bytes before MASK */
     /* 12 = CMD_CODE (1) + RESERVED (3) + OPERATION (4) + EQUIP_ID (4) */
-    mask = (uint32_t)tvb_get_uint32(tvb, 12, ENC_LITTLE_ENDIAN);
+    mask = (uint32_t)tvb_get_letohl(tvb, 12);
     mask = (mask + 7) / 8;
 
     if (length == mask + 16)
@@ -1417,7 +1417,7 @@ dissect_qcdiag_log_config_setmask(tvbuff_t *tvb, uint32_t offset, packet_info *p
 
     /* If Response assumed, there are 16 bytes before MASK */
     /* 16 = CMD_CODE (1) + RESERVED (3) + OPERATION (4) + STATUS (4) + EQUIP_ID (4) */
-    //mask = (uint32_t)tvb_get_uint32(tvb, 16, ENC_LITTLE_ENDIAN);
+    //mask = (uint32_t)tvb_get_letohl(tvb, 16);
     //mask = (mask + 7) / 8;
 
     //if (length == mask + 20)
@@ -2043,7 +2043,7 @@ qcdictionary_load(wmem_array_t *hf_array _U_, GPtrArray *ett_array _U_)
     bool success = false;
 
     const char *data_dir = get_datafile_dir(epan_get_environment_prefix());
-    const char *safe_dir = g_build_filename(data_dir, "qualcomm", NULL);
+    char *safe_dir = g_build_filename(data_dir, "qualcomm", NULL);
 
     /* Reasoning for reading files in a particular folder
      *
@@ -2064,6 +2064,7 @@ qcdictionary_load(wmem_array_t *hf_array _U_, GPtrArray *ett_array _U_)
         }
         ws_dir_close(dir);
     }
+    g_free(safe_dir);
 
     if (success && dump_dict)
         qualcomm_dict_print(stdout, all_logcodes);

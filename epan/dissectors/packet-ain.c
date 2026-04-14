@@ -857,6 +857,18 @@ static const value_string ain_err_code_string_vals[] = {
 };
 
 
+/*--- Cyclic dependencies ---*/
+
+/* Invoke/argument -> Invoke/argument */
+static unsigned dissect_ain_T_argument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* ReturnResult/result/result -> ReturnResult/result/result */
+static unsigned dissect_ain_T_result_01(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+/* ReturnError/parameter -> ReturnError/parameter */
+static unsigned dissect_ain_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+
 
 
 static unsigned
@@ -8211,10 +8223,13 @@ dissect_ain_T_linkedId(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset
 
 static unsigned
 dissect_ain_T_argument(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // Invoke/argument -> Invoke/argument
+  increment_dissection_depth_by_n(actx->pinfo, 1);
 
   offset = dissect_invokeData(tree, tvb, offset, actx);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -8242,10 +8257,13 @@ dissect_ain_Invoke(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_
 
 static unsigned
 dissect_ain_T_result_01(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // ReturnResult/result/result -> ReturnResult/result/result
+  increment_dissection_depth_by_n(actx->pinfo, 1);
 
   offset = dissect_returnResultData(tree, tvb, offset, actx);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -8286,10 +8304,13 @@ dissect_ain_ReturnResult(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offs
 
 static unsigned
 dissect_ain_T_parameter(bool implicit_tag _U_, tvbuff_t *tvb _U_, unsigned offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // ReturnError/parameter -> ReturnError/parameter
+  increment_dissection_depth_by_n(actx->pinfo, 1);
 
   offset = dissect_returnErrorData(tree, tvb, offset, actx);
 
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 

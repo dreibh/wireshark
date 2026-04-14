@@ -173,7 +173,7 @@ for details.
     except OSError as ex:
         print('Warning: unable to invoke git stripspace: %s' % (ex,))
         return is_good
-    if newbody != body:
+    if newbody and newbody != body:
         new_lines = newbody.splitlines(True)
         diff = difflib.unified_diff(old_lines, new_lines,
                                     fromfile='OLD/.git/COMMIT_EDITMSG',

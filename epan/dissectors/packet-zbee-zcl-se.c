@@ -2766,8 +2766,7 @@ dissect_zcl_price_publish_tier_labels(tvbuff_t *tvb, proto_tree *tree, unsigned 
     *offset += 1;
 
     /* Number of Labels */
-    number_of_labels = tvb_get_uint8(tvb, *offset);
-    proto_tree_add_item(tree, hf_zbee_zcl_price_tier_labels_number_of_labels, tvb, *offset, 1, ENC_NA);
+    proto_tree_add_item_ret_uint8(tree, hf_zbee_zcl_price_tier_labels_number_of_labels, tvb, *offset, 1, ENC_NA, &number_of_labels);
     *offset += 1;
 
     for (int i = 0; i < number_of_labels; i++) {
@@ -8086,15 +8085,14 @@ dissect_zcl_msg_display(tvbuff_t *tvb, proto_tree *tree, unsigned *offset)
 static void
 dissect_zcl_msg_cancel(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned *offset)
 {
-    int8_t msg_ctrl;
+    uint8_t msg_ctrl;
 
     /* Message ID */
     proto_tree_add_item(tree, hf_zbee_zcl_msg_message_id, tvb, *offset, 4, ENC_LITTLE_ENDIAN);
     *offset += 4;
 
     /* Message Control */
-    msg_ctrl = tvb_get_uint8(tvb, *offset);
-    proto_tree_add_item(tree, hf_zbee_zcl_msg_ctrl, tvb, *offset, 1, ENC_NA);
+    proto_tree_add_item_ret_uint8(tree, hf_zbee_zcl_msg_ctrl, tvb, *offset, 1, ENC_NA, &msg_ctrl);
     *offset += 1;
 
     if (msg_ctrl != 0x00) {
@@ -11445,8 +11443,7 @@ dissect_zcl_calendar_publish_day_profile(tvbuff_t *tvb, proto_tree *tree, unsign
     *offset += 1;
 
     /* Calendar Type */
-    calendar_type = tvb_get_uint8(tvb, *offset);
-    proto_tree_add_item(tree, hf_zbee_zcl_calendar_type, tvb, *offset, 1, ENC_NA);
+    proto_tree_add_item_ret_uint8(tree, hf_zbee_zcl_calendar_type, tvb, *offset, 1, ENC_NA, &calendar_type);
     *offset += 1;
 
     for (int i = 0; tvb_reported_length_remaining(tvb, *offset) >= 3 && i < schedule_entries_count; i++) {

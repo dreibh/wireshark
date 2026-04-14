@@ -1201,9 +1201,11 @@ dissect_eap_sim(proto_tree *eap_tree, tvbuff_t *tvb, packet_info* pinfo, unsigne
     aoffset += 1;
     aleft   -= 1;
 
-    if (aleft <= 0)
+    pi = proto_tree_add_item(attr_tree, hf_eap_sim_subtype_length, tvb, aoffset, 1, ENC_BIG_ENDIAN);
+    if (length == 0) {
+      expert_add_info(pinfo, pi, &ei_eap_bad_length);
       break;
-    proto_tree_add_item(attr_tree, hf_eap_sim_subtype_length, tvb, aoffset, 1, ENC_BIG_ENDIAN);
+    }
     aoffset += 1;
     aleft   -= 1;
 

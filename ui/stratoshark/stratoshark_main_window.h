@@ -72,7 +72,6 @@ class PrintDialog;
 class FileSetDialog;
 class FilterDialog;
 class FunnelStatistics;
-class StratosharkWelcomePage;
 class PacketCommentDialog;
 class PacketList;
 class ProtoTree;
@@ -125,6 +124,9 @@ protected:
     void changeEvent(QEvent* event) override;
     void openRecentCaptureFile(const QString &filename) override;
 
+
+    bool tryClosingCaptureFile(QString before_what, FileCloseContext context = Default) override;
+
 private:
     // XXX Move to FilterUtils
     enum MatchSelected {
@@ -134,14 +136,6 @@ private:
         MatchSelectedNot,
         MatchSelectedAndNot,
         MatchSelectedOrNot
-    };
-
-    enum FileCloseContext {
-        Default,
-        Quit,
-        Restart,
-        Reload,
-        Update
     };
 
     Ui::StratosharkMainWindow *main_ui_;
@@ -170,10 +164,6 @@ private:
     info_data_t info_data_;
 #endif
 
-#ifdef HAVE_SOFTWARE_UPDATE
-    QAction *update_action_;
-#endif
-
     QPoint dragStartPosition;
 
     void freeze();
@@ -189,7 +179,6 @@ private:
 #ifdef Q_OS_WIN
     void fileAddExtension(QString &file_name, int file_type, ws_compression_type compression_type);
 #endif // Q_OS_WIN
-    bool testCaptureFileClose(QString before_what, FileCloseContext context = Default);
     void captureStop();
 
     void initMainToolbarIcons();
@@ -349,10 +338,6 @@ private slots:
     void openTapParameterDialog(const QString cfg_str, const QString arg, void *userdata);
     void openTapParameterDialog();
 
-#if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
-    void softwareUpdateRequested();
-#endif
-
     void connectFileMenuActions();
     void printFile();
 
@@ -409,10 +394,6 @@ private slots:
 
     void connectHelpMenuActions();
 
-#ifdef HAVE_SOFTWARE_UPDATE
-    void checkForUpdates();
-#endif
-
     void goToCancelClicked();
     void goToGoClicked();
     void goToLineEditReturnPressed();
@@ -435,7 +416,7 @@ private slots:
     void on_actionContextFilterFieldReference_triggered();
 
     void extcap_options_finished(int result);
-    void showExtcapOptionsDialog(QString & device_name, bool startCaptureOnClose);
+    void showExtcapOptionsDialog(QString device_name, bool startCaptureOnClose);
 
     friend class MainApplication;
 };

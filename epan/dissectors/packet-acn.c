@@ -3540,8 +3540,7 @@ acn_add_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int off
       proto_tree_add_item(addr_tree, hf_acn_ip_address_type, tvb, offset, 1, ENC_BIG_ENDIAN);
       offset    += 1;
       /* Add port */
-      port       = tvb_get_ntohs(tvb, offset);
-      proto_tree_add_item(addr_tree, hf_acn_port, tvb, offset, 2, ENC_BIG_ENDIAN);
+      proto_tree_add_item_ret_uint(addr_tree, hf_acn_port, tvb, offset, 2, ENC_BIG_ENDIAN, &port);
       offset    += 2;
       /* Add Address */
       proto_tree_add_item(addr_tree, hf_acn_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -3555,8 +3554,7 @@ acn_add_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int off
       proto_tree_add_item(addr_tree, hf_acn_ip_address_type, tvb, offset, 1, ENC_BIG_ENDIAN);
       offset    += 1;
       /* Add port */
-      port       = tvb_get_ntohs(tvb, offset);
-      proto_tree_add_item(addr_tree, hf_acn_port, tvb, offset, 2, ENC_BIG_ENDIAN);
+      proto_tree_add_item_ret_uint(addr_tree, hf_acn_port, tvb, offset, 2, ENC_BIG_ENDIAN, &port);
       offset    += 2;
       /* Add Address */
       proto_tree_add_item(addr_tree, hf_acn_ipv6, tvb, offset, 16, ENC_NA);
@@ -3570,8 +3568,7 @@ acn_add_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int off
       proto_tree_add_item(addr_tree, hf_acn_ip_address_type, tvb, offset, 1, ENC_BIG_ENDIAN);
       offset    += 1;
       /* Add port */
-      port       = tvb_get_ntohs(tvb, offset);
-      proto_tree_add_item(addr_tree, hf_acn_port, tvb, offset, 2, ENC_BIG_ENDIAN);
+      proto_tree_add_item_ret_uint(addr_tree, hf_acn_port, tvb, offset, 2, ENC_BIG_ENDIAN, &port);
       /* Append port to tree item */
       proto_item_append_text(pi, " Port %d", port);
       offset    += 2;
@@ -5554,8 +5551,7 @@ dissect_acn_dmx_data_pdu(uint32_t protocol_id, tvbuff_t *tvb, packet_info *pinfo
       data_offset += 2;
 
       if (protocol_id == ACN_PROTOCOL_ID_DMX_2 || protocol_id == ACN_PROTOCOL_ID_DMX_3) {
-        dmx_2_start_code = (uint8_t)tvb_get_ntohs(tvb, data_offset - 1);
-        proto_tree_add_item(pdu_tree, hf_acn_dmx_2_start_code, tvb, data_offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint8(pdu_tree, hf_acn_dmx_2_start_code, tvb, data_offset, 1, ENC_BIG_ENDIAN, &dmx_2_start_code);
         data_offset += 1;
         dmx_count   -= 1;
       }
@@ -7431,8 +7427,7 @@ dissect_acn(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
   /* add preamble, postamble and ACN Packet ID */
   proto_tree_add_item(acn_tree, hf_acn_preamble_size, tvb, data_offset, 2, ENC_BIG_ENDIAN);
   data_offset += 2;
-  postamble_size = tvb_get_uint16(tvb, data_offset, ENC_BIG_ENDIAN);
-  proto_tree_add_item(acn_tree, hf_acn_postamble_size, tvb, data_offset, 2, ENC_BIG_ENDIAN);
+  proto_tree_add_item_ret_uint16(acn_tree, hf_acn_postamble_size, tvb, data_offset, 2, ENC_BIG_ENDIAN, &postamble_size);
   data_offset += 2;
   proto_tree_add_item(acn_tree, hf_acn_packet_identifier, tvb, data_offset, 12, ENC_UTF_8);
   data_offset += 12;

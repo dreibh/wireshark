@@ -705,6 +705,64 @@
     </message>
 </context>
 <context>
+    <name>CaptureCardWidget</name>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Captura paquets en directe de la vostra xarxa.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Capture</source>
+        <translation type="unfinished">Captura</translation>
+    </message>
+    <message>
+        <source>Start a new capture session</source>
+        <translation type="unfinished">Comença una sessió de captura nova.</translation>
+    </message>
+    <message>
+        <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
+        <translation type="unfinished">&lt;h2&gt;Captura&lt;/h2&gt;</translation>
+    </message>
+    <message>
+        <source>…using this filter:</source>
+        <translation type="unfinished">…amb aquest filtre:</translation>
+    </message>
+    <message>
+        <source>Capture filter</source>
+        <translation type="unfinished">Filtre de captura</translation>
+    </message>
+    <message>
+        <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
+        <translation type="unfinished">Escriviu una expressió del filtre de captura per a limitar quines dades es graven durant una captura.</translation>
+    </message>
+    <message>
+        <source>Interface type filter</source>
+        <translation type="unfinished">Filtre de tipus d&apos;interfície</translation>
+    </message>
+    <message>
+        <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
+        <translation type="unfinished">Filtra la llista de fonts de captura per tipus. Mostra quantes fonts hi ha visibles actualment i quantes n&apos;hi ha d&apos;amagades pel filtre actiu.</translation>
+    </message>
+    <message>
+        <source>Capture sources</source>
+        <translation type="unfinished">Fonts de captura</translation>
+    </message>
+    <message>
+        <source>Lists available capture sources. Select one or more to capture from.</source>
+        <translation type="unfinished">Llista de les fonts de captura disponibles. Trieu-ne almenys una per a fer una captura.</translation>
+    </message>
+    <message>
+        <source>All interfaces shown</source>
+        <translation type="unfinished">Es mostren totes les interfícies</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n interface(s) shown, %1 hidden</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CaptureCommentDialog</name>
     <message>
         <source>Edit Capture Comments</source>
@@ -1034,6 +1092,10 @@
         <translation>Interfície</translation>
     </message>
     <message>
+        <source>Interface Description</source>
+        <translation>Descripció de la interfície</translation>
+    </message>
+    <message>
         <source>Dropped packets</source>
         <translation>Paquets descartats</translation>
     </message>
@@ -1048,10 +1110,6 @@
     <message>
         <source>Packet size limit (snaplen)</source>
         <translation>Límit de la mida de paquet (snaplen)</translation>
-    </message>
-    <message>
-        <source>Interface Description</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>none</source>
@@ -2247,7 +2305,7 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Displays the raw bytes of the selected packet in hexadecimal and ASCII.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra els bytes en brut del paquet seleccionat en hexadecimal i en ASCII.</translation>
     </message>
     <message>
         <source>Event data</source>
@@ -2255,7 +2313,7 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Displays the raw data of the selected event.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra les dades en brut de l&apos;esdeveniment seleccionat.</translation>
     </message>
 </context>
 <context>
@@ -2907,7 +2965,46 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
 </context>
 <context>
+    <name>ExpertInfoModel</name>
+    <message>
+        <source>Severity: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: Packet comments listed below.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Group: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protocol: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Packet: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Header Field: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ExpertInfoProxyModel</name>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Packet</source>
         <translation>Paquet</translation>
@@ -5279,15 +5376,15 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     <name>InfoBannerWidget</name>
     <message>
         <source>Tips and announcements</source>
-        <translation type="unfinished"></translation>
+        <translation>Consells i anuncis</translation>
     </message>
     <message>
         <source>%1: %2 (%3 of %4)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1: %2 (%3 de %4)</translation>
     </message>
     <message>
         <source>Action: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Acció: %1</translation>
     </message>
 </context>
 <context>
@@ -5335,6 +5432,14 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     <message>
         <source>Virtual</source>
         <translation>Virtual</translation>
+    </message>
+    <message>
+        <source>Tunnel Interfaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Loopback Devices</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Remote interfaces</source>
@@ -6435,80 +6540,140 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
         <source>Show file load time</source>
         <translation>Mostra el temps de càrrega del fitxer</translation>
     </message>
+    <message>
+        <source>Packet list multi-color display mode:</source>
+        <translation>Mode de colors de la visualització de les llistes de paquets:</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Desactivat</translation>
+    </message>
+    <message>
+        <source>Scrollbar only</source>
+        <translation>Només barra de desplaçament</translation>
+    </message>
+    <message>
+        <source>Equal stripes</source>
+        <translation>Ratlles iguals</translation>
+    </message>
+    <message>
+        <source>Shift right</source>
+        <translation>Desplaça a la dreta</translation>
+    </message>
+    <message>
+        <source>75%</source>
+        <translation>75&#xa0;%</translation>
+    </message>
+    <message>
+        <source>80%</source>
+        <translation>80&#xa0;%</translation>
+    </message>
+    <message>
+        <source>85%</source>
+        <translation>85&#xa0;%</translation>
+    </message>
+    <message>
+        <source>90%</source>
+        <translation>90&#xa0;%</translation>
+    </message>
+    <message>
+        <source>95%</source>
+        <translation>95&#xa0;%</translation>
+    </message>
+    <message>
+        <source>Separator style:</source>
+        <translation>Estil de separador:</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation>Vertical</translation>
+    </message>
+    <message>
+        <source>Diagonal</source>
+        <translation>Diagonal</translation>
+    </message>
+    <message>
+        <source>Bubble</source>
+        <translation>Bombolla</translation>
+    </message>
+    <message>
+        <source>Display multiple colors in packet details</source>
+        <translation>Mostra múltiples colors als detalls dels paquets.</translation>
+    </message>
 </context>
 <context>
     <name>LearnCardWidget</name>
     <message>
         <source>User Documentation</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Documentació d&apos;usuari</translation>
     </message>
     <message>
         <source>Docs</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Documentació</translation>
     </message>
     <message>
         <source>Read the Wireshark user documentation online.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Mostra la documentació d&apos;usuari del Wireshark en línia.</translation>
     </message>
     <message>
         <source>Wiki</source>
-        <translation type="unfinished">Wiki</translation>
+        <translation type="vanished">Viqui</translation>
     </message>
     <message>
         <source>Browse the Wireshark Wiki for how-tos and other information.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Navega per la viquipèdia del Wireshark per a saber com fer-lo servir i obtenir més informació.</translation>
     </message>
     <message>
         <source>Questions and Answers</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Preguntes i respostes</translation>
     </message>
     <message>
         <source>Q&amp;A</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">PiR</translation>
     </message>
     <message>
         <source>Get answers to your Wireshark questions from the community.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Obteniu respostes de la comunitat sobre el Wireshark.</translation>
     </message>
     <message>
         <source>Mailing Lists</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Llistes de correu</translation>
     </message>
     <message>
         <source>Lists</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Llistes</translation>
     </message>
     <message>
         <source>Join the Wireshark mailing lists to discuss Wireshark with other users and developers.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Uniu-vos a les llistes de correu del Wireshark per a parlar amb altres usuaris i desenvolupadors del programa.</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Learn&lt;/h2&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;h2&gt;Aprèn&lt;/h2&gt;</translation>
     </message>
     <message>
         <source>Learn</source>
-        <translation type="unfinished"></translation>
+        <translation>Aprèn</translation>
     </message>
     <message>
         <source>Opens the Wireshark documentation website</source>
-        <translation type="unfinished"></translation>
+        <translation>Obre el lloc web de la documentació del Wireshark.</translation>
     </message>
     <message>
         <source>Discord</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Discord</translation>
     </message>
     <message>
         <source>Join the Wireshark Discord server to chat with other users and developers.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Uniu-vos al servidor de Discord del Wireshark per a parlar amb altres usuaris i desenvolupadors.</translation>
     </message>
     <message>
         <source>Donate</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Fes un donatiu</translation>
     </message>
     <message>
         <source>Support the Wireshark project by making a donation to the Wireshark Foundation.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Ajudeu al projecte Wireshark amb donacions a la Fundació Wireshark.</translation>
     </message>
 </context>
 <context>
@@ -7019,43 +7184,43 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Expert information</source>
-        <translation type="unfinished"></translation>
+        <translation>Informació avançada</translation>
     </message>
     <message>
         <source>Opens the expert information dialog, showing errors, warnings, and other relevant information about the capture.</source>
-        <translation type="unfinished"></translation>
+        <translation>Obre el diàleg d&apos;informació avançada, que mostra errors, avisos i més informació rellevant de la captura.</translation>
     </message>
     <message>
         <source>Capture comment</source>
-        <translation type="unfinished"></translation>
+        <translation>Comentari de la captura</translation>
     </message>
     <message>
         <source>Opens the Capture File Properties dialog to view or edit capture-level comments.</source>
-        <translation type="unfinished"></translation>
+        <translation>Obre el diàleg de propietats del fitxer de captura per a veure&apos;l o editar-ne els comentaris a nivell de captura.</translation>
     </message>
     <message>
         <source>Information</source>
-        <translation type="unfinished"></translation>
+        <translation>Informació</translation>
     </message>
     <message>
         <source>Displays general information, status messages, and expert severity details.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra informació general, missatges d&apos;estat i detalls avançats importants.</translation>
     </message>
     <message>
         <source>Packet statistics</source>
-        <translation type="unfinished"></translation>
+        <translation>Estadístiques de paquet</translation>
     </message>
     <message>
         <source>Shows the number of captured, displayed, and selected packets.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra el nombre de paquets capturats, mostrats i seleccionats.</translation>
     </message>
     <message>
         <source>Configuration profile</source>
-        <translation type="unfinished"></translation>
+        <translation>Perfil de configuració</translation>
     </message>
     <message>
         <source>Displays the current configuration profile and allows switching between profiles.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra el perfil de configuració actual i permet canviar de perfil.</translation>
     </message>
     <message>
         <source>ERROR</source>
@@ -7172,6 +7337,14 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source> before updating</source>
+        <translation type="unfinished">abans d&apos;actualitzar</translation>
+    </message>
+    <message>
+        <source>Please close the current file before updating.</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Display filter as %1</source>
         <translation>Mostra el filtre com a %1</translation>
@@ -7683,7 +7856,7 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Displays a visual diagram of the selected packet&apos;s fields.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra un diagrama visual dels camps del paquet seleccionat.</translation>
     </message>
     <message>
         <source>Show Field Values</source>
@@ -7900,11 +8073,11 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     <name>PacketList</name>
     <message>
         <source>Packet list</source>
-        <translation type="unfinished">Llista de paquets</translation>
+        <translation type="vanished">Llista de paquets</translation>
     </message>
     <message>
         <source>List of captured packets</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Llista de paquets capturats</translation>
     </message>
     <message>
         <source>Summary as Text</source>
@@ -8015,6 +8188,22 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     <message>
         <source>Sorting …</source>
         <translation>S&apos;ordena…</translation>
+    </message>
+    <message>
+        <source>Marked</source>
+        <translation type="unfinished">Marcat</translation>
+    </message>
+    <message>
+        <source>Ignored</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reference Time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation type="unfinished">Modificat</translation>
     </message>
 </context>
 <context>
@@ -8149,7 +8338,40 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
 
 &lt;/tbody&gt;&lt;/table&gt;
 &lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;
+
+&lt;h3&gt;Dreceres de teclat valuoses i sorprenents per a estalviar temps&lt;/h3&gt;
+&lt;table&gt;&lt;tbody&gt;
+
+&lt;tr&gt;&lt;th&gt;+&lt;/th&gt;&lt;td&gt;Augmenta el zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;-&lt;/th&gt;&lt;td&gt;Redueix el zoom&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;x&lt;/th&gt;&lt;td&gt;Augmenta el zoom en l&apos;eix de les X&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;X&lt;/th&gt;&lt;td&gt;Redueix el zoom en l&apos;eix de les X&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;y&lt;/th&gt;&lt;td&gt;Augmenta el zoom en l&apos;eix de les Y&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Y&lt;/th&gt;&lt;td&gt;Redueix el zoom en l&apos;eix de les Y&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;0&lt;/th&gt;&lt;td&gt;Restableix el gràfic al seu estat inicial&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;→&lt;/th&gt;&lt;td&gt;Mou 10 píxels a la dreta&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;←&lt;/th&gt;&lt;td&gt;Mou 10 píxels a la dreta&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↑&lt;/th&gt;&lt;td&gt;Mou 10 píxels amunt&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;↓&lt;/th&gt;&lt;td&gt;Mou 10 píxels avall&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Majúscula+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Mou 1 píxel a la dreta&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Majúscula+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Mou 1 píxel a l&apos;esquerra&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Majúscula+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Mou 1 píxel amunt&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Majúscula+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Mou 1 píxel avall&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;→&lt;/th&gt;&lt;td&gt;Mou 100 píxels a la dreta&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;←&lt;/th&gt;&lt;td&gt;Mou 100 píxels a l&apos;esquerra&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↑&lt;/th&gt;&lt;td&gt;Mou 100 píxels amunt&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;&lt;i&gt;Alt+&lt;/i&gt;↓&lt;/th&gt;&lt;td&gt;Mou 100 píxels avall&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;g&lt;/th&gt;&lt;td&gt;Commuta l&apos;origen del temps&lt;/td&gt;&lt;/th&gt;
+
+&lt;tr&gt;&lt;th&gt;t&lt;/th&gt;&lt;td&gt;Commuta l&apos;origen del temps&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;Espai&lt;/th&gt;&lt;td&gt;Commuta l&apos;eix superior&lt;/td&gt;&lt;/th&gt;
+&lt;tr&gt;&lt;th&gt;a&lt;/th&gt;&lt;td&gt;Commuta l&apos;eix superior&lt;/td&gt;&lt;/th&gt;
+
+&lt;/tbody&gt;&lt;/table&gt;
+&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Add a new plot.</source>
@@ -8277,35 +8499,35 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Move Up 100 Pixels</source>
-        <translation type="unfinished">Mou 100 píxels amunt</translation>
+        <translation>Mou 100 píxels amunt</translation>
     </message>
     <message>
         <source>Alt+Up</source>
-        <translation type="unfinished">Alt+Amunt</translation>
+        <translation>Alt+Amunt</translation>
     </message>
     <message>
         <source>Move Left 100 Pixels</source>
-        <translation type="unfinished">Mou 100 píxels a l&apos;esquerra</translation>
+        <translation>Mou 100 píxels a l&apos;esquerra</translation>
     </message>
     <message>
         <source>Alt+Left</source>
-        <translation type="unfinished">Alt+Esquerra</translation>
+        <translation>Alt+Esquerra</translation>
     </message>
     <message>
         <source>Move Right 100 Pixels</source>
-        <translation type="unfinished">Mou 100 píxels a la dreta</translation>
+        <translation>Mou 100 píxels a la dreta</translation>
     </message>
     <message>
         <source>Alt+Right</source>
-        <translation type="unfinished">Alt+Dreta</translation>
+        <translation>Alt+Dreta</translation>
     </message>
     <message>
         <source>Move Down 100 Pixels</source>
-        <translation type="unfinished">Mou 100 píxels avall</translation>
+        <translation>Mou 100 píxels avall</translation>
     </message>
     <message>
         <source>Alt+Down</source>
-        <translation type="unfinished">Alt+Avall</translation>
+        <translation>Alt+Avall</translation>
     </message>
     <message>
         <source>Go To Packet Under Cursor</source>
@@ -8695,7 +8917,7 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Welcome Page</source>
-        <translation type="unfinished"></translation>
+        <translation>Pàgina de benvinguda</translation>
     </message>
     <message>
         <source>Capture</source>
@@ -9078,38 +9300,38 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Task progress</source>
-        <translation type="unfinished"></translation>
+        <translation>Progrés de la tasca</translation>
     </message>
     <message>
         <source>Shows the progress of the current background task.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra el progrés de la tasca de fons actual.</translation>
     </message>
     <message>
         <source>Progress bar</source>
-        <translation type="unfinished"></translation>
+        <translation>Barra de progrés</translation>
     </message>
     <message>
         <source>Shows the percentage of the task that has been completed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra el percentatge que s&apos;ha completat de la tasca.</translation>
     </message>
     <message>
         <source>Stop</source>
-        <translation type="unfinished">Para</translation>
+        <translation>Para</translation>
     </message>
     <message>
         <source>Stops the current background task.</source>
-        <translation type="unfinished"></translation>
+        <translation>Para la tasca de fons actual.</translation>
     </message>
 </context>
 <context>
     <name>ProtoTree</name>
     <message>
         <source>Packet details</source>
-        <translation>Detalls del paquet</translation>
+        <translation type="vanished">Detalls del paquet</translation>
     </message>
     <message>
         <source>Tree view of the selected packet&apos;s fields</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Vista d&apos;arbre dels camps del paquet seleccionat</translation>
     </message>
     <message>
         <source>Not a field or protocol</source>
@@ -9172,6 +9394,26 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
         <translation>Filtra la referència del filtre</translation>
     </message>
     <message>
+        <source>Coloring Rule Preferences...</source>
+        <translation>Preferències de les regles d&apos;acoloriment...</translation>
+    </message>
+    <message>
+        <source>Coloring Rules...</source>
+        <translation>Regles d&apos;acoloriment...</translation>
+    </message>
+    <message>
+        <source>Resume Coloring Rule</source>
+        <translation>Posa la regla d&apos;acoloriment en marxa</translation>
+    </message>
+    <message>
+        <source>Pause Coloring Rule</source>
+        <translation>Posa la regla d&apos;acoloriment en pausa</translation>
+    </message>
+    <message>
+        <source>Resume All Coloring Rules</source>
+        <translation>Posa totes les regles d&apos;acoloriment en marxa</translation>
+    </message>
+    <message>
         <source>Copied %1</source>
         <translation>Copiat %1</translation>
     </message>
@@ -9186,6 +9428,29 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     <message>
         <source>Colorize with Filter</source>
         <translation>Acoloreix amb el filtre</translation>
+    </message>
+</context>
+<context>
+    <name>ProtoTreeModel</name>
+    <message>
+        <source>Comment</source>
+        <translation type="unfinished">Comentari</translation>
+    </message>
+    <message>
+        <source>Chat</source>
+        <translation type="unfinished">Conversa</translation>
+    </message>
+    <message>
+        <source>Note</source>
+        <translation type="unfinished">Nota</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation type="unfinished">Avís</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation type="unfinished">Error</translation>
     </message>
 </context>
 <context>
@@ -9914,7 +10179,7 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     <name>RecentCaptureFilesListModel</name>
     <message>
         <source>%1 (file no longer found at path)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (el fitxer ja no es troba al camí especificat)</translation>
     </message>
 </context>
 <context>
@@ -13681,7 +13946,7 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Save data as raw</source>
-        <translation>Desa les dades com a raw</translation>
+        <translation>Desa les dades en brut</translation>
     </message>
     <message>
         <source>Disable data formatting for export/clipboard and save as raw data</source>
@@ -13987,6 +14252,121 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
 </context>
 <context>
+    <name>WelcomeHeaderWidget</name>
+    <message>
+        <source>Form</source>
+        <translation type="unfinished">Formulari</translation>
+    </message>
+    <message>
+        <source>Application Name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Application name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark</source>
+        <translation type="unfinished">Wireshark</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Version of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>4.7.0 (v4.7.0rc0-2438-g68ddfc1bcba4)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Variant of the application running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Build variant of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Development Build</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update Available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Graphical indicator that an update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes</source>
+        <translation type="unfinished">Notes de la versió</translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for the available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download Update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for the currently available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss update notification</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss the update notification and show the information about an update again on either next application start or when a new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update %1 is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update for version %1 is available (current version is %2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>WelcomePage</name>
     <message>
         <source>Form</source>
@@ -13994,15 +14374,15 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Welcome to Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Us donem la benvinguda al Wireshark.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Us donem la benvinguda al Wireshark.&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Open</source>
-        <translation type="unfinished"></translation>
+        <translation>Obre</translation>
     </message>
     <message>
         <source>List of recently opened files. Files that can no longer be found on disk are shown in italics.</source>
-        <translation type="unfinished"></translation>
+        <translation>Llista de tots els fitxers oberts recentment. Els fitxers que ja no es troben al disc es mostren en cursiva.</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Open a file on your file system&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -14022,47 +14402,47 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Capture</source>
-        <translation type="unfinished">Captura</translation>
+        <translation type="vanished">Captura</translation>
     </message>
     <message>
         <source>Start a new capture session</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Comença una sessió de captura nova.</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Captura paquets en directe de la vostra xarxa.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Captura paquets en directe de la vostra xarxa.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
-        <translation>&lt;h2&gt;Captura&lt;/h2&gt;</translation>
+        <translation type="vanished">&lt;h2&gt;Captura&lt;/h2&gt;</translation>
     </message>
     <message>
         <source>…using this filter:</source>
-        <translation>…amb aquest filtre:</translation>
+        <translation type="vanished">…amb aquest filtre:</translation>
     </message>
     <message>
         <source>Interface list</source>
-        <translation>Llista d&apos;interfícies</translation>
+        <translation type="vanished">Llista d&apos;interfícies</translation>
     </message>
     <message>
         <source>List of available capture interfaces</source>
-        <translation>Llista d&apos;interfícies de captura disponibles</translation>
+        <translation type="vanished">Llista d&apos;interfícies de captura disponibles</translation>
     </message>
     <message>
         <source>Tips and announcements</source>
-        <translation type="unfinished"></translation>
+        <translation>Consells i anuncis</translation>
     </message>
     <message>
         <source>Rotating tips, sponsor acknowledgements, and announcements for Wireshark and Stratoshark conferences.</source>
-        <translation type="unfinished"></translation>
+        <translation>Consells cíclics, reconeixements als espònsors i anuncis de conferències del Wireshark i l&apos;Stratoshark.</translation>
     </message>
     <message>
         <source>Learn</source>
-        <translation type="unfinished"></translation>
+        <translation>Aprèn</translation>
     </message>
     <message>
         <source>Links to documentation, wiki, and community resources.</source>
-        <translation type="unfinished"></translation>
+        <translation>Enllaços a la documentació, viquipèdia i recursos de la comunitat.</translation>
     </message>
     <message>
         <source>Show in Finder</source>
@@ -14074,70 +14454,66 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Welcome page</source>
-        <translation type="unfinished"></translation>
+        <translation>Pàgina de benvinguda</translation>
     </message>
     <message>
         <source>The %1 welcome page provides access to recent files, capture interfaces, and learning resources.</source>
-        <translation type="unfinished"></translation>
+        <translation>La pàgina de benvinguda al %1 proporciona accés a fitxers recents, interfícies de captura i recursos d&apos;aprenentatge.</translation>
     </message>
     <message>
         <source>Welcome to %1</source>
-        <translation>Us donem la benvinguda al %1.</translation>
+        <translation type="vanished">Us donem la benvinguda al %1.</translation>
     </message>
     <message>
         <source>List of recently opened capture files. Double-click or press Enter to open.</source>
-        <translation type="unfinished"></translation>
+        <translation>Llista dels fitxers de captura oberts recentment. Feu-hi doble clic o premeu la tecla de Retor per a obrir-la.</translation>
     </message>
     <message>
         <source>Interface type filter</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Filtre de tipus d&apos;interfície</translation>
     </message>
     <message>
         <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Filtra la llista de fonts de captura per tipus. Mostra quantes fonts hi ha visibles actualment i quantes n&apos;hi ha d&apos;amagades pel filtre actiu.</translation>
     </message>
     <message>
         <source>Capture sources</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Fonts de captura</translation>
     </message>
     <message>
         <source>Lists available capture sources. Select one or more to capture from.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Llista de les fonts de captura disponibles. Trieu-ne almenys una per a fer una captura.</translation>
     </message>
     <message>
         <source>Capture filter</source>
-        <translation type="unfinished">Filtre de captura</translation>
+        <translation type="vanished">Filtre de captura</translation>
     </message>
     <message>
         <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Escriviu una expressió del filtre de captura per a limitar quines dades es graven durant una captura.</translation>
     </message>
     <message>
         <source>All interfaces shown</source>
-        <translation>Es mostren totes les interfícies</translation>
+        <translation type="vanished">Es mostren totes les interfícies</translation>
     </message>
     <message numerus="yes">
         <source>%n interface(s) shown, %1 hidden</source>
-        <translation>
+        <translation type="vanished">
             <numerusform>%n interfície mostrada, %1 d&apos;amagades</numerusform>
             <numerusform>%n interfícies mostrades, %1 d&apos;amagades</numerusform>
         </translation>
     </message>
     <message>
-        <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
-        <translation>Esteu esnifant el pegament que manté unida la Internet fent servir el Wireshark</translation>
-    </message>
-    <message>
         <source>You are running Wireshark </source>
-        <translation>S&apos;executa el Wireshark </translation>
+        <translation type="vanished">S&apos;executa el Wireshark </translation>
     </message>
     <message>
         <source> You receive automatic updates.</source>
-        <translation>Rebeu actualitzacions automàtiques.</translation>
+        <translation type="vanished">Rebeu actualitzacions automàtiques.</translation>
     </message>
     <message>
         <source> You have disabled automatic updates.</source>
-        <translation>Heu desactivat les actualitzacions automàtiques.</translation>
+        <translation type="vanished">Heu desactivat les actualitzacions automàtiques.</translation>
     </message>
     <message>
         <source>Copy file path</source>
@@ -14152,47 +14528,47 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     <name>WelcomePagePreferencesFrame</name>
     <message>
         <source>Frame</source>
-        <translation type="unfinished">Trama</translation>
+        <translation>Trama</translation>
     </message>
     <message>
         <source>Tips Section</source>
-        <translation type="unfinished"></translation>
+        <translation>Secció de consells</translation>
     </message>
     <message>
         <source>Show Tips section in sidebar</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra la secció de consells a la barra lateral.</translation>
     </message>
     <message>
         <source>Show slides</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra diapositives</translation>
     </message>
     <message>
         <source>Event Notifications (e.g. SharkFest)</source>
-        <translation type="unfinished"></translation>
+        <translation>Notificacions d&apos;esdeveniments (com ara el SharkFest)</translation>
     </message>
     <message>
         <source>Sponsorship and Donor information</source>
-        <translation type="unfinished"></translation>
+        <translation>Informació d&apos;espònsors i donants</translation>
     </message>
     <message>
         <source>Tip of the Day</source>
-        <translation type="unfinished"></translation>
+        <translation>Consell del dia</translation>
     </message>
     <message>
         <source>Slide display interval</source>
-        <translation type="unfinished"></translation>
+        <translation>Interval de visualització de diapositives</translation>
     </message>
     <message>
         <source> s</source>
-        <translation type="unfinished"></translation>
+        <translation> s</translation>
     </message>
     <message>
         <source>Learn Section</source>
-        <translation type="unfinished"></translation>
+        <translation>Secció d&apos;aprenentatge</translation>
     </message>
     <message>
         <source>Show Learn section in sidebar</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra la secció d&apos;aprenentatge a la barra lateral.</translation>
     </message>
 </context>
 <context>
@@ -15468,47 +15844,59 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
         <translation>&amp;Opcions…</translation>
     </message>
     <message>
-        <source>Allows jumping to a specific packet by its number.</source>
+        <source>Main Window</source>
         <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Allows jumping to a specific packet by its number.</source>
+        <translation>Permet saltar a un paquet específic segons el seu número.</translation>
     </message>
     <message>
         <source>Search packet</source>
-        <translation type="unfinished"></translation>
+        <translation>Cerca un paquet</translation>
     </message>
     <message>
         <source>Allows searching for packets based on different criteria like display filters or text.</source>
-        <translation type="unfinished"></translation>
+        <translation>Permet buscar paquets segons diversos criteris com ara filtres de visualització o text.</translation>
     </message>
     <message>
         <source>Edit Address</source>
-        <translation type="unfinished"></translation>
+        <translation>Edita l&apos;adreça</translation>
     </message>
     <message>
         <source>Allows editing address resolution information for the current capture.</source>
-        <translation type="unfinished"></translation>
+        <translation>Permet editar la informació de resolució d&apos;adreces per a la captura actual.</translation>
     </message>
     <message>
         <source>Edit Column</source>
-        <translation type="unfinished">Edita la columna</translation>
+        <translation>Edita la columna</translation>
     </message>
     <message>
         <source>Allows adding, removing, or modifying columns in the packet list.</source>
-        <translation type="unfinished"></translation>
+        <translation>Permet afegir, traure o modificar columnes de la llista de paquets.</translation>
     </message>
     <message>
         <source>Edit Preference</source>
-        <translation type="unfinished"></translation>
+        <translation>Edita les preferències</translation>
     </message>
     <message>
         <source>Allows changing protocol or application preferences.</source>
-        <translation type="unfinished"></translation>
+        <translation>Permet canviar les preferències d&apos;aplicació o de protocol.</translation>
     </message>
     <message>
         <source>Edit Filter Expression</source>
-        <translation type="unfinished"></translation>
+        <translation>Edita l&apos;expressió del filtre</translation>
     </message>
     <message>
         <source>Allows creating or editing display filter buttons.</source>
+        <translation>Permet crear o editar botons de filtres de visualització.</translation>
+    </message>
+    <message>
+        <source>Main View</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Main Menu</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -15521,19 +15909,19 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source>Contains buttons for common actions like starting a capture or opening a file.</source>
-        <translation type="unfinished"></translation>
+        <translation>Conté botons per a accions comunes com ara començar una captura o obrir un fitxer.</translation>
     </message>
     <message>
         <source>Status Bar</source>
-        <translation type="unfinished"></translation>
+        <translation>Barra d&apos;estat</translation>
     </message>
     <message>
         <source>Shows information about the current capture file and application state.</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra informació sobre el fitxer de captura actual i el seu estat d&apos;aplicació.</translation>
     </message>
     <message>
         <source>Contains the display filter edit box and expression buttons.</source>
-        <translation type="unfinished"></translation>
+        <translation>Conté un requadre d&apos;edició del filtre de visualització i els botons d&apos;expressions.</translation>
     </message>
     <message>
         <source>&amp;User&apos;s Guide</source>
@@ -16344,6 +16732,22 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
         <translation>Comprova si hi ha actualitzacions…</translation>
     </message>
     <message>
+        <source>Main View Splitter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Contains the packet list, protocol tree, and packet bytes.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Extra View Splitter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Contains packet extras and bytes views.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Unable to drop files during capture.</source>
         <translation>No es poden descartar fitxers mentre es fa una captura.</translation>
     </message>
@@ -16414,6 +16818,10 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     <message>
         <source>Show or hide the toolbar</source>
         <translation>Mostra o amaga la barra d&apos;eines</translation>
+    </message>
+    <message>
+        <source>Software update checking is not available on this platform.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Continue &amp;without Saving</source>
@@ -16553,7 +16961,7 @@ Per exemple, si es tria un interval d&apos;una hora, es crearà un fitxer cada h
     </message>
     <message>
         <source> before updating</source>
-        <translation>abans d&apos;actualitzar</translation>
+        <translation type="vanished">abans d&apos;actualitzar</translation>
     </message>
     <message>
         <source> before exporting PDUs</source>

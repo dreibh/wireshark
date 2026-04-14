@@ -4744,7 +4744,7 @@ static int dissect_gatt_uuid(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb
 static int
 dissect_handle(proto_tree *tree, packet_info *pinfo, int hf,
         tvbuff_t *tvb, int offset, btl2cap_data_t *l2cap_data,
-        bluetooth_uuid_t *uuid, int32_t handle, uint8_t opcode)
+        bluetooth_uuid_t *uuid, int32_t handle, uint8_t opcode, uint16_t *p_handle_value)
 {
     proto_item        *handle_item;
     proto_item        *sub_item;
@@ -4811,6 +4811,9 @@ dissect_handle(proto_tree *tree, packet_info *pinfo, int hf,
     if (uuid)
         *uuid = attribute_uuid;
 
+    if (p_handle_value) {
+        *p_handle_value = tvb_get_uint16(tvb, offset, ENC_LITTLE_ENDIAN);
+    }
     return offset + 2;
 }
 
@@ -5095,8 +5098,7 @@ dissect_attribute_value(proto_tree *tree, proto_item *patron_item, packet_info *
         if (bluetooth_gatt_has_no_parameter(att_data->opcode))
             break;
 
-        offset = dissect_handle(tree, pinfo, hf_btatt_included_service_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, att_data->opcode);
-        sub_handle = tvb_get_uint16(tvb, offset - 2, ENC_LITTLE_ENDIAN);
+        offset = dissect_handle(tree, pinfo, hf_btatt_included_service_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, att_data->opcode, &sub_handle);
 
         proto_tree_add_item(tree, hf_btatt_ending_handle, tvb, offset, 2, ENC_LITTLE_ENDIAN);
         offset += 2;
@@ -5124,8 +5126,7 @@ dissect_attribute_value(proto_tree *tree, proto_item *patron_item, packet_info *
         proto_tree_add_bitmask(tree, tvb, offset, hf_btatt_characteristic_properties, ett_btatt_characteristic_properties,  hfx_btatt_characteristic_properties, ENC_NA);
         offset += 1;
 
-        offset = dissect_handle(tree, pinfo, hf_btatt_characteristic_value_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, att_data->opcode);
-        sub_handle = tvb_get_uint16(tvb, offset - 2, ENC_LITTLE_ENDIAN);
+        offset = dissect_handle(tree, pinfo, hf_btatt_characteristic_value_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, att_data->opcode, &sub_handle);
 
         if (tvb_reported_length_remaining(tvb, offset) == 16) {
             proto_tree_add_item(tree, hf_btatt_uuid128, tvb, offset, 16, ENC_NA);
@@ -5439,7 +5440,7 @@ dissect_attribute_value(proto_tree *tree, proto_item *patron_item, packet_info *
         sub_tree = proto_item_add_subtree(sub_item, ett_btatt_list);
 
         while (offset < (int64_t) tvb_captured_length(tvb)) {
-            offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, att_data->opcode);
+            offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, att_data->opcode, NULL);
         }
         break;
     case 0x2906: /* Valid Range */ {
@@ -11001,8 +11002,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         request_opcode = tvb_get_uint8(tvb, offset);
         offset += 1;
 
-        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle_in_error, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode);
-        handle = tvb_get_letohs(tvb, offset - 2);
+        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle_in_error, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode, &handle);
 
         error_code = tvb_get_uint8(tvb, offset);
 
@@ -11171,8 +11171,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                     sub_item = proto_tree_add_item(main_tree, hf_btatt_information_data, tvb, offset, 4, ENC_NA);
                     sub_tree = proto_item_add_subtree(sub_item, ett_btatt_list);
 
-                    offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode);
-                    handle = tvb_get_uint16(tvb, offset - 2, ENC_LITTLE_ENDIAN);
+                    offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode, &handle);
 
                     proto_tree_add_item(sub_tree, hf_btatt_uuid16, tvb, offset, 2, ENC_LITTLE_ENDIAN);
                     uuid = get_bluetooth_uuid(tvb, offset, 2);
@@ -11191,8 +11190,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                     sub_item = proto_tree_add_item(main_tree, hf_btatt_information_data, tvb, offset, 4, ENC_NA);
                     sub_tree = proto_item_add_subtree(sub_item, ett_btatt_list);
 
-                    offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode);
-                    handle = tvb_get_uint16(tvb, offset - 2, ENC_LITTLE_ENDIAN);
+                    offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode, &handle);
 
                     proto_tree_add_item(sub_tree, hf_btatt_uuid128, tvb, offset, 16, ENC_NA);
                     uuid = get_bluetooth_uuid(tvb, offset, 16);
@@ -11251,7 +11249,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
             sub_tree = proto_item_add_subtree(sub_item, ett_btatt_list);
 
-            offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode);
+            offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode, NULL);
 
             proto_tree_add_item(sub_tree, hf_btatt_group_end_handle, tvb, offset, 2, ENC_LITTLE_ENDIAN);
             offset += 2;
@@ -11336,7 +11334,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                                 ATTRIBUTE_TYPE_OTHER, l2cap_data);
                     }
 
-                    offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode);
+                    offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode, NULL);
 
                     if (request_data) {
                         offset = dissect_attribute_value(sub_tree, sub_item, pinfo, tvb, offset, length - 2, tvb_get_uint16(tvb, offset - 2, ENC_LITTLE_ENDIAN), request_data->parameters.read_by_type.uuid, &att_data);
@@ -11355,8 +11353,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         break;
 
     case 0x0a: /* Read Request */
-        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode);
-        handle = tvb_get_letohs(tvb, offset - 2);
+        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode, &handle);
 
         col_append_info_by_handle(pinfo, handle, opcode, l2cap_data);
 
@@ -11375,7 +11372,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     case 0x0b: /* Read Response */
         if (request_data) {
-            dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_write.handle, opcode);
+            dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_write.handle, opcode, NULL);
 
             col_append_info_by_handle(pinfo, request_data->parameters.read_write.handle, opcode, l2cap_data);
         }
@@ -11398,8 +11395,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         break;
 
     case 0x0c: /* Read Blob Request */
-        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode);
-        handle = tvb_get_letohs(tvb, offset - 2);
+        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode, &handle);
 
         col_append_info_by_handle(pinfo, handle, opcode, l2cap_data);
         col_append_fstr(pinfo->cinfo, COL_INFO, ", Offset: %u", tvb_get_letohs(tvb, offset));
@@ -11422,7 +11418,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     case 0x0d: /* Read Blob Response */
         if (request_data && request_data->opcode == (opcode - 1)) {
-            dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_write.handle, opcode);
+            dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_write.handle, opcode, NULL);
 
             col_append_info_by_handle(pinfo, request_data->parameters.read_write.handle, opcode, l2cap_data);
 
@@ -11470,8 +11466,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
         col_append_str(pinfo->cinfo, COL_INFO, ", Handles: ");
         while (tvb_reported_length_remaining(tvb, offset) >= 2) {
-            offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode);
-            handle = tvb_get_letohs(tvb, offset - 2);
+            offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode, &handle);
             col_append_fstr(pinfo->cinfo, COL_INFO, "0x%04x ", handle);
 
             dissect_attribute_value(main_tree, NULL, pinfo, tvb, offset, 0, handle, uuid, &att_data);
@@ -11495,7 +11490,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
             if (opcode == 0x0f) {
                 for (i_handle = 0; i_handle < request_data->parameters.read_multiple.number_of_handles; i_handle += 1) {
-                    dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_multiple.handle[i_handle], opcode);
+                    dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_multiple.handle[i_handle], opcode, NULL);
                     offset = dissect_attribute_value(main_tree, NULL, pinfo, tvb, offset, tvb_captured_length_remaining(tvb, offset), request_data->parameters.read_multiple.handle[i_handle], uuid, &att_data);
                 }
             } else {
@@ -11512,7 +11507,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                     if (remain < length)
                         break;
 
-                    dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_multiple.handle[i_handle], opcode);
+                    dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_multiple.handle[i_handle], opcode, NULL);
                     dissect_attribute_value(main_tree, NULL, pinfo, tvb, offset, length, request_data->parameters.read_multiple.handle[i_handle], uuid, &att_data);
 
                     i_handle++;
@@ -11542,9 +11537,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
                     sub_tree = proto_item_add_subtree(sub_item, ett_btatt_list);
 
-                    offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode);
-                    handle = tvb_get_uint16(tvb, offset - 2, ENC_LITTLE_ENDIAN);
-
+                    offset = dissect_handle(sub_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, NULL, HANDLE_TVB, opcode, &handle);
                     proto_tree_add_item(sub_tree, hf_btatt_group_end_handle, tvb, offset, 2, ENC_LITTLE_ENDIAN);
                     offset += 2;
 
@@ -11568,8 +11561,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     case 0x1d: /* Handle Value Indication */
     case 0x52: /* Write Command */
     case 0x1b: /* Handle Value Notification */
-        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode);
-        handle = tvb_get_letohs(tvb, offset - 2);
+        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode, &handle);
         col_append_info_by_handle(pinfo, handle, opcode, l2cap_data);
         offset = dissect_attribute_value(main_tree, NULL, pinfo, tvb, offset, tvb_captured_length_remaining(tvb, offset), tvb_get_uint16(tvb, offset - 2, ENC_LITTLE_ENDIAN), uuid, &att_data);
         if (!pinfo->fd->visited && l2cap_data && (opcode == 0x12 || opcode == 0x1d)) {
@@ -11586,7 +11578,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         /* No parameters */
 
         if (request_data && request_data->opcode == (opcode - 1)) {
-            dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_write.handle, opcode);
+            dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_write.handle, opcode, NULL);
 
             dissect_attribute_value(main_tree, NULL, pinfo, tvb, offset, 0, request_data->parameters.read_write.handle, uuid, &att_data);
 
@@ -11597,8 +11589,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     case 0x16: /* Prepare Write Request */
     case 0x17: /* Prepare Write Response */
-        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode);
-        handle = tvb_get_letohs(tvb, offset - 2);
+        offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode, &handle);
 
         col_append_info_by_handle(pinfo, handle, opcode, l2cap_data);
         col_append_fstr(pinfo->cinfo, COL_INFO, ", Offset: %u", tvb_get_letohs(tvb, offset));
@@ -11665,7 +11656,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
 
     case 0x1E: /* Handle Value Confirmation */
         if (request_data && request_data->opcode == (opcode - 1)) {
-            dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_write.handle, opcode);
+            dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, request_data->parameters.read_write.handle, opcode, NULL);
 
             col_append_info_by_handle(pinfo, request_data->parameters.read_write.handle, opcode, l2cap_data);
 
@@ -11677,8 +11668,7 @@ dissect_btatt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
         {
             uint8_t length;
 
-            offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode);
-            handle = tvb_get_letohs(tvb, offset - 2);
+            offset = dissect_handle(main_tree, pinfo, hf_btatt_handle, tvb, offset, l2cap_data, &uuid, HANDLE_TVB, opcode, &handle);
 
             col_append_info_by_handle(pinfo, handle, opcode, l2cap_data);
 

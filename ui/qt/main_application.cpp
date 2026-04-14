@@ -45,6 +45,7 @@
 
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/color_utils.h>
+#include <ui/qt/utils/software_update.h>
 #include "coloring_rules_dialog.h"
 
 #include "epan/color_filters.h"
@@ -56,7 +57,6 @@
 
 #include "wsutil/filter_files.h"
 #include "ui/capture_globals.h"
-#include "ui/software_update.h"
 #include "ui/file_dialog.h"
 #include "ui/recent_utils.h"
 
@@ -167,21 +167,6 @@ extern "C" void menu_recent_file_write_all(FILE *rf) {
         }
     }
 }
-
-#if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
-/** Check to see if Wireshark can shut down safely (e.g. offer to save the
- *  current capture).
- */
-extern "C" int software_update_can_shutdown_callback(void) {
-    return mainApp->softwareUpdateCanShutdown();
-}
-
-/** Shut down Wireshark in preparation for an upgrade.
- */
-extern "C" void software_update_shutdown_request_callback(void) {
-    mainApp->softwareUpdateShutdownRequest();
-}
-#endif // HAVE_SOFTWARE_UPDATE && Q_OS_WIN
 
 void MainApplication::refreshPacketData()
 {
@@ -414,7 +399,7 @@ void MainApplication::setConfigurationProfile(const char *profile_name, bool wri
 
     /* Apply command-line preferences */
     commandline_options_reapply();
-    extcap_register_preferences();
+    extcap_register_preferences(NULL, NULL);
 
     /* Switching profile requires reloading the macro list. */
     reloadDisplayFilterMacros();
@@ -470,7 +455,12 @@ void MainApplication::setConfigurationProfile(const char *profile_name, bool wri
 
 void MainApplication::reloadLuaPluginsDelayed()
 {
-    QTimer::singleShot(0, this, &MainApplication::reloadLuaPlugins);
+    QTimer::singleShot(0, this, [this]() {
+        /* Clear the reloading flag so the re-triggered reload
+         * is not blocked by the isReloadingLua() guard. */
+        setReloadingLua(false);
+        emit reloadLuaPlugins();
+    });
 }
 
 const QIcon &MainApplication::normalIcon()
@@ -556,7 +546,7 @@ bool MainApplication::event(QEvent *event)
 
 void MainApplication::cleanup()
 {
-    software_update_cleanup();
+    SoftwareUpdate::instance()->cleanup();
     storeCustomColorsInRecent();
     // Write the user's recent file(s) to disk.
     write_profile_recent();
@@ -631,10 +621,6 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     // If our window text is lighter than the window background, assume the theme is dark.
     prefs_set_gui_theme_is_dark(ColorUtils::themeIsDark());
 
-#if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
-    connect(this, &MainApplication::softwareUpdateQuit, this, &MainApplication::quit, Qt::QueuedConnection);
-#endif
-
 #if QT_VERSION >= QT_VERSION_CHECK(6, 5, 0) && defined(Q_OS_WIN)
     colorSchemeChanged();
     connect(styleHints(), &QStyleHints::colorSchemeChanged, this, &MainApplication::colorSchemeChanged);
@@ -652,11 +638,6 @@ MainApplication::~MainApplication()
     free_interface_list(cached_if_list_);
 #endif
     clearDynamicMenuGroupItems();
-}
-
-void MainApplication::registerUpdate(register_action_e action, const char *message)
-{
-    emit splashUpdate(action, message);
 }
 
 void MainApplication::emitAppSignal(AppSignal signal)
@@ -939,7 +920,7 @@ void MainApplication::setInterfaceList(GList *if_list)
 }
 #endif
 
-void MainApplication::allSystemsGo(const char* name_proper, const char* version)
+void MainApplication::allSystemsGo()
 {
     QString display_filter = NULL;
     initialized_ = true;
@@ -948,7 +929,10 @@ void MainApplication::allSystemsGo(const char* name_proper, const char* version)
         emit openCaptureFile(pending_open_files_.front(), display_filter, WTAP_TYPE_AUTO);
         pending_open_files_.pop_front();
     }
-    software_update_init(name_proper, version);
+
+    bool sideBarVisible = recent.gui_welcome_page_sidebar_tips_visible ||
+                           recent.gui_welcome_page_sidebar_learn_visible;
+    SoftwareUpdate::instance()->init(!sideBarVisible);
 
 #ifdef HAVE_LIBPCAP
     int err;
@@ -1062,39 +1046,6 @@ void MainApplication::zoomTextFont(int zoomLevel)
     zoomed_application_font.setPointSizeF(zoom_size);
     emit zoomRegularFont(zoomed_application_font);
 }
-
-#if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
-bool MainApplication::softwareUpdateCanShutdown() {
-    software_update_ok_ = true;
-    // At this point the update is ready to install, but WinSparkle has
-    // not yet run the installer. We need to close our "Wireshark is
-    // running" mutexes since the IsWiresharkRunning NSIS macro checks
-    // for them.
-    //
-    // We must not exit the Qt main event loop here, which means we must
-    // not close the main window.
-
-    // Step 1: See if we have any open files.
-    emit softwareUpdateRequested();
-    if (software_update_ok_ == true) {
-
-        // Step 2: Close the "running" mutexes.
-        close_app_running_mutex();
-    }
-    return software_update_ok_;
-}
-
-void MainApplication::softwareUpdateShutdownRequest() {
-    // At this point the installer has been launched. Neither Wireshark nor
-    // its children should have any "Wireshark is running" mutexes open.
-    // The main window should still be open as noted above in
-    // softwareUpdateCanShutdown and it's safe to exit the Qt main
-    // event loop.
-
-    // Step 3: Quit.
-    emit softwareUpdateQuit();
-}
-#endif
 
 void MainApplication::captureEventHandler(CaptureEvent ev)
 {

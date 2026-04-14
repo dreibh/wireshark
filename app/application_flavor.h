@@ -70,6 +70,17 @@ extern const char* application_get_vcs_version_info(void);
 extern const char* application_get_vcs_version_info_short(void);
 
 /**
+ * @brief Retrieve the application version string.
+ *
+ * Returns a string containing the application version number.
+ * This does not include any version control metadata, even
+ * for builds from a source tree checked out via version control.
+ *
+ * @return  A constant string with the application version.
+ */
+extern const char* application_version(void);
+
+/**
  * @brief Get the list of application supported file extensions
  *
  * @param file_extensions Returned array of extensions supported by the application
@@ -86,6 +97,13 @@ extern const char** application_columns(void);
  * @brief Get the default number of columns for the application
  */
 extern unsigned application_num_columns(void);
+
+/**
+ * @brief Get the default release notes URL for the application.
+ *
+ * @return The release notes URL. Must not be freed.
+ */
+extern const char *application_flavor_release_notes_url(void);
 
 /**
  * @brief Convenience routine for checking the application flavor.

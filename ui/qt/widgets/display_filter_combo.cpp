@@ -70,6 +70,10 @@ DisplayFilterCombo::DisplayFilterCombo(QWidget *parent) :
     // Default is Preferred.
     setSizePolicy(QSizePolicy::MinimumExpanding, sizePolicy().verticalPolicy());
     setAccessibleName(tr("Display filter selector"));
+#ifdef Q_OS_MAC
+    setAttribute(Qt::WA_MacShowFocusRect, true);
+    lineEdit()->setAttribute(Qt::WA_MacShowFocusRect, true);
+#endif
     updateStyleSheet();
     setToolTip(tr("Select from previously used filters."));
 

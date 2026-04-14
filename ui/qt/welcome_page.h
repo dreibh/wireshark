@@ -15,9 +15,10 @@
 class QListWidget;
 class QListWidgetItem;
 class QMenu;
+class CaptureCardWidget;
+class InterfaceFrame;
 
 #include <ui/qt/widgets/splash_overlay.h>
-#include "interface_frame.h"
 
 namespace Ui {
     class WelcomePage;
@@ -30,27 +31,25 @@ public:
     explicit WelcomePage(QWidget *parent = 0);
     virtual ~WelcomePage();
     InterfaceFrame *getInterfaceFrame();
+    CaptureCardWidget *captureCard();
     const QString captureFilter();
     void setCaptureFilter(const QString capture_filter);
     void updateStyleSheets();
 
 public slots:
     void interfaceSelected();
+    void setCaptureFilterText(const QString capture_filter);
 
 protected:
     virtual bool event(QEvent *event);
     virtual void resizeEvent(QResizeEvent *event);
-    virtual void changeEvent(QEvent* event);
-    virtual QString getReleaseLabel();
-    virtual QString getReleaseLabelGlue();
+    virtual void showEvent(QShowEvent *event);
 
 protected slots:
     void on_openFileSectionLabel_clicked();
-    void on_captureSectionLabel_clicked();
 
 private:
     Ui::WelcomePage *welcome_ui_;
-    QString flavor_;
     QString show_in_str_;
 
     SplashOverlay *splash_overlay_;
@@ -58,25 +57,11 @@ private:
     void updateSidebarLayout();
 
 signals:
-    void startCapture(QStringList ifaces);
     void recentFileActivated(QString cfile);
-    void captureFilterSyntaxChanged(bool valid);
-    void showExtcapOptions(QString &device_name, bool startCaptureOnClose);
-    void interfacesChanged();
-
-public slots:
-    void setCaptureFilterText(const QString capture_filter);
 
 private slots:
     void appInitialized();
-    void interfaceListChanged();
-    void setReleaseLabel();
-    void captureFilterTextEdited(const QString capture_filter);
     void showCaptureFilesContextMenu(QPoint pos);
-
-    void on_captureSectionInterfaceFrame_showExtcapOptions(QString device_name, bool startCaptureOnClose);
-    void on_captureSectionInterfaceFrame_startCapture(QStringList);
-    void captureStarting();
     void applySidebarPreferences();
 };
 

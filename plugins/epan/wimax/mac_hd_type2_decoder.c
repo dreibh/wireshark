@@ -715,10 +715,8 @@ static int dissect_mac_header_type_2_decoder(tvbuff_t *tvb, packet_info *pinfo, 
 			break;
 			case CL_MIMO_FB:
 				/* Get the MIMO type */
-				/* TODO: mask is 0xc000, so shifting by 6 doesn't look right.. can't possibly get 1 or 2.. */
-				mimo_type = ((tvb_get_uint8(tvb, offset) & 0xC0) >> 6);
 				/* Decode and display the MIMO type */
-				proto_tree_add_item(ti_tree, hf_mac_header_type_2_cl_mimo_type, tvb, offset, 2, ENC_BIG_ENDIAN);
+				proto_tree_add_item_ret_uint(ti_tree, hf_mac_header_type_2_cl_mimo_type, tvb, offset, 2, ENC_BIG_ENDIAN, &mimo_type);
 				if(mimo_type == 1)
 				{
 					/* Decode and display the umber of streams */

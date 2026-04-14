@@ -2928,11 +2928,48 @@ dissect_negprot_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
 	uint32_t    caps         = 0;
 	int16_t     tz;
 	const char *dialect_name = NULL;
+	const char *dialect_guess_from_wc = NULL;
 	struct negprot_dialects *dialects = NULL;
 
 	DISSECTOR_ASSERT(si);
 
-	WORD_COUNT;
+	/* Word Count with guessed dialect */
+	wc = tvb_get_uint8(tvb, offset);
+
+	switch(wc) {
+	case 1:
+		/*
+		 * If a dialect was selected (dialect != 0xffff) then this should be Core Protocol.
+		 * If a dialect was not selected (dialect == 0xffff) then server doesn't support
+		 * any of the dialects the client listed.
+		 */
+		dialect_guess_from_wc = "CORE PROTOCOL or no dialect selected";
+		break;
+	case 13:
+		/*
+		 * Server selected CorePlus dialect or a dialect from LAN Manager 1.0 through
+		 * LAN Manager 2.1.
+		 */
+		dialect_guess_from_wc = "Greater than CORE PROTOCOL and up to LANMAN2.1";
+		break;
+	case 17:
+		/*
+		 * Server selected NT LAN Manager.
+		 */
+		dialect_guess_from_wc = "NT LAN Manager";
+		break;
+	}
+
+	if (dialect_guess_from_wc) {
+		proto_tree_add_uint_format_value(tree, hf_smb_word_count, tvb, offset, 1, wc,
+			"%u (%s)", (unsigned)wc, dialect_guess_from_wc);
+	} else {
+		proto_tree_add_uint(tree, hf_smb_word_count, tvb, offset, 1, wc);
+	}
+
+	offset += 1;
+	if (wc == 0)
+		goto bytecount;
 
 	/* Dialect Index */
 	dialect = tvb_get_letohs(tvb, offset);
@@ -2941,53 +2978,22 @@ dissect_negprot_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
 		dialects = (struct negprot_dialects *)si->sip->extra_info;
 		if (dialect < dialects->num) {
 			dialect_name = dialects->name[dialect];
+		} else {
+			dialect_name = "server selected dialect out of index";
 		}
-	}
-	if (!dialect_name) {
-		dialect_name = "unknown";
 	}
 
-	switch(wc) {
-	case 1:
-		if (dialect == 0xffff) {
-			/*
-			 * Server doesn't support any of the dialects the
-			 * client listed.
-			 */
-			proto_tree_add_uint_format_value(tree, hf_smb_dialect_index,
-				tvb, offset, 2, dialect,
-				"-1, server does not support any of the listed dialects");
-		} else {
-			/*
-			 * A dialect was selected; this should be
-			 * Core Protocol.
-			 */
-			proto_tree_add_uint(tree, hf_smb_dialect_index,
-				tvb, offset, 2, dialect);
-		}
-		break;
-	case 13:
-		/*
-		 * Server selected CorePlus dialect or a dialect from LAN Manager 1.0 through
-		 * LAN Manager 2.1.
-		 */
-		proto_tree_add_uint_format_value(tree, hf_smb_dialect_index,
-			tvb, offset, 2, dialect,
-			"%u, Greater than CORE PROTOCOL and up to LANMAN2.1", dialect);
-		break;
-	case 17:
-		/*
-		 * Server selected NT LAN Manager.
-		 */
-		proto_tree_add_uint_format_value(tree, hf_smb_dialect_index,
-			tvb, offset, 2, dialect,
-			"%u: %s", dialect, dialect_name);
-		break;
-	default:
-		proto_tree_add_item(tree, hf_smb_word_unk_response_format, tvb, offset, wc*2, ENC_NA);
-		offset += wc*2;
-		goto bytecount;
+	if (dialect == 0xffff) {
+		/* Server doesn't support any of the dialects the client listed. */
+		proto_tree_add_uint_format_value(tree, hf_smb_dialect_index, tvb, offset, 2, dialect,
+			"-1 (server does not support any of the listed dialects)");
+	} else if (dialect_name) {
+		proto_tree_add_uint_format_value(tree, hf_smb_dialect_index, tvb, offset, 2, dialect,
+			"%u (%s)", dialect, dialect_name);
+	} else {
+		proto_tree_add_uint(tree, hf_smb_dialect_index, tvb, offset, 2, dialect);
 	}
+
 	offset += 2;
 
 	switch(wc) {
@@ -3106,23 +3112,20 @@ dissect_negprot_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, in
 		offset += 1;
 
 		break;
+
+	default:
+		/* subtract two bytes which were already processed for dialect index */
+		if (wc*2 - 2) {
+			proto_tree_add_item(tree, hf_smb_word_unk_response_format, tvb, offset, wc*2 - 2, ENC_NA);
+			offset += wc*2 - 2;
+		}
+		break;
 	}
 
 	BYTE_COUNT;
 
 	switch(wc) {
 	case 13:
-		/*
-		 * We don't know how to decode the blob for this ancient dialect
-		 * and it is not documented in any of the MS documents.
-		 */
-		if (!strcmp(dialect_name, "Windows for Workgroups 3.1a")) {
-			proto_tree_add_item(tree, hf_smb_unknown, tvb,
-					    offset, -1, ENC_NA);
-			offset += tvb_reported_length_remaining(tvb, offset);
-			break;
-		}
-
 		/*
 		 * Server selected CorePlus dialect or a dialect from LAN Manager 1.0 through
 		 * LAN Manager 2.1.

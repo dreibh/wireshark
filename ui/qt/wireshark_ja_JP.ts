@@ -704,6 +704,63 @@
     </message>
 </context>
 <context>
+    <name>CaptureCardWidget</name>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;ネットワークから現在のパケットをキャプチャします&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Capture</source>
+        <translation type="unfinished">キャプチャ</translation>
+    </message>
+    <message>
+        <source>Start a new capture session</source>
+        <translation type="unfinished">新規キャプチャセッションを開始</translation>
+    </message>
+    <message>
+        <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
+        <translation type="unfinished">&lt;h2&gt;キャプチャ&lt;/h2&gt;</translation>
+    </message>
+    <message>
+        <source>…using this filter:</source>
+        <translation type="unfinished">…このフィルタを利用:</translation>
+    </message>
+    <message>
+        <source>Capture filter</source>
+        <translation type="unfinished">キャプチャフィルタ</translation>
+    </message>
+    <message>
+        <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
+        <translation type="unfinished">キャプチャフィルタ式を入力してライブキャプチャ中に記録されるデータを制限します</translation>
+    </message>
+    <message>
+        <source>Interface type filter</source>
+        <translation type="unfinished">インターフェース種別フィルタ</translation>
+    </message>
+    <message>
+        <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
+        <translation type="unfinished">キャプチャソース一覧を種類ごとにフィルタします。現在表示されているソース数と、アクティブなフィルタによって非表示になっているソース数を表示します</translation>
+    </message>
+    <message>
+        <source>Capture sources</source>
+        <translation type="unfinished">キャプチャソース</translation>
+    </message>
+    <message>
+        <source>Lists available capture sources. Select one or more to capture from.</source>
+        <translation type="unfinished">利用可能なキャプチャソースの一覧です。キャプチャしたい１つか複数を選択します</translation>
+    </message>
+    <message>
+        <source>All interfaces shown</source>
+        <translation type="unfinished">すべての表示されたインターフェース</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n interface(s) shown, %1 hidden</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CaptureCommentDialog</name>
     <message>
         <source>Edit Capture Comments</source>
@@ -1025,6 +1082,10 @@
         <translation>インターフェース</translation>
     </message>
     <message>
+        <source>Interface Description</source>
+        <translation>インターフェース 説明</translation>
+    </message>
+    <message>
         <source>Dropped packets</source>
         <translation>欠落したパケット</translation>
     </message>
@@ -1039,10 +1100,6 @@
     <message>
         <source>Packet size limit (snaplen)</source>
         <translation>パケットサイズ制限(snaplen)</translation>
-    </message>
-    <message>
-        <source>Interface Description</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>none</source>
@@ -2897,7 +2954,46 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
 </context>
 <context>
+    <name>ExpertInfoModel</name>
+    <message>
+        <source>Severity: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: Packet comments listed below.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Group: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protocol: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Packet: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Header Field: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ExpertInfoProxyModel</name>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Packet</source>
         <translation>パケット</translation>
@@ -5260,6 +5356,38 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 <context>
     <name>InfoBannerWidget</name>
     <message>
+        <source>April 1st</source>
+        <translation type="vanished">4月1日</translation>
+    </message>
+    <message>
+        <source>Happy April Fools&apos; Day!</source>
+        <translation type="vanished">エイプリルフールおめでとう！</translation>
+    </message>
+    <message>
+        <source>Sniffing the glue that holds the Internet together</source>
+        <translation type="vanished">インターネットを互いにつなぐのりをキャプチャする</translation>
+    </message>
+    <message>
+        <source>Sniffing the glue that holds your system together</source>
+        <translation type="vanished">システムを互いにつなぐのりをキャプチャする</translation>
+    </message>
+    <message>
+        <source>Birthday</source>
+        <translation type="vanished">誕生日</translation>
+    </message>
+    <message>
+        <source>Happy Birthday, Wireshark!</source>
+        <translation type="vanished">Wireshark誕生日おめでとう!</translation>
+    </message>
+    <message>
+        <source>On this day in 1998, the first version of Ethereal (later renamed Wireshark) was released. Thank you to the community that has kept the project thriving ever since!</source>
+        <translation type="vanished">1998年のこの日、Ethereal（後にWiresharkと改名）の最初のバージョンがリリースされました。それ以来、プロジェクトを発展させ続けてくれているコミュニティの皆さんに感謝します！</translation>
+    </message>
+    <message>
+        <source>Our History</source>
+        <translation type="vanished">私たちの歴史</translation>
+    </message>
+    <message>
         <source>Tips and announcements</source>
         <translation>TIPSとお知らせ</translation>
     </message>
@@ -5317,6 +5445,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Virtual</source>
         <translation>仮想</translation>
+    </message>
+    <message>
+        <source>Tunnel Interfaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Loopback Devices</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Remote interfaces</source>
@@ -6414,52 +6550,112 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <source>Show file load time</source>
         <translation>ファイル読込時間を表示</translation>
     </message>
+    <message>
+        <source>Packet list multi-color display mode:</source>
+        <translation>パケット一覧マルチカラー表示モード:</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>オフ</translation>
+    </message>
+    <message>
+        <source>Scrollbar only</source>
+        <translation>スクロールバーのみ</translation>
+    </message>
+    <message>
+        <source>Equal stripes</source>
+        <translation>縞模様</translation>
+    </message>
+    <message>
+        <source>Shift right</source>
+        <translation>シフト右</translation>
+    </message>
+    <message>
+        <source>75%</source>
+        <translation>75%</translation>
+    </message>
+    <message>
+        <source>80%</source>
+        <translation>80%</translation>
+    </message>
+    <message>
+        <source>85%</source>
+        <translation>85%</translation>
+    </message>
+    <message>
+        <source>90%</source>
+        <translation>90%</translation>
+    </message>
+    <message>
+        <source>95%</source>
+        <translation>95%</translation>
+    </message>
+    <message>
+        <source>Separator style:</source>
+        <translation>区切りスタイル:</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation>垂直</translation>
+    </message>
+    <message>
+        <source>Diagonal</source>
+        <translation>対角</translation>
+    </message>
+    <message>
+        <source>Bubble</source>
+        <translation>バブル</translation>
+    </message>
+    <message>
+        <source>Display multiple colors in packet details</source>
+        <translation>パケット詳細部に複数の色を表示します</translation>
+    </message>
 </context>
 <context>
     <name>LearnCardWidget</name>
     <message>
         <source>User Documentation</source>
-        <translation>ユーザドキュメント</translation>
+        <translation type="vanished">ユーザドキュメント</translation>
     </message>
     <message>
         <source>Docs</source>
-        <translation>ドキュメント</translation>
+        <translation type="vanished">ドキュメント</translation>
     </message>
     <message>
         <source>Read the Wireshark user documentation online.</source>
-        <translation>Wiresharkユーザドキュメントをオンラインで読む</translation>
+        <translation type="vanished">Wiresharkユーザドキュメントをオンラインで読む</translation>
     </message>
     <message>
         <source>Wiki</source>
-        <translation>Wiki</translation>
+        <translation type="vanished">Wiki</translation>
     </message>
     <message>
         <source>Browse the Wireshark Wiki for how-tos and other information.</source>
-        <translation>手順や他の情報をWireshark Wikiで参照</translation>
+        <translation type="vanished">手順や他の情報をWireshark Wikiで参照</translation>
     </message>
     <message>
         <source>Questions and Answers</source>
-        <translation>質問と回答</translation>
+        <translation type="vanished">質問と回答</translation>
     </message>
     <message>
         <source>Q&amp;A</source>
-        <translation>Q&amp;A</translation>
+        <translation type="vanished">Q&amp;A</translation>
     </message>
     <message>
         <source>Get answers to your Wireshark questions from the community.</source>
-        <translation>コミュニティからあなたのWiresharkの質問に対して回答を得る</translation>
+        <translation type="vanished">コミュニティからあなたのWiresharkの質問に対して回答を得る</translation>
     </message>
     <message>
         <source>Mailing Lists</source>
-        <translation>メーリングリスト</translation>
+        <translation type="vanished">メーリングリスト</translation>
     </message>
     <message>
         <source>Lists</source>
-        <translation>リスト</translation>
+        <translation type="vanished">リスト</translation>
     </message>
     <message>
         <source>Join the Wireshark mailing lists to discuss Wireshark with other users and developers.</source>
-        <translation>Wiresharkメーリングリストに参加して他のユーザや開発者と議論する</translation>
+        <translation type="vanished">Wiresharkメーリングリストに参加して他のユーザや開発者と議論する</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Learn&lt;/h2&gt;</source>
@@ -6475,19 +6671,19 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Discord</source>
-        <translation>Discord</translation>
+        <translation type="vanished">Discord</translation>
     </message>
     <message>
         <source>Join the Wireshark Discord server to chat with other users and developers.</source>
-        <translation>Wireshark Discordサーバに参加して他のユーザや開発者と話す</translation>
+        <translation type="vanished">Wireshark Discordサーバに参加して他のユーザや開発者と話す</translation>
     </message>
     <message>
         <source>Donate</source>
-        <translation>寄付</translation>
+        <translation type="vanished">寄付</translation>
     </message>
     <message>
         <source>Support the Wireshark project by making a donation to the Wireshark Foundation.</source>
-        <translation>Wireshark Foundationに寄付を行うことでWiresharkプロジェクトをサポートする</translation>
+        <translation type="vanished">Wireshark Foundationに寄付を行うことでWiresharkプロジェクトをサポートする</translation>
     </message>
 </context>
 <context>
@@ -7148,6 +7344,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source> before updating</source>
+        <translation type="unfinished">更新前</translation>
+    </message>
+    <message>
+        <source>Please close the current file before updating.</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Display filter as %1</source>
         <translation>%1 として表示フィルタ</translation>
@@ -7874,11 +8078,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>PacketList</name>
     <message>
         <source>Packet list</source>
-        <translation>パケット一覧</translation>
+        <translation type="vanished">パケット一覧</translation>
     </message>
     <message>
         <source>List of captured packets</source>
-        <translation>キャプチャしたパケットの一覧</translation>
+        <translation type="vanished">キャプチャしたパケットの一覧</translation>
     </message>
     <message>
         <source>Summary as Text</source>
@@ -7989,6 +8193,22 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Sorting …</source>
         <translation>ソート中 …</translation>
+    </message>
+    <message>
+        <source>Marked</source>
+        <translation type="unfinished">マーク済</translation>
+    </message>
+    <message>
+        <source>Ignored</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reference Time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation type="unfinished">修正日</translation>
     </message>
 </context>
 <context>
@@ -9104,11 +9324,11 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <name>ProtoTree</name>
     <message>
         <source>Packet details</source>
-        <translation>パケット詳細</translation>
+        <translation type="vanished">パケット詳細</translation>
     </message>
     <message>
         <source>Tree view of the selected packet&apos;s fields</source>
-        <translation>選択したパケットのフィールドのツリー表示</translation>
+        <translation type="vanished">選択したパケットのフィールドのツリー表示</translation>
     </message>
     <message>
         <source>Not a field or protocol</source>
@@ -9171,6 +9391,26 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>フィルタフィールドリファレンス</translation>
     </message>
     <message>
+        <source>Coloring Rule Preferences...</source>
+        <translation>色付けルール設定...</translation>
+    </message>
+    <message>
+        <source>Coloring Rules...</source>
+        <translation>色付けルール...</translation>
+    </message>
+    <message>
+        <source>Resume Coloring Rule</source>
+        <translation>色付けルールを復元</translation>
+    </message>
+    <message>
+        <source>Pause Coloring Rule</source>
+        <translation>色付けルールを停止</translation>
+    </message>
+    <message>
+        <source>Resume All Coloring Rules</source>
+        <translation>すべての色付けルールを復元</translation>
+    </message>
+    <message>
         <source>Copied %1</source>
         <translation>%1 コピー済</translation>
     </message>
@@ -9185,6 +9425,29 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Colorize with Filter</source>
         <translation>フィルタで色付け</translation>
+    </message>
+</context>
+<context>
+    <name>ProtoTreeModel</name>
+    <message>
+        <source>Comment</source>
+        <translation type="unfinished">コメント</translation>
+    </message>
+    <message>
+        <source>Chat</source>
+        <translation type="unfinished">チャット</translation>
+    </message>
+    <message>
+        <source>Note</source>
+        <translation type="unfinished">注意</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation type="unfinished">警告</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation type="unfinished">エラー</translation>
     </message>
 </context>
 <context>
@@ -13977,6 +14240,121 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
 </context>
 <context>
+    <name>WelcomeHeaderWidget</name>
+    <message>
+        <source>Form</source>
+        <translation type="unfinished">フォーム</translation>
+    </message>
+    <message>
+        <source>Application Name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Application name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark</source>
+        <translation type="unfinished">Wireshark</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Version of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>4.7.0 (v4.7.0rc0-2438-g68ddfc1bcba4)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Variant of the application running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Build variant of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Development Build</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update Available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Graphical indicator that an update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes</source>
+        <translation type="unfinished">リリースノート</translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for the available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download Update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for the currently available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss update notification</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss the update notification and show the information about an update again on either next application start or when a new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update %1 is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update for version %1 is available (current version is %2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>WelcomePage</name>
     <message>
         <source>Form</source>
@@ -13984,7 +14362,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Welcome to Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Wiresharkへようこそ&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Wiresharkへようこそ&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Open</source>
@@ -14012,31 +14390,31 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Capture</source>
-        <translation>キャプチャ</translation>
+        <translation type="vanished">キャプチャ</translation>
     </message>
     <message>
         <source>Start a new capture session</source>
-        <translation>新規キャプチャセッションを開始</translation>
+        <translation type="vanished">新規キャプチャセッションを開始</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;ネットワークから現在のパケットをキャプチャします&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;ネットワークから現在のパケットをキャプチャします&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
-        <translation>&lt;h2&gt;キャプチャ&lt;/h2&gt;</translation>
+        <translation type="vanished">&lt;h2&gt;キャプチャ&lt;/h2&gt;</translation>
     </message>
     <message>
         <source>…using this filter:</source>
-        <translation>…このフィルタを利用:</translation>
+        <translation type="vanished">…このフィルタを利用:</translation>
     </message>
     <message>
         <source>Interface list</source>
-        <translation>インターフェース一覧</translation>
+        <translation type="vanished">インターフェース一覧</translation>
     </message>
     <message>
         <source>List of available capture interfaces</source>
-        <translation>利用可能なキャプチャインターフェース一覧</translation>
+        <translation type="vanished">利用可能なキャプチャインターフェース一覧</translation>
     </message>
     <message>
         <source>Tips and announcements</source>
@@ -14072,7 +14450,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Welcome to %1</source>
-        <translation>%1 へようこそ</translation>
+        <translation type="vanished">%1 へようこそ</translation>
     </message>
     <message>
         <source>List of recently opened capture files. Double-click or press Enter to open.</source>
@@ -14080,53 +14458,49 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source>Interface type filter</source>
-        <translation>インターフェース種別フィルタ</translation>
+        <translation type="vanished">インターフェース種別フィルタ</translation>
     </message>
     <message>
         <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
-        <translation>キャプチャソース一覧を種類ごとにフィルタします。現在表示されているソース数と、アクティブなフィルタによって非表示になっているソース数を表示します</translation>
+        <translation type="vanished">キャプチャソース一覧を種類ごとにフィルタします。現在表示されているソース数と、アクティブなフィルタによって非表示になっているソース数を表示します</translation>
     </message>
     <message>
         <source>Capture sources</source>
-        <translation>キャプチャソース</translation>
+        <translation type="vanished">キャプチャソース</translation>
     </message>
     <message>
         <source>Lists available capture sources. Select one or more to capture from.</source>
-        <translation>利用可能なキャプチャソースの一覧です。キャプチャしたい１つか複数を選択します</translation>
+        <translation type="vanished">利用可能なキャプチャソースの一覧です。キャプチャしたい１つか複数を選択します</translation>
     </message>
     <message>
         <source>Capture filter</source>
-        <translation>キャプチャフィルタ</translation>
+        <translation type="vanished">キャプチャフィルタ</translation>
     </message>
     <message>
         <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
-        <translation>キャプチャフィルタ式を入力してライブキャプチャ中に記録されるデータを制限します</translation>
+        <translation type="vanished">キャプチャフィルタ式を入力してライブキャプチャ中に記録されるデータを制限します</translation>
     </message>
     <message>
         <source>All interfaces shown</source>
-        <translation>すべての表示されたインターフェース</translation>
+        <translation type="vanished">すべての表示されたインターフェース</translation>
     </message>
     <message numerus="yes">
         <source>%n interface(s) shown, %1 hidden</source>
-        <translation>
+        <translation type="vanished">
             <numerusform>%n インターフェース表示, %1 非表示</numerusform>
         </translation>
     </message>
     <message>
-        <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
-        <translation>あなたはWiresharkを使ってインターネットを互いにつなぐ膠をキャプチャしています</translation>
-    </message>
-    <message>
         <source>You are running Wireshark </source>
-        <translation>Wiresharkを起動中</translation>
+        <translation type="vanished">Wiresharkを起動中</translation>
     </message>
     <message>
         <source> You receive automatic updates.</source>
-        <translation>自動アップデートを受信します</translation>
+        <translation type="vanished">自動アップデートを受信します</translation>
     </message>
     <message>
         <source> You have disabled automatic updates.</source>
-        <translation>自動アップデートを無効にしました</translation>
+        <translation type="vanished">自動アップデートを無効にしました</translation>
     </message>
     <message>
         <source>Copy file path</source>
@@ -15457,6 +15831,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>オプション…(&amp;O)</translation>
     </message>
     <message>
+        <source>Main Window</source>
+        <translation>メインウインドウ</translation>
+    </message>
+    <message>
         <source>Allows jumping to a specific packet by its number.</source>
         <translation>番号で特定のパケットにジャンプすることを許可します</translation>
     </message>
@@ -15499,6 +15877,14 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Allows creating or editing display filter buttons.</source>
         <translation>表示フィルタボタンの作成や編集を許可します</translation>
+    </message>
+    <message>
+        <source>Main View</source>
+        <translation>メインビュー</translation>
+    </message>
+    <message>
+        <source>Main Menu</source>
+        <translation>メインメニュー</translation>
     </message>
     <message>
         <source>&amp;3GPP Uu</source>
@@ -16333,6 +16719,22 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
         <translation>更新を確認…</translation>
     </message>
     <message>
+        <source>Main View Splitter</source>
+        <translation>メインビュー分割</translation>
+    </message>
+    <message>
+        <source>Contains the packet list, protocol tree, and packet bytes.</source>
+        <translation>パケット一覧、プロトコルツリーとパケットバイト列を含みます</translation>
+    </message>
+    <message>
+        <source>Extra View Splitter</source>
+        <translation>エクストラビュー分割</translation>
+    </message>
+    <message>
+        <source>Contains packet extras and bytes views.</source>
+        <translation>パケットエクストラとバイトビューを含みます</translation>
+    </message>
+    <message>
         <source>Unable to drop files during capture.</source>
         <translation>キャプチャ中にファイルをドロップできません</translation>
     </message>
@@ -16403,6 +16805,10 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     <message>
         <source>Show or hide the toolbar</source>
         <translation>ツールバーを表示/非表示</translation>
+    </message>
+    <message>
+        <source>Software update checking is not available on this platform.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Continue &amp;without Saving</source>
@@ -16540,7 +16946,7 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
     </message>
     <message>
         <source> before updating</source>
-        <translation>更新前</translation>
+        <translation type="vanished">更新前</translation>
     </message>
     <message>
         <source> before exporting PDUs</source>

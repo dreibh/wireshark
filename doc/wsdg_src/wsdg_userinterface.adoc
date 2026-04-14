@@ -332,8 +332,12 @@ Slide files use the following structure:
     "schema_version": 1,
     "config": {
         "colors": {
-            "default": { "start": "#333333", "end": "#222222" },
-            "events": { "start": "#1a4a6e", "end": "#234d6e" }
+            "default": { "start": "#333333", "end": "#222222", "degrees": 145 },
+            "events": { "start": "#1a4a6e", "end": "#234d6e", "degrees": 145 },
+            "seasonal": {
+                "start": "#781E32", "end": "#641E64", "degrees": 145,
+                "steps": ["#781E32", "#8C5014", "#327832", "#1E5A82", "#3C2882", "#641E64"]
+            }
         },
         "types": {
             "events": { "randomized": false, "maxdisplay": 0, "only": false },
@@ -363,16 +367,20 @@ editor-based and CI validation.
 
 The `type`, `title`, `description`, and `url` fields are required per slide.
 Slides missing any of these are skipped with a warning. The `type` must be one
-of `"events"`, `"sponsorship"`, or `"tips"`. Note that `"sponsorship"` is
-reserved for the predefined `slides.json` and cannot be used in custom slide
-files. All other slide fields are optional and default to empty strings.
+of `"events"`, `"sponsorship"`, `"tips"`, or `"seasonal"`. Note that
+`"sponsorship"` and "seasonal" are reserved for the predefined `slides.json` and cannot be used in custom slide files. All other slide fields are optional and default to empty strings.
 
 The `image` field is a filename resolved at runtime under `:/json/banners/`. If
 empty or missing, a generic semi-transparent overlay is shown instead.
 
+The `application` field filters a slide to either `"wireshark"` or
+`"stratoshark"`. If omitted, the slide is shown in both applications.
+
 The `date_from` and `date_until` fields use ISO 8601 format (`YYYY-MM-DD`).
 Slides are hidden before `date_from` and after `date_until`. Omitting either
 field removes that constraint.
+
+`date_month` (1-12) and `date_day` (1-31) specify the exact day the slide should be shown each year. `date_from` and `date_until` will be ignored if these fields are present. For example, `date_month=12` and `date_day=25` will show the slide only on December 25th of each year.
 
 ==== Configuration Section
 
@@ -381,10 +389,16 @@ The optional `config` section controls slide display behavior and colors.
 *Colors* (`config.colors`): Per-type gradient color overrides with `"start"` and
 `"end"` fields in `#RRGGBB` format. The `"default"` entry provides fallback
 colors for types without explicit colors. Available keys: `"default"`,
-`"events"`, `"sponsorship"`, `"tips"`.
+`"events"`, `"sponsorship"`, `"tips"`, `"seasonal"`.
+
+Each color entry also supports the optional fields `"degrees"` (integer, 0-360)
+for the gradient angle and `"steps"` (array of `#RRGGBB` hex strings) for
+intermediate gradient color stops. When `"steps"` is provided, the colors are
+distributed evenly across the gradient from 0.0 to 1.0 instead of using a
+simple start/end pair.
 
 *Type settings* (`config.types`): Per-type display settings. Available keys:
-`"events"`, `"sponsorship"`, `"tips"`. Each entry supports:
+`"events"`, `"sponsorship"`, `"tips"`, `"seasonal"`. Each entry supports:
 
 [cols="1,3"]
 |===

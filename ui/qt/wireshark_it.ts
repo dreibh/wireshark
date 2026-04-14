@@ -705,6 +705,64 @@
     </message>
 </context>
 <context>
+    <name>CaptureCardWidget</name>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Cattura i pacchetti live dalla tua rete.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Capture</source>
+        <translation type="unfinished">Cattura</translation>
+    </message>
+    <message>
+        <source>Start a new capture session</source>
+        <translation type="unfinished">Avvia una nuova sessione di cattura </translation>
+    </message>
+    <message>
+        <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
+        <translation type="unfinished">&lt;h2&gt;Cattura&lt;/h2&gt;</translation>
+    </message>
+    <message>
+        <source>…using this filter:</source>
+        <translation type="unfinished">...usando questo filtro:</translation>
+    </message>
+    <message>
+        <source>Capture filter</source>
+        <translation type="unfinished">Filtro di cattura</translation>
+    </message>
+    <message>
+        <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
+        <translation type="unfinished">Digita un&apos;espressione di filtro di acquisizione per limitare i dati da registrare durante l&apos;acquisizione in tempo reale.</translation>
+    </message>
+    <message>
+        <source>Interface type filter</source>
+        <translation type="unfinished">Filtro tipo di interfaccia</translation>
+    </message>
+    <message>
+        <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
+        <translation type="unfinished">Filtra l&apos;elenco delle origini di acquisizione per tipo. Mostra quante sorgenti sono attualmente visibili e quante sono nascoste dal filtro attivo.</translation>
+    </message>
+    <message>
+        <source>Capture sources</source>
+        <translation type="unfinished">Sorgenti di cattura</translation>
+    </message>
+    <message>
+        <source>Lists available capture sources. Select one or more to capture from.</source>
+        <translation type="unfinished">Elenca le sorgenti di cattura disponibili. Selezionane uno o più da cui catturare.</translation>
+    </message>
+    <message>
+        <source>All interfaces shown</source>
+        <translation type="unfinished">Tutte le interfacce mostrate</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n interface(s) shown, %1 hidden</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CaptureCommentDialog</name>
     <message>
         <source>Edit Capture Comments</source>
@@ -1034,6 +1092,10 @@
         <translation>Interfaccia</translation>
     </message>
     <message>
+        <source>Interface Description</source>
+        <translation>Descrizione interfaccia</translation>
+    </message>
+    <message>
         <source>Dropped packets</source>
         <translation>Pacchetti persi</translation>
     </message>
@@ -1048,10 +1110,6 @@
     <message>
         <source>Packet size limit (snaplen)</source>
         <translation>Dimensione limite del pacchetto (snaplen)</translation>
-    </message>
-    <message>
-        <source>Interface Description</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>none</source>
@@ -2907,7 +2965,46 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
 </context>
 <context>
+    <name>ExpertInfoModel</name>
+    <message>
+        <source>Severity: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: Packet comments listed below.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Group: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protocol: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Packet: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Header Field: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ExpertInfoProxyModel</name>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Packet</source>
         <translation>Pacchetto</translation>
@@ -5280,6 +5377,38 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
 <context>
     <name>InfoBannerWidget</name>
     <message>
+        <source>April 1st</source>
+        <translation type="vanished">1° aprile</translation>
+    </message>
+    <message>
+        <source>Happy April Fools&apos; Day!</source>
+        <translation type="vanished">Felice pesce d&apos;aprile</translation>
+    </message>
+    <message>
+        <source>Sniffing the glue that holds the Internet together</source>
+        <translation type="vanished">Sniffare la colla che tiene insieme Internet</translation>
+    </message>
+    <message>
+        <source>Sniffing the glue that holds your system together</source>
+        <translation type="vanished">Sniffare la colla che tiene insieme il tuo sistema</translation>
+    </message>
+    <message>
+        <source>Birthday</source>
+        <translation type="vanished">Compleanno</translation>
+    </message>
+    <message>
+        <source>Happy Birthday, Wireshark!</source>
+        <translation type="vanished">Buon compleanno, Wireshark!</translation>
+    </message>
+    <message>
+        <source>On this day in 1998, the first version of Ethereal (later renamed Wireshark) was released. Thank you to the community that has kept the project thriving ever since!</source>
+        <translation type="vanished">In questo giorno del 1998, la prima versione di Ethereal (successivamente rinominato Wireshark) è stata rilasciata. Grazie alla comunità che ha consentito al progetto di prosperare da allora!</translation>
+    </message>
+    <message>
+        <source>Our History</source>
+        <translation type="vanished">La nostra storia</translation>
+    </message>
+    <message>
         <source>Tips and announcements</source>
         <translation>Suggerimenti e annunci</translation>
     </message>
@@ -5337,6 +5466,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Virtual</source>
         <translation>Virtuale</translation>
+    </message>
+    <message>
+        <source>Tunnel Interfaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Loopback Devices</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Remote interfaces</source>
@@ -6437,52 +6574,112 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <source>Show file load time</source>
         <translation>Mostra il tempo di caricamento dei file</translation>
     </message>
+    <message>
+        <source>Packet list multi-color display mode:</source>
+        <translation>Modalità di visualizzazione multicolore dell&apos;elenco dei pacchetti:</translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation>Spento</translation>
+    </message>
+    <message>
+        <source>Scrollbar only</source>
+        <translation>Solo la barra di scorrimento</translation>
+    </message>
+    <message>
+        <source>Equal stripes</source>
+        <translation>Strisce uguali</translation>
+    </message>
+    <message>
+        <source>Shift right</source>
+        <translation>Sposta a destra</translation>
+    </message>
+    <message>
+        <source>75%</source>
+        <translation>75%</translation>
+    </message>
+    <message>
+        <source>80%</source>
+        <translation>80%</translation>
+    </message>
+    <message>
+        <source>85%</source>
+        <translation>85%</translation>
+    </message>
+    <message>
+        <source>90%</source>
+        <translation>90%</translation>
+    </message>
+    <message>
+        <source>95%</source>
+        <translation>95%</translation>
+    </message>
+    <message>
+        <source>Separator style:</source>
+        <translation>Stile del separatore:</translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation>Verticale</translation>
+    </message>
+    <message>
+        <source>Diagonal</source>
+        <translation>Diagonale</translation>
+    </message>
+    <message>
+        <source>Bubble</source>
+        <translation>Bolla</translation>
+    </message>
+    <message>
+        <source>Display multiple colors in packet details</source>
+        <translation>Visualizza più colori nei dettagli del pacchetto</translation>
+    </message>
 </context>
 <context>
     <name>LearnCardWidget</name>
     <message>
         <source>User Documentation</source>
-        <translation>Manuale utente</translation>
+        <translation type="vanished">Manuale utente</translation>
     </message>
     <message>
         <source>Docs</source>
-        <translation>Documenti</translation>
+        <translation type="vanished">Documenti</translation>
     </message>
     <message>
         <source>Read the Wireshark user documentation online.</source>
-        <translation>Leggi in linea il manuale utente di Wireshark.</translation>
+        <translation type="vanished">Leggi in linea il manuale utente di Wireshark.</translation>
     </message>
     <message>
         <source>Wiki</source>
-        <translation>Wiki</translation>
+        <translation type="vanished">Wiki</translation>
     </message>
     <message>
         <source>Browse the Wireshark Wiki for how-tos and other information.</source>
-        <translation>Sfoglia il wiki di Wireshark per how-to e altre informazioni.</translation>
+        <translation type="vanished">Sfoglia il wiki di Wireshark per how-to e altre informazioni.</translation>
     </message>
     <message>
         <source>Questions and Answers</source>
-        <translation>Domande e risposte</translation>
+        <translation type="vanished">Domande e risposte</translation>
     </message>
     <message>
         <source>Q&amp;A</source>
-        <translation>Domande e risposte</translation>
+        <translation type="vanished">Domande e risposte</translation>
     </message>
     <message>
         <source>Get answers to your Wireshark questions from the community.</source>
-        <translation>Ottieni risposte alle tue domande su Wireshark dalla comunità.</translation>
+        <translation type="vanished">Ottieni risposte alle tue domande su Wireshark dalla comunità.</translation>
     </message>
     <message>
         <source>Mailing Lists</source>
-        <translation>Liste di distribuzione</translation>
+        <translation type="vanished">Liste di distribuzione</translation>
     </message>
     <message>
         <source>Lists</source>
-        <translation>Elenchi</translation>
+        <translation type="vanished">Elenchi</translation>
     </message>
     <message>
         <source>Join the Wireshark mailing lists to discuss Wireshark with other users and developers.</source>
-        <translation>Unisciti alle liste di distribuzione di Wireshark per discutere con altri utenti e sviluppatori.</translation>
+        <translation type="vanished">Unisciti alle liste di distribuzione di Wireshark per discutere con altri utenti e sviluppatori.</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Learn&lt;/h2&gt;</source>
@@ -6498,19 +6695,19 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Discord</source>
-        <translation>Discord</translation>
+        <translation type="vanished">Discord</translation>
     </message>
     <message>
         <source>Join the Wireshark Discord server to chat with other users and developers.</source>
-        <translation>Unisciti al server Discord di Wireshark e interagisci tramite chat con altri utenti e sviluppatori.</translation>
+        <translation type="vanished">Unisciti al server Discord di Wireshark e interagisci tramite chat con altri utenti e sviluppatori.</translation>
     </message>
     <message>
         <source>Donate</source>
-        <translation>Donazione</translation>
+        <translation type="vanished">Donazione</translation>
     </message>
     <message>
         <source>Support the Wireshark project by making a donation to the Wireshark Foundation.</source>
-        <translation>Supporta il progetto Wireshark effettuando una donazione alla Wireshark Foundation.</translation>
+        <translation type="vanished">Supporta il progetto Wireshark effettuando una donazione alla Wireshark Foundation.</translation>
     </message>
 </context>
 <context>
@@ -7174,6 +7371,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source> before updating</source>
+        <translation type="unfinished"> prima di aggiornare</translation>
+    </message>
+    <message>
+        <source>Please close the current file before updating.</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Display filter as %1</source>
         <translation>Filtro di visualizzazione come %1</translation>
@@ -7902,11 +8107,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <name>PacketList</name>
     <message>
         <source>Packet list</source>
-        <translation>Elenco dei pacchetti</translation>
+        <translation type="vanished">Elenco dei pacchetti</translation>
     </message>
     <message>
         <source>List of captured packets</source>
-        <translation>Elenco dei pacchetti catturati</translation>
+        <translation type="vanished">Elenco dei pacchetti catturati</translation>
     </message>
     <message>
         <source>Summary as Text</source>
@@ -8017,6 +8222,22 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Sorting …</source>
         <translation>Ordinamento...</translation>
+    </message>
+    <message>
+        <source>Marked</source>
+        <translation type="unfinished">Marcati</translation>
+    </message>
+    <message>
+        <source>Ignored</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reference Time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation type="unfinished">Modificato</translation>
     </message>
 </context>
 <context>
@@ -9141,11 +9362,11 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <name>ProtoTree</name>
     <message>
         <source>Packet details</source>
-        <translation>Dettagli del pacchetto</translation>
+        <translation type="vanished">Dettagli del pacchetto</translation>
     </message>
     <message>
         <source>Tree view of the selected packet&apos;s fields</source>
-        <translation>Vista ad albero dei campi del pacchetto selezionato</translation>
+        <translation type="vanished">Vista ad albero dei campi del pacchetto selezionato</translation>
     </message>
     <message>
         <source>Not a field or protocol</source>
@@ -9208,6 +9429,26 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Riferimento campo di filtro</translation>
     </message>
     <message>
+        <source>Coloring Rule Preferences...</source>
+        <translation>Preferenze regole di colorazione...</translation>
+    </message>
+    <message>
+        <source>Coloring Rules...</source>
+        <translation>Regole di colorazione...</translation>
+    </message>
+    <message>
+        <source>Resume Coloring Rule</source>
+        <translation>Riprendi regola di colorazione</translation>
+    </message>
+    <message>
+        <source>Pause Coloring Rule</source>
+        <translation>Sospendi regola di colorazione</translation>
+    </message>
+    <message>
+        <source>Resume All Coloring Rules</source>
+        <translation>Riprendi tutte le regole di colorazione</translation>
+    </message>
+    <message>
         <source>Copied %1</source>
         <translation>Copiati %1</translation>
     </message>
@@ -9222,6 +9463,29 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Colorize with Filter</source>
         <translation>Colora con filtro</translation>
+    </message>
+</context>
+<context>
+    <name>ProtoTreeModel</name>
+    <message>
+        <source>Comment</source>
+        <translation type="unfinished">Commento</translation>
+    </message>
+    <message>
+        <source>Chat</source>
+        <translation type="unfinished">Conversazione</translation>
+    </message>
+    <message>
+        <source>Note</source>
+        <translation type="unfinished">Nota</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation type="unfinished">Avviso</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation type="unfinished">Errore</translation>
     </message>
 </context>
 <context>
@@ -14022,6 +14286,121 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
 </context>
 <context>
+    <name>WelcomeHeaderWidget</name>
+    <message>
+        <source>Form</source>
+        <translation type="unfinished">Modulo</translation>
+    </message>
+    <message>
+        <source>Application Name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Application name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark</source>
+        <translation type="unfinished">Wireshark</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Version of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>4.7.0 (v4.7.0rc0-2438-g68ddfc1bcba4)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Variant of the application running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Build variant of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Development Build</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update Available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Graphical indicator that an update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes</source>
+        <translation type="unfinished">Note di rilascio</translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for the available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download Update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for the currently available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss update notification</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss the update notification and show the information about an update again on either next application start or when a new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update %1 is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update for version %1 is available (current version is %2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>WelcomePage</name>
     <message>
         <source>Form</source>
@@ -14029,7 +14408,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Welcome to Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Benvenuto in Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Benvenuto in Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Open</source>
@@ -14057,31 +14436,31 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Capture</source>
-        <translation>Cattura</translation>
+        <translation type="vanished">Cattura</translation>
     </message>
     <message>
         <source>Start a new capture session</source>
-        <translation>Avvia una nuova sessione di cattura </translation>
+        <translation type="vanished">Avvia una nuova sessione di cattura </translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Cattura i pacchetti live dalla tua rete.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Cattura i pacchetti live dalla tua rete.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
-        <translation>&lt;h2&gt;Cattura&lt;/h2&gt;</translation>
+        <translation type="vanished">&lt;h2&gt;Cattura&lt;/h2&gt;</translation>
     </message>
     <message>
         <source>…using this filter:</source>
-        <translation>...usando questo filtro:</translation>
+        <translation type="vanished">...usando questo filtro:</translation>
     </message>
     <message>
         <source>Interface list</source>
-        <translation>Elenco delle interfacce</translation>
+        <translation type="vanished">Elenco delle interfacce</translation>
     </message>
     <message>
         <source>List of available capture interfaces</source>
-        <translation>Elenco delle interfacce di cattura disponibili</translation>
+        <translation type="vanished">Elenco delle interfacce di cattura disponibili</translation>
     </message>
     <message>
         <source>Tips and announcements</source>
@@ -14117,7 +14496,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Welcome to %1</source>
-        <translation>Benvenuto in %1</translation>
+        <translation type="vanished">Benvenuto in %1</translation>
     </message>
     <message>
         <source>List of recently opened capture files. Double-click or press Enter to open.</source>
@@ -14125,54 +14504,50 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Interface type filter</source>
-        <translation>Filtro tipo di interfaccia</translation>
+        <translation type="vanished">Filtro tipo di interfaccia</translation>
     </message>
     <message>
         <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
-        <translation>Filtra l&apos;elenco delle origini di acquisizione per tipo. Mostra quante sorgenti sono attualmente visibili e quante sono nascoste dal filtro attivo.</translation>
+        <translation type="vanished">Filtra l&apos;elenco delle origini di acquisizione per tipo. Mostra quante sorgenti sono attualmente visibili e quante sono nascoste dal filtro attivo.</translation>
     </message>
     <message>
         <source>Capture sources</source>
-        <translation>Sorgenti di cattura</translation>
+        <translation type="vanished">Sorgenti di cattura</translation>
     </message>
     <message>
         <source>Lists available capture sources. Select one or more to capture from.</source>
-        <translation>Elenca le sorgenti di cattura disponibili. Selezionane uno o più da cui catturare.</translation>
+        <translation type="vanished">Elenca le sorgenti di cattura disponibili. Selezionane uno o più da cui catturare.</translation>
     </message>
     <message>
         <source>Capture filter</source>
-        <translation>Filtro di cattura</translation>
+        <translation type="vanished">Filtro di cattura</translation>
     </message>
     <message>
         <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
-        <translation>Digita un&apos;espressione di filtro di acquisizione per limitare i dati da registrare durante l&apos;acquisizione in tempo reale.</translation>
+        <translation type="vanished">Digita un&apos;espressione di filtro di acquisizione per limitare i dati da registrare durante l&apos;acquisizione in tempo reale.</translation>
     </message>
     <message>
         <source>All interfaces shown</source>
-        <translation>Tutte le interfacce mostrate</translation>
+        <translation type="vanished">Tutte le interfacce mostrate</translation>
     </message>
     <message numerus="yes">
         <source>%n interface(s) shown, %1 hidden</source>
-        <translation>
+        <translation type="vanished">
             <numerusform>%n interfaccia mostrata, %1 nascoste</numerusform>
             <numerusform>%n interfacce mostrate, %1 nascoste</numerusform>
         </translation>
     </message>
     <message>
-        <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
-        <translation>Stai annusando la colla che tiene insieme Internet con Wireshark</translation>
-    </message>
-    <message>
         <source>You are running Wireshark </source>
-        <translation>Stai eseguendo Wireshark </translation>
+        <translation type="vanished">Stai eseguendo Wireshark </translation>
     </message>
     <message>
         <source> You receive automatic updates.</source>
-        <translation> Ricevi aggiornamenti automatici.</translation>
+        <translation type="vanished"> Ricevi aggiornamenti automatici.</translation>
     </message>
     <message>
         <source> You have disabled automatic updates.</source>
-        <translation>Hai disabilitato gli aggiornamenti automatici.</translation>
+        <translation type="vanished">Hai disabilitato gli aggiornamenti automatici.</translation>
     </message>
     <message>
         <source>Copy file path</source>
@@ -15503,6 +15878,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>&amp;Opzioni...</translation>
     </message>
     <message>
+        <source>Main Window</source>
+        <translation>Finestra principale</translation>
+    </message>
+    <message>
         <source>Allows jumping to a specific packet by its number.</source>
         <translation>Consente di passare a un pacchetto specifico tramite il suo numero.</translation>
     </message>
@@ -15545,6 +15924,14 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Allows creating or editing display filter buttons.</source>
         <translation>Consente di creare o modificare i pulsanti del filtro di visualizzazione.</translation>
+    </message>
+    <message>
+        <source>Main View</source>
+        <translation>Vista principale</translation>
+    </message>
+    <message>
+        <source>Main Menu</source>
+        <translation>Menu principale</translation>
     </message>
     <message>
         <source>&amp;3GPP Uu</source>
@@ -16379,6 +16766,22 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
         <translation>Verifica aggiornamenti...</translation>
     </message>
     <message>
+        <source>Main View Splitter</source>
+        <translation>Separatore della vista principale</translation>
+    </message>
+    <message>
+        <source>Contains the packet list, protocol tree, and packet bytes.</source>
+        <translation>Contiene l&apos;elenco dei pacchetti, l&apos;albero dei protocolli e i byte del pacchetto.</translation>
+    </message>
+    <message>
+        <source>Extra View Splitter</source>
+        <translation>Separatore della vista aggiuntiva</translation>
+    </message>
+    <message>
+        <source>Contains packet extras and bytes views.</source>
+        <translation>Contiene viste aggiuntive dei pacchetti e dei byte.</translation>
+    </message>
+    <message>
         <source>Unable to drop files during capture.</source>
         <translation>Impossibile scartare file durante la cattura.</translation>
     </message>
@@ -16449,6 +16852,10 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     <message>
         <source>Show or hide the toolbar</source>
         <translation>Mostra o nascondi la barra degli strumenti</translation>
+    </message>
+    <message>
+        <source>Software update checking is not available on this platform.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Continue &amp;without Saving</source>
@@ -16588,7 +16995,7 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source> before updating</source>
-        <translation> prima di aggiornare</translation>
+        <translation type="vanished"> prima di aggiornare</translation>
     </message>
     <message>
         <source> before exporting PDUs</source>

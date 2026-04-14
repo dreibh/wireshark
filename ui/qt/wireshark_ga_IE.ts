@@ -706,6 +706,65 @@
     </message>
 </context>
 <context>
+    <name>CaptureCardWidget</name>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Gabháil paicéid beo ó do líonra.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Capture</source>
+        <translation type="unfinished">Gabháil</translation>
+    </message>
+    <message>
+        <source>Start a new capture session</source>
+        <translation type="unfinished">Tosaigh seisiún gabhála nua</translation>
+    </message>
+    <message>
+        <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
+        <translation type="unfinished">&lt;h2&gt;Gabháil&lt;/h2&gt;</translation>
+    </message>
+    <message>
+        <source>…using this filter:</source>
+        <translation type="unfinished">… Ag baint úsáide as an scagaire seo:</translation>
+    </message>
+    <message>
+        <source>Capture filter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
+        <translation type="unfinished">Cuir isteach slonn scagaire gabhála chun teorainn a chur leis na sonraí a thaifeadtar le linn gabhála beo.</translation>
+    </message>
+    <message>
+        <source>Interface type filter</source>
+        <translation type="unfinished">Scagaire cineál comhéadain</translation>
+    </message>
+    <message>
+        <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
+        <translation type="unfinished">Scagann sé an liosta foinsí gabhála de réir cineáil. Taispeánann sé cé mhéad foinse atá le feiceáil faoi láthair agus cé mhéad atá i bhfolach ag an scagaire gníomhach.</translation>
+    </message>
+    <message>
+        <source>Capture sources</source>
+        <translation type="unfinished">Foinsí gabhála</translation>
+    </message>
+    <message>
+        <source>Lists available capture sources. Select one or more to capture from.</source>
+        <translation type="unfinished">Liostaíonn sé foinsí gabhála atá ar fáil. Roghnaigh ceann amháin nó níos mó le gabháil uathu.</translation>
+    </message>
+    <message>
+        <source>All interfaces shown</source>
+        <translation type="unfinished">Gach comhéadan a thaispeántar</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n interface(s) shown, %1 hidden</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CaptureCommentDialog</name>
     <message>
         <source>Edit Capture Comments</source>
@@ -1043,6 +1102,10 @@
         <translation>Comhéadan</translation>
     </message>
     <message>
+        <source>Interface Description</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Dropped packets</source>
         <translation>Paicéid tite</translation>
     </message>
@@ -1057,10 +1120,6 @@
     <message>
         <source>Packet size limit (snaplen)</source>
         <translation>Teorainn mhéid an phaicéid (snaplen)</translation>
-    </message>
-    <message>
-        <source>Interface Description</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>none</source>
@@ -2917,7 +2976,46 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
 </context>
 <context>
+    <name>ExpertInfoModel</name>
+    <message>
+        <source>Severity: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: Packet comments listed below.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Group: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protocol: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Packet: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Header Field: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ExpertInfoProxyModel</name>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Packet</source>
         <translation>Paicéad</translation>
@@ -5355,6 +5453,14 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>Fíorúil</translation>
     </message>
     <message>
+        <source>Tunnel Interfaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Loopback Devices</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Remote interfaces</source>
         <translation>Comhéadain chianda</translation>
     </message>
@@ -6456,52 +6562,112 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <source>Show file load time</source>
         <translation>Taispeáin am ualach an chomhaid</translation>
     </message>
+    <message>
+        <source>Packet list multi-color display mode:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation type="unfinished">As</translation>
+    </message>
+    <message>
+        <source>Scrollbar only</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Equal stripes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Shift right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>75%</source>
+        <translation type="unfinished">75%</translation>
+    </message>
+    <message>
+        <source>80%</source>
+        <translation type="unfinished">80%</translation>
+    </message>
+    <message>
+        <source>85%</source>
+        <translation type="unfinished">85%</translation>
+    </message>
+    <message>
+        <source>90%</source>
+        <translation type="unfinished">90%</translation>
+    </message>
+    <message>
+        <source>95%</source>
+        <translation type="unfinished">95%</translation>
+    </message>
+    <message>
+        <source>Separator style:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Diagonal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bubble</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Display multiple colors in packet details</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>LearnCardWidget</name>
     <message>
         <source>User Documentation</source>
-        <translation>Doiciméadú Úsáideora</translation>
+        <translation type="vanished">Doiciméadú Úsáideora</translation>
     </message>
     <message>
         <source>Docs</source>
-        <translation>Doiciméid</translation>
+        <translation type="vanished">Doiciméid</translation>
     </message>
     <message>
         <source>Read the Wireshark user documentation online.</source>
-        <translation>Léigh doiciméadú úsáideora Wireshark ar líne.</translation>
+        <translation type="vanished">Léigh doiciméadú úsáideora Wireshark ar líne.</translation>
     </message>
     <message>
         <source>Wiki</source>
-        <translation>Vicí</translation>
+        <translation type="vanished">Vicí</translation>
     </message>
     <message>
         <source>Browse the Wireshark Wiki for how-tos and other information.</source>
-        <translation>Brabhsáil Vicí Wireshark le haghaidh treoracha agus eolas eile.</translation>
+        <translation type="vanished">Brabhsáil Vicí Wireshark le haghaidh treoracha agus eolas eile.</translation>
     </message>
     <message>
         <source>Questions and Answers</source>
-        <translation>Ceisteanna agus Freagraí</translation>
+        <translation type="vanished">Ceisteanna agus Freagraí</translation>
     </message>
     <message>
         <source>Q&amp;A</source>
-        <translation>C&amp;F</translation>
+        <translation type="vanished">C&amp;F</translation>
     </message>
     <message>
         <source>Get answers to your Wireshark questions from the community.</source>
-        <translation>Faigh freagraí ar do cheisteanna faoi Wireshark ón bpobal.</translation>
+        <translation type="vanished">Faigh freagraí ar do cheisteanna faoi Wireshark ón bpobal.</translation>
     </message>
     <message>
         <source>Mailing Lists</source>
-        <translation>Liostaí Poist</translation>
+        <translation type="vanished">Liostaí Poist</translation>
     </message>
     <message>
         <source>Lists</source>
-        <translation>Liostaí</translation>
+        <translation type="vanished">Liostaí</translation>
     </message>
     <message>
         <source>Join the Wireshark mailing lists to discuss Wireshark with other users and developers.</source>
-        <translation>Bígí páirteach i liostaí poist Wireshark chun plé a dhéanamh ar Wireshark le húsáideoirí agus forbróirí eile.</translation>
+        <translation type="vanished">Bígí páirteach i liostaí poist Wireshark chun plé a dhéanamh ar Wireshark le húsáideoirí agus forbróirí eile.</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Learn&lt;/h2&gt;</source>
@@ -6517,19 +6683,19 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
     <message>
         <source>Discord</source>
-        <translation>Discord</translation>
+        <translation type="vanished">Discord</translation>
     </message>
     <message>
         <source>Join the Wireshark Discord server to chat with other users and developers.</source>
-        <translation>Bí páirteach i bhfreastalaí Wireshark Discord chun comhrá a dhéanamh le húsáideoirí agus forbróirí eile.</translation>
+        <translation type="vanished">Bí páirteach i bhfreastalaí Wireshark Discord chun comhrá a dhéanamh le húsáideoirí agus forbróirí eile.</translation>
     </message>
     <message>
         <source>Donate</source>
-        <translation>Tabhair Síntiús</translation>
+        <translation type="vanished">Tabhair Síntiús</translation>
     </message>
     <message>
         <source>Support the Wireshark project by making a donation to the Wireshark Foundation.</source>
-        <translation>Tacaigh le tionscadal Wireshark trí dheontas a thabhairt do Fhondúireacht Wireshark.</translation>
+        <translation type="vanished">Tacaigh le tionscadal Wireshark trí dheontas a thabhairt do Fhondúireacht Wireshark.</translation>
     </message>
 </context>
 <context>
@@ -7196,6 +7362,14 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source> before updating</source>
+        <translation type="unfinished"> roimh nuashonrú</translation>
+    </message>
+    <message>
+        <source>Please close the current file before updating.</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Display filter as %1</source>
         <translation>Taispeáin scagaire mar %1</translation>
@@ -7926,11 +8100,11 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     <name>PacketList</name>
     <message>
         <source>Packet list</source>
-        <translation>Liosta paicéad</translation>
+        <translation type="vanished">Liosta paicéad</translation>
     </message>
     <message>
         <source>List of captured packets</source>
-        <translation>Liosta na bpacáistí gafa</translation>
+        <translation type="vanished">Liosta na bpacáistí gafa</translation>
     </message>
     <message>
         <source>Summary as Text</source>
@@ -8041,6 +8215,22 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     <message>
         <source>Sorting …</source>
         <translation>Sórtáil…</translation>
+    </message>
+    <message>
+        <source>Marked</source>
+        <translation type="unfinished">Marcáilte</translation>
+    </message>
+    <message>
+        <source>Ignored</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reference Time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation type="unfinished">Athraithe</translation>
     </message>
 </context>
 <context>
@@ -9172,11 +9362,11 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     <name>ProtoTree</name>
     <message>
         <source>Packet details</source>
-        <translation>Sonraí paicéad</translation>
+        <translation type="vanished">Sonraí paicéad</translation>
     </message>
     <message>
         <source>Tree view of the selected packet&apos;s fields</source>
-        <translation>Radharc crainn de réimsí an phaicéid roghnaithe</translation>
+        <translation type="vanished">Radharc crainn de réimsí an phaicéid roghnaithe</translation>
     </message>
     <message>
         <source>Not a field or protocol</source>
@@ -9239,6 +9429,26 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>Scag Tagairt Réimse</translation>
     </message>
     <message>
+        <source>Coloring Rule Preferences...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Coloring Rules...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Resume Coloring Rule</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pause Coloring Rule</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Resume All Coloring Rules</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Copied %1</source>
         <translation>Cóipeáladh %1</translation>
     </message>
@@ -9253,6 +9463,29 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     <message>
         <source>Colorize with Filter</source>
         <translation>Dathú le Scagaire</translation>
+    </message>
+</context>
+<context>
+    <name>ProtoTreeModel</name>
+    <message>
+        <source>Comment</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Chat</source>
+        <translation type="unfinished">Comhrá</translation>
+    </message>
+    <message>
+        <source>Note</source>
+        <translation type="unfinished">Nóta</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation type="unfinished">Rabhadh</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation type="unfinished">Earráid</translation>
     </message>
 </context>
 <context>
@@ -14061,6 +14294,121 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
 </context>
 <context>
+    <name>WelcomeHeaderWidget</name>
+    <message>
+        <source>Form</source>
+        <translation type="unfinished">Foirm</translation>
+    </message>
+    <message>
+        <source>Application Name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Application name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark</source>
+        <translation type="unfinished">Wireshark</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Version of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>4.7.0 (v4.7.0rc0-2438-g68ddfc1bcba4)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Variant of the application running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Build variant of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Development Build</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update Available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Graphical indicator that an update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes</source>
+        <translation type="unfinished">Nótaí Eisiúna</translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for the available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download Update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for the currently available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss update notification</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss the update notification and show the information about an update again on either next application start or when a new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update %1 is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update for version %1 is available (current version is %2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>WelcomePage</name>
     <message>
         <source>Form</source>
@@ -14068,7 +14416,7 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Welcome to Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;p&gt;&lt;body&gt;&lt;head/&gt;&lt;span style =&quot; clómhéid: mór;&quot;&gt;Fáilte go Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;p&gt;&lt;body&gt;&lt;head/&gt;&lt;span style =&quot; clómhéid: mór;&quot;&gt;Fáilte go Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Open</source>
@@ -14096,31 +14444,31 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
     <message>
         <source>Capture</source>
-        <translation>Gabháil</translation>
+        <translation type="vanished">Gabháil</translation>
     </message>
     <message>
         <source>Start a new capture session</source>
-        <translation>Tosaigh seisiún gabhála nua</translation>
+        <translation type="vanished">Tosaigh seisiún gabhála nua</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Gabháil paicéid beo ó do líonra.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Gabháil paicéid beo ó do líonra.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
-        <translation>&lt;h2&gt;Gabháil&lt;/h2&gt;</translation>
+        <translation type="vanished">&lt;h2&gt;Gabháil&lt;/h2&gt;</translation>
     </message>
     <message>
         <source>…using this filter:</source>
-        <translation>… Ag baint úsáide as an scagaire seo:</translation>
+        <translation type="vanished">… Ag baint úsáide as an scagaire seo:</translation>
     </message>
     <message>
         <source>Interface list</source>
-        <translation>Liosta comhéadain</translation>
+        <translation type="vanished">Liosta comhéadain</translation>
     </message>
     <message>
         <source>List of available capture interfaces</source>
-        <translation>Liosta de na comhéadain gabhála atá ar fáil</translation>
+        <translation type="vanished">Liosta de na comhéadain gabhála atá ar fáil</translation>
     </message>
     <message>
         <source>Tips and announcements</source>
@@ -14156,7 +14504,7 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
     <message>
         <source>Welcome to %1</source>
-        <translation>Fáilte go %1</translation>
+        <translation type="vanished">Fáilte go %1</translation>
     </message>
     <message>
         <source>List of recently opened capture files. Double-click or press Enter to open.</source>
@@ -14164,55 +14512,51 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
     <message>
         <source>Interface type filter</source>
-        <translation>Scagaire cineál comhéadain</translation>
+        <translation type="vanished">Scagaire cineál comhéadain</translation>
     </message>
     <message>
         <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
-        <translation>Scagann sé an liosta foinsí gabhála de réir cineáil. Taispeánann sé cé mhéad foinse atá le feiceáil faoi láthair agus cé mhéad atá i bhfolach ag an scagaire gníomhach.</translation>
+        <translation type="vanished">Scagann sé an liosta foinsí gabhála de réir cineáil. Taispeánann sé cé mhéad foinse atá le feiceáil faoi láthair agus cé mhéad atá i bhfolach ag an scagaire gníomhach.</translation>
     </message>
     <message>
         <source>Capture sources</source>
-        <translation>Foinsí gabhála</translation>
+        <translation type="vanished">Foinsí gabhála</translation>
     </message>
     <message>
         <source>Lists available capture sources. Select one or more to capture from.</source>
-        <translation>Liostaíonn sé foinsí gabhála atá ar fáil. Roghnaigh ceann amháin nó níos mó le gabháil uathu.</translation>
+        <translation type="vanished">Liostaíonn sé foinsí gabhála atá ar fáil. Roghnaigh ceann amháin nó níos mó le gabháil uathu.</translation>
     </message>
     <message>
         <source>Capture filter</source>
-        <translation>Capture filter</translation>
+        <translation type="vanished">Capture filter</translation>
     </message>
     <message>
         <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
-        <translation>Cuir isteach slonn scagaire gabhála chun teorainn a chur leis na sonraí a thaifeadtar le linn gabhála beo.</translation>
+        <translation type="vanished">Cuir isteach slonn scagaire gabhála chun teorainn a chur leis na sonraí a thaifeadtar le linn gabhála beo.</translation>
     </message>
     <message>
         <source>All interfaces shown</source>
-        <translation>Gach comhéadan a thaispeántar</translation>
+        <translation type="vanished">Gach comhéadan a thaispeántar</translation>
     </message>
     <message numerus="yes">
         <source>%n interface(s) shown, %1 hidden</source>
-        <translation>
+        <translation type="vanished">
             <numerusform>Taispeántar comhéadan %n, %1 i bhfolach</numerusform>
             <numerusform>Taispeántar %n comhéadain, %1 i bhfolach</numerusform>
             <numerusform>Taispeántar %n comhéadain, %1 i bhfolach</numerusform>
         </translation>
     </message>
     <message>
-        <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
-        <translation>Tá tú ag sniffing an gliú go seilbh ar an Idirlíon le chéile ag baint úsáide as Wireshark </translation>
-    </message>
-    <message>
         <source>You are running Wireshark </source>
-        <translation>Tá Wireshark á rith agat </translation>
+        <translation type="vanished">Tá Wireshark á rith agat </translation>
     </message>
     <message>
         <source> You receive automatic updates.</source>
-        <translation> Faigheann tú nuashonruithe uathoibríocha.</translation>
+        <translation type="vanished"> Faigheann tú nuashonruithe uathoibríocha.</translation>
     </message>
     <message>
         <source> You have disabled automatic updates.</source>
-        <translation> Tá nuashonruithe uathoibríocha díchumasaithe agat.</translation>
+        <translation type="vanished"> Tá nuashonruithe uathoibríocha díchumasaithe agat.</translation>
     </message>
     <message>
         <source>Copy file path</source>
@@ -15543,6 +15887,10 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>&amp;Roghanna…</translation>
     </message>
     <message>
+        <source>Main Window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Allows jumping to a specific packet by its number.</source>
         <translation>Ceadaíonn sé léim chuig paicéad ar leith de réir a uimhir.</translation>
     </message>
@@ -15585,6 +15933,14 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     <message>
         <source>Allows creating or editing display filter buttons.</source>
         <translation>Ceadaíonn sé cnaipí scagaire taispeána a chruthú nó a chur in eagar.</translation>
+    </message>
+    <message>
+        <source>Main View</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Main Menu</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>&amp;3GPP Uu</source>
@@ -16419,6 +16775,22 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
         <translation>Seiceáil le haghaidh Nuashonruithe…</translation>
     </message>
     <message>
+        <source>Main View Splitter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Contains the packet list, protocol tree, and packet bytes.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Extra View Splitter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Contains packet extras and bytes views.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Unable to drop files during capture.</source>
         <translation>Ní féidir comhaid a scaoileadh le linn gabhála.</translation>
     </message>
@@ -16489,6 +16861,10 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     <message>
         <source>Show or hide the toolbar</source>
         <translation>Taispeáin nó folaigh an barra uirlisí</translation>
+    </message>
+    <message>
+        <source>Software update checking is not available on this platform.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Continue &amp;without Saving</source>
@@ -16630,7 +17006,7 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
     <message>
         <source> before updating</source>
-        <translation> roimh nuashonrú</translation>
+        <translation type="vanished"> roimh nuashonrú</translation>
     </message>
     <message>
         <source> before exporting PDUs</source>

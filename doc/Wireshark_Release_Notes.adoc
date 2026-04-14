@@ -26,10 +26,15 @@ If you or your organization would like to contribute or become a sponsor, please
 * Welcome Page Overhaul
   The welcome page has been redesigned to be more informative and easier to navigate. It now highlights the learning sections better and includes a new sidebar with tips and tricks for using Wireshark effectively. The welcome page is now also more accessible, with improved keyboard navigation and screen reader support.
 
+* Lua Debugger
+  A built-in Lua script debugger has been added. It supports breakpoints, single-stepping, variable inspection, expression evaluation, and stack traces. The debugger can be opened from the menu:Tools[Lua Debugger] menu.
+
 Many other improvements have been made.
 See the “New and Updated Features” section below for more details.
 
 //=== Bug Fixes
+
+* wsbuglink:21115[Wireshark Profile Import RCE via Zip-Slip Vulnerability ] - A critical issue that caused Wireshark to crash when importing malformed zip files has been fixed. This bug was reported by Joohyun Park, Hyuk Kwon, Yonghwa Lee, Taisic Yun, Sangjun Song (Theori), with Xint and has been resolved in this release.
 
 //The following bugs have been fixed:
 //* wsbuglink:5000[]
@@ -44,8 +49,8 @@ The following features are either new or have been significantly updated since v
 * The Windows installers now ship with Npcap 1.87.
   They previously shipped with Npcap 1.83.
 
-// * The Windows installers now ship with Qt 6.8.3.
-//   They previously shipped with Qt 6.5.3.
+* The Windows and macOS installers now ship with Qt 6.10.3.
+  They previously shipped with Qt 6.9.3.
 
 * The keyboard shortcuts dialog (menu:About Wireshark[Keyboard Shortcuts]) has been moved out of of the About dialog to the menu:View[Internals,Keyboard Shortcuts] menu and now has a button to print the list of keyboard shortcuts to an HTML file.
 

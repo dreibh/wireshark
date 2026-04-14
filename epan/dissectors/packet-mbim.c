@@ -47,6 +47,7 @@
 #include <epan/tfs.h>
 #include <epan/unit_strings.h>
 #include <epan/iana-info.h>
+#include <epan/exceptions.h>
 #include <wiretap/wtap.h>
 #include <wsutil/ws_padding_to.h>
 
@@ -3694,7 +3695,9 @@ mbim_dissect_tlv_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigne
                 break;
         }
         decrement_dissection_depth(pinfo);
-        *offset = tlv_data_offset + data_length;
+        if (ckd_add(offset, tlv_data_offset, data_length)) {
+            THROW(ReportedBoundsError);
+        }
     }
     if (padding_length) {
         proto_tree_add_item(tree, hf_mbim_tlv_ie_padding, tvb, *offset, padding_length, ENC_NA);

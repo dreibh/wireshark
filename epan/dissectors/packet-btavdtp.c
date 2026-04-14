@@ -1246,9 +1246,9 @@ dissect_capabilities(tvbuff_t *tvb, packet_info *pinfo,
     proto_item  *service_item                                 = NULL;
     int         service_category                              = 0;
     int         losc                                          = 0;
-    int         recovery_type                                 = 0;
-    int         maximum_recovery_window_size                  = 0;
-    int         maximum_number_of_media_packet_in_parity_code = 0;
+    uint8_t     recovery_type;
+    uint8_t     maximum_recovery_window_size;
+    uint8_t     maximum_number_of_media_packet_in_parity_code;
     int         media_type                                    = 0;
     int         media_codec_type                              = 0;
 
@@ -1289,14 +1289,12 @@ dissect_capabilities(tvbuff_t *tvb, packet_info *pinfo,
                 /* losc should be 0 */
                 break;
             case SERVICE_CATEGORY_RECOVERY:
-                recovery_type = tvb_get_uint8(tvb, offset);
-                pitem = proto_tree_add_item(service_tree, hf_btavdtp_recovery_type, tvb, offset, 1, ENC_NA);
+                pitem = proto_tree_add_item_ret_uint8(service_tree, hf_btavdtp_recovery_type, tvb, offset, 1, ENC_NA, &recovery_type);
                 proto_item_append_text(pitem, " (%s)", val_to_str_const(recovery_type, recovery_type_vals, "RFD"));
                 offset += 1;
                 losc -= 1;
 
-                maximum_recovery_window_size = tvb_get_uint8(tvb, offset);
-                pitem = proto_tree_add_item(service_tree, hf_btavdtp_maximum_recovery_window_size, tvb, offset, 1, ENC_NA);
+                pitem = proto_tree_add_item_ret_uint8(service_tree, hf_btavdtp_maximum_recovery_window_size, tvb, offset, 1, ENC_NA, &maximum_recovery_window_size);
                 if (maximum_recovery_window_size == 0x00) {
                     proto_item_append_text(pitem, " (Forbidden)");
                 } else if (maximum_recovery_window_size >= 0x18) {
@@ -1305,8 +1303,7 @@ dissect_capabilities(tvbuff_t *tvb, packet_info *pinfo,
                 offset += 1;
                 losc -= 1;
 
-                maximum_number_of_media_packet_in_parity_code = tvb_get_uint8(tvb, offset);
-                proto_tree_add_item(service_tree, hf_btavdtp_maximum_number_of_media_packet_in_parity_code, tvb, offset, 1, ENC_NA);
+                proto_tree_add_item_ret_uint8(service_tree, hf_btavdtp_maximum_number_of_media_packet_in_parity_code, tvb, offset, 1, ENC_NA, &maximum_number_of_media_packet_in_parity_code);
                 pitem = proto_tree_add_item(service_tree, hf_btavdtp_maximum_recovery_window_size, tvb, offset, 1, ENC_NA);
                 if (maximum_number_of_media_packet_in_parity_code == 0x00) {
                     proto_item_append_text(pitem, " (Forbidden)");

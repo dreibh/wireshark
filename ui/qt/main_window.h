@@ -76,6 +76,7 @@ public slots:
     void layoutPanes();
     void applyRecentPaneGeometry();
     void updateForUnsavedChanges();
+    void cyclePane(bool reverse = false);
 
 protected:
     enum CopySelected {
@@ -88,6 +89,15 @@ protected:
         CopyListAsCSV,
         CopyListAsYAML,
         CopyListAsHTML,
+    };
+
+    enum FileCloseContext {
+        Default,
+        Quit,
+        Restart,
+        Reload,
+        Update,
+        Export
     };
 
     void showWelcome();
@@ -145,7 +155,9 @@ protected:
      */
     virtual void openRecentCaptureFile(const QString &filename) = 0;
 
-    protected slots:
+    virtual bool tryClosingCaptureFile(QString before_what, FileCloseContext context = Default) = 0;
+
+protected slots:
     void addDisplayFilterTranslationActions(QMenu *copy_menu);
     void updateDisplayFilterTranslationActions(const QString &df_text);
     void updateTitlebar();

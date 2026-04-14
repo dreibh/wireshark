@@ -2929,7 +2929,7 @@ dissect_smb2_file_all_info(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pa
 	offset = dissect_smb_access_mask(tvb, tree, offset, is_dir, (si->flags & 1));
 
 	/* Position Information */
-	proto_tree_add_item(tree, hf_smb2_position_information, tvb, offset, 8, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_smb2_position_information, tvb, offset, 8, ENC_LITTLE_ENDIAN);
 	offset += 8;
 
 	/* Mode Information */
@@ -2937,7 +2937,7 @@ dissect_smb2_file_all_info(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *pa
 	offset += 4;
 
 	/* Alignment Information */
-	proto_tree_add_item(tree, hf_smb2_alignment_information, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_smb2_alignment_information, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	offset +=4;
 
 	/* file name length */
@@ -9566,7 +9566,7 @@ dissect_smb2_ioctl_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
 
 	/* flags: reserved: must be zero */
-	proto_tree_add_item(tree, hf_smb2_flags, tvb, offset, 4, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_smb2_flags, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	offset += 4;
 
 	/* reserved */
@@ -12347,7 +12347,7 @@ append_uncompress_data(wmem_array_t *out, tvbuff_t *tvb, int offset, unsigned le
 static int
 dissect_smb2_compression_pattern_v1(proto_tree *tree,
 				    tvbuff_t *tvb, int offset, int length,
-				    wmem_array_t *out)
+				    wmem_array_t *out, bool *ok)
 {
 	proto_item *pat_item;
 	proto_tree *pat_tree;
@@ -12371,11 +12371,31 @@ dissect_smb2_compression_pattern_v1(proto_tree *tree,
 
 	proto_item_append_text(pat_item, " 0x%02x repeated %u times", pattern, times);
 
-	if (out && times < MAX_UNCOMPRESSED_SIZE) {
+	if (times > MAX_UNCOMPRESSED_SIZE) {
+		*ok = false;
+	}
+
+	if (out && *ok) {
 		uint8_t v = (uint8_t)pattern;
 
-		for (unsigned i = 0; i < times; i++)
+		/* Both of these are much faster than adding one byte at a,
+		 * time though the second is somewhat faster in testing due
+		 * to how compilers optimize a known length memset. */
+#if 0
+		uint8_t *bytes = g_malloc(times);
+		memset(bytes, v, times);
+		wmem_array_append(out, bytes, times);
+		g_free(bytes);
+#else
+		uint8_t sixty_four_bytes[64];
+		memset(sixty_four_bytes, v, 64);
+		unsigned i = 0;
+		for (i = 0; i < times/64; i++)
+			wmem_array_append(out, sixty_four_bytes, 64);
+
+		for (i *= 64; i < times; i++)
 			wmem_array_append(out, &v, 1);
+#endif
 	}
 
 	return offset;
@@ -12392,8 +12412,6 @@ dissect_smb2_chained_comp_payload(packet_info *pinfo, proto_tree *tree,
 	unsigned alg, length, flags, orig_size = 0;
 	tvbuff_t *uncomp_tvb = NULL;
 	bool lz_based = false;
-
-	*ok = true;
 
 	subtree = proto_tree_add_subtree_format(tree, tvb, offset, 0, ett_smb2_comp_payload, &subitem, "COMPRESSION_PAYLOAD_HEADER");
 	proto_tree_add_item_ret_uint(subtree, hf_smb2_comp_transform_comp_alg, tvb, offset, 2, ENC_LITTLE_ENDIAN, &alg);
@@ -12415,10 +12433,15 @@ dissect_smb2_chained_comp_payload(packet_info *pinfo, proto_tree *tree,
 		length -= 4;
 	}
 
-	if (length > MAX_UNCOMPRESSED_SIZE) {
+	if (length > MAX_UNCOMPRESSED_SIZE || wmem_array_get_count(out) > MAX_UNCOMPRESSED_SIZE) {
 		/* decompression error */
-		col_append_str(pinfo->cinfo, COL_INFO, "Comp. SMB3 (invalid)");
+		if (*ok) {
+			col_append_str(pinfo->cinfo, COL_INFO, "Comp. SMB3 (too big)");
+		}
 		*ok = false;
+	}
+
+	if (!*ok && (lz_based || SMB2_COMP_ALG_NONE)) {
 		goto out;
 	}
 
@@ -12436,18 +12459,24 @@ dissect_smb2_chained_comp_payload(packet_info *pinfo, proto_tree *tree,
 		uncomp_tvb = tvb_uncompress_lznt1(tvb, offset, length);
 		break;
 	case SMB2_COMP_ALG_PATTERN_V1:
-		dissect_smb2_compression_pattern_v1(subtree, tvb, offset, length, out);
+		dissect_smb2_compression_pattern_v1(subtree, tvb, offset, length, out, ok);
 		break;
 	default:
-		col_append_str(pinfo->cinfo, COL_INFO, "Comp. SMB3 (unknown)");
+		// XXX - This should be an expert info, probably not in column
+		if (*ok) {
+			col_append_str(pinfo->cinfo, COL_INFO, "Comp. SMB3 (unknown)");
+		}
 		uncomp_tvb = NULL;
+		*ok = false;
 		break;
 	}
 
 	if (lz_based) {
 		if (!uncomp_tvb || tvb_reported_length(uncomp_tvb) != orig_size) {
 			/* decompression error */
-			col_append_str(pinfo->cinfo, COL_INFO, "Comp. SMB3 (invalid)");
+			if (*ok) {
+				col_append_str(pinfo->cinfo, COL_INFO, "Comp. SMB3 (invalid)");
+			}
 			*ok = false;
 			goto out;
 		}
@@ -12509,11 +12538,7 @@ dissect_smb2_comp_transform_header(packet_info *pinfo, proto_tree *tree,
 
 		*comp_tvb = tvb_new_subset_length(tvb, offset, tvb_reported_length_remaining(tvb, offset));
 		do {
-			bool ok = false;
-
-			offset = dissect_smb2_chained_comp_payload(pinfo, tree, tvb, offset, uncomp_data, &ok);
-			if (!ok)
-				all_ok = false;
+			offset = dissect_smb2_chained_comp_payload(pinfo, tree, tvb, offset, uncomp_data, &all_ok);
 		} while (tvb_reported_length_remaining(tvb, offset) > 8);
 		if (all_ok)
 			goto decompression_ok;

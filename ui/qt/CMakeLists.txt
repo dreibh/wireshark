@@ -19,9 +19,11 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/additional_toolbar.h
 	widgets/apply_line_edit.h
 	widgets/base_data_source_view.h
+	widgets/capture_card_widget.h
 	widgets/capture_filter_combo.h
 	widgets/capture_filter_edit.h
 	widgets/clickable_label.h
+	widgets/collapsible_section.h
 	widgets/compression_group_box.h
 	widgets/copy_from_profile_button.h
 	widgets/detachable_tabwidget.h
@@ -66,6 +68,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/traffic_tab.h
 	widgets/traffic_tree.h
 	widgets/traffic_types_list.h
+	widgets/welcome_header_widget.h
 	widgets/wireless_timeline.h
 	widgets/wireshark_file_dialog.h
 	widgets/customplot.h
@@ -93,6 +96,7 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/rtp_audio_routing_filter.h
 	utils/rtp_audio_routing.h
 	utils/rtp_audio_silence_generator.h
+	utils/software_update.h
 	utils/stock_icon.h
 	utils/tango_colors.h
 	utils/variant_pointer.h
@@ -300,12 +304,21 @@ if(ENABLE_PCAP)
 	endif()
 endif()
 
+if(LUA_FOUND)
+	list(APPEND WIRESHARK_QT_HEADERS
+		lua_debugger_code_view.h
+		lua_debugger_dialog.h
+	)
+endif()
+
 set(WIRESHARK_WIDGET_SRCS
 	widgets/additional_toolbar.cpp
 	widgets/apply_line_edit.cpp
+	widgets/capture_card_widget.cpp
 	widgets/capture_filter_combo.cpp
 	widgets/capture_filter_edit.cpp
 	widgets/clickable_label.cpp
+	widgets/collapsible_section.cpp
 	widgets/compression_group_box.cpp
 	widgets/copy_from_profile_button.cpp
 	widgets/detachable_tabwidget.cpp
@@ -350,6 +363,7 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/traffic_tab.cpp
 	widgets/traffic_tree.cpp
 	widgets/traffic_types_list.cpp
+	widgets/welcome_header_widget.cpp
 	widgets/wireless_timeline.cpp
 	widgets/wireshark_file_dialog.cpp
 	widgets/customplot.cpp
@@ -376,6 +390,7 @@ set(WIRESHARK_UTILS_SRCS
 	utils/rtp_audio_routing_filter.cpp
 	utils/rtp_audio_routing.cpp
 	utils/rtp_audio_silence_generator.cpp
+	utils/software_update.cpp
 	utils/stock_icon.cpp
 	utils/wireshark_mime_data.cpp
 	utils/wireshark_zip_helper.cpp
@@ -415,6 +430,7 @@ set(WIRESHARK_MODEL_SRCS
 	models/proto_tree_model.cpp
 	models/recentcapturefiles_list_model.cpp
 	models/related_packet_delegate.cpp
+	models/multi_color_packet_delegate.cpp
 	models/resolved_addresses_models.cpp
 	models/sparkline_delegate.cpp
 	models/supported_protocols_model.cpp
@@ -570,6 +586,13 @@ if(ENABLE_PCAP)
 	endif()
 endif()
 
+if(LUA_FOUND)
+	list(APPEND WIRESHARK_QT_SRC
+		lua_debugger_code_view.cpp
+		lua_debugger_dialog.cpp
+	)
+endif()
+
 set(WIRESHARK_QT_TAP_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/expert_info_dialog.cpp
 	${CMAKE_CURRENT_SOURCE_DIR}/funnel_statistics.cpp
@@ -696,12 +719,29 @@ set(WIRESHARK_QT_UI
 	wireshark_main_window.ui
 )
 
+set(WIRESHARK_QT_WIDGETS_UI
+	widgets/capture_card_widget.ui
+	widgets/learn_card_widget.ui
+	widgets/welcome_header_widget.ui
+)
+
 if(HAVE_PCAP_REMOTE)
 	list(APPEND WIRESHARK_QT_UI
 		remote_capture_dialog.ui
 		remote_settings_dialog.ui
 	)
 endif()
+
+if(LUA_FOUND)
+	list(APPEND WIRESHARK_QT_UI
+		lua_debugger_dialog.ui
+	)
+endif()
+
+set(WIRESHARK_QT_UI_SRCS
+	${WIRESHARK_QT_UI}
+	${WIRESHARK_QT_WIDGETS_UI}
+)
 
 set(WIRESHARK_QT_TS
 	wireshark_ca.ts
@@ -753,23 +793,45 @@ add_custom_command(
 		${CMAKE_SOURCE_DIR}/AUTHORS
 )
 
-# Generate translatable strings from slides.json for lupdate
-add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/slide_tr_strings.cpp
-	COMMAND ${Python3_EXECUTABLE}
-		${CMAKE_SOURCE_DIR}/resources/json/generate_slide_translations.py
-		${CMAKE_SOURCE_DIR}/resources/json/slides.json
-		${CMAKE_CURRENT_BINARY_DIR}/slide_tr_strings.cpp
-		InfoBannerWidget
-	DEPENDS
-		${CMAKE_SOURCE_DIR}/resources/json/slides.json
-		${CMAKE_SOURCE_DIR}/resources/json/generate_slide_translations.py
-	COMMENT "Generating slide translation strings for lupdate"
+# Generate translatable strings from JSON data files for lupdate
+GENERATE_JSON_TR_STRINGS(
+	INPUT   ${CMAKE_SOURCE_DIR}/resources/json/slides.json
+	OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/slide_tr_strings.cpp
+	CONTEXT InfoBannerWidget
+	EXTRACT slides:tag,title,description,description_sub,body_text,button_label,url
 )
+
+GENERATE_JSON_TR_STRINGS(
+	INPUT   ${CMAKE_SOURCE_DIR}/resources/json/learn_card.json
+	OUTPUT  ${CMAKE_CURRENT_BINARY_DIR}/learn_card_tr_strings.cpp
+	CONTEXT LearnCardWidget
+	EXTRACT links:label,short_label,tooltip
+	        buttons:label,tooltip
+)
+
+# Stylesheet resources
+set(STYLESHEET_QSS_FILES
+	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card-dark.qss
+	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card-light.qss
+	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card-dark.qss
+	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card-light.qss
+	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/welcome-header-dark.qss
+	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/welcome-header-light.qss
+)
+set(_stylesheet_qrc_files "")
+foreach(_qss ${STYLESHEET_QSS_FILES})
+	file(RELATIVE_PATH _qss_alias "${CMAKE_SOURCE_DIR}/ui/stylesheets" "${_qss}")
+	string(APPEND _stylesheet_qrc_files
+		"        <file alias=\"${_qss_alias}\">${_qss}</file>\n")
+endforeach()
+file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/stylesheets.qrc"
+	"<RCC>\n    <qresource prefix=\"/stylesheets\">\n${_stylesheet_qrc_files}    </qresource>\n</RCC>\n")
 
 # JSON data resources
 set(_json_qrc_files
 	"        <file alias=\"slides.json\">${CMAKE_SOURCE_DIR}/resources/json/slides.json</file>\n")
+string(APPEND _json_qrc_files
+	"        <file alias=\"learn_card.json\">${CMAKE_SOURCE_DIR}/resources/json/learn_card.json</file>\n")
 if(CUSTOM_SLIDES_JSON AND EXISTS "${CUSTOM_SLIDES_JSON}")
 	string(APPEND _json_qrc_files
 		"        <file alias=\"slides_custom.json\">${CUSTOM_SLIDES_JSON}</file>\n")
@@ -809,6 +871,7 @@ qt_add_resources(WIRESHARK_QT_QRC
 	${CMAKE_CURRENT_BINARY_DIR}/i18n.qrc
 	${CMAKE_CURRENT_BINARY_DIR}/authors.qrc
 	${CMAKE_CURRENT_BINARY_DIR}/json_resource.qrc
+	${CMAKE_CURRENT_BINARY_DIR}/stylesheets.qrc
 	OPTIONS ${CMAKE_AUTORCC_OPTIONS}
 )
 
@@ -853,7 +916,7 @@ register_tap_files(wireshark-tap-register.c
 	${WIRESHARK_QT_TAP_SRC}
 )
 
-source_group("ui\\UIC Files" FILES ${WIRESHARK_QT_UI})
+source_group("ui\\UIC Files" FILES ${WIRESHARK_QT_UI_SRCS})
 source_group("ui\\qrc" FILES ${WIRESHARK_QT_QRC})
 source_group("ui\\Header" FILES ${WIRESHARK_QT_HEADERS})
 source_group("ui\\Widget Header" FILES ${WIRESHARK_WIDGET_HEADERS})
@@ -877,11 +940,12 @@ add_library(qtui OBJECT
 	${WIRESHARK_QT_NONGENERATED_SRC}
 	${WIRESHARK_3RD_PARTY_WIDGET_SRCS}
 
-	# Generated translation markers for slides.json (lupdate only)
+	# Generated translation markers for JSON data (lupdate only)
 	${CMAKE_CURRENT_BINARY_DIR}/slide_tr_strings.cpp
+	${CMAKE_CURRENT_BINARY_DIR}/learn_card_tr_strings.cpp
 
 	# For AUTOUIC and AUTORCC.
-	${WIRESHARK_QT_UI}
+	${WIRESHARK_QT_UI_SRCS}
 	${WIRESHARK_QT_QRC}
 
 	${WIRESHARK_QT_TAP_SRC}
@@ -894,6 +958,7 @@ if(USE_qt6)
 		Qt6::Core5Compat
 		Qt6::Concurrent
 		Qt6::PrintSupport
+		Qt6::Network
 	)
 	if(Qt6Multimedia_FOUND)
 		target_link_libraries(qtui PUBLIC Qt6::Multimedia)

@@ -4104,9 +4104,9 @@ proto_register_asam_cmp(void) {
         { &hf_cmp_a2b_flag_pwd_err,                 { "Downstream Power Switch Error (PWRERR)", "asam-cmp.msg.a2b.flags.pwr_err", FT_BOOLEAN, 16, TFS(&a2b_downstream_power_switch_error_no_error), 0x0400, NULL, HFILL} },
         { &hf_cmp_a2b_flag_becovf_err,              { "Bit Error Count Error (BECOVFERR)", "asam-cmp.msg.a2b.flags.becovf_err", FT_BOOLEAN, 16, TFS(&a2b_bit_error_count_error_no_error), 0x0800, NULL, HFILL} },
         { &hf_cmp_a2b_flag_srf_err,                 { "SRF Miss Error (SRFERR)", "asam-cmp.msg.a2b.flags.srf_err", FT_BOOLEAN, 16, TFS(&a2b_srf_miss_error_no_error), 0x1000, NULL, HFILL} },
-        { &hf_cmp_a2b_flag_srfcrc_err,              { "SRF CRC Error (SRFCRCERR Subordinate Node Only)", "asam-cmp.msg.a2b.flags.srf_err", FT_BOOLEAN, 16, TFS(&a2b_srf_crc_error_no_error), 0x2000, NULL, HFILL} },
-        { &hf_cmp_a2b_flag_icrc_err,                { "Interrupt Frame CRC Error (ICRCERR)", "asam-cmp.msg.a2b.flags.srf_err", FT_BOOLEAN, 16, TFS(&a2b_iocrc_error_no_error), 0x4000, NULL, HFILL} },
-        { &hf_cmp_a2b_flag_i2c_err,                 { "I2C Transaction Error (I2CERR)", "asam-cmp.msg.a2b.flags.srf_err", FT_BOOLEAN, 16, TFS(&a2b_i2c_transaction_error_no_error), 0x8000, NULL, HFILL} },
+        { &hf_cmp_a2b_flag_srfcrc_err,              { "SRF CRC Error (SRFCRCERR Subordinate Node Only)", "asam-cmp.msg.a2b.flags.srfcrc_err", FT_BOOLEAN, 16, TFS(&a2b_srf_crc_error_no_error), 0x2000, NULL, HFILL} },
+        { &hf_cmp_a2b_flag_icrc_err,                { "Interrupt Frame CRC Error (ICRCERR)", "asam-cmp.msg.a2b.flags.icrc_err", FT_BOOLEAN, 16, TFS(&a2b_iocrc_error_no_error), 0x4000, NULL, HFILL} },
+        { &hf_cmp_a2b_flag_i2c_err,                 { "I2C Transaction Error (I2CERR)", "asam-cmp.msg.a2b.flags.i2c_err", FT_BOOLEAN, 16, TFS(&a2b_i2c_transaction_error_no_error), 0x8000, NULL, HFILL} },
 
         { &hf_cmp_a2b_reserved,                     { "Reserved", "asam-cmp.msg.a2b.reserved", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
         { &hf_cmp_a2b_upstream_set,                 { "Upstream Settings", "asam-cmp.msg.a2b.upstream_settings", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL} },
@@ -4148,7 +4148,7 @@ proto_register_asam_cmp(void) {
 
         /* Link State */
         { &hf_cmp_link_state_flags,                 { "Flags", "asam-cmp.msg.link_state.flags", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
-        { &hf_cmp_link_state_flag_link_err,         { "Link Error", "asam-cmp.msg.link_state.flags.link_err", FT_BOOLEAN, 16, TFS(&cmp_err_noerr), 0x01, NULL, HFILL} },
+        { &hf_cmp_link_state_flag_link_err,         { "Link Error", "asam-cmp.msg.link_state.flags.link_err", FT_BOOLEAN, 16, TFS(&cmp_err_noerr), 0x0001, NULL, HFILL} },
         { &hf_cmp_link_state_flag_reserved,         { "Reserved", "asam-cmp.msg.link_state.flags.reserved", FT_BOOLEAN, 16, NULL, 0xFFFE, NULL, HFILL } },
 
         { &hf_cmp_link_state_flag_reserved_tx,      { "Reserved", "asam-cmp.msg.link_state.flags.reserved_tx", FT_BOOLEAN, 16, NULL, 0xFFFF, NULL, HFILL } },

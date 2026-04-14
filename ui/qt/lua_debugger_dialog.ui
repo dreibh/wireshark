@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ~ Wireshark - Network traffic analyzer
+  ~ By Gerald Combs <gerald@wireshark.org>
+  ~ Copyright 1998 Gerald Combs
+  ~
+  ~ SPDX-License-Identifier: GPL-2.0-or-later
+  -->
+<ui version="4.0">
+ <class>LuaDebuggerDialog</class>
+ <widget class="QDialog" name="LuaDebuggerDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1000</width>
+    <height>700</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Lua Debugger</string>
+  </property>
+  <layout class="QHBoxLayout" name="horizontalLayout">
+   <item>
+    <widget class="QSplitter" name="mainSplitter">
+     <property name="orientation">
+      <enum>Qt::Horizontal</enum>
+     </property>
+     <widget class="QWidget" name="leftPanel">
+      <layout class="QVBoxLayout" name="leftPanelLayout">
+       <property name="spacing">
+        <number>2</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+      <item>
+       <widget class="QToolBar" name="toolBar">
+        <property name="movable">
+         <bool>false</bool>
+        </property>
+        <property name="floatable">
+         <bool>false</bool>
+        </property>
+        <addaction name="actionSepBeforeContinue"/>
+         <addaction name="actionContinue"/>
+         <addaction name="actionStep"/>
+         <addaction name="actionSepAfterStep"/>
+         <addaction name="actionOpenFile"/>
+        <addaction name="actionReloadLuaPlugins"/>
+        <addaction name="actionClearBreakpoints"/>
+       </widget>
+      </item>
+       <item>
+        <widget class="QSplitter" name="leftSplitter">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="childrenCollapsible">
+          <bool>false</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QTabWidget" name="codeTabWidget">
+      <property name="currentIndex">
+       <number>-1</number>
+      </property>
+      <property name="tabsClosable">
+       <bool>true</bool>
+      </property>
+     </widget>
+    </widget>
+   </item>
+  </layout>
+  <action name="actionContinue">
+   <property name="icon">
+    <iconset theme="media-playback-start"/>
+   </property>
+   <property name="text">
+    <string>Continue</string>
+   </property>
+  </action>
+  <action name="actionSepBeforeContinue">
+   <property name="separator">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionSepAfterStep">
+   <property name="separator">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionStep">
+   <property name="icon">
+    <iconset theme="go-next"/>
+   </property>
+   <property name="text">
+    <string>Step</string>
+   </property>
+   <property name="shortcut">
+    <string>F10</string>
+   </property>
+  </action>
+  <action name="actionClearBreakpoints">
+   <property name="icon">
+    <iconset theme="edit-clear"/>
+   </property>
+   <property name="text">
+    <string>Clear Breakpoints</string>
+   </property>
+  </action>
+  <action name="actionOpenFile">
+   <property name="icon">
+    <iconset theme="document-open"/>
+   </property>
+   <property name="text">
+    <string>Open File</string>
+   </property>
+  </action>
+  <action name="actionReloadLuaPlugins">
+   <property name="icon">
+    <iconset theme="view-refresh"/>
+   </property>
+   <property name="text">
+    <string>Reload Lua Plugins</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Shift+L</string>
+   </property>
+  </action>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>LuaDebuggerCodeView</class>
+   <extends>QWidget</extends>
+   <header>lua_debugger_code_view.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>

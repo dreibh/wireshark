@@ -705,6 +705,64 @@
     </message>
 </context>
 <context>
+    <name>CaptureCardWidget</name>
+    <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Captura en vivo paquetes desde su red.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+    </message>
+    <message>
+        <source>Capture</source>
+        <translation type="unfinished">Captura</translation>
+    </message>
+    <message>
+        <source>Start a new capture session</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
+        <translation type="unfinished">&lt;h2&gt;Capturar&lt;/h2&gt;</translation>
+    </message>
+    <message>
+        <source>…using this filter:</source>
+        <translation type="unfinished">…usando este filtro:</translation>
+    </message>
+    <message>
+        <source>Capture filter</source>
+        <translation type="unfinished">Filtro de captura</translation>
+    </message>
+    <message>
+        <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Interface type filter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Capture sources</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lists available capture sources. Select one or more to capture from.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>All interfaces shown</source>
+        <translation type="unfinished">Todas las interfaces mostradas</translation>
+    </message>
+    <message numerus="yes">
+        <source>%n interface(s) shown, %1 hidden</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CaptureCommentDialog</name>
     <message>
         <source>Edit Capture Comments</source>
@@ -1011,6 +1069,10 @@
         <translation>Interfaz</translation>
     </message>
     <message>
+        <source>Interface Description</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Dropped packets</source>
         <translation>Paquetes perdidos</translation>
     </message>
@@ -1024,10 +1086,6 @@
     </message>
     <message>
         <source>Packet size limit (snaplen)</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Interface Description</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -2882,7 +2940,46 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     </message>
 </context>
 <context>
+    <name>ExpertInfoModel</name>
+    <message>
+        <source>Severity: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Summary: Packet comments listed below.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Group: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Protocol: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Packet: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Header Field: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>ExpertInfoProxyModel</name>
+    <message>
+        <source>Count: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Packet</source>
         <translation>Paquete</translation>
@@ -5265,6 +5362,14 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Tunnel Interfaces</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Loopback Devices</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Remote interfaces</source>
         <translation type="unfinished"></translation>
     </message>
@@ -6363,53 +6468,69 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <source>Show file load time</source>
         <translation>Mostrar tiempo de carga de archivo</translation>
     </message>
+    <message>
+        <source>Packet list multi-color display mode:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Off</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Scrollbar only</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Equal stripes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Shift right</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>75%</source>
+        <translation type="unfinished">75%</translation>
+    </message>
+    <message>
+        <source>80%</source>
+        <translation type="unfinished">80%</translation>
+    </message>
+    <message>
+        <source>85%</source>
+        <translation type="unfinished">85%</translation>
+    </message>
+    <message>
+        <source>90%</source>
+        <translation type="unfinished">90%</translation>
+    </message>
+    <message>
+        <source>95%</source>
+        <translation type="unfinished">95%</translation>
+    </message>
+    <message>
+        <source>Separator style:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Vertical</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Diagonal</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Bubble</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Display multiple colors in packet details</source>
+        <translation type="unfinished"></translation>
+    </message>
 </context>
 <context>
     <name>LearnCardWidget</name>
-    <message>
-        <source>User Documentation</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Docs</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Read the Wireshark user documentation online.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Wiki</source>
-        <translation type="unfinished">Wiki</translation>
-    </message>
-    <message>
-        <source>Browse the Wireshark Wiki for how-tos and other information.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Questions and Answers</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Q&amp;A</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Get answers to your Wireshark questions from the community.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Mailing Lists</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Lists</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Join the Wireshark mailing lists to discuss Wireshark with other users and developers.</source>
-        <translation type="unfinished"></translation>
-    </message>
     <message>
         <source>&lt;h2&gt;Learn&lt;/h2&gt;</source>
         <translation type="unfinished"></translation>
@@ -6420,22 +6541,6 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     </message>
     <message>
         <source>Opens the Wireshark documentation website</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Discord</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Join the Wireshark Discord server to chat with other users and developers.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Donate</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Support the Wireshark project by making a donation to the Wireshark Foundation.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -7075,6 +7180,14 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
 </context>
 <context>
     <name>MainWindow</name>
+    <message>
+        <source> before updating</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Please close the current file before updating.</source>
+        <translation type="unfinished"></translation>
+    </message>
     <message>
         <source>Display filter as %1</source>
         <translation type="unfinished"></translation>
@@ -7802,14 +7915,6 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
 <context>
     <name>PacketList</name>
     <message>
-        <source>Packet list</source>
-        <translation type="unfinished">Listado de paquetes</translation>
-    </message>
-    <message>
-        <source>List of captured packets</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Summary as Text</source>
         <translation type="unfinished"></translation>
     </message>
@@ -7916,6 +8021,22 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     <message>
         <source>Sorting …</source>
         <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Marked</source>
+        <translation type="unfinished">Marcado</translation>
+    </message>
+    <message>
+        <source>Ignored</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reference Time</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Modified</source>
+        <translation type="unfinished">Modificado</translation>
     </message>
 </context>
 <context>
@@ -8998,14 +9119,6 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
 <context>
     <name>ProtoTree</name>
     <message>
-        <source>Packet details</source>
-        <translation type="unfinished">Detalles de paquete</translation>
-    </message>
-    <message>
-        <source>Tree view of the selected packet&apos;s fields</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Not a field or protocol</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9066,6 +9179,26 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>Coloring Rule Preferences...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Coloring Rules...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Resume Coloring Rule</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pause Coloring Rule</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Resume All Coloring Rules</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Copied %1</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9080,6 +9213,29 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     <message>
         <source>Colorize with Filter</source>
         <translation>Colorear con filtro</translation>
+    </message>
+</context>
+<context>
+    <name>ProtoTreeModel</name>
+    <message>
+        <source>Comment</source>
+        <translation type="unfinished">Comentario</translation>
+    </message>
+    <message>
+        <source>Chat</source>
+        <translation type="unfinished">Conversación</translation>
+    </message>
+    <message>
+        <source>Note</source>
+        <translation type="unfinished">Nota</translation>
+    </message>
+    <message>
+        <source>Warning</source>
+        <translation type="unfinished">Advertencia</translation>
+    </message>
+    <message>
+        <source>Error</source>
+        <translation type="unfinished">Error</translation>
     </message>
 </context>
 <context>
@@ -13812,6 +13968,121 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     </message>
 </context>
 <context>
+    <name>WelcomeHeaderWidget</name>
+    <message>
+        <source>Form</source>
+        <translation type="unfinished">Form</translation>
+    </message>
+    <message>
+        <source>Application Name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Application name</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Wireshark</source>
+        <translation type="unfinished">Wireshark</translation>
+    </message>
+    <message>
+        <source>Version information</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Version of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>4.7.0 (v4.7.0rc0-2438-g68ddfc1bcba4)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Variant of the application running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Build variant of the application currently running</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Development Build</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update Available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Graphical indicator that an update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update available: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for the available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download Update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for the currently available update</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss update notification</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Dismiss the update notification and show the information about an update again on either next application start or when a new update is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Update %1 is available</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>A new update for version %1 is available (current version is %2)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Release Notes for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Opens a browser to show the release notes for %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Download update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Starts the download process for update %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>WelcomePage</name>
     <message>
         <source>Form</source>
@@ -13819,7 +14090,7 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Welcome to Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Bienvenidos a Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&lt;span style=&quot; font-size:large;&quot;&gt;Bienvenidos a Wireshark&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Open</source>
@@ -13846,32 +14117,24 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation>Archivos de captura que han sido abiertos anteriormente</translation>
     </message>
     <message>
-        <source>Capture</source>
-        <translation type="unfinished">Captura</translation>
-    </message>
-    <message>
-        <source>Start a new capture session</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Captura en vivo paquetes desde su red.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
+        <translation type="vanished">&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Captura en vivo paquetes desde su red.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
-        <translation>&lt;h2&gt;Capturar&lt;/h2&gt;</translation>
+        <translation type="vanished">&lt;h2&gt;Capturar&lt;/h2&gt;</translation>
     </message>
     <message>
         <source>…using this filter:</source>
-        <translation>…usando este filtro:</translation>
+        <translation type="vanished">…usando este filtro:</translation>
     </message>
     <message>
         <source>Interface list</source>
-        <translation>Listado de interfaz</translation>
+        <translation type="vanished">Listado de interfaz</translation>
     </message>
     <message>
         <source>List of available capture interfaces</source>
-        <translation>Listado de interfaces de captura disponibles</translation>
+        <translation type="vanished">Listado de interfaces de captura disponibles</translation>
     </message>
     <message>
         <source>Tips and announcements</source>
@@ -13906,63 +14169,31 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Welcome to %1</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>List of recently opened capture files. Double-click or press Enter to open.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Interface type filter</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capture sources</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Lists available capture sources. Select one or more to capture from.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Capture filter</source>
-        <translation type="unfinished">Filtro de captura</translation>
-    </message>
-    <message>
-        <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>All interfaces shown</source>
-        <translation>Todas las interfaces mostradas</translation>
+        <translation type="vanished">Todas las interfaces mostradas</translation>
     </message>
     <message numerus="yes">
         <source>%n interface(s) shown, %1 hidden</source>
-        <translation>
+        <translation type="vanished">
             <numerusform>%n interfaz mostrada, %1 oculta</numerusform>
             <numerusform>%n interfaces mostradas, %1 ocultas</numerusform>
         </translation>
     </message>
     <message>
-        <source>You are sniffing the glue that holds the Internet together using Wireshark </source>
-        <translation>Está absorbiendo el pegamento que mantiene unido internet usando Wireshark</translation>
-    </message>
-    <message>
         <source>You are running Wireshark </source>
-        <translation>Está ejecutando Wireshark</translation>
+        <translation type="vanished">Está ejecutando Wireshark</translation>
     </message>
     <message>
         <source> You receive automatic updates.</source>
-        <translation>Recibe actualizaciones automáticas.</translation>
+        <translation type="vanished">Recibe actualizaciones automáticas.</translation>
     </message>
     <message>
         <source> You have disabled automatic updates.</source>
-        <translation>Ha desactivado actualizaciones automáticas</translation>
+        <translation type="vanished">Ha desactivado actualizaciones automáticas</translation>
     </message>
     <message>
         <source>Copy file path</source>
@@ -15293,6 +15524,10 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation>&amp;Opciones…</translation>
     </message>
     <message>
+        <source>Main Window</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Allows jumping to a specific packet by its number.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -15334,6 +15569,14 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     </message>
     <message>
         <source>Allows creating or editing display filter buttons.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Main View</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Main Menu</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -16169,6 +16412,22 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
         <translation>Buscar actualizaciones…</translation>
     </message>
     <message>
+        <source>Main View Splitter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Contains the packet list, protocol tree, and packet bytes.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Extra View Splitter</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Contains packet extras and bytes views.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Unable to drop files during capture.</source>
         <translation type="unfinished"></translation>
     </message>
@@ -16237,6 +16496,10 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     </message>
     <message>
         <source>Show or hide the toolbar</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Software update checking is not available on this platform.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -16366,10 +16629,6 @@ Por ejemplo, use 1 hora para tener creado un nuevo archivo cada hora en punto.</
     <message>
         <source>Please wait while Wireshark is initializing…</source>
         <translation>Por favor espere mientras Wireshark se inicia…</translation>
-    </message>
-    <message>
-        <source> before updating</source>
-        <translation type="unfinished"></translation>
     </message>
     <message>
         <source> before exporting PDUs</source>

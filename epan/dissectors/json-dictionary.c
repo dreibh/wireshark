@@ -92,6 +92,9 @@ dict_field_def_free(dict_field_def_t *field_def)
 	xmlFree(field_def->description);
 	xmlFree(field_def->info_label);
 	xmlFree(field_def->display_filter);
+	xmlFree(field_def->parser);
+	xmlFree(field_def->parser_args);
+	xmlFree(field_def->case_attr);
 
 	g_slist_free_full(field_def->child_fields, (GDestroyNotify)dict_field_def_free);
 	g_slist_free_full(field_def->enum_values, (GDestroyNotify)dict_enum_def_free);
@@ -202,13 +205,6 @@ static dict_field_def_t *process_field(xmlNodePtr node, const char *parent_path,
 
 	name = xmlGetProp(node, (const xmlChar *)XML_ATTR_NAME);
 	path = xmlGetProp(node, (const xmlChar *)XML_ATTR_PATH);
-	type = xmlGetProp(node, (const xmlChar *)XML_ATTR_TYPE);
-	description = xmlGetProp(node, (const xmlChar *)XML_ATTR_DESCRIPTION);
-	info_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_INFO);
-	df_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_DF);
-	parser_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_PARSER);
-	parser_args_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_PARSER_ARGS);
-	case_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_CASE);
 
 	// Path is required
 	if (!path) {
@@ -224,12 +220,17 @@ static dict_field_def_t *process_field(xmlNodePtr node, const char *parent_path,
 		} else if (name) {
 			path = xmlStrdup(name);
 		} else {
-			xmlFree(name);
-			xmlFree(type);
-			xmlFree(description);
 			return NULL;
 		}
 	}
+
+	type = xmlGetProp(node, (const xmlChar *)XML_ATTR_TYPE);
+	description = xmlGetProp(node, (const xmlChar *)XML_ATTR_DESCRIPTION);
+	info_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_INFO);
+	df_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_DF);
+	parser_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_PARSER);
+	parser_args_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_PARSER_ARGS);
+	case_attr = xmlGetProp(node, (const xmlChar *)XML_ATTR_CASE);
 
 	field_def = g_new0(dict_field_def_t, 1);
 	field_def->name = name ? name : xmlStrdup(path);

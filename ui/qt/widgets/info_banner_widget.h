@@ -21,60 +21,72 @@
 
 class QJsonObject;
 
-enum BannerSlideType {
-    BannerEvents,
-    BannerSponsorship,
-    BannerTips,
-};
+    enum BannerSlideType {
+            BannerEvents,
+            BannerSponsorship,
+            BannerTips,
+            BannerSeasonal,
+    };
+    Q_DECLARE_METATYPE(BannerSlideType)
 
-struct BannerSlide {
-    BannerSlideType type;
-    QString tag;              // type label shown as subheader, e.g. "Tip of the Day"
-    QString title;            // main heading, e.g. "Quick Filter Shortcut"
-    QString description;      // primary text shown in highlight box
-    QString description_sub;  // secondary line in highlight box
-    QString body_text;        // additional text below the highlight box
-    QString button_label;     // action button text, e.g. "More Tips"
-    QString url;              // click/button target
-    QString image;            // banner image filename, resolved under :/json/banners/
-    QDate date_from;          // slide visible from this date (inclusive), invalid = always
-    QDate date_until;         // slide visible until this date (inclusive), invalid = always
-};
+    struct BannerSlide {
+            BannerSlideType type;
+            QString tag;              // type label shown as subheader, e.g. "Tip of the Day"
+            QString title;            // main heading, e.g. "Quick Filter Shortcut"
+            QString description;      // primary text shown in highlight box
+            QString description_sub;  // secondary line in highlight box
+            QString body_text;        // additional text below the highlight box
+            QString button_label;     // action button text, e.g. "More Tips"
+            QString url;              // click/button target
+            QString image;            // banner image filename, resolved under :/json/banners/
+            int date_month;           // optional month for seasonal slides (1-12)
+            int date_day;             // optional day for seasonal slides (1-31)
+            QString application;      // optional application filter (e.g. "tshark"), empty = all
+            QDate date_from;          // slide visible from this date (inclusive), invalid = always
+            QDate date_until;         // slide visible until this date (inclusive), invalid = always
+    };
 
-struct SlideTypeConfig {
-    bool randomized = false;
-    int maxdisplay = 0;       // 0 = show all (no limit)
-    bool only = false;        // only slides from this file for this type
-    bool hidden = false;      // suppress this type entirely (custom files only)
-    QColor color_start;
-    QColor color_end;
-};
+    struct SlideTypeConfig {
+            bool randomized = false;
+            int maxdisplay = 0;       // 0 = show all (no limit)
+            bool only = false;        // only slides from this file for this type
+            bool hidden = false;      // suppress this type entirely (custom files only)
+            QColor color_start;       // gradient start color for this type, default if not specified in file
+            QColor color_end;         // gradient end color for this type, default if not specified in file
+            int color_gradient;       // optional gradient angle in degrees (0 = left-to-right, 90 = top-to-bottom, etc.)
+            QList<QColor> steps;      // optional discrete gradient steps (overrides color_start/color_end if specified)
+    };
 
 class InfoBannerWidget : public QFrame {
     Q_OBJECT
 public:
     explicit InfoBannerWidget(QWidget *parent = nullptr);
 
-    void updateStyleSheets();
     void setCompactMode(bool compact);
     bool isCompactMode() const;
     void setSlideTypeVisible(BannerSlideType type, bool visible);
     void setAutoAdvanceInterval(unsigned seconds);
     void applySlideFilter();
+    bool hasVisibleSlides() const;
 
     QSize sizeHint() const override;
+    QSize minimumSizeHint() const override;
+
+    void startRotation();
 
 protected:
     void paintEvent(QPaintEvent *event) override;
     void mousePressEvent(QMouseEvent *event) override;
     void mouseMoveEvent(QMouseEvent *event) override;
+    void leaveEvent(QEvent *event) override;
     void changeEvent(QEvent *event) override;
+    bool event(QEvent *event) override;
 
 private:
-    QList<BannerSlide> all_slides_;
     QList<BannerSlide> slides_;
     int current_slide_;
     bool compact_mode_;
+    bool hovered_;
     QMap<BannerSlideType, bool> slide_type_visible_;
     QTimer *auto_advance_timer_;
     int auto_advance_ms_;
@@ -98,17 +110,21 @@ private:
                                 QMap<BannerSlideType, SlideTypeConfig> &file_config,
                                 QMap<BannerSlideType, QList<BannerSlide>> &file_slides);
     void buildSlideSequence();
+
     void advanceSlide();
     // Updates accessibleName/Description to reflect the current slide and
     // notifies the platform AT via QAccessible::NameChanged. Must be called
     // whenever current_slide_ changes, because this widget is fully
     // custom-painted — there are no child widgets for AT to interrogate.
     void updateAccessibility();
-    QPair<QColor, QColor> gradientForType(BannerSlideType type) const;
     int dotHitTest(const QPoint &pos) const;
     QRect dotRect(int index) const;
     QRect buttonRect() const;
     static BannerSlideType typeFromString(const QString &type_str);
+    static BannerSlideType validTypeFromString(const QString &type_str,
+                                               const QString &resource_path,
+                                               const QString &context,
+                                               bool is_custom);
 
     // Layout constants
     static constexpr int kCardWidth = 300;

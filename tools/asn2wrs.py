@@ -556,14 +556,14 @@ def dependency_compute(items, dependency, map_fn = lambda t: t, ignore_fn = lamb
     item_ord = []
     item_cyc = []
     x = {}  # already emitted
-    #print '# Dependency computation'
+    #print('# Dependency computation')
     for t in items:
         if map_fn(t) in x:
-            #print 'Continue: %s : %s' % (t, (map_fn(t))
+            #print('Continue: %s : %s' % (t, (map_fn(t))))
             continue
         stack = [t]
         stackx = {t : dependency.get(t, [])[:]}
-        #print 'Push: %s : %s' % (t, str(stackx[t]))
+        #print('Push: %s : %s' % (t, str(stackx[t])))
         while stack:
             if stackx[stack[-1]]:  # has dependencies
                 d = stackx[stack[-1]].pop(0)
@@ -575,18 +575,18 @@ def dependency_compute(items, dependency, map_fn = lambda t: t, ignore_fn = lamb
                     c = [d] + c[0:c.index(d)+1]
                     c.reverse()
                     item_cyc.append(c)
-                    #print 'Cyclic: %s ' % (' -> '.join(c))
+                    #print('Cyclic: %s ' % (' -> '.join(c)))
                     continue
                 stack.append(d)
                 stackx[d] = dependency.get(d, [])[:]
-                #print 'Push: %s : %s' % (d, str(stackx[d]))
+                #print('Push: %s : %s' % (d, str(stackx[d])))
             else:
-                #print 'Pop: %s' % (stack[-1])
+                #print('Pop: %s' % (stack[-1]))
                 del stackx[stack[-1]]
                 e = map_fn(stack.pop())
                 if e in x:
                     continue
-                #print 'Add: %s' % (e)
+                #print('Add: %s' % (e))
                 item_ord.append(e)
                 x[e] = True
     return (item_ord, item_cyc)
@@ -1594,10 +1594,11 @@ class EthCtx:
                     break
 
         if len(cycle_funcs) > 1:
+            # The cycle always begins and ends with the same type, so
+            # subtract one.
             out += f'''\
   // {' -> '.join(cycle_funcs)}
-  actx->pinfo->dissection_depth += {len(cycle_funcs) - 1};
-  increment_dissection_depth(actx->pinfo);
+  increment_dissection_depth_by_n(actx->pinfo, {len(cycle_funcs) - 1});
 '''
 
         if self.conform.get_fn_presence(self.eth_type[tname]['ref'][0]):
@@ -1620,9 +1621,10 @@ class EthCtx:
                     break
 
         if len(cycle_funcs) > 1:
+            # The cycle always begins and ends with the same type, so
+            # subtract one, as above
             out += f'''\
-  actx->pinfo->dissection_depth -= {len(cycle_funcs) - 1};
-  decrement_dissection_depth(actx->pinfo);
+  decrement_dissection_depth_by_n(actx->pinfo, {len(cycle_funcs) - 1});
 '''
 
         if self.conform.get_fn_presence(self.eth_type[tname]['ref'][0]):
@@ -5232,6 +5234,20 @@ class OpenType (Type):
         t = self.single_type()
         if t:
             ectx.eth_dep_add(ident, t)
+        else:
+            # It's an OpenType, which means a type field or a variable-type
+            # value [set] field, and we don't have a constraint that limits
+            # us to a single type. That means that this is "one whose set of
+            # values is the complete set of all possible values that can be
+            # specified using ASN.1." [Rec. ITU-T X.681 14.2] Also see X.680
+            # 3.8.57 NOTE 2.
+            #
+            # Determining all the possible types that could follow is likely
+            # impossible at this point and might be very hard even after
+            # everything is parsed. There *might* be cycles. In a conservative
+            # approach, just claim that the OpenType depends on itself, which
+            # will create a cyclical dependency for sure just in case.
+            ectx.eth_dep_add(ident, ident)
 
     def eth_tname(self):
         t = self.single_type()

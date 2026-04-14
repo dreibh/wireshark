@@ -424,6 +424,7 @@ include(UseMakePluginReg)
 include(UseMakeTaps)
 include(UseExecutableResources)
 include(UseAsn2Wrs)
+include(UseJsonTranslations)
 
 # The following snippet has been taken from
 # https://github.com/USESystemEngineeringBV/cmake-eclipse-helper/wiki/HowToWorkaroundIndexer
@@ -1414,6 +1415,7 @@ if(BUILD_wireshark OR BUILD_stratoshark)
 				PrintSupport
 				Widgets
 				Concurrent
+				Network
 				Core5Compat
 			OPTIONAL_COMPONENTS
 				DBus
@@ -2210,7 +2212,7 @@ elseif(APPLE)
 		ui/macosx/cocoa_bridge.mm
 	)
 	if (SPARKLE_FOUND)
-		list(APPEND PLATFORM_UI_SRC ui/macosx/sparkle_bridge.m)
+		list(APPEND PLATFORM_UI_SRC ui/macosx/sparkle_bridge.mm)
 	endif()
 endif()
 
@@ -2268,7 +2270,6 @@ set(STRATO_TAP_SRC
 # Copied into ${DATAFILE_DIR} at build time and ${CMAKE_INSTALL_DATADIR}/wireshark
 # at install time.
 set(INSTALL_DIRS
-	resources/share/wireshark/profiles
 	resources/protocols/diameter
 	resources/protocols/dtds
 	resources/protocols/json
@@ -2279,6 +2280,11 @@ set(INSTALL_DIRS
 	resources/protocols/wimaxasncp
 	resources/protocols/protobuf
 )
+if (GLOBAL_PROFILE_DATA_DIR)
+	list(APPEND INSTALL_DIRS ${GLOBAL_PROFILE_DATA_DIR})
+else()
+	list(APPEND INSTALL_DIRS resources/share/wireshark/profiles)
+endif()
 
 # Copied into ${DATAFILE_DIR} at build time and ${CMAKE_INSTALL_DATADIR}/wireshark
 # at install time.
@@ -2299,10 +2305,14 @@ set(DOC_FILES
 )
 
 if (BUILD_stratoshark)
-	set(STRATOSHARK_INSTALL_DIRS
-		resources/share/stratoshark/profiles
-	)
+	set(STRATOSHARK_INSTALL_DIRS)
 
+	if (STRATOSHARK_GLOBAL_PROFILE_DATA_DIR)
+		list(APPEND STRATOSHARK_INSTALL_DIRS ${STRATOSHARK_GLOBAL_PROFILE_DATA_DIR})
+	else()
+		list(APPEND STRATOSHARK_INSTALL_DIRS resources/share/stratoshark/profiles)
+	endif()
+		
 	set(STRATOSHARK_INSTALL_FILES
 		doc/ws.css
 		resources/share/stratoshark/colorfilters
@@ -2852,8 +2862,12 @@ add_custom_command(
 	WORKING_DIRECTORY ${_protocol_data_dir}
 )
 
-set(_profiles_src_dir ${CMAKE_SOURCE_DIR}/resources/share/wireshark/profiles)
-file(GLOB WIRESHARK_PROFILE_FILES RELATIVE ${_profiles_src_dir} ${_profiles_src_dir}/*/*)
+if (GLOBAL_PROFILE_DATA_DIR)
+	set(_profiles_src_dir ${GLOBAL_PROFILE_DATA_DIR})
+else()
+	set(_profiles_src_dir ${CMAKE_SOURCE_DIR}/resources/share/wireshark/profiles)
+endif()
+	file(GLOB WIRESHARK_PROFILE_FILES RELATIVE ${_profiles_src_dir} ${_profiles_src_dir}/*/*)
 set (_profiles_data_files)
 foreach(_data_file ${WIRESHARK_PROFILE_FILES})
 	list(APPEND _profiles_data_files "${DATAFILE_DIR}/profiles/${_data_file}")
@@ -2862,12 +2876,16 @@ endforeach()
 add_custom_command(
 	OUTPUT ${_profiles_data_files}
 	COMMAND ${CMAKE_COMMAND} -E copy_directory
-		"${CMAKE_SOURCE_DIR}/resources/share/wireshark/profiles" "${DATAFILE_DIR}/profiles"
+		"${_profiles_src_dir}" "${DATAFILE_DIR}/profiles"
 )
 
 
 if (BUILD_stratoshark)
-	set(_profiles_src_dir ${CMAKE_SOURCE_DIR}/resources/share/stratoshark/profiles)
+	if (STRATOSHARK_GLOBAL_PROFILE_DATA_DIR)
+		set(_profiles_src_dir ${STRATOSHARK_GLOBAL_PROFILE_DATA_DIR})
+	else()
+		set(_profiles_src_dir ${CMAKE_SOURCE_DIR}/resources/share/stratoshark/profiles)
+	endif()
 	file(GLOB STRATOSHARK_PROFILE_FILES RELATIVE ${_profiles_src_dir} ${_profiles_src_dir}/*/*)
 endif()
 
@@ -2879,7 +2897,7 @@ if (BUILD_stratoshark AND ENABLE_APPLICATION_BUNDLE)
 	add_custom_command(
 		OUTPUT ${_stratoshark_profiles_data_files}
 		COMMAND ${CMAKE_COMMAND} -E copy_directory
-			"${CMAKE_SOURCE_DIR}/resources/share/stratoshark/profiles" "${STRATOSHARK_DATAFILE_DIR}/profiles"
+			"${_profiles_src_dir}" "${STRATOSHARK_DATAFILE_DIR}/profiles"
 	)
 endif()
 

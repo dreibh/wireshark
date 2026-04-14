@@ -6644,9 +6644,7 @@ elem_a2p_bearer_format(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uint
     curr_offset = offset;
 
     proto_tree_add_item(tree, hf_ansi_a_a2p_bearer_form_num_formats, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-    proto_tree_add_item(tree, hf_ansi_a_a2p_bearer_form_ip_addr_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-
-    ip_addr_type = tvb_get_uint8(tvb, curr_offset) & 0x03;
+    proto_tree_add_item_ret_uint8(tree, hf_ansi_a_a2p_bearer_form_ip_addr_type, tvb, curr_offset, 1, ENC_BIG_ENDIAN, &ip_addr_type);
 
     curr_offset++;
 

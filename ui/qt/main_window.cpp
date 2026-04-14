@@ -20,8 +20,10 @@
 #include <app/application_flavor.h>
 #include <wsutil/filesystem.h>
 #include <wsutil/version_info.h>
+#include "wsutil/file_util.h"
 
 #include <ui/commandline.h>
+#include <ui/qt/utils/software_update.h>
 
 #include <QAction>
 #include <QClipboard>
@@ -64,6 +66,23 @@ MainWindow::MainWindow(QWidget *parent) :
 #endif
 {
     findTextCodecs();
+
+    if (SoftwareUpdate::plattformSupported()) {
+        connect(SoftwareUpdate::instance(), &SoftwareUpdate::appShutdownRequested, this, [this](ShutdownEvent* shutdownEvent) {
+            // tryClosingCaptureFile doesn't use this string because we aren't
+            // going to launch another dialog, but maybe we'll change that.
+            QString before_what(tr(" before updating"));
+            if (tryClosingCaptureFile(before_what, Update)) {
+                #ifdef _WIN32
+                    close_app_running_mutex();
+                #endif
+                shutdownEvent->accept();
+            } else {
+                shutdownEvent->reject(tr("Please close the current file before updating."));
+            }
+        }, Qt::BlockingQueuedConnection);
+    }
+
 }
 
 MainWindow::~MainWindow()

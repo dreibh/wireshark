@@ -2091,13 +2091,11 @@ dlms_set_data_value(tvbuff_t* tvb, packet_info *pinfo, proto_item* item, int cho
 // NOLINTNEXTLINE(misc-no-recursion)
 static int dlms_get_type_description_length(tvbuff_t* tvb, packet_info* pinfo, int offset)
 {
-    pinfo->dissection_depth += 2;
-    increment_dissection_depth(pinfo);
+    increment_dissection_depth_by_n(pinfo, 3);
 
     int choice = tvb_get_uint8(tvb, offset);
     if (choice == 1) { // array
-        pinfo->dissection_depth -= 2;
-        decrement_dissection_depth(pinfo);
+        decrement_dissection_depth_by_n(pinfo, 3);
         return 1 + 2 + dlms_get_type_description_length(tvb, pinfo, offset + 3);
     }
     else if (choice == 2) { // structure
@@ -2107,13 +2105,11 @@ static int dlms_get_type_description_length(tvbuff_t* tvb, packet_info* pinfo, i
             end_offset += dlms_get_type_description_length(tvb, pinfo, end_offset);
             sequence_of--;
         }
-        pinfo->dissection_depth -= 2;
-        decrement_dissection_depth(pinfo);
+        decrement_dissection_depth_by_n(pinfo, 3);
         return end_offset - offset;
     }
     else {
-        pinfo->dissection_depth -= 2;
-        decrement_dissection_depth(pinfo);
+        decrement_dissection_depth_by_n(pinfo, 3);
         return 1;
     }
 }
@@ -2125,8 +2121,7 @@ static proto_item* dlms_dissect_compact_array_content(tvbuff_t* tvb, packet_info
     proto_tree* subtree;
     unsigned choice;
 
-    pinfo->dissection_depth += 2;
-    increment_dissection_depth(pinfo);
+    increment_dissection_depth_by_n(pinfo, 3);
 
     item = proto_tree_add_item(tree, hf_dlms_data, tvb, *content_offset, 0, ENC_NA);
     choice = tvb_get_uint8(tvb, description_offset);
@@ -2156,8 +2151,7 @@ static proto_item* dlms_dissect_compact_array_content(tvbuff_t* tvb, packet_info
     }
     proto_item_set_end(item, tvb, *content_offset);
 
-    pinfo->dissection_depth -= 2;
-    decrement_dissection_depth(pinfo);
+    decrement_dissection_depth_by_n(pinfo, 3);
 
     return item;
 }
@@ -2170,8 +2164,7 @@ static proto_item* dlms_dissect_data(tvbuff_t* tvb, packet_info* pinfo, proto_tr
     unsigned choice, length, i;
 
     /* Protect against recursion */
-    pinfo->dissection_depth += 2;
-    increment_dissection_depth(pinfo);
+    increment_dissection_depth_by_n(pinfo, 3);
 
     item = proto_tree_add_item(tree, hf_dlms_data, tvb, *offset, 1, ENC_NA);
     choice = tvb_get_uint8(tvb, *offset);
@@ -2211,7 +2204,7 @@ static proto_item* dlms_dissect_data(tvbuff_t* tvb, packet_info* pinfo, proto_tr
         contents_tvb = tvb_new_subset_length(tvb, *offset, length);
         /* The length here is an actual byte length instead of a number
          * of array elements matching the description. Due to this, the
-         * compact array can be syntatically valid according to the ASN.1
+         * compact array can be syntactically valid according to the ASN.1
          * but semantically impossible when interpreting the array-contents
          * according to the description. If the description contains no
          * non-null scalar types then the contents length MUST be zero as
@@ -2233,8 +2226,7 @@ static proto_item* dlms_dissect_data(tvbuff_t* tvb, packet_info* pinfo, proto_tr
         *offset = dlms_set_data_value(tvb, pinfo, item, choice, *offset);
     }
     proto_item_set_end(item, tvb, *offset);
-    pinfo->dissection_depth -= 2;
-    decrement_dissection_depth(pinfo);
+    decrement_dissection_depth_by_n(pinfo, 3);
 
     return item;
 }
@@ -2301,8 +2293,7 @@ dlms_dissect_datablock_g(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, in
     last_block = tvb_get_uint8(tvb, offset);
     offset += 1;
 
-    proto_tree_add_item(subtree, hf_dlms_block_number, tvb, offset, 4, ENC_BIG_ENDIAN);
-    block_number = tvb_get_ntohl(tvb, offset);
+    proto_tree_add_item_ret_uint(subtree, hf_dlms_block_number, tvb, offset, 4, ENC_BIG_ENDIAN, &block_number);
     offset += 4;
 
     result = tvb_get_uint8(tvb, offset);
@@ -2327,8 +2318,7 @@ dlms_dissect_datablock_sa(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, i
     last_block = tvb_get_uint8(tvb, *offset);
     *offset += 1;
 
-    proto_tree_add_item(subtree, hf_dlms_block_number, tvb, *offset, 4, ENC_BIG_ENDIAN);
-    block_number = tvb_get_ntohl(tvb, *offset);
+    proto_tree_add_item_ret_uint(subtree, hf_dlms_block_number, tvb, *offset, 4, ENC_BIG_ENDIAN, &block_number);
     *offset += 4;
 
     dlms_dissect_datablock_data(tvb, pinfo, tree, subtree, *offset, block_number, last_block);
@@ -2501,8 +2491,7 @@ dlms_dissect_get_request(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, in
         /*offset = */dlms_dissect_selective_access_descriptor(tvb, pinfo, tree, offset);
     }
     else if (choice == DLMS_GET_REQUEST_NEXT) {
-        proto_tree_add_item(tree, hf_dlms_block_number, tvb, offset, 4, ENC_BIG_ENDIAN);
-        block_number = tvb_get_ntohl(tvb, offset);
+        proto_tree_add_item_ret_uint(tree, hf_dlms_block_number, tvb, offset, 4, ENC_BIG_ENDIAN, &block_number);
         /*offset += 4;*/
         col_add_fstr(pinfo->cinfo, COL_INFO, "Get-Request-Next (block %u)", block_number);
     }
@@ -2625,15 +2614,13 @@ dlms_dissect_set_response(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, i
     }
     else if (choice == DLMS_SET_RESPONSE_DATABLOCK) {
         col_set_str(pinfo->cinfo, COL_INFO, "Set-Response-Datablock");
-        proto_tree_add_item(tree, hf_dlms_block_number, tvb, offset, 4, ENC_BIG_ENDIAN);
-        block_number = tvb_get_ntohl(tvb, offset);
+        proto_tree_add_item_ret_uint(tree, hf_dlms_block_number, tvb, offset, 4, ENC_BIG_ENDIAN, &block_number);
         col_append_fstr(pinfo->cinfo, COL_INFO, " (block %u)", block_number);
     }
     else if (choice == DLMS_SET_RESPONSE_LAST_DATABLOCK) {
         col_set_str(pinfo->cinfo, COL_INFO, "Set-Response-Last-Datablock");
         dlms_dissect_data_access_result(tvb, pinfo, tree, offset);
-        proto_tree_add_item(tree, hf_dlms_block_number, tvb, offset, 4, ENC_BIG_ENDIAN);
-        block_number = tvb_get_ntohl(tvb, offset);
+        proto_tree_add_item_ret_uint(tree, hf_dlms_block_number, tvb, offset, 4, ENC_BIG_ENDIAN, &block_number);
         col_append_fstr(pinfo->cinfo, COL_INFO, " (block %u)", block_number);
     }
     else {
@@ -2648,14 +2635,12 @@ dlms_dissect_action_response(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree
     const char* result_name;
     proto_item* item;
 
-    proto_tree_add_item(tree, hf_dlms_action_response, tvb, offset, 1, ENC_NA);
-    choice = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item_ret_uint(tree, hf_dlms_action_response, tvb, offset, 1, ENC_NA, &choice);
     offset += 1;
     offset = dlms_dissect_invoke_id_and_priority(tree, tvb, offset);
     if (choice == DLMS_ACTION_RESPONSE_NORMAL) {
         col_set_str(pinfo->cinfo, COL_INFO, "Action-Response-Normal");
-        item = proto_tree_add_item(tree, hf_dlms_action_result, tvb, offset, 1, ENC_NA);
-        result = tvb_get_uint8(tvb, offset);
+        item = proto_tree_add_item_ret_uint(tree, hf_dlms_action_result, tvb, offset, 1, ENC_NA, &result);
         /*offset += 1;*/
         if (result) {
             result_name = val_to_str_const(result, dlms_action_result_names, "unknown");
@@ -2969,10 +2954,9 @@ dissect_dlms_hdlc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
     /* Frame format field */
     subsubtree = proto_tree_add_subtree(subtree, tvb, 1, 2, ett_dlms_hdlc_format, 0, "Frame Format");
     proto_tree_add_item(subsubtree, hf_dlms_hdlc_type, tvb, 1, 2, ENC_BIG_ENDIAN);
-    proto_tree_add_item(subsubtree, hf_dlms_hdlc_segmentation, tvb, 1, 2, ENC_BIG_ENDIAN);
-    segmentation = (tvb_get_ntohs(tvb, 1) >> 11) & 1;
-    proto_tree_add_item(subsubtree, hf_dlms_hdlc_length, tvb, 1, 2, ENC_BIG_ENDIAN);
-    length = tvb_get_ntohs(tvb, 1) & 0x7ff; /* length of HDLC frame excluding the opening and closing flag fields */
+    proto_tree_add_item_ret_uint(subsubtree, hf_dlms_hdlc_segmentation, tvb, 1, 2, ENC_BIG_ENDIAN, &segmentation);
+    /* length of HDLC frame excluding the opening and closing flag fields */
+    proto_tree_add_item_ret_uint(subsubtree, hf_dlms_hdlc_length, tvb, 1, 2, ENC_BIG_ENDIAN, &length);
 
     /* Destination address field */
     da_len = dlms_dissect_hdlc_calc_address_len(tvb, 3);

@@ -1277,8 +1277,7 @@ dissect_game_packet(struct tibia_convo *convo, tvbuff_t *tvb, unsigned offset, p
         }
     }
     if (convo->has.xtea) {
-        len = tvb_get_letohs(tvb, offset);
-        ti = proto_tree_add_item(tree, hf_tibia_payload_len, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+        ti = proto_tree_add_item_ret_uint(tree, hf_tibia_payload_len, tvb, offset, 2, ENC_LITTLE_ENDIAN, &len);
         offset += 2;
         if (len > tvb_captured_length_remaining(tvb, offset)) {
             expert_add_info(pinfo, ti, &ei_xtea_len_toobig);

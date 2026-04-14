@@ -148,6 +148,12 @@ if(APPLE)
 	option(ENABLE_SPARKLE "Enable automatic updates using Sparkle" ON)
 endif()
 
+set(GLOBAL_PROFILE_DATA_DIR CACHE PATH "Directory that provides Wireshark global profiles for installation")
+
+if(BUILD_stratoshark)
+	set(STRATOSHARK_GLOBAL_PROFILE_DATA_DIR CACHE PATH "Directory that provides Stratoshark global profiles for installation")
+endif()
+
 if(WIN32)
 	# Enable signing of NSIS installer by default only if we have 'sign-wireshark.bat' on the path
 	# of the host system.

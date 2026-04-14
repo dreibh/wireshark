@@ -32,7 +32,9 @@ typedef enum {
 	IF_DIALUP	= 6,
 	IF_USB		= 7,
 	IF_EXTCAP	= 8,
-	IF_VIRTUAL	= 9
+	IF_VIRTUAL	= 9,
+        IF_LOOPBACK	= 10,
+        IF_TUNNEL	= 11,
 } interface_type;
 
 /*
@@ -59,8 +61,8 @@ typedef struct {
 	char	*friendly_name; /* from OS, e.g. "Local Area Connection", or
 				   NULL if not available */
 	char	*vendor_description;
-				/* vendor description from pcap_findalldevs(),
-				   e.g. "Realtek PCIe GBE Family Controller",
+				/* vendor description from pcap_findalldevs()
+				   on Windows, e.g. "Realtek PCIe GBE Family Controller",
 				   or NULL if not available */
 	GSList  *addrs;         /* containing address values of if_addr_t */
 	interface_type type;    /* type of interface */

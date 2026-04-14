@@ -816,13 +816,13 @@ get_remote_interface_list(const char *hostname, const char *port,
 		return NULL;
 	}
 
-	return get_interface_list_findalldevs_ex(hostname, port, auth_type,
+	return get_remote_interface_list_common(hostname, port, auth_type,
 	    username, passwd, err, err_str);
 }
 #endif
 
 GList *
-get_interface_list_ws(int *err, char **err_str)
+get_local_interface_list_ws(int *err, char **err_str)
 {
 	if (!has_npcap) {
 		/*
@@ -834,13 +834,7 @@ get_interface_list_ws(int *err, char **err_str)
 		return NULL;
 	}
 
-	return get_interface_list_findalldevs(true, err, err_str);
-}
-
-GList*
-get_interface_list_ss(int* err, char** err_str)
-{
-	return get_interface_list_findalldevs(false, err, err_str);
+	return get_local_interface_list(err, err_str);
 }
 
 /*

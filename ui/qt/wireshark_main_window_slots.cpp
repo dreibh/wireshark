@@ -16,6 +16,7 @@
 #endif
 
 #include "wireshark_main_window.h"
+#include <ui/qt/widgets/capture_card_widget.h>
 
 /*
  * The generated Ui_WiresharkMainWindow::setupUi() can grow larger than our configured limit,
@@ -83,10 +84,6 @@ DIAG_ON(frame-larger-than=)
 #include <ui/qt/widgets/drag_drop_toolbar.h>
 #include "ui/qt/widgets/wireshark_file_dialog.h"
 #include <ui/qt/utils/workspace_state.h>
-
-#ifdef HAVE_SOFTWARE_UPDATE
-#include "ui/software_update.h"
-#endif
 
 #include "about_dialog.h"
 #include "bluetooth_att_server_attributes_dialog.h"
@@ -171,6 +168,7 @@ DIAG_ON(frame-larger-than=)
 #include "wlan_statistics_dialog.h"
 #include <ui/qt/widgets/wireless_timeline.h>
 #include <ui/qt/utils/workspace_state.h>
+#include <ui/qt/interface_frame.h>
 
 #include <functional>
 #include <QClipboard>
@@ -224,10 +222,10 @@ bool WiresharkMainWindow::openCaptureFile(QString cf_path, QString read_filter, 
 
         // TODO detect call from "cf_read" -> "update_progress_dlg"
         // ("capture_file_.capFile()->read_lock"), possibly queue opening the
-        // file and return early to avoid the warning in testCaptureFileClose.
+        // file and return early to avoid the warning in tryClosingCaptureFile.
 
         QString before_what(tr(" before opening another file"));
-        if (!testCaptureFileClose(before_what)) {
+        if (!tryClosingCaptureFile(before_what)) {
             ret = false;
             goto finish;
         }
@@ -783,6 +781,9 @@ void WiresharkMainWindow::captureFileReadStarted(const QString &action) {
 
     /* Set up main window for a capture file. */
 //    main_set_for_capture_file(true);
+
+    /* Clear session-disabled (paused) color filters for new capture */
+    color_filter_clear_session_disabled();
 
     mainApp->popStatus(WiresharkApplication::FileStatus);
     QString msg = tr("%1: %2").arg(action).arg(capture_file_.fileName());
@@ -1432,7 +1433,7 @@ void WiresharkMainWindow::startInterfaceCapture(bool valid, const QString captur
     capture_filter_valid_ = valid;
     welcome_page_->setCaptureFilter(capture_filter);
     QString before_what(tr(" before starting a new capture"));
-    if (testCaptureFileClose(before_what)) {
+    if (tryClosingCaptureFile(before_what)) {
         // The interface tree will update the selected interfaces via its timer
         // so no need to do anything here.
         startCapture(QStringList());
@@ -1515,6 +1516,20 @@ void WiresharkMainWindow::reloadLuaPlugins()
     if (mainApp->isReloadingLua())
         return;
 
+    /*
+     * Don't reload while cf_read is in progress.  cf_read calls
+     * processEvents() via its progress dialog, and our deferred-reload
+     * QTimer can fire during those calls.  Performing cf_close/cf_reload
+     * while cf_read is still on the C call stack corrupts its state
+     * (e.g. frees cf->linktypes that cf_read still references).
+     * Re-schedule the reload so it runs once cf_read has finished.
+     */
+    if (capture_file_.capFile() &&
+        capture_file_.capFile()->state == FILE_READ_IN_PROGRESS) {
+        mainApp->reloadLuaPluginsDelayed();
+        return;
+    }
+
     bool uses_lua_filehandler = false;
 
     if (capture_file_.capFile()) {
@@ -1525,7 +1540,7 @@ void WiresharkMainWindow::reloadLuaPlugins()
         if (uses_lua_filehandler && cf->unsaved_changes) {
             // Prompt to save the file before reloading, in case the FileHandler has changed
             QString before_what(tr(" before reloading Lua plugins"));
-            if (!testCaptureFileClose(before_what, Reload)) {
+            if (!tryClosingCaptureFile(before_what, Reload)) {
                 return;
             }
         }
@@ -1533,7 +1548,14 @@ void WiresharkMainWindow::reloadLuaPlugins()
 
     mainApp->setReloadingLua(true);
 
-    wslua_reload_plugins(NULL, NULL, application_configuration_environment_prefix());
+    if (!wslua_reload_plugins(NULL, NULL, application_configuration_environment_prefix())) {
+        /* Reload was deferred because Lua code is currently executing.
+         * A deferred reload will be scheduled once the Lua call stack
+         * has unwound.  Keep isReloadingLua true to block further
+         * user-initiated reloads until the deferred reload completes. */
+        return;
+    }
+
     this->clearAddedPacketMenus();
     funnel_statistics_reload_menus();
     reloadDynamicMenus();
@@ -1557,6 +1579,11 @@ void WiresharkMainWindow::reloadLuaPlugins()
     } else {
         redissectPackets();
     }
+
+    /* Notify the Lua subsystem that the reload is fully complete,
+     * including cf_reload/redissect.  This must happen AFTER the
+     * file has been fully re-read. */
+    wslua_reload_done();
 
     mainApp->setReloadingLua(false);
     SimpleDialog::displayQueuedMessages();
@@ -1736,17 +1763,6 @@ void WiresharkMainWindow::openTapParameterDialog()
     openTapParameterDialog(cfg_str, NULL, NULL);
 }
 
-#if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
-void WiresharkMainWindow::softwareUpdateRequested() {
-    // testCaptureFileClose doesn't use this string because we aren't
-    // going to launch another dialog, but maybe we'll change that.
-    QString before_what(tr(" before updating"));
-    if (!testCaptureFileClose(before_what, Update)) {
-        mainApp->rejectSoftwareUpdate();
-    }
-}
-#endif
-
 // File Menu
 
 void WiresharkMainWindow::connectFileMenuActions()
@@ -1762,7 +1778,7 @@ void WiresharkMainWindow::connectFileMenuActions()
 
     connect(main_ui_->actionFileClose, &QAction::triggered, this, [this]() {
         QString before_what(tr(" before closing the file"));
-        if (testCaptureFileClose(before_what)) {
+        if (tryClosingCaptureFile(before_what)) {
             showWelcome();
         }
     });
@@ -1859,7 +1875,7 @@ void WiresharkMainWindow::exportPDU()
     // After exporting PDUs the current capture file is closed and the
     // exported file opened instead, so ask if there are unsaved frames.
     QString before_what(tr(" before exporting PDUs"));
-    if (!testCaptureFileClose(before_what, Export)) {
+    if (!tryClosingCaptureFile(before_what, Export)) {
         return;
     }
 
@@ -1883,7 +1899,7 @@ void WiresharkMainWindow::stripPacketHeaders()
     // After stripping headers the current capture file is closed and the
     // exported file opened instead, so ask if there are unsaved frames.
     QString before_what(tr(" before stripping headers"));
-    if (!testCaptureFileClose(before_what, Export)) {
+    if (!tryClosingCaptureFile(before_what, Export)) {
         return;
     }
 
@@ -2895,7 +2911,7 @@ void WiresharkMainWindow::reloadCaptureFileAsFormatOrCapture()
 
     if (cf->unsaved_changes) {
         QString before_what(tr(" before reloading the file"));
-        if (!testCaptureFileClose(before_what, Reload))
+        if (!tryClosingCaptureFile(before_what, Reload))
             return;
     }
 
@@ -2913,7 +2929,7 @@ void WiresharkMainWindow::reloadCaptureFile()
 
     if (cf->unsaved_changes) {
         QString before_what(tr(" before reloading the file"));
-        if (!testCaptureFileClose(before_what, Reload))
+        if (!tryClosingCaptureFile(before_what, Reload))
             return;
     }
 
@@ -3054,7 +3070,7 @@ void WiresharkMainWindow::connectCaptureMenuActions()
     connect(main_ui_->actionCaptureRestart, &QAction::triggered, this, [this]() {
         QString before_what(tr(" before restarting the capture"));
         cap_session_.capture_opts->restart = true;
-        if (!testCaptureFileClose(before_what, Restart)) {
+        if (!tryClosingCaptureFile(before_what, Restart)) {
             return;
         }
         startCapture(QStringList());
@@ -3095,7 +3111,7 @@ void WiresharkMainWindow::showCaptureOptionsDialog()
         connect(capture_options_dialog_, &CaptureOptionsDialog::captureFilterTextEdited,
                 this->welcome_page_, &WelcomePage::setCaptureFilterText);
         // Propagate selection changes from main UI to dialog.
-        connect(this->welcome_page_, &WelcomePage::interfacesChanged,
+        connect(this->welcome_page_->captureCard(), &CaptureCardWidget::interfacesChanged,
                 capture_options_dialog_, &CaptureOptionsDialog::interfaceSelected);
 
         connect(capture_options_dialog_, &CaptureOptionsDialog::setFilterValid,
@@ -3149,7 +3165,7 @@ void WiresharkMainWindow::startCaptureTriggered()
 
     /* XXX - will closing this remove a temporary file? */
     QString before_what(tr(" before starting a new capture"));
-    if (testCaptureFileClose(before_what)) {
+    if (tryClosingCaptureFile(before_what)) {
         startCapture(QStringList());
     } else {
         // simply clicking the button sets it to 'checked' even though we've
@@ -4043,13 +4059,6 @@ void WiresharkMainWindow::connectHelpMenuActions()
     connect(main_ui_->actionHelpReleaseNotes, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_WIRESHARK_RELEASE_NOTES); });
 }
 
-#ifdef HAVE_SOFTWARE_UPDATE
-void WiresharkMainWindow::checkForUpdates()
-{
-    software_update_check();
-}
-#endif
-
 void WiresharkMainWindow::setPreviousFocus() {
     previous_focus_ = mainApp->focusWidget();
     if (previous_focus_ != nullptr) {
@@ -4150,14 +4159,14 @@ void WiresharkMainWindow::extcap_options_finished(int result)
 {
     if (result == QDialog::Accepted) {
         QString before_what(tr(" before starting a new capture"));
-        if (testCaptureFileClose(before_what)) {
+        if (tryClosingCaptureFile(before_what)) {
             startCapture(QStringList());
         }
     }
     this->welcome_page_->getInterfaceFrame()->interfaceListChanged();
 }
 
-void WiresharkMainWindow::showExtcapOptionsDialog(QString &device_name, bool startCaptureOnClose)
+void WiresharkMainWindow::showExtcapOptionsDialog(QString device_name, bool startCaptureOnClose)
 {
     ExtcapOptionsDialog * extcap_options_dialog = ExtcapOptionsDialog::createForDevice(device_name, startCaptureOnClose, this);
     /* The dialog returns null, if the given device name is not a valid extcap device */

@@ -74,7 +74,6 @@
 #include "ui/commandline.h"
 #include "ui/capture_ui_utils.h"
 #include "ui/preference_utils.h"
-#include "ui/software_update.h"
 #include "ui/taps.h"
 #include "ui/plugins/include/uiqt_plugin.h"
 
@@ -89,6 +88,7 @@
 #include <ui/qt/widgets/splash_overlay.h>
 #include "ui/stratoshark/stratoshark_application.h"
 #include "ui/qt/utils/workspace_state.h"
+#include "ui/qt/utils/software_update.h"
 
 #include "capture/capture-pcap-util.h"
 
@@ -207,9 +207,9 @@ gather_wireshark_qt_compiled_info(feature_list l)
     without_feature(l, "QtMultimedia");
 #endif
 
-    const char *update_info = software_update_info();
-    if (update_info) {
-        with_feature(l, "automatic updates using %s", update_info);
+    QString update_info = SoftwareUpdate::info();
+    if (!update_info.isEmpty()) {
+        with_feature(l, "automatic updates using %s", update_info.toUtf8().constData());
     } else {
         without_feature(l, "automatic updates");
     }
@@ -827,7 +827,7 @@ int main(int argc, char *qt_argv[])
     ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Calling extcap_register_preferences, elapsed time %" PRIu64 " us \n", g_get_monotonic_time() - start_time);
 #endif
     splash_update(RA_EXTCAP, NULL, NULL);
-    extcap_register_preferences();
+    extcap_register_preferences(splash_update, NULL);
 
     /* Apply the extcap command line options now that the extcap preferences
      * are loaded.
@@ -982,7 +982,7 @@ int main(int argc, char *qt_argv[])
         g_free(err_msg);
     }
 
-    ssApp->allSystemsGo(application_flavor_name_proper(), STRATOSHARK_VERSION);
+    ssApp->allSystemsGo();
     ws_log(LOG_DOMAIN_MAIN, LOG_LEVEL_INFO, "Stratoshark is up and ready to go, elapsed time %.3fs", (float) (g_get_monotonic_time() - start_time) / 1000000);
     SimpleDialog::displayQueuedMessages(main_w);
 

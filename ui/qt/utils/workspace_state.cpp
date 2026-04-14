@@ -264,3 +264,42 @@ void WorkspaceState::onFileStatusChecked(const QString &filename, qint64 size, b
         }
     }
 }
+
+bool WorkspaceState::isDevelopmentBuild()
+{
+    // VERSION_FLAVOR is always defined in config.h — it is set to
+    // "Development Build" by default and to an empty string for
+    // release builds (via the WIRESHARK_VERSION_FLAVOR env var).
+    return strlen(VERSION_FLAVOR) > 0;
+}
+
+bool WorkspaceState::isPortableApplication()
+{
+#ifdef Q_OS_WIN
+
+    /* Check whether Wireshark is being run from a PortableApps directory layout.
+    *
+    * PortableApps installs applications in a structure where the application
+    * directory sits inside an "App" folder, with an "AppInfo" directory alongside.
+    * For Wireshark, the layout is:
+    *   PortableApps/Wireshark/App/Wireshark/ (where wireshark.exe resides)
+    *   PortableApps/Wireshark/AppInfo/ (exists alongside the App folder)
+    *
+    * This function checks for the existence of the AppInfo directory to identify
+    * a PortableApps installation.
+    *
+    * Returns true if running from a PortableApps layout, false otherwise.
+    */
+    QString appDir = QCoreApplication::applicationDirPath();
+    QDir parentDir(appDir);
+
+    if (!parentDir.cdUp()) {
+            return false;
+    }
+
+    QString appInfoDir = parentDir.filePath("AppInfo");
+    return QDir(appInfoDir).exists();
+#else
+    return false; // Portable mode is only supported on Windows
+#endif
+}

@@ -26,7 +26,8 @@
 						"default": { "$ref": "#/$defs/colorPair" },
 						"events": { "$ref": "#/$defs/colorPair" },
 						"sponsorship": { "$ref": "#/$defs/colorPair" },
-						"tips": { "$ref": "#/$defs/colorPair" }
+						"tips": { "$ref": "#/$defs/colorPair" },
+						"seasonal": { "$ref": "#/$defs/colorPair" }
 					},
 					"additionalProperties": false
 				},
@@ -34,6 +35,7 @@
 					"type": "object",
 					"description": "Per-type display configuration.",
 					"properties": {
+						"seasonal": { "$ref": "#/$defs/typeConfig" },
 						"events": { "$ref": "#/$defs/typeConfig" },
 						"sponsorship": { "$ref": "#/$defs/typeConfig" },
 						"tips": { "$ref": "#/$defs/typeConfig" }
@@ -64,6 +66,20 @@
 					"type": "string",
 					"pattern": "^#[0-9a-fA-F]{6}$",
 					"description": "Gradient end color in #RRGGBB hex format."
+				},
+				"degrees": {
+					"type": "integer",
+					"minimum": 0,
+					"maximum": 360,
+					"description": "Optional gradient angle in degrees."
+				},
+				"steps": {
+					"type": "array",
+					"items": {
+						"type": "string",
+						"pattern": "^#[0-9a-fA-F]{6}$"
+					},
+					"description": "Optional array of intermediate gradient color stops in #RRGGBB hex format."
 				}
 			},
 			"required": ["start", "end"],
@@ -103,7 +119,7 @@
 			"properties": {
 				"type": {
 					"type": "string",
-					"enum": ["events", "sponsorship", "tips"],
+					"enum": ["events", "sponsorship", "tips", "seasonal"],
 					"description": "Slide category. Determines color scheme and grouping."
 				},
 				"tag": {
@@ -138,6 +154,23 @@
 				"image": {
 					"type": "string",
 					"description": "Banner image filename, resolved under :/json/banners/ at runtime."
+				},
+				"date_month": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 12,
+					"description": "For seasonal slides: month (1-12) when the slide should be shown."
+				},
+				"date_day": {
+					"type": "integer",
+					"minimum": 1,
+					"maximum": 31,
+					"description": "For seasonal slides: day of month (1-31) when the slide should be shown."
+				},
+				"application": {
+					"type": "string",
+					"enum": ["wireshark", "stratoshark"],
+					"description": "Optional application filter ('wireshark' or 'stratoshark'). Slide is only shown when the specified application is active."
 				},
 				"date_from": {
 					"type": "string",

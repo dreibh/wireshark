@@ -99,6 +99,8 @@ InterfaceFrame::InterfaceFrame(QWidget * parent)
     ifTypeDescription.insert(IF_USB, tr("USB"));
     ifTypeDescription.insert(IF_EXTCAP, tr("External Capture"));
     ifTypeDescription.insert(IF_VIRTUAL, tr ("Virtual"));
+    ifTypeDescription.insert(IF_TUNNEL, tr ("Tunnel Interfaces"));
+    ifTypeDescription.insert(IF_LOOPBACK, tr ("Loopback Devices"));
 
     QList<InterfaceTreeColumns> columns;
     columns.append(IFTREE_COL_EXTCAP);

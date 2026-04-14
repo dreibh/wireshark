@@ -10650,6 +10650,12 @@ dissect_dsrc_app_VehicleWeightLimits(tvbuff_t *tvb _U_, uint32_t offset _U_, asn
 
 /* --- Module ETSI-ITS-DSRC --- --- ---                                       */
 
+/*--- Cyclic dependencies ---*/
+
+/* RegionalExtension/regExtValue -> RegionalExtension/regExtValue */
+static unsigned dissect_dsrc_T_regExtValue(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+
 
 static const value_string dsrc_RegionId_vals[] = {
   { noRegion, "noRegion" },
@@ -10672,8 +10678,11 @@ dissect_dsrc_RegionId(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _
 
 static unsigned
 dissect_dsrc_T_regExtValue(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // RegionalExtension/regExtValue -> RegionalExtension/regExtValue
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset = dissect_per_open_type_pdu_new(tvb, offset, actx, tree, hf_index, dissect_regextval_pdu);
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 
@@ -15583,13 +15592,11 @@ static const per_sequence_t gdd_GddStructure_sequence[] = {
 static unsigned
 dissect_gdd_GddStructure(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
   // GddStructure -> GddAttributes -> GddAttributes/_item -> InternationalSign-destinationInformation -> InternationalSign-destinationInformation/ioList -> DestinationInformationIO -> DestinationInformationIO/destPlace -> DestinationPlace -> GddStructure
-  actx->pinfo->dissection_depth += 8;
-  increment_dissection_depth(actx->pinfo);
+  increment_dissection_depth_by_n(actx->pinfo, 8);
   offset = dissect_per_sequence(tvb, offset, actx, tree, hf_index,
                                    ett_gdd_GddStructure, gdd_GddStructure_sequence);
 
-  actx->pinfo->dissection_depth -= 8;
-  decrement_dissection_depth(actx->pinfo);
+  decrement_dissection_depth_by_n(actx->pinfo, 8);
   return offset;
 }
 
@@ -22212,6 +22219,12 @@ static int dissect_cpmv1_CollectivePerceptionMessagev1_PDU(tvbuff_t *tvb _U_, pa
 
 /* --- Module CPM-PDU-Descriptions --- --- ---                                */
 
+/*--- Cyclic dependencies ---*/
+
+/* WrappedCpmContainer/containerData -> WrappedCpmContainer/containerData */
+static unsigned dissect_cpm_T_containerData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_);
+
+
 
 static const per_sequence_t cpm_MessageRateRange_sequence[] = {
   { &hf_cpm_messageRateMin  , ASN1_NO_EXTENSIONS     , ASN1_NOT_OPTIONAL, dissect_its_MessageRateHz },
@@ -22272,8 +22285,11 @@ dissect_cpm_CpmContainerId(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *a
 
 static unsigned
 dissect_cpm_T_containerData(tvbuff_t *tvb _U_, uint32_t offset _U_, asn1_ctx_t *actx _U_, proto_tree *tree _U_, int hf_index _U_) {
+  // WrappedCpmContainer/containerData -> WrappedCpmContainer/containerData
+  increment_dissection_depth_by_n(actx->pinfo, 1);
   offset = dissect_per_open_type_pdu_new(tvb, offset, actx, tree, hf_index, dissect_cpmcontainers_pdu);
 
+  decrement_dissection_depth_by_n(actx->pinfo, 1);
   return offset;
 }
 

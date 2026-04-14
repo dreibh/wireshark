@@ -5763,7 +5763,10 @@ static bool trel_key_derivation_func(/*ieee802154_packet* packet*/ unsigned char
     GByteArray* bytes;
     bytes = g_byte_array_new();
     bool res = hex_str_to_bytes(uat_key->pref_key, bytes, false);
-    if (!res) return false;
+    if (!res) {
+        g_byte_array_unref(bytes);
+        return false;
+    }
 
     uint8_t saltstring[] = { 'T', 'h', 'r', 'e', 'a', 'd', 'S', 'e', 'q', 'u', 'e', 'n', 'c', 'e', 'M', 'a', 's', 't', 'e', 'r', 'K', 'e', 'y' };
     uint8_t info_str[] = { 'T', 'h', 'r', 'e', 'a', 'd', 'O', 'v', 'e','r', 'I', 'n', 'f', 'r', 'a', 'K', 'e', 'y' };
@@ -5775,6 +5778,7 @@ static bool trel_key_derivation_func(/*ieee802154_packet* packet*/ unsigned char
     salt[3] = (Key_sequence >> 0) & 0xff;
 
     memcpy(ikm, bytes->data, 16);
+    g_byte_array_unref(bytes);
     memcpy(salt + sizeof(uint32_t), saltstring, sizeof(saltstring));
 
     err = hkdf_extract(GCRY_MD_SHA256, salt, sizeof(salt), ikm, sizeof(ikm), prk);

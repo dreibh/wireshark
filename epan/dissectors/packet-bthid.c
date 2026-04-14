@@ -183,8 +183,7 @@ dissect_bthid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
     }
 
     pitem = proto_tree_add_item_ret_uint(bthid_tree, hf_bthid_transaction_type, tvb, offset, 1, ENC_BIG_ENDIAN, &transaction_type);
-    parameter = transaction_type & 0x0F;
-    transaction_type = transaction_type >> 4;
+    parameter = tvb_get_uint8(tvb, offset) & 0x0F;
 
     col_append_str(pinfo->cinfo, COL_INFO, val_to_str_const(transaction_type, transaction_type_vals, "Unknown TransactionType"));
 
@@ -265,8 +264,7 @@ dissect_bthid(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U
             proto_tree_add_item(bthid_tree, hf_bthid_parameter_reserved, tvb, offset, 1, ENC_BIG_ENDIAN);
             offset += 1;
 
-            pitem = proto_tree_add_item(bthid_tree, hf_bthid_idle_rate, tvb, offset, 1, ENC_BIG_ENDIAN);
-            idle_rate = tvb_get_uint8(tvb, offset);
+            pitem = proto_tree_add_item_ret_uint(bthid_tree, hf_bthid_idle_rate, tvb, offset, 1, ENC_BIG_ENDIAN, &idle_rate);
             proto_item_append_text(pitem, " (%u.%03u ms)", idle_rate * 4 / 1000, idle_rate * 4 % 1000);
             col_append_fstr(pinfo->cinfo, COL_INFO, " - Idle Rate: %u.%03u ms", idle_rate*4/1000, idle_rate*4%1000);
             offset += 1;

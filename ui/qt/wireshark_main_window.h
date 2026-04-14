@@ -133,6 +133,8 @@ protected:
     void changeEvent(QEvent* event) override;
     void openRecentCaptureFile(const QString &filename) override;
 
+    bool tryClosingCaptureFile(QString before_what, FileCloseContext context = Default) override;
+
 private:
     // XXX Move to FilterUtils
     enum MatchSelected {
@@ -142,15 +144,6 @@ private:
         MatchSelectedNot,
         MatchSelectedAndNot,
         MatchSelectedOrNot
-    };
-
-    enum FileCloseContext {
-        Default,
-        Quit,
-        Restart,
-        Reload,
-        Update,
-        Export
     };
 
     Ui::WiresharkMainWindow *main_ui_;
@@ -182,10 +175,6 @@ private:
     info_data_t info_data_;
 #endif
 
-#ifdef HAVE_SOFTWARE_UPDATE
-    QAction *update_action_;
-#endif
-
     QPoint dragStartPosition;
 
     QPointer<TLSKeylogDialog> tlskeylog_dialog_;
@@ -203,7 +192,6 @@ private:
 #ifdef Q_OS_WIN
     void fileAddExtension(QString &file_name, int file_type, ws_compression_type compression_type);
 #endif // Q_OS_WIN
-    bool testCaptureFileClose(QString before_what, FileCloseContext context = Default);
     void captureStop(bool discard = false);
 
     void initMainToolbarIcons();
@@ -294,8 +282,13 @@ public slots:
     void launchRLCGraph(bool channelKnown, uint8_t RAT, uint16_t ueid, uint8_t rlcMode,
                         uint16_t channelType, uint16_t channelId, uint8_t direction);
 
+#ifdef HAVE_LUA
+    void openLuaDebuggerDialog();
+#endif
+
     void rtpPlayerDialogReplaceRtpStreams(QVector<rtpstream_id_t *> stream_ids);
     void rtpPlayerDialogAddRtpStreams(QVector<rtpstream_id_t *> stream_ids);
+
     void rtpPlayerDialogRemoveRtpStreams(QVector<rtpstream_id_t *> stream_ids);
     void rtpAnalysisDialogReplaceRtpStreams(QVector<rtpstream_id_t *> stream_ids);
     void rtpAnalysisDialogAddRtpStreams(QVector<rtpstream_id_t *> stream_ids);
@@ -383,10 +376,6 @@ private slots:
     void openTapParameterDialog(const QString cfg_str, const QString arg, void *userdata);
     void openTapParameterDialog();
 
-#if defined(HAVE_SOFTWARE_UPDATE) && defined(Q_OS_WIN)
-    void softwareUpdateRequested();
-#endif
-
     // If you're manually connecting a signal to a slot, don't prefix its name
     // with "on_". Otherwise you'll get runtime warnings.
 
@@ -453,10 +442,6 @@ private slots:
 
     void connectHelpMenuActions();
 
-#ifdef HAVE_SOFTWARE_UPDATE
-    void checkForUpdates();
-#endif
-
     void goToCancelClicked();
     void goToGoClicked();
     void goToLineEditReturnPressed();
@@ -502,7 +487,7 @@ private slots:
     void on_actionContextFilterFieldReference_triggered();
 
     void extcap_options_finished(int result);
-    void showExtcapOptionsDialog(QString & device_name, bool startCaptureOnClose);
+    void showExtcapOptionsDialog(QString device_name, bool startCaptureOnClose);
 
     QString findRtpStreams(QVector<rtpstream_id_t *> *stream_ids, bool reverse);
 

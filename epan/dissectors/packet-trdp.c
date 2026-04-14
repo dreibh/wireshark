@@ -144,23 +144,23 @@ typedef enum {
  */
 
 typedef struct collectedParameter{
-    const char* ifName; /* info, interface name from bus-def */
-    const char* hostIp; /* as defined in xml, should be identical to captured packet */
-    const char* leadIp; /* leader ip, if this is the follower declaration */
+    char* ifName; /* info, interface name from bus-def */
+    char* hostIp; /* as defined in xml, should be identical to captured packet */
+    char* leadIp; /* leader ip, if this is the follower declaration */
 /* time-monitoring not yet implemented */
-    const char* pdComTo;
-    const char* mdComConfirmTo;
-    const char* mdComReplyTo;
-    const char* pdTo;   /* pd timeout in µs */
-    const char* cycle;  /* pd transmission cycle */
-    const char* mdConfirmTo; /* md confirmation timeout in µs */
-    const char* mdReplyTo; /* md reply timeout in µs */
+    char* pdComTo;
+    char* mdComConfirmTo;
+    char* mdComReplyTo;
+    char* pdTo;   /* pd timeout in µs */
+    char* cycle;  /* pd transmission cycle */
+    char* mdConfirmTo; /* md confirmation timeout in µs */
+    char* mdReplyTo; /* md reply timeout in µs */
 /* */
-    const char* uri;    /* dst: destination uri, !dst: if set filter for source uri */
-    const char* smi;    /* SMI of telegram */
-    const char* udv;    /* userdata version 0<udv<256, in the packet udv=1 -> 0x0100 --BE-> 00 01 */
-    const char* uri2;   /* !dst-only, filter for redundancy device */
-    const char* smi2;   /* !dst-only, SMI for message from follower */
+    char* uri;    /* dst: destination uri, !dst: if set filter for source uri */
+    char* smi;    /* SMI of telegram */
+    char* udv;    /* userdata version 0<udv<256, in the packet udv=1 -> 0x0100 --BE-> 00 01 */
+    char* uri2;   /* !dst-only, filter for redundancy device */
+    char* smi2;   /* !dst-only, SMI for message from follower */
 } XMLCollectedPar;
 
 /* Assistant type to cater the type duality of a BITSET8 */
@@ -188,7 +188,7 @@ typedef struct Element {
 
     ElementType type; /**< Numeric type of the variable (see Usermanual, chapter 4.2) or defined at ::TRDP_BOOL8, ::TRDP_UINT8, ::TRDP_UINT16 and so on, and its typeName[1..30]*/
 
-    int32_t     array_size; /**< Amount this value occurred. 1 is default; 0 indicates a dynamic list (the dynamic list is preceeded by an integer revealing the actual size.) */
+    int32_t     array_size; /**< Amount this value occurred. 1 is default; 0 indicates a dynamic list (the dynamic list is preceded by an integer revealing the actual size.) */
     double      scale;      /**< A factor the given value is scaled */
     int32_t     offset;     /**< Offset that is added to the values. displayed value = scale * raw value + offset */
 
@@ -263,7 +263,7 @@ typedef struct TrdpXmlContext {
     bool        isShippedXml; /**< mark datasets when shipped to be displayed accordingly */
     GError**    error;
 
-    xmlTextReader* reader;    /**< will be aquired on first call and reused */
+    xmlTextReader* reader;    /**< will be acquired on first call and reused */
 } TrdpXmlContext;
 
 /** @struct TrdpDict
@@ -272,7 +272,7 @@ typedef struct TrdpXmlContext {
  *
  *  The old QtXML-based application used hash-tables instead of lists.
  *  GLib offers GHashTable as an alternative.
- *  However, once the structure is built, there are not that many look-ups, since Datasets and Elemnts are directly linked.
+ *  However, once the structure is built, there are not that many look-ups, since Datasets and Elements are directly linked.
  *  Only in case of large ComId databases, this would become relevant again. Mañana, mañana ...
  */
 typedef struct TrdpDict {
@@ -345,6 +345,7 @@ static void TrdpDict_delete(TrdpDict* self, int parent_id);
 static void Element_delete(Element* self);
 static void Dataset_delete(Dataset* self, int parent_id);
 static void ComId_delete(ComId* self);
+static void XMLCollectedPar_delete(XMLCollectedPar* self);
 
 /*******************************************************************************
  * type lookup handler
@@ -441,16 +442,26 @@ static void XML_translate_element(TrdpDict* self, xmlNode* node, unsigned int* c
 
     if (node) {
 
+        xmlChar *type = xmlGetProp(node, (const xmlChar *)"type");
+        xmlChar *name = xmlGetProp(node, (const xmlChar *)"name");
+        xmlChar *unit = xmlGetProp(node, (const xmlChar *)"unit");
+        xmlChar *array_size = xmlGetProp(node, (const xmlChar *)"array-size");
+        xmlChar *scale = xmlGetProp(node, (const xmlChar *)"scale");
+        xmlChar *offset = xmlGetProp(node, (const xmlChar *)"offset");
+        xmlChar *bits = xmlGetProp(node, (const xmlChar *)"bits");
         Element* el = Element_new(
-            (const char*)xmlGetProp(node, (const xmlChar *)"type"),
-            (const char*)xmlGetProp(node, (const xmlChar *)"name"),
-            (const char*)xmlGetProp(node, (const xmlChar *)"unit"),
-            (const char*)xmlGetProp(node, (const xmlChar *)"array-size"),
-            (const char*)xmlGetProp(node, (const xmlChar *)"scale"),
-            (const char*)xmlGetProp(node, (const xmlChar *)"offset"),
-            (const char*)xmlGetProp(node, (const xmlChar *)"bits"),
+            (const char*)type, (const char*)name, (const char*)unit, (const char*)array_size,
+            (const char*)scale, (const char*)offset, (const char*)bits,
             ++(*cnt),
             &err);
+
+        xmlFree(type);
+        xmlFree(name);
+        xmlFree(unit);
+        xmlFree(array_size);
+        xmlFree(scale);
+        xmlFree(offset);
+        xmlFree(bits);
 
         if (el) {
             /* update the element in the list */
@@ -463,11 +474,11 @@ static void XML_translate_element(TrdpDict* self, xmlNode* node, unsigned int* c
             /* read additional bit-elements, do it inline here */
             xmlNode* bit = xmlFirstElementChild(node);
             while (bit && !err) {
-                Element_add_bit(
-                    el,
-                    (const char*)xmlGetProp(bit, (const xmlChar *)"name"),
-                    (const char*)xmlGetProp(bit, (const xmlChar *)"position"),
-                    -1, &err);
+                char* bit_name = (char*)xmlGetProp(bit, (const xmlChar*)"name");
+                char* position = (char*)xmlGetProp(bit, (const xmlChar*)"position");
+                Element_add_bit(el, bit_name, position, -1, &err);
+                xmlFree(bit_name);
+                xmlFree(position);
 
                 bit = xmlNextElementSibling(bit);
             }
@@ -481,11 +492,14 @@ static void XML_translate_dataset(TrdpDict* self, xmlNode* node, GError** error)
     unsigned int element_cnt = 0;
 
     if (node) {
+        xmlChar* id = xmlGetProp(node, (const xmlChar *)"id");
+        xmlChar* name = xmlGetProp(node, (const xmlChar *)"name");
         Dataset* ds = Dataset_new(
-            (const char*)xmlGetProp(node, (const xmlChar *)"id"),
-            (const char*)xmlGetProp(node, (const xmlChar *)"name"),
+            (const char*)id, (const char*)name,
             self->parseCtx.isShippedXml ? NULL : self->parseCtx.currentFile,
             &err);
+        xmlFree(id);
+        xmlFree(name);
 
         if (ds) {
             ds->next = self->mTableDataset;
@@ -532,14 +546,19 @@ static void XML_translate_com_connection(TrdpDict* self, ComId* com, xmlNode* no
         return;
     }
 
-    par->uri  = (const char*)xmlGetProp(node, (const xmlChar *)(dst?"uri":"uri1"));
-    par->uri2 = (const char*)(dst ? xmlGetProp(node, (const xmlChar *)"uri2") : NULL);
+    xmlFree(par->uri);
+    xmlFree(par->uri2);
+    par->uri  = (char*)xmlGetProp(node, (const xmlChar *)(dst?"uri":"uri1"));
+    par->uri2 = (char*)(dst ? xmlGetProp(node, (const xmlChar *)"uri2") : NULL);
 
     xmlNode* sdt_par = xmlFirstElementChild(node);
+    xmlFree(par->smi);
+    xmlFree(par->smi2);
+    xmlFree(par->udv);
     if (sdt_par && (0==xmlStrcmp(sdt_par->name, (const xmlChar *)"sdt-parameter"))) {
-        par->smi  = (const char*)xmlGetProp(sdt_par, (const xmlChar *)"smi1");
-        par->smi2 = (const char*)xmlGetProp(sdt_par, (const xmlChar *)"smi2");
-        par->udv  = (const char*)xmlGetProp(sdt_par, (const xmlChar *)"udv");
+        par->smi  = (char*)xmlGetProp(sdt_par, (const xmlChar *)"smi1");
+        par->smi2 = (char*)xmlGetProp(sdt_par, (const xmlChar *)"smi2");
+        par->udv  = (char*)xmlGetProp(sdt_par, (const xmlChar *)"udv");
     } else {
         par->smi=NULL;
         par->smi2=NULL;
@@ -550,19 +569,25 @@ static void XML_translate_com_connection(TrdpDict* self, ComId* com, xmlNode* no
         return;
     }
 
-    ComId_connection_parse(com, (const char*)xmlGetProp(node, (const xmlChar *)"name"), dst, par, error);
+    char* name = (char*)xmlGetProp(node, (const xmlChar*)"name");
+    ComId_connection_parse(com, name, dst, par, error);
+    xmlFree(name);
 }
 
 static void XML_translate_com(TrdpDict* self, xmlNode* node, XMLCollectedPar* par, GError** error) {
     GError* err=NULL;
 
     if (node) {
+        xmlChar *com_id = xmlGetProp(node, (const xmlChar *)"com-id");
+        xmlChar *name = xmlGetProp(node, (const xmlChar *)"name");
+        xmlChar *data_set_id = xmlGetProp(node, (const xmlChar *)"data-set-id");
         ComId* com = ComId_new(
-            (const char*)xmlGetProp(node, (const xmlChar *)"com-id"),
-            (const char*)xmlGetProp(node, (const xmlChar *)"name"),
-            (const char*)xmlGetProp(node, (const xmlChar *)"data-set-id"),
+            (char*)com_id, (char*)name, (char*)data_set_id,
             self->parseCtx.currentFile,
             &err);
+        xmlFree(com_id);
+        xmlFree(name);
+        xmlFree(data_set_id);
 
         if (com && !err) {
 
@@ -582,21 +607,41 @@ static void XML_translate_com(TrdpDict* self, xmlNode* node, XMLCollectedPar* pa
 
             xmlNode* compar = xmlFirstElementChild(node);
             while (compar && !err) {
-                const char* s;
+                char* s;
                 if (0==xmlStrcmp(compar->name, (const xmlChar *)"pd-parameter")) {
-                    if ((s = (const char*)xmlGetProp(compar, (const xmlChar *)"timeout"))) {
-                        if (!par->pdTo       ) par->pdTo        = s; else g_set_error(&err, q_xml, XML_INVALID_CONTENT, "Extra pd-parameter element.");
+                    if ((s = (char*)xmlGetProp(compar, (const xmlChar *)"timeout"))) {
+                        if (!par->pdTo       ) {
+                            par->pdTo        = s;
+                        } else {
+                            g_set_error(&err, q_xml, XML_INVALID_CONTENT, "Extra pd-parameter element.");
+                            xmlFree(s);
+                        }
                     }
-                    if ((s = (const char*)xmlGetProp(compar, (const xmlChar *)"cycle"))) {
-                        if (!par->cycle      ) par->cycle       = s; else g_set_error(&err, q_xml, XML_INVALID_CONTENT, "Extra pd-parameter element.");
+                    if ((s = (char*)xmlGetProp(compar, (const xmlChar *)"cycle"))) {
+                        if (!par->cycle      ) {
+                            par->cycle       = s;
+                        } else {
+                            g_set_error(&err, q_xml, XML_INVALID_CONTENT, "Extra pd-parameter element.");
+                            xmlFree(s);
+                        }
                     }
                 }
                 if (0==xmlStrcmp(compar->name, (const xmlChar *)"md-parameter")) {
-                    if ((s = (const char*)xmlGetProp(compar, (const xmlChar *)"confirm-timeout"))) {
-                        if (!par->mdConfirmTo) par->mdConfirmTo = s; else g_set_error(&err, q_xml, XML_INVALID_CONTENT, "Extra md-parameter element.");
+                    if ((s = (char*)xmlGetProp(compar, (const xmlChar *)"confirm-timeout"))) {
+                        if (!par->mdConfirmTo) {
+                            par->mdConfirmTo = s;
+                        } else {
+                            g_set_error(&err, q_xml, XML_INVALID_CONTENT, "Extra md-parameter element.");
+                            xmlFree(s);
+                        }
                     }
-                    if ((s = (const char*)xmlGetProp(compar, (const xmlChar *)"reply-timeout"))) {
-                        if (!par->mdReplyTo  ) par->mdReplyTo   = s; else g_set_error(&err, q_xml, XML_INVALID_CONTENT, "Extra md-parameter element.");
+                    if ((s = (char*)xmlGetProp(compar, (const xmlChar *)"reply-timeout"))) {
+                        if (!par->mdReplyTo  ) {
+                            par->mdReplyTo   = s;
+                        } else {
+                            g_set_error(&err, q_xml, XML_INVALID_CONTENT, "Extra md-parameter element.");
+                            xmlFree(s);
+                        }
                     }
                 }
                 compar = xmlNextElementSibling(compar);
@@ -612,9 +657,17 @@ static void XML_translate_com(TrdpDict* self, xmlNode* node, XMLCollectedPar* pa
                 srcdst = xmlNextElementSibling(srcdst);
             }
 
-            par->pdTo = NULL;
+            xmlFree(par->cycle);
             par->cycle = NULL;
+            /* Don't free anything that is a shallow copy of another param */
+            if (par->pdTo != par->pdComTo)
+                xmlFree(par->pdTo);
+            par->pdTo = NULL;
+            if (par->mdConfirmTo != par->mdComConfirmTo)
+                xmlFree(par->mdConfirmTo);
             par->mdConfirmTo = NULL;
+            if (par->mdReplyTo != par->mdComReplyTo)
+                xmlFree(par->mdReplyTo);
             par->mdReplyTo = NULL;
         }
         if (err) g_propagate_error(error, err);
@@ -630,25 +683,40 @@ static void XML_translate(TrdpDict* self, xmlDoc* doc, GError** error) {
             xmlNode* busInterface = xmlFirstElementChild(node);
             while (busInterface && !*error) {
                 XMLCollectedPar par = {
-                    .ifName = (const char*)xmlGetProp(busInterface, (const xmlChar *)"name"),
-                    .hostIp = (const char*)xmlGetProp(busInterface, (const xmlChar *)"host-ip"),
-                    .leadIp = (const char*)xmlGetProp(busInterface, (const xmlChar *)"leader-ip"),
+                    .ifName = (char*)xmlGetProp(busInterface, (const xmlChar *)"name"),
+                    .hostIp = (char*)xmlGetProp(busInterface, (const xmlChar *)"host-ip"),
+                    .leadIp = (char*)xmlGetProp(busInterface, (const xmlChar *)"leader-ip"),
                     NULL,};
 
                 xmlNode* comParam = xmlFirstElementChild(busInterface);
                 while (comParam && !*error) {
-                    const char* s;
+                    char* s;
                     if (0==xmlStrcmp(comParam->name, (const xmlChar *)"pd-com-parameter")) {
-                        if ((s = (const char*)xmlGetProp(comParam, (const xmlChar *)"timeout-value"))) {
-                            if (!par.pdComTo       ) par.pdComTo        = s; else g_set_error(error, q_xml, XML_INVALID_CONTENT, "Extra pd-com-parameter element.");
+                        if ((s = (char*)xmlGetProp(comParam, (const xmlChar *)"timeout-value"))) {
+                            if (!par.pdComTo) {
+                                par.pdComTo        = s;
+                            } else {
+                                g_set_error(error, q_xml, XML_INVALID_CONTENT, "Extra pd-com-parameter element.");
+                                xmlFree(s);
+                            }
                         }
                     }
                     if (0==xmlStrcmp(comParam->name, (const xmlChar *)"md-com-parameter")) {
-                        if ((s = (const char*)xmlGetProp(comParam, (const xmlChar *)"confirm-timeout"))) {
-                            if (!par.mdComConfirmTo) par.mdComConfirmTo = s; else g_set_error(error, q_xml, XML_INVALID_CONTENT, "Extra md-com-parameter element.");
+                        if ((s = (char*)xmlGetProp(comParam, (const xmlChar *)"confirm-timeout"))) {
+                            if (!par.mdComConfirmTo) {
+                                par.mdComConfirmTo = s;
+                            } else {
+                                g_set_error(error, q_xml, XML_INVALID_CONTENT, "Extra md-com-parameter element.");
+                                xmlFree(s);
+                            }
                         }
-                        if ((s = (const char*)xmlGetProp(comParam, (const xmlChar *)"reply-timeout"))) {
-                            if (!par.mdComReplyTo  ) par.mdComReplyTo   = s; else g_set_error(error, q_xml, XML_INVALID_CONTENT, "Extra md-com-parameter element.");
+                        if ((s = (char*)xmlGetProp(comParam, (const xmlChar *)"reply-timeout"))) {
+                            if (!par.mdComReplyTo) {
+                                par.mdComReplyTo   = s;
+                            } else {
+                                g_set_error(error, q_xml, XML_INVALID_CONTENT, "Extra md-com-parameter element.");
+                                xmlFree(s);
+                            }
                         }
                     }
                     comParam = xmlNextElementSibling(comParam);
@@ -663,6 +731,7 @@ static void XML_translate(TrdpDict* self, xmlDoc* doc, GError** error) {
                 }
 
                 busInterface = xmlNextElementSibling(busInterface);
+                XMLCollectedPar_delete(&par);
             }
         } else if (0==xmlStrcmp(node->name, (const xmlChar *)"data-set-list")) {
             xmlNode* dataSet = xmlFirstElementChild(node);
@@ -997,7 +1066,6 @@ static Element* Element_new(const char* _type, const char* _name, const char* _u
                             const char* _scale, const char* _offset, const char* _bitnames,
                             unsigned int cnt, GError** error)
 {
-
     gdouble scale;
     int32_t offset;
     int32_t array_size;
@@ -1557,6 +1625,27 @@ static bool ComId_assert_SSC(ComId* self, const packet_info* pinfo, uint32_t ssc
     con->sequence = ssc;
 
     return TRUE;
+}
+
+static void XMLCollectedPar_delete(XMLCollectedPar* self) {
+
+    if (self) {
+        xmlFree(self->ifName);
+        xmlFree(self->hostIp);
+        xmlFree(self->leadIp);
+        xmlFree(self->pdComTo);
+        xmlFree(self->mdComConfirmTo);
+        xmlFree(self->mdComReplyTo);
+        xmlFree(self->pdTo);
+        xmlFree(self->cycle);
+        xmlFree(self->mdConfirmTo);
+        xmlFree(self->mdReplyTo);
+        xmlFree(self->uri);
+        xmlFree(self->smi);
+        xmlFree(self->udv);
+        xmlFree(self->uri2);
+        xmlFree(self->smi2);
+    }
 }
 
 /*****************************************************************************
@@ -2209,8 +2298,7 @@ static uint32_t build_trdp_tree(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
         proto_tree_add_item(trdp_tree, hf_trdp_comid,            tvb, TRDP_HEADER_OFFSET_COMID, 4, ENC_BIG_ENDIAN);
         proto_tree_add_item(trdp_tree, hf_trdp_etb_topocount,    tvb, TRDP_HEADER_OFFSET_ETB_TOPOCNT, 4, ENC_BIG_ENDIAN);
         proto_tree_add_item(trdp_tree, hf_trdp_op_trn_topocount, tvb, TRDP_HEADER_OFFSET_OP_TRN_TOPOCNT, 4, ENC_BIG_ENDIAN);
-        proto_tree_add_item(trdp_tree, hf_trdp_datasetlength,    tvb, TRDP_HEADER_OFFSET_DATASETLENGTH, 4, ENC_BIG_ENDIAN);
-        datasetlength = tvb_get_ntohl(tvb, TRDP_HEADER_OFFSET_DATASETLENGTH);
+        proto_tree_add_item_ret_uint(trdp_tree, hf_trdp_datasetlength,    tvb, TRDP_HEADER_OFFSET_DATASETLENGTH, 4, ENC_BIG_ENDIAN, &datasetlength);
     } else {
         expert_add_info_format(pinfo, tree, &ei_trdp_packet_small, "Packet too small for header information");
     }
@@ -2392,7 +2480,7 @@ static void add_reg_info(int *hf_ptr, const char *name, const char *abbrev, enum
 static void Element_add_reg_info(Element* el, const char* parentName) {
     char *name;
     char *abbrev;
-    const char *blurb;
+    char *blurb;
     int *pett_id = &el->ett_id;
 
     name = wmem_strdup(NULL, el->name);
@@ -2427,6 +2515,7 @@ static void Element_add_reg_info(Element* el, const char* parentName) {
                         }
                     }
                 }
+                wmem_free(NULL, blurb);
                 add_reg_info(&el->hf_id, name, abbrev, FT_UINT8, BASE_HEX, 0, NULL);
             } else {
                 add_reg_info(&el->hf_id, name, abbrev, FT_BOOLEAN, 8, 0, blurb);
@@ -2498,6 +2587,11 @@ static void Dataset_add_reg_info(Dataset *ds) {
     if (ds->listOfElements)  wmem_array_append_one(trdp_build_dict.ett, pett_id);
 }
 
+static void trdp_shutdown(void) {
+    TrdpDict_delete(pTrdpParser, proto_trdp);
+    pTrdpParser = NULL;
+}
+
 static void register_trdp_fields(const char *prefix _U_) {
     API_TRACE;
 
@@ -2557,6 +2651,7 @@ static void register_trdp_fields(const char *prefix _U_) {
     char *basepath = g_basexml ? get_datafile_path("trdp", epan_get_environment_prefix()) : NULL;
     const char* ld = (g_customTrdpDictionary && *g_customTrdpDictionary) ? g_customTrdpDictionary : g_customTrdpDictionaryFolder;
     pTrdpParser = TrdpDict_new(basepath, ld, &err);
+    register_shutdown_routine(trdp_shutdown);
 
     API_TRACE;
     if (err) {
