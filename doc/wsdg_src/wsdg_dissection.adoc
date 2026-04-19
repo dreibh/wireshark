@@ -33,8 +33,9 @@ the finished code may make more sense as a built-in dissector.
 [NOTE]
 .Read README.dissector
 ====
-The file _doc/README.dissector_ contains detailed information about writing
-a dissector. In many cases it is more up to date than this document.
+The file wsrepofile:doc/README.dissector[] contains
+detailed information about writing a dissector. In many cases it is more up to
+date than this document.
 ====
 
 [#ChDissectAdd]
@@ -908,7 +909,7 @@ arrived and then start the dissection.
 
 The following sections will guide you through two common cases. For a
 description of all possible functions, structures and parameters, see
-_epan/reassemble.h_.
+wsrepofile:epan/reassemble.h[].
 
 [#ChDissectReassembleUdp]
 
@@ -1168,7 +1169,7 @@ so that a message can start at an arbitrary position within a packet.
 
 This sounds complicated, but there is a simple solution.
 `tcp_dissect_pdus()` does all this tcp packet reassembling for you.
-This function is implemented in _epan/dissectors/packet-tcp.h_.
+This function is implemented in wsrepofile:epan/dissectors/packet-tcp.h[].
 
 .Reassembling TCP fragments
 [source,c]
@@ -1520,8 +1521,8 @@ their arguments, return types, and what they do.
 
 === How to use conversations
 
-Some info about how to use conversations in a dissector can be found in the file
-_doc/README.dissector_, chapter 2.2.
+Some info about how to use conversations in a dissector can be found in the
+file wsrepofile:doc/README.dissector[], chapter 2.2.
 
 [#ChDissectIdl2wrs]
 

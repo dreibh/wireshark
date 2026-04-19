@@ -79,19 +79,20 @@ prompt you to re-run CMake.
 
 ==== Source Code Overview
 
-Wireshark’s `main` entry point is in _ui/qt/main.cpp_. Command-line arguments
+Wireshark’s `main` entry point is in wsrepofile:ui/qt/main.cpp[]. Command-line arguments
 are processed there and the main application class (`WiresharkApplication`)
 instance is created there along with the main window.
 
-The main window along with the rest of the application resides in _ui/qt_. Due
-to its size the main window code is split into several modules, _main_window.cpp_,
-_wireshark_main_window.cpp_ and _wireshark_main_window_slots.cpp_.
+The main window along with the rest of the application resides in wsrepodir:ui/qt[]. Due
+to its size the main window code is split into several modules, wsrepofile:ui/qt/main_window.cpp[],
+wsrepofile:ui/qt/wireshark_main_window.cpp[] and wsrepofile:ui/qt/wireshark_main_window_slots.cpp[].
 
-Most of the modules in _ui/qt_ are dialogs. Although we follow Qt naming
+Most of the modules in wsrepodir:ui/qt[] are dialogs. Although we follow Qt naming
 conventions for class names, we follow our own conventions by separating file
-name components with underscores. For example, ColoringRulesDialog is defined in
-_coloring_rules_dialog.cpp_, _coloring_rules_dialog.h_, and
-_coloring_rules_dialog.ui_.
+name components with underscores. For example, `ColoringRulesDialog` is defined in
+wsrepofile:ui/qt/coloring_rules_dialog.cpp[],
+wsrepofile:ui/qt/coloring_rules_dialog.h[], and
+wsrepofile:ui/qt/coloring_rules_dialog.ui[].
 
 General-purpose dialogs are subclasses of `QDialog`. Dialogs that rely on the
 current capture file can subclass `WiresharkDialog`, which provides methods and
@@ -102,7 +103,7 @@ open when the capture file closes.
 
 ===== Names
 
-The code in _ui/qt_ directory uses three APIs: Qt (which uses upper camel case), GLib (which uses snake_case), and the Wireshark
+The code in the wsrepodir:ui/qt[] directory uses three APIs: Qt (which uses upper camel case), GLib (which uses snake_case), and the Wireshark
 API (which also uses snake_case).
 
 As a general rule, for names, Wireshark’s Qt code:
@@ -118,9 +119,9 @@ capture file closes. Subclassing `WiresharkDialog` as described above can make
 it easier to persist across capture files.
 
 When you create a window with a row of standard “OK” and “Close” buttons at
-the bottom using Qt Creator you will end up with a subclass of QDialog. This is
+the bottom using Qt Creator you will end up with a subclass of `QDialog`. This is
 fine for traditional modal dialogs, but many times the “dialog” needs to behave
-like a QWindow instead.
+like a `QWindow` instead.
 
 Modal dialogs should be constructed with `QDialog(parent)`. Modeless dialogs
 (windows) should be constructed with `QDialog(NULL, Qt::Window)`. Other
@@ -128,7 +129,7 @@ combinations (particularly `QDialog(parent, Qt::Window)`) can lead to odd and
 inconsistent behavior. Again, subclassing `WiresharkDialog` will take care of
 this for you.
 
-Most of the dialogs in ui/qt share many similarities, including method names,
+Most of the dialogs in wsrepodir:ui/qt[] share many similarities, including method names,
 widget names, and behavior. Most dialogs should have the following, although
 it’s not strictly required:
 
@@ -161,11 +162,11 @@ particularly if you're manually allocating and releasing memory.
 QStrings are generally *much* safer and easier to use. They also make
 translations easier.
 
-If you need to pass strings between Qt and GLib you can use a number
-of convenience routines which are defined in _ui/qt/utils/qt_ui_utils.h_.
+If you need to pass strings between Qt and GLib, you can use a number
+of convenience routines which are defined in wsrepofile:ui/qt/utils/qt_ui_utils.h[].
 
-If you're calling a function that returns wmem-allocated memory it might make
-more sense to add a wrapper function to _qt_ui_utils_ than to call wmem_free in
+If you're calling a function that returns wmem-allocated memory, it might make
+more sense to add a wrapper function to _qt_ui_utils_ than to call `wmem_free` in
 your code.
 
 ===== Mixing C and {cpp}
@@ -188,7 +189,7 @@ usually available as `tr()`.
 However, please avoid using `tr()` for static strings and define them in _*.ui_
 files instead. `tr()` on manually created objects like `QMenu` are not
 automatically retranslated and must instead be manually translated using
-`changeEvent()` and `retranslateUi()`. See _ui/qt/wireshark_main_window.cpp_ for an example
+`changeEvent()` and `retranslateUi()`. See wsrepofile:ui/qt/wireshark_main_window.cpp[] for an example
 of this.
 
 NOTE: If your object life is short and your components are (re)created
@@ -206,11 +207,11 @@ replacing XX with the ISO 639 language code:
 lupdate -I. $(find ui/qt -name '*.cpp' -o -name '*.h' -o -name '*.ui') -ts ui/qt/wireshark_XX.ts
 msginit --no-translator --input packaging/debian/po/templates.pot --output packaging/debian/po/XX.po
 ----
-- Add _ui/qt/wireshark_XX.ts_ to _ui/qt/CMakeLists.txt_.
-- Add _ui/qt/wireshark_XX.ts_ to _.tx/config_.
+- Add _ui/qt/wireshark_XX.ts_ to wsrepofile:ui/qt/CMakeLists.txt[].
+- Add _ui/qt/wireshark_XX.ts_ to wsrepofile:.tx/config[].
 - Translate with Qt Linguist: `linguist ui/qt/wireshark_XX.ts`.
 - Do a test build and make sure the generated _wireshark_XX.qm_ binary file is included.
-- Fill in the msgStr fields in the XX.po file.
+- Fill in the `msgStr` fields in the XX.po file.
 - Push your changes to GitLab for review. See <<ChSrcContribute>> for details.
 
 Alternatively you can put your QM file in the _languages_
@@ -226,17 +227,17 @@ https://explore.transifex.com/wireshark/wireshark/[Transifex].
 Translation resources are organized by type of translation and development branch:
 
 master::
-Qt Linguist resources in the _ui/qt_ in the master branch.
+Qt Linguist resources in the wsrepodir:ui/qt[] in the master branch.
 
 debian::
-GNU gettext resources in the _debian_ directory in the master branch.
+GNU gettext resources in the wsrepodir:packaging/debian[] directory in the master branch.
 
 qt-_XY_, master-_XY_::
 Qt Linguist resources in the _ui/qt_ in the _X.Y_ release branch.
 For example, qt-34 matches the Wireshark 3.2 release branch.
 
 po-_XY_, debian-_XY_::
-GNU gettext (.po) resources in the _debian_ directory in the _X.Y_ release branch.
+GNU gettext (.po) resources in the _packaging/debian_ directory in the _X.Y_ release branch.
 For example, po-34 matches the Wireshark 3.4 release branch.
 
 Each week translations are link:{wireshark-code-file-url}/tools/update-tx[automatically synchronized] with the source code through the following steps:
@@ -256,7 +257,8 @@ Wireshark uses an extended version of the
 https://en.wikipedia.org/wiki/Tango_Desktop_Project[Tango Color Palette]
 for many interface elements that require custom colors. This includes the
 I/O graphs, sequence diagrams, and RTP streams. Please use this palette
-(defined in `tango_colors.h` and the *ColorUtils* class) if *QPalette*
+(defined in wsrepofile:ui/qt/utils/tango_colors.h[] and the
+`ColorUtils` class in wsrepofile:ui/qt/utils/color_utils.h[]) if *QPalette*
 doesn't meet your needs.
 
 Wireshark supports dark themes (aka “dark mode”) on some platforms. We
@@ -276,11 +278,11 @@ around this by using `ColorUtils::themeLinkBrush()` and
 ==== Other Issues and Information
 
 The main window has many QActions which are shared with child widgets. See
-_ui/qt/proto_tree.cpp_ for an example of this.
+wsrepofile:ui/qt/proto_tree.cpp[] for an example of this.
 
 To demonstrate the functionality of the plugin interface options, a
-demonstration plugin exists (pluginifdemo). See <<ChapterPlugins>> and
-_plugins/ui/pluginifdemo_.
+demonstration plugin exists (`pluginifdemo`). See <<ChapterPlugins>> and
+wsrepodir:plugins/ui/pluginifdemo[].
 
 https://www.kdab.com/development-resources/qt-tools/gammaray/[GammaRay] lets you inspect
 the internals of a running Qt application similar to $$Spy++$$ on Windows.
@@ -299,26 +301,26 @@ JSON resource files at runtime rather than being hardcoded.
 |===
 |Path |Purpose
 
-|_resources/json/slides.json_
+|wsrepofile:resources/json/slides.json[]
 |Default slide deck and configuration shipped in the source tree.
 
-|_resources/json/slides.schema.json_
+|wsrepofile:resources/json/slides.schema.json[]
 |JSON Schema for validating slide files.
 
-|_resources/json/banners/_
+|wsrepodir:resources/json/banners/[]
 |Banner images referenced by slides. All files in this directory are
 automatically embedded via `file(GLOB)` in CMake.
 
-|_ui/qt/widgets/info_banner_widget.h_
+|wsrepofile:ui/qt/widgets/info_banner_widget.h[]
 |`BannerSlide` struct, `SlideTypeConfig` struct, and `InfoBannerWidget` class.
 
-|_ui/qt/widgets/info_banner_widget.cpp_
+|wsrepofile:ui/qt/widgets/info_banner_widget.cpp[]
 |JSON loading, config merging, rotation logic, and rendering.
 
-|_ui/qt/CMakeLists.txt_
+|wsrepofile:ui/qt/CMakeLists.txt[]
 |QRC resource generation for Wireshark.
 
-|_ui/stratoshark/CMakeLists.txt_
+|wsrepofile:ui/stratoshark/CMakeLists.txt[]
 |QRC resource generation for Stratoshark.
 |===
 
@@ -362,7 +364,7 @@ Slide files use the following structure:
 }
 ----
 
-A formal JSON Schema is available at _resources/json/slides.schema.json_ for
+A formal JSON Schema is available at wsrepofile:resources/json/slides.schema.json[] for
 editor-based and CI validation.
 
 The `type`, `title`, `description`, and `url` fields are required per slide.

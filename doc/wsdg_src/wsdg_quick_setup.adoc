@@ -279,7 +279,7 @@ to run it by entering `wireshark`.
 To build the Wireshark User's Guide and the Wireshark Developer's Guide,
 build the `all_guides` target, e.g.  `make all_guides` or `ninja
 all_guides`.  Detailed information to build these guides can be found in
-the file _doc/README.documentation.adoc_ in the Wireshark sources.
+the file wsrepofile:doc/README.documentation.adoc[] in the Wireshark sources.
 
 ==== Optional: Create an installable or source code package
 
@@ -622,7 +622,7 @@ msbuild doc\all_guides.vcxproj
 ----
 
 Detailed information to build these guides can be found in the file
-`doc\README.documentation.adoc` in the Wireshark sources.
+wsrepofile:doc/README.documentation.adoc[] in the Wireshark sources.
 
 Building the documentation requires `Xsltproc` as an additional dependency :
 

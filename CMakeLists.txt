@@ -425,6 +425,7 @@ include(UseMakeTaps)
 include(UseExecutableResources)
 include(UseAsn2Wrs)
 include(UseJsonTranslations)
+include(QrcBuilder)
 
 # The following snippet has been taken from
 # https://github.com/USESystemEngineeringBV/cmake-eclipse-helper/wiki/HowToWorkaroundIndexer
@@ -2312,7 +2313,7 @@ if (BUILD_stratoshark)
 	else()
 		list(APPEND STRATOSHARK_INSTALL_DIRS resources/share/stratoshark/profiles)
 	endif()
-		
+
 	set(STRATOSHARK_INSTALL_FILES
 		doc/ws.css
 		resources/share/stratoshark/colorfilters
@@ -2984,13 +2985,19 @@ if(ENABLE_APPLICATION_BUNDLE)
 
 	# Add files to the Wireshark application bundle
 	# Wireshark.app/Contents
-	file(WRITE ${CMAKE_BINARY_DIR}/packaging/macosx/wireshark/PkgInfo "APPLWshk\n")
-	set(WIRESHARK_BUNDLE_CONTENTS_FILES
-		${CMAKE_BINARY_DIR}/packaging/macosx/wireshark/PkgInfo
-	)
-	set_source_files_properties(${WIRESHARK_BUNDLE_CONTENTS_FILES} PROPERTIES
-		MACOSX_PACKAGE_LOCATION .
-	)
+	if(CMAKE_CFG_INTDIR STREQUAL ".")
+		# Not Xcode
+		file(WRITE ${CMAKE_BINARY_DIR}/packaging/macosx/wireshark/PkgInfo "APPLWshk\n")
+		set(WIRESHARK_BUNDLE_CONTENTS_FILES
+			${CMAKE_BINARY_DIR}/packaging/macosx/wireshark/PkgInfo
+		)
+		set_source_files_properties(${WIRESHARK_BUNDLE_CONTENTS_FILES} PROPERTIES
+			MACOSX_PACKAGE_LOCATION .
+		)
+	else()
+		# Xcode seems to generate its own
+		set(WIRESHARK_BUNDLE_CONTENTS_FILES)
+	endif()
 
 	if(HAVE_LIQUID_GLASS_ICONS)
 		# Compile our Liquid Glass icons to an asset catalog
@@ -3093,13 +3100,19 @@ if(ENABLE_APPLICATION_BUNDLE)
 
 	# Add files to the Stratoshark application bundle
 	# Stratoshark.app/Contents
-	file(WRITE ${CMAKE_BINARY_DIR}/packaging/macosx/stratoshark/PkgInfo "APPLLgry\n")
-	set(STRATOSHARK_BUNDLE_CONTENTS_FILES
-		${CMAKE_BINARY_DIR}/packaging/macosx/stratoshark/PkgInfo
-	)
-	set_source_files_properties(${STRATOSHARK_BUNDLE_CONTENTS_FILES} PROPERTIES
-		MACOSX_PACKAGE_LOCATION .
-	)
+	if(CMAKE_CFG_INTDIR STREQUAL ".")
+		# Not Xcode
+		file(WRITE ${CMAKE_BINARY_DIR}/packaging/macosx/stratoshark/PkgInfo "APPLLgry\n")
+		set(STRATOSHARK_BUNDLE_CONTENTS_FILES
+			${CMAKE_BINARY_DIR}/packaging/macosx/stratoshark/PkgInfo
+		)
+		set_source_files_properties(${STRATOSHARK_BUNDLE_CONTENTS_FILES} PROPERTIES
+			MACOSX_PACKAGE_LOCATION .
+		)
+	else()
+		# Xcode seems to generate its own
+		set(STRATOSHARK_BUNDLE_CONTENTS_FILES)
+	endif()
 
 	# Stratoshark.app/Contents/Resources
 	set(STRATOSHARK_BUNDLE_RESOURCE_FILES
@@ -3196,6 +3209,7 @@ if(BUILD_wireshark AND QT_FOUND)
 		set_target_properties(
 			wireshark PROPERTIES
 				MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/packaging/macosx/WiresharkInfo.plist
+				XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "org.wireshark.Wireshark"
 		)
 		if(CMAKE_CFG_INTDIR STREQUAL ".")
 			# Add a wrapper script which opens the bundle. This is more convenient
@@ -3310,6 +3324,7 @@ if(BUILD_stratoshark AND QT_FOUND)
 		set_target_properties(
 			stratoshark PROPERTIES
 				MACOSX_BUNDLE_INFO_PLIST ${CMAKE_BINARY_DIR}/packaging/macosx/StratosharkInfo.plist
+				XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER "org.wireshark.Stratoshark"
 		)
 		if(CMAKE_CFG_INTDIR STREQUAL ".")
 			# Add a wrapper script which opens the bundle. This is more convenient

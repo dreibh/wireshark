@@ -285,7 +285,7 @@ static bool do_uncompress(struct input *input,
 {
 	uint32_t symbol;
 	uint32_t length;
-	int32_t match_offset;
+	unsigned match_offset;
 	int rc;
 	struct hf_tree tree = {0};
 	struct bitstring bstr = {0};
@@ -322,7 +322,6 @@ static bool do_uncompress(struct input *input,
 			symbol = symbol >> 4;
 
 			match_offset = (1U << symbol) + bitstring_lookup(&bstr, symbol);
-			match_offset *= -1;
 
 			if (length == 15) {
 				if (bstr.bitstring_index >= bstr.input->size)
@@ -342,15 +341,24 @@ static bool do_uncompress(struct input *input,
 			bitstring_skip(&bstr, symbol);
 
 			length += 3;
-			do {
-				uint8_t byte;
-				unsigned elem_count = wmem_array_get_count(obuf)+match_offset;
-
-				if (wmem_array_try_index(obuf, elem_count, &byte))
-					return false;
-				wmem_array_append_one(obuf, byte);
-				length--;
-			} while (length != 0);
+			if (match_offset > wmem_array_get_count(obuf))
+			    return false;
+			ws_assert(match_offset != 0);
+			/* Must call grow first, to realloc the array if needed
+			 * and avoid invalidating the pointers returned from
+			 * wmem_array_index. */
+                        if (!wmem_array_grow(obuf, length))
+                            return false;
+			uint8_t *src;
+			unsigned i;
+			for (i = 0; i < length / match_offset; i++) {
+				src = wmem_array_index(obuf, wmem_array_get_count(obuf) - match_offset);
+				wmem_array_append(obuf, src, match_offset);
+			}
+			for (i *= match_offset; i < length; i++) {
+				src = wmem_array_index(obuf, wmem_array_get_count(obuf) - match_offset);
+				wmem_array_append(obuf, src, 1);
+			}
 		}
 	}
 	return true;

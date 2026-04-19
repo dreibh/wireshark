@@ -47,6 +47,7 @@ static dissector_handle_t bthci_evt_handle;
 static dissector_handle_t btcommon_cod_handle;
 static dissector_handle_t btcommon_eir_handle;
 static dissector_handle_t btcommon_ad_handle;
+static dissector_handle_t btcommon_channel_map_handle;
 static dissector_handle_t btcommon_le_channel_map_handle;
 
 /* Initialize the protocol and registered fields */
@@ -1047,6 +1048,7 @@ static int ett_opcode;
 static int ett_lmp_subtree;
 static int ett_ptype_subtree;
 static int ett_le_state_subtree;
+static int ett_channel_map;
 static int ett_le_channel_map;
 static int ett_le_features;
 static int ett_le_report;
@@ -4094,6 +4096,8 @@ dissect_bthci_evt_le_meta(tvbuff_t *tvb, int offset, packet_info *pinfo,
             {
                 uint32_t con_handle, config_id;
                 uint8_t action, role, rtt_type;
+                proto_item *sub_item;
+                proto_tree *sub_tree;
                 proto_tree_add_item_ret_uint8(tree, hf_bthci_evt_status, tvb, offset, 1, ENC_NA, &status);
                 send_hci_summary_status_tap(status, pinfo, bluetooth_data);
                 offset += 1;
@@ -4122,7 +4126,9 @@ dissect_bthci_evt_le_meta(tvbuff_t *tvb, int offset, packet_info *pinfo,
                 offset += 1;
                 proto_tree_add_item(tree, hf_bthci_evt_cs_sync_phy, tvb, offset, 1, ENC_NA);
                 offset += 1;
-                proto_tree_add_item(tree, hf_bthci_evt_channel_map, tvb, offset, 10, ENC_NA);
+                sub_item = proto_tree_add_item(tree, hf_bthci_evt_channel_map, tvb, offset, 10, ENC_NA);
+                sub_tree = proto_item_add_subtree(sub_item, ett_channel_map);
+                call_dissector(btcommon_channel_map_handle, tvb_new_subset_length(tvb, offset, 10), pinfo, sub_tree);
                 offset += 10;
                 proto_tree_add_item(tree, hf_bthci_evt_channel_map_repetition, tvb, offset, 1, ENC_NA);
                 offset += 1;
@@ -5827,6 +5833,10 @@ dissect_bthci_evt_command_complete(tvbuff_t *tvb, int offset,
             break;
 
         case 0x1406: /* Read AFH Channel Map */
+            {
+            proto_item *sub_item;
+            proto_tree *sub_tree;
+
             proto_tree_add_item(tree, hf_bthci_evt_status, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             send_hci_summary_status_tap(tvb_get_uint8(tvb, offset), pinfo, bluetooth_data);
             offset += 1;
@@ -5837,9 +5847,12 @@ dissect_bthci_evt_command_complete(tvbuff_t *tvb, int offset,
             proto_tree_add_item(tree, hf_bthci_evt_afh_mode, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset += 1;
 
-            proto_tree_add_item(tree, hf_bthci_evt_afh_channel_map, tvb, offset, 10, ENC_NA);
+            sub_item = proto_tree_add_item(tree, hf_bthci_evt_afh_channel_map, tvb, offset, 10, ENC_NA);
+            sub_tree = proto_item_add_subtree(sub_item, ett_channel_map);
+            call_dissector(btcommon_channel_map_handle, tvb_new_subset_length(tvb, offset, 10), pinfo, sub_tree);
             offset += 10;
 
+            }
             break;
 
         case 0x1407: /* Read Clock */
@@ -7513,6 +7526,10 @@ dissect_bthci_evt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
 
             break;
         case 0x50: /* Synchronization Train Received */
+            {
+            proto_item *sub_item;
+            proto_tree *sub_tree;
+
             proto_tree_add_item(tree, hf_bthci_evt_status, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             send_hci_summary_status_tap(tvb_get_uint8(tvb, offset), pinfo, bluetooth_data);
             offset += 1;
@@ -7522,7 +7539,9 @@ dissect_bthci_evt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
             proto_tree_add_item(tree, hf_bthci_evt_clock_offset_32, tvb, offset, 4, ENC_LITTLE_ENDIAN);
             offset += 4;
 
-            proto_tree_add_item(tree, hf_bthci_evt_afh_channel_map, tvb, offset, 10, ENC_NA);
+            sub_item = proto_tree_add_item(tree, hf_bthci_evt_afh_channel_map, tvb, offset, 10, ENC_NA);
+            sub_tree = proto_item_add_subtree(sub_item, ett_channel_map);
+            call_dissector(btcommon_channel_map_handle, tvb_new_subset_length(tvb, offset, 10), pinfo, sub_tree);
             offset += 10;
 
             proto_tree_add_item(tree, hf_bthci_evt_lt_addr, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -7537,6 +7556,7 @@ dissect_bthci_evt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
             proto_tree_add_item(tree, hf_bthci_evt_service_data, tvb, offset, 1, ENC_LITTLE_ENDIAN);
             offset += 1;
 
+            }
             break;
         case 0x51: /* Connectionless Peripheral Broadcast Receive */
             {
@@ -7586,9 +7606,16 @@ dissect_bthci_evt(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *dat
             /* NOTE: no parameters */
             break;
         case 0x55: /* Connectionless Peripheral Broadcast Channel Map Change */
-            proto_tree_add_item(tree, hf_bthci_evt_afh_channel_map, tvb, offset, 10, ENC_NA);
+            {
+            proto_item *sub_item;
+            proto_tree *sub_tree;
+
+            sub_item = proto_tree_add_item(tree, hf_bthci_evt_afh_channel_map, tvb, offset, 10, ENC_NA);
+            sub_tree = proto_item_add_subtree(sub_item, ett_channel_map);
+            call_dissector(btcommon_channel_map_handle, tvb_new_subset_length(tvb, offset, 10), pinfo, sub_tree);
             offset += 10;
 
+            }
             break;
         case 0x56: /* Inquiry Response Notification */
             proto_tree_add_item(tree, hf_bthci_evt_iac_lap, tvb, offset, 3, ENC_LITTLE_ENDIAN);
@@ -9128,7 +9155,6 @@ proto_register_bthci_evt(void)
            FT_UINT8, BASE_DEC, VALS(evt_enable_values), 0x0,
            NULL, HFILL}
         },
-/* TODO: More detailed dissection */
         { &hf_bthci_evt_afh_channel_map,
           {"AFH Channel Map", "bthci_evt.afh_channel_map",
            FT_BYTES, BASE_NONE, NULL, 0x0,
@@ -11722,6 +11748,7 @@ proto_register_bthci_evt(void)
         &ett_lmp_subtree,
         &ett_ptype_subtree,
         &ett_le_state_subtree,
+        &ett_channel_map,
         &ett_le_channel_map,
         &ett_le_features,
         &ett_le_report,
@@ -11804,6 +11831,7 @@ proto_reg_handoff_bthci_evt(void)
     btcommon_cod_handle = find_dissector_add_dependency("btcommon.cod", proto_bthci_evt);
     btcommon_eir_handle = find_dissector_add_dependency("btcommon.eir_ad.eir", proto_bthci_evt);
     btcommon_ad_handle  = find_dissector_add_dependency("btcommon.eir_ad.ad", proto_bthci_evt);
+    btcommon_channel_map_handle    = find_dissector_add_dependency("btcommon.channel_map", proto_bthci_evt);
     btcommon_le_channel_map_handle = find_dissector_add_dependency("btcommon.le_channel_map", proto_bthci_evt);
 }
 

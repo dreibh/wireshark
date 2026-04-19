@@ -52,10 +52,14 @@
          <bool>false</bool>
         </property>
         <addaction name="actionSepBeforeContinue"/>
-         <addaction name="actionContinue"/>
-         <addaction name="actionStep"/>
-         <addaction name="actionSepAfterStep"/>
-         <addaction name="actionOpenFile"/>
+        <addaction name="actionContinue"/>
+        <addaction name="actionStepOver"/>
+        <addaction name="actionStepIn"/>
+        <addaction name="actionStepOut"/>
+        <addaction name="actionSepAfterStep"/>
+        <addaction name="actionOpenFile"/>
+        <addaction name="actionSaveFile"/>
+        <addaction name="actionSepAfterSave"/>
         <addaction name="actionReloadLuaPlugins"/>
         <addaction name="actionClearBreakpoints"/>
        </widget>
@@ -72,13 +76,40 @@
        </item>
       </layout>
      </widget>
-     <widget class="QTabWidget" name="codeTabWidget">
-      <property name="currentIndex">
-       <number>-1</number>
-      </property>
-      <property name="tabsClosable">
-       <bool>true</bool>
-      </property>
+     <widget class="QWidget" name="codeEditorSide">
+      <layout class="QVBoxLayout" name="codeEditorSideLayout">
+       <property name="spacing">
+        <number>0</number>
+       </property>
+       <property name="leftMargin">
+        <number>0</number>
+       </property>
+       <property name="topMargin">
+        <number>0</number>
+       </property>
+       <property name="rightMargin">
+        <number>0</number>
+       </property>
+       <property name="bottomMargin">
+        <number>0</number>
+       </property>
+       <item>
+        <widget class="LuaDebuggerFindFrame" name="luaDebuggerFindFrame" native="true"/>
+       </item>
+       <item>
+        <widget class="LuaDebuggerGoToLineFrame" name="luaDebuggerGoToLineFrame" native="true"/>
+       </item>
+       <item>
+        <widget class="QTabWidget" name="codeTabWidget">
+         <property name="currentIndex">
+          <number>-1</number>
+         </property>
+         <property name="tabsClosable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+      </layout>
      </widget>
     </widget>
    </item>
@@ -89,6 +120,9 @@
    </property>
    <property name="text">
     <string>Continue</string>
+   </property>
+   <property name="shortcut">
+    <string>F5</string>
    </property>
   </action>
   <action name="actionSepBeforeContinue">
@@ -101,15 +135,37 @@
     <bool>true</bool>
    </property>
   </action>
-  <action name="actionStep">
+  <action name="actionStepOver">
    <property name="icon">
-    <iconset theme="go-next"/>
+    <iconset theme="debug-step-over"/>
    </property>
    <property name="text">
-    <string>Step</string>
+    <string>Step Over</string>
    </property>
    <property name="shortcut">
     <string>F10</string>
+   </property>
+  </action>
+  <action name="actionStepIn">
+   <property name="icon">
+    <iconset theme="debug-step-into"/>
+   </property>
+   <property name="text">
+    <string>Step Into</string>
+   </property>
+   <property name="shortcut">
+    <string>F11</string>
+   </property>
+  </action>
+  <action name="actionStepOut">
+   <property name="icon">
+    <iconset theme="debug-step-out"/>
+   </property>
+   <property name="text">
+    <string>Step Out</string>
+   </property>
+   <property name="shortcut">
+    <string>Shift+F11</string>
    </property>
   </action>
   <action name="actionClearBreakpoints">
@@ -126,6 +182,46 @@
    </property>
    <property name="text">
     <string>Open File</string>
+   </property>
+  </action>
+  <action name="actionSaveFile">
+   <property name="icon">
+    <iconset theme="document-save"/>
+   </property>
+   <property name="text">
+    <string>Save</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+S</string>
+   </property>
+  </action>
+  <action name="actionSepAfterSave">
+   <property name="separator">
+    <bool>true</bool>
+   </property>
+  </action>
+  <action name="actionFind">
+   <property name="icon">
+    <iconset theme="edit-find"/>
+   </property>
+   <property name="text">
+    <string>Find…</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+F</string>
+   </property>
+  </action>
+  <action name="actionGoToLine">
+   <property name="text">
+    <string>Go to Line…</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+G</string>
+   </property>
+  </action>
+  <action name="actionSepAfterEditor">
+   <property name="separator">
+    <bool>true</bool>
    </property>
   </action>
   <action name="actionReloadLuaPlugins">
@@ -145,6 +241,16 @@
    <class>LuaDebuggerCodeView</class>
    <extends>QWidget</extends>
    <header>lua_debugger_code_view.h</header>
+  </customwidget>
+  <customwidget>
+   <class>LuaDebuggerFindFrame</class>
+   <extends>QFrame</extends>
+   <header>lua_debugger_find_frame.h</header>
+  </customwidget>
+  <customwidget>
+   <class>LuaDebuggerGoToLineFrame</class>
+   <extends>QFrame</extends>
+   <header>lua_debugger_goto_line_frame.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

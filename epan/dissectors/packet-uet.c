@@ -86,6 +86,7 @@ static int hf_uet_pds_ack_cc_state_reserved;
 static int hf_uet_pds_ack_cc_state_ooo_count;
 static int hf_uet_pds_ack_ccx_state;
 static int hf_uet_pds_ack_sack_bitmap;
+static int hf_uet_pds_rudi_rsvd;
 static int hf_uet_pds_rudi_pkt_id;
 
 //SES
@@ -1308,6 +1309,9 @@ dissect_pds_rudi_req_rsp(tvbuff_t* tvb, proto_tree* pds_tree, int offset)
 {
     int         orig_offset = offset;
 
+    proto_tree_add_item(pds_tree, hf_uet_pds_rudi_rsvd, tvb, offset, 2, ENC_BIG_ENDIAN);
+    offset += 2;
+
     proto_tree_add_item(pds_tree, hf_uet_pds_rudi_pkt_id, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
 
@@ -2038,6 +2042,11 @@ proto_register_uet(void)
         { &hf_uet_pds_ack_cc_state_ooo_count,
             { "Out Of Order Count", "uet.pds.ack.cc_state.ooo_count",
                 FT_UINT16, BASE_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_uet_pds_rudi_rsvd,
+            { "Reserved", "uet.pds.rudi.rsvd",
+                FT_UINT16, BASE_HEX, NULL, 0x0,
                 NULL, HFILL }
         },
         { &hf_uet_pds_rudi_pkt_id,

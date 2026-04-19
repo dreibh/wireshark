@@ -69,7 +69,7 @@ wmem_array_new(wmem_allocator_t *allocator, const size_t elem_size)
     return array;
 }
 
-void
+bool
 wmem_array_grow(wmem_array_t *array, const unsigned to_add)
 {
     unsigned new_alloc_count, new_count;
@@ -77,22 +77,25 @@ wmem_array_grow(wmem_array_t *array, const unsigned to_add)
     uint8_t *new_buf;
 
     new_alloc_count = array->alloc_count;
-    new_count = array->elem_count + to_add;
+    if (ckd_add(&new_count, array->elem_count, to_add)) {
+        ws_critical("Can't grow array (element count would overflow)!");
+        return false;
+    }
 
     while (new_alloc_count < new_count) {
         if (ckd_mul(&new_alloc_count, new_alloc_count, 2)) {
             ws_critical("Can't grow array (element count would overflow)!");
-            return;
+            return false;
         }
     }
 
-    if (new_alloc_count == array->alloc_count) {
-        return;
+    if (new_alloc_count <= array->alloc_count) {
+        return true;
     }
 
     if (ckd_mul(&new_size, new_alloc_count, array->elem_size)) {
         ws_critical("Can't grow array (size would overflow)!");
-        return;
+        return false;
     }
 
     new_buf = (uint8_t *)wmem_realloc(array->allocator, array->buf, new_size);
@@ -102,20 +105,25 @@ wmem_array_grow(wmem_array_t *array, const unsigned to_add)
          * Note g_realloc aborts the program on error; the various
          * wmem allocators might or might not. */
         ws_critical("Reallocating array failed!");
-        return;
+        return false;
     }
 
     array->buf = new_buf;
     array->alloc_count = new_alloc_count;
+
+    return true;
 }
 
-static void
+static bool
 wmem_array_write_null_terminator(wmem_array_t *array)
 {
     if (array->null_terminated) {
-        wmem_array_grow(array, 1);
+        if (!wmem_array_grow(array, 1)) {
+            return false;
+        }
         memset(&array->buf[array->elem_count * array->elem_size], 0x0, array->elem_size);
     }
+    return true;
 }
 
 void
@@ -131,17 +139,19 @@ wmem_array_bzero(wmem_array_t *array)
     memset(array->buf, 0x0, array->elem_size * array->elem_count);
 }
 
-void
+bool
 wmem_array_append(wmem_array_t *array, const void *in, unsigned count)
 {
-    wmem_array_grow(array, count);
+    if (!wmem_array_grow(array, count)) {
+        return false;
+    }
 
     memcpy(&array->buf[array->elem_count * array->elem_size], in,
             count * array->elem_size);
 
     array->elem_count += count;
 
-    wmem_array_write_null_terminator(array);
+    return wmem_array_write_null_terminator(array);
 }
 
 void *

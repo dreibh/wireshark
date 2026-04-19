@@ -82,7 +82,7 @@ wmem_array_new(wmem_allocator_t *allocator, const size_t elem_size);
  * @param to_add Number of additional elements to allocate space for.
  */
 WS_DLL_PUBLIC
-void
+bool
 wmem_array_grow(wmem_array_t *array, const unsigned to_add);
 
 /**
@@ -118,9 +118,14 @@ wmem_array_bzero(wmem_array_t *array);
  * @param array Pointer to the dynamic array to append to.
  * @param in Pointer to the input buffer containing elements to append.
  * @param count Number of elements to append from the input buffer.
+ *
+ * @note Since this can realloc the array, if in points to an existing
+ * index in the array, you must call wmem_array_grow first before
+ * wmem_array_index or else the pointer can be invalidated and a segfault
+ * occur.
  */
 WS_DLL_PUBLIC
-void
+bool
 wmem_array_append(wmem_array_t *array, const void *in, unsigned count);
 
 /**

@@ -9,14 +9,19 @@
 
 #include "collapsible_section.h"
 
+#include <QFont>
+#include <QGuiApplication>
 #include <QSplitter>
 
 CollapsibleSection::CollapsibleSection(const QString &title, QWidget *parent)
     : QWidget(parent), savedHeight(100)
 {
+    QFont headerFont(QGuiApplication::font());
+    headerFont.setBold(true);
 
     // Toggle button with arrow indicator
     toggleButton = new QToolButton(this);
+    toggleButton->setFont(headerFont);
     toggleButton->setStyleSheet(
         QStringLiteral("QToolButton { border: none; font-weight: bold; }"));
     toggleButton->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);

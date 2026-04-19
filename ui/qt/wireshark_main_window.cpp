@@ -379,6 +379,9 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     connect(luaDebuggerAction, &QAction::triggered, this,
             &WiresharkMainWindow::openLuaDebuggerDialog);
     main_ui_->menuTools->addAction(luaDebuggerAction);
+
+    // Separate the Lua plugins comming after the Lua debugger
+    main_ui_->menuTools->addSeparator();
 #endif
 
     // Initialize base class menu pointers for recent captures handling

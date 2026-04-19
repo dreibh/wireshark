@@ -1206,6 +1206,7 @@ dissect_ttl_segmented_message_entry(tvbuff_t* tvb, packet_info* pinfo, proto_tre
         }
         else {
             ttl_segmented_info_t* new_info = NULL;
+            uint32_t segment_size, segment_type;
 
             fh = fragment_get(&ttl_reassembly_table, pinfo, key, NULL);
 
@@ -1218,12 +1219,14 @@ dissect_ttl_segmented_message_entry(tvbuff_t* tvb, packet_info* pinfo, proto_tre
                     g_hash_table_remove(segmented_frames_info_ht, GUINT_TO_POINTER(key));
                 }
 
-                new_info = g_new(ttl_segmented_info_t, 1);
+                proto_tree_add_item_ret_uint(tree, hf_ttl_trace_data_entry_segment_size, tvb, offset, 4, ENC_LITTLE_ENDIAN, &segment_size);
+                offset += 4;
+                proto_tree_add_item_ret_uint(tree, hf_ttl_trace_data_entry_segment_type, tvb, offset, 4, ENC_LITTLE_ENDIAN, &segment_type);
+                offset += 4;
 
-                proto_tree_add_item_ret_uint(tree, hf_ttl_trace_data_entry_segment_size, tvb, offset, 4, ENC_LITTLE_ENDIAN, &new_info->full_size);
-                offset += 4;
-                proto_tree_add_item_ret_uint(tree, hf_ttl_trace_data_entry_segment_type, tvb, offset, 4, ENC_LITTLE_ENDIAN, &new_info->type);
-                offset += 4;
+                new_info = g_new(ttl_segmented_info_t, 1);
+                new_info->full_size = segment_size;
+                new_info->type = segment_type;
 
                 g_hash_table_insert(segmented_frames_info_ht, GUINT_TO_POINTER(key), new_info);
 

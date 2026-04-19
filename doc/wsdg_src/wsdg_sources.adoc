@@ -209,8 +209,9 @@ $ git pull --rebase upstream master
 
 The sources contain several documentation files. It’s a good idea to read these
 files first. After obtaining the sources, tools and libraries, the first place
-to look at is _doc/README.developer_. Inside you will find the latest
-information for Wireshark development for all supported platforms.
+to look at is wsrepofile:doc/README.developer[]. Inside
+you will find the latest information for Wireshark development for all
+supported platforms.
 
 .Build Wireshark before changing anything
 [TIP]

@@ -2015,8 +2015,8 @@ static const value_string ndps_get_resman_session_type_enum[] = {
     { 0, NULL }
 };
 
-static int
-align_4(tvbuff_t *tvb, int aoffset)
+static unsigned
+align_4(tvbuff_t *tvb, unsigned aoffset)
 {
     if(tvb_captured_length_remaining(tvb, aoffset) > 4 )
     {

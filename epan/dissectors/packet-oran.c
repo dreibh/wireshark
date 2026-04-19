@@ -510,6 +510,10 @@ static int hf_oran_num_reps;
 static int hf_oran_c_eAxC_ID;
 static int hf_oran_refa;
 
+static int hf_oran_bfws_frame_defined;
+static int hf_oran_bfws_symbols_since_defined;
+
+
 /* Convenient fields for filtering, mostly shown as hidden */
 static int hf_oran_cplane;
 static int hf_oran_uplane;
@@ -680,6 +684,8 @@ static expert_field ei_oran_reserved_not_zero;
 static expert_field ei_oran_too_many_symbols;
 static expert_field ei_oran_se30_not_ul;
 static expert_field ei_oran_se30_unknown_ueid;
+static expert_field ei_oran_beamid_bfws_not_found;
+
 
 
 /* These are the message types handled by this dissector.  Others have handling in packet-ecpri.c */
@@ -1840,6 +1846,18 @@ typedef struct {
 static wmem_tree_t *ul_symbol_timing;
 
 
+/* Tracking lifetimes of DL beamIds */
+typedef struct {
+    uint32_t frame_defined;
+    uint32_t symbol_when_defined;
+} bfw_definition;
+
+/* Maintained during first pass: beamId (from ext11) -> bfw_definition */
+static wmem_tree_t *dl_beam_ids_defined;
+/* Lookup where/when beamIds were defined (frameid:beamid) -> bfw_definition */
+static wmem_tree_t *dl_beam_ids_results;
+
+
 static void show_link_to_acknack_response(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo,
                                           ack_nack_request_t *response);
 
@@ -2364,6 +2382,7 @@ static uint32_t dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info 
                                   uint8_t iq_width,
                                   unsigned bundle_number,
                                   unsigned first_prb, unsigned last_prb, bool is_orphan,
+                                  uint32_t symbol_count,
                                   oran_tap_info *tap_info)
 {
     /* Set bundle name */
@@ -2421,6 +2440,15 @@ static uint32_t dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info 
     proto_item_append_text(bundle_ti, " (beamId:%u) ", beam_id);
     bit_offset += 16;
     add_beam_id_to_tap(tap_info, beam_id);
+
+    /* On first pass, record that beamId was defined here */
+    if (!PINFO_FD_VISITED(pinfo)) {
+        bfw_definition *definition = wmem_new0(wmem_file_scope(), bfw_definition);
+        definition->frame_defined = pinfo->num;
+        definition->symbol_when_defined = symbol_count;
+        wmem_tree_insert32(dl_beam_ids_defined, beam_id, definition);
+    }
+
 
     /* Number of weights per bundle (from preference) */
     proto_item *wpb_ti = proto_tree_add_uint(bundle_tree, hf_oran_num_weights_per_bundle, tvb, 0, 0,
@@ -2570,7 +2598,7 @@ static unsigned dissect_csf(proto_item *tree, tvbuff_t *tvb, unsigned bit_offset
 static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
                                   flow_state_t* state,
                                   uint32_t sectionType, oran_tap_info *tap_info, proto_item *protocol_item,
-                                  uint32_t subframeId, uint32_t slotId, uint32_t startSymbolId,
+                                  uint32_t subframeId, uint32_t frameId, uint32_t slotId, uint32_t startSymbolId,
                                   uint8_t ci_iq_width, uint8_t ci_comp_meth, unsigned ci_comp_opt,
                                   unsigned num_sinr_per_prb)
 {
@@ -3756,6 +3784,9 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 uint32_t num_bundles;
                 bool orphaned_prbs = false;
 
+                /* N.B. glibly assuming that Mu=1 */
+                uint32_t symbol_count = (frameId*20 + slotId) * 14 + startSymbolId;
+
                 if (!disableBFWs) {
                     /********************************************/
                     /* Table 7.7.1.1-1 */
@@ -3790,6 +3821,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                                                     ext11_settings.bundles[b].start,
                                                     ext11_settings.bundles[b].end,
                                                     ext11_settings.bundles[b].is_orphan,
+                                                    symbol_count,
                                                     tap_info);
                         if (!offset) {
                             break;
@@ -3820,23 +3852,62 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                                             tvb, offset, 1, ENC_BIG_ENDIAN);
                         /* beamId */
                         /* N.B., only added to tap_info if not 0 or ignored (after SEs seen) */
-                        uint16_t beam_id;
-                        proto_item *ti = proto_tree_add_item_ret_uint16(extension_tree, hf_oran_beam_id,
-                                                                        tvb, offset, 2, ENC_BIG_ENDIAN, &beam_id);
+                        uint32_t beam_id;
+                        proto_item *beamid_ti = proto_tree_add_item_ret_uint(extension_tree, hf_oran_beam_id,
+                                                                             tvb, offset, 2, ENC_BIG_ENDIAN, &beam_id);
                         if (!ext11_settings.bundles[n].is_orphan) {
-                            proto_item_append_text(ti, "    (PRBs %3u-%3u)  (Bundle %2u)",
+                            proto_item_append_text(beamid_ti, "    (PRBs %3u-%3u)  (Bundle %2u)",
                                                    ext11_settings.bundles[n].start,
                                                    ext11_settings.bundles[n].end,
                                                    n);
                         }
                         else {
                             orphaned_prbs = true;
-                            proto_item_append_text(ti, "    (PRBs %3u-%3u)  (Orphaned PRBs)",
+                            proto_item_append_text(beamid_ti, "    (PRBs %3u-%3u)  (Orphaned PRBs)",
                                                    ext11_settings.bundles[n].start,
                                                    ext11_settings.bundles[n].end);
                         }
                         offset += 2;
+
+
+                        /* Look for where BFWs were sent for this beamId */
+                        bfw_definition *definition;
+
+                        wmem_tree_key_t key[3];
+                        key[0].length = 1;
+                        key[0].key = &pinfo->num;
+                        key[1].length = 1;
+                        key[1].key = &beam_id;
+                        key[2].length = 0;
+                        key[2].key    = NULL;
+
+                        if (!PINFO_FD_VISITED(pinfo)) {
+                            /* Look up current result */
+                            definition = wmem_tree_lookup32(dl_beam_ids_defined, beam_id);
+                            if (definition != NULL) {
+                                /* Add to results table for this frame */
+                                wmem_tree_insert32_array(dl_beam_ids_results, key, definition);
+                            }
+                        }
+                        else {
+                            /* Look up from result table */
+                            definition = wmem_tree_lookup32_array(dl_beam_ids_results, key);
+                        }
+
+                        /* Show link back to frame where/when beamId was defined */
+                        if (definition && definition->frame_defined != 0 && definition->frame_defined != pinfo->num) {
+                            proto_item *defined_ti = proto_tree_add_uint(extension_tree, hf_oran_bfws_frame_defined, tvb, offset, 0, definition->frame_defined);
+                            proto_item_set_generated(defined_ti);
+                            proto_item *since_ti = proto_tree_add_uint(extension_tree, hf_oran_bfws_symbols_since_defined, tvb, offset, 0,
+                                                                       symbol_count - definition->symbol_when_defined);
+                            proto_item_set_generated(since_ti);
+                        }
+                        else {
+                            expert_add_info_format(NULL, beamid_ti, &ei_oran_beamid_bfws_not_found,
+                                                   "ext11 for beamId %u and disableBFWs set, but can't find definition", beam_id);
+                        }
                     }
+
                 }
 
                 /* Add summary to extension root */
@@ -6534,7 +6605,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
         tvbuff_t *section_tvb = tvb_new_subset_remaining(tvb, offset);
         offset += dissect_oran_c_section(section_tvb, oran_tree, pinfo, state, sectionType, tap_info,
                                          protocol_item,
-                                         subframeId, slotId, startSymbolId,
+                                         subframeId, frameId, slotId, startSymbolId,
                                          bit_width, ci_comp_method, ci_comp_opt,
                                          num_sinr_per_prb);
     }
@@ -10041,6 +10112,20 @@ proto_register_oran(void)
             NULL, HFILL}
         },
 
+        /* For ext11, where was a beamId (last) defined? */
+        { &hf_oran_bfws_frame_defined,
+          { "Beam defined in frame", "oran_fh_cus.bfw-defined",
+            FT_FRAMENUM, BASE_NONE,
+            FRAMENUM_TYPE(FT_FRAMENUM_RETRANS_PREV), 0x0,
+            NULL, HFILL}
+        },
+        { &hf_oran_bfws_symbols_since_defined,
+          { "Symbols since BFWs defined", "oran_fh_cus.symbols-since-bfw-defined",
+            FT_UINT32, BASE_DEC,
+            NULL, 0x0,
+            NULL, HFILL}
+        },
+
         /* Reassembly */
         { &hf_oran_fragment,
           { "Fragment", "oran_fh_cus.fragment", FT_FRAMENUM, BASE_NONE,
@@ -10196,6 +10281,7 @@ proto_register_oran(void)
         { &ei_oran_too_many_symbols, { "oran_fh_cus.too_many_symbols", PI_MALFORMED, PI_ERROR, "Range of symbols in slot exceeds 14", EXPFILL }},
         { &ei_oran_se30_not_ul, { "oran_fh_cus.se30_not_ul", PI_MALFORMED, PI_WARN, "SE30 should only be sent in uplink direction", EXPFILL }},
         { &ei_oran_se30_unknown_ueid, { "oran_fh_cus.se30_unknown_ue", PI_MALFORMED, PI_WARN, "SE30 UEId not recognised from SE10", EXPFILL }},
+        { &ei_oran_beamid_bfws_not_found, { "oran_fh_cus.beamid_bfws_not_found", PI_SEQUENCE, PI_WARN, "Have bundle with disableBFWs but no definition found", EXPFILL }},
     };
 
     /* Register the protocol name and description */
@@ -10294,6 +10380,9 @@ proto_register_oran(void)
     flow_states_table = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
     flow_results_table = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
     ul_symbol_timing = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
+
+    dl_beam_ids_defined = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
+    dl_beam_ids_results = wmem_tree_new_autoreset(wmem_epan_scope(), wmem_file_scope());
 
     register_init_routine(&oran_init_protocol);
 

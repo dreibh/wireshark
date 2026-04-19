@@ -400,13 +400,39 @@ extern int Dot11DecryptScanTdlsForKeys(
 int
 Dot11DecryptGetKCK(const PDOT11DECRYPT_KEY_ITEM key, const uint8_t **kck);
 
+/**
+ * @brief Retrieves the Key Encryption Key (KEK) for a given decryption key item.
+ *
+ * @param kek Pointer to a pointer that will receive the KEK data.
+ * @return The length of the KEK in bytes, or 0 if an error occurred.
+ */
 int
 Dot11DecryptGetKEK(const PDOT11DECRYPT_KEY_ITEM key, const uint8_t **kek);
 
 int
+
+/**
+ * @brief Retrieves the TK (Temporal Key) from a given key item.
+ *
+ * This function extracts the TK from a DOT11DECRYPT_KEY_ITEM and returns its pointer along with its length.
+ *
+ * @param key Pointer to the DOT11DECRYPT_KEY_ITEM containing the key information.
+ * @param tk Pointer to store the extracted TK.
+ * @return Length of the TK in bytes, or 0 if an error occurred.
+ */
 Dot11DecryptGetTK(const PDOT11DECRYPT_KEY_ITEM key, const uint8_t **tk);
 
 int
+
+/**
+ * @brief Retrieves the GTK (Group Temporal Key) from a given key item.
+ *
+ * This function extracts the Group Temporal Key (GTK) from the provided key item and stores it in the gtk pointer.
+ *
+ * @param key Pointer to the DOT11DECRYPT_KEY_ITEM containing the encryption keys.
+ * @param gtk Pointer to store the retrieved GTK.
+ * @return The length of the GTK if successful, 0 otherwise.
+ */
 Dot11DecryptGetGTK(const PDOT11DECRYPT_KEY_ITEM key, const uint8_t **gtk);
 
 /**

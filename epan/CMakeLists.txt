@@ -31,6 +31,7 @@ add_custom_command(
 		${CMAKE_SOURCE_DIR}/tools/rdps.py
 		${CMAKE_CURRENT_SOURCE_DIR}/print.ps
 )
+add_custom_target(generate_ps_c DEPENDS ps.c)
 
 set(LIBWIRESHARK_PUBLIC_HEADERS
 	addr_resolv.h
@@ -344,7 +345,7 @@ target_include_directories(epan
 		${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-add_dependencies(epan lemon)
+add_dependencies(epan lemon generate_ps_c)
 
 install(TARGETS epan
 	EXPORT WiresharkTargets
@@ -434,6 +435,7 @@ CHECKAPI(
 	SOURCES
 	  ${LIBWIRESHARK_NONGENERATED_FILES}
 )
+add_dependencies(checkAPI_epan generate_ps_c)
 
 #
 # Editor modelines  -  https://www.wireshark.org/tools/modelines.html

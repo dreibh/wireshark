@@ -16,9 +16,10 @@
 #include <QtGlobal>
 
 class QSyntaxHighlighter;
+class QEvent;
 
 /**
- * @brief Read-only code editor supporting gutter breakpoints and highlighting.
+ * @brief Editable code editor supporting gutter breakpoints and highlighting.
  */
 class LuaDebuggerCodeView : public QPlainTextEdit
 {
@@ -45,12 +46,17 @@ class LuaDebuggerCodeView : public QPlainTextEdit
     void setFilename(const QString &f) { filename = f; }
     QString getFilename() const { return filename; }
     /**
-     * @brief Highlight and scroll to the requested line.
-     * @param line Line number to select (1-based).
+     * @brief Set the debugger "execution paused" line (amber bar) and move the
+     *        caret to that line. Pass @<= 0 to clear only the paused-line bar.
      */
     void setCurrentLine(qint32 line);
-    /** @brief Remove any current-line highlight from the view. */
+    /** @brief Clear the debugger paused-line highlight (caret stripe unchanged). */
     void clearCurrentLineHighlight();
+    /**
+     * @brief Move the caret to the start of a line without changing the paused
+     *        line (e.g. go-to-line).
+     */
+    void moveCaretToLineStart(qint32 line);
     /** @brief Apply a monospace font to both editor text and gutter. */
     void setEditorFont(const QFont &font);
     /** @brief Refresh breakpoint markers in the gutter area. */
@@ -65,19 +71,22 @@ class LuaDebuggerCodeView : public QPlainTextEdit
   protected:
     /** @brief Update margins whenever Qt reports a size change. */
     void resizeEvent(QResizeEvent *event) override;
+    /** @brief Forward Esc to LuaDebuggerDialog (keys go to viewport, not the dialog). */
+    bool eventFilter(QObject *watched, QEvent *event) override;
 
   private slots:
     /** @brief Update margins to accommodate new block digits. */
     void updateLineNumberAreaWidth(int newBlockCount);
-    /** @brief Recompute the highlight for the active line. */
-    void highlightCurrentLine();
+    /** @brief Rebuild debugger + caret line extra selections. */
+    void rebuildLineHighlights();
     /** @brief Repaint the gutter when Qt issues update requests. */
     void updateLineNumberArea(const QRect &rect, int dy);
 
   private:
     QWidget *lineNumberArea;
-    qint32 currentLine;
     QSyntaxHighlighter *syntaxHighlighter;
+    /** 1-based line where the debugger is paused, or -1 if none. */
+    qint32 pausedExecutionLine_ = -1;
 
     friend class LineNumberArea;
     QString filename;

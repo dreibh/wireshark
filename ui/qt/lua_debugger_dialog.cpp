@@ -8,16 +8,27 @@
  */
 
 #include "lua_debugger_dialog.h"
+#include "accordion_frame.h"
+#include <QApplication>
 #include "lua_debugger_code_view.h"
+#include "lua_debugger_find_frame.h"
+#include "lua_debugger_goto_line_frame.h"
 #include "main_application.h"
 #include "main_window.h"
 #include "ui_lua_debugger_dialog.h"
 #include "utils/stock_icon.h"
 #include "widgets/collapsible_section.h"
 
+#include <QAction>
 #include <QCheckBox>
+#include <QChildEvent>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QEvent>
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+#include <QKeyCombination>
+#endif
+#include <QKeyEvent>
 #include <QColor>
 #include <QComboBox>
 #include <QDir>
@@ -37,16 +48,18 @@
 #include <QList>
 #include <QMenu>
 #include <QMessageBox>
+#include <QMetaObject>
 #include <QPainter>
 #include <QPalette>
+#include <QPlainTextEdit>
 #include <QPointer>
-#include <QScrollArea>
 #include <QSet>
 #include <QStandardPaths>
 #include <QStyle>
+#include <QTextDocument>
+#include <QSplitter>
 #include <QTextStream>
 #include <QVBoxLayout>
-#include <QtGlobal>
 
 #include <glib.h>
 
@@ -82,12 +95,6 @@ namespace
 namespace SettingsKeys
 {
 constexpr const char *Theme = "theme";
-constexpr const char *FontFamily = "fontFamily";
-constexpr const char *FontSize = "fontSize";
-constexpr const char *DialogWidth = "dialogWidth";
-constexpr const char *DialogHeight = "dialogHeight";
-constexpr const char *DialogX = "dialogX";
-constexpr const char *DialogY = "dialogY";
 constexpr const char *MainSplitter = "mainSplitterState";
 constexpr const char *LeftSplitter = "leftSplitterState";
 constexpr const char *SectionVariables = "sectionVariables";
@@ -109,9 +116,10 @@ constexpr qint32 BreakpointLineRole = static_cast<qint32>(Qt::UserRole + 3);
 constexpr qint32 StackItemFileRole = static_cast<qint32>(Qt::UserRole + 4);
 constexpr qint32 StackItemLineRole = static_cast<qint32>(Qt::UserRole + 5);
 constexpr qint32 StackItemNavigableRole = static_cast<qint32>(Qt::UserRole + 6);
-constexpr qint32 VariablePathRole = static_cast<qint32>(Qt::UserRole + 7);
-constexpr qint32 VariableTypeRole = static_cast<qint32>(Qt::UserRole + 8);
-constexpr qint32 VariableCanExpandRole = static_cast<qint32>(Qt::UserRole + 9);
+constexpr qint32 StackItemLevelRole = static_cast<qint32>(Qt::UserRole + 7);
+constexpr qint32 VariablePathRole = static_cast<qint32>(Qt::UserRole + 8);
+constexpr qint32 VariableTypeRole = static_cast<qint32>(Qt::UserRole + 9);
+constexpr qint32 VariableCanExpandRole = static_cast<qint32>(Qt::UserRole + 10);
 
 /** @brief Registers the UI callback with the Lua debugger core at load time. */
 class LuaDebuggerUiCallbackRegistrar
@@ -129,13 +137,86 @@ class LuaDebuggerUiCallbackRegistrar
 };
 
 static LuaDebuggerUiCallbackRegistrar g_luaDebuggerUiCallbackRegistrar;
+
+/** @brief Build a key sequence from a key event for matching QAction shortcuts. */
+static QKeySequence luaSeqFromKeyEvent(const QKeyEvent *ke)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    return QKeySequence(QKeyCombination(ke->modifiers(), static_cast<Qt::Key>(ke->key())));
+#else
+    return QKeySequence(ke->key() | ke->modifiers());
+#endif
+}
+
+/**
+ * @brief True if @a pressed is one of the debugger shortcuts that overlap the
+ * main window (Find, Save, Go to line, Reload Lua plugins).
+ */
+static bool matchesLuaDebuggerShortcutKeys(Ui::LuaDebuggerDialog *ui,
+                                           const QKeySequence &pressed)
+{
+    return (pressed.matches(ui->actionFind->shortcut()) == QKeySequence::ExactMatch) ||
+           (pressed.matches(ui->actionSaveFile->shortcut()) == QKeySequence::ExactMatch) ||
+           (pressed.matches(ui->actionGoToLine->shortcut()) == QKeySequence::ExactMatch) ||
+           (pressed.matches(ui->actionReloadLuaPlugins->shortcut()) == QKeySequence::ExactMatch);
+}
+
+/**
+ * @brief Run debugger toolbar actions that share shortcuts with the main window.
+ *
+ * When a capture file is open, Wireshark enables Find Packet (Ctrl+F) and
+ * Go to Packet (Ctrl+G). QEvent::ShortcutOverride is handled separately: we only
+ * accept() there so Qt does not activate the main-window QAction; triggering
+ * happens on KeyPress only. Doing both would call showAccordionFrame(..., true)
+ * twice and toggle the bar closed immediately after opening.
+ *
+ * @return True if @a pressed matches one of these shortcuts (handled or not).
+ */
+static bool triggerLuaDebuggerShortcuts(Ui::LuaDebuggerDialog *ui,
+                                        const QKeySequence &pressed)
+{
+    if (pressed.matches(ui->actionFind->shortcut()) == QKeySequence::ExactMatch)
+    {
+        if (ui->actionFind->isEnabled())
+        {
+            ui->actionFind->trigger();
+        }
+        return true;
+    }
+    if (pressed.matches(ui->actionSaveFile->shortcut()) == QKeySequence::ExactMatch)
+    {
+        if (ui->actionSaveFile->isEnabled())
+        {
+            ui->actionSaveFile->trigger();
+        }
+        return true;
+    }
+    if (pressed.matches(ui->actionGoToLine->shortcut()) == QKeySequence::ExactMatch)
+    {
+        if (ui->actionGoToLine->isEnabled())
+        {
+            ui->actionGoToLine->trigger();
+        }
+        return true;
+    }
+    if (pressed.matches(ui->actionReloadLuaPlugins->shortcut()) ==
+        QKeySequence::ExactMatch)
+    {
+        if (ui->actionReloadLuaPlugins->isEnabled())
+        {
+            ui->actionReloadLuaPlugins->trigger();
+        }
+        return true;
+    }
+    return false;
+}
 } // namespace
 
 LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     : GeometryStateDialog(parent), ui(new Ui::LuaDebuggerDialog),
       eventLoop(nullptr), enabledCheckBox(nullptr), breakpointTabsPrimed(false),
       debuggerPaused(false), reloadDeferred(false), variablesSection(nullptr),
-      stackSection(nullptr), filesSection(nullptr), breakpointsSection(nullptr),
+      stackSection(nullptr), breakpointsSection(nullptr), filesSection(nullptr),
       evalSection(nullptr), settingsSection(nullptr), variablesTree(nullptr),
       stackTree(nullptr), fileTree(nullptr), breakpointsTree(nullptr),
       evalInputEdit(nullptr), evalOutputEdit(nullptr), evalButton(nullptr),
@@ -164,33 +245,60 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     // Compact toolbar styling with consistent icons
     ui->toolBar->setIconSize(QSize(18, 18));
     ui->toolBar->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    ui->toolBar->setStyleSheet(
-        QStringLiteral("QToolBar { spacing: 4px; padding: 2px 4px; }"));
+    ui->toolBar->setStyleSheet(QStringLiteral(
+        "QToolBar {"
+        "  background-color: palette(window);"
+        "  border: none;"
+        "  spacing: 4px;"
+        "  padding: 2px 4px;"
+        "}"));
     ui->actionOpenFile->setIcon(StockIcon("document-open"));
-    ui->actionContinue->setIcon(StockIcon("media-playback-start"));
-    ui->actionStep->setIcon(StockIcon("go-next"));
+    ui->actionSaveFile->setIcon(
+        style()->standardIcon(QStyle::SP_DialogSaveButton));
+    ui->actionContinue->setIcon(StockIcon("x-lua-debug-continue"));
+    ui->actionStepOver->setIcon(StockIcon("x-lua-debug-step-over"));
+    ui->actionStepIn->setIcon(StockIcon("x-lua-debug-step-in"));
+    ui->actionStepOut->setIcon(StockIcon("x-lua-debug-step-out"));
     ui->actionReloadLuaPlugins->setIcon(StockIcon("view-refresh"));
     ui->actionClearBreakpoints->setIcon(StockIcon("edit-clear"));
+    ui->actionFind->setIcon(StockIcon("edit-find"));
     ui->actionOpenFile->setToolTip(tr("Open Lua Script"));
+    ui->actionSaveFile->setToolTip(tr("Save (%1)").arg(
+        QKeySequence(QKeySequence::Save)
+            .toString(QKeySequence::NativeText)));
     ui->actionContinue->setToolTip(tr("Continue execution (F5)"));
-    ui->actionStep->setToolTip(tr("Step to next line (F10)"));
+    ui->actionStepOver->setToolTip(tr("Step over (F10)"));
+    ui->actionStepIn->setToolTip(tr("Step into (F11)"));
+    ui->actionStepOut->setToolTip(tr("Step out (Shift+F11)"));
     ui->actionReloadLuaPlugins->setToolTip(
         tr("Reload Lua Plugins (Ctrl+Shift+L)"));
     ui->actionClearBreakpoints->setToolTip(tr("Remove all breakpoints"));
-    ui->actionContinue->setShortcut(QKeySequence(Qt::Key_F5));
+    ui->actionFind->setToolTip(tr("Find in script (%1)")
+                                   .arg(QKeySequence(QKeySequence::Find)
+                                            .toString(QKeySequence::NativeText)));
+    ui->actionGoToLine->setToolTip(tr("Go to line (%1)")
+                                       .arg(QKeySequence(Qt::CTRL | Qt::Key_G)
+                                                .toString(QKeySequence::NativeText)));
     ui->actionContinue->setShortcutContext(Qt::WidgetWithChildrenShortcut);
-    ui->actionStep->setShortcut(QKeySequence(Qt::Key_F10));
-    ui->actionStep->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    ui->actionStepOver->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    ui->actionStepIn->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    ui->actionStepOut->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     ui->actionReloadLuaPlugins->setShortcut(
         QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L));
     ui->actionReloadLuaPlugins->setShortcutContext(
         Qt::WidgetWithChildrenShortcut);
+    ui->actionSaveFile->setShortcut(QKeySequence::Save);
+    ui->actionSaveFile->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    ui->actionFind->setShortcut(QKeySequence::Find);
+    ui->actionFind->setShortcutContext(Qt::WidgetWithChildrenShortcut);
+    ui->actionGoToLine->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_G));
+    ui->actionGoToLine->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     folderIcon = StockIcon("folder");
     fileIcon = StockIcon("text-x-generic");
 
     // Toolbar controls - Checkbox for enable/disable
-    // Order: Checkbox | Separator | Continue | Step | Separator | Open | Reload
-    // | Clear
+    // Order: Checkbox | Separator | Continue | Step Over/In/Out | Separator |
+    // Open | Reload | Clear
     QAction *firstAction = ui->toolBar->actions().isEmpty()
                                ? nullptr
                                : ui->toolBar->actions().first();
@@ -204,25 +312,44 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
             &LuaDebuggerDialog::onDebuggerToggled);
     connect(ui->actionContinue, &QAction::triggered, this,
             &LuaDebuggerDialog::onContinue);
-    connect(ui->actionStep, &QAction::triggered, this,
-            &LuaDebuggerDialog::onStep);
+    connect(ui->actionStepOver, &QAction::triggered, this,
+            &LuaDebuggerDialog::onStepOver);
+    connect(ui->actionStepIn, &QAction::triggered, this,
+            &LuaDebuggerDialog::onStepIn);
+    connect(ui->actionStepOut, &QAction::triggered, this,
+            &LuaDebuggerDialog::onStepOut);
     connect(ui->actionClearBreakpoints, &QAction::triggered, this,
             &LuaDebuggerDialog::onClearBreakpoints);
     connect(ui->actionOpenFile, &QAction::triggered, this,
             &LuaDebuggerDialog::onOpenFile);
+    connect(ui->actionSaveFile, &QAction::triggered, this,
+            &LuaDebuggerDialog::onSaveFile);
+    connect(ui->actionFind, &QAction::triggered, this,
+            &LuaDebuggerDialog::onEditorFind);
+    connect(ui->actionGoToLine, &QAction::triggered, this,
+            &LuaDebuggerDialog::onEditorGoToLine);
     connect(ui->actionReloadLuaPlugins, &QAction::triggered, this,
             &LuaDebuggerDialog::onReloadLuaPlugins);
     addAction(ui->actionContinue);
-    addAction(ui->actionStep);
+    addAction(ui->actionStepOver);
+    addAction(ui->actionStepIn);
+    addAction(ui->actionStepOut);
     addAction(ui->actionReloadLuaPlugins);
+    addAction(ui->actionSaveFile);
+    addAction(ui->actionFind);
+    addAction(ui->actionGoToLine);
+
+    ui->luaDebuggerFindFrame->hide();
+    ui->luaDebuggerGoToLineFrame->hide();
 
     // Tab Widget
-    connect(ui->codeTabWidget, &QTabWidget::tabCloseRequested,
-            [this](int idx)
+    connect(ui->codeTabWidget, &QTabWidget::tabCloseRequested, this,
+            &LuaDebuggerDialog::onCodeTabCloseRequested);
+    connect(ui->codeTabWidget, &QTabWidget::currentChanged, this,
+            [this](int)
             {
-                QWidget *w = ui->codeTabWidget->widget(idx);
-                ui->codeTabWidget->removeTab(idx);
-                delete w;
+                updateSaveActionState();
+                updateLuaEditorAuxFrames();
             });
 
     // Breakpoints
@@ -267,6 +394,8 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
 
     connect(stackTree, &QTreeWidget::itemDoubleClicked, this,
             &LuaDebuggerDialog::onStackItemDoubleClicked);
+    connect(stackTree, &QTreeWidget::currentItemChanged, this,
+            &LuaDebuggerDialog::onStackCurrentItemChanged);
 
     // Evaluate panel
     connect(evalButton, &QPushButton::clicked, this,
@@ -304,8 +433,7 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     if (mainApp)
     {
         connect(mainApp, &MainApplication::zoomMonospaceFont, this,
-                &LuaDebuggerDialog::onMonospaceFontUpdated,
-                Qt::UniqueConnection);
+                &LuaDebuggerDialog::onMonospaceFontUpdated, Qt::UniqueConnection);
         connect(mainApp, &MainApplication::appInitialized, this,
                 &LuaDebuggerDialog::onMainAppInitialized, Qt::UniqueConnection);
         connect(mainApp, &MainApplication::preferencesChanged, this,
@@ -333,6 +461,10 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
      */
     applyDialogSettings();
     updateBreakpoints();
+    updateSaveActionState();
+    updateLuaEditorAuxFrames();
+
+    installDescendantShortcutFilters();
 }
 
 LuaDebuggerDialog::~LuaDebuggerDialog()
@@ -360,6 +492,14 @@ void LuaDebuggerDialog::createCollapsibleSections()
 
     // --- Variables Section ---
     variablesSection = new CollapsibleSection(tr("Variables"), this);
+    variablesSection->setToolTip(
+        tr("<p><b>Locals</b><br/>"
+           "Parameters and local variables for the selected stack frame.</p>"
+           "<p><b>Upvalues</b><br/>"
+           "Outer variables that this function actually uses from surrounding code. "
+           "Anything the function does not reference does not appear here.</p>"
+           "<p><b>Globals</b><br/>"
+           "Names from the global environment table.</p>"));
     variablesTree = new QTreeWidget();
     variablesTree->setColumnCount(3);
     variablesTree->setHeaderLabels({tr("Name"), tr("Value"), tr("Type")});
@@ -373,19 +513,12 @@ void LuaDebuggerDialog::createCollapsibleSections()
     stackTree->setColumnCount(2);
     stackTree->setHeaderLabels({tr("Function"), tr("Location")});
     stackTree->setRootIsDecorated(true);
+    stackTree->setToolTip(
+        tr("Select a row to inspect locals and upvalues for that frame. "
+           "Double-click a Lua frame to open its source location."));
     stackSection->setContentWidget(stackTree);
     stackSection->setExpanded(true);
     splitter->addWidget(stackSection);
-
-    // --- Files Section ---
-    filesSection = new CollapsibleSection(tr("Files"), this);
-    fileTree = new QTreeWidget();
-    fileTree->setColumnCount(1);
-    fileTree->setHeaderLabels({tr("Files")});
-    fileTree->setRootIsDecorated(false);
-    filesSection->setContentWidget(fileTree);
-    filesSection->setExpanded(true);
-    splitter->addWidget(filesSection);
 
     // --- Breakpoints Section ---
     breakpointsSection = new CollapsibleSection(tr("Breakpoints"), this);
@@ -397,6 +530,16 @@ void LuaDebuggerDialog::createCollapsibleSections()
     breakpointsSection->setContentWidget(breakpointsTree);
     breakpointsSection->setExpanded(true);
     splitter->addWidget(breakpointsSection);
+
+    // --- Files Section ---
+    filesSection = new CollapsibleSection(tr("Files"), this);
+    fileTree = new QTreeWidget();
+    fileTree->setColumnCount(1);
+    fileTree->setHeaderLabels({tr("Files")});
+    fileTree->setRootIsDecorated(false);
+    filesSection->setContentWidget(fileTree);
+    filesSection->setExpanded(true);
+    splitter->addWidget(filesSection);
 
     // --- Evaluate Section ---
     evalSection = new CollapsibleSection(tr("Evaluate"), this);
@@ -517,13 +660,14 @@ void LuaDebuggerDialog::handlePause(const char *file_path, int64_t line)
     debuggerPaused = true;
     updateWidgets();
 
+    stackSelectionLevel = 0;
     updateStack();
     variablesTree->clear();
     updateVariables(nullptr, QString());
 
     /*
-     * If an event loop is already running (e.g. we were called from onStep()
-     * which triggered an immediate re-pause), reuse it instead of nesting.
+     * If an event loop is already running (e.g. we were called from a step
+     * action which triggered an immediate re-pause), reuse it instead of nesting.
      * The outer loop.exec() is still on the stack and will return when we
      * eventually quit it via Continue or close.
      */
@@ -580,7 +724,7 @@ void LuaDebuggerDialog::onContinue()
     updateWidgets();
 }
 
-void LuaDebuggerDialog::onStep()
+void LuaDebuggerDialog::runDebuggerStep(void (*step_fn)(void))
 {
     if (!debuggerPaused)
     {
@@ -591,13 +735,12 @@ void LuaDebuggerDialog::onStep()
     clearPausedStateUi();
 
     /*
-     * Call wslua_debugger_step() which will immediately fire the line
-     * hook. If it hits a pause, handlePause() is called synchronously.
-     * handlePause() detects that eventLoop is already set and reuses
-     * it instead of nesting a new one — so the stack does NOT grow
-     * with each step.
+     * The step function resumes the VM and may synchronously hit handlePause()
+     * again. handlePause() detects that eventLoop is already set and reuses
+     * it instead of nesting a new one — so the stack does NOT grow with each
+     * step.
      */
-    wslua_debugger_step();
+    step_fn();
 
     /*
      * If handlePause() was NOT called (e.g. step landed in C code
@@ -610,6 +753,21 @@ void LuaDebuggerDialog::onStep()
     }
 
     updateWidgets();
+}
+
+void LuaDebuggerDialog::onStepOver()
+{
+    runDebuggerStep(wslua_debugger_step_over);
+}
+
+void LuaDebuggerDialog::onStepIn()
+{
+    runDebuggerStep(wslua_debugger_step_in);
+}
+
+void LuaDebuggerDialog::onStepOut()
+{
+    runDebuggerStep(wslua_debugger_step_out);
 }
 
 void LuaDebuggerDialog::onDebuggerToggled(bool checked)
@@ -627,14 +785,128 @@ void LuaDebuggerDialog::onDebuggerToggled(bool checked)
     updateWidgets();
 }
 
+void LuaDebuggerDialog::reject()
+{
+    /* Base QDialog::reject() calls done(Rejected), which hides() without
+     * delivering QCloseEvent, so our closeEvent() unsaved-scripts check does
+     * not run (e.g. Esc). Synchronous close() from keyPressEvent → reject()
+     * can fail to finish closing; queue close() so closeEvent() runs on the
+     * next event-loop turn (same path as the window close control). */
+    QMetaObject::invokeMethod(this, "close", Qt::QueuedConnection);
+}
+
 void LuaDebuggerDialog::closeEvent(QCloseEvent *event)
 {
+    if (!ensureUnsavedChangesHandled(tr("Lua Debugger")))
+    {
+        event->ignore();
+        return;
+    }
+
     /* Disable the debugger so breakpoints won't fire and reopen the
      * dialog after it has been closed. */
     wslua_debugger_set_enabled(false);
     resumeDebuggerAndExitLoop();
 
-    GeometryStateDialog::closeEvent(event);
+    /*
+     * Do not call QDialog::closeEvent (GeometryStateDialog inherits it):
+     * QDialog::closeEvent invokes reject(); our reject() queues close()
+     * asynchronously, so the dialog stays visible and Qt then ignores the
+     * close event (see qdialog.cpp: if (that && isVisible()) e->ignore()).
+     * QWidget::closeEvent only accepts the event so the window can close.
+     */
+    QWidget::closeEvent(event);
+}
+
+void LuaDebuggerDialog::handleEscapeKey()
+{
+    QWidget *const modal = QApplication::activeModalWidget();
+    if (modal && modal != this)
+    {
+        return;
+    }
+    if (ui->luaDebuggerFindFrame->isVisible())
+    {
+        ui->luaDebuggerFindFrame->animatedHide();
+        return;
+    }
+    if (ui->luaDebuggerGoToLineFrame->isVisible())
+    {
+        ui->luaDebuggerGoToLineFrame->animatedHide();
+        return;
+    }
+    QMetaObject::invokeMethod(this, "close", Qt::QueuedConnection);
+}
+
+void LuaDebuggerDialog::installDescendantShortcutFilters()
+{
+    installEventFilter(this);
+    for (QWidget *w : findChildren<QWidget *>())
+    {
+        w->installEventFilter(this);
+    }
+}
+
+void LuaDebuggerDialog::childEvent(QChildEvent *event)
+{
+    if (event->added())
+    {
+        if (auto *w = qobject_cast<QWidget *>(event->child()))
+        {
+            w->installEventFilter(this);
+            for (QWidget *d : w->findChildren<QWidget *>())
+            {
+                d->installEventFilter(this);
+            }
+        }
+    }
+    QDialog::childEvent(event);
+}
+
+bool LuaDebuggerDialog::eventFilter(QObject *obj, QEvent *event)
+{
+    QWidget *const receiver = qobject_cast<QWidget *>(obj);
+    const bool inDebuggerUi =
+        receiver && isVisible() && isAncestorOf(receiver);
+
+    if (inDebuggerUi && event->type() == QEvent::ShortcutOverride)
+    {
+        auto *ke = static_cast<QKeyEvent *>(event);
+        const QKeySequence pressed = luaSeqFromKeyEvent(ke);
+        if (matchesLuaDebuggerShortcutKeys(ui, pressed))
+        {
+            ke->accept();
+            return false;
+        }
+    }
+
+    if (inDebuggerUi && event->type() == QEvent::KeyPress)
+    {
+        auto *ke = static_cast<QKeyEvent *>(event);
+        /*
+         * Esc must be handled here: QPlainTextEdit accepts Key_Escape without
+         * propagating to QDialog::keyPressEvent, so reject() never runs.
+         * Dismiss inline find/go bars first; then queue close() so closeEvent()
+         * runs (unsaved-scripts prompt). Skip if a different modal dialog owns
+         * the event (e.g. nested prompt).
+         */
+        if (ke->key() == Qt::Key_Escape && ke->modifiers() == Qt::NoModifier)
+        {
+            QWidget *const modal = QApplication::activeModalWidget();
+            if (modal && modal != this)
+            {
+                return QDialog::eventFilter(obj, event);
+            }
+            handleEscapeKey();
+            return true;
+        }
+        const QKeySequence pressed = luaSeqFromKeyEvent(ke);
+        if (triggerLuaDebuggerShortcuts(ui, pressed))
+        {
+            return true;
+        }
+    }
+    return QDialog::eventFilter(obj, event);
 }
 
 void LuaDebuggerDialog::onClearBreakpoints()
@@ -696,8 +968,12 @@ void LuaDebuggerDialog::updateBreakpoints()
             item->setData(0, BreakpointLineRole, static_cast<qlonglong>(line));
             item->setToolTip(0, tr("Enable or disable this breakpoint"));
             item->setText(1, QString::number(line));
+            const QString fileDisplayName = fileInfo.fileName();
             QString locationText =
-                QStringLiteral("%1:%2").arg(normalizedPath).arg(line);
+                QStringLiteral("%1:%2")
+                    .arg(fileDisplayName.isEmpty() ? normalizedPath
+                                                    : fileDisplayName)
+                    .arg(line);
             item->setText(2, locationText);
             item->setTextAlignment(2, Qt::AlignLeft | Qt::AlignVCenter);
 
@@ -758,14 +1034,29 @@ void LuaDebuggerDialog::updateBreakpoints()
 
 void LuaDebuggerDialog::updateStack()
 {
+    if (!stackTree)
+    {
+        return;
+    }
+
+    const bool signalsWereBlocked = stackTree->blockSignals(true);
     stackTree->clear();
+
     int32_t frameCount = 0;
     wslua_stack_frame_t *stack = wslua_debugger_get_stack(&frameCount);
-    if (stack)
+    QTreeWidgetItem *itemToSelect = nullptr;
+    if (stack && frameCount > 0)
     {
+        const int maxLevel = static_cast<int>(frameCount) - 1;
+        stackSelectionLevel = qBound(0, stackSelectionLevel, maxLevel);
+        wslua_debugger_set_variable_stack_level(
+            static_cast<int32_t>(stackSelectionLevel));
+
         for (int32_t frameIndex = 0; frameIndex < frameCount; ++frameIndex)
         {
             QTreeWidgetItem *item = new QTreeWidgetItem(stackTree);
+            item->setData(0, StackItemLevelRole,
+                            static_cast<qlonglong>(frameIndex));
             const char *rawSource = stack[frameIndex].source;
             const bool isLuaFrame = rawSource && rawSource[0] == '@';
             const QString functionName = QString::fromUtf8(
@@ -780,9 +1071,16 @@ void LuaDebuggerDialog::updateStack()
                 {
                     resolvedPath = filePath;
                 }
+                const QString fileDisplayName =
+                    QFileInfo(resolvedPath).fileName();
                 locationText = QStringLiteral("%1:%2")
-                                   .arg(resolvedPath)
+                                   .arg(fileDisplayName.isEmpty() ? resolvedPath
+                                                                 : fileDisplayName)
                                    .arg(stack[frameIndex].line);
+                item->setToolTip(
+                    1, QStringLiteral("%1:%2")
+                           .arg(resolvedPath)
+                           .arg(stack[frameIndex].line));
             }
             else
             {
@@ -806,11 +1104,57 @@ void LuaDebuggerDialog::updateStack()
                     palette().color(QPalette::Disabled, QPalette::Text);
                 item->setForeground(0, disabledColor);
                 item->setForeground(1, disabledColor);
-                item->setFlags(item->flags() & ~Qt::ItemIsSelectable);
+            }
+
+            if (frameIndex == stackSelectionLevel)
+            {
+                itemToSelect = item;
             }
         }
         wslua_debugger_free_stack(stack, frameCount);
     }
+    else
+    {
+        stackSelectionLevel = 0;
+        wslua_debugger_set_variable_stack_level(0);
+    }
+
+    if (itemToSelect)
+    {
+        stackTree->setCurrentItem(itemToSelect);
+    }
+    stackTree->blockSignals(signalsWereBlocked);
+}
+
+void LuaDebuggerDialog::refreshVariablesForCurrentStackFrame()
+{
+    if (!variablesTree || !debuggerPaused || !wslua_debugger_is_paused())
+    {
+        return;
+    }
+    variablesTree->clear();
+    updateVariables(nullptr, QString());
+}
+
+void LuaDebuggerDialog::onStackCurrentItemChanged(QTreeWidgetItem *current,
+                                                  QTreeWidgetItem *previous)
+{
+    Q_UNUSED(previous);
+    if (!stackTree || !current || !debuggerPaused ||
+        !wslua_debugger_is_paused())
+    {
+        return;
+    }
+
+    const int level = static_cast<int>(current->data(0, StackItemLevelRole).toLongLong());
+    if (level < 0 || level == stackSelectionLevel)
+    {
+        return;
+    }
+
+    stackSelectionLevel = level;
+    wslua_debugger_set_variable_stack_level(static_cast<int32_t>(level));
+    refreshVariablesForCurrentStackFrame();
 }
 
 // NOLINTNEXTLINE(misc-no-recursion)
@@ -977,7 +1321,7 @@ LuaDebuggerCodeView *LuaDebuggerDialog::loadFile(const QString &file_path)
 
     // Create new tab
     LuaDebuggerCodeView *codeView = new LuaDebuggerCodeView(ui->codeTabWidget);
-    codeView->setEditorFont(effectiveMonospaceFont());
+    codeView->setEditorFont(effectiveMonospaceFont(true));
     codeView->setFilename(normalizedPath);
 
     QFile file(normalizedPath);
@@ -1033,10 +1377,276 @@ LuaDebuggerCodeView *LuaDebuggerDialog::loadFile(const QString &file_path)
             }
         });
 
+    connect(codeView->document(), &QTextDocument::modificationChanged, this,
+            [this, codeView]()
+            {
+                updateTabTextForCodeView(codeView);
+                updateWindowModifiedState();
+                if (ui->codeTabWidget->currentWidget() == codeView)
+                {
+                    updateSaveActionState();
+                }
+            });
+
     ui->codeTabWidget->addTab(codeView, QFileInfo(normalizedPath).fileName());
+    updateTabTextForCodeView(codeView);
     ui->codeTabWidget->setCurrentWidget(codeView);
     ui->codeTabWidget->show();
+    updateSaveActionState();
+    updateWindowModifiedState();
+    updateLuaEditorAuxFrames();
     return codeView;
+}
+
+LuaDebuggerCodeView *LuaDebuggerDialog::currentCodeView() const
+{
+    return qobject_cast<LuaDebuggerCodeView *>(
+        ui->codeTabWidget->currentWidget());
+}
+
+qint32 LuaDebuggerDialog::unsavedOpenScriptTabCount() const
+{
+    qint32 count = 0;
+    const qint32 tabCount =
+        static_cast<qint32>(ui->codeTabWidget->count());
+    for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
+    {
+        LuaDebuggerCodeView *view = qobject_cast<LuaDebuggerCodeView *>(
+            ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
+        if (view && view->document()->isModified())
+        {
+            ++count;
+        }
+    }
+    return count;
+}
+
+bool LuaDebuggerDialog::hasUnsavedChanges() const
+{
+    return unsavedOpenScriptTabCount() > 0;
+}
+
+bool LuaDebuggerDialog::ensureUnsavedChangesHandled(const QString &title)
+{
+    if (!hasUnsavedChanges())
+    {
+        return true;
+    }
+
+    const qint32 unsavedCount = unsavedOpenScriptTabCount();
+    const QMessageBox::StandardButton reply = QMessageBox::question(
+        this, title,
+        tr("There are unsaved changes in %Ln open file(s).", "", unsavedCount),
+        QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+        QMessageBox::Save);
+
+    if (reply == QMessageBox::Cancel)
+    {
+        return false;
+    }
+    if (reply == QMessageBox::Save)
+    {
+        return saveAllModified();
+    }
+    clearAllDocumentModified();
+    return true;
+}
+
+void LuaDebuggerDialog::clearAllDocumentModified()
+{
+    const qint32 tabCount =
+        static_cast<qint32>(ui->codeTabWidget->count());
+    for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
+    {
+        LuaDebuggerCodeView *view = qobject_cast<LuaDebuggerCodeView *>(
+            ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
+        if (view)
+        {
+            view->document()->setModified(false);
+        }
+    }
+}
+
+bool LuaDebuggerDialog::saveCodeView(LuaDebuggerCodeView *view)
+{
+    if (!view)
+    {
+        return false;
+    }
+    const QString path = view->getFilename();
+    if (path.isEmpty())
+    {
+        return false;
+    }
+
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        QMessageBox::warning(
+            this, tr("Save Lua Script"),
+            tr("Could not write to %1:\n%2").arg(path, file.errorString()));
+        return false;
+    }
+    QTextStream out(&file);
+    out << view->toPlainText();
+    file.close();
+    view->document()->setModified(false);
+    return true;
+}
+
+bool LuaDebuggerDialog::saveAllModified()
+{
+    const qint32 tabCount =
+        static_cast<qint32>(ui->codeTabWidget->count());
+    for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
+    {
+        LuaDebuggerCodeView *view = qobject_cast<LuaDebuggerCodeView *>(
+            ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
+        if (view && view->document()->isModified())
+        {
+            if (!saveCodeView(view))
+            {
+                return false;
+            }
+        }
+    }
+    return true;
+}
+
+void LuaDebuggerDialog::updateTabTextForCodeView(LuaDebuggerCodeView *view)
+{
+    if (!view)
+    {
+        return;
+    }
+    const int tabIndex = ui->codeTabWidget->indexOf(view);
+    if (tabIndex < 0)
+    {
+        return;
+    }
+    QString label = QFileInfo(view->getFilename()).fileName();
+    if (view->document()->isModified())
+    {
+        label += QStringLiteral(" *");
+    }
+    ui->codeTabWidget->setTabText(tabIndex, label);
+}
+
+void LuaDebuggerDialog::updateSaveActionState()
+{
+    LuaDebuggerCodeView *view = currentCodeView();
+    ui->actionSaveFile->setEnabled(view && view->document()->isModified());
+}
+
+void LuaDebuggerDialog::updateWindowModifiedState()
+{
+    setWindowModified(hasUnsavedChanges());
+}
+
+void LuaDebuggerDialog::showAccordionFrame(AccordionFrame *show_frame,
+                                           bool toggle)
+{
+    QList<AccordionFrame *> frame_list =
+        QList<AccordionFrame *>() << ui->luaDebuggerFindFrame
+                                  << ui->luaDebuggerGoToLineFrame;
+    frame_list.removeAll(show_frame);
+    for (AccordionFrame *af : frame_list)
+    {
+        if (af)
+        {
+            af->animatedHide();
+        }
+    }
+    if (!show_frame)
+    {
+        return;
+    }
+    if (toggle && show_frame->isVisible())
+    {
+        show_frame->animatedHide();
+        return;
+    }
+    LuaDebuggerGoToLineFrame *const goto_frame =
+        qobject_cast<LuaDebuggerGoToLineFrame *>(show_frame);
+    if (goto_frame)
+    {
+        goto_frame->syncLineFieldFromEditor();
+    }
+    show_frame->animatedShow();
+    if (LuaDebuggerFindFrame *const find_frame =
+            qobject_cast<LuaDebuggerFindFrame *>(show_frame))
+    {
+        find_frame->scheduleFindFieldFocus();
+    }
+    else if (goto_frame)
+    {
+        goto_frame->scheduleLineFieldFocus();
+    }
+}
+
+void LuaDebuggerDialog::updateLuaEditorAuxFrames()
+{
+    QPlainTextEdit *ed = currentCodeView();
+    ui->luaDebuggerFindFrame->setTargetEditor(ed);
+    ui->luaDebuggerGoToLineFrame->setTargetEditor(ed);
+}
+
+void LuaDebuggerDialog::onEditorFind()
+{
+    updateLuaEditorAuxFrames();
+    showAccordionFrame(ui->luaDebuggerFindFrame, true);
+}
+
+void LuaDebuggerDialog::onEditorGoToLine()
+{
+    updateLuaEditorAuxFrames();
+    showAccordionFrame(ui->luaDebuggerGoToLineFrame, true);
+}
+
+void LuaDebuggerDialog::onSaveFile()
+{
+    LuaDebuggerCodeView *view = currentCodeView();
+    if (!view || !view->document()->isModified())
+    {
+        return;
+    }
+    saveCodeView(view);
+    updateSaveActionState();
+}
+
+void LuaDebuggerDialog::onCodeTabCloseRequested(int index)
+{
+    QWidget *widget = ui->codeTabWidget->widget(index);
+    LuaDebuggerCodeView *view = qobject_cast<LuaDebuggerCodeView *>(widget);
+    if (view && view->document()->isModified())
+    {
+        const QMessageBox::StandardButton reply = QMessageBox::question(
+            this, tr("Lua Debugger"),
+            tr("Save changes to %1 before closing?")
+                .arg(QFileInfo(view->getFilename()).fileName()),
+            QMessageBox::Save | QMessageBox::Discard | QMessageBox::Cancel,
+            QMessageBox::Save);
+        if (reply == QMessageBox::Cancel)
+        {
+            return;
+        }
+        if (reply == QMessageBox::Save)
+        {
+            if (!saveCodeView(view))
+            {
+                return;
+            }
+        }
+        else
+        {
+            view->document()->setModified(false);
+        }
+    }
+
+    ui->codeTabWidget->removeTab(index);
+    delete widget;
+    updateSaveActionState();
+    updateWindowModifiedState();
 }
 
 void LuaDebuggerDialog::onBreakpointItemChanged(QTreeWidgetItem *item,
@@ -1106,7 +1716,7 @@ void LuaDebuggerDialog::onBreakpointItemDoubleClicked(QTreeWidgetItem *item,
     LuaDebuggerCodeView *view = loadFile(file);
     if (view)
     {
-        view->setCurrentLine(static_cast<qint32>(lineNumber));
+        view->moveCaretToLineStart(static_cast<qint32>(lineNumber));
     }
 }
 
@@ -1118,6 +1728,38 @@ void LuaDebuggerDialog::onCodeViewContextMenu(const QPoint &pos)
         return;
 
     QMenu menu(this);
+
+    QAction *undoAct = menu.addAction(tr("Undo"));
+    undoAct->setEnabled(codeView->document()->isUndoAvailable());
+    connect(undoAct, &QAction::triggered, codeView, &QPlainTextEdit::undo);
+
+    QAction *redoAct = menu.addAction(tr("Redo"));
+    redoAct->setEnabled(codeView->document()->isRedoAvailable());
+    connect(redoAct, &QAction::triggered, codeView, &QPlainTextEdit::redo);
+
+    menu.addSeparator();
+
+    QAction *cutAct = menu.addAction(tr("Cut"));
+    cutAct->setEnabled(codeView->textCursor().hasSelection());
+    connect(cutAct, &QAction::triggered, codeView, &QPlainTextEdit::cut);
+
+    QAction *copyAct = menu.addAction(tr("Copy"));
+    copyAct->setEnabled(codeView->textCursor().hasSelection());
+    connect(copyAct, &QAction::triggered, codeView, &QPlainTextEdit::copy);
+
+    QAction *pasteAct = menu.addAction(tr("Paste"));
+    pasteAct->setEnabled(codeView->canPaste());
+    connect(pasteAct, &QAction::triggered, codeView, &QPlainTextEdit::paste);
+
+    QAction *selAllAct = menu.addAction(tr("Select All"));
+    connect(selAllAct, &QAction::triggered, codeView, &QPlainTextEdit::selectAll);
+
+    menu.addSeparator();
+    menu.addAction(ui->actionFind);
+    menu.addAction(ui->actionGoToLine);
+
+    menu.addSeparator();
+
     QTextCursor cursor = codeView->cursorForPosition(pos);
     const qint32 lineNumber = static_cast<qint32>(cursor.blockNumber() + 1);
 
@@ -1208,22 +1850,13 @@ void LuaDebuggerDialog::onStackItemDoubleClicked(QTreeWidgetItem *item,
     LuaDebuggerCodeView *view = loadFile(file);
     if (view)
     {
-        view->setCurrentLine(static_cast<qint32>(line));
+        view->moveCaretToLineStart(static_cast<qint32>(line));
     }
 }
 
 void LuaDebuggerDialog::onMonospaceFontUpdated(const QFont &font)
 {
-    if (!mainApp || !mainApp->isInitialized())
-    {
-        return;
-    }
-    applyMonospaceFonts(font);
-
-    /* Persist the font to our JSON settings */
-    settings_[SettingsKeys::FontFamily] = font.family();
-    settings_[SettingsKeys::FontSize] = font.pointSize();
-    saveSettingsFile();
+    applyCodeEditorFonts(font);
 }
 
 void LuaDebuggerDialog::onMainAppInitialized()
@@ -1234,6 +1867,7 @@ void LuaDebuggerDialog::onMainAppInitialized()
 void LuaDebuggerDialog::onPreferencesChanged()
 {
     applyCodeViewThemes();
+    applyMonospaceFonts();
 }
 
 void LuaDebuggerDialog::onThemeChanged(int idx)
@@ -1316,7 +1950,7 @@ void LuaDebuggerDialog::onLuaReloadCallback()
          * called in onLuaPostReloadCallback() AFTER plugins are loaded,
          * so new scripts appear in the file tree.
          */
-        if (dialog->ui && dialog->ui->codeTabWidget)
+        if (dialog->ui->codeTabWidget)
         {
             const qint32 tabCount =
                 static_cast<qint32>(dialog->ui->codeTabWidget->count());
@@ -1374,7 +2008,7 @@ void LuaDebuggerDialog::onScriptLoadedCallback(const char *file_path)
 
 void LuaDebuggerDialog::reloadAllScriptFiles()
 {
-    if (!ui || !ui->codeTabWidget)
+    if (!ui->codeTabWidget)
     {
         return;
     }
@@ -1386,6 +2020,12 @@ void LuaDebuggerDialog::reloadAllScriptFiles()
             ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
         if (view)
         {
+            if (view->document()->isModified())
+            {
+                /* Keep in-memory edits when this reload was not preceded by a
+                 * save/discard prompt (e.g. Analyze → Reload Lua Plugins). */
+                continue;
+            }
             QString filePath = view->getFilename();
             if (!filePath.isEmpty())
             {
@@ -1404,7 +2044,9 @@ void LuaDebuggerDialog::reloadAllScriptFiles()
 
 void LuaDebuggerDialog::applyCodeViewThemes()
 {
-    if (!ui || !ui->codeTabWidget)
+    ui->luaDebuggerFindFrame->updateStyleSheet();
+    ui->luaDebuggerGoToLineFrame->updateStyleSheet();
+    if (!ui->codeTabWidget)
     {
         return;
     }
@@ -1699,7 +2341,7 @@ void LuaDebuggerDialog::openInitialBreakpointFiles(
 
 void LuaDebuggerDialog::configureVariablesTreeColumns()
 {
-    if (!ui || !variablesTree || !variablesTree->header())
+    if (!variablesTree || !variablesTree->header())
     {
         return;
     }
@@ -1715,7 +2357,7 @@ void LuaDebuggerDialog::configureVariablesTreeColumns()
 
 void LuaDebuggerDialog::configureStackTreeColumns()
 {
-    if (!ui || !stackTree || !stackTree->header())
+    if (!stackTree || !stackTree->header())
     {
         return;
     }
@@ -1731,11 +2373,11 @@ void LuaDebuggerDialog::configureStackTreeColumns()
 
 void LuaDebuggerDialog::clearPausedStateUi()
 {
-    if (ui && variablesTree)
+    if (variablesTree)
     {
         variablesTree->clear();
     }
-    if (ui && stackTree)
+    if (stackTree)
     {
         stackTree->clear();
     }
@@ -1759,7 +2401,7 @@ void LuaDebuggerDialog::resumeDebuggerAndExitLoop()
 
 void LuaDebuggerDialog::onVariablesContextMenuRequested(const QPoint &pos)
 {
-    if (!ui || !variablesTree)
+    if (!variablesTree)
     {
         return;
     }
@@ -1800,7 +2442,7 @@ void LuaDebuggerDialog::onVariablesContextMenuRequested(const QPoint &pos)
 
 void LuaDebuggerDialog::clearAllCodeHighlights()
 {
-    if (!ui || !ui->codeTabWidget)
+    if (!ui->codeTabWidget)
     {
         return;
     }
@@ -1818,73 +2460,79 @@ void LuaDebuggerDialog::clearAllCodeHighlights()
 
 void LuaDebuggerDialog::applyMonospaceFonts()
 {
-    applyMonospaceFonts(effectiveMonospaceFont());
+    applyCodeEditorFonts(effectiveMonospaceFont(true));
+    applyMonospacePanelFonts();
 }
 
-void LuaDebuggerDialog::applyMonospaceFonts(const QFont &font)
+void LuaDebuggerDialog::applyCodeEditorFonts(const QFont &monoFont)
 {
-    QFont monoFont = font;
-    if (monoFont.family().isEmpty())
+    QFont font = monoFont;
+    if (font.family().isEmpty())
     {
-        monoFont = effectiveMonospaceFont();
+        font = effectiveMonospaceFont(true);
     }
 
-    QList<QWidget *> widgets;
-    widgets << this << variablesTree << stackTree << fileTree << breakpointsTree
-            << ui->toolBar << evalInputEdit << evalOutputEdit;
+    if (!ui->codeTabWidget)
+    {
+        return;
+    }
+    const qint32 tabCount = static_cast<qint32>(ui->codeTabWidget->count());
+    for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
+    {
+        LuaDebuggerCodeView *view = qobject_cast<LuaDebuggerCodeView *>(
+            ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
+        if (view)
+        {
+            view->setEditorFont(font);
+        }
+    }
+}
+
+void LuaDebuggerDialog::applyMonospacePanelFonts()
+{
+    const QFont panelMono = effectiveMonospaceFont(false);
+    const QFont headerFont = effectiveRegularFont();
+
+    const QList<QWidget *> widgets = {variablesTree, stackTree, breakpointsTree,
+                                      evalInputEdit, evalOutputEdit};
     for (QWidget *widget : widgets)
     {
         if (widget)
         {
-            widget->setFont(monoFont);
+            widget->setFont(panelMono);
         }
     }
 
-    const QList<QTreeWidget *> trees = {variablesTree, stackTree, fileTree,
-                                        breakpointsTree};
-    for (QTreeWidget *tree : trees)
+    const QList<QTreeWidget *> treesWithStandardHeaders = {
+        variablesTree, stackTree, fileTree, breakpointsTree};
+    for (QTreeWidget *tree : treesWithStandardHeaders)
     {
         if (tree && tree->header())
         {
-            tree->header()->setFont(monoFont);
-        }
-    }
-
-    if (ui && ui->codeTabWidget)
-    {
-        const qint32 tabCount = static_cast<qint32>(ui->codeTabWidget->count());
-        for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
-        {
-            LuaDebuggerCodeView *view = qobject_cast<LuaDebuggerCodeView *>(
-                ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
-            if (view)
-            {
-                view->setEditorFont(monoFont);
-            }
+            tree->header()->setFont(headerFont);
         }
     }
 }
 
-QFont LuaDebuggerDialog::effectiveMonospaceFont() const
+QFont LuaDebuggerDialog::effectiveMonospaceFont(bool zoomed) const
 {
-    /* If mainApp is initialized, use its monospace font */
+    /* Monospace font for panels and the script editor. */
     if (mainApp && mainApp->isInitialized())
     {
-        return mainApp->monospaceFont();
-    }
-
-    /* Try to use the persisted font from last session (from settings_) */
-    QString savedFamily = settings_.value(SettingsKeys::FontFamily).toString();
-    int savedSize = settings_.value(SettingsKeys::FontSize, 0).toInt();
-    if (!savedFamily.isEmpty() && savedSize > 0)
-    {
-        QFont savedFont(savedFamily, savedSize);
-        savedFont.setStyleHint(QFont::Monospace);
-        return savedFont;
+        return mainApp->monospaceFont(zoomed);
     }
 
     /* Fall back to system fixed font */
     return QFontDatabase::systemFont(QFontDatabase::FixedFont);
+}
+
+QFont LuaDebuggerDialog::effectiveRegularFont() const
+{
+    if (mainApp && mainApp->isInitialized())
+    {
+        return mainApp->font();
+    }
+    return QGuiApplication::font();
 }
 
 void LuaDebuggerDialog::syncDebuggerToggleWithCore()
@@ -1940,29 +2588,41 @@ void LuaDebuggerDialog::updateEnabledCheckboxIcon()
 void LuaDebuggerDialog::updateStatusLabel()
 {
     const bool debuggerEnabled = wslua_debugger_is_enabled();
-    QString title = tr("Lua Debugger");
+    /* [*] is required for setWindowModified() to show an unsaved
+     * indicator in the title. */
+    QString title = QStringLiteral("[*]%1").arg(tr("Lua Debugger"));
+
+#ifdef Q_OS_MAC
+        // On macOS we separate with a unicode em dash
+        title += QString(" " UTF8_EM_DASH " ");
+#else
+        title += QString(" - ");
+#endif
 
     if (!debuggerEnabled)
     {
-        title += tr(" - Disabled");
+        title += tr("Disabled");
     }
     else if (debuggerPaused)
     {
-        title += tr(" - Paused");
+        title += tr("Paused");
     }
     else
     {
-        title += tr(" - Running");
+        title += tr("Running");
     }
 
     setWindowTitle(title);
+    updateWindowModifiedState();
 }
 
 void LuaDebuggerDialog::updateContinueActionState()
 {
     const bool allowContinue = wslua_debugger_is_enabled() && debuggerPaused;
     ui->actionContinue->setEnabled(allowContinue);
-    ui->actionStep->setEnabled(allowContinue);
+    ui->actionStepOver->setEnabled(allowContinue);
+    ui->actionStepIn->setEnabled(allowContinue);
+    ui->actionStepOut->setEnabled(allowContinue);
 }
 
 void LuaDebuggerDialog::updateWidgets()
@@ -2005,6 +2665,11 @@ void LuaDebuggerDialog::onOpenFile()
 
 void LuaDebuggerDialog::onReloadLuaPlugins()
 {
+    if (!ensureUnsavedChangesHandled(tr("Reload Lua Plugins")))
+    {
+        return;
+    }
+
     // Confirmation dialog
     QMessageBox::StandardButton reply = QMessageBox::question(
         this, tr("Reload Lua Plugins"),
@@ -2108,9 +2773,9 @@ void LuaDebuggerDialog::onEvaluate()
     evalOutputEdit->setTextCursor(cursor);
 
     // Update all views in case the expression modified state
+    updateStack();
     variablesTree->clear();
     updateVariables(nullptr, QString());
-    updateStack();
     refreshAvailableScripts();
 }
 
@@ -2200,23 +2865,6 @@ void LuaDebuggerDialog::applyDialogSettings()
             themeComboBox->setCurrentIndex(idx);
     }
 
-    // Font settings are handled by effectiveMonospaceFont() which reads from
-    // settings_
-
-    // Apply dialog geometry
-    int savedWidth = settings_.value(SettingsKeys::DialogWidth, 0).toInt();
-    int savedHeight = settings_.value(SettingsKeys::DialogHeight, 0).toInt();
-    int savedX = settings_.value(SettingsKeys::DialogX, -1).toInt();
-    int savedY = settings_.value(SettingsKeys::DialogY, -1).toInt();
-    if (savedWidth > 0 && savedHeight > 0)
-    {
-        resize(savedWidth, savedHeight);
-        if (savedX >= 0 && savedY >= 0)
-        {
-            move(savedX, savedY);
-        }
-    }
-
     // Apply splitter states
     QString mainSplitterHex =
         settings_.value(SettingsKeys::MainSplitter).toString();
@@ -2254,12 +2902,12 @@ void LuaDebuggerDialog::applyDialogSettings()
     if (stackSection)
         stackSection->setExpanded(
             settings_.value(SettingsKeys::SectionStack, true).toBool());
-    if (filesSection)
-        filesSection->setExpanded(
-            settings_.value(SettingsKeys::SectionFiles, false).toBool());
     if (breakpointsSection)
         breakpointsSection->setExpanded(
             settings_.value(SettingsKeys::SectionBreakpoints, true).toBool());
+    if (filesSection)
+        filesSection->setExpanded(
+            settings_.value(SettingsKeys::SectionFiles, false).toBool());
     if (evalSection)
         evalSection->setExpanded(
             settings_.value(SettingsKeys::SectionEval, false).toBool());
@@ -2309,16 +2957,6 @@ void LuaDebuggerDialog::storeDialogSettings()
     else
         settings_[SettingsKeys::Theme] = "auto";
 
-    // Font is stored when it changes
-    // (onMonospaceFontUpdated/onMainAppInitialized) No need to store here -
-    // settings_ already has current values
-
-    // Store dialog geometry
-    settings_[SettingsKeys::DialogWidth] = width();
-    settings_[SettingsKeys::DialogHeight] = height();
-    settings_[SettingsKeys::DialogX] = x();
-    settings_[SettingsKeys::DialogY] = y();
-
     // Store splitter states as hex strings
     if (ui->mainSplitter)
     {
@@ -2336,10 +2974,10 @@ void LuaDebuggerDialog::storeDialogSettings()
         variablesSection ? variablesSection->isExpanded() : true;
     settings_[SettingsKeys::SectionStack] =
         stackSection ? stackSection->isExpanded() : true;
-    settings_[SettingsKeys::SectionFiles] =
-        filesSection ? filesSection->isExpanded() : false;
     settings_[SettingsKeys::SectionBreakpoints] =
         breakpointsSection ? breakpointsSection->isExpanded() : true;
+    settings_[SettingsKeys::SectionFiles] =
+        filesSection ? filesSection->isExpanded() : false;
     settings_[SettingsKeys::SectionEval] =
         evalSection ? evalSection->isExpanded() : false;
     settings_[SettingsKeys::SectionSettings] =

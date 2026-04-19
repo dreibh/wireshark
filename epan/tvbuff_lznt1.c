@@ -62,13 +62,22 @@ uncompress_chunk(tvbuff_t *tvb, int offset, unsigned in_size, wmem_array_t *obuf
 
 				match_len = (f & l_mask) + 3;
 				match_off = (f >> o_shift) + 1;
-				for (j = 0; j < match_len; j++) {
-					uint8_t byte;
-					if (match_off > out_off)
-						return false;
-					if (wmem_array_try_index(obuf, out_start+out_off-match_off, &byte))
-						return false;
-					wmem_array_append_one(obuf, byte);
+				/* out_off only increases, only test once. */
+				if (match_off > out_start + out_off)
+					return false;
+				/* Must call grow first, to realloc the array
+				 * if needed. */
+                                if (!wmem_array_grow(obuf, match_len))
+                                    return false;
+				uint8_t *src;
+				for (j = 0; j < match_len / match_off; j++) {
+					src = wmem_array_index(obuf, out_start + out_off - match_off);
+					wmem_array_append(obuf, src, match_off);
+					out_off += match_off;
+				}
+				for (j *= match_off; j < match_len; j++) {
+					src = wmem_array_index(obuf, out_start + out_off - match_off);
+					wmem_array_append(obuf, src, 1);
 					out_off++;
 				}
 			}

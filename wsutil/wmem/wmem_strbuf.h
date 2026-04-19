@@ -149,13 +149,18 @@ wmem_strbuf_append(wmem_strbuf_t *strbuf, const char *str);
 /**
  * @brief Append a specified number of bytes from a string to a string buffer.
  *
- * Appends up to `append_len` bytes from the string `str` to the end of the given
+ * Appends `append_len` bytes from the string `str` to the end of the given
  * `wmem_strbuf_t` buffer. Embedded null characters in `str` will be copied, and the
  * resulting buffer will be null-terminated.
  *
  * @param strbuf Pointer to the string buffer to append to.
  * @param str Source string to copy bytes from.
  * @param append_len Number of bytes to append from the source string.
+ *
+ * @warning Because this can be used to copy embedded null characters, it can
+ * be used for arrays of char that are not strictly null-terminated strings,
+ * but conversely it does not check the length of str. The caller must ensure
+ * that append_len is not larger than the memory allocated for str.
  */
 WS_DLL_PUBLIC
 void

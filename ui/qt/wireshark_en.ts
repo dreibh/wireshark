@@ -6587,6 +6587,13 @@ For example, use 1 hour to have a new file created every hour on the hour.</sour
             <numerusform>Are you sure you want to remove %Ln breakpoints?</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <source>There are unsaved changes in %Ln open file(s).</source>
+        <translation>
+            <numerusform>There are unsaved changes in %Ln open file.</numerusform>
+            <numerusform>There are unsaved changes in %Ln open files.</numerusform>
+        </translation>
+    </message>
 </context>
 <context>
     <name>LteMacStatisticsDialog</name>

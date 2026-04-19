@@ -680,6 +680,10 @@ WSLUA_FUNCTION wslua_request_fields(lua_State *L) {
             Field f = (Field)g_new0(struct _wslua_header_field_info, 1);
             f->name = g_strdup(name);
             g_ptr_array_add(wanted_fields, f);
+
+            /* Ensure that the memory is managed by Lua */
+            pushField(L, f);
+            lua_pop(L, 1);
         }
 
         return 0;
@@ -717,13 +721,15 @@ WSLUA_FUNCTION wslua_request_fields(lua_State *L) {
         f->name = g_strdup(name);
         g_ptr_array_add(wanted_fields, f);
 
-        lua_pop(L, 1);  /* Remove the field name from the stack */
+        /* Ensure that the memory is managed by Lua */
+        pushField(L, f);
+        lua_pop(L, 2);  /* Remove the Field and the field name from the stack */
     }
 
     return 0;
 }
 
-static bool wslua_add_protocol_fields(const char *proto_name) {
+static bool wslua_add_protocol_fields(lua_State *L, const char *proto_name) {
     void *cookie;
     header_field_info *hfinfo;
     int proto_id = proto_get_id_by_filter_name(proto_name);
@@ -745,6 +751,10 @@ static bool wslua_add_protocol_fields(const char *proto_name) {
         Field f = (Field)g_new0(struct _wslua_header_field_info, 1);
         f->name = g_strdup(hfinfo->abbrev);
         g_ptr_array_add(wanted_fields, f);
+
+        /* Ensure that the memory is managed by Lua */
+        pushField(L, f);
+        lua_pop(L, 1);
     }
 
     return true;
@@ -802,7 +812,7 @@ WSLUA_FUNCTION wslua_request_protocol_fields(lua_State *L) {
     /* Handle single string argument: request_protocol_fields("http") */
     if (lua_type(L, WSLUA_ARG_request_protocol_fields_PROTOCOLS) == LUA_TSTRING) {
         const char *proto_name = lua_tostring(L, WSLUA_ARG_request_protocol_fields_PROTOCOLS);
-        if (wslua_add_protocol_fields(proto_name)) {
+        if (wslua_add_protocol_fields(L, proto_name)) {
             lua_pushstring(L, proto_name);
             lua_rawseti(L, -2, ++result_count);
         }
@@ -834,7 +844,7 @@ WSLUA_FUNCTION wslua_request_protocol_fields(lua_State *L) {
         lua_rawgeti(L, WSLUA_ARG_request_protocol_fields_PROTOCOLS, i);
 
         const char *proto_name = lua_tostring(L, -1);
-        if (wslua_add_protocol_fields(proto_name)) {
+        if (wslua_add_protocol_fields(L, proto_name)) {
             lua_pushstring(L, proto_name);
             lua_rawseti(L, -3, ++result_count);
         }

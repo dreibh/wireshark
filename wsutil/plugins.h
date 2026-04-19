@@ -37,6 +37,15 @@ typedef enum {
 #define WS_PLUGIN_DESC_DFILTER      (1UL << 5)
 #define WS_PLUGIN_DESC_UI           (1UL << 6)
 
+/**
+ * @brief Initialize plugins of a specific type.
+ *
+ * Initializes and loads plugins based on the given type and application environment variable prefix.
+ *
+ * @param type The type of plugin to initialize.
+ * @param app_env_var_prefix Prefix for the application environment variables.
+ * @return A pointer to the initialized plugins_t structure, or NULL if no plugins are supported.
+ */
 WS_DLL_PUBLIC plugins_t *plugins_init(plugin_type_e type, const char* app_env_var_prefix);
 
 typedef void (*plugin_description_callback)(const char *name, const char *version,
@@ -53,8 +62,8 @@ WS_DLL_PUBLIC void plugins_cleanup(plugins_t *plugins);
 
 WS_DLL_PUBLIC bool plugins_supported(void);
 
-/**
- * Returns true if the given filename ends in .dll on Windows or .so on other platforms.
+ /**
+ * @brief Returns true if the given filename ends in .dll on Windows or .so on other platforms.
  *
  * @param filename The filename to check.
  * @return true if the filename has a plugin suffix, false otherwise.

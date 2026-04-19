@@ -2126,7 +2126,16 @@ uint32_t tvb_get_bits(tvbuff_t *tvb, const unsigned bit_offset,
  *
  * @return The same `target` pointer passed in, for convenience.
  *
+ * @note For obtaining a target buffer the same length as the requested data,
+ * prefer @ref tvb_memdup to pre-allocating a buffer and calling this. That
+ * function tests that the data is available before allocating, avoiding leaks
+ * or overly large allocations. This is particularly important when the length
+ * or offset is obtained from packet data. Use this function only for more
+ * complicated situations, e.g., a larger buffer to which auxilary bytes such
+ * as an encryption key will be appended.
+ *
  * @see tvb_get_ptr
+ * @see tvb_memdup
  */
 WS_DLL_PUBLIC void *tvb_memcpy(tvbuff_t *tvb, void *target, const unsigned offset,
     size_t length);

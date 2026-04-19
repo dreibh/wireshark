@@ -596,15 +596,24 @@ struct sll2_header {
 #define VLAN_SIZE 4
 static void
 sll_remove_vlan_info(uint8_t* fd, uint32_t* len) {
-    if (pntohu16(fd + offsetof(struct sll_header, sll_protocol)) == ETHERTYPE_VLAN) {
-        int rest_len;
-        /* point to start of vlan */
-        fd = fd + offsetof(struct sll_header, sll_protocol);
+    unsigned rest_len;
+    if (ckd_sub(&rest_len, *len, offsetof(struct sll_header, sll_protocol))) {
+        /* This shouldn't happen. */
+        return;
+    }
+    /* point to protocol header */
+    fd = fd + offsetof(struct sll_header, sll_protocol);
+    if (pntohu16(fd) == ETHERTYPE_VLAN) {
         /* bytes to read after vlan info */
-        rest_len = *len - (offsetof(struct sll_header, sll_protocol) + VLAN_SIZE);
-        /* remove vlan info from packet */
-        memmove(fd, fd + VLAN_SIZE, rest_len);
-        *len -= 4;
+        if (rest_len <= VLAN_SIZE) {
+            /* There's no data past the VLAN tag, if the whole tag is present. */
+            *len -= rest_len;
+        } else {
+            /* remove vlan info from packet */
+            rest_len -= VLAN_SIZE;
+            memmove(fd, fd + VLAN_SIZE, rest_len);
+            *len -= 4;
+        }
     }
 }
 
@@ -2498,6 +2507,7 @@ main(int argc, char *argv[])
                 }
 
                 /* remove vlan info */
+                /* XXX - Should this adjust reported length if adjlen is set? */
                 if (rem_vlan) {
                     remove_vlan_info(&read_rec);
                 }

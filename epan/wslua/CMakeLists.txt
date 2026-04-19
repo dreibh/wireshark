@@ -89,6 +89,7 @@ add_custom_command(
 		${WSLUA_TAPS_USED}
 )
 
+add_custom_target(taps_wslua DEPENDS taps_wslua.c)
 
 add_custom_command(
 	OUTPUT
@@ -117,6 +118,8 @@ add_library(wslua OBJECT
 	${WSLUA_FILES}
 )
 
+add_dependencies(wslua taps_wslua register_wslua)
+
 if(FETCH_lua)
 	add_dependencies(wslua lua54)
 endif()
@@ -143,6 +146,7 @@ CHECKAPI(
 	SOURCES
 	  ${WSLUA_FILES}
 )
+add_dependencies(checkAPI_wslua taps_wslua register_wslua)
 
 #
 # Editor modelines  -  https://www.wireshark.org/tools/modelines.html

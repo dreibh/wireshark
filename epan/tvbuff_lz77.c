@@ -72,22 +72,34 @@ static bool do_uncompress(tvbuff_t *tvb, int offset, int in_size,
 				}
 				match_len += 7;
 			}
-                        if (match_len > MAX_INPUT_SIZE)
-                            return false;
+			/* XXX - We could instead fail inside the loops, e.g.
+			 * testing wmem_array_get_count(obuf) > MAX_INPUT_SIZE,
+			 * and return what we could decompress in a tvb with
+			 * reported length greater than captured length. */
+			if (match_len > MAX_INPUT_SIZE)
+				return false;
 			match_len += 3;
-                        /* It is tempting to use memmove and/or check if
-                         * match_len > match_off and fail, but it is allowed
-                         * and is why the 1 byte at a time loop is used.
-                         * See [MS-XCA] 2.4.4. [There still are some likely
-                         * possible optimizations to copy several bytes at
-                         * a time.] */
-			for (i = 0; i < match_len; i++) {
-				uint8_t byte;
-				if (match_off > wmem_array_get_count(obuf))
-					return false;
-				if (wmem_array_try_index(obuf, wmem_array_get_count(obuf)-match_off, &byte))
-					return false;
-				wmem_array_append_one(obuf, byte);
+                        /* We can copy up to match_off bytes at a time.
+                         * (The overlap handling is *not* like memmove,
+                         * see [MS-XCA] 2.4.4.) */
+                        /* wmem_array_get_count only increases, so we only need
+                         * test this once. */
+			if (match_off > wmem_array_get_count(obuf))
+				return false;
+			uint8_t *src;
+			ws_assert(match_off != 0); // Guaranteed by line 45
+			/* Must call grow first, to realloc the array first
+			 * if needed and avoid invalidating pointers returned
+			 * from wmem_array_index when appending. */
+                        if (!wmem_array_grow(obuf, match_len))
+                                return false;
+			for (i = 0; i < match_len / match_off; i++) {
+				src = wmem_array_index(obuf, wmem_array_get_count(obuf) - match_off);
+				wmem_array_append(obuf, src, match_off);
+			}
+			for (i *= match_off; i < match_len; i++) {
+				src = wmem_array_index(obuf, wmem_array_get_count(obuf) - match_off);
+				wmem_array_append(obuf, src, 1);
 			}
 		}
 	}

@@ -2602,7 +2602,7 @@ static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_inf
                 opt_offset += hai_len;
 
                 /* Padding... */
-                padd_length = opt_len - opt_offset;
+                padd_length = opt_len - (opt_offset - offset);
                 proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_padding, tvb, opt_offset, padd_length, ENC_NA);
                 opt_offset += padd_length;
 
@@ -2626,7 +2626,7 @@ static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_inf
                 opt_offset += mn_len;
 
                 /* Padding... */
-                padd_length = opt_len - opt_offset;
+                padd_length = opt_len - (opt_offset - offset);
                 proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_padding, tvb, opt_offset, padd_length, ENC_NA);
                 opt_offset += padd_length;
 

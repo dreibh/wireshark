@@ -11,7 +11,6 @@
 #define LUA_DEBUGGER_DIALOG_H
 
 #include "geometry_state_dialog.h"
-#include <QAction>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QEventLoop>
@@ -19,17 +18,17 @@
 #include <QPair>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QSplitter>
 #include <QString>
-#include <QToolBar>
-#include <QToolButton>
 #include <QTreeWidget>
 #include <QVariantMap>
 #include <QVector>
 
 #include "epan/wslua/wslua_debugger.h"
 
+class AccordionFrame;
 class CollapsibleSection;
+class QEvent;
+class QChildEvent;
 
 namespace Ui
 {
@@ -88,18 +87,40 @@ class LuaDebuggerDialog : public GeometryStateDialog
      */
     bool ensureFileTreeEntry(const QString &file_path);
 
+    /**
+     * @brief Close from Esc or programmatic reject(); queues close() so
+     *        closeEvent() runs (unsaved-scripts prompt matches the window
+     *        close button). The base QDialog::reject() hides via done() and
+     *        skips closeEvent(); synchronous close() from Esc can fail to close.
+     */
+    void reject() override;
+
+  public slots:
+    /**
+     * @brief Escape: hide inline find/go accordions if shown, else close dialog.
+     *        Invoked from the script editor because keys often go to the viewport,
+     *        not the top-level dialog event filter.
+     */
+    void handleEscapeKey();
+
   protected:
     /**
      * @brief Flush state and resume execution when the dialog closes.
      * @param event Close request metadata from Qt.
      */
     void closeEvent(QCloseEvent *event) override;
+    bool eventFilter(QObject *obj, QEvent *event) override;
+    void childEvent(QChildEvent *event) override;
 
   private slots:
     /** @brief Resume Lua execution when the Continue action is triggered. */
     void onContinue();
-    /** @brief Step to the next line when the Step action is triggered. */
-    void onStep();
+    /** @brief Step over the current line. */
+    void onStepOver();
+    /** @brief Step into the next line (including callees). */
+    void onStepIn();
+    /** @brief Step out to the caller frame. */
+    void onStepOut();
     /** @brief Enable or disable the debugger when the toggle button is clicked.
      */
     void onDebuggerToggled(bool checked);
@@ -120,11 +141,18 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void onVariablesContextMenuRequested(const QPoint &pos);
     /** @brief Prompt the user to open a Lua file into a new tab. */
     void onOpenFile();
+    /** @brief Save the active script tab to disk. */
+    void onSaveFile();
+    /** @brief Prompt before closing a tab that has unsaved edits. */
+    void onCodeTabCloseRequested(int index);
     /** @brief Trigger a reload of all Lua plugins. */
     void onReloadLuaPlugins();
     /** @brief Jump to the selected stack frame location. */
     void onStackItemDoubleClicked(QTreeWidgetItem *item, int column);
-    /** @brief Reapply fonts when the application monospace font changes. */
+    /** @brief Show Locals/Upvalues for the selected stack frame. */
+    void onStackCurrentItemChanged(QTreeWidgetItem *current,
+                                   QTreeWidgetItem *previous);
+    /** @brief Apply Wireshark text zoom to the script editor only. */
     void onMonospaceFontUpdated(const QFont &font);
     /** @brief Refresh fonts once the main application finishes initializing. */
     void onMainAppInitialized();
@@ -140,6 +168,10 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void evaluateSelection(const QString &text);
     /** @brief Handle theme selection changes from the Settings section. */
     void onThemeChanged(int idx);
+    /** @brief Show inline find/replace bar. */
+    void onEditorFind();
+    /** @brief Show inline go-to-line bar. */
+    void onEditorGoToLine();
 
   private:
     Ui::LuaDebuggerDialog *ui;
@@ -178,12 +210,14 @@ class LuaDebuggerDialog : public GeometryStateDialog
     QIcon fileIcon;
     bool debuggerPaused;
     bool reloadDeferred;
+    /** @brief lua_getstack level for variables; kept in sync with stack list. */
+    int stackSelectionLevel;
 
     // Collapsible sections (created programmatically)
     CollapsibleSection *variablesSection;
     CollapsibleSection *stackSection;
-    CollapsibleSection *filesSection;
     CollapsibleSection *breakpointsSection;
+    CollapsibleSection *filesSection;
     CollapsibleSection *evalSection;
     CollapsibleSection *settingsSection;
 
@@ -205,6 +239,12 @@ class LuaDebuggerDialog : public GeometryStateDialog
     /** @brief Refresh the call stack tree from the debugger back-end. */
     void updateStack();
     /**
+     * @brief Rebuild the variables tree after the stack frame for inspection
+     *        changed (same as clearing the tree and calling updateVariables at
+     *        the root).
+     */
+    void refreshVariablesForCurrentStackFrame();
+    /**
      * @brief Populate the variables tree with locals, globals, or nested
      * tables.
      * @param parent Optional parent tree item receiving the children.
@@ -220,6 +260,43 @@ class LuaDebuggerDialog : public GeometryStateDialog
      * @return Pointer to the code view widget that now hosts the file.
      */
     LuaDebuggerCodeView *loadFile(const QString &file_path);
+    /** @brief The code editor in the active tab, or nullptr. */
+    LuaDebuggerCodeView *currentCodeView() const;
+    /** @brief True if any open tab has unsaved edits. */
+    bool hasUnsavedChanges() const;
+    /** @brief How many open code tabs currently have unsaved edits. */
+    qint32 unsavedOpenScriptTabCount() const;
+    /**
+     * @brief If any tab is modified, prompt to save or discard.
+     * @param title Window title for the prompt.
+     * @return False if the user cancelled; true if there is nothing to do,
+     *         changes were saved, or the user chose to discard.
+     */
+    bool ensureUnsavedChangesHandled(const QString &title);
+    /** @brief Mark every open document as unmodified without saving. */
+    void clearAllDocumentModified();
+    /** @brief Persist one editor buffer to its file path. */
+    bool saveCodeView(LuaDebuggerCodeView *view);
+    /** @brief Save every tab that has unsaved edits. */
+    bool saveAllModified();
+    /** @brief Update tab label (e.g. trailing *) for one editor. */
+    void updateTabTextForCodeView(LuaDebuggerCodeView *view);
+    /** @brief Enable Save when the current tab can be written. */
+    void updateSaveActionState();
+    /** @brief Reflect unsaved scripts in the window (e.g. close-button hint). */
+    void updateWindowModifiedState();
+    /** @brief Hide other accordion bars then show one (matches main window). */
+    void showAccordionFrame(AccordionFrame *frame, bool toggle = false);
+    /** @brief Point find/goto bars at the active code tab. */
+    void updateLuaEditorAuxFrames();
+    /** @brief Install this dialog as an event filter on all descendant widgets
+     *  so conflicting shortcuts are handled here before the main window.
+     */
+    void installDescendantShortcutFilters();
+    /** @brief Apply monospace to each open code tab (and line number area). */
+    void applyCodeEditorFonts(const QFont &monoFont);
+    /** @brief Base monospace for panel bodies; normal font for tree headers. */
+    void applyMonospacePanelFonts();
     /** @brief Index all Lua scripts from standard plugin directories. */
     void refreshAvailableScripts();
     /**
@@ -275,20 +352,25 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void clearPausedStateUi();
     /** @brief Remove highlights from every open code view. */
     void clearAllCodeHighlights();
-    /** @brief Apply the global monospace font to tree and list widgets. */
+    /** @brief Zoomed monospace for the editor; base monospace + normal headers for panels. */
     void applyMonospaceFonts();
-    /** @brief Apply a supplied monospace font to debugger widgets. */
-    void applyMonospaceFonts(const QFont &font);
     /** @brief Apply the current theme preference to all code views. */
     void applyCodeViewThemes();
     /** @brief Reload all script files from disk (e.g., after Lua plugin
      * reload). */
     void reloadAllScriptFiles();
-    /** @brief Determine the current monospace font, honoring zoom settings. */
-    QFont effectiveMonospaceFont() const;
+    /** @brief Monospace for panels and the script editor. */
+    QFont effectiveMonospaceFont(bool zoomed) const;
+    /** @brief Standard Wireshark UI font for tree column headers. */
+    QFont effectiveRegularFont() const;
     /** @brief Resume the debugger (if paused) and exit any nested event loop.
      */
     void resumeDebuggerAndExitLoop();
+    /**
+     * @brief Resume execution with a stepping mode; shared by step over/in/out.
+     * @param step_fn Core step function (e.g. wslua_debugger_step_over).
+     */
+    void runDebuggerStep(void (*step_fn)(void));
     /** @brief Update the enabled state of the eval panel based on debugger
      * state. */
     void updateEvalPanelState();

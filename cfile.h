@@ -129,17 +129,78 @@ typedef struct _capture_file {
     uint32_t                    cum_bytes;
 } capture_file;
 
+ /**
+  * @brief Initialize a capture file structure.
+  *
+  * @param cf Pointer to the capture file structure to be initialized.
+  */
 extern void cap_file_init(capture_file *cf);
 
 const nstime_t *cap_file_provider_get_frame_ts(struct packet_provider_data *prov, uint32_t frame_num);
 const nstime_t *cap_file_provider_get_start_ts(struct packet_provider_data *prov);
+
+/**
+ * @brief Get the end timestamp of a capture file.
+ *
+ * @param prov Pointer to the packet provider data structure.
+ * @return const nstime_t* Pointer to the end timestamp, or NULL if not available.
+ */
 const nstime_t *cap_file_provider_get_end_ts(struct packet_provider_data *prov);
+
+/**
+ * @brief Retrieves the name of a network interface from a capture file.
+ *
+ * @param prov Pointer to the packet provider data structure.
+ * @param interface_id The ID of the interface to retrieve.
+ * @param section_number The section number in the capture file.
+ * @return const char* The name of the interface, or "unknown" if not found.
+ */
 const char *cap_file_provider_get_interface_name(struct packet_provider_data *prov, uint32_t interface_id, unsigned section_number);
+
+/**
+ * @brief Retrieves a description for a network interface from a capture file.
+ *
+ * @param prov Pointer to the packet provider data structure.
+ * @param interface_id The ID of the network interface.
+ * @param section_number The section number in the capture file.
+ * @return A string containing the description of the network interface, or NULL if not found.
+ */
 const char *cap_file_provider_get_interface_description(struct packet_provider_data *prov, uint32_t interface_id, unsigned section_number);
+
+/**
+ * @brief Retrieves the process ID associated with a given process information ID and section number.
+ *
+ * @param prov Pointer to the packet provider data structure.
+ * @param process_info_id The ID of the process information.
+ * @param section_number The section number within the capture file.
+ * @return int32_t The process ID, or -1 if an error occurred.
+ */
 int32_t cap_file_provider_get_process_id(struct packet_provider_data *prov, uint32_t process_info_id, unsigned section_number);
+
 const char *cap_file_provider_get_process_name(struct packet_provider_data *prov, uint32_t process_info_id, unsigned section_number);
+
+/**
+ * @brief Retrieves the UUID of a process from a capture file.
+ *
+ * @param prov Pointer to the packet provider data structure.
+ * @param process_info_id Identifier for the process information.
+ * @param section_number The section number (currently unused).
+ * @param uuid_size Pointer to store the size of the UUID.
+ * @return const uint8_t* Pointer to the UUID or NULL if not found.
+ */
 const uint8_t *cap_file_provider_get_process_uuid(struct packet_provider_data *prov, uint32_t process_info_id, unsigned section_number, size_t *uuid_size);
+
 wtap_block_t cap_file_provider_get_modified_block(struct packet_provider_data *prov, const frame_data *fd);
+
+/**
+ * @brief Set a modified block for a frame in the packet provider.
+ *
+ * This function updates or inserts a new wtap_block_t into the frames_modified_blocks tree of the packet_provider_data structure.
+ *
+ * @param prov Pointer to the packet_provider_data structure.
+ * @param fd Pointer to the frame_data structure representing the frame.
+ * @param new_block The new wtap_block_t to be set for the frame.
+ */
 void cap_file_provider_set_modified_block(struct packet_provider_data *prov, frame_data *fd, const wtap_block_t new_block);
 
 #ifdef __cplusplus

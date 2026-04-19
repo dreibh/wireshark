@@ -474,6 +474,7 @@ ADD_CUSTOM_COMMAND(
 )
 
 set( WSDG_BUILT_DEPS wsluarm )
+add_custom_target(generate_wsdg_deps DEPENDS ${WSDG_BUILT_DEPS})
 
 set( ASCIIDOC_CONF_FILES
 	${CMAKE_CURRENT_SOURCE_DIR}/attributes.adoc
@@ -488,7 +489,7 @@ if(ASCIIDOCTOR_FOUND)
 	set_doc_target_properties(user_guide_docbook)
 	set_target_properties(user_guide_docbook PROPERTIES EXCLUDE_FROM_ALL True)
 
-	ASCIIDOCTOR2DOCBOOK(wsdg_src/developer-guide.adoc ${ASCIIDOC_CONF_FILES} ${WSDG_SOURCE} ${WSDG_BUILT_DEPS})
+	ASCIIDOCTOR2DOCBOOK(wsdg_src/developer-guide.adoc ${ASCIIDOC_CONF_FILES} ${WSDG_SOURCE} ${WSDG_BUILT_DEPS} generate_wsdg_deps)
 	add_custom_target(developer_guide_docbook DEPENDS generate_developer-guide.xml)
 	set_doc_target_properties(developer_guide_docbook)
 	set_target_properties(developer_guide_docbook PROPERTIES EXCLUDE_FROM_ALL True)
@@ -602,7 +603,7 @@ if(ASCIIDOCTOR_FOUND AND XSLTPROC_EXECUTABLE)
 endif()
 
 if(ASCIIDOCTOR_FOUND AND ASCIIDOCTOR_PDF_EXECUTABLE)
-	ASCIIDOCTOR2PDF(${WSDG_TITLE} wsdg_src/developer-guide.adoc ${WSDG_SOURCE} ${WSDG_BUILT_DEPS})
+	ASCIIDOCTOR2PDF(${WSDG_TITLE} wsdg_src/developer-guide.adoc ${WSDG_SOURCE} ${WSDG_BUILT_DEPS} generate_wsdg_deps)
 
 	add_custom_target(developer_guide_pdf
 		DEPENDS
@@ -614,7 +615,7 @@ if(ASCIIDOCTOR_FOUND AND ASCIIDOCTOR_PDF_EXECUTABLE)
 endif()
 
 if(ASCIIDOCTOR_FOUND AND ASCIIDOCTOR_EPUB_EXECUTABLE)
-	ASCIIDOCTOR2EPUB(${WSDG_TITLE} wsdg_src/developer-guide.adoc ${WSDG_SOURCE} ${WSDG_BUILT_DEPS})
+	ASCIIDOCTOR2EPUB(${WSDG_TITLE} wsdg_src/developer-guide.adoc ${WSDG_SOURCE} ${WSDG_BUILT_DEPS} generate_wsdg_deps)
 
 	add_custom_target(developer_guide_epub
 		DEPENDS

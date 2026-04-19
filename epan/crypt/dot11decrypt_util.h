@@ -12,6 +12,16 @@
 
 #include "dot11decrypt_int.h"
 
+/**
+ * @brief Constructs the AAD (Additional Authentication Data) for a 802.11 MAC frame.
+ *
+ * @param wh Pointer to the DOT11DECRYPT_MAC_FRAME structure containing the MAC header.
+ * @param A1 Pointer to the first address field of the MAC frame.
+ * @param A2 Pointer to the second address field of the MAC frame.
+ * @param A3 Pointer to the third address field of the MAC frame.
+ * @param aad Buffer to store the constructed AAD.
+ * @param aad_len Pointer to store the length of the constructed AAD.
+ */
 void dot11decrypt_construct_aad(
     PDOT11DECRYPT_MAC_FRAME wh,
     const uint8_t *A1,
@@ -20,10 +30,19 @@ void dot11decrypt_construct_aad(
     uint8_t *aad,
     size_t *aad_len);
 
-/*
+/**
+ * @brief Extracts the AAD addresses for nonce calculation.
+ *
  * Reference: IEEE 802.11-2024 12.5.4.3.3 Construct AAD,
  * IEEE 802.11be-2024 12.5.2.3.3 Construct AAD, 12.5.2.3.4 Construct CCM nonce,
  * 12.5.4.3.4 Construct GCM nonce.
+ *
+ * @param wh Pointer to the MAC frame structure.
+ * @param ap_mld_mac Pointer to the Access Point's Multi-Link MAC address.
+ * @param sta_mld_mac Pointer to the Station's Multi-Link MAC address.
+ * @param A1 Pointer to store the first address component.
+ * @param A2 Pointer to store the second address component.
+ * @param A3 Pointer to store the third address component.
  */
 static inline void dot11decrypt_get_nonce_aad_addrs(
     PDOT11DECRYPT_MAC_FRAME wh,

@@ -660,30 +660,35 @@ set(STRATOSHARK_QT_TS
 	${WIRESHARK_QT_TS}
 )
 
+cmake_path(SET TRANSLATION_INSTALL_DIR NORMALIZE "${CMAKE_INSTALL_BINDIR}/translations")
+
+# Translation files (i18n)
+qrc_register(NAME i18n TARGET stratoshark PREFIX "/i18n")
 foreach(_file ${STRATOSHARK_QT_TS})
-	get_filename_component(_qresource ${_file} NAME_WE)
-	set(_qresource_qm "${_qresource}.qm")
-	set(i18n_qresource "${i18n_qresource}\n    <file>${_qresource_qm}</file>")
+    get_filename_component(_qresource ${_file} NAME_WE)
+    set(_qresource_qm "${CMAKE_CURRENT_BINARY_DIR}/${_qresource}.qm")
+
+    qrc_add_file(NAME i18n TARGET stratoshark FILE "${_qresource_qm}" ALIAS "${_qresource}.qm" GENERATED ON)
+
+    install(FILES "${_qresource_qm}" DESTINATION "${TRANSLATION_INSTALL_DIR}")
 endforeach()
-configure_file(i18n.qrc.in ${CMAKE_CURRENT_BINARY_DIR}/i18n.qrc)
+qrc_finalize(NAME i18n TARGET stratoshark OUTPUT_FILE_NAME "i18n.qrc" OUTPUT_VAR STRATOSHARK_I18N_QRC)
 
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/authors.qrc"
-"<RCC>\n"
-"    <qresource prefix=\"/about\">\n"
-"        <file compress-algo=\"zstd\">authors.csv</file>\n"
-"    </qresource>\n"
-"</RCC>\n"
-)
-
+# Authors file
 add_custom_command(
-	OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/authors.csv
-	COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/make-authors-csv.py
-			< ${CMAKE_SOURCE_DIR}/AUTHORS
-			> ${CMAKE_CURRENT_BINARY_DIR}/authors.csv
-	DEPENDS
-		${CMAKE_SOURCE_DIR}/tools/make-authors-csv.py
-		${CMAKE_SOURCE_DIR}/AUTHORS
+    OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/authors.csv
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tools/make-authors-csv.py
+                    < ${CMAKE_SOURCE_DIR}/AUTHORS
+                    > ${CMAKE_CURRENT_BINARY_DIR}/authors.csv
+    DEPENDS
+        ${CMAKE_SOURCE_DIR}/tools/make-authors-csv.py
+        ${CMAKE_SOURCE_DIR}/AUTHORS
 )
+
+qrc_register(NAME authors TARGET stratoshark PREFIX "/about")
+qrc_add_file(NAME authors TARGET stratoshark FILE "${CMAKE_CURRENT_BINARY_DIR}/authors.csv" ALIAS "authors.csv"
+             COMPRESS "zstd" GENERATED ON)
+qrc_finalize(NAME authors TARGET stratoshark OUTPUT_VAR STRATOSHARK_AUTHORS_QRC)
 
 # Generate translatable strings from JSON data files for lupdate
 GENERATE_JSON_TR_STRINGS(
@@ -702,41 +707,34 @@ GENERATE_JSON_TR_STRINGS(
 )
 
 # Stylesheet resources
-set(STYLESHEET_QSS_FILES
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card-dark.qss
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card-light.qss
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card-dark.qss
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card-light.qss
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/welcome-header-dark.qss
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/welcome-header-light.qss
+qrc_register(
+	NAME stylesheets
+	TARGET stratoshark
+	PREFIX "/stylesheets"
 )
-set(_stylesheet_qrc_files "")
-foreach(_qss ${STYLESHEET_QSS_FILES})
-	file(RELATIVE_PATH _qss_alias "${CMAKE_SOURCE_DIR}/ui/stylesheets" "${_qss}")
-	string(APPEND _stylesheet_qrc_files
-		"        <file alias=\"${_qss_alias}\">${_qss}</file>\n")
-endforeach()
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/stylesheets.qrc"
-	"<RCC>\n    <qresource prefix=\"/stylesheets\">\n${_stylesheet_qrc_files}    </qresource>\n</RCC>\n")
+qrc_add_files(
+	NAME stylesheets
+	TARGET stratoshark
+	BASE_DIR "${CMAKE_SOURCE_DIR}/ui/stylesheets"
+	FILES
+		${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card-dark.qss
+		${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card-light.qss
+		${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card-dark.qss
+		${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card-light.qss
+		${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/welcome-header-dark.qss
+		${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/welcome-header-light.qss
+)
+qrc_finalize(NAME stylesheets TARGET stratoshark OUTPUT_VAR STRATOSHARK_STYLESHEETS_QRC)
 
 # JSON data resources
-set(_json_qrc_files
-	"        <file alias=\"slides.json\">${CMAKE_SOURCE_DIR}/resources/json/slides.json</file>\n")
-string(APPEND _json_qrc_files
-	"        <file alias=\"learn_card.json\">${CMAKE_SOURCE_DIR}/resources/json/learn_card.json</file>\n")
+qrc_register(NAME json_resource TARGET stratoshark PREFIX "/json")
+qrc_add_file(NAME json_resource TARGET stratoshark FILE  "${CMAKE_SOURCE_DIR}/resources/json/slides.json" ALIAS "slides.json")
+qrc_add_file(NAME json_resource TARGET stratoshark FILE  "${CMAKE_SOURCE_DIR}/resources/json/learn_card.json" ALIAS "learn_card.json")
 if(CUSTOM_SLIDES_JSON AND EXISTS "${CUSTOM_SLIDES_JSON}")
-	string(APPEND _json_qrc_files
-		"        <file alias=\"slides_custom.json\">${CUSTOM_SLIDES_JSON}</file>\n")
-	message(STATUS "Custom banner slides: ${CUSTOM_SLIDES_JSON}")
+    qrc_add_file(NAME json_resource TARGET stratoshark FILE  "${CUSTOM_SLIDES_JSON}" ALIAS "slides_custom.json")
 endif()
-file(GLOB _banner_images "${CMAKE_SOURCE_DIR}/resources/json/banners/*")
-foreach(_img ${_banner_images})
-	get_filename_component(_img_name "${_img}" NAME)
-	string(APPEND _json_qrc_files
-		"        <file alias=\"banners/${_img_name}\">${_img}</file>\n")
-endforeach()
-file(WRITE "${CMAKE_CURRENT_BINARY_DIR}/json_resource.qrc"
-	"<RCC>\n    <qresource prefix=\"/json\">\n${_json_qrc_files}    </qresource>\n</RCC>\n")
+qrc_add_glob(NAME json_resource TARGET stratoshark GLOB "${CMAKE_SOURCE_DIR}/resources/json/banners/*" ALIAS_PREFIX "banners/")
+qrc_finalize(NAME json_resource TARGET stratoshark OUTPUT_VAR STRATOSHARK_JSON_QRC)
 
 # Drop the file modification time of source files from generated files
 # to help with reproducible builds. We do not use QFileInfo.lastModified
@@ -760,10 +758,10 @@ qt_add_resources(STRATOSHARK_QT_QRC
 	${CMAKE_SOURCE_DIR}/resources/layout.qrc
 	${SSICON_QRC}
 	${CMAKE_SOURCE_DIR}/resources/stock_icons.qrc
-	${CMAKE_CURRENT_BINARY_DIR}/i18n.qrc
-	${CMAKE_CURRENT_BINARY_DIR}/authors.qrc
-	${CMAKE_CURRENT_BINARY_DIR}/json_resource.qrc
-	${CMAKE_CURRENT_BINARY_DIR}/stylesheets.qrc
+	${STRATOSHARK_I18N_QRC}
+	${STRATOSHARK_AUTHORS_QRC}
+	${STRATOSHARK_JSON_QRC}
+	${STRATOSHARK_STYLESHEETS_QRC}
 	OPTIONS ${CMAKE_AUTORCC_OPTIONS}
 )
 
@@ -887,7 +885,7 @@ set_target_properties(ui_stratoshark PROPERTIES
 	# AUTORCC not needed with qt_add_resources
 	#AUTORCC ON
 	# Ensure .qm files are generated before autogenerating i18n.qrc
-	AUTOGEN_TARGET_DEPENDS "${STRATOSHARK_QT_QM}"
+	AUTOGEN_TARGET_DEPENDS "${STRATOSHARK_QT_QM};stratoshark_translations"
 )
 
 if(MSVC)

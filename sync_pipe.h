@@ -55,27 +55,57 @@
  */
 #define SP_QUIT         'Q'     /* "gracefully" capture quit message (SIGUSR1) */
 
-/* Write a message, with a string body, to the recipient pipe in the
-   standard format (1-byte message indicator, 3-byte message length
-   (excluding length and indicator field), and the string.
-   If msg is NULL, the message has only a length and indicator. */
+/**
+ * @brief Writes a string message to the recipient pipe.
+ *
+ * Write a message, with a string body, to the recipient pipe in the
+ * standard format (1-byte message indicator, 3-byte message length
+ * (excluding length and indicator field), and the string.
+ * If msg is NULL, the message has only a length and indicator.
+ *
+ * @param pipe_fd The file descriptor of the pipe.
+ * @param indicator A character indicating the type of message.
+ * @param msg The string message to be written.
+ */
 extern void
 sync_pipe_write_string_msg(int pipe_fd, char indicator, const char *msg);
 
-/* Write a message, with an unsigned integer body, to the recipient
-   pipe in the standard format (1-byte message indicator, 3-byte
-   message length (excluding length and indicator field), and the
-   unsigned integer, as a string. */
+/**
+ * @brief Writes a string message to the recipient pipe.
+ *
+ * Write a message, with an unsigned integer body, to the recipient
+ * pipe in the standard format (1-byte message indicator, 3-byte
+ * message length (excluding length and indicator field), and the
+ * unsigned integer, as a string.
+ *
+ * @param pipe_fd The file descriptor of the pipe.
+ * @param indicator A character indicating the type of message.
+ * @param num The unsigned integer message to be written.
+ */
 extern void
 sync_pipe_write_uint_msg(int pipe_fd, char indicator, unsigned int num);
 
-/* Write a message, with an integer body, to the recipient pipe in the
-   standard format (1-byte message indicator, 3-byte message length
-   (excluding length and indicator field), and the integer, as a string. */
+/**
+ * @brief Writes a string message to the recipient pipe.
+ *
+ * Write a message, with an unsigned integer body, to the recipient
+ * pipe in the standard format (1-byte message indicator, 3-byte
+ * message length (excluding length and indicator field), and the
+ * integer, as a string.
+ *
+ * @param pipe_fd The file descriptor of the pipe.
+ * @param indicator A character indicating the type of message.
+ * @param num The unsigned integer message to be written.
+ */
 extern void
 sync_pipe_write_int_msg(int pipe_fd, char indicator, int num);
 
-/** the child encountered an error, notify the parent */
+/**
+ * @brief Notify the parent that the child encountered an error.
+ *
+ * @param error_msg The error message to be sent to the parent.
+ * @param secondary_error_msg An optional secondary error message to be sent to the parent.
+ */
 extern void
 sync_pipe_write_errmsgs_to_parent(int pipe_fd, const char *error_msg,
                                   const char *secondary_error_msg);

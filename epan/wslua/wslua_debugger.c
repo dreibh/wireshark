@@ -18,6 +18,14 @@
 #include <wsutil/report_message.h>
 #include <wsutil/ws_assert.h>
 
+typedef enum
+{
+    WSLUA_STEP_KIND_NONE = 0,
+    WSLUA_STEP_KIND_IN,   /**< Next line hook anywhere (step into calls) */
+    WSLUA_STEP_KIND_OVER, /**< Next line at same or outer stack depth */
+    WSLUA_STEP_KIND_OUT   /**< Pause when returning to an outer frame */
+} wslua_step_kind_t;
+
 /* debugger context */
 typedef struct
 {
@@ -29,9 +37,11 @@ typedef struct
     GMutex mutex;
     bool mutex_initialized;
     wslua_breakpoint_t temporary_breakpoint;
-    bool step_mode; /**< When true, pause at the next line hook */
+    wslua_step_kind_t step_kind;
+    int step_stack_depth; /**< Frame count captured when OVER/OUT begins */
     bool was_enabled_before_reload; /**< Saved state across plugin reload */
     bool reload_in_progress; /**< Suppress auto-enable during reload */
+    int32_t variable_stack_level; /**< lua_getstack index for Locals/Upvalues */
 } wslua_debugger_t;
 
 static wslua_debugger_t debugger = {
@@ -43,9 +53,11 @@ static wslua_debugger_t debugger = {
     {0}, /* mutex */
     false,
     {NULL, 0, false}, /* temporary_breakpoint */
-    false,            /* step_mode */
-    false,            /* was_enabled_before_reload */
-    false             /* reload_in_progress */
+    WSLUA_STEP_KIND_NONE, /* step_kind */
+    0,                    /* step_stack_depth */
+    false,                /* was_enabled_before_reload */
+    false,                /* reload_in_progress */
+    0,                    /* variable_stack_level */
 };
 
 /* Breakpoints (in-memory, persisted by Qt side) */
@@ -152,6 +164,7 @@ wslua_debugger_breakpoint_matches(const wslua_breakpoint_t *breakpoint,
 /* Forward declarations */
 static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info);
 static void wslua_debugger_update_hook(void);
+static int wslua_debugger_count_stack_frames(lua_State *L);
 static void remove_breakpoint_at(unsigned idx);
 static int64_t wslua_debugger_count_table_entries(lua_State *L, int idx);
 static char *wslua_debugger_describe_value(lua_State *L, int idx);
@@ -240,6 +253,8 @@ void wslua_debugger_init(lua_State *L)
 
     /* Check if we should auto-enable based on active breakpoints */
     bool has_active = false;
+    ensure_breakpoints_initialized();
+    g_mutex_lock(&debugger.mutex);
     for (unsigned i = 0; i < breakpoints_array->len; i++)
     {
         wslua_breakpoint_t *bp =
@@ -250,6 +265,7 @@ void wslua_debugger_init(lua_State *L)
             break;
         }
     }
+    g_mutex_unlock(&debugger.mutex);
 
     if (has_active)
     {
@@ -302,7 +318,7 @@ static void wslua_debugger_update_hook(void)
             should_hook = true;
         }
 
-        if (!should_hook && debugger.step_mode)
+        if (!should_hook && debugger.step_kind != WSLUA_STEP_KIND_NONE)
         {
             should_hook = true;
         }
@@ -357,7 +373,7 @@ void wslua_debugger_continue(void)
 {
     g_mutex_lock(&debugger.mutex);
     debugger.state = WSLUA_DEBUGGER_RUNNING;
-    debugger.step_mode = false;
+    debugger.step_kind = WSLUA_STEP_KIND_NONE;
     /* Clear temp breakpoint */
     if (debugger.temporary_breakpoint.file_path)
     {
@@ -391,7 +407,7 @@ void wslua_debugger_run_to_line(const char *file_path, int64_t line)
     debugger.temporary_breakpoint.line = line;
     debugger.temporary_breakpoint.active = true;
 
-    debugger.step_mode = false;
+    debugger.step_kind = WSLUA_STEP_KIND_NONE;
     debugger.paused_L = NULL;
     debugger.enabled = true;
     debugger.state = WSLUA_DEBUGGER_RUNNING;
@@ -400,16 +416,26 @@ void wslua_debugger_run_to_line(const char *file_path, int64_t line)
 }
 
 /**
- * @brief Step to the next line.
- *
- * This function sets step mode, which causes the debugger to pause
- * at the very next line hook, regardless of breakpoints.
- * This is a "step over" style operation — it advances to the next
- * Lua source line without descending into called functions.
- *
- * This function should only be called when the debugger is paused.
+ * @brief Count Lua stack frames (0 = innermost).
  */
-void wslua_debugger_step(void)
+static int
+wslua_debugger_count_stack_frames(lua_State *L)
+{
+    lua_Debug ar;
+    int level = 0;
+
+    while (lua_getstack(L, level, &ar))
+    {
+        level++;
+    }
+    return level;
+}
+
+/**
+ * @brief Shared setup when resuming from a paused state into a step mode.
+ */
+static void
+wslua_debugger_begin_step(wslua_step_kind_t kind, int stack_depth_for_over_out)
 {
     g_mutex_lock(&debugger.mutex);
     /* Clear temp breakpoint since we're stepping */
@@ -421,10 +447,79 @@ void wslua_debugger_step(void)
     debugger.temporary_breakpoint.active = false;
     debugger.paused_L = NULL;
 
-    debugger.step_mode = true;
+    debugger.step_kind = kind;
+    if (kind == WSLUA_STEP_KIND_OVER || kind == WSLUA_STEP_KIND_OUT)
+    {
+        debugger.step_stack_depth = stack_depth_for_over_out;
+    }
     debugger.state = WSLUA_DEBUGGER_RUNNING;
     g_mutex_unlock(&debugger.mutex);
     wslua_debugger_update_hook();
+}
+
+void wslua_debugger_step_in(void)
+{
+    wslua_debugger_begin_step(WSLUA_STEP_KIND_IN, 0);
+}
+
+void wslua_debugger_step_over(void)
+{
+    g_mutex_lock(&debugger.mutex);
+    lua_State *target_L = debugger.paused_L ? debugger.paused_L : debugger.L;
+    g_mutex_unlock(&debugger.mutex);
+    if (!target_L)
+    {
+        return;
+    }
+    const int depth = wslua_debugger_count_stack_frames(target_L);
+    wslua_debugger_begin_step(WSLUA_STEP_KIND_OVER, depth);
+}
+
+void wslua_debugger_step_out(void)
+{
+    g_mutex_lock(&debugger.mutex);
+    lua_State *target_L = debugger.paused_L ? debugger.paused_L : debugger.L;
+    g_mutex_unlock(&debugger.mutex);
+    if (!target_L)
+    {
+        return;
+    }
+    const int depth = wslua_debugger_count_stack_frames(target_L);
+    /*
+     * Only one Lua frame: "step out" of the chunk is ordinary continuation —
+     * there will be no further line hooks in this activation.
+     */
+    if (depth <= 1)
+    {
+        wslua_debugger_continue();
+        return;
+    }
+    wslua_debugger_begin_step(WSLUA_STEP_KIND_OUT, depth);
+}
+
+/**
+ * @brief Step into the next executed line (may enter callees).
+ *
+ * Equivalent to wslua_debugger_step_in(). Kept for API compatibility.
+ */
+void wslua_debugger_step(void)
+{
+    wslua_debugger_step_in();
+}
+
+void wslua_debugger_set_variable_stack_level(int32_t level)
+{
+    g_mutex_lock(&debugger.mutex);
+    debugger.variable_stack_level = level < 0 ? 0 : level;
+    g_mutex_unlock(&debugger.mutex);
+}
+
+int32_t wslua_debugger_get_variable_stack_level(void)
+{
+    g_mutex_lock(&debugger.mutex);
+    const int32_t level = debugger.variable_stack_level;
+    g_mutex_unlock(&debugger.mutex);
+    return level;
 }
 
 /**
@@ -661,14 +756,49 @@ static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
 
     bool hit = false;
 
-    /* Step mode: pause at every line */
+    /* Single-step modes (step in / over / out) */
+    wslua_step_kind_t step_kind;
+    int step_stack_depth_snapshot;
     g_mutex_lock(&debugger.mutex);
-    if (debugger.step_mode)
-    {
-        hit = true;
-        debugger.step_mode = false; /* One-shot */
-    }
+    step_kind = debugger.step_kind;
+    step_stack_depth_snapshot = debugger.step_stack_depth;
     g_mutex_unlock(&debugger.mutex);
+
+    if (step_kind != WSLUA_STEP_KIND_NONE)
+    {
+        bool step_done = false;
+        switch (step_kind)
+        {
+        case WSLUA_STEP_KIND_IN:
+            step_done = true;
+            break;
+        case WSLUA_STEP_KIND_OVER: {
+            const int d = wslua_debugger_count_stack_frames(L);
+            if (d <= step_stack_depth_snapshot)
+            {
+                step_done = true;
+            }
+            break;
+        }
+        case WSLUA_STEP_KIND_OUT: {
+            const int d = wslua_debugger_count_stack_frames(L);
+            if (d < step_stack_depth_snapshot)
+            {
+                step_done = true;
+            }
+            break;
+        }
+        default:
+            break;
+        }
+        if (step_done)
+        {
+            hit = true;
+            g_mutex_lock(&debugger.mutex);
+            debugger.step_kind = WSLUA_STEP_KIND_NONE;
+            g_mutex_unlock(&debugger.mutex);
+        }
+    }
 
     /* Check regular breakpoints */
     if (!hit)
@@ -710,8 +840,10 @@ static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
 
     if (hit)
     {
+        g_mutex_lock(&debugger.mutex);
         debugger.state = WSLUA_DEBUGGER_PAUSED;
         debugger.paused_L = L;
+        g_mutex_unlock(&debugger.mutex);
 
         if (debugger.ui_update_callback)
         {
@@ -738,7 +870,7 @@ static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
          */
 
         /*
-         * Re-install the hook on this thread (L) so that step_mode
+         * Re-install the hook on this thread (L) so that stepping
          * and breakpoints can fire on subsequent lines within the
          * same dissector call.  The hook was disabled on L above to
          * prevent re-entrancy during the nested event loop; now that
@@ -805,12 +937,42 @@ void wslua_debugger_free_stack(wslua_stack_frame_t *stack, int32_t frame_count)
 }
 
 /**
+ * @brief Fill @a ar for lua_getlocal / lua_getinfo for stack frame @a level.
+ */
+static bool
+wslua_debugger_fill_activation(lua_State *L, int32_t level, lua_Debug *ar)
+{
+    return lua_getstack(L, level, ar);
+}
+
+/**
+ * @brief After @a ar describes an activation, push the running closure so
+ *        lua_getupvalue can enumerate upvalues (Lua debug library pattern).
+ */
+static bool wslua_debugger_push_function_for_ar(lua_State *L, lua_Debug *ar)
+{
+    const int base = lua_gettop(L);
+    if (!lua_getinfo(L, "f", ar))
+    {
+        lua_settop(L, base);
+        return false;
+    }
+    if (!lua_isfunction(L, -1))
+    {
+        lua_settop(L, base);
+        return false;
+    }
+    return true;
+}
+
+/**
  * @brief Lookup a variable path in Lua state.
  * @param L The Lua state.
  * @param path The path to lookup (e.g. "a.b").
  * @return true if found (value on stack), false otherwise.
  */
-static bool wslua_debugger_lookup_path(lua_State *L, const char *path)
+static bool wslua_debugger_lookup_path(lua_State *L, const char *path,
+                                       int32_t stack_level)
 {
     if (!path || !*path)
         return false;
@@ -826,7 +988,7 @@ static bool wslua_debugger_lookup_path(lua_State *L, const char *path)
 
     /* Look in locals */
     lua_Debug debug_info;
-    if (!lua_getstack(L, 0, &debug_info))
+    if (!wslua_debugger_fill_activation(L, stack_level, &debug_info))
     {
         g_free(first_component);
         return false;
@@ -848,22 +1010,25 @@ static bool wslua_debugger_lookup_path(lua_State *L, const char *path)
     if (!found)
     {
         /* Look in upvalues */
-        lua_getinfo(L, "f", &debug_info); /* Push function */
-        local_index = 1;
-        while ((name = lua_getupvalue(L, -1, local_index++)))
+        if (wslua_debugger_push_function_for_ar(L, &debug_info))
         {
-            if (g_strcmp0(name, first_component) == 0)
+            local_index = 1;
+            while ((name = lua_getupvalue(L, -1, local_index++)))
             {
-                found = true;
-                lua_remove(L, -2); /* Remove function */
-                break;
+                if (g_strcmp0(name, first_component) == 0)
+                {
+                    found = true;
+                    lua_remove(L, -2); /* Remove function */
+                    break;
+                }
+                lua_pop(L, 1);
             }
-            lua_pop(L, 1);
+            if (!found)
+                lua_pop(L, 1); /* Remove function */
         }
+
         if (!found)
         {
-            lua_pop(L, 1); /* Remove function */
-
             /* Look in globals */
             lua_getglobal(L, first_component);
             if (lua_isnil(L, -1))
@@ -1015,6 +1180,7 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
 {
     g_mutex_lock(&debugger.mutex);
     lua_State *target_L = debugger.paused_L ? debugger.paused_L : debugger.L;
+    const int32_t variable_stack_level = debugger.variable_stack_level;
     g_mutex_unlock(&debugger.mutex);
     if (!target_L)
     {
@@ -1052,7 +1218,8 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
     {
         /* Locals */
         lua_Debug debug_info;
-        if (lua_getstack(target_L, 0, &debug_info))
+        if (wslua_debugger_fill_activation(target_L, variable_stack_level,
+                                           &debug_info))
         {
             int32_t local_index = 1;
             const char *name;
@@ -1081,15 +1248,26 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
     {
         /* Upvalues */
         lua_Debug debug_info;
-        if (lua_getstack(target_L, 0, &debug_info))
+        if (wslua_debugger_fill_activation(target_L, variable_stack_level,
+                                           &debug_info) &&
+            wslua_debugger_push_function_for_ar(target_L, &debug_info))
         {
-            lua_getinfo(target_L, "f", &debug_info);
             int32_t upvalue_index = 1;
             const char *name;
-            while ((name = lua_getupvalue(target_L, -1, upvalue_index++)))
+            while ((name = lua_getupvalue(target_L, -1, upvalue_index)))
             {
                 wslua_variable_t variable;
-                variable.name = g_strdup(name);
+                /* C closures use "" as the name for each slot; use a label so
+                 * the UI path is valid for expansion. */
+                if (name[0] == '\0')
+                {
+                    variable.name =
+                        g_strdup_printf("(closure #%d)", upvalue_index);
+                }
+                else
+                {
+                    variable.name = g_strdup(name);
+                }
                 variable.type =
                     g_strdup(lua_typename(target_L, lua_type(target_L, -1)));
                 variable.value = wslua_debugger_describe_value(target_L, -1);
@@ -1098,6 +1276,7 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
 
                 g_array_append_val(variables_array, variable);
                 lua_pop(target_L, 1);
+                upvalue_index++;
             }
             lua_pop(target_L, 1); /* Function */
         }
@@ -1163,7 +1342,8 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
         else if (g_str_has_prefix(path, "Globals."))
             lookup_path = path + 8;
 
-        if (wslua_debugger_lookup_path(target_L, lookup_path))
+        if (wslua_debugger_lookup_path(target_L, lookup_path,
+                                       variable_stack_level))
         {
             if (lua_istable(target_L, -1))
             {
@@ -1254,14 +1434,19 @@ bool wslua_debugger_get_breakpoint(unsigned idx, const char **file_path,
 {
     ensure_breakpoints_initialized();
 
+    g_mutex_lock(&debugger.mutex);
     if (idx >= breakpoints_array->len)
+    {
+        g_mutex_unlock(&debugger.mutex);
         return false;
+    }
 
     wslua_breakpoint_t *bp =
         &g_array_index(breakpoints_array, wslua_breakpoint_t, idx);
     *file_path = bp->file_path;
     *line = bp->line;
     *active = bp->active;
+    g_mutex_unlock(&debugger.mutex);
     return true;
 }
 

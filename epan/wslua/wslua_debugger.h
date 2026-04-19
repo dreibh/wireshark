@@ -93,12 +93,47 @@ extern "C"
     WS_DLL_PUBLIC void wslua_debugger_continue(void);
 
     /**
-     * @brief Step to the next line.
+     * @brief Step into the next executed line (enters called functions).
      *
      * Resumes execution and pauses at the very next line hook,
-     * regardless of breakpoints. This advances to the next Lua
-     * source line without descending into called functions
-     * (similar to "step over").
+     * regardless of breakpoints.
+     */
+    WS_DLL_PUBLIC void wslua_debugger_step_in(void);
+
+    /**
+     * @brief Step over the current line (skips line hooks inside callees).
+     *
+     * Resumes execution and pauses at the next line hook that runs in the
+     * current stack frame or an outer frame (after returns).
+     */
+    WS_DLL_PUBLIC void wslua_debugger_step_over(void);
+
+    /**
+     * @brief Step out of the current function (pause in the caller).
+     *
+     * If there is only one Lua stack frame, behaves like
+     * wslua_debugger_continue().
+     */
+    WS_DLL_PUBLIC void wslua_debugger_step_out(void);
+
+    /**
+     * @brief Set which call stack frame supplies Locals and Upvalues in the
+     *        variables view.
+     *
+     * @a level is the index passed to @c lua_getstack (0 = innermost Lua/C
+     * activation). Globals are unaffected. If the debugger is not paused, the
+     * value is still stored for the next pause.
+     */
+    WS_DLL_PUBLIC void wslua_debugger_set_variable_stack_level(int32_t level);
+
+    /**
+     * @brief Current variable-inspection stack level (see
+     *        wslua_debugger_set_variable_stack_level()).
+     */
+    WS_DLL_PUBLIC int32_t wslua_debugger_get_variable_stack_level(void);
+
+    /**
+     * @brief Same as wslua_debugger_step_in() (legacy name).
      */
     WS_DLL_PUBLIC void wslua_debugger_step(void);
 

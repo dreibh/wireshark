@@ -1034,6 +1034,30 @@ No options:
       -DENABLE_ZLIB=OFF -DENABLE_ZSTD=OFF -DBUILD_mmdbresolve=OFF ..
     - ninja
 
+Clang ASAN Build:
+  extends: .build-ubuntu
+  tags:
+    - saas-linux-medium-amd64
+  rules: !reference [.if-plain-merge-request]
+  needs:
+    - job: "Commit Check"
+      optional: true
+  script:
+    - source /clang-latest.env
+    - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
+    - cmake --preset=ninja_ccache -DCMAKE_BUILD_TYPE=Debug -DENABLE_ASAN=ON -DENABLE_WERROR=ON -DBUILD_stratoshark=ON ..
+    - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
+    - ninja
+    - ninja test-programs
+    - chown -R user .
+    - if [ -f run/dumpcap ]; then setcap cap_net_raw,cap_net_admin+eip run/dumpcap; fi
+    - if [ -f run/dumpcap ]; then su user -c "run/dumpcap -D" ; fi
+    - WIRESHARK_DEBUG_WMEM_OVERRIDE=simple PYTEST_ADDOPTS="--skip-missing-programs=dumpcap,rawshark,falcodump --enable-stratoshark" su user -c "pytest --junitxml=../clang_asan_tests.xml"
+  artifacts:
+    when: always
+    reports:
+      junit: clang_asan_tests.xml
+
 # Windows runners are still beta, at least technically:
 # https://docs.gitlab.com/ee/user/gitlab_com/index.html#windows-shared-runners-beta
 Windows Build:

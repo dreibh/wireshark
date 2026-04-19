@@ -305,7 +305,22 @@ WS_DLL_PUBLIC int port_with_resolution_to_str_buf(char *buf, unsigned long buf_s
 
 /* Setup name resolution preferences */
 struct pref_module;
+
+/**
+ * @brief Disable all forms of name resolution.
+ *
+ * Sets all relevant global resolution flags (`gbl_resolv_flags`) to `false`,
+ * effectively disabling hostname, service name, and other symbolic resolution
+ * features. This is typically used to improve performance or enforce numeric-only
+ * addressing in network captures.
+ *
+ * @param nameres Pointer to the preferences module for name resolution, used to register preferences.
+ */
 extern void addr_resolve_pref_init(struct pref_module *nameres);
+
+/**
+ * @brief Apply name resolution preferences.
+ */
 extern void addr_resolve_pref_apply(void);
 
 /**

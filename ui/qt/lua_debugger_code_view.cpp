@@ -11,7 +11,10 @@
 #include "lua_debugger_dialog.h"
 
 #include <QColor>
+#include <QEvent>
 #include <QFontDatabase>
+#include <QKeyEvent>
+#include <QMetaObject>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPalette>
@@ -390,7 +393,7 @@ qint32 LuaSyntaxHighlighter::findLongBlockEnd(const QString &text, qint32 from,
 
 LuaDebuggerCodeView::LuaDebuggerCodeView(QWidget *parent)
     : QPlainTextEdit(parent), lineNumberArea(new LineNumberArea(this)),
-      currentLine(-1), syntaxHighlighter(nullptr)
+      syntaxHighlighter(nullptr)
 {
     syntaxHighlighter = new LuaSyntaxHighlighter(document());
 
@@ -398,8 +401,14 @@ LuaDebuggerCodeView::LuaDebuggerCodeView(QWidget *parent)
             &LuaDebuggerCodeView::updateLineNumberAreaWidth);
     connect(this, &LuaDebuggerCodeView::updateRequest, this,
             &LuaDebuggerCodeView::updateLineNumberArea);
+    connect(this, &LuaDebuggerCodeView::cursorPositionChanged, this,
+            &LuaDebuggerCodeView::rebuildLineHighlights);
 
-    setReadOnly(true);
+    /* QAbstractScrollArea delivers key events to the viewport; Esc never
+     * reaches QDialog::keyPressEvent. Forward to LuaDebuggerDialog::handleEscapeKey(). */
+    viewport()->installEventFilter(this);
+
+    setReadOnly(false);
     setLineWrapMode(QPlainTextEdit::NoWrap);
 
     QFont initialFont;
@@ -409,6 +418,7 @@ LuaDebuggerCodeView::LuaDebuggerCodeView(QWidget *parent)
     }
     setEditorFont(initialFont);
     applyEditorPalette();
+    rebuildLineHighlights();
 }
 
 qint32 LuaDebuggerCodeView::lineNumberAreaWidth()
@@ -453,44 +463,125 @@ void LuaDebuggerCodeView::resizeEvent(QResizeEvent *e)
                                       cr.height()));
 }
 
-void LuaDebuggerCodeView::highlightCurrentLine()
+bool LuaDebuggerCodeView::eventFilter(QObject *watched, QEvent *event)
 {
-    // Deprecated or unused if we use setCurrentLine
+    if (watched == viewport() && event->type() == QEvent::KeyPress)
+    {
+        auto *ke = static_cast<QKeyEvent *>(event);
+        if (ke->key() == Qt::Key_Escape && ke->modifiers() == Qt::NoModifier)
+        {
+            if (LuaDebuggerDialog *dlg = LuaDebuggerDialog::instance())
+            {
+                QMetaObject::invokeMethod(dlg, "handleEscapeKey",
+                                          Qt::QueuedConnection);
+                return true;
+            }
+        }
+    }
+    return QPlainTextEdit::eventFilter(watched, event);
+}
+
+void LuaDebuggerCodeView::rebuildLineHighlights()
+{
+    QList<QTextEdit::ExtraSelection> extraSelections;
+
+    /* Debugger paused line — fixed amber bar; independent of caret. */
+    if (pausedExecutionLine_ > 0)
+    {
+        QTextBlock pauseBlock = document()->findBlockByNumber(
+            static_cast<int>(pausedExecutionLine_ - 1));
+        if (pauseBlock.isValid())
+        {
+            QTextCursor pauseCursor(pauseBlock);
+            pauseCursor.movePosition(QTextCursor::StartOfBlock);
+            QTextEdit::ExtraSelection pauseSel;
+            QColor dbgColor = QColor(QStringLiteral("#806F00"));
+            dbgColor.setAlpha(120);
+            pauseSel.format.setBackground(dbgColor);
+            pauseSel.format.setProperty(QTextFormat::FullWidthSelection, true);
+            pauseSel.cursor = pauseCursor;
+            pauseSel.cursor.clearSelection();
+            extraSelections.append(pauseSel);
+        }
+    }
+
+    /* Caret line — subtle; skip if same line as debugger (do not replace pause look). */
+    QTextBlock caretBlock = textCursor().block();
+    if (caretBlock.isValid())
+    {
+        const int caretLine = caretBlock.blockNumber() + 1;
+        const bool sameAsPause =
+            (pausedExecutionLine_ > 0) && (caretLine == pausedExecutionLine_);
+
+        if (!sameAsPause)
+        {
+            /* Match the line-number gutter background (see applyEditorPalette). */
+            const QColor lineColor =
+                lineNumberArea
+                    ? lineNumberArea->palette().color(QPalette::Base)
+                    : palette().color(QPalette::Base);
+
+            QTextCursor caretLineCursor(caretBlock);
+            caretLineCursor.movePosition(QTextCursor::StartOfBlock);
+            QTextEdit::ExtraSelection caretSel;
+            caretSel.format.setBackground(lineColor);
+            caretSel.format.setProperty(QTextFormat::FullWidthSelection, true);
+            caretSel.cursor = caretLineCursor;
+            caretSel.cursor.clearSelection();
+            extraSelections.append(caretSel);
+        }
+    }
+
+    setExtraSelections(extraSelections);
 }
 
 void LuaDebuggerCodeView::setCurrentLine(qint32 line)
 {
     if (line <= 0)
     {
-        clearCurrentLineHighlight();
+        pausedExecutionLine_ = -1;
+        rebuildLineHighlights();
         return;
     }
 
-    currentLine = line;
+    QTextBlock block =
+        document()->findBlockByNumber(static_cast<int>(line - 1));
+    if (!block.isValid())
+    {
+        pausedExecutionLine_ = -1;
+        rebuildLineHighlights();
+        return;
+    }
 
-    QList<QTextEdit::ExtraSelection> extraSelections;
-    QTextEdit::ExtraSelection selection;
-    QColor lineColor = QColor("#806F00");
-    lineColor.setAlpha(120);
-    selection.format.setBackground(lineColor);
-    selection.format.setProperty(QTextFormat::FullWidthSelection, true);
-
-    // Move cursor to line
-    QTextCursor cursor(
-        document()->findBlockByNumber(static_cast<int>(line - 1)));
+    pausedExecutionLine_ = line;
+    QTextCursor cursor(block);
+    cursor.movePosition(QTextCursor::StartOfBlock);
     setTextCursor(cursor);
-    selection.cursor = cursor;
-    selection.cursor.clearSelection();
-    extraSelections.append(selection);
+}
 
-    setExtraSelections(extraSelections);
+void LuaDebuggerCodeView::moveCaretToLineStart(qint32 line)
+{
+    if (line <= 0)
+    {
+        return;
+    }
+
+    QTextBlock block =
+        document()->findBlockByNumber(static_cast<int>(line - 1));
+    if (!block.isValid())
+    {
+        return;
+    }
+
+    QTextCursor cursor(block);
+    cursor.movePosition(QTextCursor::StartOfBlock);
+    setTextCursor(cursor);
 }
 
 void LuaDebuggerCodeView::clearCurrentLineHighlight()
 {
-    currentLine = -1;
-    QList<QTextEdit::ExtraSelection> emptySelections;
-    setExtraSelections(emptySelections);
+    pausedExecutionLine_ = -1;
+    rebuildLineHighlights();
 }
 
 void LuaDebuggerCodeView::setEditorFont(const QFont &font)
@@ -536,6 +627,7 @@ void LuaDebuggerCodeView::applyTheme()
         lineNumberArea->update();
     }
     viewport()->update();
+    rebuildLineHighlights();
 }
 
 void LuaDebuggerCodeView::applyEditorPalette()
