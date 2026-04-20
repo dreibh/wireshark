@@ -554,6 +554,78 @@ static range_t* get_range(lua_State *L, int idx_r, int idx_m)
     return ret;
 }
 
+/* WSLUA_ATTRIBUTE Pref_name RO The name/abbreviation of the preference. */
+WSLUA_ATTRIBUTE_NAMED_STRING_GETTER(Pref,name,name);
+
+/* WSLUA_ATTRIBUTE Pref_label RO The user-visible label of the preference. */
+WSLUA_ATTRIBUTE_NAMED_STRING_GETTER(Pref,label,label);
+
+/* WSLUA_ATTRIBUTE Pref_description RO The human-readable description. */
+WSLUA_ATTRIBUTE_NAMED_STRING_GETTER(Pref,description,desc);
+
+/* Map pref_type_e to a short descriptive string; used by the Pref.type
+ * attribute so scripts (and the debugger) can introspect without needing
+ * to know the enum values of prefs-int.h. */
+static const char *pref_type_to_string(pref_type_e type) {
+    switch (type) {
+        case PREF_BOOL:        return "bool";
+        case PREF_UINT:        return "uint";
+        case PREF_STRING:      return "string";
+        case PREF_ENUM:        return "enum";
+        case PREF_RANGE:       return "range";
+        case PREF_STATIC_TEXT: return "statictext";
+        case PREF_UAT:         return "uat";
+        default:               return "unknown";
+    }
+}
+
+/* WSLUA_ATTRIBUTE Pref_type RO The preference type as the raw pref_type_e
+   enum value (integer). Use `Pref.type_name` for the human-readable short
+   string ("bool", "uint", "string", "enum", "range", "statictext",
+   "uat"). */
+WSLUA_ATTRIBUTE_GET(Pref,type, {
+    lua_pushinteger(L, (lua_Integer)obj->type);
+});
+
+/* WSLUA_ATTRIBUTE Pref_type_name RO Human-readable short string matching
+   the Pref.type enum: "bool", "uint", "string", "enum", "range",
+   "statictext", "uat", or "unknown". */
+WSLUA_ATTRIBUTE_GET(Pref,type_name, {
+    lua_pushstring(L, pref_type_to_string(obj->type));
+});
+
+/* WSLUA_ATTRIBUTE Pref_value RO The current value of the preference.
+ *
+ * The concrete Lua type depends on Pref.type: bool/uint/string/enum/range
+ * return the expected primitive, while statictext and uat return nil to
+ * match the existing behavior of Prefs.__index.
+ */
+WSLUA_ATTRIBUTE_GET(Pref,value, {
+    switch (obj->type) {
+        case PREF_BOOL:
+            lua_pushboolean(L, obj->value.b);
+            break;
+        case PREF_UINT:
+            lua_pushinteger(L, (lua_Integer)obj->value.u);
+            break;
+        case PREF_STRING:
+            lua_pushstring(L, obj->value.s);
+            break;
+        case PREF_ENUM:
+            lua_pushinteger(L, (lua_Integer)obj->value.e);
+            break;
+        case PREF_RANGE: {
+            char *push_str = range_convert_range(NULL, obj->value.r);
+            lua_pushstring(L, push_str);
+            wmem_free(NULL, push_str);
+            break;
+        }
+        default:
+            lua_pushnil(L);
+            break;
+    }
+});
+
 /* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */
 static int Pref__gc(lua_State* L) {
     Pref pref = toPref(L,1);
@@ -637,9 +709,23 @@ WSLUA_META Pref_meta[] = {
     { NULL, NULL }
 };
 
+/* Registered as a sub-table of the class' metatable so that Pref.name,
+ * Pref.label, Pref.description, Pref.type and Pref.value resolve via the
+ * wslua attribute dispatcher. This also lets the Lua debugger expand
+ * each Pref and enumerate its attributes. */
+WSLUA_ATTRIBUTES Pref_attributes[] = {
+    WSLUA_ATTRIBUTE_ROREG(Pref,name),
+    WSLUA_ATTRIBUTE_ROREG(Pref,label),
+    WSLUA_ATTRIBUTE_ROREG(Pref,description),
+    WSLUA_ATTRIBUTE_ROREG(Pref,type),
+    WSLUA_ATTRIBUTE_ROREG(Pref,type_name),
+    WSLUA_ATTRIBUTE_ROREG(Pref,value),
+    { NULL, NULL, NULL }
+};
+
 
 WSLUA_REGISTER Pref_register(lua_State* L) {
-    WSLUA_REGISTER_CLASS(Pref);
+    WSLUA_REGISTER_CLASS_WITH_ATTRS(Pref);
     return 0;
 }
 
@@ -882,6 +968,64 @@ WSLUA_METAMETHOD Prefs__index(lua_State* L) {
     return 0;
 }
 
+/* Stateless __pairs iterator: receives (prefs_userdata, prev_name_or_nil)
+ * and returns the next (name, Pref) pair or nil when exhausted. Using a
+ * linear scan keeps the closure state-free and sidesteps the need to
+ * expose the internal linked-list pointer to Lua. */
+static int Prefs_pairs_iter(lua_State *L) {
+    Pref prefs_p = checkPrefs(L, 1);
+    const char *prev = lua_isnoneornil(L, 2) ? NULL : luaL_checkstring(L, 2);
+
+    if (! prefs_p || ! prefs_p->next) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    Pref cur = prefs_p->next;
+    if (prev != NULL) {
+        while (cur != NULL && g_strcmp0(cur->name, prev) != 0) {
+            cur = cur->next;
+        }
+        if (cur != NULL) {
+            cur = cur->next;
+        }
+    }
+
+    if (cur == NULL) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    lua_pushstring(L, cur->name);
+
+    if (cur->ref != LUA_NOREF) {
+        /* Push the original Pref userdata held alive by the registry;
+         * creating a fresh userdata around the same pointer would later
+         * trigger Pref__gc on an already-registered pref, which that
+         * destructor explicitly forbids. */
+        lua_rawgeti(L, LUA_REGISTRYINDEX, cur->ref);
+    } else {
+        lua_pushnil(L);
+    }
+    return 2;
+}
+
+WSLUA_METAMETHOD Prefs__pairs(lua_State *L) {
+    /*
+    Iterate over all registered preferences of a protocol.
+
+    ===== Example
+
+    [source,lua]
+    ----
+    for name, pref in pairs(proto_foo.prefs) do
+        debug(name .. " = " .. tostring(pref.value))
+    end
+    ----
+    */
+    WSLUA_STATELESS_PAIRS_BODY(Prefs);
+}
+
 /* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */
 static int Prefs__gc(lua_State* L _U_) {
     /* do NOT free Prefs, it's a static part of Proto */
@@ -891,6 +1035,7 @@ static int Prefs__gc(lua_State* L _U_) {
 WSLUA_META Prefs_meta[] = {
     WSLUA_CLASS_MTREG(Prefs,newindex),
     WSLUA_CLASS_MTREG(Prefs,index),
+    WSLUA_CLASS_MTREG(Prefs,pairs),
     { NULL, NULL }
 };
 

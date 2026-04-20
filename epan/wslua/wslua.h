@@ -542,6 +542,18 @@ extern int wslua_reg_attributes(lua_State *L, const wslua_attribute_table *t, bo
 #define WSLUA_ATTRIBUTE_ROREG(class,name) { #name, class##_get_##name, NULL }
 #define WSLUA_ATTRIBUTE_WOREG(class,name) { #name, NULL, class##_set_##name }
 
+/* Body of a __pairs metamethod that hands the generic-for protocol
+ * a stateless iterator `C##_pairs_iter`. The iterator must accept
+ * (self, prev_key_or_nil) and return the next (key, value) pair or a
+ * single nil when done. Use inside a WSLUA_METAMETHOD body so the
+ * caller retains control of any doc comments shown in the manual. */
+#define WSLUA_STATELESS_PAIRS_BODY(C)                 \
+    check##C(L, 1);                                   \
+    lua_pushcfunction(L, C##_pairs_iter);             \
+    lua_pushvalue(L, 1);                              \
+    lua_pushnil(L);                                   \
+    return 3
+
 #define WSLUA_ATTRIBUTE_FUNC_SETTER(C,field) \
     static int C##_set_##field (lua_State* L) { \
         C obj = check##C (L,1); \

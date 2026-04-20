@@ -107,13 +107,18 @@ wmem_strbuf_new(wmem_allocator_t *allocator, const char *str);
  * @brief Create a new string buffer initialized with a substring of specified length.
  *
  * Allocates and initializes a new `wmem_strbuf_t` structure using the specified memory allocator,
- * and copies up to `len` bytes from the string `str` into the buffer. The resulting buffer is
+ * and copies `len` bytes from the string `str` into the buffer. The resulting buffer is
  * null-terminated.
  *
  * @param allocator Pointer to the memory allocator to use.
  * @param str Source string to copy into the buffer.
  * @param len Number of bytes to copy from the source string.
  * @return Pointer to the newly created string buffer, or NULL on failure.
+ *
+ * @warning Because this can be used to copy embedded null characters, it can
+ * be used for arrays of char that are not strictly null-terminated strings,
+ * but conversely it does not check the length of str. The caller must ensure
+ * that len is not larger than the memory allocated for str.
  */
 WS_DLL_PUBLIC
 wmem_strbuf_t *

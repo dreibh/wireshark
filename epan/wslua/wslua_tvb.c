@@ -113,6 +113,24 @@ Tvb* push_Tvb(lua_State* L, tvbuff_t* ws_tvb) {
 }
 
 
+/* WSLUA_ATTRIBUTE Tvb_captured_length RO The captured length of the Tvb
+   (amount saved in the capture process). Mirrors `tvb:captured_len()`. */
+WSLUA_ATTRIBUTE_GET(Tvb,captured_length, {
+    lua_pushinteger(L, tvb_captured_length(obj->ws_tvb));
+});
+
+/* WSLUA_ATTRIBUTE Tvb_reported_length RO The reported length of the Tvb
+   (length on the network). Mirrors `tvb:reported_len()`. */
+WSLUA_ATTRIBUTE_GET(Tvb,reported_length, {
+    lua_pushinteger(L, tvb_reported_length(obj->ws_tvb));
+});
+
+/* WSLUA_ATTRIBUTE Tvb_raw_offset RO The raw offset of this (sub) Tvb in its
+   source Tvb. Mirrors `tvb:offset()`. */
+WSLUA_ATTRIBUTE_GET(Tvb,raw_offset, {
+    lua_pushinteger(L, tvb_raw_offset(obj->ws_tvb));
+});
+
 WSLUA_METAMETHOD Tvb__tostring(lua_State* L) {
     /*
     Convert the bytes of a <<lua_class_Tvb,`Tvb`>> into a string.
@@ -325,8 +343,20 @@ WSLUA_META Tvb_meta[] = {
     { NULL, NULL }
 };
 
+/* Read-only attributes. Registered so the Lua debugger can expand a Tvb
+ * in the Variables view without having to invoke methods. The attribute
+ * names intentionally differ from the corresponding method names to
+ * avoid the attribute/method collision check performed by
+ * wslua_push_attributes. */
+WSLUA_ATTRIBUTES Tvb_attributes[] = {
+    WSLUA_ATTRIBUTE_ROREG(Tvb,captured_length),
+    WSLUA_ATTRIBUTE_ROREG(Tvb,reported_length),
+    WSLUA_ATTRIBUTE_ROREG(Tvb,raw_offset),
+    { NULL, NULL, NULL }
+};
+
 int Tvb_register(lua_State* L) {
-    WSLUA_REGISTER_CLASS(Tvb);
+    WSLUA_REGISTER_CLASS_WITH_ATTRS(Tvb);
     if (outstanding_Tvb != NULL) {
         g_ptr_array_unref(outstanding_Tvb);
     }
@@ -1661,6 +1691,18 @@ WSLUA_METHOD TvbRange_raw(lua_State* L) {
     WSLUA_RETURN(1); /* A Lua string of the binary bytes in the <<lua_class_TvbRange,`TvbRange`>>. */
 }
 
+/* WSLUA_ATTRIBUTE TvbRange_length RO The length (in bytes) of the range.
+   Mirrors `range:len()`. */
+WSLUA_ATTRIBUTE_GET(TvbRange,length, {
+    lua_pushinteger(L, (lua_Integer)obj->len);
+});
+
+/* WSLUA_ATTRIBUTE TvbRange_position RO The offset within the parent Tvb at
+   which the range starts. Mirrors `range:offset()`. */
+WSLUA_ATTRIBUTE_GET(TvbRange,position, {
+    lua_pushinteger(L, (lua_Integer)obj->offset);
+});
+
 WSLUA_METAMETHOD TvbRange__eq(lua_State* L) {
     /* Checks whether the contents of two <<lua_class_TvbRange,`TvbRange`>>s are equal. */
     TvbRange tvb_l = checkTvbRange(L,1);
@@ -1767,12 +1809,20 @@ WSLUA_META TvbRange_meta[] = {
     { NULL, NULL }
 };
 
+/* Read-only attributes for debugger introspection; see the comment on
+ * Tvb_attributes for the naming rationale. */
+WSLUA_ATTRIBUTES TvbRange_attributes[] = {
+    WSLUA_ATTRIBUTE_ROREG(TvbRange,length),
+    WSLUA_ATTRIBUTE_ROREG(TvbRange,position),
+    { NULL, NULL, NULL }
+};
+
 int TvbRange_register(lua_State* L) {
     if (outstanding_TvbRange != NULL) {
         g_ptr_array_unref(outstanding_TvbRange);
     }
     outstanding_TvbRange = g_ptr_array_new();
-    WSLUA_REGISTER_CLASS(TvbRange);
+    WSLUA_REGISTER_CLASS_WITH_ATTRS(TvbRange);
     return 0;
 }
 

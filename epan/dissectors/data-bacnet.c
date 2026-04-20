@@ -1622,6 +1622,9 @@ BACnetVendorIdentifiers[] = {
     { 1611, "HumiPure" },
     { 1612, "Humber Horizons" },
     { 1613, "Automated Facility Systems, Inc." },
+    { 1614, "SiteSense AS" },
+    { 1615, "Eco-2i EURL" },
+    { 1616, "Donix Embedded Systems CC" },
     { 0, NULL }
 };
 value_string_ext BACnetVendorIdentifiers_ext = VALUE_STRING_EXT_INIT(BACnetVendorIdentifiers);
