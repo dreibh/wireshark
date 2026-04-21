@@ -10193,7 +10193,7 @@ dissect_packet_data(tvbuff_t *tvb ,tvbuff_t *auth_tvb _U_,
     tvbuff_t  *buf = NULL;
     uint8_t* decrypted;
     netlogon_auth_vars *vars;
-    /*ws_debug("Dissection of request data offset %d len=%d on packet %d",offset,tvb_length_remaining(tvb,offset),pinfo->num);*/
+    /*ws_debug("Dissection of request data offset %d len=%d on packet %d",offset,tvb_captured_length_remaining(tvb,offset),pinfo->num);*/
 
     vars = find_or_create_schannel_netlogon_auth_vars(pinfo, auth_info, is_server);
     if (vars == NULL) {

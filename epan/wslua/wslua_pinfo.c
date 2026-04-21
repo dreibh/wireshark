@@ -54,30 +54,35 @@ WSLUA_CLASS_DEFINE(PrivateTable,FAIL_ON_NULL_OR_EXPIRED("PrivateTable"));
 /* PrivateTable represents the pinfo->private_table. */
 
 WSLUA_METAMETHOD PrivateTable__tostring(lua_State* L) {
-    /* Gets debugging type information about the private table. */
+    /* Returns a short label of the form
+       `PrivateTable: keys={k1, k2, k3}` enumerating the current key
+       set, or `PrivateTable: (expired)` once the underlying
+       packet_info is gone. The previous bare `k1,k2,k3` rendering
+       matched no other wslua __tostring and made the value
+       indistinguishable from a regular comma-separated string in
+       the debugger's Variables view. */
     PrivateTable priv = toPrivateTable(L,1);
-    GString *key_string;
-    GList *keys, *key;
-
-    if (!priv) return 0;
-
-    key_string = g_string_new ("");
-    keys = g_hash_table_get_keys (priv->table);
-    key = g_list_first (keys);
-    while (key) {
-        key_string = g_string_append (key_string, (const char *)key->data);
-        key = g_list_next (key);
-        if (key) {
-            key_string = g_string_append_c (key_string, ',');
-        }
+    if (!priv || !priv->table) {
+        lua_pushstring(L, "PrivateTable: (expired)");
+        WSLUA_RETURN(1);
     }
 
-    lua_pushstring(L,key_string->str);
+    GString *out = g_string_new("PrivateTable: keys={");
+    GList *keys = g_hash_table_get_keys(priv->table);
+    for (GList *key = g_list_first(keys); key; key = g_list_next(key)) {
+        g_string_append(out, (const char *)key->data);
+        if (g_list_next(key)) {
+            g_string_append(out, ", ");
+        }
+    }
+    g_string_append_c(out, '}');
 
-    g_string_free (key_string, TRUE);
-    g_list_free (keys);
+    lua_pushstring(L, out->str);
 
-    WSLUA_RETURN(1); /* A string with all keys in the table, mostly for debugging. */
+    g_string_free(out, TRUE);
+    g_list_free(keys);
+
+    WSLUA_RETURN(1); /* A string with all keys in the table. */
 }
 
 static int PrivateTable__index(lua_State* L) {
@@ -218,7 +223,28 @@ int PrivateTable_register(lua_State* L) {
 WSLUA_CLASS_DEFINE(Pinfo,FAIL_ON_NULL_OR_EXPIRED("Pinfo"));
 /* Packet information. */
 
-static int Pinfo__tostring(lua_State *L) { lua_pushstring(L,"a Pinfo"); return 1; }
+/* Bypass checkPinfo (which raises on expired/null) so the debugger
+ * Variables view can still render an expired Pinfo as a recognizable
+ * label instead of crashing the script when it is hovered. */
+static int Pinfo__tostring(lua_State *L) {
+    Pinfo pinfo = toPinfo(L, 1);
+    if (!pinfo || !pinfo->ws_pinfo || pinfo->expired) {
+        lua_pushstring(L, "Pinfo: (expired)");
+        return 1;
+    }
+    packet_info *pi = pinfo->ws_pinfo;
+    char *src = address_to_display(NULL, &pi->src);
+    char *dst = address_to_display(NULL, &pi->dst);
+    lua_pushfstring(L, "Pinfo: frame=%d src=%s dst=%s proto=%s len=%d",
+                    (int)pi->num,
+                    src ? src : "?",
+                    dst ? dst : "?",
+                    pi->current_proto ? pi->current_proto : "?",
+                    pi->fd ? (int)pi->fd->pkt_len : 0);
+    wmem_free(NULL, src);
+    wmem_free(NULL, dst);
+    return 1;
+}
 
 #define PINFO_ADDRESS_GETTER(name) \
     WSLUA_ATTRIBUTE_GET(Pinfo,name, { \

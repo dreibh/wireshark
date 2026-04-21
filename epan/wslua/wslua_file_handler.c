@@ -794,17 +794,28 @@ WSLUA_CONSTRUCTOR FileHandler_new(lua_State* L) {
 }
 
 WSLUA_METAMETHOD FileHandler__tostring(lua_State* L) {
-    /* Generates a string of debug info for the FileHandler */
+    /* Returns a short label of the form
+       `FileHandler: <name> caps=[<r><w>] description="<description>"`
+       where <r>/<w> are `r`/`w` when the handler can read/write and
+       `-` otherwise (e.g. `[rw]`, `[r-]`, `[-w]`). The previous
+       form dumped raw Lua registry refs and the internal
+       description; the registered `name`, capability, and
+       user-visible description are what actually identify the
+       handler. */
     FileHandler fh = toFileHandler(L,1);
 
     if (!fh) {
-        lua_pushstring(L,"FileHandler pointer is NULL!");
-    } else {
-        lua_pushfstring(L, "FileHandler(%s): description='%s', internal description='%s', read_open=%d, read=%d, write=%d",
-            fh->finfo.name, fh->finfo.description, fh->internal_description, fh->read_open_ref, fh->read_ref, fh->write_ref);
+        lua_pushstring(L, "FileHandler: (null)");
+        WSLUA_RETURN(1);
     }
 
-    WSLUA_RETURN(1); /* String of debug information. */
+    lua_pushfstring(L, "FileHandler: %s caps=[%c%c] description=\"%s\"",
+                    fh->finfo.name ? fh->finfo.name : "?",
+                    fh->is_reader ? 'r' : '-',
+                    fh->is_writer ? 'w' : '-',
+                    fh->finfo.description ? fh->finfo.description : "");
+
+    WSLUA_RETURN(1); /* A short label identifying the handler. */
 }
 
 static int FileHandler__gc(lua_State* L _U_) {

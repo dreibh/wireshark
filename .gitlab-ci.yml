@@ -271,10 +271,6 @@ workflow:
     - ninja
     - ninja test-programs
     - pytest --enable-stratoshark --disable-capture --junitxml=../macos_tests.xml
-  after_script:
-    # The cache should be large enough to be useful but it shouldn't take
-    # too long to restore+save each run.
-    - ccache --max-size $( gdu --summarize --block-size=1M "$CI_PROJECT_DIR/build" | awk '{printf ("%dM", $1 * 1.5)}' )
   needs: []
 
 .build-mingw:
@@ -675,22 +671,26 @@ Windows Arm64 Package:
     expire_in: 3 days
 
 macOS Universal Package:
+  extends: .build-macos
   stage: build
   rules: !reference [.if-w-w-only-merged]
   variables:
     CODE_SIGN_IDENTITY: "Wireshark Foundation"
-    WIRESHARK_BASE_DIR: "$CI_PROJECT_DIR/../wireshark-third-party"
-    FALCO_PLUGIN_DIR: "$WIRESHARK_BASE_DIR/macos-universal-master/lib/falco/plugins"
   tags:
     - wireshark-macos-universal-package
   environment:
     name: macos-package
   retry: 1
   before_script:
-    - export PATH="/Library/Frameworks/Python.framework/Versions/3.13/bin:$PATH:$HOME/bin"
+    - brew --version
+    - printf "\e[0Ksection_start:%s:brew_section[collapsed=true]\r\e[0KInstalling prerequisites" "$( date +%s)"
+    - brew install awscli ccache cmake ninja python
+    # - ./tools/macos-setup-brew.sh --install-optional --install-test-deps
+    - printf "\e[0Ksection_end:%s:brew_section\r\e[0K" "$( date +%s)"
+    - export PATH="/opt/homebrew/bin:$PATH:$HOME/bin"
     - python3 -m venv --clear $CI_PROJECT_DIR/.venv
     - source $CI_PROJECT_DIR/.venv/bin/activate
-    - pip3 install pytest pytest-xdist
+    - pip3 install  dmgbuild pyobjc-framework-Quartz pytest pytest-xdist
   script:
     - if [[ $MACOS_REINSTALL_THIRD_PARTY == true ]] ; then rm -rf "$WIRESHARK_BASE_DIR" ; fi
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt" ] ; then mkdir -p "$WIRESHARK_BASE_DIR/Qt" ; fi
@@ -712,14 +712,12 @@ macOS Universal Package:
       -DFALCO_PLUGINS="$FALCO_PLUGIN_DIR/libcloudtrail.so;$FALCO_PLUGIN_DIR/libgcpaudit.so;$FALCO_PLUGIN_DIR/libk8saudit.so"
       -DTEST_EXTRA_ARGS="--enable-stratoshark;--enable-release"
       ..
-    # Temporary hack to fix "Package 'zlib', required by 'libscap', not found"
-    - sed -i .bak '/Requires.*zlib/d' $WIRESHARK_BASE_DIR/macos-universal-master/lib/pkgconfig/libscap.pc
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
     - for exe in $( find run/{Wire,Strato}shark.app/Contents/MacOS -type f ) ; do
         lipo "$exe" -verify_arch arm64 x86_64 ;
       done
-    - codesign-prep
+    - base64 -d < $MACOS_CODESIGN_PREP_B64 | bash
     - security find-identity -v -s "$CODE_SIGN_IDENTITY"
     - ninja wireshark_dmg
     - ninja stratoshark_dmg
@@ -1089,6 +1087,10 @@ macOS Build:
     when:
       - runner_system_failure
       - stuck_or_timeout_failure
+  after_script:
+    # The cache should be large enough to be useful but it shouldn't take
+    # too long to restore+save each run.
+    - ccache --max-size $( gdu --summarize --block-size=1M "$CI_PROJECT_DIR/build" | awk '{printf ("%dM", $1 * 1.5)}' )
   artifacts:
     when: always
     reports:

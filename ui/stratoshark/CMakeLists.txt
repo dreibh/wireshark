@@ -23,6 +23,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_combo.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/clickable_label.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/collapsible_section.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/compression_group_box.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/copy_from_profile_button.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/detachable_tabwidget.h
@@ -268,6 +269,11 @@ if(ENABLE_PCAP)
 	endif()
 endif()
 
+if(LUA_FOUND)
+	include(${CMAKE_SOURCE_DIR}/ui/qt/lua_debugger/CMakeLists.txt)
+	list(APPEND WIRESHARK_QT_HEADERS ${WIRESHARK_LUA_DEBUGGER_HEADERS})
+endif()
+
 set (STRATOSHARK_QT_HEADERS
 	stratoshark_application.h
 	stratoshark_main_window.h
@@ -289,6 +295,7 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_combo.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/clickable_label.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/collapsible_section.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/compression_group_box.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/copy_from_profile_button.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/detachable_tabwidget.cpp
@@ -520,6 +527,10 @@ if(ENABLE_PCAP)
 	endif()
 endif()
 
+if(LUA_FOUND)
+	list(APPEND WIRESHARK_QT_SRC ${WIRESHARK_LUA_DEBUGGER_SRCS})
+endif()
+
 set (STRATOSHARK_QT_SRC
 	stratoshark_application.cpp
 	stratoshark_main.cpp
@@ -632,6 +643,10 @@ if(HAVE_PCAP_REMOTE)
 		${CMAKE_SOURCE_DIR}/ui/qt/remote_capture_dialog.ui
 		${CMAKE_SOURCE_DIR}/ui/qt/remote_settings_dialog.ui
 	)
+endif()
+
+if(LUA_FOUND)
+	list(APPEND WIRESHARK_QT_UI ${WIRESHARK_LUA_DEBUGGER_UI})
 endif()
 
 set (STRATOSHARK_QT_UI
@@ -855,6 +870,7 @@ target_include_directories(ui_stratoshark
 		${CMAKE_CURRENT_BINARY_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}
 		${CMAKE_SOURCE_DIR}/ui/qt
+		${CMAKE_SOURCE_DIR}/ui/qt/lua_debugger
 )
 
 if(USE_qt6)

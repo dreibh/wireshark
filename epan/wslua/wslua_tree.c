@@ -1684,19 +1684,29 @@ WSLUA_METHOD TreeItem_get_field_info(lua_State *L) {
 }
 
 WSLUA_METAMETHOD TreeItem__tostring(lua_State* L) {
-    /* Returns string debug information about the <<lua_class_TreeItem,`TreeItem`>>. */
+    /* Returns a short label of the form `TreeItem: <abbrev>` for an
+       attached field, `TreeItem: (root)` for a text-only/root tree,
+       or `TreeItem: (no item)` / `TreeItem: (expired)` /
+       `TreeItem: (null)` for the degenerate cases. The previous
+       form dumped only boolean flags (expired/item/tree/same),
+       which were not very useful for identifying which TreeItem
+       the debugger is looking at. */
     TreeItem ti = toTreeItem(L,1);
 
-    if (ti) {
-        lua_pushfstring(L,
-            "TreeItem: expired=%s, has item=%s, has subtree=%s, they are %sthe same",
-            ti->expired ? "true" : "false",
-            ti->item ? "true" : "false",
-            ti->tree ? "true" : "false",
-            (ti->tree == ti->item) ? "" : "not ");
-    }
-    else {
-        lua_pushstring(L, "No TreeItem object!");
+    if (!ti) {
+        lua_pushstring(L, "TreeItem: (null)");
+    } else if (ti->expired) {
+        lua_pushstring(L, "TreeItem: (expired)");
+    } else if (!ti->item) {
+        lua_pushstring(L, "TreeItem: (no item)");
+    } else {
+        proto_node *node = (proto_node *)ti->item;
+        field_info *finfo = node ? node->finfo : NULL;
+        if (finfo && finfo->hfinfo && finfo->hfinfo->abbrev) {
+            lua_pushfstring(L, "TreeItem: %s", finfo->hfinfo->abbrev);
+        } else {
+            lua_pushstring(L, "TreeItem: (root)");
+        }
     }
 
     return 1;

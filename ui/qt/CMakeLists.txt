@@ -305,12 +305,8 @@ if(ENABLE_PCAP)
 endif()
 
 if(LUA_FOUND)
-	list(APPEND WIRESHARK_QT_HEADERS
-		lua_debugger_code_view.h
-		lua_debugger_dialog.h
-		lua_debugger_find_frame.h
-		lua_debugger_goto_line_frame.h
-	)
+	include(${CMAKE_CURRENT_SOURCE_DIR}/lua_debugger/CMakeLists.txt)
+	list(APPEND WIRESHARK_QT_HEADERS ${WIRESHARK_LUA_DEBUGGER_HEADERS})
 endif()
 
 set(WIRESHARK_WIDGET_SRCS
@@ -589,12 +585,7 @@ if(ENABLE_PCAP)
 endif()
 
 if(LUA_FOUND)
-	list(APPEND WIRESHARK_QT_SRC
-		lua_debugger_code_view.cpp
-		lua_debugger_dialog.cpp
-		lua_debugger_find_frame.cpp
-		lua_debugger_goto_line_frame.cpp
-	)
+	list(APPEND WIRESHARK_QT_SRC ${WIRESHARK_LUA_DEBUGGER_SRCS})
 endif()
 
 set(WIRESHARK_QT_TAP_SRC
@@ -737,11 +728,7 @@ if(HAVE_PCAP_REMOTE)
 endif()
 
 if(LUA_FOUND)
-	list(APPEND WIRESHARK_QT_UI
-		lua_debugger_dialog.ui
-		lua_debugger_find_frame.ui
-		lua_debugger_goto_line_frame.ui
-	)
+	list(APPEND WIRESHARK_QT_UI ${WIRESHARK_LUA_DEBUGGER_UI})
 endif()
 
 set(WIRESHARK_QT_UI_SRCS
@@ -987,6 +974,7 @@ target_include_directories(qtui
 	PRIVATE
 		${CMAKE_CURRENT_BINARY_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}
+		${CMAKE_CURRENT_SOURCE_DIR}/lua_debugger
 )
 
 target_compile_definitions(qtui

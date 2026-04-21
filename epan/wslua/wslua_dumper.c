@@ -265,10 +265,11 @@ WSLUA_ATTRIBUTE_GET(PseudoHeader,type_name, {
 });
 
 /* __tostring returns a compact tag so the debugger/print show what kind
- * of pseudoheader this is without dumping the full variant struct. */
+ * of pseudoheader this is without dumping the full variant struct.
+ * Shape matches the shared convention: `Class: key=value` pairs. */
 static int PseudoHeader__tostring(lua_State *L) {
     PseudoHeader ph = checkPseudoHeader(L, 1);
-    lua_pushfstring(L, "PseudoHeader (%s)",
+    lua_pushfstring(L, "PseudoHeader: type=%s",
                     pseudoheader_type_name(ph ? ph->type : PHDR_NONE));
     return 1;
 }
@@ -864,6 +865,27 @@ static int Dumper_get_encap_description(lua_State* L) {
     return 1;
 }
 
+WSLUA_METAMETHOD Dumper__tostring(lua_State* L) {
+    /* Returns a short label of the form
+       `Dumper: file_type=<name> encap=<name>` while open, or
+       `Dumper: (closed)` once `Dumper:close()` has run. Like the
+       read-only attributes above, this deliberately bypasses
+       checkDumper so a closed dumper is still inspectable from the
+       debugger's Variables view. */
+    Dumper *dp = (Dumper *)luaL_checkudata(L, 1, "Dumper");
+    if (!dp || !*dp) {
+        lua_pushstring(L, "Dumper: (closed)");
+        WSLUA_RETURN(1);
+    }
+    const char *ftype = wtap_file_type_subtype_name(
+        wtap_dump_file_type_subtype(*dp));
+    const char *encap = wtap_encap_name(DUMPER_ENCAP(*dp));
+    lua_pushfstring(L, "Dumper: file_type=%s encap=%s",
+                    ftype ? ftype : "?",
+                    encap ? encap : "?");
+    WSLUA_RETURN(1); /* The string. */
+}
+
 WSLUA_ATTRIBUTES Dumper_attributes[] = {
     WSLUA_ATTRIBUTE_ROREG(Dumper,is_open),
     WSLUA_ATTRIBUTE_ROREG(Dumper,file_type),
@@ -886,6 +908,7 @@ WSLUA_METHODS Dumper_methods[] = {
 };
 
 WSLUA_META Dumper_meta[] = {
+    WSLUA_CLASS_MTREG(Dumper,tostring),
     { NULL, NULL }
 };
 

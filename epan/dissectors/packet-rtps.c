@@ -14021,6 +14021,7 @@ static void dissect_APP_ACK(tvbuff_t *tvb,
     &wid);
   offset += 4;
   guid->entity_id = wid;
+  guid->fields_present |= GUID_HAS_ENTITY_ID;
   rtps_util_add_topic_info(tree, pinfo, tvb, offset, guid);
 
   /* writerEntityId */

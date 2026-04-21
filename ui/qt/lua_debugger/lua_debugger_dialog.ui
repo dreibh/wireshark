@@ -56,6 +56,7 @@
         <addaction name="actionStepOver"/>
         <addaction name="actionStepIn"/>
         <addaction name="actionStepOut"/>
+        <addaction name="actionAddWatch"/>
         <addaction name="actionSepAfterStep"/>
         <addaction name="actionOpenFile"/>
         <addaction name="actionSaveFile"/>
@@ -233,6 +234,20 @@
    </property>
    <property name="shortcut">
     <string>Ctrl+Shift+L</string>
+   </property>
+  </action>
+  <action name="actionAddWatch">
+   <property name="icon">
+    <iconset theme="system-search"/>
+   </property>
+   <property name="text">
+    <string>Add Watch</string>
+   </property>
+   <property name="toolTip">
+    <string>Add Watch</string>
+   </property>
+   <property name="shortcut">
+    <string>Ctrl+Alt+W</string>
    </property>
   </action>
  </widget>

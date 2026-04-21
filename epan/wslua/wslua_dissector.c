@@ -1027,48 +1027,39 @@ WSLUA_ATTRIBUTE_GET(DissectorTable,type_name, {
 
 /* XXX It would be nice to iterate and print which dissectors it has */
 WSLUA_METAMETHOD DissectorTable__tostring(lua_State* L) {
-    /* Gets some debug information about the <<lua_class_DissectorTable,`DissectorTable`>>. */
+    /* Returns a short label of the form
+       `DissectorTable: <name> type=<type_name>` and appends
+       `base=<n>` for integer tables or ` (Decode As only)` for
+       FT_NONE tables. The previous form ended in a colon and
+       embedded a literal newline, which was confusing in
+       single-line listings like the debugger Variables view. */
     DissectorTable dt = checkDissectorTable(L,1);
-    GString* s;
-    ftenum_t type;
 
     if (!dt) return 0;
 
-    type =  get_dissector_table_selector_type(dt->name);
-    s = g_string_new("DissectorTable ");
+    ftenum_t type = get_dissector_table_selector_type(dt->name);
+    GString *s = g_string_new(NULL);
+    g_string_printf(s, "DissectorTable: %s type=%s",
+                    dt->name, ftype_name(type));
 
-    switch(type) {
-        case FT_STRING:
-        {
-            g_string_append_printf(s,"%s String:\n",dt->name);
-            break;
-        }
+    switch (type) {
         case FT_UINT8:
         case FT_UINT16:
         case FT_UINT24:
         case FT_UINT32:
-        {
-            int base = get_dissector_table_param(dt->name);
-            g_string_append_printf(s,"%s Integer(%i):\n",dt->name,base);
+            g_string_append_printf(s, " base=%d",
+                                   get_dissector_table_param(dt->name));
             break;
-        }
-        case FT_GUID:
-        {
-            g_string_append_printf(s,"%s GUID:\n",dt->name);
-            break;
-        }
         case FT_NONE:
-        {
-            g_string_append_printf(s,"%s only for Decode As:\n",dt->name);
+            g_string_append(s, " (Decode As only)");
             break;
-        }
         default:
-            luaL_error(L,"Strange table type");
+            break;
     }
 
-    lua_pushstring(L,s->str);
-    g_string_free(s,TRUE);
-    WSLUA_RETURN(1); /* A string of debug information about the <<lua_class_DissectorTable,`DissectorTable`>>. */
+    lua_pushstring(L, s->str);
+    g_string_free(s, TRUE);
+    WSLUA_RETURN(1); /* A short label identifying the table. */
 }
 
 /* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */

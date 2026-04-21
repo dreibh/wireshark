@@ -153,14 +153,24 @@ WSLUA_ATTRIBUTE_GET(ProtoExpert,severity, {
 });
 
 WSLUA_METAMETHOD ProtoExpert__tostring(lua_State* L) {
-    /* Returns a string with debugging information about a `ProtoExpert` object. */
+    /* Returns a short label of the form
+       `ProtoExpert: <abbrev> severity=<severity> text="<text>"`
+       where <severity> is the human-readable severity name
+       (matching `ProtoExpert.severity`). Replaces the previous
+       integer-only dump of every internal id, which is still
+       reachable via the individual `abbrev`/`text`/`group`/
+       `severity` attributes. */
     ProtoExpert pe = toProtoExpert(L,1);
 
     if (!pe) {
-        lua_pushstring(L,"ProtoExpert pointer is NULL!");
+        lua_pushstring(L, "ProtoExpert: (null)");
     } else {
-        lua_pushfstring(L, "ProtoExpert: ei=%d, hf=%d, abbr=%s, text=%s, group=%d, severity=%d",
-                        pe->ids.ei, pe->ids.hf, pe->abbrev, pe->text, pe->group, pe->severity);
+        const char *sev = val_to_str_const(pe->severity, expert_severity_vals,
+                                           "Unknown");
+        lua_pushfstring(L, "ProtoExpert: %s severity=%s text=\"%s\"",
+                        pe->abbrev ? pe->abbrev : "?",
+                        sev,
+                        pe->text ? pe->text : "");
     }
     return 1;
 }

@@ -1056,13 +1056,90 @@ static bool wslua_debugger_index_by_string(lua_State *L, const char *key)
 }
 
 /**
+ * Resolve a global-like name: try the registry global table first, then the
+ * current stack frame's _ENV upvalue (Lua 5.2+). Wireshark loads scripts with
+ * a file environment that stores top-level bindings in _ENV while
+ * lua_getglobal() only sees raw _G, so Globals.foo paths must fall back to
+ * _ENV to match what Lua code actually resolves.
+ * On success leaves one value on the stack; on failure leaves the stack clean.
+ */
+static bool
+wslua_debugger_get_global_or_env_field(lua_State *L, int32_t stack_level,
+                                       const char *name)
+{
+    if (!name || !*name)
+    {
+        return false;
+    }
+
+    lua_getglobal(L, name);
+    if (!lua_isnil(L, -1))
+    {
+        return true;
+    }
+    lua_pop(L, 1);
+
+#if LUA_VERSION_NUM >= 502
+    {
+        lua_Debug ar;
+        if (!wslua_debugger_fill_activation(L, stack_level, &ar))
+        {
+            return false;
+        }
+        if (!wslua_debugger_push_function_for_ar(L, &ar))
+        {
+            return false;
+        }
+        int uv = 1;
+        const char *nm;
+        while ((nm = lua_getupvalue(L, -1, uv++)))
+        {
+            if (g_strcmp0(nm, "_ENV") == 0)
+            {
+                lua_remove(L, -2); /* function */
+                lua_getfield(L, -1, name);
+                lua_remove(L, -2); /* _ENV table */
+                if (!lua_isnil(L, -1))
+                {
+                    return true;
+                }
+                lua_pop(L, 1);
+                return false;
+            }
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 1); /* function */
+    }
+#endif
+    return false;
+}
+
+/** How to resolve the first path segment (after optional Locals./Upvalues./Globals. strip). */
+typedef enum
+{
+    /** Locals, then upvalues, then globals (unqualified / bare watch specs). */
+    WSLUA_LOOKUP_FIRST_AUTO = 0,
+    /** Path was written as Locals.… — first name is a local only. */
+    WSLUA_LOOKUP_FIRST_LOCAL_ONLY = 1,
+    /** Path was written as Upvalues.… */
+    WSLUA_LOOKUP_FIRST_UPVALUE_ONLY = 2,
+    /** Path was written as Globals.… — first name is _G[name] only. */
+    WSLUA_LOOKUP_FIRST_GLOBAL_ONLY = 3,
+} wslua_lookup_first_kind_t;
+
+/* Forward declaration — defined with the path-grammar scanners below. */
+static bool wslua_debugger_spec_scan_bracket_key(const char **pp, lua_State *L);
+
+/**
  * @brief Lookup a variable path in Lua state.
  * @param L The Lua state.
- * @param path The path to lookup (e.g. "a.b").
+ * @param path The path to lookup (e.g. "a.b"), without Locals./Upvalues./Globals. prefix.
+ * @param first_kind Where the first segment must be resolved (AUTO = legacy order).
  * @return true if found (value on stack), false otherwise.
  */
 static bool wslua_debugger_lookup_path(lua_State *L, const char *path,
-                                       int32_t stack_level)
+                                       int32_t stack_level,
+                                       wslua_lookup_first_kind_t first_kind)
 {
     if (!path || !*path)
         return false;
@@ -1076,7 +1153,18 @@ static bool wslua_debugger_lookup_path(lua_State *L, const char *path,
     char *first_component = g_strndup(path_ptr, end_ptr - path_ptr);
     path_ptr = end_ptr;
 
-    /* Look in locals */
+    if (first_kind == WSLUA_LOOKUP_FIRST_GLOBAL_ONLY)
+    {
+        if (!wslua_debugger_get_global_or_env_field(L, stack_level,
+                                                    first_component))
+        {
+            g_free(first_component);
+            return false;
+        }
+        g_free(first_component);
+        goto traverse_rest;
+    }
+
     lua_Debug debug_info;
     if (!wslua_debugger_fill_activation(L, stack_level, &debug_info))
     {
@@ -1084,53 +1172,108 @@ static bool wslua_debugger_lookup_path(lua_State *L, const char *path,
         return false;
     }
 
-    int32_t local_index = 1;
-    const char *name;
-    bool found = false;
-    while ((name = lua_getlocal(L, &debug_info, local_index++)))
+    if (first_kind == WSLUA_LOOKUP_FIRST_LOCAL_ONLY)
     {
-        if (g_strcmp0(name, first_component) == 0)
+        int32_t local_index = 1;
+        const char *name;
+        bool found = false;
+        while ((name = lua_getlocal(L, &debug_info, local_index++)))
         {
-            found = true;
-            break;
+            if (g_strcmp0(name, first_component) == 0)
+            {
+                found = true;
+                break;
+            }
+            lua_pop(L, 1);
         }
-        lua_pop(L, 1);
+        g_free(first_component);
+        if (!found)
+        {
+            return false;
+        }
+        goto traverse_rest;
     }
 
-    if (!found)
+    if (first_kind == WSLUA_LOOKUP_FIRST_UPVALUE_ONLY)
     {
-        /* Look in upvalues */
+        bool found = false;
         if (wslua_debugger_push_function_for_ar(L, &debug_info))
         {
-            local_index = 1;
-            while ((name = lua_getupvalue(L, -1, local_index++)))
+            int32_t uv = 1;
+            const char *nm;
+            while ((nm = lua_getupvalue(L, -1, uv++)))
             {
-                if (g_strcmp0(name, first_component) == 0)
+                if (g_strcmp0(nm, first_component) == 0)
                 {
                     found = true;
-                    lua_remove(L, -2); /* Remove function */
+                    lua_remove(L, -2); /* function */
                     break;
                 }
                 lua_pop(L, 1);
             }
             if (!found)
-                lua_pop(L, 1); /* Remove function */
+            {
+                lua_pop(L, 1); /* function */
+            }
+        }
+        g_free(first_component);
+        if (!found)
+        {
+            return false;
+        }
+        goto traverse_rest;
+    }
+
+    /* WSLUA_LOOKUP_FIRST_AUTO — locals, then upvalues, then globals */
+    {
+        int32_t local_index = 1;
+        const char *name;
+        bool found = false;
+        while ((name = lua_getlocal(L, &debug_info, local_index++)))
+        {
+            if (g_strcmp0(name, first_component) == 0)
+            {
+                found = true;
+                break;
+            }
+            lua_pop(L, 1);
         }
 
         if (!found)
         {
-            /* Look in globals */
-            lua_getglobal(L, first_component);
-            if (lua_isnil(L, -1))
+            /* Look in upvalues */
+            if (wslua_debugger_push_function_for_ar(L, &debug_info))
             {
-                lua_pop(L, 1);
-                g_free(first_component);
-                return false;
+                local_index = 1;
+                while ((name = lua_getupvalue(L, -1, local_index++)))
+                {
+                    if (g_strcmp0(name, first_component) == 0)
+                    {
+                        found = true;
+                        lua_remove(L, -2); /* Remove function */
+                        break;
+                    }
+                    lua_pop(L, 1);
+                }
+                if (!found)
+                    lua_pop(L, 1); /* Remove function */
+            }
+
+            if (!found)
+            {
+                /* Globals (raw _G) or chunk _ENV (Wireshark file sandbox). */
+                if (!wslua_debugger_get_global_or_env_field(L, stack_level,
+                                                            first_component))
+                {
+                    g_free(first_component);
+                    return false;
+                }
             }
         }
+        g_free(first_component);
     }
-    g_free(first_component);
 
+traverse_rest:
     /* Traverse rest */
     while (*path_ptr)
     {
@@ -1152,53 +1295,47 @@ static bool wslua_debugger_lookup_path(lua_State *L, const char *path,
         else if (*path_ptr == '[')
         {
             path_ptr++;
-            end_ptr = path_ptr;
-            while (*end_ptr && *end_ptr != ']')
-                end_ptr++;
-            if (*end_ptr != ']')
+            const bool is_table = lua_istable(L, -1);
+            const bool is_userdata = !is_table && lua_isuserdata(L, -1);
+            if (!is_table && !is_userdata)
             {
                 lua_pop(L, 1);
-                return false; /* Malformed */
+                return false;
             }
 
-            char *key_str = g_strndup(path_ptr, end_ptr - path_ptr);
-            path_ptr = end_ptr + 1;
-
-            if (lua_istable(L, -1))
+            /* Decode the bracket key and push it on the stack (above the
+             * parent). */
+            if (!wslua_debugger_spec_scan_bracket_key(&path_ptr, L))
             {
-                /* Check if integer */
-                char *endptr_conversion;
-                int64_t idx = g_ascii_strtoll(key_str, &endptr_conversion, 10);
-                if (*endptr_conversion == '\0')
-                {
-                    lua_pushinteger(L, idx);
-                    lua_gettable(L, -2);
-                }
-                else
-                {
-                    /* String key in brackets? */
-                    lua_pushstring(L, key_str);
-                    lua_gettable(L, -2);
-                }
-                lua_remove(L, -2); /* Remove parent */
-                g_free(key_str);
+                lua_pop(L, 1); /* parent */
+                return false;
             }
-            else if (lua_isuserdata(L, -1))
+
+            if (is_table)
             {
-                /* Userdata indexing only makes sense with the attribute
-                 * name, so reuse the string getter path. */
-                const bool ok = wslua_debugger_index_by_string(L, key_str);
-                g_free(key_str);
+                /* stack: parent, key → parent[key] */
+                lua_gettable(L, -2);
+                lua_remove(L, -2); /* parent */
+            }
+            else
+            {
+                /* Userdata indexing only makes sense with a string key. */
+                if (lua_type(L, -1) != LUA_TSTRING)
+                {
+                    lua_pop(L, 2); /* key + parent */
+                    return false;
+                }
+                size_t key_len = 0;
+                const char *key_lua = lua_tolstring(L, -1, &key_len);
+                char *key_copy = g_strndup(key_lua, key_len);
+                lua_pop(L, 1); /* key */
+                const bool ok =
+                    wslua_debugger_index_by_string(L, key_copy);
+                g_free(key_copy);
                 if (!ok)
                 {
                     return false;
                 }
-            }
-            else
-            {
-                g_free(key_str);
-                lua_pop(L, 1);
-                return false;
             }
         }
         else
@@ -1489,13 +1626,22 @@ static int64_t wslua_debugger_count_userdata_getters(lua_State *L, int idx)
 /*
  * Cap preview strings at a modest length so one oversized leaf cannot
  * freeze the Variables view. Tvb's __tostring dumps the full packet as
- * hex; a 1500-byte frame becomes a ~4500 character preview. The raw
- * value is still reachable via the Evaluate pane when a caller needs
- * the complete text.
+ * hex; a 1500-byte frame becomes a ~4500 character preview. The raw,
+ * untruncated value is reachable via
+ * @ref wslua_debugger_read_variable_value_full (used by "Copy value"
+ * in the Watch panel) and via the Evaluate pane.
  */
 #define WSLUA_DEBUGGER_PREVIEW_MAX_BYTES 256
 
-static char *wslua_debugger_describe_value(lua_State *L, int idx)
+/*
+ * Stringify the Lua value at @p idx. When @p truncate is true the result
+ * is capped at WSLUA_DEBUGGER_PREVIEW_MAX_BYTES for display surfaces
+ * (Variables tree, watch root/child preview). When false the full
+ * luaL_tolstring output is returned so callers such as "Copy value" can
+ * deliver the complete text to the clipboard.
+ */
+static char *wslua_debugger_describe_value_ex(lua_State *L, int idx,
+                                              bool truncate)
 {
     const int absIndex = wslua_debugger_abs_index(L, idx);
     const int valueType = lua_type(L, absIndex);
@@ -1523,7 +1669,7 @@ static char *wslua_debugger_describe_value(lua_State *L, int idx)
     size_t length = 0;
     const char *stringValue = luaL_tolstring(L, absIndex, &length);
     char *result;
-    if (stringValue && length > WSLUA_DEBUGGER_PREVIEW_MAX_BYTES)
+    if (truncate && stringValue && length > WSLUA_DEBUGGER_PREVIEW_MAX_BYTES)
     {
         /* Use an ASCII ellipsis ("...") to avoid UTF-8 truncation concerns
          * when the raw preview is binary. */
@@ -1531,12 +1677,25 @@ static char *wslua_debugger_describe_value(lua_State *L, int idx)
                                  WSLUA_DEBUGGER_PREVIEW_MAX_BYTES,
                                  stringValue);
     }
+    else if (!truncate && stringValue)
+    {
+        /* Copy exactly @p length bytes so full values containing embedded
+         * NULs (binary data produced by Tvb / ByteArray __tostring)
+         * round-trip intact to the clipboard. g_strdup would stop at the
+         * first NUL. */
+        result = g_strndup(stringValue, length);
+    }
     else
     {
         result = g_strdup(stringValue ? stringValue : "");
     }
     lua_pop(L, 1);
     return result;
+}
+
+static char *wslua_debugger_describe_value(lua_State *L, int idx)
+{
+    return wslua_debugger_describe_value_ex(L, idx, true);
 }
 
 static bool wslua_debugger_value_can_expand(lua_State *L, int idx)
@@ -1559,6 +1718,283 @@ static bool wslua_debugger_value_can_expand(lua_State *L, int idx)
         return wslua_debugger_userdata_has_visible_pairs(L, absIndex);
     }
     return false;
+}
+
+/**
+ * @brief Lua typename, or "userdata (ClassName)" when metatable.__name is a string.
+ */
+static char *
+wslua_debugger_format_value_type(lua_State *L, int idx)
+{
+#if LUA_VERSION_NUM >= 502
+    const int absidx = lua_absindex(L, idx);
+#else
+    const int absidx =
+        (idx > 0 || idx <= LUA_REGISTRYINDEX) ? idx : lua_gettop(L) + idx + 1;
+#endif
+    const int t = lua_type(L, absidx);
+    if (t != LUA_TUSERDATA)
+    {
+        return g_strdup(lua_typename(L, t));
+    }
+    if (!lua_getmetatable(L, absidx))
+    {
+        return g_strdup("userdata");
+    }
+    const char *cls = NULL;
+    if (lua_getfield(L, -1, "__name") && lua_type(L, -1) == LUA_TSTRING)
+    {
+        cls = lua_tostring(L, -1);
+    }
+    lua_pop(L, 1); /* __name or nil */
+    lua_pop(L, 1); /* metatable */
+    if (cls)
+    {
+        return g_strdup_printf("userdata (%s)", cls);
+    }
+    return g_strdup("userdata");
+}
+
+/**
+ * Append child variable rows for the value at stack top (table or userdata).
+ * Pops that value.
+ * @param globals_subtree When true (Variables path "Globals."…), do not hide
+ *        whole "namespace" tables whose entries are only functions — same as
+ *        the top-level Globals list — so class/proto tables remain navigable.
+ */
+static void
+wslua_debugger_append_children_of_value(lua_State *target_L,
+                                        GArray *variables_array,
+                                        bool globals_subtree)
+{
+    if (lua_istable(target_L, -1))
+    {
+        lua_pushnil(target_L);
+        while (lua_next(target_L, -2) != 0)
+        {
+            /* key at -2, value at -1 */
+
+            /* Hide functions/methods and wslua internal markers. */
+            if (globals_subtree
+                    ? wslua_debugger_basic_entry_is_hidden(target_L)
+                    : wslua_debugger_entry_is_hidden(target_L))
+            {
+                lua_pop(target_L, 1);
+                continue;
+            }
+
+            wslua_variable_t variable;
+
+            /* Key */
+            if (lua_type(target_L, -2) == LUA_TSTRING)
+            {
+                variable.name = g_strdup(lua_tostring(target_L, -2));
+            }
+            else if (lua_type(target_L, -2) == LUA_TNUMBER)
+            {
+                /* Use lua_tonumber instead of lua_tostring to avoid
+                 * modifying the key on the stack, which would break
+                 * lua_next() iteration */
+                lua_Number num_key = lua_tonumber(target_L, -2);
+                variable.name =
+                    g_strdup_printf("[%g]", (double)num_key);
+            }
+            else
+            {
+                variable.name = g_strdup(
+                    lua_typename(target_L, lua_type(target_L, -2)));
+            }
+
+            /* Value */
+            variable.type = wslua_debugger_format_value_type(target_L, -1);
+            variable.value =
+                wslua_debugger_describe_value(target_L, -1);
+            if (globals_subtree && lua_istable(target_L, -1))
+            {
+                /* Stay navigable even when all children are functions. */
+                int64_t total = 0;
+                wslua_debugger_basic_table_counts(target_L, -1, &total, NULL);
+                variable.can_expand = total > 0;
+            }
+            else
+            {
+                variable.can_expand =
+                    wslua_debugger_value_can_expand(target_L, -1);
+            }
+            g_array_append_val(variables_array, variable);
+            lua_pop(target_L, 1);
+        }
+    }
+    else if (lua_isuserdata(target_L, -1))
+    {
+        /* Two introspection protocols are supported, in order:
+         *   1. wslua attribute getters (via __getters), which
+         *      expose a class's declared properties.
+         *   2. the standard Lua __pairs metamethod, for any
+         *      iterable userdata (for example a wslua class
+         *      backed by a C-side collection).
+         *
+         * Classes registered with WSLUA_REGISTER_META get an
+         * empty __getters table installed by wslua_register_
+         * classinstance_meta even when they declare no
+         * attributes, so gate the first branch on an actual
+         * visible entry rather than the table's existence. */
+        const int userdata_abs = lua_gettop(target_L);
+        if (wslua_debugger_count_userdata_getters(target_L,
+                                                  userdata_abs) > 0 &&
+            wslua_debugger_push_getters(target_L, userdata_abs))
+        {
+            lua_pushnil(target_L);
+            while (lua_next(target_L, -2) != 0)
+            {
+                /* __getters stores: [name] = cfunction. Anything
+                 * else (notably the __typeof marker) is ignored. */
+                if (lua_type(target_L, -2) != LUA_TSTRING ||
+                    !lua_iscfunction(target_L, -1))
+                {
+                    lua_pop(target_L, 1);
+                    continue;
+                }
+
+                const char *attr_name = lua_tostring(target_L, -2);
+                if (g_strcmp0(attr_name, WSLUA_TYPEOF_FIELD) == 0)
+                {
+                    lua_pop(target_L, 1);
+                    continue;
+                }
+
+                /* Protected call: getter(userdata). Errors are
+                 * surfaced as the value so traversal keeps working
+                 * even if a single attribute raises. */
+                lua_pushvalue(target_L, -1);           /* getter */
+                lua_pushvalue(target_L, userdata_abs); /* self */
+                const int call_status =
+                    lua_pcall(target_L, 1, 1, 0);
+                if (call_status != 0)
+                {
+                    wslua_variable_t variable;
+                    variable.name = g_strdup(attr_name);
+                    variable.type = g_strdup("error");
+                    const char *err = lua_tostring(target_L, -1);
+                    variable.value =
+                        g_strdup(err ? err : "<getter error>");
+                    variable.can_expand = false;
+                    g_array_append_val(variables_array, variable);
+                    lua_pop(target_L, 2); /* error + getter */
+                    continue;
+                }
+
+                /* Skip attributes that resolve to a callable; the
+                 * Variables view never shows functions/methods. */
+                if (lua_type(target_L, -1) == LUA_TFUNCTION)
+                {
+                    lua_pop(target_L, 2); /* result + getter */
+                    continue;
+                }
+
+                /* Skip attributes that evaluated to nil. A getter
+                 * returning nil typically signals "not applicable
+                 * for this object variant" (e.g. PseudoHeader
+                 * fields that only make sense for a subset of
+                 * encapsulations, or a Dumper that has been
+                 * closed). Hiding these keeps the view focused on
+                 * data that is actually present. */
+                if (lua_type(target_L, -1) == LUA_TNIL)
+                {
+                    lua_pop(target_L, 2); /* result + getter */
+                    continue;
+                }
+
+                wslua_variable_t variable;
+                variable.name = g_strdup(attr_name);
+                /*
+                 * Tag attribute-backed rows so the UI tooltip makes
+                 * the kind obvious: an "attribute" comes from a
+                 * wslua __getters entry (class-declared property),
+                 * while ordinary locals/upvalues/globals carry the
+                 * raw Lua typename.
+                 */
+                {
+                    char *inner =
+                        wslua_debugger_format_value_type(target_L, -1);
+                    variable.type =
+                        g_strdup_printf("attribute (%s)", inner);
+                    g_free(inner);
+                }
+                variable.value =
+                    wslua_debugger_describe_value(target_L, -1);
+                variable.can_expand =
+                    wslua_debugger_value_can_expand(target_L, -1);
+
+                g_array_append_val(variables_array, variable);
+                lua_pop(target_L, 2); /* result + getter */
+            }
+            lua_pop(target_L, 1); /* __getters */
+        }
+        else if (wslua_debugger_push_pairs_iterator(target_L,
+                                                    userdata_abs))
+        {
+            /* Stack: ..., userdata, iterator, state, key */
+            while (wslua_debugger_pairs_next(target_L))
+            {
+                /* Stack: ..., userdata, iterator, state, key,
+                 *        value */
+                if (lua_type(target_L, -1) == LUA_TFUNCTION)
+                {
+                    lua_pop(target_L, 1); /* value; keep key */
+                    continue;
+                }
+                /* Hide nil entries for the same reason as in the
+                 * attribute path: nil typically marks a slot that
+                 * is not meaningful for the current instance. */
+                if (lua_type(target_L, -1) == LUA_TNIL)
+                {
+                    lua_pop(target_L, 1); /* value; keep key */
+                    continue;
+                }
+
+                wslua_variable_t variable;
+                if (lua_type(target_L, -2) == LUA_TSTRING)
+                {
+                    variable.name =
+                        g_strdup(lua_tostring(target_L, -2));
+                }
+                else if (lua_type(target_L, -2) == LUA_TNUMBER)
+                {
+                    lua_Number num_key =
+                        lua_tonumber(target_L, -2);
+                    variable.name =
+                        g_strdup_printf("[%g]", (double)num_key);
+                }
+                else
+                {
+                    variable.name = g_strdup(lua_typename(
+                        target_L, lua_type(target_L, -2)));
+                }
+
+                /*
+                 * Tag __pairs-sourced rows as "pair" so the UI can
+                 * distinguish them from attribute-backed rows and
+                 * regular locals in the tooltip.
+                 */
+                {
+                    char *inner =
+                        wslua_debugger_format_value_type(target_L, -1);
+                    variable.type = g_strdup_printf("pair (%s)", inner);
+                    g_free(inner);
+                }
+                variable.value =
+                    wslua_debugger_describe_value(target_L, -1);
+                variable.can_expand =
+                    wslua_debugger_value_can_expand(target_L, -1);
+
+                g_array_append_val(variables_array, variable);
+                lua_pop(target_L, 1); /* value; keep key */
+            }
+            /* pairs_next cleaned up the iterator triple. */
+        }
+    }
+    lua_pop(target_L, 1); /* Pop result */
 }
 
 /**
@@ -1632,7 +2068,7 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
                 wslua_variable_t variable;
                 variable.name = g_strdup(name);
                 variable.type =
-                    g_strdup(lua_typename(target_L, lua_type(target_L, -1)));
+                    wslua_debugger_format_value_type(target_L, -1);
                 variable.value = wslua_debugger_describe_value(target_L, -1);
                 variable.can_expand =
                     wslua_debugger_value_can_expand(target_L, -1);
@@ -1675,7 +2111,7 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
                     variable.name = g_strdup(name);
                 }
                 variable.type =
-                    g_strdup(lua_typename(target_L, lua_type(target_L, -1)));
+                    wslua_debugger_format_value_type(target_L, -1);
                 variable.value = wslua_debugger_describe_value(target_L, -1);
                 variable.can_expand =
                     wslua_debugger_value_can_expand(target_L, -1);
@@ -1712,8 +2148,11 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
                 break;
             }
 
-            /* Hide functions/methods and wslua internal markers. */
-            if (wslua_debugger_entry_is_hidden(target_L))
+            /* Hide functions and __typeof keys only — not "namespace" tables
+             * whose children are all functions. entry_is_hidden() would drop
+             * class/proto tables like Proto entirely, so a global like a Proto
+             * or wslua class table would never appear at this level. */
+            if (wslua_debugger_basic_entry_is_hidden(target_L))
             {
                 lua_pop(target_L, 1);
                 continue;
@@ -1733,9 +2172,22 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
             }
 
             variable.type =
-                g_strdup(lua_typename(target_L, lua_type(target_L, -1)));
+                wslua_debugger_format_value_type(target_L, -1);
             variable.value = wslua_debugger_describe_value(target_L, -1);
-            variable.can_expand = wslua_debugger_value_can_expand(target_L, -1);
+            /* value_can_expand() uses the "visible" filter and would hide
+             * namespace tables we just listed; use raw count so they stay
+             * navigable. */
+            if (lua_istable(target_L, -1))
+            {
+                int64_t total = 0;
+                wslua_debugger_basic_table_counts(target_L, -1, &total, NULL);
+                variable.can_expand = total > 0;
+            }
+            else
+            {
+                variable.can_expand =
+                    wslua_debugger_value_can_expand(target_L, -1);
+            }
 
             g_array_append_val(variables_array, variable);
             lua_pop(target_L, 1);
@@ -1746,231 +2198,32 @@ wslua_variable_t *wslua_debugger_get_variables(const char *path,
     else
     {
         /* Lookup path */
-        /* Strip prefix if present */
+        /* Strip prefix if present; honor explicit section (no shadowing). */
         const char *lookup_path = path;
+        wslua_lookup_first_kind_t lk_first = WSLUA_LOOKUP_FIRST_AUTO;
         if (g_str_has_prefix(path, "Locals."))
+        {
             lookup_path = path + 7;
+            lk_first = WSLUA_LOOKUP_FIRST_LOCAL_ONLY;
+        }
         else if (g_str_has_prefix(path, "Upvalues."))
+        {
             lookup_path = path + 9;
+            lk_first = WSLUA_LOOKUP_FIRST_UPVALUE_ONLY;
+        }
         else if (g_str_has_prefix(path, "Globals."))
+        {
             lookup_path = path + 8;
+            lk_first = WSLUA_LOOKUP_FIRST_GLOBAL_ONLY;
+        }
 
         if (wslua_debugger_lookup_path(target_L, lookup_path,
-                                       variable_stack_level))
+                                       variable_stack_level, lk_first))
         {
-            if (lua_istable(target_L, -1))
-            {
-                lua_pushnil(target_L);
-                while (lua_next(target_L, -2) != 0)
-                {
-                    /* key at -2, value at -1 */
-
-                    /* Hide functions/methods and wslua internal markers. */
-                    if (wslua_debugger_entry_is_hidden(target_L))
-                    {
-                        lua_pop(target_L, 1);
-                        continue;
-                    }
-
-                    wslua_variable_t variable;
-
-                    /* Key */
-                    if (lua_type(target_L, -2) == LUA_TSTRING)
-                    {
-                        variable.name = g_strdup(lua_tostring(target_L, -2));
-                    }
-                    else if (lua_type(target_L, -2) == LUA_TNUMBER)
-                    {
-                        /* Use lua_tonumber instead of lua_tostring to avoid
-                         * modifying the key on the stack, which would break
-                         * lua_next() iteration */
-                        lua_Number num_key = lua_tonumber(target_L, -2);
-                        variable.name =
-                            g_strdup_printf("[%g]", (double)num_key);
-                    }
-                    else
-                    {
-                        variable.name = g_strdup(
-                            lua_typename(target_L, lua_type(target_L, -2)));
-                    }
-
-                    /* Value */
-                    variable.type = g_strdup(
-                        lua_typename(target_L, lua_type(target_L, -1)));
-                    variable.value =
-                        wslua_debugger_describe_value(target_L, -1);
-                    variable.can_expand =
-                        wslua_debugger_value_can_expand(target_L, -1);
-
-                    g_array_append_val(variables_array, variable);
-                    lua_pop(target_L, 1);
-                }
-            }
-            else if (lua_isuserdata(target_L, -1))
-            {
-                /* Two introspection protocols are supported, in order:
-                 *   1. wslua attribute getters (via __getters), which
-                 *      expose a class's declared properties.
-                 *   2. the standard Lua __pairs metamethod, for any
-                 *      iterable userdata (for example a wslua class
-                 *      backed by a C-side collection).
-                 *
-                 * Classes registered with WSLUA_REGISTER_META get an
-                 * empty __getters table installed by wslua_register_
-                 * classinstance_meta even when they declare no
-                 * attributes, so gate the first branch on an actual
-                 * visible entry rather than the table's existence. */
-                const int userdata_abs = lua_gettop(target_L);
-                if (wslua_debugger_count_userdata_getters(target_L,
-                                                          userdata_abs) > 0 &&
-                    wslua_debugger_push_getters(target_L, userdata_abs))
-                {
-                    lua_pushnil(target_L);
-                    while (lua_next(target_L, -2) != 0)
-                    {
-                        /* __getters stores: [name] = cfunction. Anything
-                         * else (notably the __typeof marker) is ignored. */
-                        if (lua_type(target_L, -2) != LUA_TSTRING ||
-                            !lua_iscfunction(target_L, -1))
-                        {
-                            lua_pop(target_L, 1);
-                            continue;
-                        }
-
-                        const char *attr_name = lua_tostring(target_L, -2);
-                        if (g_strcmp0(attr_name, WSLUA_TYPEOF_FIELD) == 0)
-                        {
-                            lua_pop(target_L, 1);
-                            continue;
-                        }
-
-                        /* Protected call: getter(userdata). Errors are
-                         * surfaced as the value so traversal keeps working
-                         * even if a single attribute raises. */
-                        lua_pushvalue(target_L, -1);           /* getter */
-                        lua_pushvalue(target_L, userdata_abs); /* self */
-                        const int call_status =
-                            lua_pcall(target_L, 1, 1, 0);
-                        if (call_status != 0)
-                        {
-                            wslua_variable_t variable;
-                            variable.name = g_strdup(attr_name);
-                            variable.type = g_strdup("error");
-                            const char *err = lua_tostring(target_L, -1);
-                            variable.value =
-                                g_strdup(err ? err : "<getter error>");
-                            variable.can_expand = false;
-                            g_array_append_val(variables_array, variable);
-                            lua_pop(target_L, 2); /* error + getter */
-                            continue;
-                        }
-
-                        /* Skip attributes that resolve to a callable; the
-                         * Variables view never shows functions/methods. */
-                        if (lua_type(target_L, -1) == LUA_TFUNCTION)
-                        {
-                            lua_pop(target_L, 2); /* result + getter */
-                            continue;
-                        }
-
-                        /* Skip attributes that evaluated to nil. A getter
-                         * returning nil typically signals "not applicable
-                         * for this object variant" (e.g. PseudoHeader
-                         * fields that only make sense for a subset of
-                         * encapsulations, or a Dumper that has been
-                         * closed). Hiding these keeps the view focused on
-                         * data that is actually present. */
-                        if (lua_type(target_L, -1) == LUA_TNIL)
-                        {
-                            lua_pop(target_L, 2); /* result + getter */
-                            continue;
-                        }
-
-                        wslua_variable_t variable;
-                        variable.name = g_strdup(attr_name);
-                        /*
-                         * Tag attribute-backed rows so the UI tooltip makes
-                         * the kind obvious: an "attribute" comes from a
-                         * wslua __getters entry (class-declared property),
-                         * while ordinary locals/upvalues/globals carry the
-                         * raw Lua typename.
-                         */
-                        variable.type = g_strdup_printf(
-                            "attribute (%s)",
-                            lua_typename(target_L,
-                                         lua_type(target_L, -1)));
-                        variable.value =
-                            wslua_debugger_describe_value(target_L, -1);
-                        variable.can_expand =
-                            wslua_debugger_value_can_expand(target_L, -1);
-
-                        g_array_append_val(variables_array, variable);
-                        lua_pop(target_L, 2); /* result + getter */
-                    }
-                    lua_pop(target_L, 1); /* __getters */
-                }
-                else if (wslua_debugger_push_pairs_iterator(target_L,
-                                                            userdata_abs))
-                {
-                    /* Stack: ..., userdata, iterator, state, key */
-                    while (wslua_debugger_pairs_next(target_L))
-                    {
-                        /* Stack: ..., userdata, iterator, state, key,
-                         *        value */
-                        if (lua_type(target_L, -1) == LUA_TFUNCTION)
-                        {
-                            lua_pop(target_L, 1); /* value; keep key */
-                            continue;
-                        }
-                        /* Hide nil entries for the same reason as in the
-                         * attribute path: nil typically marks a slot that
-                         * is not meaningful for the current instance. */
-                        if (lua_type(target_L, -1) == LUA_TNIL)
-                        {
-                            lua_pop(target_L, 1); /* value; keep key */
-                            continue;
-                        }
-
-                        wslua_variable_t variable;
-                        if (lua_type(target_L, -2) == LUA_TSTRING)
-                        {
-                            variable.name =
-                                g_strdup(lua_tostring(target_L, -2));
-                        }
-                        else if (lua_type(target_L, -2) == LUA_TNUMBER)
-                        {
-                            lua_Number num_key =
-                                lua_tonumber(target_L, -2);
-                            variable.name =
-                                g_strdup_printf("[%g]", (double)num_key);
-                        }
-                        else
-                        {
-                            variable.name = g_strdup(lua_typename(
-                                target_L, lua_type(target_L, -2)));
-                        }
-
-                        /*
-                         * Tag __pairs-sourced rows as "pair" so the UI can
-                         * distinguish them from attribute-backed rows and
-                         * regular locals in the tooltip.
-                         */
-                        variable.type = g_strdup_printf(
-                            "pair (%s)",
-                            lua_typename(target_L,
-                                         lua_type(target_L, -1)));
-                        variable.value =
-                            wslua_debugger_describe_value(target_L, -1);
-                        variable.can_expand =
-                            wslua_debugger_value_can_expand(target_L, -1);
-
-                        g_array_append_val(variables_array, variable);
-                        lua_pop(target_L, 1); /* value; keep key */
-                    }
-                    /* pairs_next cleaned up the iterator triple. */
-                }
-            }
-            lua_pop(target_L, 1); /* Pop result */
+            const bool globals_subtree =
+                path && g_str_has_prefix(path, "Globals.");
+            wslua_debugger_append_children_of_value(target_L, variables_array,
+                                                    globals_subtree);
         }
     }
 
@@ -2241,6 +2494,1137 @@ static void wslua_eval_timeout_hook(lua_State *L, lua_Debug *ar)
 }
 
 /**
+ * Build a compilable Lua chunk from a user expression. A leading '=' means
+ * "return …". If the text does not compile as a chunk, retry as
+ * "return (expr)" so bare identifiers (e.g. a local name) work like the
+ * Evaluate pane's '=' shorthand.
+ *
+ * @return Newly allocated source for luaL_loadstring(), or NULL on failure.
+ */
+static char *
+wslua_debugger_expression_compilable_chunk(lua_State *L,
+                                             const char *expression,
+                                             char **error_msg)
+{
+    if (error_msg)
+    {
+        *error_msg = NULL;
+    }
+
+    char *trimmed = g_strdup(expression);
+    g_strstrip(trimmed);
+    if (!*trimmed)
+    {
+        g_free(trimmed);
+        if (error_msg)
+        {
+            *error_msg = g_strdup("Empty expression");
+        }
+        return NULL;
+    }
+
+    if (trimmed[0] == '=')
+    {
+        char *chunk = g_strdup_printf("return %s", trimmed + 1);
+        g_free(trimmed);
+        if (luaL_loadstring(L, chunk) != LUA_OK)
+        {
+            if (error_msg)
+            {
+                *error_msg =
+                    g_strdup(lua_tostring(L, -1) ? lua_tostring(L, -1)
+                                                : "Syntax error");
+            }
+            lua_pop(L, 1);
+            g_free(chunk);
+            return NULL;
+        }
+        lua_pop(L, 1);
+        return chunk;
+    }
+
+    char *chunk = g_strdup(trimmed);
+    if (luaL_loadstring(L, chunk) == LUA_OK)
+    {
+        lua_pop(L, 1);
+        g_free(trimmed);
+        return chunk;
+    }
+    lua_pop(L, 1);
+    g_free(chunk);
+
+    chunk = g_strdup_printf("return (%s)", trimmed);
+    g_free(trimmed);
+    if (luaL_loadstring(L, chunk) != LUA_OK)
+    {
+        if (error_msg)
+        {
+            *error_msg =
+                g_strdup(lua_tostring(L, -1) ? lua_tostring(L, -1)
+                                              : "Syntax error");
+        }
+        lua_pop(L, 1);
+        g_free(chunk);
+        return NULL;
+    }
+    lua_pop(L, 1);
+    return chunk;
+}
+
+/**
+ * Scan one [A-Za-z_][A-Za-z0-9_]*; advance *pp past it on success.
+ */
+static bool
+wslua_debugger_spec_scan_identifier(const char **pp)
+{
+    const char *p = *pp;
+    if (!p || (!g_ascii_isalpha((guchar)*p) && *p != '_'))
+        return false;
+    p++;
+    while (g_ascii_isalnum((guchar)*p) || *p == '_')
+        p++;
+    *pp = p;
+    return true;
+}
+
+/**
+ * @brief Consume one Lua string escape starting at **pp (which must point at
+ * '\\'). If @a out is non-NULL, append the decoded bytes.
+ *
+ * Accepted escapes match the Lua 5.x reference manual:
+ *   \\a \\b \\f \\n \\r \\t \\v   C-style control bytes
+ *   \\\\ \\" \\' \\?              literal punctuation
+ *   \\NNN                         decimal byte, 1..3 digits, value <= 255
+ *   \\xHH                         hex byte, exactly 2 hex digits
+ *   \\u{H..}                      Unicode codepoint (1..8 hex digits,
+ *                                 <= 0x7FFFFFFF), encoded as UTF-8
+ *   \\z                           skip following whitespace (no bytes emitted)
+ *
+ * Returns false on a malformed escape.
+ */
+static bool
+wslua_debugger_spec_consume_escape(const char **pp, GString *out)
+{
+    const char *p = *pp;
+    if (*p != '\\' || !p[1])
+        return false;
+    p++;
+    char c = *p;
+    switch (c)
+    {
+    case 'a':  if (out) g_string_append_c(out, '\a'); p++; break;
+    case 'b':  if (out) g_string_append_c(out, '\b'); p++; break;
+    case 'f':  if (out) g_string_append_c(out, '\f'); p++; break;
+    case 'n':  if (out) g_string_append_c(out, '\n'); p++; break;
+    case 'r':  if (out) g_string_append_c(out, '\r'); p++; break;
+    case 't':  if (out) g_string_append_c(out, '\t'); p++; break;
+    case 'v':  if (out) g_string_append_c(out, '\v'); p++; break;
+    case '\\': if (out) g_string_append_c(out, '\\'); p++; break;
+    case '"':  if (out) g_string_append_c(out, '"'); p++; break;
+    case '\'': if (out) g_string_append_c(out, '\''); p++; break;
+    case '?':  if (out) g_string_append_c(out, '?'); p++; break;
+    case 'z':
+        p++;
+        while (*p && g_ascii_isspace((guchar)*p))
+            p++;
+        break;
+    case 'x':
+    {
+        p++;
+        if (!g_ascii_isxdigit((guchar)p[0]) ||
+            !g_ascii_isxdigit((guchar)p[1]))
+            return false;
+        if (out)
+        {
+            unsigned v = ((unsigned)g_ascii_xdigit_value(p[0]) << 4) |
+                         (unsigned)g_ascii_xdigit_value(p[1]);
+            g_string_append_c(out, (char)v);
+        }
+        p += 2;
+        break;
+    }
+    case 'u':
+    {
+        p++;
+        if (*p != '{')
+            return false;
+        p++;
+        guint64 v = 0;
+        int hexcount = 0;
+        while (g_ascii_isxdigit((guchar)*p) && hexcount < 8)
+        {
+            v = (v << 4) | (guint64)g_ascii_xdigit_value(*p);
+            p++;
+            hexcount++;
+        }
+        if (hexcount == 0 || *p != '}' || v > 0x7FFFFFFFu)
+            return false;
+        p++;
+        if (out)
+            g_string_append_unichar(out, (gunichar)v);
+        break;
+    }
+    default:
+        if (g_ascii_isdigit((guchar)c))
+        {
+            unsigned v = 0;
+            int digits = 0;
+            while (g_ascii_isdigit((guchar)*p) && digits < 3)
+            {
+                v = v * 10 + (unsigned)(*p - '0');
+                p++;
+                digits++;
+            }
+            if (v > 255)
+                return false;
+            if (out)
+                g_string_append_c(out, (char)v);
+        }
+        else
+        {
+            return false;
+        }
+        break;
+    }
+    *pp = p;
+    return true;
+}
+
+/**
+ * @brief Scan a Lua short literal string (double- or single-quoted) starting
+ * at **pp. If @a out is non-NULL, decode the contents into it (without the
+ * surrounding quotes). Advances *pp past the closing quote on success.
+ */
+static bool
+wslua_debugger_spec_scan_quoted(const char **pp, GString *out)
+{
+    const char *p = *pp;
+    char quote = *p;
+    if (quote != '"' && quote != '\'')
+        return false;
+    p++;
+    while (*p && *p != quote)
+    {
+        if (*p == '\\')
+        {
+            if (!wslua_debugger_spec_consume_escape(&p, out))
+                return false;
+            continue;
+        }
+        if (*p == '\n' || *p == '\r')
+            return false;
+        if (out)
+            g_string_append_c(out, *p);
+        p++;
+    }
+    if (*p != quote)
+        return false;
+    p++;
+    *pp = p;
+    return true;
+}
+
+/**
+ * @brief Scan an integer literal at **pp with optional leading '-' and
+ * decimal or hex ("0x" / "0X") digits. Advances *pp past the literal.
+ * If @a out_value is non-NULL, stores the parsed value.
+ */
+static bool
+wslua_debugger_spec_scan_integer(const char **pp, int64_t *out_value)
+{
+    const char *p = *pp;
+    bool neg = false;
+    if (*p == '-')
+    {
+        neg = true;
+        p++;
+    }
+    if (!g_ascii_isdigit((guchar)*p))
+        return false;
+
+    char *endp = NULL;
+    guint64 mag;
+    if (*p == '0' && (p[1] == 'x' || p[1] == 'X') &&
+        g_ascii_isxdigit((guchar)p[2]))
+    {
+        mag = g_ascii_strtoull(p + 2, &endp, 16);
+    }
+    else
+    {
+        mag = g_ascii_strtoull(p, &endp, 10);
+    }
+    if (!endp || endp == p)
+        return false;
+
+    if (out_value)
+        *out_value = neg ? -(int64_t)mag : (int64_t)mag;
+    *pp = endp;
+    return true;
+}
+
+/**
+ * @brief Scan a bracket key starting at **pp (after the opening '[' has been
+ * consumed). Advances *pp past the closing ']'. Whitespace around the key is
+ * tolerated. If @a L is non-NULL, pushes the decoded Lua value on top of @a L.
+ *
+ * Accepts:
+ *   integer                 decimal or hex, optional leading '-'
+ *   true / false            Lua boolean literals
+ *   "string" / 'string'     Lua short literal string with full escape set
+ */
+static bool
+wslua_debugger_spec_scan_bracket_key(const char **pp, lua_State *L)
+{
+    const char *p = *pp;
+    while (*p && g_ascii_isspace((guchar)*p))
+        p++;
+    if (!*p)
+        return false;
+
+    bool pushed = false;
+    if (strncmp(p, "true", 4) == 0 &&
+        !(g_ascii_isalnum((guchar)p[4]) || p[4] == '_'))
+    {
+        if (L)
+        {
+            lua_pushboolean(L, 1);
+            pushed = true;
+        }
+        p += 4;
+    }
+    else if (strncmp(p, "false", 5) == 0 &&
+             !(g_ascii_isalnum((guchar)p[5]) || p[5] == '_'))
+    {
+        if (L)
+        {
+            lua_pushboolean(L, 0);
+            pushed = true;
+        }
+        p += 5;
+    }
+    else if (*p == '-' || g_ascii_isdigit((guchar)*p))
+    {
+        int64_t v;
+        if (!wslua_debugger_spec_scan_integer(&p, &v))
+            return false;
+        if (L)
+        {
+            lua_pushinteger(L, (lua_Integer)v);
+            pushed = true;
+        }
+    }
+    else if (*p == '"' || *p == '\'')
+    {
+        GString *decoded = L ? g_string_new(NULL) : NULL;
+        if (!wslua_debugger_spec_scan_quoted(&p, decoded))
+        {
+            if (decoded)
+                g_string_free(decoded, true);
+            return false;
+        }
+        if (L)
+        {
+            lua_pushlstring(L, decoded->str, decoded->len);
+            pushed = true;
+            g_string_free(decoded, true);
+        }
+    }
+    else
+    {
+        return false;
+    }
+
+    while (*p && g_ascii_isspace((guchar)*p))
+        p++;
+    if (*p != ']')
+    {
+        if (pushed)
+            lua_pop(L, 1);
+        return false;
+    }
+    p++;
+    *pp = p;
+    return true;
+}
+
+/**
+ * @brief Validate a path body.
+ *
+ * Grammar (after any section prefix has already been stripped):
+ *   body        := ident ( '.' ident | '[' bracket-key ']' )*
+ *   ident       := [A-Za-z_] [A-Za-z0-9_]*
+ *   bracket-key := ws? ( integer | 'true' | 'false' | string ) ws?
+ *   integer     := '-'? ( decimal-digits | '0x' hex-digits | '0X' hex-digits )
+ *   string      := '"' ( char-except-"\\\\\" | escape )* '"'
+ *                | '\'' ( char-except-'\\\\\' | escape )* '\''
+ *   escape      — see wslua_debugger_spec_consume_escape()
+ *
+ * Same surface syntax as wslua_debugger_lookup_path after the first segment.
+ */
+static bool
+wslua_debugger_spec_validate_path_body(const char *body)
+{
+    const char *p = body;
+
+    if (!body || !*body)
+        return false;
+    if (!wslua_debugger_spec_scan_identifier(&p))
+        return false;
+    while (*p)
+    {
+        if (*p == '.')
+        {
+            p++;
+            if (!wslua_debugger_spec_scan_identifier(&p))
+                return false;
+        }
+        else if (*p == '[')
+        {
+            p++;
+            if (!wslua_debugger_spec_scan_bracket_key(&p, NULL))
+                return false;
+        }
+        else
+        {
+            return false;
+        }
+    }
+    return true;
+}
+
+/**
+ * Remove spaces and tabs adjacent to '.' outside of bracket [...] string
+ * literals. Modifies @a s in place.
+ */
+static void
+wslua_debugger_watch_collapse_ws_around_dots(char *s)
+{
+    if (!s || !*s)
+        return;
+
+    GString *o = g_string_sized_new(strlen(s) + 4);
+    const char *p = s;
+    bool in_bracket = false;
+    bool in_dq = false;
+    bool in_sq = false;
+
+    while (*p)
+    {
+        unsigned char c = (unsigned char)*p;
+
+        if (!in_bracket)
+        {
+            if (c == '[')
+            {
+                in_bracket = true;
+                g_string_append_c(o, (char)c);
+                p++;
+                continue;
+            }
+            if (g_ascii_isspace(c))
+            {
+                const char *q = p;
+                while (*q && g_ascii_isspace((unsigned char)*q))
+                    q++;
+                if (*q == '.' && o->len > 0 && o->str[o->len - 1] != '.')
+                {
+                    p = q;
+                    continue;
+                }
+                if (o->len > 0 && o->str[o->len - 1] == '.' &&
+                    (*q == '_' || g_ascii_isalpha((guchar)*q) || *q == '['))
+                {
+                    p = q;
+                    continue;
+                }
+            }
+            g_string_append_c(o, (char)c);
+            p++;
+            continue;
+        }
+
+        /* in_bracket */
+        if ((in_dq || in_sq) && c == '\\' && p[1])
+        {
+            /* Keep the backslash and the escaped byte together so that
+             * \" / \' inside a bracket string literal do not toggle the
+             * in-string state. */
+            g_string_append_c(o, (char)c);
+            g_string_append_c(o, p[1]);
+            p += 2;
+            continue;
+        }
+        if (!in_dq && !in_sq && c == ']')
+        {
+            in_bracket = false;
+            g_string_append_c(o, (char)c);
+            p++;
+            continue;
+        }
+        if (!in_sq && c == '"')
+        {
+            in_dq = !in_dq;
+            g_string_append_c(o, (char)c);
+            p++;
+            continue;
+        }
+        if (!in_dq && c == '\'')
+        {
+            in_sq = !in_sq;
+            g_string_append_c(o, (char)c);
+            p++;
+            continue;
+        }
+        g_string_append_c(o, (char)c);
+        p++;
+    }
+
+    /* o is built by copying/skipping bytes from s, so o->len <= strlen(s)
+     * and writing o->len + 1 bytes back into s is safe.
+     */
+    memcpy(s, o->str, o->len + 1);
+    g_string_free(o, true);
+}
+
+/**
+ * Count of '.' and '[' in @a path — the same metric as the Qt Watch panel
+ * (watchSubpathBoundaryCount) and @ref WSLUA_WATCH_MAX_PATH_SEGMENTS.
+ */
+static unsigned
+wslua_debugger_watch_path_boundary_count(const char *path)
+{
+    unsigned n = 0;
+
+    if (!path)
+    {
+        return 0;
+    }
+    for (const char *p = path; *p; p++)
+    {
+        if (*p == '.' || *p == '[')
+        {
+            n++;
+        }
+    }
+    return n;
+}
+
+/**
+ * @return Heap-allocated canonical variable-tree path, or NULL if @a spec is
+ *         not a valid path-shaped watch. Applies trim, @c _G / @c _G. alias
+ *         to @c Globals / @c Globals., whitespace collapse around dots, and
+ *         path-body validation. Caller must @c g_free when non-NULL.
+ */
+static char *
+wslua_debugger_watch_canonical_path(const char *spec)
+{
+    if (!spec || !*spec)
+        return NULL;
+
+    char *work = g_strdup(spec);
+    g_strstrip(work);
+    if (!*work)
+    {
+        g_free(work);
+        return NULL;
+    }
+
+    if (g_strcmp0(work, "_G") == 0)
+    {
+        g_free(work);
+        return g_strdup("Globals");
+    }
+    if (g_str_has_prefix(work, "_G."))
+    {
+        char *t = g_strdup_printf("Globals.%s", work + 3);
+        g_free(work);
+        work = t;
+    }
+
+    wslua_debugger_watch_collapse_ws_around_dots(work);
+
+    if (g_str_has_prefix(work, "Locals."))
+    {
+        if (!wslua_debugger_spec_validate_path_body(work + 7))
+            goto fail;
+        goto canon_ok;
+    }
+    if (g_str_has_prefix(work, "Upvalues."))
+    {
+        if (!wslua_debugger_spec_validate_path_body(work + 9))
+            goto fail;
+        goto canon_ok;
+    }
+    if (g_str_has_prefix(work, "Globals."))
+    {
+        if (!wslua_debugger_spec_validate_path_body(work + 8))
+            goto fail;
+        goto canon_ok;
+    }
+    if (g_strcmp0(work, "Locals") == 0 || g_strcmp0(work, "Upvalues") == 0 ||
+        g_strcmp0(work, "Globals") == 0)
+    {
+        goto canon_ok;
+    }
+    if (!wslua_debugger_spec_validate_path_body(work))
+        goto fail;
+    /* Bare path body: caller decides whether to prepend Locals. */
+canon_ok:
+    if (wslua_debugger_watch_path_boundary_count(work) >=
+        WSLUA_WATCH_MAX_PATH_SEGMENTS)
+    {
+        goto fail;
+    }
+    return work;
+
+fail:
+    g_free(work);
+    return NULL;
+}
+
+bool
+wslua_debugger_watch_spec_uses_path_resolution(const char *spec)
+{
+    char *c = wslua_debugger_watch_canonical_path(spec);
+    if (!c)
+        return false;
+    g_free(c);
+    return true;
+}
+
+char *
+wslua_debugger_watch_variable_path_for_spec(const char *spec)
+{
+    char *canon = wslua_debugger_watch_canonical_path(spec);
+    if (!canon)
+        return NULL;
+
+    if (g_str_has_prefix(canon, "Locals.") ||
+        g_str_has_prefix(canon, "Upvalues.") ||
+        g_str_has_prefix(canon, "Globals.") ||
+        g_strcmp0(canon, "Locals") == 0 ||
+        g_strcmp0(canon, "Upvalues") == 0 ||
+        g_strcmp0(canon, "Globals") == 0)
+    {
+        return canon;
+    }
+
+    char *out = g_strdup_printf("Locals.%s", canon);
+    g_free(canon);
+    return out;
+}
+
+/**
+ * @return 0 if @a first_component matches a local, 1 upvalue, 2 global, -1 not found.
+ *         Clears transient values from the Lua stack.
+ */
+static int
+wslua_debugger_first_segment_binding_kind(lua_State *L, int32_t stack_level,
+                                          const char *first_component)
+{
+    if (!first_component || !*first_component)
+    {
+        return -1;
+    }
+
+    lua_Debug debug_info;
+    if (!wslua_debugger_fill_activation(L, stack_level, &debug_info))
+    {
+        return -1;
+    }
+
+    int32_t local_index = 1;
+    const char *name;
+    while ((name = lua_getlocal(L, &debug_info, local_index++)))
+    {
+        if (g_strcmp0(name, first_component) == 0)
+        {
+            lua_pop(L, 1);
+            return 0;
+        }
+        lua_pop(L, 1);
+    }
+
+    if (wslua_debugger_push_function_for_ar(L, &debug_info))
+    {
+        local_index = 1;
+        while ((name = lua_getupvalue(L, -1, local_index++)))
+        {
+            if (g_strcmp0(name, first_component) == 0)
+            {
+                lua_remove(L, -2); /* function */
+                lua_pop(L, 1);     /* value */
+                return 1;
+            }
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 1); /* function */
+    }
+
+    if (wslua_debugger_get_global_or_env_field(L, stack_level,
+                                               first_component))
+    {
+        lua_pop(L, 1);
+        return 2;
+    }
+    return -1;
+}
+
+char *
+wslua_debugger_watch_resolved_variable_path_for_spec(const char *spec)
+{
+    char *canon = wslua_debugger_watch_canonical_path(spec);
+    if (!canon)
+        return NULL;
+
+    /* Already qualified or a section-only spec → done. */
+    if (g_str_has_prefix(canon, "Locals.") ||
+        g_str_has_prefix(canon, "Upvalues.") ||
+        g_str_has_prefix(canon, "Globals.") ||
+        g_strcmp0(canon, "Locals") == 0 ||
+        g_strcmp0(canon, "Upvalues") == 0 ||
+        g_strcmp0(canon, "Globals") == 0)
+    {
+        return canon;
+    }
+
+    /* Bare path body: if we have a paused frame, classify by first segment
+     * binding, otherwise fall back to "Locals.<body>". */
+    g_mutex_lock(&debugger.mutex);
+    const bool paused =
+        debugger.state == WSLUA_DEBUGGER_PAUSED && debugger.paused_L != NULL;
+    lua_State *L = debugger.paused_L;
+    const int32_t variable_stack_level = debugger.variable_stack_level;
+
+    if (!paused || !L)
+    {
+        g_mutex_unlock(&debugger.mutex);
+        char *out = g_strdup_printf("Locals.%s", canon);
+        g_free(canon);
+        return out;
+    }
+
+    const char *end_ptr = canon;
+    while (*end_ptr && *end_ptr != '.' && *end_ptr != '[')
+        end_ptr++;
+
+    char *first_component = g_strndup(canon, (size_t)(end_ptr - canon));
+    if (!first_component || !*first_component)
+    {
+        g_mutex_unlock(&debugger.mutex);
+        g_free(first_component);
+        return canon;
+    }
+
+    const int kind = wslua_debugger_first_segment_binding_kind(
+        L, variable_stack_level, first_component);
+    g_mutex_unlock(&debugger.mutex);
+    g_free(first_component);
+
+    const char *section = "Locals";
+    if (kind == 1)
+        section = "Upvalues";
+    else if (kind == 2)
+        section = "Globals";
+    /* kind < 0 falls back to Locals (matches variable_path_for_spec). */
+
+    char *out = g_strdup_printf("%s.%s", section, canon);
+    g_free(canon);
+    return out;
+}
+
+/** @return level or -1 */
+static int32_t
+wslua_debugger_find_frame_with_local(lua_State *L, const char *name)
+{
+    if (!name || !*name)
+    {
+        return -1;
+    }
+    for (int32_t level = 0;; level++)
+    {
+        lua_Debug ar;
+        if (!lua_getstack(L, level, &ar))
+        {
+            break;
+        }
+        int32_t i = 1;
+        const char *ln;
+        while ((ln = lua_getlocal(L, &ar, i++)))
+        {
+            if (ln[0] == '(')
+            {
+                lua_pop(L, 1);
+                continue;
+            }
+            if (g_strcmp0(ln, name) == 0)
+            {
+                lua_pop(L, 1);
+                return level;
+            }
+            lua_pop(L, 1);
+        }
+    }
+    return -1;
+}
+
+/** @return level or -1 */
+static int32_t
+wslua_debugger_find_frame_with_upvalue(lua_State *L, const char *name)
+{
+    if (!name || !*name)
+    {
+        return -1;
+    }
+    for (int32_t level = 0;; level++)
+    {
+        lua_Debug ar;
+        if (!lua_getstack(L, level, &ar))
+        {
+            break;
+        }
+        if (!wslua_debugger_push_function_for_ar(L, &ar))
+        {
+            continue;
+        }
+        int32_t uv = 1;
+        const char *un;
+        while ((un = lua_getupvalue(L, -1, uv++)))
+        {
+            if (g_strcmp0(un, name) == 0)
+            {
+                lua_pop(L, 2); /* upvalue + function */
+                return level;
+            }
+            lua_pop(L, 1);
+        }
+        lua_pop(L, 1); /* function */
+    }
+    return -1;
+}
+
+int32_t
+wslua_debugger_find_stack_level_for_watch_spec(const char *spec)
+{
+    char *canon = wslua_debugger_watch_canonical_path(spec);
+    if (!canon)
+        return -1;
+
+    if (g_strcmp0(canon, "Locals") == 0 || g_strcmp0(canon, "Upvalues") == 0 ||
+        g_strcmp0(canon, "Globals") == 0 ||
+        g_str_has_prefix(canon, "Globals."))
+    {
+        g_free(canon);
+        return -1;
+    }
+
+    enum
+    {
+        WATCH_STACK_LOCAL,
+        WATCH_STACK_UPVALUE,
+        WATCH_STACK_UNQUAL
+    } mode = WATCH_STACK_UNQUAL;
+
+    const char *walk = canon;
+    if (g_str_has_prefix(canon, "Locals."))
+    {
+        mode = WATCH_STACK_LOCAL;
+        walk = canon + 7;
+    }
+    else if (g_str_has_prefix(canon, "Upvalues."))
+    {
+        mode = WATCH_STACK_UPVALUE;
+        walk = canon + 9;
+    }
+
+    const char *end = walk;
+    while (*end && *end != '.' && *end != '[')
+        end++;
+    if (end == walk)
+    {
+        g_free(canon);
+        return -1;
+    }
+
+    char *first_seg = g_strndup(walk, (size_t)(end - walk));
+
+    g_mutex_lock(&debugger.mutex);
+    const bool paused =
+        debugger.state == WSLUA_DEBUGGER_PAUSED && debugger.paused_L != NULL;
+    lua_State *L = debugger.paused_L;
+    if (!paused || !L)
+    {
+        g_mutex_unlock(&debugger.mutex);
+        g_free(first_seg);
+        g_free(canon);
+        return -1;
+    }
+
+    int32_t found = -1;
+    if (mode == WATCH_STACK_LOCAL)
+    {
+        found = wslua_debugger_find_frame_with_local(L, first_seg);
+    }
+    else if (mode == WATCH_STACK_UPVALUE)
+    {
+        found = wslua_debugger_find_frame_with_upvalue(L, first_seg);
+    }
+    else
+    {
+        found = wslua_debugger_find_frame_with_local(L, first_seg);
+        if (found < 0)
+            found = wslua_debugger_find_frame_with_upvalue(L, first_seg);
+    }
+    g_mutex_unlock(&debugger.mutex);
+    g_free(first_seg);
+    g_free(canon);
+    return found;
+}
+
+bool wslua_debugger_watch_read_root(const char *spec,
+                                    char **value_out, char **type_out,
+                                    bool *can_expand_out, char **error_msg)
+{
+    if (value_out)
+    {
+        *value_out = NULL;
+    }
+    if (type_out)
+    {
+        *type_out = NULL;
+    }
+    if (can_expand_out)
+    {
+        *can_expand_out = false;
+    }
+    if (error_msg)
+    {
+        *error_msg = NULL;
+    }
+
+    if (!spec || !*spec)
+    {
+        if (error_msg)
+        {
+            *error_msg = g_strdup("Empty watch specification");
+        }
+        return false;
+    }
+
+    if (!wslua_debugger_watch_spec_uses_path_resolution(spec))
+    {
+        if (error_msg)
+        {
+            *error_msg = g_strdup("Invalid watch path");
+        }
+        return false;
+    }
+
+    g_mutex_lock(&debugger.mutex);
+    const bool paused =
+        debugger.state == WSLUA_DEBUGGER_PAUSED && debugger.paused_L != NULL;
+    lua_State *L = debugger.paused_L;
+    const int32_t variable_stack_level = debugger.variable_stack_level;
+    g_mutex_unlock(&debugger.mutex);
+
+    if (!paused || !L)
+    {
+        if (error_msg)
+        {
+            *error_msg = g_strdup("Debugger is not paused");
+        }
+        return false;
+    }
+
+    char *varpath = wslua_debugger_watch_resolved_variable_path_for_spec(spec);
+    if (!varpath)
+    {
+        if (error_msg)
+        {
+            *error_msg = g_strdup("Invalid watch path");
+        }
+        return false;
+    }
+
+    /* Section-only specs ("Locals" / "Upvalues" / "Globals") have no root
+     * value to look up: they are purely container rows whose children are
+     * produced by wslua_debugger_get_variables(section). Report them as an
+     * empty, expandable "section" entry so the Qt layer shows the expansion
+     * indicator and lazy-fills children on demand. */
+    if (g_strcmp0(varpath, "Locals") == 0 ||
+        g_strcmp0(varpath, "Upvalues") == 0 ||
+        g_strcmp0(varpath, "Globals") == 0)
+    {
+        if (type_out)
+        {
+            *type_out = g_strdup("section");
+        }
+        if (value_out)
+        {
+            *value_out = g_strdup("");
+        }
+        if (can_expand_out)
+        {
+            *can_expand_out = true;
+        }
+        g_free(varpath);
+        return true;
+    }
+
+    /* Strip Locals./Upvalues./Globals. prefix and pick first-segment resolver. */
+    const char *lookup_path = varpath;
+    wslua_lookup_first_kind_t lk_first = WSLUA_LOOKUP_FIRST_AUTO;
+    if (g_str_has_prefix(varpath, "Locals."))
+    {
+        lookup_path = varpath + 7;
+        lk_first = WSLUA_LOOKUP_FIRST_LOCAL_ONLY;
+    }
+    else if (g_str_has_prefix(varpath, "Upvalues."))
+    {
+        lookup_path = varpath + 9;
+        lk_first = WSLUA_LOOKUP_FIRST_UPVALUE_ONLY;
+    }
+    else if (g_str_has_prefix(varpath, "Globals."))
+    {
+        lookup_path = varpath + 8;
+        lk_first = WSLUA_LOOKUP_FIRST_GLOBAL_ONLY;
+    }
+
+    if (!wslua_debugger_lookup_path(L, lookup_path, variable_stack_level,
+                                    lk_first))
+    {
+        g_free(varpath);
+        if (error_msg)
+        {
+            *error_msg = g_strdup("Path not found");
+        }
+        return false;
+    }
+
+    const bool globals_subtree = g_str_has_prefix(varpath, "Globals.") ||
+                                 g_strcmp0(varpath, "Globals") == 0;
+    g_free(varpath);
+
+    if (type_out)
+    {
+        *type_out = wslua_debugger_format_value_type(L, -1);
+    }
+    if (value_out)
+    {
+        if (lua_type(L, -1) == LUA_TNIL)
+        {
+            *value_out = g_strdup("nil");
+        }
+        else
+        {
+            *value_out = wslua_debugger_describe_value(L, -1);
+        }
+    }
+    if (can_expand_out)
+    {
+        /* Under Globals.*, namespace tables full of functions still expand so
+         * class/proto tables stay navigable (same rule as get_variables). */
+        if (globals_subtree && lua_istable(L, -1))
+        {
+            int64_t total = 0;
+            wslua_debugger_basic_table_counts(L, -1, &total, NULL);
+            *can_expand_out = total > 0;
+        }
+        else
+        {
+            *can_expand_out = wslua_debugger_value_can_expand(L, -1);
+        }
+    }
+    lua_pop(L, 1);
+    return true;
+}
+
+bool wslua_debugger_read_variable_value_full(const char *variable_path,
+                                             char **value_out,
+                                             char **error_msg)
+{
+    if (value_out)
+    {
+        *value_out = NULL;
+    }
+    if (error_msg)
+    {
+        *error_msg = NULL;
+    }
+
+    if (!variable_path || !*variable_path)
+    {
+        if (error_msg)
+        {
+            *error_msg = g_strdup("Empty variable path");
+        }
+        return false;
+    }
+
+    g_mutex_lock(&debugger.mutex);
+    const bool paused =
+        debugger.state == WSLUA_DEBUGGER_PAUSED && debugger.paused_L != NULL;
+    lua_State *L = debugger.paused_L;
+    const int32_t variable_stack_level = debugger.variable_stack_level;
+    g_mutex_unlock(&debugger.mutex);
+
+    if (!paused || !L)
+    {
+        if (error_msg)
+        {
+            *error_msg = g_strdup("Debugger is not paused");
+        }
+        return false;
+    }
+
+    /* Mirror wslua_debugger_watch_read_root's first-segment resolver so
+     * "Locals.x", "Upvalues.y" and "Globals.z" resolve from the intended
+     * section even when a local shadows a global. */
+    const char *lookup_path = variable_path;
+    wslua_lookup_first_kind_t lk_first = WSLUA_LOOKUP_FIRST_AUTO;
+    if (g_str_has_prefix(variable_path, "Locals."))
+    {
+        lookup_path = variable_path + 7;
+        lk_first = WSLUA_LOOKUP_FIRST_LOCAL_ONLY;
+    }
+    else if (g_str_has_prefix(variable_path, "Upvalues."))
+    {
+        lookup_path = variable_path + 9;
+        lk_first = WSLUA_LOOKUP_FIRST_UPVALUE_ONLY;
+    }
+    else if (g_str_has_prefix(variable_path, "Globals."))
+    {
+        lookup_path = variable_path + 8;
+        lk_first = WSLUA_LOOKUP_FIRST_GLOBAL_ONLY;
+    }
+
+    if (!wslua_debugger_lookup_path(L, lookup_path, variable_stack_level,
+                                    lk_first))
+    {
+        if (error_msg)
+        {
+            *error_msg = g_strdup("Path not found");
+        }
+        return false;
+    }
+
+    if (value_out)
+    {
+        if (lua_type(L, -1) == LUA_TNIL)
+        {
+            *value_out = g_strdup("nil");
+        }
+        else
+        {
+            *value_out = wslua_debugger_describe_value_ex(L, -1,
+                                                          /*truncate=*/false);
+        }
+    }
+    lua_pop(L, 1);
+    return true;
+}
+
+/**
  * @brief Evaluate a Lua expression in the context of the paused debugger.
  *
  * This function evaluates the given expression using the paused Lua state.
@@ -2284,19 +3668,15 @@ char *wslua_debugger_evaluate(const char *expression, char **error_msg)
         return NULL;
     }
 
-    /* Handle '=' prefix: treat as return statement for easy value inspection */
-    char *code_to_eval;
-    if (expression[0] == '=')
-    {
-        code_to_eval = g_strdup_printf("return %s", expression + 1);
-    }
-    else
-    {
-        code_to_eval = g_strdup(expression);
-    }
-
     /* Save stack top to detect return values */
     int top_before = lua_gettop(L);
+
+    char *code_to_eval =
+        wslua_debugger_expression_compilable_chunk(L, expression, error_msg);
+    if (!code_to_eval)
+    {
+        return NULL;
+    }
 
     /* Load the string as a chunk */
     int load_result = luaL_loadstring(L, code_to_eval);

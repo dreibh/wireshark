@@ -15,10 +15,12 @@
 #include <QComboBox>
 #include <QEventLoop>
 #include <QFont>
+#include <QHash>
 #include <QPair>
 #include <QPlainTextEdit>
 #include <QPushButton>
 #include <QString>
+#include <QStringList>
 #include <QTreeWidget>
 #include <QVariantMap>
 #include <QVector>
@@ -88,6 +90,11 @@ class LuaDebuggerDialog : public GeometryStateDialog
     bool ensureFileTreeEntry(const QString &file_path);
 
     /**
+     * @brief Apply inline edit for a root watch row (used by the item delegate).
+     */
+    void commitWatchRootSpec(QTreeWidgetItem *item, const QString &text);
+
+    /**
      * @brief Close from Esc or programmatic reject(); queues close() so
      *        closeEvent() runs (unsaved-scripts prompt matches the window
      *        close button). The base QDialog::reject() hides via done() and
@@ -137,6 +144,14 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void onCodeViewContextMenu(const QPoint &pos);
     /** @brief Populate child variable nodes when a tree item expands. */
     void onVariableItemExpanded(QTreeWidgetItem *item);
+    /** @brief Update the Variables expansion map when a row collapses. */
+    void onVariableItemCollapsed(QTreeWidgetItem *item);
+    /** @brief Populate watch child rows when a watch item expands. */
+    void onWatchItemExpanded(QTreeWidgetItem *item);
+    /** @brief Update the in-memory expansion map when a watch row collapses. */
+    void onWatchItemCollapsed(QTreeWidgetItem *item);
+    /** @brief Context menu for the Watch tree. */
+    void onWatchContextMenuRequested(const QPoint &pos);
     /** @brief Provide copy actions for a variable entry. */
     void onVariablesContextMenuRequested(const QPoint &pos);
     /** @brief Prompt the user to open a Lua file into a new tab. */
@@ -144,7 +159,7 @@ class LuaDebuggerDialog : public GeometryStateDialog
     /** @brief Save the active script tab to disk. */
     void onSaveFile();
     /** @brief Prompt before closing a tab that has unsaved edits. */
-    void onCodeTabCloseRequested(int index);
+    void onCodeTabCloseRequested(int idx);
     /** @brief Trigger a reload of all Lua plugins. */
     void onReloadLuaPlugins();
     /** @brief Jump to the selected stack frame location. */
@@ -164,14 +179,18 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void onEvaluate();
     /** @brief Clear the eval input and output fields. */
     void onEvalClear();
-    /** @brief Evaluate selected text from the code view. */
-    void evaluateSelection(const QString &text);
     /** @brief Handle theme selection changes from the Settings section. */
     void onThemeChanged(int idx);
     /** @brief Show inline find/replace bar. */
     void onEditorFind();
     /** @brief Show inline go-to-line bar. */
     void onEditorGoToLine();
+    /** @brief Sync Watch selection when Variables row selection changes. */
+    void onVariablesCurrentItemChanged(QTreeWidgetItem *current,
+                                       QTreeWidgetItem *previous);
+    /** @brief Sync Variables selection when a path-style watch root is selected. */
+    void onWatchCurrentItemChanged(QTreeWidgetItem *current,
+                                   QTreeWidgetItem *previous);
 
   private:
     Ui::LuaDebuggerDialog *ui;
@@ -215,6 +234,7 @@ class LuaDebuggerDialog : public GeometryStateDialog
 
     // Collapsible sections (created programmatically)
     CollapsibleSection *variablesSection;
+    CollapsibleSection *watchSection;
     CollapsibleSection *stackSection;
     CollapsibleSection *breakpointsSection;
     CollapsibleSection *filesSection;
@@ -223,6 +243,7 @@ class LuaDebuggerDialog : public GeometryStateDialog
 
     // Tree widgets (created programmatically)
     QTreeWidget *variablesTree;
+    QTreeWidget *watchTree;
     QTreeWidget *stackTree;
     QTreeWidget *fileTree;
     QTreeWidget *breakpointsTree;
@@ -346,6 +367,8 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void updateContinueActionState();
     /** @brief Configure the variables tree column sizing rules. */
     void configureVariablesTreeColumns();
+    /** @brief Configure the watch tree column sizing rules. */
+    void configureWatchTreeColumns();
     /** @brief Configure the stack tree header layout. */
     void configureStackTreeColumns();
     /** @brief Remove paused-state UI artifacts like stacks and highlights. */
@@ -382,16 +405,118 @@ class LuaDebuggerDialog : public GeometryStateDialog
     // ---- Qt-based JSON settings persistence (like import_hexdump) ----
     /** @brief In-memory settings store, persisted to JSON file. */
     QVariantMap settings_;
-    /** @brief Load settings from lua_debugger.json in the profile directory.
+    /** @brief True after lua_debugger.json was written from closeEvent (destructor fallback if false). */
+    bool luaDebuggerJsonSaved_{false};
+    /** @brief Load settings from lua_debugger.json (global personal config, not per-profile).
      */
     void loadSettingsFile();
-    /** @brief Save settings to lua_debugger.json in the profile directory.
+    /** @brief Save settings to lua_debugger.json (global personal config, not per-profile).
      */
     void saveSettingsFile();
     /** @brief Apply loaded settings to UI widgets. */
     void applyDialogSettings();
     /** @brief Store current UI widget state into settings map. */
     void storeDialogSettings();
+
+    /** @brief Serialize breakpoint list from the engine into settings_. */
+    void storeBreakpointsList();
+    /** @brief Serialize watch entries from the watch tree into settings_. */
+    void storeWatchList();
+    /** @brief Rebuild the watch tree from settings_. */
+    void rebuildWatchTreeFromSettings();
+    /** @brief Refresh value/type (and expansion affordances) for all watch roots. */
+    void refreshWatchDisplay();
+    /** @brief Add a path watch (e.g. from the Variables context menu). */
+    void addPathWatch(const QString &debuggerPath);
+    /**
+     * @brief Insert a top-level watch row; optionally open the inline editor.
+     *        The spec must be a Variables-style path (see
+     *        wslua_debugger_watch_spec_uses_path_resolution).
+     */
+    void insertNewWatchRow(const QString &initialSpec = QString(),
+                           bool openEditor = true);
+    /** @brief Apply one root or nested watch row from the debugger back-end. */
+    void applyWatchItemState(QTreeWidgetItem *item, bool liveContext,
+                             const QString &muted);
+    void applyWatchItemEmpty(QTreeWidgetItem *item, const QString &muted,
+                             const QString &watchTipExtra);
+    void applyWatchItemNonPath(QTreeWidgetItem *item,
+                               const QString &watchTipExtra);
+    void applyWatchItemNoLiveContext(QTreeWidgetItem *item,
+                                     const QString &muted,
+                                     const QString &watchTipExtra);
+    void applyWatchItemError(QTreeWidgetItem *item, const QString &errStr,
+                             const QString &watchTipExtra);
+    void applyWatchItemSuccess(QTreeWidgetItem *item, const QString &spec,
+                               const char *val, const char *typ,
+                               bool can_expand,
+                               const QString &watchTipExtra);
+    /** @brief Fill children for a path-based watch using get_variables. */
+    void fillWatchPathChildren(QTreeWidgetItem *parent,
+                               const QString &variablePath);
+    /** @brief Re-query children after clearing (used on expand and on refresh). */
+    void refillWatchChildren(QTreeWidgetItem *item);
+    /** @brief Refresh expanded watch rows depth-first (values after pause/step). */
+    void refreshWatchBranch(QTreeWidgetItem *item);
+    /** @brief Re-expand persisted subpaths after loading settings or refresh. */
+    void restoreWatchExpansionState();
+    /** @brief Re-expand Variables sections from the runtime expansion map. */
+    void restoreVariablesExpansionState();
+
+    /** @brief Delete the given top-level watch rows from the tree. */
+    void deleteWatchRows(const QList<QTreeWidgetItem *> &items);
+    QTreeWidgetItem *findVariablesItemByPath(const QString &path) const;
+    QTreeWidgetItem *findWatchRootForVariablePath(const QString &path) const;
+    static void expandAncestorsOf(QTreeWidget *tree, QTreeWidgetItem *item);
+    /** @brief Select the Variables row matching the current watch (if any). */
+    void syncVariablesTreeToCurrentWatch();
+    /** @brief Shared wording when the user enters a non-path watch spec. */
+    void showPathOnlyVariablePathWatchMessage();
+
+    bool syncWatchVariablesSelection_ = false;
+
+    /**
+     * @brief Runtime-only expansion state for one tree root (watch row or
+     * Variables Locals/Globals/Upvalues section).
+     *
+     * Tracks which roots are expanded and which descendant path keys are
+     * expanded. Updated on every QTreeWidget::itemExpanded / itemCollapsed
+     * signal so the state survives child-item destruction during pause →
+     * resume → pause cycles, lazy refills, and tree refreshes.
+     *
+     * **Not** persisted to `lua_debugger.json`.
+     */
+    struct TreeSectionExpansionState
+    {
+        bool rootExpanded = false;
+        QStringList subpaths;
+    };
+    QHash<QString, TreeSectionExpansionState> watchExpansion_;
+    /**
+     * @brief Runtime-only expansion for Variables top-level sections
+     * (`Locals`, `Globals`, `Upvalues`). Same lifecycle as `watchExpansion_`.
+     */
+    QHash<QString, TreeSectionExpansionState> variablesExpansion_;
+
+    void recordTreeSectionRootExpansion(
+        QHash<QString, TreeSectionExpansionState> &map, const QString &rootKey,
+        bool expanded);
+    void recordTreeSectionSubpathExpansion(
+        QHash<QString, TreeSectionExpansionState> &map, const QString &rootKey,
+        const QString &key, bool expanded);
+    QStringList treeSectionExpandedSubpaths(
+        const QHash<QString, TreeSectionExpansionState> &map,
+        const QString &rootKey) const;
+
+    /** @brief Merge one root's expansion state into `watchExpansion_`. */
+    void recordWatchRootExpansion(const QString &rootSpec, bool expanded);
+    /** @brief Add / remove one descendant key in `watchExpansion_`. */
+    void recordWatchSubpathExpansion(const QString &rootSpec,
+                                     const QString &key, bool expanded);
+    /** @brief Look up expanded descendant keys for @p rootSpec (may be empty). */
+    QStringList watchExpandedSubpathsForSpec(const QString &rootSpec) const;
+    /** @brief Drop map entries for watch specs no longer in the tree. */
+    void pruneWatchExpansionMap();
 };
 
 #endif // LUA_DEBUGGER_DIALOG_H

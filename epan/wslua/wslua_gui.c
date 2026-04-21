@@ -316,6 +316,7 @@ static void text_win_close_cb(void* data) {
     }
 
     if (cbd->wslua_tw->expired) {
+        g_free(cbd->wslua_tw->title);
         g_free(cbd->wslua_tw);
         g_free(cbd);
     } else {
@@ -612,11 +613,20 @@ WSLUA_METHOD ProgDlg_close(lua_State* L) { /* Hides the progress bar. */
 
 
 static int ProgDlg__tostring(lua_State* L) {
+    /* Returns a short label of the form
+       `ProgDlg: title="<title>" task="<task>" state=<state>` where
+       <state> is `running` or `stopped`. The previous form
+       rendered as just `stopped` / `not stopped`, which was
+       indistinguishable from a regular string in the debugger
+       Variables view. */
     ProgDlg pd = checkProgDlg(L,1);
 
-    lua_pushfstring(L, "%sstopped",pd->stopped?"":"not ");
+    lua_pushfstring(L, "ProgDlg: title=\"%s\" task=\"%s\" state=%s",
+                    pd->title ? pd->title : "",
+                    pd->task  ? pd->task  : "",
+                    pd->stopped ? "stopped" : "running");
 
-    WSLUA_RETURN(1); /* A string specifying whether the Progress Dialog has stopped or not. */
+    WSLUA_RETURN(1); /* A short label identifying the dialog. */
 }
 
 /* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */
@@ -722,6 +732,7 @@ WSLUA_CONSTRUCTOR TextWindow_new(lua_State* L) { /*
     tw = g_new(struct _wslua_tw, 1);
     tw->expired = false;
     tw->ws_tw = ops->new_text_window(ops->ops_id, title);
+    tw->title = g_strdup(title);
 
     default_cbd = g_new(struct _close_cb_data, 1);
 
@@ -1001,8 +1012,31 @@ WSLUA_METHODS TextWindow_methods[] = {
     { NULL, NULL }
 };
 
+static int TextWindow__tostring(lua_State* L) {
+    /* Returns a short label of the form
+       `TextWindow: title="<title>" state=<state>` where <state> is
+       `open` or `closed`. The previous __tostring was wired to
+       `TextWindow:get_text()`, which returned the window's text
+       contents and made the value indistinguishable from a regular
+       string in the debugger Variables view. The full text is still
+       reachable via `TextWindow:get_text()` for callers that need
+       it. */
+    TextWindow tw = toTextWindow(L,1);
+
+    if (!tw) {
+        lua_pushstring(L, "TextWindow: (null)");
+        return 1;
+    }
+
+    lua_pushfstring(L, "TextWindow: title=\"%s\" state=%s",
+                    tw->title ? tw->title : "",
+                    tw->expired ? "closed" : "open");
+
+    return 1;
+}
+
 WSLUA_META TextWindow_meta[] = {
-    {"__tostring", TextWindow_get_text},
+    {"__tostring", TextWindow__tostring},
     { NULL, NULL }
 };
 

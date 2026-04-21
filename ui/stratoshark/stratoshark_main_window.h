@@ -261,6 +261,10 @@ public slots:
     void captureFileClosing();
     void captureFileClosed();
 
+#ifdef HAVE_LUA
+    void openLuaDebuggerDialog();
+#endif
+
 private slots:
 
     void captureEventHandler(CaptureEvent ev);

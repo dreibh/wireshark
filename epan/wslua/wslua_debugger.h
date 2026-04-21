@@ -133,6 +133,17 @@ extern "C"
     WS_DLL_PUBLIC int32_t wslua_debugger_get_variable_stack_level(void);
 
     /**
+     * @brief Suggest a stack frame index for a path-style watch (same indices as
+     *        wslua_debugger_set_variable_stack_level / lua_getstack: 0 = innermost).
+     *
+     * @c Globals.… and section-only specs return -1. @c Locals.… searches locals
+     * only; @c Upvalues.… searches upvalues only; unqualified specs try locals
+     * (innermost first) then upvalues. Returns -1 when not paused or no match.
+     */
+    WS_DLL_PUBLIC int32_t wslua_debugger_find_stack_level_for_watch_spec(
+        const char *spec);
+
+    /**
      * @brief Same as wslua_debugger_step_in() (legacy name).
      */
     WS_DLL_PUBLIC void wslua_debugger_step(void);
@@ -441,6 +452,95 @@ extern "C"
      */
     WS_DLL_PUBLIC void wslua_debugger_foreach_loaded_script(
         wslua_debugger_loaded_script_callback_t callback, void *user_data);
+
+    /*
+     * Watch path APIs (below) take @c debugger.mutex when they touch the
+     * paused Lua state. Call them from the same execution context as the Lua
+     * debugger UI (typically the Qt GUI thread), matching
+     * @ref wslua_debugger_get_variables and other variable accessors. Do not
+     * interleave them with code that resumes the debugger or replaces
+     * @c paused_L from another thread.
+     */
+
+    /** Maximum count of '.' and '[' in a canonical watch path (same metric as the Qt Watch panel; enforced in wslua_debugger_watch_canonical_path()). */
+#define WSLUA_WATCH_MAX_PATH_SEGMENTS 32
+
+    /**
+     * @brief True when @a spec resolves like a Variables path: @c Locals./
+     *        @c Upvalues./ @c Globals. prefix, a section root name, or a
+     *        single identifier (meaning @c Locals.name).
+     *
+     * The parser tolerates leading/trailing whitespace, the @c _G / @c _G.
+     * alias for @c Globals / @c Globals., whitespace around @c "." outside
+     * bracket string literals, and @c \\" / @c \\\\ escapes inside @c "..."
+     * / @c '...' bracket keys.
+     */
+    WS_DLL_PUBLIC bool wslua_debugger_watch_spec_uses_path_resolution(
+        const char *spec);
+
+    /**
+     * @brief Full variable-tree path for path-style specs (e.g. @c Locals.foo
+     *        for @c "foo"). Caller must @c g_free when non-NULL.
+     * @return NULL for non-path specs (operators, calls, invalid paths).
+     */
+    WS_DLL_PUBLIC char *wslua_debugger_watch_variable_path_for_spec(
+        const char *spec);
+
+    /**
+     * @brief Full variable-tree path for UI (e.g. tooltips) matching Variables resolution.
+     *
+     * For unqualified specs, the first path segment is resolved in the same order as
+     * variable lookup (locals, then upvalues, then globals), so a global-only name
+     * maps to @c Globals.name rather than @c Locals.name.
+     *
+     * When the debugger is not paused, falls back to
+     * wslua_debugger_watch_variable_path_for_spec(). Caller must @c g_free when non-NULL.
+     */
+    WS_DLL_PUBLIC char *wslua_debugger_watch_resolved_variable_path_for_spec(
+        const char *spec);
+
+    /**
+     * @brief Read root Value/Type/expand for one watch while paused.
+     *
+     * @a spec must validate as a path under
+     * wslua_debugger_watch_spec_uses_path_resolution(); otherwise the call
+     * fails with an "Invalid watch path" error.
+     *
+     * Children (if any) are fetched with wslua_debugger_get_variables() on
+     * the path returned by
+     * wslua_debugger_watch_resolved_variable_path_for_spec().
+     */
+    WS_DLL_PUBLIC bool wslua_debugger_watch_read_root(
+        const char *spec, char **value_out, char **type_out,
+        bool *can_expand_out, char **error_msg);
+
+    /**
+     * @brief Read the full, untruncated value of a resolved variable path
+     *        while the debugger is paused.
+     *
+     * Unlike the preview returned by @ref wslua_debugger_watch_read_root
+     * or @ref wslua_debugger_get_variables — which cap the stringified
+     * value at an internal display limit — this variant returns the
+     * complete @c luaL_tolstring() output so the UI can offer a true
+     * "Copy value" action for both watch roots and nested sub-elements.
+     *
+     * @p variable_path uses the same surface syntax as the Variables tree
+     * (e.g. @c Locals.foo, @c Globals.bar[1].baz); the leading
+     * @c Locals./Upvalues./Globals. prefix selects the resolution
+     * section exactly as in @ref wslua_debugger_watch_read_root.
+     *
+     * Tables are still summarised as @c "table[N]" since a table has no
+     * meaningful full-text form; binary string values (e.g. @c Tvb
+     * @c __tostring output) are preserved verbatim including embedded
+     * NULs.
+     *
+     * @param variable_path Resolved variable path.
+     * @param value_out Output pointer; caller frees with g_free().
+     * @param error_msg Optional error description; caller frees with g_free().
+     * @return true on success, false on error.
+     */
+    WS_DLL_PUBLIC bool wslua_debugger_read_variable_value_full(
+        const char *variable_path, char **value_out, char **error_msg);
 
 #ifdef __cplusplus
 }

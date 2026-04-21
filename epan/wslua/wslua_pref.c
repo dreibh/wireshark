@@ -626,6 +626,52 @@ WSLUA_ATTRIBUTE_GET(Pref,value, {
     }
 });
 
+/* Build a short Lua-side preview of the current value. Used by
+ * Pref__tostring; mirrors the type-dispatched logic in the
+ * Pref.value getter but produces a string suitable for embedding
+ * in a one-line label. Returns a g_malloc'd buffer the caller
+ * must g_free. */
+static char *pref_value_preview(Pref pref) {
+    if (!pref) return g_strdup("?");
+    switch (pref->type) {
+        case PREF_BOOL:
+            return g_strdup(pref->value.b ? "true" : "false");
+        case PREF_UINT:
+            return g_strdup_printf("%u", pref->value.u);
+        case PREF_STRING:
+            return g_strdup_printf("\"%s\"", pref->value.s ? pref->value.s : "");
+        case PREF_ENUM:
+            return g_strdup_printf("%d", pref->value.e);
+        case PREF_RANGE: {
+            char *r = range_convert_range(NULL, pref->value.r);
+            char *out = g_strdup(r ? r : "");
+            wmem_free(NULL, r);
+            return out;
+        }
+        case PREF_STATIC_TEXT:
+        case PREF_UAT:
+        default:
+            return g_strdup("-");
+    }
+}
+
+WSLUA_METAMETHOD Pref__tostring(lua_State* L) {
+    /* Returns a short label of the form
+       `Pref: <name> type=<type> value=<value>` (e.g.
+       `Pref: mypref type=bool value=true`). Unregistered prefs
+       (created by `Pref.bool()` etc. but not yet assigned into a
+       `Prefs` table) render as
+       `Pref: (unregistered) type=<type> value=<value>`. */
+    Pref pref = checkPref(L,1);
+    char *value = pref_value_preview(pref);
+    lua_pushfstring(L, "Pref: %s type=%s value=%s",
+                    pref->name ? pref->name : "(unregistered)",
+                    pref_type_to_string(pref->type),
+                    value);
+    g_free(value);
+    WSLUA_RETURN(1); /* The string. */
+}
+
 /* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */
 static int Pref__gc(lua_State* L) {
     Pref pref = toPref(L,1);
@@ -706,6 +752,7 @@ WSLUA_METHODS Pref_methods[] = {
 };
 
 WSLUA_META Pref_meta[] = {
+    WSLUA_CLASS_MTREG(Pref,tostring),
     { NULL, NULL }
 };
 
@@ -1010,6 +1057,23 @@ static int Prefs_pairs_iter(lua_State *L) {
     return 2;
 }
 
+WSLUA_METAMETHOD Prefs__tostring(lua_State *L) {
+    /* Returns a short label of the form `Prefs: <proto> entries=<n>`,
+       where <proto> is the owning protocol's short name and <n> is
+       the number of registered prefs (zero for a freshly registered
+       proto with no `proto.prefs.foo = ...` assignments yet). */
+    Pref prefs_p = checkPrefs(L,1);
+    unsigned count = 0;
+    for (Pref p = prefs_p ? prefs_p->next : NULL; p != NULL; p = p->next) {
+        ++count;
+    }
+    const char *proto_name =
+        (prefs_p && prefs_p->proto && prefs_p->proto->name)
+            ? prefs_p->proto->name : "?";
+    lua_pushfstring(L, "Prefs: %s entries=%d", proto_name, (int)count);
+    WSLUA_RETURN(1); /* The string. */
+}
+
 WSLUA_METAMETHOD Prefs__pairs(lua_State *L) {
     /*
     Iterate over all registered preferences of a protocol.
@@ -1036,6 +1100,7 @@ WSLUA_META Prefs_meta[] = {
     WSLUA_CLASS_MTREG(Prefs,newindex),
     WSLUA_CLASS_MTREG(Prefs,index),
     WSLUA_CLASS_MTREG(Prefs,pairs),
+    WSLUA_CLASS_MTREG(Prefs,tostring),
     { NULL, NULL }
 };
 

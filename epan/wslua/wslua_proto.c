@@ -160,9 +160,18 @@ WSLUA_METAMETHOD Proto__call(lua_State* L) { /* Creates a <<lua_class_Proto,`Pro
 }
 
 static int Proto__tostring(lua_State* L) {
+    /* Returns a short label of the form
+       `Proto: <loname> description="<desc>"` (e.g.
+       `Proto: myproto description="My Protocol"`). `loname` is the
+       short/filter name used in `DissectorTable` and display
+       filters; `desc` is the human-readable description string passed
+       to `Proto.new`. The previous form only showed one field, which was
+       ambiguous when multiple Proto objects shared similar names. */
     Proto proto = checkProto(L,1);
 
-    lua_pushfstring(L, "Proto: %s", proto->name);
+    lua_pushfstring(L, "Proto: %s description=\"%s\"",
+                    proto->loname ? proto->loname : "?",
+                    proto->desc   ? proto->desc   : "");
 
     return 1;
 }

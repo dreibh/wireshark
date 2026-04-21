@@ -146,6 +146,7 @@ struct _wslua_tw {
     funnel_text_window_t* ws_tw;
     bool expired;
     void* close_cb_data;
+    char* title;
 };
 
 typedef struct _wslua_field_t {
@@ -349,6 +350,7 @@ struct _wslua_filehandler {
 struct _wslua_dir {
     GDir* dir;
     char* ext;
+    char* path;
 };
 
 struct _wslua_progdlg {

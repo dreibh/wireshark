@@ -1999,9 +1999,9 @@ static unsigned dissect_wlccp_tlvs( proto_tree *_tree, tvbuff_t *_tvb, unsigned 
 				DISSECTOR_ASSERT(_offset > _old_offset);
 			} /* while bytes_left >= 4*/
 
-		} /* _container_flag && (tvb_length_remaining(_tvb,_offset) >= 4) */
+		} /* _container_flag && (tvb_reported_length_remaining(_tvb,_offset) >= 4) */
 
-	} /*_container_flag && (tvb_length_remaining(_tvb,_offset) < 4) */
+	} /*_container_flag && (tvb_reported_length_remaining(_tvb,_offset) < 4) */
 
 
 	/* done with decoding the contained TLVs */

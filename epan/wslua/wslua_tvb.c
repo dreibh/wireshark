@@ -133,14 +133,20 @@ WSLUA_ATTRIBUTE_GET(Tvb,raw_offset, {
 
 WSLUA_METAMETHOD Tvb__tostring(lua_State* L) {
     /*
-    Convert the bytes of a <<lua_class_Tvb,`Tvb`>> into a string.
-    This is primarily useful for debugging purposes since the string will be truncated if it is too long.
+    Convert the bytes of a <<lua_class_Tvb,`Tvb`>> into a string of
+    the form `Tvb: captured=<C> reported=<R> bytes=<hex>`.
+    The hex preview is automatically truncated by `tvb_bytes_to_str`
+    to a small number of bytes (currently 36) so the rendering stays
+    useful in the debugger Variables view and in `print()` for large
+    packets.
     */
     Tvb tvb = checkTvb(L,1);
-    int len = tvb_captured_length(tvb->ws_tvb);
-    char* str = tvb_bytes_to_str(NULL,tvb->ws_tvb,0,len);
+    int captured = tvb_captured_length(tvb->ws_tvb);
+    int reported = tvb_reported_length(tvb->ws_tvb);
+    char* str = tvb_bytes_to_str(NULL, tvb->ws_tvb, 0, captured);
 
-    lua_pushfstring(L, "TVB(%d) : %s", len, str);
+    lua_pushfstring(L, "Tvb: captured=%d reported=%d bytes=%s",
+                    captured, reported, str ? str : "");
 
     wmem_free(NULL, str);
 
@@ -1733,11 +1739,14 @@ WSLUA_METAMETHOD TvbRange__eq(lua_State* L) {
 
 WSLUA_METAMETHOD TvbRange__tostring(lua_State* L) {
     /*
-    Converts the <<lua_class_TvbRange,`TvbRange`>> into a string.
-    The string can be truncated, so this is primarily useful for debugging or in cases where truncation is preferred, e.g. "67:89:AB:...".
+    Converts the <<lua_class_TvbRange,`TvbRange`>> into a string of
+    the form `TvbRange: offset=<O> length=<L> bytes=<hex>`. The hex
+    preview is truncated by `tvb_bytes_to_str` to a small number of
+    bytes so the rendering stays useful in the debugger Variables
+    view and in `print()` for large ranges. Empty ranges render as
+    `TvbRange: offset=<O> length=0 (empty)`.
     */
     TvbRange tvbr = checkTvbRange(L,1);
-    char* str = NULL;
 
     if (!(tvbr && tvbr->tvb)) return 0;
     if (tvbr->tvb->expired) {
@@ -1746,14 +1755,18 @@ WSLUA_METAMETHOD TvbRange__tostring(lua_State* L) {
     }
 
     if (tvbr->len == 0) {
-        lua_pushstring(L, "<EMPTY>");
+        lua_pushfstring(L, "TvbRange: offset=%d length=0 (empty)",
+                        tvbr->offset);
     } else {
-        str = tvb_bytes_to_str(NULL,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len);
-        lua_pushstring(L,str);
+        char *str = tvb_bytes_to_str(NULL, tvbr->tvb->ws_tvb,
+                                     tvbr->offset, tvbr->len);
+        lua_pushfstring(L, "TvbRange: offset=%d length=%d bytes=%s",
+                        tvbr->offset, tvbr->len, str ? str : "");
         wmem_free(NULL, str);
     }
 
-    WSLUA_RETURN(1); /* A Lua hex string of the <<lua_class_TvbRange,`TvbRange`>> truncated to 24 bytes. */
+    WSLUA_RETURN(1); /* A short label including the offset, length,
+                        and a truncated hex preview. */
 }
 
 WSLUA_METHODS TvbRange_methods[] = {

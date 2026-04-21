@@ -256,9 +256,29 @@ int Column_register(lua_State *L) {
 WSLUA_CLASS_DEFINE(Columns,NOP); /* The <<lua_class_Column,``Column``>>s of the packet list. */
 
 WSLUA_METAMETHOD Columns__tostring(lua_State *L) {
-    lua_pushstring(L,"Columns");
-    WSLUA_RETURN(1);
-    /* The string "Columns". This has no real use aside from debugging. */
+    /* Returns a short preview of the form
+       `Columns: number="1" protocol="TCP" info="..."`. Only the
+       three columns most useful for a quick "what packet is this"
+       glance are included; per-Column iteration via `pairs(cols)`
+       exposes the full set. As with `Column.__tostring`, an empty
+       value can mean the column is unconfigured, hasn't been
+       written yet, or that cinfo is NULL (e.g. while dissecting
+       for the details pane). Returns `Columns: (no cinfo)` when
+       there is no column_info to inspect at all. */
+    Columns cols = checkColumns(L,1);
+    if (!cols || !cols->cinfo) {
+        lua_pushstring(L, "Columns: (no cinfo)");
+        WSLUA_RETURN(1);
+    }
+    const char *num   = col_get_text(cols->cinfo, COL_NUMBER);
+    const char *proto = col_get_text(cols->cinfo, COL_PROTOCOL);
+    const char *info  = col_get_text(cols->cinfo, COL_INFO);
+    lua_pushfstring(L,
+        "Columns: number=\"%s\" protocol=\"%s\" info=\"%s\"",
+        num   ? num   : "",
+        proto ? proto : "",
+        info  ? info  : "");
+    WSLUA_RETURN(1); /* The preview string. */
 }
 
 /*

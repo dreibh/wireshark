@@ -9,7 +9,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  *
- * References: 3GPP TS 24.501 19.6.0
+ * References: 3GPP TS 24.501 19.6.2
  */
 
 #include "config.h"
@@ -6329,9 +6329,11 @@ static const value_string nas_5gs_sm_pf_type_values[] = {
     { 0x85, "802.1Q C-TAG PCP/DEI type" },
     { 0x86, "802.1Q S-TAG PCP/DEI type" },
     { 0x87, "Ethertype type" },
-    { 0x88, "Destination MAC address range" },
-    { 0x89, "Source MAC address range" },
-    { 0x91, "(S)RTP multiplexed media identification information" },
+    { 0x88, "Destination MAC address range type" },
+    { 0x89, "Source MAC address range type" },
+    { 0x8a, "Extended 802.1Q C-TAG PCP/DEI type" },
+    { 0x8b, "Extended 802.1Q S-TAG PCP/DEI type" },
+    { 0x91, "(S)RTP multiplexed media identification information type" },
     { 0, NULL }
  };
 
@@ -6526,23 +6528,10 @@ de_nas_5gs_sm_qos_rules(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
                         break;
                     case 133:
                     case 134:
-                        {
-                            uint8_t flags = tvb_get_bits8(tvb, (curr_offset << 3) + 2, 2);
-                            if (flags) {
-                                /* assume this is an extended type */
-                                proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_pcp_ind, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                                proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_dei_ind, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                                if (flags & 2)
-                                    proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_pcp, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                                if (flags & 1)
-                                    proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_dei, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                            } else {
-                                proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_pcp, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                                proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_dei, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
-                            }
-                            curr_offset++;
-                            pfc_len = 1;
-                        }
+                        proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_pcp, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+                        proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_dei, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+                        curr_offset++;
+                        pfc_len = 1;
                         break;
                     case 135:
                         proto_tree_add_item(sub_tree3, hf_nas_5gs_ethertype, tvb, curr_offset, 2, ENC_BIG_ENDIAN);
@@ -6556,6 +6545,20 @@ de_nas_5gs_sm_qos_rules(tvbuff_t *tvb, proto_tree *tree, packet_info *pinfo,
                         proto_tree_add_item(sub_tree3, hf_nas_5gs_mac_addr_high, tvb, curr_offset, 6, ENC_NA);
                         curr_offset += 6;
                         pfc_len = 12;
+                        break;
+                    case 138:
+                    case 139:
+                        {
+                            uint8_t flags = tvb_get_bits8(tvb, (curr_offset << 3) + 2, 2);
+                            proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_pcp_ind, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+                            proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_dei_ind, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+                            if (flags & 2)
+                                proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_pcp, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+                            if (flags & 1)
+                                proto_tree_add_item(sub_tree3, hf_nas_5gs_vlan_tag_dei, tvb, curr_offset, 1, ENC_BIG_ENDIAN);
+                            curr_offset++;
+                            pfc_len = 1;
+                        }
                         break;
                     case 145:
                         {
