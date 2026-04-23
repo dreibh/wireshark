@@ -24,7 +24,7 @@
 
 #include "packet_list_record.h"
 
-#include "cfile.h"
+#include <epan/cfile.h>
 
 class QElapsedTimer;
 

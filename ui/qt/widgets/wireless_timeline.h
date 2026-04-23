@@ -34,7 +34,7 @@
 
 #include <QScrollArea>
 
-#include "cfile.h"
+#include <epan/cfile.h>
 
 /* pixels height for rendered timeline */
 #define TIMELINE_HEIGHT 64

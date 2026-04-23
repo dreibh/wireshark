@@ -278,7 +278,8 @@ dissect_exported_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
     tvbuff_t * payload_tvb = NULL;
     int offset = 0;
     uint32_t tag;
-    int tag_len, p2p_dir, link_dir;
+    uint16_t tag_len;
+    int p2p_dir, link_dir;
     int next_proto_type = -1;
     const char *proto_name = NULL;
     const char *dissector_table = NULL;
@@ -302,8 +303,7 @@ dissect_exported_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* 
         ti = proto_tree_add_item_ret_uint(exported_pdu_tree, hf_exported_pdu_tag, tvb, offset, 2, ENC_BIG_ENDIAN, &tag);
         offset+=2;
         tag_tree = proto_item_add_subtree(ti, ett_exported_pdu_tag);
-        proto_tree_add_item(tag_tree, hf_exported_pdu_tag_len, tvb, offset, 2, ENC_BIG_ENDIAN);
-        tag_len = tvb_get_ntohs(tvb, offset);
+        proto_tree_add_item_ret_uint16(tag_tree, hf_exported_pdu_tag_len, tvb, offset, 2, ENC_BIG_ENDIAN, &tag_len);
         proto_item_set_len(ti, 4 + tag_len);
         offset+=2;
 

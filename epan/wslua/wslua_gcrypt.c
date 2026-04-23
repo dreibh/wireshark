@@ -282,6 +282,9 @@ WSLUA_METHOD GcryptCipher_decrypt(lua_State* L) {
     }
     gcry_error_t err = gcry_cipher_decrypt(*gcry_cipher, pout, out_length, pin, in_length);
     if (err) {
+        if (bain != NULL) {
+            g_byte_array_free(baout, TRUE);
+        }
         lua_pushstring(L, gcry_strerror(err));
         return lua_error(L);
     }

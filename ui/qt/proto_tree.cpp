@@ -19,7 +19,7 @@
 #include <epan/epan_dissect.h>
 #include <epan/color_filters.h>
 #include <epan/dissectors/packet-frame.h>
-#include <cfile.h>
+#include <epan/cfile.h>
 
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/variant_pointer.h>

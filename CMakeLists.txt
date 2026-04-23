@@ -843,7 +843,7 @@ else() # ! MSVC
 		# usage in normal operation.
 		#
 		list(APPEND WIRESHARK_COMMON_FLAGS
-			-Wframe-larger-than=32768
+			-Wstack-usage=32768
 		)
 	endif()
 
@@ -2917,12 +2917,16 @@ list(APPEND copy_data_files_depends
 add_custom_target(copy_data_files ALL DEPENDS ${copy_data_files_depends} )
 set_target_properties(copy_data_files PROPERTIES FOLDER "Copy Tasks")
 
-# sources common for wireshark, tshark, rawshark and sharkd
+# sources common for the packet processors (Wireshark, TShark,
+# rawshark and sharkd) and the event processors (Stratoshark and
+# strato)
+#
+# XXX - should some be moved to existing libraries? Should the
+# remaining ones be put into separate libraries for packet
+# processors and event processors?
 add_library(shark_common OBJECT
-	cfile.c
 	extcap_parser.c
 	file_packet_provider.c
-	sync_pipe_write.c
 )
 add_library(cli_main OBJECT cli_main.c)
 
@@ -3808,8 +3812,8 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 		cli_main.c
 		dumpcap.c
 		ringbuffer.c
-		sync_pipe_write.c
 		capture/iface_monitor.c
+		capture/sync_pipe_write.c
 		capture/ws80211_utils.c
 		ui/capture_opts.c
 		${CAPUTILS_SRC}
@@ -4511,7 +4515,6 @@ if(ASCIIDOCTOR_FOUND AND XSLTPROC_EXECUTABLE)
 endif()
 
 set(SHARK_PUBLIC_HEADERS
-	cfile.h
 	cli_main.h
 	${CMAKE_BINARY_DIR}/ws_version.h
 )

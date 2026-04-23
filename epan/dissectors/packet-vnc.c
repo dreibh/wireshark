@@ -1228,8 +1228,7 @@ vnc_startup_messages(tvbuff_t *tvb, packet_info *pinfo, int offset,
 	uint8_t num_security_types;
 	uint32_t desktop_name_len, auth_result, text_len, auth_code;
 	vnc_packet_t *per_packet_info;
-	int num_tunnel_types;
-	int num_auth_types;
+	uint32_t num_tunnel_types, num_auth_types;
 	proto_item* auth_item;
 	int bytes_available;
 	int bytes_needed = 0;
@@ -1394,12 +1393,11 @@ vnc_startup_messages(tvbuff_t *tvb, packet_info *pinfo, int offset,
 
 	case VNC_SESSION_STATE_TIGHT_TUNNELING_CAPABILITIES :
 	{
-		int i;
+		unsigned i;
 
 		col_set_str(pinfo->cinfo, COL_INFO, "TightVNC tunneling capabilities supported");
 
-		proto_tree_add_item(tree, hf_vnc_tight_num_tunnel_types, tvb, offset, 4, ENC_BIG_ENDIAN);
-		num_tunnel_types = tvb_get_ntohl(tvb, offset);
+		proto_tree_add_item_ret_uint(tree, hf_vnc_tight_num_tunnel_types, tvb, offset, 4, ENC_BIG_ENDIAN, &num_tunnel_types);
 
 		offset += 4;
 
@@ -1433,8 +1431,7 @@ vnc_startup_messages(tvbuff_t *tvb, packet_info *pinfo, int offset,
 
 		col_set_str(pinfo->cinfo, COL_INFO, "TightVNC authentication capabilities supported");
 
-		proto_tree_add_item(tree, hf_vnc_tight_num_auth_types, tvb, offset, 4, ENC_BIG_ENDIAN);
-		num_auth_types = tvb_get_ntohl(tvb, offset);
+		proto_tree_add_item_ret_uint(tree, hf_vnc_tight_num_auth_types, tvb, offset, 4, ENC_BIG_ENDIAN, &num_auth_types);
 		offset += 4;
 
 		auth_item = proto_tree_add_item_ret_uint(tree, hf_vnc_tight_auth_code, tvb, offset, 4, ENC_BIG_ENDIAN, &auth_code);
@@ -1654,7 +1651,7 @@ vnc_startup_messages(tvbuff_t *tvb, packet_info *pinfo, int offset,
 	}
 	case VNC_SESSION_STATE_VENCRYPT_AUTH_CAPABILITIES:
 	{
-		int i;
+		unsigned i;
 		bytes_needed = 2;
 		if (bytes_available < bytes_needed && vnc_preference_desegment && pinfo->can_desegment) {
 			pinfo->desegment_offset = offset;
@@ -3501,7 +3498,7 @@ process_tight_rect_filter_palette(tvbuff_t *tvb, packet_info *pinfo, unsigned *o
 				  proto_tree *tree, int *bits_per_pixel)
 {
 	vnc_packet_t *per_packet_info;
-	int num_colors;
+	uint8_t num_colors;
 	unsigned palette_bytes;
 
 	/* See TightVNC's vnc_unixsrc/vncviewer/tight.c:InitFilterPaletteBPP() */
@@ -3511,8 +3508,7 @@ process_tight_rect_filter_palette(tvbuff_t *tvb, packet_info *pinfo, unsigned *o
 	DISSECTOR_ASSERT(per_packet_info != NULL);
 
 	VNC_BYTES_NEEDED(1);
-	proto_tree_add_item(tree, hf_vnc_tight_palette_num_colors, tvb, *offset, 1, ENC_BIG_ENDIAN);
-	num_colors = tvb_get_uint8(tvb, *offset);
+	proto_tree_add_item_ret_uint8(tree, hf_vnc_tight_palette_num_colors, tvb, *offset, 1, ENC_BIG_ENDIAN, &num_colors);
 	*offset += 1;
 
 	num_colors++;

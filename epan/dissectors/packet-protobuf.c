@@ -326,6 +326,55 @@ protobuf_uri_message_type_copy_cb(void* n, const void* o, size_t siz _U_)
     return new_rec;
 }
 
+/* Update by checking whether uri and message type look sensible */
+static bool protobuf_uri_message_type_update_cb(void* r _U_, char** error)
+{
+    protobuf_uri_mapping_t* updated_rec = (protobuf_uri_mapping_t*)r;
+    const char* uri = updated_rec->uri;
+    const char *message_type = updated_rec->message_type;
+
+    /* Message type may not be empty */
+    if (strlen(uri) == 0) {
+        *error = g_strdup("URI pattern may not be empty");
+        return false;
+    }
+
+    /* Limit number of wildcard '*' chars in uri pattern */
+    int stars = 0;
+    for (size_t n=0; n < strlen(uri); n++) {
+        if (uri[n] == '*') {
+            if (++stars > 16) {
+                *error = g_strdup("uri has too many wildcards in it");
+                return false;
+            }
+        }
+    }
+
+    /* Consecutive wildcards in uri makes no sense */
+    if (strstr(uri, "**")) {
+        *error = g_strdup("uri has consecutive wildcard characters - this makes no sense");
+        return false;
+    }
+
+
+    /* Message type may not be empty */
+    if (strlen(message_type) == 0) {
+        *error = g_strdup("Message type must be set");
+        return false;
+    }
+
+    /* Don't allow any whitespace in message type */
+    for (size_t n=0; n < strlen(message_type); n++) {
+        if (g_ascii_isspace(message_type[n])) {
+            *error = g_strdup("Message type should not contain any whitespace characters");
+            return false;
+        }
+    }
+
+    /* Return true only if *error has not been set by checking code. */
+    return true;
+}
+
 static void
 protobuf_uri_message_type_free_cb(void*r)
 {
@@ -1161,7 +1210,7 @@ dissect_one_protobuf_field(tvbuff_t *tvb, unsigned* offset, unsigned maxlen, pac
  * Which fields will be displayed is controlled by 'add_default_value' option:
  *  - ADD_DEFAULT_VALUE_NONE      -- do not display any missing fields.
  *  - ADD_DEFAULT_VALUE_DECLARED  -- only missing fields of situation (1) will be displayed.
- *  - ADD_DEFAULT_VALUE_ENUM_BOOL -- missing fields of situantions (1, 2 and 3) will be displayed.
+ *  - ADD_DEFAULT_VALUE_ENUM_BOOL -- missing fields of situations (1, 2 and 3) will be displayed.
  *  - ADD_DEFAULT_VALUE_ALL       -- missing fields of all situations (1, 2, 3, and 4) will be displayed.
  */
 static void
@@ -1611,7 +1660,7 @@ static bool
 uri_matches_pattern(const char *request_uri, const char *uri_pattern, int depth)
 {
     /* Arbitrary recursion depth limit.. */
-    if (depth > 32) {
+    if (depth >= 16) {
         return false;
     }
 
@@ -1620,27 +1669,31 @@ uri_matches_pattern(const char *request_uri, const char *uri_pattern, int depth)
         return true;
     }
 
+    size_t uri_request_length = strlen(request_uri);
+    size_t uri_pattern_length = strlen(uri_pattern);
+
+
     /* Match if both strings now empty */
-    if (strlen(uri_pattern)==0 && strlen(request_uri)==0) {
+    if (uri_pattern_length==0 && uri_request_length==0) {
         return true;
     }
 
     /* Fail if remaining, unmatched pattern but reached end of uri */
-    if (strlen(uri_pattern)>0 && strlen(request_uri)==0) {
+    if (uri_pattern_length>0 && uri_request_length==0) {
         return false;
     }
 
     /* If remainder of pattern is just '*', it matches */
-    if (strlen(uri_pattern)==1 && uri_pattern[0] == '*') {
+    if (uri_pattern_length==1 && uri_pattern[0] == '*') {
         return true;
     }
 
     /* If next uri_pattern char is not '*', needs to match exactly */
-    if (strlen(uri_pattern) && uri_pattern[0] != '*') {
+    if (uri_pattern_length && uri_pattern[0] != '*') {
 
         /* Skip identical characters */
         int n;
-        for (n=0; strlen(request_uri+n) && strlen(request_uri+n) && uri_pattern[n] != '*'; n++) {
+        for (n=0; uri_request_length-n && uri_pattern_length-n && uri_pattern[n] != '*'; n++) {
             if (request_uri[n] == uri_pattern[n]) {
                 continue;
             }
@@ -1654,7 +1707,7 @@ uri_matches_pattern(const char *request_uri, const char *uri_pattern, int depth)
         return uri_matches_pattern(request_uri+n, uri_pattern+n, depth+1);
     }
 
-    if (strlen(uri_pattern) && uri_pattern[0] == '*') {
+    if (uri_pattern_length && uri_pattern[0] == '*') {
         /* We are at a '*'. Test with/without moving past it now */
         return (uri_matches_pattern(request_uri+1, uri_pattern,   depth+1) ||
                 uri_matches_pattern(request_uri+1, uri_pattern+1, depth+1));
@@ -2491,7 +2544,7 @@ proto_register_protobuf(void)
         UAT_AFFECTS_DISSECTION | UAT_AFFECTS_FIELDS,
         NULL, //"ChProtobufURIMessageTypes",
         protobuf_uri_message_type_copy_cb,
-        NULL,
+        protobuf_uri_message_type_update_cb,
         protobuf_uri_message_type_free_cb,
         update_protobuf_uri_message_types,
         NULL,

@@ -22,8 +22,8 @@
 
 #include <glib.h>
 #include <epan/epan.h>
-#include <epan/packet_info.h>
-#include <cfile.h>
+#include <epan/frame_data.h>
+#include <epan/cfile.h>
 
 #ifdef __cplusplus
 extern "C" {

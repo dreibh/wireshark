@@ -981,6 +981,7 @@ void
 proto_reg_handoff_rtitcp(void)
 {
     heur_dissector_add("tcp", dissect_rtitcp_heur, "RTI TCP Layer" , "rtitcp", proto_rtitcp, HEURISTIC_ENABLE);
+    heur_dissector_add("tls", dissect_rtitcp_heur, "RTI TCP over TLS", "rtitcp_tls", proto_rtitcp, HEURISTIC_ENABLE);
 }
 
 /*

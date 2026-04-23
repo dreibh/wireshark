@@ -263,15 +263,17 @@ void ext_toolbar_unregister_toolbar(ext_toolbar_t * toolbar)
 
         if ( ! g_list_find_custom(toolbar_entries, toolbar, (GCompareFunc) ext_toolbar_compare) )
         {
-            GHashTable * dataSet = g_hash_table_new(g_str_hash, g_str_equal);
-            g_hash_table_insert( dataSet, g_strdup("toolbar_name"), g_strdup(et->name) );
+            GHashTable * dataSet = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
+            g_hash_table_insert( dataSet, "toolbar_name", g_strdup(et->name) );
             plugin_if_call_gui_cb(PLUGIN_IF_REMOVE_TOOLBAR, dataSet);
+
+            /* Clean up the data */
+            g_hash_table_destroy(dataSet);
 
             g_free(et->name);
             g_free(et->tooltip);
             g_free(et->defvalue);
             g_free(et->regex);
-
             g_free(et);
         }
     }
@@ -506,17 +508,19 @@ void ext_toolbar_update_data_set_active(ext_toolbar_t * entry, bool status)
 
 extern void plugin_if_apply_filter(const char * filter_string, bool force)
 {
-    plugin_if_callback_t actionType;
-    GHashTable * dataSet = NULL;
+    plugin_if_callback_t actionType = (force == true) ? PLUGIN_IF_FILTER_ACTION_APPLY : PLUGIN_IF_FILTER_ACTION_PREPARE;
+    GHashTable * dataSet = g_hash_table_new(g_str_hash, g_str_equal);
+    char* filter_copy = g_strdup(filter_string);
 
-    actionType = ( force == true ) ? PLUGIN_IF_FILTER_ACTION_APPLY : PLUGIN_IF_FILTER_ACTION_PREPARE;
-    dataSet = g_hash_table_new(g_str_hash, g_str_equal);
-
-    g_hash_table_insert( dataSet, g_strdup("action_type"), (void *) &actionType );
-    g_hash_table_insert( dataSet, g_strdup("filter_string"), g_strdup(filter_string) );
-    g_hash_table_insert( dataSet, g_strdup("force"), (void *) &force );
+    g_hash_table_insert( dataSet, "action_type", (void *) &actionType );
+    g_hash_table_insert( dataSet, "filter_string", filter_copy);
+    g_hash_table_insert( dataSet, "force", (void *) &force );
 
     plugin_if_call_gui_cb(actionType, dataSet);
+
+    /* Clean up the data */
+    g_hash_table_destroy(dataSet);
+    g_free(filter_copy);
 }
 
 extern void plugin_if_goto_frame(uint32_t framenr)
@@ -525,22 +529,26 @@ extern void plugin_if_goto_frame(uint32_t framenr)
 
     dataSet = g_hash_table_new(g_str_hash, g_str_equal);
 
-    g_hash_table_insert( dataSet, g_strdup("frame_nr"), GUINT_TO_POINTER(framenr) );
+    g_hash_table_insert( dataSet, "frame_nr", GUINT_TO_POINTER(framenr) );
 
     plugin_if_call_gui_cb(PLUGIN_IF_GOTO_FRAME, dataSet);
+
+    /* Clean up the data */
+    g_hash_table_destroy(dataSet);
 }
 
 extern void plugin_if_save_preference(const char * pref_module, const char * pref_key, const char * pref_value)
 {
-    GHashTable * dataSet = NULL;
+    GHashTable * dataSet = g_hash_table_new_full(g_str_hash, g_str_equal, NULL, g_free);
 
-    dataSet = g_hash_table_new(g_str_hash, g_str_equal);
-
-    g_hash_table_insert( dataSet, g_strdup("pref_module"), g_strdup(pref_module) );
-    g_hash_table_insert( dataSet, g_strdup("pref_key"), g_strdup(pref_key) );
-    g_hash_table_insert( dataSet, g_strdup("pref_value"), g_strdup(pref_value) );
+    g_hash_table_insert( dataSet, "pref_module", g_strdup(pref_module) );
+    g_hash_table_insert( dataSet, "pref_key", g_strdup(pref_key) );
+    g_hash_table_insert( dataSet, "pref_value", g_strdup(pref_value) );
 
     plugin_if_call_gui_cb(PLUGIN_IF_PREFERENCE_SAVE, dataSet);
+
+    /* Clean up the data */
+    g_hash_table_destroy(dataSet);
 }
 
 extern void plugin_if_get_ws_info(ws_info_t **ws_info_ptr)
@@ -582,9 +590,9 @@ extern void* plugin_if_get_frame_data(plugin_if_frame_data_cb extract_cb, void* 
 
     dataSet = g_hash_table_new(g_str_hash, g_str_equal);
 
-    g_hash_table_insert(dataSet, g_strdup("extract_cb"), extract_cb);
-    g_hash_table_insert(dataSet, g_strdup("user_data"), user_data);
-    g_hash_table_insert(dataSet, g_strdup("ret_value_ptr"), &ret_value);
+    g_hash_table_insert(dataSet, "extract_cb", extract_cb);
+    g_hash_table_insert(dataSet, "user_data", user_data);
+    g_hash_table_insert(dataSet, "ret_value_ptr", &ret_value);
 
     plugin_if_call_gui_cb(PLUGIN_IF_GET_FRAME_DATA, dataSet);
 
@@ -599,9 +607,9 @@ extern void* plugin_if_get_capture_file(plugin_if_capture_file_cb extract_cb, vo
 
     dataSet = g_hash_table_new(g_str_hash, g_str_equal);
 
-    g_hash_table_insert(dataSet, g_strdup("extract_cb"), extract_cb);
-    g_hash_table_insert(dataSet, g_strdup("user_data"), user_data);
-    g_hash_table_insert(dataSet, g_strdup("ret_value_ptr"), &ret_value);
+    g_hash_table_insert(dataSet, "extract_cb", extract_cb);
+    g_hash_table_insert(dataSet, "user_data", user_data);
+    g_hash_table_insert(dataSet, "ret_value_ptr", &ret_value);
 
     plugin_if_call_gui_cb(PLUGIN_IF_GET_CAPTURE_FILE, dataSet);
 

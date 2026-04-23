@@ -753,8 +753,7 @@ dissect_websocket_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, voi
   }
 
   /* Opcode */
-  proto_tree_add_item(ws_tree, hf_ws_opcode, tvb, 0, 1, ENC_BIG_ENDIAN);
-  opcode = tvb_get_uint8(tvb, 0) & MASK_WS_OPCODE;
+  proto_tree_add_item_ret_uint8(ws_tree, hf_ws_opcode, tvb, 0, 1, ENC_BIG_ENDIAN, &opcode);
   col_append_fstr(pinfo->cinfo, COL_INFO, " %s", val_to_str_const(opcode, ws_opcode_vals, "Unknown Opcode"));
   col_append_str(pinfo->cinfo, COL_INFO, fin ? " [FIN]" : "[FRAGMENT] ");
 

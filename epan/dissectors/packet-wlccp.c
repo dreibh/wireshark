@@ -2163,8 +2163,7 @@ static unsigned dissect_wlccp_sec_tlv(proto_tree *_tree, tvbuff_t *_tvb, unsigne
 			proto_tree_add_item(_tree, hf_wlccp_mic_msg_seq_count, _tvb, _offset, 8, ENC_BIG_ENDIAN);
 			_offset += 8;
 
-			proto_tree_add_item(_tree, hf_wlccp_mic_length, _tvb, _offset, 2, ENC_BIG_ENDIAN);
-			_mic_length = tvb_get_ntohs(_tvb,_offset);
+			proto_tree_add_item_ret_uint16(_tree, hf_wlccp_mic_length, _tvb, _offset, 2, ENC_BIG_ENDIAN, &_mic_length);
 			_offset += 2;
 
 			proto_tree_add_item(_tree, hf_wlccp_mic_value, _tvb, _offset, _mic_length, ENC_NA);
@@ -2305,8 +2304,7 @@ static unsigned dissect_wlccp_rrm_tlv(proto_tree *_tree, tvbuff_t *_tvb, unsigne
 			proto_tree_add_item(_tree, hf_wlccp_channel, _tvb, _offset, 1, ENC_BIG_ENDIAN);
 			_offset += 1;
 
-			proto_tree_add_item(_tree, hf_wlccp_count, _tvb, _offset, 1, ENC_BIG_ENDIAN);
-			_count = tvb_get_uint8(_tvb,_offset);
+			proto_tree_add_item_ret_uint(_tree, hf_wlccp_count, _tvb, _offset, 1, ENC_BIG_ENDIAN, &_count);
 			_offset += 1;
 
 			proto_tree_add_item(_tree, hf_wlccp_duration, _tvb, _offset, 2, ENC_BIG_ENDIAN);

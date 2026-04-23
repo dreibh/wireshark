@@ -223,16 +223,6 @@ static void dissect_beep_status(tvbuff_t *tvb, int offset,
 }
 #endif
 
-static int num_len(tvbuff_t *tvb, int offset)
-{
-  unsigned int i = 0;
-
-  while (g_ascii_isdigit(tvb_get_uint8(tvb, offset + i))) i++;
-
-  return i;
-
-}
-
 /*
  * We check for a terminator. This can be CRLF, which will be recorded
  * as a terminator, or CR or LF by itself, which will be redorded as
@@ -352,16 +342,18 @@ dissect_beep_mime_header(tvbuff_t *tvb, packet_info *pinfo, int offset,
 }
 
 static int
-dissect_beep_int(tvbuff_t *tvb, packet_info *pinfo, int offset,
+dissect_beep_int(tvbuff_t *tvb, packet_info *pinfo _U_, unsigned offset,
                     proto_tree *tree, int hf, unsigned *val, int *hfa[])
 {
   proto_item  *hidden_item;
-  unsigned ival, ind = 0;
-  unsigned int len = num_len(tvb, offset);
+  unsigned endoff, len, ind = 0;
+  uint32_t ival;
 
   /* XXX - Should check for conversion errors and, for values except for
    * seqno, values outside the range. */
-  ival = (unsigned)strtoul((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, len, ENC_ASCII), NULL, 10);
+  /* XXX - Add a _remaining convenience function? */
+  tvb_get_string_uint(tvb, offset, tvb_reported_length_remaining(tvb, offset), ENC_STR_DEC, &ival, &endoff);
+  len = endoff - offset;
   proto_tree_add_uint(tree, hf, tvb, offset, len, ival);
 
   while (hfa[ind]) {

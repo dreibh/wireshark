@@ -1863,6 +1863,60 @@ GByteArray* tvb_get_string_bytes(tvbuff_t *tvb, const unsigned offset, const uns
                                  const unsigned encoding, GByteArray* bytes, unsigned *endoff);
 
 /**
+ * @brief Parse a case-insensitive byte string into an unsigned 64-bit integer.
+ *
+ * Converts a string from the given tvbuff_t into an unsigned integer value,
+ * interpreting it similarly to strtoul in the C locale. Only ASCII-like
+ * encodings are supported.
+ *
+ * @param tvb        The tvbuff_t to read from.
+ * @param[in] offset The beginning offset in the tvb.
+ * @param[in] length The field's length in the tvb
+ * @param[in] encoding The ENC_* that describes the format (e.g., ENC_STR_NUM)
+ * @param[in,out] value A pointer to a uint64_t that hold the converted value
+ * @param[out] endoff if not NULL, should point to an unsigned int that this
+ *     routine will set to the offset to the character after the last character
+ *     used in the conversion. This is useful because the entire length. If
+ *     NULL, then the routine fails if the entire length is not used (e.g.,
+ *     there is trailing whitespace).
+ *
+ * @return true on success and false on failure; if no valid conversion could
+ * be performed, *endoff and *value are set to 0. If overflow occurs, *value
+ * is set to UINT64_MAX; this is considered a failure, but endoff will be
+ * set correctly in this case if not NULL.
+ */
+WS_DLL_PUBLIC
+bool tvb_get_string_uint64(tvbuff_t *tvb, const unsigned offset, const unsigned length,
+                           const unsigned encoding, uint64_t* value, unsigned *endoff);
+
+/**
+ * @brief Parse a case-insensitive byte string into an unsigned 32-bit integer.
+ *
+ * Converts a string from the given tvbuff_t into an unsigned integer value,
+ * interpreting it similarly to strtoul in the C locale. Only ASCII-like
+ * encodings are supported.
+ *
+ * @param tvb        The tvbuff_t to read from.
+ * @param[in] offset The beginning offset in the tvb.
+ * @param[in] length The field's length in the tvb
+ * @param[in] encoding The ENC_* that describes the format (e.g., ENC_STR_NUM)
+ * @param[in,out] value A pointer to a uint32_t that hold the converted value
+ * @param[out] endoff if not NULL, should point to an unsigned int that this
+ *     routine will set to the offset to the character after the last character
+ *     used in the conversion. This is useful because the entire length. If
+ *     NULL, then the routine fails if the entire length is not used (e.g.,
+ *     there is trailing whitespace).
+ *
+ * @return true on success and false on failure; if no valid conversion could
+ * be performed, *endoff and *value are set to 0. If overflow occurs, *value
+ * is set to UINT64_MAX; this is considered a failure, but endoff will be
+ * set correctly in this case if not NULL.
+ */
+WS_DLL_PUBLIC
+bool tvb_get_string_uint(tvbuff_t *tvb, const unsigned offset, const unsigned length,
+                         const unsigned encoding, uint32_t* value, unsigned *endoff);
+
+/**
  * @brief Retrieve an IPv4 address from a tvbuff in network byte order.
  *
  * Reads four bytes from the given tvbuff_t at the specified offset,

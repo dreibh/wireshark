@@ -137,6 +137,10 @@ tvb find_line_end, tvb_find_uint8, tvb_find_uint16 and tvb_ws_mempbrk_pattern_ui
 has been changed in a similar fashion. They now return a boolean, true
 if found.
 
+Functions tvb_get_string_uint[64] were added that can retrieve an unsigned
+integer encoded as an ASCII-like string from packet data similar to strtoul
+but without string copying or otherwise ensuring NUL termination.
+
 === Plugin Development Changes
 
 The list of installed dissector header files has been reduced and is now restricted to ones that contain the following:

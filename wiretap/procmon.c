@@ -390,6 +390,13 @@ static bool procmon_read(wtap *wth, wtap_rec *rec,
         procmon_read_hosts(wth, file_info->header.host_port_array_offset, err, err_info);
     }
 
+    /* Stop processing once our offset reaches past events (or the file is malformed) */
+    if (file_info->cur_event >= file_info->header.num_events)
+    {
+        ws_debug("end of events");
+        return false;
+    }
+
     *data_offset = file_info->event_offsets[file_info->cur_event];
     ws_noisy("file offset is %" PRId64 " array offset is %" PRId64, file_tell(wth->fh), *data_offset);
 
@@ -399,12 +406,6 @@ static bool procmon_read(wtap *wth, wtap_rec *rec,
         return false;
     }
 
-    /* Stop processing once offset reaches past events */
-    if (file_info->cur_event >= file_info->header.num_events)
-    {
-        ws_debug("end of events");
-        return false;
-    }
     file_info->cur_event++;
 
     // if (*data_offset+COMMON_EVENT_STRUCT_SIZE >= (int64_t)file_info->header.event_offsets_array_offset) {

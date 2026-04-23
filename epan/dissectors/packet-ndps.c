@@ -2425,8 +2425,7 @@ credentials(tvbuff_t* tvb, packet_info *pinfo, proto_tree *ndps_tree, unsigned f
     proto_tree  *atree;
     proto_item  *aitem, *expert_item;
 
-    cred_type = tvb_get_ntohl(tvb, foffset);
-    proto_tree_add_item(ndps_tree, hf_ndps_cred_type, tvb, foffset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(ndps_tree, hf_ndps_cred_type, tvb, foffset, 4, ENC_BIG_ENDIAN, &cred_type);
     foffset += 4;
     switch (cred_type)
     {

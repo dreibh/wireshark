@@ -64,11 +64,10 @@
 #include <wsutil/clopts_common.h>
 #include <wsutil/privileges.h>
 
-#include "sync_pipe.h"
-
 #include "ui/capture_opts.h"
 #include <capture/capture_session.h>
 #include <capture/capture_sync.h>
+#include <capture/sync_pipe.h>
 
 #include "wsutil/tempfile.h"
 #include "wsutil/file_util.h"

@@ -17,7 +17,7 @@
 
 #include <ui/qt/utils/field_information.h>
 
-#include "cfile.h"
+#include <epan/cfile.h>
 
 #include <QTabWidget>
 

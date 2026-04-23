@@ -10,7 +10,7 @@
 #include "protocol_hierarchy_dialog.h"
 #include <ui_protocol_hierarchy_dialog.h>
 
-#include "cfile.h"
+#include <epan/cfile.h>
 
 #include "ui/proto_hier_stats.h"
 

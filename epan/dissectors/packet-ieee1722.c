@@ -1135,9 +1135,8 @@ static int dissect_1722_61883(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tre
         proto_tree_add_item(ti_61883_tree, hf_1722_61883_cip_dbc, tvb, offset, 1, ENC_BIG_ENDIAN);
         offset += 1;
 
-        ti = proto_tree_add_item(ti_61883_tree, hf_1722_61883_cip_qi2, tvb, offset, 1, ENC_BIG_ENDIAN);
-        cip_qi2 = tvb_get_uint8(tvb, offset) & IEEE_1722_QI2_MASK;
-        if (cip_qi2 != 0x80)
+        ti = proto_tree_add_item_ret_uint8(ti_61883_tree, hf_1722_61883_cip_qi2, tvb, offset, 1, ENC_BIG_ENDIAN, &cip_qi2);
+        if (cip_qi2 != 0x02)
         {
             expert_add_info(pinfo, ti, &ei_1722_61883_incorrect_qi2);
         }

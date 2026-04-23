@@ -472,17 +472,15 @@ void proto_report_dissector_bug(const char *format, ...)
  * passed as the argument, because ENC_BIG_ENDIAN and ENC_ASCII are both
  * 0x00000000. So we use ENC_STR_NUM or ENC_STR_HEX bit-or'ed with
  * ENC_ASCII and its ilk.
- *
- * XXX - ENC_STR_NUM is not yet supported by any code in Wireshark,
- * and these are only used for byte arrays.  Presumably they could
- * also be used for integral values in the future.
  */
-/* this is for strings as numbers "12345" */
+/* this is for strings with auto-detected base as with strtoul */
 #define ENC_STR_NUM     0x01000000
 /* this is for strings as hex "1a2b3c" */
 #define ENC_STR_HEX     0x02000000
-/* a convenience macro for either of the above */
-#define ENC_STRING      0x03000000
+/* this is for strings as decimal "12345" */
+#define ENC_STR_DEC     0x04000000
+/* a convenience macro for any of the above */
+#define ENC_STRING      0x07000000
 /* Kept around for compatibility for Lua scripts; code should use ENC_CHARENCODING_MASK */
 #define ENC_STR_MASK    0x0000FFFE
 

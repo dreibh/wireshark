@@ -153,6 +153,7 @@ in6_addr_is_multicast(const ws_in6_addr *a)
  * Utility for CIDR notation of subnets
  */
 #define WS_INET_CIDRADDRSTRLEN  19
+#define WS_INET6_CIDRADDRSTRLEN 50  /* max "xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx:xxxx/128\0" */
 
 /*
  * To check for errors set errno to zero before calling ws_inet_ntop{4,6}.

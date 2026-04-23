@@ -13,7 +13,7 @@
 #include <epan/prefs-int.h>
 #include <epan/proto.h>
 
-#include <cfile.h>
+#include <epan/cfile.h>
 #include <ui/commandline.h>
 #include <ui/preference_utils.h>
 #include <wsutil/utf8_entities.h>

@@ -1965,6 +1965,72 @@ parse_month_name(const char *name, int *tm_mon)
 	return false;
 }
 
+bool
+tvb_get_string_uint64(tvbuff_t *tvb, const unsigned offset, const unsigned length,
+		      const unsigned encoding, uint64_t *value, unsigned *endoff)
+{
+	const uint8_t *ptr;
+	const uint8_t *endptr;
+	const uint8_t **endptrptr = endoff ? &endptr : NULL;
+	bool success;
+
+	validate_single_byte_ascii_encoding(encoding);
+
+	ptr = ensure_contiguous_unsigned(tvb, offset, length);
+
+	switch (encoding & ENC_STRING) {
+	case ENC_STR_HEX:
+		success = ws_hexbuftou64(ptr, length, endptrptr, value);
+		break;
+	case ENC_STR_DEC:
+		success = ws_buftou64(ptr, length, endptrptr, value);
+		break;
+	case ENC_STR_NUM:
+	default:
+		success = ws_basebuftou64(ptr, length, endptrptr, value, 0);
+	}
+
+	if (endoff) {
+		// 0 <= endptr - ptr <= length
+		*endoff = offset + (uint32_t)(endptr - ptr);
+	}
+
+	return success;
+}
+
+bool
+tvb_get_string_uint(tvbuff_t *tvb, const unsigned offset, const unsigned length,
+		    const unsigned encoding, uint32_t *value, unsigned *endoff)
+{
+	const uint8_t *ptr;
+	const uint8_t *endptr;
+	const uint8_t **endptrptr = endoff ? &endptr : NULL;
+	bool success;
+
+	validate_single_byte_ascii_encoding(encoding);
+
+	ptr = ensure_contiguous_unsigned(tvb, offset, length);
+
+	switch (encoding & ENC_STRING) {
+	case ENC_STR_HEX:
+		success = ws_hexbuftou32(ptr, length, endptrptr, value);
+		break;
+	case ENC_STR_DEC:
+		success = ws_buftou32(ptr, length, endptrptr, value);
+		break;
+	case ENC_STR_NUM:
+	default:
+		success = ws_basebuftou32(ptr, length, endptrptr, value, 0);
+	}
+
+	if (endoff) {
+		// 0 <= endptr - ptr <= length
+		*endoff = offset + (uint32_t)(endptr - ptr);
+	}
+
+	return success;
+}
+
 /*
  * Is the character a WSP character, as per RFC 5234?  (space or tab).
  */

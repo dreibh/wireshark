@@ -17,7 +17,7 @@
 #include <wsutil/ws_assert.h>
 #include <wsutil/pint.h>
 
-#include "sync_pipe.h"
+#include <capture/sync_pipe.h>
 
 /****************************************************************************************************************/
 /* sync_pipe handling */

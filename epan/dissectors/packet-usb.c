@@ -4527,9 +4527,8 @@ dissect_linux_usb_pseudo_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     urb_type = tvb_get_uint8(tvb, 8);
     urb->is_request = (urb_type==URB_SUBMIT);
     proto_tree_add_uint(tree, hf_usb_linux_urb_type, tvb, 8, 1, urb_type);
-    proto_tree_add_item(tree, hf_usb_linux_transfer_type, tvb, 9, 1, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item_ret_uint8(tree, hf_usb_linux_transfer_type, tvb, 9, 1, ENC_LITTLE_ENDIAN, &transfer_type);
 
-    transfer_type = tvb_get_uint8(tvb, 9);
     urb->transfer_type = transfer_type;
 
     endpoint_byte = tvb_get_uint8(tvb, 10);   /* direction bit | endpoint */
@@ -4861,8 +4860,7 @@ dissect_usbpcap_iso_packets(packet_info *pinfo _U_, proto_tree *urb_tree, uint8_
     proto_tree_add_item(urb_tree, hf_usb_win32_iso_start_frame, tvb, offset, 4, ENC_LITTLE_ENDIAN);
     offset += 4;
 
-    num_packets = tvb_get_letohl(tvb, offset);
-    num_packets_ti = proto_tree_add_item(urb_tree, hf_usb_win32_iso_num_packets, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+    num_packets_ti = proto_tree_add_item_ret_uint(urb_tree, hf_usb_win32_iso_num_packets, tvb, offset, 4, ENC_LITTLE_ENDIAN, &num_packets);
     offset += 4;
 
     proto_tree_add_item(urb_tree, hf_usb_win32_iso_error_count, tvb, offset, 4, ENC_LITTLE_ENDIAN);

@@ -41,6 +41,7 @@ set(LIBWIRESHARK_PUBLIC_HEADERS
 	arptypes.h
 	asn1.h
 	capture_dissectors.h
+	cfile.h
 	charsets.h
 	color_filters.h
 	column.h
@@ -146,6 +147,7 @@ set(LIBWIRESHARK_NONGENERATED_FILES
 	aftypes.c
 	asn1.c
 	capture_dissectors.c
+	cfile.c
 	charsets.c
 	color_filters.c
 	column.c

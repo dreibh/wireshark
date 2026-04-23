@@ -12,7 +12,7 @@
 #ifndef __COMMANDLINE_H__
 #define __COMMANDLINE_H__
 
-#include "cfile.h" /* For search_direction */
+#include <epan/cfile.h> /* For search_direction */
 #include "ui/capture_opts.h"
 
 #ifdef __cplusplus

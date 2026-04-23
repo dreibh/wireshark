@@ -2536,8 +2536,7 @@ dissect_wccp2_info(tvbuff_t *tvb, int offset,
 
     proto_tree_add_item(info_tree, hf_item_type, tvb, offset, 2, ENC_BIG_ENDIAN);
 
-    item_length = tvb_get_ntohs(tvb, offset+2);
-    proto_tree_add_item(info_tree, hf_item_length, tvb, offset+2, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint16(info_tree, hf_item_length, tvb, offset+2, 2, ENC_BIG_ENDIAN, &item_length);
 
     offset += 4;
 

@@ -5210,7 +5210,7 @@ static void dissect_smb2_both_directory_info(tvbuff_t *tvb, packet_info *pinfo, 
 		int old_offset = offset;
 		int next_offset;
 		int file_name_len;
-		int short_name_len;
+		uint8_t short_name_len;
 		uint32_t attr;
 
 		if (parent_tree) {
@@ -5267,8 +5267,7 @@ static void dissect_smb2_both_directory_info(tvbuff_t *tvb, packet_info *pinfo, 
 		offset += 4;
 
 		/* short name length */
-		short_name_len = tvb_get_uint8(tvb, offset);
-		proto_tree_add_item(tree, hf_smb2_short_name_len, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+		proto_tree_add_item_ret_uint8(tree, hf_smb2_short_name_len, tvb, offset, 1, ENC_LITTLE_ENDIAN, &short_name_len);
 		offset += 1;
 
 		/* reserved */
@@ -5380,7 +5379,7 @@ static void dissect_smb2_id_both_directory_info(tvbuff_t *tvb, packet_info *pinf
 		int old_offset = offset;
 		int next_offset;
 		int file_name_len;
-		int short_name_len;
+		uint8_t short_name_len;
 		uint32_t attr;
 
 		if (parent_tree) {
@@ -5437,8 +5436,7 @@ static void dissect_smb2_id_both_directory_info(tvbuff_t *tvb, packet_info *pinf
 		offset += 4;
 
 		/* short name length */
-		short_name_len = tvb_get_uint8(tvb, offset);
-		proto_tree_add_item(tree, hf_smb2_short_name_len, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+		proto_tree_add_item_ret_uint8(tree, hf_smb2_short_name_len, tvb, offset, 1, ENC_LITTLE_ENDIAN, &short_name_len);
 		offset += 1;
 
 		/* reserved */

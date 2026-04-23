@@ -473,18 +473,25 @@ the string, including the terminating null.
 The buffer is allocated in the given wmem scope (see README.wmem for more
 information).
 
-int tvb_get_nstringz(tvbuff_t *tvb, const int offset, const unsigned bufsize, uint8_t* buffer);
-int tvb_get_nstringz0(tvbuff_t *tvb, const int offset, const unsigned bufsize, uint8_t* buffer);
+int tvb_get_raw_bytes_as_stringz(tvbuff_t *tvb, const int offset, const unsigned bufsize, uint8_t* buffer);
 
-Copies bufsize bytes, including the terminating NULL, to buffer. If a NULL
+Copies up to bufsize - 1 bytes to buffer and adds a terminating NUL. If a NUL
 terminator is found before reaching bufsize, only the bytes up to and including
-the NULL are copied. Returns the number of bytes copied (not including
-terminating NULL), or -1 if the string was truncated in the buffer due to
-not having reached the terminating NULL. In this case, the resulting
-buffer is not NULL-terminated.
-tvb_get_nstringz0() works like tvb_get_nstringz(), but never returns -1 since
-the string is guaranteed to have a terminating NULL. If the string was truncated
-when copied into buffer, a NULL is placed at the end of buffer to terminate it.
+the NUL are copied. If no NUL is found, then bufsize - 1 bytes are copied and a
+NUL byte is added to ensure null termination. If fewer bytes are available than
+bufsize - 1, as many bytes as are present in the tvb are copied and a NUL
+terminator is added. Bufsize must be at least 1 to allow space for the NUL.
+Returns the number of bytes copied, not including terminating NUL.
+
+WARNING - This function does not do encoding validation and does not guarantee
+that it produces a UTF-8 string, and the result should never be added to the
+tree, columns, or other output without validation. (This might be used, for
+example, to handle character encodings not supported by the API yet.)
+
+int tvb_get_raw_bytes_as_string(tvbuff_t *tvb, const int offset, const unsigned bufsize, uint8_t* buffer);
+
+Similar to the above, but does not stop at a NUL byte and always copies as
+many bytes up to bufsize - 1 as possible.
 
 char *tvb_get_ts_23_038_7bits_string(wmem_allocator_t *scope, tvbuff_t *tvb,
                                      const int bit_offset, int no_of_chars);

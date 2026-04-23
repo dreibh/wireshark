@@ -19187,7 +19187,7 @@ static int dissect_DIS_PARSER_DESIGNATOR_PDU(tvbuff_t *tvb, packet_info *pinfo, 
 
 static int dissect_DIS_PARSER_INTERCOM_CONTROL_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
 {
-    int8_t source_line_id;
+    uint8_t source_line_id;
     proto_tree_add_item(tree, hf_intercom_control_control_type, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
 
@@ -19200,8 +19200,7 @@ static int dissect_DIS_PARSER_INTERCOM_CONTROL_PDU(tvbuff_t *tvb, packet_info *p
     proto_tree_add_item(tree, hf_intercom_control_source_communications_device_id, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item(tree, hf_intercom_control_source_line_id, tvb, offset, 1, ENC_BIG_ENDIAN);
-    source_line_id = tvb_get_uint8(tvb, offset);
+    proto_tree_add_item_ret_uint8(tree, hf_intercom_control_source_line_id, tvb, offset, 1, ENC_BIG_ENDIAN, &source_line_id);
     col_append_fstr( pinfo->cinfo, COL_INFO, ", SourceLineID=%u", source_line_id);
     offset += 1;
 

@@ -19,12 +19,13 @@
 #include "config.h"
 
 #include <stdio.h>	/* for sscanf() */
-#include <stdlib.h>	/* for strtoul() */
 
 #include <epan/packet.h>
 #include <epan/strutil.h>
 #include <epan/prefs.h>
 #include <epan/expert.h>
+
+#include <wsutil/strtoi.h>
 
 #include "packet-tcp.h"
 
@@ -1012,13 +1013,12 @@ static int
 stat_dissector (tvbuff_t *tvb, proto_tree *tree, unsigned offset)
 {
   unsigned      occurrences = 0;
-  const unsigned char *first_colon = NULL, *last_colon = NULL;
+  const unsigned char *first_colon = NULL, *last_colon = NULL, *endp;
   unsigned      tokenlen, linelen;
   unsigned      next_offset = 0;
   const unsigned char *next_token;
   const unsigned char *line, *lineend;
   uint32_t      slabclass;
-  char          response_chars[21];
 
   while (tvb_offset_exists (tvb, offset)) {
     /* Find the end of the line. */
@@ -1059,10 +1059,7 @@ stat_dissector (tvbuff_t *tvb, proto_tree *tree, unsigned offset)
       if (tokenlen > 10 || tokenlen <= 0) {
         return -1;
       }
-      memcpy (response_chars, first_colon + 1, tokenlen);
-      response_chars[tokenlen] = '\0';
-
-      slabclass = (uint32_t) strtoul (response_chars, NULL, 10);
+      ws_buftou32(first_colon + 1, tokenlen, &endp, &slabclass);
       proto_tree_add_uint (tree, hf_slabclass, tvb, offset, tokenlen, slabclass);
       offset += tokenlen + 1;
       line = last_colon + 1;
@@ -1073,10 +1070,8 @@ stat_dissector (tvbuff_t *tvb, proto_tree *tree, unsigned offset)
       if (tokenlen > 10 || tokenlen <= 0) {
         return -1;
       }
-      memcpy (response_chars, line, tokenlen);
-      response_chars[tokenlen] = '\0';
 
-      slabclass = (uint32_t) strtoul (response_chars, NULL, 10);
+      ws_buftou32(line, tokenlen, &endp, &slabclass);
       proto_tree_add_uint (tree, hf_slabclass, tvb, offset, tokenlen, slabclass);
 
       offset += (int) (tokenlen + 1);
@@ -1121,13 +1116,12 @@ get_response_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uns
   unsigned       next_offset;
   unsigned       linelen;
   const unsigned char  *line, *lineend;
-  const unsigned char  *next_token;
+  const unsigned char  *next_token, *endp;
   int            tokenlen;
   uint16_t       flags;
   uint32_t       bytes;
   uint64_t       cas;
   uint8_t        opcode = 0xff;
-  char           response_chars[21]; /* cover uint64 (20 + 1) bytes*/
 
   /* expecting to read 'bytes' number of bytes from the buffer. */
   while (tvb_offset_exists (tvb, offset)) {
@@ -1180,10 +1174,8 @@ get_response_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uns
     if (tokenlen == 0 || tokenlen > 5) {
       return -1;
     }
-    memcpy (response_chars, line, tokenlen);
-    response_chars[tokenlen] = '\0';
 
-    flags = (uint16_t) strtoul (response_chars, NULL, 10);
+    ws_buftou16(line, tokenlen, &endp, &flags);
     proto_tree_add_uint (tree, hf_flags, tvb, offset, tokenlen, flags);
 
     offset += (int) (next_token - line);
@@ -1194,10 +1186,8 @@ get_response_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uns
     if (tokenlen == 0 || tokenlen > 10) {
       return -1;
     }
-    memcpy (response_chars, line, tokenlen);
-    response_chars[tokenlen] = '\0';
 
-    bytes = (uint32_t) strtoul (response_chars, NULL, 10);
+    ws_buftou32(line, tokenlen, &endp, &bytes);
     proto_tree_add_uint (tree, hf_value_length, tvb, offset, tokenlen, bytes);
 
     offset += (int) (next_token - line);
@@ -1210,10 +1200,8 @@ get_response_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, uns
     }
 
     if (tokenlen != 0) {  /* reached the end of line; CRLF */
-      memcpy (response_chars, line, tokenlen);
-      response_chars[tokenlen] = '\0';
 
-      cas = (uint64_t) strtoul (response_chars, NULL, 10);
+      ws_buftou64(line, tokenlen, &endp, &cas);
       proto_tree_add_uint64 (tree, hf_cas, tvb, offset, tokenlen, cas);
 
       /* CRLF */
@@ -1328,14 +1316,13 @@ static int
 memcache_request_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, unsigned offset,
                             const unsigned char *line, const unsigned char *lineend, uint8_t opcode)
 {
-  const unsigned char *next_token;
+  const unsigned char *next_token, *endp;
   unsigned      tokenlen;
 
   uint16_t      flags;
   uint32_t      expiration;
   uint32_t      bytes;
   uint64_t      cas;
-  char          response_chars[21]; /* cover uint64 (20 + 1) bytes*/
 
   /* command. */
   tokenlen = get_token_len (line, lineend, &next_token);
@@ -1370,10 +1357,8 @@ memcache_request_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     if (tokenlen == 0 || tokenlen > 5) {
       return -1;
     }
-    memcpy (response_chars, line, tokenlen);
-    response_chars[tokenlen] = '\0';
 
-    flags = (uint16_t) strtoul (response_chars, NULL, 10);
+    ws_buftou16(line, tokenlen, &endp, &flags);
     proto_tree_add_uint (tree, hf_flags, tvb, offset, tokenlen, flags);
 
     offset += (int) (next_token - line);
@@ -1384,10 +1369,8 @@ memcache_request_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     if (tokenlen == 0 || tokenlen > 10) {
       return -1;
     }
-    memcpy (response_chars, line, tokenlen);
-    response_chars[tokenlen] = '\0';
 
-    expiration = (uint32_t) strtoul (response_chars, NULL, 10);
+    ws_buftou32(line, tokenlen, &endp, &expiration);
     proto_tree_add_uint (tree, hf_expiration, tvb, offset, tokenlen, expiration);
 
     offset += (int) (next_token - line);
@@ -1398,10 +1381,8 @@ memcache_request_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     if (tokenlen == 0 || tokenlen > 10) {
       return -1;
     }
-    memcpy (response_chars, line, tokenlen);
-    response_chars[tokenlen] = '\0';
 
-    bytes = (uint32_t) strtoul (response_chars, NULL, 10);
+    ws_buftou32(line, tokenlen, &endp, &bytes);
     proto_tree_add_uint (tree, hf_value_length, tvb, offset, tokenlen, bytes);
 
     offset += (int) (next_token - line);
@@ -1413,10 +1394,8 @@ memcache_request_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
       if (tokenlen == 0 || tokenlen > 20) {
         return -1;
       }
-      memcpy (response_chars, line, tokenlen);
-      response_chars[tokenlen] = '\0';
 
-      cas = (uint64_t) strtoul (response_chars, NULL, 10);
+      ws_buftou64(line, tokenlen, &endp, &cas);
       proto_tree_add_uint64 (tree, hf_cas, tvb, offset, tokenlen, cas);
 
       offset += (int) (next_token - line);
@@ -1504,10 +1483,7 @@ memcache_request_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_item (tree, hf_noreply, tvb, offset, tokenlen, ENC_ASCII);
       } else {
         /* expiration */
-        memcpy (response_chars, line, tokenlen);
-        response_chars[tokenlen] = '\0';
-
-        expiration = (uint32_t) strtoul (response_chars, NULL, 10);
+        ws_buftou32(line, tokenlen, &endp, &expiration);
         proto_tree_add_uint (tree, hf_expiration, tvb, offset, tokenlen, expiration);
       }
       offset += (int) (next_token - line);
@@ -1575,10 +1551,7 @@ memcache_request_dissector (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         proto_tree_add_item (tree, hf_noreply, tvb, offset, tokenlen, ENC_ASCII);
       } else {
         /* expiration */
-        memcpy (response_chars, line, tokenlen);
-        response_chars[tokenlen] = '\0';
-
-        expiration = (uint32_t) strtoul (response_chars, NULL, 10);
+        ws_buftou32(line, tokenlen, &endp, &expiration);
         proto_tree_add_uint (tree, hf_expiration, tvb, offset, tokenlen, expiration);
       }
       offset += (int) (next_token - line);

@@ -156,6 +156,8 @@ static expert_field ei_http_excess_data;
 static expert_field ei_http_bad_header_name;
 static expert_field ei_http_decompression_failed;
 static expert_field ei_http_decompression_disabled;
+static expert_field ei_http_response_code_invalid;
+static expert_field ei_http_request_uri_invalid;
 
 static dissector_handle_t http_handle;
 static dissector_handle_t http_tcp_handle;
@@ -2716,8 +2718,13 @@ basic_response_dissector(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree,
 			 http_conv_t *conv_data _U_, http_req_res_t *curr)
 {
 	const unsigned char *next_token;
+	const unsigned char *status_code_token;
 	unsigned tokenlen;
-	char response_code_chars[4];
+	unsigned i;
+	unsigned expert_len;
+	bool invalid_status_code_token = false;
+	int status_code_offset;
+	proto_item *ti;
 	proto_item *r_ti;
 	http_info_value_t *stat_info = p_get_proto_data(pinfo->pool, pinfo, proto_http, HTTP_PROTO_DATA_INFO);
 
@@ -2736,33 +2743,55 @@ basic_response_dissector(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree,
 	/*
 	 * The second token is the Status Code.
 	 */
-	tokenlen = get_token_len(line, lineend, &next_token);
+	status_code_token = next_token;
+	status_code_offset = offset;
+	tokenlen = get_token_len(status_code_token, lineend, &next_token);
+
+	/* Validate status code token */
+	if (tokenlen != 3) {
+		invalid_status_code_token = true;
+	} else {
+		for (i = 0; i < tokenlen; i++) {
+			if (!g_ascii_isdigit(status_code_token[i])) {
+				invalid_status_code_token = true;
+				break;
+			}
+		}
+	}
+
+	expert_len = tokenlen;
+	if (expert_len == 0 && tvb_reported_length_remaining(tvb, status_code_offset) > 0)
+		expert_len = 1;
+
+	if (tokenlen >= 3) {
+		ws_buftou32(status_code_token, 3, NULL, &stat_info->response_code);
+		if (curr) {
+			curr->response_code = stat_info->response_code;
+		}
+	}
+
+	ti = proto_tree_add_uint(tree, hf_http_response_code, tvb, status_code_offset,
+				 tokenlen < 3 ? expert_len : 3,
+			    stat_info->response_code);
+	if (expert_len > 3)
+		proto_item_set_len(ti, expert_len);
+
+	if (invalid_status_code_token) {
+		expert_add_info_format(pinfo, ti, &ei_http_response_code_invalid,
+			"Invalid HTTP response status code token: \"%s\" (expected exactly 3 digits)",
+			format_text(pinfo->pool, (const char *)status_code_token, tokenlen));
+	}
 	if (tokenlen < 3)
 		return;
 
-	/* The Status Code characters must be copied into a null-terminated
-	 * buffer for strtoul() to parse them into an unsigned integer value.
-	 */
-	memcpy(response_code_chars, line, 3);
-	response_code_chars[3] = '\0';
-
-	stat_info->response_code =
-		(unsigned)strtoul(response_code_chars, NULL, 10);
-	if (curr) {
-		curr->response_code = stat_info->response_code;
-	}
-
-	proto_tree_add_uint(tree, hf_http_response_code, tvb, offset, 3,
-			    stat_info->response_code);
-
 	r_ti = proto_tree_add_string(tree, hf_http_response_code_desc,
-		tvb, offset, 3, val_to_str(pinfo->pool, stat_info->response_code,
+		tvb, status_code_offset, 3, val_to_str(pinfo->pool, stat_info->response_code,
 		vals_http_status_code, "Unknown (%d)"));
 
 	proto_item_set_generated(r_ti);
 
 	/* Advance to the start of the next token. */
-	offset += (int) (next_token - line);
+	offset += (int) (next_token - status_code_token);
 	line = next_token;
 
 	/*
@@ -2817,10 +2846,9 @@ chunked_encoding_dissector(tvbuff_t **tvb_ptr, packet_info *pinfo,
 	while (datalen > 0) {
 		uint32_t  chunk_size;
 		unsigned  chunk_offset;
-		uint8_t	 *chunk_string;
 		unsigned  linelen;
+		unsigned  endoff;
 		bool	  found;
-		char	 *c;
 
 		found = tvb_find_line_end_remaining(tvb, offset, &linelen , &chunk_offset);
 
@@ -2829,23 +2857,7 @@ chunked_encoding_dissector(tvbuff_t **tvb_ptr, packet_info *pinfo,
 			break;
 		}
 
-		chunk_string = tvb_get_string_enc(pinfo->pool, tvb, offset, linelen, ENC_ASCII);
-
-		if (chunk_string == NULL) {
-			/* Can't get the chunk size line */
-			break;
-		}
-
-		c = (char*)chunk_string;
-
-		/*
-		 * We don't care about the extensions.
-		 */
-		if ((c = strchr(c, ';'))) {
-			*c = '\0';
-		}
-
-		chunk_size = (uint32_t)strtol((char*)chunk_string, NULL, 16);
+		tvb_get_string_uint(tvb, offset, linelen, ENC_STR_HEX, &chunk_size, &endoff);
 
 		if (chunk_size > datalen) {
 			/*
@@ -3016,18 +3028,22 @@ http_payload_subdissector(tvbuff_t *tvb, proto_tree *tree,
 		 * The string was successfully split in two
 		 * Create a proxy-connect subtree
 		 */
-		if(tree) {
-			item = proto_tree_add_item(tree, proto_http, tvb, 0, -1, ENC_NA);
-			proxy_tree = proto_item_add_subtree(item, ett_http);
+		item = proto_tree_add_item(tree, proto_http, tvb, 0, -1, ENC_NA);
+		proxy_tree = proto_item_add_subtree(item, ett_http);
 
-			item = proto_tree_add_string(proxy_tree, hf_http_proxy_connect_host,
-						     tvb, 0, 0, strings[0]);
-			proto_item_set_generated(item);
+		item = proto_tree_add_string(proxy_tree, hf_http_proxy_connect_host,
+					     tvb, 0, 0, strings[0]);
+		proto_item_set_generated(item);
 
-			item = proto_tree_add_uint(proxy_tree, hf_http_proxy_connect_port,
-						   tvb, 0, 0, (uint32_t)strtol(strings[1], NULL, 10) );
-			proto_item_set_generated(item);
+		if (!ws_strtou32(strings[1], NULL, &uri_port)) {
+			proto_tree_add_expert_format(proxy_tree, pinfo, &ei_http_request_uri_invalid,
+						     tvb, 0, 0, "Invalid target port number (%s)", strings[1]);
+			return;
 		}
+
+		item = proto_tree_add_uint(proxy_tree, hf_http_proxy_connect_port,
+					   tvb, 0, 0, uri_port);
+		proto_item_set_generated(item);
 
 		/* Set the port and address to the proxied ones so that
 		 * decode_tcp_ports doesn't call the current conversation
@@ -3036,7 +3052,6 @@ http_payload_subdissector(tvbuff_t *tvb, proto_tree *tree,
 		 * or set the conversation dissector don't affect the original
 		 * conversation but the proxied one.
 		 */
-		uri_port = (int)strtol(strings[1], NULL, 10); /* Convert string to a base-10 integer */
 
 		/* Just use the string as a string address. */
 		set_address(&uri_addr, AT_STRINGZ, (int)strlen(strings[0]) + 1, strings[0]);
@@ -3355,7 +3370,7 @@ get_hf_for_header(char* header_name)
 {
 	int* hf_id = NULL;
 
-	if (header_fields_hash) {
+	if (header_fields_hash && header_name) {
 		hf_id = (int*) g_hash_table_lookup(header_fields_hash, header_name);
 	} else {
 		hf_id = NULL;
@@ -4953,7 +4968,9 @@ proto_register_http(void)
 		{ &ei_http_leading_crlf, { "http.leading_crlf", PI_MALFORMED, PI_ERROR, "Leading CRLF previous message in the stream may have extra CRLF", EXPFILL }},
 		{ &ei_http_bad_header_name, { "http.bad_header_name", PI_PROTOCOL, PI_WARN, "Illegal characters found in header name", EXPFILL }},
 		{ &ei_http_decompression_failed, { "http.decompression_failed", PI_UNDECODED, PI_WARN, "Decompression failed", EXPFILL }},
-		{ &ei_http_decompression_disabled, { "http.decompression_disabled", PI_UNDECODED, PI_CHAT, "Decompression disabled", EXPFILL }}
+		{ &ei_http_decompression_disabled, { "http.decompression_disabled", PI_UNDECODED, PI_CHAT, "Decompression disabled", EXPFILL }},
+		{ &ei_http_response_code_invalid, { "http.response.code.invalid", PI_MALFORMED, PI_WARN, "Invalid HTTP response status code token", EXPFILL }},
+		{ &ei_http_request_uri_invalid, { "http.request.uri.invalid", PI_MALFORMED, PI_ERROR, "Invalid request target", EXPFILL }},
 
 	};
 

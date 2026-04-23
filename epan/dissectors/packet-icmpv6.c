@@ -1873,8 +1873,7 @@ static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_inf
         opt_offset = offset;
 
         /* Option type */
-        proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_type, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
-        opt_type = tvb_get_uint8(tvb, opt_offset);
+        proto_tree_add_item_ret_uint8(icmp6opt_tree, hf_icmpv6_opt_type, tvb, opt_offset, 1, ENC_BIG_ENDIAN, &opt_type);
         opt_offset += 1;
 
         /* Add option name to option root label */
@@ -2266,8 +2265,7 @@ static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_inf
                 opt_offset += 1;
 
                 /* Prefix Len */
-                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_ipa_prefix_len, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
-                prefix_len = tvb_get_uint8(tvb, opt_offset);
+                proto_tree_add_item_ret_uint8(icmp6opt_tree, hf_icmpv6_opt_ipa_prefix_len, tvb, opt_offset, 1, ENC_BIG_ENDIAN, &prefix_len);
                 opt_offset += 1;
 
                 proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_reserved, tvb, opt_offset, 4, ENC_NA);
@@ -2290,8 +2288,7 @@ static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_inf
                 opt_offset += 1;
 
                 /* Prefix Len */
-                proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_nrpi_prefix_len, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
-                prefix_len = tvb_get_uint8(tvb, opt_offset);
+                proto_tree_add_item_ret_uint8(icmp6opt_tree, hf_icmpv6_opt_nrpi_prefix_len, tvb, opt_offset, 1, ENC_BIG_ENDIAN, &prefix_len);
                 opt_offset += 1;
 
                 proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_reserved, tvb, opt_offset, 4, ENC_NA);
@@ -2299,7 +2296,7 @@ static unsigned dissect_icmpv6_nd_opt(tvbuff_t *tvb, unsigned offset, packet_inf
 
                 /* Prefix */
                 proto_tree_add_item(icmp6opt_tree, hf_icmpv6_opt_nrpi_prefix, tvb, opt_offset, 16, ENC_NA);
-                proto_item_append_text(ti, " %s/%d", tvb_ip6_to_str(pinfo->pool, tvb, opt_offset), prefix_len);
+                proto_item_append_text(ti, " %s/%u", tvb_ip6_to_str(pinfo->pool, tvb, opt_offset), prefix_len);
                 opt_offset += 16;
 
                 break;
@@ -3110,8 +3107,7 @@ dissect_icmpv6_rpl_opt(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree
         opt_offset = offset;
 
         /* Option type */
-        proto_tree_add_item(icmp6opt_tree, hf_icmpv6_rpl_opt_type, tvb, opt_offset, 1, ENC_BIG_ENDIAN);
-        opt_type = tvb_get_uint8(tvb, opt_offset);
+        proto_tree_add_item_ret_uint8(icmp6opt_tree, hf_icmpv6_rpl_opt_type, tvb, opt_offset, 1, ENC_BIG_ENDIAN, &opt_type);
         opt_offset += 1;
 
         /* Add option name to option root label */
@@ -4336,8 +4332,7 @@ dissect_rrenum(tvbuff_t *tvb, int rr_offset, packet_info *pinfo, proto_tree *tre
             up_tree = proto_item_add_subtree(ti_up, ett_icmpv6_rr_up);
 
             /* UseLen */
-            proto_tree_add_item(up_tree, hf_icmpv6_rr_pco_up_uselen, tvb, rr_offset, 1, ENC_BIG_ENDIAN);
-            uselen = tvb_get_uint8(tvb, rr_offset);
+            proto_tree_add_item_ret_uint8(up_tree, hf_icmpv6_rr_pco_up_uselen, tvb, rr_offset, 1, ENC_BIG_ENDIAN, &uselen);
             rr_offset += 1;
 
             /* KeepLen */

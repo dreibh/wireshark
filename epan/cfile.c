@@ -14,8 +14,7 @@
 #include <glib.h>
 
 #include <epan/packet.h>
-
-#include "cfile.h"
+#include <epan/cfile.h>
 
 void
 cap_file_init(capture_file *cf)

@@ -45,7 +45,7 @@
 #include <epan/color_filters.h>
 #include <epan/secrets.h>
 
-#include "cfile.h"
+#include <epan/cfile.h>
 #include "file.h"
 #include "fileset.h"
 

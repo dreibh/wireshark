@@ -14,7 +14,7 @@
 #include <QMimeData>
 #include <QTabBar>
 
-#include "cfile.h"
+#include <epan/cfile.h>
 
 #include <app/application_flavor.h>
 

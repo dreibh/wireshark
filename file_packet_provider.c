@@ -11,7 +11,7 @@
 
 #include <stdint.h>
 #include <glib.h>
-#include "cfile.h"
+#include <epan/cfile.h>
 #include "wiretap/wtap.h"
 #include "wiretap/wtap_opttypes.h"
 

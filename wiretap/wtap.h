@@ -1600,6 +1600,7 @@ typedef struct hashipv6 {
     uint8_t           flags;          /* B0 dummy_entry, B1 resolve, B2 If the address is used in the trace */
     char              ip6[WS_INET6_ADDRSTRLEN];
     char              name[MAXDNSNAMELEN];
+    char              cidr_addr[WS_INET6_CIDRADDRSTRLEN];
 } hashipv6_t;
 
 /** A struct with lists of resolved addresses.

@@ -12,7 +12,7 @@
 
 #include <config.h>
 
-#include "cfile.h"
+#include <epan/cfile.h>
 
 #include <epan/column.h>
 #include <epan/packet.h>

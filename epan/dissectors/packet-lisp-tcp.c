@@ -461,13 +461,11 @@ dissect_lisp_tcp_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, vo
     message_tree = proto_item_add_subtree(tim, ett_lisp_tcp);
 
     /* Message type (2 bytes) */
-    type = tvb_get_ntohs(tvb, offset);
-    proto_tree_add_item(message_tree, hf_lisp_tcp_message_type, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint16(message_tree, hf_lisp_tcp_message_type, tvb, offset, 2, ENC_BIG_ENDIAN, &type);
     offset += 2;
 
     /* Message length (2 bytes) */
-    len = tvb_get_ntohs(tvb, offset);
-    til = proto_tree_add_item(message_tree, hf_lisp_tcp_message_length, tvb, offset, 2, ENC_BIG_ENDIAN);
+    til = proto_tree_add_item_ret_uint16(message_tree, hf_lisp_tcp_message_length, tvb, offset, 2, ENC_BIG_ENDIAN, &len);
     offset += 2;
 
     if (len < 8) {
