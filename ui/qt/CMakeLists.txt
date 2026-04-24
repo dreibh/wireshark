@@ -178,6 +178,9 @@ set(WIRESHARK_QT_HEADERS
 	decode_as_dialog.h
 	display_filter_expression_dialog.h
 	dissector_tables_dialog.h
+	dis_audio_stream.h
+	dis_stream_dialog.h
+	dis_stream_analysis_dialog.h
 	enabled_protocols_dialog.h
 	endpoint_dialog.h
 	expert_info_dialog.h
@@ -466,6 +469,9 @@ set(WIRESHARK_QT_SRC
 	decode_as_dialog.cpp
 	display_filter_expression_dialog.cpp
 	dissector_tables_dialog.cpp
+	dis_audio_stream.cpp
+	dis_stream_dialog.cpp
+	dis_stream_analysis_dialog.cpp
 	enabled_protocols_dialog.cpp
 	endpoint_dialog.cpp
 	export_dissection_dialog.cpp

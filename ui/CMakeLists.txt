@@ -45,6 +45,7 @@ set(NONGENERATED_UI_SRC
 	tap-rlc-graph.c
 	tap-tcp-stream.c
 	tap-aggregation.c
+	tap-dis-common.c
 	text_import.c
 	text_import_regex.c
 	time_shift.c
@@ -59,6 +60,7 @@ file(GLOB EXTRA_UI_HEADERS
 	rtp_stream.h
 	rtp_stream_id.h
 	tap-iax2-analysis.h
+	tap-dis-common.h
 	tap-rtp-analysis.h
 	tap-aggregation.h
 )

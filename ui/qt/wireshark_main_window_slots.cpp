@@ -101,6 +101,7 @@ DIAG_ON(frame-larger-than=)
 #include "conversation_hash_tables_dialog.h"
 #include "enabled_protocols_dialog.h"
 #include "decode_as_dialog.h"
+#include "dis_stream_dialog.h"
 #include <ui/qt/widgets/display_filter_edit.h>
 #include "display_filter_expression_dialog.h"
 #include "dissector_tables_dialog.h"
@@ -3795,6 +3796,8 @@ void WiresharkMainWindow::showPlotDialog(const QString& y_field, bool filtered)
 
 void WiresharkMainWindow::connectTelephonyMenuActions()
 {
+    connect(action_telephony_dis_streams_, &QAction::triggered, this, &WiresharkMainWindow::openTelephonyDisStreamsDialog);
+
     connect(main_ui_->actionTelephonyVoipCalls, &QAction::triggered, this, [=]() {
                 VoipCallsDialog *dialog = VoipCallsDialog::openVoipCallsDialogVoip(*this, capture_file_, packet_list_);
                 dialog->show();
@@ -3847,6 +3850,14 @@ void WiresharkMainWindow::connectTelephonyMenuActions()
         VoipCallsDialog *dialog = VoipCallsDialog::openVoipCallsDialogSip(*this, capture_file_, packet_list_);
         dialog->show();
     });
+}
+
+DisStreamDialog *WiresharkMainWindow::openTelephonyDisStreamsDialog()
+{
+    DisStreamDialog *dialog = DisStreamDialog::openDisStreamDialog(*this, capture_file_, packet_list_);
+    dialog->show();
+
+    return dialog;
 }
 
 RtpPlayerDialog *WiresharkMainWindow::openTelephonyRtpPlayerDialog()

@@ -1362,6 +1362,12 @@ Data collected is number of request and response pairs of each Diameter
 command code, Minimum SRT, Maximum SRT, Average SRT, and Sum SRT.
 Currently no statistics are gathered on unpaired messages.
 
+*-z* dis,streams::
+Collect statistics for all DIS radio streams discovered by the `dis` tap.
+The output includes start and end times, endpoints, radio and entity IDs,
+signal and transmitter packet counts, estimated lost packets, and jitter
+metrics derived from DIS transmitter timestamps.
+
 *-z* dns,tree[,__filter__]::
 Create a summary of the captured DNS packets. General information are collected
 such as qtype and qclass distribution. For some data (as qname length or DNS

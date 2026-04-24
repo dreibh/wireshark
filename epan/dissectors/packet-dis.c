@@ -25,10 +25,12 @@
 #include <epan/epan.h>
 #include <epan/tfs.h>
 #include <epan/expert.h>
+#include <epan/tap.h>
 
 #include <wsutil/ws_padding_to.h>
 
 #include "packet-link16.h"
+#include "packet-dis.h"
 
 #define DEFAULT_DIS_UDP_PORT 3000 /* Not IANA registered */
 
@@ -37,12 +39,19 @@
 
 // Global hash table to store previous EntityStatePDU EntityIdentifier
 static wmem_map_t *packet_context_map = NULL;
+static int dis_tap = -1;
 
 // Structure to hold this EntityStatePDU entitykind and entitydomain
 typedef struct {
     uint8_t entity_kind;
     uint8_t entity_domain;
 } packet_context_t;
+
+static void dis_reset_tap_info(dis_tap_info_t *dis_info)
+{
+    memset(dis_info, 0, sizeof(*dis_info));
+    dis_info->info_payload_type = DIS_PAYLOAD_TYPE_INVALID;
+}
 /* SISO-REF-010-2023 Version 34 draft d11 - 21 July 2024 XML generated Content Begin */
 /*  	Reprinted with permission from SISO Inc.    */
 
@@ -19029,31 +19038,47 @@ static int dissect_DIS_PARSER_IFF_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_t
 
 /* DIS Radio Communications protocol (RCP) family PDUs
  */
-static int dissect_DIS_PARSER_TRANSMITTER_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+static int dissect_DIS_PARSER_TRANSMITTER_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, dis_tap_info_t *dis_info)
 {
     proto_item* ti;
     proto_tree* sub_tree;
     uint32_t radioID, disRadioTransmitState, modulationParamLength;
+    uint8_t disRadioSource;
     uint16_t systemModulation;
+
+    dis_info->info_valid_radio_pdu_tap = true;
+    dis_info->info_pdu_type = DIS_TAP_PDU_TRANSMITTER;
+    dis_info->info_entity_id_site = tvb_get_ntohs(tvb, offset);
+    dis_info->info_entity_id_appl = tvb_get_ntohs(tvb, offset + 2);
+    dis_info->info_entity_id_entity = tvb_get_ntohs(tvb, offset + 4);
 
     offset = parseField_Entity(tvb, tree, offset, "Entity ID", NULL);
 
     proto_tree_add_item(tree, hf_dis_radio_id, tvb, offset, 2, ENC_BIG_ENDIAN);
     radioID = tvb_get_ntohs(tvb, offset);
+    dis_info->info_radio_id = (uint16_t)radioID;
     col_append_fstr( pinfo->cinfo, COL_INFO, ", RadioID=%u", radioID);
     offset += 2;
 
     offset = dissect_DIS_FIELDS_RADIO_ENTITY_TYPE(tvb, tree, offset, "Radio Entity Type");
 
     disRadioTransmitState = tvb_get_uint8(tvb, offset);
+    dis_info->info_transmit_state = (uint8_t)disRadioTransmitState;
     proto_tree_add_item(tree, hf_dis_radio_transmit_state, tvb, offset, 1, ENC_BIG_ENDIAN);
     col_append_fstr( pinfo->cinfo, COL_INFO, ", Transmit State=%s", val_to_str_const(disRadioTransmitState, DIS_PDU_Transmitter_Transmit_State_Strings, "Unknown Transmit State"));
     offset++;
 
+    disRadioSource = tvb_get_uint8(tvb, offset);
+    dis_info->info_radio_input_source = disRadioSource;
     proto_tree_add_item(tree, hf_dis_radio_input_source, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset++;
 
     proto_tree_add_item(tree, hf_dis_padding, tvb, offset, 2, ENC_NA);
+    dis_info->info_payload_offset = 0;
+    dis_info->info_payload_len = 0;
+    dis_info->info_all_data_present = tvb_captured_length(tvb) >= tvb_reported_length(tvb);
+    dis_info->info_data = tvb_get_ptr(tvb, 0, tvb_captured_length(tvb));
+
     offset += 2;
 
     sub_tree = proto_tree_add_subtree(tree, tvb, offset, 24, ett_antenna_location, NULL, "Antenna Location");
@@ -19224,22 +19249,36 @@ static int dissect_DIS_PARSER_INTERCOM_CONTROL_PDU(tvbuff_t *tvb, packet_info *p
     return offset;
 }
 
-static int dissect_DIS_PARSER_SIGNAL_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+static int dissect_DIS_PARSER_SIGNAL_PDU(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint8_t pduType, dis_tap_info_t *dis_info)
 {
     proto_item* ti;
     proto_tree* sub_tree;
     uint32_t radioID, encodingScheme, numSamples;
     uint16_t tdlType;
+    int captured_remaining;
+    int reported_remaining;
     uint8_t messageType;
+
+    dis_info->info_valid_radio_pdu_tap = true;
+    dis_info->info_pdu_type = pduType;
+    dis_info->info_entity_id_site = tvb_get_ntohs(tvb, offset);
+    dis_info->info_entity_id_appl = tvb_get_ntohs(tvb, offset + 2);
+    dis_info->info_entity_id_entity = tvb_get_ntohs(tvb, offset + 4);
 
     offset = parseField_Entity(tvb, tree, offset, "Entity ID", NULL);
 
     proto_tree_add_item(tree, hf_dis_radio_id, tvb, offset, 2, ENC_BIG_ENDIAN);
     radioID = tvb_get_ntohs(tvb, offset);
+    dis_info->info_radio_id = (uint16_t)radioID;
     col_append_fstr( pinfo->cinfo, COL_INFO, ", RadioID=%u", radioID);
     offset += 2;
 
     encodingScheme = tvb_get_ntohs(tvb, offset);
+    if (((encodingScheme & 0xC000) >> 14) == DIS_ENCODING_CLASS_ENCODED_AUDIO) {
+        dis_info->info_payload_type = (uint8_t)DIS_ENCODING_TYPE(encodingScheme);
+        dis_info->info_payload_type_str = val_to_str_const(DIS_ENCODING_TYPE(encodingScheme),
+            DIS_PDU_Signal_Encoding_Type_Strings, "Unknown");
+    }
     if ((encodingScheme & 0xC000) >> 14 == DIS_ENCODING_CLASS_ENCODED_AUDIO)
         col_append_fstr(pinfo->cinfo, COL_INFO,", Encoding Type=%s",
             val_to_str_const(DIS_ENCODING_TYPE(encodingScheme),
@@ -19270,6 +19309,8 @@ static int dissect_DIS_PARSER_SIGNAL_PDU(tvbuff_t *tvb, packet_info *pinfo, prot
         col_append_fstr(pinfo->cinfo, COL_INFO, ", Number of Samples=%u", numSamples);
     offset += 2;
 
+    dis_info->info_payload_offset = offset;
+
     if (tdlType == DIS_PDU_SIGNAL_TDL_TYPE_LINK_16_STANDARDIZED_FORMAT_JTIDS_MIDS_TADIL_J) {
         offset = parse_DIS_FIELDS_SIGNAL_LINK16_NETWORK_HEADER(tvb, tree, offset, &messageType);
 
@@ -19281,6 +19322,18 @@ static int dissect_DIS_PARSER_SIGNAL_PDU(tvbuff_t *tvb, packet_info *pinfo, prot
         proto_tree_add_item(tree, hf_dis_signal_data, tvb, offset, -1, ENC_NA );
         offset += tvb_reported_length_remaining(tvb, offset);
     }
+
+    captured_remaining = tvb_captured_length_remaining(tvb, dis_info->info_payload_offset);
+    reported_remaining = tvb_reported_length_remaining(tvb, dis_info->info_payload_offset);
+    if (captured_remaining < 0) {
+        captured_remaining = 0;
+    }
+    if (reported_remaining < 0) {
+        reported_remaining = 0;
+    }
+    dis_info->info_payload_len = (unsigned)captured_remaining;
+    dis_info->info_all_data_present = captured_remaining >= reported_remaining;
+    dis_info->info_data = tvb_get_ptr(tvb, 0, tvb_captured_length(tvb));
     /* ****ck******* need to look for padding bytes */
 
     return offset;
@@ -20488,7 +20541,7 @@ static int parse_persistent_pdu_payload(tvbuff_t* tvb, packet_info* pinfo, proto
     }
 }
 
-static int parse_pdu_payload(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, int offset, uint8_t pduType)
+static int parse_pdu_payload(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, int offset, uint8_t pduType, dis_tap_info_t *dis_info)
 {
     switch (pduType)
     {
@@ -20511,10 +20564,10 @@ static int parse_pdu_payload(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree
         return dissect_DIS_PARSER_DESIGNATOR_PDU(tvb, pinfo, tree, offset);
     /* DIS Radio Communications protocol (RCP) family PDUs */
     case DIS_PDUTYPE_TRANSMITTER:
-        return dissect_DIS_PARSER_TRANSMITTER_PDU(tvb, pinfo, tree, offset);
+          return dissect_DIS_PARSER_TRANSMITTER_PDU(tvb, pinfo, tree, offset, dis_info);
     case DIS_PDUTYPE_SIGNAL:
     case DIS_PDUTYPE_INTERCOM_SIGNAL:
-        return dissect_DIS_PARSER_SIGNAL_PDU(tvb, pinfo, tree, offset);
+          return dissect_DIS_PARSER_SIGNAL_PDU(tvb, pinfo, tree, offset, pduType, dis_info);
     case DIS_PDUTYPE_RECEIVER:
         return dissect_DIS_PARSER_RECEIVER_PDU(tvb, pinfo, tree, offset);
     case DIS_PDUTYPE_INTERCOM_CONTROL:
@@ -20602,6 +20655,9 @@ static int dissect_dis(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
 
     dis_header_t header;
     uint8_t persistentObjectPduType;
+    dis_tap_info_t *dis_info = wmem_new0(pinfo->pool, dis_tap_info_t);
+
+    dis_reset_tap_info(dis_info);
 
     /* DIS packets must be at least 12 bytes long.  DIS uses port 3000, by
      * default, but the Cisco Redundant Link Management protocol can also use
@@ -20627,6 +20683,7 @@ static int dissect_dis(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
      */
     dis_header_tree = proto_tree_add_subtree(dis_tree, tvb, offset, 12, ett_dis_header, NULL, "Header");
     offset = parseDISHeader(tvb, dis_header_tree, offset, &header);
+    dis_info->info_tx_timestamp = tvb_get_ntohl(tvb, 4);
 
     /* Locate the string name for the PDU type enumeration,
      * or default to "Unknown".
@@ -20680,7 +20737,7 @@ static int dissect_dis(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
         }
         else
         {
-            offset = parse_pdu_payload(tvb, pinfo, dis_payload_tree, offset, header.pduType);
+            offset = parse_pdu_payload(tvb, pinfo, dis_payload_tree, offset, header.pduType, dis_info);
         }
     }
 
@@ -20689,6 +20746,11 @@ static int dissect_dis(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void
     if (offset != offsetBeforePayloadParse)
     {
         proto_item_set_end(dis_payload_node, tvb, offset);
+    }
+
+    if ((dis_tap != -1) && dis_info->info_valid_radio_pdu_tap)
+    {
+        tap_queue_packet(dis_tap, pinfo, dis_info);
     }
 
     return tvb_captured_length(tvb);
@@ -23249,6 +23311,7 @@ void proto_register_dis(void)
     proto_register_subtree_array(ett, array_length(ett));
 
     dis_dissector_handle = register_dissector("dis", dissect_dis, proto_dis);
+    dis_tap = register_tap("dis");
 
     expert_dis = expert_register_protocol(proto_dis);
     expert_register_field_array(expert_dis, ei, array_length(ei));

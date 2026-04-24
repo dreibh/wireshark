@@ -390,28 +390,6 @@ Fedora RPM Package:
 #     - tshark --version
 #  needs: [ 'Fedora RPM Package' ]
 
-openSUSE 15.6 RPM Package:
-  extends: .build-rpm
-  image: registry.gitlab.com/wireshark/wireshark-containers/opensuse-15.6-dev
-  script:
-    # Workaround for the default gcc being 7.5.0, which has incomplete C++17
-    - source /gcc-latest.env
-    # Shared GitLab runners limit the log size to 4M, so reduce verbosity. See
-    # https://gitlab.com/gitlab-com/support-forum/issues/2790
-    - export FORCE_CMAKE_NINJA_NON_VERBOSE=1
-    - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
-    - cmake -G Ninja ..
-    - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
-    - ninja wireshark_rpm
-
-openSUSE 15.6 RPM Test:
-  extends: .test-rpm
-  image: registry.gitlab.com/wireshark/wireshark-containers/opensuse-15.6-dev
-  script:
-    - zypper --no-gpg-checks --no-remote install -y build/packaging/rpm/RPMS/x86_64/*.rpm
-    - tshark --version
-  needs: [ 'openSUSE 15.6 RPM Package' ]
-
 openSUSE 16.0 RPM Package:
   extends: .build-rpm
   image: registry.gitlab.com/wireshark/wireshark-containers/opensuse-16.0-dev
@@ -953,7 +931,8 @@ Clang + Code Checks:
   # needs: [ 'Commit Check' ]
   script:
     - source /clang-latest.env
-    - apt-get update && apt-get --yes install python3-venv
+    - export PYTHON_MINOR_VERSION="$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+    - apt-get update && apt-get --yes install python3-venv "python${PYTHON_MINOR_VERSION}-venv"
     - python3 -m venv $CI_PROJECT_DIR/.venv
     - source $CI_PROJECT_DIR/.venv/bin/activate
     # build-ubuntu puts us in `build`.

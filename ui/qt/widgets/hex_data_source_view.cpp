@@ -22,6 +22,7 @@
 #include "ui/recent.h"
 
 #include <QActionGroup>
+#include <QKeyEvent>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QScreen>
@@ -29,6 +30,7 @@
 #include <QStyle>
 #include <QStyleOption>
 #include <QTextLayout>
+#include <QToolTip>
 #include <QWindow>
 
 // To do:
@@ -45,6 +47,17 @@
 Q_DECLARE_METATYPE(bytes_view_type)
 Q_DECLARE_METATYPE(bytes_encoding_type)
 Q_DECLARE_METATYPE(DataPrinter::DumpType)
+
+namespace {
+QPoint mouseGlobalPos(const QMouseEvent *event)
+{
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+    return event->globalPosition().toPoint();
+#else
+    return event->globalPos();
+#endif
+}
+} // namespace
 
 HexDataSourceView::HexDataSourceView(const QByteArray &data, packet_char_enc encoding, QWidget *parent) :
     BaseDataSourceView(data, parent),
@@ -66,7 +79,18 @@ HexDataSourceView::HexDataSourceView(const QByteArray &data, packet_char_enc enc
     row_width_(recent.gui_bytes_view == BYTES_BITS ? 8 : 16),
     em_width_(0),
     line_height_(0),
-    allow_hover_selection_(!recent.gui_allow_hover_selection)
+    allow_hover_selection_(!recent.gui_allow_hover_selection),
+    selection_anchor_(-1),
+    selection_start_(-1),
+    selection_end_(-1),
+    selecting_(false),
+    context_byte_offset_(-1),
+    cursor_byte_(-1),
+    hovered_annotation_index_(-1),
+    offset_start_byte_(-1),
+    offset_end_byte_(-1),
+    selected_field_is_protocol_(false),
+    selected_field_use_own_range_(false)
 {
     layout_->setCacheEnabled(true);
 
@@ -93,6 +117,72 @@ HexDataSourceView::~HexDataSourceView()
     delete(layout_);
 }
 
+void HexDataSourceView::setAnnotations(const QVector<ByteViewAnnotation> &annotations)
+{
+    annotations_ = annotations;
+    hovered_annotation_index_ = -1;
+    viewport()->update();
+}
+
+bool HexDataSourceView::selectionRange(int *start, int *length) const
+{
+    if (selection_start_ < 0 || selection_end_ < 0) {
+        return false;
+    }
+    int s = qMin(selection_start_, selection_end_);
+    int e = qMax(selection_start_, selection_end_);
+    if (start) {
+        *start = s;
+    }
+    if (length) {
+        *length = e - s + 1;
+    }
+    return true;
+}
+
+int HexDataSourceView::selectionAnchor() const
+{
+    return selection_anchor_;
+}
+
+int HexDataSourceView::selectionEnd() const
+{
+    return selection_end_;
+}
+
+int HexDataSourceView::contextByteOffset() const
+{
+    return context_byte_offset_;
+}
+
+void HexDataSourceView::setOffsetStart(int byte)
+{
+    if (byte < 0 || byte >= data_.size()) {
+        return;
+    }
+    offset_start_byte_ = byte;
+    viewport()->update();
+}
+
+void HexDataSourceView::setOffsetEnd(int byte)
+{
+    if (byte < 0) {
+        offset_end_byte_ = -1;
+    } else if (byte >= data_.size()) {
+        return;
+    } else {
+        offset_end_byte_ = byte;
+    }
+    viewport()->update();
+}
+
+void HexDataSourceView::clearOffsetMarkers()
+{
+    offset_start_byte_ = -1;
+    offset_end_byte_ = -1;
+    viewport()->update();
+}
+
 void HexDataSourceView::createContextMenu()
 {
 
@@ -100,6 +190,26 @@ void HexDataSourceView::createContextMenu()
     action_allow_hover_selection_->setCheckable(true);
     action_allow_hover_selection_->setChecked(true);
     connect(action_allow_hover_selection_, &QAction::toggled, this, &HexDataSourceView::toggleHoverAllowed);
+    ctx_menu_.addSeparator();
+
+    action_add_annotation_ = ctx_menu_.addAction(tr("Add annotation…"));
+    connect(action_add_annotation_, &QAction::triggered, this, &HexDataSourceView::requestAddAnnotation);
+
+    action_edit_annotation_ = ctx_menu_.addAction(tr("Edit annotation…"));
+    connect(action_edit_annotation_, &QAction::triggered, this, &HexDataSourceView::requestEditAnnotation);
+
+    action_remove_annotation_ = ctx_menu_.addAction(tr("Remove annotation"));
+    connect(action_remove_annotation_, &QAction::triggered, this, &HexDataSourceView::requestRemoveAnnotation);
+
+    action_set_offset_start_ = ctx_menu_.addAction(tr("Start byte for offset"));
+    connect(action_set_offset_start_, &QAction::triggered, this, &HexDataSourceView::requestSetOffsetStart);
+
+    action_set_offset_end_ = ctx_menu_.addAction(tr("End byte for offset"));
+    connect(action_set_offset_end_, &QAction::triggered, this, &HexDataSourceView::requestSetOffsetEnd);
+
+    action_clear_offset_markers_ = ctx_menu_.addAction(tr("Clear offset markers"));
+    connect(action_clear_offset_markers_, &QAction::triggered, this, &HexDataSourceView::requestClearOffsetMarkers);
+
     ctx_menu_.addSeparator();
 
     QActionGroup * copy_actions = DataPrinter::copyActions(this);
@@ -160,6 +270,36 @@ void HexDataSourceView::toggleHoverAllowed(bool checked)
     }
 }
 
+void HexDataSourceView::requestAddAnnotation()
+{
+    emit addAnnotationRequested();
+}
+
+void HexDataSourceView::requestEditAnnotation()
+{
+    emit editAnnotationRequested();
+}
+
+void HexDataSourceView::requestRemoveAnnotation()
+{
+    emit removeAnnotationRequested();
+}
+
+void HexDataSourceView::requestSetOffsetStart()
+{
+    emit offsetStartRequested(context_byte_offset_);
+}
+
+void HexDataSourceView::requestSetOffsetEnd()
+{
+    emit offsetEndRequested(context_byte_offset_);
+}
+
+void HexDataSourceView::requestClearOffsetMarkers()
+{
+    emit offsetMarkersCleared();
+}
+
 void HexDataSourceView::updateContextMenu()
 {
     if (ctx_menu_.isEmpty()) {
@@ -193,6 +333,33 @@ void HexDataSourceView::updateContextMenu()
     case BYTES_ENC_EBCDIC:
         action_bytes_enc_ebcdic_->setChecked(true);
         break;
+    }
+
+    if (action_add_annotation_) {
+        int sel_start = -1;
+        int sel_length = 0;
+        bool has_selection = selectionRange(&sel_start, &sel_length);
+        if (!has_selection && context_byte_offset_ >= 0) {
+            sel_start = context_byte_offset_;
+            sel_length = 1;
+            has_selection = true;
+        }
+
+        int ann_idx = annotationIndexAt(context_byte_offset_);
+        if (ann_idx < 0 && has_selection) {
+            ann_idx = annotationIndexIntersecting(sel_start, sel_length);
+        }
+
+        action_add_annotation_->setEnabled(has_selection);
+        action_edit_annotation_->setEnabled(ann_idx >= 0);
+        action_remove_annotation_->setEnabled(ann_idx >= 0);
+    }
+
+    if (action_set_offset_start_) {
+        bool has_byte = context_byte_offset_ >= 0;
+        action_set_offset_start_->setEnabled(has_byte);
+        action_set_offset_end_->setEnabled(has_byte);
+        action_clear_offset_markers_->setEnabled(offset_start_byte_ >= 0 || offset_end_byte_ >= 0);
     }
 }
 
@@ -233,6 +400,8 @@ void HexDataSourceView::unmarkField()
     field_len_ = 0;
     field_a_start_ = 0;
     field_a_len_ = 0;
+    selected_field_is_protocol_ = false;
+    selected_field_use_own_range_ = false;
     viewport()->update();
 }
 
@@ -364,15 +533,35 @@ void HexDataSourceView::mousePressEvent (QMouseEvent *event) {
     // - Triggers selectedFieldChanged in ProtoTree, which clears the
     //   selection and selects the corresponding (or no) item.
 
-    const int byte_offset = byteOffsetAtPixel(event->pos());
+    const int byte_offset = byteOffsetAtPixel(event->pos(), true);
+    if (byte_offset < 0) {
+        return;
+    }
+
+    setFocus(Qt::MouseFocusReason);
+    selecting_ = true;
     setUpdatesEnabled(false);
-    emit byteSelected(byte_offset);
+    updateSelection(byte_offset, event->modifiers() & Qt::ShiftModifier, true);
     viewport()->update();
     setUpdatesEnabled(true);
 }
 
 void HexDataSourceView::mouseMoveEvent(QMouseEvent *event)
 {
+    if (!event) {
+        return;
+    }
+
+    if (selecting_ && (event->buttons() & Qt::LeftButton)) {
+        int byte_offset = byteOffsetAtPixel(event->pos(), true);
+        if (byte_offset >= 0) {
+            updateSelection(byte_offset, true, false);
+            viewport()->update();
+        }
+    }
+
+    updateAnnotationToolTip(byteOffsetAtPixel(event->pos(), true), mouseGlobalPos(event));
+
     if (allow_hover_selection_ ||
         (!allow_hover_selection_ && event->modifiers() & Qt::ControlModifier)) {
         return;
@@ -387,6 +576,20 @@ void HexDataSourceView::mouseMoveEvent(QMouseEvent *event)
     viewport()->update();
 }
 
+void HexDataSourceView::mouseReleaseEvent(QMouseEvent *event)
+{
+    if (event && event->button() == Qt::LeftButton) {
+        selecting_ = false;
+        int byte_offset = byteOffsetAtPixel(event->pos(), true);
+        if (byte_offset >= 0) {
+            updateSelection(byte_offset, true, false);
+            viewport()->update();
+        }
+    }
+
+    QAbstractScrollArea::mouseReleaseEvent(event);
+}
+
 void HexDataSourceView::leaveEvent(QEvent *event)
 {
     field_hover_start_ = 0;
@@ -395,6 +598,8 @@ void HexDataSourceView::leaveEvent(QEvent *event)
     emit byteHovered(hovered_byte_offset_);
 
     viewport()->update();
+    hovered_annotation_index_ = -1;
+    QToolTip::hideText();
     QAbstractScrollArea::leaveEvent(event);
 }
 
@@ -403,7 +608,55 @@ void HexDataSourceView::contextMenuEvent(QContextMenuEvent *event)
     if (ctx_menu_.isEmpty()) {
         createContextMenu();
     }
+    context_byte_offset_ = byteOffsetAtPixel(event->pos(), true);
+    updateContextMenu();
     ctx_menu_.popup(event->globalPos());
+}
+
+void HexDataSourceView::keyPressEvent(QKeyEvent *event)
+{
+    if (!event || data_.isEmpty()) {
+        QAbstractScrollArea::keyPressEvent(event);
+        return;
+    }
+
+    int new_byte = cursor_byte_ >= 0 ? cursor_byte_ : 0;
+    bool handled = true;
+
+    switch (event->key()) {
+    case Qt::Key_Left:
+        new_byte -= 1;
+        break;
+    case Qt::Key_Right:
+        new_byte += 1;
+        break;
+    case Qt::Key_Up:
+        new_byte -= row_width_;
+        break;
+    case Qt::Key_Down:
+        new_byte += row_width_;
+        break;
+    case Qt::Key_Home:
+        new_byte = 0;
+        break;
+    case Qt::Key_End:
+        new_byte = dataSize() - 1;
+        break;
+    default:
+        handled = false;
+        break;
+    }
+
+    if (!handled) {
+        QAbstractScrollArea::keyPressEvent(event);
+        return;
+    }
+
+    new_byte = qBound(0, new_byte, dataSize() - 1);
+    updateSelection(new_byte, event->modifiers() & Qt::ShiftModifier, true);
+    scrollToByte(new_byte);
+    viewport()->update();
+    event->accept();
 }
 
 // Private
@@ -435,6 +688,30 @@ void HexDataSourceView::drawLine(QPainter *painter, const int offset, const int 
     int tvb_len = static_cast<int>(data_.size());
     int max_tvb_pos = qMin(offset + row_width_, tvb_len) - 1;
     QList<QTextLayout::FormatRange> fmt_list;
+    int sel_start = -1;
+    int sel_length = 0;
+    bool has_selection = selectionRange(&sel_start, &sel_length);
+    QColor sel_bg;
+    QColor sel_fg;
+    QColor sel_overlay;
+    if (has_selection) {
+        sel_bg = palette().highlight().color();
+        sel_overlay = sel_bg;
+        sel_overlay.setAlphaF(qreal(0.35f));
+        sel_fg = ColorUtils::contrastingTextColor(sel_overlay);
+    }
+    QColor marker_start_bg = ColorUtils::expert_color_note;
+    QColor marker_end_bg = ColorUtils::expert_color_error;
+    marker_start_bg.setAlphaF(qreal(0.7f));
+    marker_end_bg.setAlphaF(qreal(0.7f));
+    auto intersects = [](int a_start, int a_len, int b_start, int b_len) -> bool {
+        if (a_len <= 0 || b_len <= 0) {
+            return false;
+        }
+        int a_end = a_start + a_len - 1;
+        int b_end = b_start + b_len - 1;
+        return a_start <= b_end && a_end >= b_start;
+    };
 
     static const char hexchars[16] = {
         '0', '1', '2', '3', '4', '5', '6', '7',
@@ -529,6 +806,38 @@ void HexDataSourceView::drawLine(QPainter *painter, const int offset, const int 
         }
         addHexFormatRange(fmt_list, field_a_start_, field_a_len_, offset, max_tvb_pos, ModeField);
         addHexFormatRange(fmt_list, field_hover_start_, field_hover_len_, offset, max_tvb_pos, ModeHover);
+        if (has_selection) {
+            addHexCustomRange(fmt_list, sel_start, sel_length, offset, max_tvb_pos, sel_overlay, sel_fg);
+        }
+        for (const ByteViewAnnotation &ann : annotations_) {
+            if (ann.length <= 0) {
+                continue;
+            }
+            bool overlaps_selection = has_selection && intersects(ann.start, ann.length, sel_start, sel_length);
+            bool overlaps_field = intersects(ann.start, ann.length, field_start_, field_len_) ||
+                    intersects(ann.start, ann.length, field_a_start_, field_a_len_) ||
+                    intersects(ann.start, ann.length, field_hover_start_, field_hover_len_);
+            QColor ann_bg = ann.color;
+            if (overlaps_selection) {
+                QColor blended = QColor::fromRgb(ColorUtils::alphaBlend(ann_bg, sel_bg, 0.7));
+                blended.setAlpha(ann_bg.alpha());
+                ann_bg = blended;
+            }
+            if (overlaps_field) {
+                qreal alpha = ann_bg.alphaF();
+                ann_bg.setAlphaF(qMax(alpha * qreal(0.65f), qreal(0.35f)));
+            }
+            addHexCustomRange(fmt_list, ann.start, ann.length, offset, max_tvb_pos, ann_bg,
+                              ColorUtils::contrastingTextColor(ann_bg));
+        }
+        if (offset_start_byte_ >= 0) {
+            addHexCustomRange(fmt_list, offset_start_byte_, 1, offset, max_tvb_pos,
+                              marker_start_bg, ColorUtils::contrastingTextColor(marker_start_bg));
+        }
+        if (offset_end_byte_ >= 0) {
+            addHexCustomRange(fmt_list, offset_end_byte_, 1, offset, max_tvb_pos,
+                              marker_end_bg, ColorUtils::contrastingTextColor(marker_end_bg));
+        }
     }
 
     // ASCII
@@ -608,6 +917,38 @@ void HexDataSourceView::drawLine(QPainter *painter, const int offset, const int 
         }
         addAsciiFormatRange(fmt_list, field_a_start_, field_a_len_, offset, max_tvb_pos, ModeField);
         addAsciiFormatRange(fmt_list, field_hover_start_, field_hover_len_, offset, max_tvb_pos, ModeHover);
+        if (has_selection) {
+            addAsciiCustomRange(fmt_list, sel_start, sel_length, offset, max_tvb_pos, sel_overlay, sel_fg);
+        }
+        for (const ByteViewAnnotation &ann : annotations_) {
+            if (ann.length <= 0) {
+                continue;
+            }
+            bool overlaps_selection = has_selection && intersects(ann.start, ann.length, sel_start, sel_length);
+            bool overlaps_field = intersects(ann.start, ann.length, field_start_, field_len_) ||
+                    intersects(ann.start, ann.length, field_a_start_, field_a_len_) ||
+                    intersects(ann.start, ann.length, field_hover_start_, field_hover_len_);
+            QColor ann_bg = ann.color;
+            if (overlaps_selection) {
+                QColor blended = QColor::fromRgb(ColorUtils::alphaBlend(ann_bg, sel_bg, 0.7));
+                blended.setAlpha(ann_bg.alpha());
+                ann_bg = blended;
+            }
+            if (overlaps_field) {
+                qreal alpha = ann_bg.alphaF();
+                ann_bg.setAlphaF(qMax(alpha * qreal(0.65f), qreal(0.35f)));
+            }
+            addAsciiCustomRange(fmt_list, ann.start, ann.length, offset, max_tvb_pos, ann_bg,
+                                ColorUtils::contrastingTextColor(ann_bg));
+        }
+        if (offset_start_byte_ >= 0) {
+            addAsciiCustomRange(fmt_list, offset_start_byte_, 1, offset, max_tvb_pos,
+                                marker_start_bg, ColorUtils::contrastingTextColor(marker_start_bg));
+        }
+        if (offset_end_byte_ >= 0) {
+            addAsciiCustomRange(fmt_list, offset_end_byte_, 1, offset, max_tvb_pos,
+                                marker_end_bg, ColorUtils::contrastingTextColor(marker_end_bg));
+        }
     }
 
     // XXX Fields won't be highlighted if neither hex nor ascii are enabled.
@@ -722,6 +1063,180 @@ bool HexDataSourceView::addAsciiFormatRange(QList<QTextLayout::FormatRange> &fmt
     return addFormatRange(fmt_list, fmt_start, fmt_length, mode);
 }
 
+bool HexDataSourceView::addHexCustomRange(QList<QTextLayout::FormatRange> &fmt_list, int mark_start, int mark_length, int tvb_offset, int max_tvb_pos, const QColor &bg, const QColor &fg)
+{
+    if (mark_start < 0 || mark_length < 1) {
+        return false;
+    }
+
+    int tvb_len = static_cast<int>(data_.size());
+    int mark_end = mark_start + mark_length - 1;
+    if (mark_start >= tvb_len) {
+        return false;
+    }
+    mark_end = qMin(mark_end, tvb_len - 1);
+    if (mark_start > max_tvb_pos && mark_end < tvb_offset) {
+        return false;
+    }
+
+    int chars_per_byte;
+    switch (recent.gui_bytes_view) {
+    case BYTES_HEX:
+        chars_per_byte = 2;
+        break;
+    case BYTES_BITS:
+        chars_per_byte = 8;
+        break;
+    case BYTES_DEC:
+    case BYTES_OCT:
+        chars_per_byte = 3;
+        break;
+    default:
+        ws_assert_not_reached();
+    }
+    int chars_plus_pad = chars_per_byte + 1;
+    int byte_start = qMax(tvb_offset, mark_start) - tvb_offset;
+    int byte_end = qMin(max_tvb_pos, mark_end) - tvb_offset;
+    if (byte_end < byte_start) {
+        return false;
+    }
+    int fmt_start = offsetChars() + 1 // offset + spacing
+            + (byte_start / separator_interval_)
+            + (byte_start * chars_plus_pad);
+    int fmt_length = offsetChars() + 1 // offset + spacing
+            + (byte_end / separator_interval_)
+            + (byte_end * chars_plus_pad)
+            + chars_per_byte
+            - fmt_start;
+
+    QTextLayout::FormatRange format_range;
+    format_range.start = fmt_start;
+    format_range.length = fmt_length;
+    format_range.format.setBackground(bg);
+    format_range.format.setForeground(fg);
+    fmt_list << format_range;
+    return true;
+}
+
+bool HexDataSourceView::addAsciiCustomRange(QList<QTextLayout::FormatRange> &fmt_list, int mark_start, int mark_length, int tvb_offset, int max_tvb_pos, const QColor &bg, const QColor &fg)
+{
+    if (mark_start < 0 || mark_length < 1) {
+        return false;
+    }
+
+    int tvb_len = static_cast<int>(data_.size());
+    int mark_end = mark_start + mark_length - 1;
+    if (mark_start >= tvb_len) {
+        return false;
+    }
+    mark_end = qMin(mark_end, tvb_len - 1);
+    if (mark_start > max_tvb_pos && mark_end < tvb_offset) {
+        return false;
+    }
+
+    int byte_start = qMax(tvb_offset, mark_start) - tvb_offset;
+    int byte_end = qMin(max_tvb_pos, mark_end) - tvb_offset;
+    if (byte_end < byte_start) {
+        return false;
+    }
+    int fmt_start = offsetChars() + DataPrinter::hexChars() + 3 // offset + hex + spacing
+            + (byte_start / separator_interval_)
+            + byte_start;
+    int fmt_length = offsetChars() + DataPrinter::hexChars() + 3 // offset + hex + spacing
+            + (byte_end / separator_interval_)
+            + byte_end
+            + 1 // Just one character.
+            - fmt_start;
+
+    QTextLayout::FormatRange format_range;
+    format_range.start = fmt_start;
+    format_range.length = fmt_length;
+    format_range.format.setBackground(bg);
+    format_range.format.setForeground(fg);
+    fmt_list << format_range;
+    return true;
+}
+
+int HexDataSourceView::annotationIndexAt(int byte_offset) const
+{
+    if (byte_offset < 0) {
+        return -1;
+    }
+
+    for (auto i = annotations_.size(); i > 0; ) {
+        --i;
+        const ByteViewAnnotation &ann = annotations_.at(i);
+        if (byte_offset >= ann.start && byte_offset < ann.start + ann.length) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+int HexDataSourceView::annotationIndexIntersecting(int start, int length) const
+{
+    if (start < 0 || length <= 0) {
+        return -1;
+    }
+    int end = start + length - 1;
+
+    for (auto i = annotations_.size(); i > 0; ) {
+        --i;
+        const ByteViewAnnotation &ann = annotations_.at(i);
+        int ann_end = ann.start + ann.length - 1;
+        if (ann.start <= end && ann_end >= start) {
+            return static_cast<int>(i);
+        }
+    }
+    return -1;
+}
+
+void HexDataSourceView::updateSelection(int byte_offset, bool extend, bool emit_signal)
+{
+    if (byte_offset < 0 || byte_offset >= data_.size()) {
+        return;
+    }
+
+    if (!extend || selection_anchor_ < 0) {
+        selection_anchor_ = byte_offset;
+    }
+
+    if (extend) {
+        selection_start_ = selection_anchor_;
+        selection_end_ = byte_offset;
+    } else {
+        selection_start_ = byte_offset;
+        selection_end_ = byte_offset;
+    }
+    cursor_byte_ = byte_offset;
+
+    if (emit_signal) {
+        emit byteSelected(byte_offset);
+    }
+}
+
+void HexDataSourceView::updateAnnotationToolTip(int byte_offset, const QPoint &global_pos)
+{
+    int ann_idx = annotationIndexAt(byte_offset);
+    if (ann_idx == hovered_annotation_index_) {
+        return;
+    }
+
+    hovered_annotation_index_ = ann_idx;
+    if (ann_idx < 0) {
+        QToolTip::hideText();
+        return;
+    }
+
+    const QString comment = annotations_.at(ann_idx).comment.trimmed();
+    if (comment.isEmpty()) {
+        QToolTip::hideText();
+        return;
+    }
+
+    QToolTip::showText(global_pos, tr("Comment: %1").arg(comment), this);
+}
+
 void HexDataSourceView::scrollToByte(int byte)
 {
     verticalScrollBar()->setValue(byte / row_width_);
@@ -803,18 +1318,48 @@ void HexDataSourceView::updateScrollbars()
     }
 }
 
-int HexDataSourceView::byteOffsetAtPixel(QPoint pos)
+int HexDataSourceView::byteOffsetAtPixel(QPoint pos, bool allow_fuzzy)
 {
+    if (x_pos_to_column_.isEmpty()) {
+        return -1;
+    }
+
     int byte = (verticalScrollBar()->value() + (pos.y() / line_height_)) * row_width_;
     int x = (horizontalScrollBar()->value() * em_width_) + pos.x();
+    Q_ASSERT(x_pos_to_column_.size() <= std::numeric_limits<int>::max());
+    int size = static_cast<int>(x_pos_to_column_.size());
+
+    if (x < 0 || x >= size) {
+        if (!allow_fuzzy) {
+            return -1;
+        }
+        x = qBound(0, x, size - 1);
+    }
+
     int col = x_pos_to_column_.value(x, -1);
+    if (col < 0 && allow_fuzzy) {
+        int left = x - 1;
+        int right = x + 1;
+        while (left >= 0 || right < size) {
+            if (left >= 0 && x_pos_to_column_[left] >= 0) {
+                col = x_pos_to_column_[left];
+                break;
+            }
+            if (right < size && x_pos_to_column_[right] >= 0) {
+                col = x_pos_to_column_[right];
+                break;
+            }
+            left--;
+            right++;
+        }
+    }
 
     if (col < 0) {
         return -1;
     }
 
     byte += col;
-    if (byte > data_.size()) {
+    if (byte < 0 || byte >= data_.size()) {
         return -1;
     }
     return byte;

@@ -13,16 +13,18 @@
 
 #include "ui/ui_prefs.h"
 #include "ui/language.h"
+#include "ui/profile.h"
 #include <wsutil/ws_assert.h>
 
 static wmem_allocator_t* ui_scope;
 
-void ui_init(void)
+void ui_init(const char* app_env_var_prefix)
 {
     ui_scope = wmem_allocator_new(WMEM_ALLOCATOR_BLOCK);
 
     ui_prefs_init();
     language_init();
+    profile_init(app_env_var_prefix);
 }
 
 void ui_cleanup(void)

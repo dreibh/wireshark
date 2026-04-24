@@ -12,17 +12,12 @@ include(WiresharkPlugin)
 # Plugin name and version info (major minor micro extra)
 set_module_info(wimaxasncp 0 0 1 0)
 
-add_definitions(
-		${LIBXML2_DEFINITIONS}
-)
-
 set(DISSECTOR_SRC
 	packet-wimaxasncp.c
 )
 
 add_wireshark_epan_plugin_library(wimaxasncp
-	PLUGIN_LIBS ${LIBXML2_LIBRARIES}
-	PLUGIN_INCS ${LIBXML2_INCLUDE_DIRS}
+	PLUGIN_LIBS LibXml2::LibXml2
 )
 
 #

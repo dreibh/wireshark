@@ -280,6 +280,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-dcerpc.h
 	packet-dcom-dispatch.h
 	packet-dcom.h
+	packet-dis.h
 	packet-dns.h
 	packet-dsp.h
 	packet-dtls.h

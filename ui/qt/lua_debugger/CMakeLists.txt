@@ -5,6 +5,7 @@
 
 set(WIRESHARK_LUA_DEBUGGER_HEADERS
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_code_view.h
+	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_item_utils.h
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_dialog.h
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_find_frame.h
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_goto_line_frame.h

@@ -12,6 +12,7 @@
 
 #include "ws_symbol_export.h"
 #include <glib.h>
+#include <stdbool.h>
 
 typedef struct lua_State lua_State;
 
@@ -234,9 +235,14 @@ extern "C"
      */
     typedef struct
     {
-        char *source; /**< Source filename */
-        int64_t line; /**< Line number */
-        char *name;   /**< Function name */
+        char *source;        /**< Source filename */
+        int64_t line;        /**< Currently-executing line */
+        int64_t linedefined; /**< First line of the function's definition; together
+                                  with @c source forms a stable identity for this
+                                  Lua activation (used by the Qt dialog to decide
+                                  whether the previous-pause Locals/Upvalues
+                                  baseline still refers to the same function). */
+        char *name;          /**< Function name */
     } wslua_stack_frame_t;
 
     /**

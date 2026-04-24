@@ -21,6 +21,7 @@
 
 #include "file.h"
 
+#include <app/application_flavor.h>
 #include <epan/epan.h>
 #include <epan/epan_dissect.h>
 #include <epan/prefs.h>
@@ -34,9 +35,6 @@ ProfileSwitcher::ProfileSwitcher(QObject *parent) :
     capture_file_changed_(true),
     profile_changed_(false)
 {
-    if (g_list_length(current_profile_list()) == 0) {
-        init_profile_list();
-    }
     connect(mainApp, &MainApplication::profileChanging, this, &ProfileSwitcher::disableSwitching);
 }
 
@@ -76,11 +74,12 @@ void ProfileSwitcher::checkPacket(capture_file *cap_file, frame_data *fdata, qsi
 
     if (row == 0) {
         clearProfileFilters();
-        for (GList *cur = current_profile_list() ; cur; cur = cur->next) {
+        for (GList *cur = profile_get_list() ; cur; cur = cur->next) {
             profile_def *profile = static_cast<profile_def *>(cur->data);
-            if (!profile->auto_switch_filter) {
+            if ((profile->auto_switch_filter == NULL) ||
+                (*profile->auto_switch_filter == '\0'))
                 continue;
-            }
+
             dfilter_t *dfcode;
             if (dfilter_compile(profile->auto_switch_filter, &dfcode, NULL) && dfcode) {
                 profile_filters_.append({profile->name, dfcode});

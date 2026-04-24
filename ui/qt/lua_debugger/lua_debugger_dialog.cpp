@@ -64,13 +64,20 @@
 #include <QStyle>
 #include <QTextDocument>
 #include <QSplitter>
+#include <QPersistentModelIndex>
 #include <QTimer>
 #include <QStyledItemDelegate>
 #include <QStyleOptionViewItem>
 #include <QAbstractItemModel>
+#include <QItemSelectionModel>
 #include <QModelIndex>
-#include <QTreeWidgetItem>
+#include <QStandardItem>
+#include <QStandardItemModel>
+#include <QTreeView>
+#include "lua_debugger_item_utils.h"
 #include <QTextStream>
+
+using namespace LuaDebuggerItems;
 #include <QVBoxLayout>
 #include <QToolButton>
 #include <QHBoxLayout>
@@ -166,20 +173,39 @@ constexpr qint32 VariableTypeRole = static_cast<qint32>(Qt::UserRole + 9);
 constexpr qint32 VariableCanExpandRole = static_cast<qint32>(Qt::UserRole + 10);
 constexpr qint32 WatchSpecRole = static_cast<qint32>(Qt::UserRole + 11);
 constexpr qint32 WatchSubpathRole = static_cast<qint32>(Qt::UserRole + 13);
-constexpr qint32 WatchLastValueRole = static_cast<qint32>(Qt::UserRole + 14);
 constexpr qint32 WatchPendingNewRole = static_cast<qint32>(Qt::UserRole + 15);
 /*
  * Expansion state for watch roots and Variables sections is tracked in
  * LuaDebuggerDialog::watchExpansion_ and variablesExpansion_ (runtime-only
  * QHashes). The dialog members are the single source of truth and survive
  * child-item destruction during pause / resume / step.
+ *
+ * "Value changed since last pause" baselines live on the dialog too
+ * (LuaDebuggerDialog::watchRootBaseline_ / watchChildBaseline_ /
+ * variablesBaseline_ and their *Current_ mirrors); see the header.
  */
-/** Per-root map path/subpath key → last raw value string (child bold-on-change). */
-constexpr qint32 WatchChildSnapRole =
+/** Monotonic flash generation id stored on a value cell so a pending
+ *  clear-timer only clears its own flash, not a fresher one. */
+constexpr qint32 ChangedFlashSerialRole =
     static_cast<qint32>(Qt::UserRole + 20);
 
 constexpr qsizetype WATCH_TOOLTIP_MAX_CHARS = 4096;
 constexpr int WATCH_EXPR_MAX_CHARS = 65536;
+/** Transient background-flash duration for a value that just changed. */
+constexpr int CHANGED_FLASH_MS = 500;
+/**
+ * Delay before applying the "Watch column shows —" placeholder after a step
+ * resume. A typical Lua single-step re-pauses well within a few ms; running
+ * the placeholder repaint immediately would visibly flicker every Watch row
+ * value→—→value across the resume / re-pause boundary, even when the value
+ * did not change. handlePause() bumps watchPlaceholderEpoch_, so any timer
+ * scheduled with a stale epoch is dropped without touching the Watch tree.
+ * Long-running steps (or scripts that simply terminate) still see the
+ * placeholder appear after this delay.
+ */
+constexpr int WATCH_PLACEHOLDER_DEFER_MS = 250;
+/** Separator used in composite (stackLevel, path) baseline-map keys. */
+constexpr QChar CHANGE_KEY_SEP = QChar(0x1F); // ASCII Unit Separator
 
 /** @brief Registers the UI callback with the Lua debugger core at load time. */
 class LuaDebuggerUiCallbackRegistrar
@@ -271,7 +297,7 @@ static bool triggerLuaDebuggerShortcuts(Ui::LuaDebuggerDialog *ui,
     return false;
 }
 
-static QTreeWidgetItem *watchRootItem(QTreeWidgetItem *item)
+static QStandardItem *watchRootItem(QStandardItem *item)
 {
     while (item && item->parent())
     {
@@ -280,19 +306,85 @@ static QTreeWidgetItem *watchRootItem(QTreeWidgetItem *item)
     return item;
 }
 
+/**
+ * True when a watch spec resolves against `_G` (i.e. not frame-dependent).
+ * Used by changeKey() to avoid invalidating a Globals watch when the user
+ * switches the call-stack frame.
+ */
+static bool watchSpecIsGlobalScoped(const QString &spec)
+{
+    const QString t = spec.trimmed();
+    return t.startsWith(QLatin1String("Globals")) ||
+           t == QLatin1String("_G") ||
+           t.startsWith(QLatin1String("_G."));
+}
+
+/**
+ * True when a Variables tree path is under `Globals` (frame-independent).
+ */
+static bool variablesPathIsGlobalScoped(const QString &path)
+{
+    return path == QLatin1String("Globals") ||
+           path.startsWith(QLatin1String("Globals."));
+}
+
+/** Compose a baseline-map key from (stackLevel, path). */
+static QString changeKey(int stackLevel, const QString &path)
+{
+    return QString::number(stackLevel) + CHANGE_KEY_SEP + path;
+}
+
+/** Parse the "spec" portion out of a composite key produced by changeKey(). */
+static QString watchSpecFromChangeKey(const QString &key)
+{
+    const qsizetype sep = key.indexOf(CHANGE_KEY_SEP);
+    return sep < 0 ? key : key.mid(sep + 1);
+}
+
+/**
+ * Lookup / compare in one place. Returns true when @a key was recorded in
+ * @a baseline with a different value, or (when @a flashNew is set) when @a
+ * key was absent from @a baseline but @a baseline itself is non-empty —
+ * i.e. we have *some* prior snapshot to compare against, so the absence of
+ * this key means the variable appeared since the last pause.
+ *
+ * An empty-string baseline is still a valid recorded value and can signal a
+ * change.
+ *
+ * The @a flashNew heuristic is used for runtime-discovered rows
+ * (Variables tree, Watch children inside an expanded table) but is
+ * deliberately false for Watch *roots* since a root with no baseline is
+ * almost always one the user just added and should not flash on its first
+ * evaluation.
+ *
+ * Factored out so the unit tests can exercise it without a live dialog.
+ */
+template <class Key, class Map>
+static bool shouldMarkChanged(const Map &baseline, const Key &key,
+                              const QString &newVal, bool flashNew = false)
+{
+    const auto it = baseline.constFind(key);
+    if (it != baseline.constEnd())
+    {
+        return *it != newVal;
+    }
+    return flashNew && !baseline.isEmpty();
+}
+
+
 /** Top-level Variables section key (`Locals` / `Globals` / `Upvalues`). */
-static QString variableSectionRootKeyFromItem(const QTreeWidgetItem *item)
+static QString variableSectionRootKeyFromItem(const QStandardItem *item)
 {
     if (!item)
     {
         return QString();
     }
-    const QTreeWidgetItem *walk = item;
+    const QStandardItem *walk = item;
     while (walk->parent())
     {
         walk = walk->parent();
     }
-    return walk->data(0, VariablePathRole).toString();
+    return walk->data(VariablePathRole).toString();
 }
 
 static bool watchSpecUsesPathResolution(const QString &spec)
@@ -354,23 +446,45 @@ static VariableRowFields readVariableRowFields(const wslua_variable_t &v,
  * placeholder so that onItemExpanded can lazily populate children. Watch rows
  * use `enabledOnlyPlaceholder=true` so the placeholder never becomes selectable.
  */
-static void applyVariableExpansionIndicator(QTreeWidgetItem *item,
+static void applyVariableExpansionIndicator(QStandardItem *col0,
                                             bool canExpand,
-                                            bool enabledOnlyPlaceholder)
+                                            bool enabledOnlyPlaceholder,
+                                            int columnCount = 3)
 {
-    if (canExpand)
+    if (!canExpand)
     {
-        item->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
-        QTreeWidgetItem *const ph = new QTreeWidgetItem(item);
+        return;
+    }
+    if (columnCount == 2)
+    {
+        auto *p0 = new QStandardItem();
+        auto *p1 = new QStandardItem();
         if (enabledOnlyPlaceholder)
         {
-            ph->setFlags(Qt::ItemIsEnabled);
+            p0->setFlags(Qt::ItemIsEnabled);
+            p1->setFlags(Qt::ItemIsEnabled);
         }
+        col0->appendRow({p0, p1});
+        return;
+    }
+    auto *p0 = new QStandardItem();
+    auto *p1 = new QStandardItem();
+    auto *p2 = new QStandardItem();
+    if (enabledOnlyPlaceholder)
+    {
+        p0->setFlags(Qt::ItemIsEnabled);
+        p1->setFlags(Qt::ItemIsEnabled);
+        p2->setFlags(Qt::ItemIsEnabled);
     }
     else
     {
-        item->setChildIndicatorPolicy(QTreeWidgetItem::DontShowIndicator);
+        for (QStandardItem *p : {p0, p1, p2})
+        {
+            p->setFlags((p->flags() | Qt::ItemIsSelectable | Qt::ItemIsEnabled) &
+                        ~Qt::ItemIsEditable);
+        }
     }
+    col0->appendRow({p0, p1, p2});
 }
 
 /** Full Variables path for path-style watches (e.g. Locals.foo for "foo"). */
@@ -409,7 +523,7 @@ static QString watchResolvedVariablePathForTooltip(const QString &spec)
 }
 
 /** Sets VariablePathRole on a watch root from spec (resolved section when paused). */
-static void watchRootSetVariablePathRoleFromSpec(QTreeWidgetItem *row,
+static void watchRootSetVariablePathRoleFromSpec(QStandardItem *row,
                                                  const QString &spec)
 {
     if (!row)
@@ -419,28 +533,28 @@ static void watchRootSetVariablePathRoleFromSpec(QTreeWidgetItem *row,
     const QString t = spec.trimmed();
     if (t.isEmpty())
     {
-        row->setData(0, VariablePathRole, QVariant());
+        row->setData(QVariant(), VariablePathRole);
         return;
     }
     const QString vpRes = watchResolvedVariablePathForTooltip(t);
     if (!vpRes.isEmpty())
     {
-        row->setData(0, VariablePathRole, vpRes);
+        row->setData(vpRes, VariablePathRole);
         return;
     }
     const QString vp = watchVariablePathForSpec(t);
     if (!vp.isEmpty())
     {
-        row->setData(0, VariablePathRole, vp);
+        row->setData(vp, VariablePathRole);
     }
     else
     {
-        row->setData(0, VariablePathRole, QVariant());
+        row->setData(QVariant(), VariablePathRole);
     }
 }
 
 /** Locals / Upvalues / Globals line for watch tooltips (full variable-tree path). */
-static QString watchPathOriginSuffix(const QTreeWidgetItem *item,
+static QString watchPathOriginSuffix(const QStandardItem *item,
                                      const QString &spec)
 {
     /* Prefer resolver output (matches lookup order for unqualified names). */
@@ -451,7 +565,7 @@ static QString watchPathOriginSuffix(const QTreeWidgetItem *item,
     }
     if (vp.isEmpty() && item)
     {
-        vp = item->data(0, VariablePathRole).toString();
+        vp = item->data(VariablePathRole).toString();
     }
     if (vp.startsWith(QLatin1String("Locals.")) ||
         vp == QLatin1String("Locals"))
@@ -520,40 +634,38 @@ static QString watchPathParentKey(const QString &path)
     return QString();
 }
 
-static void applyWatchChildRowPresentation(QTreeWidgetItem *item,
-                                           const QString &stableKey,
-                                           const QString &rawVal,
-                                           const QString &typeText)
+/**
+ * Populate the text and tooltip cells for one Watch-tree child row.
+ * "Value changed since last pause" visuals (accent + bold + optional flash)
+ * are applied by the dialog via `applyChangedVisuals` once this function
+ * has installed the display text; see `fillWatchPathChildren`.
+ */
+static void applyWatchChildRowTextAndTooltip(QStandardItem *col0,
+                                             const QString &rawVal,
+                                             const QString &typeText)
 {
-    QTreeWidgetItem *root = watchRootItem(item);
-    if (!root)
+    auto *wm = qobject_cast<QStandardItemModel *>(col0->model());
+    if (!wm)
     {
         return;
     }
-    QVariantMap snaps = root->data(0, WatchChildSnapRole).toMap();
-    const QString prev = snaps.value(stableKey).toString();
-    item->setText(1, rawVal);
-    QString tooltipSuffix =
+    setText(wm, col0, 1, rawVal);
+    const QString tooltipSuffix =
         typeText.isEmpty()
             ? QString()
             : LuaDebuggerDialog::tr("Type: %1").arg(typeText);
-    item->setToolTip(
-        0,
+    setToolTip(
+        wm, col0, 0,
         capWatchTooltipText(
             tooltipSuffix.isEmpty()
-                ? item->text(0)
-                : QStringLiteral("%1\n%2").arg(item->text(0), tooltipSuffix)));
-    item->setToolTip(
-        1,
+                ? col0->text()
+                : QStringLiteral("%1\n%2").arg(col0->text(), tooltipSuffix)));
+    setToolTip(
+        wm, col0, 1,
         capWatchTooltipText(
             tooltipSuffix.isEmpty()
                 ? rawVal
                 : QStringLiteral("%1\n%2").arg(rawVal, tooltipSuffix)));
-    QFont f1 = item->font(1);
-    f1.setBold(!prev.isEmpty() && prev != rawVal);
-    item->setFont(1, f1);
-    snaps[stableKey] = rawVal;
-    root->setData(0, WatchChildSnapRole, snaps);
 }
 
 static int watchSubpathBoundaryCount(const QString &subpath)
@@ -574,25 +686,25 @@ static int watchSubpathBoundaryCount(const QString &subpath)
     return n;
 }
 
-static QTreeWidgetItem *findWatchItemBySubpathOrPathKey(QTreeWidgetItem *subtree,
+static QStandardItem *findWatchItemBySubpathOrPathKey(QStandardItem *subtree,
                                                         const QString &key)
 {
     if (!subtree || key.isEmpty())
     {
         return nullptr;
     }
-    QList<QTreeWidgetItem *> queue;
+    QList<QStandardItem *> queue;
     queue.append(subtree);
     while (!queue.isEmpty())
     {
-        QTreeWidgetItem *it = queue.takeFirst();
-        const QString sp = it->data(0, WatchSubpathRole).toString();
-        const QString vp = it->data(0, VariablePathRole).toString();
+        QStandardItem *it = queue.takeFirst();
+        const QString sp = it->data(WatchSubpathRole).toString();
+        const QString vp = it->data(VariablePathRole).toString();
         if ((!sp.isEmpty() && sp == key) || (!vp.isEmpty() && vp == key))
         {
             return it;
         }
-        for (int i = 0; i < it->childCount(); ++i)
+        for (int i = 0; i < it->rowCount(); ++i)
         {
             queue.append(it->child(i));
         }
@@ -601,23 +713,23 @@ static QTreeWidgetItem *findWatchItemBySubpathOrPathKey(QTreeWidgetItem *subtree
 }
 
 /** Variables tree: match @a key against VariablePathRole only. */
-static QTreeWidgetItem *findVariableTreeItemByPathKey(QTreeWidgetItem *subtree,
+static QStandardItem *findVariableTreeItemByPathKey(QStandardItem *subtree,
                                                       const QString &key)
 {
     if (!subtree || key.isEmpty())
     {
         return nullptr;
     }
-    QList<QTreeWidgetItem *> queue;
+    QList<QStandardItem *> queue;
     queue.append(subtree);
     while (!queue.isEmpty())
     {
-        QTreeWidgetItem *it = queue.takeFirst();
-        if (it->data(0, VariablePathRole).toString() == key)
+        QStandardItem *it = queue.takeFirst();
+        if (it->data(VariablePathRole).toString() == key)
         {
             return it;
         }
-        for (int i = 0; i < it->childCount(); ++i)
+        for (int i = 0; i < it->rowCount(); ++i)
         {
             queue.append(it->child(i));
         }
@@ -625,7 +737,7 @@ static QTreeWidgetItem *findVariableTreeItemByPathKey(QTreeWidgetItem *subtree,
     return nullptr;
 }
 
-using TreePathKeyFinder = QTreeWidgetItem *(*)(QTreeWidgetItem *,
+using TreePathKeyFinder = QStandardItem *(*)(QStandardItem *,
                                                 const QString &);
 
 /**
@@ -640,11 +752,13 @@ using TreePathKeyFinder = QTreeWidgetItem *(*)(QTreeWidgetItem *,
  * ancestor chain handles deep-only keys whose intermediate ancestors are not
  * in @a pathKeys; missing items are skipped (structural gaps between pauses).
  */
-static void reexpandTreeDescendantsByPathKeys(QTreeWidgetItem *subtree,
-                                             QStringList pathKeys,
-                                             TreePathKeyFinder findByKey)
+static void reexpandTreeDescendantsByPathKeys(QTreeView *tree,
+                                              QStandardItemModel *model,
+                                              QStandardItem *subtree,
+                                              QStringList pathKeys,
+                                              TreePathKeyFinder findByKey)
 {
-    if (!subtree || pathKeys.isEmpty() || !findByKey)
+    if (!tree || !model || !subtree || pathKeys.isEmpty() || !findByKey)
     {
         return;
     }
@@ -669,85 +783,156 @@ static void reexpandTreeDescendantsByPathKeys(QTreeWidgetItem *subtree,
         }
         for (const QString &k : chain)
         {
-            QTreeWidgetItem *n = findByKey(subtree, k);
+            QStandardItem *n = findByKey(subtree, k);
             if (!n)
             {
                 continue;
             }
-            if (!n->isExpanded())
+            const QModelIndex ix = model->indexFromItem(n);
+            if (ix.isValid() && !tree->isExpanded(ix))
             {
-                n->setExpanded(true);
+                tree->setExpanded(ix, true);
             }
         }
     }
 }
 
-static void reexpandWatchDescendantsByPathKeys(QTreeWidgetItem *subtree,
+static void reexpandWatchDescendantsByPathKeys(QTreeView *tree,
+                                               QStandardItemModel *model,
+                                               QStandardItem *subtree,
                                                QStringList pathKeys)
 {
-    reexpandTreeDescendantsByPathKeys(subtree, std::move(pathKeys),
+    reexpandTreeDescendantsByPathKeys(tree, model, subtree, std::move(pathKeys),
                                        findWatchItemBySubpathOrPathKey);
 }
 
-static void clearWatchFilterErrorChrome(QTreeWidgetItem *item, QTreeWidget *tree)
+static void clearWatchFilterErrorChrome(QStandardItem *col0, QTreeView *tree)
 {
+    auto *wm = qobject_cast<QStandardItemModel *>(col0 ? col0->model() : nullptr);
+    if (!wm || !tree)
+    {
+        return;
+    }
     const QPalette &pal = tree->palette();
-    item->setForeground(0, pal.brush(QPalette::Text));
-    item->setForeground(1, pal.brush(QPalette::Text));
-    item->setBackground(0, QBrush());
-    item->setBackground(1, QBrush());
+    setForeground(wm, col0, 0, pal.brush(QPalette::Text));
+    setForeground(wm, col0, 1, pal.brush(QPalette::Text));
+    setBackground(wm, col0, 0, QBrush());
+    setBackground(wm, col0, 1, QBrush());
 }
 
-static void applyWatchFilterErrorChrome(QTreeWidgetItem *item, QTreeWidget *tree)
+static void applyWatchFilterErrorChrome(QStandardItem *col0, QTreeView *tree)
 {
     Q_UNUSED(tree);
+    auto *wm = qobject_cast<QStandardItemModel *>(col0 ? col0->model() : nullptr);
+    if (!wm)
+    {
+        return;
+    }
     QColor fg = ColorUtils::fromColorT(&prefs.gui_filter_invalid_fg);
     QColor bg = ColorUtils::fromColorT(&prefs.gui_filter_invalid_bg);
-    item->setForeground(0, fg);
-    item->setForeground(1, fg);
-    item->setBackground(0, bg);
-    item->setBackground(1, bg);
+    setForeground(wm, col0, 0, fg);
+    setForeground(wm, col0, 1, fg);
+    setBackground(wm, col0, 0, bg);
+    setBackground(wm, col0, 1, bg);
 }
 
 /* Initialize a freshly-created top-level watch row from a canonical spec.
  * The on-disk "watches" array is a flat list of spec strings (see
  * storeWatchList / rebuildWatchTreeFromSettings). */
-static void setupWatchRootItemFromSpec(QTreeWidgetItem *row,
+static void setupWatchRootItemFromSpec(QStandardItem *col0, QStandardItem *col1,
                                        const QString &spec)
 {
-    row->setFlags(row->flags() | Qt::ItemIsEditable | Qt::ItemIsEnabled |
-                  Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
-    row->setText(0, spec);
-    row->setData(0, WatchSpecRole, spec);
-    row->setData(0, WatchSubpathRole, QString());
-    row->setData(0, WatchPendingNewRole, QVariant(false));
-    watchRootSetVariablePathRoleFromSpec(row, spec);
-    row->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
-    QTreeWidgetItem *const ph = new QTreeWidgetItem(row);
-    ph->setFlags(Qt::ItemIsEnabled);
+    col0->setFlags(col0->flags() | Qt::ItemIsEditable | Qt::ItemIsEnabled |
+                   Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+    /* Value column: drag the whole watch row, not a single cell, when reordering. */
+    col1->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+    col0->setText(spec);
+    col1->setText(QString());
+    col0->setData(spec, WatchSpecRole);
+    col0->setData(QString(), WatchSubpathRole);
+    col0->setData(QVariant(false), WatchPendingNewRole);
+    watchRootSetVariablePathRoleFromSpec(col0, spec);
+    auto *const ph0 = new QStandardItem();
+    auto *const ph1 = new QStandardItem();
+    ph0->setFlags(Qt::ItemIsEnabled);
+    ph1->setFlags(Qt::ItemIsEnabled);
+    col0->appendRow({ph0, ph1});
 }
+
+/**
+ * Watch list: @c QStandardItemModel::dropMimeData() uses the drop @a column when
+ * resolving the target index, so a drop on the Value column (column 1) can
+ * re-parent a row or move a single "cell" instead of reordering the
+ * two-column watch entry. For top-level drops, use column 0. For any index
+ * on a top-level watch row, use the Watch-spec column (0) as the parent/anchor.
+ */
+class WatchItemModel : public QStandardItemModel
+{
+  public:
+    using QStandardItemModel::QStandardItemModel;
+
+  protected:
+    bool dropMimeData(const QMimeData *data, Qt::DropAction action, int row,
+                      int column, const QModelIndex &parent) override
+    {
+        int c = column;
+        QModelIndex p = parent;
+        if (!p.isValid())
+        {
+            c = 0;
+        }
+        else if (!p.parent().isValid() && p.column() != 0)
+        {
+            p = p.sibling(p.row(), 0);
+        }
+        return QStandardItemModel::dropMimeData(data, action, row, c, p);
+    }
+};
 
 /**
  * @brief Watch tree that only allows top-level reordering via drag-and-drop.
  *
+ * The view uses @c QAbstractItemView::SelectRows so the drop line spans both
+ * columns (Qt 6+). The Value column is drag-enabled for watch roots. Nested
+ * watch rows are not valid drop targets. A drop on a top-level row’s center
+ * (@c OnItem) is applied like @c AboveItem: insert that row at the same index
+ * the view would use for a drop just above, instead of re-parenting as a
+ * child of the target row.
+ *
  * The dialog's settings map (`settings_`) is refreshed from the tree only at
  * close time via `storeDialogSettings()` / `saveSettingsFile()`, so a drop
- * event has no persistence work to do beyond letting QTreeWidget finish the
- * internal move.
+ * event has no persistence work to do beyond the model’s internal move. After
+ * a successful move, panel monospace fonts are re-applied on the watch tree
+ * and related panels.
+ *
+ * Only top-level (watch spec) rows may be dragged: starting a drag is blocked
+ * when the selection includes any expanded variable (child) index.
  */
-class WatchTreeWidget : public QTreeWidget
+class WatchTreeWidget : public QTreeView
 {
   public:
     explicit WatchTreeWidget(LuaDebuggerDialog *dlg, QWidget *parent = nullptr)
-        : QTreeWidget(parent)
+        : QTreeView(parent), dialog_(dlg)
     {
-        Q_UNUSED(dlg);
     }
 
   protected:
+    void startDrag(Qt::DropActions supportedActions) override
+    {
+        const QModelIndexList list = selectedIndexes();
+        for (const QModelIndex &ix : list)
+        {
+            if (ix.isValid() && ix.parent().isValid())
+            {
+                return;
+            }
+        }
+        QTreeView::startDrag(supportedActions);
+    }
+
     void dragMoveEvent(QDragMoveEvent *event) override
     {
-        QTreeWidget::dragMoveEvent(event);
+        QTreeView::dragMoveEvent(event);
         if (!event->isAccepted())
         {
             return;
@@ -760,39 +945,90 @@ class WatchTreeWidget : public QTreeWidget
         const QModelIndex idx = indexAt(pos);
         if (idx.isValid() && idx.parent().isValid())
         {
+            /* Nested (expanded variable) rows: do not make them drop targets. */
             event->ignore();
-            return;
-        }
-        /* OnItem on a top-level row nests the dragged row as a child — only allow
-         * AboveItem / BelowItem reorder between roots. */
-        if (idx.isValid() && !idx.parent().isValid() &&
-            dropIndicatorPosition() == QAbstractItemView::OnItem)
-        {
-            event->ignore();
-            return;
         }
     }
 
     void dropEvent(QDropEvent *event) override
     {
+        if (dragDropMode() == QAbstractItemView::InternalMove &&
+            (event->source() != this || !(event->possibleActions() & Qt::MoveAction)))
+        {
+            return;
+        }
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
         const QPoint pos = event->position().toPoint();
 #else
         const QPoint pos = event->pos();
 #endif
-        const QModelIndex idx = indexAt(pos);
-        if (idx.isValid() && idx.parent().isValid())
+        const QModelIndex raw = indexAt(pos);
+        if (raw.isValid() && raw.parent().isValid())
         {
             event->ignore();
             return;
         }
-        if (idx.isValid() && !idx.parent().isValid() &&
+        /* OnItem on a top-level index would insert as a child; treat like Above. */
+        if (raw.isValid() && !raw.parent().isValid() &&
             dropIndicatorPosition() == QAbstractItemView::OnItem)
         {
-            event->ignore();
+            if (auto *m = qobject_cast<QStandardItemModel *>(model()))
+            {
+                const int destRow = raw.row();
+                if (m->dropMimeData(event->mimeData(), Qt::MoveAction, destRow,
+                                    0, QModelIndex()))
+                {
+                    event->setDropAction(Qt::MoveAction);
+                    event->accept();
+                }
+                else
+                {
+                    event->ignore();
+                }
+            }
+            else
+            {
+                event->ignore();
+            }
+            stopAutoScroll();
+            setState(QAbstractItemView::NoState);
+            if (viewport())
+            {
+                viewport()->update();
+            }
+            if (event->isAccepted() && dialog_)
+            {
+                LuaDebuggerDialog *const d = dialog_;
+                QTimer::singleShot(0, d, [d]()
+                                   { d->reapplyMonospacePanelFonts(); });
+            }
             return;
         }
-        QTreeWidget::dropEvent(event);
+        QTreeView::dropEvent(event);
+        if (event->isAccepted() && dialog_)
+        {
+            LuaDebuggerDialog *const d = dialog_;
+            QTimer::singleShot(0, d, [d]() { d->reapplyMonospacePanelFonts(); });
+        }
+    }
+
+  private:
+    LuaDebuggerDialog *dialog_ = nullptr;
+};
+
+/** Variables tree: block inline editors on all columns (read-only display). */
+class VariablesReadOnlyDelegate : public QStyledItemDelegate
+{
+  public:
+    using QStyledItemDelegate::QStyledItemDelegate;
+
+    QWidget *createEditor(QWidget *parent, const QStyleOptionViewItem &option,
+                          const QModelIndex &index) const override
+    {
+        Q_UNUSED(parent);
+        Q_UNUSED(option);
+        Q_UNUSED(index);
+        return nullptr;
     }
 };
 
@@ -829,27 +1065,17 @@ class WatchValueColumnDelegate : public QStyledItemDelegate
     }
 };
 
-#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
-// QTreeWidget::itemFromIndex() is protected in Qt5 but public in Qt6. Use a
-// friend-style helper subclass to access it portably.
-class TreeWidgetItemFromIndex : public QTreeWidget
+static QStandardItem *
+itemFromTreeIndex(const QTreeView *tree, const QModelIndex &index)
 {
-  public:
-    using QTreeWidget::itemFromIndex;
-};
-
-static inline QTreeWidgetItem *
-itemFromIndexHelper(const QTreeWidget *tree, const QModelIndex &index)
-{
-    return static_cast<const TreeWidgetItemFromIndex *>(tree)->itemFromIndex(
-        index);
+    auto *m = qobject_cast<QStandardItemModel *>(tree ? tree->model() : nullptr);
+    return m ? m->itemFromIndex(index) : nullptr;
 }
-#endif
 
 class WatchRootDelegate : public QStyledItemDelegate
 {
   public:
-    WatchRootDelegate(QTreeWidget *tree, LuaDebuggerDialog *dialog,
+    WatchRootDelegate(QTreeView *tree, LuaDebuggerDialog *dialog,
                       QObject *parent = nullptr)
         : QStyledItemDelegate(parent), tree_(tree), dialog_(dialog)
     {
@@ -862,7 +1088,7 @@ class WatchRootDelegate : public QStyledItemDelegate
                       const QModelIndex &index) const override;
 
   private:
-    QTreeWidget *tree_;
+    QTreeView *tree_;
     LuaDebuggerDialog *dialog_;
 };
 
@@ -876,11 +1102,7 @@ WatchRootDelegate::createEditor(QWidget *parent,
     {
         return nullptr;
     }
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-    QTreeWidgetItem *it = tree_->itemFromIndex(index);
-#else
-    QTreeWidgetItem *it = itemFromIndexHelper(tree_, index);
-#endif
+    QStandardItem *it = itemFromTreeIndex(tree_, index);
     if (!it || it->parent() != nullptr)
     {
         return nullptr;
@@ -896,19 +1118,15 @@ void WatchRootDelegate::setEditorData(QWidget *editor,
     {
         return;
     }
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-    QTreeWidgetItem *it = tree_->itemFromIndex(index);
-#else
-    QTreeWidgetItem *it = itemFromIndexHelper(tree_, index);
-#endif
+    QStandardItem *it = itemFromTreeIndex(tree_, index);
     if (!it)
     {
         return;
     }
-    QString s = it->data(0, WatchSpecRole).toString();
+    QString s = it->data(WatchSpecRole).toString();
     if (s.isEmpty())
     {
-        s = it->text(0);
+        s = it->text();
     }
     le->setText(s);
 }
@@ -922,11 +1140,7 @@ void WatchRootDelegate::setModelData(QWidget *editor, QAbstractItemModel *model,
     {
         return;
     }
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
-    QTreeWidgetItem *it = tree_->itemFromIndex(index);
-#else
-    QTreeWidgetItem *it = itemFromIndexHelper(tree_, index);
-#endif
+    QStandardItem *it = itemFromTreeIndex(tree_, index);
     if (!it)
     {
         return;
@@ -942,8 +1156,10 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
       debuggerPaused(false), reloadDeferred(false), variablesSection(nullptr),
       watchSection(nullptr), stackSection(nullptr), breakpointsSection(nullptr),
       filesSection(nullptr), evalSection(nullptr), settingsSection(nullptr),
-      variablesTree(nullptr), watchTree(nullptr), stackTree(nullptr),
-      fileTree(nullptr), breakpointsTree(nullptr),
+      variablesTree(nullptr), variablesModel(nullptr), watchTree(nullptr),
+      watchModel(nullptr), stackTree(nullptr), stackModel(nullptr),
+      fileTree(nullptr), fileModel(nullptr), breakpointsTree(nullptr),
+      breakpointsModel(nullptr),
       evalInputEdit(nullptr), evalOutputEdit(nullptr), evalButton(nullptr),
       evalClearButton(nullptr), themeComboBox(nullptr)
 {
@@ -985,7 +1201,6 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     ui->actionStepIn->setIcon(StockIcon("x-lua-debug-step-in"));
     ui->actionStepOut->setIcon(StockIcon("x-lua-debug-step-out"));
     ui->actionReloadLuaPlugins->setIcon(StockIcon("view-refresh"));
-    ui->actionClearBreakpoints->setIcon(StockIcon("edit-clear"));
     {
         QIcon addWatchIcon = QIcon::fromTheme(QStringLiteral("system-search"));
         if (addWatchIcon.isNull())
@@ -1010,7 +1225,6 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     ui->actionStepOut->setToolTip(tr("Step out (Shift+F11)"));
     ui->actionReloadLuaPlugins->setToolTip(
         tr("Reload Lua Plugins (Ctrl+Shift+L)"));
-    ui->actionClearBreakpoints->setToolTip(tr("Remove all breakpoints"));
     ui->actionAddWatch->setToolTip(tr("%1 (%2)")
                                        .arg(ui->actionAddWatch->toolTip(),
                                             ui->actionAddWatch->shortcut()
@@ -1041,7 +1255,7 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
 
     // Toolbar controls - Checkbox for enable/disable
     // Order: Checkbox | Separator | Continue | Step Over/In/Out | Separator |
-    // Open | Reload | Clear
+    // Open | Reload
     QAction *firstAction = ui->toolBar->actions().isEmpty()
                                ? nullptr
                                : ui->toolBar->actions().first();
@@ -1061,8 +1275,6 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
             &LuaDebuggerDialog::onStepIn);
     connect(ui->actionStepOut, &QAction::triggered, this,
             &LuaDebuggerDialog::onStepOut);
-    connect(ui->actionClearBreakpoints, &QAction::triggered, this,
-            &LuaDebuggerDialog::onClearBreakpoints);
     connect(ui->actionAddWatch, &QAction::triggered, this, [this]()
             { insertNewWatchRow(QString(), true); });
     connect(ui->actionOpenFile, &QAction::triggered, this,
@@ -1099,29 +1311,28 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
             });
 
     // Breakpoints
-    connect(breakpointsTree, &QTreeWidget::itemChanged, this,
+    connect(breakpointsModel, &QStandardItemModel::itemChanged, this,
             &LuaDebuggerDialog::onBreakpointItemChanged);
-    connect(breakpointsTree, &QTreeWidget::itemClicked, this,
-            &LuaDebuggerDialog::onBreakpointItemClicked);
-    connect(breakpointsTree, &QTreeWidget::itemDoubleClicked, this,
+    connect(breakpointsTree, &QTreeView::doubleClicked, this,
             &LuaDebuggerDialog::onBreakpointItemDoubleClicked);
+    connect(breakpointsTree, &QTreeView::customContextMenuRequested, this,
+            &LuaDebuggerDialog::onBreakpointContextMenuRequested);
 
     QHeaderView *breakpointHeader = breakpointsTree->header();
     breakpointHeader->setStretchLastSection(false);
     breakpointHeader->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     breakpointHeader->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     breakpointHeader->setSectionResizeMode(2, QHeaderView::Stretch);
-    breakpointHeader->setSectionResizeMode(3, QHeaderView::ResizeToContents);
-    breakpointsTree->headerItem()->setText(2, tr("Location"));
+    breakpointsModel->setHeaderData(2, Qt::Horizontal, tr("Location"));
     breakpointsTree->setColumnHidden(1, true);
 
     // Variables
-    connect(variablesTree, &QTreeWidget::itemExpanded, this,
+    connect(variablesTree, &QTreeView::expanded, this,
             &LuaDebuggerDialog::onVariableItemExpanded);
-    connect(variablesTree, &QTreeWidget::itemCollapsed, this,
+    connect(variablesTree, &QTreeView::collapsed, this,
             &LuaDebuggerDialog::onVariableItemCollapsed);
     variablesTree->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(variablesTree, &QTreeWidget::customContextMenuRequested, this,
+    connect(variablesTree, &QTreeView::customContextMenuRequested, this,
             &LuaDebuggerDialog::onVariablesContextMenuRequested);
 
     /* onWatchItemExpanded updates watchExpansion_ (the runtime expansion
@@ -1129,12 +1340,12 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
      * update on collapse. No storeWatchList() call is needed on expand /
      * collapse because expansion state is intentionally not persisted to
      * lua_debugger.json. */
-    connect(watchTree, &QTreeWidget::itemExpanded, this,
+    connect(watchTree, &QTreeView::expanded, this,
             &LuaDebuggerDialog::onWatchItemExpanded);
-    connect(watchTree, &QTreeWidget::itemCollapsed, this,
+    connect(watchTree, &QTreeView::collapsed, this,
             &LuaDebuggerDialog::onWatchItemCollapsed);
     watchTree->setContextMenuPolicy(Qt::CustomContextMenu);
-    connect(watchTree, &QTreeWidget::customContextMenuRequested, this,
+    connect(watchTree, &QTreeView::customContextMenuRequested, this,
             &LuaDebuggerDialog::onWatchContextMenuRequested);
     watchTree->setItemDelegateForColumn(
         0, new WatchRootDelegate(watchTree, this, watchTree));
@@ -1142,31 +1353,37 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
         1, new WatchValueColumnDelegate(watchTree));
     watchTree->viewport()->installEventFilter(this);
 
-    connect(watchTree, &QTreeWidget::currentItemChanged, this,
-            &LuaDebuggerDialog::onWatchCurrentItemChanged);
-    connect(variablesTree, &QTreeWidget::currentItemChanged, this,
+    connect(watchTree->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &LuaDebuggerDialog::onWatchCurrentItemChanged);
+    connect(variablesTree->selectionModel(),
+            &QItemSelectionModel::currentChanged, this,
             &LuaDebuggerDialog::onVariablesCurrentItemChanged);
 
     // Files
-    connect(fileTree, &QTreeWidget::itemDoubleClicked,
-            [this](QTreeWidgetItem *item, int column)
+    connect(fileTree, &QTreeView::doubleClicked, this,
+            [this](const QModelIndex &index)
             {
-                Q_UNUSED(column);
-                if (!item || item->data(0, FileTreeIsDirectoryRole).toBool())
+                if (!fileModel || !index.isValid())
                 {
                     return;
                 }
-                const QString path = item->data(0, FileTreePathRole).toString();
+                QStandardItem *item =
+                    fileModel->itemFromIndex(index.sibling(index.row(), 0));
+                if (!item || item->data(FileTreeIsDirectoryRole).toBool())
+                {
+                    return;
+                }
+                const QString path = item->data(FileTreePathRole).toString();
                 if (!path.isEmpty())
                 {
                     loadFile(path);
                 }
             });
 
-    connect(stackTree, &QTreeWidget::itemDoubleClicked, this,
+    connect(stackTree, &QTreeView::doubleClicked, this,
             &LuaDebuggerDialog::onStackItemDoubleClicked);
-    connect(stackTree, &QTreeWidget::currentItemChanged, this,
-            &LuaDebuggerDialog::onStackCurrentItemChanged);
+    connect(stackTree->selectionModel(), &QItemSelectionModel::currentChanged,
+            this, &LuaDebuggerDialog::onStackCurrentItemChanged);
 
     // Evaluate panel
     connect(evalButton, &QPushButton::clicked, this,
@@ -1178,6 +1395,10 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     configureWatchTreeColumns();
     configureStackTreeColumns();
     applyMonospaceFonts();
+    /* Seed the accent + flash brushes from the initial palette so the very
+     * first pause shows correctly themed cues without having to wait for a
+     * preference / color-scheme change. */
+    refreshChangedValueBrushes();
 
     /*
      * Register our reload callback with the debugger core.
@@ -1275,10 +1496,19 @@ void LuaDebuggerDialog::createCollapsibleSections()
            "Outer variables that this function actually uses from surrounding code. "
            "Anything the function does not reference does not appear here.</p>"
            "<p><b>Globals</b><br/>"
-           "Names from the global environment table.</p>"));
-    variablesTree = new QTreeWidget();
-    variablesTree->setColumnCount(3);
-    variablesTree->setHeaderLabels({tr("Name"), tr("Value"), tr("Type")});
+           "Names from the global environment table.</p>"
+           "<p>Values that differ from the previous pause are drawn in a "
+           "<b>bold accent color</b>, and briefly flash on the pause that "
+           "introduced the change.</p>"));
+    variablesModel = new QStandardItemModel(this);
+    variablesModel->setColumnCount(3);
+    variablesModel->setHorizontalHeaderLabels({tr("Name"), tr("Value"), tr("Type")});
+    variablesTree = new QTreeView();
+    variablesTree->setModel(variablesModel);
+    /* Type is folded into Name/Value tooltips; keep the column for model data. */
+    variablesTree->setColumnHidden(2, true);
+    variablesTree->setItemDelegate(
+        new VariablesReadOnlyDelegate(variablesTree));
     variablesTree->setUniformRowHeights(true);
     variablesTree->setWordWrap(false);
     variablesSection->setContentWidget(variablesTree);
@@ -1315,16 +1545,22 @@ void LuaDebuggerDialog::createCollapsibleSections()
            "arbitrary Lua expressions.</p>"
            "<p>Values are only read while the debugger is "
            "<b>paused</b>; otherwise the Value column shows a muted "
-           "em dash. Child values that changed since the previous pause "
-           "are shown in <b>bold</b>.</p>"
+           "em dash. Values that differ from the previous pause are "
+           "drawn in a <b>bold accent color</b>, and briefly flash on "
+           "the pause that introduced the change.</p>"
            "<p>Double-click or press <b>F2</b> to edit a row; "
            "<b>Delete</b> removes it; drag rows to reorder.</p>"));
     watchTree = new WatchTreeWidget(this);
-    watchTree->setColumnCount(2);
-    watchTree->setHeaderLabels({tr("Watch"), tr("Value")});
+    watchModel = new WatchItemModel(this);
+    watchModel->setColumnCount(2);
+    watchModel->setHorizontalHeaderLabels({tr("Watch"), tr("Value")});
+    watchTree->setModel(watchModel);
     watchTree->setRootIsDecorated(true);
     watchTree->setDragDropMode(QAbstractItemView::InternalMove);
     watchTree->setDefaultDropAction(Qt::MoveAction);
+    /* Row selection + full-row focus: horizontal drop line spans all columns. */
+    watchTree->setSelectionBehavior(QAbstractItemView::SelectRows);
+    watchTree->setAllColumnsShowFocus(true);
     watchTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
     watchTree->setUniformRowHeights(true);
     watchTree->setWordWrap(false);
@@ -1341,9 +1577,12 @@ void LuaDebuggerDialog::createCollapsibleSections()
 
     // --- Stack Trace Section ---
     stackSection = new CollapsibleSection(tr("Stack Trace"), this);
-    stackTree = new QTreeWidget();
-    stackTree->setColumnCount(2);
-    stackTree->setHeaderLabels({tr("Function"), tr("Location")});
+    stackModel = new QStandardItemModel(this);
+    stackModel->setColumnCount(2);
+    stackModel->setHorizontalHeaderLabels({tr("Function"), tr("Location")});
+    stackTree = new QTreeView();
+    stackTree->setModel(stackModel);
+    stackTree->setEditTriggers(QAbstractItemView::NoEditTriggers);
     stackTree->setRootIsDecorated(true);
     stackTree->setToolTip(
         tr("Select a row to inspect locals and upvalues for that frame. "
@@ -1354,20 +1593,30 @@ void LuaDebuggerDialog::createCollapsibleSections()
 
     // --- Breakpoints Section ---
     breakpointsSection = new CollapsibleSection(tr("Breakpoints"), this);
-    breakpointsTree = new QTreeWidget();
-    breakpointsTree->setColumnCount(4);
-    breakpointsTree->setHeaderLabels(
-        {tr("Active"), tr("Line"), tr("File"), QString()});
+    breakpointsModel = new QStandardItemModel(this);
+    breakpointsModel->setColumnCount(3);
+    breakpointsModel->setHorizontalHeaderLabels(
+        {tr("Active"), tr("Line"), tr("File")});
+    breakpointsTree = new QTreeView();
+    breakpointsTree->setModel(breakpointsModel);
+    breakpointsTree->setEditTriggers(QAbstractItemView::NoEditTriggers);
     breakpointsTree->setRootIsDecorated(false);
+    breakpointsTree->setSelectionBehavior(QAbstractItemView::SelectRows);
+    breakpointsTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    breakpointsTree->setAllColumnsShowFocus(true);
+    breakpointsTree->setContextMenuPolicy(Qt::CustomContextMenu);
     breakpointsSection->setContentWidget(breakpointsTree);
     breakpointsSection->setExpanded(true);
     splitter->addWidget(breakpointsSection);
 
     // --- Files Section ---
     filesSection = new CollapsibleSection(tr("Files"), this);
-    fileTree = new QTreeWidget();
-    fileTree->setColumnCount(1);
-    fileTree->setHeaderLabels({tr("Files")});
+    fileModel = new QStandardItemModel(this);
+    fileModel->setColumnCount(1);
+    fileModel->setHorizontalHeaderLabels({tr("Files")});
+    fileTree = new QTreeView();
+    fileTree->setModel(fileModel);
+    fileTree->setEditTriggers(QAbstractItemView::NoEditTriggers);
     fileTree->setRootIsDecorated(false);
     filesSection->setContentWidget(fileTree);
     filesSection->setExpanded(true);
@@ -1490,14 +1739,54 @@ void LuaDebuggerDialog::handlePause(const char *file_path, int64_t line)
     }
 
     debuggerPaused = true;
+
+    /* Cancel any deferred "Watch column shows —" placeholder still pending
+     * from the previous resume (typical for runDebuggerStep): we are
+     * about to repaint the Watch tree with real values, so the user must
+     * never see it briefly flip to "—" and back to the same value. */
+    ++watchPlaceholderEpoch_;
+
+    /* One snapshot per pause entry: rotate last pause's "current" values
+     * into the baseline so every refresh below compares against them.
+     * This MUST happen before any refresh that walks the Watch / Variables
+     * trees, otherwise the very first refresh would overwrite
+     * *Current_ with this pause's values and the snapshot would then
+     * rotate those values into *Baseline_, losing the "changed since last
+     * pause" signal. updateWidgets() calls refreshWatchDisplay(), so it
+     * counts as such a refresh and must be preceded by the rotation.
+     *
+     * isPauseEntryRefresh_ is also set here so that every refresh inside
+     * the pause-entry sequence — including the one triggered by
+     * updateWidgets() — gets the transient row-flash in addition to the
+     * persistent bold accent. Subsequent intra-pause refreshes
+     * (stack-frame switch, theme change, watch edit, eval) read from the
+     * same baseline and stay stable. */
+    snapshotBaselinesOnPauseEntry();
+    /* Decide whether the just-rotated baseline still describes the same
+     * Lua function at frame 0. It does not after a call or return, and the
+     * cue must be suppressed for this one pause; see
+     * changeHighlightAllowed() and updatePauseEntryFrameIdentity(). Must
+     * run before the first refresh below so the gate is in effect for
+     * every paint in the pause-entry sequence. */
+    updatePauseEntryFrameIdentity();
+    isPauseEntryRefresh_ = true;
     updateWidgets();
 
     stackSelectionLevel = 0;
+    /* Anchor the changed-value cue to the level we're about to paint at;
+     * intra-pause stack-frame switches will compare stackSelectionLevel
+     * against this and suppress the cue at every other level (see
+     * changeHighlightAllowed()). */
+    pauseEntryStackLevel_ = stackSelectionLevel;
     updateStack();
-    variablesTree->clear();
+    if (variablesModel)
+        {
+            variablesModel->removeRows(0, variablesModel->rowCount());
+        }
     updateVariables(nullptr, QString());
     restoreVariablesExpansionState();
     refreshWatchDisplay();
+    isPauseEntryRefresh_ = false;
 
     /*
      * If an event loop is already running (e.g. we were called from a step
@@ -1576,17 +1865,50 @@ void LuaDebuggerDialog::runDebuggerStep(void (*step_fn)(void))
      */
     step_fn();
 
+    /* Synchronous re-pause: handlePause() already ran the full refresh
+     * (including the Watch tree) with debuggerPaused=true. Anything we do
+     * here would either be redundant or, worse, blank the freshly painted
+     * values back to the "—" placeholder. */
+    if (debuggerPaused)
+    {
+        return;
+    }
+
     /*
      * If handlePause() was NOT called (e.g. step landed in C code
      * and the hook didn't fire), we need to quit the event loop so
      * the original handlePause() caller can return.
      */
-    if (!debuggerPaused && eventLoop)
+    if (eventLoop)
     {
         eventLoop->quit();
     }
 
-    updateWidgets();
+    /* Update the non-Watch chrome (window title, action enabled-state, eval
+     * panel placeholder) immediately so the user sees the debugger is no
+     * longer paused. The Watch tree is a special case: a typical step
+     * re-pauses within a few ms and immediately blanking every Watch value
+     * to "—" only to repaint the same value right back looks like every
+     * row is "blinking". Defer the placeholder application; if handlePause()
+     * arrives before the timer it bumps watchPlaceholderEpoch_ and the
+     * deferred refresh becomes a no-op. If no pause arrives in the deferral
+     * window (long-running step, script ended), the placeholder is applied
+     * normally so stale values are not left displayed. */
+    updateEnabledCheckboxIcon();
+    updateStatusLabel();
+    updateContinueActionState();
+    updateEvalPanelState();
+
+    const qint32 epoch = ++watchPlaceholderEpoch_;
+    QPointer<LuaDebuggerDialog> guard(this);
+    QTimer::singleShot(WATCH_PLACEHOLDER_DEFER_MS, this, [guard, epoch]() {
+        if (!guard || guard->debuggerPaused ||
+            guard->watchPlaceholderEpoch_ != epoch)
+        {
+            return;
+        }
+        guard->refreshWatchDisplay();
+    });
 }
 
 void LuaDebuggerDialog::onStepOver()
@@ -1615,6 +1937,10 @@ void LuaDebuggerDialog::onDebuggerToggled(bool checked)
     {
         debuggerPaused = false;
         clearPausedStateUi();
+        /* Disabling the debugger breaks the "changed since last pause"
+         * chain; drop every baseline so the next enable → pause cycle
+         * starts clean instead of comparing against a stale snapshot. */
+        clearAllChangeBaselines();
     }
     updateWidgets();
 }
@@ -1711,7 +2037,8 @@ bool LuaDebuggerDialog::eventFilter(QObject *obj, QEvent *event)
         event->type() == QEvent::MouseButtonDblClick)
     {
         auto *me = static_cast<QMouseEvent *>(event);
-        if (me->button() == Qt::LeftButton && !watchTree->itemAt(me->pos()))
+        if (me->button() == Qt::LeftButton &&
+            !watchTree->indexAt(me->pos()).isValid())
         {
             insertNewWatchRow(QString(), true);
             return true;
@@ -1732,24 +2059,57 @@ bool LuaDebuggerDialog::eventFilter(QObject *obj, QEvent *event)
     if (inDebuggerUi && event->type() == QEvent::KeyPress)
     {
         auto *ke = static_cast<QKeyEvent *>(event);
+        if (breakpointsTree &&
+            (obj == breakpointsTree || obj == breakpointsTree->viewport()))
+        {
+            if (breakpointsTree->hasFocus() ||
+                (breakpointsTree->viewport() &&
+                 breakpointsTree->viewport()->hasFocus()))
+            {
+                if ((ke->key() == Qt::Key_Delete ||
+                     ke->key() == Qt::Key_Backspace) &&
+                    ke->modifiers() == Qt::NoModifier)
+                {
+                    if (removeSelectedBreakpoints())
+                    {
+                        return true;
+                    }
+                }
+            }
+        }
         if (watchTree && (obj == watchTree || obj == watchTree->viewport()))
         {
             if (watchTree->hasFocus() ||
                 (watchTree->viewport() && watchTree->viewport()->hasFocus()))
             {
-                QTreeWidgetItem *cur = watchTree->currentItem();
+                const QModelIndex curIx = watchTree->currentIndex();
+                QStandardItem *cur =
+                    watchModel
+                        ? watchModel->itemFromIndex(
+                              curIx.sibling(curIx.row(), 0))
+                        : nullptr;
                 if (cur && cur->parent() == nullptr)
                 {
                     if ((ke->key() == Qt::Key_Delete ||
                          ke->key() == Qt::Key_Backspace) &&
                         ke->modifiers() == Qt::NoModifier)
                     {
-                        QList<QTreeWidgetItem *> del;
-                        for (QTreeWidgetItem *it : watchTree->selectedItems())
+                        QList<QStandardItem *> del;
+                        if (watchTree->selectionModel())
                         {
-                            if (it && it->parent() == nullptr)
+                            for (const QModelIndex &six :
+                                 watchTree->selectionModel()->selectedIndexes())
                             {
-                                del.append(it);
+                                if (six.column() != 0)
+                                {
+                                    continue;
+                                }
+                                QStandardItem *it =
+                                    watchModel->itemFromIndex(six);
+                                if (it && it->parent() == nullptr)
+                                {
+                                    del.append(it);
+                                }
                             }
                         }
                         if (del.isEmpty())
@@ -1762,7 +2122,12 @@ bool LuaDebuggerDialog::eventFilter(QObject *obj, QEvent *event)
                     if (ke->key() == Qt::Key_F2 &&
                         ke->modifiers() == Qt::NoModifier)
                     {
-                        watchTree->editItem(cur, 0);
+                        const QModelIndex editIx =
+                            watchModel->indexFromItem(cur);
+                        if (editIx.isValid())
+                        {
+                            watchTree->edit(editIx);
+                        }
                         return true;
                     }
                 }
@@ -1827,7 +2192,12 @@ void LuaDebuggerDialog::onClearBreakpoints()
 
 void LuaDebuggerDialog::updateBreakpoints()
 {
-    breakpointsTree->clear();
+    if (!breakpointsModel)
+    {
+        return;
+    }
+    breakpointsModel->removeRows(0, breakpointsModel->rowCount());
+    breakpointsModel->setHeaderData(2, Qt::Horizontal, tr("Location"));
     unsigned count = wslua_debugger_get_breakpoint_count();
     bool hasActiveBreakpoint = false;
     const bool collectInitialFiles = !breakpointTabsPrimed;
@@ -1842,51 +2212,52 @@ void LuaDebuggerDialog::updateBreakpoints()
         {
             QString normalizedPath =
                 normalizedFilePath(QString::fromUtf8(file_path));
-            QTreeWidgetItem *item = new QTreeWidgetItem(breakpointsTree);
 
             /* Check if file exists */
             QFileInfo fileInfo(normalizedPath);
             bool fileExists = fileInfo.exists() && fileInfo.isFile();
 
-            item->setCheckState(0, active ? Qt::Checked : Qt::Unchecked);
-            item->setData(0, BreakpointFileRole, normalizedPath);
-            item->setData(0, BreakpointLineRole, static_cast<qlonglong>(line));
-            item->setToolTip(0, tr("Enable or disable this breakpoint"));
-            item->setText(1, QString::number(line));
+            QStandardItem *const i0 = new QStandardItem();
+            QStandardItem *const i1 = new QStandardItem();
+            QStandardItem *const i2 = new QStandardItem();
+            i0->setCheckable(true);
+            i0->setCheckState(active ? Qt::Checked : Qt::Unchecked);
+            i0->setData(normalizedPath, BreakpointFileRole);
+            i0->setData(static_cast<qlonglong>(line), BreakpointLineRole);
+            i0->setToolTip(tr("Enable or disable this breakpoint"));
+            i1->setText(QString::number(line));
             const QString fileDisplayName = fileInfo.fileName();
             QString locationText =
                 QStringLiteral("%1:%2")
                     .arg(fileDisplayName.isEmpty() ? normalizedPath
                                                     : fileDisplayName)
                     .arg(line);
-            item->setText(2, locationText);
-            item->setTextAlignment(2, Qt::AlignLeft | Qt::AlignVCenter);
+            i2->setText(locationText);
+            i2->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
 
             if (!fileExists)
             {
                 /* Mark stale breakpoints with warning icon and gray text */
-                item->setIcon(2, QIcon::fromTheme("dialog-warning"));
-                item->setToolTip(2,
-                                 tr("File not found: %1").arg(normalizedPath));
-                item->setForeground(0, QBrush(Qt::gray));
-                item->setForeground(1, QBrush(Qt::gray));
-                item->setForeground(2, QBrush(Qt::gray));
+                i2->setIcon(QIcon::fromTheme("dialog-warning"));
+                i2->setToolTip(tr("File not found: %1").arg(normalizedPath));
+                i0->setForeground(QBrush(Qt::gray));
+                i1->setForeground(QBrush(Qt::gray));
+                i2->setForeground(QBrush(Qt::gray));
                 /* Disable the checkbox for stale breakpoints */
-                item->setFlags(item->flags() & ~Qt::ItemIsUserCheckable);
-                item->setCheckState(0, Qt::Unchecked);
+                i0->setFlags(i0->flags() & ~Qt::ItemIsUserCheckable);
+                i0->setCheckState(Qt::Unchecked);
             }
             else
             {
-                item->setToolTip(
-                    2, tr("%1\nLine %2").arg(normalizedPath).arg(line));
+                i2->setToolTip(tr("%1\nLine %2").arg(normalizedPath).arg(line));
             }
 
-            item->setIcon(3, QIcon::fromTheme("edit-delete"));
-            item->setToolTip(3, tr("Remove this breakpoint"));
             if (active && fileExists)
             {
                 hasActiveBreakpoint = true;
             }
+
+            breakpointsModel->appendRow({i0, i1, i2});
 
             /* Only add to file tree if file exists */
             if (fileExists)
@@ -1925,11 +2296,14 @@ void LuaDebuggerDialog::updateStack()
     }
 
     const bool signalsWereBlocked = stackTree->blockSignals(true);
-    stackTree->clear();
+    if (stackModel)
+    {
+        stackModel->removeRows(0, stackModel->rowCount());
+    }
 
     int32_t frameCount = 0;
     wslua_stack_frame_t *stack = wslua_debugger_get_stack(&frameCount);
-    QTreeWidgetItem *itemToSelect = nullptr;
+    QStandardItem *itemToSelect = nullptr;
     if (stack && frameCount > 0)
     {
         const int maxLevel = static_cast<int>(frameCount) - 1;
@@ -1939,9 +2313,10 @@ void LuaDebuggerDialog::updateStack()
 
         for (int32_t frameIndex = 0; frameIndex < frameCount; ++frameIndex)
         {
-            QTreeWidgetItem *item = new QTreeWidgetItem(stackTree);
-            item->setData(0, StackItemLevelRole,
-                            static_cast<qlonglong>(frameIndex));
+            QStandardItem *const nameItem = new QStandardItem();
+            QStandardItem *const locItem = new QStandardItem();
+            nameItem->setData(static_cast<qlonglong>(frameIndex),
+                              StackItemLevelRole);
             const char *rawSource = stack[frameIndex].source;
             const bool isLuaFrame = rawSource && rawSource[0] == '@';
             const QString functionName = QString::fromUtf8(
@@ -1962,38 +2337,39 @@ void LuaDebuggerDialog::updateStack()
                                    .arg(fileDisplayName.isEmpty() ? resolvedPath
                                                                  : fileDisplayName)
                                    .arg(stack[frameIndex].line);
-                item->setToolTip(
-                    1, QStringLiteral("%1:%2")
-                           .arg(resolvedPath)
-                           .arg(stack[frameIndex].line));
+                locItem->setToolTip(QStringLiteral("%1:%2")
+                                        .arg(resolvedPath)
+                                        .arg(stack[frameIndex].line));
             }
             else
             {
                 locationText = QString::fromUtf8(rawSource ? rawSource : "[C]");
             }
 
-            item->setText(0, functionName);
-            item->setText(1, locationText);
+            nameItem->setText(functionName);
+            locItem->setText(locationText);
 
             if (isLuaFrame)
             {
-                item->setData(0, StackItemNavigableRole, true);
-                item->setData(0, StackItemFileRole, resolvedPath);
-                item->setData(0, StackItemLineRole,
-                              static_cast<qlonglong>(stack[frameIndex].line));
+                nameItem->setData(true, StackItemNavigableRole);
+                nameItem->setData(resolvedPath, StackItemFileRole);
+                nameItem->setData(static_cast<qlonglong>(stack[frameIndex].line),
+                                  StackItemLineRole);
             }
             else
             {
-                item->setData(0, StackItemNavigableRole, false);
+                nameItem->setData(false, StackItemNavigableRole);
                 QColor disabledColor =
                     palette().color(QPalette::Disabled, QPalette::Text);
-                item->setForeground(0, disabledColor);
-                item->setForeground(1, disabledColor);
+                nameItem->setForeground(disabledColor);
+                locItem->setForeground(disabledColor);
             }
+
+            stackModel->appendRow({nameItem, locItem});
 
             if (frameIndex == stackSelectionLevel)
             {
-                itemToSelect = item;
+                itemToSelect = nameItem;
             }
         }
         wslua_debugger_free_stack(stack, frameCount);
@@ -2004,9 +2380,10 @@ void LuaDebuggerDialog::updateStack()
         wslua_debugger_set_variable_stack_level(0);
     }
 
-    if (itemToSelect)
+    if (itemToSelect && stackModel)
     {
-        stackTree->setCurrentItem(itemToSelect);
+        const QModelIndex ix = stackModel->indexFromItem(itemToSelect);
+        stackTree->setCurrentIndex(ix);
     }
     stackTree->blockSignals(signalsWereBlocked);
 }
@@ -2017,23 +2394,33 @@ void LuaDebuggerDialog::refreshVariablesForCurrentStackFrame()
     {
         return;
     }
-    variablesTree->clear();
+    if (variablesModel)
+        {
+            variablesModel->removeRows(0, variablesModel->rowCount());
+        }
     updateVariables(nullptr, QString());
     restoreVariablesExpansionState();
     refreshWatchDisplay();
 }
 
-void LuaDebuggerDialog::onStackCurrentItemChanged(QTreeWidgetItem *current,
-                                                  QTreeWidgetItem *previous)
+void LuaDebuggerDialog::onStackCurrentItemChanged(const QModelIndex &current,
+                                                  const QModelIndex &previous)
 {
     Q_UNUSED(previous);
-    if (!stackTree || !current || !debuggerPaused ||
+    if (!stackTree || !stackModel || !current.isValid() || !debuggerPaused ||
         !wslua_debugger_is_paused())
     {
         return;
     }
+    QStandardItem *const rowItem =
+        stackModel->itemFromIndex(current.sibling(current.row(), 0));
+    if (!rowItem)
+    {
+        return;
+    }
 
-    const int level = static_cast<int>(current->data(0, StackItemLevelRole).toLongLong());
+    const int level =
+        static_cast<int>(rowItem->data(StackItemLevelRole).toLongLong());
     if (level < 0 || level == stackSelectionLevel)
     {
         return;
@@ -2045,50 +2432,116 @@ void LuaDebuggerDialog::onStackCurrentItemChanged(QTreeWidgetItem *current,
     syncVariablesTreeToCurrentWatch();
 }
 
-// NOLINTNEXTLINE(misc-no-recursion)
-void LuaDebuggerDialog::updateVariables(QTreeWidgetItem *parent,
+void LuaDebuggerDialog::updateVariables(QStandardItem *parent,
                                         const QString &path)
 {
+    if (!variablesModel)
+    {
+        return;
+    }
     int32_t variableCount = 0;
     wslua_variable_t *variables = wslua_debugger_get_variables(
         path.isEmpty() ? NULL : path.toUtf8().constData(), &variableCount);
+
+    /* "First-time expansion" guard for the new-child flash: the children
+     * about to be appended belong to @p path, and a child absent from
+     * baseline is only meaningfully "new" if @p path was *visited* (and
+     * therefore its then-children captured) at the previous pause. We
+     * record that directly — the companion set variablesCurrentParents_
+     * gets @p path's own change key on every paint and rotates into
+     * variablesBaselineParents_ at pause entry. Scanning baseline value
+     * keys by prefix cannot answer this question: a parent that was
+     * expanded last pause but had no children to show (e.g. a function
+     * with no locals yet, an empty table) would look identical to one
+     * that was collapsed, so the FIRST child appearing now could never
+     * flash. The level matches the one used for the child keys (Globals
+     * anchor to -1, everything else follows the current stack frame). */
+    const int parentChildLevel =
+        variablesPathIsGlobalScoped(path) ? -1 : stackSelectionLevel;
+    const QString parentVisitedKey = changeKey(parentChildLevel, path);
+    const bool parentVisitedInBaseline =
+        variablesBaselineParents_.contains(parentVisitedKey);
+    variablesCurrentParents_.insert(parentVisitedKey);
 
     if (variables)
     {
         for (int32_t variableIndex = 0; variableIndex < variableCount;
              ++variableIndex)
         {
-            QTreeWidgetItem *item;
-            if (parent)
-            {
-                item = new QTreeWidgetItem(parent);
-            }
-            else
-            {
-                item = new QTreeWidgetItem(variablesTree);
-            }
+            auto *nameItem = new QStandardItem();
+            auto *valueItem = new QStandardItem();
+            auto *typeItem = new QStandardItem();
 
             const VariableRowFields f =
                 readVariableRowFields(variables[variableIndex], path);
 
-            item->setText(0, f.name);
-            item->setText(1, f.value);
+            nameItem->setText(f.name);
+            valueItem->setText(f.value);
+            typeItem->setText(f.type);
 
             const QString tooltipSuffix =
                 f.type.isEmpty() ? QString() : tr("Type: %1").arg(f.type);
-            item->setToolTip(
-                0, tooltipSuffix.isEmpty()
-                       ? f.name
-                       : QStringLiteral("%1\n%2").arg(f.name, tooltipSuffix));
-            item->setToolTip(1, tooltipSuffix.isEmpty()
-                                    ? f.value
-                                    : QStringLiteral("%1\n%2").arg(
-                                          f.value, tooltipSuffix));
-            item->setData(0, VariableTypeRole, f.type);
-            item->setData(0, VariableCanExpandRole, f.canExpand);
-            item->setData(0, VariablePathRole, f.childPath);
+            nameItem->setToolTip(tooltipSuffix.isEmpty()
+                                     ? f.name
+                                     : QStringLiteral("%1\n%2")
+                                           .arg(f.name, tooltipSuffix));
+            valueItem->setToolTip(tooltipSuffix.isEmpty()
+                                      ? f.value
+                                      : QStringLiteral("%1\n%2")
+                                            .arg(f.value, tooltipSuffix));
+            typeItem->setToolTip(tooltipSuffix.isEmpty()
+                                      ? f.type
+                                      : QStringLiteral("%1\n%2")
+                                            .arg(f.type, tooltipSuffix));
+            nameItem->setData(f.type, VariableTypeRole);
+            nameItem->setData(f.canExpand, VariableCanExpandRole);
+            nameItem->setData(f.childPath, VariablePathRole);
 
-            applyVariableExpansionIndicator(item, f.canExpand,
+            for (QStandardItem *cell : {nameItem, valueItem, typeItem})
+            {
+                cell->setFlags(cell->flags() & ~Qt::ItemIsEditable);
+            }
+
+            if (parent)
+            {
+                parent->appendRow({nameItem, valueItem, typeItem});
+            }
+            else
+            {
+                variablesModel->appendRow({nameItem, valueItem, typeItem});
+            }
+
+            /* Scope Globals watchers by level=-1 so changing the selected
+             * stack frame does not invalidate a Globals baseline. All other
+             * paths are scoped by the current stack level. */
+            const bool isGlobal = variablesPathIsGlobalScoped(f.childPath);
+            const int level = isGlobal ? -1 : stackSelectionLevel;
+            const QString vk = changeKey(level, f.childPath);
+            /* flashNew=parentVisitedInBaseline: a variable absent from
+             * the previous pause's snapshot but present now is "new" (e.g.
+             * a fresh local binding, a key added to a table, a new upvalue)
+             * and gets the same visual cue as a value change — but ONLY
+             * when @p path itself was painted at the previous pause.
+             * Otherwise this is a first-time expansion and treating every
+             * child as "new" would be visual noise, not information.
+             *
+             * Non-Globals comparisons are also gated on
+             * changeHighlightAllowed(): walking to a different stack frame
+             * inside the same pause shows locals/upvalues from an unrelated
+             * scope where comparing against the pause-entry baseline at the
+             * same numeric level would either flag every variable as "new"
+             * or compare against an unrelated previous-pause snapshot. The
+             * cue resumes automatically when the user navigates back to the
+             * pause-entry frame. Globals are anchored to level=-1 and stay
+             * comparable across frames, so they keep their highlight. */
+            const bool changed =
+                (isGlobal || changeHighlightAllowed()) &&
+                shouldMarkChanged(variablesBaseline_, vk, f.value,
+                                  /*flashNew=*/parentVisitedInBaseline);
+            applyChangedVisuals(nameItem, changed, isPauseEntryRefresh_);
+            variablesCurrent_[vk] = f.value;
+
+            applyVariableExpansionIndicator(nameItem, f.canExpand,
                                             /*enabledOnlyPlaceholder=*/false);
         }
         // Sort Globals alphabetically; preserve declaration order for
@@ -2101,7 +2554,7 @@ void LuaDebuggerDialog::updateVariables(QTreeWidgetItem *parent,
             }
             else
             {
-                variablesTree->sortItems(0, Qt::AscendingOrder);
+                variablesModel->sort(0, Qt::AscendingOrder);
             }
         }
 
@@ -2109,8 +2562,14 @@ void LuaDebuggerDialog::updateVariables(QTreeWidgetItem *parent,
     }
 }
 
-void LuaDebuggerDialog::onVariableItemExpanded(QTreeWidgetItem *item)
+void LuaDebuggerDialog::onVariableItemExpanded(const QModelIndex &index)
 {
+    if (!variablesModel || !index.isValid())
+    {
+        return;
+    }
+    QStandardItem *item =
+        variablesModel->itemFromIndex(index.sibling(index.row(), 0));
     if (!item)
     {
         return;
@@ -2122,23 +2581,29 @@ void LuaDebuggerDialog::onVariableItemExpanded(QTreeWidgetItem *item)
     }
     else
     {
-        const QString key = item->data(0, VariablePathRole).toString();
+        const QString key = item->data(VariablePathRole).toString();
         recordTreeSectionSubpathExpansion(variablesExpansion_, section, key,
                                           true);
     }
 
-    if (item->childCount() == 1 && item->child(0)->text(0).isEmpty())
+    if (item->rowCount() == 1 && item->child(0) &&
+        item->child(0)->text().isEmpty())
     {
-        // Remove dummy
-        delete item->takeChild(0);
+        item->removeRow(0);
 
-        QString path = item->data(0, VariablePathRole).toString();
-        updateVariables(item, path);
+        QString varPath = item->data(VariablePathRole).toString();
+        updateVariables(item, varPath);
     }
 }
 
-void LuaDebuggerDialog::onVariableItemCollapsed(QTreeWidgetItem *item)
+void LuaDebuggerDialog::onVariableItemCollapsed(const QModelIndex &index)
 {
+    if (!variablesModel || !index.isValid())
+    {
+        return;
+    }
+    QStandardItem *item =
+        variablesModel->itemFromIndex(index.sibling(index.row(), 0));
     if (!item)
     {
         return;
@@ -2150,7 +2615,7 @@ void LuaDebuggerDialog::onVariableItemCollapsed(QTreeWidgetItem *item)
     }
     else
     {
-        const QString key = item->data(0, VariablePathRole).toString();
+        const QString key = item->data(VariablePathRole).toString();
         recordTreeSectionSubpathExpansion(variablesExpansion_, section, key,
                                           false);
     }
@@ -2516,74 +2981,187 @@ void LuaDebuggerDialog::onCodeTabCloseRequested(int idx)
     updateWindowModifiedState();
 }
 
-void LuaDebuggerDialog::onBreakpointItemChanged(QTreeWidgetItem *item,
-                                                int column)
+void LuaDebuggerDialog::onBreakpointItemChanged(QStandardItem *item)
 {
-    if (column == 0)
+    if (!item || item->column() != 0)
     {
-        const QString file = item->data(0, BreakpointFileRole).toString();
-        const int64_t lineNumber =
-            item->data(0, BreakpointLineRole).toLongLong();
-        const bool active = item->checkState(0) == Qt::Checked;
-        wslua_debugger_set_breakpoint_active(file.toUtf8().constData(),
-                                             lineNumber, active);
-        if (active)
-        {
-            ensureDebuggerEnabledForActiveBreakpoints();
-        }
-        else
-        {
-            syncDebuggerToggleWithCore();
-        }
+        return;
+    }
+    const QString file = item->data(BreakpointFileRole).toString();
+    const int64_t lineNumber = item->data(BreakpointLineRole).toLongLong();
+    const bool active = item->checkState() == Qt::Checked;
+    wslua_debugger_set_breakpoint_active(file.toUtf8().constData(), lineNumber,
+                                         active);
+    if (active)
+    {
+        ensureDebuggerEnabledForActiveBreakpoints();
+    }
+    else
+    {
+        syncDebuggerToggleWithCore();
+    }
 
-        const qint32 tabCount = static_cast<qint32>(ui->codeTabWidget->count());
-        for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
-        {
-            LuaDebuggerCodeView *tabView = qobject_cast<LuaDebuggerCodeView *>(
-                ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
-            if (tabView && tabView->getFilename() == file)
-                tabView->updateBreakpointMarkers();
-        }
+    const qint32 tabCount = static_cast<qint32>(ui->codeTabWidget->count());
+    for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
+    {
+        LuaDebuggerCodeView *tabView = qobject_cast<LuaDebuggerCodeView *>(
+            ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
+        if (tabView && tabView->getFilename() == file)
+            tabView->updateBreakpointMarkers();
     }
 }
 
-void LuaDebuggerDialog::onBreakpointItemClicked(QTreeWidgetItem *item,
-                                                int column)
+void LuaDebuggerDialog::onBreakpointItemDoubleClicked(const QModelIndex &index)
 {
-    if (column == 3)
+    if (!index.isValid() || !breakpointsModel)
     {
-        const QString file = item->data(0, BreakpointFileRole).toString();
-        const int64_t lineNumber =
-            item->data(0, BreakpointLineRole).toLongLong();
-        wslua_debugger_remove_breakpoint(file.toUtf8().constData(), lineNumber);
-        updateBreakpoints();
-
-        const qint32 tabCount = static_cast<qint32>(ui->codeTabWidget->count());
-        for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
-        {
-            LuaDebuggerCodeView *tabView = qobject_cast<LuaDebuggerCodeView *>(
-                ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
-            if (tabView && tabView->getFilename() == file)
-                tabView->updateBreakpointMarkers();
-        }
+        return;
     }
-}
-
-void LuaDebuggerDialog::onBreakpointItemDoubleClicked(QTreeWidgetItem *item,
-                                                      int column)
-{
-    Q_UNUSED(column);
+    QStandardItem *item = breakpointsModel->item(index.row(), 0);
     if (!item)
     {
         return;
     }
 
-    const QString file = item->data(0, BreakpointFileRole).toString();
-    const int64_t lineNumber = item->data(0, BreakpointLineRole).toLongLong();
+    const QString file = item->data(BreakpointFileRole).toString();
+    const int64_t lineNumber = item->data(BreakpointLineRole).toLongLong();
     LuaDebuggerCodeView *view = loadFile(file);
     if (view)
     {
         view->moveCaretToLineStart(static_cast<qint32>(lineNumber));
+    }
+}
+
+bool LuaDebuggerDialog::removeBreakpointRows(const QList<int> &rows)
+{
+    if (!breakpointsModel || rows.isEmpty())
+    {
+        return false;
+    }
+
+    /* Collect (file, line) pairs for the requested rows before touching the
+     * model: rebuilding the model in updateBreakpoints() would invalidate
+     * any QStandardItem pointers we held. De-duplicate row indices so callers
+     * can pass selectionModel()->selectedIndexes() directly. */
+    QVector<QPair<QString, int64_t>> toRemove;
+    QSet<int> seenRows;
+    for (int row : rows)
+    {
+        if (row < 0 || seenRows.contains(row))
+        {
+            continue;
+        }
+        seenRows.insert(row);
+        QStandardItem *const row0 = breakpointsModel->item(row, 0);
+        if (!row0)
+        {
+            continue;
+        }
+        toRemove.append({row0->data(BreakpointFileRole).toString(),
+                         row0->data(BreakpointLineRole).toLongLong()});
+    }
+    if (toRemove.isEmpty())
+    {
+        return false;
+    }
+
+    QSet<QString> touchedFiles;
+    for (const auto &bp : toRemove)
+    {
+        wslua_debugger_remove_breakpoint(bp.first.toUtf8().constData(),
+                                         bp.second);
+        touchedFiles.insert(bp.first);
+    }
+    updateBreakpoints();
+
+    const qint32 tabCount = static_cast<qint32>(ui->codeTabWidget->count());
+    for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
+    {
+        LuaDebuggerCodeView *tabView = qobject_cast<LuaDebuggerCodeView *>(
+            ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
+        if (tabView && touchedFiles.contains(tabView->getFilename()))
+        {
+            tabView->updateBreakpointMarkers();
+        }
+    }
+    return true;
+}
+
+bool LuaDebuggerDialog::removeSelectedBreakpoints()
+{
+    if (!breakpointsTree)
+    {
+        return false;
+    }
+    QItemSelectionModel *const sm = breakpointsTree->selectionModel();
+    if (!sm)
+    {
+        return false;
+    }
+    QList<int> rows;
+    for (const QModelIndex &ix : sm->selectedIndexes())
+    {
+        if (ix.isValid())
+        {
+            rows.append(ix.row());
+        }
+    }
+    return removeBreakpointRows(rows);
+}
+
+void LuaDebuggerDialog::onBreakpointContextMenuRequested(const QPoint &pos)
+{
+    if (!breakpointsTree || !breakpointsModel)
+    {
+        return;
+    }
+
+    const QModelIndex ix = breakpointsTree->indexAt(pos);
+    /* Ensure the row under the cursor is part of the selection so "Remove"
+     * operates on something sensible even when the user right-clicks a row
+     * that was not previously selected. */
+    if (ix.isValid() && breakpointsTree->selectionModel() &&
+        !breakpointsTree->selectionModel()->isRowSelected(
+            ix.row(), ix.parent()))
+    {
+        breakpointsTree->setCurrentIndex(ix);
+    }
+
+    QMenu menu(this);
+    QAction *removeAct = nullptr;
+    if (ix.isValid())
+    {
+        removeAct = menu.addAction(tr("Remove"));
+        removeAct->setShortcut(QKeySequence(QKeySequence::Delete));
+    }
+    QAction *removeAllAct = nullptr;
+    if (breakpointsModel->rowCount() > 0)
+    {
+        if (removeAct)
+        {
+            menu.addSeparator();
+        }
+        removeAllAct = menu.addAction(tr("Remove All Breakpoints"));
+    }
+    if (menu.isEmpty())
+    {
+        return;
+    }
+
+    QAction *chosen = menu.exec(breakpointsTree->viewport()->mapToGlobal(pos));
+    if (!chosen)
+    {
+        return;
+    }
+    if (chosen == removeAct)
+    {
+        removeSelectedBreakpoints();
+        return;
+    }
+    if (chosen == removeAllAct)
+    {
+        onClearBreakpoints();
+        return;
     }
 }
 
@@ -2684,7 +3262,8 @@ void LuaDebuggerDialog::onCodeViewContextMenu(const QPoint &pos)
         {
             menu.addSeparator();
             QAction *addWatch =
-                menu.addAction(tr("Add Watch…"));
+                menu.addAction(tr("Add Watch"));
+            addWatch->setShortcut(ui->actionAddWatch->shortcut());
             connect(addWatch, &QAction::triggered,
                     [this, selectedText]()
                     {
@@ -2702,20 +3281,24 @@ void LuaDebuggerDialog::onCodeViewContextMenu(const QPoint &pos)
     menu.exec(codeView->mapToGlobal(pos));
 }
 
-void LuaDebuggerDialog::onStackItemDoubleClicked(QTreeWidgetItem *item,
-                                                 int column)
+void LuaDebuggerDialog::onStackItemDoubleClicked(const QModelIndex &index)
 {
-    Q_UNUSED(column);
+    if (!stackModel || !index.isValid())
+    {
+        return;
+    }
+    QStandardItem *item =
+        stackModel->itemFromIndex(index.sibling(index.row(), 0));
     if (!item)
     {
         return;
     }
-    if (!item->data(0, StackItemNavigableRole).toBool())
+    if (!item->data(StackItemNavigableRole).toBool())
     {
         return;
     }
-    const QString file = item->data(0, StackItemFileRole).toString();
-    const qint64 line = item->data(0, StackItemLineRole).toLongLong();
+    const QString file = item->data(StackItemFileRole).toString();
+    const qint64 line = item->data(StackItemLineRole).toLongLong();
     if (file.isEmpty() || line <= 0)
     {
         return;
@@ -2794,6 +3377,14 @@ void LuaDebuggerDialog::onLuaReloadCallback()
     LuaDebuggerDialog *dialog = _instance;
     if (dialog)
     {
+        /*
+         * Plugin reload wipes the Lua state, so the set of variables /
+         * locals / globals the user is looking at may be meaningless after
+         * reload. Reset all baselines to avoid falsely flagging values as
+         * "changed" simply because the world was rebuilt.
+         */
+        dialog->clearAllChangeBaselines();
+
         /*
          * If the debugger was paused, the UI layer called
          * wslua_debugger_notify_reload() which disabled the debugger
@@ -2876,7 +3467,7 @@ void LuaDebuggerDialog::onScriptLoadedCallback(const char *file_path)
     if (dialog && file_path)
     {
         dialog->ensureFileTreeEntry(QString::fromUtf8(file_path));
-        dialog->fileTree->sortItems(0, Qt::AscendingOrder);
+        dialog->fileModel->sort(0, Qt::AscendingOrder);
     }
 }
 
@@ -2920,6 +3511,10 @@ void LuaDebuggerDialog::applyCodeViewThemes()
 {
     ui->luaDebuggerFindFrame->updateStyleSheet();
     ui->luaDebuggerGoToLineFrame->updateStyleSheet();
+    /* Theme / palette changed — recompute the accent + flash brushes used
+     * by applyChangedVisuals so the Watch and Variables cues track the
+     * active light/dark theme. */
+    refreshChangedValueBrushes();
     if (!ui->codeTabWidget)
     {
         return;
@@ -2954,7 +3549,10 @@ static void loaded_script_callback(const char *file_path, void *user_data)
 void LuaDebuggerDialog::refreshAvailableScripts()
 {
     /* Clear existing file tree entries */
-    fileTree->clear();
+    if (fileModel)
+    {
+        fileModel->removeRows(0, fileModel->rowCount());
+    }
 
     /*
      * First, scan the plugin directories to show all available .lua files.
@@ -2981,7 +3579,7 @@ void LuaDebuggerDialog::refreshAvailableScripts()
      */
     wslua_debugger_foreach_loaded_script(loaded_script_callback, this);
 
-    fileTree->sortItems(0, Qt::AscendingOrder);
+    fileModel->sort(0, Qt::AscendingOrder);
     fileTree->expandAll();
 }
 
@@ -3008,6 +3606,10 @@ void LuaDebuggerDialog::scanScriptDirectory(const QString &dir_path)
 
 bool LuaDebuggerDialog::ensureFileTreeEntry(const QString &file_path)
 {
+    if (!fileModel)
+    {
+        return false;
+    }
     QString normalized = normalizedFilePath(file_path);
     if (normalized.isEmpty())
     {
@@ -3020,7 +3622,7 @@ bool LuaDebuggerDialog::ensureFileTreeEntry(const QString &file_path)
         return false;
     }
 
-    QTreeWidgetItem *parent = nullptr;
+    QStandardItem *parent = nullptr;
     bool createdLeaf = false;
     const qint32 componentCount = static_cast<qint32>(components.size());
     for (qint32 componentIndex = 0; componentIndex < componentCount;
@@ -3031,23 +3633,24 @@ bool LuaDebuggerDialog::ensureFileTreeEntry(const QString &file_path)
             components.at(static_cast<int>(componentIndex)).first;
         const QString absolutePath =
             components.at(static_cast<int>(componentIndex)).second;
-        QTreeWidgetItem *item = findChildItemByPath(parent, absolutePath);
+        QStandardItem *item = findChildItemByPath(parent, absolutePath);
         if (!item)
         {
-            item = parent ? new QTreeWidgetItem(parent)
-                          : new QTreeWidgetItem(fileTree);
-            item->setText(0, displayName);
-            item->setToolTip(0, absolutePath);
-            item->setData(0, FileTreePathRole, absolutePath);
-            item->setData(0, FileTreeIsDirectoryRole, !isLeaf);
-            item->setIcon(0, isLeaf ? fileIcon : folderIcon);
+            item = new QStandardItem();
+            item->setText(displayName);
+            item->setToolTip(absolutePath);
+            item->setData(absolutePath, FileTreePathRole);
+            item->setData(!isLeaf, FileTreeIsDirectoryRole);
+            item->setIcon(isLeaf ? fileIcon : folderIcon);
             if (parent)
             {
+                parent->appendRow(item);
                 parent->sortChildren(0, Qt::AscendingOrder);
             }
-            else
+            else if (fileModel)
             {
-                fileTree->sortItems(0, Qt::AscendingOrder);
+                fileModel->appendRow(item);
+                fileModel->sort(0, Qt::AscendingOrder);
             }
             if (isLeaf)
             {
@@ -3094,18 +3697,18 @@ QString LuaDebuggerDialog::normalizedFilePath(const QString &file_path) const
     return trimmed;
 }
 
-QTreeWidgetItem *
-LuaDebuggerDialog::findChildItemByPath(QTreeWidgetItem *parent,
+QStandardItem *
+LuaDebuggerDialog::findChildItemByPath(QStandardItem *parent,
                                        const QString &path) const
 {
     if (parent)
     {
-        const qint32 childCount = static_cast<qint32>(parent->childCount());
+        const qint32 childCount = static_cast<qint32>(parent->rowCount());
         for (qint32 childIndex = 0; childIndex < childCount; ++childIndex)
         {
-            QTreeWidgetItem *child =
+            QStandardItem *child =
                 parent->child(static_cast<int>(childIndex));
-            if (child->data(0, FileTreePathRole).toString() == path)
+            if (child->data(FileTreePathRole).toString() == path)
             {
                 return child;
             }
@@ -3114,13 +3717,13 @@ LuaDebuggerDialog::findChildItemByPath(QTreeWidgetItem *parent,
     }
 
     const qint32 topLevelCount =
-        static_cast<qint32>(fileTree->topLevelItemCount());
+        static_cast<qint32>(fileModel->rowCount());
     for (qint32 topLevelIndex = 0; topLevelIndex < topLevelCount;
          ++topLevelIndex)
     {
-        QTreeWidgetItem *item =
-            fileTree->topLevelItem(static_cast<int>(topLevelIndex));
-        if (item->data(0, FileTreePathRole).toString() == path)
+        QStandardItem *item =
+            fileModel->item(static_cast<int>(topLevelIndex));
+        if (item->data(FileTreePathRole).toString() == path)
         {
             return item;
         }
@@ -3215,14 +3818,14 @@ void LuaDebuggerDialog::openInitialBreakpointFiles(
 
 void LuaDebuggerDialog::configureVariablesTreeColumns()
 {
-    if (!variablesTree || !variablesTree->header())
+    if (!variablesTree || !variablesModel || !variablesTree->header())
     {
         return;
     }
-    variablesTree->setColumnCount(2);
     QHeaderView *header = variablesTree->header();
     header->setStretchLastSection(true);
     header->setSectionsMovable(false);
+    /* Visible columns: Name, Value (column 2 Type is hidden). */
     header->setSectionResizeMode(0, QHeaderView::Interactive);
     header->setSectionResizeMode(1, QHeaderView::Stretch);
     // Initial width for Name column - Value column stretches to fill the rest
@@ -3263,11 +3866,14 @@ void LuaDebuggerDialog::clearPausedStateUi()
 {
     if (variablesTree)
     {
-        variablesTree->clear();
+        if (variablesModel)
+        {
+            variablesModel->removeRows(0, variablesModel->rowCount());
+        }
     }
-    if (stackTree)
+    if (stackModel)
     {
-        stackTree->clear();
+        stackModel->removeRows(0, stackModel->rowCount());
     }
     clearAllCodeHighlights();
 }
@@ -3289,19 +3895,25 @@ void LuaDebuggerDialog::resumeDebuggerAndExitLoop()
 
 void LuaDebuggerDialog::onVariablesContextMenuRequested(const QPoint &pos)
 {
-    if (!variablesTree)
+    if (!variablesTree || !variablesModel)
     {
         return;
     }
 
-    QTreeWidgetItem *item = variablesTree->itemAt(pos);
+    const QModelIndex ix = variablesTree->indexAt(pos);
+    if (!ix.isValid())
+    {
+        return;
+    }
+    QStandardItem *item =
+        variablesModel->itemFromIndex(ix.sibling(ix.row(), 0));
     if (!item)
     {
         return;
     }
 
-    const QString nameText = item->text(0);
-    const QString valueText = item->text(1);
+    const QString nameText = item->text();
+    const QString valueText = text(variablesModel, item, 1);
     const QString bothText =
         valueText.isEmpty() ? nameText : tr("%1 = %2").arg(nameText, valueText);
 
@@ -3328,7 +3940,7 @@ void LuaDebuggerDialog::onVariablesContextMenuRequested(const QPoint &pos)
     if (eventLoop)
     {
         menu.addSeparator();
-        const QString varPath = item->data(0, VariablePathRole).toString();
+        const QString varPath = item->data(VariablePathRole).toString();
         if (!varPath.isEmpty())
         {
             QAction *addWatch =
@@ -3337,6 +3949,7 @@ void LuaDebuggerDialog::onVariablesContextMenuRequested(const QPoint &pos)
                                             ? varPath.left(48) +
                                                   QStringLiteral("…")
                                             : varPath));
+            addWatch->setShortcut(ui->actionAddWatch->shortcut());
             connect(addWatch, &QAction::triggered, this,
                     [this, varPath]() { addPathWatch(varPath); });
         }
@@ -3393,6 +4006,56 @@ void LuaDebuggerDialog::applyCodeEditorFonts(const QFont &monoFont)
     }
 }
 
+/**
+ * @brief Walk the watch @c QStandardItemModel tree: set each item’s
+ * @c QFont to the panel monospace while preserving the existing bold bit
+ * (change-highlight) so it wins over the tree widget font after row moves.
+ */
+// NOLINTNEXTLINE(misc-no-recursion)
+static void reapplyMonospaceToWatchItemModelRecursive(const QFont &base,
+                                                      QStandardItemModel *m,
+                                                      const QModelIndex &parent)
+{
+    if (!m)
+    {
+        return;
+    }
+    const int rows = m->rowCount(parent);
+    const int cols = m->columnCount(parent);
+    for (int r = 0; r < rows; ++r)
+    {
+        for (int c = 0; c < cols; ++c)
+        {
+            const QModelIndex idx = m->index(r, c, parent);
+            if (QStandardItem *it = m->itemFromIndex(idx))
+            {
+                QFont f = base;
+                f.setBold(it->font().bold());
+                it->setFont(f);
+            }
+        }
+        const QModelIndex col0 = m->index(r, 0, parent);
+        if (col0.isValid() && m->rowCount(col0) > 0)
+        {
+            reapplyMonospaceToWatchItemModelRecursive(base, m, col0);
+        }
+    }
+}
+
+void LuaDebuggerDialog::reapplyMonospaceToWatchItemFonts()
+{
+    if (!watchModel)
+    {
+        return;
+    }
+    reapplyMonospaceToWatchItemModelRecursive(
+        effectiveMonospaceFont(false), watchModel, QModelIndex());
+    if (watchTree)
+    {
+        watchTree->update();
+    }
+}
+
 void LuaDebuggerDialog::applyMonospacePanelFonts()
 {
     const QFont panelMono = effectiveMonospaceFont(false);
@@ -3409,15 +4072,16 @@ void LuaDebuggerDialog::applyMonospacePanelFonts()
         }
     }
 
-    const QList<QTreeWidget *> treesWithStandardHeaders = {
+    const QList<QTreeView *> treesWithStandardHeaders = {
         variablesTree, watchTree, stackTree, fileTree, breakpointsTree};
-    for (QTreeWidget *tree : treesWithStandardHeaders)
+    for (QTreeView *tree : treesWithStandardHeaders)
     {
         if (tree && tree->header())
         {
             tree->header()->setFont(headerFont);
         }
     }
+    reapplyMonospaceToWatchItemFonts();
 }
 
 QFont LuaDebuggerDialog::effectiveMonospaceFont(bool zoomed) const
@@ -3681,7 +4345,10 @@ void LuaDebuggerDialog::onEvaluate()
 
     // Update all views in case the expression modified state
     updateStack();
-    variablesTree->clear();
+    if (variablesModel)
+        {
+            variablesModel->removeRows(0, variablesModel->rowCount());
+        }
     updateVariables(nullptr, QString());
     restoreVariablesExpansionState();
     refreshAvailableScripts();
@@ -3702,17 +4369,17 @@ void LuaDebuggerDialog::storeWatchList()
     }
     /* On disk, "watches" is a flat array of canonical watch spec strings in
      * visual order. Per-row expansion, editor origin, and other runtime state
-     * are tracked in QTreeWidgetItem data roles only and are not persisted. */
+     * are tracked in QStandardItem data roles only and are not persisted. */
     QStringList specs;
-    const int n = watchTree->topLevelItemCount();
+    const int n = watchModel->rowCount();
     for (int i = 0; i < n; ++i)
     {
-        QTreeWidgetItem *it = watchTree->topLevelItem(i);
+        QStandardItem *it = watchModel->item(i);
         if (!it)
         {
             continue;
         }
-        const QString spec = it->data(0, WatchSpecRole).toString();
+        const QString spec = it->data(WatchSpecRole).toString();
         if (spec.isEmpty())
         {
             continue;
@@ -3751,11 +4418,20 @@ void LuaDebuggerDialog::storeBreakpointsList()
 
 void LuaDebuggerDialog::rebuildWatchTreeFromSettings()
 {
-    if (!watchTree)
+    if (!watchTree || !watchModel)
     {
         return;
     }
-    watchTree->clear();
+    watchModel->removeRows(0, watchModel->rowCount());
+    /* The tree is being repopulated from settings; any stale baselines for
+     * specs that end up in the tree will be rebuilt naturally on the next
+     * refresh. Wipe everything so a fresh session starts with no "changed"
+     * flags. Variables baselines are kept because they are not tied to
+     * watch specs. */
+    watchRootBaseline_.clear();
+    watchRootCurrent_.clear();
+    watchChildBaseline_.clear();
+    watchChildCurrent_.clear();
     /* The watch list on disk is a flat array of canonical spec strings.
      * Values that are not a valid path watch, or that are not strings, are
      * silently dropped (see wslua_debugger_watch_spec_uses_path_resolution). */
@@ -3776,8 +4452,10 @@ void LuaDebuggerDialog::rebuildWatchTreeFromSettings()
         {
             continue;
         }
-        QTreeWidgetItem *row = new QTreeWidgetItem(watchTree);
-        setupWatchRootItemFromSpec(row, spec);
+        auto *col0 = new QStandardItem();
+        auto *col1 = new QStandardItem();
+        setupWatchRootItemFromSpec(col0, col1, spec);
+        watchModel->appendRow({col0, col1});
     }
     refreshWatchDisplay();
     restoreWatchExpansionState();
@@ -3786,21 +4464,21 @@ void LuaDebuggerDialog::rebuildWatchTreeFromSettings()
 namespace
 {
 // NOLINTNEXTLINE(misc-no-recursion)
-static QTreeWidgetItem *findVariableItemByPathRecursive(QTreeWidgetItem *node,
+static QStandardItem *findVariableItemByPathRecursive(QStandardItem *node,
                                                         const QString &path)
 {
     if (!node)
     {
         return nullptr;
     }
-    if (node->data(0, VariablePathRole).toString() == path)
+    if (node->data(VariablePathRole).toString() == path)
     {
         return node;
     }
-    const int n = node->childCount();
+    const int n = node->rowCount();
     for (int i = 0; i < n; ++i)
     {
-        QTreeWidgetItem *r =
+        QStandardItem *r =
             findVariableItemByPathRecursive(node->child(i), path);
         if (r)
         {
@@ -3811,25 +4489,21 @@ static QTreeWidgetItem *findVariableItemByPathRecursive(QTreeWidgetItem *node,
 }
 } // namespace
 
-void LuaDebuggerDialog::deleteWatchRows(const QList<QTreeWidgetItem *> &items)
+void LuaDebuggerDialog::deleteWatchRows(const QList<QStandardItem *> &items)
 {
-    if (!watchTree || items.isEmpty())
+    if (!watchModel || items.isEmpty())
     {
         return;
     }
     QVector<int> indices;
     indices.reserve(items.size());
-    for (QTreeWidgetItem *it : items)
+    for (QStandardItem *it : items)
     {
         if (!it || it->parent() != nullptr)
         {
             continue;
         }
-        const int idx = watchTree->indexOfTopLevelItem(it);
-        if (idx >= 0)
-        {
-            indices.append(idx);
-        }
+        indices.append(it->row());
     }
     if (indices.isEmpty())
     {
@@ -3839,23 +4513,26 @@ void LuaDebuggerDialog::deleteWatchRows(const QList<QTreeWidgetItem *> &items)
     std::sort(indices.begin(), indices.end(), std::greater<int>());
     for (int idx : indices)
     {
-        delete watchTree->takeTopLevelItem(idx);
+        watchModel->removeRow(idx);
     }
+    /* After deletion, drop baselines for specs that are no longer present
+     * in the tree so a later "Add Watch" of the same spec starts clean. */
+    pruneChangeBaselinesToLiveWatchSpecs();
     refreshWatchDisplay();
 }
 
-QTreeWidgetItem *
+QStandardItem *
 LuaDebuggerDialog::findVariablesItemByPath(const QString &path) const
 {
     if (!variablesTree || path.isEmpty())
     {
         return nullptr;
     }
-    const int top = variablesTree->topLevelItemCount();
+    const int top = variablesModel->rowCount();
     for (int i = 0; i < top; ++i)
     {
-        QTreeWidgetItem *r =
-            findVariableItemByPathRecursive(variablesTree->topLevelItem(i),
+        QStandardItem *r =
+            findVariableItemByPathRecursive(variablesModel->item(i, 0),
                                             path);
         if (r)
         {
@@ -3865,18 +4542,18 @@ LuaDebuggerDialog::findVariablesItemByPath(const QString &path) const
     return nullptr;
 }
 
-QTreeWidgetItem *
+QStandardItem *
 LuaDebuggerDialog::findWatchRootForVariablePath(const QString &path) const
 {
     if (!watchTree || path.isEmpty())
     {
         return nullptr;
     }
-    const int n = watchTree->topLevelItemCount();
+    const int n = watchModel->rowCount();
     for (int i = 0; i < n; ++i)
     {
-        QTreeWidgetItem *w = watchTree->topLevelItem(i);
-        const QString spec = w->data(0, WatchSpecRole).toString();
+        QStandardItem *w = watchModel->item(i, 0);
+        const QString spec = w->data(WatchSpecRole).toString();
         QString vp = watchResolvedVariablePathForTooltip(spec);
         if (vp.isEmpty())
         {
@@ -3886,7 +4563,7 @@ LuaDebuggerDialog::findWatchRootForVariablePath(const QString &path) const
         {
             return w;
         }
-        if (w->data(0, VariablePathRole).toString() == path)
+        if (w->data(VariablePathRole).toString() == path)
         {
             return w;
         }
@@ -3894,45 +4571,63 @@ LuaDebuggerDialog::findWatchRootForVariablePath(const QString &path) const
     return nullptr;
 }
 
-void LuaDebuggerDialog::expandAncestorsOf(QTreeWidget *tree,
-                                            QTreeWidgetItem *item)
+void LuaDebuggerDialog::expandAncestorsOf(QTreeView *tree,
+                                          QStandardItemModel *model,
+                                          QStandardItem *item)
 {
-    if (!tree || !item)
+    if (!tree || !model || !item)
     {
         return;
     }
-    QList<QTreeWidgetItem *> chain;
-    for (QTreeWidgetItem *p = item->parent(); p; p = p->parent())
+    QList<QStandardItem *> chain;
+    for (QStandardItem *p = item->parent(); p; p = p->parent())
     {
         chain.prepend(p);
     }
-    for (QTreeWidgetItem *a : chain)
+    for (QStandardItem *a : chain)
     {
-        tree->expandItem(a);
+        const QModelIndex ix = model->indexFromItem(a);
+        if (ix.isValid())
+        {
+            tree->setExpanded(ix, true);
+        }
     }
 }
 
 void LuaDebuggerDialog::onVariablesCurrentItemChanged(
-    QTreeWidgetItem *current, QTreeWidgetItem *previous)
+    const QModelIndex &current, const QModelIndex &previous)
 {
     Q_UNUSED(previous);
-    if (syncWatchVariablesSelection_ || !watchTree || !variablesTree || !current)
+    if (syncWatchVariablesSelection_ || !watchTree || !watchModel ||
+        !variablesTree || !variablesModel || !current.isValid())
     {
         return;
     }
-    const QString path = current->data(0, VariablePathRole).toString();
-    if (path.isEmpty())
+    QStandardItem *curItem =
+        variablesModel->itemFromIndex(current.sibling(current.row(), 0));
+    QStandardItem *watch = nullptr;
+    if (curItem)
     {
-        return;
-    }
-    QTreeWidgetItem *watch = findWatchRootForVariablePath(path);
-    if (!watch)
-    {
-        return;
+        const QString path = curItem->data(VariablePathRole).toString();
+        if (!path.isEmpty())
+        {
+            watch = findWatchRootForVariablePath(path);
+        }
     }
     syncWatchVariablesSelection_ = true;
-    watchTree->setCurrentItem(watch);
-    watchTree->scrollToItem(watch);
+    if (watch)
+    {
+        const QModelIndex wix = watchModel->indexFromItem(watch);
+        watchTree->setCurrentIndex(wix);
+        watchTree->scrollTo(wix);
+    }
+    else if (QItemSelectionModel *sm = watchTree->selectionModel())
+    {
+        /* No matching watch for this Variables row — clear the stale
+         * Watch selection so the two trees stay in sync. */
+        sm->clearSelection();
+        sm->setCurrentIndex(QModelIndex(), QItemSelectionModel::Clear);
+    }
     syncWatchVariablesSelection_ = false;
 }
 
@@ -3942,76 +4637,446 @@ void LuaDebuggerDialog::syncVariablesTreeToCurrentWatch()
     {
         return;
     }
-    QTreeWidgetItem *const cur = watchTree->currentItem();
-    if (!cur || cur->parent() != nullptr)
+    const QModelIndex curIx = watchTree->currentIndex();
+    QStandardItem *const cur =
+        watchModel
+            ? watchModel->itemFromIndex(curIx.sibling(curIx.row(), 0))
+            : nullptr;
+    QStandardItem *v = nullptr;
+    if (cur && cur->parent() == nullptr)
     {
-        return;
-    }
-    const QString spec = cur->data(0, WatchSpecRole).toString();
-    if (spec.isEmpty())
-    {
-        return;
-    }
-    QString path = cur->data(0, VariablePathRole).toString();
-    if (path.isEmpty())
-    {
-        path = watchResolvedVariablePathForTooltip(spec);
-        if (path.isEmpty())
+        const QString spec = cur->data(WatchSpecRole).toString();
+        if (!spec.isEmpty())
         {
-            path = watchVariablePathForSpec(spec);
+            QString path = cur->data(VariablePathRole).toString();
+            if (path.isEmpty())
+            {
+                path = watchResolvedVariablePathForTooltip(spec);
+                if (path.isEmpty())
+                {
+                    path = watchVariablePathForSpec(spec);
+                }
+            }
+            if (!path.isEmpty())
+            {
+                v = findVariablesItemByPath(path);
+            }
         }
     }
-    if (path.isEmpty())
-    {
-        return;
-    }
-    QTreeWidgetItem *v = findVariablesItemByPath(path);
-    if (!v)
-    {
-        return;
-    }
     syncWatchVariablesSelection_ = true;
-    expandAncestorsOf(variablesTree, v);
-    variablesTree->setCurrentItem(v);
-    variablesTree->scrollToItem(v);
+    if (v)
+    {
+        expandAncestorsOf(variablesTree, variablesModel, v);
+        const QModelIndex vix = variablesModel->indexFromItem(v);
+        variablesTree->setCurrentIndex(vix);
+        variablesTree->scrollTo(vix);
+    }
+    else if (QItemSelectionModel *sm = variablesTree->selectionModel())
+    {
+        /* No matching Variables row for the current watch — clear the
+         * stale Variables selection so the two trees stay in sync. */
+        sm->clearSelection();
+        sm->setCurrentIndex(QModelIndex(), QItemSelectionModel::Clear);
+    }
     syncWatchVariablesSelection_ = false;
 }
 
-void LuaDebuggerDialog::onWatchCurrentItemChanged(QTreeWidgetItem *current,
-                                                  QTreeWidgetItem *previous)
+void LuaDebuggerDialog::onWatchCurrentItemChanged(const QModelIndex &current,
+                                                  const QModelIndex &previous)
 {
     Q_UNUSED(previous);
-    if (syncWatchVariablesSelection_ || !watchTree || !variablesTree ||
-        !current)
+    if (syncWatchVariablesSelection_ || !watchTree || !watchModel ||
+        !variablesTree || !current.isValid())
     {
         return;
     }
-    if (current->parent() != nullptr)
+    QStandardItem *rowItem =
+        watchModel->itemFromIndex(current.sibling(current.row(), 0));
+    const QString spec =
+        (rowItem && rowItem->parent() == nullptr)
+            ? rowItem->data(WatchSpecRole).toString()
+            : QString();
+
+    if (!spec.isEmpty())
+    {
+        const bool live = wslua_debugger_is_enabled() && debuggerPaused &&
+                          wslua_debugger_is_paused();
+        if (live)
+        {
+            const int32_t desired =
+                wslua_debugger_find_stack_level_for_watch_spec(
+                    spec.toUtf8().constData());
+            if (desired >= 0 && desired != stackSelectionLevel)
+            {
+                stackSelectionLevel = static_cast<int>(desired);
+                wslua_debugger_set_variable_stack_level(desired);
+                refreshVariablesForCurrentStackFrame();
+                updateStack();
+            }
+        }
+    }
+
+    /* Always sync: when the current watch has no resolvable path, the
+     * helper clears the stale Variables selection. */
+    syncVariablesTreeToCurrentWatch();
+}
+
+namespace
+{
+/**
+ * Blend two RGB colors by @a alpha (0 = all @a base, 255 = all @a accent).
+ * Used to build a theme-aware transient flash background that sits at a
+ * low opacity over the view's base color so it does not overpower the
+ * text or the selection highlight.
+ */
+static QColor blendRgb(const QColor &base, const QColor &accent, int alpha)
+{
+    const int a = std::max(0, std::min(255, alpha));
+    const int inv = 255 - a;
+    return QColor::fromRgb(
+        (base.red() * inv + accent.red() * a) / 255,
+        (base.green() * inv + accent.green() * a) / 255,
+        (base.blue() * inv + accent.blue() * a) / 255);
+}
+} // namespace
+
+void LuaDebuggerDialog::refreshChangedValueBrushes()
+{
+    /* Use the Qt palette so the accent and flash follow the current theme
+     * (light / dark / system). QPalette::Link is the most reliable "accent"
+     * role Qt exposes across platforms; QPalette::Highlight is the selection
+     * color and makes for a recognizable flash. */
+    QPalette pal = palette();
+    if (watchTree)
+    {
+        pal = watchTree->palette();
+    }
+    QColor accent = pal.color(QPalette::Link);
+    if (!accent.isValid())
+    {
+        accent = pal.color(QPalette::Highlight);
+    }
+    if (!accent.isValid())
+    {
+        accent = QColor(0x1F, 0x6F, 0xEB); // reasonable fallback
+    }
+    changedValueBrush_ = QBrush(accent);
+
+    const QColor base = pal.color(QPalette::Base);
+    const QColor hi = pal.color(QPalette::Highlight);
+    /* ~20% opacity mix feels visible on light themes and doesn't wash out
+     * text on dark themes. Pre-blend with Base so the resulting solid color
+     * renders the same regardless of whether the style composites alpha. */
+    changedFlashBrush_ = QBrush(blendRgb(base, hi, 50));
+}
+
+void LuaDebuggerDialog::snapshotBaselinesOnPauseEntry()
+{
+    /* Rotate Current → Baseline for every changed-tracking map, then clear
+     * Current. The paint helpers will repopulate Current with this pause's
+     * displayed values as they run. Missing keys mean "no baseline yet"
+     * and deliberately do not light up as "changed" on the first sighting. */
+    watchRootBaseline_ = std::move(watchRootCurrent_);
+    watchRootCurrent_.clear();
+    watchChildBaseline_ = std::move(watchChildCurrent_);
+    watchChildCurrent_.clear();
+    variablesBaseline_ = std::move(variablesCurrent_);
+    variablesCurrent_.clear();
+    /* Rotate the parent-visited sets in lockstep with the value maps;
+     * the gate they feed (parent visited last pause?) is meaningful only
+     * relative to the same rotation boundary. */
+    variablesBaselineParents_ = std::move(variablesCurrentParents_);
+    variablesCurrentParents_.clear();
+    watchChildBaselineParents_ = std::move(watchChildCurrentParents_);
+    watchChildCurrentParents_.clear();
+}
+
+void LuaDebuggerDialog::updatePauseEntryFrameIdentity()
+{
+    /* Compute "<source>:<linedefined>" for the function at frame 0 and
+     * compare against the identity captured at the previous pause. The
+     * baseline rotation just done in snapshotBaselinesOnPauseEntry() keys
+     * Locals/Upvalues at numeric stack level 0 — that is meaningful only
+     * if frame 0 is still the same Lua function. After a call or return
+     * it is a different function whose locals never lived under those
+     * keys, so changeHighlightAllowed() must report false for one pause
+     * (Globals are unaffected; they are anchored to level=-1).
+     *
+     * Self-correcting: painting still runs, so the next pause's rotate
+     * will leave Baseline holding values that match the new function. */
+    int32_t frameCount = 0;
+    wslua_stack_frame_t *stack = wslua_debugger_get_stack(&frameCount);
+
+    QString newIdentity;
+    if (stack && frameCount > 0)
+    {
+        const char *src = stack[0].source ? stack[0].source : "";
+        newIdentity =
+            QStringLiteral("%1:%2").arg(QString::fromUtf8(src)).arg(
+                static_cast<qlonglong>(stack[0].linedefined));
+    }
+    if (stack)
+    {
+        wslua_debugger_free_stack(stack, frameCount);
+    }
+
+    /* Empty newIdentity (no frames at all — should not happen at a real
+     * pause, but be defensive) is treated as "different from anything",
+     * so the cue is suppressed. The match flag is also false on the very
+     * first pause because pauseEntryFrame0Identity_ starts empty; that is
+     * harmless because the baselines are empty too. */
+    pauseEntryFrame0MatchesPrev_ =
+        !newIdentity.isEmpty() && newIdentity == pauseEntryFrame0Identity_;
+    pauseEntryFrame0Identity_ = newIdentity;
+}
+
+namespace
+{
+/**
+ * Collect every column-cell in the same row as @p anchor (inclusive).
+ * Works for both top-level rows (anchor->parent() == nullptr) and child
+ * rows. Cells with different models, or missing columns, are skipped.
+ */
+static QVector<QStandardItem *> rowCellsFor(QStandardItem *anchor)
+{
+    QVector<QStandardItem *> out;
+    if (!anchor)
+    {
+        return out;
+    }
+    auto *model = qobject_cast<QStandardItemModel *>(anchor->model());
+    if (!model)
+    {
+        return out;
+    }
+    const int cols = model->columnCount();
+    QStandardItem *parent = anchor->parent();
+    const int row = anchor->row();
+    for (int c = 0; c < cols; ++c)
+    {
+        QStandardItem *cell = parent ? parent->child(row, c)
+                                     : model->item(row, c);
+        if (cell)
+        {
+            out.append(cell);
+        }
+    }
+    return out;
+}
+
+/**
+ * Schedule a one-shot clear for @p cell tagged with @p serial. The clear
+ * only runs if the cell's current serial still matches, so a newer flash
+ * installed on the same cell is not wiped by a stale timer.
+ */
+static void scheduleFlashClear(QObject *owner, QStandardItem *cell,
+                               qint32 serial, int delayMs)
+{
+    if (!cell || !cell->model())
     {
         return;
     }
-    const QString spec = current->data(0, WatchSpecRole).toString();
+    QPointer<QAbstractItemModel> modelGuard(cell->model());
+    const QPersistentModelIndex pix(cell->index());
+    QTimer::singleShot(delayMs, owner, [modelGuard, pix, serial]() {
+        if (!modelGuard || !pix.isValid())
+        {
+            return;
+        }
+        auto *sim =
+            qobject_cast<QStandardItemModel *>(modelGuard.data());
+        if (!sim)
+        {
+            return;
+        }
+        QStandardItem *c = sim->itemFromIndex(pix);
+        if (!c)
+        {
+            return;
+        }
+        if (c->data(ChangedFlashSerialRole).toInt() != serial)
+        {
+            return;
+        }
+        c->setBackground(QBrush());
+        c->setData(QVariant(), ChangedFlashSerialRole);
+    });
+}
+} // namespace
+
+void LuaDebuggerDialog::applyChangedVisuals(QStandardItem *anchor,
+                                            bool changed,
+                                            bool isPauseEntryRefresh)
+{
+    if (!anchor)
+    {
+        return;
+    }
+
+    const QVector<QStandardItem *> cells = rowCellsFor(anchor);
+    if (cells.isEmpty())
+    {
+        return;
+    }
+
+    if (changed)
+    {
+        /* One serial per row-flash; every cell in the row tags itself with
+         * the same serial so a re-flash on this row cleanly supersedes the
+         * previous row-flash's pending timers. */
+        const qint32 serial =
+            isPauseEntryRefresh ? ++flashSerial_ : 0;
+        for (QStandardItem *cell : cells)
+        {
+            QFont f = cell->font();
+            f.setBold(true);
+            cell->setFont(f);
+            cell->setForeground(changedValueBrush_);
+            if (isPauseEntryRefresh)
+            {
+                cell->setData(serial, ChangedFlashSerialRole);
+                cell->setBackground(changedFlashBrush_);
+                scheduleFlashClear(this, cell, serial, CHANGED_FLASH_MS);
+            }
+        }
+    }
+    else
+    {
+        /* Clear ONLY the change-specific visuals (bold, and any flash this
+         * helper installed). Leave the caller-managed foreground /
+         * background untouched so error chrome (red) and the no-live-
+         * context placeholder coloring survive. A pending flash timer is
+         * cancelled by invalidating the serial. */
+        for (QStandardItem *cell : cells)
+        {
+            QFont f = cell->font();
+            f.setBold(false);
+            cell->setFont(f);
+            if (cell->data(ChangedFlashSerialRole).isValid())
+            {
+                cell->setData(QVariant(), ChangedFlashSerialRole);
+                cell->setBackground(QBrush());
+            }
+        }
+    }
+}
+
+void LuaDebuggerDialog::clearAllChangeBaselines()
+{
+    watchRootBaseline_.clear();
+    watchRootCurrent_.clear();
+    watchChildBaseline_.clear();
+    watchChildCurrent_.clear();
+    variablesBaseline_.clear();
+    variablesCurrent_.clear();
+    variablesBaselineParents_.clear();
+    variablesCurrentParents_.clear();
+    watchChildBaselineParents_.clear();
+    watchChildCurrentParents_.clear();
+    /* The frame-0 identity gate is part of the same "comparable across
+     * pauses" contract: a debugger toggle or Lua reload also breaks that
+     * contract, and starting the next session by comparing against a
+     * stale identity would suppress the cue on the very first pause for
+     * no reason. */
+    pauseEntryFrame0Identity_.clear();
+    pauseEntryFrame0MatchesPrev_ = false;
+}
+
+void LuaDebuggerDialog::clearChangeBaselinesForWatchSpec(const QString &spec)
+{
     if (spec.isEmpty())
     {
         return;
     }
-
-    const bool live = wslua_debugger_is_enabled() && debuggerPaused &&
-                      wslua_debugger_is_paused();
-    if (live)
+    const auto matches = [&spec](const QString &key)
     {
-        const int32_t desired = wslua_debugger_find_stack_level_for_watch_spec(
-            spec.toUtf8().constData());
-        if (desired >= 0 && desired != stackSelectionLevel)
+        return watchSpecFromChangeKey(key) == spec;
+    };
+    for (auto *m : {&watchRootBaseline_, &watchRootCurrent_})
+    {
+        for (auto it = m->begin(); it != m->end();)
         {
-            stackSelectionLevel = static_cast<int>(desired);
-            wslua_debugger_set_variable_stack_level(desired);
-            refreshVariablesForCurrentStackFrame();
-            updateStack();
+            if (matches(it.key()))
+            {
+                it = m->erase(it);
+            }
+            else
+            {
+                ++it;
+            }
         }
     }
+    for (auto *m : {&watchChildBaseline_, &watchChildCurrent_})
+    {
+        for (auto it = m->begin(); it != m->end();)
+        {
+            if (matches(it.key()))
+            {
+                it = m->erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+    for (auto *m : {&watchChildBaselineParents_, &watchChildCurrentParents_})
+    {
+        for (auto it = m->begin(); it != m->end();)
+        {
+            if (matches(it.key()))
+            {
+                it = m->erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    }
+}
 
-    syncVariablesTreeToCurrentWatch();
+void LuaDebuggerDialog::pruneChangeBaselinesToLiveWatchSpecs()
+{
+    if (!watchModel)
+    {
+        return;
+    }
+    QSet<QString> liveSpecs;
+    const int n = watchModel->rowCount();
+    for (int i = 0; i < n; ++i)
+    {
+        const QStandardItem *it = watchModel->item(i);
+        if (!it)
+        {
+            continue;
+        }
+        const QString spec = it->data(WatchSpecRole).toString();
+        if (!spec.isEmpty())
+        {
+            liveSpecs.insert(spec);
+        }
+    }
+    const auto pruneMap = [&](auto &m)
+    {
+        for (auto it = m.begin(); it != m.end();)
+        {
+            if (!liveSpecs.contains(watchSpecFromChangeKey(it.key())))
+            {
+                it = m.erase(it);
+            }
+            else
+            {
+                ++it;
+            }
+        }
+    };
+    pruneMap(watchRootBaseline_);
+    pruneMap(watchRootCurrent_);
+    pruneMap(watchChildBaseline_);
+    pruneMap(watchChildCurrent_);
+    pruneMap(watchChildBaselineParents_);
+    pruneMap(watchChildCurrentParents_);
 }
 
 void LuaDebuggerDialog::refreshWatchDisplay()
@@ -4023,77 +5088,87 @@ void LuaDebuggerDialog::refreshWatchDisplay()
     const bool liveContext = wslua_debugger_is_enabled() && debuggerPaused &&
                              wslua_debugger_is_paused();
     const QString muted = QStringLiteral("\u2014");
-    const int n = watchTree->topLevelItemCount();
+    const int n = watchModel->rowCount();
     for (int i = 0; i < n; ++i)
     {
-        QTreeWidgetItem *root = watchTree->topLevelItem(i);
+        QStandardItem *root = watchModel->item(i);
         applyWatchItemState(root, liveContext, muted);
-        if (liveContext && root && root->isExpanded())
+        if (liveContext && root &&
+            LuaDebuggerItems::isExpanded(watchTree, watchModel, root))
         {
             refreshWatchBranch(root);
         }
     }
 }
 
-void LuaDebuggerDialog::applyWatchItemEmpty(QTreeWidgetItem *item,
+void LuaDebuggerDialog::applyWatchItemEmpty(QStandardItem *item,
                                             const QString &muted,
                                             const QString &watchTipExtra)
 {
+    if (!watchModel)
+    {
+        return;
+    }
     clearWatchFilterErrorChrome(item, watchTree);
-    item->setText(1, muted);
-    item->setToolTip(0, watchTipExtra);
+    setText(watchModel, item, 1, muted);
+    item->setToolTip(watchTipExtra);
     /* Explain the muted em dash instead of leaving an empty tooltip: a blank
      * row has no variable path to evaluate, so there is nothing to show in
      * the Value column. */
-    item->setToolTip(
-        1,
+    LuaDebuggerItems::setToolTip(
+        watchModel, item, 1,
         capWatchTooltipText(
             tr("No watch path entered yet — enter a variable path in the "
                "Watch column to see a value here.")));
-    QFont f1 = item->font(1);
-    f1.setBold(false);
-    item->setFont(1, f1);
-    item->setChildIndicatorPolicy(QTreeWidgetItem::DontShowIndicator);
-    while (item->childCount() > 0)
+    applyChangedVisuals(item,
+                        /*changed=*/false, /*isPauseEntryRefresh=*/false);
+    while (item->rowCount() > 0)
     {
-        delete item->takeChild(0);
+        item->removeRow(0);
     }
 }
 
-void LuaDebuggerDialog::applyWatchItemNonPath(QTreeWidgetItem *item,
+void LuaDebuggerDialog::applyWatchItemNonPath(QStandardItem *item,
                                               const QString &watchTipExtra)
 {
+    if (!watchModel)
+    {
+        return;
+    }
     /* Defensive: normal entry points reject non-path specs before a row is
      * created, but hand-edited lua_debugger.json could still supply one. */
     applyWatchFilterErrorChrome(item, watchTree);
-    item->setText(1, tr("Not a variable path"));
+    setText(watchModel, item, 1, tr("Not a variable path"));
     item->setToolTip(
-        0,
         capWatchTooltipText(
             QStringLiteral("%1\n%2")
-                .arg(item->text(0),
+                .arg(item->text(),
                      tr("Use a Variables-style path (e.g. Locals.x, "
                         "Globals.t.k, t[1], t[\"k\"], or a single identifier).")) +
                 watchTipExtra));
-    item->setToolTip(
-        1, capWatchTooltipText(tr("Only variable paths can be watched.")));
-    QFont fe = item->font(1);
-    fe.setBold(false);
-    item->setFont(1, fe);
-    item->setData(0, WatchChildSnapRole, QVariant());
-    item->setChildIndicatorPolicy(QTreeWidgetItem::DontShowIndicator);
-    while (item->childCount() > 0)
+    LuaDebuggerItems::setToolTip(
+        watchModel, item, 1,
+        capWatchTooltipText(tr("Only variable paths can be watched.")));
+    applyChangedVisuals(item,
+                        /*changed=*/false, /*isPauseEntryRefresh=*/false);
+    while (item->rowCount() > 0)
     {
-        delete item->takeChild(0);
+        item->removeRow(0);
     }
 }
 
-void LuaDebuggerDialog::applyWatchItemNoLiveContext(QTreeWidgetItem *item,
+void LuaDebuggerDialog::applyWatchItemNoLiveContext(QStandardItem *item,
                                                     const QString &muted,
                                                     const QString &watchTipExtra)
 {
-    item->setText(1, muted);
-    item->setForeground(1, watchTree->palette().brush(QPalette::PlaceholderText));
+    if (!watchModel || !watchTree)
+    {
+        return;
+    }
+    setText(watchModel, item, 1, muted);
+    LuaDebuggerItems::setForeground(watchModel, item, 1,
+                                 watchTree->palette().brush(
+                                     QPalette::PlaceholderText));
     /* Replace the previous `muted \n Type: muted` tooltip (which just
      * repeated the em dash) with a short explanation so the user knows
      * *why* there is no value: watches are only evaluated while the
@@ -4105,52 +5180,74 @@ void LuaDebuggerDialog::applyWatchItemNoLiveContext(QTreeWidgetItem *item,
                  "The debugger is currently disabled.");
     const QString ttSuf = tr("Type: %1").arg(muted);
     item->setToolTip(
-        0,
         capWatchTooltipText(
             QStringLiteral("%1\n%2\n%3")
-                .arg(item->text(0), mutedReason, ttSuf) +
+                .arg(item->text(), mutedReason, ttSuf) +
             watchTipExtra));
-    item->setToolTip(1, capWatchTooltipText(mutedReason));
-    QFont f1 = item->font(1);
-    f1.setBold(false);
-    item->setFont(1, f1);
-    item->setData(0, WatchLastValueRole, QVariant());
-    item->setChildIndicatorPolicy(QTreeWidgetItem::DontShowIndicator);
+    LuaDebuggerItems::setToolTip(watchModel, item, 1,
+                            capWatchTooltipText(mutedReason));
+    /* Clear the accent/bold/flash but do NOT touch the baseline maps:
+     * bold-on-change must survive resume → pause cycles so the next pause
+     * can compare against the value displayed at the end of this pause.
+     * applyChangedVisuals(false) only unbolds; it leaves the caller's
+     * foreground / background intact, so the placeholder brush set above
+     * and the normal column-0 text stay as the caller wants. */
+    applyChangedVisuals(item,
+                        /*changed=*/false, /*isPauseEntryRefresh=*/false);
+    /* A previous pause may have left the Watch-column (col 0) foreground
+     * set to the accent. Reset it to the default text color so the spec
+     * looks normal while unpaused. */
+    LuaDebuggerItems::setForeground(
+        watchModel, item, 0,
+        watchTree->palette().brush(QPalette::Text));
     if (item->parent() == nullptr)
     {
-        item->setData(0, WatchChildSnapRole, QVariant());
-        while (item->childCount() > 0)
+        while (item->rowCount() > 0)
         {
-            delete item->takeChild(0);
+            item->removeRow(0);
         }
     }
 }
 
-void LuaDebuggerDialog::applyWatchItemError(QTreeWidgetItem *item,
+void LuaDebuggerDialog::applyWatchItemError(QStandardItem *item,
                                             const QString &errStr,
                                             const QString &watchTipExtra)
 {
+    if (!watchModel)
+    {
+        return;
+    }
     applyWatchFilterErrorChrome(item, watchTree);
-    item->setText(1, errStr);
+    setText(watchModel, item, 1, errStr);
     const QString ttSuf = tr("Type: %1").arg(tr("error"));
     item->setToolTip(
-        0,
         capWatchTooltipText(
-            QStringLiteral("%1\n%2").arg(item->text(0), ttSuf) + watchTipExtra));
-    item->setToolTip(
-        1,
+            QStringLiteral("%1\n%2").arg(item->text(), ttSuf) + watchTipExtra));
+    LuaDebuggerItems::setToolTip(
+        watchModel, item, 1,
         capWatchTooltipText(
             QStringLiteral("%1\n%2\n%3")
                 .arg(tr("Invalid watch path."), errStr, ttSuf)));
-    item->setData(0, WatchChildSnapRole, QVariant());
-    item->setChildIndicatorPolicy(QTreeWidgetItem::DontShowIndicator);
-    while (item->childCount() > 0)
+    applyChangedVisuals(item,
+                        /*changed=*/false, /*isPauseEntryRefresh=*/false);
+    /* An error invalidates the comparison: drop baselines for this root so
+     * the next successful evaluation does not flag a change vs the pre-error
+     * value. */
+    if (item->parent() == nullptr)
     {
-        delete item->takeChild(0);
+        const QString spec = item->data(WatchSpecRole).toString();
+        if (!spec.isEmpty())
+        {
+            clearChangeBaselinesForWatchSpec(spec);
+        }
+    }
+    while (item->rowCount() > 0)
+    {
+        item->removeRow(0);
     }
 }
 
-void LuaDebuggerDialog::applyWatchItemSuccess(QTreeWidgetItem *item,
+void LuaDebuggerDialog::applyWatchItemSuccess(QStandardItem *item,
                                               const QString &spec,
                                               const char *val, const char *typ,
                                               bool can_expand,
@@ -4160,57 +5257,68 @@ void LuaDebuggerDialog::applyWatchItemSuccess(QTreeWidgetItem *item,
     {
         watchRootSetVariablePathRoleFromSpec(item, spec);
     }
+    if (!watchModel)
+    {
+        return;
+    }
     const QString v = val ? QString::fromUtf8(val) : QString();
     const QString typStr = typ ? QString::fromUtf8(typ) : QString();
-    const QString prev = item->data(0, WatchLastValueRole).toString();
-    item->setText(1, v);
+    setText(watchModel, item, 1, v);
     const QString ttSuf =
         typStr.isEmpty() ? QString() : tr("Type: %1").arg(typStr);
     item->setToolTip(
-        0,
         capWatchTooltipText(
             (ttSuf.isEmpty()
-                 ? item->text(0)
-                 : QStringLiteral("%1\n%2").arg(item->text(0), ttSuf)) +
+                 ? item->text()
+                 : QStringLiteral("%1\n%2").arg(item->text(), ttSuf)) +
             watchTipExtra));
-    item->setToolTip(
-        1,
+    LuaDebuggerItems::setToolTip(
+        watchModel, item, 1,
         capWatchTooltipText(
             ttSuf.isEmpty() ? v : QStringLiteral("%1\n%2").arg(v, ttSuf)));
-    QFont f1 = item->font(1);
-    f1.setBold(!prev.isEmpty() && prev != v);
-    item->setFont(1, f1);
-    item->setData(0, WatchLastValueRole, v);
+    /* Only watch roots are routed through applyWatchItemSuccess; children go
+     * through applyWatchChildRowTextAndTooltip + applyChangedVisuals inside
+     * fillWatchPathChildren. The Globals branch is excluded from
+     * changeHighlightAllowed() because it is anchored to level=-1 and
+     * therefore stays comparable across stack-frame switches. */
+    const bool isGlobal = watchSpecIsGlobalScoped(spec);
+    const int level = isGlobal ? -1 : stackSelectionLevel;
+    const QString rk = changeKey(level, spec);
+    const bool changed = (isGlobal || changeHighlightAllowed()) &&
+                         shouldMarkChanged(watchRootBaseline_, rk, v);
+    applyChangedVisuals(item, changed, isPauseEntryRefresh_);
+    watchRootCurrent_[rk] = v;
 
     if (can_expand)
     {
-        item->setChildIndicatorPolicy(QTreeWidgetItem::ShowIndicator);
-        if (item->childCount() == 0)
+        if (item->rowCount() == 0)
         {
-            QTreeWidgetItem *const ph = new QTreeWidgetItem(item);
-            ph->setFlags(Qt::ItemIsEnabled);
+            QStandardItem *const ph0 = new QStandardItem();
+            QStandardItem *const ph1 = new QStandardItem();
+            ph0->setFlags(Qt::ItemIsEnabled);
+            ph1->setFlags(Qt::ItemIsEnabled);
+            item->appendRow({ph0, ph1});
         }
     }
     else
     {
-        item->setChildIndicatorPolicy(QTreeWidgetItem::DontShowIndicator);
-        while (item->childCount() > 0)
+        while (item->rowCount() > 0)
         {
-            delete item->takeChild(0);
+            item->removeRow(0);
         }
     }
 }
 
-void LuaDebuggerDialog::applyWatchItemState(QTreeWidgetItem *item,
+void LuaDebuggerDialog::applyWatchItemState(QStandardItem *item,
                                             bool liveContext,
                                             const QString &muted)
 {
-    if (!item)
+    if (!item || !watchModel || !watchTree)
     {
         return;
     }
 
-    const QString spec = item->data(0, WatchSpecRole).toString();
+    const QString spec = item->data(WatchSpecRole).toString();
     const QString watchTipExtra = watchPathOriginSuffix(item, spec);
 
     if (item->parent() == nullptr && spec.isEmpty())
@@ -4226,7 +5334,8 @@ void LuaDebuggerDialog::applyWatchItemState(QTreeWidgetItem *item,
     }
 
     clearWatchFilterErrorChrome(item, watchTree);
-    item->setForeground(1, watchTree->palette().brush(QPalette::Text));
+    LuaDebuggerItems::setForeground(watchModel, item, 1,
+                               watchTree->palette().brush(QPalette::Text));
 
     if (!liveContext)
     {
@@ -4253,25 +5362,28 @@ void LuaDebuggerDialog::applyWatchItemState(QTreeWidgetItem *item,
     g_free(typ);
 }
 
-void LuaDebuggerDialog::fillWatchPathChildren(QTreeWidgetItem *parent,
+void LuaDebuggerDialog::fillWatchPathChildren(QStandardItem *parent,
                                               const QString &path)
 {
+    if (!watchModel || !watchTree)
+    {
+        return;
+    }
     /* Path watches drill down with wslua_debugger_get_variables (same tree as
      * Variables); expression watches use wslua_debugger_watch_* elsewhere. */
     if (watchSubpathBoundaryCount(path) >= WSLUA_WATCH_MAX_PATH_SEGMENTS)
     {
-        QTreeWidgetItem *sent = new QTreeWidgetItem(parent);
-        sent->setText(0, QStringLiteral("\u2026"));
-        sent->setText(1, tr("Maximum watch depth reached"));
-        sent->setFlags(Qt::ItemIsEnabled);
-        QTreeWidget *tw = parent->treeWidget();
-        if (tw)
-        {
-            sent->setForeground(
-                1, tw->palette().brush(QPalette::PlaceholderText));
-        }
-        sent->setToolTip(
-            1, capWatchTooltipText(tr("Maximum watch depth reached.")));
+        auto *sent0 = new QStandardItem(QStringLiteral("\u2026"));
+        auto *sent1 = new QStandardItem(tr("Maximum watch depth reached"));
+        sent0->setFlags(Qt::ItemIsEnabled);
+        sent1->setFlags(Qt::ItemIsEnabled);
+        LuaDebuggerItems::setForeground(
+            watchModel, sent0, 1,
+            watchTree->palette().brush(QPalette::PlaceholderText));
+        LuaDebuggerItems::setToolTip(
+            watchModel, sent0, 1,
+            capWatchTooltipText(tr("Maximum watch depth reached.")));
+        parent->appendRow({sent0, sent1});
         return;
     }
 
@@ -4284,24 +5396,71 @@ void LuaDebuggerDialog::fillWatchPathChildren(QTreeWidgetItem *parent,
         return;
     }
 
+    const QStandardItem *const rootWatch = watchRootItem(parent);
+    const QString rootSpec =
+        rootWatch ? rootWatch->data(WatchSpecRole).toString() : QString();
+    const bool rootIsGlobal = watchSpecIsGlobalScoped(rootSpec);
+    const int rootLevel = rootIsGlobal ? -1 : stackSelectionLevel;
+    const QString rootKey = changeKey(rootLevel, rootSpec);
+    auto &baseline = watchChildBaseline_[rootKey];
+    auto &current = watchChildCurrent_[rootKey];
+    /* Globals-scoped roots are anchored to level=-1 and stay comparable
+     * across stack-frame switches; everything else is suppressed when the
+     * user has navigated away from the pause-entry frame (see
+     * changeHighlightAllowed()). */
+    const bool highlightAllowed = rootIsGlobal || changeHighlightAllowed();
+    /* "First-time expansion" guard, mirror of the one in updateVariables():
+     * a child absent from baseline is only meaningfully "new" if the
+     * parent @p path was painted at the previous pause. We record that
+     * fact directly via the visited-parents companion set; scanning the
+     * value baseline by prefix cannot tell "collapsed last pause" apart
+     * from "expanded last pause with no children yet", so the FIRST
+     * child to appear under a parent that has always been empty (an
+     * empty table just got its first key) would otherwise never flash. */
+    auto &baselineParents = watchChildBaselineParents_[rootKey];
+    auto &currentParents = watchChildCurrentParents_[rootKey];
+    const bool parentVisitedInBaseline = baselineParents.contains(path);
+    currentParents.insert(path);
+
     for (int32_t variableIndex = 0; variableIndex < variableCount;
          ++variableIndex)
     {
-        QTreeWidgetItem *item = new QTreeWidgetItem(parent);
+        auto *nameItem = new QStandardItem();
+        auto *valueItem = new QStandardItem();
 
         const VariableRowFields f =
             readVariableRowFields(variables[variableIndex], path);
 
-        item->setText(0, f.name);
-        item->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
-        item->setData(0, VariableTypeRole, f.type);
-        item->setData(0, VariableCanExpandRole, f.canExpand);
-        item->setData(0, VariablePathRole, f.childPath);
+        nameItem->setText(f.name);
+        nameItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        nameItem->setData(f.type, VariableTypeRole);
+        nameItem->setData(f.canExpand, VariableCanExpandRole);
+        nameItem->setData(f.childPath, VariablePathRole);
 
-        applyWatchChildRowPresentation(item, f.childPath, f.value, f.type);
+        parent->appendRow({nameItem, valueItem});
 
-        applyVariableExpansionIndicator(item, f.canExpand,
-                                        /*enabledOnlyPlaceholder=*/true);
+        applyWatchChildRowTextAndTooltip(nameItem, f.value, f.type);
+
+        /* flashNew=parentVisitedInBaseline: a child key that appeared
+         * since the previous pause inside an already-visited watch path
+         * is a legitimate change (e.g. a new key inserted into a table)
+         * and gets the cue. But when the user expands a parent for the
+         * first time, the parent itself was never painted at the previous
+         * pause, so lighting up the whole subtree as "new" is misleading. The whole
+         * comparison is also gated on highlightAllowed (see above) to
+         * suppress the cue when the user is browsing a different stack
+         * frame than the pause was entered at — Globals-scoped roots are
+         * exempt and stay comparable. */
+        const bool changed =
+            highlightAllowed &&
+            shouldMarkChanged(baseline, f.childPath, f.value,
+                              /*flashNew=*/parentVisitedInBaseline);
+        applyChangedVisuals(nameItem, changed, isPauseEntryRefresh_);
+        current[f.childPath] = f.value;
+
+        applyVariableExpansionIndicator(nameItem, f.canExpand,
+                                        /*enabledOnlyPlaceholder=*/true,
+                                        /*columnCount=*/2);
     }
 
     if (variableChildrenShouldSortByName(path))
@@ -4315,18 +5474,18 @@ void LuaDebuggerDialog::fillWatchPathChildren(QTreeWidgetItem *parent,
 namespace
 {
 /** Subpath / variable-path key used to address @p item inside a watch root. */
-static QString watchItemExpansionKey(const QTreeWidgetItem *item)
+static QString watchItemExpansionKey(const QStandardItem *item)
 {
     if (!item || !item->parent())
     {
         return QString();
     }
-    const QString sp = item->data(0, WatchSubpathRole).toString();
+    const QString sp = item->data(WatchSubpathRole).toString();
     if (!sp.isEmpty())
     {
         return sp;
     }
-    return item->data(0, VariablePathRole).toString();
+    return item->data(VariablePathRole).toString();
 }
 } // namespace
 
@@ -4423,15 +5582,15 @@ void LuaDebuggerDialog::pruneWatchExpansionMap()
         return;
     }
     QSet<QString> liveSpecs;
-    const int n = watchTree->topLevelItemCount();
+    const int n = watchModel->rowCount();
     for (int i = 0; i < n; ++i)
     {
-        const QTreeWidgetItem *it = watchTree->topLevelItem(i);
+        const QStandardItem *it = watchModel->item(i);
         if (!it)
         {
             continue;
         }
-        const QString spec = it->data(0, WatchSpecRole).toString();
+        const QString spec = it->data(WatchSpecRole).toString();
         if (!spec.isEmpty())
         {
             liveSpecs.insert(spec);
@@ -4450,8 +5609,14 @@ void LuaDebuggerDialog::pruneWatchExpansionMap()
     }
 }
 
-void LuaDebuggerDialog::onWatchItemExpanded(QTreeWidgetItem *item)
+void LuaDebuggerDialog::onWatchItemExpanded(const QModelIndex &index)
 {
+    if (!watchModel || !index.isValid())
+    {
+        return;
+    }
+    QStandardItem *item =
+        watchModel->itemFromIndex(index.sibling(index.row(), 0));
     if (!item)
     {
         return;
@@ -4460,9 +5625,9 @@ void LuaDebuggerDialog::onWatchItemExpanded(QTreeWidgetItem *item)
      * expansion and the programmatic setExpanded(true) calls made by
      * reexpandWatchDescendantsByPathKeys; re-recording an already-tracked
      * key is idempotent. */
-    const QTreeWidgetItem *const rootWatch = watchRootItem(item);
+    const QStandardItem *const rootWatch = watchRootItem(item);
     const QString rootSpec =
-        rootWatch ? rootWatch->data(0, WatchSpecRole).toString() : QString();
+        rootWatch ? rootWatch->data(WatchSpecRole).toString() : QString();
     if (!item->parent())
     {
         recordWatchRootExpansion(rootSpec, true);
@@ -4473,11 +5638,25 @@ void LuaDebuggerDialog::onWatchItemExpanded(QTreeWidgetItem *item)
                                     true);
     }
 
-    if (item->childCount() == 1 && item->child(0)->text(0).isEmpty())
+    if (item->rowCount() == 1)
     {
-        delete item->takeChild(0);
+        const QModelIndex parentIx = watchModel->indexFromItem(item);
+        const QModelIndex firstChildIx =
+            watchModel->index(0, 0, parentIx);
+        const QString t0 =
+            LuaDebuggerItems::rowColumnDisplayText(firstChildIx, 0);
+        const QString t1 =
+            LuaDebuggerItems::rowColumnDisplayText(firstChildIx, 1);
+        if (t0.isEmpty() && t1.isEmpty())
+        {
+            item->removeRow(0);
+        }
+        else
+        {
+            return;
+        }
     }
-    else if (item->childCount() > 0)
+    else if (item->rowCount() > 0)
     {
         return;
     }
@@ -4485,15 +5664,21 @@ void LuaDebuggerDialog::onWatchItemExpanded(QTreeWidgetItem *item)
     refillWatchChildren(item);
 }
 
-void LuaDebuggerDialog::onWatchItemCollapsed(QTreeWidgetItem *item)
+void LuaDebuggerDialog::onWatchItemCollapsed(const QModelIndex &index)
 {
+    if (!watchModel || !index.isValid())
+    {
+        return;
+    }
+    QStandardItem *item =
+        watchModel->itemFromIndex(index.sibling(index.row(), 0));
     if (!item)
     {
         return;
     }
-    const QTreeWidgetItem *const rootWatch = watchRootItem(item);
+    const QStandardItem *const rootWatch = watchRootItem(item);
     const QString rootSpec =
-        rootWatch ? rootWatch->data(0, WatchSpecRole).toString() : QString();
+        rootWatch ? rootWatch->data(WatchSpecRole).toString() : QString();
     if (!item->parent())
     {
         recordWatchRootExpansion(rootSpec, false);
@@ -4505,20 +5690,20 @@ void LuaDebuggerDialog::onWatchItemCollapsed(QTreeWidgetItem *item)
     }
 }
 
-void LuaDebuggerDialog::refillWatchChildren(QTreeWidgetItem *item)
+void LuaDebuggerDialog::refillWatchChildren(QStandardItem *item)
 {
     if (!item)
     {
         return;
     }
-    while (item->childCount() > 0)
+    while (item->rowCount() > 0)
     {
-        delete item->takeChild(0);
+        item->removeRow(0);
     }
 
-    const QTreeWidgetItem *const rootWatch = watchRootItem(item);
-    const QString rootSpec = rootWatch->data(0, WatchSpecRole).toString();
-    QString path = item->data(0, VariablePathRole).toString();
+    const QStandardItem *const rootWatch = watchRootItem(item);
+    const QString rootSpec = rootWatch->data(WatchSpecRole).toString();
+    QString path = item->data(VariablePathRole).toString();
     if (path.isEmpty())
     {
         path = watchResolvedVariablePathForTooltip(rootSpec);
@@ -4530,9 +5715,10 @@ void LuaDebuggerDialog::refillWatchChildren(QTreeWidgetItem *item)
     fillWatchPathChildren(item, path);
 }
 
-void LuaDebuggerDialog::refreshWatchBranch(QTreeWidgetItem *item)
+void LuaDebuggerDialog::refreshWatchBranch(QStandardItem *item)
 {
-    if (!item || !item->isExpanded())
+    if (!item || !watchTree || !watchModel ||
+        !LuaDebuggerItems::isExpanded(watchTree, watchModel, item))
     {
         return;
     }
@@ -4543,13 +5729,13 @@ void LuaDebuggerDialog::refreshWatchBranch(QTreeWidgetItem *item)
      * and survives both refills and the children-clearing that happens while
      * the debugger is not paused. This lets deep subtrees survive stepping,
      * pause / resume, and Variables tree refreshes without being tied to
-     * transient QTreeWidgetItem lifetimes. */
-    const QTreeWidgetItem *const rootWatch = watchRootItem(item);
+     * transient QStandardItem lifetimes. */
+    const QStandardItem *const rootWatch = watchRootItem(item);
     const QString rootSpec =
-        rootWatch ? rootWatch->data(0, WatchSpecRole).toString() : QString();
+        rootWatch ? rootWatch->data(WatchSpecRole).toString() : QString();
     refillWatchChildren(item);
     reexpandWatchDescendantsByPathKeys(
-        item, watchExpandedSubpathsForSpec(rootSpec));
+        watchTree, watchModel, item, watchExpandedSubpathsForSpec(rootSpec));
 }
 
 namespace
@@ -4559,10 +5745,10 @@ struct WatchContextMenuActions
 {
     QAction *addWatch = nullptr;
     QAction *copyValue = nullptr;
-    QAction *remove = nullptr;
     QAction *duplicate = nullptr;
-    QAction *moveUp = nullptr;
-    QAction *moveDown = nullptr;
+    QAction *editWatch = nullptr;
+    QAction *remove = nullptr;
+    QAction *removeAllWatches = nullptr;
 };
 } /* namespace */
 
@@ -4571,21 +5757,39 @@ struct WatchContextMenuActions
  * @a item (may be null / a child row), returning pointers to each action
  * so the caller can dispatch on the chosen QAction.
  *
- * Sub-element rows (descendants of a watch root) only expose `Add Watch…`
- * and `Copy Value`; the remaining entries (Remove, Duplicate, Move
- * Up/Down) operate on the watch list itself and therefore only make
- * sense on watch roots.
+ * Sub-element rows (descendants of a watch root) only expose `Add Watch`
+ * and `Copy Value`. Watch roots also get duplicate, edit, copy value, remove
+ * one, and remove all.
  */
-static void buildWatchContextMenu(QMenu &menu, QTreeWidgetItem *item,
-                                  WatchContextMenuActions *acts)
+static void buildWatchContextMenu(
+    QMenu &menu, QStandardItem *item, WatchContextMenuActions *acts,
+    const QStandardItemModel *watchModel, const QKeySequence &addWatchShortcut)
 {
-    acts->addWatch = menu.addAction(QObject::tr("Add Watch…"));
+    acts->addWatch = menu.addAction(QObject::tr("Add Watch"));
+    if (!addWatchShortcut.isEmpty())
+    {
+        acts->addWatch->setShortcut(addWatchShortcut);
+    }
     if (!item)
     {
+        if (watchModel && watchModel->rowCount() > 0)
+        {
+            menu.addSeparator();
+            acts->removeAllWatches = menu.addAction(
+                QObject::tr("Remove All Watches"));
+        }
         return;
     }
 
-    menu.addSeparator();
+    if (item->parent() == nullptr)
+    {
+        /* Watch root: Add Watch, then duplicate / edit, then the rest. */
+        acts->duplicate = menu.addAction(QObject::tr("Duplicate Watch"));
+        acts->editWatch = menu.addAction(QObject::tr("Edit Watch"));
+        acts->editWatch->setShortcut(QKeySequence(Qt::Key_F2));
+        menu.addSeparator();
+    }
+
     acts->copyValue = menu.addAction(QObject::tr("Copy Value"));
 
     if (item->parent() != nullptr)
@@ -4594,24 +5798,33 @@ static void buildWatchContextMenu(QMenu &menu, QTreeWidgetItem *item,
     }
 
     menu.addSeparator();
-    acts->moveUp = menu.addAction(QObject::tr("Move Up"));
-    acts->moveDown = menu.addAction(QObject::tr("Move Down"));
-    acts->duplicate = menu.addAction(QObject::tr("Duplicate Watch"));
     acts->remove = menu.addAction(QObject::tr("Remove"));
+    acts->remove->setShortcut(QKeySequence(QKeySequence::Delete));
+    if (watchModel->rowCount() > 0)
+    {
+        acts->removeAllWatches = menu.addAction(
+            QObject::tr("Remove All Watches"));
+    }
 }
 
 void LuaDebuggerDialog::onWatchContextMenuRequested(const QPoint &pos)
 {
-    if (!watchTree)
+    if (!watchTree || !watchModel)
     {
         return;
     }
 
-    QTreeWidgetItem *item = watchTree->itemAt(pos);
+    const QModelIndex ix = watchTree->indexAt(pos);
+    QStandardItem *item = nullptr;
+    if (ix.isValid())
+    {
+        item = watchModel->itemFromIndex(ix.sibling(ix.row(), 0));
+    }
 
     QMenu menu(this);
     WatchContextMenuActions acts;
-    buildWatchContextMenu(menu, item, &acts);
+    buildWatchContextMenu(menu, item, &acts, watchModel,
+                          ui->actionAddWatch->shortcut());
 
     QAction *chosen = menu.exec(watchTree->viewport()->mapToGlobal(pos));
     if (!chosen)
@@ -4622,6 +5835,22 @@ void LuaDebuggerDialog::onWatchContextMenuRequested(const QPoint &pos)
     if (chosen == acts.addWatch)
     {
         insertNewWatchRow(QString(), true);
+        return;
+    }
+    if (chosen == acts.removeAllWatches)
+    {
+        if (watchModel)
+        {
+            QList<QStandardItem *> all;
+            for (int i = 0; i < watchModel->rowCount(); ++i)
+            {
+                if (QStandardItem *r = watchModel->item(i, 0))
+                {
+                    all.append(r);
+                }
+            }
+            deleteWatchRows(all);
+        }
         return;
     }
     if (!item)
@@ -4651,7 +5880,7 @@ void LuaDebuggerDialog::onWatchContextMenuRequested(const QPoint &pos)
     if (chosen == acts.copyValue)
     {
         QString value;
-        const QString varPath = item->data(0, VariablePathRole).toString();
+        const QString varPath = item->data(VariablePathRole).toString();
         if (!varPath.isEmpty() && debuggerPaused &&
             wslua_debugger_is_enabled() && wslua_debugger_is_paused())
         {
@@ -4667,7 +5896,7 @@ void LuaDebuggerDialog::onWatchContextMenuRequested(const QPoint &pos)
         }
         if (value.isNull())
         {
-            value = item->text(1);
+            value = LuaDebuggerItems::rowColumnDisplayText(ix, 1);
         }
         copyToClipboard(value);
         return;
@@ -4678,11 +5907,34 @@ void LuaDebuggerDialog::onWatchContextMenuRequested(const QPoint &pos)
         return;
     }
 
+    if (chosen == acts.editWatch)
+    {
+        QTimer::singleShot(0, this, [this, item]()
+                           {
+                               if (!watchModel || !watchTree)
+                               {
+                                   return;
+                               }
+                               const QModelIndex editIx =
+                                   watchModel->indexFromItem(item);
+                               if (!editIx.isValid())
+                               {
+                                   return;
+                               }
+                               watchTree->scrollTo(editIx);
+                               watchTree->setCurrentIndex(editIx);
+                               watchTree->edit(editIx);
+                           });
+        return;
+    }
+
     if (chosen == acts.remove)
     {
-        QList<QTreeWidgetItem *> del;
-        for (QTreeWidgetItem *it : watchTree->selectedItems())
+        QList<QStandardItem *> del;
+        for (const QModelIndex &six :
+             watchTree->selectionModel()->selectedRows(0))
         {
+            QStandardItem *it = watchModel->itemFromIndex(six);
             if (it && it->parent() == nullptr)
             {
                 del.append(it);
@@ -4696,45 +5948,42 @@ void LuaDebuggerDialog::onWatchContextMenuRequested(const QPoint &pos)
         return;
     }
 
-    const int idx = watchTree->indexOfTopLevelItem(item);
     if (chosen == acts.duplicate)
     {
-        QTreeWidgetItem *copy = new QTreeWidgetItem();
-        copy->setFlags(copy->flags() | Qt::ItemIsEditable | Qt::ItemIsEnabled |
-                       Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
-        copy->setText(0, item->text(0));
+        auto *copy0 = new QStandardItem();
+        auto *copy1 = new QStandardItem();
+        copy0->setFlags(copy0->flags() | Qt::ItemIsEditable | Qt::ItemIsEnabled |
+                        Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+        copy1->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+        copy0->setText(item->text());
+        {
+            const QModelIndex srcRow0 = watchModel->indexFromItem(item);
+            LuaDebuggerItems::setText(
+                watchModel, copy0, 1,
+                LuaDebuggerItems::rowColumnDisplayText(srcRow0, 1));
+        }
         for (int r = WatchSpecRole; r <= WatchPendingNewRole; ++r)
         {
-            copy->setData(0, r, item->data(0, r));
+            copy0->setData(item->data(r), r);
         }
-        copy->setData(0, WatchPendingNewRole, QVariant(false));
-        copy->setData(0, VariablePathRole, item->data(0, VariablePathRole));
-        copy->setData(0, VariableTypeRole, item->data(0, VariableTypeRole));
-        copy->setData(0, VariableCanExpandRole,
-                       item->data(0, VariableCanExpandRole));
-        copy->setData(0, WatchLastValueRole, QVariant());
-        copy->setData(0, WatchChildSnapRole, QVariant());
-        copy->setExpanded(false);
-        if (copy->childCount() == 0)
+        copy0->setData(false, WatchPendingNewRole);
+        copy0->setData(item->data(VariablePathRole), VariablePathRole);
+        copy0->setData(item->data(VariableTypeRole), VariableTypeRole);
+        copy0->setData(item->data(VariableCanExpandRole),
+                       VariableCanExpandRole);
+        /* The duplicate is a brand-new row: it has no baseline yet, so the
+         * first refresh will not show it as "changed". No per-item role data
+         * to clear — baselines live on the dialog, keyed by spec+level, and
+         * the copy shares the spec of its source. */
         {
-            QTreeWidgetItem *const ph = new QTreeWidgetItem(copy);
-            ph->setFlags(Qt::ItemIsEnabled);
+            auto *ph0 = new QStandardItem();
+            auto *ph1 = new QStandardItem();
+            ph0->setFlags(Qt::ItemIsEnabled);
+            ph1->setFlags(Qt::ItemIsEnabled);
+            copy0->appendRow({ph0, ph1});
         }
-        watchTree->insertTopLevelItem(idx + 1, copy);
+        watchModel->insertRow(item->row() + 1, {copy0, copy1});
         refreshWatchDisplay();
-        return;
-    }
-    if (chosen == acts.moveUp && idx > 0)
-    {
-        QTreeWidgetItem *taken = watchTree->takeTopLevelItem(idx);
-        watchTree->insertTopLevelItem(idx - 1, taken);
-        return;
-    }
-    if (chosen == acts.moveDown && idx >= 0 &&
-        idx < watchTree->topLevelItemCount() - 1)
-    {
-        QTreeWidgetItem *taken = watchTree->takeTopLevelItem(idx);
-        watchTree->insertTopLevelItem(idx + 1, taken);
         return;
     }
 }
@@ -4752,10 +6001,10 @@ void LuaDebuggerDialog::showPathOnlyVariablePathWatchMessage()
            "or a single identifier for Locals.name)."));
 }
 
-void LuaDebuggerDialog::commitWatchRootSpec(QTreeWidgetItem *item,
+void LuaDebuggerDialog::commitWatchRootSpec(QStandardItem *item,
                                             const QString &text)
 {
-    if (!watchTree || !item || item->parent() != nullptr)
+    if (!watchTree || !watchModel || !item || item->parent() != nullptr)
     {
         return;
     }
@@ -4765,9 +6014,9 @@ void LuaDebuggerDialog::commitWatchRootSpec(QTreeWidgetItem *item,
     {
         /* Clearing the text of a brand-new row discards it (no persisted
          * entry ever existed); clearing an existing row removes it. */
-        if (item->data(0, WatchPendingNewRole).toBool())
+        if (item->data(WatchPendingNewRole).toBool())
         {
-            delete item;
+            watchModel->removeRow(item->row());
             refreshWatchDisplay();
         }
         else
@@ -4792,14 +6041,28 @@ void LuaDebuggerDialog::commitWatchRootSpec(QTreeWidgetItem *item,
         return;
     }
 
-    item->setData(0, WatchSpecRole, t);
-    item->setText(0, t);
-    item->setData(0, WatchPendingNewRole, QVariant(false));
-    watchRootSetVariablePathRoleFromSpec(item, t);
-    if (item->childCount() == 0)
+    /* Editing a spec invalidates baselines for both old and new specs:
+     * the old spec no longer applies to this row, and the new spec has
+     * never been evaluated on this row before (so the first refresh must
+     * not flag it as "changed" against an unrelated old value). */
+    const QString oldSpec = item->data(WatchSpecRole).toString();
+    if (!oldSpec.isEmpty() && oldSpec != t)
     {
-        QTreeWidgetItem *const ph = new QTreeWidgetItem(item);
-        ph->setFlags(Qt::ItemIsEnabled);
+        clearChangeBaselinesForWatchSpec(oldSpec);
+    }
+    clearChangeBaselinesForWatchSpec(t);
+
+    item->setData(t, WatchSpecRole);
+    item->setText(t);
+    item->setData(false, WatchPendingNewRole);
+    watchRootSetVariablePathRoleFromSpec(item, t);
+    if (item->rowCount() == 0)
+    {
+        auto *ph0 = new QStandardItem();
+        auto *ph1 = new QStandardItem();
+        ph0->setFlags(Qt::ItemIsEnabled);
+        ph1->setFlags(Qt::ItemIsEnabled);
+        item->appendRow({ph0, ph1});
     }
     refreshWatchDisplay();
 }
@@ -4807,7 +6070,7 @@ void LuaDebuggerDialog::commitWatchRootSpec(QTreeWidgetItem *item,
 void LuaDebuggerDialog::insertNewWatchRow(const QString &initialSpec,
                                           bool openEditor)
 {
-    if (!watchTree)
+    if (!watchTree || !watchModel)
     {
         return;
     }
@@ -4819,30 +6082,38 @@ void LuaDebuggerDialog::insertNewWatchRow(const QString &initialSpec,
         return;
     }
 
-    QTreeWidgetItem *row = new QTreeWidgetItem(watchTree);
-    row->setFlags(row->flags() | Qt::ItemIsEditable | Qt::ItemIsEnabled |
-                  Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
-    row->setData(0, WatchSpecRole, init);
-    row->setText(0, init);
-    row->setData(0, WatchSubpathRole, QString());
-    row->setData(0, WatchPendingNewRole, init.isEmpty());
+    auto *row0 = new QStandardItem();
+    auto *row1 = new QStandardItem();
+    row0->setFlags(row0->flags() | Qt::ItemIsEditable | Qt::ItemIsEnabled |
+                   Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+    row1->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable | Qt::ItemIsDragEnabled);
+    row0->setData(init, WatchSpecRole);
+    row0->setText(init);
+    row0->setData(QString(), WatchSubpathRole);
+    row0->setData(QVariant(init.isEmpty()), WatchPendingNewRole);
     if (!init.isEmpty())
     {
-        watchRootSetVariablePathRoleFromSpec(row, init);
+        watchRootSetVariablePathRoleFromSpec(row0, init);
     }
     {
-        QTreeWidgetItem *const ph = new QTreeWidgetItem(row);
-        ph->setFlags(Qt::ItemIsEnabled);
+        auto *ph0 = new QStandardItem();
+        auto *ph1 = new QStandardItem();
+        ph0->setFlags(Qt::ItemIsEnabled);
+        ph1->setFlags(Qt::ItemIsEnabled);
+        row0->appendRow({ph0, ph1});
     }
+    watchModel->appendRow({row0, row1});
     refreshWatchDisplay();
 
     if (openEditor)
     {
-        QTimer::singleShot(0, this, [this, row]()
+        QTimer::singleShot(0, this, [this, row0]()
                            {
-                               watchTree->scrollToItem(row);
-                               watchTree->setCurrentItem(row);
-                               watchTree->editItem(row, 0);
+                               const QModelIndex editIx =
+                                   watchModel->indexFromItem(row0);
+                               watchTree->scrollTo(editIx);
+                               watchTree->setCurrentIndex(editIx);
+                               watchTree->edit(editIx);
                            });
     }
 }
@@ -4855,10 +6126,10 @@ void LuaDebuggerDialog::restoreWatchExpansionState()
     }
     /* Re-apply each root's expansion from the runtime map. After a fresh load
      * from lua_debugger.json the map is empty (rows open collapsed). */
-    for (int i = 0; i < watchTree->topLevelItemCount(); ++i)
+    for (int i = 0; i < watchModel->rowCount(); ++i)
     {
-        QTreeWidgetItem *root = watchTree->topLevelItem(i);
-        const QString spec = root->data(0, WatchSpecRole).toString();
+        QStandardItem *root = watchModel->item(i);
+        const QString spec = root->data(WatchSpecRole).toString();
         bool rootExpanded = false;
         QStringList subpaths;
         const auto it = watchExpansion_.constFind(spec);
@@ -4867,14 +6138,17 @@ void LuaDebuggerDialog::restoreWatchExpansionState()
             rootExpanded = it->rootExpanded;
             subpaths = it->subpaths;
         }
-        if (rootExpanded != root->isExpanded())
+        if (rootExpanded !=
+            LuaDebuggerItems::isExpanded(watchTree, watchModel, root))
         {
-            root->setExpanded(rootExpanded);
+            LuaDebuggerItems::setExpanded(watchTree, watchModel, root,
+                                     rootExpanded);
         }
         if (rootExpanded)
         {
-            reexpandTreeDescendantsByPathKeys(root, subpaths,
-                                               findWatchItemBySubpathOrPathKey);
+            reexpandTreeDescendantsByPathKeys(
+                watchTree, watchModel, root, subpaths,
+                findWatchItemBySubpathOrPathKey);
         }
     }
 }
@@ -4885,10 +6159,10 @@ void LuaDebuggerDialog::restoreVariablesExpansionState()
     {
         return;
     }
-    for (int i = 0; i < variablesTree->topLevelItemCount(); ++i)
+    for (int i = 0; i < variablesModel->rowCount(); ++i)
     {
-        QTreeWidgetItem *root = variablesTree->topLevelItem(i);
-        const QString section = root->data(0, VariablePathRole).toString();
+        QStandardItem *root = variablesModel->item(i);
+        const QString section = root->data(VariablePathRole).toString();
         if (section.isEmpty())
         {
             continue;
@@ -4908,14 +6182,17 @@ void LuaDebuggerDialog::restoreVariablesExpansionState()
             rootExpanded = it->rootExpanded;
             subpaths = it->subpaths;
         }
-        if (rootExpanded != root->isExpanded())
+        if (rootExpanded !=
+            LuaDebuggerItems::isExpanded(variablesTree, variablesModel, root))
         {
-            root->setExpanded(rootExpanded);
+            LuaDebuggerItems::setExpanded(variablesTree, variablesModel, root,
+                                     rootExpanded);
         }
         if (rootExpanded)
         {
-            reexpandTreeDescendantsByPathKeys(root, subpaths,
-                                               findVariableTreeItemByPathKey);
+            reexpandTreeDescendantsByPathKeys(
+                variablesTree, variablesModel, root, subpaths,
+                findVariableTreeItemByPathKey);
         }
     }
 }

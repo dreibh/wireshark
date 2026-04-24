@@ -234,8 +234,8 @@ if(ASCIIDOCTOR_EXECUTABLE)
                     ${ARGN}
             VERBATIM
             )
-            add_custom_target(${_generate_pdf} DEPENDS ${_output_pdf})
-            set_asciidoctor_target_properties(${_generate_pdf})
+            #add_custom_target(${_generate_pdf} DEPENDS ${_output_pdf})
+            #set_asciidoctor_target_properties(${_generate_pdf})
             unset(_generate_pdf)
             unset(_output_pdf)
         ENDMACRO()
@@ -286,8 +286,8 @@ if(ASCIIDOCTOR_EXECUTABLE)
                     ${ARGN}
             VERBATIM
             )
-            add_custom_target(${_generate_epub} DEPENDS ${_output_epub})
-            set_asciidoctor_target_properties(${_generate_epub})
+            #add_custom_target(${_generate_epub} DEPENDS ${_output_epub})
+            #set_asciidoctor_target_properties(${_generate_epub})
             unset(_generate_epub)
             unset(_output_epub)
         ENDMACRO()

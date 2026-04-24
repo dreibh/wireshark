@@ -918,6 +918,7 @@ wslua_stack_frame_t *wslua_debugger_get_stack(int32_t *frame_count)
         wslua_stack_frame_t frame;
         frame.source = g_strdup(debug_info.source ? debug_info.source : "?");
         frame.line = (int64_t)debug_info.currentline;
+        frame.linedefined = (int64_t)debug_info.linedefined;
         frame.name = g_strdup(debug_info.name ? debug_info.name : "?");
         g_array_append_val(stack_array, frame);
         level++;

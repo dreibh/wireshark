@@ -735,6 +735,9 @@ bool krb_decrypt;
 /* keytab filename */
 static const char *keytab_filename = "";
 
+/* Retrieved from read_keytab_file.h */
+extern krb5_context keytab_krb5_ctx;
+
 void
 read_keytab_file_from_preferences(void)
 {
@@ -1234,9 +1237,6 @@ static void missing_signing_key(proto_tree *tree, packet_info *pinfo,
 }
 
 #endif /* HAVE_KRB5_PAC_VERIFY */
-
-/* Retrieved from read_keytab_file.h */
-extern krb5_context keytab_krb5_ctx;
 
 #ifdef HAVE_KRB5_C_FX_CF2_SIMPLE
 static void
@@ -2668,7 +2668,7 @@ decrypt_krb5_data(proto_tree *tree _U_, packet_info *pinfo,
 
 	read_keytab_file_from_preferences();
 
-	for(ek=keytab_get_enc_key_list();ek;ek=ek->next){
+	for(ek=(enc_key_t*)keytab_get_enc_key_list();ek;ek=ek->next){
 		krb5_keytab_entry key;
 		krb5_crypto crypto;
 		uint8_t *cryptocopy; /* workaround for pre-0.6.1 heimdal bug */
@@ -2698,7 +2698,7 @@ decrypt_krb5_data(proto_tree *tree _U_, packet_info *pinfo,
 								&data,
 								NULL);
 		if((ret == 0) && (length>0)){
-			char *user_data;
+			uint8_t *user_data;
 
 			used_encryption_key(tree, pinfo, zero_private,
 					    ek, usage, cryptotvb,
@@ -2706,7 +2706,7 @@ decrypt_krb5_data(proto_tree *tree _U_, packet_info *pinfo,
 
 			krb5_crypto_destroy(keytab_krb5_ctx, crypto);
 			/* return a private wmem_alloced blob to the caller */
-			user_data = (char *)wmem_memdup(pinfo->pool, data.data, (unsigned)data.length);
+			user_data = wmem_memdup(pinfo->pool, data.data, (unsigned)data.length);
 			if (datalen) {
 				*datalen = (int)data.length;
 			}

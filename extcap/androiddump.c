@@ -31,8 +31,6 @@
 #include <wsutil/report_message.h>
 #include <app/application_flavor.h>
 
-#include "ui/failure_message.h"
-
 #ifdef HAVE_NETINET_IN_H
 #    include <netinet/in.h>
 #endif
@@ -82,6 +80,7 @@
 #else
     #include "wiretap/wtap.h"
     #include "wiretap/pcap-encap.h"
+    #include "ui/failure_message.h"
 #endif
 
 #include <cli_main.h>
@@ -501,7 +500,7 @@ static bool extcap_dumper_dump(struct extcap_dumper extcap_dumper,
     pcap_header.ts.tv_sec = seconds;
     pcap_header.ts.tv_usec = nanoseconds / 1000;
 
-    pcap_dump((u_char *) extcap_dumper.dumper.pcap, &pcap_header, buffer);
+    pcap_dump((u_char *) extcap_dumper.dumper.pcap, &pcap_header, (uint8_t*)buffer);
     if (pcap_dump_flush(extcap_dumper.dumper.pcap) == -1) {
         ws_warning("Write to %s failed: %s", fifo, g_strerror(errno));
     }
@@ -2526,7 +2525,9 @@ int main(int argc, char *argv[]) {
         g_free(err_msg);
     }
 
+#ifndef ANDROIDDUMP_USE_LIBPCAP
     init_report_failure_message("androiddump");
+#endif
 
     extcap_conf = g_new0(extcap_parameters, 1);
 

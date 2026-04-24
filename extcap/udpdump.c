@@ -36,7 +36,6 @@
 #endif
 
 #include <writecap/pcapio.h>
-#include <wiretap/wtap.h>
 #include <wsutil/strtoi.h>
 #include <wsutil/inet_addr.h>
 #include <wsutil/filesystem.h>

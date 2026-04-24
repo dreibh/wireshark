@@ -429,6 +429,20 @@ static int hf_prp_node_name;
 static int hf_prp_version_name;
 static int hf_prp_hsr_nodes_tables_count;
 
+static int hf_lldp_mngmt_enable_array_length;
+static int hf_lldp_mngmt_enable_array;
+static int hf_lldp_mngmt_global_enable;
+static int hf_lldp_mngmt_port_tx_enable;
+static int hf_lldp_mngmt_enable_reserved;
+static int hf_lldp_mngmt_msg_tx_interval;
+static int hf_lldp_mngmt_msg_tx_hold;
+static int hf_lldp_mngmt_datastore;
+static int hf_lldp_mngmt_datastore_data_table;
+static int hf_lldp_mngmt_datastore_snmp;
+static int hf_lldp_mngmt_datastore_netconf_yang;
+static int hf_lldp_mngmt_datastore_reserved;
+static int hf_lldp_mngmt_last_change;
+
 /* Initialize the subtree pointers */
 static int ett_enip;
 static int ett_cip_io_generic;
@@ -459,6 +473,8 @@ static int ett_eip_cert_num_certs;
 static int ett_security_profiles;
 static int ett_ingress_egress_apply_behavior;
 static int ett_iana_port_state_flags;
+static int ett_lldp_mngmt_enable;
+static int ett_lldp_mngmt_datastore;
 static int ett_connection_info;
 static int ett_connection_path_info;
 static int ett_cmd_data;
@@ -494,6 +510,7 @@ static expert_field ei_mal_eip_security_crl;
 static expert_field ei_mal_eip_cert_capability_flags;
 static expert_field ei_mal_cpf_item_length_mismatch;
 static expert_field ei_mal_cpf_item_minimum_size;
+static expert_field ei_mal_lldp_mngmt_datastore;
 
 static expert_field ei_cip_request_no_response;
 static expert_field ei_cip_io_heartbeat;
@@ -889,6 +906,11 @@ static const value_string cip_data_direction[] = {
 static const true_false_string dlr_lnknbrstatus_frame_type_vals = {
     "Neighbor_Status Frame",
     "Link_Status Frame"
+};
+
+static const true_false_string tfs_true_false = {
+    "True",
+    "False"
 };
 
 static void enip_prompt(packet_info *pinfo _U_, char* result)
@@ -2624,6 +2646,68 @@ int dissect_cip_mac_address(packet_info* pinfo _U_, proto_tree* tree, proto_item
     return 6;
 }
 
+int dissect_lldp_mngmt_enable(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb, int offset, int total_len _U_)
+{
+   guint16 bit_length;
+   guint16 byte_length;
+
+   bit_length = tvb_get_letohs(tvb, offset);
+   byte_length = (bit_length + 7) / 8;
+
+   proto_tree_add_uint_format_value(tree, hf_lldp_mngmt_enable_array_length, tvb, offset, 2, bit_length, "%u bits (%u bytes)", bit_length, byte_length);
+   offset += 2;
+
+   /* Loop over each byte in the "enable array" */
+   for (guint16 byte_idx = 0; byte_idx < byte_length; byte_idx++) {
+      guint8 byte = tvb_get_uint8(tvb, offset + byte_idx);
+
+      proto_item* byte_item = proto_tree_add_uint_format(tree, hf_lldp_mngmt_enable_array, tvb, offset + byte_idx, 1, byte, "LLDP Enable Array %u", byte_idx + 1);
+      proto_tree* byte_tree =  proto_item_add_subtree(byte_item, ett_lldp_mngmt_enable);
+
+      /* Loop over the "enable bits" in this byte */
+      for (guint8 bit = 0; bit < 8; bit++) {
+         guint16 global_bit_index = byte_idx * 8 + bit;
+         gboolean bit_val = (byte >> bit) & 0x01;
+
+         if (global_bit_index >= bit_length) {
+            proto_tree_add_boolean_format(byte_tree, hf_lldp_mngmt_enable_reserved, tvb, offset + byte_idx, 1, bit_val, "Reserved (bit %u): %s", global_bit_index, bit_val ? tfs_true_false.true_string : tfs_true_false.false_string);
+            continue;
+         }
+
+         if (global_bit_index == 0) {
+            proto_tree_add_boolean_format(byte_tree, hf_lldp_mngmt_global_enable, tvb, offset + byte_idx, 1, bit_val, "Global Enable: %s", bit_val ? tfs_enabled_disabled.true_string : tfs_enabled_disabled.false_string);
+         }
+         else {
+            proto_tree_add_boolean_format(byte_tree, hf_lldp_mngmt_port_tx_enable, tvb, offset + byte_idx, 1, bit_val, "Port %u Tx Enable: %s", global_bit_index, bit_val ? tfs_enabled_disabled.true_string : tfs_enabled_disabled.false_string);
+
+         }
+      }
+   }
+
+   return offset + byte_length;
+}
+
+int dissect_lldp_mngmt_datastore(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb,
+   int offset, int total_len _U_)
+{
+   static int* const datastore[] = {
+      &hf_lldp_mngmt_datastore_data_table,
+      &hf_lldp_mngmt_datastore_snmp,
+      &hf_lldp_mngmt_datastore_netconf_yang,
+      &hf_lldp_mngmt_datastore_reserved,
+      NULL
+   };
+
+   if (total_len < 2)
+   {
+      expert_add_info(pinfo, item, &ei_mal_lldp_mngmt_datastore);
+      return total_len;
+   }
+
+   proto_tree_add_bitmask(tree, tvb, offset, hf_lldp_mngmt_datastore, ett_lldp_mngmt_datastore, datastore, ENC_LITTLE_ENDIAN);
+   return 2;
+}
+
 const attribute_info_t enip_attribute_vals[] = {
 
     /* TCP/IP Object (class attributes) */
@@ -2748,6 +2832,13 @@ const attribute_info_t enip_attribute_vals[] = {
 
    // PRP/HSR Nodes Table
    {0x57, CIP_ATTR_INSTANCE, 1, 0, "PRP/HSR Nodes Table(s) Count", cip_udint, &hf_prp_hsr_nodes_tables_count, NULL},
+
+   // LLDP Management Object
+   {0x109, CIP_ATTR_INSTANCE, 1, 0, "LLDP Enable", cip_dissector_func, NULL, dissect_lldp_mngmt_enable},
+   {0x109, CIP_ATTR_INSTANCE, 2, 1, "msgTxInterval", cip_uint, &hf_lldp_mngmt_msg_tx_interval, NULL},
+   {0x109, CIP_ATTR_INSTANCE, 3, 2, "msgTxHold", cip_usint, &hf_lldp_mngmt_msg_tx_hold, NULL},
+   {0x109, CIP_ATTR_INSTANCE, 4, 3, "LLDP Datastore", cip_dissector_func, NULL, dissect_lldp_mngmt_datastore},
+   {0x109, CIP_ATTR_INSTANCE, 5, 4, "Last Change", cip_udint, &hf_lldp_mngmt_last_change, NULL},
 
    /* CIP Security Object (instance attributes) */
    {0x5D, CIP_ATTR_INSTANCE, 1, 0, "State", cip_usint, &hf_cip_security_state, NULL},
@@ -3982,6 +4073,11 @@ static int dissect_cip_class1(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tre
    return dissect_cip_io_generic(tvb, pinfo, tree, &io_data_input);
 }
 
+static void enip_lldp_mngmnt_last_change(char* s, uint32_t value)
+{
+   snprintf(s, ITEM_LABEL_LENGTH, "%.3f seconds", value / 100.0);
+}
+
 /* Register the protocol with Wireshark */
 
 /* this format is require because a script is used to build the C function
@@ -4245,6 +4341,20 @@ proto_register_enip(void)
       { &hf_prp_node_name, { "Node Name", "cip.prp.node_name", FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL } },
       { &hf_prp_version_name, { "Version Name", "cip.prp.version_name", FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL } },
       { &hf_prp_hsr_nodes_tables_count, { "PRP/HSR Nodes Table(s) Count", "cip.prp.prp_hsr_nodes_table_count", FT_UINT32, BASE_HEX, NULL, 0, NULL, HFILL } },
+
+      { &hf_lldp_mngmt_enable_array_length, { "LLDP Enable Array Length", "cip.lldpmngmnt.enable.array_length", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL } },
+      { &hf_lldp_mngmt_enable_array,{ "LLDP Enable Array", "cip.lldpmngmnt.enable_array", FT_UINT8, BASE_HEX, NULL, 0, NULL, HFILL } },
+      { &hf_lldp_mngmt_global_enable, { "Global Enable", "cip.lldpmngmnt.enable.global", FT_BOOLEAN, 8, NULL, 0x01, NULL, HFILL } },
+      { &hf_lldp_mngmt_port_tx_enable, { "Port Tx Enable", "cip.lldpmngmnt.enable.port_tx", FT_BOOLEAN, BASE_NONE, NULL, 0, NULL, HFILL } },
+      { &hf_lldp_mngmt_enable_reserved, { "Reserved", "cip.lldpmngmnt.enable.reserved", FT_BOOLEAN, BASE_NONE, NULL, 0, NULL, HFILL } },
+      { &hf_lldp_mngmt_msg_tx_interval, { "msgTxInterval", "cip.lldpmngmnt.msg_tx_interval", FT_UINT16, BASE_DEC | BASE_UNIT_STRING, UNS(&units_second_seconds), 0, NULL, HFILL } },
+      { &hf_lldp_mngmt_msg_tx_hold, { "msgTxHold", "cip.lldpmngmnt.msg_tx_hold", FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL } },
+      { &hf_lldp_mngmt_datastore, { "LLDP Datastore", "cip.lldpmngmnt.lldp_datastore", FT_UINT16, BASE_HEX, NULL, 0, NULL, HFILL } },
+      { &hf_lldp_mngmt_datastore_data_table, { "LLDP Data Table Object", "cip.lldpmngmnt.lldp_datastore.data_table", FT_BOOLEAN, 16, NULL, 0x0001, NULL, HFILL } },
+      { &hf_lldp_mngmt_datastore_snmp, { "SNMP", "cip.lldpmngmnt.lldp_datastore.snmp", FT_BOOLEAN, 16, NULL, 0x0002, NULL, HFILL } },
+      { &hf_lldp_mngmt_datastore_netconf_yang, { "NETCONF YANG", "cip.lldpmngmnt.lldp_datastore.netconf_yang", FT_BOOLEAN, 16, NULL, 0x0004, NULL, HFILL } },
+      { &hf_lldp_mngmt_datastore_reserved, { "Reserved", "cip.lldpmngmnt.lldp_datastore.reserved", FT_UINT16, BASE_HEX, NULL, 0xFFF8, NULL, HFILL } },
+      { &hf_lldp_mngmt_last_change, { "Last Change", "cip.lldpmngmnt.last_change", FT_UINT32, BASE_CUSTOM, CF_FUNC(enip_lldp_mngmnt_last_change), 0, NULL, HFILL}},
 
       { &hf_enip_iana_port_state_flags,
         { "IANA Port State", "enip.iana_port_state_flags",
@@ -5444,6 +5554,8 @@ proto_register_enip(void)
       &ett_security_profiles,
       &ett_ingress_egress_apply_behavior,
       &ett_iana_port_state_flags,
+      &ett_lldp_mngmt_datastore,
+      &ett_lldp_mngmt_enable,
       &ett_connection_info,
       &ett_connection_path_info,
       &ett_cmd_data
@@ -5481,6 +5593,7 @@ proto_register_enip(void)
       { &ei_mal_eip_cert_capability_flags, { "cip.malformed.eip_cert.capability_flags", PI_MALFORMED, PI_ERROR, "Malformed EIP Certificate Management Capability Flags", EXPFILL }},
       { &ei_mal_cpf_item_length_mismatch, { "enip.malformed.cpf_item_length_mismatch", PI_MALFORMED, PI_ERROR, "CPF Item Length Mismatch", EXPFILL } },
       { &ei_mal_cpf_item_minimum_size, { "enip.malformed.cpf_item_minimum_size", PI_MALFORMED, PI_ERROR, "CPF Item Minimum Size is 4", EXPFILL } },
+      { &ei_mal_lldp_mngmt_datastore, { "cip.malformed.lldp.lldp_datastore", PI_MALFORMED, PI_ERROR, "Malformed LLDP Datastore", EXPFILL }},
 
       // Analysis Checks
       { &ei_cip_request_no_response, { "cip.analysis.request_no_response", PI_PROTOCOL, PI_NOTE, "CIP request without a response", EXPFILL } },

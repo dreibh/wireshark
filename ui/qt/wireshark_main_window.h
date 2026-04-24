@@ -72,6 +72,7 @@
 class AccordionFrame;
 class DataSourceTab;
 class CaptureOptionsDialog;
+class DisStreamDialog;
 class PrintDialog;
 class FileSetDialog;
 class FilterDialog;
@@ -157,6 +158,7 @@ private:
     QActionGroup *time_display_actions_;
     QActionGroup *time_precision_actions_;
     FunnelStatistics *funnel_statistics_;
+    QAction *action_telephony_dis_streams_;
     QList<QPair<QAction *, bool> > freeze_actions_;
     QPointer<QWidget> freeze_focus_;
     QMap<QAction *, ts_type> td_actions;
@@ -469,6 +471,7 @@ private slots:
 
     void connectTelephonyMenuActions();
 
+    DisStreamDialog *openTelephonyDisStreamsDialog();
     RtpStreamDialog *openTelephonyRtpStreamsDialog();
     RtpPlayerDialog *openTelephonyRtpPlayerDialog();
     RtpAnalysisDialog *openTelephonyRtpAnalysisDialog();

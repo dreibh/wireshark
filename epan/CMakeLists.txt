@@ -8,7 +8,6 @@
 #
 
 add_definitions(
-		${LIBXML2_DEFINITIONS}
 		${KERBEROS_DEFINITIONS}
 )
 
@@ -170,6 +169,7 @@ set(LIBWIRESHARK_NONGENERATED_FILES
 	export_object.c
 	exported_pdu.c
 	fifo_string_cache.c
+	file_packet_provider.c
 	filter_expressions.c
 	aggregation_fields.c
 	follow.c
@@ -296,13 +296,13 @@ target_link_libraries(epan
 		${GLIB2_LIBRARIES}
 	PRIVATE
 		wiretap
+		LibXml2::LibXml2
 		${BROTLI_LIBRARIES}
 		${CARES_LIBRARIES}
 		${GCRYPT_LIBRARIES}
 		${GIO2_LIBRARIES}
 		${GNUTLS_LIBRARIES}
 		${KERBEROS_LIBRARIES}
-		${LIBXML2_LIBRARIES}
 		${LUA_LIBRARIES}
 		${LZ4_LIBRARIES}
 		${M_LIBRARIES}
@@ -332,7 +332,6 @@ target_include_directories(epan
 		${KERBEROS_INCLUDE_DIRS}
 		${GLIB2_INCLUDE_DIRS}
 		${GNUTLS_INCLUDE_DIRS}
-		${LIBXML2_INCLUDE_DIRS}
 		${LUA_INCLUDE_DIRS}
 		${LZ4_INCLUDE_DIRS}
 		${NGHTTP2_INCLUDE_DIRS}

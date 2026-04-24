@@ -25,6 +25,8 @@ option(BUILD_dcerpcidl2wrs "Build dcerpcidl2wrs" ON)
 option(BUILD_xxx2deb       "Build xxx2deb" OFF)
 
 option(BUILD_androiddump   "Build androiddump" ON)
+cmake_dependent_option(EXTCAP_ANDROIDDUMP_LIBPCAP   "Build androiddump using libpcap" OFF BUILD_androiddump OFF)
+
 option(BUILD_sshdump       "Build sshdump" ON)
 option(BUILD_ciscodump     "Build ciscodump" ON)
 option(BUILD_dpauxmon      "Build dpauxmon" ON)
@@ -65,7 +67,6 @@ option(ENABLE_ASSERT     "Enable assertions for all build configurations" OFF)
 
 option(ENABLE_CCACHE     "Speed up compiling and linking using ccache if possible" OFF)
 option(DISABLE_FRAME_LARGER_THAN_WARNING "Disable warning if the size of a function frame is large" OFF)
-option(EXTCAP_ANDROIDDUMP_LIBPCAP    "Build androiddump using libpcap" OFF)
 option(ENABLE_TODO_WARNINGS "Enable compiler warnings that are yet to be fixed" OFF)
 option(ENABLE_PEDANTIC_WARNINGS "Enable pedantic or unfixable compiler warnings (noisy)" OFF)
 option(ENABLE_CODE_ANALYSIS "Enable the compiler's static analyzer if possible" OFF)

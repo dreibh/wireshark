@@ -22,6 +22,18 @@
 #endif /* _WIN32 */
 #include <krb5.h>
 
+#ifdef HAVE_MIT_KERBEROS
+#define KRB5_KT_KEY(k)          (&(k)->key)
+#define KRB5_KEY_TYPE(k)        ((k)->enctype)
+#define KRB5_KEY_LENGTH(k)      ((k)->length)
+#define KRB5_KEY_DATA(k)        ((k)->contents)
+#else
+#define KRB5_KT_KEY(k)          (&(k)->keyblock)
+#define KRB5_KEY_TYPE(k)        ((k)->keytype)
+#define KRB5_KEY_LENGTH(k)      ((k)->keyvalue.length)
+#define KRB5_KEY_DATA(k)        ((k)->keyvalue.data)
+#endif
+
 krb5_context keytab_krb5_ctx;
 
 static enc_key_t* enc_key_list = NULL;
@@ -268,7 +280,6 @@ keytab_file_read(const char* filename)
         ret = krb5_kt_next_entry(keytab_krb5_ctx, keytab, &key, &cursor);
         if (ret == 0) {
             enc_key_t* new_key;
-            int i;
             wmem_strbuf_t* str_principal = wmem_strbuf_new(wmem_epan_scope(), "keytab principal ");
 
             new_key = wmem_new0(wmem_epan_scope(), enc_key_t);
@@ -278,19 +289,31 @@ keytab_file_read(const char* filename)
             new_key->next = enc_key_list;
 
             /* generate origin string, describing where this key came from */
-            for (i = 0; i < key.principal->length; i++) {
-                wmem_strbuf_append_printf(str_principal, "%s%s", (i ? "/" : ""), (key.principal->data[i]).data);
-            }
-            wmem_strbuf_append_printf(str_principal, "@%s", key.principal->realm.data);
-            new_key->key_origin = (char*)wmem_strbuf_get_str(str_principal);
-            new_key->keytype = key.key.enctype;
-            new_key->keylength = key.key.length;
+            char* name;
+            krb5_unparse_name(keytab_krb5_ctx, key.principal, &name);
+            wmem_strbuf_append(str_principal, name);
+            new_key->key_origin = (char*)wmem_strbuf_finalize(str_principal);
+#ifdef HAVE_MIT_KERBEROS
+            krb5_free_unparsed_name(keytab_krb5_ctx, name);
+#else
+            /* Heimdal has the other function but it is deprecated, we could
+             * test for this function's presence instead. */
+            krb5_xfree(name);
+#endif
+            new_key->keytype = KRB5_KEY_TYPE(KRB5_KT_KEY(&key));
+            new_key->keylength = MIN(KRB5_KEY_LENGTH(KRB5_KT_KEY(&key)), KRB_MAX_KEY_LENGTH);
             memcpy(new_key->keyvalue,
-                key.key.contents,
-                MIN(key.key.length, KRB_MAX_KEY_LENGTH));
+                KRB5_KEY_DATA(KRB5_KT_KEY(&key)),
+                new_key->keylength);
 
             enc_key_list = new_key;
+#ifdef HAVE_MIT_KERBEROS
+            /* MIT has the other function but it is deprecated, we could
+             * test for this function's presence instead. */
             ret = krb5_free_keytab_entry_contents(keytab_krb5_ctx, &key);
+#else
+            ret = krb5_kt_free_entry(keytab_krb5_ctx, &key);
+#endif
             if (ret) {
                 ws_critical("KERBEROS ERROR: Could not release the entry: %d", ret);
                 ret = 0; /* try to continue with the next entry */

@@ -2221,6 +2221,7 @@ set(TSHARK_TAP_SRC
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-credentials.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-camelsrt.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-diameter-avp.c
+	${CMAKE_SOURCE_DIR}/ui/cli/tap-dis.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-expert.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-exportobject.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-endpoints.c
@@ -2917,31 +2918,34 @@ list(APPEND copy_data_files_depends
 add_custom_target(copy_data_files ALL DEPENDS ${copy_data_files_depends} )
 set_target_properties(copy_data_files PROPERTIES FOLDER "Copy Tasks")
 
-# sources common for the packet processors (Wireshark, TShark,
-# rawshark and sharkd) and the event processors (Stratoshark and
-# strato)
+# sources common for executables that support interacting with extcap
+# interfaces.
 #
-# XXX - should some be moved to existing libraries? Should the
-# remaining ones be put into separate libraries for packet
-# processors and event processors?
-add_library(shark_common OBJECT
+# XXX - Should these be put into a shared library? extcap.c uses functions
+# from libwireshark (prefs) so if these were moved into a shared library it
+# would have to be libwireshark or a library that depends on libwireshark.
+# (Note that the files to implement a extcap interface in extcap/ depend
+# on libwsutil and libwiretap, but not libwireshark.)
+set(EXTCAP_SUPPORT_SRC
+	extcap.c
 	extcap_parser.c
-	file_packet_provider.c
 )
+add_library(extcap_support OBJECT ${EXTCAP_SUPPORT_SRC})
+target_compile_options(extcap_support PRIVATE ${WERROR_COMMON_FLAGS})
 add_library(cli_main OBJECT cli_main.c)
+target_compile_options(cli_main PRIVATE ${WERROR_COMMON_FLAGS})
 
 if(BUILD_wireshark AND QT_FOUND)
 	set(WIRESHARK_SRC
 		file.c
 		fileset.c
-		extcap.c
 		${PLATFORM_UI_SRC}
+		app/wireshark_flavor.c
 	)
 	set(wireshark_FILES
-		$<TARGET_OBJECTS:shark_common>
+		$<TARGET_OBJECTS:extcap_support>
 		${WIRESHARK_SRC}
 		${PLATFORM_UI_RC_FILES}
-		app/wireshark_flavor.c
 	)
 	set_executable_resources(wireshark "Wireshark" UNIQUE_RC)
 endif()
@@ -2950,12 +2954,11 @@ if(BUILD_stratoshark AND QT_FOUND)
 	set(STRATOSHARK_SRC
 		file.c
 		fileset.c
-		extcap.c
 		${PLATFORM_UI_SRC}
 		app/stratoshark_flavor.c
 	)
 	set(stratoshark_FILES
-		$<TARGET_OBJECTS:shark_common>
+		$<TARGET_OBJECTS:extcap_support>
 		${STRATOSHARK_SRC}
 		${PLATFORM_UI_RC_FILES}
 	)
@@ -3459,10 +3462,9 @@ if(BUILD_tshark)
 	)
 	set(tshark_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:shark_common>
+		$<TARGET_OBJECTS:extcap_support>
 		tshark-tap-register.c
 		tshark.c
-		extcap.c
 		app/wireshark_flavor.c
 		${TSHARK_TAP_SRC}
 	)
@@ -3490,9 +3492,8 @@ if(BUILD_strato)
 	)
 	set(strato_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:shark_common>
+		$<TARGET_OBJECTS:extcap_support>
 		strato.c
-		extcap.c
 		app/stratoshark_flavor.c
 		${STRATO_TAP_SRC}
 		strato-tap-register.c
@@ -3519,7 +3520,6 @@ if(BUILD_tfshark)
 	)
 	set(tfshark_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:shark_common>
 		tfshark.c
 		app/wireshark_flavor.c
 		${TSHARK_TAP_SRC}
@@ -3543,7 +3543,6 @@ if(BUILD_rawshark AND PCAP_FOUND)
 	)
 	set(rawshark_FILES
 		$<TARGET_OBJECTS:cli_main>
-		$<TARGET_OBJECTS:shark_common>
 		rawshark.c
 		app/wireshark_flavor.c
 	)
@@ -3571,7 +3570,6 @@ if(BUILD_sharkd)
 		# XXX - currently doesn't work on Windows if it uses
 		# $<TARGET_OBJECTS:cli_main> and has real_main().
 		#
-		$<TARGET_OBJECTS:shark_common>
 		ui/cli/simple_dialog.c
 		sharkd.c
 		sharkd_daemon.c
@@ -4453,6 +4451,9 @@ if(CLEAN_C_FILES)
 	endif()
 
 	# XXX This also contains object files ($<TARGET_OBJECTS:...>), is that an issue?
+	# It doesn't cause it to fail, but it doesn't set the flags on
+	# those objects' source files, either.
+	# https://discourse.cmake.org/t/set-source-file-properties-and-generator-expressions-to-support-partial-linking-executables/9932/3
 	set_source_files_properties(
 		${CLEAN_C_FILES}
 		PROPERTIES
@@ -4806,6 +4807,7 @@ CHECKAPI(
 	SOURCES
 	  ${WIRESHARK_SRC}
 	  ${TSHARK_TAP_SRC}
+	  ${EXTCAP_SUPPORT_SRC}
 )
 
 find_program(SHELLCHECK_EXECUTABLE shellcheck

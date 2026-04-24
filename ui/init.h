@@ -19,7 +19,7 @@ extern "C" {
 #endif /* __cplusplus */
 
 /* Initialize the UI "helper" components */
-extern void ui_init(void);
+extern void ui_init(const char* app_env_var_prefix);
 
 /* Cleanup the UI "helper" components */
 extern void ui_cleanup(void);

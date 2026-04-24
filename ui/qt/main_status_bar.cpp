@@ -510,7 +510,11 @@ void MainStatusBar::updateCaptureFixedStatistics(capture_session *cap_session)
 
 void MainStatusBar::showProfileMenu(const QPoint &global_pos, Qt::MouseButton button)
 {
+    //Use the model object to pull the profile information
     ProfileModel model;
+    ProfileSortModel sortModel;
+    sortModel.setSourceModel(&model);
+    sortModel.sort(0, Qt::DescendingOrder);
 
     QMenu * ctx_menu_;
     QMenu * profile_menu;
@@ -526,28 +530,35 @@ void MainStatusBar::showProfileMenu(const QPoint &global_pos, Qt::MouseButton bu
     QActionGroup * global = new QActionGroup(profile_menu);
     QActionGroup * user = new QActionGroup(profile_menu);
 
-    for (int cnt = 0; cnt < model.rowCount(); cnt++)
+    const ProfileItem* currentProfile = model.getCurrentProfile();
+
+    //Use the raw profile information from the model
+    //(for performance and simpler looking code)
+    for (int i = 0; i < sortModel.rowCount(); ++i)
     {
-        QModelIndex idx = model.index(cnt, ProfileModel::COL_NAME);
-        if (! idx.isValid())
-            continue;
-
-
         QAction * pa = Q_NULLPTR;
-        QString name = idx.data().toString();
+
+        //Go through the proxy model to get the profile information in the right order
+        QModelIndex proxyIndex = sortModel.index(i, 0);
+        QModelIndex sourceIndex = sortModel.mapToSource(proxyIndex);
+        const ProfileItem* profile = model.getProfile(sourceIndex.row());
+        if (profile == Q_NULLPTR)
+            continue;   //Pacify the static analyzer, but this should never happen.
+
+        QString name = profile->getName();
 
         // An ampersand in the menu item's text sets Alt+F as a shortcut for this menu.
         // Use "&&" to get a real ampersand in the menu bar.
         name.replace('&', "&&");
 
-        if (idx.data(ProfileModel::DATA_IS_DEFAULT).toBool())
+        if (profile->isDefault())
         {
             pa = profile_menu->addAction(name);
         }
-        else if (idx.data(ProfileModel::DATA_IS_GLOBAL).toBool())
+        else if (profile->isGlobal())
         {
             /* Check if this profile does not exist as user */
-            if (cnt == model.findByName(name))
+            if (model.getPersonalProfile(profile->getName()) == Q_NULLPTR)
                 pa = global->addAction(name);
         }
         else
@@ -556,13 +567,22 @@ void MainStatusBar::showProfileMenu(const QPoint &global_pos, Qt::MouseButton bu
         if (! pa)
             continue;
 
+        QFont profileFont;
         pa->setCheckable(true);
-        if (idx.data(ProfileModel::DATA_IS_SELECTED).toBool())
+        if ((currentProfile != Q_NULLPTR) &&
+            (profile->getName().compare(currentProfile->getName()) == 0) &&
+            profile->isGlobal() == currentProfile->isGlobal())
+        {
+            profileFont.setBold(true);
             pa->setChecked(true);
+        }
 
-        pa->setFont(idx.data(Qt::FontRole).value<QFont>());
-        pa->setProperty("profile_name", idx.data());
-        pa->setProperty("profile_is_global", idx.data(ProfileModel::DATA_IS_GLOBAL));
+        if (profile->isGlobal())
+            profileFont.setItalic(true);
+
+        pa->setFont(profileFont);
+        pa->setProperty("profile_name", profile->getName());
+        pa->setProperty("profile_is_global", profile->isGlobal());
 
         connect(pa, &QAction::triggered, this, &MainStatusBar::switchToProfile);
     }
@@ -577,8 +597,7 @@ void MainStatusBar::showProfileMenu(const QPoint &global_pos, Qt::MouseButton bu
 
         bool enable_edit = false;
 
-        QModelIndex idx = model.activeProfile();
-        if (! idx.data(ProfileModel::DATA_IS_DEFAULT).toBool() && ! idx.data(ProfileModel::DATA_IS_GLOBAL).toBool())
+        if ((currentProfile != Q_NULLPTR) && !currentProfile->isDefault() && !currentProfile->isGlobal())
             enable_edit = true;
 
         profile_menu->setTitle(tr("Switch to"));

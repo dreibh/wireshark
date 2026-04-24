@@ -669,7 +669,7 @@ int main(int argc, char *qt_argv[])
     }
 
     profile_store_persconffiles(true);
-    ui_init();
+    ui_init(application_configuration_environment_prefix());
     recent_init();
 
     /* Read the profile independent recent file.  We have to do this here so we can */
@@ -1191,7 +1191,6 @@ int main(int argc, char *qt_argv[])
     profile_register_persconffile("lua_debugger.json");
 
     profile_store_persconffiles(false);
-    init_profile_list();
 
     // If the wsApp->exec() event loop exits cleanly, we call
     // WiresharkApplication::cleanup().

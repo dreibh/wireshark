@@ -62,7 +62,6 @@
         <addaction name="actionSaveFile"/>
         <addaction name="actionSepAfterSave"/>
         <addaction name="actionReloadLuaPlugins"/>
-        <addaction name="actionClearBreakpoints"/>
        </widget>
       </item>
        <item>
@@ -167,14 +166,6 @@
    </property>
    <property name="shortcut">
     <string>Shift+F11</string>
-   </property>
-  </action>
-  <action name="actionClearBreakpoints">
-   <property name="icon">
-    <iconset theme="edit-clear"/>
-   </property>
-   <property name="text">
-    <string>Clear Breakpoints</string>
    </property>
   </action>
   <action name="actionOpenFile">

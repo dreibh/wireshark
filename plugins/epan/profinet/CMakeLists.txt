@@ -31,13 +31,7 @@ set(DISSECTOR_SUPPORT_SRC
 )
 
 add_wireshark_epan_plugin_library(profinet
-	PLUGIN_LIBS ${LIBXML2_LIBRARIES}
-	PLUGIN_INCS ${LIBXML2_INCLUDE_DIRS}
-)
-
-target_compile_definitions(profinet
-	PRIVATE
-		${LIBXML2_DEFINITIONS}
+	PLUGIN_LIBS LibXml2::LibXml2
 )
 
 #

@@ -8,7 +8,7 @@
 #
 
 if(EXTCAP_ANDROIDDUMP_LIBPCAP)
-	set(ANDROIDDUMP_USE_LIBPCAP 1)
+	set(ANDROIDDUMP_USE_LIBPCAP 1 PARENT_SCOPE)
 endif()
 
 if(LIBSSH_FOUND)
@@ -93,6 +93,8 @@ endmacro()
 
 add_custom_target(extcaps)
 
+# XXX - Should this be a shared library, and the headers installed as public
+# headers, for development of extcaps outside the source tree?
 add_library(extcap-base OBJECT extcap-base.c)
 if(LIBSSH_FOUND)
 	add_library(ssh-base OBJECT ssh-base.c)
@@ -106,8 +108,6 @@ if(BUILD_androiddump)
 	if(EXTCAP_ANDROIDDUMP_LIBPCAP)
 		if(HAVE_LIBPCAP)
 			set(androiddump_LIBS
-				ui
-				wiretap
 				wsutil
 				${WIN_WS2_32_LIBRARY}
 				$<$<BOOL:${PCAP_FOUND}>:pcap::pcap>
@@ -248,7 +248,6 @@ if(BUILD_udpdump)
 		wsutil
 		${CMAKE_DL_LIBS}
 		${WIN_WS2_32_LIBRARY}
-		wsutil
 		writecap
 	)
 	set(udpdump_FILES
