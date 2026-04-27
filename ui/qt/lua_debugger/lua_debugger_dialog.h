@@ -10,15 +10,19 @@
 #ifndef LUA_DEBUGGER_DIALOG_H
 #define LUA_DEBUGGER_DIALOG_H
 
+#include "epan/wslua/wslua_debugger.h"
 #include "geometry_state_dialog.h"
+
 #include <QBrush>
 #include <QCheckBox>
 #include <QComboBox>
 #include <QEventLoop>
 #include <QFont>
 #include <QHash>
+#include <QList>
 #include <QPair>
 #include <QPlainTextEdit>
+#include <QPointer>
 #include <QPushButton>
 #include <QSet>
 #include <QString>
@@ -30,12 +34,16 @@
 #include <QVariantMap>
 #include <QVector>
 
-#include "epan/wslua/wslua_debugger.h"
+struct _capture_session;
 
 class AccordionFrame;
 class CollapsibleSection;
+class LuaDebuggerPauseOverlay;
+class QAction;
 class QEvent;
 class QChildEvent;
+class QCloseEvent;
+class QShowEvent;
 
 namespace Ui
 {
@@ -74,6 +82,52 @@ class LuaDebuggerDialog : public GeometryStateDialog
      * @return Pointer to the global dialog instance.
      */
     static LuaDebuggerDialog *instance(QWidget *parent = nullptr);
+
+    /**
+     * @brief True when a live capture is running and the debugger has
+     *        been forcibly disabled by it.
+     *
+     * The pause path (handlePause()) is incompatible with live capture:
+     * the dumpcap pipe keeps delivering packets while we sit in a
+     * nested QEventLoop, and dissecting them would re-enter Lua on the
+     * paused stack. Suspending the pipe source from outside is also
+     * fragile (g_source_destroy frees the GIOChannel, breaking the
+     * resume path). The least invasive policy is to simply turn the
+     * debugger off for the duration of any live capture and restore
+     * the user's prior on/off setting when capture finishes.
+     */
+    static bool isSuppressedByLiveCapture();
+
+    /**
+     * @brief Capture-session observer; force-disables the debugger
+     *        while a live capture is running and restores the prior
+     *        enabled state on capture stop.
+     *
+     * Registered from LuaDebuggerUiCallbackRegistrar so the policy is
+     * in effect from process start, regardless of whether the dialog
+     * has been opened. Always called on the GUI thread.
+     */
+    static void onCaptureSessionEvent(int event,
+                                      struct _capture_session *cap_session,
+                                      void *user_data);
+
+    /**
+     * @brief If the debugger is paused, reject the supplied close
+     *        event, record the pending close so it can be re-delivered
+     *        once the Lua C stack has unwound, raise/activate the
+     *        debugger window, and return true. Otherwise return false
+     *        and do nothing.
+     *
+     * Called from WiresharkMainWindow::closeEvent /
+     * StratosharkMainWindow::closeEvent. Encapsulates the pause-close
+     * interaction so the main window does not need to know about the
+     * debugger's paused state or its re-delivery protocol. Paths like
+     * macOS Dock-Quit (which fan a single close pulse out to every
+     * top-level window and never retry) are handled correctly because
+     * handlePause()'s post-loop cleanup re-issues the deferred close
+     * once the Lua stack has unwound.
+     */
+    static bool handleMainCloseIfPaused(QCloseEvent *event);
 
     /**
      * @brief React to the debugger pausing execution at a breakpoint.
@@ -127,6 +181,7 @@ class LuaDebuggerDialog : public GeometryStateDialog
      * @param event Close request metadata from Qt.
      */
     void closeEvent(QCloseEvent *event) override;
+    void showEvent(QShowEvent *event) override;
     bool eventFilter(QObject *obj, QEvent *event) override;
     void childEvent(QChildEvent *event) override;
 
@@ -195,6 +250,18 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void onEditorFind();
     /** @brief Show inline go-to-line bar. */
     void onEditorGoToLine();
+    /**
+     * @brief Copy a Watch row's value (untruncated when paused); shared with
+     *        context menu and keyboard shortcut.
+     */
+    void copyWatchValueForItem(QStandardItem *item, const QModelIndex &ix);
+    /** @brief Duplicate a top-level watch row. */
+    void duplicateWatchRootItem(QStandardItem *item);
+    /** @brief Remove every top-level watch row. */
+    void removeAllWatchTopLevelItems();
+    void toggleBreakpointOnCodeViewLine(LuaDebuggerCodeView *codeView,
+                                        qint32 line);
+    void runToCurrentLineInPausedEditor(LuaDebuggerCodeView *codeView, qint32 line);
     /** @brief Sync Watch selection when Variables row selection changes. */
     void onVariablesCurrentItemChanged(const QModelIndex &current,
                                        const QModelIndex &previous);
@@ -206,6 +273,40 @@ class LuaDebuggerDialog : public GeometryStateDialog
     Ui::LuaDebuggerDialog *ui;
     static LuaDebuggerDialog *_instance;
     static int32_t currentTheme_;
+
+    /* Live-capture suppression. See isSuppressedByLiveCapture(). */
+    static bool s_captureSuppressionActive_;
+    /* User's enabled-state at the moment the live capture started;
+     * restored when capture finishes. Meaningful only while
+     * s_captureSuppressionActive_ is true. */
+    static bool s_captureSuppressionPrevEnabled_;
+
+    /* Enter / exit the "live capture is suppressing the debugger"
+     * state. Idempotent; each returns true iff the call actually
+     * transitioned the static state (and therefore whoever called
+     * needs to refresh widgets). Shared between the capture-callback
+     * path (onCaptureSessionEvent) and the dialog-startup
+     * reconciliation path so both follow exactly the same protocol. */
+    static bool enterLiveCaptureSuppression();
+    static bool exitLiveCaptureSuppression();
+
+    /* Re-apply live-capture suppression at dialog startup so any
+     * core-enable that leaked through constructor-time init paths
+     * (e.g. ensureDebuggerEnabledForActiveBreakpoints after applying
+     * saved breakpoints) is forced back off without disturbing the
+     * previously captured "user intent" used to restore state on
+     * capture stop. */
+    void reconcileWithLiveCaptureOnStartup();
+
+    /* True when a main-window close has been requested while the Lua
+     * debugger must arbitrate first (paused-stack safety or unsaved
+     * script prompt). Consumed by deliverDeferredMainCloseIfPending(). */
+    static bool s_mainCloseDeferredByPause_;
+
+    /* Re-deliver a main-window close that was deferred while paused.
+     * Idempotent. Called from handlePause()'s post-loop cleanup so
+     * the queued close runs after the Lua C stack has unwound. */
+    static void deliverDeferredMainCloseIfPending();
 
     /**
      * @brief Static callback invoked before Lua plugins are reloaded.
@@ -237,8 +338,63 @@ class LuaDebuggerDialog : public GeometryStateDialog
     bool breakpointTabsPrimed;
     QIcon folderIcon;
     QIcon fileIcon;
+    /* True when this dialog is in a pause entry / nested event-loop UI
+     * (Continue/step, freeze, chrome). The C side reports an actual
+     * breakpoint with wslua_debugger_is_paused(); the two are usually
+     * aligned but are updated on different call paths. */
     bool debuggerPaused;
     bool reloadDeferred;
+    /* True while "Reload Lua Plugins" forces temporary reload chrome. */
+    bool reloadUiActive_ = false;
+    /* Snapshot checkbox state so we can restore prior chrome after reload. */
+    bool reloadUiSavedCheckboxChecked_ = false;
+    bool reloadUiSavedCheckboxEnabled_ = true;
+    /* Debugger enabled-state when reload was requested from this dialog. */
+    bool reloadUiRequestWasEnabled_ = false;
+
+    /* Pause-freeze state: populated on outermost-frame pause entry,
+     * consumed on outermost-frame resume. */
+    QList<QPointer<QWidget>> frozenTopLevels;
+    /* Every QAction outside the debugger dialog disabled across the
+     * pause: menu items, toolbar buttons, and keyboard shortcuts.
+     * Needed because macOS native NSMenuItems bypass the QApplication
+     * event filter and trigger QAction::triggered() directly, and
+     * because Qt::ApplicationShortcut actions on background dialogs
+     * could fire even though those dialogs are setEnabled(false). A
+     * disabled QAction propagates to all of its UI representations,
+     * which gives the user an unambiguous "everything outside the
+     * debugger is inert" cue. */
+    QList<QPointer<QAction>> frozenActions;
+    /* QMainWindow::centralWidget() disabled across the pause. The
+     * QApplication-level PauseInputFilter is meant to drop mouse and
+     * key events for any window other than this dialog, but it is not
+     * a reliable single point of truth — native menu-equivalent paths
+     * on macOS and other edge cases can still drive selection changes
+     * in the packet list. setEnabled(false) on centralWidget is a
+     * guaranteed cut: Qt refuses to deliver user input to the widget
+     * or any of its descendants, and the tree grays to match the
+     * overlay's "paused" visual language. The dialog itself is
+     * parented to the QMainWindow (not to its central widget) so this
+     * does NOT disable the debugger UI. On resume, setEnabled(true)
+     * triggers Qt's update() cascade over centralWidget and its
+     * descendants, which is what restores the packet list from the
+     * frozen-looking state it would otherwise be stuck in — the
+     * QEvent::UpdateRequest filter swallowed every main-window paint
+     * during the pause, so some child viewports have a stale backing
+     * store until something forces a real paint pass. */
+    QPointer<QWidget> frozenCentralWidget;
+    /* Pause overlay is a plain child widget of the main window (like
+     * SplashOverlay on the welcome page). Created on pause entry and
+     * destroyed on resume; being a child widget means it has no
+     * platform-window identity of its own, so it cannot surface as an
+     * independent entry in Mission Control or Alt-Tab and follows the
+     * main window for free. */
+    QPointer<LuaDebuggerPauseOverlay> pauseOverlay;
+    QObject *pauseInputFilter;
+    /* One-shot guard for endPauseFreeze(): set to false at outer pause
+     * entry, flipped to true on first unfreeze so the second call site
+     * (handlePause post-loop vs. closeEvent) becomes a no-op. */
+    bool pauseUnfrozen_ = true;
     /** @brief lua_getstack level for variables; kept in sync with stack list. */
     int stackSelectionLevel;
 
@@ -372,8 +528,24 @@ class LuaDebuggerDialog : public GeometryStateDialog
      * @return Canonical or cleaned absolute path string.
      */
     QString normalizedFilePath(const QString &file_path) const;
-    /** @brief Sync the checkbox UI state with the core debugger flag. */
+    /** @brief Sync only the checkbox checked/enabled state from core flags. */
     void syncDebuggerToggleWithCore();
+    /** @brief Refresh checkbox sync + all debugger state chrome/widgets. */
+    void refreshDebuggerStateUi();
+    /** @brief Enter transient "reload in progress" chrome when applicable. */
+    void enterReloadUiStateIfEnabled();
+    /** @brief Exit transient reload chrome and restore normal widget syncing. */
+    void exitReloadUiState();
+    /** @brief One combined status for window title and toolbar dot (single source
+     *        of truth for chrome, derived from the core and Qt members). */
+    enum class DebuggerUiStatus
+    {
+        Paused,
+        DisabledLiveCapture,
+        Disabled,
+        Running
+    };
+    DebuggerUiStatus currentDebuggerUiStatus() const;
     /** @brief Update the checkbox icon based on the enabled state. */
     void updateEnabledCheckboxIcon();
     /** @brief Enable the debugger if any active breakpoint requires it. */
@@ -429,6 +601,16 @@ class LuaDebuggerDialog : public GeometryStateDialog
      */
     void resumeDebuggerAndExitLoop();
     /**
+     * @brief Undo the pause-entry UI freeze synchronously.
+     *
+     * Idempotent: safe to call from both handlePause()'s post-loop
+     * (normal Continue/Step resume) and from closeEvent() (so the
+     * rest of WiresharkMainWindow::closeEvent runs with a fully
+     * interactive UI when the user closes the app while the
+     * debugger is paused). Gated by pauseUnfrozen_.
+     */
+    void endPauseFreeze();
+    /**
      * @brief Resume execution with a stepping mode; shared by step over/in/out.
      * @param step_fn Core step function (e.g. wslua_debugger_step_over).
      */
@@ -465,8 +647,8 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void rebuildWatchTreeFromSettings();
     /** @brief Refresh value/type (and expansion affordances) for all watch roots. */
     void refreshWatchDisplay();
-    /** @brief Add a path watch (e.g. from the Variables context menu). */
-    void addPathWatch(const QString &debuggerPath);
+    /** @brief Add a watch from an expression/path spec without opening the editor. */
+    void addWatchFromSpec(const QString &watchSpec);
     /**
      * @brief Insert a top-level watch row; optionally open the inline editor.
      *        The spec must be a Variables-style path (see

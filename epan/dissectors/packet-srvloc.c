@@ -24,8 +24,6 @@
 
 #include "config.h"
 
-#include <stdlib.h>	/* for strtoul() */
-
 #include <epan/packet.h>
 #include <epan/prefs.h>
 #include "packet-tcp.h"
@@ -329,8 +327,7 @@ dissect_authblk(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
 
     proto_tree_add_item(tree, hf_srvloc_timestamp, tvb, offset, 8, ENC_TIME_NTP|ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_srvloc_block_structure_descriptor, tvb, offset + 8, 2, ENC_BIG_ENDIAN);
-    length = tvb_get_ntohs(tvb, offset + 10);
-    proto_tree_add_item(tree, hf_srvloc_authenticator_length, tvb, offset + 10, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint16(tree, hf_srvloc_authenticator_length, tvb, offset + 10, 2, ENC_BIG_ENDIAN, &length);
     offset += 12;
     proto_tree_add_item(tree, hf_srvloc_authentication_block, tvb, offset, length, ENC_ASCII);
     offset += length;
@@ -346,8 +343,7 @@ dissect_authblk_v2(tvbuff_t *tvb, unsigned offset, proto_tree *tree)
     proto_tree_add_item(tree, hf_srvloc_authblkv2_bsd, tvb, offset, 2, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_srvloc_authblkv2_len, tvb, offset+2, 2, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_srvloc_authblkv2_timestamp, tvb, offset+4, 4, ENC_TIME_SECS|ENC_BIG_ENDIAN);
-    length = tvb_get_ntohs(tvb, offset + 8);
-    proto_tree_add_uint(tree, hf_srvloc_authblkv2_slpspilen, tvb, offset + 8, 2, length);
+    proto_tree_add_item_ret_uint16(tree, hf_srvloc_authblkv2_slpspilen, tvb, offset + 8, 2, ENC_BIG_ENDIAN, &length);
     offset += 10;
     proto_tree_add_item(tree, hf_srvloc_authblkv2_slpspi, tvb, offset, length, ENC_ASCII);
     offset += length;
@@ -596,8 +592,7 @@ dissect_srvloc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
         proto_tree_add_bitmask(srvloc_tree, tvb, offset + 4, hf_srvloc_flags_v1, ett_srvloc_flags, v1_flags, ENC_NA);
         proto_tree_add_item(srvloc_tree, hf_srvloc_dialect, tvb, offset + 5, 1, ENC_NA);
         proto_tree_add_item(srvloc_tree, hf_srvloc_language, tvb, offset + 6, 2, ENC_ASCII);
-        encoding = tvb_get_ntohs(tvb, offset + 8);
-        proto_tree_add_item(srvloc_tree, hf_srvloc_encoding, tvb, offset + 8, 2, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint16(srvloc_tree, hf_srvloc_encoding, tvb, offset + 8, 2, ENC_BIG_ENDIAN, &encoding);
         proto_tree_add_item(srvloc_tree, hf_srvloc_transaction_id, tvb, offset + 10, 2, ENC_BIG_ENDIAN);
         /* added echo of XID to info column by Greg Morris 0ct 14, 2005 */
         col_append_fstr(pinfo->cinfo, COL_INFO, ", V1 Transaction ID - %u", tvb_get_ntohs(tvb, offset + 10));
@@ -772,8 +767,7 @@ dissect_srvloc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
                 expert_add_info_format(pinfo, expert_item, &ei_srvloc_error, "Error: %s", val_to_str(pinfo->pool, expert_status, srvloc_errs, "Unknown SRVLOC Error (0x%02x)"));
             }
             offset += 2;
-            count = tvb_get_ntohs(tvb, offset);
-            proto_tree_add_item(srvloc_tree, hf_srvloc_service_type_count, tvb, offset, 2, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(srvloc_tree, hf_srvloc_service_type_count, tvb, offset, 2, ENC_BIG_ENDIAN, &count);
             offset += 2;
             while (count > 0) {
                 length = tvb_get_ntohs(tvb, offset);

@@ -538,6 +538,10 @@ extern "C" {
 #define ETHERTYPE_DCE			0x8903	/* Cisco Systems Inc DCE */
 #endif
 
+#ifndef ETHERTYPE_TTAG
+#define ETHERTYPE_TTAG			0x8905	/* Cisco Systems Inc T-Tag (Timestamp Tag) */
+#endif
+
 #ifndef ETHERTYPE_FCOE
 #define ETHERTYPE_FCOE			0x8906	/* Fibre Channel over Ethernet */
 #endif

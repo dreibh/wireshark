@@ -318,6 +318,33 @@ static void lua_resetthread_cb(void *user_data) {
 
 int dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_) {
     int consumed_bytes = tvb_captured_length(tvb);
+
+    /*
+     * If the Lua debugger is currently paused at a breakpoint, the global
+     * lua_State is mid-execution inside the C hook callback that drove the
+     * UI's nested Qt event loop. Any other widget that paints or queries
+     * dissection state during that loop (e.g. the packet list rendering
+     * uncached rows uncovered by scrolling) would otherwise re-enter this
+     * function and call lua_pcall on a freshly created lua_newthread()
+     * coroutine. The hook installed on the main state is inherited by new
+     * threads, so the re-entrant call hits the same breakpoint, the hook
+     * overwrites debugger.paused_L with the throwaway thread, the inner
+     * handlePause() short-circuits via its eventLoop guard, and when the
+     * thread is reset and garbage-collected debugger.paused_L is left
+     * dangling. Subsequent debugger queries dereference freed Lua memory
+     * and corrupt arbitrary heap regions until the process eventually
+     * faults somewhere unrelated.
+     *
+     * Returning the consumed length without entering Lua leaves the
+     * packet untouched in the protocol tree for that brief window. That
+     * matches what would happen if no Lua dissector were registered for
+     * the protocol; the row will be re-dissected normally on the next
+     * paint after the debugger resumes.
+     */
+    if (wslua_debugger_is_paused()) {
+        return consumed_bytes;
+    }
+
     tvbuff_t *saved_lua_tvb = lua_tvb;
     packet_info *saved_lua_pinfo = lua_pinfo;
     struct _wslua_treeitem *saved_lua_tree = lua_tree;
@@ -427,6 +454,15 @@ int dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data 
  * @return true if the packet was recognized by the sub-dissector (stop dissection here)
  */
 bool heur_dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_) {
+    /*
+     * Same reentry guard as dissect_lua(): refuse to enter the Lua VM
+     * while the debugger is paused at a breakpoint. See the comment
+     * there for the failure mode this prevents.
+     */
+    if (wslua_debugger_is_paused()) {
+        return false;
+    }
+
     bool result = false;
     tvbuff_t *saved_lua_tvb = lua_tvb;
     packet_info *saved_lua_pinfo = lua_pinfo;

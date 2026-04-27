@@ -384,7 +384,7 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
             &WiresharkMainWindow::openLuaDebuggerDialog);
     main_ui_->menuTools->addAction(luaDebuggerAction);
 
-    // Separate the Lua plugins comming after the Lua debugger
+    // Separate the Lua plugins coming after the Lua debugger
     main_ui_->menuTools->addSeparator();
 #endif
 
@@ -1016,15 +1016,13 @@ void WiresharkMainWindow::closeEvent(QCloseEvent *event) {
     }
 
 #ifdef HAVE_LUA
-    /*
-     * If the Lua debugger is paused we are inside a nested event loop
-     * with the Lua dissector still on the C call stack.
-     */
-    if (wslua_debugger_is_paused()) {
-        LuaDebuggerDialog *dbg = LuaDebuggerDialog::instance();
-        if (dbg) {
-            dbg->close();
-        }
+    /* Refuse to close while the Lua debugger is paused; the debugger
+     * defers and re-delivers the close once the Lua C stack has
+     * unwound. Running tryClosingCaptureFile() / mainApp->quit() with
+     * the Lua dissector still on the C stack would tear down capture /
+     * epan state and abort in wmem_cleanup_scopes() at exit. */
+    if (LuaDebuggerDialog::handleMainCloseIfPaused(event)) {
+        return;
     }
 #endif
 

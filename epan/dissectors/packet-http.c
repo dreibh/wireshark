@@ -2738,7 +2738,6 @@ basic_response_dissector(packet_info *pinfo, tvbuff_t *tvb, proto_tree *tree,
 			    ENC_ASCII);
 	/* Advance to the start of the next token. */
 	offset += (int) (next_token - line);
-	line = next_token;
 
 	/*
 	 * The second token is the Status Code.

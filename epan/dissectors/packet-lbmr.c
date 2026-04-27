@@ -4667,8 +4667,7 @@ static int dissect_lbmr_remote_domain_route(tvbuff_t * tvb, int offset, packet_i
     int ofs = 0;
     uint16_t idx;
 
-    num_domains = tvb_get_ntohs(tvb, offset + O_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_NUM_DOMAINS);
-    proto_tree_add_item(tree, hf_lbmr_remote_domain_route_hdr_num_domains, tvb, offset + O_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_NUM_DOMAINS, L_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_NUM_DOMAINS, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint16(tree, hf_lbmr_remote_domain_route_hdr_num_domains, tvb, offset + O_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_NUM_DOMAINS, L_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_NUM_DOMAINS, ENC_BIG_ENDIAN, &num_domains);
     proto_tree_add_item(tree, hf_lbmr_remote_domain_route_hdr_ip, tvb, offset + O_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_IP, L_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_IP, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_lbmr_remote_domain_route_hdr_port, tvb, offset + O_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_PORT, L_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_PORT, ENC_BIG_ENDIAN);
     proto_tree_add_item(tree, hf_lbmr_remote_domain_route_hdr_route_index, tvb, offset + O_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_ROUTE_INDEX, L_LBMR_REMOTE_DOMAIN_ROUTE_HDR_T_ROUTE_INDEX, ENC_BIG_ENDIAN);
@@ -4973,8 +4972,7 @@ static int dissect_lbmr_opt_unknown(tvbuff_t * tvb, int offset, packet_info * pi
     subtree = proto_item_add_subtree(subtree_item, ett_lbmr_opt_unknown);
     opt_type = tvb_get_uint8(tvb, offset + O_LBMR_LBMR_OPT_HDR_T_TYPE);
     type_item = proto_tree_add_item(subtree, hf_lbmr_opt_unknown_type, tvb, offset + O_LBMR_LBMR_OPT_HDR_T_TYPE, L_LBMR_LBMR_OPT_HDR_T_TYPE, ENC_BIG_ENDIAN);
-    len = tvb_get_uint8(tvb, offset + O_LBMR_LBMR_OPT_HDR_T_LEN);
-    proto_tree_add_item(subtree, hf_lbmr_opt_unknown_len, tvb, offset + O_LBMR_LBMR_OPT_HDR_T_LEN, L_LBMR_LBMR_OPT_HDR_T_LEN, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint8(subtree, hf_lbmr_opt_unknown_len, tvb, offset + O_LBMR_LBMR_OPT_HDR_T_LEN, L_LBMR_LBMR_OPT_HDR_T_LEN, ENC_BIG_ENDIAN, &len);
     proto_tree_add_item(subtree, hf_lbmr_opt_unknown_flags, tvb, offset + O_LBMR_LBMR_OPT_HDR_T_FLAGS, L_LBMR_LBMR_OPT_HDR_T_FLAGS, ENC_NA);
     proto_tree_add_item(subtree, hf_lbmr_opt_unknown_data, tvb, offset + L_LBMR_LBMR_OPT_HDR_T, (int) len - L_LBMR_LBMR_OPT_HDR_T, ENC_NA);
     proto_item_set_len(subtree_item, (int) len);

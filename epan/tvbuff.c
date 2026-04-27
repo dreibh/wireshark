@@ -1978,6 +1978,14 @@ tvb_get_string_uint64(tvbuff_t *tvb, const unsigned offset, const unsigned lengt
 
 	ptr = ensure_contiguous_unsigned(tvb, offset, length);
 
+	if (ptr == NULL) {
+		*value = 0;
+		if (endoff) {
+			*endoff = offset;
+		}
+		return false;
+	}
+
 	switch (encoding & ENC_STRING) {
 	case ENC_STR_HEX:
 		success = ws_hexbuftou64(ptr, length, endptrptr, value);
@@ -2011,6 +2019,14 @@ tvb_get_string_uint(tvbuff_t *tvb, const unsigned offset, const unsigned length,
 
 	ptr = ensure_contiguous_unsigned(tvb, offset, length);
 
+	if (ptr == NULL) {
+		*value = 0;
+		if (endoff) {
+			*endoff = offset;
+		}
+		return false;
+	}
+
 	switch (encoding & ENC_STRING) {
 	case ENC_STR_HEX:
 		success = ws_hexbuftou32(ptr, length, endptrptr, value);
@@ -2021,6 +2037,88 @@ tvb_get_string_uint(tvbuff_t *tvb, const unsigned offset, const unsigned length,
 	case ENC_STR_NUM:
 	default:
 		success = ws_basebuftou32(ptr, length, endptrptr, value, 0);
+	}
+
+	if (endoff) {
+		// 0 <= endptr - ptr <= length
+		*endoff = offset + (uint32_t)(endptr - ptr);
+	}
+
+	return success;
+}
+
+bool
+tvb_get_string_uint16(tvbuff_t *tvb, const unsigned offset, const unsigned length,
+		    const unsigned encoding, uint16_t *value, unsigned *endoff)
+{
+	const uint8_t *ptr;
+	const uint8_t *endptr;
+	const uint8_t **endptrptr = endoff ? &endptr : NULL;
+	bool success;
+
+	validate_single_byte_ascii_encoding(encoding);
+
+	ptr = ensure_contiguous_unsigned(tvb, offset, length);
+
+	if (ptr == NULL) {
+		*value = 0;
+		if (endoff) {
+			*endoff = offset;
+		}
+		return false;
+	}
+
+	switch (encoding & ENC_STRING) {
+	case ENC_STR_HEX:
+		success = ws_hexbuftou16(ptr, length, endptrptr, value);
+		break;
+	case ENC_STR_DEC:
+		success = ws_buftou16(ptr, length, endptrptr, value);
+		break;
+	case ENC_STR_NUM:
+	default:
+		success = ws_basebuftou16(ptr, length, endptrptr, value, 0);
+	}
+
+	if (endoff) {
+		// 0 <= endptr - ptr <= length
+		*endoff = offset + (uint32_t)(endptr - ptr);
+	}
+
+	return success;
+}
+
+bool
+tvb_get_string_uint8(tvbuff_t *tvb, const unsigned offset, const unsigned length,
+		    const unsigned encoding, uint8_t *value, unsigned *endoff)
+{
+	const uint8_t *ptr;
+	const uint8_t *endptr;
+	const uint8_t **endptrptr = endoff ? &endptr : NULL;
+	bool success;
+
+	validate_single_byte_ascii_encoding(encoding);
+
+	ptr = ensure_contiguous_unsigned(tvb, offset, length);
+
+	if (ptr == NULL) {
+		*value = 0;
+		if (endoff) {
+			*endoff = offset;
+		}
+		return false;
+	}
+
+	switch (encoding & ENC_STRING) {
+	case ENC_STR_HEX:
+		success = ws_hexbuftou8(ptr, length, endptrptr, value);
+		break;
+	case ENC_STR_DEC:
+		success = ws_buftou8(ptr, length, endptrptr, value);
+		break;
+	case ENC_STR_NUM:
+	default:
+		success = ws_basebuftou8(ptr, length, endptrptr, value, 0);
 	}
 
 	if (endoff) {

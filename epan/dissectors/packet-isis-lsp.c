@@ -1430,8 +1430,7 @@ dissect_lsp_ext_ip_reachability_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tre
 
         len = 5 + byte_length;
         if ((ctrl_info & 0x40) != 0) {
-            subclvs_len = tvb_get_uint8(tvb, offset+len);
-            proto_tree_add_item(subtree, hf_isis_lsp_ext_ip_reachability_subclvs_len, tvb, offset+len, 1, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(subtree, hf_isis_lsp_ext_ip_reachability_subclvs_len, tvb, offset+len, 1, ENC_BIG_ENDIAN, &subclvs_len);
             i =0;
             while (i < subclvs_len) {
                 clv_offset = offset + len + 1 + i; /* skip the total subtlv len indicator */
@@ -2198,8 +2197,7 @@ dissect_lsp_ipv6_reachability_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree 
 
         len = 6 + byte_length;
         if ((ctrl_info & 0x20) != 0) {
-            subclvs_len = tvb_get_uint8(tvb, offset+len);
-            proto_tree_add_item(subtree, hf_isis_lsp_ipv6_reachability_subclvs_len, tvb, offset+len, 1, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint(subtree, hf_isis_lsp_ipv6_reachability_subclvs_len, tvb, offset+len, 1, ENC_BIG_ENDIAN, &subclvs_len);
 
             i =0;
             while (i < subclvs_len) {

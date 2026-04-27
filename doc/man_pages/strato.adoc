@@ -559,6 +559,14 @@ Field 2:: plugin version (e.g. 0.0.4)
 Field 3:: plugin type ("dissector", "tap", "file type", etc.)
 Field 4:: full path to plugin file
 
+*profiles*[,__filter__]  Dumps a list of profiles. Specific profile types
+can be listed with the "global", "personal", or "all" filters.  By default,
+"all" are shown.
+
+[horizontal]
+Field 1:: Profile name
+Field 2:: Type of profile (personal, global, default)
+
 *protocols* Dumps the protocols in the registration database to stdout.
 An independent program can take this output and format it into nice tables
 or HTML or whatever.  There is one record per line.  The fields are tab-delimited.

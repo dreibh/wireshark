@@ -373,11 +373,12 @@ DisStreamAnalysisDialog::updatePacketRows()
 void
 DisStreamAnalysisDialog::updatePlot()
 {
-    disstream_info_t *stream_info = selectedStream();
-    QString error_message;
-
     audio_plot_->clearGraphs();
     audio_plot_->legend->setVisible(false);
+
+#ifdef QT_MULTIMEDIA_LIB
+    disstream_info_t *stream_info = selectedStream();
+    QString error_message;
 
     if (!stream_info || !audio_stream_ || !audio_stream_->prepareVisualData(stream_info, error_message)) {
         audio_plot_->replot();
@@ -421,6 +422,8 @@ DisStreamAnalysisDialog::updatePlot()
 
     audio_plot_->xAxis->rescale(true);
     audio_plot_->yAxis->setRange(-1.4, 1.4);
+#endif
+
     audio_plot_->replot();
 }
 

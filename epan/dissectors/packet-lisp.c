@@ -586,8 +586,7 @@ dissect_lcaf_natt_rloc(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     rloc_tree = proto_item_add_subtree(ti, ett_lisp_lcaf_natt_rloc);
 
     /* AFI (2 bytes) */
-    proto_tree_add_item(rloc_tree, hf_lisp_lcaf_natt_rloc_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
-    rloc_afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item_ret_uint16(rloc_tree, hf_lisp_lcaf_natt_rloc_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &rloc_afi);
     offset += 2;
 
     /* Reencap hop */
@@ -1352,8 +1351,7 @@ dissect_lcaf_mcast_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     src_tree = proto_item_add_subtree(ti_src, ett_lisp_lcaf_mcinfo_src);
 
     /* Source/Subnet AFI (2 bytes) */
-    proto_tree_add_item(src_tree, hf_lisp_lcaf_mcinfo_src_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
-    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item_ret_uint16(src_tree, hf_lisp_lcaf_mcinfo_src_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
     offset += 2;
 
     /* Source/Subnet Address */
@@ -1385,8 +1383,7 @@ dissect_lcaf_mcast_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     grp_tree = proto_item_add_subtree(ti_grp, ett_lisp_lcaf_mcinfo_grp);
 
     /* Group AFI (2 bytes) */
-    proto_tree_add_item(grp_tree, hf_lisp_lcaf_mcinfo_grp_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
-    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item_ret_uint16(grp_tree, hf_lisp_lcaf_mcinfo_grp_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
     offset += 2;
 
     /* Group Address */
@@ -1507,8 +1504,7 @@ dissect_lcaf_src_dst_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     src_tree = proto_item_add_subtree(ti_src, ett_lisp_lcaf_srcdst_src);
 
     /* Source Prefix AFI (2 bytes) */
-    proto_tree_add_item(src_tree, hf_lisp_lcaf_srcdst_src_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
-    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item_ret_uint16(src_tree, hf_lisp_lcaf_srcdst_src_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
     offset += 2;
 
     /* Source Prefix */
@@ -1546,8 +1542,7 @@ dissect_lcaf_src_dst_key(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     dst_tree = proto_item_add_subtree(ti_dst, ett_lisp_lcaf_srcdst_dst);
 
     /* Destination Prefix AFI (2 bytes) */
-    proto_tree_add_item(dst_tree, hf_lisp_lcaf_srcdst_dst_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
-    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item_ret_uint16(dst_tree, hf_lisp_lcaf_srcdst_dst_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
     offset += 2;
 
     /* Destination Prefix */
@@ -1659,8 +1654,7 @@ dissect_lcaf_kv_addr_pair(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     key_tree = proto_item_add_subtree(ti_key, ett_lisp_lcaf_kv_key);
 
     /* Key AFI (2 bytes) */
-    proto_tree_add_item(key_tree, hf_lisp_lcaf_kv_key_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
-    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item_ret_uint16(key_tree, hf_lisp_lcaf_kv_key_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
     offset += 2;
 
     /* Key */
@@ -1703,8 +1697,7 @@ dissect_lcaf_kv_addr_pair(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     value_tree = proto_item_add_subtree(ti_value, ett_lisp_lcaf_kv_value);
 
     /* Value AFI (2 bytes) */
-    proto_tree_add_item(value_tree, hf_lisp_lcaf_kv_value_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
-    afi = tvb_get_ntohs(tvb, offset);
+    proto_tree_add_item_ret_uint16(value_tree, hf_lisp_lcaf_kv_value_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &afi);
     offset += 2;
 
     /* Value */
@@ -2132,8 +2125,7 @@ dissect_lisp_mapping(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree,
     offset += 2;
 
     /* EID prefix AFI (16 bits) */
-    eid_afi = tvb_get_ntohs(tvb, offset);
-    proto_tree_add_item(lisp_mapping_tree, hf_lisp_mapping_eid_afi, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint16(lisp_mapping_tree, hf_lisp_mapping_eid_afi, tvb, offset, 2, ENC_BIG_ENDIAN, &eid_afi);
     offset += 2;
 
     /* EID */
@@ -2715,8 +2707,7 @@ dissect_lisp_map_notify(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree
         offset += 2;
 
         /* MS-RTR Authentication Data Length (16 bits) */
-        authlen = tvb_get_ntohs(tvb, offset);
-        proto_tree_add_item(lisp_tree, hf_lisp_msrtr_authlen, tvb, offset, 2, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint16(lisp_tree, hf_lisp_msrtr_authlen, tvb, offset, 2, ENC_BIG_ENDIAN, &authlen);
         offset += 2;
 
         /* MS-RTR Authentication Data */
@@ -2855,8 +2846,7 @@ dissect_lisp_info(tvbuff_t *tvb, packet_info *pinfo, proto_tree *lisp_tree)
     offset += 2;
 
     /* Authentication Data Length (16 bits) */
-    authlen = tvb_get_ntohs(tvb, offset);
-    proto_tree_add_item(lisp_tree, hf_lisp_authlen, tvb, offset, 2, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint16(lisp_tree, hf_lisp_authlen, tvb, offset, 2, ENC_BIG_ENDIAN, &authlen);
     offset += 2;
 
     /* Authentication Data */

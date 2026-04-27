@@ -172,6 +172,7 @@ const value_string etype_vals[] = {
 	{ ETHERTYPE_NCSI,                 "Network Controller Sideband Interface" },
 	{ ETHERTYPE_PRP,                  "Parallel Redundancy Protocol (PRP) and HSR Supervision (IEC62439 Part 3)" },
 	{ ETHERTYPE_FLIP,                 "Flow Layer Internal Protocol" },
+	{ ETHERTYPE_TTAG,                 "Cisco Timestamp Tag (T-Tag)" },
 	{ ETHERTYPE_ROCE,                 "RDMA over Converged Ethernet" },
 	{ ETHERTYPE_TDMOE,                "Digium TDM over Ethernet Protocol" },
 	{ ETHERTYPE_WAI,                  "WAI Authentication Protocol" },

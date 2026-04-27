@@ -303,8 +303,9 @@ dissect_sjle_time_usecs(proto_tree *tree, packet_info* pinfo, int hf_idx, tvbuff
 }
 
 static void
-dissect_sjle_uint(proto_tree *tree, packet_info* pinfo, int hf_idx, tvbuff_t *tvb, int offset, int len) {
-    uint32_t uint_val = (uint32_t) strtoul(tvb_format_text(pinfo->pool, tvb, offset, len), NULL, 10);
+dissect_sjle_uint(proto_tree *tree, packet_info* pinfo _U_, int hf_idx, tvbuff_t *tvb, int offset, int len) {
+    uint32_t uint_val;
+    tvb_get_string_uint(tvb, offset, len, ENC_STR_DEC, &uint_val, NULL);
     proto_tree_add_uint(tree, hf_idx, tvb, offset, len, uint_val);
 }
 

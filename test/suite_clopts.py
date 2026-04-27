@@ -19,6 +19,7 @@ import pytest
 #glossaries = ('fields', 'protocols', 'values', 'decodes', 'defaultprefs', 'currentprefs')
 
 glossaries = ('decodes', 'values')
+profiles = ('all', 'global', 'personal')
 testout_pcap = 'testout.pcap'
 
 
@@ -209,6 +210,11 @@ class TestTsharkDumpGlossaries:
             if key not in keys_to_check:
                 del ip_props[key]
         assert actual_obj == expected_obj
+
+    def test_tshark_dump_profiles(self, cmd_tshark, base_env):
+        for profile in profiles:
+            process = subprocesstest.run((cmd_tshark, '-G', 'profiles', profile), capture_output=True, env=base_env)
+            assert not process.stderr, 'Found error output while printing profiles ' + profile
 
     def test_tshark_unicode_folders(self, cmd_tshark, unicode_env, features):
         '''Folders output with unicode'''

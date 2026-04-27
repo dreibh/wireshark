@@ -271,8 +271,6 @@ req_resp_hdrs_do_reassembly(tvbuff_t *tvb, const int offset, packet_info *pinfo,
 			while (!done_chunking) {
 				unsigned chunk_size = 0;
 				unsigned chunk_offset = 0;
-				char *chunk_string = NULL;
-				char *c = NULL;
 
 				reported_length_remaining =
 				    tvb_reported_length_remaining(tvb,
@@ -308,19 +306,8 @@ req_resp_hdrs_do_reassembly(tvbuff_t *tvb, const int offset, packet_info *pinfo,
 					*last_chunk_offset = next_offset - offset;
 				}
 
-				chunk_string = (char*)tvb_get_string_enc(pinfo->pool, tvb, next_offset,
-				    linelen, ENC_ASCII);
-				c = chunk_string;
-
-				/*
-				 * We don't care about the extensions (including optional
-				 * BWS, see RFC 9112 7.1.1)
-				 */
-				if ((c = strpbrk(c, "; \t"))) {
-					*c = '\0';
-				}
-
-				if (!ws_hexstrtou32(chunk_string, NULL, &chunk_size)) {
+				unsigned chunk_end;
+				if (!tvb_get_string_uint(tvb, next_offset, linelen, ENC_STR_HEX, &chunk_size, &chunk_end)) {
 					/* We couldn't get the chunk size,
 					 * so stop trying.
 					 */

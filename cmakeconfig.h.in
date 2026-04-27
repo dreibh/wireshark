@@ -88,7 +88,7 @@
 /* Define to 1 if you have the <grp.h> header file. */
 #cmakedefine HAVE_GRP_H 1
 
-/* Define to use heimdal kerberos */
+/* Define to use heimdal kerberos. Deprecated; use MIT instead. */
 #cmakedefine HAVE_HEIMDAL_KERBEROS 1
 
 /* Define to 1 if you have the `krb5_pac_verify' function. */

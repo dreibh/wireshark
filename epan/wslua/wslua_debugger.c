@@ -39,9 +39,37 @@ typedef struct
     wslua_breakpoint_t temporary_breakpoint;
     wslua_step_kind_t step_kind;
     int step_stack_depth; /**< Frame count captured when OVER/OUT begins */
-    bool was_enabled_before_reload; /**< Saved state across plugin reload */
-    bool reload_in_progress; /**< Suppress auto-enable during reload */
     int32_t variable_stack_level; /**< lua_getstack index for Locals/Upvalues */
+    /*
+     * Set only in wslua_debugger_notify_reload() to copy debugger.enabled
+     * before the reload path forces enabled false and clears L. Used by
+     * wslua_debugger_restore_after_reload() to turn the debugger back on after
+     * cf_reload / redissect (not by wslua_debugger_init, which is suppressed
+     * while this sequence runs). Cleared on consume, on renounce, or when the
+     * user sets user_explicitly_disabled (uncheck) so a pending restore does
+     * not fight that intent.
+     */
+    bool was_enabled_before_reload;
+    /*
+     * True between wslua_debugger_notify_reload() and
+     * wslua_debugger_notify_post_reload(). While set, wslua_debugger_init()
+     * returns without auto-enabling for active breakpoints, so the line hook
+     * does not run inside the reload / re-dissection stack and re-enter the
+     * event loop.
+     */
+    bool reload_in_progress;
+    /*
+     * Set from the UI main enable checkbox via
+     * wslua_debugger_set_user_explicitly_disabled(). When true, the user has
+     * left the core debugger "off" on purpose. Gates wslua_debugger_init
+     * breakpoint auto-enable, wslua_debugger_may_auto_enable_for_breakpoints,
+     * wslua_debugger_run_to_line, and a secondary check in
+     * wslua_debugger_restore_after_reload. Not equivalent to !enabled — the
+     * core can be off for other reasons (e.g. live capture) without this bit
+     * being set, and it persists across operations that do not touch
+     * was_enabled_before_reload.
+     */
+    bool user_explicitly_disabled;
 } wslua_debugger_t;
 
 static wslua_debugger_t debugger = {
@@ -55,9 +83,10 @@ static wslua_debugger_t debugger = {
     {NULL, 0, false}, /* temporary_breakpoint */
     WSLUA_STEP_KIND_NONE, /* step_kind */
     0,                    /* step_stack_depth */
+    0,                    /* variable_stack_level */
     false,                /* was_enabled_before_reload */
     false,                /* reload_in_progress */
-    0,                    /* variable_stack_level */
+    false,                /* user_explicitly_disabled */
 };
 
 /* Breakpoints (in-memory, persisted by Qt side) */
@@ -273,7 +302,12 @@ void wslua_debugger_init(lua_State *L)
     }
     g_mutex_unlock(&debugger.mutex);
 
-    if (has_active)
+    bool user_wants_debugger_off = false;
+    g_mutex_lock(&debugger.mutex);
+    user_wants_debugger_off = debugger.user_explicitly_disabled;
+    g_mutex_unlock(&debugger.mutex);
+
+    if (has_active && !user_wants_debugger_off)
     {
         wslua_debugger_set_enabled(true);
     }
@@ -363,6 +397,33 @@ void wslua_debugger_set_enabled(bool enabled)
     wslua_debugger_update_hook();
 }
 
+void wslua_debugger_set_user_explicitly_disabled(
+    bool user_wants_debugger_stay_off)
+{
+    g_mutex_lock(&debugger.mutex);
+    debugger.user_explicitly_disabled = user_wants_debugger_stay_off;
+    if (user_wants_debugger_stay_off)
+    {
+        debugger.was_enabled_before_reload = false;
+    }
+    g_mutex_unlock(&debugger.mutex);
+}
+
+bool wslua_debugger_may_auto_enable_for_breakpoints(void)
+{
+    g_mutex_lock(&debugger.mutex);
+    const bool may = !debugger.user_explicitly_disabled;
+    g_mutex_unlock(&debugger.mutex);
+    return may;
+}
+
+void wslua_debugger_renounce_restore_after_reload(void)
+{
+    g_mutex_lock(&debugger.mutex);
+    debugger.was_enabled_before_reload = false;
+    g_mutex_unlock(&debugger.mutex);
+}
+
 /**
  * @brief Register the UI callback.
  * @param cb The callback function.
@@ -405,6 +466,12 @@ void wslua_debugger_run_to_line(const char *file_path, int64_t line)
         return;
     }
     g_mutex_lock(&debugger.mutex);
+    if (debugger.user_explicitly_disabled)
+    {
+        g_mutex_unlock(&debugger.mutex);
+        g_free(canonical_copy);
+        return;
+    }
     if (debugger.temporary_breakpoint.file_path)
     {
         g_free(debugger.temporary_breakpoint.file_path);
@@ -503,16 +570,6 @@ void wslua_debugger_step_out(void)
     wslua_debugger_begin_step(WSLUA_STEP_KIND_OUT, depth);
 }
 
-/**
- * @brief Step into the next executed line (may enter callees).
- *
- * Equivalent to wslua_debugger_step_in(). Kept for API compatibility.
- */
-void wslua_debugger_step(void)
-{
-    wslua_debugger_step_in();
-}
-
 void wslua_debugger_set_variable_stack_level(int32_t level)
 {
     g_mutex_lock(&debugger.mutex);
@@ -564,7 +621,6 @@ void wslua_debugger_add_breakpoint(const char *file_path, int64_t line)
 
     g_array_append_val(breakpoints_array, breakpoint);
     g_mutex_unlock(&debugger.mutex);
-    wslua_debugger_set_enabled(true);
     g_free(norm_file_path);
     wslua_debugger_update_hook();
 }
@@ -640,10 +696,10 @@ void wslua_debugger_set_breakpoint_active(const char *file_path, int64_t line,
             bp->active = active;
             g_mutex_unlock(&debugger.mutex);
             g_free(norm_file_path);
-            if (active)
-            {
-                wslua_debugger_set_enabled(true);
-            }
+            /* Toggling a breakpoint's active state must never change the
+             * debugger's enabled flag (especially during a live capture,
+             * where debugging is suppressed entirely). Just re-arm the
+             * Lua line hook so the change takes effect on the next tick. */
             wslua_debugger_update_hook();
             return;
         }
@@ -2390,13 +2446,26 @@ void wslua_debugger_notify_post_reload(void)
  */
 void wslua_debugger_restore_after_reload(void)
 {
-    if (debugger.was_enabled_before_reload)
+    bool need_enable = false;
+
+    g_mutex_lock(&debugger.mutex);
+    if (!debugger.was_enabled_before_reload)
     {
-        debugger.was_enabled_before_reload = false;
-        if (!debugger.enabled && debugger.L)
-        {
-            wslua_debugger_set_enabled(true);
-        }
+        g_mutex_unlock(&debugger.mutex);
+        return;
+    }
+    debugger.was_enabled_before_reload = false;
+    if (debugger.user_explicitly_disabled)
+    {
+        g_mutex_unlock(&debugger.mutex);
+        return;
+    }
+    need_enable = !debugger.enabled && debugger.L != NULL;
+    g_mutex_unlock(&debugger.mutex);
+
+    if (need_enable)
+    {
+        wslua_debugger_set_enabled(true);
     }
 }
 

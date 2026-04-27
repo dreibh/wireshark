@@ -238,7 +238,7 @@
     <string>Add Watch</string>
    </property>
    <property name="shortcut">
-    <string>Ctrl+Alt+W</string>
+    <string>Ctrl+Shift+W</string>
    </property>
   </action>
  </widget>

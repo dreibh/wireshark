@@ -94,7 +94,7 @@ public:
     static void performUIUpdate();
 
     /**
-     * Returns a string with the information about which sofware update framework is being used.
+     * Returns a string with the information about which software update framework is being used.
      */
     static QString info();
 
@@ -102,8 +102,8 @@ public:
      * A runtime "wrapper" for HAVE_SOFTWARE_UPDATE and including platform checks. This can be
      * used by the UI to check if an update is currently supported and possible or not.
      *
-     * @return true The plattform is supported
-     * @return false The plattform is not supported
+     * @return true The platform is supported
+     * @return false The platform is not supported
      */
     static bool plattformSupported();
 

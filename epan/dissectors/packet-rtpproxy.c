@@ -332,45 +332,40 @@ rtpproxy_add_tag(tvbuff_t *tvb, packet_info* pinfo, proto_tree* rtpproxy_tree, u
 }
 
 static void
-rtpproxy_add_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rtpproxy_tree, unsigned begin, unsigned realsize)
+rtpproxy_add_parameter(tvbuff_t *parent_tvb, packet_info *pinfo, proto_tree *rtpproxy_tree, unsigned begin, unsigned realsize)
 {
     proto_item *ti;
     proto_tree *another_tree = NULL;
+    tvbuff_t *tvb;
     unsigned offset = 0;
     unsigned new_offset = 0;
-    int i;
-    unsigned pt = 0;
-    char** codecs = NULL;
-    unsigned codec_len;
+    uint8_t parameter_type;
+    uint16_t parameter_value;
     const char* rawstr = NULL;
     uint32_t ipaddr[4]; /* Enough room for IPv4 or IPv6 */
 
     /* Extract the entire parameters line. */
     /* Something like "t4p1iic8,0,2,4,18,96,97,98,100,101" */
-    rawstr = (char*)tvb_get_string_enc(pinfo->pool, tvb, begin, realsize, ENC_ASCII);
+    rawstr = (char*)tvb_get_string_enc(pinfo->pool, parent_tvb, begin, realsize, ENC_ASCII);
 
-    while(offset < realsize){
-        ti = proto_tree_add_item(rtpproxy_tree, hf_rtpproxy_command_parameter, tvb, begin + offset, 1, ENC_ASCII);
+    tvb = tvb_new_subset_length(parent_tvb, begin, realsize);
+
+    while (tvb_reported_length_remaining(tvb, offset)) {
+        ti = proto_tree_add_item_ret_uint8(rtpproxy_tree, hf_rtpproxy_command_parameter, tvb, offset, 1, ENC_ASCII, &parameter_type);
         offset++; /* Skip 1-byte parameter's type */
-        switch (g_ascii_tolower(tvb_get_uint8(tvb, begin+offset-1)))
+        switch (g_ascii_tolower(parameter_type))
         {
             /* Official long parameters */
             case 'c':
-                new_offset = (int)strspn(rawstr+offset, "0123456789,");
                 another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_codecs);
-                codecs = wmem_strsplit(pinfo->pool, (char*)tvb_get_string_enc(pinfo->pool, tvb, begin+offset, new_offset, ENC_ASCII), ",", 0);
-                i = 0;
-                while(codecs[i]){
-                    /* We assume strings < 2^32-1 bytes long. :-) */
-                    codec_len = (unsigned)strlen(codecs[i]);
-                    ti = proto_tree_add_uint(another_tree, hf_rtpproxy_command_parameter_codec, tvb, begin+offset, codec_len,
-                            (uint16_t) g_ascii_strtoull((char*)tvb_get_string_enc(pinfo->pool, tvb, begin+offset, codec_len, ENC_ASCII), NULL, 10));
-                    proto_item_append_text(ti, " (%s)", val_to_str_ext_const((unsigned)strtoul(tvb_format_text(pinfo->pool, tvb,begin+offset,codec_len),NULL,10), &rtp_payload_type_vals_ext, "Unknown"));
-                    offset += codec_len;
-                    if(codecs[i+1])
+                while (tvb_get_string_uint16(tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_STR_DEC, &parameter_value, &new_offset)) {
+                    ti = proto_tree_add_uint(another_tree, hf_rtpproxy_command_parameter_codec, tvb, offset, new_offset - offset, parameter_value);
+                    proto_item_append_text(ti, " (%s)", val_to_str_ext_const(parameter_value, &rtp_payload_type_vals_ext, "Unknown"));
+                    offset = new_offset;
+                    if (tvb_reported_length_remaining(tvb, offset) && tvb_get_uint8(tvb, offset) == ',') {
                         offset++; /* skip comma */
-                    i++;
-                };
+                    }
+                }
                 break;
             case 'l':
                 /* That's another one protocol shortcoming - the same parameter used twice. */
@@ -379,40 +374,37 @@ rtpproxy_add_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rtpproxy_t
                 new_offset = (int)strspn(rawstr+offset, "0123456789.");
                 if(new_offset){
                     another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_local);
-                    if(str_to_ip((char*)tvb_get_string_enc(pinfo->pool, tvb, begin+offset, new_offset, ENC_ASCII), ipaddr))
-                        proto_tree_add_ipv4(another_tree, hf_rtpproxy_command_parameter_local_ipv4, tvb, begin+offset, new_offset, ipaddr[0]);
+                    if(str_to_ip((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, new_offset, ENC_ASCII), ipaddr))
+                        proto_tree_add_ipv4(another_tree, hf_rtpproxy_command_parameter_local_ipv4, tvb, offset, new_offset, ipaddr[0]);
                     else
-                        proto_tree_add_expert(another_tree, pinfo, &ei_rtpproxy_bad_ipv4, tvb, begin+offset, new_offset);
+                        proto_tree_add_expert(another_tree, pinfo, &ei_rtpproxy_bad_ipv4, tvb, offset, new_offset);
                     offset += new_offset;
                 }
                 break;
             case 'r':
                 new_offset = (int)strspn(rawstr+offset, "0123456789.");
                 another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_remote);
-                if(str_to_ip((char*)tvb_get_string_enc(pinfo->pool, tvb, begin+offset, new_offset, ENC_ASCII), ipaddr))
-                    proto_tree_add_ipv4(another_tree, hf_rtpproxy_command_parameter_remote_ipv4, tvb, begin+offset, new_offset, ipaddr[0]);
+                if(str_to_ip((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, new_offset, ENC_ASCII), ipaddr))
+                    proto_tree_add_ipv4(another_tree, hf_rtpproxy_command_parameter_remote_ipv4, tvb, offset, new_offset, ipaddr[0]);
                 else
-                    proto_tree_add_expert(another_tree, pinfo, &ei_rtpproxy_bad_ipv4, tvb, begin+offset, new_offset);
+                    proto_tree_add_expert(another_tree, pinfo, &ei_rtpproxy_bad_ipv4, tvb, offset, new_offset);
                 offset += new_offset;
                 break;
             case 'z':
-                new_offset = (int)strspn(rawstr+offset, "0123456789");
                 another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_repacketize);
-                proto_tree_add_uint(another_tree, hf_rtpproxy_command_parameter_repacketize, tvb, begin+offset, new_offset,
-                        (uint16_t) g_ascii_strtoull((char*)tvb_get_string_enc(pinfo->pool, tvb, begin+offset, new_offset, ENC_ASCII), NULL, 10));
-                offset += new_offset;
+                tvb_get_string_uint16(tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_STR_DEC, &parameter_value, &new_offset);
+                proto_tree_add_uint(another_tree, hf_rtpproxy_command_parameter_repacketize, tvb, offset, new_offset - offset, parameter_value);
+                offset = new_offset;
                 break;
             /* Unofficial long parameters */
             case 'd':
-                new_offset = (int)strspn(rawstr+offset, "0123456789");
                 another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_dtmf);
-                proto_tree_add_uint(another_tree, hf_rtpproxy_command_parameter_dtmf, tvb, begin+offset, new_offset,
-                        (uint16_t) g_ascii_strtoull((char*)tvb_get_string_enc(pinfo->pool, tvb, begin+offset, new_offset, ENC_ASCII), NULL, 10));
+                tvb_get_string_uint16(tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_STR_DEC, &parameter_value, &new_offset);
+                proto_tree_add_uint(another_tree, hf_rtpproxy_command_parameter_dtmf, tvb, offset, new_offset - offset, parameter_value);
                 if(rtpproxy_establish_conversation){
-                    pt = (unsigned)strtoul(tvb_format_text(pinfo->pool, tvb,begin+offset,new_offset),NULL,10);
-                    dissector_add_uint("rtp.pt", pt, rtp_events_handle);
+                    dissector_add_uint("rtp.pt", parameter_value, rtp_events_handle);
                 }
-                offset += new_offset;
+                offset = new_offset;
                 break;
             case 'm':
                 new_offset = (int)strspn(rawstr+offset, "0123456789=,");
@@ -421,20 +413,19 @@ rtpproxy_add_parameter(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rtpproxy_t
                 break;
             case 'p':
                 another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_proto);
-                proto_tree_add_item(another_tree, hf_rtpproxy_command_parameter_proto, tvb, begin+offset, 1, ENC_ASCII);
+                proto_tree_add_item(another_tree, hf_rtpproxy_command_parameter_proto, tvb, offset, 1, ENC_ASCII);
                 offset++;
                 break;
             case 't':
-                new_offset = (int)strspn(rawstr+offset, "0123456789");
                 another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_transcode);
-                ti = proto_tree_add_uint(another_tree, hf_rtpproxy_command_parameter_transcode, tvb, begin+offset, new_offset,
-                        (uint16_t) g_ascii_strtoull((char*)tvb_get_string_enc(pinfo->pool, tvb, begin+offset, new_offset, ENC_ASCII), NULL, 10));
-                proto_item_append_text(ti, " (%s)", val_to_str_ext_const((unsigned)strtoul(tvb_format_text(pinfo->pool, tvb,begin+offset, new_offset),NULL,10), &rtp_payload_type_vals_ext, "Unknown"));
-                offset += new_offset;
+                tvb_get_string_uint16(tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_STR_DEC, &parameter_value, &new_offset);
+                ti = proto_tree_add_uint(another_tree, hf_rtpproxy_command_parameter_transcode, tvb, offset, new_offset - offset, parameter_value);
+                proto_item_append_text(ti, " (%s)", val_to_str_ext_const(parameter_value, &rtp_payload_type_vals_ext, "Unknown"));
+                offset = new_offset;
                 break;
             case 'u':
                 another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_acc);
-                proto_tree_add_item(another_tree, hf_rtpproxy_command_parameter_acc, tvb, begin+offset, 1, ENC_ASCII);
+                proto_tree_add_item(another_tree, hf_rtpproxy_command_parameter_acc, tvb, offset, 1, ENC_ASCII);
                 offset++;
                 break;
             default:
@@ -486,10 +477,11 @@ rtpproxy_add_tid(bool is_request, tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 static void
 rtpproxy_add_notify_addr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rtpproxy_tree, unsigned begin, unsigned end)
 {
-    unsigned offset = 0;
+    unsigned offset = 0, end_offset;
     unsigned tmp;
     bool ipv6 = false;
     uint32_t ipaddr[4]; /* Enough room for IPv4 or IPv6 */
+    uint16_t port;
 
     /* Check for at least one colon */
     if (tvb_find_uint8_length(tvb, begin, end, ':', &offset)) {
@@ -511,8 +503,8 @@ rtpproxy_add_notify_addr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rtpproxy
             else
                 proto_tree_add_expert(rtpproxy_tree, pinfo, &ei_rtpproxy_bad_ipv4, tvb, begin, offset - begin);
         }
-        proto_tree_add_uint(rtpproxy_tree, hf_rtpproxy_notify_port, tvb, offset+1, end - (offset+1),
-            (uint16_t) g_ascii_strtoull((char*)tvb_get_string_enc(pinfo->pool, tvb, offset+1, end - (offset+1), ENC_ASCII), NULL, 10));
+        tvb_get_string_uint16(tvb, offset+1, end - (offset+1), ENC_STR_DEC, &port, &end_offset);
+        proto_tree_add_uint(rtpproxy_tree, hf_rtpproxy_notify_port, tvb, offset+1, end_offset - (offset + 1), port);
     }
     else{
         proto_item *ti = NULL;
@@ -527,9 +519,9 @@ rtpproxy_add_notify_addr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *rtpproxy
         }
         if (ti) {
             proto_item_set_generated(ti);
-            proto_tree_add_uint(rtpproxy_tree, hf_rtpproxy_notify_port, tvb, begin, end - begin,
-                (uint16_t) g_ascii_strtoull((char*)tvb_get_string_enc(pinfo->pool, tvb, begin, end - begin, ENC_ASCII), NULL, 10));
         }
+        tvb_get_string_uint16(tvb, begin, end - begin, ENC_STR_DEC, &port, &end_offset);
+        proto_tree_add_uint(rtpproxy_tree, hf_rtpproxy_notify_port, tvb, begin, end_offset - begin, port);
     }
 }
 
@@ -552,7 +544,7 @@ dissect_rtpproxy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
     const char* cookie = NULL;
     /* For RT(C)P setup */
     address addr;
-    uint16_t port;
+    uint16_t port, codec;
     uint32_t ipaddr[4]; /* Enough room for IPv4 or IPv6 */
     rtpproxy_info_t *rtpproxy_info = NULL;
     tvbuff_t *subtvb;
@@ -739,11 +731,9 @@ dissect_rtpproxy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
                 offset = tvb_skip_wsp(tvb, new_offset+1, tvb_captured_length(tvb));
 
                 /* Extract Port */
-                tvb_find_uint8_remaining(tvb, offset, ' ', &new_offset);
-                tmpstr = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, new_offset - offset, ENC_ASCII);
+                tvb_get_string_uint16(tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_STR_DEC, &port, &new_offset);
                 col_append_fstr(pinfo->cinfo, COL_INFO, ":%s", tmpstr);
-                proto_tree_add_uint(rtpproxy_tree, hf_rtpproxy_port, tvb, offset, new_offset - offset,
-                        (uint16_t) g_ascii_strtoull((char*)tmpstr, NULL, 10));
+                proto_tree_add_uint(rtpproxy_tree, hf_rtpproxy_port, tvb, offset, new_offset - offset, port);
                 /* Skip whitespace */
                 offset = tvb_skip_wsp(tvb, new_offset+1, tvb_captured_length(tvb));
             }
@@ -765,9 +755,8 @@ dissect_rtpproxy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
                 offset = tvb_skip_wsp(tvb, new_offset+1, tvb_captured_length(tvb));
 
                 /* Extract codec */
-                tvb_find_uint8_remaining(tvb, offset, ' ', &new_offset);
-                proto_tree_add_uint(rtpproxy_tree, hf_rtpproxy_playback_codec, tvb, offset, new_offset - offset,
-                        (uint16_t) g_ascii_strtoull((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, new_offset - offset, ENC_ASCII), NULL, 10));
+                tvb_get_string_uint16(tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_STR_DEC, &codec, &new_offset);
+                proto_tree_add_uint(rtpproxy_tree, hf_rtpproxy_playback_codec, tvb, offset, new_offset - offset, codec);
                 /* Skip whitespace */
                 offset = tvb_skip_wsp(tvb, new_offset+1, tvb_captured_length(tvb));
             }
@@ -863,9 +852,7 @@ dissect_rtpproxy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
             }
 
             /* Extract Port */
-            tvb_find_uint8_remaining(tvb, offset, ' ', &new_offset);
-            /* Convert port to unsigned 16-bit number */
-            port = (uint16_t) g_ascii_strtoull((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, new_offset - offset, ENC_ASCII), NULL, 10);
+            tvb_get_string_uint16(tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_STR_DEC, &port, &new_offset);
             proto_tree_add_uint(rtpproxy_tree, hf_rtpproxy_port, tvb, offset, new_offset - offset, port);
             /* Skip whitespace */
             offset = tvb_skip_wsp(tvb, new_offset+1, tvb_captured_length(tvb));

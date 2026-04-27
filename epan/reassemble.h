@@ -23,7 +23,11 @@
 extern "C" {
 #endif
 
-/* only in fd_head: packet is defragmented */
+/* in fd_head: packet is defragmented
+ * in item: this item was used in defragmentation
+ * (An item can have this set when the head does not if defragmentation
+ * was reset due to changing the total length or partial reassembly.)
+ */
 #define FD_DEFRAGMENTED		0x0001
 
 /* there are overlapping fragments */

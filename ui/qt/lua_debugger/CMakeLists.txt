@@ -9,6 +9,7 @@ set(WIRESHARK_LUA_DEBUGGER_HEADERS
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_dialog.h
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_find_frame.h
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_goto_line_frame.h
+	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_pause_overlay.h
 )
 
 set(WIRESHARK_LUA_DEBUGGER_SRCS
@@ -16,6 +17,7 @@ set(WIRESHARK_LUA_DEBUGGER_SRCS
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_dialog.cpp
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_find_frame.cpp
 	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_goto_line_frame.cpp
+	${CMAKE_CURRENT_LIST_DIR}/lua_debugger_pause_overlay.cpp
 )
 
 set(WIRESHARK_LUA_DEBUGGER_UI

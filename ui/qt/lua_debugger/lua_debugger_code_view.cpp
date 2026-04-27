@@ -485,7 +485,7 @@ void LuaDebuggerCodeView::rebuildLineHighlights()
 {
     QList<QTextEdit::ExtraSelection> extraSelections;
 
-    /* Debugger paused line — fixed amber bar; independent of caret. */
+    /* Debugger paused line — amber bar; theme-specific (independent of caret). */
     if (pausedExecutionLine_ > 0)
     {
         QTextBlock pauseBlock = document()->findBlockByNumber(
@@ -495,8 +495,18 @@ void LuaDebuggerCodeView::rebuildLineHighlights()
             QTextCursor pauseCursor(pauseBlock);
             pauseCursor.movePosition(QTextCursor::StartOfBlock);
             QTextEdit::ExtraSelection pauseSel;
-            QColor dbgColor = QColor(QStringLiteral("#806F00"));
-            dbgColor.setAlpha(120);
+            QColor dbgColor;
+            if (resolveIsDarkTheme())
+            {
+                /* Dark: translucent deep gold (reads well on #1E1E1E). */
+                dbgColor = QColor(QStringLiteral("#806F00"));
+                dbgColor.setAlpha(120);
+            }
+            else
+            {
+                /* Light: pale warm amber; distinct from selection #ADD6FF. */
+                dbgColor = QColor(QStringLiteral("#FEF3C7"));
+            }
             pauseSel.format.setBackground(dbgColor);
             pauseSel.format.setProperty(QTextFormat::FullWidthSelection, true);
             pauseSel.cursor = pauseCursor;
@@ -517,9 +527,7 @@ void LuaDebuggerCodeView::rebuildLineHighlights()
         {
             /* Match the line-number gutter background (see applyEditorPalette). */
             const QColor lineColor =
-                lineNumberArea
-                    ? lineNumberArea->palette().color(QPalette::Base)
-                    : palette().color(QPalette::Base);
+                lineNumberArea->palette().color(QPalette::Base);
 
             QTextCursor caretLineCursor(caretBlock);
             caretLineCursor.movePosition(QTextCursor::StartOfBlock);
@@ -537,10 +545,17 @@ void LuaDebuggerCodeView::rebuildLineHighlights()
 
 void LuaDebuggerCodeView::setCurrentLine(qint32 line)
 {
+    /* The gutter repaints on cursor movement via the updateRequest
+     * signal, but the early-return branches below do not move the
+     * cursor, and we need the paused-line yellow arrow (and the
+     * accompanying dimmed breakpoint circle, if any) to appear /
+     * disappear whenever pausedExecutionLine_ changes. Request a
+     * line-number-area repaint explicitly in every branch. */
     if (line <= 0)
     {
         pausedExecutionLine_ = -1;
         rebuildLineHighlights();
+        lineNumberArea->update();
         return;
     }
 
@@ -550,6 +565,7 @@ void LuaDebuggerCodeView::setCurrentLine(qint32 line)
     {
         pausedExecutionLine_ = -1;
         rebuildLineHighlights();
+        lineNumberArea->update();
         return;
     }
 
@@ -557,6 +573,8 @@ void LuaDebuggerCodeView::setCurrentLine(qint32 line)
     QTextCursor cursor(block);
     cursor.movePosition(QTextCursor::StartOfBlock);
     setTextCursor(cursor);
+    rebuildLineHighlights();
+    lineNumberArea->update();
 }
 
 void LuaDebuggerCodeView::moveCaretToLineStart(qint32 line)
@@ -582,6 +600,11 @@ void LuaDebuggerCodeView::clearCurrentLineHighlight()
 {
     pausedExecutionLine_ = -1;
     rebuildLineHighlights();
+    /* Force the gutter to repaint so the paused-line yellow arrow
+     * is cleared and any dimmed breakpoint circle returns to full
+     * brightness on resume, even when no cursor movement triggers
+     * updateRequest. */
+    lineNumberArea->update();
 }
 
 void LuaDebuggerCodeView::setEditorFont(const QFont &font)
@@ -593,24 +616,15 @@ void LuaDebuggerCodeView::setEditorFont(const QFont &font)
     }
     resolvedFont.setStyleHint(QFont::TypeWriter, QFont::PreferDefault);
     QPlainTextEdit::setFont(resolvedFont);
-    if (lineNumberArea)
-    {
-        lineNumberArea->setFont(resolvedFont);
-    }
+    lineNumberArea->setFont(resolvedFont);
     updateLineNumberAreaWidth(0);
-    if (lineNumberArea)
-    {
-        lineNumberArea->update();
-    }
+    lineNumberArea->update();
     viewport()->update();
 }
 
 void LuaDebuggerCodeView::updateBreakpointMarkers()
 {
-    if (lineNumberArea)
-    {
-        lineNumberArea->update();
-    }
+    lineNumberArea->update();
 }
 
 void LuaDebuggerCodeView::applyTheme()
@@ -622,10 +636,7 @@ void LuaDebuggerCodeView::applyTheme()
         static_cast<LuaSyntaxHighlighter *>(syntaxHighlighter)
             ->setTheme(isDark);
     }
-    if (lineNumberArea)
-    {
-        lineNumberArea->update();
-    }
+    lineNumberArea->update();
     viewport()->update();
     rebuildLineHighlights();
 }
@@ -634,8 +645,7 @@ void LuaDebuggerCodeView::applyEditorPalette()
 {
     const bool isDark = resolveIsDarkTheme();
     QPalette pal = palette();
-    QPalette gutterPal =
-        lineNumberArea ? lineNumberArea->palette() : QPalette();
+    QPalette gutterPal = lineNumberArea->palette();
 
     QColor baseColor;
     QColor gutterColor;
@@ -677,18 +687,16 @@ void LuaDebuggerCodeView::applyEditorPalette()
     viewport()->setPalette(pal);
     viewport()->setAutoFillBackground(true);
 
-    if (lineNumberArea)
-    {
-        lineNumberArea->setPalette(gutterPal);
-        lineNumberArea->setAutoFillBackground(true);
-        lineNumberArea->update();
-    }
+    lineNumberArea->setPalette(gutterPal);
+    lineNumberArea->setAutoFillBackground(true);
+    lineNumberArea->update();
 }
 
 void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
 {
     const bool isDark = resolveIsDarkTheme();
     QPainter painter(lineNumberArea);
+    painter.setRenderHint(QPainter::Antialiasing, true);
     QColor gutterColor;
     QColor textColor;
 
@@ -729,27 +737,69 @@ void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
             painter.drawText(0, top, lineNumberArea->width() - 20,
                              fontMetrics().height(), Qt::AlignRight, number);
 
-            // Draw breakpoint
+            const qint32 lineNo = static_cast<qint32>(blockNumber + 1);
+            const bool pausedHere = (pausedExecutionLine_ == lineNo);
+
+            /* Breakpoint circle. On the paused line the red (enabled)
+             * circle is drawn dimmed (reduced alpha) so the overlaid
+             * yellow right-pointing triangle is visually dominant while
+             * the breakpoint itself stays recognizable underneath.
+             * Gray (disabled) circles are not dimmed — the yellow
+             * arrow is the only indicator that is never dimmed. */
             if (canonical)
             {
                 const int32_t state =
                     wslua_debugger_get_breakpoint_state_canonical(
-                        canonical, blockNumber + 1);
+                        canonical, lineNo);
                 if (state != -1)
                 {
-                    if (state == 1)
+                    /* Match the toolbar state-indicator palette used
+                     * in updateEnabledCheckboxIcon(): red #DC3545 for
+                     * enabled breakpoints, gray #808080 for disabled
+                     * ones. The yellow paused-arrow triangle below
+                     * uses the same palette's #FFC107. */
+                    QColor circleColor = (state == 1)
+                                             ? QColor("#DC3545")
+                                             : QColor("#808080");
+                    if (pausedHere && state == 1)
                     {
-                        painter.setBrush(Qt::red);
+                        circleColor.setAlpha(80);
                     }
-                    else
-                    {
-                        painter.setBrush(Qt::gray);
-                    }
-                    painter.setPen(Qt::NoPen);
+                    painter.setBrush(circleColor);
+                    /* 1px darker rim matches the Enable-checkbox state
+                     * indicator in the toolbar
+                     * (updateEnabledCheckboxIcon()); alpha is
+                     * preserved by QColor::darker(), so the dimmed
+                     * paused-red variant also gets a proportionally
+                     * dimmed rim. */
+                    painter.setPen(QPen(circleColor.darker(140), 1));
                     const qint32 radius = fontMetrics().height() / 2 - 2;
                     painter.drawEllipse(lineNumberArea->width() - 15, top + 2,
                                         radius * 2, radius * 2);
                 }
+            }
+
+            /* Yellow right-pointing triangle marks the line the
+             * debugger is paused at. Drawn after (and therefore on
+             * top of) the breakpoint circle, which is dimmed on this
+             * line so the triangle dominates while the breakpoint is
+             * still visible. */
+            if (pausedHere)
+            {
+                const qint32 radius = fontMetrics().height() / 2 - 2;
+                const qint32 diameter = radius * 2;
+                const qreal x = lineNumberArea->width() - 15;
+                const qreal y = top + 2;
+                QPolygonF triangle;
+                triangle << QPointF(x, y)
+                         << QPointF(x, y + diameter)
+                         << QPointF(x + diameter, y + diameter / 2.0);
+                const QColor triangleColor("#FFC107");
+                painter.setBrush(triangleColor);
+                /* Same 1px darker rim as the toolbar state indicator
+                 * (see updateEnabledCheckboxIcon()). */
+                painter.setPen(QPen(triangleColor.darker(140), 1));
+                painter.drawPolygon(triangle);
             }
         }
 

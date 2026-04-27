@@ -334,59 +334,6 @@ keytab_file_read(const char* filename)
 
 USES_APPLE_RST
 
-#elif defined (HAVE_LIBNETTLE)
-
-
-static void
-keytab_file_read(const char* service_key_file)
-{
-    FILE* skf;
-    ws_statb64 st;
-    service_key_t* sk;
-    unsigned char buf[SERVICE_KEY_SIZE];
-    int newline_skip = 0, count = 0;
-
-    if (service_key_file != NULL && ws_stat64(service_key_file, &st) == 0) {
-
-        /* The service key file contains raw 192-bit (24 byte) 3DES keys.
-         * There can be zero, one (\n), or two (\r\n) characters between
-         * keys.  Trailing characters are ignored.
-         */
-
-         /* XXX We should support the standard keytab format instead */
-        if (st.st_size > SERVICE_KEY_SIZE) {
-            if ((st.st_size % (SERVICE_KEY_SIZE + 1) == 0) ||
-                (st.st_size % (SERVICE_KEY_SIZE + 1) == SERVICE_KEY_SIZE)) {
-                newline_skip = 1;
-            }
-            else if ((st.st_size % (SERVICE_KEY_SIZE + 2) == 0) ||
-                (st.st_size % (SERVICE_KEY_SIZE + 2) == SERVICE_KEY_SIZE)) {
-                newline_skip = 2;
-            }
-        }
-
-        skf = ws_fopen(service_key_file, "rb");
-        if (!skf) return;
-
-        while (fread(buf, SERVICE_KEY_SIZE, 1, skf) == 1) {
-            sk = g_malloc(sizeof(service_key_t));
-            sk->kvno = buf[0] << 8 | buf[1];
-            sk->keytype = KEYTYPE_DES3_CBC_MD5;
-            sk->length = DES3_KEY_SIZE;
-            sk->contents = g_memdup2(buf + 2, DES3_KEY_SIZE);
-            sk->origin = g_strdup_printf("3DES service key file, key #%d, offset %ld", count, ftell(skf));
-            service_key_list = g_slist_append(service_key_list, (void*)sk);
-            if (fseek(skf, newline_skip, SEEK_CUR) < 0) {
-                ws_critical("unable to seek...");
-                fclose(skf);
-                return;
-            }
-            count++;
-        }
-        fclose(skf);
-    }
-}
-
 #endif
 
 void keytab_file_data_init(void)

@@ -2646,7 +2646,7 @@ int dissect_cip_mac_address(packet_info* pinfo _U_, proto_tree* tree, proto_item
     return 6;
 }
 
-int dissect_lldp_mngmt_enable(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb, int offset, int total_len _U_)
+static int dissect_lldp_mngmt_enable(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb, int offset, int total_len _U_)
 {
    guint16 bit_length;
    guint16 byte_length;
@@ -2687,7 +2687,7 @@ int dissect_lldp_mngmt_enable(packet_info* pinfo _U_, proto_tree* tree, proto_it
    return offset + byte_length;
 }
 
-int dissect_lldp_mngmt_datastore(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb,
+static int dissect_lldp_mngmt_datastore(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb,
    int offset, int total_len _U_)
 {
    static int* const datastore[] = {
@@ -2902,7 +2902,7 @@ const attribute_info_t enip_attribute_vals[] = {
 
 // Table of CIP services defined by this dissector.
 static cip_service_info_t enip_obj_spec_service_table[] = {
-   // DLR Onject
+   // DLR Object
    { 0x47, 0x4B, "Verify_Fault_Location", NULL },
    { 0x47, 0x4C, "Clear_Rapid_Faults", NULL },
    { 0x47, 0x4D, "Restart_Sign_On", NULL },

@@ -109,6 +109,10 @@ static dissector_table_t streaming_content_type_dissector_table;
 
 static dissector_table_t stream_id_content_type_dissector_table;
 
+static GRegex *g_regex_imsi = NULL;
+static GRegex *g_regex_referenceid = NULL;
+static GRegex *g_regex_location = NULL;
+
 #ifdef HAVE_NGHTTP2
 /* The type of reassembly mode contains:
  *  - HTTP2_DATA_REASSEMBLY_MODE_END_STREAM   Complete reassembly at the end of stream. (default)
@@ -1207,6 +1211,43 @@ get_fake_header_value(packet_info* pinfo, const char* name, bool the_other_direc
 
     return NULL;
 }
+
+static GRegex *
+get_regex_imsi(void)
+{
+    if (g_regex_imsi == NULL) {
+        g_regex_imsi = g_regex_new(
+            ".*imsi-([0-9]{5,15}).*",
+            G_REGEX_CASELESS | G_REGEX_FIRSTLINE,
+            0,
+            NULL);
+    }
+
+    return g_regex_imsi;
+}
+
+static GRegex *
+get_regex_referenceid(void)
+{
+    if (g_regex_referenceid == NULL) {
+        g_regex_referenceid = g_regex_new (
+            ".*\\/(referenceid|chargingdata|sm-contexts|sm-policies|pdu-sessions)\\/([A-Za-z0-9\\-.]+).*",
+            G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
+    }
+    return g_regex_referenceid;
+}
+
+static GRegex *
+get_regex_location(void)
+{
+    if (g_regex_location == NULL) {
+        g_regex_location = g_regex_new (
+            ".*\\/(chargingdata|sm-contexts|sm-policies|pdu-sessions)\\/([A-Za-z0-9\\-.]+).*",
+            G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
+    }
+    return g_regex_location;
+}
+
 #endif
 
 static void
@@ -1219,6 +1260,23 @@ http2_init_protocol(void)
 static void
 http2_cleanup_protocol(void) {
     g_hash_table_destroy(streamid_hash);
+}
+
+static void
+http2_shutdown(void)
+{
+    if (g_regex_imsi != NULL) {
+        g_regex_unref(g_regex_imsi);
+        g_regex_imsi = NULL;
+    }
+    if (g_regex_referenceid != NULL) {
+        g_regex_unref(g_regex_referenceid);
+        g_regex_referenceid = NULL;
+    }
+    if (g_regex_location != NULL) {
+        g_regex_unref(g_regex_location);
+        g_regex_location = NULL;
+    }
 }
 
 static dissector_handle_t http2_handle;
@@ -2145,10 +2203,10 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
         if(http2_3gpp_session) {
             /* 3GPP Supi look up */
             /* If no Supi found the try look in referenceId mapping */
+            GRegex* regex_imsi = get_regex_imsi();
+            GRegex* regex_referenceid = get_regex_referenceid();
             GMatchInfo *match_info_imsi;
             GMatchInfo *match_info_referenceid;
-            static GRegex *regex_imsi = NULL;
-            static GRegex *regex_referenceid = NULL;
             char *matched_imsi = NULL;
             char *matched_referenceid = NULL;
 
@@ -2159,16 +2217,6 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
             * We are interested in IMSI and will be formatted as follows:
             *   Pattern: '^imsi-[0-9]{5,15}$'
             */
-            if (regex_imsi == NULL) {
-                regex_imsi = g_regex_new (
-                    ".*imsi-([0-9]{5,15}).*",
-                    G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
-            }
-            if (regex_referenceid == NULL) {
-                regex_referenceid = g_regex_new (
-                    ".*\\/(referenceid|chargingdata|sm-contexts|sm-policies|pdu-sessions)\\/([A-Za-z0-9\\-.]+).*",
-                    G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
-            }
 
             g_regex_match(regex_imsi, stream_info->path, 0, &match_info_imsi);
             g_regex_match(regex_referenceid, stream_info->path, 0, &match_info_referenceid);
@@ -2186,8 +2234,8 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
                 }
                 g_free(matched_referenceid);
             }
-            g_regex_unref(regex_imsi);
-            g_regex_unref(regex_referenceid);
+            g_match_info_free(match_info_imsi);
+            g_match_info_free(match_info_referenceid);
         }
     }
 
@@ -2196,15 +2244,9 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
 
         if(http2_3gpp_session && stream_info->imsi) {
             /* Try lookup location mapping */
+            GRegex* regex_location = get_regex_location();
             GMatchInfo *match_info_location;
-            static GRegex *regex_location = NULL;
             char *matched_location = NULL;
-
-            if (regex_location == NULL) {
-                regex_location = g_regex_new (
-                    ".*\\/(chargingdata|sm-contexts|sm-policies|pdu-sessions)\\/([A-Za-z0-9\\-.]+).*",
-                    G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
-            }
 
             g_regex_match(regex_location, stream_info->location, 0, &match_info_location);
 
@@ -2215,7 +2257,7 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
                 }
                 g_free(matched_location);
             }
-            g_regex_unref(regex_location);
+            g_match_info_free(match_info_location);
         }
     }
 
@@ -2225,10 +2267,10 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
         if(http2_3gpp_session) {
             /* 3GPP Supi look up */
             /* If no Supi found the try look in referenceId mapping */
+            GRegex* regex_imsi = get_regex_imsi();
+            GRegex* regex_referenceid = get_regex_referenceid();
             GMatchInfo *match_info_imsi;
             GMatchInfo *match_info_referenceid;
-            static GRegex *regex_imsi = NULL;
-            static GRegex *regex_referenceid = NULL;
             char *matched_imsi = NULL;
             char *matched_referenceid = NULL;
 
@@ -2239,17 +2281,6 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
             * We are interested in IMSI and will be formatted as follows:
             *   Pattern: '^imsi-[0-9]{5,15}$'
             */
-            if (regex_imsi == NULL) {
-                regex_imsi = g_regex_new (
-                    ".*imsi-([0-9]{5,15}).*",
-                    G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
-            }
-            if (regex_referenceid == NULL) {
-                regex_referenceid = g_regex_new (
-                    ".*\\/(referenceid|chargingdata|sm-contexts|sm-policies|pdu-sessions)\\/([A-Za-z0-9\\-.]+).*",
-                    G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
-            }
-
             g_regex_match(regex_imsi, status, 0, &match_info_imsi);
             g_regex_match(regex_referenceid, status, 0, &match_info_referenceid);
 
@@ -2266,8 +2297,8 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
                 }
                 g_free(matched_referenceid);
             }
-            g_regex_unref(regex_imsi);
-            g_regex_unref(regex_referenceid);
+            g_match_info_free(match_info_imsi);
+            g_match_info_free(match_info_referenceid);
         }
     }
 
@@ -2276,8 +2307,8 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
 
         if(http2_3gpp_session) {
             /* 3GPP Supi look up */
+            GRegex* regex_imsi = get_regex_imsi();
             GMatchInfo *match_info_imsi;
-            static GRegex *regex_imsi = NULL;
             char *matched_imsi = NULL;
 
             /* 3GPP TS 29.571
@@ -2287,11 +2318,6 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
             * We are interested in IMSI and will be formatted as follows:
             *   Pattern: '^imsi-[0-9]{5,15}$'
             */
-            if (regex_imsi == NULL) {
-                regex_imsi = g_regex_new (
-                    ".*imsi-([0-9]{5,15}).*",
-                    G_REGEX_CASELESS | G_REGEX_FIRSTLINE, 0, NULL);
-            }
 
             g_regex_match(regex_imsi, correlation_info, 0, &match_info_imsi);
 
@@ -2302,7 +2328,7 @@ populate_http_header_tracking(tvbuff_t *tvb, packet_info *pinfo, http2_session_t
                 }
                 g_free(matched_imsi);
             }
-            g_regex_unref(regex_imsi);
+            g_match_info_free(match_info_imsi);
         }
     }
 
@@ -5478,6 +5504,7 @@ proto_register_http2(void)
 
     register_init_routine(&http2_init_protocol);
     register_cleanup_routine(&http2_cleanup_protocol);
+    register_shutdown_routine(&http2_shutdown);
 
     http2_handle = register_dissector("http2", dissect_http2, proto_http2);
 

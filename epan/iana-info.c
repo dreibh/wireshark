@@ -404,7 +404,7 @@ static const struct ws_iana_ip_special_block __ipv6_special_block[] = {
 };
 
 
-/* (last updated 2026-04-17) */
+/* (last updated 2026-04-24) */
 
 
 static const value_string enterprise_val[] = {
@@ -16053,7 +16053,7 @@ static const value_string enterprise_val[] = {
 	{ 15669,    "Lifecycle Software" },
 	{ 15670,    "The Internet Marketing Center" },
 	{ 15671,    "Wardega Consulting" },
-	{ 15672,    "Javno preduzece Posta Srbije" },
+	{ 15672,    "Posta Srbije d.o.o." },
 	{ 15673,    "Codeangels Solutions" },
 	{ 15674,    "Valente CC" },
 	{ 15675,    "StoneDonut, LLC" },
@@ -65900,6 +65900,55 @@ static const value_string enterprise_val[] = {
 	{ 65603,    "Trexcel Corporation" },
 	{ 65604,    "Ericsson - IT Managed Services" },
 	{ 65605,    "OneWiseTech" },
+	{ 65606,    "Gavin John" },
+	{ 65607,    "Seaal" },
+	{ 65608,    "NodeX" },
+	{ 65609,    "NodeAI Diagnostics Corp." },
+	{ 65610,    "Rootist, LLC" },
+	{ 65611,    "Turaco Labs Ltd" },
+	{ 65612,    "ZK-PKI" },
+	{ 65613,    "SYSBRAN" },
+	{ 65614,    "Eric Carrozzo" },
+	{ 65615,    "Guangdong CASSTK Co., Ltd." },
+	{ 65616,    "XDISC SA" },
+	{ 65617,    "XIPE" },
+	{ 65618,    "Carmentis SAS" },
+	{ 65619,    "Opsens Solutions Inc" },
+	{ 65620,    "Spectronic Denmark A/S" },
+	{ 65621,    "Clever Cloud" },
+	{ 65622,    "Axians HR" },
+	{ 65623,    "PC-Wolf EDV-Service & -Notdienst" },
+	{ 65624,    "Ordr, Inc" },
+	{ 65625,    "Valkyrie Bioscience" },
+	{ 65626,    "Vaunix Technology Corporation" },
+	{ 65627,    "Anthropic, PBC." },
+	{ 65628,    "Decentralized Quantum Key Management Infrastructure" },
+	{ 65629,    "xHSM" },
+	{ 65630,    "Shenzhen Tocloud-iot technology Co.,Ltd" },
+	{ 65631,    "Shenzhen Qin'an Technology Co., Ltd." },
+	{ 65632,    "Grupo Computación Modular Avanzada S.A." },
+	{ 65633,    "HBA International" },
+	{ 65634,    "Swen Scholz" },
+	{ 65635,    "Aplus Power Technology (Hangzhou) Co., Ltd." },
+	{ 65636,    "IOTRONICS" },
+	{ 65637,    "Polska Agencja Rozwoju Przedsiębiorczości" },
+	{ 65638,    "Port of Antwerp-Bruges" },
+	{ 65639,    "KatBox GmbH" },
+	{ 65640,    "Sicoob Credicaf" },
+	{ 65641,    "DENQEN engineering SRL" },
+	{ 65642,    "Stellar Quanta Labs" },
+	{ 65643,    "Tours-événements" },
+	{ 65644,    "LeSecure" },
+	{ 65645,    "American ID Group" },
+	{ 65646,    "Desistec ingeniería y servicios Ltda." },
+	{ 65647,    "Hagbergs Skogstransport AB" },
+	{ 65648,    "City of Highland Village" },
+	{ 65649,    "CMCC OTT-CDN" },
+	{ 65650,    "WORKBASE JOINT STOCK COMPANY" },
+	{ 65651,    "ITALGRANITI GROUP S.P.A." },
+	{ 65652,    "SurrealDB Ltd" },
+	{ 65653,    "ADK Hospital" },
+	{ 65654,    "Georgia Farm Bureau Mutual Insurance Company" },
 	{ 0, NULL }
 };
 

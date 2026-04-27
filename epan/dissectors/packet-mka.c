@@ -1014,7 +1014,7 @@ dissect_sak_use(proto_tree *mka_tree, packet_info *pinfo _U_, tvbuff_t *tvb, int
     } else {
       proto_tree_add_item(sak_use_set_tree, hf_mka_old_lowest_acceptable_pn, tvb, offset, 4, ENC_BIG_ENDIAN);
     }
-    offset += 4;
+    /*offset += 4;*/
   }
   else
   {
@@ -1092,7 +1092,7 @@ dissect_distributed_sak(proto_tree *mka_tree, packet_info *pinfo, tvbuff_t *tvb,
     /* Add the wrapped key data. */
     const uint8_t *wrappedkey = tvb_memdup(pinfo->pool, tvb, offset, wrappedlen);
     proto_tree_add_item(distributed_sak_tree, hf_mka_aes_key_wrap_sak, tvb, offset, wrappedlen, ENC_NA);
-    offset += wrappedlen;
+    /*offset += wrappedlen;*/
 
     /* Attempt to unwrap the key using the KEK for the CKN. */
     /* Fetch the KEK for the CKN in the basic parameter set. */
@@ -1553,7 +1553,6 @@ dissect_mka(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
    * The 802.1Xbx-2014 spec specifies support for MKA version 2.
    * The 802.1Xck-2018 spec specifies support for MKA version 3.
    */
-  mka_version_type = tvb_get_uint8(tvb, offset);
   if ((mka_version_type < 1) || (mka_version_type > 3)) {
     expert_add_info(pinfo, ti, &ei_unexpected_data);
   }

@@ -728,7 +728,7 @@ init_tpncp_data_fields_info(tpncp_data_field_info ***data_fields_info, unsigned 
             continue;
         }
         data_id = (int) g_ascii_strtoll(tmp, NULL, 10);
-        if ((name = strtok(NULL, " ")) == NULL) {
+        if ((data_id < 0) || ((name = strtok(NULL, " ")) == NULL)) {
             report_failure(
                 "ERROR! Badly formed data base entry: %s - corresponding field's registration is skipped.",
                 entry_copy);

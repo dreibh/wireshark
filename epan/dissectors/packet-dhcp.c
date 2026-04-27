@@ -132,6 +132,7 @@
 #include <epan/packet.h>
 #include "packet-arp.h"
 #include "packet-dns.h"				/* for get_dns_name() */
+#include "packet-radius.h"
 #include <epan/addr_resolv.h>
 #include <epan/prefs.h>
 #include <epan/tap.h>
@@ -3683,7 +3684,7 @@ dhcp_dhcp_decode_agent_info(packet_info *pinfo, proto_item *v_ti, proto_tree *v_
 		{4, {"DOCSIS Device Class", val_u_long, &hf_dhcp_option82_docsis_device_class}}, /* [RFC3256] */
 		{5, {"Link selection", ipv4, &hf_dhcp_option82_link_selection}}, /* [RFC3527] */
 		{6, {"Subscriber ID", string, &hf_dhcp_option82_subscriber_id}},  /* [RFC3993] */ /***** CHECK STRING TYPE */
-		{7, {"RADIUS Attributes", bytes, &hf_dhcp_option82_radius_attributes}}, /* [RFC4014] */
+		{7, {"RADIUS Attributes", special, &hf_dhcp_option82_radius_attributes}}, /* [RFC4014] */
 		{8, {"Authentication", bytes, &hf_dhcp_option82_authentication}}, /* [RFC4030] */
 		{9, {"Vendor-Specific Information", special, &hf_dhcp_option82_vi}}, /* [RFC 4243] */
 		{10, {"Flags", val_u_byte, &hf_dhcp_option82_flags}}, /* [RFC5010] */
@@ -3738,6 +3739,9 @@ dhcp_dhcp_decode_agent_info(packet_info *pinfo, proto_item *v_ti, proto_tree *v_
 		if (o82_opt[idx].info.ftype == special) {
 			switch(subopt)
 			{
+			case 7:
+				dissect_attribute_value_pairs(o82_v_tree, pinfo, tvb, suboptoff, subopt_len, NULL);
+				break;
 			case 9:
 				while (suboptoff < subopt_end) {
 					vti = proto_tree_add_item_ret_uint(o82_v_tree, hf_dhcp_option82_vi_enterprise, tvb, suboptoff, 4, ENC_BIG_ENDIAN, &enterprise);

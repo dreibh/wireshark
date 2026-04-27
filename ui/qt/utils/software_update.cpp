@@ -519,7 +519,7 @@ void SoftwareUpdate::onNetworkReplyFinished(QNetworkReply* reply)
     #elif defined(__APPLE__)
         const auto target_os = "macos";
     #else
-        /** needs to be set to something, as an empty string means any plattform for sparkle */
+        /** needs to be set to something, as an empty string means any platform for sparkle */
         const auto target_os = "xxxx";
     #endif
 

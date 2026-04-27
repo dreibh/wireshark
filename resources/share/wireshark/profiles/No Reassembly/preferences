@@ -123,6 +123,7 @@ rpcap.desegment_pdus: FALSE
 rsync.desegment: FALSE
 rtmpt.desegment: FALSE
 rtp.desegment_rtp_streams: FALSE
+rtps.enable_rtps_reassembly: FALSE
 rtsp.desegment_headers: FALSE
 rtsp.desegment_body: FALSE
 sametime.reassemble: FALSE

@@ -186,6 +186,7 @@ static ws_enum_t const all_enums[] = {
     ENUM(ENC_SEP_NONE),
     ENUM(ENC_SEP_SPACE),
     ENUM(ENC_STRING),
+    ENUM(ENC_STR_DEC),
     ENUM(ENC_STR_HEX),
     ENUM(ENC_STR_MASK),
     ENUM(ENC_STR_NUM),

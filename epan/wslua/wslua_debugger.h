@@ -74,6 +74,34 @@ extern "C"
     WS_DLL_PUBLIC void wslua_debugger_set_enabled(bool enabled);
 
     /**
+     * @brief Set whether the user asked to keep the debugger off.
+     *
+     * When @a user_wants_debugger_stay_off is true, also invalidates
+     * @c was_enabled_before_reload so a pending
+     * wslua_debugger_restore_after_reload() will not re-enable. When false,
+     * the user has explicitly enabled the debugger in the UI again; auto-enable
+     * and restore logic may then apply.
+     */
+    WS_DLL_PUBLIC void
+    wslua_debugger_set_user_explicitly_disabled(bool user_wants_debugger_stay_off);
+
+    /**
+     * @brief True if the UI may enable the debugger for active breakpoints
+     *        and similar (false when the user has asked the debugger to stay
+     *        off). Does not consider capture; the UI may combine this with
+     *        e.g. live-capture gating.
+     */
+    WS_DLL_PUBLIC bool
+    wslua_debugger_may_auto_enable_for_breakpoints(void);
+
+    /**
+     * @brief Clear state saved for wslua_debugger_restore_after_reload() so
+     *        a pending call will not re-enable. Call e.g. when the debugger
+     *        dialog is closed and no delayed restore is desired.
+     */
+    WS_DLL_PUBLIC void wslua_debugger_renounce_restore_after_reload(void);
+
+    /**
      * @brief Callback type for UI update when paused.
      * @param file_path The file path where execution is paused.
      * @param line The line number where execution is paused.
@@ -143,11 +171,6 @@ extern "C"
      */
     WS_DLL_PUBLIC int32_t wslua_debugger_find_stack_level_for_watch_spec(
         const char *spec);
-
-    /**
-     * @brief Same as wslua_debugger_step_in() (legacy name).
-     */
-    WS_DLL_PUBLIC void wslua_debugger_step(void);
 
     /**
      * @brief Run execution until a specific line is reached.

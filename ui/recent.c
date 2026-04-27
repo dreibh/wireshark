@@ -777,7 +777,7 @@ cfilter_recent_write_all(FILE *rf)
 
 /** Reverse the order of all the capture filter lists after
  *  reading recent_common (we want the latest first).
- *  Note this is O(N), whereas appendng N items to a GList is O(N^2),
+ *  Note this is O(N), whereas appending N items to a GList is O(N^2),
  *  since it doesn't have a pointer to the end like a GQueue.
  */
 static void
