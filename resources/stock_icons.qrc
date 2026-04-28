@@ -98,6 +98,8 @@
         <file>stock_icons/16x16/x-lua-debug-step-out.template@2x.png</file>
         <file>stock_icons/16x16/x-lua-debug-step-over.template.png</file>
         <file>stock_icons/16x16/x-lua-debug-step-over.template@2x.png</file>
+        <file>stock_icons/16x16/x-lua-debug-run-to-line.template.png</file>
+        <file>stock_icons/16x16/x-lua-debug-run-to-line.template@2x.png</file>
         <file>stock_icons/16x16/x-reset-layout_1.png</file>
         <file>stock_icons/16x16/x-reset-layout_1@2x.png</file>
         <file>stock_icons/16x16/x-reset-layout_2.png</file>
@@ -165,6 +167,8 @@
         <file>stock_icons/24x24/x-lua-debug-step-out.template@2x.png</file>
         <file>stock_icons/24x24/x-lua-debug-step-over.template.png</file>
         <file>stock_icons/24x24/x-lua-debug-step-over.template@2x.png</file>
+        <file>stock_icons/24x24/x-lua-debug-run-to-line.template.png</file>
+        <file>stock_icons/24x24/x-lua-debug-run-to-line.template@2x.png</file>
         <file>stock_icons/24x24/x-reset-layout_1.png</file>
         <file>stock_icons/24x24/x-reset-layout_1@2x.png</file>
         <file>stock_icons/24x24/x-reset-layout_2.png</file>

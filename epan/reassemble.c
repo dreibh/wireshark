@@ -1925,7 +1925,7 @@ fragment_defragment_and_free (fragment_head *fd_head, const packet_info *pinfo)
 				/* Note that overlaps of old fragments were already calculated. */
 				fd_i->flags    |= FD_OVERLAP;
 				fd_head->flags |= FD_OVERLAP;
-				if(last_fd->len != fd_i->len
+				if(last_fd->len != fd_i->len || (old_dfpos + fd_i->len > size)
 				   || tvb_memeql(fd_i->tvb_data, 0, data+old_dfpos, fd_i->len) ) {
 					fd_i->flags    |= FD_OVERLAPCONFLICT;
 					fd_head->flags |= FD_OVERLAPCONFLICT;

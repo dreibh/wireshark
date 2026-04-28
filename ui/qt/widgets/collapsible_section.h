@@ -10,10 +10,13 @@
 #ifndef COLLAPSIBLE_SECTION_H
 #define COLLAPSIBLE_SECTION_H
 
+#include <QFont>
 #include <QFrame>
 #include <QToolButton>
 #include <QVBoxLayout>
 #include <QWidget>
+
+class QHBoxLayout;
 
 /**
  * @brief A collapsible section widget for use in a QSplitter.
@@ -69,6 +72,26 @@ class CollapsibleSection : public QWidget
      */
     int headerHeight() const;
 
+    /**
+     * @brief Height of the title / toggle control (single header line).
+     * @return Pixels, at least 1. Used to size header trailing controls to match.
+     */
+    int titleButtonHeight() const;
+
+    /**
+     * @brief Font used for the section title (bold application font).
+     */
+    QFont titleButtonFont() const;
+
+    /**
+     * @brief Set an optional widget in the header row after the horizontal
+     *        rule (order: title, rule, trailing). Pass @c nullptr to clear.
+     *        The widget is sized to the title line height. The section
+     *        takes ownership of @a widget.
+     * @param widget The widget to show, or @c nullptr.
+     */
+    void setHeaderTrailingWidget(QWidget *widget);
+
   signals:
     /**
      * @brief Emitted when the section is toggled.
@@ -82,8 +105,11 @@ class CollapsibleSection : public QWidget
   private:
     QToolButton *toggleButton;
     QFrame *headerLine;
+    QHBoxLayout *headerLayout_ = nullptr;
     QWidget *contentArea;
     QVBoxLayout *mainLayout;
+    /** Non-null if setHeaderTrailingWidget; owned as child, cleared on replace. */
+    QWidget *headerTrailingWidget_ = nullptr;
     int savedHeight;
 };
 

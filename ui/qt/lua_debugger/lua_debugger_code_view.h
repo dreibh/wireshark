@@ -65,8 +65,15 @@ class LuaDebuggerCodeView : public QPlainTextEdit
     void applyTheme();
 
   signals:
-    /** @brief Emitted when a breakpoint icon is clicked within the gutter. */
-    void breakpointToggled(const QString &filename, qint32 line);
+    /**
+     * @brief Emitted when a breakpoint icon is clicked within the gutter
+     *        (right margin).
+     * @param toggleActive If true, the click should enable/disable the
+     *        breakpoint without removing it (currently mapped to Shift+click);
+     *        otherwise add or remove on plain click.
+     */
+    void breakpointToggled(const QString &filename, qint32 line,
+                           bool toggleActive);
 
   protected:
     /** @brief Update margins whenever Qt reports a size change. */

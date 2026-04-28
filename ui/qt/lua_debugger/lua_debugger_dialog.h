@@ -14,11 +14,14 @@
 #include "geometry_state_dialog.h"
 
 #include <QBrush>
+
+class QToolButton;
 #include <QCheckBox>
 #include <QComboBox>
 #include <QEventLoop>
 #include <QFont>
 #include <QHash>
+#include <QIcon>
 #include <QList>
 #include <QPair>
 #include <QPlainTextEdit>
@@ -194,6 +197,8 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void onStepIn();
     /** @brief Step out to the caller frame. */
     void onStepOut();
+    /** @brief Run to the line under the cursor in the active code editor. */
+    void onRunToLine();
     /** @brief Enable or disable the debugger when the toggle button is clicked.
      */
     void onDebuggerToggled(bool checked);
@@ -427,6 +432,21 @@ class LuaDebuggerDialog : public GeometryStateDialog
 
     // Settings panel widgets (created programmatically)
     QComboBox *themeComboBox;
+    /** @brief Watch section header: remove selected root watch row(s). */
+    QToolButton *watchRemoveButton_ = nullptr;
+    /** @brief Watch section header: remove all top-level watch rows. */
+    QToolButton *watchRemoveAllButton_ = nullptr;
+    /** @brief Breakpoints section header: toggle at caret, clear all. */
+    QToolButton *breakpointHeaderToggleButton_ = nullptr;
+    QToolButton *breakpointHeaderRemoveAllButton_ = nullptr;
+    /**
+     * @brief Cached breakpoint header dot icons, indexed by
+     *        @c LuaDbgBpHeaderIconMode (0..2). Recomputed lazily when the
+     *        cache key (editor font + side + DPR) changes; without this the
+     *        icon would be regenerated on every cursor move.
+     */
+    QIcon bpHeaderIconCache_[3];
+    QString bpHeaderIconCacheKey_;
 
     /** @brief Refresh the call stack tree from the debugger back-end. */
     void updateStack();
@@ -686,6 +706,18 @@ class LuaDebuggerDialog : public GeometryStateDialog
 
     /** @brief Delete the given top-level watch rows from the tree. */
     void deleteWatchRows(const QList<QStandardItem *> &items);
+    /**
+     * @brief Top-level watch rows in the current selection (column 0) only;
+     *        used by the header Remove control. No currentIndex fallback, so
+     *        the button does not act on a non-selected row.
+     */
+    QList<QStandardItem *> selectedWatchRootItemsForRemove() const;
+    /** @brief Enable the Watch section header + / − / remove-all controls. */
+    void updateWatchHeaderButtonState();
+    /** @brief Enable the Breakpoints section header toggle / remove-all. */
+    void updateBreakpointHeaderButtonState();
+    /** @brief Activate all or deactivate all breakpoints (header control). */
+    void toggleAllBreakpointsActiveFromHeader();
     QStandardItem *findVariablesItemByPath(const QString &path) const;
     QStandardItem *findWatchRootForVariablePath(const QString &path) const;
     static void expandAncestorsOf(QTreeView *tree, QStandardItemModel *model,

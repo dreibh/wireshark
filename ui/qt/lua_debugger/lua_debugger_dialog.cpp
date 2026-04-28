@@ -46,6 +46,7 @@
 #include <QFileInfo>
 #include <QFont>
 #include <QFontDatabase>
+#include <QFontMetricsF>
 #include <QFormLayout>
 #include <QGuiApplication>
 #include <QHeaderView>
@@ -67,6 +68,7 @@
 #include <QPointer>
 #include <QShowEvent>
 #include <QSet>
+#include <QSizePolicy>
 #include <QStandardPaths>
 #include <QStyle>
 #include <QTextDocument>
@@ -113,6 +115,167 @@ luaDebuggerSettingsFilePath()
         application_configuration_environment_prefix());
     return gchar_free_to_qstring(p);
 }
+
+/** Fullwidth ＋ (U+FF0B) and － (U+FF0D): same advance; reads wider than ASCII +/−. */
+static const QString kLuaDbgHeaderPlus{QStringLiteral("\uFF0B")};
+static const QString kLuaDbgHeaderMinus{QStringLiteral("\uFF0D")};
+
+/** Tight, flat so glyphs sit in the same vertical band as the HLine. */
+static const QString kLuaDbgHeaderToolButtonStyle{QStringLiteral(
+    "QToolButton { border: none; padding: 0px; margin: 0px; }")};
+
+namespace {
+
+/**
+ * Visual mode for the Breakpoints header “activate all / deactivate all”
+ * control. The dot mirrors the gutter convention — red @c #DC3545 when any
+ * breakpoint is active, gray @c #808080 when all are inactive — so the
+ * header aggregates what the gutter shows. Click flips the aggregate state.
+ */
+enum class LuaDbgBpHeaderIconMode
+{
+    NoBreakpoints, /**< Gray, control disabled (Qt dims it automatically). */
+    ActivateAll,   /**< Gray — all BPs inactive, click activates all. */
+    DeactivateAll, /**< Red — any BP active, click deactivates all. */
+};
+
+/**
+ * Breakpoint header: same geometry and fill/rim as @c LineNumberArea
+ * (diameter @c 2*(h/2-2) from the editor @c QFontMetrics), centered in
+ * @a headerSide. Renders at @a dpr (device pixels) for crisp icons on HiDPI,
+ * like @c updateEnabledCheckboxIcon(). @a editorFont nullptr uses
+ * @c QGuiApplication::font.
+ */
+static QIcon
+luaDbgBreakpointHeaderIconForMode(const QFont *editorFont,
+                                  LuaDbgBpHeaderIconMode mode, int headerSide,
+                                  qreal dpr)
+{
+    if (headerSide < 4)
+    {
+        headerSide = 12;
+    }
+    if (dpr <= 0.0 || dpr > 8.0)
+    {
+        dpr = 1.0;
+    }
+    const QFont f =
+        editorFont != nullptr ? *editorFont : QGuiApplication::font();
+    const QFontMetrics fm(f);
+    /* Match line_number_area: radius = h/2 - 2, diameter 2*radius. */
+    const int r = fm.height() / 2 - 2;
+    int diam = 2 * qMax(0, r);
+    diam = qMax(6, qMin(diam, headerSide - 4));
+    const qreal s = static_cast<qreal>(headerSide);
+    const qreal d = static_cast<qreal>(diam);
+    const QRectF circleRect((s - d) / 2.0, (s - d) / 2.0, d, d);
+
+    QPixmap pm(QSize(headerSide, headerSide) * dpr);
+    pm.setDevicePixelRatio(dpr);
+    pm.fill(Qt::transparent);
+    {
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        QColor fill;
+        switch (mode)
+        {
+        case LuaDbgBpHeaderIconMode::NoBreakpoints:
+        case LuaDbgBpHeaderIconMode::ActivateAll:
+            /* Match LineNumberArea disabled-breakpoint @c #808080. */
+            fill = QColor(QStringLiteral("#808080"));
+            break;
+        case LuaDbgBpHeaderIconMode::DeactivateAll:
+            fill = QColor(QStringLiteral("#DC3545"));
+            break;
+        }
+        p.setBrush(fill);
+        p.setPen(QPen(fill.darker(140), 1.0));
+        p.drawEllipse(circleRect);
+    }
+    /* Only register the Normal pixmap so Qt dims the disabled state itself,
+     * giving the @c NoBreakpoints case a visibly different look. */
+    return QIcon(pm);
+}
+
+} // namespace
+
+static void
+styleLuaDebuggerHeaderBreakpointToggleButton(QToolButton *btn, int side)
+{
+    btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn->setIconSize(QSize(side, side));
+    btn->setFixedSize(side, side);
+    btn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btn->setText(QString());
+}
+
+/**
+ * @a glyphs: shrink key is @a glyphs.first() (＋/－: first only, matching legacy);
+ * grow step requires all glyphs' bounding heights to fit.
+ */
+static void
+styleLuaDebuggerHeaderFittedTextButton(QToolButton *btn, int side,
+                                       const QFont &titleFont,
+                                       const QStringList &glyphs)
+{
+    if (glyphs.isEmpty()) {
+        return;
+    }
+    const QString &shrinkKey = glyphs[0];
+    btn->setToolButtonStyle(Qt::ToolButtonTextOnly);
+    QFont f = titleFont;
+    for (int k = 0; k < 45 && f.pointSizeF() > 3.0; ++k) {
+        QFontMetricsF m(f);
+        const QRectF r = m.boundingRect(shrinkKey);
+        if (m.height() <= static_cast<qreal>(side) + 0.5
+            && r.height() <= static_cast<qreal>(side) + 0.5) {
+            break;
+        }
+        f.setPointSizeF(f.pointSizeF() - 0.5);
+    }
+    for (int k = 0; k < 3; ++k) {
+        QFont tryF = f;
+        tryF.setPointSizeF(f.pointSizeF() + 0.5);
+        QFontMetricsF m(tryF);
+        qreal rMax = 0.0;
+        for (const QString &g : glyphs) {
+            rMax = std::max(rMax, m.boundingRect(g).height());
+        }
+        if (m.height() <= static_cast<qreal>(side) + 0.5
+            && rMax <= static_cast<qreal>(side) + 0.5) {
+            f = tryF;
+        } else {
+            break;
+        }
+    }
+    btn->setFont(f);
+    btn->setFixedSize(side, side);
+    btn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btn->setIcon(QIcon());
+}
+
+/** Plain +/− labels: same @a side as @c CollapsibleSection::titleButtonHeight. */
+static void
+styleLuaDebuggerHeaderPlusMinusButton(QToolButton *btn, int side,
+                                      const QFont &titleFont)
+{
+    const QStringList pm{kLuaDbgHeaderPlus, kLuaDbgHeaderMinus};
+    styleLuaDebuggerHeaderFittedTextButton(btn, side, titleFont, pm);
+}
+
+/** Trash icon, same @a side as ＋/−. */
+static void
+styleLuaDebuggerHeaderRemoveAllButton(QToolButton *btn, int side)
+{
+    btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+    btn->setIcon(QIcon::fromTheme(QStringLiteral("edit-delete"),
+                                  StockIcon(QStringLiteral("edit-clear"))));
+    btn->setIconSize(QSize(side, side));
+    btn->setFixedSize(side, side);
+    btn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    btn->setText(QString());
+}
+
 
 /* Application-wide event filter installed while the debugger is paused.
  *
@@ -585,11 +748,12 @@ static QKeySequence luaSeqFromKeyEvent(const QKeyEvent *ke)
 
 /** @brief Sequences for context-menu labels and eventFilter (must match). */
 const QKeySequence kCtxGoToLine(QKeySequence(Qt::CTRL | Qt::Key_G));
-const QKeySequence kCtxRunToLine(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_R));
+const QKeySequence kCtxRunToLine(QKeySequence(Qt::CTRL | Qt::Key_F10));
 const QKeySequence kCtxWatchEdit(Qt::Key_F2);
 const QKeySequence kCtxWatchCopyValue(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_C));
 const QKeySequence kCtxWatchDuplicate(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D));
 const QKeySequence kCtxWatchRemoveAll(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_K));
+const QKeySequence kCtxAddWatch(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_W));
 const QKeySequence kCtxToggleBreakpoint(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_B));
 const QKeySequence kCtxReloadLuaPlugins(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_L));
 const QKeySequence kCtxRemoveAllBreakpoints(QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F9));
@@ -1550,11 +1714,17 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
       fileTree(nullptr), fileModel(nullptr), breakpointsTree(nullptr),
       breakpointsModel(nullptr),
       evalInputEdit(nullptr), evalOutputEdit(nullptr), evalButton(nullptr),
-      evalClearButton(nullptr), themeComboBox(nullptr)
+      evalClearButton(nullptr), themeComboBox(nullptr), watchRemoveButton_(nullptr),
+      watchRemoveAllButton_(nullptr), breakpointHeaderToggleButton_(nullptr),
+      breakpointHeaderRemoveAllButton_(nullptr)
 {
     _instance = this;
     setAttribute(Qt::WA_DeleteOnClose);
     ui->setupUi(this);
+    ui->actionAddWatch->setShortcut(kCtxAddWatch);
+    ui->actionAddWatch->setToolTip(
+        tr("Add Watch (%1)")
+            .arg(kCtxAddWatch.toString(QKeySequence::NativeText)));
     loadGeometry();
 
     lastOpenDirectory =
@@ -1589,20 +1759,9 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     ui->actionStepOver->setIcon(StockIcon("x-lua-debug-step-over"));
     ui->actionStepIn->setIcon(StockIcon("x-lua-debug-step-in"));
     ui->actionStepOut->setIcon(StockIcon("x-lua-debug-step-out"));
+    ui->actionRunToLine->setIcon(StockIcon("x-lua-debug-run-to-line"));
     ui->actionReloadLuaPlugins->setIcon(StockIcon("view-refresh"));
-    {
-        QIcon addWatchIcon = QIcon::fromTheme(QStringLiteral("system-search"));
-        if (addWatchIcon.isNull())
-        {
-            addWatchIcon = QIcon::fromTheme(QStringLiteral("list-add"));
-        }
-        if (addWatchIcon.isNull())
-        {
-            addWatchIcon = style()->standardIcon(
-                QStyle::SP_FileDialogDetailedView);
-        }
-        ui->actionAddWatch->setIcon(addWatchIcon);
-    }
+    ui->actionAddWatch->setIcon(StockIcon("list-add"));
     ui->actionFind->setIcon(StockIcon("edit-find"));
     ui->actionOpenFile->setToolTip(tr("Open Lua Script"));
     ui->actionSaveFile->setToolTip(tr("Save (%1)").arg(
@@ -1612,12 +1771,11 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     ui->actionStepOver->setToolTip(tr("Step over (F10)"));
     ui->actionStepIn->setToolTip(tr("Step into (F11)"));
     ui->actionStepOut->setToolTip(tr("Step out (Shift+F11)"));
+    ui->actionRunToLine->setToolTip(
+        tr("Run to line (%1)")
+            .arg(kCtxRunToLine.toString(QKeySequence::NativeText)));
     ui->actionReloadLuaPlugins->setToolTip(
         tr("Reload Lua Plugins (Ctrl+Shift+L)"));
-    ui->actionAddWatch->setToolTip(tr("%1 (%2)")
-                                       .arg(ui->actionAddWatch->toolTip(),
-                                            ui->actionAddWatch->shortcut()
-                                                .toString(QKeySequence::NativeText)));
     ui->actionAddWatch->setShortcutContext(Qt::WidgetWithChildrenShortcut);
     ui->actionFind->setToolTip(tr("Find in script (%1)")
                                    .arg(QKeySequence(QKeySequence::Find)
@@ -1663,6 +1821,8 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
             &LuaDebuggerDialog::onStepIn);
     connect(ui->actionStepOut, &QAction::triggered, this,
             &LuaDebuggerDialog::onStepOut);
+    connect(ui->actionRunToLine, &QAction::triggered, this,
+            &LuaDebuggerDialog::onRunToLine);
     connect(ui->actionAddWatch, &QAction::triggered, this, [this]() {
         QString fromEditor;
         if (LuaDebuggerCodeView *cv = currentCodeView())
@@ -1712,6 +1872,8 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
             {
                 updateSaveActionState();
                 updateLuaEditorAuxFrames();
+                updateBreakpointHeaderButtonState();
+                updateContinueActionState();
             });
 
     // Breakpoints
@@ -1721,6 +1883,16 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
             &LuaDebuggerDialog::onBreakpointItemDoubleClicked);
     connect(breakpointsTree, &QTreeView::customContextMenuRequested, this,
             &LuaDebuggerDialog::onBreakpointContextMenuRequested);
+    connect(breakpointsModel, &QAbstractItemModel::rowsInserted, this, [this]() {
+        updateBreakpointHeaderButtonState();
+    });
+    connect(breakpointsModel, &QAbstractItemModel::rowsRemoved, this, [this]() {
+        updateBreakpointHeaderButtonState();
+    });
+    connect(breakpointsModel, &QAbstractItemModel::modelReset, this, [this]() {
+        updateBreakpointHeaderButtonState();
+    });
+    updateBreakpointHeaderButtonState();
 
     QHeaderView *breakpointHeader = breakpointsTree->header();
     breakpointHeader->setStretchLastSection(false);
@@ -1759,9 +1931,25 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
 
     connect(watchTree->selectionModel(), &QItemSelectionModel::currentChanged,
             this, &LuaDebuggerDialog::onWatchCurrentItemChanged);
+    /* Header Remove button reflects the current selection; selectionChanged
+     * fires for every selection mutation (click, Shift/Ctrl+click, keyboard).
+     * No separate currentChanged hook is needed — the header buttons depend
+     * on selectedRows(), not on the current index. */
+    connect(watchTree->selectionModel(), &QItemSelectionModel::selectionChanged,
+            this, [this]() { updateWatchHeaderButtonState(); });
+    connect(watchModel, &QAbstractItemModel::rowsInserted, this, [this]() {
+        updateWatchHeaderButtonState();
+    });
+    connect(watchModel, &QAbstractItemModel::rowsRemoved, this, [this]() {
+        updateWatchHeaderButtonState();
+    });
+    connect(watchModel, &QAbstractItemModel::modelReset, this, [this]() {
+        updateWatchHeaderButtonState();
+    });
     connect(variablesTree->selectionModel(),
             &QItemSelectionModel::currentChanged, this,
             &LuaDebuggerDialog::onVariablesCurrentItemChanged);
+    updateWatchHeaderButtonState();
 
     // Files
     connect(fileTree, &QTreeView::doubleClicked, this,
@@ -1980,6 +2168,62 @@ void LuaDebuggerDialog::createCollapsibleSections()
         watchOuter->addWidget(watchTree, 1);
         watchSection->setContentWidget(watchWrap);
     }
+    {
+        const int hdrH = watchSection->titleButtonHeight();
+        const QFont hdrTitleFont = watchSection->titleButtonFont();
+        auto *const watchHeaderBtnRow = new QWidget(watchSection);
+        auto *const watchHeaderBtnLayout = new QHBoxLayout(watchHeaderBtnRow);
+        watchHeaderBtnLayout->setContentsMargins(0, 0, 0, 0);
+        watchHeaderBtnLayout->setSpacing(4);
+        watchHeaderBtnLayout->setAlignment(Qt::AlignVCenter);
+        QToolButton *const watchAddBtn = new QToolButton(watchHeaderBtnRow);
+        styleLuaDebuggerHeaderPlusMinusButton(watchAddBtn, hdrH, hdrTitleFont);
+        watchAddBtn->setText(kLuaDbgHeaderPlus);
+        watchAddBtn->setAutoRaise(true);
+        watchAddBtn->setStyleSheet(kLuaDbgHeaderToolButtonStyle);
+        /* Compute tooltip directly from the action's shortcut so this block
+         * does not depend on actionAddWatch's tooltip having already been set. */
+        watchAddBtn->setToolTip(
+            tr("Add Watch (%1)")
+                .arg(ui->actionAddWatch->shortcut()
+                         .toString(QKeySequence::NativeText)));
+        connect(watchAddBtn, &QToolButton::clicked, ui->actionAddWatch,
+                &QAction::trigger);
+        QToolButton *const watchRemBtn = new QToolButton(watchHeaderBtnRow);
+        watchRemoveButton_ = watchRemBtn;
+        styleLuaDebuggerHeaderPlusMinusButton(watchRemBtn, hdrH, hdrTitleFont);
+        watchRemBtn->setText(kLuaDbgHeaderMinus);
+        watchRemBtn->setAutoRaise(true);
+        watchRemBtn->setStyleSheet(kLuaDbgHeaderToolButtonStyle);
+        watchRemBtn->setEnabled(false);
+        watchRemBtn->setToolTip(
+            tr("Remove Watch (%1)")
+                .arg(QKeySequence(QKeySequence::Delete)
+                         .toString(QKeySequence::NativeText)));
+        QToolButton *const watchRemAllBtn = new QToolButton(watchHeaderBtnRow);
+        watchRemoveAllButton_ = watchRemAllBtn;
+        styleLuaDebuggerHeaderRemoveAllButton(watchRemAllBtn, hdrH);
+        watchRemAllBtn->setAutoRaise(true);
+        watchRemAllBtn->setStyleSheet(kLuaDbgHeaderToolButtonStyle);
+        watchRemAllBtn->setEnabled(false);
+        watchRemAllBtn->setToolTip(
+            tr("Remove All Watches (%1)")
+                .arg(
+                    kCtxWatchRemoveAll.toString(QKeySequence::NativeText)));
+        watchHeaderBtnLayout->addWidget(watchAddBtn);
+        watchHeaderBtnLayout->addWidget(watchRemBtn);
+        watchHeaderBtnLayout->addWidget(watchRemAllBtn);
+        connect(watchRemBtn, &QToolButton::clicked, this, [this]() {
+            const QList<QStandardItem *> del = selectedWatchRootItemsForRemove();
+            if (!del.isEmpty())
+            {
+                deleteWatchRows(del);
+            }
+        });
+        connect(watchRemAllBtn, &QToolButton::clicked, this,
+                &LuaDebuggerDialog::removeAllWatchTopLevelItems);
+        watchSection->setHeaderTrailingWidget(watchHeaderBtnRow);
+    }
     watchSection->setExpanded(true);
     splitter->addWidget(watchSection);
 
@@ -2014,6 +2258,43 @@ void LuaDebuggerDialog::createCollapsibleSections()
     breakpointsTree->setAllColumnsShowFocus(true);
     breakpointsTree->setContextMenuPolicy(Qt::CustomContextMenu);
     breakpointsSection->setContentWidget(breakpointsTree);
+    {
+        const int hdrH = breakpointsSection->titleButtonHeight();
+        auto *const bpHeaderBtnRow = new QWidget(breakpointsSection);
+        auto *const bpHeaderBtnLayout = new QHBoxLayout(bpHeaderBtnRow);
+        bpHeaderBtnLayout->setContentsMargins(0, 0, 0, 0);
+        bpHeaderBtnLayout->setSpacing(4);
+        bpHeaderBtnLayout->setAlignment(Qt::AlignVCenter);
+        QToolButton *const bpTglBtn = new QToolButton(bpHeaderBtnRow);
+        breakpointHeaderToggleButton_ = bpTglBtn;
+        styleLuaDebuggerHeaderBreakpointToggleButton(bpTglBtn, hdrH);
+        bpTglBtn->setIcon(
+            luaDbgBreakpointHeaderIconForMode(
+                nullptr, LuaDbgBpHeaderIconMode::NoBreakpoints, hdrH,
+                bpTglBtn->devicePixelRatioF()));
+        bpTglBtn->setAutoRaise(true);
+        bpTglBtn->setStyleSheet(kLuaDbgHeaderToolButtonStyle);
+        bpTglBtn->setEnabled(false);
+        bpTglBtn->setToolTip(tr("No breakpoints"));
+        QToolButton *const bpRemAllBtn = new QToolButton(bpHeaderBtnRow);
+        breakpointHeaderRemoveAllButton_ = bpRemAllBtn;
+        styleLuaDebuggerHeaderRemoveAllButton(bpRemAllBtn, hdrH);
+        bpRemAllBtn->setAutoRaise(true);
+        bpRemAllBtn->setStyleSheet(kLuaDbgHeaderToolButtonStyle);
+        bpRemAllBtn->setEnabled(false);
+        bpRemAllBtn->setToolTip(
+            tr("Remove All Breakpoints (%1)")
+                .arg(
+                    kCtxRemoveAllBreakpoints.toString(
+                        QKeySequence::NativeText)));
+        bpHeaderBtnLayout->addWidget(bpTglBtn);
+        bpHeaderBtnLayout->addWidget(bpRemAllBtn);
+        connect(bpTglBtn, &QToolButton::clicked, this,
+                &LuaDebuggerDialog::toggleAllBreakpointsActiveFromHeader);
+        connect(bpRemAllBtn, &QToolButton::clicked, this,
+                &LuaDebuggerDialog::onClearBreakpoints);
+        breakpointsSection->setHeaderTrailingWidget(bpHeaderBtnRow);
+    }
     breakpointsSection->setExpanded(true);
     splitter->addWidget(breakpointsSection);
 
@@ -3060,6 +3341,8 @@ void LuaDebuggerDialog::updateBreakpoints()
         breakpointTabsPrimed = true;
         openInitialBreakpointFiles(initialBreakpointFiles);
     }
+
+    updateBreakpointHeaderButtonState();
 }
 
 void LuaDebuggerDialog::updateStack()
@@ -3452,7 +3735,7 @@ LuaDebuggerCodeView *LuaDebuggerDialog::loadFile(const QString &file_path)
 
     connect(
         codeView, &LuaDebuggerCodeView::breakpointToggled,
-        [this](const QString &file_path, qint32 line)
+        [this](const QString &file_path, qint32 line, bool toggleActive)
         {
             const int32_t state = wslua_debugger_get_breakpoint_state(
                 file_path.toUtf8().constData(), line);
@@ -3461,6 +3744,12 @@ LuaDebuggerCodeView *LuaDebuggerDialog::loadFile(const QString &file_path)
                 wslua_debugger_add_breakpoint(file_path.toUtf8().constData(),
                                               line);
                 ensureDebuggerEnabledForActiveBreakpoints();
+            }
+            else if (toggleActive)
+            {
+                /* Shift+click: enable/disable without removing. */
+                wslua_debugger_set_breakpoint_active(
+                    file_path.toUtf8().constData(), line, state == 0);
             }
             else
             {
@@ -3493,6 +3782,8 @@ LuaDebuggerCodeView *LuaDebuggerDialog::loadFile(const QString &file_path)
                     updateSaveActionState();
                 }
             });
+    connect(codeView, &QPlainTextEdit::cursorPositionChanged, this,
+            &LuaDebuggerDialog::updateBreakpointHeaderButtonState);
 
     ui->codeTabWidget->addTab(codeView, QFileInfo(normalizedPath).fileName());
     updateTabTextForCodeView(codeView);
@@ -3782,6 +4073,11 @@ void LuaDebuggerDialog::onBreakpointItemChanged(QStandardItem *item)
         if (tabView && tabView->getFilename() == file)
             tabView->updateBreakpointMarkers();
     }
+
+    /* The Breakpoints table is the only mutation path that does not flow
+     * through updateBreakpoints(); refresh the section-header dot here so
+     * its color mirrors the new aggregate active state. */
+    updateBreakpointHeaderButtonState();
 }
 
 void LuaDebuggerDialog::onBreakpointItemDoubleClicked(const QModelIndex &index)
@@ -5185,6 +5481,9 @@ void LuaDebuggerDialog::updateContinueActionState()
     ui->actionStepOver->setEnabled(allowContinue);
     ui->actionStepIn->setEnabled(allowContinue);
     ui->actionStepOut->setEnabled(allowContinue);
+    /* Run to this line additionally requires a focusable line in the editor,
+     * i.e. an active code view tab. */
+    ui->actionRunToLine->setEnabled(allowContinue && currentCodeView() != nullptr);
 }
 
 void LuaDebuggerDialog::updateWidgets()
@@ -5539,6 +5838,181 @@ void LuaDebuggerDialog::deleteWatchRows(const QList<QStandardItem *> &items)
      * in the tree so a later "Add Watch" of the same spec starts clean. */
     pruneChangeBaselinesToLiveWatchSpecs();
     refreshWatchDisplay();
+}
+
+QList<QStandardItem *>
+LuaDebuggerDialog::selectedWatchRootItemsForRemove() const
+{
+    QList<QStandardItem *> del;
+    if (!watchModel || !watchTree || !watchTree->selectionModel())
+    {
+        return del;
+    }
+    for (const QModelIndex &six :
+         watchTree->selectionModel()->selectedRows(0))
+    {
+        QStandardItem *it = watchModel->itemFromIndex(six);
+        if (it && it->parent() == nullptr)
+        {
+            del.append(it);
+        }
+    }
+    /* Intentionally no QTreeView::currentIndex fallback: after a remove the
+     * selection can be empty while current still points at a row, which would
+     * leave the header button enabled and the next click would remove the
+     * wrong (non-selected) entry. The context menu and Del key have their
+     * own item/current handling. */
+    return del;
+}
+
+void LuaDebuggerDialog::updateWatchHeaderButtonState()
+{
+    if (watchRemoveButton_)
+    {
+        watchRemoveButton_->setEnabled(
+            !selectedWatchRootItemsForRemove().isEmpty());
+    }
+    if (watchRemoveAllButton_)
+    {
+        watchRemoveAllButton_->setEnabled(
+            watchModel && watchModel->rowCount() > 0);
+    }
+}
+
+void LuaDebuggerDialog::toggleAllBreakpointsActiveFromHeader()
+{
+    const unsigned n = wslua_debugger_get_breakpoint_count();
+    if (n == 0U)
+    {
+        return;
+    }
+    /* Activate all only when every BP is off; if any is on (all on or mix),
+     * this control shows “deactivate” and turns all off. */
+    bool allInactive = true;
+    for (unsigned i = 0; i < n; ++i)
+    {
+        const char *file_path;
+        int64_t line;
+        bool active;
+        if (wslua_debugger_get_breakpoint(i, &file_path, &line, &active) &&
+            active)
+        {
+            allInactive = false;
+            break;
+        }
+    }
+    const bool makeActive = allInactive;
+    for (unsigned i = 0; i < n; ++i)
+    {
+        const char *file_path;
+        int64_t line;
+        bool active;
+        if (wslua_debugger_get_breakpoint(i, &file_path, &line, &active))
+        {
+            wslua_debugger_set_breakpoint_active(file_path, line, makeActive);
+        }
+    }
+    updateBreakpoints();
+    const qint32 tabCount = static_cast<qint32>(ui->codeTabWidget->count());
+    for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
+    {
+        LuaDebuggerCodeView *const tabView = qobject_cast<LuaDebuggerCodeView *>(
+            ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
+        if (tabView)
+        {
+            tabView->updateBreakpointMarkers();
+        }
+    }
+}
+
+void LuaDebuggerDialog::updateBreakpointHeaderButtonState()
+{
+    if (breakpointHeaderToggleButton_)
+    {
+        const int side = std::max(breakpointHeaderToggleButton_->height(),
+                                  breakpointHeaderToggleButton_->width());
+        const qreal dpr = breakpointHeaderToggleButton_->devicePixelRatioF();
+        LuaDebuggerCodeView *const cv = currentCodeView();
+        const QFont *const editorFont =
+            (cv && !cv->getFilename().isEmpty()) ? &cv->font() : nullptr;
+        const unsigned n = wslua_debugger_get_breakpoint_count();
+        bool allInactive = n > 0U;
+        for (unsigned i = 0; allInactive && i < n; ++i)
+        {
+            const char *file_path;
+            int64_t line;
+            bool active;
+            if (wslua_debugger_get_breakpoint(i, &file_path, &line, &active))
+            {
+                if (active)
+                {
+                    allInactive = false;
+                }
+            }
+        }
+        LuaDbgBpHeaderIconMode mode;
+        const QString tglLineKeys =
+            kCtxToggleBreakpoint.toString(QKeySequence::NativeText);
+        if (n == 0U)
+        {
+            mode = LuaDbgBpHeaderIconMode::NoBreakpoints;
+            breakpointHeaderToggleButton_->setEnabled(false);
+            breakpointHeaderToggleButton_->setToolTip(
+                tr("No breakpoints\n%1: add or remove breakpoint on the current "
+                   "line in the editor")
+                    .arg(tglLineKeys));
+        }
+        else if (allInactive)
+        {
+            /* All BPs off: dot is gray (mirrors gutter); click activates all. */
+            mode = LuaDbgBpHeaderIconMode::ActivateAll;
+            breakpointHeaderToggleButton_->setEnabled(true);
+            breakpointHeaderToggleButton_->setToolTip(
+                tr("All breakpoints are inactive — click to activate all\n"
+                   "%1: add or remove on the current line in the editor")
+                    .arg(tglLineKeys));
+        }
+        else
+        {
+            /* Any BP on (all-on or mix): dot is red (mirrors gutter); click
+             * deactivates all. */
+            mode = LuaDbgBpHeaderIconMode::DeactivateAll;
+            breakpointHeaderToggleButton_->setEnabled(true);
+            breakpointHeaderToggleButton_->setToolTip(
+                tr("Click to deactivate all breakpoints\n"
+                   "%1: add or remove on the current line in the editor")
+                    .arg(tglLineKeys));
+        }
+        /* Cache the three icons keyed by (font, side, dpr); cursor moves
+         * fire updateBreakpointHeaderButtonState() frequently and only the
+         * mode actually varies on hot paths. */
+        const QString cacheKey =
+            QStringLiteral("%1/%2/%3")
+                .arg(editorFont != nullptr ? editorFont->key()
+                                           : QGuiApplication::font().key())
+                .arg(side)
+                .arg(dpr);
+        if (cacheKey != bpHeaderIconCacheKey_)
+        {
+            bpHeaderIconCacheKey_ = cacheKey;
+            for (QIcon &cached : bpHeaderIconCache_)
+            {
+                cached = QIcon();
+            }
+        }
+        const int modeIdx = static_cast<int>(mode);
+        if (bpHeaderIconCache_[modeIdx].isNull())
+        {
+            bpHeaderIconCache_[modeIdx] =
+                luaDbgBreakpointHeaderIconForMode(editorFont, mode, side, dpr);
+        }
+        breakpointHeaderToggleButton_->setIcon(bpHeaderIconCache_[modeIdx]);
+    }
+    if (breakpointHeaderRemoveAllButton_)
+    {
+        breakpointHeaderRemoveAllButton_->setEnabled(
+            breakpointsModel && breakpointsModel->rowCount() > 0);
+    }
 }
 
 QStandardItem *
@@ -7052,6 +7526,18 @@ void LuaDebuggerDialog::toggleBreakpointOnCodeViewLine(
             tabView->updateBreakpointMarkers();
         }
     }
+}
+
+void LuaDebuggerDialog::onRunToLine()
+{
+    LuaDebuggerCodeView *codeView = currentCodeView();
+    if (!codeView || !eventLoop)
+    {
+        return;
+    }
+    const qint32 line =
+        static_cast<qint32>(codeView->textCursor().blockNumber() + 1);
+    runToCurrentLineInPausedEditor(codeView, line);
 }
 
 void LuaDebuggerDialog::runToCurrentLineInPausedEditor(
