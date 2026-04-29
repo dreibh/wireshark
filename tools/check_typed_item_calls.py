@@ -500,32 +500,13 @@ class ProtoTreeAddItemCheck(APICheck):
 
                     enc = m.group(4)
                     hf_name = m.group(1)
-                    if not enc.startswith('ENC_') and 'endian' not in enc.lower():
-                        if enc not in {'encoding', 'enc', 'client_is_le', 'cigi_byte_order', 'endian', 'endianess', 'machine_encoding', 'byte_order', 'bLittleEndian',
-                                       'p_mq_parm->mq_str_enc', 'p_mq_parm->mq_int_enc',
-                                       'iEnc', 'strid_enc', 'iCod', 'nl_data->encoding',
-                                       'argp->info->encoding', 'gquic_info->encoding', 'writer_encoding',
-                                       'tds_get_int2_encoding(tds_info)',
-                                       'tds_get_int4_encoding(tds_info)',
-                                       'tds_get_char_encoding(tds_info)',
-                                       'info->encoding',
-                                       'item->encoding',
-                                       'DREP_ENC_INTEGER(drep)', 'string_encoding', 'item', 'type',
-                                       'dvb_enc_to_item_enc(encoding)',
-                                       'packet->enc',
-                                       'IS_EBCDIC(uCCS) ? ENC_EBCDIC : ENC_ASCII',
-                                       'DREP_ENC_INTEGER(hdr->drep)',
+                    if 'endian' not in enc.lower() and 'enc' not in enc.lower():
+                        if enc not in {'client_is_le', 'cigi_byte_order', 'endian', 'endianess', 'byte_order', 'bLittleEndian',
+                                       'iCod',
+                                       'item', 'type',
                                        'payload_le',
-                                       'local_encoding',
-                                       'hf_data_encoding',
-                                       'IS_EBCDIC(eStr) ? ENC_EBCDIC : ENC_ASCII',
                                        'pdu_info->sbc', 'pdu_info->mbc',
-                                       'seq_info->txt_enc | ENC_NA',
-                                       'BASE_SHOW_UTF_8_PRINTABLE',
-                                       'is_mdns ? ENC_UTF_8|ENC_NA : ENC_ASCII|ENC_NA',
-                                       'xl_encoding',
-                                       'my_frame_data->encoding_client', 'my_frame_data->encoding_results',
-                                       'seq_info->txt_enc'
+                                       'BASE_SHOW_UTF_8_PRINTABLE'
                                        }:
 
                             result.warn(self.file + ':' + str(line_number),

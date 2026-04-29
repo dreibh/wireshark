@@ -4234,6 +4234,9 @@ process_cap_file(capture_file *cf, char *save_file, int out_file_type,
     pass_status_t first_pass_status, second_pass_status;
     int64_t elapsed_start;
 
+    /* Guaranteed by cf_open succeeding. */
+    ws_assert(cf->provider.wth);
+
     if (save_file != NULL) {
         /* Set up to write to the capture file. */
         wtap_dump_params_init_no_idbs(&params, cf->provider.wth);

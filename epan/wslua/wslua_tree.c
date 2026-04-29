@@ -534,43 +534,85 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
                 case FT_UINT24:
                 case FT_UINT32:
                 case FT_FRAMENUM:
+                    if (!lua_isnumber(L,1)) {
+                        THROW_LUA_ERROR("Expected number for unsigned integer field");
+                        return 0;
+                    }
                     item = proto_tree_add_uint(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,wslua_checkuint32(L,1));
                     break;
                 case FT_INT8:
                 case FT_INT16:
                 case FT_INT24:
                 case FT_INT32:
+                    if (!lua_isnumber(L,1)) {
+                        THROW_LUA_ERROR("Expected number for integer field");
+                        return 0;
+                    }
                     item = proto_tree_add_int(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,wslua_checkint32(L,1));
                     break;
                 case FT_FLOAT:
+                    if (!lua_isnumber(L,1)) {
+                        THROW_LUA_ERROR("Expected number for FT_FLOAT field");
+                        return 0;
+                    }
                     item = proto_tree_add_float(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,(float)luaL_checknumber(L,1));
                     break;
                 case FT_DOUBLE:
+                    if (!lua_isnumber(L,1)) {
+                        THROW_LUA_ERROR("Expected number for FT_DOUBLE field");
+                        return 0;
+                    }
                     item = proto_tree_add_double(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,(double)luaL_checknumber(L,1));
                     break;
                 case FT_ABSOLUTE_TIME:
                 case FT_RELATIVE_TIME:
+                    if (!isNSTime(L,1)) {
+                        THROW_LUA_ERROR("Expected NSTime for %s field", (type==FT_ABSOLUTE_TIME ? "FT_ABSOLUTE_TIME" : "FT_RELATIVE_TIME"));
+                        return 0;
+                    }
                     item = proto_tree_add_time(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,checkNSTime(L,1));
                     break;
                 case FT_STRING:
                 case FT_STRINGZ:
-                    item = proto_tree_add_string(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,luaL_checkstring(L,1));
+                    {
+                        const char *value = lua_tostring(L, 1);
+                        if (value == NULL) {
+                            THROW_LUA_ERROR("Expected string for %s field", (type==FT_STRING ? "FT_STRING" : "FT_STRINGZ") );
+                            return 0;
+                        }
+                        item = proto_tree_add_string(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,value);
+                    }
                     break;
                 case FT_BYTES:
-                    item = proto_tree_add_bytes(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len, (const uint8_t*) luaL_checkstring(L,1));
+                    {
+                        const char *value = lua_tostring(L, 1);
+                        if (value == NULL) {
+                            THROW_LUA_ERROR("Expected bytes for FT_BYTES field");
+                            return 0;
+                        }
+                        item = proto_tree_add_bytes(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len, (const uint8_t*)value);
+                    }
                     break;
                 case FT_UINT64:
+                    if (!isUInt64(L,1)) {
+                        THROW_LUA_ERROR("Expected UInt64 for FT_UINT64 field");
+                        return 0;
+                    }
                     item = proto_tree_add_uint64(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,checkUInt64(L,1));
                     break;
                 case FT_INT64:
+                    if (!isInt64(L,1)) {
+                        THROW_LUA_ERROR("Expected Int64 for FT_INT64 field");
+                        return 0;
+                    }
                     item = proto_tree_add_int64(tree_item->tree,hfid,tvbr->tvb->ws_tvb,tvbr->offset,tvbr->len,checkInt64(L,1));
                     break;
                 case FT_IPv4:
                     {
-                        Address addr = checkAddress(L,1);
+                        Address addr = isAddress(L,1) ? checkAddress(L,1) : NULL;
                         uint32_t addr_value;
 
-                        if (addr->type != AT_IPv4) {
+                        if (addr == NULL || addr->type != AT_IPv4) {
                             THROW_LUA_ERROR("Expected IPv4 address for FT_IPv4 field");
                             return 0;
                         }
@@ -586,8 +628,8 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
                     break;
                 case FT_IPv6:
                     {
-                        Address addr = checkAddress(L,1);
-                        if (addr->type != AT_IPv6) {
+                        Address addr = isAddress(L,1) ? checkAddress(L,1) : NULL;
+                        if (addr == NULL || addr->type != AT_IPv6) {
                             THROW_LUA_ERROR("Expected IPv6 address for FT_IPv6 field");
                             return 0;
                         }
@@ -597,8 +639,8 @@ static int TreeItem_add_item_any(lua_State *L, bool little_endian) {
                     break;
                 case FT_ETHER:
                     {
-                        Address addr = checkAddress(L,1);
-                        if (addr->type != AT_ETHER) {
+                        Address addr = isAddress(L,1) ? checkAddress(L,1) : NULL;
+                        if (addr == NULL || addr->type != AT_ETHER) {
                             THROW_LUA_ERROR("Expected MAC address for FT_ETHER field");
                             return 0;
                         }

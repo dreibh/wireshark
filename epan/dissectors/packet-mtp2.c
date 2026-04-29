@@ -405,8 +405,7 @@ dissect_mtp2_lssu(tvbuff_t *su_tvb, packet_info *pinfo, proto_item *mtp2_tree,
     sf_extra_offset = SF_EXTRA_OFFSET;
   }
 
-  proto_tree_add_item(mtp2_tree, hf_mtp2_sf, su_tvb, sf_offset, SF_LENGTH, ENC_LITTLE_ENDIAN);
-  sf = tvb_get_uint8(su_tvb, SF_OFFSET);
+  proto_tree_add_item_ret_uint8(mtp2_tree, hf_mtp2_sf, su_tvb, sf_offset, SF_LENGTH, ENC_LITTLE_ENDIAN, &sf);
 
   /*  If the LI is 2 then there is an extra octet following the standard SF
    *  field but it is not defined what this octet is.

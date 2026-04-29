@@ -43,12 +43,14 @@
  * RFC 3825: Dynamic Host Configuration Protocol Option for Coordinate-based Location Configuration Information
  * RFC 3925: Vendor-Identifying Vendor Options for Dynamic Host Configuration Protocol version 4 (DHCPv4)
  * RFC 3942: Reclassifying DHCPv4 Options
+ * RFC 4014: Remote Authentication Dial-In User Service (RADIUS) Attributes Suboption for the Dynamic Host Configuration Protocol (DHCP) Relay Agent Information Option
  * RFC 4174: The IPv4 Dynamic Host Configuration Protocol (DHCP) Option for the Internet Storage Name Service
  * RFC 4243: Vendor-Specific Information Suboption for the Dynamic Host Configuration Protocol (DHCP) Relay Agent Option
  * RFC 4361: Node-specific Client Identifiers for Dynamic Host Configuration Protocol Version Four (DHCPv4)
  * RFC 4388: Dynamic Host Configuration Protocol (DHCP) Leasequery
  * RFC 4578: Dynamic Host Configuration Protocol (DHCP) Options for PXE
  * RFC 4776: Dynamic Host Configuration Protocol (DHCPv4 and DHCPv6) Option for Civic Addresses Configuration Information
+ * RFC 5010: The Dynamic Host Configuration Protocol Version 4 (DHCPv4) Relay Agent Flags Suboption
  * RFC 5192: DHCP Options for Protocol for Carrying Authentication for Network Access (PANA) Authentication Agent
  * RFC 5223: Discovering Location-to-Service Translation (LoST) Servers Using the Dynamic Host Configuration Protocol (DHCP)
  * RFC 5417: CAPWAP Access Controller DHCP Option
@@ -486,6 +488,8 @@ static int hf_dhcp_option82_vi_cl_mso_defined_text;		/* 82:9:4491:6 */
 static int hf_dhcp_option82_vi_cl_secure_file_transfer_uri;	/* 82:9:4491:7 */
 									/* 82:9 suboptions end */
 static int hf_dhcp_option82_flags;					/* 82:10 */
+static int hf_dhcp_option82_flags_unicast;			/* 82:10 */
+static int hf_dhcp_option82_flags_reserved;			/* 82:10 */
 static int hf_dhcp_option82_server_id_override;			/* 82:11 */
 static int hf_dhcp_option82_relay_agent_id;			/* 82:12 */
 static int hf_dhcp_option82_option_ani_att;			/* 82:13 */
@@ -705,6 +709,7 @@ static int ett_dhcp_option63_suboption;
 static int ett_dhcp_option77_instance;
 static int ett_dhcp_option82_suboption;
 static int ett_dhcp_option82_suboption9;
+static int ett_dhcp_option82_suboption10;
 static int ett_dhcp_option124_vendor_class_data_item;
 static int ett_dhcp_option125_suboption;
 static int ett_dhcp_option125_tr111_suboption;
@@ -1164,6 +1169,11 @@ struct opt_info {
 static const true_false_string flag_set_broadcast = {
 	"Broadcast",
 	"Unicast"
+};
+
+static const true_false_string flag_set_unicast = {
+	"Unicast",
+	"Broadcast"
 };
 
 #define BOOTP_MAX_NO_CHAR 64
@@ -3687,7 +3697,7 @@ dhcp_dhcp_decode_agent_info(packet_info *pinfo, proto_item *v_ti, proto_tree *v_
 		{7, {"RADIUS Attributes", special, &hf_dhcp_option82_radius_attributes}}, /* [RFC4014] */
 		{8, {"Authentication", bytes, &hf_dhcp_option82_authentication}}, /* [RFC4030] */
 		{9, {"Vendor-Specific Information", special, &hf_dhcp_option82_vi}}, /* [RFC 4243] */
-		{10, {"Flags", val_u_byte, &hf_dhcp_option82_flags}}, /* [RFC5010] */
+		{10, {"Flags", special, &hf_dhcp_option82_flags}}, /* [RFC5010] */
 		{11, {"Server ID Override", ipv4, &hf_dhcp_option82_server_id_override}}, /* [RFC 5107] */
 		{12, {"Relay Agent Identifier", bytes, &hf_dhcp_option82_relay_agent_id}}, /* [RFC 6925] */
 		{13, {"Access Technology Type", bytes, &hf_dhcp_option82_option_ani_att}}, /* [RFC7839] */
@@ -3820,6 +3830,18 @@ dhcp_dhcp_decode_agent_info(packet_info *pinfo, proto_item *v_ti, proto_tree *v_
 					}
 				}
 				break;
+			case 10: /* Relay Agent Flags Suboption */
+				{
+					static int * const dhcp_option82_flags[] = {
+						&hf_dhcp_option82_flags_unicast,
+						&hf_dhcp_option82_flags_reserved,
+						NULL
+					};
+
+					proto_tree_add_bitmask_with_flags(o82_v_tree, tvb, suboptoff, hf_dhcp_option82_flags,
+						ett_dhcp_option82_suboption10, dhcp_option82_flags, ENC_BIG_ENDIAN, BMT_NO_INT);
+				}
+				break;
 			case 13: /* Access Technology Type */
 				if (subopt_len != 2) {
 					expert_add_info_format(pinfo, vti, &ei_dhcp_bad_length, "length isn't 2");
@@ -3828,7 +3850,6 @@ dhcp_dhcp_decode_agent_info(packet_info *pinfo, proto_item *v_ti, proto_tree *v_
 				proto_tree_add_item(o82_v_tree, hf_dhcp_option82_option_ani_att_res, tvb, suboptoff, 1, ENC_NA);
 				proto_tree_add_item(o82_v_tree, hf_dhcp_option82_option_ani_att_att, tvb, suboptoff+1, 1, ENC_NA);
 				break;
-			break;
 			case 151:
 				if (subopt_len == 1) {
 					proto_tree_add_item(o82_v_tree, hf_dhcp_option82_vrf_name_global, tvb, suboptoff, 1, ENC_NA);
@@ -9567,6 +9588,16 @@ proto_register_dhcp(void)
 		    FT_UINT8, BASE_HEX, NULL, 0x0,
 		    "Option 82:10 Flags", HFILL }},
 
+		{ &hf_dhcp_option82_flags_unicast,
+		  { "Unicast flag", "dhcp.option.agent_information_option.flags.unicast",
+		    FT_BOOLEAN, 8, TFS(&flag_set_unicast), 0x80,
+		    "Option 82:10 Unicast flag", HFILL }},
+
+		{ &hf_dhcp_option82_flags_reserved,
+		  { "Reserved flags", "dhcp.option.agent_information_option.flags.reserved",
+		    FT_UINT8, BASE_HEX, NULL, 0x7F,
+		    "Option 82:10 Reserved flags", HFILL }},
+
 		{ &hf_dhcp_option82_server_id_override,
 		  { "Server ID Override", "dhcp.option.agent_information_option.server_id_override",
 		    FT_IPv4, BASE_NONE, NULL, 0x00,
@@ -10654,6 +10685,7 @@ proto_register_dhcp(void)
 		&ett_dhcp_option77_instance,
 		&ett_dhcp_option82_suboption,
 		&ett_dhcp_option82_suboption9,
+		&ett_dhcp_option82_suboption10,
 		&ett_dhcp_option124_vendor_class_data_item,
 		&ett_dhcp_option125_suboption,
 		&ett_dhcp_option125_tr111_suboption,

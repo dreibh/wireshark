@@ -544,8 +544,8 @@ dissect_lsp_mgt_info_clv(tvbuff_t *tvb, packet_info* pinfo, proto_tree *tree, un
 		    "Short management info entry");
 		return;
 	}
-	name_length = tvb_get_uint8(tvb, offset);
-	proto_tree_add_item(tree, hf_nlsp_mgt_info_name_length, tvb, offset, 1, ENC_BIG_ENDIAN);
+
+	proto_tree_add_item_ret_uint8(tree, hf_nlsp_mgt_info_name_length, tvb, offset, 1, ENC_BIG_ENDIAN, &name_length);
 	offset += 1;
 	length -= 1;
 

@@ -530,11 +530,12 @@ QVariant ProfileModel::dataPath(const QModelIndex &index, QString& profilePath) 
                 ProfileItem* refItem = Q_NULLPTR;
                 int row = findByNameAndVisibility(item->getReference(), false, true);
                 if (row >= 0)
+                {
                     refItem = profile_items_[row];
-
-                /* The reference is itself a copy of the original, therefore it is not accepted */
-                if ((refItem->getStatus() == ProfileItem::StatusType::Copy || refItem->getStatus() == ProfileItem::StatusType::New) && refItem->getName().compare(item->getReference()) != 0)
-                    refItem = Q_NULLPTR;
+                    /* The reference is itself a copy of the original, therefore it is not accepted */
+                    if ((refItem->getStatus() == ProfileItem::StatusType::Copy || refItem->getStatus() == ProfileItem::StatusType::New) && refItem->getName().compare(item->getReference()) != 0)
+                        refItem = Q_NULLPTR;
+                }
 
                 /* found no other profile, original one had to be deleted */
                 if (!refItem || row == index.row() || (refItem->isDeleted()))

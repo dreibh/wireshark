@@ -2058,6 +2058,116 @@ static void conversation_setup(packet_info *pinfo, proto_tree *tree, dect_nr_con
 	proto_item_set_generated(item);
 }
 
+/* Table 6.2.2-2a: Feedback info format 1 */
+static void handle_feedback_format_1(proto_tree *tree, tvbuff_t *tvb, int offset, packet_info *pinfo)
+{
+	uint32_t harq, bs, cqi;
+	bool tx_fb;
+
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi1_harq_pn, tvb, offset, 2, ENC_BIG_ENDIAN, &harq);
+	proto_tree_add_item_ret_boolean(tree, hf_dect_nr_fbi1_tx_fb, tvb, offset, 2, ENC_BIG_ENDIAN, &tx_fb);
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi1_bs, tvb, offset, 2, ENC_BIG_ENDIAN, &bs);
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi1_cqi, tvb, offset, 2, ENC_BIG_ENDIAN, &cqi);
+
+	col_append_fstr(pinfo->cinfo, COL_INFO, " (HARQ proc #%d %s, %s, CQI: %s)",
+			harq, tfs_get_string(tx_fb, &tfs_ack_nack),
+			val_to_str_const(bs, buffer_status_vals, "Unknown"),
+			val_to_str_const(cqi, cqi_vals, "Unknown"));
+}
+
+/* Table 6.2.2-2b: Feedback info format 2 */
+static void handle_feedback_format_2(proto_tree *tree, tvbuff_t *tvb, int offset, packet_info *pinfo _U_)
+{
+	proto_tree_add_item(tree, hf_dect_nr_fbi2_cb_index, tvb, offset, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_dect_nr_fbi2_mimo_fb, tvb, offset, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_dect_nr_fbi2_bs, tvb, offset, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_dect_nr_fbi2_cqi, tvb, offset, 2, ENC_BIG_ENDIAN);
+}
+
+/* Table 6.2.2-2c: Feedback info format 3 */
+static void handle_feedback_format_3(proto_tree *tree, tvbuff_t *tvb, int offset, packet_info *pinfo)
+{
+	uint32_t harq_1, harq_2, cqi;
+	bool tx_fb_1, tx_fb_2;
+
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi3_harq_pn_1, tvb, offset, 2, ENC_BIG_ENDIAN, &harq_1);
+	proto_tree_add_item_ret_boolean(tree, hf_dect_nr_fbi3_tx_fb_1, tvb, offset, 2, ENC_BIG_ENDIAN, &tx_fb_1);
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi3_harq_pn_2, tvb, offset, 2, ENC_BIG_ENDIAN, &harq_2);
+	proto_tree_add_item_ret_boolean(tree, hf_dect_nr_fbi3_tx_fb_2, tvb, offset, 2, ENC_BIG_ENDIAN, &tx_fb_2);
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi3_cqi, tvb, offset, 2, ENC_BIG_ENDIAN, &cqi);
+
+	col_append_fstr(pinfo->cinfo, COL_INFO, " (HARQ proc #%d %s, HARQ proc #%d %s, CQI: %s)",
+				harq_1, tfs_get_string(tx_fb_1, &tfs_ack_nack),
+				harq_2, tfs_get_string(tx_fb_2, &tfs_ack_nack),
+				val_to_str_const(cqi, cqi_vals, "Unknown"));
+}
+
+/* Table 6.2.2-2d: Feedback info format 4 */
+static void handle_feedback_format_4(proto_tree *tree, tvbuff_t *tvb, int offset, packet_info *pinfo)
+{
+	uint32_t harq, cqi;
+
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi4_harq_fb_bm, tvb, offset, 2, ENC_BIG_ENDIAN, &harq);
+
+	col_append_fstr(pinfo->cinfo, COL_INFO, " (HARQ procs: ");
+	/* Cycle from 0th to 8th HARQ bitmap */
+	for (uint16_t bitCycle = 0, i = 0; i <= 8; i++) {
+		bitCycle = (1 << i);
+		if (harq & bitCycle)
+			col_append_sep_fstr(pinfo->cinfo, COL_INFO, " ", " #%d", i + 1);
+	}
+
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi4_cqi, tvb, offset, 2, ENC_BIG_ENDIAN, &cqi);
+	col_append_fstr(pinfo->cinfo, COL_INFO, ", CQI: %s)", val_to_str_const(cqi, cqi_vals, "Unknown"));
+}
+
+/* Table 6.2.2-2e: Feedback info format 5 */
+static void handle_feedback_format_5(proto_tree *tree, tvbuff_t *tvb, int offset, packet_info *pinfo)
+{
+	uint32_t harq;
+	bool tx_fb;
+
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi5_harq_pn, tvb, offset, 2, ENC_BIG_ENDIAN, &harq);
+	proto_tree_add_item_ret_boolean(tree, hf_dect_nr_fbi5_tx_fb, tvb, offset, 2, ENC_BIG_ENDIAN, &tx_fb);
+	proto_tree_add_item(tree, hf_dect_nr_fbi5_mimo_fb, tvb, offset, 2, ENC_BIG_ENDIAN);
+	proto_tree_add_item(tree, hf_dect_nr_fbi5_cb_index, tvb, offset, 2, ENC_BIG_ENDIAN);
+
+	col_append_fstr(pinfo->cinfo, COL_INFO, " (HARQ proc #%d %s)", harq, tfs_get_string(tx_fb, &tfs_ack_nack));
+}
+
+/* Table 6.2.2-2f: Feedback info format 6 */
+static void handle_feedback_format_6(proto_tree *tree, tvbuff_t *tvb, int offset, packet_info *pinfo)
+{
+	uint32_t harq, bs, cqi;
+
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi6_harq_pn, tvb, offset, 2, ENC_BIG_ENDIAN, &harq);
+	dect_tree_add_reserved_item(tree, hf_dect_nr_fbi6_res1, tvb, offset, 2, pinfo, ENC_BIG_ENDIAN);
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi6_bs, tvb, offset, 2, ENC_BIG_ENDIAN, &bs);
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi6_cqi, tvb, offset, 2, ENC_BIG_ENDIAN, &cqi);
+
+	col_append_fstr(pinfo->cinfo, COL_INFO, " (HARQ proc #%d, %s, CQI: %s)",
+				harq,
+				val_to_str_const(bs, buffer_status_vals, "Unknown"),
+				val_to_str_const(cqi, cqi_vals, "Unknown"));
+}
+
+/* Table 6.2.2-2g: Feedback info format 7 */
+static void handle_feedback_format_7(proto_tree *tree, tvbuff_t *tvb, int offset, packet_info *pinfo)
+{
+	uint32_t bs, cqi;
+	bool cqi_sel;
+
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi7_bs, tvb, offset, 2, ENC_BIG_ENDIAN, &bs);
+	proto_tree_add_item_ret_boolean(tree, hf_dect_nr_fbi7_cqi_field, tvb, offset, 2, ENC_BIG_ENDIAN, &cqi_sel);
+	proto_tree_add_item_ret_uint(tree, hf_dect_nr_fbi7_cqi, tvb, offset, 2, ENC_BIG_ENDIAN, &cqi);
+	dect_tree_add_reserved_item(tree, hf_dect_nr_fbi7_res1, tvb, offset, 2, pinfo, ENC_BIG_ENDIAN);
+
+	col_append_fstr(pinfo->cinfo, COL_INFO, " (%s", val_to_str_const(bs, buffer_status_vals, "Unknown"));
+	if (cqi_sel)
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", CQI: %s", val_to_str_const(cqi, cqi_vals, "Unknown"));
+	col_append_fstr(pinfo->cinfo, COL_INFO, ")");
+}
+
 /* 6.2: Physical Header Field */
 static int dissect_physical_header_field(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree, dect_nr_context_t *ctx)
 {
@@ -2134,39 +2244,29 @@ static int dissect_physical_header_field(tvbuff_t *tvb, int offset, packet_info 
 
 		proto_tree_add_item_ret_uint(tree, hf_dect_nr_fb_format, tvb, offset, 2, ENC_BIG_ENDIAN, &fb_format);
 
+		if (fb_format != 0) {
+			col_add_fstr(pinfo->cinfo, COL_INFO, "Feedback");
+		}
+
 		switch (fb_format) {
 		case 1: /* Format 1, Table 6.2.2-2a */
-			proto_tree_add_item(tree, hf_dect_nr_fbi1_harq_pn, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi1_tx_fb, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi1_bs, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi1_cqi, tvb, offset, 2, ENC_BIG_ENDIAN);
+			handle_feedback_format_1(tree, tvb, offset, pinfo);
 			break;
 
 		case 2: /* Format 2, Table 6.2.2-2b */
-			proto_tree_add_item(tree, hf_dect_nr_fbi2_cb_index, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi2_mimo_fb, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi2_bs, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi2_cqi, tvb, offset, 2, ENC_BIG_ENDIAN);
+			handle_feedback_format_2(tree, tvb, offset, pinfo);
 			break;
 
 		case 3: /* Format 3, Table 6.2.2-2c */
-			proto_tree_add_item(tree, hf_dect_nr_fbi3_harq_pn_1, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi3_tx_fb_1, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi3_harq_pn_2, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi3_tx_fb_2, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi3_cqi, tvb, offset, 2, ENC_BIG_ENDIAN);
+			handle_feedback_format_3(tree, tvb, offset, pinfo);
 			break;
 
 		case 4: /* Format 4, Table 6.2.2-2d */
-			proto_tree_add_item(tree, hf_dect_nr_fbi4_harq_fb_bm, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi4_cqi, tvb, offset, 2, ENC_BIG_ENDIAN);
+			handle_feedback_format_4(tree, tvb, offset, pinfo);
 			break;
 
 		case 5: /* Format 5, Table 6.2.2-2e */
-			proto_tree_add_item(tree, hf_dect_nr_fbi5_harq_pn, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi5_tx_fb, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi5_mimo_fb, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi5_cb_index, tvb, offset, 2, ENC_BIG_ENDIAN);
+			handle_feedback_format_5(tree, tvb, offset, pinfo);
 			break;
 
 		case 6: /* Format 6, Table 6.2.2-2f */
@@ -2174,17 +2274,11 @@ static int dissect_physical_header_field(tvbuff_t *tvb, int offset, packet_info 
 			 * for the corresponding HARQ process. The HARQ retransmission with the process number
 			 * shall use DF Redundancy Version 0.
 			 */
-			proto_tree_add_item(tree, hf_dect_nr_fbi6_harq_pn, tvb, offset, 2, ENC_BIG_ENDIAN);
-			dect_tree_add_reserved_item(tree, hf_dect_nr_fbi6_res1, tvb, offset, 2, pinfo, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi6_bs, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi6_cqi, tvb, offset, 2, ENC_BIG_ENDIAN);
+			handle_feedback_format_6(tree, tvb, offset, pinfo);
 			break;
 
 		case 7: /* Format 7, Table 6.2.2-2g */
-			proto_tree_add_item(tree, hf_dect_nr_fbi7_bs, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi7_cqi_field, tvb, offset, 2, ENC_BIG_ENDIAN);
-			proto_tree_add_item(tree, hf_dect_nr_fbi7_cqi, tvb, offset, 2, ENC_BIG_ENDIAN);
-			dect_tree_add_reserved_item(tree, hf_dect_nr_fbi7_res1, tvb, offset, 2, pinfo, ENC_BIG_ENDIAN);
+			handle_feedback_format_7(tree, tvb, offset, pinfo);
 			break;
 
 		case 15: /* Escape */
@@ -4237,6 +4331,11 @@ static int dissect_dect_nr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent
 
 	/* 6.2 Physical Header Field */
 	offset = dissect_physical_header_field(tvb, offset, pinfo, tree, &ctx);
+
+	/* Check if this is a PCC-only feedback message */
+	if (tvb_captured_length(tvb) - offset == 0) {
+		return offset;
+	}
 
 	/* 6.3 MAC PDU */
 	offset = dissect_mac_pdu(tvb, offset, pinfo, tree, &ctx);

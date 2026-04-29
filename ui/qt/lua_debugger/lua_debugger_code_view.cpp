@@ -399,7 +399,8 @@ LuaDebuggerCodeView::LuaDebuggerCodeView(QWidget *parent)
      * behavior is otherwise non-discoverable. */
     lineNumberArea->setToolTip(
         tr("Click: add or remove breakpoint\n"
-           "Shift+click: enable or disable breakpoint without removing it"));
+           "Shift+click: on an empty line, add a disabled breakpoint;\n"
+           "on an existing breakpoint, toggle its active state"));
     syntaxHighlighter = new LuaSyntaxHighlighter(document());
 
     connect(this, &LuaDebuggerCodeView::blockCountChanged, this,
@@ -766,10 +767,6 @@ void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
                     QColor circleColor = (state == 1)
                                              ? QColor("#DC3545")
                                              : QColor("#808080");
-                    if (pausedHere && state == 1)
-                    {
-                        circleColor.setAlpha(80);
-                    }
                     painter.setBrush(circleColor);
                     /* 1px darker rim matches the Enable-checkbox state
                      * indicator in the toolbar

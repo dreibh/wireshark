@@ -1412,11 +1412,16 @@ proto_reg_handoff_btad_gaen(void)
 
 static int proto_btad_matter;
 
+#define MATTER_OPCODE_COMMISSIONABLE    0x00
+#define MATTER_OPCODE_NETWORK_RECOVERY  0x01
+
 static int hf_btad_matter_opcode;
-static int hf_btad_matter_version;
+static int hf_btad_matter_version_u8;
+static int hf_btad_matter_version_u16;
 static int hf_btad_matter_discriminator;
 static int hf_btad_matter_vendor_id;
 static int hf_btad_matter_product_id;
+static int hf_btad_matter_recovery_id;
 static int hf_btad_matter_flags;
 static int hf_btad_matter_flags_additional_data;
 static int hf_btad_matter_flags_ext_announcement;
@@ -1432,24 +1437,33 @@ void proto_reg_handoff_btad_matter(void);
 static int
 dissect_btad_matter(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, void *data _U_)
 {
-    /* We are interested only in the last 8 bytes (Service Data Payload) */
-    int offset = tvb_captured_length(tvb) - 8;
-
+    int offset = 0;
     proto_tree *main_item = proto_tree_add_item(tree, proto_btad_matter, tvb, offset, -1, ENC_NA);
     proto_tree *main_tree = proto_item_add_subtree(main_item, ett_btad_matter);
 
-    proto_tree_add_item(main_tree, hf_btad_matter_opcode, tvb, offset, 1, ENC_NA);
+    unsigned int opcode;
+    proto_tree_add_item_ret_uint(main_tree, hf_btad_matter_opcode, tvb, offset, 1, ENC_NA, &opcode);
     offset += 1;
 
-    proto_tree_add_item(main_tree, hf_btad_matter_version, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    proto_tree_add_item(main_tree, hf_btad_matter_discriminator, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    offset += 2;
-
-    proto_tree_add_item(main_tree, hf_btad_matter_vendor_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    offset += 2;
-
-    proto_tree_add_item(main_tree, hf_btad_matter_product_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
-    offset += 2;
+    switch (opcode) {
+    case MATTER_OPCODE_COMMISSIONABLE:
+        proto_tree_add_item(main_tree, hf_btad_matter_version_u16, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+        proto_tree_add_item(main_tree, hf_btad_matter_discriminator, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+        offset += 2;
+        proto_tree_add_item(main_tree, hf_btad_matter_vendor_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+        offset += 2;
+        proto_tree_add_item(main_tree, hf_btad_matter_product_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+        offset += 2;
+        break;
+    case MATTER_OPCODE_NETWORK_RECOVERY:
+        proto_tree_add_item(main_tree, hf_btad_matter_version_u8, tvb, offset, 1, ENC_NA);
+        offset += 1;
+        proto_tree_add_item(main_tree, hf_btad_matter_recovery_id, tvb, offset, 8, ENC_LITTLE_ENDIAN);
+        offset += 8;
+        break;
+    default:
+        return offset;
+    }
 
     static int * const flags[] = {
         &hf_btad_matter_flags_additional_data,
@@ -1467,7 +1481,8 @@ void
 proto_register_btad_matter(void)
 {
     static const value_string opcode_vals[] = {
-        { 0x00, "Commissionable" },
+        { MATTER_OPCODE_COMMISSIONABLE, "Commissionable" },
+        { MATTER_OPCODE_NETWORK_RECOVERY, "Network Recovery" },
         { 0, NULL }
     };
 
@@ -1477,7 +1492,12 @@ proto_register_btad_matter(void)
             FT_UINT8, BASE_HEX, VALS(opcode_vals), 0x0,
             NULL, HFILL }
         },
-        {&hf_btad_matter_version,
+        {&hf_btad_matter_version_u8,
+          {"Advertisement Version", "bluetooth.matter.version",
+            FT_UINT8, BASE_DEC, NULL, 0xF0,
+            NULL, HFILL}
+        },
+        {&hf_btad_matter_version_u16,
           {"Advertisement Version", "bluetooth.matter.version",
             FT_UINT16, BASE_DEC, NULL, 0xF000,
             NULL, HFILL}
@@ -1496,6 +1516,11 @@ proto_register_btad_matter(void)
           { "Product ID", "bluetooth.matter.product_id",
             FT_UINT16, BASE_HEX, NULL, 0x0,
             "A 16-bit value identifying the product", HFILL }
+        },
+        { &hf_btad_matter_recovery_id,
+          { "Recovery ID", "bluetooth.matter.recovery_id",
+            FT_UINT64, BASE_HEX, NULL, 0x0,
+            "A 64-bit recovery ID", HFILL }
         },
         { &hf_btad_matter_flags,
           { "Flags", "bluetooth.matter.flags",

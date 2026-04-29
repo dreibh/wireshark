@@ -522,7 +522,7 @@ dissect_mongo_reply(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tr
 {
   proto_item *ti;
   proto_tree *flags_tree;
-  int i, number_returned;
+  uint32_t i, number_returned;
 
   ti = proto_tree_add_item(tree, hf_mongo_reply_flags, tvb, offset, 4, ENC_NA);
   flags_tree = proto_item_add_subtree(ti, ett_mongo_flags);
@@ -538,8 +538,7 @@ dissect_mongo_reply(tvbuff_t *tvb, packet_info *pinfo, unsigned offset, proto_tr
   proto_tree_add_item(tree, hf_mongo_starting_from, tvb, offset, 4, ENC_LITTLE_ENDIAN);
   offset += 4;
 
-  proto_tree_add_item(tree, hf_mongo_number_returned, tvb, offset, 4, ENC_LITTLE_ENDIAN);
-  number_returned = tvb_get_letohl(tvb, offset);
+  proto_tree_add_item_ret_uint(tree, hf_mongo_number_returned, tvb, offset, 4, ENC_LITTLE_ENDIAN, &number_returned);
   offset += 4;
 
   for (i=0; i < number_returned; i++)
@@ -1183,7 +1182,7 @@ proto_register_mongo(void)
     },
     { &hf_mongo_number_returned,
       { "Number Returned", "mongo.number_returned",
-      FT_INT32, BASE_DEC, NULL, 0x0,
+      FT_UINT32, BASE_DEC, NULL, 0x0,
       "Number of documents in the reply", HFILL }
     },
     { &hf_mongo_document,

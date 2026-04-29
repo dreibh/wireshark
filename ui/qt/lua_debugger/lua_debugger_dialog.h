@@ -208,7 +208,7 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void onBreakpointItemChanged(QStandardItem *item);
     /** @brief Open the clicked breakpoint's file and focus the line. */
     void onBreakpointItemDoubleClicked(const QModelIndex &index);
-    /** @brief Show the Breakpoints tree context menu (Remove / Remove All). */
+    /** @brief Show the Breakpoints tree context menu (Open / Remove / Remove All). */
     void onBreakpointContextMenuRequested(const QPoint &pos);
     /** @brief Build and show the editor context menu. */
     void onCodeViewContextMenu(const QPoint &pos);
@@ -224,6 +224,10 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void onWatchContextMenuRequested(const QPoint &pos);
     /** @brief Provide copy actions for a variable entry. */
     void onVariablesContextMenuRequested(const QPoint &pos);
+    /** @brief Right-click menu on a Files-panel script leaf. */
+    void onFileTreeContextMenuRequested(const QPoint &pos);
+    /** @brief Right-click menu on a Stack-Trace row. */
+    void onStackContextMenuRequested(const QPoint &pos);
     /** @brief Prompt the user to open a Lua file into a new tab. */
     void onOpenFile();
     /** @brief Save the active script tab to disk. */
@@ -273,6 +277,17 @@ class LuaDebuggerDialog : public GeometryStateDialog
     /** @brief Sync Variables selection when a path-style watch root is selected. */
     void onWatchCurrentItemChanged(const QModelIndex &current,
                                    const QModelIndex &previous);
+    /**
+     * @brief Adjust the left panel layout based on section expansion state.
+     *
+     * When at least one collapsible section is expanded, the splitter takes
+     * all extra vertical space. When every section is collapsed, the
+     * splitter is clamped to its content height (sum of section header
+     * heights plus inter-section handles) and a trailing stretch in
+     * leftPanelLayout absorbs the leftover, keeping the toolbar and section
+     * headers pinned to the top of the panel.
+     */
+    void updateLeftPanelStretch();
 
   private:
     Ui::LuaDebuggerDialog *ui;
@@ -439,6 +454,8 @@ class LuaDebuggerDialog : public GeometryStateDialog
     /** @brief Breakpoints section header: toggle at caret, clear all. */
     QToolButton *breakpointHeaderToggleButton_ = nullptr;
     QToolButton *breakpointHeaderRemoveAllButton_ = nullptr;
+    /** @brief Dialog-wide QAction backing the Ctrl+Shift+F9 shortcut. */
+    QAction *actionRemoveAllBreakpoints_ = nullptr;
     /**
      * @brief Cached breakpoint header dot icons, indexed by
      *        @c LuaDbgBpHeaderIconMode (0..2). Recomputed lazily when the

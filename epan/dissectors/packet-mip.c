@@ -482,8 +482,7 @@ dissect_mip_priv_ext_3gpp2(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tr
   uint16_t type;
   unsigned length = tvb_reported_length(tvb);
 
-  type = tvb_get_ntohs(tvb,offset);
-  proto_tree_add_item(tree, hf_mip_nvse_3gpp2_type, tvb, offset, 2, ENC_BIG_ENDIAN);
+  proto_tree_add_item_ret_uint16(tree, hf_mip_nvse_3gpp2_type, tvb, offset, 2, ENC_BIG_ENDIAN, &type);
   offset+=2;
 
   switch(type){
@@ -771,8 +770,7 @@ dissect_mip_extensions( tvbuff_t *tvb, unsigned offset, proto_tree *tree, packet
           /* Vendor/Org ID */
           /*Vendor ID & nvse type & nvse value are included in ext_len, so do not increment offset for them here.*/
           nvse_local_offset = offset + hdrLen;
-          nvse_vendor_org_id = tvb_get_ntohl(tvb, nvse_local_offset);
-          proto_tree_add_item(ext_tree, hf_mip_nvse_vendor_org_id, tvb, nvse_local_offset, 4, ENC_BIG_ENDIAN);
+          proto_tree_add_item_ret_uint(ext_tree, hf_mip_nvse_vendor_org_id, tvb, nvse_local_offset, 4, ENC_BIG_ENDIAN, &nvse_vendor_org_id);
           nvse_local_offset+=4;
 
           next_tvb = tvb_new_subset_length(tvb, nvse_local_offset, ext_len-6);
@@ -792,8 +790,7 @@ dissect_mip_extensions( tvbuff_t *tvb, unsigned offset, proto_tree *tree, packet
       {
         uint8_t sub_type;
 
-        sub_type = tvb_get_uint8(tvb, offset);
-        proto_tree_add_item(ext_tree, hf_mip_mne_sub_type, tvb, offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint8(ext_tree, hf_mip_mne_sub_type, tvb, offset, 1, ENC_BIG_ENDIAN, &sub_type);
         mne_local_offset = offset+1;
         switch (sub_type) {
         case 0:

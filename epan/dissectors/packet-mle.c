@@ -722,8 +722,7 @@ dissect_mle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
 
     /* Parse the security suite field. */
     /* Security Suite Field */
-    security_suite = tvb_get_uint8(tvb, offset);
-    proto_tree_add_item(mle_tree, hf_mle_security_suite, tvb, offset, 1, ENC_NA);
+    proto_tree_add_item_ret_uint8(mle_tree, hf_mle_security_suite, tvb, offset, 1, ENC_NA, &security_suite);
     offset++;
 
     aux_header_offset = offset;
@@ -836,8 +835,7 @@ dissect_mle(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
         tlv_tree = proto_item_add_subtree(ti, ett_mle_tlv);
 
         /* Type */
-        proto_tree_add_item(tlv_tree, hf_mle_tlv_type, payload_tvb, offset, 1, ENC_NA);
-        tlv_type = tvb_get_uint8(payload_tvb, offset);
+        proto_tree_add_item_ret_uint8(tlv_tree, hf_mle_tlv_type, payload_tvb, offset, 1, ENC_NA, &tlv_type);
         offset++;
 
         /* Add value name to value root label */

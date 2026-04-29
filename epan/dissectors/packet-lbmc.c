@@ -7220,8 +7220,7 @@ static int dissect_nhdr_tsni_rec(tvbuff_t * tvb, unsigned offset, packet_info * 
     subtree_item = proto_tree_add_item(tree, hf_lbmc_tsni_rec, tvb, offset, L_LBMC_CNTL_TSNI_REC_HDR_T, ENC_NA);
     subtree = proto_item_add_subtree(subtree_item, ett_lbmc_tsni_rec);
     proto_tree_add_item(subtree, hf_lbmc_tsni_rec_tidx, tvb, offset + O_LBMC_CNTL_TSNI_REC_HDR_T_TIDX, L_LBMC_CNTL_TSNI_REC_HDR_T_TIDX, ENC_BIG_ENDIAN);
-    sqn_item = proto_tree_add_item(subtree, hf_lbmc_tsni_rec_sqn, tvb, offset + O_LBMC_CNTL_TSNI_REC_HDR_T_SQN, L_LBMC_CNTL_TSNI_REC_HDR_T_SQN, ENC_BIG_ENDIAN);
-    sqn = tvb_get_ntohl(tvb, offset + O_LBMC_CNTL_TSNI_REC_HDR_T_SQN);
+    sqn_item = proto_tree_add_item_ret_uint(subtree, hf_lbmc_tsni_rec_sqn, tvb, offset + O_LBMC_CNTL_TSNI_REC_HDR_T_SQN, L_LBMC_CNTL_TSNI_REC_HDR_T_SQN, ENC_BIG_ENDIAN, &sqn);
     expert_add_info_format(pinfo, sqn_item, &ei_lbmc_analysis_tsni, "TSNI Sqn 0x%08x", sqn);
     return (L_LBMC_CNTL_TSNI_REC_HDR_T);
 }
@@ -8753,8 +8752,7 @@ static int dissect_nhdr_umq_idx_cmd_resp(tvbuff_t * tvb, unsigned offset, packet
     proto_tree_add_item(subtree, hf_lbmc_umq_idx_cmd_resp_next_hdr, tvb, offset + O_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_NEXT_HDR, L_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_NEXT_HDR, ENC_BIG_ENDIAN);
     proto_tree_add_item(subtree, hf_lbmc_umq_idx_cmd_resp_hdr_len, tvb, offset + O_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_HDR_LEN, L_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_HDR_LEN, ENC_BIG_ENDIAN);
     proto_tree_add_bitmask(subtree, tvb, offset + O_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_FLAGS, hf_lbmc_umq_idx_cmd_resp_flags, ett_lbmc_umq_idx_cmd_resp_flags, flags, ENC_BIG_ENDIAN);
-    resp_type = tvb_get_uint8(tvb, offset + O_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_RESP_TYPE);
-    resp_type_item = proto_tree_add_item(subtree, hf_lbmc_umq_idx_cmd_resp_resp_type, tvb, offset + O_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_RESP_TYPE, L_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_RESP_TYPE, ENC_BIG_ENDIAN);
+    resp_type_item = proto_tree_add_item_ret_uint8(subtree, hf_lbmc_umq_idx_cmd_resp_resp_type, tvb, offset + O_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_RESP_TYPE, L_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_RESP_TYPE, ENC_BIG_ENDIAN, &resp_type);
     proto_tree_add_item(subtree, hf_lbmc_umq_idx_cmd_resp_queue_id, tvb, offset + O_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_QUEUE_ID, L_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_QUEUE_ID, ENC_BIG_ENDIAN);
     proto_tree_add_item(subtree, hf_lbmc_umq_idx_cmd_resp_cmd_id, tvb, offset + O_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_CMD_ID, L_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_CMD_ID, ENC_BIG_ENDIAN);
     proto_tree_add_item(subtree, hf_lbmc_umq_idx_cmd_resp_inst_idx, tvb, offset + O_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_INST_IDX, L_LBMC_CNTL_UMQ_IDX_CMD_RESP_HDR_T_INST_IDX, ENC_BIG_ENDIAN);
@@ -9782,8 +9780,7 @@ static int dissect_nhdr_auth_unknown(tvbuff_t * tvb, unsigned offset, packet_inf
     proto_tree_add_item(subtree, hf_lbmc_auth_unknown_next_hdr, tvb, offset + O_LBMC_CNTL_AUTH_GENERIC_HDR_T_NEXT_HDR, L_LBMC_CNTL_AUTH_GENERIC_HDR_T_NEXT_HDR, ENC_BIG_ENDIAN);
     hdrlen_item = proto_tree_add_item(subtree, hf_lbmc_auth_unknown_hdr_len, tvb, offset + O_LBMC_CNTL_AUTH_GENERIC_HDR_T_HDR_LEN, L_LBMC_CNTL_AUTH_GENERIC_HDR_T_HDR_LEN, ENC_BIG_ENDIAN);
     proto_tree_add_item(subtree, hf_lbmc_auth_unknown_flags, tvb, offset + O_LBMC_CNTL_AUTH_GENERIC_HDR_T_FLAGS, L_LBMC_CNTL_AUTH_GENERIC_HDR_T_FLAGS, ENC_BIG_ENDIAN);
-    opid_item = proto_tree_add_item(subtree, hf_lbmc_auth_unknown_opid, tvb, offset + O_LBMC_CNTL_AUTH_GENERIC_HDR_T_OPID, L_LBMC_CNTL_AUTH_GENERIC_HDR_T_OPID, ENC_BIG_ENDIAN);
-    opid = tvb_get_uint8(tvb, offset + O_LBMC_CNTL_AUTH_GENERIC_HDR_T_OPID);
+    opid_item = proto_tree_add_item_ret_uint8(subtree, hf_lbmc_auth_unknown_opid, tvb, offset + O_LBMC_CNTL_AUTH_GENERIC_HDR_T_OPID, L_LBMC_CNTL_AUTH_GENERIC_HDR_T_OPID, ENC_BIG_ENDIAN, &opid);
     expert_add_info_format(pinfo, opid_item, &ei_lbmc_analysis_invalid_value, "Invalid LBMC AUTH OPID 0x%02x", opid);
     len_dissected = L_LBMC_CNTL_AUTH_GENERIC_HDR_T;
     datalen = (int) hdrlen - len_dissected;

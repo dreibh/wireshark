@@ -3,10 +3,12 @@
 0ksection
 0x%02x
 0x%08x
+100ge
 10base
 10baset1s
 10gbase
 10gig
+11abg
 11bgn
 16apsk
 1xrtt
@@ -22,6 +24,7 @@
 3gpp2
 3pcap
 5views
+6910p
 7login
 80211n
 80mhz
@@ -411,6 +414,7 @@ chan1
 chan2
 chandle
 changelog
+chanjour
 channelisation
 channelised
 channelized
@@ -914,6 +918,7 @@ edonkey
 eeprom
 eesti
 effecter
+eg20t
 egprs
 egroup
 eigrp
@@ -1464,6 +1469,7 @@ ioepoch
 ioerr
 ioflag
 iograph
+iommu
 ionospheric
 iotecha
 iowait
@@ -1818,6 +1824,7 @@ monday
 monlist
 monmap
 monterrey
+moorestown
 moscow
 motorola
 mountdev
@@ -3067,6 +3074,7 @@ swedish
 swisscom
 swissvoice
 switchinfo
+switchtec
 swout
 sybase
 sydney
@@ -3141,6 +3149,7 @@ telfonica
 telia
 telkom
 telnet
+telostech
 telstra
 teléfonos
 teredo
@@ -3471,6 +3480,7 @@ uploaded
 uploading
 uploads
 uptime
+upvalues
 uring
 urlencoded
 urllib
@@ -3503,6 +3513,7 @@ v1410
 v1530
 v1610
 v2client
+v6133cl
 valgrind
 validations
 validator
@@ -3645,6 +3656,7 @@ x509af
 x509ce
 x509if
 x509sat
+x58le
 xattr
 xattrs
 xauth
@@ -3697,4 +3709,3 @@ zquarter
 zsssr
 zugtyp
 zürich
-upvalues

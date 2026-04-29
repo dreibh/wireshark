@@ -31,6 +31,13 @@ CollapsibleSection::CollapsibleSection(const QString &title, QWidget *parent)
     toggleButton->setText(title);
     toggleButton->setCheckable(true);
     toggleButton->setChecked(false);
+    /* Cache the title row height from the initial sizeHint (RightArrow) and
+     * use it to pin headerContainer_ below. The platform style's
+     * sizeFromContents(CT_ToolButton) consults opt.arrowType, so a live
+     * sizeHint() varies by 1-2px between RightArrow and DownArrow; pinning
+     * the container at this fixed value keeps the header row, the HLine
+     * (AlignVCenter), and headerHeight()/titleButtonHeight() stable. */
+    titleH_ = toggleButton->sizeHint().height();
     toggleButton->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
     // Horizontal line after header
@@ -46,6 +53,14 @@ CollapsibleSection::CollapsibleSection(const QString &title, QWidget *parent)
     headerLayout_->addWidget(toggleButton, 0, Qt::AlignVCenter);
     headerLayout_->addWidget(headerLine, 1, Qt::AlignVCenter);
 
+    /* Wrap headerLayout_ in a fixed-height container so the row size is
+     * driven by titleH_ rather than by the (variable) max child sizeHint.
+     * This is what stops the HLine from drifting on toggle. */
+    headerContainer_ = new QWidget(this);
+    headerContainer_->setLayout(headerLayout_);
+    headerContainer_->setFixedHeight(titleH_);
+    headerContainer_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+
     // Content area - initially hidden
     contentArea = new QWidget(this);
     contentArea->setVisible(false);
@@ -55,12 +70,19 @@ CollapsibleSection::CollapsibleSection(const QString &title, QWidget *parent)
     mainLayout = new QVBoxLayout(this);
     mainLayout->setContentsMargins(0, 0, 0, 0);
     mainLayout->setSpacing(2);
-    mainLayout->addLayout(headerLayout_);
+    mainLayout->addWidget(headerContainer_);
     mainLayout->addWidget(contentArea, 1);
 
-    // Set size policy to work well in splitter
-    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+    /* Size policy in splitter: Expanding-Y so an expanded section actively
+     * pulls surplus vertical space rather than leaving it unallocated; when
+     * collapsed, setMaximumHeight(headerHeight()) in onToggle still caps the
+     * section at hh regardless of policy. */
+    setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
 
+    /* Use clicked (not toggled): clicked is only emitted on user interaction,
+     * while toggled also fires on programmatic setChecked(). setExpanded()
+     * already calls onToggle() explicitly after setChecked(), so a toggled
+     * connection would invoke onToggle() twice. */
     connect(toggleButton, &QToolButton::clicked, this,
             &CollapsibleSection::onToggle);
 }
@@ -123,15 +145,14 @@ void CollapsibleSection::setTitle(const QString &title)
 
 int CollapsibleSection::headerHeight() const
 {
-    /* setHeaderTrailingWidget() pins the trailing widget's height to
-     * titleButtonHeight() (== toggleButton sizeHint height), so the
-     * toggle-button row is the tallest part of the header by construction. */
-    return toggleButton->sizeHint().height() + 4;
+    /* Stable across toggles: see titleH_ docs and constructor for why we
+     * cache instead of calling toggleButton->sizeHint().height() live. */
+    return titleH_;
 }
 
 int CollapsibleSection::titleButtonHeight() const
 {
-    return toggleButton->sizeHint().height();
+    return titleH_;
 }
 
 QFont CollapsibleSection::titleButtonFont() const

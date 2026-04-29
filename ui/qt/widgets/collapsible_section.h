@@ -106,11 +106,20 @@ class CollapsibleSection : public QWidget
     QToolButton *toggleButton;
     QFrame *headerLine;
     QHBoxLayout *headerLayout_ = nullptr;
+    /** Wraps headerLayout_ with a fixed height so the row cannot grow when
+     *  toggleButton->sizeHint() fluctuates by 1-2px on arrowType change. */
+    QWidget *headerContainer_ = nullptr;
     QWidget *contentArea;
     QVBoxLayout *mainLayout;
     /** Non-null if setHeaderTrailingWidget; owned as child, cleared on replace. */
     QWidget *headerTrailingWidget_ = nullptr;
     int savedHeight;
+    /** Cached header row height, captured once from toggleButton->sizeHint()
+     *  at construction. The platform style's sizeFromContents(CT_ToolButton)
+     *  consults opt.arrowType, so a live sizeHint() varies by 1-2px between
+     *  RightArrow and DownArrow; using a cached value keeps headerHeight()
+     *  and titleButtonHeight() stable across toggles. */
+    int titleH_ = 0;
 };
 
 #endif // COLLAPSIBLE_SECTION_H

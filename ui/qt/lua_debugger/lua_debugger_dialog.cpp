@@ -30,6 +30,7 @@
 #include <QChildEvent>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QDesktopServices>
 #include <QEvent>
 #if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
 #include <QKeyCombination>
@@ -71,6 +72,7 @@
 #include <QSizePolicy>
 #include <QStandardPaths>
 #include <QStyle>
+#include <QTextBlock>
 #include <QTextDocument>
 #include <QSplitter>
 #include <QPersistentModelIndex>
@@ -84,6 +86,7 @@
 #include <QStandardItemModel>
 #include <QTreeView>
 #include <QTextStream>
+#include <QUrl>
 
 #include <QVBoxLayout>
 #include <QToolButton>
@@ -92,7 +95,6 @@
 
 #include <glib.h>
 
-#include "ui/recent.h"
 #include "app/application_flavor.h"
 #include "wsutil/filesystem.h"
 #include <epan/prefs.h>
@@ -263,15 +265,23 @@ styleLuaDebuggerHeaderPlusMinusButton(QToolButton *btn, int side,
     styleLuaDebuggerHeaderFittedTextButton(btn, side, titleFont, pm);
 }
 
-/** Trash icon, same @a side as ＋/−. */
+/** Trash icon, same @a side as ＋/− on macOS; 2 px smaller elsewhere. */
 static void
 styleLuaDebuggerHeaderRemoveAllButton(QToolButton *btn, int side)
 {
     btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
     btn->setIcon(QIcon::fromTheme(QStringLiteral("edit-delete"),
                                   StockIcon(QStringLiteral("edit-clear"))));
-    btn->setIconSize(QSize(side, side));
-    btn->setFixedSize(side, side);
+#ifdef Q_OS_MAC
+    const int btnSide = side;
+#else
+    /* The themed trash glyph rendered at headerHeight() looks slightly too
+     * tall next to the +/-/toggle buttons on Linux/Windows; trim 4 px so the
+     * trailing button row reads as one set of equal-sized controls. */
+    const int btnSide = qMax(1, side - 4);
+#endif
+    btn->setIconSize(QSize(btnSide, btnSide));
+    btn->setFixedSize(btnSide, btnSide);
     btn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     btn->setText(QString());
 }
@@ -856,6 +866,61 @@ static QStandardItem *watchRootItem(QStandardItem *item)
         item = item->parent();
     }
     return item;
+}
+
+/**
+ * @brief Return the Lua identifier under the given cursor position, or
+ *        an empty string if the position is not on an identifier.
+ *
+ * Lua identifiers are `[A-Za-z_][A-Za-z0-9_]*`. The bracket grammar that
+ * the Watch panel accepts (`a.b[1]`, `a.b["k"]`) is not synthesized here
+ * — only the bare identifier under the caret is returned, mirroring the
+ * "double-click to select word" affordance Qt's text editors offer.
+ */
+static QString luaIdentifierUnderCursor(const QTextCursor &cursor)
+{
+    const QString block = cursor.block().text();
+    const int posInBlock = cursor.positionInBlock();
+    if (block.isEmpty() || posInBlock < 0 || posInBlock > block.size())
+    {
+        return {};
+    }
+
+    auto isIdentChar = [](QChar c)
+    {
+        return c.isLetterOrNumber() || c == QLatin1Char('_');
+    };
+    auto isIdentStart = [](QChar c)
+    {
+        return c.isLetter() || c == QLatin1Char('_');
+    };
+
+    /* Caret may sit one past the end of the identifier; expand left
+     * until we are inside, then sweep both directions. */
+    int start = posInBlock;
+    int end = posInBlock;
+    if (start > 0 && !isIdentChar(block.at(start - 1)) &&
+        (start >= block.size() || !isIdentChar(block.at(start))))
+    {
+        return {};
+    }
+    while (start > 0 && isIdentChar(block.at(start - 1)))
+    {
+        --start;
+    }
+    while (end < block.size() && isIdentChar(block.at(end)))
+    {
+        ++end;
+    }
+    if (start >= end)
+    {
+        return {};
+    }
+    if (!isIdentStart(block.at(start)))
+    {
+        return {};
+    }
+    return block.mid(start, end - start);
 }
 
 /**
@@ -1861,6 +1926,19 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     addAction(ui->actionFind);
     addAction(ui->actionGoToLine);
 
+    /* "Remove All Breakpoints" needs a real, dialog-wide shortcut so
+     * Ctrl+Shift+F9 fires regardless of focus. Setting the keys only
+     * on the right-click menu action (built on demand) made the
+     * shortcut a label without a binding. */
+    actionRemoveAllBreakpoints_ = new QAction(tr("Remove All Breakpoints"), this);
+    actionRemoveAllBreakpoints_->setShortcut(kCtxRemoveAllBreakpoints);
+    actionRemoveAllBreakpoints_->setShortcutContext(
+        Qt::WidgetWithChildrenShortcut);
+    actionRemoveAllBreakpoints_->setEnabled(false);
+    connect(actionRemoveAllBreakpoints_, &QAction::triggered, this,
+            &LuaDebuggerDialog::onClearBreakpoints);
+    addAction(actionRemoveAllBreakpoints_);
+
     ui->luaDebuggerFindFrame->hide();
     ui->luaDebuggerGoToLineFrame->hide();
 
@@ -1971,11 +2049,17 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
                     loadFile(path);
                 }
             });
+    fileTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(fileTree, &QTreeView::customContextMenuRequested, this,
+            &LuaDebuggerDialog::onFileTreeContextMenuRequested);
 
     connect(stackTree, &QTreeView::doubleClicked, this,
             &LuaDebuggerDialog::onStackItemDoubleClicked);
     connect(stackTree->selectionModel(), &QItemSelectionModel::currentChanged,
             this, &LuaDebuggerDialog::onStackCurrentItemChanged);
+    stackTree->setContextMenuPolicy(Qt::CustomContextMenu);
+    connect(stackTree, &QTreeView::customContextMenuRequested, this,
+            &LuaDebuggerDialog::onStackContextMenuRequested);
 
     // Evaluate panel
     connect(evalButton, &QPushButton::clicked, this,
@@ -2386,13 +2470,80 @@ void LuaDebuggerDialog::createCollapsibleSections()
     settingsSection->setExpanded(false);
     splitter->addWidget(settingsSection);
 
-    // Set initial sizes - expanded sections get more space
     QList<int> sizes;
     int headerH = variablesSection->headerHeight();
-    sizes << 120 << 70 << 100 << headerH << 80 << headerH
-          << headerH; // Variables, Watch, Stack, Files(collapsed), Breakpoints,
-                      // Eval(collapsed), Settings(collapsed)
+    sizes << 120 << 70 << 100 << headerH << 80 << headerH << headerH;
     splitter->setSizes(sizes);
+
+    /* Tell QSplitter that every section is allowed to absorb surplus
+     * vertical space. Collapsed sections cap themselves at headerHeight via
+     * setMaximumHeight, so this stretch only takes effect for sections that
+     * are actually expanded; without it, expanding one section while the
+     * others stay collapsed leaves the leftover height unallocated and the
+     * expanded section never grows past its savedHeight. */
+    for (int i = 0; i < splitter->count(); ++i)
+        splitter->setStretchFactor(i, 1);
+
+    /* Trailing stretch in leftPanelLayout: absorbs leftover vertical space
+     * when every section is collapsed (in tandem with leftSplitter being
+     * clamped to its content height by updateLeftPanelStretch()), so the
+     * toolbar and section headers stay pinned to the top of the panel.
+     * When at least one section is expanded the stretch is set to 0 and
+     * the splitter takes all extra height. */
+    ui->leftPanelLayout->addStretch(0);
+
+    const QList<CollapsibleSection *> allSections = {
+        variablesSection, watchSection,    stackSection, breakpointsSection,
+        filesSection,     evalSection,     settingsSection};
+    for (CollapsibleSection *s : allSections)
+        connect(s, &CollapsibleSection::toggled,
+                this, &LuaDebuggerDialog::updateLeftPanelStretch);
+    updateLeftPanelStretch();
+}
+
+void LuaDebuggerDialog::updateLeftPanelStretch()
+{
+    if (!ui || !ui->leftSplitter || !ui->leftPanelLayout)
+        return;
+
+    const QList<CollapsibleSection *> sections = {
+        variablesSection, watchSection,    stackSection, breakpointsSection,
+        filesSection,     evalSection,     settingsSection};
+
+    bool anyExpanded = false;
+    int contentH = 0;
+    int counted = 0;
+    for (CollapsibleSection *s : sections)
+    {
+        if (!s)
+            continue;
+        if (s->isExpanded())
+            anyExpanded = true;
+        contentH += s->headerHeight();
+        ++counted;
+    }
+    if (counted > 1)
+        contentH += (counted - 1) * ui->leftSplitter->handleWidth();
+
+    const int splitterIdx = ui->leftPanelLayout->indexOf(ui->leftSplitter);
+    /* The trailing stretch is the last layout item appended in
+     * createCollapsibleSections(). */
+    const int stretchIdx = ui->leftPanelLayout->count() - 1;
+    if (splitterIdx < 0 || stretchIdx < 0 || splitterIdx == stretchIdx)
+        return;
+
+    if (anyExpanded)
+    {
+        ui->leftSplitter->setMaximumHeight(QWIDGETSIZE_MAX);
+        ui->leftPanelLayout->setStretch(splitterIdx, 1);
+        ui->leftPanelLayout->setStretch(stretchIdx, 0);
+    }
+    else
+    {
+        ui->leftSplitter->setMaximumHeight(contentH);
+        ui->leftPanelLayout->setStretch(splitterIdx, 0);
+        ui->leftPanelLayout->setStretch(stretchIdx, 1);
+    }
 }
 
 LuaDebuggerDialog *LuaDebuggerDialog::instance(QWidget *parent)
@@ -3743,11 +3894,26 @@ LuaDebuggerCodeView *LuaDebuggerDialog::loadFile(const QString &file_path)
             {
                 wslua_debugger_add_breakpoint(file_path.toUtf8().constData(),
                                               line);
-                ensureDebuggerEnabledForActiveBreakpoints();
+                if (toggleActive)
+                {
+                    /* Shift+click on a bare gutter line: still create
+                     * the breakpoint, but mark it inactive so the user
+                     * can pre-arm a line without paying the line-hook
+                     * cost until they activate it. Skip the
+                     * ensure-enabled call because the new row carries
+                     * no active flag yet. */
+                    wslua_debugger_set_breakpoint_active(
+                        file_path.toUtf8().constData(), line, false);
+                }
+                else
+                {
+                    ensureDebuggerEnabledForActiveBreakpoints();
+                }
             }
             else if (toggleActive)
             {
-                /* Shift+click: enable/disable without removing. */
+                /* Shift+click on an existing breakpoint: enable/disable
+                 * without removing. */
                 wslua_debugger_set_breakpoint_active(
                     file_path.toUtf8().constData(), line, state == 0);
             }
@@ -4197,19 +4363,18 @@ void LuaDebuggerDialog::onBreakpointContextMenuRequested(const QPoint &pos)
     }
 
     QMenu menu(this);
+    QAction *openAct = nullptr;
     QAction *removeAct = nullptr;
     if (ix.isValid())
     {
+        openAct = menu.addAction(tr("Open Source"));
+        menu.addSeparator();
         removeAct = menu.addAction(tr("Remove"));
         removeAct->setShortcut(QKeySequence::Delete);
     }
     QAction *removeAllAct = nullptr;
     if (breakpointsModel->rowCount() > 0)
     {
-        if (removeAct)
-        {
-            menu.addSeparator();
-        }
         removeAllAct = menu.addAction(tr("Remove All Breakpoints"));
         removeAllAct->setShortcut(kCtxRemoveAllBreakpoints);
     }
@@ -4221,6 +4386,11 @@ void LuaDebuggerDialog::onBreakpointContextMenuRequested(const QPoint &pos)
     QAction *chosen = menu.exec(breakpointsTree->viewport()->mapToGlobal(pos));
     if (!chosen)
     {
+        return;
+    }
+    if (chosen == openAct)
+    {
+        onBreakpointItemDoubleClicked(ix);
         return;
     }
     if (chosen == removeAct)
@@ -4314,25 +4484,43 @@ void LuaDebuggerDialog::onCodeViewContextMenu(const QPoint &pos)
                 { runToCurrentLineInPausedEditor(codeView, lineNumber); });
     }
 
-    // Evaluate selection if there is selected text
-    QString selectedText = codeView->textCursor().selectedText();
-    if (!selectedText.isEmpty())
+    /* Add Watch is available regardless of paused state, mirroring the
+     * toolbar action and the Watch-panel header `+` button. Prefer the
+     * current selection; otherwise fall back to the Lua identifier
+     * under the caret so a single right-click on a variable name is
+     * enough — no manual selection required. While the debugger is not
+     * paused the watch row simply renders a muted em dash for its
+     * value and resolves on the next pause. */
     {
-        menu.addSeparator();
-        QAction *addWatch =
-            menu.addAction(tr("Add Watch"));
-        addWatch->setShortcut(ui->actionAddWatch->shortcut());
-        connect(addWatch, &QAction::triggered,
-                [this, selectedText]()
-                {
-                    const QString t = selectedText.trimmed();
-                    if (!watchSpecUsesPathResolution(t))
+        QString watchSpec = codeView->textCursor().selectedText().trimmed();
+        if (watchSpec.isEmpty())
+        {
+            const QTextCursor caretCursor =
+                codeView->cursorForPosition(pos);
+            watchSpec = luaIdentifierUnderCursor(caretCursor);
+        }
+        if (!watchSpec.isEmpty())
+        {
+            menu.addSeparator();
+            const QString shortLabel = watchSpec.length() > 48
+                                           ? watchSpec.left(48) +
+                                                 QStringLiteral("…")
+                                           : watchSpec;
+            QAction *addWatch = menu.addAction(
+                tr("Add Watch: \"%1\"").arg(shortLabel));
+            addWatch->setShortcut(ui->actionAddWatch->shortcut());
+            connect(addWatch, &QAction::triggered,
+                    [this, watchSpec]()
                     {
-                        showPathOnlyVariablePathWatchMessage();
-                        return;
-                    }
-                    addWatchFromSpec(t);
-                });
+                        const QString t = watchSpec.trimmed();
+                        if (!watchSpecUsesPathResolution(t))
+                        {
+                            showPathOnlyVariablePathWatchMessage();
+                            return;
+                        }
+                        addWatchFromSpec(t);
+                    });
+        }
     }
 
     menu.exec(codeView->mapToGlobal(pos));
@@ -5083,10 +5271,17 @@ void LuaDebuggerDialog::onVariablesContextMenuRequested(const QPoint &pos)
     const QString bothText =
         valueText.isEmpty() ? nameText : tr("%1 = %2").arg(nameText, valueText);
 
+    const QString varPath = item->data(VariablePathRole).toString();
+
     QMenu menu(this);
     QAction *copyName = menu.addAction(tr("Copy Name"));
     QAction *copyValue = menu.addAction(tr("Copy Value"));
-    QAction *copyBoth = menu.addAction(tr("Copy Name && Value"));
+    QAction *copyPath = nullptr;
+    if (!varPath.isEmpty())
+    {
+        copyPath = menu.addAction(tr("Copy Path"));
+    }
+    QAction *copyNameValue = menu.addAction(tr("Copy Name && Value"));
 
     auto copyToClipboard = [](const QString &text)
     {
@@ -5100,11 +5295,15 @@ void LuaDebuggerDialog::onVariablesContextMenuRequested(const QPoint &pos)
             [copyToClipboard, nameText]() { copyToClipboard(nameText); });
     connect(copyValue, &QAction::triggered, this,
             [copyToClipboard, valueText]() { copyToClipboard(valueText); });
-    connect(copyBoth, &QAction::triggered, this,
-            [copyToClipboard, bothText]() { copyToClipboard(bothText); });
+    if (copyPath)
+    {
+        connect(copyPath, &QAction::triggered, this,
+                [copyToClipboard, varPath]() { copyToClipboard(varPath); });
+    }
+    connect(copyNameValue, &QAction::triggered, this,
+        [copyToClipboard, bothText]() { copyToClipboard(bothText); });
 
     menu.addSeparator();
-    const QString varPath = item->data(VariablePathRole).toString();
     if (!varPath.isEmpty())
     {
         QAction *addWatch =
@@ -5118,6 +5317,123 @@ void LuaDebuggerDialog::onVariablesContextMenuRequested(const QPoint &pos)
     }
 
     menu.exec(variablesTree->viewport()->mapToGlobal(pos));
+}
+
+void LuaDebuggerDialog::onFileTreeContextMenuRequested(const QPoint &pos)
+{
+    if (!fileTree || !fileModel)
+    {
+        return;
+    }
+    const QModelIndex ix = fileTree->indexAt(pos);
+    if (!ix.isValid())
+    {
+        return;
+    }
+    QStandardItem *item =
+        fileModel->itemFromIndex(ix.sibling(ix.row(), 0));
+    if (!item || item->data(FileTreeIsDirectoryRole).toBool())
+    {
+        /* Only file leaves get a menu — directory rows are
+         * decorative groupings. */
+        return;
+    }
+    const QString path = item->data(FileTreePathRole).toString();
+    if (path.isEmpty())
+    {
+        return;
+    }
+
+    QMenu menu(this);
+    QAction *openAct = menu.addAction(tr("Open Source"));
+    QAction *revealAct = menu.addAction(tr("Reveal in File Manager"));
+    menu.addSeparator();
+    QAction *copyPathAct = menu.addAction(tr("Copy Path"));
+
+    QAction *chosen = menu.exec(fileTree->viewport()->mapToGlobal(pos));
+    if (!chosen)
+    {
+        return;
+    }
+    if (chosen == openAct)
+    {
+        loadFile(path);
+        return;
+    }
+    if (chosen == revealAct)
+    {
+        /* Open the *parent* directory rather than the file itself: the
+         * file might be associated with an external editor that would
+         * launch on open, which is not what "Reveal" implies. */
+        const QString parentDir = QFileInfo(path).absolutePath();
+        if (!parentDir.isEmpty())
+        {
+            QDesktopServices::openUrl(QUrl::fromLocalFile(parentDir));
+        }
+        return;
+    }
+    if (chosen == copyPathAct)
+    {
+        if (QClipboard *clip = QGuiApplication::clipboard())
+        {
+            clip->setText(path);
+        }
+        return;
+    }
+}
+
+void LuaDebuggerDialog::onStackContextMenuRequested(const QPoint &pos)
+{
+    if (!stackTree || !stackModel)
+    {
+        return;
+    }
+    const QModelIndex ix = stackTree->indexAt(pos);
+    if (!ix.isValid())
+    {
+        return;
+    }
+    QStandardItem *item =
+        stackModel->itemFromIndex(ix.sibling(ix.row(), 0));
+    if (!item)
+    {
+        return;
+    }
+
+    const bool navigable = item->data(StackItemNavigableRole).toBool();
+    const QString file = item->data(StackItemFileRole).toString();
+    const qint64 line = item->data(StackItemLineRole).toLongLong();
+
+    QMenu menu(this);
+    QAction *openAct = menu.addAction(tr("Open Source"));
+    /* C frames cannot be opened — gray the entry instead of hiding it
+     * so the menu stays positionally consistent across rows. */
+    openAct->setEnabled(navigable && !file.isEmpty() && line > 0);
+    QAction *copyLocAct = menu.addAction(tr("Copy Location"));
+    copyLocAct->setEnabled(!file.isEmpty() && line > 0);
+
+    QAction *chosen = menu.exec(stackTree->viewport()->mapToGlobal(pos));
+    if (!chosen)
+    {
+        return;
+    }
+    if (chosen == openAct && openAct->isEnabled())
+    {
+        LuaDebuggerCodeView *view = loadFile(file);
+        if (view)
+        {
+            view->moveCaretToLineStart(static_cast<qint32>(line));
+        }
+        return;
+    }
+    if (chosen == copyLocAct && copyLocAct->isEnabled())
+    {
+        if (QClipboard *clip = QGuiApplication::clipboard())
+        {
+            clip->setText(QStringLiteral("%1:%2").arg(file).arg(line));
+        }
+        return;
+    }
 }
 
 void LuaDebuggerDialog::clearAllCodeHighlights()
@@ -6010,8 +6326,13 @@ void LuaDebuggerDialog::updateBreakpointHeaderButtonState()
     }
     if (breakpointHeaderRemoveAllButton_)
     {
-        breakpointHeaderRemoveAllButton_->setEnabled(
-            breakpointsModel && breakpointsModel->rowCount() > 0);
+        const bool hasBreakpoints =
+            breakpointsModel && breakpointsModel->rowCount() > 0;
+        breakpointHeaderRemoveAllButton_->setEnabled(hasBreakpoints);
+        if (actionRemoveAllBreakpoints_)
+        {
+            actionRemoveAllBreakpoints_->setEnabled(hasBreakpoints);
+        }
     }
 }
 
@@ -6236,19 +6557,18 @@ static QColor blendRgb(const QColor &base, const QColor &accent, int alpha)
 
 void LuaDebuggerDialog::refreshChangedValueBrushes()
 {
-    /* Use the Qt palette so the accent and flash follow the current theme
-     * (light / dark / system). QPalette::Link is the most reliable "accent"
-     * role Qt exposes across platforms; QPalette::Highlight is the selection
-     * color and makes for a recognizable flash. */
+    /* Bold accent matches application link color (see ColorUtils::themeLinkBrush).
+     * Flash still blends the watch tree Base + Highlight for row-local context. */
     QPalette pal = palette();
     if (watchTree)
     {
         pal = watchTree->palette();
     }
-    QColor accent = pal.color(QPalette::Link);
+
+    QColor accent = ColorUtils::themeLinkBrush().color();
     if (!accent.isValid())
     {
-        accent = pal.color(QPalette::Highlight);
+        accent = QApplication::palette().color(QPalette::Highlight);
     }
     if (!accent.isValid())
     {
@@ -7942,6 +8262,11 @@ void LuaDebuggerDialog::applyDialogSettings()
     if (watchSection)
         watchSection->setExpanded(
             settings_.value(SettingsKeys::SectionWatch, true).toBool());
+    /* The setExpanded() calls above each fire the section's toggled signal
+     * which triggers updateLeftPanelStretch(). Call once more explicitly to
+     * guarantee the splitter max-height and layout stretch factors reflect
+     * the final restored expansion state regardless of signal-ordering. */
+    updateLeftPanelStretch();
     /* Match Qt enable intent to C: persist active breakpoints, then
      * enable only if the user is not in "disabled" mode. */
     ensureDebuggerEnabledForActiveBreakpoints();
