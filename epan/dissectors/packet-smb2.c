@@ -12952,8 +12952,6 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, bool fi
 		 * create it.
 		 */
 		si->conv = wmem_new0(wmem_file_scope(), smb2_conv_info_t);
-		/* qqq this leaks memory for now since we never free
-		   the hashtables */
 		si->conv->matched = g_hash_table_new(smb2_saved_info_hash_matched,
 			smb2_saved_info_equal_matched);
 		si->conv->unmatched = g_hash_table_new(smb2_saved_info_hash_unmatched,
@@ -12961,8 +12959,8 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, bool fi
 		si->conv->preauth_hash_current = si->conv->preauth_hash_con;
 
 		/* Bit of a hack to avoid leaking the hash tables - register a
-		 * callback to free them. Ideally wmem would implement a simple
-		 * hash table so we wouldn't have to do this. */
+		 * callback to free them. Ideally we'd use two wmem_map_t
+		 * so we wouldn't have to do this. */
 		wmem_register_callback(wmem_file_scope(), smb2_conv_destroy,
 				si->conv);
 
@@ -13147,18 +13145,16 @@ dissect_smb2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, bool fi
 			if (dcerpc_fetch_polhnd_data(&ssi->policy_hnd, &fid_name, NULL, &open_frame, &close_frame, pinfo->num)) {
 				/* If needed, create the file entry and save the policy hnd */
 				if (!si->eo_file_info) {
-					if (si->conv) {
-						eo_file_info = (smb2_eo_file_info_t *)wmem_map_lookup(si->session->files,&ssi->policy_hnd);
-						if (!eo_file_info) { /* XXX This should never happen */
-							/* assert(1==0); */
-							eo_file_info = wmem_new(wmem_file_scope(), smb2_eo_file_info_t);
-							policy_hnd_hashtablekey = wmem_new(wmem_file_scope(), e_ctx_hnd);
-							memcpy(policy_hnd_hashtablekey, &ssi->policy_hnd, sizeof(e_ctx_hnd));
-							eo_file_info->end_of_file=0;
-							wmem_map_insert(si->session->files,policy_hnd_hashtablekey,eo_file_info);
-						}
-						si->eo_file_info=eo_file_info;
+					eo_file_info = (smb2_eo_file_info_t *)wmem_map_lookup(si->session->files,&ssi->policy_hnd);
+					if (!eo_file_info) { /* XXX This should never happen */
+						/* assert(1==0); */
+						eo_file_info = wmem_new(wmem_file_scope(), smb2_eo_file_info_t);
+						policy_hnd_hashtablekey = wmem_new(wmem_file_scope(), e_ctx_hnd);
+						memcpy(policy_hnd_hashtablekey, &ssi->policy_hnd, sizeof(e_ctx_hnd));
+						eo_file_info->end_of_file=0;
+						wmem_map_insert(si->session->files,policy_hnd_hashtablekey,eo_file_info);
 					}
+					si->eo_file_info=eo_file_info;
 				}
 
 			}

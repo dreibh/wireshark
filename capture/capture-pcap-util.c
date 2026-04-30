@@ -1678,8 +1678,7 @@ get_if_capabilities_pcap_create(interface_options *interface_opts,
 	pcap_close(pch);
 
 	*open_status = CAP_DEVICE_OPEN_NO_ERR;
-	if (open_status_str != NULL)
-		*open_status_str = NULL;
+	*open_status_str = NULL;
 	return caps;
 }
 

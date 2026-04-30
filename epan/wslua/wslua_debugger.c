@@ -324,7 +324,10 @@ void wslua_debugger_init(lua_State *L)
  */
 bool wslua_debugger_is_enabled(void)
 {
-    return debugger.enabled;
+    g_mutex_lock(&debugger.mutex);
+    bool enabled = debugger.enabled;
+    g_mutex_unlock(&debugger.mutex);
+    return enabled;
 }
 
 /**
@@ -788,7 +791,10 @@ char *wslua_debugger_canonical_path(const char *file_path)
  */
 static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
 {
-    if (!debugger.enabled)
+    g_mutex_lock(&debugger.mutex);
+    bool hook_active = debugger.enabled;
+    g_mutex_unlock(&debugger.mutex);
+    if (!hook_active)
         return;
 
     /* Get info */
@@ -940,7 +946,10 @@ static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
          * a coroutine thread created by lua_newthread(), which is
          * distinct from debugger.L (the main state).
          */
-        if (debugger.enabled)
+        g_mutex_lock(&debugger.mutex);
+        bool reinstall_hook = debugger.enabled;
+        g_mutex_unlock(&debugger.mutex);
+        if (reinstall_hook)
         {
             lua_sethook(L, wslua_debug_hook, LUA_MASKLINE, 0);
         }
@@ -2378,13 +2387,18 @@ void wslua_debugger_register_reload_callback(
  */
 bool wslua_debugger_notify_reload(void)
 {
+    bool should_disable = false;
+
+    g_mutex_lock(&debugger.mutex);
     if (!debugger.reload_in_progress)
     {
         debugger.reload_in_progress = true;
         debugger.was_enabled_before_reload = debugger.enabled;
     }
+    should_disable = debugger.enabled;
+    g_mutex_unlock(&debugger.mutex);
 
-    if (debugger.enabled)
+    if (should_disable)
     {
         wslua_debugger_set_enabled(false);
     }

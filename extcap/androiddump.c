@@ -411,7 +411,9 @@ static void useNonBlockingConnectTimeout(socket_handle_t  sock) {
         ws_debug("Can't set socket timeout, using default");
 #else
     int flags = fcntl(sock, F_GETFL);
-    fcntl(sock, F_SETFL, flags | O_NONBLOCK);
+    if (-1 == fcntl(sock, F_SETFL, flags | O_NONBLOCK)) {
+        ws_info("Failure setting socket to non-blocking: %s", g_strerror(errno));
+    }
 #endif
 }
 
@@ -427,7 +429,9 @@ static void useNormalConnectTimeout(socket_handle_t  sock) {
     ioctlsocket(sock, FIONBIO, &non_blocking);
 #else
     int flags = fcntl(sock, F_GETFL);
-    fcntl(sock, F_SETFL, flags & ~O_NONBLOCK);
+    if (-1 == fcntl(sock, F_SETFL, flags & ~O_NONBLOCK)) {
+        ws_info("Failure setting socket to blocking: %s", g_strerror(errno));
+    }
     const struct timeval socket_timeout = {
         .tv_sec = SOCKET_RW_TIMEOUT_MS / 1000,
         .tv_usec = (SOCKET_RW_TIMEOUT_MS % 1000) * 1000

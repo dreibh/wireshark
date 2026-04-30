@@ -2808,9 +2808,7 @@ ieee802154_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, u
         packet->dst16 = tvb_get_letohs(tvb, offset);
 
         /* Provide address hints to higher layers that need it. */
-        if (ieee_hints) {
-            ieee_hints->dst16 = packet->dst16;
-        }
+        ieee_hints->dst16 = packet->dst16;
 
         set_address_tvb(&pinfo->dl_dst, ieee802_15_4_short_address_type, 2, tvb, offset);
         copy_address_shallow(&pinfo->dst, &pinfo->dl_dst);
@@ -2860,9 +2858,7 @@ ieee802154_dissect_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, u
             packet->src_pan = IEEE802154_BCAST_PAN;
         }
     }
-    if (ieee_hints) {
-        ieee_hints->src_pan = packet->src_pan;
-    }
+    ieee_hints->src_pan = packet->src_pan;
 
     /* Source Address */
     if (packet->src_addr_mode == IEEE802154_FCF_ADDR_SHORT) {

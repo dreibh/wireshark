@@ -1243,7 +1243,7 @@ dissect_zbee_tlv_chanmask(proto_tree *tree, tvbuff_t *tvb, unsigned offset, int 
     mask = tvb_get_letohl(tvb, offset);
 
     page = (uint8_t)((mask >> 27) & 0x07);
-    mask &= 0x07FFFFFFUL;
+    mask &= UINT32_C(0x07FFFFFF);
 
     proto_tree_add_uint(tree, hf_page, tvb, offset, 4, page);
     ti = proto_tree_add_uint_format(tree, hf_channel, tvb, offset, 4, mask, "Channels: ");
@@ -1284,11 +1284,8 @@ dissect_zbee_tlv_chanmask(proto_tree *tree, tvbuff_t *tvb, unsigned offset, int 
         /* If the next channel is selected too,
          * skip past it and display a range of values instead.
          */
-        if ((2 << i) & mask)
-        {
-            while ((i<32) && ((2 << i) & mask)) i++;
-            proto_item_append_text(ti, "-%d", i);
-        }
+        while ((i<31) && ((2U << i) & mask)) i++;
+        proto_item_append_text(ti, "-%d", i);
     }
 
     offset += sizeof(uint32_t);
