@@ -63,10 +63,23 @@ private:
 extern "C" {
 #endif
 
+/**
+ * @brief Handles the "About" dialog for different GUI types.
+ *
+ * @param gui_type The type of GUI (e.g., Qt, GTK).
+ * @param gui_data Pointer to GUI-specific data.
+ */
 extern void pluginifdemo_ui_about(ext_menubar_gui_type gui_type, void *gui_data);
 extern void pluginifdemo_ui_main(ext_menubar_gui_type gui_type, void *gui_data);
 extern void pluginifdemo_toolbar_log(const char * message);
 
+/**
+ * @brief Registers a toolbar for the plugin.
+ *
+ * This function registers a new toolbar entry with the given name and associates it with a callback function that will be executed when the toolbar item is activated.
+ *
+ * @param toolbar A pointer to the ext_toolbar_t structure representing the toolbar to be registered.
+ */
 extern void pluginifdemo_toolbar_register(ext_toolbar_t * toolbar);
 
 #ifdef __cplusplus

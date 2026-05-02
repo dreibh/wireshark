@@ -1013,8 +1013,7 @@ static void transfer_add_segment(tcpcl_dissect_ctx_t *ctx, uint64_t xfer_id, uin
         seg_meta = wmem_list_frame_data(frm);
     }
     else {
-        wmem_list_insert_sorted(xfer->seg_list, seg_meta, tcpcl_seg_meta_compare_loc);
-        frm = wmem_list_find_custom(xfer->seg_list, seg_meta, tcpcl_seg_meta_compare_loc);
+        frm = wmem_list_insert_sorted(xfer->seg_list, seg_meta, tcpcl_seg_meta_compare_loc);
         // Set for new item
         seg_meta->flags = flags;
     }
@@ -1112,8 +1111,7 @@ static void transfer_add_ack(tcpcl_dissect_ctx_t *ctx, uint64_t xfer_id, uint8_t
         ack_meta = wmem_list_frame_data(frm);
     }
     else {
-        wmem_list_insert_sorted(xfer->ack_list, ack_meta, tcpcl_ack_meta_compare_loc);
-        wmem_list_find_custom(xfer->ack_list, ack_meta, tcpcl_ack_meta_compare_loc);
+        frm = wmem_list_insert_sorted(xfer->ack_list, ack_meta, tcpcl_ack_meta_compare_loc);
         // Set for new item
         ack_meta->flags = flags;
         ack_meta->seen_len = ack_len;

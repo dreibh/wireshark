@@ -738,7 +738,9 @@ static bool netlog_parse_entirety(wtap *wth, FILE_T fh, int *err, char **err_inf
     }
 
     int num_tokens = json_parse_len((const char*)filebuf, bytes_read, NULL, 0);
-    if (num_tokens < 0) {
+    if (num_tokens <= 0) {
+        /* 0 tokens needed is a degenerate cases, e.g., nothing but whitespace
+         * until the first NUL. Reject that too. */
         g_free(filebuf);
         return false;
     }

@@ -7561,6 +7561,13 @@ Relative to reference: n/a (outside reference range)</source>
             <numerusform>Are you sure you want to remove %Ln breakpoints?</numerusform>
         </translation>
     </message>
+    <message numerus="yes">
+        <source>Are you sure you want to remove %Ln watch(es)?</source>
+        <translation>
+            <numerusform>Are you sure you want to remove %Ln watch?</numerusform>
+            <numerusform>Are you sure you want to remove %Ln watches?</numerusform>
+        </translation>
+    </message>
     <message>
         <source>Enable or disable this breakpoint</source>
         <translation type="unfinished"></translation>

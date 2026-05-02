@@ -10,7 +10,10 @@
 #include "lua_debugger_code_view.h"
 #include "lua_debugger_dialog.h"
 
+#include <algorithm>
+
 #include <QColor>
+#include <QContextMenuEvent>
 #include <QEvent>
 #include <QFontDatabase>
 #include <QKeyEvent>
@@ -754,9 +757,10 @@ void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
              * arrow is the only indicator that is never dimmed. */
             if (canonical)
             {
+                bool hasExtras = false;
                 const int32_t state =
-                    wslua_debugger_get_breakpoint_state_canonical(
-                        canonical, lineNo);
+                    wslua_debugger_get_breakpoint_state_canonical_ex(
+                        canonical, lineNo, &hasExtras);
                 if (state != -1)
                 {
                     /* Match the toolbar state-indicator palette used
@@ -776,8 +780,34 @@ void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
                      * dimmed rim. */
                     painter.setPen(QPen(circleColor.darker(140), 1));
                     const qint32 radius = fontMetrics().height() / 2 - 2;
-                    painter.drawEllipse(lineNumberArea->width() - 15, top + 2,
-                                        radius * 2, radius * 2);
+                    const qint32 cx = lineNumberArea->width() - 15;
+                    const qint32 cy = top + 2;
+                    painter.drawEllipse(cx, cy, radius * 2, radius * 2);
+
+                    /* Conditional / hit-count / logpoint indicator: a
+                     * white core inside the breakpoint dot. Mirrors the
+                     * Breakpoints-list italic Location text and tooltip
+                     * so users can see at a glance which lines have
+                     * extras attached to them without hovering. The
+                     * core is drawn with alpha matched to the outer
+                     * dot so the dimmed paused-line variant still reads
+                     * correctly. */
+                    if (hasExtras)
+                    {
+                        QColor coreColor(Qt::white);
+                        coreColor.setAlpha(circleColor.alpha());
+                        painter.setBrush(coreColor);
+                        painter.setPen(Qt::NoPen);
+                        /* Half-radius core, centred. Reads well at the
+                         * 12–14 px sizes typical for editor fonts;
+                         * scales naturally with the line height. */
+                        const qint32 coreRadius =
+                            std::max(2, radius / 2);
+                        const qint32 coreX = cx + radius - coreRadius;
+                        const qint32 coreY = cy + radius - coreRadius;
+                        painter.drawEllipse(coreX, coreY, coreRadius * 2,
+                                            coreRadius * 2);
+                    }
                 }
             }
 
@@ -814,41 +844,149 @@ void LuaDebuggerCodeView::lineNumberAreaPaintEvent(QPaintEvent *event)
     g_free(canonical);
 }
 
+qint32 LineNumberArea::lineAtY(qint32 yPx) const
+{
+    QTextBlock block = codeEditor->firstVisibleBlock();
+    qint32 top = static_cast<qint32>(
+        codeEditor->blockBoundingGeometry(block)
+            .translated(codeEditor->contentOffset())
+            .top());
+    qint32 bottom =
+        top +
+        static_cast<qint32>(codeEditor->blockBoundingRect(block).height());
+    qint32 blockNumber = block.blockNumber();
+    while (block.isValid())
+    {
+        if (yPx >= top && yPx <= bottom)
+        {
+            return blockNumber + 1;
+        }
+        block = block.next();
+        top = bottom;
+        bottom = top + static_cast<qint32>(
+                           codeEditor->blockBoundingRect(block).height());
+        ++blockNumber;
+    }
+    return -1;
+}
+
 void LineNumberArea::mousePressEvent(QMouseEvent *event)
 {
-    const QPoint click_pos = event->pos();
-    if (click_pos.x() > width() - 20)
+    /* Only the primary button drives add / remove / toggle here. The
+     * secondary button (right-click on Win/Linux, Ctrl-click or
+     * two-finger trackpad tap on macOS) is handled by
+     * @ref contextMenuEvent, which always pops the
+     * Edit / Disable / Remove menu so that gesture is never confused
+     * with the toggle path. */
+    if (event->button() != Qt::LeftButton)
     {
-        // Clicked in breakpoint area
-        QTextBlock block = codeEditor->firstVisibleBlock();
-        qint32 top =
-            static_cast<qint32>(codeEditor->blockBoundingGeometry(block)
-                                    .translated(codeEditor->contentOffset())
-                                    .top());
-        qint32 bottom =
-            top +
-            static_cast<qint32>(codeEditor->blockBoundingRect(block).height());
-        qint32 blockNumber = block.blockNumber();
+        return;
+    }
 
-        while (block.isValid())
+    const QPoint click_pos = event->pos();
+    if (click_pos.x() <= width() - 20)
+    {
+        return;
+    }
+
+    const qint32 lineNo = lineAtY(click_pos.y());
+    if (lineNo < 1)
+    {
+        return;
+    }
+
+    const bool toggleActive =
+        (event->modifiers() & Qt::ShiftModifier) != 0;
+
+    /* Plain left-click on a "rich" breakpoint (one carrying a
+     * condition, a hit-count target, or a log message) opens the
+     * Edit / Disable / Remove popup instead of removing it: those
+     * extras are easy to lose to a misclick, so the destructive
+     * action requires an explicit Remove choice from the menu. Plain
+     * breakpoints and clicks on bare lines keep the original
+     * add-or-remove-on-click flow. Shift+click keeps the existing
+     * modifier semantics (toggle active / pre-arm disabled). */
+    bool richBp = false;
+    if (!toggleActive && !codeEditor->filename.isEmpty())
+    {
+        char *canonical = wslua_debugger_canonical_path(
+            codeEditor->filename.toUtf8().constData());
+        if (canonical)
         {
-            if (click_pos.y() >= top && click_pos.y() <= bottom)
+            bool hasExtras = false;
+            const int32_t state =
+                wslua_debugger_get_breakpoint_state_canonical_ex(
+                    canonical, lineNo, &hasExtras);
+            g_free(canonical);
+            if (state != -1 && hasExtras)
             {
-                const bool toggleActive =
-                    (event->modifiers() & Qt::ShiftModifier) != 0;
-                emit codeEditor->breakpointToggled(codeEditor->filename,
-                                                   blockNumber + 1,
-                                                   toggleActive);
-                codeEditor->viewport()->update();
-                update();
-                break;
+                richBp = true;
             }
-
-            block = block.next();
-            top = bottom;
-            bottom = top + static_cast<qint32>(
-                               codeEditor->blockBoundingRect(block).height());
-            ++blockNumber;
         }
     }
+
+    if (richBp)
+    {
+        QPoint globalPos =
+#if QT_VERSION >= QT_VERSION_CHECK(6, 0, 0)
+            event->globalPosition().toPoint();
+#else
+            event->globalPos();
+#endif
+        emit codeEditor->breakpointGutterMenuRequested(
+            codeEditor->filename, lineNo, globalPos);
+    }
+    else
+    {
+        emit codeEditor->breakpointToggled(codeEditor->filename, lineNo,
+                                            toggleActive);
+        codeEditor->viewport()->update();
+        update();
+    }
+}
+
+void LineNumberArea::contextMenuEvent(QContextMenuEvent *event)
+{
+    /* Secondary-click contract on the gutter: always pop the
+     * Edit / Disable / Remove menu when the gesture lands on an
+     * existing breakpoint, regardless of whether it carries extras.
+     * This is the canonical "second click" affordance — works on
+     * Windows / Linux right-click, macOS Ctrl-click and the macOS
+     * two-finger trackpad tap, all of which Qt funnels through
+     * QContextMenuEvent. Bare lines have nothing to act on; we let
+     * the event through so the parent editor (or its viewport) can
+     * decide what to do (currently nothing in that area). */
+    const QPoint pos = event->pos();
+    if (pos.x() <= width() - 20 || codeEditor->filename.isEmpty())
+    {
+        QWidget::contextMenuEvent(event);
+        return;
+    }
+
+    const qint32 lineNo = lineAtY(pos.y());
+    if (lineNo < 1)
+    {
+        QWidget::contextMenuEvent(event);
+        return;
+    }
+
+    char *canonical = wslua_debugger_canonical_path(
+        codeEditor->filename.toUtf8().constData());
+    if (!canonical)
+    {
+        QWidget::contextMenuEvent(event);
+        return;
+    }
+    const int32_t state = wslua_debugger_get_breakpoint_state_canonical_ex(
+        canonical, lineNo, /*has_extras=*/nullptr);
+    g_free(canonical);
+    if (state == -1)
+    {
+        QWidget::contextMenuEvent(event);
+        return;
+    }
+
+    emit codeEditor->breakpointGutterMenuRequested(
+        codeEditor->filename, lineNo, event->globalPos());
+    event->accept();
 }

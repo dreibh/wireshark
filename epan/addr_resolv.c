@@ -98,7 +98,7 @@
 
 #define ENAME_HOSTS     "hosts"
 #define ENAME_SUBNETS   "subnets"
-#define ENAME_SUBNETS_V6 "subnetIpv6"
+#define ENAME_SUBNETS_V6 "subnetsipv6"
 #define ENAME_ETHERS    "ethers"
 #define ENAME_IPXNETS   "ipxnets"
 #define ENAME_MANUF     "manuf"
@@ -3676,7 +3676,7 @@ addr_resolve_pref_init(module_t *nameres)
             "Resolve network (IP) addresses",
             "Resolve IPv4, IPv6, and IPX addresses into host names."
             " The next set of check boxes determines how name resolution should be performed."
-            " If no other options are checked name resolution is made from Wireshark's host file"
+            " If no other options are checked name resolution is made from Wireshark's host, subnets or subnetsipv6 file"
             " and capture file name resolution blocks.",
             &gbl_resolv_flags.network_name);
 

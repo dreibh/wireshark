@@ -844,6 +844,9 @@ Commit Check:
     - ./tools/wrap-ci-test.py --file $REPORT_FILE --suite $TEST_SUITE --case tools/validate-commit ./tools/validate-commit.py $( git log --max-count=$NUM_COMMITS --pretty=format:%h $CI_MERGE_REQUEST_SOURCE_BRANCH_SHA ) || EXIT_CODE=1
     - ./tools/wrap-ci-test.py --file $REPORT_FILE --suite $TEST_SUITE --case tools/checklicenses ./tools/checklicenses.py || EXIT_CODE=1
     - ./tools/wrap-ci-test.py --file $REPORT_FILE --suite $TEST_SUITE --case tools/check_help_urls ./tools/check_help_urls.py || EXIT_CODE=1
+    # Report this failure, but don't fail the job for now. Not all developers
+    # might have access to all the PNG compression tools.
+    - ./tools/wrap-ci-test.py --file $REPORT_FILE --suite $TEST_SUITE --case tools/check_pngs ./tools/check_pngs.sh "${CI_MERGE_REQUEST_SOURCE_BRANCH_SHA}~${NUM_COMMITS}" || echo 'ℹ️ This merge request includes PNGs that can be made smaller with lossless compression. Please run tools/compress-pngs.py if possible.'
     - exit $EXIT_CODE
   artifacts:
     when: always

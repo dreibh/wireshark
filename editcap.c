@@ -194,13 +194,7 @@ abs_time_to_str_with_sec_resolution(const nstime_t *abs_time)
     tmp = localtime(&abs_time->secs);
 
     if (tmp) {
-        snprintf(buf, 16, "%d%02d%02d%02d%02d%02d",
-            tmp->tm_year + 1900,
-            tmp->tm_mon+1,
-            tmp->tm_mday,
-            tmp->tm_hour,
-            tmp->tm_min,
-            tmp->tm_sec);
+        strftime(buf, sizeof buf, "%Y%m%d%H%M%S", tmp);
     } else {
         buf[0] = '\0';
     }

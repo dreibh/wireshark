@@ -202,7 +202,6 @@ static char *procmon_read_string(FILE_T fh, gunichar2 *str_buf, int *err, char *
         ws_debug("Truncating string from %u bytes to %u", cur_str_size, MAX_PROCMON_STRING_LENGTH);
         cur_str_size = MAX_PROCMON_STRING_LENGTH;
     }
-    // XXX Make sure cur_str_size is even?
     if (!wtap_read_bytes_or_eof(fh, str_buf, cur_str_size, err, err_info))
     {
         ws_debug("wtap_read_bytes_or_eof() failed, err = %d.", *err);
@@ -215,7 +214,8 @@ static char *procmon_read_string(FILE_T fh, gunichar2 *str_buf, int *err, char *
         }
         return NULL;
     }
-    return g_utf16_to_utf8(str_buf, cur_str_size, NULL, NULL, NULL);
+    char *utf8_str = g_convert_with_fallback((const char *)str_buf, cur_str_size, "UTF-8", "UTF-16LE", "?", NULL, NULL, NULL);
+    return utf8_str ? utf8_str : g_strdup("<invalid>");
 }
 
 // Read the hosts array. Assume failures here are non-fatal.

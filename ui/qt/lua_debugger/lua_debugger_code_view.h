@@ -17,6 +17,7 @@
 
 class QSyntaxHighlighter;
 class QEvent;
+class QContextMenuEvent;
 
 /**
  * @brief Editable code editor supporting gutter breakpoints and highlighting.
@@ -75,6 +76,27 @@ class LuaDebuggerCodeView : public QPlainTextEdit
     void breakpointToggled(const QString &filename, qint32 line,
                            bool toggleActive);
 
+    /**
+     * @brief Request an Edit / Disable (Enable) / Remove popup for the
+     *        breakpoint at @a filename:@a line, anchored at
+     *        @a globalPos.
+     *
+     * Emitted in two cases:
+     *   1. A plain left-click on the gutter that lands on a "rich"
+     *      breakpoint (one carrying a condition, hit-count target, or
+     *      log message). The popup guards those user-typed extras
+     *      against accidental loss; plain breakpoints keep the
+     *      original add-or-remove-on-click behaviour and emit
+     *      @ref breakpointToggled instead.
+     *   2. A context-menu gesture (right-click on Win/Linux, Ctrl-
+     *      click or two-finger trackpad tap on macOS) on any
+     *      existing breakpoint, regardless of whether it carries
+     *      extras. The same popup is offered, so the destructive
+     *      Remove always sits behind an explicit menu choice.
+     */
+    void breakpointGutterMenuRequested(const QString &filename, qint32 line,
+                                       const QPoint &globalPos);
+
   protected:
     /** @brief Update margins whenever Qt reports a size change. */
     void resizeEvent(QResizeEvent *event) override;
@@ -129,8 +151,29 @@ class LineNumberArea : public QWidget
     /** @brief Toggle breakpoints when the gutter is clicked. */
     void mousePressEvent(QMouseEvent *event) override;
 
+    /**
+     * @brief Right-click / Ctrl-click / two-finger trackpad tap on
+     *        the breakpoint gutter: always pop the
+     *        Edit / Disable / Remove menu when the click lands on an
+     *        existing breakpoint, regardless of whether it carries
+     *        extras. Clicks on bare lines are ignored.
+     */
+    void contextMenuEvent(QContextMenuEvent *event) override;
+
   private:
     LuaDebuggerCodeView *codeEditor;
+
+    /**
+     * @brief Map a gutter-local Y coordinate to the 1-based line
+     *        number of the block under it, or @c -1 if none.
+     *
+     * Walks the visible-blocks geometry the same way the gutter
+     * painter does. Defined as a member so it can reach through
+     * @c codeEditor into @c QPlainTextEdit's protected geometry
+     * accessors (legal because @c LineNumberArea is a friend of
+     * @ref LuaDebuggerCodeView).
+     */
+    qint32 lineAtY(qint32 yPx) const;
 };
 
 #endif // LUA_DEBUGGER_CODE_VIEW_H

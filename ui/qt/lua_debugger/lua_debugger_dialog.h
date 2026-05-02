@@ -47,6 +47,7 @@ class QEvent;
 class QChildEvent;
 class QCloseEvent;
 class QShowEvent;
+class QSplitter;
 
 namespace Ui
 {
@@ -133,6 +134,20 @@ class LuaDebuggerDialog : public GeometryStateDialog
     static bool handleMainCloseIfPaused(QCloseEvent *event);
 
     /**
+     * @brief C-callable trampoline for @c wslua_debugger_log_emit_callback_t.
+     *
+     * The core invokes this on the Lua thread that hit the line; the
+     * trampoline appends the message to a thread-safe pending queue
+     * and, on the empty-to-non-empty transition, posts a single
+     * @ref drainPendingLogs invocation queued on @ref _instance.
+     * Subsequent fires before the drain runs only enqueue, so a
+     * burst of logpoint hits costs one queued event total instead
+     * of one per fire.
+     */
+    static void trampolineLogEmit(const char *file_path, int64_t line,
+                                   const char *message);
+
+    /**
      * @brief React to the debugger pausing execution at a breakpoint.
      * @param file_path Path of the Lua file that triggered the pause.
      * @param line Line number where execution stopped.
@@ -206,8 +221,48 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void onClearBreakpoints();
     /** @brief Apply checkbox updates to a specific breakpoint row. */
     void onBreakpointItemChanged(QStandardItem *item);
-    /** @brief Open the clicked breakpoint's file and focus the line. */
+    /**
+     * @brief Role-based dispatch for inline condition / hit count / log
+     *        message edits. Wired to @c QStandardItemModel::dataChanged
+     *        because @ref onBreakpointItemChanged does not see the role
+     *        list and cannot distinguish a delegate-written condition
+     *        from an unrelated bookkeeping role write.
+     */
+    void onBreakpointModelDataChanged(const QModelIndex &topLeft,
+                                       const QModelIndex &bottomRight,
+                                       const QVector<int> &roles);
+    /**
+     * @brief Open the source file at the breakpoint's line when the
+     *        user double-clicks anywhere on the row.
+     *
+     * Editing the condition / hit count / log message lives behind the
+     * row context menu's "Edit..." action and the section-header edit
+     * button (see @ref startInlineBreakpointEdit), keeping the primary
+     * gesture aligned with the rest of the dialog (open source).
+     */
     void onBreakpointItemDoubleClicked(const QModelIndex &index);
+    /**
+     * @brief Open the inline condition / hit count / log message
+     *        editor on the given Breakpoints row.
+     *
+     * Single entry point used by the row context menu's "Edit..."
+     * action and by the section-header edit button. Silently no-ops
+     * for stale rows (file missing) where the Location cell does not
+     * carry @c Qt::ItemIsEditable.
+     */
+    void startInlineBreakpointEdit(int row);
+    /**
+     * @brief Show an Edit / Disable / Remove popup at @a globalPos for
+     *        the breakpoint at @a filename:@a line.
+     *
+     * Triggered by @ref LuaDebuggerCodeView::breakpointGutterMenuRequested
+     * when a plain gutter click lands on a "rich" breakpoint (one
+     * carrying a condition, hit-count target, or log message).
+     * Dismissing the popup is a no-op so the breakpoint and its
+     * extras stay exactly as they were before the click.
+     */
+    void onBreakpointGutterMenu(const QString &filename, qint32 line,
+                                 const QPoint &globalPos);
     /** @brief Show the Breakpoints tree context menu (Open / Remove / Remove All). */
     void onBreakpointContextMenuRequested(const QPoint &pos);
     /** @brief Build and show the editor context menu. */
@@ -251,6 +306,17 @@ class LuaDebuggerDialog : public GeometryStateDialog
     void onColorsChanged();
     /** @brief Evaluate the expression in the eval input field. */
     void onEvaluate();
+    /**
+     * @brief Drain the cross-thread logpoint queue into the Evaluate
+     *        output panel.
+     *
+     * Posted as a single queued invocation by @ref trampolineLogEmit
+     * the first time a fire enqueues a message after the previous
+     * drain finished. Many fires therefore funnel through one
+     * event-loop tick instead of one queued lambda per fire, which
+     * is what made per-packet logpoints freeze the GUI.
+     */
+    void drainPendingLogs();
     /** @brief Clear the eval input and output fields. */
     void onEvalClear();
     /** @brief Handle theme selection changes from the Settings section. */
@@ -438,12 +504,29 @@ class LuaDebuggerDialog : public GeometryStateDialog
     QStandardItemModel *fileModel;
     QTreeView *breakpointsTree;
     QStandardItemModel *breakpointsModel;
+    /**
+     * @brief Re-entrancy guard for the breakpoints model -> core mutation
+     *        path. Set while @ref updateBreakpoints rebuilds rows from
+     *        @c wslua_debugger_get_breakpoint_extended; the role-based
+     *        dispatch in @ref onBreakpointItemChanged honours the guard
+     *        so a programmatic @c setData during the rebuild does not
+     *        loop back through @c set_breakpoint_*.
+     */
+    bool suppressBreakpointItemChanged_ = false;
 
     // Eval panel widgets (created programmatically)
     QPlainTextEdit *evalInputEdit;
     QPlainTextEdit *evalOutputEdit;
     QPushButton *evalButton;
     QPushButton *evalClearButton;
+    /**
+     * @brief Vertical splitter between the Evaluate input and output panes.
+     *
+     * Held as a member so that its collapse state and pane sizes can be
+     * persisted across sessions via storeDialogSettings()/applyDialogSettings()
+     * (see SettingsKeys::EvalSplitter).
+     */
+    QSplitter *evalSplitter_ = nullptr;
 
     // Settings panel widgets (created programmatically)
     QComboBox *themeComboBox;
@@ -453,7 +536,16 @@ class LuaDebuggerDialog : public GeometryStateDialog
     QToolButton *watchRemoveAllButton_ = nullptr;
     /** @brief Breakpoints section header: toggle at caret, clear all. */
     QToolButton *breakpointHeaderToggleButton_ = nullptr;
+    /** @brief Breakpoints section header: remove selected breakpoint row(s). */
+    QToolButton *breakpointHeaderRemoveButton_ = nullptr;
     QToolButton *breakpointHeaderRemoveAllButton_ = nullptr;
+    /**
+     * @brief Breakpoints section header: open the inline condition /
+     *        hit count / log message editor on the focused row. Enabled
+     *        only when exactly one editable row is selected (mirrors
+     *        the inline editor's "edit one row at a time" model).
+     */
+    QToolButton *breakpointHeaderEditButton_ = nullptr;
     /** @brief Dialog-wide QAction backing the Ctrl+Shift+F9 shortcut. */
     QAction *actionRemoveAllBreakpoints_ = nullptr;
     /**
@@ -698,8 +790,6 @@ class LuaDebuggerDialog : public GeometryStateDialog
                              const QString &muted);
     void applyWatchItemEmpty(QStandardItem *item, const QString &muted,
                              const QString &watchTipExtra);
-    void applyWatchItemNonPath(QStandardItem *item,
-                               const QString &watchTipExtra);
     void applyWatchItemNoLiveContext(QStandardItem *item,
                                      const QString &muted,
                                      const QString &watchTipExtra);
@@ -709,9 +799,17 @@ class LuaDebuggerDialog : public GeometryStateDialog
                                const char *val, const char *typ,
                                bool can_expand,
                                const QString &watchTipExtra);
+    /** @brief Apply success state for an expression watch (non-path spec). */
+    void applyWatchItemExpression(QStandardItem *item, const QString &spec,
+                                  const char *val, const char *typ,
+                                  bool can_expand,
+                                  const QString &watchTipExtra);
     /** @brief Fill children for a path-based watch using get_variables. */
     void fillWatchPathChildren(QStandardItem *parent,
                                const QString &variablePath);
+    /** @brief Fill children for an expression watch using watch_expr_get_variables. */
+    void fillWatchExprChildren(QStandardItem *parent, const QString &rootSpec,
+                               const QString &subpath);
     /** @brief Re-query children after clearing (used on expand and on refresh). */
     void refillWatchChildren(QStandardItem *item);
     /** @brief Refresh expanded watch rows depth-first (values after pause/step). */
@@ -741,8 +839,6 @@ class LuaDebuggerDialog : public GeometryStateDialog
                                   QStandardItem *item);
     /** @brief Select the Variables row matching the current watch (if any). */
     void syncVariablesTreeToCurrentWatch();
-    /** @brief Shared wording when the user enters a non-path watch spec. */
-    void showPathOnlyVariablePathWatchMessage();
 
     bool syncWatchVariablesSelection_ = false;
 
@@ -851,6 +947,25 @@ class LuaDebuggerDialog : public GeometryStateDialog
      * an earlier clear fires.
      */
     qint32 flashSerial_ = 0;
+    /**
+     * @brief Source file (normalized) of the line the debugger is paused on.
+     *
+     * Set by @ref handlePause and cleared by @ref clearPausedStateUi.
+     * @ref updateBreakpoints uses the pair (@ref pausedFile_,
+     * @ref pausedLine_) to find the breakpoints-tree row matching the
+     * current pause location and apply the same change-highlight visuals
+     * the Watch / Variables trees use, so the row that "fired" stands
+     * out at a glance.
+     *
+     * Empty when the debugger is not paused; matching is skipped in that
+     * state so a resumed dialog never carries forward a stale cue. The
+     * line number is paired in @ref pausedLine_; both must match for a
+     * row to be considered the firing breakpoint.
+     */
+    QString pausedFile_;
+    /** @brief Line number of the pause; see @ref pausedFile_. Zero when
+     *  the debugger is not paused. */
+    qlonglong pausedLine_ = 0;
     /**
      * Monotonic epoch for the deferred "Watch column shows —" placeholder
      * application after a step resume. runDebuggerStep() captures the value

@@ -107,6 +107,13 @@ typedef struct plugin_field_extract_t {
     int data_length;            // out
 } plugin_field_extract_t;
 
+/**
+ * @brief Creates a new sinsp_span_t object.
+ *
+ * This function allocates memory for a new sinsp_span_t object and initializes it with default values.
+ *
+ * @return A pointer to the newly created sinsp_span_t object.
+ */
 sinsp_span_t *create_sinsp_span(void);
 void destroy_sinsp_span(sinsp_span_t *sinsp_span);
 
@@ -115,23 +122,115 @@ uint32_t get_sinsp_source_id(sinsp_source_info_t *ssi);
 const char *get_sinsp_source_last_error(sinsp_source_info_t *ssi);
 const char *get_sinsp_source_name(sinsp_source_info_t *ssi);
 const char* get_sinsp_source_description(sinsp_source_info_t *ssi);
+
+/**
+ * @brief Retrieves information about a field in a sinsp_source_info_t structure.
+ *
+ * @param ssi Pointer to the sinsp_source_info_t structure.
+ * @param field_num Index of the field to retrieve information for.
+ * @param field Pointer to a sinsp_field_info_t structure where the field information will be stored.
+ * @return true if the field information was successfully retrieved, false otherwise.
+ */
 bool get_sinsp_source_field_info(sinsp_source_info_t *ssi, size_t field_num, sinsp_field_info_t *field);
 
 // libsinsp builtin syscall routines.
+
+/**
+ * @brief Creates a syscall source for a span.
+ *
+ * @param sinsp_span Pointer to the sinsp_span_t structure.
+ * @param ssi_ptr Pointer to a pointer that will receive the sinsp_source_info_t structure.
+ */
 void create_sinsp_syscall_source(sinsp_span_t *sinsp_span, sinsp_source_info_t **ssi_ptr);
+
+/**
+ * @brief Opens a sinsp capture file.
+ *
+ * This function initializes and opens a sinsp span for capturing events from a specified file.
+ *
+ * @param sinsp_span Pointer to the sinsp span structure that will be initialized.
+ * @param filepath The path to the capture file to open.
+ */
 void open_sinsp_capture(sinsp_span_t *sinsp_span, const char *filepath);
+
 //uint32_t process_syscall_capture(sinsp_span_t * sinsp_span, sinsp_source_info_t *ssi, uint32_t to_event);
+
+/**
+ * @brief Closes a sinsp capture.
+ *
+ * @param sinsp_span Pointer to the sinsp span representing the capture session.
+ */
 void close_sinsp_capture(sinsp_span_t *sinsp_span);
+
+/**
+ * @brief Extract syscall source fields from a span.
+ *
+ * @param sinsp_span The span containing the syscall events.
+ * @param ssi The source info for the span.
+ * @param frame_num The frame number to extract fields from.
+ * @param sinsp_fields Pointer to store the extracted fields.
+ * @param sinsp_field_len Pointer to store the length of the extracted fields.
+ * @param sisnp_evt_info Pointer to store event information.
+ * @return true if extraction is successful, false otherwise.
+ */
 bool extract_syscall_source_fields(sinsp_span_t *sinsp_span, sinsp_source_info_t *ssi, uint32_t frame_num, sinsp_field_extract_t **sinsp_fields, uint32_t *sinsp_field_len, void** sisnp_evt_info);
+
+/**
+ * @brief Retrieves the parent category of a syscall based on the field check index.
+ *
+ * @param ssi Pointer to the source information structure.
+ * @param field_check_idx Index used to determine the syscall category.
+ * @return The parent category of the syscall, or SSC_OTHER if out of bounds.
+ */
 sinsp_syscall_category_e get_syscall_parent_category(sinsp_source_info_t *ssi, size_t field_check_idx);
 bool get_extracted_syscall_source_fields(sinsp_span_t *sinsp_span, uint32_t frame_num, sinsp_field_extract_t **sinsp_fields, uint32_t *sinsp_field_len, void** sinsp_evt_info);
+
+/**
+ * @brief Retrieves the name of an event argument.
+ *
+ * @param sinsp_evt_info Pointer to the event information structure.
+ * @param arg_num The index of the argument to retrieve.
+ * @return A pointer to the argument name, or NULL if the argument number exceeds the event parameter count.
+ */
 char* get_evt_arg_name(void* sinsp_evt_info, uint32_t arg_num);
 bool evt_creates_fd(void* sinsp_evt_info);
 
 // Extractor plugin routines.
 // These roughly match common_plugin_info
+
+/**
+ * @brief Creates a new sinsp_plugin_source object.
+ *
+ * @param sinsp_span The span containing the plugin information.
+ * @param libname The name of the library to register as a plugin.
+ * @param ssi_ptr Pointer to store the created sinsp_source_info_t object.
+ * @return char* A string error message if an error occurred, otherwise NULL.
+ */
 char *create_sinsp_plugin_source(sinsp_span_t *sinsp_span, const char* libname, sinsp_source_info_t **ssi_ptr);
+
+/**
+ * @brief Get the number of fields in a sinsp source.
+ *
+ * @param ssi Pointer to the sinsp_source_info_t structure.
+ * @return size_t The number of fields.
+ */
 size_t get_sinsp_source_nfields(sinsp_source_info_t *ssi);
+
+/**
+ * @brief Extracts plugin source fields from an event.
+ *
+ * This function extracts fields from a given event and populates the provided
+ * structure with the extracted data.
+ *
+ * @param ssi Pointer to the source information structure.
+ * @param event_num The event number.
+ * @param evt_data Pointer to the event data.
+ * @param evt_datalen Length of the event data.
+ * @param pool Memory allocator for temporary storage.
+ * @param sinsp_fields Pointer to the structure where extracted fields will be stored.
+ * @param sinsp_field_len Maximum length of the fields structure.
+ * @return true if extraction is successful, false otherwise.
+ */
 bool extract_plugin_source_fields(sinsp_source_info_t *ssi, uint32_t event_num, const uint8_t *evt_data, uint32_t evt_datalen, wmem_allocator_t *pool, plugin_field_extract_t *sinsp_fields, uint32_t sinsp_field_len);
 
 

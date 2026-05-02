@@ -20,6 +20,15 @@
 
 /******* dbg_print *********/
 #define DEBUG_BUFFER_SIZE 4096
+
+/**
+ * @brief Prints debug information to a specified output.
+ *
+ * @param which Pointer to an integer indicating the verbosity level.
+ * @param how The minimum verbosity level required for printing.
+ * @param where File stream to print to, or NULL to use ws_message().
+ * @param fmt Format string for the message.
+ */
 extern void dbg_print(const int* which, int how, FILE* where,
 	const char* fmt, ... ) G_GNUC_PRINTF(4, 5);
 
@@ -180,6 +189,13 @@ extern AVPL* new_avpl_from_match(avpl_match_mode mode, const char* name,AVPL* sr
 extern bool insert_avp(AVPL* avpl, AVP* avp);
 
 /* renames an avpl */
+
+/**
+ * @brief Renames an AVPL (Attribute Value Pair List) to a new name.
+ *
+ * @param avpl Pointer to the AVPL to be renamed.
+ * @param name The new name for the AVPL.
+ */
 extern void rename_avpl(AVPL* avpl, char* name);
 
 /* it will add all the avps in src which don't match(*) any attribute in dest */
@@ -204,7 +220,16 @@ extern AVP* extract_avp_by_name(AVPL* avpl, char* name);
 
 /* returns a newly allocated string containing a representation of the avp list */
 extern char* avpl_to_str(AVPL* avpl);
-extern char* avpl_to_dotstr(AVPL*);
+
+/**
+ * @brief Converts an AVPL to a DOT string representation.
+ *
+ * This function takes an AVPL (Attribute-Value Pair List) and converts it into a string in DOT format, which is commonly used for graph visualization.
+ *
+ * @param avpl The AVPL to convert.
+ * @return A dynamically allocated string representing the AVPL in DOT format. The caller is responsible for freeing this memory.
+ */
+extern char* avpl_to_dotstr(AVPL* avpl);
 
 /* deletes an avp list  and eventually its contents */
 extern void delete_avpl(AVPL* avpl, bool avps_too);

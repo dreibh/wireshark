@@ -244,9 +244,10 @@ wmem_list_append(wmem_list_t *list, void *data);
  * @param func Comparison function of type `GCompareFunc` used to maintain sort order.
  *             Should return a negative value if the first argument is less than the second,
  *             zero if equal, and positive if greater.
+ * @return Pointer to the newly created frame containing the data pointer.
  */
 WS_DLL_PUBLIC
-void
+wmem_list_frame_t*
 wmem_list_insert_sorted(wmem_list_t *list, void* data, GCompareFunc func);
 
 /**
@@ -264,9 +265,10 @@ wmem_list_insert_sorted(wmem_list_t *list, void* data, GCompareFunc func);
  * @param func Comparison function of type `GCompareFunc` used to maintain sort order.
  *             Should return a negative value if the first argument is less than the second,
  *             zero if equal, and positive if greater.
+ * @return Pointer to the newly created frame containing the data pointer.
  */
 WS_DLL_PUBLIC
-void
+wmem_list_frame_t*
 wmem_list_append_sorted(wmem_list_t *list, void* data, GCompareFunc func);
 
 /**
