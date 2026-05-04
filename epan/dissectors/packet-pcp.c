@@ -1469,8 +1469,7 @@ static int dissect_pcp_message_text(tvbuff_t *tvb, packet_info *pinfo, proto_tre
     offset += 4;
 
     /* buflen */
-    buflen = tvb_get_ntohl(tvb, offset);
-    proto_tree_add_item(pcp_text_tree, hf_pcp_text_buflen, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(pcp_text_tree, hf_pcp_text_buflen, tvb, offset, 4, ENC_BIG_ENDIAN, &buflen);
     offset += 4;
 
     /* buffer */

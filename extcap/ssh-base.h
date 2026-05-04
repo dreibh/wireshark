@@ -57,6 +57,12 @@ typedef struct _ssh_params {
 } ssh_params_t;
 
 /* Add libssh version information to an extcap_parameters structure */
+
+/**
+ * @brief Adds information about the libssh library version to the extcap parameters.
+ *
+ * @param extcap_conf Pointer to the extcap parameters structure.
+ */
 void add_libssh_info(extcap_parameters * extcap_conf);
 
 /* Create a ssh connection using all the possible authentication methods */
@@ -66,15 +72,43 @@ ssh_session create_ssh_connection(const ssh_params_t* ssh_params, char** err_inf
 int ssh_channel_printf(ssh_channel channel, const char* fmt, ...);
 
 /* Clean the current ssh session and channel. */
+
+/**
+ * @brief Cleans up SSH session and channel resources.
+ *
+ * This function is responsible for properly closing and freeing the SSH session and channel resources.
+ *
+ * @param sshs Pointer to the SSH session to be cleaned up.
+ * @param channel Pointer to the SSH channel to be closed.
+ */
 void ssh_cleanup(ssh_session* sshs, ssh_channel* channel);
 
 /* Init the ssh_params_t structure */
+
+/**
+ * @brief Create a new SSH parameters structure.
+ *
+ * @return A pointer to the newly created ssh_params_t structure, or NULL on failure.
+ */
 ssh_params_t* ssh_params_new(void);
 
 /* Clean the ssh params */
+
+/**
+ * @brief Frees the memory allocated for an ssh_params_t structure.
+ *
+ * @param ssh_params Pointer to the ssh_params_t structure to be freed.
+ */
 void ssh_params_free(ssh_params_t* ssh_params);
 
 /* Sets the libssh log level to match the ws log level */
+
+/**
+ * @brief Set the log level for SSH parameters.
+ *
+ * @param ssh_params Pointer to the SSH parameters structure.
+ * @param level The desired log level from the ws_log_level enumeration.
+ */
 void ssh_params_set_log_level(ssh_params_t* ssh_params, enum ws_log_level level);
 
 #endif

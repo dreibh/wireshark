@@ -154,23 +154,23 @@
     <name>AnnotationEditDialog</name>
     <message>
         <source>Color:</source>
-        <translation type="unfinished"></translation>
+        <translation>Colore:</translation>
     </message>
     <message>
         <source>Comment (max %1 characters)</source>
-        <translation type="unfinished"></translation>
+        <translation>Commento (massimo %1 caratteri)</translation>
     </message>
     <message>
         <source>Comment:</source>
-        <translation type="unfinished">Commento:</translation>
+        <translation>Commento:</translation>
     </message>
     <message>
         <source>Select Annotation Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Seleziona colore annotazioni</translation>
     </message>
     <message>
         <source>Annotations are session-only and will be lost when the capture is closed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Le annotazioni sono valide solo per la sessione e andranno perse alla chiusura dell&apos;acquisizione.</translation>
     </message>
 </context>
 <context>
@@ -725,6 +725,74 @@
     <message>
         <source>PNG Image (*.png)</source>
         <translation>Immagine PNG (*.png)</translation>
+    </message>
+</context>
+<context>
+    <name>BreakpointConditionDelegate</name>
+    <message>
+        <source>Expression</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lua expression — pause when truthy</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Evaluated each time control reaches this line; locals, upvalues, and globals are visible like Watch / Evaluate.
+Runtime errors are treated as false (silent) and surface as a warning icon on the row.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hit Count</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pause after N hits (0 disables)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Gate the pause on a hit counter. The dropdown next to the integer picks the comparison mode: ≥ pauses every hit at or after N (default); = pauses once when the counter reaches N; every pauses on hits N, 2×N, 3×N, …; once pauses on the Nth hit and deactivates the breakpoint. Use 0 to disable the gate. The counter is preserved across edits to Expression / Hit Count / Log Message; lowering the target below the current count rolls the counter back to 0 so the breakpoint can wait for the next N hits. Right-click the row to reset it explicitly. Combined with an Expression on the same row, the hit-count gate runs first.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Log Message</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Log message — supports {expr} and tags such as {filename}, {basename}, {line}, {function}, {hits}, {timestamp}, {delta}…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Logpoints write a message to the Evaluate output (and Wireshark&apos;s info log) each time the line is reached. By default execution continues without pausing; tick the Pause box on this editor to also pause after emitting (useful for log-then-inspect without duplicating the breakpoint). The line is emitted verbatim — there is no automatic file:line prefix. Inside {} the text is evaluated as a Lua expression in this frame and converted to text the same way tostring() does; reserved tags below shadow any same-named Lua local / upvalue / global. Origin: {filename}, {basename}, {line}, {function}, {what}. Counters and scope: {hits}, {depth}, {thread}. Time: {timestamp}, {datetime}, {epoch}, {epoch_ms}, {elapsed}, {delta}. Use {{ and }} for literal { and }. Per-placeholder errors substitute &apos;&lt;error: ...&gt;&apos; without aborting the line.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>from</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>every</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>once</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Comparison mode for the hit count:
+from — pause on every hit from N onwards.
+every — pause on hits N, 2N, 3N…
+once — pause once on the Nth hit and deactivate the breakpoint.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation type="unfinished">Pausa</translation>
+    </message>
+    <message>
+        <source>Pause: format and emit the log message AND pause execution.
+Off = logpoint only (matches the historical &quot;logpoints never pause&quot; convention).</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -2340,78 +2408,85 @@ Ad esempio, usa 1 ora per fare in modo che un nuovo file sia creato ogni ora.</t
     </message>
     <message>
         <source>Packet annotations are not saved and will be lost when the capture is closed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Le annotazioni dei pacchetti non vengono salvate e andranno perse alla chiusura dell&apos;acquisizione.</translation>
     </message>
     <message>
         <source>Packet Annotations</source>
-        <translation type="unfinished"></translation>
+        <translation>Annotazioni pacchetto</translation>
     </message>
     <message>
         <source>Select one or more bytes first.</source>
-        <translation type="unfinished"></translation>
+        <translation>Seleziona prima uno o più byte.</translation>
     </message>
     <message>
         <source>Add Annotation</source>
-        <translation type="unfinished"></translation>
+        <translation>Aggiungi annotazione</translation>
     </message>
     <message>
         <source>No annotation found at the selection.</source>
-        <translation type="unfinished"></translation>
+        <translation>Nessuna annotazione trovata nella selezione.</translation>
     </message>
     <message>
         <source>Edit Annotation</source>
-        <translation type="unfinished"></translation>
+        <translation>Modifica annotazione</translation>
     </message>
     <message>
         <source>Start byte set: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Set di byte iniziale: %1</translation>
     </message>
     <message>
         <source>Set start byte first.</source>
-        <translation type="unfinished"></translation>
+        <translation>Imposta prima il byte di inizio.</translation>
     </message>
     <message>
         <source>Start byte (absolute): %1
 End byte (absolute): %2
 Distance (absolute, bytes): %3
 Distance (signed, bytes): %4</source>
-        <translation type="unfinished"></translation>
+        <translation>Byte iniziale (assoluto): %1
+Byte finale (assoluto): %2
+Distanza (assoluta, byte): %3
+Distanza (con segno, byte): %4</translation>
     </message>
     <message>
         <source>selected protocol</source>
-        <translation type="unfinished"></translation>
+        <translation>protocollo selezionato</translation>
     </message>
     <message>
         <source>selected field</source>
-        <translation type="unfinished"></translation>
+        <translation>campo selezionato</translation>
     </message>
     <message>
         <source>parent protocol</source>
-        <translation type="unfinished"></translation>
+        <translation>protocollo superiore</translation>
     </message>
     <message>
         <source>
 Reference range (%1): start %2, length %3</source>
-        <translation type="unfinished"></translation>
+        <translation>
+Intervallo di riferimento (%1): inizio %2, lunghezza %3</translation>
     </message>
     <message>
         <source>
 Start byte (relative to reference): %1
 End byte (relative to reference): %2</source>
-        <translation type="unfinished"></translation>
+        <translation>
+Byte iniziale (relativo al riferimento): %1
+Byte finale (relativo al riferimento): %2</translation>
     </message>
     <message>
         <source>
 Relative to reference: n/a (outside reference range)</source>
-        <translation type="unfinished"></translation>
+        <translation>
+Relativo al riferimento: n/d (al di fuori dell&apos;intervallo di riferimento)</translation>
     </message>
     <message>
         <source>Compute Offset</source>
-        <translation type="unfinished"></translation>
+        <translation>Calcola l&apos;offset</translation>
     </message>
     <message>
         <source>Offset markers cleared.</source>
-        <translation type="unfinished"></translation>
+        <translation>Marcatori di offset puliti.</translation>
     </message>
 </context>
 <context>
@@ -2508,245 +2583,245 @@ Relative to reference: n/a (outside reference range)</source>
     <name>DisAudioStream</name>
     <message>
         <source>No DIS signal payload is available for playback.</source>
-        <translation type="unfinished"></translation>
+        <translation>Non è disponibile alcun segnale DIS per la riproduzione.</translation>
     </message>
     <message>
         <source>Unable to decode DIS audio payload for this stream.</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossibile decodificare il payload audio DIS per questo flusso.</translation>
     </message>
     <message>
         <source>Audio format is not supported by the current output device.</source>
-        <translation type="unfinished"></translation>
+        <translation>Il formato audio non è supportato dal dispositivo di uscita attuale.</translation>
     </message>
     <message>
         <source>Unable to open playback buffer.</source>
-        <translation type="unfinished"></translation>
+        <translation>Impossibile aprire il buffer di riproduzione.</translation>
     </message>
 </context>
 <context>
     <name>DisStreamAnalysisDialog</name>
     <message>
         <source>DIS Stream Analysis</source>
-        <translation type="unfinished"></translation>
+        <translation>Analisi flusso DIS</translation>
     </message>
     <message>
         <source>Stream</source>
-        <translation type="unfinished">Flusso</translation>
+        <translation>Flusso</translation>
     </message>
     <message>
         <source>Codec</source>
-        <translation type="unfinished">Codificatore</translation>
+        <translation>Codificatore</translation>
     </message>
     <message>
         <source>Duration (s)</source>
-        <translation type="unfinished"></translation>
+        <translation>Durata (s)</translation>
     </message>
     <message>
         <source>Packets</source>
-        <translation type="unfinished">Pacchetti</translation>
+        <translation>Pacchetti</translation>
     </message>
     <message>
         <source>Signal Packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Pacchetti di segnale</translation>
     </message>
     <message>
         <source>Transmitter Packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Pacchetti trasmettitore</translation>
     </message>
     <message>
         <source>Estimated Lost</source>
-        <translation type="unfinished"></translation>
+        <translation>Perdita stimata</translation>
     </message>
     <message>
         <source>Jitter (mean/max ms)</source>
-        <translation type="unfinished"></translation>
+        <translation>Jitter (media/massimo ms)</translation>
     </message>
     <message>
         <source>Delta (mean/max ms)</source>
-        <translation type="unfinished"></translation>
+        <translation>Delta (media/massimo ms)</translation>
     </message>
     <message>
         <source>Capture Time (s)</source>
-        <translation type="unfinished"></translation>
+        <translation>Tempo di cattura (s)</translation>
     </message>
     <message>
         <source>Amplitude</source>
-        <translation type="unfinished"></translation>
+        <translation>Ampiezza</translation>
     </message>
     <message>
         <source>0.000 / 0.000 s</source>
-        <translation type="unfinished"></translation>
+        <translation>0.000 / 0.000 s</translation>
     </message>
     <message>
         <source>Playback</source>
-        <translation type="unfinished"></translation>
+        <translation>Riproduzione</translation>
     </message>
     <message>
         <source>Packet</source>
-        <translation type="unfinished">Pacchetto</translation>
+        <translation>Pacchetto</translation>
     </message>
     <message>
         <source>Time (s)</source>
-        <translation type="unfinished">Tempo (s)</translation>
+        <translation>Tempo (s)</translation>
     </message>
     <message>
         <source>Delta (ms)</source>
-        <translation type="unfinished">Delta (ms)</translation>
+        <translation>Delta (ms)</translation>
     </message>
     <message>
         <source>Jitter (ms)</source>
-        <translation type="unfinished">Jitter (ms)</translation>
+        <translation>Jitter (ms)</translation>
     </message>
     <message>
         <source>Lost</source>
-        <translation type="unfinished">Persi</translation>
+        <translation>Persi</translation>
     </message>
     <message>
         <source>Status</source>
-        <translation type="unfinished">Stato</translation>
+        <translation>Stato</translation>
     </message>
     <message>
         <source>Go To First Packet</source>
-        <translation type="unfinished"></translation>
+        <translation>Vai al primo pacchetto</translation>
     </message>
     <message>
         <source>Play</source>
-        <translation type="unfinished">Riproduci</translation>
+        <translation>Riproduci</translation>
     </message>
     <message>
         <source>Stop</source>
-        <translation type="unfinished">Ferma</translation>
+        <translation>Ferma</translation>
     </message>
     <message>
         <source>-</source>
-        <translation type="unfinished">-</translation>
+        <translation>-</translation>
     </message>
     <message>
         <source>Unknown</source>
-        <translation type="unfinished">Sconosciuto</translation>
+        <translation>Sconosciuto</translation>
     </message>
     <message>
         <source>Problem</source>
-        <translation type="unfinished"></translation>
+        <translation>Problema</translation>
     </message>
     <message>
         <source>OK</source>
-        <translation type="unfinished">OK</translation>
+        <translation>OK</translation>
     </message>
     <message>
         <source>Waveform</source>
-        <translation type="unfinished"></translation>
+        <translation>Forma d&apos;onda</translation>
     </message>
     <message>
         <source>Jitter Spikes</source>
-        <translation type="unfinished"></translation>
+        <translation>Picchi di jitter</translation>
     </message>
     <message>
         <source>Estimated Loss</source>
-        <translation type="unfinished"></translation>
+        <translation>Perdita stimata</translation>
     </message>
     <message>
         <source>Problem Packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Pacchetto problematici</translation>
     </message>
     <message>
         <source>Pause</source>
-        <translation type="unfinished"></translation>
+        <translation>Pausa</translation>
     </message>
     <message>
         <source>DIS Playback</source>
-        <translation type="unfinished"></translation>
+        <translation>Riproduzione DIS</translation>
     </message>
 </context>
 <context>
     <name>DisStreamDialog</name>
     <message>
         <source>DIS Streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Flussi DIS</translation>
     </message>
     <message>
         <source>Start</source>
-        <translation type="unfinished"></translation>
+        <translation>Inizio</translation>
     </message>
     <message>
         <source>End</source>
-        <translation type="unfinished">Finisce</translation>
+        <translation>Fine</translation>
     </message>
     <message>
         <source>Src Address</source>
-        <translation type="unfinished"></translation>
+        <translation>Indirizzo sorgente</translation>
     </message>
     <message>
         <source>Src Port</source>
-        <translation type="unfinished"></translation>
+        <translation>Porta sorgente</translation>
     </message>
     <message>
         <source>Dst Address</source>
-        <translation type="unfinished"></translation>
+        <translation>Indirizzo di destinazione</translation>
     </message>
     <message>
         <source>Dst Port</source>
-        <translation type="unfinished"></translation>
+        <translation>Porta di destinazione</translation>
     </message>
     <message>
         <source>Radio</source>
-        <translation type="unfinished"></translation>
+        <translation>Radio</translation>
     </message>
     <message>
         <source>Entity</source>
-        <translation type="unfinished"></translation>
+        <translation>Entità</translation>
     </message>
     <message>
         <source>Signal</source>
-        <translation type="unfinished"></translation>
+        <translation>Segnale</translation>
     </message>
     <message>
         <source>Tx</source>
-        <translation type="unfinished"></translation>
+        <translation>Tx</translation>
     </message>
     <message>
         <source>Lost</source>
-        <translation type="unfinished">Persi</translation>
+        <translation>Persi</translation>
     </message>
     <message>
         <source>Max Delta (ms)</source>
-        <translation type="unfinished">Delta massimo (ms)</translation>
+        <translation>Delta massimo (ms)</translation>
     </message>
     <message>
         <source>Mean Jitter (ms)</source>
-        <translation type="unfinished"></translation>
+        <translation>Jitter medio (ms)</translation>
     </message>
     <message>
         <source>Max Jitter (ms)</source>
-        <translation type="unfinished"></translation>
+        <translation>Jitter massimo (ms)</translation>
     </message>
     <message>
         <source>Pb</source>
-        <translation type="unfinished"></translation>
+        <translation>Pb</translation>
     </message>
     <message>
         <source>Prepare Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>Prepara filtro</translation>
     </message>
     <message>
         <source>Play</source>
-        <translation type="unfinished">Riproduci</translation>
+        <translation>Riproduci</translation>
     </message>
     <message>
         <source>Stop</source>
-        <translation type="unfinished">Ferma</translation>
+        <translation>Ferma</translation>
     </message>
     <message>
         <source>Analyze</source>
-        <translation type="unfinished">Analizza</translation>
+        <translation>Analizza</translation>
     </message>
     <message>
         <source>X</source>
-        <translation type="unfinished">X</translation>
+        <translation>X</translation>
     </message>
     <message>
         <source>DIS Playback</source>
-        <translation type="unfinished"></translation>
+        <translation>Riproduzione DIS</translation>
     </message>
 </context>
 <context>
@@ -4451,27 +4526,27 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Add annotation…</source>
-        <translation type="unfinished"></translation>
+        <translation>Aggiungi annotazione...</translation>
     </message>
     <message>
         <source>Edit annotation…</source>
-        <translation type="unfinished"></translation>
+        <translation>Modifica annotazione...</translation>
     </message>
     <message>
         <source>Remove annotation</source>
-        <translation type="unfinished"></translation>
+        <translation>Rimuovi annotazione</translation>
     </message>
     <message>
         <source>Start byte for offset</source>
-        <translation type="unfinished"></translation>
+        <translation>Byte iniziale per l&apos;offset</translation>
     </message>
     <message>
         <source>End byte for offset</source>
-        <translation type="unfinished"></translation>
+        <translation>Byte finale per l&apos;offset</translation>
     </message>
     <message>
         <source>Clear offset markers</source>
-        <translation type="unfinished"></translation>
+        <translation>Pulisci i marcatori di offset</translation>
     </message>
     <message>
         <source>Show bytes as hexadecimal</source>
@@ -4507,7 +4582,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Comment: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Commento: %1</translation>
     </message>
 </context>
 <context>
@@ -7441,6 +7516,15 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
+    <name>LuaDebuggerCodeView</name>
+    <message>
+        <source>Click: add or remove breakpoint
+Shift+click: on an empty line, add a disabled breakpoint;
+on an existing breakpoint, toggle its active state</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>LuaDebuggerDialog</name>
     <message>
         <source>Open Lua Script</source>
@@ -7467,12 +7551,12 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>Esci (Maiusc+F11)</translation>
     </message>
     <message>
-        <source>Reload Lua Plugins (Ctrl+Shift+L)</source>
-        <translation>Ricarica plugin Lua (Ctrl+Maiusc+L)</translation>
+        <source>Run to line (%1)</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Remove all breakpoints</source>
-        <translation type="vanished">Elimina tutti i breakpoint</translation>
+        <source>Reload Lua Plugins (Ctrl+Shift+L)</source>
+        <translation>Ricarica plugin Lua (Ctrl+Maiusc+L)</translation>
     </message>
     <message>
         <source>Find in script (%1)</source>
@@ -7491,33 +7575,30 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>Variabili</translation>
     </message>
     <message>
-        <source>&lt;p&gt;&lt;b&gt;Locals&lt;/b&gt;&lt;br/&gt;Parameters and local variables for the selected stack frame.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Upvalues&lt;/b&gt;&lt;br/&gt;Outer variables that this function actually uses from surrounding code. Anything the function does not reference does not appear here.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Globals&lt;/b&gt;&lt;br/&gt;Names from the global environment table.&lt;/p&gt;</source>
-        <translation type="vanished">&lt;p&gt;&lt;b&gt;Locals&lt;/b&gt;&lt;br/&gt; Parametri e variabili locali relativi allo stack frame selezionato.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Upvalue&lt;/b&gt;&lt;br/&gt;Variabili esterne provenienti dal codice circostante che questa funzione utilizza effettivamente. Tutto ciò che non viene referenziato dalla funzione non apparirà qui.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Globali&lt;/b&gt;&lt;br/&gt;Nomi contenuti nella tabella dell&apos;ambiente globale.&lt;/p&gt;</translation>
-    </message>
-    <message>
         <source>From: Locals</source>
-        <translation type="unfinished"></translation>
+        <translation>Da: locali</translation>
     </message>
     <message>
         <source>From: Upvalues</source>
-        <translation type="unfinished"></translation>
+        <translation>Da: upvalue</translation>
     </message>
     <message>
         <source>From: Globals</source>
-        <translation type="unfinished"></translation>
+        <translation>Da: globali</translation>
     </message>
     <message>
         <source>
 … (truncated)</source>
-        <translation type="unfinished"></translation>
+        <translation>
+… (troncato)</translation>
     </message>
     <message>
         <source>%1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">%1 (%2)</translation>
     </message>
     <message>
         <source>&lt;p&gt;&lt;b&gt;Locals&lt;/b&gt;&lt;br/&gt;Parameters and local variables for the selected stack frame.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Upvalues&lt;/b&gt;&lt;br/&gt;Outer variables that this function actually uses from surrounding code. Anything the function does not reference does not appear here.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Globals&lt;/b&gt;&lt;br/&gt;Names from the global environment table.&lt;/p&gt;&lt;p&gt;Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;p&gt;&lt;b&gt;Locali&lt;/b&gt;&lt;br/&gt;Parametri e variabili locali per il frame dello stack selezionato.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Upvalue&lt;/b&gt;&lt;br/&gt;Variabili esterne che questa funzione utilizza effettivamente dal codice circostante. Tutto ciò a cui la funzione non fa riferimento non compare qui.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Globali&lt;/b&gt;&lt;br/&gt;Nomi tratti dalla tabella dell&apos;ambiente globale.&lt;/p&gt;&lt;p&gt;I valori che differiscono dalla pausa precedente vengono disegnati con un &lt;b&gt;con un colore di accento marcato&lt;/b&gt;, e lampeggiano brevemente durante la pausa che ha introdotto la modifica.&lt;/p&gt;</translation>
     </message>
     <message>
         <source>Name</source>
@@ -7533,11 +7614,11 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Monitora</translation>
     </message>
     <message>
         <source>&lt;p&gt;Each row is a &lt;b&gt;Variables-tree path&lt;/b&gt;, not a Lua expression. Accepted forms:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Section-qualified: &lt;code&gt;Locals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Upvalues.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Globals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;.&lt;/li&gt;&lt;li&gt;Section root alone: &lt;code&gt;Locals&lt;/code&gt;, &lt;code&gt;Upvalues&lt;/code&gt;, &lt;code&gt;Globals&lt;/code&gt; (&lt;code&gt;_G&lt;/code&gt; is an alias for &lt;code&gt;Globals&lt;/code&gt;).&lt;/li&gt;&lt;li&gt;Unqualified name: resolved in &lt;b&gt;Locals &amp;rarr; Upvalues &amp;rarr; Globals&lt;/b&gt; order; the row tooltip shows which section matched.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;After the first segment, chain &lt;code&gt;.field&lt;/code&gt; or bracket keys &amp;mdash; integer (&lt;code&gt;[1]&lt;/code&gt;, &lt;code&gt;[-1]&lt;/code&gt;, &lt;code&gt;[0x1F]&lt;/code&gt;), boolean (&lt;code&gt;[true]&lt;/code&gt;), or short-literal string (&lt;code&gt;[&quot;key&quot;]&lt;/code&gt;, &lt;code&gt;[&apos;k&apos;]&lt;/code&gt;). Depth is capped at 32 segments. Use the &lt;b&gt;Evaluate&lt;/b&gt; panel below for arbitrary Lua expressions.&lt;/p&gt;&lt;p&gt;Values are only read while the debugger is &lt;b&gt;paused&lt;/b&gt;; otherwise the Value column shows a muted em dash. Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;&lt;p&gt;Double-click or press &lt;b&gt;F2&lt;/b&gt; to edit a row; &lt;b&gt;Delete&lt;/b&gt; removes it; drag rows to reorder.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">&lt;p&gt;Ogni riga è un &lt;b&gt;percorso dell&apos;albero delle variabili&lt;/b&gt;, non un&apos;espressione Lua. Forme accettate: &lt;/p&gt;&lt;ul&gt;&lt;li&gt;qualificato dalla sezione: &lt;code&gt;Locals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Upvalues.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Globals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;. &lt;li&gt;Radice della sezione da sola: &lt;code&gt;Locals&lt;/code&gt;, &lt;code&gt;Upvalues&lt;/code&gt;, &lt;code&gt;Globals&lt;/code&gt; (&lt;code&gt;_G&lt;/code&gt; è un alias per &lt;code&gt;Globals&lt;/code&gt;).&lt;/li&gt; &lt;li&gt;Nome non qualificato: risolto nell&apos;ordine &lt;b&gt;Locali &amp;rarr; Upvalue ​​&amp;rarr; Globali&lt;/b&gt;; il suggerimento della riga mostra quale sezione corrisponde.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;Dopo il primo segmento, concatena &lt;code&gt;.field&lt;/code&gt; o chiavi tra parentesi quadre &amp;mdash; intero (&lt;code&gt;[1]&lt;/code&gt;, &lt;code&gt;[-1]&lt;/code&gt;, &lt;code&gt;[0x1F]&lt;/code&gt;), booleano (&lt;code&gt;[true]&lt;/code&gt;) o stringa letterale breve (&lt;code&gt;[&quot;key&quot;]&lt;/code&gt;, &lt;code&gt;[&apos;k&apos;]&lt;/code&gt;). La profondità è limitata a 32 segmenti. Utilizza il pannello &lt;b&gt;Valuta&lt;/b&gt; qui sotto per espressioni Lua arbitrarie.&lt;/p&gt; &lt;p&gt;I valori vengono letti solo quando il debugger è &lt;b&gt;in pausa&lt;/b&gt;; altrimenti la colonna Valore mostra un trattino lungo attenuato. I valori che differiscono dalla pausa precedente vengono visualizzati con un &lt;b&gt;colore marcato&lt;/b&gt; e lampeggiano brevemente durante la pausa che ha introdotto la modifica.&lt;/p&gt; &lt;p&gt;Fai doppio clic o premi &lt;b&gt;F2&lt;/b&gt; per modificare una riga; &lt;b&gt;Canc&lt;/b&gt; la elimina; trascina le righe per riordinarle.&lt;/p&gt;</translation>
     </message>
     <message>
         <source>Stack Trace</source>
@@ -7581,7 +7662,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>&lt;b&gt;Lua Expression Evaluation&lt;/b&gt;&lt;br&gt;&lt;br&gt;Code is executed using &lt;code&gt;lua_pcall()&lt;/code&gt; in a protected environment. Runtime errors are caught and displayed in the output.&lt;br&gt;&lt;br&gt;&lt;b&gt;Prefix with &lt;code&gt;=&lt;/code&gt;&lt;/b&gt; to return a value (e.g., &lt;code&gt;=my_var&lt;/code&gt;).&lt;br&gt;&lt;br&gt;&lt;b&gt;What works:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Read/modify global variables (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Modify table contents (&lt;code&gt;my_table.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Call functions and inspect return values&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;Limitations:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Local variables cannot be modified directly (use &lt;code&gt;debug.setlocal()&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Long-running expressions are automatically aborted&lt;/li&gt;&lt;li&gt;&lt;b&gt;Warning:&lt;/b&gt; Changes to globals persist and can affect ongoing dissection&lt;/li&gt;&lt;/ul&gt;</source>
-        <translation>&lt;b&gt;Valutazione delle espressioni Lua&lt;/b&gt;&lt;br&gt;&lt;br&gt;Il codice è eseguito utilizzando &lt;code&gt;lua_pcall()&lt;/code&gt; in un ambiente protetto. Gli errori di runtime sono intercettati e visualizzati nel risultato.&lt;br&gt;&lt;br&gt;&lt;b&gt;Anteponi &lt;code&gt;=&lt;/code&gt;&lt;/b&gt; per restituire un valore (ad es., &lt;code&gt;=mia_var&lt;/code&gt;).&lt;br&gt;&lt;br&gt;&lt;b&gt;Cosa funziona:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Lettura/modifica delle variabili globali (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Modifica dei contenuti della tabella (&lt;code&gt;mia_tabella.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Invoca funzioni e ispezionai valori restituiti&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;Limitazioni:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Le variabili locali non possono essere modificate direttamente (usa &lt;code&gt;debug.setlocal()&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Le espressioni con lunga durata vengono interrotte automaticamente&lt;/li&gt;&lt;li&gt;&lt;b&gt;Avviso:&lt;/b&gt; le modifiche alle variabili globali persistono e possono avere impatto sulla decodifica in corso&lt;/li&gt;&lt;/ul&gt;</translation>
+        <translation type="vanished">&lt;b&gt;Valutazione delle espressioni Lua&lt;/b&gt;&lt;br&gt;&lt;br&gt;Il codice è eseguito utilizzando &lt;code&gt;lua_pcall()&lt;/code&gt; in un ambiente protetto. Gli errori di runtime sono intercettati e visualizzati nel risultato.&lt;br&gt;&lt;br&gt;&lt;b&gt;Anteponi &lt;code&gt;=&lt;/code&gt;&lt;/b&gt; per restituire un valore (ad es., &lt;code&gt;=mia_var&lt;/code&gt;).&lt;br&gt;&lt;br&gt;&lt;b&gt;Cosa funziona:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Lettura/modifica delle variabili globali (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Modifica dei contenuti della tabella (&lt;code&gt;mia_tabella.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Invoca funzioni e ispezionai valori restituiti&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;Limitazioni:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Le variabili locali non possono essere modificate direttamente (usa &lt;code&gt;debug.setlocal()&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Le espressioni con lunga durata vengono interrotte automaticamente&lt;/li&gt;&lt;li&gt;&lt;b&gt;Avviso:&lt;/b&gt; le modifiche alle variabili globali persistono e possono avere impatto sulla decodifica in corso&lt;/li&gt;&lt;/ul&gt;</translation>
     </message>
     <message>
         <source>Output</source>
@@ -7636,7 +7717,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Enable or disable this breakpoint</source>
-        <translation>Abilita e disabilita questo breakpoint</translation>
+        <translation type="vanished">Abilita e disabilita questo breakpoint</translation>
     </message>
     <message>
         <source>File not found: %1</source>
@@ -7645,63 +7726,59 @@ Relative to reference: n/a (outside reference range)</source>
     <message>
         <source>%1
 Line %2</source>
-        <translation>%1
+        <translation type="vanished">%1
 Riga %2</translation>
     </message>
     <message>
         <source>No watch path entered yet — enter a variable path in the Watch column to see a value here.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Nessun percorso da controllare inserito finora: inserisci un percorso variabile nella colonna Monitoraggio per visualizzarne il valore.</translation>
     </message>
     <message>
         <source>Not a variable path</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Non un percorso variabile</translation>
     </message>
     <message>
         <source>Use a Variables-style path (e.g. Locals.x, Globals.t.k, t[1], t[&quot;k&quot;], or a single identifier).</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Utilizza un percorso in stile Variabili (ad es. Locals.x, Globals.t.k, t[1], t[&quot;k&quot;] o un singolo identificatore).</translation>
     </message>
     <message>
         <source>Only variable paths can be watched.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">È possibile monitorare solo i percorsi variabili.</translation>
     </message>
     <message>
         <source>Value shown only while the debugger is paused.</source>
-        <translation type="unfinished"></translation>
+        <translation>Valore mostrato solo quando il debugger è in pausa.</translation>
     </message>
     <message>
         <source>Value shown only while the debugger is paused. The debugger is currently disabled.</source>
-        <translation type="unfinished"></translation>
+        <translation>Valore mostrato solo quando il debugger è in pausa. Il debugger è attualmente disabilitato.</translation>
     </message>
     <message>
         <source>error</source>
-        <translation type="unfinished"></translation>
+        <translation>errore</translation>
     </message>
     <message>
         <source>Invalid watch path.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Percorso di monitoraggio non valido.</translation>
     </message>
     <message>
         <source>Maximum watch depth reached</source>
-        <translation type="unfinished"></translation>
+        <translation>Profondità di monitoraggio massima raggiunta</translation>
     </message>
     <message>
         <source>Maximum watch depth reached.</source>
-        <translation type="unfinished"></translation>
+        <translation>Profondità di monitoraggio massima raggiunta.</translation>
     </message>
     <message>
         <source>Only variable paths can be watched (e.g. Locals.name, Globals.x, or a single identifier for Locals.name).</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">È possibile monitorare solo i percorsi variabili (ad es. Locals.name, Globals.x o un singolo identificatore per Locals.name).</translation>
     </message>
     <message numerus="yes">
         <source>Watch path is too long (maximum %Ln characters).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation type="vanished">
+            <numerusform>Il percorso di visualizzazione è troppo lungo (massimo %Ln caratteri).</numerusform>
+            <numerusform>Il percorso di visualizzazione è troppo lungo (massimo %Ln caratteri).</numerusform>
         </translation>
-    </message>
-    <message>
-        <source>Remove this breakpoint</source>
-        <translation type="vanished">Rimuovi questo breakpoint</translation>
     </message>
     <message>
         <source>Type: %1</source>
@@ -7730,10 +7807,130 @@ Riga %2</translation>
     </message>
     <message>
         <source>Remove</source>
-        <translation type="unfinished">Rimuovi</translation>
+        <translation>Rimuovi</translation>
     </message>
     <message>
         <source>Remove All Breakpoints</source>
+        <translation>Rimuovi tutti i breakpoint</translation>
+    </message>
+    <message>
+        <source>Add Watch (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;p&gt;Each row is either a &lt;b&gt;Variables-tree path&lt;/b&gt; or a &lt;b&gt;Lua expression&lt;/b&gt;; the panel auto-detects which based on the syntax you type.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Path watches&lt;/b&gt; &amp;mdash; resolved against the paused frame&apos;s locals, upvalues, and globals:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Section-qualified: &lt;code&gt;Locals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Upvalues.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Globals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;.&lt;/li&gt;&lt;li&gt;Section root alone: &lt;code&gt;Locals&lt;/code&gt;, &lt;code&gt;Upvalues&lt;/code&gt;, &lt;code&gt;Globals&lt;/code&gt; (&lt;code&gt;_G&lt;/code&gt; is an alias for &lt;code&gt;Globals&lt;/code&gt;).&lt;/li&gt;&lt;li&gt;Unqualified name: resolved in &lt;b&gt;Locals &amp;rarr; Upvalues &amp;rarr; Globals&lt;/b&gt; order; the row tooltip shows which section matched.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;After the first segment, chain &lt;code&gt;.field&lt;/code&gt; or bracket keys &amp;mdash; integer (&lt;code&gt;[1]&lt;/code&gt;, &lt;code&gt;[-1]&lt;/code&gt;, &lt;code&gt;[0x1F]&lt;/code&gt;), boolean (&lt;code&gt;[true]&lt;/code&gt;), or short-literal string (&lt;code&gt;[&quot;key&quot;]&lt;/code&gt;, &lt;code&gt;[&apos;k&apos;]&lt;/code&gt;). Depth is capped at 32 segments.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Expression watches&lt;/b&gt; &amp;mdash; anything that is not a plain path (operators, function/method calls, table constructors, length &lt;code&gt;#&lt;/code&gt;, comparisons, &amp;hellip;) is evaluated as Lua against the same locals/upvalues/globals. &lt;b&gt;You do not need a leading &lt;code&gt;=&lt;/code&gt; or &lt;code&gt;return&lt;/code&gt;&lt;/b&gt;; value-returning expressions auto-return their value. Examples: &lt;code&gt;#packets&lt;/code&gt;, &lt;code&gt;tbl[i + 1]&lt;/code&gt;, &lt;code&gt;obj:method()&lt;/code&gt;, &lt;code&gt;a == b&lt;/code&gt;, &lt;code&gt;{x, y}&lt;/code&gt;. Tables produced by an expression are expandable, and children re-resolve on every pause.&lt;/p&gt;&lt;p&gt;Values are only read while the debugger is &lt;b&gt;paused&lt;/b&gt;; otherwise the Value column shows a muted em dash. Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;&lt;p&gt;Double-click or press &lt;b&gt;F2&lt;/b&gt; to edit a row; &lt;b&gt;Delete&lt;/b&gt; removes it; drag rows to reorder. Use the &lt;b&gt;Evaluate&lt;/b&gt; panel below to run statements with side effects (assignments, blocks, loops).&lt;/p&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove Watch (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove All Watches (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;p&gt;&lt;b&gt;Expression&lt;/b&gt;&lt;br/&gt;Pause only when this Lua expression is truthy in the current frame. Runtime errors count as false and surface a warning icon on the row.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Hit Count&lt;/b&gt;&lt;br/&gt;Gate the pause on a hit counter (&lt;code&gt;0&lt;/code&gt; disables). The dropdown next to the integer picks the comparison mode: &lt;code&gt;&amp;ge;&lt;/code&gt; pauses every hit at or after &lt;i&gt;N&lt;/i&gt; (default); &lt;code&gt;=&lt;/code&gt; pauses once when the counter reaches &lt;i&gt;N&lt;/i&gt;; &lt;code&gt;every&lt;/code&gt; pauses on hits &lt;i&gt;N&lt;/i&gt;, 2&amp;times;&lt;i&gt;N&lt;/i&gt;, 3&amp;times;&lt;i&gt;N&lt;/i&gt;, &amp;hellip;; &lt;code&gt;once&lt;/code&gt; pauses on the &lt;i&gt;N&lt;/i&gt;th hit and deactivates the breakpoint. The counter is preserved across edits; right-click the row to reset it.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Log Message&lt;/b&gt;&lt;br/&gt;Write a line to the &lt;i&gt;Evaluate&lt;/i&gt; output (and Wireshark&apos;s debug log) each time the breakpoint fires &amp;mdash; after the &lt;i&gt;Hit Count&lt;/i&gt; gate and any &lt;i&gt;Expression&lt;/i&gt; allow it. By default execution continues; click the pause toggle on the editor row to also pause after emitting. Tags: &lt;code&gt;{expr}&lt;/code&gt; (any Lua value); &lt;code&gt;{filename}&lt;/code&gt;, &lt;code&gt;{basename}&lt;/code&gt;, &lt;code&gt;{line}&lt;/code&gt;, &lt;code&gt;{function}&lt;/code&gt;, &lt;code&gt;{what}&lt;/code&gt;; &lt;code&gt;{hits}&lt;/code&gt;, &lt;code&gt;{depth}&lt;/code&gt;, &lt;code&gt;{thread}&lt;/code&gt;; &lt;code&gt;{timestamp}&lt;/code&gt;, &lt;code&gt;{datetime}&lt;/code&gt;, &lt;code&gt;{epoch}&lt;/code&gt;, &lt;code&gt;{epoch_ms}&lt;/code&gt;, &lt;code&gt;{elapsed}&lt;/code&gt;, &lt;code&gt;{delta}&lt;/code&gt;; &lt;code&gt;{{&lt;/code&gt; / &lt;code&gt;}}&lt;/code&gt; for literal braces.&lt;/p&gt;&lt;p&gt;Edit the &lt;i&gt;Location&lt;/i&gt; cell (double-click, F2, or right-click &amp;rarr; Edit) to attach one of these. A white core inside the breakpoint dot &amp;mdash; in this list and in the gutter &amp;mdash; marks rows that carry extras. Switching the editor&apos;s mode dropdown mid-edit discards typed-but-uncommitted text on the other pages; press Enter on a page before switching if you want to keep what you typed.&lt;/p&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No breakpoints</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Edit Breakpoint</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove Breakpoint (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove All Breakpoints (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;b&gt;Lua Expression Evaluation&lt;/b&gt;&lt;br&gt;&lt;br&gt;Code runs in a protected environment: runtime errors are caught and shown in the output instead of propagating.&lt;br&gt;&lt;br&gt;&lt;b&gt;Prefix with &lt;code&gt;=&lt;/code&gt;&lt;/b&gt; to return a value (e.g., &lt;code&gt;=my_var&lt;/code&gt;).&lt;br&gt;&lt;br&gt;&lt;b&gt;What works:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Read/modify global variables (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Modify table contents (&lt;code&gt;my_table.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Call functions and inspect return values&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;Limitations:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Local variables cannot be modified directly (use &lt;code&gt;debug.setlocal()&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Long-running expressions are automatically aborted&lt;/li&gt;&lt;li&gt;&lt;b&gt;Warning:&lt;/b&gt; Changes to globals persist and can affect ongoing dissection&lt;/li&gt;&lt;/ul&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Location: %1:%2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Condition: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>pauses on hits %1, 2×%1, 3×%1, …</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>pauses once on hit %1, then deactivates the breakpoint</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>pauses on every hit from %1 onwards</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hit Count: %1 / %2 (%3)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hits: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Log: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>(logpoint — also pauses)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>(logpoint — does not pause)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Condition error on last evaluation — treated as false (silent). Edit or reset the breakpoint to clear.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Condition error: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Edit...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Disable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Enable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Remove</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Edit...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Open Source</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reset Hit Count</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reset All Hit Counts</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -7769,12 +7966,53 @@ Riga %2</translation>
         <translation>Rimuovi breakpoint</translation>
     </message>
     <message>
-        <source>Run to this line</source>
-        <translation>Esegui fino a questa riga</translation>
+        <source>No breakpoints
+%1: add or remove breakpoint on the current line in the editor</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Evaluate &quot;%1&quot;</source>
-        <translation type="vanished">Valuta &quot;%1&quot;</translation>
+        <source>All breakpoints are inactive — click to activate all
+%1: add or remove on the current line in the editor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Click to deactivate all breakpoints
+%1: add or remove on the current line in the editor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter a variable path (e.g. Locals.x, Globals.t.k) or a Lua expression in the Watch column to see a value here.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not evaluate watch.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Expression — re-evaluated on every pause.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear All Watches</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <source>Are you sure you want to remove %Ln watch(es)?</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Watch expression is too long (maximum %Ln characters).</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Run to this line</source>
+        <translation>Esegui fino a questa riga</translation>
     </message>
     <message>
         <source>%1 = %2</source>
@@ -7794,11 +8032,23 @@ Riga %2</translation>
     </message>
     <message>
         <source>Add Watch: &quot;%1&quot;</source>
+        <translation>Aggiungi monitoraggio: &quot;%1&quot;</translation>
+    </message>
+    <message>
+        <source>Copy Path</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reveal in File Manager</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy Location</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Debugger is paused. Uncheck to disable.</source>
-        <translation type="unfinished"></translation>
+        <translation>Il debugger è in pausa. Deseleziona questa opzione per disabilitarlo.</translation>
     </message>
     <message>
         <source>Debugger is enabled. Uncheck to disable.</source>
@@ -7806,7 +8056,7 @@ Riga %2</translation>
     </message>
     <message>
         <source>Debugger is disabled while a live capture is running. Stop the capture to re-enable.</source>
-        <translation type="unfinished"></translation>
+        <translation>Il debugger è disabilitato durante l&apos;esecuzione di una cattura in tempo reale. Interrompi la cattura per riabilitarlo.</translation>
     </message>
     <message>
         <source>Debugger is disabled. Check to enable.</source>
@@ -7814,7 +8064,7 @@ Riga %2</translation>
     </message>
     <message>
         <source>Disabled (live capture)</source>
-        <translation type="unfinished"></translation>
+        <translation>Disabilitato (cattura live)</translation>
     </message>
     <message>
         <source>Disabled</source>
@@ -7890,15 +8140,11 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
     </message>
     <message>
         <source>Add Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Aggiungi monitoraggio</translation>
     </message>
     <message>
         <source>Ctrl+Shift+W</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Clear Breakpoints</source>
-        <translation type="vanished">Cancella breakpoint</translation>
+        <translation>Ctrl+Maiusc+W</translation>
     </message>
     <message>
         <source>Open File</source>
@@ -7987,11 +8233,11 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
     <name>LuaDebuggerPauseOverlay</name>
     <message>
         <source>Lua debugger paused</source>
-        <translation type="unfinished"></translation>
+        <translation>Debugger Lua in pausa</translation>
     </message>
     <message>
         <source>Use the Lua Debugger window to step, continue, or evaluate. The main window resumes when execution is released.</source>
-        <translation type="unfinished"></translation>
+        <translation>Utilizza la finestra del debugger Lua per eseguire il codice passo dopo passo, continuare o valutare l&apos;esecuzione. La finestra principale riprende l&apos;esecuzione al rilascio del pulsante di esecuzione.</translation>
     </message>
 </context>
 <context>
@@ -9919,10 +10165,6 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
         <translation>Nuovo profilo</translation>
     </message>
     <message>
-        <source>Profile Error</source>
-        <translation type="vanished">Errore di profilo</translation>
-    </message>
-    <message>
         <source>Exporting profiles</source>
         <translation>Esportazione profili</translation>
     </message>
@@ -9947,22 +10189,6 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
             <numerusform>%Ln profilo personale selezionato</numerusform>
             <numerusform>%Ln profili personali selezionati</numerusform>
         </translation>
-    </message>
-    <message>
-        <source>An import of profiles is not allowed, while changes are pending</source>
-        <translation type="vanished">Non è consentito importare profili, mentre ci sono modifiche in corso</translation>
-    </message>
-    <message>
-        <source>An import is pending to be saved. Additional imports are not allowed</source>
-        <translation type="vanished">Un&apos;importazione è in fase di salvataggio. Non sono consentite importazioni aggiuntive</translation>
-    </message>
-    <message>
-        <source>An export of profiles is only allowed for personal profiles</source>
-        <translation type="vanished">Un&apos;esportazione di profili è consentita solo per i profili personali</translation>
-    </message>
-    <message>
-        <source>An export of profiles is not allowed, while changes are pending</source>
-        <translation type="vanished">Un&apos;esportazione di profili non è consentita, mentre ci sono modifiche in corso</translation>
     </message>
     <message numerus="yes">
         <source>%Ln profile(s) exported</source>
@@ -10036,40 +10262,24 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
         <translation>Questo è un profilo fornito dal sistema</translation>
     </message>
     <message>
-        <source>A profile change for this name is pending</source>
-        <translation type="vanished">Una modifica al profilo per questo nome è in corso</translation>
-    </message>
-    <message>
-        <source> (See: %1)</source>
-        <translation type="vanished"> (Vedi: %1)</translation>
-    </message>
-    <message>
-        <source>This is an invalid profile definition</source>
-        <translation type="vanished">Questa è una definizione non valida di un profilo</translation>
-    </message>
-    <message>
         <source>A profile already exists with this name</source>
         <translation>Un profilo con questo nome esiste già</translation>
     </message>
     <message>
-        <source>A profile with this name is being deleted</source>
-        <translation type="vanished">Un profilo con questo nome è in fase di eliminazione</translation>
-    </message>
-    <message>
         <source>Duplicate profile name (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Nome di profilo duplicato (%1)</translation>
     </message>
     <message>
         <source>A profile change for this name is pending (See: %1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Una modifica del profilo per questo nome è in sospeso (Vedi: %1)</translation>
     </message>
     <message>
         <source>%1 (originally %2)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (originariamente %2)</translation>
     </message>
     <message>
         <source>The %1 profile is being deleted</source>
-        <translation type="unfinished"></translation>
+        <translation>Il profilo %1 sarà eliminato</translation>
     </message>
     <message>
         <source>Created from default settings</source>
@@ -10093,16 +10303,8 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
         <translation>copia</translation>
     </message>
     <message>
-        <source>Exporting profiles while changes are pending is not allowed</source>
-        <translation type="vanished">Non è consentito esportare profili mentre ci sono modifiche in corso.</translation>
-    </message>
-    <message>
         <source>No profiles found to export</source>
         <translation>Nessun profilo trovato per l&apos;esportazione</translation>
-    </message>
-    <message>
-        <source>Can&apos;t delete profile directory</source>
-        <translation type="vanished">Impossibile eliminare la cartella del profilo</translation>
     </message>
     <message>
         <source>A profile name cannot contain the following characters: %1</source>
@@ -10115,18 +10317,6 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
     <message>
         <source>A profile cannot start or end with a period (.)</source>
         <translation>Un profilo non può iniziare o finire con un punto (.)</translation>
-    </message>
-    <message>
-        <source>Default</source>
-        <translation type="vanished">Predefinito</translation>
-    </message>
-    <message>
-        <source>Global</source>
-        <translation type="vanished">Globale</translation>
-    </message>
-    <message>
-        <source>Personal</source>
-        <translation type="vanished">Personale</translation>
     </message>
     <message>
         <source>Renamed from: %1</source>
@@ -11037,35 +11227,35 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
     </message>
     <message>
         <source>Global</source>
-        <translation type="unfinished">Globale</translation>
+        <translation>Globale</translation>
     </message>
     <message>
         <source>Personal</source>
-        <translation type="unfinished">Personale</translation>
+        <translation>Personale</translation>
     </message>
     <message>
         <source>Add Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Aggiungi monitoraggio</translation>
     </message>
     <message>
         <source>Remove All Watches</source>
-        <translation type="unfinished"></translation>
+        <translation>Rimuovi tutti i monitoraggi</translation>
     </message>
     <message>
         <source>Duplicate Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Duplica monitoraggio</translation>
     </message>
     <message>
         <source>Edit Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Modifica monitoraggio</translation>
     </message>
     <message>
         <source>Copy Value</source>
-        <translation type="unfinished">Copia valore</translation>
+        <translation>Copia valore</translation>
     </message>
     <message>
         <source>Remove</source>
-        <translation type="unfinished">Rimuovi</translation>
+        <translation>Rimuovi</translation>
     </message>
 </context>
 <context>
@@ -17644,11 +17834,11 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
     </message>
     <message>
         <source>DIS Streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Flussi DIS</translation>
     </message>
     <message>
         <source>Show and analyze DIS radio streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Mostra e analizza i flussi radio DIS</translation>
     </message>
     <message>
         <source>Lua Debugger</source>

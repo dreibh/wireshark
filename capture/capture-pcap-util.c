@@ -769,9 +769,8 @@ if_info_new(const char *name, const char *description, bool loopback)
 	 * Try the platform's way of getting a friendly name and
 	 * interface type first.
 	 *
-	 * If that fails, then, for a loopback interface, give it the
-	 * friendly name "Loopback" and, for VMware interfaces,
-	 * give them the type IF_VIRTUAL.
+	 * If that fails, then try to figure out what the interface
+	 * is and give it a friendly name and appropriate type.
 	 */
 	add_unix_interface_ifinfo(if_info, name, description);
 	if (if_info->type == IF_WIRED) {
@@ -855,7 +854,7 @@ if_info_new(const char *name, const char *description, bool loopback)
 		} else if (g_ascii_strncasecmp(name, "docker", 6) == 0) {
 			if_info->type = IF_VIRTUAL;
 			if (if_info->friendly_name == NULL)
-				if_info->friendly_name = g_strdup("Docker Virtual Ethernet");
+				if_info->friendly_name = g_strdup("Docker Bridge");
 		} else if (g_ascii_strncasecmp(name, "veth", 4) == 0) {
 			if_info->type = IF_VIRTUAL;
 			if (if_info->friendly_name == NULL)
@@ -868,9 +867,45 @@ if_info_new(const char *name, const char *description, bool loopback)
 			if_info->type = IF_VIRTUAL;
 			if (if_info->friendly_name == NULL)
 				if_info->friendly_name = g_strdup("Libvirt Bridge");
+		} else if (g_ascii_strncasecmp(name, "lxcbr", 5) == 0) {
+			if_info->type = IF_VIRTUAL;
+			if (if_info->friendly_name == NULL)
+				if_info->friendly_name = g_strdup("LXC Bridge");
+		} else if (g_ascii_strncasecmp(name, "nlmon", 5) == 0) {
+			if_info->type = IF_VIRTUAL;
+			if (if_info->friendly_name == NULL)
+				if_info->friendly_name = g_strdup("Netlink monitor");
+		} else if (g_ascii_strncasecmp(name, "nflog", 5) == 0) {
+			if_info->type = IF_VIRTUAL;
+			if (if_info->friendly_name == NULL)
+				if_info->friendly_name = g_strdup("Netfilter log");
+		} else if (g_ascii_strncasecmp(name, "nfqueue", 7) == 0) {
+			if_info->type = IF_VIRTUAL;
+			if (if_info->friendly_name == NULL)
+				if_info->friendly_name = g_strdup("Netfilter queue");
+		} else if (g_ascii_strncasecmp(name, "dbus-session", 12) == 0) {
+			if_info->type = IF_VIRTUAL;
+			if (if_info->friendly_name == NULL)
+				if_info->friendly_name = g_strdup("D-Bus session bus");
+		} else if (g_ascii_strncasecmp(name, "dbus-system", 11) == 0) {
+			if_info->type = IF_VIRTUAL;
+			if (if_info->friendly_name == NULL)
+				if_info->friendly_name = g_strdup("D-Bus system bus");
 #endif
 		}
 	}
+#if defined(__linux__)
+	if (if_info->type == IF_USB) {
+		if (g_ascii_strncasecmp(name, "usbmon0", 7) == 0) {
+			if (if_info->friendly_name == NULL)
+				if_info->friendly_name = g_strdup("USB monitor (all)");
+		} else if (g_ascii_strncasecmp(name, "usbmon", 6) == 0) {
+			if (if_info->friendly_name == NULL)
+				if_info->friendly_name = g_strdup("USB monitor");
+		}
+	}
+#endif
+
 	if_info->vendor_description = NULL;
 #endif
 	if_info->loopback = loopback;

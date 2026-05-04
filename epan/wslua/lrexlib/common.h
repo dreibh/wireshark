@@ -182,6 +182,14 @@ void bufferZ_addnum (TBuffer *buf, size_t num);
  * @return The value of the field as an integer.
  */
 int  get_int_field (lua_State *L, const char* field);
+
+/**
+ * @brief Sets an integer field in a Lua table.
+ *
+ * @param L The Lua state.
+ * @param field The name of the field to set.
+ * @param val The value to set the field to.
+ */
 void set_int_field (lua_State *L, const char* field, int val);
 
 /**
@@ -194,7 +202,15 @@ void set_int_field (lua_State *L, const char* field, int val);
  * @param arrs Pointer to an array of flag pairs.
  * @return Number of tables processed.
  */
-int  get_flags (lua_State *L, const flag_pair **arrs);
+int get_flags (lua_State *L, const flag_pair **arrs);
+
+/**
+ * @brief Retrieves the key for a given flag value.
+ *
+ * @param fp Pointer to the flag pair.
+ * @param val The flag value.
+ * @return The key corresponding to the flag value.
+ */
 const char *get_flag_key (const flag_pair *fp, int val);
 
 /**

@@ -101,12 +101,12 @@ ADDITIONAL_LIST="
 	xxhash-devel
 	"
 
-# Uncomment to add PNG compression utilities used by compress-pngs:
-# ADDITIONAL_LIST="$ADDITIONAL_LIST
-#	advancecomp
-#	optipng
-#	oxipng
-#	pngcrush"
+# PNG compression utilities used by compress-pngs:
+ADDITIONAL_LIST="$ADDITIONAL_LIST
+	advancecomp
+	optipng
+	oxipng
+	pngcrush"
 
 # XXX
 RPMDEPS_LIST="rpm-build"

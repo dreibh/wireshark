@@ -1562,8 +1562,7 @@ dissect_ntp_std(tvbuff_t *tvb, packet_info *pinfo, proto_tree *ntp_tree, ntp_con
 
 	/* Stratum, 1byte field represents distance from primary source
 	 */
-	proto_tree_add_item(ntp_tree, hf_ntp_stratum, tvb, 1, 1, ENC_NA);
-	stratum = tvb_get_uint8(tvb, 1);
+	proto_tree_add_item_ret_uint8(ntp_tree, hf_ntp_stratum, tvb, 1, 1, ENC_NA, &stratum);
 
 	/* Poll interval, 1byte field indicating the maximum interval
 	 * between successive messages, in seconds to the nearest

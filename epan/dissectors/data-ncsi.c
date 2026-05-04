@@ -6,8 +6,8 @@
  *
  * List of PCI IDs
  *
- * Version: 2026.04.24
- * Date:    2026-04-24 03:15:02
+ * Version: 2026.04.30
+ * Date:    2026-04-30 03:15:02
  *
  * Maintained by Albert Pool, Martin Mares, and other volunteers from
  * the PCI ID Project at https://pci-ids.ucw.cz/.
@@ -17331,6 +17331,8 @@ static pci_id_t const pci_vid_117C[] = {
 {0x117C, 0x00BB, 0x117C, 0x00C9, "Celerity FC-641E(0x117C-0x00C9)"},
 {0x117C, 0x00BB, 0x117C, 0x00CA, "Celerity FC-642E(0x117C-0x00CA)"},
 {0x117C, 0x00BB, 0x117C, 0x00D4, "Celerity FC-644E(0x117C-0x00D4)"},
+{0x117C, 0x00BB, 0x117C, 0x40D8, "ThunderLink FC 5642(0x117C-0x40D8)"},
+{0x117C, 0x00BB, 0x117C, 0x40D9, "ThunderLink FC 5322(0x117C-0x40D9)"},
 {0x117C, 0x00C5, 0xFFFF, 0xFFFF, "ExpressNVM PCIe Gen4 Switch(0x00C5)"},
 {0x117C, 0x00C5, 0x117C, 0x00C6, "ExpressNVM S48F PCIe Gen4(0x117C-0x00C6)"},
 {0x117C, 0x00C5, 0x117C, 0x00CB, "ExpressNVM S4FF PCIe Gen4(0x117C-0x00CB)"},
@@ -17340,6 +17342,11 @@ static pci_id_t const pci_vid_117C[] = {
 {0x117C, 0x00E6, 0x117C, 0x00C2, "ExpressSAS H1244 GT(0x117C-0x00C2)"},
 {0x117C, 0x00E6, 0x117C, 0x00C3, "ExpressSAS H12F0 GT(0x117C-0x00C3)"},
 {0x117C, 0x00E6, 0x117C, 0x00C4, "ExpressSAS H120F GT(0x117C-0x00C4)"},
+{0x117C, 0x00E6, 0x117C, 0x00E1, "ExpressSAS H1280 GT(0x117C-0x00E1)"},
+{0x117C, 0x00E6, 0x117C, 0x00E2, "ExpressSAS H1208 GT(0x117C-0x00E2)"},
+{0x117C, 0x00E6, 0x117C, 0x00E3, "ExpressSAS H1244 GT(0x117C-0x00E3)"},
+{0x117C, 0x00E6, 0x117C, 0x40E0, "ThunderLink SH 5128(0x117C-0x40E0)"},
+{0x117C, 0x00E6, 0x117C, 0x40E4, "ThunderLink SH 5128(0x117C-0x40E4)"},
 {0x117C, 0x8013, 0xFFFF, 0xFFFF, "ExpressPCI UL4D(0x8013)"},
 {0x117C, 0x8014, 0xFFFF, 0xFFFF, "ExpressPCI UL4S(0x8014)"},
 {0x117C, 0x8027, 0xFFFF, 0xFFFF, "ExpressPCI UL5D(0x8027)"},
@@ -17347,7 +17354,7 @@ static pci_id_t const pci_vid_117C[] = {
 {0x117C, 0x8070, 0x117C, 0x0070, "ExpressSAS H1280(0x117C-0x0070)"},
 {0x117C, 0x8070, 0x117C, 0x0071, "ExpressSAS H1208(0x117C-0x0071)"},
 {0x117C, 0x8070, 0x117C, 0x0080, "ExpressSAS H1244(0x117C-0x0080)"},
-{0x117C, 0x8070, 0x117C, 0x40AE, "ThunderLink TLSH-3128(0x117C-0x40AE)"},
+{0x117C, 0x8070, 0x117C, 0x40AE, "ThunderLink SH 3128(0x117C-0x40AE)"},
 {0x117C, 0x8072, 0xFFFF, 0xFFFF, "ExpressSAS 12Gb/s SAS/SATA HBA(0x8072)"},
 {0x117C, 0x8072, 0x117C, 0x0072, "ExpressSAS H12F0(0x117C-0x0072)"},
 {0x117C, 0x8072, 0x117C, 0x0073, "ExpressSAS H120F(0x117C-0x0073)"},
@@ -24555,6 +24562,7 @@ static pci_id_t const pci_vid_14C3[] = {
 {0x14C3, 0x7991, 0xFFFF, 0xFFFF, "MT7996 secondary link PCIe Wi-Fi 7(802.11be) 320MHz Wireless Network Adapter [Filogic 680](0x7991)"},
 {0x14C3, 0x7992, 0xFFFF, 0xFFFF, "MT7992 primary link PCIe Wi-Fi 7(802.11be) 160MHz Wireless Network Adapter [Filogic 660](0x7992)"},
 {0x14C3, 0x799A, 0xFFFF, 0xFFFF, "MT7992 secondary link PCIe Wi-Fi 7(802.11be) 160MHz Wireless Network Adapter [Filogic 660](0x799A)"},
+{0x14C3, 0x8188, 0xFFFF, 0xFFFF, "MT8188 [Kompanio 838] Root Complex(0x8188)"},
 {0x14C3, 0x8650, 0xFFFF, 0xFFFF, "MT7650 Bluetooth(0x8650)"},
 }; /* pci_vid_14C3[] */
 
@@ -25177,6 +25185,7 @@ static pci_id_t const pci_vid_14E4[] = {
 {0x14E4, 0x16D6, 0x193D, 0x1087, "NIC-ETH531F-3S-2P(0x193D-0x1087)"},
 {0x14E4, 0x16D7, 0xFFFF, 0xFFFF, "BCM57414 NetXtreme-E 10Gb/25Gb RDMA Ethernet Controller(0x16D7)"},
 {0x14E4, 0x16D7, 0x117C, 0x00CC, "FastFrame N422 Dual-port 25Gb Ethernet Adapter(0x117C-0x00CC)"},
+{0x14E4, 0x16D7, 0x117C, 0x40D7, "ThunderLink NS 5252 Dual-port 25Gb Ethernet Adapter(0x117C-0x40D7)"},
 {0x14E4, 0x16D7, 0x14E4, 0x1402, "BCM957414A4142CC 10Gb/25Gb Ethernet PCIe(0x14E4-0x1402)"},
 {0x14E4, 0x16D7, 0x14E4, 0x1404, "BCM957414M4142C OCP 2x25G Type1 wRoCE(0x14E4-0x1404)"},
 {0x14E4, 0x16D7, 0x14E4, 0x4140, "NetXtreme E-Series Advanced Dual-port 25Gb SFP28 Network Daughter Card(0x14E4-0x4140)"},
@@ -25245,7 +25254,7 @@ static pci_id_t const pci_vid_14E4[] = {
 {0x14E4, 0x1713, 0x17AA, 0x3A23, "IdeaPad S10e(0x17AA-0x3A23)"},
 {0x14E4, 0x1750, 0xFFFF, 0xFFFF, "BCM57508 NetXtreme-E 10Gb/25Gb/40Gb/50Gb/100Gb/200Gb Ethernet(0x1750)"},
 {0x14E4, 0x1750, 0x117C, 0x00CF, "FastFrame N412 Dual-port 100Gb Ethernet Adapter(0x117C-0x00CF)"},
-{0x14E4, 0x1750, 0x117C, 0x40D6, "ThunderLink TLNS-5102 Dual-port 100Gb Ethernet Adapter(0x117C-0x40D6)"},
+{0x14E4, 0x1750, 0x117C, 0x40D6, "ThunderLink NS 5102 Dual-port 100Gb Ethernet Adapter(0x117C-0x40D6)"},
 {0x14E4, 0x1750, 0x14E4, 0x2100, "NetXtreme-E Dual-port 100G QSFP56 Ethernet PCIe4.0 x16 Adapter (BCM957508-P2100G)(0x14E4-0x2100)"},
 {0x14E4, 0x1750, 0x14E4, 0x5208, "NetXtreme-E Dual-port 100G QSFP56 Ethernet OCP 3.0 Adapter (BCM957508-N2100G)(0x14E4-0x5208)"},
 {0x14E4, 0x1750, 0x14E4, 0x520A, "NetXtreme-E Dual-port 100G DSFP Ethernet OCP 3.0 Adapter (BCM957508-N2100GD)(0x14E4-0x520A)"},
@@ -25256,6 +25265,7 @@ static pci_id_t const pci_vid_14E4[] = {
 {0x14E4, 0x1751, 0x1028, 0x09D4, "PowerEdge XR11/XR12 LOM(0x1028-0x09D4)"},
 {0x14E4, 0x1751, 0x1028, 0x0B1B, "PowerEdge XR5610 LOM(0x1028-0x0B1B)"},
 {0x14E4, 0x1751, 0x117C, 0x00DA, "FastFrame N424 Quad-port 25Gb Ethernet Adapter(0x117C-0x00DA)"},
+{0x14E4, 0x1751, 0x117C, 0x40DF, "ThunderLink NS 5254 Quad-port 25Gb Ethernet Adapter(0x117C-0x40DF)"},
 {0x14E4, 0x1751, 0x14E4, 0x4250, "NetXtreme-E Quad-port 25G SFP28 Ethernet PCIe4.0 x16 Adapter (BCM957504-P425G)(0x14E4-0x4250)"},
 {0x14E4, 0x1751, 0x14E4, 0x5045, "NetXtreme-E BCM57504 4x25G OCP3.0(0x14E4-0x5045)"},
 {0x14E4, 0x1751, 0x14E4, 0x5100, "NetXtreme-E Single-port 100G QSFP56 Ethernet OCP 3.0 Adapter (BCM957504-N1100G)(0x14E4-0x5100)"},
@@ -25266,6 +25276,7 @@ static pci_id_t const pci_vid_14E4[] = {
 {0x14E4, 0x1751, 0x1590, 0x0420, "HPE Ethernet 25/50Gb 2-port 6310C Adapter(0x1590-0x0420)"},
 {0x14E4, 0x1752, 0xFFFF, 0xFFFF, "BCM57502 NetXtreme-E 10Gb/25Gb/40Gb/50Gb Ethernet(0x1752)"},
 {0x14E4, 0x1760, 0xFFFF, 0xFFFF, "BCM57608 25Gb/50Gb/100Gb/200Gb/400Gb Ethernet(0x1760)"},
+{0x14E4, 0x1760, 0x117C, 0x00CF, "FastFrame N522 Dual-port 200Gb Ethernet Adapter(0x117C-0x00CF)"},
 {0x14E4, 0x1760, 0x14E4, 0x9110, "BCM57608 1x400G PCIe Ethernet NIC(0x14E4-0x9110)"},
 {0x14E4, 0x1760, 0x14E4, 0x9120, "BCM57608 2x200G PCIe Ethernet NIC(0x14E4-0x9120)"},
 {0x14E4, 0x1760, 0x14E4, 0x9121, "BCM57608 2x100G PCIe Ethernet NIC(0x14E4-0x9121)"},
@@ -30481,6 +30492,8 @@ static pci_id_t const pci_vid_19E5[] = {
 {0x19E5, 0x0222, 0x19E5, 0x0051, "Hi1822 SP681 (2*25/10GE)(0x19E5-0x0051)"},
 {0x19E5, 0x0222, 0x19E5, 0x0052, "Hi1822 SP680 (4*25/10GE)(0x19E5-0x0052)"},
 {0x19E5, 0x0222, 0x19E5, 0x00A1, "Hi1822 SP670 (2*100GE)(0x19E5-0x00A1)"},
+{0x19E5, 0x0229, 0xFFFF, 0xFFFF, "Hi1872 Family(0x0229)"},
+{0x19E5, 0x022A, 0xFFFF, 0xFFFF, "Hi1872 Family Virtual Function(0x022A)"},
 {0x19E5, 0x1710, 0xFFFF, 0xFFFF, "iBMA Virtual Network Adapter(0x1710)"},
 {0x19E5, 0x1711, 0xFFFF, 0xFFFF, "Hi171x Series [iBMC Intelligent Management system chip w/VGA support](0x1711)"},
 {0x19E5, 0x1712, 0xFFFF, 0xFFFF, "Intelligent Management system chip Virtual Network Adapter(0x1712)"},
@@ -35974,6 +35987,10 @@ static pci_id_t const pci_vid_2116[] = {
 {0x2116, 0xFFFF, 0xFFFF, 0xFFFF, "ZyDAS Technology Corp.(0x2116)"},
 }; /* pci_vid_2116[] */
 
+static pci_id_t const pci_vid_2123[] = {
+{0x2123, 0xFFFF, 0xFFFF, 0xFFFF, "Shanghai Warpdrive Technology Co., Ltd(0x2123)"},
+}; /* pci_vid_2123[] */
+
 static pci_id_t const pci_vid_21B4[] = {
 {0x21B4, 0xFFFF, 0xFFFF, 0xFFFF, "Hunan Goke Microelectronics Co., Ltd(0x21B4)"},
 }; /* pci_vid_21B4[] */
@@ -36673,6 +36690,12 @@ static pci_id_t const pci_vid_4C53[] = {
 static pci_id_t const pci_vid_4C54[] = {
 {0x4C54, 0xFFFF, 0xFFFF, 0xFFFF, "Lisuan Technology Co., Ltd.(0x4C54)"},
 {0x4C54, 0x5000, 0xFFFF, 0xFFFF, "LISUAN 7G100 Series Graphics(0x5000)"},
+{0x4C54, 0x5001, 0xFFFF, 0xFFFF, "LISUAN 7G100 Series Graphics(0x5001)"},
+{0x4C54, 0x5002, 0xFFFF, 0xFFFF, "LISUAN 7G100 Series Graphics(0x5002)"},
+{0x4C54, 0x5003, 0xFFFF, 0xFFFF, "LISUAN 7G100 Series Graphics(0x5003)"},
+{0x4C54, 0x5004, 0xFFFF, 0xFFFF, "LISUAN 7G100 Series Graphics(0x5004)"},
+{0x4C54, 0x5005, 0xFFFF, 0xFFFF, "LISUAN 7G100 Series Graphics(0x5005)"},
+{0x4C54, 0x5006, 0xFFFF, 0xFFFF, "LISUAN 7G100 Series Graphics(0x5006)"},
 }; /* pci_vid_4C54[] */
 
 static pci_id_t const pci_vid_4CA1[] = {
@@ -48848,7 +48871,7 @@ static pci_vid_index_t const pci_vid_index[] = {
 {0x1179, 42, pci_vid_1179 },
 {0x117A, 1, pci_vid_117A },
 {0x117B, 1, pci_vid_117B },
-{0x117C, 75, pci_vid_117C },
+{0x117C, 82, pci_vid_117C },
 {0x117D, 1, pci_vid_117D },
 {0x117E, 1, pci_vid_117E },
 {0x117F, 1, pci_vid_117F },
@@ -49660,7 +49683,7 @@ static pci_vid_index_t const pci_vid_index[] = {
 {0x14C0, 2, pci_vid_14C0 },
 {0x14C1, 7, pci_vid_14C1 },
 {0x14C2, 1, pci_vid_14C2 },
-{0x14C3, 27, pci_vid_14C3 },
+{0x14C3, 28, pci_vid_14C3 },
 {0x14C4, 1, pci_vid_14C4 },
 {0x14C5, 1, pci_vid_14C5 },
 {0x14C6, 1, pci_vid_14C6 },
@@ -49692,7 +49715,7 @@ static pci_vid_index_t const pci_vid_index[] = {
 {0x14E1, 1, pci_vid_14E1 },
 {0x14E2, 1, pci_vid_14E2 },
 {0x14E3, 1, pci_vid_14E3 },
-{0x14E4, 894, pci_vid_14E4 },
+{0x14E4, 897, pci_vid_14E4 },
 {0x14E5, 1, pci_vid_14E5 },
 {0x14E6, 1, pci_vid_14E6 },
 {0x14E7, 1, pci_vid_14E7 },
@@ -50220,7 +50243,7 @@ static pci_vid_index_t const pci_vid_index[] = {
 {0x19DE, 1, pci_vid_19DE },
 {0x19E2, 1, pci_vid_19E2 },
 {0x19E3, 4, pci_vid_19E3 },
-{0x19E5, 126, pci_vid_19E5 },
+{0x19E5, 128, pci_vid_19E5 },
 {0x19E7, 6, pci_vid_19E7 },
 {0x19EE, 1, pci_vid_19EE },
 {0x19F1, 1, pci_vid_19F1 },
@@ -50634,6 +50657,7 @@ static pci_vid_index_t const pci_vid_index[] = {
 {0x2108, 2, pci_vid_2108 },
 {0x2114, 3, pci_vid_2114 },
 {0x2116, 1, pci_vid_2116 },
+{0x2123, 1, pci_vid_2123 },
 {0x21B4, 1, pci_vid_21B4 },
 {0x21C3, 1, pci_vid_21C3 },
 {0x22B8, 2, pci_vid_22B8 },
@@ -50707,7 +50731,7 @@ static pci_vid_index_t const pci_vid_index[] = {
 {0x4C4D, 4, pci_vid_4C4D },
 {0x4C52, 9, pci_vid_4C52 },
 {0x4C53, 6, pci_vid_4C53 },
-{0x4C54, 2, pci_vid_4C54 },
+{0x4C54, 8, pci_vid_4C54 },
 {0x4CA1, 1, pci_vid_4CA1 },
 {0x4D51, 2, pci_vid_4D51 },
 {0x4D54, 1, pci_vid_4D54 },
@@ -50921,7 +50945,7 @@ static pci_vid_index_t const pci_vid_index[] = {
 {0xFFFD, 2, pci_vid_FFFD },
 {0xFFFE, 2, pci_vid_FFFE },
 {0xFFFF, 1, pci_vid_FFFF },
-}; /* We have 2499 VIDs */
+}; /* We have 2500 VIDs */
 
 static int vid_search(const void *key, const void *tbl_entry)
 {

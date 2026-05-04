@@ -18,6 +18,7 @@
 #include <QMetaObject>
 #include <QMessageBox>
 #include <QFormLayout>
+#include <QSignalBlocker>
 #include <QTextStream>
 #include <QVBoxLayout>
 
@@ -227,12 +228,12 @@ DisStreamDialog::tapDraw(disstream_tapinfo_t *tapinfo _U_)
 disstream_info_t *
 DisStreamDialog::selectedStream() const
 {
-    QList<QTreeWidgetItem *> selected = stream_tree_->selectedItems();
-    if (selected.isEmpty()) {
+    QTreeWidgetItem *current = stream_tree_->currentItem();
+    if (!current) {
         return nullptr;
     }
 
-    quintptr ptr = selected.first()->data(0, disstream_ptr_role).value<quintptr>();
+    quintptr ptr = current->data(0, disstream_ptr_role).value<quintptr>();
     return reinterpret_cast<disstream_info_t *>(ptr);
 }
 
@@ -247,6 +248,8 @@ DisStreamDialog::updateStreams()
         updateWidgets();
         return;
     }
+
+    QSignalBlocker signal_blocker(stream_tree_);
 
     stream_tree_->setSortingEnabled(false);
     stream_tree_->clear();
@@ -349,6 +352,15 @@ DisStreamDialog::updateWidgets()
 void
 DisStreamDialog::onStreamSelectionChanged()
 {
+#ifdef QT_MULTIMEDIA_LIB
+    disstream_info_t *stream_info = selectedStream();
+
+    if (audio_stream_->currentStream() != nullptr &&
+        audio_stream_->currentStream() != stream_info &&
+        (audio_stream_->isPlaying() || audio_stream_->isPaused())) {
+        audio_stream_->stopPlayback();
+    }
+#endif
     updateWidgets();
 }
 

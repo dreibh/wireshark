@@ -306,11 +306,16 @@ disstream_info_update_timing(disstream_info_t *stream_info, packet_info *pinfo,
     double current_time_ms;
     double tx_ms;
     double nominal_ms;
+    double nominal_delta_ms;
+    double reference_delta_ms;
     double sample_time_ms;
     double sample_tx_ms;
     double jitter_diff_ms;
     double current_jitter_ms;
+    double timestamp_spacing_error_ms;
+    double arrival_delta_ms;
     uint32_t lost_packets;
+    bool use_dis_timestamp_spacing;
 
     current_time_ms = nstime_to_msec(&pinfo->rel_ts);
     tx_ms = dis_tx_timestamp_to_ms(dis_info->info_tx_timestamp);
@@ -344,13 +349,38 @@ disstream_info_update_timing(disstream_info_t *stream_info, packet_info *pinfo,
 
     stream_info->timing_packet_count++;
 
-    stream_info->max_delta_ms = MAX(stream_info->max_delta_ms,
-        current_time_ms - stream_info->prev_arrival_ms);
-    stream_info->mean_delta_ms += ((current_time_ms - stream_info->prev_arrival_ms)
+    arrival_delta_ms = current_time_ms - stream_info->prev_arrival_ms;
+
+    stream_info->max_delta_ms = MAX(stream_info->max_delta_ms, arrival_delta_ms);
+    stream_info->mean_delta_ms += (arrival_delta_ms
         - stream_info->mean_delta_ms) / (stream_info->timing_packet_count - 1);
 
-    jitter_diff_ms = fabs((current_time_ms - stream_info->prev_arrival_ms)
-        - (nominal_ms - stream_info->prev_nominal_ms));
+    sample_time_ms = 0.0;
+    if (dis_info->info_sample_rate > 0 && dis_info->info_num_samples > 0) {
+        sample_time_ms = ((double)dis_info->info_num_samples / (double)dis_info->info_sample_rate) * 1000.0;
+    } else if (dis_info->info_payload_len > 0) {
+        sample_time_ms = ((double)dis_info->info_payload_len / DISSTREAM_CODEC_CLOCK_HZ) * 1000.0;
+    }
+
+    nominal_delta_ms = nominal_ms - stream_info->prev_nominal_ms;
+    use_dis_timestamp_spacing = nominal_delta_ms > 0.0;
+
+    /*
+     * DIS transit timestamps are unreliable depending on radio vendor.
+     * Some radios do not advance the transmit timestamp in a way that
+     * reflects packetization spacing. In that case, fall back to media timing
+     * derived from sample count and sample rate, which matches the older DIS
+     * voice tools logic more closely.
+     */
+    if (use_dis_timestamp_spacing && sample_time_ms > 0.0) {
+        timestamp_spacing_error_ms = fabs(nominal_delta_ms - sample_time_ms);
+        if (timestamp_spacing_error_ms > MAX(sample_time_ms * 0.5, 5.0)) {
+            use_dis_timestamp_spacing = false;
+        }
+    }
+
+    reference_delta_ms = use_dis_timestamp_spacing ? nominal_delta_ms : sample_time_ms;
+    jitter_diff_ms = fabs(arrival_delta_ms - reference_delta_ms);
     current_jitter_ms = ((15.0 * stream_info->filtered_jitter_ms) + jitter_diff_ms) / 16.0;
     stream_info->filtered_jitter_ms = current_jitter_ms;
 
@@ -359,16 +389,18 @@ disstream_info_update_timing(disstream_info_t *stream_info, packet_info *pinfo,
         / (stream_info->timing_packet_count - 1);
 
     if (out_delta_ms) {
-        *out_delta_ms = current_time_ms - stream_info->prev_arrival_ms;
+        *out_delta_ms = arrival_delta_ms;
     }
     if (out_jitter_ms) {
         *out_jitter_ms = current_jitter_ms;
     }
 
-    sample_time_ms = ((double)dis_info->info_payload_len / DISSTREAM_CODEC_CLOCK_HZ) * 1000.0;
-    sample_tx_ms = tx_ms - stream_info->prev_tx_ms;
-    if (sample_tx_ms < 0.0) {
-        sample_tx_ms += DISSTREAM_TX_WRAP_MS;
+    sample_tx_ms = reference_delta_ms;
+    if (sample_tx_ms <= 0.0) {
+        sample_tx_ms = tx_ms - stream_info->prev_tx_ms;
+        if (sample_tx_ms < 0.0) {
+            sample_tx_ms += DISSTREAM_TX_WRAP_MS;
+        }
     }
 
     if (sample_time_ms > 0.0) {

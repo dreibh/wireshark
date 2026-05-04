@@ -471,6 +471,15 @@ typedef struct TETHERCAT_VOE_HEADER
 } ETHERCAT_VOE_HEADER, *PETHERCAT_VOE_HEADER;
 #define ETHERCAT_VOE_HEADER_LEN 6 /*sizeof(ETHERCAT_VOE_HEADER)*/
 
+/**
+ * @brief Initialize the EtherCAT mailbox header.
+ *
+ * This function initializes the EtherCAT mailbox header structure with data from a TVB buffer.
+ *
+ * @param pMbox Pointer to the EtherCAT mailbox header structure to be initialized.
+ * @param tvb Pointer to the TVB buffer containing the data.
+ * @param offset Offset within the TVB buffer where the data starts.
+ */
 extern void init_mbx_header(PETHERCAT_MBOX_HEADER pMbox, tvbuff_t *tvb, int offset);
 
 DIAG_ON_PEDANTIC

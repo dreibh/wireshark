@@ -167,6 +167,12 @@ private:
     QString advancedPrefName_;
 };
 
+/**
+ * @brief Retrieves the preference structure associated with a given preference pointer.
+ *
+ * @param pref_ptr The pointer to the preference.
+ * @return A pointer to the preference structure, or NULL if not found.
+ */
 extern pref_t *prefFromPrefPtr(void *pref_ptr);
 
 #endif // PREF_MODELS_H

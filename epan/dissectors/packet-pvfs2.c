@@ -2186,8 +2186,7 @@ dissect_pvfs2_lookup_path_response(tvbuff_t *tvb, proto_tree *tree,
 	offset += 4;
 
 	/* handle_count */
-	handle_count = tvb_get_letohl(tvb, offset);
-	proto_tree_add_item(tree, hf_pvfs_lookup_path_response_handle_count, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item_ret_uint(tree, hf_pvfs_lookup_path_response_handle_count, tvb, offset, 4, ENC_LITTLE_ENDIAN, &handle_count);
 	offset += 4;
 
 	/* TODO: add bounds checking */
@@ -2261,8 +2260,7 @@ dissect_pvfs2_readdir_response(tvbuff_t *tvb, proto_tree *tree, unsigned offset,
 	offset += 4;
 
 	/* dirent_count */
-	dirent_count = tvb_get_letohl(tvb, offset);
-	proto_tree_add_item(tree, hf_pvfs_dirent_count, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item_ret_uint(tree, hf_pvfs_dirent_count, tvb, offset, 4, ENC_LITTLE_ENDIAN, &dirent_count);
 	offset += 4;
 
 	for (nCount = 0; nCount < dirent_count; nCount++)
@@ -2293,8 +2291,7 @@ dissect_pvfs2_getconfig_response(tvbuff_t *tvb, proto_tree *parent_tree,
 				ett_pvfs_server_config, NULL, "Server Config");
 
 	/* Total number of bytes in server config (incl. entry count) */
-	total_bytes = tvb_get_letohl(tvb, offset);
-	proto_tree_add_item(tree, hf_pvfs_getconfig_response_total_bytes, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item_ret_uint(tree, hf_pvfs_getconfig_response_total_bytes, tvb, offset, 4, ENC_LITTLE_ENDIAN, &total_bytes);
 	offset += 4;
 
 	/* There must be at least 4 bytes of data returned to determine the
@@ -2549,7 +2546,7 @@ dissect_pvfs2_mgmt_perf_mon_response(tvbuff_t *tvb, proto_tree *tree,
 {
 	uint32_t perf_array_count, i;
 
-	/* TODO: suggested_next_id */
+	/* suggested_next_id */
 	proto_tree_add_item(tree, hf_pvfs_mgmt_perf_mon_response_suggested_next_id, tvb, offset, 4, ENC_LITTLE_ENDIAN);
 	offset += 4;
 
@@ -2560,9 +2557,8 @@ dissect_pvfs2_mgmt_perf_mon_response(tvbuff_t *tvb, proto_tree *tree,
 
 	offset += 4;
 
-	/* TODO: perf_array_count */
-	perf_array_count = tvb_get_letohl(tvb, offset);
-	proto_tree_add_item(tree, hf_pvfs_mgmt_perf_mon_response_perf_array_count, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	/* perf_array_count */
+	proto_tree_add_item_ret_uint(tree, hf_pvfs_mgmt_perf_mon_response_perf_array_count, tvb, offset, 4, ENC_LITTLE_ENDIAN, &perf_array_count);
 	offset += 4;
 
 	for (i = 0; i < perf_array_count; i++)
@@ -2582,8 +2578,7 @@ dissect_pvfs2_mgmt_iterate_handles_response(tvbuff_t *tvb, proto_tree *tree,
 	offset += 4;
 
 	/* handle_count */
-	handle_count = tvb_get_letohl(tvb, offset);
-	proto_tree_add_item(tree, hf_pvfs_mgmt_iterate_handles_response_handle_count, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item_ret_uint(tree, hf_pvfs_mgmt_iterate_handles_response_handle_count, tvb, offset, 4, ENC_LITTLE_ENDIAN, &handle_count);
 	offset += 4;
 
 	/* TODO: this could be improved */
@@ -2619,8 +2614,7 @@ dissect_pvfs2_mgmt_dspace_info_list_response(tvbuff_t *tvb, proto_tree *tree,
 	offset += 4;
 
 	/* dspace_info_count */
-	dspace_info_count = tvb_get_letohl(tvb, offset);
-	proto_tree_add_item(tree, hf_pvfs_mgmt_dspace_info_list_response_dspace_info_count, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+	proto_tree_add_item_ret_uint(tree, hf_pvfs_mgmt_dspace_info_list_response_dspace_info_count, tvb, offset, 4, ENC_LITTLE_ENDIAN, &dspace_info_count);
 
 	if ((dspace_info_count > 0) && (tree))
 	{

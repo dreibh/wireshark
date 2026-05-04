@@ -43,16 +43,62 @@ extern "C"
     } wslua_debugger_theme_t;
 
     /**
+     * @brief Hit-count comparison mode used by the line hook gate.
+     *
+     * Persisted as a string in the Qt JSON settings file (the lower-cased
+     * suffix of each enum name: @c "from", @c "every", @c "once"). The
+     * numeric values are an internal implementation detail; renumbering is
+     * safe as long as the writer/reader in the Qt UI keep mapping the
+     * string form correctly.
+     */
+    typedef enum
+    {
+        /** @c hits >= target (default; "pause from hit N onward"). */
+        WSLUA_HIT_COUNT_MODE_FROM = 0,
+        /** @c hits % target == 0 — pause on hits N, 2N, 3N, … */
+        WSLUA_HIT_COUNT_MODE_EVERY = 1,
+        /** @c hits == target, then deactivate the breakpoint (one-shot). */
+        WSLUA_HIT_COUNT_MODE_ONCE = 2,
+    } wslua_hit_count_mode_t;
+
+    /**
      * @brief Breakpoint structure for in-memory storage.
      *
      * Breakpoints are persisted via the Qt UI's JSON settings file,
      * not via Wireshark's UAT system.
+     *
+     * @c condition / @c hit_count_target / @c log_message are optional:
+     * NULL/empty/zero means "not set". When set, the line hook applies
+     * the gates in order: hit-count, condition, then logpoint vs pause.
+     * @c hit_count is a runtime counter and is not persisted.
+     * @c last_fired_us is a runtime monotonic timestamp (microseconds,
+     * @c g_get_monotonic_time scale) used to compute the
+     * @c {delta} logpoint tag; @c 0 means the breakpoint has not fired
+     * yet. Not persisted.
      */
     typedef struct _wslua_breakpoint_t
     {
-        char *file_path; /**< File path of the script */
-        int64_t line;    /**< Line number */
-        bool active;     /**< Whether the breakpoint is active */
+        char *file_path;          /**< File path of the script */
+        int64_t line;             /**< Line number */
+        bool active;              /**< Whether the breakpoint is active */
+        char *condition;          /**< Optional Lua expression; pause when truthy */
+        int64_t hit_count_target; /**< Optional hit count threshold; 0 = none */
+        int64_t hit_count;        /**< Runtime hit counter (not persisted) */
+        wslua_hit_count_mode_t hit_count_mode; /**< How the gate compares
+                                       *  @c hit_count against
+                                       *  @c hit_count_target. Ignored when
+                                       *  @c hit_count_target == 0. */
+        bool condition_error;     /**< Last condition eval errored (sticky) */
+        char *condition_error_msg;/**< Last condition error text; NULL = none.
+                                   *   Owned by the breakpoint, freed on edit /
+                                   *   reset / remove. Not persisted. */
+        char *log_message;        /**< Optional logpoint template with {expr} */
+        bool log_also_pause;      /**< Logpoint *and* pause: when @c log_message
+                                   *   is set, true means the breakpoint formats
+                                   *   and emits the message AND pauses. Default
+                                   *   false (matches the historical
+                                   *   "logpoints never pause" behavior). */
+        int64_t last_fired_us;    /**< Monotonic ts of previous fire; 0 = never */
     } wslua_breakpoint_t;
 
     /**
@@ -212,6 +258,132 @@ extern "C"
     WS_DLL_PUBLIC void wslua_debugger_clear_breakpoints(void);
 
     /**
+     * @brief Set (or clear) the Lua condition expression on a breakpoint.
+     *
+     * The expression is evaluated each time control reaches the line, in the
+     * breakpoint's frame, with the same custom @c _ENV used by Watch /
+     * Evaluate (locals, upvalues, then globals). The breakpoint pauses only
+     * when the expression is truthy. Runtime errors are silent and set the
+     * @c condition_error flag (cleared by editing the condition or resetting
+     * the breakpoint).
+     *
+     * Pass @c NULL or an empty string to clear an existing condition.
+     * Setting or clearing the condition resets @c condition_error and the
+     * runtime @c hit_count to zero.
+     */
+    WS_DLL_PUBLIC void
+    wslua_debugger_set_breakpoint_condition(const char *file_path, int64_t line,
+                                            const char *condition);
+
+    /**
+     * @brief Set (or clear) the hit-count target on a breakpoint.
+     *
+     * Semantics depend on the breakpoint's @c hit_count_mode (default
+     * @ref WSLUA_HIT_COUNT_MODE_FROM: pause / log when
+     * @c hit_count >= @a target). @a target == 0 disables the gate
+     * regardless of mode. The runtime @c hit_count is preserved across
+     * target edits unless the new target is below the current count
+     * (in which case it rolls back so the breakpoint can wait for the
+     * "next N" hits instead of pausing every line forever).
+     */
+    WS_DLL_PUBLIC void
+    wslua_debugger_set_breakpoint_hit_count_target(const char *file_path,
+                                                   int64_t line,
+                                                   int64_t target);
+
+    /**
+     * @brief Set the hit-count comparison mode on a breakpoint.
+     *
+     * Picks how the line hook compares @c hit_count to
+     * @c hit_count_target. Ignored when @c hit_count_target == 0. The
+     * @ref WSLUA_HIT_COUNT_MODE_ONCE variant also deactivates the
+     * breakpoint after the matching fire (one-shot).
+     */
+    WS_DLL_PUBLIC void
+    wslua_debugger_set_breakpoint_hit_count_mode(const char *file_path,
+                                                  int64_t line,
+                                                  wslua_hit_count_mode_t mode);
+
+    /**
+     * @brief Set (or clear) the logpoint message template on a breakpoint.
+     *
+     * A non-empty template makes the breakpoint a *logpoint*: when it would
+     * pause, it instead formats the template (see @ref wslua_debugger_format_log_message)
+     * and emits the result, then continues. The hit-count and condition gates
+     * still apply before the logpoint fires.
+     *
+     * Pass @c NULL or empty to clear (the breakpoint reverts to a regular
+     * pausing breakpoint).
+     */
+    WS_DLL_PUBLIC void
+    wslua_debugger_set_breakpoint_log_message(const char *file_path,
+                                              int64_t line,
+                                              const char *message);
+
+    /**
+     * @brief Toggle the "log AND pause" behavior on a logpoint.
+     *
+     * When @a also_pause is @c true, a breakpoint that has a non-empty
+     * @c log_message will format and emit the message *and* still pause
+     * execution. When @c false (the default), logpoints emit and resume,
+     * matching the historical convention. Has no effect on breakpoints
+     * with no @c log_message set.
+     */
+    WS_DLL_PUBLIC void
+    wslua_debugger_set_breakpoint_log_also_pause(const char *file_path,
+                                                  int64_t line,
+                                                  bool also_pause);
+
+    /**
+     * @brief Reset the runtime @c hit_count for a single breakpoint to zero.
+     */
+    WS_DLL_PUBLIC void
+    wslua_debugger_reset_breakpoint_hit_count(const char *file_path,
+                                              int64_t line);
+
+    /**
+     * @brief Reset the runtime @c hit_count for every breakpoint to zero.
+     */
+    WS_DLL_PUBLIC void wslua_debugger_reset_all_breakpoint_hit_counts(void);
+
+    /**
+     * @brief Validate that @a expression compiles as a Lua chunk.
+     *
+     * Uses @c luaL_loadstring (no execution) on the same wrapped form used
+     * by the runtime expression evaluator, so syntactic acceptance here
+     * matches what the line hook will accept at runtime. Used by the inline
+     * editor to reject obvious typos before saving.
+     *
+     * @param expression  Expression to validate; may not be NULL.
+     * @param err_msg     On error, set to a g_strdup'd description; caller
+     *                    must g_free(). May be NULL.
+     * @return true on syntactically-valid input.
+     */
+    WS_DLL_PUBLIC bool
+    wslua_debugger_check_condition_syntax(const char *expression,
+                                          char **err_msg);
+
+    /**
+     * @brief Stamp / clear a parse-time condition error on the breakpoint.
+     *
+     * Set @a err_msg to a non-empty string to mark the breakpoint as
+     * having an unusable condition; pass @c NULL or @c "" to clear any
+     * prior error. The string is copied; the caller retains ownership of
+     * @a err_msg.
+     *
+     * Used by the inline editor: after calling
+     * @ref wslua_debugger_set_breakpoint_condition with new text the UI
+     * runs @ref wslua_debugger_check_condition_syntax and reports the
+     * parse failure here, so the @c condition_error flag and the row
+     * tooltip light up immediately, without waiting for the line hook to
+     * try evaluating the (still broken) condition.
+     */
+    WS_DLL_PUBLIC void
+    wslua_debugger_set_breakpoint_condition_error(const char *file_path,
+                                                   int64_t line,
+                                                   const char *err_msg);
+
+    /**
      * @brief Get the state of a breakpoint.
      * @param file_path The file path.
      * @param line The line number.
@@ -322,6 +494,81 @@ extern "C"
                                                      const char **file_path,
                                                      int64_t *line,
                                                      bool *active);
+
+    /**
+     * @brief Get full breakpoint details by index.
+     *
+     * Superset of @ref wslua_debugger_get_breakpoint. The returned string
+     * pointers are owned by the breakpoint storage and are valid until the
+     * next mutation of the breakpoints list (add/remove/clear/set_*); copy
+     * with @c g_strdup if you need to outlive that. Any @c out-pointer may
+     * be NULL to skip that field.
+     */
+    WS_DLL_PUBLIC bool wslua_debugger_get_breakpoint_extended(
+        unsigned idx, const char **file_path, int64_t *line, bool *active,
+        const char **condition, int64_t *hit_count_target,
+        int64_t *hit_count, bool *condition_error,
+        const char **log_message,
+        wslua_hit_count_mode_t *hit_count_mode,
+        bool *log_also_pause);
+
+    /**
+     * @brief Return a copy of the last condition error message for the
+     *        breakpoint at @a idx.
+     *
+     * Returns the most recent error string from a failed condition
+     * evaluation (treated as false at runtime), or NULL when no error is
+     * recorded. The returned pointer is newly allocated; the caller owns
+     * it and must release it with @c g_free.
+     *
+     * Use with @c condition_error from
+     * @ref wslua_debugger_get_breakpoint_extended: that boolean stays
+     * sticky across line hits, this getter is the matching human-readable
+     * detail for the row tooltip.
+     *
+     * @return Newly allocated message or @c NULL when @a idx is out of
+     *         range or no error has been recorded.
+     */
+    WS_DLL_PUBLIC char *
+    wslua_debugger_get_breakpoint_condition_error_message(unsigned idx);
+
+    /**
+     * @brief Get state and a "has extras" flag in one mutex acquisition.
+     *
+     * Combined accessor for the gutter painter, which calls this once per
+     * visible line: doing two separate locked queries (state + extras)
+     * would double the contention with the line hook on busy scripts.
+     *
+     * @c *has_extras is set to @c true when the breakpoint at @a canonical_path
+     * / @a line carries at least one of: non-empty condition, hit-count
+     * target > 0, or non-empty log message. Pass @c NULL to skip.
+     *
+     * @return -1 if no breakpoint exists, 0 if inactive, 1 if active.
+     */
+    WS_DLL_PUBLIC int32_t
+    wslua_debugger_get_breakpoint_state_canonical_ex(const char *canonical_path,
+                                                     int64_t line,
+                                                     bool *has_extras);
+
+    /**
+     * @brief Callback type for logpoint output.
+     *
+     * Invoked by the line hook when a logpoint fires (after the hit-count
+     * and condition gates have been satisfied). @a file_path / @a line
+     * identify the breakpoint; @a message is the fully-formatted text with
+     * any @c {expr} placeholders already substituted. The callback runs on
+     * the Lua thread (i.e. the same thread that hit the line); the
+     * implementation should marshal to its UI thread if needed.
+     */
+    typedef void (*wslua_debugger_log_emit_callback_t)(const char *file_path,
+                                                       int64_t line,
+                                                       const char *message);
+
+    /**
+     * @brief Register (or unregister with NULL) a logpoint output sink.
+     */
+    WS_DLL_PUBLIC void wslua_debugger_register_log_emit_callback(
+        wslua_debugger_log_emit_callback_t callback);
 
     /**
      * @brief Callback type for reload notification.
@@ -570,6 +817,84 @@ extern "C"
      */
     WS_DLL_PUBLIC bool wslua_debugger_read_variable_value_full(
         const char *variable_path, char **value_out, char **error_msg);
+
+    /*
+     * Watch expression APIs (below) evaluate an arbitrary Lua expression
+     * against the paused state. They share the same instruction-count and
+     * call-depth safety hooks as @ref wslua_debugger_evaluate, and run with
+     * a custom @c _ENV that exposes the paused frame's locals, upvalues,
+     * and globals — so a bare identifier in an expression resolves the
+     * same way an unqualified path watch does.
+     *
+     * Use these for any spec that does not validate as a path under
+     * @ref wslua_debugger_watch_spec_uses_path_resolution. Like the path
+     * APIs above, they take @c debugger.mutex when they touch the paused
+     * Lua state and must be called from the same execution context as the
+     * Qt debugger UI (typically the GUI thread).
+     */
+
+    /**
+     * @brief Evaluate @a spec as a Lua expression and report the root
+     *        Value/Type/expand bit.
+     *
+     * Behaves like @ref wslua_debugger_watch_read_root but with no
+     * "must be a variable path" restriction — any expression that
+     * compiles and runs is acceptable. The result is the first (and only)
+     * return value of the evaluated chunk.
+     *
+     * Outputs are caller-owned (@c g_free); on failure the function
+     * returns @c false and writes a descriptive @a *error_msg.
+     */
+    WS_DLL_PUBLIC bool wslua_debugger_watch_expr_read_root(
+        const char *spec, char **value_out, char **type_out,
+        bool *can_expand_out, char **error_msg);
+
+    /**
+     * @brief Evaluate @a spec, walk @a subpath on the result, and report
+     *        the resolved descendant's Value/Type/expand bit.
+     *
+     * @a subpath uses the same syntax as the tail of a path watch
+     * (e.g. @c "[1].name"). An empty / NULL @a subpath returns the same
+     * data as @ref wslua_debugger_watch_expr_read_root.
+     *
+     * The expression is re-evaluated on every call; the same instruction
+     * and call-depth caps as @ref wslua_debugger_evaluate apply.
+     */
+    WS_DLL_PUBLIC bool wslua_debugger_watch_expr_read_subpath(
+        const char *spec, const char *subpath, char **value_out,
+        char **type_out, bool *can_expand_out, char **error_msg);
+
+    /**
+     * @brief Evaluate @a spec, walk @a subpath, and enumerate the
+     *        descendant's children into @c wslua_variable_t records.
+     *
+     * Mirrors @ref wslua_debugger_get_variables on a path watch's
+     * sub-table — children are produced from the same enumerator
+     * (@c wslua_debugger_append_children_of_value), so the Qt layer can
+     * reuse its row-building helpers.
+     *
+     * @return @c true with @c *variables_out / @c *count_out filled
+     *         (caller frees with @c wslua_debugger_free_variables);
+     *         @c false on evaluation / lookup failure.
+     */
+    WS_DLL_PUBLIC bool wslua_debugger_watch_expr_get_variables(
+        const char *spec, const char *subpath,
+        wslua_variable_t **variables_out, int32_t *count_out,
+        char **error_msg);
+
+    /**
+     * @brief Read the full untruncated stringified value of an expression
+     *        watch (root or sub-element) for the Copy Value action.
+     *
+     * @a subpath uses the same syntax as
+     * @ref wslua_debugger_watch_expr_read_subpath; an empty / NULL subpath
+     * targets the root expression result. Tables still summarise as
+     * @c "table[N]"; binary string values (e.g. @c Tvb @c __tostring) are
+     * preserved verbatim including embedded NULs.
+     */
+    WS_DLL_PUBLIC bool wslua_debugger_watch_expr_read_full(
+        const char *spec, const char *subpath, char **value_out,
+        char **error_msg);
 
 #ifdef __cplusplus
 }

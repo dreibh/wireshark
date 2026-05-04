@@ -1628,6 +1628,7 @@ BACnetVendorIdentifiers[] = {
     { 1617, "GPS Air" },
     { 1618, "–" },
     { 1619, "Qingping Technology Beijing Co., Ltd." },
+    { 1620, "PSsystec GmbH" },
     { 0, NULL }
 };
 value_string_ext BACnetVendorIdentifiers_ext = VALUE_STRING_EXT_INIT(BACnetVendorIdentifiers);

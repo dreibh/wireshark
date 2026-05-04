@@ -41,6 +41,7 @@ static dissector_handle_t  pcap_pktdata_handle;
 
 static int hf_pcapng_block;
 
+static int hf_pcapng_block_offset;
 static int hf_pcapng_block_type;
 static int hf_pcapng_block_type_vendor;
 static int hf_pcapng_block_type_value;
@@ -231,6 +232,7 @@ static int * const hfx_pcapng_option_data_packet_darwin_flags[] = {
 };
 
 static bool pref_dissect_next_layer;
+static bool pref_additional_block_info;
 
 static const value_string block_type_vals[] = {
     { BLOCK_TYPE_IDB,                       "Interface Description Block" },
@@ -1517,13 +1519,20 @@ dissect_shb_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
 
     byte_order_magic_item = proto_tree_add_item(tree, hf_pcapng_section_header_byte_order_magic, tvb, offset, 4, ENC_NA);
     if (byte_order_magic_bad) {
+        if (pref_additional_block_info)
+            proto_item_append_text(argp->block_item, " (Invalid endian)");
         expert_add_info(pinfo, byte_order_magic_item, &ei_invalid_byte_order_magic);
         return false;
     }
-    if (argp->info->encoding == ENC_BIG_ENDIAN)
+    if (argp->info->encoding == ENC_BIG_ENDIAN) {
+        if (pref_additional_block_info)
+            proto_item_append_text(argp->block_item, " (Big-endian)");
         proto_item_append_text(byte_order_magic_item, " (Big-endian)");
-    else
+    } else {
+        if (pref_additional_block_info)
+            proto_item_append_text(argp->block_item, " (Little-endian)");
         proto_item_append_text(byte_order_magic_item, " (Little-endian)");
+    }
     offset += 4;
 
     proto_tree_add_item(tree, hf_pcapng_section_header_major_version, tvb, offset, 2, argp->info->encoding);
@@ -1903,9 +1912,12 @@ dissect_cb_data(proto_tree *tree, packet_info *pinfo _U_, tvbuff_t *tvb,
                 block_data_arg *argp)
 {
     int offset = 0;
+    uint32_t pen;
 
-    proto_tree_add_item(tree, hf_pcapng_cb_pen, tvb, offset, 4, argp->info->encoding);
+    proto_tree_add_item_ret_uint(tree, hf_pcapng_cb_pen, tvb, offset, 4, argp->info->encoding, &pen);
     offset += 4;
+    if (pref_additional_block_info)
+        proto_item_append_text(argp->block_item, " (PEN: %u (%s))", pen, enterprises_lookup(pen, NULL));
 
     /* Todo: Add known PEN custom data dissection. */
     proto_tree_add_item(tree, hf_pcapng_cb_data, tvb, offset, tvb_reported_length(tvb) - offset, argp->info->encoding);
@@ -1931,6 +1943,7 @@ int dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct in
     uint32_t         block_type;
     uint32_t         block_length = 0, block_length_trailer;
     uint32_t         length;
+    const char      *block_type_name;
     tvbuff_t        *volatile next_tvb = NULL;
     block_data_arg   arg;
     volatile bool stop_dissecting = false;
@@ -1949,6 +1962,9 @@ int dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct in
     block_item = proto_tree_add_item(tree, hf_pcapng_block, tvb, offset, length, ENC_NA);
     block_tree = proto_item_add_subtree(block_item, ett_pcapng_section_header_block);
 
+    proto_tree_add_uint64_format_value(block_tree, hf_pcapng_block_offset, tvb, offset, length, info->block_offset,
+                                       "0x%08" PRIx64 " (%" PRIu64 ")", info->block_offset, info->block_offset);
+
     /* Block type */
     block_type_item = proto_tree_add_item(block_tree, hf_pcapng_block_type, tvb, offset, 4, info->encoding);
     block_type_tree = proto_item_add_subtree(block_type_item, ett_pcapng_block_type);
@@ -1959,15 +1975,16 @@ int dissect_block(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, struct in
 
     /* Name is either from local 'name', or from fixed block_type_vals */
     if (p_local_block_callback) {
-        proto_item_append_text(block_item, " %u: %s", info->block_number, p_local_block_callback->name);
-        proto_item_append_text(block_type_item, ": (%s)", p_local_block_callback->name);
-        proto_item_append_text(block_type_value_item, ": (%s)", p_local_block_callback->name);
+        block_type_name = p_local_block_callback->name;
     }
     else {
-        proto_item_append_text(block_item, " %u: %s", info->block_number, val_to_str_const(block_type, block_type_vals, "Unknown"));
-        proto_item_append_text(block_type_item, ": (%s)", val_to_str_const(block_type, block_type_vals, "Unknown"));
-        proto_item_append_text(block_type_value_item, ": (%s)", val_to_str_const(block_type, block_type_vals, "Unknown"));
+        block_type_name = val_to_str_const(block_type, block_type_vals, "Unknown");
     }
+    if (pref_additional_block_info)
+        proto_item_append_text(block_item, " %u: Offset: 0x%08" PRIx64 " (%" PRIu64 "), Length: %u, %s",
+            info->block_number, info->block_offset, info->block_offset, length, block_type_name);
+    proto_item_append_text(block_type_item, ": (%s)", block_type_name);
+    proto_item_append_text(block_type_value_item, ": (%s)", block_type_name);
     info->block_number += 1;
 
     arg.block_item = block_item;
@@ -2099,6 +2116,8 @@ dissect_pcapng(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
         return 0;
 
     info.encoding = ENC_BIG_ENDIAN;
+    info.block_offset = 0;
+    info.prev_block_length = 0;
     info.block_number = 1;
     info.section_number = 0;
     info.interface_number = 0;
@@ -2146,6 +2165,8 @@ dissect_pcapng(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _
         }
         else {
             length = tvb_get_uint32(tvb, offset + 4, info.encoding);
+            info.block_offset += info.prev_block_length;
+            info.prev_block_length = length;
         }
         next_tvb = tvb_new_subset_length(tvb, offset, length);
 
@@ -2190,6 +2211,11 @@ common_register_pcapng(void)
         { &hf_pcapng_block,
             { "Block",                                     "pcapng.block",
             FT_NONE, BASE_NONE, NULL, 0x00,
+            NULL, HFILL }
+        },
+        { &hf_pcapng_block_offset,
+            { "Block Offset",                              "pcapng.block.offset",
+            FT_UINT64, BASE_HEX_DEC, NULL, 0x00,
             NULL, HFILL }
         },
         { &hf_pcapng_block_type,
@@ -2859,6 +2885,11 @@ common_register_pcapng(void)
             "Dissect next layer",
             "Dissect next layer",
             &pref_dissect_next_layer);
+
+    prefs_register_bool_preference(module, "additional_block_info",
+            "Additional Block Info",
+            "Display additional information for each block",
+            &pref_additional_block_info);
 
     expert_module = expert_register_protocol(proto_pcapng);
     expert_register_field_array(expert_module, ei, array_length(ei));

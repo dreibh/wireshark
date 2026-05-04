@@ -198,13 +198,13 @@ ADDITIONAL_LIST="
 	xsltproc
 	"
 
-# Uncomment to add PNG compression utilities used by compress-pngs:
-# ADDITIONAL_LIST="
-#	$ADDITIONAL_LIST
-#	advancecomp
-#	optipng
-#	pngcrush
-#	"
+# PNG compression utilities used by compress-pngs:
+ADDITIONAL_LIST="
+	$ADDITIONAL_LIST
+	advancecomp
+	optipng
+	pngcrush
+	"
 
 DEBDEPS_LIST="
 	asciidoctor

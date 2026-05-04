@@ -155,23 +155,23 @@
     <name>AnnotationEditDialog</name>
     <message>
         <source>Color:</source>
-        <translation type="unfinished"></translation>
+        <translation>Dath:</translation>
     </message>
     <message>
         <source>Comment (max %1 characters)</source>
-        <translation type="unfinished"></translation>
+        <translation>Trácht (uasmhéid %1 carachtar)</translation>
     </message>
     <message>
         <source>Comment:</source>
-        <translation type="unfinished">Nóta tráchta:</translation>
+        <translation>Trácht:</translation>
     </message>
     <message>
         <source>Select Annotation Color</source>
-        <translation type="unfinished"></translation>
+        <translation>Roghnaigh Dath anótála</translation>
     </message>
     <message>
         <source>Annotations are session-only and will be lost when the capture is closed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Is don seisiún amháin atá na hanótálacha agus caillfear iad nuair a dhúnfar an gabháil.</translation>
     </message>
 </context>
 <context>
@@ -729,61 +729,129 @@
     </message>
 </context>
 <context>
+    <name>BreakpointConditionDelegate</name>
+    <message>
+        <source>Expression</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Lua expression — pause when truthy</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Evaluated each time control reaches this line; locals, upvalues, and globals are visible like Watch / Evaluate.
+Runtime errors are treated as false (silent) and surface as a warning icon on the row.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hit Count</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pause after N hits (0 disables)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Gate the pause on a hit counter. The dropdown next to the integer picks the comparison mode: ≥ pauses every hit at or after N (default); = pauses once when the counter reaches N; every pauses on hits N, 2×N, 3×N, …; once pauses on the Nth hit and deactivates the breakpoint. Use 0 to disable the gate. The counter is preserved across edits to Expression / Hit Count / Log Message; lowering the target below the current count rolls the counter back to 0 so the breakpoint can wait for the next N hits. Right-click the row to reset it explicitly. Combined with an Expression on the same row, the hit-count gate runs first.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Log Message</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Log message — supports {expr} and tags such as {filename}, {basename}, {line}, {function}, {hits}, {timestamp}, {delta}…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Logpoints write a message to the Evaluate output (and Wireshark&apos;s info log) each time the line is reached. By default execution continues without pausing; tick the Pause box on this editor to also pause after emitting (useful for log-then-inspect without duplicating the breakpoint). The line is emitted verbatim — there is no automatic file:line prefix. Inside {} the text is evaluated as a Lua expression in this frame and converted to text the same way tostring() does; reserved tags below shadow any same-named Lua local / upvalue / global. Origin: {filename}, {basename}, {line}, {function}, {what}. Counters and scope: {hits}, {depth}, {thread}. Time: {timestamp}, {datetime}, {epoch}, {epoch_ms}, {elapsed}, {delta}. Use {{ and }} for literal { and }. Per-placeholder errors substitute &apos;&lt;error: ...&gt;&apos; without aborting the line.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>from</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>every</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>once</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Comparison mode for the hit count:
+from — pause on every hit from N onwards.
+every — pause on hits N, 2N, 3N…
+once — pause once on the Nth hit and deactivate the breakpoint.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pause</source>
+        <translation type="unfinished">Sos</translation>
+    </message>
+    <message>
+        <source>Pause: format and emit the log message AND pause execution.
+Off = logpoint only (matches the historical &quot;logpoints never pause&quot; convention).</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>CaptureCardWidget</name>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Capture live packets from your network.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Gabh paicéid bheo ó do líonra.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Capture</source>
-        <translation type="unfinished">Gabháil</translation>
+        <translation>Gabháil</translation>
     </message>
     <message>
         <source>Start a new capture session</source>
-        <translation type="unfinished"></translation>
+        <translation>Tosaigh seisiún gabhála nua</translation>
     </message>
     <message>
         <source>&lt;h2&gt;Capture&lt;/h2&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;h2&gt;Gabháil&lt;/h2&gt;</translation>
     </message>
     <message>
         <source>…using this filter:</source>
-        <translation type="unfinished"></translation>
+        <translation>…ag baint úsáide as an scagaire seo:</translation>
     </message>
     <message>
         <source>Capture filter</source>
-        <translation type="unfinished">Scagaire gabhála</translation>
+        <translation>Scagaire gabhála</translation>
     </message>
     <message>
         <source>Enter a capture filter expression to limit which data is recorded during live capture.</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir isteach slonn scagaire gabhála chun teorainn a chur leis na sonraí a thaifeadtar le linn gabhála beo.</translation>
     </message>
     <message>
         <source>Interface type filter</source>
-        <translation type="unfinished"></translation>
+        <translation>Scagaire cineál comhéadain</translation>
     </message>
     <message>
         <source>Filters the capture source list by type. Shows how many sources are currently visible and how many are hidden by the active filter.</source>
-        <translation type="unfinished"></translation>
+        <translation>Scagann sé an liosta foinsí gabhála de réir cineáil. Taispeánann sé cé mhéad foinse atá le feiceáil faoi láthair agus cé mhéad atá i bhfolach ag an scagaire gníomhach.</translation>
     </message>
     <message>
         <source>Capture sources</source>
-        <translation type="unfinished"></translation>
+        <translation>Foinsí gabhála</translation>
     </message>
     <message>
         <source>Lists available capture sources. Select one or more to capture from.</source>
-        <translation type="unfinished"></translation>
+        <translation>Liostaíonn sé foinsí gabhála atá ar fáil. Roghnaigh ceann amháin nó níos mó le gabháil uathu.</translation>
     </message>
     <message>
         <source>All interfaces shown</source>
-        <translation type="unfinished"></translation>
+        <translation>Gach comhéadan a thaispeántar</translation>
     </message>
     <message numerus="yes">
         <source>%n interface(s) shown, %1 hidden</source>
-        <translation type="unfinished">
-            <numerusform>%n interface shown, %1 hidden</numerusform>
-            <numerusform>%n interfaces shown, %1 hidden</numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>%n comhéadan taispeánta, %1 i bhfolach</numerusform>
+            <numerusform>%n comhéadain taispeánta, %1 i bhfolach</numerusform>
+            <numerusform>%n comhéadain taispeánta, %1 i bhfolach</numerusform>
         </translation>
     </message>
 </context>
@@ -1126,7 +1194,7 @@
     </message>
     <message>
         <source>Interface Description</source>
-        <translation type="unfinished"></translation>
+        <translation>Cur Síos ar an gComhéadan</translation>
     </message>
     <message>
         <source>Dropped packets</source>
@@ -2351,78 +2419,85 @@ Mar shampla, bain úsáid as 1 uair an chloig chun comhad nua a chruthú gach ua
     </message>
     <message>
         <source>Packet annotations are not saved and will be lost when the capture is closed.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ní shábháiltear anótálacha paicéid agus caillfear iad nuair a dhúnfar an gabháil.</translation>
     </message>
     <message>
         <source>Packet Annotations</source>
-        <translation type="unfinished"></translation>
+        <translation>Anótálacha Pacáiste</translation>
     </message>
     <message>
         <source>Select one or more bytes first.</source>
-        <translation type="unfinished"></translation>
+        <translation>Roghnaigh beart amháin nó níos mó ar dtús.</translation>
     </message>
     <message>
         <source>Add Annotation</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir Anótáil leis</translation>
     </message>
     <message>
         <source>No annotation found at the selection.</source>
-        <translation type="unfinished"></translation>
+        <translation>Níor aimsíodh aon nóta ag an roghnú.</translation>
     </message>
     <message>
         <source>Edit Annotation</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir anótáil in Eagar</translation>
     </message>
     <message>
         <source>Start byte set: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Tacar beart tosaigh: %1</translation>
     </message>
     <message>
         <source>Set start byte first.</source>
-        <translation type="unfinished"></translation>
+        <translation>Socraigh an beart tosaigh ar dtús.</translation>
     </message>
     <message>
         <source>Start byte (absolute): %1
 End byte (absolute): %2
 Distance (absolute, bytes): %3
 Distance (signed, bytes): %4</source>
-        <translation type="unfinished"></translation>
+        <translation>Beart tosaigh (absolóideach): %1
+Beart deiridh (absolóideach): %2
+Fad (absolóideach, beart): %3
+Fad (sínithe, beart): %4</translation>
     </message>
     <message>
         <source>selected protocol</source>
-        <translation type="unfinished"></translation>
+        <translation>prótacal roghnaithe</translation>
     </message>
     <message>
         <source>selected field</source>
-        <translation type="unfinished"></translation>
+        <translation>réimse roghnaithe</translation>
     </message>
     <message>
         <source>parent protocol</source>
-        <translation type="unfinished"></translation>
+        <translation>prótacal tuismitheora</translation>
     </message>
     <message>
         <source>
 Reference range (%1): start %2, length %3</source>
-        <translation type="unfinished"></translation>
+        <translation>
+Raon tagartha (%1): tús %2, fad %3</translation>
     </message>
     <message>
         <source>
 Start byte (relative to reference): %1
 End byte (relative to reference): %2</source>
-        <translation type="unfinished"></translation>
+        <translation>
+Beart tosaigh (i gcoibhneas leis an tagairt): %1
+Beart deiridh (i gcoibhneas leis an tagairt): %2</translation>
     </message>
     <message>
         <source>
 Relative to reference: n/a (outside reference range)</source>
-        <translation type="unfinished"></translation>
+        <translation>
+I gcoibhneas leis an tagairt: n/a (lasmuigh den raon tagartha)</translation>
     </message>
     <message>
         <source>Compute Offset</source>
-        <translation type="unfinished"></translation>
+        <translation>Fritháireamh Ríomh</translation>
     </message>
     <message>
         <source>Offset markers cleared.</source>
-        <translation type="unfinished"></translation>
+        <translation>Glanadh marcóirí fritháireamh.</translation>
     </message>
 </context>
 <context>
@@ -2519,245 +2594,245 @@ Relative to reference: n/a (outside reference range)</source>
     <name>DisAudioStream</name>
     <message>
         <source>No DIS signal payload is available for playback.</source>
-        <translation type="unfinished"></translation>
+        <translation>Níl aon ualach comhartha DIS ar fáil le haghaidh athsheinm.</translation>
     </message>
     <message>
         <source>Unable to decode DIS audio payload for this stream.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ní féidir ualach fuaime DIS a dhíchódú don sruth seo.</translation>
     </message>
     <message>
         <source>Audio format is not supported by the current output device.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ní thacaíonn an gléas aschuir reatha leis an bhformáid fuaime.</translation>
     </message>
     <message>
         <source>Unable to open playback buffer.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ní féidir an maolán athsheinm a oscailt.</translation>
     </message>
 </context>
 <context>
     <name>DisStreamAnalysisDialog</name>
     <message>
         <source>DIS Stream Analysis</source>
-        <translation type="unfinished"></translation>
+        <translation>Anailís Srutha DIS</translation>
     </message>
     <message>
         <source>Stream</source>
-        <translation type="unfinished">Sruth</translation>
+        <translation>Sruth</translation>
     </message>
     <message>
         <source>Codec</source>
-        <translation type="unfinished">Códac</translation>
+        <translation>Codec</translation>
     </message>
     <message>
         <source>Duration (s)</source>
-        <translation type="unfinished"></translation>
+        <translation>Fad (s)</translation>
     </message>
     <message>
         <source>Packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Pacáistí</translation>
     </message>
     <message>
         <source>Signal Packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Pacáistí Comhartha</translation>
     </message>
     <message>
         <source>Transmitter Packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Pacáistí Tarchuradóra</translation>
     </message>
     <message>
         <source>Estimated Lost</source>
-        <translation type="unfinished"></translation>
+        <translation>Caillteanas Measta</translation>
     </message>
     <message>
         <source>Jitter (mean/max ms)</source>
-        <translation type="unfinished"></translation>
+        <translation>Ciorcal (meán/uasmhéid ms)</translation>
     </message>
     <message>
         <source>Delta (mean/max ms)</source>
-        <translation type="unfinished"></translation>
+        <translation>Delta (meán/uasmhéid ms)</translation>
     </message>
     <message>
         <source>Capture Time (s)</source>
-        <translation type="unfinished"></translation>
+        <translation>Am Gabhála (s)</translation>
     </message>
     <message>
         <source>Amplitude</source>
-        <translation type="unfinished"></translation>
+        <translation>Aimplitiúid</translation>
     </message>
     <message>
         <source>0.000 / 0.000 s</source>
-        <translation type="unfinished"></translation>
+        <translation>0.000 / 0.000 s</translation>
     </message>
     <message>
         <source>Playback</source>
-        <translation type="unfinished"></translation>
+        <translation>Athsheinm</translation>
     </message>
     <message>
         <source>Packet</source>
-        <translation type="unfinished"></translation>
+        <translation>Paicéad</translation>
     </message>
     <message>
         <source>Time (s)</source>
-        <translation type="unfinished">Am (s)</translation>
+        <translation>Am (s)</translation>
     </message>
     <message>
         <source>Delta (ms)</source>
-        <translation type="unfinished">Deilte (ms)</translation>
+        <translation>Delta (ms)</translation>
     </message>
     <message>
         <source>Jitter (ms)</source>
-        <translation type="unfinished">Jitter (ms)</translation>
+        <translation>Giodam (ms)</translation>
     </message>
     <message>
         <source>Lost</source>
-        <translation type="unfinished">Caillte</translation>
+        <translation>Caillte</translation>
     </message>
     <message>
         <source>Status</source>
-        <translation type="unfinished">Stádas</translation>
+        <translation>Stádas</translation>
     </message>
     <message>
         <source>Go To First Packet</source>
-        <translation type="unfinished"></translation>
+        <translation>Téigh go dtí an Chéad Phacáiste</translation>
     </message>
     <message>
         <source>Play</source>
-        <translation type="unfinished">Seinn</translation>
+        <translation>Seinn</translation>
     </message>
     <message>
         <source>Stop</source>
-        <translation type="unfinished"></translation>
+        <translation>Stad</translation>
     </message>
     <message>
         <source>-</source>
-        <translation type="unfinished">-</translation>
+        <translation>-</translation>
     </message>
     <message>
         <source>Unknown</source>
-        <translation type="unfinished"></translation>
+        <translation>Anaithnid</translation>
     </message>
     <message>
         <source>Problem</source>
-        <translation type="unfinished"></translation>
+        <translation>Fadhb</translation>
     </message>
     <message>
         <source>OK</source>
-        <translation type="unfinished">Ceart go leor</translation>
+        <translation>Ceart go leor</translation>
     </message>
     <message>
         <source>Waveform</source>
-        <translation type="unfinished"></translation>
+        <translation>Tonnfhoirm</translation>
     </message>
     <message>
         <source>Jitter Spikes</source>
-        <translation type="unfinished"></translation>
+        <translation>Spící Giodam</translation>
     </message>
     <message>
         <source>Estimated Loss</source>
-        <translation type="unfinished"></translation>
+        <translation>Caillteanas Measta</translation>
     </message>
     <message>
         <source>Problem Packets</source>
-        <translation type="unfinished"></translation>
+        <translation>Pacáistí Fadhbanna</translation>
     </message>
     <message>
         <source>Pause</source>
-        <translation type="unfinished"></translation>
+        <translation>Sos</translation>
     </message>
     <message>
         <source>DIS Playback</source>
-        <translation type="unfinished"></translation>
+        <translation>Athsheinm DIS</translation>
     </message>
 </context>
 <context>
     <name>DisStreamDialog</name>
     <message>
         <source>DIS Streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Sruthanna DIS</translation>
     </message>
     <message>
         <source>Start</source>
-        <translation type="unfinished">Tosaigh</translation>
+        <translation>Tosaigh</translation>
     </message>
     <message>
         <source>End</source>
-        <translation type="unfinished">Deireadh</translation>
+        <translation>Deireadh</translation>
     </message>
     <message>
         <source>Src Address</source>
-        <translation type="unfinished"></translation>
+        <translation>Seoladh Foinse</translation>
     </message>
     <message>
         <source>Src Port</source>
-        <translation type="unfinished"></translation>
+        <translation>Port Foinse</translation>
     </message>
     <message>
         <source>Dst Address</source>
-        <translation type="unfinished"></translation>
+        <translation>Seoladh Ceann Scríbe</translation>
     </message>
     <message>
         <source>Dst Port</source>
-        <translation type="unfinished"></translation>
+        <translation>Port Ceann Scríbe</translation>
     </message>
     <message>
         <source>Radio</source>
-        <translation type="unfinished"></translation>
+        <translation>Raidió</translation>
     </message>
     <message>
         <source>Entity</source>
-        <translation type="unfinished"></translation>
+        <translation>Eintiteas</translation>
     </message>
     <message>
         <source>Signal</source>
-        <translation type="unfinished"></translation>
+        <translation>Comhartha</translation>
     </message>
     <message>
         <source>Tx</source>
-        <translation type="unfinished"></translation>
+        <translation>Tarchur</translation>
     </message>
     <message>
         <source>Lost</source>
-        <translation type="unfinished">Caillte</translation>
+        <translation>Caillte</translation>
     </message>
     <message>
         <source>Max Delta (ms)</source>
-        <translation type="unfinished">Max Delta (ms)</translation>
+        <translation>Uasmhéid Delta (ms)</translation>
     </message>
     <message>
         <source>Mean Jitter (ms)</source>
-        <translation type="unfinished"></translation>
+        <translation>Meán-Giodam (ms)</translation>
     </message>
     <message>
         <source>Max Jitter (ms)</source>
-        <translation type="unfinished"></translation>
+        <translation>Uasmhéid Giodam (ms)</translation>
     </message>
     <message>
         <source>Pb</source>
-        <translation type="unfinished"></translation>
+        <translation>Pb</translation>
     </message>
     <message>
         <source>Prepare Filter</source>
-        <translation type="unfinished"></translation>
+        <translation>Ullmhaigh Scagaire</translation>
     </message>
     <message>
         <source>Play</source>
-        <translation type="unfinished">Seinn</translation>
+        <translation>Seinn</translation>
     </message>
     <message>
         <source>Stop</source>
-        <translation type="unfinished"></translation>
+        <translation>Stad</translation>
     </message>
     <message>
         <source>Analyze</source>
-        <translation type="unfinished">Anailís</translation>
+        <translation>Anailís</translation>
     </message>
     <message>
         <source>X</source>
-        <translation type="unfinished">X</translation>
+        <translation>X</translation>
     </message>
     <message>
         <source>DIS Playback</source>
-        <translation type="unfinished"></translation>
+        <translation>Athsheinm DIS</translation>
     </message>
 </context>
 <context>
@@ -3322,42 +3397,42 @@ Relative to reference: n/a (outside reference range)</source>
     <name>ExpertInfoModel</name>
     <message>
         <source>Severity: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Déine: %1</translation>
     </message>
     <message>
         <source>Summary: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Achoimre: %1</translation>
     </message>
     <message>
         <source>Summary: Packet comments listed below.</source>
-        <translation type="unfinished"></translation>
+        <translation>Achoimre: Tuairimí faoin bpacáiste atá liostaithe thíos.</translation>
     </message>
     <message>
         <source>Group: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Grúpa: %1</translation>
     </message>
     <message>
         <source>Protocol: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Prótacal: %1</translation>
     </message>
     <message>
         <source>Count: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Líon: %1</translation>
     </message>
     <message>
         <source>Packet: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Pacáiste: %1</translation>
     </message>
     <message>
         <source>Header Field: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Réimse Ceanntásca: %1</translation>
     </message>
 </context>
 <context>
     <name>ExpertInfoProxyModel</name>
     <message>
         <source>Count: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Líon: %1</translation>
     </message>
     <message>
         <source>Packet</source>
@@ -4470,27 +4545,27 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Add annotation…</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir nóta leis…</translation>
     </message>
     <message>
         <source>Edit annotation…</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir anótáil in eagar…</translation>
     </message>
     <message>
         <source>Remove annotation</source>
-        <translation type="unfinished"></translation>
+        <translation>Bain anótáil</translation>
     </message>
     <message>
         <source>Start byte for offset</source>
-        <translation type="unfinished"></translation>
+        <translation>Beart tosaigh don fhritháireamh</translation>
     </message>
     <message>
         <source>End byte for offset</source>
-        <translation type="unfinished"></translation>
+        <translation>Deireadh beart le haghaidh fritháireamh</translation>
     </message>
     <message>
         <source>Clear offset markers</source>
-        <translation type="unfinished"></translation>
+        <translation>Marcóirí fritháireamh soiléire</translation>
     </message>
     <message>
         <source>Show bytes as hexadecimal</source>
@@ -4526,7 +4601,7 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Comment: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Trácht: %1</translation>
     </message>
 </context>
 <context>
@@ -5825,11 +5900,11 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Tunnel Interfaces</source>
-        <translation type="unfinished"></translation>
+        <translation>Comhéadain Tolláin</translation>
     </message>
     <message>
         <source>Loopback Devices</source>
-        <translation type="unfinished"></translation>
+        <translation>Gléasanna Lúb-ais</translation>
     </message>
     <message>
         <source>Remote interfaces</source>
@@ -6935,63 +7010,63 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Packet list multi-color display mode:</source>
-        <translation type="unfinished"></translation>
+        <translation>Mód taispeána il-dhathach liosta paicéad:</translation>
     </message>
     <message>
         <source>Off</source>
-        <translation type="unfinished">As</translation>
+        <translation>As</translation>
     </message>
     <message>
         <source>Scrollbar only</source>
-        <translation type="unfinished"></translation>
+        <translation>Barra scrollaithe amháin</translation>
     </message>
     <message>
         <source>Equal stripes</source>
-        <translation type="unfinished"></translation>
+        <translation>Stríoca comhionanna</translation>
     </message>
     <message>
         <source>Shift right</source>
-        <translation type="unfinished"></translation>
+        <translation>Bog ar dheis</translation>
     </message>
     <message>
         <source>75%</source>
-        <translation type="unfinished">75%</translation>
+        <translation>75%</translation>
     </message>
     <message>
         <source>80%</source>
-        <translation type="unfinished">80%</translation>
+        <translation>80%</translation>
     </message>
     <message>
         <source>85%</source>
-        <translation type="unfinished">85%</translation>
+        <translation>85%</translation>
     </message>
     <message>
         <source>90%</source>
-        <translation type="unfinished">90%</translation>
+        <translation>90%</translation>
     </message>
     <message>
         <source>95%</source>
-        <translation type="unfinished">95%</translation>
+        <translation>95%</translation>
     </message>
     <message>
         <source>Separator style:</source>
-        <translation type="unfinished"></translation>
+        <translation>Stíl deighilteora:</translation>
     </message>
     <message>
         <source>Vertical</source>
-        <translation type="unfinished"></translation>
+        <translation>Ingearach</translation>
     </message>
     <message>
         <source>Diagonal</source>
-        <translation type="unfinished"></translation>
+        <translation>Trasnánach</translation>
     </message>
     <message>
         <source>Bubble</source>
-        <translation type="unfinished"></translation>
+        <translation>Boilgeog</translation>
     </message>
     <message>
         <source>Display multiple colors in packet details</source>
-        <translation type="unfinished"></translation>
+        <translation>Taispeáin dathanna iolracha i sonraí an phaicéid</translation>
     </message>
 </context>
 <context>
@@ -7461,263 +7536,499 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
 </context>
 <context>
+    <name>LuaDebuggerCodeView</name>
+    <message>
+        <source>Click: add or remove breakpoint
+Shift+click: on an empty line, add a disabled breakpoint;
+on an existing breakpoint, toggle its active state</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
     <name>LuaDebuggerDialog</name>
     <message>
         <source>Open Lua Script</source>
-        <translation type="unfinished"></translation>
+        <translation>Oscail Script Lua</translation>
     </message>
     <message>
         <source>Save (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Sábháil (%1)</translation>
     </message>
     <message>
         <source>Continue execution (F5)</source>
-        <translation type="unfinished"></translation>
+        <translation>Lean ar aghaidh leis an bhforghníomhú (F5).</translation>
     </message>
     <message>
         <source>Step over (F10)</source>
-        <translation type="unfinished"></translation>
+        <translation>Céim thar (F10)</translation>
     </message>
     <message>
         <source>Step into (F11)</source>
-        <translation type="unfinished"></translation>
+        <translation>Céim isteach (F11)</translation>
     </message>
     <message>
         <source>Step out (Shift+F11)</source>
+        <translation>Céim amach (Shift+F11)</translation>
+    </message>
+    <message>
+        <source>Run to line (%1)</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Reload Lua Plugins (Ctrl+Shift+L)</source>
-        <translation type="unfinished"></translation>
+        <translation>Athlódáil Breiseáin Lua (Ctrl+Shift+L)</translation>
     </message>
     <message>
         <source>Find in script (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Aimsigh sa script (%1)</translation>
     </message>
     <message>
         <source>Go to line (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Téigh go dtí líne (%1)</translation>
     </message>
     <message>
         <source>Location</source>
-        <translation type="unfinished">Suíomh</translation>
+        <translation>Suíomh</translation>
     </message>
     <message>
         <source>Variables</source>
-        <translation type="unfinished"></translation>
+        <translation>Athróga</translation>
     </message>
     <message>
         <source>From: Locals</source>
-        <translation type="unfinished"></translation>
+        <translation>Ó: Muintir na háite</translation>
     </message>
     <message>
         <source>From: Upvalues</source>
-        <translation type="unfinished"></translation>
+        <translation>Ó: Luachanna Uasmhéide</translation>
     </message>
     <message>
         <source>From: Globals</source>
-        <translation type="unfinished"></translation>
+        <translation>Ó: Domhanda</translation>
     </message>
     <message>
         <source>
 … (truncated)</source>
-        <translation type="unfinished"></translation>
+        <translation>
+… (gearrtha)</translation>
     </message>
     <message>
         <source>%1 (%2)</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">%1 (%2)</translation>
     </message>
     <message>
         <source>&lt;p&gt;&lt;b&gt;Locals&lt;/b&gt;&lt;br/&gt;Parameters and local variables for the selected stack frame.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Upvalues&lt;/b&gt;&lt;br/&gt;Outer variables that this function actually uses from surrounding code. Anything the function does not reference does not appear here.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Globals&lt;/b&gt;&lt;br/&gt;Names from the global environment table.&lt;/p&gt;&lt;p&gt;Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;p&gt;&lt;b&gt;Locals&lt;/b&gt;&lt;br/&gt;Paraiméadair agus athróga áitiúla don fhráma cruachta roghnaithe.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Uasluachanna&lt;/b&gt;&lt;br/&gt;Athróga seachtracha a úsáideann an fheidhm seo i ndáiríre ón gcód máguaird. Ní fheictear aon rud nach dtagraíonn an fheidhm dó anseo.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Globals&lt;/b&gt;&lt;br/&gt;Ainmneacha ón tábla timpeallachta domhanda.&lt;/p&gt;&lt;p&gt;Tarraingítear luachanna atá difriúil ón sos roimhe seo i &lt;b&gt;dath béime trom&lt;/b&gt;, agus splancann siad go hachomair ar an sos a thug an t-athrú isteach.&lt;/p&gt;</translation>
     </message>
     <message>
         <source>Name</source>
-        <translation type="unfinished">Ainm</translation>
+        <translation>Ainm</translation>
     </message>
     <message>
         <source>Value</source>
-        <translation type="unfinished">Luach</translation>
+        <translation>Luach</translation>
     </message>
     <message>
         <source>Type</source>
-        <translation type="unfinished">Cineál</translation>
+        <translation>Cineál</translation>
     </message>
     <message>
         <source>Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Faire</translation>
     </message>
     <message>
         <source>&lt;p&gt;Each row is a &lt;b&gt;Variables-tree path&lt;/b&gt;, not a Lua expression. Accepted forms:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Section-qualified: &lt;code&gt;Locals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Upvalues.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Globals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;.&lt;/li&gt;&lt;li&gt;Section root alone: &lt;code&gt;Locals&lt;/code&gt;, &lt;code&gt;Upvalues&lt;/code&gt;, &lt;code&gt;Globals&lt;/code&gt; (&lt;code&gt;_G&lt;/code&gt; is an alias for &lt;code&gt;Globals&lt;/code&gt;).&lt;/li&gt;&lt;li&gt;Unqualified name: resolved in &lt;b&gt;Locals &amp;rarr; Upvalues &amp;rarr; Globals&lt;/b&gt; order; the row tooltip shows which section matched.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;After the first segment, chain &lt;code&gt;.field&lt;/code&gt; or bracket keys &amp;mdash; integer (&lt;code&gt;[1]&lt;/code&gt;, &lt;code&gt;[-1]&lt;/code&gt;, &lt;code&gt;[0x1F]&lt;/code&gt;), boolean (&lt;code&gt;[true]&lt;/code&gt;), or short-literal string (&lt;code&gt;[&quot;key&quot;]&lt;/code&gt;, &lt;code&gt;[&apos;k&apos;]&lt;/code&gt;). Depth is capped at 32 segments. Use the &lt;b&gt;Evaluate&lt;/b&gt; panel below for arbitrary Lua expressions.&lt;/p&gt;&lt;p&gt;Values are only read while the debugger is &lt;b&gt;paused&lt;/b&gt;; otherwise the Value column shows a muted em dash. Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;&lt;p&gt;Double-click or press &lt;b&gt;F2&lt;/b&gt; to edit a row; &lt;b&gt;Delete&lt;/b&gt; removes it; drag rows to reorder.&lt;/p&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">&lt;p&gt;Is cosán &lt;b&gt;crann athróg&lt;/b&gt; é gach ró, ní léiriú Lua. Foirmeacha glactha:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Cáilithe de réir rannóige: &lt;code&gt;Locals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Upvalues.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Globals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;.&lt;/li&gt;&lt;li&gt;Fréamh na rannóige ina haonar: &lt;code&gt;Locals&lt;/code&gt;, &lt;code&gt;Upvalues&lt;/code&gt;, &lt;code&gt;Globals&lt;/code&gt; (is leasainm é &lt;code&gt;_G&lt;/code&gt; do &lt;code&gt;Globals&lt;/code&gt;).&lt;/li&gt;&lt;li&gt;Ainm neamhcháilithe: réitithe in ord &lt;b&gt;Locals &amp;rarr; Upvalues ​​&amp;rarr; Globals&lt;/b&gt;; taispeánann an leid uirlis ró cén rannóg a mheaitseálann.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;Tar éis an chéad deighleog, slabhrú eochracha &lt;code&gt;.field&lt;/code&gt; nó lúibíní &amp;mdash; slánuimhir (&lt;code&gt;[1]&lt;/code&gt;, &lt;code&gt;[-1]&lt;/code&gt;, &lt;code&gt;[0x1F]&lt;/code&gt;), booléanach (&lt;code&gt;[true]&lt;/code&gt;), nó teaghrán gearr-litearálta (&lt;code&gt;[&quot;key&quot;]&lt;/code&gt;, &lt;code&gt;[&apos;k&apos;]&lt;/code&gt;). Tá an doimhneacht teoranta ag 32 deighleog. Bain úsáid as an bpainéal &lt;b&gt;Meastóireacht&lt;/b&gt; thíos le haghaidh léirithe Lua treallacha.&lt;/p&gt;&lt;p&gt;Ní léitear luachanna ach amháin nuair a bhíonn an dífhabhtóir &lt;b&gt;ar sos&lt;/b&gt;; ar shlí eile taispeánann an colún Luach fleasc em balbhaithe. Tarraingítear luachanna atá difriúil ón sos roimhe seo i &lt;b&gt;dath béime trom&lt;/b&gt;, agus splancann siad go hachomair ar an sos a thug an t-athrú isteach.&lt;/p&gt;&lt;p&gt;Cliceáil faoi dhó nó brúigh &lt;b&gt;F2&lt;/b&gt; chun ró a chur in eagar; baintear é le &lt;b&gt;Scrios&lt;/b&gt;; tarraing sraitheanna chun athordú.&lt;/p&gt;</translation>
     </message>
     <message>
         <source>Stack Trace</source>
-        <translation type="unfinished"></translation>
+        <translation>Rian Cruachta</translation>
     </message>
     <message>
         <source>Function</source>
-        <translation type="unfinished"></translation>
+        <translation>Feidhm</translation>
     </message>
     <message>
         <source>Select a row to inspect locals and upvalues for that frame. Double-click a Lua frame to open its source location.</source>
-        <translation type="unfinished"></translation>
+        <translation>Roghnaigh ró chun luachanna áitiúla agus uasluachanna a iniúchadh don fhráma sin. Cliceáil faoi dhó ar fhráma Lua chun a shuíomh foinseach a oscailt.</translation>
     </message>
     <message>
         <source>Breakpoints</source>
-        <translation type="unfinished"></translation>
+        <translation>Brisphointí</translation>
     </message>
     <message>
         <source>Active</source>
-        <translation type="unfinished"></translation>
+        <translation>Gníomhach</translation>
     </message>
     <message>
         <source>Line</source>
-        <translation type="unfinished"></translation>
+        <translation>Líne</translation>
     </message>
     <message>
         <source>File</source>
-        <translation type="unfinished">Comhad</translation>
+        <translation>Comhad</translation>
     </message>
     <message>
         <source>Files</source>
-        <translation type="unfinished"></translation>
+        <translation>Comhaid</translation>
     </message>
     <message>
         <source>Evaluate</source>
-        <translation type="unfinished">Meastóireacht</translation>
+        <translation>Meastóireacht a dhéanamh</translation>
     </message>
     <message>
         <source>Enter Lua expression (prefix with = to return value)</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir isteach an abairt Lua (réimír le = chun luach a thabhairt ar ais)</translation>
     </message>
     <message>
         <source>&lt;b&gt;Lua Expression Evaluation&lt;/b&gt;&lt;br&gt;&lt;br&gt;Code is executed using &lt;code&gt;lua_pcall()&lt;/code&gt; in a protected environment. Runtime errors are caught and displayed in the output.&lt;br&gt;&lt;br&gt;&lt;b&gt;Prefix with &lt;code&gt;=&lt;/code&gt;&lt;/b&gt; to return a value (e.g., &lt;code&gt;=my_var&lt;/code&gt;).&lt;br&gt;&lt;br&gt;&lt;b&gt;What works:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Read/modify global variables (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Modify table contents (&lt;code&gt;my_table.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Call functions and inspect return values&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;Limitations:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Local variables cannot be modified directly (use &lt;code&gt;debug.setlocal()&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Long-running expressions are automatically aborted&lt;/li&gt;&lt;li&gt;&lt;b&gt;Warning:&lt;/b&gt; Changes to globals persist and can affect ongoing dissection&lt;/li&gt;&lt;/ul&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">&lt;b&gt;Meastóireacht ar Léiriú Lua&lt;/b&gt;&lt;br&gt;&lt;br&gt;Déantar cód a fhorghníomhú ag baint úsáide as &lt;code&gt;lua_pcall()&lt;/code&gt; i dtimpeallacht chosanta. Gabhtar earráidí rith-ama agus taispeántar iad san aschur.&lt;br&gt;&lt;br&gt;&lt;b&gt;Réimír &lt;code&gt;=&lt;/code&gt;&lt;/b&gt; chun luach a thabhairt ar ais (m.sh., &lt;code&gt;=my_var&lt;/code&gt;).&lt;br&gt;&lt;br&gt;&lt;b&gt;Cad a oibríonn:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Léigh/athraigh athróga domhanda (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Athraigh ábhar an tábla (&lt;code&gt;my_table.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Glaoigh ar fheidhmeanna agus déan iniúchadh ar luachanna fillte&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;Teorainneacha:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Ní féidir athróga áitiúla a mhodhnú go díreach (bain úsáid as &lt;code&gt;debug.setlocal()&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Cuirtear deireadh go huathoibríoch le habairtí a ritheann le fada&lt;/li&gt;&lt;li&gt;&lt;b&gt;Rabhadh:&lt;/b&gt; Leanann athruithe ar athróga domhanda agus is féidir leo difear a dhéanamh do dhíscaoileadh leanúnach&lt;/li&gt;&lt;/ul&gt;</translation>
     </message>
     <message>
         <source>Output</source>
-        <translation type="unfinished">Aschur</translation>
+        <translation>Aschur</translation>
     </message>
     <message>
         <source>Execute the Lua code (Ctrl+Return)</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir an cód Lua i bhfeidhm (Ctrl+Return)</translation>
     </message>
     <message>
         <source>Clear</source>
-        <translation type="unfinished"></translation>
+        <translation>Glan</translation>
     </message>
     <message>
         <source>Clear input and output</source>
-        <translation type="unfinished"></translation>
+        <translation>Ionchur agus aschur soiléir</translation>
     </message>
     <message>
         <source>Settings</source>
-        <translation type="unfinished"></translation>
+        <translation>Socruithe</translation>
     </message>
     <message>
         <source>Auto (follow color scheme)</source>
-        <translation type="unfinished"></translation>
+        <translation>Uathoibríoch (lean an scéim dathanna)</translation>
     </message>
     <message>
         <source>Dark</source>
-        <translation type="unfinished"></translation>
+        <translation>Dorcha</translation>
     </message>
     <message>
         <source>Light</source>
-        <translation type="unfinished"></translation>
+        <translation>Solas</translation>
     </message>
     <message>
         <source>Color theme for the code editor</source>
-        <translation type="unfinished"></translation>
+        <translation>Téama datha don eagarthóir cóid</translation>
     </message>
     <message>
         <source>Code View Theme:</source>
-        <translation type="unfinished"></translation>
+        <translation>Téama Radharc Cód:</translation>
     </message>
     <message>
         <source>Clear All Breakpoints</source>
-        <translation type="unfinished"></translation>
+        <translation>Glan Gach Brisphointe</translation>
     </message>
     <message numerus="yes">
         <source>Are you sure you want to remove %Ln breakpoint(s)?</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation>
+            <numerusform>An bhfuil tú cinnte gur mian leat pointe briste %Ln a bhaint?</numerusform>
+            <numerusform>An bhfuil tú cinnte gur mian leat %Ln pointí briste a bhaint?</numerusform>
+            <numerusform>An bhfuil tú cinnte gur mian leat %Ln pointí briste a bhaint?</numerusform>
         </translation>
     </message>
     <message>
         <source>Enable or disable this breakpoint</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Cumasaigh nó díchumasaigh an pointe briste seo</translation>
     </message>
     <message>
         <source>File not found: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Comhad gan aimsiú: %1</translation>
     </message>
     <message>
         <source>%1
 Line %2</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">%1
+Líne %2</translation>
     </message>
     <message>
         <source>No watch path entered yet — enter a variable path in the Watch column to see a value here.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Níl aon chonair faire curtha isteach fós — cuir isteach cosán athraitheach sa cholún Faire chun luach a fheiceáil anseo.</translation>
     </message>
     <message>
         <source>Not a variable path</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Ní cosán athraitheach é</translation>
     </message>
     <message>
         <source>Use a Variables-style path (e.g. Locals.x, Globals.t.k, t[1], t[&quot;k&quot;], or a single identifier).</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Bain úsáid as cosán i stíl Athróg (e.g. Locals.x, Globals.t.k, t[1], t[&quot;k&quot;], nó aitheantóir aonair).</translation>
     </message>
     <message>
         <source>Only variable paths can be watched.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Ní féidir ach cosáin athraitheacha a fheiceáil.</translation>
     </message>
     <message>
         <source>Value shown only while the debugger is paused.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ní thaispeántar an luach ach amháin nuair a bhíonn an dífhabhtóir ar sos.</translation>
     </message>
     <message>
         <source>Value shown only while the debugger is paused. The debugger is currently disabled.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ní thaispeántar an luach ach amháin nuair a bhíonn an dífhabhtóir ar sos. Tá an dífhabhtóir díchumasaithe faoi láthair.</translation>
     </message>
     <message>
         <source>error</source>
-        <translation type="unfinished"></translation>
+        <translation>earráid</translation>
     </message>
     <message>
         <source>Invalid watch path.</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Cosán faire neamhbhailí.</translation>
     </message>
     <message>
         <source>Maximum watch depth reached</source>
-        <translation type="unfinished"></translation>
+        <translation>Doimhneacht uasta faire bainte amach</translation>
     </message>
     <message>
         <source>Maximum watch depth reached.</source>
-        <translation type="unfinished"></translation>
+        <translation>Shroich an doimhneacht faire uasta.</translation>
     </message>
     <message>
         <source>Only variable paths can be watched (e.g. Locals.name, Globals.x, or a single identifier for Locals.name).</source>
-        <translation type="unfinished"></translation>
+        <translation type="vanished">Ní féidir ach cosáin athraitheacha a fheiceáil (e.g. Locals.name, Globals.x, nó aitheantóir aonair do Locals.name).</translation>
     </message>
     <message numerus="yes">
         <source>Watch path is too long (maximum %Ln characters).</source>
-        <translation type="unfinished">
-            <numerusform></numerusform>
-            <numerusform></numerusform>
-            <numerusform></numerusform>
+        <translation type="vanished">
+            <numerusform>Tá an cosán faire rófhada (uasmhéid %Ln carachtar).</numerusform>
+            <numerusform>Tá an cosán faire rófhada (uasmhéid %Ln carachtair).</numerusform>
+            <numerusform>Tá an cosán faire rófhada (uasmhéid %Ln carachtair).</numerusform>
         </translation>
     </message>
     <message>
         <source>Type: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Cineál: %1</translation>
     </message>
     <message numerus="yes">
         <source>There are unsaved changes in %Ln open file(s).</source>
+        <translation>
+            <numerusform>Tá athruithe gan sábháil i %Ln comhad oscailte.</numerusform>
+            <numerusform>Tá athruithe gan sábháil i %Ln comhaid oscailte.</numerusform>
+            <numerusform>Tá athruithe gan sábháil i %Ln comhaid oscailte.</numerusform>
+        </translation>
+    </message>
+    <message>
+        <source>Save Lua Script</source>
+        <translation>Sábháil Script Lua</translation>
+    </message>
+    <message>
+        <source>Could not write to %1:
+%2</source>
+        <translation>Níorbh fhéidir scríobh chuig %1:
+%2</translation>
+    </message>
+    <message>
+        <source>Save changes to %1 before closing?</source>
+        <translation>Sábháil athruithe ar %1 roimh dhúnadh?</translation>
+    </message>
+    <message>
+        <source>Remove</source>
+        <translation>Bain</translation>
+    </message>
+    <message>
+        <source>Remove All Breakpoints</source>
+        <translation>Bain Gach Brisphointe</translation>
+    </message>
+    <message>
+        <source>Add Watch (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;p&gt;Each row is either a &lt;b&gt;Variables-tree path&lt;/b&gt; or a &lt;b&gt;Lua expression&lt;/b&gt;; the panel auto-detects which based on the syntax you type.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Path watches&lt;/b&gt; &amp;mdash; resolved against the paused frame&apos;s locals, upvalues, and globals:&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Section-qualified: &lt;code&gt;Locals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Upvalues.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;, &lt;code&gt;Globals.&lt;i&gt;name&lt;/i&gt;&lt;/code&gt;.&lt;/li&gt;&lt;li&gt;Section root alone: &lt;code&gt;Locals&lt;/code&gt;, &lt;code&gt;Upvalues&lt;/code&gt;, &lt;code&gt;Globals&lt;/code&gt; (&lt;code&gt;_G&lt;/code&gt; is an alias for &lt;code&gt;Globals&lt;/code&gt;).&lt;/li&gt;&lt;li&gt;Unqualified name: resolved in &lt;b&gt;Locals &amp;rarr; Upvalues &amp;rarr; Globals&lt;/b&gt; order; the row tooltip shows which section matched.&lt;/li&gt;&lt;/ul&gt;&lt;p&gt;After the first segment, chain &lt;code&gt;.field&lt;/code&gt; or bracket keys &amp;mdash; integer (&lt;code&gt;[1]&lt;/code&gt;, &lt;code&gt;[-1]&lt;/code&gt;, &lt;code&gt;[0x1F]&lt;/code&gt;), boolean (&lt;code&gt;[true]&lt;/code&gt;), or short-literal string (&lt;code&gt;[&quot;key&quot;]&lt;/code&gt;, &lt;code&gt;[&apos;k&apos;]&lt;/code&gt;). Depth is capped at 32 segments.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Expression watches&lt;/b&gt; &amp;mdash; anything that is not a plain path (operators, function/method calls, table constructors, length &lt;code&gt;#&lt;/code&gt;, comparisons, &amp;hellip;) is evaluated as Lua against the same locals/upvalues/globals. &lt;b&gt;You do not need a leading &lt;code&gt;=&lt;/code&gt; or &lt;code&gt;return&lt;/code&gt;&lt;/b&gt;; value-returning expressions auto-return their value. Examples: &lt;code&gt;#packets&lt;/code&gt;, &lt;code&gt;tbl[i + 1]&lt;/code&gt;, &lt;code&gt;obj:method()&lt;/code&gt;, &lt;code&gt;a == b&lt;/code&gt;, &lt;code&gt;{x, y}&lt;/code&gt;. Tables produced by an expression are expandable, and children re-resolve on every pause.&lt;/p&gt;&lt;p&gt;Values are only read while the debugger is &lt;b&gt;paused&lt;/b&gt;; otherwise the Value column shows a muted em dash. Values that differ from the previous pause are drawn in a &lt;b&gt;bold accent color&lt;/b&gt;, and briefly flash on the pause that introduced the change.&lt;/p&gt;&lt;p&gt;Double-click or press &lt;b&gt;F2&lt;/b&gt; to edit a row; &lt;b&gt;Delete&lt;/b&gt; removes it; drag rows to reorder. Use the &lt;b&gt;Evaluate&lt;/b&gt; panel below to run statements with side effects (assignments, blocks, loops).&lt;/p&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove Watch (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove All Watches (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;p&gt;&lt;b&gt;Expression&lt;/b&gt;&lt;br/&gt;Pause only when this Lua expression is truthy in the current frame. Runtime errors count as false and surface a warning icon on the row.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Hit Count&lt;/b&gt;&lt;br/&gt;Gate the pause on a hit counter (&lt;code&gt;0&lt;/code&gt; disables). The dropdown next to the integer picks the comparison mode: &lt;code&gt;&amp;ge;&lt;/code&gt; pauses every hit at or after &lt;i&gt;N&lt;/i&gt; (default); &lt;code&gt;=&lt;/code&gt; pauses once when the counter reaches &lt;i&gt;N&lt;/i&gt;; &lt;code&gt;every&lt;/code&gt; pauses on hits &lt;i&gt;N&lt;/i&gt;, 2&amp;times;&lt;i&gt;N&lt;/i&gt;, 3&amp;times;&lt;i&gt;N&lt;/i&gt;, &amp;hellip;; &lt;code&gt;once&lt;/code&gt; pauses on the &lt;i&gt;N&lt;/i&gt;th hit and deactivates the breakpoint. The counter is preserved across edits; right-click the row to reset it.&lt;/p&gt;&lt;p&gt;&lt;b&gt;Log Message&lt;/b&gt;&lt;br/&gt;Write a line to the &lt;i&gt;Evaluate&lt;/i&gt; output (and Wireshark&apos;s debug log) each time the breakpoint fires &amp;mdash; after the &lt;i&gt;Hit Count&lt;/i&gt; gate and any &lt;i&gt;Expression&lt;/i&gt; allow it. By default execution continues; click the pause toggle on the editor row to also pause after emitting. Tags: &lt;code&gt;{expr}&lt;/code&gt; (any Lua value); &lt;code&gt;{filename}&lt;/code&gt;, &lt;code&gt;{basename}&lt;/code&gt;, &lt;code&gt;{line}&lt;/code&gt;, &lt;code&gt;{function}&lt;/code&gt;, &lt;code&gt;{what}&lt;/code&gt;; &lt;code&gt;{hits}&lt;/code&gt;, &lt;code&gt;{depth}&lt;/code&gt;, &lt;code&gt;{thread}&lt;/code&gt;; &lt;code&gt;{timestamp}&lt;/code&gt;, &lt;code&gt;{datetime}&lt;/code&gt;, &lt;code&gt;{epoch}&lt;/code&gt;, &lt;code&gt;{epoch_ms}&lt;/code&gt;, &lt;code&gt;{elapsed}&lt;/code&gt;, &lt;code&gt;{delta}&lt;/code&gt;; &lt;code&gt;{{&lt;/code&gt; / &lt;code&gt;}}&lt;/code&gt; for literal braces.&lt;/p&gt;&lt;p&gt;Edit the &lt;i&gt;Location&lt;/i&gt; cell (double-click, F2, or right-click &amp;rarr; Edit) to attach one of these. A white core inside the breakpoint dot &amp;mdash; in this list and in the gutter &amp;mdash; marks rows that carry extras. Switching the editor&apos;s mode dropdown mid-edit discards typed-but-uncommitted text on the other pages; press Enter on a page before switching if you want to keep what you typed.&lt;/p&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>No breakpoints</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Edit Breakpoint</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove Breakpoint (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Remove All Breakpoints (%1)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&lt;b&gt;Lua Expression Evaluation&lt;/b&gt;&lt;br&gt;&lt;br&gt;Code runs in a protected environment: runtime errors are caught and shown in the output instead of propagating.&lt;br&gt;&lt;br&gt;&lt;b&gt;Prefix with &lt;code&gt;=&lt;/code&gt;&lt;/b&gt; to return a value (e.g., &lt;code&gt;=my_var&lt;/code&gt;).&lt;br&gt;&lt;br&gt;&lt;b&gt;What works:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Read/modify global variables (&lt;code&gt;_G.x = 42&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Modify table contents (&lt;code&gt;my_table.field = 99&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Call functions and inspect return values&lt;/li&gt;&lt;/ul&gt;&lt;b&gt;Limitations:&lt;/b&gt;&lt;ul&gt;&lt;li&gt;Local variables cannot be modified directly (use &lt;code&gt;debug.setlocal()&lt;/code&gt;)&lt;/li&gt;&lt;li&gt;Long-running expressions are automatically aborted&lt;/li&gt;&lt;li&gt;&lt;b&gt;Warning:&lt;/b&gt; Changes to globals persist and can affect ongoing dissection&lt;/li&gt;&lt;/ul&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Location: %1:%2</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Condition: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>pauses on hits %1, 2×%1, 3×%1, …</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>pauses once on hit %1, then deactivates the breakpoint</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>pauses on every hit from %1 onwards</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hit Count: %1 / %2 (%3)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Hits: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Log: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>(logpoint — also pauses)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>(logpoint — does not pause)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Condition error on last evaluation — treated as false (silent). Edit or reset the breakpoint to clear.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Condition error: %1</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Edit...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Disable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Enable</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>&amp;Remove</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Edit...</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Open Source</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reset Hit Count</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reset All Hit Counts</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Undo</source>
+        <translation>Cuir ar ceal</translation>
+    </message>
+    <message>
+        <source>Redo</source>
+        <translation>Athdhéan</translation>
+    </message>
+    <message>
+        <source>Cut</source>
+        <translation>Gearr</translation>
+    </message>
+    <message>
+        <source>Copy</source>
+        <translation>Cóipeáil</translation>
+    </message>
+    <message>
+        <source>Paste</source>
+        <translation>Greamaigh</translation>
+    </message>
+    <message>
+        <source>Select All</source>
+        <translation>Roghnaigh Uile</translation>
+    </message>
+    <message>
+        <source>Add Breakpoint</source>
+        <translation>Cuir Brisphointe leis</translation>
+    </message>
+    <message>
+        <source>Remove Breakpoint</source>
+        <translation>Bain Brisphointe</translation>
+    </message>
+    <message>
+        <source>No breakpoints
+%1: add or remove breakpoint on the current line in the editor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>All breakpoints are inactive — click to activate all
+%1: add or remove on the current line in the editor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Click to deactivate all breakpoints
+%1: add or remove on the current line in the editor</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Enter a variable path (e.g. Locals.x, Globals.t.k) or a Lua expression in the Watch column to see a value here.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Could not evaluate watch.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Expression — re-evaluated on every pause.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Clear All Watches</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <source>Are you sure you want to remove %Ln watch(es)?</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <source>Watch expression is too long (maximum %Ln characters).</source>
         <translation type="unfinished">
             <numerusform></numerusform>
             <numerusform></numerusform>
@@ -7725,272 +8036,233 @@ Line %2</source>
         </translation>
     </message>
     <message>
-        <source>Save Lua Script</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Could not write to %1:
-%2</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save changes to %1 before closing?</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove</source>
-        <translation type="unfinished">Bain</translation>
-    </message>
-    <message>
-        <source>Remove All Breakpoints</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Undo</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Redo</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Cut</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Copy</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Paste</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Select All</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Add Breakpoint</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Remove Breakpoint</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
         <source>Run to this line</source>
-        <translation type="unfinished"></translation>
+        <translation>Rith go dtí an líne seo</translation>
     </message>
     <message>
         <source>%1 = %2</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 = %2</translation>
     </message>
     <message>
         <source>Copy Name</source>
-        <translation type="unfinished"></translation>
+        <translation>Cóip Ainm</translation>
     </message>
     <message>
         <source>Copy Value</source>
-        <translation type="unfinished"></translation>
+        <translation>Cóipeáil Luach</translation>
     </message>
     <message>
         <source>Copy Name &amp;&amp; Value</source>
-        <translation type="unfinished"></translation>
+        <translation>Cóipeáil Ainm &amp;&amp; Luach</translation>
     </message>
     <message>
         <source>Add Watch: &quot;%1&quot;</source>
+        <translation>Cuir Faire leis: &quot;%1&quot;</translation>
+    </message>
+    <message>
+        <source>Copy Path</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Reveal in File Manager</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Copy Location</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Debugger is paused. Uncheck to disable.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá an dífhabhtóir ar sos. Díthiceáil chun é a dhíchumasú.</translation>
     </message>
     <message>
         <source>Debugger is enabled. Uncheck to disable.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá an dífhabhtóir cumasaithe. Díthiceáil chun é a dhíchumasú.</translation>
     </message>
     <message>
         <source>Debugger is disabled while a live capture is running. Stop the capture to re-enable.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá an dífhabhtóir díchumasaithe agus gabháil bheo ar siúl. Stop an gabháil chun é a athchumasú.</translation>
     </message>
     <message>
         <source>Debugger is disabled. Check to enable.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá an dífhabhtóir díchumasaithe. Seiceáil chun é a chumasú.</translation>
     </message>
     <message>
         <source>Disabled (live capture)</source>
-        <translation type="unfinished"></translation>
+        <translation>Díchumasaithe (gabháil bheo)</translation>
     </message>
     <message>
         <source>Disabled</source>
-        <translation type="unfinished"></translation>
+        <translation>Díchumasaithe</translation>
     </message>
     <message>
         <source>Paused</source>
-        <translation type="unfinished"></translation>
+        <translation>Sosaithe</translation>
     </message>
     <message>
         <source>Running</source>
-        <translation type="unfinished"></translation>
+        <translation>Ag rith</translation>
     </message>
     <message>
         <source>Lua Scripts (*.lua);;All Files (*)</source>
-        <translation type="unfinished"></translation>
+        <translation>Scripteanna Lua (*.lua);;Gach Comhad (*)</translation>
     </message>
     <message>
         <source>Are you sure you want to reload all Lua plugins?
 
 This will restart all Lua scripts and may affect capture analysis.</source>
-        <translation type="unfinished"></translation>
+        <translation>An bhfuil tú cinnte gur mian leat na breiseáin Lua go léir a athlódáil?
+
+Atosóidh sé seo na scripteanna Lua go léir agus d&apos;fhéadfadh sé difear a dhéanamh don anailís gabhála.</translation>
     </message>
     <message>
         <source>Evaluation available when debugger is paused</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá meastóireacht ar fáil nuair a bhíonn an dífhabhtóir ar sos</translation>
     </message>
     <message>
         <source>Error: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Earráid: %1</translation>
     </message>
     <message>
         <source>Error: Unknown error</source>
-        <translation type="unfinished"></translation>
+        <translation>Earráid: Earráid anaithnid</translation>
     </message>
     <message>
         <source>Lua Debugger</source>
-        <translation type="unfinished"></translation>
+        <translation>Dífhabhtóir Lua</translation>
     </message>
     <message>
         <source>Continue</source>
-        <translation type="unfinished"></translation>
+        <translation>Lean ar aghaidh</translation>
     </message>
     <message>
         <source>F5</source>
-        <translation type="unfinished"></translation>
+        <translation>F5</translation>
     </message>
     <message>
         <source>Step Over</source>
-        <translation type="unfinished"></translation>
+        <translation>Céim Thar</translation>
     </message>
     <message>
         <source>F10</source>
-        <translation type="unfinished"></translation>
+        <translation>F10</translation>
     </message>
     <message>
         <source>Step Into</source>
-        <translation type="unfinished"></translation>
+        <translation>Céim Isteach</translation>
     </message>
     <message>
         <source>F11</source>
-        <translation type="unfinished"></translation>
+        <translation>F11</translation>
     </message>
     <message>
         <source>Step Out</source>
-        <translation type="unfinished"></translation>
+        <translation>Céim Amach</translation>
     </message>
     <message>
         <source>Shift+F11</source>
-        <translation type="unfinished"></translation>
+        <translation>Shift+F11</translation>
     </message>
     <message>
         <source>Add Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir Faire leis</translation>
     </message>
     <message>
         <source>Ctrl+Shift+W</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+Shift+W</translation>
     </message>
     <message>
         <source>Open File</source>
-        <translation type="unfinished"></translation>
+        <translation>Oscail Comhad</translation>
     </message>
     <message>
         <source>Save</source>
-        <translation type="unfinished">Sábháil</translation>
+        <translation>Sábháil</translation>
     </message>
     <message>
         <source>Ctrl+S</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+S</translation>
     </message>
     <message>
         <source>Find…</source>
-        <translation type="unfinished"></translation>
+        <translation>Aimsigh…</translation>
     </message>
     <message>
         <source>Ctrl+F</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+F</translation>
     </message>
     <message>
         <source>Go to Line…</source>
-        <translation type="unfinished"></translation>
+        <translation>Téigh go dtí an Líne…</translation>
     </message>
     <message>
         <source>Ctrl+G</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+G</translation>
     </message>
     <message>
         <source>Reload Lua Plugins</source>
-        <translation type="unfinished">Athluchtaigh Breiseáin Lua</translation>
+        <translation>Athlódáil Breiseáin Lua</translation>
     </message>
     <message>
         <source>Ctrl+Shift+L</source>
-        <translation type="unfinished"></translation>
+        <translation>Ctrl+Shift+L</translation>
     </message>
 </context>
 <context>
     <name>LuaDebuggerFindFrame</name>
     <message>
         <source>Find:</source>
-        <translation type="unfinished">Aimsigh:</translation>
+        <translation>Aimsigh:</translation>
     </message>
     <message>
         <source>Find Next</source>
-        <translation type="unfinished"></translation>
+        <translation>Aimsigh an Chéad Chéad</translation>
     </message>
     <message>
         <source>Find Previous</source>
-        <translation type="unfinished"></translation>
+        <translation>Aimsigh Roimhe Seo</translation>
     </message>
     <message>
         <source>Replace:</source>
-        <translation type="unfinished"></translation>
+        <translation>Athsholáthair:</translation>
     </message>
     <message>
         <source>Replace</source>
-        <translation type="unfinished"></translation>
+        <translation>Athsholáthair</translation>
     </message>
     <message>
         <source>Replace All</source>
-        <translation type="unfinished"></translation>
+        <translation>Ionadaigh Gach Rud</translation>
     </message>
     <message>
         <source>Close</source>
-        <translation type="unfinished">Dún</translation>
+        <translation>Dún</translation>
     </message>
 </context>
 <context>
     <name>LuaDebuggerGoToLineFrame</name>
     <message>
         <source>Line:</source>
-        <translation type="unfinished"></translation>
+        <translation>Line:</translation>
     </message>
     <message>
         <source>Go to line</source>
-        <translation type="unfinished"></translation>
+        <translation>Téigh go dtí an líne</translation>
     </message>
     <message>
         <source>Cancel</source>
-        <translation type="unfinished">Cuir ar ceal</translation>
+        <translation>Cealaigh</translation>
     </message>
 </context>
 <context>
     <name>LuaDebuggerPauseOverlay</name>
     <message>
         <source>Lua debugger paused</source>
-        <translation type="unfinished"></translation>
+        <translation>Dífhabhtóir Lua curtha ar sos</translation>
     </message>
     <message>
         <source>Use the Lua Debugger window to step, continue, or evaluate. The main window resumes when execution is released.</source>
-        <translation type="unfinished"></translation>
+        <translation>Bain úsáid as an bhfuinneog Lua Debugger chun céim ar chéim a ghlacadh, leanúint ar aghaidh, nó meastóireacht a dhéanamh. Atosóidh an phríomhfhuinneog nuair a scaoiltear an forghníomhú.</translation>
     </message>
 </context>
 <context>
@@ -8208,11 +8480,11 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <name>MainWindow</name>
     <message>
         <source> before updating</source>
-        <translation type="unfinished"></translation>
+        <translation>roimh nuashonrú</translation>
     </message>
     <message>
         <source>Please close the current file before updating.</source>
-        <translation type="unfinished"></translation>
+        <translation>Dún an comhad reatha sula ndéantar an nuashonrú.</translation>
     </message>
     <message>
         <source>Display filter as %1</source>
@@ -9054,19 +9326,19 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Marked</source>
-        <translation type="unfinished">Marcáilte</translation>
+        <translation>Marcáilte</translation>
     </message>
     <message>
         <source>Ignored</source>
-        <translation type="unfinished"></translation>
+        <translation>Neamhaird déanta air</translation>
     </message>
     <message>
         <source>Reference Time</source>
-        <translation type="unfinished"></translation>
+        <translation>Am Tagartha</translation>
     </message>
     <message>
         <source>Modified</source>
-        <translation type="unfinished">Athraithe</translation>
+        <translation>Modhnaithe</translation>
     </message>
 </context>
 <context>
@@ -9924,10 +10196,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>Próifíl nua</translation>
     </message>
     <message>
-        <source>Profile Error</source>
-        <translation type="vanished">Earráid Phróifíle</translation>
-    </message>
-    <message>
         <source>Exporting profiles</source>
         <translation>Próifílí á n-easpórtáil</translation>
     </message>
@@ -9954,22 +10222,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
             <numerusform>%Ln próifílí pearsanta roghnaithe</numerusform>
             <numerusform>%Ln próifílí pearsanta roghnaithe</numerusform>
         </translation>
-    </message>
-    <message>
-        <source>An import of profiles is not allowed, while changes are pending</source>
-        <translation type="vanished">Ní cheadaítear próifílí a iompórtáil, cé go bhfuil athruithe ar feitheamh</translation>
-    </message>
-    <message>
-        <source>An import is pending to be saved. Additional imports are not allowed</source>
-        <translation type="vanished">Tá iompórtáil ar feitheamh le sábháil. Ní cheadaítear allmhairí breise</translation>
-    </message>
-    <message>
-        <source>An export of profiles is only allowed for personal profiles</source>
-        <translation type="vanished">Ní cheadaítear próifílí a easpórtáil ach amháin le haghaidh próifílí pearsanta</translation>
-    </message>
-    <message>
-        <source>An export of profiles is not allowed, while changes are pending</source>
-        <translation type="vanished">Ní cheadaítear próifílí a easpórtáil, agus tá athruithe ar feitheamh</translation>
     </message>
     <message numerus="yes">
         <source>%Ln profile(s) exported</source>
@@ -10047,40 +10299,24 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>Is córas é seo a sholáthraíonn próifíl</translation>
     </message>
     <message>
-        <source>A profile change for this name is pending</source>
-        <translation type="vanished">Tá athrú próifíle don ainm seo ar feitheamh</translation>
-    </message>
-    <message>
-        <source> (See: %1)</source>
-        <translation type="vanished"> (Féach: %1)</translation>
-    </message>
-    <message>
-        <source>This is an invalid profile definition</source>
-        <translation type="vanished">Is sainmhíniú neamhbhailí próifíle é seo</translation>
-    </message>
-    <message>
         <source>A profile already exists with this name</source>
         <translation>Tá próifíl ann cheana féin leis an ainm seo</translation>
     </message>
     <message>
-        <source>A profile with this name is being deleted</source>
-        <translation type="vanished">Tá próifíl leis an ainm seo á scriosadh</translation>
-    </message>
-    <message>
         <source>Duplicate profile name (%1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Ainm próifíle dúblach (%1)</translation>
     </message>
     <message>
         <source>A profile change for this name is pending (See: %1)</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá athrú próifíle don ainm seo ar feitheamh (Féach: %1)</translation>
     </message>
     <message>
         <source>%1 (originally %2)</source>
-        <translation type="unfinished"></translation>
+        <translation>%1 (%2 ar dtús)</translation>
     </message>
     <message>
         <source>The %1 profile is being deleted</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá an phróifíl %1 á scriosadh</translation>
     </message>
     <message>
         <source>Created from default settings</source>
@@ -10104,16 +10340,8 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>cóip</translation>
     </message>
     <message>
-        <source>Exporting profiles while changes are pending is not allowed</source>
-        <translation type="vanished">Ní cheadaítear próifílí easpórtála fad is atá athruithe ar feitheamh</translation>
-    </message>
-    <message>
         <source>No profiles found to export</source>
         <translation>Níor aimsíodh aon phróifílí le heaspórtáil</translation>
-    </message>
-    <message>
-        <source>Can&apos;t delete profile directory</source>
-        <translation type="vanished">Ní féidir comhadlann na próifíle a scriosadh</translation>
     </message>
     <message>
         <source>A profile name cannot contain the following characters: %1</source>
@@ -10126,18 +10354,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>A profile cannot start or end with a period (.)</source>
         <translation>Ní féidir le próifíl tosú nó deireadh a chur le tréimhse (.)</translation>
-    </message>
-    <message>
-        <source>Default</source>
-        <translation type="vanished">Réamhshocrú</translation>
-    </message>
-    <message>
-        <source>Global</source>
-        <translation type="vanished">Domhanda</translation>
-    </message>
-    <message>
-        <source>Personal</source>
-        <translation type="vanished">Pearsanta</translation>
     </message>
     <message>
         <source>Renamed from: %1</source>
@@ -10274,23 +10490,23 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Coloring Rule Preferences...</source>
-        <translation type="unfinished"></translation>
+        <translation>Roghanna Rialacha Dathúcháin...</translation>
     </message>
     <message>
         <source>Coloring Rules...</source>
-        <translation type="unfinished"></translation>
+        <translation>Rialacha Dathúcháin...</translation>
     </message>
     <message>
         <source>Resume Coloring Rule</source>
-        <translation type="unfinished"></translation>
+        <translation>Riail Dathúcháin Athscríbhinní</translation>
     </message>
     <message>
         <source>Pause Coloring Rule</source>
-        <translation type="unfinished"></translation>
+        <translation>Riail Dathúcháin Sos</translation>
     </message>
     <message>
         <source>Resume All Coloring Rules</source>
-        <translation type="unfinished"></translation>
+        <translation>Lean ar aghaidh leis na Rialacha Dathúcháin go léir</translation>
     </message>
     <message>
         <source>Copied %1</source>
@@ -10313,23 +10529,23 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <name>ProtoTreeModel</name>
     <message>
         <source>Comment</source>
-        <translation type="unfinished"></translation>
+        <translation>Trácht</translation>
     </message>
     <message>
         <source>Chat</source>
-        <translation type="unfinished">Comhrá</translation>
+        <translation>Comhrá</translation>
     </message>
     <message>
         <source>Note</source>
-        <translation type="unfinished">Nóta</translation>
+        <translation>Nóta</translation>
     </message>
     <message>
         <source>Warning</source>
-        <translation type="unfinished">Rabhadh</translation>
+        <translation>Rabhadh</translation>
     </message>
     <message>
         <source>Error</source>
-        <translation type="unfinished">Earráid</translation>
+        <translation>Earráid</translation>
     </message>
 </context>
 <context>
@@ -11048,35 +11264,35 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Global</source>
-        <translation type="unfinished">Domhanda</translation>
+        <translation>Domhanda</translation>
     </message>
     <message>
         <source>Personal</source>
-        <translation type="unfinished">Pearsanta</translation>
+        <translation>Pearsanta</translation>
     </message>
     <message>
         <source>Add Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir Faire leis</translation>
     </message>
     <message>
         <source>Remove All Watches</source>
-        <translation type="unfinished"></translation>
+        <translation>Bain Gach Uaireadóir</translation>
     </message>
     <message>
         <source>Duplicate Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Faire Dhúblach</translation>
     </message>
     <message>
         <source>Edit Watch</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir Faire in Eagar</translation>
     </message>
     <message>
         <source>Copy Value</source>
-        <translation type="unfinished"></translation>
+        <translation>Cóipeáil Luach</translation>
     </message>
     <message>
         <source>Remove</source>
-        <translation type="unfinished">Bain</translation>
+        <translation>Bain</translation>
     </message>
 </context>
 <context>
@@ -15173,115 +15389,115 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <name>WelcomeHeaderWidget</name>
     <message>
         <source>Form</source>
-        <translation type="unfinished">Foirm</translation>
+        <translation>Foirm</translation>
     </message>
     <message>
         <source>Application Name</source>
-        <translation type="unfinished"></translation>
+        <translation>Ainm an Iarratais</translation>
     </message>
     <message>
         <source>Application name</source>
-        <translation type="unfinished"></translation>
+        <translation>Ainm an iarratais</translation>
     </message>
     <message>
         <source>Wireshark</source>
-        <translation type="unfinished">Wireshark</translation>
+        <translation>Wireshark</translation>
     </message>
     <message>
         <source>Version information</source>
-        <translation type="unfinished"></translation>
+        <translation>Faisnéis faoin leagan</translation>
     </message>
     <message>
         <source>Version of the application currently running</source>
-        <translation type="unfinished"></translation>
+        <translation>Leagan den fheidhmchlár atá ag rith faoi láthair</translation>
     </message>
     <message>
         <source>4.7.0 (v4.7.0rc0-2438-g68ddfc1bcba4)</source>
-        <translation type="unfinished"></translation>
+        <translation>4.7.0 (v4.7.0rc0-2438-g68ddfc1bcba4)</translation>
     </message>
     <message>
         <source>Variant of the application running</source>
-        <translation type="unfinished"></translation>
+        <translation>Leagan den fheidhmchlár atá ag rith</translation>
     </message>
     <message>
         <source>Build variant of the application currently running</source>
-        <translation type="unfinished"></translation>
+        <translation>Leagan tógála den fheidhmchlár atá ag rith faoi láthair</translation>
     </message>
     <message>
         <source>Development Build</source>
-        <translation type="unfinished"></translation>
+        <translation>Tógáil Forbartha</translation>
     </message>
     <message>
         <source>Update Available</source>
-        <translation type="unfinished"></translation>
+        <translation>Nuashonrú ar Fáil</translation>
     </message>
     <message>
         <source>Graphical indicator that an update is available</source>
-        <translation type="unfinished"></translation>
+        <translation>Táscaire grafach go bhfuil nuashonrú ar fáil</translation>
     </message>
     <message>
         <source>.</source>
-        <translation type="unfinished"></translation>
+        <translation>.</translation>
     </message>
     <message>
         <source>Update available</source>
-        <translation type="unfinished"></translation>
+        <translation>Nuashonrú ar fáil</translation>
     </message>
     <message>
         <source>A new update is available</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá nuashonrú nua ar fáil</translation>
     </message>
     <message>
         <source>Update available: %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Nuashonrú ar fáil: %1</translation>
     </message>
     <message>
         <source>Release Notes</source>
-        <translation type="unfinished">Nótaí Eisiúna</translation>
+        <translation>Nótaí Eisiúna</translation>
     </message>
     <message>
         <source>Opens a browser to show the release notes for the available update</source>
-        <translation type="unfinished"></translation>
+        <translation>Osclaíonn sé brabhsálaí chun na nótaí scaoilte don nuashonrú atá ar fáil a thaispeáint</translation>
     </message>
     <message>
         <source>Download Update</source>
-        <translation type="unfinished"></translation>
+        <translation>Íoslódáil Nuashonrú</translation>
     </message>
     <message>
         <source>Starts the download process for the currently available update</source>
-        <translation type="unfinished"></translation>
+        <translation>Tosaíonn sé an próiseas íoslódála don nuashonrú atá ar fáil faoi láthair</translation>
     </message>
     <message>
         <source>Dismiss update notification</source>
-        <translation type="unfinished"></translation>
+        <translation>Díbhe fógra nuashonraithe</translation>
     </message>
     <message>
         <source>Dismiss the update notification and show the information about an update again on either next application start or when a new update is available</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir an fógra nuashonraithe ar leataobh agus taispeáin an fhaisnéis faoin nuashonrú arís an chéad uair eile a thosófar an feidhmchlár nó nuair a bheidh nuashonrú nua ar fáil.</translation>
     </message>
     <message>
         <source>Update %1 is available</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá nuashonrú %1 ar fáil</translation>
     </message>
     <message>
         <source>A new update for version %1 is available (current version is %2)</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá nuashonrú nua ar fáil do leagan %1 (is é %2 an leagan reatha)</translation>
     </message>
     <message>
         <source>Release Notes for update %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Nótaí Eisiúna don nuashonrú %1</translation>
     </message>
     <message>
         <source>Opens a browser to show the release notes for %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Osclaíonn sé brabhsálaí chun na nótaí scaoilte do %1 a thaispeáint</translation>
     </message>
     <message>
         <source>Download update %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Íoslódáil nuashonrú %1</translation>
     </message>
     <message>
         <source>Starts the download process for update %1</source>
-        <translation type="unfinished"></translation>
+        <translation>Tosaíonn an próiseas íoslódála don nuashonrú %1</translation>
     </message>
 </context>
 <context>
@@ -16688,7 +16904,7 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Main Window</source>
-        <translation type="unfinished"></translation>
+        <translation>Príomhfhuinneog</translation>
     </message>
     <message>
         <source>Allows jumping to a specific packet by its number.</source>
@@ -16736,11 +16952,11 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Main View</source>
-        <translation type="unfinished"></translation>
+        <translation>Príomh-Radharc</translation>
     </message>
     <message>
         <source>Main Menu</source>
-        <translation type="unfinished"></translation>
+        <translation>Príomh-Roghchlár</translation>
     </message>
     <message>
         <source>&amp;3GPP Uu</source>
@@ -17576,19 +17792,19 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>Main View Splitter</source>
-        <translation type="unfinished"></translation>
+        <translation>Scoilteoir Príomh-Radharc</translation>
     </message>
     <message>
         <source>Contains the packet list, protocol tree, and packet bytes.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá an liosta paicéad, an crann prótacail, agus na bearta paicéad ann.</translation>
     </message>
     <message>
         <source>Extra View Splitter</source>
-        <translation type="unfinished"></translation>
+        <translation>Scoilteoir Radharc Breise</translation>
     </message>
     <message>
         <source>Contains packet extras and bytes views.</source>
-        <translation type="unfinished"></translation>
+        <translation>Tá breiseáin phaicéid agus radhairc beart ann.</translation>
     </message>
     <message>
         <source>Unable to drop files during capture.</source>
@@ -17664,19 +17880,19 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>DIS Streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Sruthanna DIS</translation>
     </message>
     <message>
         <source>Show and analyze DIS radio streams</source>
-        <translation type="unfinished"></translation>
+        <translation>Taispeáin agus anailísigh sruthanna raidió DIS</translation>
     </message>
     <message>
         <source>Lua Debugger</source>
-        <translation type="unfinished"></translation>
+        <translation>Dífhabhtóir Lua</translation>
     </message>
     <message>
         <source>Software update checking is not available on this platform.</source>
-        <translation type="unfinished"></translation>
+        <translation>Níl seiceáil nuashonruithe bogearraí ar fáil ar an ardán seo.</translation>
     </message>
     <message>
         <source>Continue &amp;without Saving</source>

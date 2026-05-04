@@ -54,7 +54,9 @@
 #include <QIcon>
 #include <QJsonArray>
 #include <QJsonParseError>
+#include <QIntValidator>
 #include <QLineEdit>
+#include <QListView>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QKeySequence>
@@ -63,16 +65,23 @@
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QMetaObject>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QPainter>
 #include <QPalette>
 #include <QPlainTextEdit>
 #include <QPointer>
+#include <QResizeEvent>
 #include <QShowEvent>
 #include <QSet>
 #include <QSizePolicy>
 #include <QStandardPaths>
+#include <QStringList>
+#include <climits>
+
 #include <QStyle>
 #include <QTextBlock>
+#include <QToolTip>
 #include <QTextDocument>
 #include <QSplitter>
 #include <QPersistentModelIndex>
@@ -125,6 +134,9 @@ static const QString kLuaDbgHeaderMinus{QStringLiteral("\uFF0D")};
 /** Tight, flat so glyphs sit in the same vertical band as the HLine. */
 static const QString kLuaDbgHeaderToolButtonStyle{QStringLiteral(
     "QToolButton { border: none; padding: 0px; margin: 0px; }")};
+
+/** Maximum number of lines the Evaluate / logpoint output retains. */
+static constexpr int kLuaDbgEvalOutputMaxLines = 5000;
 
 namespace {
 
@@ -265,25 +277,37 @@ styleLuaDebuggerHeaderPlusMinusButton(QToolButton *btn, int side,
     styleLuaDebuggerHeaderFittedTextButton(btn, side, titleFont, pm);
 }
 
-/** Trash icon, same @a side as ＋/− on macOS; 2 px smaller elsewhere. */
+/**
+ * Apply the standard "header icon-only" sizing to @a btn — the
+ * pixel-perfect treatment the trash button gets on each platform
+ * (Mac: full @a side; non-Mac: @a side &minus; 4 so the themed glyph
+ * doesn't read taller than the @c +/&minus; / toggle buttons next to
+ * it). The caller is responsible for installing the icon itself; this
+ * helper exists so every header icon button (Edit, Remove All, …)
+ * picks up the same Mac-vs-Linux-vs-Windows sizing without drifting.
+ */
 static void
-styleLuaDebuggerHeaderRemoveAllButton(QToolButton *btn, int side)
+styleLuaDebuggerHeaderIconOnlyButton(QToolButton *btn, int side)
 {
     btn->setToolButtonStyle(Qt::ToolButtonIconOnly);
-    btn->setIcon(QIcon::fromTheme(QStringLiteral("edit-delete"),
-                                  StockIcon(QStringLiteral("edit-clear"))));
 #ifdef Q_OS_MAC
     const int btnSide = side;
 #else
-    /* The themed trash glyph rendered at headerHeight() looks slightly too
-     * tall next to the +/-/toggle buttons on Linux/Windows; trim 4 px so the
-     * trailing button row reads as one set of equal-sized controls. */
     const int btnSide = qMax(1, side - 4);
 #endif
     btn->setIconSize(QSize(btnSide, btnSide));
     btn->setFixedSize(btnSide, btnSide);
     btn->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     btn->setText(QString());
+}
+
+/** Trash icon, sized like every other header icon-only button. */
+static void
+styleLuaDebuggerHeaderRemoveAllButton(QToolButton *btn, int side)
+{
+    btn->setIcon(QIcon::fromTheme(QStringLiteral("edit-delete"),
+                                  StockIcon(QStringLiteral("edit-clear"))));
+    styleLuaDebuggerHeaderIconOnlyButton(btn, side);
 }
 
 
@@ -468,6 +492,54 @@ bool LuaDebuggerDialog::s_captureSuppressionActive_ = false;
 bool LuaDebuggerDialog::s_captureSuppressionPrevEnabled_ = false;
 bool LuaDebuggerDialog::s_mainCloseDeferredByPause_ = false;
 
+namespace
+{
+/* Cross-thread coalescing queue for logpoint emissions.
+ *
+ * The line hook fires on the Lua thread; the GUI mutation must run
+ * on the GUI thread. Per-fire queued invocations through
+ * QMetaObject::invokeMethod allocate a heap functor and post an
+ * event each time, which saturates the main event queue when a
+ * logpoint matches every packet. Funnelling fires through this
+ * queue and posting a single drain task per non-empty transition
+ * keeps the queue depth bounded regardless of the firing rate.
+ *
+ * The mutex is held only for trivial list operations; the actual
+ * widget append happens on the GUI thread under no extra lock. */
+QMutex s_logEmitMutex;
+QStringList s_pendingLogMessages;
+bool s_logDrainScheduled = false;
+} // namespace
+
+void LuaDebuggerDialog::trampolineLogEmit(const char *file_path, int64_t line,
+                                           const char *message)
+{
+    Q_UNUSED(file_path);
+    Q_UNUSED(line);
+    LuaDebuggerDialog *dialog = _instance;
+    if (!dialog)
+    {
+        return;
+    }
+    QString messageQ = message ? QString::fromUtf8(message) : QString();
+
+    bool schedule = false;
+    {
+        QMutexLocker lock(&s_logEmitMutex);
+        s_pendingLogMessages.append(messageQ);
+        if (!s_logDrainScheduled)
+        {
+            s_logDrainScheduled = true;
+            schedule = true;
+        }
+    }
+    if (schedule)
+    {
+        QMetaObject::invokeMethod(dialog, "drainPendingLogs",
+                                   Qt::QueuedConnection);
+    }
+}
+
 bool LuaDebuggerDialog::handleMainCloseIfPaused(QCloseEvent *event)
 {
     LuaDebuggerDialog *dbg = _instance;
@@ -644,6 +716,7 @@ namespace SettingsKeys
 constexpr const char *Theme = "theme";
 constexpr const char *MainSplitter = "mainSplitterState";
 constexpr const char *LeftSplitter = "leftSplitterState";
+constexpr const char *EvalSplitter = "evalSplitterState";
 constexpr const char *SectionVariables = "sectionVariables";
 constexpr const char *SectionStack = "sectionStack";
 constexpr const char *SectionFiles = "sectionFiles";
@@ -674,6 +747,20 @@ constexpr qint32 FileTreePathRole = static_cast<qint32>(Qt::UserRole);
 constexpr qint32 FileTreeIsDirectoryRole = static_cast<qint32>(Qt::UserRole + 1);
 constexpr qint32 BreakpointFileRole = static_cast<qint32>(Qt::UserRole + 2);
 constexpr qint32 BreakpointLineRole = static_cast<qint32>(Qt::UserRole + 3);
+constexpr qint32 BreakpointConditionRole =
+    static_cast<qint32>(Qt::UserRole + 30);
+constexpr qint32 BreakpointHitCountRole =
+    static_cast<qint32>(Qt::UserRole + 31);
+constexpr qint32 BreakpointHitTargetRole =
+    static_cast<qint32>(Qt::UserRole + 32);
+constexpr qint32 BreakpointConditionErrRole =
+    static_cast<qint32>(Qt::UserRole + 33);
+constexpr qint32 BreakpointLogMessageRole =
+    static_cast<qint32>(Qt::UserRole + 34);
+constexpr qint32 BreakpointHitModeRole =
+    static_cast<qint32>(Qt::UserRole + 35);
+constexpr qint32 BreakpointLogAlsoPauseRole =
+    static_cast<qint32>(Qt::UserRole + 36);
 constexpr qint32 StackItemFileRole = static_cast<qint32>(Qt::UserRole + 4);
 constexpr qint32 StackItemLineRole = static_cast<qint32>(Qt::UserRole + 5);
 constexpr qint32 StackItemNavigableRole = static_cast<qint32>(Qt::UserRole + 6);
@@ -959,6 +1046,47 @@ static QString watchSpecFromChangeKey(const QString &key)
 }
 
 /**
+ * Strip the synthetic @c "watch:N:" prefix Lua prepends to runtime errors
+ * raised inside an expression chunk. The C side loads the chunk with the
+ * name @c "=watch", so @c assert / @c error messages come back as
+ * @c "watch:1: <user message>". The chunk is always one line and the row's
+ * red error chrome already conveys "watch failed", so the prefix is pure
+ * noise in the *Value* cell — most painfully in predicate watches where
+ * the user-supplied message is the entire payload of the row. The full,
+ * unstripped string is preserved in the cell tooltip for anyone who wants
+ * the location.
+ *
+ * Path-watch errors ("Path not found: …") do not start with @c "watch:",
+ * so they are returned unchanged.
+ */
+static QString stripWatchExpressionErrorPrefix(const QString &errStr)
+{
+    static const QLatin1String kPrefix("watch:");
+    if (!errStr.startsWith(kPrefix))
+    {
+        return errStr;
+    }
+    qsizetype i = kPrefix.size();
+    const qsizetype digitStart = i;
+    while (i < errStr.size() && errStr.at(i).isDigit())
+    {
+        ++i;
+    }
+    if (i == digitStart || i >= errStr.size() ||
+        errStr.at(i) != QLatin1Char(':'))
+    {
+        return errStr;
+    }
+    ++i;
+    while (i < errStr.size() &&
+           (errStr.at(i) == QLatin1Char(' ') || errStr.at(i) == QLatin1Char('\t')))
+    {
+        ++i;
+    }
+    return errStr.mid(i);
+}
+
+/**
  * Lookup / compare in one place. Returns true when @a key was recorded in
  * @a baseline with a different value, or (when @a flashNew is set) when @a
  * key was absent from @a baseline but @a baseline itself is non-empty —
@@ -1023,6 +1151,27 @@ static QString variableTreeChildPath(const QString &parentPath,
         return parentPath + nameText;
     }
     return parentPath + QLatin1Char('.') + nameText;
+}
+
+/**
+ * Subpath under @a parentSubpath addressed at @a nameText for an expression
+ * watch. Unlike the Variables-tree path (variableTreeChildPath), the
+ * top-level segment is anchored to "the expression result" (parentSubpath
+ * is empty) rather than a Locals/Upvalues/Globals section, so a string
+ * key always carries a leading @c '.' even at depth 1.
+ *
+ * The result is consumed by @c wslua_debugger_traverse_subpath_on_top via
+ * @c wslua_debugger_watch_expr_get_variables; that helper accepts subpaths
+ * starting with @c '.' or @c '['.
+ */
+static QString expressionWatchChildSubpath(const QString &parentSubpath,
+                                           const QString &nameText)
+{
+    if (nameText.startsWith(QLatin1Char('[')))
+    {
+        return parentSubpath + nameText;
+    }
+    return parentSubpath + QLatin1Char('.') + nameText;
 }
 
 /** Globals subtree is sorted by name; Locals/Upvalues keep engine order. */
@@ -1724,7 +1873,14 @@ WatchRootDelegate::createEditor(QWidget *parent,
     {
         return nullptr;
     }
-    return new QLineEdit(parent);
+    QLineEdit *editor = new QLineEdit(parent);
+    /* Suppress the blue rounded focus ring QMacStyle draws around an
+     * actively edited inline editor. The cell's own selection
+     * background plus the line edit's frame already make it obvious
+     * which row is being edited; the focus ring just adds visual
+     * noise on top. The attribute is a no-op on Linux / Windows. */
+    editor->setAttribute(Qt::WA_MacShowFocusRect, false);
+    return editor;
 }
 
 void WatchRootDelegate::setEditorData(QWidget *editor,
@@ -1765,6 +1921,1266 @@ void WatchRootDelegate::setModelData(QWidget *editor, QAbstractItemModel *model,
     dialog_->commitWatchRootSpec(it, le->text());
 }
 
+// ============================================================================
+// BreakpointConditionDelegate
+// ============================================================================
+//
+// Inline editor for the Breakpoints list's Location column. Mirrors the
+// VSCode breakpoint inline editor: a small mode picker on the left
+// (Expression / Hit Count / Log Message) reconfigures the value line
+// edit's validator / placeholder / tooltip to match the chosen mode and
+// stashes the previously-typed text under a per-mode draft slot so
+// switching back restores it. The Hit Count mode restricts input to
+// non-negative integers via a QIntValidator. Each commit updates only
+// the selected mode's field; the others are preserved unchanged on the
+// model item.
+//
+// The editor IS the value @c QLineEdit (see @ref BreakpointInlineLineEdit
+// above); the mode combo, hit-mode combo and pause checkbox are children
+// of the line edit, positioned in the line edit's text margins. This
+// keeps the inline editor's parent chain identical to the Watch tree's
+// bare-@c QLineEdit editor, so the platform's native style draws both
+// trees' edit fields at exactly the same height with exactly the same
+// frame, focus ring and selection colours.
+//
+// Adding a fourth mode in the future is a one-row append to
+// kBreakpointEditModes plus an extension of @c applyEditorMode and the
+// commit/load logic in @c setEditorData / @c setModelData; no other
+// site needs to change.
+
+enum class BreakpointEditMode : int
+{
+    Expression = 0,
+    HitCount = 1,
+    LogMessage = 2,
+};
+
+struct BreakpointEditModeSpec
+{
+    BreakpointEditMode mode;
+    const char *label;        /**< tr() applied at construction. */
+    const char *placeholder;  /**< nullptr -> none. */
+    const char *valueTooltip; /**< Tooltip on the value-editor widget. */
+};
+
+static const BreakpointEditModeSpec kBreakpointEditModes[] = {
+    {BreakpointEditMode::Expression, QT_TRANSLATE_NOOP(
+                                         "BreakpointConditionDelegate",
+                                         "Expression"),
+     QT_TRANSLATE_NOOP("BreakpointConditionDelegate",
+                        "Lua expression — pause when truthy"),
+     QT_TRANSLATE_NOOP(
+         "BreakpointConditionDelegate",
+         "Evaluated each time control reaches this line; locals, "
+         "upvalues, and globals are visible like Watch / Evaluate.\n"
+         "Runtime errors are treated as false (silent) and surface as "
+         "a warning icon on the row.")},
+    {BreakpointEditMode::HitCount,
+     QT_TRANSLATE_NOOP("BreakpointConditionDelegate", "Hit Count"),
+     QT_TRANSLATE_NOOP(
+         "BreakpointConditionDelegate",
+         "Pause after N hits (0 disables)"),
+     QT_TRANSLATE_NOOP(
+         "BreakpointConditionDelegate",
+         "Gate the pause on a hit counter. The dropdown next to the "
+         "integer picks the comparison mode: \xe2\x89\xa5 pauses "
+         "every hit at or after N (default); = pauses once when the "
+         "counter reaches N; every pauses on hits N, 2\xc3\x97N, "
+         "3\xc3\x97N, \xe2\x80\xa6; once pauses on the Nth hit and "
+         "deactivates the breakpoint. Use 0 to disable the gate. The "
+         "counter is preserved across edits to Expression / Hit "
+         "Count / Log Message; lowering the target below the current "
+         "count rolls the counter back to 0 so the breakpoint can "
+         "wait for the next N hits. Right-click the row to reset it "
+         "explicitly. Combined with an Expression on the same row, "
+         "the hit-count gate runs first.")},
+    {BreakpointEditMode::LogMessage,
+     QT_TRANSLATE_NOOP("BreakpointConditionDelegate", "Log Message"),
+     QT_TRANSLATE_NOOP(
+         "BreakpointConditionDelegate",
+         "Log message — supports {expr} and tags such as {filename}, "
+         "{basename}, {line}, {function}, {hits}, {timestamp}, "
+         "{delta}\xe2\x80\xa6"),
+     QT_TRANSLATE_NOOP(
+         "BreakpointConditionDelegate",
+         "Logpoints write a message to the Evaluate output (and "
+         "Wireshark's info log) each time the line is reached. By "
+         "default execution continues without pausing; tick the "
+         "Pause box on this editor to also pause after emitting "
+         "(useful for log-then-inspect without duplicating the "
+         "breakpoint). The line is emitted verbatim — there is no "
+         "automatic file:line prefix. Inside {} the text is "
+         "evaluated as a Lua expression in this frame and "
+         "converted to text the same way tostring() does; "
+         "reserved tags below shadow any same-named Lua local / "
+         "upvalue / global. "
+         "Origin: {filename}, {basename}, {line}, {function}, "
+         "{what}. Counters and scope: {hits}, {depth}, {thread}. "
+         "Time: {timestamp}, {datetime}, {epoch}, {epoch_ms}, "
+         "{elapsed}, {delta}. Use {{ and }} for literal { and }. "
+         "Per-placeholder errors substitute '<error: ...>' without "
+         "aborting the line.")},
+};
+
+/**
+ * @brief Inline editor for the Breakpoints "Location" column.
+ *
+ * The editor IS a @c QLineEdit, exactly like the Watch tree's editor — same
+ * widget class, same parent chain (direct child of the view's viewport),
+ * same native rendering on every platform. This is what makes the
+ * Breakpoint edit field render at @c QLineEdit::sizeHint() height with the
+ * platform's native frame, focus ring, padding and selection colours,
+ * pixel-identical to the Watch edit field.
+ *
+ * The earlier implementation wrapped the line edit inside
+ * @c QStackedWidget inside @c QHBoxLayout inside a wrapper @c QWidget;
+ * with that nesting the layout sized the @c QLineEdit to whatever the
+ * row was (never to its own natural sizeHint), so on macOS the
+ * @c QMacStyle frame painter drew a much shorter line edit than the
+ * Watch tree's bare @c QLineEdit, even when the row itself was the same
+ * height. Embedding the auxiliary controls AS CHILDREN of the
+ * @c QLineEdit (the same idiom used by Qt Creator's
+ * @c Utils::FancyLineEdit and Chrome's omnibox) lets the line edit be
+ * the editor and reserve interior space for the embedded widgets via
+ * @c setTextMargins().
+ *
+ * The mode combo lives on the left edge; the hit-count comparison combo
+ * and the "also pause" toggle live on the right edge, hidden by
+ * default and shown only for the modes that own them. Caller
+ * (@ref BreakpointConditionDelegate::createEditor) wires up the
+ * mode-change behaviour, the focus / commit logic and the model
+ * read/write; this class is intentionally only responsible for the
+ * geometry of the embedded widgets and the corresponding text margins.
+ */
+class BreakpointInlineLineEdit : public QLineEdit
+{
+  public:
+    explicit BreakpointInlineLineEdit(QWidget *parent = nullptr)
+        : QLineEdit(parent)
+    {
+    }
+
+    /** Hand the editor its three embedded widgets (already parented to
+     *  @c this by the caller) so it can reserve text-margin space for
+     *  them and reposition them on every resize. */
+    void setEmbeddedWidgets(QComboBox *modeCombo,
+                            QComboBox *hitModeCombo,
+                            QToolButton *pauseButton)
+    {
+        modeCombo_ = modeCombo;
+        hitModeCombo_ = hitModeCombo;
+        pauseButton_ = pauseButton;
+        relayout();
+    }
+
+    /** Re-run the geometry pass — call after toggling the visibility of
+     *  any embedded widget so the text margins (and therefore the
+     *  caret-claim area) follow.
+     *
+     *  Bails out when the editor has no real width yet (called e.g. from
+     *  @c setEmbeddedWidgets / @c applyEditorMode before
+     *  @c QAbstractItemView has placed us in the cell): with width()==0
+     *  every right-anchored widget would land at a negative x. The first
+     *  real layout pass happens via @c resizeEvent once the view sets
+     *  our geometry, and a final pass via @c showEvent picks up any
+     *  visibility changes that landed after that. */
+    void relayout()
+    {
+        if (!modeCombo_ || width() <= 0)
+            return;
+
+        const int kInnerGap = 4;
+        /* The frame width Qt's style draws around the line edit's
+         * content rect. We push our embedded widgets just inside the
+         * frame so they don't overlap the native border. */
+        QStyleOptionFrame opt;
+        initStyleOption(&opt);
+        const int frameW = style()->pixelMetric(
+            QStyle::PM_DefaultFrameWidth, &opt, this);
+
+        /* Vertically center every embedded widget on the line edit's
+         * own visual mid-line, using each widget's natural sizeHint
+         * height. This is the same alignment QLineEdit's built-in
+         * trailing/leading actions use, and it's what makes the row
+         * read as one coherent control on every platform — combos
+         * with a different intrinsic height than the line edit's text
+         * area sit pixel-aligned with the caret rather than stretched
+         * top-to-bottom. */
+        const auto centeredRect = [this](const QSize &hint, int x) {
+            int h = hint.height();
+            if (h > height())
+                h = height();
+            const int y = (height() - h) / 2;
+            return QRect(x, y, hint.width(), h);
+        };
+
+        /* QMacStyle paints the @c QComboBox's native popup arrow with
+         * one pixel of optical padding above the label, which makes
+         * the combo's text baseline read 1 px higher than the
+         * @c QLineEdit's caret baseline when both are vertically
+         * centered in the same row. Other platforms render the combo
+         * flush with the line edit's text, so the nudge is macOS-only.
+         * Both combos (mode on the left, hit-count comparison on the
+         * right) need the same nudge so they land on a shared
+         * baseline. */
+#ifdef Q_OS_MACOS
+        constexpr int comboBaselineNudge = 1;
+#else
+        constexpr int comboBaselineNudge = 0;
+#endif
+
+        int leftEdge = frameW + kInnerGap;
+        int rightEdge = width() - frameW - kInnerGap;
+
+        const QSize modeHint = modeCombo_->sizeHint();
+        QRect modeRect = centeredRect(modeHint, leftEdge);
+        modeRect.translate(0, comboBaselineNudge);
+        modeCombo_->setGeometry(modeRect);
+        leftEdge += modeHint.width() + kInnerGap;
+
+        if (pauseButton_ && !pauseButton_->isHidden())
+        {
+            /* Force the toggle's height to @c editor.height() - 6 so
+             * its Highlight-color chip clears the line edit's frame
+             * by 3 px on top and 3 px on bottom regardless of the
+             * @c QToolButton's natural sizeHint.
+             *
+             * Two things conspire against a "shrink to a smaller
+             * height" attempt that goes through sizeHint or
+             * @c centeredRect:
+             *   - @c centeredRect clamps @c h to @c editor.height()
+             *     when sizeHint is taller, undoing any pre-shrink.
+             *   - @c QToolButton's @c sizeHint() can be smaller than
+             *     the editor on some platforms, so a @c qMin with
+             *     sizeHint silently keeps the natural (larger
+             *     relative to the chosen inset) height.
+             *
+             * @c setMaximumHeight is the belt-and-braces lock —
+             * @c setGeometry alone is enough today, but a future
+             * re-layout triggered by Qt's polish / size-policy
+             * machinery would otherwise bring back the natural
+             * height. The chip stylesheet renders at the button's
+             * geometry, so capping the geometry caps the chip. */
+            const QSize hint = pauseButton_->sizeHint();
+            const int h = qMax(0, height() - 6);
+            rightEdge -= hint.width();
+            pauseButton_->setMaximumHeight(h);
+            const int y = (height() - h) / 2;
+            pauseButton_->setGeometry(rightEdge, y, hint.width(), h);
+            rightEdge -= kInnerGap;
+        }
+        if (hitModeCombo_ && !hitModeCombo_->isHidden())
+        {
+            const QSize hint = hitModeCombo_->sizeHint();
+            rightEdge -= hint.width();
+            QRect hitRect = centeredRect(hint, rightEdge);
+            hitRect.translate(0, comboBaselineNudge);
+            hitModeCombo_->setGeometry(hitRect);
+            rightEdge -= kInnerGap;
+        }
+
+        /* setTextMargins reserves space inside the line edit's content
+         * rect for our embedded widgets — the typing area and the
+         * placeholder text never collide with the combo / checkbox. */
+        const int leftMargin = leftEdge - frameW;
+        const int rightMargin = (width() - frameW) - rightEdge;
+        setTextMargins(leftMargin, 0, rightMargin, 0);
+    }
+
+  protected:
+    void resizeEvent(QResizeEvent *e) override
+    {
+        QLineEdit::resizeEvent(e);
+        relayout();
+    }
+
+    void showEvent(QShowEvent *e) override
+    {
+        QLineEdit::showEvent(e);
+        /* The editor was created and configured (mode, visibility of
+         * the auxiliary widgets) before the view called show() on us.
+         * Any earlier @c relayout() bailed out on width()==0; this
+         * is the first time we're guaranteed to have a real size and
+         * a settled visibility for every child. */
+        relayout();
+    }
+
+    void paintEvent(QPaintEvent *e) override
+    {
+        QLineEdit::paintEvent(e);
+        /* Draw an explicit 1 px border on top of the native frame.
+         * QMacStyle's @c QLineEdit frame is intentionally faint
+         * (especially in dark mode) and disappears against the row's
+         * highlight; embedding mode / hit-mode combos and the pause
+         * toggle as children clutters the cell further, so without a
+         * visible border the user can no longer tell where the
+         * editable area begins and ends. We draw with @c QPalette::Mid
+         * so the stroke adapts to light and dark themes automatically.
+         *
+         * Antialiasing is left off so the 1 px stroke lands on integer
+         * pixel boundaries — a crisp line rather than a half-bright
+         * 2 px smear — and we inset by 1 pixel so the border lives
+         * inside the widget rect (which @c QLineEdit::paintEvent has
+         * just painted) instead of outside it where the native focus
+         * ring lives. */
+        QPainter p(this);
+        QPen pen(palette().color(QPalette::Active, QPalette::Mid));
+        pen.setWidth(1);
+        pen.setCosmetic(true);
+        p.setPen(pen);
+        p.setBrush(Qt::NoBrush);
+        p.drawRect(rect().adjusted(0, 0, -1, -1));
+    }
+
+  private:
+    QComboBox *modeCombo_ = nullptr;
+    QComboBox *hitModeCombo_ = nullptr;
+    QToolButton *pauseButton_ = nullptr;
+};
+
+/** Wrap @p base so it also publishes a @c QIcon::Selected variant
+ *  tinted to the palette's @c HighlightedText color.
+ *
+ *  Qt's default item delegate (and most widget styles) paint selected
+ *  cells by requesting the icon with @c mode == @c QIcon::Selected.
+ *  Fixed PNG / SVG theme icons usually don't ship a Selected pixmap,
+ *  so the row's selection background ends up rendered with the
+ *  original (often dark) glyph — which goes near-invisible on a dark
+ *  blue selection in dark mode. We re-tint the alpha mask to
+ *  @c HighlightedText so the glyph reads cleanly regardless of theme. */
+static QIcon luaDbgMakeSelectionAwareIcon(const QIcon &base,
+                                          const QPalette &palette)
+{
+    if (base.isNull())
+        return base;
+
+    QIcon out;
+    QList<QSize> sizes = base.availableSizes();
+    if (sizes.isEmpty())
+    {
+        /* Theme icons (QIcon::fromTheme) sometimes report no available
+         * sizes when they're served from an SVG; fall back to the
+         * sizes the breakpoints / variables / watch trees actually
+         * request. The pixmap call below will rasterise on demand. */
+        sizes = {QSize(16, 16), QSize(22, 22), QSize(32, 32)};
+    }
+
+    for (const QSize &sz : sizes)
+    {
+        const QPixmap normalPm = base.pixmap(sz);
+        if (normalPm.isNull())
+            continue;
+        out.addPixmap(normalPm, QIcon::Normal);
+
+        QPixmap tintedPm(normalPm.size());
+        tintedPm.setDevicePixelRatio(normalPm.devicePixelRatio());
+        tintedPm.fill(Qt::transparent);
+        QPainter p(&tintedPm);
+        p.drawPixmap(0, 0, normalPm);
+        /* SourceIn keeps the original alpha mask and replaces the RGB
+         * channels with HighlightedText — works for monochrome line
+         * art (which is what every glyph we feed through here is). */
+        p.setCompositionMode(QPainter::CompositionMode_SourceIn);
+        p.fillRect(tintedPm.rect(),
+                   palette.color(QPalette::Active, QPalette::HighlightedText));
+        p.end();
+        out.addPixmap(tintedPm, QIcon::Selected);
+    }
+    return out;
+}
+
+/** Build a palette-aware "also pause" icon with separate Off / On
+ *  variants. The toggled state is signalled by:
+ *
+ *   - @c QIcon::Off : two solid pause bars in the palette's
+ *     @c ButtonText color, on a transparent background. The
+ *     @c QToolButton's background stylesheet is also transparent
+ *     in this state, so the cell shows the bars on the cell's
+ *     own background.
+ *   - @c QIcon::On  : two solid bars in @c HighlightedText (white).
+ *     The bars sit on top of the @c QToolButton's checked-state
+ *     stylesheet background — a rounded @c Highlight-color chip
+ *     that fills the whole button, not just the 16×16 icon. The
+ *     button-sized chip is the primary "armed" cue; doing it on
+ *     the button (rather than baking it into the icon pixmap)
+ *     covers the full clickable surface and reads as a real
+ *     state-of-toggle indicator. */
+static QIcon luaDbgMakePauseIcon(const QPalette &palette)
+{
+    const int side = 16;
+    const qreal dpr = 2.0;
+
+    /* Layout: two bars, 3 px wide, with a 2 px gap, occupying the
+     * central 8 px of a 16 px square. Rounded corners (1 px radius)
+     * match the visual weight of macOS / Windows 11 media glyphs. */
+    const qreal barW = 3.0;
+    const qreal gap = 2.0;
+    const qreal totalW = barW * 2 + gap;
+    const qreal x0 = (side - totalW) / 2.0;
+    const qreal y0 = 3.0;
+    const qreal h = side - 6.0;
+    const QRectF leftBar(x0, y0, barW, h);
+    const QRectF rightBar(x0 + barW + gap, y0, barW, h);
+
+    const auto drawBars = [&](QPainter *p, const QColor &color)
+    {
+        p->setPen(Qt::NoPen);
+        p->setBrush(color);
+        p->drawRoundedRect(leftBar, 1.0, 1.0);
+        p->drawRoundedRect(rightBar, 1.0, 1.0);
+    };
+
+    const auto makePixmap = [&]()
+    {
+        QPixmap pm(int(side * dpr), int(side * dpr));
+        pm.setDevicePixelRatio(dpr);
+        pm.fill(Qt::transparent);
+        return pm;
+    };
+
+    QIcon out;
+
+    /* Off: bars in regular text color on transparent background. */
+    {
+        QPixmap pm = makePixmap();
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        drawBars(&p, palette.color(QPalette::Active, QPalette::ButtonText));
+        p.end();
+        out.addPixmap(pm, QIcon::Normal, QIcon::Off);
+    }
+
+    /* On: white bars on transparent background. The stylesheet on
+     * the QToolButton supplies the colored rounded background that
+     * the bars sit on. */
+    {
+        QPixmap pm = makePixmap();
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        drawBars(&p, palette.color(QPalette::Active, QPalette::HighlightedText));
+        p.end();
+        out.addPixmap(pm, QIcon::Normal, QIcon::On);
+    }
+
+    return out;
+}
+
+/** Stylesheet for the breakpoint-editor pause toggle: transparent
+ *  when unchecked, filled rounded @c Highlight chip when checked.
+ *
+ *  Going through @c setStyleSheet rather than overriding paintEvent
+ *  keeps the toggle a vanilla @c QToolButton: native focus / hover
+ *  feedback still works, and the chip covers the full clickable
+ *  surface (not just the 16×16 icon). The colors are pulled from
+ *  the live application palette via @c palette() so the chip tracks
+ *  the user's accent color and adapts cleanly to dark mode without
+ *  hard-coded hex values. */
+static QString luaDbgPauseToggleStyleSheet()
+{
+    return QStringLiteral(
+        "QToolButton {"
+        "  border: none;"
+        "  background: transparent;"
+        "  padding: 2px;"
+        "}"
+        "QToolButton:checked {"
+        "  background-color: palette(highlight);"
+        "  border-radius: 4px;"
+        "}"
+        "QToolButton:!checked:hover {"
+        "  background-color: palette(midlight);"
+        "  border-radius: 4px;"
+        "}");
+}
+
+class BreakpointConditionDelegate : public QStyledItemDelegate
+{
+  public:
+    explicit BreakpointConditionDelegate(LuaDebuggerDialog *dialog)
+        : QStyledItemDelegate(dialog)
+    {
+    }
+
+    QWidget *createEditor(QWidget *parent,
+                          const QStyleOptionViewItem & /*option*/,
+                          const QModelIndex & /*index*/) const override
+    {
+        /* The editor IS a @c QLineEdit — same widget class as the Watch
+         * editor, so the platform style draws an identical inline
+         * edit. The mode combo, hit-count comparison combo and "also
+         * pause" checkbox are children of the line edit, positioned
+         * inside the line edit's text-margin area by
+         * @ref BreakpointInlineLineEdit::relayout. */
+        BreakpointInlineLineEdit *editor = new BreakpointInlineLineEdit(parent);
+        /* Suppress the macOS focus ring around the actively edited
+         * cell — same rationale as the Watch editor: the cell
+         * selection plus the explicit border drawn in
+         * BreakpointInlineLineEdit::paintEvent already make the
+         * edited row obvious. No-op on Linux / Windows. */
+        editor->setAttribute(Qt::WA_MacShowFocusRect, false);
+
+        QComboBox *mode = new QComboBox(editor);
+        /* Force a Qt-managed popup view. macOS otherwise opens the
+         * combo as a native NSMenu, which is not a Qt widget and is
+         * outside the editor's parent chain; while that menu is
+         * active QApplication::focusWidget() returns @c nullptr, our
+         * focusChanged listener treats that as "click outside",
+         * commits the pending edit and tears the editor down before
+         * the user can pick a row from the dropdown. Setting an
+         * explicit QListView keeps the popup inside the editor's
+         * widget tree so isAncestorOf() recognises it as part of the
+         * edit session. */
+        mode->setView(new QListView(mode));
+
+        for (const BreakpointEditModeSpec &spec : kBreakpointEditModes)
+        {
+            mode->addItem(QCoreApplication::translate(
+                              "BreakpointConditionDelegate", spec.label),
+                          static_cast<int>(spec.mode));
+        }
+
+        /* The hit-count comparison-mode combo and the "also pause"
+         * checkbox are children of the @c BreakpointInlineLineEdit
+         * just like the mode combo. They are toggled visible by the
+         * mode-combo currentIndexChanged handler below; the line
+         * edit's @c relayout() pass reserves text-margin space for
+         * whichever ones are currently visible. */
+        QComboBox *hitModeCombo = new QComboBox(editor);
+        hitModeCombo->setView(new QListView(hitModeCombo));
+        /* Labels are deliberately short — the integer field next to
+         * the combo carries the value of N, and the tooltip below
+         * spells the modes out in full. The longest label drives the
+         * combo's sizeHint width inside the inline editor; keeping
+         * them at 1–5 visible characters lets the row stay narrow
+         * even on tight columns. */
+        hitModeCombo->addItem(
+            QCoreApplication::translate(
+                "BreakpointConditionDelegate", "from"),
+            static_cast<int>(WSLUA_HIT_COUNT_MODE_FROM));
+        hitModeCombo->addItem(
+            QCoreApplication::translate(
+                "BreakpointConditionDelegate", "every"),
+            static_cast<int>(WSLUA_HIT_COUNT_MODE_EVERY));
+        hitModeCombo->addItem(
+            QCoreApplication::translate(
+                "BreakpointConditionDelegate", "once"),
+            static_cast<int>(WSLUA_HIT_COUNT_MODE_ONCE));
+        hitModeCombo->setToolTip(QCoreApplication::translate(
+            "BreakpointConditionDelegate",
+            "Comparison mode for the hit count:\n"
+            "from — pause on every hit from N onwards.\n"
+            "every — pause on hits N, 2N, 3N…\n"
+            "once — pause once on the Nth hit and deactivate the "
+            "breakpoint."));
+        hitModeCombo->setVisible(false);
+
+        /* Icon-only "also pause" toggle. The horizontal space inside
+         * the inline editor is tight (the QLineEdit must stay
+         * usable), so we drop the "Pause" word and rely on the
+         * platform pause glyph plus the tooltip. We use a checkable
+         * @c QToolButton (auto-raise, icon-only) rather than a
+         * @c QCheckBox so the cell shows just the pause glyph
+         * without an empty @c QCheckBox indicator next to it; the
+         * tool button's depressed-state visual already conveys the
+         * "checked" semantics. The accessibility name preserves the
+         * textual label for screen readers. */
+        QToolButton *pauseChk = new QToolButton(editor);
+        pauseChk->setCheckable(true);
+        pauseChk->setFocusPolicy(Qt::TabFocus);
+        pauseChk->setToolButtonStyle(Qt::ToolButtonIconOnly);
+        /* Icon is drawn from the editor's own palette so the bars
+         * automatically read white in dark mode and black in light
+         * mode — a fixed stock pixmap would be near-invisible in
+         * one of the two themes. */
+        pauseChk->setIcon(luaDbgMakePauseIcon(editor->palette()));
+        pauseChk->setIconSize(QSize(16, 16));
+        /* Stylesheet drives the on/off background: transparent when
+         * unchecked (just the bars on the cell background), full
+         * Highlight-color rounded chip filling the button when
+         * checked. The chip is the primary on/off signal; the icon
+         * colors (ButtonText vs HighlightedText) follow it.
+         *
+         * Using a stylesheet here also disables @c autoRaise (which
+         * is no longer needed since we paint our own hover / pressed
+         * feedback) — both controls would otherwise compete and
+         * leave the button looking ambiguous. */
+        pauseChk->setStyleSheet(luaDbgPauseToggleStyleSheet());
+        pauseChk->setAccessibleName(QCoreApplication::translate(
+            "BreakpointConditionDelegate", "Pause"));
+        pauseChk->setToolTip(QCoreApplication::translate(
+            "BreakpointConditionDelegate",
+            "Pause: format and emit the log message AND pause "
+            "execution.\n"
+            "Off = logpoint only (matches the historical "
+            "\"logpoints never pause\" convention)."));
+        pauseChk->setVisible(false);
+
+        editor->setEmbeddedWidgets(mode, hitModeCombo, pauseChk);
+
+        editor->setProperty("luaDbgModeCombo",
+                            QVariant::fromValue<QObject *>(mode));
+        editor->setProperty("luaDbgHitModeCombo",
+                            QVariant::fromValue<QObject *>(hitModeCombo));
+        editor->setProperty("luaDbgPauseCheckBox",
+                            QVariant::fromValue<QObject *>(pauseChk));
+
+        /* Per-mode draft text caches. The editor is a single line edit
+         * shared across all three modes, so when the user switches mode
+         * we have to remember what they typed under the previous mode
+         * and restore what they had typed (or the persisted value, see
+         * setEditorData) under the new mode. */
+        editor->setProperty(perModeDraftPropertyName(BreakpointEditMode::Expression),
+                            QString());
+        editor->setProperty(perModeDraftPropertyName(BreakpointEditMode::HitCount),
+                            QString());
+        editor->setProperty(perModeDraftPropertyName(BreakpointEditMode::LogMessage),
+                            QString());
+        /* -1 means "not initialised yet" so the very first
+         * applyEditorMode does not write the empty current text into a
+         * draft slot before it has loaded the actual draft. */
+        editor->setProperty("luaDbgCurrentMode", -1);
+
+        QObject::connect(
+            mode, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            editor,
+            [editor](int idx) { applyEditorMode(editor, idx); });
+
+        /* Install the event filter only on widgets whose lifetime
+         * we explicitly manage:
+         *   - the editor itself, which IS the QLineEdit (focus /
+         *     Escape / generic safety net),
+         *   - the popup view of every QComboBox in the editor
+         *     (Show/Hide tracking; lets the focus-out commit logic
+         *     keep the editor alive while any combo dropdown is
+         *     open, including the inner hit-count-mode combo).
+         *
+         * Restricting the filter to widgets we own keeps @c watched
+         * pointers stable: events emitted from partially-destroyed
+         * children during editor teardown (e.g. ~QComboBox calling
+         * close()/setVisible(false) and emitting Hide) never reach
+         * the filter, so qobject_cast on the watched pointer cannot
+         * dereference a freed vtable. */
+        BreakpointConditionDelegate *self =
+            const_cast<BreakpointConditionDelegate *>(this);
+        editor->installEventFilter(self);
+        const auto installPopupFilter = [self, editor](QComboBox *combo)
+        {
+            if (!combo || !combo->view())
+                return;
+            /* Tag the view with its owning editor so the eventFilter
+             * Show/Hide branch can update the popup-open counter
+             * without walking the parent chain (which during a
+             * shown-popup state goes through Qt's internal
+             * QComboBoxPrivateContainer top-level, not the editor). */
+            combo->view()->setProperty(
+                "luaDbgEditorOwner",
+                QVariant::fromValue<QObject *>(editor));
+            combo->view()->installEventFilter(self);
+        };
+        installPopupFilter(mode);
+        for (QComboBox *c : editor->findChildren<QComboBox *>())
+        {
+            if (c != mode)
+                installPopupFilter(c);
+        }
+
+        /* Commit-on-Enter inside the value editors.
+         *
+         * Wired via @c QLineEdit::returnPressed on every QLineEdit
+         * inside the stack pages. We also walk page descendants so
+         * a future page that hosts multiple QLineEdit children is
+         * covered without changes here.
+         *
+         * The closeEditorOnAccept lambda is one-shot per editor —
+         * the @c luaDbgClosing guard ensures commitData/closeEditor
+         * are emitted at most once. Enter, focus loss and the
+         * delegate's own event filter can race to commit, and
+         * re-emitting on an already-tearing-down editor crashes the
+         * view. */
+        const auto closeEditorOnAccept =
+            [self](QWidget *editorWidget)
+        {
+            if (!editorWidget)
+                return;
+            if (editorWidget->property("luaDbgClosing").toBool())
+                return;
+            editorWidget->setProperty("luaDbgClosing", true);
+            emit self->commitData(editorWidget);
+            emit self->closeEditor(
+                editorWidget, QAbstractItemDelegate::SubmitModelCache);
+        };
+        QObject::connect(editor, &QLineEdit::returnPressed, editor,
+                         [closeEditorOnAccept, editor]()
+                         { closeEditorOnAccept(editor); });
+
+        /* The editor IS the value line edit, so it receives keyboard
+         * focus by default when QAbstractItemView shows it. The mode
+         * combo, hit-mode combo and pause checkbox are reachable with
+         * Tab as ordinary children of the line edit. */
+
+        /* Click-outside-to-commit. QStyledItemDelegate's built-in
+         * "FocusOut closes the editor" hook only watches the editor
+         * widget itself; if the user opens the mode combo's popup and
+         * then clicks somewhere outside the row, focus moves to a
+         * widget that is neither the editor nor a descendant, so the
+         * built-in handler doesn't fire — we have to do this in
+         * @c QApplication::focusChanged instead.
+         *
+         * Listen to QApplication::focusChanged instead, deferring the
+         * decision via a zero-delay timer so the new focus has settled
+         * (covers both ordinary clicks elsewhere and clicks that land
+         * on a widget with no focus policy, where focusWidget() ends
+         * up @c nullptr). The combo's popup and any tooltip we show
+         * all stay descendants of @a editor and leave the editor
+         * open. */
+        QPointer<QWidget> editorGuard(editor);
+        QPointer<QComboBox> modeGuard(mode);
+        QPointer<QAbstractItemView> popupGuard(mode->view());
+        /* Helper: is the user currently inside the mode combo's
+         * dropdown? Combines the explicit open/close flag we set from
+         * the eventFilter (most reliable) with `view->isVisible()`
+         * as a backup; in either case we treat "popup is open" as
+         * "still inside the editor" so the editor doesn't close
+         * while the user is picking a mode. */
+        auto popupOpen = [editorGuard, popupGuard]()
+        {
+            if (editorGuard &&
+                editorGuard->property("luaDbgPopupOpen").toBool())
+            {
+                return true;
+            }
+            return popupGuard && popupGuard->isVisible();
+        };
+        /* Helper: should the focus shift to @a w be treated as "still
+         * inside the editor"? True for the editor itself, any
+         * descendant, the mode combo or its descendants, and the
+         * combo popup view (which Qt may parent via a top-level
+         * Qt::Popup window — so isAncestorOf isn't reliable across
+         * platforms). */
+        auto stillInside = [editorGuard, modeGuard, popupGuard](QWidget *w)
+        {
+            if (!w)
+                return false;
+            if (editorGuard &&
+                (w == editorGuard.data() || editorGuard->isAncestorOf(w)))
+            {
+                return true;
+            }
+            if (modeGuard &&
+                (w == modeGuard.data() || modeGuard->isAncestorOf(w)))
+            {
+                return true;
+            }
+            if (popupGuard &&
+                (w == popupGuard.data() || popupGuard->isAncestorOf(w)))
+            {
+                return true;
+            }
+            return false;
+        };
+        QObject::connect(
+            qApp, &QApplication::focusChanged, editor,
+            [self, editorGuard, popupOpen,
+             stillInside](QWidget *old, QWidget *now)
+            {
+                if (!editorGuard)
+                    return;
+                /* Already torn down or in the process of being torn
+                 * down by another commit path (Enter via
+                 * returnPressed, or a previous focus-loss tick).
+                 * Re-emitting commitData / closeEditor on a
+                 * deleteLater'd editor crashes the view. */
+                if (editorGuard->property("luaDbgClosing").toBool())
+                    return;
+                if (popupOpen())
+                    return;
+                if (stillInside(now))
+                    return;
+                /* Transient null-focus state (e.g. native menu/popup
+                 * just took focus, app deactivation, or focus moving
+                 * through a non-Qt widget): keep the editor open. The
+                 * deferred timer below re-checks once focus settles. */
+                if (!now)
+                {
+                    if (stillInside(old))
+                    {
+                        QTimer::singleShot(
+                            0, editorGuard.data(),
+                            [editorGuard, popupOpen, stillInside, self]()
+                            {
+                                if (!editorGuard)
+                                    return;
+                                if (editorGuard->property("luaDbgClosing")
+                                        .toBool())
+                                    return;
+                                if (popupOpen())
+                                    return;
+                                QWidget *fw = QApplication::focusWidget();
+                                if (!fw || stillInside(fw))
+                                    return;
+                                editorGuard->setProperty("luaDbgClosing",
+                                                         true);
+                                emit self->commitData(editorGuard.data());
+                                emit self->closeEditor(
+                                    editorGuard.data(),
+                                    QAbstractItemDelegate::SubmitModelCache);
+                            });
+                    }
+                    return;
+                }
+                editorGuard->setProperty("luaDbgClosing", true);
+                emit self->commitData(editorGuard.data());
+                emit self->closeEditor(
+                    editorGuard.data(),
+                    QAbstractItemDelegate::SubmitModelCache);
+            });
+
+        return editor;
+    }
+
+    void setEditorData(QWidget *editor,
+                       const QModelIndex &index) const override
+    {
+        QLineEdit *valueEdit = qobject_cast<QLineEdit *>(editor);
+        QComboBox *mode =
+            qobject_cast<QComboBox *>(editor->property("luaDbgModeCombo")
+                                          .value<QObject *>());
+        if (!valueEdit || !mode)
+        {
+            return;
+        }
+
+        const QAbstractItemModel *model = index.model();
+        const QModelIndex col0 = model->index(index.row(), 0, index.parent());
+
+        const QString condition =
+            model->data(col0, BreakpointConditionRole).toString();
+        const qint64 target =
+            model->data(col0, BreakpointHitTargetRole).toLongLong();
+        const int hitMode =
+            model->data(col0, BreakpointHitModeRole)
+                .toInt();
+        const QString logMessage =
+            model->data(col0, BreakpointLogMessageRole).toString();
+
+        /* Seed the per-mode draft caches with the persisted values
+         * before applyEditorMode() runs — applyEditorMode loads the
+         * draft for the active mode into the line edit. The Hit Count
+         * cache is the integer rendered as a string (empty for
+         * target == 0 so the field reads as unconfigured rather than
+         * literal "0"). */
+        editor->setProperty(perModeDraftPropertyName(BreakpointEditMode::Expression),
+                            condition);
+        editor->setProperty(perModeDraftPropertyName(BreakpointEditMode::HitCount),
+                            target > 0 ? QString::number(target) : QString());
+        editor->setProperty(perModeDraftPropertyName(BreakpointEditMode::LogMessage),
+                            logMessage);
+
+        if (QComboBox *hitModeCombo = editorHitModeCombo(editor))
+        {
+            const int comboIdx = hitModeCombo->findData(hitMode);
+            hitModeCombo->setCurrentIndex(comboIdx >= 0 ? comboIdx : 0);
+        }
+        if (QToolButton *logPauseChk = editorPauseToggle(editor))
+        {
+            logPauseChk->setChecked(
+                model->data(col0, BreakpointLogAlsoPauseRole).toBool());
+        }
+
+        BreakpointEditMode initial = BreakpointEditMode::Expression;
+        if (!logMessage.isEmpty())
+            initial = BreakpointEditMode::LogMessage;
+        else if (!condition.isEmpty())
+            initial = BreakpointEditMode::Expression;
+        else if (target > 0)
+            initial = BreakpointEditMode::HitCount;
+
+        const int idx = mode->findData(static_cast<int>(initial));
+        if (idx >= 0)
+        {
+            /* setCurrentIndex fires currentIndexChanged when the index
+             * actually changes, which the connected handler routes to
+             * applyEditorMode. The very first edit opens with the combo
+             * at its default index 0 (Expression); if @c initial is
+             * also Expression, no change → no signal → the line edit
+             * would never get seeded. Always invoke applyEditorMode
+             * explicitly here so the editor is fully configured
+             * regardless of whether the index changed. */
+            QSignalBlocker blocker(mode);
+            mode->setCurrentIndex(idx);
+            blocker.unblock();
+            applyEditorMode(editor, idx);
+        }
+    }
+
+    void setModelData(QWidget *editor, QAbstractItemModel *model,
+                      const QModelIndex &index) const override
+    {
+        QLineEdit *valueEdit = qobject_cast<QLineEdit *>(editor);
+        QComboBox *mode =
+            qobject_cast<QComboBox *>(editor->property("luaDbgModeCombo")
+                                          .value<QObject *>());
+        if (!valueEdit || !mode)
+        {
+            return;
+        }
+
+        const BreakpointEditMode chosen = static_cast<BreakpointEditMode>(
+            mode->currentData().toInt());
+        const QModelIndex col0 = model->index(index.row(), 0, index.parent());
+        const QString currentText = valueEdit->text();
+
+        switch (chosen)
+        {
+        case BreakpointEditMode::Expression:
+        {
+            /* Accept whatever the user typed unconditionally — empty
+             * (clears the condition) or syntactically invalid (the
+             * dispatch in onBreakpointModelDataChanged runs the parse
+             * checker after writing the condition and stamps the row
+             * with the @c condition_error warning icon + error string
+             * tooltip immediately, so a typo is visible at commit time
+             * rather than only after the line has been hit). */
+            model->setData(col0, currentText.trimmed(),
+                           BreakpointConditionRole);
+            return;
+        }
+        case BreakpointEditMode::HitCount:
+        {
+            /* Empty / non-numeric / negative input maps to 0 ("no hit
+             * count"). The QIntValidator on the editor already rejects
+             * negatives and non-digits during typing, but we still
+             * tolerate empty text here so an explicit clear commits
+             * cleanly. */
+            const QString text = currentText.trimmed();
+            bool ok = false;
+            const qlonglong v = text.toLongLong(&ok);
+            const qlonglong target = (ok && v > 0) ? v : 0;
+            model->setData(col0, target, BreakpointHitTargetRole);
+            /* Persist the comparison-mode pick alongside the integer
+             * so the dispatch in onBreakpointModelDataChanged can
+             * forward both to the core in one tick. The mode is
+             * meaningful only when target > 0; we still write it for
+             * target == 0 so toggling the value back on later
+             * remembers the previous mode. */
+            if (QComboBox *hitModeCombo = editorHitModeCombo(editor))
+            {
+                model->setData(col0, hitModeCombo->currentData().toInt(),
+                               BreakpointHitModeRole);
+            }
+            return;
+        }
+        case BreakpointEditMode::LogMessage:
+        {
+            /* Do NOT trim — leading / trailing whitespace can be
+             * intentional in a log line. */
+            model->setData(col0, currentText, BreakpointLogMessageRole);
+            if (QToolButton *logPauseChk = editorPauseToggle(editor))
+            {
+                model->setData(col0, logPauseChk->isChecked(),
+                               BreakpointLogAlsoPauseRole);
+            }
+            return;
+        }
+        }
+    }
+
+    void updateEditorGeometry(QWidget *editor,
+                              const QStyleOptionViewItem &option,
+                              const QModelIndex & /*index*/) const override
+    {
+        /* Use the row rect, but ensure the editor is at least as tall
+         * as a QLineEdit's natural sizeHint so the inline inputs read
+         * at the same comfortable height as the Watch inline editor.
+         * The accompanying @ref sizeHint override keeps the row itself
+         * tall enough to host this geometry without overlapping the
+         * row below. */
+        QRect rect = option.rect;
+        const int preferred = preferredEditorHeight();
+        if (rect.height() < preferred)
+        {
+            rect.setHeight(preferred);
+        }
+        editor->setGeometry(rect);
+    }
+
+    QSize sizeHint(const QStyleOptionViewItem &option,
+                   const QModelIndex &index) const override
+    {
+        /* The Watch tree's inline QLineEdit reads taller than the
+         * default text-only Breakpoints row because the row height
+         * matches QLineEdit::sizeHint(); mirror that on this column so
+         * the two inline editors visually agree. The row itself
+         * inherits this height through QTreeView's per-row sizing. */
+        QSize base = QStyledItemDelegate::sizeHint(option, index);
+        const int preferred = preferredEditorHeight();
+        if (base.height() < preferred)
+        {
+            base.setHeight(preferred);
+        }
+        return base;
+    }
+
+  protected:
+    bool eventFilter(QObject *watched, QEvent *event) override
+    {
+        /* Track the open state of every QComboBox popup inside the
+         * editor via Show/Hide events on its view. We can't rely on
+         * `view->isVisible()` racing with focusChanged, and Qt has
+         * no aboutToShow/aboutToHide signal on QComboBox we can use
+         * here. We store a refcount on the editor (luaDbgPopupOpenCount)
+         * so that ANY open dropdown — outer mode selector or the
+         * inner hit-count-mode combo — keeps the editor alive
+         * during focus shifts to its popup. The boolean
+         * luaDbgPopupOpen is also kept in sync as a convenience for
+         * existing readers.
+         *
+         * @c watched is guaranteed to be a popup view we explicitly
+         * installed on in createEditor(), and its
+         * @c luaDbgEditorOwner property points to the owning editor
+         * that we set at install time. We avoid walking the runtime
+         * parent chain because Qt reparents popup views into a
+         * private top-level container while the popup is shown. */
+        if (event->type() == QEvent::Show || event->type() == QEvent::Hide)
+        {
+            QWidget *view = qobject_cast<QWidget *>(watched);
+            if (view)
+            {
+                QWidget *owner = qobject_cast<QWidget *>(
+                    view->property("luaDbgEditorOwner")
+                        .value<QObject *>());
+                if (owner)
+                {
+                    int n = owner->property("luaDbgPopupOpenCount")
+                                .toInt();
+                    if (event->type() == QEvent::Show)
+                        ++n;
+                    else if (n > 0)
+                        --n;
+                    owner->setProperty("luaDbgPopupOpenCount", n);
+                    owner->setProperty("luaDbgPopupOpen", n > 0);
+                }
+            }
+        }
+        /* Enter is intentionally NOT handled here. The dialog installs
+         * its own descendant-shortcut filter and the platform input
+         * method can both reorder/swallow key events before our
+         * delegate filter sees them, which made an event-filter-based
+         * Enter handler unreliable in practice. We instead wire the
+         * QLineEdit's canonical "user accepted the input" signal
+         * (returnPressed) in createEditor(); that is emitted by Qt
+         * only after the widget has actually processed the key, and
+         * it fires even when an outside filter swallowed the
+         * QKeyEvent.
+         *
+         * We still handle Escape here because there is no Qt signal
+         * for "user pressed Escape" on a QLineEdit. */
+        if (event->type() == QEvent::KeyPress)
+        {
+            QKeyEvent *ke = static_cast<QKeyEvent *>(event);
+            const int key = ke->key();
+            if (key != Qt::Key_Escape)
+                return QStyledItemDelegate::eventFilter(watched, event);
+
+            QWidget *editor = qobject_cast<QWidget *>(watched);
+            if (!editor || !editor->isAncestorOf(QApplication::focusWidget()))
+            {
+                if (QWidget *w = qobject_cast<QWidget *>(watched))
+                {
+                    editor = w;
+                    while (editor->parentWidget())
+                    {
+                        if (editor->property("luaDbgModeCombo").isValid())
+                            break;
+                        editor = editor->parentWidget();
+                    }
+                }
+            }
+            if (!editor)
+                return QStyledItemDelegate::eventFilter(watched, event);
+
+            /* Don't hijack Escape inside the mode combo or its popup;
+             * the combo uses Escape to dismiss its dropdown, and we
+             * want that to keep the editor open. */
+            QComboBox *modeCombo = qobject_cast<QComboBox *>(
+                editor->property("luaDbgModeCombo").value<QObject *>());
+            QWidget *watchedWidget = qobject_cast<QWidget *>(watched);
+            const bool inModeCombo =
+                modeCombo && watchedWidget &&
+                (watchedWidget == modeCombo ||
+                 modeCombo->isAncestorOf(watchedWidget) ||
+                 (modeCombo->view() &&
+                  (watchedWidget == modeCombo->view() ||
+                   modeCombo->view()->isAncestorOf(watchedWidget))));
+            if (inModeCombo)
+                return QStyledItemDelegate::eventFilter(watched, event);
+
+            editor->setProperty("luaDbgClosing", true);
+            emit const_cast<BreakpointConditionDelegate *>(this)
+                ->closeEditor(editor, RevertModelCache);
+            return true;
+        }
+        return QStyledItemDelegate::eventFilter(watched, event);
+    }
+
+  private:
+    /**
+     * @brief Cached natural height for the inline inputs.
+     *
+     * Computed once per delegate (so a session-wide font-size change
+     * still applies on the next debugger open) from a freshly-created
+     * @c QLineEdit, the same control used by the Watch tree's inline
+     * editor — which is what the user is comparing against. The value
+     * is plumbed through @ref sizeHint and @ref updateEditorGeometry
+     * so both the row height and the editor geometry stay in sync.
+     */
+    int preferredEditorHeight() const
+    {
+        if (cachedPreferredHeight_ <= 0)
+        {
+            QLineEdit probe;
+            cachedPreferredHeight_ = probe.sizeHint().height();
+        }
+        return cachedPreferredHeight_;
+    }
+    mutable int cachedPreferredHeight_ = 0;
+
+    /** Q_PROPERTY name of the per-mode draft text cache for @p m. The
+     *  shared editor line edit is one widget across all three modes,
+     *  so the user's typing under each mode is stashed on the editor
+     *  via this property and restored when the mode is reactivated.
+     *  @see applyEditorMode, setEditorData. */
+    static const char *perModeDraftPropertyName(BreakpointEditMode m)
+    {
+        switch (m)
+        {
+        case BreakpointEditMode::Expression:
+            return "luaDbgDraftExpression";
+        case BreakpointEditMode::HitCount:
+            return "luaDbgDraftHitCount";
+        case BreakpointEditMode::LogMessage:
+            return "luaDbgDraftLogMessage";
+        }
+        return "luaDbgDraftExpression";
+    }
+
+    /** Switch the editor's line edit to display @p modeIndex's mode.
+     *
+     *  Called by the mode-combo @c currentIndexChanged signal and
+     *  directly from @c setEditorData on the initial open. Saves the
+     *  current line-edit text into the previous mode's draft slot,
+     *  loads the new mode's draft into the line edit, applies the
+     *  mode-specific validator / placeholder / tooltip, and toggles
+     *  the visibility of the auxiliary controls. The line edit then
+     *  re-runs its layout pass so the new auxiliary visibility is
+     *  reflected in the text margins. */
+    static void applyEditorMode(QWidget *editor, int modeIndex)
+    {
+        if (!editor || modeIndex < 0 ||
+            modeIndex >= static_cast<int>(
+                             sizeof(kBreakpointEditModes) /
+                             sizeof(kBreakpointEditModes[0])))
+        {
+            return;
+        }
+        QLineEdit *valueEdit = qobject_cast<QLineEdit *>(editor);
+        if (!valueEdit)
+            return;
+
+        const BreakpointEditModeSpec &spec = kBreakpointEditModes[modeIndex];
+        const BreakpointEditMode newMode = spec.mode;
+        const int prevModeRaw = editor->property("luaDbgCurrentMode").toInt();
+
+        /* Stash whatever was in the line edit under the OLD mode's
+         * draft slot before we overwrite it. -1 (the createEditor
+         * sentinel) means "first call, nothing to stash yet". */
+        if (prevModeRaw >= 0)
+        {
+            const auto prevMode = static_cast<BreakpointEditMode>(prevModeRaw);
+            editor->setProperty(perModeDraftPropertyName(prevMode),
+                                valueEdit->text());
+        }
+
+        /* Restore (or seed, on the very first call) the new mode's
+         * draft into the line edit. */
+        const QString draft =
+            editor->property(perModeDraftPropertyName(newMode)).toString();
+        valueEdit->setText(draft);
+
+        /* Validator: only the Hit Count mode constrains input. The
+         * old validator (if any) is owned by the line edit, so
+         * setValidator(nullptr) lets Qt clean it up on next attach. */
+        if (newMode == BreakpointEditMode::HitCount)
+        {
+            valueEdit->setValidator(new QIntValidator(0, INT_MAX, valueEdit));
+        }
+        else
+        {
+            valueEdit->setValidator(nullptr);
+        }
+
+        if (spec.placeholder)
+        {
+            valueEdit->setPlaceholderText(QCoreApplication::translate(
+                "BreakpointConditionDelegate", spec.placeholder));
+        }
+        else
+        {
+            valueEdit->setPlaceholderText(QString());
+        }
+        if (spec.valueTooltip)
+        {
+            valueEdit->setToolTip(QCoreApplication::translate(
+                "BreakpointConditionDelegate", spec.valueTooltip));
+        }
+        else
+        {
+            valueEdit->setToolTip(QString());
+        }
+
+        if (QComboBox *hitModeCombo = editorHitModeCombo(editor))
+        {
+            hitModeCombo->setVisible(newMode == BreakpointEditMode::HitCount);
+        }
+        if (QToolButton *pauseChk = editorPauseToggle(editor))
+        {
+            pauseChk->setVisible(newMode == BreakpointEditMode::LogMessage);
+        }
+
+        editor->setProperty("luaDbgCurrentMode",
+                            static_cast<int>(newMode));
+
+        /* The auxiliary visibility just changed; have the line edit
+         * re-run its embedded-widget layout so the right-side text
+         * margin matches what's currently shown. (BreakpointInlineLineEdit
+         * has no Q_OBJECT — it adds no signals/slots/Q_PROPERTYs over
+         * QLineEdit — so we use dynamic_cast rather than qobject_cast.) */
+        if (auto *bple =
+                dynamic_cast<BreakpointInlineLineEdit *>(editor))
+        {
+            bple->relayout();
+        }
+
+        valueEdit->selectAll();
+    }
+
+    static QComboBox *editorHitModeCombo(QWidget *editor)
+    {
+        if (!editor)
+            return nullptr;
+        return qobject_cast<QComboBox *>(
+            editor->property("luaDbgHitModeCombo").value<QObject *>());
+    }
+
+    static QToolButton *editorPauseToggle(QWidget *editor)
+    {
+        if (!editor)
+            return nullptr;
+        return qobject_cast<QToolButton *>(
+            editor->property("luaDbgPauseCheckBox").value<QObject *>());
+    }
+};
+
 } // namespace
 
 LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
@@ -1781,7 +3197,9 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
       evalInputEdit(nullptr), evalOutputEdit(nullptr), evalButton(nullptr),
       evalClearButton(nullptr), themeComboBox(nullptr), watchRemoveButton_(nullptr),
       watchRemoveAllButton_(nullptr), breakpointHeaderToggleButton_(nullptr),
-      breakpointHeaderRemoveAllButton_(nullptr)
+      breakpointHeaderRemoveButton_(nullptr),
+      breakpointHeaderRemoveAllButton_(nullptr),
+      breakpointHeaderEditButton_(nullptr)
 {
     _instance = this;
     setAttribute(Qt::WA_DeleteOnClose);
@@ -1957,6 +3375,13 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     // Breakpoints
     connect(breakpointsModel, &QStandardItemModel::itemChanged, this,
             &LuaDebuggerDialog::onBreakpointItemChanged);
+    /* Role-based dispatch for the inline condition / hit-count / log-message
+     * editor. itemChanged covers checkbox toggles (CheckStateRole) but the
+     * delegate writes only data roles, which itemChanged still fires for
+     * but without role information; dataChanged exposes the role list and
+     * lets onBreakpointModelDataChanged route to the matching core APIs. */
+    connect(breakpointsModel, &QStandardItemModel::dataChanged, this,
+            &LuaDebuggerDialog::onBreakpointModelDataChanged);
     connect(breakpointsTree, &QTreeView::doubleClicked, this,
             &LuaDebuggerDialog::onBreakpointItemDoubleClicked);
     connect(breakpointsTree, &QTreeView::customContextMenuRequested, this,
@@ -1970,15 +3395,34 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     connect(breakpointsModel, &QAbstractItemModel::modelReset, this, [this]() {
         updateBreakpointHeaderButtonState();
     });
+    connect(breakpointsTree->selectionModel(),
+            &QItemSelectionModel::selectionChanged,
+            this, [this]() { updateBreakpointHeaderButtonState(); });
     updateBreakpointHeaderButtonState();
 
     QHeaderView *breakpointHeader = breakpointsTree->header();
-    breakpointHeader->setStretchLastSection(false);
-    breakpointHeader->setSectionResizeMode(0, QHeaderView::ResizeToContents);
-    breakpointHeader->setSectionResizeMode(1, QHeaderView::ResizeToContents);
-    breakpointHeader->setSectionResizeMode(2, QHeaderView::Stretch);
+    /* User-resizable columns: drag the divider between Active and
+     * Location to give the icon / location text whatever balance they
+     * want. The Location column still soaks up any leftover width via
+     * stretchLastSection, so by default the row looks the same as
+     * before and only the column boundary is now interactive. */
+    breakpointHeader->setStretchLastSection(true);
+    breakpointHeader->setSectionResizeMode(0, QHeaderView::Interactive);
+    breakpointHeader->setSectionResizeMode(1, QHeaderView::Interactive);
+    breakpointHeader->setSectionResizeMode(2, QHeaderView::Interactive);
     breakpointsModel->setHeaderData(2, Qt::Horizontal, tr("Location"));
     breakpointsTree->setColumnHidden(1, true);
+    /* Sensible default for the Active column: enough for the checkbox
+     * + indicator icon + a small inset. The user can drag from here. */
+    breakpointsTree->setColumnWidth(0, breakpointsTree->fontMetrics().height() * 4);
+
+    /* Logpoint output sink. The core invokes the callback on the Lua
+     * thread that hit the line; we marshal to the GUI thread via a
+     * queued invokeMethod so the slot runs safely against
+     * evalOutputEdit. The lambda captures @c this; the destructor
+     * unregisters the callback before the dialog disappears. */
+    wslua_debugger_register_log_emit_callback(
+        &LuaDebuggerDialog::trampolineLogEmit);
 
     // Variables
     connect(variablesTree, &QTreeView::expanded, this,
@@ -2158,6 +3602,19 @@ LuaDebuggerDialog::~LuaDebuggerDialog()
     wslua_debugger_register_reload_callback(NULL);
     wslua_debugger_register_post_reload_callback(NULL);
     wslua_debugger_register_script_loaded_callback(NULL);
+    wslua_debugger_register_log_emit_callback(NULL);
+
+    /* Discard any logpoint messages that arrived after the
+     * unregister but before this destructor ran, and reset the
+     * drain-scheduled flag so the next debugger session starts
+     * fresh. Without this reset the next session's first fire
+     * would skip scheduling its drain (because the flag was left
+     * @c true), and messages would accumulate indefinitely. */
+    {
+        QMutexLocker lock(&s_logEmitMutex);
+        s_pendingLogMessages.clear();
+        s_logDrainScheduled = false;
+    }
 
     delete ui;
     _instance = nullptr;
@@ -2203,8 +3660,11 @@ void LuaDebuggerDialog::createCollapsibleSections()
     // --- Watch Section ---
     watchSection = new CollapsibleSection(tr("Watch"), this);
     watchSection->setToolTip(
-        tr("<p>Each row is a <b>Variables-tree path</b>, not a Lua "
-           "expression. Accepted forms:</p>"
+        tr("<p>Each row is either a <b>Variables-tree path</b> or a "
+           "<b>Lua expression</b>; the panel auto-detects which based on "
+           "the syntax you type.</p>"
+           "<p><b>Path watches</b> &mdash; resolved against the paused "
+           "frame's locals, upvalues, and globals:</p>"
            "<ul>"
            "<li>Section-qualified: <code>Locals.<i>name</i></code>, "
            "<code>Upvalues.<i>name</i></code>, "
@@ -2221,15 +3681,26 @@ void LuaDebuggerDialog::createCollapsibleSections()
            "(<code>[1]</code>, <code>[-1]</code>, <code>[0x1F]</code>), "
            "boolean (<code>[true]</code>), or short-literal string "
            "(<code>[\"key\"]</code>, <code>['k']</code>). Depth is capped "
-           "at 32 segments. Use the <b>Evaluate</b> panel below for "
-           "arbitrary Lua expressions.</p>"
+           "at 32 segments.</p>"
+           "<p><b>Expression watches</b> &mdash; anything that is not a "
+           "plain path (operators, function/method calls, table "
+           "constructors, length <code>#</code>, comparisons, &hellip;) is "
+           "evaluated as Lua against the same locals/upvalues/globals. "
+           "<b>You do not need a leading <code>=</code> or <code>return</code></b>; "
+           "value-returning expressions auto-return their value. "
+           "Examples: <code>#packets</code>, <code>tbl[i + 1]</code>, "
+           "<code>obj:method()</code>, <code>a == b</code>, "
+           "<code>{x, y}</code>. Tables produced by an expression are "
+           "expandable, and children re-resolve on every pause.</p>"
            "<p>Values are only read while the debugger is "
            "<b>paused</b>; otherwise the Value column shows a muted "
            "em dash. Values that differ from the previous pause are "
            "drawn in a <b>bold accent color</b>, and briefly flash on "
            "the pause that introduced the change.</p>"
            "<p>Double-click or press <b>F2</b> to edit a row; "
-           "<b>Delete</b> removes it; drag rows to reorder.</p>"));
+           "<b>Delete</b> removes it; drag rows to reorder. Use the "
+           "<b>Evaluate</b> panel below to run statements with side "
+           "effects (assignments, blocks, loops).</p>"));
     watchTree = new WatchTreeWidget(this);
     watchModel = new WatchItemModel(this);
     watchModel->setColumnCount(2);
@@ -2329,13 +3800,61 @@ void LuaDebuggerDialog::createCollapsibleSections()
 
     // --- Breakpoints Section ---
     breakpointsSection = new CollapsibleSection(tr("Breakpoints"), this);
+    breakpointsSection->setToolTip(
+        tr("<p><b>Expression</b><br/>"
+           "Pause only when this Lua expression is truthy in the "
+           "current frame. Runtime errors count as false and surface a "
+           "warning icon on the row.</p>"
+           "<p><b>Hit Count</b><br/>"
+           "Gate the pause on a hit counter (<code>0</code> "
+           "disables). The dropdown next to the integer picks the "
+           "comparison mode: <code>&ge;</code> pauses every hit at or "
+           "after <i>N</i> (default); <code>=</code> pauses once when "
+           "the counter reaches <i>N</i>; <code>every</code> pauses on "
+           "hits <i>N</i>, 2&times;<i>N</i>, 3&times;<i>N</i>, "
+           "&hellip;; <code>once</code> pauses on the <i>N</i>th hit "
+           "and deactivates the breakpoint. The counter is preserved "
+           "across edits; right-click the row to reset it.</p>"
+           "<p><b>Log Message</b><br/>"
+           "Write a line to the <i>Evaluate</i> output (and "
+           "Wireshark's debug log) each time the breakpoint fires &mdash; "
+           "after the <i>Hit Count</i> gate and any <i>Expression</i> "
+           "allow it. By default execution continues; click the pause "
+           "toggle on the editor row to also pause after emitting. "
+           "Tags: <code>{expr}</code> (any Lua value); "
+           "<code>{filename}</code>, <code>{basename}</code>, "
+           "<code>{line}</code>, <code>{function}</code>, "
+           "<code>{what}</code>; <code>{hits}</code>, "
+           "<code>{depth}</code>, <code>{thread}</code>; "
+           "<code>{timestamp}</code>, <code>{datetime}</code>, "
+           "<code>{epoch}</code>, <code>{epoch_ms}</code>, "
+           "<code>{elapsed}</code>, <code>{delta}</code>; "
+           "<code>{{</code> / <code>}}</code> for literal braces.</p>"
+           "<p>Edit the <i>Location</i> cell (double-click, F2, or "
+           "right-click &rarr; Edit) to attach one of these. A white "
+           "core inside the breakpoint dot &mdash; in this list and in "
+           "the gutter &mdash; marks rows that carry extras. "
+           "Switching the editor's mode dropdown mid-edit discards "
+           "typed-but-uncommitted text on the other pages; press "
+           "Enter on a page before switching if you want to keep "
+           "what you typed.</p>"));
     breakpointsModel = new QStandardItemModel(this);
     breakpointsModel->setColumnCount(3);
     breakpointsModel->setHorizontalHeaderLabels(
         {tr("Active"), tr("Line"), tr("File")});
     breakpointsTree = new QTreeView();
     breakpointsTree->setModel(breakpointsModel);
-    breakpointsTree->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    /* Inline edit on the Location column (delegate-driven mode picker for
+     * Condition / Hit Count / Log Message). DoubleClicked is the default
+     * trigger; the slot in onBreakpointItemDoubleClicked redirects double-
+     * click on any row cell to the editable column so the editor opens
+     * even when the user clicked the Active checkbox or the hidden Line
+     * column. EditKeyPressed enables F2 to open the editor with keyboard. */
+    breakpointsTree->setEditTriggers(QAbstractItemView::DoubleClicked |
+                                     QAbstractItemView::EditKeyPressed |
+                                     QAbstractItemView::SelectedClicked);
+    breakpointsTree->setItemDelegateForColumn(
+        2, new BreakpointConditionDelegate(this));
     breakpointsTree->setRootIsDecorated(false);
     breakpointsTree->setSelectionBehavior(QAbstractItemView::SelectRows);
     breakpointsTree->setSelectionMode(QAbstractItemView::ExtendedSelection);
@@ -2344,6 +3863,7 @@ void LuaDebuggerDialog::createCollapsibleSections()
     breakpointsSection->setContentWidget(breakpointsTree);
     {
         const int hdrH = breakpointsSection->titleButtonHeight();
+        const QFont hdrTitleFont = breakpointsSection->titleButtonFont();
         auto *const bpHeaderBtnRow = new QWidget(breakpointsSection);
         auto *const bpHeaderBtnLayout = new QHBoxLayout(bpHeaderBtnRow);
         bpHeaderBtnLayout->setContentsMargins(0, 0, 0, 0);
@@ -2360,6 +3880,41 @@ void LuaDebuggerDialog::createCollapsibleSections()
         bpTglBtn->setStyleSheet(kLuaDbgHeaderToolButtonStyle);
         bpTglBtn->setEnabled(false);
         bpTglBtn->setToolTip(tr("No breakpoints"));
+        QToolButton *const bpEditBtn = new QToolButton(bpHeaderBtnRow);
+        breakpointHeaderEditButton_ = bpEditBtn;
+        /* Settings-gear glyph: same lookup chain (and fallback) used
+         * by the Active column's "this row has extras" indicator for
+         * conditional / hit-count breakpoints (see updateBreakpoints),
+         * so the header button and the row marker read as the same
+         * symbol. Sized through the shared header-icon helper so it
+         * matches the trash button on every platform. */
+        {
+            QIcon editIcon = QIcon::fromTheme(
+                QStringLiteral("emblem-system"),
+                QIcon::fromTheme(QStringLiteral("preferences-other")));
+            if (editIcon.isNull())
+            {
+                editIcon =
+                    style()->standardIcon(QStyle::SP_FileDialogDetailedView);
+            }
+            bpEditBtn->setIcon(editIcon);
+        }
+        styleLuaDebuggerHeaderIconOnlyButton(bpEditBtn, hdrH);
+        bpEditBtn->setAutoRaise(true);
+        bpEditBtn->setStyleSheet(kLuaDbgHeaderToolButtonStyle);
+        bpEditBtn->setEnabled(false);
+        bpEditBtn->setToolTip(tr("Edit Breakpoint"));
+        QToolButton *const bpRemBtn = new QToolButton(bpHeaderBtnRow);
+        breakpointHeaderRemoveButton_ = bpRemBtn;
+        styleLuaDebuggerHeaderPlusMinusButton(bpRemBtn, hdrH, hdrTitleFont);
+        bpRemBtn->setText(kLuaDbgHeaderMinus);
+        bpRemBtn->setAutoRaise(true);
+        bpRemBtn->setStyleSheet(kLuaDbgHeaderToolButtonStyle);
+        bpRemBtn->setEnabled(false);
+        bpRemBtn->setToolTip(
+            tr("Remove Breakpoint (%1)")
+                .arg(QKeySequence(QKeySequence::Delete)
+                         .toString(QKeySequence::NativeText)));
         QToolButton *const bpRemAllBtn = new QToolButton(bpHeaderBtnRow);
         breakpointHeaderRemoveAllButton_ = bpRemAllBtn;
         styleLuaDebuggerHeaderRemoveAllButton(bpRemAllBtn, hdrH);
@@ -2372,9 +3927,48 @@ void LuaDebuggerDialog::createCollapsibleSections()
                     kCtxRemoveAllBreakpoints.toString(
                         QKeySequence::NativeText)));
         bpHeaderBtnLayout->addWidget(bpTglBtn);
+        bpHeaderBtnLayout->addWidget(bpRemBtn);
+        bpHeaderBtnLayout->addWidget(bpEditBtn);
         bpHeaderBtnLayout->addWidget(bpRemAllBtn);
         connect(bpTglBtn, &QToolButton::clicked, this,
                 &LuaDebuggerDialog::toggleAllBreakpointsActiveFromHeader);
+        connect(bpEditBtn, &QToolButton::clicked, this,
+                [this]()
+                {
+                    if (!breakpointsTree)
+                        return;
+                    /* Resolve the edit target the same way the context
+                     * menu does: prefer the focused / current row, fall
+                     * back to the first selected row when nothing is
+                     * focused. The button mirrors the Remove button's
+                     * enable state (any selected row), and
+                     * startInlineBreakpointEdit() silently skips stale
+                     * (file-missing) rows, so an "always single row"
+                     * launch is enough here. */
+                    int row = -1;
+                    const QModelIndex cur =
+                        breakpointsTree->currentIndex();
+                    if (cur.isValid())
+                    {
+                        row = cur.row();
+                    }
+                    else if (QItemSelectionModel *sel =
+                                 breakpointsTree->selectionModel())
+                    {
+                        for (const QModelIndex &si :
+                             sel->selectedIndexes())
+                        {
+                            if (si.isValid())
+                            {
+                                row = si.row();
+                                break;
+                            }
+                        }
+                    }
+                    startInlineBreakpointEdit(row);
+                });
+        connect(bpRemBtn, &QToolButton::clicked, this,
+                [this]() { removeSelectedBreakpoints(); });
         connect(bpRemAllBtn, &QToolButton::clicked, this,
                 &LuaDebuggerDialog::onClearBreakpoints);
         breakpointsSection->setHeaderTrailingWidget(bpHeaderBtnRow);
@@ -2402,15 +3996,21 @@ void LuaDebuggerDialog::createCollapsibleSections()
     evalMainLayout->setContentsMargins(0, 0, 0, 0);
     evalMainLayout->setSpacing(4);
 
-    QSplitter *evalSplitter = new QSplitter(Qt::Vertical);
+    /* Held as a member so the input/output split (including either pane
+     * being collapsed to zero by the user) persists via
+     * storeDialogSettings()/applyDialogSettings(). */
+    evalSplitter_ = new QSplitter(Qt::Vertical);
     evalInputEdit = new QPlainTextEdit();
+    /* Same cap as the output pane: a giant paste shouldn't grow
+     * the input buffer without bound either, and the document's
+     * per-line layout cost climbs linearly with size. */
+    evalInputEdit->setMaximumBlockCount(kLuaDbgEvalOutputMaxLines);
     evalInputEdit->setPlaceholderText(
         tr("Enter Lua expression (prefix with = to return value)"));
     evalInputEdit->setToolTip(
         tr("<b>Lua Expression Evaluation</b><br><br>"
-           "Code is executed using <code>lua_pcall()</code> in a protected "
-           "environment. "
-           "Runtime errors are caught and displayed in the output.<br><br>"
+           "Code runs in a protected environment: runtime errors are "
+           "caught and shown in the output instead of propagating.<br><br>"
            "<b>Prefix with <code>=</code></b> to return a value (e.g., "
            "<code>=my_var</code>).<br><br>"
            "<b>What works:</b><ul>"
@@ -2428,9 +4028,15 @@ void LuaDebuggerDialog::createCollapsibleSections()
     evalOutputEdit = new QPlainTextEdit();
     evalOutputEdit->setReadOnly(true);
     evalOutputEdit->setPlaceholderText(tr("Output"));
-    evalSplitter->addWidget(evalInputEdit);
-    evalSplitter->addWidget(evalOutputEdit);
-    evalMainLayout->addWidget(evalSplitter, 1);
+    /* Bound the output buffer. With per-packet logpoints the line
+     * count grows without limit otherwise, and QPlainTextEdit's
+     * per-line layout cost climbs linearly with the document size.
+     * QPlainTextEdit auto-evicts the oldest blocks once the cap is
+     * reached. */
+    evalOutputEdit->setMaximumBlockCount(kLuaDbgEvalOutputMaxLines);
+    evalSplitter_->addWidget(evalInputEdit);
+    evalSplitter_->addWidget(evalOutputEdit);
+    evalMainLayout->addWidget(evalSplitter_, 1);
 
     QHBoxLayout *evalButtonLayout = new QHBoxLayout();
     evalButton = new QPushButton(tr("Evaluate"));
@@ -2579,6 +4185,13 @@ void LuaDebuggerDialog::handlePause(const char *file_path, int64_t line)
     }
 
     debuggerPaused = true;
+    /* Record the pause location so the breakpoints-tree refresh below can
+     * apply the same change-highlight visuals (bold + accent + one-shot
+     * background flash) the Watch / Variables trees use. The pair is
+     * cleared in clearPausedStateUi() on resume so a non-matching row
+     * never carries forward a stale cue across pauses. */
+    pausedFile_ = normalizedPath;
+    pausedLine_ = static_cast<qlonglong>(line);
 
     /* Cancel any deferred "Watch column shows —" placeholder still pending
      * from the previous resume (typical for runDebuggerStep): we are
@@ -2626,6 +4239,11 @@ void LuaDebuggerDialog::handlePause(const char *file_path, int64_t line)
     updateVariables(nullptr, QString());
     restoreVariablesExpansionState();
     refreshWatchDisplay();
+    /* Pull in the latest hit_count / condition_error from core so the
+     * Breakpoints row tooltips reflect what just happened on the way in
+     * to this pause (logpoints and "below threshold" hits accumulate
+     * silently without taking us through the pause path). */
+    updateBreakpoints();
     isPauseEntryRefresh_ = false;
 
     /*
@@ -3402,6 +5020,13 @@ void LuaDebuggerDialog::updateBreakpoints()
     {
         return;
     }
+    /* Suppress dispatch through onBreakpointItemChanged while we rebuild the
+     * model; the inline-edit slot is fine for user-triggered checkbox /
+     * delegate-driven changes but a wholesale rebuild from core would
+     * otherwise loop. Restored unconditionally on the function tail so
+     * an early return does not leave the flag set. */
+    const bool prevSuppress = suppressBreakpointItemChanged_;
+    suppressBreakpointItemChanged_ = true;
     breakpointsModel->removeRows(0, breakpointsModel->rowCount());
     breakpointsModel->setHeaderData(2, Qt::Horizontal, tr("Location"));
     unsigned count = wslua_debugger_get_breakpoint_count();
@@ -3411,73 +5036,258 @@ void LuaDebuggerDialog::updateBreakpoints()
     QSet<QString> seenInitialFiles;
     for (unsigned i = 0; i < count; i++)
     {
-        const char *file_path;
-        int64_t line;
-        bool active;
-        if (wslua_debugger_get_breakpoint(i, &file_path, &line, &active))
+        const char *file_path = nullptr;
+        int64_t line = 0;
+        bool active = false;
+        const char *condition_c = nullptr;
+        int64_t hit_count_target = 0;
+        int64_t hit_count = 0;
+        bool condition_error = false;
+        const char *log_message_c = nullptr;
+        wslua_hit_count_mode_t hit_count_mode =
+            WSLUA_HIT_COUNT_MODE_FROM;
+        bool log_also_pause = false;
+        if (!wslua_debugger_get_breakpoint_extended(
+                i, &file_path, &line, &active, &condition_c,
+                &hit_count_target, &hit_count, &condition_error,
+                &log_message_c, &hit_count_mode, &log_also_pause))
         {
-            QString normalizedPath =
-                normalizedFilePath(QString::fromUtf8(file_path));
+            continue;
+        }
 
-            /* Check if file exists */
-            QFileInfo fileInfo(normalizedPath);
-            bool fileExists = fileInfo.exists() && fileInfo.isFile();
+        QString normalizedPath =
+            normalizedFilePath(QString::fromUtf8(file_path));
+        const QString condition =
+            condition_c ? QString::fromUtf8(condition_c) : QString();
+        const QString logMessage =
+            log_message_c ? QString::fromUtf8(log_message_c) : QString();
+        const bool hasCondition = !condition.isEmpty();
+        const bool hasLog = !logMessage.isEmpty();
+        const bool hasHitTarget = hit_count_target > 0;
 
-            QStandardItem *const i0 = new QStandardItem();
-            QStandardItem *const i1 = new QStandardItem();
-            QStandardItem *const i2 = new QStandardItem();
-            i0->setCheckable(true);
-            i0->setCheckState(active ? Qt::Checked : Qt::Unchecked);
-            i0->setData(normalizedPath, BreakpointFileRole);
-            i0->setData(static_cast<qlonglong>(line), BreakpointLineRole);
-            i0->setToolTip(tr("Enable or disable this breakpoint"));
-            i1->setText(QString::number(line));
-            const QString fileDisplayName = fileInfo.fileName();
-            QString locationText =
-                QStringLiteral("%1:%2")
-                    .arg(fileDisplayName.isEmpty() ? normalizedPath
-                                                    : fileDisplayName)
-                    .arg(line);
-            i2->setText(locationText);
-            i2->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        /* Check if file exists */
+        QFileInfo fileInfo(normalizedPath);
+        bool fileExists = fileInfo.exists() && fileInfo.isFile();
 
-            if (!fileExists)
+        QStandardItem *const i0 = new QStandardItem();
+        QStandardItem *const i1 = new QStandardItem();
+        QStandardItem *const i2 = new QStandardItem();
+        /* QStandardItem ships with Qt::ItemIsEditable on by default; the
+         * Active checkbox cell and the (hidden) Line cell must not host
+         * an editor — the inline condition / hit-count / log-message
+         * editor lives on column 2 only. Without this, double-clicking
+         * the checkbox column opens a stray QLineEdit over the row. */
+        i0->setFlags(i0->flags() & ~Qt::ItemIsEditable);
+        i1->setFlags(i1->flags() & ~Qt::ItemIsEditable);
+        i0->setCheckable(true);
+        i0->setCheckState(active ? Qt::Checked : Qt::Unchecked);
+        i0->setData(normalizedPath, BreakpointFileRole);
+        i0->setData(static_cast<qlonglong>(line), BreakpointLineRole);
+        i0->setData(condition, BreakpointConditionRole);
+        i0->setData(static_cast<qlonglong>(hit_count_target),
+                    BreakpointHitTargetRole);
+        i0->setData(static_cast<qlonglong>(hit_count),
+                    BreakpointHitCountRole);
+        i0->setData(condition_error, BreakpointConditionErrRole);
+        i0->setData(logMessage, BreakpointLogMessageRole);
+        i0->setData(static_cast<int>(hit_count_mode),
+                    BreakpointHitModeRole);
+        i0->setData(log_also_pause, BreakpointLogAlsoPauseRole);
+        i1->setText(QString::number(line));
+        const QString fileDisplayName = fileInfo.fileName();
+        QString locationText =
+            QStringLiteral("%1:%2")
+                .arg(fileDisplayName.isEmpty() ? normalizedPath
+                                                : fileDisplayName)
+                .arg(line);
+        i2->setText(locationText);
+        i2->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        /* The location cell is the inline-edit target for condition /
+         * hit count / log message. Make it editable on existing files;
+         * stale rows below clear the flag. */
+        i2->setFlags((i2->flags() | Qt::ItemIsEditable)
+                     & ~Qt::ItemIsUserCheckable);
+
+        /* Compose a multi-line tooltip applied to all three cells, so
+         * hovering anywhere on the row reveals the full condition / hit
+         * count / log details that no longer have a dedicated column. */
+        QStringList tooltipLines;
+        tooltipLines.append(
+            tr("Location: %1:%2").arg(normalizedPath).arg(line));
+        if (hasCondition)
+        {
+            tooltipLines.append(tr("Condition: %1").arg(condition));
+        }
+        if (hasHitTarget)
+        {
+            QString modeDesc;
+            switch (hit_count_mode)
             {
-                /* Mark stale breakpoints with warning icon and gray text */
-                i2->setIcon(QIcon::fromTheme("dialog-warning"));
-                i2->setToolTip(tr("File not found: %1").arg(normalizedPath));
-                i0->setForeground(QBrush(Qt::gray));
-                i1->setForeground(QBrush(Qt::gray));
-                i2->setForeground(QBrush(Qt::gray));
-                /* Disable the checkbox for stale breakpoints */
-                i0->setFlags(i0->flags() & ~Qt::ItemIsUserCheckable);
-                i0->setCheckState(Qt::Unchecked);
+            case WSLUA_HIT_COUNT_MODE_EVERY:
+                modeDesc = tr("pauses on hits %1, 2\xc3\x97%1, "
+                              "3\xc3\x97%1, \xe2\x80\xa6")
+                               .arg(hit_count_target);
+                break;
+            case WSLUA_HIT_COUNT_MODE_ONCE:
+                modeDesc =
+                    tr("pauses once on hit %1, then deactivates the "
+                       "breakpoint")
+                        .arg(hit_count_target);
+                break;
+            case WSLUA_HIT_COUNT_MODE_FROM:
+            default:
+                modeDesc = tr("pauses on every hit from %1 onwards")
+                               .arg(hit_count_target);
+                break;
             }
-            else
+            tooltipLines.append(tr("Hit Count: %1 / %2 (%3)")
+                                    .arg(hit_count)
+                                    .arg(hit_count_target)
+                                    .arg(modeDesc));
+        }
+        else if (hit_count > 0)
+        {
+            tooltipLines.append(tr("Hits: %1").arg(hit_count));
+        }
+        if (hasLog)
+        {
+            tooltipLines.append(tr("Log: %1").arg(logMessage));
+            tooltipLines.append(log_also_pause
+                                    ? tr("(logpoint — also pauses)")
+                                    : tr("(logpoint — does not pause)"));
+        }
+        if (condition_error)
+        {
+            tooltipLines.append(
+                tr("Condition error on last evaluation — treated as "
+                   "false (silent). Edit or reset the breakpoint to "
+                   "clear."));
+            /* Surface the actual Lua error string so users don't have
+             * to guess which identifier was nil. The C-side getter
+             * returns a freshly allocated copy under the breakpoints
+             * mutex, so reading it here is safe even when the line
+             * hook is racing to overwrite the field. */
+            char *err_msg =
+                wslua_debugger_get_breakpoint_condition_error_message(i);
+            if (err_msg && err_msg[0])
             {
-                i2->setToolTip(tr("%1\nLine %2").arg(normalizedPath).arg(line));
+                tooltipLines.append(
+                    tr("Condition error: %1")
+                        .arg(QString::fromUtf8(err_msg)));
             }
+            g_free(err_msg);
+        }
 
-            if (active && fileExists)
+        /* Cell icons render with @c QIcon::Selected mode when the row
+         * is selected; theme icons (QIcon::fromTheme) usually don't
+         * ship that mode, so a dark glyph against the dark blue
+         * selection background reads as an invisible blob in dark
+         * mode. luaDbgMakeSelectionAwareIcon synthesises the Selected
+         * pixmap from the tree's palette (HighlightedText) so every
+         * row indicator stays legible while the row is highlighted. */
+        const QPalette bpPalette = breakpointsTree->palette();
+
+        if (!fileExists)
+        {
+            /* Mark stale breakpoints with warning icon and gray text.
+             * The "file not found" indicator stays on the Location cell
+             * because it describes the *file*, not the breakpoint's
+             * extras (condition / hit count / log message). */
+            i2->setIcon(luaDbgMakeSelectionAwareIcon(
+                QIcon::fromTheme("dialog-warning"), bpPalette));
+            tooltipLines.prepend(tr("File not found: %1").arg(normalizedPath));
+            i0->setForeground(QBrush(Qt::gray));
+            i1->setForeground(QBrush(Qt::gray));
+            i2->setForeground(QBrush(Qt::gray));
+            /* Disable the checkbox + inline editor for stale breakpoints */
+            i0->setFlags(i0->flags() & ~Qt::ItemIsUserCheckable);
+            i0->setCheckState(Qt::Unchecked);
+            i2->setFlags(i2->flags() & ~Qt::ItemIsEditable);
+        }
+        else
+        {
+            /* Extras indicator on the Active column, drawn after the
+             * checkbox (Qt's standard cell layout: check indicator,
+             * decoration, then text). Mirrors the gutter dot's white
+             * core so users get a consistent at-a-glance cue both in
+             * the editor margin and in the Breakpoints list.
+             *
+             * Indicator priority: condition error > logpoint >
+             * conditional / hit count > plain. */
+            if (condition_error)
             {
-                hasActiveBreakpoint = true;
+                i0->setIcon(luaDbgMakeSelectionAwareIcon(
+                    QIcon::fromTheme("dialog-warning"), bpPalette));
             }
-
-            breakpointsModel->appendRow({i0, i1, i2});
-
-            /* Only add to file tree if file exists */
-            if (fileExists)
+            else if (hasLog)
             {
-                ensureFileTreeEntry(normalizedPath);
+                QIcon icon = QIcon::fromTheme(
+                    QStringLiteral("mail-send"),
+                    QIcon::fromTheme(QStringLiteral("document-edit")));
+                if (icon.isNull())
+                {
+                    icon = style()->standardIcon(
+                        QStyle::SP_FileDialogContentsView);
+                }
+                i0->setIcon(luaDbgMakeSelectionAwareIcon(icon, bpPalette));
             }
-
-            /* Only open existing files initially */
-            if (collectInitialFiles && fileExists &&
-                !seenInitialFiles.contains(normalizedPath))
+            else if (hasCondition || hasHitTarget)
             {
-                initialBreakpointFiles.append(normalizedPath);
-                seenInitialFiles.insert(normalizedPath);
+                QIcon icon = QIcon::fromTheme(
+                    QStringLiteral("emblem-system"),
+                    QIcon::fromTheme(QStringLiteral("preferences-other")));
+                if (icon.isNull())
+                {
+                    icon = style()->standardIcon(
+                        QStyle::SP_FileDialogDetailedView);
+                }
+                i0->setIcon(luaDbgMakeSelectionAwareIcon(icon, bpPalette));
             }
+        }
+
+        const QString tooltipText = tooltipLines.join(QChar('\n'));
+        i0->setToolTip(tooltipText);
+        i1->setToolTip(tooltipText);
+        i2->setToolTip(tooltipText);
+
+        if (active && fileExists)
+        {
+            hasActiveBreakpoint = true;
+        }
+
+        breakpointsModel->appendRow({i0, i1, i2});
+
+        /* Highlight the breakpoint row that matches the current pause
+         * location with the same bold-accent (and one-shot background
+         * flash on pause entry) treatment the Watch / Variables trees
+         * use, so the row that "fired" stands out at a glance. The
+         * matching gate is the file + line pair captured in
+         * handlePause(); both are cleared in clearPausedStateUi(), so
+         * this branch is dormant whenever the debugger is not paused.
+         *
+         * applyChangedVisuals must run after appendRow so the cells
+         * have a concrete model index — scheduleFlashClear() captures
+         * a QPersistentModelIndex on each cell to drive its timed
+         * clear, and that index is only valid once the row is in the
+         * model. */
+        if (debuggerPaused && fileExists && !pausedFile_.isEmpty() &&
+            normalizedPath == pausedFile_ && line == pausedLine_)
+        {
+            applyChangedVisuals(i0, /*changed=*/true, isPauseEntryRefresh_);
+        }
+
+        /* Only add to file tree if file exists */
+        if (fileExists)
+        {
+            ensureFileTreeEntry(normalizedPath);
+        }
+
+        /* Only open existing files initially */
+        if (collectInitialFiles && fileExists &&
+            !seenInitialFiles.contains(normalizedPath))
+        {
+            initialBreakpointFiles.append(normalizedPath);
+            seenInitialFiles.insert(normalizedPath);
         }
     }
 
@@ -3494,6 +5304,7 @@ void LuaDebuggerDialog::updateBreakpoints()
     }
 
     updateBreakpointHeaderButtonState();
+    suppressBreakpointItemChanged_ = prevSuppress;
 }
 
 void LuaDebuggerDialog::updateStack()
@@ -3884,6 +5695,16 @@ LuaDebuggerCodeView *LuaDebuggerDialog::loadFile(const QString &file_path)
     connect(codeView, &QWidget::customContextMenuRequested, this,
             &LuaDebuggerDialog::onCodeViewContextMenu);
 
+    /* Queued connection: the gutter emits this from inside its
+     * mousePressEvent, so dispatching the popup via a queued slot
+     * lets the press event fully unwind before QMenu::exec() spins
+     * its own nested loop. Avoids the "press grab still attached"
+     * artefacts that bite when a modal popup is opened directly out
+     * of a press handler. */
+    connect(codeView, &LuaDebuggerCodeView::breakpointGutterMenuRequested,
+            this, &LuaDebuggerDialog::onBreakpointGutterMenu,
+            Qt::QueuedConnection);
+
     connect(
         codeView, &LuaDebuggerCodeView::breakpointToggled,
         [this](const QString &file_path, qint32 line, bool toggleActive)
@@ -4214,7 +6035,18 @@ void LuaDebuggerDialog::onCodeTabCloseRequested(int idx)
 
 void LuaDebuggerDialog::onBreakpointItemChanged(QStandardItem *item)
 {
-    if (!item || item->column() != 0)
+    if (!item)
+    {
+        return;
+    }
+    /* Re-entrancy guard: updateBreakpoints() rebuilds the model and writes
+     * many roles via setData; without this gate every set during the
+     * rebuild would loop back through wslua_debugger_set_breakpoint_*. */
+    if (suppressBreakpointItemChanged_)
+    {
+        return;
+    }
+    if (item->column() != 0)
     {
         return;
     }
@@ -4246,20 +6078,300 @@ void LuaDebuggerDialog::onBreakpointItemChanged(QStandardItem *item)
     updateBreakpointHeaderButtonState();
 }
 
+void LuaDebuggerDialog::onBreakpointModelDataChanged(
+    const QModelIndex &topLeft, const QModelIndex &bottomRight,
+    const QVector<int> &roles)
+{
+    if (suppressBreakpointItemChanged_ || !breakpointsModel)
+    {
+        return;
+    }
+    /* The delegate writes BreakpointConditionRole / BreakpointHitTargetRole
+     * / BreakpointLogMessageRole on column 0 of the touched row. Translate
+     * those changes into the matching wslua_debugger_set_breakpoint_*
+     * calls and refresh the row visuals. We dispatch on `roles` so this
+     * slot ignores the ordinary display / decoration churn that
+     * updateBreakpoints itself emits. */
+    const bool wantsCondition = roles.isEmpty() ||
+                                roles.contains(BreakpointConditionRole);
+    const bool wantsTarget = roles.isEmpty() ||
+                              roles.contains(BreakpointHitTargetRole);
+    const bool wantsLog = roles.isEmpty() ||
+                          roles.contains(BreakpointLogMessageRole);
+    const bool wantsHitMode = roles.isEmpty() ||
+                               roles.contains(BreakpointHitModeRole);
+    const bool wantsLogAlsoPause =
+        roles.isEmpty() || roles.contains(BreakpointLogAlsoPauseRole);
+    if (!wantsCondition && !wantsTarget && !wantsLog && !wantsHitMode &&
+        !wantsLogAlsoPause)
+    {
+        return;
+    }
+
+    bool touched = false;
+    for (int row = topLeft.row(); row <= bottomRight.row(); ++row)
+    {
+        QStandardItem *col0 = breakpointsModel->item(row, 0);
+        if (!col0)
+            continue;
+        const QString file = col0->data(BreakpointFileRole).toString();
+        const int64_t line = col0->data(BreakpointLineRole).toLongLong();
+        if (file.isEmpty() || line <= 0)
+            continue;
+        const QByteArray fileUtf8 = file.toUtf8();
+
+        if (wantsCondition)
+        {
+            const QString cond =
+                col0->data(BreakpointConditionRole).toString();
+            const QByteArray condUtf8 = cond.toUtf8();
+            wslua_debugger_set_breakpoint_condition(
+                fileUtf8.constData(), line,
+                cond.isEmpty() ? NULL : condUtf8.constData());
+            /* Parse-time validation. The runtime evaluator treats
+             * any error in the condition as silent-false, so without
+             * this check a typo (e.g. unbalanced parens, or a
+             * missing @c return inside a statement) would only
+             * surface as a row icon after the line is hit. Running
+             * the parse-only checker at commit time stamps the row
+             * with the condition_error flag/message immediately; on
+             * a successful parse the flag we just cleared via
+             * set_breakpoint_condition stays cleared. */
+            if (!cond.isEmpty())
+            {
+                char *parse_err = NULL;
+                const bool parses_ok =
+                    wslua_debugger_check_condition_syntax(
+                        condUtf8.constData(), &parse_err);
+                if (!parses_ok)
+                {
+                    wslua_debugger_set_breakpoint_condition_error(
+                        fileUtf8.constData(), line,
+                        parse_err ? parse_err : "Parse error");
+                }
+                g_free(parse_err);
+            }
+            touched = true;
+        }
+        if (wantsTarget)
+        {
+            const qlonglong target =
+                col0->data(BreakpointHitTargetRole).toLongLong();
+            wslua_debugger_set_breakpoint_hit_count_target(
+                fileUtf8.constData(), line, static_cast<int64_t>(target));
+            touched = true;
+        }
+        if (wantsHitMode)
+        {
+            /* The mode role is meaningful only when target > 0, but
+             * we forward it regardless so toggling the integer back
+             * on later remembers the last mode the user picked. The
+             * core ignores the mode when target == 0. */
+            const int hitMode =
+                col0->data(BreakpointHitModeRole).toInt();
+            wslua_debugger_set_breakpoint_hit_count_mode(
+                fileUtf8.constData(), line,
+                static_cast<wslua_hit_count_mode_t>(hitMode));
+            touched = true;
+        }
+        if (wantsLog)
+        {
+            const QString msg =
+                col0->data(BreakpointLogMessageRole).toString();
+            wslua_debugger_set_breakpoint_log_message(
+                fileUtf8.constData(), line,
+                msg.isEmpty() ? NULL : msg.toUtf8().constData());
+            touched = true;
+        }
+        if (wantsLogAlsoPause)
+        {
+            const bool alsoPause =
+                col0->data(BreakpointLogAlsoPauseRole).toBool();
+            wslua_debugger_set_breakpoint_log_also_pause(
+                fileUtf8.constData(), line, alsoPause);
+            touched = true;
+        }
+    }
+
+    if (touched)
+    {
+        /* Rebuild rows so the tooltip and Location-cell indicator reflect
+         * the updated condition / hit target / log message. Deferred to
+         * the next event-loop tick on purpose: we are still inside the
+         * model's dataChanged emit, immediately followed by an
+         * itemChanged emit on the same item; tearing down every row
+         * synchronously here would dangle the QStandardItem pointer
+         * delivered to onBreakpointItemChanged and would also leave the
+         * inline editor pointing at a destroyed model index, which can
+         * silently swallow the just-committed edit (the source of the
+         * "condition / hit count are sticky" symptom). The
+         * suppressBreakpointItemChanged_ guard inside updateBreakpoints
+         * still prevents this path from looping back into either slot. */
+        QPointer<LuaDebuggerDialog> self(this);
+        QTimer::singleShot(0, this, [self]()
+        {
+            if (self)
+            {
+                self->updateBreakpoints();
+            }
+        });
+    }
+}
+
+void LuaDebuggerDialog::startInlineBreakpointEdit(int row)
+{
+    /* Single entry point used by both the row context menu's "Edit..."
+     * action and the section-header edit button. Routes the edit to
+     * the Location cell, which is the column the
+     * BreakpointConditionDelegate is attached to. Stale (file-missing)
+     * rows have Qt::ItemIsEditable cleared in updateBreakpoints, so
+     * the early-out keeps us from briefly opening an empty editor on
+     * those rows. */
+    if (!breakpointsModel || !breakpointsTree)
+    {
+        return;
+    }
+    if (row < 0 || row >= breakpointsModel->rowCount())
+    {
+        return;
+    }
+    const QModelIndex editTarget = breakpointsModel->index(row, 2);
+    if (!editTarget.isValid() || !(editTarget.flags() & Qt::ItemIsEditable))
+    {
+        return;
+    }
+    breakpointsTree->setCurrentIndex(editTarget);
+    breakpointsTree->scrollTo(editTarget);
+    breakpointsTree->edit(editTarget);
+}
+
+void LuaDebuggerDialog::onBreakpointGutterMenu(const QString &filename,
+                                                qint32 line,
+                                                const QPoint &globalPos)
+{
+    /* Re-check the breakpoint state at popup time rather than trusting
+     * what the gutter saw on the click. The model is the source of
+     * truth and the C-side state may have changed between the click
+     * and the queued slot dispatch (e.g. a hit-count target just got
+     * met from another script line, or another reload-driven refresh
+     * landed in the queue first). If the breakpoint has gone away,
+     * silently skip — there's nothing meaningful to offer. */
+    const QByteArray filePathUtf8 = filename.toUtf8();
+    const int32_t state = wslua_debugger_get_breakpoint_state(
+        filePathUtf8.constData(), line);
+    if (state == -1)
+    {
+        return;
+    }
+    const bool currentlyActive = (state == 1);
+
+    QMenu menu(this);
+    QAction *editAct = menu.addAction(tr("&Edit..."));
+    QAction *toggleAct =
+        menu.addAction(currentlyActive ? tr("&Disable") : tr("&Enable"));
+    menu.addSeparator();
+    QAction *removeAct = menu.addAction(tr("&Remove"));
+
+    /* exec() returns the chosen action, or nullptr if the user
+     * dismissed the menu (Escape, click outside, focus loss). The
+     * dismiss path is a no-op by design — the user-typed condition /
+     * hit-count target / log message stays exactly as it was. */
+    QAction *chosen = menu.exec(globalPos);
+    if (!chosen)
+    {
+        return;
+    }
+
+    if (chosen == editAct)
+    {
+        /* Find the row that matches this (file, line) pair so the
+         * Location-cell delegate can open in place. Compare against
+         * the *normalized* path stored under BreakpointFileRole — the
+         * gutter may have handed us a non-canonical filename. */
+        if (!breakpointsModel)
+        {
+            return;
+        }
+        const QString normalized = normalizedFilePath(filename);
+        int targetRow = -1;
+        for (int row = 0; row < breakpointsModel->rowCount(); ++row)
+        {
+            QStandardItem *col0 = breakpointsModel->item(row, 0);
+            if (!col0)
+                continue;
+            const int64_t rowLine =
+                col0->data(BreakpointLineRole).toLongLong();
+            if (rowLine != line)
+                continue;
+            const QString rowFile =
+                col0->data(BreakpointFileRole).toString();
+            if (rowFile == normalized)
+            {
+                targetRow = row;
+                break;
+            }
+        }
+        if (targetRow >= 0)
+        {
+            startInlineBreakpointEdit(targetRow);
+        }
+        return;
+    }
+
+    if (chosen == toggleAct)
+    {
+        wslua_debugger_set_breakpoint_active(filePathUtf8.constData(), line,
+                                             !currentlyActive);
+        if (!currentlyActive)
+        {
+            ensureDebuggerEnabledForActiveBreakpoints();
+        }
+    }
+    else if (chosen == removeAct)
+    {
+        wslua_debugger_remove_breakpoint(filePathUtf8.constData(), line);
+        refreshDebuggerStateUi();
+    }
+
+    updateBreakpoints();
+
+    /* Refresh every open script tab's gutter so the dot updates
+     * immediately on the same tab the user clicked, plus any other
+     * tab that happens to show the same file. */
+    const qint32 tabCount = static_cast<qint32>(ui->codeTabWidget->count());
+    for (qint32 tabIndex = 0; tabIndex < tabCount; ++tabIndex)
+    {
+        LuaDebuggerCodeView *tabView = qobject_cast<LuaDebuggerCodeView *>(
+            ui->codeTabWidget->widget(static_cast<int>(tabIndex)));
+        if (tabView)
+        {
+            tabView->updateBreakpointMarkers();
+        }
+    }
+}
+
 void LuaDebuggerDialog::onBreakpointItemDoubleClicked(const QModelIndex &index)
 {
     if (!index.isValid() || !breakpointsModel)
     {
         return;
     }
-    QStandardItem *item = breakpointsModel->item(index.row(), 0);
-    if (!item)
+    /* Double-click on a Breakpoints row opens the source file at the
+     * matching line. Editing the condition / hit count / log message
+     * is triggered through the row context menu's "Edit..." action or
+     * the section-header edit button, which both call
+     * @ref startInlineBreakpointEdit. */
+    QStandardItem *col0 = breakpointsModel->item(index.row(), 0);
+    if (!col0)
     {
         return;
     }
-
-    const QString file = item->data(BreakpointFileRole).toString();
-    const int64_t lineNumber = item->data(BreakpointLineRole).toLongLong();
+    const QString file = col0->data(BreakpointFileRole).toString();
+    const int64_t lineNumber = col0->data(BreakpointLineRole).toLongLong();
+    if (file.isEmpty() || lineNumber <= 0)
+    {
+        return;
+    }
     LuaDebuggerCodeView *view = loadFile(file);
     if (view)
     {
@@ -4363,18 +6475,87 @@ void LuaDebuggerDialog::onBreakpointContextMenuRequested(const QPoint &pos)
     }
 
     QMenu menu(this);
+    QAction *editAct = nullptr;
     QAction *openAct = nullptr;
+    QAction *resetHitsAct = nullptr;
     QAction *removeAct = nullptr;
+
+    /* Decide whether "Reset Hit Count" should be enabled by scanning the
+     * current selection (or just the row under the cursor when nothing
+     * else is selected). The action shows up disabled when there is
+     * nothing to reset, so the user understands what it would do but
+     * can't accidentally fire it on a freshly-created breakpoint. */
+    auto rowHasResettableHits = [this](int row) -> bool
+    {
+        QStandardItem *col0 = breakpointsModel->item(row, 0);
+        if (!col0)
+            return false;
+        const qlonglong target =
+            col0->data(BreakpointHitTargetRole).toLongLong();
+        const qlonglong count =
+            col0->data(BreakpointHitCountRole).toLongLong();
+        return target > 0 || count > 0;
+    };
+
+    bool anyResettable = false;
+    QSet<int> selRowsSet;
+    if (breakpointsTree->selectionModel())
+    {
+        for (const QModelIndex &si :
+             breakpointsTree->selectionModel()->selectedIndexes())
+        {
+            if (!si.isValid())
+                continue;
+            if (selRowsSet.contains(si.row()))
+                continue;
+            selRowsSet.insert(si.row());
+            if (rowHasResettableHits(si.row()))
+            {
+                anyResettable = true;
+            }
+        }
+    }
+    if (selRowsSet.isEmpty() && ix.isValid())
+    {
+        anyResettable = rowHasResettableHits(ix.row());
+    }
+
+    /* "Reset All Hit Counts" is enabled when ANY breakpoint in the
+     * model has resettable hits, regardless of selection — it's the
+     * "wipe every counter" gesture, not "wipe the selection's
+     * counters". Compute it as a separate full scan so an unsele
+     * cted-but-resettable row keeps the menu item live. */
+    bool anyResettableInModel = false;
+    {
+        const int rc = breakpointsModel->rowCount();
+        for (int r = 0; r < rc; ++r)
+        {
+            if (rowHasResettableHits(r))
+            {
+                anyResettableInModel = true;
+                break;
+            }
+        }
+    }
+
     if (ix.isValid())
     {
+        editAct = menu.addAction(tr("Edit..."));
+        editAct->setEnabled(ix.flags() & Qt::ItemIsEditable);
         openAct = menu.addAction(tr("Open Source"));
+        menu.addSeparator();
+        resetHitsAct = menu.addAction(tr("Reset Hit Count"));
+        resetHitsAct->setEnabled(anyResettable);
         menu.addSeparator();
         removeAct = menu.addAction(tr("Remove"));
         removeAct->setShortcut(QKeySequence::Delete);
     }
+    QAction *resetAllHitsAct = nullptr;
     QAction *removeAllAct = nullptr;
     if (breakpointsModel->rowCount() > 0)
     {
+        resetAllHitsAct = menu.addAction(tr("Reset All Hit Counts"));
+        resetAllHitsAct->setEnabled(anyResettableInModel);
         removeAllAct = menu.addAction(tr("Remove All Breakpoints"));
         removeAllAct->setShortcut(kCtxRemoveAllBreakpoints);
     }
@@ -4388,14 +6569,52 @@ void LuaDebuggerDialog::onBreakpointContextMenuRequested(const QPoint &pos)
     {
         return;
     }
+    if (chosen == editAct)
+    {
+        startInlineBreakpointEdit(ix.row());
+        return;
+    }
     if (chosen == openAct)
     {
         onBreakpointItemDoubleClicked(ix);
         return;
     }
+    if (chosen == resetHitsAct)
+    {
+        QSet<int> rows = selRowsSet;
+        if (rows.isEmpty() && ix.isValid())
+        {
+            rows.insert(ix.row());
+        }
+        for (int row : rows)
+        {
+            QStandardItem *col0 = breakpointsModel->item(row, 0);
+            if (!col0)
+                continue;
+            const QString file = col0->data(BreakpointFileRole).toString();
+            const int64_t line = col0->data(BreakpointLineRole).toLongLong();
+            if (file.isEmpty() || line <= 0)
+                continue;
+            wslua_debugger_reset_breakpoint_hit_count(
+                file.toUtf8().constData(), line);
+        }
+        updateBreakpoints();
+        return;
+    }
     if (chosen == removeAct)
     {
         removeSelectedBreakpoints();
+        return;
+    }
+    if (chosen == resetAllHitsAct)
+    {
+        /* Wipes every counter under one mutex acquisition (cheaper
+         * than looping per-row from Qt). Also clears any sticky
+         * condition errors so a typo that's been "stuck red" since
+         * the last fire goes back to neutral until the line is hit
+         * again — matches the per-row Reset Hit Count semantics. */
+        wslua_debugger_reset_all_breakpoint_hit_counts();
+        updateBreakpoints();
         return;
     }
     if (chosen == removeAllAct)
@@ -4512,13 +6731,12 @@ void LuaDebuggerDialog::onCodeViewContextMenu(const QPoint &pos)
             connect(addWatch, &QAction::triggered,
                     [this, watchSpec]()
                     {
-                        const QString t = watchSpec.trimmed();
-                        if (!watchSpecUsesPathResolution(t))
-                        {
-                            showPathOnlyVariablePathWatchMessage();
-                            return;
-                        }
-                        addWatchFromSpec(t);
+                        /* Both path watches (Locals.x, Globals.t.k) and
+                         * expression watches (e.g. pinfo.src:tostring(),
+                         * #packets) are accepted; the watch panel decides
+                         * how to evaluate based on whether the text
+                         * validates as a Variables-tree path. */
+                        addWatchFromSpec(watchSpec.trimmed());
                     });
         }
     }
@@ -5125,6 +7343,18 @@ void LuaDebuggerDialog::clearPausedStateUi()
         stackModel->removeRows(0, stackModel->rowCount());
     }
     clearAllCodeHighlights();
+    /* Drop the pause location and refresh the breakpoints tree so the
+     * row that was highlighted while paused returns to its normal
+     * appearance. Doing it here (rather than at every individual resume
+     * site) keeps the cue tied to the same teardown that already wipes
+     * the editor's pause-line stripe and the Variables / Stack trees. */
+    const bool hadPauseLocation = !pausedFile_.isEmpty();
+    pausedFile_.clear();
+    pausedLine_ = 0;
+    if (hadPauseLocation && breakpointsModel)
+    {
+        updateBreakpoints();
+    }
 }
 
 void LuaDebuggerDialog::resumeDebuggerAndExitLoop()
@@ -5931,6 +8161,34 @@ void LuaDebuggerDialog::updateEvalPanelState()
     }
 }
 
+void LuaDebuggerDialog::drainPendingLogs()
+{
+    /* Swap-and-release the queue under the mutex so further
+     * trampoline calls reschedule us without contending with the
+     * GUI-side append loop below. */
+    QStringList batch;
+    {
+        QMutexLocker lock(&s_logEmitMutex);
+        batch.swap(s_pendingLogMessages);
+        s_logDrainScheduled = false;
+    }
+    if (!evalOutputEdit || batch.isEmpty())
+    {
+        return;
+    }
+    /* Logpoint lines are appended verbatim — no automatic location
+     * prefix. Users who want the originating file or breakpoint
+     * line can use the {filename} / {line} template tags. */
+    for (const QString &m : batch)
+    {
+        evalOutputEdit->appendPlainText(m);
+    }
+
+    QTextCursor cursor = evalOutputEdit->textCursor();
+    cursor.movePosition(QTextCursor::End);
+    evalOutputEdit->setTextCursor(cursor);
+}
+
 void LuaDebuggerDialog::onEvaluate()
 {
     if (!debuggerPaused || !wslua_debugger_is_paused())
@@ -5964,16 +8222,12 @@ void LuaDebuggerDialog::onEvaluate()
         output = tr("Error: Unknown error");
     }
 
-    // Append to output with separator
-    QString currentOutput = evalOutputEdit->toPlainText();
-    if (!currentOutput.isEmpty())
-    {
-        currentOutput += QStringLiteral("\n");
-    }
-    currentOutput += QStringLiteral("> %1\n%2").arg(expression, output);
-    evalOutputEdit->setPlainText(currentOutput);
+    /* Append the prompt-style "> expr" line and the result. Each
+     * appendPlainText call adds a paragraph break, so the result
+     * lands on its own line below the echoed expression. */
+    evalOutputEdit->appendPlainText(QStringLiteral("> %1").arg(expression));
+    evalOutputEdit->appendPlainText(output);
 
-    // Scroll to bottom
     QTextCursor cursor = evalOutputEdit->textCursor();
     cursor.movePosition(QTextCursor::End);
     evalOutputEdit->setTextCursor(cursor);
@@ -6039,14 +8293,72 @@ void LuaDebuggerDialog::storeBreakpointsList()
         const char *file = nullptr;
         int64_t line = 0;
         bool active = false;
-        if (wslua_debugger_get_breakpoint(i, &file, &line, &active))
+        const char *condition = nullptr;
+        int64_t hit_target = 0;
+        int64_t hit_count = 0; /* runtime-only; not persisted */
+        bool cond_err = false; /* runtime-only; not persisted */
+        const char *log_message = nullptr;
+        wslua_hit_count_mode_t hit_mode = WSLUA_HIT_COUNT_MODE_FROM;
+        bool log_also_pause = false;
+        if (!wslua_debugger_get_breakpoint_extended(
+                i, &file, &line, &active, &condition, &hit_target,
+                &hit_count, &cond_err, &log_message, &hit_mode,
+                &log_also_pause))
         {
-            QJsonObject bp;
-            bp[QStringLiteral("file")] = QString::fromUtf8(file);
-            bp[QStringLiteral("line")] = static_cast<qint64>(line);
-            bp[QStringLiteral("active")] = active;
-            list.append(bp.toVariantMap());
+            continue;
         }
+        QJsonObject bp;
+        bp[QStringLiteral("file")] = QString::fromUtf8(file);
+        bp[QStringLiteral("line")] = static_cast<qint64>(line);
+        bp[QStringLiteral("active")] = active;
+        /* Omit defaults so older Wireshark builds without these keys
+         * still round-trip the file unchanged when nothing has been
+         * configured. */
+        if (condition && condition[0])
+        {
+            bp[QStringLiteral("condition")] = QString::fromUtf8(condition);
+        }
+        if (hit_target > 0)
+        {
+            bp[QStringLiteral("hitCountTarget")] =
+                static_cast<qint64>(hit_target);
+        }
+        /* @c hitCountMode is persisted as a string ("from" / "every" /
+         * "once") so the JSON file is self-describing and matches the
+         * UI dropdown verbatim. Omit the key when the mode is the
+         * default @c FROM so the file stays minimal for users who
+         * never touch the dropdown. */
+        if (hit_target > 0 && hit_mode != WSLUA_HIT_COUNT_MODE_FROM)
+        {
+            const char *modeStr = "from";
+            switch (hit_mode)
+            {
+            case WSLUA_HIT_COUNT_MODE_EVERY:
+                modeStr = "every";
+                break;
+            case WSLUA_HIT_COUNT_MODE_ONCE:
+                modeStr = "once";
+                break;
+            case WSLUA_HIT_COUNT_MODE_FROM:
+            default:
+                modeStr = "from";
+                break;
+            }
+            bp[QStringLiteral("hitCountMode")] =
+                QString::fromLatin1(modeStr);
+        }
+        if (log_message && log_message[0])
+        {
+            bp[QStringLiteral("logMessage")] = QString::fromUtf8(log_message);
+        }
+        if (log_message && log_message[0] && log_also_pause)
+        {
+            /* Persist only when meaningful (non-empty log message AND
+             * non-default true) so older Wireshark builds keep
+             * round-tripping the file unchanged for the common case. */
+            bp[QStringLiteral("logAlsoPause")] = true;
+        }
+        list.append(bp.toVariantMap());
     }
     settings_[SettingsKeys::Breakpoints] = list;
 }
@@ -6068,22 +8380,20 @@ void LuaDebuggerDialog::rebuildWatchTreeFromSettings()
     watchChildBaseline_.clear();
     watchChildCurrent_.clear();
     /* The watch list on disk is a flat array of canonical spec strings.
-     * Values that are not a valid path watch, or that are not strings, are
-     * silently dropped (see wslua_debugger_watch_spec_uses_path_resolution). */
+     * Both path watches (resolved against the Variables tree) and
+     * expression watches (re-evaluated as Lua on every pause) round-trip
+     * through this list; only empty / container entries are dropped. */
     const QVariantList rawList =
         settings_.value(QString::fromUtf8(SettingsKeys::Watches)).toList();
     for (const QVariant &entry : rawList)
     {
         /* Container QVariants (QVariantMap / QVariantList) toString() to an
          * empty string and are dropped here. Scalar-like values (numbers,
-         * booleans) convert to a non-empty string but are then rejected by
-         * watchSpecUsesPathResolution below. */
+         * booleans) convert to a non-empty string and are kept as
+         * expression watches; they will simply produce a Lua error on
+         * evaluation if they are not valid expressions. */
         const QString spec = entry.toString();
         if (spec.isEmpty())
-        {
-            continue;
-        }
-        if (!watchSpecUsesPathResolution(spec))
         {
             continue;
         }
@@ -6323,6 +8633,25 @@ void LuaDebuggerDialog::updateBreakpointHeaderButtonState()
                 luaDbgBreakpointHeaderIconForMode(editorFont, mode, side, dpr);
         }
         breakpointHeaderToggleButton_->setIcon(bpHeaderIconCache_[modeIdx]);
+    }
+    /* The Edit and Remove header buttons share enable state: both act on
+     * the breakpoint row(s) the user has selected, so a selection-only
+     * gate keeps them visually and behaviourally in lockstep. Edit only
+     * ever opens one editor (the current/first-selected row); the click
+     * handler resolves a single row internally, and
+     * startInlineBreakpointEdit() is a no-op on stale (file-missing)
+     * rows, so we don't need to inspect editability here. */
+    QItemSelectionModel *const bpSelectionModel =
+        breakpointsTree ? breakpointsTree->selectionModel() : nullptr;
+    const bool hasBreakpointSelection =
+        bpSelectionModel && !bpSelectionModel->selectedRows().isEmpty();
+    if (breakpointHeaderRemoveButton_)
+    {
+        breakpointHeaderRemoveButton_->setEnabled(hasBreakpointSelection);
+    }
+    if (breakpointHeaderEditButton_)
+    {
+        breakpointHeaderEditButton_->setEnabled(hasBreakpointSelection);
     }
     if (breakpointHeaderRemoveAllButton_)
     {
@@ -6932,37 +9261,8 @@ void LuaDebuggerDialog::applyWatchItemEmpty(QStandardItem *item,
     LuaDebuggerItems::setToolTip(
         watchModel, item, 1,
         capWatchTooltipText(
-            tr("No watch path entered yet — enter a variable path in the "
-               "Watch column to see a value here.")));
-    applyChangedVisuals(item,
-                        /*changed=*/false, /*isPauseEntryRefresh=*/false);
-    while (item->rowCount() > 0)
-    {
-        item->removeRow(0);
-    }
-}
-
-void LuaDebuggerDialog::applyWatchItemNonPath(QStandardItem *item,
-                                              const QString &watchTipExtra)
-{
-    if (!watchModel)
-    {
-        return;
-    }
-    /* Defensive: normal entry points reject non-path specs before a row is
-     * created, but hand-edited lua_debugger.json could still supply one. */
-    applyWatchFilterErrorChrome(item, watchTree);
-    setText(watchModel, item, 1, tr("Not a variable path"));
-    item->setToolTip(
-        capWatchTooltipText(
-            QStringLiteral("%1\n%2")
-                .arg(item->text(),
-                     tr("Use a Variables-style path (e.g. Locals.x, "
-                        "Globals.t.k, t[1], t[\"k\"], or a single identifier).")) +
-                watchTipExtra));
-    LuaDebuggerItems::setToolTip(
-        watchModel, item, 1,
-        capWatchTooltipText(tr("Only variable paths can be watched.")));
+            tr("Enter a variable path (e.g. Locals.x, Globals.t.k) or a "
+               "Lua expression in the Watch column to see a value here.")));
     applyChangedVisuals(item,
                         /*changed=*/false, /*isPauseEntryRefresh=*/false);
     while (item->rowCount() > 0)
@@ -7032,16 +9332,27 @@ void LuaDebuggerDialog::applyWatchItemError(QStandardItem *item,
         return;
     }
     applyWatchFilterErrorChrome(item, watchTree);
-    setText(watchModel, item, 1, errStr);
+    /* The cell text shows a tidied error: for expression watches the
+     * synthetic "watch:N: " prefix is stripped (the row's red chrome
+     * already says "watch failed", and the chunk is always one line);
+     * path-watch errors pass through unchanged. The tooltip below keeps
+     * the full untouched string for diagnostics. */
+    const QString cellErrStr = stripWatchExpressionErrorPrefix(errStr);
+    setText(watchModel, item, 1, cellErrStr);
     const QString ttSuf = tr("Type: %1").arg(tr("error"));
     item->setToolTip(
         capWatchTooltipText(
             QStringLiteral("%1\n%2").arg(item->text(), ttSuf) + watchTipExtra));
+    /* "Could not evaluate watch" works for both flavors: a path watch
+     * fails to resolve or an expression watch fails to compile / runs
+     * into a Lua error. The detailed @a errStr below carries the
+     * specific reason (e.g. "Path not found", "watch:1: ...") so the
+     * generic header just acknowledges that a value could not be read. */
     LuaDebuggerItems::setToolTip(
         watchModel, item, 1,
         capWatchTooltipText(
             QStringLiteral("%1\n%2\n%3")
-                .arg(tr("Invalid watch path."), errStr, ttSuf)));
+                .arg(tr("Could not evaluate watch."), errStr, ttSuf)));
     applyChangedVisuals(item,
                         /*changed=*/false, /*isPauseEntryRefresh=*/false);
     /* An error invalidates the comparison: drop baselines for this root so
@@ -7123,6 +9434,76 @@ void LuaDebuggerDialog::applyWatchItemSuccess(QStandardItem *item,
     }
 }
 
+void LuaDebuggerDialog::applyWatchItemExpression(
+    QStandardItem *item, const QString &spec, const char *val,
+    const char *typ, bool can_expand, const QString &watchTipExtra)
+{
+    if (item->parent() == nullptr)
+    {
+        /* Expression watches have no Variables-tree counterpart; clear
+         * the role so leftover state from a prior path-style spec on the
+         * same row does not leak into Variables-tree selection sync. */
+        item->setData(QVariant(), VariablePathRole);
+    }
+    if (!watchModel)
+    {
+        return;
+    }
+    const QString v = val ? QString::fromUtf8(val) : QString();
+    const QString typStr = typ ? QString::fromUtf8(typ) : QString();
+    setText(watchModel, item, 1, v);
+
+    const QString exprNote =
+        tr("Expression — re-evaluated on every pause.");
+    const QString ttSuf =
+        typStr.isEmpty() ? QString() : tr("Type: %1").arg(typStr);
+
+    QString col0Tooltip = item->text();
+    if (!ttSuf.isEmpty())
+    {
+        col0Tooltip = QStringLiteral("%1\n%2").arg(col0Tooltip, ttSuf);
+    }
+    col0Tooltip = QStringLiteral("%1\n%2").arg(col0Tooltip, exprNote);
+    item->setToolTip(capWatchTooltipText(col0Tooltip + watchTipExtra));
+
+    QString col1Tooltip = v;
+    if (!ttSuf.isEmpty())
+    {
+        col1Tooltip = QStringLiteral("%1\n%2").arg(col1Tooltip, ttSuf);
+    }
+    col1Tooltip = QStringLiteral("%1\n%2").arg(col1Tooltip, exprNote);
+    LuaDebuggerItems::setToolTip(watchModel, item, 1,
+                                 capWatchTooltipText(col1Tooltip));
+
+    /* Change tracking — same scheme as path roots, but expression specs
+     * are not Globals-anchored (watchSpecIsGlobalScoped returns false on
+     * non-path specs), so the cue is fully gated on changeHighlightAllowed. */
+    const QString rk = changeKey(stackSelectionLevel, spec);
+    const bool changed = changeHighlightAllowed() &&
+                         shouldMarkChanged(watchRootBaseline_, rk, v);
+    applyChangedVisuals(item, changed, isPauseEntryRefresh_);
+    watchRootCurrent_[rk] = v;
+
+    if (can_expand)
+    {
+        if (item->rowCount() == 0)
+        {
+            QStandardItem *const ph0 = new QStandardItem();
+            QStandardItem *const ph1 = new QStandardItem();
+            ph0->setFlags(Qt::ItemIsEnabled);
+            ph1->setFlags(Qt::ItemIsEnabled);
+            item->appendRow({ph0, ph1});
+        }
+    }
+    else
+    {
+        while (item->rowCount() > 0)
+        {
+            item->removeRow(0);
+        }
+    }
+}
+
 void LuaDebuggerDialog::applyWatchItemState(QStandardItem *item,
                                             bool liveContext,
                                             const QString &muted)
@@ -7141,12 +9522,6 @@ void LuaDebuggerDialog::applyWatchItemState(QStandardItem *item,
         return;
     }
 
-    if (!watchSpecUsesPathResolution(spec))
-    {
-        applyWatchItemNonPath(item, watchTipExtra);
-        return;
-    }
-
     clearWatchFilterErrorChrome(item, watchTree);
     LuaDebuggerItems::setForeground(watchModel, item, 1,
                                watchTree->palette().brush(QPalette::Text));
@@ -7157,12 +9532,19 @@ void LuaDebuggerDialog::applyWatchItemState(QStandardItem *item,
         return;
     }
 
+    const bool isPathSpec = watchSpecUsesPathResolution(spec);
+
     char *val = nullptr;
     char *typ = nullptr;
     bool can_expand = false;
     char *err = nullptr;
-    const bool ok = wslua_debugger_watch_read_root(
-        spec.toUtf8().constData(), &val, &typ, &can_expand, &err);
+
+    const bool ok =
+        isPathSpec
+            ? wslua_debugger_watch_read_root(spec.toUtf8().constData(), &val,
+                                             &typ, &can_expand, &err)
+            : wslua_debugger_watch_expr_read_root(
+                  spec.toUtf8().constData(), &val, &typ, &can_expand, &err);
     if (!ok)
     {
         const QString errStr = err ? QString::fromUtf8(err) : muted;
@@ -7171,7 +9553,15 @@ void LuaDebuggerDialog::applyWatchItemState(QStandardItem *item,
         return;
     }
 
-    applyWatchItemSuccess(item, spec, val, typ, can_expand, watchTipExtra);
+    if (isPathSpec)
+    {
+        applyWatchItemSuccess(item, spec, val, typ, can_expand, watchTipExtra);
+    }
+    else
+    {
+        applyWatchItemExpression(item, spec, val, typ, can_expand,
+                                 watchTipExtra);
+    }
     g_free(val);
     g_free(typ);
 }
@@ -7280,6 +9670,110 @@ void LuaDebuggerDialog::fillWatchPathChildren(QStandardItem *parent,
     if (variableChildrenShouldSortByName(path))
     {
         parent->sortChildren(0, Qt::AscendingOrder);
+    }
+
+    wslua_debugger_free_variables(variables, variableCount);
+}
+
+void LuaDebuggerDialog::fillWatchExprChildren(QStandardItem *parent,
+                                              const QString &rootSpec,
+                                              const QString &subpath)
+{
+    if (!watchModel || !watchTree)
+    {
+        return;
+    }
+    /* The depth cap mirrors the path-based variant: deeply nested
+     * expression children would otherwise grow without bound and we want
+     * a recognizable sentinel rather than a runaway tree. */
+    if (watchSubpathBoundaryCount(subpath) >= WSLUA_WATCH_MAX_PATH_SEGMENTS)
+    {
+        auto *sent0 = new QStandardItem(QStringLiteral("\u2026"));
+        auto *sent1 = new QStandardItem(tr("Maximum watch depth reached"));
+        sent0->setFlags(Qt::ItemIsEnabled);
+        sent1->setFlags(Qt::ItemIsEnabled);
+        LuaDebuggerItems::setForeground(
+            watchModel, sent0, 1,
+            watchTree->palette().brush(QPalette::PlaceholderText));
+        LuaDebuggerItems::setToolTip(
+            watchModel, sent0, 1,
+            capWatchTooltipText(tr("Maximum watch depth reached.")));
+        parent->appendRow({sent0, sent1});
+        return;
+    }
+
+    if (rootSpec.trimmed().isEmpty())
+    {
+        return;
+    }
+
+    char *err = nullptr;
+    wslua_variable_t *variables = nullptr;
+    int32_t variableCount = 0;
+    const QByteArray rootSpecUtf8 = rootSpec.toUtf8();
+    const QByteArray subpathUtf8 = subpath.toUtf8();
+    const bool ok = wslua_debugger_watch_expr_get_variables(
+        rootSpecUtf8.constData(),
+        subpath.isEmpty() ? nullptr : subpathUtf8.constData(),
+        &variables, &variableCount, &err);
+    g_free(err);
+    if (!ok || !variables)
+    {
+        return;
+    }
+
+    /* Expression watches have no Globals anchor, so changes are only
+     * highlighted under changeHighlightAllowed() (i.e. on the same stack
+     * frame as the pause entered at). */
+    const QString rootKey = changeKey(stackSelectionLevel, rootSpec);
+    auto &baseline = watchChildBaseline_[rootKey];
+    auto &current = watchChildCurrent_[rootKey];
+    auto &baselineParents = watchChildBaselineParents_[rootKey];
+    auto &currentParents = watchChildCurrentParents_[rootKey];
+    /* The subpath is the parent key for change tracking; it doubles as the
+     * "visited parent" identity. Empty subpath = the expression result
+     * itself, which is the same identity as the root row. */
+    const bool parentVisitedInBaseline = baselineParents.contains(subpath);
+    currentParents.insert(subpath);
+    const bool highlightAllowed = changeHighlightAllowed();
+
+    for (int32_t i = 0; i < variableCount; ++i)
+    {
+        auto *nameItem = new QStandardItem();
+        auto *valueItem = new QStandardItem();
+
+        const QString name =
+            QString::fromUtf8(variables[i].name ? variables[i].name : "");
+        const QString value =
+            QString::fromUtf8(variables[i].value ? variables[i].value : "");
+        const QString type =
+            QString::fromUtf8(variables[i].type ? variables[i].type : "");
+        const bool canExpand = variables[i].can_expand ? true : false;
+        const QString childSub = expressionWatchChildSubpath(subpath, name);
+
+        nameItem->setText(name);
+        nameItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsSelectable);
+        nameItem->setData(type, VariableTypeRole);
+        nameItem->setData(canExpand, VariableCanExpandRole);
+        nameItem->setData(childSub, WatchSubpathRole);
+        /* VariablePathRole is intentionally left empty: expression
+         * children have no Variables-tree counterpart, so any sync against
+         * it would mismatch a real path watch with the same composed name. */
+
+        parent->appendRow({nameItem, valueItem});
+
+        applyWatchChildRowTextAndTooltip(nameItem, value, type);
+
+        const bool changed =
+            highlightAllowed &&
+            shouldMarkChanged(baseline, childSub, value,
+                              /*flashNew=*/parentVisitedInBaseline);
+        applyChangedVisuals(nameItem, changed, isPauseEntryRefresh_);
+        current[childSub] = value;
+
+        applyVariableExpansionIndicator(nameItem, canExpand,
+                                        /*enabledOnlyPlaceholder=*/true,
+                                        /*columnCount=*/2);
     }
 
     wslua_debugger_free_variables(variables, variableCount);
@@ -7516,17 +10010,37 @@ void LuaDebuggerDialog::refillWatchChildren(QStandardItem *item)
     }
 
     const QStandardItem *const rootWatch = watchRootItem(item);
-    const QString rootSpec = rootWatch->data(WatchSpecRole).toString();
-    QString path = item->data(VariablePathRole).toString();
-    if (path.isEmpty())
+    if (!rootWatch)
     {
-        path = watchResolvedVariablePathForTooltip(rootSpec);
+        return;
+    }
+    const QString rootSpec = rootWatch->data(WatchSpecRole).toString();
+
+    if (watchSpecUsesPathResolution(rootSpec))
+    {
+        QString path = item->data(VariablePathRole).toString();
         if (path.isEmpty())
         {
-            path = watchVariablePathForSpec(rootSpec);
+            path = watchResolvedVariablePathForTooltip(rootSpec);
+            if (path.isEmpty())
+            {
+                path = watchVariablePathForSpec(rootSpec);
+            }
         }
+        fillWatchPathChildren(item, path);
+        return;
     }
-    fillWatchPathChildren(item, path);
+
+    /* Expression watch: descendants are addressed by a Lua-style subpath
+     * relative to the expression's root value, stored in WatchSubpathRole.
+     * The subpath of the root itself is empty — children of the root then
+     * fan out through expressionWatchChildSubpath() in
+     * fillWatchExprChildren(). */
+    const QString subpath =
+        item->parent() == nullptr
+            ? QString()
+            : item->data(WatchSubpathRole).toString();
+    fillWatchExprChildren(item, rootSpec, subpath);
 }
 
 void LuaDebuggerDialog::refreshWatchBranch(QStandardItem *item)
@@ -7735,14 +10249,45 @@ void LuaDebuggerDialog::copyWatchValueForItem(QStandardItem *item,
         }
     };
     QString value;
-    const QString varPath = item->data(VariablePathRole).toString();
-    if (!varPath.isEmpty() && debuggerPaused && wslua_debugger_is_enabled() &&
+    if (item && debuggerPaused && wslua_debugger_is_enabled() &&
         wslua_debugger_is_paused())
     {
+        const QStandardItem *const rootWatch = watchRootItem(item);
+        const QString rootSpec =
+            rootWatch ? rootWatch->data(WatchSpecRole).toString() : QString();
+
         char *val = nullptr;
         char *err = nullptr;
-        if (wslua_debugger_read_variable_value_full(
-                varPath.toUtf8().constData(), &val, &err))
+        bool ok = false;
+
+        if (watchSpecUsesPathResolution(rootSpec))
+        {
+            /* Path-style: prefer the row's resolved Variables-tree path so
+             * children copy the correct nested value, not the root. */
+            const QString varPath = item->data(VariablePathRole).toString();
+            if (!varPath.isEmpty())
+            {
+                ok = wslua_debugger_read_variable_value_full(
+                    varPath.toUtf8().constData(), &val, &err);
+            }
+        }
+        else if (!rootSpec.isEmpty())
+        {
+            /* Expression-style: re-evaluate against the root spec, then
+             * walk the row's stored subpath (empty for the root itself). */
+            const QString subpath =
+                item->parent() == nullptr
+                    ? QString()
+                    : item->data(WatchSubpathRole).toString();
+            const QByteArray rootSpecUtf8 = rootSpec.toUtf8();
+            const QByteArray subpathUtf8 = subpath.toUtf8();
+            ok = wslua_debugger_watch_expr_read_full(
+                rootSpecUtf8.constData(),
+                subpath.isEmpty() ? nullptr : subpathUtf8.constData(), &val,
+                &err);
+        }
+
+        if (ok)
         {
             value = QString::fromUtf8(val ? val : "");
         }
@@ -7811,6 +10356,28 @@ void LuaDebuggerDialog::removeAllWatchTopLevelItems()
             all.append(r);
         }
     }
+    if (all.isEmpty())
+    {
+        return;
+    }
+
+    /* Confirmation dialog. Mirrors onClearBreakpoints(): the destructive
+     * "wipe everything" gesture is reachable from the header button, the
+     * Ctrl+Shift+W keyboard shortcut and the watch context menu, so the
+     * prompt lives here (instead of at each call site) to guarantee the
+     * user always gets one chance to back out. Default is No so a stray
+     * Enter on a focused dialog does not silently delete the user's
+     * watch list. */
+    const int count = static_cast<int>(all.size());
+    QMessageBox::StandardButton reply = QMessageBox::question(
+        this, tr("Clear All Watches"),
+        tr("Are you sure you want to remove %Ln watch(es)?", "", count),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (reply != QMessageBox::Yes)
+    {
+        return;
+    }
+
     deleteWatchRows(all);
 }
 
@@ -7884,14 +10451,6 @@ void LuaDebuggerDialog::addWatchFromSpec(const QString &watchSpec)
     insertNewWatchRow(watchSpec, false);
 }
 
-void LuaDebuggerDialog::showPathOnlyVariablePathWatchMessage()
-{
-    QMessageBox::information(
-        this, tr("Lua Debugger"),
-        tr("Only variable paths can be watched (e.g. Locals.name, Globals.x, "
-           "or a single identifier for Locals.name)."));
-}
-
 void LuaDebuggerDialog::commitWatchRootSpec(QStandardItem *item,
                                             const QString &text)
 {
@@ -7921,16 +10480,15 @@ void LuaDebuggerDialog::commitWatchRootSpec(QStandardItem *item,
     {
         QMessageBox::warning(
             this, tr("Lua Debugger"),
-            tr("Watch path is too long (maximum %Ln characters).", "",
+            tr("Watch expression is too long (maximum %Ln characters).", "",
                static_cast<qlonglong>(WATCH_EXPR_MAX_CHARS)));
         return;
     }
 
-    if (!watchSpecUsesPathResolution(t))
-    {
-        showPathOnlyVariablePathWatchMessage();
-        return;
-    }
+    /* Both path watches (Locals.x, Globals.t.k) and expression watches
+     * (any Lua expression — pinfo.src:tostring(), #packets, t[i] + 1)
+     * are accepted; the watch panel decides how to evaluate based on
+     * whether @c t validates as a Variables-tree path. */
 
     /* Editing a spec invalidates baselines for both old and new specs:
      * the old spec no longer applies to this row, and the new spec has
@@ -7980,11 +10538,8 @@ void LuaDebuggerDialog::insertNewWatchRow(const QString &initialSpec,
             }
         }
     }
-    if (!init.isEmpty() && !watchSpecUsesPathResolution(init))
-    {
-        showPathOnlyVariablePathWatchMessage();
-        return;
-    }
+    /* Both path watches and expression watches are accepted; the watch
+     * panel decides how to evaluate. */
 
     auto *row0 = new QStandardItem();
     auto *row1 = new QStandardItem();
@@ -8181,6 +10736,47 @@ void LuaDebuggerDialog::applyDialogSettings()
         QString file = bp.value("file").toString();
         int64_t line = bp.value("line").toVariant().toLongLong();
         bool active = bp.value("active").toBool(true);
+        /* Forward-compat: missing keys mean "feature not configured" so we
+         * skip the corresponding setter call rather than clearing it. The
+         * core defaults to "no condition / no target / no log message" on
+         * add_breakpoint, so this matches a pristine entry. */
+        const bool hasCondition = bp.contains("condition");
+        const QString condition = hasCondition
+                                       ? bp.value("condition").toString()
+                                       : QString();
+        const bool hasTarget = bp.contains("hitCountTarget");
+        const int64_t hitCountTarget =
+            hasTarget ? bp.value("hitCountTarget").toVariant().toLongLong()
+                      : int64_t{0};
+        const bool hasMode = bp.contains("hitCountMode");
+        wslua_hit_count_mode_t hitCountMode = WSLUA_HIT_COUNT_MODE_FROM;
+        if (hasMode)
+        {
+            const QString modeStr =
+                bp.value("hitCountMode").toString().toLower();
+            if (modeStr == QStringLiteral("every"))
+            {
+                hitCountMode = WSLUA_HIT_COUNT_MODE_EVERY;
+            }
+            else if (modeStr == QStringLiteral("once"))
+            {
+                hitCountMode = WSLUA_HIT_COUNT_MODE_ONCE;
+            }
+            else
+            {
+                /* Unknown / empty / "from" all collapse to the default
+                 * so a JSON file from a future Wireshark with extra
+                 * modes degrades gracefully instead of corrupting the
+                 * gate. */
+                hitCountMode = WSLUA_HIT_COUNT_MODE_FROM;
+            }
+        }
+        const bool hasLog = bp.contains("logMessage");
+        const QString logMessage =
+            hasLog ? bp.value("logMessage").toString() : QString();
+        const bool hasLogAlsoPause = bp.contains("logAlsoPause");
+        const bool logAlsoPause =
+            hasLogAlsoPause ? bp.value("logAlsoPause").toBool() : false;
 
         if (!file.isEmpty() && line > 0)
         {
@@ -8192,6 +10788,37 @@ void LuaDebuggerDialog::applyDialogSettings()
             }
             wslua_debugger_set_breakpoint_active(file.toUtf8().constData(),
                                                  line, active);
+            if (hasCondition)
+            {
+                const QByteArray fb = file.toUtf8();
+                const QByteArray cb = condition.toUtf8();
+                wslua_debugger_set_breakpoint_condition(
+                    fb.constData(), line,
+                    condition.isEmpty() ? NULL : cb.constData());
+            }
+            if (hasTarget)
+            {
+                wslua_debugger_set_breakpoint_hit_count_target(
+                    file.toUtf8().constData(), line, hitCountTarget);
+            }
+            if (hasMode)
+            {
+                wslua_debugger_set_breakpoint_hit_count_mode(
+                    file.toUtf8().constData(), line, hitCountMode);
+            }
+            if (hasLog)
+            {
+                const QByteArray fb = file.toUtf8();
+                const QByteArray mb = logMessage.toUtf8();
+                wslua_debugger_set_breakpoint_log_message(
+                    fb.constData(), line,
+                    logMessage.isEmpty() ? NULL : mb.constData());
+            }
+            if (hasLogAlsoPause)
+            {
+                wslua_debugger_set_breakpoint_log_also_pause(
+                    file.toUtf8().constData(), line, logAlsoPause);
+            }
         }
     }
 
@@ -8217,6 +10844,8 @@ void LuaDebuggerDialog::applyDialogSettings()
         settings_.value(SettingsKeys::MainSplitter).toString();
     QString leftSplitterHex =
         settings_.value(SettingsKeys::LeftSplitter).toString();
+    QString evalSplitterHex =
+        settings_.value(SettingsKeys::EvalSplitter).toString();
 
     bool splittersRestored = false;
     if (!mainSplitterHex.isEmpty() && ui->mainSplitter)
@@ -8230,6 +10859,14 @@ void LuaDebuggerDialog::applyDialogSettings()
         ui->leftSplitter->restoreState(
             QByteArray::fromHex(leftSplitterHex.toLatin1()));
         splittersRestored = true;
+    }
+    /* The Evaluate input/output splitter is independent of the outer panel
+     * splitters; restore even if the others are missing so a user who has
+     * only ever collapsed an Evaluate pane keeps that preference. */
+    if (!evalSplitterHex.isEmpty() && evalSplitter_)
+    {
+        evalSplitter_->restoreState(
+            QByteArray::fromHex(evalSplitterHex.toLatin1()));
     }
 
     if (!splittersRestored && ui->mainSplitter)
@@ -8301,6 +10938,13 @@ void LuaDebuggerDialog::storeDialogSettings()
     {
         settings_[SettingsKeys::LeftSplitter] =
             QString::fromLatin1(ui->leftSplitter->saveState().toHex());
+    }
+    /* Evaluate input/output splitter: preserves whether either pane is
+     * collapsed (size 0) so the user's chosen layout survives close/reopen. */
+    if (evalSplitter_)
+    {
+        settings_[SettingsKeys::EvalSplitter] =
+            QString::fromLatin1(evalSplitter_->saveState().toHex());
     }
 
     // Store section expanded states

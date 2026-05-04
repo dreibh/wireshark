@@ -17072,14 +17072,14 @@ dissect_ProfiSafeParameterRequest(tvbuff_t *tvb, int offset,
     uint16_t    wd_time;
     uint16_t    par_crc;
     uint32_t    ipar_crc = 0;
-    uint8_t     prm_flag1;
+    uint8_t     prm_flag1_raw = 0;
     uint8_t     prm_flag1_chck_seq;
     uint8_t     prm_flag1_chck_ipar;
     uint8_t     prm_flag1_sil;
     uint8_t     prm_flag1_crc_len;
     uint8_t     prm_flag1_crc_seed;
     uint8_t     prm_flag1_reserved;
-    uint8_t     prm_flag2;
+    uint8_t     prm_flag2_raw = 0;
     uint8_t     prm_flag2_reserved;
     uint8_t     prm_flag2_f_block_id;
     uint8_t     prm_flag2_f_par_version;
@@ -17096,9 +17096,11 @@ dissect_ProfiSafeParameterRequest(tvbuff_t *tvb, int offset,
     f_tree = proto_item_add_subtree(f_item, ett_pn_io_profisafe_f_parameter);
     proto_item_set_text(f_item, "F-Parameter: ");
 
+    /* --- F_Prm_Flag1 --- */
     flags1_item = proto_tree_add_item(f_tree, hf_pn_io_ps_f_prm_flag1, tvb, offset, 1, ENC_BIG_ENDIAN);
     flags1_tree = proto_item_add_subtree(flags1_item, ett_pn_io_profisafe_f_parameter_prm_flag1);
 
+    /* Use bitfield sub-dissectors for display and raw PRM byte for logic */
     /* dissection of F_Prm_Flag1 */
     dissect_dcerpc_uint8(tvb, offset, pinfo, flags1_tree, drep,
         hf_pn_io_ps_f_prm_flag1_chck_seq, &prm_flag1_chck_seq);
@@ -17112,9 +17114,12 @@ dissect_ProfiSafeParameterRequest(tvbuff_t *tvb, int offset,
         hf_pn_io_ps_f_prm_flag1_crc_seed, &prm_flag1_crc_seed);
     dissect_dcerpc_uint8(tvb, offset, pinfo, flags1_tree, drep,
         hf_pn_io_ps_f_prm_flag1_reserved, &prm_flag1_reserved);
-    prm_flag1 = prm_flag1_chck_seq|prm_flag1_chck_ipar|prm_flag1_sil|prm_flag1_crc_len|prm_flag1_crc_seed|prm_flag1_reserved;
+
+    /* Read raw PRM flag_1 byte once for logic */
+    prm_flag1_raw = tvb_get_uint8(tvb, offset);
     offset++;
 
+    /* --- F_Prm_Flag2 --- */
     flags2_item = proto_tree_add_item(f_tree, hf_pn_io_ps_f_prm_flag2, tvb, offset, 1, ENC_BIG_ENDIAN);
     flags2_tree = proto_item_add_subtree(flags2_item, ett_pn_io_profisafe_f_parameter_prm_flag2);
 
@@ -17125,44 +17130,51 @@ dissect_ProfiSafeParameterRequest(tvbuff_t *tvb, int offset,
         hf_pn_io_ps_f_prm_flag2_f_block_id, &prm_flag2_f_block_id);
     dissect_dcerpc_uint8(tvb, offset, pinfo, flags2_tree, drep,
         hf_pn_io_ps_f_prm_flag2_f_par_version, &prm_flag2_f_par_version);
-    prm_flag2 = prm_flag2_reserved|prm_flag2_f_block_id|prm_flag2_f_par_version;
+
+    /* Read raw PRM flag_2 byte once for logic */
+    prm_flag2_raw = tvb_get_uint8(tvb, offset);
     offset++;
 
     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, f_item, drep,
-                    hf_pn_io_ps_f_src_adr, &src_addr);
+        hf_pn_io_ps_f_src_adr, &src_addr);
     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, f_item, drep,
-                    hf_pn_io_ps_f_dest_adr, &dst_addr);
+        hf_pn_io_ps_f_dest_adr, &dst_addr);
     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, f_item, drep,
-                    hf_pn_io_ps_f_wd_time, &wd_time);
+        hf_pn_io_ps_f_wd_time, &wd_time);
 
-    /* Dissection for F_iPar_CRC: see F_Prm_Flag2 -> F_Block_ID */
-    if( (prm_flag2_f_block_id & 0x08) && !(prm_flag2_f_block_id & 0x20) ) {
+    /* Dissection for F_iPar_CRC: see F_Prm_Flag2 -> F_Block_ID
+     * Use raw PRM flag_2 byte for condition check */
+    if ((prm_flag2_raw & 0x08) && !(prm_flag2_raw & 0x20)) {
         offset = dissect_dcerpc_uint32(tvb, offset, pinfo, f_item, drep,
-                        hf_pn_io_ps_f_ipar_crc, &ipar_crc);
+            hf_pn_io_ps_f_ipar_crc, &ipar_crc);
     }
 
     offset = dissect_dcerpc_uint16(tvb, offset, pinfo, f_item, drep,
-                    hf_pn_io_ps_f_par_crc, &par_crc);
+        hf_pn_io_ps_f_par_crc, &par_crc);
 
 
-    /* Differentiate between ipar_crc and no_ipar_crc */
-    if( (prm_flag2_f_block_id & 0x08) && !(prm_flag2_f_block_id & 0x20) ) {    /* include ipar_crc display */
+    /* Differentiate between ipar_crc and no_ipar_crc; use raw PRM flags in display */
+    if ((prm_flag2_raw & 0x08) && !(prm_flag2_raw & 0x20)) {    /* include ipar_crc display */
         col_append_fstr(pinfo->cinfo, COL_INFO,
-                        ", F-Parameter record, prm_flag1:0x%02x, prm_flag2:0x%02x, src:0x%04x,"
-                         " dst:0x%04x, wd_time:%d, ipar_crc:0x%04x, crc:0x%04x",
-                        prm_flag1, prm_flag2, src_addr, dst_addr, wd_time, ipar_crc, par_crc);
+            ", F-Parameter record, prm_flag1:0x%02x, prm_flag2:0x%02x, src:0x%04x,"
+            " dst:0x%04x, wd_time:%d, ipar_crc:0x%08x, crc:0x%04x",
+            prm_flag1_raw, prm_flag2_raw, src_addr, dst_addr, wd_time, ipar_crc, par_crc);
 
-        proto_item_append_text(f_item, "prm_flag1:0x%02x, prm_flag2:0x%02x, src:0x%04x, dst:0x%04x, wd_time:%d, ipar_crc:0x%04x, par_crc:0x%04x",
-                prm_flag1, prm_flag2, src_addr, dst_addr, wd_time, ipar_crc, par_crc);
+        proto_item_append_text(f_item,
+            "prm_flag1:0x%02x, prm_flag2:0x%02x, src:0x%04x, dst:0x%04x,"
+            " wd_time:%d, ipar_crc:0x%08x, par_crc:0x%04x",
+            prm_flag1_raw, prm_flag2_raw, src_addr, dst_addr, wd_time, ipar_crc, par_crc);
     }
     else {    /* exclude ipar_crc display */
         col_append_fstr(pinfo->cinfo, COL_INFO,
-                        ", F-Parameter record, prm_flag1:0x%02x, prm_flag2:0x%02x, src:0x%04x,"
-                         " dst:0x%04x, wd_time:%d, crc:0x%04x",
-                        prm_flag1, prm_flag2, src_addr, dst_addr, wd_time, par_crc);
+            ", F-Parameter record, prm_flag1:0x%02x, prm_flag2:0x%02x, src:0x%04x,"
+            " dst:0x%04x, wd_time:%d, crc:0x%04x",
+            prm_flag1_raw, prm_flag2_raw, src_addr, dst_addr, wd_time, par_crc);
 
-        proto_item_append_text(f_item, "prm_flag1:0x%02x, prm_flag2:0x%02x, src:0x%04x, dst:0x%04x, wd_time:%d, par_crc:0x%04x",
-                prm_flag1, prm_flag2, src_addr, dst_addr, wd_time, par_crc);
+        proto_item_append_text(f_item,
+            "prm_flag1:0x%02x, prm_flag2:0x%02x, src:0x%04x, dst:0x%04x,"
+            " wd_time:%d, par_crc:0x%04x",
+            prm_flag1_raw, prm_flag2_raw, src_addr, dst_addr, wd_time, par_crc);
     }
 
     if (!PINFO_FD_VISITED(pinfo)) {
@@ -17192,9 +17204,11 @@ dissect_ProfiSafeParameterRequest(tvbuff_t *tvb, int offset,
                 io_data_object->f_par_crc1 = par_crc;
                 io_data_object->f_src_adr = src_addr;
                 io_data_object->f_dest_adr = dst_addr;
-                io_data_object->f_crc_seed = prm_flag1 & 0x40;
-                if (!(prm_flag1 & 0x10)) {
-                    if (prm_flag1 & 0x20) {
+
+                /* Normalize F_CRC_Seed to 0/1 using raw PRM flag_1 */
+                io_data_object->f_crc_seed = (prm_flag1_raw & 0x40) ? 1 : 0;
+                if (!(prm_flag1_raw & 0x10)) {
+                    if (prm_flag1_raw & 0x20) {
                         io_data_object->f_crc_len = 4;
                     } else {
                         io_data_object->f_crc_len = 3;
@@ -17212,9 +17226,11 @@ dissect_ProfiSafeParameterRequest(tvbuff_t *tvb, int offset,
                     io_data_object->f_par_crc1 = par_crc;
                     io_data_object->f_src_adr = src_addr;
                     io_data_object->f_dest_adr = dst_addr;
-                    io_data_object->f_crc_seed = prm_flag1 & 0x40;
-                    if (!(prm_flag1 & 0x10)) {
-                        if (prm_flag1 & 0x20) {
+
+                    /* Normalize F_CRC_Seed to 0/1 using raw PRM flag_1 */
+                    io_data_object->f_crc_seed = (prm_flag1_raw & 0x40) ? 1 : 0;
+                    if (!(prm_flag1_raw & 0x10)) {
+                        if (prm_flag1_raw & 0x20) {
                             io_data_object->f_crc_len = 4;
                         } else {
                             io_data_object->f_crc_len = 3;

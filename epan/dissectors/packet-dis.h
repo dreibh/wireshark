@@ -29,6 +29,8 @@ typedef struct dis_tap_info {
     uint8_t info_radio_input_source;
     uint8_t info_payload_type;
     uint32_t info_tx_timestamp;
+    uint32_t info_sample_rate;
+    uint32_t info_num_samples;
     bool info_all_data_present;
     unsigned info_payload_offset;
     unsigned info_payload_len;
