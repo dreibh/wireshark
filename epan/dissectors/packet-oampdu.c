@@ -2200,10 +2200,8 @@ dissect_oampdu_vendor_specific(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
                                 uint8_t nqs_i;
                                 uint8_t rvpqs_i;
 
-                                proto_tree_add_item(dpoe_opcode_response_tree, hf_oam_dpoe_repthr_nqs, tvb, offset, 1, ENC_BIG_ENDIAN);
-                                nqs = tvb_get_uint8(tvb, offset);
-                                proto_tree_add_item(dpoe_opcode_response_tree, hf_oam_dpoe_repthr_rvpqs, tvb, offset+1, 1, ENC_BIG_ENDIAN);
-                                rvpqs = tvb_get_uint8(tvb, offset+1);
+                                proto_tree_add_item_ret_uint8(dpoe_opcode_response_tree, hf_oam_dpoe_repthr_nqs, tvb, offset, 1, ENC_BIG_ENDIAN, &nqs);
+                                proto_tree_add_item_ret_uint8(dpoe_opcode_response_tree, hf_oam_dpoe_repthr_rvpqs, tvb, offset+1, 1, ENC_BIG_ENDIAN, &rvpqs);
 
                                 for (nqs_i = 0; nqs_i < nqs; nqs_i++) {
                                     for (rvpqs_i = 0; rvpqs_i < rvpqs; rvpqs_i++) {
@@ -2404,8 +2402,7 @@ dissect_oampdu_vendor_specific(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
                                 proto_tree_add_item(dpoe_opcode_response_tree, hf_oam_dpoe_1904_1_mac_control_functions_supported, tvb, offset, 2, ENC_BIG_ENDIAN);
                             } else if (leaf_branch == DPOE_LB_1904_1_CFG_MCAST_LLID) {
                                 uint8_t action;
-                                proto_tree_add_item(dpoe_opcode_response_tree, hf_oam_dpoe_1904_1_cfg_mcast_llid_action, tvb, offset, 1, ENC_BIG_ENDIAN);
-                                action = tvb_get_uint8(tvb, offset);
+                                proto_tree_add_item_ret_uint8(dpoe_opcode_response_tree, hf_oam_dpoe_1904_1_cfg_mcast_llid_action, tvb, offset, 1, ENC_BIG_ENDIAN, &action);
                                 switch (action) {
                                     case 0x00:
                                     case 0x01:
@@ -2433,8 +2430,7 @@ dissect_oampdu_vendor_specific(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tr
                 case 0x08:
                     break;
                 case DPOE_OPCODE_FILE_TRANSFER:
-                    opcode = tvb_get_uint8(tvb, offset);
-                    proto_tree_add_item(dpoe_opcode_tree, hf_oam_dpoe_file_transfer_opcode, tvb, offset, 1, ENC_BIG_ENDIAN);
+                    proto_tree_add_item_ret_uint8(dpoe_opcode_tree, hf_oam_dpoe_file_transfer_opcode, tvb, offset, 1, ENC_BIG_ENDIAN, &opcode);
                     offset += 1;
                     switch (opcode) {
                         case DPOE_FILE_TRANSFER_WRITE:

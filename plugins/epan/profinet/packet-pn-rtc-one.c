@@ -524,7 +524,7 @@ dissect_PNIO_C_SDU_RTC1(tvbuff_t *tvb, unsigned offset,
         col_set_str(pinfo->cinfo, COL_PROTOCOL, "PNIO");            /* set protocol name */
 
         data_item = proto_tree_add_protocol_format(tree, proto_pn_io_rtc1, tvb, offset, tvb_captured_length(tvb),
-                "PROFINET IO Cyclic Service Data Unit: %u bytes", tvb_captured_length(tvb));
+            "PROFINET IO Cyclic Service Data Unit: %u bytes", tvb_captured_length(tvb));
         data_tree = proto_item_add_subtree(data_item, ett_pn_io_rtc);
 
         /* dissect_dcerpc_uint16(tvb, offset, pinfo, data_tree, drep, hf_pn_io_packedframe_SFCRC, &u16SFCRC); */
@@ -546,8 +546,8 @@ dissect_PNIO_C_SDU_RTC1(tvbuff_t *tvb, unsigned offset,
                 /* if RTC frame has setup frame and setup frame number is less than RTC frame number AND RTC frame does not have release frame yet! */
                 /* then, get AR UUID of current station info */
                 if ((current_aruuid_frame->setupframe && current_aruuid_frame->setupframe < pinfo->num) &&
-                   ((current_aruuid_frame->releaseframe && current_aruuid_frame->releaseframe > pinfo->num) ||
-                    !current_aruuid_frame->releaseframe)) {
+                    ((current_aruuid_frame->releaseframe && current_aruuid_frame->releaseframe > pinfo->num) ||
+                        !current_aruuid_frame->releaseframe)) {
                     if (current_aruuid_frame->inputframe == frameid) {
                         current_aruuid = current_aruuid_frame->aruuid.data1;
                         break;
@@ -572,7 +572,7 @@ dissect_PNIO_C_SDU_RTC1(tvbuff_t *tvb, unsigned offset,
                 if (u16SecurityLength == security_data)
                     col_set_str(pinfo->cinfo, COL_PROTOCOL, "PNIO_PSsec");    /* set PROFISsafe with security protocol name */
                 else
-                    col_set_str(pinfo->cinfo, COL_PROTOCOL, "PNIO_PS");    /* set PROFISsafe protocol name */
+                col_set_str(pinfo->cinfo, COL_PROTOCOL, "PNIO_PS");    /* set PROFISsafe protocol name */
             }
 
             if (addresses_equal(&(pinfo->src), conversation_key_addr1(conversation->key_ptr)) && addresses_equal(&(pinfo->dst), conversation_key_addr2(conversation->key_ptr))) {
@@ -673,10 +673,12 @@ dissect_PNIO_C_SDU_RTC1(tvbuff_t *tvb, unsigned offset,
                             proto_tree_add_uint(IODataObject_tree, hf_pn_io_ps_f_dest_adr, tvb, 0, 0, io_data_object->f_dest_adr);
 
                             /* Get Safety IO Data */
-                            if (io_data_object->f_crc_seed == false) {
-                                safety_io_data_length = io_data_object->length - F_MESSAGE_TRAILER_4BYTE;
+                            /* PROFIsafe trailer = StatusByte (1 byte) + CRC length (f_crc_len bytes) */
+                            if (io_data_object->f_crc_len > 0 &&
+                                io_data_object->length > (uint8_t)(1 + io_data_object->f_crc_len)) {
+                                safety_io_data_length = io_data_object->length - (uint8_t)(1 + io_data_object->f_crc_len);
                             } else {
-                                safety_io_data_length = io_data_object->length - F_MESSAGE_TRAILER_5BYTE;
+                                safety_io_data_length = 0;
                             }
 
                             if (safety_io_data_length > 0) {
@@ -880,10 +882,12 @@ dissect_PNIO_C_SDU_RTC1(tvbuff_t *tvb, unsigned offset,
                             proto_tree_add_uint(IODataObject_tree, hf_pn_io_ps_f_dest_adr, tvb, 0, 0, io_data_object->f_dest_adr);
 
                             /* Get Safety IO Data */
-                            if (io_data_object->f_crc_seed == false) {
-                                safety_io_data_length = io_data_object->length - F_MESSAGE_TRAILER_4BYTE;
+                            /* PROFIsafe trailer = StatusByte (1 byte) + CRC length (f_crc_len bytes) */
+                            if (io_data_object->f_crc_len > 0 &&
+                                io_data_object->length > (uint8_t)(1 + io_data_object->f_crc_len)) {
+                                safety_io_data_length = io_data_object->length - (uint8_t)(1 + io_data_object->f_crc_len);
                             } else {
-                                safety_io_data_length = io_data_object->length - F_MESSAGE_TRAILER_5BYTE;
+                                safety_io_data_length = 0;
                             }
 
                             if (safety_io_data_length > 0) {

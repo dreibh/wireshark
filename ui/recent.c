@@ -1680,6 +1680,14 @@ recent_read_static(char **rf_path_return, int *rf_errno_return)
     recent.gui_profile_switch_check_count = 1000;
     recent.gui_fileopen_remembered_dir = NULL;
 
+    /* defaults for the welcome page sidebar */
+    recent.gui_welcome_page_sidebar_learn_visible = true;
+    recent.gui_welcome_page_sidebar_tips_visible = true;
+    recent.gui_welcome_page_sidebar_tips_events = true;
+    recent.gui_welcome_page_sidebar_tips_sponsorship = true;
+    recent.gui_welcome_page_sidebar_tips_tips = true;
+    recent.gui_welcome_page_sidebar_tips_interval = 8;
+
     /* Construct the pathname of the user's recent common file. */
     rf_path = get_persconffile_path(RECENT_COMMON_FILE_NAME, false, application_configuration_environment_prefix());
 
@@ -1740,14 +1748,6 @@ recent_read_profile_static(char **rf_path_return, int *rf_errno_return)
     recent.gui_tsgd_ma_window_size = 1.0;
     recent.gui_tsgd_throughput_show = true;
     recent.gui_tsgd_goodput_show = false;
-
-    /* defaults for the welcome page sidebar */
-    recent.gui_welcome_page_sidebar_learn_visible = true;
-    recent.gui_welcome_page_sidebar_tips_visible = true;
-    recent.gui_welcome_page_sidebar_tips_events = true;
-    recent.gui_welcome_page_sidebar_tips_sponsorship = true;
-    recent.gui_welcome_page_sidebar_tips_tips = true;
-    recent.gui_welcome_page_sidebar_tips_interval = 8;
 
     /* pane size of zero will autodetect */
     recent.gui_geometry_main_upper_pane   = 0;

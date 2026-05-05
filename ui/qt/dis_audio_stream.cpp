@@ -156,6 +156,8 @@ DisAudioStream::DisAudioStream(QObject *parent) :
     sample_rate_(0),
     channels_(1),
     total_playback_secs_(0.0),
+    playback_start_time_(0.0),
+    current_stream_(nullptr),
     stopping_playback_(false)
 {
     progress_timer_->setInterval(50);
@@ -352,9 +354,6 @@ DisAudioStream::playDisStream(const disstream_info_t *stream_info, QString &erro
 
     sample_rate_ = sample_rate;
     channels_ = channels;
-    total_playback_secs_ = (sample_rate_ > 0 && channels_ > 0)
-        ? (double)pcm_buffer_.size() / (SAMPLE_BYTES * channels_ * sample_rate_)
-        : 0.0;
     buildVisualData(stream_info);
 
     stopPlayback();
@@ -363,6 +362,25 @@ DisAudioStream::playDisStream(const disstream_info_t *stream_info, QString &erro
     format.setSampleRate((int)sample_rate);
     format.setChannelCount((int)channels);
     QByteArray playback_pcm = pcm_buffer_;
+    if (stream_info && sample_rate_ > 0 && channels_ > 0 && playback_start_time_ > 0.0) {
+        const double stream_start_time = nstime_to_sec(&stream_info->start_rel_time);
+        const double stream_end_time = nstime_to_sec(&stream_info->stop_rel_time);
+        const double bounded_start = qBound(stream_start_time, playback_start_time_, stream_end_time);
+        const double start_offset_secs = bounded_start - stream_start_time;
+        const qint64 start_frame = qBound<qint64>(0,
+            (qint64)std::floor(start_offset_secs * sample_rate_),
+            pcm_buffer_.size() / (SAMPLE_BYTES * channels_));
+        const qint64 start_byte = start_frame * channels_ * SAMPLE_BYTES;
+
+        if (start_byte > 0 && start_byte < playback_pcm.size()) {
+            playback_pcm = playback_pcm.mid(start_byte);
+        } else if (start_byte >= playback_pcm.size()) {
+            playback_pcm.clear();
+        }
+    }
+    total_playback_secs_ = (sample_rate_ > 0 && channels_ > 0)
+        ? (double)playback_pcm.size() / (SAMPLE_BYTES * channels_ * sample_rate_)
+        : 0.0;
 #if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     format.setSampleFormat(QAudioFormat::Int16);
     QAudioDevice output_device = QMediaDevices::defaultAudioOutput();
@@ -416,6 +434,7 @@ DisAudioStream::playDisStream(const disstream_info_t *stream_info, QString &erro
     }
 
     audio_sink_->start(playback_buffer_);
+    current_stream_ = stream_info;
     progress_timer_->start();
     emit playbackProgress(0.0, total_playback_secs_);
     emit playbackStateChanged(audio_sink_->state());
@@ -453,6 +472,8 @@ DisAudioStream::stopPlayback(bool call_stop)
         playback_buffer_->deleteLater();
         playback_buffer_ = nullptr;
     }
+
+    current_stream_ = nullptr;
 
     stopping_playback_ = false;
 }

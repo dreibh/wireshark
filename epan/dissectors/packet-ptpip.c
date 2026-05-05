@@ -566,8 +566,7 @@ int dissect_ptpIP (tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *da
     offset += 4;
     /* @todo:maybe add some length verification checks to see if len advertised matches actual len */
 
-    pktType = tvb_get_letohl(tvb, offset);
-    proto_tree_add_item(ptp_tree, hf_ptpIP_pktType, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+    proto_tree_add_item_ret_uint(ptp_tree, hf_ptpIP_pktType, tvb, offset, 4, ENC_LITTLE_ENDIAN, &pktType);
     offset += 4;
     switch (pktType) {
         case PTPIP_INIT_COMMAND_REQUEST:

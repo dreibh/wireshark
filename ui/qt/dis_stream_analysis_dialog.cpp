@@ -16,6 +16,7 @@
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QVBoxLayout>
 
 #include "epan/addr_resolv.h"
@@ -52,9 +53,21 @@ DisStreamAnalysisDialog::openDisStreamAnalysisDialog(QWidget &parent, CaptureFil
 void
 DisStreamAnalysisDialog::selectStream(disstream_info_t *stream_info)
 {
+    if (!stream_info) {
+        have_requested_stream_ = false;
+        return;
+    }
+
+    if (have_requested_stream_) {
+        disstream_id_free(&requested_stream_id_);
+    }
+    disstream_id_copy(&stream_info->id, &requested_stream_id_);
+    have_requested_stream_ = true;
+
     for (int i = 0; i < stream_combo_->count(); i++) {
         quintptr ptr = stream_combo_->itemData(i).value<quintptr>();
-        if (reinterpret_cast<disstream_info_t *>(ptr) == stream_info) {
+        disstream_info_t *candidate = reinterpret_cast<disstream_info_t *>(ptr);
+        if (candidate && disstream_id_equal(&candidate->id, &stream_info->id)) {
             stream_combo_->setCurrentIndex(i);
             return;
         }
@@ -74,13 +87,19 @@ DisStreamAnalysisDialog::DisStreamAnalysisDialog(QWidget &parent, CaptureFile &c
     jitter_label_(new QLabel(this)),
     delta_label_(new QLabel(this)),
     codec_label_(new QLabel(this)),
+    hint_label_(new QLabel(this)),
     playback_progress_(new QProgressBar(this)),
     playback_time_label_(new QLabel(this)),
     button_box_(new QDialogButtonBox(QDialogButtonBox::Close, Qt::Horizontal, this)),
     play_button_(nullptr),
     stop_button_(nullptr),
     goto_button_(nullptr),
+    start_marker_pos_(nullptr),
+    playback_marker_pos_(nullptr),
+    start_marker_time_(0.0),
+    playback_marker_time_(0.0),
     need_redraw_(false),
+    have_requested_stream_(false),
     packet_list_(packet_list)
 #ifdef QT_MULTIMEDIA_LIB
     , audio_stream_(new DisAudioStream(this))
@@ -109,7 +128,17 @@ DisStreamAnalysisDialog::DisStreamAnalysisDialog(QWidget &parent, CaptureFile &c
     audio_plot_->yAxis->setLabel(tr("Amplitude"));
     audio_plot_->setInteraction(QCP::iRangeDrag, true);
     audio_plot_->setInteraction(QCP::iRangeZoom, true);
+    start_marker_pos_ = new QCPItemStraightLine(audio_plot_);
+    start_marker_pos_->setPen(QPen(Qt::green, 3));
+    start_marker_pos_->setVisible(false);
+    playback_marker_pos_ = new QCPItemStraightLine(audio_plot_);
+    playback_marker_pos_->setPen(QPen(Qt::black, 1));
+    playback_marker_pos_->setVisible(false);
     layout->addWidget(audio_plot_);
+
+    hint_label_->setTextFormat(Qt::RichText);
+    hint_label_->setWordWrap(true);
+    layout->addWidget(hint_label_);
 
     QHBoxLayout *progress_layout = new QHBoxLayout;
     playback_progress_->setRange(0, 1000);
@@ -146,6 +175,7 @@ DisStreamAnalysisDialog::DisStreamAnalysisDialog(QWidget &parent, CaptureFile &c
 
     connect(stream_combo_, qOverload<int>(&QComboBox::currentIndexChanged), this, &DisStreamAnalysisDialog::onStreamChanged);
     connect(packet_tree_, &QTreeWidget::itemDoubleClicked, this, &DisStreamAnalysisDialog::onPacketRowActivated);
+    connect(audio_plot_, &QCustomPlot::mouseDoubleClick, this, &DisStreamAnalysisDialog::onGraphDoubleClicked);
     connect(button_box_, &QDialogButtonBox::rejected, this, &DisStreamAnalysisDialog::reject);
     connect(goto_button_, &QPushButton::clicked, this, &DisStreamAnalysisDialog::onGoToPacket);
 #ifdef QT_MULTIMEDIA_LIB
@@ -184,6 +214,9 @@ DisStreamAnalysisDialog::~DisStreamAnalysisDialog()
 #ifdef QT_MULTIMEDIA_LIB
     audio_stream_->stopPlayback();
 #endif
+    if (have_requested_stream_) {
+        disstream_id_free(&requested_stream_id_);
+    }
     disstream_reset(&tapinfo_);
     remove_tap_listener_disstream(&tapinfo_);
     pinstance_ = nullptr;
@@ -269,7 +302,9 @@ DisStreamAnalysisDialog::updateStreams()
             .arg(stream_info->id.entity_id_entity);
 
         stream_combo_->addItem(text, QVariant::fromValue((quintptr)stream_info));
-        if (stream_info == previous) {
+        if (have_requested_stream_ && disstream_id_equal(&stream_info->id, &requested_stream_id_)) {
+            selected_index = idx;
+        } else if (!have_requested_stream_ && stream_info == previous) {
             selected_index = idx;
         }
         idx++;
@@ -285,6 +320,11 @@ DisStreamAnalysisDialog::updateStreams()
         stream_combo_->setCurrentIndex(0);
     }
 
+    if (have_requested_stream_ && selected_index >= 0) {
+        disstream_id_free(&requested_stream_id_);
+        have_requested_stream_ = false;
+    }
+
     stream_combo_->blockSignals(false);
     need_redraw_ = false;
     updateAnalysis();
@@ -298,6 +338,8 @@ DisStreamAnalysisDialog::updateAnalysis()
     double duration;
 
     if (!stream_info) {
+        start_marker_time_ = 0.0;
+        setPlaybackMarker(0.0, false);
         duration_label_->setText(tr("-"));
         packets_label_->setText(tr("-"));
         signal_label_->setText(tr("-"));
@@ -308,8 +350,11 @@ DisStreamAnalysisDialog::updateAnalysis()
         codec_label_->setText(tr("-"));
         updatePacketRows();
         updatePlot();
+        updateHintLabel();
         return;
     }
+
+    setStartPlayMarker(selectedStartTime());
 
     duration = nstime_to_sec(&stream_info->stop_rel_time) - nstime_to_sec(&stream_info->start_rel_time);
     duration_label_->setText(QString::number(duration, 'f', 3));
@@ -326,6 +371,7 @@ DisStreamAnalysisDialog::updateAnalysis()
     codec_label_->setText(stream_info->payload_type_str ? stream_info->payload_type_str : tr("Unknown"));
     updatePacketRows();
     updatePlot();
+    updateHintLabel();
 }
 
 void
@@ -422,9 +468,75 @@ DisStreamAnalysisDialog::updatePlot()
 
     audio_plot_->xAxis->rescale(true);
     audio_plot_->yAxis->setRange(-1.4, 1.4);
+    drawStartPlayMarker();
+    drawPlaybackMarker();
 #endif
 
     audio_plot_->replot();
+}
+
+double
+DisStreamAnalysisDialog::selectedStartTime() const
+{
+    return start_marker_time_;
+}
+
+void
+DisStreamAnalysisDialog::setStartPlayMarker(double new_time)
+{
+    disstream_info_t *stream_info = selectedStream();
+
+    if (!stream_info) {
+        start_marker_time_ = 0.0;
+        return;
+    }
+
+    const double stream_start = nstime_to_sec(&stream_info->start_rel_time);
+    const double stream_stop = nstime_to_sec(&stream_info->stop_rel_time);
+
+    if (new_time <= 0.0) {
+        start_marker_time_ = stream_start;
+    } else {
+        start_marker_time_ = qBound(stream_start, new_time, stream_stop);
+    }
+}
+
+void
+DisStreamAnalysisDialog::drawStartPlayMarker()
+{
+    if (!start_marker_pos_) {
+        return;
+    }
+
+    disstream_info_t *stream_info = selectedStream();
+    if (!stream_info) {
+        start_marker_pos_->setVisible(false);
+        return;
+    }
+
+    start_marker_pos_->point1->setCoords(start_marker_time_, 0.0);
+    start_marker_pos_->point2->setCoords(start_marker_time_, 1.0);
+    start_marker_pos_->setVisible(true);
+}
+
+void
+DisStreamAnalysisDialog::setPlaybackMarker(double new_time, bool visible)
+{
+    playback_marker_time_ = new_time;
+    if (playback_marker_pos_) {
+        playback_marker_pos_->setVisible(visible);
+    }
+}
+
+void
+DisStreamAnalysisDialog::drawPlaybackMarker()
+{
+    if (!playback_marker_pos_ || !playback_marker_pos_->visible()) {
+        return;
+    }
+
+    playback_marker_pos_->point1->setCoords(playback_marker_time_, 0.0);
+    playback_marker_pos_->point2->setCoords(playback_marker_time_, 1.0);
 }
 
 void
@@ -449,8 +561,36 @@ DisStreamAnalysisDialog::updateWidgets()
 }
 
 void
+DisStreamAnalysisDialog::updateHintLabel()
+{
+    disstream_info_t *stream_info = selectedStream();
+    QString hint = QStringLiteral("<small><i>");
+
+    if (!stream_info) {
+        hint += tr("Double click on graph to set start of playback.");
+    } else {
+        hint += tr("Start: %1 s. Double click on graph to set start of playback.")
+            .arg(QString::number(selectedStartTime(), 'f', 6));
+    }
+
+    hint += QStringLiteral("</i></small>");
+    hint_label_->setText(hint);
+}
+
+void
 DisStreamAnalysisDialog::onStreamChanged(int index _U_)
 {
+#ifdef QT_MULTIMEDIA_LIB
+    disstream_info_t *stream_info = selectedStream();
+
+    if (audio_stream_->currentStream() != nullptr &&
+        audio_stream_->currentStream() != stream_info &&
+        (audio_stream_->isPlaying() || audio_stream_->isPaused())) {
+        audio_stream_->stopPlayback();
+        playback_progress_->setValue(0);
+        playback_time_label_->setText(tr("0.000 / 0.000 s"));
+    }
+#endif
     updateAnalysis();
     updateWidgets();
 }
@@ -480,6 +620,19 @@ DisStreamAnalysisDialog::onPacketRowActivated(QTreeWidgetItem *item, int column 
     }
 }
 
+void
+DisStreamAnalysisDialog::onGraphDoubleClicked(QMouseEvent *event)
+{
+    if (!event || event->button() != Qt::LeftButton) {
+        return;
+    }
+
+    setStartPlayMarker(audio_plot_->xAxis->pixelToCoord(event->pos().x()));
+    drawStartPlayMarker();
+    updateHintLabel();
+    audio_plot_->replot();
+}
+
 #ifdef QT_MULTIMEDIA_LIB
 void
 DisStreamAnalysisDialog::onPlayPauseStream()
@@ -488,17 +641,22 @@ DisStreamAnalysisDialog::onPlayPauseStream()
     QString error_message;
 
     if (audio_stream_->playbackState() == QAudio::ActiveState) {
-        audio_stream_->pausePlayback();
-        updateWidgets();
-        return;
+        if (audio_stream_->currentStream() == stream_info) {
+            audio_stream_->pausePlayback();
+            updateWidgets();
+            return;
+        }
     }
 
     if (audio_stream_->isPaused()) {
-        audio_stream_->resumePlayback();
-        updateWidgets();
-        return;
+        if (audio_stream_->currentStream() == stream_info) {
+            audio_stream_->resumePlayback();
+            updateWidgets();
+            return;
+        }
     }
 
+    audio_stream_->setPlaybackStartTime(selectedStartTime());
     if (!audio_stream_->playDisStream(stream_info, error_message)) {
         QMessageBox::warning(this, tr("DIS Playback"), error_message);
         return;
@@ -516,6 +674,8 @@ DisStreamAnalysisDialog::onStopStream()
     audio_stream_->stopPlayback();
     playback_progress_->setValue(0);
     playback_time_label_->setText(tr("0.000 / 0.000 s"));
+    setPlaybackMarker(0.0, false);
+    audio_plot_->replot();
     updateWidgets();
 }
 
@@ -533,11 +693,20 @@ DisStreamAnalysisDialog::onPlaybackProgress(double position_secs, double duratio
     playback_time_label_->setText(QStringLiteral("%1 / %2 s")
         .arg(QString::number(position_secs, 'f', 3))
         .arg(QString::number(duration_secs, 'f', 3)));
+
+    const double absolute_time = selectedStartTime() + position_secs;
+    setPlaybackMarker(absolute_time, true);
+    drawPlaybackMarker();
+    audio_plot_->replot(QCustomPlot::rpQueuedReplot);
 }
 
 void
-DisStreamAnalysisDialog::onPlaybackStateChanged(QAudio::State state _U_)
+DisStreamAnalysisDialog::onPlaybackStateChanged(QAudio::State state)
 {
+    if (state == QAudio::StoppedState || state == QAudio::IdleState) {
+        setPlaybackMarker(0.0, false);
+        audio_plot_->replot(QCustomPlot::rpQueuedReplot);
+    }
     updateWidgets();
 }
 #endif

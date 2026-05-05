@@ -19297,13 +19297,15 @@ static int dissect_DIS_PARSER_SIGNAL_PDU(tvbuff_t *tvb, packet_info *pinfo, prot
     proto_tree_add_item(tree, hf_dis_tdl_type, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
-    proto_tree_add_item(tree, hf_dis_sample_rate, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item_ret_uint(tree, hf_dis_sample_rate, tvb, offset, 4, ENC_BIG_ENDIAN,
+        &dis_info->info_sample_rate);
     offset += 4;
 
     proto_tree_add_item(tree, hf_dis_data_length, tvb, offset, 2, ENC_BIG_ENDIAN);
     offset += 2;
 
     numSamples = tvb_get_ntohs(tvb, offset);
+    dis_info->info_num_samples = numSamples;
     proto_tree_add_item(tree, hf_dis_num_of_samples, tvb, offset, 2, ENC_BIG_ENDIAN);
     if (numSamples)
         col_append_fstr(pinfo->cinfo, COL_INFO, ", Number of Samples=%u", numSamples);

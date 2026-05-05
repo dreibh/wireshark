@@ -1301,7 +1301,7 @@ static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
         return;
     }
 
-    bool hit = false;
+    bool pause_for_step = false;
 
     /* Single-step modes (step in / over / out) */
     wslua_step_kind_t step_kind;
@@ -1340,17 +1340,19 @@ static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
         }
         if (step_done)
         {
-            hit = true;
+            pause_for_step = true;
             g_mutex_lock(&debugger.mutex);
             debugger.step_kind = WSLUA_STEP_KIND_NONE;
             g_mutex_unlock(&debugger.mutex);
         }
     }
 
+    bool pause_for_bp = false;
+
     /* Check regular breakpoints (with hit-count gate, condition, and
      * logpoint handling). */
-    if (!hit && bp_site_set_contains(norm_source,
-                                       (int64_t)debug_info->currentline))
+    if (bp_site_set_contains(norm_source,
+                             (int64_t)debug_info->currentline))
     {
         /* Fast-path filter: most lines aren't breakpoint sites. The
          * @ref bp_site_set lookup above runs under a read-rwlock and
@@ -1590,12 +1592,12 @@ static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
                      * pause path below reinstalls it on resume. */
                     if (log_also_pause_snapshot)
                     {
-                        hit = true;
+                        pause_for_bp = true;
                     }
                 }
                 else
                 {
-                    hit = true;
+                    pause_for_bp = true;
                 }
             }
 
@@ -1604,7 +1606,7 @@ static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
              * path reinstalls it itself; on no-pause exits (logpoint
              * fired, condition false, condition error) we need to put
              * the line hook back so subsequent lines still trip it. */
-            if (eval_invoked && !hit)
+            if (eval_invoked && !pause_for_bp)
             {
                 g_mutex_lock(&debugger.mutex);
                 const bool reinstall = debugger.enabled;
@@ -1619,6 +1621,8 @@ static void wslua_debug_hook(lua_State *L, lua_Debug *debug_info)
         g_free(condition_snapshot);
         g_free(log_message_snapshot);
     }
+
+    bool hit = pause_for_step || pause_for_bp;
 
     /* Check temp breakpoint */
     if (!hit)

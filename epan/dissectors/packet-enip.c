@@ -37,6 +37,7 @@
 #include <epan/proto_data.h>
 #include <epan/tfs.h>
 #include <epan/iana-info.h>
+#include <epan/to_str.h>
 
 #include "packet-tcp.h"
 #include "packet-cip.h"
@@ -443,6 +444,53 @@ static int hf_lldp_mngmt_datastore_netconf_yang;
 static int hf_lldp_mngmt_datastore_reserved;
 static int hf_lldp_mngmt_last_change;
 
+static int hf_lldp_datatbl_elink_instance;
+static int hf_lldp_datatbl_mac_address;
+static int hf_lldp_datatbl_interface_label;
+static int hf_lldp_datatbl_time_to_time;
+static int hf_lldp_datatbl_system_capabilities;
+static int hf_lldp_datatbl_syscap_other;
+static int hf_lldp_datatbl_syscap_repeater;
+static int hf_lldp_datatbl_syscap_bridge;
+static int hf_lldp_datatbl_syscap_access_point;
+static int hf_lldp_datatbl_syscap_router;
+static int hf_lldp_datatbl_syscap_telephone;
+static int hf_lldp_datatbl_syscap_docsis;
+static int hf_lldp_datatbl_syscap_end_station;
+static int hf_lldp_datatbl_syscap_cvlan;
+static int hf_lldp_datatbl_syscap_svlan;
+static int hf_lldp_datatbl_syscap_two_port_mac_relay;
+static int hf_lldp_datatbl_syscap_reserved;
+static int hf_lldp_datatbl_enabled_capabilities;
+static int hf_lldp_datatbl_encap_other;
+static int hf_lldp_datatbl_encap_repeater;
+static int hf_lldp_datatbl_encap_bridge;
+static int hf_lldp_datatbl_encap_access_point;
+static int hf_lldp_datatbl_encap_router;
+static int hf_lldp_datatbl_encap_telephone;
+static int hf_lldp_datatbl_encap_docsis;
+static int hf_lldp_datatbl_encap_end_station;
+static int hf_lldp_datatbl_encap_cvlan;
+static int hf_lldp_datatbl_encap_svlan;
+static int hf_lldp_datatbl_encap_two_port_mac_relay;
+static int hf_lldp_datatbl_encap_reserved;
+static int hf_lldp_datatbl_mngmt_addr_count;
+static int hf_lldp_datatbl_mngmt_addr;
+static int hf_lldp_datatbl_cip_id_vendor_id;
+static int hf_lldp_datatbl_cip_id_device_type;
+static int hf_lldp_datatbl_cip_id_product_code;
+static int hf_lldp_datatbl_cip_id_major_revision;
+static int hf_lldp_datatbl_cip_id_minor_revision;
+static int hf_lldp_datatbl_cip_id_serial_number;
+static int hf_lldp_datatbl_ethcap_preemption_support;
+static int hf_lldp_datatbl_ethcap_preemption_status;
+static int hf_lldp_datatbl_ethcap_preemption_active;
+static int hf_lldp_datatbl_ethcap_add_frag_size;
+static int hf_lldp_datatbl_last_change;
+static int hf_lldp_datatbl_position_id;
+static int hf_lldp_datatbl_phy_mode;
+static int hf_lldp_datatbl_phy_node_id;
+
 /* Initialize the subtree pointers */
 static int ett_enip;
 static int ett_cip_io_generic;
@@ -475,6 +523,8 @@ static int ett_ingress_egress_apply_behavior;
 static int ett_iana_port_state_flags;
 static int ett_lldp_mngmt_enable;
 static int ett_lldp_mngmt_datastore;
+static int ett_lldp_datatbl_system_capabilities;
+static int ett_lldp_datatbl_enabled_capabilities;
 static int ett_connection_info;
 static int ett_connection_path_info;
 static int ett_cmd_data;
@@ -511,6 +561,12 @@ static expert_field ei_mal_eip_cert_capability_flags;
 static expert_field ei_mal_cpf_item_length_mismatch;
 static expert_field ei_mal_cpf_item_minimum_size;
 static expert_field ei_mal_lldp_mngmt_datastore;
+static expert_field ei_mal_datatbl_system_capabilities;
+static expert_field ei_mal_datatbl_management_address;
+static expert_field ei_mal_datatbl_cip_identification;
+static expert_field ei_mal_datatbl_eth_capabilities;
+static expert_field ei_mal_datatbl_last_change;
+static expert_field ei_mal_datatbl_t1s_phy_config;
 
 static expert_field ei_cip_request_no_response;
 static expert_field ei_cip_io_heartbeat;
@@ -899,6 +955,22 @@ static const value_string cip_data_direction[] = {
    { ECIDT_UNKNOWN, "Unknown" },
    { ECIDT_O2T, "O->T" },
    { ECIDT_T2O, "T->O" },
+
+   { 0, NULL }
+};
+
+static const value_string lldp_datatbl_add_frag_size_vals[] = {
+   { 0, "64 octets" },
+   { 1, "128 octets" },
+   { 2, "192 octets" },
+   { 3, "256 octets" },
+
+   { 0, NULL }
+};
+
+static const value_string lldp_datatbl_phy_mode_vals[] = {
+   { 0, "CSMA/CD" },
+   { 1, "PLCA" },
 
    { 0, NULL }
 };
@@ -2708,6 +2780,181 @@ static int dissect_lldp_mngmt_datastore(packet_info* pinfo _U_, proto_tree* tree
    return 2;
 }
 
+static int dissect_lldp_datatbl_system_capabilities(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb, int offset, int total_len _U_)
+{
+   static int* const system_capability_bits[] = {
+       &hf_lldp_datatbl_syscap_other,
+       &hf_lldp_datatbl_syscap_repeater,
+       &hf_lldp_datatbl_syscap_bridge,
+       &hf_lldp_datatbl_syscap_access_point,
+       &hf_lldp_datatbl_syscap_router,
+       &hf_lldp_datatbl_syscap_telephone,
+       &hf_lldp_datatbl_syscap_docsis,
+       &hf_lldp_datatbl_syscap_end_station,
+       &hf_lldp_datatbl_syscap_cvlan,
+       &hf_lldp_datatbl_syscap_svlan,
+       &hf_lldp_datatbl_syscap_two_port_mac_relay,
+       &hf_lldp_datatbl_syscap_reserved,
+       NULL
+   };
+
+   static int* const enabled_capability_bits[] = {
+       &hf_lldp_datatbl_encap_other,
+       &hf_lldp_datatbl_encap_repeater,
+       &hf_lldp_datatbl_encap_bridge,
+       &hf_lldp_datatbl_encap_access_point,
+       &hf_lldp_datatbl_encap_router,
+       &hf_lldp_datatbl_encap_telephone,
+       &hf_lldp_datatbl_encap_docsis,
+       &hf_lldp_datatbl_encap_end_station,
+       &hf_lldp_datatbl_encap_cvlan,
+       &hf_lldp_datatbl_encap_svlan,
+       &hf_lldp_datatbl_encap_two_port_mac_relay,
+       &hf_lldp_datatbl_encap_reserved,
+       NULL
+   };
+
+   if (total_len < 4)
+   {
+      expert_add_info(pinfo, item, &ei_mal_datatbl_system_capabilities);
+      return total_len;
+   }
+
+   proto_tree_add_bitmask(tree, tvb, offset, hf_lldp_datatbl_system_capabilities, ett_lldp_datatbl_system_capabilities, system_capability_bits, ENC_LITTLE_ENDIAN);
+   offset += 2;
+
+   proto_tree_add_bitmask(tree, tvb, offset, hf_lldp_datatbl_enabled_capabilities, ett_lldp_datatbl_enabled_capabilities, enabled_capability_bits, ENC_LITTLE_ENDIAN);
+   offset += 2;
+
+   return offset;
+}
+
+static int dissect_lldp_datatbl_management_address(packet_info* pinfo, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb, int offset, int total_len _U_)
+{
+   uint32_t addr_count;
+
+   if (total_len < 1)
+   {
+      expert_add_info(pinfo, item, &ei_mal_datatbl_management_address);
+      return total_len;
+   }
+
+   proto_tree_add_item_ret_uint(tree, hf_lldp_datatbl_mngmt_addr_count, tvb, offset, 1, ENC_LITTLE_ENDIAN, &addr_count);
+   offset += 1;
+
+   for (uint32_t i = 0; i < addr_count; i++) {
+      proto_tree_add_ipv4_format(tree, hf_lldp_datatbl_mngmt_addr, tvb, offset, 4, tvb_get_ipv4(tvb, offset), "Management Address %u: %s", i + 1, tvb_ip_to_str(pinfo->pool, tvb, offset));
+      offset += 4;
+   }
+
+   return offset;
+}
+
+static int dissect_lldp_datatbl_cip_identification(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb, int offset, int total_len _U_)
+{
+   if (total_len < 12)
+   {
+      expert_add_info(pinfo, item, &ei_mal_datatbl_cip_identification);
+      return total_len;
+   }
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_cip_id_vendor_id, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+   offset += 2;
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_cip_id_device_type, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+   offset += 2;
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_cip_id_product_code, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+   offset += 2;
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_cip_id_major_revision, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+   offset += 1;
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_cip_id_minor_revision, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+   offset += 1;
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_cip_id_serial_number, tvb, offset, 4, ENC_LITTLE_ENDIAN);
+   offset += 4;
+
+   return offset;
+}
+
+static int dissect_lldp_datatbl_eth_capabilities(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb, int offset, int total_len _U_)
+{
+   uint8_t frag_size;
+
+   if (total_len < 4)
+   {
+      expert_add_info(pinfo, item, &ei_mal_datatbl_eth_capabilities);
+      return total_len;
+   }
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_ethcap_preemption_support, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+   offset += 1;
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_ethcap_preemption_status, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+   offset += 1;
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_ethcap_preemption_active, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+   offset += 1;
+
+   frag_size = tvb_get_uint8(tvb, offset);
+   if (frag_size >= 4) {
+      proto_tree_add_uint_format_value(tree, hf_lldp_datatbl_ethcap_add_frag_size, tvb, offset, 1, frag_size, "%u (Reserved)", frag_size);
+   }
+   else {
+      proto_tree_add_item(tree, hf_lldp_datatbl_ethcap_add_frag_size, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+   }
+   offset += 1;
+
+   return offset;
+}
+
+static int dissect_lldp_datatbl_last_change(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb, int offset, int total_len _U_)
+{
+   uint32_t centiseconds;
+   double  seconds;
+
+   if (total_len < 4)
+   {
+      expert_add_info(pinfo, item, &ei_mal_datatbl_last_change);
+      return total_len;
+   }
+
+   centiseconds = tvb_get_letohl(tvb, offset);
+   seconds = centiseconds / 100.0;
+
+   proto_tree_add_uint_format_value(tree, hf_lldp_datatbl_last_change, tvb, offset, 4, centiseconds, "%.2f seconds (%u hundredths of a second)", seconds, centiseconds);
+   offset += 4;
+
+   return offset;
+}
+
+static int dissect_lldp_datatbl_t1s_phy_config(packet_info* pinfo _U_, proto_tree* tree, proto_item* item _U_, tvbuff_t* tvb, int offset, int total_len _U_)
+{
+   uint8_t phy_mode;
+
+   if (total_len < 2)
+   {
+      expert_add_info(pinfo, item, &ei_mal_datatbl_t1s_phy_config);
+      return total_len;
+   }
+
+   phy_mode = tvb_get_uint8(tvb, offset);
+   if (phy_mode >= 2) {
+      proto_tree_add_uint_format_value(tree, hf_lldp_datatbl_phy_mode, tvb, offset, 1, phy_mode, "%u (Reserved)", phy_mode);
+   }
+   else {
+      proto_tree_add_item(tree, hf_lldp_datatbl_phy_mode, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+   }
+   offset += 1;
+
+   proto_tree_add_item(tree, hf_lldp_datatbl_phy_node_id, tvb, offset, 1, ENC_LITTLE_ENDIAN);
+   offset += 1;
+
+   return offset;
+}
+
 const attribute_info_t enip_attribute_vals[] = {
 
     /* TCP/IP Object (class attributes) */
@@ -2840,6 +3087,19 @@ const attribute_info_t enip_attribute_vals[] = {
    {0x109, CIP_ATTR_INSTANCE, 4, 3, "LLDP Datastore", cip_dissector_func, NULL, dissect_lldp_mngmt_datastore},
    {0x109, CIP_ATTR_INSTANCE, 5, 4, "Last Change", cip_udint, &hf_lldp_mngmt_last_change, NULL},
 
+   // LLDP Data Table Object
+   {0x10A, CIP_ATTR_INSTANCE, 1, 0, "Ethernet Link Instance Number", cip_uint, &hf_lldp_datatbl_elink_instance, NULL},
+   {0x10A, CIP_ATTR_INSTANCE, 2, 1, "MAC Address", cip_dissector_func, NULL, dissect_cip_mac_address},
+   {0x10A, CIP_ATTR_INSTANCE, 3, 2, "Interface Label", cip_short_string, &hf_lldp_datatbl_interface_label, NULL},
+   {0x10A, CIP_ATTR_INSTANCE, 4, 3, "Time to Live", cip_uint, &hf_lldp_datatbl_time_to_time, NULL},
+   {0x10A, CIP_ATTR_INSTANCE, 5, 4, "System Capabilities TLV", cip_dissector_func, NULL, dissect_lldp_datatbl_system_capabilities},
+   {0x10A, CIP_ATTR_INSTANCE, 6, 5, "IPv4 Management Addresses", cip_dissector_func, NULL, dissect_lldp_datatbl_management_address},
+   {0x10A, CIP_ATTR_INSTANCE, 7, 6, "CIP Identification", cip_dissector_func, NULL, dissect_lldp_datatbl_cip_identification},
+   {0x10A, CIP_ATTR_INSTANCE, 8, 7, "Additional Ethernet Capabilities", cip_dissector_func, NULL, dissect_lldp_datatbl_eth_capabilities},
+   {0x10A, CIP_ATTR_INSTANCE, 9, 8, "Last Change", cip_dissector_func, NULL, dissect_lldp_datatbl_last_change},
+   {0x10A, CIP_ATTR_INSTANCE, 10, 9, "Position ID", cip_uint, &hf_lldp_datatbl_position_id, NULL},
+   { 0x10A, CIP_ATTR_INSTANCE, 11, 10, "T1S PHY Configuration", cip_dissector_func, NULL, dissect_lldp_datatbl_t1s_phy_config},
+
    /* CIP Security Object (instance attributes) */
    {0x5D, CIP_ATTR_INSTANCE, 1, 0, "State", cip_usint, &hf_cip_security_state, NULL},
    {0x5D, CIP_ATTR_INSTANCE, 2, 1, "Security Profiles", cip_dissector_func, NULL, dissect_cip_security_profiles },
@@ -2897,7 +3157,6 @@ const attribute_info_t enip_attribute_vals[] = {
    /* Ingress Egress Object (instance attributes) */
    {0x63, false, 1, 0, "Ingress Rules", cip_dissector_func, NULL, dissect_ingress_egress_rules},
    {0x63, false, 2, 1, "Egress Rules", cip_dissector_func, NULL, dissect_ingress_egress_rules},
-
 };
 
 // Table of CIP services defined by this dissector.
@@ -2932,6 +3191,7 @@ static cip_service_info_t enip_obj_spec_service_table[] = {
     { 0xF5, 0x4C, "Set_Port_Admin_State", dissect_tcpip_set_port_admin_state },
     { 0xF5, 0x4D, "Set_Protocol_Admin_State", dissect_tcpip_set_protocol_admin_state },
 };
+//static_assert(array_length(enip_attribute_vals) == ENIP_ATTRIBUTE_VALS_LEN, "enip_attribute_vals size mismatch - update ENIP_ATTRIBUTE_VALS_LEN in packet-enip.h");
 
 // Look up a given CIP service from this dissector.
 cip_service_info_t* cip_get_service_enip(uint32_t class_id, uint8_t service_id)
@@ -4356,6 +4616,53 @@ proto_register_enip(void)
       { &hf_lldp_mngmt_datastore_reserved, { "Reserved", "cip.lldpmngmnt.lldp_datastore.reserved", FT_UINT16, BASE_HEX, NULL, 0xFFF8, NULL, HFILL } },
       { &hf_lldp_mngmt_last_change, { "Last Change", "cip.lldpmngmnt.last_change", FT_UINT32, BASE_CUSTOM, CF_FUNC(enip_lldp_mngmnt_last_change), 0, NULL, HFILL}},
 
+      { &hf_lldp_datatbl_elink_instance, { "Ethernet Link Instance Number", "cip.lldpdatatbl.elink_instance", FT_UINT16, BASE_DEC, NULL, 0, NULL, HFILL }},
+      { &hf_lldp_datatbl_mac_address, { "MAC Address", "cip.lldpdatatbl.mac_address", FT_ETHER, BASE_NONE, NULL, 0, NULL, HFILL } },
+      { &hf_lldp_datatbl_interface_label, { "Interface Label", "cip.lldpdatatbl.interface_label", FT_STRING, BASE_NONE, NULL, 0, NULL, HFILL } },
+      { &hf_lldp_datatbl_time_to_time, { "Time to Live", "cip.lldpdatatbl.time_to_live", FT_UINT16, BASE_DEC | BASE_UNIT_STRING, UNS(&units_second_seconds), 0, NULL, HFILL } },
+      { &hf_lldp_datatbl_system_capabilities, { "System Capabilities", "cip.lldpdatatbl.system_capabilities", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_other, { "Other", "cip.lldpdatatbl.syscap.other", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0001, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_repeater, { "Repeater", "cip.lldpdatatbl.syscap.repeater", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0002, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_bridge, { "Bridge", "cip.lldpdatatbl.syscap.bridge", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0004, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_access_point, { "Access Point", "cip.lldpdatatbl.syscap.access_point", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0008, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_router, { "Router", "cip.lldpdatatbl.syscap.router", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0010, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_telephone, { "Telephone", "cip.lldpdatatbl.syscap.telephone", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0020, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_docsis, { "DOCSIS Cable Device", "cip.lldpdatatbl.syscap.docsis", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0040, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_end_station, { "End Station", "cip.lldpdatatbl.syscap.end_station", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0080, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_cvlan, { "C-VLAN Component", "cip.lldpdatatbl.syscap.cvlan", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0100, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_svlan, { "S-VLAN Component", "cip.lldpdatatbl.syscap.svlan", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0200, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_two_port_mac_relay, { "Two-port MAC Relay Component", "cip.lldpdatatbl.syscap.two_port_mac_relay", FT_BOOLEAN, 16, TFS(&tfs_capable_not_capable), 0x0400, NULL, HFILL } },
+      { &hf_lldp_datatbl_syscap_reserved, { "Reserved", "cip.lldpdatatbl.syscap.reserved", FT_BOOLEAN, 16, NULL, 0xF800, NULL, HFILL } },
+      { &hf_lldp_datatbl_enabled_capabilities, { "Enabled Capabilities", "cip.lldpdatatbl.enabled_capabilities", FT_UINT16, BASE_HEX, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_other, { "Other", "cip.lldpdatatbl.encap.other", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0001, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_repeater, { "Repeater", "cip.lldpdatatbl.encap.repeater", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0002, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_bridge, { "Bridge", "cip.lldpdatatbl.encap.bridge", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0004, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_access_point, { "Access Point", "cip.lldpdatatbl.encap.access_point", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0008, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_router, { "Router", "cip.lldpdatatbl.encap.router", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0010, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_telephone, { "Telephone", "cip.lldpdatatbl.encap.telephone", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0020, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_docsis, { "DOCSIS Cable Device", "cip.lldpdatatbl.encap.docsis", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0040, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_end_station, { "End Station", "cip.lldpdatatbl.encap.end_station", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0080, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_cvlan, { "C-VLAN Component", "cip.lldpdatatbl.encap.cvlan", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0100, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_svlan, { "S-VLAN Component", "cip.lldpdatatbl.encap.svlan", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0200, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_two_port_mac_relay, { "Two-port MAC Relay Component", "cip.lldpdatatbl.encap.two_port_mac_relay", FT_BOOLEAN, 16, TFS(&tfs_enabled_disabled), 0x0400, NULL, HFILL } },
+      { &hf_lldp_datatbl_encap_reserved, { "Reserved", "cip.lldpdatatbl.encap.reserved", FT_BOOLEAN, 16, NULL, 0xF800, NULL, HFILL } },
+      { &hf_lldp_datatbl_mngmt_addr_count, { "Management Address Count", "cip.lldpdatatbl.mngmt_addr_count", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_mngmt_addr, { "Management Address", "cip.lldpdatatbl.mngmt_addr", FT_IPv4, BASE_NONE, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_cip_id_vendor_id,{ "Vendor ID", "cip.lldpdatatbl.cip_id.vendor_id", FT_UINT16, BASE_HEX | BASE_EXT_STRING, &cip_vendor_vals_ext, 0, NULL, HFILL } },
+      { &hf_lldp_datatbl_cip_id_device_type, { "Device Type", "cip.lldpdatatbl.cip_id.device_type", FT_UINT16, BASE_HEX | BASE_EXT_STRING, &cip_devtype_vals_ext, 0, NULL, HFILL } },
+      { &hf_lldp_datatbl_cip_id_product_code, { "Product Code", "cip.lldpdatatbl.cip_id.product_code", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_cip_id_major_revision, { "Major Revision", "cip.lldpdatatbl.cip_id.major_revision", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_cip_id_minor_revision, { "Minor Revision", "cip.lldpdatatbl.cip_id.minor_revision", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_cip_id_serial_number, { "CIP Serial Number", "cip.lldpdatatbl.cip_id.serial_number", FT_UINT32, BASE_HEX, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_ethcap_preemption_support, { "Preemption Support", "cip.lldpdatatbl.ethcap.preemption_support", FT_BOOLEAN, BASE_NONE, TFS(&tfs_supported_not_supported), 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_ethcap_preemption_status, { "Preemption Status", "cip.lldpdatatbl.ethcap.preemption_status", FT_BOOLEAN, BASE_NONE, TFS(&tfs_enabled_disabled), 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_ethcap_preemption_active, { "Preemption Active", "cip.lldpdatatbl.ethcap.preemption_active", FT_BOOLEAN, BASE_NONE, TFS(&tfs_active_inactive), 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_ethcap_add_frag_size, { "Additional Fragment Size", "cip.lldpdatatbl.ethcap.add_frag_size", FT_UINT8, BASE_DEC, VALS(lldp_datatbl_add_frag_size_vals), 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_last_change, { "Last Change", "cip.lldpdatatbl.last_change", FT_UINT32, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_position_id, { "Position ID", "cip.lldpdatatbl.position_id", FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_phy_mode, { "PHY Mode", "cip.lldpdatatbl.t1s.phy_mode", FT_UINT8, BASE_DEC, VALS(lldp_datatbl_phy_mode_vals), 0x0, NULL, HFILL } },
+      { &hf_lldp_datatbl_phy_node_id, { "PHY Node ID for PLCA", "cip.lldpdatatbl.t1s.phy_node_id", FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL } },
+
       { &hf_enip_iana_port_state_flags,
         { "IANA Port State", "enip.iana_port_state_flags",
           FT_UINT8, BASE_HEX, NULL, 0,
@@ -5556,6 +5863,8 @@ proto_register_enip(void)
       &ett_iana_port_state_flags,
       &ett_lldp_mngmt_datastore,
       &ett_lldp_mngmt_enable,
+      &ett_lldp_datatbl_system_capabilities,
+      &ett_lldp_datatbl_enabled_capabilities,
       &ett_connection_info,
       &ett_connection_path_info,
       &ett_cmd_data
@@ -5594,6 +5903,12 @@ proto_register_enip(void)
       { &ei_mal_cpf_item_length_mismatch, { "enip.malformed.cpf_item_length_mismatch", PI_MALFORMED, PI_ERROR, "CPF Item Length Mismatch", EXPFILL } },
       { &ei_mal_cpf_item_minimum_size, { "enip.malformed.cpf_item_minimum_size", PI_MALFORMED, PI_ERROR, "CPF Item Minimum Size is 4", EXPFILL } },
       { &ei_mal_lldp_mngmt_datastore, { "cip.malformed.lldp.lldp_datastore", PI_MALFORMED, PI_ERROR, "Malformed LLDP Datastore", EXPFILL }},
+      { &ei_mal_datatbl_system_capabilities, { "cip.malformed.lldp.system_capabilities", PI_MALFORMED, PI_ERROR, "Malformed LLDP System Capabilities", EXPFILL }},
+      { &ei_mal_datatbl_management_address, { "cip.malformed.lldp.management_address", PI_MALFORMED, PI_ERROR, "Malformed LLDP Management Address", EXPFILL }},
+      { &ei_mal_datatbl_cip_identification, { "cip.malformed.lldp.cip_identification", PI_MALFORMED, PI_ERROR, "Malformed LLDP CIP Identification", EXPFILL }},
+      { &ei_mal_datatbl_eth_capabilities, { "cip.malformed.lldp.eth_capabilities", PI_MALFORMED, PI_ERROR, "Malformed LLDP ETH Capabilities", EXPFILL }},
+      { &ei_mal_datatbl_last_change, { "cip.malformed.lldp.last_change", PI_MALFORMED, PI_ERROR, "Malformed LLDP Last Change", EXPFILL }},
+      { &ei_mal_datatbl_t1s_phy_config, { "cip.malformed.lldp.t1s_phy_config", PI_MALFORMED, PI_ERROR, "Malformed LLDP T1S PHY Config", EXPFILL }},
 
       // Analysis Checks
       { &ei_cip_request_no_response, { "cip.analysis.request_no_response", PI_PROTOCOL, PI_NOTE, "CIP request without a response", EXPFILL } },

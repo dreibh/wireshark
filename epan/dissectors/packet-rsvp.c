@@ -6578,8 +6578,7 @@ dissect_rsvp_3gpp_object(proto_tree *ti, packet_info* pinfo, proto_tree *rsvp_ob
             length = tvb_get_ntohs(tvb, offset);
             proto_tree_add_item(rsvp_object_tree, hf_rsvp_3gpp_obj_ie_len, tvb, offset, 2, ENC_BIG_ENDIAN);
             offset+=2;
-            ie_type = tvb_get_ntohs(tvb, offset);
-            proto_tree_add_item(rsvp_object_tree, hf_rsvp_3gpp_obj_ie_type, tvb, offset, 2, ENC_BIG_ENDIAN);
+            proto_tree_add_item_ret_uint16(rsvp_object_tree, hf_rsvp_3gpp_obj_ie_type, tvb, offset, 2, ENC_BIG_ENDIAN, &ie_type);
             offset+=2;
 
             if ((ie_type == 0)||(ie_type==2)){
@@ -9663,7 +9662,7 @@ proto_register_rsvp(void)
         },
         {&hf_rsvp_3gpp_obj_ie_type,
          { "IE Type", "rsvp.3gpp_obj.ie_type",
-           FT_UINT32, BASE_DEC, VALS(rsvp_3gpp_object_ie_type_vals), 0,
+           FT_UINT16, BASE_DEC, VALS(rsvp_3gpp_object_ie_type_vals), 0,
            NULL, HFILL }
         },
         {&hf_rsvp_3gpp_obj_ue_ipv4_addr,

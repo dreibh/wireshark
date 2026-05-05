@@ -29,6 +29,8 @@
 
 class QComboBox;
 class QCustomPlot;
+class QCPItemStraightLine;
+class QMouseEvent;
 
 class DisStreamAnalysisDialog : public WiresharkDialog
 {
@@ -67,13 +69,20 @@ private:
     QLabel *jitter_label_;
     QLabel *delta_label_;
     QLabel *codec_label_;
+    QLabel *hint_label_;
     QProgressBar *playback_progress_;
     QLabel *playback_time_label_;
     QDialogButtonBox *button_box_;
     QPushButton *play_button_;
     QPushButton *stop_button_;
     QPushButton *goto_button_;
+    QCPItemStraightLine *start_marker_pos_;
+    QCPItemStraightLine *playback_marker_pos_;
+    double start_marker_time_;
+    double playback_marker_time_;
     bool need_redraw_;
+    bool have_requested_stream_;
+    disstream_id_t requested_stream_id_;
     QObject *packet_list_;
 
 #ifdef QT_MULTIMEDIA_LIB
@@ -91,11 +100,18 @@ private:
     void updateAnalysis();
     void updatePacketRows();
     void updatePlot();
+    void updateHintLabel();
+    double selectedStartTime() const;
+    void setStartPlayMarker(double new_time);
+    void drawStartPlayMarker();
+    void setPlaybackMarker(double new_time, bool visible);
+    void drawPlaybackMarker();
 
 private slots:
     void onStreamChanged(int index);
     void onGoToPacket();
     void onPacketRowActivated(QTreeWidgetItem *item, int column);
+    void onGraphDoubleClicked(QMouseEvent *event);
 #ifdef QT_MULTIMEDIA_LIB
     void onPlayPauseStream();
     void onStopStream();

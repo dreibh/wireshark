@@ -42,9 +42,11 @@ public:
     void stopPlayback(bool call_stop = true);
     void pausePlayback();
     void resumePlayback();
+    void setPlaybackStartTime(double start_time_secs) { playback_start_time_ = start_time_secs; }
     bool isPlaying() const;
     bool isPaused() const;
     QAudio::State playbackState() const;
+    const disstream_info_t *currentStream() const { return current_stream_; }
     double playbackDurationSeconds() const { return total_playback_secs_; }
     const QVector<double> &visualTimestamps() const { return visual_timestamps_; }
     const QVector<double> &visualSamples() const { return visual_samples_; }
@@ -80,6 +82,8 @@ private:
     unsigned sample_rate_;
     unsigned channels_;
     double total_playback_secs_;
+    double playback_start_time_;
+    const disstream_info_t *current_stream_;
     bool stopping_playback_;
     QVector<double> visual_timestamps_;
     QVector<double> visual_samples_;
