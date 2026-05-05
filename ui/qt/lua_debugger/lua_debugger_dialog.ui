@@ -254,7 +254,7 @@
   <customwidget>
    <class>LuaDebuggerCodeView</class>
    <extends>QWidget</extends>
-   <header>lua_debugger_code_view.h</header>
+   <header>lua_debugger_code_editor.h</header>
   </customwidget>
   <customwidget>
    <class>LuaDebuggerFindFrame</class>

@@ -55,7 +55,7 @@ extern wtap_open_return_val etw_dump(const char* etl_filename, const char* pcapn
  * @param interface_desc A description of the interface.
  * @param interface_desc_length The length of the interface description.
  */
-extern void wtap_etl_add_interface(int pkt_encap, char* interface_name, unsigned short interface_name_length, char* interface_desc, unsigned short interface_desc_length);
+extern void wtap_etl_add_interface(int pkt_encap, const char* interface_name, unsigned short interface_name_length, const char* interface_desc, unsigned short interface_desc_length);
 
 /**
  * @brief Dumps an ETL record as a Wireshark packet.

@@ -16,7 +16,7 @@
 
 #include <wireshark_dialog.h>
 #include "packet_list.h"
-#include <ui/tap-credentials.h>
+#include <epan/credentials.h>
 
 class CredentialsModel;
 

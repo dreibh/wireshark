@@ -37,6 +37,7 @@
 #include <epan/exceptions.h>
 #include <epan/show_exception.h>
 #include <epan/unit_strings.h>
+#include <epan/credentials.h>
 #include <glib.h>
 #include "packet-http.h"
 #include "packet-http2.h"
@@ -44,8 +45,6 @@
 #include "packet-tls.h"
 #include "packet-acdr.h"
 #include "packet-media-type.h"
-
-#include <ui/tap-credentials.h>
 
 void proto_register_http(void);
 void proto_reg_handoff_http(void);
@@ -3775,7 +3774,7 @@ process_header(tvbuff_t *tvb, unsigned offset, unsigned next_offset,
 			auth->num = pinfo->num;
 			auth->password_hf_id = *headers[hf_index].hf;
 			auth->proto = "HTTP header auth";
-			auth->username = wmem_strdup(pinfo->pool, TAP_CREDENTIALS_PLACEHOLDER);
+			auth->username = wmem_strdup(pinfo->pool, CREDENTIALS_PLACEHOLDER);
 			tap_queue_packet(credentials_tap, pinfo, auth);
 			break;
 

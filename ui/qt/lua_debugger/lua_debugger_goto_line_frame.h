@@ -7,17 +7,23 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+/**
+ * @file
+ * Inline go-to-line bar for the Lua debugger code editor.
+ */
+
 #ifndef LUA_DEBUGGER_GOTO_LINE_FRAME_H
 #define LUA_DEBUGGER_GOTO_LINE_FRAME_H
 
-#include "accordion_frame.h"
-
 #include <QPointer>
+
+#include "accordion_frame.h"
 
 class QKeyEvent;
 class QPlainTextEdit;
 
-namespace Ui {
+namespace Ui
+{
 class LuaDebuggerGoToLineFrame;
 }
 

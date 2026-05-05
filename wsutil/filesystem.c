@@ -273,6 +273,10 @@ static char *appbundle_dir;
  */
 static bool running_in_build_directory_flag;
 
+#ifdef HAVE_MSYSTEM
+static bool running_in_posix_directory_flag;
+#endif
+
 #ifndef _WIN32
 /*
  * Get the pathname of the executable using various platform-
@@ -577,7 +581,11 @@ configuration_init_w32(const char* app_flavor, const char* arg0 _U_)
             /* We succeeded. */
             trim_progfile_dir(app_flavor);
             /* Now try to figure out if we're running in a build directory. */
+#ifdef HAVE_MSYSTEM
+            char *wsutil_lib = g_build_filename(progfile_dir, "libwsutil.dll.a", (char *)NULL);
+#else
             char *wsutil_lib = g_build_filename(progfile_dir, "wsutil.lib", (char *)NULL);
+#endif /* HAVE_MSYSTEM */
             if (file_exists(wsutil_lib)) {
                 running_in_build_directory_flag = true;
             }
@@ -619,18 +627,20 @@ configuration_init_w32(const char* app_flavor, const char* arg0 _U_)
 
 #ifdef HAVE_MSYSTEM
     /*
-     * We already have the program_dir. Find the installation prefix.
-     * This is one level up from the bin_dir. If the program_dir does
-     * not end with "bin" then assume we are running in the build directory
-     * and the "installation prefix" (staging directory) is the same as
-     * the program_dir.
+     * If we're not running in the build directory, we could either be running
+     * from the result of "ninja install" in the MSYS2 POSIX environment with
+     * a UN*X-like directory structure, or running from a NSIS install with a
+     * Windows-like directory structure. We already have the program_dir.
+     * If the program_dir ends with "bin" then assume we are running with a
+     * UN*X-like directory layout, and vice versa.
      */
     if (g_str_has_suffix(progfile_dir, _S"bin")) {
+        running_in_posix_directory_flag = true;
         install_prefix = trim_last_dir_from_path(progfile_dir);
     }
     else {
         install_prefix = g_strdup(progfile_dir);
-        running_in_build_directory_flag = true;
+        running_in_posix_directory_flag = false;
     }
 #endif /* HAVE_MSYSTEM */
 
@@ -995,38 +1005,7 @@ get_datafile_dir(const char* app_env_var_prefix)
          */
         datafile_dir = g_strdup(g_getenv(data_dir_envar));
     }
-
-#if defined(HAVE_MSYSTEM)
-    if (running_in_build_directory_flag) {
-        datafile_dir = g_strdup(install_prefix);
-    } else {
-        datafile_dir = g_build_filename(install_prefix, DATA_DIR, app_lower, (char *)NULL);
-    }
-#elif defined(_WIN32)
-    /*
-     * Do we have the pathname of the program?  If so, assume we're
-     * running an installed version of the program.  If we fail,
-     * we don't change "datafile_dir", and thus end up using the
-     * default.
-     *
-     * XXX - does NSIS put the installation directory into
-     * "\HKEY_LOCAL_MACHINE\SOFTWARE\Wireshark\InstallDir"?
-     * If so, perhaps we should read that from the registry,
-     * instead.
-     */
-    if (progfile_dir != NULL) {
-        /*
-         * Yes, we do; use that.
-         */
-        datafile_dir = g_strdup(progfile_dir);
-    } else {
-        /*
-         * No, we don't.
-         * Fall back on the default installation directory.
-         */
-        datafile_dir = g_strdup("C:\\Program Files\\Wireshark\\");
-    }
-#else
+    /* You are in a maze of twisty little #ifdefs, all different. */
 #ifdef ENABLE_APPLICATION_BUNDLE
     /*
      * If we're running from an app bundle and weren't started
@@ -1042,6 +1021,38 @@ get_datafile_dir(const char* app_env_var_prefix)
                                         appbundle_dir, app_lower);
     }
 #endif
+#if defined(_WIN32)
+    else
+#if defined(HAVE_MSYSTEM)
+    if (!running_in_posix_directory_flag)
+#endif // HAVE_SYSTEM
+    {
+        /*
+         * Do we have the pathname of the program?  If so, assume we're
+         * running an installed version of the program.  If we fail,
+         * we don't change "datafile_dir", and thus end up using the
+         * default.
+         *
+         * XXX - does NSIS put the installation directory into
+         * "\HKEY_LOCAL_MACHINE\SOFTWARE\Wireshark\InstallDir"?
+         * If so, perhaps we should read that from the registry,
+         * instead.
+         */
+        if (progfile_dir != NULL) {
+            /*
+             * Yes, we do; use that.
+             */
+            datafile_dir = g_strdup(progfile_dir);
+        } else {
+            /*
+             * No, we don't.
+             * Fall back on the default installation directory.
+             */
+            datafile_dir = g_strdup("C:\\Program Files\\Wireshark\\");
+        }
+    }
+#endif // _WIN32
+#if defined(HAVE_MSYSTEM) || !defined(_WIN32)
     else if (running_in_build_directory_flag && progfile_dir != NULL) {
         /*
          * We're (probably) being run from the build directory and
@@ -1063,7 +1074,7 @@ get_datafile_dir(const char* app_env_var_prefix)
             datafile_dir = g_build_filename(install_prefix, DATA_DIR, app_lower, (char *)NULL);
         }
     }
-#endif
+#endif // HAVE_MSYSTEM || !_WIN32
     g_free(app_lower);
     g_free(data_dir_envar);
     return datafile_dir;
@@ -1079,21 +1090,6 @@ get_doc_dir(const char* app_env_var_prefix _U_)
     if (false) {
         ;
     }
-
-#if defined(HAVE_MSYSTEM)
-    if (running_in_build_directory_flag) {
-        doc_dir = g_strdup(install_prefix);
-    } else {
-        doc_dir = g_build_filename(install_prefix, DOC_DIR, (char *)NULL);
-    }
-#elif defined(_WIN32)
-    if (progfile_dir != NULL) {
-        doc_dir = g_strdup(progfile_dir);
-    } else {
-        /* Fall back on the default installation directory. */
-        doc_dir = g_strdup("C:\\Program Files\\Wireshark\\");
-    }
-#else
 #ifdef ENABLE_APPLICATION_BUNDLE
     /*
      * If we're running from an app bundle and weren't started
@@ -1108,6 +1104,21 @@ get_doc_dir(const char* app_env_var_prefix _U_)
         doc_dir = g_strdup(get_datafile_dir(app_env_var_prefix));
     }
 #endif
+#if defined(_WIN32)
+    else
+#if defined(HAVE_MSYSTEM)
+    if (!running_in_posix_directory_flag)
+#endif // HAVE_MSYSTEM
+    {
+        if (progfile_dir != NULL) {
+            doc_dir = g_strdup(progfile_dir);
+        } else {
+            /* Fall back on the default installation directory. */
+            doc_dir = g_strdup("C:\\Program Files\\Wireshark\\");
+        }
+    }
+#endif // _WIN32
+#if defined(HAVE_MSYSTEM) || !defined(_WIN32)
     else if (running_in_build_directory_flag && progfile_dir != NULL) {
         /*
          * We're (probably) being run from the build directory and
@@ -1121,7 +1132,7 @@ get_doc_dir(const char* app_env_var_prefix _U_)
             doc_dir = g_build_filename(install_prefix, DOC_DIR, (char *)NULL);
         }
     }
-#endif
+#endif // HAVE_MSYSTEM || !_WIN32
     return doc_dir;
 }
 
@@ -1168,19 +1179,6 @@ init_plugin_dir(const char* app_env_var_prefix)
     }
 
 #if defined(HAVE_PLUGINS) || defined(HAVE_LUA)
-#if defined(HAVE_MSYSTEM)
-    else if (running_in_build_directory_flag) {
-        plugin_dir = g_build_filename(install_prefix, "plugins", app_lower, (char *)NULL);
-    } else {
-        plugin_dir = g_build_filename(install_prefix, PLUGIN_DIR, (char *)NULL);
-    }
-#elif defined(_WIN32)
-    else if (running_in_build_directory_flag) {
-        plugin_dir = g_build_filename(get_progfile_dir(), "plugins", app_lower, (char *)NULL);
-    } else {
-        plugin_dir = g_build_filename(get_progfile_dir(), "plugins", (char *)NULL);
-    }
-#else
 #ifdef ENABLE_APPLICATION_BUNDLE
     /*
      * If we're running from an app bundle and weren't started
@@ -1204,14 +1202,25 @@ init_plugin_dir(const char* app_env_var_prefix)
          * we're running is (that's the build directory).
          */
         plugin_dir = g_build_filename(get_progfile_dir(), "plugins", app_lower, (char *)NULL);
-    } else {
+    }
+#if defined(_WIN32)
+    else
+#if defined(HAVE_MSYSTEM)
+    if (!running_in_posix_directory_flag)
+#endif // HAVE_MSYSTEM
+    {
+        plugin_dir = g_build_filename(get_progfile_dir(), "plugins", (char *)NULL);
+    }
+#endif // _WIN32
+#if defined(HAVE_MSYSTEM) || !defined(_WIN32)
+    else {
         if (g_path_is_absolute(PLUGIN_DIR)) {
             plugin_dir = g_strdup(PLUGIN_DIR);
         } else {
             plugin_dir = g_build_filename(install_prefix, PLUGIN_DIR, (char *)NULL);
         }
     }
-#endif // HAVE_MSYSTEM / _WIN32
+#endif /* defined(HAVE_MSYSTEM) || !defined(_WIN32) */
 #endif /* defined(HAVE_PLUGINS) || defined(HAVE_LUA) */
     g_free(app_lower);
     g_free(plugin_dir_envar);
@@ -1304,27 +1313,6 @@ init_extcap_dir(const char* app_env_var_prefix, const char* dir_extcap _U_)
          */
         extcap_dir = g_strdup(g_getenv(extcap_dir_envar));
     }
-
-#if defined(HAVE_MSYSTEM)
-    else if (running_in_build_directory_flag) {
-        extcap_dir = g_build_filename(install_prefix, "extcap", (char *)NULL);
-    } else {
-        extcap_dir = g_build_filename(install_prefix, EXTCAP_DIR, (char *)NULL);
-    }
-#elif defined(_WIN32)
-        /*
-         * On Windows, extcap utilities are stored in "extcap/<program name>"
-         * in the build directory and in "extcap" in the installation
-         * directory.
-         */
-    else if (running_in_build_directory_flag) {
-        extcap_dir = g_build_filename(get_progfile_dir(), EXTCAP_DIR_NAME,
-            app_lower, (char *)NULL);
-    } else {
-        extcap_dir = g_build_filename(get_progfile_dir(), EXTCAP_DIR_NAME,
-            (char *)NULL);
-    }
-#else
 #ifdef ENABLE_APPLICATION_BUNDLE
     else if (appbundle_dir != NULL) {
         /*
@@ -1349,13 +1337,29 @@ init_extcap_dir(const char* app_env_var_prefix, const char* dir_extcap _U_)
         extcap_dir = g_build_filename(get_progfile_dir(), EXTCAP_DIR_NAME,
             app_lower, (char *)NULL);
     }
+#if defined(_WIN32)
+    else
+#if defined(HAVE_MSYSTEM)
+    if (!running_in_posix_directory_flag)
+#endif // HAVE_MSYSTEM
+    /*
+     * On Windows, extcap utilities are stored in "extcap/<program name>"
+     * in the build directory and in "extcap" in the installation
+     * directory.
+     */
+    {
+        extcap_dir = g_build_filename(get_progfile_dir(), EXTCAP_DIR_NAME,
+            (char *)NULL);
+    }
+#endif // defined(_WIN32)
+#if defined(HAVE_MSYSTEM) || !defined(_WIN32)
     else {
         if (g_path_is_absolute(EXTCAP_DIR))
             extcap_dir = g_strdup(dir_extcap);
         else
             extcap_dir = g_build_filename(install_prefix, dir_extcap, (char*)NULL);
     }
-#endif // HAVE_MSYSTEM / _WIN32
+#endif /* defined(HAVE_MSYSTEM) || !defined(_WIN32) */
     g_free(app_lower);
     g_free(extcap_dir_envar);
 }

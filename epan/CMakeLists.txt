@@ -54,6 +54,7 @@ set(LIBWIRESHARK_PUBLIC_HEADERS
 	crc32-tvb.h
 	crc6-tvb.h
 	crc8-tvb.h
+	credentials.h
 	decode_as.h
 	disabled_protos.h
 	conversation_filter.h

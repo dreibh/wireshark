@@ -65,6 +65,9 @@ ShortcutListModel::ShortcutListModel(QObject *parent) :
         if (shortcuts[name].first == QKeySequence(Qt::CTRL | Qt::Key_Down).toString(QKeySequence::NativeText)) {
             appendRow(QStringList() << "F8" << name << shortcuts[name].second);
         }
+        if (shortcuts[name].first == QKeySequence(Qt::CTRL | Qt::Key_Plus).toString(QKeySequence::NativeText)) {
+            appendRow(QStringList() << "Ctrl+=" << name << shortcuts[name].second);
+        }
     }
 
     /* Hard coded keyPressEvent() */

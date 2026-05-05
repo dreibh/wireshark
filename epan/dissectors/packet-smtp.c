@@ -25,8 +25,8 @@
 #include <epan/strutil.h>
 #include <epan/reassemble.h>
 #include <epan/proto_data.h>
+#include <epan/credentials.h>
 
-#include <ui/tap-credentials.h>
 #include <tap.h>
 
 #include <wsutil/str_util.h>

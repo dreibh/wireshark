@@ -36,6 +36,9 @@
 #include <wsutil/ws_pipe.h>
 #include <wsutil/ws_assert.h>
 #include <wsutil/file_compressed.h>
+
+#include <epan/prefs.h>
+
 #include <app/application_flavor.h>
 
 #ifdef _WIN32

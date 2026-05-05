@@ -10,10 +10,9 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#ifndef __TAP_CREDENTIALS_H__
-#define __TAP_CREDENTIALS_H__
+#pragma once
 
-#define TAP_CREDENTIALS_PLACEHOLDER "n.a."
+#define CREDENTIALS_PLACEHOLDER "n.a."
 
 typedef struct tap_credential {
     unsigned num;
@@ -23,5 +22,3 @@ typedef struct tap_credential {
     const char* proto;
     char* info;
 } tap_credential_t;
-
-#endif

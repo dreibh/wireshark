@@ -7,9 +7,12 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "lua_debugger_goto_line_frame.h"
-#include "lua_debugger_code_view.h"
+/**
+ * @file
+ * Inline go-to-line bar for the Lua debugger code editor.
+ */
 
+#include "lua_debugger_goto_line_frame.h"
 #include <ui_lua_debugger_goto_line_frame.h>
 
 #include <QApplication>
@@ -19,9 +22,11 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
-#include <QTimer>
 #include <QTextBlock>
 #include <QTextCursor>
+#include <QTimer>
+
+#include "lua_debugger_code_editor.h"
 
 LuaDebuggerGoToLineFrame::LuaDebuggerGoToLineFrame(QWidget *parent)
     : AccordionFrame(parent), ui_(new Ui::LuaDebuggerGoToLineFrame)
@@ -31,12 +36,9 @@ LuaDebuggerGoToLineFrame::LuaDebuggerGoToLineFrame(QWidget *parent)
     ui_->lineLineEdit->setValidator(new QIntValidator(1, 999999999, ui_->lineLineEdit));
     updateStyleSheet();
 
-    connect(ui_->goButton, &QPushButton::clicked, this,
-            &LuaDebuggerGoToLineFrame::on_goButton_clicked);
-    connect(ui_->cancelButton, &QPushButton::clicked, this,
-            &LuaDebuggerGoToLineFrame::on_cancelButton_clicked);
-    connect(ui_->lineLineEdit, &QLineEdit::returnPressed, this,
-            &LuaDebuggerGoToLineFrame::on_goButton_clicked);
+    connect(ui_->goButton, &QPushButton::clicked, this, &LuaDebuggerGoToLineFrame::on_goButton_clicked);
+    connect(ui_->cancelButton, &QPushButton::clicked, this, &LuaDebuggerGoToLineFrame::on_cancelButton_clicked);
+    connect(ui_->lineLineEdit, &QLineEdit::returnPressed, this, &LuaDebuggerGoToLineFrame::on_goButton_clicked);
 
     ui_->goButton->setDefault(true);
     ui_->goButton->setAutoDefault(true);
@@ -44,10 +46,7 @@ LuaDebuggerGoToLineFrame::LuaDebuggerGoToLineFrame(QWidget *parent)
     ui_->cancelButton->setAutoDefault(false);
 }
 
-LuaDebuggerGoToLineFrame::~LuaDebuggerGoToLineFrame()
-{
-    delete ui_;
-}
+LuaDebuggerGoToLineFrame::~LuaDebuggerGoToLineFrame() { delete ui_; }
 
 void LuaDebuggerGoToLineFrame::setTargetEditor(QPlainTextEdit *editor)
 {
@@ -99,8 +98,7 @@ void LuaDebuggerGoToLineFrame::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
-    if (event->modifiers() == Qt::NoModifier &&
-        (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter))
+    if (event->modifiers() == Qt::NoModifier && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter))
     {
         on_goButton_clicked();
         event->accept();
@@ -139,8 +137,7 @@ void LuaDebuggerGoToLineFrame::on_goButton_clicked()
         return;
     }
 
-    QTextBlock block =
-        editor_->document()->findBlockByNumber(static_cast<int>(target - 1));
+    QTextBlock block = editor_->document()->findBlockByNumber(static_cast<int>(target - 1));
     if (!block.isValid())
     {
         return;

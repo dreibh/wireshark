@@ -7,18 +7,24 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
+/**
+ * @file
+ * Inline find / replace bar for the Lua debugger code editor.
+ */
+
 #ifndef LUA_DEBUGGER_FIND_FRAME_H
 #define LUA_DEBUGGER_FIND_FRAME_H
 
-#include "accordion_frame.h"
-
 #include <QPointer>
+
+#include "accordion_frame.h"
 
 class QEvent;
 class QKeyEvent;
 class QPlainTextEdit;
 
-namespace Ui {
+namespace Ui
+{
 class LuaDebuggerFindFrame;
 }
 

@@ -95,7 +95,7 @@ DIAG_ON(frame-larger-than=)
 #include <ui/tap-aggregation.h>
 
 #ifdef HAVE_LUA
-#include "lua_debugger_dialog.h"
+#include "lua_debugger.h"
 #endif
 
 // If we ever add support for multiple windows this will need to be replaced.
@@ -1021,7 +1021,7 @@ void WiresharkMainWindow::closeEvent(QCloseEvent *event) {
      * unwound. Running tryClosingCaptureFile() / mainApp->quit() with
      * the Lua dissector still on the C stack would tear down capture /
      * epan state and abort in wmem_cleanup_scopes() at exit. */
-    if (LuaDebuggerDialog::handleMainCloseIfPaused(event)) {
+    if (LuaDebugger::tryDeferMainWindowClose(event)) {
         return;
     }
 #endif
@@ -3187,12 +3187,6 @@ void WiresharkMainWindow::openTLSKeylogDialog()
 #ifdef HAVE_LUA
 void WiresharkMainWindow::openLuaDebuggerDialog()
 {
-    LuaDebuggerDialog *dialog = LuaDebuggerDialog::instance(this);
-    if (dialog->isMinimized()) {
-        dialog->showNormal();
-    }
-    dialog->show();
-    dialog->raise();
-    dialog->activateWindow();
+    LuaDebugger::open(this);
 }
 #endif

@@ -29,7 +29,7 @@
 
 #include <tap.h>
 #include <epan/export_object.h>
-#include <ui/tap-credentials.h>
+#include <epan/credentials.h>
 
 #include "packet-tls.h"
 #include "packet-tls-utils.h"

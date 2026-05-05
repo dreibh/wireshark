@@ -52,6 +52,9 @@ extern "C" {
 #define PREF_EFFECT_GUI_COLOR         (1u << 5)
 #define PREF_EFFECT_AGGREGATION       (1u << 6)
 
+/* Default update interval in milliseconds */
+#define DEFAULT_UPDATE_INTERVAL 100
+
 struct epan_uat;
 struct _e_addr_resolve;
 

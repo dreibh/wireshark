@@ -21,12 +21,13 @@
 #include <tdh.h>
 #include <stdlib.h>
 
-#define MAX_SMALL_BUFFER 4
 #define MAX_LOG_LINE_LENGTH 1024
 #define MAX_KEY_LENGTH 64
 
 typedef struct Property_Key_Value
 {
+    USHORT key_length;
+    USHORT value_length;
     WCHAR key[MAX_KEY_LENGTH];
     WCHAR value[MAX_LOG_LINE_LENGTH];
 } PROPERTY_KEY_VALUE;
@@ -68,7 +69,7 @@ VOID format_message(WCHAR* lpszMessage, PROPERTY_KEY_VALUE* propArray, DWORD dwP
 BOOL get_event_information(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO* pInfo);
 
 /**
- * @brief Extracts properties from an event record.
+ * @brief Extract a propertiy from an event record.
  *
  * @param pEvent Pointer to the EVENT_RECORD structure.
  * @param pInfo Pointer to the TRACE_EVENT_INFO structure.
@@ -79,7 +80,7 @@ BOOL get_event_information(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO* pInfo);
  * @param pExtract Pointer to the PROPERTY_KEY_VALUE structure where the extracted property will be stored.
  * @return PBYTE Pointer to the next byte in the user data buffer, or NULL if an error occurred.
  */
-PBYTE extract_properties(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD PointerSize, USHORT i, PBYTE pUserData, PBYTE pEndOfUserData, PROPERTY_KEY_VALUE* pExtract);
+PBYTE extract_property(PEVENT_RECORD pEvent, PTRACE_EVENT_INFO pInfo, DWORD PointerSize, USHORT i, PBYTE pUserData, PBYTE pEndOfUserData, PROPERTY_KEY_VALUE* pExtract);
 
 #endif
 

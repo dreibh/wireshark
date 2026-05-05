@@ -23,11 +23,11 @@
 #include <epan/reassemble.h>
 #include <epan/proto_data.h>
 #include <epan/expert.h>
+#include <epan/credentials.h>
 
 #include <wsutil/str_util.h>
 #include <wsutil/strtoi.h>
 
-#include <ui/tap-credentials.h>
 #include <tap.h>
 
 #include "packet-tls.h"

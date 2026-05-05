@@ -405,9 +405,6 @@ capture_opts_free_interface_t(interface_t *device);
 /* Default capture buffer size in Mbytes. */
 #define DEFAULT_CAPTURE_BUFFER_SIZE 2
 
-/* Default update interval in milliseconds */
-#define DEFAULT_UPDATE_INTERVAL 100
-
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */

@@ -45,21 +45,42 @@ enum {
     OPT_HELP,
     OPT_VERSION,
     OPT_INCLUDE_UNDECIDABLE_EVENT,
+    OPT_EVENT_ENABLE_SID,
+    OPT_EVENT_ENABLE_PROPERTY_TS_ID,
+    OPT_EVENT_ENABLE_PROPERTY_PROCESS_START_KEY,
+    OPT_EVENT_ENABLE_PROPERTY_EVENT_KEY,
+    OPT_EVENT_ENABLE_STACK_TRACE,
+    OPT_EVENT_ENABLE_SILOS,
+    OPT_EVENT_ENABLE_PROPERTY_SOURCE_CONTAINER_TRACKING,
     OPT_ETLFILE,
     OPT_PARAMS
 };
 
 static const struct ws_option longopts[] = {
     EXTCAP_BASE_OPTIONS,
-    { "help",    ws_no_argument,       NULL, OPT_HELP},
-    { "version", ws_no_argument,       NULL, OPT_VERSION},
-    { "iue",     ws_optional_argument, NULL, OPT_INCLUDE_UNDECIDABLE_EVENT},
-    { "etlfile", ws_required_argument, NULL, OPT_ETLFILE},
-    { "params",  ws_required_argument, NULL, OPT_PARAMS},
+    { "help",             ws_no_argument,       NULL, OPT_HELP},
+    { "version",          ws_no_argument,       NULL, OPT_VERSION},
+    { "iue",              ws_optional_argument, NULL, OPT_INCLUDE_UNDECIDABLE_EVENT},
+    { "event-sid",        ws_optional_argument, NULL, OPT_EVENT_ENABLE_SID},
+    { "event-stacktrace", ws_optional_argument, NULL, OPT_EVENT_ENABLE_STACK_TRACE},
+    { "event-tsid",       ws_optional_argument, NULL, OPT_EVENT_ENABLE_PROPERTY_TS_ID},
+    { "event-pstartkey",  ws_optional_argument, NULL, OPT_EVENT_ENABLE_PROPERTY_PROCESS_START_KEY},
+    { "event-eventkey",   ws_optional_argument, NULL, OPT_EVENT_ENABLE_PROPERTY_EVENT_KEY},
+    { "event-silos",      ws_optional_argument, NULL, OPT_EVENT_ENABLE_SILOS},
+    { "event-containerid",ws_optional_argument, NULL, OPT_EVENT_ENABLE_PROPERTY_SOURCE_CONTAINER_TRACKING},
+    { "etlfile",          ws_required_argument, NULL, OPT_ETLFILE},
+    { "params",           ws_required_argument, NULL, OPT_PARAMS},
     { 0, 0, 0, 0 }
 };
 
 int g_include_undecidable_event;
+BOOL g_event_enable_sid;
+BOOL g_event_enable_tsid;
+BOOL g_event_enable_event_key;
+BOOL g_event_enable_property_pstartkey;
+BOOL g_event_enable_stack_trace;
+BOOL g_event_enable_silos;
+BOOL g_event_property_source_container_tracking;
 
 static void graceful_shutdown_cb(void)
 {
@@ -187,7 +208,7 @@ cleanup:
  * Lists the configuration parameters for this extcap interface.
  * @param interface The interface name.
  */
-static int list_config(char* interface)
+static int list_config(const char* interface)
 {
     unsigned inc = 0;
     unsigned etwselector;
@@ -222,6 +243,30 @@ static int list_config(char* interface)
     printf("arg {number=%u}{call=--iue}{display=Should undecidable events be included}"
         "{type=boolflag}{default=false}{tooltip=Choose if the undecidable event is included}{group=Capture}\n",
         inc++);
+    /*
+    * We provide capture options to collect extra details about the ETW events (Windows 10+)
+    */
+    printf("arg {number=%u}{call=--event-sid}{display=Include the security identifier (SID) of the user in the event's extended data.}"
+        "{type=boolflag}{default=false}{tooltip=The SID of the user whose token is running the process in which an event created is captured.}{group=Advanced}\n",
+        inc++);
+    printf("arg {number=%u}{call=--event-stacktrace}{display=Add a call stack trace to the extended data of events.}"
+        "{type=boolflag}{default=false}{tooltip=This request the event stack trace to be added to extended data.}{group=Advanced}\n",
+        inc++);
+    printf("arg {number=%u}{call=--event-tsid}{display=Include the terminal session identifier (TSID).}"
+        "{type=boolflag}{default=false}{tooltip=The terminal session identifier (TSID) will be included in the event's extended data.}{group=Advanced}\n",
+        inc++);
+    printf("arg {number=%u}{call=--event-pstartkey}{display=Include the Process Start Key in the extended data.}"
+        "{type=boolflag}{default=false}{tooltip=The Process Start Key is a sequence number that identifies the process. While the Process ID may be reused within a session, the Process Start Key is guaranteed to be unique in the current boot session.}{group=Advanced}\n",
+        inc++);
+    printf("arg {number=%u}{call=--event-eventkey}{display=Include the Event Key in the extended data.}"
+        "{type=boolflag}{default=false}{tooltip=The Event Key is a unique identifier for the event instance that will be constant across multiple trace sessions listening to this event. It can be used to correlate simultaneous trace sessions.}{group=Advanced}\n",
+        inc++);
+    printf("arg {number=%u}{call=--event-silos}{display=Enables host logging sessions to collect Crimson events from server silos.}"
+        "{type=boolflag}{default=false}{tooltip=When running Windows Containers On Windows (WCOW), enables the logging of sessions within server silos.}{group=Advanced}\n",
+        inc++);
+    printf("arg {number=%u}{call=--event-containerid}{display=Marks the provider's events with source container information.}"
+        "{type=boolflag}{default=false}{tooltip=When running Windows Containers On Windows (WCOW), capture the source container in which a process is running.}{group=Advanced}\n",
+        inc++);
 
     /*
      * Display known providers.
@@ -242,7 +287,7 @@ static int list_config(char* interface)
  * @param option_name The value of the option queried (only 'params' supported)
  * @param option_value The value of the provider we're getting sub-options for.
  */
-static int list_config_option(char* interface, char* option_name, char* option_value)
+static int list_config_option(const char* interface, const char* option_name, char* option_value)
 {
     unsigned inc = 0;
     unsigned loglevelselector = 0;
@@ -386,6 +431,34 @@ int main(int argc, char* argv[])
 
         case OPT_INCLUDE_UNDECIDABLE_EVENT:
             g_include_undecidable_event = true;
+            break;
+
+        case OPT_EVENT_ENABLE_SID:
+            g_event_enable_sid = true;
+            break;
+
+        case OPT_EVENT_ENABLE_PROPERTY_TS_ID:
+            g_event_enable_tsid = true;
+            break;
+
+        case OPT_EVENT_ENABLE_PROPERTY_PROCESS_START_KEY:
+            g_event_enable_property_pstartkey = true;
+            break;
+
+        case OPT_EVENT_ENABLE_PROPERTY_EVENT_KEY:
+            g_event_enable_event_key = true;
+            break;
+
+        case OPT_EVENT_ENABLE_STACK_TRACE:
+            g_event_enable_stack_trace = true;
+            break;
+
+        case OPT_EVENT_ENABLE_SILOS:
+            g_event_enable_silos = true;
+            break;
+
+        case OPT_EVENT_ENABLE_PROPERTY_SOURCE_CONTAINER_TRACKING:
+            g_event_property_source_container_tracking = true;
             break;
 
         case ':':

@@ -7,8 +7,12 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#include "lua_debugger_find_frame.h"
+/**
+ * @file
+ * Inline find / replace bar for the Lua debugger code editor.
+ */
 
+#include "lua_debugger_find_frame.h"
 #include <ui_lua_debugger_find_frame.h>
 
 #include <QApplication>
@@ -18,11 +22,10 @@
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QTextCursor>
-#include <QTimer>
 #include <QTextDocument>
+#include <QTimer>
 
-LuaDebuggerFindFrame::LuaDebuggerFindFrame(QWidget *parent)
-    : AccordionFrame(parent), ui_(new Ui::LuaDebuggerFindFrame)
+LuaDebuggerFindFrame::LuaDebuggerFindFrame(QWidget *parent) : AccordionFrame(parent), ui_(new Ui::LuaDebuggerFindFrame)
 {
     ui_->setupUi(this);
     /* Share one stretch column so both line edits align left and right edges. */
@@ -52,8 +55,7 @@ bool LuaDebuggerFindFrame::eventFilter(QObject *watched, QEvent *event)
     if (watched == ui_->findLineEdit && event->type() == QEvent::KeyPress)
     {
         auto *ke = static_cast<QKeyEvent *>(event);
-        if (ke->modifiers() == Qt::NoModifier &&
-            (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter))
+        if (ke->modifiers() == Qt::NoModifier && (ke->key() == Qt::Key_Return || ke->key() == Qt::Key_Enter))
         {
             on_findNextButton_clicked();
             return true;
@@ -62,10 +64,7 @@ bool LuaDebuggerFindFrame::eventFilter(QObject *watched, QEvent *event)
     return AccordionFrame::eventFilter(watched, event);
 }
 
-LuaDebuggerFindFrame::~LuaDebuggerFindFrame()
-{
-    delete ui_;
-}
+LuaDebuggerFindFrame::~LuaDebuggerFindFrame() { delete ui_; }
 
 void LuaDebuggerFindFrame::setTargetEditor(QPlainTextEdit *editor)
 {
@@ -108,8 +107,7 @@ void LuaDebuggerFindFrame::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
-    if (event->modifiers() == Qt::NoModifier &&
-        (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter))
+    if (event->modifiers() == Qt::NoModifier && (event->key() == Qt::Key_Return || event->key() == Qt::Key_Enter))
     {
         on_findNextButton_clicked();
         event->accept();

@@ -71,6 +71,8 @@ include::wsdg_plugins.adoc[]
 
 include::wsdg_lua_support.adoc[]
 
+include::wsdg_lua_debugger.adoc[]
+
 include::wsdg_userinterface.adoc[]
 
 include::wsdg_tests.adoc[]

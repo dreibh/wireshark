@@ -3563,6 +3563,18 @@ static const value_string he_phy_nominal_packet_padding_vals[] = {
   { 0, NULL }
 };
 
+static const range_string he_regulatory_info_rvals[] = {
+  { 0, 0, "Indoor AP"},
+  { 1, 1, "Standard Power AP"},
+  { 2, 2, "Very Low Power AP"},
+  { 3, 3, "Indoor Enabled AP"},
+  { 4, 6, "Reserved"},
+  { 7, 7, "AP Role Not Relevant"},
+  { 8, 8, "Indoor Standard Power AP"},
+  { 9, 15, "Reserved"},
+  { 0, 0, NULL}
+};
+
 // MBO-OCE attributes
 #define MBO_AP_CAPABILITY_INDICATION    1
 #define MBO_NON_PREF_CHANNEL_REPORT     2
@@ -59642,7 +59654,7 @@ proto_register_ieee80211(void)
 
     {&hf_ieee80211_he_operation_6ghz_control_regulatory_info,
      {"Regulatory Info", "wlan.ext_tag.he_operation.6ghz.control.regulatory_info",
-      FT_UINT8, BASE_DEC, NULL, 0x78, NULL, HFILL }},
+      FT_UINT8, BASE_RANGE_STRING | BASE_DEC, RVALS(he_regulatory_info_rvals), 0x78, NULL, HFILL }},
 
     {&hf_ieee80211_he_operation_6ghz_control_reserved,
      {"Reserved", "wlan.ext_tag.he_operation.6ghz.control.reserved",

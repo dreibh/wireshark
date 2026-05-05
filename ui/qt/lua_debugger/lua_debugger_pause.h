@@ -1,4 +1,4 @@
-/** @file
+/* lua_debugger_pause.h
  *
  * Wireshark - Network traffic analyzer
  * By Gerald Combs <gerald@wireshark.org>
@@ -7,11 +7,62 @@
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
 
-#ifndef LUA_DEBUGGER_PAUSE_OVERLAY_H
-#define LUA_DEBUGGER_PAUSE_OVERLAY_H
+/**
+ * @file
+ * Pause UX: visual overlay and key capture that engage while the
+ * debugger holds execution.
+ */
 
+#ifndef LUA_DEBUGGER_PAUSE_H
+#define LUA_DEBUGGER_PAUSE_H
+
+#include <QList>
+#include <QObject>
+#include <QPointer>
 #include <QString>
 #include <QWidget>
+
+class LuaDebuggerDialog;
+class LuaDebuggerPauseOverlay;
+class QAction;
+class QEvent;
+class QEventLoop;
+class QPaintEvent;
+
+/* ===== pause_controller ===== */
+
+/**
+ * @brief Owns the nested pause @c QEventLoop pointer and the application-wide
+ *        freeze (disabled top-levels, actions, central widget, overlay, input
+ *        filter) for the outermost @ref LuaDebuggerDialog::handlePause frame.
+ */
+class LuaDebuggerPauseController : public QObject
+{
+  public:
+    explicit LuaDebuggerPauseController(LuaDebuggerDialog *host);
+
+    bool hasActiveLoop() const { return activeLoop_ != nullptr; }
+    QEventLoop *activeLoop() const { return activeLoop_; }
+    void setActiveLoop(QEventLoop *loop) { activeLoop_ = loop; }
+    void clearActiveLoop() { activeLoop_ = nullptr; }
+    void quitLoop();
+
+    void beginOuterFreeze();
+    void endFreeze();
+
+  private:
+    LuaDebuggerDialog *host_ = nullptr;
+    QEventLoop *activeLoop_ = nullptr;
+
+    QList<QPointer<QWidget>> frozenTopLevels_;
+    QList<QPointer<QAction>> frozenActions_;
+    QPointer<QWidget> frozenCentralWidget_;
+    QPointer<LuaDebuggerPauseOverlay> pauseOverlay_;
+    QObject *pauseInputFilter_ = nullptr;
+    bool pauseUnfrozen_ = true;
+};
+
+/* ===== pause_overlay ===== */
 
 /**
  * @brief Translucent overlay shown over the main window while the Lua
@@ -62,4 +113,24 @@ class LuaDebuggerPauseOverlay : public QWidget
     QString subtext_text_;
 };
 
-#endif // LUA_DEBUGGER_PAUSE_OVERLAY_H
+/* ===== pause_key_filter ===== */
+
+/**
+ * Swallows input and selected events for non-debugger windows during pause,
+ * and suppresses UpdateRequest/LayoutRequest on the main window.
+ */
+class LuaDebuggerPauseInputFilter : public QObject
+{
+  public:
+    explicit LuaDebuggerPauseInputFilter(QWidget *debugger_dialog, QWidget *main_window, QObject *parent = nullptr);
+
+    bool eventFilter(QObject *watched, QEvent *event) override;
+
+  private:
+    bool isOwnedByDebugger(const QWidget *w) const;
+
+    QWidget *debugger_dialog_;
+    QWidget *main_window_;
+};
+
+#endif

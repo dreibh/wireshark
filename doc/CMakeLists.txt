@@ -381,6 +381,7 @@ set(WSDG_FILES
 	wsdg_src/wsdg_dissection.adoc
 	wsdg_src/wsdg_env_intro.adoc
 	wsdg_src/wsdg_libraries.adoc
+	wsdg_src/wsdg_lua_debugger.adoc
 	wsdg_src/wsdg_lua_support.adoc
 	wsdg_src/wsdg_preface.adoc
 	wsdg_src/wsdg_quick_setup.adoc
@@ -412,6 +413,7 @@ set(WSDG_GRAPHICS
 	wsdg_src/images/ws-function-blocks.dia
 	wsdg_src/images/ws-function-blocks.svg
 	wsdg_src/images/ws-logo.png
+	wsdg_src/images/wslua-debugger.png
 )
 
 set(WSUG_SOURCE

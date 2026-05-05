@@ -448,9 +448,9 @@ The fields “Automatic”, “Seconds” and “...seconds” are mutually excl
 |menu:Name Resolution[Enable for MAC Layer]||This item allows you to control whether or not Wireshark translates MAC addresses into names, see <<ChAdvNameResolutionSection>>.
 |menu:Name Resolution[Enable for Network Layer]||This item allows you to control whether or not Wireshark translates network addresses into names, see <<ChAdvNameResolutionSection>>.
 |menu:Name Resolution[Enable for Transport Layer]||This item allows you to control whether or not Wireshark translates transport addresses into names, see <<ChAdvNameResolutionSection>>.
-|menu:Zoom In[]                     |kbd:[Ctrl+&#43;]   | Zoom into the packet data (increase the font size).
+|menu:Zoom In[]                     |kbd:[Ctrl+&#43;] or kbd:[Ctrl+=]  | Zoom into the packet data (increase the font size).
 |menu:Zoom Out[]                    |kbd:[Ctrl+-]       | Zoom out of the packet data (decrease the font size).
-|menu:Normal Size[]                 |kbd:[Ctrl+=]       | Set zoom level back to 100% (set font size back to normal).
+|menu:Normal Size[]                 |kbd:[Ctrl+0]       | Set zoom level back to 100% (set font size back to normal).
 |menu:Expand Subtrees[]                             |kbd:[Shift+→]|This menu item expands the currently selected subtree in the packet details tree.
 |menu:Collapse Subtrees[]                           |kbd:[Shift+←]|This menu item collapses the currently selected subtree in the packet details tree.
 |menu:Expand All[]                                  |kbd:[Ctrl+→] |Wireshark keeps a list of all the protocol subtrees that are expanded, and uses it to ensure that the correct subtrees are expanded when you display a packet. This menu item expands all subtrees in all packets in the capture.

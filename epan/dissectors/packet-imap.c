@@ -19,7 +19,7 @@
 #include <wsutil/strtoi.h>
 #include "packet-tls.h"
 #include "packet-tls-utils.h"
-#include <ui/tap-credentials.h>
+#include <epan/credentials.h>
 #include <tap.h>
 
 void proto_register_imap(void);

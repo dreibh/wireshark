@@ -17,7 +17,7 @@
 
 #include <epan/tap.h>
 #include <capture_file.h>
-#include <ui/tap-credentials.h>
+#include <epan/credentials.h>
 
 class CredentialsModel : public QAbstractListModel
 {
