@@ -177,24 +177,37 @@ WS_DLL_PUBLIC const reassembly_table_functions
 WS_DLL_PUBLIC const reassembly_table_functions
 	addresses_ports_reassembly_table_functions;	/* keys have endpoint addresses and ports and an ID */
 
-/*
- * Register a reassembly table. By registering the table with epan, the creation and
+/**
+ * @brief Register a reassembly table. By registering the table with epan, the creation and
  * destruction of the table can be managed by epan and not the dissector.
+ *
+ * @param table The reassembly table to register.
+ * @param funcs The functions to use for the reassembly table.
  */
 WS_DLL_PUBLIC void
 reassembly_table_register(reassembly_table *table,
 		      const reassembly_table_functions *funcs);
 
-/*
- * Initialize/destroy a reassembly table.
+/**
+ * @brief Initialize a reassembly table.
  *
  * init: If table doesn't exist: create table;
  *       else: just remove any entries;
- * destroy: remove entries and destroy table;
+ *
+ * @param table The reassembly table to initialize or destroy.
+ * @param funcs The functions to use for the reassembly table. This is only used when initializing a new table, and is ignored when destroying a table.
  */
 WS_DLL_PUBLIC void
 reassembly_table_init(reassembly_table *table,
 		      const reassembly_table_functions *funcs);
+
+/**
+ * @brief Destroy a reassembly table.
+ *
+ * Remove entries and destroy table;
+ *
+ * @param table The reassembly table to destroy.
+ */
 WS_DLL_PUBLIC void
 reassembly_table_destroy(reassembly_table *table);
 
@@ -437,14 +450,26 @@ WS_DLL_PUBLIC fragment_head *
 fragment_end_seq_next(reassembly_table *table, const packet_info *pinfo,
 		      const uint32_t id, const void *data);
 
-/* To specify the offset for the fragment numbering, the first fragment is added with 0, and
+/**
+ * @brief Adds a fragment with sequence numbering and sets an offset for subsequent fragments.
+ *
+ * To specify the offset for the fragment numbering, the first fragment is added with 0, and
  * afterwards this offset is set. All additional calls to off_seq_check will calculate
- * the number in sequence in regards to the offset */
+ * the number in sequence in regards to the offset.
+ *
+ * @param table Pointer to the reassembly table.
+ * @param pinfo Pointer to the packet information structure.
+ * @param id Identifier for the fragment.
+ * @param data Pointer to the fragment data.
+ * @param fragment_offset Offset for the fragment numbering.
+ */
 WS_DLL_PUBLIC void
 fragment_add_seq_offset(reassembly_table *table, const packet_info *pinfo, const uint32_t id,
                     const void *data, const uint32_t fragment_offset);
 
-/*
+/**
+ * @brief Sets the expected total length for reassembly of a PDU.
+ *
  * Sets the expected index for the last block (for fragment_add_seq functions)
  * or the expected number of bytes (for fragment_add functions). A reassembly
  * must already have started.
@@ -452,24 +477,43 @@ fragment_add_seq_offset(reassembly_table *table, const packet_info *pinfo, const
  * Note that for FD_BLOCKSEQUENCE tot_len is the index for the tail fragment.
  * i.e. since the block numbers start at 0, if we specify tot_len==2, that
  * actually means we want to defragment 3 blocks, block 0, 1 and 2.
+ *
+ * @param table The reassembly table.
+ * @param pinfo Packet information.
+ * @param id Identifier for the reassembly session.
+ * @param data Pointer to the data containing the total length.
+ * @param tot_len The expected total length of the reassembled data.
  */
 WS_DLL_PUBLIC void
 fragment_set_tot_len(reassembly_table *table, const packet_info *pinfo,
 		     const uint32_t id, const void *data, const uint32_t tot_len);
 
-/*
+
+/**
+ * Resets the total length of a reassembled fragment.
+ *
+ * @brief Clears the state of previously reassembled fragments and allows new fragments to extend the result again.
+ *
  * Similar to fragment_set_tot_len, it sets the expected number of bytes (for
  * fragment_add functions) for a previously started reassembly. If the specified
  * length already matches the reassembled length, then nothing will be done.
  *
  * If the fragments were previously reassembled, then this state will be
  * cleared, allowing new fragments to extend the reassembled result again.
+ *
+ * @param table The reassembly table containing the fragment information.
+ * @param pinfo Packet information for the current packet.
+ * @param id Unique identifier for the fragment.
+ * @param data Pointer to the fragment data.
+ * @param tot_len The total length of the reassembled data.
  */
 WS_DLL_PUBLIC void
 fragment_reset_tot_len(reassembly_table *table, const packet_info *pinfo,
 		       const uint32_t id, const void *data, const uint32_t tot_len);
 
-/*
+/**
+ * Truncates a fragmented packet in a reassembly table.
+ *
  * Truncates the size of an already defragmented reassembly to tot_len,
  * discarding past that point, including splitting any fragments in the
  * middle as necessary. The specified length must be less than or equal
@@ -478,50 +522,98 @@ fragment_reset_tot_len(reassembly_table *table, const packet_info *pinfo,
  *
  * Used for continuous streams like TCP, where the length of a segment cannot
  * be determined without first reassembling and handing to a subdissector.
+ *
+ * @brief Adjusts the length of a fragment and resets defragmentation if necessary.
+ * @param table The reassembly table containing the fragment.
+ * @param pinfo Information about the current packet.
+ * @param id The identifier for the fragment.
+ * @param data Pointer to the new data for the fragment.
+ * @param tot_len The total length of the data.
  */
 WS_DLL_PUBLIC void
 fragment_truncate(reassembly_table *table, const packet_info *pinfo,
 		       const uint32_t id, const void *data, const uint32_t tot_len);
 
-/*
+/**
+ * @brief Get the total length of reassembled data.
+ *
  * Return the expected index for the last block (for fragment_add_seq functions)
  * or the expected number of bytes (for fragment_add functions).
+ *
+ * @param table The reassembly table.
+ * @param pinfo Packet information.
+ * @param id Fragment identifier.
+ * @param data Pointer to fragment data.
+ * @return uint32_t Total length of reassembled data.
  */
 WS_DLL_PUBLIC uint32_t
 fragment_get_tot_len(reassembly_table *table, const packet_info *pinfo,
 		     const uint32_t id, const void *data);
 
-/*
+/**
+ * @brief Set the partial reassembly flag for a fragment head.
+ *
  * This function will set the partial reassembly flag(FD_PARTIAL_REASSEMBLY) for a fh.
  * When this function is called, the fh MUST already exist, i.e.
  * the fh MUST be created by the initial call to fragment_add() before
  * this function is called. Also note that this function MUST be called to indicate
  * a fh will be extended (increase the already stored data). After calling this function,
  * and if FD_DEFRAGMENTED is set, the reassembly process will be continued.
+ *
+ * @param table The reassembly table containing the fragment head.
+ * @param pinfo Information about the current packet.
+ * @param id Identifier for the fragment head.
+ * @param data Pointer to the additional data to be added to the fragment head.
  */
 WS_DLL_PUBLIC void
 fragment_set_partial_reassembly(reassembly_table *table,
 				const packet_info *pinfo, const uint32_t id,
 				const void *data);
 
-/* This function is used to check if there is partial or completed reassembly state
+/**
+ * @brief Retrieves the partial or completed reassembly state for a packet.
+ *
+ * This function is used to check if there is partial or completed reassembly state
  * matching this packet. I.e. Are there reassembly going on or not for this packet?
+ *
+ * @param table The reassembly table to search within.
+ * @param pinfo Packet information containing details about the current packet.
+ * @param id Identifier used to identify the packet in the reassembly table.
+ * @param data Additional data associated with the packet.
+ * @return fragment_head* Pointer to the fragment head if a matching reassembly state is found, NULL otherwise.
  */
 WS_DLL_PUBLIC fragment_head *
 fragment_get(reassembly_table *table, const packet_info *pinfo,
 	     const uint32_t id, const void *data);
 
 /* The same for the reassemble table */
+/**
+ * @brief Get the reassembled data for a given ID.
+ *
+ * @param table The reassembly table.
+ * @param pinfo Packet information.
+ * @param id Identifier for the fragment.
+ * @return Pointer to the reassembled data, or NULL if not found.
+ */
 WS_DLL_PUBLIC fragment_head *
 fragment_get_reassembled_id(reassembly_table *table, const packet_info *pinfo,
 			    const uint32_t id);
 
-/* This will free up all resources and delete reassembly state for this PDU.
+/**
+ * @brief Deletes a fragment from the reassembly table.
+ *
+ * This will free up all resources and delete reassembly state for this PDU.
  * Except if the PDU is completely reassembled, then it would NOT deallocate the
  * buffer holding the reassembled data but instead return the TVB
  *
  * So, if you call fragment_delete and it returns non-NULL, YOU are responsible to
  * tvb_free() .
+ *
+ * @param table The reassembly table.
+ * @param pinfo Packet information.
+ * @param id Fragment identifier.
+ * @param data Pointer to additional data.
+ * @return A pointer to the tvbuff containing the reassembled data if it was not freed, otherwise NULL.
  */
 WS_DLL_PUBLIC tvbuff_t *
 fragment_delete(reassembly_table *table, const packet_info *pinfo,
@@ -552,11 +644,35 @@ typedef struct _fragment_items {
     const char *tag;
 } fragment_items;
 
+/**
+ * @brief Process reassembled data and return a new tvbuff.
+ *
+ * @param tvb The original tvbuff containing the fragment.
+ * @param offset The offset within the tvbuff where the fragment starts.
+ * @param pinfo Packet information structure.
+ * @param name Name of the reassembled data source.
+ * @param fd_head Fragment head structure.
+ * @param fit Fragment items structure.
+ * @param update_col_infop Pointer to a boolean indicating whether to update column info.
+ * @param tree Protocol tree for displaying fragment information.
+ * @return tvbuff_t* A new tvbuff containing the reassembled data, or NULL if not applicable.
+ */
 WS_DLL_PUBLIC tvbuff_t *
 process_reassembled_data(tvbuff_t *tvb, const int offset, packet_info *pinfo,
     const char *name, fragment_head *fd_head, const fragment_items *fit,
     bool *update_col_infop, proto_tree *tree);
 
+/**
+ * @brief Show the fragment tree for a sequence of fragments.
+ *
+ * @param ipfd_head Pointer to the fragment header.
+ * @param fit Pointer to the fragment items.
+ * @param tree Pointer to the protocol tree.
+ * @param pinfo Pointer to the packet information.
+ * @param tvb Pointer to the TV buffer.
+ * @param fi Pointer to the protocol item for fragments.
+ * @return true if successful, false otherwise.
+ */
 WS_DLL_PUBLIC bool
 show_fragment_tree(fragment_head *ipfd_head, const fragment_items *fit,
     proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb, proto_item **fi);
@@ -569,7 +685,11 @@ show_fragment_seq_tree(fragment_head *ipfd_head, const fragment_items *fit,
  */
 extern void reassembly_tables_init(void);
 
-/* Cleanup internal structures
+/**
+ * @brief Cleanup internal structures used for reassembly.
+ *
+ * This function is responsible for freeing any resources and cleaning up
+ * internal data structures that are used to manage reassembly operations.
  */
 extern void
 reassembly_table_cleanup(void);

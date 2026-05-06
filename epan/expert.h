@@ -79,31 +79,59 @@ typedef struct expert_module expert_module_t;
  */
 WS_DLL_PUBLIC int proto_expert;
 
+/**
+ * @brief Initializes expert system.
+ *
+ * This function initializes the expert system, setting up necessary data structures and resources.
+ */
 extern void
 expert_init(void);
 
+/**
+ * @brief Initializes the expert system for each packet.
+ *
+ * This function initializes the expert system for each packet, setting up necessary data structures and resources.
+ */
 extern void
 expert_packet_init(void);
 
 extern void
 expert_cleanup(void);
 
+/**
+ * @brief Cleans up resources used by expert processing.
+ *
+ * This function is responsible for cleaning up any resources that were allocated
+ * during the initialization and operation of expert processing in Wireshark.
+ */
 extern void
 expert_packet_cleanup(void);
 
+/**
+ * @brief Get the highest severity of expert information.
+ *
+ * @return The highest severity level.
+ */
 WS_DLL_PUBLIC int
 expert_get_highest_severity(void);
 
+/**
+ * @brief Update the expert info comment count.
+ *
+ * @param count The new comment count.
+ */
 WS_DLL_PUBLIC void
 expert_update_comment_count(uint64_t count);
 
-/** Add an expert info.
- Add an expert info tree to a protocol item using registered expert info item
- @param pinfo Packet info of the currently processed packet. May be NULL if
-        pi is supplied
- @param pi Current protocol item (or NULL)
- @param eiindex The registered expert info item
- @return the newly created expert info tree
+/**
+ * @brief Add an expert info.
+ *
+ * Add an expert info tree to a protocol item using registered expert info item
+ * @param pinfo Packet info of the currently processed packet. May be NULL if
+ *       pi is supplied
+ * @param pi Current protocol item (or NULL)
+ * @param eiindex The registered expert info item
+ * @return the newly created expert info tree
  */
 WS_DLL_PUBLIC proto_item *
 expert_add_info(packet_info *pinfo, proto_item *pi, expert_field *eiindex);
@@ -195,37 +223,46 @@ WS_DLL_PUBLIC proto_item*
 proto_tree_add_expert_format_remaining(proto_tree* tree, packet_info* pinfo, expert_field* eiindex,
 	tvbuff_t* tvb, unsigned start, const char* format, ...) G_GNUC_PRINTF(6, 7);
 
-/*
- * Register that a protocol has expert info.
+/**
+ * @brief Register that a protocol has expert info.
+ * @param id The protocol ID to register.
+ * @return A pointer to the expert module for the protocol, or NULL if registration fails.
  */
 WS_DLL_PUBLIC expert_module_t *expert_register_protocol(int id);
 
 /**
- * Deregister a expert info.
+ * @brief Deregister a expert info.
+ * @param abbrev The abbreviation of the expert info to deregister.
  */
 void expert_deregister_expertinfo (const char *abbrev);
 
 /**
- * Deregister expert info from a protocol.
+ * @brief Deregister expert info from a protocol.
+ * @param module The expert module for the protocol.
  */
 void expert_deregister_protocol (expert_module_t *module);
 
 /**
- * Free deregistered expert infos.
+ * @brief Free deregistered expert infos.
  */
 void expert_free_deregistered_expertinfos (void);
 
 /**
- * Get summary text of an expert_info field.
+ * @brief Get summary text of an expert_info field.
+ *
  * This is intended for use in expert_add_info_format or proto_tree_add_expert_format
  * to get the "base" string to then append additional information
+ * @param eiindex The registered expert info item
+ * @return The summary text of the expert info item, or NULL if the item is not found.
  */
 WS_DLL_PUBLIC const char* expert_get_summary(expert_field *eiindex);
 
-/** Register a expert field array.
- @param module the protocol handle from expert_register_protocol()
- @param ei the ei_register_info array
- @param num_records the number of records in exp */
+/**
+ * @brief Register a expert field array.
+ * @param module the protocol handle from expert_register_protocol()
+ * @param ei the ei_register_info array
+ * @param num_records the number of records in exp
+ */
 WS_DLL_PUBLIC void
 expert_register_field_array(expert_module_t *module, ei_register_info *ei, const int num_records);
 

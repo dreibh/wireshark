@@ -687,6 +687,7 @@ static expert_field ei_oran_too_many_symbols;
 static expert_field ei_oran_se30_not_ul;
 static expert_field ei_oran_se30_unknown_ueid;
 static expert_field ei_oran_beamid_bfws_not_found;
+static expert_field ei_oran_syminc_set_for_uplane;
 
 
 
@@ -2665,6 +2666,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
         uint32_t rb;
         proto_tree_add_item_ret_uint(c_section_tree, hf_oran_rb, tvb, offset, 1, ENC_NA, &rb);
         /* symInc (1 bit) */
+        /* TODO: mark as ignored if SE6, SE12 or SE19 present */
         if (sectionType != SEC_C_RRM_MEAS_REPORTS &&     /* Section Type 10 */
             sectionType != SEC_C_REQUEST_RRM_MEAS) {     /* Section Type 11 */
             unsigned int sym_inc;
@@ -7029,8 +7031,12 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         /* rb */
         uint32_t rb;
         proto_tree_add_item_ret_uint(section_tree, hf_oran_rb, tvb, offset, 1, ENC_NA, &rb);
-        /* symInc */
-        proto_tree_add_item(section_tree, hf_oran_symInc, tvb, offset, 1, ENC_NA);
+        /* symInc. "use of symInc=1 shall be prohibited in the U-plane"  */
+        uint8_t syminc;
+        proto_item *syminc_ti = proto_tree_add_item_ret_uint8(section_tree, hf_oran_symInc, tvb, offset, 1, ENC_NA, &syminc);
+        if (syminc) {
+            expert_add_info(NULL, syminc_ti, &ei_oran_syminc_set_for_uplane);
+        }
         /* startPrbu */
         uint32_t startPrbu = 0;
         proto_tree_add_item_ret_uint(section_tree, hf_oran_startPrbu, tvb, offset, 2, ENC_BIG_ENDIAN, &startPrbu);
@@ -10296,6 +10302,7 @@ proto_register_oran(void)
         { &ei_oran_se30_not_ul, { "oran_fh_cus.se30_not_ul", PI_MALFORMED, PI_WARN, "SE30 should only be sent in uplink direction", EXPFILL }},
         { &ei_oran_se30_unknown_ueid, { "oran_fh_cus.se30_unknown_ue", PI_MALFORMED, PI_WARN, "SE30 UEId not recognised from SE10", EXPFILL }},
         { &ei_oran_beamid_bfws_not_found, { "oran_fh_cus.beamid_bfws_not_found", PI_SEQUENCE, PI_WARN, "Have bundle with disableBFWs but no definition found", EXPFILL }},
+        { &ei_oran_syminc_set_for_uplane, { "oran_fh_cus.syminc_set_for_uplane", PI_MALFORMED, PI_ERROR, "symcInc is prohibited in the U-Plane", EXPFILL }}
     };
 
     /* Register the protocol name and description */

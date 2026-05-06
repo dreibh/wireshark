@@ -104,6 +104,11 @@ static int hf_frame_cb_pen;
 static int hf_frame_cb_copy_allowed;
 static int hf_frame_comment;
 static int hf_frame_encoding;
+static int hf_frame_cust_opt;
+static int hf_frame_cust_opt_pen;
+static int hf_frame_cust_opt_copy_allowed;
+static int hf_frame_cust_opt_string;
+static int hf_frame_cust_opt_data;
 
 static int ett_frame;
 static int ett_ifname;
@@ -188,6 +193,7 @@ static dissector_table_t wtap_encap_dissector_table;
 static dissector_table_t wtap_fts_rec_dissector_table;
 static dissector_table_t block_pen_dissector_table;
 static dissector_table_t binary_option_pen_dissector_table;
+static dissector_table_t string_option_pen_dissector_table;
 static dissector_table_t packet_block_option_dissector_table;
 
 /* The number of tree items required to add an exception to the tree */
@@ -490,21 +496,43 @@ handle_packet_option(wtap_block_t block _U_, unsigned option_id,
     wtap_opttype_e option_type _U_, wtap_optval_t *optval, void *user_data)
 {
 	struct custom_binary_opt_cb_data *cb_data = (struct custom_binary_opt_cb_data *)user_data;
+	proto_item *ti;
+	proto_tree *opt_tree;
 
 	switch (option_id) {
 
 	case OPT_CUSTOM_STR_COPY:
 	case OPT_CUSTOM_STR_NO_COPY:
 		/* Display it */
+		cb_data->data.optval = optval;
+		if (!dissector_try_uint_with_data(string_option_pen_dissector_table,
+		    optval->custom_stringval.pen, cb_data->tvb,
+		    cb_data->pinfo, cb_data->tree, false, &cb_data->data)) {
+			ti = proto_tree_add_item(cb_data->tree, hf_frame_cust_opt, cb_data->tvb, 0, tvb_reported_length(cb_data->tvb), ENC_NA);
+			opt_tree = proto_item_add_subtree(ti, ett_verdict);
+			proto_tree_add_uint(opt_tree, hf_frame_cust_opt_pen, cb_data->tvb, 0, 0,
+							 optval->custom_stringval.pen);
+			proto_tree_add_boolean(opt_tree, hf_frame_cust_opt_copy_allowed, cb_data->tvb, 0, 0, option_id == OPT_CUSTOM_STR_COPY);
+			proto_tree_add_string(opt_tree, hf_frame_cust_opt_string, cb_data->tvb, 0, 0, optval->custom_stringval.string);
+		}
 		break;
 
 	case OPT_CUSTOM_BIN_COPY:
 	case OPT_CUSTOM_BIN_NO_COPY:
 		/* Process it */
 		cb_data->data.optval = optval;
-		dissector_try_uint_with_data(binary_option_pen_dissector_table,
+		if (!dissector_try_uint_with_data(binary_option_pen_dissector_table,
 		    optval->custom_binaryval.pen, cb_data->tvb,
-		    cb_data->pinfo, cb_data->tree, false, &cb_data->data);
+		    cb_data->pinfo, cb_data->tree, false, &cb_data->data)) {
+
+			ti = proto_tree_add_item(cb_data->tree, hf_frame_cust_opt, cb_data->tvb, 0, tvb_reported_length(cb_data->tvb), ENC_NA);
+			opt_tree = proto_item_add_subtree(ti, ett_verdict);
+			proto_tree_add_uint(opt_tree, hf_frame_cust_opt_pen, cb_data->tvb, 0, 0,
+							 optval->custom_binaryval.pen);
+			proto_tree_add_boolean(opt_tree, hf_frame_cust_opt_copy_allowed, cb_data->tvb, 0, 0, option_id == OPT_CUSTOM_BIN_COPY);
+			proto_tree_add_bytes_with_length(opt_tree, hf_frame_cust_opt_data, cb_data->tvb, 0, 0, optval->custom_binaryval.data.custom_data, (unsigned)optval->custom_binaryval.data.custom_data_len);
+
+		}
 		break;
 
 	default:
@@ -1133,11 +1161,8 @@ dissect_frame(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
 				    pinfo->rec->rec_header.custom_block_header.pen,
 				    tvb, pinfo, parent_tree)) {
 					col_set_str(pinfo->cinfo, COL_PROTOCOL, "PCAPNG");
-					proto_tree_add_uint_format_value(fh_tree, hf_frame_cb_pen, tvb, 0, 0,
-					                                 pinfo->rec->rec_header.custom_block_header.pen,
-					                                 "%s (%u)",
-					                                 enterprises_lookup(pinfo->rec->rec_header.custom_block_header.pen, "Unknown"),
-					                                 pinfo->rec->rec_header.custom_block_header.pen);
+					proto_tree_add_uint(fh_tree, hf_frame_cb_pen, tvb, 0, 0,
+					                    pinfo->rec->rec_header.custom_block_header.pen);
 					proto_tree_add_boolean(fh_tree, hf_frame_cb_copy_allowed, tvb, 0, 0, pinfo->rec->rec_header.custom_block_header.copy_allowed);
 					col_add_fstr(pinfo->cinfo, COL_INFO, "Custom Block: PEN = %s (%d), will%s be copied",
 					             enterprises_lookup(pinfo->rec->rec_header.custom_block_header.pen, "Unknown"),
@@ -1617,7 +1642,7 @@ static void common_register_frame(bool use_packets)
 
 		{ &hf_frame_cb_pen,
 		  { "Private Enterprise Number", "frame.cb_pen",
-		    FT_UINT32, BASE_DEC, NULL, 0x0,
+		    FT_UINT32, BASE_ENTERPRISES, STRINGS_ENTERPRISES, 0x0,
 		    "IANA assigned private enterprise number (PEN)", HFILL }},
 
 		{ &hf_frame_cb_copy_allowed,
@@ -1630,6 +1655,30 @@ static void common_register_frame(bool use_packets)
 		    FT_UINT32, BASE_DEC, VALS(packet_char_enc_types), 0x0,
 		    "Character encoding (ASCII, EBCDIC...)", HFILL }},
 
+		{ &hf_frame_cust_opt,
+		  { "Custom Option", "frame.custom_opt",
+		    FT_NONE, BASE_NONE, NULL, 0x0,
+		    NULL, HFILL }},
+
+		{ &hf_frame_cust_opt_pen,
+		  { "Private Enterprise Number", "frame.custom_opt.pen",
+		    FT_UINT32, BASE_ENTERPRISES, STRINGS_ENTERPRISES, 0x0,
+		    "IANA assigned private enterprise number (PEN)", HFILL }},
+
+		{ &hf_frame_cust_opt_copy_allowed,
+		  { "Copying", "frame.custom_opt.copy",
+		    FT_BOOLEAN, BASE_NONE, TFS(&tfs_allowed_not_allowed), 0x0,
+		    "Whether the custom option will be written or not", HFILL }},
+
+		{ &hf_frame_cust_opt_string,
+		  { "String data", "frame.custom_opt.string",
+		    FT_STRING, BASE_NONE, NULL, 0x0,
+		    NULL, HFILL }},
+
+		{ &hf_frame_cust_opt_data,
+		  { "Binary data", "frame.custom_opt.binary",
+		    FT_BYTES, BASE_NONE, NULL, 0x0,
+		    NULL, HFILL }},
 	};
 
 	static hf_register_info hf_encap =
@@ -1697,6 +1746,8 @@ static void common_register_frame(bool use_packets)
 	    "PcapNG custom block PEN", proto_frame, FT_UINT32, BASE_DEC);
 	binary_option_pen_dissector_table = register_dissector_table("pcapng_custom_binary_option",
 	    "PcapNG custom binary option PEN", proto_frame, FT_UINT32, BASE_DEC);
+	string_option_pen_dissector_table = register_dissector_table("pcapng_custom_string_option",
+	    "PcapNG custom string option PEN", proto_frame, FT_UINT32, BASE_DEC);
 	packet_block_option_dissector_table = register_dissector_table("pcapng_packet_block_option",
 	    "PcapNG packet block option", proto_frame, FT_UINT32, BASE_DEC);
 	register_capture_dissector_table("wtap_encap", "Wiretap encapsulation type");

@@ -252,12 +252,28 @@ typedef struct {
     const char* description;
 } ws_services_entry_t;
 
+/**
+ * @brief Lookup a service name based on its port number and protocol.
+ *
+ * @param value The port number to look up.
+ * @param proto The protocol associated with the port.
+ */
 ws_services_entry_t const*
 global_services_lookup(uint16_t value, ws_services_proto_t proto);
 
+/**
+ * @brief Dump all known services to a file.
+ *
+ * @param fp The file pointer to which the services information will be written.
+ */
 WS_DLL_PUBLIC
 void global_services_dump(FILE* fp);
 
+/**
+ * @brief Dump all known enterprise numbers to a file.
+ *
+ * @param fp The file pointer to which the enterprise numbers information will be written.
+ */
 WS_DLL_PUBLIC
 void global_enterprises_dump(FILE* fp);
 
@@ -277,10 +293,22 @@ struct ws_iana_ip_special_block {
     int source, destination, forwardable, global, reserved;
 };
 
+/**
+ * @brief Lookup an IPv4 special block based on its IP number.
+ *
+ * @param ipnum The IP number to look up.
+ * @return Pointer to the special block if found, NULL otherwise.
+ */
 WS_DLL_PUBLIC
 const struct ws_iana_ip_special_block*
 ws_iana_ipv4_special_block_lookup(uint32_t ipnum);
 
+/**
+ * @brief Lookup an IPv6 special block based on the given address.
+ *
+ * @param addr The IPv6 address to look up.
+ * @return A pointer to the corresponding special block entry if found, NULL otherwise.
+ */
 WS_DLL_PUBLIC
 const struct ws_iana_ip_special_block*
 ws_iana_ipv6_special_block_lookup(const ws_in6_addr* addr);

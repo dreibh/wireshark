@@ -76,7 +76,7 @@ static profile_def* profile_find_by_name(const char* name, bool is_global)
     return NULL;
 }
 
-static bool
+bool
 profile_name_is_valid(const char* name)
 {
     bool valid = true;

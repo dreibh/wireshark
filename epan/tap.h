@@ -91,6 +91,11 @@ typedef struct _tap_reg {
  */
 extern void register_all_tap_listeners(tap_reg_t const *tap_reg_listeners);
 
+/**
+ * @brief Initializes the tap system.
+ *
+ * This function initializes the tap system and should be called once when the dissector is initialized.
+ */
 extern void tap_init(void);
 
 /** This function registers that a dissector has the packet tap ability

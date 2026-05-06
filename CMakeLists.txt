@@ -2261,6 +2261,10 @@ set(TSHARK_TAP_SRC
 
 )
 
+set(TSHARK_COMMON_SRC
+	${CMAKE_SOURCE_DIR}/ui/cli/cli_common.c
+)
+
 set(STRATO_TAP_SRC
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-endpoints.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-exportobject.c
@@ -2271,6 +2275,10 @@ set(STRATO_TAP_SRC
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-stats_tree.c
 	${CMAKE_SOURCE_DIR}/ui/cli/tap-srt.c
 	${CUSTOM_STRATO_TAP_SRC}
+)
+
+set(STRATO_COMMON_SRC
+	${CMAKE_SOURCE_DIR}/ui/cli/cli_common.c
 )
 
 # Copied into ${DATAFILE_DIR} at build time and ${CMAKE_INSTALL_DATADIR}/wireshark
@@ -3472,6 +3480,7 @@ if(BUILD_tshark)
 		tshark.c
 		app/wireshark_flavor.c
 		${TSHARK_TAP_SRC}
+		${TSHARK_COMMON_SRC}
 	)
 
 	set_executable_resources(tshark "TShark" UNIQUE_RC)
@@ -3501,6 +3510,7 @@ if(BUILD_strato)
 		strato.c
 		app/stratoshark_flavor.c
 		${STRATO_TAP_SRC}
+		${STRATO_COMMON_SRC}
 		strato-tap-register.c
 	)
 

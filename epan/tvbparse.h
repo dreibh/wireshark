@@ -331,6 +331,12 @@ tvbparse_wanted_t* tvbparse_hashed(const int id,
                                    tvbparse_wanted_t* other,
                                    ...);
 
+/**
+ * @brief Adds a hashed element to the wanted list.
+ *
+ * @param w Pointer to the tvbparse_wanted_t structure.
+ * @param ... Variable arguments, alternating between name (char*) and element (tvbparse_wanted_t*).
+ */
 WS_DLL_PUBLIC
 void tvbparse_hashed_add(tvbparse_wanted_t* w, ...);
 
@@ -351,19 +357,26 @@ tvbparse_wanted_t* tvbparse_set_seq(const int id,
                                     tvbparse_action_t after_cb,
                                     ...);
 
-/*
- * some
+/**
+ * @brief Creates a parsing element that matches a given candidate a specified number of times.
  *
  * When looked for it will try to match the given candidate at least min times
  * and at most max times. If the given candidate is matched at least min times
  * a composed element is returned.
  *
+ * @param id Identifier for the parsing element.
+ * @param min Minimum number of times the candidate should be matched.
+ * @param max Maximum number of times the candidate should be matched.
+ * @param data User-defined data to be associated with the parsing element.
+ * @param before_cb Callback function to be called before parsing the element.
+ * @param after_cb Callback function to be called after parsing the element.
+ * @param wanted The candidate element to be matched repeatedly.
  */
 WS_DLL_PUBLIC
 tvbparse_wanted_t* tvbparse_some(const int id,
                                  const unsigned min,
                                  const unsigned max,
-                                 const void* private_data,
+                                 const void* data,
                                  tvbparse_action_t before_cb,
                                  tvbparse_action_t after_cb,
                                  const tvbparse_wanted_t* wanted);
@@ -381,11 +394,21 @@ tvbparse_wanted_t* tvbparse_some(const int id,
 WS_DLL_PUBLIC
 tvbparse_wanted_t* tvbparse_handle(tvbparse_wanted_t** handle);
 
-/*  quoted
- *  this is a composed candidate, that will try to match a quoted string
- *  (included the quotes) including into it every escaped quote.
+/**
+ * @brief Parses quoted strings in a given data buffer.
+ *
+ * this is a composed candidate, that will try to match a quoted string
+ * (included the quotes) including into it every escaped quote.
  *
  *  C strings are matched with tvbparse_quoted(-1,NULL,NULL,NULL,"\"","\\")
+ *
+ * @param id Identifier for the parsed token.
+ * @param data Pointer to the data buffer containing the quoted strings.
+ * @param before_cb Callback function to be invoked before parsing.
+ * @param after_cb Callback function to be invoked after parsing.
+ * @param quote Character used as the quote delimiter.
+ * @param escape Character used for escaping special characters within quotes.
+ * @return A tvbparse_wanted_t structure representing the parsed quoted strings.
  */
 WS_DLL_PUBLIC
 tvbparse_wanted_t* tvbparse_quoted(const int id,
@@ -399,6 +422,16 @@ tvbparse_wanted_t* tvbparse_quoted(const int id,
  * a helper callback for quoted strings that will shrink the token to contain
  * only the string and not the quotes
  */
+/**
+ * @brief Callback function to shrink token length and offset.
+ *
+ * This callback is invoked before or after an element has been processed.
+ * It adjusts the token's offset and length by incrementing the offset and decrementing the length by 2.
+ *
+ * @param tvbparse_data User data passed to the callback (not used).
+ * @param wanted_data Wanted data for the element (not used).
+ * @param tok Pointer to the current token being processed.
+ */
 WS_DLL_PUBLIC
 void tvbparse_shrink_token_cb(void* tvbparse_data,
                               const void* wanted_data,
@@ -407,13 +440,24 @@ void tvbparse_shrink_token_cb(void* tvbparse_data,
 
 
 
-/* initialize the parser (at every packet)
+/**
+ * @brief Initialize a new TVB parser.
+ *
+ * initialize the parser (at every packet)
  * scope: memory scope/pool
  * tvb: what are we parsing?
  * offset: from where
  * len: for how many bytes
  * private_data: will be passed to the action callbacks
  * ignore: a wanted token type to be ignored (the associated cb WILL be called when it matches)
+ *
+ * @param scope Memory allocation scope for the parser.
+ * @param tvb The input tvbuff to parse.
+ * @param offset Starting offset within the tvbuff.
+ * @param len Length of data to parse, or -1 to use the entire captured length.
+ * @param private_data Private data to associate with the parser.
+ * @param ignore Configuration for ignored elements during parsing.
+ * @return Pointer to the initialized tvbparse_t structure.
  */
 WS_DLL_PUBLIC
 tvbparse_t* tvbparse_init(wmem_allocator_t *scope,
@@ -423,46 +467,82 @@ tvbparse_t* tvbparse_init(wmem_allocator_t *scope,
                           void* private_data,
                           const tvbparse_wanted_t* ignore);
 
-/* reset the parser */
+/**
+ * @brief Resets the token buffer parser to a new offset and length.
+ *
+ * @param tt Pointer to the tvbparse_t structure.
+ * @param offset The new starting offset for parsing.
+ * @param len The new length of data to parse.
+ * @return true if the reset is successful, false otherwise.
+ */
 WS_DLL_PUBLIC
 bool tvbparse_reset(tvbparse_t* tt, const unsigned offset, unsigned len);
 
+/**
+ * @brief Get the current offset in the TVB parse structure.
+ *
+ * @param tt Pointer to the TVB parse structure.
+ * @return The current offset.
+ */
 WS_DLL_PUBLIC
-unsigned tvbparse_curr_offset(tvbparse_t* tt);
+ unsigned tvbparse_curr_offset(tvbparse_t* tt);
 unsigned tvbparse_len_left(tvbparse_t* tt);
 
 
 
-/*
+/**
+ * @brief Peeks at the next token in the buffer without advancing the parser.
+ *
  * This will look for the wanted token at the current offset or after any given
  * number of ignored tokens returning false if there's no match or true if there
  * is a match.
  * The parser will be left in its original state and no callbacks will be called.
+ *
+ * @param tt Pointer to the tvbparse_t structure representing the parser state.
+ * @param wanted Pointer to the tvbparse_wanted_t structure describing the token to look for.
+ * @return True if a match is found, false otherwise.
  */
 WS_DLL_PUBLIC
 bool tvbparse_peek(tvbparse_t* tt,
                        const tvbparse_wanted_t* wanted);
 
-/*
+/**
+ * @brief Retrieves a token based on the specified conditions.
+ *
  * This will look for the wanted token at the current offset or after any given
  * number of ignored tokens returning NULL if there's no match.
  * if there is a match it will set the offset of the current parser after
  * the end of the token
+ *
+ * @param tt Pointer to the TVB parse context.
+ * @param wanted Pointer to the structure containing the conditions for the desired token.
+ * @return Pointer to the retrieved token if successful, NULL otherwise.
  */
 WS_DLL_PUBLIC
 tvbparse_elem_t* tvbparse_get(tvbparse_t* tt,
                               const tvbparse_wanted_t* wanted);
 
-/*
+/**
+ * @brief Finds an element in a TVB parse structure based on a given condition.
+ *
  * Like tvbparse_get but this will look for a wanted token even beyond the
  * current offset.
  * This function is slow.
+ *
+ * @param tt Pointer to the TVB parse structure.
+ * @param wanted Pointer to the wanted element description, including the condition function.
+ * @return Pointer to the found element if successful, NULL otherwise.
  */
 WS_DLL_PUBLIC
 tvbparse_elem_t* tvbparse_find(tvbparse_t* tt,
                                const tvbparse_wanted_t* wanted);
 
-
+/**
+ * @brief Adds an element to a protocol tree.
+ *
+ * @param tree The protocol tree to which the element will be added.
+ * @param curr The current element being processed.
+ */
 WS_DLL_PUBLIC
 void tvbparse_tree_add_elem(proto_tree* tree, tvbparse_elem_t* curr);
 

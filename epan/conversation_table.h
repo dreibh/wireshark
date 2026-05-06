@@ -263,6 +263,11 @@ WS_DLL_PUBLIC void conversation_table_set_gui_info(conv_gui_init_cb init_cb);
 WS_DLL_PUBLIC void endpoint_table_set_gui_info(endpoint_gui_init_cb init_cb);
 
 /* For backwards source and binary compatibility */
+/**
+ * @brief Set GUI initialization callback for hostlist table.
+ *
+ * @param init_cb Callback function to initialize GUI information.
+ */
 G_DEPRECATED_FOR(endpoint_table_set_gui_info)
 WS_DLL_PUBLIC void hostlist_table_set_gui_info(endpoint_gui_init_cb init_cb);
 
@@ -293,7 +298,8 @@ WS_DLL_PUBLIC void reset_endpoint_table_data(conv_hash_t *ch);
 G_DEPRECATED_FOR(reset_endpoint_table_data)
 WS_DLL_PUBLIC void reset_hostlist_table_data(conv_hash_t *ch);
 
-/** Initialize dissector conversation for stats and (possibly) GUI.
+/**
+ * @brief Initialize dissector conversation for stats and (possibly) GUI.
  *
  * @param opt_arg filter string to compare with dissector
  * @param userdata register_ct_t* for dissector conversation table
@@ -308,10 +314,17 @@ WS_DLL_PUBLIC void dissector_conversation_init(const char *opt_arg, void* userda
 WS_DLL_PUBLIC void dissector_endpoint_init(const char *opt_arg, void* userdata);
 
 /* For backwards source and binary compatibility */
+/**
+ * @brief Initialize the dissector host list with the given options and user data.
+ *
+ * @param opt_arg Options argument for initialization.
+ * @param userdata User data to be passed during initialization.
+ */
 G_DEPRECATED_FOR(dissector_endpoint_init)
 WS_DLL_PUBLIC void dissector_hostlist_init(const char *opt_arg, void* userdata);
 
-/** Get the string representation of an address.
+/**
+ * @brief Get the string representation of an address.
  *
  * @param allocator The wmem allocator to use when allocating the string
  * @param addr The address.
@@ -320,7 +333,8 @@ WS_DLL_PUBLIC void dissector_hostlist_init(const char *opt_arg, void* userdata);
  */
 WS_DLL_PUBLIC char *get_conversation_address(wmem_allocator_t *allocator, address *addr, bool resolve_names);
 
-/** Get the string representation of a port.
+/**
+ * @brief Get the string representation of a port.
  *
  * @param allocator The wmem allocator to use when allocating the string
  * @param port The port number.
@@ -332,7 +346,8 @@ WS_DLL_PUBLIC char *get_conversation_address(wmem_allocator_t *allocator, addres
  */
 WS_DLL_PUBLIC char *get_conversation_port(wmem_allocator_t *allocator, uint32_t port, conversation_type ctype, bool resolve_names);
 
-/** Get the string representation of the port for an endpoint_item_t.
+/**
+ * @brief Get the string representation of the port for an endpoint_item_t.
  *
  * @param allocator The wmem allocator to use when allocating the string
  *
@@ -344,7 +359,8 @@ WS_DLL_PUBLIC char *get_conversation_port(wmem_allocator_t *allocator, uint32_t 
  */
 WS_DLL_PUBLIC char *get_endpoint_port(wmem_allocator_t *allocator, endpoint_item_t *item, bool resolve_names);
 
-/** Get a display filter for the given conversation and direction.
+/**
+ * @brief Get a display filter for the given conversation and direction.
  *
  * @param conv_item The conversation.
  * @param direction The desired direction.
@@ -352,7 +368,8 @@ WS_DLL_PUBLIC char *get_endpoint_port(wmem_allocator_t *allocator, endpoint_item
  */
 WS_DLL_PUBLIC char *get_conversation_filter(conv_item_t *conv_item, conv_direction_e direction);
 
-/** Get a display filter for the given endpoint.
+/**
+ * @brief Get a display filter for the given endpoint.
  *
  * @param endpoint_item The endpoint.
  * @return A string, allocated using the wmem NULL allocator,
@@ -364,7 +381,8 @@ WS_DLL_PUBLIC char *get_endpoint_filter(endpoint_item_t *endpoint_item);
 G_DEPRECATED_FOR(get_endpoint_filter)
 WS_DLL_PUBLIC char *get_hostlist_filter(endpoint_item_t *endpoint_item);
 
-/** Add some data to the conversation table.
+/**
+ * @brief Add some data to the conversation table.
  *
  * @param ch the table to add the data to
  * @param src source address
@@ -425,7 +443,8 @@ add_conversation_table_data_ipv4_subnet(conv_hash_t *ch, const address *src, con
     nstime_t *ts, nstime_t *abs_ts, ct_dissector_info_t *ct_info,
     conversation_type ctype);
 
-/** Add some data to the endpoint table.
+/**
+ * @brief Add some data to the endpoint table.
  *
  * @param ch the table hash to add the data to
  * @param addr address
@@ -447,6 +466,18 @@ WS_DLL_PUBLIC void add_endpoint_table_data_ipv4_subnet(conv_hash_t *ch, const ad
     uint32_t port, bool sender, int num_frames, int num_bytes, et_dissector_info_t *et_info, endpoint_type etype);
 
 /* For backwards source and binary compatibility */
+/**
+ * @brief Adds data to the hostlist table for a conversation.
+ *
+ * @param ch Pointer to the conversation hash table.
+ * @param addr Address of the endpoint.
+ * @param port Port number of the endpoint.
+ * @param sender Boolean indicating if this is the sender's data.
+ * @param num_frames Number of frames associated with the endpoint.
+ * @param num_bytes Total bytes associated with the endpoint.
+ * @param et_info Pointer to the dissector information.
+ * @param etype Type of the endpoint.
+ */
 G_DEPRECATED_FOR(add_endpoint_table_data)
 WS_DLL_PUBLIC void add_hostlist_table_data(conv_hash_t *ch, const address *addr,
     uint32_t port, bool sender, int num_frames, int num_bytes, et_dissector_info_t *et_info, endpoint_type etype);

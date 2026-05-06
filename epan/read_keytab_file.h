@@ -18,8 +18,13 @@
 extern "C" {
 #endif /* __cplusplus */
 
+/**
+ * @brief Reads a Kerberos keytab file.
+ *
+ * @param filename The path to the keytab file to read.
+ */
 WS_DLL_PUBLIC
-void keytab_file_read(const char *);
+void keytab_file_read(const char *filename);
 
 #ifdef HAVE_KERBEROS
 #define KRB_MAX_KEY_LENGTH	32
@@ -81,11 +86,21 @@ WS_DLL_PUBLIC void keytab_file_key_map_insert(wmem_map_t* key_map, enc_key_t* ne
 
 #endif /* HAVE_KERBEROS */
 
+/**
+ * @brief Initializes data structures for keytab file processing.
+ */
 WS_DLL_LOCAL
 void keytab_file_data_init(void);
 
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+ /**
+  * @brief Initializes data structures for keytab file processing.
+  *
+  * This function initializes any necessary data structures or variables required
+  * for reading and processing keytab files.
+  */
 
 #endif  /* __READ_KEYTAB_FILE_H */

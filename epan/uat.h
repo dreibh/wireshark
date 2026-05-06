@@ -348,6 +348,12 @@ bool uat_load_str(uat_t* uat_in, const char* entry, char** err);
  */
 uat_t *uat_find(char *name);
 
+/**
+ * @brief Retrieve a UAT table by its name.
+ *
+ * @param name The name of the UAT table to retrieve. Must not be NULL.
+ * @return Pointer to the UAT table if found, otherwise NULL.
+ */
 WS_DLL_PUBLIC
 uat_t* uat_get_table_by_name(const char* name);
 
@@ -376,34 +382,191 @@ WS_DLL_PUBLIC
 bool uat_fld_chk_oid(void*, const char*, unsigned, const void*, const void*, char** err);
 WS_DLL_PUBLIC
 bool uat_fld_chk_proto(void*, const char*, unsigned, const void*, const void*, char** err);
+
+/**
+ * @brief Checks if a field name is valid.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_field(void*, const char*, unsigned, const void*, const void*, char** err);
+bool uat_fld_chk_field(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Checks if a field value is a valid decimal number.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_num_dec(void*, const char*, unsigned, const void*, const void*, char** err);
+bool uat_fld_chk_num_dec(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Checks if a field value is a valid decimal 64-bit number.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_num_dec64(void*, const char*, unsigned, const void*, const void*, char** err);
+bool uat_fld_chk_num_dec64(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Checks if a field contains a valid hexadecimal number.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_num_hex(void*, const char*, unsigned, const void*, const void*, char** err);
+bool uat_fld_chk_num_hex(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Check if a field contains a valid hexadecimal number.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_num_hex64(void*, const char*, unsigned, const void*, const void*, char** err);
+bool uat_fld_chk_num_hex64(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Check if a field contains a signed decimal number.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_num_signed_dec(void*, const char*, unsigned, const void*, const void*, char** err);
+bool uat_fld_chk_num_signed_dec(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Check if a field value is a signed decimal 64-bit number.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_num_signed_dec64(void*, const char*, unsigned, const void*, const void*, char** err);
+bool uat_fld_chk_num_signed_dec64(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Check if a field value is a numeric double.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_num_dbl(void*, const char*, unsigned, const void*, const void*, char** err);
+bool uat_fld_chk_num_dbl(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Check if a field value is a boolean.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_bool(void*, const char*, unsigned, const void*, const void*, char** err);
+bool uat_fld_chk_bool(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Checks if a field value is a valid enum.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param v Value string.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_enum(void*, const char*, unsigned, const void*, const void*, char**);
+bool uat_fld_chk_enum(void* u1, const char* strptr, unsigned len, const void* v, const void* u3, char** err);
+
+/**
+ * @brief Checks if a field value is a  range object.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_range(void*, const char*, unsigned, const void*, const void*, char**);
+bool uat_fld_chk_range(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Checks if a color field is valid.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_color(void*, const char*, unsigned, const void*, const void*, char**);
+bool uat_fld_chk_color(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
 
 typedef void (*uat_cb_t)(void* uat,void* user_data);
+
+/**
+ * @brief Iterates over all UAT tables and calls a callback function for each.
+ *
+ * @param cb Callback function to be called for each UAT table.
+ * @param user_data User data to be passed to the callback function.
+ */
 WS_DLL_PUBLIC
 void uat_foreach_table(uat_cb_t cb,void* user_data);
+
+/**
+ * @brief Unloads all UATs that are not loaded from a profile.
+ *
+ * This function iterates through all UATs and unloads those that are not marked as being loaded from a profile.
+ */
 void uat_unload_all(void);
 
 /* Converts an ASCII string using C-style escapes (e.g., for unprintable
@@ -436,20 +599,77 @@ char* uat_unbinstring(const char* si, unsigned in_len, unsigned* len_p);
 
 /* Some strings entirely made of ... already declared */
 
+/**
+ * @brief Checks if a string contains only printable characters.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_str_isprint(void*, const char*, unsigned, const void*, const void*, char**);
+bool uat_fld_chk_str_isprint(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
 
 WS_DLL_PUBLIC
-bool uat_fld_chk_str_isalpha(void*, const char*, unsigned, const void*, const void*, char**);
 
-WS_DLL_PUBLIC
-bool uat_fld_chk_str_isalnum(void*, const char*, unsigned, const void*, const void*, char**);
+/**
+ * @brief Checks if a string contains only alphabetic characters.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
+bool uat_fld_chk_str_isalpha(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
 
-WS_DLL_PUBLIC
-bool uat_fld_chk_str_isdigit(void*, const char*, unsigned, const void*, const void*, char**);
 
+/**
+ * @brief Checks if a string is alphanumeric.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
 WS_DLL_PUBLIC
-bool uat_fld_chk_str_isxdigit(void*, const char*, unsigned, const void*, const void*, char**);
+bool uat_fld_chk_str_isalnum(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Checks if a string contains only digits.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
+WS_DLL_PUBLIC
+bool uat_fld_chk_str_isdigit(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
+
+/**
+ * @brief Checks if a string contains only hexadecimal digits.
+ *
+ * @param u1 User data pointer, not used in this function.
+ * @param strptr String to check.
+ * @param len Length of the string being checked.
+ * @param u2 User data pointer, not used in this function.
+ * @param u3 User data pointer, not used in this function.
+ * @param err Error message buffer if an error occurs.
+ * @return true if the field value is valid, false otherwise.
+ */
+WS_DLL_PUBLIC
+bool uat_fld_chk_str_isxdigit(void* u1, const char* strptr, unsigned len, const void* u2, const void* u3, char** err);
 
 
 /*

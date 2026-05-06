@@ -161,6 +161,10 @@ typedef struct _stat_data_t {
     void        *user_data;       /**< "GUI" specifics (if necessary) */
 } stat_data_t;
 
+/** Initialize statistics tap system.
+ *
+ * @brief Initializes the statistics tap system, setting up necessary data structures.
+ */
 extern void stat_tap_init(void);
 
 /** Register UI information for a tap.
@@ -175,16 +179,41 @@ WS_DLL_PUBLIC void stat_tap_iterate_tables(wmem_foreach_func func, void *user_da
 WS_DLL_PUBLIC void stat_tap_get_filter(stat_tap_table_ui* new_stat, const char *opt_arg, const char **filter, char** err);
 WS_DLL_PUBLIC stat_tap_table* stat_tap_init_table(const char *name, int num_fields, int num_elements,
                 const char *filter_string);
+
+/**
+ * @brief Adds a new table to the statistics tap.
+ *
+ * @param new_stat Pointer to the statistics tap UI structure.
+ * @param table Pointer to the statistics tap table structure.
+ */
 WS_DLL_PUBLIC void stat_tap_add_table(stat_tap_table_ui* new_stat, stat_tap_table* table);
+
+/**
+ * @brief Finds a table by its UI structure and name.
+ *
+ * @param ui The UI structure containing the tables.
+ * @param name The name of the table to find.
+ * @return stat_tap_table* Pointer to the found table, or NULL if not found.
+ */
 WS_DLL_PUBLIC stat_tap_table *stat_tap_find_table(stat_tap_table_ui *ui, const char *name);
 WS_DLL_PUBLIC void stat_tap_init_table_row(stat_tap_table *stat_table, unsigned table_index, unsigned num_fields, const stat_tap_table_item_type* fields);
 WS_DLL_PUBLIC stat_tap_table_item_type* stat_tap_get_field_data(const stat_tap_table *stat_table, unsigned table_index, unsigned field_index);
+
+/**
+ * @brief Set field data for a specific table and field index.
+ *
+ * @param stat_table Pointer to the stat_tap_table structure.
+ * @param table_index Index of the table within the stat_tap_table.
+ * @param field_index Index of the field within the specified table.
+ * @param field_data Pointer to the new field data to be set.
+ */
 WS_DLL_PUBLIC void stat_tap_set_field_data(stat_tap_table *stat_table, unsigned table_index, unsigned field_index, stat_tap_table_item_type* field_data);
 WS_DLL_PUBLIC void reset_stat_table(stat_tap_table_ui* new_stat);
 
 WS_DLL_PUBLIC stat_tap_table_ui *stat_tap_by_name(const char *name);
 
-/** Free all of the tables associated with a stat_tap_table_ui.
+/**
+ * @brief Free all of the tables associated with a stat_tap_table_ui.
  *
  * Frees data created by stat_tap_ui.stat_tap_init_cb.
  * stat_tap_table_ui.stat_tap_free_table_item_cb is called for each index in each
@@ -194,11 +223,28 @@ WS_DLL_PUBLIC stat_tap_table_ui *stat_tap_by_name(const char *name);
  */
 WS_DLL_PUBLIC void free_stat_tables(stat_tap_table_ui* new_stat);
 
-
+/**
+ * @brief Processes a command argument for statistics.
+ *
+ * @param optstr The option string to process.
+ * @return true if the command is recognized and processed, false otherwise.
+ */
 WS_DLL_PUBLIC bool process_stat_cmd_arg(const char *optstr);
 
+/**
+ * @brief List command-line arguments for requested statistics.
+ *
+ * This function iterates through a list of command-line arguments and processes them to request specific statistics.
+ */
 WS_DLL_PUBLIC void list_stat_cmd_args(void);
 
+/**
+ * @brief Start requested statistics.
+ *
+ * This function processes and initializes all registered statistics taps that have been requested.
+ *
+ * @return true if all statistics taps were successfully initialized, false otherwise.
+ */
 WS_DLL_PUBLIC bool start_requested_stats(void);
 
 #ifdef __cplusplus

@@ -88,7 +88,10 @@ WS_DLL_PUBLIC stream_pdu_fragment_t *stream_find_frag( stream_t *stream, uint32_
 WS_DLL_PUBLIC stream_pdu_fragment_t *stream_add_frag( stream_t *stream, uint32_t framenum, uint32_t offset,
 					tvbuff_t *tvb, packet_info *pinfo, bool more_frags );
 
-/* Get the length of a fragment previously found by stream_find_frag().
+/**
+ * @brief Get the length of a fragment previously found by stream_find_frag().
+ * @param frag A fragment within the PDU.
+ * @return The length of the fragment.
  */
 extern uint32_t stream_get_frag_length( const stream_pdu_fragment_t *frag);
 
@@ -112,13 +115,23 @@ WS_DLL_PUBLIC tvbuff_t *stream_process_reassembled(
     const struct _fragment_items *fit,
     bool *update_col_infop, proto_tree *tree);
 
-/* Get the PDU number. PDUs are numbered from zero within a stream.
- * frag can be any fragment within a PDU.
+/**
+ * @brief Get the PDU number. PDUs are numbered from zero within a stream.
+ * @param frag A fragment within the PDU.
+ * @return The PDU number.
  */
 extern uint32_t stream_get_pdu_no( const stream_pdu_fragment_t *frag);
 
 /* initialise the stream routines */
+
+/**
+ * @brief Initializes stream-related data structures and reassembly tables.
+ */
 void stream_init( void );
+
+/**
+ * @brief Cleans up stream-related data structures and reassembly tables.
+ */
 void stream_cleanup( void );
 
 #endif /* STREAM_H */

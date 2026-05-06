@@ -193,9 +193,7 @@ abs_time_to_str_with_sec_resolution(const nstime_t *abs_time)
 
     tmp = localtime(&abs_time->secs);
 
-    if (tmp) {
-        strftime(buf, sizeof buf, "%Y%m%d%H%M%S", tmp);
-    } else {
+    if (!(tmp && strftime(buf, 16, "%Y%m%d%H%M%S", tmp))) {
         buf[0] = '\0';
     }
 

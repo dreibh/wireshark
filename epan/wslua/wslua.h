@@ -1130,7 +1130,15 @@ extern Pinfo* push_Pinfo(lua_State* L, packet_info* p);
  * @brief Clears all outstanding Pinfo objects.
  */
 extern void clear_outstanding_Pinfo(void);
+
+/**
+ * @brief Clears all outstanding Column objects.
+ */
 extern void clear_outstanding_Column(void);
+
+/**
+ * @brief Clears all outstanding Column objects.
+ */
 extern void clear_outstanding_Columns(void);
 
 /**
@@ -1281,6 +1289,15 @@ extern void clear_current_plugin_version(void);
  * @return 0 on success, non-zero on failure.
  */
 extern int wslua_deregister_heur_dissectors(lua_State* L);
+
+/**
+ * @brief Deregisters all Lua-based protocol dissectors.
+ *
+ * This function iterates through all registered protocol dissectors and removes them from the system.
+ *
+ * @param L The Lua state.
+ * @return 0 on success, non-zero on failure.
+ */
 extern int wslua_deregister_protocols(lua_State* L);
 
 /**

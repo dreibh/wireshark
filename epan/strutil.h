@@ -177,7 +177,8 @@ char*     xml_escape(const char *unescaped);
 WS_DLL_PUBLIC
 uint8_t * convert_string_to_hex(const char *string, size_t *nbytes);
 
-/** Prep a string for case-sensitive vs case-insensitive searching.
+/**
+ * @brief Prep a string for case-sensitive vs case-insensitive searching.
  *
  * @param string The search string
  * @param case_insensitive true if case-insensitive, false if not
@@ -188,6 +189,13 @@ uint8_t * convert_string_to_hex(const char *string, size_t *nbytes);
 WS_DLL_PUBLIC
 char * convert_string_case(const char *string, bool case_insensitive);
 
+/**
+ * @brief Decodes an IA5-7BIT encoded string into a UTF-8 string.
+ *
+ * @param dest Destination buffer for the decoded string.
+ * @param src Source buffer containing the IA5-7BIT encoded data.
+ * @param len Length of the source data to decode.
+ */
 WS_DLL_PUBLIC
 void IA5_7BIT_decode(unsigned char * dest, const unsigned char* src, int len);
 
@@ -226,9 +234,14 @@ size_t ws_label_strcpy(char *label_str, size_t bufsize, size_t pos, const uint8_
 WS_DLL_PUBLIC
 size_t ws_label_strcat(char *label_str, size_t bufsize, const uint8_t *str, int flags);
 
-/*
- * Check name is valid. This covers names for display filter fields, dissector
+/**
+ * @brief Check if name is valid.
+ *
+ * This covers names for display filter fields, dissector
  * tables, preference modules, etc. Lower case is preferred.
+ * @param name The name to check.
+ * @param lower_only If true, only lower case letters are allowed.
+ * @return 0 if the name is valid, otherwise the first invalid character.
  */
 WS_DLL_LOCAL unsigned char
 module_check_valid_name(const char *name, bool lower_only);

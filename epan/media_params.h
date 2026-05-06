@@ -24,6 +24,16 @@
 extern "C" {
 #endif /* __cplusplus */
 
+/**
+ * @brief Finds a media type parameter in a given set of parameters.
+ *
+ * Searches for a parameter with a specified key within a string containing multiple parameters.
+ *
+ * @param scope Memory allocator scope.
+ * @param parameters String containing the parameters to search through.
+ * @param key The key of the parameter to find.
+ * @return Pointer to the value of the found parameter, or NULL if not found.
+ */
 WS_DLL_PUBLIC char *
 ws_find_media_type_parameter(wmem_allocator_t *scope, const char *parameters, const char *key);
 

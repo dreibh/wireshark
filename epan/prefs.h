@@ -1023,7 +1023,9 @@ WS_DLL_PUBLIC void prefs_register_custom_preference_TCP_Analysis(module_t *modul
     const enum_val_t *enumvals, bool radio_buttons);
 
 /**
- * Mark a preference that affects fields change. This works for bool, enum,
+ * @brief Mark a preference that affects fields change.
+ *
+ * This works for bool, enum,
  * int, string (containing filename), range preferences. UAT is not included,
  * because you can specified UAT_AFFECTS_FIELDS at uat_new().
   *
@@ -1039,13 +1041,20 @@ WS_DLL_PUBLIC void prefs_register_custom_preference_TCP_Analysis(module_t *modul
 WS_DLL_PUBLIC void prefs_set_preference_effect_fields(module_t *module,
     const char *name);
 
+/**
+ * @brief Set the effect flags for a preference in a given module.
+ *
+ * @param module The module containing the preference.
+ * @param name The name of the preference to set.
+ * @param flags The effect flags to set.
+ */
 WS_DLL_PUBLIC void prefs_set_preference_effect(module_t* module,
     const char* name, unsigned flags);
 
 typedef unsigned (*pref_cb)(pref_t *pref, void *user_data);
 
 /**
- * Call a callback function, with a specified argument, for each preference
+ * @brief Call a callback function, with a specified argument, for each preference
  * in a given module.
  *
  * If any of the callbacks return a non-zero value, stop and return that
@@ -1062,7 +1071,7 @@ WS_DLL_PUBLIC unsigned prefs_pref_foreach(module_t *module, pref_cb callback,
     void *user_data);
 
 /**
- * Parse through a list of comma-separated, possibly quoted strings.
+ * @brief Parse through a list of comma-separated, possibly quoted strings.
  * Return a list of the string data.
  *
  * Commas, whitespace, and the quotes surrounding entries are removed.
@@ -1074,12 +1083,13 @@ WS_DLL_PUBLIC unsigned prefs_pref_foreach(module_t *module, pref_cb callback,
 WS_DLL_PUBLIC GList *prefs_get_string_list(const char *str);
 
 /**
- * Clear the given list of string data.
+ * @brief Clear the given list of string data.
  * @param sl the GList to clear
  */
 WS_DLL_PUBLIC void prefs_clear_string_list(GList *sl);
 
-/** Fetch a short preference type name, e.g. "Integer".
+/**
+ * @brief Fetch a short preference type name, e.g. "Integer".
  *
  * @param pref A preference.
  *
@@ -1088,7 +1098,8 @@ WS_DLL_PUBLIC void prefs_clear_string_list(GList *sl);
 WS_DLL_PUBLIC
 const char *prefs_pref_type_name(pref_t *pref);
 
-/** Fetch a long description of the preference type
+/**
+ * @brief Fetch a long description of the preference type
  *
  * @param pref A preference.
  *
@@ -1099,7 +1110,8 @@ const char *prefs_pref_type_name(pref_t *pref);
 WS_DLL_PUBLIC
 char *prefs_pref_type_description(pref_t *pref);
 
-/** Fetch a string representation of the preference.
+/**
+ * @brief Fetch a string representation of the preference.
  *
  * @param pref A preference.
  * @param source Which value of the preference to return, see pref_source_t.
@@ -1109,7 +1121,8 @@ char *prefs_pref_type_description(pref_t *pref);
 WS_DLL_PUBLIC
 char *prefs_pref_to_str(pref_t *pref, pref_source_t source);
 
-/** Fetch the number of preferences in a module that are not UATs.
+/**
+ * @brief Fetch the number of preferences in a module that are not UATs.
  *
  * @param module A preference module.
  *
@@ -1119,7 +1132,8 @@ WS_DLL_PUBLIC
 int prefs_num_non_uat(module_t* module);
 
 
-/** Fetch whether a preference is marked obsolete.
+/**
+ * @brief Fetch whether a preference is marked obsolete.
  *
  * @param pref A preference.
  *
@@ -1129,7 +1143,8 @@ WS_DLL_PUBLIC
 bool prefs_is_preference_obsolete(pref_t *pref);
 
 /**
- * Read the preferences file, fill in "prefs", and return a pointer to it.
+ * @brief Read the preferences file, fill in "prefs", and return a pointer to it.
+ *
  * If we got an error (other than "it doesn't exist") we report it through
  * the UI.
  *
@@ -1142,7 +1157,7 @@ bool prefs_is_preference_obsolete(pref_t *pref);
 extern e_prefs *read_prefs(const char* app_env_var_prefix);
 
 /**
- * Write out "prefs" to the user's preferences file, and return 0.
+ * @brief Write out "prefs" to the user's preferences file, and return 0.
  *
  * If we got an error, stuff a pointer to the path of the preferences file
  * into "*pf_path_return", and return the errno.
@@ -1154,7 +1169,7 @@ extern e_prefs *read_prefs(const char* app_env_var_prefix);
 WS_DLL_PUBLIC int write_prefs(const char* app_env_var_prefix, char **pf_path_return);
 
 /**
- * Callback function for writing individual preferences.
+ * @brief Callback function for writing individual preferences.
  *
  * @param data A preference pointer of type pref_t*
  * @param user_data write_pref_arg_t* pointer
@@ -1162,7 +1177,7 @@ WS_DLL_PUBLIC int write_prefs(const char* app_env_var_prefix, char **pf_path_ret
 WS_DLL_PUBLIC void pref_write_individual(void* data, void* user_data);
 
 /**
- * Callback function for freeing individual preferences.
+ * @brief Callback function for freeing individual preferences.
  *
  * @param data A preference pointer of type pref_t*
  * @param user_data unused
@@ -1206,21 +1221,23 @@ WS_DLL_PUBLIC prefs_set_pref_e prefs_set_pref(char *prefarg, char **errmsg);
 WS_DLL_PUBLIC range_t* prefs_get_range_value(const char *module_name, const char* pref_name);
 
 /**
- * Returns true if the specified capture device is hidden
+ * @brief Checks if the specified capture device is hidden
+ *
  * @param name the name of the capture device
  * @return true if the specified capture device is hidden, otherwise false
  */
 WS_DLL_PUBLIC bool prefs_is_capture_device_hidden(const char *name);
 
 /**
- * Returns true if the given device should capture in monitor mode by default
+ * @brief Returns true if the given device should capture in monitor mode by default
+ *
  * @param name the name of the capture device
  * @return true if the specified capture device should capture in monitor mode by default, otherwise false
  */
 WS_DLL_PUBLIC bool prefs_capture_device_monitor_mode(const char *name);
 
 /**
- * Returns true if the user has marked this column as visible
+ * @brief Returns true if the user has marked this column as visible
  *
  * @param column the name of the column
  * @return true if this column as visible, otherwise false
@@ -1228,7 +1245,7 @@ WS_DLL_PUBLIC bool prefs_capture_device_monitor_mode(const char *name);
 WS_DLL_PUBLIC bool prefs_capture_options_dialog_column_is_visible(const char *column);
 
 /**
- * Returns true if the layout pane content is enabled
+ * @brief Returns true if the layout pane content is enabled
  *
  * @param layout_pane_content the layout pane content to check
  * @return true if the layout pane content is enabled, otherwise false

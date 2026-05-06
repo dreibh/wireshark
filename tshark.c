@@ -81,11 +81,11 @@
 #include "wsutil/filter_files.h"
 #include "ui/cli/tshark-tap.h"
 #include "ui/cli/tap-exportobject.h"
+#include "ui/cli/cli_common.h"
 #include "ui/tap_export_pdu.h"
 #include "ui/dissect_opts.h"
 #include "ui/failure_message.h"
 #include "ui/capture_opts.h"
-#include "ui/profile.h"
 #if defined(HAVE_LIBSMI)
 #include "epan/oids.h"
 #endif
@@ -684,55 +684,6 @@ hexdump_option_help(FILE *output)
     fprintf(output, "\n");
 }
 
-static bool
-profiles_dump(const char* filter)
-{
-    FILE* output;
-    output = stdout;
-
-    GList* fl1 = profile_get_list();
-
-    if ((filter == NULL) || (strcmp(filter, "all") == 0)) {
-
-        while (fl1) {
-            profile_def* profile = (profile_def*)fl1->data;
-            const char* str_type = profile->is_global ? "global" : "personal";
-            if (strcmp(profile->name, DEFAULT_PROFILE) == 0)
-                str_type = "default";
-
-            fprintf(output, "%s\t%s\n", profile->name, str_type);
-
-            fl1 = g_list_next(fl1);
-        }
-
-    } else if (strcmp(filter, "global") == 0) {
-
-        while (fl1) {
-            profile_def* profile = (profile_def*)fl1->data;
-            if (profile->is_global)
-                fprintf(output, "%s\t%s\n", profile->name, filter);
-
-            fl1 = g_list_next(fl1);
-        }
-
-    } else if (strcmp(filter, "personal") == 0) {
-
-        while (fl1) {
-            profile_def* profile = (profile_def*)fl1->data;
-            if (!profile->is_global && (strcmp(profile->name, DEFAULT_PROFILE) != 0))
-                fprintf(output, "%s\t%s\n", profile->name, filter);
-
-            fl1 = g_list_next(fl1);
-        }
-
-    } else {
-        cmdarg_err("Invalid profile filter \"%s\". Valid filters are \"global\", \"personal\", and \"all\".", filter);
-        return false;
-    }
-
-    return true;
-}
-
 static void
 print_current_user(void)
 {
@@ -1011,10 +962,10 @@ dump_glossary(const char* glossary, const char* elastic_mapping_filter)
         extcap_dump_all();
     }
     else if (strcmp(glossary, "profiles") == 0) {
-        profiles_dump(NULL);
+        profiles_dump(application_configuration_environment_prefix(), NULL);
     }
     else if (strncmp(glossary, "profiles,", strlen("profiles,")) == 0) {
-        if (!profiles_dump(glossary + strlen("profiles,")))
+        if (!profiles_dump(application_configuration_environment_prefix(), glossary + strlen("profiles,")))
             exit_status = WS_EXIT_INVALID_OPTION;
     }
     else if (strcmp(glossary, "protocols") == 0) {
@@ -1265,9 +1216,6 @@ main(int argc, char *argv[])
     /* Initialize the version information. */
     ws_init_version_info("TShark", application_flavor_name_proper(), application_get_vcs_version_info,
             gather_tshark_compile_info, gather_tshark_runtime_info);
-
-    /* Initialize the profile list */
-    profile_init(application_configuration_environment_prefix());
 
     /* Fail sometimes. Useful for testing fuzz scripts. */
     /* if (g_random_int_range(0, 100) < 5) abort(); */

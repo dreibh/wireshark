@@ -1378,9 +1378,11 @@ The debugger-specific behaviors:
   (`tostring(pinfo.src)`) becomes an expression watch — see
   <<wslua_debugger_watch>>. When the debugger is not paused the
   new row's value column shows a muted em dash until the next
-  pause. With the script editor focused, `kbd:[Ctrl+Shift+B]`,
-  `kbd:[Ctrl+F10]` (paused), and `kbd:[Ctrl+Shift+W]` match those
-  context-menu shortcuts.
+  pause.
+* *Keyboard shortcuts.* With the script editor focused,
+  Add Breakpoint `kbd:[Ctrl+Shift+B]`,
+  Add Watch `kbd:[Ctrl+Shift+W]`, and Run to this line
+  `kbd:[Ctrl+F10]` (available when debugger is paused).
 
 [#wslua_debugger_settings]
 

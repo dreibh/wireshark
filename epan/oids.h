@@ -100,10 +100,19 @@ typedef struct _oid_info_t {
 } oid_info_t;
 
 /** init function called from prefs.c */
+/**
+ * @brief Initialize OID resolution and register related preferences.
+ *
+ * @param app_env_var_prefix The prefix for environment variables related to OID resolution.
+ */
 WS_DLL_PUBLIC void oids_init(const char* app_env_var_prefix);
+
 extern void oid_pref_init(module_t *nameres);
 
 /** init function called from epan.h */
+/**
+ * @brief Clean up OID-related resources.
+ */
 WS_DLL_PUBLIC void oids_cleanup(void);
 
 /*
@@ -139,18 +148,92 @@ unsigned oid_string2subid(wmem_allocator_t *scope, const char *oid_str, uint32_t
 
 WS_DLL_PUBLIC char* oid_encoded2string(wmem_allocator_t *scope, const uint8_t* encoded, unsigned len);
 WS_DLL_PUBLIC char* rel_oid_encoded2string(wmem_allocator_t *scope, const uint8_t* encoded, unsigned len);
+
+/**
+ * @brief Convert a sequence of OID sub-identifiers to a human-readable string.
+ *
+ * @param scope Memory allocator for the returned string.
+ * @param subids Array of OID sub-identifiers.
+ * @param len Number of sub-identifiers in the array.
+ * @return A formatted string representing the OID, or NULL on failure.
+ */
 WS_DLL_PUBLIC char* oid_subid2string(wmem_allocator_t *scope, uint32_t *subids, unsigned len);
+
+/**
+ * @brief Convert a sequence of OID subidentifiers to a human-readable string.
+ *
+ * @param scope Memory allocator for the returned string.
+ * @param subids Array of OID subidentifiers.
+ * @param len Number of subidentifiers in the array.
+ * @param is_absolute Flag indicating if the OID is absolute (starts with a dot).
+ * @return A formatted string representing the OID, or "*** Empty OID ***" if input is invalid.
+ */
 WS_DLL_PUBLIC char* rel_oid_subid2string(wmem_allocator_t *scope, uint32_t *subids, unsigned len, bool is_absolute);
 
 /* these return a formated string as human readable as possible */
+/**
+ * @brief Resolve an OID to its human-readable name.
+ *
+ * @param scope Memory allocator for the returned string.
+ * @param len Length of the OID sub-identifier array.
+ * @param subids Array of OID sub-identifiers.
+ * @return Human-readable name of the OID, or NULL if not found.
+ */
 WS_DLL_PUBLIC char *oid_resolved(wmem_allocator_t *scope, unsigned len, uint32_t *subids);
+
 WS_DLL_PUBLIC char *oid_resolved_from_encoded(wmem_allocator_t *scope, const uint8_t *oid, int len);
+
+/**
+ * @brief Resolve an OID from its encoded form.
+ *
+ * @param scope Memory allocator for allocated memory.
+ * @param oid Encoded OID data.
+ * @param len Length of the encoded OID data.
+ * @return Resolved OID as a string, or NULL if resolution fails.
+ */
 WS_DLL_PUBLIC char *rel_oid_resolved_from_encoded(wmem_allocator_t *scope, const uint8_t *oid, int len);
+
+/**
+ * @brief Resolves an OID string to its resolved form.
+ *
+ * @param scope Memory allocator scope for allocating memory.
+ * @param oid_str The OID string to resolve.
+ * @return The resolved OID as a string, or NULL if resolution fails.
+ */
 WS_DLL_PUBLIC char *oid_resolved_from_string(wmem_allocator_t *scope, const char *oid_str);
 
 /* these yield two formated strings one resolved and one numeric */
+
+/**
+ * @brief Resolve and convert an OID to both resolved and numeric representations.
+ *
+ * @param scope Memory allocator for allocating memory.
+ * @param oid_len Length of the OID subids array.
+ * @param subids Array of OID subidentifiers.
+ * @param resolved_p Pointer to store the resolved OID string.
+ * @param numeric_p Pointer to store the numeric OID representation.
+ */
 WS_DLL_PUBLIC void oid_both(wmem_allocator_t *scope, unsigned oid_len, uint32_t *subids, char** resolved_p, char** numeric_p);
+
+/**
+ * @brief Resolve and convert an OID from its encoded form to both resolved and numeric representations.
+ *
+ * @param scope Memory allocator for allocating memory.
+ * @param oid Encoded OID data.
+ * @param oid_len Length of the encoded OID data.
+ * @param resolved_p Pointer to store the resolved OID string.
+ * @param numeric_p Pointer to store the numeric OID representation.
+ */
 WS_DLL_PUBLIC void oid_both_from_encoded(wmem_allocator_t *scope, const uint8_t *oid, int oid_len, char** resolved_p, char** numeric_p);
+
+/**
+ * @brief Resolve and convert an OID from its string representation to both resolved and numeric forms.
+ *
+ * @param scope Memory allocator for allocating memory.
+ * @param oid_str The OID string to resolve and convert.
+ * @param resolved_p Pointer to store the resolved OID string.
+ * @param numeric_p Pointer to store the numeric OID representation.
+ */
 WS_DLL_PUBLIC void oid_both_from_string(wmem_allocator_t *scope, const char *oid_str, char** resolved_p, char** numeric_p);
 
 /*
@@ -159,7 +242,30 @@ WS_DLL_PUBLIC void oid_both_from_string(wmem_allocator_t *scope, const char *oid
  *  *left_p will be set to the number of remaining unresolved subids
  */
 WS_DLL_PUBLIC oid_info_t* oid_get(unsigned oid_len, uint32_t *subids, unsigned* matched_p, unsigned* left_p);
+
+/**
+ * @brief Retrieves an OID information structure from its encoded form.
+ *
+ * @param scope Memory allocator scope for allocating the returned object.
+ * @param oid Encoded OID data.
+ * @param oid_len Length of the encoded OID data.
+ * @param subids Pointer to store the decoded sub-identifiers.
+ * @param matched Pointer to store the number of matched sub-identifiers.
+ * @param left Pointer to store the number of remaining sub-identifiers.
+ * @return Pointer to the retrieved OID information structure, or NULL if not found.
+ */
 WS_DLL_PUBLIC oid_info_t* oid_get_from_encoded(wmem_allocator_t *scope, const uint8_t *oid, int oid_len, uint32_t **subids, unsigned* matched, unsigned* left);
+
+/**
+ * @brief Retrieves an OID information structure from a string representation.
+ *
+ * @param scope Memory allocator scope for the returned oid_info_t structure.
+ * @param oid_str String representation of the OID to retrieve.
+ * @param subids Pointer to store the resulting sub-identifier array.
+ * @param matched Pointer to store the number of matched sub-identifiers.
+ * @param left Pointer to store the number of remaining sub-identifiers.
+ * @return Pointer to the retrieved oid_info_t structure, or NULL if not found.
+ */
 WS_DLL_PUBLIC oid_info_t* oid_get_from_string(wmem_allocator_t *scope, const char *oid_str, uint32_t **subids, unsigned* matched, unsigned* left);
 
 /* these are used to add oids to the collection */
@@ -168,8 +274,9 @@ WS_DLL_PUBLIC void oid_add_from_encoded(const char* name, const uint8_t *oid, in
 WS_DLL_PUBLIC void oid_add_from_string(const char* name, const char *oid_str);
 
 /**
- * Fetch the default MIB/PIB path
+ * @brief Fetch the default MIB/PIB path
  *
+ * @param app_env_var_prefix The prefix for environment variables related to OID resolution.
  * @return A string containing the default MIB/PIB path.  It must be
  * g_free()d by the caller.
  */

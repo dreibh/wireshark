@@ -1604,8 +1604,8 @@ dissect_sdp_media_attribute_rtpmap(proto_tree *tree, packet_info *pinfo, tvbuff_
     pi = proto_tree_add_item(tree, hf_media_sample_rate, tvb,
                              offset, tokenlen, ENC_UTF_8);
     transport_info->sample_rate[pt] = 0;
-    if (!ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA),
-                     NULL, &transport_info->sample_rate[pt])) {
+    if (!tvb_get_string_uint(tvb, offset, tokenlen, ENC_STR_DEC,
+                     &transport_info->sample_rate[pt], NULL)) {
         expert_add_info(pinfo, pi, &ei_sdp_invalid_sample_rate);
     } else if (!strcmp(transport_info->encoding_name[pt], "G722")) {
         // The reported sampling rate is 8000, but the actual value is
@@ -1620,8 +1620,8 @@ dissect_sdp_media_attribute_rtpmap(proto_tree *tree, packet_info *pinfo, tvbuff_
             tokenlen = length - offset;
             pi = proto_tree_add_item(tree, hf_media_channels, tvb,
                                      offset, tokenlen, ENC_UTF_8);
-            if (!ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen, ENC_UTF_8|ENC_NA),
-                             NULL, &transport_info->channels[pt])) {
+            if (!tvb_get_string_uint(tvb, offset, tokenlen, ENC_STR_DEC,
+                             &transport_info->channels[pt], NULL)) {
                 expert_add_info(pinfo, pi, &ei_sdp_invalid_channels);
             }
         }
@@ -1784,8 +1784,8 @@ dissect_sdp_media_attribute_path(packet_info *pinfo, tvbuff_t *tvb, char *attrib
             if (str_to_ip((char*)tvb_get_string_enc(pinfo->pool, tvb, address_offset, port_offset-address_offset, ENC_UTF_8|ENC_NA),
                           &msrp_ipaddr)) {
                 /* Get port number */
-                if (ws_strtou16((char*)tvb_get_string_enc(pinfo->pool, tvb, port_offset + 1,
-                                                   port_end_offset - port_offset - 1, ENC_UTF_8|ENC_NA), NULL, &msrp_port_number)) {
+                if (tvb_get_string_uint16(tvb, port_offset + 1,
+                                                   port_end_offset - port_offset - 1, ENC_STR_DEC, &msrp_port_number, NULL)) {
                     /* Port and address are usable, store for later use in
                      * complete_descriptions (overrides the "c=" address). */
                     alloc_address_wmem(wmem_file_scope(), &media_desc->media_attr.msrp.ipaddr, AT_IPv4, 4, &msrp_ipaddr);
@@ -1874,8 +1874,7 @@ dissect_sdp_media_attribute_crypto(proto_tree *tree, packet_info *pinfo, tvbuff_
     tokenlen = find_next_token_in_line(tvb, tree, &offset, &next_offset);
     if (tokenlen == 0)
         return;
-    crypto_tag_valid = ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, offset,
-                                                      tokenlen, ENC_UTF_8|ENC_NA), NULL, &crypto_tag);
+    crypto_tag_valid = tvb_get_string_uint(tvb, offset, tokenlen, ENC_STR_DEC, &crypto_tag, NULL);
     pi = proto_tree_add_uint(tree, hf_sdp_crypto_tag, tvb, offset, tokenlen, crypto_tag);
     if (!crypto_tag_valid)
         expert_add_info(pinfo, pi, &ei_sdp_invalid_crypto_tag);
@@ -2000,8 +1999,7 @@ dissect_sdp_media_attribute_crypto(proto_tree *tree, packet_info *pinfo, tvbuff_
 
                     /* This will not work if more than one parameter */
                     /* number of octets used for the MKI in the RTP payload */
-                    mki_len_valid = ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, offset, tokenlen,
-                                                                   ENC_UTF_8|ENC_NA), NULL, &transport_info->mki_len);
+                    mki_len_valid = tvb_get_string_uint(tvb, offset, tokenlen, ENC_STR_DEC, &transport_info->mki_len, NULL);
                     pi = proto_tree_add_item(parameter_tree, hf_sdp_crypto_mki_length,
                                              tvb, offset, tokenlen, ENC_UTF_8);
                     if (!mki_len_valid)

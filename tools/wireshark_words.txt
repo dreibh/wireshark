@@ -587,6 +587,7 @@ cp56time
 cp56time2a
 cpdlc
 cpich
+cplane
 cplusplus
 cpmcistate
 cppcheck
@@ -3294,6 +3295,7 @@ udpcp
 udpdump
 udphdr
 udrei
+ueids
 uganda
 uievent
 uimsbf
@@ -3473,6 +3475,7 @@ unvoiced
 updatability
 updatable
 upiri
+uplane
 uplanet
 uplink
 upload

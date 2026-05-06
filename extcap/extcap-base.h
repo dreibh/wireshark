@@ -223,6 +223,14 @@ void extcap_version_print(extcap_parameters * extcap);
  */
 void extcap_help_print(extcap_parameters * extcap);
 
+/**
+ * @brief Log the command line arguments for debugging purposes.
+ *
+ * Constructs a string from the provided array of command line arguments and logs it using ws_debug().
+ *
+ * @param ar Array of command line arguments.
+ * @param n Number of elements in the array.
+ */
 void extcap_cmdline_debug(char** ar, const unsigned n);
 
 /**
@@ -232,6 +240,11 @@ void extcap_cmdline_debug(char** ar, const unsigned n);
  */
 void extcap_config_debug(unsigned* count);
 
+/**
+ * @brief Display help information for extcap.
+ *
+ * Outputs usage instructions and available options for extcap to stdout.
+ */
 void extcap_base_help(void);
 
 /**
@@ -242,11 +255,11 @@ void extcap_base_help(void);
  */
 void extcap_log_init(void);
 
-/*
- * Report errors and warnings through ws_warning().
+/**
+ * @brief Logs a command argument error message.
  *
- * Unfortunately, ws_warning() may be a macro, so we do it by calling
- * ws_logv() with the appropriate arguments.
+ * @param msg_format The format string for the error message.
+ * @param ap The variable arguments list for the format string.
  */
 void extcap_log_cmdarg_err(const char *msg_format, va_list ap);
 

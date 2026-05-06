@@ -36,6 +36,14 @@ typedef struct _file_priv_t {
 extern void create_wth_priv(lua_State* L, wtap *wth);
 
 /* gets the private data table from wtap */
+
+/**
+ * @brief Retrieves the private data table reference from a wtap structure.
+ *
+ * @param L The Lua state.
+ * @param wth The wtap structure.
+ * @return The number of values pushed onto the stack.
+ */
 extern int get_wth_priv_table_ref(lua_State* L, wtap *wth);
 
 /* sets the private data to wtap - the table is presumed on top of stack */

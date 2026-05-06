@@ -34,6 +34,14 @@ typedef enum {
  */
 int parse_token(token_t token, char *str);
 
+/**
+ * @brief Scans for text2pcap utility functionality.
+ *
+ * This function is used to scan and identify the capabilities of the text2pcap utility,
+ * which converts an ASCII hexdump into a libpcap-format capture file.
+ *
+ * @return 0 on success, -1 on failure.
+ */
 int text2pcap_scan(void);
 
 #endif

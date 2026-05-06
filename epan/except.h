@@ -92,17 +92,53 @@ struct except_stacknode {
 };
 
 /* private functions made external so they can be used in macros */
+
+/**
+ * @brief Set up a cleanup handler for exception handling.
+ */
 WS_DLL_PUBLIC void except_setup_clean(struct except_stacknode *,
         struct except_cleanup *, void (*)(void *), void *);
+
+/**
+ * @brief Set up a try block for exception handling.
+ */
 WS_DLL_PUBLIC void except_setup_try(struct except_stacknode *,
         struct except_catch *, const except_id_t [], size_t);
+
+/**
+ * @brief Pop the top node from the exception stack.
+ * @return struct except_stacknode* Pointer to the popped node from the exception stack.
+ */
 WS_DLL_PUBLIC struct except_stacknode *except_pop(void);
 
 /* public interface functions */
+/**
+ * @brief Initialize the exception handling system.
+ *
+ * @return int 0 on success, -1 on failure.
+ */
 WS_DLL_PUBLIC int except_init(void);
+
+/**
+ * @brief Deinitialize the exception handling system.
+ */
 WS_DLL_PUBLIC void except_deinit(void);
-WS_DLL_PUBLIC WS_NORETURN void except_rethrow(except_t *);
-WS_DLL_PUBLIC WS_NORETURN void except_throw(long, long, const char *);
+
+/**
+ * @brief Rethrow an exception.
+ *
+ * @param except Pointer to the exception object.
+ */
+WS_DLL_PUBLIC WS_NORETURN void except_rethrow(except_t * except);
+
+/**
+ * @brief Throw an exception with a message and optional data.
+ * @param group The exception group identifier.
+ * @param code The exception code identifier.
+ * @param msg The message associated with the exception.
+ */
+WS_DLL_PUBLIC WS_NORETURN void except_throw(long group, long code, const char *msg);
+
 WS_DLL_PUBLIC WS_NORETURN void except_throwd(long, long, const char *, void *);
 WS_DLL_PUBLIC WS_NORETURN void except_vthrowf(long group, long code, const char *fmt, va_list vl);
 WS_DLL_PUBLIC WS_NORETURN void except_throwf(long, long, const char *, ...)
@@ -112,10 +148,24 @@ extern unsigned long except_code(except_t *);
 extern unsigned long except_group(except_t *);
 extern const char *except_message(except_t *);
 extern void *except_data(except_t *);
-WS_DLL_PUBLIC void *except_take_data(except_t *);
+
+/**
+ * @brief Take data from an exception object.
+ *
+ * @param ex Pointer to the exception object.
+ * @return The data that was stored in the exception object, or NULL if no data was stored.
+ */
+WS_DLL_PUBLIC void *except_take_data(except_t * ex);
+
 WS_DLL_PUBLIC void except_set_allocator(void *(*)(size_t), void (*)(void *));
 WS_DLL_PUBLIC void *except_alloc(size_t);
-WS_DLL_PUBLIC void except_free(void *);
+
+/**
+ * @brief Frees memory allocated for an exception node.
+ *
+ * @param ptr Pointer to the memory to be freed.
+ */
+WS_DLL_PUBLIC void except_free(void * ptr);
 
 /* Functions to be used in a last resort when things go badly wrong; e.g.,
  * Lua uses setjmp and longjmp for its own error handling, and Lua errors
@@ -123,7 +173,19 @@ WS_DLL_PUBLIC void except_free(void *);
  * top node has exited and the node (and the jmp_buf) is no longer valid
  * (having been created on the stack) so we can't run the handlers or even
  * traverse the exception stack. It's better to do this than crash.  */
+
+/**
+ * @brief Get the top node from the exception stack.
+ *
+ * @return const struct except_stacknode* Pointer to the top node in the exception stack.
+ */
 const struct except_stacknode *except_get_top(void);
+
+/**
+ * @brief Set the top node of an exception stack.
+ *
+ * @param node Pointer to the new top node of the exception stack.
+ */
 void except_set_top(struct except_stacknode *node);
 
 #define except_code(E) ((E)->except_id.except_code)

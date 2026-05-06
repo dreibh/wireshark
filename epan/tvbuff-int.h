@@ -88,6 +88,12 @@ struct tvbuff {
 	unsigned		raw_offset;
 };
 
+/**
+ * @brief Creates a new TVB (Packet Buffer) with the specified operations.
+ *
+ * @param ops Pointer to the TVB operations structure.
+ * @return Pointer to the newly created TVB.
+ */
 tvbuff_t *tvb_new(const struct tvb_ops *ops);
 
 tvbuff_t *tvb_new_proxy(tvbuff_t *backing);
@@ -96,8 +102,24 @@ void tvb_add_to_chain(tvbuff_t *parent, tvbuff_t *child);
 
 unsigned tvb_offset_from_real_beginning_counter(const tvbuff_t *tvb, const unsigned counter);
 
+/**
+ * @brief Validates that an offset and length are within the bounds of a TVBuffer.
+ *
+ * @param tvb The TVBuffer to validate against.
+ * @param offset The starting offset for validation.
+ * @param length The length to validate from the offset.
+ */
 void tvb_validate_offset_length(const tvbuff_t *tvb, const unsigned offset, const unsigned length);
 void tvb_validate_offset_and_remaining(const tvbuff_t *tvb, const unsigned offset, unsigned *rem_len);
 
+/**
+ * @brief Validates that an offset and length are within the bounds of a tvbuff.
+ *
+ * @param tvb The tvbuff to check.
+ * @param offset The starting offset.
+ * @param length_val The length to validate.
+ * @param offset_ptr Pointer to store the adjusted offset (if needed).
+ * @param length_ptr Pointer to store the adjusted length (if needed).
+ */
 void tvb_check_offset_length(const tvbuff_t *tvb, const int offset, int const length_val, unsigned *offset_ptr, unsigned *length_ptr);
 #endif

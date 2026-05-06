@@ -471,7 +471,6 @@ is_rtsp_request_or_reply(tvbuff_t *tvb, unsigned linelen, rtsp_type_t *type,
     unsigned      ii;
     unsigned      offset = 0, next_offset;
     unsigned      tokenlen;
-    char          response_chars[4];
 
     tvb_get_token_len_length(tvb, offset, linelen, &tokenlen, &next_offset);
 
@@ -487,9 +486,7 @@ is_rtsp_request_or_reply(tvbuff_t *tvb, unsigned linelen, rtsp_type_t *type,
             offset = next_offset;
             tvb_get_token_len_length(tvb, offset, tvb_reported_length_remaining(tvb, offset), &tokenlen, NULL);
             if (tokenlen >= 3) {
-                tvb_memcpy(tvb, response_chars, offset, 3);
-                response_chars[3] = '\0';
-                ws_strtou32(response_chars, NULL, &rtsp_stat_info->response_code);
+                tvb_get_string_uint(tvb, offset, tokenlen, ENC_STR_DEC, &rtsp_stat_info->response_code, NULL);
             }
         }
         return true;
@@ -831,11 +828,10 @@ rtsp_create_conversation(packet_info *pinfo, proto_item *ti,
 static const char rtsp_content_length[] = "Content-Length:";
 
 static bool
-rtsp_get_content_length(const char *line_begin, uint32_t*content_length)
+rtsp_get_content_length(const char *line_begin, uint32_t *content_length)
 {
     const char *tmp;
     const char *p;
-    const char *up;
 
     /* We only call this if HDR_MATCHES(rtsp_content_length)) is true,
      * so line_len has already been checked to be long enough. The
@@ -843,11 +839,8 @@ rtsp_get_content_length(const char *line_begin, uint32_t*content_length)
      * packet data. */
 
     tmp = line_begin + STRLEN_CONST(rtsp_content_length);
-    while (*tmp && g_ascii_isspace(*tmp))
-        tmp++;
-    ws_strtoi32(tmp, &p, (int32_t*)content_length);
-    up = p;
-    if (up == tmp || (*up != '\0' && !g_ascii_isspace(*up))) {
+    /* Allow trailing spaces but not anything else. */
+    if (!ws_strtou32(tmp, &p, content_length) || (*p != '\0' && !g_ascii_isspace(*p))) {
         *content_length = 0;
         return false;  /* not a valid number */
     }
@@ -1255,8 +1248,7 @@ dissect_rtspmessage(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tr
             {
                 uint32_t clength;
                 bool clength_valid;
-                clength_valid = ws_strtou32(tvb_format_text(pinfo->pool, tvb, value_offset, value_len),
-                    NULL, &clength);
+                clength_valid = tvb_get_string_uint(tvb, value_offset, value_len, ENC_STR_DEC, &clength, NULL);
                 ti = proto_tree_add_uint(rtsp_tree, hf_rtsp_content_length, tvb, offset, linelen, clength);
                 if (!clength_valid)
                     expert_add_info(pinfo, ti, &ei_rtsp_content_length_invalid);
@@ -1300,16 +1292,14 @@ dissect_rtspmessage(tvbuff_t *tvb, unsigned offset, packet_info *pinfo, proto_tr
             } else if (HDR_MATCHES(rtsp_rdt_feature_level))
             {
                 bool rdt_feature_level_valid;
-                rdt_feature_level_valid = ws_strtou32(tvb_format_text(pinfo->pool, tvb, value_offset, value_len),
-                    NULL, &rdt_feature_level);
+                rdt_feature_level_valid = tvb_get_string_uint(tvb, value_offset, value_len, ENC_STR_DEC, &rdt_feature_level, NULL);
                 ti = proto_tree_add_uint(rtsp_tree, hf_rtsp_rdtfeaturelevel,
                 tvb, offset, linelen, rdt_feature_level);
                 if (!rdt_feature_level_valid)
                     expert_add_info(pinfo, ti, &ei_rtsp_rdtfeaturelevel_invalid);
             } else if (HDR_MATCHES(rtsp_cseq))
             {
-                cseq_valid = ws_strtou32(tvb_format_text(pinfo->pool, tvb, value_offset, value_len),
-                    NULL, &cseq);
+                cseq_valid = tvb_get_string_uint(tvb, value_offset, value_len, ENC_STR_DEC, &cseq, NULL);
                 ti = proto_tree_add_uint(rtsp_tree, hf_rtsp_cseq, tvb, offset, linelen, cseq);
                 if (!cseq_valid) {
                     expert_add_info(pinfo, ti, &ei_rtsp_cseq_invalid);
@@ -1580,7 +1570,6 @@ process_rtsp_request(tvbuff_t *tvb, unsigned linelen, packet_info *pinfo, proto_
 static void
 process_rtsp_reply(tvbuff_t *tvb, unsigned linelen, packet_info *pinfo _U_, proto_tree *tree)
 {
-    const char   *status;
     unsigned      status_i;
     unsigned      token_len;
     unsigned      offset = 0, next_offset;
@@ -1595,8 +1584,7 @@ process_rtsp_reply(tvbuff_t *tvb, unsigned linelen, packet_info *pinfo _U_, prot
     /* Actual code number now */
     tvb_get_token_len_length(tvb, offset, linelen, &token_len , &next_offset);
 
-    status = (char*)tvb_get_string_enc(pinfo->pool, tvb, offset, token_len, ENC_UTF_8);
-    if (ws_strtou(status, NULL, &status_i)) {
+    if (tvb_get_string_uint(tvb, offset, token_len, ENC_STR_DEC, &status_i, NULL)) {
         /* Add field to tree */
         proto_tree_add_uint(tree, hf_rtsp_status, tvb, offset, token_len, status_i);
     }

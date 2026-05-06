@@ -95,6 +95,15 @@ typedef struct {
 	} addr;
 } if_addr_t;
 
+/**
+ * @brief Deserialize a serialized interface list into a GList.
+ *
+ * @param data     Serialized input buffer containing the interface list.
+ * @param err      Pointer to an integer set to an error code on failure.
+ * @param err_str  Pointer to a string set to a descriptive error message on failure.
+ *
+ * @return A GList of deserialized interface entries, or NULL on error.
+ */
 extern GList *deserialize_interface_list(char *data, int *err, char **err_str);
 
 /**

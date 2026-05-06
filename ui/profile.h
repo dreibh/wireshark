@@ -57,6 +57,13 @@ void profile_empty_list(void);
  */
 GList* profile_get_list(void);
 
+/** Determine if string is a valid profile name
+ *
+ * @param name Profile name to check
+ * @return true if profile name is valid, false otherwise
+ */
+bool profile_name_is_valid(const char* name);
+
 /** Save the profile settings to disk
  *
  * @param name Profile name

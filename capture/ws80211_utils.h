@@ -170,6 +170,12 @@ int ws80211_str_to_chan_type(const char *s);
  */
 const char *ws80211_chan_type_to_str(enum ws80211_channel_type type);
 
+/**
+ * @brief Convert a Wi-Fi band type to its string representation.
+ *
+ * @param type The Wi-Fi band type to convert.
+ * @return String representation of the band type, or NULL if invalid.
+ */
 const char *ws80211_band_type_to_str(enum ws80211_band_type type);
 
 /**

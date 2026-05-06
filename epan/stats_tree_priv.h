@@ -181,11 +181,29 @@ struct _stats_tree_cfg {
 };
 
 /* guess what, this is it! */
+/**
+ * @brief Registers callback functions for presenting statistics tree.
+ *
+ * @param registry_iterator Callback to iterate over the registry.
+ * @param setup_node_pr Callback to set up a node in the statistics tree.
+ * @param free_tree_pr Callback to free the statistics tree.
+ * @param data User-defined data passed to callbacks.
+ */
 WS_DLL_PUBLIC void stats_tree_presentation(void (*registry_iterator)(void *,void *,void *),
 				    void (*setup_node_pr)(stat_node*),
 				    void (*free_tree_pr)(stats_tree*),
 				    void *data);
 
+/**
+ * @brief Creates a new statistics tree.
+ *
+ * Initializes a new statistics tree with the given configuration and filter.
+ *
+ * @param cfg Pointer to the statistics tree configuration.
+ * @param pr Pointer to the tree presentation structure.
+ * @param filter The filter string for the statistics tree.
+ * @return Pointer to the newly created statistics tree.
+ */
 WS_DLL_PUBLIC stats_tree *stats_tree_new(stats_tree_cfg *cfg, tree_pres *pr, const char *filter);
 
 /** callback for taps */
@@ -198,6 +216,11 @@ WS_DLL_PUBLIC void stats_tree_reset(void *p_st);
 WS_DLL_PUBLIC void stats_tree_reinit(void *p_st);
 
 /* callback for destroy */
+/**
+ * @brief Frees a stats_tree structure.
+ *
+ * @param st Pointer to the stats_tree structure to be freed.
+ */
 WS_DLL_PUBLIC void stats_tree_free(stats_tree *st);
 
 /** given an ws_optarg splits the abbr part

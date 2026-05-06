@@ -22,8 +22,6 @@
 #include <epan/to_str.h>
 #include <epan/expert.h>
 
-#include <wsutil/strtoi.h>
-
 #define DHT_MIN_LEN 5
 
 void proto_register_bt_dht(void);
@@ -120,7 +118,7 @@ static const char list_str[] = "List...";
 
 
 static inline bool
-bencoded_string_length(packet_info *pinfo, tvbuff_t *tvb, unsigned *offset_ptr, unsigned *length)
+bencoded_string_length(packet_info *pinfo _U_, tvbuff_t *tvb, unsigned *offset_ptr, unsigned *length)
 {
   unsigned offset, start;
   unsigned remaining = tvb_captured_length_remaining(tvb, *offset_ptr);
@@ -133,8 +131,7 @@ bencoded_string_length(packet_info *pinfo, tvbuff_t *tvb, unsigned *offset_ptr, 
   while (tvb_get_uint8(tvb, offset) != ':' && --remaining)
     ++offset;
 
-  if (remaining && ws_strtou32((char*)tvb_get_string_enc(pinfo->pool, tvb, start, offset-start, ENC_ASCII),
-      NULL, length)) {
+  if (remaining && tvb_get_string_uint(tvb, start, offset-start, ENC_STR_DEC, length, NULL)) {
     ++offset; /* skip the ':' */
     *offset_ptr = offset;
     return true;

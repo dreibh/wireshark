@@ -115,6 +115,12 @@ typedef struct plugin_field_extract_t {
  * @return A pointer to the newly created sinsp_span_t object.
  */
 sinsp_span_t *create_sinsp_span(void);
+
+/**
+ * @brief Destroys a sinsp_span_t object.
+ *
+ * @param sinsp_span The span to be destroyed.
+ */
 void destroy_sinsp_span(sinsp_span_t *sinsp_span);
 
 // Common routines

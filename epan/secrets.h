@@ -38,7 +38,14 @@ extern "C" {
  * truncated by the user) and store only the bare minimum keys.
  */
 
+/**
+ * @brief Initialize the secrets management system.
+ */
 void secrets_init(void);
+
+/**
+ * @brief Cleans up all secrets-related resources.
+ */
 void secrets_cleanup(void);
 
 #if 0

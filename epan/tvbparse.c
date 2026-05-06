@@ -730,25 +730,25 @@ static int cond_some(tvbparse_t* tt, int offset, const tvbparse_wanted_t * wante
 }
 
 tvbparse_wanted_t* tvbparse_some(const int id,
-                                 const unsigned from,
-                                 const unsigned to,
+                                 const unsigned min,
+                                 const unsigned max,
                                  const void* data,
                                  tvbparse_action_t before_cb,
                                  tvbparse_action_t after_cb,
-                                 const tvbparse_wanted_t* el) {
+                                 const tvbparse_wanted_t* wanted) {
 
     tvbparse_wanted_t* w = wmem_new0(wmem_epan_scope(), tvbparse_wanted_t);
 
-    ws_assert(from <= to);
+    ws_assert(min <= max);
 
     w->condition = cond_some;
     w->id = id;
-    w->min = from;
-    w->max = to;
+    w->min = min;
+    w->max = max;
     w->data = data;
     w->before = before_cb;
     w->after = after_cb;
-    w->control.subelem = el;
+    w->control.subelem = wanted;
 
     return w;
 }

@@ -18,7 +18,12 @@
 #ifndef __IANA_CHARSETS_H__
 #define __IANA_CHARSETS_H__
 
-/* Map a MIBenum code for a charset to a Wireshark string encoding. */
+/**
+ * @brief Map a MIBenum code for a charset to a Wireshark string encoding.
+ *
+ * @param charset The character set code.
+ * @return The corresponding Wireshark encoding, or ENC_NA if not found.
+ */
 WS_DLL_PUBLIC unsigned mibenum_charset_to_encoding (unsigned charset);
 
 /* value_string_ext table of names for MIBenum codes */

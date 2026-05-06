@@ -290,25 +290,98 @@ proto_item * proto_tree_add_cbor_container(proto_tree *tree, int hfindex, packet
 WS_DLL_PUBLIC
 proto_item * proto_tree_add_cbor_ctrl(proto_tree *tree, int hfindex, packet_info *pinfo, tvbuff_t *tvb, const wscbor_chunk_t *chunk);
 
+/**
+ * @brief Adds a CBOR boolean item to the protocol tree.
+ *
+ * @param tree The protocol tree to which the item will be added.
+ * @param hfindex The field ID for the new item.
+ * @param pinfo Packet information structure.
+ * @param tvb The TVB containing the data.
+ * @param chunk Information about the CBOR chunk.
+ * @param value Pointer to the boolean value to add, or NULL if false.
+ * @return The newly added proto_item.
+ */
 WS_DLL_PUBLIC
 proto_item * proto_tree_add_cbor_boolean(proto_tree *tree, int hfindex, packet_info *pinfo, tvbuff_t *tvb, const wscbor_chunk_t *chunk, const bool *value);
 
+/**
+ * @brief Adds a CBOR unsigned integer item to the protocol tree.
+ *
+ * @param tree The protocol tree to which the item will be added.
+ * @param hfindex The field ID for the new item.
+ * @param pinfo Packet information structure.
+ * @param tvb The TVB containing the data.
+ * @param chunk Information about the CBOR chunk.
+ * @param value Pointer to the unsigned 64-bit integer value, or NULL if not applicable.
+ * @return The newly added protocol item.
+ */
 WS_DLL_PUBLIC
 proto_item * proto_tree_add_cbor_uint64(proto_tree *tree, int hfindex, packet_info *pinfo, tvbuff_t *tvb, const wscbor_chunk_t *chunk, const uint64_t *value);
 
+/**
+ * @brief Adds a CBOR integer item to the protocol tree.
+ *
+ * @param tree The protocol tree to which the item will be added.
+ * @param hfindex The field ID for the new item.
+ * @param pinfo Packet information structure.
+ * @param tvb The TVB containing the data.
+ * @param chunk The CBOR chunk being processed.
+ * @param value Pointer to the integer value to add, or NULL if not applicable.
+ * @return The newly added protocol item.
+ */
 WS_DLL_PUBLIC
 proto_item * proto_tree_add_cbor_int64(proto_tree *tree, int hfindex, packet_info *pinfo, tvbuff_t *tvb, const wscbor_chunk_t *chunk, const int64_t *value);
 
+/**
+ * @brief Add an item representing a bitmask value.
+ *
+ * @param tree The protocol tree to add the item to.
+ * @param hfindex The field index for the bitmask.
+ * @param ett The expert tree tag for the bitmask.
+ * @param fields An array of field indices for the bitmask bits, or NULL if none.
+ * @param pinfo The packet information structure.
+ * @param tvb The TVB containing the data to be dissected.
+ * @param chunk The CBOR chunk containing the bitmask value.
+ * @param value A pointer to the bitmask value, or NULL if not provided.
+ * @return The protocol item representing the bitmask.
+ */
 WS_DLL_PUBLIC
 proto_item * proto_tree_add_cbor_bitmask(proto_tree *tree, int hfindex, const int ett, int *const *fields, packet_info *pinfo, tvbuff_t *tvb, const wscbor_chunk_t *chunk, const uint64_t *value);
 
+/**
+ * @brief Add an item representing a CBOR text string (tstr) value.
+ *
+ * @param tree The protocol tree to add the item to.
+ * @param hfindex The field ID for the tstr value.
+ * @param pinfo The packet information structure.
+ * @param tvb The TVB containing the tstr data.
+ * @param chunk The CBOR chunk containing the tstr data.
+ * @return proto_item* The newly added protocol tree item.
+ */
 WS_DLL_PUBLIC
 proto_item * proto_tree_add_cbor_tstr(proto_tree *tree, int hfindex, packet_info *pinfo, tvbuff_t *tvb, const wscbor_chunk_t *chunk);
 
+/**
+ * @brief Add an item representing a CBOR byte string value.
+ *
+ * @param tree The protocol tree to add the item to.
+ * @param hfindex The field ID for the item.
+ * @param pinfo Packet information structure.
+ * @param tvb The TVB containing the data.
+ * @param chunk The CBOR chunk containing the string value.
+ * @return proto_item* Pointer to the added protocol item.
+ */
 WS_DLL_PUBLIC
 proto_item * proto_tree_add_cbor_bstr(proto_tree *tree, int hfindex, packet_info *pinfo, tvbuff_t *tvb, const wscbor_chunk_t *chunk);
 
-/** Add an item representing the length of a bstr or tstr value.
+/**
+ * @brief Add an item representing the length of a bstr or tstr value.
+ * @param tree The protocol tree to add the item to.
+ * @param hfindex The field ID for the item.
+ * @param pinfo Packet information structure.
+ * @param tvb The TVB containing the data.
+ * @param chunk The CBOR chunk containing the string value.
+ * @return proto_item* Pointer to the added protocol item.
  */
 WS_DLL_PUBLIC
 proto_item * proto_tree_add_cbor_strlen(proto_tree *tree, int hfindex, packet_info *pinfo, tvbuff_t *tvb, const wscbor_chunk_t *chunk);

@@ -113,6 +113,14 @@ struct dissector_table;
 WS_DLL_PUBLIC struct dissector_table* register_decode_as_next_proto(int proto, const char *table_name, const char *ui_name, build_label_func label_func);
 
 /* Walk though the dissector table and provide dissector_handle_t for each item in the table */
+
+/**
+ * @brief Populate a list with default decode-as values.
+ *
+ * @param table_name The name of the dissector table to populate.
+ * @param add_to_list Function pointer to add items to the list.
+ * @param ui_element User interface element for display purposes.
+ */
 WS_DLL_PUBLIC void decode_as_default_populate_list(const char *table_name, decode_as_add_to_list_func add_to_list, void *ui_element);
 /* Clear a FT_UINT32 value from dissector table list */
 WS_DLL_PUBLIC bool decode_as_default_reset(const char *name, const void *pattern);

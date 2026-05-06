@@ -1210,7 +1210,8 @@ static const value_string evt_encryption_modes[] = {
 
 static const value_string evt_encryption_enable[] = {
     {0x00, "Link Level Encryption is OFF"},
-    {0x01, "Link Level Encryption is ON"},
+    {0x01, "Link Level Encryption is ON (E0 for BR/EDR, AES-CCM for LE)"},
+    {0x02, "Link Level Encryption is ON (AES-CCM for BR/EDR)"},
     {0, NULL }
 };
 

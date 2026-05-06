@@ -13361,7 +13361,6 @@ static bool rtps_is_ping(tvbuff_t *tvb, packet_info *pinfo, int offset)
 /* *********************************************************************** */
 static void dissect_APP_ACK_CONF(tvbuff_t *tvb,
   packet_info *pinfo _U_,
-  int offset,
   uint8_t flags,
   const unsigned encoding,
   int octets_to_next_header,
@@ -13387,7 +13386,8 @@ static void dissect_APP_ACK_CONF(tvbuff_t *tvb,
   * (after last interval) unsigned long virtualWriterEpoch
   *
   */
-  int original_offset; /* Offset to the readerEntityId */
+  unsigned offset = 0;
+  unsigned original_offset; /* Offset to the readerEntityId */
   uint32_t virtual_writer_count;
   uint32_t wid;
   proto_item *octet_item;
@@ -14004,7 +14004,6 @@ static void dissect_serialized_data(proto_tree *tree, packet_info *pinfo, tvbuff
 /* *********************************************************************** */
 static void dissect_APP_ACK(tvbuff_t *tvb,
   packet_info *pinfo,
-  int offset,
   uint8_t flags,
   const unsigned encoding,
   int octets_to_next_header,
@@ -14035,7 +14034,8 @@ static void dissect_APP_ACK(tvbuff_t *tvb,
   * (after last interval) unsigned long virtualWriterEpoch
   *
   */
-  int original_offset; /* Offset to the readerEntityId */
+  unsigned offset = 0;
+  unsigned original_offset; /* Offset to the readerEntityId */
   int32_t virtual_writer_count;
   uint32_t wid;                  /* Writer EntityID */
   proto_item *octet_item;
@@ -14211,7 +14211,6 @@ static void dissect_APP_ACK(tvbuff_t *tvb,
 /* *********************************************************************** */
 static void dissect_PAD(tvbuff_t *tvb,
                 packet_info *pinfo,
-                int offset,
                 uint8_t flags,
                 const unsigned encoding,
                 int octets_to_next_header,
@@ -14222,6 +14221,7 @@ static void dissect_PAD(tvbuff_t *tvb,
    * +---------------+---------------+---------------+---------------+
    */
   proto_item *item;
+  unsigned offset = 0;
 
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, PAD_FLAGS, flags);
 
@@ -14243,7 +14243,7 @@ static void dissect_PAD(tvbuff_t *tvb,
 /* *********************************************************************** */
 /* *                               D A T A                               * */
 /* *********************************************************************** */
-static void dissect_DATA_v1(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_DATA_v1(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree) {
   /* RTPS 1.0/1.1:
    * 0...2...........7...............15.............23...............31
@@ -14302,8 +14302,8 @@ static void dissect_DATA_v1(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
    *   - serializedData is equivalent to the old 'parameters'
    */
   int min_len;
+  unsigned offset = 0;
   bool is_builtin_entity = false;    /* true=entityId.entityKind = built-in */
-  int old_offset = offset;
   uint32_t wid;                  /* Writer EntityID */
   proto_item *octet_item;
 
@@ -14408,13 +14408,13 @@ static void dissect_DATA_v1(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
                         0x0102, NULL, 0, false, NULL);
     } else {
       proto_tree_add_item(tree, hf_rtps_issue_data, tvb, offset,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         ENC_NA);
     }
   }
 }
 
-static void dissect_DATA_v2(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_DATA_v2(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                             const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                             uint16_t vendor_id, endpoint_guid *guid) {
   /*
@@ -14451,7 +14451,7 @@ static void dissect_DATA_v2(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
    * +---------------+---------------+---------------+---------------+
    */
   int min_len;
-  int old_offset = offset;
+  unsigned offset = 0;
   uint32_t wid;                  /* Writer EntityID */
   uint32_t status_info = 0xffffffff;
   proto_item *octet_item;
@@ -14518,7 +14518,7 @@ static void dissect_DATA_v2(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
   if ((flags & FLAG_DATA_Q_v2) != 0) {
     bool is_inline_qos = true;
     offset = dissect_parameter_sequence(tree, pinfo, tvb, offset, encoding,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "inlineQos", 0x0200, NULL, vendor_id, is_inline_qos, NULL);
   }
 
@@ -14531,14 +14531,14 @@ static void dissect_DATA_v2(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
 	  || (wid == ENTITYID_RTI_BUILTIN_PARTICIPANT_CONFIG_SECURE_WRITER)
 	  || (wid == ENTITYID_RTI_BUILTIN_PARTICIPANT_CONFIG_SECURE_READER) ? true : false;
     dissect_serialized_data(tree, pinfo, tvb, offset,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "serializedData", vendor_id, from_builtin_writer, guid, NOT_A_FRAGMENT);
   }
   generate_status_info(pinfo, wid, status_info);
 }
 
 
-static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offset, uint8_t flags,
+static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, uint8_t flags,
   const unsigned encoding, proto_tree* tree, int octets_to_next_header, uint16_t vendor_id) {
   /*
    * 0...2...........7...............15.............23...............31
@@ -14594,6 +14594,7 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
   tvbuff_t *he_tvb;
   unsigned header_extension_length = 0;
   rtps_current_packet_decryption_info_t *decryption_info = NULL;
+  unsigned offset = 0;
 
   ++offset;
   proto_tree_add_bitmask_value(
@@ -14818,7 +14819,7 @@ static void dissect_HEADER_EXTENSION(tvbuff_t* tvb, packet_info* pinfo, int offs
   }
 }
 
-static void dissect_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                 uint16_t vendor_id, endpoint_guid *guid) {
   /*
@@ -14858,8 +14859,8 @@ static void dissect_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
    * +---------------+---------------+---------------+---------------+
    */
 
+  unsigned offset = 0;
   int  min_len;
-  int old_offset = offset;
   uint32_t frag_number = 0;
   proto_item *octet_item;
   uint32_t wid;
@@ -14935,7 +14936,7 @@ static void dissect_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
   if ((flags & FLAG_DATA_Q_v2) != 0) {
     bool is_inline_qos = true;
     offset = dissect_parameter_sequence(tree, pinfo, tvb, offset, encoding,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "inlineQos", 0x0200, NULL, vendor_id, is_inline_qos, NULL);
   }
 
@@ -14948,7 +14949,7 @@ static void dissect_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
       || (wid == ENTITYID_RTI_BUILTIN_PARTICIPANT_CONFIG_SECURE_WRITER)
       || (wid == ENTITYID_RTI_BUILTIN_PARTICIPANT_CONFIG_SECURE_READER) ? true : false;
     dissect_serialized_data(tree, pinfo, tvb, offset,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "serializedData", vendor_id, from_builtin_writer, NULL, (int32_t)frag_number);
   }
 }
@@ -14957,7 +14958,7 @@ static void dissect_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
 /* *********************************************************************** */
 /* *                        N O K E Y _ D A T A                          * */
 /* *********************************************************************** */
-static void dissect_NOKEY_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_NOKEY_DATA(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                 uint16_t version, uint16_t vendor_id) {
   /* RTPS 1.0/1.1:
@@ -15031,9 +15032,9 @@ static void dissect_NOKEY_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, ui
    */
 
   int  min_len;
+  unsigned offset = 0;
   uint32_t wid;                  /* Writer EntityID */
   bool from_builtin_writer;
-  int old_offset = offset;
   proto_item *octet_item;
 
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, NOKEY_DATA_FLAGS, flags);
@@ -15079,7 +15080,7 @@ static void dissect_NOKEY_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, ui
   /* Issue Data */
   if ((version < 0x0200) && (flags & FLAG_NOKEY_DATA_D) == 0) {
     proto_tree_add_item(tree, hf_rtps_issue_data, tvb, offset,
-                         octets_to_next_header - (offset - old_offset) + 4,
+                         octets_to_next_header - offset + 4,
                         ENC_NA);
   }
 
@@ -15091,7 +15092,7 @@ static void dissect_NOKEY_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, ui
       || (wid == ENTITYID_RTI_BUILTIN_PARTICIPANT_CONFIG_SECURE_WRITER)
       || (wid == ENTITYID_RTI_BUILTIN_PARTICIPANT_CONFIG_SECURE_READER) ? true : false;
     dissect_serialized_data(tree, pinfo, tvb, offset,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "serializedData", vendor_id, from_builtin_writer, NULL, NOT_A_FRAGMENT);
   }
 
@@ -15100,7 +15101,7 @@ static void dissect_NOKEY_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, ui
 /* *********************************************************************** */
 /* *                    N O K E Y _ D A T A _ F R A G                    * */
 /* *********************************************************************** */
-static void dissect_NOKEY_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset,
+static void dissect_NOKEY_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo,
                 uint8_t flags, const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                 uint16_t vendor_id) {
   /*
@@ -15133,9 +15134,9 @@ static void dissect_NOKEY_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offse
    */
 
   int  min_len;
+  unsigned offset = 0;
   uint32_t wid;                  /* Writer EntityID */
   bool from_builtin_writer;
-  int old_offset = offset;
   uint32_t frag_number = 0;
   proto_item *octet_item;
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, NOKEY_DATA_FRAG_FLAGS, flags);
@@ -15188,7 +15189,7 @@ static void dissect_NOKEY_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offse
   if ((flags & FLAG_DATA_Q_v2) != 0) {
     bool is_inline_qos = true;
     offset = dissect_parameter_sequence(tree, pinfo, tvb, offset, encoding,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "inlineQos", 0x0200, NULL, vendor_id, is_inline_qos, NULL);
   }
 
@@ -15201,7 +15202,7 @@ static void dissect_NOKEY_DATA_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offse
       || (wid == ENTITYID_RTI_BUILTIN_PARTICIPANT_CONFIG_SECURE_WRITER)
       || (wid == ENTITYID_RTI_BUILTIN_PARTICIPANT_CONFIG_SECURE_READER) ? true : false;
     dissect_serialized_data(tree, pinfo, tvb,offset,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "serializedData", vendor_id, from_builtin_writer, NULL, (int32_t)frag_number);
   }
 }
@@ -15213,7 +15214,7 @@ static void dissect_PING(tvbuff_t* tvb, int offset, const unsigned encoding, int
 /* *********************************************************************** */
 /* *                            A C K N A C K                            * */
 /* *********************************************************************** */
-static void dissect_ACKNACK(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_ACKNACK(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                 proto_item *item, endpoint_guid *guid) {
   /* RTPS 1.0/1.1:
@@ -15248,7 +15249,8 @@ static void dissect_ACKNACK(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
    * | Counter count                                                 |
    * +---------------+---------------+---------------+---------------+
    */
-  int original_offset; /* Offset to the readerEntityId */
+  unsigned offset = 0;
+  unsigned original_offset; /* Offset to the readerEntityId */
   proto_item *octet_item;
   uint32_t wid;
 
@@ -15302,7 +15304,7 @@ static void dissect_ACKNACK(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
 /* *********************************************************************** */
 /* *                          N A C K _ F R A G                          * */
 /* *********************************************************************** */
-static void dissect_NACK_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_NACK_FRAG(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                               const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                               endpoint_guid *guid) {
   /*
@@ -15326,6 +15328,7 @@ static void dissect_NACK_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
    * +---------------+---------------+---------------+---------------+
    */
   proto_item *octet_item;
+  int offset = 0;
   uint32_t wid;
 
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, NACK_FRAG_FLAGS, flags);
@@ -15372,7 +15375,7 @@ static void dissect_NACK_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
 /* *********************************************************************** */
 /* *                           H E A R T B E A T                         * */
 /* *********************************************************************** */
-static void dissect_HEARTBEAT(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_HEARTBEAT(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                 uint16_t version, endpoint_guid *guid) {
   /* RTPS 1.0/1.1:
@@ -15420,6 +15423,7 @@ static void dissect_HEARTBEAT(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
    * +---------------+---------------+---------------+---------------+
    */
   proto_item *octet_item;
+  unsigned offset = 0;
   uint32_t wid;
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, HEARTBEAT_FLAGS, flags);
 
@@ -15473,7 +15477,7 @@ static void dissect_HEARTBEAT(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
 /* *********************************************************************** */
 /* *                 H E A R T B E A T _ B A T C H                       * */
 /* *********************************************************************** */
-static void dissect_HEARTBEAT_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offset,
+static void dissect_HEARTBEAT_BATCH(tvbuff_t *tvb, packet_info *pinfo,
                 uint8_t flags, const unsigned encoding, int octets_to_next_header,
                 proto_tree *tree, endpoint_guid *guid) {
   /*
@@ -15505,6 +15509,7 @@ static void dissect_HEARTBEAT_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
    * +---------------+---------------+---------------+---------------+
    */
   proto_item *octet_item;
+  unsigned offset = 0;
   uint32_t wid;
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, HEARTBEAT_BATCH_FLAGS, flags);
 
@@ -15564,7 +15569,7 @@ static void dissect_HEARTBEAT_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
 /* *                  H E A R T B E A T _ V I R T U A L                  * */
 /* *********************************************************************** */
 
-static void dissect_HEARTBEAT_VIRTUAL(tvbuff_t *tvb, packet_info *pinfo _U_, int offset,
+static void dissect_HEARTBEAT_VIRTUAL(tvbuff_t *tvb, packet_info *pinfo _U_,
                 uint8_t flags, const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                 uint16_t vendor_id _U_, endpoint_guid *guid) {
 
@@ -15639,8 +15644,9 @@ static void dissect_HEARTBEAT_VIRTUAL(tvbuff_t *tvb, packet_info *pinfo _U_, int
     * +---------------+---------------+---------------+---------------+
     */
 
+    unsigned offset = 0;
     uint32_t num_writers, num_virtual_guids, wid;
-    int writer_id_offset, virtual_guid_offset = 0, old_offset;
+    unsigned writer_id_offset, virtual_guid_offset = 0, old_offset;
     proto_item *octet_item, *ti;
 
     proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, HEARTBEAT_VIRTUAL_FLAGS, flags);
@@ -15836,7 +15842,7 @@ static void dissect_HEARTBEAT_VIRTUAL(tvbuff_t *tvb, packet_info *pinfo _U_, int
 /* *********************************************************************** */
 /* *                   H E A R T B E A T _ F R A G                       * */
 /* *********************************************************************** */
-static void dissect_HEARTBEAT_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_HEARTBEAT_FRAG(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree, endpoint_guid *guid) {
   /*
    * 0...2...........7...............15.............23...............31
@@ -15857,6 +15863,7 @@ static void dissect_HEARTBEAT_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset
    * +---------------+---------------+---------------+---------------+
    */
   proto_item *octet_item;
+  unsigned offset = 0;
   uint32_t wid;
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, HEARTBEAT_FRAG_FLAGS, flags);
 
@@ -15906,7 +15913,7 @@ static void dissect_HEARTBEAT_FRAG(tvbuff_t *tvb, packet_info *pinfo, int offset
 /* *                           A N D                                     * */
 /* *             R T P S _ D A T A _ S E S S I O N                       * */
 /* *********************************************************************** */
-static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 unsigned encoding, int octets_to_next_header, proto_tree *tree,
                 uint16_t vendor_id, bool is_session, endpoint_guid *guid) {
   /*
@@ -15961,8 +15968,8 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
    * |                                                               |
    * +---------------+---------------+---------------+---------------+
    */
+  unsigned offset = 0;
   int min_len;
-  int old_offset = offset;
   uint32_t writer_wid;                  /* Writer EntityID */
   uint32_t reader_wid = 0;
   uint32_t status_info = 0xffffffff;
@@ -16035,7 +16042,7 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
   if ((flags & FLAG_RTPS_DATA_Q) != 0) {
     bool is_inline_qos = true;
     offset = dissect_parameter_sequence(tree, pinfo, tvb, offset, encoding,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "inlineQos", 0x0200, &status_info, vendor_id, is_inline_qos, &coherent_set_entity_info_object);
   }
 
@@ -16055,7 +16062,7 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
       uint32_t encapsulation_id, encapsulation_len;
       proto_item *ti;
       rtps_pm_tree = proto_tree_add_subtree(tree, tvb, offset,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         ett_rtps_part_message_data, &ti, "ParticipantMessageData");
 
       /* Encapsulation ID */
@@ -16079,7 +16086,7 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
       offset += 4;
 
       rtps_util_add_seq_octets(rtps_pm_tree, pinfo, tvb, offset, encoding,
-                               octets_to_next_header - (offset - old_offset) + 4, hf_rtps_data_serialize_data);
+                               octets_to_next_header - offset + 4, hf_rtps_data_serialize_data);
 
     } else if (writer_wid == ENTITYID_P2P_BUILTIN_PARTICIPANT_STATELESS_WRITER || writer_wid == ENTITYID_P2P_BUILTIN_PARTICIPANT_VOLATILE_SECURE_WRITER) {
       /* PGM stands for Participant Generic Message */
@@ -16090,7 +16097,7 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
       uint64_t sequence_number;
 
       ti = proto_tree_add_boolean_format(tree, hf_rtps_pgm, tvb, offset,
-              octets_to_next_header - (offset - old_offset) + 4, true, "Participant Generic Message");
+              octets_to_next_header - offset + 4, true, "Participant Generic Message");
       rtps_pgm_tree = proto_item_add_subtree(ti, ett_rtps_pgm_data);
 
       proto_tree_add_item_ret_uint(rtps_pgm_tree, hf_rtps_param_serialize_encap_kind,
@@ -16175,7 +16182,7 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
       uint32_t encapsulation_id, encapsulation_opt;
 
       locator_ping_tree = proto_tree_add_subtree(tree, tvb, offset,
-                          octets_to_next_header - (offset - old_offset) + 4,
+                          octets_to_next_header - offset + 4,
                           ett_rtps_locator_ping_tree, &ti, "Locator Ping Message");
 
       /* Encapsulation Id */
@@ -16212,7 +16219,7 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
       int32_t service_id;
 
       ti = proto_tree_add_boolean_format(tree, hf_rtps_srm, tvb, offset,
-              octets_to_next_header - (offset - old_offset) + 4,
+              octets_to_next_header - offset + 4,
               true, "Service Request Message");
       service_request_tree = proto_item_add_subtree(ti, ett_rtps_service_request_tree);
 
@@ -16257,7 +16264,7 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
           || (writer_wid == ENTITYID_RTI_BUILTIN_PARTICIPANT_CONFIG_SECURE_READER) ? true : false;
       /* At the end still dissect the rest of the bytes as raw data */
       dissect_serialized_data(tree, pinfo, tvb, offset,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         label, vendor_id, from_builtin_writer, guid, NOT_A_FRAGMENT);
     }
   }
@@ -16265,14 +16272,15 @@ static void dissect_RTPS_DATA(tvbuff_t *tvb, packet_info *pinfo, int offset, uin
   generate_status_info(pinfo, writer_wid, status_info);
 }
 
-static void dissect_RTPS_DATA_SESSION(tvbuff_t* tvb, packet_info* pinfo, int offset, uint8_t flags,
+static void dissect_RTPS_DATA_SESSION(tvbuff_t* tvb, packet_info* pinfo, uint8_t flags,
   unsigned encoding, int octets_to_next_header, proto_tree* tree,
   uint16_t vendor_id, endpoint_guid* guid) {
     bool is_data_session_intermediate = false;
     proto_item* ti = NULL;
+    unsigned offset = 0;
 
     p_set_proto_data(pinfo->pool, pinfo, proto_rtps, RTPS_DATA_SESSION_FINAL_PROTODATA_KEY, &is_data_session_intermediate);
-    dissect_RTPS_DATA(tvb, pinfo, offset, flags, encoding, octets_to_next_header,
+    dissect_RTPS_DATA(tvb, pinfo, flags, encoding, octets_to_next_header,
       tree, vendor_id, true, guid);
     ti = proto_tree_add_boolean(tree, hf_rtps_data_session_intermediate, tvb, offset, 0, is_data_session_intermediate);
     proto_item_set_generated(ti);
@@ -16281,7 +16289,7 @@ static void dissect_RTPS_DATA_SESSION(tvbuff_t* tvb, packet_info* pinfo, int off
 /* *********************************************************************** */
 /* *                 R T P S _ D A T A _ F R A G _ [SESSION]             * */
 /* *********************************************************************** */
-static void dissect_RTPS_DATA_FRAG_kind(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_RTPS_DATA_FRAG_kind(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                 uint16_t vendor_id, bool is_session, endpoint_guid *guid) {
   /*
@@ -16356,8 +16364,8 @@ static void dissect_RTPS_DATA_FRAG_kind(tvbuff_t *tvb, packet_info *pinfo, int o
 
 
    */
+  unsigned offset = 0;
   int min_len;
-  int old_offset = offset;
   uint64_t sample_seq_number = 0;
   uint32_t frag_number = 0, frag_size = 0, sample_size = 0, num_frags = 0;
   uint32_t wid;                  /* Writer EntityID */
@@ -16446,7 +16454,7 @@ static void dissect_RTPS_DATA_FRAG_kind(tvbuff_t *tvb, packet_info *pinfo, int o
   if ((flags & FLAG_RTPS_DATA_FRAG_Q) != 0) {
     bool is_inline_qos = true;
     offset = dissect_parameter_sequence(tree, pinfo, tvb, offset, encoding,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "inlineQos", 0x0200, &status_info, vendor_id, is_inline_qos, &coherent_set_entity_info_object);
   }
 
@@ -16528,7 +16536,7 @@ static void dissect_RTPS_DATA_FRAG_kind(tvbuff_t *tvb, packet_info *pinfo, int o
 /* *********************************************************************** */
 /* *                 R T P S _ D A T A _ B A T C H                       * */
 /* *********************************************************************** */
-static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offset,
+static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo,
                 uint8_t flags, const unsigned encoding, int octets_to_next_header,
                 proto_tree *tree, uint16_t vendor_id, endpoint_guid *guid) {
   /*
@@ -16601,12 +16609,12 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
    * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
    */
 
+  unsigned offset = 0;
   int min_len;
-  int old_offset = offset;
   uint32_t wid;                  /* Writer EntityID */
   uint32_t status_info = 0xffffffff;
   uint32_t octetsToSLEncapsulationId;
-  int32_t sampleListOffset;
+  unsigned sampleListOffset;
   uint16_t encapsulation_id;
   bool try_dissection_from_type_object = false;
   uint16_t *sample_info_flags = NULL;
@@ -16687,7 +16695,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
   /* InlineQos */
   if ((flags & FLAG_RTPS_DATA_BATCH_Q) != 0) {
     offset = dissect_parameter_sequence(tree, pinfo, tvb, offset, encoding,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "batchInlineQos", 0x0200, &status_info, vendor_id, false, NULL);
   }
 
@@ -16719,7 +16727,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
     while (offset < sampleListOffset) {
       uint16_t flags2;
       /*uint16_t octetsToInlineQos;*/
-      int min_length;
+      unsigned min_length;
       proto_tree *si_tree;
       int offset_begin_sampleinfo = offset;
 
@@ -16770,7 +16778,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
       /* Parameter list [only if Q==1] */
       if ((flags2 & FLAG_SAMPLE_INFO_Q) != 0) {
         offset = dissect_parameter_sequence(si_tree, pinfo, tvb, offset, encoding,
-                        octets_to_next_header - (offset - old_offset) + 4,
+                        octets_to_next_header - offset + 4,
                         "sampleInlineQos", 0x0200, &status_info, vendor_id, false, NULL);
       }
       proto_item_set_len(ti, offset - offset_begin_sampleinfo);
@@ -16785,7 +16793,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
       pinfo,
       tvb,
       offset,
-      tvb_reported_length(tvb) - offset,
+      tvb_reported_length_remaining(tvb, offset),
       true,
       &encapsulation_id,
       NULL,
@@ -16802,7 +16810,6 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
       offset = 0;
       dissected_data_holder_tree = compressed_subtree;
       octets_to_next_header = tvb_reported_length(data_holder_tvb);
-      old_offset = 0;
   }
 
   /* If it is compressed but not uncompressed don't try to dissect */
@@ -16819,7 +16826,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
        * can happen for example when a DISPOSE message is sent, there are sample
        * info records, but the payload size is zero for all of them)
        */
-      if ((octets_to_next_header - (offset - old_offset) > 0)) {
+      if ((octets_to_next_header - offset > 0)) {
           proto_item *ti;
           proto_tree *sil_tree;
           int count = 0;
@@ -16834,7 +16841,7 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
               "Serialized Sample List");
           for (count = 0; count < sample_info_count; ++count) {
               /* Ensure there are enough bytes in the buffer to dissect the next sample */
-              if (octets_to_next_header - (offset - old_offset) + 4 < (int)sample_info_length[count]) {
+              if (octets_to_next_header - offset + 4 < sample_info_length[count]) {
                   expert_add_info_format(pinfo, ti, &ei_rtps_parameter_value_invalid, "Error: not enough bytes to dissect sample");
                   return;
               }
@@ -16871,8 +16878,8 @@ static void dissect_RTPS_DATA_BATCH(tvbuff_t *tvb, packet_info *pinfo, int offse
 /* *********************************************************************** */
 /* *                                 G A P                               * */
 /* *********************************************************************** */
-static void dissect_GAP(tvbuff_t *tvb, packet_info *pinfo, int offset,
-                uint8_t flags, const unsigned encoding, int octets_to_next_header,
+static void dissect_GAP(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
+                const unsigned encoding, int octets_to_next_header,
                 proto_tree *tree, endpoint_guid *guid) {
   /* RTPS 1.0/1.1:
    * 0...2...........7...............15.............23...............31
@@ -16911,6 +16918,7 @@ static void dissect_GAP(tvbuff_t *tvb, packet_info *pinfo, int offset,
    * +---------------+---------------+---------------+---------------+
    */
   proto_item *octet_item;
+  unsigned offset = 0;
   uint32_t wid;
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, GAP_FLAGS, flags);
 
@@ -16953,7 +16961,7 @@ static void dissect_GAP(tvbuff_t *tvb, packet_info *pinfo, int offset,
 /* *********************************************************************** */
 /* *                           I N F O _ T S                             * */
 /* *********************************************************************** */
-static void dissect_INFO_TS(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_INFO_TS(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree) {
   /* RTPS 1.0/1.1:
    * 0...2...........7...............15.............23...............31
@@ -16976,6 +16984,7 @@ static void dissect_INFO_TS(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
    * +---------------+---------------+---------------+---------------+
    */
 
+  unsigned offset = 0;
   int min_len;
   proto_item *octet_item;
 
@@ -17011,7 +17020,7 @@ static void dissect_INFO_TS(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
 /* *********************************************************************** */
 /* *                           I N F O _ S R C                           * */
 /* *********************************************************************** */
-static void dissect_INFO_SRC(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_INFO_SRC(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree, uint16_t rtps_version) {
   /* RTPS 1.0/1.1:
    * 0...2...........7...............15.............23...............31
@@ -17042,6 +17051,7 @@ static void dissect_INFO_SRC(tvbuff_t *tvb, packet_info *pinfo, int offset, uint
    * +---------------+---------------+---------------+---------------+
    */
   proto_item *octet_item;
+  unsigned offset = 0;
   uint16_t version;
 
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, INFO_SRC_FLAGS, flags);
@@ -17095,7 +17105,7 @@ static void dissect_INFO_SRC(tvbuff_t *tvb, packet_info *pinfo, int offset, uint
 /* *********************************************************************** */
 /* *                    I N F O _ R E P L Y _ I P 4                      * */
 /* *********************************************************************** */
-static void dissect_INFO_REPLY_IP4(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_INFO_REPLY_IP4(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree) {
   /* RTPS 1.0/1.1:
    * 0...2...........7...............15.............23...............31
@@ -17126,6 +17136,7 @@ static void dissect_INFO_REPLY_IP4(tvbuff_t *tvb, packet_info *pinfo, int offset
    * +---------------+---------------+---------------+---------------+
    */
   int min_len;
+  unsigned offset = 0;
   proto_item *octet_item;
 
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, INFO_REPLY_IP4_FLAGS, flags);
@@ -17165,7 +17176,7 @@ static void dissect_INFO_REPLY_IP4(tvbuff_t *tvb, packet_info *pinfo, int offset
 /* *********************************************************************** */
 /* *                           I N F O _ D S T                           * */
 /* *********************************************************************** */
-static void dissect_INFO_DST(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_INFO_DST(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree,
                 uint16_t version, endpoint_guid *dst_guid) {
   /* RTPS 1.0/1.1:
@@ -17189,6 +17200,7 @@ static void dissect_INFO_DST(tvbuff_t *tvb, packet_info *pinfo, int offset, uint
    * +---------------+---------------+---------------+---------------+
    */
   proto_item *octet_item;
+  unsigned offset = 0;
 
   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, INFO_DST_FLAGS, flags);
 
@@ -17228,7 +17240,7 @@ static void dissect_INFO_DST(tvbuff_t *tvb, packet_info *pinfo, int offset, uint
 /* *********************************************************************** */
 /* *                        I N F O _ R E P L Y                          * */
 /* *********************************************************************** */
-static void dissect_INFO_REPLY(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_INFO_REPLY(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
                 const unsigned encoding, int octets_to_next_header, proto_tree *tree) {
   /* RTPS 1.0/1.1:
    *   INFO_REPLY is *NOT* the same thing as the old INFO_REPLY.
@@ -17248,6 +17260,7 @@ static void dissect_INFO_REPLY(tvbuff_t *tvb, packet_info *pinfo, int offset, ui
    * +---------------+---------------+---------------+---------------+
    */
 
+  unsigned offset = 0;
   int min_len;
   proto_item *octet_item;
 
@@ -17282,7 +17295,7 @@ static void dissect_INFO_REPLY(tvbuff_t *tvb, packet_info *pinfo, int offset, ui
 /* *********************************************************************** */
 /* *                              RTI CRC                                * */
 /* *********************************************************************** */
-static void dissect_RTI_CRC(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags,
+static void dissect_RTI_CRC(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags,
         const unsigned encoding, int octets_to_next_header,proto_tree *tree) {
    /*
     * 0...2...........7...............15.............23...............31
@@ -17294,23 +17307,24 @@ static void dissect_RTI_CRC(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8
     * |                             CRC32                             |
     * +---------------+---------------+---------------+---------------+
       Total 12 bytes */
-   proto_item *octet_item;
+  unsigned offset = 0;
+  proto_item *octet_item;
 
-   proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, RTI_CRC_FLAGS, flags);
+  proto_tree_add_bitmask_value(tree, tvb, offset + 1, hf_rtps_sm_flags, ett_rtps_flags, RTI_CRC_FLAGS, flags);
 
-   octet_item = proto_tree_add_item(tree, hf_rtps_sm_octets_to_next_header, tvb,
+  octet_item = proto_tree_add_item(tree, hf_rtps_sm_octets_to_next_header, tvb,
                          offset + 2, 2, encoding);
 
-   if (octets_to_next_header != 8) {
-     expert_add_info_format(pinfo, octet_item, &ei_rtps_sm_octets_to_next_header_error, "(Error: should be == 8)");
-     return;
-   }
+  if (octets_to_next_header != 8) {
+    expert_add_info_format(pinfo, octet_item, &ei_rtps_sm_octets_to_next_header_error, "(Error: should be == 8)");
+    return;
+  }
 
-   offset += 4;
-   proto_tree_add_item(tree, hf_rtps_sm_rti_crc_number, tvb, offset, 4, encoding);
+  offset += 4;
+  proto_tree_add_item(tree, hf_rtps_sm_rti_crc_number, tvb, offset, 4, encoding);
 
-   offset += 4;
-      proto_tree_add_item(tree, hf_rtps_sm_rti_crc_result, tvb, offset, 4, ENC_BIG_ENDIAN);
+  offset += 4;
+  proto_tree_add_item(tree, hf_rtps_sm_rti_crc_result, tvb, offset, 4, ENC_BIG_ENDIAN);
 }
 
 /**
@@ -17347,7 +17361,6 @@ static int rtps_util_look_for_secure_tag(
 static void dissect_SECURE(
     tvbuff_t *tvb,
     packet_info *pinfo,
-    int offset,
     uint8_t flags,
     const unsigned encoding _U_,
     int octets_to_next_header,
@@ -17375,10 +17388,10 @@ static void dissect_SECURE(
   * +---------------+---------------+---------------+---------------+
   */
   proto_tree * payload_tree;
+  unsigned offset = 0;
   unsigned local_encoding;
   int secure_body_len = 0;
   rtps_current_packet_decryption_info_t *decryption_info;
-  int initial_offset = offset;
 
   proto_tree_add_bitmask_value(
       tree,
@@ -17495,7 +17508,7 @@ static void dissect_SECURE(
      */
     tag_offset = rtps_util_look_for_secure_tag(
         tvb,
-        initial_offset + octets_to_next_header + 4);
+        octets_to_next_header + 4);
     if (tag_offset > 0) {
       tag = tvb_memdup(
           pinfo->pool,
@@ -17613,7 +17626,7 @@ static void dissect_SECURE(
   }
 }
 
-static void dissect_SECURE_PREFIX(tvbuff_t *tvb, packet_info *pinfo _U_, int offset,
+static void dissect_SECURE_PREFIX(tvbuff_t *tvb, packet_info *pinfo _U_,
                 uint8_t flags, const unsigned encoding, int octets_to_next_header,
                 proto_tree *tree, uint16_t vendor_id _U_) {
     /*
@@ -17643,6 +17656,7 @@ static void dissect_SECURE_PREFIX(tvbuff_t *tvb, packet_info *pinfo _U_, int off
      * |               init_vector_suffix[8]                           |
      * +---------------+---------------+---------------+---------------+
      */
+  unsigned offset = 0;
   proto_tree * sec_data_header_tree;
   int flags_offset = offset + 1;
   int session_id_offset = 0;
@@ -17777,7 +17791,6 @@ static void dissect_SECURE_PREFIX(tvbuff_t *tvb, packet_info *pinfo _U_, int off
 static void dissect_SECURE_POSTFIX(
     tvbuff_t *tvb,
     packet_info *pinfo _U_,
-    int offset,
     uint8_t flags,
     const unsigned encoding,
     int octets_to_next_header,
@@ -17821,6 +17834,7 @@ static void dissect_SECURE_POSTFIX(
     *   | octet[16] receiver_specific_macs[N-1].receiver_mac            |
     *   +---------------+---------------+---------------+---------------+
     */
+  unsigned offset = 0;
   int specific_macs_num = 0;
 
   ++offset;
@@ -17927,10 +17941,11 @@ static void dissect_SECURE_POSTFIX(
  * +---------------+---------------+---------------+---------------+
  *
  */
-static void dissect_UDP_WAN_BINDING_PING(tvbuff_t *tvb, packet_info *pinfo _U_, int offset,
+static void dissect_UDP_WAN_BINDING_PING(tvbuff_t *tvb, packet_info *pinfo _U_,
     uint8_t flags, const unsigned encoding, int octets_to_next_header _U_,
     proto_tree *tree, uint16_t vendor_id _U_) {
 
+    unsigned offset = 0;
     const unsigned flags_offset = offset + 1;
     const unsigned next_header_offset = flags_offset + 1;
     const unsigned port_offset = next_header_offset + 2;
@@ -17969,7 +17984,6 @@ static void dissect_UDP_WAN_BINDING_PING(tvbuff_t *tvb, packet_info *pinfo _U_, 
 static bool dissect_rtps_submessage_v2(
     tvbuff_t *tvb,
     packet_info *pinfo,
-    int offset,
     uint8_t flags,
     const unsigned encoding,
     uint8_t submessageId,
@@ -17984,76 +17998,76 @@ static bool dissect_rtps_submessage_v2(
   switch (submessageId)
   {
     case SUBMESSAGE_HEADER_EXTENSION:
-      dissect_HEADER_EXTENSION(tvb, pinfo, offset, flags, encoding, rtps_submessage_tree, octets_to_next_header, vendor_id);
+      dissect_HEADER_EXTENSION(tvb, pinfo, flags, encoding, rtps_submessage_tree, octets_to_next_header, vendor_id);
       break;
     case SUBMESSAGE_DATA_FRAG:
-      dissect_DATA_FRAG(tvb, pinfo, offset, flags, encoding,
+      dissect_DATA_FRAG(tvb, pinfo, flags, encoding,
           octets_to_next_header, rtps_submessage_tree, vendor_id, guid);
       break;
 
     case SUBMESSAGE_NOKEY_DATA_FRAG:
-      dissect_NOKEY_DATA_FRAG(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree, vendor_id);
+      dissect_NOKEY_DATA_FRAG(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree, vendor_id);
       break;
 
     case SUBMESSAGE_NACK_FRAG:
-      dissect_NACK_FRAG(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree, guid);
+      dissect_NACK_FRAG(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree, guid);
       break;
 
     case SUBMESSAGE_ACKNACK_SESSION:
     case SUBMESSAGE_ACKNACK_BATCH:
-      dissect_ACKNACK(tvb, pinfo, offset, flags, encoding,
+      dissect_ACKNACK(tvb, pinfo, flags, encoding,
           octets_to_next_header, rtps_submessage_tree, submessage_item, dst_guid);
       break;
 
     case SUBMESSAGE_APP_ACK:
-      dissect_APP_ACK(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree, submessage_item, guid);
+      dissect_APP_ACK(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree, submessage_item, guid);
       break;
 
     case SUBMESSAGE_APP_ACK_CONF:
-      dissect_APP_ACK_CONF(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree, submessage_item, guid);
+      dissect_APP_ACK_CONF(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree, submessage_item, guid);
       break;
 
     case SUBMESSAGE_HEARTBEAT_SESSION:
     case SUBMESSAGE_HEARTBEAT_BATCH:
-      dissect_HEARTBEAT_BATCH(tvb, pinfo, offset, flags, encoding,
+      dissect_HEARTBEAT_BATCH(tvb, pinfo, flags, encoding,
           octets_to_next_header, rtps_submessage_tree, guid);
       break;
 
     case SUBMESSAGE_HEARTBEAT_FRAG:
-      dissect_HEARTBEAT_FRAG(tvb, pinfo, offset, flags, encoding,
+      dissect_HEARTBEAT_FRAG(tvb, pinfo, flags, encoding,
           octets_to_next_header, rtps_submessage_tree, guid);
       break;
 
     case SUBMESSAGE_HEARTBEAT_VIRTUAL:
-      dissect_HEARTBEAT_VIRTUAL(tvb, pinfo, offset, flags, encoding,
+      dissect_HEARTBEAT_VIRTUAL(tvb, pinfo, flags, encoding,
           octets_to_next_header, rtps_submessage_tree, vendor_id, guid);
       break;
 
     case SUBMESSAGE_RTPS_DATA_SESSION: {
-      dissect_RTPS_DATA_SESSION(tvb, pinfo, offset, flags, encoding, octets_to_next_header,
+      dissect_RTPS_DATA_SESSION(tvb, pinfo, flags, encoding, octets_to_next_header,
         rtps_submessage_tree, vendor_id, guid);
       break;
     }
     case SUBMESSAGE_RTPS_DATA:
-      dissect_RTPS_DATA(tvb, pinfo, offset, flags, encoding, octets_to_next_header,
+      dissect_RTPS_DATA(tvb, pinfo, flags, encoding, octets_to_next_header,
               rtps_submessage_tree, vendor_id, false, guid);
 
       break;
 
     case SUBMESSAGE_RTI_DATA_FRAG_SESSION:
     case SUBMESSAGE_RTPS_DATA_FRAG:
-      dissect_RTPS_DATA_FRAG_kind(tvb, pinfo, offset, flags, encoding, octets_to_next_header,
+      dissect_RTPS_DATA_FRAG_kind(tvb, pinfo, flags, encoding, octets_to_next_header,
                                 rtps_submessage_tree, vendor_id, (submessageId == SUBMESSAGE_RTI_DATA_FRAG_SESSION), guid);
       break;
 
     case SUBMESSAGE_RTPS_DATA_BATCH:
-      dissect_RTPS_DATA_BATCH(tvb, pinfo, offset, flags, encoding, octets_to_next_header,
+      dissect_RTPS_DATA_BATCH(tvb, pinfo, flags, encoding, octets_to_next_header,
                                 rtps_submessage_tree, vendor_id, guid);
       break;
 
     case SUBMESSAGE_RTI_CRC:
       if (vendor_id == RTPS_VENDOR_RTI_DDS) {
-        dissect_RTI_CRC(tvb, pinfo, offset, flags, encoding, octets_to_next_header,
+        dissect_RTI_CRC(tvb, pinfo, flags, encoding, octets_to_next_header,
                                 rtps_submessage_tree);
       }
       break;
@@ -18061,7 +18075,6 @@ static bool dissect_rtps_submessage_v2(
       dissect_SECURE(
           tvb,
           pinfo,
-          offset,
           flags,
           encoding,
           octets_to_next_header,
@@ -18072,16 +18085,16 @@ static bool dissect_rtps_submessage_v2(
       break;
     case SUBMESSAGE_SEC_PREFIX:
     case SUBMESSAGE_SRTPS_PREFIX:
-      dissect_SECURE_PREFIX(tvb, pinfo, offset, flags, encoding, octets_to_next_header,
+      dissect_SECURE_PREFIX(tvb, pinfo, flags, encoding, octets_to_next_header,
                                 rtps_submessage_tree, vendor_id);
       break;
     case SUBMESSAGE_SEC_POSTFIX:
     case SUBMESSAGE_SRTPS_POSTFIX:
-      dissect_SECURE_POSTFIX(tvb, pinfo, offset, flags, encoding, octets_to_next_header,
+      dissect_SECURE_POSTFIX(tvb, pinfo, flags, encoding, octets_to_next_header,
                                 rtps_submessage_tree, vendor_id);
       break;
     case SUBMESSAGE_RTI_UDP_WAN_BINDING_PING:
-      dissect_UDP_WAN_BINDING_PING(tvb, pinfo, offset, flags, encoding, octets_to_next_header,
+      dissect_UDP_WAN_BINDING_PING(tvb, pinfo, flags, encoding, octets_to_next_header,
             rtps_submessage_tree, vendor_id);
       break;
 
@@ -18092,7 +18105,7 @@ static bool dissect_rtps_submessage_v2(
   return true;
 }
 
-static bool dissect_rtps_submessage_v1(tvbuff_t *tvb, packet_info *pinfo, int offset, uint8_t flags, const unsigned encoding,
+static bool dissect_rtps_submessage_v1(tvbuff_t *tvb, packet_info *pinfo, uint8_t flags, const unsigned encoding,
                                            uint8_t submessageId, uint16_t version, uint16_t vendor_id, int octets_to_next_header,
                                            proto_tree *rtps_submessage_tree, proto_item *submessage_item,
                                            endpoint_guid * guid, endpoint_guid * dst_guid)
@@ -18100,58 +18113,58 @@ static bool dissect_rtps_submessage_v1(tvbuff_t *tvb, packet_info *pinfo, int of
   switch (submessageId)
   {
     case SUBMESSAGE_PAD:
-      dissect_PAD(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree);
+      dissect_PAD(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree);
       break;
 
     case SUBMESSAGE_DATA:
       if (version < 0x0200) {
-        dissect_DATA_v1(tvb, pinfo, offset, flags, encoding,
+        dissect_DATA_v1(tvb, pinfo, flags, encoding,
                 octets_to_next_header, rtps_submessage_tree);
       } else {
-        dissect_DATA_v2(tvb, pinfo, offset, flags, encoding,
+        dissect_DATA_v2(tvb, pinfo, flags, encoding,
                 octets_to_next_header, rtps_submessage_tree, vendor_id, guid);
       }
       break;
 
     case SUBMESSAGE_NOKEY_DATA:
-      dissect_NOKEY_DATA(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree,
+      dissect_NOKEY_DATA(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree,
                          version, vendor_id);
       break;
 
     case SUBMESSAGE_ACKNACK:
-      dissect_ACKNACK(tvb, pinfo, offset, flags, encoding,
+      dissect_ACKNACK(tvb, pinfo, flags, encoding,
 		  octets_to_next_header, rtps_submessage_tree, submessage_item, dst_guid);
       break;
 
     case SUBMESSAGE_HEARTBEAT:
-      dissect_HEARTBEAT(tvb, pinfo, offset, flags, encoding,
+      dissect_HEARTBEAT(tvb, pinfo, flags, encoding,
 		  octets_to_next_header, rtps_submessage_tree, version, guid);
       break;
 
     case SUBMESSAGE_GAP:
-      dissect_GAP(tvb, pinfo, offset, flags, encoding,
+      dissect_GAP(tvb, pinfo, flags, encoding,
 		  octets_to_next_header, rtps_submessage_tree, guid);
       break;
 
     case SUBMESSAGE_INFO_TS:
-      dissect_INFO_TS(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree);
+      dissect_INFO_TS(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree);
       break;
 
     case SUBMESSAGE_INFO_SRC:
-      dissect_INFO_SRC(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree, version);
+      dissect_INFO_SRC(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree, version);
       break;
 
     case SUBMESSAGE_INFO_REPLY_IP4:
-      dissect_INFO_REPLY_IP4(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree);
+      dissect_INFO_REPLY_IP4(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree);
       break;
 
     case SUBMESSAGE_INFO_DST:
-      dissect_INFO_DST(tvb, pinfo, offset, flags, encoding,
+      dissect_INFO_DST(tvb, pinfo, flags, encoding,
           octets_to_next_header, rtps_submessage_tree, version, dst_guid);
       break;
 
     case SUBMESSAGE_INFO_REPLY:
-      dissect_INFO_REPLY(tvb, pinfo, offset, flags, encoding, octets_to_next_header, rtps_submessage_tree);
+      dissect_INFO_REPLY(tvb, pinfo, flags, encoding, octets_to_next_header, rtps_submessage_tree);
       break;
 
     default:
@@ -18464,6 +18477,7 @@ void dissect_rtps_submessages(
   proto_tree *rtps_submessage_tree;
   unsigned encoding;
   int next_submsg, octets_to_next_header;
+  tvbuff_t *submsg_tvb;
   endpoint_guid dst_guid;
   submessage_col_info current_submessage_col_info = {NULL, NULL, NULL};
 
@@ -18515,6 +18529,7 @@ void dissect_rtps_submessages(
       octets_to_next_header = tvb_reported_length_remaining(tvb, offset + 4);
     }
     next_submsg = offset + octets_to_next_header + 4;
+    submsg_tvb = tvb_new_subset_length(tvb, offset, octets_to_next_header + 4);
 
     /* Set length of this item */
     proto_item_set_len(ti, octets_to_next_header + 4);
@@ -18524,15 +18539,14 @@ void dissect_rtps_submessages(
      * submessage (at the ID byte).
      */
     p_set_proto_data(pinfo->pool, pinfo, proto_rtps, RTPS_CURRENT_SUBMESSAGE_COL_DATA_KEY, (void **)&current_submessage_col_info);
-    if (!dissect_rtps_submessage_v1(tvb, pinfo, offset, flags, encoding,
+    if (!dissect_rtps_submessage_v1(submsg_tvb, pinfo, flags, encoding,
                                     submessageId, version, vendor_id,
                                     octets_to_next_header, rtps_submessage_tree,
                                     ti, guid, &dst_guid)) {
       if ((version < 0x0200) ||
           !dissect_rtps_submessage_v2(
-              tvb,
+              submsg_tvb,
               pinfo,
-              offset,
               flags,
               encoding,
               submessageId,

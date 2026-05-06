@@ -119,13 +119,20 @@ sharkd_dissect_request(uint32_t framenum, uint32_t frame_ref_num,
                        column_info *cinfo, uint32_t dissect_flags,
                        sharkd_dissect_func_t cb, void *data,
                        int *err, char **err_info);
+
+/**
+ * @brief Get the modified packet block for a given frame, if available.
+ *
+ * @param fd Pointer to the frame data structure.
+ * @return The modified packet block, or NULL if no modification is available.
+ */
 wtap_block_t sharkd_get_modified_block(const frame_data *fd);
 
 /**
  * @brief Get the packet block for a given frame.
  *
  * @param fd Pointer to the frame data structure.
- * @return wtap_block_t The packet block, or NULL if an error occurred.
+ * @return The packet block, or NULL if an error occurred.
  */
 wtap_block_t sharkd_get_packet_block(const frame_data *fd);
 

@@ -35,6 +35,12 @@ extern "C" {
 
 /* To add dynamically an export name, call the following function
    It returns the registered tap */
+/**
+ * @brief Register an export PDU tap with a default encapsulation.
+ *
+ * @param name The name of the export PDU tap.
+ * @return int 0 on success, -1 on failure.
+ */
 WS_DLL_PUBLIC int register_export_pdu_tap(const char *name);
 /* Same as above, but for export taps that use an encapsulation other
  * than WTAP_ENCAP_WIRESHARK_UPPER_PDU */
@@ -43,22 +49,24 @@ WS_DLL_PUBLIC GSList *get_export_pdu_tap_list(void);
 
 WS_DLL_PUBLIC int export_pdu_tap_get_encap(const char* name);
 
-/** Compute the size (in bytes) of a pdu item
-*
-@param pinfo Packet info that may contain data for the pdu item
-@param data optional data of the pdu item
-@return the size of the pdu item
-*/
+/**
+ * @brief Compute the size (in bytes) of a pdu item
+ *
+ * @param pinfo Packet info that may contain data for the pdu item
+ * @param data optional data of the pdu item
+ * @return the size of the pdu item
+ */
 typedef int (*exp_pdu_get_size)(packet_info *pinfo, void* data);
 
-/** Populate a buffer with pdu item data
-*
-@param pinfo Packet info that may contain data for the PDU item
-@param data optional data of the PDU item
-@param tlv_buffer buffer to be populated with PDU item
-@param tlv_buffer_size size of buffer to be populated
-@return the number of bytes populated to the buffer (typically PDU item size)
-*/
+/**
+ * @brief Populate a buffer with pdu item data
+ *
+ * @param pinfo Packet info that may contain data for the PDU item
+ * @param data optional data of the PDU item
+ * @param tlv_buffer buffer to be populated with PDU item
+ * @param tlv_buffer_size size of buffer to be populated
+ * @return the number of bytes populated to the buffer (typically PDU item size)
+ */
 typedef int (*exp_pdu_populate_data)(packet_info *pinfo, void* data, uint8_t *tlv_buffer, uint32_t tlv_buffer_size);
 
 typedef struct exp_pdu_data_item
@@ -123,8 +131,19 @@ WS_DLL_PUBLIC exp_pdu_data_item_t exp_pdu_data_src_port;
 WS_DLL_PUBLIC exp_pdu_data_item_t exp_pdu_data_dst_port;
 WS_DLL_PUBLIC exp_pdu_data_item_t exp_pdu_data_orig_frame_num;
 
+/**
+ * @brief Initializes the PDU export system.
+ *
+ * This function initializes the necessary data structures and resources for exporting PDUs.
+ */
 extern void export_pdu_init(void);
 
+/**
+ * @brief Cleans up resources used by exported PDU handling.
+ *
+ * This function frees all resources allocated for exporting PDUs, including
+ * freeing any dynamically allocated memory and resetting global variables.
+ */
 extern void export_pdu_cleanup(void);
 
 #ifdef __cplusplus
