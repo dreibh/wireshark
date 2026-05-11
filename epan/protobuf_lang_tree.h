@@ -9,10 +9,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-
-#ifndef __PROTOBUF_LANG_TREE_H__
-#define __PROTOBUF_LANG_TREE_H__
-
+#pragma once
 #include <wireshark.h>
 
 #include <stdio.h>
@@ -842,8 +839,6 @@ pbl_free_node(void *anode);
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* __PROTOBUF_LANG_TREE_H__ */
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

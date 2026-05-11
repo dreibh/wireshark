@@ -6,9 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#ifndef __MANUF_H__
-#define __MANUF_H__
-
+#pragma once
 #include <wireshark.h>
 
 #ifdef __cplusplus
@@ -126,5 +124,3 @@ ws_manuf_count(void);
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif

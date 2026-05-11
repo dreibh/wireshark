@@ -26,10 +26,7 @@
  * for exceptions with no message, and don't have to worry about
  * not freeing that).
  */
-
-#ifndef XCEPT_H
-#define XCEPT_H
-
+#pragma once
 #include <glib.h>
 #include <setjmp.h>
 #include <stdlib.h>
@@ -261,8 +258,6 @@ void except_set_top(struct except_stacknode *node);
         except_free(except_ch.except_obj.except_dyndata);       \
         except_pop();                                           \
     }
-
-#endif /* XCEPT_H */
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

@@ -12,10 +12,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-
-#ifndef __MEDIA_PARAMS_H__
-#define __MEDIA_PARAMS_H__
-
+#pragma once
 #include <epan/wmem_scopes.h>
 
 #include "ws_symbol_export.h"
@@ -40,5 +37,3 @@ ws_find_media_type_parameter(wmem_allocator_t *scope, const char *parameters, co
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* media_params.h */

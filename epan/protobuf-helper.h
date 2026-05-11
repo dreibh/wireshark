@@ -21,10 +21,7 @@
  * One day, if C++ library is allowed, we can create a protobuf-helper.cpp file, that invoking official protobuf C++ library directly,
  * to replace protobuf-helper.c. The packet-protobuf.c can keep unchanged.
  */
-
-#ifndef __PROTOBUF_HELPER_H__
-#define __PROTOBUF_HELPER_H__
-
+#pragma once
 #include <wsutil/value_string.h>
 
 #ifdef __cplusplus
@@ -527,8 +524,6 @@ pbw_foreach_message(const PbwDescriptorPool* pool, void (*cb)(const PbwDescripto
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* __PROTOBUF_HELPER_H__ */
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

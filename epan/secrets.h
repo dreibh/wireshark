@@ -8,10 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-
-#ifndef __SECRETS_H__
-#define __SECRETS_H__
-
+#pragma once
 #include <inttypes.h>
 #include <stdbool.h>
 
@@ -202,5 +199,3 @@ secrets_rsa_decrypt(const cert_key_id_t *key_id, const uint8_t *encr, unsigned e
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* __SECRETS_H__ */

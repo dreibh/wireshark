@@ -8,10 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-
-#ifndef __CFILE_H__
-#define __CFILE_H__
-
+#pragma once
 #include <epan/epan.h>
 #include <epan/column-info.h>
 #include <epan/dfilter/dfilter.h>
@@ -211,5 +208,3 @@ WS_DLL_PUBLIC void cap_file_provider_set_modified_block(struct packet_provider_d
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* cfile.h */

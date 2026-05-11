@@ -9,9 +9,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#ifndef __IANA_INFO_H__
-#define __IANA_INFO_H__
-
+#pragma once
 #include <wireshark.h>
 #include "ws_symbol_export.h"
 #include <wsutil/value_string.h>
@@ -316,5 +314,3 @@ ws_iana_ipv6_special_block_lookup(const ws_in6_addr* addr);
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif

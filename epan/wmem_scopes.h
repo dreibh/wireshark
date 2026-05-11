@@ -8,10 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-
-#ifndef __WMEM_SCOPES_H__
-#define __WMEM_SCOPES_H__
-
+#pragma once
 #include <wsutil/wmem/wmem.h>
 
 #ifdef __cplusplus
@@ -83,8 +80,6 @@ wmem_cleanup_scopes(void);
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* __WMEM_SCOPES_H__ */
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

@@ -8,9 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#ifndef __FIFO_STRING_CACHE_H__
-#define __FIFO_STRING_CACHE_H__
-
+#pragma once
 #include <stdbool.h>
 
 #include <glib.h>
@@ -58,5 +56,3 @@ fifo_string_cache_insert(fifo_string_cache_t *fcache, const char *entry);
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* __FIFO_STRING_CACHE_H__ */

@@ -6,9 +6,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-
-#ifndef FTYPES_INT_H
-#define FTYPES_INT_H
+#pragma once
 
 #include "ftypes.h"
 #include <epan/proto.h>
@@ -371,8 +369,6 @@ byte_array_from_charconst(unsigned long num, char **err_msg);
 char *
 bytes_to_dfilter_repr(wmem_allocator_t *scope,
 			const uint8_t *src, size_t src_size);
-
-#endif /* FTYPES_INT_H */
 
 /*
  * Editor modelines  -  https://www.wireshark.org/tools/modelines.html

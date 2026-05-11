@@ -9,10 +9,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
 */
-
-#ifndef __CRC16_TVB_H__
-#define __CRC16_TVB_H__
-
+#pragma once
 #include "ws_symbol_export.h"
 
 #ifdef __cplusplus
@@ -139,5 +136,3 @@ WS_DLL_PUBLIC uint16_t crc16_0x3D65_tvb_offset_seed(tvbuff_t *tvb, unsigned offs
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* crc16-tvb.h */

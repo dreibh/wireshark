@@ -8,10 +8,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-
-#ifndef __DISSECTOR_FILTERS_H__
-#define __DISSECTOR_FILTERS_H__
-
+#pragma once
 #include <glib.h>
 
 #include "ws_symbol_export.h"
@@ -114,5 +111,3 @@ WS_DLL_PUBLIC GList *log_conv_filter_list;
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
-
-#endif /* conversation_filter.h */

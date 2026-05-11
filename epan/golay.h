@@ -15,9 +15,7 @@
  *
  * SPDX-License-Identifier: GPL-2.0-or-later
  */
-#ifndef __GOLAY_H__
-#define __GOLAY_H__
-
+#pragma once
 #include <stdint.h>
 
 #include "ws_symbol_export.h"
@@ -39,8 +37,6 @@ int32_t golay_errors(uint32_t codeword);
 */
 WS_DLL_PUBLIC
 int golay_decode(uint32_t w);
-
-#endif
 
 /*
  * Editor modelines

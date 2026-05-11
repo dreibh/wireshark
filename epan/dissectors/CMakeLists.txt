@@ -1037,6 +1037,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-igap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-igmp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-igrp.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-ike.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ilnp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-imap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-imf.c
@@ -1080,7 +1081,6 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-ipxwan.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-irc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-irdma.c
-	${CMAKE_CURRENT_SOURCE_DIR}/packet-isakmp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-iscsi.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-isdn.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-iser.c
