@@ -15,6 +15,7 @@
 #               [--nocheck-value-string-array]
 #               [--nocheck-shadow]
 #               [--debug]
+#               [--folder]
 #               file1 file2 ...
 #
 # Wireshark - Network traffic analyzer
@@ -24,10 +25,17 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 
+# TODO:
+# - continue to check for overlap between this script and check_typed_item_calls.py and rationalize
+# - use more check_common.py functions for working out lists of files to check (--commit, --open)
+# - speedup using concurrent.futures.ProcessPoolExecutor() - one file per future
+
+
 import argparse
 import os
 import re
 import sys
+from check_common import findDissectorFilesInFolder
 
 
 APIs = {
@@ -40,7 +48,7 @@ APIs = {
     # }
     #
     # APIs that MUST NOT be used in Wireshark
-    'prohibited': {'count_errors': True, 'functions': (
+    'prohibited': {'count_errors': True, 'functions': set((
         # Memory-unsafe APIs
         # Use something that won't overwrite the end of your buffer instead
         # of these.
@@ -155,16 +163,16 @@ APIs = {
         'tmpnam',    # use mkstemp
         '_snwprintf',  # use StringCchPrintf
         'system',
-    )},
+    ))},
 
     ### Soft-Deprecated functions that should not be used in new code but
     # have not been entirely removed from old code. These will become errors
     # once they've been removed from all existing code.
-    'soft-deprecated': {'count_errors': False, 'functions': (
-    )},
+    'soft-deprecated': {'count_errors': False, 'functions': set((
+    ))},
 
     # APIs that SHOULD NOT be used in Wireshark (any more)
-    'deprecated': {'count_errors': True, 'functions': (
+    'deprecated': {'count_errors': True, 'functions': set((
         'perror',                                         # Use g_strerror() and report messages in whatever
                                                           #  fashion is appropriate for the code in question.
         'ctime',                                          # Use abs_time_secs_to_str()
@@ -276,9 +284,9 @@ APIs = {
         'g_win32_get_package_installation_directory',
         'g_win32_get_package_installation_subdirectory',
         'qVariantFromValue',
-    )},
+    ))},
 
-    'dissectors-prohibited': {'count_errors': True, 'functions': (
+    'dissectors-prohibited': {'count_errors': True, 'functions': set((
         # APIs that make the program exit. Dissectors shouldn't call these.
         'abort',
         'assert',
@@ -286,14 +294,14 @@ APIs = {
         'exit',
         'g_assert',
         'g_error',
-    )},
+    ))},
 
-    'dissectors-restricted': {'count_errors': False, 'functions': (
+    'dissectors-restricted': {'count_errors': False, 'functions': set((
         # APIs that print to the terminal. Dissectors shouldn't call these.
         # FIXME: Explain what to use instead.
         'printf',
         'g_warning',
-    )},
+    ))},
 }
 
 # Default API groups to check
@@ -338,20 +346,27 @@ def red(text):
 
 def find_api_in_file(group_hash, file_contents, found_apis):
     """Find APIs from the group that appear in the file contents."""
-    for api in group_hash['functions']:
-        count = 0
-        # Match function calls, but ignore false positives from:
-        # C++ method definition: int MyClass::open(...)
-        # Method invocation: myClass->open(...);
-        # Function declaration: int open(...);
-        # Method invocation: QString().sprintf(...)
-        # The pattern below is very slow, so do a quick "in" check first.
-        if api in file_contents:
+    # Match function calls, but ignore false positives from:
+    # C++ method definition: int MyClass::open(...)
+    # Method invocation: myClass->open(...);
+    # Function declaration: int open(...);
+    # Method invocation: QString().sprintf(...)
+    #
+    # The re pattern below is very slow, so convert file_contents to a set
+    # and do a naive match first; this is faster than `api in file_contents`.
+    # https://stackoverflow.com/a/58238304/82195
+
+    # string.punctuation minus '_'; we could probably reduce this.
+    c_punctuation = '!"#$%&\'()*+,-./:;<=>?@[\\]^`{|}~'
+    file_contents_no_punctuation = file_contents.translate(str.maketrans(c_punctuation, ' ' * len(c_punctuation)))
+    found_set = group_hash['functions'] & set(file_contents_no_punctuation.split())
+    if found_set:
+        for api in found_set:
             pattern = pattern = re.compile(r'\W(?<!::)(?<!->)(?<!\w )(?<!\.)' + re.escape(api) + r'\W*\(')
             count = len(pattern.findall(file_contents))
-        if count > 0:
-            found_apis.append(api)
-            group_hash['function_counts'][api] = group_hash['function_counts'].get(api, 0) + 1
+            if count > 0:
+                found_apis.append(api)
+                group_hash['function_counts'][api] = group_hash['function_counts'].get(api, 0) + 1
 
 
 def check_apis_called_with_tvb_get_ptr(api_list, file_contents, found_apis):
@@ -398,6 +413,7 @@ def check_complex_snprintf(file_contents, filename):
     return error_count
 
 
+# N.B. more detailed value_string checks are done in check_typed_item_calls.py
 def check_value_string_arrays(file_contents, filename, debug_flag):
     """Check value_string and enum_val_t arrays for proper termination."""
     count = 0
@@ -562,7 +578,7 @@ def check_ett_registration(file_contents, filename):
 
     # Find all the ett_ variables declared in the file
     ett_declarations = re.findall(
-        r'^(?:static\s+)?g?int\s+(' + ett_var_re + r')\s*=\s*-1\s*;',
+        r'^(?:static\s+)int\s+(' + ett_var_re + r');',
         file_contents, re.MULTILINE | re.IGNORECASE)
 
     if not ett_declarations:
@@ -581,11 +597,11 @@ def check_ett_registration(file_contents, filename):
     # Convert to a set for fast lookup
     ett_uses = set(ett_address_uses)
 
-    # Find which declared etts are not used.
-    unused_etts = [ett for ett in ett_declarations if ett not in ett_uses]
+    # Find which declared etts appear not to have been registered.
+    unused_etts = [ett for ett in ett_declarations if ett not in ett_uses and '[' not in ett]
 
     if unused_etts:
-        print(red(f"Error: found these unused ett variables in {filename}: {' '.join(unused_etts)}"), file=sys.stderr)
+        print(red(f"Error: found these unregistered ett variables in {filename}: {' '.join(unused_etts)}"), file=sys.stderr)
         error_count += 1
 
     return error_count
@@ -936,6 +952,8 @@ def main():
     parser.add_argument('--debug', action='store_true', default=False, dest='debug_flag')
     parser.add_argument('-p', '--pre-commit', action='store_true', default=False, dest='pre_commit')
     parser.add_argument('--file', default='', dest='filenamelist')
+    parser.add_argument('--folder', action='store', default='',
+                        help='specify folder to test')
     parser.add_argument('-h', '--help', action='store_true', default=False, dest='help_flag')
     parser.add_argument('files', nargs='*')
 
@@ -971,6 +989,17 @@ def main():
         with open(args.filenamelist) as f:
             for line in f:
                 filelist.extend(line.strip().split(';'))
+
+    if args.folder:
+        # Add all files from a given folder.
+        folder = args.folder
+        if not os.path.isdir(folder):
+            print('Folder', folder, 'not found!')
+            exit(1)
+        # Find files from folder.
+        print('Looking for files in', folder)
+        filelist = findDissectorFilesInFolder(folder, recursive=True)
+
 
     if not filelist:
         print("no files to process", file=sys.stderr)
