@@ -29,6 +29,8 @@
 # - continue to check for overlap between this script and check_typed_item_calls.py and rationalize
 # - use more check_common.py functions for working out lists of files to check (--commit, --open)
 # - speedup using concurrent.futures.ProcessPoolExecutor() - one file per future
+# - see if we need to do anything special with respect to Python's regex cache. We create a *lot*
+#   of expressions.
 
 
 import argparse
@@ -323,12 +325,12 @@ TvbPtrAPIs = [
 ]
 
 # List of possible shadow variables (Majority coming from macOS)
-ShadowVariables = [
+ShadowVariables = set((
     'index',
     'time',
     'strlen',
     'system',
-]
+))
 
 # Defines pairs function/variable which are excluded
 # from prefs_register_*_preference checks
@@ -344,22 +346,14 @@ def red(text):
     return f"\033[31m{text}\033[0m"
 
 
-def find_api_in_file(group_hash, file_contents, found_apis):
+def find_api_in_file(group_hash, file_words, file_contents, found_apis):
     """Find APIs from the group that appear in the file contents."""
     # Match function calls, but ignore false positives from:
     # C++ method definition: int MyClass::open(...)
     # Method invocation: myClass->open(...);
     # Function declaration: int open(...);
     # Method invocation: QString().sprintf(...)
-    #
-    # The re pattern below is very slow, so convert file_contents to a set
-    # and do a naive match first; this is faster than `api in file_contents`.
-    # https://stackoverflow.com/a/58238304/82195
-
-    # string.punctuation minus '_'; we could probably reduce this.
-    c_punctuation = '!"#$%&\'()*+,-./:;<=>?@[\\]^`{|}~'
-    file_contents_no_punctuation = file_contents.translate(str.maketrans(c_punctuation, ' ' * len(c_punctuation)))
-    found_set = group_hash['functions'] & set(file_contents_no_punctuation.split())
+    found_set = group_hash['functions'] & file_words
     if found_set:
         for api in found_set:
             pattern = pattern = re.compile(r'\W(?<!::)(?<!->)(?<!\w )(?<!\.)' + re.escape(api) + r'\W*\(')
@@ -381,13 +375,15 @@ def check_apis_called_with_tvb_get_ptr(api_list, file_contents, found_apis):
             found_apis.append(api)
 
 
-def check_shadow_variable(shadow_list, file_contents, found_apis):
+def check_shadow_variable(shadow_set, file_words, file_contents, found_apis):
     """Check for shadow variables."""
-    for api in shadow_list:
-        pattern = re.compile(r'\s' + re.escape(api) + r'\s*[^\(\w\s]')
-        count = len(pattern.findall(file_contents))
-        if count > 0:
-            found_apis.append(api)
+    found_set = shadow_set & file_words
+    if found_set:
+        for api in found_set:
+            pattern = re.compile(r'\s' + re.escape(api) + r'\s*[^\(\w\s]')
+            count = len(pattern.findall(file_contents))
+            if count > 0:
+                found_apis.append(api)
 
 
 def check_snprintf_plus_strlen(file_contents, filename):
@@ -414,6 +410,8 @@ def check_complex_snprintf(file_contents, filename):
 
 
 # N.B. more detailed value_string checks are done in check_typed_item_calls.py
+# XXX We might be able to speed this up by checking for *_string in file_words,
+# but file_words is created after we strip out our strings.
 def check_value_string_arrays(file_contents, filename, debug_flag):
     """Check value_string and enum_val_t arrays for proper termination."""
     count = 0
@@ -549,9 +547,11 @@ def check_proto_tree_add_XXX(file_contents, filename):
                 clean_args = re.sub(r'\s+', ' ', args)
                 print(f"\tArgs: {clean_args}", file=sys.stderr)
 
-        # Remove anything inside parentheses in the arguments so we
-        # don't get false positives
-        args_no_parens = re.sub(r'\(.*?\)', '', args, flags=re.DOTALL)
+        # Remove anything inside parenthesis in the arguments so we
+        # don't get false positives when someone calls
+        # proto_tree_add_XXX(..., tvb_YYY(..., ENC_ZZZ))
+        # and allow there to be newlines inside
+        args_no_parens = re.sub(r'\(.*\)', '', args, flags=re.DOTALL)
 
         # Check for accidental usage of ENC_ parameter
         if re.search(r',\s*ENC_', args_no_parens, re.DOTALL):
@@ -611,7 +611,7 @@ def check_hf_entries(file_contents, filename):
     """Check all hf entries for various problems."""
     error_count = 0
 
-    hf_re = (
+    hf_re = re.compile(
         r'\{\s*&\s*([A-Z0-9_\[\]-]+)\s*,\s*'        # &hf
         r'\{\s*'
         r'("[A-Z0-9 \'./()_:-]+")\s*,\s*'           # name
@@ -624,7 +624,7 @@ def check_hf_entries(file_contents, filename):
         r'HFILL'
     )
 
-    for m in re.finditer(hf_re, file_contents, re.IGNORECASE | re.DOTALL):
+    for m in hf_re.finditer(file_contents, re.IGNORECASE | re.DOTALL):
         hf, name, abbrev, ft, display, convert, bitmask, blurb = m.groups()
 
         display = re.sub(r'\s+', '', display)
@@ -808,8 +808,11 @@ def check_pref_var_dupes(file_contents, filename):
     return error_count
 
 
-def check_try_catch(file_contents, filename):
+def check_try_catch(file_words, file_contents, filename):
     """Check for forbidden control flow changes in TRY/CATCH blocks."""
+    if not set(('TRY', 'ENDTRY')) & file_words:
+        return 0
+
     error_count = 0
 
     # Match TRY { ... } ENDTRY (with an optional '\' in case of a macro).
@@ -1082,6 +1085,15 @@ def main():
         # Remove all '#if 0'd' code
         file_contents = remove_if0_code(file_contents, filename)
 
+        # The re patterns in find_api_in_file and check_shadow_variable
+        # are slow. Create a set of words so that we can do a quick,
+        # naive match first; this is faster than `api in file_contents`.
+        # https://stackoverflow.com/a/58238304/82195
+
+        # string.punctuation minus '_'; we could probably reduce this.
+        c_punctuation = '!"#$%&\'()*+,-./:;<=>?@[\\]^`{|}~'
+        file_words = set(file_contents.translate(str.maketrans(c_punctuation, ' ' * len(c_punctuation))).split())
+
         error_count += check_ett_registration(file_contents, filename)
 
         #check_apis_called_with_tvb_get_ptr(api_list, file_contents, found_apis);
@@ -1090,7 +1102,7 @@ def main():
 
         if args.check_shadow:
             found_apis = []
-            check_shadow_variable(ShadowVariables, file_contents, found_apis)
+            check_shadow_variable(ShadowVariables, file_words, file_contents, found_apis)
             if found_apis:
                 print(f"Warning: Found shadow variable(s) in {filename} : {','.join(found_apis)}", file=sys.stderr)
 
@@ -1100,7 +1112,7 @@ def main():
 
         error_count += check_proto_tree_add_XXX(file_contents, filename)
 
-        error_count += check_try_catch(file_contents, filename)
+        error_count += check_try_catch(file_words, file_contents, filename)
 
         # Check and count APIs
         for group_arg in api_groups:
@@ -1116,7 +1128,7 @@ def main():
             if len(group_parts) > 1:
                 APIs[api_group]['max_function_count'] = int(group_parts[1])
 
-            find_api_in_file(APIs[api_group], file_contents, found_apis)
+            find_api_in_file(APIs[api_group], file_words, file_contents, found_apis)
 
             cur_func_count = sum(APIs[api_group]['function_counts'].values())
 

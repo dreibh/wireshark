@@ -48,13 +48,20 @@ class QToolButton;
 class QTreeView;
 class QWidget;
 
-/** @brief Column indices for the Breakpoints tree model. */
+/** @brief Column indices for the Breakpoints tree model.
+ *
+ * @c Line is hidden by @ref LuaDebuggerBreakpointsController::configureColumns;
+ * the visible-to-the-user order is therefore @c Active, @c Hits, @c Location.
+ * @c Hits sits next to @c Active so the at-a-glance "is this breakpoint
+ * armed and how close to firing" cue lives right next to the on/off
+ * checkbox; @c Location stays the elastic last column. */
 namespace BreakpointColumn
 {
 constexpr int Active = 0;
-constexpr int Line = 1;
-constexpr int Location = 2;
-constexpr int Count = 3;
+constexpr int Hits = 1;
+constexpr int Line = 2;
+constexpr int Location = 3;
+constexpr int Count = 4;
 } // namespace BreakpointColumn
 
 /* ===== breakpoint_modes ===== */
@@ -349,6 +356,13 @@ class LuaDebuggerBreakpointsController : public QObject
      *        rebuilds the breakpoint table and gutter markers.
      */
     void removeAtLine(const QString &file, qint32 line);
+
+    /**
+     * @brief Move a breakpoint in @p file from @p fromLine to @p toLine,
+     *        preserving metadata. No-op if either line is invalid, unchanged,
+     *        source is absent, or destination is occupied.
+     */
+    void moveAtLine(const QString &file, qint32 fromLine, qint32 toLine);
 
     /** @brief Activate-all / deactivate-all toggle (header). */
     void toggleAllActive();

@@ -332,6 +332,53 @@ QString pauseToggleStyleSheet()
 
 } // namespace LuaDbgBreakpointModes
 
+namespace
+{
+
+/**
+ * @brief Compact one-cell rendering of a breakpoint's hit-count gate.
+ *
+ * Returns the text for the Breakpoints list @c Hits column. The
+ * running counter comes first so the eye lands on the live value;
+ * the gate (if any) follows in parentheses, which visually
+ * quarantine the mode glyph from being read as an operator (the
+ * @c every glyph @c "\xc3\x97" is otherwise easy to misread as a
+ * multiplication sign next to the count). Glyph choices match the
+ * column header tooltip:
+ *   - @c "\xe2\x89\xa5N" (≥N) for @ref WSLUA_HIT_COUNT_MODE_FROM
+ *   - @c "\xc3\x97N"   (×N) for @ref WSLUA_HIT_COUNT_MODE_EVERY
+ *   - @c "@N"          for @ref WSLUA_HIT_COUNT_MODE_ONCE
+ *
+ * Examples: @c "3 (\xe2\x89\xa510)" for a @c from 10 row that has
+ * been hit 3 times; @c "5" for an ungated row at 5 hits.
+ */
+QString formatBreakpointHitsSummary(int64_t hit_count_target, int64_t hit_count, wslua_hit_count_mode_t hit_mode)
+{
+    QString result = QString::number(hit_count);
+    if (hit_count_target > 0)
+    {
+        result += QStringLiteral(" (");
+        switch (hit_mode)
+        {
+        case WSLUA_HIT_COUNT_MODE_EVERY:
+            result += QString::fromUtf8("\xc3\x97");
+            break;
+        case WSLUA_HIT_COUNT_MODE_ONCE:
+            result += QStringLiteral("@");
+            break;
+        case WSLUA_HIT_COUNT_MODE_FROM:
+        default:
+            result += QString::fromUtf8("\xe2\x89\xa5");
+            break;
+        }
+        result += QString::number(hit_count_target);
+        result += QStringLiteral(")");
+    }
+    return result;
+}
+
+} // namespace
+
 /* ===== breakpoint_inline_editor ===== */
 
 
@@ -1259,12 +1306,40 @@ void LuaDebuggerBreakpointsController::configureColumns() const
     }
     QHeaderView *breakpointHeader = tree_->header();
     breakpointHeader->setStretchLastSection(true);
+    breakpointHeader->setSectionsMovable(false);
+    /* Active and Hits auto-fit the widest visible cell (header text
+     * or any row's content, including the extras icon next to the
+     * checkbox). Row count is bounded by the breakpoints array, so
+     * the per-resize scan stays cheap; the auto-fit also tracks
+     * Hits content as it grows from empty to e.g. "\xe2\x89\xa5""100\xc2\xb7""3"
+     * without us having to pre-measure a worst-case string. */
     breakpointHeader->setSectionResizeMode(BreakpointColumn::Active, QHeaderView::ResizeToContents);
+    breakpointHeader->setSectionResizeMode(BreakpointColumn::Hits, QHeaderView::ResizeToContents);
     breakpointHeader->setSectionResizeMode(BreakpointColumn::Line, QHeaderView::Interactive);
     breakpointHeader->setSectionResizeMode(BreakpointColumn::Location, QHeaderView::Interactive);
     model_->setHeaderData(BreakpointColumn::Location, Qt::Horizontal, host_->tr("Location"));
+    /* Hits column header tooltip — spells out the cell grammar so users
+     * don't have to memorise the glyphs. The mode words match the
+     * inline-editor combo labels so the column reads as a compact
+     * mirror of what the user picked in the dropdown. */
+    model_->setHeaderData(BreakpointColumn::Hits, Qt::Horizontal,
+                          host_->tr("<p><b>Hit-count summary</b></p>"
+                                    "<p><code>\xe2\x89\xa5N</code> &mdash; <i>from</i> mode: pause from hit <i>N</i> "
+                                    "onwards.<br/>"
+                                    "<code>\xc3\x97N</code> &mdash; <i>every</i> mode: pause on hits <i>N</i>, "
+                                    "<i>2N</i>, <i>3N</i>, &hellip;<br/>"
+                                    "<code>@N</code> &mdash; <i>once</i> mode: pause once on the <i>N</i>th hit, "
+                                    "then deactivate.</p>"
+                                    "<p>The cell starts with the running hit counter; if a gate is set "
+                                    "it follows in parentheses, e.g. <code>3 (\xe2\x89\xa5"
+                                    "10)</code>. With no hit gate the cell is just the counter.</p>"
+                                    "<p>Edit the <i>Location</i> cell to set or change the gate (see "
+                                    "the breakpoint-extras section).</p>"),
+                          Qt::ToolTipRole);
     tree_->setColumnHidden(BreakpointColumn::Line, true);
-    tree_->setColumnWidth(BreakpointColumn::Active, tree_->fontMetrics().height() * 4);
+    /* No explicit setColumnWidth for Active or Hits — the
+     * ResizeToContents mode above derives the width from header
+     * text + the widest cell on every model change. */
 }
 
 void LuaDebuggerBreakpointsController::startInlineEdit(int row)
@@ -1527,16 +1602,22 @@ void LuaDebuggerBreakpointsController::refreshFromEngine()
         bool fileExists = fileInfo.exists() && fileInfo.isFile();
 
         QStandardItem *const activeItem = new QStandardItem();
+        QStandardItem *const hitsItem = new QStandardItem();
         QStandardItem *const lineItem = new QStandardItem();
         QStandardItem *const locationItem = new QStandardItem();
         /* QStandardItem ships with Qt::ItemIsEditable on by default; the
-         * Active checkbox cell and the (hidden) Line cell must not host
-         * an editor — the inline condition / hit-count / log-message
-         * editor lives on the Location column only. Without this,
-         * double-clicking the checkbox column opens a stray QLineEdit
-         * over the row. */
+         * Active checkbox cell, the new Hits summary cell, and the
+         * (hidden) Line cell must not host an editor — the inline
+         * condition / hit-count / log-message editor lives on the
+         * Location column only. Without this, double-clicking the
+         * checkbox column opens a stray QLineEdit over the row. */
         activeItem->setFlags(activeItem->flags() & ~Qt::ItemIsEditable);
+        hitsItem->setFlags(hitsItem->flags() & ~Qt::ItemIsEditable & ~Qt::ItemIsUserCheckable);
         lineItem->setFlags(lineItem->flags() & ~Qt::ItemIsEditable);
+        /* Hits summary cell text — formatter decides empty vs ≥N / ×N /
+         * @N, with optional ·count suffix. Pure text; the Active cell
+         * still carries the extras icon so we don't duplicate it here. */
+        hitsItem->setText(formatBreakpointHitsSummary(hit_count_target, hit_count, hit_count_mode));
         activeItem->setCheckable(true);
         activeItem->setCheckState(active ? Qt::Checked : Qt::Unchecked);
         activeItem->setData(normalizedPath, BreakpointFileRole);
@@ -1637,6 +1718,7 @@ void LuaDebuggerBreakpointsController::refreshFromEngine()
             locationItem->setIcon(luaDbgMakeSelectionAwareIcon(QIcon::fromTheme("dialog-warning"), bpPalette));
             tooltipLines.prepend(host_->tr("File not found: %1").arg(normalizedPath));
             activeItem->setForeground(QBrush(Qt::gray));
+            hitsItem->setForeground(QBrush(Qt::gray));
             lineItem->setForeground(QBrush(Qt::gray));
             locationItem->setForeground(QBrush(Qt::gray));
             /* Disable the checkbox + inline editor for stale breakpoints */
@@ -1676,10 +1758,11 @@ void LuaDebuggerBreakpointsController::refreshFromEngine()
 
         const QString tooltipText = tooltipLines.join(QChar('\n'));
         activeItem->setToolTip(tooltipText);
+        hitsItem->setToolTip(tooltipText);
         lineItem->setToolTip(tooltipText);
         locationItem->setToolTip(tooltipText);
 
-        model_->appendRow({activeItem, lineItem, locationItem});
+        model_->appendRow({activeItem, hitsItem, lineItem, locationItem});
 
         /* Highlight the breakpoint row that matches the current pause
          * location with the same bold-accent (and one-shot background
@@ -2255,6 +2338,100 @@ void LuaDebuggerBreakpointsController::removeAtLine(const QString &file, qint32 
     refreshAllOpenTabMarkers();
 }
 
+void LuaDebuggerBreakpointsController::moveAtLine(const QString &file, qint32 fromLine, qint32 toLine)
+{
+    if (file.isEmpty() || fromLine < 1 || toLine < 1 || fromLine == toLine)
+    {
+        return;
+    }
+
+    const QByteArray fileUtf8 = file.toUtf8();
+    if (wslua_debugger_get_breakpoint_state(fileUtf8.constData(), fromLine) == -1)
+    {
+        return;
+    }
+    if (wslua_debugger_get_breakpoint_state(fileUtf8.constData(), toLine) != -1)
+    {
+        return;
+    }
+
+    bool isActive = true;
+    int64_t hitTarget = 0;
+    wslua_hit_count_mode_t hitMode = WSLUA_HIT_COUNT_MODE_FROM;
+    bool logAlsoPause = false;
+    QString condition;
+    QString logMessage;
+    bool found = false;
+
+    const unsigned count = wslua_debugger_get_breakpoint_count();
+    for (unsigned i = 0; i < count; ++i)
+    {
+        const char *file_path = nullptr;
+        int64_t line = 0;
+        bool active = false;
+        const char *condition_c = nullptr;
+        int64_t hit_target = 0;
+        int64_t hit_count = 0;
+        bool cond_err = false;
+        const char *log_message = nullptr;
+        wslua_hit_count_mode_t hit_mode = WSLUA_HIT_COUNT_MODE_FROM;
+        bool log_also_pause = false;
+
+        if (!wslua_debugger_get_breakpoint_extended(i, &file_path, &line, &active, &condition_c, &hit_target,
+                                                    &hit_count, &cond_err, &log_message, &hit_mode,
+                                                    &log_also_pause))
+        {
+            continue;
+        }
+        if (line != fromLine)
+        {
+            continue;
+        }
+        QString normalizedPath = host_->normalizedFilePath(QString::fromUtf8(file_path));
+        if (normalizedPath != file)
+        {
+            continue;
+        }
+
+        isActive = active;
+        hitTarget = hit_target;
+        hitMode = hit_mode;
+        logAlsoPause = log_also_pause;
+        condition = QString::fromUtf8(condition_c ? condition_c : "");
+        logMessage = QString::fromUtf8(log_message ? log_message : "");
+        found = true;
+        break;
+    }
+
+    if (!found)
+    {
+        return;
+    }
+
+    wslua_debugger_add_breakpoint(fileUtf8.constData(), toLine);
+    wslua_debugger_set_breakpoint_active(fileUtf8.constData(), toLine, isActive);
+    if (!condition.isEmpty())
+    {
+        const QByteArray conditionUtf8 = condition.toUtf8();
+        wslua_debugger_set_breakpoint_condition(fileUtf8.constData(), toLine, conditionUtf8.constData());
+    }
+    if (hitTarget > 0)
+    {
+        wslua_debugger_set_breakpoint_hit_count_target(fileUtf8.constData(), toLine, hitTarget);
+        wslua_debugger_set_breakpoint_hit_count_mode(fileUtf8.constData(), toLine, hitMode);
+    }
+    if (!logMessage.isEmpty())
+    {
+        const QByteArray logMessageUtf8 = logMessage.toUtf8();
+        wslua_debugger_set_breakpoint_log_message(fileUtf8.constData(), toLine, logMessageUtf8.constData());
+        wslua_debugger_set_breakpoint_log_also_pause(fileUtf8.constData(), toLine, logAlsoPause);
+    }
+
+    wslua_debugger_remove_breakpoint(fileUtf8.constData(), fromLine);
+    refreshFromEngine();
+    refreshAllOpenTabMarkers();
+}
+
 void LuaDebuggerBreakpointsController::refreshAllOpenTabMarkers() const
 {
     if (!host_)
@@ -2329,7 +2506,7 @@ void LuaDebuggerBreakpointsController::serializeTo(QVariantMap &settingsMap) con
         /* @c hitCountMode is persisted as a string ("from" / "every" /
          * "once") so the JSON file is self-describing and matches the
          * UI dropdown verbatim. */
-        const char *modeStr = "from";
+        const char *modeStr;
         switch (hit_mode)
         {
         case WSLUA_HIT_COUNT_MODE_EVERY:
@@ -2439,7 +2616,7 @@ CollapsibleSection *LuaDebuggerDialog::createBreakpointsSection(QWidget *parent)
                                       "the gutter &mdash; marks rows that carry extras.</p>"));
     breakpointsModel = new QStandardItemModel(this);
     breakpointsModel->setColumnCount(BreakpointColumn::Count);
-    breakpointsModel->setHorizontalHeaderLabels({tr("Active"), tr("Line"), tr("File")});
+    breakpointsModel->setHorizontalHeaderLabels({tr("Active"), tr("Hits"), tr("Line"), tr("Location")});
     breakpointsTree = new QTreeView();
     breakpointsTree->setModel(breakpointsModel);
     /* Inline edit on the Location column (delegate-driven mode picker for

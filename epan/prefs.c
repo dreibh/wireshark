@@ -436,6 +436,11 @@ prefs_cleanup(void)
     /* Clean the uats */
     uat_cleanup();
 
+    /*
+     * Unload any loaded MIBs.
+     */
+    oids_cleanup();
+
     /* Shut down mmdbresolve */
     maxmind_db_pref_cleanup();
 
@@ -3949,9 +3954,6 @@ prefs_register_modules(void)
                                    10,
                                    &prefs.capture_update_interval);
 
-    prefs_register_bool_preference(capture_module, "enable_aggregation_view", "Enable aggregation view",
-        "Enable Aggregation View for real-time capturing", &prefs.enable_aggregation);
-
     prefs_register_bool_preference(capture_module, "no_interface_load", "Don't load interfaces on startup",
         "Don't automatically load capture interfaces on startup", &prefs.capture_no_interface_load);
 
@@ -4539,7 +4541,6 @@ prefs_set_global_defaults(wmem_allocator_t* pref_scope, const char** col_fmt, in
     prefs.capture_update_interval       = DEFAULT_UPDATE_INTERVAL;
     prefs.capture_no_extcap             = false;
     prefs.capture_show_info             = false;
-    prefs.enable_aggregation            = false;
 
     if (!prefs.capture_columns) {
         /* First time through */
@@ -4704,7 +4705,8 @@ prefs_reset(const char* app_env_var_prefix, const char** col_fmt, int num_cols)
     /*
      * Unload any loaded MIBs.
      */
-    oids_cleanup();
+    /* XXX - oids_cleanup not tested/supported at non-shutdown yet */
+    //oids_cleanup();
 
     /*
      * Reload all UAT preferences.
@@ -4811,7 +4813,8 @@ read_prefs(const char* app_env_var_prefix)
     FILE        *pf;
 
     /* clean up libsmi structures before reading prefs */
-    oids_cleanup();
+    /* XXX - oids_cleanup not tested/supported at non-shutdown yet */
+    // oids_cleanup();
 
 #ifdef _WIN32
     read_registry();

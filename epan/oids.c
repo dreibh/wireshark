@@ -427,11 +427,11 @@ static inline oid_kind_t smikind(SmiNode* sN, oid_key_t** key_p) {
 
 				typedata =  get_typedata(elType);
 
-				k = g_new(oid_key_t,1);
+				k = wmem_new(wmem_epan_scope(), oid_key_t);
 
 				oid1 = smiRenderOID(sN->oidlen, sN->oid, SMI_RENDER_QUALIFIED);
 				oid2 = smiRenderOID(elNode->oidlen, elNode->oid, SMI_RENDER_NAME);
-				k->name = g_strconcat(oid1, ".", oid2, NULL);
+				k->name = wmem_strconcat(wmem_epan_scope(), oid1, ".", oid2, NULL);
 				smi_free (oid1);
 				smi_free (oid2);
 
@@ -525,10 +525,11 @@ static inline oid_kind_t smikind(SmiNode* sN, oid_key_t** key_p) {
 						   || (ft == FT_UINT64) || (ft == FT_INT64) )
 
 static void unregister_mibs(void) {
-	/* TODO: Unregister "MIBs" proto and clean up field array and subtree array.
-	 * Wireshark does not support that yet. :-( */
-
-	/* smiExit(); */
+	if (oids_init_done) {
+		proto_deregister_protocol("MIBS");
+	}
+	smiExit();
+	oids_init_done = false;
 }
 
 static void restart_needed_warning(void) {
@@ -540,7 +541,7 @@ static void register_mibs(const char* app_env_var_prefix) {
 	SmiModule *smiModule;
 	SmiNode *smiNode;
 	unsigned i;
-	int proto_mibs = -1;
+	int proto_mibs = 0;
 	wmem_array_t* hfa;
 	GArray* etta;
 	char* path_str;
@@ -676,7 +677,7 @@ static void register_mibs(const char* app_env_var_prefix) {
 				/* HFILL */
 				HFILL_INIT(hf);
 
-				oid_data->value_hfid = -1;
+				oid_data->value_hfid = 0;
 
 				if ( IS_ENUMABLE(hf.hfinfo.type) && (smiEnum = smiGetFirstNamedNumber(smiType))) {
 					GArray* vals = g_array_sized_new(true,true,sizeof(value_string), 16);
@@ -738,7 +739,7 @@ static void register_mibs(const char* app_env_var_prefix) {
 						hf_register_info hf;
 
 						hf.p_id                     = &(key->hfid);
-						hf.hfinfo.name              = key->name;
+						hf.hfinfo.name              = g_strdup(key->name);
 						hf.hfinfo.abbrev            = alnumerize(key->name);
 						hf.hfinfo.type              = key->ft_type;
 						hf.hfinfo.display           = key->display;
@@ -749,14 +750,16 @@ static void register_mibs(const char* app_env_var_prefix) {
 						HFILL_INIT(hf);
 
 						wmem_array_append_one(hfa,hf);
-						key->hfid = -1;
+						key->hfid = 0;
 					}
 				}
 			}
 		}
 	}
 
-	proto_mibs = proto_register_protocol("MIBs", "MIBS", "mibs");
+	/* These are allocated on the heap so that proto_deregister_protocol
+	 * can free them. */
+	proto_mibs = proto_register_protocol(g_strdup("MIBs"), g_strdup("MIBS"), g_strdup("mibs"));
 
 	proto_register_field_array(proto_mibs, (hf_register_info*)wmem_array_get_raw(hfa), wmem_array_get_count(hfa));
 	proto_register_subtree_array((int**)(void*)etta->data, etta->len);
@@ -1346,14 +1349,17 @@ oid_get_default_mib_path(const char* app_env_var_prefix _U_) {
 	GHashTable* unique_paths = g_hash_table_new_full(files_identical_hash, files_identical_equal, NULL, g_free);
 
 #ifdef _WIN32
+	/* XXX - This is appropriate for MSYS2 installed via package,
+	 * but an MSYS2 install into the POSIX runtime should probably
+	 * use the other path (NB: check the search path separator.) */
 	path = get_datafile_path("snmp\\mibs", app_env_var_prefix);
-	g_hash_table_add(unique_paths, path);
-	g_string_append(path_str, path);
+	oid_add_unique_path(unique_paths, path_str, path);
 
 	path = get_persconffile_path("snmp\\mibs", false, app_env_var_prefix);
-	if (g_hash_table_add(unique_paths, path))
-		g_string_append_printf(path_str, G_SEARCHPATH_SEPARATOR_S "%s", path);
+	oid_add_unique_path(unique_paths, path_str, path);
 #else
+	// This directory is usually flat on UN*X systems, and we haven't
+	// recursively descended into it before. We could start.
 	g_hash_table_add(unique_paths, g_strdup("/usr/share/snmp/mibs"));
 	g_string_append(path_str, "/usr/share/snmp/mibs");
 
@@ -1361,8 +1367,19 @@ oid_get_default_mib_path(const char* app_env_var_prefix _U_) {
 		smiInit("wireshark");
 	path = smiGetPath();
 	if (strlen(path) > 0 ) {
-		if (g_hash_table_add(unique_paths, g_strdup(path)))
-			g_string_append_printf(path_str, G_SEARCHPATH_SEPARATOR_S "%s", path);
+		// Conversely to above, libsmi is generally compiled with the
+		// entire directory structure so we don't need to recurse here
+		// or check that there actually are files in each directory.
+		// We do want to split them for adding to the unique hash table.
+		// 20 is arbitrary here to have a limit; 12 is the number that
+		// libsmi seems to be compiled with currently.
+		char **paths = g_strsplit(path, G_SEARCHPATH_SEPARATOR_S, 20);
+		for (i = 0; paths[i]; i++) {
+			//oid_add_unique_path(unique_paths, path_str, paths[i]);
+			if (g_hash_table_add(unique_paths, g_strdup(path)))
+				g_string_append_printf(path_str, G_SEARCHPATH_SEPARATOR_S "%s", path);
+		}
+		g_strfreev(paths);
 	}
 	smi_free(path);
 

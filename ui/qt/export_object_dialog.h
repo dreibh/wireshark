@@ -23,6 +23,7 @@
 
 class QTreeWidgetItem;
 class QAbstractButton;
+class QToolButton;
 
 namespace Ui {
 class ExportObjectDialog;
@@ -40,29 +41,37 @@ public slots:
     void show();
 
 protected:
-    virtual void keyPressEvent(QKeyEvent *evt);
+    void beginRetapPackets() override;
+    void endRetapPackets() override;
+    virtual void keyPressEvent(QKeyEvent *evt) override;
 
 private slots:
-    void accept();
+    void accept() override;
     void captureEvent(CaptureEvent e);
     void on_buttonBox_helpRequested();
     void on_buttonBox_clicked(QAbstractButton *button);
     void on_cmbContentType_currentIndexChanged(int index);
+    void uniqueToggled(bool checked);
 
     void modelDataChanged(const QModelIndex &topLeft, int from, int to);
     void modelRowsReset();
 
-    void currentHasChanged(QModelIndex current);
+    void currentHasChanged(const QModelIndex &current);
+    void selectionHasChanged(const QItemSelection&);
 
 private:
     bool mimeTypeIsPreviewable(QString mime_type);
+    void saveEntry(const QModelIndex &proxyIndex, QString *tempFile = nullptr);
+    void saveEntries(const QModelIndexList &proxyIndices);
     void saveCurrentEntry(QString *tempFile = Q_NULLPTR);
+    void saveSelectedEntries();
+    void saveDisplayedEntries();
     void saveAllEntries();
 
     Ui::ExportObjectDialog *eo_ui_;
 
     QPushButton *save_bt_;
-    QPushButton *save_all_bt_;
+    QToolButton *save_all_bt_;
     ExportObjectModel model_;
     ExportObjectProxyModel proxyModel_;
 
