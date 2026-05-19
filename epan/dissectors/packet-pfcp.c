@@ -1509,14 +1509,16 @@ typedef struct _pfcp_hdr {
     uint64_t seid;    /* Session End-point ID */
 } pfcp_hdr_t;
 
+#define PFCP_SEID_INVALID UINT64_MAX
+
 /* Relation between frame -> session */
-wmem_map_t* pfcp_session_table;
+static wmem_map_t* pfcp_session_table;
 
 /* Relation between session -> IMSI */
-wmem_map_t* pfcp_session_imsi;
+static wmem_map_t* pfcp_session_imsi;
 
 /* Relation between <seid,ip> -> frame */
-wmem_map_t* pfcp_frame_map;
+static wmem_map_t* pfcp_frame_map;
 
 
 typedef struct pfcp_info {
@@ -1604,6 +1606,35 @@ static const value_string pfcp_message_type[] = {
     {0, NULL}
 };
 static value_string_ext pfcp_message_type_ext = VALUE_STRING_EXT_INIT(pfcp_message_type);
+
+#define PFCP_MSG_IS_REQUEST(msg)                            \
+    ((msg) == PFCP_MSG_HEARTBEAT_REQUEST ||                 \
+     (msg) == PFCP_MSG_PFD_MANAGEMENT_REQUEST ||            \
+     (msg) == PFCP_MSG_ASSOCIATION_SETUP_REQUEST ||         \
+     (msg) == PFCP_MSG_ASSOCIATION_UPDATE_REQUEST ||        \
+     (msg) == PFCP_MSG_ASSOCIATION_RELEASE_REQUEST ||       \
+     (msg) == PFCP_MSG_NODE_REPORT_REQUEST ||               \
+     (msg) == PFCP_MSG_SESSION_SET_DELETION_REQUEST ||      \
+     (msg) == PFCP_MSG_SESSION_SET_MODIFICATION_REQUEST ||  \
+     (msg) == PFCP_MSG_SESSION_ESTABLISHMENT_REQUEST ||     \
+     (msg) == PFCP_MSG_SESSION_MODIFICATION_REQUEST ||      \
+     (msg) == PFCP_MSG_SESSION_DELETION_REQUEST ||          \
+     (msg) == PFCP_MSG_SESSION_REPORT_REQUEST)
+
+#define PFCP_MSG_IS_RESPONSE(msg)                           \
+    ((msg) == PFCP_MSG_HEARTBEAT_RESPONSE ||                \
+     (msg) == PFCP_MSG_PFD_MANAGEMENT_RESPONSE ||           \
+     (msg) == PFCP_MSG_ASSOCIATION_SETUP_RESPONSE ||        \
+     (msg) == PFCP_MSG_ASSOCIATION_UPDATE_RESPONSE ||       \
+     (msg) == PFCP_MSG_ASSOCIATION_RELEASE_RESPONSE ||      \
+     (msg) == PFCP_MSG_VERSION_NOT_SUPPORTED_RESPONSE ||    \
+     (msg) == PFCP_MSG_NODE_REPORT_RESPONSE ||              \
+     (msg) == PFCP_MSG_SESSION_SET_DELETION_RESPONSE ||     \
+     (msg) == PFCP_MSG_SESSION_SET_MODIFICATION_RESPONSE || \
+     (msg) == PFCP_MSG_SESSION_ESTABLISHMENT_RESPONSE ||    \
+     (msg) == PFCP_MSG_SESSION_MODIFICATION_RESPONSE ||     \
+     (msg) == PFCP_MSG_SESSION_DELETION_RESPONSE ||         \
+     (msg) == PFCP_MSG_SESSION_REPORT_RESPONSE)
 
 /* 8.1.2    Information Element Types */
 #define PFCP_IE_ID_CREATE_PDR                   1
@@ -4684,7 +4715,7 @@ dissect_pfcp_quota_holding_time(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     unsigned offset = 0;
     uint32_t value;
     /* Octet 5 to 8    Time Quota value
-    * TThe Time Quota value shall be encoded as an Unsigned32 binary integer value. It contains a duration in seconds
+    * The Time Quota value shall be encoded as an Unsigned32 binary integer value. It contains a duration in seconds
     */
     proto_tree_add_item_ret_uint(tree, hf_pfcp_quota_holding_time, tvb, offset, 4, ENC_BIG_ENDIAN, &value);
     offset += 4;
@@ -4793,7 +4824,7 @@ dissect_pfcp_time_quota(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, pro
     unsigned offset = 0;
     uint32_t value;
     /* Octet 5 to 8    Time Quota value
-    * TThe Time Quota value shall be encoded as an Unsigned32 binary integer value. It contains a duration in seconds
+    * The Time Quota value shall be encoded as an Unsigned32 binary integer value. It contains a duration in seconds
     */
     proto_tree_add_item_ret_uint(tree, hf_pfcp_time_quota, tvb, offset, 4, ENC_BIG_ENDIAN, &value);
     offset += 4;
@@ -6504,7 +6535,7 @@ static void dissect_pfcp_user_id(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
         offset += 1;
 
         /* (b+1) to c    IMEI */
-        /* Fetch the BCD encoded digits from tvb low half byte, formating the digits according to
+        /* Fetch the BCD encoded digits from tvb low half byte, formatting the digits according to
         * a default digit set of 0-9 returning "?" for overdecadic digits a pointer to the EP
         * allocated string will be returned.
         */
@@ -10320,46 +10351,18 @@ pfcp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, unsi
     pcr.seq_nr = seq_nr;
     pcr.req_time = pinfo->abs_ts;
 
-    switch (msgtype) {
-    case PFCP_MSG_HEARTBEAT_REQUEST:
-    case PFCP_MSG_PFD_MANAGEMENT_REQUEST:
-    case PFCP_MSG_ASSOCIATION_SETUP_REQUEST:
-    case PFCP_MSG_ASSOCIATION_UPDATE_REQUEST:
-    case PFCP_MSG_ASSOCIATION_RELEASE_REQUEST:
-    case PFCP_MSG_NODE_REPORT_REQUEST:
-    case PFCP_MSG_SESSION_SET_DELETION_REQUEST:
-    case PFCP_MSG_SESSION_SET_MODIFICATION_REQUEST:
-    case PFCP_MSG_SESSION_ESTABLISHMENT_REQUEST:
-    case PFCP_MSG_SESSION_MODIFICATION_REQUEST:
-    case PFCP_MSG_SESSION_DELETION_REQUEST:
-    case PFCP_MSG_SESSION_REPORT_REQUEST:
+    if (PFCP_MSG_IS_REQUEST(msgtype)) {
         pcr.is_request = true;
         pcr.req_frame = pinfo->num;
         pcr.rep_frame = 0;
-        break;
-    case PFCP_MSG_HEARTBEAT_RESPONSE:
-    case PFCP_MSG_PFD_MANAGEMENT_RESPONSE:
-    case PFCP_MSG_ASSOCIATION_SETUP_RESPONSE:
-    case PFCP_MSG_ASSOCIATION_UPDATE_RESPONSE:
-    case PFCP_MSG_ASSOCIATION_RELEASE_RESPONSE:
-    case PFCP_MSG_VERSION_NOT_SUPPORTED_RESPONSE:
-    case PFCP_MSG_NODE_REPORT_RESPONSE:
-    case PFCP_MSG_SESSION_SET_DELETION_RESPONSE:
-    case PFCP_MSG_SESSION_SET_MODIFICATION_RESPONSE:
-    case PFCP_MSG_SESSION_ESTABLISHMENT_RESPONSE:
-    case PFCP_MSG_SESSION_MODIFICATION_RESPONSE:
-    case PFCP_MSG_SESSION_DELETION_RESPONSE:
-    case PFCP_MSG_SESSION_REPORT_RESPONSE:
-
+    } else if (PFCP_MSG_IS_RESPONSE(msgtype)) {
         pcr.is_request = false;
         pcr.req_frame = 0;
         pcr.rep_frame = pinfo->num;
-        break;
-    default:
+    } else {
         pcr.is_request = false;
         pcr.req_frame = 0;
         pcr.rep_frame = 0;
-        break;
     }
 
     pcrp = (pfcp_msg_hash_t *)wmem_map_lookup(pfcp_info->matched, &pcr);
@@ -10368,20 +10371,7 @@ pfcp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, unsi
         pcrp->is_request = pcr.is_request;
     } else {
         /* no match, let's try to make one */
-        switch (msgtype) {
-        case PFCP_MSG_HEARTBEAT_REQUEST:
-        case PFCP_MSG_PFD_MANAGEMENT_REQUEST:
-        case PFCP_MSG_ASSOCIATION_SETUP_REQUEST:
-        case PFCP_MSG_ASSOCIATION_UPDATE_REQUEST:
-        case PFCP_MSG_ASSOCIATION_RELEASE_REQUEST:
-        case PFCP_MSG_NODE_REPORT_REQUEST:
-        case PFCP_MSG_SESSION_SET_DELETION_REQUEST:
-        case PFCP_MSG_SESSION_SET_MODIFICATION_REQUEST:
-        case PFCP_MSG_SESSION_ESTABLISHMENT_REQUEST:
-        case PFCP_MSG_SESSION_MODIFICATION_REQUEST:
-        case PFCP_MSG_SESSION_DELETION_REQUEST:
-        case PFCP_MSG_SESSION_REPORT_REQUEST:
-
+        if (PFCP_MSG_IS_REQUEST(msgtype)) {
             pcr.seq_nr = seq_nr;
 
             pcrp = (pfcp_msg_hash_t *)wmem_map_remove(pfcp_info->unmatched, &pcr);
@@ -10398,20 +10388,7 @@ pfcp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, unsi
             pcrp->is_request = true;
             wmem_map_insert(pfcp_info->unmatched, pcrp, pcrp);
             return NULL;
-        case PFCP_MSG_HEARTBEAT_RESPONSE:
-        case PFCP_MSG_PFD_MANAGEMENT_RESPONSE:
-        case PFCP_MSG_ASSOCIATION_SETUP_RESPONSE:
-        case PFCP_MSG_ASSOCIATION_UPDATE_RESPONSE:
-        case PFCP_MSG_ASSOCIATION_RELEASE_RESPONSE:
-        case PFCP_MSG_VERSION_NOT_SUPPORTED_RESPONSE:
-        case PFCP_MSG_NODE_REPORT_RESPONSE:
-        case PFCP_MSG_SESSION_SET_DELETION_RESPONSE:
-        case PFCP_MSG_SESSION_SET_MODIFICATION_RESPONSE:
-        case PFCP_MSG_SESSION_ESTABLISHMENT_RESPONSE:
-        case PFCP_MSG_SESSION_MODIFICATION_RESPONSE:
-        case PFCP_MSG_SESSION_DELETION_RESPONSE:
-        case PFCP_MSG_SESSION_REPORT_RESPONSE:
-
+        } else if (PFCP_MSG_IS_RESPONSE(msgtype)) {
             pcr.seq_nr = seq_nr;
             pcrp = (pfcp_msg_hash_t *)wmem_map_lookup(pfcp_info->unmatched, &pcr);
 
@@ -10423,9 +10400,6 @@ pfcp_match_response(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, unsi
                     wmem_map_insert(pfcp_info->matched, pcrp, pcrp);
                 }
             }
-            break;
-        default:
-            break;
         }
     }
 
@@ -11007,7 +10981,7 @@ static const pfcp_ie_t pfcp_ies[] = {
 /*    299 */    { dissect_pfcp_predefined_rules_name },                         /* Predefined Rules Name                           Variable Length / Clause 8.2.205 */
 /*    300 */    { dissect_pfcp_grouped_ie },                                    /* MBS Session N4mb Control Information            Extendable / Table 7.5.2.1-5 */
 /*    301 */    { dissect_pfcp_grouped_ie },                                    /* MBS Multicast Parameters                        Extendable / Table 7.5.2.3-5 */
-/*    302 */    { dissect_pfcp_grouped_ie },                                    /* Addd MBS Unicast Parameters IE in Create FAR    Extendable / Table 7.5.2.3-6 */
+/*    302 */    { dissect_pfcp_grouped_ie },                                    /* Added MBS Unicast Parameters IE in Create FAR    Extendable / Table 7.5.2.3-6 */
 /*    303 */    { dissect_pfcp_grouped_ie },                                    /* MBS Session N4mb Information                    Extendable / Table 7.5.3.1-4 */
 /*    304 */    { dissect_pfcp_grouped_ie },                                    /* Remove MBS Unicast Parameters IE in Update FAR  Extendable / Table 7.5.4.3-4 */
 /*    305 */    { dissect_pfcp_mbs_session_identifier },                        /* MBS Session Identifier                          Variable Length / Clause 8.2.206 */
@@ -11114,7 +11088,7 @@ static const pfcp_ie_t pfcp_ies[] = {
 
 #define NUM_PFCP_IES array_length(pfcp_ies)
 /* Set up the array to hold "etts" for each IE*/
-int ett_pfcp_elem[NUM_PFCP_IES-1];
+static int ett_pfcp_elem[NUM_PFCP_IES-1];
 
 typedef struct pfcp_generic_ie {
     uint16_t    enterprise_id; // 0 for non-vendor-IE
@@ -11373,8 +11347,8 @@ dissect_pfcp_message(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
 
     pfcp_hdr = wmem_new0(pinfo->pool, pfcp_hdr_t);
 
-    /* Setting the SEID to -1 to say that the SEID is not valid for this packet */
-    pfcp_hdr->seid = -1;
+    /* Setting the SEID to invalid to indicate that the SEID is not present for this packet */
+    pfcp_hdr->seid = PFCP_SEID_INVALID;
 
     col_set_str(pinfo->cinfo, COL_PROTOCOL, "PFCP");
     col_clear(pinfo->cinfo, COL_INFO);
@@ -11457,8 +11431,8 @@ dissect_pfcp_message(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree)
           3    |        Message Length (1st Octet)              |
           4    |        Message Length (2nd Octet)              |
           5    |        Sequence Number (1st Octet)             |
-          6    |        Sequence Number (2st Octet)             |
-          7    |        Sequence Number (3st Octet)             |
+          6    |        Sequence Number (2nd Octet)             |
+          7    |        Sequence Number (3rd Octet)             |
           8    |             Spare                              |
     */
     proto_tree_add_item_ret_uint(sub_tree, hf_pfcp_seqno, tvb, offset, 3, ENC_BIG_ENDIAN, &seq_no);
@@ -11510,7 +11484,7 @@ dissect_pfcp(tvbuff_t * tvb, packet_info * pinfo, proto_tree * tree, void *data 
         bool follow_on = (tvb_get_uint8(tvb, offset) & 0x04);
 
         /* length of the message in octets plus the excluded mandatory part of the PFCP header (the first 4 octets) */
-        uint16_t message_length = (tvb_get_uint16(tvb, (offset + 2), 0) + 4);
+        uint16_t message_length = (tvb_get_uint16(tvb, (offset + 2), ENC_BIG_ENDIAN) + 4);
 
         tvbuff_t *message_tvb = tvb_new_subset_length(tvb, offset, message_length);
         offset += dissect_pfcp_message(message_tvb, pinfo, tree);
@@ -14322,7 +14296,7 @@ proto_register_pfcp(void)
             NULL, HFILL }
         },
         { &hf_pfcp_apply_action_flags_o6_b2_ddpn,
-        { "DDPN (Discared Downlink Packet Notification)", "pfcp.apply_action.ddpn",
+        { "DDPN (Discarded Downlink Packet Notification)", "pfcp.apply_action.ddpn",
             FT_BOOLEAN, 8, NULL, 0x04,
             NULL, HFILL }
         },
@@ -17202,7 +17176,7 @@ proto_register_pfcp(void)
         },
 
         { &hf_pfcp_data_status_flags_b0_drop,
-        { "DROP (First DL packet is discared by UP function)", "pfcp.data_status.flags.drop",
+        { "DROP (First DL packet is discarded by UP function)", "pfcp.data_status.flags.drop",
             FT_BOOLEAN, 8, TFS(&tfs_present_not_present), 0x01,
             NULL, HFILL }
         },
@@ -19735,7 +19709,7 @@ proto_register_pfcp(void)
     expert_register_field_array(expert_pfcp, ei, array_length(ei));
 
     /* Register dissector table for enterprise IE dissectors */
-    pfcp_enterprise_ies_dissector_table = register_dissector_table("pfcp.enterprise_ies", "PFCP Enterprice IEs",
+    pfcp_enterprise_ies_dissector_table = register_dissector_table("pfcp.enterprise_ies", "PFCP Enterprise IEs",
         proto_pfcp, FT_UINT32, BASE_DEC);
 
     pfcp_register_generic_ie_dissector(VENDOR_TRAVELPING, "pfcp_travelping_ies", "pfcp.ie.travelping", "Travelping IE Type", pfcp_travelping_ies, G_N_ELEMENTS(pfcp_travelping_ies));

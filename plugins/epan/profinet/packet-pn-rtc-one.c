@@ -476,7 +476,6 @@ dissect_PNIO_C_SDU_RTC1(tvbuff_t *tvb, unsigned offset,
     uint16_t number_iocs_input_cr;
     uint16_t number_io_data_objects_output_cr;
     uint16_t number_iocs_output_cr;
-    uint16_t u16SecurityLength;
 
     int security_data;
 
@@ -504,12 +503,11 @@ dissect_PNIO_C_SDU_RTC1(tvbuff_t *tvb, unsigned offset,
     uint32_t            current_aruuid = 0;
     uint32_t            current_fake_aruuid = 4126751477;
 
-    u16SecurityLength = tvb_get_uint16(tvb, 6, ENC_BIG_ENDIAN);
     security_data = tvb_captured_length_remaining(tvb, 8) + 4; /* Include cyclic status fields */
 
-    if (u16SecurityLength == security_data)
+    if (pn_is_valid_security_metadata(tvb, 0, security_data))
     {
-        col_set_str(pinfo->cinfo, COL_PROTOCOL, "PNIOsec");            /* set protocol name */
+        col_set_str(pinfo->cinfo, COL_PROTOCOL, "PNIOsec");
 
         data_item = proto_tree_add_protocol_format(tree, proto_pn_io_rtc1, tvb, offset, tvb_captured_length(tvb) - 8,
             "PROFINET IO Cyclic Service Data Unit: %u bytes", tvb_captured_length(tvb) - 8);
@@ -569,8 +567,8 @@ dissect_PNIO_C_SDU_RTC1(tvbuff_t *tvb, unsigned offset,
             pn_find_dcp_station_info(station_info, conversation);
 
             if (pnio_ps_selection == true) {
-                if (u16SecurityLength == security_data)
-                    col_set_str(pinfo->cinfo, COL_PROTOCOL, "PNIO_PSsec");    /* set PROFISsafe with security protocol name */
+                if (pn_is_valid_security_metadata(tvb, 0, security_data))
+                    col_set_str(pinfo->cinfo, COL_PROTOCOL, "PNIO_PSsec");
                 else
                 col_set_str(pinfo->cinfo, COL_PROTOCOL, "PNIO_PS");    /* set PROFISsafe protocol name */
             }

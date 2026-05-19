@@ -2450,8 +2450,8 @@ static void dissect_nvme_get_logpage_err_inf_resp(proto_item *ti, tvbuff_t *cmd_
 
 static void post_add_intval_from_16bytes(proto_item *ti, tvbuff_t *tvb, unsigned off)
 {
-    uint64_t lo = tvb_get_uint64(tvb, off, 0);
-    uint64_t hi = tvb_get_uint64(tvb, off, 8);
+    uint64_t lo = tvb_get_uint64(tvb, off, ENC_BIG_ENDIAN);
+    uint64_t hi = tvb_get_uint64(tvb, off+8, ENC_BIG_ENDIAN);
     double res;
 
     res = (double)hi;
@@ -2977,7 +2977,7 @@ static const value_string ana_state_tbl[] = {
     { 0x2,  "ANA Non-Optimized State" },
     { 0x3,  "ANA Inaccessible State" },
     { 0x4,  "ANA Persistent Loss State" },
-    { 0xF,  "ANA Change Sate" },
+    { 0xF,  "ANA Change State" },
     { 0, NULL}
 };
 
@@ -6559,7 +6559,7 @@ proto_register_nvme(void)
                FT_BOOLEAN, 8, NULL, 0x2, NULL, HFILL}
         },
         { &hf_nvme_identify_ctrl_anacap[3],
-            { "Reports Innaccessible State", "nvme.cmd.identify.ctrl.anacap.isr",
+            { "Reports Inaccessible State", "nvme.cmd.identify.ctrl.anacap.isr",
                FT_BOOLEAN, 8, NULL, 0x4, NULL, HFILL}
         },
         { &hf_nvme_identify_ctrl_anacap[4],
@@ -6567,7 +6567,7 @@ proto_register_nvme(void)
                FT_BOOLEAN, 8, NULL, 0x8, NULL, HFILL}
         },
         { &hf_nvme_identify_ctrl_anacap[5],
-            { "Reports ANA Change Sate", "nvme.cmd.identify.ctrl.anacap.csr",
+            { "Reports ANA Change State", "nvme.cmd.identify.ctrl.anacap.csr",
                FT_BOOLEAN, 8, NULL, 0x10, NULL, HFILL}
         },
         { &hf_nvme_identify_ctrl_anacap[6],
