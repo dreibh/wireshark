@@ -1325,6 +1325,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-netlink-generic.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-netlink-netfilter.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-netlink-net_dm.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-netlink-nl80211.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-netlink-mac80211-hwsim.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-netlink-ovs_ct_limit.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-netlink-ovs_datapath.c
@@ -1934,7 +1935,6 @@ set(DISSECTOR_DATA_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/data-isobus.c
 	${CMAKE_CURRENT_SOURCE_DIR}/data-midi-sysex-id.c
 	${CMAKE_CURRENT_SOURCE_DIR}/data-ncsi.c
-	${CMAKE_CURRENT_SOURCE_DIR}/data-nl80211.c
 	${CMAKE_CURRENT_SOURCE_DIR}/data-usb.c
 )
 

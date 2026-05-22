@@ -1430,28 +1430,13 @@ tcp_seq_analysis_packet( void *ptr, packet_info *pinfo, epan_dissect_t *edt _U_,
 
 char *tcp_follow_conv_filter(epan_dissect_t *edt _U_, packet_info *pinfo, unsigned *stream, unsigned *sub_stream _U_)
 {
-    conversation_t *conv;
-    struct tcp_analysis *tcpd;
+    uint8_t max_layer_num = proto_get_layer_num(pinfo, proto_tcp);
 
-    /* XXX: Since TCP doesn't use the endpoint API, we can only look
-     * up using the current pinfo addresses and ports. We don't want
-     * to create a new conversation or new TCP stream.
-     * Eventually the endpoint API should support storing multiple
-     * endpoints and TCP should be changed to use the endpoint API.
-     */
-    conv = find_conversation_strat(pinfo, CONVERSATION_TCP, 0, false);
-    if (((pinfo->net_src.type == AT_IPv4 && pinfo->net_dst.type == AT_IPv4) ||
-        (pinfo->net_src.type == AT_IPv6 && pinfo->net_dst.type == AT_IPv6))
-        && (pinfo->ptype == PT_TCP) &&
-        conv != NULL)
-    {
-        /* TCP over IPv4/6 */
-        tcpd=get_tcp_conversation_data(conv, pinfo);
-        if (tcpd == NULL)
-            return NULL;
-
-        *stream = tcpd->stream;
-        return ws_strdup_printf("tcp.stream eq %u", tcpd->stream);
+    for (uint8_t curr_layer_num = max_layer_num; curr_layer_num; --curr_layer_num) {
+        *stream = GPOINTER_TO_UINT(p_get_proto_data(pinfo->pool, pinfo, hf_tcp_stream, curr_layer_num));
+        if (*stream) {
+            return ws_strdup_printf("tcp.stream eq %u", --*stream);
+        }
     }
 
     return NULL;
@@ -1488,6 +1473,7 @@ typedef struct tcp_follow_tap_data
     tvbuff_t *tvb;
     struct tcpheader* tcph;
     struct tcp_analysis *tcpd;
+    unsigned stream_id;
 
 } tcp_follow_tap_data_t;
 
@@ -1615,6 +1601,10 @@ follow_tcp_tap_listener(void *tapdata, packet_info *pinfo,
     follow_record_t *follow_record;
     follow_info_t *follow_info = (follow_info_t *)tapdata;
     const tcp_follow_tap_data_t *follow_data = (const tcp_follow_tap_data_t *)data;
+
+    if (follow_info->stream_id != follow_data->stream_id)
+        return TAP_PACKET_DONT_REDRAW;
+
     bool is_server;
     uint32_t sequence = follow_data->tcph->th_seq;
     uint32_t length = follow_data->tcph->th_have_seglen
@@ -2040,6 +2030,53 @@ process_tcp_payload(tvbuff_t *tvb, volatile int offset, packet_info *pinfo,
     uint32_t seq, uint32_t nxtseq, bool is_tcp_segment,
     struct tcp_analysis *tcpd, struct tcpinfo *tcpinfo);
 
+typedef struct _ooo_segment_item {
+    uint32_t frame;
+    uint32_t seq;
+    uint32_t len;
+    uint8_t *data;
+} ooo_segment_item;
+
+static int
+compare_ooo_segment_item(const void *a, const void *b)
+{
+    const ooo_segment_item *fd_a = a;
+    const ooo_segment_item *fd_b = b;
+
+    /* We only insert segments into this list that satisfy
+     * LT_SEQ(tcpd->fwd->maxnextseq, seq), for the current value
+     * of maxnextseq (removing segments when maxnextseq is advanced)
+     * so these rollover-aware comparisons are transitive over the
+     * domain (never greater than 2^31).
+     */
+    if (LT_SEQ(fd_a->seq, fd_b->seq))
+        return -1;
+
+    if (GT_SEQ(fd_a->seq, fd_b->seq))
+        return 1;
+
+    if (fd_a->frame < fd_b->frame)
+        return -1;
+
+    if (fd_a->frame > fd_b->frame)
+        return 1;
+
+    return 0;
+}
+
+static unsigned
+ooo_segment_hash(const void *a)
+{
+    const ooo_segment_item *fd_a = a;
+
+    return g_int_hash(&fd_a->seq);
+}
+
+static gboolean
+ooo_segment_equal(const void *a, const void *b)
+{
+    return compare_ooo_segment_item(a, b) == 0;
+}
 
 static struct tcp_analysis *
 init_tcp_conversation_data(packet_info *pinfo, int direction)
@@ -2059,6 +2096,8 @@ init_tcp_conversation_data(packet_info *pinfo, int direction)
     if (tcp_reassemble_out_of_order) {
         tcpd->flow1.ooo_segments=wmem_list_new(wmem_file_scope());
         tcpd->flow2.ooo_segments=wmem_list_new(wmem_file_scope());
+        tcpd->flow1.ooo_segments_map=wmem_map_new(wmem_file_scope(), ooo_segment_hash, ooo_segment_equal);
+        tcpd->flow2.ooo_segments_map=wmem_map_new(wmem_file_scope(), ooo_segment_hash, ooo_segment_equal);
     }
 
     /* Only allocate the data if its actually going to be analyzed */
@@ -4556,40 +4595,6 @@ split_msp(packet_info *pinfo, struct tcp_multisegment_pdu *msp, struct tcp_analy
     return newmsp;
 }
 
-typedef struct _ooo_segment_item {
-    uint32_t frame;
-    uint32_t seq;
-    uint32_t len;
-    uint8_t *data;
-} ooo_segment_item;
-
-static int
-compare_ooo_segment_item(const void *a, const void *b)
-{
-    const ooo_segment_item *fd_a = a;
-    const ooo_segment_item *fd_b = b;
-
-    /* We only insert segments into this list that satisfy
-     * LT_SEQ(tcpd->fwd->maxnextseq, seq), for the current value
-     * of maxnextseq (removing segments when maxnextseq is advanced)
-     * so these rollover-aware comparisons are transitive over the
-     * domain (never greater than 2^31).
-     */
-    if (LT_SEQ(fd_a->seq, fd_b->seq))
-        return -1;
-
-    if (GT_SEQ(fd_a->seq, fd_b->seq))
-        return 1;
-
-    if (fd_a->frame < fd_b->frame)
-        return -1;
-
-    if (fd_a->frame > fd_b->frame)
-        return 1;
-
-    return 0;
-}
-
 /* Search through our list of out of order segments and add the ones that are
  * now contiguous onto a MSP until we use them all or reach another gap.
  *
@@ -4670,6 +4675,7 @@ msp_add_out_of_order(packet_info *pinfo, struct tcp_multisegment_pdu *msp, struc
         }
         updated_maxnextseq = false;
         tvb_free(tvb_data);
+        wmem_map_remove(tcpd->fwd->ooo_segments_map, fd);
         wmem_list_remove_frame(tcpd->fwd->ooo_segments, curr_entry);
         curr_entry = wmem_list_head(tcpd->fwd->ooo_segments);
 
@@ -5072,7 +5078,7 @@ again:
             }
         } else {
             /* If we have visited this frame before, look for the frame in the
-             * list of unused out of order segments. Since we know the gap will
+             * map of unused out of order segments. Since we know the gap will
              * never be filled, we could pass it to the subdissector, but
              * we want to be consistent between passes.
              */
@@ -5081,9 +5087,14 @@ again:
             fd->frame = pinfo->num;
             fd->seq = seq;
             fd->len = nxtseq - seq;
-            if (wmem_list_find_custom(tcpd->fwd->ooo_segments, fd, compare_ooo_segment_item)) {
+            if (wmem_map_contains(tcpd->fwd->ooo_segments_map, fd)) {
                 has_gap = true;
             }
+#if 0
+            DISSECTOR_ASSERT_CMPINT(wmem_map_size(tcpd->fwd->ooo_segments_map), ==, wmem_list_count(tcpd->fwd->ooo_segments));
+            wmem_list_frame_t *head = wmem_list_head(tcpd->fwd->ooo_segments);
+            DISSECTOR_ASSERT(has_gap == (head && (compare_ooo_segment_item(fd, wmem_list_frame_data(head)) >= 0)));
+#endif
         }
     }
 
@@ -5199,6 +5210,7 @@ again:
              * which means that these bytes exist. */
             fd->data = tvb_memdup(wmem_file_scope(), tvb, offset, fd->len);
             wmem_list_append_sorted(tcpd->fwd->ooo_segments, fd, compare_ooo_segment_item);
+            wmem_map_insert(tcpd->fwd->ooo_segments_map, fd, fd);
         }
         ipfd_head = NULL;
     } else {
@@ -8814,6 +8826,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
     if (tcpd) {
         item = proto_tree_add_uint(tcp_tree, hf_tcp_stream, tvb, offset, 0, tcpd->stream);
         proto_item_set_generated(item);
+        p_add_proto_data(pinfo->pool, pinfo, hf_tcp_stream, pinfo->curr_proto_layer_num, GUINT_TO_POINTER(tcpd->stream + 1)); // Add 1 to distinguish stream 0 from NULL
         tcpinfo.stream = tcpd->stream;
 
         if (tcp_calculate_ts) {
@@ -9740,6 +9753,7 @@ dissect_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data _U_)
             follow_data->tvb = tvb_new_subset_remaining(tvb, offset);
             follow_data->tcph = tcph;
             follow_data->tcpd = tcpd;
+            follow_data->stream_id = tcph->th_stream;
 
             tap_queue_packet(tcp_follow_tap, pinfo, follow_data);
         }
