@@ -18,12 +18,13 @@ import sys
 
 # A list of update tools to run
 # - name: The name of the tool; it will be printed in the commit message if it fails.
+# - master_only: True if this should only be run from the master branch (optional).
 # - path: Path to the tool relative to the repository root.
+# - args: List of arguments to pass to the tool (optional).
 # - python_modules: List of required Python modules (optional).
 # - updated_files: List of files that this tool updates.
 #
 # Each tool must
-# - Run without arguments, i.e. the script should perform the desired update by default.
 # - Exit with 0 on success and nonzero on failure.
 # - Print a short, informative message suitable for inclusion in a git commit on failure.
 # - Preferably be able to run from anywhere.
@@ -48,29 +49,38 @@ UPDATE_TOOLS = (
     },
     {
         "name": "USB",
-        "path": "tools/make-usb.py",
-        "updated_files": ["epan/dissectors/data-usb.c"],
+        "path": "tools/dissector_generators/generate-usb-data.py",
+        "updated_files": [
+            "epan/dissectors/data-usb.c"
+            "epan/dissectors/data-usb.h"
+        ],
     },
     {
         "name": "Bluetooth",
         "python_modules": ["PyYAML"],
-        "path": "tools/make-bluetooth.py",
+        "path": "tools/dissector_generators/generate-bluetooth-data.py",
         "updated_files": ["epan/dissectors/data-bluetooth.c"],
     },
     {
         "name": "TLS CT Log IDs",
         "python_modules": ["requests"],
-        "path": "tools/make-tls-ct-logids.py",
+        "path": "tools/dissector_generators/generate-tls-ct-logids.py",
         "updated_files": ["epan/dissectors/packet-tls-utils.c"],
     },
     {
+        "name": "Netlink NL80211 enums and fields",
+        "python_modules": ["requests"],
+        "path": "tools/dissector_generators/generate-nl80211.py",
+        "updated_files": ["epan/dissectors/packet-netlink-nl80211.c"],
+    },
+    {
         "name": "PCI IDs",
-        "path": "tools/make-usb.py",
+        "path": "tools/dissector_generators/generate-ncsi-data.py",
         "updated_files": ["epan/dissectors/data-ncsi.c", "epan/dissectors/data-ncsi.h"],
     },
     {
         "name": "ISOBUS parameters",
-        "path": "tools/make-isobus.py",
+        "path": "tools/dissector_generators/generate-isobus-data.py",
         "updated_files": [
             "epan/dissectors/data-isobus.c",
             "epan/dissectors/data-isobus.h",
@@ -79,23 +89,27 @@ UPDATE_TOOLS = (
     {
         "name": "BACNET",
         "python_modules": ["beautifulsoup4"],
-        "path": "tools/generate-bacnet-vendors.py",
-        "updated_files": ["epan/dissectors/data-bacnet.c"],
+        "path": "tools/dissector_generators/generate-bacnet-data.py",
+        "updated_files": [
+            "epan/dissectors/data-bacnet.c"
+            "epan/dissectors/data-bacnet.h"
+            ],
     },
     {
         "name": "DMX",
-        "path": "tools/make-dmx-manfid.py",
+        "path": "tools/dissector_generators/generate-dmx-manfid-data.py",
         "updated_files": [
             "epan/dissectors/data-dmx-manfid.c",
             "epan/dissectors/data-dmx-manfid.h",
         ],
     },
-    # Asterix requires an argument and a compile, and should only be run from master.
-    # {
-    #     'name': 'Asterix',
-    #     'path': 'tools/make-specs.py',
-    #     'updated_files': []
-    # },
+    {
+        "name": "Asterix",
+        "master_only": True,
+        "path": "tools/asterix/update-specs.py",
+        "args": ["--update", "epan/dissectors/packet-asterix-generated.h"],
+        "updated_files": [ "epan/dissectors/packet-asterix-generated.h"]
+    },
     {
         "name": "Introspection enumerations",
         "python_modules": ["pyclibrary"],
@@ -109,6 +123,13 @@ UPDATE_TOOLS = (
         "name": "Freedesktop.org metadata",
         "path": "tools/update-appdata.py",
         "updated_files": ["resources/freedesktop/org.wireshark.Wireshark.metainfo.xml"],
+    },
+    {
+        "name": "Update VMware ESXi Releases",
+        "python_modules": ["requests"],
+        "path": "tools/dissector_generators/generate-vmware-hb.py",
+        "args": ["--quiet", "epan/dissectors/packet-vmware-hb.c"],
+        "updated_files": [ "epan/dissectors/packet-vmware-hb.c"]
     },
 )
 
@@ -124,6 +145,11 @@ def main():
         "--list-python-modules",
         action="store_true",
         help="Print required Python modules, suitable for passing to `pip install` and exit",
+    )
+    # XXX Should we try to figure this out automatically?
+    parser.add_argument(
+        "--target-branch",
+        help="The target git branch, e.g. \"master\"",
     )
     parser.add_argument(
         "--tool-output",
@@ -145,7 +171,7 @@ def main():
                 modules.extend(tool["python_modules"])
             except KeyError:
                 pass
-        print(f"{' '.join(modules)}")
+        print(f"{' '.join(sorted(set(modules), key=str.lower))}")
         sys.exit(0)
 
     # Update everything by default
@@ -153,8 +179,13 @@ def main():
     with open(args.tool_output, "w") as tool_output_f:
         # XXX Should we build after each update as well?
         for tool in UPDATE_TOOLS:
+            try:
+                if args.target_branch != "master" and tool["master_only"]:
+                    continue
+            except KeyError:
+                pass
             print(f"Running {tool['path']}.\n")
-            res = subprocess.run([sys.executable, tool["path"]], capture_output=True, encoding="UTF-8")
+            res = subprocess.run([sys.executable, tool["path"]] + tool.get("args", []), capture_output=True, encoding="UTF-8")
             print(res.stdout, end="")
             print(res.stderr, end="")
             if res.returncode == 0:

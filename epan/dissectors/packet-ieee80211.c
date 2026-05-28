@@ -284,12 +284,6 @@ UAT_CSTRING_CB_DEF(uat_wep_key_records, string, uat_wep_key_record_t)
 static bool enable_decryption = true;
 
 static void
-ieee_80211_add_tagged_parameters(tvbuff_t *tvb, int offset, packet_info *pinfo,
-                                  proto_tree *tree, int tagged_parameters_len, int ftype,
-                                  association_sanity_check_t *association_sanity_check);
-
-
-static void
 save_proto_data(tvbuff_t *tvb, packet_info *pinfo, int offset, size_t size, int key);
 
 static void
@@ -6606,6 +6600,45 @@ static int hf_ieee80211_tag_wnm_sleep_mode_interval;
 
 static int hf_ieee80211_wnm_sub_elt_id;
 static int hf_ieee80211_wnm_sub_elt_len;
+static int hf_ieee80211_wnm_sleep_subelem_id;
+static int hf_ieee80211_wnm_sleep_subelem_len;
+static int hf_ieee80211_wnm_sleep_subelem_data;
+static int hf_ieee80211_wnm_sleep_subelem_gtk_key_info;
+static int hf_ieee80211_wnm_sleep_subelem_gtk_key_id;
+static int hf_ieee80211_wnm_sleep_subelem_gtk_key_length;
+static int hf_ieee80211_wnm_sleep_subelem_gtk_rsc;
+static int hf_ieee80211_wnm_sleep_subelem_gtk_key;
+static int hf_ieee80211_wnm_sleep_subelem_igtk_key_id;
+static int hf_ieee80211_wnm_sleep_subelem_igtk_ipn;
+static int hf_ieee80211_wnm_sleep_subelem_igtk_key;
+static int hf_ieee80211_wnm_sleep_subelem_bigtk_key_id;
+static int hf_ieee80211_wnm_sleep_subelem_bigtk_bipn;
+static int hf_ieee80211_wnm_sleep_subelem_bigtk_key;
+static int hf_ieee80211_wnm_sleep_subelem_cigtk_key_info;
+static int hf_ieee80211_wnm_sleep_subelem_cigtk_cipn;
+static int hf_ieee80211_wnm_sleep_subelem_cigtk_key;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key_info;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key_id;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_gtk_link_id_info;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_gtk_link_id;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key_length;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_gtk_rsc;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_igtk_key_id;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_igtk_ipn;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_igtk_link_id_info;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_igtk_link_id;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_igtk_key;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_key_id;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_bipn;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_link_id_info;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_link_id;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_key;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_key_id;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_cipn;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_link_id_info;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_link_id;
+static int hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_key;
 
 /* IEEE Std 802.11v-2011 7.3.2.87 */
 static int hf_ieee80211_tag_time_zone;
@@ -14406,19 +14439,27 @@ dissect_wrapped_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
                                              PASN_DATA_KEY);
 
   if (pasn_data) {
-    proto_tree *auth_tree = NULL;
+    proto_tree *auth_tree = NULL, *tagged_tree;
     proto_item *ai = NULL;
     uint16_t frame_len = 0;
     tvbuff_t *new_tvb = NULL;
+    unsigned tagged_parameter_tree_len, auth_offset;
 
     switch (pasn_data->pasn_seq) {
     case 1:
-      auth_tree = proto_tree_add_subtree(tree, tvb, offset, -1,
+      auth_tree = proto_tree_add_subtree(tree, tvb, offset, ext_tag_len,
                                          ett_pasn_auth_frame, &ai,
                                          "Authentication Frame");
       new_tvb = tvb_new_subset_remaining(tvb, offset);
       offset = dissect_auth_frame(auth_tree, pinfo, new_tvb);
-      proto_item_set_len(ai, offset); /* This is correct */
+      tagged_parameter_tree_len =
+        tvb_reported_length_remaining(new_tvb, offset);
+      if (tagged_parameter_tree_len > 0) {
+        tagged_tree = get_tagged_parameter_tree(auth_tree, new_tvb, offset,
+          tagged_parameter_tree_len);
+        ieee_80211_add_tagged_parameters(new_tvb, offset, pinfo, tagged_tree,
+          tagged_parameter_tree_len, MGT_AUTHENTICATION, NULL);
+      }
       break;
 
     case 2:
@@ -14431,7 +14472,17 @@ dissect_wrapped_data(proto_tree *tree, packet_info *pinfo, tvbuff_t *tvb,
                                          ett_pasn_auth_frame, NULL,
                                          "Authentication Frame 1");
       new_tvb = tvb_new_subset_length(tvb, offset, frame_len);
-      offset += dissect_auth_frame(auth_tree, pinfo, new_tvb);
+      auth_offset= dissect_auth_frame(auth_tree, pinfo, new_tvb);
+      offset += auth_offset;
+      tagged_parameter_tree_len =
+        tvb_reported_length_remaining(new_tvb, auth_offset);
+      if (tagged_parameter_tree_len > 0) {
+        tagged_tree = get_tagged_parameter_tree(auth_tree, new_tvb, auth_offset,
+          tagged_parameter_tree_len);
+        ieee_80211_add_tagged_parameters(new_tvb, auth_offset, pinfo, tagged_tree,
+          tagged_parameter_tree_len, MGT_AUTHENTICATION, NULL);
+        offset += tagged_parameter_tree_len;
+      }
 
       /* Second frame */
       frame_len = tvb_get_letohs(tvb, offset);
@@ -14726,6 +14777,36 @@ wnm_sleep_mode_req(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offs
   return offset - start;
 }
 
+#define WNM_SLEEP_MODE_SUBID_GTK       0
+#define WNM_SLEEP_MODE_SUBID_IGTK      1
+#define WNM_SLEEP_MODE_SUBID_BIGTK     2
+#define WNM_SLEEP_MODE_SUBID_MLO_GTK   3
+#define WNM_SLEEP_MODE_SUBID_MLO_IGTK  4
+#define WNM_SLEEP_MODE_SUBID_MLO_BIGTK 5
+#define WNM_SLEEP_MODE_SUBID_CIGTK     7
+#define WNM_SLEEP_MODE_SUBID_MLO_CIGTK 8
+
+static const range_string wnm_sleep_subelem_id_rvals[] = {
+  { WNM_SLEEP_MODE_SUBID_GTK, WNM_SLEEP_MODE_SUBID_GTK,
+    "GTK" },
+  { WNM_SLEEP_MODE_SUBID_IGTK, WNM_SLEEP_MODE_SUBID_IGTK,
+    "IGTK" },
+  { WNM_SLEEP_MODE_SUBID_BIGTK, WNM_SLEEP_MODE_SUBID_BIGTK,
+    "BIGTK" },
+  { WNM_SLEEP_MODE_SUBID_MLO_GTK, WNM_SLEEP_MODE_SUBID_MLO_GTK,
+    "MLO GTK" },
+  { WNM_SLEEP_MODE_SUBID_MLO_IGTK, WNM_SLEEP_MODE_SUBID_MLO_IGTK,
+    "MLO IGTK" },
+  { WNM_SLEEP_MODE_SUBID_MLO_BIGTK, WNM_SLEEP_MODE_SUBID_MLO_BIGTK,
+    "MLO BIGTK" },
+  { WNM_SLEEP_MODE_SUBID_CIGTK, WNM_SLEEP_MODE_SUBID_CIGTK,
+    "CIGTK" },
+  { WNM_SLEEP_MODE_SUBID_MLO_CIGTK, WNM_SLEEP_MODE_SUBID_MLO_CIGTK,
+    "MLO CIGTK" },
+  { WNM_SLEEP_MODE_SUBID_MLO_CIGTK + 1, 255, "Reserved" },
+  { 0, 0, NULL }
+};
+
 static unsigned
 wnm_sleep_mode_resp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int offset)
 {
@@ -14741,9 +14822,158 @@ wnm_sleep_mode_resp(proto_tree *tree, tvbuff_t *tvb, packet_info *pinfo, int off
     expert_add_info(pinfo, tree, &ei_ieee80211_tag_wnm_sleep_mode_no_key_data);
     return offset - start;
   }
-  proto_tree_add_item(tree, hf_ieee80211_ff_key_data, tvb, offset,
-                      key_data_len, ENC_NA);
-  offset += key_data_len;
+
+  while (offset - (start + 3) < key_data_len) {
+    uint8_t id, len;
+    int s_end;
+
+    proto_tree_add_item_ret_uint8(tree, hf_ieee80211_wnm_sleep_subelem_id,
+                                  tvb, offset, 1, ENC_LITTLE_ENDIAN, &id);
+    offset += 1;
+
+    proto_tree_add_item_ret_uint8(tree, hf_ieee80211_wnm_sleep_subelem_len,
+                                  tvb, offset, 1, ENC_LITTLE_ENDIAN, &len);
+    offset += 1;
+
+    if (len == 0) {
+      break;
+    }
+    s_end = offset + len;
+    switch (id) {
+    case WNM_SLEEP_MODE_SUBID_GTK:
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_gtk_key_info,
+                          tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_gtk_key_id,
+                          tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_gtk_key_length,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      offset += 1;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_gtk_rsc,
+                          tvb, offset, 8, ENC_NA);
+      offset += 8;
+      if (offset >= s_end)
+        break;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_gtk_key,
+                          tvb, offset, s_end - offset, ENC_NA);
+      break;
+    case WNM_SLEEP_MODE_SUBID_IGTK:
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_igtk_key_id,
+                          tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_igtk_ipn,
+                          tvb, offset, 6, ENC_LITTLE_ENDIAN);
+      offset += 6;
+      if (offset >= s_end)
+        break;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_igtk_key,
+                          tvb, offset, s_end - offset, ENC_NA);
+      break;
+    case WNM_SLEEP_MODE_SUBID_BIGTK:
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_bigtk_key_id,
+                          tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_bigtk_bipn,
+                          tvb, offset, 6, ENC_LITTLE_ENDIAN);
+      offset += 6;
+      if (offset >= s_end)
+        break;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_bigtk_key,
+                          tvb, offset, s_end - offset, ENC_NA);
+      break;
+    case WNM_SLEEP_MODE_SUBID_CIGTK:
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_cigtk_key_info,
+                          tvb, offset, 1, ENC_NA);
+      offset += 1;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_cigtk_cipn,
+                          tvb, offset, 6, ENC_LITTLE_ENDIAN);
+      offset += 6;
+      if (offset >= s_end)
+        break;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_cigtk_key,
+                          tvb, offset, s_end - offset, ENC_NA);
+      break;
+    case WNM_SLEEP_MODE_SUBID_MLO_GTK:
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_gtk_link_id_info,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_gtk_link_id,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      offset += 1;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key_info,
+                          tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key_id,
+                          tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key_length,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      offset += 1;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_gtk_rsc,
+                          tvb, offset, 8, ENC_NA);
+      offset += 8;
+      if (offset >= s_end)
+        break;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key,
+                          tvb, offset, s_end - offset, ENC_NA);
+      break;
+    case WNM_SLEEP_MODE_SUBID_MLO_IGTK:
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_igtk_link_id_info,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_igtk_link_id,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      offset += 1;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_igtk_key_id,
+                          tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_igtk_ipn,
+                          tvb, offset, 6, ENC_LITTLE_ENDIAN);
+      offset += 6;
+      if (offset >= s_end)
+        break;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_igtk_key,
+                          tvb, offset, s_end - offset, ENC_NA);
+      break;
+    case WNM_SLEEP_MODE_SUBID_MLO_BIGTK:
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_link_id_info,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_link_id,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      offset += 1;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_key_id,
+                          tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_bipn,
+                          tvb, offset, 6, ENC_LITTLE_ENDIAN);
+      offset += 6;
+      if (offset >= s_end)
+        break;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_key,
+                          tvb, offset, s_end - offset, ENC_NA);
+      break;
+    case WNM_SLEEP_MODE_SUBID_MLO_CIGTK:
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_link_id_info,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_link_id,
+                          tvb, offset, 1, ENC_LITTLE_ENDIAN);
+      offset += 1;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_key_id,
+                          tvb, offset, 2, ENC_LITTLE_ENDIAN);
+      offset += 2;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_cipn,
+                          tvb, offset, 6, ENC_LITTLE_ENDIAN);
+      offset += 6;
+      if (offset >= s_end)
+        break;
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_key,
+                          tvb, offset, s_end - offset, ENC_NA);
+      break;
+    default:
+      proto_tree_add_item(tree, hf_ieee80211_wnm_sleep_subelem_data,
+                          tvb, offset, len, ENC_NA);
+      break;
+    }
+    offset = s_end;
+  }
+
   return offset - start;
 }
 
@@ -20973,15 +21203,15 @@ dissect_vendor_ie_wfa(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree _U_, v
   uint8_t subtype;
   tvbuff_t *vendor_tvb;
 
-  if (tag_len < 4)
+  if (tag_len < 1)
     return 0;
 
-  subtype = tvb_get_uint8(tvb, 3);
+  subtype = tvb_get_uint8(tvb, offset);
   proto_item_append_text(field_data->item_tag, ": %s", val_to_str_const(subtype, wfa_subtype_vals, "Unknown"));
-  vendor_tvb = tvb_new_subset_length(tvb, offset + 4, tag_len - 4);
+  vendor_tvb = tvb_new_subset_length(tvb, offset + 1, tag_len - 1);
   dissect = dissector_try_uint_with_data(wifi_alliance_ie_table, subtype, vendor_tvb, pinfo, field_data->item_tag, false, NULL);
   if (dissect <= 0) {
-      proto_tree_add_item(field_data->item_tag, hf_ieee80211_tag_vendor_data, vendor_tvb, 0, tag_len - 4, ENC_NA);
+      proto_tree_add_item(field_data->item_tag, hf_ieee80211_tag_vendor_data, vendor_tvb, 0, tag_len - 1, ENC_NA);
   }
 
   return tvb_captured_length(tvb);
@@ -23250,7 +23480,7 @@ dissect_extended_capabilities_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
   return offset;
 }
 
-static int
+int
 dissect_vht_mcs_set(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
   proto_item *ti;
@@ -23316,12 +23546,9 @@ dissect_vht_mcs_set(proto_tree *tree, tvbuff_t *tvb, int offset)
   return offset;
 }
 
-static int
-dissect_vht_capability_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+int
+dissect_vht_capabilities(proto_tree *tree, tvbuff_t *tvb, int offset)
 {
-  int tag_len = tvb_reported_length(tvb);
-  ieee80211_tagged_field_data_t* field_data = (ieee80211_tagged_field_data_t*)data;
-  int offset = 0;
   static int * const ieee80211_vht_caps[] = {
     &hf_ieee80211_vht_max_mpdu_length,
     &hf_ieee80211_vht_supported_chan_width_set,
@@ -23348,6 +23575,21 @@ dissect_vht_capability_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
     NULL
   };
 
+  /* 4 byte VHT Capabilities  Info*/
+  proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_vht_cap,
+                                    ett_vht_cap_tree, ieee80211_vht_caps,
+                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+  offset += 4;
+  return offset;
+}
+
+static int
+dissect_vht_capability_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void* data)
+{
+  int tag_len = tvb_reported_length(tvb);
+  ieee80211_tagged_field_data_t* field_data = (ieee80211_tagged_field_data_t*)data;
+  int offset = 0;
+
   if (tag_len != 12) {
     expert_add_info_format(pinfo, field_data->item_tag_length, &ei_ieee80211_tag_length,
                            "VHT Capabilities IE length %u wrong, must be = 12", tag_len);
@@ -23355,10 +23597,7 @@ dissect_vht_capability_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, v
   }
 
   /* 4 byte VHT Capabilities  Info*/
-  proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_vht_cap,
-                                    ett_vht_cap_tree, ieee80211_vht_caps,
-                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
-  offset += 4;
+  offset = dissect_vht_capabilities(tree, tvb, offset);
 
   /* 8 byte MCS set */
   offset = dissect_vht_mcs_set(tree, tvb, offset);
@@ -26119,7 +26358,7 @@ dissect_max_away_duration(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tre
   return offset;
 }
 
-static int
+int
 dissect_mcs_set(proto_tree *tree, packet_info* pinfo, tvbuff_t *tvb, int offset, bool basic, bool vendorspecific)
 {
   proto_item *ti;
@@ -27331,12 +27570,9 @@ dissect_20_40_bss_intolerant(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
   return offset;
 }
 
-static int
-dissect_ht_capability_ie_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset,
-                         uint32_t tag_len, proto_item *ti_len, bool vendorspecific)
+int
+dissect_ht_capabilities(proto_tree *tree, tvbuff_t *tvb, int offset, bool vendorspecific)
 {
-  proto_item *cap_item, *ti;
-  proto_tree *cap_tree;
   static int * const ieee80211_ht[] = {
     &hf_ieee80211_ht_ldpc_coding,
     &hf_ieee80211_ht_chan_width,
@@ -27355,6 +27591,28 @@ dissect_ht_capability_ie_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     NULL
   };
 
+  /* 2 byte HT Capabilities  Info*/
+  if (vendorspecific)
+  {
+    proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_ht_vs_cap,
+                                    ett_ht_cap_tree, ieee80211_ht,
+                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+  }
+  else
+  {
+    proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_ht_cap,
+                                    ett_ht_cap_tree, ieee80211_ht,
+                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
+  }
+  return offset + 2;
+}
+
+static int
+dissect_ht_capability_ie_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset,
+                         uint32_t tag_len, proto_item *ti_len, bool vendorspecific)
+{
+  proto_item *cap_item, *ti;
+  proto_tree *cap_tree;
   static int * const ieee80211_htex[] = {
     &hf_ieee80211_htex_reserved_b0_b7,
     &hf_ieee80211_htex_mcs,
@@ -27410,19 +27668,7 @@ dissect_ht_capability_ie_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *t
     return (offset > 0) ? offset : 1;
 
   /* 2 byte HT Capabilities  Info*/
-  if (vendorspecific)
-  {
-    proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_ht_vs_cap,
-                                    ett_ht_cap_tree, ieee80211_ht,
-                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
-  }
-  else
-  {
-    proto_tree_add_bitmask_with_flags(tree, tvb, offset, hf_ieee80211_ht_cap,
-                                    ett_ht_cap_tree, ieee80211_ht,
-                                    ENC_LITTLE_ENDIAN, BMT_NO_APPEND);
-  }
-  offset += 2;
+  offset = dissect_ht_capabilities(tree, tvb, offset, vendorspecific);
 
   /* 1 byte A-MPDU Parameters */
   if (vendorspecific)
@@ -37649,7 +37895,7 @@ ieee80211_tag_dms_response(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
   return tvb_captured_length(tvb);
 }
 
-static void
+int
 ieee_80211_add_tagged_parameters(tvbuff_t *tvb, int offset, packet_info *pinfo,
                                   proto_tree *tree, int tagged_parameters_len, int ftype,
                                   association_sanity_check_t *association_sanity_check)
@@ -37681,6 +37927,7 @@ ieee_80211_add_tagged_parameters(tvbuff_t *tvb, int offset, packet_info *pinfo,
       break;
     }
   }
+  return offset;
 }
 
 static void
@@ -57948,6 +58195,195 @@ proto_register_ieee80211(void)
     {&hf_ieee80211_wnm_sub_elt_len,
      {"Subelement len", "wlan.wnm_subelt.len",
       FT_UINT8, BASE_DEC, NULL, 0, NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_id,
+     {"Subelement ID", "wlan.wnm_sleep.subelem.id",
+      FT_UINT8, BASE_DEC|BASE_RANGE_STRING, RVALS(wnm_sleep_subelem_id_rvals), 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_len,
+     {"Length", "wlan.wnm_sleep.subelem.len",
+      FT_UINT8, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_data,
+     {"Data", "wlan.wnm_sleep.subelem.data",
+      FT_BYTES, BASE_NONE, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_gtk_key_info,
+     {"Key Info", "wlan.wnm_sleep.subelem.gtk.key_info",
+      FT_UINT16, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_gtk_key_id,
+     {"Key ID", "wlan.wnm_sleep.subelem.gtk.key_id",
+      FT_UINT16, BASE_DEC, NULL, 0x0003,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_gtk_key_length,
+     {"Key Length", "wlan.wnm_sleep.subelem.gtk.key_length",
+      FT_UINT8, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_gtk_rsc,
+     {"RSC", "wlan.wnm_sleep.subelem.gtk.rsc",
+      FT_BYTES, BASE_NONE, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_gtk_key,
+     {"Key (GTK)", "wlan.wnm_sleep.subelem.gtk.key",
+      FT_BYTES, BASE_NONE, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_igtk_key_id,
+     {"Key ID", "wlan.wnm_sleep.subelem.igtk.key_id",
+      FT_UINT16, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_igtk_ipn,
+     {"IPN", "wlan.wnm_sleep.subelem.igtk.ipn",
+      FT_UINT48, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_igtk_key,
+     {"Key (IGTK)", "wlan.wnm_sleep.subelem.igtk.key",
+      FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_bigtk_key_id,
+     {"Key ID", "wlan.wnm_sleep.subelem.bigtk.key_id",
+      FT_UINT16, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_bigtk_bipn,
+     {"BIPN", "wlan.wnm_sleep.subelem.bigtk.bipn",
+      FT_UINT48, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_bigtk_key,
+     {"Key (BIGTK)", "wlan.wnm_sleep.subelem.bigtk.key",
+      FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_cigtk_key_info,
+     {"Key Info", "wlan.wnm_sleep.subelem.cigtk.key_info",
+      FT_UINT8, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_cigtk_cipn,
+     {"CIPN", "wlan.wnm_sleep.subelem.cigtk.cipn",
+      FT_UINT48, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_cigtk_key,
+     {"Key (CIGTK)", "wlan.wnm_sleep.subelem.cigtk.key",
+      FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key_info,
+     {"Key Info", "wlan.wnm_sleep.subelem.mlo_gtk.key_info",
+      FT_UINT16, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key_id,
+     {"Key ID", "wlan.wnm_sleep.subelem.mlo_gtk.key_id",
+      FT_UINT16, BASE_DEC, NULL, 0x0003,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_gtk_link_id_info,
+     {"Link ID Info", "wlan.wnm_sleep.subelem.mlo_gtk.link_id_info",
+      FT_UINT8, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_gtk_link_id,
+     {"Link ID", "wlan.wnm_sleep.subelem.mlo_gtk.link_id",
+      FT_UINT8, BASE_DEC, NULL, 0x0f,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key_length,
+     {"Key Length", "wlan.wnm_sleep.subelem.mlo_gtk.key_length",
+      FT_UINT8, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_gtk_rsc,
+     {"RSC", "wlan.wnm_sleep.subelem.mlo_gtk.rsc",
+      FT_BYTES, BASE_NONE, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_gtk_key,
+     {"Key (MLO GTK)", "wlan.wnm_sleep.subelem.mlo_gtk.key",
+      FT_BYTES, BASE_NONE, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_igtk_key_id,
+     {"Key ID", "wlan.wnm_sleep.subelem.mlo_igtk.key_id",
+      FT_UINT16, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_igtk_ipn,
+     {"IPN", "wlan.wnm_sleep.subelem.mlo_igtk.ipn",
+      FT_UINT48, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_igtk_link_id_info,
+     {"Link ID Info", "wlan.wnm_sleep.subelem.mlo_igtk.link_id_info",
+      FT_UINT8, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_igtk_link_id,
+     {"Link ID", "wlan.wnm_sleep.subelem.mlo_igtk.link_id",
+      FT_UINT8, BASE_DEC, NULL, 0x0f,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_igtk_key,
+     {"Key (MLO IGTK)", "wlan.wnm_sleep.subelem.mlo_igtk.key",
+      FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_key_id,
+     {"Key ID", "wlan.wnm_sleep.subelem.mlo_bigtk.key_id",
+      FT_UINT16, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_bipn,
+     {"BIPN", "wlan.wnm_sleep.subelem.mlo_bigtk.bipn",
+      FT_UINT48, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_link_id,
+     {"Link ID", "wlan.wnm_sleep.subelem.mlo_bigtk.link_id",
+      FT_UINT8, BASE_DEC, NULL, 0x0f,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_link_id_info,
+     {"Link ID Info", "wlan.wnm_sleep.subelem.mlo_bigtk.link_id_info",
+      FT_UINT8, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_bigtk_key,
+     {"Key (MLO BIGTK)", "wlan.wnm_sleep.subelem.mlo_bigtk.key",
+      FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_key_id,
+     {"Key ID", "wlan.wnm_sleep.subelem.mlo_cigtk.key_id",
+      FT_UINT16, BASE_DEC, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_cipn,
+     {"CIPN", "wlan.wnm_sleep.subelem.mlo_cigtk.cipn",
+      FT_UINT48, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_link_id,
+     {"Link ID", "wlan.wnm_sleep.subelem.mlo_cigtk.link_id",
+      FT_UINT8, BASE_DEC, NULL, 0x0f,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_link_id_info,
+     {"Link ID Info", "wlan.wnm_sleep.subelem.mlo_cigtk.link_id_info",
+      FT_UINT8, BASE_HEX, NULL, 0,
+      NULL, HFILL }},
+
+    {&hf_ieee80211_wnm_sleep_subelem_mlo_cigtk_key,
+     {"Key (MLO CIGTK)", "wlan.wnm_sleep.subelem.mlo_cigtk.key",
+      FT_BYTES, BASE_NONE, NULL, 0, NULL, HFILL }},
 
     /* Time Advertisement */
     {&hf_ieee80211_tag_time_adv_timing_capab,

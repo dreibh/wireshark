@@ -229,6 +229,7 @@ then
 	# Base and Multimedia pull in most of the other required modules
 	# RH/Fedora and SUSE use slightly different pkg names for modules
 	QT6_LIST=(base
+			svg
 			tools
 			multimedia)
 
@@ -342,6 +343,9 @@ echo "Optional package sbc-devel is unavailable"
 
 add_package ADDITIONAL_LIST libsmi-devel ||
 echo "Optional package libsmi-devel is unavailable"
+
+add_package ADDITIONAL_LIST cpuinfo-devel ||
+echo "Optional package cpuinfo-devel is unavailable"
 
 # opencore-amr-devel: RHEL/CentOS, Fedora
 # libopencore-amr-devel: OpenSUSE

@@ -21,6 +21,9 @@ extern "C" {
  *@file
  */
 
+/**
+ * @brief Represents a preference module grouping related preferences under a named, hierarchical entry in the preferences system.
+ */
 struct pref_module {
     const char *name;           /**< name of module */
     const char *title;          /**< title of module (displayed in preferences list) */
@@ -48,52 +51,109 @@ struct pref_module {
                                      to ensure saving to disk */
 };
 
+/**
+ * @brief Bundles a preference module with a file handle for use during preference serialization.
+ */
 typedef struct {
-    module_t *module;
-    FILE     *pf;
+    module_t* module; /**< The preference module whose preferences are being written. */
+    FILE*     pf;     /**< The output file handle to which preferences are being written. */
 } write_pref_arg_t;
 
-typedef void (*pref_custom_free_cb) (pref_t* pref);
-typedef void (*pref_custom_reset_cb) (pref_t* pref);
-typedef prefs_set_pref_e (*pref_custom_set_cb) (pref_t* pref, const char* value, unsigned int* changed_flags);
-/* typedef void (*pref_custom_write_cb) (pref_t* pref, write_pref_arg_t* arg); Deprecated. */
-/* pref_custom_type_name_cb should return NULL for internal / hidden preferences. */
-typedef const char * (*pref_custom_type_name_cb) (void);
-typedef char * (*pref_custom_type_description_cb) (void);
-typedef bool (*pref_custom_is_default_cb) (pref_t* pref);
-typedef char * (*pref_custom_to_str_cb) (pref_t* pref, bool default_val);
 
-/** Structure to hold callbacks for PREF_CUSTOM type */
+/**
+ * @brief Callback invoked to free any resources allocated by a custom preference.
+ * @param pref The custom preference to free.
+ */
+typedef void (*pref_custom_free_cb)(pref_t* pref);
+
+/**
+ * @brief Callback invoked to reset a custom preference to its default value.
+ * @param pref The custom preference to reset.
+ */
+typedef void (*pref_custom_reset_cb)(pref_t* pref);
+
+/**
+ * @brief Callback invoked to set a custom preference from a string value, reporting which flags changed.
+ * @param pref          The custom preference to update.
+ * @param value         The new value as a string to parse and apply.
+ * @param changed_flags Bitmask updated to indicate which aspects of the preference changed.
+ * @return A prefs_set_pref_e result code indicating success or the nature of any error.
+ */
+typedef prefs_set_pref_e (*pref_custom_set_cb)(pref_t* pref, const char* value, unsigned int* changed_flags);
+
+/* typedef void (*pref_custom_write_cb) (pref_t* pref, write_pref_arg_t* arg); Deprecated. */
+
+/**
+ * @brief Callback that returns the type name string for a custom preference; returns NULL for internal or hidden preferences.
+ * @return A string identifying the preference type, or NULL if the preference should be hidden.
+ */
+typedef const char* (*pref_custom_type_name_cb)(void);
+
+/**
+ * @brief Callback that returns a newly allocated human-readable description of a custom preference type.
+ * @return A newly allocated string describing the preference type; caller is responsible for freeing it.
+ */
+typedef char* (*pref_custom_type_description_cb)(void);
+
+/**
+ * @brief Callback that reports whether a custom preference currently holds its default value.
+ * @param pref The custom preference to check.
+ * @return True if the preference is set to its default value, false otherwise.
+ */
+typedef bool (*pref_custom_is_default_cb)(pref_t* pref);
+
+/**
+ * @brief Callback that serializes a custom preference to a newly allocated string.
+ * @param pref        The custom preference to serialize.
+ * @param default_val True to serialize the default value, false to serialize the current value.
+ * @return A newly allocated string representation of the preference value; caller is responsible for freeing it.
+ */
+typedef char* (*pref_custom_to_str_cb)(pref_t* pref, bool default_val);
+
+/**
+ * @brief Callback table for a PREF_CUSTOM preference, providing lifecycle and serialization hooks.
+ */
 struct pref_custom_cbs {
-    pref_custom_free_cb free_cb;
-    pref_custom_reset_cb reset_cb;
-    pref_custom_set_cb set_cb;
+    pref_custom_free_cb             free_cb;             /**< Releases any resources owned by the custom preference value */
+    pref_custom_reset_cb            reset_cb;            /**< Resets the custom preference to its default value */
+    pref_custom_set_cb              set_cb;              /**< Parses and applies a new value to the custom preference */
     /* pref_custom_write_cb write_cb; Deprecated. */
-    pref_custom_type_name_cb type_name_cb;
-    pref_custom_type_description_cb type_description_cb;
-    pref_custom_is_default_cb is_default_cb;
-    pref_custom_to_str_cb to_str_cb;
+    pref_custom_type_name_cb        type_name_cb;        /**< Returns a short type name string for the custom preference */
+    pref_custom_type_description_cb type_description_cb; /**< Returns a human-readable description of the custom preference type */
+    pref_custom_is_default_cb       is_default_cb;       /**< Returns true if the custom preference currently holds its default value */
+    pref_custom_to_str_cb           to_str_cb;           /**< Serializes the current custom preference value to a string */
 };
 
+
+/**
+ * @brief Discriminator tag identifying the type and UI representation of a preference entry.
+ *
+ * Annotations:
+ * - (1) Not used in new code; retained for backward compatibility.
+ * - (2) Like PREF_RANGE but also registers the value as a Decode As handler.
+ * - (3) Value is stored but never written to the preferences file.
+ * - (4) TCP simultaneous-open ambiguity resolution enum.
+ * - (5) Selects a subdissector by name from a dissector table.
+ */
 typedef enum {
-    PREF_UINT,
-    PREF_BOOL,
-    PREF_ENUM,
-    PREF_STRING,
-    PREF_RANGE,
-    PREF_STATIC_TEXT,
-    PREF_UAT,
-    PREF_SAVE_FILENAME,
-    PREF_COLOR,                 // (1)
-    PREF_CUSTOM,                // (1)
-    PREF_DIRNAME,
-    PREF_DECODE_AS_RANGE,       // (2)
-    PREF_OPEN_FILENAME,
-    PREF_PASSWORD,              // (3)
-    PREF_PROTO_TCP_SNDAMB_ENUM, // (4)
-    PREF_DISSECTOR,             // (5)
-    PREF_INT,
-    PREF_FLOAT
+    PREF_UINT,               /**< Unsigned integer preference */
+    PREF_BOOL,               /**< Boolean (true/false) preference */
+    PREF_ENUM,               /**< Enumerated value preference, chosen from a fixed value_string list */
+    PREF_STRING,             /**< Free-form string preference */
+    PREF_RANGE,              /**< Port/value range preference (e.g., "80,443,8080-8090") */
+    PREF_STATIC_TEXT,        /**< Non-editable informational label displayed in the preferences UI */
+    PREF_UAT,                /**< User Accessible Table (UAT) preference */
+    PREF_SAVE_FILENAME,      /**< File path preference for a file to be written/saved */
+    PREF_COLOR,              /**< Color preference (1); not used in new code */
+    PREF_CUSTOM,             /**< Custom preference with user-supplied callbacks (1); not used in new code */
+    PREF_DIRNAME,            /**< Directory path preference */
+    PREF_DECODE_AS_RANGE,    /**< Range preference that also registers a Decode As mapping (2) */
+    PREF_OPEN_FILENAME,      /**< File path preference for a file to be read/opened */
+    PREF_PASSWORD,           /**< Sensitive string preference; stored in memory but never persisted to disk (3) */
+    PREF_PROTO_TCP_SNDAMB_ENUM, /**< Enum preference for resolving TCP simultaneous-open ambiguity (4) */
+    PREF_DISSECTOR,          /**< Subdissector selection preference; names a dissector within a table (5) */
+    PREF_INT,                /**< Signed integer preference */
+    PREF_FLOAT               /**< Floating-point preference */
 } pref_type_e;
 
 /*
@@ -624,14 +684,15 @@ prefs_pref_is_default(pref_t *pref);
 WS_DLL_PUBLIC
 unsigned pref_stash(pref_t *pref, void *unused);
 
+/**
+ * @brief Carries context data used when unstashing preferences back to their live values.
+ */
 typedef struct pref_unstash_data
 {
-    /* Used to set prefs_changed member to true if the preference
-       differs from its stashed values. */
-    module_t *module;
-    /* Qt uses stashed values to then "applies" them
-      during unstash.  Use this flag for that behavior */
-    bool handle_decode_as;
+    module_t* module;          /**< The preference module being unstashed; used to detect and flag any changes
+                                    between the current and stashed preference values. */
+    bool      handle_decode_as; /**< When true, stashed values are applied as "decode as" overrides during
+                                     unstashing, matching the behavior required by the Qt preferences UI. */
 } pref_unstash_data_t;
 
 /**

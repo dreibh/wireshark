@@ -125,7 +125,6 @@ QT5_LIST="
 
 QT6_LIST="
 	freeglut3-dev
-	libqt6svg6-dev
 	libvulkan-dev
 	libxkbcommon-dev
 	qt6-base-dev
@@ -143,6 +142,11 @@ apt-get update || exit 2
 # libqt6core5compat6-dev: Ubuntu 22.04
 add_package QT6_LIST qt6-5compat-dev ||
 QT6_LIST="$QT6_LIST libqt6core5compat6-dev"
+
+# qt6-svg-dev: Debian >= bookworm, Ubuntu >= 23.04
+# libqt6svg6-dev: Ubuntu 22.04
+add_package QT6_LIST qt6-svg-dev ||
+QT6_LIST="$QT6_LIST libqt6svg6-dev"
 
 if [ $ADD_QT5 -ne 0 ]
 then
@@ -251,6 +255,10 @@ echo "libilbc-dev is unavailable"
 # bcg729 library libbcg729-dev
 add_package ADDITIONAL_LIST libbcg729-dev ||
     echo "libbcg729-dev is unavailable"
+
+# Debian >= bullseye, Ubuntu >= 22.04 (jammy)
+add_package ADDITIONAL_LIST libcpuinfo-dev ||
+    echo "libcpuinfo-dev is unavailable"
 
 ACTUAL_LIST=$BASIC_LIST
 

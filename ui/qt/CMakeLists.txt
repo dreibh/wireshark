@@ -415,6 +415,7 @@ set(WIRESHARK_MODEL_SRCS
 	models/export_objects_model.cpp
 	models/fileset_entry_model.cpp
 	models/filter_list_model.cpp
+	models/in_packet_find_delegate.cpp
 	models/info_proxy_model.cpp
 	models/interface_sort_filter_model.cpp
 	models/interface_tree_cache_model.cpp
@@ -496,6 +497,7 @@ set(WIRESHARK_QT_SRC
 	glib_mainloop_on_qeventloop.cpp
 	iax2_analysis_dialog.cpp
 	import_text_dialog.cpp
+	in_packet_find_bar.cpp
 	interface_frame.cpp
 	interface_toolbar_reader.cpp
 	interface_toolbar.cpp
@@ -948,11 +950,12 @@ add_library(qtui OBJECT
 
 if(USE_qt6)
 	target_link_libraries(qtui PUBLIC
-		Qt6::Widgets
-		Qt6::Core5Compat
 		Qt6::Concurrent
-		Qt6::PrintSupport
+		Qt6::Core5Compat
 		Qt6::Network
+		Qt6::PrintSupport
+		Qt6::Svg
+		Qt6::Widgets
 	)
 	if(Qt6Multimedia_FOUND)
 		target_link_libraries(qtui PUBLIC Qt6::Multimedia)

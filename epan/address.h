@@ -21,7 +21,10 @@ extern "C" {
 #endif /* __cplusplus */
 
 /* Types of "global" addresses Wireshark knows about. */
-/* Address types can be added here if there are many dissectors that use them or just
+/**
+ * @brief Identifies the type of a network layer or link layer address.
+ *
+ * Address types can be added here if there are many dissectors that use them or just
  * within a specific dissector.
  * If an address type is added here, it must be "registered" within address_types.c
  * For dissector address types, just use the address_type_dissector_register function
@@ -32,36 +35,44 @@ extern "C" {
  * assumed. Only representation (aka conversion of value to string) is implemented for this type.
  */
 typedef enum {
-    AT_NONE,               /* no link-layer address */
-    AT_ETHER,              /* MAC (Ethernet, 802.x, FDDI) address */
-    AT_IPv4,               /* IPv4 */
-    AT_IPv6,               /* IPv6 */
-    AT_IPX,                /* IPX */
-    AT_FC,                 /* Fibre Channel */
-    AT_FCWWN,              /* Fibre Channel WWN */
-    AT_STRINGZ,            /* null-terminated string */
-    AT_EUI64,              /* IEEE EUI-64 */
-    AT_IB,                 /* Infiniband GID/LID */
-    AT_AX25,               /* AX.25 */
-    AT_VINES,              /* Banyan Vines address */
-    AT_NUMERIC,            /* Numeric address type. */
-    AT_MCTP,               /* MCTP */
-    AT_ILNP_NID,           /* ILNP NID */
-    AT_ILNP_L64,           /* ILNP L64 */
-    AT_ILNP_ILV,           /* ILNP ILV */
-    AT_END_OF_LIST         /* Must be last in list */
+    AT_NONE,          /**< No address / unset. */
+    AT_ETHER,         /**< MAC address (Ethernet, 802.x, FDDI); 6 bytes. */
+    AT_IPv4,          /**< IPv4 address; 4 bytes. */
+    AT_IPv6,          /**< IPv6 address; 16 bytes. */
+    AT_IPX,           /**< IPX network + node address; 10 bytes. */
+    AT_FC,            /**< Fibre Channel address; 3 bytes. */
+    AT_FCWWN,         /**< Fibre Channel World Wide Name; 8 bytes. */
+    AT_STRINGZ,       /**< Null-terminated string address. */
+    AT_EUI64,         /**< IEEE EUI-64 address; 8 bytes. */
+    AT_IB,            /**< InfiniBand GID (16 bytes) or LID (2 bytes). */
+    AT_AX25,          /**< AX.25 amateur radio address; 7 bytes. */
+    AT_VINES,         /**< Banyan VINES address; 6 bytes. */
+    AT_NUMERIC,       /**< Numeric scalar address (uint8/16/32/64); display-only. */
+    AT_MCTP,          /**< Management Component Transport Protocol address. */
+    AT_ILNP_NID,      /**< ILNP Node Identifier (NID); 8 bytes. */
+    AT_ILNP_L64,      /**< ILNP 64-bit Locator (L64); 8 bytes. */
+    AT_ILNP_ILV,      /**< ILNP Identifier-Locator Vector (ILV); 16 bytes. */
+    AT_END_OF_LIST    /**< Sentinel — must remain the last enumerator. */
 } address_type;
 
+
+/**
+ * @brief Holds a network or link-layer address of any supported type.
+ */
 typedef struct _address {
-    int           type;         /* type of address */
-    int           len;          /* length of address, in bytes */
-    const void   *data;         /* pointer to address data */
+    int         type; /**< Address family; one of the #address_type values. */
+    int         len;  /**< Length of the address data pointed to by @c data, in bytes. */
+    const void *data; /**< Pointer to the raw address bytes; not owned by this struct. */
 
     /* private */
-    void         *priv;
+    void *priv; /**< Reserved for internal address-type implementation use; must not be accessed by callers. */
 } address;
 
+
+/** @brief Static initializer for an #address with explicit type, length, and data pointer. */
 #define ADDRESS_INIT(type, len, data) {type, len, data, NULL}
+
+/** @brief Static initializer for an empty #address (@c AT_NONE, zero length, NULL data). */
 #define ADDRESS_INIT_NONE ADDRESS_INIT(AT_NONE, 0, NULL)
 
 /** @brief Clear an address structure by setting its fields to default values.
@@ -408,22 +419,24 @@ add_address_to_hash64(uint64_t hash_val, const address *addr) {
  */
 WS_DLL_PUBLIC unsigned address_to_bytes(const address *addr, uint8_t *buf, unsigned buf_len);
 
-/* Types of port numbers Wireshark knows about. */
+/**
+ * @brief Transport-layer port number types recognized by Wireshark.
+ */
 typedef enum {
-    PT_NONE,            /* no port number */
-    PT_SCTP,            /* SCTP */
-    PT_TCP,             /* TCP */
-    PT_UDP,             /* UDP */
-    PT_DCCP,            /* DCCP */
-    PT_IPX,             /* IPX sockets */
-    PT_DDP,             /* DDP AppleTalk connection */
-    PT_IDP,             /* XNS IDP sockets */
-    PT_USB,             /* USB endpoint 0xffff means the host */
-    PT_I2C,
-    PT_IBQP,            /* Infiniband QP number */
-    PT_BLUETOOTH,
-    PT_IWARP_MPA,       /* iWarp MPA */
-    PT_MCTP
+    PT_NONE,       /**< No port number applicable */
+    PT_SCTP,       /**< Stream Control Transmission Protocol (SCTP) port */
+    PT_TCP,        /**< Transmission Control Protocol (TCP) port */
+    PT_UDP,        /**< User Datagram Protocol (UDP) port */
+    PT_DCCP,       /**< Datagram Congestion Control Protocol (DCCP) port */
+    PT_IPX,        /**< IPX socket number */
+    PT_DDP,        /**< AppleTalk Datagram Delivery Protocol (DDP) connection */
+    PT_IDP,        /**< XNS Internet Datagram Protocol (IDP) socket number */
+    PT_USB,        /**< USB endpoint number; 0xffff denotes the host */
+    PT_I2C,        /**< I2C bus endpoint */
+    PT_IBQP,       /**< InfiniBand Queue Pair (QP) number */
+    PT_BLUETOOTH,  /**< Bluetooth endpoint */
+    PT_IWARP_MPA,  /**< iWARP Marker PDU Aligned (MPA) framing endpoint */
+    PT_MCTP        /**< Management Component Transport Protocol (MCTP) endpoint */
 } port_type;
 
 #ifdef __cplusplus

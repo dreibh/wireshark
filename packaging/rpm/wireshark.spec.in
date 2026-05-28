@@ -33,6 +33,7 @@
 %bcond_with	ilbc
 %bcond_with	opus
 %bcond_with	libssh
+%bcond_with	cpuinfo
 
 # Fedora options to use clang as the compiler
 # https://docs.fedoraproject.org/en-US/packaging-guidelines/#compiler
@@ -194,6 +195,10 @@ BuildRequires:	(opus-devel or libopus-devel)
 BuildRequires:	libssh-devel
 %endif
 
+%if %{with cpuinfo}
+BuildRequires:	cpuinfo-devel
+%endif
+
 # Uncomment these if you want to be sure you get them...
 #BuildRequires:	krb5-devel
 #BuildRequires:	libsmi-devel
@@ -262,6 +267,7 @@ BuildRequires:	libQt5PrintSupport-devel
 BuildRequires:	libQt5Concurrent-devel
 BuildRequires:	libqt5-qtmultimedia-devel
 BuildRequires:	libqt5-linguist-devel
+BuildRequires:	libqt5-qtsvg-devel
 Requires:	libQt5Svg5
 # Need this for SUSE's suse_update_desktop_file macro
 BuildRequires:	update-desktop-files
@@ -269,6 +275,7 @@ BuildRequires:	update-desktop-files
 BuildRequires:	qt5-qtbase-devel
 BuildRequires:	qt5-qtmultimedia-devel
 BuildRequires:	qt5-linguist
+BuildRequires:	qt5-qtsvg-devel
 Requires:	qt5-qtsvg
 %endif
 %endif
@@ -278,10 +285,16 @@ BuildRequires:	qt6-base-devel
 BuildRequires:	qt6-multimedia-devel
 BuildRequires:	qt6-tools-devel
 BuildRequires:	qt6-linguist-devel
+BuildRequires:	qt6-svg-devel
+# Require SVG runtime since we don't actually link with the library
+Requires:	libQt6Svg6
 %else
 BuildRequires:	qt6-qtbase-devel
 BuildRequires:	qt6-qtmultimedia-devel
 BuildRequires:	qt6-qttools-devel
+BuildRequires:	qt6-qtsvg-devel
+# Require SVG runtime since we don't actually link with the library
+Requires:	qt6-qtsvg
 %endif
 BuildRequires:	qt6-qt5compat-devel
 BuildRequires:	libxkbcommon-devel
@@ -481,6 +494,11 @@ the strato text-mode variant, and necessary Stratoshark-related extcaps.
   -DENABLE_LIBSSH=ON \
 %else
   -DENABLE_LIBSSH=OFF \
+%endif
+%if %{with cpuinfo}
+  -DENABLE_CPUINFO=ON \
+%else
+  -DENABLE_CPUINFO=OFF \
 %endif
 
 # Fedora and SUSE 15 do out of source builds by default, but they store
