@@ -388,10 +388,13 @@ void ProfileDialog::buttonBoxAccepted()
             (newProfile->getName().compare(get_profile_name()) != 0) ||
             (newProfile->isGlobal() != currentProfile->isGlobal()))
         {
-            mainApp->emitAppSignal(MainApplication::ProfileChanging);
-
             // The new profile exists, change.
             mainApp->setConfigurationProfile(newProfile->getName().toUtf8().constData(), false);
+        }
+        else if (newProfile->isDefault() && currentProfile->isDefault())
+        {
+            // The default profile is reseting, ensure if reloads
+            mainApp->setConfigurationProfile(Q_NULLPTR, false);
         }
     }
 }
@@ -426,7 +429,7 @@ void ProfileDialog::dataChanged(const QModelIndex&)
     ok_button_->setEnabled(enable_ok);
 
     pd_ui_->profileTreeView->dataChanged(sort_model_->mapFromSource(model_->index(0, ProfileModel::COL_NAME)),
-        sort_model_->mapFromSource(model_->index(model_->rowCount() - 1, model_->columnCount())));
+        sort_model_->mapFromSource(model_->index(model_->rowCount() - 1, model_->columnCount() - 1)));
 }
 
 void ProfileDialog::filterChanged(const QString &text)

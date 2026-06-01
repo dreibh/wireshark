@@ -17,7 +17,6 @@
 
 #include "wireshark_main_window.h"
 #include <ui/qt/widgets/capture_card_widget.h>
-#include "in_packet_find_bar.h"
 
 /*
  * The generated Ui_WiresharkMainWindow::setupUi() can grow larger than our configured limit,
@@ -162,6 +161,7 @@ DIAG_ON(frame-larger-than=)
 #include <ui/qt/utils/stock_icon.h>
 #include "keyboard_shortcuts_dialog.h"
 #include "supported_protocols_dialog.h"
+#include "theme_debug_dialog.h"
 #include "tap_parameter_dialog.h"
 #include "tcp_stream_dialog.h"
 #include "time_shift_dialog.h"
@@ -2286,20 +2286,6 @@ void WiresharkMainWindow::findPacket()
     main_ui_->searchFrame->setFocus();
 }
 
-void WiresharkMainWindow::on_actionEditFindInPacket_triggered()
-{
-    if (in_packet_find_bar_) {
-        if (!in_packet_find_bar_->isVisible()) {
-            in_packet_find_bar_->showAnimated();
-        } else {
-            in_packet_find_bar_->hideAnimated();
-        }
-        if (main_ui_->searchFrame) {
-            main_ui_->searchFrame->refreshWidgets();
-        }
-    }
-}
-
 void WiresharkMainWindow::editTimeShift()
 {
     TimeShiftDialog *ts_dialog = new TimeShiftDialog(this, capture_file_.capFile());
@@ -2614,6 +2600,11 @@ void WiresharkMainWindow::connectViewMenuActions()
     connect(main_ui_->actionViewInternalsKeyboardShortcuts, &QAction::triggered, this, [this]() {
         KeyboardShortcutsDialog *keyboard_shortcuts_dlg = new KeyboardShortcutsDialog(this);
         keyboard_shortcuts_dlg->show();
+    });
+
+    connect(main_ui_->actionViewInternalsThemeDebug, &QAction::triggered, this, [this]() {
+        ThemeDebugDialog *theme_debug_dlg = new ThemeDebugDialog(this);
+        theme_debug_dlg->show();
     });
 
     connect(main_ui_->actionViewShowPacketInNewWindow, &QAction::triggered, this,

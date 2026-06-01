@@ -49,6 +49,9 @@
 #include <QUrl>
 #include <QMutex>
 #include <QDebug>
+#include <QEvent>
+#include <QHeaderView>
+#include <QResizeEvent>
 
 #include <epan/prefs.h>
 
@@ -116,6 +119,16 @@ InterfaceFrame::InterfaceFrame(QWidget * parent)
 
     ui->interfaceTree->setModel(&info_model_);
     ui->interfaceTree->setSortingEnabled(true);
+
+    // Long source names (e.g. extcap descriptions) are elided in the middle
+    // so both the type prefix and the trailing short id stay visible. The
+    // model supplies a ToolTipRole with the full name for hover.
+    ui->interfaceTree->setTextElideMode(Qt::ElideMiddle);
+
+    // Let the (last) sparkline column stretch to fill whatever the icon and
+    // name columns leave; resizeInterfaceColumns() caps the name column so
+    // this stretch always yields a generous sparkline width.
+    ui->interfaceTree->header()->setStretchLastSection(true);
 
     ui->interfaceTree->setItemDelegateForColumn(proxy_model_.mapSourceToColumn(IFTREE_COL_STATS), new SparkLineDelegate(this));
 
@@ -398,14 +411,60 @@ void InterfaceFrame::resetInterfaceTreeDisplay()
     if (proxy_model_.rowCount() > 0)
     {
         ui->interfaceTree->show();
-        ui->interfaceTree->resizeColumnToContents(proxy_model_.mapSourceToColumn(IFTREE_COL_EXTCAP));
-        ui->interfaceTree->resizeColumnToContents(proxy_model_.mapSourceToColumn(IFTREE_COL_DISPLAY_NAME));
-        ui->interfaceTree->resizeColumnToContents(proxy_model_.mapSourceToColumn(IFTREE_COL_STATS));
+        resizeInterfaceColumns();
     }
     else
     {
         ui->interfaceTree->hide();
     }
+}
+
+void InterfaceFrame::resizeInterfaceColumns()
+{
+    if (proxy_model_.rowCount() <= 0)
+        return;
+
+    int extcapCol = proxy_model_.mapSourceToColumn(IFTREE_COL_EXTCAP);
+    int nameCol = proxy_model_.mapSourceToColumn(IFTREE_COL_DISPLAY_NAME);
+
+    ui->interfaceTree->resizeColumnToContents(extcapCol);
+    ui->interfaceTree->resizeColumnToContents(nameCol);
+
+    // Cap the name column to at most half of the row's text area so the
+    // sparkline column (the stretched last section) always gets a generous
+    // share. Without this cap a long name (e.g. the packetflix extcap
+    // description) would grow the name column to its full content width and
+    // squeeze the sparkline down to a sliver. QTreeView elides the
+    // overflowing names (Qt::ElideMiddle, set in the constructor).
+    int textArea = ui->interfaceTree->viewport()->width()
+                   - ui->interfaceTree->columnWidth(extcapCol);
+    int maxNameW = textArea / 2;
+    if (maxNameW > 0 && ui->interfaceTree->columnWidth(nameCol) > maxNameW)
+        ui->interfaceTree->setColumnWidth(nameCol, maxNameW);
+    // The sparkline column then stretches to fill the remainder
+    // (header()->setStretchLastSection(true) in the constructor).
+}
+
+void InterfaceFrame::changeEvent(QEvent *evt)
+{
+    QFrame::changeEvent(evt);
+
+    // QTBUG-122109: re-polishing a QTreeView (which happens whenever the
+    // application style sheet is reapplied — on a theme change or an OS
+    // dark/light switch) resets every visible section to the minimum width,
+    // eliding the interface-name column since it isn't the last column.
+    // Re-fit the columns once the style change has propagated to the tree.
+    if (evt->type() == QEvent::StyleChange)
+        QTimer::singleShot(0, this, &InterfaceFrame::resizeInterfaceColumns);
+}
+
+void InterfaceFrame::resizeEvent(QResizeEvent *evt)
+{
+    QFrame::resizeEvent(evt);
+
+    // Re-fit the columns so the name column's cap (and thus the room left
+    // for the sparkline) tracks the available width as the window resizes.
+    resizeInterfaceColumns();
 }
 
 // XXX Should this be in capture/capture-pcap-util.[ch]?

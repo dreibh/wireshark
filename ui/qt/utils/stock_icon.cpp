@@ -124,13 +124,6 @@ StockIcon::StockIcon(const QString icon_name) :
             continue;
         }
 
-        // Fallback: check for SVG template icon
-        QString icon_path_svg_template = QStringLiteral("%1%2/%3.template.svg").arg(path_pfx_, type, icon_name);
-        if (QFile::exists(icon_path_svg_template)) {
-            addFile(icon_path_svg_template);
-            continue;
-        }
-
         // Regular full-color icons
         QString icon_path = QStringLiteral("%1%2/%3.png").arg(path_pfx_, type, icon_name);
         if (QFile::exists(icon_path)) {
@@ -160,6 +153,11 @@ StockIcon::StockIcon(const QString icon_name) :
 
 // Create a square icon filled with the specified color.
 QIcon StockIcon::colorIcon(const QRgb bg_color, const QRgb fg_color, const QString glyph)
+{
+    return colorIcon(QColor(bg_color), fg_color, glyph);
+}
+
+QIcon StockIcon::colorIcon(const QColor bg_color, const QRgb fg_color, const QString glyph)
 {
     QList<int> sizes = QList<int>() << 48 << 32 << 24 << 16 << 12;
     QIcon color_icon;
