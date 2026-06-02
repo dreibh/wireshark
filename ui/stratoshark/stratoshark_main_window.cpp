@@ -393,7 +393,6 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
     setFeaturesEnabled(false);
     connect(mainApp, &MainApplication::appInitialized, this, [this]() { setFeaturesEnabled(); });
     connect(mainApp, &MainApplication::appInitialized, this, &StratosharkMainWindow::applyGlobalCommandLineOptions);
-    connect(mainApp, &MainApplication::appInitialized, this, &StratosharkMainWindow::zoomText);
     connect(mainApp, &MainApplication::appInitialized, this, &StratosharkMainWindow::initViewColorizeMenu);
     connect(mainApp, &MainApplication::appInitialized, this, &StratosharkMainWindow::addStatsPluginsToMenu);
     connect(mainApp, &MainApplication::appInitialized, this, &StratosharkMainWindow::addDynamicMenus);
@@ -407,22 +406,21 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
     connect(mainApp, &MainApplication::preferencesChanged, this, &StratosharkMainWindow::layoutPanes);
     connect(mainApp, &MainApplication::preferencesChanged, this, &StratosharkMainWindow::layoutToolbars);
     connect(mainApp, &MainApplication::preferencesChanged, this, &StratosharkMainWindow::updatePreferenceActions);
-    connect(mainApp, &MainApplication::preferencesChanged, this, &StratosharkMainWindow::zoomText);
     connect(mainApp, &MainApplication::preferencesChanged, this, &StratosharkMainWindow::updateTitlebar);
 
     connect(WorkspaceState::instance(), &WorkspaceState::recentCaptureFilesChanged, this, &StratosharkMainWindow::updateRecentCaptures);
     connect(WorkspaceState::instance(), &WorkspaceState::recentFileStatusChanged, this, &StratosharkMainWindow::updateRecentCaptures);
     connect(mainApp, &MainApplication::preferencesChanged, this, &StratosharkMainWindow::updateRecentCaptures);
     updateRecentCaptures();
-    df_combo_box_ = new DisplayFilterCombo(this);
+    df_combo_box_ = new DisplayFilterEntry(this);
 
     funnel_statistics_ = new FunnelStatistics(this, capture_file_);
-    connect(df_combo_box_, &QComboBox::editTextChanged, funnel_statistics_, &FunnelStatistics::displayFilterTextChanged);
+    connect(df_combo_box_, &QLineEdit::textChanged, funnel_statistics_, &FunnelStatistics::displayFilterTextChanged);
     connect(funnel_statistics_, &FunnelStatistics::setDisplayFilter, this, &StratosharkMainWindow::setDisplayFilter);
     connect(funnel_statistics_, &FunnelStatistics::openCaptureFile, this,
             [=](QString cf_path, QString filter) { openCaptureFile(cf_path, filter); });
 
-    connect(df_combo_box_, &QComboBox::editTextChanged, this, &StratosharkMainWindow::updateDisplayFilterTranslationActions);
+    connect(df_combo_box_, &QLineEdit::textChanged, this, &StratosharkMainWindow::updateDisplayFilterTranslationActions);
 
     file_set_dialog_ = new FileSetDialog(this);
     connect(file_set_dialog_, &FileSetDialog::fileSetOpenCaptureFile, this, [=](QString cf_path) { openCaptureFile(cf_path); });
@@ -563,8 +561,8 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
     updateRecentActions();
     setForCaptureInProgress(false);
 
-    setTabOrder(main_ui_->mainToolBar, df_combo_box_->lineEdit());
-    setTabOrder(df_combo_box_->lineEdit(), packet_list_);
+    setTabOrder(main_ui_->mainToolBar, df_combo_box_);
+    setTabOrder(df_combo_box_, packet_list_);
     setTabOrder(packet_list_, proto_tree_);
     setTabOrder(proto_tree_, data_source_tab_);
 
@@ -609,9 +607,6 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
             packet_list_, &PacketList::setCaptureFile);
     connect(this, &StratosharkMainWindow::setCaptureFile,
             proto_tree_, &ProtoTree::setCaptureFile);
-
-    connect(mainApp, &MainApplication::zoomMonospaceFont, packet_list_, &PacketList::setMonospaceFont);
-    connect(mainApp, &MainApplication::zoomMonospaceFont, proto_tree_, &ProtoTree::setMonospaceFont);
 
     connectFileMenuActions();
     connectEditMenuActions();
@@ -849,7 +844,6 @@ void StratosharkMainWindow::updateStyleSheet()
 
 #endif
     welcome_page_->updateStyleSheets();
-    df_combo_box_->updateStyleSheet();
 }
 
 bool StratosharkMainWindow::eventFilter(QObject *obj, QEvent *event) {
@@ -861,8 +855,8 @@ bool StratosharkMainWindow::eventFilter(QObject *obj, QEvent *event) {
         QKeyEvent *kevt = static_cast<QKeyEvent *>(event);
         if (kevt->text().length() > 0 && kevt->text()[0].isPrint() &&
             !(kevt->modifiers() & Qt::ControlModifier)) {
-            df_combo_box_->lineEdit()->insert(kevt->text());
-            df_combo_box_->lineEdit()->setFocus();
+            df_combo_box_->insert(kevt->text());
+            df_combo_box_->setFocus();
             return true;
         }
     }
@@ -2405,9 +2399,6 @@ void StratosharkMainWindow::setForCapturedPackets(bool have_captured_packets)
     main_ui_->actionGoNextConversationPacket->setEnabled(have_captured_packets);
     main_ui_->actionGoPreviousConversationPacket->setEnabled(have_captured_packets);
 
-    main_ui_->actionViewZoomIn->setEnabled(have_captured_packets);
-    main_ui_->actionViewZoomOut->setEnabled(have_captured_packets);
-    main_ui_->actionViewNormalSize->setEnabled(have_captured_packets);
     main_ui_->actionViewResizeColumns->setEnabled(have_captured_packets);
     main_ui_->actionViewRedissect->setEnabled(have_captured_packets);
 

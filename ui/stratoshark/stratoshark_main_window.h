@@ -62,7 +62,7 @@
 #include "capture_file_dialog.h"
 #include "capture_file_properties_dialog.h"
 #include <ui/qt/utils/field_information.h>
-#include <ui/qt/widgets/display_filter_combo.h>
+#include <ui/qt/widgets/display_filter_entry.h>
 #include "main_window.h"
 
 class AccordionFrame;
@@ -888,10 +888,6 @@ private slots:
     /** @brief Applies current name-resolution preference changes to the packet list. */
     void setNameResolution();
 
-    /**
-     * @brief Adjusts the text zoom level in the packet details and bytes panes.
-     */
-    void zoomText();
 
     /** @brief Opens the Coloring Rules management dialog. */
     void showColoringRulesDialog();

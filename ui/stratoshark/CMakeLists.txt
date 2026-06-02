@@ -20,14 +20,13 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/apply_line_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/base_data_source_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_card_widget.h
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_combo.h
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_edit.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_entry.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/display_filter_entry.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/clickable_label.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/collapsible_section.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/compression_group_box.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/copy_from_profile_button.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/detachable_tabwidget.h
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/display_filter_combo.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/display_filter_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/dissector_syntax_line_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/dissector_tables_view.h
@@ -37,6 +36,8 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/elided_label.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/expert_info_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/field_filter_edit.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_edit.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_expression_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_expression_toolbar.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/find_line_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/follow_stream_text.h
@@ -91,6 +92,7 @@ set(WIRESHARK_UTILS_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/color_utils.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/data_printer.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/field_information.h
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/font_manager.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/frame_information.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/idata_printable.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/profile_switcher.h
@@ -108,6 +110,7 @@ set(WIRESHARK_UTILS_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_parser.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_stylesheet_loader.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_token_handler.h
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/themed_icon.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/variant_pointer.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/wireshark_mime_data.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/wireshark_zip_helper.h
@@ -119,7 +122,16 @@ set (STRATOSHARK_UTILS_HEADERS ${WIRESHARK_UTILS_HEADERS})
 set(WIRESHARK_MODEL_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/models/astringlist_list_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/atap_data_model.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/bookmark_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/cache_proxy_model.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/capture_filter_bookmark_model.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/display_filter_bookmark_model.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/capture_filter_completer.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/display_filter_completer.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/capture_filter_history_model.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/display_filter_history_model.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/capture_filter_validator.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/display_filter_validator.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/coloring_rules_delegate.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/coloring_rules_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/column_list_model.h
@@ -130,7 +142,10 @@ set(WIRESHARK_MODEL_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/models/expert_info_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/expert_info_proxy_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/fileset_entry_model.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/filter_completer.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/filter_history_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/filter_list_model.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/filter_validator.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/info_proxy_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/interface_sort_filter_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/interface_tree_cache_model.h
@@ -303,14 +318,13 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/additional_toolbar.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/apply_line_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_card_widget.cpp
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_combo.cpp
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_edit.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_filter_entry.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/display_filter_entry.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/clickable_label.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/collapsible_section.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/compression_group_box.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/copy_from_profile_button.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/detachable_tabwidget.cpp
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/display_filter_combo.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/display_filter_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/dissector_syntax_line_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/dissector_tables_view.cpp
@@ -320,6 +334,8 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/elided_label.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/expert_info_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/field_filter_edit.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_edit.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_expression_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_expression_toolbar.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/find_line_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/follow_stream_text.cpp
@@ -384,6 +400,7 @@ set(WIRESHARK_UTILS_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/color_utils.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/data_printer.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/field_information.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/font_manager.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/frame_information.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/profile_switcher.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/proto_node.cpp
@@ -398,6 +415,7 @@ set(WIRESHARK_UTILS_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_parser.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_stylesheet_loader.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_token_handler.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/themed_icon.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/system_theme_detector_common.cpp
 	${WIRESHARK_THEMES_PLATFORM_SRC}
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/wireshark_mime_data.cpp
@@ -410,7 +428,16 @@ set (STRATOSHARK_UTILS_SRCS ${WIRESHARK_UTILS_SRCS})
 set(WIRESHARK_MODEL_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/models/astringlist_list_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/atap_data_model.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/bookmark_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/cache_proxy_model.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/capture_filter_bookmark_model.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/display_filter_bookmark_model.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/capture_filter_completer.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/display_filter_completer.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/capture_filter_history_model.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/display_filter_history_model.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/capture_filter_validator.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/display_filter_validator.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/coloring_rules_delegate.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/coloring_rules_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/column_list_model.cpp
@@ -421,7 +448,10 @@ set(WIRESHARK_MODEL_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/models/expert_info_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/expert_info_proxy_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/fileset_entry_model.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/filter_completer.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/filter_history_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/filter_list_model.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/filter_validator.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/info_proxy_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/interface_sort_filter_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/interface_tree_cache_model.cpp
@@ -815,6 +845,7 @@ qt_add_resources(STRATOSHARK_QT_QRC
 	${CMAKE_SOURCE_DIR}/resources/layout.qrc
 	${SSICON_QRC}
 	${CMAKE_SOURCE_DIR}/resources/stock_icons.qrc
+	${CMAKE_SOURCE_DIR}/resources/theme_icons.qrc
 	${STRATOSHARK_I18N_QRC}
 	${STRATOSHARK_AUTHORS_QRC}
 	${STRATOSHARK_JSON_QRC}

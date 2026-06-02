@@ -437,7 +437,6 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     setFeaturesEnabled(false);
     connect(mainApp, &MainApplication::appInitialized, this, [this]() { setFeaturesEnabled(); });
     connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::applyGlobalCommandLineOptions);
-    connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::zoomText);
     connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::initViewColorizeMenu);
     connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::addStatsPluginsToMenu);
     connect(mainApp, &MainApplication::appInitialized, this, &WiresharkMainWindow::addDynamicMenus);
@@ -452,7 +451,6 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::layoutPanes);
     connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::layoutToolbars);
     connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::updatePreferenceActions);
-    connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::zoomText);
     connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::updateTitlebar);
     connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::updateAggregationView);
     connect(mainApp, &MainApplication::aggregationChanged, this, &WiresharkMainWindow::updateAggregationView);
@@ -462,15 +460,15 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     connect(mainApp, &MainApplication::preferencesChanged, this, &WiresharkMainWindow::updateRecentCaptures);
     updateRecentCaptures();
 
-    df_combo_box_ = new DisplayFilterCombo(this);
+    df_combo_box_ = new DisplayFilterEntry(this);
 
     funnel_statistics_ = new FunnelStatistics(this, capture_file_);
-    connect(df_combo_box_, &QComboBox::editTextChanged, funnel_statistics_, &FunnelStatistics::displayFilterTextChanged);
+    connect(df_combo_box_, &QLineEdit::textChanged, funnel_statistics_, &FunnelStatistics::displayFilterTextChanged);
     connect(funnel_statistics_, &FunnelStatistics::setDisplayFilter, this, &WiresharkMainWindow::setDisplayFilter);
     connect(funnel_statistics_, &FunnelStatistics::openCaptureFile, this,
             [=](QString cf_path, QString filter) { openCaptureFile(cf_path, filter); });
 
-    connect(df_combo_box_, &QComboBox::editTextChanged, this, &WiresharkMainWindow::updateDisplayFilterTranslationActions);
+    connect(df_combo_box_, &QLineEdit::textChanged, this, &WiresharkMainWindow::updateDisplayFilterTranslationActions);
 
     file_set_dialog_ = new FileSetDialog(this);
     connect(file_set_dialog_, &FileSetDialog::fileSetOpenCaptureFile, this, [=](QString cf_path) { openCaptureFile(cf_path); });
@@ -619,7 +617,7 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     updateRecentActions();
     setForCaptureInProgress(false);
 
-    setTabOrder(df_combo_box_->lineEdit(), packet_list_);
+    setTabOrder(df_combo_box_, packet_list_);
     setTabOrder(packet_list_, proto_tree_);
     setTabOrder(proto_tree_, data_source_tab_);
 
@@ -664,10 +662,6 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
             packet_list_, &PacketList::setCaptureFile);
     connect(this, &WiresharkMainWindow::setCaptureFile,
             proto_tree_, &ProtoTree::setCaptureFile);
-
-    connect(mainApp, &MainApplication::zoomMonospaceFont, packet_list_, &PacketList::setMonospaceFont);
-    connect(mainApp, &MainApplication::zoomRegularFont, packet_list_, &PacketList::setRegularFont);
-    connect(mainApp, &MainApplication::zoomMonospaceFont, proto_tree_, &ProtoTree::setMonospaceFont);
 
     connectFileMenuActions();
     connectEditMenuActions();
@@ -916,7 +910,6 @@ void WiresharkMainWindow::updateStyleSheet()
 
 #endif
     welcome_page_->updateStyleSheets();
-    df_combo_box_->updateStyleSheet();
 }
 
 bool WiresharkMainWindow::eventFilter(QObject *obj, QEvent *event) {
@@ -928,8 +921,8 @@ bool WiresharkMainWindow::eventFilter(QObject *obj, QEvent *event) {
         QKeyEvent *kevt = static_cast<QKeyEvent *>(event);
         if (kevt->text().length() > 0 && kevt->text()[0].isPrint() &&
             !(kevt->modifiers() & Qt::ControlModifier)) {
-            df_combo_box_->lineEdit()->insert(kevt->text());
-            df_combo_box_->lineEdit()->setFocus();
+            df_combo_box_->insert(kevt->text());
+            df_combo_box_->setFocus();
             return true;
         }
     }
@@ -2574,9 +2567,6 @@ void WiresharkMainWindow::setForCapturedPackets(bool have_captured_packets)
     main_ui_->actionGoFirstConversationPacket->setEnabled(have_captured_packets);
     main_ui_->actionGoLastConversationPacket->setEnabled(have_captured_packets);
 
-    main_ui_->actionViewZoomIn->setEnabled(have_captured_packets);
-    main_ui_->actionViewZoomOut->setEnabled(have_captured_packets);
-    main_ui_->actionViewNormalSize->setEnabled(have_captured_packets);
     main_ui_->actionViewResizeColumns->setEnabled(have_captured_packets);
     main_ui_->actionViewRedissect->setEnabled(have_captured_packets);
 
