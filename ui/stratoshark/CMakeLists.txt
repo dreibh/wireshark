@@ -7,15 +7,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 
-if(USE_qt6)
-  set(qtver "6")
-else()
-  set(qtver "5")
-endif()
+set(qtver "6")
 
 ADD_CUSTOM_CMAKE_INCLUDE()
 
 set(WIRESHARK_WIDGET_HEADERS
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/adaptive_tool_button.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/additional_toolbar.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/apply_line_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/base_data_source_view.h
@@ -48,6 +45,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/info_banner_widget.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/learn_card_widget.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/overlay_scroll_bar.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/adaptive_header_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/packet_list_header.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/path_selection_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/pref_module_view.h
@@ -315,6 +313,7 @@ set (STRATOSHARK_QT_HEADERS
 )
 
 set(WIRESHARK_WIDGET_SRCS
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/adaptive_tool_button.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/additional_toolbar.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/apply_line_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_card_widget.cpp
@@ -346,6 +345,7 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/info_banner_widget.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/learn_card_widget.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/overlay_scroll_bar.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/adaptive_header_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/packet_list_header.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/path_selection_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/pref_module_view.cpp
@@ -799,7 +799,6 @@ qrc_add_files(
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/accordion-frame.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/bluetooth-table.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card.qss
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/filter-combo.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/interface-toolbar-lineedit.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/welcome-header.qss
@@ -821,6 +820,7 @@ qrc_register(NAME themes TARGET stratoshark PREFIX "/themes")
 add_theme(NAME "wireshark" TARGET stratoshark )
 add_theme(NAME "stratoshark" TARGET stratoshark )
 add_theme(NAME "inverted" TARGET stratoshark )
+add_theme(NAME "midnight-blue" TARGET stratoshark )
 qrc_finalize(NAME themes TARGET stratoshark OUTPUT_VAR STRATOSHARK_THEMES_QRC)
 
 # Drop the file modification time of source files from generated files
@@ -854,11 +854,7 @@ qt_add_resources(STRATOSHARK_QT_QRC
 	OPTIONS ${CMAKE_AUTORCC_OPTIONS}
 )
 
-if (USE_qt6)
-	QT6_ADD_TRANSLATION(STRATOSHARK_QT_QM ${STRATOSHARK_QT_TS} OPTIONS -silent)
-else()
-	QT5_ADD_TRANSLATION(STRATOSHARK_QT_QM ${STRATOSHARK_QT_TS} OPTIONS -silent)
-endif()
+QT6_ADD_TRANSLATION(STRATOSHARK_QT_QM ${STRATOSHARK_QT_TS} OPTIONS -silent)
 
 add_custom_target(
 	stratoshark_translations
@@ -927,11 +923,6 @@ add_library(ui_stratoshark OBJECT
 
 target_include_directories(ui_stratoshark
 	SYSTEM PRIVATE
-		# Include Qt before anything else, see the comment about
-		# QT5_INCLUDE_DIRS in the top-level CMakeLists.txt
-		# Basically, qt@5 headers should be prioritized over qt@6 which
-		# would be found due to GCRYPT_INCLUDE_DIRS=/usr/local/include
-		${QT5_INCLUDE_DIRS}
 		${GCRYPT_INCLUDE_DIRS}
 		${MINIZIP_INCLUDE_DIRS}
 		${MINIZIPNG_INCLUDE_DIRS}
@@ -962,11 +953,6 @@ if(USE_qt6)
 		target_link_libraries(ui_stratoshark PUBLIC Qt6::DBus)
 	endif()
 endif()
-
-target_compile_definitions(ui_stratoshark
-	PUBLIC
-		${QT5_COMPILE_DEFINITIONS}
-)
 
 set_target_properties(ui_stratoshark PROPERTIES
 	LINK_FLAGS "${WS_LINK_FLAGS}"

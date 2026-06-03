@@ -771,7 +771,7 @@ Documentation:
   script:
     # XXX We might want to move this to wireshark-ubuntu-dev or debian-setup.sh.
     - DEBIAN_FRONTEND=noninteractive apt-get update
-    - DEBIAN_FRONTEND=noninteractive apt-get --yes install ruby-asciidoctor-pdf ruby-coderay ruby-dev
+    - DEBIAN_FRONTEND=noninteractive apt-get --yes install asciidoctor-pdf ruby-coderay ruby-dev
     - NOKOGIRI_USE_SYSTEM_LIBRARIES=1 gem install asciidoctor-epub3
     - mkdir build
     - cd build
@@ -919,27 +919,6 @@ Ubuntu GCC Build:
     reports:
       junit: ubuntu_tests.xml
 
-Ubuntu Qt5 Build:
-  extends: .build-ubuntu
-  rules:
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      interruptible: true
-      changes:
-        - "ui/**/*"
-    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
-      when: manual
-      allow_failure: true
-  needs:
-    - job: "Commit Check"
-      optional: true
-  script:
-    - ../tools/debian-setup.sh --install-qt5-deps --yes --no-install-recommends
-    - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
-    - cmake --preset=ninja_ccache -DENABLE_WERROR=ON -DUSE_qt6=OFF ..
-    - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
-    - ninja
-    - run/wireshark -v
-
 # Fedora doesn't appear to have checks in place to ensure that their MinGW Qt
 # packages work, so disable the MinGW builds for now.
 .Fedora MinGW Build:
@@ -1075,6 +1054,8 @@ Windows Build:
     - cmake -G "Visual Studio 18 2026" -A x64 -DENABLE_LTO=off -DBUILD_stratoshark=on ..
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug Wireshark.slnx
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug test-programs.vcxproj
+    # jsonschema gates the theme.jsonc schema tests in suite_theme; the runner image doesn't ship it.
+    - C:\Windows\py.exe -m pip install --quiet jsonschema
     - C:\Windows\py.exe -m pytest --build-type=Debug --disable-gui --enable-stratoshark --junitxml=../windows_tests.xml
   artifacts:
     when: always

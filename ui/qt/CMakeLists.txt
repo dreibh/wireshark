@@ -7,15 +7,12 @@
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
 
-if(USE_qt6)
-	set(qtver "6")
-else()
-	set(qtver "5")
-endif()
+set(qtver "6")
 
 ADD_CUSTOM_CMAKE_INCLUDE()
 
 set(WIRESHARK_WIDGET_HEADERS
+	widgets/adaptive_tool_button.h
 	widgets/additional_toolbar.h
 	widgets/apply_line_edit.h
 	widgets/base_data_source_view.h
@@ -49,6 +46,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/info_banner_widget.h
 	widgets/learn_card_widget.h
 	widgets/overlay_scroll_bar.h
+	widgets/adaptive_header_view.h
 	widgets/packet_list_header.h
 	widgets/path_selection_edit.h
 	widgets/pref_module_view.h
@@ -304,6 +302,7 @@ set(WIRESHARK_QT_HEADERS
 	supported_protocols_dialog.h
 	tabnav_tree_widget.h
 	tap_parameter_dialog.h
+	tcp_dedup_dialog.h
 	tcp_stream_dialog.h
 	theme_debug_dialog.h
 	time_shift_dialog.h
@@ -339,6 +338,7 @@ if(LUA_FOUND)
 endif()
 
 set(WIRESHARK_WIDGET_SRCS
+	widgets/adaptive_tool_button.cpp
 	widgets/additional_toolbar.cpp
 	widgets/apply_line_edit.cpp
 	widgets/capture_card_widget.cpp
@@ -371,6 +371,7 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/info_banner_widget.cpp
 	widgets/learn_card_widget.cpp
 	widgets/overlay_scroll_bar.cpp
+	widgets/adaptive_header_view.cpp
 	widgets/packet_list_header.cpp
 	widgets/path_selection_edit.cpp
 	widgets/pref_module_view.cpp
@@ -624,6 +625,7 @@ set(WIRESHARK_QT_SRC
 	supported_protocols_dialog.cpp
 	tabnav_tree_widget.cpp
 	tap_parameter_dialog.cpp
+	tcp_dedup_dialog.cpp
 	tcp_stream_dialog.cpp
 	theme_debug_dialog.cpp
 	time_shift_dialog.cpp
@@ -886,7 +888,6 @@ qrc_add_files(
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/accordion-frame.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/bluetooth-table.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card.qss
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/filter-combo.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/interface-toolbar-lineedit.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/welcome-header.qss
@@ -908,6 +909,7 @@ qrc_register(NAME themes PREFIX "/themes")
 add_theme(NAME "wireshark")
 add_theme(NAME "stratoshark")
 add_theme(NAME "inverted")
+add_theme(NAME "midnight-blue")
 qrc_finalize(NAME themes OUTPUT_VAR THEMES_QRC)
 
 # Drop the file modification time of source files from generated files
@@ -942,13 +944,8 @@ qt_add_resources(WIRESHARK_QT_QRC
 )
 
 # qt[56]_add_translation is deprecated in Qt 6.2 and later for
-# qt[6]_add_translations, but until we drop Qt 5.15 support it
-# would be more complicated to have two different approaches.
-if (USE_qt6)
-	QT6_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS} OPTIONS -silent)
-else()
-	QT5_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS} OPTIONS -silent)
-endif()
+# qt[6]_add_translations, so we should switch as Qt 5 support is dropped.
+QT6_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS} OPTIONS -silent)
 
 add_custom_target(
 	translations
@@ -978,8 +975,6 @@ set_source_files_properties(
 	PROPERTIES
 	SKIP_AUTOGEN ON
 )
-
-add_definitions(${QT5_DEFINITIONS})
 
 register_tap_files(wireshark-tap-register.c
 	${WIRESHARK_QT_TAP_SRC}
@@ -1040,11 +1035,6 @@ endif()
 
 target_include_directories(qtui
 	SYSTEM PRIVATE
-		# Include Qt before anything else, see the comment about
-		# QT5_INCLUDE_DIRS in the top-level CMakeLists.txt
-		# Basically, qt@5 headers should be prioritized over qt@6 which
-		# would be found due to GCRYPT_INCLUDE_DIRS=/usr/local/include
-		${QT5_INCLUDE_DIRS}
 		${GCRYPT_INCLUDE_DIRS}
 		${MINIZIP_INCLUDE_DIRS}
 		${MINIZIPNG_INCLUDE_DIRS}
@@ -1057,11 +1047,6 @@ target_include_directories(qtui
 		${CMAKE_CURRENT_BINARY_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}
 		${CMAKE_CURRENT_SOURCE_DIR}/lua_debugger
-)
-
-target_compile_definitions(qtui
-	PUBLIC
-		${QT5_COMPILE_DEFINITIONS}
 )
 
 set_target_properties(qtui PROPERTIES

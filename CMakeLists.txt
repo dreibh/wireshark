@@ -16,10 +16,7 @@ if(DEFINED ENV{FORCE_CMAKE_NINJA_NON_VERBOSE})
 endif()
 
 # https://doc.qt.io/qt-6/cmake-supported-cmake-versions.html
-cmake_minimum_required(VERSION 3.20)
-if(POLICY CMP0127)
-	cmake_policy(SET CMP0127 NEW)
-endif()
+cmake_minimum_required(VERSION 3.22)
 if(POLICY CMP0135)
 	cmake_policy(SET CMP0135 NEW)
 endif()
@@ -33,6 +30,54 @@ else()
 endif()
 
 project(${_project_name} C CXX)
+
+#
+# SunOS 5.x (the SVR4-based version, i.e. the one people usually call
+# "Solaris")) is annoying. (We don't support previous versions.)
+#
+# The Sun/Oracle compilers default to building 32-bit *even when running
+# on 64-bit platforms*; you have to provide an explicit flag to force a
+# 64-bit build. (This might be a backwards-compatibility thing.)
+#
+# Fortunately for us, 1) we require C17 support and 2) the Sun/Oracle
+# compilers don't offer C17 support, so we can't use them, and don't
+# have to worry about them.
+#
+# CMake, however, doesn't seem to understand Solaris's multi-architecture
+# file pathname structure. It's different from the structures used on
+# Linux distributions; it appears that the /usr/lib directory contains
+# stuff for 32-bit targets, and that there's a /usr/lib/${isa} directory
+# for the equivalent stuff for 64-bit targets.
+#
+# This means that, if you're doing a 64-bit build, find_package() will
+# look in /usr/lib/cmake rather than /usr/lib/${isa}/cmake, and the
+# FindPkgConfig functions/macros will look in /usr/lib/pkgconfig rather
+# than /usr/lib/${isa}/pkgconfig. This means that, if you don't have
+# 32-bit versions of various packages installed, those packages won't
+# be found, and if you *do* have 32-bit version installed, they will be
+# found and used for a 64-bit build.
+#
+# Both of those will produce hard-to-diagnose failures.
+#
+# So, if we're doing a 64-bit build on SunOS 5.x, we use "isainfo -n" to
+# get the ${isa} value, and set CMAKE_LIBRARY_ARCHITECTURE to that value
+# to force CMake to look in the right places.
+#
+if(CMAKE_SYSTEM_NAME STREQUAL "SunOS" AND CMAKE_SYSTEM_VERSION MATCHES "5[.][0-9.]*")
+	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+		execute_process(
+		    COMMAND "isainfo" "-n"
+		    OUTPUT_VARIABLE CMAKE_LIBRARY_ARCHITECTURE
+		    RESULT_VARIABLE status
+		    OUTPUT_STRIP_TRAILING_WHITESPACE)
+		if(status)
+			#
+			# isainfo -n failed; give up.
+			#
+			message(FATAL_ERROR "isainfo -n failed, so we can't determine the target architecture")
+		endif()
+	endif()
+endif()
 
 if(WIN32)
 	set(_msystem False)
@@ -1453,55 +1498,7 @@ if(BUILD_wireshark OR BUILD_stratoshark)
 			message(WARNING "Qt 6.5.3 or later is required.")
 		endif()
 	else() # USE_qt6
-		set(qtver 5)
-		if(DEFINED ENV{WIRESHARK_QT5_PREFIX_PATH})
-			list(APPEND CMAKE_PREFIX_PATH $ENV{WIRESHARK_QT5_PREFIX_PATH})
-		endif()
-		message(DEPRECATION "Support for building with Qt 5 will be removed in the future.")
-		if(APPLE OR WIN32)
-			message(FATAL_ERROR "Qt 6 is required to build on ${CMAKE_SYSTEM_NAME}.")
-		endif()
-
-		set(QT5_PACKAGELIST
-			Qt5Core
-			Qt5Gui
-			Qt5LinguistTools
-			Qt5PrintSupport
-			Qt5Widgets
-			Qt5Concurrent
-			Qt5Svg
-		)
-		set(QT5_OPTIONAL_PACKAGELIST
-			# DBus is a core component of Qt6, but was an add-on in Qt5.
-			Qt5DBus
-			Qt5Multimedia
-		)
-		foreach(_qt5_package IN LISTS QT5_PACKAGELIST)
-			find_package(${_qt5_package} REQUIRED ${QT5_FIND_PACKAGE_OPTIONS})
-			list(APPEND QT5_LIBRARIES ${${_qt5_package}_LIBRARIES})
-			list(APPEND QT5_INCLUDE_DIRS ${${_qt5_package}_INCLUDE_DIRS})
-			list(APPEND QT5_COMPILE_DEFINITIONS ${${_qt5_package}_COMPILE_DEFINITIONS})
-		endforeach()
-		foreach(_qt5_package IN LISTS QT5_OPTIONAL_PACKAGELIST)
-			find_package(${_qt5_package} ${QT5_FIND_PACKAGE_OPTIONS})
-			list(APPEND QT5_LIBRARIES ${${_qt5_package}_LIBRARIES})
-			list(APPEND QT5_INCLUDE_DIRS ${${_qt5_package}_INCLUDE_DIRS})
-			list(APPEND QT5_COMPILE_DEFINITIONS ${${_qt5_package}_COMPILE_DEFINITIONS})
-		endforeach()
-
-		if (Qt5Widgets_VERSION VERSION_LESS 5.15)
-			message(FATAL_ERROR "Qt 5.15 or later is required. Qt 6 is recommended.")
-		endif()
-
-		if(APPLE AND "/usr/local/opt/qt5/lib/QtCore.framework" IN_LIST Qt5Core_INCLUDE_DIRS)
-			# When qt@6 and qt@5 are both installed via Homebrew,
-			# /usr/local/include/QtCore/qvariant.h points to Qt 6 headers.
-			# Normally the Headers from `-iframework /usr/local/opt/qt5/lib`
-			# should be used, but `-isystem /usr/local/include` (via
-			# Libgcrypt and others) seems to prioritized, resulting in use
-			# of the Qt6 headers. Resolve this by explicit including Qt5.
-			list(APPEND QT5_INCLUDE_DIRS /usr/local/opt/qt5/include)
-		endif()
+		message(FATAL_ERROR "Support for building with Qt 5 has been removed.")
 	endif() # USE_qt6
 
 	set(QT_FOUND ON)
@@ -1511,10 +1508,10 @@ if(BUILD_wireshark OR BUILD_stratoshark)
 	if(APPLE)
 		ws_find_package(Sparkle ENABLE_SPARKLE HAVE_SOFTWARE_UPDATE 2)
 	endif()
-	if(Qt6Multimedia_FOUND OR Qt5Multimedia_FOUND)
+	if(Qt6Multimedia_FOUND)
 		set(QT_MULTIMEDIA_LIB 1)
 	endif()
-	if(Qt6DBus_FOUND OR Qt5DBus_FOUND)
+	if(Qt6DBus_FOUND)
 		set(QT_DBUS_LIB 1)
 	endif()
 	if(NOT DEFINED MOC_OPTIONS)
@@ -1648,9 +1645,9 @@ endif()
 
 if (QT_FOUND)
 	# CMake uses qmake to find Qt4. It relies on Qt's CMake modules
-	# to find Qt5. This means that we can't assume that the qmake
+	# to find Qt >= 5. This means that we can't assume that the qmake
 	# in our PATH is the correct one. We can fetch qmake's location
-	# from Qt5::qmake, which is defined in Qt5CoreConfigExtras.cmake.
+	# from Qt6::qmake, which is defined in Qt6CoreConfigExtras.cmake.
 	get_target_property(QT_QMAKE_EXECUTABLE Qt${qtver}::qmake IMPORTED_LOCATION)
 	get_filename_component(_qt_bin_path "${QT_QMAKE_EXECUTABLE}" DIRECTORY)
 	set(QT_BIN_PATH "${_qt_bin_path}" CACHE INTERNAL
@@ -1910,7 +1907,7 @@ if(BUILD_wireshark AND QT_FOUND)
 	add_subdirectory( ui/qt )
 	add_subdirectory( ui/plugins )
 elseif(BUILD_wireshark AND USE_qt6)
-	message(VERBOSE "To use Qt5 instead of Qt6 use CMake option USE_qt6=OFF.")
+	message(WARNING "Building Wireshark requested but Qt 6.2 or later not found.")
 endif()
 
 if(BUILD_stratoshark AND QT_FOUND)
@@ -3128,7 +3125,6 @@ if(BUILD_wireshark AND QT_FOUND)
 		wiretap
 		epan
 		summary
-		${QT5_LIBRARIES}
 		${APPLE_APPLICATION_SERVICES_LIBRARY}
 		${APPLE_APPKIT_LIBRARY}
 		${APPLE_CORE_FOUNDATION_LIBRARY}
@@ -3245,7 +3241,6 @@ if(BUILD_stratoshark AND QT_FOUND)
 		wiretap
 		epan
 		summary
-		${QT5_LIBRARIES}
 		${APPLE_APPLICATION_SERVICES_LIBRARY}
 		${APPLE_APPKIT_LIBRARY}
 		${APPLE_CORE_FOUNDATION_LIBRARY}
@@ -4197,12 +4192,10 @@ if(RPMBUILD_EXECUTABLE)
 	if(CCACHE_EXECUTABLE)
 		list(APPEND _rpmbuild_with_args --with ccache)
 	endif()
-	if(NOT BUILD_wireshark)
-		list(APPEND _rpmbuild_with_args --without qt5 --without qt6)
-	elseif(USE_qt6)
-		list(APPEND _rpmbuild_with_args --without qt5 --with qt6)
+	if(QT_FOUND AND (BUILD_wireshark OR BUILD_stratoshark))
+		list(APPEND _rpmbuild_with_args --with qt6)
 	else()
-		list(APPEND _rpmbuild_with_args --with qt5 --without qt6)
+		list(APPEND _rpmbuild_with_args --without qt6)
 	endif()
 	if(SINSP_FOUND)
 		if(BUILD_stratoshark)

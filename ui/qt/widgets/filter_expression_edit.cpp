@@ -11,11 +11,16 @@
 
 #include <ui/qt/widgets/filter_expression_edit.h>
 
+#include <ui/qt/widgets/adaptive_tool_button.h>
 #include <ui/qt/models/filter_history_model.h>
 #include <ui/qt/models/bookmark_model.h>
+#include <ui/qt/utils/font_manager.h>
 #include <ui/qt/utils/stock_icon.h>
 #include <ui/qt/utils/theme_manager.h>
 #include <ui/qt/utils/themes/themed_icon.h>
+#include <ui/qt/utils/theme_manager.h>
+
+#include <ui/recent.h>
 
 #include <QAction>
 #include <QApplication>
@@ -29,26 +34,14 @@
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
+#include <QStyle>
 #include <QToolButton>
 #include <QWidgetAction>
+#include <QMargins>
 
 #include <functional>
 
 namespace {
-
-// An opaque "muted" foreground: the text color blended `toward_bg` of the way
-// to the window background. Using a solid blend (not an alpha) keeps it legible
-// in both light and dark mode and under macOS menu vibrancy, where alpha text
-// washes out.
-QColor mutedColor(const QPalette &pal, qreal toward_bg)
-{
-    const QColor fg = pal.color(QPalette::WindowText);
-    const QColor bg = pal.color(QPalette::Window);
-    return QColor::fromRgbF(
-        fg.redF()   + (bg.redF()   - fg.redF())   * toward_bg,
-        fg.greenF() + (bg.greenF() - fg.greenF()) * toward_bg,
-        fg.blueF()  + (bg.blueF()  - fg.blueF())  * toward_bg);
-}
 
 // A bookmark-menu row: monospace expression on the left, muted name on the
 // right (per the design mockup). No Q_OBJECT — it only overrides event
@@ -66,8 +59,8 @@ public:
 
         // Monospace expression, sized to match the surrounding menu text.
         QLabel *expr_label = new QLabel(expr, this);
-        QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
-        mono.setPointSizeF(base.pointSizeF());
+        QFont mono = FontManager::monospaceFont();
+        mono.setPointSizeF(base.pointSizeF() - 1.0); // match the header's relative sizing
         expr_label->setFont(mono);
         expr_label->setAttribute(Qt::WA_TransparentForMouseEvents);
         layout->addWidget(expr_label);
@@ -80,9 +73,6 @@ public:
             nf.setPointSizeF(base.pointSizeF() - 1.0);
             name_label->setFont(nf);
             name_label->setAttribute(Qt::WA_TransparentForMouseEvents);
-            QPalette pal = name_label->palette();
-            pal.setColor(QPalette::WindowText, mutedColor(pal, 0.40));
-            name_label->setPalette(pal);
             layout->addWidget(name_label);
         }
     }
@@ -119,34 +109,19 @@ private:
     bool hovered_ = false;
 };
 
-// QLineEdit creates one internal QToolButton per side action but exposes no
-// action-to-button accessor. Each addAction() builds its button synchronously,
-// so right afterwards the one child not yet in `known` is the button just added.
-// `known` accumulates across calls so each capture returns a distinct button.
-QToolButton *takeNewButton(const QLineEdit *edit, QList<QToolButton *> &known)
-{
-    const QList<QToolButton *> all = edit->findChildren<QToolButton *>();
-    for (QToolButton *button : all) {
-        if (!known.contains(button)) {
-            known.append(button);
-            return button;
-        }
-    }
-    return nullptr;
-}
-
 } // namespace
+
+// Spacing (px) between adjacent inline buttons and between a button and the text
+// area; small so the affordances read as a tight cluster.
+static const int inline_button_spacing_ = 2;
 
 FilterExpressionEdit::FilterExpressionEdit(QWidget *parent) :
     FilterEdit(parent),
-    bookmark_action_(nullptr),
-    clear_action_(nullptr),
-    history_action_(nullptr),
-    apply_action_(nullptr),
     bookmark_button_(nullptr),
     clear_button_(nullptr),
     history_button_(nullptr),
     apply_button_(nullptr),
+    inline_layout_(nullptr),
     bookmark_menu_(nullptr),
     history_menu_(nullptr),
     save_action_(nullptr),
@@ -157,7 +132,8 @@ FilterExpressionEdit::FilterExpressionEdit(QWidget *parent) :
     historyModel_(nullptr),
     bookmarkModel_(nullptr),
     completion_source_(new QConcatenateTablesProxyModel(this)),
-    apply_visible_(false)
+    apply_visible_(false),
+    buttons_left_aligned_(recent.gui_geometry_leftalign_actions)
 {
     // --- Bookmark menu, built once and kept in sync with the model. -------
     // The actions sit at the top, then a separator, then the saved-filter
@@ -187,34 +163,64 @@ FilterExpressionEdit::FilterExpressionEdit(QWidget *parent) :
     // --- Recent-list popup, filled on demand. ----------------------------
     history_menu_ = new QMenu(this);
 
-    // --- In-line actions (native addAction layout, no hand geometry). ----
-    // Capture the internal icon buttons as their actions create them, so
-    // paintEvent() can fence the icon zones off from the tint and anchor the
-    // dividers to the right button edges.
-    QList<QToolButton *> known_buttons;
+    // --- In-line buttons, placed by a layout and sized by AdaptiveToolButton. -
+    // Each button hugs its glyph and tracks zoom; the layout below reflows them
+    // on resize, and updateInlineMargins() reserves matching text margins.
+    // Buttons start hidden and are shown by their model/text/apply conditions.
 
     // Leading: bookmark.
-    bookmark_action_ = new QAction(StockIcon("x-capture-filter-bookmark"), QString(), this);
-    bookmark_action_->setToolTip(tr("Manage saved filters"));
-    addAction(bookmark_action_, QLineEdit::LeadingPosition);
-    bookmark_button_ = takeNewButton(this, known_buttons);
-    bookmark_action_->setVisible(false);
-    connect(bookmark_action_, &QAction::triggered, this, [this]() {
+    bookmark_button_ = new AdaptiveToolButton(this);
+    bookmark_button_->setIconPadding(1);
+    bookmark_button_->setBaseIconSize(QSize(14, 14));
+    bookmark_button_->setIcon(StockIcon("x-capture-filter-bookmark"));
+    bookmark_button_->setToolTip(tr("Manage saved filters"));
+    bookmark_button_->setVisible(false);
+    connect(bookmark_button_, &QAbstractButton::clicked, this, [this]() {
         bookmark_menu_->popup(mapToGlobal(QPoint(0, height())));
     });
 
-    // Trailing actions are right-anchored: the first added sits nearest the
-    // edge, each subsequent one to its left.  Adding history, then apply, then
-    // clear yields a left-to-right order of clear, apply, history -- matching
-    // the long-standing toolbar layout.
-    history_action_ = new QAction(
-        ThemedIcon(":/svg_icons/x-filter-history.svg", ThemeManager::PaletteText),
-        QString(), this);
-    history_action_->setToolTip(tr("Recent filters"));
-    addAction(history_action_, QLineEdit::TrailingPosition);
-    history_button_ = takeNewButton(this, known_buttons);
-    history_action_->setVisible(false);
-    connect(history_action_, &QAction::triggered, this, [this]() {
+    // Trailing trio, in left-to-right order clear, apply, history.
+    clear_button_ = new AdaptiveToolButton(this);
+    clear_button_->setIconPadding(1);
+    clear_button_->setBaseIconSize(QSize(14, 14));
+    // Neutral at rest, red on hover (QIcon::Active) — the old "x-filter-clear"
+    // gray→scarlet behaviour, now theme-token driven.
+    clear_button_->setIcon(ThemedIcon(":/svg_icons/x-filter-clear.svg",
+                                      ThemeManager::PaletteText, ThemeManager::FilterClear));
+    clear_button_->setToolTip(tr("Clear the filter"));
+    clear_button_->setVisible(false);
+    connect(clear_button_, &QAbstractButton::clicked, this, [this]() {
+        clear();
+        emit cleared();
+    });
+
+    // Blue when there is something to apply (item 6). The state tint stays in
+    // the text area (paintEvent fences the icon strips with the neutral field
+    // bg), so the blue glyph reads as its own affordance rather than clashing
+    // with a green "valid" field. Disabled (nothing to apply) dims via the
+    // engine's Disabled mode.
+    apply_button_ = new AdaptiveToolButton(this);
+    apply_button_->setIconPadding(1);
+    apply_button_->setIcon(ThemedIcon(":/svg_icons/x-filter-apply.svg", ThemeManager::FilterApply));
+    apply_button_->setToolTip(tr("Apply this filter"));
+    // The apply glyph is a wide 24x14 chevron (its native SVG size); set that
+    // fixed so a square box doesn't squeeze it short. AdaptiveToolButton scales
+    // width and height independently, so the 24:14 aspect holds under zoom.
+    apply_button_->setBaseIconSize(QSize(24, 14));
+    apply_button_->setVisible(false);
+    connect(apply_button_, &QAbstractButton::clicked, this, &FilterExpressionEdit::applyExpression);
+
+    history_button_ = new AdaptiveToolButton(this);
+    history_button_->setIconPadding(1);
+    history_button_->setIcon(ThemedIcon(":/svg_icons/x-filter-history.svg", ThemeManager::PaletteText));
+    history_button_->setToolTip(tr("Recent filters"));
+    // Size the recent-filters dropdown like a disclosure arrow rather than a full
+    // action glyph. QStyle exposes no tree-arrow metric; PM_MenuButtonIndicator
+    // is the dropdown-indicator size and the closest equivalent.
+    const int arrow = style()->pixelMetric(QStyle::PM_MenuButtonIndicator, nullptr, this);
+    history_button_->setBaseIconSize(QSize(arrow, arrow) * 2);
+    history_button_->setVisible(false);
+    connect(history_button_, &QAbstractButton::clicked, this, [this]() {
         populateHistoryMenu();
         // Span at least the field width, like the old combo dropdown; the menu
         // still grows wider for longer entries.
@@ -222,35 +228,21 @@ FilterExpressionEdit::FilterExpressionEdit(QWidget *parent) :
         history_menu_->popup(mapToGlobal(QPoint(0, height())));
     });
 
-    // Monochrome like clear/history: the validity feedback lives in the central
-    // background tint, so a coloured apply glyph would clash with it (a green
-    // apply beside a green valid field).
-    apply_action_ = new QAction(
-        ThemedIcon(":/svg_icons/x-filter-apply.svg", ThemeManager::PaletteText),
-        QString(), this);
-    apply_action_->setToolTip(tr("Apply this filter"));
-    addAction(apply_action_, QLineEdit::TrailingPosition);
-    apply_button_ = takeNewButton(this, known_buttons);
-    apply_action_->setVisible(false);
-    connect(apply_action_, &QAction::triggered, this, &FilterExpressionEdit::applyExpression);
-
-    clear_action_ = new QAction(
-        ThemedIcon(":/svg_icons/x-filter-clear.svg", ThemeManager::PaletteText),
-        QString(), this);
-    clear_action_->setToolTip(tr("Clear the filter"));
-    addAction(clear_action_, QLineEdit::TrailingPosition);
-    clear_button_ = takeNewButton(this, known_buttons);
-    clear_action_->setVisible(false);
-    connect(clear_action_, &QAction::triggered, this, [this]() {
-        clear();
-        emit cleared();
-    });
+    // Lay the buttons out inside the field. rebuildInlineLayout() places them for
+    // the current alignment; hidden buttons take no layout space, so the row
+    // tightens as conditions change.
+    const int frame = style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, this);
+    inline_layout_ = new QHBoxLayout(this);
+    inline_layout_->setContentsMargins(frame + 1, 0, frame + 1, 0);
+    inline_layout_->setSpacing(inline_button_spacing_);
+    rebuildInlineLayout();
 
     // --- Generic signal/state plumbing. ----------------------------------
     connect(this, &QLineEdit::textChanged, this, [this](const QString &t) {
         updateClearVisible();
         updateApplyEnabled();
         updateRemoveEnabled();
+        updateBookmarkState();
         emit textChangedExpr(t);
     });
     connect(this, &FilterEdit::syntaxStateChanged, this, [this](FilterEdit::SyntaxState s) {
@@ -260,9 +252,16 @@ FilterExpressionEdit::FilterExpressionEdit(QWidget *parent) :
     });
     connect(this, &QLineEdit::returnPressed, this, &FilterExpressionEdit::applyExpression);
 
+    // Button widths change with zoom; keep the reserved text margins in step so
+    // the text/affordance boundary stays correct.
+    connect(FontManager::instance(), &FontManager::zoomChanged,
+            this, &FilterExpressionEdit::updateInlineMargins);
+
     updateClearVisible();
     updateApplyEnabled();
     updateRemoveEnabled();
+    updateBookmarkState();
+    updateInlineMargins();
 }
 
 void FilterExpressionEdit::setHistoryModel(FilterHistoryModel *model)
@@ -280,7 +279,8 @@ void FilterExpressionEdit::setHistoryModel(FilterHistoryModel *model)
     if (historyModel_)
         completion_source_->addSourceModel(historyModel_);
 
-    history_action_->setVisible(historyModel_ != nullptr);
+    history_button_->setVisible(historyModel_ != nullptr);
+    updateInlineMargins();
 }
 
 void FilterExpressionEdit::setBookmarkModel(BookmarkModel *model)
@@ -310,21 +310,25 @@ void FilterExpressionEdit::setBookmarkModel(BookmarkModel *model)
                 this, &FilterExpressionEdit::rebuildBookmarkEntries);
     }
 
-    bookmark_action_->setVisible(bookmarkModel_ != nullptr);
+    bookmark_button_->setVisible(bookmarkModel_ != nullptr);
     rebuildBookmarkEntries();
     updateRemoveEnabled();
+    updateInlineMargins();
 }
 
 void FilterExpressionEdit::setApplyActionVisible(bool visible)
 {
     apply_visible_ = visible;
-    apply_action_->setVisible(visible);
+    apply_button_->setVisible(visible);
     updateApplyEnabled();
+    updateInlineMargins();
 }
 
-void FilterExpressionEdit::setBookmarkIcon(const QIcon &icon)
+void FilterExpressionEdit::setBookmarkIcon(const QIcon &normal, const QIcon &matching)
 {
-    bookmark_action_->setIcon(icon);
+    normal_bookmark_icon_ = normal;
+    matching_bookmark_icon_ = matching;
+    updateBookmarkState();
 }
 
 void FilterExpressionEdit::setPreferencesActionVisible(bool visible)
@@ -375,6 +379,7 @@ void FilterExpressionEdit::rebuildBookmarkEntries()
     if (rows == 0) {
         // Nothing saved: drop the separator too, so the menu is just the actions.
         static_separator_->setVisible(false);
+        updateBookmarkState(); // e.g. the last bookmark was just removed
         return;
     }
     static_separator_->setVisible(true);
@@ -385,14 +390,10 @@ void FilterExpressionEdit::rebuildBookmarkEntries()
     // QMenu::addSection() drops the title text.
     QLabel *header = new QLabel(saved_section_label_.toUpper());
     QFont header_font = base;
-    header_font.setPointSizeF(qMax(1.0, base.pointSizeF() - 2.0));
+    header_font.setPointSizeF(qMax(1.0, base.pointSizeF() - 1.0));
     header->setFont(header_font);
     header->setContentsMargins(12, 5, 12, 2);
-    {
-        QPalette pal = header->palette();
-        pal.setColor(QPalette::WindowText, mutedColor(pal, 0.45));
-        header->setPalette(pal);
-    }
+
     QWidgetAction *header_action = new QWidgetAction(this);
     header_action->setDefaultWidget(header);
     header_action->setEnabled(false); // non-interactive label
@@ -418,6 +419,8 @@ void FilterExpressionEdit::rebuildBookmarkEntries()
         bookmark_menu_->addAction(entry);
         entry_actions_.append(entry);
     }
+
+    updateBookmarkState(); // the current text may now (not) match a saved entry
 }
 
 void FilterExpressionEdit::populateHistoryMenu()
@@ -439,13 +442,77 @@ void FilterExpressionEdit::populateHistoryMenu()
 
 void FilterExpressionEdit::updateClearVisible()
 {
-    clear_action_->setVisible(!text().isEmpty());
+    // Reflow only when the clear button's presence actually flips, so typing
+    // doesn't re-reserve text margins on every keystroke.
+    const bool show = !text().isEmpty();
+    if (show == !clear_button_->isHidden())
+        return;
+    clear_button_->setVisible(show);
+    updateInlineMargins();
 }
 
 void FilterExpressionEdit::updateApplyEnabled()
 {
-    apply_action_->setEnabled(apply_visible_ && !text().isEmpty() &&
+    apply_button_->setEnabled(apply_visible_ && !text().isEmpty() &&
                               state() != FilterEdit::SyntaxState::Invalid);
+}
+
+void FilterExpressionEdit::rebuildInlineLayout()
+{
+    // Drop existing items; the buttons stay parented to the field, spacers freed.
+    while (QLayoutItem *item = inline_layout_->takeAt(0))
+        delete item;
+
+    // Right-aligned (default):  bookmark | <text> | clear apply history
+    // Left-aligned:             bookmark clear apply history | <text>
+    inline_layout_->addWidget(bookmark_button_, 0, Qt::AlignVCenter);
+    if (!buttons_left_aligned_)
+        inline_layout_->addStretch(1);
+    inline_layout_->addWidget(clear_button_, 0, Qt::AlignVCenter);
+    inline_layout_->addWidget(apply_button_, 0, Qt::AlignVCenter);
+    if (buttons_left_aligned_)
+        inline_layout_->addStretch(1);
+    inline_layout_->addWidget(history_button_, 0, Qt::AlignVCenter);
+
+    updateInlineMargins();
+}
+
+void FilterExpressionEdit::setButtonsLeftAligned(bool left)
+{
+    if (buttons_left_aligned_ == left)
+        return;
+    buttons_left_aligned_ = left;
+    recent.gui_geometry_leftalign_actions = left;
+    write_recent();
+    rebuildInlineLayout();
+}
+
+QMargins FilterExpressionEdit::inlineMargins() {
+    // Reserve text margins matching the shown buttons so the text never runs
+    // under one, and so QLineEdit's sizeHint accounts for them (keeping the
+    // toolbar from compressing the field under its neighbours). The dividers in
+    // paintEvent() use the buttons' real geometry, so a slight over-reservation
+    // here is harmless. Use isHidden(), not isVisible(): this runs before the
+    // field is first shown, when isVisible() is still false for every child.
+    const int edge = style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, this) + 1;
+
+    auto zone = [](const AdaptiveToolButton *b) {
+        return b->isHidden() ? 0 : b->sizeHint().width() + inline_button_spacing_;
+    };
+
+    auto leftTrail = edge + zone(bookmark_button_);
+    auto rightTrail = edge + zone(history_button_);
+    if (buttons_left_aligned_ )
+        leftTrail += zone(clear_button_) + zone(apply_button_);
+    else
+        rightTrail += zone(clear_button_) + zone(apply_button_);
+
+    return QMargins(leftTrail, 0, rightTrail, 0);
+}
+
+void FilterExpressionEdit::updateInlineMargins()
+{
+    setTextMargins(inlineMargins());
 }
 
 void FilterExpressionEdit::updateRemoveEnabled()
@@ -456,9 +523,32 @@ void FilterExpressionEdit::updateRemoveEnabled()
     remove_action_->setEnabled(match);
 }
 
+void FilterExpressionEdit::updateBookmarkState()
+{
+    // "Matching" is data state, not an interaction mode, so the widget owns the
+    // swap: show the matching (saved) glyph when the current text is a saved
+    // bookmark, else the per-filter glyph. No-op until a leaf supplies both.
+    if (normal_bookmark_icon_.isNull())
+        return;
+    const bool saved = bookmarkModel_ && bookmarkModel_->contains(text());
+    bookmark_button_->setIcon(saved ? matching_bookmark_icon_ : normal_bookmark_icon_);
+}
+
 void FilterExpressionEdit::paintEvent(QPaintEvent *event)
 {
     FilterEdit::paintEvent(event);
+
+    // QLineEdit's icon button sits its glyph near the button's own right edge, so
+    // the only gap before the text is the line edit's small text margin. The line
+    // sits a single pixel past the edge to land midway between glyph and text.
+    // Tune kGapInset if it drifts toward either side.
+    const int kGapInset = 2;
+
+    ThemeManager * tm = ThemeManager::instance();
+
+    QMargins margins = inlineMargins();
+    const QColor field = tm->color(ThemeManager::PaletteBase);
+    const QColor tint_divider = tm->color(ThemeManager::FieldBorder);
 
     QPainter painter(this);
 
@@ -468,65 +558,19 @@ void FilterExpressionEdit::paintEvent(QPaintEvent *event)
     QPainterPath clip;
     clip.addRoundedRect(inner, 2, 2);
     painter.setClipPath(clip);
+    painter.setPen(QPen(tint_divider, 1));
 
-    // The QSS background-color tints the whole field, including behind the
-    // in-line icons; repaint the leading (bookmark) and trailing
-    // (clear/history/apply) icon strips with the neutral field background so the
-    // tint stays in the text area. The glyphs are child widgets painted after
-    // us, so they stay visible over this fill.
-    //
-    // Source the neutral from the application palette, not this widget's: under
-    // the QSS state tint the widget's own QPalette::Base reads off-colour (a
-    // dark box even in light mode), while qApp's base is the true field colour
-    // — the same source the in-line glyphs use, so the strips match.
-    const QColor field = qApp->palette().color(QPalette::Base);
-
-    if (bookmark_button_ && bookmark_button_->isVisible()) {
-        const int edge = bookmark_button_->geometry().right() + 1;
+    // clear the background for the buttons on the left and right
+    if (margins.left() > 0) {
         painter.fillRect(QRect(QPoint(inner.left(), inner.top()),
-                               QPoint(edge - 1, inner.bottom())), field);
+                QPoint(inner.left() + margins.left(), inner.bottom())), field);
+        auto x = inner.left() + margins.left() - kGapInset;
+        painter.drawLine(x, inner.top() + 2, x, inner.bottom() - 2);
     }
-
-    int trailing_edge = inner.right() + 1;
-    for (const QToolButton *button : {clear_button_, history_button_, apply_button_}) {
-        if (button && button->isVisible())
-            trailing_edge = qMin(trailing_edge, button->geometry().left());
+    if (margins.right() > 0) {
+        painter.fillRect(QRect(QPoint(inner.right() - margins.right(), inner.top()),
+                QPoint(inner.right(), inner.bottom())), field);
+        auto x = inner.right() - margins.right() + kGapInset;
+        painter.drawLine(x, inner.top() + 2, x, inner.bottom() - 2);
     }
-    if (trailing_edge <= inner.right())
-        painter.fillRect(QRect(QPoint(trailing_edge, inner.top()),
-                               QPoint(inner.right(), inner.bottom())), field);
-
-    // Thin vertical hairlines mark the icon-zone boundaries — the separation the
-    // mockup draws with its `vsep` dividers. At a low alpha so each reads as a
-    // hairline rather than a second border. The two sit on different
-    // backgrounds, so they take their colour from different places: the bookmark
-    // hairline borders the tinted text area, so use the widget foreground that
-    // setState() keeps contrast-correct against the active tint; the history
-    // hairline sits on the neutral trailing strip, so use the application text
-    // colour (a tinted state overrides the widget's QPalette::Text).
-    QColor tint_divider = palette().color(QPalette::Text);
-    tint_divider.setAlpha(150);
-    QColor base_divider = qApp->palette().color(QPalette::Text);
-    base_divider.setAlpha(150);
-
-    // QLineEdit's icon button sits its glyph near the button's own right edge, so
-    // the only gap before the text is the line edit's small text margin. The line
-    // sits a single pixel past the edge to land midway between glyph and text.
-    // Tune kGapInset if it drifts toward either side.
-    const int kGapInset = 1;
-
-    auto drawDivider = [&](const QToolButton *button, int x, const QColor &color) {
-        painter.setPen(QPen(color, 1));
-        const QRect g = button->geometry();
-        painter.drawLine(x, g.top() + 2, x, g.bottom() - 2);
-    };
-
-    if (bookmark_button_ && bookmark_button_->isVisible())
-        drawDivider(bookmark_button_, bookmark_button_->geometry().right() + kGapInset,
-                    tint_divider);
-    // Isolate the history dropdown on the far right, the way the old combo box's
-    // drop arrow read as its own affordance.
-    if (history_button_ && history_button_->isVisible())
-        drawDivider(history_button_, history_button_->geometry().left() - kGapInset,
-                    base_divider);
 }
