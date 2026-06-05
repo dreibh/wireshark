@@ -412,13 +412,7 @@ private slots:
      * @param topLeft Top left index of changed data.
      * @param bottomRight Bottom right index of changed data.
      */
-    void handleDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight,
-#if QT_VERSION < QT_VERSION_CHECK(6, 0, 0)
-        const QVector<int>
-#else
-        const QList<int>
-#endif
-        );
+    void handleDataChanged(const QModelIndex &topLeft, const QModelIndex &bottomRight, const QList<int>);
 
     /**
      * @brief Handles updates when the model layout changes.

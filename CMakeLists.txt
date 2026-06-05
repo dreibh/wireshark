@@ -32,6 +32,17 @@ endif()
 project(${_project_name} C CXX)
 
 #
+# Make sure the C and C++ compilers support C17 and C++17, and recommend
+# using GCC or Clang if they don't.
+#
+if(NOT "c_std_17" IN_LIST CMAKE_C_COMPILE_FEATURES)
+	message(FATAL_ERROR "The C compiler you're using does not support C17, but Wireshark and Stratoshark require it; use GCC or Clang.")
+endif()
+if(NOT "cxx_std_17" IN_LIST CMAKE_CXX_COMPILE_FEATURES)
+	message(FATAL_ERROR "The C++ compiler you're using does not support C17, but Wireshark and Stratoshark require it; use GCC or Clang.")
+endif()
+
+#
 # SunOS 5.x (the SVR4-based version, i.e. the one people usually call
 # "Solaris")) is annoying. (We don't support previous versions.)
 #
@@ -63,8 +74,20 @@ project(${_project_name} C CXX)
 # get the ${isa} value, and set CMAKE_LIBRARY_ARCHITECTURE to that value
 # to force CMake to look in the right places.
 #
+# Furthermore, for at least for some packages (D-Bus an GLib), there are
+# separate include files for 32-bit and 64-bit builds (I guess using
+# "unsigned long long" as a 64-bit integer type on a 64-bit build is
+# like crossing the beams or something), and there are two separate
+# .pc files, so if we're doing a 32-bit build we should make sure we look
+# in /usr/lib/pkgconfig for .pc files and if we're doing a 64-bit build
+# we should make sure we look in# /usr/lib/amd64/pkgconfig for .pc files.
+#
 if(CMAKE_SYSTEM_NAME STREQUAL "SunOS" AND CMAKE_SYSTEM_VERSION MATCHES "5[.][0-9.]*")
 	if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+		#
+		# 64-bit build. Get the ISA, and set
+		# CMAKE_LIBRARY_ARCHITECTURE to it.
+		#
 		execute_process(
 		    COMMAND "isainfo" "-n"
 		    OUTPUT_VARIABLE CMAKE_LIBRARY_ARCHITECTURE
@@ -76,6 +99,41 @@ if(CMAKE_SYSTEM_NAME STREQUAL "SunOS" AND CMAKE_SYSTEM_VERSION MATCHES "5[.][0-9
 			#
 			message(FATAL_ERROR "isainfo -n failed, so we can't determine the target architecture")
 		endif()
+
+		#
+		# If /usr/lib/pkgconfig appears in the path, prepend
+		# /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/pkgconfig to it;
+		# otherwise, put /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}
+		# at the end.
+		#
+		# Note: string(REPLACE) does not appear to support using
+		# ENV{...} as an argument, so we set a variable and then
+		# use set() to set the environment variable.
+		#
+		if((NOT DEFINED ENV{PKG_CONFIG_PATH}) OR "$ENV{PKG_CONFIG_PATH}" EQUAL "")
+			#
+			# Not set, or empty.  Set it to
+			# /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/pkgconfig.
+			#
+			set(fixed_path "/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/pkgconfig")
+		elseif("$ENV{PKG_CONFIG_PATH}" MATCHES "/usr/lib/pkgconfig")
+			#
+			# It contains /usr/lib/pkgconfig.  Prepend
+			# /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/pkgconfig
+			# to /usr/lib/pkgconfig.
+			#
+			string(REPLACE "/usr/lib/pkgconfig"
+			    "/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/pkgconfig:/usr/lib/pkgconfig"
+			    fixed_path "$ENV{PKG_CONFIG_PATH}")
+		else()
+			#
+			# Not empty, but doesn't contain /usr/lib/pkgconfig.
+			# Append /usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/pkgconfig
+			# to it.
+			#
+			set(fixed_path "$ENV{PKG_CONFIG_PATH}:/usr/lib/${CMAKE_LIBRARY_ARCHITECTURE}/pkgconfig")
+		endif()
+		set(ENV{PKG_CONFIG_PATH} "${fixed_path}")
 	endif()
 endif()
 
@@ -103,7 +161,7 @@ endif()
 # Updated by tools/make-version.py
 set(PROJECT_MAJOR_VERSION 4)
 set(PROJECT_MINOR_VERSION 7)
-set(PROJECT_PATCH_VERSION 0)
+set(PROJECT_PATCH_VERSION 1)
 set(PROJECT_BUILD_VERSION 0)
 set(PROJECT_VERSION_EXTENSION "")
 
@@ -1465,41 +1523,50 @@ ws_find_package(LIBSSH ENABLE_LIBSSH HAVE_LIBSSH "0.8.5")
 ws_find_package(PCAP ENABLE_PCAP HAVE_LIBPCAP)
 ws_find_package(Systemd BUILD_sdjournal HAVE_SYSTEMD)
 
+# The SpeexDSP resampler is required iff building sharkd, or building
+# Wireshark or Stratoshark with Qt Multimedia
+if(BUILD_sharkd)
+	reset_find_package(SPEEXDSP)
+	find_package(SpeexDSP REQUIRED)
+elseif(BUILD_wireshark OR BUILD_stratoshark)
+	reset_find_package(SPEEXDSP)
+	find_package(SpeexDSP)
+endif()
+
 # Build one of the Qt GUIs?
 if(BUILD_wireshark OR BUILD_stratoshark)
 	# We don't use any QVulkan* classes, so tell Qt's CMake modules not to look for Vulkan.
 	set(CMAKE_DISABLE_FIND_PACKAGE_WrapVulkanHeaders ON)
-	if(USE_qt6)
-		set(qtver 6)
-		if(DEFINED ENV{WIRESHARK_QT6_PREFIX_PATH})
-			list(APPEND CMAKE_PREFIX_PATH $ENV{WIRESHARK_QT6_PREFIX_PATH})
-		endif()
+	set(qtver 6)
+	if(DEFINED ENV{WIRESHARK_QT6_PREFIX_PATH})
+		list(APPEND CMAKE_PREFIX_PATH $ENV{WIRESHARK_QT6_PREFIX_PATH})
+	endif()
 
-		find_package(Qt6 6.2 REQUIRED
-			COMPONENTS
-				Core
-				Concurrent
-				Core5Compat
-				Gui
-				LinguistTools
-				Network
-				PrintSupport
-				Svg
-				Widgets
-			OPTIONAL_COMPONENTS
-				DBus
-				Multimedia
-		)
+	find_package(Qt6 6.2 REQUIRED
+		COMPONENTS
+			Core
+			Concurrent
+			Core5Compat
+			Gui
+			LinguistTools
+			Network
+			PrintSupport
+			Svg
+			Widgets
+		OPTIONAL_COMPONENTS
+			DBus
+	)
 
-		if (WIN32 AND Qt6Widgets_VERSION VERSION_LESS 6.5.3)
-			message(WARNING "Qt 6.5.3 or later is required.")
-		endif()
-		if (APPLE AND Qt6Widgets_VERSION VERSION_LESS 6.5.3)
-			message(WARNING "Qt 6.5.3 or later is required.")
-		endif()
-	else() # USE_qt6
-		message(FATAL_ERROR "Support for building with Qt 5 has been removed.")
-	endif() # USE_qt6
+	if (SPEEXDSP_FOUND)
+		find_package(Qt6 ${Qt6_VERSION} REQUIRED OPTIONAL_COMPONENTS Multimedia)
+	endif()
+
+	if (WIN32 AND Qt6Widgets_VERSION VERSION_LESS 6.5.3)
+		message(WARNING "Qt 6.5.3 or later is required.")
+	endif()
+	if (APPLE AND Qt6Widgets_VERSION VERSION_LESS 6.5.3)
+		message(WARNING "Qt 6.5.3 or later is required.")
+	endif()
 
 	set(QT_FOUND ON)
 	if(WIN32)
@@ -1507,12 +1574,6 @@ if(BUILD_wireshark OR BUILD_stratoshark)
 	endif()
 	if(APPLE)
 		ws_find_package(Sparkle ENABLE_SPARKLE HAVE_SOFTWARE_UPDATE 2)
-	endif()
-	if(Qt6Multimedia_FOUND)
-		set(QT_MULTIMEDIA_LIB 1)
-	endif()
-	if(Qt6DBus_FOUND)
-		set(QT_DBUS_LIB 1)
 	endif()
 	if(NOT DEFINED MOC_OPTIONS)
 		# Squelch moc verbose "nothing to do" output
@@ -1614,11 +1675,6 @@ find_package( XSLTPROC )
 
 find_package(DOXYGEN)
 
-# The SpeexDSP resampler is required iff building wireshark or sharkd.
-if(BUILD_wireshark OR BUILD_stratoshark OR BUILD_sharkd)
-	find_package(SpeexDSP REQUIRED)
-endif()
-
 # Generate the distribution tarball.
 add_custom_target(dist
 	COMMAND ${CMAKE_BINARY_DIR}/packaging/source/git-export-release.sh -d "${CMAKE_BINARY_DIR}"
@@ -1656,7 +1712,7 @@ if (QT_FOUND)
 	# Use qmake to find windeployqt and macdeployqt. Ideally one of
 	# the modules in ${QTDIR}/lib/cmake would do this for us.
 	if(WIN32)
-		if (USE_qt6 AND USE_MSYSTEM)
+		if (USE_MSYSTEM)
 			set(_windeployqt_name "windeployqt-qt6")
 		else()
 			set(_windeployqt_name "windeployqt")
@@ -1906,7 +1962,7 @@ add_subdirectory( doc )
 if(BUILD_wireshark AND QT_FOUND)
 	add_subdirectory( ui/qt )
 	add_subdirectory( ui/plugins )
-elseif(BUILD_wireshark AND USE_qt6)
+elseif(BUILD_wireshark)
 	message(WARNING "Building Wireshark requested but Qt 6.2 or later not found.")
 endif()
 

@@ -421,7 +421,7 @@ void SyntaxLineEdit::paintEvent(QPaintEvent *event)
     //
     // It's not clear if this is a bug or just how things work under Qt6.
     // Either way, it's easy to work around.
-#if QT_VERSION >= QT_VERSION_CHECK(5, 15, 3)
+
     // Must match the DisplayFilterEdit stylesheet.
     int pad = style()->pixelMetric(QStyle::PM_DefaultFrameWidth) + 1;
     QRect full_cr = cr.adjusted(-pad, 0, -1, 0);
@@ -444,7 +444,6 @@ void SyntaxLineEdit::paintEvent(QPaintEvent *event)
     }
 
     painter.fillRect(full_cr, bg);
-#endif
 
     QLineEdit::paintEvent(event);
 
@@ -530,11 +529,7 @@ QStringList SyntaxLineEdit::splitLineUnderCursor()
     QPoint token_coords(getTokenUnderCursor());
 
     // Split line into preamble and word under cursor.
-#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
     QString preamble = text().first(token_coords.x()).trimmed();
-#else
-    QString preamble = text().mid(0, token_coords.x()).trimmed();
-#endif
     // This should be trimmed already
     QString token_word = text().mid(token_coords.x(), token_coords.y());
 

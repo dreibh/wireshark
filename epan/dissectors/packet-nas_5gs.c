@@ -853,6 +853,10 @@ static int hf_nas_5gs_ursp_traff_desc_dest_fqdn_len;
 static int hf_nas_5gs_ursp_traff_desc_dest_fqdn;
 static int hf_nas_5gs_ursp_traff_desc_regex_len;
 static int hf_nas_5gs_ursp_traff_desc_regex;
+static int hf_nas_5gs_ursp_traff_desc_pin_id_len;
+static int hf_nas_5gs_ursp_traff_desc_pin_id;
+static int hf_nas_5gs_ursp_traff_desc_conn_group_id_len;
+static int hf_nas_5gs_ursp_traff_desc_conn_group_id;
 static int hf_nas_5gs_ursp_traff_desc_dest_mac_addr_range_low;
 static int hf_nas_5gs_ursp_traff_desc_dest_mac_addr_range_high;
 static int hf_nas_5gs_ursp_traff_desc_len;
@@ -868,6 +872,10 @@ static int hf_nas_5gs_ursp_r_sel_desc_loc_nr_cell_id;
 static int hf_nas_5gs_ursp_r_sel_desc_loc_eutra_cell_id;
 static int hf_nas_5gs_ursp_r_sel_desc_loc_gnb_id;
 static int hf_nas_5gs_ursp_r_sel_desc_loc_tai_len;
+static int hf_nas_5gs_ursp_r_sel_desc_time_win_start;
+static int hf_nas_5gs_ursp_r_sel_desc_time_win_stop;
+static int hf_nas_5gs_ursp_r_sel_desc_pdu_sess_pair_id;
+static int hf_nas_5gs_ursp_r_sel_desc_rsn;
 static int hf_nas_5gs_dnn_len;
 static int hf_nas_5gs_upsi_sublist_len;
 static int hf_nas_5gs_upsc;
@@ -10341,6 +10349,8 @@ static const value_string nas_5gs_ursp_traff_desc_component_type_values[] = {
     { 0x92, "Regular expression" },
     { 0xa0, "OS App Id type" },
     { 0xa1, "Destination MAC address range type"},
+    { 0xa2, "PIN ID type" },
+    { 0xa3, "Connectivity group ID type" },
     { 0, NULL }
 };
 
@@ -10630,6 +10640,24 @@ de_nas_5gs_ursp_traff_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
             proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_dest_mac_addr_range_high, tvb, offset, 6, ENC_NA);
             offset += 6;
             break;
+        case 0xa2: /* PIN ID */
+            /* For "PIN ID type", the traffic descriptor component value field shall be
+               encoded as a sequence of a one octet length field and a PIN ID value field
+               containing a UTF-8 string. TS 24.526 Section 5.2 */
+            proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_traff_desc_pin_id_len, tvb, offset, 1, ENC_NA, &length);
+            offset += 1;
+            proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_pin_id, tvb, offset, length, ENC_UTF_8);
+            offset += length;
+            break;
+        case 0xa3: /* Connectivity group ID */
+            /* For "connectivity group ID type", the traffic descriptor component value field
+               shall be encoded as a sequence of a one octet length field and a connectivity
+               group ID value field containing a UTF-8 string. TS 24.526 Section 5.2 */
+            proto_tree_add_item_ret_uint(tree, hf_nas_5gs_ursp_traff_desc_conn_group_id_len, tvb, offset, 1, ENC_NA, &length);
+            offset += 1;
+            proto_tree_add_item(tree, hf_nas_5gs_ursp_traff_desc_conn_group_id, tvb, offset, length, ENC_UTF_8);
+            offset += length;
+            break;
         default:
             proto_tree_add_expert_remaining(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset);
             return;
@@ -10685,6 +10713,7 @@ static const value_string nas_5gs_ursp_r_sel_desc_comp_type_values[] = {
     { 0x81, "5G ProSe layer-3 UE-to-network relay offload type" },
     { 0x82, "PDU session pair ID type" },
     { 0x83, "RSN type" },
+    { 0x84, "5G ProSe multi-path preference type" },
     { 0, NULL }
 };
 
@@ -10830,6 +10859,32 @@ de_nas_5gs_ursp_r_sel_desc(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree)
             }
             break;
         }
+        case 0x80: /* Time window */
+            /* For "Time window type", the route selection descriptor component value field
+               shall be encoded as a sequence of a four octet start time field,
+               a four octet start time fraction field, a four octet stop time field,
+               and a four octet stop time fraction field.
+               The time values use UNIX epoch with 1/2^32 fractional seconds.
+               TS 24.526 Section 5.2 */
+            proto_tree_add_item(tree, hf_nas_5gs_ursp_r_sel_desc_time_win_start, tvb, offset, 8, ENC_TIME_RTPS | ENC_BIG_ENDIAN);
+            offset += 8;
+            proto_tree_add_item(tree, hf_nas_5gs_ursp_r_sel_desc_time_win_stop, tvb, offset, 8, ENC_TIME_RTPS | ENC_BIG_ENDIAN);
+            offset += 8;
+            break;
+        case 0x82: /* PDU session pair ID */
+            /* For "PDU session pair ID type", the route selection descriptor component
+               value field shall be encoded as one octet which specifies the PDU session
+               pair identifier value. TS 24.526 Section 5.2 */
+            proto_tree_add_item(tree, hf_nas_5gs_ursp_r_sel_desc_pdu_sess_pair_id, tvb, offset, 1, ENC_BIG_ENDIAN);
+            offset++;
+            break;
+        case 0x83: /* RSN */
+            /* For "RSN type", the route selection descriptor component value field
+               shall be encoded as one octet which specifies the RSN value.
+               TS 24.526 Section 5.2 */
+            proto_tree_add_item(tree, hf_nas_5gs_ursp_r_sel_desc_rsn, tvb, offset, 1, ENC_BIG_ENDIAN);
+            offset++;
+            break;
         default:
             proto_tree_add_expert_remaining(tree, pinfo, &ei_nas_5gs_ie_not_dis, tvb, offset);
             return;
@@ -16304,6 +16359,26 @@ proto_register_nas_5gs(void)
             FT_ETHER, BASE_NONE, NULL, 0x0,
             NULL, HFILL }
         },
+        { &hf_nas_5gs_ursp_traff_desc_pin_id_len,
+        { "PIN ID length", "nas-5gs.ursp.traff_desc.pin_id_len",
+            FT_UINT8, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_nas_5gs_ursp_traff_desc_pin_id,
+        { "PIN ID", "nas-5gs.ursp.traff_desc.pin_id",
+            FT_STRING, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_nas_5gs_ursp_traff_desc_conn_group_id_len,
+        { "Connectivity group ID length", "nas-5gs.ursp.traff_desc.conn_group_id_len",
+            FT_UINT8, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_nas_5gs_ursp_traff_desc_conn_group_id,
+        { "Connectivity group ID", "nas-5gs.ursp.traff_desc.conn_group_id",
+            FT_STRING, BASE_NONE, NULL, 0x0,
+            NULL, HFILL }
+        },
         { &hf_nas_5gs_ursp_traff_desc_len,
         { "Length", "nas-5gs.ursp.r_sel_desc_len",
             FT_UINT16, BASE_DEC, NULL, 0x0,
@@ -16367,6 +16442,26 @@ proto_register_nas_5gs(void)
         { &hf_nas_5gs_ursp_r_sel_desc_loc_tai_len,
         { "Length", "nas-5gs.ursp.r_sel_desc.loc_tai_len",
             FT_UINT8, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_nas_5gs_ursp_r_sel_desc_time_win_start,
+        { "Start time", "nas-5gs.ursp.r_sel_desc.time_window.start",
+            FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_nas_5gs_ursp_r_sel_desc_time_win_stop,
+        { "Stop time", "nas-5gs.ursp.r_sel_desc.time_window.stop",
+            FT_ABSOLUTE_TIME, ABSOLUTE_TIME_UTC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_nas_5gs_ursp_r_sel_desc_pdu_sess_pair_id,
+        { "PDU session pair ID", "nas-5gs.ursp.r_sel_desc.pdu_session_pair_id",
+            FT_UINT8, BASE_DEC, NULL, 0x0,
+            NULL, HFILL }
+        },
+        { &hf_nas_5gs_ursp_r_sel_desc_rsn,
+        { "RSN", "nas-5gs.ursp.r_sel_desc.rsn",
+            FT_UINT8, BASE_DEC, VALS(nas_5gs_sm_pdu_session_rsn_vals), 0x0,
             NULL, HFILL }
         },
         { &hf_nas_5gs_dnn_len,
