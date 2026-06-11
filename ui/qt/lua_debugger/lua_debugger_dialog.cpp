@@ -566,8 +566,6 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
     {
         connect(FontManager::instance(), &FontManager::monospaceFontChanged, this, &LuaDebuggerDialog::onMonospaceFontUpdated,
                 Qt::UniqueConnection);
-        connect(mainApp, &MainApplication::appInitialized, this, &LuaDebuggerDialog::onMainAppInitialized,
-                Qt::UniqueConnection);
         connect(mainApp, &MainApplication::preferencesChanged, this, &LuaDebuggerDialog::onPreferencesChanged,
                 Qt::UniqueConnection);
         /*
@@ -577,10 +575,9 @@ LuaDebuggerDialog::LuaDebuggerDialog(QWidget *parent)
          */
         connect(ThemeManager::instance(), &ThemeManager::themeChanged, this, &LuaDebuggerDialog::onColorsChanged,
                 Qt::UniqueConnection);
-        if (mainApp->isInitialized())
-        {
-            onMainAppInitialized();
-        }
+        // Run now if the app is already up (the usual case for this on-demand
+        // dialog), otherwise once it finishes initializing.
+        mainApp->whenInitialized(this, [this]() { onMainAppInitialized(); });
     }
 
     filesController_.refreshAvailableScripts();
@@ -2028,14 +2025,14 @@ void LuaDebuggerLuaReloadCoordinator::onReloadLuaPluginsRequested()
     }
 
     reloadUiRequestWasEnabled_ = false;
-    if (!host_->codeTabsController().ensureUnsavedChangesHandled(host_->tr("Reload Lua Plugins")))
+    if (!host_->codeTabsController().ensureUnsavedChangesHandled(QObject::tr("Reload Lua Plugins")))
     {
         return;
     }
 
     const QMessageBox::StandardButton reply =
-        QMessageBox::question(host_, host_->tr("Reload Lua Plugins"),
-                              host_->tr("Are you sure you want to reload all Lua plugins?\n\nThis will "
+        QMessageBox::question(host_, QObject::tr("Reload Lua Plugins"),
+                              QObject::tr("Are you sure you want to reload all Lua plugins?\n\nThis will "
                                         "restart all Lua "
                                         "scripts and may affect capture analysis."),
                               QMessageBox::Yes | QMessageBox::No, QMessageBox::No);

@@ -27,9 +27,24 @@ If you or your organization would like to contribute or become a sponsor, please
 // Many other improvements have been made.
 // See the “New and Updated Features” section below for more details.
 
-The following changes have been made since version 0.10.0:
+The following changes have been made since version 0.10.1:
 
 * Nothing of note.
+
+The following changes have been made since version 0.10.0:
+
+The Stratoshark Windows installer now includes a DLL that was required by the cloudtrail and gcpaudit plugins.
+
+The following issues have been fixed:
+* Wireshark appears in German where Systemlanguage is Dutch. wsbuglink:20347[].
+* If you double-click an interface in the welcome screen interface list, and have typed nothing in the capture filter box, the system reports an invalid capture filter. wsbuglink:21303[].
+* Qt: Appearance mode is stored per-profile while theme name is global — theme flips on profile switch. wsbuglink:21311[].
+* Qt: 'Recent filters' arrow button gives no hover/pressed feedback. wsbuglink:21322[].
+* Qt: Hidden interfaces (Welcome page right-click) not persisted across profile switch or restart. wsbuglink:21325[].
+* Qt: Preferences dialog left category tree cannot be resized (labels truncated, only horizontal scrollbar) wsbuglink:21327[].
+* Stratoshark: no-libpcap compilation broken (actionCaptureRestart) — fix from 554baf6294 never applied. wsbuglink:21328[].
+* Qt: Make theme preview resemble a real Wireshark window (mini packet-list mockup) wsbuglink:21329[].
+* stratoshark -D lists a bunch of *network* capture devices. wsbuglink:21332[].
 
 The following changes have been made since version 0.9.3:
 
@@ -119,6 +134,8 @@ The following bugs have been fixed since version 0.9.3:
 In order to work around wsbuglink:20869[issue 20869], the macOS package ships with the gcpaudit and k8saudit plugins disabled.
 In order to enable them, you can rename them from *Stratoshark.app/Contents/PlugIns/stratoshark/falco/_plugin_.so.disabled* to *Stratoshark.app/Contents/PlugIns/stratoshark/falco/_plugin_.so*.
 
+* Interfaces hidden from the welcome page are now remembered across profile switches and restarts. wsbuglink:21325[]
+
 The following bugs have been fixed since version 0.9.2:
 
 * .scap file extension wrongly associated with Wireshark. wsbuglink:20583[].
@@ -141,8 +158,15 @@ The following bugs have been fixed since version 0.9.0:
 
 Stratoshark can capture system calls locally on Linux and a variety of log sources on Windows, macOS, and Linux.
 
-// The following features are either new or have been significantly updated since version 0.9.0:
+The following features are either new or have been significantly updated since version 0.9.0:
 
+* The welcome screen's capture-source activity sparklines now keep their history for the whole session.
+  Previously the sparklines, and the activity-first ordering of the source list, were reset whenever you
+  started or stopped a capture or returned to the welcome screen, so the list re-shuffled each time.
+  Now the history persists, the ordering stays stable, and a break in a sparkline marks the interval during
+  which a capture was running (statistics are not sampled while capturing).
+  When a source is dropping packets, the drops are shown as a separate line.
+  wsbuglink:21318[]
 
 //* The Windows installers now ship with Qt 6.5.2.
 //  They previously shipped with Qt 6.2.3.

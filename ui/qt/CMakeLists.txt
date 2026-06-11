@@ -79,6 +79,9 @@ set(WIRESHARK_3RD_PARTY_WIDGET_HEADERS
 )
 
 set(WIRESHARK_MANAGER_HEADERS
+	manager/interface_list_manager.h
+	manager/interface_statistics.h
+	manager/interface_stats_worker.h
 	manager/preference_manager.h
 	manager/wireshark_preference.h
 )
@@ -404,6 +407,9 @@ set(WIRESHARK_3RD_PARTY_WIDGET_SRCS
 )
 
 set(WIRESHARK_MANAGER_SRCS
+	manager/interface_list_manager.cpp
+	manager/interface_statistics.cpp
+	manager/interface_stats_worker.cpp
 	manager/preference_manager.cpp
 	manager/wireshark_preference.cpp
 )
@@ -828,20 +834,6 @@ set(WIRESHARK_QT_TS
 	wireshark_zh_CN.ts
 )
 
-cmake_path(SET TRANSLATION_INSTALL_DIR NORMALIZE "${CMAKE_INSTALL_BINDIR}/translations")
-
-# Translation files (i18n)
-qrc_register(NAME i18n PREFIX "/i18n")
-foreach(_file ${WIRESHARK_QT_TS})
-    get_filename_component(_qresource ${_file} NAME_WE)
-    set(_qresource_qm "${CMAKE_CURRENT_BINARY_DIR}/${_qresource}.qm")
-
-    qrc_add_file(NAME i18n FILE "${_qresource_qm}" ALIAS "${_qresource}.qm" GENERATED ON)
-
-    install(FILES "${_qresource_qm}" DESTINATION "${TRANSLATION_INSTALL_DIR}")
-endforeach()
-qrc_finalize(NAME i18n OUTPUT_FILE_NAME "i18n.qrc" OUTPUT_VAR I18N_QRC)
-
 # Authors file
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_BINARY_DIR}/authors.csv
@@ -943,27 +935,6 @@ qt_add_resources(WIRESHARK_QT_QRC
 	OPTIONS ${CMAKE_AUTORCC_OPTIONS}
 )
 
-# qt[56]_add_translation is deprecated in Qt 6.2 and later for
-# qt[6]_add_translations, so we should switch as Qt 5 support is dropped.
-QT6_ADD_TRANSLATION(WIRESHARK_QT_QM ${WIRESHARK_QT_TS} OPTIONS -silent)
-
-add_custom_target(
-	translations
-	DEPENDS
-		${WIRESHARK_QT_QM}
-)
-set_target_properties(translations PROPERTIES FOLDER "UI")
-
-if (WIN32)
-	add_custom_target(copy_qt_translations ALL)
-	add_custom_command(TARGET copy_qt_translations
-		POST_BUILD
-		COMMAND ${CMAKE_COMMAND} -E make_directory $<TARGET_FILE_DIR:wireshark>/translations
-		COMMAND ${CMAKE_COMMAND} -E copy_if_different ${WIRESHARK_QT_QM} $<TARGET_FILE_DIR:wireshark>/translations
-	)
-	add_dependencies(copy_qt_translations translations)
-endif()
-
 set_source_files_properties(
 	${WIRESHARK_QT_NONGENERATED_SRC}
 	PROPERTIES
@@ -1049,13 +1020,26 @@ target_include_directories(qtui
 
 set_target_properties(qtui PROPERTIES
 	LINK_FLAGS "${WS_LINK_FLAGS}"
-	FOLDER "UI"
 	AUTOMOC ON
 	AUTOUIC ON
 	# AUTORCC not needed with qt_add_resources
 	#AUTORCC ON
-	# Ensure .qm files are generated before autogenerating i18n.qrc
-	AUTOGEN_TARGET_DEPENDS "${WIRESHARK_QT_QM};translations"
+)
+
+# Below uses the Qt 6.2 signature for qt_add_lrelease. Eventually it would
+# be good to use the newer signature in order to merge the Qt provided
+# translation catalogs.
+# https://doc.qt.io/qt-6/qtlinguist-cmake-qt-add-lrelease.html
+qt_add_lrelease(qtui
+	TS_FILES ${WIRESHARK_QT_TS}
+	QM_FILES_OUTPUT_VARIABLE WIRESHARK_QT_QM
+	OPTIONS -silent
+)
+# Translation resource (i18n)
+qt_add_resources(qtui "i18n"
+	PREFIX "/i18n"
+	BASE "${CMAKE_CURRENT_BINARY_DIR}"
+	FILES "${WIRESHARK_QT_QM}"
 )
 
 if(MSVC)

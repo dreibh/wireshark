@@ -16,6 +16,7 @@
 #endif
 
 #include "wireshark_main_window.h"
+#include <ui/qt/manager/interface_list_manager.h>
 #include <ui/qt/widgets/capture_card_widget.h>
 
 /*
@@ -1440,6 +1441,22 @@ void WiresharkMainWindow::startInterfaceCapture(bool valid, const QString captur
         // so no need to do anything here.
         startCapture(QStringList());
     }
+}
+
+void WiresharkMainWindow::onAppInitialized()
+{
+    // Post-initialization setup, run once the application is ready. Ordered: a
+    // few of these steps populate menus that later ones extend.
+    setFeaturesEnabled();
+    applyGlobalCommandLineOptions();
+    initViewColorizeMenu();
+    addStatsPluginsToMenu();
+    addDynamicMenus();
+    addPluginIFStructures();
+    initConversationMenus();
+    initExportObjectsMenus();
+    initFollowStreamMenus();
+    addDisplayFilterTranslationActions(main_ui_->menuEditCopy);
 }
 
 void WiresharkMainWindow::applyGlobalCommandLineOptions()
@@ -3079,7 +3096,7 @@ void WiresharkMainWindow::connectCaptureMenuActions()
 #ifdef HAVE_LIBPCAP
     connect(main_ui_->actionCaptureRefreshInterfaces, &QAction::triggered, this, [this]() {
         main_ui_->actionCaptureRefreshInterfaces->setEnabled(false);
-        mainApp->refreshLocalInterfaces();
+        interfaceListManager()->requestRefresh(true);
         main_ui_->actionCaptureRefreshInterfaces->setEnabled(true);
     });
 #endif

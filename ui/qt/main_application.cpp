@@ -37,7 +37,6 @@
 #include "ui/commandline.h"
 #include "ui/decode_as_utils.h"
 #include "ui/preference_utils.h"
-#include "ui/iface_lists.h"
 #include "ui/language.h"
 #include "ui/recent.h"
 #include "ui/simple_dialog.h"
@@ -76,6 +75,7 @@
 #include <ui/qt/capture_file.h>
 
 #include <ui/qt/main_window.h>
+#include <ui/qt/manager/interface_list_manager.h>
 #include <ui/qt/main_status_bar.h>
 #include <ui/qt/utils/workspace_state.h>
 #include <ui/qt/utils/theme_styler.h>
@@ -197,9 +197,6 @@ void MainApplication::setConfigurationProfile(const char *profile_name, bool wri
     char *err_msg = NULL;
     const char* env_prefix = application_configuration_environment_prefix();
 
-    bool prev_capture_no_interface_load;
-    bool prev_capture_no_extcap;
-
     /* First check if profile exists */
     if (!profile_exists(env_prefix, profile_name, false)) {
         if (profile_exists(env_prefix, profile_name, true)) {
@@ -233,9 +230,6 @@ void MainApplication::setConfigurationProfile(const char *profile_name, bool wri
     if (profile_name && strcmp (profile_name, get_profile_name()) == 0) {
         return;
     }
-
-    prev_capture_no_interface_load = prefs.capture_no_interface_load;
-    prev_capture_no_extcap = prefs.capture_no_extcap;
 
     /* Get the current geometry, before writing it to disk */
     emit profileChanging();
@@ -281,7 +275,12 @@ void MainApplication::setConfigurationProfile(const char *profile_name, bool wri
     prefs_to_capture_opts(&global_capture_opts);
     prefs_apply_all();
 #ifdef HAVE_LIBPCAP
-    update_local_interfaces(&global_capture_opts);
+    /* Re-apply interface display attributes from the new profile's prefs before
+       the preferencesChanged() emit below, so its listeners see fresh data. The
+       manager owns interface enumeration/attributes now. */
+    if (MainWindow *mw = mainWindow())
+        if (InterfaceListManager *mgr = mw->interfaceListManager())
+            mgr->reapplyInterfacePreferences();
 #endif
 
     emit columnsChanged();
@@ -298,14 +297,13 @@ void MainApplication::setConfigurationProfile(const char *profile_name, bool wri
         g_free(err_msg);
     }
 
-    /* Load interfaces if settings have changed */
-    if (!prefs.capture_no_interface_load &&
-        ((prefs.capture_no_interface_load != prev_capture_no_interface_load) ||
-         (prefs.capture_no_extcap != prev_capture_no_extcap))) {
-        refreshLocalInterfaces();
-    }
-
-    emit localInterfaceListChanged();
+    /* Capture-interface prefs are now watched by InterfaceListManager, which
+       rescans when capture_no_interface_load / capture_no_extcap flips. A profile
+       switch can also change interface display attributes, so notify subscribers
+       (the manager owns the interface-list-changed signal now). */
+    MainWindow *mw = mainWindow();
+    if (mw && mw->interfaceListManager())
+        mw->interfaceListManager()->notifyListChanged();
     emit packetDissectionChanged();
 
     /* Write recent_common file to ensure last used profile setting is stored. */
@@ -420,13 +418,9 @@ MainApplication::MainApplication(int &argc,  char **argv) :
     initialized_(false),
     is_reloading_lua_(false),
     if_notifier_(NULL),
-    active_captures_(0),
-    refresh_interfaces_pending_(false)
+    active_captures_(0)
 #if defined(Q_OS_MAC) || defined(Q_OS_WIN)
     , normal_icon_(windowIcon())
-#endif
-#ifdef HAVE_LIBPCAP
-    , cached_if_list_(NULL)
 #endif
 {
     mainApp = this;
@@ -486,9 +480,6 @@ MainApplication::MainApplication(int &argc,  char **argv) :
 MainApplication::~MainApplication()
 {
     mainApp = NULL;
-#ifdef HAVE_LIBPCAP
-    free_interface_list(cached_if_list_);
-#endif
     clearDynamicMenuGroupItems();
 }
 
@@ -506,9 +497,6 @@ void MainApplication::emitAppSignal(AppSignal signal)
         break;
     case FilterExpressionsChanged:
         emit filterExpressionsChanged();
-        break;
-    case LocalInterfacesChanged:
-        emit localInterfaceListChanged();
         break;
     case NameResolutionChanged:
         emit addressResolutionChanged();
@@ -708,7 +696,9 @@ iface_mon_event_cb(const char *iface, int added, int up)
          * so we probably should monitor those events as well and update
          * the interface list appropriately when those change.
          */
-        mainApp->refreshLocalInterfaces();
+        MainWindow *mainWindow = mainApp->mainWindow();
+        if (mainWindow && mainWindow->interfaceListManager())
+            mainWindow->interfaceListManager()->requestRefresh();
     }
 }
 
@@ -733,33 +723,45 @@ void MainApplication::emitLocalInterfaceEvent(const char *ifname, int added, int
     emit localInterfaceEvent(ifname, added, up);
 }
 
-void MainApplication::refreshLocalInterfaces()
+void MainApplication::whenInitializedDispatch(const QObject *context, std::function<void()> fn)
 {
-    if (active_captures_ > 0) {
-        refresh_interfaces_pending_ = true;
-        return;
-    }
-
-    refresh_interfaces_pending_ = false;
-    extcap_clear_interfaces();
-
-#ifdef HAVE_LIBPCAP
-    emit scanLocalInterfaces(nullptr);
-#endif
+    // POLICY DECISION (your input shapes behavior here):
+    //
+    // We get here only when a caller registers via whenInitialized() *after*
+    // appInitialized() has already fired. The not-yet-initialized path runs the
+    // callback later, from the event loop, once construction is long finished.
+    // How should the already-initialized path behave?
+    //
+    //   A) Synchronous: fn(); right now. Simplest. But the callback runs while
+    //      the caller's constructor is still on the stack -- the object may be
+    //      only partly built, and any code after the whenInitialized() call in
+    //      that constructor runs *after* the callback. Timing differs from the
+    //      deferred path.
+    //
+    //   B) Deferred to the event loop (e.g. QTimer::singleShot(0, context, fn)
+    //      or QMetaObject::invokeMethod(..., Qt::QueuedConnection)): callback
+    //      always runs after the current call returns, matching the signal path
+    //      exactly, so callers see one consistent ordering. Costs one event-loop
+    //      turn and needs the context-still-alive guarantee.
+    //
+    // Option A (current behavior) is intentional for now: it exactly reproduces
+    // the old open-coded `if (isInitialized()) doThing();` -- a synchronous call
+    // on the caller's stack -- so routing those sites through whenInitialized()
+    // is a pure no-op refactor. Option B is the intended end state, but it
+    // shifts the already-initialized callback by one event-loop turn and so
+    // changes ordering for every converted site at once; switch to it only
+    // behind broader ordering/lifetime tests (dialogs opened mid-session,
+    // welcome/interface frames at cold start, context destroyed same-turn).
+    //
+    // To switch, delete the fn() below and enable the deferred dispatch:
+    //
+    //     QTimer::singleShot(0, const_cast<QObject *>(context), std::move(fn));
+    //
+    // (context is the receiver, so the call is dropped if it dies first, and
+    // runs on context's thread -- matching the connect() branch.)
+    Q_UNUSED(context) // option A ignores context; option B uses it.
+    fn(); // option A: synchronous, matches legacy behavior.
 }
-
-#ifdef HAVE_LIBPCAP
-GList* MainApplication::getInterfaceList() const
-{
-    return interface_list_copy(cached_if_list_);
-}
-
-void MainApplication::setInterfaceList(GList *if_list)
-{
-    free_interface_list(cached_if_list_);
-    cached_if_list_ = interface_list_copy(if_list);
-}
-#endif
 
 void MainApplication::allSystemsGo()
 {
@@ -806,52 +808,61 @@ _e_prefs *MainApplication::readConfigurationFiles(bool reset)
     return prefs_p;
 }
 
-static void switchTranslator(QTranslator& myTranslator, const QString& filename,
-    const QString& searchPath)
+static void switchTranslator(QTranslator& myTranslator, const QLocale &locale, const QString& filename, const QStringList &searchPath)
 {
     mainApp->removeTranslator(&myTranslator);
-
-    if (myTranslator.load(filename, searchPath))
-        mainApp->installTranslator(&myTranslator);
+    for (const QString &path : searchPath) {
+        if (myTranslator.load(locale, filename, QStringLiteral("_"), path)) {
+            mainApp->installTranslator(&myTranslator);
+            return;
+        }
+    }
+    if (locale.language() != QLocale::C) {
+        /* Don't compare the locale itself, see:
+         * https://doc.qt.io/qt-6/qlocale.html#operator-eq-eq
+         *
+         * Note that the ordered list of languages that were tried is that of
+         * locale.uiLanguages(); the first language in that list is not
+         * necessarily locale.language(), especially on Windows (See #17221.)
+         */
+        qWarning() << "Couldn't load" << filename << "translations!" << "Searched:" << searchPath;
+    }
 }
 
 void MainApplication::loadLanguage(const QString newLanguage)
 {
     QLocale locale;
-    QString localeLanguage;
     const char* env_prefix = application_configuration_environment_prefix();
 
     if (newLanguage.isEmpty() || newLanguage == USE_SYSTEM_LANGUAGE) {
         locale = QLocale::system();
-        localeLanguage = locale.name();
     } else {
-        localeLanguage = newLanguage;
-        locale = QLocale(localeLanguage);
+        locale = QLocale(newLanguage);
     }
 
     QLocale::setDefault(locale);
-    switchTranslator(mainApp->translator,
-            QStringLiteral("wireshark_%1.qm").arg(localeLanguage), QStringLiteral(":/i18n/"));
-    if (QFile::exists(QStringLiteral("%1/%2/wireshark_%3.qm")
-            .arg(get_datafile_dir(env_prefix)).arg("languages").arg(localeLanguage)))
-        switchTranslator(mainApp->translator,
-                QStringLiteral("wireshark_%1.qm").arg(localeLanguage), QStringLiteral("%1/languages").arg(get_datafile_dir(env_prefix)));
-    if (QFile::exists(QStringLiteral("%1/wireshark_%3.qm")
-            .arg(gchar_free_to_qstring(get_persconffile_path("languages", false, env_prefix))).arg(localeLanguage)))
-        switchTranslator(mainApp->translator,
-                QStringLiteral("wireshark_%1.qm").arg(localeLanguage), gchar_free_to_qstring(get_persconffile_path("languages", false, env_prefix)));
-    if (QFile::exists(QStringLiteral("%1/qt_%2.qm")
-            .arg(get_datafile_dir(env_prefix)).arg(localeLanguage))) {
-        switchTranslator(mainApp->translatorQt,
-                QStringLiteral("qt_%1.qm").arg(localeLanguage), QString(get_datafile_dir(env_prefix)));
-    } else if (QFile::exists(QStringLiteral("%1/qt_%2.qm")
-            .arg(get_datafile_dir(env_prefix)).arg(localeLanguage.left(localeLanguage.lastIndexOf('_'))))) {
-        switchTranslator(mainApp->translatorQt,
-                QStringLiteral("qt_%1.qm").arg(localeLanguage.left(localeLanguage.lastIndexOf('_'))), QString(get_datafile_dir(env_prefix)));
-    } else {
-        QString translationPath = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
-        switchTranslator(mainApp->translatorQt, QStringLiteral("qt_%1.qm").arg(localeLanguage), translationPath);
-    }
+
+    // Search path list ordered by priority. Prefer personal configuration
+    // to global datadir to embedded resources to Qt global directory.
+    QStringList searchPath;
+    searchPath.emplaceBack(gchar_free_to_qstring(get_persconffile_path("languages", false, env_prefix)));
+    searchPath.emplaceBack(QStringLiteral("%1/languages").arg(get_datafile_dir(env_prefix)));
+    searchPath.emplaceBack(QStringLiteral(":/i18n/"));
+
+#if QT_VERSION >= QT_VERSION_CHECK(6, 8, 0)
+    searchPath.append(QLibraryInfo::path(QLibraryInfo::TranslationsPath));
+#else
+    searchPath.emplaceBack(QLibraryInfo::path(QLibraryInfo::TranslationsPath));
+#endif
+
+    // Translations are searched for in the reverse order in which they were
+    // installed, so install the Qt generic translator first and ours last.
+    switchTranslator(mainApp->translatorQt, locale, QStringLiteral("qt"), searchPath);
+
+    // XXX - Yes, the translation files are also wireshark_%1.qm for Stratoshark.
+    // There is a stratoshark_en.[ts|qm] file too (for plurals?) though I'm
+    // not sure if it's used properly.
+    switchTranslator(mainApp->translator, locale, QStringLiteral("wireshark"), searchPath);
 }
 
 void MainApplication::doTriggerMenuItem(MainMenuItem menuItem)
@@ -886,9 +897,9 @@ void MainApplication::captureEventHandler(CaptureEvent ev)
         case CaptureEvent::Finished:
             active_captures_--;
             emit captureActive(active_captures_);
-            if (refresh_interfaces_pending_ && !global_capture_opts.restart) {
-                refreshLocalInterfaces();
-            }
+            // A refresh requested during the capture was deferred by
+            // InterfaceListManager (capture-active guard) and is serviced now via
+            // the captureActive signal above; no explicit re-trigger needed.
             break;
         default:
             break;

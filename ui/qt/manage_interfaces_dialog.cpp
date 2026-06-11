@@ -29,7 +29,6 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #endif
-#include "ui/iface_lists.h"
 #include "ui/preference_utils.h"
 #include "ui/ws_ui_util.h"
 #include <wsutil/utf8_entities.h>
@@ -37,6 +36,8 @@
 #include <ui/qt/utils/qt_ui_utils.h>
 
 #include "main_application.h"
+#include <ui/qt/main_window.h>
+#include <ui/qt/manager/interface_list_manager.h>
 
 #include <QDebug>
 
@@ -262,7 +263,9 @@ ManageInterfacesDialog::~ManageInterfacesDialog()
         remoteAccepted();
 #endif
         prefs_main_write();
-        mainApp->refreshLocalInterfaces();
+        MainWindow *mainWindow = mainApp->mainWindow();
+        if (mainWindow && mainWindow->interfaceListManager())
+            mainWindow->interfaceListManager()->requestRefresh();
         emit ifsChanged();
     }
 
@@ -447,7 +450,7 @@ void ManageInterfacesDialog::updateRemoteInterfaceList(capture_options* capture_
             auth_str = ws_strdup_printf("%s:%s", roptions->remote_host_opts.auth_username,
                                        roptions->remote_host_opts.auth_password);
         }
-        caps = capture_get_if_capabilities(capture_opts->app_name, if_string, monitor_mode, auth_str, NULL, NULL, main_window_update);
+        caps = capture_get_if_capabilities(if_string, monitor_mode, auth_str, NULL, NULL, main_window_update);
         g_free(auth_str);
         for (; (curr_addr = g_slist_nth(if_info->addrs, ips)) != NULL; ips++) {
             address addr_str;

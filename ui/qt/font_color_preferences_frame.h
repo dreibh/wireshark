@@ -44,9 +44,9 @@ public:
 
     /**
      * Called by the preferences dialog when the user accepts changes.
-     * Copies the stashed theme selection back to recent_common (the
-     * color-scheme mode is persisted via the normal pref_stashed path
-     * and does not need an explicit unstash).
+     * Copies the stashed theme selection and appearance mode back to
+     * recent_common.  Both live in global recent storage so they survive
+     * profile switches.
      */
     void unstash();
 
@@ -61,21 +61,17 @@ private:
     /** Pointer to the generated UI elements. */
     Ui::FontColorPreferencesFrame *ui;
 
-    /** Combo box for selecting the overall color scheme. */
-    QComboBox *colorSchemeComboBox_;
-
-    QComboBox *themeComboBox_;
-
     QString    stashed_theme_name_;
 
-    /** Preference for the color scheme. */
-    pref_t *pref_color_scheme_;
+    /**
+     * Stashed appearance mode (COLOR_SCHEME_DEFAULT / _LIGHT / _DARK).
+     * Committed to recent.gui_color_scheme in unstash() when the user
+     * accepts the dialog; not applied live.
+     */
+    int        stashed_color_scheme_;
 
     /** Preference for the Qt GUI font name. */
     pref_t *pref_qt_gui_font_name_;
-
-    /** Hand-painted theme mockup driven by ThemeManager::previewTheme(). */
-    ThemePreviewWidget *previewWidget_ = nullptr;
 
     /** The currently selected font. */
     QFont cur_font_;

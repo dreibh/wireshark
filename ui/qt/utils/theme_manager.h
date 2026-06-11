@@ -177,6 +177,9 @@ public:
         FilterBookmarkMatch,    // current filter is saved   (← AccentWarning, yellow)
         FilterClear,            // clear affordance (active) (← AccentError, red)
         FilterApply,            // apply affordance          (← AccentInfo, blue)
+        FilterHistory,          // recent-filters arrow, dimmed at rest (← PaletteMid);
+                                // the default theme pins the classic Tango grays
+                                // (#555753 / #d3d7cf) via theme.filter.history.
 
         // Syntax highlighting — foreground text colours for code- and
         // data-viewers (JSON, hex, Lua debugger, etc.).  Derived so
@@ -573,7 +576,7 @@ private:
     void reapplyForSchemeChange();
 
     /**
-     * Maps prefs.gui_color_scheme (COLOR_SCHEME_DEFAULT / _LIGHT /
+     * Maps recent.gui_color_scheme (COLOR_SCHEME_DEFAULT / _LIGHT /
      * _DARK) to ThemeMode.  Defined in the .cpp to keep prefs.h out
      * of this header.
      */

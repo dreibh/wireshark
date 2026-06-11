@@ -39,26 +39,27 @@ const int num_font_pangrams_ = array_length(font_pangrams_);
 
 FontColorPreferencesFrame::FontColorPreferencesFrame(QWidget *parent) :
     QFrame(parent),
-    ui(new Ui::FontColorPreferencesFrame),
-    colorSchemeComboBox_(nullptr),
-    themeComboBox_(nullptr)
+    ui(new Ui::FontColorPreferencesFrame)
 {
     ui->setupUi(this);
 
-    // Appearance mode — System / Dark / Light.  Wired to prefs.gui_color_scheme
-    // via the existing pref_stashed machinery.  Drives ThemeManager's light/
-    // dark selection independently of which theme is active.
-    colorSchemeComboBox_ = new QComboBox();
-    colorSchemeComboBox_->addItem(tr("System"), COLOR_SCHEME_DEFAULT);
-    colorSchemeComboBox_->addItem(tr("Light"),  COLOR_SCHEME_LIGHT);
-    colorSchemeComboBox_->addItem(tr("Dark"),   COLOR_SCHEME_DARK);
-    connect(colorSchemeComboBox_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+    // Appearance mode — System / Dark / Light.  Stashed in
+    // stashed_color_scheme_ and committed to recent.gui_color_scheme (global
+    // recent_common storage) on Apply.  Drives ThemeManager's light/dark
+    // selection independently of which theme is active.
+    stashed_color_scheme_ = recent.gui_color_scheme;
+
+    ui->colorSchemeComboBox->clear();
+    ui->colorSchemeComboBox->addItem(tr("System"), COLOR_SCHEME_DEFAULT);
+    ui->colorSchemeComboBox->addItem(tr("Light"),  COLOR_SCHEME_LIGHT);
+    ui->colorSchemeComboBox->addItem(tr("Dark"),   COLOR_SCHEME_DARK);
+    connect(ui->colorSchemeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &FontColorPreferencesFrame::colorSchemeIndexChanged);
 
     // Theme picker — populated from ThemeManager::availableThemes().
     // Persists its selection in recent_common.gui_theme_name via the
     // frame's stash/unstash flow, so the choice survives profile switches.
-    themeComboBox_ = new QComboBox();
+    ui->themeComboBox->clear();
     // Resolve empty/legacy "default" to the flavor's preferred default so
     // the dropdown shows a real, currently-shipped theme selected on
     // first run instead of an entry that no longer exists.
@@ -71,36 +72,21 @@ FontColorPreferencesFrame::FontColorPreferencesFrame(QWidget *parent) :
         // Show the theme name only; the author moves to a hint label below
         // the preview (set in refreshPreview()) so the dropdown stays clean.
         // The author is stashed in a private item-data role to feed it.
-        themeComboBox_->addItem(t.name, t.internalName);
-        themeComboBox_->setItemData(i, t.author, Qt::UserRole + 1);
+        ui->themeComboBox->addItem(t.name, t.internalName);
+        ui->themeComboBox->setItemData(i, t.author, Qt::UserRole + 1);
         if (!t.description.isEmpty())
-            themeComboBox_->setItemData(i, t.description, Qt::ToolTipRole);
+            ui->themeComboBox->setItemData(i, t.description, Qt::ToolTipRole);
         if (t.internalName == stashed_theme_name_)
             selectedIdx = i;
     }
     if (selectedIdx >= 0)
-        themeComboBox_->setCurrentIndex(selectedIdx);
-    connect(themeComboBox_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        ui->themeComboBox->setCurrentIndex(selectedIdx);
+    connect(ui->themeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &FontColorPreferencesFrame::themeIndexChanged);
 
-    // Place both controls into the Theme group's QFormLayout so the
-    // labels right-align in a column.
-    ui->themeGroupLayout->addRow(tr("Appearance mode:"), colorSchemeComboBox_);
-    ui->themeGroupLayout->addRow(tr("Theme:"),           themeComboBox_);
-
-    pref_color_scheme_ = prefFromPrefPtr(&prefs.gui_color_scheme);
     pref_qt_gui_font_name_ = prefFromPrefPtr(&prefs.gui_font_name);
 
     cur_font_.fromString(prefs_get_string_value(pref_qt_gui_font_name_, pref_stashed));
-
-    // Embed the hand-painted mockup into the placeholder container
-    // reserved in font_color_preferences_frame.ui.  refreshPreview()
-    // populates it lazily via showEvent → updateWidgets, so no initial
-    // setPreviewColors() call is needed here.
-    QVBoxLayout *previewLayout = new QVBoxLayout(ui->themePreviewContainer);
-    previewLayout->setContentsMargins(0, 0, 0, 0);
-    previewWidget_ = new ThemePreviewWidget(ui->themePreviewContainer);
-    previewLayout->addWidget(previewWidget_);
 
     // Repaint the preview when the live theme changes underneath us.
     // ThemeManager emits themeChanged whenever the OS scheme flips while
@@ -172,10 +158,9 @@ void FontColorPreferencesFrame::updateWidgets()
     ui->fontSampleLineEdit->setStyleSheet(line_edit_ss);
     ui->fontSampleLineEdit->setFont(cur_font_);
 
-    if (colorSchemeComboBox_) {
-        colorSchemeComboBox_->setCurrentIndex(
-            colorSchemeComboBox_->findData(
-                prefs_get_enum_value(pref_color_scheme_, pref_stashed)));
+    if (ui->colorSchemeComboBox) {
+        ui->colorSchemeComboBox->setCurrentIndex(
+            ui->colorSchemeComboBox->findData(stashed_color_scheme_));
     }
 
     refreshPreview();
@@ -183,21 +168,20 @@ void FontColorPreferencesFrame::updateWidgets()
 
 void FontColorPreferencesFrame::colorSchemeIndexChanged(int)
 {
-    if (colorSchemeComboBox_) {
-        prefs_set_enum_value(pref_color_scheme_, colorSchemeComboBox_->currentData().toInt(), pref_stashed);
-        // COLOR_SCHEME_DEFAULT is 0 so we don't need to check failure
+    if (ui->colorSchemeComboBox) {
+        stashed_color_scheme_ = ui->colorSchemeComboBox->currentData().toInt();
         updateWidgets();
     }
 }
 
 void FontColorPreferencesFrame::themeIndexChanged(int)
 {
-    if (!themeComboBox_)
+    if (!ui->themeComboBox)
         return;
     // Stash the picked theme's internal name; unstash() commits to
     // recent_common on Apply.  Not applied live — a switch here requires
     // the user to accept the preferences dialog.
-    stashed_theme_name_ = themeComboBox_->currentData().toString();
+    stashed_theme_name_ = ui->themeComboBox->currentData().toString();
     refreshPreview();
 }
 
@@ -207,6 +191,8 @@ void FontColorPreferencesFrame::unstash()
     recent.gui_theme_name = stashed_theme_name_.isEmpty()
         ? nullptr
         : g_strdup(stashed_theme_name_.toUtf8().constData());
+
+    recent.gui_color_scheme = stashed_color_scheme_;
 }
 
 void FontColorPreferencesFrame::on_fontPushButton_clicked()
@@ -224,22 +210,17 @@ void FontColorPreferencesFrame::on_fontPushButton_clicked()
 
 void FontColorPreferencesFrame::refreshPreview()
 {
-    // Constructor signal-firing safety: themeComboBox_->setCurrentIndex()
-    // in the ctor fires themeIndexChanged before previewWidget_ is built.
-    if (!previewWidget_)
-        return;
-
     // Author and description hints below the preview, fed from the
     // stashed roles on the selected theme item (the dropdown itself
     // shows the name only).  Description is also kept on ToolTipRole so
     // it surfaces while browsing the dropdown.
-    if (themeComboBox_) {
-        const int idx = themeComboBox_->currentIndex();
-        const QString author = themeComboBox_->itemData(
+    if (ui->themeComboBox) {
+        const int idx = ui->themeComboBox->currentIndex();
+        const QString author = ui->themeComboBox->itemData(
             idx, Qt::UserRole + 1).toString();
         ui->themeAuthorLabel->setText(
             author.isEmpty() ? QString() : tr("Theme by %1").arg(author));
-        const QString description = themeComboBox_->itemData(
+        const QString description = ui->themeComboBox->itemData(
             idx, Qt::ToolTipRole).toString();
         ui->themeDescriptionLabel->setText(description);
     }
@@ -252,7 +233,7 @@ void FontColorPreferencesFrame::refreshPreview()
     // value (not isDarkMode()) is what fixes the bug where the live mode_
     // short-circuited the answer before the user pressed Apply.
     ThemeManager::PreviewScheme previewScheme;
-    switch (prefs_get_enum_value(pref_color_scheme_, pref_stashed)) {
+    switch (stashed_color_scheme_) {
     case COLOR_SCHEME_LIGHT:
         previewScheme = ThemeManager::PreviewScheme::PreferLight;
         break;
@@ -268,6 +249,6 @@ void FontColorPreferencesFrame::refreshPreview()
     // corrupt theme name or missing file), so passing an empty hash is
     // safe — the preview just falls back to the live ThemeManager's
     // colors token-by-token.
-    previewWidget_->setPreviewColors(
+    ui->previewWidget->setPreviewColors(
         ThemeManager::instance()->previewTheme(stashed_theme_name_, previewScheme));
 }

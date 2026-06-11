@@ -195,6 +195,7 @@ workflow:
     AQT_ARCH: "msvc2022_64"
     VCVARS_ARCH: "64"
     WIRESHARK_BASE_DIR: "$CI_PROJECT_DIR\\.."
+    FALCO_PLUGIN_DIR: "$WIRESHARK_BASE_DIR/wireshark-x64-libs/falcosecurity-plugins-2026-03-16-2-x64-ws"
   stage: build
   retry: 1
   before_script:
@@ -274,7 +275,9 @@ workflow:
     - cmake --preset=ninja_ccache
       -DWIRESHARK_BASE_DIR=$WIRESHARK_BASE_DIR
       -DBUILD_stratoshark=on
-      -DFALCO_PLUGINS="$FALCO_PLUGIN_DIR/libcloudtrail.so;$FALCO_PLUGIN_DIR/libgcpaudit.so;$FALCO_PLUGIN_DIR/libk8saudit.so"
+      -DFALCO_PLUGIN_DIR="$FALCO_PLUGIN_DIR"
+      -DFALCO_PLUGINS="libcloudtrail.so;libgcpaudit.so;libk8saudit.so"
+      -DTEST_EXTRA_ARGS="--enable-stratoshark"
       ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
@@ -333,7 +336,7 @@ Source Package:
     # - ccache --max-size $( du --summarize --block-size=1M "$CI_PROJECT_DIR/build" | awk '{printf ("%dM", $1 * 1.5)}' )
     - if [ "$CI_JOB_STATUS" != "success" ]; then exit 0 ; fi
     - if [ -n "$SCHEDULE_TYPE" ] ; then exit 0 ; fi
-    - rclone config create wireshark $WS_RCLONE_REMOTE_OPTS
+    - rclone config create wireshark $WS_RCLONE_REMOTE_OPTS > /dev/null
     - stat --format="%n %s bytes" wireshark-*.tar.*
     - for digest in sha512 sha256 sha1 ; do openssl $digest wireshark-*.tar.* ; done
     - if [ -n "$S3_DESTINATION_DIST" ] ; then rclone copy . "wireshark:$S3_DESTINATION_DIST" --include "wireshark-*.tar.*" ; fi
@@ -513,15 +516,12 @@ Arch Linux :
     # falcosecurity/plugins
     - pacman $COMMON_PACMAN_ARGS go
     - git clone https://github.com/falcosecurity/plugins.git falco-plugins
-    - pushd /tmp/falco-plugins/plugins/cloudtrail
-    - make
-    - popd
-    - pushd /tmp/falco-plugins/plugins/gcpaudit
-    - make
-    - popd
-    - pushd /tmp/falco-plugins/plugins/k8saudit
-    - make
-    - popd
+    - for plugin in cloudtrail gcpaudit k8saudit ; do
+        pushd /tmp/falco-plugins/plugins/$plugin ;
+        make ;
+        mv -v *.so ../.. ;
+        popd ;
+      done
     # falcosecurity/libs
     - pacman $COMMON_PACMAN_ARGS uthash libelf onetbb jsoncpp re2
     - export LDFLAGS=-Wl,-rpath,'$ORIGIN/../lib'
@@ -540,7 +540,8 @@ Arch Linux :
     - cd build
     - printf "\e[0Ksection_start:%s:cmake_section[collapsed=true]\r\e[0KRunning CMake" "$( date +%s)"
     - cmake -G Ninja -DBUILD_stratoshark=on
-      -DFALCO_PLUGINS="/tmp/falco-plugins/plugins/cloudtrail/libcloudtrail.so;/tmp/falco-plugins/plugins/gcpaudit/libgcpaudit.so;/tmp/falco-plugins/plugins/k8saudit/libk8saudit.so"
+      -DFALCO_PLUGIN_DIR="/tmp/falco-plugins"
+      -DFALCO_PLUGINS="libcloudtrail.so;libgcpaudit.so;libk8saudit.so"
       -DCMAKE_INSTALL_PREFIX=$WIRESHARK_PREFIX ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
     - ninja
@@ -554,8 +555,6 @@ Arch Linux :
       - $CI_PROJECT_DIR/wireshark-arch-*.tar.xz
 
 Windows x64 Package:
-  variables:
-    FALCO_PLUGIN_DIR: "$WIRESHARK_BASE_DIR/wireshark-x64-libs/falcosecurity-plugins-2026-03-16-2-x64-ws"
   extends: .build-windows
   rules: !reference [.if-w-w-only-merged]
   tags:
@@ -567,8 +566,9 @@ Windows x64 Package:
     - cmake -G "Visual Studio 18 2026" -A x64
       -DENABLE_LTO=off
       -DBUILD_stratoshark=on
-      -DFALCO_PLUGINS="$FALCO_PLUGIN_DIR/cloudtrail.dll;$FALCO_PLUGIN_DIR/gcpaudit.dll;$FALCO_PLUGIN_DIR/k8saudit.dll"
-      -DFALCO_PLUGIN_DLLS="$FALCO_PLUGIN_DIR/libunwind.dll"
+      -DFALCO_PLUGIN_DIR="$FALCO_PLUGIN_DIR"
+      -DFALCO_PLUGINS="cloudtrail.dll;gcpaudit.dll;k8saudit.dll"
+      -DFALCO_PLUGIN_DLLS="libunwind.dll"
       -DENABLE_SIGNED_NSIS=on ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount Wireshark.slnx
     - msbuild /verbosity:minimal /maxcpucount test-programs.vcxproj
@@ -592,10 +592,11 @@ Windows x64 Package:
     - if (Test-Path env:S3_DESTINATION_WINDOWS_X64) { foreach ($package in $packages) { rclone copyto $package "wireshark:$env:S3_DESTINATION_WINDOWS_X64/$($package.Name)" --missing-on-dst - } }
     - $wiresharkVersion = Get-Content .\wireshark_version.txt
     - $wiresharkNsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Wireshark-*-x64.exe).Hash.ToLower()
-    - Set-Content -Path wireshark-release-info-$($wiresharkVersion)-windows-x64.ini -Value ("[DEFAULT]`nnsis_sha256 = $wiresharkNsisSha256")
+    # XXX this should probably be done elsewhere, e.g. in a CMake target or in a script similar to the macOS package.
+    - Set-Content -Path wireshark-release-info-$($wiresharkVersion)-windows-x64.ini -Value ("[DEFAULT]`nminimum_system_version = 10.0-17763`nnsis_sha256 = $wiresharkNsisSha256")
     - $stratosharkVersion = Get-Content .\stratoshark_version.txt
     - $stratosharkNsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Stratoshark-*-x64.exe).Hash.ToLower()
-    - Set-Content -Path stratoshark-release-info-$($stratosharkVersion)-windows-x64.ini -Value ("[DEFAULT]`nnsis_sha256 = $stratosharkNsisSha256")
+    - Set-Content -Path stratoshark-release-info-$($stratosharkVersion)-windows-x64.ini -Value ("[DEFAULT]`nminimum_system_version = 10.0-17763`nnsis_sha256 = $stratosharkNsisSha256")
     - if (Test-Path env:S3_DESTINATION_RELEASE) { rclone copy . "wireshark:$env:S3_DESTINATION_RELEASE" --include "*shark-release-info-*-windows-*.ini" --missing-on-dst - }
     - C:\Windows\py.exe -m pytest --enable-stratoshark --enable-release
   artifacts:
@@ -619,8 +620,9 @@ Windows Arm64 Package:
     - cmake -G "Visual Studio 18 2026" -A arm64
       -DENABLE_LTO=off
       -DBUILD_stratoshark=on
-      -DFALCO_PLUGINS="$FALCO_PLUGIN_DIR/cloudtrail.dll;$FALCO_PLUGIN_DIR/gcpaudit.dll;$FALCO_PLUGIN_DIR/k8saudit.dll"
-      -DFALCO_PLUGIN_DLLS="$FALCO_PLUGIN_DIR/libunwind.dll"
+      -DFALCO_PLUGIN_DIR="$FALCO_PLUGIN_DIR"
+      -DFALCO_PLUGINS="cloudtrail.dll;gcpaudit.dll;k8saudit.dll"
+      -DFALCO_PLUGIN_DLLS="libunwind.dll"
       -DENABLE_SIGNED_NSIS=on ..
     - msbuild /verbosity:minimal "/consoleloggerparameters:PerformanceSummary;NoSummary" /maxcpucount Wireshark.slnx
     - msbuild /verbosity:minimal /maxcpucount test-programs.vcxproj
@@ -639,10 +641,10 @@ Windows Arm64 Package:
     - if (Test-Path env:S3_DESTINATION_WINDOWS_ARM64) { foreach ($package in $packages) { rclone copyto $package "wireshark:$env:S3_DESTINATION_WINDOWS_ARM64/$($package.Name)" --missing-on-dst - } }
     - $wiresharkVersion = Get-Content .\wireshark_version.txt
     - $wiresharkNsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Wireshark-*-arm64.exe).Hash.ToLower()
-    - Set-Content -Path wireshark-release-info-$($wiresharkVersion)-windows-arm64.ini -Value ("[DEFAULT]`nnsis_sha256 = $wiresharkNsisSha256")
+    - Set-Content -Path wireshark-release-info-$($wiresharkVersion)-windows-arm64.ini -Value ("[DEFAULT]`nminimum_system_version = 10.0-17763`nnsis_sha256 = $wiresharkNsisSha256")
     - $stratosharkVersion = Get-Content .\stratoshark_version.txt
     - $stratosharkNsisSha256 = (Get-FileHash -Algorithm SHA256 .\packaging\nsis\Stratoshark-*-arm64.exe).Hash.ToLower()
-    - Set-Content -Path stratoshark-release-info-$($stratosharkVersion)-windows-arm64.ini -Value ("[DEFAULT]`nnsis_sha256 = $stratosharkNsisSha256")
+    - Set-Content -Path stratoshark-release-info-$($stratosharkVersion)-windows-arm64.ini -Value ("[DEFAULT]`nminimum_system_version = 10.0-17763`nnsis_sha256 = $stratosharkNsisSha256")
     - if (Test-Path env:S3_DESTINATION_RELEASE) { rclone copy . "wireshark:$env:S3_DESTINATION_RELEASE" --include "*shark-release-info-*-windows-*.ini" --missing-on-dst - }
     - C:\Windows\py.exe -m pytest --enable-stratoshark --enable-release
   artifacts:
@@ -706,7 +708,8 @@ macOS Universal Package:
       -DCMAKE_OSX_DEPLOYMENT_TARGET=13.0
       -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
       -DBUILD_stratoshark=on
-      -DFALCO_PLUGINS="$FALCO_PLUGIN_DIR/libcloudtrail.so;$FALCO_PLUGIN_DIR/libgcpaudit.so;$FALCO_PLUGIN_DIR/libk8saudit.so"
+      -DFALCO_PLUGIN_DIR="$FALCO_PLUGIN_DIR"
+      -DFALCO_PLUGINS="libcloudtrail.so;libgcpaudit.so;libk8saudit.so"
       -DTEST_EXTRA_ARGS="--enable-stratoshark;--enable-release"
       ..
     - printf "\e[0Ksection_end:%s:cmake_section\r\e[0K" "$( date +%s)"
@@ -734,14 +737,12 @@ macOS Universal Package:
       fi
     - $CI_PROJECT_DIR/build/run/tshark --version
     - WIRESHARK_SPARKLE_SIGNATURE=$( age --decrypt --identity="$MACOS_AGE_IDENTITY" "$MACOS_SPARKLE_BLOB" | $WIRESHARK_BASE_DIR/macos-universal-master/sparkle/bin/sign_update --ed-key-file - Wireshark?[1-9]*.dmg )
-    - WIRESHARK_DMG_SHA256=$( shasum --algorithm 256 Wireshark?[1-9]*.dmg | awk '{print $1}' )
     - WIRESHARK_VERSION=$(< ../wireshark_version.txt)
-    - printf '[DEFAULT]\nsparkle_signature = %s\ndmg_sha256 = %s\n' "$WIRESHARK_SPARKLE_SIGNATURE" "$WIRESHARK_DMG_SHA256" > wireshark-release-info-${WIRESHARK_VERSION}-macos-arm64.ini
+    - printf 'sparkle_signature = %s\n' "$WIRESHARK_SPARKLE_SIGNATURE" >> wireshark-release-info-${WIRESHARK_VERSION}-macos-arm64.ini
     - cp wireshark-release-info-${WIRESHARK_VERSION}-macos-arm64.ini wireshark-release-info-${WIRESHARK_VERSION}-macos-intel64.ini
     - STRATOSHARK_SPARKLE_SIGNATURE=$( age --decrypt --identity="$MACOS_AGE_IDENTITY" "$MACOS_SPARKLE_BLOB" | $WIRESHARK_BASE_DIR/macos-universal-master/sparkle/bin/sign_update --ed-key-file - Stratoshark?[0-9]*.dmg )
-    - STRATOSHARK_DMG_SHA256=$( shasum --algorithm 256 Stratoshark?[0-9]*.dmg | awk '{print $1}' )
     - STRATOSHARK_VERSION=$(< ../stratoshark_version.txt)
-    - printf '[DEFAULT]\nsparkle_signature = %s\ndmg_sha256 = %s\n' "$STRATOSHARK_SPARKLE_SIGNATURE" "$STRATOSHARK_DMG_SHA256" > stratoshark-release-info-${STRATOSHARK_VERSION}-macos-arm64.ini
+    - printf 'sparkle_signature = %s\n' "$STRATOSHARK_SPARKLE_SIGNATURE" >> stratoshark-release-info-${STRATOSHARK_VERSION}-macos-arm64.ini
     - cp stratoshark-release-info-${STRATOSHARK_VERSION}-macos-arm64.ini stratoshark-release-info-${STRATOSHARK_VERSION}-macos-intel64.ini
     - if [ -n "$S3_DESTINATION_RELEASE" ] ; then
         aws s3 cp wireshark-release-info-*-macos-arm64.ini "s3://$S3_DESTINATION_RELEASE/" ;
@@ -781,7 +782,8 @@ Documentation:
     - ninja all_guides
     - cd doc
     - for HTML_DIR in ws[ud]g_html{,_chunked} ; do zip -9 -r "$HTML_DIR.zip" "$HTML_DIR" ; done
-    - if [ -n "$MC_DESTINATION_DOCS" ] ; then mc --quiet cp ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} "$MC_DESTINATION_DOCS/" ; fi
+    - rclone config create wireshark $WS_RCLONE_REMOTE_OPTS > /dev/null
+    - if [ -n "$S3_DESTINATION_DOCS" ] ; then rclone copy . "wireshark:$S3_DESTINATION_DOCS" --include "ws[ud]g_html{,_chunked}.zip" --include "Wireshark*Guide.{epub,pdf}" ; fi
     - mv -v ws[ud]g_html{,_chunked}.zip Wireshark*Guide.{epub,pdf} ../..
   after_script:
     - if [ "$CI_JOB_STATUS" != "success" ]; then exit 0 ; fi
@@ -1013,7 +1015,7 @@ No options:
       -DENABLE_MINIZIP=OFF -DENABLE_NETLINK=OFF -DENABLE_NGHTTP2=OFF -DENABLE_NGHTTP3=OFF
       -DENABLE_BCG729=OFF -DENABLE_OPUS=OFF -DENABLE_PCAP=OFF -DENABLE_PLUGIN_IFDEMO=ON
       -DENABLE_PLUGINS=OFF -DENABLE_SBC=OFF -DENABLE_SMI=OFF -DENABLE_SNAPPY=OFF -DENABLE_SPANDSP=OFF
-      -DENABLE_ZLIB=OFF -DENABLE_ZSTD=OFF -DBUILD_mmdbresolve=OFF ..
+      -DENABLE_ZLIB=OFF -DENABLE_ZLIBNG=OFF -DENABLE_ZSTD=OFF -DBUILD_mmdbresolve=OFF ..
     - ninja
 
 Clang ASAN Build:
@@ -1051,7 +1053,13 @@ Windows Build:
     - job: "Commit Check"
       optional: true
   script:
-    - cmake -G "Visual Studio 18 2026" -A x64 -DENABLE_LTO=off -DBUILD_stratoshark=on ..
+    - cmake -G "Visual Studio 18 2026" -A x64
+      -DENABLE_LTO=off
+      -DBUILD_stratoshark=on
+      -DFALCO_PLUGIN_DIR="$FALCO_PLUGIN_DIR"
+      -DFALCO_PLUGINS="cloudtrail.dll;gcpaudit.dll;k8saudit.dll"
+      -DFALCO_PLUGIN_DLLS="libunwind.dll"
+      ..
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug Wireshark.slnx
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug test-programs.vcxproj
     # jsonschema gates the theme.jsonc schema tests in suite_theme; the runner image doesn't ship it.
@@ -1134,7 +1142,8 @@ AI Trailer Reminder:
 # Adapted from https://www.synopsys.com/blogs/software-security/integrating-coverity-scan-with-gitlab-ci/
 # and https://gitlab.gnome.org/GNOME/glib/-/blob/8f57a5b9/.gitlab-ci.yml#L481
 # and https://community.blackduck.com/s/article/Exclude-Unwanted-Files-from-Coverity-Scan-and-Manage-Unwanted-Issues-in-CIM
-Coverity GCC Scan:
+# Black Duck / Coverity Scan has been down for quite a while. Disable it for now.
+.Coverity GCC Scan:
   image: registry.gitlab.com/wireshark/wireshark-containers/ubuntu-dev
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "coverity-gcc"'
@@ -1165,7 +1174,8 @@ Coverity GCC Scan:
       - cov-int.tar.gz
       - job_environment_variables.sh
 
-Coverity GCC Submit:
+# Black Duck / Coverity Scan has been down for quite a while. Disable it for now.
+.Coverity GCC Submit:
   image: curlimages/curl
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "coverity-gcc"'
@@ -1177,7 +1187,8 @@ Coverity GCC Submit:
     - curl --fail --data "project=$COVERITY_SCAN_PROJECT_NAME&token=$COVERITY_SCAN_TOKEN&email=$GITLAB_USER_EMAIL&url=$ARTIFACT_JOB_URL/artifacts/raw/cov-int.tar.gz&version=$GIT_DESCRIPTION&description=Ubuntu $GIT_DESCRIPTION $CI_COMMIT_REF_NAME:$CI_PIPELINE_ID" https://scan.coverity.com/builds
   needs: [ 'Coverity GCC Scan' ]
 
-Coverity Visual C++ Scan:
+# Black Duck / Coverity Scan has been down for quite a while. Disable it for now.
+.Coverity Visual C++ Scan:
   extends: .build-windows
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "coverity-visual-c++"'
@@ -1201,7 +1212,8 @@ Coverity Visual C++ Scan:
       - cov-int.zip
       - job_environment_variables.sh
 
-Coverity Visual C++ Submit:
+# Black Duck / Coverity Scan has been down for quite a while. Disable it for now.
+.Coverity Visual C++ Submit:
   image: curlimages/curl
   rules:
     - if: '$CI_PIPELINE_SOURCE == "schedule" && $SCHEDULE_TYPE == "coverity-visual-c++"'
@@ -1230,7 +1242,8 @@ Clang Static Analyzer:
     - if [ -d logs ] ; then mv logs $SB_DIR ; fi
     - chmod -R u=rwX,go=rX "$SB_DIR"
     - zip -9 -r "${SB_DIR}.zip" "$SB_DIR"
-    - if [ -n "$MC_DESTINATION_ANALYSIS" ] ; then mc --quiet cp "${SB_DIR}.zip" "$MC_DESTINATION_ANALYSIS/" ; fi
+    - rclone config create wireshark $WS_RCLONE_REMOTE_OPTS > /dev/null
+    - if [ -n "$S3_DESTINATION_ANALYSIS" ] ; then rclone copyto "${SB_DIR}.zip" "wireshark:$S3_DESTINATION_ANALYSIS/${SB_DIR}.zip" ; fi
 
 # Windows runners are still beta, at least technically:
 # https://docs.gitlab.com/ee/user/gitlab_com/index.html#windows-shared-runners-beta
@@ -1265,7 +1278,8 @@ API Reference:
     - ninja wsar_html_zip 2>&1 > doxygen_output.txt | tee doxygen_errors.txt
     - mv wsar_html.zip doxygen_{output,errors}.txt ..
     - cd ..
-    - if [ -n "$MC_DESTINATION_DOCS" ] ; then mc --quiet cp wsar_html.zip "$MC_DESTINATION_DOCS/" ; fi
+    - rclone config create wireshark $WS_RCLONE_REMOTE_OPTS > /dev/null
+    - if [ -n "$S3_DESTINATION_DOCS" ] ; then rclone copyto wsar_html.zip "wireshark:$S3_DESTINATION_DOCS/wsar_html.zip" ; fi
   after_script:
     - if [ "$CI_JOB_STATUS" != "success" ]; then exit 0 ; fi
   artifacts:
@@ -1279,11 +1293,6 @@ Code Lines and Data:
   extends: .build-ubuntu
   rules: !reference [.if-daily-schedule]
   stage: analysis
-  variables:
-    CLOC_OUT: /tmp/cloc.txt
-    SCC_OUT: /tmp/scc.txt
-    SLOC_OUT: /tmp/sloccount.txt
-    TOKEI_OUT: /tmp/tokei.txt
   script:
     - DEBIAN_FRONTEND=noninteractive apt-get update
     - DEBIAN_FRONTEND=noninteractive apt-get --yes install sloccount cloc curl unzip
@@ -1300,14 +1309,14 @@ Code Lines and Data:
     - cd ..
     - echo -n "cloc version:\ "
     - cloc --version
-    - cloc --quiet . | tee $CLOC_OUT
+    - cloc --quiet . | tee cloc.txt
     - /tmp/scc --version
-    - /tmp/scc --not-match 'qt/.*.ts' . | tee $SCC_OUT
+    - /tmp/scc --not-match 'qt/.*.ts' . | tee scc.txt
     - echo -n "SLOCCount version:\ "
     - sloccount --version
-    - sloccount . | awk "/^Computing results/ { results=1 } { if (results) print }" | tee $SLOC_OUT
+    - sloccount . | awk "/^Computing results/ { results=1 } { if (results) print }" | tee sloccount.txt
     - /tmp/tokei --version
-    - /tmp/tokei --exclude 'qt/*.ts' . | tee $TOKEI_OUT
+    - /tmp/tokei --exclude 'qt/*.ts' . | tee tokei.txt
     - |
       cat > manuf <<FIN
       # This file was generated by TShark $(git describe --tags | sed -e 's/^v//') with the
@@ -1323,8 +1332,9 @@ Code Lines and Data:
       FIN
     - build/run/tshark -G manuf | sed -e 's,:00:00:00/24,,' >> manuf
     - gzip --best --keep manuf
-    - if [ -n "$MC_DESTINATION_ANALYSIS" ] ; then mc --quiet cp "$CLOC_OUT" "$SCC_OUT" "$SLOC_OUT" "$TOKEI_OUT" "$MC_DESTINATION_ANALYSIS/" ; fi
-    - if [ -n "$MC_DESTINATION_DATA" ] ; then mc --quiet cp manuf manuf.gz "$MC_DESTINATION_DATA/" ; fi
+    - rclone config create wireshark $WS_RCLONE_REMOTE_OPTS > /dev/null
+    - if [ -n "$S3_DESTINATION_ANALYSIS" ] ; then rclone copy . "wireshark:$S3_DESTINATION_ANALYSIS" --include "{cloc,scc,sloccount,tokei}.txt" ; fi
+    - if [ -n "$S3_DESTINATION_DATA" ] ; then rclone copy . "wireshark:$S3_DESTINATION_DATA" --include "manuf{,.gz}" ; fi
   artifacts:
     paths:
     - manuf
@@ -1367,7 +1377,8 @@ Code Lines and Data:
     - FUZZ_ERRORS="/tmp/fuzz/$( basename "$FUZZ_CAPTURE" .pcap ).err"
     - printf "\nfuzz-test.sh stderr:\n" >> "$FUZZ_ERRORS"
     - cat fuzz-test.err >> "$FUZZ_ERRORS"
-    - if [ -n "$MC_DESTINATION_FUZZ" ] ; then mc --quiet cp "$FUZZ_CAPTURE" "$FUZZ_ERRORS" "$MC_DESTINATION_FUZZ/" ; fi
+    - rclone config create wireshark $WS_RCLONE_REMOTE_OPTS > /dev/null
+    - if [ -n "$S3_DESTINATION_FUZZ" ] ; then rclone copy . "wireshark:$S3_DESTINATION_FUZZ" --include "$FUZZ_CAPTURE" --include "$FUZZ_ERRORS" ; fi
 
 ASan Menagerie Fuzz:
   extends: .fuzz-ubuntu
