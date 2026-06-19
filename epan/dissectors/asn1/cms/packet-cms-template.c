@@ -71,7 +71,7 @@ static unsigned char digest_buf[MAX(HASH_SHA1_LENGTH, HASH_MD5_LENGTH)];
 static int
 dissect_cms(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* data _U_)
 {
-	int offset = 0;
+	unsigned offset = 0;
 	proto_item *item=NULL;
 	proto_tree *tree=NULL;
 	asn1_ctx_t asn1_ctx;
@@ -104,7 +104,7 @@ cms_get_private_data(packet_info *pinfo)
 static void
 cms_verify_msg_digest(proto_item *pi, tvbuff_t *content, const char *alg, tvbuff_t *tvb, int offset)
 {
-  int i= 0, buffer_size = 0;
+  int i, buffer_size = 0;
 
   /* we only support two algorithms at the moment  - if we do add SHA2
      we should add a registration process to use a registration process */

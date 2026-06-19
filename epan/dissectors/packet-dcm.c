@@ -2886,7 +2886,7 @@ dcm_tag_lookup(uint16_t grp, uint16_t elm)
             tag_def = (dcm_tag_t const *)wmem_map_lookup(dcm_tag_table, GUINT_TO_POINTER(((uint32_t)grp << 16) | (elm & 0x000F)));
         }
         else if (grp == 0x1010) {
-            tag_def = (dcm_tag_t const *)wmem_map_lookup(dcm_tag_table, GUINT_TO_POINTER(((uint32_t)grp << 16) | (elm & 0x0000)));
+            tag_def = (dcm_tag_t const *)wmem_map_lookup(dcm_tag_table, GUINT_TO_POINTER(((uint32_t)grp << 16)));
         }
 
         if (tag_def == NULL) {
@@ -3803,7 +3803,7 @@ dissect_dcm_main(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, bool is_po
     uint32_t pdu_len = 0;
     uint32_t tlen = 0;
 
-    int offset = 0;
+    unsigned offset = 0;
 
     /*
         TCP packets are assembled well by wireshark in conjunction with the dissectors.

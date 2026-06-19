@@ -92,6 +92,11 @@ endif()
 include(CheckFunctionExists)
 include(CheckSymbolExists)
 
+if(WIN32)
+	check_symbol_exists(AF_UNIX "winsock2.h;afunix.h" HAVE_AF_UNIX)
+elseif(HAVE_SYS_SOCKET_H)
+	check_symbol_exists(AF_UNIX "sys/socket.h" HAVE_AF_UNIX)
+endif()
 #
 # Platform-specific functions used in platform-specific code.
 # We check for them only on the platform on which we use them.
@@ -141,6 +146,9 @@ if(UNIX)
 	check_symbol_exists("strptime"      "time.h"     HAVE_STRPTIME)
 	check_symbol_exists("vasprintf"     "stdio.h"    HAVE_VASPRINTF)
 	cmake_pop_check_state()
+endif()
+if(HAVE_SYS_SOCKET_H)
+	check_symbol_exists(SO_PEERCRED "sys/socket.h" HAVE_SO_PEERCRED)
 endif()
 
 #Struct members
