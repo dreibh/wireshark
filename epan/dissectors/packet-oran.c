@@ -2489,7 +2489,9 @@ static uint32_t dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info 
     if (!PINFO_FD_VISITED(pinfo)) {
         if (section_details) {
             for (unsigned prb = first_prb; prb <= last_prb; prb++) {
-                section_details->beamIds[prb] = beam_id;
+                if (prb < 273) {
+                    section_details->beamIds[prb] = beam_id;
+                }
             }
         }
     }
@@ -3142,7 +3144,9 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 dl_data_section->details[index_to_use].startPrb = startPrbc;
                 dl_data_section->details[index_to_use].numPrb = numPrbc;
                 for (unsigned prb = startPrbc; prb <= startPrbc+numPrbc; prb++) {
-                    dl_data_section->details[index_to_use].beamIds[prb] = section_beamId;
+                    if (prb < 273) {
+                        dl_data_section->details[index_to_use].beamIds[prb] = section_beamId;
+                    }
                 }
             }
         }
@@ -3991,9 +3995,11 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
 
                         if (!PINFO_FD_VISITED(pinfo)) {
                             if (dl_data_section) {
-                                /* Set beamId only for range of PRBss */
+                                /* Set beamId only for range of PRBs */
                                 for (unsigned prb = ext11_settings.bundles[n].start; prb <= ext11_settings.bundles[n].end; prb++) {
-                                    dl_data_section->details[index_to_use].beamIds[prb] = beam_id;
+                                    if (prb < 273) {
+                                        dl_data_section->details[index_to_use].beamIds[prb] = beam_id;
+                                    }
                                 }
                             }
                         }
@@ -7514,9 +7520,11 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             proto_tree_add_item(rb_tree, hf_oran_iq_user_data, tvb, offset, nBytesForSamples, ENC_NA);
 
             if (section_details) {
-                proto_item *beamid_ti = proto_tree_add_uint(rb_tree, hf_oran_beamId, tvb, 0, 0,
-                                                            section_details->beamIds[startPrbu + i*(1+rb)]);
-                proto_item_set_generated(beamid_ti);
+                if ((startPrbu + i*(1+rb)) < 273) {
+                    proto_item *beamid_ti = proto_tree_add_uint(rb_tree, hf_oran_beamId, tvb, 0, 0,
+                                                                section_details->beamIds[startPrbu + i*(1+rb)]);
+                    proto_item_set_generated(beamid_ti);
+                }
             }
 
 
@@ -7549,7 +7557,9 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                 }
                 proto_item_append_text(prbHeading, " (%u REs)", samples);
                 if (section_details) {
-                    proto_item_append_text(prbHeading, " [BeamId:%u]", section_details->beamIds[startPrbu + i*(1+rb)]);
+                    if ((startPrbu + i*(1+rb)) < 273) {
+                        proto_item_append_text(prbHeading, " [BeamId:%u]", section_details->beamIds[startPrbu + i*(1+rb)]);
+                    }
                 }
 
                 /* Was this PRB all zeros? */
@@ -8655,10 +8665,10 @@ proto_register_oran(void)
             "Defines the IQ bit width for the user data in every section in the C-Plane message", HFILL}
         },
         { &hf_oran_udCompHdrIqWidth_pref,
-          { "User Data IQ width", "oran_fh_cus.udCompHdrWidth",
+          { "User Data IQ width", "oran_fh_cus.udCompHdrWidth.pref",
             FT_UINT8, BASE_DEC,
             NULL, 0x0,
-            "Defines the IQ bit width for the user data in every section in the C-Plane message", HFILL}
+            "IQ bit width for the user data in every section in the C-Plane message, from preference", HFILL}
         },
 
         { &hf_oran_sinrCompHdrIqWidth_pref,
@@ -8878,19 +8888,19 @@ proto_register_oran(void)
           { "ciCompHdr", "oran_fh_cus.ciCompHdr",
             FT_STRING, BASE_NONE,
             NULL, 0x0,
-            NULL, HFILL}
+            "Channel Information Compression Header", HFILL}
         },
         { &hf_oran_ciCompHdrMeth,
           { "User Data Compression Method", "oran_fh_cus.ciCompHdrMeth",
             FT_UINT8, BASE_DEC | BASE_RANGE_STRING,
             RVALS(ud_comp_header_meth), 0x0e,
-            "Defines the compression method for the user data in every section in the C-Plane message", HFILL}
+            "Compression method for Channel Information", HFILL}
          },
         { &hf_oran_ciCompHdrIqWidth,
-          { "User Data IQ width", "oran_fh_cus.udCompHdrWidth",
+          { "User Data IQ width", "oran_fh_cus.ciCompHdrWidth",
             FT_UINT8, BASE_DEC | BASE_RANGE_STRING,
             RVALS(ud_comp_header_width), 0xf0,
-            "Defines the IQ bit width for the user data in every section in the C-Plane message", HFILL}
+            "IQ bit width for Channel Information", HFILL}
         },
         { &hf_oran_ciCompOpt,
           { "ciCompOpt", "oran_fh_cus.ciCompOpt",
