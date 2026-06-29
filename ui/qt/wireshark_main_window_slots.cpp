@@ -18,6 +18,8 @@
 #include "wireshark_main_window.h"
 #include <ui/qt/manager/interface_list_manager.h>
 #include <ui/qt/widgets/capture_card_widget.h>
+#include "packet_dialog.h"
+#include "search_frame.h"
 
 /*
  * The generated Ui_WiresharkMainWindow::setupUi() can grow larger than our configured limit,
@@ -106,6 +108,7 @@ DIAG_ON(frame-larger-than=)
 #include <ui/qt/widgets/display_filter_edit.h>
 #include "display_filter_expression_dialog.h"
 #include "dissector_tables_dialog.h"
+#include "distribution_dialog.h"
 #include "endpoint_dialog.h"
 #include "expert_info_dialog.h"
 #include "export_object_action.h"
@@ -1222,6 +1225,10 @@ void WiresharkMainWindow::setMenusForSelectedPacket()
     main_ui_->actionCopyListAsYAML->setEnabled(selectedRows().count() > 0);
     main_ui_->actionCopyListAsHTML->setEnabled(selectedRows().count() > 0);
 
+    if (main_ui_->searchFrame) {
+        main_ui_->searchFrame->setPacketSelected(frame_selected);
+    }
+
     main_ui_->actionEditMarkSelected->setEnabled(frame_selected || multi_selection);
     main_ui_->actionEditMarkAllDisplayed->setEnabled(have_frames);
     /* Unlike un-ignore, do not allow unmark of all frames when no frames are displayed  */
@@ -2284,12 +2291,14 @@ void WiresharkMainWindow::findPacket()
         return;
     }
     setPreviousFocus();
-    if (!main_ui_->searchFrame->isVisible()) {
-        showAccordionFrame(main_ui_->searchFrame, true);
+    SearchFrame *sf = main_ui_->searchFrame;
+    if (!sf->isVisible()) {
+        sf->setInPacketMode(false);
+        showAccordionFrame(sf, true);
     } else {
-        main_ui_->searchFrame->animatedHide();
+        sf->cancelSearch();
     }
-    main_ui_->searchFrame->setFocus();
+    sf->setFocus();
 }
 
 void WiresharkMainWindow::editTimeShift()
@@ -3467,6 +3476,8 @@ void WiresharkMainWindow::connectStatisticsMenuActions()
         sequence_dialog->show();
     });
 
+    connect(main_ui_->actionStatisticsDistribution, &QAction::triggered, this, [this]() { showDistributionDialog(QString()); } );
+
     connect(main_ui_->actionStatisticsCollectd, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("collectd"); });
     connect(main_ui_->actionStatisticsDNS, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("dns"); });
     connect(main_ui_->actionStatisticsDNS_QR, &QAction::triggered, this, [=]() { openStatisticsTreeDialog("dns_qr"); });
@@ -4156,6 +4167,18 @@ void WiresharkMainWindow::showEndpointsDialog()
             });
     connect(endp_dialog, &EndpointDialog::openTcpStreamGraph, this, &WiresharkMainWindow::openTcpStreamDialog);
     endp_dialog->show();
+}
+
+void WiresharkMainWindow::showDistributionDialog(const QString &abbreviation)
+{
+    DistributionDialog *dis_dialog = new DistributionDialog(*this, capture_file_, abbreviation);
+    dis_dialog->show();
+    connect(dis_dialog, &DistributionDialog::filterAction, this, &WiresharkMainWindow::filterAction);
+}
+
+void WiresharkMainWindow::showDistributionDialog()
+{
+    showDistributionDialog(QString());
 }
 
 void WiresharkMainWindow::externalMenuItemTriggered()

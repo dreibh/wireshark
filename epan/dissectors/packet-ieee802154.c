@@ -1973,7 +1973,7 @@ tvbuff_t *decrypt_ieee802154_payload(tvbuff_t * tvb, unsigned offset, packet_inf
         unsigned nkeys = set_key_func(packet, key, alt_key, &ieee802154_keys[decrypt_info->key_number]);
         if (nkeys >= 1) {
             /* Try with the initial key */
-            memcpy(decrypt_info->key, key, sizeof(key));
+            decrypt_info->key = key;
             payload_tvb = decrypt_func(tvb, offset, pinfo, packet, decrypt_info);
             if (!((*decrypt_info->status == DECRYPT_PACKET_MIC_CHECK_FAILED) || (*decrypt_info->status == DECRYPT_PACKET_DECRYPT_FAILED))) {
                 break;
@@ -1981,7 +1981,7 @@ tvbuff_t *decrypt_ieee802154_payload(tvbuff_t * tvb, unsigned offset, packet_inf
         }
         if (nkeys >= 2) {
             /* Try also with the alternate key */
-            memcpy(decrypt_info->key, alt_key, sizeof(alt_key));
+            decrypt_info->key = alt_key;
             payload_tvb = decrypt_func(tvb, offset, pinfo, packet, decrypt_info);
             if (!((*decrypt_info->status == DECRYPT_PACKET_MIC_CHECK_FAILED) || (*decrypt_info->status == DECRYPT_PACKET_DECRYPT_FAILED))) {
                 break;
@@ -3042,9 +3042,9 @@ ieee802154_decrypt_payload(tvbuff_t *tvb, unsigned mhr_len, packet_info *pinfo, 
             payload_tvb = decrypt_ieee802154_payload(tvb, mhr_len, pinfo, NULL, packet, &decrypt_info,
                 ieee802154_set_trel_key, dissect_ieee802154_decrypt);
         else
-        /* call with NULL tree since we add the key_number below without hiding it */
-        payload_tvb = decrypt_ieee802154_payload(tvb, mhr_len, pinfo, NULL, packet, &decrypt_info,
-                                     ieee802154_set_mac_key, dissect_ieee802154_decrypt);
+            // call with NULL tree since we add the key_number below without hiding it
+            payload_tvb = decrypt_ieee802154_payload(tvb, mhr_len, pinfo, NULL, packet, &decrypt_info,
+                ieee802154_set_mac_key, dissect_ieee802154_decrypt);
 
         /* Get the unencrypted data if decryption failed.  */
         if (!payload_tvb) {
@@ -5667,7 +5667,7 @@ ccm_cbc_mac(const uint8_t *key, const uint8_t *iv, const uint8_t *a, int a_len, 
         }
         else {
             memcpy(block, a, a_len);
-            memset(&block[a_len-1], 0, sizeof(block)-a_len);
+            memset(&block[a_len], 0, sizeof(block)-a_len);
         }
         /* Adjust pointers. */
         a += sizeof(block);
@@ -5687,7 +5687,7 @@ ccm_cbc_mac(const uint8_t *key, const uint8_t *iv, const uint8_t *a, int a_len, 
         }
         else {
             memcpy(block, m, m_len);
-            memset(&block[a_len], 0, sizeof(block)-m_len);
+            memset(&block[m_len], 0, sizeof(block)-m_len);
         }
         /* Adjust pointers. */
         m += sizeof(block);

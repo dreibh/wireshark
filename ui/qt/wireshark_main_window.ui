@@ -177,6 +177,20 @@
        <string>Main View</string>
       </property>
       <widget class="WelcomePage" name="welcomePage"/>
+      <widget class="QSplitter" name="splitterMaster">
+       <property name="accessibleName">
+        <string>Main View Splitter</string>
+       </property>
+       <property name="accessibleDescription">
+        <string>Contains the packet list, protocol tree, and packet bytes.</string>
+       </property>
+       <property name="focusPolicy">
+        <enum>Qt::FocusPolicy::NoFocus</enum>
+       </property>
+       <property name="childrenCollapsible">
+        <bool>false</bool>
+       </property>
+      </widget>
      </widget>
     </item>
    </layout>
@@ -618,6 +632,7 @@
     <addaction name="actionStatisticsIOGraph"/>
     <addaction name="actionStatisticsPlot"/>
     <addaction name="menuServiceResponseTime"/>
+    <addaction name="actionStatisticsDistribution"/>
     <addaction name="separator"/>
     <addaction name="actionStatistics_REGISTER_STAT_GROUP_UNSORTED"/>
     <addaction name="menu29West"/>
@@ -844,7 +859,7 @@
    <addaction name="actionFileClose"/>
    <addaction name="actionViewReload"/>
    <addaction name="separator"/>
-   <addaction name="actionEditFindPacket"/>
+  <addaction name="actionEditFindPacket"/>
    <addaction name="actionGoPreviousPacket"/>
    <addaction name="actionGoNextPacket"/>
    <addaction name="actionGoGoToPacket"/>
@@ -1373,9 +1388,9 @@
    <property name="text">
     <string>Reload as File Format/Capture</string>
    </property>
-   <property name="shortcut">
-    <string notr="true">Ctrl+Shift+F</string>
-   </property>
+    <property name="shortcut">
+     <string notr="true">Ctrl+Shift+F</string>
+    </property>
   </action>
   <action name="actionCaptureOptions">
    <property name="text">
@@ -1946,6 +1961,14 @@
    </property>
    <property name="toolTip">
     <string>Collectd statistics</string>
+   </property>
+  </action>
+  <action name="actionStatisticsDistribution">
+   <property name="text">
+    <string>Distribution</string>
+   </property>
+   <property name="toolTip">
+    <string>Distribution statistics</string>
    </property>
   </action>
   <action name="actionStatisticsDNS">
