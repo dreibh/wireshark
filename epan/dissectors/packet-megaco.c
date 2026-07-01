@@ -483,10 +483,15 @@ static int dissect_megaco_text_tcp(tvbuff_t *tvb, packet_info *pinfo, proto_tree
      * The minimum length of a MEGACO message is 6?:
      * Re-assembly ?
      */
-    if (is_tpkt(tvb, 6, NULL)) {
+    if (!is_tpkt(tvb, 6, NULL)) {
         /*
          * It's not a TPKT packet;
          * Is in MEGACO ?
+         *
+         * XXX - Why call dissect_tpkt_encap after deciding that
+         * MEGACO is not in TPKT? For the Continuation case? But
+         * dissect_megaco_text can call the data dissector if it
+         * doesn't look like MEGACO, so it's duplicative.
          */
         dissect_megaco_text(tvb, pinfo, tree, data);
     }
@@ -2784,6 +2789,7 @@ dissect_megaco_Packagesdescriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
             tvb_find_uint8_length(tvb, tvb_RBRKT+1, tvb_packages_end_offset, '}', &tvb_RBRKT);
             tvb_LBRKT_found = tvb_find_uint8_length(tvb, tvb_LBRKT, tvb_packages_end_offset, '{', &tvb_LBRKT);
 
+            /* Find the comma that delimits the next packagesItem */
             found  = tvb_find_uint8_length(tvb, tvb_previous_offset, tvb_packages_end_offset, ',', &tvb_current_offset);
 
             if (found == false || tvb_current_offset > tvb_packages_end_offset){
@@ -2815,18 +2821,13 @@ dissect_megaco_Packagesdescriptor(tvbuff_t *tvb, packet_info *pinfo _U_, proto_t
 
             proto_tree_add_format_text(megaco_packagesdescriptor_tree, tvb, tvb_previous_offset, tokenlen);
 
-            found = tvb_find_uint8_length(tvb, tvb_RBRKT, tvb_packages_end_offset, ',', &tvb_current_offset);
-
-            if (found == false || tvb_current_offset > tvb_packages_end_offset ){
-                tvb_current_offset = tvb_packages_end_offset;
-            }
-
+            /* Move past the comma and any LWSP */
             tvb_previous_offset = megaco_tvb_skip_wsp(tvb, tvb_current_offset+1);
 
             tvb_LBRKT = tvb_previous_offset;
             tvb_RBRKT = tvb_previous_offset;
 
-        } while ( tvb_current_offset < tvb_packages_end_offset );
+        } while ( tvb_previous_offset < tvb_packages_end_offset );
     }
 
 }
