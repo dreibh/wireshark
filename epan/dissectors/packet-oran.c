@@ -528,6 +528,7 @@ static int hf_oran_bfws_symbols_since_defined;
 
 static int hf_oran_corresponding_cplane_frame;
 static int hf_oran_corresponding_cplane_frame_time_delta;
+static int hf_oran_corresponding_uplane_frame;
 
 
 /* Convenient fields for filtering, mostly shown as hidden */
@@ -1794,8 +1795,8 @@ typedef struct {
     uint32_t last_frame[2];
     uint8_t  next_expected_sequence_number[2];
 
-    /* DL expected frames.  sectionId -> expected_section_data_t* */
-    wmem_tree_t *expected_dl_sections;
+    /* expected frames.  sectionId -> expected_section_data_t* */
+    wmem_tree_t *expected_sections[2];  /* [direction] */
 
     /* Table recording ackNack requests (ackNackId -> ack_nack_request_t*)
        Note that this assumes that the same ackNackId will not be reused within a state,
@@ -1913,6 +1914,13 @@ static uint32_t make_flow_key(packet_info *pinfo, uint16_t eaxc_id, uint8_t plan
 /* Table maintained on first pass from flow_key(uint32_t) -> flow_state_t* */
 static wmem_tree_t *flow_states_table;
 
+typedef struct {
+    uint32_t frame_number;
+    uint16_t sectionId;
+    uint32_t gap_in_usecs;
+    /* TODO: could add PRB, symbol ranges here too? */
+} corresponding_uplane_frame;
+
 /* Table consulted on subsequent passes: frame_num -> flow_result_t* */
 static wmem_tree_t *flow_results_table;
 
@@ -1923,8 +1931,11 @@ typedef struct {
     uint32_t previous_frame;
 
     /* sectionId -> expected_section_data_t*   */
-    wmem_tree_t *expected_dl_sections;
+    /* Frame only covers one direction */
+    wmem_tree_t *expected_sections;
 
+    /* List of u-plane frames (corresponding_uplane_frame*) corresponding to a c-plane frame */
+    wmem_list_t *u_plane_frames;
 } flow_result_t;
 
 
@@ -3159,53 +3170,52 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
     }
 
 
-    expected_section_data_t *dl_data_section = NULL;
+    expected_section_data_t *data_section = NULL;
     unsigned index_to_use = 0;
 
     /* On first pass, allocate a section entry to use */
     if (link_planes_together && !PINFO_FD_VISITED(pinfo)) {
 
-        if (!tap_info->uplink) {
-            /* Look for existing entry for sectionId to overwrite first. */
-            dl_data_section = wmem_tree_lookup32(state->expected_dl_sections,
-                                                 sectionId);
-            if (dl_data_section == NULL) {
-                /* None, so create */
-                dl_data_section = wmem_new0(wmem_file_scope(), expected_section_data_t);
-                wmem_tree_insert32(state->expected_dl_sections,
-                                   sectionId,
-                                   dl_data_section);
-            }
+        /* Look for existing entry for sectionId to overwrite first. */
+        uint8_t direction = !tap_info->uplink;
+        data_section = wmem_tree_lookup32(state->expected_sections[direction],
+                                          sectionId);
+        if (data_section == NULL) {
+            /* None, so create */
+            data_section = wmem_new0(wmem_file_scope(), expected_section_data_t);
+            wmem_tree_insert32(state->expected_sections[direction],
+                               sectionId,
+                               data_section);
+        }
 
-            /* If 2nd entry not in use, use that one */
-            if (!dl_data_section->details[1].in_use) {
+        /* If 2nd entry not in use, use that one */
+        if (!data_section->details[1].in_use) {
+            index_to_use = 1;
+        }
+        else {
+            /* Both in use, so replace the older of the 2 entries */
+            if (data_section->details[1].frame_number < data_section->details[0].frame_number) {
                 index_to_use = 1;
             }
-            else {
-                /* Both in use, so replace the older of the 2 entries */
-                if (dl_data_section->details[1].frame_number < dl_data_section->details[0].frame_number) {
-                    index_to_use = 1;
-                }
-            }
+        }
 
-            if (dl_data_section) {
-                section_details_t *details = &dl_data_section->details[index_to_use];
+        if (data_section) {
+            section_details_t *details = &data_section->details[index_to_use];
 
-                details->in_use = true;
-                details->frame = frameId;
-                details->subframe = subframeId;
-                details->slot = slotId;
-                details->startSymbol = startSymbolId;
+            details->in_use = true;
+            details->frame = frameId;
+            details->subframe = subframeId;
+            details->slot = slotId;
+            details->startSymbol = startSymbolId;
 
-                details->frame_number = pinfo->num;
-                details->frame_time = pinfo->abs_ts;
-                dl_data_section->sectionId = sectionId;
-                details->startPrb = startPrbc;
-                details->numPrb = numPrbc;
-                for (unsigned prb = startPrbc; prb <= startPrbc+numPrbc; prb++) {
-                    if (prb < 273) {
-                        details->beamIds[prb] = section_beamId;
-                    }
+            details->frame_number = pinfo->num;
+            details->frame_time = pinfo->abs_ts;
+            data_section->sectionId = sectionId;
+            details->startPrb = startPrbc;
+            details->numPrb = numPrbc;
+            for (unsigned prb = startPrbc; prb <= startPrbc+numPrbc; prb++) {
+                if (prb < 273) {
+                    details->beamIds[prb] = section_beamId;
                 }
             }
         }
@@ -4004,7 +4014,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                                                     ext11_settings.bundles[b].end,
                                                     ext11_settings.bundles[b].is_orphan,
                                                     symbol_count,
-                                                    (link_planes_together && dl_data_section) ? &dl_data_section->details[index_to_use] : NULL,
+                                                    (link_planes_together && data_section) ? &data_section->details[index_to_use] : NULL,
                                                     tap_info);
                         if (!offset) {
                             break;
@@ -4053,11 +4063,11 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                         offset += 2;
 
                         if (!PINFO_FD_VISITED(pinfo)) {
-                            if (dl_data_section) {
+                            if (data_section) {
                                 /* Set beamId only for range of PRBs */
                                 for (unsigned prb = ext11_settings.bundles[n].start; prb <= ext11_settings.bundles[n].end; prb++) {
                                     if (prb < 273) {
-                                        dl_data_section->details[index_to_use].beamIds[prb] = beam_id;
+                                        data_section->details[index_to_use].beamIds[prb] = beam_id;
                                     }
                                 }
                             }
@@ -5982,7 +5992,9 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
             state = wmem_new0(wmem_file_scope(), flow_state_t);
             state->ack_nack_requests = wmem_tree_new(wmem_file_scope());
             wmem_tree_insert32(flow_states_table, key, state);
-            state->expected_dl_sections = wmem_tree_new(wmem_file_scope());
+            /* Tables for each direction */
+            state->expected_sections[0] = wmem_tree_new(wmem_file_scope());
+            state->expected_sections[1] = wmem_tree_new(wmem_file_scope());
         }
 
         /* Check sequence analysis status */
@@ -5992,6 +6004,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
             result->unexpected_seq_number = true;
             result->expected_sequence_number = state->next_expected_sequence_number[direction];
             result->previous_frame = state->last_frame[direction];
+            result->u_plane_frames = wmem_list_new(wmem_file_scope());
             wmem_tree_insert32(flow_results_table, pinfo->num, result);
         }
         /* Update conversation info */
@@ -6920,6 +6933,18 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
                                tvb_reported_length_remaining(tvb, offset));
     }
 
+    if (PINFO_FD_VISITED(pinfo) && result) {
+        /* Show list of frames that have corresponding U-plane data */
+        wmem_list_frame_t *list_frame;
+        for (list_frame = wmem_list_head(result->u_plane_frames); list_frame != NULL; list_frame = wmem_list_frame_next(list_frame)) {
+            corresponding_uplane_frame *frame = wmem_list_frame_data(list_frame);
+            proto_item *uplane_frame_ti = proto_tree_add_uint(oran_tree, hf_oran_corresponding_uplane_frame, tvb, 0, 0,
+                                                              frame->frame_number);
+            proto_item_append_text(uplane_frame_ti, " sectionId:%u (in %uus)", frame->sectionId, frame->gap_in_usecs);
+            proto_item_set_generated(uplane_frame_ti);
+        }
+    }
+
     return tvb_captured_length(tvb);
 }
 
@@ -7165,12 +7190,9 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     unsigned compression;
     int includeUdCompHeader;
 
-    /* Also look up C-PLANE state (sent in opposite direction) so may check current compression settings */
-    uint32_t cplane_key = make_flow_key(pinfo, eAxC, ORAN_C_PLANE, true);
-    flow_state_t* cplane_state = (flow_state_t*)wmem_tree_lookup32(flow_states_table, cplane_key);
-    uint32_t cplane_samedir_key = make_flow_key(pinfo, eAxC, ORAN_C_PLANE, false);
-    flow_state_t* cplane_samedir_state = (flow_state_t*)wmem_tree_lookup32(flow_states_table, cplane_samedir_key);
-
+    /* Also lookup C-PLANE state (sent in opposite direction for UL) so may check current compression settings */
+    uint32_t cplane_key =                make_flow_key(pinfo, eAxC, ORAN_C_PLANE, direction == 0);
+    flow_state_t* cplane_state =         (flow_state_t*)wmem_tree_lookup32(flow_states_table, cplane_key);
 
     if (!PINFO_FD_VISITED(pinfo)) {
         /* Create state/conversation if doesn't exist yet */
@@ -7178,11 +7200,15 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             /* Allocate new state */
             state = wmem_new0(wmem_file_scope(), flow_state_t);
             state->ack_nack_requests = wmem_tree_new(wmem_file_scope());
+            state->expected_sections[0] = wmem_tree_new(wmem_file_scope());
+            state->expected_sections[1] = wmem_tree_new(wmem_file_scope());
             wmem_tree_insert32(flow_states_table, key, state);
         }
 
         result = wmem_new0(wmem_file_scope(), flow_result_t);
-        result->expected_dl_sections = wmem_tree_new(wmem_file_scope());
+        result->expected_sections = wmem_tree_new(wmem_file_scope());
+        /* u_plane_frames not used for u-plane frames.. */
+
         wmem_tree_insert32(flow_results_table, pinfo->num, result);
 
         /* Check sequence analysis status (but not if later part of radio layer fragmentation) */
@@ -7246,7 +7272,6 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                           (pinfo->abs_ts.secs - timing->first_frame_time.secs);
                     int nseconds_between_packets =
                           pinfo->abs_ts.nsecs - timing->first_frame_time.nsecs;
-
 
                     /* Round to nearest microsecond. */
                     uint32_t total_gap = (seconds_between_packets*1000000) +
@@ -7326,10 +7351,9 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     unsigned number_of_sections = 0;
     unsigned nBytesPerPrb =0;
 
-
-    if (link_planes_together && !PINFO_FD_VISITED(pinfo) && cplane_samedir_state) {
+    if (link_planes_together && !PINFO_FD_VISITED(pinfo) && cplane_state) {
         /* Take a deep-copy of this state on first pass */
-        wmem_tree_foreach(cplane_samedir_state->expected_dl_sections, copy_section_entry, result->expected_dl_sections);
+        wmem_tree_foreach(cplane_state->expected_sections[direction], copy_section_entry, result->expected_sections);
     }
 
     /* Add each section (not from count, just keep parsing until payload used) */
@@ -7356,12 +7380,12 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
         section_details_t *section_details = NULL;
 
-        /* For DL, lookup corresponding C-plane frame/info */
-        if (link_planes_together && direction == 1) {
-            if (cplane_samedir_state != NULL) {
+        /* Lookup corresponding C-plane frame/info */
+        if (link_planes_together) {
+            if (cplane_state != NULL) {
 
                 expected_section_data_t *section_data = NULL;
-                section_data = wmem_tree_lookup32(result->expected_dl_sections, sectionId);
+                section_data = wmem_tree_lookup32(result->expected_sections, sectionId);
 
                 if (section_data) {
                     /* Need to work out which of 2 entries is in use for this data frame */
@@ -7409,9 +7433,26 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                         proto_item *cplane_delta_ti = proto_tree_add_uint(section_tree, hf_oran_corresponding_cplane_frame_time_delta, tvb, 0, 0, (uint32_t)total_gap);
                         proto_item_set_generated(cplane_delta_ti);
                     }
+
+                    if (!PINFO_FD_VISITED(pinfo)) {
+                        /* Look up 'result' for c-plane frame, and tell it about this frame.. */
+                        flow_result_t *cplane_result = wmem_tree_lookup32(flow_results_table, section_details->frame_number);
+                        if (!cplane_result) {
+                            cplane_result = wmem_new0(wmem_file_scope(), flow_result_t);
+                            cplane_result->u_plane_frames = wmem_list_new(wmem_file_scope());
+                            wmem_tree_insert32(flow_results_table, section_details->frame_number, cplane_result);
+                        }
+                        /* TODO: add more details? If move this further down, can include prb and symbol info.. */
+
+                        corresponding_uplane_frame *details = wmem_new(wmem_file_scope(), corresponding_uplane_frame);
+                        details->frame_number = pinfo->num;
+                        details->gap_in_usecs = (uint32_t)total_gap;
+                        details->sectionId = sectionId;
+
+                        wmem_list_append(cplane_result->u_plane_frames, details);
+                    }
                 }
             }
-
         }
 
         /* rb */
@@ -7642,7 +7683,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             startPrbu = 0;  /* may already be 0... */
         }
 
-        section_mod_compr_config_t* mod_compr_config = get_mod_compr_section_to_read(cplane_samedir_state, sectionId);
+        section_mod_compr_config_t* mod_compr_config = get_mod_compr_section_to_read(cplane_state, sectionId);
 
         /* Add each PRB */
         for (unsigned i = 0; i < numPrbu; i++) {
@@ -10641,11 +10682,17 @@ proto_register_oran(void)
             FT_FRAMENUM, BASE_NONE,
             FRAMENUM_TYPE(FT_FRAMENUM_REQUEST), 0x0, NULL, HFILL}
         },
-        /* Time since corresponding C-plane frame for DL U-plane */
+        /* Time since corresponding C-plane frame for U-plane */
         { &hf_oran_corresponding_cplane_frame_time_delta,
           { "Time since C-plane frame", "oran_fh_cus.cplane-frame-time-delta",
             FT_UINT32, BASE_DEC, NULL, 0x0,
             "Microseconds since C-plane frame", HFILL}
+        },
+        /* Corresponding U-plane frame for C-plane */
+        { &hf_oran_corresponding_uplane_frame,
+          { "U-plane frame", "oran_fh_cus.uplane-frame",
+            FT_FRAMENUM, BASE_NONE,
+            FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0, NULL, HFILL}
         },
 
         /* Reassembly */

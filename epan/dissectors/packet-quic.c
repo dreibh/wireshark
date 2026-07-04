@@ -2073,12 +2073,14 @@ again:
     }
 
     bool has_gap = false;
-    quic_retrans_key *tmp_key = wmem_new(pinfo->pool, quic_retrans_key);
-    tmp_key->num = pinfo->num;
-    tmp_key->offset = offset;
-    tmp_key->pkt_number = stream_info->stream_offset;
 
-    /* if (! REASSEMBLE_UNTIL_FIN ) */ {
+    /* Only do retransmission & gap checks on the whole STREAM frame. */
+    if (first_pdu /* && ! REASSEMBLE_UNTIL_FIN */ ) {
+        quic_retrans_key *tmp_key = wmem_new(pinfo->pool, quic_retrans_key);
+        tmp_key->num = pinfo->num;
+        tmp_key->offset = offset;
+        tmp_key->pkt_number = stream_info->stream_offset;
+
         if (!PINFO_FD_VISITED(pinfo)) {
             if (stream->inorder_offset < seq) {
                 /* A gap. */
@@ -3037,6 +3039,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         case FT_STREAM_E:
         case FT_STREAM_F: {
             uint64_t stream_id, stream_offset = 0, length;
+            bool stream_fin;
             int32_t lenvar;
 
             offset -= 1;
@@ -3044,7 +3047,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
             col_append_str(pinfo->cinfo, COL_INFO, ", STREAM");
 
             ftflags_tree = proto_item_add_subtree(ti_ftflags, ett_quic_ftflags);
-            proto_tree_add_item(ftflags_tree, hf_quic_stream_fin, tvb, offset, 1, ENC_NA);
+            proto_tree_add_item_ret_boolean(ftflags_tree, hf_quic_stream_fin, tvb, offset, 1, ENC_NA, &stream_fin);
             proto_tree_add_item(ftflags_tree, hf_quic_stream_len, tvb, offset, 1, ENC_NA);
             proto_tree_add_item(ftflags_tree, hf_quic_stream_off, tvb, offset, 1, ENC_NA);
             offset += 1;
@@ -3058,7 +3061,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
             proto_item_append_text(ti_ft, " id=%" PRIu64, stream_id);
             col_append_fstr(pinfo->cinfo, COL_INFO, "(%" PRIu64 ")", stream_id);
 
-            proto_item_append_text(ti_ft, " fin=%d", !!(frame_type & FTFLAGS_STREAM_FIN));
+            proto_item_append_text(ti_ft, " fin=%d", stream_fin);
 
             if (!PINFO_FD_VISITED(pinfo)) {
                 quic_streams_add(pinfo, quic_info, (unsigned)stream_id);
@@ -3096,6 +3099,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
                 .stream_offset = stream_offset,
                 .quic_info = quic_info,
                 .from_server = from_server,
+                .fin = stream_fin,
             };
             dissect_quic_stream_payload(tvb, offset, (int)length, pinfo, ft_tree, quic_info, &stream_info, stream, quic_packet);
             offset += (int)length;
@@ -4706,10 +4710,9 @@ dissect_quic_long_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tre
     /* Payload */
     ti = proto_tree_add_item(quic_tree, hf_quic_payload, tvb, offset, -1, ENC_NA);
 
-    if (conn) {
-        quic_process_payload(tvb, pinfo, quic_tree, ti, offset,
-                             conn, quic_packet, from_server, &ciphers->pp_cipher, first_byte, quic_packet->pkn_len);
-    }
+    quic_process_payload(tvb, pinfo, quic_tree, ti, offset,
+                         conn, quic_packet, from_server, &ciphers->pp_cipher, first_byte, quic_packet->pkn_len);
+
     if (!PINFO_FD_VISITED(pinfo) && !quic_packet->decryption.error) {
         // Packet number is verified to be valid, remember it.
         *quic_max_packet_number(conn, dgram_info->path_id, from_server, first_byte) = quic_packet->packet_number;
@@ -4838,26 +4841,26 @@ dissect_quic_short_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tr
     /* Protected Payload */
     ti = proto_tree_add_item(hdr_tree, hf_quic_protected_payload, tvb, offset, -1, ENC_NA);
 
-    if (conn) {
-        bool phase_change = false;
-        if (!PINFO_FD_VISITED(pinfo)) {
-            phase_change = quic_get_pp_cipher(&pp_cipher, key_phase, conn, from_server, quic_packet->packet_number);
-        }
 
-        quic_process_payload(tvb, pinfo, quic_tree, ti, offset,
-                             conn, quic_packet, from_server, &pp_cipher,
-                             first_byte, quic_packet->pkn_len);
-        if (!PINFO_FD_VISITED(pinfo)) {
-            if (!quic_packet->decryption.error) {
-                // Packet number is verified to be valid, remember it.
-                *quic_max_packet_number(conn, dgram_info->path_id, from_server, first_byte) = quic_packet->packet_number;
-                // pp cipher is verified to be valid, remember if it new.
-                quic_set_pp_cipher(&pp_cipher, key_phase, conn, from_server, quic_packet->packet_number);
-            } else if (phase_change) {
-                quic_pp_cipher_reset(&pp_cipher);
-            }
+    bool phase_change = false;
+    if (!PINFO_FD_VISITED(pinfo)) {
+        phase_change = quic_get_pp_cipher(&pp_cipher, key_phase, conn, from_server, quic_packet->packet_number);
+    }
+
+    quic_process_payload(tvb, pinfo, quic_tree, ti, offset,
+                         conn, quic_packet, from_server, &pp_cipher,
+                         first_byte, quic_packet->pkn_len);
+    if (!PINFO_FD_VISITED(pinfo)) {
+        if (!quic_packet->decryption.error) {
+            // Packet number is verified to be valid, remember it.
+            *quic_max_packet_number(conn, dgram_info->path_id, from_server, first_byte) = quic_packet->packet_number;
+            // pp cipher is verified to be valid, remember if it new.
+            quic_set_pp_cipher(&pp_cipher, key_phase, conn, from_server, quic_packet->packet_number);
+        } else if (phase_change) {
+            quic_pp_cipher_reset(&pp_cipher);
         }
     }
+
     offset += tvb_reported_length_remaining(tvb, offset);
 
     return offset;
