@@ -5337,7 +5337,7 @@ again:
         /* there was another pdu following this one. */
         pinfo->can_desegment=2;
         /* we also have to prevent the dissector from changing the
-         * PROTOCOL and INFO colums since what follows may be an
+         * PROTOCOL and INFO columns since what follows may be an
          * incomplete PDU and we don't want it be changed back from
          *  <Protocol>   to <SSH>
          */
@@ -5579,7 +5579,7 @@ ssh_dissect_connection_specific(tvbuff_t *packet_tvb, packet_info *pinfo,
         offset += 4;
         const char* request_name;
         uint32_t slen;
-        int item_len;
+        unsigned item_len;
         proto_tree_add_item_ret_uint(msg_type_tree, hf_ssh_channel_request_name_len, packet_tvb, offset, 4, ENC_BIG_ENDIAN, &slen);
         offset += 4;
         proto_tree_add_item_ret_string(msg_type_tree, hf_ssh_channel_request_name, packet_tvb, offset, slen, ENC_UTF_8, pinfo->pool, (const uint8_t**)&request_name);

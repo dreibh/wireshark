@@ -9001,14 +9001,14 @@ ssl_dissect_hnd_hello_ext_quic_transport_parameters(ssl_common_dissect_t *hf, tv
         uint32_t parameter_end_offset;
         uint64_t value;
         uint32_t i;
-        int len = 0;
+        unsigned len = 0;
 
         parameter_tree = proto_tree_add_subtree(tree, tvb, offset, 2, hf->ett.hs_ext_quictp_parameter,
                                                 NULL, "Parameter");
         /* TransportParameter ID and Length. */
         if (use_varint_encoding) {
             uint64_t parameter_length64;
-            int type_len = 0;
+            unsigned type_len = 0;
 
             proto_tree_add_item_ret_varint(parameter_tree, hf->hf.hs_ext_quictp_parameter_type,
                                            tvb, offset, -1, ENC_VARINT_QUIC, &parameter_type, &type_len);
@@ -10283,6 +10283,7 @@ ssl_dissect_hnd_hello_ext_ech(ssl_common_dissect_t *hf, tvbuff_t *tvb, packet_in
                     ssl->ech_transcript.data_len += 2;
                     uint32_t extensions_end = ech_offset + tvb_get_ntohs(ech_tvb, ech_offset) + 2;
                     ech_offset += 2;
+                    bool ech_outer_extensions_found = false;
                     while (extensions_end - ech_offset >= 4) {
                         uint16_t ext_type = tvb_get_ntohs(ech_tvb, ech_offset);
                         ech_offset += 2;
@@ -10295,6 +10296,16 @@ ssl_dissect_hnd_hello_ext_ech(ssl_common_dissect_t *hf, tvbuff_t *tvb, packet_in
                             ssl->ech_transcript.data_len += 4 + ext_len;
                             ech_offset += ext_len;
                         } else if (ext_len > 0) {
+                            if (ech_outer_extensions_found) {
+                                ssl_debug_printf("Illegal parameter; only a single \"ech_outer_extensions\" extension is allowed\n");
+                                /* This could lead to a buffer overflow by
+                                 * making the post-copying ClientHelloInner
+                                 * longer than ClientHelloOuter and is
+                                 * illegal, so skip this and don't copy. */
+                                ech_offset += ext_len;
+                                continue;
+                            }
+                            ech_outer_extensions_found = true;
                             unsigned num_ech_outer_extensions = tvb_get_uint8(ech_tvb, ech_offset);
                             ech_offset += 1;
                             uint32_t ech_outer_extensions_end = ech_offset + num_ech_outer_extensions;

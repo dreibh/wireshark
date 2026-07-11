@@ -399,8 +399,8 @@ static int hf_oran_sym_prb_pattern;
 static int hf_oran_sym_mask;
 static int hf_oran_num_mc_scale_offset;
 static int hf_oran_prb_pattern;
-static int hf_oran_prb_block_offset;
-static int hf_oran_prb_block_size;
+static int hf_oran_prb_blk_offset;
+static int hf_oran_prb_blk_size;
 
 static int hf_oran_codebook_index;
 static int hf_oran_layerid;
@@ -518,6 +518,10 @@ static int hf_oran_full_pwr_mode_2_tpmi_group;
 
 static int hf_oran_num_cand_ranks;
 static int hf_oran_ue_pref_rank;
+static int hf_oran_ue_tpmi_rank_y;
+static int hf_oran_ue_tpmi_rank_y_sinr_lx;
+static int hf_oran_ue_layer_pre_eq_sinr;
+
 
 /* Computed fields */
 static int hf_oran_c_eAxC_ID;
@@ -529,6 +533,7 @@ static int hf_oran_bfws_symbols_since_defined;
 static int hf_oran_corresponding_cplane_frame;
 static int hf_oran_corresponding_cplane_frame_time_delta;
 static int hf_oran_corresponding_uplane_frame;
+static int hf_oran_corresponding_uplane_frames_total;
 
 
 /* Convenient fields for filtering, mostly shown as hidden */
@@ -984,6 +989,18 @@ static const range_string freq_offset_fb_values[] = {
     {0x0,    0xffff,   "reserved"},
     {0, 0, NULL}
 };
+
+/* 7.5.3.78 */
+static const range_string ue_tmpi_rank_sinr_vals[] = {
+    {0,      0,        "0 dB SINR"},
+    {0x0001, 0x07ff,   "positive SINR"},
+    {0xf800, 0xffff,   "-ve SINR"},
+    {0x8000, 0x8000,   "invalid measurement result"},
+    {0x0,    0xffff,   "reserved"},
+    {0, 0, NULL}
+};
+
+
 
 /* Table 7.5.2.19-1 */
 static const value_string num_sinr_per_prb_vals[] = {
@@ -1918,7 +1935,9 @@ typedef struct {
     uint32_t frame_number;
     uint16_t sectionId;
     uint32_t gap_in_usecs;
-    /* TODO: could add PRB, symbol ranges here too? */
+    uint8_t symbol;
+    uint16_t startPrbu;
+    uint16_t numPrbu;
 } corresponding_uplane_frame;
 
 /* Table consulted on subsequent passes: frame_num -> flow_result_t* */
@@ -4659,28 +4678,19 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                         /* reserved (8 bits) */
                         add_reserved_field(pattern_tree, hf_oran_reserved_8bits, tvb, offset, 1);
                         offset += 1;
-                    }
-                    else {               /* PRB-BLOCK */
-                        /* prbBlkOffset (8 bits) */
-                        proto_tree_add_item(pattern_tree, hf_oran_prb_block_offset, tvb, offset, 1, ENC_BIG_ENDIAN);
-                        offset += 1;
-                        /* prbBlkSize (4 bits) */
-                        proto_tree_add_item(pattern_tree, hf_oran_prb_block_size, tvb, offset, 1, ENC_BIG_ENDIAN);
-                        offset += 1;
-                    }
-
-                    /* Yellowish part */
-                    if (prb_mode) {   /* PRB-BLOCK */
-                        /* prbBlkSize (4 bits) */
-                        proto_tree_add_item(pattern_tree, hf_oran_prb_block_size, tvb, offset, 1, ENC_BIG_ENDIAN);
-                    }
-                    else {
                         /* reserved (4 bits) */
                         add_reserved_field(pattern_tree, hf_oran_reserved_4bits, tvb, offset, 1);
                     }
+                    else {               /* PRB-BLOCK */
+                        /* prbBlkOffset (8 bits) */
+                        proto_tree_add_item(pattern_tree, hf_oran_prb_blk_offset, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        offset += 1;
+                        /* prbBlkSize (8 bits) */
+                        proto_tree_add_item(pattern_tree, hf_oran_prb_blk_size, tvb, offset, 2, ENC_BIG_ENDIAN);
+                        offset += 1;
+                    }
 
                     for (unsigned c=0; c < numMcScaleOffset; c++) {
-
                         if (c > 0) {
                             /* reserved (4 bits) */
                             add_reserved_field(pattern_tree, hf_oran_reserved_4bits, tvb, offset, 1);
@@ -4708,8 +4718,8 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                                                           hf_oran_mc_scale_re_mask_even,
                                                           ett_oran_mc_scale_remask,
                                                           remask_flags_even, ENC_BIG_ENDIAN, &mcScaleReMask);
-
                         offset += 2;
+
                         /* csf (1 bit) */
                         bool csf;
                         dissect_csf(pattern_tree, tvb, offset*8, ci_iq_width, &csf);
@@ -5510,28 +5520,52 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 }
                 case 10:
                 {
-                    /* TODO: UE TPMI and rank recommendation measurement */
+                    /* UE TPMI and rank recommendation measurement */
 
-                    /* numCandRanks (4 bits) */
-                    add_reserved_field(mr_tree, hf_oran_num_cand_ranks, tvb, offset, 1);
+                    /* numCandRanks (4 bits - only 1-4 valid) */
+                    uint8_t num_cand_ranks;
+                    proto_tree_add_item_ret_uint8(mr_tree, hf_oran_num_cand_ranks, tvb, offset, 1, ENC_NA, &num_cand_ranks);
+                    if (num_cand_ranks > 4) {
+                        num_cand_ranks = 4;
+                    }
+                    if (num_cand_ranks < 1) {
+                        num_cand_ranks = 1;
+                    }
+
                     /* uePrefRank (4 bits) */
                     add_reserved_field(mr_tree, hf_oran_ue_pref_rank, tvb, offset, 1);
                     offset += 1;
 
-                    /* TODO: ueTpmiRank1 (1 byte) */
-                    offset += 1;
+                    for (uint8_t cand_rank=1; cand_rank <= num_cand_ranks; cand_rank++) {
+                        /* ueTpmiRankY (1 byte) */
+                        proto_item *rank_y_ti = proto_tree_add_item(mr_tree, hf_oran_ue_tpmi_rank_y,
+                                                                    tvb, offset, 1, ENC_BIG_ENDIAN);
+                        proto_item_append_text(rank_y_ti, " (rank %u)", cand_rank);
 
-                    /* TODO: ueTpmiRank1Sinr1 (2 bytes) */
-                    offset += 2;
+                        offset += 1;
 
-                    /* TODO: various Sinr depending upon numCandRanks value.. */
+                        for (uint8_t sinr = 1; sinr <= cand_rank; sinr++) {
+                            /* ueTpmiRankYSinrLX (2 bytes) */
+                            proto_item *rank_y_sinr_x_ti = proto_tree_add_item(mr_tree, hf_oran_ue_tpmi_rank_y_sinr_lx,
+                                                                        tvb, offset, 2, ENC_BIG_ENDIAN);
+                            proto_item_append_text(rank_y_sinr_x_ti, " (rank %u, sinr %u)", cand_rank, sinr);
+                            offset += 2;
+                        }
+                    }
                     break;
                 }
                 case 11:
                 {
-                    /* TODO: UE layer pre-equalization SINR report */
-
-                    /* TODO: 1st to last layer ueLayerPreEqSinr (2 bytes each) */
+                    /* UE layer pre-equalization SINR report */
+                    /* TODO: how to know how many layers? Just fill up available data? */
+                    unsigned num_layers = (meas_data_size-1) * 4;
+                    for (unsigned layer=0; layer < num_layers; layer++) {
+                        /* ueLayerPreEqSinr (2 bytes each) */
+                        proto_item *pre_eq_sinr_ti = proto_tree_add_item(mr_tree, hf_oran_ue_layer_pre_eq_sinr,
+                                                                    tvb, offset, 2, ENC_BIG_ENDIAN);
+                        proto_item_append_text(pre_eq_sinr_ti, " (layer %u)", layer);
+                        offset += 2;
+                    }
                     break;
                 }
 
@@ -6940,9 +6974,14 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
             corresponding_uplane_frame *frame = wmem_list_frame_data(list_frame);
             proto_item *uplane_frame_ti = proto_tree_add_uint(oran_tree, hf_oran_corresponding_uplane_frame, tvb, 0, 0,
                                                               frame->frame_number);
-            proto_item_append_text(uplane_frame_ti, " sectionId:%u (in %uus)", frame->sectionId, frame->gap_in_usecs);
+            proto_item_append_text(uplane_frame_ti, "  sectionId:%2u symbol:%2u PRBs %3u->%3u  (in %uus)",
+                                   frame->sectionId, frame->symbol, frame->startPrbu, frame->startPrbu+frame->numPrbu-1, frame->gap_in_usecs);
             proto_item_set_generated(uplane_frame_ti);
         }
+        /* Also show total number of corresponding u-plane frames */
+        proto_item *uplane_frame_count_ti = proto_tree_add_uint(oran_tree, hf_oran_corresponding_uplane_frames_total, tvb, 0, 0,
+                                                                wmem_list_count(result->u_plane_frames));
+        proto_item_set_generated(uplane_frame_count_ti);
     }
 
     return tvb_captured_length(tvb);
@@ -7207,7 +7246,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
 
         result = wmem_new0(wmem_file_scope(), flow_result_t);
         result->expected_sections = wmem_tree_new(wmem_file_scope());
-        /* u_plane_frames not used for u-plane frames.. */
+        result->u_plane_frames = wmem_list_new(wmem_file_scope());
 
         wmem_tree_insert32(flow_results_table, pinfo->num, result);
 
@@ -7379,6 +7418,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         }
 
         section_details_t *section_details = NULL;
+        corresponding_uplane_frame *details = NULL;
 
         /* Lookup corresponding C-plane frame/info */
         if (link_planes_together) {
@@ -7411,7 +7451,10 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                         index_to_use = 1;
                     }
                     else {
-                        /* TODO: expert info warning? */
+                        /* Just choose the latest one.  Don't know numerology, so just use up to subframe */
+                        unsigned total_first =  section_data->details[0].frame * 10 + section_data->details[0].subframe;
+                        unsigned total_second = section_data->details[1].frame * 10 + section_data->details[1].subframe;
+                        index_to_use = total_second > total_first;
                     }
 
                     section_details = &section_data->details[index_to_use];
@@ -7442,12 +7485,13 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
                             cplane_result->u_plane_frames = wmem_list_new(wmem_file_scope());
                             wmem_tree_insert32(flow_results_table, section_details->frame_number, cplane_result);
                         }
-                        /* TODO: add more details? If move this further down, can include prb and symbol info.. */
+                        /* PRB range filled in below.. */
 
-                        corresponding_uplane_frame *details = wmem_new(wmem_file_scope(), corresponding_uplane_frame);
+                        details = wmem_new(wmem_file_scope(), corresponding_uplane_frame);
                         details->frame_number = pinfo->num;
                         details->gap_in_usecs = (uint32_t)total_gap;
                         details->sectionId = sectionId;
+                        details->symbol = symbolId;
 
                         wmem_list_append(cplane_result->u_plane_frames, details);
                     }
@@ -7473,6 +7517,11 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
         uint32_t numPrbu = 0;
         proto_tree_add_item_ret_uint(section_tree, hf_oran_numPrbu, tvb, offset, 1, ENC_NA, &numPrbu);
         offset += 1;
+
+        if (!PINFO_FD_VISITED(pinfo) && details) {
+            details->startPrbu = startPrbu;
+            details->numPrbu = (numPrbu) ? numPrbu : 273;
+        }
 
         proto_item *ud_comp_meth_item, *ud_comp_len_ti=NULL;
         uint32_t ud_comp_len = 0;
@@ -9949,21 +9998,20 @@ proto_register_oran(void)
             NULL, 0xf0,
             "number of symbol and resource block patterns", HFILL}
         },
-        /* 7.7.23.11 */
+        /* 7.7.23.9 */
         { &hf_oran_prb_mode,
           { "prbMode", "oran_fh_cus.prbMode",
             FT_BOOLEAN, 8,
             TFS(&prb_mode_tfs), 0x01,
             "PRB Mode", HFILL}
         },
-
+        /* 7.7.23.4 */
         { &hf_oran_sym_prb_pattern,
           { "symPrbPattern", "oran_fh_cus.symPrbPattern",
             FT_STRING, BASE_NONE,
             NULL, 0x0,
             NULL, HFILL}
         },
-
         /* 7.7.23.3 */
         { &hf_oran_sym_mask,
           { "symMask", "oran_fh_cus.symMask",
@@ -9984,7 +10032,22 @@ proto_register_oran(void)
           { "prbPattern", "oran_fh_cus.prbPattern",
             FT_UINT8, BASE_DEC,
             NULL, 0x0f,
-            "resource block pattern part of symPrbPattern", HFILL}
+            "size of one PRB block of one SymPrbPattern", HFILL}
+        },
+        /* 7.7.23.10 */
+        { &hf_oran_prb_blk_offset,
+          { "prbBlkOffset", "oran_fh_cus.prbBlkOffset",
+            FT_UINT16, BASE_DEC,
+            NULL, 0x0ff0,
+            "offset to start of PRB block", HFILL}
+        },
+
+        /* 7.7.23.11 */
+        { &hf_oran_prb_blk_size,
+          { "prbBlkSize", "oran_fh_cus.prbBlkSize",
+            FT_UINT16, BASE_DEC,
+            NULL, 0x0ff0,
+            "size of one PRB block of one SymPrbPattern", HFILL}
         },
 
         /* 7.7.3.2 */
@@ -10634,6 +10697,30 @@ proto_register_oran(void)
             "Most optimal UL Tx rank for UE",
             HFILL}
         },
+        /* 7.5.3.77 */
+        { &hf_oran_ue_tpmi_rank_y,
+          {"ueTpmiRankY", "oran_fh_cus.ueTpmiRankY",
+            FT_UINT8, BASE_DEC,
+            NULL, 0x0,
+            "TPMI index for codebook-based PUSCH tx",
+            HFILL}
+        },
+        /* 7.5.3.78 */
+        { &hf_oran_ue_tpmi_rank_y_sinr_lx,
+          {"ueTpmiRankYSinrLX", "oran_fh_cus.ueTpmiRankYSinrLX",
+            FT_UINT16, BASE_HEX | BASE_RANGE_STRING,
+            RVALS(ue_tmpi_rank_sinr_vals), 0x0,
+            "Estimation of post-equalization SINR",
+            HFILL}
+        },
+        /* 7.5.3.79 */
+        { &hf_oran_ue_layer_pre_eq_sinr,
+          {"ueLayerPreEqSinr", "oran_fh_cus.ueLayerPreEqSinr",
+            FT_UINT16, BASE_HEX,
+            NULL, 0x0,
+            "Pre-equalization SINR of a UE layer",
+            HFILL}
+        },
 
         { &hf_oran_c_section_common,
           { "Common Section", "oran_fh_cus.c-plane.section.common",
@@ -10693,6 +10780,11 @@ proto_register_oran(void)
           { "U-plane frame", "oran_fh_cus.uplane-frame",
             FT_FRAMENUM, BASE_NONE,
             FRAMENUM_TYPE(FT_FRAMENUM_RESPONSE), 0x0, NULL, HFILL}
+        },
+        { &hf_oran_corresponding_uplane_frames_total,
+          { "U-plane frames total", "oran_fh_cus.u-plane-frames-total",
+            FT_UINT32, BASE_DEC, NULL, 0x0,
+            "Number of corresponding U-plane frames", HFILL}
         },
 
         /* Reassembly */

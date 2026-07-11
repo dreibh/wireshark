@@ -1341,7 +1341,10 @@ static const struct encap_type_info encap_table_base[] = {
 	{ "dect_nr", "DECT-2020 New Radio (NR) MAC layer" },
 
 	/* WTAP_ENCAP_MMODULE */
-	{ "m_module", "Bachmann M-Module File" },
+	{ "m_module", "Bachmann M-Module file" },
+
+	/* WTAP_ENCAP_PROCMON */
+	{ "procmon", "Microsoft Process Monitor file"},
 };
 
 static int wtap_num_encap_types = array_length(encap_table_base);
@@ -1547,7 +1550,7 @@ static const char * const wtap_errlist[] = {
 const char *
 wtap_strerror(int err)
 {
-	static char errbuf[128];
+	static WS_THREAD_LOCAL char errbuf[128];
 	unsigned int wtap_errlist_index;
 
 	if (err < 0) {

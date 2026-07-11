@@ -391,6 +391,38 @@ ws_memrchr(const void *_haystack, int ch, size_t n)
 #endif /* HAVE_MEMRCHR */
 }
 
+/* Return the first occurrence of ch in the null-terminated string str.
+ * If not found, return a pointer to the null-terminator. */
+char *
+ws_strchrnul(const char *str, int ch)
+{
+#ifdef HAVE_STRCHRNUL
+ #ifdef __APPLE__
+    /* strchrnul was introduced in macOS 15.4, runtime check if building
+     * with a newer SDK than that but an older deployment target. */
+    if (__builtin_available(macOS 15.4, *)) {
+        return (char*)strchrnul(str, ch);
+    } else {
+        /* Minimal generic implementation. */
+        while (*str != '\0' && *str != (char)ch) {
+            str++;
+        }
+        return (char *)str;
+    }
+ #else
+    /* Cast in case someone has an implementation that works like one of those
+     * fancy C23 qualifier-preserving versions. */
+    return (char*)strchrnul(str, ch);
+ #endif
+#else
+    /* Minimal generic implementation. */
+    while (*str != '\0' && *str != (char)ch) {
+        str++;
+    }
+    return (char *)str;
+#endif
+}
+
 static const char *thousands_grouping_fmt;
 static const char *thousands_grouping_fmt_flt;
 

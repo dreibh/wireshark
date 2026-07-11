@@ -7969,7 +7969,7 @@ static int ett_zbee_zcl_multistate_output_basic_priority_array;
 static int ett_zbee_zcl_multistate_output_basic_priority_array_structure;
 
 /* Attributes */
-static const value_string zbee_zcl_multistate_output_basic_attr_names[] = {
+static const value_string zbee_zcl_multistate_basic_attr_names[] = {
     { ZBEE_ZCL_ATTR_ID_MULTISTATE_OUTPUT_BASIC_STATE_TEXT,           "State Text" },
     { ZBEE_ZCL_ATTR_ID_MULTISTATE_OUTPUT_BASIC_DESCRIPTION,          "Description" },
     { ZBEE_ZCL_ATTR_ID_MULTISTATE_OUTPUT_BASIC_NUMBER_OF_STATES,     "Number of States" },
@@ -8107,7 +8107,7 @@ proto_register_zbee_zcl_multistate_output_basic(void)
     static hf_register_info hf[] = {
 
         { &hf_zbee_zcl_multistate_output_basic_attr_id,
-            { "Attribute", "zbee_zcl_general.multistate_output_basic.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_multistate_output_basic_attr_names),
+            { "Attribute", "zbee_zcl_general.multistate_output_basic.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_multistate_basic_attr_names),
             0x00, NULL, HFILL } },
 
         { &hf_zbee_zcl_multistate_output_basic_reliability,
@@ -8255,20 +8255,6 @@ static int ett_zbee_zcl_multistate_value_basic_status_flags;
 static int ett_zbee_zcl_multistate_value_basic_priority_array;
 static int ett_zbee_zcl_multistate_value_basic_priority_array_structure;
 
-/* Attributes */
-static const value_string zbee_zcl_multistate_value_basic_attr_names[] = {
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_STATE_TEXT,           "State Text" },
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_DESCRIPTION,          "Description" },
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_NUMBER_OF_STATES,     "Number of States" },
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_OUT_OF_SERVICE,       "Out of Service" },
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_PRESENT_VALUE,        "Present Value" },
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_PRIORITY_ARRAY,       "Priority Array" },
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_RELIABILITY,          "Reliability" },
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_RELINQUISH_DEFAULT,   "Relinquish Default" },
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_STATUS_FLAGS,         "Status Flags" },
-    { ZBEE_ZCL_ATTR_ID_MULTISTATE_VALUE_BASIC_APPLICATION_TYPE,     "Application Type" },
-    { 0, NULL }
-};
 
 static const value_string zbee_zcl_multistate_value_basic_priority_array_bool_values[] = {
     { 0x01, "Valid" },
@@ -8394,7 +8380,7 @@ proto_register_zbee_zcl_multistate_value_basic(void)
     static hf_register_info hf[] = {
 
         { &hf_zbee_zcl_multistate_value_basic_attr_id,
-            { "Attribute", "zbee_zcl_general.multistate_value_basic.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_multistate_value_basic_attr_names),
+            { "Attribute", "zbee_zcl_general.multistate_value_basic.attr_id", FT_UINT16, BASE_HEX, VALS(zbee_zcl_multistate_basic_attr_names),
             0x00, NULL, HFILL } },
 
         { &hf_zbee_zcl_multistate_value_basic_reliability,
@@ -9327,7 +9313,7 @@ static void dissect_zcl_part_trasfpartframe(tvbuff_t *tvb, proto_tree *tree, uns
 {
 
     uint8_t   options;
-    int       frame_len;
+    unsigned  frame_len;
 
     static int * const part_opt[] = {
         &hf_zbee_zcl_part_opt_first_block,
@@ -10318,8 +10304,7 @@ dissect_zcl_ota_imageblockrsp(tvbuff_t *tvb, proto_tree *tree, unsigned *offset)
         *offset += 4;
 
         /* Retrieve 'Data Size' field */
-        data_size = tvb_get_uint8(tvb, *offset);
-        proto_tree_add_item(tree, hf_zbee_zcl_ota_data_size, tvb, *offset, 1, ENC_NA);
+        proto_tree_add_item_ret_uint8(tree, hf_zbee_zcl_ota_data_size, tvb, *offset, 1, ENC_NA, &data_size);
         *offset += 1;
 
         /* Retrieve 'Image Data' field */
@@ -11419,8 +11404,7 @@ dissect_zcl_pwr_prof_enphsschednotif(tvbuff_t *tvb, proto_tree *tree, unsigned *
     *offset += 1;
 
     /* Retrieve "Number of Scheduled Phases" field */
-    num_of_sched_phases = tvb_get_uint8(tvb, *offset);
-    proto_tree_add_item(tree, hf_zbee_zcl_pwr_prof_num_of_sched_phases, tvb, *offset, 1, ENC_NA);
+    proto_tree_add_item_ret_uint8(tree, hf_zbee_zcl_pwr_prof_num_of_sched_phases, tvb, *offset, 1, ENC_NA, &num_of_sched_phases);
     *offset += 1;
 
     /* Scheduled Energy Phases decoding */
@@ -13681,8 +13665,7 @@ dissect_zbee_zcl_gp_payload(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     proto_tree_add_item(tree, hf_zbee_gp_gpd_command_id, tvb, offset, 1, ENC_NA);
     offset += 1;
 
-    payload_size = tvb_get_uint8(tvb, offset);
-    proto_tree_add_item(tree, hf_zbee_gp_gpd_payload_size, tvb, offset, 1, ENC_NA);
+    proto_tree_add_item_ret_uint(tree, hf_zbee_gp_gpd_payload_size, tvb, offset, 1, ENC_NA, &payload_size);
     offset += 1;
 
     if (payload_size != 0 && payload_size != 0xff) {

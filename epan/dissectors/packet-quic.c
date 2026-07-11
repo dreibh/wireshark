@@ -1634,7 +1634,7 @@ quic_stream_free_persistent_key(void *ptr)
     g_slice_free(quic_stream_key, key);
 }
 
-static const reassembly_table_functions
+const reassembly_table_functions
 quic_reassembly_table_functions = {
     quic_stream_hash,
     quic_stream_equal,
@@ -1999,6 +1999,8 @@ desegment_quic_stream(tvbuff_t *tvb, int offset, int length, packet_info *pinfo,
     const uint32_t nxtseq = seq + (uint32_t)length;
     uint32_t reassembly_id = 0;
     bool first_pdu = true;
+    bool saved_fin;
+    bool has_gap = false;
 
     // XXX fix the tvb accessors below such that no new tvb is needed.
     tvb = tvb_new_subset_length(tvb, 0, offset + length);
@@ -2072,9 +2074,8 @@ again:
         reassembly_id = msp ? msp->first_frame : pinfo->num;
     }
 
-    bool has_gap = false;
-
-    /* Only do retransmission & gap checks on the whole STREAM frame. */
+    /* Only do retransmission & gap checks on the whole STREAM frame.
+     * If there was a gap on the first PDU there still is one. */
     if (first_pdu /* && ! REASSEMBLE_UNTIL_FIN */ ) {
         quic_retrans_key *tmp_key = wmem_new(pinfo->pool, quic_retrans_key);
         tmp_key->num = pinfo->num;
@@ -2301,8 +2302,15 @@ again:
             tvbuff_t *next_tvb = tvb_new_chain(tvb, fh->tvb_data);
             add_new_data_source(pinfo, next_tvb, "Reassembled QUIC");
             stream_info->offset = seq;
+            /* If we know that another PDU follows, don't tell the subdissector
+             * that we're at FIN. It will be set on the next PDU. */
+            saved_fin = stream_info->fin;
+            if (another_pdu_follows) {
+                stream_info->fin = false;
+            }
             process_quic_stream(next_tvb, 0, pinfo, tree, quic_info, stream_info, quic_packet);
             called_dissector = true;
+            stream_info->fin = saved_fin;
 
             int old_len = (int)(tvb_reported_length(next_tvb) - last_fragment_len);
             if (pinfo->desegment_len &&
@@ -2476,7 +2484,8 @@ dissect_quic_stream_payload(tvbuff_t *tvb, int offset, int length, packet_info *
      */
 
     if (length > 0) {
-        /* Don't call a subdissector for a zero length segment. It won't
+        /* Don't try to desegment for a zero length segment. Our methods
+         * probably don't work and aren't needed. (see #19497).
          * work for dissection (see #12368), and our methods of determing
          * if desegmentation is needed won't work either (#19497). If there
          * ever is an app_handle on top of QUIC that needs to be called with
@@ -2484,6 +2493,11 @@ dissect_quic_stream_payload(tvbuff_t *tvb, int offset, int length, packet_info *
          */
         pinfo->can_desegment = 2;
         desegment_quic_stream(tvb, offset, length, pinfo, tree, quic_info, stream_info, stream, quic_packet);
+    } else if (stream_info->fin) {
+        /* Do try to call the subdissector at FIN; HTTP/3 might need this
+         * for some implementations. It probably doesn't work yet. Cf.
+         * #15159 and #12368. */
+        process_quic_stream(tvb, offset, pinfo, tree, quic_info, stream_info, quic_packet);
     }
 }
 /* QUIC Streams tracking and reassembly. }}} */
@@ -2863,7 +2877,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
     proto_item *ti_ft, *ti_ftflags, *ti_ftid, *ti;
     proto_tree *ft_tree, *ftflags_tree, *ftid_tree;
     uint64_t frame_type;
-    int32_t lenft;
+    uint32_t lenft;
     unsigned   orig_offset = offset;
 
     ti_ft = proto_tree_add_item(quic_tree, hf_quic_frame, tvb, offset, 1, ENC_NA);
@@ -2897,7 +2911,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         case FT_PATH_ACK:
         case FT_PATH_ACK_ECN:{
             uint64_t ack_range_count, path_id;
-            int32_t lenvar;
+            uint32_t lenvar;
 
             switch(frame_type){
                 case FT_ACK:
@@ -2960,7 +2974,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         break;
         case FT_RESET_STREAM:{
             uint64_t stream_id, error_code;
-            int32_t len_streamid = 0, len_finalsize = 0, len_error_code = 0;
+            uint32_t len_streamid = 0, len_finalsize = 0, len_error_code = 0;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", RS");
 
@@ -2980,9 +2994,9 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         }
         break;
         case FT_STOP_SENDING:{
-            int32_t len_streamid;
+            uint32_t len_streamid;
             uint64_t stream_id, error_code;
-            int32_t len_error_code = 0;
+            uint32_t len_error_code = 0;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", SS");
 
@@ -3000,7 +3014,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         break;
         case FT_CRYPTO: {
             uint64_t crypto_offset, crypto_length;
-            int32_t lenvar;
+            uint32_t lenvar;
             col_append_str(pinfo->cinfo, COL_INFO, ", CRYPTO");
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_crypto_offset, tvb, offset, -1, ENC_VARINT_QUIC, &crypto_offset, &lenvar);
             offset += lenvar;
@@ -3019,7 +3033,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         break;
         case FT_NEW_TOKEN: {
             uint64_t token_length;
-            int32_t lenvar;
+            uint32_t lenvar;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", NT");
 
@@ -3040,7 +3054,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         case FT_STREAM_F: {
             uint64_t stream_id, stream_offset = 0, length;
             bool stream_fin;
-            int32_t lenvar;
+            uint32_t lenvar;
 
             offset -= 1;
 
@@ -3106,7 +3120,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         }
         break;
         case FT_MAX_DATA:{
-            int32_t len_maximumdata;
+            uint32_t len_maximumdata;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", MD");
 
@@ -3115,7 +3129,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         }
         break;
         case FT_MAX_STREAM_DATA:{
-            int32_t len_streamid, len_maximumstreamdata;
+            uint32_t len_streamid, len_maximumstreamdata;
             uint64_t stream_id;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", MSD");
@@ -3132,7 +3146,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         break;
         case FT_MAX_STREAMS_BIDI:
         case FT_MAX_STREAMS_UNI:{
-            int32_t len_streamid;
+            uint32_t len_streamid;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", MS");
 
@@ -3141,7 +3155,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         }
         break;
         case FT_DATA_BLOCKED:{
-            int32_t len_offset;
+            uint32_t len_offset;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", DB");
 
@@ -3150,7 +3164,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         }
         break;
         case FT_STREAM_DATA_BLOCKED:{
-            int32_t len_streamid, len_offset;
+            uint32_t len_streamid, len_offset;
             uint64_t stream_id;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", SDB");
@@ -3167,7 +3181,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         break;
         case FT_STREAMS_BLOCKED_BIDI:
         case FT_STREAMS_BLOCKED_UNI:{
-            int32_t len_streamid;
+            uint32_t len_streamid;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", SB");
 
@@ -3177,11 +3191,11 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         break;
         case FT_NEW_CONNECTION_ID:
         case FT_PATH_NEW_CONNECTION_ID:{
-            int32_t len_sequence;
-            int32_t len_retire_prior_to;
+            uint32_t len_sequence;
+            uint32_t len_retire_prior_to;
             uint64_t seq_num = 0, path_id = 0;
             uint32_t nci_length;
-            int32_t lenvar = 0;
+            uint32_t lenvar = 0;
             bool valid_cid = false;
 
             switch(frame_type){
@@ -3231,8 +3245,8 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         break;
         case FT_RETIRE_CONNECTION_ID:
         case FT_PATH_RETIRE_CONNECTION_ID:{
-            int32_t len_sequence;
-            int32_t lenvar;
+            uint32_t len_sequence;
+            uint32_t lenvar;
             uint64_t path_id;
 
             switch(frame_type){
@@ -3266,7 +3280,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         }
         break;
         case FT_PATH_ABANDON:{
-            int32_t lenvar, len_error_code;
+            uint32_t lenvar, len_error_code;
             uint64_t path_id, error_code;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", PA");
@@ -3281,7 +3295,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         break;
         case FT_CONNECTION_CLOSE_TPT:
         case FT_CONNECTION_CLOSE_APP:{
-            int32_t len_reasonphrase, len_frametype, len_error_code;
+            uint32_t len_reasonphrase, len_frametype, len_error_code;
             uint64_t len_reason = 0;
             uint64_t error_code;
             const char *tls_alert = NULL;
@@ -3327,7 +3341,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         break;
         case FT_DATAGRAM:
         case FT_DATAGRAM_LENGTH:{
-            int32_t dg_length;
+            uint32_t dg_length;
             uint64_t length;
             col_append_str(pinfo->cinfo, COL_INFO, ", DG");
             if (frame_type == FT_DATAGRAM_LENGTH) {
@@ -3335,7 +3349,7 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
                 proto_tree_add_item_ret_varint(ft_tree, hf_quic_dg_length, tvb, offset, -1, ENC_VARINT_QUIC, &length, &dg_length);
                 offset += dg_length;
             } else {
-                length = (uint32_t) tvb_reported_length_remaining(tvb, offset);
+                length = tvb_reported_length_remaining(tvb, offset);
             }
             proto_tree_add_item(ft_tree, hf_quic_dg, tvb, offset, (uint32_t)length, ENC_NA);
             if (quic_info->app_datagram_handle) {
@@ -3355,11 +3369,11 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
             col_append_str(pinfo->cinfo, COL_INFO, ", IA");
         break;
         case FT_ACK_FREQUENCY:{
-            int32_t length;
+            uint32_t length;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", AF");
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_af_sequence_number, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
 
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_af_ack_eliciting_threshold, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
             offset += (uint32_t)length;
@@ -3372,21 +3386,21 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         }
         break;
         case FT_TIME_STAMP:{
-            int32_t length;
+            uint32_t length;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", TS");
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_ts, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
 
         }
         break;
         case FT_OBSERVED_ADDRESS_IPV4:
         case FT_OBSERVED_ADDRESS_IPV6:{
-            int32_t length;
+            uint32_t length;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", OA");
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_oa_seq_num, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
 
             if (frame_type == FT_OBSERVED_ADDRESS_IPV4 ) {
                 proto_tree_add_item(ft_tree, hf_quic_oa_ipv4, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -3405,23 +3419,23 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
         case FT_PATH_STATUS:
         case FT_PATH_BACKUP_AVAILABLE:
         case FT_PATH_STATUS_AVAILABLE:{
-            int32_t length;
+            uint32_t length;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", PS");
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_mp_ps_path_identifier, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
 
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_mp_ps_path_status_sequence_number, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
 
             if (frame_type == FT_PATH_STATUS ) {
                 proto_tree_add_item_ret_varint(ft_tree, hf_quic_mp_ps_path_status, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-                offset += (uint32_t)length;
+                offset += length;
             }
         }
         break;
         case FT_MAX_PATHS:{
-            int32_t length;
+            uint32_t length;
 
             /* multipath draft-07: "If any of the endpoints does not advertise
              * the initial_max_paths transport parameter, then the endpoints
@@ -3433,34 +3447,34 @@ dissect_quic_frame_type(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tree
              */
             col_append_str(pinfo->cinfo, COL_INFO, ", MP");
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_mp_maximum_paths, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
         }
         break;
         case FT_MAX_PATH_ID:{
-            int32_t length;
+            uint32_t length;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", MPI");
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_mp_maximum_path_identifier, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
         }
         break;
         case FT_PATHS_BLOCKED:{
-            int32_t length;
+            uint32_t length;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", PB");
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_mp_maximum_path_identifier, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
         }
         break;
         case FT_PATH_CIDS_BLOCKED:{
-            int32_t length;
+            uint32_t length;
 
             col_append_str(pinfo->cinfo, COL_INFO, ", PCB");
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_mp_pcb_path_identifier, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
 
             proto_tree_add_item_ret_varint(ft_tree, hf_quic_mp_pcb_next_sequence_number, tvb, offset, -1, ENC_VARINT_QUIC, NULL, &length);
-            offset += (uint32_t)length;
+            offset += length;
         }
         break;
         default:
@@ -4546,9 +4560,9 @@ dissect_quic_long_header(tvbuff_t *tvb, packet_info *pinfo, proto_tree *quic_tre
     uint8_t long_packet_type;
     uint32_t version;
     quic_cid_t  dcid = {.len=0}, scid = {.len=0};
-    int32_t len_token_length;
+    uint32_t len_token_length;
     uint64_t token_length;
-    int32_t len_payload_length;
+    uint32_t len_payload_length;
     uint64_t payload_length;
     uint8_t first_byte = 0;
     quic_info_data_t *conn = dgram_info->conn;

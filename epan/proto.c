@@ -393,6 +393,11 @@ static int proto_string_errors;
 static expert_field ei_string_trailing_characters;
 static void register_string_errors(void);
 
+/* Handle varint errors expert info */
+static int proto_varint_errors;
+static expert_field ei_varint_decoding_failed_error;
+static void register_varint_errors(void);
+
 static int proto_register_field_init(header_field_info *hfinfo, const int parent);
 
 /* special-case header field used within proto.c */
@@ -630,6 +635,7 @@ proto_init(GSList *register_all_plugin_protocols_list,
 	register_byte_array_string_decodinws_error();
 	register_date_time_string_decodinws_error();
 	register_string_errors();
+	register_varint_errors();
 	ftypes_register_pseudofields();
 	col_register_protocol();
 
@@ -909,7 +915,10 @@ proto_tree_free_node(proto_node *node, void *data _U_)
 	proto_tree_children_foreach(node, proto_tree_free_node, NULL);
 
 	if (finfo) {
-		fvalue_free(finfo->value);
+		// The fvalue_t structure was allocated using fvalue_new_pool()
+		// (see new_field_info()) and will be reclaimed when the pool is
+		// freed, so we only release the type-specific data it owns here.
+		fvalue_cleanup(finfo->value);
 		finfo->value = NULL;
 	}
 }
@@ -1837,19 +1846,20 @@ get_int64_value(proto_tree *tree, tvbuff_t *tvb, unsigned start, unsigned length
 /* For FT_STRING */
 static inline const uint8_t *
 get_string_value(wmem_allocator_t *scope, tvbuff_t *tvb, unsigned start,
-    int length, int *ret_length, const unsigned encoding)
+    int length, unsigned *ret_length, const unsigned encoding)
 {
 	if (length == -1) {
-		length = tvb_ensure_captured_length_remaining(tvb, start);
+		*ret_length = tvb_ensure_captured_length_remaining(tvb, start);
+	} else {
+		*ret_length = length;
 	}
-	*ret_length = length;
-	return tvb_get_string_enc(scope, tvb, start, length, encoding);
+	return tvb_get_string_enc(scope, tvb, start, *ret_length, encoding);
 }
 
 /* For FT_STRINGZ */
 static inline const uint8_t *
 get_stringz_value(wmem_allocator_t *scope, proto_tree *tree, tvbuff_t *tvb,
-    unsigned start, int length, int *ret_length, const unsigned encoding)
+    unsigned start, int length, unsigned *ret_length, const unsigned encoding)
 {
 	const uint8_t *value;
 
@@ -1866,7 +1876,7 @@ get_stringz_value(wmem_allocator_t *scope, proto_tree *tree, tvbuff_t *tvb,
 	 */
 	if (length == -1) {
 		/* This can throw an exception */
-		value = tvb_get_stringz_enc(scope, tvb, start, (unsigned*)&length, encoding);
+		value = tvb_get_stringz_enc(scope, tvb, start, ret_length, encoding);
 	} else {
 		/* In this case, length signifies the length of the string.
 		 *
@@ -1889,16 +1899,16 @@ get_stringz_value(wmem_allocator_t *scope, proto_tree *tree, tvbuff_t *tvb,
 		 * (XXX - this would change if we made string values counted
 		 * rather than null-terminated.)
 		 */
-		value = tvb_get_string_enc(scope, tvb, start, length, encoding);
+		*ret_length = length;
+		value = tvb_get_string_enc(scope, tvb, start, *ret_length, encoding);
 	}
-	*ret_length = length;
 	return value;
 }
 
 /* For FT_UINT_STRING */
 static inline const uint8_t *
 get_uint_string_value(wmem_allocator_t *scope, proto_tree *tree,
-    tvbuff_t *tvb, unsigned start, int length, int *ret_length,
+    tvbuff_t *tvb, unsigned start, int length, unsigned *ret_length,
     const unsigned encoding)
 {
 	uint32_t n;
@@ -1907,15 +1917,14 @@ get_uint_string_value(wmem_allocator_t *scope, proto_tree *tree,
 	/* I believe it's ok if this is called with a NULL tree */
 	n = get_uint_value(tree, tvb, start, length, encoding & ~ENC_CHARENCODING_MASK);
 	value = tvb_get_string_enc(scope, tvb, start + length, n, encoding);
-	length += n;
-	*ret_length = length;
+	*ret_length = length + n;
 	return value;
 }
 
 /* For FT_STRINGZPAD */
 static inline const uint8_t *
 get_stringzpad_value(wmem_allocator_t *scope, tvbuff_t *tvb, unsigned start,
-    int length, int *ret_length, const unsigned encoding)
+    int length, unsigned *ret_length, const unsigned encoding)
 {
 	/*
 	 * XXX - currently, string values are null-
@@ -1926,16 +1935,17 @@ get_stringzpad_value(wmem_allocator_t *scope, tvbuff_t *tvb, unsigned start,
 	 * trailing NULs.
 	 */
 	if (length == -1) {
-		length = tvb_ensure_captured_length_remaining(tvb, start);
+		*ret_length = tvb_ensure_captured_length_remaining(tvb, start);
+	} else {
+		*ret_length = length;
 	}
-	*ret_length = length;
-	return tvb_get_string_enc(scope, tvb, start, length, encoding);
+	return tvb_get_string_enc(scope, tvb, start, *ret_length, encoding);
 }
 
 /* For FT_STRINGZTRUNC */
 static inline const uint8_t *
 get_stringztrunc_value(wmem_allocator_t *scope, tvbuff_t *tvb, unsigned start,
-    int length, int *ret_length, const unsigned encoding)
+    int length, unsigned *ret_length, const unsigned encoding)
 {
 	/*
 	 * XXX - currently, string values are null-
@@ -1946,10 +1956,11 @@ get_stringztrunc_value(wmem_allocator_t *scope, tvbuff_t *tvb, unsigned start,
 	 * starting with the terminating NUL.
 	 */
 	if (length == -1) {
-		length = tvb_ensure_captured_length_remaining(tvb, start);
+		*ret_length = tvb_ensure_captured_length_remaining(tvb, start);
+	} else {
+		*ret_length = length;
 	}
-	*ret_length = length;
-	return tvb_get_string_enc(scope, tvb, start, length, encoding);
+	return tvb_get_string_enc(scope, tvb, start, *ret_length, encoding);
 }
 
 /*
@@ -2816,13 +2827,6 @@ detect_trailing_stray_characters(unsigned encoding, const char *string, int leng
 	}
 }
 
-static void
-free_fvalue_cb(void *data)
-{
-	fvalue_t *fv = (fvalue_t*)data;
-	fvalue_free(fv);
-}
-
 /* Add an item to a proto_tree, using the text label registered to that item;
    the item is extracted from the tvbuff handed to it. */
 static proto_item *
@@ -2839,14 +2843,16 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 	const char *stringval = NULL;
 	nstime_t    time_stamp;
 	bool        length_error;
+	unsigned    item_length;
 
-	/* Ensure that the newly created fvalue_t is freed if we throw an
-	 * exception before adding it to the tree. (gcc creates clobbering
-	 * when it optimizes the equivalent TRY..EXCEPT implementation.)
-	 * XXX: Move the new_field_info() call inside here?
-	 */
-	CLEANUP_PUSH(free_fvalue_cb, new_fi->value);
-
+	// new_fi->value is allocated from the packet-scoped pool (see
+	// new_field_info()), so if a tvbuff accessor below throws before the
+	// node is added to the tree the fvalue_t structure is still reclaimed
+	// when the pool is freed; no explicit cleanup handler is needed. This
+	// relies on the invariant that the type-specific data an fvalue owns
+	// (byte arrays, string buffers, ...) is only allocated *after* the
+	// throwing tvbuff read that produced it succeeds, so nothing that would
+	// need fvalue_cleanup() is ever leaked on the exception path.
 	switch (new_fi->hfinfo->type) {
 		case FT_NONE:
 			/* no value to set for FT_NONE */
@@ -3125,7 +3131,7 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 
 		case FT_STRING:
 			stringval = (const char*)get_string_value(PNODE_POOL(tree),
-			    tvb, start, length, &length, encoding);
+			    tvb, start, length, &item_length, encoding);
 			proto_tree_set_string(new_fi, stringval);
 
 			/* Instead of calling proto_item_set_len(), since we
@@ -3137,12 +3143,12 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 			 * there always be a protocol tree into which
 			 * we're putting this item.
 			 */
-			new_fi->length = length;
+			new_fi->length = item_length;
 			break;
 
 		case FT_STRINGZ:
 			stringval = (const char*)get_stringz_value(PNODE_POOL(tree),
-			    tree, tvb, start, length, &length, encoding);
+			    tree, tvb, start, length, &item_length, encoding);
 			proto_tree_set_string(new_fi, stringval);
 
 			/* Instead of calling proto_item_set_len(),
@@ -3154,7 +3160,7 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 			 * there always be a protocol tree into which
 			 * we're putting this item.
 			 */
-			new_fi->length = length;
+			new_fi->length = item_length;
 			break;
 
 		case FT_UINT_STRING:
@@ -3173,7 +3179,7 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 			if (encoding == true)
 				encoding = ENC_ASCII|ENC_LITTLE_ENDIAN;
 			stringval = (const char*)get_uint_string_value(PNODE_POOL(tree),
-			    tree, tvb, start, length, &length, encoding);
+			    tree, tvb, start, length, &item_length, encoding);
 			proto_tree_set_string(new_fi, stringval);
 
 			/* Instead of calling proto_item_set_len(), since we
@@ -3185,12 +3191,12 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 			 * there always be a protocol tree into which
 			 * we're putting this item.
 			 */
-			new_fi->length = length;
+			new_fi->length = item_length;
 			break;
 
 		case FT_STRINGZPAD:
 			stringval = (const char*)get_stringzpad_value(PNODE_POOL(tree),
-			    tvb, start, length, &length, encoding);
+			    tvb, start, length, &item_length, encoding);
 			proto_tree_set_string(new_fi, stringval);
 
 			/* Instead of calling proto_item_set_len(), since we
@@ -3202,12 +3208,12 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 			 * there always be a protocol tree into which
 			 * we're putting this item.
 			 */
-			new_fi->length = length;
+			new_fi->length = item_length;
 			break;
 
 		case FT_STRINGZTRUNC:
 			stringval = (const char*)get_stringztrunc_value(PNODE_POOL(tree),
-			    tvb, start, length, &length, encoding);
+			    tvb, start, length, &item_length, encoding);
 			proto_tree_set_string(new_fi, stringval);
 
 			/* Instead of calling proto_item_set_len(), since we
@@ -3219,7 +3225,7 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 			 * there always be a protocol tree into which
 			 * we're putting this item.
 			 */
-			new_fi->length = length;
+			new_fi->length = item_length;
 			break;
 
 		case FT_ABSOLUTE_TIME:
@@ -3302,7 +3308,6 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 	 * strings and bytes, we would have to set new_fi->value to something
 	 * non-NULL, or otherwise ensure that proto_item_fill_display_label
 	 * could handle NULL values. */
-	CLEANUP_POP
 	pi = proto_tree_add_node(tree, new_fi);
 
 	switch (new_fi->hfinfo->type) {
@@ -3321,7 +3326,7 @@ proto_tree_new_item(field_info *new_fi, proto_tree *tree,
 	         * can also do so (and for UTF-8 possibly even make the
 	         * string _shorter_).
 	         */
-		detect_trailing_stray_characters(encoding, stringval, length, pi);
+		detect_trailing_stray_characters(encoding, stringval, item_length, pi);
 		break;
 
 	default:
@@ -3632,19 +3637,19 @@ ptvcursor_add_ret_string(ptvcursor_t* ptvc, int hf, int length, const unsigned e
 
 	switch (hfinfo->type) {
 	case FT_STRING:
-		value = get_string_value(scope, ptvc->tvb, offset, length, (int*)&item_length, encoding);
+		value = get_string_value(scope, ptvc->tvb, offset, length, &item_length, encoding);
 		break;
 	case FT_STRINGZ:
-		value = get_stringz_value(scope, ptvc->tree, ptvc->tvb, offset, length, (int*)&item_length, encoding);
+		value = get_stringz_value(scope, ptvc->tree, ptvc->tvb, offset, length, &item_length, encoding);
 		break;
 	case FT_UINT_STRING:
-		value = get_uint_string_value(scope, ptvc->tree, ptvc->tvb, offset, length, (int*)&item_length, encoding);
+		value = get_uint_string_value(scope, ptvc->tree, ptvc->tvb, offset, length, &item_length, encoding);
 		break;
 	case FT_STRINGZPAD:
-		value = get_stringzpad_value(scope, ptvc->tvb, offset, length, (int*)&item_length, encoding);
+		value = get_stringzpad_value(scope, ptvc->tvb, offset, length, &item_length, encoding);
 		break;
 	case FT_STRINGZTRUNC:
-		value = get_stringztrunc_value(scope, ptvc->tvb, offset, length, (int*)&item_length, encoding);
+		value = get_stringztrunc_value(scope, ptvc->tvb, offset, length, &item_length, encoding);
 		break;
 	default:
 		REPORT_DISSECTOR_BUG("field %s is not of type FT_STRING, FT_STRINGZ, FT_UINT_STRING, FT_STRINGZPAD, or FT_STRINGZTRUNC",
@@ -3851,11 +3856,11 @@ proto_tree_add_item_ret_int64(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 
 proto_item *
 proto_tree_add_item_ret_varint(proto_tree *tree, int hfindex, tvbuff_t *tvb,
-    const unsigned start, int length, const unsigned encoding, uint64_t *retval, int *lenretval)
+    const unsigned start, unsigned length, const unsigned encoding, uint64_t *retval, unsigned *lenretval)
 {
 	header_field_info *hfinfo;
 	field_info	*new_fi;
-	uint64_t		value;
+	uint64_t	value;
 
 	PROTO_REGISTRAR_GET_NTH(hfindex, hfinfo);
 
@@ -3864,17 +3869,33 @@ proto_tree_add_item_ret_varint(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 		    hfinfo->abbrev);
 	}
 
-	/* length validation for native number encoding caught by get_uint64_value() */
-	/* length has to be -1 or > 0 regardless of encoding */
-	if (length == 0)
-		REPORT_DISSECTOR_BUG("Invalid length %d passed to proto_tree_add_item_ret_varint",
-			length);
+	if (!(encoding & ENC_VARINT_MASK)) {
+		REPORT_DISSECTOR_BUG("Encoding must be a VARINT");
+	}
 
 	if (encoding & ENC_STRING) {
 		REPORT_DISSECTOR_BUG("wrong encoding");
 	}
 
-	length = tvb_get_varint(tvb, start, (length == -1) ? FT_VARINT_MAX_LEN : length, &value, encoding);
+	/* tvb_get_varint clamps the max length to FT_VARINT_MAX_LEN (10)
+	 * It also handles length 0, setting both return values to 0.
+	 * XXX - Should the max length be affected by the field type and/or
+	 * encoding, e.g. 5 for FT_[U]INT32?
+	 * XXX - Should there be separate _varint and _varuint versions to
+	 * avoid the changing the sign when casting the return value?
+	 * XXX - Do we even need the length parameter? Every user of this
+	 * function passes in -1 or FT_VARINT_MAX_LEN. We could have a
+	 * separate function, but unlike some field types, variable length
+	 * is the typical case here, not the exception, and the typical
+	 * case should have the shorter, more convenient function name.
+	 * Having the length makes the signature more similar to other
+	 * functions, though. */
+	length = tvb_get_varint(tvb, start, length, &value, encoding);
+
+	if (length == 0) {
+		expert_add_info(NULL, tree, &ei_varint_decoding_failed_error);
+		THROW(ReportedBoundsError);
+	}
 
 	if (retval) {
 		*retval = value;
@@ -4175,7 +4196,7 @@ proto_tree_add_item_ret_string_and_length(proto_tree *tree, int hfindex,
                                           const unsigned encoding,
                                           wmem_allocator_t *scope,
                                           const uint8_t **retval,
-                                          int *lenretval)
+                                          unsigned *lenretval)
 {
 	proto_item *pi;
 	header_field_info *hfinfo;
@@ -4245,8 +4266,9 @@ proto_tree_add_item_ret_string(proto_tree *tree, int hfindex, tvbuff_t *tvb,
                                const unsigned encoding, wmem_allocator_t *scope,
                                const uint8_t **retval)
 {
+	unsigned item_length; // Param cannot be NULL in function below
 	return proto_tree_add_item_ret_string_and_length(tree, hfindex,
-	    tvb, start, length, encoding, scope, retval, &length);
+	    tvb, start, length, encoding, scope, retval, &item_length);
 }
 
 proto_item *
@@ -4256,7 +4278,7 @@ proto_tree_add_item_ret_display_string_and_length(proto_tree *tree, int hfindex,
                                                   const unsigned encoding,
                                                   wmem_allocator_t *scope,
                                                   char **retval,
-                                                  int *lenretval)
+                                                  unsigned *lenretval)
 {
 	proto_item *pi;
 	header_field_info *hfinfo;
@@ -4373,8 +4395,9 @@ proto_tree_add_item_ret_display_string(proto_tree *tree, int hfindex,
                                        wmem_allocator_t *scope,
                                        char **retval)
 {
+	unsigned item_length; // Param cannot be NULL in function below
 	return proto_tree_add_item_ret_display_string_and_length(tree, hfindex,
-	    tvb, start, length, encoding, scope, retval, &length);
+	    tvb, start, length, encoding, scope, retval, &item_length);
 }
 
 proto_item *
@@ -4499,7 +4522,7 @@ proto_item *
 proto_tree_add_item_new_ret_length(proto_tree *tree, header_field_info *hfinfo,
 				   tvbuff_t *tvb, const unsigned start,
 				   int length, const unsigned encoding,
-				   int *lenretval)
+				   unsigned *lenretval)
 {
 	field_info        *new_fi;
 	int		  item_length;
@@ -4540,7 +4563,7 @@ proto_tree_add_item_new_ret_length(proto_tree *tree, header_field_info *hfinfo,
 proto_item *
 proto_tree_add_item_ret_length(proto_tree *tree, int hfindex, tvbuff_t *tvb,
 			       const unsigned start, int length,
-			       const unsigned encoding, int *lenretval)
+			       const unsigned encoding, unsigned *lenretval)
 {
 	register header_field_info *hfinfo;
 
@@ -6591,7 +6614,9 @@ proto_tree_add_node(proto_tree *tree, field_info *fi)
 		for (tnode = tree; tnode != NULL; tnode = tnode->parent) {
 			depth++;
 			if (G_UNLIKELY(depth > prefs.gui_max_tree_depth)) {
-				fvalue_free(fi->value);
+				/* The fvalue_t is pool-allocated; just release the
+				 * type-specific data it owns (see new_field_info()). */
+				fvalue_cleanup(fi->value);
 				fi->value = NULL;
 				THROW_MESSAGE(DissectorError, wmem_strdup_printf(PNODE_POOL(tree),
 						     "Maximum tree depth %d exceeded for \"%s\" - \"%s\" (%s:%u) (Maximum depth can be increased in advanced preferences)",
@@ -6614,9 +6639,11 @@ proto_tree_add_node(proto_tree *tree, field_info *fi)
 	tfi = PNODE_FINFO(tnode);
 	if (tfi != NULL && (tfi->tree_type < 0 || tfi->tree_type >= num_tree_types)) {
 		/* Since we are not adding fi to a node, its fvalue won't get
-		 * freed by proto_tree_free_node(), so free it now.
+		 * cleaned up by proto_tree_free_node(), so release the
+		 * type-specific data it owns now. The fvalue_t structure itself
+		 * is pool-allocated (see new_field_info()).
 		 */
-		fvalue_free(fi->value);
+		fvalue_cleanup(fi->value);
 		fi->value = NULL;
 		REPORT_DISSECTOR_BUG("\"%s\" - \"%s\" tfi->tree_type: %d invalid (%s:%u)",
 				     fi->hfinfo->name, fi->hfinfo->abbrev, tfi->tree_type, __FILE__, __LINE__);
@@ -7078,7 +7105,7 @@ new_field_info(proto_tree *tree, header_field_info *hfinfo, tvbuff_t *tvb,
 			FI_SET_FLAG(fi, FI_HIDDEN);
 		}
 	}
-	fi->value = fvalue_new(fi->hfinfo->type);
+	fi->value = fvalue_new_pool(PNODE_POOL(tree), fi->hfinfo->type);
 	fi->rep        = NULL;
 
 	fi->appendix_start  = 0;
@@ -10070,6 +10097,27 @@ register_string_errors(void)
 	proto_set_cant_toggle(proto_string_errors);
 }
 
+static void
+register_varint_errors(void)
+{
+	static ei_register_info ei[] = {
+		{ &ei_varint_decoding_failed_error,
+			{ "_ws.varint.decoding_failed", PI_MALFORMED, PI_ERROR, "Varint decoding failed", EXPFILL }
+		},
+	};
+
+	expert_module_t* expert_varint_errors;
+
+	proto_varint_errors = proto_register_protocol("Varint Errors", "Varint errors", "_ws.varint");
+
+	expert_varint_errors = expert_register_protocol(proto_varint_errors);
+	expert_register_field_array(expert_varint_errors, ei, array_length(ei));
+
+	/* "Varint Errors" isn't really a protocol, it's an error indication;
+	   disabling them makes no sense. */
+	proto_set_cant_toggle(proto_varint_errors);
+}
+
 static int
 proto_register_field_init(header_field_info *hfinfo, const int parent)
 {
@@ -10440,7 +10488,7 @@ proto_item_fill_label(const field_info *fi, char *label_str, size_t *value_pos)
 			}
 			if (hfinfo->strings) {
 				/*
-				 * Table of time valus to be displayed
+				 * Table of time values to be displayed
 				 * specially.
 				 */
 				const char *time_string = try_time_val_to_str(value, (const time_value_string *)hfinfo->strings);
