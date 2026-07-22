@@ -543,6 +543,8 @@ A complete list of available comparison operators is shown in <<DispCompOps>>.
 [TIP]
 ====
 English and C-like operators are interchangeable and can be mixed within a filter string.
+Beginning in Wireshark 5.0, the English forms of operators (but not field, function, or
+macro names, or the first characters in escape sequences) are case-insensitive.
 ====
 
 [#DispCompOps]
@@ -664,6 +666,13 @@ Alternatively, a raw string syntax can be used. Such strings are prefixed with `
 backslash as a literal character.
 +
 `http.user_agent matches r"\(X11;"`
++
+Paired directional ("smart" or "curly") double quotes can be used in lieu
+of straight double quotes. This is mostly to handle example filters copied from
+webpages that _helpfully_ replace straight quotes, but it possible to
+include straight double quotes unescaped in directional double quote
+enclosed raw string literals. A right directional double quote can be
+escaped in a string literal opened by a left directional double quote.
 
 Date and time::
 `frame.time == "Sep 26, 2004 23:18:04.954975"`

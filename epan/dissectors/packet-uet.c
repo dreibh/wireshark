@@ -67,9 +67,11 @@ static int hf_uet_pds_flags_rsvd_ctl;
 static int hf_uet_pds_flags_rsvd_ack;
 static int hf_uet_pds_flags_rsvd_rudi;
 static int hf_uet_pds_flags_rsvd_nack;
+static int hf_uet_pds_clear_psn_offset;
 static int hf_uet_pds_clear_psn;
 static int hf_uet_pds_psn;
 static int hf_uet_pds_cack_psn;
+static int hf_uet_pds_ack_psn_offset;
 static int hf_uet_pds_ack_psn;
 static int hf_uet_pds_spdcid;
 static int hf_uet_pds_dpdcid;
@@ -89,6 +91,7 @@ static int hf_uet_pds_ctl_payload;
 static int hf_uet_pds_ack_prlg;
 static int hf_uet_pds_ack_cc_type;
 static int hf_uet_pds_ack_mpr;
+static int hf_uet_pds_ack_sack_psn_offset;
 static int hf_uet_pds_ack_sack_psn;
 static int hf_uet_pds_ack_cc_state;
 static int hf_uet_pds_ack_cc_state_service_time;
@@ -138,9 +141,8 @@ static int hf_uet_ses_atomic_op_ext_hdr_sem_ctl;
 static int hf_uet_ses_atomic_op_ext_hdr_rsvd;
 static int hf_uet_ses_rendv_ext_hdr;
 static int hf_uet_ses_rendv_ext_hdr_eager_length;
-static int hf_uet_ses_rendv_ext_hdr_reserved;
+static int hf_uet_ses_rendv_ext_hdr_read_ri_generation;
 static int hf_uet_ses_rendv_ext_hdr_read_pid_on_fep;
-static int hf_uet_ses_rendv_ext_hdr_reserved2;
 static int hf_uet_ses_rendv_ext_hdr_read_resource_index;
 static int hf_uet_ses_rendv_ext_hdr_read_offset;
 static int hf_uet_ses_rendv_ext_hdr_read_match_bits;
@@ -835,12 +837,10 @@ dissect_ses_rendv_ext_hdr(proto_tree* tree, tvbuff_t* tvb, packet_info* pinfo, i
 
     proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_eager_length, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
-    proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_reserved, tvb, offset, 2, ENC_BIG_ENDIAN);
-    proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_read_pid_on_fep, tvb, offset, 2, ENC_BIG_ENDIAN);
-    offset += 2;
-    proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_reserved2, tvb, offset, 2, ENC_BIG_ENDIAN);
-    proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_read_resource_index, tvb, offset, 2, ENC_BIG_ENDIAN);
-    offset += 2;
+    proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_read_ri_generation, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_read_pid_on_fep, tvb, offset, 4, ENC_BIG_ENDIAN);
+    proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_read_resource_index, tvb, offset, 4, ENC_BIG_ENDIAN);
+    offset += 4;
     proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_read_offset, tvb, offset, 8, ENC_BIG_ENDIAN);
     offset += 8;
     proto_tree_add_item(ext_tree, hf_uet_ses_rendv_ext_hdr_read_match_bits, tvb, offset, 8, ENC_BIG_ENDIAN);
@@ -1275,9 +1275,10 @@ dissect_pds_rud_rod_req(tvbuff_t* tvb, packet_info* pinfo, proto_tree* pds_tree,
     proto_item* mode_item = NULL;
     int         orig_offset = offset;
     int         len = tvb_reported_length_remaining(tvb, offset) + 2; // including prologue
-    int32_t     clear_psn_offset;
+    int16_t     clear_psn_offset;
     uint32_t    clear_psn;
     uint32_t    psn;
+    proto_item* item;
 
     if (len < UET_PDS_RUD_ROD_MIN_HDR_LEN) {
         expert_add_info_format(pinfo, pds_item, &ei_uet_pds_rud_rod_hdr_len_invalid, "PDS RUD/ROD header must be at least %d bytes",
@@ -1286,8 +1287,10 @@ dissect_pds_rud_rod_req(tvbuff_t* tvb, packet_info* pinfo, proto_tree* pds_tree,
 
     clear_psn_offset = tvb_get_ntohis(tvb, offset);
     psn = tvb_get_ntohl(tvb, offset + 2);
+    proto_tree_add_int_format_value(pds_tree, hf_uet_pds_clear_psn_offset, tvb, offset, 2, clear_psn_offset, "%+d", clear_psn_offset);
     clear_psn = psn + clear_psn_offset;
-    proto_tree_add_uint_format_value(pds_tree, hf_uet_pds_clear_psn, tvb, offset, 2, clear_psn, "%u (%+d)", clear_psn, clear_psn_offset);
+    item = proto_tree_add_uint(pds_tree, hf_uet_pds_clear_psn, tvb, offset, 2, clear_psn);
+    proto_item_set_generated(item);
     offset += 2;
     proto_tree_add_item(pds_tree, hf_uet_pds_psn, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -1297,7 +1300,6 @@ dissect_pds_rud_rod_req(tvbuff_t* tvb, packet_info* pinfo, proto_tree* pds_tree,
     if (flags & UET_PDS_RUD_ROD_FLAGS_SYN) {
         uint32_t psn_offset;
         uint32_t start_psn;
-        proto_item *item;
 
         mode_item = proto_tree_add_item(pds_tree, hf_uet_pds_pdc_mode, tvb, offset, 1, ENC_NA);
         proto_item_set_text(mode_item, "%s", "PDC Mode");
@@ -1375,8 +1377,9 @@ dissect_pds_ack_ext_hdr(tvbuff_t* tvb, packet_info* pinfo, proto_tree* pds_tree,
     proto_item* cc_state_item = NULL;
     int         orig_offset = offset;
     uint8_t     cc_type = 0;
-    int32_t sack_psn_offset;
-    uint32_t sack_psn;
+    int16_t     sack_psn_offset;
+    uint32_t    sack_psn;
+    proto_item* item;
 
     if (tvb_reported_length_remaining(tvb, offset) < UET_PDS_ACK_EXT_HDR_SIZE) {
         proto_tree_add_expert_format(pds_tree, pinfo, &ei_uet_pds_ack_ext_hdr_len_invalid, tvb, offset, 1,
@@ -1395,7 +1398,9 @@ dissect_pds_ack_ext_hdr(tvbuff_t* tvb, packet_info* pinfo, proto_tree* pds_tree,
     offset += 1;
     sack_psn_offset = tvb_get_ntohis(tvb, offset);
     sack_psn = cack_psn + sack_psn_offset;
-    proto_tree_add_uint_format_value(ext_tree, hf_uet_pds_ack_sack_psn, tvb, offset, 2, sack_psn, "%u (%+d)", sack_psn, sack_psn_offset);
+    proto_tree_add_int_format_value(ext_tree, hf_uet_pds_ack_sack_psn_offset, tvb, offset, 2, sack_psn_offset, "%+d", sack_psn_offset);
+    item = proto_tree_add_uint(ext_tree, hf_uet_pds_ack_sack_psn, tvb, offset, 2, sack_psn);
+    proto_item_set_generated(item);
     offset += 2;
     proto_tree_add_item(ext_tree, hf_uet_pds_ack_sack_bitmap, tvb, offset, 8, ENC_BIG_ENDIAN);
     offset += 8;
@@ -1431,14 +1436,17 @@ static int
 dissect_pds_ack(tvbuff_t* tvb, packet_info* pinfo, proto_tree* pds_tree, int offset, uint8_t type)
 {
     int         orig_offset = offset;
-    int32_t     ack_psn_offset;
+    int16_t     ack_psn_offset;
     uint32_t    ack_psn;
     uint32_t    cack_psn;
+    proto_item* item;
 
     ack_psn_offset = tvb_get_ntohis(tvb, offset);
     cack_psn = tvb_get_ntohl(tvb, offset + 2);
     ack_psn = cack_psn + ack_psn_offset;
-    proto_tree_add_uint_format_value(pds_tree, hf_uet_pds_ack_psn, tvb, offset, 2, ack_psn, "%u (%+d)", ack_psn, ack_psn_offset);
+    proto_tree_add_int_format_value(pds_tree, hf_uet_pds_ack_psn_offset, tvb, offset, 2, ack_psn_offset, "%+d", ack_psn_offset);
+    item = proto_tree_add_uint(pds_tree, hf_uet_pds_ack_psn, tvb, offset, 2, ack_psn);
+    proto_item_set_generated(item);
     offset += 2;
     proto_tree_add_item(pds_tree, hf_uet_pds_cack_psn, tvb, offset, 4, ENC_BIG_ENDIAN);
     offset += 4;
@@ -2036,6 +2044,11 @@ proto_register_uet(void)
                 FT_UINT8, BASE_HEX, NULL, 0x47,
                 NULL, HFILL }
         },
+        { &hf_uet_pds_clear_psn_offset,
+            { "Clear PSN Offset", "uet.pds.clear_psn_offset",
+                FT_INT16, BASE_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
         { &hf_uet_pds_clear_psn,
             { "Clear PSN", "uet.pds.clear_psn",
                 FT_UINT32, BASE_DEC, NULL, 0x0,
@@ -2044,6 +2057,11 @@ proto_register_uet(void)
         { &hf_uet_pds_psn,
             { "PSN", "uet.pds.psn",
                 FT_UINT32, BASE_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_uet_pds_ack_psn_offset,
+            { "ACK PSN Offset", "uet.pds.ack_psn_offset",
+                FT_INT16, BASE_DEC, NULL, 0x0,
                 NULL, HFILL }
         },
         { &hf_uet_pds_ack_psn,
@@ -2144,6 +2162,11 @@ proto_register_uet(void)
         { &hf_uet_pds_ack_mpr,
             { "Maximum PSN range (MPR)", "uet.pds.ack.mpr",
                 FT_UINT8, BASE_DEC, NULL, 0x0,
+                NULL, HFILL }
+        },
+        { &hf_uet_pds_ack_sack_psn_offset,
+            { "SACK PSN Offset", "uet.pds.ack.sack_psn_offset",
+                FT_INT16, BASE_DEC, NULL, 0x0,
                 NULL, HFILL }
         },
         { &hf_uet_pds_ack_sack_psn,
@@ -2397,24 +2420,19 @@ proto_register_uet(void)
                 FT_UINT32, BASE_DEC, NULL, 0x0,
                 NULL, HFILL }
         },
-        { &hf_uet_ses_rendv_ext_hdr_reserved,
-            { "Reserved", "uet.ses.rendv_ext_hdr.reserved",
-                FT_UINT16, BASE_HEX, NULL, 0xc000,
+        { &hf_uet_ses_rendv_ext_hdr_read_ri_generation,
+            { "Read RI Generation", "uet.ses.rendv_ext_hdr.read_ri_generation",
+                FT_UINT32, BASE_DEC, NULL, 0xff000000,
                 NULL, HFILL }
         },
         { &hf_uet_ses_rendv_ext_hdr_read_pid_on_fep,
             { "Read PIDonFEP", "uet.ses.rendv_ext_hdr.read_pid_on_fep",
-                FT_UINT16, BASE_DEC, NULL, 0x3fff,
-                NULL, HFILL }
-        },
-        { &hf_uet_ses_rendv_ext_hdr_reserved2,
-            { "Reserved", "uet.ses.rendv_ext_hdr.reserved2",
-                FT_UINT16, BASE_HEX, NULL, 0xf000,
+                FT_UINT32, BASE_DEC, NULL, 0x00fff000,
                 NULL, HFILL }
         },
         { &hf_uet_ses_rendv_ext_hdr_read_resource_index,
             { "Read Resource Index", "uet.ses.rendv_ext_hdr.read_resource_index",
-                FT_UINT16, BASE_DEC, NULL, 0x0fff,
+                FT_UINT32, BASE_DEC, NULL, 0x00000fff,
                 NULL, HFILL }
         },
         { &hf_uet_ses_rendv_ext_hdr_read_offset,
