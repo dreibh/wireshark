@@ -932,6 +932,7 @@ dissect_ses_std_req(proto_tree* ses_tree, proto_item* ses_item, tvbuff_t* tvb, p
     switch (opcode) {
     case UET_SES_OPCODE_ATOMIC:
     case UET_SES_OPCODE_FETCHING_ATOMIC:
+    case UET_SES_OPCODE_TSEND_ATOMIC:
     case UET_SES_OPCODE_TSEND_FETCH_ATOMIC:
         offset += dissect_ses_atomic_hdr(ses_tree, tvb, pinfo, offset);
         break;
@@ -1005,6 +1006,7 @@ dissect_ses_small_req(proto_tree* ses_tree, proto_item* ses_item, tvbuff_t* tvb,
     switch (opcode) {
     case UET_SES_OPCODE_ATOMIC:
     case UET_SES_OPCODE_FETCHING_ATOMIC:
+    case UET_SES_OPCODE_TSEND_ATOMIC:
     case UET_SES_OPCODE_TSEND_FETCH_ATOMIC:
         offset += dissect_ses_atomic_hdr(ses_tree, tvb, pinfo, offset);
         break;
@@ -1054,7 +1056,7 @@ dissect_ses_medium_req(proto_tree* ses_tree, proto_item* ses_item, tvbuff_t* tvb
 
     proto_tree_add_item(ses_tree, hf_uet_ses_med_req_flags_rsv2, tvb, offset, 2, ENC_BIG_ENDIAN);
     proto_tree_add_item(ses_tree, hf_uet_ses_med_req_req_length, tvb, offset, 2, ENC_BIG_ENDIAN);
-    offset += 3;
+    offset += 2;
 
     proto_tree_add_item(ses_tree, hf_uet_ses_med_req_resource_index_generation, tvb, offset, 1, ENC_BIG_ENDIAN);
     offset += 1;
@@ -1082,6 +1084,7 @@ dissect_ses_medium_req(proto_tree* ses_tree, proto_item* ses_item, tvbuff_t* tvb
     switch (opcode) {
     case UET_SES_OPCODE_ATOMIC:
     case UET_SES_OPCODE_FETCHING_ATOMIC:
+    case UET_SES_OPCODE_TSEND_ATOMIC:
     case UET_SES_OPCODE_TSEND_FETCH_ATOMIC:
         offset += dissect_ses_atomic_hdr(ses_tree, tvb, pinfo, offset);
         break;
