@@ -13,7 +13,7 @@
  /*
   * Dissector for the O-RAN Fronthaul CUS protocol specification.
   * See https://specifications.o-ran.org/specifications, WG4, Fronthaul Interfaces Workgroup
-  * The current implementation is based on the ORAN-WG4.CUS.0-v20.00 specification.
+  * The current implementation is based on the ORAN-WG4.CUS.0-v21.00 specification.
   * Note that other eCPRI message types are handled in packet-ecpri.c
   */
 
@@ -2400,14 +2400,21 @@ static int dissect_bfwCompParam(tvbuff_t *tvb, proto_tree *tree, packet_info *pi
 }
 
 
-/* Special case for uncompressed/16-bit value */
-static float uncompressed_to_float(uint32_t h)
+/* Special case for uncompressed value with given iq_width */
+static float uncompressed_to_float(uint32_t bits, uint32_t iq_width)
 {
-    int16_t i16 = h & 0x0000ffff;
+    if (iq_width == 0 || iq_width > 16) {
+        /* Not valid */
+        return 0.0;
+    }
+
+    uint16_t mask = (1U << (iq_width-1)) - 1;
+    int16_t i16 = (bits < mask) ? (bits & mask) : (bits - (1<<iq_width));
+
     if (show_unscaled_values) {
         return (float)i16;
     }
-    return ((float)i16) / 0x7fff;
+    return ((float)i16) / (mask);
 }
 
 /* Decompress I/Q value, taking into account method, width, exponent, other input-specific methods */
@@ -2418,7 +2425,7 @@ static float decompress_value(uint32_t bits, uint32_t comp_method, uint8_t iq_wi
 {
     switch (comp_method) {
         case COMP_NONE: /* no compression */
-            return uncompressed_to_float(bits);
+            return uncompressed_to_float(bits, iq_width);
 
         case COMP_BLOCK_FP:         /* block floating point */
         case BFP_AND_SELECTIVE_RE:
