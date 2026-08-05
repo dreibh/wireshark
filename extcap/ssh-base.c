@@ -107,7 +107,7 @@ static void extcap_log(int priority, const char *function, const char *buffer, v
 	 */
 #if LIBSSH_VERSION_INT < SSH_VERSION_INT(0,11,0)
 		level = LOG_LEVEL_INFO;
-#elif LIBSSH_VERSION_INT < SSH_VERSION_INT(0,12,1)
+#elif LIBSSH_VERSION_INT < SSH_VERSION_INT(0,13,0)
 		if (strncmp(function, "ssh_strict_fopen", strlen("ssh_strict_fopen")) == 0) {
 			level = LOG_LEVEL_DEBUG;
 		} else {
@@ -124,10 +124,134 @@ static void extcap_log(int priority, const char *function, const char *buffer, v
 	ws_log_write_always_full("libssh", level, NULL, 0, function, "%s", buffer);
 }
 
+void ssh_base_list_config(unsigned *count)
+{
+	unsigned inc = *count;
+
+        // Server tab
+	printf("arg {number=%u}{call=--remote-host}{display=Remote SSH server address}"
+		"{type=string}{tooltip=The remote SSH host. It can be both "
+		"an IP address or a hostname}{required=true}{group=Server}\n", inc++);
+	printf("arg {number=%u}{call=--remote-port}{display=Remote SSH server port}"
+		"{type=unsigned}{default=22}{tooltip=The remote SSH host port (1-65535)}"
+		"{range=1,65535}{group=Server}\n", inc++);
+
+	// Authentication tab
+	printf("arg {number=%u}{call=--remote-username}{display=Remote SSH server username}"
+		"{type=string}{tooltip=The remote SSH username. If not provided, "
+		"the current user will be used}{group=Authentication}\n", inc++);
+	printf("arg {number=%u}{call=--remote-password}{display=Remote SSH server password}"
+		"{type=password}{tooltip=The SSH password, used when other methods (SSH agent "
+		"or key files) are unavailable.}{group=Authentication}\n", inc++);
+	printf("arg {number=%u}{call=--sshkey}{display=Path to SSH private key}"
+		"{type=fileselect}{tooltip=The path on the local filesystem of the private SSH key (OpenSSH format)}"
+		"{mustexist=true}{group=Authentication}\n", inc++);
+	printf("arg {number=%u}{call=--sshkey-passphrase}{display=SSH key passphrase}"
+		"{type=password}{tooltip=Passphrase to unlock the SSH private key}{group=Authentication}\n",
+		inc++);
+	printf("arg {number=%u}{call=--proxycommand}{display=ProxyCommand}"
+		"{type=string}{tooltip=The command to use as proxy for the SSH connection}"
+		"{group=Authentication}\n", inc++);
+	printf("arg {number=%u}{call=--update-known-hosts}{display=Update known hosts}"
+		"{type=boolflag}{tooltip=Update user known hosts file if host key is unknown}{group=Authentication}"
+		"\n", inc++);
+	printf("arg {number=%u}{call=--ssh-sha1}{display=Support SHA-1 keys (deprecated)}"
+		"{type=boolflag}{tooltip=Support keys and key exchange algorithms using SHA-1 (deprecated)}{group=Authentication}"
+		"\n", inc++);
+	*count = inc;
+}
+
+void ssh_base_add_help_options(extcap_parameters *extcap_conf)
+{
+	extcap_help_add_option(extcap_conf, "--remote-host <host>", "the remote SSH host");
+	extcap_help_add_option(extcap_conf, "--remote-port <port>", "the remote SSH port");
+	extcap_help_add_option(extcap_conf, "--remote-username <username>", "the remote SSH username");
+	extcap_help_add_option(extcap_conf, "--remote-password <password>", "the remote SSH password. If not specified, ssh-agent and ssh-key are used");
+	extcap_help_add_option(extcap_conf, "--sshkey <private key path>", "the path of the SSH key (OpenSSH format)");
+	extcap_help_add_option(extcap_conf, "--sshkey-passphrase <private key passphrase>", "the passphrase to unlock private SSH key");
+	extcap_help_add_option(extcap_conf, "--proxycommand <proxy command>", "the command to use as proxy for the SSH connection");
+	extcap_help_add_option(extcap_conf, "--ssh-sha1", "support keys and key exchange using SHA-1 (deprecated)");
+	extcap_help_add_option(extcap_conf, "--update-known-hosts", "update user known hosts file if host key unknown");
+}
+
 void add_libssh_info(extcap_parameters * extcap_conf)
 {
 	extcap_base_set_compiled_with(extcap_conf, "libssh version %s", SSH_STRINGIFY(LIBSSH_VERSION));
 	extcap_base_set_running_with(extcap_conf, "libssh version %s", ssh_version(0));
+}
+
+static bool
+verify_ssh_hostkey(ssh_session sshs, const ssh_params_t *ssh_params, char** err_info)
+{
+	ssh_key srv_pubkey = NULL;
+	unsigned char *hash = NULL;
+	char *fingerprint = NULL;
+	size_t hlen;
+	int rc;
+
+#if LIBSSH_VERSION_INT >= SSH_VERSION_INT(0,12,2)
+	/* If GSS-API key exchange was used, the server identity was already
+	 * verified via the MIC. Servers in that scenario often don't send
+	 * their host key, or change it frequently, so libssh recommends
+	 * not performing verification here. */
+	if (ssh_session_kex_is_gss(sshs)) {
+		return true;
+	}
+#endif
+
+	if (ssh_get_server_publickey(sshs, &srv_pubkey) != SSH_OK) {
+		return false;
+	}
+
+	rc = ssh_get_publickey_hash(srv_pubkey, SSH_PUBLICKEY_HASH_SHA256, &hash, &hlen);
+	ssh_key_free(srv_pubkey);
+
+	if (rc != SSH_OK) {
+		return false;
+	}
+	/* We require libssh 0.8.5, so we have ssh_session_is_known_server() */
+	int state = ssh_session_is_known_server(sshs);
+
+	switch (state) {
+	case SSH_KNOWN_HOSTS_OK:
+		ssh_clean_pubkey_hash(&hash);
+		return true;
+	case SSH_KNOWN_HOSTS_CHANGED:
+		fingerprint = ssh_get_fingerprint_hash(SSH_PUBLICKEY_HASH_SHA256, hash, hlen);
+		*err_info = ws_strdup_printf("SSH host key verification failed: server host key changed to %s", fingerprint);
+		ssh_string_free_char(fingerprint);
+		break;
+	case SSH_KNOWN_HOSTS_OTHER:
+		*err_info = g_strdup("SSH host key verification failed: host key type differs from known_hosts");
+		break;
+	case SSH_KNOWN_HOSTS_NOT_FOUND:
+		// No known hosts file available. libssh can create one.
+	case SSH_KNOWN_HOSTS_UNKNOWN:
+		fingerprint = ssh_get_fingerprint_hash(SSH_PUBLICKEY_HASH_SHA256, hash, hlen);
+		if (ssh_params->update_known_hosts) {
+			if (ssh_session_update_known_hosts(sshs) == SSH_OK) {
+				ws_log(LOG_DOMAIN_CAPCHILD, LOG_LEVEL_MESSAGE,
+					"Added %s to user known_hosts with key %s",
+					ssh_params->host, fingerprint);
+				ssh_string_free_char(fingerprint);
+				ssh_clean_pubkey_hash(&hash);
+				return true;
+			} else {
+				*err_info = ws_strdup_printf("Adding SSH host key %s to known_hosts failed: %s", fingerprint, ssh_get_error(sshs));
+			}
+		} else {
+			*err_info = ws_strdup_printf("SSH host key verification failed: server is not in known_hosts. Rerun with the \"update-known-hosts\" option to add %s to the user known_hosts files with key %s", ssh_params->host, fingerprint);
+		}
+		ssh_string_free_char(fingerprint);
+		break;
+	case SSH_KNOWN_HOSTS_ERROR:
+	default:
+		*err_info = ws_strdup_printf("SSH host key verification failed: %s", ssh_get_error(sshs));
+		break;
+	}
+
+	ssh_clean_pubkey_hash(&hash);
+	return false;
 }
 
 ssh_session create_ssh_connection(const ssh_params_t* ssh_params, char** err_info)
@@ -252,6 +376,12 @@ ssh_session create_ssh_connection(const ssh_params_t* ssh_params, char** err_inf
 	/* Connect to server */
 	if (ssh_connect(sshs) != SSH_OK) {
 		*err_info = ws_strdup_printf("Connection error: %s", ssh_get_error(sshs));
+		goto failure;
+	}
+
+	/* Verify the server identity before sending authentication material. */
+	if (!verify_ssh_hostkey(sshs, ssh_params, err_info)) {
+		ssh_disconnect(sshs);
 		goto failure;
 	}
 

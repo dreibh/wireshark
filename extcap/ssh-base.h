@@ -28,6 +28,7 @@
 #define STDOUT_FILENO 1
 #endif
 
+/* Server and Authentication Options */
 #define SSH_BASE_OPTIONS \
 	{ "remote-host", ws_required_argument, NULL, OPT_REMOTE_HOST}, \
 	{ "remote-port", ws_required_argument, NULL, OPT_REMOTE_PORT}, \
@@ -37,12 +38,29 @@
 	{ "sshkey", ws_required_argument, NULL, OPT_SSHKEY}, \
 	{ "sshkey-passphrase", ws_required_argument, NULL, OPT_SSHKEY_PASSPHRASE}, \
 	{ "proxycommand", ws_required_argument, NULL, OPT_PROXYCOMMAND}, \
-	{ "ssh-sha1", ws_no_argument, NULL, OPT_SSH_SHA1}
+	{ "ssh-sha1", ws_no_argument, NULL, OPT_SSH_SHA1}, \
+	{ "update-known-hosts", ws_no_argument, NULL, OPT_UPDATE_KNOWN_HOSTS}
+
+#define SSH_BASE_OPTIONS_ENUM \
+	OPT_REMOTE_HOST, \
+	OPT_REMOTE_PORT, \
+	OPT_REMOTE_USERNAME, \
+	OPT_REMOTE_PASSWORD, \
+	OPT_SSHKEY, \
+	OPT_SSHKEY_PASSPHRASE, \
+	OPT_PROXYCOMMAND, \
+	OPT_SSH_SHA1, \
+	OPT_UPDATE_KNOWN_HOSTS
 
 #define SSH_BASE_PACKET_OPTIONS \
 	SSH_BASE_OPTIONS, \
 	{ "remote-interface", ws_required_argument, NULL, OPT_REMOTE_INTERFACE}, \
 	{ "remote-filter", ws_required_argument, NULL, OPT_REMOTE_FILTER}
+
+#define SSH_BASE_PACKET_OPTIONS_ENUM \
+	SSH_BASE_OPTIONS_ENUM, \
+	OPT_REMOTE_INTERFACE, \
+	OPT_REMOTE_FILTER
 
 /**
  * @brief Holds the connection parameters required to establish an SSH session for an SSH-based extcap capture.
@@ -56,8 +74,23 @@ typedef struct _ssh_params {
     char*    sshkey_passphrase;  /**< Passphrase used to decrypt the private key at sshkey_path; NULL if the key is unencrypted. */
     char*    proxycommand;       /**< Shell command used to establish the SSH connection via a proxy or jump host; NULL for a direct connection. */
     bool     ssh_sha1;           /**< True to permit SHA-1 based host key algorithms, which may be required for older SSH servers. */
+    bool     update_known_hosts;
     int      debug;              /**< Debug verbosity level for SSH session diagnostics; 0 disables debug output. */
 } ssh_params_t;
+
+/**
+ * @brief Print SSH base server and authentication configuration options
+ *
+ * @param[in,out] count The current option count
+ */
+void ssh_base_list_config(unsigned *count);
+
+/**
+ * @brief Adds SSH base server and authentication options to the help options.
+ *
+ * @param extcap_conf Pointer to the extcap parameters structure.
+ */
+void ssh_base_add_help_options(extcap_parameters *extcap_conf);
 
 /* Add libssh version information to an extcap_parameters structure */
 
