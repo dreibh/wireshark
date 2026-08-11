@@ -16242,6 +16242,20 @@ dissect_zcl_touchlink_network_update_request(tvbuff_t *tvb, proto_tree *tree, un
 
 
 /**
+ *This function decodes the Device Information Request payload.
+ *
+ *@param  tvb the tv buffer of the current data_type
+ *@param  tree the tree to append this item to
+ *@param  offset offset of data in tvb
+*/
+static void
+dissect_zcl_touchlink_device_info_request(tvbuff_t *tvb, proto_tree *tree, guint *offset)
+{
+    proto_tree_add_item(tree, hf_zbee_zcl_touchlink_start_index, tvb, *offset, 1, ENC_LITTLE_ENDIAN);
+    *offset += 1;
+} /* dissect_zcl_touchlink_device_info_request */
+
+/**
  *This function decodes the Scan Response payload.
  *
  *@param  tvb the tv buffer of the current data_type
@@ -16335,6 +16349,20 @@ dissect_zcl_touchlink_network_start_response(tvbuff_t *tvb, proto_tree *tree, un
     proto_tree_add_item(tree, hf_zbee_zcl_touchlink_panid, tvb, *offset, 2, ENC_LITTLE_ENDIAN);
     *offset += 2;
 } /* dissect_zcl_touchlink_network_start_response */
+
+/**
+ *This function decodes the Network Join Router/EndDevice Response payloads.
+ *
+ *@param  tvb the tv buffer of the current data_type
+ *@param  tree the tree to append this item to
+ *@param  offset offset of data in tvb
+*/
+static void
+dissect_zcl_touchlink_network_join_response(tvbuff_t *tvb, proto_tree *tree, guint *offset)
+{
+    proto_tree_add_item(tree, hf_zbee_zcl_touchlink_status, tvb, *offset, 1, ENC_LITTLE_ENDIAN);
+    *offset += 1;
+} /*dissect_zcl_touchlink_network_join_response*/
 
 /**
  *This function decodes the Device Information Response payload.
@@ -16571,6 +16599,9 @@ dissect_zbee_zcl_touchlink(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
                 break;
 
             case ZBEE_ZCL_CMD_ID_DEVICE_INFO_REQUEST:
+                dissect_zcl_touchlink_device_info_request(tvb, tree, &offset);
+                break;
+
             case ZBEE_ZCL_CMD_ID_GET_GROUP_IDENTIFIERS_REQUEST:
             case ZBEE_ZCL_CMD_ID_GET_ENDPOINT_LIST_REQUEST:
                 proto_tree_add_item(tree, hf_zbee_zcl_touchlink_start_index, tvb, offset, 1, ENC_LITTLE_ENDIAN);
@@ -16594,8 +16625,7 @@ dissect_zbee_zcl_touchlink(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 
             case ZBEE_ZCL_CMD_ID_NETWORK_JOIN_ROUTER_RESPONSE:
             case ZBEE_ZCL_CMD_ID_NETWORK_JOIN_ENDDEV_RESPONSE:
-                proto_tree_add_item(tree, hf_zbee_zcl_touchlink_status, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-                offset++;
+                dissect_zcl_touchlink_network_join_response(tvb, tree, &offset);
                 break;
 
             case ZBEE_ZCL_CMD_ID_DEVICE_INFO_RESPONSE:
@@ -16626,6 +16656,17 @@ dissect_zbee_zcl_touchlink(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
     }
     return offset;
 } /*dissect_zbee_zcl_touchlink*/
+
+static void
+zbee_zcl_touchlink_init(void)
+{
+    /* Empty the commissioning map, as a new dissection pass is
+       going to be done, so all of the entries in that map,
+       which were allocated with file scope, have been freed. */
+    if (zcl_touchlink_commissioning_map != NULL) {
+        g_hash_table_remove_all(zcl_touchlink_commissioning_map);
+    }
+}
 
 /**
  *ZigBee ZCL Touchlink Commissioning cluster protocol registration routine.
@@ -16868,6 +16909,8 @@ proto_register_zbee_zcl_touchlink(void)
 
     /* Register the ZigBee ZCL Touchlink Commissioning dissector. */
     register_dissector(ZBEE_PROTOABBREV_ZCL_TOUCHLINK, dissect_zbee_zcl_touchlink, proto_zbee_zcl_touchlink);
+
+    register_init_routine(zbee_zcl_touchlink_init);
 } /*proto_register_zbee_zcl_touchlink*/
 
 /**
