@@ -457,8 +457,12 @@ static bool peak_trc_read_packet_v1(wtap* wth, peak_trc_state_t* state, wtap_can
                     break;
                 }
 
+                // There should be 4 bytes of data in an error message.
+                // The first two have information that can become metadata
+                // XXX - Should we reject the message entirely if there's fewer
+                // than 2, or 4, bytes of data?
                 //Translate PEAK error data into SocketCAN meta data for supported error types
-                if ((peak_msg->id | (CAN_ERR_PROT_FORM& CAN_ERR_PROT_STUFF)) != 0)
+                if (bytes && g_strv_length(bytes) >= 2 && (peak_msg->id | (CAN_ERR_PROT_FORM& CAN_ERR_PROT_STUFF)) != 0)
                 {
                     // Data Byte 0: Direction
                     uint8_t byte0 = (uint8_t)g_ascii_strtoull(bytes[0], NULL, 16);
@@ -507,8 +511,11 @@ static bool peak_trc_read_packet_v1(wtap* wth, peak_trc_state_t* state, wtap_can
     }
 
 #ifdef WS_DEBUG
-    for (int i = 0; i < column_count; i++)
-        ws_debug("%d: %s\n", i, g_match_info_fetch(match_info, i));
+    for (int i = 0; i < column_count; i++) {
+        char *match_text = g_match_info_fetch(match_info, i);
+        ws_debug("%d: %s\n", i, match_text);
+        g_free(match_text);
+    }
 #endif
 
     g_match_info_free(match_info);
@@ -615,6 +622,7 @@ static bool peak_trc_read_packet_v2(wtap* wth, peak_trc_state_t* state, wtap_can
                     {
                         // TODO: Hardware Status change.
                         // Currently not supported in Wireshark
+                        g_free(column_text);
                         return false;
                     }
                     else if (strcmp(column_text, "ER") == 0)
@@ -625,12 +633,14 @@ static bool peak_trc_read_packet_v2(wtap* wth, peak_trc_state_t* state, wtap_can
                     {
                         // TODO: Error Counter change
                         // Currently not supported in Wireshark
+                        g_free(column_text);
                         return false;
                     }
                     else if (strcmp(column_text, "EV") == 0)
                     {
                         // Event. User-defined text, begins directly after bus specifier
                         // TODO add support for this event type
+                        g_free(column_text);
                         return false;
                     }
                     break;

@@ -32,8 +32,6 @@
 #include <wsutil/time_util.h>
 #include <wsutil/ws_strptime.h>
 
-#include <cli_main.h>
-
 #define CISCODUMP_VERSION_MAJOR "1"
 #define CISCODUMP_VERSION_MINOR "0"
 #define CISCODUMP_VERSION_RELEASE "0"
@@ -2298,7 +2296,7 @@ int main(int argc, char *argv[])
 	g_set_prgname("ciscodump");
 
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init();
+	extcap_log_init(extcap_conf);
 
 	/*
 	 * Get credential information for later use.

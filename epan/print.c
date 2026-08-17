@@ -721,11 +721,11 @@ proto_tree_write_node_pdml(proto_node *node, void *data)
 }
 
 json_dumper
-write_json_preamble(FILE *fh)
+write_json_preamble(FILE *fh, bool compact)
 {
     json_dumper dumper = {
         .output_file = fh,
-        .flags = JSON_DUMPER_FLAGS_PRETTY_PRINT
+        .flags = compact ? 0 : JSON_DUMPER_FLAGS_PRETTY_PRINT
     };
     json_dumper_begin_array(&dumper);
     return dumper;
@@ -792,7 +792,7 @@ write_json_proto_tree(output_fields_t* fields,
         data.cached_src = edt->pi.data_src ?
             (struct data_source *)edt->pi.data_src->data : NULL;
         data.cached_src_idx = 0;
-        data.grouping_table = g_hash_table_new(g_direct_hash, g_direct_equal);
+        data.grouping_table = g_hash_table_new(g_str_hash, g_str_equal);
 
         write_json_proto_node_children(edt->tree, &data);
         g_hash_table_destroy(data.grouping_table);
@@ -1216,7 +1216,7 @@ proto_node_group_children_by_json_key(proto_node *node)
      * hashmap.
      */
     GSList *same_key_nodes_list = NULL;
-    GHashTable *lookup_by_json_key = g_hash_table_new(g_direct_hash, g_direct_equal);
+    GHashTable *lookup_by_json_key = g_hash_table_new(g_str_hash, g_str_equal);
     proto_node *current_child = node->first_child;
 
     /**

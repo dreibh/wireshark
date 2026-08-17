@@ -4896,7 +4896,10 @@ static int hf_ieee80211_eht_320_tx_max_nss_12_13;
 static int hf_ieee80211_eht_mcs_and_nss_le_80mhz;
 static int hf_ieee80211_eht_mcs_and_nss_eq_160mhz;
 static int hf_ieee80211_eht_mcs_and_nss_eq_320mhz;
-static int hf_ieee80211_eht_ppe_thresholds;
+static int hf_ieee80211_eht_ppe_thresholds_nss;
+static int hf_ieee80211_eht_ppe_thresholds_ru_index_bitmask;
+static int hf_ieee80211_eht_ppe_thresholds_ppetmax;
+static int hf_ieee80211_eht_ppe_thresholds_ppet8;
 static int hf_ieee80211_eht_ttl_mapping_control;
 static int hf_ieee80211_eht_ttl_mapping_direction;
 static int hf_ieee80211_eht_ttl_default_link_mapping;
@@ -8619,6 +8622,9 @@ static int ett_ff_eht_mimo_mu_exclusive_report;
 static int ett_eht_mu_exclusive_beamforming_rpt_ru_index;
 static int ett_eht_reconfig_status_list;
 static int ett_eht_group_key_data;
+static int ett_eht_ppe_threshold;
+static int ett_eht_ppe_nss;
+static int ett_eht_ppe_ru_alloc;
 
 static int ett_tag_measure_request_mode_tree;
 static int ett_tag_measure_request_type_tree;
@@ -9590,7 +9596,7 @@ eht_ru_allocation_base_custom(char *result, uint32_t ru_allocation)
     ru_str = "RU size: 2x996";
   } else if (ru_allocation == 69) {
     ru_str = "RU size: 4x996";
-  } else if (ru_allocation >= 70 && ru_allocation <= 81) {
+  } else if (ru_allocation <= 81) {
     ru_str = "MRU size: 52+26";
   } else if (ru_allocation >= 82 && ru_allocation <= 89) {
     ru_str = "MRU size: 106+26";
@@ -30207,6 +30213,27 @@ static int * const eht_mcs_20mhz_map_hdrs[] = {
   NULL
 };
 
+static const value_string eht_ru_alloc_vals[] = {
+  { 0, "242" },
+  { 1, "484" },
+  { 2, "996" },
+  { 3, "2x996" },
+  { 4, "4x996" },
+  { 0, NULL }
+};
+
+static const value_string eht_constellation_vals[] = {
+  { 0, "BPSK" },
+  { 1, "QPSK" },
+  { 2, "16-QAM" },
+  { 3, "64-QAM" },
+  { 4, "256-QAM" },
+  { 5, "1024-QAM" },
+  { 6, "4096-QAM" },
+  { 7, "None" },
+  { 0, NULL }
+};
+
 static void
 dissect_eht_capabilities(tvbuff_t *tvb, packet_info *pinfo _U_,
                          proto_tree *tree, int offset, int len _U_)
@@ -30409,8 +30436,78 @@ dissect_eht_capabilities(tvbuff_t *tvb, packet_info *pinfo _U_,
    * If the PPE thresholds are present, add them.
    */
   if (ppe_thresholds_present) {
-    proto_tree_add_item(tree, hf_ieee80211_eht_ppe_thresholds, tvb, offset,
-                        tvb_captured_length_remaining(tvb, offset), ENC_NA);
+    uint8_t ppe_thresholds_field = tvb_get_uint8(tvb, offset);
+    uint8_t nss_count = ppe_thresholds_field & 0x0F, nss_index = 0;
+    uint8_t ru_index_bitmask = (tvb_get_uint16(tvb, offset, ENC_LITTLE_ENDIAN) & 0x01F0) >> 4;
+    proto_tree *ppe_tree = NULL;
+    int i = 0;
+    int bit_offset = 1;  /* How many bits we are into the bytes */
+
+    ppe_tree = proto_tree_add_subtree(tree, tvb, offset, len - offset + 1,
+                        ett_eht_ppe_threshold, NULL,
+                        "PPE Thresholds");
+    proto_tree_add_item(ppe_tree, hf_ieee80211_eht_ppe_thresholds_nss, tvb, offset,
+                        1, ENC_NA);
+    proto_tree_add_item(ppe_tree, hf_ieee80211_eht_ppe_thresholds_ru_index_bitmask, tvb,
+                        offset, 2, ENC_LITTLE_ENDIAN);
+    offset += 1; /* start at bit 9: offset++ and bit_offset = 1 */
+
+    /*
+     * Now, for each of the nss values, add a sub-tree with its thresholds.
+     * The actual count is one more than the number in the first three bits.
+     */
+    while (nss_index < nss_count + 1) {
+      int start_offset = 0;
+      proto_tree *nss_tree = NULL;
+      proto_item *nssti = NULL;
+      uint8_t l_ru_bitmask = ru_index_bitmask;
+
+      nss_tree = proto_tree_add_subtree_format(ppe_tree, tvb, offset, -1,
+                        ett_eht_ppe_nss, &nssti, "NSS %d", nss_index);
+      start_offset = offset;
+
+      for (i = 0; i < 5; i++) {
+        if (l_ru_bitmask & 0x01) {
+          int bits_avail = 8 - bit_offset, bits_needed = 6 - bits_avail;
+          uint8_t the_bits = 0;
+          int ru_start_offset = offset;
+          proto_tree *ru_alloc_tree = NULL;
+          proto_item *rualti = NULL;
+
+          ru_alloc_tree = proto_tree_add_subtree_format(nss_tree, tvb, offset,
+                                        -1, ett_eht_ppe_ru_alloc, &rualti,
+                                        "RU allocation: %s",
+                                        val_to_str_const(i, eht_ru_alloc_vals, "Unk"));
+
+          /*
+           * Assemble the bits we require ... we need 6, or 2x3
+           */
+          if (bits_avail >= 6) { /* We can use the current byte */
+            the_bits = (tvb_get_uint8(tvb, offset) >> bit_offset) & 0x3F;
+          } else { /* We need two adjacent bytes */
+            the_bits = (tvb_get_uint8(tvb, offset) >> bit_offset);
+            offset++;
+            the_bits = the_bits |
+                        ((tvb_get_uint8(tvb, offset) &
+                                ((1 << bits_needed) - 1)) << bits_avail);
+          }
+          /*
+           * Now we have two three bit fields, use them.
+           */
+          proto_tree_add_uint(ru_alloc_tree, hf_ieee80211_eht_ppe_thresholds_ppetmax, tvb, ru_start_offset,
+                              offset - ru_start_offset + 1, the_bits & 0x07);
+          proto_tree_add_uint(ru_alloc_tree, hf_ieee80211_eht_ppe_thresholds_ppet8, tvb, ru_start_offset,
+                              offset - ru_start_offset + 1, the_bits >> 3);
+
+          bit_offset = (bit_offset + 6) % 8;
+          proto_item_set_len(rualti, offset - ru_start_offset + 1);
+        }
+        l_ru_bitmask = l_ru_bitmask >> 1;
+      }
+
+      proto_item_set_len(nssti, offset - start_offset + 1);
+      nss_index++;
+    }
   }
 }
 
@@ -32135,7 +32232,7 @@ add_tagged_field_with_validation(packet_info *pinfo, proto_tree *tree, tvbuff_t 
   if (tree) {
     if (tag_no == TAG_ELEMENT_ID_EXTENSION) {
       ext_tag_no  = tvb_get_uint8(tvb, offset + 2);
-      ti = proto_tree_add_item(orig_tree, hf_ieee80211_ext_tag, tvb, offset + 2, tag_len + tag_overhead - 2, ENC_NA);
+      ti = proto_tree_add_item(orig_tree, hf_ieee80211_ext_tag, tvb, offset, 2 + tag_len + tag_overhead - 2, ENC_NA);
       proto_item_append_text(ti, ": %s", val_to_str_ext(pinfo->pool, ext_tag_no, &tag_num_vals_eid_ext_ext, "Unknown (%d)"));
     } else {
       ti = proto_tree_add_item(orig_tree, hf_ieee80211_tag, tvb, offset, 2 + tag_len + tag_overhead - 2, ENC_NA);
@@ -32146,15 +32243,16 @@ add_tagged_field_with_validation(packet_info *pinfo, proto_tree *tree, tvbuff_t 
 
   }
 
+  ti_tag = proto_tree_add_item(tree, hf_ieee80211_tag_number, tvb, offset, 1, ENC_NA);
+  offset += 1;
+  ti_len = proto_tree_add_uint(tree, hf_ieee80211_tag_length, tvb, offset, 1, tag_len);
   if (tag_no == TAG_ELEMENT_ID_EXTENSION) {
-    ti_len = proto_tree_add_uint(tree, hf_ieee80211_ext_tag_length, tvb, offset + 1, 1, tag_len - 1);
-    ti_tag = proto_tree_add_item(tree, hf_ieee80211_ext_tag_number, tvb, offset + 2, 1, ENC_LITTLE_ENDIAN);
-    proto_item_append_text(ti_len, " (Tag len: %u)", tag_len);
-  } else {
-    ti_tag = proto_tree_add_item(tree, hf_ieee80211_tag_number, tvb, offset, 1, ENC_LITTLE_ENDIAN);
-    ti_len = proto_tree_add_uint(tree, hf_ieee80211_tag_length, tvb, offset + 1, 1, tag_len);
+    proto_item_set_generated(proto_tree_add_uint(tree, hf_ieee80211_ext_tag_length, tvb, offset, 1, tag_len - 1));
+    ti_tag = proto_tree_add_item(tree, hf_ieee80211_ext_tag_number, tvb, offset + 1, 1, ENC_LITTLE_ENDIAN);
+    offset += 1;
   }
-  if (tag_len > (unsigned)tvb_reported_length_remaining(tvb, offset)) {
+  offset += 1;
+  if (tag_len > tvb_reported_length_remaining(tvb, offset)) {
     expert_add_info_format(pinfo, ti_len, &ei_ieee80211_tag_length,
                            "Tag Length is longer than remaining payload");
   }
@@ -32209,7 +32307,7 @@ add_tagged_field_with_validation(packet_info *pinfo, proto_tree *tree, tvbuff_t 
   };
   if (!dissector_try_uint_with_data(tagged_field_table, tag_no, tag_tvb, pinfo, tree, false, &field_data))
   {
-      proto_tree_add_item(tree, hf_ieee80211_tag_data, tvb, offset + 2, tag_len, ENC_NA);
+      proto_tree_add_item(tree, hf_ieee80211_tag_data, tvb, offset, tag_len, ENC_NA);
       expert_add_info_format(pinfo, ti_tag, &ei_ieee80211_tag_data,
                              "Dissector for 802.11 IE Tag"
                              " (%s) code not implemented, Contact"
@@ -62109,9 +62207,21 @@ proto_register_ieee80211(void)
       "wlan.eht.supported_eht_mcs_nss_set.bytes",
       FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
-    {&hf_ieee80211_eht_ppe_thresholds,
-     {"EHT PPE Thresholds", "wlan.eht.ppe_thresholds",
-      FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
+    {&hf_ieee80211_eht_ppe_thresholds_nss,
+     {"NSS_PE", "wlan.eht.ppe_thresholds.nss_pe",
+      FT_UINT8, BASE_DEC, NULL, 0x0F, NULL, HFILL }},
+
+    {&hf_ieee80211_eht_ppe_thresholds_ru_index_bitmask,
+     {"RU Index Bitmask", "wlan.eht.ppe_thresholds.ru_index_bitmask",
+      FT_UINT16, BASE_HEX, NULL, 0x01F0, NULL, HFILL }},
+
+    {&hf_ieee80211_eht_ppe_thresholds_ppetmax,
+     {"PPETmax","wlan.eht.ppe_thresholds.ppetmax",
+      FT_UINT8, BASE_HEX, VALS(eht_constellation_vals), 0x0, NULL, HFILL }},
+
+    {&hf_ieee80211_eht_ppe_thresholds_ppet8,
+     {"PPET8","wlan.eht.ppe_thresholds.ppet8",
+      FT_UINT8, BASE_HEX, VALS(eht_constellation_vals), 0x0, NULL, HFILL }},
 
     {&hf_ieee80211_eht_ttl_mapping_control,
      {"TID-To-Link Mapping Control",
@@ -62794,6 +62904,9 @@ proto_register_ieee80211(void)
     &ett_eht_mu_exclusive_beamforming_rpt_ru_index,
     &ett_eht_reconfig_status_list,
     &ett_eht_group_key_data,
+    &ett_eht_ppe_threshold,
+    &ett_eht_ppe_nss,
+    &ett_eht_ppe_ru_alloc,
 
     &ett_tag_measure_request_mode_tree,
     &ett_tag_measure_request_type_tree,

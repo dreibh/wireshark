@@ -48,8 +48,6 @@
 #include <wsutil/nstime.h>
 #include <app/application_flavor.h>
 
-#include <cli_main.h>
-
 #define PCAP_SNAPLEN 0xffff
 
 #define UDPDUMP_DEFAULT_PORT 5555
@@ -357,7 +355,7 @@ int main(int argc, char *argv[])
 	g_set_prgname("udpdump");
 
 	/* Initialize log handler early so we can have proper logging during startup. */
-	extcap_log_init();
+	extcap_log_init(extcap_conf);
 
 	/*
 	 * Get credential information for later use.

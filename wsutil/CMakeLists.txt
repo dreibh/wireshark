@@ -131,6 +131,7 @@ set(WSUTIL_PUBLIC_HEADERS
 	processes.h
 	regex.h
 	report_message.h
+	saplzclzh.h
 	sign_ext.h
 	sober128.h
 	socket.h
@@ -203,6 +204,8 @@ set(WSUTIL_COMMON_FILES
 	privileges.c
 	regex.c
 	rsa.c
+	saplzclzh.c
+	saplzclzh/csdecompr.c
 	sober128.c
 	socket.c
 	strnatcmp.c
@@ -415,8 +418,8 @@ target_link_libraries(wsutil
 		${M_LIBRARIES}
 		${ZLIB_LIBRARIES}
 		${ZLIBNG_LIBRARIES}
-		${LZ4_LIBRARIES}
-		${XXHASH_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:LZ4::LZ4>
+		$<TARGET_NAME_IF_EXISTS:XXHASH::XXHASH>
 		$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_LIBRARIES},${PCRE2_LIBRARIES}>
 		${WIN_IPHLPAPI_LIBRARY}
 		${SOCKET_LIBRARY}
@@ -429,12 +432,10 @@ target_include_directories(wsutil SYSTEM
 		${GLIB2_INCLUDE_DIRS}
 		${GCRYPT_INCLUDE_DIRS}
 		${GNUTLS_INCLUDE_DIRS}
-		${XXHASH_INCLUDE_DIRS}
 		${GMODULE2_INCLUDE_DIRS}
 		${ZLIB_INCLUDE_DIRS}
 		${ZLIBNG_INCLUDE_DIRS}
 		${ZSTD_INCLUDE_DIRS}
-		${LZ4_INCLUDE_DIRS}
 		${PCRE2_INCLUDE_DIRS}
 )
 
@@ -476,10 +477,10 @@ target_link_libraries(wsutil_static
 		${GCRYPT_LIBRARIES}
 		${GNUTLS_LIBRARIES}
 		${M_LIBRARIES}
-		${XXHASH_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:XXHASH::XXHASH>
 		${ZLIB_LIBRARIES}
 		${ZLIBNG_LIBRARIES}
-		${LZ4_LIBRARIES}
+		$<TARGET_NAME_IF_EXISTS:LZ4::LZ4>
 		$<IF:$<CONFIG:Debug>,${PCRE2_DEBUG_LIBRARIES},${PCRE2_LIBRARIES}>
 		${WIN_IPHLPAPI_LIBRARY}
 		${SOCKET_LIBRARY}
@@ -493,11 +494,9 @@ target_include_directories(wsutil_static SYSTEM
 		${GCRYPT_INCLUDE_DIRS}
 		${GNUTLS_INCLUDE_DIRS}
 		${GMODULE2_INCLUDE_DIRS}
-		${XXHASH_INCLUDE_DIRS}
 		${ZLIB_INCLUDE_DIRS}
 		${ZLIBNG_INCLUDE_DIRS}
 		${ZSTD_INCLUDE_DIRS}
-		${LZ4_INCLUDE_DIRS}
 		${PCRE2_INCLUDE_DIRS}
 )
 

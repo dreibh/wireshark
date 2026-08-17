@@ -25,6 +25,8 @@ If you or your organization would like to contribute or become a sponsor, please
 
 The following changes have been made since version 4.7.2:
 
+* The minimum supported Windows version is Windows 10 21H2 (build 19044) or
+  Windows Server 2022.
 * Display filter operators' English forms like "and" and "or" are case-insensitive.
 * Display filter string literals can be surrounded by appropriate pairs of
   directional ("smart" or "curly") double quotes instead of straight double
@@ -104,6 +106,11 @@ The following features are either new or have been significantly updated since v
 * New `tshark -z imsi` statistics lists all unique IMSIs found in a capture
   with packet counts, first/last frame numbers, and protocols.
   A new "imsi" tap is registered by the E.212 dissector.
+
+* New compact JSON output option omits indentation and whitespace,
+  significantly reducing output size and improving performance.
+  Available as `tshark --json-compact` (with `-T json` or `-T jsonraw`)
+  and as a "Compact (no indentation)" checkbox in the GUI JSON export dialog.
 
 * The Windows installers now ship with Npcap 1.88.
   They previously shipped with Npcap 1.83.
@@ -219,6 +226,7 @@ RDP Conctrl virtual channel Protocol (CONCTRL)
 RDP Video Capture Virtual Channel Extension (RDPECAM)
 Real-Time Tracking Protocol (RTTrP)
 TrueConf
+UDX
 Ultra Ethernet Transport (UET)
 XGT
 ZigBee ZCL Generic Tunnel
@@ -241,6 +249,15 @@ an alias for the protocol and all its fields.
 --
 
 === New and Updated Capture Interface support
+
+* `etwdump` now supports new capture providers, among which:
+  * un-encrypted LDAP messages
+  * un-encrypted SMB client/server messages
+  * un-encrypted HTTPS messages (from both WinInet and WinHTTP)
+  * raw HCI events (similar to Microsoft's btvs.exe)
+
+* `etwdump` now supports capture options and has a much better support of
+  undecipherable messages.
 
 // [commaize]
 // --

@@ -55,10 +55,10 @@ def check_lua_script_verify(check_lua_script, result_file):
         optargs = []
 
         if heur_regmode is not None:
-            optargs += ['-X', 'lua_script1:heur_regmode={}'.format(heur_regmode)]
+            optargs += ['-X', f'lua_script1:heur_regmode={heur_regmode}']
 
         if conv_regmode is not None:
-            optargs += ['-X', 'lua_script1:conv_regmode={}'.format(conv_regmode)]
+            optargs += ['-X', f'lua_script1:conv_regmode={conv_regmode}']
 
         tshark_proc = check_lua_script(lua_script, cap_file, check_stage_1, '-V', *optargs)
 
@@ -352,8 +352,8 @@ class TestWsluaUnicode:
         '''Check handling of unicode paths.'''
         if not features.have_lua:
             pytest.skip('Test requires Lua scripting support.')
-        if sys.platform == 'win32' and not features.have_lua_unicode:
-            pytest.skip('Test requires a patched Lua build with UTF-8 support.')
+#        if sys.platform == 'win32' and not features.have_lua_unicode:
+#            pytest.skip('Test requires a patched Lua build with UTF-8 support.')
 
         # Prepare test environment, put files in the right places.
         uni_script = os.path.join(unicode_env.pluginsdir, 'script-Ф-€-中.lua')

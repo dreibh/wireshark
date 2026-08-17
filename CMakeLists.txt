@@ -2453,7 +2453,8 @@ if(USE_REPOSITORY)
 	# https://github.com/maxmind/libmaxminddb/commit/3998f42bdb6678cbaa1a543057e5c81ba1668ac2
 	# percolates up to vcpkg.
 	# if (MAXMINDDB_FOUND)
-	# 	list (APPEND THIRD_PARTY_DLLS "${MAXMINDDB_DLL_DIR}/${MAXMINDDB_DLL}")
+	#	list(APPEND THIRD_PARTY_DLLS "$<$<CONFIG:Debug>:${MAXMINDDB_DLL_DIR_DEBUG}/${MAXMINDDB_DLL_DEBUG}")
+	#	list(APPEND THIRD_PARTY_DLLS "$<$<NOT:$<CONFIG:Debug>>:${MAXMINDDB_DLL_DIR_RELEASE}/${MAXMINDDB_DLL_RELEASE}>")
 	# endif(MAXMINDDB_FOUND)
 	if (LIBSSH_FOUND)
 		foreach( _dll ${LIBSSH_DLLS} )
@@ -2498,8 +2499,8 @@ if(USE_REPOSITORY)
 		list (APPEND THIRD_PARTY_PDBS "${LUA_DLL_DIR}/${LUA_PDB}")
 	endif(LUA_FOUND)
 	if (LZ4_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${LZ4_DLL_DIR}/${LZ4_DLL}")
-		list (APPEND THIRD_PARTY_PDBS "${LZ4_DLL_DIR}/${LZ4_PDB}")
+		list (APPEND THIRD_PARTY_DLLS "$<IF:$<CONFIG:Debug>,${LZ4_DLL_DIR_DEBUG}/${LZ4_DLL_DEBUG},${LZ4_DLL_DIR}/${LZ4_DLL}>")
+		list (APPEND THIRD_PARTY_PDBS "$<IF:$<CONFIG:Debug>,${LZ4_DLL_DIR_DEBUG}/${LZ4_PDB_DEBUG},${LZ4_DLL_DIR}/${LZ4_PDB}>")
 	endif(LZ4_FOUND)
 	if (MINIZIP_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${MINIZIP_DLL_DIR}/${MINIZIP_DLL}")
@@ -2613,8 +2614,8 @@ if(USE_REPOSITORY)
 		list (APPEND THIRD_PARTY_DLLS "${WINSPARKLE_DLL_DIR}/${WINSPARKLE_DLL}")
 	endif(WINSPARKLE_FOUND)
 	if (XXHASH_FOUND)
-		list (APPEND THIRD_PARTY_DLLS "${XXHASH_DLL_DIR}/${XXHASH_DLL}")
-		list (APPEND THIRD_PARTY_PDBS "${XXHASH_DLL_DIR}/${XXHASH_PDB}")
+		list (APPEND THIRD_PARTY_DLLS "$<IF:$<CONFIG:Debug>,${XXHASH_DLL_DIR_DEBUG}/${XXHASH_DLL_DEBUG},${XXHASH_DLL_DIR}/${XXHASH_DLL}>")
+		list (APPEND THIRD_PARTY_PDBS "$<IF:$<CONFIG:Debug>,${XXHASH_DLL_DIR_DEBUG}/${XXHASH_PDB_DEBUG},${XXHASH_DLL_DIR}/${XXHASH_PDB}>")
 	endif(XXHASH_FOUND)
 	if (ZLIB_FOUND)
 		list (APPEND THIRD_PARTY_DLLS "${ZLIB_DLL_DIR}/${ZLIB_DLL}")
@@ -2973,8 +2974,6 @@ set(EXTCAP_SUPPORT_SRC
 )
 add_library(extcap_support OBJECT ${EXTCAP_SUPPORT_SRC})
 target_compile_options(extcap_support PRIVATE ${WERROR_COMMON_FLAGS})
-add_library(cli_main OBJECT cli_main.c)
-target_compile_options(cli_main PRIVATE ${WERROR_COMMON_FLAGS})
 
 if(BUILD_wireshark AND QT_FOUND)
 	set(WIRESHARK_SRC
@@ -3591,7 +3590,6 @@ if(BUILD_tshark)
 		${SOCKET_LIBRARY}
 	)
 	set(tshark_FILES
-		$<TARGET_OBJECTS:cli_main>
 		$<TARGET_OBJECTS:extcap_support>
 		tshark-tap-register.c
 		tshark.c
@@ -3622,7 +3620,6 @@ if(BUILD_strato)
 		${SOCKET_LIBRARY}
 	)
 	set(strato_FILES
-		$<TARGET_OBJECTS:cli_main>
 		$<TARGET_OBJECTS:extcap_support>
 		strato.c
 		app/stratoshark_flavor.c
@@ -3651,7 +3648,6 @@ if(BUILD_tfshark)
 		${APPLE_SYSTEM_CONFIGURATION_LIBRARY}
 	)
 	set(tfshark_FILES
-		$<TARGET_OBJECTS:cli_main>
 		tfshark.c
 		app/wireshark_flavor.c
 		${TSHARK_TAP_SRC}
@@ -3674,7 +3670,6 @@ if(BUILD_rawshark AND PCAP_FOUND)
 		${SOCKET_LIBRARY}
 	)
 	set(rawshark_FILES
-		$<TARGET_OBJECTS:cli_main>
 		rawshark.c
 		app/wireshark_flavor.c
 	)
@@ -3698,10 +3693,6 @@ if(BUILD_sharkd)
 		${GCRYPT_LIBRARIES}
 	)
 	set(sharkd_FILES
-		#
-		# XXX - currently doesn't work on Windows if it uses
-		# $<TARGET_OBJECTS:cli_main> and has real_main().
-		#
 		ui/cli/simple_dialog.c
 		sharkd.c
 		sharkd_daemon.c
@@ -3725,7 +3716,6 @@ if(BUILD_dftest)
 		epan
 	)
 	set(dftest_FILES
-		$<TARGET_OBJECTS:cli_main>
 		app/wireshark_flavor.c
 		dftest.c
 	)
@@ -3750,7 +3740,6 @@ if(BUILD_randpkt)
 		wsutil
 	)
 	set(randpkt_FILES
-		$<TARGET_OBJECTS:cli_main>
 		app/wireshark_flavor.c
 		randpkt.c
 	)
@@ -3777,7 +3766,6 @@ if(BUILD_text2pcap)
 		${ZLIBNG_LIBRARIES}
 	)
 	set(text2pcap_FILES
-		$<TARGET_OBJECTS:cli_main>
 		app/wireshark_flavor.c
 		text2pcap.c
 	)
@@ -3799,7 +3787,6 @@ if(BUILD_mergecap)
 		${CMAKE_DL_LIBS}
 	)
 	set(mergecap_FILES
-		$<TARGET_OBJECTS:cli_main>
 		app/wireshark_flavor.c
 		mergecap.c
 	)
@@ -3820,7 +3807,6 @@ if(BUILD_reordercap)
 		${CMAKE_DL_LIBS}
 	)
 	set(reordercap_FILES
-		$<TARGET_OBJECTS:cli_main>
 		app/wireshark_flavor.c
 		reordercap.c
 	)
@@ -3843,7 +3829,6 @@ if(BUILD_capinfos)
 		${CMAKE_DL_LIBS}
 	)
 	set(capinfos_FILES
-		$<TARGET_OBJECTS:cli_main>
 		app/wireshark_flavor.c
 		capinfos.c
 	)
@@ -3866,7 +3851,6 @@ if(BUILD_captype)
 		${CMAKE_DL_LIBS}
 	)
 	set(captype_FILES
-		$<TARGET_OBJECTS:cli_main>
 		app/wireshark_flavor.c
 		captype.c
 	)
@@ -3888,7 +3872,6 @@ if(BUILD_editcap)
 		${CMAKE_DL_LIBS}
 	)
 	set(editcap_FILES
-		$<TARGET_OBJECTS:cli_main>
 		app/wireshark_flavor.c
 		editcap.c
 	)
@@ -3939,7 +3922,6 @@ if(BUILD_dumpcap AND PCAP_FOUND)
 	# the static version of libwsutil.
 	#
 	set(dumpcap_FILES
-		cli_main.c
 		dumpcap.c
 		ringbuffer.c
 		capture/iface_monitor.c
@@ -4039,7 +4021,7 @@ endif()
 if (MAXMINDDB_FOUND)
 	set(mmdbresolve_LIBS
 		# Note: libmaxminddb is not GPL-2 compatible.
-		${MAXMINDDB_LIBRARY}
+		MaxMindDB::MaxMindDB
 		# Needed for CMake-built libmaxminddb.lib <= 1.43.
 		${SOCKET_LIBRARY}
 	)
@@ -4053,8 +4035,6 @@ if(NOT VCSVERSION_OVERRIDE)
 	add_dependencies(mmdbresolve vcs_version)
 endif()
 	target_link_libraries(mmdbresolve ${mmdbresolve_LIBS})
-	target_include_directories(mmdbresolve PUBLIC ${MAXMINDDB_INCLUDE_DIRS})
-	target_compile_definitions(mmdbresolve PUBLIC ${MAXMINDDB_DEFINITIONS})
 	install(TARGETS mmdbresolve RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
 	if(BUILD_stratoshark AND ENABLE_APPLICATION_BUNDLE)
 		add_custom_command(TARGET mmdbresolve POST_BUILD
@@ -4649,7 +4629,6 @@ if(ASCIIDOCTOR_FOUND AND XSLTPROC_EXECUTABLE)
 endif()
 
 set(SHARK_PUBLIC_HEADERS
-	cli_main.h
 	${CMAKE_BINARY_DIR}/ws_version.h
 )
 
