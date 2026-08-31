@@ -166,6 +166,7 @@ typedef enum {
     CONVERSATION_DNP3,           /**< DNP3 (Distributed Network Protocol 3) conversation */
     CONVERSATION_ILNP,           /**< Identifier-Locator Network Protocol (ILNP) conversation */
     CONVERSATION_SYNCHROPHASOR,  /**< Synchrophasor conversation */
+    CONVERSATION_UDX,            /**< UDX stream */
 } conversation_type;
 
 /*
@@ -217,6 +218,7 @@ typedef enum {
 #define ENDPOINT_IPv6		CONVERSATION_IPv6
 #define ENDPOINT_ETH		CONVERSATION_ETH
 #define ENDPOINT_ILNP		CONVERSATION_ILNP
+#define ENDPOINT_UDX		CONVERSATION_UDX
 
 typedef conversation_type endpoint_type;
 
@@ -326,6 +328,16 @@ typedef struct conversation {
  * find_or_create_conversation().
  */
 struct conversation_addr_port_endpoints;
+
+/*
+ * Getters for conversation_addr_port_endpoints, refer to
+ * packet_info.h:{PINFO_{SRC,DST,...} macros for the reason.
+ */
+address *conversation_addr_port_endpoints_addr1(struct conversation_addr_port_endpoints *endpoints);
+address *conversation_addr_port_endpoints_addr2(struct conversation_addr_port_endpoints *endpoints);
+uint32_t conversation_addr_port_endpoints_port1(struct conversation_addr_port_endpoints *endpoints);
+uint32_t conversation_addr_port_endpoints_port2(struct conversation_addr_port_endpoints *endpoints);
+
 typedef struct conversation_addr_port_endpoints* conversation_addr_port_endpoints_t;
 
 /**

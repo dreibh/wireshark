@@ -10,6 +10,8 @@
 #ifndef INTERFACE_TOOLBAR_H
 #define INTERFACE_TOOLBAR_H
 
+#include <wireshark.h>
+
 #include "ui/iface_toolbar.h"
 #include "funnel_text_dialog.h"
 #include "capture_event.h"
@@ -29,8 +31,8 @@ class InterfaceToolbar;
  */
 struct interface_values
 {
-    /** File descriptor for writing control messages to the interface. */
-    int out_fd;
+    /** Pointer to the queue to send the toolbar message to. Ref counted. */
+    GAsyncQueue *control_out_queue;
 
     /** Map of control numbers to their current byte array values. */
     QMap<int, QByteArray> value;
@@ -117,9 +119,6 @@ signals:
     void closeReader();
 
 private slots:
-    /** @brief Subscribes to the window's InterfaceListManager::interfaceListChanged. */
-    void connectInterfaceListManager();
-
     /**
      * @brief Updates the states of the toolbar widgets based on current values.
      */

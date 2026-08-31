@@ -3745,6 +3745,14 @@ Relativo al riferimento: n/d (al di fuori dell&apos;intervallo di riferimento)</
         <translation>La guida per l&apos;interfaccia %1 non è disponibile. File specificato: %2</translation>
     </message>
     <message>
+        <source>Bookmark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Type a name to create a bookmark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Save parameters on capture start</source>
         <translation>Salva parametri all&apos;avvio della cattura</translation>
     </message>
@@ -9230,6 +9238,14 @@ su un breakpoint esistente, attiva o disattiva il suo stato</translation>
         <translation>Includi Byte Order Mark</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Escape spreadsheet formulas</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Sostituisci i caratteri di spaziatura (tabulazioni, ritorno a capo, ecc.) con escape in stile C&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -9258,11 +9274,11 @@ su un breakpoint esistente, attiva o disattiva il suo stato</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Output compact JSON without indentation (significantly faster and smaller)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Genera JSON compatto senza indentazione (significativamente più veloce e più piccolo)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Compact (no indentation)</source>
-        <translation type="unfinished"></translation>
+        <translation>Compatto (senza indentazione)</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a name/value pair for each field with the field value&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -9565,8 +9581,8 @@ su un breakpoint esistente, attiva o disattiva il suo stato</translation>
 <context>
     <name>Plot</name>
     <message>
-        <source>Field cannot be empty!</source>
-        <translation>Il campo non può essere vuoto!</translation>
+        <source>Field cannot be empty.</source>
+        <translation>Il campo non può essere vuoto.</translation>
     </message>
 </context>
 <context>
@@ -12846,8 +12862,12 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
         <translation>, avvio: %1, cursore: %2. Premi &quot;G&quot; per portarti sul pacchetto %3. Doppio clic sul grafico per impostare l&apos;avvio della riproduzione.</translation>
     </message>
     <message>
-        <source>Playback of stream %1 failed!</source>
-        <translation>Riproduzione del flusso %1 non riuscita!</translation>
+        <source>Playback of stream %1 failed.</source>
+        <translation>Riproduzione del flusso %1 non riuscita.</translation>
+    </message>
+    <message>
+        <source>Save failed.</source>
+        <translation>Salvataggio non riuscito.</translation>
     </message>
     <message>
         <source>Automatic</source>
@@ -12897,10 +12917,6 @@ Questo riavvierà tutti gli script Lua e potrebbe influire sull&apos;analisi del
     <message>
         <source>No streams are suitable for save</source>
         <translation>Non ci sono flussi pronti per il salvataggio</translation>
-    </message>
-    <message>
-        <source>Save failed!</source>
-        <translation>Salvataggio non riuscito</translation>
     </message>
     <message>
         <source>Can&apos;t write header of AU file</source>

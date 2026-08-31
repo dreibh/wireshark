@@ -3718,6 +3718,14 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>无法找到 extcap接口 %1 的帮助。文件：%2</translation>
     </message>
     <message>
+        <source>Bookmark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Type a name to create a bookmark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Save parameters on capture start</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9122,6 +9130,14 @@ on an existing breakpoint, toggle its active state</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Escape spreadsheet formulas</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9456,7 +9472,7 @@ on an existing breakpoint, toggle its active state</source>
 <context>
     <name>Plot</name>
     <message>
-        <source>Field cannot be empty!</source>
+        <source>Field cannot be empty.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -12673,7 +12689,11 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
-        <source>Playback of stream %1 failed!</source>
+        <source>Playback of stream %1 failed.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Save failed.</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
@@ -12723,10 +12743,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     </message>
     <message>
         <source>No streams are suitable for save</source>
-        <translation type="unfinished"></translation>
-    </message>
-    <message>
-        <source>Save failed!</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

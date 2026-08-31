@@ -35,6 +35,10 @@
 #define EXTCAP_CONTROL_IN_PREFIX  "wireshark_control_ext_to_ws"
 #define EXTCAP_CONTROL_OUT_PREFIX "wireshark_control_ws_to_ext"
 
+#define EXTCAP_CONTROL_NONE 0
+#define EXTCAP_CONTROL_TOOLBAR 1
+#define EXTCAP_CONTROL_QUIT 2
+
 #define EXTCAP_ARGUMENT_CONFIG                  "--extcap-config"
 #define EXTCAP_ARGUMENT_CONFIG_OPTION_NAME      "--extcap-config-option-name"
 #define EXTCAP_ARGUMENT_CONFIG_OPTION_VALUE     "--extcap-config-option-value"
@@ -59,6 +63,7 @@ typedef struct _extcap_info {
     char  *full_path;   /**< Absolute path to the extcap executable */
     char  *version;     /**< Version string reported by the extcap via --extcap-version */
     char  *help;        /**< URL or text string pointing to the extcap's help resource */
+    unsigned control;   /**< Level of control pipe support (0 == None, 1 == Toolbar only, 2 == Quit) */
     GList *interfaces;  /**< List of extcap_interface entries exposed by this extcap binary */
 } extcap_info;
 
@@ -101,6 +106,55 @@ void
 extcap_register_preferences(register_cb cb, void *client_data);
 
 /**
+ * Reads our preferences from extcap.cfg, which is shared by all of our
+ * configuration profiles.
+ *
+ * Our preferences must already be registered, which extcap_register_preferences()
+ * takes care of. Changing profiles resets every registered preference, including
+ * ours, so call this afterward to restore them.
+ */
+void
+extcap_read_preferences(void);
+
+/**
+ * Writes our preferences to extcap.cfg, which is shared by all of our
+ * configuration profiles.
+ *
+ * Does nothing if our interfaces haven't been loaded, since that means that
+ * our preferences aren't registered and writing them would leave us with a
+ * file that has nothing but default values in it. Call this after changing an
+ * extcap preference; write_prefs() doesn't write them for us.
+ */
+void
+extcap_write_preferences(void);
+
+/**
+ * Returns the bookmark name for an extcap interface.
+ *
+ * @param ifname The extcap interface name.
+ * @return The bookmark name, or NULL if the interface isn't a bookmark. Must
+ * be freed with g_free().
+ */
+char *
+extcap_get_bookmark_name(const char *ifname);
+
+/**
+ * Bookmark an extcap interface, and save our interface information.
+ *
+ * If the interface we're given is itself a bookmark, its bookmark is renamed.
+ * Otherwise a new bookmark is added for the interface. Renaming the bookmark
+ * of an interface that we're currently using doesn't remove it until we next
+ * load our interfaces.
+ *
+ * @param ifname The extcap interface name, which may be a bookmark.
+ * @param bookmark_name The bookmark name.
+ * @return The bookmark's interface name, e.g. "randpkt/Random test", or NULL if
+ * we couldn't bookmark the interface. Must be freed with g_free().
+ */
+char *
+extcap_set_bookmark(const char *ifname, const char *bookmark_name);
+
+/**
  * Fetches the interface capabilities for the named extcap interface.
  * Initializes the extcap interface list if that hasn't already been done.
  * @param ifname The interface name.
@@ -109,6 +163,16 @@ extcap_register_preferences(register_cb cb, void *client_data);
  */
 if_capabilities_t *
 extcap_get_if_dlts(const char * ifname, char ** err_str);
+
+/**
+ * Fetches the interface capabilities for a list of interfaces.
+ * Initializes the extcap interface list if that hasn't already been done.
+ * @param queries A GList of if_cap_query_t
+ * @param caps_hash A GHashTable to insert the if_capabilities_t into for each name.
+ * @return A GList of all queries that were not extcap interfaces (presumably local).
+ */
+GList *
+extcap_get_if_list_dlts(GList *queries, GHashTable *caps_hash);
 
 /**
  * Append a list of all extcap capture interfaces to the specified list.

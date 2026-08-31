@@ -13,6 +13,7 @@ import subprocess
 import sys
 
 import pytest
+
 from subprocesstest import count_output, grep_output
 
 
@@ -525,8 +526,8 @@ class TestDissectGrpcWeb:
                 '-o', 'protobuf.pbf_as_hf: TRUE',
                 '-d', 'tcp.port==57228,http2',
                 '-2',
-                '-Y', '(tcp.stream eq 6) && (pbf.greet.HelloRequest.name == "88888888"'
-                        '|| pbf.greet.HelloRequest.name == "99999999"'
+                '-Y', '(tcp.stream eq 6) && (pbf.greet.HelloRequest.name == "88888888"' +
+                        '|| pbf.greet.HelloRequest.name == "99999999"' +
                         '|| pbf.greet.HelloReply.message == "Hello 99999999")',
             ), encoding='utf-8', env=test_env)
         assert grep_output(stdout, 'GRPC-Web-Text')
@@ -1154,7 +1155,7 @@ class TestDecompressSmb2:
         stdout = subprocess.check_output((cmd_tshark,
                 '-r', capture_file('smb311-lz77-lz77huff-lznt1.pcap.gz'),
                 '-Tfields', '-edata.data',
-                '-Y', 'frame.number == %d'%frame_num,
+                '-Y', f'frame.number == {frame_num}'
         ), encoding='utf-8', env=test_env)
         assert b'a'*4096 == bytes.fromhex(stdout.strip())
 
@@ -1173,7 +1174,7 @@ class TestDecompressSmb2:
         stdout = subprocess.check_output((cmd_tshark,
             '-r', capture_file('smb311-chained-patternv1-lznt1.pcapng.gz'),
             '-Tfields', '-edata.data',
-            '-Y', 'frame.number == %d'%frame_num,
+            '-Y', f'frame.number == {frame_num}'
         ), encoding='utf-8', env=test_env)
         assert b'\xaa'*256 == bytes.fromhex(stdout.strip())
 
@@ -1407,6 +1408,38 @@ class TestDissectUdx:
             ), encoding='utf-8', env=test_env)
         assert grep_output(stdout, r'^6\t8')
 
+    def test_udx_many_sack_blocks(self, cmd_tshark, capture_file, test_env):
+        '''A selective acknowledgement is not limited to what data_offset can
+        delimit.
+
+        A packet carrying no payload leaves data_offset zero and its blocks run
+        to the end of the datagram, which is how libudx reports a badly
+        fragmented receive window. It sends up to fifty of them, well past the
+        thirty-one that would fit in a delimited area.
+        '''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR,
+                '-r', capture_file('udx_sackblocks.pcap.gz'),
+                '-Y', 'udx.type.sack == 1',
+                '-Tfields', '-eudx.sack.start',
+            ), encoding='utf-8', env=test_env)
+        assert len(stdout.strip().split(',')) == 40
+
+    def test_udx_repeat_below_the_timers(self, cmd_tshark, capture_file, test_env):
+        '''A repeat too soon to be either of libudx's timers is just a repeat.
+
+        Nothing on this flow has been acknowledged, so there is no round trip
+        time and both the retransmission timeout and the probe timer sit at
+        their floor of one second. A repeat half a second in cannot be either,
+        and saying which timer fired would be inventing one.
+        '''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR, '-2',
+                '-r', capture_file('udx_norto.pcap.gz'),
+                '-V',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'This packet was retransmitted')
+        assert not grep_output(stdout, 'Retransmission timeout')
+        assert not grep_output(stdout, 'Tail loss probe')
+
     def test_udx_stream_pairing(self, cmd_tshark, capture_file, test_env):
         '''Three streams multiplexed over one socket pair are told apart.
 
@@ -1476,6 +1509,40 @@ class TestDissectUdx:
         assert sorted(set(stdout.split('\n')[0].split('\t'))) == ['', '0']
         assert grep_output(stdout, r'^0\t1$')
 
+    def test_udx_rto_beats_sack(self, cmd_tshark, capture_file, test_env):
+        '''A full timeout decides a retransmission, even with later SACKs.
+
+        Sequence 0 is lost while 1 and 2 arrive and are selectively
+        acknowledged, so the highest selectively acknowledged sequence sits
+        above the resent one. The resend still comes a second and a half
+        later, which makes it a timer retransmission rather than a fast one.
+        '''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR, '-2',
+                '-r', capture_file('udx_rto.pcap.gz'),
+                '-V',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'Retransmission timeout')
+        assert not grep_output(stdout, 'Fast retransmission')
+
+    def test_udx_sack_acknowledges(self, cmd_tshark, capture_file, test_env):
+        '''A selective acknowledgement acknowledges the packet it names.'''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR, '-2',
+                '-r', capture_file('udx_rto.pcap.gz'),
+                '-Tfields', '-eframe.number', '-eudx.analysis.acked_in',
+            ), encoding='utf-8', env=test_env)
+        # Sequences 1 and 2 are acknowledged by the first SACK, in frame 4,
+        # not by the cumulative acknowledgement that arrives in frame 7.
+        assert grep_output(stdout, r'^2\t4$')
+        assert grep_output(stdout, r'^3\t4$')
+
+    def test_udx_tail_loss_probe_with_new_data(self, cmd_tshark, capture_file, test_env):
+        '''A probe that carries new data is still a probe.'''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR, '-2',
+                '-r', capture_file('udx_tlpnew.pcap.gz'),
+                '-V',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'Tail loss probe')
+
     def test_udx_follow_stream(self, cmd_tshark, capture_file, test_env):
         '''Following a stream yields the payload in both directions.'''
         stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR,
@@ -1500,6 +1567,113 @@ class TestDissectUdx:
             return [l for l in stdout.splitlines() if l.strip() and not l.strip().isdigit()]
 
         assert payload('udx_clean.pcap.gz')[-20:] == payload('udx_loss.pcap.gz')[-20:]
+
+    def test_udx_follow_superseded_fragment(self, cmd_tshark, capture_file, test_env):
+        '''A held packet that is delivered by another copy stops holding up
+        the ones behind it.
+
+        Sequence 2 is held while the gap at 1 is open and arrives a second
+        time before that gap closes. Filling the gap delivers one copy; the
+        other has to be discarded rather than left at the head of the pending
+        list, where it would block every packet after it.
+        '''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR,
+                '-r', capture_file('udx_followstall.pcap.gz'),
+                '-q', '-z', 'follow,udx,ascii,0',
+            ), encoding='utf-8', env=test_env)
+        # All six packets, in sequence order, including the one sent last.
+        payload = [l for l in stdout.splitlines() if l and set(l) <= set('abcdef')]
+        assert ''.join(payload) == ''.join(c * 16 for c in 'abcdef')
+
+    def test_udx_acknowledges_below_first_seen(self, cmd_tshark, capture_file, test_env):
+        '''The first packet on the wire need not hold the lowest sequence.
+
+        Sequence 0 was lost and resent, so it appears after 1 and 2. The
+        cumulative acknowledgement covers all three and has to retire it.
+        '''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR, '-2',
+                '-r', capture_file('udx_lateseq.pcap.gz'),
+                '-Tfields', '-eframe.number', '-eudx.analysis.acked_in',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, r'^3\t4$')
+
+    def test_udx_rtt_measured_on_sending_flow(self, cmd_tshark, capture_file, test_env):
+        '''The round trip time belongs to the flow whose packet was timed.
+
+        Only one side sends data here, so if the sample were credited to the
+        flow carrying the acknowledgements the sending flow would never have
+        one, and this six millisecond pause would fall under the floor that
+        applies when no round trip time is known.
+        '''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR, '-2',
+                '-r', capture_file('udx_rtttlp.pcap.gz'),
+                '-V',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'Tail loss probe')
+
+    def test_udx_conversations_split_multiplexed_streams(self, cmd_tshark, capture_file, test_env):
+        '''Three streams on one socket pair are three UDX conversations.
+
+        The enclosing UDP flow counts them together, so the UDP table shows a
+        single conversation for the same capture.
+        '''
+        def rows(table):
+            stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR,
+                    '-r', capture_file('udx_multi.pcap.gz'),
+                    '-q', '-z', table,
+                ), encoding='utf-8', env=test_env)
+            return [l for l in stdout.splitlines() if '<->' in l]
+
+        assert len(rows('conv,udp')) == 1
+        assert len(rows('conv,udx')) == 3
+
+    def test_udx_conversation_totals(self, cmd_tshark, capture_file, test_env):
+        '''The streams account for exactly what the UDP conversation carried.
+
+        Each of the three streams reports 127 frames and 75728 bytes, which adds
+        up to the 381 frames and 227184 bytes the UDP table reports for the whole
+        capture. Byte counts are asked for machine readable so the columns are
+        plain integers rather than SI prefixed.
+        '''
+        def total(table):
+            stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR,
+                    '-r', capture_file('udx_multi.pcap.gz'),
+                    '-o', 'conv.machine_readable:TRUE',
+                    '-q', '-z', table,
+                ), encoding='utf-8', env=test_env)
+            rows = [l.split() for l in stdout.splitlines() if '<->' in l]
+            return [(int(r[7]), int(r[8])) for r in rows]
+
+        assert total('conv,udx') == [(127, 75728)] * 3
+        assert total('conv,udp') == [(381, 227184)]
+
+    def test_udx_endpoints(self, cmd_tshark, capture_file, test_env):
+        '''Both ends appear once, with the traffic split by direction.'''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR,
+                '-r', capture_file('udx_multi.pcap.gz'),
+                '-o', 'conv.machine_readable:TRUE',
+                '-q', '-z', 'endpoints,udx',
+            ), encoding='utf-8', env=test_env)
+        rows = [l.split() for l in stdout.splitlines() if l.startswith('10.0.0.')]
+        assert [(r[0], int(r[1]), int(r[2])) for r in rows] == [
+            ('10.0.0.1', 381, 227184),
+            ('10.0.0.2', 381, 227184),
+        ]
+        # Sent one way is received the other.
+        assert (int(rows[0][3]), int(rows[0][4])) == (int(rows[1][5]), int(rows[1][6]))
+
+    def test_udx_conversations_follow_analysis_preference(self, cmd_tshark, capture_file, test_env):
+        '''The tables carry the stream index, so they need sequence analysis.
+
+        With the preference off the dissector assigns no stream number, the same
+        condition under which udx.stream is absent from the tree.
+        '''
+        stdout = subprocess.check_output((cmd_tshark, *UDX_HEUR,
+                '-r', capture_file('udx_multi.pcap.gz'),
+                '-oudx.analyze_sequence_numbers:FALSE',
+                '-q', '-z', 'conv,udx',
+            ), encoding='utf-8', env=test_env)
+        assert len([l for l in stdout.splitlines() if '<->' in l]) == 0
 
 
 class TestDissectGsmtapUm:

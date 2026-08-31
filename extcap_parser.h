@@ -144,6 +144,10 @@ typedef struct _extcap_arg {
     GList *values;       /**< List of extcap_value entries for selector, radio, and multicheck arguments */
 } extcap_arg;
 
+#define EXTCAP_CONTROL_NONE 0
+#define EXTCAP_CONTROL_TOOLBAR 1
+#define EXTCAP_CONTROL_QUIT 2
+
 /**
  * @brief Describes a single capture interface advertised by an extcap binary.
  */
@@ -153,6 +157,7 @@ typedef struct _extcap_interface {
     char *version;     /**< Version string reported by the extcap for this interface */
     char *help;        /**< URL or text pointing to help documentation for this interface */
     char *extcap_path; /**< Absolute path to the extcap binary that provides this interface */
+    unsigned control;  /**< Bitmask of control pipe messages supported (0 == None, 1 == TOOLBAR, 2 == QUIT) */
 
     extcap_sentence_type if_type; /**< Sentence type discriminator (EXTCAP_SENTENCE_INTERFACE or EXTCAP_SENTENCE_DLT) */
 } extcap_interface;
@@ -199,13 +204,6 @@ extcap_complex *extcap_parse_complex(extcap_arg_type complex_type,
 void extcap_free_complex(extcap_complex *comp);
 
 /* Print a complex value out for debug */
-
-/**
- * @brief Prints a complex type using its string representation.
- *
- * @param comp Pointer to the extcap_complex structure to be printed.
- */
-void extcap_printf_complex(extcap_complex *comp);
 
 /**
  * @brief Get a string representation of a complex type.

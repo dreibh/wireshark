@@ -85,7 +85,7 @@ InterfaceToolbar::InterfaceToolbar(QWidget *parent, const iface_toolbar *toolbar
     for (GList *walker = toolbar->ifnames; walker; walker = walker->next)
     {
         QString ifname((char *)walker->data);
-        interface_[ifname].out_fd = -1;
+        interface_[ifname].control_out_queue = nullptr;
     }
 
     initializeControls(toolbar);
@@ -102,22 +102,9 @@ InterfaceToolbar::InterfaceToolbar(QWidget *parent, const iface_toolbar *toolbar
         ui->horizontalSpacer->changeSize(0,0, QSizePolicy::Fixed, QSizePolicy::Fixed);
     }
 
-    // Refresh on app-init and on every interface-list change from the window's
-    // InterfaceListManager. The toolbar may be built before that manager exists,
-    // so defer the manager connection to appInitialized when needed.
-    connect(mainApp, &MainApplication::appInitialized, this, &InterfaceToolbar::interfaceListChanged);
-    mainApp->whenInitialized(this, [this]() { connectInterfaceListManager(); });
+    connect(mainApp, &MainApplication::interfaceListChanged, this, &InterfaceToolbar::interfaceListChanged);
 
     updateWidgets();
-}
-
-void InterfaceToolbar::connectInterfaceListManager()
-{
-    MainWindow *mainWindow = mainApp->mainWindow();
-    if (mainWindow && mainWindow->interfaceListManager()) {
-        connect(mainWindow->interfaceListManager(), &InterfaceListManager::interfaceListChanged,
-                this, &InterfaceToolbar::interfaceListChanged, Qt::UniqueConnection);
-    }
 }
 
 InterfaceToolbar::~InterfaceToolbar()
@@ -633,7 +620,7 @@ void InterfaceToolbar::controlSend(QString ifname, int num, int command, const Q
         return;
     }
 
-    if (ifname.isEmpty() || interface_[ifname].out_fd == -1)
+    if (ifname.isEmpty() || interface_[ifname].control_out_queue == nullptr)
     {
         // Does not have a control out channel
         return;
@@ -654,12 +641,8 @@ void InterfaceToolbar::controlSend(QString ifname, int num, int command, const Q
     ba.append(command);
     ba.append(payload);
 
-    if (ws_write(interface_[ifname].out_fd, ba.data(), ba.length()) != ba.length())
-    {
-        simple_dialog_async(ESD_TYPE_ERROR, ESD_BTN_OK,
-                            "Unable to send control message:\n%s.",
-                            g_strerror(errno));
-    }
+    g_async_queue_push(interface_[ifname].control_out_queue, g_bytes_new(ba.data(), ba.length()));
+    g_main_context_wakeup(NULL); // Necessary, at least on Windows
 }
 
 void InterfaceToolbar::onControlButtonClicked()
@@ -816,31 +799,11 @@ void InterfaceToolbar::startCapture(GArray *ifaces)
         if (ifname.compare(selected_ifname) == 0)
             selected_found = true;
 
-        if (interface_[ifname].out_fd != -1)
+        if (interface_[ifname].control_out_queue != nullptr)
             // Already have control channels for this interface
             continue;
 
-        // Open control out channel
-#ifdef _WIN32
-        // Duplicate control out handle and pass the duplicate handle to _open_osfhandle().
-        // This allows the C run-time file descriptor (out_fd) and the extcap_control_out_h to be closed independently.
-        // The duplicated handle will get closed at the same time the file descriptor is closed.
-        // The control out pipe will close when both out_fd and extcap_control_out_h are closed.
-        HANDLE duplicate_out_handle = INVALID_HANDLE_VALUE;
-        if (!DuplicateHandle(GetCurrentProcess(), interface_opts->extcap_control_out_h,
-                             GetCurrentProcess(), &duplicate_out_handle, 0, true, DUPLICATE_SAME_ACCESS))
-        {
-            simple_dialog_async(ESD_TYPE_ERROR, ESD_BTN_OK,
-                                "Failed to duplicate extcap control out handle: %s\n.",
-                                win32strerror(GetLastError()));
-        }
-        else
-        {
-            interface_[ifname].out_fd = _open_osfhandle((intptr_t)duplicate_out_handle, O_APPEND | O_BINARY);
-        }
-#else
-        interface_[ifname].out_fd = ws_open(interface_opts->extcap_control_out, O_WRONLY | O_BINARY, 0);
-#endif
+        interface_[ifname].control_out_queue = g_async_queue_ref(interface_opts->extcap_control_out_q);
         sendChangedValues(ifname);
         controlSend(ifname, 0, commandControlInitialized);
     }
@@ -859,11 +822,10 @@ void InterfaceToolbar::stopCapture()
 {
     foreach (QString ifname, interface_.keys())
     {
-        if (interface_[ifname].out_fd != -1)
+        if (interface_[ifname].control_out_queue != nullptr)
         {
-            ws_close_if_possible (interface_[ifname].out_fd);
-
-            interface_[ifname].out_fd = -1;
+            g_async_queue_unref(interface_[ifname].control_out_queue);
+            interface_[ifname].control_out_queue = nullptr;
         }
 
         foreach (int num, control_widget_.keys())
@@ -955,7 +917,7 @@ bool InterfaceToolbar::hasInterface(QString ifname) const
 void InterfaceToolbar::updateWidgets()
 {
     const QString &ifname = ui->interfacesComboBox->currentText();
-    bool is_capturing = (interface_[ifname].out_fd == -1 ? false : true);
+    bool is_capturing = (interface_[ifname].control_out_queue == nullptr ? false : true);
 
     foreach (int num, control_widget_.keys())
     {

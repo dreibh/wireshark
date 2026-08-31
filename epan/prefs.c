@@ -2201,6 +2201,12 @@ unsigned pref_get_changed_flags(pref_t *pref, void *unstash_data_p)
     case PREF_DIRNAME:
     case PREF_PASSWORD:
     case PREF_DISSECTOR:
+        if (pref->stashed_val.string == NULL) {
+            /* XXX - This shouldn't happen, but there's an issue with how the
+             * Preferences Dialog handles newly registered extcap prefs. */
+            ws_debug("stashed pref %s is NULL", prefs_get_name(pref));
+            break;
+        }
         if (strcmp(*pref->varp.string, pref->stashed_val.string) != 0) {
             unstash_data->module->prefs_changed_flags |= prefs_get_effect_flags(pref);
         }
@@ -2302,6 +2308,12 @@ pref_unstash(pref_t *pref, void *unstash_data_p)
     case PREF_DIRNAME:
     case PREF_PASSWORD:
     case PREF_DISSECTOR:
+        if (pref->stashed_val.string == NULL) {
+            /* XXX - This shouldn't happen, but there's an issue with how the
+             * Preferences Dialog handles newly registered extcap prefs. */
+            ws_debug("stashed pref %s is NULL", prefs_get_name(pref));
+            break;
+        }
         if (strcmp(*pref->varp.string, pref->stashed_val.string) != 0) {
             wmem_free(pref->scope, *pref->varp.string);
             *pref->varp.string = wmem_strdup(pref->scope, pref->stashed_val.string);
@@ -3117,13 +3129,13 @@ colorized_frame_to_str_cb(pref_t* pref _U_, bool default_val _U_)
 static module_t *gui_module;
 static module_t *gui_color_module;
 static module_t *nameres_module;
+static module_t *extcap_module;
 
 static void
 prefs_register_modules(void)
 {
     module_t *printing, *capture_module, *console_module,
         *gui_layout_module, *gui_font_module;
-    module_t *extcap_module;
     unsigned int layout_gui_flags;
     struct pref_custom_cbs custom_cbs;
 
@@ -3132,14 +3144,15 @@ prefs_register_modules(void)
         return;
     }
 
-    /* GUI
-     * These are "simple" GUI preferences that can be read/written using the
-     * preference module API.  These preferences still use their own
-     * configuration screens for access, but this cuts down on the
-     * preference "string compare list" in set_pref()
+    /* Extcap
+     * The extcap preferences used to be in the main preference file, but are
+     * now (since 4.4.0) written separately to "extcap.cfg". It occasionally
+     * seems to cause issues that this is registered as a top level module.
      */
     extcap_module = prefs_register_module(prefs_top_level_modules, prefs_modules, "extcap", "Extcap Utilities",
         "Extcap Utilities", NULL, NULL, false);
+    /* Extcap preferences don't affect dissection */
+    prefs_set_module_effect_flags(extcap_module, PREF_EFFECT_CAPTURE);
 
     /* Setting default value to true */
     prefs.extcap_save_on_start = true;
@@ -4476,7 +4489,7 @@ read_registry(void)
 #endif
 
 void
-prefs_read_module(const char *module, const char* app_env_var_prefix)
+prefs_read_module(const char *module, bool from_profile, const char* app_env_var_prefix)
 {
     int         err;
     char        *pf_path;
@@ -4488,9 +4501,9 @@ prefs_read_module(const char *module, const char* app_env_var_prefix)
     }
 
     /* Construct the pathname of the user's preferences file for the module. */
-    char *pf_name = wmem_strdup_printf(NULL, "%s.cfg", module);
-    pf_path = get_persconffile_path(pf_name, true, app_env_var_prefix);
-    wmem_free(NULL, pf_name);
+    char *pf_name = g_strdup_printf("%s.cfg", module);
+    pf_path = get_persconffile_path(pf_name, from_profile, app_env_var_prefix);
+    g_free(pf_name);
 
     /* Read the user's module preferences file, if it exists and is not a dir. */
     if (!test_for_regular_file(pf_path) || ((pf = ws_fopen(pf_path, "r")) == NULL)) {
@@ -6060,6 +6073,7 @@ set_pref(char *pref_name, const char *value, void *private_data,
 typedef struct {
     FILE     *pf;
     bool is_gui_module;
+    bool is_extcap_module;
 } write_gui_pref_arg_t;
 
 const char *
@@ -6686,6 +6700,9 @@ write_module_prefs(module_t *module, void *user_data)
     if ((module == gui_module) && (gui_pref_arg->is_gui_module != true))
         return 0;
 
+    if ((module == extcap_module) && (gui_pref_arg->is_extcap_module != true))
+        return 0;
+
     /* Write a header for the main modules and GUI sub-modules */
     if (((module->parent == NULL) || (module->parent == gui_module)) &&
         ((prefs_module_has_submodules(module)) ||
@@ -6739,14 +6756,62 @@ write_registry(void)
 }
 #endif
 
+int
+prefs_write_module(const char *module, bool from_profile, const char* app_env_var_prefix)
+{
+    write_gui_pref_arg_t write_pref_info;
+
+    module_t *target_module = prefs_find_module(module);
+    if (!target_module) {
+        return ENOENT;
+    }
+
+    char *pf_name = g_strdup_printf("%s.cfg", module);
+    char *pf_path = get_persconffile_path(pf_name, from_profile, app_env_var_prefix);
+    g_free(pf_name);
+
+    FILE *pf;
+    if ((pf = ws_fopen(pf_path, "w")) == NULL) {
+        int err = errno;
+        if (err != EISDIR) {
+            ws_warning("Unable to save %s preferences \"%s\": %s",
+                module, pf_path, g_strerror(err));
+        }
+        g_free(pf_path);
+        return err;
+    }
+    g_free(pf_path);
+
+    fprintf(pf, "# %s configuration file for Wireshark " VERSION ".\n"
+                "#\n"
+                "# This file is regenerated each time preferences are saved within\n"
+                "# Wireshark. Making manual changes should be safe, however.\n"
+                "# Preferences that have been commented out have not been\n"
+                "# changed from their default value.\n", target_module->title);
+
+    write_pref_info.pf = pf;
+    write_pref_info.is_gui_module = (target_module == gui_module);
+    write_pref_info.is_extcap_module = (target_module == extcap_module);
+
+    write_module_prefs(target_module, &write_pref_info);
+
+    fclose(pf);
+
+    return 0;
+}
+
 /* Write out "prefs" to the user's preferences file, and return 0.
 
    If the preferences file path is NULL, write to stdout.
 
-   If we got an error, stuff a pointer to the path of the preferences file
-   into "*pf_path_return", and return the errno. */
-int
-write_prefs(const char* app_env_var_prefix, char **pf_path_return)
+   If we got an error, stuff a pointer to the path of the preferences
+   file into "*pf_path_return", and return the errno.
+
+   Note that we don't write extcap.cfg here; that's done by
+   extcap_write_preferences().
+*/
+    int
+    write_prefs(const char *app_env_var_prefix, char **pf_path_return)
 {
     char        *pf_path;
     FILE        *pf;
@@ -6786,35 +6851,6 @@ write_prefs(const char* app_env_var_prefix, char **pf_path_return)
                 g_free(err);
             }
         }
-
-        module_t *extcap_module = prefs_find_module("extcap");
-        if (extcap_module && !prefs.capture_no_extcap) {
-            char *ext_path = get_persconffile_path("extcap.cfg", true, app_env_var_prefix);
-            FILE *extf;
-            if ((extf = ws_fopen(ext_path, "w")) == NULL) {
-                if (errno != EISDIR) {
-                    ws_warning("Unable to save extcap preferences \"%s\": %s",
-                        ext_path, g_strerror(errno));
-                }
-                g_free(ext_path);
-            } else {
-                g_free(ext_path);
-
-                fputs("# Extcap configuration file for Wireshark " VERSION ".\n"
-                      "#\n"
-                      "# This file is regenerated each time preferences are saved within\n"
-                      "# Wireshark. Making manual changes should be safe, however.\n"
-                      "# Preferences that have been commented out have not been\n"
-                      "# changed from their default value.\n", extf);
-
-                write_gui_pref_info.pf = extf;
-                write_gui_pref_info.is_gui_module = false;
-
-                write_module_prefs(extcap_module, &write_gui_pref_info);
-
-                fclose(extf);
-            }
-        }
     }
 
     fputs("# Configuration file for Wireshark " VERSION ".\n"
@@ -6832,10 +6868,15 @@ write_prefs(const char* app_env_var_prefix, char **pf_path_return)
      */
     write_gui_pref_info.pf = pf;
     write_gui_pref_info.is_gui_module = true;
+    write_gui_pref_info.is_extcap_module = false;
 
     write_module_prefs(gui_module, &write_gui_pref_info);
 
     write_gui_pref_info.is_gui_module = false;
+    if (pf_path_return == NULL) {
+        /* If we're writing the prefs to stdout, write the extcap prefs. */
+        write_gui_pref_info.is_extcap_module = true;
+    }
     prefs_module_list_foreach(prefs_top_level_modules, write_module_prefs, &write_gui_pref_info, true);
 
     fclose(pf);

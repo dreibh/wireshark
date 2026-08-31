@@ -309,6 +309,7 @@ set(DISSECTOR_PUBLIC_HEADERS
 	packet-ieee80211-radiotap-defs.h
 	packet-ieee80211-radiotap-iter.h
 	packet-ieee80211.h
+	packet-ieee802154.h
 	packet-ieee802a.h
 	packet-ip.h
 	packet-ipsec.h
@@ -391,6 +392,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/file-jpeg.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-mmodule.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-mp4.c
+	${CMAKE_CURRENT_SOURCE_DIR}/file-ogg.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-pcap.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-pcapng.c
 	${CMAKE_CURRENT_SOURCE_DIR}/file-pcapng-darwin.c
@@ -948,6 +950,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gtp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gtpv2.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gquic.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-gue.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gvcp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gvrp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-gvsp.c
@@ -1712,6 +1715,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tacacs.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tali.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tapa.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-tcg-storage.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tcp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tcpcl.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-tcpros.c

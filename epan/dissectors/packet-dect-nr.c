@@ -122,6 +122,7 @@ static int hf_dect_nr_mux_ie_type_long;
 static int hf_dect_nr_mux_ie_type_short_pl0;
 static int hf_dect_nr_mux_ie_type_short_pl1;
 static int hf_dect_nr_mux_mac_ie_len;
+static int hf_dect_nr_mux_mac_sdu;
 
 /* 6.4.2.2: Network Beacon message */
 static int hf_dect_nr_nb_msg;
@@ -521,16 +522,28 @@ static int hf_dect_nr_dlc_ext_invalid_next_hop_addr;
 static int hf_dect_nr_hls_bin;
 
 /* DLC Reassembly */
-static int hf_dect_nr_segments;
-static int hf_dect_nr_segment;
-static int hf_dect_nr_segment_overlap;
-static int hf_dect_nr_segment_overlap_conflict;
-static int hf_dect_nr_segment_multiple_tails;
-static int hf_dect_nr_segment_too_long_segment;
-static int hf_dect_nr_segment_error;
-static int hf_dect_nr_segment_count;
-static int hf_dect_nr_reassembled_in;
-static int hf_dect_nr_reassembled_length;
+static int hf_dect_nr_dlc_segments;
+static int hf_dect_nr_dlc_segment;
+static int hf_dect_nr_dlc_segment_overlap;
+static int hf_dect_nr_dlc_segment_overlap_conflict;
+static int hf_dect_nr_dlc_segment_multiple_tails;
+static int hf_dect_nr_dlc_segment_too_long_segment;
+static int hf_dect_nr_dlc_segment_error;
+static int hf_dect_nr_dlc_segment_count;
+static int hf_dect_nr_dlc_reassembled_in;
+static int hf_dect_nr_dlc_reassembled_length;
+
+/* CVG Reassembly */
+static int hf_dect_nr_cvg_segments;
+static int hf_dect_nr_cvg_segment;
+static int hf_dect_nr_cvg_segment_overlap;
+static int hf_dect_nr_cvg_segment_overlap_conflict;
+static int hf_dect_nr_cvg_segment_multiple_tails;
+static int hf_dect_nr_cvg_segment_too_long_segment;
+static int hf_dect_nr_cvg_segment_error;
+static int hf_dect_nr_cvg_segment_count;
+static int hf_dect_nr_cvg_reassembled_in;
+static int hf_dect_nr_cvg_reassembled_length;
 
 /* CVG */
 static int hf_dect_nr_cvg_pdu;
@@ -557,6 +570,7 @@ static int hf_dect_nr_cvg_data_res1;
 static int hf_dect_nr_cvg_data_seq_num;
 static int hf_dect_nr_cvg_data_sdu_len;
 static int hf_dect_nr_cvg_data_seg_offset;
+static int hf_dect_nr_cvg_data_payload;
 
 /* 6.3.5 Data EP IE */
 static int hf_dect_nr_cvg_data_ep_ie;
@@ -664,8 +678,8 @@ static int ett_dect_nr_asn_ie;
 static int ett_dect_nr_dlc_pdu;
 static int ett_dect_nr_dlc_routing_hdr;
 static int ett_dect_nr_dlc_ext_hdr;
-static int ett_dect_nr_segment;
-static int ett_dect_nr_segments;
+static int ett_dect_nr_dlc_segment;
+static int ett_dect_nr_dlc_segments;
 static int ett_dect_nr_cvg;
 static int ett_dect_nr_cvg_header;
 static int ett_dect_nr_cvg_ep_mux_ie;
@@ -677,9 +691,10 @@ static int ett_dect_nr_cvg_tx_services_config_ie;
 static int ett_dect_nr_cvg_arq_fb_ie;
 static int ett_dect_nr_cvg_arq_poll_ie;
 static int ett_dect_nr_cvg_flow_status_ie;
+static int ett_dect_nr_cvg_segment;
+static int ett_dect_nr_cvg_segments;
 
 static dissector_handle_t dect_nr_handle;
-static dissector_handle_t ipv6_handle;
 
 static dissector_table_t mac_hdr_dissector_table;
 static dissector_table_t ie_dissector_table;
@@ -687,8 +702,6 @@ static dissector_table_t ie_short_dissector_table;
 static dissector_table_t ie_extension_dissector_table;
 static dissector_table_t ie_cvg_dissector_table;
 static dissector_table_t ep_mux_dissector_table;
-
-static heur_dissector_list_t heur_subdissector_list;
 
 static wmem_map_t *rd_id_map;
 
@@ -698,23 +711,6 @@ static const enum_val_t phf_type_pref_vals[] = {
 	{ "auto", "Automatic", DECT_NR_PHF_TYPE_AUTO },
 	{ "type1", "Type 1: 40 bits", DECT_NR_PHF_TYPE_1 },
 	{ "type2", "Type 2: 80 bits", DECT_NR_PHF_TYPE_2 },
-	{ NULL, NULL, -1 }
-};
-
-/* Preference to configure DLC data type */
-typedef enum {
-	DLC_DATA_TYPE_AUTO,
-	DLC_DATA_TYPE_BINARY,
-	DLC_DATA_TYPE_CVG,
-	DLC_DATA_TYPE_IPv6,
-} dlc_data_type_t;
-
-static int dlc_data_type_pref = DLC_DATA_TYPE_AUTO;
-static const enum_val_t dlc_data_type_pref_vals[] = {
-	{ "auto", "Automatic", DLC_DATA_TYPE_AUTO },
-	{ "binary", "Binary (data)", DLC_DATA_TYPE_BINARY },
-	{ "cvg", "CVG layer", DLC_DATA_TYPE_CVG },
-	{ "ipv6", "IPv6", DLC_DATA_TYPE_IPv6 },
 	{ NULL, NULL, -1 }
 };
 
@@ -2140,27 +2136,52 @@ static const range_string dect_nr_cvg_ep_mux_vals[] = {
 
 /* DLC Reassembly */
 
-static const fragment_items dect_nr_segment_items = {
+static const fragment_items dect_nr_dlc_segment_items = {
 	/* Segment subtrees */
-	&ett_dect_nr_segment,
-	&ett_dect_nr_segments,
+	&ett_dect_nr_dlc_segment,
+	&ett_dect_nr_dlc_segments,
 	/* Segment fields */
-	&hf_dect_nr_segments,
-	&hf_dect_nr_segment,
-	&hf_dect_nr_segment_overlap,
-	&hf_dect_nr_segment_overlap_conflict,
-	&hf_dect_nr_segment_multiple_tails,
-	&hf_dect_nr_segment_too_long_segment,
-	&hf_dect_nr_segment_error,
-	&hf_dect_nr_segment_count,
+	&hf_dect_nr_dlc_segments,
+	&hf_dect_nr_dlc_segment,
+	&hf_dect_nr_dlc_segment_overlap,
+	&hf_dect_nr_dlc_segment_overlap_conflict,
+	&hf_dect_nr_dlc_segment_multiple_tails,
+	&hf_dect_nr_dlc_segment_too_long_segment,
+	&hf_dect_nr_dlc_segment_error,
+	&hf_dect_nr_dlc_segment_count,
 	/* Reassembled in field */
-	&hf_dect_nr_reassembled_in,
+	&hf_dect_nr_dlc_reassembled_in,
 	/* Reassembled length field */
-	&hf_dect_nr_reassembled_length,
+	&hf_dect_nr_dlc_reassembled_length,
 	/* Reassembled data field */
 	NULL,
 	/* Tag */
 	"DLC PDU segments"
+};
+
+/* CVG Reassembly */
+
+static const fragment_items dect_nr_cvg_segment_items = {
+	/* Segment subtrees */
+	&ett_dect_nr_cvg_segment,
+	&ett_dect_nr_cvg_segments,
+	/* Segment fields */
+	&hf_dect_nr_cvg_segments,
+	&hf_dect_nr_cvg_segment,
+	&hf_dect_nr_cvg_segment_overlap,
+	&hf_dect_nr_cvg_segment_overlap_conflict,
+	&hf_dect_nr_cvg_segment_multiple_tails,
+	&hf_dect_nr_cvg_segment_too_long_segment,
+	&hf_dect_nr_cvg_segment_error,
+	&hf_dect_nr_cvg_segment_count,
+	/* Reassembled in field */
+	&hf_dect_nr_cvg_reassembled_in,
+	/* Reassembled length field */
+	&hf_dect_nr_cvg_reassembled_length,
+	/* Reassembled data field */
+	NULL,
+	/* Tag */
+	"CVG PDU segments"
 };
 
 typedef struct dect_nr_sec_info {
@@ -2186,6 +2207,7 @@ typedef struct {
 	dect_nr_sec_info_t sec_info;
 	uint16_t psn;
 	dect_nr_conv_info_t *conv_info;
+	proto_tree *proto_tree;
 } dect_nr_context_t;
 
 typedef struct {
@@ -2193,6 +2215,7 @@ typedef struct {
 	uint32_t ie_length;
 	bool ie_type_present;
 	bool ie_length_present;
+	dect_nr_context_t *dlc_ctx;
 } dect_nr_cvg_context_t;
 
 typedef struct {
@@ -2251,7 +2274,8 @@ static const reassembly_table_functions dect_nr_reassembly_functions = {
 	dect_nr_reassembly_free_key_func,
 };
 
-static reassembly_table dect_nr_reassembly_table;
+static reassembly_table dect_nr_dlc_reassembly_table;
+static reassembly_table dect_nr_cvg_reassembly_table;
 
 /* Add expert info to reserved bits which is not zero */
 static void dect_tree_add_reserved_item(proto_tree *tree, int hf_index, tvbuff_t *tvb, int offset, int length, packet_info *pinfo, const unsigned encoding)
@@ -2898,17 +2922,92 @@ static int dissect_cvg_ep_mux_ie(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tr
 	return offset;
 }
 
+static tvbuff_t *
+cvg_data_reassemble(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tree,
+		    dect_nr_cvg_context_t *cvg_ctx, int hf_payload,
+		    uint8_t si, uint16_t seq_num, uint16_t seg_offset,
+		    uint32_t *data_len, bool *data_incomplete, proto_item **data_item,
+		    wmem_strbuf_t **data_info)
+{
+	dect_nr_context_t reassembly_ctx;
+	uint32_t length;
+	wmem_strbuf_t *segm_info;
+	fragment_head *frag_msg;
+	tvbuff_t *subtvb;
+
+	*data_incomplete = false;
+
+	if (cvg_ctx && cvg_ctx->dlc_ctx) {
+		reassembly_ctx = *cvg_ctx->dlc_ctx;
+	} else {
+		memset(&reassembly_ctx, 0, sizeof(reassembly_ctx));
+	}
+
+	length = tvb_captured_length_remaining(tvb, offset);
+	if (!cvg_ctx || !cvg_ctx->ie_length_present) {
+		*data_len = length;
+	} else if (length < (cvg_ctx->ie_length)) {
+		*data_len = length;
+		*data_incomplete = true;
+	} else {
+		*data_len = cvg_ctx->ie_length;
+	}
+
+	*data_item = proto_tree_add_item(tree, hf_payload, tvb, offset, *data_len, ENC_NA);
+
+	segm_info = wmem_strbuf_create(pinfo->pool);
+
+	if (si == 0) {
+		wmem_strbuf_append_printf(segm_info, "SN %u, ", seq_num);
+	} else if (si == 1) {
+		wmem_strbuf_append_printf(segm_info, "SN %u (first segment), ", seq_num);
+	} else if (si == 2) {
+		wmem_strbuf_append_printf(segm_info, "SN %u (last segment at %u), ", seq_num, seg_offset);
+	} else if (si == 3) {
+		wmem_strbuf_append_printf(segm_info, "SN %u (segment at %u), ", seq_num, seg_offset);
+	}
+
+	frag_msg = fragment_add_seq_next(&dect_nr_cvg_reassembly_table, tvb, offset, pinfo,
+					 seq_num, &reassembly_ctx, *data_len, (si == 1 || si == 3));
+	subtvb = process_reassembled_data(tvb, offset, pinfo, "Reassembled CVG",
+					  frag_msg, &dect_nr_cvg_segment_items, NULL, tree);
+
+	*data_info = wmem_strbuf_create(pinfo->pool);
+	wmem_strbuf_append_printf(*data_info, " [ %s%d bytes ]",
+				  wmem_strbuf_finalize(segm_info),
+				  (cvg_ctx && cvg_ctx->ie_length_present) ? cvg_ctx->ie_length : *data_len);
+
+	return subtvb;
+}
+
+static void
+cvg_data_append_col_info(packet_info *pinfo, proto_item *data_item, bool data_incomplete,
+			 wmem_strbuf_t *data_info)
+{
+	if (data_incomplete) {
+		wmem_strbuf_append(data_info, " [data incomplete]");
+		expert_add_info(pinfo, data_item, &ei_dect_nr_pdu_cut_short);
+	}
+
+	col_append_str(pinfo->cinfo, COL_INFO, wmem_strbuf_finalize(data_info));
+}
+
 /* 6.3.4 Data IE */
-static int dissect_cvg_data_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data _U_)
+static int dissect_cvg_data_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data)
 {
 	unsigned offset = 0;
+	proto_item *data_item;
 	uint8_t si;
 	uint8_t sli;
 	uint16_t seq_num;
 	uint16_t sdu_len;
-	uint16_t seg_offset;
+	uint16_t seg_offset = 0;
+	uint32_t data_len;
+	bool data_incomplete;
 	tvbuff_t *subtvb;
-	int length;
+	wmem_strbuf_t *data_info;
+
+	dect_nr_cvg_context_t *cvg_ctx = (dect_nr_cvg_context_t *)data;
 
 	proto_item *item = proto_tree_add_item(parent_tree, hf_dect_nr_cvg_data_ie, tvb, offset, -1, ENC_NA);
 	proto_tree *tree = proto_item_add_subtree(item, ett_dect_nr_cvg_data_ie);
@@ -2929,33 +3028,39 @@ static int dissect_cvg_data_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *pa
 		offset += 2;
 	}
 
-	length = tvb_reported_length_remaining(tvb, offset);
-	subtvb = tvb_new_subset_length(tvb, offset, length);
+	subtvb = cvg_data_reassemble(tvb, offset, pinfo, tree, cvg_ctx, hf_dect_nr_cvg_data_payload,
+				     si, seq_num, seg_offset, &data_len, &data_incomplete,
+				     &data_item, &data_info);
 
-	/* No COL_INFO updates from the data dissector */
-	col_set_writable(pinfo->cinfo, COL_INFO, false);
-	call_data_dissector(subtvb, pinfo, proto_tree_get_root(parent_tree));
-	col_set_writable(pinfo->cinfo, COL_INFO, true);
-	offset += length;
+	if (subtvb) {
+		col_set_writable(pinfo->cinfo, COL_INFO, false);
+		call_data_dissector(subtvb, pinfo, proto_tree_get_root(parent_tree));
+		col_set_writable(pinfo->cinfo, COL_INFO, true);
+	}
 
-	proto_item_set_len(item, offset);
+	cvg_data_append_col_info(pinfo, data_item, data_incomplete, data_info);
+	proto_item_set_len(item, offset + data_len);
 
-	return offset;
+	return offset + data_len;
 }
 
 /* 6.3.5 Data EP IE */
-static int dissect_cvg_data_ep_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data _U_)
+static int dissect_cvg_data_ep_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void *data)
 {
 	unsigned offset = 0;
+	proto_item *data_item;
 	uint16_t ep_mux;
 	uint8_t si;
 	uint8_t sli;
 	uint16_t seq_num;
 	uint16_t sdu_len;
-	uint16_t seg_offset;
+	uint16_t seg_offset = 0;
+	uint32_t data_len;
+	bool data_incomplete;
 	tvbuff_t *subtvb;
-	int length;
+	wmem_strbuf_t *data_info;
 	int sublen;
+	dect_nr_cvg_context_t *cvg_ctx = (dect_nr_cvg_context_t *)data;
 
 	proto_item *item = proto_tree_add_item(parent_tree, hf_dect_nr_cvg_data_ep_ie, tvb, offset, -1, ENC_NA);
 	proto_tree *tree = proto_item_add_subtree(item, ett_dect_nr_cvg_data_ep_ie);
@@ -2979,26 +3084,30 @@ static int dissect_cvg_data_ep_ie(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 		offset += 2;
 	}
 
-	length = tvb_reported_length_remaining(tvb, offset);
-	subtvb = tvb_new_subset_length(tvb, offset, length);
+	subtvb = cvg_data_reassemble(tvb, offset, pinfo, tree, cvg_ctx, hf_dect_nr_cvg_data_payload,
+				     si, seq_num, seg_offset, &data_len, &data_incomplete,
+				     &data_item, &data_info);
 
-	/* No COL_INFO updates from the dect_nr dissector after a matching ep_mux */
-	col_set_writable(pinfo->cinfo, COL_INFO, true);
-	col_append_str(pinfo->cinfo, COL_PROTOCOL, "/");
-	col_set_fence(pinfo->cinfo, COL_PROTOCOL);
-	sublen = dissector_try_uint_with_data(ep_mux_dissector_table, ep_mux, subtvb, pinfo, proto_tree_get_root(tree), false, NULL);
-	col_set_writable(pinfo->cinfo, COL_INFO, false);
-
-	if (sublen <= 0) {
-		call_data_dissector(subtvb, pinfo, proto_tree_get_root(parent_tree));
+	if (subtvb) {
+		/* No COL_INFO updates from the dect_nr dissector after a matching ep_mux */
 		col_set_writable(pinfo->cinfo, COL_INFO, true);
-		col_append_str(pinfo->cinfo, COL_PROTOCOL, "data");
+		col_append_str(pinfo->cinfo, COL_PROTOCOL, "/");
+		col_set_fence(pinfo->cinfo, COL_PROTOCOL);
+		sublen = dissector_try_uint_with_data(ep_mux_dissector_table, ep_mux, subtvb, pinfo,
+						      proto_tree_get_root(tree), false, NULL);
+		col_set_writable(pinfo->cinfo, COL_INFO, false);
+
+		if (sublen <= 0) {
+			call_data_dissector(subtvb, pinfo, proto_tree_get_root(parent_tree));
+			col_set_writable(pinfo->cinfo, COL_INFO, true);
+			col_append_str(pinfo->cinfo, COL_PROTOCOL, "data");
+		}
 	}
-	offset += length;
 
-	proto_item_set_len(item, offset);
+	cvg_data_append_col_info(pinfo, data_item, data_incomplete, data_info);
+	proto_item_set_len(item, offset + data_len);
 
-	return offset;
+	return offset + data_len;
 }
 
 /* 6.3.6 Data Transparent IE */
@@ -3173,7 +3282,7 @@ static int dissect_cvg_ie(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_t
 	tvbuff_t *subtvb;
 	int sublen;
 
-	subtvb = tvb_new_subset_length(tvb, offset, ctx->ie_length);
+	subtvb = tvb_new_subset_length(tvb, offset, tvb_reported_length_remaining(tvb, offset));
 	sublen = dissector_try_uint_with_data(ie_cvg_dissector_table, ctx->ie_type, subtvb, pinfo, parent_tree, false, ctx);
 
 	if (sublen > 0) {
@@ -3223,7 +3332,7 @@ static int dissect_cvg_header_f2c(tvbuff_t *tvb, int offset, packet_info *pinfo,
 }
 
 /* 6.3.2 CVG Header */
-static int dissect_cvg_header(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree)
+static int dissect_cvg_header(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree, dect_nr_context_t *dlc_ctx)
 {
 	int start = offset;
 	uint8_t cvg_ext;
@@ -3231,6 +3340,8 @@ static int dissect_cvg_header(tvbuff_t *tvb, int offset, packet_info *pinfo, pro
 	uint8_t f2c;
 
 	dect_nr_cvg_context_t ctx = { 0 };
+
+	ctx.dlc_ctx = dlc_ctx;
 
 	/* CVG header tree */
 	proto_item *item = proto_tree_add_item(parent_tree, hf_dect_nr_cvg_header, tvb, offset, 1, ENC_NA);
@@ -3286,126 +3397,22 @@ static int dissect_cvg_header(tvbuff_t *tvb, int offset, packet_info *pinfo, pro
 	return offset;
 }
 
-static void dissect_cvg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree)
+static void dissect_cvg_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree _U_, dect_nr_context_t *dlc_ctx)
 {
 	unsigned offset = 0;
 	unsigned length;
 
-	proto_item *item = proto_tree_add_item(parent_tree, hf_dect_nr_cvg_pdu, tvb, offset, -1, ENC_NA);
+	proto_item *item = proto_tree_add_item(dlc_ctx->proto_tree, hf_dect_nr_cvg_pdu, tvb, offset, -1, ENC_NA);
 	proto_tree *tree = proto_item_add_subtree(item, ett_dect_nr_cvg);
 
 	length = tvb_reported_length(tvb);
 	while (offset < length) {
-		offset = dissect_cvg_header(tvb, offset, pinfo, tree);
-	}
-}
-
-
-static bool dissect_cvg_heur(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data _U_)
-{
-	uint8_t hdr, cvg_ext, mt, ie_type, f2c;
-	uint16_t len;
-
-	/*
-	 * CVG Header Format 1
-	 *
-	 *  0      1      2      3      4      5      6      7
-	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	 * |  CVG Ext   | MT |           CVG IE Type         |
-	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	 *
-	 * CVG Header Format 2
-	 *  0      1      2      3      4      5      6      7
-	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	 * |  CVG Ext   | MT |     F2C     |     Mux Tag     |
-	 * +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-	 *
-	 */
-
-	if (tvb_captured_length(tvb) < 1) {
-		return false;
-	}
-
-	hdr = tvb_get_uint8(tvb, 0);
-	cvg_ext = (hdr & 0xC0) >> 6;
-
-	if (cvg_ext == 0) {
-		len = 1; /* At least 1 byte */
-	} else if (cvg_ext == 1) {
-		len = tvb_get_uint8(tvb, 1);
-	} else if (cvg_ext == 2) {
-		len = tvb_get_uint16(tvb, 1, ENC_BIG_ENDIAN);
-	} else {
-		return false;
-	}
-
-	/* Check that len is valid for an IE and that the data exists */
-	if (len == 0 || tvb_reported_length_remaining(tvb, 1 + cvg_ext) < len) {
-		return false;
-	}
-
-	/* indicates the header format */
-	mt = (hdr & 0x20);
-
-	if (mt == 0) { /* header format 1 */
-		ie_type = (hdr & 0x1F);
-		if ((ie_type >= 9 && ie_type <= 29) || ie_type == 31) {
-			return false;
-		}
-	} else { /* header format 2 */
-		f2c = (hdr & 0x18) >> 3;
-		if (f2c == 3) {
-			return false;
-		}
-	}
-
-	dissect_cvg_pdu(tvb, pinfo, tree);
-
-	return true;
-}
-
-static void dissect_dlc_data(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree)
-{
-	heur_dtbl_entry_t *hdtbl_entry;
-
-	switch (dlc_data_type_pref) {
-	case DLC_DATA_TYPE_AUTO:
-		/* No COL_INFO updates from the dect_nr dissector after heuristic */
-		col_set_writable(pinfo->cinfo, COL_INFO, true);
-		if (dissector_try_heuristic(heur_subdissector_list, tvb, pinfo, parent_tree, &hdtbl_entry, NULL)) {
-			const char *dect_nr_text = col_get_text(pinfo->cinfo, COL_PROTOCOL);
-			if (dect_nr_text && strstr(dect_nr_text, "DECT NR+") == NULL) {
-				col_prepend_fstr(pinfo->cinfo, COL_PROTOCOL, "DECT NR+/");
-			}
-			col_set_writable(pinfo->cinfo, COL_INFO, false);
-			break;
-		}
-		/* FALLTHRU */
-
-	case DLC_DATA_TYPE_BINARY:
-		/* No COL_INFO updates from the data dissector */
-		col_set_writable(pinfo->cinfo, COL_INFO, false);
-		call_data_dissector(tvb, pinfo, parent_tree);
-		col_set_writable(pinfo->cinfo, COL_INFO, true);
-		break;
-
-	case DLC_DATA_TYPE_CVG:
-		/* Standard CVG parsing */
-		dissect_cvg_pdu(tvb, pinfo, parent_tree);
-		break;
-
-	case DLC_DATA_TYPE_IPv6:
-		/* No COL_INFO updates from the dect_nr dissector after IPv6 */
-		col_set_writable(pinfo->cinfo, COL_INFO, true);
-		call_dissector(ipv6_handle, tvb, pinfo, parent_tree);
-		col_prepend_fstr(pinfo->cinfo, COL_PROTOCOL, "DECT NR+/");
-		col_set_writable(pinfo->cinfo, COL_INFO, false);
-		break;
+		offset = dissect_cvg_header(tvb, offset, pinfo, tree, dlc_ctx);
 	}
 }
 
 /* DLC Extension Header */
-static int dissect_dlc_extension_header(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree)
+static int dissect_dlc_extension_header(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *parent_tree, dect_nr_context_t *dlc_ctx)
 {
 	int start = offset;
 	uint8_t dlc_ext;
@@ -3449,7 +3456,7 @@ static int dissect_dlc_extension_header(tvbuff_t *tvb, int offset, packet_info *
 	case 1: /* CVG PDU */
 		proto_tree_add_item(tree, hf_dect_nr_hls_bin, tvb, offset, ext_length, ENC_NA);
 		subtvb = tvb_new_subset_length(tvb, offset, ext_length);
-		dissect_dlc_data(subtvb, pinfo, proto_tree_get_root(tree));
+		dissect_cvg_pdu(subtvb, pinfo, tree, dlc_ctx);
 		offset += ext_length;
 		break;
 
@@ -3507,12 +3514,17 @@ static int dissect_dlc_service_type(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 
 	dect_nr_context_t *ctx = (dect_nr_context_t *)data;
 
-	proto_item *item = proto_tree_add_item(parent_tree, hf_dect_nr_dlc_pdu, tvb, offset, -1, ENC_NA);
-	proto_tree *tree = proto_item_add_subtree(item, ett_dect_nr_dlc_pdu);
-
+	proto_tree_add_item(parent_tree, hf_dect_nr_mux_mac_sdu, tvb, offset, -1, ENC_NA);
 	length = tvb_captured_length_remaining(tvb, offset);
 
-	if (!ctx || !ctx->ie_length_present) {
+	if (!ctx) { /* No context */
+		return offset + length;
+	}
+
+	proto_item *item = proto_tree_add_item(ctx->proto_tree, hf_dect_nr_dlc_pdu, tvb, offset, -1, ENC_NA);
+	proto_tree *tree = proto_item_add_subtree(item, ett_dect_nr_dlc_pdu);
+
+	if (!ctx->ie_length_present) {
 		expert_add_info(pinfo, tree, &ei_dect_nr_ie_length_not_set);
 		return offset + length;
 	}
@@ -3632,10 +3644,10 @@ static int dissect_dlc_service_type(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 		}
 
 		/* Reassemble segments */
-		frag_msg = fragment_add_seq_next(&dect_nr_reassembly_table, tvb, offset, pinfo,
+		frag_msg = fragment_add_seq_next(&dect_nr_dlc_reassembly_table, tvb, offset, pinfo,
 						 sn, ctx, data_len, (si == 1 || si == 3));
 		subtvb = process_reassembled_data(tvb, offset, pinfo, "Reassembled DLC",
-						  frag_msg, &dect_nr_segment_items, NULL, tree);
+						  frag_msg, &dect_nr_dlc_segment_items, NULL, tree);
 	} else {
 		subtvb = tvb_new_subset_length(tvb, offset, data_len);
 	}
@@ -3647,10 +3659,10 @@ static int dissect_dlc_service_type(tvbuff_t *tvb, packet_info *pinfo, proto_tre
 	if (subtvb) {
 		if (dlc_ie_type == 5 || dlc_ie_type == 6) {
 			while (offset < ctx->ie_length) {
-				offset = dissect_dlc_extension_header(tvb, offset, pinfo, tree);
+				offset = dissect_dlc_extension_header(tvb, offset, pinfo, tree, ctx);
 			}
 		} else {
-			dissect_dlc_data(subtvb, pinfo, proto_tree_get_root(tree));
+			dissect_cvg_pdu(subtvb, pinfo, tree, ctx);
 			offset += data_len;
 		}
 	} else {
@@ -5233,6 +5245,7 @@ static int dissect_dect_nr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent
 		/* Use PHF type preference */
 		ctx.phf_type = phf_type_pref;
 	}
+	ctx.proto_tree = tree;
 
 	/* 6.2 Physical Header Field */
 	offset = dissect_physical_header_field(tvb, offset, pinfo, tree, &ctx);
@@ -5462,8 +5475,8 @@ void proto_register_dect_nr(void)
 		/* 6.3: MAC PDU */
 
 		{ &hf_dect_nr_mac_pdu,
-			{ "MAC PDU", "dect_nr.mac", FT_NONE, BASE_NONE,
-			  NULL, 0x0, "Medium Access Control (layer) PDU", HFILL }
+			{ "Medium Access Control (MAC PDU)", "dect_nr.mac", FT_NONE, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
 		},
 		{ &hf_dect_nr_mac_version,
 			{ "Version", "dect_nr.mac.version", FT_UINT8, BASE_DEC,
@@ -5597,6 +5610,10 @@ void proto_register_dect_nr(void)
 		},
 		{ &hf_dect_nr_mux_mac_ie_len,
 			{ "IE length in bytes", "dect_nr.mac.mux_hdr.ie_len", FT_UINT16, BASE_DEC,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_mux_mac_sdu,
+			{ "MAC SDU", "dect_nr.mac.mux_hdr.mac_sdu", FT_BYTES, BASE_NONE,
 			  NULL, 0x0, NULL, HFILL }
 		},
 
@@ -6867,8 +6884,8 @@ void proto_register_dect_nr(void)
 		/* DLC Headers and Messages */
 
 		{ &hf_dect_nr_dlc_pdu,
-			{ "DLC PDU", "dect_nr.dlc", FT_NONE, BASE_NONE,
-			  NULL, 0x0, "Data Link Control (layer) PDU", HFILL }
+			{ "Data Link Control (DLC PDU)", "dect_nr.dlc", FT_NONE, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
 		},
 		{ &hf_dect_nr_dlc_ie_type,
 			{ "IE Type", "dect_nr.dlc.ie_type", FT_UINT8, BASE_DEC,
@@ -6996,9 +7013,10 @@ void proto_register_dect_nr(void)
 		},
 
 		/* CVG Headers and Messages */
+
 		{ &hf_dect_nr_cvg_pdu,
-			{ "CVG PDU", "dect_nr.cvg", FT_NONE, BASE_NONE,
-			  NULL, 0x0, "Convergence (layer) PDU", HFILL }
+			{ "Convergence Layer (CVG PDU)", "dect_nr.cvg", FT_NONE, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
 		},
 		{ &hf_dect_nr_cvg_header,
 			{ "CVG Header", "dect_nr.cvg.header", FT_NONE, BASE_NONE,
@@ -7029,7 +7047,7 @@ void proto_register_dect_nr(void)
 			  NULL, 0x07, NULL, HFILL }
 		},
 		{ &hf_dect_nr_cvg_header_length,
-			{ "Length", "dect_nr.cvg.header.length", FT_UINT16, BASE_DEC,
+			{ "IE payload length", "dect_nr.cvg.header.length", FT_UINT16, BASE_DEC,
 			  NULL, 0x0, NULL, HFILL }
 		},
 
@@ -7070,6 +7088,10 @@ void proto_register_dect_nr(void)
 		},
 		{ &hf_dect_nr_cvg_data_seg_offset,
 			{ "Segmentation offset", "dect_nr.cvg.data.seg_offset", FT_UINT16, BASE_DEC,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_cvg_data_payload,
+			{ "Payload", "dect_nr.cvg.data.payload", FT_BYTES, BASE_NONE,
 			  NULL, 0x0, NULL, HFILL }
 		},
 
@@ -7251,45 +7273,87 @@ void proto_register_dect_nr(void)
 			  NULL, 0x0, NULL, HFILL }
 		},
 
-		/* Fragment entries */
-		{ &hf_dect_nr_segments,
+		/* DLC Fragment entries */
+		{ &hf_dect_nr_dlc_segments,
 			{ "DLC segments", "dect_nr.dlc.segments", FT_NONE, BASE_NONE,
 			  NULL, 0x0, NULL, HFILL }
 		},
-		{ &hf_dect_nr_segment,
+		{ &hf_dect_nr_dlc_segment,
 			{ "DLC segment", "dect_nr.dlc.segment", FT_FRAMENUM, BASE_NONE,
 			  NULL, 0x0, NULL, HFILL }
 		},
-		{ &hf_dect_nr_segment_overlap,
+		{ &hf_dect_nr_dlc_segment_overlap,
 			{ "DLC segment overlap", "dect_nr.dlc.segment.overlap", FT_BOOLEAN, BASE_NONE,
 			  NULL, 0x0, NULL, HFILL }
 		},
-		{ &hf_dect_nr_segment_overlap_conflict,
+		{ &hf_dect_nr_dlc_segment_overlap_conflict,
 			{ "DLC segment overlapping with conflicting data", "dect_nr.dlc.segment.overlap.conflict", FT_BOOLEAN, BASE_NONE,
 			  NULL, 0x0, NULL, HFILL }
 		},
-		{ &hf_dect_nr_segment_multiple_tails,
+		{ &hf_dect_nr_dlc_segment_multiple_tails,
 			{ "DLC has multiple tails", "dect_nr.dlc.segment.multiple_tails", FT_BOOLEAN, BASE_NONE,
 			  NULL, 0x0, NULL, HFILL }
 		},
-		{ &hf_dect_nr_segment_too_long_segment,
+		{ &hf_dect_nr_dlc_segment_too_long_segment,
 			{ "DLC segment too long", "dect_nr.dlc.segment.too_long_segment", FT_BOOLEAN, BASE_NONE,
 			  NULL, 0x0, NULL, HFILL }
 		},
-		{ &hf_dect_nr_segment_error,
+		{ &hf_dect_nr_dlc_segment_error,
 			{ "DLC segment error", "dect_nr.dlc.segment.error", FT_FRAMENUM, BASE_NONE,
 			  NULL, 0x0, NULL, HFILL }
 		},
-		{ &hf_dect_nr_segment_count,
+		{ &hf_dect_nr_dlc_segment_count,
 			{ "DLC segment count", "dect_nr.dlc.segment.count", FT_UINT32, BASE_DEC,
 			  NULL, 0x0, NULL, HFILL }
 		},
-		{ &hf_dect_nr_reassembled_in,
+		{ &hf_dect_nr_dlc_reassembled_in,
 			{ "Reassembled DLC in frame", "dect_nr.dlc.reassembled.in", FT_FRAMENUM, BASE_NONE,
 			  NULL, 0x0, "This DLC data is reassembled in this frame", HFILL }
 		},
-		{ &hf_dect_nr_reassembled_length,
+		{ &hf_dect_nr_dlc_reassembled_length,
 			{ "Reassembled DLC length", "dect_nr.dlc.reassembled.length", FT_UINT32, BASE_DEC,
+			  NULL, 0x0, "The total length of the reassembled payload", HFILL }
+		},
+
+		/* CVG Fragment entries */
+		{ &hf_dect_nr_cvg_segments,
+			{ "CVG segments", "dect_nr.cvg.segments", FT_NONE, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_cvg_segment,
+			{ "CVG segment", "dect_nr.cvg.segment", FT_FRAMENUM, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_cvg_segment_overlap,
+			{ "CVG segment overlap", "dect_nr.cvg.segment.overlap", FT_BOOLEAN, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_cvg_segment_overlap_conflict,
+			{ "CVG segment overlapping with conflicting data", "dect_nr.cvg.segment.overlap.conflict", FT_BOOLEAN, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_cvg_segment_multiple_tails,
+			{ "CVG has multiple tails", "dect_nr.cvg.segment.multiple_tails", FT_BOOLEAN, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_cvg_segment_too_long_segment,
+			{ "CVG segment too long", "dect_nr.cvg.segment.too_long_segment", FT_BOOLEAN, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_cvg_segment_error,
+			{ "CVG segment error", "dect_nr.cvg.segment.error", FT_FRAMENUM, BASE_NONE,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_cvg_segment_count,
+			{ "CVG segment count", "dect_nr.cvg.segment.count", FT_UINT32, BASE_DEC,
+			  NULL, 0x0, NULL, HFILL }
+		},
+		{ &hf_dect_nr_cvg_reassembled_in,
+			{ "Reassembled CVG in frame", "dect_nr.cvg.reassembled.in", FT_FRAMENUM, BASE_NONE,
+			  NULL, 0x0, "This CVG data is reassembled in this frame", HFILL }
+		},
+		{ &hf_dect_nr_cvg_reassembled_length,
+			{ "Reassembled CVG length", "dect_nr.cvg.reassembled.length", FT_UINT32, BASE_DEC,
 			  NULL, 0x0, "The total length of the reassembled payload", HFILL }
 		},
 	};
@@ -7334,8 +7398,10 @@ void proto_register_dect_nr(void)
 		&ett_dect_nr_dlc_pdu,
 		&ett_dect_nr_dlc_routing_hdr,
 		&ett_dect_nr_dlc_ext_hdr,
-		&ett_dect_nr_segment,
-		&ett_dect_nr_segments,
+		&ett_dect_nr_dlc_segment,
+		&ett_dect_nr_dlc_segments,
+		&ett_dect_nr_cvg_segment,
+		&ett_dect_nr_cvg_segments,
 		&ett_dect_nr_cvg,
 		&ett_dect_nr_cvg_header,
 		&ett_dect_nr_cvg_ep_mux_ie,
@@ -7383,7 +7449,8 @@ void proto_register_dect_nr(void)
 	expert_module_t *expert = expert_register_protocol(proto_dect_nr);
 	expert_register_field_array(expert, ei, array_length(ei));
 
-	reassembly_table_register(&dect_nr_reassembly_table, &dect_nr_reassembly_functions);
+	reassembly_table_register(&dect_nr_dlc_reassembly_table, &dect_nr_reassembly_functions);
+	reassembly_table_register(&dect_nr_cvg_reassembly_table, &dect_nr_reassembly_functions);
 
 	dect_nr_handle = register_dissector("dect_nr", dissect_dect_nr, proto_dect_nr);
 
@@ -7398,9 +7465,7 @@ void proto_register_dect_nr(void)
 	prefs_register_enum_preference(module, "phf_type", "Physical Header Field Type",
 				       "Automatic will determine type from 6th and 7th packet byte.",
 				       &phf_type_pref, phf_type_pref_vals, false);
-	prefs_register_enum_preference(module, "dlc_data_type", "DLC PDU data type",
-				       "Automatic will use heuristics to determine payload.",
-				       &dlc_data_type_pref, dlc_data_type_pref_vals, false);
+	prefs_register_obsolete_preference(module, "dlc_data_type");
 	prefs_register_bool_preference(module, "mac_pdus_decrypted", "Handle MAC PDUs as decrypted",
 				       "Always handle MAC PDUs as decrypted",
 				       &mac_pdus_decrypted_pref);
@@ -7417,15 +7482,11 @@ void proto_register_dect_nr(void)
 					 "Cipher Key 3 as HEX string.",
 					 &cipher_key_pref[3]);
 
-	heur_subdissector_list = register_heur_dissector_list("dect_nr.dlc", proto_dect_nr);
-
 	rd_id_map = wmem_map_new_autoreset(wmem_epan_scope(), wmem_file_scope(), g_direct_hash, g_direct_equal);
 }
 
 void proto_reg_handoff_dect_nr(void)
 {
-	ipv6_handle = find_dissector("ipv6");
-
 	/* Table 6.3.2-2: MAC header type field */
 	dissector_add_uint("dect_nr.mac_hdr", 0, create_dissector_handle(dissect_mac_data_header, proto_dect_nr));
 	dissector_add_uint("dect_nr.mac_hdr", 1, create_dissector_handle(dissect_mac_beacon_header, proto_dect_nr));
@@ -7491,10 +7552,8 @@ void proto_reg_handoff_dect_nr(void)
 	dissector_add_uint("dect_nr.cvg_ie", 30, create_dissector_handle(dissect_cvg_escape_ie, proto_dect_nr));
 
 	/* DECT-2020 NR Endpoint Multiplexing Address Allocation */
-	dissector_add_uint("dect_nr.ep_mux", 0x8002, ipv6_handle);
+	dissector_add_uint("dect_nr.ep_mux", 0x8002, find_dissector("ipv6"));
 	dissector_add_uint("dect_nr.ep_mux", 0x8003, find_dissector("6lowpan"));
-
-	heur_dissector_add("dect_nr.dlc", dissect_cvg_heur, "CVG layer over DLC DECT NR+", "cvg_dect_nr", proto_dect_nr, HEURISTIC_ENABLE);
 
 	dissector_add_uint("wtap_encap", WTAP_ENCAP_DECT_NR, dect_nr_handle);
 	dissector_add_for_decode_as_with_preference("udp.port", dect_nr_handle);

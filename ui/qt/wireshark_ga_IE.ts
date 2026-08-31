@@ -3757,6 +3757,14 @@ I gcoibhneas leis an tagairt: n/a (lasmuigh den raon tagartha)</translation>
         <translation>Ní féidir cabhair le haghaidh chomhéadan extcap %1 a aimsiú. Comhad tugtha: %2</translation>
     </message>
     <message>
+        <source>Bookmark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Type a name to create a bookmark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Save parameters on capture start</source>
         <translation>Sábháil paraiméadair nuair a thosaíonn an gabháil</translation>
     </message>
@@ -9205,27 +9213,27 @@ ar phointe briste atá ann cheana féin, lascraigh a staid ghníomhach</translat
     <name>PacketFormatCArraysGroupBox</name>
     <message>
         <source>GroupBox</source>
-        <translation type="unfinished">Bosca Grúpa</translation>
+        <translation>Bosca Grúpa</translation>
     </message>
     <message>
         <source>Packet Format</source>
-        <translation type="unfinished"></translation>
+        <translation>Formáid an Phacáiste</translation>
     </message>
     <message>
         <source>Include secondary data sources</source>
-        <translation type="unfinished">Cuir foinsí sonraí tánaisteacha san áireamh</translation>
+        <translation>Cuir foinsí sonraí tánaisteacha san áireamh</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Generate arrays for secondary data sources like reassembled or decrypted buffers in addition to the frame&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Gin eagair le haghaidh foinsí sonraí tánaisteacha cosúil le maoláin ath-chomhthionóilte nó díchriptithe sa bhreis ar an bhfráma&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Include an array to index into the list of frames&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Cuir sraith san áireamh le hinnéacsú isteach sa liosta frámaí&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Include index</source>
-        <translation type="unfinished"></translation>
+        <translation>Cuir innéacs san áireamh</translation>
     </message>
 </context>
 <context>
@@ -9263,6 +9271,14 @@ ar phointe briste atá ann cheana féin, lascraigh a staid ghníomhach</translat
         <translation>Cuir Marc Ordú Beart san áireamh</translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Escape spreadsheet formulas</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Cuir carachtair spáis bhána (tabanna, línte nua, srl.) in ionad carachtair spáis bhána&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
@@ -9291,11 +9307,11 @@ ar phointe briste atá ann cheana féin, lascraigh a staid ghníomhach</translat
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Output compact JSON without indentation (significantly faster and smaller)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Aschur JSON dlúth gan eangú (i bhfad níos tapúla agus níos lú)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Compact (no indentation)</source>
-        <translation type="unfinished"></translation>
+        <translation>Dlúth (gan aon chlaonadh)</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Export a name/value pair for each field with the field value&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -9598,8 +9614,8 @@ ar phointe briste atá ann cheana féin, lascraigh a staid ghníomhach</translat
 <context>
     <name>Plot</name>
     <message>
-        <source>Field cannot be empty!</source>
-        <translation>Ní féidir leis an réimse a bheith folamh!</translation>
+        <source>Field cannot be empty.</source>
+        <translation type="unfinished"></translation>
     </message>
 </context>
 <context>
@@ -12890,8 +12906,12 @@ Atosóidh sé seo na scripteanna Lua go léir agus d&apos;fhéadfadh sé difear 
         <translation>, tús %1, cúrsóir: %2. Brúigh &quot;G&quot; chun dul go dtí paicéad %3. Cliceáil faoi dhó ar ghraf chun tús athsheinm a shocrú.</translation>
     </message>
     <message>
-        <source>Playback of stream %1 failed!</source>
-        <translation>Theip ar ais-athsheinm shruth %1!</translation>
+        <source>Playback of stream %1 failed.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Save failed.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Automatic</source>
@@ -12941,10 +12961,6 @@ Atosóidh sé seo na scripteanna Lua go léir agus d&apos;fhéadfadh sé difear 
     <message>
         <source>No streams are suitable for save</source>
         <translation>Níl aon sruthanna oiriúnach le sábháil</translation>
-    </message>
-    <message>
-        <source>Save failed!</source>
-        <translation>Theip ar shábháil!</translation>
     </message>
     <message>
         <source>Can&apos;t write header of AU file</source>

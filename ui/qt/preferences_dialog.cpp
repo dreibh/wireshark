@@ -130,7 +130,6 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
 {
     advancedPrefsModel_.setSourceModel(&model_);
     modulePrefsModel_.setSourceModel(&model_);
-    saved_capture_no_extcap_ = prefs.capture_no_extcap;
 
     // Some classes depend on pref_ptr_to_pref_ so this MUST be called after
     // model_.populate().
@@ -417,7 +416,13 @@ void PreferencesDialog::apply()
     }
     prefs_modules_for_all_modules(module_prefs_unstash, NULL);
 
-    extcap_register_preferences(NULL, NULL);
+    // Extcap preferences have a file of their own, which prefs_main_write()
+    // below doesn't write for us. Write it here instead of registering the
+    // extcap preferences so that we have something to write, which caused
+    // warnings and unexpected behavior of its own: newly registered
+    // preferences don't get a stashed value in the model, which matters if the
+    // "Apply" button was selected instead of "Ok".
+    extcap_write_preferences();
 
     if (redissect_flags & PREF_EFFECT_GUI_LAYOUT) {
         // Layout type changed, reset sizes
@@ -482,12 +487,6 @@ void PreferencesDialog::apply()
 
     if (redissect_flags & PREF_EFFECT_GUI_LAYOUT) {
         mainApp->emitAppSignal(MainApplication::RecentPreferencesRead);
-    }
-
-    if (prefs.capture_no_extcap != saved_capture_no_extcap_) {
-        MainWindow *mainWindow = mainApp->mainWindow();
-        if (mainWindow && mainWindow->interfaceListManager())
-            mainWindow->interfaceListManager()->requestRefresh();
     }
 }
 

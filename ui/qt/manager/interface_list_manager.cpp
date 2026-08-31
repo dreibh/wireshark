@@ -43,28 +43,37 @@ InterfaceListManager::InterfaceListManager(QObject *parent) :
     scanning_(false),
     refreshPending_(false),
     pendingUserInitiated_(false),
+    pendingClearExtcaps_(false),
     captureActive_(false),
     scanScheduled_(false),
-    prevCaptureNoInterfaceLoad_(prefs.capture_no_interface_load),
-    prevCaptureNoExtcap_(prefs.capture_no_extcap)
+    prevCaptureNoExtcap_(prefs.capture_no_extcap),
+    initialScanDone_(false)
 {
-    // Own the "capture prefs changed -> reload interfaces" reaction that used to
-    // live in MainApplication::setConfigurationProfile.
-    connect(mainApp, &MainApplication::preferencesChanged,
-            this, &InterfaceListManager::onPreferencesChanged);
+    connect(this, &InterfaceListManager::interfaceListChanged,
+            mainApp, &MainApplication::interfaceListChanged);
+    mainApp->whenInitialized(this, [this]() { appInitialized(); });
 }
 
 void InterfaceListManager::onPreferencesChanged()
 {
-    const bool changed =
-        prefs.capture_no_interface_load != prevCaptureNoInterfaceLoad_ ||
+    // If we've never scanned, and prefs.capture_no_interface_load is false,
+    // we need to scan.
+    const bool performInitialScan = !initialScanDone_ &&
+        !prefs.capture_no_interface_load;
+    // Querying the extcaps can be time-consuming, particular on Windows due to
+    // spawning new processes, so we'd like to avoid it if possible.
+    // If capture_no_extcap is set, then either we need to clear them
+    // or they should already be clear, but either way it's cheap because
+    // we won't re-query them.
+    // If it's not set, we only need to clear them and re-query them when
+    // performing a scan for some other reason.
+    const bool clearExtcaps = performInitialScan || prefs.capture_no_extcap;
+    const bool changed = performInitialScan ||
         prefs.capture_no_extcap != prevCaptureNoExtcap_;
-    prevCaptureNoInterfaceLoad_ = prefs.capture_no_interface_load;
     prevCaptureNoExtcap_ = prefs.capture_no_extcap;
 
-    // Mirror the old guard: only (re)load when interface loading is enabled.
-    if (changed && !prefs.capture_no_interface_load)
-        requestRefresh();
+    if (changed)
+        requestRefresh(false, clearExtcaps);
 }
 
 QStringList InterfaceListManager::currentInterfaceNames() const
@@ -117,13 +126,13 @@ void InterfaceListManager::cacheInterfaceList(GList *if_list)
  * Returns true if the interface is selected for capture and false otherwise.
  */
 static bool
-fill_from_ifaces(capture_options* capture_opts, interface_t *device)
+fill_from_ifaces(capture_options& capture_opts, interface_t *device)
 {
     interface_options *interface_opts;
     unsigned i;
 
-    for (i = 0; i < capture_opts->ifaces->len; i++) {
-        interface_opts = &g_array_index(capture_opts->ifaces, interface_options, i);
+    for (i = 0; i < capture_opts.ifaces->len; i++) {
+        interface_opts = &g_array_index(capture_opts.ifaces, interface_options, i);
         if (strcmp(interface_opts->name, device->name) != 0) {
             continue;
         }
@@ -205,12 +214,36 @@ get_iface_display_name(const char *description, const if_info_t *if_info)
 }
 
 /*
- * Fetch the list of local interfaces with capture_interface_list()
- * and set the list of "all interfaces" in *capture_opts to include
- * those interfaces.
+ * If no interfaces are selected, and we have a default interface, try to
+ * find it and select it.
  */
 static void
-scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_types, void (*update_cb)(void))
+select_default_interface(capture_options& capture_opts)
+{
+    if ((capture_opts.all_ifaces != nullptr) &&
+        (capture_opts.num_selected == 0) &&
+            (prefs.capture_device != NULL)) {
+        unsigned i;
+        interface_t *device;
+        for (i = 0; i < capture_opts.all_ifaces->len; i++) {
+            device = &g_array_index(capture_opts.all_ifaces, interface_t, i);
+            if (!device->hidden && strcmp(device->display_name, prefs.capture_device) == 0) {
+                device->selected = true;
+                capture_opts.num_selected++;
+                break;
+            }
+        }
+    }
+}
+
+/*
+ * Fetch the list of interfaces with capture_interface_list() and set the
+ * list of "all interfaces" in *capture_opts to include those interfaces.
+ * Contrary to its name, this scans local, extcap, and remote (if supported)
+ * interfaces.
+ */
+static void
+scan_local_interfaces_filtered(capture_options& capture_opts, GList * allowed_types, void (*update_cb)(void))
 {
     GList             *if_entry, *lt_entry, *if_list;
     if_info_t         *if_info;
@@ -240,9 +273,9 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
     running = true;
 
     /* Retrieve list of interface information (if_info_t) into if_list. */
-    g_free(capture_opts->ifaces_err_info);
-    if_list = capture_opts->get_iface_list(&capture_opts->ifaces_err,
-                                     &capture_opts->ifaces_err_info);
+    g_free(capture_opts.ifaces_err_info);
+    if_list = capture_opts.get_iface_list(&capture_opts.ifaces_err,
+                                     &capture_opts.ifaces_err_info);
 
     /*
      * For each discovered interface name, look up its list of capabilities.
@@ -295,9 +328,9 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
      * expected to re-discover on scanning but did not (i.e., local devices,
      * but not pipes, stdin, and remote devices.)
      */
-    if (capture_opts->all_ifaces->len > 0) {
-        for (i = (int)capture_opts->all_ifaces->len-1; i >= 0; i--) {
-            device = g_array_index(capture_opts->all_ifaces, interface_t, i);
+    if (capture_opts.all_ifaces->len > 0) {
+        for (i = (int)capture_opts.all_ifaces->len-1; i >= 0; i--) {
+            device = g_array_index(capture_opts.all_ifaces, interface_t, i);
             if (device.local && device.if_info.type != IF_PIPE && device.if_info.type != IF_STDIN) {
 
                 found = false;
@@ -314,9 +347,9 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
                     continue;
                 }
 
-                capture_opts->all_ifaces = g_array_remove_index(capture_opts->all_ifaces, i);
+                capture_opts.all_ifaces = g_array_remove_index(capture_opts.all_ifaces, i);
                 if (device.selected) {
-                    capture_opts->num_selected--;
+                    capture_opts.num_selected--;
                 }
                 capture_opts_free_interface_t(&device);
             }
@@ -346,14 +379,14 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
         }
 
         found = false;
-        for (i = 0; i < (int)capture_opts->all_ifaces->len; i++) {
-            device = g_array_index(capture_opts->all_ifaces, interface_t, i);
+        for (i = 0; i < (int)capture_opts.all_ifaces->len; i++) {
+            device = g_array_index(capture_opts.all_ifaces, interface_t, i);
             if (strcmp(device.name, if_info->name) == 0) {
                 found = true;
                 /* Remove it because we'll reinsert it below (in the proper
                  * index order, if that matters. Does it?)
                  */
-                capture_opts->all_ifaces = g_array_remove_index(capture_opts->all_ifaces, i);
+                capture_opts.all_ifaces = g_array_remove_index(capture_opts.all_ifaces, i);
                 break;
             }
         }
@@ -370,34 +403,34 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
 
 #ifdef HAVE_PCAP_REMOTE
             device.remote_opts.src_type = CAPTURE_IFLOCAL;
-            device.remote_opts.remote_host_opts.remote_host = g_strdup(capture_opts->default_options.remote_host);
-            device.remote_opts.remote_host_opts.remote_port = g_strdup(capture_opts->default_options.remote_port);
-            device.remote_opts.remote_host_opts.auth_type = capture_opts->default_options.auth_type;
-            device.remote_opts.remote_host_opts.auth_username = g_strdup(capture_opts->default_options.auth_username);
-            device.remote_opts.remote_host_opts.auth_password = g_strdup(capture_opts->default_options.auth_password);
-            device.remote_opts.remote_host_opts.datatx_udp = capture_opts->default_options.datatx_udp;
-            device.remote_opts.remote_host_opts.nocap_rpcap = capture_opts->default_options.nocap_rpcap;
-            device.remote_opts.remote_host_opts.nocap_local = capture_opts->default_options.nocap_local;
+            device.remote_opts.remote_host_opts.remote_host = g_strdup(capture_opts.default_options.remote_host);
+            device.remote_opts.remote_host_opts.remote_port = g_strdup(capture_opts.default_options.remote_port);
+            device.remote_opts.remote_host_opts.auth_type = capture_opts.default_options.auth_type;
+            device.remote_opts.remote_host_opts.auth_username = g_strdup(capture_opts.default_options.auth_username);
+            device.remote_opts.remote_host_opts.auth_password = g_strdup(capture_opts.default_options.auth_password);
+            device.remote_opts.remote_host_opts.datatx_udp = capture_opts.default_options.datatx_udp;
+            device.remote_opts.remote_host_opts.nocap_rpcap = capture_opts.default_options.nocap_rpcap;
+            device.remote_opts.remote_host_opts.nocap_local = capture_opts.default_options.nocap_local;
 #endif
 #ifdef HAVE_PCAP_SETSAMPLING
-            device.remote_opts.sampling_method = capture_opts->default_options.sampling_method;
-            device.remote_opts.sampling_param  = capture_opts->default_options.sampling_param;
+            device.remote_opts.sampling_method = capture_opts.default_options.sampling_method;
+            device.remote_opts.sampling_param  = capture_opts.default_options.sampling_param;
 #endif
 
             device.local = true;
             if (!capture_dev_user_pmode_find(if_info->name, &device.pmode)) {
-                device.pmode = capture_opts->default_options.promisc_mode;
+                device.pmode = capture_opts.default_options.promisc_mode;
             }
             if (!capture_dev_user_snaplen_find(if_info->name, &device.has_snaplen,
                                                &device.snaplen)) {
-                device.has_snaplen = capture_opts->default_options.has_snaplen;
-                device.snaplen = capture_opts->default_options.snaplen;
+                device.has_snaplen = capture_opts.default_options.has_snaplen;
+                device.snaplen = capture_opts.default_options.snaplen;
             }
-            device.cfilter      = g_strdup(capture_opts->default_options.cfilter);
-            device.optimize     = capture_opts->default_options.optimize;
-            device.timestamp_type = g_strdup(capture_opts->default_options.timestamp_type);
+            device.cfilter      = g_strdup(capture_opts.default_options.cfilter);
+            device.optimize     = capture_opts.default_options.optimize;
+            device.timestamp_type = g_strdup(capture_opts.default_options.timestamp_type);
             if ((device.buffer = capture_dev_user_buffersize_find(if_info->name)) == -1) {
-                device.buffer = capture_opts->default_options.buffer_size;
+                device.buffer = capture_opts.default_options.buffer_size;
             }
 
             /* Extcap devices start with no cached args */
@@ -523,7 +556,7 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
              * Set the active DLT for the device appropriately.
              */
             if (!found_active_dlt) {
-                set_active_dlt(&device, capture_opts->default_options.linktype);
+                set_active_dlt(&device, capture_opts.default_options.linktype);
             }
         } else {
             device.monitor_mode_enabled = false;
@@ -540,7 +573,7 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
         /* Restore device selection (for next capture). */
         if (!device.selected && selected) {
             device.selected = true;
-            capture_opts->num_selected++;
+            capture_opts.num_selected++;
         }
 
         /* We shallow copy if_info and then adding to the GArray shallow
@@ -552,11 +585,11 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
         device.if_info = *if_info;
         if_entry->data = NULL;
         g_free(if_info);
-        if (capture_opts->all_ifaces->len <= count) {
-            g_array_append_val(capture_opts->all_ifaces, device);
-            count = capture_opts->all_ifaces->len;
+        if (capture_opts.all_ifaces->len <= count) {
+            g_array_append_val(capture_opts.all_ifaces, device);
+            count = capture_opts.all_ifaces->len;
         } else {
-            g_array_insert_val(capture_opts->all_ifaces, count, device);
+            g_array_insert_val(capture_opts.all_ifaces, count, device);
         }
         count++;
     }
@@ -567,12 +600,12 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
      * Pipes and stdin are not really discoverable interfaces, so re-add them to
      * the list of all interfaces (all_ifaces).
      */
-    for (j = 0; j < capture_opts->ifaces->len; j++) {
-        interface_opts = &g_array_index(capture_opts->ifaces, interface_options, j);
+    for (j = 0; j < capture_opts.ifaces->len; j++) {
+        interface_opts = &g_array_index(capture_opts.ifaces, interface_options, j);
 
         found = false;
-        for (i = 0; i < (int)capture_opts->all_ifaces->len; i++) {
-            device = g_array_index(capture_opts->all_ifaces, interface_t, i);
+        for (i = 0; i < (int)capture_opts.all_ifaces->len; i++) {
+            device = g_array_index(capture_opts.all_ifaces, interface_t, i);
 
             /* Filter out all interfaces, which are not allowed to be scanned */
             if (allowed_types != NULL && g_list_find(allowed_types, GINT_TO_POINTER(interface_opts->if_type)) == NULL) {
@@ -614,10 +647,12 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
             device.if_info.loopback = false;
             device.if_info.extcap = g_strdup(interface_opts->extcap);
 
-            g_array_append_val(capture_opts->all_ifaces, device);
-            capture_opts->num_selected++;
+            g_array_append_val(capture_opts.all_ifaces, device);
+            capture_opts.num_selected++;
         }
     }
+
+    select_default_interface(capture_opts);
 
     running = false;
 }
@@ -627,14 +662,14 @@ scan_local_interfaces_filtered(capture_options* capture_opts, GList * allowed_ty
  * current preferences over the existing all_ifaces. No dumpcap enumeration.
  */
 static void
-update_local_interfaces(capture_options* capture_opts)
+update_local_interfaces(capture_options& capture_opts)
 {
     interface_t *device;
     char *descr;
     unsigned i;
 
-    for (i = 0; i < capture_opts->all_ifaces->len; i++) {
-        device = &g_array_index(capture_opts->all_ifaces, interface_t, i);
+    for (i = 0; i < capture_opts.all_ifaces->len; i++) {
+        device = &g_array_index(capture_opts.all_ifaces, interface_t, i);
         device->active_dlt = capture_dev_user_linktype_find(device->name);
         g_free(device->display_name);
         descr = capture_dev_user_descr_find(device->name);
@@ -646,18 +681,25 @@ update_local_interfaces(capture_options* capture_opts)
 }
 #endif // HAVE_LIBPCAP
 
-void InterfaceListManager::requestRefresh(bool userInitiated)
+void InterfaceListManager::requestRefresh(bool userInitiated, bool clearExtcaps)
 {
-    refreshPending_ = true;
     pendingUserInitiated_ = pendingUserInitiated_ || userInitiated;
+    pendingClearExtcaps_ = pendingClearExtcaps_ || clearExtcaps;
+    if (prefs.capture_no_interface_load && !(initialScanDone_ || pendingUserInitiated_)) {
+        // "Don't load interfaces on startup," is the pref description.
+        // If the pref is set, don't scan until the user initiates a scan.
+        return;
+    }
+    refreshPending_ = true;
     maybeSchedule();
 }
 
-void InterfaceListManager::refreshNow()
+void InterfaceListManager::refreshNow(bool clearExtcaps)
 {
     // Synchronous counterpart to requestRefresh(): run the scan inline instead of
     // posting it. performScan() still guards re-entrancy and capture-in-progress,
     // so this is a no-op while a scan is running or a capture is active.
+    pendingClearExtcaps_ = pendingClearExtcaps_ || clearExtcaps;
     refreshPending_ = true;
     performScan();
 }
@@ -705,6 +747,7 @@ void InterfaceListManager::performScan()
     refreshPending_ = false;
     const bool userInitiated = pendingUserInitiated_;
     pendingUserInitiated_ = false;
+    initialScanDone_ = true;
 
     QStringList removed;
 
@@ -719,13 +762,16 @@ void InterfaceListManager::performScan()
     //
     // Force extcap re-discovery so added/removed extcap interfaces are picked up
     // (previously done by MainApplication::refreshLocalInterfaces).
-    extcap_clear_interfaces();
+    if (pendingClearExtcaps_) {
+        pendingClearExtcaps_ = false;
+        extcap_clear_interfaces();
+    }
 
     // Drop the get_iface_list cache first so the scan observes hardware changes:
     // scan_local_interfaces_filtered() pulls the list through cachedInterfaceList(),
     // which would otherwise hand back the previously cached (stale) enumeration.
     cacheInterfaceList(nullptr);
-    scan_local_interfaces_filtered(&global_capture_opts, nullptr, nullptr);
+    scan_local_interfaces_filtered(global_capture_opts, nullptr, nullptr);
 
     QStringList newNames;
     if (global_capture_opts.all_ifaces != nullptr) {
@@ -771,6 +817,19 @@ void InterfaceListManager::reapplyInterfacePreferences()
     // preferencesChanged()/columnsChanged(), so the listeners of those signals
     // observe the updated names/hidden/dlt. Posting it to the event loop would race
     // those emits and surface stale interface data for a frame.
-    update_local_interfaces(&global_capture_opts);
+    update_local_interfaces(global_capture_opts);
 #endif
+}
+
+void InterfaceListManager::appInitialized()
+{
+    // Own the "capture prefs changed -> reload interfaces" reaction that used to
+    // live in MainApplication::setConfigurationProfile.
+    // We don't want to do this until the app is initialized, because the
+    // prefs.capture_no_extcap changing to true shouldn't trigger another
+    // refresh.
+    prevCaptureNoExtcap_ = prefs.capture_no_extcap;
+
+    connect(mainApp, &MainApplication::preferencesChanged,
+            this, &InterfaceListManager::onPreferencesChanged);
 }

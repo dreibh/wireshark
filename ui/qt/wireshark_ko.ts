@@ -3722,6 +3722,14 @@ Relative to reference: n/a (outside reference range)</source>
         <translation>%1 extcap 인터페이스에 대한 도움말을 찾을 수 없습니다. 주어진 파일: %2</translation>
     </message>
     <message>
+        <source>Bookmark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Type a name to create a bookmark</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Save parameters on capture start</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9126,6 +9134,14 @@ on an existing breakpoint, toggle its active state</source>
         <translation type="unfinished"></translation>
     </message>
     <message>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Escape spreadsheet formulas</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9461,7 +9477,7 @@ on an existing breakpoint, toggle its active state</source>
 <context>
     <name>Plot</name>
     <message>
-        <source>Field cannot be empty!</source>
+        <source>Field cannot be empty.</source>
         <translation type="unfinished"></translation>
     </message>
 </context>
@@ -12690,8 +12706,12 @@ This will restart all Lua scripts and may affect capture analysis.</source>
         <translation>, 시작: %1, 커서: %2, &quot;G&quot; 키를 누르면 패킷 %3(으)로 이동합니다. 그래프에서 두 번 클릭하면 재생 시작점을 설정합니다.</translation>
     </message>
     <message>
-        <source>Playback of stream %1 failed!</source>
-        <translation>스트림 %1 재생이 실패했습니다!</translation>
+        <source>Playback of stream %1 failed.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Save failed.</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Automatic</source>
@@ -12741,10 +12761,6 @@ This will restart all Lua scripts and may affect capture analysis.</source>
     <message>
         <source>No streams are suitable for save</source>
         <translation>저장하기에 적합한 스트림 없음</translation>
-    </message>
-    <message>
-        <source>Save failed!</source>
-        <translation>저장이 실패했습니다!</translation>
     </message>
     <message>
         <source>Can&apos;t write header of AU file</source>

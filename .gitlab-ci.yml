@@ -258,7 +258,7 @@ workflow:
     - printf "\e[0Ksection_end:%s:brew_section\r\e[0K" "$( date +%s)"
     - python3 -m venv $CI_PROJECT_DIR/.venv
     - source $CI_PROJECT_DIR/.venv/bin/activate
-    - pip3 install pytest pytest-xdist
+    - pip3 install --quiet jsonschema pytest pytest-xdist
     - export PYTEST_ADDOPTS="--skip-missing-programs=dumpcap,rawshark --enable-stratoshark"
     - mkdir -p ccache
     - ccache --show-stats
@@ -690,7 +690,7 @@ macOS Universal Package:
     - export PATH="/opt/homebrew/bin:$PATH:$HOME/bin"
     - python3 -m venv --clear $CI_PROJECT_DIR/.venv
     - source $CI_PROJECT_DIR/.venv/bin/activate
-    - pip3 install dmgbuild pyobjc-framework-Quartz pytest pytest-xdist
+    - pip3 install --quiet dmgbuild jsonschema pyobjc-framework-Quartz pytest pytest-xdist
   script:
     - if [[ $MACOS_REINSTALL_THIRD_PARTY == true ]] ; then rm -rf "$WIRESHARK_BASE_DIR" ; fi
     - if [ ! -d "$WIRESHARK_BASE_DIR/Qt" ] ; then mkdir -p "$WIRESHARK_BASE_DIR/Qt" ; fi
@@ -1063,7 +1063,6 @@ Windows Build:
       ..
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug Wireshark.slnx
     - msbuild /verbosity:minimal /maxcpucount /property:Configuration=Debug test-programs.vcxproj
-    # jsonschema gates the theme.jsonc schema tests in suite_theme; the runner image doesn't ship it.
     - C:\Windows\py.exe -m pip install --quiet jsonschema
     - C:\Windows\py.exe -m pytest --build-type=Debug --disable-gui --enable-stratoshark --junitxml=../windows_tests.xml
   artifacts:
@@ -1129,15 +1128,15 @@ AI Trailer Reminder:
       fi
       missing=0
       for c in $commits; do
-        if ! git log -1 --format=%B "$c" | grep -qi '^AI-Assisted:'; then
-          echo "WARNING: Commit $c is missing the 'AI-Assisted: yes|no [tool(s)]' trailer."
+        if ! git log -1 --format=%B "$c" | grep -qi '^Assisted-by:'; then
+          echo "WARNING: Commit $c is missing the 'Assisted-by: [tool(s)]' trailer."
           missing=1
         fi
       done
       if [ $missing -eq 1 ]; then
-        echo "Reminder: please add the AI-Assisted trailer to commit messages (warning only)."
+        echo "Reminder: if you used AI assistance, add an 'Assisted-by: [tool(s)]' trailer to your commit messages; see CONTRIBUTING.md (warning only)."
       else
-        echo "All checked commits include the AI-Assisted trailer."
+        echo "All checked commits include the Assisted-by AI trailer."
       fi
 
 # Adapted from https://www.synopsys.com/blogs/software-security/integrating-coverity-scan-with-gitlab-ci/

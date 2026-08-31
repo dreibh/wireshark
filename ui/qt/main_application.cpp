@@ -251,6 +251,11 @@ void MainApplication::setConfigurationProfile(const char *profile_name, bool wri
     /* Apply new preferences */
     readConfigurationFiles(true);
 
+    /* Reading the new profile's preferences reset every registered preference,
+     * including the ones that are shared by all of our profiles. Those aren't
+     * part of the profile we're leaving, so read them back in. */
+    extcap_read_preferences();
+
     /* Apply command-line preferences */
     commandline_options_reapply();
     extcap_register_preferences(NULL, NULL);
@@ -825,7 +830,7 @@ static void switchTranslator(QTranslator& myTranslator, const QLocale &locale, c
          * locale.uiLanguages(); the first language in that list is not
          * necessarily locale.language(), especially on Windows (See #17221.)
          */
-        qWarning() << "Couldn't load" << filename << "translations!" << "Searched:" << searchPath;
+        qWarning() << "Couldn't load" << filename << "translations." << "Searched:" << searchPath;
     }
 }
 
