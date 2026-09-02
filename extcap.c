@@ -62,6 +62,12 @@
  */
 #define EXTCAP_CLEANUP_TIMEOUT 30
 
+/* Separator used to specify a bookmark for a particlar extcap
+ * interface. It should be easy to type, not too ugly in `tshark -D`
+ * output, and unlikely to be used in an interface name.
+ */
+#define EXTCAP_BOOKMARK_SEPARATOR ":"
+
 /* internal container for all the extcap executables that have been found.
  * Will be reset if extcap_clear_interfaces() is being explicitly called
  * and is being used for printing information about all extcap interfaces found,
@@ -675,13 +681,16 @@ static bool cb_dlt(extcap_callback_info_t cb_info)
 }
 
 /*
- * Given an interface name which might contain an appended bookmark
- * name, return the name without the bookmark.
+ * Given an interface name which might be one of our bookmarks, return the name
+ * of the interface that the extcap gave us. We look the name up instead of
+ * taking it apart, since an interface name can contain our separator. Assumes
+ * that our interfaces have been loaded; if they haven't, all we can do is hand
+ * the name back.
  */
 static char *get_plain_ifname(const char *ifname) {
-    const char *slash = strchr(ifname, '/');
-    if (slash) {
-        return g_strndup(ifname, slash - ifname);
+    extcap_interface *interface = extcap_find_interface_for_ifname(ifname);
+    if (interface && interface->parent_call) {
+        return g_strdup(interface->parent_call);
     }
     return g_strdup(ifname);
 }
@@ -826,6 +835,8 @@ static void extcap_free_interface(void *i)
     g_free(interface->version);
     g_free(interface->help);
     g_free(interface->extcap_path);
+    g_free(interface->bookmark_name);
+    g_free(interface->parent_call);
     g_free(interface);
 }
 
@@ -1012,29 +1023,19 @@ static char **extcap_prefs_dynamic_valptr(const char *name, char **pref_name)
 
 void extcap_free_if_configuration(GList *list, bool free_args)
 {
-    GList *elem, *sl;
-
-    for (elem = g_list_first(list); elem; elem = elem->next)
+    if (free_args)
     {
-        if (elem->data != NULL)
-        {
-            sl = g_list_first((GList *)elem->data);
-            if (free_args)
-            {
-                extcap_free_arg_list(sl);
-            }
-            else
-            {
-                g_list_free(sl);
-            }
-        }
+        extcap_free_arg_list(list);
     }
-    g_list_free(list);
+    else
+    {
+        g_list_free(list);
+    }
 }
 
 /*
  * Given an interface name, return the name that we use for its preferences,
- * e.g. "randpkt/Random test" becomes "randpkt_random_test".
+ * e.g. "randpkt:Random test" becomes "randpkt_random_test".
  */
 static char *
 extcap_pref_ifname(const char *ifname)
@@ -1176,7 +1177,7 @@ static bool cb_preference(extcap_callback_info_t cb_info)
     }
 
     if (il) {
-        *il = g_list_append(*il, arguments);
+        *il = arguments;
     } else {
         extcap_free_arg_list(arguments);
     }
@@ -1299,7 +1300,7 @@ bool
 _extcap_requires_configuration_int(const char *ifname, bool check_required)
 {
     GList *arguments = 0;
-    GList *walker = 0, * item = 0;
+    GList *walker = 0;
     bool found = false, isset = false;
     extcap_argument_sufficient sufficient = EXTCAP_ARGUMENT_SUFFICIENT_NOTSET;
 
@@ -1310,64 +1311,58 @@ _extcap_requires_configuration_int(const char *ifname, bool check_required)
 
     while (walker != NULL && !found)
     {
-        item = g_list_first((GList *)(walker->data));
-        while (item != NULL && !found)
+        extcap_arg *arg = (extcap_arg *)(walker->data);
+        if (arg != NULL)
         {
-            if ((extcap_arg *)(item->data) != NULL)
+            /* Should required options be present, or any kind of options */
+            if (!check_required)
             {
-                extcap_arg *arg = (extcap_arg *)(item->data);
-                /* Should required options be present, or any kind of options */
-                if (!check_required)
+                found = true;
+            }
+            /* Following branch is executed when check of required items is requested */
+            else if (arg->is_required || arg->is_sufficient)
+            {
+                const char *stored = NULL;
+                const char *defval = NULL;
+
+                if (arg->pref_valptr != NULL)
                 {
-                    found = true;
+                    stored = *arg->pref_valptr;
                 }
-                /* Following branch is executed when check of required items is requested */
-                else if (arg->is_required || arg->is_sufficient)
+
+                if (arg->default_complex != NULL && arg->default_complex->_val != NULL)
                 {
-                    const char *stored = NULL;
-                    const char *defval = NULL;
+                    defval = arg->default_complex->_val;
+                }
 
-                    if (arg->pref_valptr != NULL)
+                if (arg->arg_type == EXTCAP_ARG_FILESELECT)
+                {
+                    isset = (arg->fileexists ? (file_exists(defval) || file_exists(stored)) : (defval || (stored && *stored)));
+                }
+                else
+                {
+                    isset = (defval || (stored && *stored));
+                }
+
+                if (arg->is_required)
+                {
+                    if (!isset)
                     {
-                        stored = *arg->pref_valptr;
+                        found = true;
                     }
+                }
 
-                    if (arg->default_complex != NULL && arg->default_complex->_val != NULL)
-                    {
-                        defval = arg->default_complex->_val;
-                    }
+                if (arg->is_sufficient && sufficient != EXTCAP_ARGUMENT_SUFFICIENT_OK)
+                {
+                    sufficient = EXTCAP_ARGUMENT_SUFFICIENT_REQUIRED;
 
-                    if (arg->arg_type == EXTCAP_ARG_FILESELECT)
+                    /* If required=sufficient is used, we just need to have one of the required="sufficient" attributes set. */
+                    if (isset)
                     {
-                        isset = (arg->fileexists ? (file_exists(defval) || file_exists(stored)) : (defval || (stored && *stored)));
-                    }
-                    else
-                    {
-                        isset = (defval || (stored && *stored));
-                    }
-
-                    if (arg->is_required)
-                    {
-                        if (!isset)
-                        {
-                            found = true;
-                        }
-                    }
-
-                    if (arg->is_sufficient && sufficient != EXTCAP_ARGUMENT_SUFFICIENT_OK)
-                    {
-                        sufficient = EXTCAP_ARGUMENT_SUFFICIENT_REQUIRED;
-
-                        /* If required=sufficient is used, we just need to have one of the required="sufficient" attributes set. */
-                        if (isset)
-                        {
-                            sufficient = EXTCAP_ARGUMENT_SUFFICIENT_OK;
-                        }
+                        sufficient = EXTCAP_ARGUMENT_SUFFICIENT_OK;
                     }
                 }
             }
-
-            item = item->next;
         }
         walker = walker->next;
     }
@@ -2307,7 +2302,6 @@ GPtrArray *extcap_prepare_arguments(interface_options *interface_opts)
             arglist = extcap_get_if_configuration(interface_opts->name);
             for (elem = g_list_first(arglist); elem; elem = elem->next)
             {
-                GList *arg_list;
                 extcap_arg *arg_iter;
 
                 if (elem->data == NULL)
@@ -2315,37 +2309,31 @@ GPtrArray *extcap_prepare_arguments(interface_options *interface_opts)
                     continue;
                 }
 
-                arg_list = g_list_first((GList *)elem->data);
-                while (arg_list != NULL)
+                const char *stored = NULL;
+                arg_iter = (extcap_arg *)(elem->data);
+                /* In case of boolflags only first element is relevant. */
+                if (arg_iter->pref_valptr != NULL)
                 {
-                    const char *stored = NULL;
-                    /* In case of boolflags only first element in arg_list is relevant. */
-                    arg_iter = (extcap_arg *)(arg_list->data);
-                    if (arg_iter->pref_valptr != NULL)
-                    {
-                        stored = *arg_iter->pref_valptr;
-                    }
+                    stored = *arg_iter->pref_valptr;
+                }
 
-                    if (arg_iter->arg_type == EXTCAP_ARG_BOOLFLAG)
+                if (arg_iter->arg_type == EXTCAP_ARG_BOOLFLAG)
+                {
+                    if (!stored && extcap_complex_get_bool(arg_iter->default_complex))
                     {
-                        if (!stored && extcap_complex_get_bool(arg_iter->default_complex))
-                        {
-                            add_arg(arg_iter->call);
-                        }
-                        else if (g_strcmp0(stored, "true") == 0)
-                        {
-                            add_arg(arg_iter->call);
-                        }
+                        add_arg(arg_iter->call);
                     }
-                    else
+                    else if (g_strcmp0(stored, "true") == 0)
                     {
-                        if (stored && strlen(stored) > 0) {
-                            add_arg(arg_iter->call);
-                            add_arg(stored);
-                        }
+                        add_arg(arg_iter->call);
                     }
-
-                    arg_list = arg_list->next;
+                }
+                else
+                {
+                    if (stored && strlen(stored) > 0) {
+                        add_arg(arg_iter->call);
+                        add_arg(stored);
+                    }
                 }
             }
 
@@ -2571,7 +2559,7 @@ extcap_init_interfaces(capture_session *cap_session)
 
         /* create control pipes if necessary */
         unsigned control_supported = extcap_get_control_for_ifname(interface_opts->name);
-        if (control_supported & (EXTCAP_CONTROL_QUIT | EXTCAP_CONTROL_TOOLBAR))
+        if (control_supported & EXTCAP_CONTROL_TOOLBAR)
         {
             extcap_create_pipe(interface_opts->name, &interface_opts->extcap_control_in,
 #ifdef _WIN32
@@ -2581,7 +2569,7 @@ extcap_init_interfaces(capture_session *cap_session)
 #endif
                                EXTCAP_CONTROL_IN_PREFIX);
         }
-        if (control_supported & EXTCAP_CONTROL_TOOLBAR)
+        if (control_supported & (EXTCAP_CONTROL_QUIT | EXTCAP_CONTROL_TOOLBAR))
         {
             extcap_create_pipe(interface_opts->name, &interface_opts->extcap_control_out,
 #ifdef _WIN32
@@ -3000,9 +2988,11 @@ extcap_list_interfaces_cb(thread_pool_t *pool, void *data, char *output)
  * Add a bookmark for an extcap interface.
  *
  * Create a new extcap interface from a parent interface, with the
- provided bookmark name and a generated call name of the form
- * "<ifname>/<bookmark_name>". Preferences are registered under the call
- * name, which gives each bookmark its own configuration.
+ * provided bookmark name and a generated call name of the form
+ * "<ifname>EXTCAP_BOOKMARK_SEPARATOR<bookmark_name>". Preferences are
+ * registered under the call name, which gives each bookmark its own
+ * configuration. The bookmark's friendly name is that of its parent interface
+ * along with the bookmark name, e.g. "SSH remote capture, My server bookmark".
  *
  * @param parent_iface The interface that the bookmark is an alias for.
  * @param toolname The name of the extcap that provides the parent interface.
@@ -3022,8 +3012,8 @@ extcap_add_bookmark(const extcap_interface *parent_iface, const char *toolname,
         return false;
     }
 
-    /* <extcap interface>/<bookmark name> */
-    char *bookmark_call = ws_strdup_printf("%s/%s", ifname, bookmark_name);
+    char *bookmark_call = ws_strdup_printf("%s" EXTCAP_BOOKMARK_SEPARATOR "%s",
+                                          ifname, bookmark_name);
 
     /* Check that this bookmark interface hasn't already been registered. */
     if (extcap_find_interface_for_ifname(bookmark_call)) {
@@ -3035,11 +3025,14 @@ extcap_add_bookmark(const extcap_interface *parent_iface, const char *toolname,
     /* Create a new interface entry for the bookmark. */
     extcap_interface *bookmark_iface = g_new0(extcap_interface, 1);
     bookmark_iface->call = bookmark_call;
-    bookmark_iface->display = g_strdup(bookmark_name);
+    bookmark_iface->display = ws_strdup_printf("%s, %s bookmark",
+                                              parent_iface->display, bookmark_name);
     bookmark_iface->version = g_strdup(parent_iface->version);
     bookmark_iface->help = g_strdup(parent_iface->help);
     bookmark_iface->extcap_path = g_strdup(parent_iface->extcap_path);
     bookmark_iface->control = parent_iface->control;
+    bookmark_iface->bookmark_name = g_strdup(bookmark_name);
+    bookmark_iface->parent_call = g_strdup(ifname);
     bookmark_iface->if_type = EXTCAP_SENTENCE_INTERFACE;
 
     tool_element->interfaces = g_list_append(tool_element->interfaces, bookmark_iface);
@@ -3374,9 +3367,12 @@ extcap_get_bookmark_name(const char *ifname)
         return NULL;
     }
 
-    const char *slash = strchr(ifname, '/');
+    // XXX Should we just bail here instead if our interfaces aren't loaded?
+    extcap_ensure_all_interfaces_loaded();
 
-    return slash ? g_strdup(slash + 1) : NULL;
+    extcap_interface *interface = extcap_find_interface_for_ifname(ifname);
+
+    return (interface && interface->bookmark_name) ? g_strdup(interface->bookmark_name) : NULL;
 }
 
 char *
@@ -3400,7 +3396,8 @@ extcap_set_bookmark(const char *ifname, const char *bookmark_name)
         goto done;
     }
 
-    bookmark_call = ws_strdup_printf("%s/%s", plain_ifname, bookmark_name);
+    bookmark_call = ws_strdup_printf("%s" EXTCAP_BOOKMARK_SEPARATOR "%s",
+                                     plain_ifname, bookmark_name);
 
     /* Add the bookmark if it's new, which registers its preferences. */
     if (!extcap_find_interface_for_ifname(bookmark_call)) {
@@ -3632,7 +3629,7 @@ extcap_migrate_profile_config(void)
         extcap_info *tool_element = (extcap_info *)tool->data;
         for (GList *walker = tool_element->interfaces; walker; walker = walker->next) {
             extcap_interface *iface = (extcap_interface *)walker->data;
-            if (strchr(iface->call, '/')) {
+            if (iface->bookmark_name) {
                 /* A bookmark. */
                 continue;
             }
@@ -3655,7 +3652,8 @@ extcap_migrate_profile_config(void)
     while (g_hash_table_iter_next(&iter, &iface_p, &args_p)) {
         extcap_interface *iface = (extcap_interface *)iface_p;
         GList *args = (GList *)args_p;
-        char *bookmark_call = ws_strdup_printf("%s/%s", iface->call, profile_name);
+        char *bookmark_call = ws_strdup_printf("%s" EXTCAP_BOOKMARK_SEPARATOR "%s",
+                                               iface->call, profile_name);
         const char *toolname = (const char *)g_hash_table_lookup(_tool_for_ifname, iface->call);
 
         if (extcap_find_interface_for_ifname(bookmark_call) || !toolname) {
