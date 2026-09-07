@@ -3746,11 +3746,11 @@ Relativo al riferimento: n/d (al di fuori dell&apos;intervallo di riferimento)</
     </message>
     <message>
         <source>Bookmark</source>
-        <translation type="unfinished"></translation>
+        <translation>Segnalibro</translation>
     </message>
     <message>
         <source>Type a name to create a bookmark</source>
-        <translation type="unfinished"></translation>
+        <translation>Digita un nome per creare un segnalibro</translation>
     </message>
     <message>
         <source>Save parameters on capture start</source>
@@ -9239,11 +9239,11 @@ su un breakpoint esistente, attiva o disattiva il suo stato</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Anteponi un apostrofo ai valori che un foglio elettronico dovrebbe interpretare come una formula (quelli che iniziano con &quot;=&quot;, &quot;+&quot;, &quot;-&quot; o &quot;@&quot;), in modo che i dati dei pacchetti non possano inserire una formula nel file esportato&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Escape spreadsheet formulas</source>
-        <translation type="unfinished"></translation>
+        <translation>Escape per le formule del foglio elettronico </translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>

@@ -323,12 +323,12 @@ if(WIN32)
 			set(WIRESHARK_BASE_DIR $ENV{WIRESHARK_BASE_DIR})
 		endif()
 		if(WIRESHARK_BASE_DIR)
-			file( TO_CMAKE_PATH ${WIRESHARK_BASE_DIR} _ws_base_dir )
+			file( TO_CMAKE_PATH "${WIRESHARK_BASE_DIR}" _ws_base_dir )
 			set( _PROJECT_LIB_DIR "${_ws_base_dir}/wireshark-${WIRESHARK_TARGET_PLATFORM}-libs" )
 			unset(_ws_base_dir)
 		elseif( DEFINED ENV{WIRESHARK_LIB_DIR} )
 			message(DEPRECATION "Support for the WIRESHARK_LIB_DIR environment variable will be removed in the future. Use WIRESHARK_BASE_DIR instead.")
-			file( TO_CMAKE_PATH $ENV{WIRESHARK_LIB_DIR} _PROJECT_LIB_DIR )
+			file( TO_CMAKE_PATH "$ENV{WIRESHARK_LIB_DIR}" _PROJECT_LIB_DIR )
 		else()
 			# Don't know what to do
 			message(FATAL_ERROR "Neither WIRESHARK_BASE_DIR or WIRESHARK_LIB_DIR are defined")
@@ -346,7 +346,7 @@ if(WIN32)
 	include(FetchContent)
 
 	set(LIBS_URL "https://dev-libs.wireshark.org/windows/packages")
-	file(TO_CMAKE_PATH ${EXTRA_INSTALLER_DIR} _file_download_dir)
+	file(TO_CMAKE_PATH "${EXTRA_INSTALLER_DIR}" _file_download_dir)
 
 	# Download Npcap required by the Windows installer.
 	# We do this here and not in FetchArtifacts.cmake because this
@@ -4866,7 +4866,7 @@ endif (GIT_EXECUTABLE)
 set_target_properties(gen-authors PROPERTIES FOLDER "Documentation")
 
 if(WIN32 AND NOT USE_MSYSTEM)
-	file (TO_NATIVE_PATH ${CMAKE_SOURCE_DIR}/tools/Get-HardenFlags.ps1 _win_harden_flags)
+	file (TO_NATIVE_PATH "${CMAKE_SOURCE_DIR}/tools/Get-HardenFlags.ps1" _win_harden_flags)
 	add_custom_target(hardening-check
 		COMMAND ${POWERSHELL_COMMAND} "${_win_harden_flags}" "${_dll_output_dir_win}"
 		DEPENDS ${PROGLIST}

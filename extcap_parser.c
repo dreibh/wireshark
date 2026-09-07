@@ -55,6 +55,17 @@ void extcap_free_complex(extcap_complex *comp) {
     g_free(comp);
 }
 
+extcap_complex *
+extcap_copy_complex(const extcap_complex *comp) {
+    if (comp == NULL)
+        return NULL;
+
+    extcap_complex *copy = g_new0(extcap_complex, 1);
+    copy->complex_type = comp->complex_type;
+    copy->_val = g_strdup(comp->_val);
+    return copy;
+}
+
 int extcap_complex_get_int(extcap_complex *comp) {
     if (comp == NULL || comp->_val == NULL || comp->complex_type != EXTCAP_ARG_INTEGER)
         return (int)0;
@@ -253,8 +264,27 @@ static void extcap_free_value(extcap_value *v) {
     g_free(v);
 }
 
+static extcap_value*
+extcap_copy_value(const extcap_value *v) {
+    if (v == NULL)
+        return NULL;
+
+    extcap_value *copy = g_new(extcap_value, 1);
+    *copy = *v;
+    copy->call = g_strdup(v->call);
+    copy->display = g_strdup(v->display);
+    copy->parent = g_strdup(v->parent);
+
+    return copy;
+}
+
 static void extcap_free_valuelist(void *data, void *user_data _U_) {
     extcap_free_value((extcap_value *) data);
+}
+
+static void*
+extcap_copy_value_cb(const void *src, void *data _U_) {
+    return extcap_copy_value((const extcap_value*)src);
 }
 
 void extcap_free_arg(extcap_arg *a) {
@@ -284,6 +314,33 @@ void extcap_free_arg(extcap_arg *a) {
     g_list_foreach(a->values, (GFunc) extcap_free_valuelist, NULL);
     g_list_free(a->values);
     g_free(a);
+}
+
+extcap_arg* extcap_copy_arg(const extcap_arg *a) {
+
+    if (a == NULL)
+        return NULL;
+
+    extcap_arg *copy = g_new(extcap_arg, 1);
+    *copy = *a;
+
+    copy->call = g_strdup(a->call);
+    copy->display = g_strdup(a->display);
+    copy->tooltip = g_strdup(a->tooltip);
+    copy->placeholder = g_strdup(a->placeholder);
+    copy->fileextension = g_strdup(a->fileextension);
+    copy->regexp = g_strdup(a->regexp);
+    copy->group = g_strdup(a->group);
+    copy->prefix = g_strdup(a->prefix);
+    copy->device_name = g_strdup(a->device_name);
+
+    copy->range_start = extcap_copy_complex(a->range_start);
+    copy->range_end = extcap_copy_complex(a->range_end);
+    copy->default_complex = extcap_copy_complex(a->default_complex);
+
+    copy->values = g_list_copy_deep(a->values, extcap_copy_value_cb, NULL);
+
+    return copy;
 }
 
 static void extcap_free_toolbar_value(iface_toolbar_value *value)

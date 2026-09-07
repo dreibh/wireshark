@@ -3731,11 +3731,11 @@ Relative to reference: n/a (outside reference range)</source>
     </message>
     <message>
         <source>Bookmark</source>
-        <translation type="unfinished"></translation>
+        <translation>ブックマーク</translation>
     </message>
     <message>
         <source>Type a name to create a bookmark</source>
-        <translation type="unfinished"></translation>
+        <translation>名前を入力してブックマークを作成します</translation>
     </message>
     <message>
         <source>Save parameters on capture start</source>
@@ -9198,11 +9198,11 @@ Shift+クリック: 空行では無効なブレークポイントを追加
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;&#xa0; &apos;=&apos;, &apos;+&apos;, &apos;-&apos;, &apos;@&apos; で始まる値は、エクスポートしたファイルで数式として解釈されないよう、先頭にアポストロフィ (&apos;) を付加します。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Escape spreadsheet formulas</source>
-        <translation type="unfinished"></translation>
+        <translation>スプレッドシート数式をエスケープ</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>

@@ -3746,11 +3746,11 @@ Relativt referensen: ej tillämpligt (utanför referensintervallet)</translation
     </message>
     <message>
         <source>Bookmark</source>
-        <translation type="unfinished"></translation>
+        <translation>Bokmärke</translation>
     </message>
     <message>
         <source>Type a name to create a bookmark</source>
-        <translation type="unfinished"></translation>
+        <translation>Skriv ett namn för att skapa ett bokmärke</translation>
     </message>
     <message>
         <source>Save parameters on capture start</source>
@@ -9237,11 +9237,11 @@ växla aktivt läge på en befintlig brytpunkt</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Inled värden som ett kalkylblad skulle tolka som en formel (de som börjar med &amp;quot;=&amp;quot;, &amp;quot;+&amp;quot;, &amp;quot;-&amp;quot; eller &amp;quot;@&amp;quot;) med en apostrof, så att paketdata inte kan injicera en formel i den exporterade filen&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Escape spreadsheet formulas</source>
-        <translation type="unfinished"></translation>
+        <translation>Skydda kalkylbladsformler</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>

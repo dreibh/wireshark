@@ -8226,7 +8226,7 @@ on an existing breakpoint, toggle its active state</source>
     </message>
     <message>
         <source>error</source>
-        <translation type="unfinished"></translation>
+        <translation>galat</translation>
     </message>
     <message>
         <source>Could not evaluate watch.</source>
@@ -8234,7 +8234,7 @@ on an existing breakpoint, toggle its active state</source>
     </message>
     <message>
         <source>Expression — re-evaluated on every pause.</source>
-        <translation type="unfinished"></translation>
+        <translation>Ekspresi -- reevaluasi pada setiap jeda.</translation>
     </message>
 </context>
 <context>
@@ -8294,11 +8294,11 @@ on an existing breakpoint, toggle its active state</source>
     </message>
     <message>
         <source>Expert information</source>
-        <translation type="unfinished"></translation>
+        <translation>Informasi pakar</translation>
     </message>
     <message>
         <source>Opens the expert information dialog, showing errors, warnings, and other relevant information about the capture.</source>
-        <translation type="unfinished"></translation>
+        <translation>Membuka dialog informasi pakar, menampilkan galat, peringatan, dan informasi relevan lain tentang tangkapan.</translation>
     </message>
     <message>
         <source>Capture comment</source>

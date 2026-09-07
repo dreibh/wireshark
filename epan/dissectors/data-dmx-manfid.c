@@ -11,7 +11,7 @@
 #include "data-dmx-manfid.h"
 
 /*
- * ESTA codes download date: 2026-08-30
+ * ESTA codes download date: 2026-09-06
  */
 static const value_string dmx_esta_manfid_vals[] = {
   { 0x0000, "ESTA / PLASA" },
@@ -324,6 +324,7 @@ static const value_string dmx_esta_manfid_vals[] = {
   { 0x039B, "Lightforce Lasertechnik" },
   { 0x03A1, "INAREX INC." },
   { 0x03A2, "licht.team" },
+  { 0x03A3, "MITKOM" },
   { 0x03A8, "ARTFOX" },
   { 0x03AA, "AIGA Electronic (GuangZhou) Co., Ltd." },
   { 0x03AB, "ABMICROLONDON" },
@@ -623,6 +624,7 @@ static const value_string dmx_esta_manfid_vals[] = {
   { 0x07C8, "Sidus Link Ltd." },
   { 0x07CB, "ilLumenate Lighting" },
   { 0x07CC, "Griven S.r.l." },
+  { 0x07CD, "Fresh AV Labs" },
   { 0x07CF, "MH-Sound" },
   { 0x07D1, "Made By Mouse LTD" },
   { 0x07D2, "Guangdong The One Studio Co., Limited" },
@@ -1119,6 +1121,7 @@ static const value_string dmx_esta_manfid_vals[] = {
   { 0x1212, "HPL Light Company" },
   { 0x1221, "SAGITTER-SDJ-Proel" },
   { 0x1222, "SM International" },
+  { 0x122A, "Guangzhou Magic Technology Co., Ltd." },
   { 0x1234, "ESTA" },
   { 0x1238, "Tirso Lighting" },
   { 0x1240, "Canary Yellow Applications" },
@@ -1196,6 +1199,7 @@ static const value_string dmx_esta_manfid_vals[] = {
   { 0x1A1A, "ValDim Waterfountains Ltd." },
   { 0x1A3D, "Red Lighting s.r.l." },
   { 0x1A58, "Wuxi Seastar Lighting Co.,Ltd." },
+  { 0x1AAF, "Gigacolor technology Co., Ltd." },
   { 0x1AFA, "TMB" },
   { 0x1AFD, "Shenzhen ZMO Information Technology Co., Ltd." },
   { 0x1B7E, "Kaltech Lighting Systems" },
@@ -1736,6 +1740,7 @@ static const value_string dmx_esta_manfid_vals[] = {
   { 0x7401, "Harvatek Corporation" },
   { 0x7402, "Chris Kallas" },
   { 0x7403, "Yenrich Technology Corporation" },
+  { 0x7471, "JG Technical Services" },
   { 0x7764, "WET" },
   { 0x7765, "MKT engineering GmbH & Co. KG" },
   { 0x7768, "MD teknoloji" },

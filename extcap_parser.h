@@ -141,6 +141,10 @@ typedef struct _extcap_arg {
 
     char **pref_valptr;  /**< Pointer to the preference storage location holding the current value */
     char  *device_name;  /**< Name of the capture device this argument is associated with */
+    /* XXX - device_name is not parsed or added by this file, but by the pref
+     * callback in extcap.c, and is simply the same ifname that is given by
+     * callers to extcap_get_if_configuration, the same for each extcap_arg
+     * in a list of extcap_args. It should probably be removed from here. */
     GList *values;       /**< List of extcap_value entries for selector, radio, and multicheck arguments */
 } extcap_arg;
 
@@ -204,6 +208,10 @@ extcap_complex *extcap_parse_complex(extcap_arg_type complex_type,
  */
 /* Free a complex */
 void extcap_free_complex(extcap_complex *comp);
+
+/* Copy a complex */
+extcap_complex *
+extcap_copy_complex(const extcap_complex *comp);
 
 /* Print a complex value out for debug */
 
@@ -282,6 +290,9 @@ bool extcap_compare_is_default(extcap_arg *element, extcap_complex *test);
  * @param a Pointer to the extcap_arg structure to be freed.
  */
 void extcap_free_arg(extcap_arg *a);
+
+extcap_arg*
+extcap_copy_arg(const extcap_arg *a);
 
 /**
  * @brief Free entire toolbar control structure.
