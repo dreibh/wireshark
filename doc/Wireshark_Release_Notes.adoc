@@ -229,6 +229,7 @@ DCERPC SCARD_PACK
 DECT NR+
 ESUN
 Generic UDP Encapsulation (GUE)
+HyperDHT / DHT-RPC
 JSON Dictionary
 Linux mac80211_hwsim Netlink
 Linux Open vSwitch Netlink (OVS)
@@ -249,6 +250,7 @@ TrueConf Protocol (TrueConf)
 RDP Conctrl virtual channel Protocol (CONCTRL)
 RDP Video Capture Virtual Channel Extension (RDPECAM)
 Real-Time Tracking Protocol (RTTrP)
+RTP over QUIC (RoQ)
 TrueConf
 UDX
 Ultra Ethernet Transport (UET)

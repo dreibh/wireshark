@@ -178,8 +178,11 @@ static int hf_tns_data_flag_sntt;
 static int hf_tns_data_id;
 static int hf_tns_data_length;
 static int hf_tns_data_oci_id;
+static int hf_tns_data_tseq;
 static int hf_tns_data_piggyback_id;
 static int hf_tns_data_unused;
+
+static int hf_tns_cursor;
 
 static int hf_tns_data_opi_version2_banner_len;
 static int hf_tns_data_opi_version2_banner;
@@ -198,6 +201,28 @@ static int hf_tns_data_setp_banner;
 static int hf_tns_data_sns_cli_vers;
 static int hf_tns_data_sns_srv_vers;
 static int hf_tns_data_sns_srvcnt;
+
+static int hf_tns_data_setdt_charset_in;
+static int hf_tns_data_setdt_charset_out;
+static int hf_tns_data_setdt_flag;
+static int hf_tns_data_setdt_caphdr;
+static int hf_tns_data_setdt_caphdr_version;
+static int hf_tns_data_setdt_caphdr_flags;
+static int hf_tns_data_setdt_tblhdr;
+static int hf_tns_data_setdt_idmap;
+static int hf_tns_data_setdt_overrides;
+static int hf_tns_data_setdt_override_client;
+static int hf_tns_data_setdt_override_repr;
+static int hf_tns_data_setdt_override_format;
+
+static int hf_tns_data_oer_call_status;
+static int hf_tns_data_oer_rowcount;
+static int hf_tns_data_oer_err_code;
+static int hf_tns_data_oer_cursor_id;
+static int hf_tns_data_oer_n_batch_errcodes;
+static int hf_tns_data_oer_n_batch_offsets;
+static int hf_tns_data_oer_n_batch_messages;
+static int hf_tns_data_oer_message;
 
 static int hf_tns_data_descriptor_row_count;
 static int hf_tns_data_descriptor_row_size;
@@ -220,10 +245,15 @@ static int ett_tns_sopt_flag;
 static int ett_tns_ntp_flag;
 static int ett_tns_conn_flag;
 static int ett_tns_rows;
+static int ett_tns_setdt_caphdr;
+static int ett_tns_setdt_overrides;
+static int ett_tns_setdt_override;
+static int ett_tns_oer;
 static int ett_sql;
 
 static expert_field ei_tns_connect_data_next_packet;
 static expert_field ei_tns_data_descriptor_size_mismatch;
+static expert_field ei_tns_data_piggyback_cursors;
 
 #define TCP_PORT_TNS			1521 /* Not IANA registered */
 
@@ -291,6 +321,62 @@ static const value_string tns_data_funcs[] = {
 	{SQLNET_XTRN_PROCSERV_R1, "External Procedures and Services Registrations"},
 	{SQLNET_XTRN_PROCSERV_R2, "External Procedures and Services Registrations"},
 	{SQLNET_SNS,              "Secure Network Services"},
+	{0, NULL}
+};
+
+/* Oracle TNS native data-type ids. Used by the Set Datatypes
+ * negotiation to label override entries with human names. */
+static const value_string tns_data_types[] = {
+	{1,   "VARCHAR"},
+	{2,   "NUMBER"},
+	{3,   "INTEGER"},
+	{4,   "FLOAT"},
+	{5,   "STRING"},
+	{6,   "VARNUM"},
+	{7,   "DECIMAL"},
+	{8,   "LONG"},
+	{9,   "VCS"},
+	{11,  "RID"},
+	{12,  "DATE"},
+	{15,  "VBI"},
+	{23,  "RAW"},
+	{24,  "LONG RAW"},
+	{96,  "CHAR"},
+	{100, "BINARY_FLOAT"},
+	{101, "BINARY_DOUBLE"},
+	{102, "REFCURSOR"},
+	{104, "ROWID"},
+	{109, "ADT"},
+	{111, "REF"},
+	{112, "CLOB"},
+	{113, "BLOB"},
+	{114, "BFILE"},
+	{116, "RSET"},
+	{180, "TIMESTAMP"},
+	{181, "TIMESTAMP WITH TIME ZONE"},
+	{182, "INTERVAL YEAR TO MONTH"},
+	{183, "INTERVAL DAY TO SECOND"},
+	{208, "UROWID"},
+	{231, "TIMESTAMP WITH LOCAL TIME ZONE"},
+	{0, NULL}
+};
+
+/* Oracle NLS character-set ids - the well-known subset, enough to name
+ * the charsets seen in a Set Datatypes negotiation. */
+static const value_string tns_charsets[] = {
+	{31,   "WE8ISO8859P1"},
+	{32,   "EE8ISO8859P2"},
+	{35,   "CL8ISO8859P5"},
+	{170,  "EE8MSWIN1250"},
+	{171,  "CL8MSWIN1251"},
+	{178,  "WE8MSWIN1252"},
+	{830,  "JA16EUC"},
+	{852,  "ZHS16GBK"},
+	{865,  "ZHT16BIG5"},
+	{867,  "ZHT16MSWIN950"},
+	{871,  "US7ASCII"},
+	{873,  "AL32UTF8"},
+	{2000, "AL16UTF16"},
 	{0, NULL}
 };
 
@@ -511,6 +597,140 @@ static unsigned get_data_func_id(tvbuff_t *tvb, int offset)
 	}
 }
 
+static int get_strtype_custom(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+{
+	int ret = 1; // 1st byte contains 254 or length if smaller than 64
+	int len = 0;
+
+	wmem_strbuf_t *strbuf = wmem_strbuf_new(pinfo->pool, "");
+
+	len = tvb_get_uint8(tvb, offset);
+	if (len == 254) {
+		int actual_len = 0;
+		len = 0;
+		do { // walk over the chunks
+			len = tvb_get_uint8(tvb, offset  + ret);
+			ret++; // 1st byte with the chunk size
+			wmem_strbuf_append(strbuf, (const char *)tvb_get_string_enc(pinfo->pool, tvb, offset  + ret, len, ENC_ASCII|ENC_NA));
+			ret += len; // length of the string's chunk
+			actual_len += len;
+		} while (len == 64);
+		ret++; // has to be null-terminated
+		len = actual_len;
+	}
+	else {
+		ret += len;
+		wmem_strbuf_append(strbuf, (const char *)tvb_get_string_enc(pinfo->pool, tvb, offset + 1, len, ENC_ASCII|ENC_NA));
+	}
+
+	proto_tree_add_uint(tree, hf_tns_data_opi_param_length, tvb, offset, 1, len);
+	proto_tree_add_string(tree, hf_tns_data_opi_param_value, tvb, offset+1, ret-1, wmem_strbuf_get_str(strbuf));
+
+	return ret;
+}
+
+static int get_sb4_custom(tvbuff_t *tvb, int offset, int *result)
+{
+	uint8_t first_byte = tvb_get_uint8(tvb, offset); // Contains length of a value
+	switch(first_byte)
+	{
+		case 0:
+			*result = 0;
+			break;
+		case 1:
+			*result = tvb_get_uint8(tvb, offset+1);
+			break;
+		case 2:
+			*result = tvb_get_ntohs(tvb, offset+1);
+			break;
+		case 3:
+			*result = tvb_get_ntoh24(tvb, offset+1);
+			break;
+		case 4:
+			*result = tvb_get_ntohl(tvb, offset+1);
+			break;
+		default:
+			/* The width byte comes straight off the wire, so a value
+			 * outside 0..4 is malformed input rather than a bug in the
+			 * dissector - asserting here would blame Wireshark for a
+			 * packet somebody else wrote. Yield zero and step over just
+			 * the width byte. */
+			*result = 0;
+			return 1;
+	}
+	return first_byte + 1;
+}
+
+/* Decode a DALC (Data-Length-And-Content) blob. The leading byte is a
+ * length only in the middle of its range:
+ *
+ *   0x00        empty
+ *   0x01..0xFD  that many data bytes follow
+ *   0xFE        chunked: (len, bytes) pairs until a 0-length chunk
+ *   0xFF        null - a marker only, no data follows
+ *
+ * The null marker consumes just itself. Reading it as a length would
+ * claim 255 bytes that are not there and misalign every field after
+ * it, so it has to be spelled out rather than left to the default.
+ *
+ * The chunk lengths in the 0xFE form are single bytes here, which is
+ * the 11g shape this dissector decodes throughout; 12.2 and later
+ * prefix each chunk with a variable-length ub4 instead. Telling the
+ * two apart needs the field version negotiated during the handshake,
+ * which is not threaded through yet.
+ *
+ * Returns the number of bytes consumed from the tvb and, when content
+ * is non-empty, a UTF-8 string allocated from pinfo->pool. */
+static int get_dalc_custom(tvbuff_t *tvb, packet_info *pinfo, int offset, const char **out_str)
+{
+	uint8_t first = tvb_get_uint8(tvb, offset);
+	if ( first == 0 || first == 255 )
+	{
+		if ( out_str )
+			*out_str = NULL;
+		return 1;
+	}
+	if ( first != 254 )
+	{
+		if ( out_str )
+			*out_str = (const char *)tvb_get_string_enc(pinfo->pool, tvb, offset + 1, first, ENC_UTF_8|ENC_NA);
+		return 1 + first;
+	}
+
+	/* Chunked form: walk (len, bytes)+ until a zero-length chunk. */
+	wmem_strbuf_t *strbuf = wmem_strbuf_new(pinfo->pool, "");
+	int o = offset + 1;
+	while ( tvb_reported_length_remaining(tvb, o) > 0 )
+	{
+		uint8_t chunk_len = tvb_get_uint8(tvb, o);
+		o += 1;
+		if ( chunk_len == 0 )
+			break;
+		wmem_strbuf_append(strbuf, (const char *)tvb_get_string_enc(pinfo->pool, tvb, o, chunk_len, ENC_UTF_8|ENC_NA));
+		o += chunk_len;
+	}
+	if ( out_str )
+		*out_str = wmem_strbuf_get_str(strbuf);
+	return o - offset;
+}
+
+/* Decode a bytes_with_length / str_with_length field: a ub4 count, and
+ * a DALC carrying the value only when that count is non-zero. The count
+ * is not simply a byte to step over - an empty field is the count
+ * alone, so reading a DALC anyway consumes whatever follows it.
+ * Returns bytes consumed; *out_str (when non-NULL) gets the string, or
+ * NULL when the field is empty. */
+static int get_field_with_length(tvbuff_t *tvb, packet_info *pinfo, int offset, const char **out_str)
+{
+	int count = 0;
+	int used = get_sb4_custom(tvb, offset, &count);
+	if ( out_str )
+		*out_str = NULL;
+	if ( count > 0 )
+		used += get_dalc_custom(tvb, pinfo, offset + used, out_str);
+	return used;
+}
+
 static void vsnum_to_vstext_basecustom(char *result, uint32_t vsnum)
 {
 	/*
@@ -701,11 +921,202 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 			break;
 		}
 
-		case SQLNET_USER_OCI_FUNC:
-			proto_tree_add_item(data_tree, hf_tns_data_oci_id, tvb, offset, 1, ENC_BIG_ENDIAN);
-			offset += 1;
-			break;
+		case SQLNET_SET_DATATYPES:
+		{
+			/* TTI_DTY: Data Type Negotiation, sent right after TTI_PRO
+			 * during the TTC handshake. The body is a fixed-shape blob
+			 * the client uses to tell the server which native Oracle
+			 * data types it understands and what wire representation it
+			 * wants for each. Layout cross-referenced with
+			 * python-oracledb.
+			 *
+			 *   charset_in        2 bytes LE   NLS_LANGUAGE charset id
+			 *   charset_out       2 bytes LE   NLS_NCHAR   charset id
+			 *   flag              1 byte       capability flag (1 = std)
+			 *   capability header 39 bytes     version triple + flag bytes
+			 *   table header      8 bytes      group/sub counts
+			 *   identity map     980 bytes     245 x (type, type, 1, 0)
+			 *   type overrides    var          entries, terminated by 0
+			 */
+			proto_tree *caphdr_tree, *ov_tree;
+			proto_item *caphdr_item, *ov_item;
 
+			if ( !is_request )
+				break;
+
+			proto_tree_add_item(data_tree, hf_tns_data_setdt_charset_in, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+			offset += 2;
+			proto_tree_add_item(data_tree, hf_tns_data_setdt_charset_out, tvb, offset, 2, ENC_LITTLE_ENDIAN);
+			offset += 2;
+			proto_tree_add_item(data_tree, hf_tns_data_setdt_flag, tvb, offset, 1, ENC_BIG_ENDIAN);
+			offset += 1;
+
+			caphdr_item = proto_tree_add_item(data_tree, hf_tns_data_setdt_caphdr, tvb, offset, 39, ENC_NA);
+			caphdr_tree = proto_item_add_subtree(caphdr_item, ett_tns_setdt_caphdr);
+			proto_tree_add_item(caphdr_tree, hf_tns_data_setdt_caphdr_version, tvb, offset, 3, ENC_BIG_ENDIAN);
+			proto_tree_add_item(caphdr_tree, hf_tns_data_setdt_caphdr_flags, tvb, offset + 3, 36, ENC_NA);
+			offset += 39;
+
+			proto_tree_add_item(data_tree, hf_tns_data_setdt_tblhdr, tvb, offset, 8, ENC_NA);
+			offset += 8;
+			proto_tree_add_item(data_tree, hf_tns_data_setdt_idmap, tvb, offset, 980, ENC_NA);
+			offset += 980;
+
+			/* Walk type-override entries until the 0 terminator. Each
+			 * entry is (client_type, server_repr[, format]); a 0 in the
+			 * server_repr slot marks a short "client knows the id but
+			 * has no override" entry. */
+			ov_item = proto_tree_add_item(data_tree, hf_tns_data_setdt_overrides, tvb, offset, -1, ENC_NA);
+			ov_tree = proto_item_add_subtree(ov_item, ett_tns_setdt_overrides);
+			int ov_start = offset;
+			while ( tvb_reported_length_remaining(tvb, offset) > 0 )
+			{
+				uint8_t client_type = tvb_get_uint8(tvb, offset);
+				if ( client_type == 0 )
+				{
+					proto_tree_add_item(ov_tree, hf_tns_data_setdt_override_client, tvb, offset, 1, ENC_BIG_ENDIAN);
+					offset += 1;
+					break;
+				}
+				uint8_t repr = tvb_get_uint8(tvb, offset + 1);
+				int entry_len = (repr == 0) ? 2 : 4;
+				proto_tree *e_tree = proto_tree_add_subtree_format(ov_tree, tvb, offset, entry_len,
+					ett_tns_setdt_override, NULL, "Type %u (%s)",
+					client_type, val_to_str_const(client_type, tns_data_types, "unknown"));
+				proto_tree_add_item(e_tree, hf_tns_data_setdt_override_client, tvb, offset, 1, ENC_BIG_ENDIAN);
+				if ( entry_len == 4 )
+				{
+					proto_tree_add_item(e_tree, hf_tns_data_setdt_override_repr, tvb, offset + 1, 1, ENC_BIG_ENDIAN);
+					proto_tree_add_item(e_tree, hf_tns_data_setdt_override_format, tvb, offset + 2, 1, ENC_BIG_ENDIAN);
+				}
+				offset += entry_len;
+			}
+			proto_item_set_len(ov_item, offset - ov_start);
+			break;
+		}
+
+		case SQLNET_RETURN_STATUS:
+		{
+			/* TTI_OER: server-side end-of-call status block. Emitted at
+			 * the end of every response — success or failure. Layout
+			 * cross-referenced with python-oracledb's
+			 * _process_error_info, in the Oracle 11g shape (no extended
+			 * ub4 error number / ub8 rowcount that 12c+ adds).
+			 *
+			 * All multi-byte integers are stored in the ub4 variable-
+			 * length form (see get_sb4_custom): first byte holds the
+			 * value's width (0..4), followed by that many big-endian
+			 * data bytes. */
+			proto_tree *oer_tree;
+			proto_item *oer_item;
+			int oer_start = offset;
+			int v;
+
+			oer_tree = proto_tree_add_subtree(data_tree, tvb, offset, -1, ett_tns_oer, &oer_item, "Oracle Error Return");
+
+			/* call_status */
+			offset += get_sb4_custom(tvb, offset, &v);
+			proto_tree_add_int(oer_tree, hf_tns_data_oer_call_status, tvb, oer_start, offset - oer_start, v);
+			/* end-to-end seq# (skipped) */
+			offset += get_sb4_custom(tvb, offset, &v);
+			/* rowcount (DML affected rows on 11g) */
+			int rc_start = offset;
+			offset += get_sb4_custom(tvb, offset, &v);
+			proto_tree_add_int(oer_tree, hf_tns_data_oer_rowcount, tvb, rc_start, offset - rc_start, v);
+			/* err_code (ORA-NNNNN, 0 on success) */
+			int ec_start = offset;
+			int err_code = 0;
+			offset += get_sb4_custom(tvb, offset, &err_code);
+			proto_tree_add_int(oer_tree, hf_tns_data_oer_err_code, tvb, ec_start, offset - ec_start, err_code);
+			/* array elem error #1, #2 (skipped) */
+			offset += get_sb4_custom(tvb, offset, &v);
+			offset += get_sb4_custom(tvb, offset, &v);
+			/* cursor_id */
+			int ci_start = offset;
+			offset += get_sb4_custom(tvb, offset, &v);
+			proto_tree_add_int(oer_tree, hf_tns_data_oer_cursor_id, tvb, ci_start, offset - ci_start, v);
+			/* error position (skipped) */
+			offset += get_sb4_custom(tvb, offset, &v);
+			/* 6 single-byte fields: sql_type, fatal, flags, user_cursor_opts, upi_param, warn_flags */
+			offset += 6;
+			/* rowid: ub4 rba, ub2 part_id, 1 byte reserved, ub4 block, ub2 slot */
+			offset += get_sb4_custom(tvb, offset, &v);
+			offset += get_sb4_custom(tvb, offset, &v);
+			offset += 1;
+			offset += get_sb4_custom(tvb, offset, &v);
+			offset += get_sb4_custom(tvb, offset, &v);
+			/* os error (skipped) */
+			offset += get_sb4_custom(tvb, offset, &v);
+			/* statement #, call # (1 byte each) */
+			offset += 2;
+			/* padding ub2 + successful iterations ub4 */
+			offset += get_sb4_custom(tvb, offset, &v);
+			offset += get_sb4_custom(tvb, offset, &v);
+			/* oerrdd (logical rowid), a bytes_with_length — skipped */
+			offset += get_field_with_length(tvb, pinfo, offset, NULL);
+
+			/* Batch error arrays (array DML). The code and offset arrays
+			 * are each a ub4 count followed by one DALC packing that many
+			 * ub4 values back to back; the message array is a ub4 count,
+			 * an indicator byte, and then that many str_with_length
+			 * entries each with a 2-byte trailer. All three counts are
+			 * zero for an ordinary statement. */
+			int n_codes = 0, n_offs = 0, n_msgs = 0;
+			int nb_start = offset;
+			offset += get_sb4_custom(tvb, offset, &n_codes);
+			proto_tree_add_int(oer_tree, hf_tns_data_oer_n_batch_errcodes, tvb, nb_start, offset - nb_start, n_codes);
+			if ( n_codes > 0 )
+				offset += get_dalc_custom(tvb, pinfo, offset, NULL);
+			nb_start = offset;
+			offset += get_sb4_custom(tvb, offset, &n_offs);
+			proto_tree_add_int(oer_tree, hf_tns_data_oer_n_batch_offsets, tvb, nb_start, offset - nb_start, n_offs);
+			if ( n_offs > 0 )
+				offset += get_dalc_custom(tvb, pinfo, offset, NULL);
+			nb_start = offset;
+			offset += get_sb4_custom(tvb, offset, &n_msgs);
+			proto_tree_add_int(oer_tree, hf_tns_data_oer_n_batch_messages, tvb, nb_start, offset - nb_start, n_msgs);
+			if ( n_msgs > 0 )
+			{
+				offset += 1;
+				for ( int i = 0; i < n_msgs; i++ )
+				{
+					offset += get_field_with_length(tvb, pinfo, offset, NULL);
+					offset += 2;
+				}
+			}
+
+			/* Trailing message DALC — present (and meaningful) only when
+			 * err_code is non-zero. */
+			if ( err_code != 0 && tvb_reported_length_remaining(tvb, offset) > 0 )
+			{
+				const char *msg = NULL;
+				int msg_start = offset;
+				offset += get_dalc_custom(tvb, pinfo, offset, &msg);
+				if ( msg )
+				{
+					proto_tree_add_string(oer_tree, hf_tns_data_oer_message, tvb, msg_start, offset - msg_start, msg);
+					col_append_fstr(pinfo->cinfo, COL_INFO, " [%s]", msg);
+				}
+			}
+			proto_item_set_len(oer_item, offset - oer_start);
+			break;
+		}
+
+		case SQLNET_USER_OCI_FUNC:
+		{
+			guint32 oci_id = 0;
+			proto_tree_add_item_ret_uint(data_tree, hf_tns_data_oci_id, tvb, offset, 1, ENC_BIG_ENDIAN, &oci_id);
+			offset += 1;
+			proto_tree_add_item(data_tree, hf_tns_data_tseq, tvb, offset, 1, ENC_BIG_ENDIAN);
+			offset += 1;
+			if((oci_id == 115) || (oci_id == 118)){
+				proto_tree_add_item(data_tree, hf_tns_data_unused, tvb, offset, 1, ENC_NA);
+				offset += 1;
+				int user_len = 0;
+				offset += get_sb4_custom(tvb, offset, &user_len);
+			}
+			break;
+		}
 		case SQLNET_RETURN_OPI_PARAM:
 		{
 			uint8_t skip = 0, opi = 0;
@@ -857,11 +1268,11 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 					/* Value length */
 					if ( opi == OPI_OSESSKEY )
 					{
-						len = tvb_get_uint8(tvb, offset);
+						len = get_strtype_custom(tvb, pinfo, par_tree, offset);
 					}
 					else /* OPI_OAUTH */
 					{
-						len = tvb_get_uint8(tvb, offset_prev) == 0 ? 0 : tvb_get_uint8(tvb, offset);
+						len = tvb_get_uint8(tvb, offset_prev) == 0 ? 0 : get_strtype_custom(tvb, pinfo, par_tree, offset);
 					}
 
 					/*
@@ -873,11 +1284,6 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 					  || ((opi == OPI_OAUTH) && !(len == 0 || len == 0x39)) )
 					{
 						proto_tree_add_item(par_tree, hf_tns_data_unused, tvb, offset_prev, offset - offset_prev, ENC_NA);
-
-						proto_tree_add_item(par_tree, hf_tns_data_opi_param_length, tvb, offset, 1, ENC_NA);
-						offset += 1;
-
-						proto_tree_add_item(par_tree, hf_tns_data_opi_param_value, tvb, offset, len, ENC_ASCII);
 						offset += len;
 
 						offset_prev = offset; /* Save offset to calculate rest of unused data */
@@ -916,10 +1322,34 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 		}
 
 		case SQLNET_PIGGYBACK_FUNC:
+		{
+			int cursors_len = 0;
+			int cursors_start;
 			proto_tree_add_item(data_tree, hf_tns_data_piggyback_id, tvb, offset, 1, ENC_BIG_ENDIAN);
 			offset += 1;
+			proto_tree_add_item(data_tree, hf_tns_data_tseq, tvb, offset, 1, ENC_BIG_ENDIAN);
+			offset += 1;
+			cursors_start = offset;
+			offset += get_sb4_custom(tvb, offset, &cursors_len);
+			/* The count comes off the wire and every cursor takes at
+			 * least one byte, so a count larger than the data left
+			 * cannot be real. Say so and stop, rather than looping on
+			 * a number somebody else chose. */
+			if ( cursors_len < 0 ||
+			     (unsigned)cursors_len > tvb_reported_length_remaining(tvb, offset) )
+			{
+				proto_tree_add_expert(data_tree, pinfo, &ei_tns_data_piggyback_cursors,
+					tvb, cursors_start, offset - cursors_start);
+				break;
+			}
+			for(int i = 0; i < cursors_len; i++) {
+				int cursor = 0;
+				int new_offset = get_sb4_custom(tvb, offset, &cursor);
+				proto_tree_add_uint(data_tree, hf_tns_cursor, tvb, offset, new_offset - offset, cursor);
+				offset = new_offset;
+			}
 			break;
-
+		}
 		case SQLNET_SNS:
 		{
 			proto_tree_add_item(data_tree, hf_tns_data_id, tvb, offset, 4, ENC_BIG_ENDIAN);
@@ -1703,6 +2133,10 @@ void proto_register_tns(void)
 			"Call ID", "tns.data_oci.id", FT_UINT8, BASE_HEX|BASE_EXT_STRING,
 			&tns_data_oci_subfuncs_ext, 0x00, NULL, HFILL }},
 
+		{ &hf_tns_data_tseq, {
+			"TSeq", "tns.data_tseq", FT_UINT8, BASE_HEX,
+			NULL, 0x00, NULL, HFILL }},
+
 		{ &hf_tns_data_piggyback_id, {
 			/* Also Call ID.
 			   Piggyback is a message what calls a small subset of functions
@@ -1712,6 +2146,10 @@ void proto_register_tns(void)
 
 		{ &hf_tns_data_unused, {
 			"Unused", "tns.data.unused", FT_BYTES, BASE_NONE,
+			NULL, 0x0, NULL, HFILL }},
+
+		{ &hf_tns_cursor, {
+			"Cursor", "tns.data.cursor", FT_UINT32, BASE_DEC,
 			NULL, 0x0, NULL, HFILL }},
 
 		{ &hf_tns_data_setp_acc_version, {
@@ -1735,6 +2173,68 @@ void proto_register_tns(void)
 			CF_FUNC(vsnum_to_vstext_basecustom), 0x0, NULL, HFILL }},
 		{ &hf_tns_data_sns_srvcnt, {
 			"Services", "tns.data_sns.srvcnt", FT_UINT16, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }},
+
+		{ &hf_tns_data_setdt_charset_in, {
+			"Charset In", "tns.data_setdt.charset_in", FT_UINT16, BASE_DEC,
+			VALS(tns_charsets), 0x0, "NLS_LANGUAGE charset id", HFILL }},
+		{ &hf_tns_data_setdt_charset_out, {
+			"Charset Out", "tns.data_setdt.charset_out", FT_UINT16, BASE_DEC,
+			VALS(tns_charsets), 0x0, "NLS_NCHAR charset id", HFILL }},
+		{ &hf_tns_data_setdt_flag, {
+			"Flag", "tns.data_setdt.flag", FT_UINT8, BASE_HEX,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_setdt_caphdr, {
+			"Capability Header", "tns.data_setdt.caphdr", FT_BYTES, BASE_NONE,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_setdt_caphdr_version, {
+			"Version", "tns.data_setdt.caphdr.version", FT_UINT24, BASE_HEX,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_setdt_caphdr_flags, {
+			"Flags", "tns.data_setdt.caphdr.flags", FT_BYTES, BASE_NONE,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_setdt_tblhdr, {
+			"Table Header", "tns.data_setdt.tblhdr", FT_BYTES, BASE_NONE,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_setdt_idmap, {
+			"Identity Map", "tns.data_setdt.idmap", FT_BYTES, BASE_NONE,
+			NULL, 0x0, "245 entries: type N -> repr N (default mapping)", HFILL }},
+		{ &hf_tns_data_setdt_overrides, {
+			"Type Overrides", "tns.data_setdt.overrides", FT_NONE, BASE_NONE,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_setdt_override_client, {
+			"Client Type", "tns.data_setdt.override.client", FT_UINT8, BASE_DEC,
+			VALS(tns_data_types), 0x0, NULL, HFILL }},
+		{ &hf_tns_data_setdt_override_repr, {
+			"Server Repr", "tns.data_setdt.override.repr", FT_UINT8, BASE_DEC,
+			VALS(tns_data_types), 0x0, NULL, HFILL }},
+		{ &hf_tns_data_setdt_override_format, {
+			"Format", "tns.data_setdt.override.format", FT_UINT8, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }},
+
+		{ &hf_tns_data_oer_call_status, {
+			"Call Status", "tns.data_oer.call_status", FT_INT32, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_oer_rowcount, {
+			"Row Count", "tns.data_oer.rowcount", FT_INT32, BASE_DEC,
+			NULL, 0x0, "DML affected rows (11g)", HFILL }},
+		{ &hf_tns_data_oer_err_code, {
+			"Error Code", "tns.data_oer.err_code", FT_INT32, BASE_DEC,
+			NULL, 0x0, "ORA-NNNNN (0 = success)", HFILL }},
+		{ &hf_tns_data_oer_cursor_id, {
+			"Cursor Id", "tns.data_oer.cursor_id", FT_INT32, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_oer_n_batch_errcodes, {
+			"Batch Error Codes", "tns.data_oer.n_batch_errcodes", FT_INT32, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_oer_n_batch_offsets, {
+			"Batch Error Offsets", "tns.data_oer.n_batch_offsets", FT_INT32, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_oer_n_batch_messages, {
+			"Batch Error Messages", "tns.data_oer.n_batch_messages", FT_INT32, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_oer_message, {
+			"Message", "tns.data_oer.message", FT_STRING, BASE_NONE,
 			NULL, 0x0, NULL, HFILL }},
 
 		{ &hf_tns_data_opi_version2_banner_len, {
@@ -1795,12 +2295,17 @@ void proto_register_tns(void)
 		&ett_tns_ntp_flag,
 		&ett_tns_conn_flag,
 		&ett_tns_rows,
+		&ett_tns_setdt_caphdr,
+		&ett_tns_setdt_overrides,
+		&ett_tns_setdt_override,
+		&ett_tns_oer,
 		&ett_sql
 	};
 
 	static ei_register_info ei[] = {
 		{ &ei_tns_connect_data_next_packet, { "tns.connect_data.next_packet", PI_REQUEST_CODE, PI_CHAT, "Long Connect Data (> 221 bytes) carried in subsequent Data packet", EXPFILL }},
 		{ &ei_tns_data_descriptor_size_mismatch, { "tns.data_descriptor.size_mismatch", PI_PROTOCOL, PI_WARN, "Data size from summing row sizes differs from size in descriptor", EXPFILL }},
+		{ &ei_tns_data_piggyback_cursors, { "tns.data.piggyback.cursors.invalid", PI_MALFORMED, PI_ERROR, "Cursor count is larger than the data left in the packet", EXPFILL }},
 	};
 
 	module_t *tns_module;

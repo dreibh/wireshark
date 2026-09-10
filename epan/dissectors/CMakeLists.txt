@@ -1008,6 +1008,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-http2.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-http3.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-http-urlencoded.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-hyperdht.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-hyperscsi.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-i2c.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-iana-oui.c
@@ -1430,6 +1431,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-p_mul.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pa-hbbackup.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pathport.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-packclient.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-packetbb.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-packetlogger.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-pagp.c
@@ -1558,6 +1560,7 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-romon.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-roofnet.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-roon_discovery.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-roq.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-roughtime.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rpc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-rpcap.c
@@ -1670,6 +1673,8 @@ set(DISSECTOR_SRC
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-smp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-smpp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-smpte-2110-20.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-smpte-2110-40.c
+	${CMAKE_CURRENT_SOURCE_DIR}/packet-smpte-291-vanc.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-smtp.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-sna.c
 	${CMAKE_CURRENT_SOURCE_DIR}/packet-snaeth.c

@@ -867,6 +867,75 @@ class TestDissectProtobuf:
         assert not grep_output(stdout, '.last_field_for_wireshark_test')
         assert not grep_output(stdout, 'Protobuf: Error')
 
+class TestDissectRtpproxy:
+    def test_rtpengine_bencode_good(self, cmd_tshark, capture_file, test_env):
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('rtpengine_good_bencode.pcap'),
+                '-d', 'udp.port==12222,rtpproxy',
+                '-Y', 'rtpproxy.cookie == "19384_1139339" && bencode.str == "sdp"',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'RTPproxy-ng')
+
+    def test_rtpengine_bencode_bad(self, cmd_tshark, capture_file, test_env):
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('rtpengine_bad_bencode.pcap'),
+                '-d', 'udp.port==12222,rtpproxy',
+                '-Y', 'rtpproxy.cookie == "19509_1136304" && bencode.str == "delete"',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'RTPproxy-ng')
+
+    def test_rtpengine_bencode_error_reply(self, cmd_tshark, capture_file, test_env):
+        '''An "offer" refused with an error, and a "delete" answered with a warning'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('rtpengine_error_reply.pcap'),
+                '-d', 'udp.port==12222,rtpproxy',
+                '-Y', 'bencode.str == "Unknown call-id"',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'RTPproxy-ng')
+
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('rtpengine_error_reply.pcap'),
+                '-d', 'udp.port==12222,rtpproxy',
+                '-Y', 'bencode.str contains "Call-ID not found or tags"',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'RTPproxy-ng')
+
+    def test_rtpengine_ng_command_tracking(self, cmd_tshark, capture_file, test_env):
+        '''The ng messages name themselves, and requests are matched to replies'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('rtpengine_error_reply.pcap'),
+                '-d', 'udp.port==12222,rtpproxy',
+                '-Y', 'rtpproxy.ng.command == "delete"',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'Request: delete')
+
+        # The reply to it carries no Call-ID of its own
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('rtpengine_error_reply.pcap'),
+                '-d', 'udp.port==12222,rtpproxy',
+                '-2',
+                '-Y', 'rtpproxy.ng.result == "error" && rtpproxy.request_in',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'Reply: error')
+
+    def test_rtpengine_ng_sdp(self, cmd_tshark, capture_file, test_env):
+        '''The session description carried by an ng message reaches the SDP dissector'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('rtpengine_query_reassembled.pcap'),
+                '-d', 'udp.port==12222,rtpproxy',
+                '-Y', 'rtpproxy.ng.command == "offer" && sdp.media.port == 8000',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'RTPproxy-ng/SDP')
+
+    def test_rtpengine_bencode_reassembled(self, cmd_tshark, capture_file, test_env):
+        '''A reply long enough to be split over two IP fragments'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('rtpengine_query_reassembled.pcap'),
+                '-d', 'udp.port==12222,rtpproxy',
+                '-Y', 'bencode.str == "last signal" && ip.reassembled.length == 1704',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, 'RTPproxy-ng')
+
 class TestDissectTcp:
     @staticmethod
     def check_tcp_out_of_order(cmd_tshark, dirs, test_env, extraArgs=[]):
@@ -1103,6 +1172,33 @@ class TestDissectTls:
         self.check_tls_out_of_order(cmd_tshark, capture_file,
             test_env, extraArgs=['-2'])
 
+class TestDissectRoq:
+    def test_roq_recognized(self, cmd_tshark, capture_file, test_env):
+        '''Verify that RTP over QUIC packets are recognized as RoQ.'''
+        stdout = subprocess.check_output((
+            cmd_tshark,
+            '-2',
+            '-d', 'udp.port==4433,quic',
+            '-r', capture_file('roq-with-keys.pcapng.gz'),
+            '-Y', 'roq',
+            '-Tfields', '-e', 'frame.number',
+        ), encoding='utf-8', env=test_env)
+
+        assert stdout.splitlines() == ['9', '88', '165', '243']
+
+    def test_roq_payload_is_rtp(self, cmd_tshark, capture_file, test_env):
+        '''Verify that RoQ media payload is handed to the RTP dissector.'''
+        stdout = subprocess.check_output((
+            cmd_tshark,
+            '-2',
+            '-d', 'udp.port==4433,quic',
+            '-r', capture_file('roq-with-keys.pcapng.gz'),
+            '-Y', 'roq && rtp',
+            '-Tfields', '-e', 'frame.number',
+        ), encoding='utf-8', env=test_env)
+
+        assert stdout.splitlines() == ['88', '165', '243']
+
 class TestDissectQuic:
     @staticmethod
     def check_quic_tls_handshake_reassembly(cmd_tshark, capture_file, test_env,
@@ -1221,6 +1317,109 @@ class TestDissectCommunityId:
              ), encoding='utf-8', env=test_env)
 
         self.check_baseline(dirs, stdout, 'communityid-filtered.txt')
+
+class TestDissectTns:
+    '''TNS (Oracle wire protocol) dissector tests, exercising two captures
+    that previously tripped buffer-overrun / wrong-state bugs in the OPI
+    parameter-value path.'''
+
+    def test_tns_malformed_piggyback(self, cmd_tshark, capture_file, test_env):
+        '''A cursor count or an integer width chosen by the sender is malformed
+        input, not a dissector bug.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_malformed.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-V',
+        ), encoding='utf-8', env=test_env)
+        # A count larger than the packet is reported against the count itself
+        assert grep_output(stdout, 'Cursor count is larger than the data left')
+        # and neither frame may be blamed on the dissector
+        assert not grep_output(stdout, 'Dissector bug')
+
+    def test_tns_bad(self, cmd_tshark, capture_file, test_env):
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_bad.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_opi.param_value == "06DE79977310E5B78E5A9493CB4FB3D6F5A0975F2B3B5D46737189DD4B7B92AA1A36B309D39D4471568CE287A52093BA"',
+        ), encoding='utf-8', env=test_env)
+        assert 'Return OPI Parameter' in stdout
+
+    def test_tns_bad2(self, cmd_tshark, capture_file, test_env):
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_bad2.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_opi.param_value == "7BD0E1244A35B13E8E194519B105257020D2DAC3816B3C5F5A71D0A3E5C217C6E796E1B592719A0FD47B7A18EF8A0311"',
+        ), encoding='utf-8', env=test_env)
+        assert 'Return OPI Parameter' in stdout
+
+    def test_tns_dty(self, cmd_tshark, capture_file, test_env):
+        '''TTI_DTY (Set Datatypes) request: charset fields, capability
+        header, table header, identity map, and ~50 type-override entries
+        must all decode without losing sync.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_dty.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_id',
+            '-e', 'tns.data_setdt.charset_in',
+            '-e', 'tns.data_setdt.charset_out',
+            '-e', 'tns.data_setdt.caphdr.version',
+            '-e', 'tns.data_setdt.override.client',
+        ), encoding='utf-8', env=test_env)
+        # data_id = 2 (Set Datatypes); charset = 871 (US7ASCII) both ways;
+        # version triple in capability header = 0x260601 (38, 6, 1);
+        # override client list ends with the 0 terminator and includes
+        # both long entries (e.g. 91) and short entries (e.g. 13).
+        fields = stdout.strip().split('\t')
+        assert fields[0] == '0x00000002', fields
+        assert fields[1] == '871' and fields[2] == '871', fields
+        assert fields[3] == '0x260601', fields
+        clients = fields[4].split(',')
+        assert clients[0] == '2' and clients[-1] == '0', clients
+        assert '91' in clients and '13' in clients, clients
+
+    def test_tns_oer(self, cmd_tshark, capture_file, test_env):
+        '''TTI_OER (Oracle Error Return) decodes call_status, rowcount,
+        err_code, cursor_id, and the trailing ORA-NNNNN message text.
+        Four frames: a successful DML (rowcount=3, err=0), a failed DML
+        (err=1, with message body), one whose message is the null marker,
+        and one carrying a non-empty oerrdd.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_oer.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_oer.call_status',
+            '-e', 'tns.data_oer.rowcount',
+            '-e', 'tns.data_oer.err_code',
+            '-e', 'tns.data_oer.cursor_id',
+            '-e', 'tns.data_oer.message',
+        ), encoding='utf-8', env=test_env)
+        # Not stdout.strip(): the last row ends in an empty field, and
+        # stripping would take the tab that holds it with the newline.
+        rows = [r.split('\t') for r in stdout.splitlines() if r]
+        assert len(rows) == 4, rows
+        assert rows[0] == ['0', '3', '0', '42', ''], rows[0]
+        assert rows[1][0] == '0' and rows[1][2] == '1' and rows[1][3] == '42', rows[1]
+        assert 'ORA-00001' in rows[1][4], rows[1]
+        # 0xFF is the null marker and stands for itself. Read as a length it
+        # claims 255 bytes that are not there.
+        assert rows[2][2] == '1722' and rows[2][3] == '9', rows[2]
+        assert rows[2][4] == '', rows[2]
+        # oerrdd is a ub4 count and then a DALC, not a bare DALC. Taking the
+        # count for a length puts every later field one field early, and the
+        # message is the first thing that visibly goes missing.
+        assert rows[3][2] == '942' and rows[3][3] == '7', rows[3]
+        assert 'ORA-00942' in rows[3][4], rows[3]
+
+    def test_tns_oer_no_malformed(self, cmd_tshark, capture_file, test_env):
+        '''No OER frame may be reported as malformed.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_oer.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', '_ws.malformed',
+            '-T', 'fields', '-e', 'frame.number',
+        ), encoding='utf-8', env=test_env)
+        assert stdout.strip() == '', stdout
 
 class TestDecompressMongo:
     def test_decompress_zstd(self, cmd_tshark, features, capture_file, test_env):
