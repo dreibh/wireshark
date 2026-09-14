@@ -145,23 +145,23 @@
     <name>AnnotationEditDialog</name>
     <message>
         <source>Color:</source>
-        <translation type="unfinished"></translation>
+        <translation>색상:</translation>
     </message>
     <message>
         <source>Comment (max %1 characters)</source>
-        <translation type="unfinished"></translation>
+        <translation>주석(최대 %1 글자)</translation>
     </message>
     <message>
         <source>Comment:</source>
-        <translation type="unfinished">주석</translation>
+        <translation>주석</translation>
     </message>
     <message>
         <source>Select Annotation Color</source>
-        <translation type="unfinished"></translation>
+        <translation>주석 색상 선택</translation>
     </message>
     <message>
         <source>Annotations are session-only and will be lost when the capture is closed.</source>
-        <translation type="unfinished"></translation>
+        <translation>주석은 세션이 유효하는 동안에만 유지됩니다. 캡쳐가 끝나면 사라집니다.</translation>
     </message>
 </context>
 <context>
@@ -722,11 +722,11 @@
     <name>BreakpointConditionDelegate</name>
     <message>
         <source>Expression</source>
-        <translation type="unfinished"></translation>
+        <translation>표현</translation>
     </message>
     <message>
         <source>Lua expression — pause when truthy</source>
-        <translation type="unfinished"></translation>
+        <translation>Lua 표현 - 진실일 때 잠시 멈춤</translation>
     </message>
     <message>
         <source>Evaluated each time control reaches this line; locals, upvalues, and globals are visible like Watch / Evaluate.
@@ -7703,7 +7703,7 @@ Relative to reference: n/a (outside reference range)</source>
     <message numerus="yes">
         <source>There are unsaved changes in %Ln open file(s).</source>
         <translation type="unfinished">
-            <numerusform></numerusform>
+            <numerusform>열려진 %Ln 파일에 저장되지 않은 변경사항이 있습니다.</numerusform>
         </translation>
     </message>
     <message>
@@ -7863,7 +7863,7 @@ on an existing breakpoint, toggle its active state</source>
     </message>
     <message>
         <source>Files</source>
-        <translation type="unfinished"></translation>
+        <translation>파일들</translation>
     </message>
     <message>
         <source>Evaluate</source>
@@ -7920,6 +7920,12 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>Type: %1</source>
         <translation type="unfinished"></translation>
+    </message>
+    <message numerus="yes">
+        <source>There are unsaved changes in %Ln open file(s).</source>
+        <translation type="vanished">
+            <numerusform>열려진 %Ln 파일에 저장되지 않은 변경사항이 있습니다.</numerusform>
+        </translation>
     </message>
     <message>
         <source>Remove All Breakpoints</source>
@@ -8035,7 +8041,7 @@ on an existing breakpoint, toggle its active state</source>
     </message>
     <message>
         <source>Lua Scripts (*.lua);;All Files (*)</source>
-        <translation type="unfinished"></translation>
+        <translation>Lua 스크립트 (*.lua);;모든 파일(*)</translation>
     </message>
     <message>
         <source>Lua Debugger</source>
@@ -8083,7 +8089,7 @@ on an existing breakpoint, toggle its active state</source>
     </message>
     <message>
         <source>Open File</source>
-        <translation type="unfinished"></translation>
+        <translation>파일 열기</translation>
     </message>
     <message>
         <source>Save</source>
@@ -9275,6 +9281,26 @@ on an existing breakpoint, toggle its active state</source>
 <context>
     <name>PacketList</name>
     <message>
+        <source>Unpin Row</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top (max %1 reached)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Go to Packet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unpin All Rows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Summary as Text</source>
         <translation>텍스트로 요약</translation>
     </message>
@@ -9348,6 +9374,14 @@ on an existing breakpoint, toggle its active state</source>
     <message>
         <source>Resize Column to Width…</source>
         <translation>열 너비 조정…</translation>
+    </message>
+    <message>
+        <source>Unfreeze Columns</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Freeze Column</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display as Packet Details</source>

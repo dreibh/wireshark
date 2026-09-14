@@ -9412,6 +9412,26 @@ ar phointe briste atá ann cheana féin, lascraigh a staid ghníomhach</translat
 <context>
     <name>PacketList</name>
     <message>
+        <source>Unpin Row</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top (max %1 reached)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Go to Packet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unpin All Rows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Summary as Text</source>
         <translation>Achoimre mar Théacs</translation>
     </message>
@@ -9485,6 +9505,14 @@ ar phointe briste atá ann cheana féin, lascraigh a staid ghníomhach</translat
     <message>
         <source>Resize Column to Width…</source>
         <translation>Athraigh an Colún go Leithead…</translation>
+    </message>
+    <message>
+        <source>Unfreeze Columns</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Freeze Column</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display as Packet Details</source>

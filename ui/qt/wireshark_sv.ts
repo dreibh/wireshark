@@ -9377,6 +9377,26 @@ växla aktivt läge på en befintlig brytpunkt</translation>
 <context>
     <name>PacketList</name>
     <message>
+        <source>Unpin Row</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top (max %1 reached)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Go to Packet</source>
+        <translation type="unfinished">Gå till paket</translation>
+    </message>
+    <message>
+        <source>Unpin All Rows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Summary as Text</source>
         <translation>Sammanfattning som text</translation>
     </message>
@@ -9450,6 +9470,14 @@ växla aktivt läge på en befintlig brytpunkt</translation>
     <message>
         <source>Resize Column to Width…</source>
         <translation>Ändra kolumnstorlek till bredden …</translation>
+    </message>
+    <message>
+        <source>Unfreeze Columns</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Freeze Column</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display as Packet Details</source>

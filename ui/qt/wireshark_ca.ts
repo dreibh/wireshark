@@ -3746,11 +3746,11 @@ Relatiu a la referència: n/a (fora del rang de referència)</translation>
     </message>
     <message>
         <source>Bookmark</source>
-        <translation type="unfinished"></translation>
+        <translation>Marcador</translation>
     </message>
     <message>
         <source>Type a name to create a bookmark</source>
-        <translation type="unfinished"></translation>
+        <translation>Escriviu un nom per a crear un marcador</translation>
     </message>
     <message>
         <source>Save parameters on capture start</source>
@@ -9237,11 +9237,11 @@ en un punt d&apos;interrupció existent, commuta el seu estat entre actiu i desa
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Prefix values that a spreadsheet would evaluate as a formula (those starting with &quot;=&quot;, &quot;+&quot;, &quot;-&quot; or &quot;@&quot;) with an apostrophe, so that packet data cannot inject a formula into the exported file&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
-        <translation type="unfinished"></translation>
+        <translation>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Posa un prefix als valors que els fulls de càlcul avaluarien com una fórmula (els que comencen amb «=», «+», «-» or «@») amb un apòstrof, de manera que les dades del paquet no puguin injectar una fórmula al fitxer exportat.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</translation>
     </message>
     <message>
         <source>Escape spreadsheet formulas</source>
-        <translation type="unfinished"></translation>
+        <translation>Escapament de fórmules en fulls de càlcul</translation>
     </message>
     <message>
         <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Replace whitespace characters (tabs, newlines, etc.) with C-style escapes&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
@@ -9377,6 +9377,26 @@ en un punt d&apos;interrupció existent, commuta el seu estat entre actiu i desa
 <context>
     <name>PacketList</name>
     <message>
+        <source>Unpin Row</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top (max %1 reached)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Go to Packet</source>
+        <translation type="unfinished">Vés al paquet</translation>
+    </message>
+    <message>
+        <source>Unpin All Rows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Summary as Text</source>
         <translation>Resum com a text</translation>
     </message>
@@ -9450,6 +9470,14 @@ en un punt d&apos;interrupció existent, commuta el seu estat entre actiu i desa
     <message>
         <source>Resize Column to Width…</source>
         <translation>Redimensiona l&apos;amplada de la columna…</translation>
+    </message>
+    <message>
+        <source>Unfreeze Columns</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Freeze Column</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display as Packet Details</source>

@@ -9213,6 +9213,26 @@ on an existing breakpoint, toggle its active state</source>
 <context>
     <name>PacketList</name>
     <message>
+        <source>Unpin Row</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top (max %1 reached)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Go to Packet</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unpin All Rows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Summary as Text</source>
         <translation type="unfinished"></translation>
     </message>
@@ -9283,6 +9303,14 @@ on an existing breakpoint, toggle its active state</source>
     </message>
     <message>
         <source>Resize Column to Width…</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Unfreeze Columns</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Freeze Column</source>
         <translation type="unfinished"></translation>
     </message>
     <message>

@@ -58,8 +58,6 @@ static int hf_rtpproxy_command_parameter_remote_ipv4;
 static int hf_rtpproxy_command_parameter_remote_ipv6;
 static int hf_rtpproxy_command_parameter_repacketize;
 static int hf_rtpproxy_command_parameter_dtmf;
-/* static int hf_rtpproxy_command_parameter_cmap; TODO */
-static int hf_rtpproxy_command_parameter_transcode;
 static int hf_rtpproxy_command_parameter_acc;
 static int hf_rtpproxy_callid;
 static int hf_rtpproxy_copy_target;
@@ -104,6 +102,7 @@ static expert_field ei_rtpproxy_timeout;
 static expert_field ei_rtpproxy_notify_no_ip;
 static expert_field ei_rtpproxy_bad_ipv4;
 static expert_field ei_rtpproxy_bad_ipv6;
+static expert_field ei_rtpproxy_no_lf_on_tcp;
 
 /* Request/response tracking */
 static int hf_rtpproxy_request_in;
@@ -215,10 +214,6 @@ static const value_string paramtypenames[] = {
     /* Unofficial command parameters / extensions */
     {'d', "DTMF payload ID (unofficial extension)"},
     {'D', "DTMF payload ID (unofficial extension)"},
-    {'m', "codec Mapping (unofficial extension)"},
-    {'M', "codec Mapping (unofficial extension)"},
-    {'t', "Transcode to (unofficial extension)"},
-    {'T', "Transcode to (unofficial extension)"},
     {'u', "accoUnting (unofficial extension)"},
     {'U', "accoUnting (unofficial extension)"},
     {0, NULL}
@@ -298,8 +293,6 @@ static int ett_rtpproxy_command_parameters_local;
 static int ett_rtpproxy_command_parameters_remote;
 static int ett_rtpproxy_command_parameters_repacketize;
 static int ett_rtpproxy_command_parameters_dtmf;
-static int ett_rtpproxy_command_parameters_cmap;
-static int ett_rtpproxy_command_parameters_transcode;
 static int ett_rtpproxy_command_parameters_acc;
 static int ett_rtpproxy_tag;
 static int ett_rtpproxy_notify;
@@ -736,18 +729,6 @@ rtpproxy_add_parameter(tvbuff_t *parent_tvb, packet_info *pinfo, proto_tree *rtp
                 if(rtpproxy_establish_conversation){
                     dissector_add_uint("rtp.pt", parameter_value, rtp_events_handle);
                 }
-                offset = new_offset;
-                break;
-            case 'm':
-                new_offset = (int)strspn(rawstr+offset, "0123456789=,");
-                /* TODO */
-                offset += new_offset;
-                break;
-            case 't':
-                another_tree = proto_item_add_subtree(ti, ett_rtpproxy_command_parameters_transcode);
-                tvb_get_string_uint16(tvb, offset, tvb_captured_length_remaining(tvb, offset), ENC_STR_DEC, &parameter_value, &new_offset);
-                ti = proto_tree_add_uint(another_tree, hf_rtpproxy_command_parameter_transcode, tvb, offset, new_offset - offset, parameter_value);
-                proto_item_append_text(ti, " (%s)", val_to_str_ext_const(parameter_value, &rtp_payload_type_vals_ext, "Unknown"));
                 offset = new_offset;
                 break;
             case 'u':
@@ -1537,7 +1518,6 @@ dissect_rtpproxy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
 
             if(rtpproxy_establish_conversation){
                 if (rtp_handle) {
-                    /* FIXME tell if isn't a video stream, and setup codec mapping */
                     if (addr.len)
                         rtp_add_address(pinfo, PT_UDP, &addr, port, 0, "RTPproxy", pinfo->num, 0, NULL);
                 }
@@ -1553,9 +1533,12 @@ dissect_rtpproxy(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data
     if (subc_offset)
         rtpproxy_add_subcommands(tvb, pinfo, rtpproxy_main_tree, subc_offset, fullsize, is_reply);
 
-    /* TODO add an expert warning about packets w/o LF sent over TCP */
+    /* The trailing LF is required over TCP, where it delimits messages, and
+     * optional over UDP. */
     if (has_lf)
         proto_tree_add_item(rtpproxy_tree, hf_rtpproxy_lf, tvb, fullsize, 1, ENC_NA);
+    else if (pinfo->ptype == PT_TCP)
+        expert_add_info(pinfo, rtpproxy_tree, &ei_rtpproxy_no_lf_on_tcp);
 
     return tvb_captured_length(tvb);
 }
@@ -1840,19 +1823,6 @@ proto_register_rtpproxy(void)
             {
                 "DTMF payload ID",
                 "rtpproxy.command_parameter_dtmf",
-                FT_UINT8, /* 0 - 127 */
-                BASE_DEC,
-                NULL,
-                0x0,
-                NULL,
-                HFILL
-            }
-        },
-        {
-            &hf_rtpproxy_command_parameter_transcode,
-            {
-                "Transcode to",
-                "rtpproxy.command_parameter_transcode",
                 FT_UINT8, /* 0 - 127 */
                 BASE_DEC,
                 NULL,
@@ -2397,6 +2367,9 @@ proto_register_rtpproxy(void)
         { &ei_rtpproxy_bad_ipv6,
           { "rtpproxy.bad_ipv6", PI_MALFORMED, PI_ERROR,
             "Bad IPv6", EXPFILL }},
+        { &ei_rtpproxy_no_lf_on_tcp,
+          { "rtpproxy.no_lf_on_tcp", PI_PROTOCOL, PI_WARN,
+            "Message without a trailing LF sent over TCP", EXPFILL }},
     };
 
     /* Setup protocol subtree array */
@@ -2410,8 +2383,6 @@ proto_register_rtpproxy(void)
         &ett_rtpproxy_command_parameters_remote,
         &ett_rtpproxy_command_parameters_repacketize,
         &ett_rtpproxy_command_parameters_dtmf,
-        &ett_rtpproxy_command_parameters_cmap,
-        &ett_rtpproxy_command_parameters_transcode,
         &ett_rtpproxy_command_parameters_acc,
         &ett_rtpproxy_tag,
         &ett_rtpproxy_notify,

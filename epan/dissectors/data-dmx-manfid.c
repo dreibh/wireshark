@@ -11,7 +11,7 @@
 #include "data-dmx-manfid.h"
 
 /*
- * ESTA codes download date: 2026-09-06
+ * ESTA codes download date: 2026-09-13
  */
 static const value_string dmx_esta_manfid_vals[] = {
   { 0x0000, "ESTA / PLASA" },
@@ -1180,6 +1180,7 @@ static const value_string dmx_esta_manfid_vals[] = {
   { 0x1872, "Super-Can Industry Growing Co. Ltd." },
   { 0x1873, "Zhongshan Wellmake Electronic Technology Co., Ltd." },
   { 0x1888, "GUANZHOU KAVON STAGE EQUIPMENT CO., LTD." },
+  { 0x1896, "Triple E Ltd" },
   { 0x18A6, "Steadfast Technology" },
   { 0x1900, "ADJ Products LLC" },
   { 0x1901, "Zhongshan Hiline Electronics Co., Ltd." },

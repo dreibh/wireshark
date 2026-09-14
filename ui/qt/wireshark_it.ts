@@ -9379,6 +9379,26 @@ su un breakpoint esistente, attiva o disattiva il suo stato</translation>
 <context>
     <name>PacketList</name>
     <message>
+        <source>Unpin Row</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top (max %1 reached)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Pin Row to Top</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Go to Packet</source>
+        <translation type="unfinished">Vai al pacchetto</translation>
+    </message>
+    <message>
+        <source>Unpin All Rows</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
         <source>Summary as Text</source>
         <translation>Riepilogo come testo</translation>
     </message>
@@ -9452,6 +9472,14 @@ su un breakpoint esistente, attiva o disattiva il suo stato</translation>
     <message>
         <source>Resize Column to Width…</source>
         <translation>Ridimensiona colonna alla larghezza...</translation>
+    </message>
+    <message>
+        <source>Unfreeze Columns</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <source>Freeze Column</source>
+        <translation type="unfinished"></translation>
     </message>
     <message>
         <source>Display as Packet Details</source>

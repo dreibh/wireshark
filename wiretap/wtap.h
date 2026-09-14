@@ -1745,7 +1745,7 @@ typedef struct wtap_dump_params {
     const GArray *mevs_growing;             /**< Meta events that will be written while writing packets, or NULL.
                                                  This array may grow since the dumper was opened and will subsequently
                                                  be written before newer packets are written in wtap_dump. */
-    const GArray *dpibs_growing;            /**< DPIBs that will be written while writing packets, or NULL.
+    const GArray *pibs_growing;             /**< Process information blocks that will be written while writing packets, or NULL.
                                                  This array may grow since the dumper was opened and will subsequently
                                                  be written before newer packets are written in wtap_dump. */
     bool        dont_copy_idbs;             /**< XXX - don't copy IDBs; this should eventually always be the case. */
@@ -2588,15 +2588,6 @@ wtapng_iface_descriptions_t *wtap_file_get_idb_info(wtap *wth);
 
 
 /**
- * @brief Gets the DPIB lookup information for the current file.
- *
- * @param wth The wiretap session.
- * @return Pointer to the existing DPIB lookup information, or NULL if none available.
- */
-WS_DLL_PUBLIC
-wtapng_dpib_lookup_info_t * wtap_file_get_dpib_lookup_info(wtap *wth);
-
-/**
  * @brief Gets next interface description.
  *
  * @details This returns the first unfetched wtap_block_t from the set
@@ -2676,6 +2667,48 @@ unsigned wtap_file_get_num_dsbs(wtap *wth);
  */
 WS_DLL_PUBLIC
 wtap_block_t wtap_file_get_dsb(wtap *wth, unsigned dsb_num);
+
+/**
+ * @brief Gets number of process information blocks.
+ * @details Returns the number of existing PIBs.
+ *
+ * @param wth The wiretap session.
+ * @return The number of existing process information blocks.
+ */
+WS_DLL_PUBLIC
+unsigned wtap_file_get_num_pibs(wtap *wth);
+
+/**
+ * @brief Gets existing process information block, not for new file.
+ * @details Returns the pointer to an existing PIB, without creating a
+ *          new one. This should only be used for accessing info.
+ *
+ * @param wth The wiretap session.
+ * @param pib_num The ordinal number (0-based) of the process information
+ * block in the file
+ * @return The specified existing process information block, which must
+ * NOT be g_free'd, or NULL if there is no such block.
+ */
+WS_DLL_PUBLIC
+wtap_block_t wtap_file_get_pib(wtap *wth, unsigned pib_num);
+
+/**
+ * @brief Finds the process information block for a process.
+ * @details Returns the ordinal number of the most recent process information
+ *          block, i.e. the last one read from the file so far, whose process
+ *          ID is the given one and whose start time, if it has one, is not
+ *          after the given time, so that processes that reused the ID can be
+ *          told apart. If every block for the ID has a later start time, the
+ *          first one is returned.
+ *
+ * @param wth The wiretap session.
+ * @param process_id The process ID, as in the pcapng epb_processid_threadid option.
+ * @param ts The time at which the packet was captured, or NULL to ignore start times.
+ * @param pib_num Set to the ordinal number (0-based) of the block found.
+ * @return true if a block was found, false otherwise.
+ */
+WS_DLL_PUBLIC
+bool wtap_file_find_pib(wtap *wth, uint32_t process_id, const nstime_t *ts, unsigned *pib_num);
 
 /**
  * @brief Adds a Decryption Secrets Block to the open wiretap session.

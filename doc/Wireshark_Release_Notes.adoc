@@ -132,6 +132,14 @@ The following features are either new or have been significantly updated since v
   Available as `tshark --json-compact` (with `-T json` or `-T jsonraw`)
   and as a "Compact (no indentation)" checkbox in the GUI JSON export dialog.
 
+* Process information stored in pcapng captures, in Wireshark custom blocks
+  or in Apple's Darwin process information blocks, is now shown under
+  "Process information" in the Frame tree as the `frame.process` fields
+  (process and thread ID, name, executable path, command line, parent
+  process ID, user ID and name, executable UUID and start time), fills the
+  "User name" column, and can be used through the "Process" conversation
+  filter.
+
 * The Windows installers now ship with Npcap 1.88.
   They previously shipped with Npcap 1.83.
 
@@ -270,6 +278,11 @@ an alias for the protocol and all its fields.
 
 == New and Updated Capture File Support
 
+* pcapng: Process information blocks are now read from and written to
+  Wireshark custom blocks (PEN 32622, block entry type 3) as well as
+  Apple's Darwin process information blocks, and both are preserved when
+  a file is rewritten.
+
 [commaize]
 --
 --
@@ -313,6 +326,15 @@ but without string copying or otherwise ensuring NUL termination.
 
 Linking with the Heimdal Kerberos library is now deprecated, and support will likely be removed in a future release.
 Linking with the MIT Kerberos library is still supported.
+
+libwiretap's per-file table of Darwin process information blocks has been
+generalised into a table of WTAP_BLOCK_PROCESS_INFORMATION blocks, with a
+32-bit process ID and the options OPT_PIB_NAME, OPT_PIB_PATH,
+OPT_PIB_CMDLINE, OPT_PIB_PPID, OPT_PIB_UID, OPT_PIB_USER, OPT_PIB_UUID and
+OPT_PIB_STARTTIME. wtap_file_get_dpib_lookup_info() has been replaced by
+wtap_file_get_num_pibs() and wtap_file_get_pib(), the dpibs_growing member
+of wtap_dump_params has been renamed pibs_growing, and the OPT_DPIB_NAME
+and OPT_DPIB_UUID option codes have been removed.
 
 === Plugin Development Changes
 

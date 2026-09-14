@@ -206,17 +206,6 @@ wtap_file_get_idb_info(wtap *wth)
 	return idb_info;
 }
 
-wtapng_dpib_lookup_info_t *
-wtap_file_get_dpib_lookup_info(wtap *wth)
-{
-	wtapng_dpib_lookup_info_t *lookup_info;
-
-	lookup_info = g_new(wtapng_dpib_lookup_info_t, 1);
-	lookup_info->dpibs = wth->dpibs;
-
-	return lookup_info;
-}
-
 wtap_block_t
 wtap_get_next_interface_description(wtap *wth)
 {
@@ -304,10 +293,101 @@ wtap_add_idb(wtap *wth, wtap_block_t idb)
 	g_array_append_val(wth->interface_data, idb);
 }
 
-void
-wtap_add_dpib(wtap *wth, wtap_block_t dpib)
+unsigned
+wtap_file_get_num_pibs(wtap *wth)
 {
-	g_array_append_val(wth->dpibs, dpib);
+	if (!wth->pibs) {
+		return 0;
+	}
+	return wth->pibs->len;
+}
+
+wtap_block_t
+wtap_file_get_pib(wtap *wth, unsigned pib_num)
+{
+	if ((wth == NULL) || (wth->pibs == NULL) || (pib_num >= wth->pibs->len))
+		return NULL;
+
+	return g_array_index(wth->pibs, wtap_block_t, pib_num);
+}
+
+#define NS_PER_S 1000000000U
+
+static void
+wtap_pib_index_free(void *pib_nums)
+{
+	g_array_free((GArray *)pib_nums, true);
+}
+
+void
+wtap_add_pib(wtap *wth, wtap_block_t pib)
+{
+	wtapng_process_info_mandatory_t *pib_mand;
+	GArray *pib_nums;
+	unsigned pib_num;
+
+	pib_num = wth->pibs->len;
+	g_array_append_val(wth->pibs, pib);
+
+	/*
+	 * Index the block by its process ID, as packets refer to a process
+	 * by its ID.
+	 */
+	if (wth->pibs_by_pid == NULL) {
+		wth->pibs_by_pid = g_hash_table_new_full(g_direct_hash,
+		    g_direct_equal, NULL, wtap_pib_index_free);
+	}
+	pib_mand = (wtapng_process_info_mandatory_t *)wtap_block_get_mandatory_data(pib);
+	pib_nums = (GArray *)g_hash_table_lookup(wth->pibs_by_pid,
+	    GUINT_TO_POINTER(pib_mand->process_id));
+	if (pib_nums == NULL) {
+		pib_nums = g_array_new(false, false, sizeof(unsigned));
+		g_hash_table_insert(wth->pibs_by_pid,
+		    GUINT_TO_POINTER(pib_mand->process_id), pib_nums);
+	}
+	g_array_append_val(pib_nums, pib_num);
+}
+
+bool
+wtap_file_find_pib(wtap *wth, uint32_t process_id, const nstime_t *ts,
+    unsigned *pib_num)
+{
+	GArray *pib_nums;
+	unsigned i, num = 0;
+	wtap_block_t pib;
+	uint64_t start_time;
+	nstime_t start_ts;
+
+	if (wth == NULL || wth->pibs_by_pid == NULL)
+		return false;
+	pib_nums = (GArray *)g_hash_table_lookup(wth->pibs_by_pid,
+	    GUINT_TO_POINTER(process_id));
+	if (pib_nums == NULL)
+		return false;
+
+	/*
+	 * Search backwards, so that the most recent block for a process ID
+	 * that was reused wins, skipping the blocks for processes that
+	 * started after the given time.  If every block has a later start
+	 * time, the clocks probably disagree; fall back to the first block.
+	 */
+	for (i = pib_nums->len; i > 0; i--) {
+		num = g_array_index(pib_nums, unsigned, i - 1);
+		if (ts == NULL)
+			break;
+		pib = g_array_index(wth->pibs, wtap_block_t, num);
+		if (wtap_block_get_uint64_option_value(pib, OPT_PIB_STARTTIME,
+		    &start_time) != WTAP_OPTTYPE_SUCCESS)
+			break;
+		start_ts.secs = (time_t)(start_time / NS_PER_S);
+		start_ts.nsecs = (int)(start_time % NS_PER_S);
+		if (nstime_cmp(&start_ts, ts) <= 0)
+			break;
+	}
+	if (i == 0)
+		num = g_array_index(pib_nums, unsigned, 0);
+	*pib_num = num;
+	return true;
 }
 
 static wtap_block_t
@@ -590,7 +670,7 @@ wtap_dump_params_init(wtap_dump_params *params, wtap *wth)
 	params->nrbs_growing = wth->nrbs;
 	params->dsbs_growing = wth->dsbs;
 	params->mevs_growing = wth->meta_events;
-	params->dpibs_growing = wth->dpibs;
+	params->pibs_growing = wth->pibs;
 	params->dont_copy_idbs = false;
 }
 
@@ -617,7 +697,7 @@ wtap_dump_params_init_no_idbs(wtap_dump_params *params, wtap *wth)
 	params->nrbs_growing = wth->nrbs;
 	params->dsbs_growing = wth->dsbs;
 	params->mevs_growing = wth->meta_events;
-	params->dpibs_growing = wth->dpibs;
+	params->pibs_growing = wth->pibs;
 	params->dont_copy_idbs = true;
 }
 
@@ -1642,7 +1722,9 @@ wtap_close(wtap *wth)
 	wtap_block_array_free(wth->interface_data);
 	wtap_block_array_free(wth->dsbs);
 	wtap_block_array_free(wth->meta_events);
-	wtap_block_array_free(wth->dpibs);
+	wtap_block_array_free(wth->pibs);
+	if (wth->pibs_by_pid != NULL)
+		g_hash_table_destroy(wth->pibs_by_pid);
 
 	g_free(wth);
 }
