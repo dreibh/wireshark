@@ -49,6 +49,7 @@
 
 #include "capture/capture_ifinfo.h"
 #include "capture/capture-pcap-util.h"
+#include "capture/capture_process_info.h"
 #include "capture/capture-pcap-util-int.h"
 #ifdef _WIN32
 #include "capture/capture-wpcap.h"
@@ -418,6 +419,10 @@ typedef struct _loop_data {
     GTimer  *file_duration_timer;
     time_t   next_interval_time;
     int      interval_s;
+    /* process information */
+    capture_process_info_t *process_info;  /**< Attributes packets to processes; NULL if not doing that */
+    GPtrArray *packet_processes;           /**< The processes of the packet being written */
+    GArray    *packet_process_ids;         /**< Their IDs, for the packet block */
 } loop_data;
 
 typedef struct _pcap_queue_element {
@@ -534,6 +539,7 @@ print_usage(FILE *output)
     fprintf(output, "                           print list of link-layer types of iface and exit\n");
     fprintf(output, "  --list-time-stamp-types  print list of timestamp types for iface and exit\n");
     fprintf(output, "  --no-optimize            do not optimize capture filter\n");
+    fprintf(output, "  --process-info           record the processes that sent or received each packet\n");
     fprintf(output, "  --update-interval        interval between updates with new packets, in milliseconds (def: %dms)\n", DEFAULT_UPDATE_INTERVAL);
     fprintf(output, "  -d                       print generated BPF code for capture filter\n");
     fprintf(output, "  -k <freq>,[<type>],[<center_freq1>],[<center_freq2>]\n");
@@ -668,6 +674,24 @@ print_caps(const char *pfx) {
     }
 }
 
+/*
+ * Whether CAP_SYS_PTRACE is in our permitted set.  Recording process
+ * information uses it to find out which processes, other than the user's
+ * own, have which sockets open.
+ */
+static bool
+have_ptrace_capability(void)
+{
+    cap_t caps = cap_get_proc();
+    cap_flag_value_t value = CAP_CLEAR;
+
+    if (caps == NULL)
+        return false;
+    cap_get_flag(caps, CAP_SYS_PTRACE, CAP_PERMITTED, &value);
+    cap_free(caps);
+    return value == CAP_SET;
+}
+
 static void
 relinquish_all_capabilities(void)
 {
@@ -675,6 +699,17 @@ relinquish_all_capabilities(void)
     /* Allowed whether or not process has any privileges.              */
     cap_t caps = cap_init();    /* all capabilities initialized to off */
     print_caps("Pre-clear");
+    if (global_capture_opts.process_info && have_ptrace_capability()) {
+        /*
+         * Keep CAP_SYS_PTRACE, and only that, while we record process
+         * information: without it we can only see the sockets of the
+         * user's own processes.
+         */
+        cap_value_t cap_list[1] = { CAP_SYS_PTRACE };
+
+        cap_set_flag(caps, CAP_PERMITTED, 1, cap_list, CAP_SET);
+        cap_set_flag(caps, CAP_EFFECTIVE, 1, cap_list, CAP_SET);
+    }
     if (cap_set_proc(caps)) {
         cmdarg_err("cap_set_proc() fail return: %s", g_strerror(errno));
     }
@@ -1266,7 +1301,7 @@ report_counts_siginfo(int signum _U_)
 #endif /* SIGINFO */
 
 static void
-exit_main(void)
+do_cleanup(void)
 {
     ws_cleanup_sockets();
 
@@ -1296,7 +1331,7 @@ exit_main(void)
  * (See comment in main() for details)
  */
 static void
-relinquish_privs_except_capture(void)
+relinquish_privs_except_capture(bool keep_ptrace)
 {
     /*
      * Drop any capabilities other than NET_ADMIN and NET_RAW:
@@ -1304,6 +1339,11 @@ relinquish_privs_except_capture(void)
      * CAP_NET_ADMIN: Promiscuous mode and a truckload of other
      *                stuff we don't need (and shouldn't have).
      * CAP_NET_RAW:   Packet capture (raw sockets).
+     *
+     * and, if we're going to record process information and have it,
+     *
+     * CAP_SYS_PTRACE: Seeing which sockets processes other than the
+     *                 user's own have open.
      *
      * If 'started_with_special_privs' (ie: suid) then drop our
      * suid privileges.
@@ -1374,6 +1414,13 @@ relinquish_privs_except_capture(void)
     // XXX - Do we really need CAP_INHERITABLE?
     cap_set_flag(caps, CAP_INHERITABLE, cl_len, cap_list, value);
     cap_set_flag(caps, CAP_EFFECTIVE, cl_len, cap_list, value);
+
+    if (keep_ptrace) {
+        cap_list[0] = CAP_SYS_PTRACE;
+        cap_get_flag(current_caps, cap_list[0], CAP_PERMITTED, &value);
+        cap_set_flag(caps, CAP_PERMITTED, cl_len, cap_list, value);
+        cap_set_flag(caps, CAP_EFFECTIVE, cl_len, cap_list, value);
+    }
 
     if (cap_set_proc(caps)) {
         /*
@@ -3363,6 +3410,20 @@ capture_loop_open_input(capture_options *capture_opts,
     return true;
 }
 
+/* stop attributing packets to processes */
+static void
+capture_loop_free_process_info(void)
+{
+    if (global_ld.process_info != NULL) {
+        capture_process_info_free(global_ld.process_info);
+        global_ld.process_info = NULL;
+        g_ptr_array_free(global_ld.packet_processes, TRUE);
+        global_ld.packet_processes = NULL;
+        g_array_free(global_ld.packet_process_ids, TRUE);
+        global_ld.packet_process_ids = NULL;
+    }
+}
+
 /* close the capture input file (pcap or capture pipe) */
 static void capture_loop_close_input(void)
 {
@@ -3443,6 +3504,10 @@ capture_loop_init_filter(pcap_t *pcap_h, bool from_cap_pipe,
 static bool
 capture_file_start_output_pcapng(capture_options *capture_opts)
 {
+    /* A new file: every process has to be described in it again. */
+    if (global_ld.process_info != NULL)
+        capture_process_info_new_file(global_ld.process_info);
+
     g_rw_lock_reader_lock (&global_ld.saved_shb_idb_lock);
 
     if (global_ld.pcapng_passthrough && !global_ld.saved_shb) {
@@ -4307,6 +4372,32 @@ capture_loop_start(capture_options *capture_opts, bool *stats_known, struct pcap
         }
     }
 
+    /* If we're supposed to record which processes the packets belong to,
+       set up to do so, now that we've dropped the privileges we opened the
+       interfaces with: what's left decides which processes we can see. */
+    if (capture_opts->process_info) {
+        char *err_msg = NULL;
+
+        global_ld.process_info = capture_process_info_new(capture_opts->get_iface_list, &err_msg);
+        if (global_ld.process_info == NULL) {
+            snprintf(errmsg, sizeof(errmsg), "Can't record process information: %s", err_msg);
+            g_free(err_msg);
+            goto error;
+        }
+        global_ld.packet_processes = g_ptr_array_new();
+        global_ld.packet_process_ids = g_array_new(FALSE, FALSE, sizeof(uint32_t));
+        for (unsigned n = 0; n < global_ld.pcaps->len; n++) {
+            pcap_src = g_array_index(global_ld.pcaps, capture_src *, n);
+            interface_opts = &g_array_index(capture_opts->ifaces, interface_options, n);
+
+            if (pcap_src->linktype >= 0 &&
+                !capture_process_info_linktype_supported(pcap_src->linktype)) {
+                ws_warning("Process information won't be recorded for packets on %s: link-layer header type %d isn't handled",
+                           interface_opts->name, pcap_src->linktype);
+            }
+        }
+    }
+
     /* If we're supposed to write to a capture file, open it for output
        (temporary/specified name/ringbuffer) */
     if (capture_opts->saving_to_file) {
@@ -4717,6 +4808,7 @@ capture_loop_start(capture_options *capture_opts, bool *stats_known, struct pcap
 
     /* close the input file (pcap or capture pipe) */
     capture_loop_close_input();
+    capture_loop_free_process_info();
 
     ws_info("Capture loop stopped.");
 
@@ -4747,6 +4839,7 @@ error:
 
     /* close the input file (pcap or cap_pipe) */
     capture_loop_close_input();
+    capture_loop_free_process_info();
 
     ws_info("Capture loop stopped with error");
 
@@ -4958,14 +5051,40 @@ capture_loop_write_packet_cb(uint8_t *pcap_src_p, const struct pcap_pkthdr *phdr
            If this fails, set "global_ld.go" to false, to stop the capture,
            and set "global_ld.err" to the error. */
         if (global_capture_opts.use_pcapng) {
-            successful = pcapng_write_enhanced_packet_block(global_ld.pdh,
-                                                            NULL,
-                                                            phdr->ts.tv_sec, (int32_t)phdr->ts.tv_usec,
-                                                            phdr->caplen, phdr->len,
-                                                            pcap_src->idb_id,
-                                                            ts_mul,
-                                                            pd, 0,
-                                                            &global_ld.bytes_written, &err);
+            const uint32_t *process_ids = NULL;
+            unsigned num_process_ids = 0;
+
+            successful = true;
+            if (global_ld.process_info != NULL) {
+                /* Describe each process the packet belongs to, once per file, before the packet. */
+                g_ptr_array_set_size(global_ld.packet_processes, 0);
+                g_array_set_size(global_ld.packet_process_ids, 0);
+                capture_process_info_lookup(global_ld.process_info, pcap_src->linktype,
+                                            pd, phdr->caplen, global_ld.packet_processes);
+                for (unsigned i = 0; i < global_ld.packet_processes->len && successful; i++) {
+                    const ws_process_info_t *process =
+                        (const ws_process_info_t *)g_ptr_array_index(global_ld.packet_processes, i);
+
+                    if (capture_process_info_needs_description(global_ld.process_info, process)) {
+                        successful = pcapng_write_process_information_block(global_ld.pdh, process,
+                                                                            &global_ld.bytes_written, &err);
+                    }
+                    g_array_append_val(global_ld.packet_process_ids, process->pid);
+                }
+                process_ids = (const uint32_t *)global_ld.packet_process_ids->data;
+                num_process_ids = global_ld.packet_process_ids->len;
+            }
+            if (successful) {
+                successful = pcapng_write_enhanced_packet_block(global_ld.pdh,
+                                                                NULL,
+                                                                phdr->ts.tv_sec, (int32_t)phdr->ts.tv_usec,
+                                                                phdr->caplen, phdr->len,
+                                                                pcap_src->idb_id,
+                                                                ts_mul,
+                                                                pd, 0,
+                                                                process_ids, num_process_ids,
+                                                                &global_ld.bytes_written, &err);
+            }
         } else {
             successful = libpcap_write_packet(global_ld.pdh,
                                               phdr->ts.tv_sec, (int32_t)phdr->ts.tv_usec,
@@ -5301,7 +5420,7 @@ main(int argc, char *argv[])
             if (strcmp(ws_optarg, SIGNAL_PIPE_CTRL_ID_NONE) != 0) {
                 // get_positive_int calls cmdarg_err
                 if (!ws_strtoi(ws_optarg, NULL, &sync_pipe_fd) || sync_pipe_fd <= 0) {
-                    exit_main();
+                    do_cleanup();
                     return WS_EXIT_INVALID_OPTION;
                 }
 #ifdef _WIN32
@@ -5392,7 +5511,7 @@ main(int argc, char *argv[])
         g_free(err_msg);
         ws_log(LOG_DOMAIN_CAPCHILD, LOG_LEVEL_ERROR,
                           "%s", please_report_bug());
-        exit_main();
+        do_cleanup();
         return EXIT_FAILURE;
     }
 
@@ -5504,7 +5623,9 @@ main(int argc, char *argv[])
     /*    Action:                                                        */
     /*      - If not -w  (ie: doing -S or -D, etc) run to completion;    */
     /*        else: after  pcap_open_live() in capture_loop_open_input() */
-    /*         drop all capabilities (NET_RAW and NET_ADMIN)             */
+    /*         drop all capabilities (NET_RAW and NET_ADMIN), except    */
+    /*         SYS_PTRACE with --process-info, if we have it, which     */
+    /*         lets us see the sockets of other users' processes        */
     /*                                                                   */
     /* ToDo: -S (stats) should drop privileges/capabilities when no      */
     /*       longer required (similar to capture).                       */
@@ -5515,9 +5636,19 @@ main(int argc, char *argv[])
 
 #ifdef HAVE_LIBCAP
     /* If 'started with special privileges' (and using libcap)  */
-    /*   Set to keep only NET_RAW and NET_ADMIN capabilities;   */
+    /*   Set to keep only NET_RAW and NET_ADMIN capabilities,   */
+    /*   plus SYS_PTRACE if we'll record process information   */
+    /*   (the options haven't been parsed yet, so look for it); */
     /*   Set euid/egid = ruid/rgid to remove suid privileges    */
-    relinquish_privs_except_capture();
+    {
+        bool keep_ptrace = false;
+
+        for (int i = 1; i < argc; i++) {
+            if (strcmp(argv[i], "--process-info") == 0)
+                keep_ptrace = true;
+        }
+        relinquish_privs_except_capture(keep_ptrace);
+    }
 #endif
 
     init_report_failure_message_simple("dumpcap");
@@ -5565,11 +5696,11 @@ main(int argc, char *argv[])
         case 'h':        /* Print help and exit */
             show_help_header("Capture network packets and dump them into a pcapng or pcap file.");
             print_usage(stdout);
-            exit_main();
+            do_cleanup();
             return EXIT_SUCCESS;
         case 'v':        /* Show version and exit */
             show_version();
-            exit_main();
+            do_cleanup();
             return EXIT_SUCCESS;
         case LONGOPT_APPLICATION_FLAVOR:
             /*
@@ -5605,12 +5736,13 @@ main(int argc, char *argv[])
         case LONGOPT_COMPRESS_TYPE:        /* compress type */
         case LONGOPT_CAPTURE_TMPDIR:       /* capture temp directory */
         case LONGOPT_UPDATE_INTERVAL:      /* sync pipe update interval */
+        case LONGOPT_PROCESS_INFO:         /* record the processes that sent or received each packet */
         {
             char* app_prefix = g_ascii_strup(app_flavor_name, -1);
             status = capture_opts_add_opt(app_prefix, &global_capture_opts, opt, ws_optarg);
             g_free(app_prefix);
             if (status != 0) {
-                exit_main();
+                do_cleanup();
                 return status;
             }
             break;
@@ -5624,7 +5756,7 @@ main(int argc, char *argv[])
                 interface_opts->ifname = g_strdup(ws_optarg);
             } else {
                 cmdarg_err("--ifname must be specified after a -i option");
-                exit_main();
+                do_cleanup();
                 return WS_EXIT_INVALID_OPTION;
             }
             break;
@@ -5636,7 +5768,7 @@ main(int argc, char *argv[])
                 interface_opts->descr = g_strdup(ws_optarg);
             } else {
                 cmdarg_err("--ifdescr must be specified after a -i option");
-                exit_main();
+                do_cleanup();
                 return WS_EXIT_INVALID_OPTION;
             }
             break;
@@ -5656,7 +5788,7 @@ main(int argc, char *argv[])
             if (!capture_child) {
                 /* We have already checked for -Z at the very beginning. */
                 cmdarg_err("--signal-pipe may only be specified with -Z");
-                exit_main();
+                do_cleanup();
                 return WS_EXIT_INVALID_OPTION;
             }
             /*
@@ -5671,7 +5803,7 @@ main(int argc, char *argv[])
                 if (sig_pipe_handle == INVALID_HANDLE_VALUE) {
                     ws_info("Signal pipe: Unable to open %s.  Dead parent?",
                           sig_pipe_name);
-                    exit_main();
+                    do_cleanup();
                     return WS_EXIT_INVALID_OPTION;
                 }
             }
@@ -5782,7 +5914,7 @@ main(int argc, char *argv[])
     if (arg_error) {
         if (ws_optopt == 'F') {
             capture_opts_list_file_types();
-            exit_main();
+            do_cleanup();
             return WS_EXIT_INVALID_OPTION;
         }
         /*
@@ -5802,20 +5934,20 @@ main(int argc, char *argv[])
         if (ws_optopt != 'Z' && ws_optopt != LONGOPT_APPLICATION_FLAVOR) {
             print_usage(stderr);
         }
-        exit_main();
+        do_cleanup();
         return WS_EXIT_INVALID_OPTION;
     }
 
     if (run_once_args > 1) {
         cmdarg_err("Only one of -D, -L, -d, -k or -S may be supplied.");
-        exit_main();
+        do_cleanup();
         return WS_EXIT_INVALID_OPTION;
     } else if (run_once_args == 1) {
         /* We're supposed to print some information, rather than
            to capture traffic; did they specify a ring buffer option? */
         if (global_capture_opts.multi_files_on) {
             cmdarg_err("Ring buffer requested, but a capture isn't being done.");
-            exit_main();
+            do_cleanup();
             return WS_EXIT_INVALID_OPTION;
         }
     } else {
@@ -5831,7 +5963,13 @@ main(int argc, char *argv[])
             (!global_capture_opts.use_pcapng || global_capture_opts.multi_files_on)) {
             /* XXX - for ringbuffer, should we apply the comments to each file? */
             cmdarg_err("Capture comments can only be set if we capture into a single pcapng file.");
-            exit_main();
+            do_cleanup();
+            return WS_EXIT_INVALID_OPTION;
+        }
+
+        if (global_capture_opts.process_info && !global_capture_opts.use_pcapng) {
+            cmdarg_err("Process information can only be recorded in pcapng files.");
+            do_cleanup();
             return WS_EXIT_INVALID_OPTION;
         }
 
@@ -5858,7 +5996,7 @@ main(int argc, char *argv[])
             }
             if (global_capture_opts.has_file_duration && global_capture_opts.has_file_interval) {
                 cmdarg_err("Ring buffer file duration and interval can't be used at the same time.");
-                exit_main();
+                do_cleanup();
                 return WS_EXIT_INVALID_OPTION;
             }
         }
@@ -5885,13 +6023,13 @@ main(int argc, char *argv[])
                  */
                 if (!machine_readable) {
                     cmdarg_err("There are no interfaces on which a capture can be done");
-                    exit_main();
+                    do_cleanup();
                     return WS_EXIT_NO_INTERFACES;
                 }
             } else {
                 cmdarg_err("%s", err_str);
                 g_free(err_str);
-                exit_main();
+                do_cleanup();
                 return WS_EXIT_INVALID_INTERFACE;
             }
         }
@@ -5962,7 +6100,7 @@ main(int argc, char *argv[])
         }
         free_interface_list(if_list);
         if (!print_statistics) {
-            exit_main();
+            do_cleanup();
             return status;
         }
     }
@@ -5973,7 +6111,7 @@ main(int argc, char *argv[])
      */
     if (print_statistics) {
         status = print_statistics_loop(machine_readable);
-        exit_main();
+        do_cleanup();
         return status;
     }
 
@@ -5982,13 +6120,13 @@ main(int argc, char *argv[])
 
         if (global_capture_opts.ifaces->len != 1) {
             cmdarg_err("Need one interface");
-            exit_main();
+            do_cleanup();
             return WS_EXIT_INVALID_INTERFACE;
         }
 
         interface_opts = &g_array_index(global_capture_opts.ifaces, interface_options, 0);
         status = set_80211_channel(interface_opts->name, set_chan_arg);
-        exit_main();
+        do_cleanup();
         return status;
     }
 
@@ -5999,7 +6137,7 @@ main(int argc, char *argv[])
     status = capture_opts_default_iface_if_necessary(&global_capture_opts, NULL);
     if (status != 0) {
         /* cmdarg_err() already called .... */
-        exit_main();
+        do_cleanup();
         return status;
     }
 
@@ -6079,7 +6217,7 @@ main(int argc, char *argv[])
                                     get_pcap_failure_secondary_error_message(open_status, open_status_str));
                     }
                     g_free(open_status_str);
-                    exit_main();
+                    do_cleanup();
                     return WS_EXIT_INVALID_INTERFACE;
                 }
 
@@ -6092,7 +6230,7 @@ main(int argc, char *argv[])
                     break;
             }
         }
-        exit_main();
+        do_cleanup();
         return status;
     }
 
@@ -6104,7 +6242,7 @@ main(int argc, char *argv[])
             interface_opts->timestamp_type_id = pcap_tstamp_type_name_to_val(interface_opts->timestamp_type);
             if (interface_opts->timestamp_type_id < 0) {
                 cmdarg_err("Invalid argument to option: --time-stamp-type=%s", interface_opts->timestamp_type);
-                exit_main();
+                do_cleanup();
                 return WS_EXIT_INVALID_OPTION;
 
             }
@@ -6176,7 +6314,7 @@ main(int argc, char *argv[])
 
     if (print_bpf_code) {
         show_filter_code(&global_capture_opts);
-        exit_main();
+        do_cleanup();
         return EXIT_SUCCESS;
     }
 
@@ -6189,12 +6327,12 @@ main(int argc, char *argv[])
     /* Now start the capture. */
     if (capture_loop_start(&global_capture_opts, &stats_known, &stats) == true) {
         /* capture ok */
-        exit_main();
+        do_cleanup();
         return EXIT_SUCCESS;
     }
 
     /* capture failed */
-    exit_main();
+    do_cleanup();
     return EXIT_FAILURE;
 }
 
