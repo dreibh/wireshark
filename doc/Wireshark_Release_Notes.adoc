@@ -27,6 +27,9 @@ The following changes have been made since version 4.7.3:
 
 * Holding down kbd:[↓] and kbd:[↑] will move rapidly through the packet list.
 
+* Coloring rules are now saved as a JSONC file.
+  The legacy file format is still supported, but support will be removed in a future release.
+
 The following changes have been made since version 4.7.2:
 
 * The minimum supported Windows version is Windows 10 21H2 (build 19044) or
@@ -90,6 +93,8 @@ The following changes have been made since version 4.6.0:
   The welcome page section headers ("Open", "Capture", "Learn") and the filter validity tints have been restored to the historical Classic look (Tango sky_blue brand, saturated GTK-era dark green / dark red filter backgrounds).
 
 * The Default profile now has additional column "Delta", showing the delta time from the previous displayed packet.
+
+* Wireshark ships a “Processes” configuration profile, which adds the new "PID" and "Proc Name" columns, showing the process on the capturing host that sent or received each packet when that was recorded.
 
 * Name Resolution
   SMI paths are now searched recursively. This makes it easier to use MIBs provided by libsmi.
@@ -198,6 +203,12 @@ The following features are either new or have been significantly updated since v
   1803 and later, including Windows Server 2019 and later, all support Unix domain
   sockets.)
 
+* The OPC UA dissector can decode ExtensionObjects of custom datatypes described
+  in an information model, a UANodeSet XML file set in the new
+  `opcua.information_model` preference, in client/server and PubSub messages.
+  The new `opcua.ns_offset` preference maps the namespace indexes of the file
+  to those in the packets.
+
 === Removed Features and Support
 
 Dumpcap's TCP@host:port interface has been removed. Tools like `socat`, `ncat`,
@@ -252,6 +263,7 @@ MySQL X Protocol (MySQLX)
 NATS
 NMEA 2000
 Object Transform Protocol (OTP)
+OPC UA PubSub UADP
 Perforce P4RPC
 PosiStageNet (PSN)
 PROFINET SXP (PN-SXP)

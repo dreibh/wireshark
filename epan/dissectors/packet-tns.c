@@ -81,6 +81,9 @@ void proto_register_tns(void);
 #define TNS_DATATYPE_UROWID         208
 #define TNS_DATATYPE_TIMESTAMP_LTZ  231
 
+/* DALC length byte marking a slot with no value (see get_dalc_custom). */
+#define TNS_DALC_ABSENT             0xFD
+
 /* Data Packet Functions */
 #define SQLNET_SET_PROTOCOL     1
 #define SQLNET_SET_DATATYPES    2
@@ -101,6 +104,7 @@ void proto_register_tns(void);
 #define SQLNET_PIGGYBACK_FUNC   17
 #define SQLNET_SIG_4UCS         18
 #define SQLNET_FLUSH_BIND_DATA  19
+#define SQLNET_END_OF_RESPONSE  29
 #define SQLNET_SNS              0xdeadbeef
 #define SQLNET_XTRN_PROCSERV_R1 32
 #define SQLNET_XTRN_PROCSERV_R2 68
@@ -114,6 +118,7 @@ void proto_register_tns(void);
 #define TTI_FETCH               5
 #define TTI_ALL8                94
 #define TTI_LOBOPS              96
+#define TTI_CLOSE_CURSORS       105
 
 /* desegmentation of TNS over TCP */
 static bool tns_desegment = true;
@@ -268,6 +273,11 @@ static int hf_tns_data_oer_n_batch_offsets;
 static int hf_tns_data_oer_n_batch_messages;
 static int hf_tns_data_oer_message;
 
+static int hf_tns_data_sta_call_status;
+static int hf_tns_data_sta_seq;
+static int hf_tns_data_call_status_txn;
+static int hf_tns_data_call_status_sess_release;
+
 static int hf_tns_data_iov_num_binds;
 static int hf_tns_data_iov_bind_dir;
 
@@ -328,6 +338,7 @@ static int ett_tns_setdt_caphdr;
 static int ett_tns_setdt_overrides;
 static int ett_tns_setdt_override;
 static int ett_tns_oer;
+static int ett_tns_call_status;
 static int ett_tns_iov;
 static int ett_tns_dcb_col;
 static int ett_tns_all8_options;
@@ -417,6 +428,7 @@ static const value_string tns_data_funcs[] = {
 	{SQLNET_PIGGYBACK_FUNC,   "Piggy back function follow"},
 	{SQLNET_SIG_4UCS,         "Signals special action for untrusted callout support"},
 	{SQLNET_FLUSH_BIND_DATA,  "Flush Out Bind data in DML/w RETURN when error"},
+	{SQLNET_END_OF_RESPONSE,  "End of Response"},
 	{SQLNET_XTRN_PROCSERV_R1, "External Procedures and Services Registrations"},
 	{SQLNET_XTRN_PROCSERV_R2, "External Procedures and Services Registrations"},
 	{SQLNET_SNS,              "Secure Network Services"},
@@ -704,11 +716,18 @@ static const value_string tns_control_cmds[] = {
 	{0, NULL}
 };
 
-/* Column types from the most recent describe (TTI_DCB), threaded to a later
+/* What a row decoder needs to know about one column: its datatype and
+ * the data length (buffer size) the describe gave it. */
+typedef struct _tns_column_t {
+	uint8_t type;
+	uint32_t data_len;
+} tns_column_t;
+
+/* Columns from the most recent describe (TTI_DCB), threaded to a later
  * TTI_RXD response so its row values can be split per column. */
 typedef struct _tns_describe_t {
 	uint32_t num_cols;
-	uint8_t *types;
+	tns_column_t *cols;
 } tns_describe_t;
 
 typedef struct _tns_conv_info_t {
@@ -841,13 +860,18 @@ static int get_sb4_custom(tvbuff_t *tvb, int offset, int *result)
  * length only in the middle of its range:
  *
  *   0x00        empty
- *   0x01..0xFD  that many data bytes follow
+ *   0x01..0xFC  that many data bytes follow (252 is the longest)
+ *   0xFD        absent value: the two-byte placeholder FD 01, no data
  *   0xFE        chunked: (len, bytes) pairs until a 0-length chunk
  *   0xFF        null - a marker only, no data follows
  *
- * The null marker consumes just itself. Reading it as a length would
- * claim 255 bytes that are not there and misalign every field after
- * it, so it has to be spelled out rather than left to the default.
+ * The top three bytes are markers, not lengths. The null marker consumes
+ * just itself. The absent-value placeholder fills a bind slot that has no
+ * inline value - a pure OUT bind, or a NULL of a type with no inline form
+ * such as BOOLEAN - and consumes itself plus the 0x01 after it. Reading
+ * either as a length would claim bytes that are not there and misalign
+ * every field after it, so they have to be spelled out rather than left
+ * to the default.
  *
  * The chunk lengths in the 0xFE form are single bytes here, which is
  * the 11g shape this dissector decodes throughout; 12.2 and later
@@ -865,6 +889,12 @@ static int get_dalc_custom(tvbuff_t *tvb, packet_info *pinfo, int offset, const 
 		if ( out_str )
 			*out_str = NULL;
 		return 1;
+	}
+	if ( first == TNS_DALC_ABSENT )
+	{
+		if ( out_str )
+			*out_str = NULL;
+		return 2;
 	}
 	if ( first != 254 )
 	{
@@ -1050,14 +1080,31 @@ static void vsnum_to_vstext_basecustom(char *result, uint32_t vsnum)
 		 vsnum & 0xff);
 }
 
+/* End-of-call status flags, carried by both TTI_OER and TTI_STA. */
+#define TNS_CALL_STATUS_TXN_IN_PROGRESS  0x00000002
+#define TNS_CALL_STATUS_SESS_RELEASE     0x00008000
+
+/* Break out the flag bits of a call status item. A client reads the
+ * transaction bit to decide whether closing or releasing the connection
+ * owes a rollback. */
+static void tns_add_call_status_flags(proto_item *ti, tvbuff_t *tvb, int start, int len, uint32_t status)
+{
+	proto_tree *st = proto_item_add_subtree(ti, ett_tns_call_status);
+	proto_tree_add_boolean(st, hf_tns_data_call_status_txn, tvb, start, len, status);
+	proto_tree_add_boolean(st, hf_tns_data_call_status_sess_release, tvb, start, len, status);
+}
+
 /* Decode an OAC (Oracle Access Column) descriptor — the type/format core
  * shared by describe columns and bind descriptors. Fields
  * use the Oracle variable-length form (get_sb4_custom).
+ * When col is not NULL it receives the type and data length.
  * Returns the new offset. */
-static int dissect_tns_oac(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset)
+static int dissect_tns_oac(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, tns_column_t *col)
 {
 	int v = 0, start;
 
+	if ( col )
+		col->type = tvb_get_uint8(tvb, offset);
 	/* type (ub1) */
 	proto_tree_add_item(tree, hf_tns_data_col_type, tvb, offset, 1, ENC_BIG_ENDIAN);
 	offset += 1;
@@ -1074,6 +1121,8 @@ static int dissect_tns_oac(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 	start = offset;
 	offset += get_sb4_custom(tvb, offset, &v);
 	proto_tree_add_uint(tree, hf_tns_data_col_max_length, tvb, start, offset - start, v);
+	if ( col )
+		col->data_len = (uint32_t)v;
 	/* max array elements (ub4, skip) */
 	offset += get_sb4_custom(tvb, offset, &v);
 	/* cont flags (ub4, skip) */
@@ -1099,8 +1148,9 @@ static int dissect_tns_oac(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, 
 
 /* Decode one per-column metadata block of a TTI_DCB describe (11g
  * shape): an OAC descriptor plus the nullability and naming fields.
+ * When col is not NULL it receives what a row decoder needs.
  * Returns the new offset. */
-static int dissect_tns_dcb_column(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int idx)
+static int dissect_tns_dcb_column(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, int idx, tns_column_t *col)
 {
 	proto_tree *col_tree;
 	proto_item *col_item;
@@ -1111,7 +1161,7 @@ static int dissect_tns_dcb_column(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 	col_tree = proto_tree_add_subtree_format(tree, tvb, offset, -1,
 		ett_tns_dcb_col, &col_item, "Column %d", idx);
 
-	offset = dissect_tns_oac(tvb, pinfo, col_tree, offset);
+	offset = dissect_tns_oac(tvb, pinfo, col_tree, offset, col);
 
 	/* nulls allowed (ub1) */
 	proto_tree_add_item(col_tree, hf_tns_data_col_nulls_ok, tvb, offset, 1, ENC_BIG_ENDIAN);
@@ -1147,7 +1197,7 @@ static int dissect_tns_dcb_column(tvbuff_t *tvb, packet_info *pinfo, proto_tree 
 static int dissect_tns_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, uint8_t dtype, int idx, int *bail, int hf, const char *prefix)
 {
 	int v_start = offset, disp_start = offset, v = 0;
-	int is_null = 0;
+	int is_null = 0, is_absent = 0;
 	uint8_t first;
 	const char *rendered = NULL;
 
@@ -1224,6 +1274,8 @@ static int dissect_tns_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 			offset += get_dalc_custom(tvb, pinfo, offset, NULL);
 			if ( first == 0 )
 				is_null = 1;
+			else if ( first == TNS_DALC_ABSENT )
+				is_absent = 1;
 			else
 			{
 				disp_start = v_start + 1; /* show the value bytes, not the length */
@@ -1252,6 +1304,10 @@ static int dissect_tns_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 	if ( is_null )
 		proto_tree_add_bytes_format(tree, hf, tvb,
 			v_start, offset - v_start, NULL, "%s %d (%s): NULL", prefix, idx,
+			val_to_str_const(dtype, tns_data_types, "unknown"));
+	else if ( is_absent )
+		proto_tree_add_bytes_format(tree, hf, tvb,
+			v_start, offset - v_start, NULL, "%s %d (%s): no value", prefix, idx,
 			val_to_str_const(dtype, tns_data_types, "unknown"));
 	else if ( rendered )
 		proto_tree_add_bytes_format(tree, hf, tvb,
@@ -1309,6 +1365,33 @@ static void dissect_tns_data_descriptor(tvbuff_t *tvb, int offset, packet_info *
 
 	call_data_dissector(tvb_new_subset_length(tvb, offset, data_len), pinfo,
 	    dd_tree);
+}
+
+static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *data_tree, bool is_request, unsigned data_func_id, bool *walk);
+
+/* Whether a message that follows another in the same packet is one we
+ * step into. A response is a run of messages back to back - a describe,
+ * a row header, the rows, a status - and a request may put piggybacks in
+ * front of its call. */
+static bool tns_is_next_message(unsigned data_func_id, bool is_request)
+{
+	if ( is_request )
+		return data_func_id == SQLNET_USER_OCI_FUNC || data_func_id == SQLNET_PIGGYBACK_FUNC;
+
+	switch ( data_func_id )
+	{
+		case SQLNET_RETURN_STATUS:
+		case SQLNET_FUNCCOMPLETE:
+		case SQLNET_END_OF_RESPONSE:
+		case SQLNET_ROW_TRANSF_HDR:
+		case SQLNET_ROW_TRANSF_DATA:
+		case SQLNET_RETURN_OPI_PARAM:
+		case SQLNET_IOVEC_4FAST_UPI:
+		case SQLNET_DESCRIBE_INFO:
+			return true;
+		default:
+			return false;
+	}
 }
 
 static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *tns_tree)
@@ -1370,6 +1453,32 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 		}
 	}
 
+	/* Decode the first message, then step into each one after it for as
+	 * long as the previous decoder ended exactly on its last byte. */
+	bool walk = false;
+	offset = dissect_tns_message(tvb, offset, pinfo, data_tree, is_request, data_func_id, &walk);
+	while ( walk && tvb_reported_length_remaining(tvb, offset) > 0 )
+	{
+		data_func_id = tvb_get_uint8(tvb, offset);
+		if ( !tns_is_next_message(data_func_id, is_request) )
+			break;
+		col_append_fstr(pinfo->cinfo, COL_INFO, ", %s", val_to_str_const(data_func_id, tns_data_funcs, "unknown"));
+		proto_tree_add_item(data_tree, hf_tns_data_id, tvb, offset, 1, ENC_BIG_ENDIAN);
+		offset += 1;
+		walk = false;
+		offset = dissect_tns_message(tvb, offset, pinfo, data_tree, is_request, data_func_id, &walk);
+	}
+
+	if ( tvb_reported_length_remaining(tvb, offset) > 0 )
+		call_data_dissector(tvb_new_subset_remaining(tvb, offset), pinfo, data_tree);
+}
+
+/* Decode the body of one TTC message, whose id byte has already been
+ * consumed. Sets *walk when the decoder ended exactly on the message's
+ * last byte, so the caller can step into whatever follows it.
+ * Returns the new offset. */
+static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, proto_tree *data_tree, bool is_request, unsigned data_func_id, bool *walk)
+{
 	/* Handle data functions that have more than just ID */
 	switch (data_func_id)
 	{
@@ -1406,7 +1515,7 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 				proto_item_set_end(ti, tvb, offset);
 				proto_tree_add_item(data_tree, hf_tns_data_setp_cli_plat, tvb, offset, -1, ENC_ASCII);
 
-				return; /* skip call_data_dissector */
+				return tvb_reported_length(tvb); /* skip call_data_dissector */
 			}
 			else
 			{
@@ -1535,7 +1644,9 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 
 			/* call_status */
 			offset += get_sb4_custom(tvb, offset, &v);
-			proto_tree_add_int(oer_tree, hf_tns_data_oer_call_status, tvb, oer_start, offset - oer_start, v);
+			tns_add_call_status_flags(
+				proto_tree_add_int(oer_tree, hf_tns_data_oer_call_status, tvb, oer_start, offset - oer_start, v),
+				tvb, oer_start, offset - oer_start, (uint32_t)v);
 			/* end-to-end seq# (skipped) */
 			offset += get_sb4_custom(tvb, offset, &v);
 			/* rowcount (DML affected rows on 11g) */
@@ -1620,6 +1731,34 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 			proto_item_set_len(oer_item, offset - oer_start);
 			break;
 		}
+
+		case SQLNET_FUNCCOMPLETE:
+		{
+			/* TTI_STA: a bare status, with no error block. It answers a
+			 * commit, a rollback or a logoff: a ub4 call status and the
+			 * ub2 end-to-end sequence number. */
+			int v = 0, start;
+
+			if ( is_request )
+				break;
+
+			start = offset;
+			offset += get_sb4_custom(tvb, offset, &v);
+			tns_add_call_status_flags(
+				proto_tree_add_uint(data_tree, hf_tns_data_sta_call_status, tvb, start, offset - start, v),
+				tvb, start, offset - start, (uint32_t)v);
+			start = offset;
+			offset += get_sb4_custom(tvb, offset, &v);
+			proto_tree_add_uint(data_tree, hf_tns_data_sta_seq, tvb, start, offset - start, v);
+			*walk = true;
+			break;
+		}
+
+		case SQLNET_END_OF_RESPONSE:
+			/* Marks the end of a response for a client that negotiated
+			 * it; there is no body. */
+			*walk = true;
+			break;
 
 		case SQLNET_IOVEC_4FAST_UPI:
 		{
@@ -1708,24 +1847,22 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 			}
 			if ( num_cols > 0 )
 				offset += 1; /* reserved byte */
+			*walk = true;
 
-			/* Remember each column's type so a later TTI_RXD response can
-			 * split its row values. Recorded once, on the first pass. */
-			uint8_t *col_types = NULL;
+			/* Remember each column so a later TTI_RXD response can split
+			 * its row values. Recorded once, on the first pass. */
+			tns_column_t *cols = NULL;
 			if ( !PINFO_FD_VISITED(pinfo) && num_cols > 0 )
-				col_types = (uint8_t *)wmem_alloc_array(wmem_file_scope(), uint8_t, num_cols);
+				cols = wmem_alloc0_array(wmem_file_scope(), tns_column_t, num_cols);
 			for ( int i = 0; i < num_cols && tvb_reported_length_remaining(tvb, offset) > 0; i++ )
-			{
-				if ( col_types )
-					col_types[i] = tvb_get_uint8(tvb, offset);
-				offset = dissect_tns_dcb_column(tvb, pinfo, data_tree, offset, i + 1);
-			}
-			if ( col_types )
+				offset = dissect_tns_dcb_column(tvb, pinfo, data_tree, offset, i + 1,
+					cols ? &cols[i] : NULL);
+			if ( cols )
 			{
 				tns_conv_info_t *tns_info = tns_get_conv_info(pinfo);
 				tns_describe_t *desc = wmem_new0(wmem_file_scope(), tns_describe_t);
 				desc->num_cols = num_cols;
-				desc->types = col_types;
+				desc->cols = cols;
 				tns_info->last_describe = desc;
 			}
 
@@ -1774,6 +1911,7 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 			}
 			/* rxhrid (bytes_with_length, skip) */
 			offset += get_field_with_length(tvb, pinfo, offset, NULL);
+			*walk = true;
 			break;
 		}
 
@@ -1830,10 +1968,28 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 						ett_tns_rxd_row, &row_item, "Row %d", ++rownum);
 					for ( uint32_t c = 0; c < desc->num_cols
 						&& tvb_reported_length_remaining(tvb, offset) > 0 && !bail; c++ )
+					{
+						const tns_column_t *col = &desc->cols[c];
+						/* A column the describe gives no data length is
+						 * NULL by definition (SELECT NULL, SELECT '')
+						 * and sends no bytes at all - not even an empty
+						 * DALC. LONG, LONG RAW and UROWID are the
+						 * exceptions: they always carry their value. */
+						if ( col->data_len == 0 && col->type != TNS_DATATYPE_LONG
+							&& col->type != TNS_DATATYPE_LONG_RAW
+							&& col->type != TNS_DATATYPE_UROWID )
+						{
+							proto_tree_add_bytes_format(row_tree, hf_tns_data_col_value,
+								tvb, offset, 0, NULL, "Column %u (%s): NULL (no data length)",
+								c + 1, val_to_str_const(col->type, tns_data_types, "unknown"));
+							continue;
+						}
 						offset = dissect_tns_value(tvb, pinfo, row_tree, offset,
-							desc->types[c], c + 1, &bail, hf_tns_data_col_value, "Column");
+							col->type, c + 1, &bail, hf_tns_data_col_value, "Column");
+					}
 					proto_item_set_len(row_item, offset - r_start);
 				}
+				*walk = !bail;
 			}
 			break;
 		}
@@ -1977,7 +2133,7 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 						bind_tree = proto_tree_add_subtree_format(binds_tree, tvb, offset, -1,
 							ett_tns_bind, &bind_item, "Bind %d: %s", i + 1,
 							val_to_str_const(btype, tns_data_types, "unknown"));
-						offset = dissect_tns_oac(tvb, pinfo, bind_tree, offset);
+						offset = dissect_tns_oac(tvb, pinfo, bind_tree, offset, NULL);
 						/* A CLOB/BLOB bind OAC carries a trailing oaccolid byte. */
 						if ( btype == TNS_DATATYPE_CLOB || btype == TNS_DATATYPE_BLOB )
 							offset += 1;
@@ -2260,10 +2416,17 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 		{
 			int cursors_len = 0;
 			int cursors_start;
+			uint8_t piggyback_id = tvb_get_uint8(tvb, offset);
 			proto_tree_add_item(data_tree, hf_tns_data_piggyback_id, tvb, offset, 1, ENC_BIG_ENDIAN);
 			offset += 1;
 			proto_tree_add_item(data_tree, hf_tns_data_tseq, tvb, offset, 1, ENC_BIG_ENDIAN);
 			offset += 1;
+			/* Only the close-cursors piggyback carries a cursor list:
+			 * a pointer byte, a ub4 count, then that many ub4 cursor
+			 * ids. The other piggybacks have bodies of their own. */
+			if ( piggyback_id != TTI_CLOSE_CURSORS )
+				break;
+			offset += 1; /* pointer */
 			cursors_start = offset;
 			offset += get_sb4_custom(tvb, offset, &cursors_len);
 			/* The count comes off the wire and every cursor takes at
@@ -2279,10 +2442,12 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 			}
 			for(int i = 0; i < cursors_len; i++) {
 				int cursor = 0;
-				int new_offset = get_sb4_custom(tvb, offset, &cursor);
-				proto_tree_add_uint(data_tree, hf_tns_cursor, tvb, offset, new_offset - offset, cursor);
-				offset = new_offset;
+				int len = get_sb4_custom(tvb, offset, &cursor);
+				proto_tree_add_uint(data_tree, hf_tns_cursor, tvb, offset, len, cursor);
+				offset += len;
 			}
+			/* The call this piggyback rides in front of follows it. */
+			*walk = true;
 			break;
 		}
 		case SQLNET_SNS:
@@ -2310,7 +2475,7 @@ static void dissect_tns_data(tvbuff_t *tvb, int offset, packet_info *pinfo, prot
 		}
 	}
 
-	call_data_dissector(tvb_new_subset_remaining(tvb, offset), pinfo, data_tree);
+	return offset;
 }
 
 static void dissect_tns_connect(tvbuff_t *tvb, int offset, packet_info *pinfo _U_, proto_tree *tns_tree)
@@ -3148,6 +3313,18 @@ void proto_register_tns(void)
 			"Format", "tns.data_setdt.override.format", FT_UINT8, BASE_DEC,
 			NULL, 0x0, NULL, HFILL }},
 
+		{ &hf_tns_data_sta_call_status, {
+			"Call Status", "tns.data_sta.call_status", FT_UINT32, BASE_HEX,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_sta_seq, {
+			"End-to-End Sequence", "tns.data_sta.seq", FT_UINT16, BASE_DEC,
+			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_call_status_txn, {
+			"Transaction in progress", "tns.data.call_status.txn_in_progress", FT_BOOLEAN, 32,
+			NULL, TNS_CALL_STATUS_TXN_IN_PROGRESS, NULL, HFILL }},
+		{ &hf_tns_data_call_status_sess_release, {
+			"Session release", "tns.data.call_status.sess_release", FT_BOOLEAN, 32,
+			NULL, TNS_CALL_STATUS_SESS_RELEASE, NULL, HFILL }},
 		{ &hf_tns_data_oer_call_status, {
 			"Call Status", "tns.data_oer.call_status", FT_INT32, BASE_DEC,
 			NULL, 0x0, NULL, HFILL }},
@@ -3332,6 +3509,7 @@ void proto_register_tns(void)
 		&ett_tns_setdt_overrides,
 		&ett_tns_setdt_override,
 		&ett_tns_oer,
+		&ett_tns_call_status,
 		&ett_tns_iov,
 		&ett_tns_dcb_col,
 		&ett_tns_all8_options,

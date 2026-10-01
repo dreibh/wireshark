@@ -3074,7 +3074,7 @@ extcap_list_interfaces_cb(thread_pool_t *pool, void *data, char *output)
 
 // This is currently only used for extcaps, but we might want to expand
 // it to general interface information in the future.
-#define INTERFACES_JSON_FILE "interfaces.json"
+#define INTERFACES_JSONC_FILE "interfaces.jsonc"
 
 /**
  * Add a bookmark for an extcap interface.
@@ -3213,17 +3213,23 @@ extcap_parse_info(char *contents)
 {
     GList *info_list = NULL;
 
+    /* interfaces.jsonc starts with our standard disclaimer. */
+    if (!json_strip_jsonc_comments(contents)) {
+        ws_warning("Failed to parse %s", INTERFACES_JSONC_FILE);
+        return NULL;
+    }
+
     /* First pass: determine number of tokens needed. */
     int ret = json_parse(contents, NULL, 0);
     if (ret <= 0) {
-        ws_warning("Failed to parse %s", INTERFACES_JSON_FILE);
+        ws_warning("Failed to parse %s", INTERFACES_JSONC_FILE);
         return NULL;
     }
 
     jsmntok_t *tokens = g_new0(jsmntok_t, ret);
     ret = json_parse(contents, tokens, ret);
     if (ret <= 0 || tokens[0].type != JSMN_ARRAY) {
-        ws_warning("%s: expected a JSON array at top level", INTERFACES_JSON_FILE);
+        ws_warning("%s: expected a JSON array at top level", INTERFACES_JSONC_FILE);
         g_free(tokens);
         return NULL;
     }
@@ -3325,7 +3331,7 @@ extcap_parse_info(char *contents)
 static GList *
 extcap_read_info(void)
 {
-    char *interfaces_path = get_persconffile_path(INTERFACES_JSON_FILE, false,
+    char *interfaces_path = get_persconffile_path(INTERFACES_JSONC_FILE, false,
                                                   application_configuration_environment_prefix());
     char *contents = NULL;
 
@@ -3365,7 +3371,7 @@ extcap_toolname_has_info(GList *info_list, const char *toolname)
 static bool
 extcap_write_info(GList *info_list)
 {
-    char *interfaces_path = get_persconffile_path(INTERFACES_JSON_FILE, false,
+    char *interfaces_path = get_persconffile_path(INTERFACES_JSONC_FILE, false,
                                                   application_configuration_environment_prefix());
     FILE *fp = ws_fopen(interfaces_path, "w");
     if (fp == NULL) {
@@ -3375,6 +3381,9 @@ extcap_write_info(GList *info_list)
         return false;
     }
     g_free(interfaces_path);
+
+    fprintf(fp, "// This file was created by %s. Edit with care.\n",
+            application_flavor_name_proper());
 
     json_dumper dumper = {
         .output_file = fp,
@@ -3452,6 +3461,18 @@ extcap_get_bookmark_name(const char *ifname)
 }
 
 char *
+extcap_get_parent_ifname(const char *ifname)
+{
+    if (!ifname) {
+        return NULL;
+    }
+
+    extcap_ensure_all_interfaces_loaded();
+
+    return get_plain_ifname(ifname);
+}
+
+char *
 extcap_set_bookmark(const char *ifname, const char *bookmark_name)
 {
     if (!ifname || !bookmark_name || strlen(bookmark_name) == 0) {
@@ -3512,11 +3533,56 @@ done:
     return bookmark_call;
 }
 
+bool
+extcap_remove_bookmark(const char *ifname)
+{
+    if (!ifname) {
+        return false;
+    }
+
+    extcap_ensure_all_interfaces_loaded();
+
+    char *bookmark_name = extcap_get_bookmark_name(ifname);
+    if (!bookmark_name) {
+        ws_debug("Bookmark name not found for %s", ifname);
+        return false;
+    }
+
+    char *plain_ifname = get_plain_ifname(ifname);
+    const char *toolname = (const char *)g_hash_table_lookup(_tool_for_ifname, plain_ifname);
+    if (!toolname) {
+        ws_warning("Can't remove bookmark for unknown extcap interface \"%s\"", plain_ifname);
+        g_free(plain_ifname);
+        g_free(bookmark_name);
+        return false;
+    }
+
+    /* This only removes the bookmark from our saved information; the
+     * interface stays registered (and thus visible) until we next load our
+     * interfaces, same as the rename case in extcap_set_bookmark(). */
+    GList *info_list = extcap_read_info();
+    extcap_saved_info_t *info = extcap_find_or_create_info(&info_list, toolname, plain_ifname);
+
+    int idx = extcap_find_saved_bookmark(info->bookmarks, bookmark_name);
+    if (idx >= 0) {
+        g_ptr_array_remove_index(info->bookmarks, (unsigned)idx);
+    }
+
+    extcap_write_info(info_list);
+    g_list_free_full(info_list, extcap_free_saved_info);
+
+    ws_debug("Removed bookmark \"%s\" from extcap interface \"%s\"", bookmark_name, plain_ifname);
+
+    g_free(plain_ifname);
+    g_free(bookmark_name);
+
+    return true;
+}
+
 /**
  * Load extcap information from the top level of the personal configuration
- * directory (must match extcap.cfg).
+ * directory (interfaces.jsonc, must match extcap.cfg).
  *
- * The info file (interfaces.json) contains a JSON array of objects.
  * Each object has a single key, which is the name of an extcap as it appears
  * on disk, including its extension if it has one. Its value is an object with
  * a key named "extcap-interfaces", whose value is an array of interface
@@ -3535,9 +3601,10 @@ done:
  *     ]}}
  *   ]
  *
- * interfaces.json isn't strictly limited to extcaps, and we might want to
+ * interfaces.jsonc isn't strictly limited to extcaps, and we might want to
  * use it to store information about other interface types in the future. We
  * might want to move this somewhere else (capture_ifinfo.c?) at that point.
+ * It may contain JSONC comments, which will be ignored.
  */
 
 static bool
@@ -3731,7 +3798,7 @@ extcap_migrate_profile_config(void)
             new_prefs = true;
         }
 
-        // Add the bookmark to interfaces.json so that we don't generate warnings
+        // Add the bookmark to interfaces.jsonc so that we don't generate warnings
         // in tshark.
         GList *info_list = extcap_read_info();
         extcap_saved_info_t *info = extcap_find_or_create_info(&info_list, toolname, iface->call);

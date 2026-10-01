@@ -146,6 +146,12 @@ public:
     QString getFilterFromRowAndColumn(QModelIndex idx);
 
     /**
+     * @brief Same as getFilterFromRowAndColumn(), but for a frame that may
+     * not have a row in this (filtered) view, e.g. a pinned row.
+     */
+    QString getFilterFromFdataAndColumn(frame_data *fdata, int column);
+
+    /**
      * @brief Resets the colorized state of the packets.
      */
     void resetColorized();
@@ -361,20 +367,22 @@ public:
     void resizeAllColumns(bool onlyTimeFormatted = false);
 
     /**
-     * @brief Pins a packet's row so that it stays visible (stacked with
-     * any other pinned rows, ordered to match the active sort) while the
-     * view is scrolled vertically. Up to PinnedRowsModel::kMaxPinnedRows
-     * packets may be pinned at once; additional pins beyond that are
-     * ignored.
-     * @param frame_num The frame number of the packet to pin.
+     * @brief Pins every currently selected row (or, if nothing is
+     * selected, the current row) so each stays visible (stacked with any
+     * other pinned rows, ordered to match the active sort) while the view
+     * is scrolled vertically. Mirrors markFrame()'s "act on the current
+     * selection, falling back to currentIndex()" pattern. Up to
+     * PinnedRowsModel::kMaxPinnedRows packets may be pinned at once;
+     * pins beyond that are silently skipped.
      */
-    void pinRow(int frame_num);
+    void pinSelectedRows();
 
     /**
-     * @brief Unpins a single packet's row, if pinned.
-     * @param frame_num The frame number of the packet to unpin.
+     * @brief Unpins every currently selected row (or, if nothing is
+     * selected, the current row) that is currently pinned. Rows in the
+     * selection that aren't pinned are left alone.
      */
-    void unpinRow(int frame_num);
+    void unpinSelectedRows();
 
     // Unpins every currently pinned packet's row.
     void unpinAllRows();
@@ -447,8 +455,43 @@ public:
      * @param column The column that was clicked, for consistency with a
      * direct click (used e.g. for context/copy actions).
      * @param buttons The mouse buttons held during the press.
+     * @param modifiers Keyboard modifiers held during the press, honored
+     * the same way a native ExtendedSelection click would: no modifier
+     * clears and selects just this row, Ctrl toggles this row within the
+     * existing selection, Shift extends the existing selection from
+     * currentIndex() through this row.
      */
-    void selectRowFromOverlay(int row, int column, Qt::MouseButtons buttons);
+    void selectRowFromOverlay(int row, int column, Qt::MouseButtons buttons,
+                               Qt::KeyboardModifiers modifiers = Qt::NoModifier);
+
+    /**
+     * @brief Starts a cell drag (filter, or selected-rows text) for the
+     * given row/column, exactly as dragging that cell in this view would.
+     * Called by the pinned overlay views, which never see this view's own
+     * mouse events.
+     */
+    void startCellDragFromOverlay(int row, int column);
+
+    // Same, for a pinned frame that is filtered out of this view (no row).
+    void startCellDragForFrameFromOverlay(int frame_num, int column);
+
+    /**
+     * @brief Selects exactly the given set of frames -- no more, no less
+     * -- clearing any prior selection first. Used for Shift-click
+     * range-select within the pinned-rows strip, where the "range" is
+     * scoped to the strip's own row order rather than the primary view's:
+     * the caller (PinnedRowView::mousePressEvent()) resolves a range of
+     * *strip* positions to this list of frame numbers first, since a
+     * single QItemSelection range can't express "these particular sparse
+     * primary-view rows" directly -- only a contiguous rectangle in one
+     * model's row space.
+     * @param frame_nums The frame numbers to select, in any order. Each is
+     * resolved to its own primary-view row independently; a frame number
+     * currently filtered out of the primary view (no row to resolve to)
+     * is silently skipped, the same documented limitation
+     * selectFrameFromOverlay() carries for a single filtered-out row.
+     */
+    void selectFramesFromOverlay(const QList<int> &frame_nums);
 
     /**
      * @brief Same as selectRowFromOverlay(), but given a frame/packet
@@ -464,8 +507,14 @@ public:
      * bypasses the model entirely and drives that directly, then emits
      * framesSelected() the same way selectionChanged() normally would.
      * @param frame_num The frame/packet number to select.
+     * @param modifiers Present for signature symmetry with
+     * selectRowFromOverlay(), but not currently acted on: this frame has
+     * no QModelIndex here at all (it's filtered out of the primary view),
+     * so there's nothing for Ctrl/Shift to toggle or extend a real
+     * QItemSelectionModel selection against. Always clears and selects
+     * just this frame, regardless of modifiers held.
      */
-    void selectFrameFromOverlay(int frame_num);
+    void selectFrameFromOverlay(int frame_num, Qt::KeyboardModifiers modifiers = Qt::NoModifier);
 
     /**
      * @brief Shows this view's context menu for a row already resolved by
@@ -588,6 +637,14 @@ public:
      */
     int currentFrameNum() const;
 
+    /**
+     * @brief The currently selected frame if it is pinned but filtered out
+     * of this view (so it has no row here and selectedRows() is empty),
+     * otherwise nullptr. Edit actions (mark, ignore, time reference,
+     * comments) use this to act on such a frame.
+     */
+    frame_data *filteredOutSelectedFrame() const;
+
 protected:
     /**
      * @brief Handles window-activation changes.
@@ -699,6 +756,8 @@ protected slots:
         const QModelIndex &index) const override;
 
 private:
+    void refreshFilteredOutFrame(frame_data *fdata);
+
     /** @brief Pointer to the internal packet list model. */
     PacketListModel *packet_list_model_;
 
@@ -716,6 +775,13 @@ private:
 
     /** @brief The context menu for colorization rules. */
     QMenu colorize_menu_;
+
+    /**
+     * @brief Starts a drag of the given cell: a display filter if one can be
+     * built for fdata/column, the selected rows' text if several are
+     * selected, or cell_text as a last resort.
+     */
+    void startCellDrag(frame_data *fdata, int column, const QString &cell_text);
 
     /** @brief Current context column index. */
     int ctx_column_;
@@ -816,6 +882,8 @@ private:
      * range) can skip the relayout that setGeometry() alone doesn't need --
      * see layoutPinnedOverlays()'s own comment. */
     QSize pinned_column_view_size_;
+    bool header_drag_active_ = false;
+    void updateFrozenOverlayMask();
 
     // Overlay view showing the pinned row's non-frozen columns.
     PinnedRowView *pinned_row_view_;
@@ -853,6 +921,16 @@ private:
     ProfileSwitcher *profile_switcher_;
 
     /**
+     * @brief Update the history of selected (current) frames.
+     * @param frame_num The frame number to add
+     *
+     * This does not append the frame number to the history while in the
+     * middle of traversing the history itself, or if the frame number is
+     * already the last frame number in the history.
+     */
+    void updateHistory(int frame_num);
+
+    /**
      * @brief Sets or unsets a frame as a time reference.
      * @param set True to set as time reference, false to unset.
      * @param fdata Pointer to the frame data.
@@ -867,8 +945,9 @@ private:
 
     /**
      * @brief Forces drawing of the current packet.
+     * @param scroll If true, scroll to the current packet.
      */
-    void drawCurrentPacket();
+    void drawCurrentPacket(bool scroll = true);
 
     /**
      * @brief Applies recent widths across all columns.

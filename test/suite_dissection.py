@@ -949,7 +949,9 @@ class TestDissectRtpproxy:
 
 class TestDissectTcp:
     @staticmethod
-    def check_tcp_out_of_order(cmd_tshark, dirs, test_env, extraArgs=[]):
+    def check_tcp_out_of_order(cmd_tshark, dirs, test_env, extraArgs=None):
+        if extraArgs is None:
+            extraArgs = []
         capture_file = os.path.join(dirs.capture_dir, 'http-ooo.pcap')
         stdout = subprocess.check_output([cmd_tshark,
                 '-r', capture_file,
@@ -1108,7 +1110,9 @@ class TestDissectGit:
 class TestDissectTls:
     @staticmethod
     def check_tls_handshake_reassembly(cmd_tshark, capture_file, test_env,
-                                       extraArgs=[]):
+                                       extraArgs=None):
+        if extraArgs is None:
+            extraArgs = []
         # Include -zexpert just to be sure that no exception has occurred. It
         # is not strictly necessary as the extension to be matched is the last
         # one in the handshake message.
@@ -1120,12 +1124,14 @@ class TestDissectTls:
                                encoding='utf-8', env=test_env)
         stdout = stdout.replace(',', '\n')
         # Expected output are lines with 0001, 0002, ..., 03e8
-        expected = ''.join('%04x\n' % i for i in range(1, 1001))
+        expected = ''.join(f'{i:04x}\n' for i in range(1, 1001))
         assert stdout == expected
 
     @staticmethod
     def check_tls_reassembly_over_tcp_reassembly(cmd_tshark, capture_file, test_env,
-                                                 extraArgs=[]):
+                                                 extraArgs=None):
+        if extraArgs is None:
+            extraArgs = []
         stdout = subprocess.check_output([cmd_tshark,
                                '-r', capture_file('tls-fragmented-over-tcp-segmented.pcapng.gz'),
                                '-zexpert,note',
@@ -1161,7 +1167,9 @@ class TestDissectTls:
             test_env, extraArgs=['-2'])
 
     @staticmethod
-    def check_tls_out_of_order(cmd_tshark, capture_file, test_env, extraArgs=[]):
+    def check_tls_out_of_order(cmd_tshark, capture_file, test_env, extraArgs=None):
+        if extraArgs is None:
+            extraArgs = []
         stdout = subprocess.check_output([cmd_tshark,
                 '-r', capture_file('challenge01_ooo_stream.pcapng.gz'),
                 '-otcp.reassemble_out_of_order:TRUE',
@@ -1213,7 +1221,7 @@ class TestDissectRoq:
 class TestDissectQuic:
     @staticmethod
     def check_quic_tls_handshake_reassembly(cmd_tshark, capture_file, test_env,
-                                       extraArgs=[]):
+                                       extraArgs=None):
         # An assortment of QUIC carrying TLS handshakes that need to be
         # reassembled, including fragmented in one packet, fragmented in
         # multiple packets, fragmented in multiple out of order packets,
@@ -1222,6 +1230,9 @@ class TestDissectQuic:
         # Include -zexpert just to be sure that nothing Warn or higher occurred.
         # Note level expert infos may be expected with the overlaps and
         # retransmissions.
+        if extraArgs is None:
+            extraArgs = []
+
         stdout = subprocess.check_output([cmd_tshark,
                                '-r', capture_file('quic-fragmented-handshakes.pcapng.gz'),
                                '-zexpert,warn',
@@ -1648,6 +1659,112 @@ class TestDissectTns:
         assert '(NUMBER): 20' in stdout, stdout
         # The VARCHAR value "hi" is rendered as text, not raw bytes.
         assert '(VARCHAR): hi' in stdout, stdout
+
+    def test_tns_dalc_absent(self, cmd_tshark, capture_file, test_env):
+        '''A bind value of FD 01 is the DALC absent-value placeholder, not a
+        length of 253. The binds after it keep their values: NUMBER 10 and
+        VARCHAR "ok".'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_dalc_absent.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_bind.value',
+            '-e', '_ws.expert',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert len(rows) == 1, rows
+        assert rows[0][0] == 'fd01,c10b,6f6b', rows[0]
+        assert rows[0][1] == '', rows[0]
+        verbose = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_dalc_absent.pcap'),
+            '-d', 'tcp.port==1521,tns', '-O', 'tns',
+        ), encoding='utf-8', env=test_env)
+        assert 'Bind 1 (VARCHAR): no value' in verbose, verbose
+        assert 'Bind 3 (VARCHAR): ok' in verbose, verbose
+
+    def test_tns_rxd_nodata(self, cmd_tshark, capture_file, test_env):
+        '''A column the describe gives a zero data length carries no bytes in
+        the row. Describe (NUMBER, VARCHAR of length 0, VARCHAR), then two
+        rows that hold only the first and last values.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_rxd_nodata.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-O', 'tns',
+        ), encoding='utf-8', env=test_env)
+        assert 'Column 1 (NUMBER): 10' in stdout, stdout
+        assert 'Column 2 (VARCHAR): NULL (no data length)' in stdout, stdout
+        assert 'Column 3 (VARCHAR): hi' in stdout, stdout
+        assert 'Column 1 (NUMBER): 20' in stdout, stdout
+        assert 'Column 3 (VARCHAR): yo' in stdout, stdout
+        assert 'Malformed' not in stdout, stdout
+
+    def test_tns_piggyback(self, cmd_tshark, capture_file, test_env):
+        '''The close-cursors piggyback is a pointer byte, a count and the
+        cursor ids. Two frames: cursors 3 and 5, then 300 and 70000.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_piggyback.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_piggyback.id',
+            '-e', 'tns.data.cursor',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.strip().splitlines()]
+        assert rows == [['0x69', '3,5'], ['0x69', '300,70000']], rows
+
+    def test_tns_walk(self, cmd_tshark, capture_file, test_env):
+        '''Every TTC message in a packet is decoded, not only the first. A
+        close-cursors piggyback in front of an execute, then a response that
+        carries describe, row header, two rows and the closing status.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_walk.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data.cursor',
+            '-e', 'tns.data_all8.sql',
+            '-e', 'tns.data_dcb.num_columns',
+            '-e', 'tns.data_rxh.num_iters',
+            '-e', 'tns.data_col.value',
+            '-e', 'tns.data_oer.err_code',
+            '-e', 'tns.data_oer.cursor_id',
+            '-e', 'tns.data_oer.message',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert len(rows) == 2, rows
+        # The piggyback's two cursors, then the execute's own (new) cursor.
+        assert rows[0][0] == '3,5,0', rows[0]
+        assert rows[0][1] == 'SELECT ID, NAME FROM USERS', rows[0]
+        assert rows[1][2] == '2' and rows[1][3] == '2', rows[1]
+        assert rows[1][4] == 'c10b,6869,c115,796f', rows[1]
+        assert rows[1][5] == '1403' and rows[1][6] == '7', rows[1]
+        assert rows[1][7].startswith('ORA-01403: no data found'), rows[1]
+
+    def test_tns_sta(self, cmd_tshark, capture_file, test_env):
+        '''TTI_STA decodes its call status and end-to-end sequence, and the
+        END_OF_RESPONSE marker behind it is named.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_sta.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_sta.call_status',
+            '-e', 'tns.data_sta.seq',
+            '-e', '_ws.col.info',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.strip().splitlines()]
+        assert len(rows) == 3, rows
+        assert rows[1][:2] == ['0x00000001', '0'], rows[1]
+        assert rows[2][:2] == ['0x00000005', '300'], rows[2]
+        assert rows[1][2].endswith('Function Complete, End of Response'), rows[1]
+
+    def test_tns_txn(self, cmd_tshark, capture_file, test_env):
+        '''The call status of TTI_OER and TTI_STA flags an open transaction
+        (0x02). An uncommitted INSERT has it; a query and a commit do not.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_txn.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data.call_status.txn_in_progress',
+        ), encoding='utf-8', env=test_env)
+        assert stdout.split() == ['True', 'False', 'False'], stdout
 
 class TestDecompressMongo:
     def test_decompress_zstd(self, cmd_tshark, features, capture_file, test_env):
@@ -2173,17 +2290,17 @@ class TestDissectPcapngProcessInformation:
 
     def test_frame_process_info_fields(self, assert_frames_match):
         assert_frames_match('process_info_wireshark_cb.pcapng', [
-            (1, 'frame.process.pid == 1234 && frame.process.name == "curl"'
-                ' && frame.process.path == "/usr/bin/curl"'
-                ' && frame.process.cmdline == "curl https://example.com/"'
-                ' && frame.process.ppid == 1 && frame.process.uid == 1000'
-                ' && frame.process.user == "alice"'
-                ' && frame.process.uuid == 6b8b4567-327b-23c6-643c-986966334873'
+            (1, 'frame.process.pid == 1234 && frame.process.name == "curl"' +
+                ' && frame.process.path == "/usr/bin/curl"' +
+                ' && frame.process.cmdline == "curl https://example.com/"' +
+                ' && frame.process.ppid == 1 && frame.process.uid == 1000' +
+                ' && frame.process.user == "alice"' +
+                ' && frame.process.uuid == 6b8b4567-327b-23c6-643c-986966334873' +
                 ' && frame.process.start_time == "2026-01-01T00:00:00Z"'),
             # A block with nothing but a process ID.
             (3, 'frame.process.pid == 4321 && !frame.process.name && !frame.process.uid'),
             # A block in a big-endian section.
-            (4, 'frame.process.pid == 77 && frame.process.name == "sshd"'
+            (4, 'frame.process.pid == 77 && frame.process.name == "sshd"' +
                 ' && frame.process.uid == 0 && !frame.process.user'),
         ])
 
@@ -2238,11 +2355,54 @@ class TestDissectPcapngProcessInformation:
             (8, 'frame.process.name == "late"'),
         ], two_pass=True)
 
-    def test_frame_darwin_effective_process(self, assert_frames_match):
+    @pytest.mark.parametrize('capture', ('process_info_darwin_dpib.pcapng', 'process_info_darwin_dpib_be.pcapng'))
+    def test_frame_darwin_effective_process(self, assert_frames_match, capture):
         '''The effective process of a Darwin packet is shown when it
-        differs from the process.'''
-        assert_frames_match('process_info_darwin_dpib.pcapng', [
+        differs from the process, whatever the byte order of the section.'''
+        assert_frames_match(capture, [
             (1, 'frame.darwin.process_info.pid == 501 && !frame.darwin.process_info.epid'),
-            (3, 'frame.darwin.process_info.pid == 501 && frame.darwin.process_info.epid == 1'
+            (3, 'frame.darwin.process_info.pid == 501 && frame.darwin.process_info.epid == 1' +
                 ' && frame.darwin.process_info.epname == "launchd"'),
         ])
+
+
+class TestDissectDnsMqtype:
+    '''DNS Multiple QTYPEs EDNS options (RFC 10029).'''
+
+    def test_mqtype_query(self, cmd_tshark, capture_file, test_env):
+        '''MQTYPE-Query option (code 20) is decoded with named QTYPEs.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dns_mqtype.pcap'),
+                '-Y', 'frame.number == 1',
+                '-Tfields',
+                '-e', 'dns.opt.code',
+                '-e', 'dns.opt.mqtype',
+            ), encoding='utf-8', env=test_env)
+        # Option code 20 (MQTYPE-Query), QTYPEs AAAA (28) and HTTPS (65)
+        assert '20' in stdout
+        assert '28' in stdout
+        assert '65' in stdout
+
+    def test_mqtype_response(self, cmd_tshark, capture_file, test_env):
+        '''MQTYPE-Response option (code 21) is decoded with named QTYPEs.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dns_mqtype.pcap'),
+                '-Y', 'frame.number == 2',
+                '-Tfields',
+                '-e', 'dns.opt.code',
+                '-e', 'dns.opt.mqtype',
+            ), encoding='utf-8', env=test_env)
+        # Option code 21 (MQTYPE-Response), QTYPE AAAA (28) only
+        assert '21' in stdout
+        assert '28' in stdout
+
+    def test_mqtype_response_empty(self, cmd_tshark, capture_file, test_env):
+        '''MQTYPE-Response with an empty QTYPE list is accepted (RFC 10029 §3.4).'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dns_mqtype.pcap'),
+                '-Y', 'frame.number == 3',
+                '-Tfields',
+                '-e', 'dns.opt.code',
+            ), encoding='utf-8', env=test_env)
+        # Option code 21 present, no QTYPEs
+        assert '21' in stdout

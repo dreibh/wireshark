@@ -247,6 +247,35 @@ static int hf_oran_symbol_mask_s2;
 static int hf_oran_symbol_mask_s1;
 static int hf_oran_symbol_mask_s0;
 
+static int hf_oran_rbg_mask_27;
+static int hf_oran_rbg_mask_26;
+static int hf_oran_rbg_mask_25;
+static int hf_oran_rbg_mask_24;
+static int hf_oran_rbg_mask_23;
+static int hf_oran_rbg_mask_22;
+static int hf_oran_rbg_mask_21;
+static int hf_oran_rbg_mask_20;
+static int hf_oran_rbg_mask_19;
+static int hf_oran_rbg_mask_18;
+static int hf_oran_rbg_mask_17;
+static int hf_oran_rbg_mask_16;
+static int hf_oran_rbg_mask_15;
+static int hf_oran_rbg_mask_14;
+static int hf_oran_rbg_mask_13;
+static int hf_oran_rbg_mask_12;
+static int hf_oran_rbg_mask_11;
+static int hf_oran_rbg_mask_10;
+static int hf_oran_rbg_mask_9;
+static int hf_oran_rbg_mask_8;
+static int hf_oran_rbg_mask_7;
+static int hf_oran_rbg_mask_6;
+static int hf_oran_rbg_mask_5;
+static int hf_oran_rbg_mask_4;
+static int hf_oran_rbg_mask_3;
+static int hf_oran_rbg_mask_2;
+static int hf_oran_rbg_mask_1;
+static int hf_oran_rbg_mask_0;
+
 static int hf_oran_exponent;
 static int hf_oran_iq_user_data;
 
@@ -267,6 +296,7 @@ static int hf_oran_ciSample;
 static int hf_oran_ciIsample;
 static int hf_oran_ciQsample;
 
+static int hf_oran_se10_port;
 static int hf_oran_beamGroupType;
 static int hf_oran_numPortc;
 
@@ -605,6 +635,8 @@ static int ett_oran_dmrs_symbol_mask;
 static int ett_oran_symbol_mask;
 static int ett_oran_active_beamspace_coefficient_mask;
 static int ett_oran_sinr_prb;
+static int ett_oran_rbgMask;
+static int ett_oran_se10_port;
 
 static int ett_oran_fragment;
 static int ett_oran_fragments;
@@ -1512,6 +1544,13 @@ static const true_false_string tfs_report_no_report_pos_meas =
     "Do not report UE_POS for UE"
 };
 
+static const true_false_string tfs_allocated_not_allocated =
+{
+    "allocated",
+    "not allocated"
+};
+
+
 
 /* Forward declaration */
 static int dissect_udcompparam(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, unsigned offset,
@@ -1535,13 +1574,21 @@ static const true_false_string tfs_ueid_reset = {
 };
 
 
+typedef struct {
+    uint32_t start;      /* first prb of bundle */
+    uint32_t end;        /* last prb of bundle*/
+    bool     is_orphan;  /* true if not complete (i.e., end-start < numBundPrb) */
+    uint8_t  bit_from_rbg_mask; /* 0 means not set, other bits offset by 1 */
+} bundle_t;
+
+
 /* Config for (and later, worked-out allocations) bundles for ext11 (dynamic BFW) */
 typedef struct {
     /* Ext 6 config */
     bool     ext6_set;
-    uint8_t  ext6_rbg_size;      /* number of PRBs allocated by bitmask */
+    uint8_t  ext6_rbg_size;      /* number of PRBs in resource block group (i.e., one bit in bitmask) */
 
-    uint8_t  ext6_num_bits_set;
+    uint8_t  ext6_num_bits_set;  /* Total number of rbgMask bits set */
     uint8_t  ext6_bits_set[28];  /* Which bit position this entry has */
     /* TODO: store an f value for each bit position? */
 
@@ -1568,11 +1615,7 @@ typedef struct {
     /* Results/settings (after calling ext11_work_out_bundles()) */
     uint32_t num_bundles;
 #define MAX_BFW_BUNDLES 512
-    struct {
-        uint32_t start;      /* first prb of bundle */
-        uint32_t end;        /* last prb of bundle*/
-        bool     is_orphan;  /* true if not complete (i.e., end-start < numBundPrb) */
-    } bundles[MAX_BFW_BUNDLES];
+    bundle_t bundles[MAX_BFW_BUNDLES];
 } ext11_settings_t;
 
 
@@ -1585,7 +1628,7 @@ static void ext11_work_out_bundles(unsigned startPrbc,
 {
     /* Allocation configured by ext 6 */
     if (settings->ext6_set) {
-        unsigned bundles_per_entry = (settings->ext6_rbg_size / numBundPrb);
+        unsigned bundles_per_mask_bit = (settings->ext6_rbg_size / numBundPrb);
 
         /* Need to cope with these not dividing exactly, or even having more PRbs in a bundle that
            rbg size.  i.e. each bundle gets the correct number of PRBs until
@@ -1593,8 +1636,8 @@ static void ext11_work_out_bundles(unsigned startPrbc,
 
         /* TODO: need to check 7.9.4.2.  Different cases depending upon value of RAD */
 
-        if (bundles_per_entry == 0) {
-            bundles_per_entry = 1;
+        if (bundles_per_mask_bit == 0) {
+            bundles_per_mask_bit = 1;
         }
 
         /* Ext6 behaviour may also be affected by ext 21 */
@@ -1602,22 +1645,18 @@ static void ext11_work_out_bundles(unsigned startPrbc,
             /* N.B., have already checked that numPrbc is not 0 */
 
             /* ciPrbGroupSize overrides number of contiguous PRBs in group */
-            bundles_per_entry = (settings->ext6_rbg_size / settings->ext21_ci_prb_group_size);
+            bundles_per_mask_bit = (settings->ext6_rbg_size / settings->ext21_ci_prb_group_size);
 
             /* numPrbc is the number of PRB groups per antenna - handled in call to dissect_bfw_bundle() */
         }
 
         unsigned bundles_set = 0;
         bool reached_orphan = false;
+
         /* For each bit set in ext6 rbg mask.. */
         for (unsigned n=0;
-             !reached_orphan && n < (settings->ext6_num_bits_set * settings->ext6_rbg_size) / numBundPrb;
+             !reached_orphan && n < 28 && n < (settings->ext6_num_bits_set * settings->ext6_rbg_size) / numBundPrb;
              n++) {
-
-            /* Watch out for array bound */
-            if (n >= 28) {
-                break;
-            }
 
             /* For each bundle... */
 
@@ -1626,7 +1665,7 @@ static void ext11_work_out_bundles(unsigned startPrbc,
             uint32_t prb_start = (settings->ext6_bits_set[n] * settings->ext6_rbg_size);
 
             /* For each bundle within identified rbgSize block */
-            for (unsigned m=0; !reached_orphan && m < bundles_per_entry; m++) {
+            for (unsigned m=0; !reached_orphan && m < bundles_per_mask_bit; m++) {
 
                 settings->bundles[bundles_set].start = startPrbc+prb_start+(m*numBundPrb);
 
@@ -1645,6 +1684,9 @@ static void ext11_work_out_bundles(unsigned startPrbc,
                     settings->bundles[bundles_set].is_orphan = true;
                     reached_orphan = true;
                 }
+
+                /* Record which rbg this bundle comes from (+1) */
+                settings->bundles[bundles_set].bit_from_rbg_mask = settings->ext6_bits_set[n]+1;
 
                 /* Get out if have reached array bound */
                 if (++bundles_set == MAX_BFW_BUNDLES) {
@@ -1909,27 +1951,91 @@ static const value_string acknack_type_vals[] = {
 #define ORAN_C_PLANE 0
 #define ORAN_U_PLANE 1
 
-/* Using parts of src/dst MAC address, so don't confuse UL messages with DL messages configuring UL.. */
-static uint32_t make_flow_key(packet_info *pinfo, uint16_t eaxc_id, uint8_t plane, bool opposite_dir)
-{
-    uint16_t eth_bits = 0;
-    if (pinfo->dl_src.len == 6 && pinfo->dl_dst.len == 6) {
-        /* Only using (most of) 2 bytes from addresses for now, but reluctant to make key longer.. */
-        const uint8_t *src_eth = (uint8_t*)pinfo->dl_src.data;
-        const uint8_t *dst_eth = (uint8_t*)pinfo->dl_dst.data;
-        if (!opposite_dir) {
-            eth_bits = (src_eth[0]<<8) | dst_eth[5];
-        }
-        else {
-            eth_bits = (dst_eth[0]<<8) | src_eth[5];
-        }
-    }
-    return eaxc_id | (plane << 16) | (eth_bits << 17);
-}
 
 
 /* Table maintained on first pass from flow_key(uint32_t) -> flow_state_t* */
 static wmem_tree_t *flow_states_table;
+
+
+/* Includes transport details (eth addresses + vlan) */
+static flow_state_t* lookup_flow(packet_info *pinfo, uint16_t eaxc_id, uint8_t plane, bool opposite_dir)
+{
+    wmem_tree_key_t key[3];
+    uint32_t word1, word2 = 0;
+
+    /* 1st value is vlan_id(15) | plane(1) | eaxc_id(16) */
+    word1 = eaxc_id | (plane << 16) | (pinfo->vlan_id << 17);
+    key[0].length = 1;
+    key[0].key = &word1;
+
+    /* 2nd word is first/last bytes of eth src/dst */
+    const uint8_t *src_eth = (uint8_t*)pinfo->dl_src.data;
+    const uint8_t *dst_eth = (uint8_t*)pinfo->dl_dst.data;
+
+    if (!opposite_dir) {
+        if (src_eth) {
+            word2 |= src_eth[5] | (src_eth[0] << 8);
+        }
+        if (dst_eth) {
+            word2 |= (dst_eth[5] << 16) | (dst_eth[0] << 24);
+        }
+    }
+    else {
+        if (src_eth) {
+            word2 |= (src_eth[5] << 16) | (src_eth[0] << 24);
+        }
+        if (dst_eth) {
+            word2 |= dst_eth[5] | (dst_eth[0] << 8);
+        }
+    }
+    key[1].length = 1;
+    key[1].key = &word2;
+    key[2].length = 0;
+    key[2].key = NULL;
+
+    return (flow_state_t*)wmem_tree_lookup32_array(flow_states_table, key);
+}
+
+static void store_flow(packet_info *pinfo, uint16_t eaxc_id, uint8_t plane, bool opposite_dir, flow_state_t *state)
+{
+    wmem_tree_key_t key[3];
+    uint32_t word1, word2 = 0;
+
+    /* 1st value is vlan_id(15) | plane(1) | eaxc_id(16) */
+    word1 = eaxc_id | (plane << 16) | (pinfo->vlan_id << 17);
+    key[0].length = 1;
+    key[0].key = &word1;
+
+    /* 2nd word is first/last bytes of eth src/dst */
+    const uint8_t *src_eth = (uint8_t*)pinfo->dl_src.data;
+    const uint8_t *dst_eth = (uint8_t*)pinfo->dl_dst.data;
+
+    if (!opposite_dir) {
+        if (src_eth) {
+            word2 |= src_eth[5] | (src_eth[0] << 8);
+        }
+        if (dst_eth) {
+            word2 |= (dst_eth[5] << 16) | (dst_eth[0] << 24);
+        }
+    }
+    else {
+        if (src_eth) {
+            word2 |= (src_eth[5] << 16) | (src_eth[0] << 24);
+        }
+        if (dst_eth) {
+            word2 |= dst_eth[5] | (dst_eth[0] << 8);
+        }
+    }
+    key[1].length = 1;
+    key[1].key = &word2;
+    key[2].length = 0;
+    key[2].key = NULL;
+
+    wmem_tree_insert32_array(flow_states_table, key, state);
+}
+
+
+
 
 typedef struct {
     uint32_t frame_number;
@@ -2515,14 +2621,14 @@ static uint32_t dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info 
                                   uint32_t num_weights_per_bundle,
                                   uint8_t iq_width,
                                   unsigned bundle_number,
-                                  unsigned first_prb, unsigned last_prb, bool is_orphan,
+                                  bundle_t *bundle,
                                   uint32_t symbol_count,
                                   section_details_t *section_details,
                                   oran_tap_info *tap_info)
 {
     /* Set bundle name */
     char bundle_name[32];
-    if (!is_orphan) {
+    if (!bundle->is_orphan) {
         snprintf(bundle_name, 32, "Bundle %3u", bundle_number);
     }
     else {
@@ -2531,19 +2637,19 @@ static uint32_t dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info 
 
     /* Create Bundle root */
     proto_item *bundle_ti;
-    if (first_prb != last_prb) {
+    if (bundle->start != bundle->end) {
         bundle_ti = proto_tree_add_string_format(tree, hf_oran_bfw_bundle,
                                                  tvb, offset, 0, "",
                                                  "%s: (PRBs %3u-%3u)",
                                                  bundle_name,
-                                                 first_prb, last_prb);
+                                                 bundle->start, bundle->end);
     }
     else {
         bundle_ti = proto_tree_add_string_format(tree, hf_oran_bfw_bundle,
                                                  tvb, offset, 0, "",
-                                                 "%s: (PRB %3u)",
+                                                 "%s: (PRB      %3u)",
                                                  bundle_name,
-                                                 first_prb);
+                                                 bundle->start);
     }
     proto_tree *bundle_tree = proto_item_add_subtree(bundle_ti, ett_oran_bfw_bundle);
 
@@ -2572,13 +2678,13 @@ static uint32_t dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info 
     /* beamId */
     uint32_t beam_id;
     proto_tree_add_item_ret_uint(bundle_tree, hf_oran_beam_id, tvb, offset, 2, ENC_BIG_ENDIAN, &beam_id);
-    proto_item_append_text(bundle_ti, " (beamId:%u) ", beam_id);
+    proto_item_append_text(bundle_ti, " (beamId:%5u) ", beam_id);
     bit_offset += 16;
     add_beam_id_to_tap(tap_info, beam_id);
 
     if (!PINFO_FD_VISITED(pinfo)) {
         if (section_details) {
-            for (unsigned prb = first_prb; prb <= last_prb; prb++) {
+            for (unsigned prb = bundle->start; prb <= bundle->end; prb++) {
                 if (prb < 273) {
                     section_details->beamIds[prb] = beam_id;
                 }
@@ -2650,6 +2756,10 @@ static uint32_t dissect_bfw_bundle(tvbuff_t *tvb, proto_tree *tree, packet_info 
     if (!non_zero_weights_seen) {
         proto_tree_add_item(bundle_tree, hf_oran_bundle_weights_all_zero, tvb,
                             bit_offset_before_weights, (bit_offset+7)/8 - (bit_offset_before_weights/8), ENC_NA);
+    }
+
+    if (bundle->bit_from_rbg_mask) {
+        proto_item_append_text(bundle_ti, " (rbg %u)", bundle->bit_from_rbg_mask-1);
     }
 
     /* Set extent of bundle */
@@ -2749,6 +2859,50 @@ static unsigned dissect_csf(proto_item *tree, tvbuff_t *tvb, unsigned bit_offset
         *p_csf = (csf!=0);
     }
     return bit_offset+1;
+}
+
+static unsigned dissect_rbg_mask(proto_item *tree, tvbuff_t *tvb, unsigned offset, uint32_t *rbgMask, proto_item **item)
+{
+    uint64_t rbgMask64;
+
+    static int * const  rbg_mask_bits[] = {
+        &hf_oran_rbg_mask_27,
+        &hf_oran_rbg_mask_26,
+        &hf_oran_rbg_mask_25,
+        &hf_oran_rbg_mask_24,
+        &hf_oran_rbg_mask_23,
+        &hf_oran_rbg_mask_22,
+        &hf_oran_rbg_mask_21,
+        &hf_oran_rbg_mask_20,
+        &hf_oran_rbg_mask_19,
+        &hf_oran_rbg_mask_18,
+        &hf_oran_rbg_mask_17,
+        &hf_oran_rbg_mask_16,
+        &hf_oran_rbg_mask_15,
+        &hf_oran_rbg_mask_14,
+        &hf_oran_rbg_mask_13,
+        &hf_oran_rbg_mask_12,
+        &hf_oran_rbg_mask_11,
+        &hf_oran_rbg_mask_10,
+        &hf_oran_rbg_mask_9,
+        &hf_oran_rbg_mask_8,
+        &hf_oran_rbg_mask_7,
+        &hf_oran_rbg_mask_6,
+        &hf_oran_rbg_mask_5,
+        &hf_oran_rbg_mask_4,
+        &hf_oran_rbg_mask_3,
+        &hf_oran_rbg_mask_2,
+        &hf_oran_rbg_mask_1,
+        &hf_oran_rbg_mask_0,
+        NULL
+    };
+
+    *item = proto_tree_add_bitmask_ret_uint64(tree, tvb, offset,
+                                              hf_oran_rbgMask, ett_oran_rbgMask,
+                                              rbg_mask_bits,
+                                              ENC_BIG_ENDIAN, &rbgMask64);
+    *rbgMask = (uint32_t)rbgMask64;
+    return offset+4;
 }
 
 
@@ -3356,7 +3510,9 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     num_trx = pref_num_bf_antennas;
                 }
 
+                bool non_zero_weights_seen = false;
                 int bit_offset = offset*8;
+                int offset_before_weights = offset;
 
                 for (unsigned n=0; n < num_trx; n++) {
                     /* Create antenna subtree */
@@ -3371,6 +3527,9 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     /* I value */
                     /* Get bits, and convert to float. */
                     uint32_t bits = tvb_get_bits32(tvb, bit_offset, bfwcomphdr_iq_width, ENC_BIG_ENDIAN);
+                    if (bits) {
+                        non_zero_weights_seen = true;
+                    }
                     float value = decompress_value(bits, bfwcomphdr_comp_meth, bfwcomphdr_iq_width, exponent,
                                                    NULL /* no ModCompr */, 0 /* RE */);
                     /* Add to tree. */
@@ -3385,6 +3544,10 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     /* Q value */
                     /* Get bits, and convert to float. */
                     bits = tvb_get_bits32(tvb, bit_offset, bfwcomphdr_iq_width, ENC_BIG_ENDIAN);
+                    if (bits) {
+                        non_zero_weights_seen = true;
+                    }
+
                     value = decompress_value(bits, bfwcomphdr_comp_meth, bfwcomphdr_iq_width, exponent,
                                              NULL /* no ModCompr */, 0 /* RE */);
                     /* Add to tree. */
@@ -3396,9 +3559,14 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                     proto_item_append_text(bfw_ti, ")");
                     proto_item_set_len(bfw_ti, (bit_offset+7)/8  - bfw_offset);
                 }
+
                 /* Need to round to next byte */
                 offset = (bit_offset+7)/8;
 
+                if (!non_zero_weights_seen) {
+                    proto_tree_add_item(extension_tree, hf_oran_bundle_weights_all_zero, tvb,
+                                        offset_before_weights, offset-offset_before_weights, ENC_NA);
+                }
                 break;
             }
 
@@ -3693,7 +3861,9 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 /* Will update ext6 recorded info */
                 ext11_settings.ext6_set = true;
 
-                /* repetition */
+                /* TODO: rb bit must be zero (unless "se6-rb-bit-supported" is set) */
+
+                /* repetition (only valid to be set if coupling via frequency and time with priorities (optimized) (7.8.1.5) */
                 proto_tree_add_bits_item(extension_tree, hf_oran_se6_repetition, tvb, offset*8, 1, ENC_BIG_ENDIAN);
                 /* rbgSize (PRBs per bit set in rbgMask) */
                 uint32_t rbgSize;
@@ -3705,14 +3875,14 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 }
                 /* rbgMask (28 bits) */
                 uint32_t rbgMask;
-                proto_item *rbgmask_ti = proto_tree_add_item_ret_uint(extension_tree, hf_oran_rbgMask, tvb, offset, 4, ENC_BIG_ENDIAN, &rbgMask);
+                proto_item *rbgmask_ti; // = proto_tree_add_item_ret_uint(extension_tree, hf_oran_rbgMask, tvb, offset, 4, ENC_BIG_ENDIAN, &rbgMask);
+                offset = dissect_rbg_mask(extension_tree, tvb, offset, &rbgMask, &rbgmask_ti);
                 if (rbgSize == 0) {
                     proto_item_append_text(rbgmask_ti, " (value ignored since rbgSize is 0)");
                 }
 
                 /* TODO: if receiver detects non-zero bits outside the valid range, those shall be ignored. */
-                offset += 4;
-                /* priority */
+                /* priority (only valid to be set if coupling via frequency and time with priorities (7.8.1.3) */
                 proto_tree_add_item(extension_tree, hf_oran_noncontig_priority, tvb, offset, 1, ENC_BIG_ENDIAN);
                 /* symbolMask */
                 offset = dissect_symbolmask(tvb, extension_tree, offset, NULL, NULL);
@@ -3721,6 +3891,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                 switch (rbgSize) {
                     case 0:
                         /* N.B. reserved, but covered above with expert info (would remain 0) */
+                        /* Might also indicate that rb bit is valid */
                         break;
                     case 1:
                         ext11_settings.ext6_rbg_size = 1; break;
@@ -3883,12 +4054,17 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                         /* Work out how many port beam entries there is room for */
                         /* Using numPortC as visible in issue 18116 */
                         for (n=0; n < numPortc; n++) {
+                            /* Port subtree */
+                            proto_item *port_ti = proto_tree_add_item(extension_tree, hf_oran_se10_port,
+                                                                      tvb, offset, 2, ENC_NA);
+                            proto_tree *port_tree = proto_item_add_subtree(port_ti, ett_oran_se10_port);
+
                             /* 1 reserved bit */
-                            add_reserved_field(extension_tree, hf_oran_reserved_1bit, tvb, offset, 1);
+                            add_reserved_field(port_tree, hf_oran_reserved_1bit, tvb, offset, 1);
 
                             /* port beam ID (or UEID) (15 bits) */
                             uint32_t id;
-                            proto_item *beamid_or_ueid_ti = proto_tree_add_item_ret_uint(extension_tree, hf_oran_beamId,
+                            proto_item *beamid_or_ueid_ti = proto_tree_add_item_ret_uint(port_tree, hf_oran_beamId,
                                                                                          tvb, offset, 2, ENC_BIG_ENDIAN, &id);
                             proto_item_append_text(beamid_or_ueid_ti, " (or UEId) port #%u", n);
                             offset += 2;
@@ -3900,6 +4076,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                             }
 
                             proto_item_append_text(extension_ti, "%u ", id);
+                            proto_item_append_text(port_ti, " (beam/ueid %u)", id);
                         }
 
                         proto_item_append_text(extension_ti, "]");
@@ -3921,12 +4098,17 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                             offset += 1;
 
                             for (n=0; n < numPortc-1; n++) {
+                                /* Port subtree */
+                                proto_item *port_ti = proto_tree_add_item(extension_tree, hf_oran_se10_port,
+                                                                          tvb, offset, 3, ENC_NA);
+                                proto_tree *port_tree = proto_item_add_subtree(port_ti, ett_oran_se10_port);
+
                                 /* 1 reserved bit */
-                                add_reserved_field(extension_tree, hf_oran_reserved_1bit, tvb, offset, 1);
+                                add_reserved_field(port_tree, hf_oran_reserved_1bit, tvb, offset, 1);
 
                                 /* port beam ID (or UEID) */
                                 uint32_t id;
-                                proto_item *beamid_or_ueid_ti = proto_tree_add_item_ret_uint(extension_tree, hf_oran_beamId,
+                                proto_item *beamid_or_ueid_ti = proto_tree_add_item_ret_uint(port_tree, hf_oran_beamId,
                                                                                              tvb, offset, 2, ENC_BIG_ENDIAN, &id);
                                 proto_item_append_text(beamid_or_ueid_ti, " port #%u beam ID (or UEId) %u", n, id);
                                 offset += 2;
@@ -3938,7 +4120,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                                 }
 
                                 /* subsequent portListIndex */
-                                pli_ti = proto_tree_add_item_ret_uint(extension_tree, hf_oran_port_list_index, tvb,
+                                pli_ti = proto_tree_add_item_ret_uint(port_tree, hf_oran_port_list_index, tvb,
                                                              offset, 1, ENC_BIG_ENDIAN, &port_list_index);
                                 if (port_list_index == 0) {
                                     /* Value 0 is reserved */
@@ -3947,6 +4129,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                                 offset += 1;
 
                                 proto_item_append_text(extension_ti, "%u:%u ", port_list_index, id);
+                                proto_item_append_text(port_ti, " (beam/ueid %u, portListIndex %u)", id, port_list_index);
                             }
                         }
 
@@ -4042,9 +4225,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                                                         pref_num_bf_antennas,
                                                     bfwcomphdr_iq_width,
                                                     b,                                 /* bundle number */
-                                                    ext11_settings.bundles[b].start,
-                                                    ext11_settings.bundles[b].end,
-                                                    ext11_settings.bundles[b].is_orphan,
+                                                    &ext11_settings.bundles[b],
                                                     symbol_count,
                                                     (link_planes_together && data_section) ? &data_section->details[index_to_use] : NULL,
                                                     tap_info);
@@ -4143,8 +4324,8 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                             definition = wmem_tree_lookup32_array(dl_beam_ids_results, key);
                         }
 
-                        /* Show link back to frame where/when beamId was defined */
-                        if (definition && definition->frame_defined != 0 && definition->frame_defined != pinfo->num) {
+                        /* Show link back to frame where/when beamId was defined. Allow linking to self */
+                        if (definition && definition->frame_defined != 0) {
                             proto_item *defined_ti = proto_tree_add_uint(bundle_tree, hf_oran_bfws_frame_defined, tvb, offset, 0, definition->frame_defined);
                             proto_item_set_generated(defined_ti);
                             proto_item *since_ti = proto_tree_add_uint(bundle_tree, hf_oran_bfws_symbols_since_defined, tvb, offset, 0,
@@ -4152,6 +4333,7 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                             proto_item_set_generated(since_ti);
                         }
                         else {
+                            /* TODO: lookup needs to find beam if it was defined in this frame!! */
                             expert_add_info_format(NULL, beamid_ti, &ei_oran_beamid_bfws_not_found,
                                                    "ext11 for beamId %u and disableBFWs set, but can't find definition", beam_id);
                         }
@@ -4582,8 +4764,9 @@ static int dissect_oran_c_section(tvbuff_t *tvb, proto_tree *tree, packet_info *
                         /* rbgSize(3 bits) */
                         proto_tree_add_item(pattern_tree, hf_oran_rbgSize, tvb, offset, 1, ENC_BIG_ENDIAN);
                         /* rbgMask (28 bits) */
-                        proto_tree_add_item(pattern_tree, hf_oran_rbgMask, tvb, offset, 4, ENC_BIG_ENDIAN);
-                        offset += 4;
+                        proto_item *rbgmask_ti;
+                        uint32_t rbgMask;
+                        offset = dissect_rbg_mask(pattern_tree, tvb, offset, &rbgMask, &rbgmask_ti);
 
                         proto_item_append_text(se20_rb_ti, " (ignored)");
                     }
@@ -5723,7 +5906,7 @@ static int dissect_udcomphdr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
         proto_item_append_text(udcomphdr_ti, " (ignored)");
         if (hdr_iq_width || ud_comp_meth) {
             if (cplane) {
-                /* Only ignore DL for cplane */
+                /* Only ignoring in DL for cplane */
                 expert_add_info_format(pinfo, udcomphdr_ti, &ei_oran_udpcomphdr_should_be_zero,
                                        "udCompHdr in C-Plane for DL should be 0 - found 0x%02x",
                                        tvb_get_uint8(tvb, offset));
@@ -5735,7 +5918,6 @@ static int dissect_udcomphdr(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
                                        tvb_get_uint8(tvb, offset));
                 */
             }
-
         }
     }
     return offset+1;
@@ -6029,8 +6211,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
     tap_info->eaxc = eAxC;
 
     /* Look up any existing conversation state for eAxC+plane */
-    uint32_t key = make_flow_key(pinfo, eAxC, ORAN_C_PLANE, false);
-    flow_state_t* state = (flow_state_t*)wmem_tree_lookup32(flow_states_table, key);
+    flow_state_t* state = lookup_flow(pinfo, eAxC, ORAN_C_PLANE, false);
 
     /* Message identifier */
     uint32_t seq_id, sub_seq_id, e;
@@ -6059,10 +6240,10 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
     if (!PINFO_FD_VISITED(pinfo)) {
 
         if (state == NULL) {
-            /* Allocate new state */
+            /* Allocate state now */
             state = wmem_new0(wmem_file_scope(), flow_state_t);
             state->ack_nack_requests = wmem_tree_new(wmem_file_scope());
-            wmem_tree_insert32(flow_states_table, key, state);
+            store_flow(pinfo, eAxC, ORAN_C_PLANE, false, state);
             /* Tables for each direction */
             state->expected_sections[0] = wmem_tree_new(wmem_file_scope());
             state->expected_sections[1] = wmem_tree_new(wmem_file_scope());
@@ -6252,7 +6433,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
         case SEC_C_UE_SCHED:     /* Section Type 5 */
             /* udCompHdr */
             offset = dissect_udcomphdr(tvb, pinfo, section_tree, offset,
-                                       true, direction==0 && pref_override_ul_compression, /* ignore for DL or if using mplane for UL settings */
+                                       true, direction==1 || pref_override_ul_compression, /* ignore for DL or if using mplane for UL settings */
                                        &bit_width, &comp_meth, &comp_meth_ti, tap_info);
             /* reserved (8 bits) */
             add_reserved_field(section_tree, hf_oran_reserved_8bits, tvb, offset, 1);
@@ -6274,7 +6455,7 @@ static int dissect_oran_c(tvbuff_t *tvb, packet_info *pinfo,
             offset += 2;
             /* udCompHdr */
             offset = dissect_udcomphdr(tvb, pinfo, section_tree, offset,
-                                       true, direction==0 && pref_override_ul_compression, /* ignore for DL or if using mplane for UL settings */
+                                       true, direction==1 || pref_override_ul_compression, /* ignore for DL or if using mplane for UL settings */
                                        &bit_width, &comp_meth, &comp_meth_ti, tap_info);
             break;
 
@@ -7399,11 +7580,13 @@ static int dissect_oran_u_section(tvbuff_t *tvb, packet_info *pinfo, unsigned of
 
     /* udCompHdr (if preferences indicate will be present) */
     bool included = (includeUdCompHeader==1) ||   /* 1 means present.. */
-        (includeUdCompHeader==2 && udcomphdr_appears_present(state, direction, tvb, offset));
+                    (includeUdCompHeader==2 && udcomphdr_appears_present(state, direction, tvb, offset)); /* heuristic */
     if (included) {
         /* 7.5.2.10 */
         /* Extract these values to inform how wide IQ samples in each PRB will be. */
-        offset = dissect_udcomphdr(tvb, pinfo, section_tree, offset, false, direction == 0, sample_bit_width_ptr,
+        offset = dissect_udcomphdr(tvb, pinfo, section_tree, offset, false,
+                                   direction == 0 && pref_override_ul_compression, /* Ignore UL if configured to */
+                                   sample_bit_width_ptr,
                                    &compression, &ud_comp_meth_item, tap_info);
 
         /* Not part of udCompHdr */
@@ -7435,8 +7618,9 @@ static int dissect_oran_u_section(tvbuff_t *tvb, packet_info *pinfo, unsigned of
             proto_item_set_generated(cplane_ti);
         }
 
+        /* Still adding these values to tap */
         tap_info->compression_methods |= (1 << compression);
-        tap_info->compression_width = *sample_bit_width_ptr;
+        tap_info->compression_width = MAX(tap_info->compression_width, *sample_bit_width_ptr);
     }
 
     /* Not supported! TODO: other places where comp method is looked up (e.g., bfw?) */
@@ -7722,8 +7906,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     tap_info->eaxc = eAxC;
 
     /* Update/report status of conversation */
-    uint32_t key = make_flow_key(pinfo, eAxC, ORAN_U_PLANE, false);
-    flow_state_t* state = (flow_state_t*)wmem_tree_lookup32(flow_states_table, key);
+    flow_state_t* state = lookup_flow(pinfo, eAxC, ORAN_U_PLANE, false);
 
     flow_result_t *result = NULL;
 
@@ -7809,8 +7992,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
     int includeUdCompHeader;
 
     /* Also lookup C-PLANE state (sent in opposite direction for UL) so may check current compression settings */
-    uint32_t cplane_key =                make_flow_key(pinfo, eAxC, ORAN_C_PLANE, direction == 0);
-    flow_state_t* cplane_state =         (flow_state_t*)wmem_tree_lookup32(flow_states_table, cplane_key);
+    flow_state_t* cplane_state = lookup_flow(pinfo, eAxC, ORAN_C_PLANE, direction == 0);
 
     if (!PINFO_FD_VISITED(pinfo)) {
         /* Create state/conversation if doesn't exist yet */
@@ -7820,7 +8002,7 @@ dissect_oran_u(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree,
             state->ack_nack_requests = wmem_tree_new(wmem_file_scope());
             state->expected_sections[0] = wmem_tree_new(wmem_file_scope());
             state->expected_sections[1] = wmem_tree_new(wmem_file_scope());
-            wmem_tree_insert32(flow_states_table, key, state);
+            store_flow(pinfo, eAxC, ORAN_U_PLANE, false, state);
         }
 
         result = wmem_new0(wmem_file_scope(), flow_result_t);
@@ -8956,6 +9138,176 @@ proto_register_oran(void)
             NULL, HFILL}
         },
 
+        /* 7.7.6.3 */
+        { &hf_oran_rbg_mask_27,
+          { "bit 27", "oran_fh_cus.rbgMask.bit27",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x08000000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_26,
+          { "bit 26", "oran_fh_cus.rbgMask.bit26",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x04000000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_25,
+          { "bit 25", "oran_fh_cus.rbgMask.bit25",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x02000000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_24,
+          { "bit 24", "oran_fh_cus.rbgMask.bit24",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x01000000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_23,
+          { "bit 23", "oran_fh_cus.rbgMask.bit23",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00800000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_22,
+          { "bit 22", "oran_fh_cus.rbgMask.bit22",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00400000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_21,
+          { "bit 21", "oran_fh_cus.rbgMask.bit21",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00200000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_20,
+          { "bit 20", "oran_fh_cus.rbgMask.bit20",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00100000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_19,
+          { "bit 19", "oran_fh_cus.rbgMask.bit19",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00080000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_18,
+          { "bit 18", "oran_fh_cus.rbgMask.bit18",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00040000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_17,
+          { "bit 17", "oran_fh_cus.rbgMask.bit17",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00020000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_16,
+          { "bit 16", "oran_fh_cus.rbgMask.bit16",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00010000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_15,
+          { "bit 15", "oran_fh_cus.rbgMask.bit15",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00008000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_14,
+          { "bit 14", "oran_fh_cus.rbgMask.bit14",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00004000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_13,
+          { "bit 13", "oran_fh_cus.rbgMask.bit13",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00002000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_12,
+          { "bit 12", "oran_fh_cus.rbgMask.bit12",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00001000,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_11,
+          { "bit 11", "oran_fh_cus.rbgMask.bit11",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000800,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_10,
+          { "bit 10", "oran_fh_cus.rbgMask.bit10",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000400,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_9,
+          { "bit 9", "oran_fh_cus.rbgMask.bit9",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000200,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_8,
+          { "bit 8", "oran_fh_cus.rbgMask.bit8",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000100,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_7,
+          { "bit 7", "oran_fh_cus.rbgMask.bit7",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000080,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_6,
+          { "bit 6", "oran_fh_cus.rbgMask.bit6",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000040,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_5,
+          { "bit 5", "oran_fh_cus.rbgMask.bit5",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000020,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_4,
+          { "bit 4", "oran_fh_cus.rbgMask.bit4",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000010,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_3,
+          { "bit 3", "oran_fh_cus.rbgMask.bit3",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000008,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_2,
+          { "bit 2", "oran_fh_cus.rbgMask.bit2",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000004,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_1,
+          { "bit 1", "oran_fh_cus.rbgMask.bit1",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000002,
+            NULL, HFILL}
+        },
+        { &hf_oran_rbg_mask_0,
+          { "bit 0", "oran_fh_cus.rbgMask.bit0",
+            FT_BOOLEAN, 32,
+            TFS(&tfs_allocated_not_allocated), 0x00000001,
+            NULL, HFILL}
+        },
+
 
         /* 7.7.22.2 */
         { &hf_oran_ack_nack_req_id,
@@ -9354,6 +9706,13 @@ proto_register_oran(void)
             "Channel information complex value - Q part", HFILL}
         },
 
+        /* 7.7.10 */
+        { &hf_oran_se10_port,
+          { "Port entry", "oran_fh_cus.portEntry",
+            FT_NONE, BASE_NONE,
+            NULL, 0x0,
+            "SE10 port entry", HFILL}
+        },
         /* 7.7.10.2 */
         { &hf_oran_beamGroupType,
           { "beamGroupType", "oran_fh_cus.beamGroupType",
@@ -10074,6 +10433,7 @@ proto_register_oran(void)
             NULL, 0x0,
             "Not all of the REs in this PRB are zero", HFILL}
         },
+        /* TODO: rename, as now used in ext1 too, which doesn't really have bundles? */
         { &hf_oran_bundle_weights_all_zero,
           { "Bundle Weights all zero", "oran_fh_cus.zero-bundle",
             FT_NONE, BASE_NONE,
@@ -10993,6 +11353,8 @@ proto_register_oran(void)
         &ett_oran_symbol_mask,
         &ett_oran_active_beamspace_coefficient_mask,
         &ett_oran_sinr_prb,
+        &ett_oran_rbgMask,
+        &ett_oran_se10_port,
 
         &ett_oran_fragment,
         &ett_oran_fragments

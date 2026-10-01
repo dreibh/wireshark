@@ -86,6 +86,8 @@ private slots:
     void on_cbResolveMacAddresses_toggled(bool checked);
     void on_compileBPF_clicked();
     void on_manageButton_clicked();
+    void on_newToolButton_clicked();
+    void on_deleteToolButton_clicked();
     void on_cbResolveNetworkNames_toggled(bool checked);
     void on_cbResolveTransportNames_toggled(bool checked);
     void on_buttonBox_accepted();
@@ -122,6 +124,10 @@ private:
     InterfaceSortFilterModel *proxy_model_;
     InterfaceTreeModel *source_model_;
     InterfaceTreeDelegate *interface_item_delegate_;
+
+    /* The temporary directory the dialog opened with, which may have come
+     * from --temp-dir rather than from the preferences. */
+    QString initial_temp_dir_;
 
     /* Proxy model column indices. Fixed for the dialog's lifetime. */
     int col_extcap_;

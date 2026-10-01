@@ -27,7 +27,8 @@ class PacketList;
  *
  * This view shares its model and selection model with the primary view so
  * that clicking a row here selects the same row there, and reuses the
- * primary view's item delegates so that rendering matches exactly.
+ * primary view's item delegates, wrapped in a FixedRowHeightDelegate so that
+ * rendering matches exactly and row heights match the primary view.
  */
 class PinnedColumnView : public QTreeView
 {
@@ -129,6 +130,11 @@ protected:
 private:
     PacketList *packet_list_;
     int frozen_column_count_;
+
+    // Cell pressed with the left button, used to start a cell drag on the
+    // first mouse move within it (as PacketList does). drag_row_ is -1 when no drag is armed.
+    int drag_row_ = -1;
+    int drag_column_ = -1;
 
     /** A thin child widget marking the boundary between the frozen and
      * non-frozen columns. A plain QPainter(this) can't be used directly on

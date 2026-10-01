@@ -248,9 +248,15 @@ public:
 
     /**
      * @brief Toggles the mark state for the specified frames.
-     * @param indeces List of model indices to toggle.
+     * @param indices List of model indices to toggle.
      */
-    void toggleFrameMark(const QModelIndexList &indeces);
+    void toggleFrameMark(const QModelIndexList &indices);
+
+    /**
+     * @brief Toggles the mark state for a frame given by record, which
+     * need not have a visible row (e.g., a pinned frame filtered out).
+     */
+    void toggleFrameMark(PacketListRecord *record);
 
     /**
      * @brief Sets the mark state for all currently displayed frames.
@@ -260,9 +266,12 @@ public:
 
     /**
      * @brief Toggles the ignore state for the specified frames.
-     * @param indeces List of model indices to toggle.
+     * @param indices List of model indices to toggle.
      */
-    void toggleFrameIgnore(const QModelIndexList &indeces);
+    void toggleFrameIgnore(const QModelIndexList &indices);
+
+    /** @brief As above, for a record that need not have a visible row. */
+    void toggleFrameIgnore(PacketListRecord *record);
 
     /**
      * @brief Sets the ignore state for all currently displayed frames.
@@ -271,10 +280,13 @@ public:
     void setDisplayedFrameIgnore(bool set);
 
     /**
-     * @brief Toggles the reference time state for a specified frame.
-     * @param rt_index The model index of the frame.
+     * @brief Toggles the reference time state for the specified frames.
+     * @param indices List of model indices to toggle
      */
-    void toggleFrameRefTime(const QModelIndex &rt_index);
+    void toggleFrameRefTime(const QModelIndexList &indices);
+
+    /** @brief As above, for a record that need not have a visible row. */
+    void toggleFrameRefTime(PacketListRecord *record);
 
     /**
      * @brief Unsets the reference time state for all frames.
@@ -288,6 +300,9 @@ public:
      */
     void addFrameComment(const QModelIndexList &indices, const QByteArray &comment);
 
+    /** @brief As above, for a record that need not have a visible row. */
+    void addFrameComment(PacketListRecord *record, const QByteArray &comment);
+
     /**
      * @brief Sets a specific comment on a frame.
      * @param index The model index of the frame.
@@ -296,11 +311,17 @@ public:
      */
     void setFrameComment(const QModelIndex &index, const QByteArray &comment, unsigned c_number);
 
+    /** @brief As above, for a record that need not have a visible row. */
+    void setFrameComment(PacketListRecord *record, const QByteArray &comment, unsigned c_number);
+
     /**
      * @brief Deletes comments from the specified frames.
      * @param indices List of model indices to remove comments from.
      */
     void deleteFrameComments(const QModelIndexList &indices);
+
+    /** @brief As above, for a record that need not have a visible row. */
+    void deleteFrameComments(PacketListRecord *record);
 
     /**
      * @brief Deletes all frame comments from all frames.
@@ -359,6 +380,11 @@ private slots:
     void onThemeChanged();
 
 private:
+    void toggleRecordsRefTime(const QList<PacketListRecord *> &records);
+    void addCommentToRecord(PacketListRecord *record, const QByteArray &comment);
+    void setCommentOnRecord(PacketListRecord *record, const QByteArray &comment, unsigned c_number);
+    bool deleteCommentsFromRecord(PacketListRecord *record);
+
     /** Cached foreground color for manually marked packets. */
     QColor marked_fg_;
     /** Cached background color for manually marked packets. */

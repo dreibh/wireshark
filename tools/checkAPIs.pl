@@ -122,6 +122,20 @@ my %APIs = (
                 'strtod',
                 'strcasecmp',
                 'strncasecmp',
+                # Wide-character versions of the above are locale-unsafe too
+                'iswalnum',
+                'iswalpha',
+                'iswcntrl',
+                'iswdigit',
+                'iswlower',
+                'iswgraph',
+                'iswprint',
+                'iswpunct',
+                'iswspace',
+                'iswupper',
+                'iswxdigit',
+                'towlower',
+                'towupper',
                 # Deprecated in glib 2.68 in favor of g_memdup2
                 # We have our local implementation for older versions
                 'g_memdup',
@@ -153,7 +167,9 @@ my %APIs = (
                 # Misc
                 'tmpnam',       # use mkstemp
                 '_snwprintf',   # use StringCchPrintf
-                'system'
+                'system',
+                'WS_DEBUG_HERE',
+                'WS_NOT_IMPLEMENTED',
                 ] },
 
         ### Soft-Deprecated functions that should not be used in new code but
@@ -280,18 +296,17 @@ my %APIs = (
         'dissectors-prohibited' => { 'count_errors' => 1, 'functions' => [
                 # APIs that make the program exit. Dissectors shouldn't call these.
                 'abort',
-                'assert',
+                'assert',                                       # use ws_assert() instead
                 'assert_perror',
                 'exit',
-                'g_assert',
-                'g_error',
+                'g_assert',                                     # use ws_assert() instead
+                'g_error',                                      # use ws_error() instead
                 ] },
 
         'dissectors-restricted' => { 'count_errors' => 0, 'functions' => [
                 # APIs that print to the terminal. Dissectors shouldn't call these.
-                # FIXME: Explain what to use instead.
-                'printf',
-                'g_warning',
+                'printf',                                       # use ws_debug() instead
+                'g_warning',                                    # use ws_warning() instead
                 ] },
 
 );

@@ -34,6 +34,7 @@
 #include "opcua_complextypeparser.h"
 #include "opcua_enumparser.h"
 #include "opcua_hfindeces.h"
+#include "opcua_infomodel.h"
 #include "opcua_keyset.h"
 #include "opcua_security_layer.h"
 #include "opcua_serviceparser.h"
@@ -717,8 +718,6 @@ static int dissect_opcua_message(tvbuff_t *tvb, packet_info *pinfo, proto_tree *
                 col_clear_fence(pinfo->cinfo, COL_INFO);
                 col_set_str(pinfo->cinfo, COL_INFO, "Abort message");
 
-                offset = 0;
-                (*pfctParse)(transport_tree, tvb, pinfo, &offset, &metadata);
                 parseAbort(transport_tree, tvb, pinfo, &offset, &metadata);
 
                 return tvb_reported_length(tvb);
@@ -948,6 +947,7 @@ void proto_register_opcua(void)
     registerComplexTypes();
     registerServiceTypes();
     registerFieldTypes(proto_opcua);
+    opcua_infomodel_register(proto_opcua, opcua_module);
 
     proto_register_subtree_array(ett, array_length(ett));
     proto_register_field_array(proto_opcua, hf, array_length(hf));
@@ -960,6 +960,7 @@ void proto_register_opcua(void)
 void proto_reg_handoff_opcua(void)
 {
     dissector_add_uint_range_with_preference("tcp.port", OPCUA_PORT_RANGE, opcua_handle);
+    opcua_infomodel_apply();
 }
 
 /*
