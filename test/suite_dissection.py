@@ -1766,6 +1766,178 @@ class TestDissectTns:
         ), encoding='utf-8', env=test_env)
         assert stdout.split() == ['True', 'False', 'False'], stdout
 
+    def test_tns_all8_option_bits(self, cmd_tshark, capture_file, test_env):
+        '''The execute options name FETCH (0x40) and NOT_PLSQL (0x8000) by
+        their own bits. tns_all8.pcap's SELECT is 0x8021 (no fetch), the
+        SELECT in tns_walk.pcap is 0x8061 (fetch).'''
+        fields = ('-T', 'fields',
+            '-e', 'tns.data_all8.options.fetch',
+            '-e', 'tns.data_all8.options.not_plsql',
+            '-Y', 'tns.data_all8.options')
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_all8.pcap'),
+            '-d', 'tcp.port==1521,tns') + fields, encoding='utf-8', env=test_env)
+        assert stdout.splitlines()[0].split('\t') == ['False', 'True'], stdout
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_walk.pcap'),
+            '-d', 'tcp.port==1521,tns') + fields, encoding='utf-8', env=test_env)
+        assert stdout.splitlines()[0].split('\t') == ['True', 'True'], stdout
+
+    def test_tns_all8_parse_only(self, cmd_tshark, capture_file, test_env):
+        '''cursor.parse() sends PARSE without EXECUTE, and a query adds
+        DESCRIBE (0x20000). An executemany with batcherrors sets
+        BATCH_ERRORS (0x80000).'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_parse.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_all8.options.parse',
+            '-e', 'tns.data_all8.options.execute',
+            '-e', 'tns.data_all8.options.describe',
+            '-e', 'tns.data_all8.options.batch_errors',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.strip().splitlines()]
+        assert rows == [
+            ['True', 'False', 'True', 'False'],
+            ['True', 'False', 'False', 'False'],
+            ['True', 'True', 'False', 'True'],
+        ], rows
+
+    def test_tns_all8_al8i4(self, cmd_tshark, capture_file, test_env):
+        '''The al8i4 execute arguments: slot 1 is a prefetch row count for a
+        query and an execution count for DML, told apart by slot 7; slot 9
+        holds the execute flags, 10 and 11 a scroll position.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_al8i4.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_all8.prefetch',
+            '-e', 'tns.data_all8.iterations',
+            '-e', 'tns.data_all8.is_query',
+            '-e', 'tns.data_all8.exec_flags.dml_rowcounts',
+            '-e', 'tns.data_all8.exec_flags.scrollable',
+            '-e', 'tns.data_all8.fetch_orientation',
+            '-e', 'tns.data_all8.fetch_pos',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.strip().splitlines()]
+        assert rows == [
+            ['0', '', 'True', 'False', 'False', '0x00000000', '0'],
+            ['100', '', 'True', 'False', 'False', '0x00000000', '0'],
+            ['', '4', 'False', 'True', 'False', '0x00000000', '0'],
+            ['1', '', 'True', 'False', 'True', '0x00000020', '5'],
+        ], rows
+
+    def test_tns_all8_nosql_binds(self, cmd_tshark, capture_file, test_env):
+        '''An execute with no SQL text still carries bind descriptors unless
+        its bind area starts on a TTI_RXD. The first frame's descriptors and
+        rows are decoded; the second frame has none and is not misread.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_all8_nosql.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_col.type',
+            '-e', 'tns.data_bind.value',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert len(rows) == 2, rows
+        assert rows[0] == ['2,1', 'c104,63,c105,64', ''], rows[0]
+        assert rows[1] == ['', '', ''], rows[1]
+
+    def test_tns_all8_defines(self, cmd_tshark, capture_file, test_env):
+        '''A define execute (options 0x8010) carries one OAC per column in
+        place of binds. The define here asks for a CLOB column as LONG.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_define.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_all8.options',
+            '-T', 'fields',
+            '-e', 'tns.data_all8.options.define',
+            '-e', 'tns.data_all8.bind_count',
+            '-e', 'tns.data_all8.define_count',
+            '-e', 'tns.data_col.type',
+            '-e', 'tns.data_col.max_length',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.strip().splitlines()]
+        assert rows == [['True', '0', '1', '8', '2147483647']], rows
+
+    def test_tns_define_rows(self, cmd_tshark, capture_file, test_env):
+        '''The rows that answer a define are framed as the define asked, not
+        as the describe said: a CLOB column defined as LONG arrives inline.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_define.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-O', 'tns',
+        ), encoding='utf-8', env=test_env)
+        assert 'Column 1 (LONG)' in stdout, stdout
+        values = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_define.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_col.value',
+            '-T', 'fields',
+            '-e', 'tns.data_col.value',
+        ), encoding='utf-8', env=test_env)
+        # the LONG value "blob_4620" and its two trailing ub4 indicators
+        assert values.strip() == '09626c6f625f343632300000', values
+
+    def test_tns_reexecute(self, cmd_tshark, capture_file, test_env):
+        '''The re-execute calls (4 and 78) carry a cursor, an iteration
+        count and two options words. For 78 the count is a prefetch size.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_reexec.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_oci.id == 4 || tns.data_oci.id == 78',
+            '-T', 'fields',
+            '-e', 'tns.data.cursor',
+            '-e', 'tns.data_reexec.iterations',
+            '-e', 'tns.data_all8.prefetch',
+            '-e', 'tns.data_all8.options.execute',
+            '-e', 'tns.data_reexec.options2.commit',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.strip().splitlines()]
+        assert rows == [
+            ['8', '1', '', 'False', 'True'],
+            ['9', '', '100', 'True', 'False'],
+        ], rows
+
+    def test_tns_reexecute_binds(self, cmd_tshark, capture_file, test_env):
+        '''Values sent without bind descriptors are typed by the execute
+        that opened the cursor; its status names the cursor id. Both the
+        REEXECUTE row and the descriptor-less TTI_ALL8 row are split.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_reexec.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'frame.number',
+            '-e', 'tns.data_bind.value',
+        ), encoding='utf-8', env=test_env)
+        values = dict(r.split('\t') for r in stdout.strip().splitlines())
+        assert values['1'] == 'c102,726f7731', values
+        assert values['3'] == 'c103,726f7732', values
+        assert values['5'] == 'c104,726f7733', values
+
+    def test_tns_return_params(self, cmd_tshark, capture_file, test_env):
+        '''The TTI_RPA that answers an execute is a return-parameters block:
+        al8o4 words, al8txl, key/value pairs, a registration, and the
+        per-iteration row counts when DML_ROWCOUNTS was asked for.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_rpa.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_rpa.num_al8o4',
+            '-T', 'fields',
+            '-e', 'tns.data_rpa.num_al8o4',
+            '-e', 'tns.data_rpa.dml_rowcount',
+            '-e', 'tns.data_kv.text',
+            '-e', 'tns.data_kv.keyword',
+            '-e', 'tns.data_oer.cursor_id',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.strip().splitlines()]
+        assert rows == [
+            ['6', '1,1,0,2', '', '', '3'],
+            ['6', '', 'PYO', '168', '0'],
+            ['6', '', '', '', '4'],
+        ], rows
+
 class TestDecompressMongo:
     def test_decompress_zstd(self, cmd_tshark, features, capture_file, test_env):
         if not features.have_zstd:
