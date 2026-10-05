@@ -510,6 +510,7 @@ static int hf_dns_opt_zoneversion_type;
 static int hf_dns_opt_zoneversion_soa;
 static int hf_dns_opt_zoneversion_version;
 static int hf_dns_opt_mqtype;
+static int hf_dns_opt_key_tag;
 static int hf_dns_nsec3_algo;
 static int hf_dns_nsec3_flags;
 static int hf_dns_nsec3_flag_optout;
@@ -775,6 +776,7 @@ typedef struct _dns_conv_info_t {
 #define O_EDNS_TCP_KA   11              /* edns-tcp-keepalive EDNS0 Option (RFC7828) */
 #define O_PADDING       12              /* EDNS(0) Padding Option (RFC7830) */
 #define O_CHAIN         13              /* draft-ietf-dnsop-edns-chain-query */
+#define O_EDNS_KEY_TAG  14              /* Signaling Trust Anchor Knowledge in DNSSEC (RFC8145) */
 #define O_EXT_ERROR     15              /* Extended DNS Errors (RFC8914) */
 #define O_REPORT_CHANNEL 18             /* DNS Error Reporting (RFC9567) */
 #define O_ZONEVERSION   19              /* DNS Zone Version (ZONEVERSION) Option (RFC9660) */
@@ -1211,6 +1213,7 @@ static const value_string edns0_opt_code_vals[] = {
   { O_EDNS_TCP_KA,       "EDNS TCP Keepalive" },
   { O_PADDING,           "PADDING" },
   { O_CHAIN,             "CHAIN" },
+  { O_EDNS_KEY_TAG,      "EDNS Key Tag" },
   { O_EXT_ERROR,         "Extended DNS Error" },
   { O_REPORT_CHANNEL,    "Report-Channel" },
   { O_ZONEVERSION,       "Zone Version" },
@@ -2036,7 +2039,7 @@ dissect_type_bitmap_nxt(proto_tree *rr_tree, packet_info* pinfo, tvbuff_t *tvb, 
 
 /*
  * SIG, KEY, and CERT RR algorithms.
- * http://www.iana.org/assignments/dns-sec-alg-numbers/dns-sec-alg-numbers.txt (last updated 2026-06-28)
+ * http://www.iana.org/assignments/dns-sec-alg-numbers/dns-sec-alg-numbers.txt (last updated 2026-10-02)
  */
 #define DNS_ALGO_RSAMD5               1 /* RSA/MD5 */
 #define DNS_ALGO_DH                   2 /* Diffie-Hellman */
@@ -2052,6 +2055,7 @@ dissect_type_bitmap_nxt(proto_tree *rr_tree, packet_info* pinfo, tvbuff_t *tvb, 
 #define DNS_ALGO_ED25519             15 /* Ed25519 */
 #define DNS_ALGO_ED448               16 /* Ed448 */
 #define DNS_ALGO_SM2SM3              17 /* SM2 signing with SM3 hashing */
+#define DNS_ALGO_MLDSA44             18 /* ML-DSA-44 */
 #define DNS_ALGO_ECCGOST12           23 /* GOST R 34.10-2012 */
 #define DNS_ALGO_INDIRECT           252 /* Indirect key */
 #define DNS_ALGO_PRIVATEDNS         253 /* Private, domain name  */
@@ -2072,6 +2076,7 @@ static const value_string dnssec_algo_vals[] = {
   { DNS_ALGO_ED25519,           "Ed25519" },
   { DNS_ALGO_ED448,             "Ed448" },
   { DNS_ALGO_SM2SM3,            "SM2 signing with SM3 hashing" },
+  { DNS_ALGO_MLDSA44,           "ML-DSA-44" },
   { DNS_ALGO_ECCGOST12,         "GOST R 34.10-2012" },
   { DNS_ALGO_INDIRECT,          "Indirect key" },
   { DNS_ALGO_PRIVATEDNS,        "Private, domain name" },
@@ -3598,6 +3603,17 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
             }
             cur_offset += optlen;
             rropt_len  -= optlen;
+          }
+          break;
+
+          case O_EDNS_KEY_TAG:
+          {
+            while (optlen >= 2) {
+              proto_tree_add_item(rropt_tree, hf_dns_opt_key_tag, tvb, cur_offset, 2, ENC_BIG_ENDIAN);
+              cur_offset += 2;
+              rropt_len  -= 2;
+              optlen     -= 2;
+            }
           }
           break;
 
@@ -7546,6 +7562,11 @@ proto_register_dns(void)
       { "QTYPE", "dns.opt.mqtype",
         FT_UINT16, BASE_DEC|BASE_EXT_STRING, &dns_types_vals_ext, 0x0,
         "Additional QTYPE (RFC10029)", HFILL }},
+
+    { &hf_dns_opt_key_tag,
+      { "Key Tag", "dns.opt.key_tag",
+        FT_UINT16, BASE_DEC, NULL, 0x0,
+        "DNSSEC Trust Anchor Key Tag (RFC8145)", HFILL }},
 
     { &hf_dns_count_questions,
       { "Questions", "dns.count.queries",
