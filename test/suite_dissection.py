@@ -2289,6 +2289,19 @@ class TestDissectTns:
             ['OCI, narrow (4-byte slots)', '5', '1', 'SELECT :v FROM DUAL'],
         ], rows
 
+    def test_tns_oci_sql_length(self, cmd_tshark, capture_file, test_env):
+        '''An OCI client declares the SQL's byte length in AL32UTF8 and three
+        times it in any other character set; the SQL decodes either way.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_oci_sql_length.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_all8.sql',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [['select 1 from dual', '']] * 2, rows
+
     def test_tns_oci_status(self, cmd_tshark, capture_file, test_env):
         '''A server answers an OCI client with a fixed-width little-endian
         status block - 136 bytes, or a compact 24 - and a 7-byte TTI_STA
@@ -2777,6 +2790,110 @@ class TestDissectTns:
         ), encoding='utf-8', env=test_env)
         rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
         assert rows == [['DATA_DIR', 'report.txt', '']] * 2, rows
+
+    def test_tns_oci_12c(self, cmd_tshark, capture_file, test_env):
+        '''At the 12c band an OCI client's narrow execute preamble inserts
+        64 zero bytes ahead of the SQL, which moves from 176 to 240; the
+        11g layout still decodes beside it.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_oci_12c.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_all8.oci_preamble',
+            '-T', 'fields',
+            '-e', 'tns.data_all8.oci_preamble',
+            '-e', 'tns.data_all8.sql',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [
+            ['OCI, narrow (4-byte slots), 12c band', 'SELECT * FROM T', ''],
+            ['OCI, narrow (4-byte slots)', 'SELECT * FROM T', ''],
+        ], rows
+
+    def test_tns_oci_12c_status(self, cmd_tshark, capture_file, test_env):
+        '''At the 12c band an OCI status block is 144 bytes: the error
+        number again at 132 and a ub8 row count at 136, which is the row
+        count sqlplus reports for a DML. An error's message follows it.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_oci_12c.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_oer.err_code',
+            '-T', 'fields',
+            '-e', 'tns.data_oer.err_code',
+            '-e', 'tns.data_oer.err_num',
+            '-e', 'tns.data_oer.rowcount64',
+            '-e', 'tns.data_oer.message',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [
+            ['0', '0', '3', '', ''],
+            ['942', '942', '0', 'ORA-00942: table or view does not exist', ''],
+        ], rows
+
+    def test_tns_oci_long_error(self, cmd_tshark, capture_file, test_env):
+        '''An error message too long for a length byte follows an OCI
+        status block chunked, with single-byte chunk lengths from an 11g
+        server and ub4 LE ones from an 18c server. Either way the whole
+        333-byte message is read and nothing is left over.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_oci_long_error.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tcp.srcport == 1521',
+            '-T', 'fields',
+            '-e', 'tns.data_oer.err_code',
+            '-e', 'tns.data_oer.message',
+            '-e', 'data.len',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [['20001', 'ORA-20001: ' + 'A' * 321, '', '']] * 2, rows
+
+    def test_tns_oci_kod(self, cmd_tshark, capture_file, test_env):
+        '''An OCI client describes an object type with TTI_KOD, by name or
+        by REF. The reply is a name header for a by-name call, a record
+        per type descriptor and a status; a descriptor that is an instance
+        of SYS.KOTTD names the type, its version and its typecode. The
+        12c band's longer header and bare record descriptor are read
+        too.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_oci_kod.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-E', 'aggregator=|',
+            '-e', 'tns.data_kod.opcode',
+            '-e', 'tns.data_kod.kind',
+            '-e', 'tns.data_kod.schema',
+            '-e', 'tns.data_kod.name',
+            '-e', 'tns.data_kod.system_type',
+            '-e', 'tns.data_kod.typecode',
+            '-e', 'tns.data_oer.err_code',
+            '-e', 'data.len',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [
+            ['3', '', '', 'DBMSOUTPUT_LINESARRAY', '', '', '', '', ''],
+            ['', '2|1', 'PYO|SYS', 'DBMSOUTPUT_LINESARRAY|DBMSOUTPUT_LINESARRAY', '0x01', '122', '0', '', ''],
+            ['4', '', '', '', '0x01', '', '', '', ''],
+            ['', '1', 'SYS', 'KOTTD', '0x01', '108', '0', '', ''],
+        ] * 2, rows
+
+    def test_tns_oci_fetch(self, cmd_tshark, capture_file, test_env):
+        '''An OCI client's fetch carries the cursor id and the row count as
+        fixed-width little-endian ub4s: sqlplus 23.26 asks cursor 2 for 15
+        rows.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_oci_12c.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_fetch.rows',
+            '-T', 'fields',
+            '-e', 'tns.data.cursor',
+            '-e', 'tns.data_fetch.rows',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [['2', '15', '']], rows
 
 class TestDecompressMongo:
     def test_decompress_zstd(self, cmd_tshark, features, capture_file, test_env):
