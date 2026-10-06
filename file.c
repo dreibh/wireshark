@@ -697,7 +697,6 @@ cf_read(capture_file *cf, bool reloading)
             }
             add_new_record_to_record_list(cf, &rec, cf->dfcode, &edt, cinfo,
                                           data_offset, &frame_dup_cache, cksum);
-            wtap_rec_reset(&rec);
         }
     }
     CATCH(OutOfMemoryError) {
@@ -924,7 +923,6 @@ cf_continue_tail(capture_file *cf, volatile int to_read, wtap_rec *rec,
                                           frame_cksum);
             to_read--;
         }
-        wtap_rec_reset(rec);
     }
     CATCH(OutOfMemoryError) {
         simple_message_box(ESD_TYPE_ERROR, NULL,
@@ -1051,7 +1049,6 @@ cf_finish_tail(capture_file *cf, wtap_rec *rec, int *err,
         add_new_record_to_record_list(cf, rec, cf->dfcode, &edt, cinfo,
                                       data_offset, frame_dup_cache,
                                       frame_cksum);
-        wtap_rec_reset(rec);
     }
 
     epan_dissect_cleanup(&edt);
@@ -2010,7 +2007,6 @@ rescan_packets(capture_file *cf, const char *action, const char *action_item, bo
            on the next pass through the loop. */
         prev_frame_num = fdata->num;
         prev_frame = fdata;
-        wtap_rec_reset(&rec);
     }
 
     epan_dissect_cleanup(&edt);
@@ -2338,7 +2334,6 @@ process_specified_records(capture_file *cf, packet_range_t *range,
             ret = PSP_FAILED;
             break;
         }
-        wtap_rec_reset(&rec);
     }
 
     if (range == &all_range) {
@@ -4744,7 +4739,6 @@ find_packet(capture_file *cf, ws_match_function match_function,
                 new_fd = fdata;
                 break;
             }
-            wtap_rec_reset(&rec);
         }
 
         if (fdata == start_fd) {
@@ -4814,10 +4808,11 @@ cf_goto_frame(capture_file *cf, unsigned fnumber, bool exact)
         }
         if (fdata->prev_dis_num == 0) {
             /* There is no previous displayed frame, so this frame is
-             * before the first displayed frame. Go to the first line,
-             * which is the closest frame.
+             * before the first displayed frame, which is the closest frame.
+             * (This isn't necessarily the first row, if the packet list is
+             * sorted.)
              */
-            fdata = NULL; /* This will select the first row. */
+            fdata = frame_data_sequence_find(cf->provider.frames, cf->first_displayed);
             statusbar_push_temporary_msg("Packet number %u isn't displayed, going to the first displayed packet, %u.", fnumber, cf->first_displayed);
         } else {
             uint32_t delta = fnumber - fdata->prev_dis_num;
@@ -5552,7 +5547,6 @@ rescan_file(capture_file *cf, const char *fname, bool is_tempfile)
         if (rec.rec_type == REC_TYPE_PACKET) {
             cf_add_encapsulation_type(cf, rec.rec_header.packet_header.pkt_encap);
         }
-        wtap_rec_reset(&rec);
     }
     wtap_rec_cleanup(&rec);
 
@@ -5628,6 +5622,9 @@ cf_save_records(capture_file *cf, const char *fname, unsigned save_format,
     addr_lists = get_addrinfo_list();
 
     if (save_format == cf->cd_t && compression_type == cf->compression_type
+            /* The input frame does not record its Zstandard level. Rewrite
+             * to honor the configured level rather than copying raw bytes. */
+            && compression_type != WS_FILE_ZSTD_COMPRESSED
             && !discard_comments && !cf->unsaved_changes
             && (wtap_addrinfo_list_empty(addr_lists) || wtap_file_type_subtype_supports_block(save_format, WTAP_BLOCK_NAME_RESOLUTION) == BLOCK_NOT_SUPPORTED)) {
         /* We're saving in the format it's already in, and we're not discarding
@@ -5723,6 +5720,7 @@ cf_save_records(capture_file *cf, const char *fname, unsigned save_format,
 
         /* Use the snaplen from cf (XXX - does wtap_dump_params_init handle that?) */
         params.snaplen = cf->snap;
+        params.zstd_compression_level = prefs.capture_zstd_compression_level;
 
         if (file_exists(fname)) {
             /* We're overwriting an existing file; write out to a new file,
@@ -5979,6 +5977,7 @@ cf_export_specified_packets(capture_file *cf, const char *fname,
 
     /* Use the snaplen from cf (XXX - does wtap_dump_params_init handle that?) */
     params.snaplen = cf->snap;
+    params.zstd_compression_level = prefs.capture_zstd_compression_level;
 
     if (file_exists(fname)) {
         /* We're overwriting an existing file; write out to a new file,

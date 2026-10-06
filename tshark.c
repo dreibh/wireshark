@@ -3370,7 +3370,6 @@ capture_input_new_packets(capture_session *cap_session, int to_read)
                     cf->provider.wth = NULL;
                 }
             }
-            wtap_rec_reset(&rec);
         }
 
         epan_dissect_free(edt);
@@ -3755,7 +3754,6 @@ process_cap_file_first_pass(capture_file *cf, int max_packet_count,
                 break;
             }
         }
-        wtap_rec_reset(&rec);
     }
     if (*err != 0)
         status = PASS_READ_ERROR;
@@ -4038,7 +4036,6 @@ process_cap_file_second_pass(capture_file *cf, wtap_dumper *pdh,
             status = PASS_PRINT_ERROR;
             break;
         }
-        wtap_rec_reset(&rec);
     }
 
     if (edt)
@@ -4198,7 +4195,6 @@ process_cap_file_single_pass(capture_file *cf, wtap_dumper *pdh,
             *err = 0; /* This is not a read error */
             break;
         }
-        wtap_rec_reset(&rec);
     }
     if (status == PASS_SUCCEEDED) {
         if (*err != 0) {
@@ -4254,6 +4250,7 @@ process_cap_file(capture_file *cf, char *save_file, int out_file_type,
     if (save_file != NULL) {
         /* Set up to write to the capture file. */
         wtap_dump_params_init_no_idbs(&params, cf->provider.wth);
+        params.zstd_compression_level = prefs.capture_zstd_compression_level;
 
         /* If we don't have an application name add TShark */
         if (wtap_block_get_string_option_value(g_array_index(params.shb_hdrs, wtap_block_t, 0), OPT_SHB_USERAPPL, &shb_user_appl) != WTAP_OPTTYPE_SUCCESS) {
@@ -4989,7 +4986,7 @@ print_packet(capture_file *cf, epan_dissect_t *edt)
             if (print_summary && !print_columns(cf, edt))
                 return false;
             if (print_details) {
-                if (!proto_tree_print(print_details ? print_dissections_expanded : print_dissections_none,
+                if (!proto_tree_print(print_dissections_expanded,
                             print_hex, edt, output_only_tables, print_stream))
                     return false;
                 if (!print_hex) {

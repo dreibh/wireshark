@@ -1749,6 +1749,7 @@ typedef struct wtap_dump_params {
                                                  This array may grow since the dumper was opened and will subsequently
                                                  be written before newer packets are written in wtap_dump. */
     bool        dont_copy_idbs;             /**< XXX - don't copy IDBs; this should eventually always be the case. */
+    unsigned    zstd_compression_level;      /**< Zstandard output level; 0 uses the library default */
 } wtap_dump_params;
 
 /* Zero-initializer for wtap_dump_params. */
@@ -2320,6 +2321,10 @@ void wtap_rec_apply_snapshot(wtap_rec *rec, uint32_t snaplen);
  * Clears existing content and resets the record for reuse.
  *
  * @param rec Pointer to the wtap_rec structure.
+ *
+ * @note wtap_read and wtap_seek_read call this before doing anything, so
+ * for a processing loop that calls one of those for each iteration and
+ * calls wtap_rec_cleanup at the end, this isn't needed.
  */
 WS_DLL_PUBLIC
 void wtap_rec_reset(wtap_rec *rec);
