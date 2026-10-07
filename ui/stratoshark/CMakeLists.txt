@@ -119,6 +119,7 @@ set(WIRESHARK_UTILS_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_stylesheet_loader.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_token_handler.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/themed_icon.h
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/contrast_adapt_icon.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/variant_pointer.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/wireshark_mime_data.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/wireshark_zip_helper.h
@@ -163,6 +164,7 @@ set(WIRESHARK_MODEL_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/models/interface_tree_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/numeric_value_chooser_delegate.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/packet_list_model.h
+	${CMAKE_SOURCE_DIR}/ui/qt/models/packet_list_proxy_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/packet_list_record.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/pinned_rows_model.h
 	${CMAKE_SOURCE_DIR}/ui/qt/models/path_selection_delegate.h
@@ -442,6 +444,7 @@ set(WIRESHARK_UTILS_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_stylesheet_loader.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_token_handler.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/themed_icon.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/contrast_adapt_icon.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/system_theme_detector_common.cpp
 	${WIRESHARK_THEMES_PLATFORM_SRC}
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/wireshark_mime_data.cpp
@@ -487,6 +490,7 @@ set(WIRESHARK_MODEL_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/models/interface_tree_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/numeric_value_chooser_delegate.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/packet_list_model.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/models/packet_list_proxy_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/packet_list_record.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/pinned_rows_model.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/models/path_selection_delegate.cpp
