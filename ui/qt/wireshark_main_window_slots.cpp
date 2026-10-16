@@ -1086,9 +1086,9 @@ void WiresharkMainWindow::setEditCommentsMenu()
     QAction *action = main_ui_->menuPacketComment->addAction(tr("Add New Comment…"));
     connect(action, &QAction::triggered, this, &WiresharkMainWindow::addPacketComment);
     action->setShortcut(QKeySequence(Qt::CTRL | Qt::ALT | Qt::Key_C));
-    frame_data *hidden_frame = packet_list_->filteredOutSelectedFrame();
-    if (selectedRows().count() == 1 || hidden_frame) {
-        frame_data * current_frame = hidden_frame ? hidden_frame : frameDataForRow(selectedRows().first());
+    QList<frame_data *> frames = selectedFrames();
+    if (frames.count() == 1) {
+        frame_data * current_frame = frames.first();
         wtap_block_t pkt_block = cf_get_packet_block(capture_file_.capFile(), current_frame);
         unsigned nComments = wtap_block_count_option(pkt_block, OPT_COMMENT);
         if (nComments > 0) {
@@ -1115,9 +1115,9 @@ void WiresharkMainWindow::setEditCommentsMenu()
         }
         wtap_block_unref(pkt_block);
     }
-    if (selectedRows().count() > 1) {
+    if (frames.count() > 1) {
         main_ui_->menuPacketComment->addSeparator();
-        action = main_ui_->menuPacketComment->addAction(tr("Delete comments from %Ln packet(s)", "", static_cast<int>(selectedRows().count())));
+        action = main_ui_->menuPacketComment->addAction(tr("Delete comments from %Ln packet(s)", "", static_cast<int>(frames.count())));
         connect(action, &QAction::triggered, this, &WiresharkMainWindow::deleteCommentsFromPackets);
     }
 }
@@ -1166,16 +1166,12 @@ void WiresharkMainWindow::setMenusForSelectedPacket()
             << main_ui_->actionViewColorizeConversation9 << main_ui_->actionViewColorizeConversation10;
 
     if (capture_file_.capFile()) {
-        QList<int> rows = selectedRows();
+        QList<frame_data *> frames = selectedFrames();
         frame_data * current_frame = 0;
-        if (rows.count() > 0)
-            current_frame = frameDataForRow(rows.at(0));
+        if (frames.count() > 0)
+            current_frame = frames.at(0);
 
-        frame_data *hidden_frame = packet_list_->filteredOutSelectedFrame();
-        if (rows.count() == 0 && hidden_frame)
-            current_frame = hidden_frame;
-
-        frame_selected = rows.count() == 1 || hidden_frame;
+        frame_selected = frames.count() == 1;
         if (packet_list_->multiSelectActive())
         {
             frame_selected = false;
@@ -1185,13 +1181,13 @@ void WiresharkMainWindow::setMenusForSelectedPacket()
         previous_selection_history = packet_list_->havePreviousHistory();
         have_frames = capture_file_.capFile()->count > 0;
         have_marked = capture_file_.capFile()->marked_count > 0;
-        another_is_marked = have_marked && rows.count() <= 1 &&
+        another_is_marked = have_marked && frames.count() <= 1 &&
                 !(capture_file_.capFile()->marked_count == 1 && frame_selected &&
                 current_frame && current_frame->marked);
         have_filtered = capture_file_.capFile()->displayed_count > 0 && capture_file_.capFile()->displayed_count != capture_file_.capFile()->count;
         have_ignored = capture_file_.capFile()->ignored_count > 0;
         have_time_ref = capture_file_.capFile()->ref_time_count > 0;
-        another_is_time_ref = have_time_ref && rows.count() <= 1 &&
+        another_is_time_ref = have_time_ref && frames.count() <= 1 &&
                 !(capture_file_.capFile()->ref_time_count == 1 && frame_selected &&
                 current_frame && current_frame->ref_time);
 
@@ -1227,7 +1223,7 @@ void WiresharkMainWindow::setMenusForSelectedPacket()
         }
     }
 
-    QList<int> rows = selectedRows();
+    QList<int> rows = selectedRows(true);
     if (main_ui_->searchFrame) {
         main_ui_->searchFrame->setSelectedFrames(rows, frame_selected);
     }
@@ -1238,6 +1234,7 @@ void WiresharkMainWindow::setMenusForSelectedPacket()
     main_ui_->actionCopyListAsHTML->setEnabled(rows.count() > 0);
 
     main_ui_->actionEditMarkSelected->setEnabled(frame_selected || multi_selection);
+    packet_list_->updatePinActions(main_ui_->actionViewPinSelectedRows, main_ui_->actionViewUnpinAllRows);
     main_ui_->actionEditMarkAllDisplayed->setEnabled(have_frames);
     /* Unlike un-ignore, do not allow unmark of all frames when no frames are displayed  */
     main_ui_->actionEditUnmarkAllDisplayed->setEnabled(have_marked);
@@ -1249,8 +1246,7 @@ void WiresharkMainWindow::setMenusForSelectedPacket()
         linkTypes = capture_file_.capFile()->linktypes;
 
     bool enableEditComments = linkTypes && wtap_dump_can_write(capture_file_.capFile()->linktypes, WTAP_COMMENT_PER_PACKET);
-    main_ui_->menuPacketComment->setEnabled(enableEditComments &&
-            (selectedRows().count() > 0 || packet_list_->filteredOutSelectedFrame()));
+    main_ui_->menuPacketComment->setEnabled(enableEditComments && selectedFrames().count() > 0);
     main_ui_->actionDeleteAllPacketComments->setEnabled(enableEditComments);
 
     main_ui_->actionEditIgnoreSelected->setEnabled(frame_selected || multi_selection);
@@ -1666,7 +1662,7 @@ void WiresharkMainWindow::initViewColorizeMenu()
         color_num++;
     }
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     // Spotlight uses Cmd+Space
     main_ui_->actionViewColorizeResetColorization->setShortcut(QKeySequence("Meta+Space"));
 #endif
@@ -2184,9 +2180,9 @@ void WiresharkMainWindow::copySelectedItems(WiresharkMainWindow::CopySelected se
     case CopyListAsYAML:
     case CopyListAsHTML:
 
-        if (packet_list_->selectedRows().count() > 0)
+        if (packet_list_->selectedRows(true).count() > 0)
         {
-            QList<int> rows = packet_list_->selectedRows();
+            QList<int> frame_nums = packet_list_->selectedRows(true);
             QStringList content, htmlContent;
 
             PacketList::SummaryCopyType copyType = PacketList::CopyAsText;
@@ -2204,7 +2200,7 @@ void WiresharkMainWindow::copySelectedItems(WiresharkMainWindow::CopySelected se
                 if (prefs.gui_packet_list_copy_text_with_aligned_columns) {
                     hdr_parts = packet_list_->createHeaderPartsForAligned();
                     align_parts = packet_list_->createAlignmentPartsForAligned();
-                    size_parts = packet_list_->createSizePartsForAligned(true, hdr_parts, rows);
+                    size_parts = packet_list_->createSizePartsForAligned(true, hdr_parts, frame_nums);
                     content << packet_list_->createHeaderSummaryForAligned(hdr_parts, align_parts, size_parts);
                 }
                 else {
@@ -2220,22 +2216,18 @@ void WiresharkMainWindow::copySelectedItems(WiresharkMainWindow::CopySelected se
                 content << packet_list_->createHeaderSummaryText(copyType);
             }
 
-            foreach (int row, rows)
+            foreach (int frame_num, frame_nums)
             {
-                QModelIndex idx = packet_list_->model()->index(row, 0);
-                if (! idx.isValid())
-                    continue;
-
                 if (copyType == PacketList::CopyAsText || copyType == PacketList::CopyAsHTML) {
                     if (prefs.gui_packet_list_copy_text_with_aligned_columns)
-                        content << packet_list_->createSummaryForAligned(idx, align_parts, size_parts);
+                        content << packet_list_->createSummaryForAligned(frame_num, align_parts, size_parts);
                     else
-                        content << packet_list_->createSummaryText(idx, PacketList::CopyAsText);
+                        content << packet_list_->createSummaryText(frame_num, PacketList::CopyAsText);
                     if (copyType == PacketList::CopyAsHTML)
-                        htmlContent << packet_list_->createSummaryForHtml(idx);
+                        htmlContent << packet_list_->createSummaryForHtml(frame_num);
                 }
                 else {
-                    content << packet_list_->createSummaryText(idx, copyType);
+                    content << packet_list_->createSummaryText(frame_num, copyType);
                 }
             }
 
@@ -2332,8 +2324,8 @@ void WiresharkMainWindow::editTimeShiftFinished(int)
 
 void WiresharkMainWindow::addPacketComment()
 {
-    QList<int> rows = selectedRows();
-    frame_data * fdata = rows.count() > 0 ? frameDataForRow(rows.at(0)) : packet_list_->filteredOutSelectedFrame();
+    QList<frame_data *> frames = selectedFrames();
+    frame_data * fdata = frames.count() > 0 ? frames.at(0) : nullptr;
     if (! fdata)
         return;
 
@@ -2355,8 +2347,7 @@ void WiresharkMainWindow::addPacketCommentFinished(PacketCommentDialog* pc_dialo
 
 void WiresharkMainWindow::editPacketComment()
 {
-    QList<int> rows = selectedRows();
-    if (rows.count() != 1 && !(rows.count() == 0 && packet_list_->filteredOutSelectedFrame()))
+    if (selectedFrames().count() != 1)
         return;
 
     QAction *ra = qobject_cast<QAction*>(sender());
@@ -2603,6 +2594,11 @@ void WiresharkMainWindow::connectViewMenuActions()
         }
     });
 
+    connect(main_ui_->actionViewPinSelectedRows, &QAction::triggered,
+            packet_list_, &PacketList::togglePinSelectedRows);
+    connect(main_ui_->actionViewUnpinAllRows, &QAction::triggered,
+            packet_list_, &PacketList::unpinAllRows);
+
     connect(main_ui_->actionViewInternalsConversationHashTables, &QAction::triggered, this, [this]() {
         ConversationHashTablesDialog *conversation_hash_tables_dlg = new ConversationHashTablesDialog(this);
         conversation_hash_tables_dlg->show();
@@ -2827,7 +2823,7 @@ void WiresharkMainWindow::colorizeConversation(bool create_rule)
     QAction *colorize_action = qobject_cast<QAction *>(sender());
     if (!colorize_action) return;
 
-    if (capture_file_.capFile() && selectedRows().count() > 0) {
+    if (capture_file_.capFile() && selectedFrames().count() > 0) {
         packet_info *pi = capture_file_.packetInfo();
         uint8_t cc_num = colorize_action->data().toUInt();
         char *filter = conversation_filter_from_packet(pi);
@@ -2914,10 +2910,13 @@ void WiresharkMainWindow::openPacketDialog(bool from_reference)
             return;
 
         fdata = frame_data_sequence_find(capture_file_.capFile()->provider.frames, framenum);
-    } else if (selectedRows().count() == 1) {
-        fdata = frameDataForRow(selectedRows().at(0));
-    } else if (selectedRows().count() > 1)
-        return;
+    } else {
+        QList<frame_data *> frames = selectedFrames();
+        if (frames.count() > 1)
+            return;
+        if (frames.count() == 1)
+            fdata = frames.at(0);
+    }
 
     /* If we have a frame, pop up the dialog */
     if (fdata) {

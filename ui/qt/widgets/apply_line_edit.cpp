@@ -28,7 +28,7 @@ ApplyLineEdit::ApplyLineEdit(QString linePlaceholderText, QWidget * parent)
     apply_button_->setCursor(Qt::ArrowCursor);
     apply_button_->setEnabled(false);
     apply_button_->setToolTip(tr("Apply changes"));
-    apply_button_->setIconSize(QSize(24, 14));
+    apply_button_->setIconSize(QSize(21, 14));
     apply_button_->setMaximumWidth(30);
     apply_button_->setStyleSheet(
             "QToolButton {"
@@ -38,7 +38,7 @@ ApplyLineEdit::ApplyLineEdit(QString linePlaceholderText, QWidget * parent)
             "}"
             );
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     setAttribute(Qt::WA_MacSmallSize, true);
     apply_button_->setAttribute(Qt::WA_MacSmallSize, true);
 #endif

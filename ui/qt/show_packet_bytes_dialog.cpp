@@ -13,9 +13,11 @@
 #include "main_window.h"
 #include "main_application.h"
 #include <ui/qt/utils/font_manager.h>
+#include <ui/qt/utils/qt_ui_utils.h>
 #include "ui/qt/widgets/wireshark_file_dialog.h"
 #include "ui/recent.h"
 
+#include <epan/charsets.h>
 #include "epan/strutil.h"
 
 #include "wsutil/utf8_entities.h"
@@ -91,6 +93,7 @@ ShowPacketBytesDialog::ShowPacketBytesDialog(QWidget &parent, CaptureFile &cf) :
     ui->cbShowAs->addItem(tr("Raw"), SHOW_RAW);
     ui->cbShowAs->addItem(tr("Rust Array"), SHOW_RUSTARRAY);
     ui->cbShowAs->addItem(tr("UTF-8"), SHOW_CODEC);
+    ui->cbShowAs->addItem(tr("UTF-8 Unescaped"), SHOW_UTF8_UNESCAPED);
     ui->cbShowAs->addItem(tr("YAML"), SHOW_YAML);
     ui->cbShowAs->setCurrentIndex(ui->cbShowAs->findData(recent.gui_show_bytes_show));
     ui->cbShowAs->blockSignals(false);
@@ -326,6 +329,7 @@ void ShowPacketBytesDialog::copyBytes()
     case SHOW_JSON:
     case SHOW_RAW:
     case SHOW_YAML:
+    case SHOW_UTF8_UNESCAPED:
         mainApp->clipboard()->setText(ui->tePacketBytes->toPlainText());
         break;
 
@@ -338,6 +342,8 @@ void ShowPacketBytesDialog::copyBytes()
         break;
 
     case SHOW_CODEC:
+        // XXX - Why toUtf8 here? Doesn't this cause an unnecessary round-trip
+        // conversion when it should already be Unicode?
         mainApp->clipboard()->setText(ui->tePacketBytes->toPlainText().toUtf8());
         break;
     }
@@ -363,6 +369,7 @@ void ShowPacketBytesDialog::saveAs()
     case SHOW_JSON:
     case SHOW_YAML:
     case SHOW_HTML:
+    case SHOW_UTF8_UNESCAPED:
         open_mode |= QFile::Text;
     default:
         break;
@@ -391,6 +398,7 @@ void ShowPacketBytesDialog::saveAs()
     case SHOW_HEXDUMP:
     case SHOW_JSON:
     case SHOW_YAML:
+    case SHOW_UTF8_UNESCAPED:
     {
         QTextStream out(&file);
         out << ui->tePacketBytes->toPlainText();
@@ -793,15 +801,27 @@ void ShowPacketBytesDialog::updatePacketBytes(void)
         // character U+FFFD.
         QByteArray encName = ui->cbShowAs->currentText().toUtf8();
         QByteArray ba(field_bytes_);
-        gsize bytes_written = 0;
-        gchar *utf8 = g_convert_with_fallback(ba.constData(), ba.size(),
-                                              "UTF-8", encName.constData(),
-                                              "\xEF\xBF\xBD",
-                                              NULL, &bytes_written, NULL);
+        wmem_strbuf_t *utf8 = get_strbuf_enc_iconv(NULL,
+            reinterpret_cast<const uint8_t*>(ba.constData()), ba.size(),
+            encName.constData());
         if (utf8) {
             ui->tePacketBytes->setLineWrapMode(QTextEdit::WidgetWidth);
-            ui->tePacketBytes->setPlainText(QString::fromUtf8(utf8, bytes_written));
-            g_free(utf8);
+            ui->tePacketBytes->setPlainText(QString::fromUtf8(utf8->str, utf8->len));
+            wmem_strbuf_destroy(utf8);
+        }
+        break;
+    }
+
+    case SHOW_UTF8_UNESCAPED:
+    {
+        QByteArray ba(field_bytes_);
+        wmem_strbuf_t *utf8 = ws_unescape_string_len(NULL,
+            reinterpret_cast<const uint8_t*>(ba.constData()), ba.size(),
+            NULL);
+        if (utf8) {
+            ui->tePacketBytes->setLineWrapMode(QTextEdit::WidgetWidth);
+            ui->tePacketBytes->setPlainText(QString::fromUtf8(utf8->str, utf8->len));
+            wmem_strbuf_destroy(utf8);
         }
         break;
     }

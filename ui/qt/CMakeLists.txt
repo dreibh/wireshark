@@ -108,6 +108,7 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/rtp_audio_routing.h
 	utils/rtp_audio_silence_generator.h
 	utils/software_update.h
+	utils/software_update_backend.h
 	utils/stock_icon.h
 	utils/tango_colors.h
 	utils/theme_manager.h
@@ -120,6 +121,7 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/themes/theme_stylesheet_loader.h
 	utils/themes/theme_token_handler.h
 	utils/themes/themed_icon.h
+	utils/themes/token_palette.h
 	utils/themes/contrast_adapt_icon.h
 	utils/variant_pointer.h
 	utils/wireshark_mime_data.h
@@ -444,6 +446,16 @@ else()
 	set(WIRESHARK_THEMES_PLATFORM_SRC utils/themes/system_theme_detector_stub.cpp)
 endif()
 
+if(HAVE_SOFTWARE_UPDATE AND WIN32)
+	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC utils/software_update_backend_win.cpp)
+elseif(HAVE_SOFTWARE_UPDATE AND APPLE)
+	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC utils/software_update_backend_mac.cpp)
+elseif(PACKAGEKIT_FOUND)
+	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC utils/software_update_backend_linux.cpp)
+else()
+	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC utils/software_update_backend_stub.cpp)
+endif()
+
 set(WIRESHARK_UTILS_SRCS
 	utils/byte_view_text_cells.cpp
 	utils/color_utils.cpp
@@ -459,6 +471,7 @@ set(WIRESHARK_UTILS_SRCS
 	utils/rtp_audio_routing.cpp
 	utils/rtp_audio_silence_generator.cpp
 	utils/software_update.cpp
+	${WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC}
 	utils/stock_icon.cpp
 	utils/theme_manager.cpp
 	utils/theme_styler.cpp
@@ -1046,6 +1059,7 @@ target_include_directories(qtui
 		${PCAP_INCLUDE_DIRS}
 		${SPEEXDSP_INCLUDE_DIRS}
 		${WINSPARKLE_INCLUDE_DIRS}
+		${PACKAGEKIT_INCLUDE_DIRS}
 		$<$<CXX_COMPILER_ID:MSVC>:${ZLIB_INCLUDE_DIRS}>
 		$<$<CXX_COMPILER_ID:MSVC>:${ZLIBNG_INCLUDE_DIRS}>
 	PRIVATE

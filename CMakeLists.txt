@@ -159,9 +159,9 @@ if(WIN32)
 endif()
 
 # Updated by tools/make-version.py
-set(PROJECT_MAJOR_VERSION 4)
-set(PROJECT_MINOR_VERSION 7)
-set(PROJECT_PATCH_VERSION 4)
+set(PROJECT_MAJOR_VERSION 5)
+set(PROJECT_MINOR_VERSION 1)
+set(PROJECT_PATCH_VERSION 0)
 set(PROJECT_BUILD_VERSION 0)
 set(PROJECT_VERSION_EXTENSION "")
 
@@ -171,8 +171,8 @@ endif()
 
 set(PROJECT_VERSION "${PROJECT_MAJOR_VERSION}.${PROJECT_MINOR_VERSION}.${PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
 
-set(STRATOSHARK_MAJOR_VERSION 0)
-set(STRATOSHARK_MINOR_VERSION 10)
+set(STRATOSHARK_MAJOR_VERSION 1)
+set(STRATOSHARK_MINOR_VERSION 1)
 
 set(STRATOSHARK_VERSION "${STRATOSHARK_MAJOR_VERSION}.${STRATOSHARK_MINOR_VERSION}.${PROJECT_PATCH_VERSION}${PROJECT_VERSION_EXTENSION}")
 
@@ -351,8 +351,8 @@ if(WIN32)
 	# Download Npcap required by the Windows installer.
 	# We do this here and not in FetchArtifacts.cmake because this
 	# is required by both the Visual Studio and MSYS2 builds.
-	set(NPCAP_VERSION "1.88")
-	set(NPCAP_SHA256 "a2f4ec1e5ea353ff67efd24b2ebf081ba44532410fae8d5e146af0310aa4f56b")
+	set(NPCAP_VERSION "1.89")
+	set(NPCAP_SHA256 "8aed85e900d783d1308506e919587d3e540451947af8a82f2d04f819e44305cc")
 	set(NPCAP_FILENAME "npcap-${NPCAP_VERSION}.exe")
 	set(NPCAP_URL "${LIBS_URL}/Npcap/${NPCAP_FILENAME}")
 	FetchContent_Declare(Npcap
@@ -1595,6 +1595,10 @@ if(BUILD_wireshark OR BUILD_stratoshark)
 	if(APPLE)
 		ws_find_package(Sparkle ENABLE_SPARKLE HAVE_SOFTWARE_UPDATE 2)
 	endif()
+	if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+		# 1.1.12 is the version shipped with RHEL 8
+		ws_find_package(PACKAGEKIT ENABLE_PACKAGEKIT HAVE_SOFTWARE_UPDATE "1.1.12")
+	endif()
 	if(NOT DEFINED MOC_OPTIONS)
 		# Squelch moc verbose "nothing to do" output
 		set(MOC_OPTIONS -nn)
@@ -2177,6 +2181,11 @@ set_package_properties(NL PROPERTIES
 	URL "https://www.infradead.org/~tgr/libnl/"
 	DESCRIPTION "Libraries for using the Netlink protocol on Linux"
 	PURPOSE "Support for managing wireless 802.11 interfaces"
+)
+set_package_properties(PACKAGEKIT PROPERTIES
+	URL "https://www.freedesktop.org/software/PackageKit/"
+	DESCRIPTION "D-Bus abstraction layer for package management (packagekit-glib2)"
+	PURPOSE "Checking for distribution updates of Wireshark on Linux"
 )
 set_package_properties(MaxMindDB PROPERTIES
 	URL "https://github.com/maxmind/libmaxminddb"
@@ -3322,6 +3331,7 @@ if(BUILD_wireshark AND QT_FOUND)
 		${SOCKET_LIBRARY}
 		${WIN_VERSION_LIBRARY}
 		${WINSPARKLE_LIBRARIES}
+		${PACKAGEKIT_LIBRARIES}
 		$<$<BOOL:${WIN32}>:uxtheme.lib>
 		${SPEEXDSP_LIBRARIES}
 		${ZLIB_LIBRARIES}
@@ -3442,6 +3452,7 @@ if(BUILD_stratoshark AND QT_FOUND)
 		${SOCKET_LIBRARY}
 		${WIN_VERSION_LIBRARY}
 		${WINSPARKLE_LIBRARIES}
+		${PACKAGEKIT_LIBRARIES}
 		$<$<BOOL:${WIN32}>:uxtheme.lib>
 		${SPEEXDSP_LIBRARIES}
 		${ZLIB_LIBRARIES}

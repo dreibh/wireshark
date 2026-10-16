@@ -2001,8 +2001,8 @@ dissect_st334_2(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
                 } else {
                     service_number = first & 0x3f;
                 }
-                ti = proto_tree_add_uint(service_tree, hf_st334_2_caption_service_number,
-                                         tvb, s_off, 1, service_number);
+                proto_tree_add_uint(service_tree, hf_st334_2_caption_service_number,
+                                    tvb, s_off, 1, service_number);
 
                 /*
                  * SMPTE ST 334-2:2015, Sec. 5.5, Table 6 defines
@@ -2708,8 +2708,7 @@ dissect_op47(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void *data)
     /* OP-47 Issue 6, Sec. 5.1 and Fig. 2 -- SDP identifier, length and format code. */
     proto_tree_add_item(op47_tree, hf_op47_sdp_identifier, tvb, 0, 2, ENC_BIG_ENDIAN);
     proto_tree_add_item(op47_tree, hf_op47_sdp_length, tvb, 2, 1, ENC_BIG_ENDIAN);
-    proto_tree_add_item(op47_tree, hf_op47_sdp_format_code, tvb, 3, 1, ENC_BIG_ENDIAN);
-    format_code = tvb_get_uint8(tvb, 3);
+    proto_tree_add_item_ret_uint8(op47_tree, hf_op47_sdp_format_code, tvb, 3, 1, ENC_BIG_ENDIAN, &format_code);
     if (format_code != 0x02 || len < 9)
         return len;
 

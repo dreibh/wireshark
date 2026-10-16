@@ -286,6 +286,9 @@ or on Windows,
 > msbuild /m /p:Configuration=Debug Wireshark.slnx
 ----
 
+MSBuild uses one CPU and generates verbose output by default.
+You can make it faster and less noisy by using the `-maxCpuCount` and `-verbosity` https://learn.microsoft.com/en-us/visualstudio/msbuild/msbuild-command-line-reference[flags], either on the command line or by placing them in a _Directory.Build.rsp_ https://learn.microsoft.com/en-us/visualstudio/msbuild/msbuild-response-files[response file].
+
 [#ChSrcRunFirstTime]
 === Run Your Version Of Wireshark
 
@@ -1230,6 +1233,8 @@ Wireshark releases are announced on the link:{wireshark-mailing-lists-url}[wires
 If you want to automatically check for the latest version, you can use one of the {wireshark-code-file-url}/ui/software_update.h[automatic update URLs] for our Windows or macOS packages, such as
 
 https://www.wireshark.org/update/0/Wireshark/0.0.0/Windows/x86-64/en-US/stable.xml
+
+You can enable update notifications on various Linux distributions using the `ENABLE_PACKAGEKIT` CMake option.
 
 [discrete]
 ===== Artwork

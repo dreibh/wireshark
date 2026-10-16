@@ -186,6 +186,15 @@ QPalette ThemePaletteBuilder::build(const TokenMap                              
 {
     QPalette pal = baselinePalette(isDarkMode, osBaseline);
 
+    // The OS baseline's Inactive group (e.g. macOS, when the window is in
+    // the background) can carry text colors that don't match the mode,
+    // leaving header and button text dark on a dark background.  Keep
+    // text legible by making Inactive text follow Active.
+    for (QPalette::ColorRole role : { QPalette::WindowText, QPalette::ButtonText,
+                                      QPalette::Text, QPalette::PlaceholderText }) {
+        pal.setColor(QPalette::Inactive, role, pal.color(QPalette::Active, role));
+    }
+
     // Apply theme-provided palette overrides.  Iterate over the full
     // QPalette role map so we only touch roles that Qt actually
     // defines; the token-name cache may not have a corresponding
@@ -220,8 +229,8 @@ QPalette ThemePaletteBuilder::build(const TokenMap                              
     // Accent on Qt 6.6+).  Themes get these for free from brand.primary;
     // no need to declare them in the palette section.
     //
-    // HighlightedText is the one role here a theme can pre-empt: when
-    // `palette.highlightedText` is declared, the loops above already
+    // Highlight and HighlightedText can be pre-empted: when
+    // `palette.highlight` / `palette.highlightedText` is declared, the loops above already
     // applied it, and the contrastingText() auto-derivation below
     // would otherwise overwrite that choice.  Some saturated
     // mid-tone brand colours sit on the WCAG luminance threshold where
@@ -229,24 +238,31 @@ QPalette ThemePaletteBuilder::build(const TokenMap                              
     // (#0e9aa7 teal is one such case); themes can pin white here.
     const QColor brandPrimary = sideOf(tokens, ThemeManager::BrandPrimary, isDarkMode);
     if (brandPrimary.isValid()) {
+        const QColor explicitHighlight =
+                sideOf(tokens, ThemeManager::PaletteHighlight, isDarkMode);
         const QColor explicitHighlightedText =
                 sideOf(tokens, ThemeManager::PaletteHighlightedText, isDarkMode);
         const QColor effectiveHighlightedText = explicitHighlightedText.isValid()
                 ? explicitHighlightedText
-                : ColorMath::contrastingText(brandPrimary);
+                : ColorMath::contrastingText(explicitHighlight.isValid() ? explicitHighlight : brandPrimary);
         if (!explicitHighlightedText.isValid())
             pal.setColor(QPalette::HighlightedText, effectiveHighlightedText);
         pal.setColor(QPalette::Disabled, QPalette::HighlightedText,
                      ColorMath::disabled(effectiveHighlightedText, baseColor));
 
-        QList<QPalette::ColorRole> brandRoles = { QPalette::Highlight, QPalette::Link };
+        QList<QPalette::ColorRole> brandRoles = { QPalette::Link };
+        if (!explicitHighlight.isValid())
+            brandRoles << QPalette::Highlight;
 #if QT_VERSION >= QT_VERSION_CHECK(6, 6, 0)
         brandRoles << QPalette::Accent;
 #endif
         for (QPalette::ColorRole role : brandRoles) {
-            pal.setColor(QPalette::Active,   role, brandPrimary);
-            pal.setColor(QPalette::Inactive, role, brandPrimary);
-            pal.setColor(QPalette::Disabled, role, ColorMath::disabled(brandPrimary, baseColor));
+            // Links follow an explicit selection color rather than brand.primary.
+            const QColor c = (role == QPalette::Link && explicitHighlight.isValid())
+                    ? explicitHighlight : brandPrimary;
+            pal.setColor(QPalette::Active,   role, c);
+            pal.setColor(QPalette::Inactive, role, c);
+            pal.setColor(QPalette::Disabled, role, ColorMath::disabled(c, baseColor));
         }
     }
 

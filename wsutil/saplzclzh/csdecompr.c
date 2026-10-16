@@ -59,6 +59,7 @@
 #endif
 #endif
 
+#include <stdint.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -125,7 +126,7 @@ SAP_INT CsGetLen (SAP_BYTE * data)
 /*           Length of org. data stream                               */
 /*--------------------------------------------------------------------*/
 {
-  SAP_INT len;
+  uint32_t len;
                                       /* file not compressed !!! .....*/
   if ((CsMagicHead[0] != data[5]) ||
       (CsMagicHead[1] != data[6]))
@@ -133,12 +134,16 @@ SAP_INT CsGetLen (SAP_BYTE * data)
     return ((SAP_INT)CS_E_FILENOTCOMPRESSED);
   }
 
-  len = (SAP_INT)data[0]         +    /* read length from first buf ..*/
-        ((SAP_INT)data[1] << 8)  +
-        ((SAP_INT)data[2] << 16) +
-        ((SAP_INT)data[3] << 24);
+  len = (uint32_t)data[0]         +   /* read length from first buf ..*/
+        ((uint32_t)data[1] << 8)  +
+        ((uint32_t)data[2] << 16) +
+        ((uint32_t)data[3] << 24);
 
-  return len;
+  /* Callers treat a negative length as not compressed */
+  if (len > INT32_MAX)
+    return ((SAP_INT)CS_E_FILENOTCOMPRESSED);
+
+  return (SAP_INT)len;
 }
 void NoBits (CSHU *cshu)
 /*--------------------------------------------------------------------*/
@@ -603,7 +608,9 @@ int DecompCodes ( CSHU *cshu,
       {
         n -= (e = (e = WSIZE - ((d &= WSIZE-1) > w ? d : w)) > n ? n : e);
 
-        if (w - d >= e)    /* (this test assumes unsigned comparison) */
+        /* The source can be before or (wrapping around the window)
+         * after the destination; only use memcpy if they don't overlap */
+        if ((w > d ? w - d : d - w) >= e)
         {
           memcpy (cshu->Slide + w, cshu->Slide + d, e);
           w += e;
@@ -1060,6 +1067,9 @@ int CsDecomprLZH (CSHU     * cshu,
 
 CODE_INT DE_STACK_OFFSET = 1<<(CS_BITS+1);
 
+/* The output stack is the part of Suffixtab after the code table */
+#define DE_STACK_END (&csc->Suffixtab[sizeof(csc->Suffixtab)])
+
 CODE_INT GetCode (struct CSC *csc)
 /*--------------------------------------------------------------------*/
 /* Read the next code from input stream                               */
@@ -1278,11 +1288,12 @@ int CsDecomprLZC (CSC      * csc,
     csc->maxbits        = inbuf[7];        /* get max. bits ...............*/
     csc->block_compress = csc->maxbits & BLOCK_MASK;
     csc->maxbits       &= BIT_MASK;
-    csc->maxmaxcode     = (CODE_INT) 1 << csc->maxbits;
-    csc->maxcode        = MAXCODE(csc->n_bits = INIT_CS_BITS);
 
     if (csc->maxbits > CS_BITS + 1)     /* not enough memory to decompress */
       return CS_E_MAXBITS_TOO_BIG;
+
+    csc->maxmaxcode     = (CODE_INT) 1 << csc->maxbits;
+    csc->maxcode        = MAXCODE(csc->n_bits = INIT_CS_BITS);
 
     /* get version and algorithm .....................................*/
     /* not supported at the moment ...................................*/
@@ -1343,6 +1354,10 @@ int CsDecomprLZC (CSC      * csc,
     finchar = oldcode = (CODE_INT) GetCode (csc);
     csc->get_r_bits = 0;                   /* not redundant !!! ...........*/
 
+    /* The first code must be a literal; there are no entries yet. */
+    if (oldcode >= 256)
+      return (CS_E_INVALIDCODE);
+
     if (outlen == 0)                  /* must have some space ........*/
     {
       code = CS_END_OUTBUFFER;
@@ -1375,9 +1390,17 @@ int CsDecomprLZC (CSC      * csc,
 
     incode = code;
 
+    /* A code can refer at most to the entry about to be added. A
+     * larger code would make the new entry its own prefix, an
+     * endless loop in the decoding below. */
+    if (code > csc->free_ent)
+      return (CS_E_INVALIDCODE);
+
     /* Special case for ababa string .................................*/
-    if (code >= csc->free_ent)
+    if (code == csc->free_ent)
     {
+      if (stackp >= DE_STACK_END)
+        return (CS_E_STACK_OVERFLOW);
       *stackp++ = (BYTE_TYP) finchar;
       OVERFLOW_CHECK
       code = oldcode;
@@ -1387,15 +1410,16 @@ int CsDecomprLZC (CSC      * csc,
     while (code >= 256)
     {
       /* Check for end of stack */
-      if (stackp >= (DE_STACK + DE_STACK_OFFSET)){
-          return (CS_E_STACK_OVERFLOW);
-      }
+      if (stackp >= DE_STACK_END)
+        return (CS_E_STACK_OVERFLOW);
       *stackp++ = TAB_SUFFIXOF(code);
       OVERFLOW_CHECK
       code = TAB_PREFIXOF(code);
     }
 
     finchar = TAB_SUFFIXOF(code);
+    if (stackp >= DE_STACK_END)
+      return (CS_E_STACK_OVERFLOW);
     *stackp++ = (BYTE_TYP) finchar;
     OVERFLOW_CHECK
 

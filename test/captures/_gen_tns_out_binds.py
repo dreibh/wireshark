@@ -13,7 +13,7 @@ and the values that come back.
               slots carry the FD 01 no-value placeholder
     Frame 2 - its reply: TTI_IOV with directions OUT, IN, OUT, then a
               TTI_RXD with the two OUT values - NUMBER 11 and VARCHAR
-              "hi" - each followed by its sb4 return code, then TTI_OER
+              "hi" - each followed by its sb4 actual length, then TTI_OER
 
 Bytes are built by hand in the Oracle 11g wire shape.
 """

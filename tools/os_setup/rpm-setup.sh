@@ -87,9 +87,7 @@ ADDITIONAL_LIST="
 	perl
 	perl-Parse-Yapp
 	python3-pytest
-	python3-pytest-xdist
 	snappy-devel
-	spandsp-devel
 	systemd-devel
 	xxhash-devel
 	"
@@ -125,6 +123,94 @@ case $PM in
 esac
 
 echo "Using $PM ($PM_SEARCH)"
+
+# On RHEL and derivatives (Rocky, AlmaLinux, CentOS Stream) many of the
+# packages below live in the CRB (CodeReady Builder; "PowerTools" on EL8)
+# and EPEL repositories, which are not enabled by default. Enable them so
+# that the package searches further down can actually find the packages
+# (e.g. asciidoctor, *-devel packages, and the PNG/codec optional tools).
+enable_el_extra_repos() {
+	# Only relevant for dnf/yum based systems.
+	case $PM in
+		dnf|yum) ;;
+		*) return 0 ;;
+	esac
+
+	# Only act on RHEL-family distributions.
+	if [ ! -e /etc/os-release ]; then
+		return 0
+	fi
+	# shellcheck disable=SC1091
+	. /etc/os-release
+	case " ${ID:-} ${ID_LIKE:-} " in
+		*" rhel "*|*" fedora "*|*" centos "*|*" rocky "*|*" almalinux "*) ;;
+		*) return 0 ;;
+	esac
+
+	# Fedora ships EPEL content natively and has no CRB; skip there.
+	if [ "${ID:-}" = "fedora" ]; then
+		return 0
+	fi
+
+	echo "Detected RHEL-family distribution (${ID:-unknown} ${VERSION_ID:-}); enabling EPEL and CRB."
+
+	# EPEL provides asciidoctor and many optional packages.
+	if ! $PM -y install epel-release 2>/dev/null; then
+		echo "Could not install epel-release automatically." >&2
+		echo "If packages are missing, install it manually, e.g.:" >&2
+		echo "    $PM -y install epel-release" >&2
+	fi
+
+	# CRB (RHEL 9/10, Rocky 9/10, Alma 9/10) is called PowerTools on EL8.
+	# dnf config-manager is the preferred way to toggle it.
+	if type dnf >/dev/null 2>&1; then
+		if ! dnf config-manager --set-enabled crb 2>/dev/null; then
+			dnf config-manager --set-enabled powertools 2>/dev/null ||
+			dnf config-manager --set-enabled PowerTools 2>/dev/null ||
+			echo "Could not enable CRB/PowerTools automatically; some -devel packages may be missing." >&2
+		fi
+	else
+		# yum (EL7-style) uses yum-config-manager.
+		yum-config-manager --enable crb 2>/dev/null ||
+		yum-config-manager --enable powertools 2>/dev/null ||
+		yum-config-manager --enable PowerTools 2>/dev/null ||
+		echo "Could not enable CRB/PowerTools automatically; some -devel packages may be missing." >&2
+	fi
+
+	# The 'devel' repo (Rocky and CentOS Stream only; absent on RHEL and
+	# AlmaLinux) carries a few extra -devel packages not yet shipped in
+	# the standard repos. Best-effort only: it does not exist everywhere
+	# and is not signed/stable, so never treat a failure as an error.
+	if [ "${ID:-}" = "rocky" ] || [ "${ID:-}" = "centos" ]; then
+		if type dnf >/dev/null 2>&1; then
+			dnf config-manager --set-enabled devel 2>/dev/null ||
+			echo "Note: optional 'devel' repo not enabled (not available here)." >&2
+		else
+			yum-config-manager --enable devel 2>/dev/null ||
+			echo "Note: optional 'devel' repo not enabled (not available here)." >&2
+		fi
+	fi
+
+	# Refresh metadata so the searches below see the newly enabled repos.
+	# This MUST succeed: every add_package probe below relies on repo
+	# metadata being present. If it fails (no network, proxy, broken
+	# mirror) the probes would all report "unavailable" even for packages
+	# that are in the always-on default repos (e.g. Qt6 in AppStream), so
+	# make the failure loud instead of silently swallowing it.
+	if ! $PM makecache; then
+		echo "" >&2
+		echo "ERROR: '$PM makecache' failed." >&2
+		echo "Repository metadata could not be downloaded. Every package will" >&2
+		echo "appear 'unavailable' below until this is fixed. Common causes:" >&2
+		echo "  * no network / HTTP(S) proxy not configured for $PM" >&2
+		echo "    (set proxy= in /etc/dnf/dnf.conf or http_proxy/https_proxy)" >&2
+		echo "  * EPEL/CRB just enabled but mirror unreachable" >&2
+		echo "Fix connectivity, then re-run this script." >&2
+		echo "" >&2
+	fi
+}
+
+enable_el_extra_repos
 
 # Adds package $2 to list variable $1 if the package is found
 add_package() {
@@ -317,6 +403,18 @@ echo "Optional package opencore-amr-devel|libopencore-amr-devel is unavailable" 
 
 add_package ADDITIONAL_LIST softhsm ||
 echo "Optional package softhsm is unavailable" >&2
+
+# spandsp-devel and python3-pytest-xdist live in EPEL on RHEL/Rocky/Alma.
+# They were previously hardcoded in ADDITIONAL_LIST, which made the whole
+# install abort ("Unable to find a match") when EPEL was not reachable.
+# Probe for them instead so a missing EPEL degrades to a warning: spandsp
+# only affects some codec support and pytest-xdist only parallelises the
+# test suite, neither is required for a basic build.
+add_package ADDITIONAL_LIST spandsp-devel ||
+echo "Optional package spandsp-devel is unavailable (needs EPEL)" >&2
+
+add_package ADDITIONAL_LIST python3-pytest-xdist ||
+echo "Optional package python3-pytest-xdist is unavailable (needs EPEL)" >&2
 
 # PNG compression utilities used by compress-pngs:
 add_package ADDITIONAL_LIST advancecomp ||

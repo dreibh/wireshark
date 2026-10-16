@@ -206,10 +206,11 @@ FilterExpressionEdit::FilterExpressionEdit(QWidget *parent) :
     apply_button_->setIcon(ContrastAdaptIcon(QStringLiteral(":/svg_icons/filter-apply.svg"),
                                              QPalette::Base));
     apply_button_->setToolTip(tr("Apply this filter"));
-    // The apply glyph is a wide 24x14 chevron (its native SVG size); set that
-    // fixed so a square box doesn't squeeze it short. AdaptiveToolButton scales
-    // width and height independently, so the 24:14 aspect holds under zoom.
-    apply_button_->setBaseIconSize(QSize(24, 14));
+    // The apply glyph is a wide 36x24 arrow (its native SVG size). Set a fixed
+    // base icon size with the correct (3:2) aspect ratio and height so that a
+    // square box doesn't squeeze it short. AdaptiveToolButton scales its width
+    // and height independently, so the 3:2 aspect ratio holds under zoom.
+    apply_button_->setBaseIconSize(QSize(21, 14));
     apply_button_->setVisible(false);
     connect(apply_button_, &QAbstractButton::clicked, this, &FilterExpressionEdit::applyExpression);
 
@@ -218,11 +219,10 @@ FilterExpressionEdit::FilterExpressionEdit(QWidget *parent) :
     history_button_->setIcon(ContrastAdaptIcon(QStringLiteral(":/svg_icons/filter-history.svg"),
                                                QPalette::Base));
     history_button_->setToolTip(tr("Recent filters"));
-    // Size the recent-filters dropdown like a disclosure arrow rather than a full
-    // action glyph. QStyle exposes no tree-arrow metric; PM_MenuButtonIndicator
-    // is the dropdown-indicator size and the closest equivalent.
-    const int arrow = style()->pixelMetric(QStyle::PM_MenuButtonIndicator, nullptr, this);
-    history_button_->setBaseIconSize(QSize(arrow, arrow) * 2);
+    // Fixed, like the other glyphs, rather than derived from a style metric:
+    // PM_MenuButtonIndicator (12px in QCommonStyle) is 20px on Breeze, which
+    // made the box far wider than the caret drawn in it.
+    history_button_->setBaseIconSize(QSize(14, 14));
     history_button_->setVisible(false);
     connect(history_button_, &QAbstractButton::clicked, this, [this]() {
         populateHistoryMenu();
@@ -234,10 +234,9 @@ FilterExpressionEdit::FilterExpressionEdit(QWidget *parent) :
 
     // Lay the buttons out inside the field. rebuildInlineLayout() places them for
     // the current alignment; hidden buttons take no layout space, so the row
-    // tightens as conditions change.
-    const int frame = style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, this);
+    // tightens as conditions change. The layout's side insets are set by
+    // updateInlineMargins(), alongside the text margins they must agree with.
     inline_layout_ = new QHBoxLayout(this);
-    inline_layout_->setContentsMargins(frame + 1, 0, frame + 1, 0);
     inline_layout_->setSpacing(inline_button_spacing_);
     rebuildInlineLayout();
 
@@ -495,14 +494,26 @@ void FilterExpressionEdit::setButtonsLeftAligned(bool left)
     rebuildInlineLayout();
 }
 
+int FilterExpressionEdit::inlineEdge() const
+{
+    // Distance from the widget edge to the outermost buttons: the frame plus a
+    // 1px gap. Query this only through here, so the layout insets, the text
+    // margins and the dividers all see the same value. Before the widget is
+    // polished, the style sheet rule isn't applied yet and the style reports
+    // its native line edit frame width (e.g. 6px on Breeze) instead of the
+    // 1px QSS border; event() re-syncs once polished.
+    return style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, this) + 1;
+}
+
 QMargins FilterExpressionEdit::inlineMargins() {
     // Reserve text margins matching the shown buttons so the text never runs
     // under one, and so QLineEdit's sizeHint accounts for them (keeping the
-    // toolbar from compressing the field under its neighbours). The dividers in
-    // paintEvent() use the buttons' real geometry, so a slight over-reservation
-    // here is harmless. Use isHidden(), not isVisible(): this runs before the
-    // field is first shown, when isVisible() is still false for every child.
-    const int edge = style()->pixelMetric(QStyle::PM_DefaultFrameWidth, nullptr, this) + 1;
+    // toolbar from compressing the field under its neighbours). paintEvent()
+    // places the dividers and the neutral strips from these margins too, so
+    // they must match the layout exactly. Use isHidden(), not isVisible():
+    // this runs before the field is first shown, when isVisible() is still
+    // false for every child.
+    const int edge = inlineEdge();
 
     auto zone = [](const AdaptiveToolButton *b) {
         return b->isHidden() ? 0 : b->sizeHint().width() + inline_button_spacing_;
@@ -520,6 +531,8 @@ QMargins FilterExpressionEdit::inlineMargins() {
 
 void FilterExpressionEdit::updateInlineMargins()
 {
+    const int edge = inlineEdge();
+    inline_layout_->setContentsMargins(edge, 0, edge, 0);
     setTextMargins(inlineMargins());
 }
 
@@ -566,20 +579,32 @@ void FilterExpressionEdit::changeEvent(QEvent *event)
     case QEvent::LanguageChange:
         updateTranslations();
         break;
+    case QEvent::StyleChange:
+        updateInlineMargins();
+        break;
     default:
         break;
     }
     FilterEdit::changeEvent(event);
 }
 
+bool FilterExpressionEdit::event(QEvent *event)
+{
+    const bool ret = FilterEdit::event(event);
+    // Sent once the style (and so any style sheet rule) has been applied, which
+    // can change the frame width inlineEdge() depends on.
+    if (event->type() == QEvent::Polish)
+        updateInlineMargins();
+    return ret;
+}
+
 void FilterExpressionEdit::paintEvent(QPaintEvent *event)
 {
     FilterEdit::paintEvent(event);
 
-    // QLineEdit's icon button sits its glyph near the button's own right edge, so
-    // the only gap before the text is the line edit's small text margin. The line
-    // sits a single pixel past the edge to land midway between glyph and text.
-    // Tune kGapInset if it drifts toward either side.
+    // Each divider sits kGapInset pixels inside the reserved text margin, toward
+    // the buttons, to land midway between glyph and text. The neutral strip fill
+    // stops at the divider, so it is also the boundary of the state tint.
     const int kGapInset = 2;
 
     ThemeManager * tm = ThemeManager::instance();
@@ -600,15 +625,16 @@ void FilterExpressionEdit::paintEvent(QPaintEvent *event)
 
     // clear the background for the buttons on the left and right
     if (margins.left() > 0) {
+        const int x = inner.left() + margins.left() - kGapInset;
         painter.fillRect(QRect(QPoint(inner.left(), inner.top()),
-                QPoint(inner.left() + margins.left(), inner.bottom())), field);
-        auto x = inner.left() + margins.left() - kGapInset;
-        painter.drawLine(x, inner.top() + 2, x, inner.bottom() - 2);
+                QPoint(x - 1, inner.bottom())), field);
+        painter.drawLine(x, inner.top(), x, inner.bottom() + 1);
     }
     if (margins.right() > 0) {
-        painter.fillRect(QRect(QPoint(inner.right() - margins.right(), inner.top()),
+        const int x = inner.right() - margins.right() + kGapInset;
+        painter.fillRect(QRect(QPoint(x, inner.top()),
                 QPoint(inner.right(), inner.bottom())), field);
-        auto x = inner.right() - margins.right() + kGapInset;
-        painter.drawLine(x, inner.top() + 2, x, inner.bottom() - 2);
+        if (!text().isEmpty())
+            painter.drawLine(x, inner.top(), x, inner.bottom() + 1);
     }
 }

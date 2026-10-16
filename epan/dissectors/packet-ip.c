@@ -122,6 +122,7 @@ static int hf_ip_tos_delay;
 static int hf_ip_tos_throughput;
 static int hf_ip_tos_reliability;
 static int hf_ip_tos_cost;
+static int hf_ip_tos_resvd;
 static int hf_ip_len;
 static int hf_ip_id;
 static int hf_ip_dst;
@@ -387,6 +388,7 @@ const value_string ip_version_vals[] = {
 #define IPTOS_TOS_MASK          0x1E
 #define IPTOS_TOS(tos)          ((tos) & IPTOS_TOS_MASK)
 #define IPTOS_NONE              0x00
+#define IPTOS_RESERVED          0x01
 #define IPTOS_LOWCOST           0x02
 #define IPTOS_RELIABILITY       0x04
 #define IPTOS_THROUGHPUT        0x08
@@ -997,8 +999,7 @@ dissect_ipopt_cipso(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, void * 
 
   /* loop through all of the tags in the CIPSO option */
   while (offset < offset_max) {
-    tagtype = tvb_get_uint8(tvb, offset);
-    tag_item = proto_tree_add_item(field_tree, hf_ip_cipso_tag_type, tvb, offset, 1, ENC_NA);
+    tag_item = proto_tree_add_item_ret_uint(field_tree, hf_ip_cipso_tag_type, tvb, offset, 1, ENC_NA, &tagtype);
 
     if ((offset + 1) < offset_max)
       taglen = tvb_get_uint8(tvb, offset + 1);
@@ -2060,6 +2061,7 @@ dissect_ip_v4(tvbuff_t *tvb, packet_info *pinfo, proto_tree *parent_tree, void* 
       proto_tree_add_item(field_tree, hf_ip_tos_throughput, tvb, offset + 1, 1, ENC_NA);
       proto_tree_add_item(field_tree, hf_ip_tos_reliability, tvb, offset + 1, 1, ENC_NA);
       proto_tree_add_item(field_tree, hf_ip_tos_cost, tvb, offset + 1, 1, ENC_NA);
+      proto_tree_add_item(field_tree, hf_ip_tos_resvd, tvb, offset + 1, 1, ENC_NA);
     }
   }
 
@@ -2662,6 +2664,10 @@ proto_register_ip(void)
     { &hf_ip_tos_cost,
       { "Cost", "ip.tos.cost", FT_BOOLEAN, 8,
         TFS(&tfs_low_normal), IPTOS_LOWCOST, NULL, HFILL }},
+
+    { &hf_ip_tos_resvd,
+      { "Reserved", "ip.tos.reserved", FT_BOOLEAN, 8,
+        TFS(&tfs_set_notset), IPTOS_RESERVED, "Unused, must be zero", HFILL }},
 
     { &hf_ip_len,
       { "Total Length", "ip.len", FT_UINT16, BASE_DEC,

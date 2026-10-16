@@ -14,22 +14,26 @@
 #define PINNED_ROWS_MODEL_H
 
 #include <QAbstractProxyModel>
+#include <QFont>
 #include <QList>
 
+class PacketListModel;
 class PacketListProxyModel;
 
 /**
  * @brief A proxy model exposing only a chosen set of "pinned" packets from
- * a PacketListProxyModel, packed together with no gaps, ordered to match the
- * source model's own current row order (i.e. whatever sort/filter is
- * currently active there).
+ * a PacketListModel, packed together with no gaps, ordered to match the
+ * packet list's current sort order (see setSortModel()).
  *
  * Used to render the pinned-row overlay in the packet list: rather than
  * hiding thousands of individual rows in a real QTreeView on the full
  * model (which QTreeView has no way to do efficiently for an arbitrary,
  * scattered row set), this proxy simply reports N rows, one per pinned
- * frame number, and maps each to that packet's current row in the source
- * model on demand.
+ * frame number.
+ *
+ * The source PacketListModel has a row for every packet regardless of the
+ * display filter, so every pinned packet always maps to a valid source
+ * row, even when it is filtered out of the packet list.
  */
 class PinnedRowsModel : public QAbstractProxyModel
 {
@@ -39,6 +43,21 @@ public:
     static const int kMaxPinnedRows = 10;
 
     explicit PinnedRowsModel(QObject *parent = nullptr);
+
+    /**
+     * @brief Sets the model whose sort order the pinned rows follow.
+     * @param sort_model The packet list's proxy model, or nullptr to
+     * order the pinned rows by frame number.
+     */
+    void setSortModel(PacketListProxyModel *sort_model);
+
+    /**
+     * @brief Sets the font the pinned rows are drawn in, from which the
+     * italic font for pinned packets without a row in the packet list is
+     * derived.
+     * @param font The packet list's font.
+     */
+    void setBaseFont(const QFont &font);
 
     /**
      * @brief Pins a packet, if not already pinned and under the
@@ -57,6 +76,19 @@ public:
     // Unpins every currently pinned packet.
     void clear();
 
+    /**
+     * @brief Re-pins the frames that were pinned when the source model was
+     * last reset (e.g., by redissection), in the order they were pinned,
+     * skipping any that no longer exist. Frame numbers are stable across
+     * redissection, so the same packets are pinned afterward.
+     * @return True if any frames were restored.
+     */
+    bool restoreSavedPins();
+
+    // Forgets the pins saved by the last source model reset, e.g., because
+    // the capture file was closed or replaced rather than redissected.
+    void discardSavedPins() { saved_frame_nums_.clear(); }
+
     // Whether the given frame number is currently pinned.
     bool isPinned(int frame_num) const;
 
@@ -64,29 +96,17 @@ public:
     int pinnedCount() const { return static_cast<int>(pinned_frame_nums_.count()); }
 
     /**
-     * @brief The frame number pinned at the given proxy row ("strip
-     * position"), i.e. this model's own row order -- not the primary
-     * view's row numbering. Used for Shift-click range-select within the
-     * pinned-rows strip, which is scoped to the strip's own row order
-     * rather than the primary view's (so unpinned packets between two
-     * pinned ones in the main list are never implicitly included).
-     * @param proxy_row A row within this model (0..pinnedCount()-1).
-     * @return The frame number pinned there, or -1 if out of range.
+     * @brief The row of the given pinned frame in this model.
+     * @param frame_num The frame number.
+     * @return The row, or -1 if the frame isn't pinned.
      */
-    int frameNumAtProxyRow(int proxy_row) const {
-        return (proxy_row >= 0 && proxy_row < pinned_frame_nums_.count()) ?
-            pinned_frame_nums_[proxy_row] : -1;
-    }
+    int rowForFrameNum(int frame_num) const { return static_cast<int>(pinned_frame_nums_.indexOf(frame_num)); }
 
     /**
-     * @brief Re-sorts the pinned frames to match the source model's
-     * current row order (i.e. whatever sort is currently applied there),
-     * and re-resolves each against the current source model state (e.g.
-     * after a display filter change), emitting layoutChanged(). A pinned
-     * frame that's been filtered out of the source model resolves to an
-     * invalid row (see sourceRowForPinnedIndex()) but stays pinned -- it
-     * reappears automatically, in its sorted position, once the filter
-     * allows it again.
+     * @brief Re-sorts the pinned frames to match the sort model's current
+     * order (whatever column/order the user last sorted by), emitting
+     * layoutChanged(). A pinned frame that's been filtered out of the
+     * packet list stays pinned, in its sorted position.
      */
     void refresh();
 
@@ -98,35 +118,15 @@ public:
     QModelIndex parent(const QModelIndex &child) const override;
     int rowCount(const QModelIndex &parent = QModelIndex()) const override;
     int columnCount(const QModelIndex &parent = QModelIndex()) const override;
-
+    bool hasChildren(const QModelIndex &parent = QModelIndex()) const override;
+    QVariant headerData(int section, Qt::Orientation orientation, int role = Qt::DisplayRole) const override;
     /**
-     * @brief Returns a pinned row's data regardless of whether it
-     * currently passes the display filter.
-     *
-     * Overridden (rather than relying on QAbstractProxyModel's default,
-     * which calls sourceModel()->data(mapToSource(index), role)) because
-     * mapToSource() only ever resolves to a row among the source model's
-     * currently *visible* (filtered-in) rows -- a pinned packet that's
-     * been filtered out has no such row, so the default would return an
-     * empty QVariant for it. This instead always reads the packet's data
-     * from the underlying PacketListModel::dataForFrameNum(), which looks the packet up
-     * directly regardless of the display filter, so pinned rows keep
-     * showing their data even after being filtered out.
-     * @param proxy_index The index within this proxy model.
-     * @param role The display role.
+     * Styles a pinned packet that has no row of its own in the packet list
+     * (greyed out and italic) and explains why in its tooltip: the display
+     * filter excludes it, or the aggregation view folded it into another
+     * packet's row.
      */
-    QVariant data(const QModelIndex &proxy_index, int role) const override;
-
-    /**
-     * @brief Returns a pinned row's flags regardless of whether it
-     * currently passes the display filter, for the same reason data() is
-     * overridden -- QAbstractProxyModel's default flags() calls
-     * sourceModel()->flags(mapToSource(index)), which is an invalid index
-     * whenever the row is filtered out, silently diverging from what
-     * data() already reports for that same row.
-     * @param proxy_index The index within this proxy model.
-     */
-    Qt::ItemFlags flags(const QModelIndex &proxy_index) const override;
+    QVariant data(const QModelIndex &index, int role = Qt::DisplayRole) const override;
 
 private slots:
     /**
@@ -144,15 +144,16 @@ private slots:
     void sourceDataChanged(const QModelIndex &source_top_left, const QModelIndex &source_bottom_right,
                            const QList<int> &roles);
 
+    void sourceModelAboutToBeReset();
+    void sourceModelReset();
+
 private:
     QList<int> pinned_frame_nums_;
-    PacketListProxyModel *packet_list_proxy_model_;
-
-    /**
-     * @brief The source model row currently backing the given pinned
-     * frame number, or -1 if that frame is filtered out.
-     */
-    int sourceRowForPinnedIndex(int proxy_row) const;
+    // Pins held across a source model reset, for restoreSavedPins().
+    QList<int> saved_frame_nums_;
+    PacketListModel *packet_list_model_;
+    PacketListProxyModel *sort_model_;
+    QFont base_font_;
 };
 
 #endif // PINNED_ROWS_MODEL_H

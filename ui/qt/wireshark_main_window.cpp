@@ -214,10 +214,10 @@ static void plugin_if_mainwindow_get_ws_info(GHashTable * data_set)
     if (cf) {
         ws_info->cf_count = cf->count;
 
-        QList<int> rows = gbl_cur_main_window_->selectedRows();
+        QList<frame_data *> frames = gbl_cur_main_window_->selectedFrames();
         frame_data * fdata = NULL;
-        if (rows.count() > 0)
-            fdata = gbl_cur_main_window_->frameDataForRow(rows.at(0));
+        if (frames.count() > 0)
+            fdata = frames.at(0);
 
         if (cf->state == FILE_READ_DONE && fdata) {
             ws_info->cf_framenr = fdata->num;
@@ -252,12 +252,9 @@ static void plugin_if_mainwindow_get_frame_data(GHashTable* data_set)
         g_hash_table_lookup_extended(data_set, "user_data", NULL, (void**)&user_data) &&
         g_hash_table_lookup_extended(data_set, "ret_value_ptr", NULL, (void**)&ret_value_ptr))
     {
-        QList<int> rows = gbl_cur_main_window_->selectedRows();
-        if (rows.count() > 0) {
-            frame_data* fdata = gbl_cur_main_window_->frameDataForRow(rows.at(0));
-            if (fdata) {
-                *ret_value_ptr = extract_cb(fdata, user_data);
-            }
+        QList<frame_data *> frames = gbl_cur_main_window_->selectedFrames();
+        if (frames.count() > 0) {
+            *ret_value_ptr = extract_cb(frames.at(0), user_data);
         }
     }
 }
@@ -523,13 +520,13 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
 #endif
 
     // Set OS specific shortcuts for fullscreen mode
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_MACOS)
     main_ui_->actionViewFullScreen->setShortcut(QKeySequence::FullScreen);
 #else
     main_ui_->actionViewFullScreen->setShortcut(QKeySequence(Qt::Key_F11));
 #endif
 
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_MACOS)
 
     main_ui_->goToPacketLabel->setAttribute(Qt::WA_MacSmallSize, true);
     main_ui_->goToLineEdit->setAttribute(Qt::WA_MacSmallSize, true);
@@ -538,7 +535,7 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
 
     main_ui_->actionEditPreferences->setMenuRole(QAction::PreferencesRole);
 
-#endif // Q_OS_MAC
+#endif // Q_OS_MACOS
 
     connect(main_ui_->goToGo, &QPushButton::pressed, this, &WiresharkMainWindow::goToGoClicked);
     connect(main_ui_->goToCancel, &QPushButton::pressed, this, &WiresharkMainWindow::goToCancelClicked);
@@ -578,6 +575,7 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     packet_list_ = packet_list_pane_->packetList();
     main_ui_->wirelessTimelineWidget->setPacketList(packet_list_);
     connect(packet_list_, &PacketList::framesSelected, this, &WiresharkMainWindow::setMenusForSelectedPacket);
+    connect(packet_list_, &PacketList::pinnedRowsChanged, this, &WiresharkMainWindow::setMenusForSelectedPacket);
     connect(packet_list_, &PacketList::framesSelected, this, &WiresharkMainWindow::framesSelected);
 
     QAction *action = main_ui_->menuPacketComment->addAction(tr("Add New Comment…"));
@@ -787,7 +785,7 @@ WiresharkMainWindow::~WiresharkMainWindow()
         disconnect(previous_focus_, &QWidget::destroyed, this, &WiresharkMainWindow::resetPreviousFocus);
     }
 
-#ifndef Q_OS_MAC
+#ifndef Q_OS_MACOS
     // Below dialogs inherit GeometryStateDialog
     // For reasons described in geometry_state_dialog.h no parent is set when
     // instantiating the dialogs and as a result objects are not automatically
@@ -916,7 +914,7 @@ void WiresharkMainWindow::updateStyleSheet()
     // palette (generally whether the theme is dark or not.) Some of these
     // widgets only have style sheets that vary with whether theme is dark
     // on macOS. (XXX - We could just update them all anyway.)
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     main_ui_->addressEditorFrame->updateStyleSheet();
     main_ui_->columnEditorFrame->updateStyleSheet();
     main_ui_->filterExpressionFrame->updateStyleSheet();
@@ -1159,7 +1157,7 @@ void WiresharkMainWindow::loadWindowGeometry()
 {
     int min_sensible_dimension = 200;
 
-#ifndef Q_OS_MAC
+#ifndef Q_OS_MACOS
     if (recent.gui_geometry_main_maximized) {
         // [save|restore]Geometry does a better job (on Linux and Windows)
         // of restoring to the original monitor because it saves
@@ -1992,7 +1990,7 @@ bool WiresharkMainWindow::tryClosingCaptureFile(QString before_what, FileCloseCo
             }
             discard_button = msg_dialog.addButton(discard_button_text, QMessageBox::DestructiveRole);
 
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_MACOS)
             /*
              * In macOS, the "default button" is not necessarily the
              * button that has the input focus; Enter/Return activates
@@ -2133,6 +2131,10 @@ void WiresharkMainWindow::updateMainToolbarIconSize()
 #endif
     icon_size = qRound(icon_size * FontManager::zoomFactor());
     main_ui_->mainToolBar->setIconSize(QSize(icon_size, icon_size));
+
+    // Base size matches the iconSize set in wireshark_main_window.ui.
+    const int filter_icon_size = qRound(14 * FontManager::zoomFactor());
+    main_ui_->displayFilterToolBar->setIconSize(QSize(filter_icon_size, filter_icon_size));
 }
 
 void WiresharkMainWindow::initMainToolbarIcons()
@@ -2168,7 +2170,7 @@ void WiresharkMainWindow::initMainToolbarIcons()
     main_ui_->actionGoLastPacket->setIcon(ThemedIcon("nav-last"));
     main_ui_->actionGoPreviousConversationPacket->setIcon(ThemedIcon("nav-previous"));
     main_ui_->actionGoNextConversationPacket->setIcon(ThemedIcon("nav-next"));
-#if defined(Q_OS_MAC)
+#if defined(Q_OS_MACOS)
     main_ui_->actionGoPreviousConversationPacket->setShortcut(QKeySequence(Qt::META | Qt::Key_Comma));
     main_ui_->actionGoNextConversationPacket->setShortcut(QKeySequence(Qt::META | Qt::Key_Period));
 #endif

@@ -1290,6 +1290,193 @@ class TestDissectQuic:
         assert not grep_output(stdout, 'Warns')
         assert not grep_output(stdout, 'Errors')
 
+@pytest.mark.parametrize("pass_args", [(), ("-2",)], ids=["one-pass", "two-pass"])
+class TestDissectMoqLite:
+    '''
+    moq-lite-05 over QUIC. The capture was generated with aioquic and exercises
+    every message of the draft, including a frame that spans several QUIC
+    packets and a group delivered as a datagram.
+    '''
+    def test_moq_lite_messages(self, cmd_tshark, capture_file, test_env, pass_args):
+        '''Every moq-lite message is dissected on the expected stream.'''
+        stdout = subprocess.check_output((cmd_tshark, *pass_args,
+                '-r', capture_file('moq-lite-05.pcapng.gz'),
+                '-Y', 'moql',
+                '-T', 'fields', '-e', 'moql.message_type',
+            ), encoding='utf-8', env=test_env)
+        messages = [m for line in stdout.splitlines() for m in line.split(',') if m]
+        # SETUP, ANNOUNCE_REQUEST, ANNOUNCE_OK, 2x ANNOUNCE_BROADCAST, ...
+        assert messages.count('1') == 2      # SETUP, one per direction
+        assert messages.count('10') == 2     # ANNOUNCE_BROADCAST
+        assert messages.count('23') == 5     # FRAME
+        # Every message of the draft appears at least once.
+        assert set(messages) == {'1', '8', '9', '10', '11', '12', '14', '15',
+                                 '16', '17', '18', '19', '20', '21', '22', '23'}
+
+    def test_moq_lite_subscription(self, cmd_tshark, capture_file, test_env, pass_args):
+        '''Group streams and datagrams are matched to their subscription.'''
+        stdout = subprocess.check_output((cmd_tshark, *pass_args,
+                '-r', capture_file('moq-lite-05.pcapng.gz'),
+                '-Y', 'moql.group_sequence',
+                '-T', 'fields', '-e', 'moql.group_sequence',
+                '-e', 'moql.broadcast_path', '-e', 'moql.track_name',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, '^6\t/room/alice\tvideo$')      # FETCH
+        assert grep_output(stdout, '^8\t/room/alice\tvideo$')      # GROUP
+        assert grep_output(stdout, '^12\t/room/alice\tvideo$')     # datagram
+        # The GROUP and each of its three FRAMEs carry the annotation.
+        assert grep_output(stdout, r'^7\t(/room/alice,){3}/room/alice\t(video,){3}video$')
+
+    def test_moq_lite_frame_timestamps(self, cmd_tshark, capture_file, test_env, pass_args):
+        '''Frame timestamps accumulate the zigzag encoded deltas.'''
+        stdout = subprocess.check_output((cmd_tshark, *pass_args,
+                '-r', capture_file('moq-lite-05.pcapng.gz'),
+                '-Y', 'moql.frame.timestamp',
+                '-T', 'fields', '-e', 'moql.frame.timestamp_delta',
+                '-e', 'moql.frame.timestamp',
+            ), encoding='utf-8', env=test_env)
+        assert grep_output(stdout, '^0,33,-3\t0,33,30$')
+
+    def test_moq_lite_reassembly(self, cmd_tshark, capture_file, test_env, pass_args):
+        '''A frame spanning several QUIC packets is reassembled.'''
+        stdout = subprocess.check_output((cmd_tshark, *pass_args,
+                '-r', capture_file('moq-lite-05.pcapng.gz'),
+                '-Y', 'moql.message_length > 1000',
+                '-T', 'fields', '-e', 'moql.message_length',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.split() == ['5120']
+
+    def test_moq_lite_no_reassembly(self, cmd_tshark, capture_file, test_env, pass_args):
+        """Disabling reassembly leaves the split frame incomplete."""
+        stdout = subprocess.check_output((cmd_tshark, *pass_args,
+                '-r', capture_file('moq-lite-05.pcapng.gz'),
+                '-o', 'moql.desegment:FALSE',
+                '-Y', 'moql.incomplete_message || moql.message_length == 5120',
+                '-T', 'fields', '-e', 'moql.incomplete_message',
+                '-e', 'moql.message_length',
+            ), encoding='utf-8', env=test_env)
+        assert stdout.strip()
+        assert all(line.startswith('1\t') for line in stdout.splitlines())
+        assert '5120' not in stdout
+
+    def test_moq_lite_expert(self, cmd_tshark, capture_file, test_env, pass_args):
+        '''Only the deliberately unknown stream type is flagged.'''
+        stdout = subprocess.check_output((cmd_tshark, *pass_args,
+                '-r', capture_file('moq-lite-05.pcapng.gz'),
+                '-zexpert,warn,moql', '-Y', 'moql',
+                ), encoding='utf-8', env=test_env)
+        assert not grep_output(stdout, 'Errors')
+        assert count_output(stdout, 'Unknown bidirectional stream type') == 1
+        assert 'Warns (1)' in stdout
+
+
+@pytest.mark.parametrize("pass_args", [(), ("-2",)], ids=["one-pass", "two-pass"])
+class TestDissectMoqLiteEdges:
+    @pytest.mark.parametrize("name,delta", [("positive", (1 << 61) - 1),
+                                           ("negative", -(1 << 61))])
+    def test_timestamp_limits(self, cmd_tshark, capture_file, test_env, pass_args, name, delta):
+        rows = self.read(cmd_tshark, capture_file, test_env, pass_args,
+                         f'moql.message_type == 23 && moql.track_name == "{name}"',
+                         "moql.frame.timestamp", "moql.frame.time", "moql.protocol_violation")
+        expected = []
+        for count in range(1, 5):
+            timestamp = delta * count
+            nanos = abs(timestamp) * 1_000_000_000 // ((1 << 62) - 1)
+            seconds, fraction = divmod(nanos, 1_000_000_000)
+            sign = "-" if timestamp < 0 else ""
+            expected.append([str(timestamp), f"{sign}{seconds}.{fraction:09d}", ""])
+        # Once the running sum overflows, subsequent absolute times are unknown.
+        assert rows == expected + [["", "", "1"], ["", "", "1"]]
+
+    def test_track_identity(self, cmd_tshark, capture_file, test_env, pass_args):
+        rows = self.read(cmd_tshark, capture_file, test_env, pass_args,
+                         'moql.frame.timestamp == 1000 && moql.broadcast_path != "/nul"',
+                         "moql.broadcast_path", "moql.track_name", "moql.frame.time")
+        assert rows == [
+            ["/long", "t" * 400 + "A", "1.000000000"],
+            ["/long", "t" * 400 + "B", "0.500000000"],
+            [r"/a\\nb", "c", "1.000000000"],
+            ["/a", r"b\\nc", "0.500000000"],
+        ]
+
+    def test_embedded_nul_identity(self, cmd_tshark, capture_file, test_env, pass_args):
+        rows = self.read(cmd_tshark, capture_file, test_env, pass_args,
+                         'moql.frame.timestamp == 1000 && moql.broadcast_path == "/nul"',
+                         "moql.frame.time")
+        assert rows == [["1.000000000"], ["0.500000000"], ["0.250000000"]]
+
+    def test_draft04_alpn(self, cmd_tshark, capture_file, test_env, pass_args):
+        rows = self.read(cmd_tshark, capture_file, test_env, pass_args,
+                         'moql.frame.payload == 6f:6c:64',
+                         "moql.message_type", "moql.frame.timestamp", "_ws.malformed")
+        assert rows == [["23", "", ""]]
+
+    @staticmethod
+    def read(cmd_tshark, capture_file, test_env, pass_args, display_filter, *fields):
+        command = [
+            cmd_tshark, *pass_args,
+            '-r', capture_file('moq-lite-edge.pcapng.gz'),
+            '-d', 'udp.port==4433,quic',
+            '-Y', display_filter,
+            '-T', 'fields',
+        ]
+        for field in fields:
+            command.extend(('-e', field))
+
+        output = subprocess.check_output(
+            command, encoding='utf-8', env=test_env
+        )
+        return [line.split('\t') for line in output.splitlines()]
+
+class TestDissectMoqLiteDatagram:
+    @pytest.mark.parametrize("encoded,value", [
+        ("3f", "63"),
+        ("4040", "64"),
+        ("80004000", "16384"),
+        ("c000000040000000", "1073741824"),
+        ("ffffffffffffffff", "4611686018427387903"),
+    ])
+    def test_varints(self, cmd_text2pcap, cmd_tshark, result_file, test_env, encoded, value):
+        """All QUIC varint widths preserve IDs, sequences and timestamps."""
+        fields = self.dissect(cmd_text2pcap, cmd_tshark, result_file, test_env,
+                              bytes.fromhex(encoded * 3 + "abcd"))
+        assert fields == [value, value, value, "abcd", "", ""]
+
+    @pytest.mark.parametrize("payload", [
+        "40", "8000", "c0000000",  # truncated subscription ID
+        "0040", "00008000",      # truncated sequence or timestamp
+    ])
+    def test_truncated(self, cmd_text2pcap, cmd_tshark, result_file, test_env, payload):
+        """A truncated varint is reported as malformed without crashing."""
+        fields = self.dissect(cmd_text2pcap, cmd_tshark, result_file, test_env,
+                              bytes.fromhex(payload))
+        assert "_ws.malformed" in fields[-1].split(",")
+
+    @pytest.mark.parametrize("size,violation", [(1200, ""), (1201, "1")])
+    def test_size_limit(self, cmd_text2pcap, cmd_tshark, result_file, test_env, size, violation):
+        """The datagram limit includes its three varint headers."""
+        fields = self.dissect(cmd_text2pcap, cmd_tshark, result_file, test_env,
+                              b"\x00" * size)
+        assert fields[4:] == [violation, ""]
+        assert len(fields[3]) == (size - 3) * 2
+
+    @staticmethod
+    def dissect(cmd_text2pcap, cmd_tshark, result_file, test_env, payload):
+        # Exported PDUs invoke the real datagram dissector without QUIC encryption.
+        text_file = result_file("moql.txt")
+        capture = result_file("moql.pcapng")
+        with open(text_file, "w") as output:
+            for offset in range(0, len(payload), 16):
+                output.write(f"{offset:06x}  {payload[offset:offset + 16].hex(' ')}\n")
+        subprocess.check_call((cmd_text2pcap, "-q", "-P", "moq-lite.datagram",
+                               text_file, capture), env=test_env)
+        command = [cmd_tshark, "-r", capture, "-T", "fields"]
+        for field in ("moql.subscribe_id", "moql.group_sequence", "moql.datagram.timestamp",
+                      "moql.frame.payload", "moql.protocol_violation", "_ws.malformed"):
+            command.extend(("-e", field))
+        return subprocess.check_output(command, encoding="utf-8", env=test_env).rstrip("\n").split("\t")
+
+
 class TestDecompressSmb2:
     @staticmethod
     def extract_compressed_payload(cmd_tshark, capture_file, test_env, frame_num):
@@ -1411,7 +1598,7 @@ class TestDissectTns:
             '-e', 'tns.data_setdt.caphdr.version',
             '-e', 'tns.data_setdt.override.client',
         ), encoding='utf-8', env=test_env)
-        # data_id = 2 (Set Datatypes); charset = 871 (US7ASCII) both ways;
+        # data_id = 2 (Set Datatypes); charset = 871 (UTF8) both ways;
         # version triple in capability header = 0x260601 (38, 6, 1);
         # override client list ends with the 0 terminator and includes
         # both long entries (e.g. 91) and short entries (e.g. 13).
@@ -1591,7 +1778,7 @@ class TestDissectTns:
         # oci id 0x60 = 96 (TTI_LOBOPS / "LOB and FILE related calls").
         assert rows[0] == ['0x60', '0x00000002', '1', '8192', '', '', ''], rows[0]
         assert rows[1] == ['0x60', '0x00000001', '1', '', '', '', ''], rows[1]
-        assert rows[2] == ['0x60', '0x00000110', '0', '', '873', '', ''], rows[2]
+        assert rows[2] == ['0x60', '0x00000110', '', '', '873', '', ''], rows[2]
         assert rows[3] == ['0x60', '0x00000040', '1', '', '', '006100620063', ''], rows[3]
 
     def test_tns_marker(self, cmd_tshark, capture_file, test_env):
@@ -2135,7 +2322,7 @@ class TestDissectTns:
 
     def test_tns_out_binds(self, cmd_tshark, capture_file, test_env):
         '''The TTI_RXD after a TTI_IOV holds the OUT bind values, typed by
-        the execute's binds and each followed by a return code; IN binds
+        the execute's binds and each followed by its actual length; IN binds
         have no value there. The status behind them is decoded too.'''
         stdout = subprocess.check_output((cmd_tshark,
             '-r', capture_file('tns_out_binds.pcap'),
@@ -2146,7 +2333,7 @@ class TestDissectTns:
         assert 'Bind 1 (NUMBER): 11' in stdout, stdout
         assert 'Bind 3 (VARCHAR): hi' in stdout, stdout
         assert 'Bind 2' not in stdout.split('Out Binds')[1], stdout
-        assert 'Return Code: 0' in stdout, stdout
+        assert 'Actual Length: 0' in stdout, stdout
         assert 'Oracle Error Return' in stdout, stdout
 
     def test_tns_lob_reply(self, cmd_tshark, capture_file, test_env):
@@ -2191,6 +2378,81 @@ class TestDissectTns:
         assert r[0:4] == ['mod', 'act', 'HR', '0x00080111'], r
         assert len(r[4].split(',')) == 2 and r[4].startswith('0026'), r
         assert r[5] == '0x0000000000000005' and r[6] == '0x0e', r
+
+    def test_tns_connect_long(self, cmd_tshark, capture_file, test_env):
+        '''A connect descriptor over 230 bytes is not in the CONNECT: the
+        CONNECT gives its length and offset but ends there, and the
+        descriptor follows in a Data packet of its own.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_connect_long.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.connect_data_length',
+            '-e', 'tns.connect_data.next_packet',
+            '-e', 'tns.connect_data',
+            '-e', '_ws.col.info',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert len(rows) == 2, rows
+        assert rows[0][0] == '238' and rows[0][1] != '' and rows[0][2] == '', rows[0]
+        assert rows[1][2].startswith('(DESCRIPTION=') and len(rows[1][2]) == 238, rows[1]
+        assert rows[1][3].endswith('Connect Data'), rows[1]
+
+    def test_tns_txn_priority(self, cmd_tshark, capture_file, test_env):
+        '''A 23ai client sets its transaction priority with an ALTER SESSION
+        piggyback in front of the next call, an empty value restoring the
+        default, and the server reports it back as keyword 204 of a
+        session-state sync.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_txn_priority.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'frame.number > 1',
+            '-T', 'fields',
+            '-e', 'tns.data_piggyback.alter_session_param',
+            '-e', 'tns.data_piggyback.alter_session_value',
+            '-e', 'tns.data_kv.keyword',
+            '-e', 'tns.data_oci.id',
+            '-e', 'data.len',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [
+            ['TXN_PRIORITY', 'low', '', '0x0e', '', ''],
+            ['', '', '204', '', '', ''],
+            ['TXN_PRIORITY', '', '', '0x0e', '', ''],
+        ], rows
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_txn_priority.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-O', 'tns',
+        ), encoding='utf-8', env=test_env)
+        assert ': TXN_PRIORITY' in stdout, stdout
+        assert 'Session Parameter: TXN_PRIORITY = (default)' in stdout, stdout
+
+    def test_tns_app_context(self, cmd_tshark, capture_file, test_env):
+        '''An application context namespace is set or cleared with a
+        piggyback in front of the next call. A zero byte ahead of the
+        namespace comes from field version 12.1 on, and the call behind
+        the piggyback decodes in either form.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_app_context.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_piggyback.app_context_op',
+            '-T', 'fields',
+            '-E', 'aggregator=|',
+            '-e', 'tns.data_piggyback.app_context_op',
+            '-e', 'tns.data_piggyback.app_context_namespace',
+            '-e', 'tns.data_piggyback.app_context_attr',
+            '-e', 'tns.data_piggyback.app_context_value',
+            '-e', 'tns.data_oci.id',
+            '-e', 'data.len',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [
+            ['1', 'CLIENTCONTEXT', 'ATTR1|ATTR2', 'VALUE1|V2', '0x0e', '', ''],
+            ['2', 'CLIENTCONTEXT', '', '', '0x0e', '', ''],
+        ], rows
 
     def test_tns_rowid_render(self, cmd_tshark, capture_file, test_env):
         '''ROWID and UROWID values are rendered as the strings Oracle prints:
@@ -2789,7 +3051,19 @@ class TestDissectTns:
             '-e', '_ws.malformed',
         ), encoding='utf-8', env=test_env)
         rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
-        assert rows == [['DATA_DIR', 'report.txt', '']] * 2, rows
+        assert rows == [['DATA_DIR', 'report.txt', '']] * 3, rows
+        # a FILE_OPEN sends its mode as the amount, and the reply echoes it
+        # after the locator, ahead of the status
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_bfile.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tcp.srcport == 1521 && tns.data_lob.amount',
+            '-T', 'fields',
+            '-e', 'tns.data_lob.amount',
+            '-e', 'tns.data_oer.err_code',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        assert stdout == '11\t0\t\n', stdout
 
     def test_tns_oci_12c(self, cmd_tshark, capture_file, test_env):
         '''At the 12c band an OCI client's narrow execute preamble inserts
@@ -2849,6 +3123,33 @@ class TestDissectTns:
         rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
         assert rows == [['20001', 'ORA-20001: ' + 'A' * 321, '', '']] * 2, rows
 
+    def test_tns_oci_dty(self, cmd_tshark, capture_file, test_env):
+        '''An OCI client's TTI_DTY has encoding flag 2 and no type table: a
+        time zone block, from 11.2 on a timezone file version, and the
+        national charset follow its capabilities, and the server answers
+        with its own time zone block. The flag marks the client as an OCI
+        one, so a status block after it is read in the OCI layout.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_oci_dty.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_setdt.field_version',
+            '-e', 'tns.data_setdt.tz_offset',
+            '-e', 'tns.data_setdt.tzfile_version',
+            '-e', 'tns.data_setdt.ncharset',
+            '-e', 'tns.data_oer.oci_status',
+            '-e', 'data.len',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [
+            ['6', '+00:00:00', '14', '2000', '', '', ''],
+            ['', '+00:00:00', '14', '', '', '', ''],
+            ['', '', '', '', '1', '', ''],
+            ['4', '+00:00:00', '', '2000', '', '', ''],
+            ['', '+00:00:00', '', '', '', '', ''],
+        ], rows
+
     def test_tns_oci_kod(self, cmd_tshark, capture_file, test_env):
         '''An OCI client describes an object type with TTI_KOD, by name or
         by REF. The reply is a name header for a by-name call, a record
@@ -2894,6 +3195,299 @@ class TestDissectTns:
         ), encoding='utf-8', env=test_env)
         rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
         assert rows == [['2', '15', '']], rows
+
+    def test_tns_array_binds(self, cmd_tshark, capture_file, test_env):
+        '''An associative-array bind's value is an element count and the
+        elements, in the request and in the OUT reply alike.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_array_binds.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_bind.num_elements',
+            '-T', 'fields',
+            '-e', 'tns.data_col.max_elements',
+            '-e', 'tns.data_bind.num_elements',
+            '-e', 'tns.data_bind.value',
+            '-e', 'tns.data_oer.err_code',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [
+            ['10', '3', 'c102,c103,c104', '', ''],
+            ['', '3', 'c103,c105,c107', '0', ''],
+        ], rows
+
+    def test_tns_bind_framing(self, cmd_tshark, capture_file, test_env):
+        '''A bind value is framed as a client sends it, not as a fetched
+        column: a LONG has no trailing indicators and a ROWID is a string.
+        The NUMBER after each decodes.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_bind_framing.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-O', 'tns',
+        ), encoding='utf-8', env=test_env)
+        assert 'Bind 2 (NUMBER): 8' in stdout, stdout
+        assert 'Bind 1 (RID): AAAK6JAAEAAACGPAAA' in stdout, stdout
+        assert 'Bind 2 (NUMBER): 9' in stdout, stdout
+        assert 'Malformed' not in stdout, stdout
+
+    def test_tns_long_bind_order(self, cmd_tshark, capture_file, test_env):
+        '''In a SQL statement a LONG-class bind value comes after all the
+        others; a PL/SQL block takes its values in bind order.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_long_bind.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-O', 'tns',
+        ), encoding='utf-8', env=test_env)
+        assert 'Bind 2 (NUMBER): 7' in stdout, stdout
+        assert 'Bind 2 (NUMBER): 8' in stdout, stdout
+        assert 'Malformed' not in stdout, stdout
+
+    def test_tns_aq(self, cmd_tshark, capture_file, test_env):
+        '''Advanced Queuing: an enqueue names its queue, correlation and
+        payload, and is answered with the message id; a dequeue names its
+        consumer, mode and condition, and is answered with the message.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_aq.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_aq.queue || tns.data_aq.msgid',
+            '-T', 'fields',
+            '-e', 'tns.data_aq.queue',
+            '-e', 'tns.data_aq.correlation',
+            '-e', 'tns.data_aq.consumer',
+            '-e', 'tns.data_aq.condition',
+            '-e', 'tns.data_aq.msgid',
+            '-e', 'tns.data_aq.enq_time',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert len(rows) == 4, rows
+        assert rows[0][:2] == ['MYQ', 'corr-1'] and rows[0][6] == '', rows[0]
+        assert rows[1][4] == '202122232425262728292a2b2c2d2e2f', rows[1]
+        assert rows[2][:4] == ['MYQ', '', 'SUB1', 'priority = 1'], rows[2]
+        assert rows[3][5] == '2024-03-04 05:07:09' and rows[3][6] == '', rows[3]
+
+    def test_tns_aq_array(self, cmd_tshark, capture_file, test_env):
+        '''The array queuing call enqueues or dequeues several messages at
+        once: a row per message on the way out, the queue's options
+        repeated per message on the way in, and the ids on the way back.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_aq_array.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tns.data_aq.array_op || tns.data_aq.msgid',
+            '-T', 'fields',
+            '-e', 'tns.data_aq.array_op',
+            '-e', 'tns.data_aq.num_messages',
+            '-e', 'tns.data_aq.queue',
+            '-e', 'tns.data_aq.correlation',
+            '-e', 'tns.data_aq.consumer',
+            '-e', 'tns.data_aq.msgid',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert len(rows) == 4, rows
+        assert rows[0][:4] == ['1', '2', 'MYQ', 'corr-1,corr-2'], rows[0]
+        assert rows[1][5].count(',') == 1, rows[1]
+        assert rows[2][:3] == ['2', '2', 'MYQ'] and rows[2][4] == 'SUB1,SUB1', rows[2]
+        assert all(r[6] == '' for r in rows), rows
+
+    def test_tns_dty_12c(self, cmd_tshark, capture_file, test_env):
+        '''A 12c+ client's TTI_DTY: capability arrays of their own lengths,
+        and a type table of big-endian 16-bit entries.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_dty_12c.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_setdt.field_version',
+            '-e', 'tns.data_setdt.type',
+            '-e', 'tns.data_setdt.rep',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [['24', '1,2,112', '1,10,1', '']], rows
+
+    def test_tns_dty_reply(self, cmd_tshark, capture_file, test_env):
+        '''A 12c+ server's TTI_DTY reply lists 16-bit type pairs up to a 0
+        type; the message after it is decoded too.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_dty_reply.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-Y', 'tcp.srcport == 1521',
+            '-T', 'fields',
+            '-e', 'tns.data_setdt.type',
+            '-e', 'tns.data_setdt.conv_type',
+            '-e', 'tns.data_sta.call_status',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.strip().splitlines()]
+        assert rows == [['1,2', '1,0', '0x00000001']], rows
+
+    def test_tns_fast_auth(self, cmd_tshark, capture_file, test_env):
+        '''A 23ai client bundles the protocol, data types and session key
+        messages into one fast-authentication packet; the call inside it
+        carries no token, though the connection's field version is 24 and
+        the execute after it does.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_fast_auth.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_setp_req.cli_plat',
+            '-e', 'tns.data_setdt.field_version',
+            '-e', 'tns.data_auth.user',
+            '-e', 'tns.data_opi.param_name',
+            '-e', 'tns.data.token',
+            '-e', 'tns.data_all8.sql',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows[0][:4] == ['python', '13,24', 'SCOTT',
+                               'AUTH_PROGRAM_NM,AUTH_MACHINE'], rows[0]
+        assert rows[0][4] == '', rows[0]
+        assert rows[1][4] == '0' and rows[1][5] == 'SELECT 1 FROM DUAL', rows[1]
+
+    def test_tns_lob_binds(self, cmd_tshark, capture_file, test_env):
+        '''A LOB value carried by a bind is a bare locator on the way out and
+        the LOB block - its size and chunk size before the locator - on the
+        way back, for an OUT bind and a RETURNING bind alike. A LONG return
+        bind is a plain DALC.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_lob_binds.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-O', 'tns',
+        ), encoding='utf-8', env=test_env)
+        assert 'Bind 1 (CLOB): locator\n' in stdout, stdout
+        assert 'Bind 2 (NUMBER): 10' in stdout, stdout
+        assert stdout.count('Bind 1 (CLOB): locator, size 50005') == 1, stdout
+        assert stdout.count('Bind 2 (CLOB): locator, size 50005') == 1, stdout
+        assert 'LOB Chunk Size: 8132' in stdout, stdout
+        assert 'Bind 3 (LONG): nineteen bytes here' in stdout, stdout
+        # a JSON bind sends its locator and image; the value returned for
+        # it is the same block a LOB's is
+        assert 'Bind 1 (JSON): {"k": 5}' in stdout, stdout
+        assert 'Bind 1 (JSON): locator, size 50005' in stdout, stdout
+        assert 'Malformed' not in stdout, stdout
+
+    def test_tns_actual_length(self, cmd_tshark, capture_file, test_env):
+        '''Each value a server returns for a bind is followed by its actual
+        length: 0 when it fitted, -1 when NULL, else its length before the
+        server cut it to the declared size - which is truncation only when
+        more than arrived.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_actual_length.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_bind.actual_len',
+            '-e', '_ws.expert.message',
+            '-e', '_ws.col.info',
+            '-Y', 'tns.data_bind.actual_len',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert [r[0] for r in rows] == ['23,-1', '5,11'], rows
+        assert rows[0][1] == 'The value was cut to 2 of its 23', rows[0]
+        assert rows[1][1] == 'The value was cut to 5 of its 11', rows[1]
+        assert all('[truncated]' in r[2] for r in rows), rows
+
+    def test_tns_create_temp(self, cmd_tshark, capture_file, test_env):
+        '''A CREATE_TEMP carries the charset form and type of the LOB to
+        create where other LOB operations carry offsets; an NCLOB is a
+        CLOB with the national form and charset.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_create_temp.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_lob.csform',
+            '-e', 'tns.data_lob.type',
+            '-e', 'tns.data_lob.charset',
+            '-e', 'tns.data_lob.offset',
+            '-e', '_ws.col.info',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert [r[:4] for r in rows] == [
+            ['1', '112', '873', ''],
+            ['2', '112', '2000', ''],
+            ['0', '113', '873', ''],
+        ], rows
+        assert [r[4].split('[CREATE_TEMP] ')[1] for r in rows] == ['[CLOB]', '[NCLOB]', '[BLOB]'], rows
+        assert all(r[5] == '' for r in rows), rows
+
+    def test_tns_bc_date(self, cmd_tshark, capture_file, test_env):
+        '''A DATE or TIMESTAMP before year 1 counts its century and year
+        down from the same bias and is shown as the BC year it is; a date
+        after it is unchanged.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_bc_date.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-O', 'tns',
+        ), encoding='utf-8', env=test_env)
+        for value in ('Column 1 (DATE): 4712-01-01 00:00:00 BC',
+                      'Column 2 (TIMESTAMP): 0044-03-15 12:30:05.500000000 BC',
+                      'Column 1 (DATE): 0044-03-15 00:00:00 BC',
+                      'Column 1 (DATE): 0001-12-31 23:59:59 BC',
+                      'Column 1 (DATE): 0101-06-01 00:00:00 BC',
+                      'Column 1 (DATE): 2026-09-22 00:00:00\n'):
+            assert value in stdout, value
+
+    def test_tns_lastrowid(self, cmd_tshark, capture_file, test_env):
+        '''The status block names the rowid of the last row a DML touched,
+        rendered as the extended rowid; a zero block means there is none.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_lastrowid.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_oer.rowid',
+            '-e', 'tns.data_oer.rowcount',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [
+            ['AAAfXBAAAAAAVrtAAA', '1', ''],
+            ['AAAfXBAQAAAAVrtAAA', '1', ''],
+            ['', '0', ''],
+        ], rows
+
+    def test_tns_fv_12_1(self, cmd_tshark, capture_file, test_env):
+        '''A session at field version 12.1 already uses the 12c forms: a
+        one-byte describe scale, the array flag in the OAC's flag byte,
+        ub4 chunk lengths, and no trailing byte after a CLOB bind's
+        descriptor; the oaccolid waits for 12.2.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_fv_12_1.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_col.scale',
+            '-e', 'tns.data_col.value',
+            '-e', 'tns.data_bind.num_elements',
+            '-e', 'tns.data_bind.value',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows[1][0] == '-127,0', rows[1]
+        values = rows[2][1].split(',')
+        assert values[0] == 'c102' and len(values[1]) // 2 == 304, rows[2]
+        assert rows[3][2] == '2', rows[3]
+        binds = rows[3][3].split(',')
+        assert binds[:2] == ['c102', 'c103'] and len(binds) == 3, rows[3]
+        assert all(r[4] == '' for r in rows), rows
+
+    def test_tns_plsql_reexec(self, cmd_tshark, capture_file, test_env):
+        '''A PL/SQL block's bind directions, reported only in the reply to
+        its first execute, are remembered against its cursor: a re-execute
+        sends no value for the OUT bind, and each iteration's OUT value
+        comes back in a TTI_RXD of its own, with no IOV.'''
+        stdout = subprocess.check_output((cmd_tshark,
+            '-r', capture_file('tns_plsql_reexec.pcap'),
+            '-d', 'tcp.port==1521,tns',
+            '-T', 'fields',
+            '-e', 'tns.data_bind.value',
+            '-e', 'tns.data_bind.actual_len',
+            '-e', 'tns.data_oer.cursor_id',
+            '-e', '_ws.malformed',
+        ), encoding='utf-8', env=test_env)
+        rows = [r.split('\t') for r in stdout.rstrip('\n').splitlines()]
+        assert rows == [
+            ['6869,c106,fd01', '', '', ''],
+            ['c107', '0', '3', ''],
+            ['796f,c115,6f6b,c111', '', '', ''],
+            ['c116,c112', '0,0', '3', ''],
+        ], rows
 
 class TestDecompressMongo:
     def test_decompress_zstd(self, cmd_tshark, features, capture_file, test_env):
@@ -3566,3 +4160,90 @@ class TestDissectDnsEdnsKeyTag:
         assert '14' in stdout
         assert '12345' in stdout
         assert '54321' in stdout
+
+
+class TestDissectDnsUpdateLease:
+    def test_ul_lease_only(self, cmd_tshark, capture_file, test_env):
+        '''Update Lease option with LEASE field only (4-byte variant) is decoded.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dns_update_lease.pcap'),
+                '-Y', 'frame.number == 1',
+                '-Tfields',
+                '-e', 'dns.opt.code',
+                '-e', 'dns.opt.ul.lease',
+            ), encoding='utf-8', env=test_env)
+        # Option code 2 (Update Lease), lease 300 seconds
+        assert '2' in stdout
+        assert '300' in stdout
+
+    def test_ul_lease_and_key_lease(self, cmd_tshark, capture_file, test_env):
+        '''Update Lease option with LEASE and KEY-LEASE fields (8-byte variant) is decoded.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dns_update_lease.pcap'),
+                '-Y', 'frame.number == 2',
+                '-Tfields',
+                '-e', 'dns.opt.code',
+                '-e', 'dns.opt.ul.lease',
+                '-e', 'dns.opt.ul.key_lease',
+            ), encoding='utf-8', env=test_env)
+        # Option code 2, lease 300 seconds, key lease 600 seconds
+        assert '2' in stdout
+        assert '300' in stdout
+        assert '600' in stdout
+
+class TestTcpFingerprint:
+    # Test cases come from
+    # https://github.com/ntop/nDPI/blob/dev/fingerprint/nDPI_TCP_fingerprint.md#appendix-a--test-vectors
+    @pytest.mark.parametrize("tcpfp_case", [
+            # capture file, packet number, fingerprint, option list
+            ('fp_tcp_linux_ubuntu24.pcap', 1, '2_64_64240_789c1d1f', '2,4,8,1,3:7'),
+            ('fp_tcp_android13.pcapng', 1, '2_64_65535_58b6a464', '2,4,8,1,3:10'),
+            ('fp_tcp_android16.pcapng', 1, '2_64_65535_58b6a464', '2,4,8,1,3:10'),
+            ('fp_tcp_freebsd15.pcap', 3, '2_64_65535_2b9b4c52', '2,1,3:6,4,8'),
+            ('fp_tcp_macos27.pcapng', 1, '194_64_65535_e76f0f14', '2,1,3:6,1,1,8,4,0'),
+            ('fp_tcp_iPadOS27.pcapng', 1, '194_64_65535_e76f0f14', '2,1,3:6,1,1,8,4,0'),
+            ('fp_tcp_iOS27_iphone.pcapng', 1, '2_64_65535_e76f0f14', '2,1,3:6,1,1,8,4,0'),
+            ('fp_tcp_iOS18_iPad.pcapng', 1, '2_64_65535_e76f0f14', '2,1,3:6,1,1,8,4,0'),
+            ('fp_tcp_iOS15_iPhone.pcapng', 1, '194_64_65535_2b6d3038', '2,1,3:5,1,1,8,4,0'),
+            ('fp_tcp_win10.pcapng', 1, '2_128_64240_47466ece', '2,1,3:8,1,1,4'),
+            ('fp_tcp_win11.pcapng', 1, '2_128_65535_47466ece', '2,1,3:8,1,1,4'),
+            ('fp_tcp_win11.pcapng', 3, '2_128_65535_47466ece', '2,1,3:8,1,1,4'),
+        ])
+    def test_tcpfp(self, cmd_tshark, capture_file, test_env, tcpfp_case):
+        (cap_file, frame_num, fp, fp_raw) = tcpfp_case
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file(os.path.join("tcpfp", cap_file)),
+                '-Y', 'frame.number == '+str(frame_num),
+                '-Tfields',
+                '-e', 'tcp.fingerprint',
+                '-e', 'tcp.fingerprint.raw',
+            ), encoding='utf-8', env=test_env)
+        (out_fp, out_fp_raw) = stdout.strip().split()
+        assert out_fp == fp
+        assert out_fp_raw == fp_raw
+
+
+class TestDissectDnsEdnsExpire:
+    def test_edns_expire_query(self, cmd_tshark, capture_file, test_env):
+        '''EDNS EXPIRE option in query (zero-length) is decoded.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dns_edns_expire.pcap'),
+                '-Y', 'frame.number == 1',
+                '-Tfields',
+                '-e', 'dns.opt.code',
+            ), encoding='utf-8', env=test_env)
+        # Option code 9 (EDNS EXPIRE), no data
+        assert '9' in stdout
+
+    def test_edns_expire_response(self, cmd_tshark, capture_file, test_env):
+        '''EDNS EXPIRE option in response with expire value is decoded.'''
+        stdout = subprocess.check_output((cmd_tshark,
+                '-r', capture_file('dns_edns_expire.pcap'),
+                '-Y', 'frame.number == 2',
+                '-Tfields',
+                '-e', 'dns.opt.code',
+                '-e', 'dns.opt.edns_expire',
+            ), encoding='utf-8', env=test_env)
+        # Option code 9, expire 86400 seconds
+        assert '9' in stdout
+        assert '86400' in stdout

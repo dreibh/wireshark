@@ -18,6 +18,7 @@
 
 #include "welcome_page.h"
 #include <ui_welcome_page.h>
+#include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/theme_manager.h>
 #include <ui/qt/models/recentcapturefiles_list_model.h>
@@ -42,7 +43,7 @@
 WelcomePage::WelcomePage(QWidget *parent) :
     QFrame(parent),
     welcome_ui_(new Ui::WelcomePage),
-    #ifdef Q_OS_MAC
+    #ifdef Q_OS_MACOS
     show_in_str_(tr("Show in Finder")),
     #else
     show_in_str_(tr("Show in Folder")),
@@ -61,6 +62,8 @@ WelcomePage::WelcomePage(QWidget *parent) :
     welcome_ui_->sidebarContainer->setVisible(false);
 
     updateStyleSheets();
+    connect(ThemeManager::instance(), &ThemeManager::themeChanged,
+            this, &WelcomePage::updateStyleSheets);
 
     /* Handle Recent Capture Files List */
     // In welcome_page.cpp or wherever the list is created
@@ -93,7 +96,7 @@ WelcomePage::WelcomePage(QWidget *parent) :
         welcome_ui_->openFileSectionRecentList->setVisible(false);
     }
 
-#ifdef Q_OS_MAC
+#ifdef Q_OS_MACOS
     welcome_ui_->openFileSectionRecentList->setAttribute(Qt::WA_MacShowFocusRect, false);
 #endif
 
@@ -376,7 +379,17 @@ void WelcomePage::showCaptureFilesContextMenu(QPoint pos)
 
 void WelcomePage::updateStyleSheets()
 {
-    setStyleSheet(ThemeManager::styleSheet(QStringLiteral("welcome-page")));
+    QString welcome_ss = ThemeManager::styleSheet(QStringLiteral("welcome-page"));
+#if !defined(Q_OS_WIN)
+    welcome_ss += QStringLiteral(
+                "QAbstractItemView:item:hover {"
+                "  background-color: %1;"
+                "  color: palette(text);"
+                "}"
+                )
+            .arg(ColorUtils::hoverBackground().name(QColor::HexArgb));
+#endif
+    setStyleSheet(welcome_ss);
 
     /* LearnCardWidget and CaptureCardWidget manage their own stylesheets */
 }

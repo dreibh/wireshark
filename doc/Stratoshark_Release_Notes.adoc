@@ -27,12 +27,23 @@ If you or your organization would like to contribute or become a sponsor, please
 // Many other improvements have been made.
 // See the “New and Updated Features” section below for more details.
 
+The following changes have been made since version 0.10.4:
+
+// https://developer.apple.com/news/?id=w4atic4c
+// https://developer.apple.com/help/account/certificates/replace-developer-id-certificates
+* macOS disk images and applications are now signed using certificates issued by Apple's Developer ID Certification Authority (G2).
+  The previous certificate was issued by Apple's Developer ID Certification Authority, which expires in early 2027.
+
 The following changes have been made since version 0.10.3:
 
+* The user interface icons have been refreshed, and now scale with the menu:View[] zoom settings.
 * Holding down kbd:[↓] and kbd:[↑] will move rapidly through the event list.
-
+* The event bytes pane can show text as UTF-8. Multi-byte characters are
+  drawn over the column of their first byte with a “]” over their last byte,
+  and hovering over any of those bytes highlights the whole character.
 * Coloring rules are now saved as a JSONC file.
   The legacy file format is still supported, but support will be removed in a future release.
+* Support for automatic update notification and updates on Linux distributions supporting PackageKit >= 1.1.12.
 
 The following changes have been made since version 0.10.2:
 
@@ -183,6 +194,14 @@ The following features are either new or have been significantly updated since v
   which a capture was running (statistics are not sampled while capturing).
   When a source is dropping packets, the drops are shown as a separate line.
   wsbuglink:21318[]
+
+* On Linux, Stratoshark can check whether the distribution offers a newer version
+  of the package it was installed from. The check uses PackageKit and never
+  contacts wireshark.org; the update itself is installed through the desktop's
+  software center (e.g. GNOME Software or KDE Discover). Self-compiled builds
+  and Flatpak, Snap or AppImage installations are not checked.
+  Building with this support requires the optional packagekit-glib2 library,
+  version 1.1.12 or later.
 
 //* The Windows installers now ship with Qt 6.5.2.
 //  They previously shipped with Qt 6.2.3.

@@ -10,8 +10,10 @@
 #pragma once
 
 #include <ui/qt/utils/theme_manager.h>
+#include <ui/qt/utils/themes/token_palette.h>
 
 #include <QIcon>
+#include <QPalette>
 #include <QSize>
 #include <QString>
 
@@ -54,9 +56,9 @@ public:
      *
      * @param name The base name of the SVG icon resource without a path or .svg extension.
      */
-    explicit ThemedIcon(const char *name) {
-        QString path = QStringLiteral(":/svg_icons/") + QLatin1String(name) + QStringLiteral(".svg");
-        *this = ThemedIcon(path, ThemeManager::PaletteText);
+    explicit ThemedIcon(const char *name) :
+        ThemedIcon(QString::fromUtf8(name))
+    {
     }
 
     /**
@@ -66,7 +68,8 @@ public:
      */
     explicit ThemedIcon(const QString &name)
     {
-        *this = ThemedIcon(qPrintable(name));
+        *this = ThemedIcon(QStringLiteral(":/svg_icons/") + name + QStringLiteral(".svg"),
+                           ThemeManager::PaletteText);
     }
 
     /**
@@ -85,4 +88,22 @@ public:
                         ThemeManager::ThemeToken active_token,
                         ThemeManager::ThemeToken selected_token = ThemeManager::NoRole,
                         QSize size = QSize(14, 14));
+
+    /**
+     * @brief Set a custom palette for drawing this icon instead of the application palette.
+     *
+     * Affects every copy of this icon. By default the application palette is
+     * used.
+     */
+    void setPalette(const QPalette &palette);
+
+private:
+    // Private delegate: the engine shares @p palette so setPalette() can reach it.
+    ThemedIcon(const QString &svg_resource_path,
+               ThemeManager::ThemeToken token,
+               ThemeManager::ThemeToken active_token,
+               ThemeManager::ThemeToken selected_token,
+               QSize size, IconPaletteRef palette);
+
+    IconPaletteRef palette_;
 };
