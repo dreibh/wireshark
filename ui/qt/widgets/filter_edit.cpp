@@ -13,10 +13,7 @@
 
 #include <ui/qt/models/filter_validator.h>
 #include <ui/qt/models/filter_completer.h>
-#include <ui/qt/utils/theme_manager.h>
-#include <ui/qt/utils/themes/color_math.h>
 
-#include <QApplication>
 #include <QPainter>
 #include <QStyle>
 #include <QStyleOptionFrame>
@@ -120,7 +117,19 @@ void FilterEdit::insertFilter(const QString &filter)
 
 void FilterEdit::onTextChanged()
 {
+    // An emptied field has nothing to validate. Resolve it right away so a stale
+    // Invalid/Valid state doesn't linger (tint behind removed buttons) for the
+    // debounce interval.
+    if (text().isEmpty()) {
+        validateNow();
+        return;
+    }
     debounce_->start();
+}
+
+bool FilterEdit::isValidationPending() const
+{
+    return debounce_->isActive();
 }
 
 void FilterEdit::setState(SyntaxState state)
@@ -140,34 +149,9 @@ void FilterEdit::setState(SyntaxState state)
         return;
     }
 
-    // The background tint comes from the global QSS (theme tokens). A single
-    // fixed text color can't serve all tints — valid/invalid are dark, the
-    // deprecated tint is bright — so compute the contrasting foreground from the
-    // active background and apply it via the palette. Non-tinted states restore
-    // the inherited text color.
-    const ThemeManager *theme = ThemeManager::instance();
-    QPalette pal = palette();
-    QColor fg;
-    switch (state_) {
-    case SyntaxState::Valid:
-        fg = ColorMath::contrastingText(theme->color(ThemeManager::FilterValid));
-        break;
-    case SyntaxState::Invalid:
-        fg = ColorMath::contrastingText(theme->color(ThemeManager::FilterInvalid));
-        break;
-    case SyntaxState::Deprecated:
-        fg = ColorMath::contrastingText(theme->color(ThemeManager::FilterDeprecated));
-        break;
-    default:
-        fg = qApp->palette().color(QPalette::Text); // inherited/base text
-        break;
-    }
-    pal.setColor(QPalette::Text, fg);
-    setPalette(pal);
-
     // The syntaxState QSS property changed; re-evaluate the stylesheet so the
-    // new tint applies. addAction-based chrome reflows itself, so there is no
-    // geometry to recompute here.
+    // new tint and its contrasting text color apply. addAction-based chrome
+    // reflows itself, so there is no geometry to recompute here.
     style()->unpolish(this);
     style()->polish(this);
     update();
@@ -176,11 +160,13 @@ void FilterEdit::setState(SyntaxState state)
 
 void FilterEdit::validateNow()
 {
+    debounce_->stop();
     const QString current = text();
 
     // No validator, or nothing typed: never tinted.
     if (!validator_ || current.isEmpty()) {
         setState(SyntaxState::Empty);
+        emit validated();
         return;
     }
 
@@ -208,6 +194,7 @@ void FilterEdit::validateNow()
         break;
     }
     setState(mapped);
+    emit validated();
 }
 
 // invalid indicator
@@ -230,8 +217,11 @@ void FilterEdit::paintEvent(QPaintEvent *event)
     QStyleOptionFrame opt;
     initStyleOption(&opt);
 
-    // get rect
-    const QRect cr = style()->subElementRect(QStyle::SE_LineEditContents, &opt, this);
+    // Contents rect minus the reserved text margins: subclasses such as
+    // FilterExpressionEdit reserve those for inline buttons and paint an opaque
+    // neutral strip over them after this runs, which would hide the icon.
+    const QRect cr = style()->subElementRect(QStyle::SE_LineEditContents, &opt, this)
+                         .marginsRemoved(textMargins());
     QRect sir(0, 0, 14, 14); 
     const int textWidth = fontMetrics().boundingRect(text()).width();
     const int margin = 2 * 6 + 1;

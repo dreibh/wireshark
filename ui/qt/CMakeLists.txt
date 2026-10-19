@@ -100,6 +100,7 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/font_manager.h
 	utils/frame_information.h
 	utils/idata_printable.h
+	utils/plot_theme.h
 	utils/profile_switcher.h
 	utils/proto_node.h
 	utils/qt_ui_utils.h
@@ -450,7 +451,7 @@ if(HAVE_SOFTWARE_UPDATE AND WIN32)
 	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC utils/software_update_backend_win.cpp)
 elseif(HAVE_SOFTWARE_UPDATE AND APPLE)
 	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC utils/software_update_backend_mac.cpp)
-elseif(PACKAGEKIT_FOUND)
+elseif(HAVE_SOFTWARE_UPDATE)
 	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC utils/software_update_backend_linux.cpp)
 else()
 	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC utils/software_update_backend_stub.cpp)
@@ -463,6 +464,7 @@ set(WIRESHARK_UTILS_SRCS
 	utils/field_information.cpp
 	utils/font_manager.cpp
 	utils/frame_information.cpp
+	utils/plot_theme.cpp
 	utils/profile_switcher.cpp
 	utils/proto_node.cpp
 	utils/qt_ui_utils.cpp
@@ -928,7 +930,6 @@ qrc_add_files(
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/application.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/welcome-page.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/accordion-frame.qss
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/bluetooth-table.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/interface-toolbar-lineedit.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card.qss
@@ -1059,7 +1060,6 @@ target_include_directories(qtui
 		${PCAP_INCLUDE_DIRS}
 		${SPEEXDSP_INCLUDE_DIRS}
 		${WINSPARKLE_INCLUDE_DIRS}
-		${PACKAGEKIT_INCLUDE_DIRS}
 		$<$<CXX_COMPILER_ID:MSVC>:${ZLIB_INCLUDE_DIRS}>
 		$<$<CXX_COMPILER_ID:MSVC>:${ZLIBNG_INCLUDE_DIRS}>
 	PRIVATE

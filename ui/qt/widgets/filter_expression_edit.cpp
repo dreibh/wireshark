@@ -253,6 +253,9 @@ FilterExpressionEdit::FilterExpressionEdit(QWidget *parent) :
         emit validityChanged(s == FilterEdit::SyntaxState::Valid ||
                              s == FilterEdit::SyntaxState::Deprecated);
     });
+    // updateApplyEnabled() holds the apply action off while a debounced
+    // validation is pending (the state is stale); re-evaluate once it has run.
+    connect(this, &FilterEdit::validated, this, &FilterExpressionEdit::updateApplyEnabled);
     connect(this, &QLineEdit::returnPressed, this, &FilterExpressionEdit::applyExpression);
 
     // Button widths change with zoom; keep the reserved text margins in step so
@@ -451,16 +454,29 @@ void FilterExpressionEdit::updateClearVisible()
 {
     // Reflow only when the clear button's presence actually flips, so typing
     // doesn't re-reserve text margins on every keystroke.
-    const bool show = !text().isEmpty();
+    // Stay visible for an empty field while a filter is still applied, so the
+    // button can clear that filter.
+    const bool show = !text().isEmpty() || !applied_expression_.isEmpty();
     if (show == !clear_button_->isHidden())
         return;
     clear_button_->setVisible(show);
     updateInlineMargins();
 }
 
+void FilterExpressionEdit::setAppliedExpression(const QString &expression)
+{
+    applied_expression_ = expression;
+    updateClearVisible();
+    updateApplyEnabled();
+}
+
 void FilterExpressionEdit::updateApplyEnabled()
 {
-    apply_button_->setEnabled(apply_visible_ && !text().isEmpty() &&
+    // Empty text is a valid thing to apply (it clears the active filter), so it
+    // is only "nothing to do" when no filter is currently applied.
+    apply_button_->setEnabled(apply_visible_ &&
+                              text() != applied_expression_ &&
+                              !isValidationPending() &&
                               state() != FilterEdit::SyntaxState::Invalid);
 }
 

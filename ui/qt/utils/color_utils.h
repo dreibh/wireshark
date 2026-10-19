@@ -21,6 +21,7 @@
 #include <QStyleOptionViewItem>
 
 class QPainter;
+class QPalette;
 class QAbstractItemView;
 
 /**
@@ -87,12 +88,17 @@ public:
      */
     static QString themeLinkStyle();
 
-
     /**
-     * @brief Returns an appropriate background color for hovered abstract items.
-     * @return The background color.
+     * @brief Stylesheet rule for the hover state of an item view's items.
+     *
+     * The fill is ColorMath::selectionHoverFill() of the application
+     * palette's Base and Highlight, the text ColorMath::readableText() of
+     * its Text on that fill, so hover is a tint of the view's own
+     * selection color.
+     * @param selector Type selector of the view, e.g. "QTreeView".
+     * @return "<selector>:item:hover { background-color: ...; color: ...; }"
      */
-    static const QColor hoverBackground();
+    static QString itemHoverStyleSheet(const QString &selector);
 
     /**
      * @brief Paints a single cell with a flat background/text color,
@@ -100,7 +106,7 @@ public:
      * marked, ignored) the model would otherwise contribute -- used for
      * PacketList's and its pinned overlay panes' manually-driven hover
      * highlight (see PacketList::drawRow()), where hovering needs to show
-     * a flat theme color regardless of the row's own coloring.
+     * the flat hover fill regardless of the row's own coloring.
      *
      * QStyledItemDelegate::paint() can't be reused for this directly: its
      * own initStyleOption() re-fetches Qt::BackgroundRole from the model
@@ -120,10 +126,21 @@ public:
                                const QColor &bg, const QColor &fg);
 
     /**
-     * @brief Returns an appropriate warning background color for the current mode.
+     * @brief Returns the warning background color for the current theme.
+     * Taken from the FilterDeprecated theme token, the same tint used for
+     * deprecated display filter text.
      * @return The background color.
      */
     static const QColor warningBackground();
+
+    /**
+     * @brief Color of the 1px separator line between packet list rows.
+     * Equal to Base when Base is light; on a dark Base it is a mid gray
+     * halfway to Text so the line stays visible over light coloring rules.
+     * @param palette The palette of the view that paints the rows.
+     * @return The separator color.
+     */
+    static QColor rowSeparatorColor(const QPalette &palette);
 
     /**
      * @brief Returns an appropriate foreground color for disabled text.

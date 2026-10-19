@@ -27,6 +27,7 @@
 
 #include "main_application.h"
 
+#include <QBoxLayout>
 #include <QClipboard>
 #include <QDesktopServices>
 #include <QDir>
@@ -88,13 +89,17 @@ WelcomePage::WelcomePage(QWidget *parent) :
     connect(welcome_ui_->openFileSectionRecentList, &QListView::customContextMenuRequested,
         this, &WelcomePage::showCaptureFilesContextMenu);
 
-    if (WorkspaceState::instance()->recentCaptureFiles().size() > 0) {
-        welcome_ui_->openFileSectionLabel->setVisible(true);
-        welcome_ui_->openFileSectionRecentList->setVisible(true);
-    } else {
-        welcome_ui_->openFileSectionLabel->setVisible(false);
-        welcome_ui_->openFileSectionRecentList->setVisible(false);
-    }
+    // Show the Open section only when there are recent files, and keep it
+    // (and the layout) up to date as files are added or removed.
+    auto updateOpenSection = [this]() {
+        bool has_recent = !WorkspaceState::instance()->recentCaptureFiles().isEmpty();
+        welcome_ui_->openFileSectionLabel->setVisible(has_recent);
+        welcome_ui_->openFileSectionRecentList->setVisible(has_recent);
+        updateSidebarLayout();
+    };
+    updateOpenSection();
+    connect(WorkspaceState::instance(), &WorkspaceState::recentCaptureFilesChanged, this, updateOpenSection);
+    connect(WorkspaceState::instance(), &WorkspaceState::stateLoaded, this, updateOpenSection);
 
 #ifdef Q_OS_MACOS
     welcome_ui_->openFileSectionRecentList->setAttribute(Qt::WA_MacShowFocusRect, false);
@@ -302,6 +307,21 @@ void WelcomePage::showEvent(QShowEvent *event)
  */
 void WelcomePage::updateSidebarLayout()
 {
+    // Open and Capture go side-by-side if preferred, there are recent files
+    // to list, and each column gets at least kMinColumnWidth; otherwise
+    // they are stacked. The container width doesn't depend on the direction,
+    // so this can't oscillate.
+    static const int kMinColumnWidth = 320;
+    QBoxLayout *content = welcome_ui_->mainContentLayout;
+    static const int kColumnSpacing = 24;
+    bool sideBySide = recent.gui_welcome_page_side_by_side &&
+            !WorkspaceState::instance()->recentCaptureFiles().isEmpty() &&
+            welcome_ui_->mainContentContainer->width() >= 2 * kMinColumnWidth + kColumnSpacing;
+    content->setDirection(sideBySide ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
+    content->setSpacing(sideBySide ? kColumnSpacing : -1);
+    content->setStretch(0, sideBySide ? 1 : 0);
+    content->setStretch(1, sideBySide ? 1 : 0);
+
     int available = welcome_ui_->sidebarContainer->height();
     if (available <= 0)
         return;
@@ -381,13 +401,8 @@ void WelcomePage::updateStyleSheets()
 {
     QString welcome_ss = ThemeManager::styleSheet(QStringLiteral("welcome-page"));
 #if !defined(Q_OS_WIN)
-    welcome_ss += QStringLiteral(
-                "QAbstractItemView:item:hover {"
-                "  background-color: %1;"
-                "  color: palette(text);"
-                "}"
-                )
-            .arg(ColorUtils::hoverBackground().name(QColor::HexArgb));
+    // Same hover fill as the other item views.
+    welcome_ss += ColorUtils::itemHoverStyleSheet(QStringLiteral("QAbstractItemView"));
 #endif
     setStyleSheet(welcome_ss);
 

@@ -36,6 +36,7 @@
 
 #include <ui/qt/utils/color_utils.h>
 #include <ui/qt/utils/theme_manager.h>
+#include <ui/qt/utils/themes/color_math.h>
 #include <ui/qt/utils/font_manager.h>
 #include <ui/qt/widgets/overlay_scroll_bar.h>
 #include "proto_tree.h"
@@ -59,6 +60,7 @@
 #include <QActionGroup>
 #include <QApplication>
 #include <QDesktopServices>
+#include <QSet>
 #include <QUrl>
 #include <QClipboard>
 #include <QContextMenuEvent>
@@ -543,18 +545,26 @@ void PacketList::colorsChanged()
                                  inactive_fg.name(),
                                  inactive_bg.name());
 
+    // The QTreeView::item:selected rules above make Qt draw selected cells
+    // through its generic stylesheet path instead of the native style. That
+    // path draws a focus frame around the current cell, even after a mouse
+    // click, which the windows11 style (Qt 6.7+) renders as a prominent
+    // rounded double outline. Only the row should look selected, so
+    // suppress the outline. macOS draws no item focus frame either way.
+    const QString no_focus_outline = "QTreeView { outline: 0; }";
+
     // Hover highlighting is painted manually in drawRow() (driven by
     // hovered_frame_num_) rather than through a :hover stylesheet
     // selector, since the mouse hovering a pinned overlay view needs to
     // highlight the corresponding row in every pane, not just the one
     // widget Qt considers "hovered".
-    QString full_style = active_style + inactive_style;
+    QString full_style = no_focus_outline + active_style + inactive_style;
 
     // Cache the plain flat colors (no :active/:!active selector -- see
     // applyOverlayActiveState()) so window-activation changes can pick the
     // right one without recomputing from ThemeManager every time.
-    overlay_active_flat_style_ = plain_style_format.arg(active_fg.name(), active_bg.name());
-    overlay_inactive_flat_style_ = plain_style_format.arg(inactive_fg.name(), inactive_bg.name());
+    overlay_active_flat_style_ = no_focus_outline + plain_style_format.arg(active_fg.name(), active_bg.name());
+    overlay_inactive_flat_style_ = no_focus_outline + plain_style_format.arg(inactive_fg.name(), inactive_bg.name());
 
     set_style_sheet_ = true;
     setStyleSheet(full_style);
@@ -582,7 +592,7 @@ void PacketList::applyOverlayActiveState()
     // This is called on every focus change in the application, and setting
     // a style sheet repolishes the widget even if it hasn't changed, so only
     // set it when it has.
-    const QString &style = (hasFocus() && isActiveWindow()) ? overlay_active_flat_style_ : overlay_inactive_flat_style_;
+    const QString &style = selectionIsActive() ? overlay_active_flat_style_ : overlay_inactive_flat_style_;
     bool changed = false;
     for (QTreeView *view : pinnedOverlayViews()) {
         if (view->styleSheet() != style) {
@@ -651,53 +661,62 @@ void PacketList::drawRow (QPainter *painter, const QStyleOptionViewItem &option,
     // native per-widget hover state, since the mouse hovering a pinned
     // overlay view needs to highlight this row here too -- native :hover
     // styling only ever reacts to the mouse being over this specific
-    // widget. Painted even on a selected row so hover wins over selection,
-    // matching the pre-ThemeManager behavior (see the old :selected:hover
-    // stylesheet rule this replaced -- "background-color: ...;
-    // color: palette(text);"). Uses ColorUtils::paintFlatCell() rather
-    // than re-invoking each column's delegate with overridden palette
-    // roles -- QStyledItemDelegate::paint() calls initStyleOption(),
-    // which re-fetches Qt::BackgroundRole from the model and clobbers any
-    // backgroundBrush/palette override made beforehand, so a colored,
-    // marked, or ignored row's own background always won that fight and
-    // showed through instead of the flat hover color.
+    // widget.
     if (prefs.gui_packet_list_hover_style && index.isValid()) {
         frame_data *fdata = getFDataForRow(index.row());
         if (fdata && (int)fdata->num == hovered_frame_num_) {
-            QColor hover_bg = ColorUtils::hoverBackground();
-            QColor text_color = palette().color(QPalette::Text);
-
-            for (int visual_col = 0; visual_col < header()->count(); visual_col++) {
-                int logical_col = header()->logicalIndex(visual_col);
-                if (isColumnHidden(logical_col)) {
-                    continue;
-                }
-                QModelIndex col_index = index.siblingAtColumn(logical_col);
-                QStyleOptionViewItem col_option = option;
-                col_option.rect = visualRect(col_index);
-                if (get_column_format(logical_col) == COL_TAG) {
-                    // The tag column has its own delegate (emoji font, centered
-                    // layout, per-segment links) that paintFlatCell()'s generic
-                    // CE_ItemViewItem drawing can't reproduce. Fill the hover
-                    // background here, then paint only the tag content on top
-                    // (not the delegate's own background fill, which would
-                    // clobber the hover color with the model's background role).
-                    painter->save();
-                    painter->fillRect(col_option.rect, hover_bg);
-                    painter->restore();
-                    tag_column_delegate_.paintContent(painter, col_option, col_index);
-                    continue;
-                }
-                ColorUtils::paintFlatCell(painter, this, col_option, col_index, hover_bg, text_color);
-            }
+            paintHoveredRow(painter, this, option, index);
         }
     }
 
     if (prefs.gui_packet_list_separator) {
         QRect rect = visualRect(index);
 
-        painter->setPen(QColor(Qt::white));
+        painter->setPen(ColorUtils::rowSeparatorColor(palette()));
         painter->drawLine(0, rect.y() + rect.height() - 1, width(), rect.y() + rect.height() - 1);
+    }
+}
+
+void PacketList::paintHoveredRow(QPainter *painter, const QTreeView *view,
+                                 const QStyleOptionViewItem &option, const QModelIndex &index) const
+{
+    // The hover fill is a tint of the selection color currently in use, so
+    // it follows focus like the selection does, and it is painted over a
+    // selected or colored row. Uses ColorUtils::paintFlatCell() rather than
+    // re-invoking each column's delegate with overridden palette roles --
+    // QStyledItemDelegate::paint() calls initStyleOption(), which
+    // re-fetches Qt::BackgroundRole from the model and clobbers any
+    // backgroundBrush/palette override made beforehand, so a colored,
+    // marked, or ignored row's own background always won that fight and
+    // showed through instead of the flat hover color.
+    const QColor selection = ThemeManager::instance()->color(
+            selectionIsActive() ? ThemeManager::PacketsSelection : ThemeManager::PacketsInactive);
+    const QPalette &pal = view->palette();
+    const QColor hover_bg = ColorMath::selectionHoverFill(pal.color(QPalette::Base), selection);
+    const QColor text_color = ColorMath::readableText(pal.color(QPalette::Text), hover_bg);
+
+    for (int visual_col = 0; visual_col < view->header()->count(); visual_col++) {
+        int logical_col = view->header()->logicalIndex(visual_col);
+        if (view->isColumnHidden(logical_col)) {
+            continue;
+        }
+        QModelIndex col_index = index.siblingAtColumn(logical_col);
+        QStyleOptionViewItem col_option = option;
+        col_option.rect = view->visualRect(col_index);
+        if (get_column_format(logical_col) == COL_TAG) {
+            // The tag column has its own delegate (emoji font, centered
+            // layout, per-segment links) that paintFlatCell()'s generic
+            // CE_ItemViewItem drawing can't reproduce. Fill the hover
+            // background here, then paint only the tag content on top
+            // (not the delegate's own background fill, which would
+            // clobber the hover color with the model's background role).
+            painter->save();
+            painter->fillRect(col_option.rect, hover_bg);
+            painter->restore();
+            tag_column_delegate_.paintContent(painter, col_option, col_index);
+            continue;
+        }
+        ColorUtils::paintFlatCell(painter, view, col_option, col_index, hover_bg, text_color);
     }
 }
 
@@ -711,12 +730,82 @@ void PacketList::setProtoTree (ProtoTree *proto_tree) {
 
 bool PacketList::uniqueSelectActive()
 {
-    return selectedFrames(false).count() == 1;
+    return selectedFrameCount(2) == 1;
 }
 
 bool PacketList::multiSelectActive()
 {
-    return selectedFrames(false).count() > 1;
+    return selectedFrameCount(2) > 1;
+}
+
+int PacketList::selectedFrameCount(int limit) const
+{
+    // Like selectedFrames(false).count(), but stops once limit packets
+    // have been found. selectedRows() builds an index for every selected
+    // row, which is slow when many packets are selected, so walk the
+    // selection ranges instead.
+    int count = 0;
+
+    // QAbstractItemModel is limited to ints for row numbers, thus this
+    // function uses ints instead of an unsigned type or qsizetype.
+    if (limit <= 0)
+        limit = INT_MAX;
+
+    if (selectionModel() && selectionModel()->hasSelection()) {
+        const QItemSelection selection = selectionModel()->selection();
+        const int last_column = model()->columnCount() - 1;
+        // A row can appear in more than one range (e.g., split by column),
+        // which can't happen if there's only one range.
+        const bool track_rows = selection.size() > 1;
+        QSet<int> rows;
+        for (const QItemSelectionRange &range : selection) {
+            if (range.parent().isValid()) {
+                continue;
+            }
+            // selectedRows() only counts rows that are selected in their
+            // entirety. That's always true for a range that spans every
+            // column, as with SelectRows; isRowSelected() is slow, as it
+            // copies and searches every range.
+            const bool whole_rows = range.left() <= 0 && range.right() >= last_column;
+            for (int row = range.top(); row <= range.bottom(); row++) {
+                if (!packet_list_proxy_model_->getRowFdata(row)) {
+                    continue;
+                }
+                if (!whole_rows && !selectionModel()->isRowSelected(row)) {
+                    continue;
+                }
+                if (track_rows) {
+                    if (rows.contains(row)) {
+                        continue;
+                    }
+                    rows.insert(row);
+                }
+                if (++count >= limit) {
+                    return limit;
+                }
+            }
+        }
+    }
+
+    // See selectedFrames(); the pinned-row strip is small.
+    if (pinned_selection_model_ && pinned_selection_model_->hasSelection()) {
+        foreach (QModelIndex idx, pinned_selection_model_->selectedRows(0)) {
+            PacketListRecord *record = static_cast<PacketListRecord *>(idx.internalPointer());
+            frame_data *fdata = record ? record->frameData() : nullptr;
+            if (!fdata) {
+                continue;
+            }
+            int row = packet_list_proxy_model_->rowOfPacket(fdata);
+            if (row >= 0 && selectionModel() && selectionModel()->isRowSelected(row)) {
+                continue;
+            }
+            if (++count >= limit) {
+                return limit;
+            }
+        }
+    }
+
+    return count;
 }
 
 QList<int> PacketList::selectedRows(bool useFrameNum)
@@ -1872,7 +1961,6 @@ void PacketList::drawCurrentPacket(bool scroll)
         // Includes pinned packets selected in the pinned-row strip that are
         // filtered out of this view, which selRows doesn't.
         const QList<frame_data *> frames = selectedFrames(false);
-        QModelIndexList selRows = selectionModel()->selectedRows(0);
         if (frames.count() > 1)
         {
             foreach (const frame_data *fdata, frames)
@@ -1904,6 +1992,8 @@ void PacketList::drawCurrentPacket(bool scroll)
              * a pinned packet that's filtered out. */
             multiSelect = false;
             selected_fdata = frames.at(0);
+            // Only one packet, so this is cheap.
+            const QModelIndexList selRows = selectionModel()->selectedRows(0);
             if (scroll && selRows.count() > 0 && selRows.at(0).isValid()) {
                 if (currentIndex().siblingAtColumn(0) != selRows.at(0)) {
                     // Not the currentIndex. Set the current index, which will
@@ -2959,6 +3049,13 @@ void PacketList::sectionMoved(int logicalIndex, int oldVisualIndex, int newVisua
 
 PacketList::PinAction PacketList::selectedRowsPinAction() const
 {
+    // Selecting more packets than can be pinned means that at least
+    // that many minus those already pinned are unpinned, which would
+    // exceed the limit; don't build the list of a large selection.
+    if (pinned_rows_model_ && selectedFrameCount(PinnedRowsModel::kMaxPinnedRows + 1) > PinnedRowsModel::kMaxPinnedRows) {
+        return PinRowsOverLimit;
+    }
+
     const QList<frame_data *> frames = selectedFrames();
     if (frames.isEmpty() || !pinned_rows_model_) {
         return NoPinAction;
@@ -3577,7 +3674,7 @@ void PacketList::drawNearOverlay()
                         }
                     } else {
                         // All filters paused, draw no color
-                        painter.fillRect(0, cur_line, o_width, row_height, QColor(Qt::white));
+                        painter.fillRect(0, cur_line, o_width, row_height, palette().color(QPalette::Base));
                     }
                 } else if (fdata->color_filter) {
                     // Single color fallback

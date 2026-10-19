@@ -293,6 +293,15 @@ public:
     QList<frame_data *> selectedFrames(bool fall_back_to_current = true) const;
 
     /**
+     * @brief Counts the selected packets, as selectedFrames(false) would
+     * return, stopping early once the count reaches a limit.
+     * @param limit The maximum count to return. <= 0 indicates no limit.
+     * @return The number of selected packets, or limit if there are at
+     * least that many.
+     */
+    int selectedFrameCount(int limit = 0) const;
+
+    /**
      * @brief Creates a summary text for a specific packet.
      * @param frame_num The packet's frame number.
      * @param type The format type for the summary.
@@ -631,14 +640,20 @@ public:
     int hoveredFrameNum() const { return hovered_frame_num_; }
 
     /**
-     * @brief The delegate used to paint the COL_TAG column (emoji font,
-     * centered layout, per-segment links). Used by drawRow() overrides
-     * (this view's own and PinnedRowView's) to paint the tag column's
-     * content directly when manually painting the hover highlight, since
-     * QStyledItemDelegate::paint() would clobber the hover background --
-     * see PacketList::drawRow()'s comment for why.
+     * @brief Paints the hover highlight over one row of @p view.
+     *
+     * Used by this view's drawRow() and the pinned overlay views' drawRow()
+     * overrides, so all three show the same fill. The fill is derived from
+     * the selection color currently in use (active or inactive, following
+     * focus like the selection itself), see ColorMath::selectionHoverFill().
+     *
+     * @param painter The painter drawRow() received.
+     * @param view The view being painted (this, or a pinned overlay view).
+     * @param option The style option drawRow() received.
+     * @param index The row's index in @p view.
      */
-    const TagColumnDelegate &tagColumnDelegate() const { return tag_column_delegate_; }
+    void paintHoveredRow(QPainter *painter, const QTreeView *view,
+                         const QStyleOptionViewItem &option, const QModelIndex &index) const;
 
 protected:
     /**
@@ -1021,6 +1036,13 @@ private:
      * whether this view's window is currently active.
      */
     void applyOverlayActiveState();
+
+    /**
+     * @brief Whether the selection is drawn in the active color pair.
+     * Same test as the `:active` stylesheet state: this view has focus
+     * and its window is active.
+     */
+    bool selectionIsActive() const { return hasFocus() && isActiveWindow(); }
 
     /**
      * @brief Slot connected to QApplication::focusChanged, since

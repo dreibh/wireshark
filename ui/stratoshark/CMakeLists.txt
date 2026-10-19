@@ -103,6 +103,7 @@ set(WIRESHARK_UTILS_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/font_manager.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/frame_information.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/idata_printable.h
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/plot_theme.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/profile_switcher.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/proto_node.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/qt_ui_utils.h
@@ -428,7 +429,7 @@ if(HAVE_SOFTWARE_UPDATE AND WIN32)
 	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC ${CMAKE_SOURCE_DIR}/ui/qt/utils/software_update_backend_win.cpp)
 elseif(HAVE_SOFTWARE_UPDATE AND APPLE)
 	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC ${CMAKE_SOURCE_DIR}/ui/qt/utils/software_update_backend_mac.cpp)
-elseif(PACKAGEKIT_FOUND)
+elseif(HAVE_SOFTWARE_UPDATE)
 	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC ${CMAKE_SOURCE_DIR}/ui/qt/utils/software_update_backend_linux.cpp)
 else()
 	set(WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC ${CMAKE_SOURCE_DIR}/ui/qt/utils/software_update_backend_stub.cpp)
@@ -441,6 +442,7 @@ set(WIRESHARK_UTILS_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/field_information.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/font_manager.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/frame_information.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/plot_theme.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/profile_switcher.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/proto_node.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/qt_ui_utils.cpp
@@ -836,7 +838,6 @@ qrc_add_files(
 	FILES
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/application.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/accordion-frame.qss
-	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/bluetooth-table.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/capture-card.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/interface-toolbar-lineedit.qss
 	${CMAKE_SOURCE_DIR}/ui/stylesheets/widgets/learn-card.qss
@@ -959,7 +960,6 @@ target_include_directories(ui_stratoshark
 		${PCAP_INCLUDE_DIRS}
 		${SPEEXDSP_INCLUDE_DIRS}
 		${WINSPARKLE_INCLUDE_DIRS}
-		${PACKAGEKIT_INCLUDE_DIRS}
 		$<$<CXX_COMPILER_ID:MSVC>:${ZLIB_INCLUDE_DIRS}>
 		$<$<CXX_COMPILER_ID:MSVC>:${ZLIBNG_INCLUDE_DIRS}>
 	PRIVATE

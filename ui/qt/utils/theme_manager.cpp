@@ -280,6 +280,7 @@ void ThemeManager::init(const QString &theme)
 void ThemeManager::cleanup()
 {
     themeColors_.clear();
+    parsedColors_.clear();
     graphColors_.clear();
     info_ = ThemeInfo();
 }
@@ -490,6 +491,10 @@ void ThemeManager::reapplyForSchemeChange()
     // that reacts to that event and reads a ThemeManager token must find the
     // token map already up to date.  Building the palette without applying it
     // first lets us complete token derivation before the signal fires.
+    // Start from the parsed map: deriveAll() only fills tokens that are
+    // absent, so re-deriving over the previous scheme's results would keep
+    // its stale values.
+    themeColors_ = parsedColors_;
     const QPalette newPalette = ThemePaletteBuilder::build(themeColors_, isDarkMode(), colorRoleCache_, paletteRoleCache_, baselineForBuild());
     ThemeTokenHandler::deriveAll(themeColors_, isDarkMode(), newPalette);
     QApplication::setPalette(newPalette);
@@ -520,7 +525,12 @@ QColor ThemeManager::color(ThemeToken role) const
     if (role == NoRole)
         return QColor();
 
-    auto it = themeColors_.constFind(role);
+    // Highlight and HighlightedText are resolved by ThemePaletteBuilder
+    // (fallback order, text kept readable on the highlight).  A declared
+    // token is only the builder's input, so these two come from the
+    // palette below.
+    const bool builderResolved = role == PaletteHighlight || role == PaletteHighlightedText;
+    auto it = builderResolved ? themeColors_.constEnd() : themeColors_.constFind(role);
     if (it != themeColors_.constEnd()) {
         const QColor c = isDarkMode() ? it.value().dark : it.value().light;
         if (c.isValid())
@@ -532,14 +542,14 @@ QColor ThemeManager::color(ThemeToken role) const
     // back).  Fall back to the live application palette — which ThemeManager
     // itself sets — so callers always get a valid, mode-correct color instead
     // of an invalid QColor.
-    switch (role) {
-    case PaletteBase:       return QApplication::palette().color(QPalette::Base);
-    case PaletteWindow:     return QApplication::palette().color(QPalette::Window);
-    case PaletteText:       return QApplication::palette().color(QPalette::Text);
-    case PaletteWindowText: return QApplication::palette().color(QPalette::WindowText);
-    case PaletteMid:        return QApplication::palette().color(QPalette::Mid);
-    default:                return QColor();
-    }
+    // Look the role up by name so every Palette* token maps to its QPalette
+    // role, including roles Qt adds in later versions.
+    const QString key = QString::fromLatin1(
+            QMetaEnum::fromType<ThemeToken>().valueToKey(role)).toLower();
+    const auto pr = paletteRoleCache_.constFind(key);
+    if (pr != paletteRoleCache_.constEnd())
+        return QApplication::palette().color(pr.value());
+    return QColor();
 }
 
 namespace {
@@ -701,6 +711,11 @@ ThemeManager::previewTheme(const QString &internalName, PreviewScheme scheme) co
         if (!out.value(pt.token).isValid())
             out.insert(pt.token, previewPalette.color(pt.role));
     }
+    // Highlight and HighlightedText are resolved by the builder (fallback
+    // order, readable text); a declared token is only its input, so the
+    // preview always takes the built values.
+    out.insert(PaletteHighlight,       previewPalette.color(QPalette::Highlight));
+    out.insert(PaletteHighlightedText, previewPalette.color(QPalette::HighlightedText));
     return out;
 }
 
@@ -769,7 +784,8 @@ bool ThemeManager::loadTheme(const QString &theme)
     // returns false only for hard failures, so on success we can take
     // the result wholesale.
     info_           = result.info;
-    themeColors_    = result.colors;
+    parsedColors_   = result.colors;
+    themeColors_    = parsedColors_;
     graphColors_    = result.graphColors;
 
     // Build the palette, derive tokens against it, then push it to
