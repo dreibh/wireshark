@@ -1928,7 +1928,7 @@ add_rr_to_tree(proto_tree  *rr_tree, tvbuff_t *tvb, int offset,
   ttl_item = proto_tree_add_item_ret_uint(rr_tree, hf_dns_rr_ttl, tvb, offset, 4, ENC_BIG_ENDIAN, &ttl_value);
   // storing ttl in the context-specific array and then increments its array's
   // index for storing ttl of the next record
-  if (dns_qr_statistics_enabled) {
+  if (dns_qr_statistics_enabled && p_dns_qr_r_rx_ttls && p_dns_qr_r_rx_ttl_index) {
     // cap (or limit check) has been put in-place to avoid overflow
     // check https://gitlab.com/wireshark/wireshark/-/issues/19700
     if (*p_dns_qr_r_rx_ttl_index < TTL_MAXIMUM_ELEMENTS) {
@@ -2967,19 +2967,18 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
     {
       int rr_len = data_len;
       int txt_offset;
-      int txt_len;
+      unsigned txt_len;
       const bool is_dnscrypt_name = (strstr(name, "2.dnscrypt-cert.") != NULL);
       #define DNSCRYPT_CERT_MAGIC 0x444E5343
 
       txt_offset = cur_offset;
       while (rr_len != 0) {
-        txt_len = tvb_get_uint8(tvb, txt_offset);
-        proto_tree_add_item(rr_tree, hf_dns_txt_length, tvb, txt_offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint(rr_tree, hf_dns_txt_length, tvb, txt_offset, 1, ENC_BIG_ENDIAN, &txt_len);
         txt_offset += 1;
         rr_len     -= 1;
         if(  is_dnscrypt_name
           && txt_len == 124
-          && rr_len >= txt_len
+          && rr_len >= (int)txt_len
           && tvb_get_uint32(tvb, txt_offset, ENC_BIG_ENDIAN) == DNSCRYPT_CERT_MAGIC){
           dissect_dnscrypt(rr_tree, tvb, txt_offset, txt_len);
         } else {
@@ -4226,12 +4225,11 @@ dissect_dns_answer(tvbuff_t *tvb, int offsetx, int dns_data_offset,
     {
       int rr_len = data_len;
       int spf_offset;
-      int spf_len;
+      unsigned spf_len;
 
       spf_offset = cur_offset;
       while (rr_len != 0) {
-        spf_len = tvb_get_uint8(tvb, spf_offset);
-        proto_tree_add_item(rr_tree, hf_dns_spf_length, tvb, spf_offset, 1, ENC_BIG_ENDIAN);
+        proto_tree_add_item_ret_uint(rr_tree, hf_dns_spf_length, tvb, spf_offset, 1, ENC_BIG_ENDIAN, &spf_len);
         spf_offset += 1;
         rr_len     -= 1;
         proto_tree_add_item(rr_tree, hf_dns_spf, tvb, spf_offset, spf_len, ENC_ASCII);

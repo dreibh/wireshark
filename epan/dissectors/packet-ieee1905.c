@@ -2723,7 +2723,7 @@ dissect_ipv6_type(tvbuff_t *tvb, packet_info *pinfo _U_,
 }
 
 /*
- * Dissect a push butteon generic phy event notification
+ * Dissect a push button generic phy event notification
  */
 static int
 dissect_push_button_event_type_notification(tvbuff_t *tvb, packet_info *pinfo _U_,
@@ -10243,9 +10243,14 @@ ieee1905_fragment_hash(const void *k)
         return 0;
     }
 
-    const uint8_t src_len = key->src.len;
-    const uint8_t dst_len = key->dst.len;
-    const uint8_t hash_buf_len = src_len + dst_len + sizeof(uint8_t) + sizeof(uint32_t);
+    /* The address can be a string which concatenates the string representation
+     * of the BDADDR (which might look up the OUI but is limited by MAXNAMELEN
+     * in addr_resolv to 64 bytes) and the Bluetooth friendly device name, which
+     * is a maximum of 248 bytes. (See [Vol 2] Part C, Section 4.3.5 and Vol 3
+     * Part C, Sect 3.2.2.) */
+    const uint16_t src_len = key->src.len;
+    const uint16_t dst_len = key->dst.len;
+    const unsigned hash_buf_len = src_len + dst_len + sizeof(uint8_t) + sizeof(uint32_t);
     uint8_t* hash_buf = (uint8_t*)wmem_alloc(NULL, hash_buf_len);
 
     memcpy(hash_buf, key->src.data, src_len);
@@ -14073,7 +14078,7 @@ proto_register_ieee1905(void)
             FT_BYTES, BASE_NONE, NULL, 0x0, NULL, HFILL }},
 
         { &hf_ieee1905_rsn_diagnostic_report_frame_body_len,
-          { "Frame Body Length ", "ieee1905.rsn_diagnostic_report.frame_body_length",
+          { "Frame Body Length", "ieee1905.rsn_diagnostic_report.frame_body_length",
             FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
         { &hf_ieee1905_rsn_diagnostic_report_frame_body,
@@ -14105,7 +14110,7 @@ proto_register_ieee1905(void)
             FT_UINT8, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
         { &hf_ieee1905_rsn_parameter_configuration_radio_bss_security_ies_len,
-          { "Security IEs Length ", "ieee1905.rsn_parameter_configuration.radio.bss.security_ies_length",
+          { "Security IEs Length", "ieee1905.rsn_parameter_configuration.radio.bss.security_ies_length",
             FT_UINT16, BASE_DEC, NULL, 0x0, NULL, HFILL }},
 
         { &hf_ieee1905_rsn_parameter_configuration_radio_bss_security_ies,

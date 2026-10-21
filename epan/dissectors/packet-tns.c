@@ -91,6 +91,7 @@ void proto_register_tns(void);
  * TNS_CCAP_FIELD_VERSION_* name them. The wire shape of several messages
  * depends on the one a connection negotiates. */
 #define TNS_CCAP_FIELD_VERSION  7
+#define TNS_FV_10_2             4   /* older than any python-oracledb names */
 #define TNS_FV_11_2             6
 #define TNS_FV_12_1             7
 #define TNS_FV_12_2             8
@@ -149,6 +150,7 @@ void proto_register_tns(void);
 /* An OCI client's execute preamble: offsets from the TTI_FUN byte, and
  * the 8-byte pointer indicator its fixed slots sit between. */
 #define TNS_OCI_INDICATOR        UINT64_C(0xfeffffffffffffff)
+#define TNS_OCI_ALL8_OPTIONS     3
 #define TNS_OCI_ALL8_CURSOR      7
 #define TNS_OCI_ALL8_IND         11
 #define TNS_OCI_ALL8_SQLLEN3     19
@@ -443,6 +445,7 @@ static int hf_tns_data_col_csform;
 static int hf_tns_data_col_max_size;
 static int hf_tns_data_col_max_elements;
 static int hf_tns_data_bind_num_elements;
+static int hf_tns_data_bind_cursor_count;
 static int hf_tns_data_col_nulls_ok;
 static int hf_tns_data_col_name;
 static int hf_tns_data_col_uds_flags;
@@ -1764,8 +1767,8 @@ static const uint8_t *tns_dalc_bytes(tvbuff_t *tvb, packet_info *pinfo, int offs
  * every field after it, so they have to be spelled out rather than left
  * to the default.
  *
- * The chunk lengths in the 0xFE form are single bytes up to field version
- * 12.1, and variable-length ub4s from 12.2 on.
+ * The chunk lengths in the 0xFE form are plain counts, a single byte (up
+ * to 255) below field version 12.1 and a variable-length ub4 from 12.1 on.
  *
  * Returns the number of bytes consumed from the tvb and, when content
  * is non-empty, a UTF-8 string allocated from pinfo->pool. */
@@ -2945,6 +2948,39 @@ static int dissect_tns_value(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree
 			proto_tree *ct;
 			int end, cursor = 0, start;
 			const tns_call_t *call = tns_answered_call(pinfo);
+
+			if ( kind == TNS_VALUE_BIND )
+			{
+				/* A client's REF CURSOR bind carries no DALC but a ub4
+				 * count, then that many ub4 cursor ids: none for an
+				 * OUT bind, which asks the server to open one, and the
+				 * id of the cursor an IN bind passes. */
+				wmem_strbuf_t *ids = wmem_strbuf_new(pinfo->pool, "");
+				int count = 0;
+
+				end = offset + get_sb4_custom(tvb, offset, &count);
+				for ( int i = 0; i < count; i++ )
+				{
+					end += get_sb4_custom(tvb, end, &cursor);
+					wmem_strbuf_append_printf(ids, "%s%d", i ? ", " : "", cursor);
+				}
+				ci = proto_tree_add_bytes_format(tree, hf, tvb, offset, end - offset, NULL,
+					"%s %d (%s): %s%s", prefix, idx,
+					val_to_str_const(dtype, tns_data_types, "unknown"),
+					count == 0 ? "a new cursor" : count == 1 ? "cursor " : "cursors ",
+					wmem_strbuf_get_str(ids));
+				ct = proto_item_add_subtree(ci, ett_tns_value);
+				start = offset;
+				offset += get_sb4_custom(tvb, offset, &count);
+				proto_tree_add_uint(ct, hf_tns_data_bind_cursor_count, tvb, start, offset - start, count);
+				for ( int i = 0; i < count; i++ )
+				{
+					start = offset;
+					offset += get_sb4_custom(tvb, offset, &cursor);
+					proto_tree_add_uint(ct, hf_tns_cursor, tvb, start, offset - start, cursor);
+				}
+				return offset;
+			}
 
 			/* Rows a TTI_FETCH returns carry a cursor cut short before
 			 * 23ai: the length byte and the id, with no describe. An
@@ -5257,14 +5293,23 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 			}
 			/* error position (skipped) */
 			offset += get_sb4_custom(tvb, offset, &v);
-			/* 6 single-byte fields: sql_type, fatal, flags,
-			 * user_cursor_opts, upi_param, warn_flags. Five are
+			/* 6 fields: sql_type, fatal, flags, user_cursor_opts,
+			 * upi_param, warn_flags. All are single bytes except flags
+			 * below 12.1, a variable-length ub2: 00 when zero, but two
+			 * bytes once a warning (an aggregate that skipped NULLs)
+			 * sets it. With no field version known, a byte that cannot
+			 * be a ub2's width is the single-byte form. Five are
 			 * diagnostic; the last is not. Its bit 0x20 says the
 			 * statement created a PL/SQL object that compiled with
 			 * errors - the call succeeded, the error code is 0 and the
 			 * reply is otherwise indistinguishable from a clean one, so
 			 * this bit is the only sign the object is invalid. */
-			offset += 5;
+			offset += 2;
+			if ( tns_field_version(pinfo) < TNS_FV_12_1 && tvb_get_uint8(tvb, offset) <= 2 )
+				offset += get_sb4_custom(tvb, offset, &v);
+			else
+				offset += 1;
+			offset += 2;
 			tns_add_warn_flags(tvb, pinfo, oer_tree, offset);
 			offset += 1;
 			/* The rowid of the last row the statement touched: ub4
@@ -6169,8 +6214,9 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 					call->bind_rec = binds;
 				}
 			}
-			else if ( oci_id == TTI_ALL8 && tvb_bytes_exist(tvb, fun_start + TNS_OCI_ALL8_IND, 8)
-				&& tvb_get_ntoh64(tvb, fun_start + TNS_OCI_ALL8_IND) == TNS_OCI_INDICATOR )
+			else if ( oci_id == TTI_ALL8 && ((tvb_bytes_exist(tvb, fun_start + TNS_OCI_ALL8_IND, 8)
+				&& tvb_get_ntoh64(tvb, fun_start + TNS_OCI_ALL8_IND) == TNS_OCI_INDICATOR)
+				|| (tns_is_oci(pinfo) && tns_field_version(pinfo) == TNS_FV_10_2)) )
 			{
 				/* An OCI client's execute (sqlplus and other thick
 				 * clients): a fixed preamble of 8-byte pointer indicators
@@ -6180,17 +6226,30 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 				 * slots are 8 bytes wide or 4, fixed for a connection;
 				 * the second indicator tells which - it sits at 27 in the
 				 * wide form and 23 in the narrow one, and the two cannot
-				 * both hold. The cursor id and SQL length precede every
-				 * slot and do not move; the bind count and the SQL do.
+				 * both hold. The options, cursor id and SQL length
+				 * precede every slot and do not move; the bind count and
+				 * the SQL do. The options are the thin client's bits,
+				 * little-endian: SET AUTOCOMMIT ON sets the commit bit on
+				 * each statement rather than sending a commit of its own.
 				 * A session at the 12c band inserts 64 zero bytes ahead
 				 * of a narrow preamble's SQL, which moves from 176 to
 				 * 240; the byte before the SQL is its length, never
-				 * zero, so which one holds shows. */
+				 * zero, so which one holds shows.
+				 *
+				 * sqlplus 10.2 sends a third form: narrow, but with the
+				 * SQL at 148. Its pointer fields hold real addresses, not
+				 * the indicator, so only the session's field version
+				 * tells this form apart. */
 				int base = fun_start, bind_count_off, sql_off;
 				uint32_t cursor, sql_len_decl, bind_count;
-				bool wide, band_12c = false;
+				bool wide, band_12c = false, form_10_2 = false;
 
-				if ( tvb_bytes_exist(tvb, base + TNS_OCI_ALL8_IND2_WIDE, 8)
+				if ( tns_is_oci(pinfo) && tns_field_version(pinfo) == TNS_FV_10_2 )
+				{
+					wide = false;
+					form_10_2 = true;
+				}
+				else if ( tvb_bytes_exist(tvb, base + TNS_OCI_ALL8_IND2_WIDE, 8)
 					&& tvb_get_ntoh64(tvb, base + TNS_OCI_ALL8_IND2_WIDE) == TNS_OCI_INDICATOR )
 					wide = true;
 				else if ( tvb_bytes_exist(tvb, base + TNS_OCI_ALL8_IND2_NARROW, 8)
@@ -6205,8 +6264,8 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 				/* the SQL length, as the client's character set has it */
 				sql_len_decl = tvb_get_letohl(tvb, base + TNS_OCI_ALL8_SQLLEN3);
 				bind_count_off = base + (wide ? 83 : 71);
-				sql_off = base + (wide ? 196 : 176);
-				if ( !wide && sql_len_decl > 0 && tvb_bytes_exist(tvb, base + 239, 1)
+				sql_off = base + (form_10_2 ? 148 : wide ? 196 : 176);
+				if ( !wide && !form_10_2 && sql_len_decl > 0 && tvb_bytes_exist(tvb, base + 239, 1)
 					&& tvb_get_uint8(tvb, base + 175) == 0 )
 				{
 					uint8_t prefix = tvb_get_uint8(tvb, base + 239);
@@ -6220,7 +6279,9 @@ static int dissect_tns_message(tvbuff_t *tvb, int offset, packet_info *pinfo, pr
 				}
 				proto_tree_add_string(data_tree, hf_tns_data_all8_oci_preamble, tvb, base, 0,
 					wide ? "OCI, wide (8-byte slots)" : band_12c ? "OCI, narrow (4-byte slots), 12c band"
-					: "OCI, narrow (4-byte slots)");
+					: form_10_2 ? "OCI, narrow (4-byte slots), 10.2" : "OCI, narrow (4-byte slots)");
+				proto_tree_add_bitmask(data_tree, tvb, base + TNS_OCI_ALL8_OPTIONS, hf_tns_data_all8_options,
+					ett_tns_all8_options, tns_all8_options, ENC_LITTLE_ENDIAN);
 				proto_tree_add_uint(data_tree, hf_tns_cursor, tvb, base + TNS_OCI_ALL8_CURSOR, 4, cursor);
 				bind_count = tvb_get_letohl(tvb, bind_count_off);
 				proto_tree_add_uint(data_tree, hf_tns_data_all8_bind_count, tvb, bind_count_off, 4, bind_count);
@@ -8385,6 +8446,9 @@ void proto_register_tns(void)
 		{ &hf_tns_data_bind_num_elements, {
 			"Array Elements", "tns.data_bind.num_elements", FT_UINT32, BASE_DEC,
 			NULL, 0x0, NULL, HFILL }},
+		{ &hf_tns_data_bind_cursor_count, {
+			"Cursor Count", "tns.data_bind.cursor_count", FT_UINT32, BASE_DEC,
+			NULL, 0x0, "The cursor ids a REF CURSOR bind passes; none asks for a new cursor", HFILL }},
 		{ &hf_tns_data_col_max_size, {
 			"Max Size", "tns.data_col.max_size", FT_UINT32, BASE_DEC,
 			NULL, 0x0, NULL, HFILL }},

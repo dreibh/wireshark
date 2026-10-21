@@ -2553,6 +2553,7 @@ dissect_usb_interface_descriptor(packet_info *pinfo, proto_tree *parent_tree,
 
         /* Register conversation for this interface in case CONTROL messages are sent to it */
         usb_trans_info->interface_info = get_usb_iface_conv_info(pinfo, interface_num);
+        usb_trans_info->interface_info->config_desc_frame_num = pinfo->num;
 
         alternate_setting.altSetting = alt_setting;
         alternate_setting.interfaceClass = tvb_get_uint8(tvb, offset);
@@ -4240,6 +4241,12 @@ try_dissect_next_protocol(proto_tree *tree, tvbuff_t *next_tvb, packet_info *pin
             break;
     }
 
+    if (urb && urb->conv && pinfo->fd &&
+        urb->conv->interfaceClass != IF_CLASS_UNKNOWN &&
+        urb->conv->config_desc_frame_num != 0) {
+        mark_frame_as_depended_upon(pinfo->fd, urb->conv->config_desc_frame_num);
+    }
+
     /* try "usb.protocol" on interface level */
     protocol = (urb->conv->interfaceClass & 0xFF) << 16 |
                (urb->conv->interfaceSubclass & 0xFF) << 8 |
@@ -4823,6 +4830,14 @@ static usb_trans_info_t
 
             ti = proto_tree_add_uint(tree, hf_usb_request_in, tvb, 0, 0, usb_trans_info->request_in);
             proto_item_set_generated(ti);
+
+            if (pinfo->fd) {
+                uint8_t transfer_type = urb->transfer_type;
+                if (transfer_type == URB_UNKNOWN)
+                    transfer_type = urb->conv->descriptor_transfer_type;
+                if (transfer_type == URB_CONTROL)
+                    mark_frame_as_depended_upon(pinfo->fd, usb_trans_info->request_in);
+            }
 
             t = pinfo->abs_ts;
             nstime_delta(&deltat, &t, &usb_trans_info->req_time);
