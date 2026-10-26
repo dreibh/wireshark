@@ -22,22 +22,7 @@
 /* WSLUA_CONTINUE_MODULE Pinfo */
 
 
-static GPtrArray* outstanding_Column;
-static GPtrArray* outstanding_Columns;
-
-CLEAR_OUTSTANDING(Column,expired, true)
-CLEAR_OUTSTANDING(Columns,expired, true)
-
-#define PUSH_COLUMN(L,c) {g_ptr_array_add(outstanding_Column,c);pushColumn(L,c);}
-
-void Push_Columns(lua_State *L, Columns c)
-{
-    g_ptr_array_add(outstanding_Columns, c);
-    pushColumns(L, c);
-}
-
-
-WSLUA_CLASS_DEFINE(Column,FAIL_ON_NULL("Column")); /* A Column in the packet list. */
+WSLUA_CLASS_DEFINE_INLINE(Column,FAIL_ON_EXPIRED("Column")); /* A Column in the packet list. */
 
 struct col_names_t {
     const char* name;
@@ -117,10 +102,16 @@ static const char*  col_id_to_name(int id) {
 
 
 WSLUA_METAMETHOD Column__tostring(lua_State *L) {
-    Column c = checkColumn(L,1);
+    /* Bypass checkColumn (which raises on expired/null) so the debugger
+     * Variables view can still render an expired Column. Its column_info
+     * may no longer exist. */
+    Column c = toColumn(L,1);
     const char* text;
 
-    if (!c->cinfo) {
+    if (!c || WSLUA_EXPIRED(c)) {
+        lua_pushstring(L, "(expired)");
+    }
+    else if (!c->cinfo) {
         text = col_id_to_name(c->col);
         lua_pushfstring(L, "(%s)", text ? text : "unknown");
     }
@@ -130,21 +121,6 @@ WSLUA_METAMETHOD Column__tostring(lua_State *L) {
     }
 
     WSLUA_RETURN(1); /* The column's string text (in parenthesis if not available). */
-}
-
-/* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS */
-static int Column__gc(lua_State* L) {
-    Column col = toColumn(L,1);
-
-    if (!col) return 0;
-
-    if (!col->expired)
-        col->expired = true;
-    else
-        g_free(col);
-
-    return 0;
-
 }
 
 WSLUA_METHOD Column_clear(lua_State *L) {
@@ -246,16 +222,12 @@ WSLUA_META Column_meta[] = {
 
 
 int Column_register(lua_State *L) {
-    WSLUA_REGISTER_CLASS(Column);
-    if (outstanding_Column != NULL) {
-        g_ptr_array_unref(outstanding_Column);
-    }
-    outstanding_Column = g_ptr_array_new();
+    WSLUA_REGISTER_CLASS_NOGC(Column);
     return 0;
 }
 
 
-WSLUA_CLASS_DEFINE(Columns,NOP); /* The <<lua_class_Column,``Column``>>s of the packet list. */
+WSLUA_CLASS_DEFINE_INLINE(Columns,NOP); /* The <<lua_class_Column,``Column``>>s of the packet list. */
 
 WSLUA_METAMETHOD Columns__tostring(lua_State *L) {
     /* Returns a short preview of the form
@@ -266,9 +238,14 @@ WSLUA_METAMETHOD Columns__tostring(lua_State *L) {
        value can mean the column is unconfigured, hasn't been
        written yet, or that cinfo is NULL (e.g. while dissecting
        for the details pane). Returns `Columns: (no cinfo)` when
-       there is no column_info to inspect at all. */
+       there is no column_info to inspect at all, and
+       `Columns: (expired)` after the end of the packet. */
     Columns cols = checkColumns(L,1);
-    if (!cols || !cols->cinfo) {
+    if (!cols || WSLUA_EXPIRED(cols)) {
+        lua_pushstring(L, "Columns: (expired)");
+        WSLUA_RETURN(1);
+    }
+    if (!cols->cinfo) {
         lua_pushstring(L, "Columns: (no cinfo)");
         WSLUA_RETURN(1);
     }
@@ -357,8 +334,7 @@ WSLUA_METAMETHOD Columns__newindex(lua_State *L) { /*
     const char* colname;
     const char* text;
 
-    if (!cols) return 0;
-    if (cols->expired) {
+    if (WSLUA_EXPIRED(cols)) {
         luaL_error(L,"expired column");
         return 0;
     }
@@ -383,30 +359,20 @@ WSLUA_METAMETHOD Columns__index(lua_State *L) {
     const struct col_names_t* cn;
     const char* colname = luaL_checkstring(L,2);
 
-    if (!cols) {
-        Column c = (Column)g_malloc(sizeof(struct _wslua_col_info));
-        c->cinfo = NULL;
-        c->col = col_name_to_id(colname);
-        c->expired = false;
-
-        PUSH_COLUMN(L,c);
-        return 1;
-    }
-
-
-    if (cols->expired) {
+    if (WSLUA_EXPIRED(cols)) {
         luaL_error(L,"expired column");
         return 0;
     }
 
     for(cn = colnames; cn->name; cn++) {
         if( g_str_equal(cn->name,colname) ) {
-            Column c = (Column)g_malloc(sizeof(struct _wslua_col_info));
-            c->cinfo = cols->cinfo;
-            c->col = col_name_to_id(colname);
-            c->expired = false;
+            struct _wslua_col_info c = {
+                .cinfo = cols->cinfo,
+                .col = col_name_to_id(colname),
+                .generation = cols->generation,
+            };
 
-            PUSH_COLUMN(L,c);
+            pushColumn(L,&c);
             return 1;
         }
     }
@@ -433,11 +399,7 @@ static int Columns_pairs_iter(lua_State *L) {
     Columns cols = checkColumns(L, 1);
     const char *prev = lua_isnoneornil(L, 2) ? NULL : luaL_checkstring(L, 2);
 
-    if (!cols) {
-        lua_pushnil(L);
-        return 1;
-    }
-    if (cols->expired) {
+    if (WSLUA_EXPIRED(cols)) {
         luaL_error(L, "expired column");
         return 0;
     }
@@ -457,12 +419,13 @@ static int Columns_pairs_iter(lua_State *L) {
         return 1;
     }
 
+    struct _wslua_col_info c = {
+        .cinfo = cols->cinfo,
+        .col = cn->id,
+        .generation = cols->generation,
+    };
     lua_pushstring(L, cn->name);
-    Column c = (Column)g_malloc(sizeof(struct _wslua_col_info));
-    c->cinfo = cols->cinfo;
-    c->col = cn->id;
-    c->expired = false;
-    PUSH_COLUMN(L, c);
+    pushColumn(L, &c);
     return 2;
 }
 
@@ -483,22 +446,6 @@ WSLUA_METAMETHOD Columns__pairs(lua_State *L) {
 }
 
 
-/* Gets registered as metamethod automatically by WSLUA_REGISTER_META */
-static int Columns__gc(lua_State* L) {
-    Columns cols = toColumns(L,1);
-
-    if (!cols) return 0;
-
-    if (!cols->expired)
-        cols->expired = true;
-    else
-        g_free(cols);
-
-    return 0;
-
-}
-
-
 WSLUA_META Columns_meta[] = {
     WSLUA_CLASS_MTREG(Columns,tostring),
     WSLUA_CLASS_MTREG(Columns,newindex),
@@ -509,11 +456,7 @@ WSLUA_META Columns_meta[] = {
 
 
 int Columns_register(lua_State *L) {
-    WSLUA_REGISTER_META(Columns);
-    if (outstanding_Columns != NULL) {
-        g_ptr_array_unref(outstanding_Columns);
-    }
-    outstanding_Columns = g_ptr_array_new();
+    WSLUA_REGISTER_META_NOGC(Columns);
     return 0;
 }
 

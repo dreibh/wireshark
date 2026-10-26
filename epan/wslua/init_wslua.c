@@ -160,22 +160,50 @@ static expert_field ei_lua_proto_interface_error;
 
 static int ett_wslua_traceback;
 
+uint64_t wslua_packet_generation;
+
+void wslua_expire_packet_objects(void)
+{
+    wslua_packet_generation++;
+}
+
+uint64_t wslua_file_generation;
+
+uint64_t wslua_state_generation;
+
+/* The pinfo->pool on which lua_pinfo_end() is currently registered, so that
+ * it is registered only once per packet even with multiple or nested Lua
+ * dissector calls. */
+static wmem_allocator_t *lua_pinfo_end_pool;
+
 static bool
-lua_pinfo_end(wmem_allocator_t *allocator _U_, wmem_cb_event_t event _U_,
+lua_pinfo_end(wmem_allocator_t *allocator, wmem_cb_event_t event _U_,
         void *user_data _U_)
 {
-    clear_outstanding_Tvb();
-    clear_outstanding_TvbRange();
-    clear_outstanding_Pinfo();
-    clear_outstanding_Column();
-    clear_outstanding_Columns();
-    clear_outstanding_PrivateTable();
-    clear_outstanding_TreeItem();
-    clear_outstanding_FieldInfo();
+    /* Only forget the pool if it's the one we last registered on; if another
+     * pool was registered on since, its callback is still pending. */
+    if (allocator == lua_pinfo_end_pool) {
+        lua_pinfo_end_pool = NULL;
+    }
+
+    wslua_expire_packet_objects();
     clear_outstanding_FuncSavers(NULL);
 
     /* keep invoking this callback later? */
     return false;
+}
+
+/* Make sure that the Lua objects pushed while dissecting this packet are
+ * expired when the packet's pool is freed. Call this before pushing any
+ * objects, so that they are expired even if a Wireshark exception escapes
+ * from the Lua call. */
+static void
+register_lua_pinfo_end(packet_info *pinfo)
+{
+    if (pinfo->pool != lua_pinfo_end_pool) {
+        wmem_register_callback(pinfo->pool, lua_pinfo_end, NULL);
+        lua_pinfo_end_pool = pinfo->pool;
+    }
 }
 
 static int wslua_not_register_menu(lua_State* LS) {
@@ -288,9 +316,27 @@ static int dissector_error_handler(lua_State *LS) {
     return 1;
 }
 
+/* The state of a call to a Lua dissector, which lua_resetthread_cb()
+ * cleans up and restores even if a Wireshark exception escapes. */
+typedef struct {
+    lua_State *L1;
+    tvbuff_t *saved_lua_tvb;
+    packet_info *saved_lua_pinfo;
+    struct _wslua_treeitem *saved_lua_tree;
+    /* A copy of the root TreeItem passed to the dissector, which lua_tree
+     * points to during the call. (The dissector need not keep a reference
+     * to the TreeItem, so it could be garbage collected.) */
+    struct _wslua_treeitem lua_tree;
+} wslua_dissect_call_t;
+
 static void lua_resetthread_cb(void *user_data) {
 
-    lua_State *L1 = (lua_State*)user_data;
+    wslua_dissect_call_t *call = (wslua_dissect_call_t*)user_data;
+    lua_State *L1 = call->L1;
+
+    lua_pinfo = call->saved_lua_pinfo;
+    lua_tree = call->saved_lua_tree;
+    lua_tvb = call->saved_lua_tvb;
 
     ws_debug("freeing thread: %p", L1);
     /* Drop any debugger references to this dying coroutine (paused_L,
@@ -337,11 +383,15 @@ static void lua_resetthread_cb(void *user_data) {
 
 int dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_) {
     int consumed_bytes = tvb_captured_length(tvb);
-    tvbuff_t *saved_lua_tvb = lua_tvb;
-    packet_info *saved_lua_pinfo = lua_pinfo;
-    struct _wslua_treeitem *saved_lua_tree = lua_tree;
+    wslua_dissect_call_t call = {
+        .saved_lua_tvb = lua_tvb,
+        .saved_lua_pinfo = lua_pinfo,
+        .saved_lua_tree = lua_tree,
+    };
     lua_pinfo = pinfo;
     lua_tvb = tvb;
+
+    register_lua_pinfo_end(pinfo);
 
     /*
      * almost equivalent to Lua:
@@ -359,12 +409,13 @@ int dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data 
     // prevents the new thread from being garbage collected.)
     lua_State *L1 = lua_newthread(L);
     ws_debug("new Lua thread: %p", L1);
+    call.L1 = L1;
 
     // Make sure that even in the case of an uncaught Wireshark exception
-    // that the thread is reset and garbage collected. (This could possibly
-    // be a TRY..FINALLY block that also does some handling to put the
-    // Lua call stack in the tree.)
-    CLEANUP_PUSH(lua_resetthread_cb, L1);
+    // that the thread is reset and garbage collected, and the globals
+    // restored. (This could possibly be a TRY..FINALLY block that also
+    // does some handling to put the Lua call stack in the tree.)
+    CLEANUP_PUSH(lua_resetthread_cb, &call);
     // Note this macro declares struct except_stacknode except_sn and
     // pushes it to the top of the exception stack.
 
@@ -396,7 +447,8 @@ int dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data 
         // After call, stack: [ error_handler_func, dissector, tvb, pinfo ]
         push_Pinfo(L1,pinfo);
         // After call, stack: [ error_handler_func, dissector, tvb, pinfo, TreeItem ]
-        lua_tree = push_TreeItem(L1, tree, proto_tree_add_item(tree, hf_wslua_fake, tvb, 0, 0, ENC_NA));
+        call.lua_tree = *push_TreeItem(L1, tree, proto_tree_add_item(tree, hf_wslua_fake, tvb, 0, 0, ENC_NA));
+        lua_tree = &call.lua_tree;
         proto_item_set_hidden(lua_tree->item);
 
         if  ( lua_pcall(L1, /*num_args=*/3, /*num_results=*/1, /*error_handler_func_stack_position=*/1) ) {
@@ -424,16 +476,7 @@ int dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data 
                     "Lua Error: did not find the %s dissector in the dissectors table", pinfo->current_proto);
     }
 
-    // XXX - Should this be registered before the lua_pcall, in case there's
-    // an exception? Also, as there can be nested dissector calls, should we
-    // try to avoid registering it more than once?
-    wmem_register_callback(pinfo->pool, lua_pinfo_end, NULL);
-
     CLEANUP_CALL_AND_POP;
-
-    lua_pinfo = saved_lua_pinfo;
-    lua_tree = saved_lua_tree;
-    lua_tvb = saved_lua_tvb;
 
     return consumed_bytes;
 
@@ -448,11 +491,11 @@ int dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data 
  */
 bool heur_dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void* data _U_) {
     bool result = false;
-    tvbuff_t *saved_lua_tvb = lua_tvb;
-    packet_info *saved_lua_pinfo = lua_pinfo;
-    struct _wslua_treeitem *saved_lua_tree = lua_tree;
-    lua_tvb = tvb;
-    lua_pinfo = pinfo;
+    wslua_dissect_call_t call = {
+        .saved_lua_tvb = lua_tvb,
+        .saved_lua_pinfo = lua_pinfo,
+        .saved_lua_tree = lua_tree,
+    };
 
     ws_assert(tvb && pinfo);
 
@@ -462,6 +505,9 @@ bool heur_dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void*
         return false;
     }
 
+    lua_tvb = tvb;
+    lua_pinfo = pinfo;
+
     /* heuristic functions are stored in a table in the registry; the registry has a
      * table at reference lua_heur_dissectors_table_ref, and that table has keys for
      * the heuristic listname (e.g., "udp", "tcp", etc.), and that key's value is a
@@ -469,14 +515,17 @@ bool heur_dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void*
      * So it's like registry[table_ref][heur_list_name][proto_name] = func
      */
 
+    register_lua_pinfo_end(pinfo);
+
     // Create a new thread with an independent execution stack and,
     // importantly, a independent linked list errorJmp of lua_longjmp.
     // This pushes the new thread onto the global stack (which
     // prevents the new thread from being garbage collected.)
     lua_State *L1 = lua_newthread(L);
     ws_debug("new Lua thread: %p", L1);
+    call.L1 = L1;
 
-    CLEANUP_PUSH(lua_resetthread_cb, L1);
+    CLEANUP_PUSH(lua_resetthread_cb, &call);
     // Note this macro declares struct except_stacknode except_sn and
     // pushes it to the top of the exception stack.
 
@@ -517,7 +566,8 @@ bool heur_dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void*
 
     push_Tvb(L1,tvb);
     push_Pinfo(L1,pinfo);
-    lua_tree = push_TreeItem(L1, tree, proto_tree_add_item(tree, hf_wslua_fake, tvb, 0, 0, ENC_NA));
+    call.lua_tree = *push_TreeItem(L1, tree, proto_tree_add_item(tree, hf_wslua_fake, tvb, 0, 0, ENC_NA));
+    lua_tree = &call.lua_tree;
     proto_item_set_hidden(lua_tree->item);
 
     /* Push a message handler so runtime VM errors are routed through the
@@ -550,16 +600,7 @@ bool heur_dissect_lua(tvbuff_t* tvb, packet_info* pinfo, proto_tree* tree, void*
     }
 
 end:
-    // XXX - Should this be registered before the lua_pcall, in case there's
-    // an exception? Also, as there can be nested dissector calls, should we
-    // try to avoid registering it more than once?
-    wmem_register_callback(pinfo->pool, lua_pinfo_end, NULL);
-
     CLEANUP_CALL_AND_POP;
-
-    lua_pinfo = saved_lua_pinfo;
-    lua_tree = saved_lua_tree;
-    lua_tvb = saved_lua_tvb;
 
     return result;
 }
@@ -626,6 +667,23 @@ static int init_error_handler(lua_State* LS) {
     wslua_handle_lua_init_error(LS, "initialization",
                                 lua_tostring(LS, 1));
     return 1;
+}
+
+static bool wslua_gc_cb(wmem_allocator_t *allocator _U_, wmem_cb_event_t event, void *user_data _U_)
+{
+    if (event == WMEM_CB_FREE_EVENT) {
+        // Objects such as Conversation refer to file scoped memory.
+        wslua_file_generation++;
+    }
+
+    if (event == WMEM_CB_FREE_EVENT && L) {
+        // In Lua 5.3 and earlier lua_gc() takes an int as the third parameter.
+        // In 5.4 and later it is variadic and the last parameter is ignored
+        // for LUA_GCCOLLECT.
+        lua_gc(L, LUA_GCCOLLECT, 0);
+    }
+
+    return true;
 }
 
 
@@ -1799,6 +1857,42 @@ void wslua_init(register_cb cb, void *client_data, const char* app_env_var_prefi
         L = lua_newstate(wslua_allocf, NULL, 1315423911);
 #else
         L = lua_newstate(wslua_allocf, NULL);
+#endif
+        wslua_state_generation++;
+
+        // Keep this registered when the Lua state is closed and recreated,
+        // as when Lua plugins are reloaded, because the file scope can be
+        // freed before the next init routine is called.
+        static bool file_gc_cb_registered;
+        if (!file_gc_cb_registered) {
+            wmem_register_callback(wmem_file_scope(), wslua_gc_cb, NULL);
+            file_gc_cb_registered = true;
+        }
+
+#if LUA_VERSION_NUM >= 505 || LUA_VERSION_RELEASE_NUM >= 50405
+        // In incremental mode, Lua does not keep up with short-lived
+        // objects that have __gc metamethods, such as ByteArray (and
+        // tables with finalizers created by scripts). An object with a
+        // finalizer takes two collection cycles to free, and the pause
+        // before the next cycle is based on the amount of memory marked,
+        // which includes the objects waiting to be finalized. When most
+        // of the garbage has finalizers, each cycle is longer than the
+        // last, and memory use grows with the number of packets
+        // dissected (#21672). Other garbage dilutes the effect, which
+        // is why it was less noticeable in Lua 5.4 in dissectors, which
+        // run on their own threads, than in Listener taps.
+        //
+        // Generational mode keeps the heap small in both versions.
+        // It must only be used for 5.4.5 and later; earlier 5.4 releases
+        // have several bugs in generational collection (see
+        // https://www.lua.org/bugs.html). In 5.4 LUA_GCGEN takes two
+        // additional int parameters (0 for the defaults); in 5.5 it
+        // takes none.
+#if LUA_VERSION_NUM >= 505
+        lua_gc(L, LUA_GCGEN);
+#else
+        lua_gc(L, LUA_GCGEN, 0, 0);
+#endif
 #endif
     }
 

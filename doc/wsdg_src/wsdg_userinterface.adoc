@@ -253,22 +253,25 @@ Qt provides a number of colors via the https://doc.qt.io/qt-5/qpalette.html[QPal
 class. Use this class when you need a standard color provided by the
 underlying operating system.
 
-Wireshark uses an extended version of the
-https://en.wikipedia.org/wiki/Tango_Desktop_Project[Tango Color Palette]
-for many interface elements that require custom colors. This includes the
-I/O graphs, sequence diagrams, and RTP streams. Please use this palette
-(defined in wsrepofile:ui/qt/utils/tango_colors.h[] and the
-`ColorUtils` class in wsrepofile:ui/qt/utils/color_utils.h[]) if *QPalette*
-doesn't meet your needs.
+Custom interface colors, such as those used by the I/O graphs, sequence
+diagrams, and RTP streams, come from the active theme. Themes are managed by
+the `ThemeManager` class in wsrepofile:ui/qt/utils/theme_manager.h[] and
+defined by the theme files in wsrepodir:resources/themes[] (the format is
+described in wsrepofile:resources/themes/README.md[]). If *QPalette*
+doesn't meet your needs, use `ThemeManager::color()` with a `ThemeToken`,
+or `ThemeManager::graphColor()` for plot series, together with the helpers
+in the `ColorUtils` class (wsrepofile:ui/qt/utils/color_utils.h[]), instead
+of hard-coding RGB values.
 
 Wireshark supports dark themes (aka “dark mode”) on some platforms. We
 leverage Qt's dark theme support when possible, but have implemented our
 own support and workarounds in some cases. You can ensure that your code
 includes proper dark theme support by doing the following:
 
-* You can use a macOS-style template icon by creating a monochrome SVG
-document with “.template” appended to the name, e.g.
-`resources/stock_icons/24x24/edit-find.template.svg`.
+* Use SVG icons from `resources/svg_icons/` through `ThemedIcon` (monochrome icons,
+recoloured to the active theme) or `ContrastAdaptIcon` (multi-colour icons whose colours are
+adjusted for contrast). Both follow theme and dark mode changes without extra code. See
+`resources/svg_icons/README.adoc` for adding an icon.
 * Qt draws unvisited links *Qt::blue* no matter what. You can work
 around this by using `ColorUtils::themeLinkBrush()` and
 `ColorUtils::themeLinkStyle()`.

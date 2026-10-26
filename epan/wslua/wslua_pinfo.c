@@ -26,31 +26,20 @@
 
 
 /*
- * Track pointers to wireshark's structures.
+ * Pointers to wireshark's structures expire at the end of the packet.
  * see comment on wslua_tvb.c
  */
 
-static GPtrArray* outstanding_Pinfo;
-static GPtrArray* outstanding_PrivateTable;
-
-CLEAR_OUTSTANDING(Pinfo,expired, true)
-CLEAR_OUTSTANDING(PrivateTable,expired, true)
-
-Pinfo* push_Pinfo(lua_State* L, packet_info* ws_pinfo) {
-    Pinfo pinfo = NULL;
-    if (ws_pinfo) {
-        pinfo = (Pinfo)g_malloc(sizeof(struct _wslua_pinfo));
-        pinfo->ws_pinfo = ws_pinfo;
-        pinfo->expired = false;
-        g_ptr_array_add(outstanding_Pinfo,pinfo);
-    }
-    return pushPinfo(L,pinfo);
+Pinfo push_Pinfo(lua_State* L, packet_info* ws_pinfo) {
+    struct _wslua_pinfo pinfo = {
+        .ws_pinfo = ws_pinfo,
+        .generation = wslua_packet_generation,
+    };
+    return pushPinfo(L,&pinfo);
 }
 
-#define PUSH_PRIVATE_TABLE(L,c) {g_ptr_array_add(outstanding_PrivateTable,c);pushPrivateTable(L,c);}
 
-
-WSLUA_CLASS_DEFINE(PrivateTable,FAIL_ON_NULL_OR_EXPIRED("PrivateTable"));
+WSLUA_CLASS_DEFINE_INLINE(PrivateTable,FAIL_ON_EXPIRED("PrivateTable"));
 /* PrivateTable represents the pinfo->private_table. */
 
 WSLUA_METAMETHOD PrivateTable__tostring(lua_State* L) {
@@ -62,7 +51,7 @@ WSLUA_METAMETHOD PrivateTable__tostring(lua_State* L) {
        indistinguishable from a regular comma-separated string in
        the debugger's Variables view. */
     PrivateTable priv = toPrivateTable(L,1);
-    if (!priv || !priv->table) {
+    if (!priv || !priv->table || WSLUA_EXPIRED(priv)) {
         lua_pushstring(L, "PrivateTable: (expired)");
         WSLUA_RETURN(1);
     }
@@ -188,24 +177,6 @@ static int PrivateTable__pairs(lua_State* L) {
     return 3;
 }
 
-/* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */
-static int PrivateTable__gc(lua_State* L) {
-    PrivateTable priv = toPrivateTable(L,1);
-
-    if (!priv) return 0;
-
-    if (!priv->expired) {
-        priv->expired = true;
-    } else {
-        if (priv->is_allocated) {
-            g_hash_table_destroy (priv->table);
-        }
-        g_free(priv);
-    }
-
-    return 0;
-}
-
 WSLUA_META PrivateTable_meta[] = {
     WSLUA_CLASS_MTREG(PrivateTable,index),
     WSLUA_CLASS_MTREG(PrivateTable,newindex),
@@ -215,12 +186,16 @@ WSLUA_META PrivateTable_meta[] = {
 };
 
 int PrivateTable_register(lua_State* L) {
-    WSLUA_REGISTER_META(PrivateTable);
+    WSLUA_REGISTER_META_NOGC(PrivateTable);
     return 0;
 }
 
 
-WSLUA_CLASS_DEFINE(Pinfo,FAIL_ON_NULL_OR_EXPIRED("Pinfo"));
+#define FAIL_ON_NULL_OR_EXPIRED_PINFO if (!p->ws_pinfo) { \
+        luaL_argerror(L,idx,"null Pinfo"); \
+    } else FAIL_ON_EXPIRED("Pinfo")
+
+WSLUA_CLASS_DEFINE_INLINE(Pinfo,FAIL_ON_NULL_OR_EXPIRED_PINFO);
 /* Packet information. */
 
 /* Bypass checkPinfo (which raises on expired/null) so the debugger
@@ -228,7 +203,7 @@ WSLUA_CLASS_DEFINE(Pinfo,FAIL_ON_NULL_OR_EXPIRED("Pinfo"));
  * label instead of crashing the script when it is hovered. */
 static int Pinfo__tostring(lua_State *L) {
     Pinfo pinfo = toPinfo(L, 1);
-    if (!pinfo || !pinfo->ws_pinfo || pinfo->expired) {
+    if (!pinfo || !pinfo->ws_pinfo || WSLUA_EXPIRED(pinfo)) {
         lua_pushstring(L, "Pinfo: (expired)");
         return 1;
     }
@@ -248,9 +223,7 @@ static int Pinfo__tostring(lua_State *L) {
 
 #define PINFO_ADDRESS_GETTER(name) \
     WSLUA_ATTRIBUTE_GET(Pinfo,name, { \
-      Address addr = g_new(address,1); \
-      copy_address(addr, &(obj->ws_pinfo->name)); \
-      pushAddress(L,addr); \
+      pushAddress(L, &(obj->ws_pinfo->name)); \
     })
 
 /*
@@ -432,19 +405,18 @@ static int Pinfo_get_match(lua_State *L) {
 /* WSLUA_ATTRIBUTE Pinfo_columns RO Access to the packet list columns. */
 /* WSLUA_ATTRIBUTE Pinfo_cols RO Access to the packet list columns (equivalent to pinfo.columns). */
 static int Pinfo_get_columns(lua_State *L) {
-    Columns cols = NULL;
     Pinfo pinfo = checkPinfo(L,1);
     const char* colname = luaL_optstring(L,2,NULL);
-
-    cols = (Columns)g_malloc(sizeof(struct _wslua_cols));
-    cols->cinfo = pinfo->ws_pinfo->cinfo;
-    cols->expired = false;
+    struct _wslua_cols cols = {
+        .cinfo = pinfo->ws_pinfo->cinfo,
+        .generation = pinfo->generation,
+    };
 
     if (!colname) {
-        Push_Columns(L,cols);
+        pushColumns(L,&cols);
     } else {
         lua_settop(L,0);
-        Push_Columns(L,cols);
+        pushColumns(L,&cols);
         lua_pushstring(L,colname);
         return get_Columns_index(L);
     }
@@ -452,27 +424,38 @@ static int Pinfo_get_columns(lua_State *L) {
 }
 
 /* WSLUA_ATTRIBUTE Pinfo_private RO Access to the private table entries. */
+static bool
+private_table_free_cb(wmem_allocator_t* allocator _U_, wmem_cb_event_t event _U_, void *user_data)
+{
+    packet_info *pinfo = (packet_info*)user_data;
+
+    g_hash_table_destroy(pinfo->private_table);
+    pinfo->private_table = NULL;
+
+    return false;
+}
+
 static int Pinfo_get_private(lua_State *L) {
-    PrivateTable priv = NULL;
     Pinfo pinfo = checkPinfo(L,1);
     const char* privname = luaL_optstring(L,2,NULL);
-    bool is_allocated = false;
+    struct _wslua_private_table priv;
 
     if (!pinfo->ws_pinfo->private_table) {
         pinfo->ws_pinfo->private_table = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, g_free);
-        is_allocated = true;
+        /* Destroy it at the end of the packet; the packet_info is valid
+         * until its pool is freed. Any PrivateTable referring to it will
+         * have expired by then. */
+        wmem_register_callback(pinfo->ws_pinfo->pool, private_table_free_cb, pinfo->ws_pinfo);
     }
 
-    priv = (PrivateTable)g_malloc(sizeof(struct _wslua_private_table));
-    priv->table = pinfo->ws_pinfo->private_table;
-    priv->is_allocated = is_allocated;
-    priv->expired = false;
+    priv.table = pinfo->ws_pinfo->private_table;
+    priv.generation = pinfo->generation;
 
     if (!privname) {
-        PUSH_PRIVATE_TABLE(L,priv);
+        pushPrivateTable(L,&priv);
     } else {
         lua_settop(L,0);
-        PUSH_PRIVATE_TABLE(L,priv);
+        pushPrivateTable(L,&priv);
         lua_pushstring(L,privname);
         return PrivateTable__index(L);
     }
@@ -482,32 +465,26 @@ static int Pinfo_get_private(lua_State *L) {
 /* WSLUA_ATTRIBUTE Pinfo_hi RW Higher Address of this Packet. */
 static int Pinfo_get_hi(lua_State *L) {
     Pinfo pinfo = checkPinfo(L,1);
-    Address addr;
 
-    addr = (Address)g_malloc(sizeof(address));
     if (cmp_address(&(pinfo->ws_pinfo->src), &(pinfo->ws_pinfo->dst) ) >= 0) {
-        copy_address(addr, &(pinfo->ws_pinfo->src));
+        pushAddress(L, &(pinfo->ws_pinfo->src));
     } else {
-        copy_address(addr, &(pinfo->ws_pinfo->dst));
+        pushAddress(L, &(pinfo->ws_pinfo->dst));
     }
 
-    pushAddress(L,addr);
     return 1;
 }
 
 /* WSLUA_ATTRIBUTE Pinfo_lo RO Lower Address of this Packet. */
 static int Pinfo_get_lo(lua_State *L) {
     Pinfo pinfo = checkPinfo(L,1);
-    Address addr;
 
-    addr = (Address)g_malloc(sizeof(address));
     if (cmp_address(&(pinfo->ws_pinfo->src), &(pinfo->ws_pinfo->dst) ) < 0) {
-        copy_address(addr, &(pinfo->ws_pinfo->src));
+        pushAddress(L, &(pinfo->ws_pinfo->src));
     } else {
-        copy_address(addr, &(pinfo->ws_pinfo->dst));
+        pushAddress(L, &(pinfo->ws_pinfo->dst));
     }
 
-    pushAddress(L,addr);
     return 1;
 }
 
@@ -534,26 +511,11 @@ static int Pinfo_set_conversation(lua_State *L) {
 
 static int Pinfo_get_conversation(lua_State *L) {
     Pinfo pinfo = checkPinfo(L,1);
-    Conversation conv = find_or_create_conversation(pinfo->ws_pinfo);
-    pushConversation(L, conv);
+    conversation_t *conv = find_or_create_conversation(pinfo->ws_pinfo);
+    push_Conversation(L, conv);
     WSLUA_RETURN(1);
 }
 
-
-/* Gets registered as metamethod automatically by WSLUA_REGISTER_CLASS/META */
-static int Pinfo__gc(lua_State* L) {
-    Pinfo pinfo = toPinfo(L,1);
-
-    if (!pinfo) return 0;
-
-    if (!pinfo->expired)
-        pinfo->expired = true;
-    else
-        g_free(pinfo);
-
-    return 0;
-
-}
 
 /* This table is ultimately registered as a sub-table of the class' metatable,
  * and if __index/__newindex is invoked then it calls the appropriate function
@@ -603,15 +565,7 @@ WSLUA_META Pinfo_meta[] = {
 };
 
 int Pinfo_register(lua_State* L) {
-    WSLUA_REGISTER_META_WITH_ATTRS(Pinfo);
-    if (outstanding_Pinfo != NULL) {
-        g_ptr_array_unref(outstanding_Pinfo);
-    }
-    outstanding_Pinfo = g_ptr_array_new();
-    if (outstanding_PrivateTable != NULL) {
-        g_ptr_array_unref(outstanding_PrivateTable);
-    }
-    outstanding_PrivateTable = g_ptr_array_new();
+    WSLUA_REGISTER_META_WITH_ATTRS_NOGC(Pinfo);
     return 0;
 }
 

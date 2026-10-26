@@ -10,7 +10,9 @@
 #include "config.h"
 
 #include <ui/qt/utils/themes/themed_icon.h>
+#include <ui/qt/utils/themes/color_math.h>
 #include <ui/qt/utils/themes/token_palette.h>
+#include <ui/qt/utils/themes/icon_engine_utils.h>
 
 #include <QApplication>
 #include <QIconEngine>
@@ -108,17 +110,17 @@ private:
         switch (mode) {
         case QIcon::Disabled: {
             QColor c = resolve(token_);
-            c.setAlphaF(c.alphaF() * 0.4);
+            c.setAlphaF(c.alphaF() * kIconDisabledOpacity);
             return c;
         }
         case QIcon::Active:
             // Explicit hover colour when given, else a slight emphasis of normal.
             return active_token_ != ThemeManager::NoRole ? resolve(active_token_)
-                                                         : resolve(token_).lighter(115);
+                                                         : ColorMath::hoverEmphasis(resolve(token_));
         case QIcon::Selected:
             return selected_token_ != ThemeManager::NoRole ? resolve(selected_token_)
                  : active_token_   != ThemeManager::NoRole ? resolve(active_token_)
-                                                           : resolve(token_).lighter(115);
+                                                           : ColorMath::hoverEmphasis(resolve(token_));
         case QIcon::Normal:
         default:
             return resolve(token_);
@@ -127,9 +129,7 @@ private:
 
     QPixmap render(const QSize &logical, qreal scale, const QColor &color) const
     {
-        QPixmap pm(logical * scale);
-        pm.setDevicePixelRatio(scale);
-        pm.fill(Qt::transparent);
+        QPixmap pm = transparentIconPixmap(logical, scale);
 
         QSvgRenderer renderer(path_);
         QPainter p(&pm);

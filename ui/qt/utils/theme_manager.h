@@ -19,6 +19,9 @@
 
 class SystemThemeDetector;
 
+/** Contrast level of the theme derivation: which ColorMath ratio set applies. */
+enum class ThemeContrast { Standard, High };
+
 /**
  * Theme metadata from the "meta" section of theme.jsonc.
  */
@@ -28,6 +31,7 @@ struct ThemeInfo {
     int     version = 0;    ///< Schema version (currently 1)
     QString description;    ///< One-line description shown in preferences
     QString author;         ///< Theme author or organization
+    ThemeContrast contrast = ThemeContrast::Standard; ///< Declared by the theme's top-level "contrast" field
 };
 
 struct ThemeSectionInfo {
@@ -38,6 +42,11 @@ struct ThemeSectionInfo {
 struct ThemeColorPair {
     QColor light;
     QColor dark;
+
+    /** The color for a mode: @c dark when @p isDarkMode, else @c light. */
+    QColor forMode(bool isDarkMode) const { return isDarkMode ? dark : light; }
+    /** Sets the color for a mode: @c dark when @p isDarkMode, else @c light. */
+    void setForMode(bool isDarkMode, const QColor &color) { (isDarkMode ? dark : light) = color; }
 };
 
 /**
@@ -52,7 +61,6 @@ struct ThemeColorPair {
  *   themes/theme_token_handler.{h,cpp}     — derives Header* / Update* / …
  *                                            from the brand + accent inputs
  *   themes/theme_palette_builder.{h,cpp}   — constructs the QPalette
- *                                            and pushes it via setPalette()
  *   themes/theme_stylesheet_loader.{h,cpp} — reads :/stylesheets/ and
  *                                            resolves wstheme(...) tokens
  *   themes/color_math.{h,cpp}              — pure color-math statics
@@ -177,8 +185,8 @@ public:
         FilterClear,            // clear affordance (active) (← AccentError, red)
         FilterApply,            // apply affordance          (← AccentInfo, blue)
         FilterHistory,          // recent-filters arrow, dimmed at rest (← PaletteMid);
-                                // the default theme pins the classic Tango grays
-                                // (#555753 / #d3d7cf) via theme.filter.history.
+                                // the default theme pins fixed grays
+                                // via theme.filter.history.
 
         // Syntax highlighting — foreground text colours for code- and
         // data-viewers (JSON, hex, Lua debugger, etc.).  Derived so
@@ -219,24 +227,54 @@ public:
 
         // Structural form chrome — borders, dividers, muted text.
         // FieldBorder is the WCAG-enforced derivation of palette.mid
-        // against palette.base (≥ 3.0:1 ratio), used to frame
-        // interactive controls without overshooting like palette.shadow
-        // does in light mode.  Separator is a softer mix of base + mid
-        // for hairlines between cards / sections; themes can override
-        // it via the JSONC "separator" top-level key when the derived
-        // value is too pronounced (Stratoshark uses an explicit value
-        // matching its midlight).  MutedText is a derived de-emphasized
-        // text color (palette text mixed toward base, contrast-adapted
-        // to base) for secondary labels and plot reference lines.
+        // against palette.base (the non-text ratio of the active
+        // contrast set), used to frame interactive controls without
+        // overshooting like palette.shadow does in light mode.
+        // Separator is a softer mix of base + mid, kept the divider
+        // ratio of the active contrast set apart from base, for
+        // hairlines between sections; themes can override it via the
+        // JSONC "separator" top-level key when the derived value is too
+        // pronounced (Stratoshark uses an explicit value matching its
+        // midlight).  MutedText is a derived de-emphasized text color
+        // (palette text mixed toward base, contrast-adapted to base)
+        // for secondary labels and plot reference lines.
         FieldBorder,
         Separator,
         MutedText,
+
+        // Raised surfaces ("cards") on Base and the colors drawn on
+        // them.  In dark mode CardBackground is kept the dark card
+        // surface ratio of the active contrast set apart from Base,
+        // starting from the theme's palette.alternateBase pin or Base;
+        // in light mode it is that color unchanged.
+        // CardBorder frames it and is used for lines on it.
+        // CardSectionHeader* and CardFocusRing are the section header
+        // and focus colors re-derived to read on the card.  CardLink is
+        // the application Link in light mode (lifted only when it does
+        // not read on the card), lifted further in dark mode so that it
+        // reads on CardLinkHover at body-text contrast.  CardLinkHover
+        // is the item hover fill with the card as base, moved toward
+        // the card until CardLink reads on it (large-text contrast in
+        // light mode).  OverlayCard* is the card surface for overlays
+        // over a black scrim, such as the startup splash: the lighter of
+        // Base and CardBackground, with its own border.
+        CardBackground,
+        CardBorder,
+        CardSectionHeader,
+        CardSectionHeaderHover,
+        CardLink,
+        CardLinkHover,
+        CardFocusRing,
+        OverlayCardBackground,
+        OverlayCardBorder,
 
         // Welcome header title and version text (derived with HeaderBackground)
         HeaderText,
         HeaderTextMuted,
 
-        // Update bar (derived from accent.success)
+        // Update bar (derived from accent.success).  UpdateDot: the
+        // status dot, accent.success, kept non-text contrast apart
+        // from the bar in high contrast.
         UpdateBackground,
         UpdateBorder,
         UpdateText,
@@ -251,6 +289,7 @@ public:
         UpdateButtonDisabledText,
         UpdateDismissHoverBg,
         UpdateDismissPressedBg,
+        UpdateDot,
 
         // Accent aliases (derived)
         HighlightColorOrange,
@@ -287,6 +326,15 @@ public:
         NoRole
     };
     Q_ENUM(ThemeToken)
+
+    /**
+     * ThemeToken enumerator named exactly @p name (case-sensitive),
+     * as written in wstheme() stylesheet references and in theme
+     * resources such as learn_card.json and SVG token maps.
+     *
+     * @return The token, or NoRole when no enumerator has that name.
+     */
+    static ThemeToken tokenFromName(const QString &name);
 
     static ThemeManager* instance();
 
@@ -383,10 +431,16 @@ public:
      *                      tracks the live system preference; the
      *                      Prefer* variants pin the side regardless of
      *                      the live mode or OS.
+     * @param gui_contrast  gui_contrast_e value to preview, resolved with
+     *                      effectiveContrast() against the theme's declared
+     *                      level.  The default UseRecentContrast reads
+     *                      recent.gui_contrast, so a caller that does not
+     *                      pass it previews the saved setting.
      * @return token → resolved QColor for the requested mode.
      */
     QHash<ThemeToken, QColor> previewTheme(const QString &internalName,
-                                           PreviewScheme scheme) const;
+                                           PreviewScheme scheme,
+                                           int gui_contrast = UseRecentContrast) const;
 
     /**
      * Runs ThemeParser on @p filePath and returns true if it produces a
@@ -498,6 +552,43 @@ public:
     void setMode(ThemeMode mode);
 
     /**
+     * Contrast level the current theme was applied with: the result of
+     * effectiveContrast() for recent.gui_contrast and the theme's
+     * declared level at the last apply.
+     */
+    ThemeContrast contrast() const;
+
+    /**
+     * True when this build can read the OS contrast preference, i.e. it
+     * was built with Qt 6.10 or later.  Below that the System contrast
+     * setting acts as Standard.
+     */
+    static bool canDetectSystemContrast();
+
+    /**
+     * True when the OS reports a high-contrast preference.  Always false
+     * when canDetectSystemContrast() is false.
+     */
+    static bool systemPrefersHighContrast();
+
+    /**
+     * Resolves the contrast level to apply.  High when the theme declares
+     * high contrast, when @p gui_contrast is GUI_CONTRAST_HIGH, or when it
+     * is GUI_CONTRAST_SYSTEM and the OS prefers high contrast; Standard
+     * otherwise.
+     *
+     * @param gui_contrast  a gui_contrast_e value (ui/recent.h).
+     * @param declared      the level the theme file declares.
+     */
+    static ThemeContrast effectiveContrast(int gui_contrast, ThemeContrast declared);
+
+    /**
+     * previewTheme() argument meaning "preview the saved contrast setting
+     * (recent.gui_contrast)".  Not a gui_contrast_e value.
+     */
+    static constexpr int UseRecentContrast = -1;
+
+    /**
      * @brief Returns the graph color for the given index, cycling through available graph colors if necessary.
      *
      * NOTE: if no graph colors are defined, this will return an invalid QColor.
@@ -508,8 +599,6 @@ public:
      * @return QColor
      */
     QColor graphColor(int idx) const;
-
-    QColor graphDefaultColor() const;
 
     /**
      * @brief Returns the number of graph colors defined in the theme.
@@ -551,6 +640,10 @@ private:
     ThemeMode mode_ = ThemeMode::System;
     SystemThemeDetector *detector_ = nullptr;
 
+    // Contrast level of the last apply; compared against a fresh
+    // effectiveContrast() when the OS contrast preference changes.
+    ThemeContrast contrast_ = ThemeContrast::Standard;
+
     // Pristine OS palette snapshot used as the baseline when the palette
     // builder constructs a new theme palette.  Captured once at ctor
     // entry (before any setPalette() call could pollute QApplication's
@@ -584,6 +677,16 @@ private:
      * (explicit setMode or a System-mode OS flip).
      */
     void reapplyForSchemeChange();
+
+    /**
+     * Resolves the effective contrast level and makes it the active
+     * ColorMath ratio set, re-derives the token table from the parsed
+     * theme for the current mode, pushes the palette and the application
+     * stylesheet, and emits themeChanged.  The shared tail of loadTheme()
+     * and reapplyForSchemeChange(); also run when the OS contrast
+     * preference changes the effective level.
+     */
+    void applyTheme();
 
     /**
      * Maps recent.gui_color_scheme (COLOR_SCHEME_DEFAULT / _LIGHT /

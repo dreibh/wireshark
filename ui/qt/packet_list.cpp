@@ -32,9 +32,8 @@
 #include "wsutil/str_util.h"
 #include <wsutil/wslog.h>
 
-#include <epan/color_filters.h>
-
 #include <ui/qt/utils/color_utils.h>
+#include <ui/qt/utils/coloring_rule_utils.h>
 #include <ui/qt/utils/theme_manager.h>
 #include <ui/qt/utils/themes/color_math.h>
 #include <ui/qt/utils/font_manager.h>
@@ -692,9 +691,8 @@ void PacketList::paintHoveredRow(QPainter *painter, const QTreeView *view,
     const QColor selection = ThemeManager::instance()->color(
             selectionIsActive() ? ThemeManager::PacketsSelection : ThemeManager::PacketsInactive);
     const QPalette &pal = view->palette();
-    const QColor hover_bg = ColorMath::selectionHoverFill(pal.color(QPalette::Base), selection);
-    const QColor text_color = ColorMath::readableText(pal.color(QPalette::Text), hover_bg);
-
+    const ColorMath::TextOnFill hover = ColorMath::selectionHover(
+            pal.color(QPalette::Base), selection, pal.color(QPalette::Text));
     for (int visual_col = 0; visual_col < view->header()->count(); visual_col++) {
         int logical_col = view->header()->logicalIndex(visual_col);
         if (view->isColumnHidden(logical_col)) {
@@ -711,12 +709,12 @@ void PacketList::paintHoveredRow(QPainter *painter, const QTreeView *view,
             // (not the delegate's own background fill, which would
             // clobber the hover color with the model's background role).
             painter->save();
-            painter->fillRect(col_option.rect, hover_bg);
+            painter->fillRect(col_option.rect, hover.fill);
             painter->restore();
             tag_column_delegate_.paintContent(painter, col_option, col_index);
             continue;
         }
-        ColorUtils::paintFlatCell(painter, view, col_option, col_index, hover_bg, text_color);
+        ColorUtils::paintFlatCell(painter, view, col_option, col_index, hover.fill, hover.text);
     }
 }
 
@@ -1878,6 +1876,7 @@ void PacketList::setColumnDelegate()
     }
 
     // Tag column delegate is installed on every COL_TAG column regardless of other delegates
+    tag_column_delegate_.setMultiColorDelegate(&multi_color_delegate_);
     for (unsigned i = 0; i < prefs.num_cols; i++) {
         if (get_column_format(i) == COL_TAG) {
             setItemDelegateForColumn(i, &tag_column_delegate_);
@@ -3631,68 +3630,26 @@ void PacketList::drawNearOverlay()
         for (int row = start; row < end; row++) {
             packet_list_proxy_model_->ensureRowColorized(row);
 
-            frame_data *fdata = packet_list_proxy_model_->getRowFdata(row);
             int next_line = (row - start + 1) * o_height / o_rows;
             int row_height = next_line - cur_line;
 
-            // Multi-color support in minimap (enabled for all non-Off modes)
-            if (prefs.gui_packet_list_multi_color_mode != PACKET_LIST_MULTI_COLOR_MODE_OFF) {
-                QModelIndex idx = packet_list_proxy_model_->index(row, 0);
-                PacketListRecord *record = static_cast<PacketListRecord*>(idx.internalPointer());
-                // Conversation color filters take full precedence — skip multi-color stripe rendering
-                bool is_conversation_color = fdata->color_filter &&
-                    strncmp(((const color_filter_t *)fdata->color_filter)->filter_name,
-                            CONVERSATION_COLOR_PREFIX, strlen(CONVERSATION_COLOR_PREFIX)) == 0;
-                if (record && record->hasMultipleColors() && !is_conversation_color) {
-                    // Draw vertical stripes for multiple colors (skip paused filters)
-                    const GSList *filters = record->matchingColorFilters();
-
-                    // Count non-paused filters
-                    int num_active_colors = 0;
-                    for (const GSList *item = filters; item != NULL; item = g_slist_next(item)) {
-                        const color_filter_t *colorf = (const color_filter_t *)item->data;
-                        if (!color_filter_is_session_disabled(colorf->filter_name)) {
-                            num_active_colors++;
-                        }
-                    }
-
-                    if (num_active_colors > 0) {
-                        int stripe_width = o_width / num_active_colors;
-                        int x_pos = 0;
-                        int stripe_idx = 0;
-
-                        for (const GSList *item = filters; item != NULL; item = g_slist_next(item)) {
-                            const color_filter_t *colorf = (const color_filter_t *)item->data;
-                            // Skip paused filters
-                            if (!color_filter_is_session_disabled(colorf->filter_name)) {
-                                QColor color(ColorUtils::fromColorT(&colorf->bg_color));
-                                int width = (stripe_idx == num_active_colors - 1) ? (o_width - x_pos) : stripe_width;
-                                painter.fillRect(x_pos, cur_line, width, row_height, color);
-                                x_pos += stripe_width;
-                                stripe_idx++;
-                            }
-                        }
-                    } else {
-                        // All filters paused, draw no color
-                        painter.fillRect(0, cur_line, o_width, row_height, palette().color(QPalette::Base));
-                    }
-                } else if (fdata->color_filter) {
-                    // Single color fallback
-                    const color_filter_t *color_filter = (const color_filter_t *) fdata->color_filter;
-                    QColor color(ColorUtils::fromColorT(&color_filter->bg_color));
-                    painter.fillRect(0, cur_line, o_width, row_height, color);
-                }
-            } else {
-                // Original single-color behavior
-                const color_t *bgcolor = NULL;
-                if (fdata->color_filter) {
-                    const color_filter_t *color_filter = (const color_filter_t *) fdata->color_filter;
-                    bgcolor = &color_filter->bg_color;
-                }
-
-                if (bgcolor) {
-                    QColor color(ColorUtils::fromColorT(bgcolor));
-                    painter.fillRect(0, cur_line, o_width, row_height, color);
+            // Colors of the matching rules; the first is the primary rule. A
+            // conversation rule comes alone. Multi-color mode Off shows only
+            // the primary rule; every other mode draws one stripe per rule.
+            QModelIndex idx = packet_list_proxy_model_->index(row, 0);
+            const QList<ColoringRuleColors> colors =
+                idx.data(PacketListModel::COLORING_RULE_COLORS).value<QList<ColoringRuleColors>>();
+            int num_colors = static_cast<int>(colors.size());
+            if (prefs.gui_packet_list_multi_color_mode == PACKET_LIST_MULTI_COLOR_MODE_OFF) {
+                num_colors = qMin(num_colors, 1);
+            }
+            if (num_colors > 0) {
+                int stripe_width = o_width / num_colors;
+                int x_pos = 0;
+                for (int stripe_idx = 0; stripe_idx < num_colors; stripe_idx++) {
+                    int width = (stripe_idx == num_colors - 1) ? (o_width - x_pos) : stripe_width;
+                    painter.fillRect(x_pos, cur_line, width, row_height, colors.at(stripe_idx).background);
+                    x_pos += stripe_width;
                 }
             }
 

@@ -39,6 +39,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_expression_toolbar.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/find_line_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/follow_stream_text.h
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/font_selection_widget.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/hex_data_source_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/interface_toolbar_lineedit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/json_data_source_view.h
@@ -65,7 +66,6 @@ set(WIRESHARK_WIDGET_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/resolved_addresses_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/rowmove_tree_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/splash_overlay.h
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/stock_icon_tool_button.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/syntax_line_edit.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/tabnav_tree_view.h
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/theme_preview_widget.h
@@ -98,6 +98,7 @@ set (STRATOSHARK_MANAGER_HEADERS ${WIRESHARK_MANAGER_HEADERS})
 set(WIRESHARK_UTILS_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/byte_view_text_cells.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/color_utils.h
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/coloring_rule_utils.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/data_printer.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/field_information.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/font_manager.h
@@ -109,8 +110,6 @@ set(WIRESHARK_UTILS_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/qt_ui_utils.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/software_update.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/software_update_backend.h
-	${CMAKE_SOURCE_DIR}/ui/qt/utils/stock_icon.h
-	${CMAKE_SOURCE_DIR}/ui/qt/utils/tango_colors.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/theme_manager.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/theme_styler.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/color_math.h
@@ -122,6 +121,8 @@ set(WIRESHARK_UTILS_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_token_handler.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/themed_icon.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/contrast_adapt_icon.h
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/themed_shape_icon.h
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/icon_engine_utils.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/variant_pointer.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/wireshark_mime_data.h
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/wireshark_zip_helper.h
@@ -231,12 +232,15 @@ set(WIRESHARK_QT_HEADERS
 	${CMAKE_SOURCE_DIR}/ui/qt/follow_stream_action.h
 	${CMAKE_SOURCE_DIR}/ui/qt/follow_stream_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/font_color_preferences_frame.h
+	${CMAKE_SOURCE_DIR}/ui/qt/font_preferences_frame.h
+	${CMAKE_SOURCE_DIR}/ui/qt/font_selection_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/funnel_statistics.h
 	${CMAKE_SOURCE_DIR}/ui/qt/funnel_string_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/funnel_text_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/geometry_state_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/glib_mainloop_on_qeventloop.h
 	${CMAKE_SOURCE_DIR}/ui/qt/graph.h
+	${CMAKE_SOURCE_DIR}/ui/qt/graph_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/import_text_dialog.h
 	${CMAKE_SOURCE_DIR}/ui/qt/interface_frame.h
 	${CMAKE_SOURCE_DIR}/ui/qt/interface_toolbar.h
@@ -360,6 +364,7 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/filter_expression_toolbar.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/find_line_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/follow_stream_text.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/font_selection_widget.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/hex_data_source_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/interface_toolbar_lineedit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/json_data_source_view.cpp
@@ -385,7 +390,6 @@ set(WIRESHARK_WIDGET_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/resolved_addresses_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/rowmove_tree_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/splash_overlay.cpp
-	${CMAKE_SOURCE_DIR}/ui/qt/widgets/stock_icon_tool_button.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/syntax_line_edit.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/tabnav_tree_view.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/theme_preview_widget.cpp
@@ -438,6 +442,7 @@ endif()
 set(WIRESHARK_UTILS_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/byte_view_text_cells.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/color_utils.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/coloring_rule_utils.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/data_printer.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/field_information.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/font_manager.cpp
@@ -448,7 +453,6 @@ set(WIRESHARK_UTILS_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/qt_ui_utils.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/software_update.cpp
 	${WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC}
-	${CMAKE_SOURCE_DIR}/ui/qt/utils/stock_icon.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/theme_manager.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/theme_styler.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/color_math.cpp
@@ -459,6 +463,7 @@ set(WIRESHARK_UTILS_SRCS
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/theme_token_handler.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/themed_icon.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/contrast_adapt_icon.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/themed_shape_icon.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/themes/system_theme_detector_common.cpp
 	${WIRESHARK_THEMES_PLATFORM_SRC}
 	${CMAKE_SOURCE_DIR}/ui/qt/utils/wireshark_mime_data.cpp
@@ -566,10 +571,13 @@ set(WIRESHARK_QT_SRC
 	${CMAKE_SOURCE_DIR}/ui/qt/follow_stream_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/follow_stream_action.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/font_color_preferences_frame.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/font_preferences_frame.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/font_selection_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/funnel_string_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/funnel_text_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/geometry_state_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/glib_mainloop_on_qeventloop.cpp
+	${CMAKE_SOURCE_DIR}/ui/qt/graph_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/import_text_dialog.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/interface_frame.cpp
 	${CMAKE_SOURCE_DIR}/ui/qt/interface_toolbar.cpp
@@ -706,6 +714,8 @@ set(WIRESHARK_QT_UI
 	${CMAKE_SOURCE_DIR}/ui/qt/filter_expression_frame.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/follow_stream_dialog.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/font_color_preferences_frame.ui
+	${CMAKE_SOURCE_DIR}/ui/qt/font_preferences_frame.ui
+	${CMAKE_SOURCE_DIR}/ui/qt/font_selection_dialog.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/funnel_string_dialog.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/funnel_text_dialog.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/import_text_dialog.ui
@@ -752,6 +762,7 @@ set(WIRESHARK_QT_UI
 
 set(WIRESHARK_QT_WIDGETS_UI
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/capture_card_widget.ui
+	${CMAKE_SOURCE_DIR}/ui/qt/widgets/font_selection_widget.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/learn_card_widget.ui
 	${CMAKE_SOURCE_DIR}/ui/qt/widgets/welcome_header_widget.ui
 )
@@ -860,7 +871,9 @@ qrc_register(NAME themes TARGET stratoshark PREFIX "/themes")
 add_theme(NAME "wireshark" TARGET stratoshark )
 add_theme(NAME "stratoshark" TARGET stratoshark )
 add_theme(NAME "inverted" TARGET stratoshark )
-add_theme(NAME "midnight-blue" TARGET stratoshark )
+add_theme(NAME "protan-deutan" TARGET stratoshark )
+add_theme(NAME "tritan" TARGET stratoshark )
+add_theme(NAME "high-contrast" TARGET stratoshark )
 qrc_finalize(NAME themes TARGET stratoshark OUTPUT_VAR STRATOSHARK_THEMES_QRC)
 
 # Drop the file modification time of source files from generated files
@@ -882,9 +895,7 @@ endif()
 qt_add_resources(STRATOSHARK_QT_QRC
 	${CMAKE_SOURCE_DIR}/resources/about.qrc
 	${CMAKE_SOURCE_DIR}/resources/languages/languages.qrc
-	${CMAKE_SOURCE_DIR}/resources/layout.qrc
 	${SSICON_QRC}
-	${CMAKE_SOURCE_DIR}/resources/stock_icons.qrc
 	${CMAKE_SOURCE_DIR}/resources/theme_icons.qrc
 	${STRATOSHARK_I18N_QRC}
 	${STRATOSHARK_AUTHORS_QRC}

@@ -67,6 +67,7 @@ DIAG_ON(frame-larger-than=)
 #include "packet_diagram.h"
 #include "packet_list.h"
 #include <ui/qt/widgets/packet_list_pane.h>
+#include "preferences_dialog.h"
 #include "proto_tree.h"
 #include "simple_dialog.h"
 #include "tap_parameter_dialog.h"
@@ -430,6 +431,10 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
             << REGISTER_TOOLS_GROUP_UNSORTED;
 
     setWindowIcon(mainApp->normalIcon());
+    // The Website and Wiki help items lead to the project's own pages, so they carry
+    // the application icon.
+    main_ui_->actionHelpWebsite->setIcon(mainApp->normalIcon());
+    main_ui_->actionHelpWiki->setIcon(mainApp->normalIcon());
     updateTitlebar();
     setMenusForCaptureFile();
     setForCapturedPackets(false);
@@ -769,6 +774,7 @@ WiresharkMainWindow::WiresharkMainWindow(QWidget *parent) :
     main_ui_->actionHelpContents->setToolTip(gchar_free_to_qstring(topic_action_url(HELP_CONTENT)));
     main_ui_->actionHelpWebsite->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_WIRESHARK_HOME)));
     main_ui_->actionHelpFAQ->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_FAQ)));
+    main_ui_->actionHelpDiscord->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_DISCORD)));
     main_ui_->actionHelpAsk->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_ASK)));
     main_ui_->actionHelpDownloads->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_WIRESHARK_DOWNLOAD)));
     main_ui_->actionHelpWiki->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_WIRESHARK_WIKI)));
@@ -783,6 +789,11 @@ WiresharkMainWindow::~WiresharkMainWindow()
     disconnect(main_ui_->mainStack, &QStackedWidget::currentChanged, this, &WiresharkMainWindow::mainStackChanged);
     if (previous_focus_ != nullptr) {
         disconnect(previous_focus_, &QWidget::destroyed, this, &WiresharkMainWindow::resetPreviousFocus);
+    }
+    if (preferences_dialog_) {
+        // The dialog is a child of this window and is deleted after our
+        // members, so its destroyed() handler must not touch them.
+        disconnect(preferences_dialog_, nullptr, this, nullptr);
     }
 
 #ifndef Q_OS_MACOS
@@ -1944,7 +1955,6 @@ bool WiresharkMainWindow::tryClosingCaptureFile(QString before_what, FileCloseCo
             msg_dialog.setText(question);
             msg_dialog.setInformativeText(infotext);
 
-            // XXX Text comes from ui/gtk/stock_icons.[ch]
             // Note that the button roles differ from the GTK+ version.
             // Cancel = RejectRole
             // Save = AcceptRole

@@ -104,11 +104,10 @@ The following changes have been made since version 4.6.0:
   A built-in Lua script debugger has been added. It supports breakpoints, single-stepping, variable inspection, expression evaluation, and stack traces. The debugger can be opened from the menu:Tools[Lua Debugger] menu.
 
 * Themes
-  Wireshark now drives the colors used throughout the GUI from a single theme instead of many individual color preferences. The renamed menu:Appearance[Theme and Font] preferences page lets you pick a theme, switch between Light, Dark, and System appearance, set the packet pane font, and preview the result on a mockup of a capture window. A built-in default theme ships with Wireshark, and additional themes can be installed as JSONC (JSON with Comments) files. The previous per-color settings (marked and ignored packets, "Follow Stream" client and server text, display filter validity, and the selected packet) are now provided by the active theme. Graph and plot windows (I/O Graph, TCP Stream, SCTP, RTP, and others) now take their grid, text and series colors from the theme, and the display filter field text, packet list row separators, and links stay readable in light and dark themes.
-  Personal themes can now be dropped as single `.jsonc` files into _$HOME/.local/lib/wireshark/themes_ (Unix) or _%APPDATA%\Wireshark\themes_ (Windows); the filename becomes the theme's name in the dropdown. The exact path is shown in the About dialog's _Folders_ tab.
-  On first launch after the upgrade, Wireshark checks the Default profile's preferences for customized values of the removed per-color settings. If any are found, a personal theme named _Personal (Migrated)_ is created automatically in the personal themes directory, the legacy keys are removed from the Default profile's preferences file, and the theme is activated so the original visual customizations are preserved. The migration runs once: the generated _personal.jsonc_ can be edited, renamed, or deleted by hand at any time.
-  The welcome page section headers ("Open", "Capture", "Learn") and the filter validity tints have been restored to the historical Classic look (Tango sky_blue brand, saturated GTK-era dark green / dark red filter backgrounds).
-  Selected and hovered rows now share one color family: the hover color of the packet list, details tree, welcome page lists and JSON view is derived from the selection color, so themes no longer define a separate hover color, and the colored gradients of the welcome page header and update bar have been replaced by flat colors. Themes that set `packets.selection` but not `palette.highlight` now use that color for selection in lists, the details tree and the bytes pane (and for the welcome page header); `palette.highlight` still overrides it. The `brand.deep` color and the `header` and `update` gradient tokens are no longer used and can be removed from personal themes. The text of selected and marked rows is now checked against its background when the theme is applied and lifted to a readable contrast (4.5:1) if a theme's pinned text color would be hard to read, and the text of a pressed button is chosen against the pressed color. The Bluetooth dialog tables use the same derived hover color as the other lists.
+  The colors used throughout the GUI, including graphs, now come from a theme instead of individual color preferences; packet coloring rules are unchanged. The menu:Appearance[Theme] preferences page lets you pick a theme, choose Light, Dark, or System appearance, and preview the result before applying it. See https://www.wireshark.org/docs/wsug_html/#ChCustPrefsThemeSection[Theme preferences] in the User's Guide for details.
+  Besides the default _Wireshark_ theme, a _High Contrast_ theme and two color-blind friendly themes, _Protanopia & Deuteranopia_ and _Tritanopia_, are included. A new _Contrast_ setting (_System_, _Standard_, or _High_) raises the contrast of any theme; _System_ follows the contrast preference of the operating system. The expert information severity icons now differ by shape as well as by color.
+  You can add your own themes as `.jsonc` files in the personal themes folder, which is shown in the About dialog's _Folders_ tab. See https://www.wireshark.org/docs/wsug_html/#ChCustPersonalThemes[Personal themes] for details.
+  If you had customized the packet selection, marked, ignored, or Follow Stream colors in the Default profile, Wireshark converts them once into a personal theme named _Personal (Migrated)_ and selects it, so those colors are kept.
 
 * The Default profile now has additional column "Delta", showing the delta time from the previous displayed packet.
 
@@ -182,11 +181,23 @@ The following features are either new or have been significantly updated since v
   PackageKit is queried over D-Bus, so building with this support only
   requires the Qt DBus module.
 
+* Disabled coloring rules can now be shown in the packet details.
+  With the new preference `gui.coloring_rules_include_disabled` (menu:Edit[Preferences > Appearance > Layout],
+  "Show disabled coloring rules", off by default) a disabled rule that matches a packet is listed
+  under the Frame tree, dimmed and in italics, and can be found with the `frame.coloring_rule.*` fields.
+  Disabled rules never color packets. When several rules match, they are listed as a
+  "Coloring Rules" subtree with one entry per rule (name, filter string and a Disabled flag);
+  the new `frame.coloring_rule.count` field holds the number of listed rules.
+  In the Frame tree, the context menu of a coloring rule now offers Disable and Enable,
+  which change the rule itself, are saved with the coloring rules and re-dissect the capture.
+
 * The Windows installers now ship with Npcap 1.89.
   They previously shipped with Npcap 1.83.
 
 * The Windows and macOS installers now ship with Qt 6.11.1.
   They previously shipped with Qt 6.9.3.
+
+* The Help menu has a new menu:Help[Discord] entry, which opens the invitation to the Wireshark Discord server.
 
 // XXX This should just describe what changed.
 // * The capture and display filter fields have a refreshed, consistent look and
@@ -250,6 +261,22 @@ The following features are either new or have been significantly updated since v
   and `tshark --export-objects ajp13,<destdir>`). Like with HTTP,
   content-encoded bodies are uncompressed, controlled by the new
   `ajp13.decompress_body` preference.
+
+* The Help menu entries Website and Wiki now show the Wireshark application icon on
+  Linux and Windows, and Ask (Q&A) no longer has an icon.
+
+* The monospace font used in the packet list, packet details, packet bytes and other text views
+  is now chosen on the new menu:Edit[Preferences > Appearance > Fonts] page, below Theme,
+  instead of in the Theme page and the system font dialog.
+  The page lists the font families, each drawn in its own typeface, with a filter field,
+  a "Show only monospaced fonts" option (on by default), the styles of the family,
+  the size (steps of 0.5 points, can be typed) and a sample.
+  Strikeout and Underline can be set, and bold or oblique styles are now applied
+  (they were stored but ignored before). An italic or underlined font hides the italic and underline markers
+  in the packet details, so only their colors mark disabled coloring rules and links then.
+  The inline page also fixes the font selection on macOS, where the native font panel
+  ignored the monospaced filter and offered no usable size control.
+  wsbuglink:21688[]
 
 === Removed Features and Support
 

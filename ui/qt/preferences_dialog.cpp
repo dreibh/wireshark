@@ -164,6 +164,7 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
     prefs_pane_to_item_[PrefsModel::typeToString(PrefsModel::Layout)] = pd_ui_->layoutFrame;
     prefs_pane_to_item_[PrefsModel::typeToString(PrefsModel::Columns)] = pd_ui_->columnFrame;
     prefs_pane_to_item_[PrefsModel::typeToString(PrefsModel::FontAndColors)] = pd_ui_->fontandcolorFrame;
+    prefs_pane_to_item_[PrefsModel::typeToString(PrefsModel::Fonts)] = pd_ui_->fontsFrame;
     prefs_pane_to_item_[PrefsModel::typeToString(PrefsModel::WelcomePage)] = pd_ui_->welcomePageFrame;
     prefs_pane_to_item_[PrefsModel::typeToString(PrefsModel::Capture)] = pd_ui_->captureFrame;
     prefs_pane_to_item_[PrefsModel::typeToString(PrefsModel::Expert)] = pd_ui_->expertFrame;
@@ -189,6 +190,8 @@ PreferencesDialog::PreferencesDialog(QWidget *parent) :
 
     pd_ui_->advancedView->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(pd_ui_->advancedView, &QTreeView::customContextMenuRequested, this, &PreferencesDialog::handleCopyMenu);
+
+    set_section_title_font(pd_ui_->advancedGroupBox);
 }
 
 PreferencesDialog::~PreferencesDialog()

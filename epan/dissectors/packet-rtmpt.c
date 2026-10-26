@@ -21,35 +21,46 @@
 *   especially regarding the lengths and the structures.
 *
 *   Documentation:
-*      RTMP protocol description on Wiki of Red5 Open Source Flash Server at
+*      Adobe's RTMP, AMF and FLV specifications are collected by the
+*      Enhanced RTMP project at
 *
-*          http://trac.red5.org/wiki/Codecs/RTMPSpecification
+*          https://veovera.org/docs/legacy/
 *
-*      and the pages to which it links:
+*      The RTMP specification is
 *
-*          http://osflash.org/documentation/rtmp
-*          http://wiki.gnashdev.org/RTMP
-*          http://wiki.gnashdev.org/RTMP_Messages_Decoded
-*          http://www.acmewebworks.com/Downloads/openCS/TheAMF.pdf
-*          https://rtmp.veriskope.com/pdf/rtmp_specification_1.0.pdf
+*          https://veovera.org/docs/legacy/rtmp-v1-0-spec.pdf
 *
-*   It's also available from Adobe at
+*      It was formerly available from Adobe at
 *
-*          https://www.adobe.com/devnet/rtmp.html
+*          https://web.archive.org/web/20210926083727/https://www.adobe.com/devnet/rtmp.html
+*
+*      RTMP protocol description on Wiki of Red5 Open Source Flash Server
+*      (archived) at
+*
+*          https://web.archive.org/web/20120530065236/http://trac.red5.org/wiki/Codecs/RTMPSpecification
+*
+*      and the pages to which it links (archived):
+*
+*          https://web.archive.org/web/20070315085249/http://osflash.org/documentation/rtmp
+*          https://web.archive.org/web/20150905175559/http://wiki.gnashdev.org/RTMP
+*          https://web.archive.org/web/20150907021630/http://wiki.gnashdev.org/RTMP_Messages_Decoded
+*          https://web.archive.org/web/20060613154925/http://www.acmewebworks.com/Downloads/openCS/TheAMF.pdf
 *
 *   For AMF, see:
 *
 *          http://download.macromedia.com/pub/labs/amf/amf0_spec_121207.pdf
 *
+*      (also at https://veovera.org/docs/legacy/amf0-file-format-spec.pdf)
+*
 *   for AMF0 and
 *
-*          http://amf3cplusplus.googlecode.com/svn-history/r4/trunk/doc/amf3_spec_05_05_08.pdf
+*          https://veovera.org/docs/legacy/amf3-file-format-spec.pdf
 *
 *   for AMF3.
 *
 *   For FLV, see:
 *
-*          https://rtmp.veriskope.com/pdf/video_file_format_spec_v10.pdf
+*          https://veovera.org/docs/legacy/video-file-format-v10-1-spec.pdf
 *
 *   For Enhanced RTMP, see:
 *
@@ -163,19 +174,6 @@ static dissector_handle_t rtmpt_http_handle;
 
 static bool rtmpt_desegment = true;
 
-/* Native Bandwidth Detection (using the checkBandwidth(), onBWCheck(),
- * onBWDone() calls) transmits a series of increasing size packets over
- * the course of 2 seconds. On a fast link the largest packet can just
- * exceed 256KB, but setting the limit there can cause massive memory
- * usage, especially with fuzzed packets where the length value is bogus.
- * Limit the initial allocation size and realloc if needed, i.e., in
- * future frames if the bytes are actually there.
- * This initial max allocation size can be reduced further if need be,
- * but keep it at least 18 so that the headers fit without checking,
- * See https://gitlab.com/wireshark/wireshark/-/issues/6898
- */
-#define RTMPT_INIT_ALLOC_SIZE 32768
-
 #define RTMP_PORT                     1935 /* Not IANA registered */
 
 #define RTMPT_MAGIC                   0x03
@@ -283,8 +281,8 @@ static const value_string rtmpt_tag_vals[] = {
         { 0, NULL }
 };
 
-/* [Spec] https://github.com/runner365/read_book/blob/master/rtmp/rtmp_specification_1.0.pdf       */
-/* [DevG] http://help.adobe.com/en_US/flashmediaserver/devguide/index.html "working with Live Video" => Adding metadata to a live stream */
+/* [Spec] https://veovera.org/docs/legacy/rtmp-v1-0-spec.pdf */
+/* [DevG] https://web.archive.org/web/20150226180406/http://help.adobe.com/en_US/flashmediaserver/devguide/index.html "working with Live Video" => Adding metadata to a live stream */
 /* [SWF] https://github.com/blackears/raven/blob/master/proj/SWFParser/doc/swf_file_format_spec_v10.pdf */
 static const value_string rtmpt_audio_codecs[] = {
         {  0,                               "Uncompressed" },             /* [DevG] */
@@ -367,7 +365,7 @@ static const value_string rtmpt_video_codecs[] = {
 };
 
 /*
- * https://raw.githubusercontent.com/veovera/enhanced-rtmp/main/enhanced-rtmp.pdf
+ * https://veovera.org/docs/enhanced/enhanced-rtmp-v2.pdf
  */
 static const value_string rtmpt_video_packet_types[] = {
         { 0,                                "PacketTypeSequenceStart" },
@@ -2368,6 +2366,22 @@ dissect_rtmpt_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, rtmpt_
                                     cdir, seq+offset,
                                     ti, tp, header_type, basic_hlen+message_hlen, id, tp?tp->have:0, tp?tp->want:0, body_len, chunk_size);
 
+                        if (tp && tp->resident && tp->have < tp->want) {
+                                /* The previous message on this chunk stream
+                                 * was never completed, and this header starts
+                                 * a new one. Incomplete messages are not added
+                                 * to rconv->packets, so its data will never be
+                                 * used. Free it, and mark the message complete
+                                 * so that nothing is appended to it later.
+                                 */
+                                wmem_free(wmem_file_scope(), tp->data.p);
+                                tp->data.p    = NULL;
+                                tp->alloc     = 0;
+                                tp->want      = tp->have;
+                                tp->chunkwant = 0;
+                                tp->chunkhave = 0;
+                        }
+
                         if (!ti) {
                                 ti = wmem_new(wmem_file_scope(), rtmpt_id_t);
                                 ti->packets = wmem_tree_new(wmem_file_scope());
@@ -2449,14 +2463,17 @@ dissect_rtmpt_common(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, rtmpt_
                         } else {
                                 /* Some more reassembly required */
                                 tp->resident = true;
-                                /* tp->want is how much data we think we want.
-                                 * If it's a really big number, we don't want
-                                 * to allocate it all at once, due to memory
-                                 * exhaustion on fuzzed data (#6898).
-                                 * RTMPT_INIT_ALLOC_SIZE should always be larger
-                                 * than basic_hlen + message_hlen.
+                                /* tp->want is how much data we think we want,
+                                 * up to a 24-bit length from the packet. Don't
+                                 * allocate it all at once, due to memory
+                                 * exhaustion on fuzzed data (#6898). Allocate
+                                 * just the header; the body is added below as
+                                 * the bytes arrive. Even a fixed initial size
+                                 * (it used to be 32 KiB) is a large multiplier,
+                                 * as each message on a chunk stream can declare
+                                 * a large length and send only a byte.
                                  */
-                                tp->alloc = MIN(tp->want, RTMPT_INIT_ALLOC_SIZE);
+                                tp->alloc = basic_hlen + message_hlen;
                                 tp->data.p = (uint8_t *)wmem_alloc(wmem_file_scope(), tp->alloc);
 
                                 if (tf && tf->ishdr) {

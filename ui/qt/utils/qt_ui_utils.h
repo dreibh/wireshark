@@ -29,6 +29,8 @@
 
 class QAction;
 class QFont;
+class QGroupBox;
+class QLabel;
 class QRect;
 
 #ifdef __cplusplus
@@ -226,6 +228,23 @@ QString join_lines(const QString multiline_string);
  * @param font The font to smooth.
  */
 void smooth_font_size(QFont &font);
+
+/**
+ * Give a preferences section group box a bold title 2 points larger than
+ * the application font, and keep the font every widget inside it has.
+ * Call it after all child widgets exist and Qt::WA_MacSmallSize is set.
+ *
+ * @param box The group box.
+ */
+void set_section_title_font(QGroupBox *box);
+
+/**
+ * Style a hint label: the application font in italic, drawn in the
+ * disabled window text color.
+ *
+ * @param label The hint label.
+ */
+void set_hint_label_style(QLabel *label);
 
 /**
  * Compare the text of two QActions. Useful for passing to std::sort.

@@ -17,7 +17,7 @@
 #include <ui/qt/widgets/syntax_line_edit.h>
 
 class QEvent;
-class StockIconToolButton;
+class QToolButton;
 
 /**
  * @brief Specifies how a filter or column expression entered in the filter edit widget should be handled.
@@ -48,6 +48,11 @@ public:
      * @param type The display filter edit type to set.
      */
     void setType(DisplayFilterEditType type);
+
+    /**
+     * @brief Disables the automatic validation of the dialog embedded Display Filter.
+     */
+    void disableAutomaticValidation();
 
 protected:
     /**
@@ -207,13 +212,13 @@ private:
     QActionGroup * actions_;
 
     /** Pointer to the bookmark tool button. */
-    QPointer<StockIconToolButton> bookmark_button_;
+    QPointer<QToolButton> bookmark_button_;
 
     /** Pointer to the clear tool button. */
-    QPointer<StockIconToolButton> clear_button_;
+    QPointer<QToolButton> clear_button_;
 
     /** Pointer to the apply tool button. */
-    QPointer<StockIconToolButton> apply_button_;
+    QPointer<QToolButton> apply_button_;
 
     /** Flag indicating whether action buttons are aligned to the left. */
     bool leftAlignActions_;
@@ -229,6 +234,9 @@ private:
 
     /** The active style sheet string applied to the widget. */
     QString style_sheet_;
+
+    /** Flag indicating if the embedded display filter validation is the automatic (default) one. */
+    bool auto_validation_ = true;
 
     /**
      * @brief Sets the default placeholder text for the widget.

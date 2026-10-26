@@ -2221,6 +2221,10 @@ unsigned pref_get_changed_flags(pref_t *pref, void *unstash_data_p)
 
     case PREF_DECODE_AS_RANGE:
     case PREF_RANGE:
+        if (pref->stashed_val.range == NULL) {
+            ws_debug("stashed pref %s is NULL", prefs_get_name(pref));
+            break;
+        }
         if (!ranges_are_equal(*pref->varp.range, pref->stashed_val.range)) {
             unstash_data->module->prefs_changed_flags |= prefs_get_effect_flags(pref);
         }
@@ -2330,6 +2334,10 @@ pref_unstash(pref_t *pref, void *unstash_data_p)
     case PREF_DECODE_AS_RANGE:
     {
         const char* table_name = prefs_get_dissector_table(pref);
+        if (pref->stashed_val.range == NULL) {
+            ws_debug("stashed pref %s is NULL", prefs_get_name(pref));
+            break;
+        }
         if (!ranges_are_equal(*pref->varp.range, pref->stashed_val.range)) {
             uint32_t i, j;
 
@@ -2387,6 +2395,10 @@ pref_unstash(pref_t *pref, void *unstash_data_p)
     }
 
     case PREF_RANGE:
+        if (pref->stashed_val.range == NULL) {
+            ws_debug("stashed pref %s is NULL", prefs_get_name(pref));
+            break;
+        }
         if (!ranges_are_equal(*pref->varp.range, pref->stashed_val.range)) {
             wmem_free(pref->scope, *pref->varp.range);
             *pref->varp.range = range_copy(pref->scope, pref->stashed_val.range);
@@ -3181,8 +3193,11 @@ prefs_register_modules(void)
      * Any changes are signaled in other ways, so PREF_EFFECT_GUI doesn't
      * explicitly do anything, but wslua_set_preference expects *some*
      * effect flag to be set if the preference was changed.
-     * We have to do this again for all the submodules (except for the
-     * layout submodule, which has its own effect flag).
+     * We have to do this again for all the submodules, which don't inherit
+     * the flags from their parent. The layout submodule and color submodule
+     * have their own effect flags, though note that not all preferences in
+     * those submodules need the specific flag; some are just grouped in the
+     * submodule to present to the user in the same dialog page as the others.
      */
     unsigned gui_effect_flags = prefs_get_module_effect_flags(gui_module);
     gui_effect_flags |= PREF_EFFECT_GUI;
@@ -3479,10 +3494,12 @@ prefs_register_modules(void)
 
     /* User Interface : Layout */
     gui_layout_module = prefs_register_subtree(gui_module, prefs_modules, "Layout", "Layout", gui_layout_callback);
+    /* Most of the preferences in Layout aren't actually "Layout" preferences,
+     * from the point of view of triggering a re-layout of the splitter, etc.
+     * So most get the default GUI effect flags. */
+    prefs_set_module_effect_flags(gui_layout_module, gui_effect_flags);
     /* Adjust the preference effects of layout GUI for better handling of preferences at Wireshark (GUI) level */
-    layout_gui_flags = prefs_get_module_effect_flags(gui_layout_module);
-    layout_gui_flags |= PREF_EFFECT_GUI_LAYOUT;
-    layout_gui_flags &= (~PREF_EFFECT_DISSECTION);
+    layout_gui_flags = gui_effect_flags | PREF_EFFECT_GUI_LAYOUT;
 
     prefs_register_uint_preference(gui_layout_module, "layout_type",
                                    "Layout type",
@@ -3631,6 +3648,15 @@ prefs_register_modules(void)
     /* This preference affects what is shown in the packet detail proto tree,
      * so changing it requires re-dissection to take effect immediately. */
     prefs_set_preference_effect(gui_module, "packet_list_multi_color_details",
+                                PREF_EFFECT_DISSECTION);
+
+    prefs_register_bool_preference(gui_module, "coloring_rules_include_disabled",
+                                   "Show disabled coloring rules",
+                                   "Also match disabled coloring rules and list them in the packet details, marked as disabled. Disabled rules never color packets.",
+                                   &prefs.gui_coloring_rules_include_disabled);
+    /* Matching disabled rules are added to the packet details tree,
+     * so changing it requires re-dissection to take effect immediately. */
+    prefs_set_preference_effect(gui_module, "coloring_rules_include_disabled",
                                 PREF_EFFECT_DISSECTION);
 
     prefs_register_enum_preference(gui_layout_module, "packet_list_multi_color_separator",
@@ -4276,6 +4302,7 @@ prefs_set_global_defaults(wmem_allocator_t* pref_scope, const char** col_fmt, in
     prefs.gui_packet_list_multi_color_mode = PACKET_LIST_MULTI_COLOR_MODE_OFF;
     prefs.gui_packet_list_multi_color_shift_percent = 85;
     prefs.gui_packet_list_multi_color_details = false;
+    prefs.gui_coloring_rules_include_disabled = false;
     prefs.gui_packet_list_multi_color_separator = PACKET_LIST_MULTI_COLOR_SEPARATOR_DIAGONAL;
     wmem_free(pref_scope, prefs.gui_interfaces_hide_types);
     prefs.gui_interfaces_hide_types = wmem_strdup(pref_scope, "");

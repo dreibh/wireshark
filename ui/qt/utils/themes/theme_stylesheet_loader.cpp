@@ -14,7 +14,6 @@
 #include <QColor>
 #include <QFile>
 #include <QIODevice>
-#include <QMetaEnum>
 #include <QRegularExpression>
 
 QString ThemeStyleSheetLoader::load(const QString  &name,
@@ -48,37 +47,20 @@ QString ThemeStyleSheetLoader::load(const QString  &name,
 
     QString qss = QString::fromUtf8(f.readAll());
 
-    // Replace the `%wsmode%` placeholder with the current effective
-    // mode as a plain string — "dark" or "light".  Intended for QSS
-    // that needs to pick a mode-specific asset by filename (e.g.
-    //   image: url(:/stock_icons/14x14/x-filter-dropdown.%wsmode%.png);
-    // ).  Placeholder takes no arguments; it's a simple textual
-    // substitution done before the wstheme(...) regex so the
-    // resolver's grammar stays purely color-typed.
-    qss.replace(QStringLiteral("%wsmode%"),
-                isDarkMode ? QStringLiteral("dark") : QStringLiteral("light"));
-
     // Replace all wstheme(RoleName) references with resolved color
     // values.  RoleName must match a ThemeToken enum identifier
     // exactly (case-sensitive), e.g. wstheme(HeaderBackground).
     static const QRegularExpression tokenRe(
         QStringLiteral("wstheme\\(\\s*([A-Za-z][A-Za-z0-9]*)\\s*\\)"));
 
-    static const QMetaEnum roleEnum =
-        QMetaEnum::fromType<ThemeManager::ThemeToken>();
-
     qsizetype offset = 0;
     QRegularExpressionMatch match;
     while ((match = tokenRe.match(qss, offset)).hasMatch()) {
         const QString token = match.captured(1);
-        bool ok = false;
-        const int roleInt = roleEnum.keyToValue(token.toUtf8().constData(), &ok);
+        const ThemeManager::ThemeToken role = ThemeManager::tokenFromName(token);
         QColor value;
-        if (ok && roleInt != ThemeManager::NoRole) {
-            const ThemeColorPair pair = tokens.value(
-                static_cast<ThemeManager::ThemeToken>(roleInt), ThemeColorPair());
-            value = isDarkMode ? pair.dark : pair.light;
-        }
+        if (role != ThemeManager::NoRole)
+            value = tokens.value(role, ThemeColorPair()).forMode(isDarkMode);
         if (value.isValid()) {
             qss.replace(match.capturedStart(), match.capturedLength(), value.name());
             offset = match.capturedStart() + value.name().length();

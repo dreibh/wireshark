@@ -128,7 +128,7 @@ DIAG_ON(frame-larger-than=)
 #include "resolved_addresses_dialog.h"
 #include "show_packet_bytes_dialog.h"
 #include "stats_tree_dialog.h"
-#include <ui/qt/utils/stock_icon.h>
+#include <ui/qt/utils/themes/themed_shape_icon.h>
 #include <ui/qt/utils/themes/themed_icon.h>
 #include "keyboard_shortcuts_dialog.h"
 #include "supported_protocols_dialog.h"
@@ -1509,7 +1509,7 @@ void StratosharkMainWindow::initViewColorizeMenu()
         if (colorf) {
             QColor bg = ColorUtils::fromColorT(colorf->bg_color);
             QColor fg = ColorUtils::fromColorT(colorf->fg_color);
-            cc_action->setIcon(StockIcon::colorIcon(bg.rgb(), fg.rgb(), QString::number(color_num)));
+            cc_action->setIcon(ThemedShapeIcon(ThemedShapeIcon::Square, bg, fg, QString::number(color_num)));
         }
         color_num++;
     }
@@ -2136,14 +2136,50 @@ void StratosharkMainWindow::editConfigurationProfiles()
 
 void StratosharkMainWindow::showPreferencesDialog(QString module_name)
 {
-    PreferencesDialog *pref_dialog = new PreferencesDialog(this);
-    connect(pref_dialog, &PreferencesDialog::destroyed, mainApp, &MainApplication::flushAppSignals);
+    // Have a single instance of the dialog at any one time. Every
+    // PreferencesDialog stashes all preferences in the global pref_t
+    // stash and its destructor clears that stash, so a second instance
+    // would wipe the stash of the first one.
+    if (preferences_dialog_ && preferences_dialog_->isVisible()) {
+        if (!module_name.isEmpty()) {
+            preferences_dialog_->setPane(module_name);
+        }
+        if (preferences_dialog_->isMinimized()) {
+            preferences_dialog_->showNormal();
+        }
+        preferences_dialog_->raise();
+        preferences_dialog_->activateWindow();
+        return;
+    }
+
+    // A finished dialog waiting for its deferred delete must clear the
+    // stash now, before the new dialog fills it.
+    delete preferences_dialog_;
+    if (preferences_dialog_) {
+        // A trigger handled while the old dialog was being destroyed
+        // already opened a new one.
+        preferences_dialog_->raise();
+        preferences_dialog_->activateWindow();
+        return;
+    }
+
+    preferences_dialog_ = new PreferencesDialog(this);
+    // QWidget emits destroyed() while QPointer still points at the dialog.
+    // Forget it before flushAppSignals() runs, so code that opens the
+    // Preferences again from there creates a new dialog instead of
+    // deleting the one being destroyed. Connected first, so it runs first.
+    connect(preferences_dialog_, &PreferencesDialog::destroyed, this, [this](QObject *obj) {
+        if (preferences_dialog_.data() == obj) {
+            preferences_dialog_.clear();
+        }
+    });
+    connect(preferences_dialog_, &PreferencesDialog::destroyed, mainApp, &MainApplication::flushAppSignals);
     saveWindowGeometry();  // Save in case the layout panes are rearranged
 
-    pref_dialog->setPane(module_name);
-    pref_dialog->setWindowModality(Qt::ApplicationModal);
-    pref_dialog->setAttribute(Qt::WA_DeleteOnClose);
-    pref_dialog->show();
+    preferences_dialog_->setPane(module_name);
+    preferences_dialog_->setWindowModality(Qt::ApplicationModal);
+    preferences_dialog_->setAttribute(Qt::WA_DeleteOnClose);
+    preferences_dialog_->show();
 }
 
 // View Menu
@@ -3191,6 +3227,7 @@ void StratosharkMainWindow::connectHelpMenuActions()
     connect(main_ui_->actionHelpMPTShark, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(LOCALPAGE_MAN_TSHARK); });
     connect(main_ui_->actionHelpWebsite, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_STRATOSHARK_HOME); });
     connect(main_ui_->actionHelpFAQ, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_FAQ); });
+    connect(main_ui_->actionHelpDiscord, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_DISCORD); });
     connect(main_ui_->actionHelpAsk, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_ASK); });
     connect(main_ui_->actionHelpDownloads, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_STRATOSHARK_DOWNLOAD); });
     connect(main_ui_->actionHelpWiki, &QAction::triggered, this, [=]() { mainApp->helpTopicAction(ONLINEPAGE_STRATOSHARK_WIKI); });

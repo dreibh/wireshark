@@ -19,6 +19,7 @@
 #include <QDebug>
 #include <epan/prefs-int.h>
 #include <ui/qt/models/pref_models.h>
+#include <ui/qt/utils/qt_ui_utils.h>
 #include <ui/qt/utils/themes/themed_icon.h>
 
 LayoutPreferencesFrame::LayoutPreferencesFrame(QWidget *parent) :
@@ -54,14 +55,6 @@ LayoutPreferencesFrame::LayoutPreferencesFrame(QWidget *parent) :
              "  margin-left: %1px;"
              "}"
              ).arg(indent);
-    ui->packetListSeparatorCheckBox->setStyleSheet(indent_ss);
-    ui->packetListHeaderShowColumnDefinition->setStyleSheet(indent_ss);
-    ui->packetListHoverStyleCheckbox->setStyleSheet(indent_ss);
-    ui->packetListAllowSorting->setStyleSheet(indent_ss);
-    ui->packetListCachedRowsLabel->setStyleSheet(indent_ss);
-    ui->statusBarShowSelectedPacketCheckBox->setStyleSheet(indent_ss);
-    ui->statusBarShowFileLoadTimeCheckBox->setStyleSheet(indent_ss);
-
     if (QLayout *lay = findChild<QLayout *>("multiColorModeLayout"))
         lay->setContentsMargins(indent, 0, 0, 0);
     if (QLayout *lay = findChild<QLayout *>("separatorModeLayout"))
@@ -90,6 +83,11 @@ LayoutPreferencesFrame::LayoutPreferencesFrame(QWidget *parent) :
     pref_packet_list_multi_color_details_ = prefFromPrefPtr(&prefs.gui_packet_list_multi_color_details);
     ui->packetListMultiColorDetailsCheckBox->setChecked(prefs_get_bool_value(pref_packet_list_multi_color_details_, pref_stashed));
     ui->packetListMultiColorDetailsCheckBox->setStyleSheet(indent_ss);
+
+    pref_coloring_rules_include_disabled_ = prefFromPrefPtr(&prefs.gui_coloring_rules_include_disabled);
+    ui->coloringRulesIncludeDisabledCheckBox->setChecked(prefs_get_bool_value(pref_coloring_rules_include_disabled_, pref_stashed));
+    ui->coloringRulesIncludeDisabledCheckBox->setStyleSheet(indent_ss);
+    ui->coloringRulesIncludeDisabledCheckBox->setToolTip(QString::fromUtf8(prefs_get_description(pref_coloring_rules_include_disabled_)));
 
     pref_packet_list_multi_color_mode_ = prefFromPrefPtr(&prefs.gui_packet_list_multi_color_mode);
     pref_packet_list_multi_color_shift_percent_ = prefFromPrefPtr(&prefs.gui_packet_list_multi_color_shift_percent);
@@ -138,6 +136,10 @@ LayoutPreferencesFrame::LayoutPreferencesFrame(QWidget *parent) :
     ui->packetListMultiColorSeparatorVerticalRadioButton->setEnabled(stripe_mode);
     ui->packetListMultiColorSeparatorDiagonalRadioButton->setEnabled(stripe_mode);
     ui->packetListMultiColorSeparatorBubbleRadioButton->setEnabled(stripe_mode);
+
+    set_section_title_font(ui->paneLayoutGroupBox);
+    set_section_title_font(ui->packetListGroupBox);
+    set_section_title_font(ui->statusBarGroupBox);
 }
 
 LayoutPreferencesFrame::~LayoutPreferencesFrame()
@@ -459,6 +461,7 @@ void LayoutPreferencesFrame::on_restoreButtonBox_clicked(QAbstractButton *)
     ui->statusBarShowSelectedPacketCheckBox->setChecked(prefs_get_bool_value(pref_show_selected_packet_, pref_default));
     ui->statusBarShowFileLoadTimeCheckBox->setChecked(prefs_get_bool_value(pref_show_file_load_time_, pref_default));
     ui->packetListMultiColorDetailsCheckBox->setChecked(prefs_get_bool_value(pref_packet_list_multi_color_details_, pref_default));
+    ui->coloringRulesIncludeDisabledCheckBox->setChecked(prefs_get_bool_value(pref_coloring_rules_include_disabled_, pref_default));
     reset_stashed_pref(pref_packet_list_multi_color_mode_);
     reset_stashed_pref(pref_packet_list_multi_color_shift_percent_);
     reset_stashed_pref(pref_packet_list_multi_color_separator_);
@@ -507,6 +510,11 @@ void LayoutPreferencesFrame::on_statusBarShowFileLoadTimeCheckBox_toggled(bool c
 void LayoutPreferencesFrame::on_packetListMultiColorDetailsCheckBox_toggled(bool checked)
 {
     prefs_set_bool_value(pref_packet_list_multi_color_details_, (bool) checked, pref_stashed);
+}
+
+void LayoutPreferencesFrame::on_coloringRulesIncludeDisabledCheckBox_toggled(bool checked)
+{
+    prefs_set_bool_value(pref_coloring_rules_include_disabled_, checked, pref_stashed);
 }
 
 void LayoutPreferencesFrame::on_packetListMultiColorOffRadioButton_toggled(bool checked)

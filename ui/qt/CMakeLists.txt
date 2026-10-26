@@ -40,6 +40,7 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/filter_expression_toolbar.h
 	widgets/find_line_edit.h
 	widgets/follow_stream_text.h
+	widgets/font_selection_widget.h
 	widgets/hex_data_source_view.h
 	widgets/interface_toolbar_lineedit.h
 	widgets/json_data_source_view.h
@@ -67,7 +68,6 @@ set(WIRESHARK_WIDGET_HEADERS
 	widgets/rowmove_tree_view.h
 	widgets/rtp_audio_graph.h
 	widgets/splash_overlay.h
-	widgets/stock_icon_tool_button.h
 	widgets/syntax_line_edit.h
 	widgets/tabnav_tree_view.h
 	widgets/theme_preview_widget.h
@@ -95,6 +95,7 @@ set(WIRESHARK_MANAGER_HEADERS
 set(WIRESHARK_UTILS_HEADERS
 	utils/byte_view_text_cells.h
 	utils/color_utils.h
+	utils/coloring_rule_utils.h
 	utils/data_printer.h
 	utils/field_information.h
 	utils/font_manager.h
@@ -110,8 +111,6 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/rtp_audio_silence_generator.h
 	utils/software_update.h
 	utils/software_update_backend.h
-	utils/stock_icon.h
-	utils/tango_colors.h
 	utils/theme_manager.h
 	utils/theme_styler.h
 	utils/themes/color_math.h
@@ -124,6 +123,8 @@ set(WIRESHARK_UTILS_HEADERS
 	utils/themes/themed_icon.h
 	utils/themes/token_palette.h
 	utils/themes/contrast_adapt_icon.h
+	utils/themes/themed_shape_icon.h
+	utils/themes/icon_engine_utils.h
 	utils/variant_pointer.h
 	utils/wireshark_mime_data.h
 	utils/wireshark_zip_helper.h
@@ -244,12 +245,15 @@ set(WIRESHARK_QT_HEADERS
 	follow_stream_action.h
 	follow_stream_dialog.h
 	font_color_preferences_frame.h
+	font_preferences_frame.h
+	font_selection_dialog.h
 	funnel_statistics.h
 	funnel_string_dialog.h
 	funnel_text_dialog.h
 	geometry_state_dialog.h
 	glib_mainloop_on_qeventloop.h
 	graph.h
+	graph_dialog.h
 	gsm_map_summary_dialog.h
 	iax2_analysis_dialog.h
 	imsi_list_dialog.h
@@ -386,6 +390,7 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/filter_expression_toolbar.cpp
 	widgets/find_line_edit.cpp
 	widgets/follow_stream_text.cpp
+	widgets/font_selection_widget.cpp
 	widgets/hex_data_source_view.cpp
 	widgets/interface_toolbar_lineedit.cpp
 	widgets/json_data_source_view.cpp
@@ -412,7 +417,6 @@ set(WIRESHARK_WIDGET_SRCS
 	widgets/rowmove_tree_view.cpp
 	widgets/rtp_audio_graph.cpp
 	widgets/splash_overlay.cpp
-	widgets/stock_icon_tool_button.cpp
 	widgets/syntax_line_edit.cpp
 	widgets/tabnav_tree_view.cpp
 	widgets/theme_preview_widget.cpp
@@ -460,6 +464,7 @@ endif()
 set(WIRESHARK_UTILS_SRCS
 	utils/byte_view_text_cells.cpp
 	utils/color_utils.cpp
+	utils/coloring_rule_utils.cpp
 	utils/data_printer.cpp
 	utils/field_information.cpp
 	utils/font_manager.cpp
@@ -474,7 +479,6 @@ set(WIRESHARK_UTILS_SRCS
 	utils/rtp_audio_silence_generator.cpp
 	utils/software_update.cpp
 	${WIRESHARK_SOFTWARE_UPDATE_PLATFORM_SRC}
-	utils/stock_icon.cpp
 	utils/theme_manager.cpp
 	utils/theme_styler.cpp
 	utils/themes/color_math.cpp
@@ -485,6 +489,7 @@ set(WIRESHARK_UTILS_SRCS
 	utils/themes/theme_token_handler.cpp
 	utils/themes/themed_icon.cpp
 	utils/themes/contrast_adapt_icon.cpp
+	utils/themes/themed_shape_icon.cpp
 	utils/themes/system_theme_detector_common.cpp
 	${WIRESHARK_THEMES_PLATFORM_SRC}
 	utils/wireshark_mime_data.cpp
@@ -603,10 +608,13 @@ set(WIRESHARK_QT_SRC
 	follow_stream_action.cpp
 	follow_stream_dialog.cpp
 	font_color_preferences_frame.cpp
+	font_preferences_frame.cpp
+	font_selection_dialog.cpp
 	funnel_string_dialog.cpp
 	funnel_text_dialog.cpp
 	geometry_state_dialog.cpp
 	glib_mainloop_on_qeventloop.cpp
+	graph_dialog.cpp
 	iax2_analysis_dialog.cpp
 	imsi_list_dialog.cpp
 	import_text_dialog.cpp
@@ -777,6 +785,8 @@ set(WIRESHARK_QT_UI
 	firewall_rules_dialog.ui
 	follow_stream_dialog.ui
 	font_color_preferences_frame.ui
+	font_preferences_frame.ui
+	font_selection_dialog.ui
 	funnel_string_dialog.ui
 	funnel_text_dialog.ui
 	gsm_map_summary_dialog.ui
@@ -845,6 +855,7 @@ set(WIRESHARK_QT_UI
 
 set(WIRESHARK_QT_WIDGETS_UI
 	widgets/capture_card_widget.ui
+	widgets/font_selection_widget.ui
 	widgets/learn_card_widget.ui
 	widgets/welcome_header_widget.ui
 )
@@ -952,7 +963,9 @@ qrc_register(NAME themes PREFIX "/themes")
 add_theme(NAME "wireshark")
 add_theme(NAME "stratoshark")
 add_theme(NAME "inverted")
-add_theme(NAME "midnight-blue")
+add_theme(NAME "protan-deutan")
+add_theme(NAME "tritan")
+add_theme(NAME "high-contrast")
 qrc_finalize(NAME themes OUTPUT_VAR THEMES_QRC)
 
 # Drop the file modification time of source files from generated files
@@ -974,8 +987,6 @@ endif()
 qt_add_resources(WIRESHARK_QT_QRC
 	../../resources/about.qrc
 	../../resources/languages/languages.qrc
-	../../resources/layout.qrc
-	../../resources/stock_icons.qrc
 	../../resources/theme_icons.qrc
 	${WSICON_QRC}
 	${I18N_QRC}

@@ -50,14 +50,15 @@ FrameInfo* push_FrameInfo(lua_State* L, wtap_rec *rec) {
 WSLUA_METAMETHOD FrameInfo__tostring(lua_State* L) {
     /* Returns a short label of the form
        `FrameInfo: encap=<name> caplen=<c> len=<r>`, or
-       `FrameInfo: (expired)` when there is no backing wtap_rec.
+       `FrameInfo: (expired)` once the callback it was passed to
+       has returned.
        The previous form dumped raw rec_type/presence_flags/
        pkt_encap integers and leaked the raw block pointer; the
        symbolic encapsulation name is enough to identify a frame
        in the debugger. */
     FrameInfo fi = toFrameInfo(L,1);
 
-    if (!fi || !fi->rec) {
+    if (!fi || !fi->rec || fi->expired) {
         lua_pushstring(L, "FrameInfo: (expired)");
         WSLUA_RETURN(1);
     }
@@ -222,14 +223,12 @@ static int FrameInfo_set_time (lua_State* L) {
 
 static int FrameInfo_get_time (lua_State* L) {
     FrameInfo fi = checkFrameInfo(L,1);
-    NSTime nstime = (NSTime)g_malloc(sizeof(nstime_t));
+    nstime_t nstime;
 
-    if (!nstime) return 0;
+    nstime.secs  = fi->rec->ts.secs;
+    nstime.nsecs = fi->rec->ts.nsecs;
 
-    nstime->secs  = fi->rec->ts.secs;
-    nstime->nsecs = fi->rec->ts.nsecs;
-
-    pushNSTime(L,nstime);
+    pushNSTime(L,&nstime);
 
     return 1; /* An NSTime object of the frame's timestamp. */
 }
@@ -440,14 +439,12 @@ static int FrameInfoConst_get_comment (lua_State* L) {
 /* WSLUA_ATTRIBUTE FrameInfoConst_time RO The packet timestamp as an NSTime object. */
 static int FrameInfoConst_get_time (lua_State* L) {
     FrameInfoConst fi = checkFrameInfoConst(L,1);
-    NSTime nstime = (NSTime)g_malloc(sizeof(nstime_t));
+    nstime_t nstime;
 
-    if (!nstime) return 0;
+    nstime.secs  = fi->rec->ts.secs;
+    nstime.nsecs = fi->rec->ts.nsecs;
 
-    nstime->secs  = fi->rec->ts.secs;
-    nstime->nsecs = fi->rec->ts.nsecs;
-
-    pushNSTime(L,nstime);
+    pushNSTime(L,&nstime);
 
     return 1; /* An NSTime object of the frame's timestamp. */
 }

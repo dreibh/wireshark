@@ -1771,8 +1771,11 @@ if (QT_FOUND)
 		# https://doc.qt.io/qt-6.5/supported-platforms.html
 		# https://doc.qt.io/qt-6.8/supported-platforms.html
 		# https://doc-snapshots.qt.io/qt6-6.10/supported-platforms.html
+		# https://doc-snapshots.qt.io/qt6-6.12/supported-platforms.html
 		# https://doc-snapshots.qt.io/qt6-dev/supported-platforms.html
-		if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.10.0" AND MIN_MACOS_VERSION VERSION_LESS "13.0")
+		if(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.12.0" AND MIN_MACOS_VERSION VERSION_LESS "14.4")
+			set(MIN_MACOS_VERSION 14.4)
+		elseif(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.10.0" AND MIN_MACOS_VERSION VERSION_LESS "13.0")
 			set(MIN_MACOS_VERSION 13.0)
 		elseif(Qt${qtver}Widgets_VERSION VERSION_GREATER_EQUAL "6.8.0" AND MIN_MACOS_VERSION VERSION_LESS "12.0")
 			set(MIN_MACOS_VERSION 12.0)
@@ -4996,8 +4999,6 @@ if(SHELLCHECK_EXECUTABLE)
 	# added support for that.
 	add_custom_command(TARGET shellcheck POST_BUILD
 		COMMAND shellcheck --external-sources
-			resources/stock_icons/svg-to-png.sh
-			resources/stock_icons/layouts-to-png.sh
 			packaging/appimage/Stratoshark-AppRun.in
 			packaging/appimage/Wireshark-AppRun.in
 			"packaging/macosx/ChmodBPF/root/Library/Application Support/Wireshark/ChmodBPF/ChmodBPF"

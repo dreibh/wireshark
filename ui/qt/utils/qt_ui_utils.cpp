@@ -42,6 +42,9 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFontDatabase>
+#include <QGroupBox>
+#include <QLabel>
+#include <QPalette>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QUrl>
@@ -234,6 +237,51 @@ void smooth_font_size(QFont &font) {
         }
         last_size = cur_size;
     }
+}
+
+// QApplication::font() has an empty resolve mask, so a child font derived
+// from it would resolve weight and size against a parent's bold, larger
+// font. Mark both as explicitly set so a reset to it takes effect.
+static QFont explicit_application_font()
+{
+    QFont font = QApplication::font();
+    font.setWeight(font.weight());
+    font.setPointSizeF(font.pointSizeF());
+    return font;
+}
+
+void set_section_title_font(QGroupBox *box)
+{
+    // Qt propagates a widget's font to its children, so set the emphasized
+    // font on the group box (which renders its title with it), then restore
+    // the font each widget inside had so only the title grows. That also
+    // keeps the smaller font of widgets with Qt::WA_MacSmallSize.
+    const QList<QWidget *> children = box->findChildren<QWidget *>();
+    QList<QFont> child_fonts;
+    for (const QWidget *child : children) {
+        QFont font = child->font();
+        font.setWeight(font.weight());
+        font.setPointSizeF(font.pointSizeF());
+        child_fonts.append(font);
+    }
+    QFont title_font = explicit_application_font();
+    title_font.setBold(true);
+    title_font.setPointSizeF(title_font.pointSizeF() + 2);
+    box->setFont(title_font);
+    for (qsizetype i = 0; i < children.size(); i++) {
+        children[i]->setFont(child_fonts[i]);
+    }
+}
+
+void set_hint_label_style(QLabel *label)
+{
+    QFont hint_font = explicit_application_font();
+    hint_font.setItalic(true);
+    label->setFont(hint_font);
+    QPalette hint_palette = label->palette();
+    hint_palette.setColor(QPalette::WindowText,
+                          hint_palette.color(QPalette::Disabled, QPalette::WindowText));
+    label->setPalette(hint_palette);
 }
 
 bool qActionLessThan(const QAction * a1, const QAction * a2) {

@@ -60,6 +60,7 @@ DIAG_ON(frame-larger-than=)
 #include "interface_toolbar.h"
 #include "packet_list.h"
 #include <ui/qt/widgets/packet_list_pane.h>
+#include "preferences_dialog.h"
 #include "proto_tree.h"
 #include "simple_dialog.h"
 #include "tap_parameter_dialog.h"
@@ -378,6 +379,10 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
             << REGISTER_TOOLS_GROUP_UNSORTED;
 
     setWindowIcon(mainApp->normalIcon());
+    // The Website and Wiki help items lead to the project's own pages, so they carry
+    // the application icon.
+    main_ui_->actionHelpWebsite->setIcon(mainApp->normalIcon());
+    main_ui_->actionHelpWiki->setIcon(mainApp->normalIcon());
     updateTitlebar();
     setMenusForCaptureFile();
     setForCapturedPackets(false);
@@ -632,6 +637,10 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
     connect(proto_tree_, &ProtoTree::showProtocolPreferences, this, &StratosharkMainWindow::showPreferencesDialog);
     connect(proto_tree_, SIGNAL(editProtocolPreference(pref_t*,module_t*)),
             main_ui_->preferenceEditorFrame, SLOT(editPreference(pref_t*,module_t*)));
+    connect(proto_tree_, &ProtoTree::recolorPacketsRequested,
+            packet_list_, &PacketList::recolorPackets);
+    connect(proto_tree_, &ProtoTree::redissectPacketsRequested,
+            this, &StratosharkMainWindow::redissectPackets);
 
     connect(main_ui_->statusBar, &MainStatusBar::showExpertInfo, this, [=]() {
         statCommandExpertInfo(NULL, NULL);
@@ -691,6 +700,7 @@ StratosharkMainWindow::StratosharkMainWindow(QWidget *parent) :
     main_ui_->actionHelpContents->setToolTip(gchar_free_to_qstring(topic_action_url(HELP_CONTENT)));
     main_ui_->actionHelpWebsite->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_STRATOSHARK_HOME)));
     main_ui_->actionHelpFAQ->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_FAQ)));
+    main_ui_->actionHelpDiscord->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_DISCORD)));
     main_ui_->actionHelpAsk->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_ASK)));
     main_ui_->actionHelpDownloads->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_STRATOSHARK_DOWNLOAD)));
     main_ui_->actionHelpWiki->setToolTip(gchar_free_to_qstring(topic_action_url(ONLINEPAGE_STRATOSHARK_WIKI)));
@@ -705,6 +715,11 @@ StratosharkMainWindow::~StratosharkMainWindow()
     disconnect(main_ui_->mainStack, &QStackedWidget::currentChanged, this, &StratosharkMainWindow::mainStackChanged);
     if (previous_focus_ != nullptr) {
         disconnect(previous_focus_, &QWidget::destroyed, this, &StratosharkMainWindow::resetPreviousFocus);
+    }
+    if (preferences_dialog_) {
+        // The dialog is a child of this window and is deleted after our
+        // members, so its destroyed() handler must not touch them.
+        disconnect(preferences_dialog_, nullptr, this, nullptr);
     }
 
 #ifndef Q_OS_MACOS
@@ -1818,7 +1833,6 @@ bool StratosharkMainWindow::tryClosingCaptureFile(QString before_what, FileClose
             msg_dialog.setText(question);
             msg_dialog.setInformativeText(infotext);
 
-            // XXX Text comes from ui/gtk/stock_icons.[ch]
             // Note that the button roles differ from the GTK+ version.
             // Cancel = RejectRole
             // Save = AcceptRole

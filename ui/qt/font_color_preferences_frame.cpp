@@ -11,31 +11,18 @@
 #include <ui/qt/utils/qt_ui_utils.h>
 
 #include "font_color_preferences_frame.h"
-#include <ui/qt/models/pref_models.h>
 #include <ui_font_color_preferences_frame.h>
 #include <ui/qt/utils/theme_manager.h>
-#include "main_application.h"
-#include "wsutil/array.h"
 
 #include <ui/recent.h>
 
-#include <QApplication>
-#include <QFontDialog>
 #include <QFormLayout>
-#include <QGroupBox>
-#include <QLabel>
-#include <QPalette>
+#include <QSignalBlocker>
 #include <QVBoxLayout>
 
-#include <epan/prefs-int.h>
-
-//: These are pangrams. Feel free to replace with nonsense text that spans your alphabet.
-//: https://en.wikipedia.org/wiki/Pangram
-static const char *font_pangrams_[] = {
-    QT_TRANSLATE_NOOP("FontColorPreferencesFrame", "Example GIF query packets have jumbo window sizes"),
-    QT_TRANSLATE_NOOP("FontColorPreferencesFrame", "Lazy badgers move unique waxy jellyfish packets")
-};
-const int num_font_pangrams_ = array_length(font_pangrams_);
+// Item data roles of the theme combo box entries.
+static const int theme_author_role_        = Qt::UserRole + 1;
+static const int theme_high_contrast_role_ = Qt::UserRole + 2;
 
 FontColorPreferencesFrame::FontColorPreferencesFrame(QWidget *parent) :
     QFrame(parent),
@@ -56,6 +43,22 @@ FontColorPreferencesFrame::FontColorPreferencesFrame(QWidget *parent) :
     connect(ui->colorSchemeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &FontColorPreferencesFrame::colorSchemeIndexChanged);
 
+    // Contrast — System / Standard / High.  Stashed like the appearance
+    // mode and committed to recent.gui_contrast on Apply.
+    stashed_contrast_ = recent.gui_contrast;
+
+    ui->contrastComboBox->clear();
+    ui->contrastComboBox->addItem(tr("System"),   GUI_CONTRAST_SYSTEM);
+    ui->contrastComboBox->addItem(tr("Standard"), GUI_CONTRAST_STANDARD);
+    ui->contrastComboBox->addItem(tr("High"),     GUI_CONTRAST_HIGH);
+    ui->contrastComboBox->setItemData(ui->contrastComboBox->findData(GUI_CONTRAST_SYSTEM),
+        ThemeManager::canDetectSystemContrast()
+            ? tr("System follows the operating system contrast setting (Qt 6.10 or later).")
+            : tr("The operating system contrast setting cannot be read with this Qt version; System acts as Standard."),
+        Qt::ToolTipRole);
+    connect(ui->contrastComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
+        this, &FontColorPreferencesFrame::contrastIndexChanged);
+
     // Theme picker — populated from ThemeManager::availableThemes().
     // Persists its selection in recent_common.gui_theme_name via the
     // frame's stash/unstash flow, so the choice survives profile switches.
@@ -73,7 +76,8 @@ FontColorPreferencesFrame::FontColorPreferencesFrame(QWidget *parent) :
         // the preview (set in refreshPreview()) so the dropdown stays clean.
         // The author is stashed in a private item-data role to feed it.
         ui->themeComboBox->addItem(t.name, t.internalName);
-        ui->themeComboBox->setItemData(i, t.author, Qt::UserRole + 1);
+        ui->themeComboBox->setItemData(i, t.author, theme_author_role_);
+        ui->themeComboBox->setItemData(i, t.contrast == ThemeContrast::High, theme_high_contrast_role_);
         if (!t.description.isEmpty())
             ui->themeComboBox->setItemData(i, t.description, Qt::ToolTipRole);
         if (t.internalName == stashed_theme_name_)
@@ -84,10 +88,6 @@ FontColorPreferencesFrame::FontColorPreferencesFrame(QWidget *parent) :
     connect(ui->themeComboBox, QOverload<int>::of(&QComboBox::currentIndexChanged),
         this, &FontColorPreferencesFrame::themeIndexChanged);
 
-    pref_qt_gui_font_name_ = prefFromPrefPtr(&prefs.gui_font_name);
-
-    cur_font_.fromString(prefs_get_string_value(pref_qt_gui_font_name_, pref_stashed));
-
     // Repaint the preview when the live theme changes underneath us.
     // ThemeManager emits themeChanged whenever the OS scheme flips while
     // the live mode is System (the detector hook re-applies and signals),
@@ -97,36 +97,11 @@ FontColorPreferencesFrame::FontColorPreferencesFrame(QWidget *parent) :
     connect(ThemeManager::instance(), &ThemeManager::themeChanged,
             this, &FontColorPreferencesFrame::refreshPreview);
 
-    // Section headers: bold and 2pt larger than the body font.  Qt propagates
-    // a widget's font to its children, so set the emphasized font on each
-    // group box (which renders its title with it) then restore the body font
-    // on the controls inside — including the combos and preview created above
-    // — so only the titles grow.  Done last, after those children exist.
-    QFont bodyFont = QApplication::font();
-    QFont headerFont = bodyFont;
-    headerFont.setBold(true);
-    headerFont.setPointSizeF(bodyFont.pointSizeF() + 2);
-    const QList<QGroupBox *> sectionBoxes = { ui->fontGroupBox, ui->themeGroupBox };
-    for (QGroupBox *box : sectionBoxes) {
-        box->setFont(headerFont);
-        const QList<QWidget *> boxChildren = box->findChildren<QWidget *>();
-        for (QWidget *child : boxChildren)
-            child->setFont(bodyFont);
-    }
-
-    // Theme author and description hints: muted + italic like the page's
-    // other hint labels.  Styled after the body-font reset above so the
-    // italics survive it.  Description is shown verbatim from the theme's
-    // meta.description; author is shown as "Theme by <author>".
-    QFont hintFont = bodyFont;
-    hintFont.setItalic(true);
-    QPalette hintPalette = ui->themeAuthorLabel->palette();
-    hintPalette.setColor(QPalette::WindowText,
-                         hintPalette.color(QPalette::Disabled, QPalette::WindowText));
-    for (QLabel *hint : { ui->themeAuthorLabel, ui->themeDescriptionLabel }) {
-        hint->setFont(hintFont);
-        hint->setPalette(hintPalette);
-    }
+    // Section title and theme hints share their styling with the Fonts page.
+    // Done last, after the combos and the preview above exist.
+    set_section_title_font(ui->themeGroupBox);
+    set_hint_label_style(ui->themeAuthorLabel);
+    set_hint_label_style(ui->themeDescriptionLabel);
 }
 
 FontColorPreferencesFrame::~FontColorPreferencesFrame()
@@ -136,33 +111,42 @@ FontColorPreferencesFrame::~FontColorPreferencesFrame()
 
 void FontColorPreferencesFrame::showEvent(QShowEvent *)
 {
-    GRand *rand_state = g_rand_new();
-    QString pangram = QStringLiteral("%1 0123456789").arg(font_pangrams_[g_rand_int_range(rand_state, 0, num_font_pangrams_)]);
-    ui->fontSampleLineEdit->setText(pangram);
-    ui->fontSampleLineEdit->setCursorPosition(0);
-    g_rand_free(rand_state);
-
     updateWidgets();
 }
 
 void FontColorPreferencesFrame::updateWidgets()
 {
-    int margin = style()->pixelMetric(QStyle::PM_LayoutLeftMargin);
-
-    ui->fontPushButton->setText(
-        cur_font_.family() + " " + cur_font_.styleName() + " " +
-        QString::number(cur_font_.pointSizeF(), 'f', 1));
-
-    QString line_edit_ss =
-        QStringLiteral("QLineEdit { margin-left: %1px; }").arg(margin);
-    ui->fontSampleLineEdit->setStyleSheet(line_edit_ss);
-    ui->fontSampleLineEdit->setFont(cur_font_);
-
     if (ui->colorSchemeComboBox) {
         ui->colorSchemeComboBox->setCurrentIndex(
             ui->colorSchemeComboBox->findData(stashed_color_scheme_));
     }
 
+    updateContrastCombo();
+    refreshPreview();
+}
+
+void FontColorPreferencesFrame::updateContrastCombo()
+{
+    if (!ui->contrastComboBox || !ui->themeComboBox)
+        return;
+
+    const bool forced = ui->themeComboBox->itemData(
+        ui->themeComboBox->currentIndex(), theme_high_contrast_role_).toBool();
+    const QSignalBlocker blocker(ui->contrastComboBox);
+    ui->contrastComboBox->setCurrentIndex(ui->contrastComboBox->findData(
+        forced ? GUI_CONTRAST_HIGH : stashed_contrast_));
+    ui->contrastComboBox->setEnabled(!forced);
+    ui->contrastLabel->setEnabled(!forced);
+    ui->contrastComboBox->setToolTip(forced
+        ? tr("The selected theme always uses high contrast.")
+        : QString());
+}
+
+void FontColorPreferencesFrame::contrastIndexChanged(int)
+{
+    if (!ui->contrastComboBox)
+        return;
+    stashed_contrast_ = ui->contrastComboBox->currentData().toInt();
     refreshPreview();
 }
 
@@ -182,6 +166,7 @@ void FontColorPreferencesFrame::themeIndexChanged(int)
     // recent_common on Apply.  Not applied live — a switch here requires
     // the user to accept the preferences dialog.
     stashed_theme_name_ = ui->themeComboBox->currentData().toString();
+    updateContrastCombo();
     refreshPreview();
 }
 
@@ -193,19 +178,7 @@ void FontColorPreferencesFrame::unstash()
         : g_strdup(stashed_theme_name_.toUtf8().constData());
 
     recent.gui_color_scheme = stashed_color_scheme_;
-}
-
-void FontColorPreferencesFrame::on_fontPushButton_clicked()
-{
-    bool ok;
-    // QFontDialog::MonospacedFonts might not be supported on Mac by the native
-    // dialog (or Linux GTK3 prior to Qt 6.12). Use DontUseNativeDialog option?
-    QFont new_font = QFontDialog::getFont(&ok, cur_font_, this, mainApp->windowTitleString(tr("Font")), QFontDialog::MonospacedFonts);
-    if (ok) {
-        prefs_set_string_value(pref_qt_gui_font_name_, new_font.toString().toStdString().c_str(), pref_stashed);
-        cur_font_ = new_font;
-        updateWidgets();
-    }
+    recent.gui_contrast = stashed_contrast_;
 }
 
 void FontColorPreferencesFrame::refreshPreview()
@@ -217,7 +190,7 @@ void FontColorPreferencesFrame::refreshPreview()
     if (ui->themeComboBox) {
         const int idx = ui->themeComboBox->currentIndex();
         const QString author = ui->themeComboBox->itemData(
-            idx, Qt::UserRole + 1).toString();
+            idx, theme_author_role_).toString();
         ui->themeAuthorLabel->setText(
             author.isEmpty() ? QString() : tr("Theme by %1").arg(author));
         const QString description = ui->themeComboBox->itemData(
@@ -250,5 +223,5 @@ void FontColorPreferencesFrame::refreshPreview()
     // safe — the preview just falls back to the live ThemeManager's
     // colors token-by-token.
     ui->previewWidget->setPreviewColors(
-        ThemeManager::instance()->previewTheme(stashed_theme_name_, previewScheme));
+        ThemeManager::instance()->previewTheme(stashed_theme_name_, previewScheme, stashed_contrast_));
 }

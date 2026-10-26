@@ -404,12 +404,17 @@ void ThemePreviewWidget::drawFilterBar(QPainter &p, const Layout &layout)
     const int   iconH = qMin(14, field.height() - 4);
     const int   pad   = 5;
 
-    // Left affordance: bookmark, tinted to FilterBookmark, on the window bg.
+    // Left affordance: bookmark, painted with FilterBookmark, on the window bg.
     QRect bookmark(field.left() + pad, field.center().y() - iconH / 2, iconH, iconH);
     const QPalette previewPal = previewPalette();
-    ContrastAdaptIcon icon("bookmark-display");
-    icon.setPalette(previewPal);
-    icon.paint(&p, bookmark);
+    // Each glyph paints the previewed theme's own Filter* token, not the live one.
+    auto paintGlyph = [&](const char *name, const QRect &r) {
+        ContrastAdaptIcon glyph(name);
+        glyph.setPalette(previewPal);
+        glyph.setTokenColors(colors_);
+        glyph.paint(&p, r);
+    };
+    paintGlyph("bookmark-display", bookmark);
 
     // Right affordances: apply pill (21:14, aka 3:2), clear ✕, and the history
     // chevron — each tinted to its own Filter* token so the preview surfaces them.
@@ -417,15 +422,9 @@ void ThemePreviewWidget::drawFilterBar(QPainter &p, const Layout &layout)
     QRect history(field.right() - 4 - iconH, field.center().y() - iconH / 2, iconH, iconH);
     QRect apply(history.left() - 6 - applyW, field.center().y() - iconH / 2, applyW, iconH);
     QRect clear(apply.left() - 4 - iconH,  field.center().y() - iconH / 2, iconH, iconH);
-    icon = ContrastAdaptIcon("filter-clear");
-    icon.setPalette(previewPal);
-    icon.paint(&p, clear);
-    icon = ContrastAdaptIcon("filter-apply");
-    icon.setPalette(previewPal);
-    icon.paint(&p, apply);
-    icon = ContrastAdaptIcon("filter-history");
-    icon.setPalette(previewPal);
-    icon.paint(&p, history);
+    paintGlyph("filter-clear", clear);
+    paintGlyph("filter-apply", apply);
+    paintGlyph("filter-history", history);
 
     // Central green text box, between the two affordance zones — the only part
     // carrying the FilterValid tint.  Text uses the contrasting colour of the
@@ -746,30 +745,26 @@ void ThemePreviewWidget::drawStatusBar(QPainter &p, const Layout &layout)
     const QColor mid        = c(ThemeManager::PaletteMid,        pal.color(QPalette::Mid));
     const QColor sep        = c(ThemeManager::Separator,         pal.color(QPalette::Mid));
     const QColor windowText = c(ThemeManager::PaletteWindowText, pal.color(QPalette::WindowText));
-    // The expert-severity LED.  The sample packets include Bad-TCP items
-    // (retransmission / dup ack), so the worst displayed severity is a warning —
-    // the dot uses ExpertWarn, the same token the live status bar would show.
-    const QColor expertWarn = c(ThemeManager::ExpertWarn, QColor("#e8b500"));
-
     const QRect &statusRect = layout.statusRect;
     p.fillRect(statusRect, window);
     p.setPen(sep);
     p.drawLine(statusRect.topLeft(), statusRect.topRight());
 
-    const double expertDotD = layout.labelFm.height() * 0.5;
-    const QRectF expertDotRect(statusRect.left() + 8,
-                               statusRect.center().y() - expertDotD / 2.0,
-                               expertDotD, expertDotD);
-    p.save();
-    p.setRenderHint(QPainter::Antialiasing, true);
-    p.setPen(Qt::NoPen);
-    p.setBrush(expertWarn);
-    p.drawEllipse(expertDotRect);
-    p.restore();
+    // The expert-severity indicator.  The sample packets include Bad-TCP items
+    // (retransmission / dup ack), so the worst displayed severity is a warning;
+    // draw the same icon the live status bar would show, in the previewed
+    // theme's colours.
+    const int iconSide = qRound(layout.labelFm.height());
+    const QRect expertIconRect(statusRect.left() + 8,
+                               statusRect.center().y() - iconSide / 2,
+                               iconSide, iconSide);
+    ContrastAdaptIcon expertIcon(QStringLiteral(":/svg_icons/expert-warn.svg"), window);
+    expertIcon.setTokenColors(colors_);
+    expertIcon.paint(&p, expertIconRect, Qt::AlignCenter);
 
     p.setFont(layout.labelFont);
     p.setPen(windowText);
-    p.drawText(QRectF(expertDotRect.right() + 6, statusRect.top(),
+    p.drawText(QRectF(expertIconRect.left() + iconSide + 6, statusRect.top(),
                       statusRect.width(), statusRect.height()),
                Qt::AlignVCenter | Qt::AlignLeft,
                tr("Ready"));

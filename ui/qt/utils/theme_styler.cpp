@@ -16,6 +16,8 @@
 #include <QDebug>
 #include <QOperatingSystemVersion>
 #include <QPainter>
+#include <QPen>
+#include <QRectF>
 #include <QStyleOptionViewItem>
 
 static QString base_style_name_;
@@ -70,6 +72,32 @@ void ThemeStyler::drawPrimitive(PrimitiveElement element, const QStyleOption *op
     }
 #endif
     QProxyStyle::drawPrimitive(element, option, painter, widget);
+
+    // Fusion outlines buttons, combo boxes and line edits with
+    // Window.darker(140), about 2:1 on a light window, which misses the
+    // non-text contrast a High control boundary needs.  Paint the frame
+    // again in FieldBorder on Fusion's own geometry.  Fusion also draws
+    // raised or pressed tool buttons through PE_PanelButtonCommand, so a
+    // hovered tool button gets the same frame.
+    if ((element == PE_PanelButtonCommand || element == PE_FrameLineEdit)
+            && option && painter
+            && ColorMath::activeRatios().level == ThemeContrast::High
+            && baseStyleName() == QLatin1String("fusion")) {
+        // QFusionStyle's button and line edit frame geometry (private in
+        // qfusionstyle.cpp, no API exposes it): the rect inset by half a
+        // pixel with a 2 px corner radius.
+        constexpr qreal fusionFrameInset = 0.5;
+        constexpr qreal fusionFrameRadius = 2.0;
+        painter->save();
+        painter->setRenderHint(QPainter::Antialiasing, true);
+        painter->setPen(QPen(ThemeManager::instance()->color(ThemeManager::FieldBorder), 1));
+        painter->setBrush(Qt::NoBrush);
+        painter->drawRoundedRect(
+                QRectF(option->rect).adjusted(fusionFrameInset, fusionFrameInset,
+                                              -fusionFrameInset, -fusionFrameInset),
+                fusionFrameRadius, fusionFrameRadius);
+        painter->restore();
+    }
 }
 
 QString ThemeStyler::buttonStyleSheet(const QString &objectname, const QColor &baseColor)
@@ -80,12 +108,21 @@ QString ThemeStyler::buttonStyleSheet(const QString &objectname, const QColor &b
         "    color: %4; "
         "}");
 
-    QColor hovorColor = ColorMath::darken(baseColor, 12);
-    QColor pressedColor = ColorMath::darken(baseColor, 20);
+    // The label is white in every state.  The fill is darkened until
+    // white reads on it, so a pastel dark-mode accent still carries the
+    // label; hover and pressed darken further, which only raises the
+    // contrast.  contrastingText() is not used: on a fill just at the
+    // readable ratio it would pick black, and the label would flip
+    // between states.
+    const QColor labelColor(Qt::white);
+    const QColor fillColor = ColorMath::ensureContrast(baseColor, labelColor,
+                                                       ColorMath::activeRatios().readableText);
+    const QColor hoverColor = ColorMath::darken(fillColor, 12);
+    const QColor pressedColor = ColorMath::darken(fillColor, 20);
 
-    QString resultStyle = buttonStyle.arg(objectname, "", baseColor.name(), ColorMath::contrastingText(baseColor).name());
-    resultStyle += buttonStyle.arg(objectname, ":hover", hovorColor.name(), ColorMath::contrastingText(hovorColor).name());
-    resultStyle += buttonStyle.arg(objectname, ":pressed", pressedColor.name(), ColorMath::contrastingText(pressedColor).name());
+    QString resultStyle = buttonStyle.arg(objectname, "", fillColor.name(), labelColor.name());
+    resultStyle += buttonStyle.arg(objectname, ":hover", hoverColor.name(), labelColor.name());
+    resultStyle += buttonStyle.arg(objectname, ":pressed", pressedColor.name(), labelColor.name());
 
     return resultStyle;
 }

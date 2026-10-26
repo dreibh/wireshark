@@ -80,6 +80,9 @@ static dissector_handle_t acn_handle;
 #define ACN_DMP_ADT_A_4         2
 #define ACN_DMP_ADT_A_R         3
 
+/* Most addresses shown for a range that has a single data item */
+#define ACN_DMP_MAX_RANGE_ITEMS 1024
+
 #define ACN_PROTOCOL_ID_SDT           0x00000001
 #define ACN_PROTOCOL_ID_DMP           0x00000002
 #define ACN_PROTOCOL_ID_DMX           0x00000003
@@ -512,6 +515,7 @@ static int ett_rdmnet_ept_status_pdu;
 static int ett_rdmnet_uid;
 
 static expert_field ei_acn_dmx_discovery_outofseq;
+static expert_field ei_acn_dmp_range_truncated;
 
 /*  Register fields */
 /* In alphabetical order */
@@ -3683,11 +3687,11 @@ acn_add_dmp_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int
 
       if (adt->flags & ACN_DMP_ADT_FLAG_V) {
         proto_tree_add_uint_format_value(tree, hf_acn_dmp_virtual_address_first, tvb, start_offset, bytes_used,
-                            adt->address, "0x%X, inc: %d, count: %d",
+                            adt->address, "0x%X, inc: %u, count: %u",
                             adt->address, adt->increment, adt->count);
       } else {
         proto_tree_add_uint_format_value(tree, hf_acn_dmp_actual_address_first, tvb, start_offset, bytes_used,
-                            adt->address, "0x%X, inc: %d, count: %d",
+                            adt->address, "0x%X, inc: %u, count: %u",
                             adt->address, adt->increment, adt->count);
       }
       break;
@@ -3727,11 +3731,11 @@ acn_add_dmp_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int
 
       if (adt->flags & ACN_DMP_ADT_FLAG_V) {
         proto_tree_add_uint_format_value(tree, hf_acn_dmp_virtual_address_first, tvb, start_offset, bytes_used,
-                            adt->address, "0x%X, inc: %d, count: %d",
+                            adt->address, "0x%X, inc: %u, count: %u",
                             adt->address, adt->increment, adt->count);
       } else {
         proto_tree_add_uint_format_value(tree, hf_acn_dmp_actual_address_first, tvb, start_offset, bytes_used,
-                            adt->address, "0x%X, inc: %d, count: %d",
+                            adt->address, "0x%X, inc: %u, count: %u",
                             adt->address, adt->increment, adt->count);
       }
       break;
@@ -3771,11 +3775,11 @@ acn_add_dmp_address(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int
 
       if (adt->flags & ACN_DMP_ADT_FLAG_V) {
         proto_tree_add_uint_format_value(tree, hf_acn_dmp_virtual_address_first, tvb, start_offset, bytes_used,
-                            adt->address, "0x%X, inc: %d, count: %d",
+                            adt->address, "0x%X, inc: %u, count: %u",
                             adt->address, adt->increment, adt->count);
       } else {
         proto_tree_add_uint_format_value(tree, hf_acn_dmp_actual_address_first, tvb, start_offset, bytes_used,
-                            adt->address, "0x%X, inc: %d, count: %d",
+                            adt->address, "0x%X, inc: %u, count: %u",
                             adt->address, adt->increment, adt->count);
       }
       break;
@@ -3825,7 +3829,8 @@ acn_add_dmp_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int of
       }
       break;
     case ACN_DMP_ADT_D_RE:
-      if (adt->count == 0) {
+      /* each of the count items must be at least one byte */
+      if (adt->count == 0 || adt->count > adt->data_length) {
         break;
       }
       if (adt->data_length <= adt->count + 4) {
@@ -3905,6 +3910,12 @@ acn_add_dmp_data(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree, int of
       data_address = adt->address;
 
       for (x=0; x<adt->count; x++) {
+        /* the same data item is shown for every address, so the count alone */
+        /* would decide how long this takes                                  */
+        if (x == ACN_DMP_MAX_RANGE_ITEMS) {
+          expert_add_info(pinfo, tree, &ei_acn_dmp_range_truncated);
+          break;
+        }
         switch (A) {
           case ACN_DMP_ADT_A_1: /* One octet address, (range: one octet address, increment, and count). */
             buffer = wmem_strdup_printf(pinfo->pool, "Addr 0x%2.2X ->", data_address);
@@ -4063,6 +4074,11 @@ acn_add_dmp_reason_codes(tvbuff_t *tvb, packet_info *pinfo _U_, proto_tree *tree
     case ACN_DMP_ADT_D_RS: /* Range address, Single data item */
       data_address = adt->address;
       for (x=0; x<adt->count; x++) {
+        /* the same reason code is shown for every address */
+        if (x == ACN_DMP_MAX_RANGE_ITEMS) {
+          expert_add_info(pinfo, tree, &ei_acn_dmp_range_truncated);
+          break;
+        }
         switch (A) {
           case ACN_DMP_ADT_A_1: /* One octet address, (range: one octet address, increment, and count). */
             buffer = wmem_strdup_printf(pinfo->pool, "Addr 0x%2.2X ->", data_address);
@@ -5098,7 +5114,9 @@ dissect_acn_dmp_pdu(tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int off
 
         /* virtual */
         while (address_count > 0) {
-          data_offset = acn_add_dmp_address(tvb, pinfo, pdu_tree, data_offset, &adt2);
+          old_offset      = data_offset;
+          data_offset     = acn_add_dmp_address(tvb, pinfo, pdu_tree, data_offset, &adt2);
+          if (old_offset == data_offset) break;
           address_count--;
         }
       }
@@ -5687,7 +5705,6 @@ dissect_acn_common_base_pdu(tvbuff_t *tvb, proto_tree *tree, int *offset, acn_pd
 /* Dissect sACN Discovery PDU*/
 #define DMX_UNIV_LIST_MAX_DIGITS 5
 #define DMX_UNIV_LIST_MAX_ITEMS_PER_LINE 16
-#define DMX_UNIV_LIST_BUF_SIZE (DMX_UNIV_LIST_MAX_DIGITS + 1) * DMX_UNIV_LIST_MAX_ITEMS_PER_LINE + 1
 static uint32_t
 dissect_acn_dmx_discovery_pdu(uint32_t protocol_id, tvbuff_t *tvb, packet_info *pinfo, proto_tree *tree, int offset, acn_pdu_offsets *last_pdu_offsets)
 {
@@ -5708,8 +5725,7 @@ dissect_acn_dmx_discovery_pdu(uint32_t protocol_id, tvbuff_t *tvb, packet_info *
 /* this pdu */
   const char       *name;
   uint32_t          vector;
-  char             *buffer;
-  char             *buf_ptr;
+  wmem_strbuf_t    *buffer;
   unsigned          x;
   uint16_t          universe;
   uint16_t          last_universe;
@@ -5717,14 +5733,12 @@ dissect_acn_dmx_discovery_pdu(uint32_t protocol_id, tvbuff_t *tvb, packet_info *
   uint32_t          page;
   uint32_t          lastpage;
   uint32_t          current_universe_idx;
-  uint32_t          bytes_printed;
   bool              warned_unorder_once;
 
   (void)protocol_id;
   warned_unorder_once = false;
 
-  buffer = (char*)wmem_alloc(pinfo->pool, DMX_UNIV_LIST_BUF_SIZE);
-  buffer[0] = '\0';
+  buffer = wmem_strbuf_new(pinfo->pool, "");
 
   data_length = 0;
 
@@ -5748,8 +5762,6 @@ dissect_acn_dmx_discovery_pdu(uint32_t protocol_id, tvbuff_t *tvb, packet_info *
 
   switch (vector) {
     case ACN_DMX_DISCOVERY_UNIVERSE_LIST_VECTOR:
-      buf_ptr = buffer;
-
       /* add a snippet to info (this may be slow) */
       col_append_fstr(pinfo->cinfo,COL_INFO, ",[Universe Page %u/%u: ", page+1, lastpage+1);
       current_universe_idx = 0;
@@ -5777,18 +5789,17 @@ dissect_acn_dmx_discovery_pdu(uint32_t protocol_id, tvbuff_t *tvb, packet_info *
           expert_add_info(pinfo, pdu_tree, &ei_acn_dmx_discovery_outofseq);
           warned_unorder_once = true;
         }
-        bytes_printed = snprintf(buf_ptr, DMX_UNIV_LIST_BUF_SIZE, "%*u ", DMX_UNIV_LIST_MAX_DIGITS /*max 5 digits (1-63999), align right*/, universe);
-        if(bytes_printed > 0)
-          buf_ptr += bytes_printed;
+        wmem_strbuf_append_printf(buffer, "%*u ", DMX_UNIV_LIST_MAX_DIGITS /*max 5 digits (1-63999), align right*/, universe);
 
         item_cnt++;
         if((item_cnt % DMX_UNIV_LIST_MAX_ITEMS_PER_LINE) == 0 || x+2 >= end_offset)
         {
-          proto_tree_add_string_format(pdu_tree, hf_acn_dmx_discovery_universe_list, tvb, data_offset, item_cnt*2, buffer, "%s", buffer);
+          proto_tree_add_string_format(pdu_tree, hf_acn_dmx_discovery_universe_list, tvb, data_offset, item_cnt*2,
+                                       wmem_strbuf_get_str(buffer), "%s", wmem_strbuf_get_str(buffer));
           data_offset += item_cnt * 2;
           item_cnt = 0;
 
-          buf_ptr = buffer;
+          wmem_strbuf_truncate(buffer, 0);
         }
 
         last_universe = universe;
@@ -9058,6 +9069,7 @@ proto_register_acn(void)
   static ei_register_info ei[] = {
     { &ei_magic_reply_invalid_type, { "magic.reply.invalid_type", PI_PROTOCOL, PI_WARN, "Invalid type", EXPFILL }},
     { &ei_acn_dmx_discovery_outofseq, { "acn.dmx.discovery.out_of_order_universes", PI_PROTOCOL, PI_WARN, "Universe list is unordered, E1.31 Sec. 8.5 requires sorted lists", EXPFILL }},
+    { &ei_acn_dmp_range_truncated, { "acn.dmp.range_truncated", PI_UNDECODED, PI_NOTE, "Range has more addresses than are shown", EXPFILL }},
   };
 
   module_t *acn_module;

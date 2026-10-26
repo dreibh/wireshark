@@ -12,16 +12,19 @@
 #include <ui/qt/utils/themes/token_palette.h>
 
 #include <QColor>
+#include <QHash>
 #include <QIcon>
 #include <QPalette>
 #include <QSize>
 #include <QString>
 
+#include <memory>
+
 /**
  * @brief A QIcon that keeps an SVG's own colours and adapts each one for
  *        contrast against the surface it is painted on.
  *
- * Companion to StockIcon and ThemedIcon, and a deliberate inverse of ThemedIcon:
+ * Companion to ThemedIcon, and a deliberate inverse of it:
  * ThemedIcon throws the SVG's colours away and flattens the silhouette to one
  * theme token, which destroys multi-colour icons.  ContrastAdaptIcon instead
  * treats the SVG as authoritative — it reads the colours out of the markup and
@@ -29,6 +32,10 @@
  * nudging only lightness (hue preserved) and only when a colour falls below the
  * target ratio.  Multi-colour and per-state colours survive; the code merely
  * guarantees the icon stays legible whatever the theme paints behind it.
+ * minContrast is the icon ratio of the active contrast level
+ * (ColorMath::activeRatios()), so high contrast adapts the drawn colours
+ * further.  Colours bound to a theme token (see below) are not adapted unless
+ * the binding asks for it.
  *
  * The background is resolved from QIcon::Mode (see contrast_adapt_icon.cpp for
  * why it must be), so theme/light-dark changes re-render automatically via the
@@ -41,22 +48,30 @@
  * alternates in the SVG itself, with one element per base colour (ignored by the
  * renderer):
  *
- *   <ws:swap base="#729fcf" active="#3465a4" selected="#204a87" on="#73d216"/>
+ *   <ws:swap base="#2960f6" active="#2050f5" selected="#1c47f5" normal-on="#2e7d32"/>
  *
  * In Active/Selected mode the engine swaps that base colour for the named
- * alternate before contrast-adapting it.  The optional "on" attribute names the
- * colour for QIcon::On (e.g. a checked toggle button); a mode-specific
+ * alternate before contrast-adapting it.  The optional "normal-on" attribute
+ * names the colour for QIcon::On (e.g. a checked toggle button); a mode-specific
  * active/selected colour takes precedence over it when both apply.
  *
  * A drawn colour can instead track the theme by binding it to a
  * ThemeManager::ThemeToken, by name:
  *
  *   <ws:map-token color="#212121" token="PaletteText"/>
+ *   <ws:map-token color="#4e72a5" token="FilterApply" active="emphasis" adapt="contrast"/>
+ *   <ws:map-token color="#888a85" active="FilterClear" adapt="contrast"/>
  *
- * Every use of that colour is then painted with the token's current theme colour
- * (not contrast-adapted), and the mapping wins over a <ws:swap> for the same
- * colour.  Icons that declare nothing simply keep
- * their drawn colours in every mode.
+ * "token" paints every use of that colour with the token's current theme
+ * colour, or the colour given with setTokenColors(), in every mode.
+ * "active" and "selected" bind QIcon::Active / QIcon::Selected only: a
+ * token name, or "emphasis" for a slight brightening of the "token"
+ * colour.  Selected falls back to "active".  Without "token", the other
+ * modes keep the drawn colour, contrast-adapted as usual.  Token colours
+ * are used as-is, unless adapt="contrast" asks for the same contrast
+ * adaptation drawn colours get.  A mapping wins over a <ws:swap> for the
+ * same colour.  Icons that declare nothing simply keep their drawn colours
+ * in every mode.
  */
 class ContrastAdaptIcon : public QIcon
 {
@@ -69,8 +84,9 @@ public:
      *        QPalette::Base for icons inside item views.
      * @param size Nominal render size used when a null size is asked.
      *
-     * The minimum contrast ratio is not a per-call parameter — it is a global
-     * default (see setDefaultMinContrast()).
+     * The minimum contrast ratio is not a per-call parameter: it is the icon
+     * ratio of the active contrast level (ColorMath::activeRatios()), read at
+     * render time, so a contrast level change re-renders the icon.
      */
     explicit ContrastAdaptIcon(const QString &svg_resource_path,
                                QPalette::ColorRole surface_role = QPalette::Window,
@@ -98,18 +114,6 @@ public:
     }
 
     /**
-     * @brief Minimum WCAG contrast ratio every ContrastAdaptIcon holds against
-     *        its background.
-     *
-     * A single global knob rather than a per-call argument: defaults to 1.6
-     * (tuned for icon visibility without shifting colours too far) and is
-     * captured by each icon when it is constructed, so set it once at start-up
-     * before icons are created.  Higher values shift colours more aggressively.
-     */
-    static void  setDefaultMinContrast(qreal ratio);
-    static qreal defaultMinContrast();
-
-    /**
      * @brief Set a custom palette for drawing this icon instead of the application palette.
      *
      * Affects every copy of this icon. By default the application palette is
@@ -117,12 +121,25 @@ public:
      */
     void setPalette(const QPalette &palette);
 
+    /**
+     * @brief Paint @c ws:map-token colours from @p colors instead of the live theme.
+     *
+     * For previews of a theme that is not the active one.  A token without a
+     * valid entry in @p colors still resolves via the live theme (or the
+     * palette for Palette* tokens).  Affects every copy of this icon, like
+     * setPalette().
+     */
+    void setTokenColors(const QHash<ThemeManager::ThemeToken, QColor> &colors);
+
 private:
-    // Private delegate: the engine shares @p palette so setPalette() can reach it.
+    // Private delegate: the engine shares @p palette and @p token_colors so
+    // setPalette() and setTokenColors() can reach them.
     ContrastAdaptIcon(const QString &svg_resource_path,
                       QPalette::ColorRole surface_role,
                       const QColor &explicit_background,
-                      QSize size, IconPaletteRef palette);
+                      QSize size, IconPaletteRef palette,
+                      IconTokenColorsRef token_colors);
 
     IconPaletteRef palette_;
+    IconTokenColorsRef token_colors_;
 };
